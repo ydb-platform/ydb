@@ -48,18 +48,17 @@ public:
 
         using TContexts = TVector<TContext>;
 
-        virtual void GenerateRows(TContexts& ctxs) = 0;
+        virtual void GenerateRows(TContexts& ctxs, TGuard<TAdaptiveLock>&& g) = 0;
 
         int TableNum;
         ui64 Generated = 0;
-        TAdaptiveLock NumbersLock;
-        TAdaptiveLock DriverLock;
+        ui64 FirstRow = 1;
+        TAdaptiveLock Lock;
 
     private:
         TString GetFullTableName(const char* table) const;
-        static ui64 CalcCountToGenerate(const TTpchWorkloadDataInitializerGenerator& owner, int tableNum, bool useState);
         const TTpchWorkloadDataInitializerGenerator& Owner;
-        ui64 TableSize;
+        TDataPortionPtr FirstPortion;
     };
 
 };

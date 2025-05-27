@@ -1,5 +1,9 @@
 #pragma once
 #include "abstract_scheme.h"
+
+#include <ydb/core/tx/columnshard/engines/scheme/abstract/schema_version.h>
+#include <ydb/core/tx/columnshard/engines/scheme/common/cache.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/sharding/sharding.h>
 
 namespace NKikimr::NOlap {
@@ -11,10 +15,10 @@ private:
     YDB_READONLY_DEF(NSharding::TGranuleShardingLogicContainer, ShardingInfo);
     YDB_READONLY(TSnapshot, SinceSnapshot, TSnapshot::Zero());
     YDB_READONLY(ui64, SnapshotVersion, 0);
-    YDB_READONLY(ui64, PathId, 0);
+    YDB_READONLY_DEF(TInternalPathId, PathId);
 
 public:
-    TGranuleShardingInfo(const NSharding::TGranuleShardingLogicContainer& shardingInfo, const TSnapshot& sinceSnapshot, const ui64 version, const ui64 pathId)
+    TGranuleShardingInfo(const NSharding::TGranuleShardingLogicContainer& shardingInfo, const TSnapshot& sinceSnapshot, const ui64 version, const TInternalPathId pathId)
         : ShardingInfo(shardingInfo)
         , SinceSnapshot(sinceSnapshot)
         , SnapshotVersion(version)
@@ -24,7 +28,7 @@ public:
 };
 
 class TVersionedIndex {
-    THashMap<ui64, std::map<TSnapshot, TGranuleShardingInfo>> ShardingInfo;
+    THashMap<TInternalPathId, std::map<TSnapshot, TGranuleShardingInfo>> ShardingInfo;
     std::map<TSnapshot, ISnapshotSchema::TPtr> Snapshots;
     std::shared_ptr<arrow::Schema> PrimaryKey;
     std::map<ui64, ISnapshotSchema::TPtr> SnapshotByVersion;
@@ -33,6 +37,11 @@ class TVersionedIndex {
     ISnapshotSchema::TPtr SchemeForActualization;
 
 public:
+    bool IsEqualTo(const TVersionedIndex& vIndex) {
+        return LastSchemaVersion == vIndex.LastSchemaVersion && SnapshotByVersion.size() == vIndex.SnapshotByVersion.size() &&
+               ShardingInfo.size() == vIndex.ShardingInfo.size() && SchemeVersionForActualization == vIndex.SchemeVersionForActualization;
+    }
+
     ISnapshotSchema::TPtr GetLastCriticalSchema() const {
         return SchemeForActualization;
     }
@@ -42,7 +51,7 @@ public:
         return result ? result : defaultSchema;
     }
 
-    std::optional<TGranuleShardingInfo> GetShardingInfoOptional(const ui64 pathId, const TSnapshot& ss) const {
+    std::optional<TGranuleShardingInfo> GetShardingInfoOptional(const TInternalPathId pathId, const TSnapshot& ss) const {
         auto it = ShardingInfo.find(pathId);
         if (it == ShardingInfo.end() || it->second.empty()) {
             return std::nullopt;
@@ -59,7 +68,7 @@ public:
         }
     }
 
-    std::optional<TGranuleShardingInfo> GetShardingInfoActual(const ui64 pathId) const;
+    std::optional<TGranuleShardingInfo> GetShardingInfoActual(const TInternalPathId pathId) const;
 
     void AddShardingInfo(const TGranuleShardingInfo& shardingInfo) {
         AFL_VERIFY(ShardingInfo[shardingInfo.GetPathId()].emplace(shardingInfo.GetSinceSnapshot(), shardingInfo).second);
@@ -73,7 +82,7 @@ public:
         return sb;
     }
 
-    ISnapshotSchema::TPtr GetSchema(const ui64 version) const {
+    ISnapshotSchema::TPtr GetSchemaOptional(const ui64 version) const {
         auto it = SnapshotByVersion.find(version);
         return it == SnapshotByVersion.end() ? nullptr : it->second;
     }
@@ -84,15 +93,25 @@ public:
         return it->second;
     }
 
-    ISnapshotSchema::TPtr GetSchema(const TSnapshot& version) const {
+    ISnapshotSchema::TPtr GetSchemaVerified(const TSnapshot& version) const {
         for (auto it = Snapshots.rbegin(); it != Snapshots.rend(); ++it) {
             if (it->first <= version) {
                 return it->second;
             }
         }
         Y_ABORT_UNLESS(!Snapshots.empty());
-        Y_ABORT_UNLESS(version.IsZero());
         return Snapshots.begin()->second;
+    }
+
+    ISnapshotSchema::TPtr GetLastSchemaBeforeOrEqualSnapshotOptional(const ui64 version) const {
+        if (SnapshotByVersion.empty()) {
+            return nullptr;
+        }
+        auto upperBound = SnapshotByVersion.upper_bound(version);
+        if (upperBound == SnapshotByVersion.begin()) {
+            return nullptr;
+        }
+        return std::prev(upperBound)->second;
     }
 
     ISnapshotSchema::TPtr GetLastSchema() const {
@@ -108,7 +127,7 @@ public:
         return PrimaryKey;
     }
 
-    const TIndexInfo* AddIndex(const TSnapshot& snapshot, TIndexInfo&& indexInfo);
+    const TIndexInfo* AddIndex(const TSnapshot& snapshot, TObjectCache<TSchemaVersionId, TIndexInfo>::TEntryGuard&& indexInfo);
 
     bool LoadShardingInfo(IDbWrapper& db);
 };

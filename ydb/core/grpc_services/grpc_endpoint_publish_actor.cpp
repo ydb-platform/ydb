@@ -48,6 +48,9 @@ class TGRpcEndpointPublishActor : public TActorBootstrapped<TGRpcEndpointPublish
         if (Description->TargetNameOverride) {
             entry.SetTargetNameOverride(Description->TargetNameOverride);
         }
+        if (Description->EndpointId) {
+            entry.SetEndpointId(Description->EndpointId);
+        }
         for (const auto &service : Description->ServedServices)
             entry.AddServices(service);
 

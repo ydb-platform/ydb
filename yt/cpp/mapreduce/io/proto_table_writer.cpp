@@ -102,7 +102,7 @@ TNode MakeNodeFromMessage(const Message& row)
 TProtoTableWriter::TProtoTableWriter(
     THolder<IProxyOutput> output,
     TVector<const Descriptor*>&& descriptors)
-    : NodeWriter_(new TNodeTableWriter(std::move(output)))
+    : NodeWriter_(std::make_unique<TNodeTableWriter>(std::move(output)))
     , Descriptors_(std::move(descriptors))
 { }
 
@@ -145,7 +145,7 @@ void TProtoTableWriter::Abort()
 TLenvalProtoTableWriter::TLenvalProtoTableWriter(
     THolder<IProxyOutput> output,
     TVector<const Descriptor*>&& descriptors)
-    : Output_(std::move(output))
+    : Output_(output.Release())
     , Descriptors_(std::move(descriptors))
 { }
 
@@ -227,6 +227,23 @@ void TLenvalProtoSingleTableWriter::AddRow(const Message& row, size_t tableIndex
     }
 
     Output_->OnRowFinished(tableIndex);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void LenvalEncodeProto(IZeroCopyOutput* output, const ::google::protobuf::Message& message)
+{
+    i32 size = message.ByteSizeLong();
+    output->Write(&size, sizeof(size));
+
+    TProtobufZeroCopyOutputStream adapter(output);
+    auto result = message.SerializeToZeroCopyStream(&adapter);
+
+    adapter.ThrowOnError();
+
+    if (!result) {
+        ythrow yexception() << "Failed to serialize protobuf message";
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

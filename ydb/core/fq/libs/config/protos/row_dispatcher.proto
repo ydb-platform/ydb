@@ -1,0 +1,41 @@
+syntax = "proto3";
+option cc_enable_arenas = true;
+
+package NFq.NConfig;
+option java_package = "ru.yandex.kikimr.proto";
+
+import "ydb/core/fq/libs/config/protos/storage.proto";
+
+////////////////////////////////////////////////////////////
+
+message TRowDispatcherCoordinatorConfig {
+    TYdbStorageConfig Database = 1;
+    string CoordinationNodePath = 2;
+    bool LocalMode = 3;                     // Use only local row_dispatcher.
+
+    // Topic partitions will be distributed uniformly up to TopicPartitionsLimitPerNode
+    // if (number nodes) * TopicPartitionsLimitPerNode < (number topic partitions)
+    // Request will hang up infinitely, disabled by default
+    uint64 TopicPartitionsLimitPerNode = 4;  
+}
+
+message TJsonParserConfig {
+    uint64 BatchSizeBytes = 1;  // default 1 MiB
+    uint64 BatchCreationTimeoutMs = 2;
+    uint64 BufferCellCount = 3;  // (number rows) * (number columns) limit, default 10^6
+}
+
+message TCompileServiceConfig {
+    uint64 ParallelCompilationLimit = 1;  // 1 by default
+}
+
+message TRowDispatcherConfig {
+    bool Enabled = 1;
+    uint64 TimeoutBeforeStartSessionSec = 2;
+    uint64 SendStatusPeriodSec = 3;
+    uint64 MaxSessionUsedMemory = 4; 
+    bool WithoutConsumer = 5;
+    TJsonParserConfig JsonParser = 7;
+    TCompileServiceConfig CompileService = 8;
+    TRowDispatcherCoordinatorConfig Coordinator = 6;
+}

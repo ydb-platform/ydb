@@ -18,7 +18,7 @@
 #include <ydb/library/actors/interconnect/interconnect.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/utils/yql_panic.h>
 
 #include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
 
@@ -36,12 +36,14 @@ using namespace NResourceBroker;
 #define LOG_W(stream) LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_RESOURCE_MANAGER, stream)
 #define LOG_N(stream) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_RESOURCE_MANAGER, stream)
 
-#define LOG_AS_C(stream) LOG_CRIT_S(*ActorSystem, NKikimrServices::KQP_RESOURCE_MANAGER, stream)
-#define LOG_AS_D(stream) LOG_DEBUG_S(*ActorSystem, NKikimrServices::KQP_RESOURCE_MANAGER, stream)
-#define LOG_AS_I(stream) LOG_INFO_S(*ActorSystem, NKikimrServices::KQP_RESOURCE_MANAGER, stream)
-#define LOG_AS_E(stream) LOG_ERROR_S(*ActorSystem, NKikimrServices::KQP_RESOURCE_MANAGER, stream)
-#define LOG_AS_W(stream) LOG_WARN_S(*ActorSystem, NKikimrServices::KQP_RESOURCE_MANAGER, stream)
-#define LOG_AS_N(stream) LOG_NOTICE_S(*ActorSystem, NKikimrServices::KQP_RESOURCE_MANAGER, stream)
+#define LOG_AS_SAFE(log) {if (ActorSystem) { log; }}
+
+#define LOG_AS_C(stream) LOG_AS_SAFE(LOG_CRIT_S(*ActorSystem, NKikimrServices::KQP_RESOURCE_MANAGER, stream))
+#define LOG_AS_D(stream) LOG_AS_SAFE(LOG_DEBUG_S(*ActorSystem, NKikimrServices::KQP_RESOURCE_MANAGER, stream))
+#define LOG_AS_I(stream) LOG_AS_SAFE(LOG_INFO_S(*ActorSystem, NKikimrServices::KQP_RESOURCE_MANAGER, stream))
+#define LOG_AS_E(stream) LOG_AS_SAFE(LOG_ERROR_S(*ActorSystem, NKikimrServices::KQP_RESOURCE_MANAGER, stream))
+#define LOG_AS_W(stream) LOG_AS_SAFE(LOG_WARN_S(*ActorSystem, NKikimrServices::KQP_RESOURCE_MANAGER, stream))
+#define LOG_AS_N(stream) LOG_AS_SAFE(LOG_NOTICE_S(*ActorSystem, NKikimrServices::KQP_RESOURCE_MANAGER, stream))
 
 namespace {
 
@@ -163,7 +165,9 @@ public:
         , ExecutionUnitsLimit(config.GetComputeActorsCount())
         , SpillingPercent(config.GetSpillingPercent())
         , TotalMemoryResource(MakeIntrusive<TMemoryResource>(config.GetQueryMemoryLimit(), (double)100, config.GetSpillingPercent()))
+        , ResourceSnapshotState(std::make_shared<TResourceSnapshotState>())
     {
+        PublishAfterBootstrap.clear();
         SetConfigValues(config);
     }
 
@@ -178,15 +182,28 @@ public:
             config.GetKqpPatternCachePatternAccessTimesBeforeTryToCompile());
 
         CreateResourceInfoExchanger(config.GetInfoExchangerSettings());
+
+        if (PublishAfterBootstrap.test()) {
+            FireResourcesPublishing();
+            PublishAfterBootstrap.clear();
+        }
     }
 
     const TIntrusivePtr<TKqpCounters>& GetCounters() const override {
         return Counters;
     }
 
+    TPlannerPlacingOptions GetPlacingOptions() override {
+        return TPlannerPlacingOptions{
+            .MaxNonParallelTasksExecutionLimit = MaxNonParallelTasksExecutionLimit.load(),
+            .MaxNonParallelDataQueryTasksLimit = MaxNonParallelDataQueryTasksLimit.load(),
+            .MaxNonParallelTopStageExecutionLimit = MaxNonParallelTopStageExecutionLimit.load(),
+            .PreferLocalDatacenterExecution = PreferLocalDatacenterExecution.load(),
+        };
+    }
+
     void CreateResourceInfoExchanger(
             const NKikimrConfig::TTableServiceConfig::TResourceManager::TInfoExchangerSettings& settings) {
-        ResourceSnapshotState = std::make_shared<TResourceSnapshotState>();
         auto exchanger = CreateKqpResourceInfoExchangerActor(
             Counters, ResourceSnapshotState, settings);
         ResourceInfoExchanger = ActorSystem->Register(exchanger);
@@ -280,6 +297,7 @@ public:
 
         if (!hasScanQueryMemory) {
             Counters->RmNotEnoughMemory->Inc();
+            tx->AckFailedMemoryAlloc(resources.Memory);
             TStringBuilder reason;
             reason << "TxId: " << txId << ", taskId: " << taskId << ". Not enough memory for query, requested: " << resources.Memory
                 << ". " << tx->ToString();
@@ -293,6 +311,7 @@ public:
         Y_DEFER {
             if (!result) {
                 Counters->RmNotEnoughMemory->Inc();
+                tx->AckFailedMemoryAlloc(resources.Memory);
                 with_lock (Lock) {
                     TotalMemoryResource->Release(resources.Memory);
                     if (!tx->PoolId.empty()) {
@@ -465,6 +484,10 @@ public:
         MaxTotalChannelBuffersSize.store(config.GetMaxTotalChannelBuffersSize());
         QueryMemoryLimit.store(config.GetQueryMemoryLimit());
         SpillingPercent.store(config.GetSpillingPercent());
+        MaxNonParallelTopStageExecutionLimit.store(config.GetMaxNonParallelTopStageExecutionLimit());
+        MaxNonParallelTasksExecutionLimit.store(config.GetMaxNonParallelTasksExecutionLimit());
+        PreferLocalDatacenterExecution.store(config.GetPreferLocalDatacenterExecution());
+        MaxNonParallelDataQueryTasksLimit.store(config.GetMaxNonParallelDataQueryTasksLimit());
     }
 
     ui32 GetNodeId() override {
@@ -474,7 +497,11 @@ public:
     void FireResourcesPublishing() {
         bool prev = PublishScheduled.test_and_set();
         if (!prev) {
-            ActorSystem->Send(SelfId, new TEvPrivate::TEvSchedulePublishResources);
+            if (Y_LIKELY(ActorSystem)) {
+                ActorSystem->Send(SelfId, new TEvPrivate::TEvSchedulePublishResources);
+            } else {
+                PublishAfterBootstrap.test_and_set();
+            }
         }
     }
 
@@ -512,10 +539,15 @@ public:
     std::atomic<double> SpillingPercent;
     TIntrusivePtr<TMemoryResource> TotalMemoryResource;
     std::atomic<i64> ExternalDataQueryMemory = 0;
+    std::atomic<ui64> MaxNonParallelTopStageExecutionLimit = 1;
+    std::atomic<ui64> MaxNonParallelTasksExecutionLimit = 8;
+    std::atomic<bool> PreferLocalDatacenterExecution = true;
+    std::atomic<ui64> MaxNonParallelDataQueryTasksLimit = 1000;
 
     // current state
     std::atomic<ui64> LastResourceBrokerTaskId = 0;
 
+    std::atomic_flag PublishAfterBootstrap;
     std::atomic_flag PublishScheduled;
     // pattern cache for different actors
     std::shared_ptr<NMiniKQL::TComputationPatternLRUCache> PatternCache;
@@ -577,7 +609,7 @@ public:
              IEventHandle::FlagTrackDelivery);
 
         ToBroker(new TEvResourceBroker::TEvResourceBrokerRequest);
-        ToBroker(new TEvResourceBroker::TEvConfigRequest(NLocalDb::KqpResourceManagerQueue));
+        ToBroker(new TEvResourceBroker::TEvConfigRequest(NLocalDb::KqpResourceManagerQueue, /*subscribe=*/ true));
 
         if (auto* mon = AppData()->Mon) {
             NMonitoring::TIndexMonPage* actorsMonPage = mon->RegisterIndexPage("actors", "Actors");

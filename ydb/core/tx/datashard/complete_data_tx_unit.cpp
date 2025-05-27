@@ -1,5 +1,6 @@
 #include "datashard_failpoints.h"
 #include "datashard_impl.h"
+#include "datashard_integrity_trails.h"
 #include "datashard_pipeline.h"
 #include "execution_unit_ctors.h"
 #include "probes.h"
@@ -78,7 +79,7 @@ void TCompleteOperationUnit::CompleteOperation(TOperation::TPtr op,
                                                const TActorContext &ctx)
 {
     TActiveTransaction *tx = dynamic_cast<TActiveTransaction*>(op.Get());
-    Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
+    Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
 
     auto duration = TAppData::TimeProvider->Now() - op->GetStartExecutionAt();
 
@@ -95,6 +96,8 @@ void TCompleteOperationUnit::CompleteOperation(TOperation::TPtr op,
 
     TOutputOpData::TResultPtr result = std::move(op->Result());
     if (result) {
+        auto status = result->GetStatus();
+
         result->Record.SetProposeLatency(duration.MilliSeconds());
 
         DataShard.FillExecutionStats(op->GetExecutionProfile(), *result->Record.MutableTxStats());
@@ -102,6 +105,10 @@ void TCompleteOperationUnit::CompleteOperation(TOperation::TPtr op,
         if (!gSkipRepliesFailPoint.Check(DataShard.TabletID(), op->GetTxId())) {
             result->Orbit = std::move(op->Orbit);
             DataShard.SendResult(ctx, result, op->GetTarget(), op->GetStep(), op->GetTxId(), op->GetTraceId());
+        }
+
+        if (!op->IsImmediate() && !op->IsReadOnly() && op->IsKqpDataTransaction()) {
+            NDataIntegrity::LogIntegrityTrailsFinish<NKikimrTxDataShard::TEvProposeTransactionResult>(ctx, DataShard.TabletID(), op->GetGlobalTxId(), status);
         }
     }
 

@@ -9,8 +9,6 @@ SRCS(
     defs.h
     destruct_actor.h
     http_request_protocol.h
-    load_network.cpp
-    load_network.h
     long_timer.cpp
     long_timer.h
     name_service_client_protocol.cpp

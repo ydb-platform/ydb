@@ -9,6 +9,7 @@
 #include <unistd.h>
 #include <pthread.h>
 #include "liburing.h"
+#include "helpers.h"
 
 #define TIMEOUT_MSEC	200
 #define TIMEOUT_SEC	10
@@ -22,32 +23,6 @@ static void msec_to_ts(struct __kernel_timespec *ts, unsigned int msec)
 	ts->tv_sec = msec / 1000;
 	ts->tv_nsec = (msec % 1000) * 1000000;
 }
-
-static unsigned long long mtime_since(const struct timeval *s,
-				      const struct timeval *e)
-{
-	long long sec, usec;
-
-	sec = e->tv_sec - s->tv_sec;
-	usec = (e->tv_usec - s->tv_usec);
-	if (sec > 0 && usec < 0) {
-		sec--;
-		usec += 1000000;
-	}
-
-	sec *= 1000;
-	usec /= 1000;
-	return sec + usec;
-}
-
-static unsigned long long mtime_since_now(struct timeval *tv)
-{
-	struct timeval end;
-
-	gettimeofday(&end, NULL);
-	return mtime_since(tv, &end);
-}
-
 
 static int test_return_before_timeout(struct io_uring *ring)
 {

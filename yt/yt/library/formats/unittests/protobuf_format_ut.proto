@@ -1,0 +1,255 @@
+import "yt/yt_proto/yt/formats/extension.proto";
+
+package NYT.NProtobufFormatTest;
+
+enum EEnum
+{
+    One = 1;
+    Two = 2;
+    Three = 3;
+
+    MinusFortyTwo = -42;
+
+    MinInt32 = -2147483648;
+    MaxInt32 = 2147483647;
+}
+
+message TEmbeddedStruct {
+    optional float float1 = 1;
+    optional string string1 = 2;
+};
+
+message TEmbedded2Message {
+    option (NYT.default_field_flags) = SERIALIZATION_YT;
+    optional uint64 embedded2_num = 10;
+    optional TEmbeddedStruct embedded2_struct = 17;
+    repeated string embedded2_repeated = 42;
+};
+
+message TEmbedded1Message {
+    option (NYT.default_field_flags) = SERIALIZATION_YT;
+    optional TEmbedded2Message t2 = 1 [(NYT.flags) = EMBEDDED];
+    oneof variant {
+        string str_variant = 101;
+        uint64 uint_variant = 102;
+    }
+    optional uint64 embedded_num = 10; // make intentional field_num collision!
+    optional string embedded_extra_field = 11;
+};
+message TEmbeddingMessage {
+    optional bytes other_columns_field = 15 [(NYT.flags) = OTHER_COLUMNS];
+    optional TEmbedded1Message t1 = 2 [(NYT.flags) = EMBEDDED];
+    optional uint64 num = 12;
+    optional string extra_field = 13;
+};
+
+message TEmbeddedMessage
+{
+    optional string key = 1;
+    optional string value = 2;
+}
+
+message TMessageWithStructuredEmbedded
+{
+    option (NYT.default_field_flags) = SERIALIZATION_YT;
+
+    message TFirstMessage
+    {
+        option (NYT.default_field_flags) = SERIALIZATION_YT;
+
+        optional EEnum enum_field = 1 [(NYT.flags) = ENUM_STRING];
+        optional int64 int64_field = 2;
+        repeated int64 repeated_int64_field = 3;
+        optional TEmbeddedMessage message_field = 4;
+        repeated TEmbeddedMessage repeated_message_field = 5;
+        optional bytes any_int64_field = 6 [(NYT.flags) = ANY];
+        optional bytes any_map_field = 7 [(NYT.flags) = ANY];
+        optional int64 optional_int64_field = 8;
+        repeated int64 another_repeated_int64_field = 9;
+        repeated bytes repeated_optional_any_field = 10 [(NYT.flags) = ANY];
+        repeated EEnum packed_repeated_enum_field = 11 [packed=true, (NYT.flags) = ENUM_STRING];
+        repeated bool optional_repeated_bool_field = 12;
+        oneof oneof_field {
+            string oneof_string_field_1 = 101;
+            string oneof_string_field = 102;
+            TEmbeddedMessage oneof_message_field = 1000;
+        }
+        oneof optional_oneof_field {
+            string optional_oneof_string_field_1 = 201;
+            string optional_oneof_string_field = 202;
+            TEmbeddedMessage optional_oneof_message_field = 2000;
+        }
+        map<int64, TEmbeddedMessage> map_field = 13 [(NYT.flags) = MAP_AS_DICT];
+    }
+
+    message TSecondMessage
+    {
+        optional int64 one = 2;
+        optional int64 two = 500000000;
+        optional int64 three = 100500;
+    }
+
+    optional TFirstMessage first = 1;
+    optional TSecondMessage second = 2;
+    repeated TEmbeddedMessage repeated_message_field = 3;
+    repeated int64 repeated_int64_field = 4;
+    optional int64 int64_any_field = 5 [(NYT.column_name) = "any_field"];
+
+    optional int32 int32_field = 6 [(NYT.column_name) = "int64_field"];
+    optional uint32 uint32_field = 7 [(NYT.column_name) = "uint64_field"];
+    optional int64 int64_field = 8 [(NYT.column_name) = "int32_field"];
+    optional uint64 uint64_field = 9 [(NYT.column_name) = "uint32_field"];
+
+    optional EEnum enum_int_field = 10 [(NYT.flags) = ENUM_INT];
+    optional EEnum enum_string_string_field = 11 [(NYT.flags) = ENUM_STRING];
+    optional EEnum enum_string_int64_field = 12 [(NYT.flags) = ENUM_STRING];
+
+
+    repeated int64 another_repeated_int64_field = 13;
+
+    repeated bytes repeated_optional_any_field = 14 [(NYT.flags) = ANY];
+
+    optional bytes other_columns_field = 15 [(NYT.flags) = OTHER_COLUMNS];
+
+    optional string utf8_field = 16;
+
+    repeated int64 packed_repeated_int64_field = 17 [packed=true];
+
+    repeated int64 optional_repeated_int64_field = 18;
+
+    oneof oneof_field {
+        string oneof_string_field_1 = 101;
+        string oneof_string_field = 102;
+        TEmbeddedMessage oneof_message_field = 1000;
+    }
+
+    oneof optional_oneof_field {
+        string optional_oneof_string_field_1 = 201;
+        string optional_oneof_string_field = 202;
+        TEmbeddedMessage optional_oneof_message_field = 2000;
+    }
+
+    map<int64, TEmbeddedMessage> map_field = 19 [(NYT.flags) = MAP_AS_DICT];
+}
+
+message TSeveralTablesMessageFirst
+{
+    option (NYT.default_field_flags) = SERIALIZATION_YT;
+
+    message TEmbedded
+    {
+        optional EEnum enum_field = 1 [(NYT.flags) = ENUM_STRING];
+        optional int64 int64_field = 2;
+    }
+    optional TEmbedded embedded = 1;
+    repeated int64 repeated_int64_field = 2;
+    optional int64 int64_field = 3 [(NYT.column_name) = "any_field"];
+}
+
+message TSeveralTablesMessageSecond
+{
+    optional EEnum enum_field = 1 [(NYT.flags) = ENUM_STRING];
+    optional int64 int64_field = 2;
+}
+
+message TSeveralTablesMessageThird
+{
+    optional string string_field = 1;
+}
+
+message TMessage
+{
+    optional double double_field = 1 [(NYT.column_name) = "Double"];
+    optional float float_field = 2 [(NYT.column_name) = "Float"];
+
+    optional int64 int64_field = 3 [(NYT.column_name) = "Int64"];
+    optional uint64 uint64_field = 4 [(NYT.column_name) = "UInt64"];
+    optional sint64 sint64_field = 5 [(NYT.column_name) = "SInt64"];
+    optional fixed64 fixed64_field = 6 [(NYT.column_name) = "Fixed64"];
+    optional sfixed64 sfixed64_field = 7 [(NYT.column_name) = "SFixed64"];
+
+    optional int32 int32_field = 8 [(NYT.column_name) = "Int32"];
+    optional uint32 uint32_field = 9 [(NYT.column_name) = "UInt32"];
+    optional sint32 sint32_field = 10 [(NYT.column_name) = "SInt32"];
+    optional fixed32 fixed32_field = 11 [(NYT.column_name) = "Fixed32"];
+    optional sfixed32 sfixed32_field = 12 [(NYT.column_name) = "SFixed32"];
+
+    optional bool bool_field = 13 [(NYT.column_name) = "Bool"];
+    optional string string_field = 14 [(NYT.column_name) = "String"];
+    optional bytes bytes_field = 15 [(NYT.column_name) = "Bytes"];
+
+    optional EEnum enum_field = 16 [(NYT.column_name) = "Enum", (NYT.flags) = ENUM_STRING];
+    optional TEmbeddedMessage message_field = 17 [(NYT.column_name) = "Message"];
+
+    optional bytes any_field_with_map = 18 [(NYT.column_name) = "AnyWithMap", (NYT.flags) = ANY];
+    optional bytes any_field_with_int64 = 19 [(NYT.column_name) = "AnyWithInt64", (NYT.flags) = ANY];
+    optional bytes any_field_with_string = 20 [(NYT.column_name) = "AnyWithString", (NYT.flags) = ANY];
+    optional bytes other_columns_field = 21 [(NYT.flags) = OTHER_COLUMNS];
+
+    optional int64 missing_int64_field = 22 [(NYT.column_name) = "MissingInt64"];
+}
+
+message TCompatMessage
+{
+    message TEmbedded
+    {
+        optional string x = 1;
+        optional string y = 2;
+    }
+
+    oneof a {
+        int64 f1 = 1;
+        string f2 = 101;
+    }
+    optional TEmbedded b = 2;
+}
+
+message TMessageWithOneof
+{
+    oneof variant {
+        int64 f1 = 1;
+        string f2 = 2;
+    }
+}
+
+message TMessageWithStruct
+{
+    message TStruct
+    {
+        optional int64 f1 = 1;
+        optional string f2 = 2;
+    }
+    optional TStruct a = 1;
+}
+
+message TOtherColumnsMessage
+{
+    optional bytes other_columns_field = 1 [(NYT.flags) = OTHER_COLUMNS];
+}
+
+message TEnumCompat {
+    option (NYT.default_field_flags) = SERIALIZATION_YT;
+    option (NYT.default_field_flags) = ENUM_SKIP_UNKNOWN_VALUES;
+
+    enum ECompatEnum {
+        One = 1;
+        Two = 2;
+        Three = 3;
+    }
+
+
+    message TStruct
+    {
+        optional ECompatEnum optional_enum = 1;
+        required ECompatEnum required_enum = 2;
+        repeated ECompatEnum repeated_enum = 3;
+        repeated ECompatEnum packed_repeated_enum = 4 [packed=true, (NYT.flags) = ENUM_STRING];
+    }
+
+    optional ECompatEnum optional_enum = 1;
+    required ECompatEnum required_enum = 2;
+    repeated ECompatEnum repeated_enum = 3;
+    repeated ECompatEnum packed_repeated_enum = 4 [packed=true, (NYT.flags) = ENUM_STRING];
+
+    optional TStruct inner = 100;
+}

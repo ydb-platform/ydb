@@ -10,7 +10,9 @@ namespace NYT::NTableClient {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-IUnversionedWriterPtr CreateSchemalessDynamicTableWriter(NYPath::TYPath path, NApi::IClientPtr client);
+IUnversionedWriterPtr CreateSchemalessDynamicTableWriter(
+    NYPath::TYPath path,
+    NApi::IClientPtr client);
 
 ////////////////////////////////////////////////////////////////////////////////
 

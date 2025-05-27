@@ -1,15 +1,17 @@
 #include "yql_s3_provider_impl.h"
 
-#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
-#include <ydb/library/yql/core/yql_opt_utils.h>
+#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/core/yql_opt_utils.h>
+#include <ydb/library/yql/providers/s3/actors/yql_arrow_column_converters.h>
+#include <ydb/library/yql/providers/s3/common/util.h>
 #include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
 
-#include <ydb/library/yql/providers/common/provider/yql_provider.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
-#include <ydb/library/yql/providers/common/provider/yql_data_provider_impl.h>
+#include <yql/essentials/providers/common/provider/yql_provider.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
 #include <ydb/library/yql/providers/s3/object_listers/yql_s3_path.h>
 
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/utils/log/log.h>
 
 namespace NYql {
 
@@ -26,6 +28,7 @@ TExprNode::TListType GetPartitionKeys(const TExprNode::TPtr& partBy) {
 
     return {};
 }
+
 }
 
 namespace {
@@ -64,7 +67,48 @@ private:
             return TStatus::Error;
         }
 
-        auto source = input->Child(TS3WriteObject::idx_Input);
+        const auto targetNode = input->Child(TS3WriteObject::idx_Target);
+        if (!TS3Target::Match(targetNode)) {
+            ctx.AddError(TIssue(ctx.GetPosition(targetNode->Pos()), "Expected S3 target."));
+            return TStatus::Error;
+        }
+
+        const TTypeAnnotationNode* targetType = nullptr;
+        const TS3Target target(targetNode);
+        if (const auto settings = target.Settings()) {
+            if (const auto userschema = GetSetting(settings.Cast().Ref(), "userschema")) {
+                targetType = userschema->Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+            }
+        }
+
+        const auto source = input->ChildPtr(TS3WriteObject::idx_Input);
+        if (const auto maybeTuple = TMaybeNode<TExprList>(source)) {
+            const auto tuple = maybeTuple.Cast();
+
+            TVector<TExprBase> convertedValues;
+            convertedValues.reserve(tuple.Size());
+            for (const auto& value : tuple) {
+                if (!EnsureStructType(input->Pos(), *value.Ref().GetTypeAnn(), ctx)) {
+                    return TStatus::Error;
+                }
+
+                TExprNode::TPtr node = value.Ptr();
+                if (targetType && TryConvertTo(node, *targetType, ctx) == TStatus::Error) {
+                    ctx.AddError(TIssue(ctx.GetPosition(source->Pos()), "Failed to convert input columns types to scheme types"));
+                    return TStatus::Error;
+                }
+
+                convertedValues.emplace_back(std::move(node));
+            }
+
+            const auto list = Build<TCoAsList>(ctx, input->Pos())
+                .Add(std::move(convertedValues))
+                .Done();
+
+            input->ChildRef(TS3WriteObject::idx_Input) = list.Ptr();
+            return TStatus::Repeat;
+        }
+
         if (!EnsureListType(*source, ctx)) {
             return TStatus::Error;
         }
@@ -74,23 +118,17 @@ private:
             return TStatus::Error;
         }
 
-        auto target = input->Child(TS3WriteObject::idx_Target);
-        if (!TS3Target::Match(target)) {
-            ctx.AddError(TIssue(ctx.GetPosition(target->Pos()), "Expected S3 target."));
+        if (!NS3Util::ValidateS3WriteSchema(source->Pos(), target.Format().Value(), sourceType->Cast<TStructExprType>(), ctx)) {
             return TStatus::Error;
         }
 
-        TS3Target tgt(target);
-        if (auto settings = tgt.Settings()) {
-            if (auto userschema = GetSetting(settings.Cast().Ref(), "userschema")) {
-                const TTypeAnnotationNode* targetType = userschema->Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
-                if (!IsSameAnnotation(*targetType, *sourceType)) {
-                    ctx.AddError(TIssue(ctx.GetPosition(source->Pos()),
-                                        TStringBuilder() << "Type mismatch between schema type: " << *targetType
-                                                         << " and actual data type: " << *sourceType << ", diff is: "
-                                                         << GetTypeDiff(*targetType, *sourceType)));
-                    return TStatus::Error;
-                }
+        if (targetType) {
+            const auto status = TryConvertTo(input->ChildRef(TS3WriteObject::idx_Input), *ctx.MakeType<TListExprType>(targetType), ctx);
+            if (status == TStatus::Error) {
+                ctx.AddError(TIssue(ctx.GetPosition(source->Pos()), "Row type mismatch for S3 external table"));
+                return TStatus::Error;
+            } else if (status != TStatus::Ok) {
+                return status;
             }
         }
 
@@ -142,8 +180,18 @@ private:
         }
 
         const auto format = tgt.Format();
+        const TTypeAnnotationNode* baseTargeType = nullptr;
 
-        auto baseTargeType = AnnotateTargetBase(format, keys, structType, ctx);
+        if (TString error; !UseBlocksSink(format, keys, structType, State_->Configuration, error)) {
+            if (error) {
+                ctx.AddError(TIssue(ctx.GetPosition(format.Pos()), error));
+                return TStatus::Error;
+            }
+            baseTargeType = AnnotateTargetBase(format, keys, structType, ctx);
+        } else {
+            baseTargeType = AnnotateTargetBlocks(structType, ctx);
+        }
+
         if (!baseTargeType) {
             return TStatus::Error;
         }
@@ -271,13 +319,22 @@ private:
                     return true;
                 }
 
+                if (name == "data.date.format") {
+                    const auto& value = setting.Tail();
+                    if (!EnsureAtom(value, ctx)) {
+                        return false;
+                    }
+
+                    return true;
+                }
+
                 if (name == "csvdelimiter") {
                     const auto& value = setting.Tail();
                     if (!EnsureAtom(value, ctx)) {
                         return false;
                     }
 
-                    if (value.Content().Size() != 1) {
+                    if (value.Content().size() != 1) {
                         ctx.AddError(TIssue(ctx.GetPosition(value.Pos()), "csv_delimiter must be single character"));
                         return false;
                     }
@@ -292,7 +349,7 @@ private:
                 return true;
             };
 
-            if (!EnsureValidSettings(*input->Child(TS3Target::idx_Settings), {"compression", "partitionedby", "mode", "userschema", "data.datetime.formatname", "data.datetime.format", "data.timestamp.formatname", "data.timestamp.format", "csvdelimiter", "filepattern"}, validator, ctx)) {
+            if (!EnsureValidSettings(*input->Child(TS3Target::idx_Settings), {"compression", "partitionedby", "mode", "userschema", "data.datetime.formatname", "data.datetime.format", "data.timestamp.formatname", "data.timestamp.format", "data.date.format", "csvdelimiter", "filepattern"}, validator, ctx)) {
                 return TStatus::Error;
             }
 
@@ -312,7 +369,7 @@ private:
     }
 
     TStatus HandleSink(const TExprNode::TPtr& input, TExprContext& ctx) {
-        if (!EnsureArgsCount(*input, 4, ctx)) {
+        if (!EnsureArgsCount(*input, 5, ctx)) {
             return TStatus::Error;
         }
         input->SetTypeAnn(ctx.MakeType<TVoidExprType>());
@@ -399,6 +456,16 @@ private:
         }
 
         return listItemType;
+    }
+
+    static const TTypeAnnotationNode* AnnotateTargetBlocks(const TStructExprType* structType, TExprContext& ctx) {
+        TTypeAnnotationNode::TListType items;
+        items.reserve(structType->GetSize() + 1);
+        for (const auto* item : structType->GetItems()) {
+            items.emplace_back(ctx.MakeType<TBlockExprType>(item->GetItemType()));
+        }
+        items.emplace_back(ctx.MakeType<TScalarExprType>(ctx.MakeType<TDataExprType>(EDataSlot::Uint64)));
+        return ctx.MakeType<TMultiExprType>(items);
     }
 
 private:

@@ -8,20 +8,17 @@
 namespace NKikimr::NViewer {
 
 using namespace NActors;
-using NSchemeShard::TEvSchemeShard;
+namespace TEvSchemeShard = NSchemeShard::TEvSchemeShard;
 using TNavigate = NSchemeCache::TSchemeCacheNavigate;
 
 class TJsonDescribe : public TViewerPipeClient {
     using TThis = TJsonDescribe;
     using TBase = TViewerPipeClient;
     using TBase::ReplyAndPassAway;
-    TAutoPtr<TEvSchemeShard::TEvDescribeSchemeResult> SchemeShardResult;
-    TAutoPtr<TEvTxProxySchemeCache::TEvNavigateKeySetResult> CacheResult;
+    TRequestResponse<TEvSchemeShard::TEvDescribeSchemeResult> SchemeShardResult;
+    TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult> CacheResult;
     TAutoPtr<NKikimrViewer::TEvDescribeSchemeInfo> DescribeResult;
-    TJsonSettings JsonSettings;
-    ui32 Timeout = 0;
     bool ExpandSubElements = true;
-    int Requests = 0;
 
 public:
     TJsonDescribe(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
@@ -48,38 +45,39 @@ public:
     }
 
     void Bootstrap() override {
-        const auto& params(Event->Get()->Request.GetParams());
-        JsonSettings.EnumAsNumbers = !FromStringWithDefault<bool>(params.Get("enums"), false);
-        JsonSettings.UI64AsString = !FromStringWithDefault<bool>(params.Get("ui64"), false);
-        Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
-        ExpandSubElements = FromStringWithDefault<ui32>(params.Get("subs"), ExpandSubElements);
-        InitConfig(params);
-
-        if (params.Has("schemeshard_id")) {
+        if (NeedToRedirect()) {
+            return;
+        }
+        // for describe we keep old behavior where enums is false by default - for compatibility reasons
+        if (FromStringWithDefault<bool>(Params.Get("enums"), false)) {
+            Proto2JsonConfig.EnumMode = TProto2JsonConfig::EnumValueMode::EnumName;
+        } else {
+            Proto2JsonConfig.EnumMode = TProto2JsonConfig::EnumValueMode::EnumNumber;
+        }
+        ExpandSubElements = FromStringWithDefault<ui32>(Params.Get("subs"), ExpandSubElements);
+        if (Params.Has("schemeshard_id")) {
             THolder<TEvSchemeShard::TEvDescribeScheme> request = MakeHolder<TEvSchemeShard::TEvDescribeScheme>();
-            FillParams(&request->Record, params);
-            ui64 schemeShardId = FromStringWithDefault<ui64>(params.Get("schemeshard_id"));
-            SendRequestToPipe(ConnectTabletPipe(schemeShardId), request.Release());
+            FillParams(&request->Record, Params);
+            ui64 schemeShardId = FromStringWithDefault<ui64>(Params.Get("schemeshard_id"));
+            SchemeShardResult = MakeRequestToTablet<TEvSchemeShard::TEvDescribeSchemeResult>(schemeShardId, request.Release());
         } else {
             THolder<TEvTxUserProxy::TEvNavigate> request = MakeHolder<TEvTxUserProxy::TEvNavigate>();
-            FillParams(request->Record.MutableDescribePath(), params);
+            FillParams(request->Record.MutableDescribePath(), Params);
             request->Record.SetUserToken(Event->Get()->UserToken);
-            SendRequest(MakeTxProxyID(), request.Release());
+            SchemeShardResult = MakeRequest<TEvSchemeShard::TEvDescribeSchemeResult>(MakeTxProxyID(), request.Release());
         }
-        ++Requests;
 
-        if (params.Has("path")) {
+        if (Params.Has("path")) {
             TAutoPtr<NSchemeCache::TSchemeCacheNavigate> request(new NSchemeCache::TSchemeCacheNavigate());
             NSchemeCache::TSchemeCacheNavigate::TEntry entry;
             entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpList;
             entry.SyncVersion = false;
-            entry.Path = SplitPath(params.Get("path"));
+            entry.Path = SplitPath(Params.Get("path"));
             request->ResultSet.emplace_back(entry);
-            SendRequest(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request));
-            ++Requests;
+            CacheResult = MakeRequest<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request));
         }
 
-        Become(&TThis::StateRequestedDescribe, TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup());
+        Become(&TThis::StateRequestedDescribe, Timeout, new TEvents::TEvWakeup());
     }
 
     STATEFN(StateRequestedDescribe) {
@@ -92,27 +90,13 @@ public:
     }
 
     void Handle(TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
-        SchemeShardResult = ev->Release();
-        if (SchemeShardResult->GetRecord().GetStatus() == NKikimrScheme::EStatus::StatusSuccess) {
-            ReplyAndPassAway();
-        } else {
-            RequestDone("TEvDescribeSchemeResult");
-        }
+        SchemeShardResult.Set(std::move(ev));
+        RequestDone();
     }
 
-    void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &ev) {
-        CacheResult = ev->Release();
-        RequestDone("TEvNavigateKeySetResult");
-    }
-
-    void RequestDone(const char* name) {
-        --Requests;
-        if (Requests == 0) {
-            ReplyAndPassAway();
-        }
-        if (Requests < 0) {
-            BLOG_CRIT("Requests < 0 in RequestDone(" << name << ")");
-        }
+    void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+        CacheResult.Set(std::move(ev));
+        RequestDone();
     }
 
     void FillDescription(NKikimrSchemeOp::TDirEntry* descr, ui64 schemeShardId) {
@@ -150,6 +134,8 @@ public:
                 return NKikimrSchemeOp::EPathTypeSequence;
             case TNavigate::KindReplication:
                 return NKikimrSchemeOp::EPathTypeReplication;
+            case TNavigate::KindTransfer:
+                return NKikimrSchemeOp::EPathTypeTransfer;
             case TNavigate::KindBlobDepot:
                 return NKikimrSchemeOp::EPathTypeBlobDepot;
             case TNavigate::KindExternalTable:
@@ -237,10 +223,10 @@ public:
     }
 
     void ReplyAndPassAway() override {
-        TStringStream json;
-        if (SchemeShardResult != nullptr && SchemeShardResult->GetRecord().GetStatus() == NKikimrScheme::EStatus::StatusSuccess) {
+        NJson::TJsonValue json;
+        if (SchemeShardResult.IsOk()) {
             DescribeResult = GetSchemeShardDescribeSchemeInfo();
-        } else if (CacheResult != nullptr) {
+        } else if (CacheResult.IsOk()) {
             NSchemeCache::TSchemeCacheNavigate *navigate = CacheResult->Request.Get();
             Y_ABORT_UNLESS(navigate->ResultSet.size() == 1);
             if (navigate->ErrorCount == 0) {
@@ -248,11 +234,19 @@ public:
             }
         }
         if (DescribeResult != nullptr) {
-            if (ExpandSubElements) {
-                if (DescribeResult->HasPathDescription()) {
-                    auto& pathDescription = *DescribeResult->MutablePathDescription();
-                    if (pathDescription.HasTable()) {
-                        auto& table = *pathDescription.MutableTable();
+            if (DescribeResult->HasPathDescription()) {
+                auto& pathDescription = *DescribeResult->MutablePathDescription();
+                if (pathDescription.HasTable()) {
+                    auto& table = *pathDescription.MutableTable();
+                    for (auto& column : *table.MutableColumns()) {
+                        if (!column.HasFamily()) {
+                            column.SetFamily(0);
+                        }
+                        if (column.GetFamily() == 0 && !column.HasFamilyName()) {
+                            column.SetFamilyName("default");
+                        }
+                    }
+                    if (ExpandSubElements) {
                         for (auto& tableIndex : table.GetTableIndexes()) {
                             NKikimrSchemeOp::TDirEntry& child = *pathDescription.AddChildren();
                             child.SetName(tableIndex.GetName());
@@ -269,8 +263,7 @@ public:
             const auto *descriptor = NKikimrScheme::EStatus_descriptor();
             auto accessDeniedStatus = descriptor->FindValueByNumber(NKikimrScheme::StatusAccessDenied)->name();
             if (DescribeResult->GetStatus() == accessDeniedStatus) {
-                Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPFORBIDDEN(Event->Get()), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
-                PassAway();
+                ReplyAndPassAway(GetHTTPFORBIDDEN("text/plain", "Forbidden"));
                 return;
             }
             for (auto& child : *DescribeResult->MutablePathDescription()->MutableChildren()) {
@@ -281,16 +274,14 @@ public:
                     child.ClearParentPathId();
                 }
             }
-            TProtoToJson::ProtoToJson(json, *DescribeResult, JsonSettings);
+            Proto2Json(*DescribeResult, json);
             DecodeExternalTableContent(json);
-        } else {
-            json << "null";
         }
 
-        ReplyAndPassAway(GetHTTPOKJSON(json.Str()));
+        ReplyAndPassAway(GetHTTPOKJSON(json));
     }
 
-    void DecodeExternalTableContent(TStringStream& json) const {
+    void DecodeExternalTableContent(NJson::TJsonValue& json) const {
         if (!DescribeResult) {
             return;
         }
@@ -304,12 +295,10 @@ public:
             return;
         }
 
-        NExternalSource::IExternalSourceFactory::TPtr externalSourceFactory{NExternalSource::CreateExternalSourceFactory({})};
-        NJson::TJsonValue root;
+        NExternalSource::IExternalSourceFactory::TPtr externalSourceFactory{NExternalSource::CreateExternalSourceFactory({}, nullptr, 50000, nullptr, false, false, true, NYql::GetAllExternalDataSourceTypes())};
         const auto& sourceType = DescribeResult->GetPathDescription().GetExternalTableDescription().GetSourceType();
         try {
-            NJson::ReadJsonTree(json.Str(), &root);
-            root["PathDescription"]["ExternalTableDescription"].EraseValue("Content");
+            json["PathDescription"]["ExternalTableDescription"].EraseValue("Content");
             auto source = externalSourceFactory->GetOrCreate(sourceType);
             auto parameters = source->GetParameters(content);
             for (const auto& [key, items]: parameters) {
@@ -317,17 +306,11 @@ public:
                 for (const auto& item: items) {
                     array.AppendValue(item);
                 }
-                root["PathDescription"]["ExternalTableDescription"]["Content"][key] = array;
+                json["PathDescription"]["ExternalTableDescription"]["Content"][key] = array;
             }
         } catch (...) {
             BLOG_CRIT("Сan't unpack content for external table: " << sourceType << ", error: " << CurrentExceptionMessage());
         }
-        json.Clear();
-        json << root;
-    }
-
-    void HandleTimeout() {
-        ReplyAndPassAway(GetHTTPGATEWAYTIMEOUT());
     }
 
     static YAML::Node GetSwagger() {
@@ -356,6 +339,7 @@ public:
             .Name = "enums",
             .Description = "convert enums to strings",
             .Type = "boolean",
+            .Default = "false",
         });
         yaml.AddParameter({
             .Name = "ui64",

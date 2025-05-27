@@ -9,71 +9,39 @@
 {% endnote %}
 
 
-## Клиенты с графическим интерфейсом {#gui}
+##  Графические пользовательские интерфейсы {#gui}
 
-|  Среда | Инструкция | Уровень поддержки |
-| --- | --- | --- |
-| Embedded UI | [Справка](../reference/embedded-ui/index.md) | |
-| [DBeaver](https://dbeaver.com)  |  [Инструкция](ide/dbeaver.md) | C помощью [JDBC-драйвера](https://github.com/ydb-platform/ydb-jdbc-driver/releases)|
-| JetBrains Database viewer |  —  | C помощью [JDBC-драйвера](https://github.com/ydb-platform/ydb-jdbc-driver/releases)|
-| [JetBrains DataGrip](https://www.jetbrains.com/ru-ru/datagrip/) |  — | C помощью [JDBC-драйвера](https://github.com/ydb-platform/ydb-jdbc-driver/releases)|
-| Другие JDBC-совместимые IDE | — | C помощью [JDBC-драйвера](https://github.com/ydb-platform/ydb-jdbc-driver/releases)|
+ {% include notitle [Содержание](gui/_includes/toc-table.md) %}
 
 
 ## Визуализация данных (Business Intelligence, BI) {#bi}
 
-| Среда | Уровень поддержки  | Инструкция |
-| --- | :---: | --- |
-{% if ydb-datalens %}
-| [{{ datalens-name }}](https://datalens.tech/ru) | Полный | [Инструкция](datalens.md) |
-{% endif %}
-{% if ydb-superset %}
+{% include notitle [Содержание](visualization/_includes/toc-table.md) %}
 
-| [Apache Superset](https://superset.apache.org) | Через [PostgreSQL-совместимость](https://ydb.tech/docs/ru/postgresql/intro) | [Инструкция](superset.md) |
 
-{% endif %}
-{% if ydb-finebi %}
-
-| [FineBI](https://intl.finebi.com) | Через [PostgreSQL-совместимость](https://ydb.tech/docs/ru/postgresql/intro) | [Инструкция](./finebi.md) |
-
-{% endif %}
-| [Grafana](https://grafana.com) | Полный| [Инструкция](grafana.md) |
-
-{% if ydb-airflow %}
 ## Оркестрация {#orchestration}
 
-| Среда | Инструкция |
-| --- | --- |
-| [{{ airflow-name }}](https://airflow.apache.org) | [Инструкция](airflow.md) |
-
-{% endif %}
+{% include notitle [Содержание](orchestration/_includes/toc-table.md) %}
 
 ## Поставка данных {#ingestion}
 
-| Система поставки | Инструкция |
-| --- | --- |
-| [FluentBit](https://fluentbit.io) | [Инструкция](fluent-bit.md) |
-| [LogStash](https://www.elastic.co/logstash) | [Инструкция](logstash.md) |
-| [Kafka Connect Sink](https://docs.confluent.io/platform/current/connect/index.html) | [Инструкция](https://github.com/ydb-platform/ydb-kafka-sink-connector) |
-| Произвольные [JDBC-источники данных](https://ru.wikipedia.org/wiki/Java_Database_Connectivity) | [Инструкция](import-jdbc.md) |
+{% include notitle [Содержание](ingestion/_includes/toc-table.md) %}
 
+### Потоковая поставка данных
 
-### Потоковая поставка данных {#streaming-ingestion}
-
-| Система поставки | Инструкция |
-| --- | --- |
-| [Apache Kafka API](https://kafka.apache.org) | [Инструкция](../reference/kafka-api/index.md) |
-| [Apache Kafka Connect](https://kafka.apache.org/documentation/#connect) | [Инструкция](../reference/kafka-api/connect/index.md) |
-
+{% include notitle [Содержание](ingestion/_includes/toc-table-streaming.md) %}
 
 ## Миграции данных {#schema_migration}
 
-| Среда | Инструкция |
-| --- | --- |
-| [goose](https://github.com/pressly/goose/) | [Инструкция](goose.md) |
-| [Liquibase](https://www.liquibase.com) | [Инструкция](liquibase.md) |
-| [Flyway](https://documentation.red-gate.com/fd/) | [Инструкция](flyway.md) |
-| [Hibernate](https://hibernate.org/orm/) | [Инструкция](hibernate.md) |
+{% include notitle [Содержание](migration/_includes/toc-table.md) %}
+
+## Объектно-реляционное отображение (ORM) {#orm}
+
+{% include notitle [Содержание](orm/_includes/toc-table.md) %}
+
+## Векторный поиск {#vectorsearch}
+
+{% include notitle [Содержание](vectorsearch/_includes/toc-table.md) %}
 
 ## Смотрите также
 

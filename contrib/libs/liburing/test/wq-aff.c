@@ -128,12 +128,47 @@ static int test(int sqpoll)
 	return ret;
 }
 
+static int test_invalid_cpu(void)
+{
+	struct io_uring_params p = { };
+	struct io_uring ring;
+	int ret, nr_cpus;
+
+	nr_cpus = sysconf(_SC_NPROCESSORS_ONLN);
+	if (nr_cpus < 0) {
+		perror("sysconf(_SC_NPROCESSORS_ONLN");
+		return T_EXIT_SKIP;
+	}
+
+	p.flags = IORING_SETUP_SQPOLL | IORING_SETUP_SQ_AFF;
+	p.sq_thread_cpu = 16 * nr_cpus;
+
+	ret = io_uring_queue_init_params(8, &ring, &p);
+	if (ret == -EPERM) {
+		return T_EXIT_SKIP;
+	} else if (ret != -EINVAL) {
+		fprintf(stderr, "Queue init: %d\n", ret);
+		return T_EXIT_FAIL;
+	}
+
+	io_uring_queue_exit(&ring);
+	return T_EXIT_PASS;
+}
+
 int main(int argc, char *argv[])
 {
 	int ret;
 
 	if (argc > 1)
 		return T_EXIT_SKIP;
+
+	ret = test_invalid_cpu();
+	if (ret == T_EXIT_SKIP) {
+		return T_EXIT_SKIP;
+	} else if (ret != T_EXIT_PASS) {
+		fprintf(stderr, "test sqpoll cpu failed\n");
+		return T_EXIT_FAIL;
+	}
 
 	ret = test(1);
 	if (ret == T_EXIT_SKIP) {

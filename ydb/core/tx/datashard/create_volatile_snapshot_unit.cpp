@@ -16,10 +16,10 @@ public:
     }
 
     EExecutionStatus Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) override {
-        Y_ABORT_UNLESS(op->IsSnapshotTx());
+        Y_ENSURE(op->IsSnapshotTx());
 
         TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
-        Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
+        Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
 
         const auto& record = tx->GetSnapshotTx();
         if (!record.HasCreateVolatileSnapshot()) {
@@ -32,7 +32,7 @@ public:
         ui64 pathId = params.GetPathId();
         ui64 step = tx->GetStep();
         ui64 txId = tx->GetTxId();
-        Y_ABORT_UNLESS(step != 0);
+        Y_ENSURE(step != 0);
 
         const TSnapshotKey key(ownerId, pathId, step, txId);
 
@@ -51,8 +51,7 @@ public:
 
         if (added) {
             DataShard.GetSnapshotManager().InitSnapshotExpireTime(key, ctx.Now());
-            if (DataShard.GetSnapshotManager().HasExpiringSnapshots())
-                DataShard.PlanCleanup(ctx);
+            DataShard.PlanCleanup(ctx);
 
             return EExecutionStatus::ExecutedNoMoreRestarts;
         } else {

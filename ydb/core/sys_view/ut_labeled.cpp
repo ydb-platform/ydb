@@ -103,7 +103,7 @@ void GetCounters(TTestEnv& env, const TString& databaseName, const TString& data
 Y_UNIT_TEST_SUITE(LabeledDbCounters) {
 
     Y_UNIT_TEST(OneTablet) {
-        TTestEnv env(1, 2, 0, 1, true);
+        TTestEnv env(1, 2, {.PqTabletsN = 1, .EnableSVP = true});
         const TString databaseName = NPQ::TTabletPreparationParameters().databaseId;
         const TString databasePath = NPQ::TTabletPreparationParameters().databasePath;
         auto edge = env.GetServer().GetRuntime()->AllocateEdgeActor();
@@ -125,7 +125,7 @@ Y_UNIT_TEST_SUITE(LabeledDbCounters) {
 
 
     Y_UNIT_TEST(OneTabletRemoveCounters) {
-        TTestEnv env(1, 2, 0, 1, true);
+        TTestEnv env(1, 2, {.PqTabletsN = 1, .EnableSVP = true});
         const TString databaseName = NPQ::TTabletPreparationParameters().databaseId;
         const TString databasePath = NPQ::TTabletPreparationParameters().databasePath;
         auto edge = env.GetServer().GetRuntime()->AllocateEdgeActor();
@@ -159,7 +159,7 @@ Y_UNIT_TEST_SUITE(LabeledDbCounters) {
 
 
     Y_UNIT_TEST(OneTabletRestart) {
-        TTestEnv env(1, 2, 0, 1, true);
+        TTestEnv env(1, 2, {.PqTabletsN = 1, .EnableSVP = true});
         const TString databaseName = NPQ::TTabletPreparationParameters().databaseId;
         const TString databasePath = NPQ::TTabletPreparationParameters().databasePath;
         auto edge = env.GetServer().GetRuntime()->AllocateEdgeActor();
@@ -204,7 +204,7 @@ Y_UNIT_TEST_SUITE(LabeledDbCounters) {
     }
 
     Y_UNIT_TEST(TwoTablets) {
-        TTestEnv env(1, 2, 0, 2, true);
+        TTestEnv env(1, 2, {.PqTabletsN = 2, .EnableSVP = true});
         const TString databaseName = NPQ::TTabletPreparationParameters().databaseId;
         const TString databasePath = NPQ::TTabletPreparationParameters().databasePath;
         auto check = [](::NMonitoring::TDynamicCounterPtr topicGroup) {
@@ -227,7 +227,7 @@ Y_UNIT_TEST_SUITE(LabeledDbCounters) {
     }
 
     Y_UNIT_TEST(TwoTabletsKillOneTablet) {
-        TTestEnv env(1, 2, 0, 2, true);
+        TTestEnv env(1, 2, {.PqTabletsN = 2, .EnableSVP = true});
         const TString databaseName = NPQ::TTabletPreparationParameters().databaseId;
         const TString databasePath = NPQ::TTabletPreparationParameters().databasePath;
         auto edge = env.GetServer().GetRuntime()->AllocateEdgeActor();

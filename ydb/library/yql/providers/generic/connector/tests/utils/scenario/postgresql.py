@@ -1,6 +1,6 @@
 from typing import Sequence
 
-import ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 as data_source_pb2
+import yql.essentials.providers.common.proto.gateways_config_pb2 as data_source_pb2
 
 import ydb.library.yql.providers.generic.connector.tests.utils.artifacts as artifacts
 from ydb.library.yql.providers.generic.connector.tests.utils.comparator import assert_data_outs_equal
@@ -30,13 +30,13 @@ def prepare_table(
 ):
     # create database
     with client.get_cursor("postgres") as (conn, cur):
-        database_exists_stmt = database.query_exists()
+        database_exists_stmt = database.exists()
         debug_with_limit(LOGGER, database_exists_stmt)
         cur.execute(database_exists_stmt)
 
         # database doesn't exist
         if not cur.fetchone():
-            create_database_stmt = database.query_create()
+            create_database_stmt = database.create()
             LOGGER.debug(create_database_stmt)
             cur.execute(create_database_stmt)
 
@@ -159,13 +159,13 @@ def select_missing_table(
 ):
     # create database but don't create table
     with client.get_cursor("postgres") as (conn, cur):
-        database_exists_stmt = test_case.database.query_exists()
+        database_exists_stmt = test_case.database.exists()
         debug_with_limit(LOGGER, database_exists_stmt)
         cur.execute(database_exists_stmt)
 
         # database doesn't exist
         if not cur.fetchone():
-            create_database_stmt = test_case.database.query_create()
+            create_database_stmt = test_case.database.create()
             debug_with_limit(LOGGER, create_database_stmt)
             cur.execute(create_database_stmt)
 

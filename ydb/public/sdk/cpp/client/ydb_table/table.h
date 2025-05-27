@@ -1,5 +1,7 @@
 #pragma once
 
+#include "fwd.h"
+
 #include "table_enum.h"
 
 #include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
@@ -26,17 +28,21 @@ class DescribeTableResult;
 class ExplicitPartitions;
 class GlobalIndexSettings;
 class VectorIndexSettings;
+class KMeansTreeSettings;
 class PartitioningSettings;
+class ReadReplicasSettings;
 class DateTypeColumnModeSettings;
 class TtlSettings;
+class TtlTier;
 class TableIndex;
 class TableIndexDescription;
 class ValueSinceUnixEpochModeSettings;
+class EvictionToExternalStorageSettings;
 
 } // namespace Table
 } // namespace Ydb
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 
 namespace NRetry::Async {
 template <typename TClient, typename TStatusType>
@@ -100,19 +106,29 @@ private:
     TMaybe<TKeyBound> To_;
 };
 
+struct TSequenceDescription {
+    struct TSetVal {
+        i64 NextValue;
+        bool NextUsed;
+    };
+    std::optional<TSetVal> SetVal;
+};
+
 struct TTableColumn {
     TString Name;
     TType Type;
     TString Family;
     std::optional<bool> NotNull;
+    std::optional<TSequenceDescription> SequenceDescription;
 
     TTableColumn() = default;
 
-    TTableColumn(TString name, TType type, TString family = TString(), std::optional<bool> notNull = std::nullopt)
+    TTableColumn(TString name, TType type, TString family = TString(), std::optional<bool> notNull = std::nullopt, std::optional<TSequenceDescription> sequenceDescription = std::nullopt)
         : Name(std::move(name))
         , Type(std::move(type))
         , Family(std::move(family))
         , NotNull(std::move(notNull))
+        , SequenceDescription(std::move(sequenceDescription))
     { }
 
     // Conversion from TColumn for API compatibility
@@ -173,12 +189,31 @@ private:
 struct TExplicitPartitions {
     using TSelf = TExplicitPartitions;
 
-    FLUENT_SETTING_VECTOR(TValue, SplitPoints);
+    FLUENT_SETTING_VECTOR_DEPRECATED(TValue, SplitPoints);
 
-    template <typename TProto>
-    static TExplicitPartitions FromProto(const TProto& proto);
-
+    static TExplicitPartitions FromProto(const Ydb::Table::ExplicitPartitions& proto);
     void SerializeTo(Ydb::Table::ExplicitPartitions& proto) const;
+};
+
+//! Represents table read replicas settings
+class TReadReplicasSettings {
+public:
+    enum class EMode {
+        PerAz = 0,
+        AnyAz = 1
+    };
+
+    TReadReplicasSettings(EMode mode, ui64 readReplicasCount);
+
+    EMode GetMode() const;
+    ui64 GetReadReplicasCount() const;
+
+    static TMaybe<TReadReplicasSettings> FromProto(const Ydb::Table::ReadReplicasSettings& proto);
+    void SerializeTo(Ydb::Table::ReadReplicasSettings& proto) const;
+
+private:
+    EMode Mode_;
+    ui64 ReadReplicasCount_;
 };
 
 struct TGlobalIndexSettings {
@@ -186,55 +221,73 @@ struct TGlobalIndexSettings {
 
     TPartitioningSettings PartitioningSettings;
     TUniformOrExplicitPartitions Partitions;
+    TMaybe<TReadReplicasSettings> ReadReplicasSettings;
 
-    template <typename TProto>
-    static TGlobalIndexSettings FromProto(const TProto& proto);
-
+    static TGlobalIndexSettings FromProto(const Ydb::Table::GlobalIndexSettings& proto);
     void SerializeTo(Ydb::Table::GlobalIndexSettings& proto) const;
 };
 
 struct TVectorIndexSettings {
 public:
-    enum class EDistance {
-        Cosine,
+    enum class EMetric {
+        Unspecified = 0,
+        InnerProduct,
+        CosineSimilarity,
+        CosineDistance,
         Manhattan,
         Euclidean,
-
-        Unknown = std::numeric_limits<int>::max()
-    };
-
-    enum class ESimilarity {
-        Cosine,
-        InnerProduct,
-
-        Unknown = std::numeric_limits<int>::max()
     };
 
     enum class EVectorType {
+        Unspecified = 0,
         Float,
         Uint8,
         Int8,
         Bit,
-
-        Unknown = std::numeric_limits<int>::max()
     };
-    using TMetric = std::variant<std::monostate, EDistance, ESimilarity>;
 
-    TMetric Metric;
-    EVectorType VectorType;
-    ui32 VectorDimension;
+    EMetric Metric = EMetric::Unspecified;
+    EVectorType VectorType = EVectorType::Unspecified;
+    ui32 VectorDimension = 0;
 
-    template <typename TProto>
-    static TVectorIndexSettings FromProto(const TProto& proto);
-
+    static TVectorIndexSettings FromProto(const Ydb::Table::VectorIndexSettings& proto);
     void SerializeTo(Ydb::Table::VectorIndexSettings& settings) const;
+
+    void Out(IOutputStream &o) const;
+};
+
+struct TKMeansTreeSettings {
+public:
+    enum class EMetric {
+        Unspecified = 0,
+        InnerProduct,
+        CosineSimilarity,
+        CosineDistance,
+        Manhattan,
+        Euclidean,
+    };
+
+    enum class EVectorType {
+        Unspecified = 0,
+        Float,
+        Uint8,
+        Int8,
+        Bit,
+    };
+
+    TVectorIndexSettings Settings;
+    ui32 Clusters = 0;
+    ui32 Levels = 0;
+
+    static TKMeansTreeSettings FromProto(const Ydb::Table::KMeansTreeSettings& proto);
+    void SerializeTo(Ydb::Table::KMeansTreeSettings& settings) const;
 
     void Out(IOutputStream &o) const;
 };
 
 //! Represents index description
 class TIndexDescription {
-    friend class NYdb::TProtoAccessor;
+    friend class NYdb::V2::TProtoAccessor;
 
 public:
     TIndexDescription(
@@ -243,7 +296,7 @@ public:
         const TVector<TString>& indexColumns,
         const TVector<TString>& dataColumns = {},
         const TVector<TGlobalIndexSettings>& globalIndexSettings = {},
-        const std::optional<TVectorIndexSettings>& vectorIndexSettings = {}
+        const std::variant<std::monostate, TKMeansTreeSettings>& specializedIndexSettings = {}
     );
 
     TIndexDescription(
@@ -257,7 +310,7 @@ public:
     EIndexType GetIndexType() const;
     const TVector<TString>& GetIndexColumns() const;
     const TVector<TString>& GetDataColumns() const;
-    const std::optional<TVectorIndexSettings>& GetVectorIndexSettings() const;
+    const std::variant<std::monostate, TKMeansTreeSettings>& GetIndexSettings() const;
     ui64 GetSizeBytes() const;
 
     void SerializeTo(Ydb::Table::TableIndex& proto) const;
@@ -277,8 +330,8 @@ private:
     TVector<TString> IndexColumns_;
     TVector<TString> DataColumns_;
     TVector<TGlobalIndexSettings> GlobalIndexSettings_;
-    std::optional<TVectorIndexSettings> VectorIndexSettings_;
-    ui64 SizeBytes = 0;
+    std::variant<std::monostate, TKMeansTreeSettings> SpecializedIndexSettings_;
+    ui64 SizeBytes_ = 0;
 };
 
 struct TRenameIndex {
@@ -311,7 +364,7 @@ private:
 
 //! Represents changefeed description
 class TChangefeedDescription {
-    friend class NYdb::TProtoAccessor;
+    friend class NYdb::V2::TProtoAccessor;
 
 public:
     class TInitialScanProgress {
@@ -360,6 +413,7 @@ public:
     const std::optional<TInitialScanProgress>& GetInitialScanProgress() const;
 
     void SerializeTo(Ydb::Table::Changefeed& proto) const;
+    void SerializeTo(Ydb::Table::ChangefeedDescription& proto) const;
     TString ToString() const;
     void Out(IOutputStream& o) const;
 
@@ -369,6 +423,9 @@ private:
 
     template <typename TProto>
     static TChangefeedDescription FromProto(const TProto& proto);
+
+    template <typename TProto>
+    void SerializeCommonFields(TProto& proto) const;
 
 private:
     TString Name_;
@@ -392,11 +449,12 @@ bool operator!=(const TChangefeedDescription& lhs, const TChangefeedDescription&
 struct TPartitionStats {
     ui64 Rows = 0;
     ui64 Size = 0;
+    ui32 LeaderNodeId = 0;
 };
 
 class TDateTypeColumnModeSettings {
 public:
-    explicit TDateTypeColumnModeSettings(const TString& columnName, const TDuration& expireAfter);
+    explicit TDateTypeColumnModeSettings(const TString& columnName, const TDuration& applyAfter);
     void SerializeTo(Ydb::Table::DateTypeColumnModeSettings& proto) const;
 
     const TString& GetColumnName() const;
@@ -404,7 +462,7 @@ public:
 
 private:
     TString ColumnName_;
-    TDuration ExpireAfter_;
+    TDuration ApplyAfter_;
 };
 
 class TValueSinceUnixEpochModeSettings {
@@ -419,7 +477,7 @@ public:
     };
 
 public:
-    explicit TValueSinceUnixEpochModeSettings(const TString& columnName, EUnit columnUnit, const TDuration& expireAfter);
+    explicit TValueSinceUnixEpochModeSettings(const TString& columnName, EUnit columnUnit, const TDuration& applyAfter);
     void SerializeTo(Ydb::Table::ValueSinceUnixEpochModeSettings& proto) const;
 
     const TString& GetColumnName() const;
@@ -433,11 +491,56 @@ public:
 private:
     TString ColumnName_;
     EUnit ColumnUnit_;
-    TDuration ExpireAfter_;
+    TDuration ApplyAfter_;
+};
+
+class TTtlDeleteAction {};
+
+class TTtlEvictToExternalStorageAction {
+public:
+    TTtlEvictToExternalStorageAction(const TString& storageName);
+    void SerializeTo(Ydb::Table::EvictionToExternalStorageSettings& proto) const;
+
+    TString GetStorage() const;
+
+private:
+    TString Storage_;
+};
+
+class TTtlTierSettings {
+public:
+    using TExpression = std::variant<
+        TDateTypeColumnModeSettings,
+        TValueSinceUnixEpochModeSettings
+    >;
+
+    using TAction = std::variant<
+        TTtlDeleteAction,
+        TTtlEvictToExternalStorageAction
+    >;
+
+public:
+    explicit TTtlTierSettings(const TExpression& expression, const TAction& action);
+
+    static std::optional<TTtlTierSettings> FromProto(const Ydb::Table::TtlTier& tier);
+    void SerializeTo(Ydb::Table::TtlTier& proto) const;
+
+    const TExpression& GetExpression() const;
+    const TAction& GetAction() const;
+
+private:
+    TExpression Expression_;
+    TAction Action_;
 };
 
 //! Represents ttl settings
 class TTtlSettings {
+private:
+    using TMode = std::variant<
+        TDateTypeColumnModeSettings,
+        TValueSinceUnixEpochModeSettings
+    >;
+
 public:
     using EUnit = TValueSinceUnixEpochModeSettings::EUnit;
 
@@ -446,25 +549,27 @@ public:
         ValueSinceUnixEpoch = 1,
     };
 
+    explicit TTtlSettings(const TVector<TTtlTierSettings>& tiers);
+
     explicit TTtlSettings(const TString& columnName, const TDuration& expireAfter);
-    explicit TTtlSettings(const Ydb::Table::DateTypeColumnModeSettings& mode, ui32 runIntervalSeconds);
     const TDateTypeColumnModeSettings& GetDateTypeColumn() const;
+    explicit TTtlSettings(const Ydb::Table::DateTypeColumnModeSettings& mode, ui32 runIntervalSeconds);
 
     explicit TTtlSettings(const TString& columnName, EUnit columnUnit, const TDuration& expireAfter);
-    explicit TTtlSettings(const Ydb::Table::ValueSinceUnixEpochModeSettings& mode, ui32 runIntervalSeconds);
     const TValueSinceUnixEpochModeSettings& GetValueSinceUnixEpoch() const;
+    explicit TTtlSettings(const Ydb::Table::ValueSinceUnixEpochModeSettings& mode, ui32 runIntervalSeconds);
 
+    static std::optional<TTtlSettings> FromProto(const Ydb::Table::TtlSettings& proto);
     void SerializeTo(Ydb::Table::TtlSettings& proto) const;
     EMode GetMode() const;
 
     TTtlSettings& SetRunInterval(const TDuration& value);
     const TDuration& GetRunInterval() const;
 
+    const TVector<TTtlTierSettings>& GetTiers() const;
+
 private:
-    std::variant<
-        TDateTypeColumnModeSettings,
-        TValueSinceUnixEpochModeSettings
-    > Mode_;
+    TVector<TTtlTierSettings> Tiers_;
     TDuration RunInterval_ = TDuration::Zero();
 };
 
@@ -540,24 +645,6 @@ private:
     std::shared_ptr<TImpl> Impl_;
 };
 
-//! Represents table read replicas settings
-class TReadReplicasSettings {
-public:
-    enum class EMode {
-        PerAz = 0,
-        AnyAz = 1
-    };
-
-    TReadReplicasSettings(EMode mode, ui64 readReplicasCount);
-
-    EMode GetMode() const;
-    ui64 GetReadReplicasCount() const;
-
-private:
-    EMode Mode_;
-    ui64 ReadReplicasCount_;
-};
-
 struct TExplicitPartitions;
 struct TDescribeTableSettings;
 
@@ -569,7 +656,7 @@ enum class EStoreType {
 //! Represents table description
 class TTableDescription {
     friend class TTableBuilder;
-    friend class NYdb::TProtoAccessor;
+    friend class NYdb::V2::TProtoAccessor;
 
     using EUnit = TValueSinceUnixEpochModeSettings::EUnit;
 
@@ -583,6 +670,7 @@ public:
     TVector<TIndexDescription> GetIndexDescriptions() const;
     TVector<TChangefeedDescription> GetChangefeedDescriptions() const;
     TMaybe<TTtlSettings> GetTtlSettings() const;
+    // Deprecated. Use GetTtlSettings() instead
     TMaybe<TString> GetTiering() const;
     EStoreType GetStoreType() const;
 
@@ -636,7 +724,7 @@ private:
     TTableDescription();
     explicit TTableDescription(const Ydb::Table::CreateTableRequest& request);
 
-    void AddColumn(const TString& name, const Ydb::Type& type, const TString& family, std::optional<bool> notNull);
+    void AddColumn(const TString& name, const Ydb::Type& type, const TString& family, std::optional<bool> notNull, std::optional<TSequenceDescription> sequenceDescription);
     void SetPrimaryKeyColumns(const TVector<TString>& primaryKeyColumns);
 
     // common
@@ -653,8 +741,8 @@ private:
     void AddUniqueSecondaryIndex(const TString& indexName, const TVector<TString>& indexColumns);
     void AddUniqueSecondaryIndex(const TString& indexName, const TVector<TString>& indexColumns, const TVector<TString>& dataColumns);
     // vector KMeansTree
-    void AddVectorKMeansTreeSecondaryIndex(const TString& indexName, const TVector<TString>& indexColumns, const TVectorIndexSettings& vectorIndexSettings);
-    void AddVectorKMeansTreeSecondaryIndex(const TString& indexName, const TVector<TString>& indexColumns, const TVector<TString>& dataColumns, const TVectorIndexSettings& vectorIndexSettings);
+    void AddVectorKMeansTreeIndex(const TString& indexName, const TVector<TString>& indexColumns, const TKMeansTreeSettings& indexSettings);
+    void AddVectorKMeansTreeIndex(const TString& indexName, const TVector<TString>& indexColumns, const TVector<TString>& dataColumns, const TKMeansTreeSettings& indexSettings);
 
     // default
     void AddSecondaryIndex(const TString& indexName, const TVector<TString>& indexColumns);
@@ -729,6 +817,7 @@ public:
 
     TColumnFamilyBuilder& SetData(const TString& media);
     TColumnFamilyBuilder& SetCompression(EColumnFamilyCompression compression);
+    TColumnFamilyBuilder& SetKeepInMemory(bool enabled);
 
     TColumnFamilyDescription Build() const;
 
@@ -788,6 +877,11 @@ public:
 
     TTableColumnFamilyBuilder& SetCompression(EColumnFamilyCompression compression) {
         Builder_.SetCompression(compression);
+        return *this;
+    }
+
+    TTableColumnFamilyBuilder& SetKeepInMemory(bool enabled) {
+        Builder_.SetKeepInMemory(enabled);
         return *this;
     }
 
@@ -854,6 +948,7 @@ public:
     TTableBuilder& AddNonNullableColumn(const TString& name, const TPgType& type, const TString& family = TString());
     TTableBuilder& SetPrimaryKeyColumns(const TVector<TString>& primaryKeyColumns);
     TTableBuilder& SetPrimaryKeyColumn(const TString& primaryKeyColumn);
+    TTableBuilder& AddSerialColumn(const TString& name, const EPrimitiveType& type, TSequenceDescription sequenceDescription, const TString& family = TString());
 
     // common
     TTableBuilder& AddSecondaryIndex(const TIndexDescription& indexDescription);
@@ -876,8 +971,8 @@ public:
     TTableBuilder& AddUniqueSecondaryIndex(const TString& indexName, const TVector<TString>& indexColumns, const TVector<TString>& dataColumns);
 
     // vector KMeansTree
-    TTableBuilder& AddVectorKMeansTreeSecondaryIndex(const TString& indexName, const TVector<TString>& indexColumns, const TVectorIndexSettings& vectorIndexSettings);
-    TTableBuilder& AddVectorKMeansTreeSecondaryIndex(const TString& indexName, const TVector<TString>& indexColumns, const TVector<TString>& dataColumns, const TVectorIndexSettings& vectorIndexSettings);
+    TTableBuilder& AddVectorKMeansTreeIndex(const TString& indexName, const TVector<TString>& indexColumns, const TKMeansTreeSettings& indexSettings);
+    TTableBuilder& AddVectorKMeansTreeIndex(const TString& indexName, const TVector<TString>& indexColumns, const TVector<TString>& dataColumns, const TKMeansTreeSettings& indexSettings);
 
     // default
     TTableBuilder& AddSecondaryIndex(const TString& indexName, const TVector<TString>& indexColumns, const TVector<TString>& dataColumns);
@@ -950,6 +1045,9 @@ public:
 
     TCopyItem& SetOmitIndexes();
     bool OmitIndexes() const;
+
+    void Out(IOutputStream& out) const;
+
 private:
     TString Source_;
     TString Destination_;
@@ -1012,22 +1110,22 @@ struct TSessionPoolSettings {
     using TSelf = TSessionPoolSettings;
 
     // Max number of sessions client can get from session pool
-    FLUENT_SETTING_DEFAULT(ui32, MaxActiveSessions, 50);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(ui32, MaxActiveSessions, 50);
 
     // Max number of attempt to create session inside session pool
     // to handle OVERLOADED error
-    FLUENT_SETTING_DEFAULT(ui32, RetryLimit, 5);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(ui32, RetryLimit, 5);
 
     // Max time session to be in idle state in session pool before
     // keep alive start to touch it
-    FLUENT_SETTING_DEFAULT(TDuration, KeepAliveIdleThreshold, TDuration::Minutes(5));
+    FLUENT_SETTING_DEFAULT_DEPRECATED(TDuration, KeepAliveIdleThreshold, TDuration::Minutes(5));
 
     // Max time session to be in idle state before closing
-    FLUENT_SETTING_DEFAULT(TDuration, CloseIdleThreshold, TDuration::Minutes(1));
+    FLUENT_SETTING_DEFAULT_DEPRECATED(TDuration, CloseIdleThreshold, TDuration::Minutes(1));
 
     // Min number of session in session pool.
     // Sessions will not be closed by CloseIdleThreshold if the number of sessions less then this limit.
-    FLUENT_SETTING_DEFAULT(ui32, MinPoolSize, 10);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(ui32, MinPoolSize, 10);
 };
 
 struct TClientSettings : public TCommonClientSettingsBase<TClientSettings> {
@@ -1041,9 +1139,9 @@ struct TClientSettings : public TCommonClientSettingsBase<TClientSettings> {
     // as it doesn't require client-server synchronization and can recompile
     // query on demand without client interaction.
     // The recommended value is False.
-    FLUENT_SETTING_DEFAULT(bool, UseQueryCache, false);
-    FLUENT_SETTING_DEFAULT(ui32, QueryCacheSize, 1000);
-    FLUENT_SETTING_DEFAULT(bool, KeepDataQueryText, true);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(bool, UseQueryCache, false);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(ui32, QueryCacheSize, 1000);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(bool, KeepDataQueryText, true);
 
     // Min allowed session variation coefficient (%) to start session balancing.
     // Variation coefficient is a ratio of the standard deviation sigma to the mean
@@ -1052,19 +1150,19 @@ struct TClientSettings : public TCommonClientSettingsBase<TClientSettings> {
     //   - add new host ([90, 100, 110, 0] sessions per host). Cv will be 77%
     // Balancing is will be performed if calculated cv greater than MinSessionCV
     // Zero - disable this feature
-    FLUENT_SETTING_DEFAULT(ui32, MinSessionCV, 20);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(ui32, MinSessionCV, 20);
 
     // Allow migrate requests between session during session balancing
-    FLUENT_SETTING_DEFAULT(bool, AllowRequestMigration, true);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(bool, AllowRequestMigration, true);
 
     // Settings of session pool
-    FLUENT_SETTING(TSessionPoolSettings, SessionPoolSettings);
+    FLUENT_SETTING_DEPRECATED(TSessionPoolSettings, SessionPoolSettings);
 };
 
 struct TBulkUpsertSettings : public TOperationRequestSettings<TBulkUpsertSettings> {
     // Format setting proto serialized into string. If not set format defaults are used.
     // I.e. it's Ydb.Table.CsvSettings for CSV.
-    FLUENT_SETTING_DEFAULT(TString, FormatSettings, "");
+    FLUENT_SETTING_DEFAULT_DEPRECATED(TString, FormatSettings, "");
 };
 
 struct TReadRowsSettings : public TOperationRequestSettings<TReadRowsSettings> {
@@ -1072,13 +1170,13 @@ struct TReadRowsSettings : public TOperationRequestSettings<TReadRowsSettings> {
 
 struct TStreamExecScanQuerySettings : public TRequestSettings<TStreamExecScanQuerySettings> {
     // Return query plan without actual query execution
-    FLUENT_SETTING_DEFAULT(bool, Explain, false);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(bool, Explain, false);
 
     // Collect runtime statistics with a given detalization mode
-    FLUENT_SETTING_DEFAULT(ECollectQueryStatsMode, CollectQueryStats, ECollectQueryStatsMode::None);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(ECollectQueryStatsMode, CollectQueryStats, ECollectQueryStatsMode::None);
 
     // Collect full query compilation diagnostics
-    FLUENT_SETTING_DEFAULT(bool, CollectFullDiagnostics, false);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(bool, CollectFullDiagnostics, false);
 };
 
 class TSession;
@@ -1198,7 +1296,7 @@ struct TTxOnlineSettings {
 
     TTxOnlineSettings() {}
 
-    FLUENT_SETTING_DEFAULT(bool, AllowInconsistentReads, false);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(bool, AllowInconsistentReads, false);
 };
 
 class TTxSettings {
@@ -1226,6 +1324,10 @@ public:
         return TTxSettings(TS_SNAPSHOT_RO);
     }
 
+    static TTxSettings SnapshotRW() {
+        return TTxSettings(TS_SNAPSHOT_RW);
+    }
+
     void Out(IOutputStream& out) const {
         switch (Mode_) {
         case TS_SERIALIZABLE_RW:
@@ -1240,6 +1342,9 @@ public:
         case TS_SNAPSHOT_RO:
             out << "SnapshotRO";
             break;
+        case TS_SNAPSHOT_RW:
+            out << "SnapshotRW";
+            break;
         default:
             out << "Unknown";
             break;
@@ -1251,10 +1356,11 @@ private:
         TS_SERIALIZABLE_RW,
         TS_ONLINE_RO,
         TS_STALE_RO,
-        TS_SNAPSHOT_RO
+        TS_SNAPSHOT_RO,
+        TS_SNAPSHOT_RW,
     };
 
-    FLUENT_SETTING(TTxOnlineSettings, OnlineSettings);
+    FLUENT_SETTING_DEPRECATED(TTxOnlineSettings, OnlineSettings);
 
 private:
     TTxSettings(ETransactionMode mode)
@@ -1263,30 +1369,7 @@ private:
     ETransactionMode Mode_;
 };
 
-class TTxControl {
-    friend class TTableClient;
-
-public:
-    using TSelf = TTxControl;
-
-    static TTxControl Tx(const TTransaction& tx) {
-        return TTxControl(tx);
-    }
-
-    static TTxControl BeginTx(const TTxSettings& settings = TTxSettings()) {
-        return TTxControl(settings);
-    }
-
-    FLUENT_SETTING_FLAG(CommitTx);
-
-private:
-    TTxControl(const TTransaction& tx);
-    TTxControl(const TTxSettings& begin);
-
-private:
-    TMaybe<TString> TxId_;
-    TTxSettings BeginTx_;
-};
+class TTxControl;
 
 enum class EAutoPartitioningPolicy {
     Disabled = 1,
@@ -1299,55 +1382,55 @@ enum class EAutoPartitioningPolicy {
 struct TColumnFamilyPolicy {
     using TSelf = TColumnFamilyPolicy;
 
-    FLUENT_SETTING_OPTIONAL(TString, Name);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(TString, Name);
 
-    FLUENT_SETTING_OPTIONAL(TString, Data);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(TString, Data);
 
-    FLUENT_SETTING_OPTIONAL(TString, External);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(TString, External);
 
-    FLUENT_SETTING_OPTIONAL(bool, KeepInMemory);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(bool, KeepInMemory);
 
-    FLUENT_SETTING_OPTIONAL(bool, Compressed);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(bool, Compressed);
 };
 
 struct TStoragePolicy {
     using TSelf = TStoragePolicy;
 
-    FLUENT_SETTING_OPTIONAL(TString, PresetName);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(TString, PresetName);
 
-    FLUENT_SETTING_OPTIONAL(TString, SysLog);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(TString, SysLog);
 
-    FLUENT_SETTING_OPTIONAL(TString, Log);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(TString, Log);
 
-    FLUENT_SETTING_OPTIONAL(TString, Data);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(TString, Data);
 
-    FLUENT_SETTING_OPTIONAL(TString, External);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(TString, External);
 
-    FLUENT_SETTING_VECTOR(TColumnFamilyPolicy, ColumnFamilies);
+    FLUENT_SETTING_VECTOR_DEPRECATED(TColumnFamilyPolicy, ColumnFamilies);
 };
 
 struct TPartitioningPolicy {
     using TSelf = TPartitioningPolicy;
 
-    FLUENT_SETTING_OPTIONAL(TString, PresetName);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(TString, PresetName);
 
-    FLUENT_SETTING_OPTIONAL(EAutoPartitioningPolicy, AutoPartitioning);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(EAutoPartitioningPolicy, AutoPartitioning);
 
-    FLUENT_SETTING_OPTIONAL(ui64, UniformPartitions);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(ui64, UniformPartitions);
 
-    FLUENT_SETTING_OPTIONAL(TExplicitPartitions, ExplicitPartitions);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(TExplicitPartitions, ExplicitPartitions);
 };
 
 struct TReplicationPolicy {
     using TSelf = TReplicationPolicy;
 
-    FLUENT_SETTING_OPTIONAL(TString, PresetName);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(TString, PresetName);
 
-    FLUENT_SETTING_OPTIONAL(ui32, ReplicasCount);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(ui32, ReplicasCount);
 
-    FLUENT_SETTING_OPTIONAL(bool, CreatePerAvailabilityZone);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(bool, CreatePerAvailabilityZone);
 
-    FLUENT_SETTING_OPTIONAL(bool, AllowPromotion);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(bool, AllowPromotion);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1355,17 +1438,17 @@ struct TReplicationPolicy {
 struct TCreateTableSettings : public TOperationRequestSettings<TCreateTableSettings> {
     using TSelf = TCreateTableSettings;
 
-    FLUENT_SETTING_OPTIONAL(TString, PresetName);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(TString, PresetName);
 
-    FLUENT_SETTING_OPTIONAL(TString, ExecutionPolicy);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(TString, ExecutionPolicy);
 
-    FLUENT_SETTING_OPTIONAL(TString, CompactionPolicy);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(TString, CompactionPolicy);
 
-    FLUENT_SETTING_OPTIONAL(TPartitioningPolicy, PartitioningPolicy);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(TPartitioningPolicy, PartitioningPolicy);
 
-    FLUENT_SETTING_OPTIONAL(TStoragePolicy, StoragePolicy);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(TStoragePolicy, StoragePolicy);
 
-    FLUENT_SETTING_OPTIONAL(TReplicationPolicy, ReplicationPolicy);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(TReplicationPolicy, ReplicationPolicy);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1425,6 +1508,11 @@ public:
 
     TAlterColumnFamilyBuilder& SetCompression(EColumnFamilyCompression compression) {
         Builder_.SetCompression(compression);
+        return *this;
+    }
+
+    TAlterColumnFamilyBuilder& SetKeepInMemory(bool enabled) {
+        Builder_.SetKeepInMemory(enabled);
         return *this;
     }
 
@@ -1527,42 +1615,42 @@ struct TAlterTableSettings : public TOperationRequestSettings<TAlterTableSetting
 
     TAlterTableSettings();
 
-    FLUENT_SETTING_VECTOR(TTableColumn, AddColumns);
+    FLUENT_SETTING_VECTOR_DEPRECATED(TTableColumn, AddColumns);
 
-    FLUENT_SETTING_VECTOR(TString, DropColumns);
+    FLUENT_SETTING_VECTOR_DEPRECATED(TString, DropColumns);
 
-    FLUENT_SETTING_VECTOR(TAlterTableColumn, AlterColumns);
+    FLUENT_SETTING_VECTOR_DEPRECATED(TAlterTableColumn, AlterColumns);
 
-    FLUENT_SETTING_VECTOR(TIndexDescription, AddIndexes);
-    FLUENT_SETTING_VECTOR(TString, DropIndexes);
-    FLUENT_SETTING_VECTOR(TRenameIndex, RenameIndexes);
+    FLUENT_SETTING_VECTOR_DEPRECATED(TIndexDescription, AddIndexes);
+    FLUENT_SETTING_VECTOR_DEPRECATED(TString, DropIndexes);
+    FLUENT_SETTING_VECTOR_DEPRECATED(TRenameIndex, RenameIndexes);
 
-    FLUENT_SETTING_VECTOR(TChangefeedDescription, AddChangefeeds);
-    FLUENT_SETTING_VECTOR(TString, DropChangefeeds);
+    FLUENT_SETTING_VECTOR_DEPRECATED(TChangefeedDescription, AddChangefeeds);
+    FLUENT_SETTING_VECTOR_DEPRECATED(TString, DropChangefeeds);
 
     TSelf& AlterColumnFamily(TString name, TString family) {
         AlterColumns_.emplace_back(std::move(name), std::move(family));
         return *this;
     }
 
-    FLUENT_SETTING_OPTIONAL(TStorageSettings, AlterStorageSettings);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(TStorageSettings, AlterStorageSettings);
 
-    FLUENT_SETTING_VECTOR(TColumnFamilyDescription, AddColumnFamilies);
-    FLUENT_SETTING_VECTOR(TColumnFamilyDescription, AlterColumnFamilies);
+    FLUENT_SETTING_VECTOR_DEPRECATED(TColumnFamilyDescription, AddColumnFamilies);
+    FLUENT_SETTING_VECTOR_DEPRECATED(TColumnFamilyDescription, AlterColumnFamilies);
 
     // workaround for MSVC
     TSelf& AlterTtlSettings(const TMaybe<TAlterTtlSettings>& value);
     const TMaybe<TAlterTtlSettings>& GetAlterTtlSettings() const;
 
-    FLUENT_SETTING(TAlterAttributes, AlterAttributes);
+    FLUENT_SETTING_DEPRECATED(TAlterAttributes, AlterAttributes);
 
-    FLUENT_SETTING(TString, SetCompactionPolicy);
+    FLUENT_SETTING_DEPRECATED(TString, SetCompactionPolicy);
 
-    FLUENT_SETTING_OPTIONAL(TPartitioningSettings, AlterPartitioningSettings);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(TPartitioningSettings, AlterPartitioningSettings);
 
-    FLUENT_SETTING_OPTIONAL(bool, SetKeyBloomFilter);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(bool, SetKeyBloomFilter);
 
-    FLUENT_SETTING_OPTIONAL(TReadReplicasSettings, SetReadReplicasSettings);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(TReadReplicasSettings, SetReadReplicasSettings);
     TSelf& SetReadReplicasSettings(TReadReplicasSettings::EMode mode, ui64 readReplicasCount) {
         SetReadReplicasSettings_ = TReadReplicasSettings(mode, readReplicasCount);
         return *this;
@@ -1626,21 +1714,23 @@ struct TCopyTablesSettings : public TOperationRequestSettings<TCopyTablesSetting
 struct TRenameTablesSettings : public TOperationRequestSettings<TRenameTablesSettings> {};
 
 struct TDescribeTableSettings : public TOperationRequestSettings<TDescribeTableSettings> {
-    FLUENT_SETTING_DEFAULT(bool, WithKeyShardBoundary, false);
-    FLUENT_SETTING_DEFAULT(bool, WithTableStatistics, false);
-    FLUENT_SETTING_DEFAULT(bool, WithPartitionStatistics, false);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(bool, WithKeyShardBoundary, false);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(bool, WithTableStatistics, false);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(bool, WithPartitionStatistics, false);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(bool, WithSetVal, false);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(bool, WithShardNodesInfo, false);
 };
 
 struct TExplainDataQuerySettings : public TOperationRequestSettings<TExplainDataQuerySettings> {
-    FLUENT_SETTING_DEFAULT(bool, WithCollectFullDiagnostics, false);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(bool, WithCollectFullDiagnostics, false);
 };
 
 struct TPrepareDataQuerySettings : public TOperationRequestSettings<TPrepareDataQuerySettings> {};
 
 struct TExecDataQuerySettings : public TOperationRequestSettings<TExecDataQuerySettings> {
-    FLUENT_SETTING_OPTIONAL(bool, KeepInQueryCache);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(bool, KeepInQueryCache);
 
-    FLUENT_SETTING_OPTIONAL(ECollectQueryStatsMode, CollectQueryStats);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(ECollectQueryStatsMode, CollectQueryStats);
 };
 
 struct TExecSchemeQuerySettings : public TOperationRequestSettings<TExecSchemeQuerySettings> {};
@@ -1648,7 +1738,7 @@ struct TExecSchemeQuerySettings : public TOperationRequestSettings<TExecSchemeQu
 struct TBeginTxSettings : public TOperationRequestSettings<TBeginTxSettings> {};
 
 struct TCommitTxSettings : public TOperationRequestSettings<TCommitTxSettings> {
-    FLUENT_SETTING_OPTIONAL(ECollectQueryStatsMode, CollectQueryStats);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(ECollectQueryStatsMode, CollectQueryStats);
 };
 
 struct TRollbackTxSettings : public TOperationRequestSettings<TRollbackTxSettings> {};
@@ -1661,24 +1751,26 @@ struct TReadTableSettings : public TRequestSettings<TReadTableSettings> {
 
     using TSelf = TReadTableSettings;
 
-    FLUENT_SETTING_OPTIONAL(TKeyBound, From);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(TKeyBound, From);
 
-    FLUENT_SETTING_OPTIONAL(TKeyBound, To);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(TKeyBound, To);
 
-    FLUENT_SETTING_VECTOR(TString, Columns);
+    FLUENT_SETTING_VECTOR_DEPRECATED(TString, Columns);
 
-    FLUENT_SETTING_FLAG(Ordered);
+    FLUENT_SETTING_FLAG_DEPRECATED(Ordered);
 
-    FLUENT_SETTING_OPTIONAL(ui64, RowLimit);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(ui64, RowLimit);
 
-    FLUENT_SETTING_OPTIONAL(bool, UseSnapshot);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(bool, UseSnapshot);
 
-    FLUENT_SETTING_OPTIONAL(ui64, BatchLimitBytes);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(ui64, BatchLimitBytes);
 
-    FLUENT_SETTING_OPTIONAL(ui64, BatchLimitRows);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(ui64, BatchLimitRows);
 
-    FLUENT_SETTING_OPTIONAL(bool, ReturnNotNullAsOptional);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(bool, ReturnNotNullAsOptional);
 };
+
+using TPrecommitTransactionCallback = std::function<TAsyncStatus ()>;
 
 //! Represents all session operations
 //! Session is transparent logic representation of connection
@@ -1817,26 +1909,51 @@ TAsyncStatus TTableClient::RetryOperation(
 class TTransaction {
     friend class TTableClient;
 public:
-    const TString& GetId() const {
-        return TxId_;
-    }
-
-    bool IsActive() const {
-        return !TxId_.empty();
-    }
+    const TString& GetId() const;
+    bool IsActive() const;
 
     TAsyncCommitTransactionResult Commit(const TCommitTxSettings& settings = TCommitTxSettings());
     TAsyncStatus Rollback(const TRollbackTxSettings& settings = TRollbackTxSettings());
 
-    TSession GetSession() const {
-        return Session_;
-    }
+    TSession GetSession() const;
+
+    void AddPrecommitCallback(TPrecommitTransactionCallback cb);
 
 private:
     TTransaction(const TSession& session, const TString& txId);
 
-    TSession Session_;
-    TString TxId_;
+    TAsyncStatus Precommit() const;
+
+    class TImpl;
+
+    std::shared_ptr<TImpl> TransactionImpl_;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TTxControl {
+    friend class TTableClient;
+
+public:
+    using TSelf = TTxControl;
+
+    static TTxControl Tx(const TTransaction& tx) {
+        return TTxControl(tx);
+    }
+
+    static TTxControl BeginTx(const TTxSettings& settings = TTxSettings()) {
+        return TTxControl(settings);
+    }
+
+    FLUENT_SETTING_FLAG_DEPRECATED(CommitTx);
+
+private:
+    TTxControl(const TTransaction& tx);
+    TTxControl(const TTxSettings& begin);
+
+private:
+    TMaybe<TTransaction> Tx_;
+    TTxSettings BeginTx_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

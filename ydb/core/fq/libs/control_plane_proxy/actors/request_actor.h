@@ -5,12 +5,13 @@
 
 #include <contrib/libs/fmt/include/fmt/format.h>
 #include <ydb/library/actors/core/event.h>
+#include <ydb/library/protobuf_printer/security_printer.h>
 #include <util/generic/maybe.h>
 
 #include <ydb/core/fq/libs/actors/logging/log.h>
 #include <ydb/core/fq/libs/control_plane_proxy/events/events.h>
 #include <ydb/core/fq/libs/control_plane_storage/events/events.h>
-#include <ydb/library/yql/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 
 namespace NFq::NPrivate {
 
@@ -92,7 +93,7 @@ public:
     }
 
     void HandleTimeout() {
-        CPP_LOG_D("Request timeout. " << RequestProxy->Get()->Request.DebugString());
+        CPP_LOG_D("Request timeout. " << NKikimr::SecureDebugString(RequestProxy->Get()->Request));
         NYql::TIssues issues;
         NYql::TIssue issue =
             MakeErrorIssue(TIssuesIds::TIMEOUT,
@@ -192,19 +193,47 @@ public:
                                             TEvControlPlaneStorage::TEvCreateQueryResponse,
                                             TEvControlPlaneProxy::TEvCreateQueryRequest,
                                             TEvControlPlaneProxy::TEvCreateQueryResponse>;
-    using TBaseRequestActor::TBaseRequestActor;
+
+        TCreateQueryRequestActor(typename TEvControlPlaneProxy::TEvCreateQueryRequest::TPtr requestProxy,
+                                 const TControlPlaneProxyConfig& config,
+                                 const TActorId& serviceId,
+                                 const TRequestCounters& counters,
+                                 const TRequestCommonCountersPtr& rateLimiterCounters,
+                                 const std::function<void(const TDuration&, bool, bool)>& probe,
+                                 const TPermissions& availablePermissions,
+                                 bool replyWithResponseOnSuccess = true)
+        : TBaseRequestActor(requestProxy, config, serviceId, counters, probe, availablePermissions, replyWithResponseOnSuccess)
+        , RateLimiterCounters(rateLimiterCounters) {
+    }
 
     STFUNC(StateFunc) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvRateLimiter::TEvCreateResourceResponse, Handle);
+            cFunc(NActors::TEvents::TSystem::Wakeup, HandleTimeout);
             default:
                 return TBaseRequestActor::StateFunc(ev);
         }
     }
 
+    bool ShouldCreateRateLimiter() const {
+        return RequestProxy->Get()->Quotas 
+                && (RequestProxy->Get()->Request.content().type() == FederatedQuery::QueryContent::STREAMING
+                    || !Config.ComputeConfig.YdbComputeControlPlaneEnabled(RequestProxy->Get()->Scope));
+    }
+
+    void HandleTimeout() {
+        // Don't need to set the RateLimiterCreationInProgress = false 
+        // because of the PassAway will be called in this callback
+        if (RateLimiterCreationInProgress) {
+            RateLimiterCounters->Timeout->Inc();
+            RateLimiterCounters->InFly->Dec();
+        }
+        TBaseRequestActor::HandleTimeout();
+    }
+
     void OnBootstrap() override {
         this->UnsafeBecome(&TCreateQueryRequestActor::StateFunc);
-        if (RequestProxy->Get()->Quotas) {
+        if (ShouldCreateRateLimiter()) {
             SendCreateRateLimiterResourceRequest();
         } else {
             SendRequestIfCan();
@@ -217,9 +246,13 @@ public:
                                                           10); // percent -> milliseconds
             CPP_LOG_T("Create rate limiter resource for cloud with limit " << cloudLimit
                                                                            << "ms");
+            RateLimiterCreationInProgress = true;
+            RateLimiterCounters->InFly->Inc();
+            StartRateLimiterCreation = TInstant::Now();
             Send(RateLimiterControlPlaneServiceId(),
                  new TEvRateLimiter::TEvCreateResource(RequestProxy->Get()->CloudId, cloudLimit));
         } else {
+            RateLimiterCounters->Error->Inc();
             NYql::TIssues issues;
             NYql::TIssue issue =
                 MakeErrorIssue(TIssuesIds::INTERNAL_ERROR,
@@ -232,12 +265,17 @@ public:
     }
 
     void Handle(TEvRateLimiter::TEvCreateResourceResponse::TPtr& ev) {
+        RateLimiterCreationInProgress = false;
+        RateLimiterCounters->InFly->Dec();
+        RateLimiterCounters->LatencyMs->Collect((TInstant::Now() - StartRateLimiterCreation).MilliSeconds());
         CPP_LOG_D(
             "Create response from rate limiter service. Success: " << ev->Get()->Success);
         if (ev->Get()->Success) {
+            RateLimiterCounters->Ok->Inc();
             QuoterResourceCreated = true;
             SendRequestIfCan();
         } else {
+            RateLimiterCounters->Error->Inc();
             NYql::TIssue issue("Failed to create rate limiter resource");
             for (const NYql::TIssue& i : ev->Get()->Issues) {
                 issue.AddSubIssue(MakeIntrusive<NYql::TIssue>(i));
@@ -249,8 +287,13 @@ public:
     }
 
     bool CanSendRequest() const override {
-        return (QuoterResourceCreated || !RequestProxy->Get()->Quotas) && TBaseRequestActor::CanSendRequest();
+        return (QuoterResourceCreated || !ShouldCreateRateLimiter()) && TBaseRequestActor::CanSendRequest();
     }
+
+private:
+    TInstant StartRateLimiterCreation;
+    bool RateLimiterCreationInProgress = false;
+    TRequestCommonCountersPtr RateLimiterCounters;
 };
 
 } // namespace NFq::NPrivate

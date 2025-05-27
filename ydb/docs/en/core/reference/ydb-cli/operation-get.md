@@ -20,9 +20,9 @@ View a description of the command to obtain the status of a long-running operati
 
 ## Parameters of the subcommand {#options}
 
-| Name | Description |
----|---
-| `--format` | Input format.<br/>Default value: `pretty`.<br/>Acceptable values:<ul><li>`pretty`: A human-readable format.</li><li>`proto-json-base64`: Protobuf result in [JSON] format{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/JSON){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/JSON){% endif %}, binary strings are encoded in [Base64]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/Base64){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/Base64){% endif %}.</li></ul> |
+| Name       | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+|------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `--format` | Input format.<br/>Default value: `pretty`.<br/>Acceptable values:<ul><li>`pretty`: A human-readable format.</li><li>`proto-json-base64`: Protobuf result in [JSON](https://en.wikipedia.org/wiki/JSON) format, binary strings are encoded in [Base64](https://en.wikipedia.org/wiki/Base64).</li></ul> |
 
 ## Examples {examples}
 

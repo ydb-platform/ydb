@@ -1,4 +1,5 @@
 #include "datashard_impl.h"
+#include "datashard_integrity_trails.h"
 #include "datashard_kqp.h"
 #include "datashard_pipeline.h"
 #include "execution_unit_ctors.h"
@@ -73,7 +74,7 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
     }
 
     TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
-    Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
+    Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
 
     DataShard.ReleaseCache(*tx);
 
@@ -89,7 +90,7 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
                 // For immediate transactions we want to translate this into a propose failure
                 if (op->IsImmediate()) {
                     const auto& dataTx = tx->GetDataTx();
-                    Y_ABORT_UNLESS(!dataTx->Ready());
+                    Y_ENSURE(!dataTx->Ready());
                     op->SetAbortedFlag();
                     BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::ERROR);
                     op->Result()->SetProcessError(dataTx->Code(), dataTx->GetErrors());
@@ -97,7 +98,7 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
                 }
 
                 // For planned transactions errors are not expected
-                Y_ABORT("Failed to restore tx data: %s", tx->GetDataTx()->GetErrors().c_str());
+                Y_ENSURE(false, "Failed to restore tx data: " << tx->GetDataTx()->GetErrors());
         }
     }
 
@@ -109,7 +110,7 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
 
     if (op->IsImmediate() && !dataTx->ReValidateKeys(txc.DB.GetScheme())) {
         // Immediate transactions may be reordered with schema changes and become invalid
-        Y_ABORT_UNLESS(!dataTx->Ready());
+        Y_ENSURE(!dataTx->Ready());
         op->SetAbortedFlag();
         BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::ERROR);
         op->Result()->SetProcessError(dataTx->Code(), dataTx->GetErrors());
@@ -146,6 +147,15 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
         }
 
         if (guardLocks.LockTxId) {
+            auto abortLock = [&]() {
+                LOG_T("Operation " << *op << " (execute_kqp_data_tx) at " << tabletId
+                    << " aborting because it cannot acquire locks");
+
+                op->SetAbortedFlag();
+                BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::LOCKS_BROKEN);
+                return EExecutionStatus::Executed;
+            };
+
             switch (DataShard.SysLocksTable().EnsureCurrentLock()) {
                 case EEnsureCurrentLock::Success:
                     // Lock is valid, we may continue with reads and side-effects
@@ -153,27 +163,26 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
 
                 case EEnsureCurrentLock::Broken:
                     // Lock is valid, but broken, we could abort early in some
-                    // cases, but it doesn't affect correctness.
+                    // cases, but it doesn't affect correctness. For write
+                    // transactions we need to abort, since we may otherwise
+                    // perform writes that are not attached to any lock.
+                    if (!op->IsReadOnly()) {
+                        return abortLock();
+                    }
                     break;
 
                 case EEnsureCurrentLock::TooMany:
                     // Lock cannot be created, it's not necessarily a problem
                     // for read-only transactions, for non-readonly we need to
                     // abort;
-                    if (op->IsReadOnly()) {
-                        break;
+                    if (!op->IsReadOnly()) {
+                        return abortLock();
                     }
-
-                    [[fallthrough]];
+                    break;
 
                 case EEnsureCurrentLock::Abort:
                     // Lock cannot be created and we must abort
-                    LOG_T("Operation " << *op << " (execute_kqp_data_tx) at " << tabletId
-                        << " aborting because it cannot acquire locks");
-
-                    op->SetAbortedFlag();
-                    BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::LOCKS_BROKEN);
-                    return EExecutionStatus::Executed;
+                    return abortLock();
             }
         }
 
@@ -206,7 +215,8 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
             }
 
             KqpEraseLocks(tabletId, kqpLocks, sysLocks);
-            sysLocks.ApplyLocks();
+            auto [_, locksBrokenByTx] = sysLocks.ApplyLocks();
+            NDataIntegrity::LogIntegrityTrailsLocks(ctx, tabletId, txId, locksBrokenByTx);
             DataShard.SubscribeNewLocks(ctx);
             if (locksDb.HasChanges()) {
                 op->SetWaitCompletionFlag(true);
@@ -272,7 +282,7 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
             //       relevant for future multi-table shards only.
             // NOTE: generation may not match an existing lock, but it's not a problem.
             for (auto& table : guardLocks.AffectedTables) {
-                Y_ABORT_UNLESS(guardLocks.LockTxId);
+                Y_ENSURE(guardLocks.LockTxId);
                 op->Result()->AddTxLock(
                     guardLocks.LockTxId,
                     DataShard.TabletID(),
@@ -302,7 +312,7 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
             for (ui64 txId : computeCtx.GetVolatileReadDependencies()) {
                 op->AddVolatileDependency(txId);
                 bool ok = DataShard.GetVolatileTxManager().AttachBlockedOperation(txId, op->GetTxId());
-                Y_VERIFY_S(ok, "Unexpected failure to attach TxId# " << op->GetTxId() << " to volatile tx " << txId);
+                Y_ENSURE(ok, "Unexpected failure to attach TxId# " << op->GetTxId() << " to volatile tx " << txId);
             }
 
             allocGuard.Release();
@@ -329,7 +339,7 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
             return EExecutionStatus::Continue;
         }
 
-        Y_ABORT_UNLESS(result);
+        Y_ENSURE(result);
         op->Result().Swap(result);
         op->SetKqpAttachedRSFlag();
 
@@ -374,6 +384,10 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
         // Note: may erase persistent locks, must be after we persist volatile tx
         AddLocksToResult(op, ctx);
 
+        if (!guardLocks.LockTxId) {
+            writeVersion.ToProto(op->Result()->Record.MutableCommitVersion());
+        }
+
         if (auto changes = std::move(dataTx->GetCollectedChanges())) {
             op->ChangeRecords() = std::move(changes);
         }
@@ -410,7 +424,7 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
             TStringBuilder() << "Shard " << DataShard.TabletID() << " cannot write more uncommitted changes");
 
         for (auto& table : guardLocks.AffectedTables) {
-            Y_ABORT_UNLESS(guardLocks.LockTxId);
+            Y_ENSURE(guardLocks.LockTxId);
             op->Result()->AddTxLock(
                 guardLocks.LockTxId,
                 DataShard.TabletID(),
@@ -437,7 +451,7 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
                 ->AddError(NKikimrTxDataShard::TError::UNKNOWN, TStringBuilder() << "Tx was terminated: " << e.what());
             return EExecutionStatus::Executed;
         } else {
-            Y_FAIL_S("Unexpected exception in KQP transaction execution: " << e.what());
+            throw;
         }
     }
 
@@ -461,7 +475,8 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
 }
 
 void TExecuteKqpDataTxUnit::AddLocksToResult(TOperation::TPtr op, const TActorContext& ctx) {
-    auto locks = DataShard.SysLocksTable().ApplyLocks();
+    auto [locks, locksBrokenByTx] = DataShard.SysLocksTable().ApplyLocks();
+    NDataIntegrity::LogIntegrityTrailsLocks(ctx, DataShard.TabletID(), op->GetTxId(), locksBrokenByTx);
     LOG_T("add locks to result: " << locks.size());
     for (const auto& lock : locks) {
         if (lock.IsError()) {

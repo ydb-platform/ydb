@@ -11,7 +11,7 @@
 #include <util/generic/size_literals.h>
 
 
-namespace NYdb::NPersQueue {
+namespace NYdb::inline V2::NPersQueue {
 
 //! Read settings for single topic.
 struct TTopicReadSettings {
@@ -28,14 +28,14 @@ struct TTopicReadSettings {
     TTopicReadSettings& operator=(TTopicReadSettings&&) = default;
 
     //! Path of topic to read.
-    FLUENT_SETTING(TString, Path);
+    FLUENT_SETTING_DEPRECATED(TString, Path);
 
     //! Start reading from this timestamp.
-    FLUENT_SETTING_OPTIONAL(TInstant, StartingMessageTimestamp);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(TInstant, StartingMessageTimestamp);
 
     //! Partition groups to read.
     //! 1-based.
-    FLUENT_SETTING_VECTOR(ui64, PartitionGroupIds);
+    FLUENT_SETTING_VECTOR_DEPRECATED(ui64, PartitionGroupIds);
 };
 
 //! Settings for read session.
@@ -65,66 +65,66 @@ struct TReadSessionSettings : public TRequestSettings<TReadSessionSettings> {
 
         //! Data size limit for the DataReceivedHandler handler.
         //! The data size may exceed this limit.
-        FLUENT_SETTING_DEFAULT(size_t, MaxMessagesBytes, Max<size_t>());
+        FLUENT_SETTING_DEFAULT_DEPRECATED(size_t, MaxMessagesBytes, Max<size_t>());
 
         //! Function to handle data events.
         //! If this handler is set, data events will be handled by handler,
         //! otherwise sent to TReadSession::GetEvent().
         //! Default value is empty function (not set).
-        FLUENT_SETTING(std::function<void(TReadSessionEvent::TDataReceivedEvent&)>, DataReceivedHandler);
+        FLUENT_SETTING_DEPRECATED(std::function<void(TReadSessionEvent::TDataReceivedEvent&)>, DataReceivedHandler);
 
         //! Function to handle commit ack events.
         //! If this handler is set, commit ack events will be handled by handler,
         //! otherwise sent to TReadSession::GetEvent().
         //! Default value is empty function (not set).
-        FLUENT_SETTING(std::function<void(TReadSessionEvent::TCommitAcknowledgementEvent&)>, CommitAcknowledgementHandler);
+        FLUENT_SETTING_DEPRECATED(std::function<void(TReadSessionEvent::TCommitAcknowledgementEvent&)>, CommitAcknowledgementHandler);
 
         //! Function to handle create partition stream events.
         //! If this handler is set, create partition stream events will be handled by handler,
         //! otherwise sent to TReadSession::GetEvent().
         //! Default value is empty function (not set).
-        FLUENT_SETTING(std::function<void(TReadSessionEvent::TCreatePartitionStreamEvent&)>, CreatePartitionStreamHandler);
+        FLUENT_SETTING_DEPRECATED(std::function<void(TReadSessionEvent::TCreatePartitionStreamEvent&)>, CreatePartitionStreamHandler);
 
         //! Function to handle destroy partition stream events.
         //! If this handler is set, destroy partition stream events will be handled by handler,
         //! otherwise sent to TReadSession::GetEvent().
         //! Default value is empty function (not set).
-        FLUENT_SETTING(std::function<void(TReadSessionEvent::TDestroyPartitionStreamEvent&)>, DestroyPartitionStreamHandler);
+        FLUENT_SETTING_DEPRECATED(std::function<void(TReadSessionEvent::TDestroyPartitionStreamEvent&)>, DestroyPartitionStreamHandler);
 
         //! Function to handle partition stream status events.
         //! If this handler is set, partition stream status events will be handled by handler,
         //! otherwise sent to TReadSession::GetEvent().
         //! Default value is empty function (not set).
-        FLUENT_SETTING(std::function<void(TReadSessionEvent::TPartitionStreamStatusEvent&)>, PartitionStreamStatusHandler);
+        FLUENT_SETTING_DEPRECATED(std::function<void(TReadSessionEvent::TPartitionStreamStatusEvent&)>, PartitionStreamStatusHandler);
 
         //! Function to handle partition stream closed events.
         //! If this handler is set, partition stream closed events will be handled by handler,
         //! otherwise sent to TReadSession::GetEvent().
         //! Default value is empty function (not set).
-        FLUENT_SETTING(std::function<void(TReadSessionEvent::TPartitionStreamClosedEvent&)>, PartitionStreamClosedHandler);
+        FLUENT_SETTING_DEPRECATED(std::function<void(TReadSessionEvent::TPartitionStreamClosedEvent&)>, PartitionStreamClosedHandler);
 
         //! Function to handle session closed events.
         //! If this handler is set, close session events will be handled by handler
         //! and then sent to TReadSession::GetEvent().
         //! Default value is empty function (not set).
-        FLUENT_SETTING(TSessionClosedHandler, SessionClosedHandler);
+        FLUENT_SETTING_DEPRECATED(TSessionClosedHandler, SessionClosedHandler);
 
         //! Function to handle all event types.
         //! If event with current type has no handler for this type of event,
         //! this handler (if specified) will be used.
         //! If this handler is not specified, event can be received with TReadSession::GetEvent() method.
-        FLUENT_SETTING(std::function<void(TReadSessionEvent::TEvent&)>, CommonHandler);
+        FLUENT_SETTING_DEPRECATED(std::function<void(TReadSessionEvent::TEvent&)>, CommonHandler);
 
         //! Executor for handlers.
         //! If not set, default single threaded executor will be used.
-        FLUENT_SETTING(IExecutor::TPtr, HandlersExecutor);
+        FLUENT_SETTING_DEPRECATED(IExecutor::TPtr, HandlersExecutor);
     };
 
     //! Consumer.
-    FLUENT_SETTING(TString, ConsumerName);
+    FLUENT_SETTING_DEPRECATED(TString, ConsumerName);
 
     //! Topics.
-    FLUENT_SETTING_VECTOR(TTopicReadSettings, Topics);
+    FLUENT_SETTING_VECTOR_DEPRECATED(TTopicReadSettings, Topics);
 
     //! Default variant.
     //! Read topic instance specified in "Topics" from all clusters.
@@ -147,41 +147,41 @@ struct TReadSessionSettings : public TRequestSettings<TReadSessionSettings> {
 
     //! Disable Clusters discovery. ReadMirrored/ReadOriginal/ReadAll will not have any effect
     //! if this option is true.
-    FLUENT_SETTING_DEFAULT(bool, DisableClusterDiscovery, false);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(bool, DisableClusterDiscovery, false);
 
     //! Maximum memory usage for read session.
-    FLUENT_SETTING_DEFAULT(size_t, MaxMemoryUsageBytes, 100_MB);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(size_t, MaxMemoryUsageBytes, 100_MB);
 
     //! Max message time lag. All messages older that now - MaxTimeLag will be ignored.
-    FLUENT_SETTING_OPTIONAL(TDuration, MaxTimeLag);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(TDuration, MaxTimeLag);
 
     //! Start reading from this timestamp.
-    FLUENT_SETTING_OPTIONAL(TInstant, StartingMessageTimestamp);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(TInstant, StartingMessageTimestamp);
 
     //! Policy for reconnections.
     //! IRetryPolicy::GetDefaultPolicy() if null (not set).
-    FLUENT_SETTING(IRetryPolicy::TPtr, RetryPolicy);
+    FLUENT_SETTING_DEPRECATED(IRetryPolicy::TPtr, RetryPolicy);
 
     //! Event handlers.
     //! See description in TEventHandlers class.
-    FLUENT_SETTING(TEventHandlers, EventHandlers);
+    FLUENT_SETTING_DEPRECATED(TEventHandlers, EventHandlers);
 
     //! Decompress messages
-    FLUENT_SETTING_DEFAULT(bool, Decompress, true);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(bool, Decompress, true);
 
     //! Executor for decompression tasks.
     //! If not set, default executor will be used.
-    FLUENT_SETTING(IExecutor::TPtr, DecompressionExecutor);
+    FLUENT_SETTING_DEPRECATED(IExecutor::TPtr, DecompressionExecutor);
 
     //! Counters.
     //! If counters are not provided explicitly,
     //! they will be created inside session (without link with parent counters).
-    FLUENT_SETTING(TReaderCounters::TPtr, Counters);
+    FLUENT_SETTING_DEPRECATED(TReaderCounters::TPtr, Counters);
 
     //! Read only original topic instance, don't read mirrored.
     //!
     //! It's better to control this setting via ReadAll()/ReadMirrored()/ReadOriginal() helpers.
-    FLUENT_SETTING_DEFAULT(bool, ReadOnlyOriginal, true);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(bool, ReadOnlyOriginal, true);
 
     //! Read topics from specified clusters.
     //!
@@ -193,15 +193,15 @@ struct TReadSessionSettings : public TRequestSettings<TReadSessionSettings> {
     //! Use ReadOriginal() function for this variant.
     //! 3. If ReadOnlyOriginal is false and one cluster is specified read will be done from all topic instances (mirrored and original) in one cluster.
     //! Use ReadMirrored() function for this variant.
-    FLUENT_SETTING_VECTOR(TString, Clusters);
+    FLUENT_SETTING_VECTOR_DEPRECATED(TString, Clusters);
 
-    FLUENT_SETTING_DEFAULT(TDuration, ConnectTimeout, TDuration::Seconds(30));
+    FLUENT_SETTING_DEFAULT_DEPRECATED(TDuration, ConnectTimeout, TDuration::Seconds(30));
 
     //! Experimental option
-    FLUENT_SETTING_OPTIONAL(bool, RangesMode);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(bool, RangesMode);
 
     //! Log.
-    FLUENT_SETTING_OPTIONAL(TLog, Log);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(TLog, Log);
 };
 
 class IReadSession {

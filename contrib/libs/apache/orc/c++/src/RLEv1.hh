@@ -38,10 +38,12 @@ namespace orc {
 
     void write(int64_t val) override;
 
+    void finishEncode() override;
+
    private:
-    int64_t delta;
-    bool repeat;
-    uint64_t tailRunLength;
+    int64_t delta_;
+    bool repeat_;
+    uint64_t tailRunLength_;
 
     void writeValues();
   };
@@ -83,14 +85,14 @@ namespace orc {
 
     inline void reset();
 
-    const std::unique_ptr<SeekableInputStream> inputStream;
-    const bool isSigned;
-    uint64_t remainingValues;
-    int64_t value;
-    const char* bufferStart;
-    const char* bufferEnd;
-    int64_t delta;
-    bool repeating;
+    const std::unique_ptr<SeekableInputStream> inputStream_;
+    const bool isSigned_;
+    uint64_t remainingValues_;
+    int64_t value_;
+    const char* bufferStart_;
+    const char* bufferEnd_;
+    int64_t delta_;
+    bool repeating_;
   };
 }  // namespace orc
 

@@ -524,7 +524,7 @@ namespace NKikimr {
                         // also we have to find replicating VSlots on this PDisk and assume they consume up to
                         // max(vslotSize for every slot in group), not their actual AllocatedSize
                         for (const auto& [id, slot] : info.VSlotsOnPDisk) {
-                            if (slot->Group && slot->Status != NKikimrBlobStorage::EVDiskStatus::READY) {
+                            if (slot->Group && slot->GetStatus() != NKikimrBlobStorage::EVDiskStatus::READY) {
                                 ui64 maxGroupSlotSize = 0;
                                 for (const TVSlotInfo *peer : slot->Group->VDisksInGroup) {
                                     maxGroupSlotSize = Max(maxGroupSlotSize, peer->Metrics.GetAllocatedSize());
@@ -607,6 +607,7 @@ namespace NKikimr {
                                     groupInfo->ID, 0, groupInfo->Generation, StoragePool.VDiskKind, failRealmIdx,
                                     failDomainIdx, vdiskIdx, TMood::Normal, groupInfo, &VSlotReadyTimestampQ,
                                     TInstant::Zero(), TDuration::Zero());
+                                vslotInfo->VDiskStatusTimestamp = State.Mono;
 
                                 // mark as uncommitted
                                 State.UncommittedVSlots.insert(vslotId);
@@ -620,6 +621,14 @@ namespace NKikimr {
 
                 groupInfo->FinishVDisksInGroup();
                 groupInfo->CalculateGroupStatus();
+                groupInfo->CalculateLayoutStatus(&State.Self, groupInfo->Topology.get(), [&] {
+                    const auto& pools = State.StoragePools.Get();
+                    if (const auto it = pools.find(groupInfo->StoragePoolId); it != pools.end()) {
+                        return TGroupGeometryInfo(groupInfo->Topology->GType, it->second.GetGroupGeometry());
+                    }
+                    Y_DEBUG_ABORT(); // this can't normally happen
+                    return TGroupGeometryInfo();
+                });
 
                 return res;
             }

@@ -52,6 +52,7 @@ message TProgram {
     uint32 RuntimeVersion = 1;
     bytes Raw = 2;
     TSettings Settings = 3;
+    uint32 LangVer = 4;
 }
 
 message TDqUri {
@@ -132,9 +133,23 @@ message TTaskOutputRangePartition {
 message TTaskOutputBroadcast {
 }
 
+message THashV1 {
+}
+
+message TColumnShardHashV1 {
+    uint64 ShardCount = 1;
+    repeated uint64 TaskIndexByHash = 2;
+    repeated uint32 KeyColumnTypes = 3;
+}
+
 message TTaskOutputHashPartition {
     repeated string KeyColumns = 1;
     uint32 PartitionsCount = 2;
+
+    oneof THashKind {
+        THashV1 HashV1 = 3;
+        TColumnShardHashV1 ColumnShardHashV1 = 4;
+    }
 }
 
 message TTaskOutputEffects {
@@ -161,7 +176,7 @@ message TTaskOutput {
 message TDqTransform {
     string Type = 1;
 
-    // binary YSON(codec ydb/library/yql/providers/common/schema/mkql)
+    // binary YSON(codec yql/essentials/providers/common/schema/mkql)
     bytes InputType = 2;
     bytes OutputType = 3;
 
@@ -184,7 +199,10 @@ message TDqInputTransformLookupSettings {
     repeated string RightJoinKeyNames = 6; //Join column names in the right hand, in the same order as previous
     bytes NarrowInputRowType = 7; //Serialized struct type
     bytes NarrowOutputRowType = 8; //Serialized struct type
-    //TODO add lookup cache parameters
+    uint64 CacheLimit = 9;
+    uint64 CacheTtlSeconds = 10;
+    uint64 MaxDelayedRows = 11;
+    bool IsMultiget = 12;
 }
 
 message TDqTask {
@@ -207,4 +225,6 @@ message TDqTask {
     repeated bytes ReadRanges = 17;
     map<string, string> RequestContext = 18;
     optional bool EnableSpilling = 19;
+    optional uint32 ArrayBufferMinFillPercentage = 20;
+    optional bool DisableMetering = 22;
 }

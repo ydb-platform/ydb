@@ -14,10 +14,10 @@ TWithTagGuard::TWithTagGuard(ISensorWriter* writer)
     YT_VERIFY(Writer_);
 }
 
-TWithTagGuard::TWithTagGuard(ISensorWriter* writer, TString tagKey, TString tagValue)
+TWithTagGuard::TWithTagGuard(ISensorWriter* writer, const std::string& tagKey, const std::string& tagValue)
     : TWithTagGuard(writer)
 {
-    AddTag(std::move(tagKey), std::move(tagValue));
+    AddTag(tagKey, tagValue);
 }
 
 void TWithTagGuard::AddTag(TTag tag)
@@ -26,9 +26,9 @@ void TWithTagGuard::AddTag(TTag tag)
     ++AddedTagCount_;
 }
 
-void TWithTagGuard::AddTag(TString tagKey, TString tagValue)
+void TWithTagGuard::AddTag(const std::string& tagKey, const std::string& tagValue)
 {
-    AddTag({std::move(tagKey), std::move(tagValue)});
+    AddTag({tagKey, tagValue});
 }
 
 TWithTagGuard::~TWithTagGuard()
@@ -50,22 +50,22 @@ void TSensorBuffer::PopTag()
     Tags_.pop_back();
 }
 
-void TSensorBuffer::AddGauge(const TString& name, double value)
+void TSensorBuffer::AddGauge(const std::string& name, double value)
 {
     Gauges_.emplace_back(name, Tags_, value);
 }
 
-void TSensorBuffer::AddCounter(const TString& name, i64 value)
+void TSensorBuffer::AddCounter(const std::string& name, i64 value)
 {
     Counters_.emplace_back(name, Tags_, value);
 }
 
-const std::vector<std::tuple<TString, TTagList, i64>>& TSensorBuffer::GetCounters() const
+const std::vector<std::tuple<std::string, TTagList, i64>>& TSensorBuffer::GetCounters() const
 {
     return Counters_;
 }
 
-const std::vector<std::tuple<TString, TTagList, double>>& TSensorBuffer::GetGauges() const
+const std::vector<std::tuple<std::string, TTagList, double>>& TSensorBuffer::GetGauges() const
 {
     return Gauges_;
 }

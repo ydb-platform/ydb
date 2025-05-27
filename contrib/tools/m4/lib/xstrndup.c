@@ -1,6 +1,6 @@
 /* Duplicate a bounded initial segment of a string, with out-of-memory
    checking.
-   Copyright (C) 2003, 2006-2007, 2009-2013 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2006-2007, 2009-2016 Free Software Foundation, Inc.
 
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -21,24 +21,7 @@
 #include "xstrndup.h"
 
 #include <string.h>
-#include <stdlib.h>
-
 #include "xalloc.h"
-
-#if defined(_MSC_VER)
-static char *
-strndup(char const *s, size_t n)
-{
-	size_t len = strnlen(s, n);
-	char *new = malloc(len + 1);
-
-	if (new == NULL)
-		return NULL;
-
-	new[len] = '\0';
-	return memcpy(new, s, len);
-}
-#endif
 
 /* Return a newly allocated copy of at most N bytes of STRING.
    In other words, return a copy of the initial segment of length N of

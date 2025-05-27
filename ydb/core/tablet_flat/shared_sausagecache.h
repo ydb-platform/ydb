@@ -4,29 +4,22 @@
 #include <ydb/core/util/cache_cache.h>
 #include <util/system/unaligned_mem.h>
 
-namespace NKikimr {
+namespace NKikimr::NSharedCache {
 
-struct TEvSharedPageCache {
-    enum EEv {
-        EvBegin = EventSpaceBegin(TKikimrEvents::ES_FLAT_EXECUTOR) + 1536,
-
-        EvConfigure = EvBegin + 0,
-    };
-
-    struct TEvConfigure
-        : public TEventPB<TEvConfigure, NKikimrSharedCache::TSharedCacheConfig, EvConfigure>
-    {
-        TEvConfigure() = default;
-    };
-};
+using TSharedCacheConfig = NKikimrSharedCache::TSharedCacheConfig;
 
 struct TSharedPageCacheCounters final : public TAtomicRefCount<TSharedPageCacheCounters> {
     using TCounterPtr = ::NMonitoring::TDynamicCounters::TCounterPtr;
+    using TReplacementPolicy = NKikimrSharedCache::TReplacementPolicy;
 
+    const TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
+
+    // lru cache counters:
     const TCounterPtr FreshBytes;
     const TCounterPtr StagingBytes;
     const TCounterPtr WarmBytes;
 
+    // page counters:
     const TCounterPtr MemLimitBytes;
     const TCounterPtr ConfigLimitBytes;
     const TCounterPtr ActivePages;
@@ -43,19 +36,25 @@ struct TSharedPageCacheCounters final : public TAtomicRefCount<TSharedPageCacheC
     const TCounterPtr LoadInFlyPages;
     const TCounterPtr LoadInFlyBytes;
 
-    explicit TSharedPageCacheCounters(const TIntrusivePtr<::NMonitoring::TDynamicCounters> &group);
+    // page collection counters:
+    const TCounterPtr PageCollections;
+    const TCounterPtr Owners;
+    const TCounterPtr PageCollectionOwners;
+
+    // request counters:
+    const TCounterPtr PendingRequests;
+    const TCounterPtr SucceedRequests;
+    const TCounterPtr FailedRequests;
+
+    explicit TSharedPageCacheCounters(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters);
+
+    TCounterPtr ReplacementPolicySize(TReplacementPolicy policy);
 };
 
-struct TSharedPageCacheConfig {
-    std::optional<ui64> LimitBytes;
-    ui64 TotalScanQueueInFlyLimit = 512_MB;
-    ui64 TotalAsyncQueueInFlyLimit = 512_MB;
-    TString CacheName = "SharedPageCache";
-    TIntrusivePtr<TSharedPageCacheCounters> Counters;
-    ui32 ActivePagesReservationPercent = 50;
-};
-
-IActor* CreateSharedPageCache(THolder<TSharedPageCacheConfig> config);
+IActor* CreateSharedPageCache(
+    const TSharedCacheConfig& config,
+    const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters
+);
 
 inline TActorId MakeSharedPageCacheId(ui64 id = 0) {
     char x[12] = { 's', 'h', 's', 'c' };

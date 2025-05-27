@@ -87,6 +87,13 @@ std::vector<typename T::key_type> GetKeys(const T& collection, size_t sizeLimit)
 }
 
 template <class T>
+THashSet<typename T::key_type> GetKeySet(const T& collection, size_t sizeLimit)
+{
+    auto vec = GetKeys(collection, sizeLimit);
+    return THashSet<typename T::key_type>(vec.begin(), vec.end());
+}
+
+template <class T>
 std::vector<typename T::mapped_type> GetValues(const T& collection, size_t sizeLimit)
 {
     return GetIthsImpl<typename T::mapped_type>(
@@ -140,7 +147,7 @@ void MergeFrom(TTarget* target, const TSource& source)
 }
 
 template <class TMap, class TKeySet>
-TKeySet DropMissingKeys(TMap&& map, const TKeySet& set)
+TKeySet DropAndReturnMissingKeys(TMap&& map, const TKeySet& set)
 {
     TKeySet dropped;
     for (auto it = map.begin(); it != map.end(); ) {
@@ -152,6 +159,18 @@ TKeySet DropMissingKeys(TMap&& map, const TKeySet& set)
         }
     }
     return dropped;
+}
+
+template <class TMap, class TKeySet>
+void DropMissingKeys(TMap&& map, TKeySet&& set)
+{
+    for (auto it = map.begin(); it != map.end(); ) {
+        if (!set.contains(it->first)) {
+            map.erase(it++);
+        } else {
+            ++it;
+        }
+    }
 }
 
 template <class TMap, class TKey>
@@ -194,6 +213,15 @@ auto EmplaceOrCrash(TContainer&& container, TArgs&&... args)
     auto [it, emplaced] = container.emplace(std::forward<TArgs>(args)...);
     YT_VERIFY(emplaced);
     return it;
+}
+
+template <class TMap, class TKey>
+auto EmplaceDefault(TMap&& map, TKey&& key)
+{
+    return map.emplace(
+        std::piecewise_construct_t{},
+        std::tuple<TKey&&>{std::forward<TKey>(key)},
+        std::tuple{});
 }
 
 template <class T, class... TVariantArgs>
@@ -348,6 +376,12 @@ template <class T>
 const T& VectorAtOr(const std::vector<T>& vector, ssize_t index, const T& defaultValue)
 {
     return index < std::ssize(vector) ? vector[index] : defaultValue;
+}
+
+template <class T>
+i64 GetVectorMemoryUsage(const std::vector<T>& vector)
+{
+    return vector.capacity() * sizeof(T);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

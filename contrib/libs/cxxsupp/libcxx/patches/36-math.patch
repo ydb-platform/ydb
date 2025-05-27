@@ -1,0 +1,32 @@
+diff --git a/include/math.h b/include/math.h
+index 509ecc4..99ec5ef 100644
+--- a/include/math.h
++++ b/include/math.h
+@@ -290,6 +290,9 @@ float          truncf(float x);
+ long double    truncl(long double x);
+ 
+ */
++#  ifdef __CUDACC__
++#    include <math_cuda.h>
++#  else
+ 
+ #  include <__config>
+ 
+@@ -323,7 +326,7 @@ extern "C++" {
+ #      undef isinf
+ #    endif
+ 
+-#    ifdef isnan
++#    if defined(isnan) && !defined(_LIBCPP_MSVCRT)
+ #      undef isnan
+ #    endif
+ 
+@@ -503,6 +506,8 @@ using std::__math::trunc;
+ 
+ #  endif // __cplusplus
+ 
++#  endif // __CUDACC__
++
+ #else // _LIBCPP_MATH_H
+ 
+ // This include lives outside the header guard in order to support an MSVC

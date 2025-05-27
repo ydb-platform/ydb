@@ -1,0 +1,40 @@
+From 7a04e6153dc51978a21d9e4204a0e1e3d2215c77 Mon Sep 17 00:00:00 2001
+From: Yuriy Chernyshov <thegeorg@yandex-team.ru>
+Date: Sun, 7 Aug 2022 00:27:49 +0300
+Subject: [PATCH] Remove deprecated register storage specifier
+
+---
+ include/boost/smart_ptr/detail/sp_counted_base_cw_ppc.hpp | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/include/boost/smart_ptr/detail/sp_counted_base_cw_ppc.hpp b/include/boost/smart_ptr/detail/sp_counted_base_cw_ppc.hpp
+index 58a69e6c06..d245c91a14 100644
+--- a/include/boost/smart_ptr/detail/sp_counted_base_cw_ppc.hpp
++++ b/include/boost/smart_ptr/detail/sp_counted_base_cw_ppc.hpp
+@@ -43,7 +43,7 @@ namespace detail
+ 
+ inline void atomic_increment( register long * pw )
+ {
+-    register int a;
++    int a;
+ 
+     asm
+     {
+@@ -58,7 +58,7 @@ inline void atomic_increment( register long * pw )
+ 
+ inline long atomic_decrement( register long * pw )
+ {
+-    register int a;
++    int a;
+ 
+     asm
+     {
+@@ -83,7 +83,7 @@ inline long atomic_decrement( register long * pw )
+ 
+ inline long atomic_conditional_increment( register long * pw )
+ {
+-    register int a;
++    int a;
+ 
+     asm
+     {

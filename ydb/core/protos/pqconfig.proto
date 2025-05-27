@@ -32,6 +32,7 @@ message TPartitionMeta {
     optional uint64 EndOffset = 2;
     optional bool SubDomainOutOfSpace = 3 [default = false];
     optional TPartitionCounterData CounterData = 4;
+    optional uint64 EndWriteTimestamp = 5;
 }
 
 message TPartitionTxMeta {
@@ -61,7 +62,7 @@ message TPQConfig {
 
     optional NKikimrClient.TKeyValueRequest.ETactic Tactic = 13 [default = MAX_THROUGHPUT];
 
-    optional bool RequireCredentialsInNewProtocol = 14 [default = true];
+    optional bool RequireCredentialsInNewProtocol = 14 [default = false];
 
     optional string ClusterTablePath = 15 [default = ""];
     optional string VersionTablePath = 16 [default = ""];
@@ -206,6 +207,8 @@ message TPQConfig {
 
     optional uint64 BalancerWakeupIntervalSec = 54 [default = 30];
     optional uint64 BalancerStatsWakeupIntervalSec = 55 [default = 5];
+
+    optional uint64 MaxWriteSessionBytesInflight = 57 [default = 1000000];
 }
 
 message TChannelProfile {
@@ -426,6 +429,7 @@ message TPQTabletConfig {
     }
     optional TPartitionStrategy PartitionStrategy = 35;
 
+    // The field is filled in only for the PQ tablet. Contains information about linked partitions for constructing a partial PartitionGraph.
     repeated TPartition AllPartitions = 36; // filled by schemeshard
 
     optional TOffloadConfig OffloadConfig = 38;
@@ -747,6 +751,7 @@ message TClientInfo {
     optional uint64 ReadLagMs = 5;
     optional uint64 LastReadTimestampMs = 8;
     optional uint64 TotalLagMs = 9;
+    optional uint64 CommitedLagMs = 10;
 }
 
 
@@ -847,6 +852,8 @@ message TStatusResponse {
         optional uint64 CommitedOffset = 9;
 
         optional bool ReadingFinished = 10;
+        optional uint64 CommitedLagMs = 11;
+        optional string CommittedMetadata = 12;
     }
 
 
@@ -862,6 +869,9 @@ message THasDataInfo {
     optional uint64 Cookie = 5;
 
     optional string ClientId = 6;
+
+    optional int32 MaxTimeLagMs = 7; // optional, default = infinity, why we use int instead of uint?
+    optional uint64 ReadTimestampMs = 8; //optional, default = 0
 }
 
 message THasDataInfoResponse { //signal
@@ -897,7 +907,7 @@ message TUserInfo {
     optional uint64 OffsetRewindSum = 5;
     optional uint64 ReadRuleGeneration = 6;
     optional uint64 PartitionSessionId = 7;
-
+    optional bool AnyCommits = 8;
 }
 
 message TPartitionClientInfo {
@@ -945,11 +955,15 @@ message TYdsShardIterator {
 
 message TPartitionOperation {
     optional uint32 PartitionId = 1;
-    optional uint64 Begin = 2;
-    optional uint64 End = 3;
+    optional uint64 CommitOffsetsBegin = 2;
+    optional uint64 CommitOffsetsEnd = 3;
     optional string Consumer = 4;
     optional string Path = 5; // topic path
     optional uint32 SupportivePartition = 6;
+    optional bool ForceCommit = 7;
+    optional bool KillReadSession = 8;
+    optional bool OnlyCheckCommitedToFinish = 9;
+    optional string ReadSessionId = 10;
 };
 
 message TWriteId {
@@ -1080,6 +1094,20 @@ message TEvPartitionScaleStatusChanged {
     required EScaleStatus ScaleStatus = 2;
 };
 
+message TPartitions {
+    message TPartitionInfo {
+        required uint32 PartitionId = 1;
+
+        message TMessageGroup {
+            required string Id = 1;
+            optional uint64 SeqNo = 2;
+        };
+        repeated TMessageGroup MessageGroup = 2;
+    };
+
+    repeated TPartitionInfo Partition = 1;
+}
+
 message TTransaction {
     enum EKind {
         KIND_UNKNOWN = 0;
@@ -1128,6 +1156,7 @@ message TTransaction {
     //
     optional TPQTabletConfig TabletConfig = 12;
     optional TBootstrapConfig BootstrapConfig = 13;
+    optional TPartitions Partitions = 16;
 
     //
     // получатель результата

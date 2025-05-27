@@ -37,13 +37,13 @@ PEERDIR(
     ydb/core/util
     ydb/core/ydb_convert
     ydb/library/aclib
-    ydb/library/yql/core/services/mounts
-    ydb/library/yql/public/issue
+    yql/essentials/core/services/mounts
+    yql/essentials/public/issue
     ydb/library/yql/utils/actor_log
-    ydb/library/yql/utils/log
+    yql/essentials/utils/log
     ydb/public/api/protos
     ydb/public/lib/base
-    ydb/public/lib/operation_id
+    ydb/public/sdk/cpp/src/library/operation_id
 )
 
 YQL_LAST_ABI_VERSION()
@@ -79,4 +79,5 @@ RECURSE(
 
 RECURSE_FOR_TESTS(
     ut
+    tools/combiner_perf/bin
 )

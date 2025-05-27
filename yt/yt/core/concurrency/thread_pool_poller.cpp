@@ -2,7 +2,6 @@
 #include "thread_pool_poller.h"
 #include "private.h"
 #include "two_level_fair_share_thread_pool.h"
-#include "new_fair_share_thread_pool.h"
 
 #include <yt/yt/core/misc/collection_helpers.h>
 #include <yt/yt/core/misc/proc.h>
@@ -200,7 +199,7 @@ public:
         // pollables and on shutdown.
         PollerImpl_.Set(nullptr, WakeupHandle_.GetFD(), CONT_POLL_EDGE_TRIGGERED | CONT_POLL_READ);
 
-        FairShareThreadPool_ = CreateNewTwoLevelFairShareThreadPool(
+        FairShareThreadPool_ = CreateTwoLevelFairShareThreadPool(
             threadCount,
             threadNamePrefix + "FS",
             {
@@ -210,14 +209,14 @@ public:
         AuxInvoker_ = FairShareThreadPool_->GetInvoker("aux", "default");
     }
 
-    void Reconfigure(int threadCount) override
+    void SetThreadCount(int threadCount) override
     {
-        FairShareThreadPool_->Configure(threadCount);
+        FairShareThreadPool_->SetThreadCount(threadCount);
     }
 
-    void Reconfigure(TDuration pollingPeriod) override
+    void SetPollingPeriod(TDuration pollingPeriod) override
     {
-        FairShareThreadPool_->Configure(pollingPeriod);
+        FairShareThreadPool_->SetPollingPeriod(pollingPeriod);
     }
 
     bool TryRegister(const IPollablePtr& pollable, TString poolName) override
@@ -528,14 +527,14 @@ public:
         Poller_->Start();
     }
 
-    void Reconfigure(int threadCount) override
+    void SetThreadCount(int threadCount) override
     {
-        return Poller_->Reconfigure(threadCount);
+        return Poller_->SetThreadCount(threadCount);
     }
 
-    void Reconfigure(TDuration pollingPeriod) override
+    void SetPollingPeriod(TDuration pollingPeriod) override
     {
-        return Poller_->Reconfigure(pollingPeriod);
+        return Poller_->SetPollingPeriod(pollingPeriod);
     }
 
     void Shutdown() override

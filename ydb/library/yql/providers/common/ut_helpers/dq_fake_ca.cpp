@@ -1,8 +1,8 @@
 #include "dq_fake_ca.h"
 
-#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
-#include <ydb/library/yql/minikql/mkql_function_registry.h>
-#include <ydb/library/yql/minikql/mkql_string_util.h>
+#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
+#include <yql/essentials/minikql/mkql_function_registry.h>
+#include <yql/essentials/minikql/mkql_string_util.h>
 
 #include <ydb/core/testlib/basics/appdata.h>
 

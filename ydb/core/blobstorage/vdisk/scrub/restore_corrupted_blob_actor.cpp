@@ -51,7 +51,7 @@ namespace NKikimr {
             }
 
             void AddFromSegment(const TMemRecLogoBlob& memRec, const TDiskPart *outbound, const TKeyLogoBlob& /*key*/,
-                    ui64 /*circaLsn*/) {
+                    ui64 /*circaLsn*/, const void* /*sst*/) {
                 const NMatrix::TVectorType local = memRec.GetLocalParts(GType);
                 if ((local & Item->Needed).Empty()) {
                     return; // no useful parts here
@@ -88,7 +88,7 @@ namespace NKikimr {
                     }
                 } else {
                     // process possible on-disk huge blob stored in fresh segment
-                    AddFromSegment(memRec, nullptr, key, Max<ui64>());
+                    AddFromSegment(memRec, nullptr, key, Max<ui64>(), nullptr);
                 }
             }
         };
@@ -146,7 +146,7 @@ namespace NKikimr {
             // filter out the read queue -- remove items that are already available or not needed
             auto remove = [](const TReadCmd& item) {
                 const NMatrix::TVectorType missing = item.Item->Needed - item.Item->GetAvailableParts();
-                return (missing & item.Parts).Empty() || item.Location == item.Item->CorruptedPart;
+                return (missing & item.Parts).Empty() || item.Location.Includes(item.Item->CorruptedPart);
             };
             ReadQ.erase(std::remove_if(ReadQ.begin(), ReadQ.end(), remove), ReadQ.end());
 
@@ -166,7 +166,7 @@ namespace NKikimr {
         }
 
         void Handle(NPDisk::TEvChunkReadResult::TPtr ev) {
-            Y_ABORT_UNLESS(ReadsPending);
+            Y_VERIFY_S(ReadsPending, VCtx->VDiskLogPrefix);
             --ReadsPending;
 
             auto *msg = ev->Get();
@@ -231,7 +231,7 @@ namespace NKikimr {
 
             for (auto& item : ev->Get()->Items) {
                 auto& myItem = Items[item.Cookie];
-                Y_ABORT_UNLESS(myItem.Status == NKikimrProto::UNKNOWN);
+                Y_VERIFY_S(myItem.Status == NKikimrProto::UNKNOWN, VCtx->VDiskLogPrefix);
                 myItem.Parts = std::move(item.Parts);
                 myItem.PartsMask = item.PartsMask;
                 if (item.Status != NKikimrProto::NODATA) { // we keep trying to fetch NODATA's till deadline
@@ -256,8 +256,8 @@ namespace NKikimr {
             for (ui32 i = item.Needed.FirstPosition(); i != item.Needed.GetSize(); i = item.Needed.NextPosition(i)) {
                 const TLogoBlobID blobId(item.BlobId, i + 1);
                 const TRope& buffer = item.GetPartData(blobId);
-                Y_ABORT_UNLESS(buffer.size() == Info->Type.PartSize(blobId));
-                Y_ABORT_UNLESS(WriteRestoredParts);
+                Y_VERIFY_S(buffer.size() == Info->Type.PartSize(blobId), VCtx->VDiskLogPrefix);
+                Y_VERIFY_S(WriteRestoredParts, VCtx->VDiskLogPrefix);
                 auto ev = std::make_unique<TEvBlobStorage::TEvVPut>(blobId, buffer, vdiskId, true, &index, Deadline,
                     NKikimrBlobStorage::EPutHandleClass::AsyncBlob);
                 ev->RewriteBlob = true;
@@ -269,7 +269,7 @@ namespace NKikimr {
         void Handle(TEvBlobStorage::TEvVPutResult::TPtr ev) {
             STLOG(PRI_DEBUG, BS_VDISK_SCRUB, VDS37, VDISKP(LogPrefix, "received TEvVPutResult"), (SelfId, SelfId()),
                 (Msg, ev->Get()->ToString()));
-            Y_ABORT_UNLESS(WritesPending);
+            Y_VERIFY_S(WritesPending, VCtx->VDiskLogPrefix);
             --WritesPending;
             const auto& record = ev->Get()->Record;
             auto& item = Items[record.GetCookie()];

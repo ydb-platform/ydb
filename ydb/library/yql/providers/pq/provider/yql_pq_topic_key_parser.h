@@ -1,5 +1,5 @@
 #pragma once
-#include <ydb/library/yql/ast/yql_expr.h>
+#include <yql/essentials/ast/yql_expr.h>
 
 #include <util/generic/string.h>
 
@@ -46,6 +46,10 @@ public:
         return TimestampFormat;
     }
 
+    TExprNode::TPtr GetDateFormat() {
+        return DateFormat;
+    }
+
     bool Parse(const TExprNode& expr, TExprNode::TPtr readSettings, TExprContext& ctx);
 
 private:
@@ -60,6 +64,7 @@ private:
     TExprNode::TPtr DateTimeFormat;
     TExprNode::TPtr TimestampFormatName;
     TExprNode::TPtr TimestampFormat;
+    TExprNode::TPtr DateFormat;
     TExprNode::TPtr UserSchema;
     TExprNode::TPtr ColumnOrder;
 };

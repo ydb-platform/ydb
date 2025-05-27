@@ -50,7 +50,7 @@ namespace NKikimr {
             TMemIterator c(p.SstPtr.Get());
             c.SeekToFirst();
             while (c.Valid()) {
-                aggr->UpdateLevel(p, c->Key, c->MemRec);
+                aggr->UpdateLevel(p, c.GetCurKey(), c.GetMemRec());
                 c.Next();
             }
             it.Next();
@@ -129,7 +129,7 @@ namespace NKikimr {
             }
 
             void AddFromFresh(const TMemRec& memRec, const TRope* /*data*/, const TKey& key, ui64 /*lsn*/) {
-                Y_ABORT_UNLESS(key == CurKey);
+                Y_VERIFY_S(key == CurKey, HullCtx->VCtx->VDiskLogPrefix);
                 if (!Constraint || Constraint->Check(CurKey)) {
                     auto mr = memRec.ToString(HullCtx->IngressCache.Get(), nullptr);
                     auto ing = IngressToString(HullCtx->VCtx->Top.get(), HullCtx->VCtx->ShortSelfVDisk, CurKey, memRec);
@@ -204,14 +204,14 @@ namespace NKikimr {
                         return;
                     }
                     const auto& c = *MemIt;
-                    if (!Constraint || Constraint->Check(c->Key)) {
-                        auto mr = c->MemRec.ToString(HullCtx->IngressCache.Get(), c.GetSstPtr()->GetOutbound());
+                    if (!Constraint || Constraint->Check(c.GetCurKey())) {
+                        auto mr = c.GetMemRec().ToString(HullCtx->IngressCache.Get(), c.GetSstPtr()->GetOutbound());
                         auto ing = IngressToString(HullCtx->VCtx->Top.get(), HullCtx->VCtx->ShortSelfVDisk,
-                                c->Key, c->MemRec);
+                                c.GetCurKey(), c.GetMemRec());
                         str << Prefix
                             << "L: " << p.Level
                             << " ID: " << p.SstPtr->AssignedSstId
-                            << " Key: " << c->Key.ToString()
+                            << " Key: " << c.GetCurKey().ToString()
                             << " Ingress: " << ing
                             << " MemRec: " << mr
                             << "\n";
@@ -324,4 +324,3 @@ namespace NKikimr {
     }
 
 } // NKikimr
-

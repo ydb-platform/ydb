@@ -1,0 +1,55 @@
+diff --git a/include/complex b/include/complex
+index 8384ed8..a11334f 100644
+--- a/include/complex
++++ b/include/complex
+@@ -1476,6 +1476,7 @@ inline namespace literals
+     }
+ 
+ 
++#if !defined(__CUDACC__)
+     constexpr complex<float> operator""if(long double __im)
+     {
+         return { 0.0f, static_cast<float>(__im) };
+@@ -1485,6 +1486,7 @@ inline namespace literals
+     {
+         return { 0.0f, static_cast<float>(__im) };
+     }
++#endif
+   } // namespace complex_literals
+ } // namespace literals
+ #endif
+diff --git a/include/math.h b/include/math.h
+index 0a1d223..62fcc62 100644
+--- a/include/math.h
++++ b/include/math.h
+@@ -504,7 +504,7 @@ typename std::enable_if<
+ isinf(_A1) _NOEXCEPT
+ { return false; }
+ 
+-#ifdef _LIBCPP_PREFERRED_OVERLOAD
++#if defined(_LIBCPP_PREFERRED_OVERLOAD) && !defined(__CUDACC__)
+ inline _LIBCPP_INLINE_VISIBILITY
+ bool
+ isinf(float __lcpp_x) _NOEXCEPT { return __libcpp_isinf(__lcpp_x); }
+@@ -552,7 +552,7 @@ typename std::enable_if<std::is_integral<_A1>::value, bool>::type
+ isnan(_A1) _NOEXCEPT
+ { return false; }
+ 
+-#ifdef _LIBCPP_PREFERRED_OVERLOAD
++#if defined(_LIBCPP_PREFERRED_OVERLOAD) && !defined(__CUDACC__)
+ inline _LIBCPP_INLINE_VISIBILITY
+ bool
+ isnan(float __lcpp_x) _NOEXCEPT { return __libcpp_isnan(__lcpp_x); }
+diff --git a/include/tuple b/include/tuple
+index e499aff..1334d04 100644
+--- a/include/tuple
++++ b/include/tuple
+@@ -223,7 +223,7 @@ class __tuple_leaf
+ 
+     template <class _Tp>
+     static constexpr bool __can_bind_reference() {
+-#if __has_keyword(__reference_binds_to_temporary)
++#if __has_keyword(__reference_binds_to_temporary) && !defined(__CUDACC__)
+       return !__reference_binds_to_temporary(_Hp, _Tp);
+ #else
+       return true;

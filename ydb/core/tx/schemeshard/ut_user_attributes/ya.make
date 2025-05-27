@@ -2,8 +2,6 @@ UNITTEST_FOR(ydb/core/tx/schemeshard)
 
 FORK_SUBTESTS()
 
-TIMEOUT(600)
-
 SIZE(MEDIUM)
 
 PEERDIR(
@@ -24,7 +22,7 @@ PEERDIR(
     ydb/core/tx/schemeshard
     ydb/core/tx/schemeshard/ut_helpers
     ydb/core/util
-    ydb/library/yql/public/issue
+    yql/essentials/public/issue
 )
 
 YQL_LAST_ABI_VERSION()

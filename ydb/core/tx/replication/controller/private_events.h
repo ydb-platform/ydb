@@ -2,7 +2,7 @@
 
 #include "replication.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
 #include <ydb/core/base/defs.h>
 #include <ydb/core/base/events.h>
@@ -32,6 +32,10 @@ struct TEvPrivate {
         EvAlterDstResult,
         EvRemoveWorker,
         EvDescribeTargetsResult,
+        EvRequestCreateStream,
+        EvAllowCreateStream,
+        EvRequestDropStream,
+        EvAllowDropStream,
 
         EvEnd,
     };
@@ -40,11 +44,10 @@ struct TEvPrivate {
 
     struct TEvDiscoveryTargetsResult: public TEventLocal<TEvDiscoveryTargetsResult, EvDiscoveryTargetsResult> {
         struct TAddEntry {
-            TString SrcPath;
-            TString DstPath;
             TReplication::ETargetKind Kind;
+            TReplication::ITarget::IConfig::TPtr Config;
 
-            explicit TAddEntry(const TString& srcPath, const TString& dstPath, TReplication::ETargetKind kind);
+            explicit TAddEntry(TReplication::ETargetKind kind, const TReplication::ITarget::IConfig::TPtr& config);
         };
 
         struct TFailedEntry {
@@ -219,6 +222,18 @@ struct TEvPrivate {
 
         explicit TEvDescribeTargetsResult(const TActorId& sender, ui64 rid, TResult&& result);
         TString ToString() const override;
+    };
+
+    struct TEvRequestCreateStream: public TEventLocal<TEvRequestCreateStream, EvRequestCreateStream> {
+    };
+
+    struct TEvAllowCreateStream: public TEventLocal<TEvAllowCreateStream, EvAllowCreateStream> {
+    };
+
+    struct TEvRequestDropStream: public TEventLocal<TEvRequestDropStream, EvRequestDropStream> {
+    };
+
+    struct TEvAllowDropStream: public TEventLocal<TEvAllowDropStream, EvAllowDropStream> {
     };
 
 }; // TEvPrivate

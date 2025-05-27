@@ -1,0 +1,459 @@
+/*
+ * [The "BSD license"]
+ *  Copyright (c) 2012-2016 Terence Parr
+ *  Copyright (c) 2012-2016 Sam Harwell
+ *  All rights reserved.
+ *
+ *  Redistribution and use in source and binary forms, with or without
+ *  modification, are permitted provided that the following conditions
+ *  are met:
+ *
+ *  1. Redistributions of source code must retain the above copyright
+ *     notice, this list of conditions and the following disclaimer.
+ *  2. Redistributions in binary form must reproduce the above copyright
+ *     notice, this list of conditions and the following disclaimer in the
+ *     documentation and/or other materials provided with the distribution.
+ *  3. The name of the author may not be used to endorse or promote products
+ *     derived from this software without specific prior written permission.
+ *
+ *  THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+ *  IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ *  OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ *  IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+ *  INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ *  NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ *  DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ *  THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ *  (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+ *  THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+
+javaTypeInitMap ::= [
+	"int":"0",
+	"long":"0",
+	"float":"0.0f",
+	"double":"0.0",
+	"boolean":"false",
+	"byte":"0",
+	"short":"0",
+	"char":"0",
+	default:"null" // anything other than a primitive type is an object
+]
+
+// args must be <object-model-object>, <fields-resulting-in-STs>
+
+ParserFile(file, parser, namedActions, contextSuperClass) ::= <<
+//
+// Generated with: -d64 -lib ./ -language protobuf
+
+syntax = "proto3";
+option cc_enable_arenas = true;
+
+package @ANTLR_PACKAGE_NAME@;
+
+message TToken {
+    uint32 Id = 1;
+    uint32 Line = 2;
+    uint32 Column = 3;
+    uint32 Element = 4;
+    string Value = 5;
+}
+
+<parser>
+
+message TSQLv1ParserAST {
+    <first(parser.funcs):{r | TRule_<r.currentRule.name> Rule_<r.currentRule.name> = 1;}; separator="">
+}
+>>
+
+ListenerFile(file, header, namedActions) ::= <<
+>>
+
+BaseListenerFile(file, header, namedActions) ::= <<
+>>
+
+VisitorFile(file, header, namedActions) ::= <<
+>>
+
+fileHeader(grammarFileName, ANTLRVersion) ::= <<
+// Generated from <grammarFileName; format="java-escape"> by ANTLR <ANTLRVersion>
+>>
+
+Parser(parser, funcs, atn, sempredFuncs, superClass) ::= <<
+<funcs; separator="\n\n">
+>>
+
+Parser_(parser, funcs, atn, sempredFuncs, ctor, superClass) ::= <<
+>>
+
+vocabulary(literalNames, symbolicNames) ::= <<
+>>
+
+dumpActions(recog, argFuncs, actionFuncs, sempredFuncs) ::= <<
+>>
+
+parser_ctor(p) ::= <<
+>>
+
+/* This generates a private method since the actionIndex is generated, making an
+ * overriding implementation impossible to maintain.
+ */
+RuleActionFunction(r, actions) ::= <<
+>>
+
+/* This generates a private method since the predIndex is generated, making an
+ * overriding implementation impossible to maintain.
+ */
+RuleSempredFunction(r, actions) ::= <<
+>>
+
+RuleFunction(currentRule,args,code,locals,ruleCtx,altLabelCtxs,namedActions,finallyAction,postamble,exceptions,elemId) ::= <<
+// rule $ANTLR start "<currentRule.name>"
+message TRule_<currentRule.name> {
+    <if((!rest(code))&&first(code).alts&&rest(first(code).alts))>
+    // some multiple alt block
+    <first(code).alts:{a | <altDecl(a,i)>}; separator="\n">
+    oneof Alt {
+        <first(code).alts:{a | TAlt<i> Alt_<currentRule.name><i> = <i>; }; separator="\n">
+    }
+    <else>
+    <code:{e | <element(e, i)>}; separator="\n">
+    <defineDescr(code)>
+    <endif>
+}
+// $ANTLR end "<currentRule.name>"
+>>
+
+LeftRecursiveRuleFunction(currentRule,args,code,locals,ruleCtx,altLabelCtxs,
+	namedActions,finallyAction,postamble) ::=
+<<
+// rule $ANTLR start "<currentRule.name>"
+message TRule_<currentRule.name> {
+    <if((!rest(code))&&first(code).alts&&rest(first(code).alts))>
+    // some multiple alt block
+    <first(code).alts:{a | <altDecl(a,i)>}; separator="\n">
+    oneof Alt {
+        <first(code).alts:{a | TAlt<i> Alt_<currentRule.name><i> = <i>; }; separator="\n">
+    }
+    <else>
+    // some common block
+    <code:{e | <element(e, i)>}; separator="\n">
+    <defineDescr(code)>
+    <endif>
+}
+// $ANTLR end "<currentRule.name>"
+>>
+
+CodeBlockForOuterMostAlt(currentOuterMostAltCodeBlock, locals, preamble, ops) ::= <<
+// CodeBlockForOuterMostAlt
+<CodeBlockForAlt(currentAltCodeBlock = currentOuterMostAltCodeBlock, ...)>
+>>
+
+CodeBlockForAlt(currentAltCodeBlock, locals, preamble, ops) ::= <<
+// CodeBlockForAlt
+<ops:{e | <element(e, i)>}; separator="\n">
+>>
+
+element(e, elemId) ::= <<
+<e>
+>>
+
+
+LL1AltBlock(choice, preamble, alts, error) ::= <<
+// LL1AltBlock
+<blockDecl()>
+TBlock<elemId> Block<elemId> = <elemId>;
+>>
+
+LL1OptionalBlock(choice, alts, error) ::= <<
+// LL1OptionalBlock
+<blockDecl()>
+TBlock<elemId> Block<elemId> = <elemId>;
+>>
+
+LL1OptionalBlockSingleAlt(choice, expr, alts, preamble, error, followExpr) ::= <<
+// LL1OptionalBlockSingleAlt
+<blockDecl()>
+TBlock<elemId> Block<elemId> = <elemId>;
+>>
+
+LL1StarBlockSingleAlt(choice, loopExpr, alts, preamble, iteration) ::= <<
+// LL1StarBlockSingleAlt
+<blockDecl()>
+repeated TBlock<elemId> Block<elemId> = <elemId>;
+>>
+
+LL1PlusBlockSingleAlt(choice, loopExpr, alts, preamble, iteration) ::= <<
+// LL1PlusBlockSingleAlt
+<blockDecl()>
+repeated TBlock<elemId> Block<elemId> = <elemId>;
+>>
+
+// LL(*) stuff
+
+AltBlock(choice, preamble, alts, error) ::= <<
+// AltBlock
+<blockDecl()>
+TBlock<elemId> Block<elemId> = <elemId>;
+>>
+
+OptionalBlock(choice, alts, error) ::= <<
+// OptionalBlock
+<blockDecl()>
+TBlock<elemId> Block<elemId> = <elemId>;
+>>
+
+StarBlock(choice, alts, sync, iteration) ::= <<
+// StarBlock
+<blockDecl()>
+repeated TBlock<elemId> Block<elemId> = <elemId>;
+>>
+
+PlusBlock(choice, alts, error) ::= <<
+// PlusBlock
+<blockDecl()>
+repeated TBlock<elemId> Block<elemId> = <elemId>;
+>>
+
+blockDecl() ::= <<
+message TBlock<elemId> {
+<if(rest(alts))>
+    <alts:{a | <altDecl(a,i)>}; separator="\n">
+    oneof Alt {
+        <alts:{a | TAlt<i> Alt<i> = <i>; }; separator="\n">
+    }
+<else>
+    <alts>
+    <defineDescr(alts)>
+<endif>
+}
+>>
+
+altDecl(alt,altNum) ::= <<
+message TAlt<altNum> {
+    <alt>
+    <defineDescr(alt)>
+}
+>>
+
+defineDescr(alt) ::= <<
+<if(rest(alt) || !alt.ops)>
+string Descr = <length([alt, file])>;
+<else>
+<if(first(alt.ops).ops)>
+<if(first(first(alt.ops).ops).ops)>
+// CodeBlockForOuterMostAlt -> CodeBlockForAlt -> CodeBlockForAlt
+string Descr = <length([first(first(alt.ops).ops).ops, file])>;
+<else>
+// CodeBlockForAlt -> CodeBlockForAlt
+string Descr = <length([first(alt.ops).ops, file])>;
+<endif>
+<else>
+string Descr = <length([alt.ops, file])>;
+<endif>
+<endif>
+>>
+
+Sync(s) ::= ""
+
+ThrowNoViableAlt(t) ::= ""
+
+TestSetInline(s) ::= <<
+>>
+
+// Java language spec 15.19 - shift operators mask operands rather than overflow to 0... need range test
+testShiftInRange(shiftAmount) ::= <<
+>>
+
+bitsetBitfieldComparison(s, bits) ::= <%
+%>
+
+isZero ::= [
+"0":true,
+default:false
+]
+
+offsetShift(shiftAmount, offset) ::= <%
+%>
+
+bitsetInlineComparison(s, bits) ::= <%
+%>
+
+cases(tokens) ::= <<
+>>
+
+InvokeRule(r, argExprsChunks) ::= <<
+TRule_<r.name> Rule_<r.name><elemId> = <elemId>;
+>>
+
+MatchToken(m) ::= <<
+TToken Token<elemId> = <elemId>;
+>>
+
+MatchSet(m, expr, capture) ::= <<
+TToken Token<elemId> = <elemId>;
+>>
+
+MatchNotSet(m, expr, capture) ::= ""
+
+CommonSetStuff(m, expr, capture, invert) ::= <<
+>>
+
+Wildcard(w) ::= <<
+>>
+
+// ACTION STUFF
+
+Action(a, foo, chunks) ::= ""
+
+ArgAction(a, chunks) ::= ""
+
+SemPred(p, chunks, failChunks) ::= <<
+>>
+
+ExceptionClause(e, catchArg, catchAction) ::= <<
+>>
+
+// lexer actions are not associated with model objects
+
+LexerSkipCommand()  ::= ""
+LexerMoreCommand()  ::= ""
+LexerPopModeCommand() ::= ""
+
+LexerTypeCommand(arg, grammar)      ::= ""
+LexerChannelCommand(arg, grammar)   ::= ""
+LexerModeCommand(arg, grammar)      ::= ""
+LexerPushModeCommand(arg, grammar)  ::= ""
+
+ActionText(t) ::= "// ActionText <t>"
+ActionTemplate(t) ::= "// ActionText <t>"
+ArgRef(a) ::= "// ArgRef <t>"
+LocalRef(a) ::= "// LocalRef <t>"
+RetValueRef(a) ::= ""
+QRetValueRef(a) ::= ""
+/** How to translate $tokenLabel */
+TokenRef(t) ::= "// TokenRef <t>"
+LabelRef(t) ::= "// LabelRef <t>"
+ListLabelRef(t) ::= ""
+SetAttr(s,rhsChunks) ::= ""
+
+TokenLabelType() ::= ""
+InputSymbolType() ::= ""
+
+TokenPropertyRef_text(t) ::= "// TokenPropertyRef_text <t>"
+TokenPropertyRef_type(t) ::= "// TokenPropertyRef_type <t>"
+TokenPropertyRef_line(t) ::= "// TokenPropertyRef_line <t>"
+TokenPropertyRef_pos(t) ::= ""
+TokenPropertyRef_channel(t) ::= ""
+TokenPropertyRef_index(t) ::= ""
+TokenPropertyRef_int(t) ::= ""
+
+RulePropertyRef_start(r) ::= ""
+RulePropertyRef_stop(r)	 ::= ""
+RulePropertyRef_text(r)	 ::= ""
+RulePropertyRef_ctx(r)	 ::= ""
+RulePropertyRef_parser(r)	 ::= ""
+
+ThisRulePropertyRef_start(r) ::= ""
+ThisRulePropertyRef_stop(r)	 ::= ""
+ThisRulePropertyRef_text(r)	 ::= ""
+ThisRulePropertyRef_ctx(r)	 ::= ""
+ThisRulePropertyRef_parser(r)	 ::= ""
+
+NonLocalAttrRef(s)		 ::= ""
+SetNonLocalAttr(s, rhsChunks)	  ::=
+    ""
+
+AddToLabelList(a) ::= ""
+
+TokenDecl(t) ::= "// TokenDecl <t>"
+TokenTypeDecl(t) ::= "// TokenTypeDecl <t>"
+TokenListDecl(t) ::= "// TokenListDecl <t>"
+RuleContextDecl(r) ::= "// RuleContextDecl<r>"
+RuleContextListDecl(rdecl) ::= ""
+
+ContextTokenGetterDecl(t)      ::=
+    ""
+ContextTokenListGetterDecl(t)  ::=
+    ""
+ContextTokenListIndexedGetterDecl(t)  ::= <<
+>>
+ContextRuleGetterDecl(r)       ::= <<
+>>
+ContextRuleListGetterDecl(r)   ::= <<
+>>
+ContextRuleListIndexedGetterDecl(r)   ::= <<
+>>
+
+LexerRuleContext() ::= "// LexerRuleContext"
+
+/** The rule context name is the rule followed by a suffix; e.g.,
+ *	r becomes rContext.
+ */
+RuleContextNameSuffix() ::= "Context"
+
+ImplicitTokenLabel(tokenName) ::= "// ImplicitTokenLabel <tokenName>"
+ImplicitRuleLabel(ruleName)	  ::= "// ImplicitRuleLabel <ruleName>"
+ImplicitSetLabel(id)		  ::= ""
+ListLabelName(label)		  ::= ""
+
+CaptureNextToken(d) ::= ""
+CaptureNextTokenType(d) ::= ""
+
+StructDecl(struct,ctorAttrs,attrs,getters,dispatchMethods,interfaces,extensionMembers)
+	::= <<
+>>
+
+AltLabelStructDecl(struct,attrs,getters,dispatchMethods) ::= <<
+>>
+
+ListenerDispatchMethod(method) ::= <<
+>>
+
+VisitorDispatchMethod(method) ::= <<
+>>
+
+AttributeDecl(d) ::= ""
+
+/** If we don't know location of label def x, use this template */
+labelref(x) ::= "<if(!x.isLocal)>((<x.ctx.name>)_localctx).<endif><x.escapedName>"
+
+/** For any action chunk, what is correctly-typed context struct ptr? */
+ctx(actionChunk) ::= "((<actionChunk.ctx.name>)_localctx)"
+
+// used for left-recursive rules
+recRuleAltPredicate(ruleName,opPrec)  ::= ""
+recRuleSetReturnAction(src,name)	  ::= ""
+recRuleSetStopToken()                 ::= ""
+
+recRuleAltStartAction(ruleName, ctxName, label, isListLabel) ::= <<
+>>
+
+recRuleLabeledAltStartAction(ruleName, currentAltLabel, label, isListLabel) ::= <<
+>>
+
+recRuleReplaceContext(ctxName) ::= <<
+>>
+
+recRuleSetPrevCtx() ::= <<
+>>
+
+
+LexerFile(lexerFile, lexer, namedActions) ::= <<
+>>
+
+Lexer(lexer, atn, actionFuncs, sempredFuncs, superClass) ::= <<
+>>
+
+SerializedJavaATN(model) ::= <<
+>>
+
+/** Using a type to init value map, try to init a type; if not in table
+ *	must be an object, default value is "null".
+ */
+initValue(typeName) ::= <<
+>>
+
+SerializedATN(model) ::= ""
+
+codeFileExtension() ::= ".proto"

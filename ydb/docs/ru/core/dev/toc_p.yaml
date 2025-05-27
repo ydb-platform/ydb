@@ -18,6 +18,8 @@ items:
     path: primary-key/toc_p.yaml
 - name: Вторичные индексы
   href: secondary-indexes.md
+- name: Векторные индексы
+  href: vector-indexes.md
 - name: Оптимизация планов запросов
   href: query-plans-optimization.md
 - name: Пакетная загрузка
@@ -26,7 +28,7 @@ items:
   href: paging.md
 - name: Таймауты
   href: timeouts.md
-- name: Системные таблицы
+- name: Системные представления
   href: system-views.md
 - name: Change Data Capture
   href: cdc.md
@@ -34,3 +36,6 @@ items:
   href: terraform.md
 - name: Пользовательские атрибуты
   href: custom-attributes.md
+- name: Управление потреблением ресурсов
+  href: resource-consumption-management.md
+  when: feature_resource_pool == true and feature_resource_pool_classifier == true

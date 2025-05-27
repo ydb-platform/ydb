@@ -9,6 +9,7 @@ TInsertTableCounters::TInsertTableCounters()
     , Inserted("InsertTable", "Inserted")
     , Committed("InsertTable", "Committed")
     , Aborted("InsertTable", "Aborted")
+    , LoadCounters(NColumnShard::TLoadTimeSignals::TSignalsRegistry::GetSignal("InsertTable"))
 {
 }
 

@@ -93,8 +93,8 @@ private:
         } else if (ev->Get()->Status) {
             LOG_SP_INFO_S(ctx, NKikimrServices::GRPC_PROXY, "Replying " << ev->Get()->Status->GRpcStatusCode << " error " << ev->Get()->Status->Msg);
             if (ev->Get()->Status->GRpcStatusCode == grpc::StatusCode::NOT_FOUND)
-                return ReplyWithError(ctx, NYdb::EStatus::NOT_FOUND, ev->Get()->Status->Msg);
-            return ReplyWithError(ctx, NYdb::EStatus::INTERNAL_ERROR, ev->Get()->Status->Msg);
+                return ReplyWithError(ctx, NYdb::EStatus::NOT_FOUND, TString{ev->Get()->Status->Msg});
+            return ReplyWithError(ctx, NYdb::EStatus::INTERNAL_ERROR, TString{ev->Get()->Status->Msg});
         } else {
             LOG_SP_INFO_S(ctx, NKikimrServices::GRPC_PROXY, "Replying INTERNAL ERROR");
             return ReplyWithError(ctx, NYdb::EStatus::INTERNAL_ERROR, "Error happened while discovering database endpoint");
@@ -112,7 +112,7 @@ private:
         auto deferred = resp->mutable_operation();
         deferred->set_ready(true);
         deferred->set_status(Ydb::StatusIds::StatusCode(status));
-        deferred->add_issues()->set_message(errorText);
+        deferred->add_issues()->set_message(TString{errorText});
         ReqCtx->Reply(resp, Ydb::StatusIds::StatusCode(status));
         TBase::Die(ctx);
     }
@@ -146,19 +146,6 @@ TGRpcDiscoveryService::TGRpcDiscoveryService(NActors::TActorSystem *system, std:
 void TGRpcDiscoveryService::InitService(grpc::ServerCompletionQueue *cq, NYdbGrpc::TLoggerPtr logger) {
     CQ_ = cq;
     SetupIncomingRequests(std::move(logger));
-}
-
-void TGRpcDiscoveryService::SetGlobalLimiterHandle(NYdbGrpc::TGlobalLimiter *limiter) {
-    Limiter_ = limiter;
-}
-
-bool TGRpcDiscoveryService::IncRequest() {
-    return Limiter_->Inc();
-}
-
-void TGRpcDiscoveryService::DecRequest() {
-    Limiter_->Dec();
-    Y_ASSERT(Limiter_->GetCurrentInFlight() >= 0);
 }
 
 void TGRpcDiscoveryService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {

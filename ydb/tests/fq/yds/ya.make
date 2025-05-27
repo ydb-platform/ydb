@@ -30,6 +30,7 @@ TEST_SRCS(
     test_continue_mode.py
     test_cpu_quota.py
     test_delete_read_rules_after_abort_by_system.py
+    test_disposition.py
     test_eval.py
     test_invalid_consumer.py
     test_kill_pq_bill.py
@@ -42,6 +43,7 @@ TEST_SRCS(
     test_recovery_match_recognize.py
     test_recovery_mz.py
     test_restart_query.py
+    test_row_dispatcher.py
     test_select_1.py
     test_select_limit_db_id.py
     test_select_limit.py
@@ -52,12 +54,10 @@ TEST_SRCS(
     test_yq_streaming.py
 )
 
-IF (SANITIZER_TYPE == "thread")
-    TIMEOUT(2400)
+IF (SANITIZER_TYPE)
     SIZE(LARGE)
-    TAG(ya:fat)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
-    TIMEOUT(600)
     SIZE(MEDIUM)
 ENDIF()
 

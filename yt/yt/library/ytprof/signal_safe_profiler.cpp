@@ -15,8 +15,11 @@
 #endif
 
 #include <yt/yt/core/misc/proc.h>
+#include "yt/yt/core/misc/protobuf_helpers.h"
 
 #include <library/cpp/yt/cpu_clock/clock.h>
+
+#include <library/cpp/yt/misc/hash.h>
 
 namespace NYT::NYTProf {
 
@@ -24,20 +27,16 @@ namespace NYT::NYTProf {
 
 TProfileLocation::operator size_t() const
 {
-    size_t hash = Tid;
-    hash = CombineHashes(hash, std::hash<TString>()(ThreadName));
-
+    size_t hash = 0;
+    HashCombine(hash, Tid);
+    HashCombine(hash, ThreadName);
     for (auto ip : Backtrace) {
-        hash = CombineHashes(hash, ip);
+        HashCombine(hash, ip);
     }
-
     for (const auto& tag : Tags) {
-        hash = CombineHashes(hash,
-            CombineHashes(
-                std::hash<TString>{}(tag.first),
-                std::hash<std::variant<TString, i64>>{}(tag.second)));
+        HashCombine(hash, tag.first);
+        HashCombine(hash, std::hash<std::variant<std::string, i64>>()(tag.second));
     }
-
     return hash;
 }
 
@@ -48,7 +47,7 @@ Y_WEAK void* AcquireFiberTagStorage()
     return nullptr;
 }
 
-Y_WEAK std::vector<std::pair<TString, std::variant<TString, i64>>> ReadFiberTags(void* /* storage */)
+Y_WEAK std::vector<std::pair<std::string, std::variant<std::string, i64>>> ReadFiberTags(void* /* storage */)
 {
     return {};
 }
@@ -298,16 +297,15 @@ NProto::Profile TSignalSafeProfiler::ReadProfile()
     NProto::Profile profile;
     profile.add_string_table();
 
-    THashMap<TString, ui64> stringTable;
-    auto stringify = [&] (const TString& str) -> i64 {
+    THashMap<std::string, i64> stringTable;
+    auto stringify = [&] (const std::string& str) -> i64 {
         if (auto it = stringTable.find(str); it != stringTable.end()) {
             return it->second;
-        } else {
-            auto nameId = profile.string_table_size();
-            profile.add_string_table(str);
-            stringTable[str] = nameId;
-            return nameId;
         }
+        auto nameId = profile.string_table_size();
+        profile.add_string_table(ToProto(str));
+        stringTable[str] = nameId;
+        return nameId;
     };
 
     AnnotateProfile(&profile, stringify);
@@ -331,9 +329,9 @@ NProto::Profile TSignalSafeProfiler::ReadProfile()
             auto label = sample->add_label();
             label->set_key(stringify(tag.first));
 
-            if (auto intValue = std::get_if<i64>(&tag.second)) {
+            if (auto* intValue = std::get_if<i64>(&tag.second)) {
                 label->set_num(*intValue);
-            } else if (auto strValue = std::get_if<TString>(&tag.second)) {
+            } else if (const auto* strValue = std::get_if<std::string>(&tag.second)) {
                 label->set_str(stringify(*strValue));
             }
         }

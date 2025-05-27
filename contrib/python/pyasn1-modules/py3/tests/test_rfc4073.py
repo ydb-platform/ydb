@@ -10,7 +10,6 @@ import unittest
 
 from pyasn1.codec.der.decoder import decode as der_decoder
 from pyasn1.codec.der.encoder import encode as der_encoder
-from pyasn1.compat.octets import str2octs
 
 from pyasn1_modules import pem
 from pyasn1_modules import rfc2634
@@ -131,7 +130,7 @@ buWO3egPDL8Kf7tBhzjIKLw=
 
             self.assertIn(next_ci['contentType'], rfc5652.cmsContentTypesMap)
             self.assertEqual(rfc5652.id_data, next_ci['contentType'])
-            self.assertIn(str2octs('Content-Type: text'), next_ci['content'])
+            self.assertIn(b'Content-Type: text', next_ci['content'])
 
             for attr in ci['content']['attrs']:
                 self.assertIn(attr['attrType'], rfc5652.cmsAttributesMap)

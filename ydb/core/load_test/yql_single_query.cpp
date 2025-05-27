@@ -5,6 +5,8 @@
 #include <ydb/core/kqp/common/kqp.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/log.h>
 
 namespace NKikimr {
 
@@ -122,7 +124,7 @@ private:
     }
 
     void HandleQueryResponse(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
-        auto& response = ev->Get()->Record.GetRef();
+        auto& response = ev->Get()->Record;
 
         if (response.GetYdbStatus() == Ydb::StatusIds_StatusCode_SUCCESS) {
             LOG_NOTICE_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Query is executed successfully");

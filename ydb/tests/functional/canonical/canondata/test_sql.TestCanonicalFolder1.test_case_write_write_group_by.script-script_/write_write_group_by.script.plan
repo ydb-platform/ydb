@@ -49,6 +49,7 @@
                                                     {
                                                         "Inputs": [],
                                                         "Name": "TableFullScan",
+                                                        "Path": "/local/base_write_write_group_by_script_script/Temp",
                                                         "ReadColumns": [
                                                             "Group",
                                                             "MinAmount",
@@ -105,43 +106,20 @@
                 "PlanNodeType": "Query",
                 "Plans": [
                     {
-                        "Node Type": "Effect",
-                        "PlanNodeId": 10,
-                        "Plans": [
+                        "Node Type": "Sink",
+                        "Operators": [
                             {
-                                "CTE Name": "precompute_0_0",
-                                "Node Type": "Upsert-ConstantExpr",
-                                "Operators": [
-                                    {
-                                        "Inputs": [
-                                            {
-                                                "InternalOperatorId": 1
-                                            }
-                                        ],
-                                        "Name": "Upsert",
-                                        "Table": "base_write_write_group_by_script_script/Temp"
-                                    },
-                                    {
-                                        "Inputs": [],
-                                        "Iterator": "precompute_0_0",
-                                        "Name": "Iterator"
-                                    }
-                                ],
-                                "PlanNodeId": 9,
-                                "Tables": [
-                                    "base_write_write_group_by_script_script/Temp"
-                                ]
+                                "Inputs": [],
+                                "Name": "Upsert",
+                                "Path": "/local/base_write_write_group_by_script_script/Temp",
+                                "SinkType": "KqpTableSink",
+                                "Table": "base_write_write_group_by_script_script/Temp"
                             }
-                        ]
-                    },
-                    {
-                        "Node Type": "Precompute_0",
-                        "Parent Relationship": "InitPlan",
+                        ],
                         "PlanNodeId": 7,
-                        "PlanNodeType": "Materialize",
                         "Plans": [
                             {
-                                "Node Type": "Collect",
+                                "Node Type": "Stage",
                                 "PlanNodeId": 6,
                                 "Plans": [
                                     {
@@ -150,7 +128,18 @@
                                         "PlanNodeType": "Connection",
                                         "Plans": [
                                             {
-                                                "Node Type": "Stage",
+                                                "Node Type": "Aggregate",
+                                                "Operators": [
+                                                    {
+                                                        "Inputs": [
+                                                            {
+                                                                "ExternalPlanNodeId": 3
+                                                            }
+                                                        ],
+                                                        "Name": "Aggregate",
+                                                        "Phase": "Final"
+                                                    }
+                                                ],
                                                 "PlanNodeId": 4,
                                                 "Plans": [
                                                     {
@@ -165,14 +154,15 @@
                                                                 "Node Type": "Aggregate",
                                                                 "Operators": [
                                                                     {
-                                                                        "Aggregation": "{_yql_agg_0: MIN(item.Amount,state._yql_agg_0)}",
+                                                                        "Aggregation": "{MIN(item.Amount)}",
                                                                         "GroupBy": "item.Group",
                                                                         "Inputs": [
                                                                             {
                                                                                 "ExternalPlanNodeId": 1
                                                                             }
                                                                         ],
-                                                                        "Name": "Aggregate"
+                                                                        "Name": "Aggregate",
+                                                                        "Phase": "Intermediate"
                                                                     }
                                                                 ],
                                                                 "PlanNodeId": 2,
@@ -183,6 +173,7 @@
                                                                             {
                                                                                 "Inputs": [],
                                                                                 "Name": "TableFullScan",
+                                                                                "Path": "/local/base_write_write_group_by_script_script/Input1",
                                                                                 "ReadColumns": [
                                                                                     "Amount",
                                                                                     "Group"
@@ -212,7 +203,9 @@
                                 ]
                             }
                         ],
-                        "Subplan Name": "CTE precompute_0_0"
+                        "Tables": [
+                            "base_write_write_group_by_script_script/Temp"
+                        ]
                     }
                 ],
                 "Stats": {

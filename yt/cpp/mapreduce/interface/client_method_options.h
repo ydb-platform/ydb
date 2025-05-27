@@ -264,6 +264,12 @@ struct TConcatenateOptions
 
     /// Whether we should append to destination or rewrite it.
     FLUENT_FIELD_OPTION(bool, Append);
+
+    // Maximum number of items to process in single concat request.
+    //
+    // If number of items provided is greater then this parameter
+    // client might split concatenate to several requests.
+    FLUENT_FIELD_DEFAULT(int, MaxBatchSize, 20);
 };
 
 ///
@@ -287,9 +293,12 @@ struct TBlobTableReaderOptions
     ///
     /// All blob parts except the last part of the blob must be of this size
     /// otherwise blob table reader emits error.
-    FLUENT_FIELD_DEFAULT(ui64, PartSize, 4 * 1024 * 1024);
+    FLUENT_FIELD_DEFAULT(i64, PartSize, 4 * 1024 * 1024);
 
-    /// @brief Offset from which to start reading
+    /// @brief Part index from which to start reading.
+    FLUENT_FIELD_DEFAULT(i64, StartPartIndex, 0);
+
+    /// @brief Offset from which to start reading.
     FLUENT_FIELD_DEFAULT(i64, Offset, 0);
 };
 
@@ -379,6 +388,11 @@ struct TSuspendOperationOptions
     ///
     /// By default running jobs are not aborted.
     FLUENT_FIELD_OPTION(bool, AbortRunningJobs);
+
+    ///
+    /// @brief Something to show in the alert.
+    ///
+    FLUENT_FIELD_OPTION(std::optional<TString>, Reason);
 };
 
 ///
@@ -468,7 +482,7 @@ struct TFileReaderOptions
     /// @brief Offset to start reading from.
     ///
     /// By default reading is started from the beginning of the file.
-    FLUENT_FIELD_OPTION(i64, Offset);
+    FLUENT_FIELD_DEFAULT(i64, Offset, 0);
 
     ///
     /// @brief Maximum length to read.
@@ -661,7 +675,7 @@ struct TTableReaderOptions
     FLUENT_FIELD_DEFAULT(size_t, SizeLimit, 4 << 20);
 
     ///
-    /// @brief Allows to fine tune format that is used for reading tables.
+    /// @brief Allows fine-tuning of the format used for reading tables.
     ///
     /// Has no effect when used with raw-reader.
     FLUENT_FIELD_OPTION(TFormatHints, FormatHints);
@@ -670,6 +684,20 @@ struct TTableReaderOptions
     /// @brief Allows to tune which attributes are added to rows while reading tables.
     ///
     FLUENT_FIELD_DEFAULT(TControlAttributes, ControlAttributes, TControlAttributes());
+};
+
+/// Options for @ref NYT::IClient::CreatePartitionTableReader
+struct TTablePartitionReaderOptions
+{
+    /// @cond Doxygen_Suppress
+    using TSelf = TTablePartitionReaderOptions;
+    /// @endcond
+
+    ///
+    /// @brief Allows fine-tuning of the format used for reading tables.
+    ///
+    /// Has no effect when used with raw-reader.
+    FLUENT_FIELD_OPTION(TFormatHints, FormatHints);
 };
 
 /// Options for @ref NYT::IClient::CreateTableWriter
@@ -991,7 +1019,7 @@ struct TLookupRowsOptions
     FLUENT_FIELD_DEFAULT(bool, KeepMissingRows, false);
 
     /// If set to true returned values will have "timestamp" attribute.
-    FLUENT_FIELD_OPTION(bool, Versioned);
+    FLUENT_FIELD_DEFAULT(bool, Versioned, false);
 };
 
 ///
@@ -1104,6 +1132,10 @@ struct TCreateClientOptions
 
     /// @brief Proxy Address to be used for connection
     FLUENT_FIELD_OPTION(TString, ProxyAddress);
+
+    /// @brief Use unix domain socket for connection.
+    /// Typically you will need this option when the RPC proxy is enabled within the job proxy.
+    FLUENT_FIELD_DEFAULT(bool, UseProxyUnixDomainSocket, false);
 };
 
 ///
@@ -1453,6 +1485,12 @@ struct TGetTablePartitionsOptions
     ///
     /// |True| by default.
     FLUENT_FIELD_DEFAULT(bool, AdjustDataWeightPerPartition, true);
+
+    ///
+    /// @brief Enable partition cookies in response.
+    ///
+    /// Partition cookies allow to efficiently read partitions using @ref NYT::IClientBase::CreateTablePartitionReader method.
+    FLUENT_FIELD_DEFAULT(bool, EnableCookies, false);
 };
 
 ///
@@ -1484,6 +1522,9 @@ struct TSkyShareTableOptions
 
     /// @brief Allow skynet manager to return fastbone links to skynet. See YT-11437
     FLUENT_FIELD_OPTION(bool, EnableFastbone);
+
+    /// @brief Custom pool.
+    FLUENT_FIELD_OPTION(TString, Pool);
 };
 
 ////////////////////////////////////////////////////////////////////////////////

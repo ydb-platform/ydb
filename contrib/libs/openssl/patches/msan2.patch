@@ -1,0 +1,18 @@
+--- a/crypto/rand/drbg_ctr.c
++++ b/crypto/rand/drbg_ctr.c
+@@ -15,6 +15,7 @@
+ #include "modes_local.h"
+ #include "internal/thread_once.h"
+ #include "rand_local.h"
++#include "sanitizers.h"
+ 
+ /*
+  * Implementation of NIST SP 800-90A CTR DRBG.
+@@ -348,6 +349,7 @@ __owur static int drbg_ctr_generate(RAND_DRBG *drbg,
+     }
+ 
+     memset(out, 0, outlen);
++    __msan_unpoison(ctr->V, 16 * sizeof(char));
+ 
+     do {
+         if (!EVP_CipherInit_ex(ctr->ctx_ctr,

@@ -1,10 +1,12 @@
 #include "tx_scan.h"
-#include <ydb/core/tx/columnshard/engines/reader/actor/actor.h>
-#include <ydb/core/tx/columnshard/engines/reader/sys_view/constructor/constructor.h>
-#include <ydb/core/tx/columnshard/engines/reader/plain_reader/constructor/constructor.h>
+
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/sys_view/common/schema.h>
+#include <ydb/core/tx/columnshard/engines/reader/actor/actor.h>
+#include <ydb/core/tx/columnshard/engines/reader/plain_reader/constructor/constructor.h>
 #include <ydb/core/tx/columnshard/engines/reader/sys_view/abstract/policy.h>
+#include <ydb/core/tx/columnshard/engines/reader/sys_view/constructor/constructor.h>
+#include <ydb/core/tx/columnshard/transactions/locks/read_start.h>
 
 namespace NKikimr::NOlap::NReader {
 
@@ -32,40 +34,85 @@ void TTxScan::Complete(const TActorContext& ctx) {
     TMemoryProfileGuard mpg("TTxScan::Complete");
     auto& request = Ev->Get()->Record;
     auto scanComputeActor = Ev->Sender;
-    const TSnapshot snapshot(request.GetSnapshot().GetStep(), request.GetSnapshot().GetTxId());
+    TSnapshot snapshot = TSnapshot(request.GetSnapshot().GetStep(), request.GetSnapshot().GetTxId());
+    if (snapshot.IsZero()) {
+        snapshot = Self->GetLastTxSnapshot();
+    }
+    const TReadMetadataBase::ESorting sorting =
+        [&]() {
+            if (request.HasReverse()) {
+                return request.GetReverse() ? TReadMetadataBase::ESorting::DESC : TReadMetadataBase::ESorting::ASC;
+            } else {
+                return TReadMetadataBase::ESorting::NONE;
+            }
+    }();
+
+    TScannerConstructorContext context(snapshot, request.HasItemsLimit() ? request.GetItemsLimit() : 0, sorting);
     const auto scanId = request.GetScanId();
     const ui64 txId = request.GetTxId();
     const ui32 scanGen = request.GetGeneration();
     const TString table = request.GetTablePath();
     const auto dataFormat = request.GetDataFormat();
     const TDuration timeout = TDuration::MilliSeconds(request.GetTimeoutMs());
+    NConveyor::TCPULimitsConfig cpuLimits;
+    cpuLimits.DeserializeFromProto(request).Validate();
     if (scanGen > 1) {
         Self->Counters.GetTabletCounters()->IncCounter(NColumnShard::COUNTER_SCAN_RESTARTED);
     }
-    const NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build()
-        ("tx_id", txId)("scan_id", scanId)("gen", scanGen)("table", table)("snapshot", snapshot)("tablet", Self->TabletID())("timeout", timeout);
+    const NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build() ("tx_id", txId)("scan_id", scanId)("gen", scanGen)(
+        "table", table)("snapshot", snapshot)("tablet", Self->TabletID())("timeout", timeout)("cpu_limits", cpuLimits.DebugString());
 
     TReadMetadataPtr readMetadataRange;
     {
-
         LOG_S_DEBUG("TTxScan prepare txId: " << txId << " scanId: " << scanId << " at tablet " << Self->TabletID());
 
-        TReadDescription read(snapshot, request.GetReverse());
+        TReadDescription read(Self->TabletID(), snapshot, sorting);
         read.TxId = txId;
-        read.PathId = request.GetLocalPathId();
+        if (request.HasLockTxId()) {
+            read.LockId = request.GetLockTxId();
+        }
+        read.PathId = TInternalPathId::FromRawValue(request.GetLocalPathId());
         read.ReadNothing = !Self->TablesManager.HasTable(read.PathId);
         read.TableName = table;
-        bool isIndex = false;
-        std::unique_ptr<IScannerConstructor> scannerConstructor = [&]() {
-            const ui64 itemsLimit = request.HasItemsLimit() ? request.GetItemsLimit() : 0;
-            auto sysViewPolicy = NSysView::NAbstract::ISysViewPolicy::BuildByPath(read.TableName);
-            isIndex = !sysViewPolicy;
-            if (!sysViewPolicy) {
-                return std::unique_ptr<IScannerConstructor>(new NPlain::TIndexScannerConstructor(snapshot, itemsLimit, request.GetReverse()));
+
+        const TString defaultReader =
+            [&]() {
+            const TString defGlobal =
+                AppDataVerified().ColumnShardConfig.GetReaderClassName() ? AppDataVerified().ColumnShardConfig.GetReaderClassName() : "PLAIN";
+            if (Self->HasIndex()) {
+                return Self->GetIndexAs<TColumnEngineForLogs>()
+                    .GetVersionedIndex()
+                    .GetLastSchema()
+                    ->GetIndexInfo()
+                    .GetScanReaderPolicyName()
+                    .value_or(defGlobal);
             } else {
-                return sysViewPolicy->CreateConstructor(snapshot, itemsLimit, request.GetReverse());
+                return defGlobal;
             }
         }();
+        std::unique_ptr<IScannerConstructor> scannerConstructor = [&]() {
+            auto sysViewPolicy = NSysView::NAbstract::ISysViewPolicy::BuildByPath(read.TableName);
+            if (!sysViewPolicy) {
+                auto constructor = NReader::IScannerConstructor::TFactory::MakeHolder(
+                    request.GetCSScanPolicy() ? request.GetCSScanPolicy() : defaultReader, context);
+                if (!constructor) {
+                    return std::unique_ptr<IScannerConstructor>();
+                }
+                return std::unique_ptr<IScannerConstructor>(constructor.Release());
+            } else {
+                return sysViewPolicy->CreateConstructor(context);
+            }
+        }();
+        if (!scannerConstructor) {
+            return SendError("cannot build scanner", AppDataVerified().ColumnShardConfig.GetReaderClassName(), ctx);
+        }
+        if (request.HasScanCursor()) {
+            auto cursorConclusion = scannerConstructor->BuildCursorFromProto(request.GetScanCursor());
+            if (cursorConclusion.IsFail()) {
+                return SendError("cannot build scanner cursor", cursorConclusion.GetErrorMessage(), ctx);
+            }
+            read.SetScanCursor(cursorConclusion.DetachResult());
+        }
         read.ColumnIds.assign(request.GetColumnTags().begin(), request.GetColumnTags().end());
         read.StatsMode = request.GetStatsMode();
 
@@ -74,35 +121,32 @@ void TTxScan::Complete(const TActorContext& ctx) {
         if (!parseResult) {
             return SendError("cannot parse program", parseResult.GetErrorMessage(), ctx);
         }
-
-        if (!request.RangesSize()) {
+        {
+            if (request.RangesSize()) {
+                auto ydbKey = scannerConstructor->GetPrimaryKeyScheme(Self);
+                {
+                    auto filterConclusion = NOlap::TPKRangesFilter::BuildFromProto(request, ydbKey);
+                    if (filterConclusion.IsFail()) {
+                        return SendError("cannot build ranges filter", filterConclusion.GetErrorMessage(), ctx);
+                    }
+                    read.PKRangesFilter = std::make_shared<NOlap::TPKRangesFilter>(filterConclusion.DetachResult());
+                }
+            }
             auto newRange = scannerConstructor->BuildReadMetadata(Self, read);
             if (newRange.IsSuccess()) {
                 readMetadataRange = TValidator::CheckNotNull(newRange.DetachResult());
             } else {
                 return SendError("cannot build metadata withno ranges", newRange.GetErrorMessage(), ctx);
             }
-        } else {
-            auto ydbKey = scannerConstructor->GetPrimaryKeyScheme(Self);
-            {
-                auto filterConclusion = NOlap::TPKRangesFilter::BuildFromProto(request, request.GetReverse(), ydbKey);
-                if (filterConclusion.IsFail()) {
-                    return SendError("cannot build ranges filter", filterConclusion.GetErrorMessage(), ctx);
-                }
-                read.PKRangesFilter = filterConclusion.DetachResult();
-            }
-            auto newRange = scannerConstructor->BuildReadMetadata(Self, read);
-            if (!newRange) {
-                return SendError("cannot build metadata", newRange.GetErrorMessage(), ctx);
-            }
-            readMetadataRange = TValidator::CheckNotNull(newRange.DetachResult());
         }
     }
     AFL_VERIFY(readMetadataRange);
+    readMetadataRange->OnBeforeStartReading(*Self);
 
     TStringBuilder detailedInfo;
     if (IS_LOG_PRIORITY_ENABLED(NActors::NLog::PRI_TRACE, NKikimrServices::TX_COLUMNSHARD)) {
-        detailedInfo << " read metadata: (" << *readMetadataRange << ")" << " req: " << request;
+        detailedInfo << " read metadata: (" << readMetadataRange->DebugString() << ")"
+                     << " req: " << request;
     }
 
     const TVersionedIndex* index = nullptr;
@@ -116,10 +160,13 @@ void TTxScan::Complete(const TActorContext& ctx) {
     TComputeShardingPolicy shardingPolicy;
     AFL_VERIFY(shardingPolicy.DeserializeFromProto(request.GetComputeShardingPolicy()));
 
-    auto scanActor = ctx.Register(new TColumnShardScan(Self->SelfId(), scanComputeActor, Self->GetStoragesManager(),
-        shardingPolicy, scanId, txId, scanGen, requestCookie, Self->TabletID(), timeout, readMetadataRange, dataFormat, Self->Counters.GetScanCounters()));
+    auto scanActorId = ctx.Register(new TColumnShardScan(Self->SelfId(), scanComputeActor, Self->GetStoragesManager(),
+        Self->DataAccessorsManager.GetObjectPtrVerified(), shardingPolicy, scanId,
+        txId, scanGen, requestCookie, Self->TabletID(), timeout, readMetadataRange, dataFormat, Self->Counters.GetScanCounters(),
+        cpuLimits));
+    Self->InFlightReadsTracker.AddScanActorId(requestCookie, scanActorId);
 
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "TTxScan started")("actor_id", scanActor)("trace_detailed", detailedInfo);
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "TTxScan started")("actor_id", scanActorId)("trace_detailed", detailedInfo);
 }
 
-}
+}   // namespace NKikimr::NOlap::NReader

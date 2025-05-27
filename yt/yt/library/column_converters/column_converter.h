@@ -50,7 +50,7 @@ class TColumnConverters
 public:
     TConvertedColumnRange ConvertRowsToColumns(
         TRange<NTableClient::TUnversionedRow> rows,
-        const THashMap<int, NTableClient::TColumnSchema>& columnSchema);
+        const THashMap<int, NTableClient::TColumnSchema>& columnSchemas);
 private:
     THashMap<int, int> IdsToIndexes_;
     std::vector<int> ColumnIds_;

@@ -276,6 +276,14 @@ TSkiffToUnversionedValueConverter CreateSimpleValueConverter(
             } else {
                 return CreatePrimitiveTypeConverter(wireType, required, columnId, ysonConverter);
             }
+        case ESimpleLogicalValueType::TzDate:
+        case ESimpleLogicalValueType::TzDatetime:
+        case ESimpleLogicalValueType::TzTimestamp:
+        case ESimpleLogicalValueType::TzDate32:
+        case ESimpleLogicalValueType::TzDatetime64:
+        case ESimpleLogicalValueType::TzTimestamp64:
+            // TODO(nadya02): YT-15805: Support tz types.
+            THROW_ERROR_EXCEPTION("Tz types are not supported now");
     }
 }
 
@@ -300,6 +308,7 @@ const auto precision = denullifiedType.GetPrecision();
         CASE(EWireType::Int32);
         CASE(EWireType::Int64);
         CASE(EWireType::Int128);
+        CASE(EWireType::Int256);
 #undef CASE
         case EWireType::Yson32:
             return CreatePrimitiveTypeConverter(wireType, fieldDescription.IsRequired(), columnId, ysonConverter);
@@ -606,7 +615,7 @@ std::unique_ptr<IParser> CreateParserForSkiff(
     const TSkiffFormatConfigPtr& config,
     int tableIndex)
 {
-    if (tableIndex >= static_cast<int>(skiffSchemas.size())) {
+    if (tableIndex >= std::ssize(skiffSchemas)) {
         THROW_ERROR_EXCEPTION("Skiff format config does not describe table #%v",
             tableIndex);
     }

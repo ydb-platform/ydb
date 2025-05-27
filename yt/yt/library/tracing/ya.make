@@ -26,7 +26,7 @@ RECURSE(
 )
 
 IF (NOT OPENSOURCE)
-    # NB: default-linux-x86_64-relwithdebinfo-opensource build does not support python programs and modules.
+    # NB: Default-linux-x86_64-relwithdebinfo-opensource build does not support python programs and modules.
     RECURSE(
         integration
         py

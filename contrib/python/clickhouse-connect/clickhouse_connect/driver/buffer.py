@@ -129,10 +129,8 @@ class ResponseBuffer(ByteSource):
         return column
 
     @property
-    def last_message(self):
-        if len(self.buffer) == 0:
-            return None
-        return self.buffer.decode()
+    def last_message(self) -> bytes:
+        return self.buffer
 
     def close(self):
         if self.source:

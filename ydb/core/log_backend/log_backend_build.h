@@ -16,6 +16,9 @@ public:
     static TAutoPtr<TLogBackend> CreateLogBackendFromUAClientConfig(
             const NKikimrConfig::TUAClientConfig& uaClientConfig,
             NMonitoring::TDynamicCounterPtr uaCounters,
-            const TString& logName);
+            const TString& logName,
+            const TString& nodeType,
+            const TString& tenant,
+            const TString& clusterName);
 };
 }

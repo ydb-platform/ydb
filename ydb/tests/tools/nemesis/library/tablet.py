@@ -5,8 +5,8 @@ import six
 
 from ydb.tests.library.nemesis.nemesis_core import Nemesis
 from ydb.tests.library.common.types import TabletTypes
-from ydb.tests.library.harness.kikimr_client import kikimr_client_factory
-from ydb.tests.library.harness.kikimr_http_client import HiveClient
+from ydb.tests.library.clients.kikimr_client import kikimr_client_factory
+from ydb.tests.library.clients.kikimr_http_client import HiveClient
 from ydb.tests.tools.nemesis.library.base import AbstractMonitoredNemesis
 
 

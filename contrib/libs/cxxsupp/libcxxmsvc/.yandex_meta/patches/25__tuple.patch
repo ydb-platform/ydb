@@ -1,0 +1,277 @@
+diff --git a/include/__tuple b/include/__tuple
+index 6d13bb2..89448b0 100644
+--- a/include/__tuple
++++ b/include/__tuple
+@@ -21,36 +21,36 @@
+ 
+ _LIBCPP_BEGIN_NAMESPACE_STD
+ 
+-template <class _Tp> struct _LIBCPP_TEMPLATE_VIS tuple_size;
++template <class _Tp> class _LIBCPP_TEMPLATE_VIS tuple_size;
+ 
+ #if !defined(_LIBCPP_CXX03_LANG)
+ template <class _Tp, class...>
+ using __enable_if_tuple_size_imp = _Tp;
+ 
+ template <class _Tp>
+-struct _LIBCPP_TEMPLATE_VIS tuple_size<__enable_if_tuple_size_imp<
++class _LIBCPP_TEMPLATE_VIS tuple_size<__enable_if_tuple_size_imp<
+     const _Tp,
+     typename enable_if<!is_volatile<_Tp>::value>::type,
+     integral_constant<size_t, sizeof(tuple_size<_Tp>)>>>
+     : public integral_constant<size_t, tuple_size<_Tp>::value> {};
+ 
+ template <class _Tp>
+-struct _LIBCPP_TEMPLATE_VIS tuple_size<__enable_if_tuple_size_imp<
++class _LIBCPP_TEMPLATE_VIS tuple_size<__enable_if_tuple_size_imp<
+     volatile _Tp,
+     typename enable_if<!is_const<_Tp>::value>::type,
+     integral_constant<size_t, sizeof(tuple_size<_Tp>)>>>
+     : public integral_constant<size_t, tuple_size<_Tp>::value> {};
+ 
+ template <class _Tp>
+-struct _LIBCPP_TEMPLATE_VIS tuple_size<__enable_if_tuple_size_imp<
++class _LIBCPP_TEMPLATE_VIS tuple_size<__enable_if_tuple_size_imp<
+     const volatile _Tp,
+     integral_constant<size_t, sizeof(tuple_size<_Tp>)>>>
+     : public integral_constant<size_t, tuple_size<_Tp>::value> {};
+ 
+ #else
+-template <class _Tp> struct _LIBCPP_TEMPLATE_VIS tuple_size<const _Tp> : public tuple_size<_Tp> {};
+-template <class _Tp> struct _LIBCPP_TEMPLATE_VIS tuple_size<volatile _Tp> : public tuple_size<_Tp> {};
+-template <class _Tp> struct _LIBCPP_TEMPLATE_VIS tuple_size<const volatile _Tp> : public tuple_size<_Tp> {};
++template <class _Tp> class _LIBCPP_TEMPLATE_VIS tuple_size<const _Tp> : public tuple_size<_Tp> {};
++template <class _Tp> class _LIBCPP_TEMPLATE_VIS tuple_size<volatile _Tp> : public tuple_size<_Tp> {};
++template <class _Tp> class _LIBCPP_TEMPLATE_VIS tuple_size<const volatile _Tp> : public tuple_size<_Tp> {};
+ #endif
+ 
+ template <size_t _Ip, class _Tp> struct _LIBCPP_TEMPLATE_VIS tuple_element;
+@@ -87,14 +87,11 @@ template <size_t...> struct __tuple_indices {};
+ 
+ template <class _IdxType, _IdxType... _Values>
+ struct __integer_sequence {
+-  template <template <class _OIdxType, _OIdxType...> class _ToIndexSeq, class _ToIndexType>
+-  using __convert = _ToIndexSeq<_ToIndexType, _Values...>;
+-
+   template <size_t _Sp>
+   using __to_tuple_indices = __tuple_indices<(_Values + _Sp)...>;
+ };
+ 
+-#if !__has_builtin(__make_integer_seq) || defined(_LIBCPP_TESTING_FALLBACK_MAKE_INTEGER_SEQUENCE)
++#if defined(__CUDACC__) || !__has_builtin(__make_integer_seq) || defined(_LIBCPP_TESTING_FALLBACK_MAKE_INTEGER_SEQUENCE)
+ namespace __detail {
+ 
+ template<typename _Tp, size_t ..._Extra> struct __repeat;
+@@ -136,7 +133,7 @@ template<> struct __parity<7> { template<size_t _Np> struct __pmake : __repeat<t
+ 
+ #endif // !__has_builtin(__make_integer_seq) || defined(_LIBCPP_TESTING_FALLBACK_MAKE_INTEGER_SEQUENCE)
+ 
+-#if __has_builtin(__make_integer_seq)
++#if __has_builtin(__make_integer_seq) && !defined(__CUDACC__)
+ template <size_t _Ep, size_t _Sp>
+ using __make_indices_imp =
+     typename __make_integer_seq<__integer_sequence, size_t, _Ep - _Sp>::template
+@@ -161,7 +158,7 @@ template <class ..._Tp> class _LIBCPP_TEMPLATE_VIS tuple;
+ template <class... _Tp> struct __tuple_like<tuple<_Tp...> > : true_type {};
+ 
+ template <class ..._Tp>
+-struct _LIBCPP_TEMPLATE_VIS tuple_size<tuple<_Tp...> >
++class _LIBCPP_TEMPLATE_VIS tuple_size<tuple<_Tp...> >
+     : public integral_constant<size_t, sizeof...(_Tp)>
+ {
+ };
+@@ -267,6 +264,7 @@ __indexed<_Idx, _Tp> __at_index(__indexed<_Idx, _Tp> const&);
+ 
+ } // namespace __indexer_detail
+ 
++#if !defined(__CUDACC__) || !defined(_MSC_VER)
+ template <size_t _Idx, class ..._Types>
+ using __type_pack_element _LIBCPP_NODEBUG = typename decltype(
+     __indexer_detail::__at_index<_Idx>(
+@@ -275,7 +273,22 @@ using __type_pack_element _LIBCPP_NODEBUG = typename decltype(
+             typename __make_tuple_indices<sizeof...(_Types)>::type
+         >{})
+   )::type;
+-#endif
++
++#else // !defined(__CUDACC__) || !defined(_MSC_VER)
++template <size_t _Idx, class ..._Types>
++struct __y_type_pack_element {
++    using __t1 = typename __make_tuple_indices<sizeof...(_Types)>::type;
++    using __t2 = __indexer_detail::__indexer<__tuple_types<_Types...>, __t1>;
++    using __t3 = decltype(__indexer_detail::__at_index<_Idx>(__t2{}));
++    using __t4 = typename __t3::type;
++};
++
++template <size_t _Idx, class ..._Types>
++using __type_pack_element = typename __y_type_pack_element<_Idx, _Types...>::__t4;
++
++#endif // !defined(__CUDACC__) || !defined(_MSC_VER)
++
++#endif // __has_builtin(__type_pack_element)
+ 
+ template <size_t _Ip, class ..._Types>
+ struct _LIBCPP_TEMPLATE_VIS tuple_element<_Ip, __tuple_types<_Types...> >
+@@ -286,7 +299,7 @@ struct _LIBCPP_TEMPLATE_VIS tuple_element<_Ip, __tuple_types<_Types...> >
+ 
+ 
+ template <class ..._Tp>
+-struct _LIBCPP_TEMPLATE_VIS tuple_size<__tuple_types<_Tp...> >
++class _LIBCPP_TEMPLATE_VIS tuple_size<__tuple_types<_Tp...> >
+     : public integral_constant<size_t, sizeof...(_Tp)>
+ {
+ };
+@@ -340,6 +353,70 @@ using __apply_cv_t _LIBCPP_NODEBUG = __apply_cv_mf<
+ // _Sp defaults to 0 and _Ep defaults to tuple_size<_Tuple>.  If _Tuple is a
+ // lvalue_reference type, then __tuple_types<_Types&...> is the result.
+ 
++#ifdef _LIBCPP_COMPILER_MSVC
++
++template<class _TupleTypes, class _Tp>
++struct __make_tuple_types_append_front;
++
++template<class ..._Types, class _Tp>
++struct __make_tuple_types_append_front<__tuple_types<_Types...>, _Tp> {
++    using type = __tuple_types<_Tp, _Types...>;
++};
++
++template<class _TupleTypes, class _Apply, size_t _Ep, size_t _Sp, class = void>
++struct __make_tuple_types_flat;
++
++template<class _Tuple, class _Apply>
++struct __make_tuple_types_flat<_Tuple, _Apply, 0, 0, void> {
++    using type = __tuple_types<>;
++};
++
++template<template<class...> class _Tuple, class _Tp, class ..._Types, class _Apply, size_t _Ep>
++struct __make_tuple_types_flat<_Tuple<_Tp, _Types...>, _Apply, _Ep, 0, enable_if_t<(_Ep > 0)>> {
++    using type = typename __make_tuple_types_append_front<
++        typename __make_tuple_types_flat<__tuple_types<_Types...>, _Apply, _Ep - 1, 0>::type,
++        typename _Apply::template __apply<_Tp>>::type;
++};
++
++template<template <class...> class _Tuple, class _Tp, class ..._Types, class _Apply, size_t _Ep, size_t _Sp>
++struct __make_tuple_types_flat<_Tuple<_Tp, _Types...>, _Apply, _Ep, _Sp, enable_if_t<(_Ep > 0 && _Sp > 0)>> {
++    using type = typename __make_tuple_types_flat<__tuple_types<_Types...>, _Apply, _Ep - 1, _Sp - 1>::type;
++};
++
++template<class _Tp, size_t _Np, class _Apply, size_t _Ep>
++struct __make_tuple_types_flat<array<_Tp, _Np>, _Apply, _Ep, 0, enable_if_t<(_Ep > 0)>> {
++    using type = typename __make_tuple_types_append_front<
++        typename __make_tuple_types_flat<array<_Tp, _Np>, _Apply, _Ep - 1, 0>::type,
++        typename _Apply::template __apply<_Tp>>::type;
++};
++
++template<class _Tp, size_t _Np, class _Apply, size_t _Ep, size_t _Sp>
++struct __make_tuple_types_flat<array<_Tp, _Np>, _Apply, _Ep, _Sp, enable_if_t<(_Sp > 0)>> {
++    using type = typename __make_tuple_types_flat<array<_Tp, _Np>, _Apply, _Ep - _Sp, 0>::type;
++};
++
++template<class _Tp,
++         size_t _Ep = tuple_size<remove_reference_t<_Tp>>::value,
++         size_t _Sp = 0,
++         bool _SameSize = (_Ep == tuple_size<typename remove_reference<_Tp>::type>::value)>
++struct __make_tuple_types {
++    static_assert(_Sp <= _Ep, "__make_tuple_types input error");
++    using _RawTp = typename remove_cv<typename remove_reference<_Tp>::type>::type;
++    using type = typename __make_tuple_types_flat<_RawTp, __apply_cv_t<_Tp>, _Ep, _Sp>::type;
++};
++
++template <class ..._Types, size_t _Ep>
++struct __make_tuple_types<tuple<_Types...>, _Ep, 0, true> {
++  typedef __tuple_types<_Types...> type;
++};
++
++template <class ..._Types, size_t _Ep>
++struct __make_tuple_types<__tuple_types<_Types...>, _Ep, 0, true> {
++  typedef __tuple_types<_Types...> type;
++};
++
++#else
++
+ template <class _TupleTypes, class _TupleIndices>
+ struct __make_tuple_types_flat;
+ 
+@@ -383,37 +460,41 @@ struct __make_tuple_types<__tuple_types<_Types...>, _Ep, 0, true> {
+   typedef _LIBCPP_NODEBUG __tuple_types<_Types...> type;
+ };
+ 
++#endif // _LIBCPP_COMPILER_MSVC
++
+ template <bool ..._Preds>
+ struct __all_dummy;
+ 
+ template <bool ..._Pred>
+-struct __all : _IsSame<__all_dummy<_Pred...>, __all_dummy<((void)_Pred, true)...>> {};
++struct __all : _IsSame<__all_dummy<_Pred...>, __all_dummy<(_Pred | true)...>>{};
+ 
+ struct __tuple_sfinae_base {
+   template <template <class, class...> class _Trait,
+             class ..._LArgs, class ..._RArgs>
+   static auto __do_test(__tuple_types<_LArgs...>, __tuple_types<_RArgs...>)
+-    -> __all<typename enable_if<_Trait<_LArgs, _RArgs>::value, bool>::type{true}...>;
++    -> __all<_Trait<_LArgs, _RArgs>::value...>;
+   template <template <class...> class>
+   static auto __do_test(...) -> false_type;
+ 
+   template <class _FromArgs, class _ToArgs>
+-  using __constructible = decltype(__do_test<is_constructible>(_ToArgs{}, _FromArgs{}));
++  using __constructible = decltype(__do_test<is_constructible>(declval<_ToArgs>(), declval<_FromArgs>()));
+   template <class _FromArgs, class _ToArgs>
+-  using __convertible = decltype(__do_test<is_convertible>(_FromArgs{}, _ToArgs{}));
++  using __convertible = decltype(__do_test<is_convertible>(declval<_FromArgs>(), declval<_ToArgs>()));
+   template <class _FromArgs, class _ToArgs>
+-  using __assignable = decltype(__do_test<is_assignable>(_ToArgs{}, _FromArgs{}));
++  using __assignable = decltype(__do_test<is_assignable>(declval<_ToArgs>(), declval<_FromArgs>()));
+ };
+ 
+ // __tuple_convertible
+ 
+ template <class _Tp, class _Up, bool = __tuple_like<typename remove_reference<_Tp>::type>::value,
+-                                bool = __tuple_like<_Up>::value>
++                                bool = __tuple_like<_Up>::value,
++                                class = void>
+ struct __tuple_convertible
+     : public false_type {};
+ 
+ template <class _Tp, class _Up>
+-struct __tuple_convertible<_Tp, _Up, true, true>
++struct __tuple_convertible<_Tp, _Up, true, true,
++                           typename enable_if<(tuple_size<typename remove_reference<_Tp>::type>::value == tuple_size<_Up>::value)>::type>
+     : public __tuple_sfinae_base::__convertible<
+       typename __make_tuple_types<_Tp>::type
+     , typename __make_tuple_types<_Up>::type
+@@ -423,12 +504,14 @@ struct __tuple_convertible<_Tp, _Up, true, true>
+ // __tuple_constructible
+ 
+ template <class _Tp, class _Up, bool = __tuple_like<typename remove_reference<_Tp>::type>::value,
+-                                bool = __tuple_like<_Up>::value>
++                                bool = __tuple_like<_Up>::value,
++                                class = void>
+ struct __tuple_constructible
+     : public false_type {};
+ 
+ template <class _Tp, class _Up>
+-struct __tuple_constructible<_Tp, _Up, true, true>
++struct __tuple_constructible<_Tp, _Up, true, true,
++                             typename enable_if<(tuple_size<typename remove_reference<_Tp>::type>::value == tuple_size<_Up>::value)>::type>
+     : public __tuple_sfinae_base::__constructible<
+       typename __make_tuple_types<_Tp>::type
+     , typename __make_tuple_types<_Up>::type
+@@ -438,12 +521,14 @@ struct __tuple_constructible<_Tp, _Up, true, true>
+ // __tuple_assignable
+ 
+ template <class _Tp, class _Up, bool = __tuple_like<typename remove_reference<_Tp>::type>::value,
+-                                bool = __tuple_like<_Up>::value>
++                                bool = __tuple_like<_Up>::value,
++                                class = void>
+ struct __tuple_assignable
+     : public false_type {};
+ 
+ template <class _Tp, class _Up>
+-struct __tuple_assignable<_Tp, _Up, true, true>
++struct __tuple_assignable<_Tp, _Up, true, true,
++                          typename enable_if<(tuple_size<typename remove_reference<_Tp>::type>::value == tuple_size<_Up>::value)>::type>
+     : public __tuple_sfinae_base::__assignable<
+       typename __make_tuple_types<_Tp>::type
+     , typename __make_tuple_types<_Up&>::type

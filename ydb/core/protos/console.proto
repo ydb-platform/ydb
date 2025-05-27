@@ -31,11 +31,17 @@ message TVolatileConfig {
     optional string Config = 2;
 }
 
-message TYamlConfigChange {
+message TMainYamlConfigChange {
     optional string OldYamlConfig = 1;
     optional string NewYamlConfig = 2;
     repeated TVolatileConfig OldVolatileYamlConfigs = 3;
     repeated TVolatileConfig NewVolatileYamlConfigs = 4;
+}
+
+message TDatabaseYamlConfigChange {
+    optional string Database = 1;
+    optional string OldYamlConfig = 2;
+    optional string NewYamlConfig = 3;
 }
 
 message TLogRecordData {
@@ -44,7 +50,8 @@ message TLogRecordData {
     repeated TConfigureResponse.TAffectedConfig AffectedConfigs = 2;
     repeated uint32 AffectedKinds = 3;
     // New configs
-    optional TYamlConfigChange YamlConfigChange = 4;
+    optional TMainYamlConfigChange MainYamlConfigChange = 4;
+    optional TDatabaseYamlConfigChange DatabaseYamlConfigChange = 5;
 }
 
 message TLogRecord {

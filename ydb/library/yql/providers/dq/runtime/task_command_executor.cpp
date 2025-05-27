@@ -3,25 +3,26 @@
 #include <ydb/library/yql/providers/dq/task_runner/tasks_runner_proxy.h>
 #include <ydb/library/yql/providers/dq/counters/task_counters.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider.h>
+#include <yql/essentials/providers/common/provider/yql_provider.h>
 #include <ydb/library/yql/providers/dq/api/protos/dqs.pb.h>
 #include <ydb/library/yql/providers/dq/api/protos/task_command_executor.pb.h>
-#include <ydb/library/yql/utils/backtrace/backtrace.h>
-#include <ydb/library/yql/utils/failure_injector/failure_injector.h>
+#include <yql/essentials/utils/backtrace/backtrace.h>
+#include <yql/essentials/utils/failure_injector/failure_injector.h>
 
-#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
-#include <ydb/library/yql/minikql/mkql_node_serialization.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node.h>
-#include <ydb/library/yql/minikql/mkql_string_util.h>
+#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
+#include <yql/essentials/minikql/mkql_node_serialization.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node.h>
+#include <yql/essentials/minikql/mkql_string_util.h>
 
-#include <ydb/library/yql/minikql/aligned_page_pool.h>
+#include <yql/essentials/minikql/aligned_page_pool.h>
 #include <ydb/library/yql/dq/runtime/dq_input_channel.h>
 #include <ydb/library/yql/dq/runtime/dq_output_channel.h>
-#include <ydb/library/yql/utils/log/log.h>
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/utils/yql_panic.h>
 
-#include <ydb/library/yql/parser/pg_wrapper/interface/context.h>
-#include <ydb/library/yql/parser/pg_catalog/catalog.h>
+#include <yql/essentials/parser/pg_wrapper/interface/context.h>
+#include <yql/essentials/parser/pg_wrapper/interface/parser.h>
+#include <yql/essentials/parser/pg_catalog/catalog.h>
 
 #include <util/system/thread.h>
 #include <util/system/fs.h>
@@ -55,7 +56,10 @@ void ToProto(T& proto, const NDq::TDqAsyncStats& stats)
     proto.SetRows(stats.Rows);
     proto.SetChunks(stats.Chunks);
     proto.SetSplits(stats.Splits);
-
+    proto.SetFilteredBytes(stats.FilteredBytes);
+    proto.SetFilteredRows(stats.FilteredRows);
+    proto.SetQueuedBytes(stats.QueuedBytes);
+    proto.SetQueuedRows(stats.QueuedRows);
     proto.SetFirstMessageMs(stats.FirstMessageTs.MilliSeconds());
     proto.SetPauseMessageMs(stats.PauseMessageTs.MilliSeconds());
     proto.SetResumeMessageMs(stats.ResumeMessageTs.MilliSeconds());
@@ -682,6 +686,10 @@ public:
         Y_ABORT_UNLESS(workingDirectory);
         NFs::SetCurrentWorkingDirectory(workingDirectory);
 
+        QueryStat.Measure<void>("LoadPgSystemFunctions", [&]() {
+            NPg::LoadSystemFunctions(*NSQLTranslationPG::CreateSystemFunctionsParser());
+        });
+
         QueryStat.Measure<void>("LoadPgExtensions", [&]()
         {
             if (TFsPath(NCommon::PgCatalogFileName).Exists()) {
@@ -743,7 +751,7 @@ public:
             }
             settings.OptLLVM = DqConfiguration->OptLLVM.Get().GetOrElse("");
 
-            Ctx.FuncProvider = TaskTransformFactory(taskParams, Ctx.FuncRegistry);
+            Ctx.FuncProvider = TaskTransformFactory({taskParams, settings.ReadRanges}, Ctx.FuncRegistry);
 
             Y_ABORT_UNLESS(!Alloc);
             Y_ABORT_UNLESS(FunctionRegistry);

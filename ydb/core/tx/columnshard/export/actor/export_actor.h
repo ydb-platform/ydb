@@ -82,6 +82,7 @@ protected:
     virtual void OnBootstrap(const TActorContext& /*ctx*/) override {
         auto evStart = ExportSession->GetTask().GetSelector()->BuildRequestInitiator(ExportSession->GetCursor());
         evStart->Record.SetGeneration((ui64)TabletId);
+        evStart->Record.SetCSScanPolicy("PLAIN");
         Send(TabletActorId, evStart.release());
         Become(&TActor::StateFunc);
     }

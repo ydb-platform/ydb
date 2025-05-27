@@ -1118,7 +1118,7 @@ void TResourceBrokerActor::Bootstrap(const TActorContext &ctx)
     if (mon) {
         NMonitoring::TIndexMonPage *actorsMonPage = mon->RegisterIndexPage("actors", "Actors");
         mon->RegisterActorPage(actorsMonPage, "rb", "Resource broker",
-                               false, ctx.ExecutorThread.ActorSystem, ctx.SelfID);
+                               false, ctx.ActorSystem(), ctx.SelfID);
     }
 
     ResourceBroker = MakeIntrusive<TResourceBroker>(std::move(BootstrapConfig), std::move(BootstrapCounters), ctx.ActorSystem());
@@ -1234,16 +1234,34 @@ void TResourceBrokerActor::Handle(TEvResourceBroker::TEvConfigure::TPtr &ev,
         ResourceBroker->Configure(std::move(config));
     }
 
-    LOG_LOG_S(ctx, 
-        success ? NActors::NLog::PRI_INFO : NActors::NLog::PRI_ERROR, 
-        NKikimrServices::RESOURCE_BROKER, 
+    LOG_LOG_S(ctx,
+        success ? NActors::NLog::PRI_INFO : NActors::NLog::PRI_ERROR,
+        NKikimrServices::RESOURCE_BROKER,
         "Configure result: " << response->Record.ShortDebugString());
+
+    auto newConfig = ResourceBroker->GetConfig();
+    for (auto& queue : newConfig.GetQueues()) {
+        auto it = QueueSubscribers.find(queue.GetName());
+        if (it == QueueSubscribers.end())
+            continue;
+
+        for(const TActorId& subscriber: it->second) {
+            auto resp = MakeHolder<TEvResourceBroker::TEvConfigResponse>();
+            resp->QueueConfig = queue;
+            ctx.Send(subscriber, resp.Release());
+        }
+    }
 
     ctx.Send(ev->Sender, response.Release());
 }
 
 void TResourceBrokerActor::Handle(TEvResourceBroker::TEvConfigRequest::TPtr& ev, const TActorContext&)
 {
+    if (ev->Get()->Subscribe) {
+        auto [it, _] = QueueSubscribers.emplace(ev->Get()->Queue, THashSet<TActorId>());
+        it->second.emplace(ev->Sender);
+    }
+
     auto config = ResourceBroker->GetConfig();
     auto resp = MakeHolder<TEvResourceBroker::TEvConfigResponse>();
     for (auto& queue : config.GetQueues()) {
@@ -1266,7 +1284,7 @@ void TResourceBrokerActor::Handle(TEvResourceBroker::TEvResourceBrokerRequest::T
 void TResourceBrokerActor::Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorContext &ctx)
 {
     auto config = ResourceBroker->GetConfig();
-    
+
     TStringStream str;
     HTML(str) {
         PRE() {
@@ -1284,7 +1302,7 @@ NKikimrResourceBroker::TResourceBrokerConfig MakeDefaultConfig()
 
     const ui64 DefaultQueueCPU = 2;
     const ui64 KqpRmQueueCPU = 4;
-    const ui64 TotalCPU = 20;
+    const ui64 TotalCPU = 256; // means unlimited
 
     // Note: these memory limits will be overwritten by MemoryController
     const ui64 KqpRmQueueMemory = 10_GB;
@@ -1379,7 +1397,7 @@ NKikimrResourceBroker::TResourceBrokerConfig MakeDefaultConfig()
     queue = config.AddQueues();
     queue->SetName("queue_restore");
     queue->SetWeight(100);
-    queue->MutableLimit()->SetCpu(2);
+    queue->MutableLimit()->SetCpu(10);
 
     queue = config.AddQueues();
     queue->SetName(NLocalDb::KqpResourceManagerQueue);
@@ -1405,7 +1423,7 @@ NKikimrResourceBroker::TResourceBrokerConfig MakeDefaultConfig()
     queue = config.AddQueues();
     queue->SetName("queue_cdc_initial_scan");
     queue->SetWeight(100);
-    queue->MutableLimit()->SetCpu(4);
+    queue->MutableLimit()->SetCpu(2);
 
     queue = config.AddQueues();
     queue->SetName("queue_statistics_scan");

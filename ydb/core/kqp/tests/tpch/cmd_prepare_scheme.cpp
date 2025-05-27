@@ -14,7 +14,7 @@ void TCommandPrepareScheme::Config(TConfig& config) {
     config.Opts->AddLongOption('p', "partitions", "Uniform partitions count in comma-separated key=value format.\n"
                                                   "Ex.: -p nation=1,lineitem=10,...")
         .Optional()
-        .Handler1T<TStringBuf>([this](TStringBuf opt) {
+        .Handler([this](const TString& opt) {
             for (TStringBuf kv : StringSplitter(opt).Split(',').SkipEmpty()) {
                 TStringBuf table, partitions;
                 kv.Split('=', table, partitions);

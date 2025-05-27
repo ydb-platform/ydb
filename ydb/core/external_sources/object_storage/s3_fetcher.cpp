@@ -1,5 +1,6 @@
 #include "s3_fetcher.h"
 
+#include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/hfunc.h>
 
 namespace NKikimr::NExternalSource::NObjectStorage {

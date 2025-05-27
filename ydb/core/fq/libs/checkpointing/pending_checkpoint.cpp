@@ -20,6 +20,11 @@ void TPendingCheckpoint::Acknowledge(const NActors::TActorId& actorId, ui64 stat
     Stats.StateSize += stateSize;
 }
 
+void TPendingCheckpoint::Abort(const NActors::TActorId& actorId) {
+    Acknowledge(actorId);
+    Stats.Aborted = true;
+}
+
 bool TPendingCheckpoint::GotAllAcknowledges() const {
     return NotYetAcknowledged.empty();
 }

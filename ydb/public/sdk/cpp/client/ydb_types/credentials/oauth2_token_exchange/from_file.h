@@ -1,11 +1,14 @@
 #pragma once
+
+#include <ydb/public/sdk/cpp/client/ydb_types/fwd.h>
+
 #include <ydb/public/sdk/cpp/client/ydb_types/credentials/credentials.h>
 
 #include <util/generic/string.h>
 
 #include <vector>
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 
 // Lists supported algorithms for creation of OAuth 2.0 token exchange provider via config file
 std::vector<TString> GetSupportedOauth2TokenExchangeJwtAlgorithms();

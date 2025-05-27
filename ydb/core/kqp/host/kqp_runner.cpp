@@ -7,6 +7,7 @@
 #include <ydb/core/kqp/opt/kqp_statistics_transformer.h>
 #include <ydb/core/kqp/opt/kqp_column_statistics_requester.h>
 #include <ydb/core/kqp/opt/kqp_constant_folding_transformer.h>
+#include <ydb/core/kqp/opt/rbo/kqp_rbo_transformer.h>
 #include <ydb/core/kqp/opt/logical/kqp_opt_cbo.h>
 
 
@@ -15,14 +16,17 @@
 #include <ydb/core/kqp/opt/kqp_query_plan.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
 
-#include <ydb/library/yql/core/yql_graph_transformer.h>
-#include <ydb/library/yql/core/peephole_opt/yql_opt_peephole_physical.h>
-#include <ydb/library/yql/core/type_ann/type_ann_expr.h>
-#include <ydb/library/yql/utils/log/log.h>
-#include <ydb/library/yql/core/services/yql_transform_pipeline.h>
-#include <ydb/library/yql/core/yql_opt_proposed_by_data.h>
+#include <yql/essentials/core/yql_graph_transformer.h>
+#include <yql/essentials/core/peephole_opt/yql_opt_peephole_physical.h>
+#include <yql/essentials/core/type_ann/type_ann_expr.h>
+#include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/core/services/yql_transform_pipeline.h>
+#include <yql/essentials/core/yql_graph_transformer.h>
+#include <yql/essentials/core/yql_opt_proposed_by_data.h>
 
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
+#include <ydb/library/yql/providers/dq/opt/dqs_opt.h>
+
 
 #include <util/generic/is_in.h>
 
@@ -117,17 +121,7 @@ public:
     }
 
     void FillResult(TResult& queryResult) const override {
-        TVector<NKikimrMiniKQL::TResult*> results;
-        for (auto& phyResult : TransformCtx.PhysicalQueryResults) {
-            auto result = google::protobuf::Arena::CreateMessage<NKikimrMiniKQL::TResult>(
-                queryResult.ProtobufArenaPtr.get());
-
-            result->CopyFrom(phyResult);
-            results.push_back(result);
-        }
-
         queryResult.QueryStats.CopyFrom(TransformCtx.QueryStats);
-        queryResult.Results = std::move(results);
     }
 
 private:
@@ -161,6 +155,8 @@ public:
     {
         YQL_ENSURE(TransformCtx->QueryCtx->Type == EKikimrQueryType::Dml);
         YQL_ENSURE(TMaybeNode<TKiDataQueryBlocks>(query));
+
+        YQL_CLOG(DEBUG, CoreDq) << "Before any rewrites: " << KqpExprToPrettyString(*query, ctx);
 
         return PrepareQueryInternal(cluster, TKiDataQueryBlocks(query), ctx, settings);
     }
@@ -201,6 +197,8 @@ public:
         YQL_ENSURE(IsIn({EKikimrQueryType::Query, EKikimrQueryType::Script}, TransformCtx->QueryCtx->Type));
         YQL_ENSURE(TMaybeNode<TKiDataQueryBlocks>(query));
 
+        YQL_CLOG(DEBUG, CoreDq) << "Before any rewrites: " << KqpExprToPrettyString(*query, ctx);
+
         const auto dataQueryBlocks = TKiDataQueryBlocks(query);
 
         if (IsOlapQuery(dataQueryBlocks)) {
@@ -230,6 +228,10 @@ private:
                 std::begin(operations),
                 std::end(operations),
                 [this](const auto& operation) {
+                    if (operation.Operation() == "FillTable") {
+                        // FillTable operation compiles without existing table.
+                        return false;
+                    }
                     const auto& tableData = SessionCtx->Tables().ExistingTable(operation.Cluster(), operation.Table());
                     return tableData.Metadata->IsOlap();
                 });
@@ -272,14 +274,25 @@ private:
 
         TExprNode::TPtr query = kqlQueryBlocks->Ptr();
         YQL_CLOG(DEBUG, ProviderKqp) << "Initial KQL query: " << KqpExprToPrettyString(*query, ctx);
+        YQL_CLOG(DEBUG, CoreDq) << "Initial KQL query: " << KqpExprToPrettyString(*query, ctx);
+
 
         TransformCtx->Reset();
         BuildQueryCtx->Reset();
         Transformer->Rewind();
+        NewRBOTransformer->Rewind();
 
         TransformCtx->DataQueryBlocks = dataQueryBlocks;
 
-        return MakeIntrusive<TPrepareQueryAsyncResult>(query, *Transformer, ctx, *TransformCtx);
+        if (Config->EnableNewRBO) {
+            YQL_CLOG(INFO, CoreDq) << "Taking the new RBO branch";
+            return MakeIntrusive<TPrepareQueryAsyncResult>(query, *NewRBOTransformer, ctx, *TransformCtx);
+            //return MakeIntrusive<TPrepareQueryAsyncResult>(query, *Transformer, ctx, *TransformCtx);
+        }
+        else {
+            YQL_CLOG(INFO, CoreDq) << "Taking the old RBO branch";
+            return MakeIntrusive<TPrepareQueryAsyncResult>(query, *Transformer, ctx, *TransformCtx);
+        }
     }
 
     void CreateGraphTransformer(const TIntrusivePtr<TTypeAnnotationContext>& typesCtx, const TIntrusivePtr<TKikimrSessionContext>& sessionCtx,
@@ -287,8 +300,11 @@ private:
     {
         auto preparedExplainTransformer = CreateKqpExplainPreparedTransformer(
             Gateway, Cluster, TransformCtx, &funcRegistry, *typesCtx, OptimizeCtx);
+        
+        auto newRBOPreparedExplainTransformer = CreateKqpExplainPreparedTransformer(
+            Gateway, Cluster, TransformCtx, &funcRegistry, *typesCtx, OptimizeCtx);
 
-        auto physicalOptimizeTransformer = CreateKqpQueryBlocksTransformer(TTransformationPipeline(typesCtx)
+        auto physicalOptimizePipeline = TTransformationPipeline(typesCtx)
             .AddServiceTransformers()
             .Add(Log("PhysicalOptimize"), "LogPhysicalOptimize")
             .AddPreTypeAnnotation()
@@ -304,12 +320,40 @@ private:
             .Add(CreateKqpStatisticsTransformer(OptimizeCtx, *typesCtx, Config, Pctx), "Statistics")
             .Add(CreateKqpLogOptTransformer(OptimizeCtx, *typesCtx, Config), "LogicalOptimize")
             .Add(CreateLogicalDataProposalsInspector(*typesCtx), "ProvidersLogicalOptimize")
-            .Add(CreateKqpPhyOptTransformer(OptimizeCtx, *typesCtx, Config), "KqpPhysicalOptimize")
+            .Add(CreateKqpPhyOptTransformer(OptimizeCtx, *typesCtx, Config), "KqpPhysicalOptimize");
+
+        if (sessionCtx->Config().UseBlockReader.Get().GetOrElse(false)) {
+            physicalOptimizePipeline.Add(NDqs::CreateDqsRewritePhyBlockReadOnDqIntegrationTransformer(*typesCtx), "ReplaceWideReadsWithBlock");
+        }
+
+        auto physicalOptimizeTransformer = CreateKqpQueryBlocksTransformer(physicalOptimizePipeline
             .Add(CreatePhysicalDataProposalsInspector(*typesCtx), "ProvidersPhysicalOptimize")
             .Add(CreateKqpFinalizingOptTransformer(OptimizeCtx), "FinalizingOptimize")
             .Add(CreateKqpQueryPhasesTransformer(), "QueryPhases")
             .Add(CreateKqpQueryEffectsTransformer(OptimizeCtx), "QueryEffects")
             .Add(CreateKqpCheckPhysicalQueryTransformer(), "CheckKqlPhysicalQuery")
+            .Build(false));
+
+        auto newRBOPhysicalOptimizeTransformer = CreateKqpQueryBlocksTransformer(TTransformationPipeline(typesCtx)
+            .AddServiceTransformers()
+            .Add(Log("NewRBOPhysicalOptimize"), "LogNewRBOPhysicalOptimize")
+            .AddPreTypeAnnotation()
+            //.AddExpressionEvaluation(funcRegistry)
+            .AddIOAnnotation()
+            .AddTypeAnnotationTransformer(CreateKqpTypeAnnotationTransformer(Cluster, sessionCtx->TablesPtr(),
+                *typesCtx, Config))
+            .Add(CreateKqpCheckQueryTransformer(), "CheckKqlQuery")
+            .AddPostTypeAnnotation(/* forSubgraph */ true)
+            //.AddCommonOptimization()
+
+            .Add(CreateKqpPgRewriteTransformer(OptimizeCtx, *typesCtx), "RewritePgSelect")
+            .Add(CreateKqpNewRBOTransformer(OptimizeCtx, *typesCtx, Config), "NewRBOTransformer")
+
+            //.Add(CreatePhysicalDataProposalsInspector(*typesCtx), "ProvidersPhysicalOptimize")
+            //.Add(CreateKqpFinalizingOptTransformer(OptimizeCtx), "FinalizingOptimize")
+            //.Add(CreateKqpQueryPhasesTransformer(), "QueryPhases")
+            //.Add(CreateKqpQueryEffectsTransformer(OptimizeCtx), "QueryEffects")
+            //.Add(CreateKqpCheckPhysicalQueryTransformer(), "CheckKqlPhysicalQuery")
             .Build(false));
 
         auto physicalBuildTxsTransformer = CreateKqpQueryBlocksTransformer(TTransformationPipeline(typesCtx)
@@ -328,8 +372,34 @@ private:
                     Config),
                 "BuildPhysicalTxs")
             .Build(false));
-        
+
+        auto newRBOPhysicalBuildTxsTransformer = CreateKqpQueryBlocksTransformer(TTransformationPipeline(typesCtx)
+            .AddServiceTransformers()
+            .Add(Log("PhysicalBuildTxs"), "LogPhysicalBuildTxs")
+            .AddTypeAnnotationTransformer(CreateKqpTypeAnnotationTransformer(Cluster, sessionCtx->TablesPtr(), *typesCtx, Config))
+            .AddPostTypeAnnotation(/* forSubgraph */ true)
+            .Add(
+                CreateKqpBuildTxsTransformer(
+                    OptimizeCtx,
+                    BuildQueryCtx,
+                    CreateTypeAnnotationTransformer(
+                        CreateKqpTypeAnnotationTransformer(Cluster, sessionCtx->TablesPtr(), *typesCtx, Config),
+                        *typesCtx),
+                    *typesCtx,
+                    Config),
+                "BuildPhysicalTxs")
+            .Build(false));
+
         auto physicalBuildQueryTransformer = TTransformationPipeline(typesCtx)
+            .AddServiceTransformers()
+            .Add(Log("PhysicalBuildQuery"), "LogPhysicalBuildQuery")
+            .AddTypeAnnotationTransformer(CreateKqpTypeAnnotationTransformer(Cluster, sessionCtx->TablesPtr(), *typesCtx, Config))
+            .AddPostTypeAnnotation()
+            .Add(CreateKqpBuildPhysicalQueryTransformer(OptimizeCtx, BuildQueryCtx), "BuildPhysicalQuery")
+            .Add(CreateKqpStatisticsTransformer(OptimizeCtx, *typesCtx, Config, Pctx), "Statistics")
+            .Build(false);
+
+        auto newRBOPhysicalBuildQueryTransformer = TTransformationPipeline(typesCtx)
             .AddServiceTransformers()
             .Add(Log("PhysicalBuildQuery"), "LogPhysicalBuildQuery")
             .AddTypeAnnotationTransformer(CreateKqpTypeAnnotationTransformer(Cluster, sessionCtx->TablesPtr(), *typesCtx, Config))
@@ -351,12 +421,49 @@ private:
                     *typesCtx), *typesCtx, Config), "Peephole")
             .Build(false);
 
+        auto newRBOPhysicalPeepholeTransformer = TTransformationPipeline(typesCtx)
+            .AddServiceTransformers()
+            .Add(Log("PhysicalPeephole"), "LogPhysicalPeephole")
+            .AddTypeAnnotationTransformer(CreateKqpTypeAnnotationTransformer(Cluster, sessionCtx->TablesPtr(), *typesCtx, Config))
+            .AddPostTypeAnnotation()
+            .Add(GetDqIntegrationPeepholeTransformer(false, typesCtx), "DqIntegrationPeephole")
+            .Add(
+                CreateKqpTxsPeepholeTransformer(
+                    CreateTypeAnnotationTransformer(
+                        CreateKqpTypeAnnotationTransformer(Cluster, sessionCtx->TablesPtr(), *typesCtx, Config),
+                    *typesCtx), *typesCtx, Config), "Peephole")
+            .Build(false);
+
         TAutoPtr<IGraphTransformer> compilePhysicalQuery(new TCompilePhysicalQueryTransformer(Cluster,
             *TransformCtx,
             *OptimizeCtx,
             *typesCtx,
             funcRegistry,
             Config));
+
+        TAutoPtr<IGraphTransformer> newRBOCompilePhysicalQuery(new TCompilePhysicalQueryTransformer(Cluster,
+            *TransformCtx,
+            *OptimizeCtx,
+            *typesCtx,
+            funcRegistry,
+            Config));
+
+        NewRBOTransformer = CreateCompositeGraphTransformer(
+            {
+                TTransformStage{ newRBOPhysicalOptimizeTransformer, "NewRBOPhysicalOptimize", TIssuesIds::DEFAULT_ERROR },
+                LogStage("NewRBOPhysicalOptimize"),
+                TTransformStage{ newRBOPhysicalBuildTxsTransformer, "NewRBOPhysicalBuildTxs", TIssuesIds::DEFAULT_ERROR },
+                LogStage("NewRBOPhysicalBuildTxs"),
+                TTransformStage{ newRBOPhysicalBuildQueryTransformer, "NewRBOPhysicalBuildQuery", TIssuesIds::DEFAULT_ERROR },
+                LogStage("NewRBOPhysicalBuildQuery"),
+                TTransformStage{ CreateSaveExplainTransformerInput(*TransformCtx), "NewRBOSaveExplainTransformerInput", TIssuesIds::DEFAULT_ERROR },
+                TTransformStage{ newRBOPhysicalPeepholeTransformer, "NewRBOPhysicalPeephole", TIssuesIds::DEFAULT_ERROR },
+                LogStage("NewRBOPhysicalPeephole"),
+                TTransformStage{ newRBOCompilePhysicalQuery, "CompilePhysicalQuery", TIssuesIds::DEFAULT_ERROR },
+                TTransformStage{ newRBOPreparedExplainTransformer, "NewRBOExplainQuery", TIssuesIds::DEFAULT_ERROR }, // TODO(sk): only on stats mode or if explain-only
+            },
+            false
+        );
 
         Transformer = CreateCompositeGraphTransformer(
             {
@@ -403,8 +510,9 @@ private:
     TKqpProviderContext Pctx;
 
     TAutoPtr<IGraphTransformer> Transformer;
-    
-    TActorSystem* ActorSystem; 
+    TAutoPtr<IGraphTransformer> NewRBOTransformer;
+
+    TActorSystem* ActorSystem;
 };
 
 } // namespace

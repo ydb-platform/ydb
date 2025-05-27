@@ -1,0 +1,170 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     BSL-1.0              2cc71fe4bd12718a9884bf7ff37269f3
+BELONGS ya.make
+    License text:
+        // Distributed under the Boost Software License, Version 1.0.
+        // (See accompanying file LICENSE_1_0.txt or copy at
+        // http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/parameter.hpp [2:4]
+        include/boost/parameter/are_tagged_arguments.hpp [2:4]
+        include/boost/parameter/aux_/always_true_predicate.hpp [2:4]
+        include/boost/parameter/aux_/arg_list.hpp [3:5]
+        include/boost/parameter/aux_/as_lvalue.hpp [2:4]
+        include/boost/parameter/aux_/augment_predicate.hpp [2:4]
+        include/boost/parameter/aux_/cast.hpp [2:4]
+        include/boost/parameter/aux_/default.hpp [3:5]
+        include/boost/parameter/aux_/has_nested_template_fn.hpp [2:4]
+        include/boost/parameter/aux_/is_maybe.hpp [2:4]
+        include/boost/parameter/aux_/is_placeholder.hpp [2:4]
+        include/boost/parameter/aux_/is_tagged_argument.hpp [3:5]
+        include/boost/parameter/aux_/lambda_tag.hpp [2:4]
+        include/boost/parameter/aux_/maybe.hpp [2:4]
+        include/boost/parameter/aux_/name.hpp [2:4]
+        include/boost/parameter/aux_/pack/as_parameter_requirements.hpp [2:4]
+        include/boost/parameter/aux_/pack/deduce_tag.hpp [2:4]
+        include/boost/parameter/aux_/pack/deduced_item.hpp [2:4]
+        include/boost/parameter/aux_/pack/insert_tagged.hpp [2:4]
+        include/boost/parameter/aux_/pack/is_named_argument.hpp [2:4]
+        include/boost/parameter/aux_/pack/item.hpp [2:4]
+        include/boost/parameter/aux_/pack/make_arg_list.hpp [3:5]
+        include/boost/parameter/aux_/pack/make_deduced_items.hpp [2:4]
+        include/boost/parameter/aux_/pack/make_items.hpp [2:4]
+        include/boost/parameter/aux_/pack/make_parameter_spec_items.hpp [2:4]
+        include/boost/parameter/aux_/pack/parameter_requirements.hpp [2:4]
+        include/boost/parameter/aux_/pack/predicate.hpp [2:4]
+        include/boost/parameter/aux_/pack/satisfies.hpp [2:4]
+        include/boost/parameter/aux_/pack/tag_deduced.hpp [2:4]
+        include/boost/parameter/aux_/pack/tag_keyword_arg.hpp [2:4]
+        include/boost/parameter/aux_/pack/tag_keyword_arg_ref.hpp [2:4]
+        include/boost/parameter/aux_/pack/tag_template_keyword_arg.hpp [2:4]
+        include/boost/parameter/aux_/pack/tag_type.hpp [2:4]
+        include/boost/parameter/aux_/pack/unmatched_argument.hpp [2:4]
+        include/boost/parameter/aux_/parameter_requirements.hpp [2:4]
+        include/boost/parameter/aux_/parenthesized_type.hpp [2:4]
+        include/boost/parameter/aux_/pp_impl/argument_pack.hpp [3:5]
+        include/boost/parameter/aux_/pp_impl/match.hpp [3:5]
+        include/boost/parameter/aux_/pp_impl/unwrap_predicate.hpp [2:4]
+        include/boost/parameter/aux_/preprocessor/binary_seq_for_each.hpp [2:4]
+        include/boost/parameter/aux_/preprocessor/binary_seq_for_each_inc.hpp [2:4]
+        include/boost/parameter/aux_/preprocessor/binary_seq_to_args.hpp [2:4]
+        include/boost/parameter/aux_/preprocessor/convert_binary_seq.hpp [2:4]
+        include/boost/parameter/aux_/preprocessor/flatten.hpp [2:4]
+        include/boost/parameter/aux_/preprocessor/for_each.hpp [2:4]
+        include/boost/parameter/aux_/preprocessor/for_each_pred.hpp [2:4]
+        include/boost/parameter/aux_/preprocessor/impl/argument_specs.hpp [2:4]
+        include/boost/parameter/aux_/preprocessor/impl/arity_range.hpp [2:4]
+        include/boost/parameter/aux_/preprocessor/impl/flatten.hpp [2:4]
+        include/boost/parameter/aux_/preprocessor/impl/for_each.hpp [2:4]
+        include/boost/parameter/aux_/preprocessor/impl/forwarding_overloads.hpp [3:5]
+        include/boost/parameter/aux_/preprocessor/impl/function_cast.hpp [3:5]
+        include/boost/parameter/aux_/preprocessor/impl/function_dispatch_layer.hpp [3:5]
+        include/boost/parameter/aux_/preprocessor/impl/function_dispatch_tuple.hpp [2:4]
+        include/boost/parameter/aux_/preprocessor/impl/function_forward_match.hpp [2:4]
+        include/boost/parameter/aux_/preprocessor/impl/function_name.hpp [2:4]
+        include/boost/parameter/aux_/preprocessor/impl/no_spec_overloads.hpp [2:4]
+        include/boost/parameter/aux_/preprocessor/impl/parenthesized_return_type.hpp [2:4]
+        include/boost/parameter/aux_/preprocessor/impl/parenthesized_type.hpp [2:4]
+        include/boost/parameter/aux_/preprocessor/impl/specification.hpp [2:4]
+        include/boost/parameter/aux_/preprocessor/impl/split_args.hpp [2:4]
+        include/boost/parameter/aux_/preprocessor/inc_binary_seq.hpp [2:4]
+        include/boost/parameter/aux_/preprocessor/is_binary.hpp [2:4]
+        include/boost/parameter/aux_/preprocessor/is_nullary.hpp [2:4]
+        include/boost/parameter/aux_/preprocessor/no_perfect_forwarding_begin.hpp [3:5]
+        include/boost/parameter/aux_/preprocessor/no_perfect_forwarding_end.hpp [3:5]
+        include/boost/parameter/aux_/preprocessor/nullptr.hpp [2:4]
+        include/boost/parameter/aux_/preprocessor/overloads.hpp [2:4]
+        include/boost/parameter/aux_/preprocessor/qualifier.hpp [3:5]
+        include/boost/parameter/aux_/preprocessor/seq_enum.hpp [2:4]
+        include/boost/parameter/aux_/preprocessor/seq_merge.hpp [2:4]
+        include/boost/parameter/aux_/result_of0.hpp [2:4]
+        include/boost/parameter/aux_/set.hpp [2:4]
+        include/boost/parameter/aux_/tag.hpp [3:5]
+        include/boost/parameter/aux_/tagged_argument.hpp [3:5]
+        include/boost/parameter/aux_/tagged_argument_fwd.hpp [3:5]
+        include/boost/parameter/aux_/template_keyword.hpp [3:5]
+        include/boost/parameter/aux_/unwrap_cv_reference.hpp [3:5]
+        include/boost/parameter/aux_/use_default.hpp [2:4]
+        include/boost/parameter/aux_/use_default_tag.hpp [2:4]
+        include/boost/parameter/aux_/void.hpp [2:4]
+        include/boost/parameter/aux_/yesno.hpp [2:4]
+        include/boost/parameter/binding.hpp [2:4]
+        include/boost/parameter/compose.hpp [2:4]
+        include/boost/parameter/config.hpp [3:5]
+        include/boost/parameter/deduced.hpp [2:4]
+        include/boost/parameter/is_argument_pack.hpp [2:4]
+        include/boost/parameter/keyword.hpp [3:5]
+        include/boost/parameter/keyword_fwd.hpp [2:4]
+        include/boost/parameter/macros.hpp [3:5]
+        include/boost/parameter/match.hpp [2:4]
+        include/boost/parameter/name.hpp [3:5]
+        include/boost/parameter/nested_keyword.hpp [2:4]
+        include/boost/parameter/optional.hpp [2:4]
+        include/boost/parameter/parameters.hpp [3:5]
+        include/boost/parameter/preprocessor.hpp [3:5]
+        include/boost/parameter/preprocessor_no_spec.hpp [2:4]
+        include/boost/parameter/required.hpp [2:4]
+        include/boost/parameter/template_keyword.hpp [3:5]
+        include/boost/parameter/value_type.hpp [2:4]
+
+KEEP     BSL-1.0              49af97cadb10453f2b05003f793e4adc
+BELONGS ya.make
+    License text:
+        Distributed under the [Boost Software License, Version 1.0](https://www.boost.org/LICENSE_1_0.txt).
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 88.89
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        README.md [26:26]
+
+KEEP     BSL-1.0              a5006bb276a0e8fcc0c080cd5a14814e
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 55.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        README.md [15:15]

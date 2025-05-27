@@ -11,7 +11,7 @@
 
 #include <google/protobuf/util/message_differencer.h>
 
-#include <ydb/library/yql/minikql/comp_nodes/mkql_saveload.h>
+#include <yql/essentials/minikql/comp_nodes/mkql_saveload.h>
 #include <ydb/core/fq/libs/actors/logging/log.h>
 
 namespace NFq {
@@ -46,8 +46,9 @@ public:
         auto& stateStorageLimits = *config.MutableStateStorageLimits();
         stateStorageLimits.SetMaxRowSizeBytes(YdbRowSizeLimit);
 
-        YqSharedResources = NFq::TYqSharedResources::Cast(NFq::CreateYqSharedResourcesImpl({}, NKikimr::CreateYdbCredentialsProviderFactory, MakeIntrusive<NMonitoring::TDynamicCounters>()));
-        auto storage = NewYdbStateStorage(config, NKikimr::CreateYdbCredentialsProviderFactory, YqSharedResources);
+        NYdb::TDriver driver(NYdb::TDriverConfig{});
+        auto ydbConnectionPtr = NewYdbConnection(config.GetStorage(), NKikimr::CreateYdbCredentialsProviderFactory, driver);
+        auto storage = NewYdbStateStorage(config, ydbConnectionPtr);
         storage->Init().GetValueSync();
         return storage;
     }

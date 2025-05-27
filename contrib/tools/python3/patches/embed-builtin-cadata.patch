@@ -1,0 +1,59 @@
+commit f973b22a716935e4ceb507dd6738236570cd2b98
+merge: d4c608daaa9086189bbbb3214113edddc2082069 02c93d0cdd494ecb2b95524fd0619931975fb0cb
+author: orivej
+date: 2019-07-03T18:34:12+03:00
+revision: 5208986
+
+    Embed builtin_cadata() into ssl module. CONTRIB-1287
+    
+    Fixes using ssl from python started with Y_PYTHON_ENTRY_POINT=:main.
+    
+    REVIEW: 865741
+    Note: mandatory check (NEED_CHECK) was skipped
+
+commit 4a060eba5386ec1fc4b7f2d0cafffff8832cae5f
+merge: dc1ec05cf5f3db39c49ec0d03a06e14e330637f5 8277f2d7d63229e5c85ef55ba84285dd59576365
+author: orivej
+date: 2019-07-01T16:12:03+03:00
+revision: 5191643
+
+    Load certs/cacert.pem into the default Python SSL context. CONTRIB-1287
+    
+    This allows to enable SSL verification in Python 2 by default.
+    
+    REVIEW: 861704
+    Note: mandatory check (NEED_CHECK) was skipped
+
+--- contrib/tools/python3/Lib/ssl.py	(index)
++++ contrib/tools/python3/Lib/ssl.py	(working tree)
+@@ -481,6 +481,20 @@ class Purpose(_ASN1Object, _Enum):
+     CLIENT_AUTH = '1.3.6.1.5.5.7.3.2'
+ 
+ 
++_builtin_cadata = None
++
++
++def builtin_cadata():
++    global _builtin_cadata
++    if _builtin_cadata is None:
++        import __res
++        data = __res.find(b'/builtin/cacert')
++        # load_verify_locations expects PEM cadata to be an ASCII-only unicode
++        # object, so we discard unicode in comments.
++        _builtin_cadata = data.decode('ASCII', errors='ignore')
++    return _builtin_cadata
++
++
+ class SSLContext(_SSLContext):
+     """An SSLContext holds various SSL-related configuration options and
+     data, such as certificates and possibly a private key."""
+@@ -591,6 +605,9 @@ class SSLContext(_SSLContext):
+     def load_default_certs(self, purpose=Purpose.SERVER_AUTH):
+         if not isinstance(purpose, _ASN1Object):
+             raise TypeError(purpose)
++
++        self.load_verify_locations(cadata=builtin_cadata())
++
+         if sys.platform == "win32":
+             for storename in self._windows_cert_stores:
+                 self._load_windows_store_certs(storename, purpose)

@@ -8,72 +8,86 @@
 #include "polymorphic.h"
 #include "context.h"
 #include "descriptors.h"
+#include "type_decl.h"
 #include "type_registry.h"
 
 #include <yt/yt/core/concurrency/fls.h>
 
-#include <library/cpp/yt/misc/preprocessor.h>
+#include <library/cpp/yt/misc/static_initializer.h>
 
 #include <concepts>
+
+namespace NYT::NPhoenix::NDetail {
 
 ////////////////////////////////////////////////////////////////////////////////
 
 #undef PHOENIX_DEFINE_TYPE
 #undef PHOENIX_DEFINE_TEMPLATE_TYPE
 #undef PHOENIX_DEFINE_OPAQUE_TYPE
+#undef PHOENIX_REGISTER_FIELD
 
 ////////////////////////////////////////////////////////////////////////////////
 
-#define PHOENIX_DEFINE_TYPE__STATIC_INIT(type, parenthesizedTypeArgs) \
-    template <class T> \
-    struct TPhoenixTypeInitializer__; \
-    \
-    template <> \
-    struct TPhoenixTypeInitializer__<type PP_DEPAREN(parenthesizedTypeArgs)> \
-    { \
-        [[maybe_unused]] static inline const void* Dummy = &type PP_DEPAREN(parenthesizedTypeArgs)::GetTypeDescriptor(); \
-    }
-
 #define PHOENIX_DEFINE_TYPE(type) \
-    PHOENIX_DEFINE_TYPE__STATIC_INIT(type, ()); \
-    \
-    const ::NYT::NPhoenix2::TTypeDescriptor& type::GetTypeDescriptor() \
+    const ::NYT::NPhoenix::TTypeDescriptor& type::GetTypeDescriptor() \
     { \
-        static const auto& descriptor = ::NYT::NPhoenix2::NDetail::RegisterTypeDescriptorImpl<type, /*Template*/ false>(); \
+        static const auto& descriptor = ::NYT::NPhoenix::ITypeRegistry::Get()->GetUniverseDescriptor().GetTypeDescriptorByTag(TypeTag); \
         return descriptor; \
     } \
     \
-    auto type::GetRuntimeFieldDescriptorMap() -> const ::NYT::NPhoenix2::NDetail::TRuntimeFieldDescriptorMap<type, TLoadContext>& \
+    auto type::GetRuntimeFieldDescriptorMap() -> const ::NYT::NPhoenix::NDetail::TRuntimeFieldDescriptorMap<type, TLoadContext>& \
     { \
-        static const auto map = ::NYT::NPhoenix2::NDetail::BuildRuntimeFieldDescriptorMap<TThis, TLoadContext>(); \
+        static const auto map = ::NYT::NPhoenix::NDetail::BuildRuntimeFieldDescriptorMap<TThis, TLoadContext>(); \
         return map; \
     } \
     \
     void type::Save(TSaveContext& context) const \
     { \
-        ::NYT::NPhoenix2::NDetail::SaveImpl(this, context); \
+        ::NYT::NPhoenix::NDetail::SaveImpl(this, context); \
     } \
     \
     void type::Load(TLoadContext& context) \
     { \
-        ::NYT::NPhoenix2::NDetail::LoadImpl(this, context); \
+        ::NYT::NPhoenix::NDetail::LoadImpl(this, context); \
+    } \
+    \
+    template <class T> \
+    struct TPhoenixTypeInitializer__; \
+    \
+    template <> \
+    struct TPhoenixTypeInitializer__<type> \
+    { \
+        YT_STATIC_INITIALIZER(::NYT::NPhoenix::NDetail::RegisterTypeDescriptorImpl<type, false>()); \
     }
 
-#define PHOENIX_DEFINE_TEMPLATE_TYPE(type, parenthesizedTypeArgs) \
-    PHOENIX_DEFINE_TYPE__STATIC_INIT(type, parenthesizedTypeArgs)
+#define PHOENIX_DEFINE_TEMPLATE_TYPE(type, typeArgs) \
+    template <class T> \
+    struct TPhoenixTypeInitializer__; \
+    \
+    template <> \
+    struct TPhoenixTypeInitializer__<type<PP_DEPAREN(typeArgs)>> \
+    { \
+        YT_STATIC_INITIALIZER(::NYT::NPhoenix::NDetail::RegisterTypeDescriptorImpl<type<PP_DEPAREN(typeArgs)>, true>()); \
+    }
 
 #define PHOENIX_DEFINE_OPAQUE_TYPE(type) \
-    PHOENIX_DEFINE_TYPE__STATIC_INIT(type, ()); \
-    \
-    const ::NYT::NPhoenix2::TTypeDescriptor& type::GetTypeDescriptor() \
+    const ::NYT::NPhoenix::TTypeDescriptor& type::GetTypeDescriptor() \
     { \
-        static const auto& descriptor = ::NYT::NPhoenix2::NDetail::RegisterOpaqueTypeDescriptorImpl<type>(); \
+        static const auto& descriptor = ::NYT::NPhoenix::ITypeRegistry::Get()->GetUniverseDescriptor().GetTypeDescriptorByTag(TypeTag); \
         return descriptor; \
+    } \
+    \
+    template <class T> \
+    struct TPhoenixTypeInitializer__; \
+    \
+    template <> \
+    struct TPhoenixTypeInitializer__<type> \
+    { \
+        YT_STATIC_INITIALIZER(::NYT::NPhoenix::NDetail::RegisterOpaqueTypeDescriptorImpl<type>()); \
     }
 
-////////////////////////////////////////////////////////////////////////////////
-
-namespace NYT::NPhoenix2::NDetail {
+#define PHOENIX_REGISTER_FIELD(fieldTag, fieldName, ...) \
+    registrar.template Field<fieldTag, &TThis::fieldName>(#fieldName) __VA_ARGS__ ()
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -96,12 +110,22 @@ struct TTraits
 
 ////////////////////////////////////////////////////////////////////////////////
 
+template <class TThis>
+using TVersionFilter = bool (*)(typename TTraits<TThis>::TVersion version);
+
+////////////////////////////////////////////////////////////////////////////////
+
 #define PHOENIX_REGISTRAR_NODISCARD [[nodiscard("Did you forget to call operator()?")]]
 
 class PHOENIX_REGISTRAR_NODISCARD TDummyFieldRegistrar
 {
 public:
     auto SinceVersion(auto /*version*/) &&
+    {
+        return std::move(*this);
+    }
+
+    auto BeforeVersion(auto /*version*/) &&
     {
         return std::move(*this);
     }
@@ -209,7 +233,7 @@ public:
     template <class TBase>
     void BaseType()
     {
-        TypeDescriptor_->BaseTypes_.push_back(&TBase::GetTypeDescriptor());
+        TypeDescriptor_->BaseTypeTags_.push_back(TBase::TypeTag);
     }
 
     const TTypeDescriptor& operator()() &&;
@@ -291,6 +315,8 @@ template <auto Member, class TThis, class TContext, class TFieldSerializer>
 class PHOENIX_REGISTRAR_NODISCARD TFieldSaveRegistrar
 {
 public:
+    using TVersion = typename TTraits<TThis>::TVersion;
+
     TFieldSaveRegistrar(const TThis* this_, TContext& context)
         : This_(this_)
         , Context_(context)
@@ -307,8 +333,15 @@ public:
         return TFieldSaveRegistrar(std::move(*this));
     }
 
-    auto InVersions(auto /*filter*/) &&
+    auto BeforeVersion(TVersion version) &&
     {
+        BeforeVersion_ = version;
+        return TFieldSaveRegistrar(std::move(*this));
+    }
+
+    auto InVersions(TVersionFilter<TThis> filter) &&
+    {
+        VersionFilter_ = filter;
         return TFieldSaveRegistrar(std::move(*this));
     }
 
@@ -325,7 +358,9 @@ public:
 
     void operator()() &&
     {
-        TFieldSerializer::Save(Context_, This_->*Member);
+        if (auto version = Context_.GetVersion(); version < BeforeVersion_ && (!VersionFilter_ || VersionFilter_(version))) {
+            TFieldSerializer::Save(Context_, This_->*Member);
+        }
     }
 
 private:
@@ -334,6 +369,9 @@ private:
 
     const TThis* const This_;
     TContext& Context_;
+
+    TVersionFilter<TThis> VersionFilter_ = nullptr;
+    TVersion BeforeVersion_ = static_cast<TVersion>(std::numeric_limits<int>::max());
 };
 
 template <class TThis, class TContext>
@@ -356,6 +394,11 @@ public:
     { }
 
     auto SinceVersion(auto /*version*/) &&
+    {
+        return TVirtualFieldSaveRegistrar(std::move(*this));
+    }
+
+    auto BeforeVersion(auto /*version*/) &&
     {
         return TVirtualFieldSaveRegistrar(std::move(*this));
     }
@@ -473,6 +516,7 @@ public:
         , Context_(other.Context_)
         , Name_(other.Name_)
         , MinVersion_(other.MinVersion_)
+        , BeforeVersion_(other.BeforeVersion_)
         , VersionFilter_(other.VersionFilter_)
         , MissingHandler_(other.MissingHandler_)
     { }
@@ -485,15 +529,19 @@ public:
         return TFieldLoadRegistrar(std::move(*this));
     }
 
+    auto BeforeVersion(TVersion version) &&
+    {
+        BeforeVersion_ = version;
+        return TFieldLoadRegistrar(std::move(*this));
+    }
+
     auto WhenMissing(TFieldMissingHandler<TThis, TContext> handler) &&
     {
         MissingHandler_ = handler;
         return TFieldLoadRegistrar(std::move(*this));
     }
 
-    using TVersionFilter = bool (*)(TVersion version);
-
-    auto InVersions(TVersionFilter filter) &&
+    auto InVersions(TVersionFilter<TThis> filter) &&
     {
         VersionFilter_ = filter;
         return TFieldLoadRegistrar(std::move(*this));
@@ -508,7 +556,7 @@ public:
 
     void operator()() &&
     {
-        if (auto version = Context_.GetVersion(); version >= MinVersion_ && (!VersionFilter_ || VersionFilter_(version))) {
+        if (auto version = Context_.GetVersion(); version >= MinVersion_ && version < BeforeVersion_ && (!VersionFilter_ || VersionFilter_(version))) {
             Context_.Dumper().SetFieldName(Name_);
             TFieldSerializer::Load(Context_, This_->*Member);
         } else if (MissingHandler_) {
@@ -527,7 +575,8 @@ private:
     const TStringBuf Name_;
 
     TVersion MinVersion_ = static_cast<TVersion>(std::numeric_limits<int>::min());
-    TVersionFilter VersionFilter_ = nullptr;
+    TVersion BeforeVersion_ = static_cast<TVersion>(std::numeric_limits<int>::max());
+    TVersionFilter<TThis> VersionFilter_ = nullptr;
     TFieldMissingHandler<TThis, TContext> MissingHandler_ = nullptr;
 };
 
@@ -550,8 +599,9 @@ public:
         : This_(other.This_)
         , Context_(other.Context_)
         , Name_(other.Name_)
-        , LoadHandler_(other.LoadHandler)
+        , LoadHandler_(other.LoadHandler_)
         , MinVersion_(other.MinVersion_)
+        , BeforeVersion_(other.BeforeVersion_)
         , VersionFilter_(other.VersionFilter_)
         , MissingHandler_(other.MissingHandler_)
     { }
@@ -561,7 +611,13 @@ public:
     auto SinceVersion(TVersion version) &&
     {
         MinVersion_ = version;
-        return TFieldLoadRegistrar(std::move(*this));
+        return TVirtualFieldLoadRegistrar(std::move(*this));
+    }
+
+    auto BeforeVersion(TVersion version) &&
+    {
+        BeforeVersion_ = version;
+        return TVirtualFieldLoadRegistrar(std::move(*this));
     }
 
     auto WhenMissing(TFieldMissingHandler<TThis, TContext> handler) &&
@@ -581,7 +637,7 @@ public:
 
     void operator()() &&
     {
-        if (auto version = Context_.GetVersion(); version >= MinVersion_ && (!VersionFilter_ || VersionFilter_(version))) {
+        if (auto version = Context_.GetVersion(); version >= MinVersion_ && version < BeforeVersion_ && (!VersionFilter_ || VersionFilter_(version))) {
             Context_.Dumper().SetFieldName(Name_);
             LoadHandler_(This_, Context_);
         } else if (MissingHandler_) {
@@ -596,6 +652,7 @@ private:
     const TFieldLoadHandler<TThis, TContext> LoadHandler_;
 
     TVersion MinVersion_ = static_cast<TVersion>(std::numeric_limits<int>::min());
+    TVersion BeforeVersion_ = static_cast<TVersion>(std::numeric_limits<int>::max());
     TVersionFilter VersionFilter_ = nullptr;
     TFieldMissingHandler<TThis, TContext> MissingHandler_ = nullptr;
 };
@@ -696,14 +753,11 @@ struct TRuntimeFieldDescriptor
     TFieldMissingHandler<TThis, TContext> MissingHandler = nullptr;
 };
 
-template <class TThis, class TContext>
-using TRuntimeFieldDescriptorMap = THashMap<TFieldTag, TRuntimeFieldDescriptor<TThis, TContext>>;
-
 template <auto Member, class TThis, class TContext, class TFieldSerializer>
 class PHOENIX_REGISTRAR_NODISCARD TRuntimeFieldDescriptorBuilderRegistar
 {
 public:
-    using TRuntimeFieldDescriptor = NPhoenix2::NDetail::TRuntimeFieldDescriptor<TThis, TContext>;
+    using TRuntimeFieldDescriptor = NPhoenix::NDetail::TRuntimeFieldDescriptor<TThis, TContext>;
 
     explicit TRuntimeFieldDescriptorBuilderRegistar(TRuntimeFieldDescriptor* descriptor)
         : Descriptor_(descriptor)
@@ -715,6 +769,11 @@ public:
     { }
 
     auto SinceVersion(auto /*version*/) &&
+    {
+        return std::move(*this);
+    }
+
+    auto BeforeVersion(auto /*version*/) &&
     {
         return std::move(*this);
     }
@@ -754,13 +813,18 @@ template <class TThis, class TContext>
 class TRuntimeVirtualFieldDescriptorBuilderRegistar
 {
 public:
-    using TRuntimeFieldDescriptor = NPhoenix2::NDetail::TRuntimeFieldDescriptor<TThis, TContext>;
+    using TRuntimeFieldDescriptor = NPhoenix::NDetail::TRuntimeFieldDescriptor<TThis, TContext>;
 
     TRuntimeVirtualFieldDescriptorBuilderRegistar(TRuntimeFieldDescriptor* descriptor)
         : Descriptor_(descriptor)
     { }
 
     auto SinceVersion(auto /*version*/) &&
+    {
+        return *this;
+    }
+
+    auto BeforeVersion(auto /*version*/) &&
     {
         return *this;
     }
@@ -985,6 +1049,12 @@ struct TSerializer
     }
 
     template <class T, class C>
+    static void Save(C& context, const TWeakPtr<T>& ptr)
+    {
+        SaveImpl(context, ptr.Lock().Get());
+    }
+
+    template <class T, class C>
     static void SaveImpl(C& context, T* ptr)
     {
         using NYT::Save;
@@ -1057,6 +1127,14 @@ struct TSerializer
         LoadImpl</*Inplace*/ true>(context, rawPtr);
     }
 
+    template <class T, class C>
+    static void Load(C& context, TWeakPtr<T>& ptr)
+    {
+        T* rawPtr = nullptr;
+        LoadImpl</*Inplace*/ false>(context, rawPtr);
+        ptr.Reset(rawPtr);
+    }
+
     template <bool Inplace, class T, class C>
     static void LoadImpl(C& context, T*& rawPtr)
     {
@@ -1108,20 +1186,21 @@ struct TSerializer
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NPhoenix2::NDetail
+} // namespace NYT::NPhoenix::NDetail
 
 namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class T, class C>
-    requires (std::derived_from<C, NPhoenix2::NDetail::TContextBase>) && (
+    requires (std::derived_from<C, NPhoenix::NDetail::TContextBase>) && (
         std::same_as<T, TIntrusivePtr<typename T::TUnderlying>> ||
         std::same_as<T, std::unique_ptr<typename T::element_type>> ||
-        std::is_pointer_v<T>)
+        std::is_pointer_v<T> ||
+        std::same_as<T, TWeakPtr<typename T::TUnderlying>>)
 struct TSerializerTraits<T, C>
 {
-    using TSerializer = NPhoenix2::NDetail::TSerializer;
+    using TSerializer = NPhoenix::NDetail::TSerializer;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -35,23 +35,41 @@ static void s_init_rand(void *user_data) {
     }
 }
 
-static int s_fallback_device_random_buffer(struct aws_byte_buf *output) {
+int aws_device_random_buffer_append(struct aws_byte_buf *output, size_t n) {
+    AWS_PRECONDITION(aws_byte_buf_is_valid(output));
 
     aws_thread_call_once(&s_rand_init, s_init_rand, NULL);
 
-    size_t diff = output->capacity - output->len;
-
-    ssize_t amount_read = read(s_rand_fd, output->buffer + output->len, diff);
-
-    if (amount_read != diff) {
-        return aws_raise_error(AWS_ERROR_RANDOM_GEN_FAILED);
+    size_t space_available = output->capacity - output->len;
+    if (space_available < n) {
+        AWS_POSTCONDITION(aws_byte_buf_is_valid(output));
+        return aws_raise_error(AWS_ERROR_SHORT_BUFFER);
     }
 
-    output->len += diff;
+    size_t original_len = output->len;
 
+    /* read() can fail if N is too large (e.g. x64 macos fails if N > INT32_MAX),
+     * so work in reasonably sized chunks. */
+    while (n > 0) {
+        size_t capped_n = aws_min_size(
+            n, 1024 * 1024 * 1024 * 1 /* 1GiB */); /* NOLINT(bugprone-implicit-widening-of-multiplication-result) */
+
+        ssize_t amount_read = read(s_rand_fd, output->buffer + output->len, capped_n);
+
+        if (amount_read <= 0) {
+            output->len = original_len;
+            AWS_POSTCONDITION(aws_byte_buf_is_valid(output));
+            return aws_raise_error(AWS_ERROR_RANDOM_GEN_FAILED);
+        }
+
+        output->len += amount_read;
+        n -= amount_read;
+    }
+
+    AWS_POSTCONDITION(aws_byte_buf_is_valid(output));
     return AWS_OP_SUCCESS;
 }
 
 int aws_device_random_buffer(struct aws_byte_buf *output) {
-    return s_fallback_device_random_buffer(output);
+    return aws_device_random_buffer_append(output, output->capacity - output->len);
 }

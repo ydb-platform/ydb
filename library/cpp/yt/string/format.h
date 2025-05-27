@@ -1,8 +1,11 @@
 #pragma once
 
 #include "format_string.h"
+#include "string_builder.h"
 
 #include <util/generic/string.h>
+
+#include <iterator>
 
 namespace NYT {
 
@@ -61,65 +64,6 @@ TString Format(TFormatString<TArgs...> format, TArgs&&... args);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-// StringBuilder(Base) definition.
-
-//! A simple helper for constructing strings by a sequence of appends.
-class TStringBuilderBase
-{
-public:
-    virtual ~TStringBuilderBase() = default;
-
-    char* Preallocate(size_t size);
-
-    void Reserve(size_t size);
-
-    size_t GetLength() const;
-
-    TStringBuf GetBuffer() const;
-
-    void Advance(size_t size);
-
-    void AppendChar(char ch);
-    void AppendChar(char ch, int n);
-
-    void AppendString(TStringBuf str);
-    void AppendString(const char* str);
-
-    template <size_t Length, class... TArgs>
-    void AppendFormat(const char (&format)[Length], TArgs&&... args);
-    template <class... TArgs>
-    void AppendFormat(TStringBuf format, TArgs&&... args);
-
-    void Reset();
-
-protected:
-    char* Begin_ = nullptr;
-    char* Current_ = nullptr;
-    char* End_ = nullptr;
-
-    virtual void DoReset() = 0;
-    virtual void DoReserve(size_t newLength) = 0;
-
-    static constexpr size_t MinBufferLength = 128;
-};
-
-////////////////////////////////////////////////////////////////////////////////
-
-class TStringBuilder
-    : public TStringBuilderBase
-{
-public:
-    TString Flush();
-
-protected:
-    TString Buffer_;
-
-    void DoReset() override;
-    void DoReserve(size_t size) override;
-};
-
-////////////////////////////////////////////////////////////////////////////////
-
 template <class... TArgs>
 void Format(TStringBuilderBase* builder, TFormatString<TArgs...> format, TArgs&&... args);
 
@@ -147,15 +91,72 @@ struct TFormattableView
 
 //! Annotates a given #range with #formatter to be applied to each item.
 template <class TRange, class TFormatter>
-TFormattableView<TRange, TFormatter> MakeFormattableView(
+TFormattableView<TRange, std::decay_t<TFormatter>> MakeFormattableView(
     const TRange& range,
     TFormatter&& formatter);
 
 template <class TRange, class TFormatter>
-TFormattableView<TRange, TFormatter> MakeShrunkFormattableView(
+TFormattableView<TRange, std::decay_t<TFormatter>> MakeShrunkFormattableView(
     const TRange& range,
     TFormatter&& formatter,
     size_t limit);
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <class TRange, class TValueGetter, class TIntervalFormatter>
+struct TCompactIntervalView
+{
+    using TBegin = std::decay_t<decltype(std::declval<const TRange>().begin())>;
+    using TEnd = std::decay_t<decltype(std::declval<const TRange>().end())>;
+
+    TBegin RangeBegin;
+    TEnd RangeEnd;
+
+    TValueGetter ValueGetter;
+    TIntervalFormatter IntervalFormatter;
+
+    TBegin begin() const;
+    TEnd end() const;
+};
+
+template <class TRange>
+struct TDefaultValueGetter
+{
+    using TIterator = std::decay_t<decltype(std::declval<const TRange>().begin())>;
+
+    auto operator()(const TIterator& iterator) const
+        -> typename std::iterator_traits<TIterator>::value_type;
+};
+
+template <class TRange, class TValueGetter>
+struct TDefaultIntervalFormatter
+{
+    using TIterator = std::decay_t<decltype(std::declval<const TRange>().begin())>;
+
+    void operator()(
+        TStringBuilderBase* builder,
+        const TIterator& first,
+        const TIterator& last,
+        const TValueGetter& valueGetter,
+        bool firstInterval) const;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+//! Writes a given integral #range as a sequence of intervals.
+//! Example:
+// MakeCompactIntervalView(std::vector {1, 2, 3, 5, 7, 8})
+// => [1-3,5,7-8]
+
+template <
+    class TRange,
+    class TValueGetter = TDefaultValueGetter<TRange>,
+    class TIntervalFormatter = TDefaultIntervalFormatter<TRange, TValueGetter>
+>
+TCompactIntervalView<TRange, TValueGetter, TIntervalFormatter> MakeCompactIntervalView(
+    const TRange& range,
+    TValueGetter&& valueGetter = {},
+    TIntervalFormatter&& intervalFormatter = {});
 
 ////////////////////////////////////////////////////////////////////////////////
 

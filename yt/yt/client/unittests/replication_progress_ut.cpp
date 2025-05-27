@@ -735,8 +735,21 @@ INSTANTIATE_TEST_SUITE_P(
             "{segments=[{lower_key=[1];timestamp=1073741824};{lower_key=[2];timestamp=3221225472}];"
                 "upper_key=[<type=max>#]}",
             "{segments=[{lower_key=[];timestamp=1073741824};{lower_key=[2];timestamp=3221225472}];"
-                "upper_key=[<type=max>#]}")
-
+                "upper_key=[<type=max>#]}"),
+        std::tuple(
+            "{segments=[{lower_key=[2];timestamp=1}];upper_key=[<type=max>#]}",
+            "{segments=[{lower_key=[1];timestamp=1}];upper_key=[2]}",
+            "{segments=[{lower_key=[1];timestamp=1}];upper_key=[<type=max>#]}"),
+        std::tuple(
+            "{segments=[{lower_key=[3];timestamp=1}];upper_key=[<type=max>#]}",
+            "{segments=[{lower_key=[1];timestamp=1}];upper_key=[2]}",
+            "{segments=[{lower_key=[1];timestamp=1};{lower_key=[2];timestamp=0};{lower_key=[3];timestamp=1}];"
+                "upper_key=[<type=max>#]}"),
+        std::tuple(
+            "{segments=[{lower_key=[1];timestamp=1};{lower_key=[2];timestamp=0};{lower_key=[3];timestamp=1}];"
+                "upper_key=[<type=max>#]}",
+            "{segments=[{lower_key=[2];timestamp=1}];upper_key=[3]}",
+            "{segments=[{lower_key=[1];timestamp=1}];upper_key=[<type=max>#]}")
 ));
 
 ////////////////////////////////////////////////////////////////////////////////

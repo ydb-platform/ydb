@@ -1,29 +1,36 @@
 import time
 import json
-import uuid
 import datetime
 
 from typing import List, Tuple
 
 from moto.core import BaseBackend, BaseModel
 from moto.core.utils import BackendDict
+from moto.moto_api._internal import mock_random
 from .exceptions import (
     SecretNotFoundException,
     SecretHasNoValueException,
     InvalidParameterException,
     ResourceExistsException,
     ResourceNotFoundException,
+    SecretStageVersionMismatchException,
     InvalidRequestException,
     ClientError,
 )
 from .utils import random_password, secret_arn, get_secret_name_from_arn
-from .list_secrets.filters import filter_all, tag_key, tag_value, description, name
+from .list_secrets.filters import (
+    filter_all,
+    tag_key,
+    tag_value,
+    description_filter,
+    name_filter,
+)
 
 
 _filter_functions = {
     "all": filter_all,
-    "name": name,
-    "description": description,
+    "name": name_filter,
+    "description": description_filter,
     "tag-key": tag_key,
     "tag-value": tag_value,
 }
@@ -52,6 +59,7 @@ class SecretsManager(BaseModel):
 class FakeSecret:
     def __init__(
         self,
+        account_id,
         region_name,
         secret_id,
         secret_string=None,
@@ -66,7 +74,7 @@ class FakeSecret:
     ):
         self.secret_id = secret_id
         self.name = secret_id
-        self.arn = secret_arn(region_name, secret_id)
+        self.arn = secret_arn(account_id, region_name, secret_id)
         self.secret_string = secret_string
         self.secret_binary = secret_binary
         self.description = description
@@ -219,12 +227,20 @@ class SecretsManagerBackend(BaseBackend):
         if version_id:
             self._client_request_token_validator(version_id)
         else:
-            version_id = str(uuid.uuid4())
+            version_id = str(mock_random.uuid4())
         return version_id
 
     def get_secret_value(self, secret_id, version_id, version_stage):
         if not self._is_valid_identifier(secret_id):
             raise SecretNotFoundException()
+
+        if version_id and version_stage:
+            versions_dict = self.secrets[secret_id].versions
+            if (
+                version_id in versions_dict
+                and version_stage not in versions_dict[version_id]["version_stages"]
+            ):
+                raise SecretStageVersionMismatchException()
 
         if not version_id and version_stage:
             # set version_id to match version_stage
@@ -382,6 +398,7 @@ class SecretsManagerBackend(BaseBackend):
                 secret.versions[version_id] = secret_version
         else:
             secret = FakeSecret(
+                account_id=self.account_id,
                 region_name=self.region_name,
                 secret_id=secret_id,
                 secret_string=secret_string,
@@ -501,7 +518,7 @@ class SecretsManagerBackend(BaseBackend):
             self._client_request_token_validator(client_request_token)
             new_version_id = client_request_token
         else:
-            new_version_id = str(uuid.uuid4())
+            new_version_id = str(mock_random.uuid4())
 
         # We add the new secret version as "pending". The previous version remains
         # as "current" for now. Once we've passed the new secret through the lambda
@@ -524,7 +541,7 @@ class SecretsManagerBackend(BaseBackend):
         if secret.rotation_lambda_arn:
             from moto.awslambda.models import lambda_backends
 
-            lambda_backend = lambda_backends[self.region_name]
+            lambda_backend = lambda_backends[self.account_id][self.region_name]
 
             request_headers = {}
             response_headers = {}
@@ -664,7 +681,7 @@ class SecretsManagerBackend(BaseBackend):
             if not force_delete_without_recovery:
                 raise SecretNotFoundException()
             else:
-                secret = FakeSecret(self.region_name, secret_id)
+                secret = FakeSecret(self.account_id, self.region_name, secret_id)
                 arn = secret.arn
                 name = secret.name
                 deletion_date = datetime.datetime.utcnow()

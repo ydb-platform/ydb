@@ -2,6 +2,7 @@
 #include "logical_type.h"
 #include "schema.h"
 #include "comparator.h"
+#include "versioned_io_options.h"
 
 #include <yt/yt/client/complex_types/check_type_compatibility.h>
 
@@ -17,8 +18,8 @@ std::pair<ESchemaCompatibility, TError> CheckTableSchemaCompatibilityImpl(
     TTableSchemaCompatibilityOptions options)
 {
     // If output schema is strict, check that input columns are subset of output columns.
-    if (outputSchema.GetStrict()) {
-        if (!inputSchema.GetStrict()) {
+    if (outputSchema.IsStrict()) {
+        if (!inputSchema.IsStrict()) {
             return {
                 ESchemaCompatibility::Incompatible,
                 TError("Incompatible strictness: input schema is not strict while output schema is"),
@@ -27,6 +28,14 @@ std::pair<ESchemaCompatibility, TError> CheckTableSchemaCompatibilityImpl(
 
         for (const auto& inputColumn : inputSchema.Columns()) {
             if (!outputSchema.FindColumn(inputColumn.Name())) {
+                if (options.AllowTimestampColumns) {
+                    if (auto originalColumnName = GetTimestampColumnOriginalNameOrNull(inputColumn.Name())) {
+                        if (outputSchema.FindColumn(*originalColumnName)) {
+                            continue;
+                        }
+                    }
+                }
+
                 return {
                     ESchemaCompatibility::Incompatible,
                     TError("Column %v is found in input schema but is missing in output schema",
@@ -85,6 +94,15 @@ std::pair<ESchemaCompatibility, TError> CheckTableSchemaCompatibilityImpl(
                         inputColumn->GetDiagnosticNameString()),
                 };
             }
+
+            if (outputColumn.Materialized().value_or(true) != inputColumn->Materialized().value_or(true)) {
+                return {
+                    ESchemaCompatibility::Incompatible,
+                    TError("Column %v materialization mismatch",
+                        inputColumn->GetDiagnosticNameString()),
+                };
+            }
+
             if (outputColumn.Aggregate() && inputColumn->Aggregate() != outputColumn.Aggregate()) {
                 return {
                     ESchemaCompatibility::Incompatible,
@@ -98,7 +116,7 @@ std::pair<ESchemaCompatibility, TError> CheckTableSchemaCompatibilityImpl(
                 TError("Unexpected computed column %v in output schema",
                     outputColumn.GetDiagnosticNameString()),
             };
-        } else if (!inputSchema.GetStrict()) {
+        } else if (!inputSchema.IsStrict()) {
             return {
                 ESchemaCompatibility::Incompatible,
                 TError("Column %v is present in output schema and is missing in non-strict input schema",
@@ -142,7 +160,7 @@ std::pair<ESchemaCompatibility, TError> CheckTableSchemaCompatibilityImpl(
     // Check that we don't lose complex types.
     // We never want to teleport complex types to schemaless part of the chunk because we want to change their type from
     // EValueType::Composite to EValueType::Any.
-    if (!outputSchema.GetStrict()) {
+    if (!outputSchema.IsStrict()) {
         for (const auto& inputColumn : inputSchema.Columns()) {
             if (!IsV3Composite(inputColumn.LogicalType())) {
                 continue;
@@ -171,8 +189,8 @@ std::pair<ESchemaCompatibility, TError> CheckTableSchemaCompatibilityImpl(
         };
     }
 
-    if (outputSchema.GetUniqueKeys()) {
-        if (!inputSchema.GetUniqueKeys()) {
+    if (outputSchema.IsUniqueKeys()) {
+        if (!inputSchema.IsUniqueKeys()) {
             return {
                 ESchemaCompatibility::Incompatible,
                 TError("Input schema \"unique_keys\" attribute is false"),

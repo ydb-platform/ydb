@@ -1,6 +1,10 @@
 #include "config.h"
 
+#include <yt/yt/core/misc/jitter.h>
+
 namespace NYT::NConcurrency {
+
+using namespace NYTree;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -10,6 +14,20 @@ TPeriodicExecutorOptions TPeriodicExecutorOptions::WithJitter(TDuration period)
         .Period = period,
         .Jitter = DefaultJitter
     };
+}
+
+TDuration TPeriodicExecutorOptions::GenerateDelay() const
+{
+    if (!Period) {
+        return TDuration::Max();
+    }
+
+    auto randomGenerator = [] {
+        return 2.0 * RandomNumber<double>() - 1.0;
+    };
+
+    // Jitter is divided by 2 for historical reasons.
+    return ApplyJitter(*Period, Jitter / 2.0, randomGenerator);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -112,6 +130,59 @@ void TPrefetchingThrottlerConfig::Register(TRegistrar registrar)
                 << TErrorAttribute("min_prefetch_amount", config->MinPrefetchAmount)
                 << TErrorAttribute("max_prefetch_amount", config->MaxPrefetchAmount);
         }
+    });
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+namespace {
+
+void ValidateFiberStackPoolSizes(const THashMap<EExecutionStackKind, int>& poolSizes)
+{
+    for (auto [stackKind, poolSize] : poolSizes) {
+        if (poolSize < 0) {
+            THROW_ERROR_EXCEPTION("Pool size of %Qlv stack it not positive",
+                stackKind);
+        }
+    }
+}
+
+} // namespace
+
+TFiberManagerConfigPtr TFiberManagerConfig::ApplyDynamic(const TFiberManagerDynamicConfigPtr& dynamicConfig) const
+{
+    auto result = New<TFiberManagerConfig>();
+    for (auto [key, value] : dynamicConfig->FiberStackPoolSizes) {
+        result->FiberStackPoolSizes[key] = value;
+    }
+    UpdateYsonStructField(result->MaxIdleFibers, dynamicConfig->MaxIdleFibers);
+    result->Postprocess();
+    return result;
+}
+
+void TFiberManagerConfig::Register(TRegistrar registrar)
+{
+    registrar.Parameter("fiber_stack_pool_sizes", &TThis::FiberStackPoolSizes)
+        .Default();
+    registrar.Parameter("max_idle_fibers", &TThis::MaxIdleFibers)
+        .Default(NConcurrency::DefaultMaxIdleFibers);
+
+    registrar.Postprocessor([] (TThis* config) {
+        ValidateFiberStackPoolSizes(config->FiberStackPoolSizes);
+    });
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TFiberManagerDynamicConfig::Register(TRegistrar registrar)
+{
+    registrar.Parameter("fiber_stack_pool_sizes", &TThis::FiberStackPoolSizes)
+        .Default();
+    registrar.Parameter("max_idle_fibers", &TThis::MaxIdleFibers)
+        .Default();
+
+    registrar.Postprocessor([] (TThis* config) {
+        ValidateFiberStackPoolSizes(config->FiberStackPoolSizes);
     });
 }
 

@@ -22,12 +22,13 @@ import os
 from google.auth import _helpers, environment_vars
 from google.auth import exceptions
 from google.auth import metrics
+from google.auth._credentials_base import _BaseCredentials
 from google.auth._refresh_worker import RefreshThreadManager
 
 DEFAULT_UNIVERSE_DOMAIN = "googleapis.com"
 
 
-class Credentials(metaclass=abc.ABCMeta):
+class Credentials(_BaseCredentials):
     """Base class for all credentials.
 
     All credentials have a :attr:`token` that is used for authentication and
@@ -47,9 +48,8 @@ class Credentials(metaclass=abc.ABCMeta):
     """
 
     def __init__(self):
-        self.token = None
-        """str: The bearer token that can be used in HTTP headers to make
-        authenticated requests."""
+        super(Credentials, self).__init__()
+
         self.expiry = None
         """Optional[datetime]: When the token expires and is no longer valid.
         If this is None, the token is assumed to never expire."""
@@ -128,6 +128,17 @@ class Credentials(metaclass=abc.ABCMeta):
         """The universe domain value."""
         return self._universe_domain
 
+    def get_cred_info(self):
+        """The credential information JSON.
+
+        The credential information will be added to auth related error messages
+        by client library.
+
+        Returns:
+            Mapping[str, str]: The credential information JSON.
+        """
+        return None
+
     @abc.abstractmethod
     def refresh(self, request):
         """Refreshes the access token.
@@ -167,9 +178,7 @@ class Credentials(metaclass=abc.ABCMeta):
             token (Optional[str]): If specified, overrides the current access
                 token.
         """
-        headers["authorization"] = "Bearer {}".format(
-            _helpers.from_bytes(token or self.token)
-        )
+        self._apply(headers, token=token)
         """Trust boundary value will be a cached value from global lookup.
 
         The response of trust boundary will be a list of regions and a hex

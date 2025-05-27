@@ -5,17 +5,9 @@ FORK_SUBTESTS(MODULO)
 SPLIT_FACTOR(20)
 
 IF (SANITIZER_TYPE)
-    REQUIREMENTS(
-        ram:32
-    )
-ENDIF()
-
-IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
-    TIMEOUT(3600)
     SIZE(LARGE)
-    TAG(ya:fat)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
-    TIMEOUT(600)
     SIZE(MEDIUM)
 ENDIF()
 
@@ -33,6 +25,7 @@ SRCS(
     dsproxy_sequence_ut.cpp
     dsproxy_patch_ut.cpp
     dsproxy_counters_ut.cpp
+    dsproxy_request_reporting_ut.cpp
 )
 
 IF (BUILD_TYPE != "DEBUG")

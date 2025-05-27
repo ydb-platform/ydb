@@ -2,12 +2,13 @@
 
 PY3_LIBRARY()
 
-VERSION(4.0.1)
+VERSION(5.0.1)
 
 LICENSE(MIT)
 
 PEERDIR(
     contrib/python/Flask
+    contrib/python/Werkzeug
 )
 
 NO_LINT()

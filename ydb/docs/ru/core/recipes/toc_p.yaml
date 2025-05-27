@@ -11,4 +11,9 @@ items:
 - name: YQL
   include:
     mode: link
-    path: yql/toc_p.yaml
+    path: ../yql/reference/recipes/toc_i.yaml
+- name: Для аналитиков
+  href: ../olap/index.md
+  include:
+    mode: link
+    path: ../olap/toc_p.yaml

@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(2.13.5)
+VERSION(2.14.2)
 
 LICENSE(Apache-2.0)
 
@@ -15,7 +15,7 @@ NO_LINT()
 
 PY_SRCS(
     TOP_LEVEL
-    allure.py
+    allure/__init__.py
     allure_commons/__init__.py
     allure_commons/_allure.py
     allure_commons/_core.py
@@ -33,6 +33,8 @@ RESOURCE_FILES(
     PREFIX contrib/python/allure-python-commons/
     .dist-info/METADATA
     .dist-info/top_level.txt
+    allure/py.typed
+    allure_commons/py.typed
 )
 
 END()

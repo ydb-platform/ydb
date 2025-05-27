@@ -1,6 +1,6 @@
 #include "config.h"
 
-#include <yt/yt/client/table_client/helpers.h>
+#include "helpers.h"
 
 #include <yt/yt/client/tablet_client/config.h>
 #include <yt/yt/client/tablet_client/helpers.h>
@@ -10,9 +10,9 @@
 
 #include <yt/yt/core/ytree/convert.h>
 
-#include <yt/yt/core/misc/singleton.h>
-
 #include <yt/yt/library/quantile_digest/config.h>
+
+#include <library/cpp/yt/memory/leaky_ref_counted_singleton.h>
 
 namespace NYT::NTableClient {
 
@@ -153,6 +153,9 @@ void TChunkWriterConfig::Register(TRegistrar registrar)
         .InRange(0.0, 0.001)
         .Default(0.0001);
 
+    registrar.Parameter("use_original_data_weight_in_samples", &TThis::UseOriginalDataWeightInSamples)
+        .Default(false);
+
     registrar.Parameter("chunk_indexes", &TThis::ChunkIndexes)
         .DefaultNew();
 
@@ -241,7 +244,7 @@ void TKeyPrefixFilterWriterConfig::Register(TRegistrar registrar)
     });
 }
 
-///////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 void TDictionaryCompressionConfig::Register(TRegistrar registrar)
 {
@@ -289,6 +292,10 @@ void TDictionaryCompressionConfig::Register(TRegistrar registrar)
         .Default(0.7)
         .InRange(0, 1);
 
+    registrar.Parameter("elect_random_policy", &TThis::ElectRandomPolicy)
+        .Default(false)
+        .DontSerializeDefault();
+
     registrar.Postprocessor([] (TThis* config) {
         if (config->DesiredSampleCount > config->MaxProcessedSampleCount) {
             THROW_ERROR_EXCEPTION("\"desired_sample_count\" cannot be greater than \"max_processed_sample_count\"");
@@ -313,7 +320,7 @@ void TDictionaryCompressionConfig::Register(TRegistrar registrar)
     });
 }
 
-///////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 void TDictionaryCompressionSessionConfig::Register(TRegistrar registrar)
 {
@@ -325,7 +332,7 @@ void TDictionaryCompressionSessionConfig::Register(TRegistrar registrar)
         .Default(64_MB);
 }
 
-///////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 void TBatchHunkReaderConfig::Register(TRegistrar registrar)
 {
@@ -415,6 +422,9 @@ void TChunkReaderOptions::Register(TRegistrar registrar)
     registrar.Parameter("enable_key_widening", &TThis::EnableKeyWidening)
         .Default(false);
 
+    registrar.Parameter("enable_any_unpacking", &TThis::EnableAnyUnpacking)
+        .Default(true);
+
     registrar.Postprocessor([] (TThis* config) {
         if (config->EnableRangeIndex && !config->EnableRowIndex) {
             THROW_ERROR_EXCEPTION("\"enable_row_index\" must be set when \"enable_range_index\" is set");
@@ -464,11 +474,20 @@ void TChunkWriterOptions::Register(TRegistrar registrar)
         .Default(false);
     registrar.Parameter("enable_column_meta_in_chunk_meta", &TThis::EnableColumnMetaInChunkMeta)
         .Default(true);
+    registrar.Parameter("consider_min_row_range_data_weight", &TThis::ConsiderMinRowRangeDataWeight)
+        .Default(true);
 
     registrar.Parameter("schema_modification", &TThis::SchemaModification)
         .Default(ETableSchemaModification::None);
+    registrar.Parameter("versioned_write_options", &TThis::VersionedWriteOptions)
+        .Default();
     registrar.Parameter("max_heavy_columns", &TThis::MaxHeavyColumns)
         .Default(0);
+
+    registrar.Parameter("block_size", &TThis::BlockSize)
+        .Default();
+    registrar.Parameter("buffer_size", &TThis::BufferSize)
+        .Default();
 
     registrar.Postprocessor([] (TThis* config) {
         if (config->ValidateUniqueKeys && !config->ValidateSorted) {

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/library/yql/providers/common/mkql/yql_provider_mkql.h>
+#include <yql/essentials/providers/common/mkql/yql_provider_mkql.h>
 
 namespace NYql {
 

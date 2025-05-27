@@ -17,12 +17,14 @@ struct TConcurrentCache<T>::TLookupTable final
     static constexpr bool EnableHazard = true;
 
     const size_t Capacity;
+    const TMemoryUsageTrackerGuard MemoryUsageGuard;
     std::atomic<size_t> Size = 0;
     TAtomicPtr<TLookupTable> Next;
 
-    explicit TLookupTable(size_t capacity)
+    TLookupTable(size_t capacity, TMemoryUsageTrackerGuard memoryUsageGuard)
         : THashTable(capacity)
         , Capacity(capacity)
+        , MemoryUsageGuard(std::move(memoryUsageGuard))
     { }
 
     typename THashTable::TItemRef Insert(TValuePtr item)
@@ -46,7 +48,11 @@ TConcurrentCache<T>::RenewTable(const TIntrusivePtr<TLookupTable>& head, size_t 
     }
 
     // Rotate lookup table.
-    auto newHead = New<TLookupTable>(capacity);
+    auto memoryUsageGuard = TMemoryUsageTrackerGuard::TryAcquire(
+        MemoryUsageTracker_,
+        TLookupTable::GetByteSize(capacity))
+        .ValueOrThrow();
+    auto newHead = New<TLookupTable>(capacity, std::move(memoryUsageGuard));
     newHead->Next = head;
 
     if (Head_.SwapIfCompare(head, newHead)) {
@@ -63,9 +69,14 @@ TConcurrentCache<T>::RenewTable(const TIntrusivePtr<TLookupTable>& head, size_t 
 }
 
 template <class T>
-TConcurrentCache<T>::TConcurrentCache(size_t capacity)
-    : Capacity_(capacity)
-    , Head_(New<TLookupTable>(capacity))
+TConcurrentCache<T>::TConcurrentCache(size_t capacity, IMemoryUsageTrackerPtr tracker)
+    : MemoryUsageTracker_(std::move(tracker))
+    , Capacity_(capacity)
+    , Head_(New<TLookupTable>(
+        capacity,
+        TMemoryUsageTrackerGuard::Acquire(
+            MemoryUsageTracker_,
+            TLookupTable::GetByteSize(capacity))))
 {
     YT_VERIFY(capacity > 0);
 }
@@ -214,6 +225,6 @@ bool TConcurrentCache<T>::IsHead(const TIntrusivePtr<TLookupTable>& head) const
     return Head_ == head.Get();
 }
 
-/////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT

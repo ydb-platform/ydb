@@ -3,11 +3,12 @@ import logging
 from typing import Sequence, Collection
 
 from clickhouse_connect.driver.insert import InsertContext
-from clickhouse_connect.driver.query import QueryContext, quote_identifier
+from clickhouse_connect.driver.query import QueryContext
+from clickhouse_connect.driver.binding import quote_identifier
 from clickhouse_connect.driver.types import ByteSource
 from clickhouse_connect.json_impl import any_to_json
 from clickhouse_connect.datatypes.base import ClickHouseType, TypeDef
-from clickhouse_connect.driver.common import must_swap
+from clickhouse_connect.driver.common import must_swap, first_value
 from clickhouse_connect.datatypes.registry import get_from_name
 
 logger = logging.getLogger(__name__)
@@ -22,8 +23,8 @@ class Array(ClickHouseType):
         self.element_type = get_from_name(type_def.values[0])
         self._name_suffix = f'({self.element_type.name})'
 
-    def read_column_prefix(self, source: ByteSource):
-        return self.element_type.read_column_prefix(source)
+    def read_column_prefix(self, source: ByteSource, ctx:QueryContext):
+        return self.element_type.read_column_prefix(source, ctx)
 
     def _data_size(self, sample: Sequence) -> int:
         if len(sample) == 0:
@@ -102,7 +103,7 @@ class Tuple(ClickHouseType):
         if len(sample) == 0:
             return 0
         elem_size = 0
-        is_dict = self.element_names and isinstance(self._first_value(list(sample)), dict)
+        is_dict = self.element_names and isinstance(first_value(list(sample), self.nullable), dict)
         for ix, e_type in enumerate(self.element_types):
             if e_type.byte_size > 0:
                 elem_size += e_type.byte_size
@@ -112,9 +113,9 @@ class Tuple(ClickHouseType):
                 elem_size += e_type.data_size([x[ix] for x in sample])
         return elem_size
 
-    def read_column_prefix(self, source: ByteSource):
+    def read_column_prefix(self, source: ByteSource, ctx: QueryContext):
         for e_type in self.element_types:
-            e_type.read_column_prefix(source)
+            e_type.read_column_prefix(source, ctx)
 
     def read_column_data(self, source: ByteSource, num_rows: int, ctx: QueryContext):
         columns = []
@@ -138,7 +139,7 @@ class Tuple(ClickHouseType):
             e_type.write_column_prefix(dest)
 
     def write_column_data(self, column: Sequence, dest: bytearray, ctx: InsertContext):
-        if self.element_names and isinstance(self._first_value(column), dict):
+        if self.element_names and isinstance(first_value(column, self.nullable), dict):
             columns = self.convert_dict_insert(column)
         else:
             columns = list(zip(*column))
@@ -152,13 +153,6 @@ class Tuple(ClickHouseType):
             for ix, name in enumerate(names):
                 col[ix].append(x.get(name))
         return col
-
-
-class Point(Tuple):
-
-    def __init__(self, type_def):
-        super().__init__(type_def)
-        self._name_suffix = ''
 
 
 class Map(ClickHouseType):
@@ -180,9 +174,9 @@ class Map(ClickHouseType):
             total += self.value_type.data_size(x.values())
         return total // len(sample)
 
-    def read_column_prefix(self, source: ByteSource):
-        self.key_type.read_column_prefix(source)
-        self.value_type.read_column_prefix(source)
+    def read_column_prefix(self, source: ByteSource, ctx: QueryContext):
+        self.key_type.read_column_prefix(source, ctx)
+        self.value_type.read_column_prefix(source, ctx)
 
     # pylint: disable=too-many-locals
     def read_column_data(self, source: ByteSource, num_rows: int, ctx: QueryContext):
@@ -237,8 +231,8 @@ class Nested(ClickHouseType):
         array_sample = [[tuple(sub_row[key] for key in keys) for sub_row in row] for row in sample]
         return self.tuple_array.data_size(array_sample)
 
-    def read_column_prefix(self, source: ByteSource):
-        self.tuple_array.read_column_prefix(source)
+    def read_column_prefix(self, source: ByteSource, ctx:QueryContext):
+        self.tuple_array.read_column_prefix(source, ctx)
 
     def read_column_data(self, source: ByteSource, num_rows: int, ctx: QueryContext):
         keys = self.element_names
@@ -252,64 +246,3 @@ class Nested(ClickHouseType):
         keys = self.element_names
         data = [[tuple(sub_row[key] for key in keys) for sub_row in row] for row in column]
         self.tuple_array.write_column_data(data, dest, ctx)
-
-
-class JSON(ClickHouseType):
-    python_type = dict
-    # Native is a Python type (primitive, dict, array), string is an actual JSON string
-    valid_formats = 'string', 'native'
-
-    def write_column_prefix(self, dest: bytearray):
-        dest.append(0x01)
-
-    def _data_size(self, sample: Collection) -> int:
-        if len(sample) == 0:
-            return 0
-        total = 0
-        for x in sample:
-            if isinstance(x, str):
-                total += len(x)
-            elif x:
-                total += len(any_to_json(x))
-        return total // len(sample) + 1
-
-    # pylint: disable=duplicate-code
-    def write_column_data(self, column: Sequence, dest: bytearray, ctx: InsertContext):
-        app = dest.append
-        first = self._first_value(column)
-        if isinstance(first, str) or self.write_format(ctx) == 'string':
-            for x in column:
-                v = x.encode()
-                sz = len(v)
-                while True:
-                    b = sz & 0x7f
-                    sz >>= 7
-                    if sz == 0:
-                        app(b)
-                        break
-                    app(0x80 | b)
-                dest += v
-        else:
-            to_json = any_to_json
-            for x in column:
-                v = to_json(x)
-                sz = len(v)
-                while True:
-                    b = sz & 0x7f
-                    sz >>= 7
-                    if sz == 0:
-                        app(b)
-                        break
-                    app(0x80 | b)
-                dest += v
-
-
-class Object(JSON):
-    python_type = dict
-
-    def __init__(self, type_def):
-        data_type = type_def.values[0].lower().replace(' ', '')
-        if data_type not in ("'json'", "nullable('json')"):
-            raise NotImplementedError('Only json or Nullable(json) Object type is currently supported')
-        super().__init__(type_def)
-        self._name_suffix = type_def.arg_str

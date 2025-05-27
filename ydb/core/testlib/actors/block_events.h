@@ -14,7 +14,7 @@ namespace NActors {
     template<class TEvType>
     class TBlockEvents : public std::deque<typename TEvType::TPtr> {
     public:
-        TBlockEvents(TTestActorRuntime& runtime, std::function<bool(typename TEvType::TPtr&)> condition = {})
+        TBlockEvents(TTestActorRuntime& runtime, std::function<bool(const typename TEvType::TPtr&)> condition = {})
             : Runtime(runtime)
             , Condition(std::move(condition))
             , Holder(Runtime.AddObserver<TEvType>(
@@ -74,6 +74,7 @@ namespace NActors {
             Cerr << "... blocking " << (ev->HasEvent() ? TypeName(*ev->GetBase()) : TypeName<TEvType>())
                 << " from " << Runtime.FindActorName(ev->Sender)
                 << " to " << Runtime.FindActorName(ev->GetRecipientRewrite())
+                << " cookie " << ptr->Cookie
                 << Endl;
             this->emplace_back(std::move(ev));
         }
@@ -85,6 +86,5 @@ namespace NActors {
         THashSet<IEventHandle*> UnblockedOnce;
         bool Stopped = false;
     };
-
 
 } // namespace NActors

@@ -3,8 +3,10 @@ LIBRARY()
 SRCS(
     activeactors.cpp
     activeactors.h
+    collector_counters.cpp
     future_callback.h
     mon_histogram_helper.h
+    pool_stats_collector.cpp
     selfping_actor.cpp
 )
 

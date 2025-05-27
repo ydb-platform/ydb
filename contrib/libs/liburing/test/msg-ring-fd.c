@@ -17,6 +17,7 @@
 
 static int no_msg;
 static int no_sparse;
+static int no_fd_pass;
 
 struct data {
 	pthread_t thread;
@@ -88,6 +89,9 @@ static int test_remote(struct io_uring *src, int ring_flags)
 	char buf[32];
 	void *tret;
 	int i;
+
+	if (no_fd_pass)
+		return 0;
 
 	pthread_barrier_init(&d.barrier, NULL, 2);
 	d.ring_flags = ring_flags;
@@ -161,6 +165,9 @@ static int test_local(struct io_uring *src, struct io_uring *dst)
 	char buf[32], dst_buf[32];
 	int i;
 
+	if (no_fd_pass)
+		return 0;
+
 	fd = -1;
 	ret = io_uring_register_files(dst, &fd, 1);
 	if (ret) {
@@ -203,7 +210,9 @@ static int test_local(struct io_uring *src, struct io_uring *dst)
 			fprintf(stderr, "wait_cqe: %d\n", ret);
 			return 1;
 		}
-		if (cqe->res < 0) {
+		if (cqe->user_data == 2 && cqe->res == -EINVAL) {
+			no_fd_pass = 1;
+		} else if (cqe->res < 0) {
 			fprintf(stderr, "cqe res %d\n", cqe->res);
 			return 1;
 		}
@@ -213,6 +222,9 @@ static int test_local(struct io_uring *src, struct io_uring *dst)
 		}
 		io_uring_cqe_seen(src, cqe);
 	}
+
+	if (no_fd_pass)
+		goto out;
 
 	ret = io_uring_wait_cqe(dst, &cqe);
 	if (ret) {
@@ -250,6 +262,7 @@ static int test_local(struct io_uring *src, struct io_uring *dst)
 		return 1;
 	}
 
+out:
 	close(fds[0]);
 	close(fds[1]);
 	io_uring_unregister_files(src);

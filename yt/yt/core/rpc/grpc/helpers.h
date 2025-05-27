@@ -9,12 +9,14 @@
 #include <library/cpp/yt/threading/event_count.h>
 #include <library/cpp/yt/threading/rw_spin_lock.h>
 
-#include <library/cpp/yt/small_containers/compact_vector.h>
+#include <library/cpp/yt/compact_containers/compact_vector.h>
 
 #include <contrib/libs/grpc/include/grpc/grpc.h>
 #include <contrib/libs/grpc/include/grpc/grpc_security.h>
 #include <contrib/libs/grpc/include/grpc/impl/codegen/grpc_types.h>
 #include <contrib/libs/grpc/include/grpc/byte_buffer_reader.h>
+
+typedef struct x509_st X509;
 
 namespace NYT::NRpc::NGrpc {
 
@@ -22,6 +24,9 @@ namespace NYT::NRpc::NGrpc {
 
 using TGprString = std::unique_ptr<char, void(*)(void*)>;
 TGprString MakeGprString(char* str);
+
+using TX509Ptr = std::unique_ptr<X509, void(*)(X509*)>;
+TX509Ptr MakeX509Ptr(X509* cert);
 
 TStringBuf ToStringBuf(const grpc_slice& slice);
 
@@ -160,7 +165,7 @@ class TGrpcMetadataArray
 public:
     TStringBuf Find(const char* key) const;
 
-    THashMap<TString, TString> ToMap() const;
+    THashMap<std::string, std::string> ToMap() const;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -185,7 +190,7 @@ public:
     const ui8* Data() const;
     size_t Size() const;
 
-    TString AsString() const;
+    std::string AsString() const;
 
 private:
     grpc_slice Native_ = grpc_empty_slice();
@@ -196,7 +201,7 @@ private:
 class TGrpcMetadataArrayBuilder
 {
 public:
-    void Add(const char* key, TString value);
+    void Add(const char* key, std::string value);
     size_t GetSize() const;
 
     grpc_metadata* Unwrap();
@@ -212,7 +217,7 @@ private:
 class TGrpcChannelArgs
 {
 public:
-    explicit TGrpcChannelArgs(const THashMap<TString, NYTree::INodePtr>& args);
+    explicit TGrpcChannelArgs(const THashMap<std::string, NYTree::INodePtr>& args);
 
     grpc_channel_args* Unwrap();
 
@@ -239,7 +244,7 @@ private:
     size_t AvailableBytes_ = 0;
     size_t RemainingBytes_;
 
-    virtual size_t DoRead(void* buf, size_t len) override;
+    size_t DoRead(void* buf, size_t len) override;
 
     bool ReadNextSlice();
 };
@@ -250,14 +255,14 @@ class TGrpcPemKeyCertPair
 {
 public:
     TGrpcPemKeyCertPair(
-        TString privateKey,
-        TString certChain);
+        std::string privateKey,
+        std::string certChain);
 
     grpc_ssl_pem_key_cert_pair* Unwrap();
 
 private:
-    TString PrivateKey_;
-    TString CertChain_;
+    std::string PrivateKey_;
+    std::string CertChain_;
     grpc_ssl_pem_key_cert_pair Native_;
 };
 
@@ -283,13 +288,15 @@ TSharedRef ExtractMessageFromEnvelopedMessage(const TSharedRef& data);
 
 TErrorCode StatusCodeToErrorCode(grpc_status_code statusCode);
 
-TString SerializeError(const TError& error);
+std::string SerializeError(const TError& error);
 TError DeserializeError(TStringBuf serializedError);
 
 TGrpcPemKeyCertPair LoadPemKeyCertPair(const TSslPemKeyCertPairConfigPtr& config);
 TGrpcChannelCredentialsPtr LoadChannelCredentials(const TChannelCredentialsConfigPtr& config);
 TGrpcServerCredentialsPtr LoadServerCredentials(const TServerCredentialsConfigPtr& config);
-std::optional<TString> ParseIssuerFromX509(TStringBuf x509String);
+TX509Ptr ParsePemCertToX509(TStringBuf pemCert);
+std::optional<std::string> ParseIssuerFromX509(const TX509Ptr& pemCertX509);
+std::optional<std::string> ParseSerialNumberFromX509(const TX509Ptr& pemCertX509);
 
 ////////////////////////////////////////////////////////////////////////////////
 

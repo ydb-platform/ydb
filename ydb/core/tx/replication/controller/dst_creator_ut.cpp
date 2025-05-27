@@ -13,7 +13,12 @@ namespace NKikimr::NReplication::NController {
 Y_UNIT_TEST_SUITE(DstCreator) {
     using namespace NTestHelpers;
 
-    void CheckTableReplica(const TTestTableDescription& tableDesc, const NKikimrSchemeOp::TTableDescription& replicatedDesc) {
+    void CheckTableReplica(
+            const TTestTableDescription& tableDesc,
+            const NKikimrSchemeOp::TTableDescription& replicatedDesc,
+            EReplicationMode mode = EReplicationMode::ReadOnly,
+            EConsistencyLevel consistency = EConsistencyLevel::Row
+    ) {
         UNIT_ASSERT_VALUES_EQUAL(replicatedDesc.KeyColumnNamesSize(), tableDesc.KeyColumns.size());
         for (ui32 i = 0; i < replicatedDesc.KeyColumnNamesSize(); ++i) {
             UNIT_ASSERT_VALUES_EQUAL(replicatedDesc.GetKeyColumnNames(i), tableDesc.KeyColumns[i]);
@@ -28,12 +33,15 @@ Y_UNIT_TEST_SUITE(DstCreator) {
             UNIT_ASSERT(FindIfPtr(tableDesc.Columns, pred));
         }
 
-        const auto& replCfg = replicatedDesc.GetReplicationConfig();
-        UNIT_ASSERT_VALUES_EQUAL(replCfg.GetMode(), NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
-        UNIT_ASSERT_VALUES_EQUAL(replCfg.GetConsistency(), NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_WEAK);
+        TString error;
+        UNIT_ASSERT_C(CheckReplicationConfig(replicatedDesc.GetReplicationConfig(), mode, consistency, error), error);
     }
 
-    void Basic(const TString& replicatedPath) {
+    void Basic(
+            const TString& replicatedPath,
+            EReplicationMode mode = EReplicationMode::ReadOnly,
+            EConsistencyLevel consistency = EConsistencyLevel::Row
+    ) {
         TEnv env;
         env.GetRuntime().SetLogPriority(NKikimrServices::REPLICATION_CONTROLLER, NLog::PRI_TRACE);
 
@@ -50,7 +58,7 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         env.CreateTable("/Root", *MakeTableDescription(tableDesc));
         env.GetRuntime().Register(CreateDstCreator(
             env.GetSender(), env.GetSchemeshardId("/Root/Table"), env.GetYdbProxy(), env.GetPathId("/Root"),
-            1 /* rid */, 1 /* tid */, TReplication::ETargetKind::Table, "/Root/Table", replicatedPath
+            1 /* rid */, 1 /* tid */, TReplication::ETargetKind::Table, "/Root/Table", replicatedPath, mode, consistency
         ));
 
         auto ev = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
@@ -59,7 +67,7 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         auto desc = env.GetDescription(replicatedPath);
         const auto& replicatedDesc = desc.GetPathDescription().GetTable();
 
-        CheckTableReplica(tableDesc, replicatedDesc);
+        CheckTableReplica(tableDesc, replicatedDesc, mode, consistency);
     }
 
     Y_UNIT_TEST(Basic) {
@@ -68,6 +76,10 @@ Y_UNIT_TEST_SUITE(DstCreator) {
 
     Y_UNIT_TEST(WithIntermediateDir) {
         Basic("/Root/Dir/Replicated");
+    }
+
+    Y_UNIT_TEST(GlobalConsistency) {
+        Basic("/Root/Replicated", EReplicationMode::ReadOnly, EConsistencyLevel::Global);
     }
 
     void WithIndex(const TString& replicatedPath, NKikimrSchemeOp::EIndexType indexType) {
@@ -370,15 +382,15 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         });
     }
 
-    Y_UNIT_TEST(UnsupportedReplicationMode) {
+    Y_UNIT_TEST(ReplicationModeMismatch) {
         auto changeMode = [](const TTestTableDescription& desc) {
             auto copy = desc;
             copy.ReplicationConfig->Mode = TTestTableDescription::TReplicationConfig::MODE_NONE;
-            copy.ReplicationConfig->Consistency = TTestTableDescription::TReplicationConfig::CONSISTENCY_UNKNOWN;
+            copy.ReplicationConfig->ConsistencyLevel = TTestTableDescription::TReplicationConfig::CONSISTENCY_LEVEL_UNKNOWN;
             return copy;
         };
 
-        ExistingDst(NKikimrScheme::StatusSchemeError, "Unsupported replication mode", changeMode, TTestTableDescription{
+        ExistingDst(NKikimrScheme::StatusSchemeError, "Replication mode mismatch", changeMode, TTestTableDescription{
             .Name = "Table",
             .KeyColumns = {"key"},
             .Columns = {
@@ -388,19 +400,23 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         });
     }
 
-    Y_UNIT_TEST(UnsupportedReplicationConsistency) {
+    Y_UNIT_TEST(ReplicationConsistencyLevelMismatch) {
         auto changeConsistency = [](const TTestTableDescription& desc) {
             auto copy = desc;
-            copy.ReplicationConfig->Consistency = TTestTableDescription::TReplicationConfig::CONSISTENCY_STRONG;
+            copy.ReplicationConfig->ConsistencyLevel = TTestTableDescription::TReplicationConfig::CONSISTENCY_LEVEL_GLOBAL;
             return copy;
         };
 
-        ExistingDst(NKikimrScheme::StatusSchemeError, "Unsupported replication consistency", changeConsistency, TTestTableDescription{
+        ExistingDst(NKikimrScheme::StatusSchemeError, "Replication consistency level mismatch", changeConsistency, TTestTableDescription{
             .Name = "Table",
             .KeyColumns = {"key"},
             .Columns = {
                 {.Name = "key", .Type = "Uint32"},
                 {.Name = "value", .Type = "Utf8"},
+            },
+            .ReplicationConfig = TTestTableDescription::TReplicationConfig{
+                .Mode = TTestTableDescription::TReplicationConfig::MODE_READ_ONLY,
+                .ConsistencyLevel = TTestTableDescription::TReplicationConfig::CONSISTENCY_LEVEL_ROW,
             },
         });
     }

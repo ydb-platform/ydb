@@ -1,21 +1,23 @@
 #pragma once
 
-#include "error.h"
+#include "public.h"
+
+#include <library/cpp/yt/error/error.h>
 
 #include <library/cpp/yt/memory/blob.h>
+#include <library/cpp/yt/memory/memory_usage_tracker.h>
+#include <library/cpp/yt/memory/ref.h>
 
 namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
 struct IMemoryUsageTracker
-    : public TRefCounted
+    : public ISimpleMemoryUsageTracker
 {
     virtual TError TryAcquire(i64 size) = 0;
     virtual TError TryChange(i64 size) = 0;
     //! Returns true unless overcommit occurred.
-    virtual bool Acquire(i64 size) = 0;
-    virtual void Release(i64 size) = 0;
     virtual void SetLimit(i64 size) = 0;
     virtual i64 GetLimit() const = 0;
     virtual i64 GetUsed() const = 0;
@@ -41,7 +43,7 @@ struct IMemoryUsageTracker
 
 DEFINE_REFCOUNTED_TYPE(IMemoryUsageTracker)
 
-/////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 struct IReservingMemoryUsageTracker
     : public IMemoryUsageTracker
@@ -93,7 +95,8 @@ public:
     i64 GetSize() const;
     void SetSize(i64 size);
     TError TrySetSize(i64 size);
-    void IncrementSize(i64 sizeDelta);
+    void IncreaseSize(i64 sizeDelta);
+    void DecreaseSize(i64 sizeDelta);
     TMemoryUsageTrackerGuard TransferMemory(i64 size);
 
 private:

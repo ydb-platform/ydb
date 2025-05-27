@@ -24,9 +24,9 @@
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/base/row_version.h>
 
-#include <ydb/library/yql/minikql/mkql_type_ops.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
-#include <ydb/library/yql/public/issue/yql_issue_manager.h>
+#include <yql/essentials/minikql/mkql_type_ops.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue_manager.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -177,7 +177,7 @@ struct TReadTableRequest : public TThrRefBase {
         , RequestVersion(tx.HasApiVersion() ? tx.GetApiVersion() : (ui32)NKikimrTxUserProxy::TReadTableTransaction::UNSPECIFIED)
     {
         for (auto &col : tx.GetColumns()) {
-            Columns.emplace_back(col, 0, NScheme::TTypeInfo(0));
+            Columns.emplace_back(col, 0, NScheme::TTypeInfo());
         }
 
         if (tx.HasSnapshotStep() && tx.HasSnapshotTxId()) {
@@ -1382,7 +1382,7 @@ void TDataReq::Handle(TEvTxProxyReq::TEvMakeRequest::TPtr &ev, const TActorConte
                 settings.LlvmRuntime = true;
             }
             if (ctx.LoggerSettings()->Satisfies(NLog::PRI_DEBUG, NKikimrServices::MINIKQL_ENGINE, TxId)) {
-                auto actorSystem = ctx.ExecutorThread.ActorSystem;
+                auto actorSystem = ctx.ActorSystem();
                 auto txId = TxId;
                 settings.BacktraceWriter = [txId, actorSystem](const char* operation, ui32 line, const TBackTrace* backtrace) {
                     LOG_DEBUG_SAMPLED_BY(*actorSystem, NKikimrServices::MINIKQL_ENGINE, txId,
@@ -1498,7 +1498,7 @@ void TDataReq::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &ev, 
     auto &res = resp->ResultSet[0];
     ReadTableRequest->TableId = res.TableId;
 
-    if (res.TableId.IsSystemView()) {
+    if (res.TableId.IsSystemView() || res.Kind == NSchemeCache::TSchemeCacheNavigate::KindSysView) {
         IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::GENERIC_RESOLVE_ERROR,
             Sprintf("Table '%s' is a system view. Read table is not supported", ReadTableRequest->TablePath.data())));
         ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ResolveError, NKikimrIssues::TStatusIds::SCHEME_ERROR, true, ctx);
@@ -1695,7 +1695,7 @@ void TDataReq::Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr &ev, c
             return Die(ctx);
         }
 
-        if (FlatMKQLRequest && entry.Kind == NSchemeCache::TSchemeCacheRequest::KindAsyncIndexTable) {
+        if (FlatMKQLRequest && entry.Kind == NSchemeCache::ETableKind::KindAsyncIndexTable) {
             TMaybe<TString> error;
 
             if (entry.KeyDescription->RowOperation != TKeyDesc::ERowOperation::Read) {

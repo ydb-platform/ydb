@@ -1,0 +1,131 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     MIT                  1d24ff22ea07e98a6769a7263566dbf7
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        LICENSE.md [12:28]
+        LICENSE.md [34:50]
+
+KEEP     MIT                  3384baf96992baa9e96645826880ac27
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        utf8proc.c [6:22]
+
+KEEP     MIT                  4372cff0d21afdacf852b4c78b18140d
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        utf8proc.h [5:21]
+
+KEEP     Unicode              50f801cdcc7554d16a2854b79f10e28c
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unicode
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://unicode.org/, http://unicode.org/copyright.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unicode.LICENSE
+    Files with this license:
+        LICENSE.md [59:93]
+
+KEEP     MIT                  74ab01fc06feca8221855c04a783e6ad
+BELONGS ya.make
+    License text:
+        - Changed license from BSD to MIT style.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 95.00
+        Match type      : REFERENCE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        NEWS.md [319:319]
+
+KEEP     MIT                  b9f647ef7e29973cc8b999af88006590
+BELONGS ya.make
+    License text:
+        work on the utf8proc library is licensed under the [MIT "expat"
+        license](http://opensource.org/licenses/MIT):
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        LICENSE.md [7:8]
+
+KEEP     MIT                  e26217fa1b7b709cdb6979bf04ccaf6e
+BELONGS ya.make
+    License text:
+         * utf8proc is a free/open-source (MIT/expat licensed) C library
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-free-unknown
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/free-unknown.LICENSE
+    Files with this license:
+        utf8proc.h [28:28]
+
+KEEP     MIT AND Unicode      e494dba55af130e3b0d56ff7a74377e3
+BELONGS ya.make
+FILE_INCLUDE LICENSE.md found in files: README.md at line 30
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        README.md [25:30]
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unicode
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://unicode.org/, http://unicode.org/copyright.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unicode.LICENSE
+    Files with this license:
+        README.md [25:30]

@@ -1,6 +1,6 @@
 #include "value.h"
 
-#include <ydb/library/yql/public/decimal/yql_decimal.h>
+#include <yql/essentials/public/decimal/yql_decimal.h>
 
 #include <library/cpp/string_utils/base64/base64.h>
 
@@ -8,7 +8,7 @@
 #include <util/string/cast.h>
 #include <util/string/escape.h>
 #include <util/string/printf.h>
-#include <ydb/public/sdk/cpp/client/ydb_value/value.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
 
 namespace NKikimr {
 namespace NClient {

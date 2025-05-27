@@ -1,0 +1,4 @@
+requirements:
+  - certifi
+exclude:
+  - httplib2/cacerts.txt

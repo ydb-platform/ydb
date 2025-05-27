@@ -2,12 +2,12 @@
 
 #include <ydb/core/tablet_flat/flat_database.h>
 #include <ydb/core/util/tuples.h>
-#include <ydb/core/util/templates.h>
 #include <ydb/core/base/blobstorage_common.h>
 
 #include <util/system/type_name.h>
 #include <util/system/unaligned_mem.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
+#include <type_traits>
 #include <utility>
 
 // https://wiki.yandex-team.ru/kikimr/techdoc/db/cxxapi/nicedb/
@@ -25,64 +25,64 @@ public:
     {}
 
     TTypeValue(const ui64& value, NScheme::TTypeId type = NScheme::NTypeIds::Uint64)
-        : TRawTypeValue(&value, sizeof(value), NScheme::TTypeInfo(type))
+        : TRawTypeValue(&value, sizeof(value), type)
     {}
 
     TTypeValue(const i64& value, NScheme::TTypeId type = NScheme::NTypeIds::Int64)
-        : TRawTypeValue(&value, sizeof(value), NScheme::TTypeInfo(type))
+        : TRawTypeValue(&value, sizeof(value), type)
     {}
 
     TTypeValue(const ui32& value, NScheme::TTypeId type = NScheme::NTypeIds::Uint32)
-        : TRawTypeValue(&value, sizeof(value), NScheme::TTypeInfo(type))
+        : TRawTypeValue(&value, sizeof(value), type)
     {}
 
     TTypeValue(const i32& value, NScheme::TTypeId type = NScheme::NTypeIds::Int32)
-        : TRawTypeValue(&value, sizeof(value), NScheme::TTypeInfo(type))
+        : TRawTypeValue(&value, sizeof(value), type)
     {}
 
     TTypeValue(const ui16& value, NScheme::TTypeId type = NScheme::NTypeIds::Date)
-        : TRawTypeValue(&value, sizeof(value), NScheme::TTypeInfo(type))
+        : TRawTypeValue(&value, sizeof(value), type)
     {}
 
     TTypeValue(const ui8& value, NScheme::TTypeId type = NScheme::NTypeIds::Byte)
-        : TRawTypeValue(&value, sizeof(value), NScheme::TTypeInfo(type))
+        : TRawTypeValue(&value, sizeof(value), type)
     {}
 
     TTypeValue(const bool& value, NScheme::TTypeId type = NScheme::NTypeIds::Bool)
-        : TRawTypeValue(&value, sizeof(value), NScheme::TTypeInfo(type))
+        : TRawTypeValue(&value, sizeof(value), type)
     {}
 
     TTypeValue(const double& value, NScheme::TTypeId type = NScheme::NTypeIds::Double)
-        : TRawTypeValue(&value, sizeof(value), NScheme::TTypeInfo(type))
+        : TRawTypeValue(&value, sizeof(value), type)
     {}
 
     template <typename ElementType>
     TTypeValue(const TVector<ElementType> &value, NScheme::TTypeId type = NScheme::NTypeIds::String)
-        : TRawTypeValue(value.empty() ? (const ElementType*)0xDEADBEEFDEADBEEF : value.data(), value.size() * sizeof(ElementType), NScheme::TTypeInfo(type))
+        : TRawTypeValue(value.empty() ? (const ElementType*)0xDEADBEEFDEADBEEF : value.data(), value.size() * sizeof(ElementType), type)
     {}
 
     TTypeValue(const TActorId& value, NScheme::TTypeId type = NScheme::NTypeIds::ActorId)
-        : TRawTypeValue(&value, sizeof(value), NScheme::TTypeInfo(type))
+        : TRawTypeValue(&value, sizeof(value), type)
     {}
 
     TTypeValue(const std::pair<ui64, ui64>& value, NScheme::TTypeId type = NScheme::NTypeIds::PairUi64Ui64)
-        : TRawTypeValue(&value, sizeof(value), NScheme::TTypeInfo(type))
+        : TRawTypeValue(&value, sizeof(value), type)
     {}
 
     TTypeValue(const std::pair<ui64, i64>& value, NScheme::TTypeId type = NScheme::NTypeIds::Decimal)
-        : TRawTypeValue(&value, sizeof(value), NScheme::TTypeInfo(type))
+        : TRawTypeValue(&value, sizeof(value), type)
     {}
 
     TTypeValue(const TString& value, NScheme::TTypeId type = NScheme::NTypeIds::Utf8)
-        : TRawTypeValue(value.data(), value.size(), NScheme::TTypeInfo(type))
+        : TRawTypeValue(value.data(), value.size(), type)
     {}
 
     TTypeValue(const TBuffer& value, NScheme::TTypeId type = NScheme::NTypeIds::String)
-        : TRawTypeValue(value.Empty() ? (const char*)0xDEADBEEFDEADBEEF : value.Data(), value.Size(), NScheme::TTypeInfo(type))
+        : TRawTypeValue(value.Empty() ? (const char*)0xDEADBEEFDEADBEEF : value.Data(), value.Size(), type)
     {}
 
     TTypeValue(const TStringBuf& value, NScheme::TTypeId type = NScheme::NTypeIds::String)
-        : TRawTypeValue(value.empty() ? (const char*)0xDEADBEEFDEADBEEF : value.data(), value.size(), NScheme::TTypeInfo(type))
+        : TRawTypeValue(value.empty() ? (const char*)0xDEADBEEFDEADBEEF : value.data(), value.size(), type)
     {}
 
     explicit TTypeValue(const TRawTypeValue& rawTypeValue)
@@ -102,100 +102,102 @@ public:
     }
 
     operator ui64() const {
-        Y_ABORT_UNLESS((Type() == NScheme::NTypeIds::Uint64
+        Y_ENSURE((Type() == NScheme::NTypeIds::Uint64
                   || Type() == NScheme::NTypeIds::Timestamp)
-                 && Size() == sizeof(ui64), "Data=%" PRIxPTR ", Type=%" PRIi64 ", Size=%" PRIi64, (ui64)Data(), (i64)Type(), (i64)Size());
+                 && Size() == sizeof(ui64), "Data=" << (const void*)Data() << ", Type=" << (i64)Type() << ", Size=" << (i64)Size());
         return ReadUnaligned<ui64>(reinterpret_cast<const ui64*>(Data()));
     }
 
     operator i64() const {
-        Y_ABORT_UNLESS((Type() == NScheme::NTypeIds::Int64
+        Y_ENSURE((Type() == NScheme::NTypeIds::Int64
                   || Type() == NScheme::NTypeIds::Interval
                   || Type() == NScheme::NTypeIds::Datetime64
                   || Type() == NScheme::NTypeIds::Timestamp64
                   || Type() == NScheme::NTypeIds::Interval64)
-                 && Size() == sizeof(i64), "Data=%" PRIxPTR ", Type=%" PRIi64 ", Size=%" PRIi64, (ui64)Data(), (i64)Type(), (i64)Size());
+                 && Size() == sizeof(i64), "Data=" << (const void*)Data() << ", Type=" << (i64)Type() << ", Size=" << (i64)Size());
         return ReadUnaligned<i64>(reinterpret_cast<const i64*>(Data()));
     }
 
     operator ui32() const {
-        Y_ABORT_UNLESS((Type() == NScheme::NTypeIds::Uint32
+        Y_ENSURE((Type() == NScheme::NTypeIds::Uint32
                   || Type() == NScheme::NTypeIds::Datetime)
-                 && Size() == sizeof(ui32), "Data=%" PRIxPTR ", Type=%" PRIi64 ", Size=%" PRIi64, (ui64)Data(), (i64)Type(), (i64)Size());
+                 && Size() == sizeof(ui32), "Data=" << (const void*)Data() << ", Type=" << (i64)Type() << ", Size=" << (i64)Size());
         ui32 value = ReadUnaligned<ui32>(reinterpret_cast<const ui32*>(Data()));
         return value;
     }
 
     operator i32() const {
-        Y_ABORT_UNLESS((Type() == NScheme::NTypeIds::Int32 
+        Y_ENSURE((Type() == NScheme::NTypeIds::Int32 
                   || Type() == NScheme::NTypeIds::Date32)
-                 && Size() == sizeof(i32), "Data=%" PRIxPTR ", Type=%" PRIi64 ", Size=%" PRIi64, (ui64)Data(), (i64)Type(), (i64)Size());
+                 && Size() == sizeof(i32), "Data=" << (const void*)Data() << ", Type=" << (i64)Type() << ", Size=" << (i64)Size());
         i32 value = ReadUnaligned<i32>(reinterpret_cast<const i32*>(Data()));
         return value;
     }
 
     operator ui16() const {
-        Y_ABORT_UNLESS(Type() == NScheme::NTypeIds::Date && Size() == sizeof(ui16), "Data=%" PRIxPTR ", Type=%" PRIi64 ", Size=%" PRIi64, (ui64)Data(), (i64)Type(), (i64)Size());
+        Y_ENSURE(Type() == NScheme::NTypeIds::Date && Size() == sizeof(ui16), "Data=" << (const void*)Data() << ", Type=" << (i64)Type() << ", Size=" << (i64)Size());
         ui16 value = ReadUnaligned<ui16>(reinterpret_cast<const ui16*>(Data()));
         return value;
     }
 
     operator ui8() const {
-        Y_ABORT_UNLESS(Type() == NScheme::NTypeIds::Byte && Size() == sizeof(ui8), "Data=%" PRIxPTR ", Type=%" PRIi64 ", Size=%" PRIi64, (ui64)Data(), (i64)Type(), (i64)Size());
+        Y_ENSURE(Type() == NScheme::NTypeIds::Byte && Size() == sizeof(ui8), "Data=" << (const void*)Data() << ", Type=" << (i64)Type() << ", Size=" << (i64)Size());
         ui8 value = *reinterpret_cast<const ui8*>(Data());
         return value;
     }
 
     operator bool() const {
-        Y_ABORT_UNLESS(Type() == NScheme::NTypeIds::Bool && Size() == sizeof(bool), "Data=%" PRIxPTR ", Type=%" PRIi64 ", Size=%" PRIi64, (ui64)Data(), (i64)Type(), (i64)Size());
+        Y_ENSURE(Type() == NScheme::NTypeIds::Bool && Size() == sizeof(bool), "Data=" << (const void*)Data() << ", Type=" << (i64)Type() << ", Size=" << (i64)Size());
         bool value = *reinterpret_cast<const bool*>(Data());
         return value;
     }
 
     operator double() const {
-        Y_ABORT_UNLESS(Type() == NScheme::NTypeIds::Double && Size() == sizeof(double), "Data=%" PRIxPTR ", Type=%" PRIi64 ", Size=%" PRIi64, (ui64)Data(), (i64)Type(), (i64)Size());
+        Y_ENSURE(Type() == NScheme::NTypeIds::Double && Size() == sizeof(double), "Data=" << (const void*)Data() << ", Type=" << (i64)Type() << ", Size=" << (i64)Size());
         double value = ReadUnaligned<double>(reinterpret_cast<const double*>(Data()));
         return value;
     }
 
     operator TActorId() const {
-        Y_ABORT_UNLESS((Type() == NScheme::NTypeIds::ActorId
+        Y_ENSURE((Type() == NScheme::NTypeIds::ActorId
                || Type() == NScheme::NTypeIds::String
                || Type() == NScheme::NTypeIds::String2m
-               || Type() == NScheme::NTypeIds::String4k) && Size() == sizeof(TActorId), "Data=%" PRIxPTR ", Type=%" PRIi64 ", Size=%" PRIi64, (ui64)Data(), (i64)Type(), (i64)Size());
+               || Type() == NScheme::NTypeIds::String4k) && Size() == sizeof(TActorId), "Data=" << (const void*)Data() << ", Type=" << (i64)Type() << ", Size=" << (i64)Size());
         return *reinterpret_cast<const TActorId*>(Data());
     }
 
     operator TString() const {
-        Y_ABORT_UNLESS(Type() == NScheme::NTypeIds::Utf8
+        Y_ENSURE(Type() == NScheme::NTypeIds::Utf8
                || Type() == NScheme::NTypeIds::String
                || Type() == NScheme::NTypeIds::String2m
-               || Type() == NScheme::NTypeIds::String4k, "Data=%" PRIxPTR ", Type=%" PRIi64 ", Size=%" PRIi64, (ui64)Data(), (i64)Type(), (i64)Size());
+               || Type() == NScheme::NTypeIds::String4k, "Data=" << (const void*)Data() << ", Type=" << (i64)Type() << ", Size=" << (i64)Size());
         return TString(reinterpret_cast<const char*>(Data()), Size());
     }
 
     operator TBuffer() const {
-        Y_ABORT_UNLESS(Type() == NScheme::NTypeIds::String
+        Y_ENSURE(Type() == NScheme::NTypeIds::String
                || Type() == NScheme::NTypeIds::String2m
-               || Type() == NScheme::NTypeIds::String4k, "Data=%" PRIxPTR ", Type=%" PRIi64 ", Size=%" PRIi64, (ui64)Data(), (i64)Type(), (i64)Size());
+               || Type() == NScheme::NTypeIds::String4k, "Data=" << (const void*)Data() << ", Type=" << (i64)Type() << ", Size=" << (i64)Size());
         return TBuffer(reinterpret_cast<const char*>(Data()), Size());
     }
 
     operator std::pair<ui64, ui64>() const {
-        Y_ABORT_UNLESS(Type() == NScheme::NTypeIds::PairUi64Ui64 && Size() == sizeof(std::pair<ui64, ui64>), "Data=%" PRIxPTR ", Type=%" PRIi64 ", Size=%" PRIi64, (ui64)Data(), (i64)Type(), (i64)Size());
+        Y_ENSURE(Type() == NScheme::NTypeIds::PairUi64Ui64 && Size() == sizeof(std::pair<ui64, ui64>),
+            "Data=" << (const void*)Data() << ", Type=" << (i64)Type() << ", Size=" << (i64)Size());
         return *reinterpret_cast<const std::pair<ui64, ui64>*>(Data());
     }
 
     operator std::pair<ui64, i64>() const {
-        Y_ABORT_UNLESS(Type() == NScheme::NTypeIds::Decimal && Size() == sizeof(std::pair<ui64, ui64>), "Data=%" PRIxPTR ", Type=%" PRIi64 ", Size=%" PRIi64, (ui64)Data(), (i64)Type(), (i64)Size());
+        Y_ENSURE(Type() == NScheme::NTypeIds::Decimal && Size() == sizeof(std::pair<ui64, ui64>),
+            "Data=" << (const void*)Data() << ", Type=" << (i64)Type() << ", Size=" << (i64)Size());
         return *reinterpret_cast<const std::pair<ui64, i64>*>(Data());
     }
 
     template <typename ElementType>
     operator TVector<ElementType>() const {
         static_assert(std::is_pod<ElementType>::value, "ElementType should be a POD type");
-        Y_ABORT_UNLESS(Type() == NScheme::NTypeIds::String || Type() == NScheme::NTypeIds::String4k || Type() == NScheme::NTypeIds::String2m);
-        Y_ABORT_UNLESS(Size() % sizeof(ElementType) == 0);
+        Y_ENSURE(Type() == NScheme::NTypeIds::String || Type() == NScheme::NTypeIds::String4k || Type() == NScheme::NTypeIds::String2m);
+        Y_ENSURE(Size() % sizeof(ElementType) == 0);
         std::size_t count = Size() / sizeof(ElementType);
         const ElementType *begin = reinterpret_cast<const ElementType*>(Data());
         const ElementType *end = begin + count;
@@ -205,8 +207,8 @@ public:
     template <typename ElementType>
     void ExtractArray(THashSet<ElementType> &container) const {
         static_assert(std::is_pod<ElementType>::value, "ElementType should be a POD type");
-        Y_ABORT_UNLESS(Type() == NScheme::NTypeIds::String || Type() == NScheme::NTypeIds::String4k || Type() == NScheme::NTypeIds::String2m);
-        Y_ABORT_UNLESS(Size() % sizeof(ElementType) == 0);
+        Y_ENSURE(Type() == NScheme::NTypeIds::String || Type() == NScheme::NTypeIds::String4k || Type() == NScheme::NTypeIds::String2m);
+        Y_ENSURE(Size() % sizeof(ElementType) == 0);
         const ElementType *begin = reinterpret_cast<const ElementType*>(Data());
         const ElementType *end = begin + Size() / sizeof(ElementType);
         container.resize(Size() / sizeof(ElementType));
@@ -230,7 +232,6 @@ template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Utf8> { typedef TString 
 template <> struct NSchemeTypeMapper<NScheme::NTypeIds::ActorId> { typedef TActorId Type; };
 template <> struct NSchemeTypeMapper<NScheme::NTypeIds::PairUi64Ui64> { typedef std::pair<ui64, ui64> Type; };
 template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Double> { typedef double Type; };
-template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Decimal> { typedef std::pair<ui64, i64> Type; };
 template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Date> { typedef ui16 Type; };
 template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Datetime> { typedef ui32 Type; };
 template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Timestamp> { typedef ui64 Type; };
@@ -239,13 +240,14 @@ template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Date32> { typedef i32 Ty
 template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Datetime64> { typedef i64 Type; };
 template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Timestamp64> { typedef i64 Type; };
 template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Interval64> { typedef i64 Type; };
+template <> struct NSchemeTypeMapper<NScheme::NTypeIds::JsonDocument> { typedef TString Type; };
 
 /// only for compatibility with old code
 template <NScheme::TTypeId ValType>
 class TConvertTypeValue : public TRawTypeValue {
 public:
     TConvertTypeValue(const TRawTypeValue& value)
-        : TRawTypeValue(value.Data(), value.Size(), value.IsEmpty() ? NScheme::TTypeInfo(0) : NScheme::TTypeInfo(ValType))
+        : TRawTypeValue(value.Data(), value.Size(), value.IsEmpty() ? 0 : ValType)
     {}
 
     template <typename ValueType> static typename NSchemeTypeMapper<ValType>::Type ConvertFrom(ValueType value) {
@@ -258,7 +260,7 @@ template <>
 class TConvertTypeValue<NScheme::NTypeIds::String> : public TRawTypeValue {
 public:
     TConvertTypeValue(const TRawTypeValue& value)
-        : TRawTypeValue(value.Data(), value.Size(), value.IsEmpty() ? NScheme::TTypeInfo(0) : NScheme::TTypeInfo(NScheme::NTypeIds::String))
+        : TRawTypeValue(value.Data(), value.Size(), value.IsEmpty() ? 0 : NScheme::NTypeIds::String)
     {}
 
     static typename NSchemeTypeMapper<NScheme::NTypeIds::String>::Type ConvertFrom(const TString& value) {
@@ -311,7 +313,7 @@ public:
 //    TConvertValue(const TRawTypeValue& value)
 //        : Value(reinterpret_cast<const char*>(value.Data()), value.Size())
 //    {
-//        Y_ABORT_UNLESS(value.Type() == NScheme::NTypeIds::String || value.Type() == NScheme::NTypeIds::Utf8);
+//        Y_ENSURE(value.Type() == NScheme::NTypeIds::String || value.Type() == NScheme::NTypeIds::Utf8);
 //    }
 //
 //    operator TStringBuf() const {
@@ -454,12 +456,12 @@ struct TConvertValueFromRawTypeValueToProto {
     TConvertValueFromRawTypeValueToProto(const TRawTypeValue& value)
         : Value(value)
     {
-        Y_ABORT_UNLESS(value.Type() == NScheme::NTypeIds::String);
+        Y_ENSURE(value.Type() == NScheme::NTypeIds::String);
     }
 
     operator TargetType() const {
         TargetType msg;
-        Y_ABORT_UNLESS(msg.ParseFromArray(Value.Data(), Value.Size()));
+        Y_ENSURE(msg.ParseFromArray(Value.Data(), Value.Size()));
         return msg;
     }
 };
@@ -495,14 +497,14 @@ struct TConvertValue<ColumnType, TVector<VectorType>, TRawTypeValue> {
     TVector<VectorType> Value;
 
     TConvertValue(const TRawTypeValue& value) {
-        Y_ABORT_UNLESS(value.Type() == NScheme::NTypeIds::String);
-        Y_ABORT_UNLESS(value.Size() % sizeof(VectorType) == 0);
+        Y_ENSURE(value.Type() == NScheme::NTypeIds::String);
+        Y_ENSURE(value.Size() % sizeof(VectorType) == 0);
         const size_t count = value.Size() / sizeof(VectorType);
         Value.reserve(count);
         for (TUnalignedMemoryIterator<VectorType> it(value.Data(), value.Size()); !it.AtEnd(); it.Next()) {
             Value.emplace_back(it.Cur());
         }
-        Y_ABORT_UNLESS(Value.size() == count);
+        Y_ENSURE(Value.size() == count);
     }
 
     operator const TVector<VectorType>&() const {
@@ -531,7 +533,7 @@ struct TConvertValue<TColumnType, TRawTypeValue, TStringBuf> {
     TRawTypeValue Value;
 
     TConvertValue(TStringBuf value)
-        : Value(value.data(), value.size(), NScheme::TTypeInfo(TColumnType::ColumnType))
+        : Value(value.data(), value.size(), TColumnType::ColumnType)
     {
         static_assert(TColumnType::ColumnType == NScheme::NTypeIds::String
                       || TColumnType::ColumnType == NScheme::NTypeIds::Utf8,
@@ -550,7 +552,7 @@ struct TConvertValue<ColumnType, TStringBuf, TRawTypeValue> {
     TConvertValue(const TRawTypeValue& value)
         : Value(reinterpret_cast<const char*>(value.Data()), value.Size())
     {
-        Y_ABORT_UNLESS(value.Type() == NScheme::NTypeIds::String || value.Type() == NScheme::NTypeIds::Utf8);
+        Y_ENSURE(value.Type() == NScheme::NTypeIds::String || value.Type() == NScheme::NTypeIds::Utf8);
     }
 
     operator TStringBuf() const {
@@ -1437,7 +1439,7 @@ struct Schema {
                 }
 
                 template <typename ColumnType>
-                auto GetValueOrDefault(typename ColumnType::Type defaultValue = GetDefaultValue<ColumnType>(SFINAE::special())) const {
+                auto GetValueOrDefault(typename ColumnType::Type defaultValue = GetDefaultValue<ColumnType>()) const {
                     Y_DEBUG_ABORT_UNLESS(IsReady(), "Rowset is not ready");
                     Y_DEBUG_ABORT_UNLESS(IsValid(), "Rowset is not valid");
                     typename ColumnType::Type value(HaveValue<ColumnType>() ? GetColumnValue<ColumnType>() : defaultValue);
@@ -1462,24 +1464,19 @@ struct Schema {
                     return DbgPrintTuple(Iterator.GetKey(), typeRegistry) + " -> " + DbgPrintTuple(Iterator.GetValues(), typeRegistry);
                 }
 
-                template <typename ColumnType, typename SFINAE::type_check<decltype(ColumnType::Default)>::type = 0>
-                static decltype(ColumnType::Default) GetNullValue(SFINAE::special) {
-                    return ColumnType::Default;
+                template <typename ColumnType>
+                static typename ColumnType::Type GetNullValue() {
+                    return GetDefaultValue<ColumnType>();
                 }
 
                 template <typename ColumnType>
-                static typename ColumnType::Type GetNullValue(SFINAE::general) {
-                    return typename ColumnType::Type();
-                }
-
-                template <typename ColumnType, typename SFINAE::type_check<decltype(ColumnType::Default)>::type = 0>
-                static decltype(ColumnType::Default) GetDefaultValue(SFINAE::special) {
-                    return ColumnType::Default;
-                }
-
-                template <typename ColumnType>
-                static typename ColumnType::Type GetDefaultValue(SFINAE::general) {
-                    return typename ColumnType::Type();
+                static typename ColumnType::Type GetDefaultValue() {
+                    constexpr bool hasDefault = requires {ColumnType::Default;};
+                    if constexpr (hasDefault) {
+                        return ColumnType::Default;
+                    } else {
+                        return typename ColumnType::Type();
+                    }
                 }
 
                 NTable::TIteratorStats* Stats() const {
@@ -1499,8 +1496,8 @@ struct Schema {
                     auto& cell = tuple.Columns[index];
                     auto type = tuple.Types[index];
                     if (cell.IsNull())
-                        return GetNullValue<ColumnType>(SFINAE::special());
-                    return TConvert<ColumnType, typename ColumnType::Type>::Convert(TRawTypeValue(cell.Data(), cell.Size(), type));
+                        return GetNullValue<ColumnType>();
+                    return TConvert<ColumnType, typename ColumnType::Type>::Convert(TRawTypeValue(cell.Data(), cell.Size(), type.GetTypeId()));
                 }
 
                 KeyIterator Iterator;

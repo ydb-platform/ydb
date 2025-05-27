@@ -181,6 +181,11 @@ struct TKikimrEvents : TEvents {
         ES_LIMITER = 4258,
         ES_MEMORY = 4259,
         ES_GROUPED_ALLOCATIONS_MANAGER = 4260,
+        ES_INCREMENTAL_RESTORE_SCAN = 4261,
+        ES_FEATURE_FLAGS = 4262,
+        ES_PRIORITY_QUEUE = 4263,
+        ES_SOLOMON_PROVIDER = 4264,
+        ES_CONVEYOR_COMPOSITE = 4265,
     };
 };
 

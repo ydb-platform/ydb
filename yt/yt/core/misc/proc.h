@@ -2,34 +2,15 @@
 
 #include "common.h"
 
-#include <yt/yt/core/misc/stripped_error.h>
+#include <library/cpp/yt/error/error.h>
+
+#include <library/cpp/yt/system/proc.h>
 
 #include <util/system/file.h>
 
-#include <errno.h>
+#include <yt/yt/core/misc/fs.h>
 
 namespace NYT {
-
-////////////////////////////////////////////////////////////////////////////////
-
-//! NYT::TError::FromSystem adds this value to a system errno. The enum
-//! below lists several errno's that are used in our code.
-constexpr int LinuxErrorCodeBase = 4200;
-constexpr int LinuxErrorCodeCount = 2000;
-
-DEFINE_ENUM(ELinuxErrorCode,
-    ((NOENT)              ((LinuxErrorCodeBase + ENOENT)))
-    ((IO)                 ((LinuxErrorCodeBase + EIO)))
-    ((ACCESS)              ((LinuxErrorCodeBase + EACCES)))
-    ((NFILE)              ((LinuxErrorCodeBase + ENFILE)))
-    ((MFILE)              ((LinuxErrorCodeBase + EMFILE)))
-    ((NOSPC)              ((LinuxErrorCodeBase + ENOSPC)))
-    ((PIPE)               ((LinuxErrorCodeBase + EPIPE)))
-    ((CONNRESET)          ((LinuxErrorCodeBase + ECONNRESET)))
-    ((TIMEDOUT)           ((LinuxErrorCodeBase + ETIMEDOUT)))
-    ((CONNREFUSED)        ((LinuxErrorCodeBase + ECONNREFUSED)))
-    ((DQUOT)              ((LinuxErrorCodeBase + EDQUOT)))
-);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -44,6 +25,30 @@ bool IsSystemError(const TError& error);
 #else
     using TFileDescriptor = int;
 #endif
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TFileDescriptorGuard
+{
+public:
+    TFileDescriptorGuard(TFileDescriptor fd = -1) noexcept;
+
+    ~TFileDescriptorGuard();
+
+    TFileDescriptorGuard(const TFileDescriptorGuard&) = delete;
+    TFileDescriptorGuard& operator = (const TFileDescriptorGuard&) = delete;
+
+    TFileDescriptorGuard(TFileDescriptorGuard&& other) noexcept;
+    TFileDescriptorGuard& operator = (TFileDescriptorGuard&& other) noexcept;
+
+    TFileDescriptor Get() const noexcept;
+
+    TFileDescriptor Release() noexcept;
+    void Reset() noexcept;
+
+private:
+    TFileDescriptor FD_ = -1;
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -104,6 +109,11 @@ TCgroupMemoryStat GetCgroupMemoryStat(
     const TString& cgroupPath,
     const TString& cgroupMountPoint = "/sys/fs/cgroup");
 
+
+std::optional<i64> GetCgroupAnonymousMemoryLimit(
+    const TString& cgroupPath,
+    const TString& cgroupMountPoint = "/sys/fs/cgroup");
+
 THashMap<TString, i64> GetVmstat();
 
 ui64 GetProcessCumulativeMajorPageFaults(int pid = -1);
@@ -160,6 +170,9 @@ void SafeMakeNonblocking(TFileDescriptor fd);
 
 bool TrySetPipeCapacity(TFileDescriptor fd, int capacity);
 void SafeSetPipeCapacity(TFileDescriptor fd, int capacity);
+
+bool TryEnableEmptyPipeEpollEvent(TFileDescriptor fd);
+void SafeEnableEmptyPipeEpollEvent(TFileDescriptor fd);
 
 bool TrySetUid(int uid);
 void SafeSetUid(int uid);
@@ -293,7 +306,7 @@ struct TMemoryMapping
 
     ui64 Offset = 0;
 
-    std::optional<int> DeviceId;
+    std::optional<NFS::TDeviceId> DeviceId;
 
     std::optional<ui64> INode;
 
@@ -312,36 +325,6 @@ std::vector<TMemoryMapping> ParseMemoryMappings(const TString& rawSMaps);
 std::vector<TMemoryMapping> GetProcessMemoryMappings(int pid);
 
 ////////////////////////////////////////////////////////////////////////////////
-
-// See https://www.kernel.org/doc/Documentation/ABI/testing/procfs-diskstats
-// for fields info.
-struct TDiskStat
-{
-    i32 MajorNumber = 0;
-    i32 MinorNumber = 0;
-    TString DeviceName;
-
-    i64 ReadsCompleted = 0;
-    i64 ReadsMerged = 0;
-    i64 SectorsRead = 0;
-    TDuration TimeSpentReading;
-
-    i64 WritesCompleted = 0;
-    i64 WritesMerged = 0;
-    i64 SectorsWritten = 0;
-    TDuration TimeSpentWriting;
-
-    i64 IOCurrentlyInProgress = 0;
-    TDuration TimeSpentDoingIO;
-    TDuration WeightedTimeSpentDoingIO;
-
-    i64 DiscardsCompleted = 0;
-    i64 DiscardsMerged = 0;
-    i64 SectorsDiscarded = 0;
-    TDuration TimeSpentDiscarding;
-};
-
-TDiskStat ParseDiskStat(const TString& statLine);
 
 // See https://docs.kernel.org/block/stat.html for more info.
 struct TBlockDeviceStat
@@ -371,9 +354,11 @@ struct TBlockDeviceStat
 
 TBlockDeviceStat ParseBlockDeviceStat(const TString& statLine);
 
-//! DeviceName to stat info
-THashMap<TString, TDiskStat> GetDiskStats();
 std::optional<TBlockDeviceStat> GetBlockDeviceStat(const TString& deviceName);
+std::optional<TBlockDeviceStat> GetBlockDeviceStat(NFS::TDeviceId deviceId);
+
+NFS::TDeviceId GetBlockDeviceId(const TString& deviceName);
+TString GetBlockDeviceName(NFS::TDeviceId deviceId);
 std::vector<TString> ListDisks();
 
 ////////////////////////////////////////////////////////////////////////////////

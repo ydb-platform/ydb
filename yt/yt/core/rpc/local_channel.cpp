@@ -30,11 +30,11 @@ using NYT::ToProto;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static constexpr auto& Logger = RpcClientLogger;
+constinit const auto Logger = RpcClientLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static const TString EndpointDescription = "<local>";
+static const std::string EndpointDescription = "<local>";
 static const IAttributeDictionaryPtr EndpointAttributes =
     ConvertToAttributes(BuildYsonStringFluently()
         .BeginMap()
@@ -51,7 +51,7 @@ public:
         : Server_(std::move(server))
     { }
 
-    const TString& GetEndpointDescription() const override
+    const std::string& GetEndpointDescription() const override
     {
         return EndpointDescription;
     }
@@ -76,9 +76,9 @@ public:
         }
 
         auto& header = request->Header();
-        header.set_start_time(ToProto<i64>(TInstant::Now()));
+        header.set_start_time(ToProto(TInstant::Now()));
         if (options.Timeout) {
-            header.set_timeout(ToProto<i64>(*options.Timeout));
+            header.set_timeout(ToProto(*options.Timeout));
         } else {
             header.clear_timeout();
         }
@@ -165,7 +165,7 @@ private:
             }
         }
 
-        const TString& GetEndpointDescription() const override
+        const std::string& GetEndpointDescription() const override
         {
             return EndpointDescription;
         }
@@ -180,9 +180,9 @@ private:
             return {};
         }
 
-        const TString& GetEndpointAddress() const override
+        const std::string& GetEndpointAddress() const override
         {
-            static const TString EmptyAddress;
+            static const std::string EmptyAddress;
             return EmptyAddress;
         }
 
@@ -208,7 +208,7 @@ private:
 
         TFuture<void> Send(TSharedRefArray message, const NBus::TSendOptions& /*options*/) override
         {
-            VERIFY_THREAD_AFFINITY_ANY();
+            YT_ASSERT_THREAD_AFFINITY_ANY();
 
             auto messageType = GetMessageType(message);
             switch (messageType) {
@@ -274,9 +274,8 @@ private:
 
             YT_VERIFY(!attachments.empty());
 
-            NCompression::ECodec codec;
-            int intCodec = header.codec();
-            YT_VERIFY(TryEnumCast(intCodec, &codec));
+            auto codecId = TryCheckedEnumCast<NCompression::ECodec>(header.codec());
+            YT_VERIFY(codecId);
 
             YT_LOG_DEBUG("Response streaming payload received (RequestId: %v, SequenceNumber: %v, Sizes: %v, "
                 "Codec: %v, Closed: %v)",
@@ -285,13 +284,13 @@ private:
                 MakeFormattableView(attachments, [] (auto* builder, const auto& attachment) {
                     builder->AppendFormat("%v", GetStreamingAttachmentSize(attachment));
                 }),
-                codec,
+                *codecId,
                 !attachments.back());
 
             TStreamingPayload payload{
-                codec,
+                *codecId,
                 sequenceNumber,
-                std::move(attachments)
+                std::move(attachments),
             };
             Handler_->HandleStreamingPayload(payload);
         }

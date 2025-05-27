@@ -1,8 +1,0 @@
-<tmp_path>/program.sql:<main>: Fatal: Execution
-
-    <tmp_path>/program.sql:<main>:2:1: Fatal: Execution of node: Result
-    	SELECT
-	^
-        <tmp_path>/program.sql:<main>:4:10: Fatal: Bad query field: "mistaken"
-        	    Url::QueryStringToList("glfilter=78318%3A79492&mistaken&glfilter=1&hid=904")
-	         ^

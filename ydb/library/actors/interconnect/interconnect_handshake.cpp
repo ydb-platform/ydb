@@ -150,7 +150,9 @@ namespace NActors {
                 }
 
                 // setup send buffer size
-                Socket->SetSendBufferSize(Actor->Common->Settings.GetSendBufferSize());
+                if (const auto& buffer = Actor->Common->Settings.TCPSocketBufferSize) {
+                    Socket->SetSendBufferSize(buffer);
+                }
             }
 
             void RegisterInPoller() {
@@ -816,7 +818,7 @@ namespace NActors {
         std::vector<NInterconnect::TAddress> ResolvePeer() {
             // issue request to a nameservice to resolve peer node address
             const auto mono = TActivationContext::Monotonic();
-            Send(Common->NameserviceId, new TEvInterconnect::TEvResolveNode(PeerNodeId, TActivationContext::Now() + (Deadline - mono)));
+            Send(Common->NameserviceId, new TEvInterconnect::TEvResolveNode(PeerNodeId, Deadline));
 
             // wait for the result
             auto ev = WaitForSpecificEvent<TEvResolveError, TEvLocalNodeInfo, TEvInterconnect::TEvNodeAddress>(
@@ -825,22 +827,22 @@ namespace NActors {
             // extract address from the result
             std::vector<NInterconnect::TAddress> addresses;
             if (!ev) {
-                Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, "DNS resolve timed out", true);
+                Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, "DynamicNS response timed out");
             } else if (auto *p = ev->CastAsLocal<TEvLocalNodeInfo>()) {
                 addresses = std::move(p->Addresses);
                 if (addresses.empty()) {
-                    Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, "DNS resolve error: no address returned", true);
+                    Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, "DynamicNS knows nothing about the node " + ToString(PeerNodeId));
                 }
             } else if (auto *p = ev->CastAsLocal<TEvInterconnect::TEvNodeAddress>()) {
                 const auto& r = p->Record;
                 if (!r.HasAddress() || !r.HasPort()) {
-                    Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, "DNS resolve error: no address returned", true);
+                    Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, "DynamicNS knows nothing about the node " + ToString(PeerNodeId));
                 }
                 addresses.emplace_back(r.GetAddress(), static_cast<ui16>(r.GetPort()));
             } else {
                 Y_ABORT_UNLESS(ev->GetTypeRewrite() == ui32(ENetwork::ResolveError));
-                Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, "DNS resolve error: " + ev->Get<TEvResolveError>()->Explain
-                    + ", Unresolved host# " + ev->Get<TEvResolveError>()->Host, true);
+                Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, "DynamicNS resolve error: " + ev->Get<TEvResolveError>()->Explain
+                    + ", Unresolved host# " + ev->Get<TEvResolveError>()->Host);
             }
 
             return addresses;
@@ -1206,8 +1208,7 @@ namespace NActors {
 
         THolder<TEvInterconnect::TNodeInfo> GetPeerNodeInfo() {
             Y_ABORT_UNLESS(PeerNodeId);
-            Send(Common->NameserviceId, new TEvInterconnect::TEvGetNode(PeerNodeId, TActivationContext::Now() +
-                (Deadline - TActivationContext::Monotonic())));
+            Send(Common->NameserviceId, new TEvInterconnect::TEvGetNode(PeerNodeId, Deadline));
             auto response = WaitForSpecificEvent<TEvInterconnect::TEvNodeInfo>("GetPeerNodeInfo");
             return std::move(response->Get()->Node);
         }

@@ -1,0 +1,11 @@
+--- a/src/utf8_fix.h
++++ b/src/utf8_fix.h
+@@ -17,6 +17,8 @@
+ 
+ #include <string>
+ 
++#include <google/protobuf/stubs/port.h>
++
+ #include "src/random.h"
+ 
+ namespace protobuf_mutator {

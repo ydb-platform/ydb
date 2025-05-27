@@ -1,0 +1,464 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+IGNORE_FILES ChangeLog-1998 ChangeLog-2012 NEWS
+
+KEEP     GPL-3.0-or-later     1693b04c7e65f9c96100278355221b12
+BELONGS lib/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-3.0-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-3.0-standalone.html, https://spdx.org/licenses/GPL-3.0-or-later
+    Files with this license:
+        lib/fpending.c [5:16]
+        lib/freadahead.c [4:15]
+        lib/stdio-impl.h [4:15]
+
+KEEP     GPL-3.0-or-later     35d1da49e32346e7015e3afbe5b31200
+BELONGS lib/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-3.0-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-3.0-standalone.html, https://spdx.org/licenses/GPL-3.0-or-later
+    Files with this license:
+        lib/c-ctype.h [10:21]
+
+KEEP     GPL-3.0-or-later     3cd46c6a1211d1fc8d07f721f1554323
+BELONGS ya.make
+    License text:
+        source, you must update the license to be GPLv3 or later.
+    Scancode info:
+        Original SPDX id: GPL-3.0-or-later
+        Score           : 16.00
+        Match type      : TAG
+        Links           : http://www.gnu.org/licenses/gpl-3.0-standalone.html, https://spdx.org/licenses/GPL-3.0-or-later
+    Files with this license:
+        README [42:42]
+
+KEEP     GPL-3.0-or-later     3f43560ef83ab8f3e18de24f216342f9
+BELONGS lib/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-3.0-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-3.0-standalone.html, https://spdx.org/licenses/GPL-3.0-or-later
+    Files with this license:
+        lib/asnprintf.c [4:15]
+        lib/gettext.h [5:16]
+        lib/localcharset.c [5:16]
+        lib/localcharset.h [5:16]
+        lib/msvc-inval.c [4:15]
+        lib/msvc-inval.h [4:15]
+        lib/msvc-nothrow.c [5:16]
+        lib/msvc-nothrow.h [5:16]
+        lib/pipe2.c [4:15]
+        lib/printf-args.c [5:16]
+        lib/printf-args.h [5:16]
+        lib/printf-parse.c [4:15]
+        lib/printf-parse.h [5:16]
+        lib/vasnprintf.c [4:15]
+        lib/vasnprintf.h [4:15]
+        lib/vasprintf.c [4:15]
+
+KEEP     GPL-3.0-or-later     4ae51eba59eabe09f95132c440dce661
+BELONGS lib/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-3.0-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-3.0-standalone.html, https://spdx.org/licenses/GPL-3.0-or-later
+    Files with this license:
+        lib/obstack.c [5:17]
+        lib/obstack.h [5:17]
+        lib/regcomp.c [6:18]
+        lib/regex.c [6:18]
+        lib/regex.h [7:19]
+        lib/regex_internal.c [6:18]
+        lib/regex_internal.h [6:18]
+        lib/regexec.c [6:18]
+
+KEEP     GPL-3.0-or-later     4c1501e84b9200d3a65db7c65c2a40eb
+BELONGS lib/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-3.0-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-3.0-standalone.html, https://spdx.org/licenses/GPL-3.0-or-later
+    Files with this license:
+        lib/platform/win64/alloca.h [7:19]
+
+KEEP     GPL-3.0-only         4fe869ee987a340198fb0d54c55c47f1
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-3.0-only
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.gnu.org/licenses/gpl-3.0-standalone.html, http://www.gnu.org/licenses/gpl-3.0.html, https://spdx.org/licenses/GPL-3.0-only
+    Files with this license:
+        COPYING [1:674]
+
+KEEP     GPL-3.0-or-later     5ba7dada0924de4a0806984d740f21db
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-3.0-or-later
+        Score           : 98.99
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-3.0-standalone.html, https://spdx.org/licenses/GPL-3.0-or-later
+    Files with this license:
+        src/builtin.c [8:19]
+        src/debug.c [8:19]
+        src/eval.c [8:19]
+        src/format.c [8:19]
+        src/freeze.c [8:19]
+        src/input.c [8:19]
+        src/m4.c [8:19]
+        src/m4.h [8:19]
+        src/macro.c [8:19]
+        src/output.c [8:19]
+        src/path.c [8:19]
+        src/symtab.c [8:19]
+
+KEEP     GFDL-1.3-or-later    60919ca4d1580be02b2b016156c1e2a2
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GFDL-1.3-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/fdl-1.3.txt, https://spdx.org/licenses/GFDL-1.3-or-later
+    Files with this license:
+        AUTHORS [38:43]
+        BACKLOG [55:60]
+        README [71:76]
+        THANKS [145:150]
+        TODO [43:48]
+
+KEEP     GPL-3.0-or-later     659dd41b50d94dd686004e4d8e78c706
+BELONGS lib/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-3.0-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-3.0-standalone.html, https://spdx.org/licenses/GPL-3.0-or-later
+    Files with this license:
+        lib/c-strcase.h [5:16]
+        lib/c-strcasecmp.c [4:15]
+        lib/c-strncasecmp.c [4:15]
+        lib/float+.h [5:16]
+        lib/gettimeofday.c [5:16]
+        lib/glthread/lock.c [4:15]
+        lib/glthread/lock.h [4:15]
+        lib/glthread/threadlib.c [4:15]
+        lib/malloca.c [5:16]
+        lib/malloca.h [5:16]
+        lib/minmax.h [5:16]
+        lib/pathmax.h [5:16]
+        lib/platform/win64/langinfo.h [5:16]
+        lib/platform/win64/sys/stat.h [5:16]
+        lib/platform/win64/sys/time.h [6:17]
+        lib/platform/win64/sys/wait.h [5:16]
+        lib/platform/win64/unistd.h [5:16]
+        lib/waitpid.c [4:15]
+        lib/xsize.h [5:16]
+
+KEEP     GPL-3.0-or-later     7c229c32d3d54dacee032f7da11d3dc5
+BELONGS lib/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-3.0-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-3.0-standalone.html, https://spdx.org/licenses/GPL-3.0-or-later
+    Files with this license:
+        lib/basename-lgpl.c [6:17]
+        lib/basename.c [6:17]
+        lib/binary-io.h [4:15]
+        lib/c-stack.c [5:16]
+        lib/c-stack.h [5:16]
+        lib/clean-temp.c [6:17]
+        lib/clean-temp.h [5:16]
+        lib/close-stream.c [5:16]
+        lib/close.c [4:15]
+        lib/closein.c [5:16]
+        lib/closein.h [5:16]
+        lib/closeout.c [6:17]
+        lib/closeout.h [6:17]
+        lib/dirname-lgpl.c [6:17]
+        lib/dirname.c [6:17]
+        lib/dup-safer-flag.c [6:17]
+        lib/dup-safer.c [5:16]
+        lib/dup2.c [5:16]
+        lib/error.c [5:16]
+        lib/error.h [6:17]
+        lib/execute.c [5:16]
+        lib/execute.h [5:16]
+        lib/exitfail.c [5:16]
+        lib/exitfail.h [5:16]
+        lib/fatal-signal.c [5:16]
+        lib/fatal-signal.h [5:16]
+        lib/fclose.c [4:15]
+        lib/fcntl.c [5:16]
+        lib/fcntl.h [6:17]
+        lib/fd-safer-flag.c [6:17]
+        lib/fd-safer.c [5:16]
+        lib/filenamecat-lgpl.c [5:16]
+        lib/filenamecat.c [5:16]
+        lib/filenamecat.h [6:17]
+        lib/fopen-safer.c [5:16]
+        lib/fpucw.h [5:16]
+        lib/freadahead.h [4:15]
+        lib/freading.h [4:15]
+        lib/getdtablesize.c [5:16]
+        lib/getopt.c [9:20]
+        lib/getopt1.c [6:17]
+        lib/getopt_int.h [6:17]
+        lib/getprogname.c [4:15]
+        lib/getprogname.h [4:15]
+        lib/gl_anyhash_list1.h [5:16]
+        lib/gl_anyhash_list2.h [5:16]
+        lib/gl_anylinked_list1.h [5:16]
+        lib/gl_anylinked_list2.h [5:16]
+        lib/gl_anytree_oset.h [5:16]
+        lib/gl_avltree_oset.c [5:16]
+        lib/gl_avltree_oset.h [5:16]
+        lib/gl_linkedhash_list.c [5:16]
+        lib/gl_linkedhash_list.h [5:16]
+        lib/gl_list.h [5:16]
+        lib/gl_oset.h [5:16]
+        lib/gl_xlist.h [5:16]
+        lib/gl_xoset.h [5:16]
+        lib/glthread/tls.c [4:15]
+        lib/glthread/tls.h [4:15]
+        lib/hard-locale.c [6:17]
+        lib/hard-locale.h [5:16]
+        lib/ignore-value.h [5:16]
+        lib/isnand-nolibm.h [4:15]
+        lib/isnanf-nolibm.h [4:15]
+        lib/isnanl-nolibm.h [4:15]
+        lib/localeconv.c [4:15]
+        lib/mbrtowc.c [5:16]
+        lib/memchr2.h [4:15]
+        lib/mkdtemp.c [5:16]
+        lib/mkstemp-safer.c [5:16]
+        lib/nl_langinfo.c [5:16]
+        lib/pipe-safer.c [4:15]
+        lib/pipe2-safer.c [4:15]
+        lib/platform/win64/fcntl.h [6:17]
+        lib/platform/win64/getopt.h [7:18]
+        lib/platform/win64/locale.h [5:16]
+        lib/platform/win64/sched.h [5:16]
+        lib/platform/win64/signal.h [6:17]
+        lib/platform/win64/spawn.h [6:17]
+        lib/printf-frexp.c [4:15]
+        lib/printf-frexp.h [4:15]
+        lib/printf-frexpl.c [4:15]
+        lib/printf-frexpl.h [4:15]
+        lib/progname.c [5:16]
+        lib/progname.h [5:16]
+        lib/quote.h [5:16]
+        lib/quotearg.c [5:16]
+        lib/quotearg.h [6:17]
+        lib/raise.c [5:16]
+        lib/sig-handler.h [5:16]
+        lib/sigaction.c [5:16]
+        lib/siglist.h [5:16]
+        lib/sigprocmask.c [5:16]
+        lib/spawn-pipe.c [5:16]
+        lib/spawn-pipe.h [5:16]
+        lib/stdio--.h [5:16]
+        lib/stdio-safer.h [5:16]
+        lib/stdlib--.h [5:16]
+        lib/stdlib-safer.h [5:16]
+        lib/stripslash.c [6:17]
+        lib/strsignal.c [5:16]
+        lib/tempname.c [5:16]
+        lib/tempname.h [5:16]
+        lib/tmpdir.c [5:16]
+        lib/tmpdir.h [4:15]
+        lib/unistd--.h [5:16]
+        lib/unistd-safer.h [5:16]
+        lib/unlocked-io.h [5:16]
+        lib/verify.h [5:16]
+        lib/verror.c [4:15]
+        lib/verror.h [4:15]
+        lib/version-etc-fsf.c [4:15]
+        lib/version-etc.c [4:15]
+        lib/version-etc.h [4:15]
+        lib/w32spawn.h [5:16]
+        lib/wait-process.c [5:16]
+        lib/wait-process.h [5:16]
+        lib/xalloc-die.c [6:17]
+        lib/xalloc-oversized.h [5:16]
+        lib/xalloc.h [5:16]
+        lib/xasprintf.c [5:16]
+        lib/xmalloc.c [5:16]
+        lib/xmalloca.c [5:16]
+        lib/xmalloca.h [5:16]
+        lib/xprintf.c [4:15]
+        lib/xprintf.h [4:15]
+        lib/xstrndup.c [5:16]
+        lib/xstrndup.h [5:16]
+        lib/xvasprintf.c [4:15]
+        lib/xvasprintf.h [4:15]
+
+KEEP     LGPL-2.0-or-later    99de7539428539ca5bda44e3fc08a41c
+BELONGS lib/ya.make
+FILE_INCLUDE lib/filenamecat-lgpl.c found in files: lib/filenamecat.c at line 30
+    License text:
+        /* Just like mfile_name_concat (filenamecat-lgpl.c), except, rather than
+    Scancode info:
+        Original SPDX id: LGPL-2.0-or-later
+        Score           : 75.00
+        Match type      : REFERENCE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
+    Files with this license:
+        lib/filenamecat.c [30:30]
+
+KEEP     GPL-3.0-or-later     a1643cc46ca6d0af0b8502b175335376
+BELONGS lib/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-3.0-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-3.0-standalone.html, https://spdx.org/licenses/GPL-3.0-or-later
+    Files with this license:
+        lib/intprops.h [5:16]
+
+KEEP     GPL-3.0-or-later     a6532c8141a6e70f23165e25c02c7e03
+BELONGS lib/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-3.0-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-3.0-standalone.html, https://spdx.org/licenses/GPL-3.0-or-later
+    Files with this license:
+        lib/memchr2.c [11:22]
+
+KEEP     GPL-3.0-or-later     b8b08f6b7c2fc67e871e96840b7f67e8
+BELONGS ya.make
+FILE_INCLUDE COPYING found in files: README at line 37
+    License text:
+        See file `COPYING' for copying conditions.  Note that M4 is distributed
+        under the GNU Public License version 3 or later.  Some files in the
+    Scancode info:
+        Original SPDX id: GPL-2.0-or-later
+        Score           : 14.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/gpl-2.0-standalone.html, https://spdx.org/licenses/GPL-2.0-or-later
+    Files with this license:
+        README [37:38]
+
+KEEP     GPL-3.0-or-later     bd5912a561636d67d8f95a9e34cf5b04
+BELONGS lib/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-3.0-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-3.0-standalone.html, https://spdx.org/licenses/GPL-3.0-or-later
+    Files with this license:
+        lib/c-strcaseeq.h [4:15]
+        lib/fd-hook.c [5:16]
+        lib/fd-hook.h [4:15]
+        lib/secure_getenv.c [5:16]
+
+KEEP     GPL-3.0-or-later     c3d8c615523b05d13b1f620348206d18
+BELONGS lib/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-3.0-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-3.0-standalone.html, https://spdx.org/licenses/GPL-3.0-or-later
+    Files with this license:
+        lib/fseeko.c [4:15]
+
+KEEP     GPL-3.0-or-later     c43a3f8af41c78419310d68f52c2a0fd
+BELONGS lib/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-3.0-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-3.0-standalone.html, https://spdx.org/licenses/GPL-3.0-or-later
+    Files with this license:
+        lib/version-etc.c [88:90]
+
+KEEP     FSFAP                d02cc4799cbd521d2aa8c3ff19e655f6
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: FSFAP
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.gnu.org/prep/maintain/html_node/License-Notices-for-Other-Files.html, https://spdx.org/licenses/FSFAP
+    Files with this license:
+        INSTALL [7:10]
+
+KEEP     GPL-3.0-or-later     d4567748e68738e056e4352a3e312182
+BELONGS lib/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-3.0-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-3.0-standalone.html, https://spdx.org/licenses/GPL-3.0-or-later
+    Files with this license:
+        lib/cloexec.c [5:16]
+        lib/cloexec.h [5:16]
+        lib/dosname.h [5:16]
+        lib/fpending.h [6:17]
+
+KEEP     GPL-3.0-or-later     f35abb2e4128ba709bfba3bd5a3e7ce3
+BELONGS lib/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-3.0-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-3.0-standalone.html, https://spdx.org/licenses/GPL-3.0-or-later
+    Files with this license:
+        lib/dirname.h [6:17]

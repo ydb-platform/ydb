@@ -51,6 +51,12 @@ DEFINE_BIT_ENUM(ETestBitEnum,
     ((Green)  (0x0004))
 );
 
+enum class EVanillaTestEnum
+{
+    First,
+    Second,
+};
+
 template <typename T>
 T PullParserConvert(TYsonStringBuf s)
 {
@@ -69,7 +75,7 @@ void TestSerializationDeserializationPullParser(const TOriginal& original, EYson
     auto yson = ConvertToYsonString(original);
     if (ysonType != EYsonType::Node) {
         auto buf = yson.AsStringBuf();
-        yson = TYsonString(buf.SubString(1, buf.Size() - 2), ysonType);
+        yson = TYsonString(buf.SubString(1, buf.size() - 2), ysonType);
     }
     auto deserialized = PullParserConvert<TResult>(yson);
     EXPECT_EQ(original, deserialized);
@@ -379,7 +385,7 @@ TEST(TSerializationTest, VectorOfTuple)
     std::vector<std::tuple<int, TString, size_t>> original{
         std::tuple<int, TString, size_t>(43, "First", 343U),
         std::tuple<int, TString, size_t>(0, "Second", 7U),
-        std::tuple<int, TString, size_t>(2323, "Third", 9U)
+        std::tuple<int, TString, size_t>(2323, "Third", 9U),
     };
 
     TestSerializationDeserialization(original);
@@ -392,7 +398,7 @@ TEST(TSerializationTest, MapOnArray)
         {"1", {{2112U, 4343U, 5445U}}},
         {"22", {{54654U, 93U, 5U}}},
         {"333", {{7U, 93U, 9U}}},
-        {"rel", {{233U, 9763U, 0U}}}
+        {"rel", {{233U, 9763U, 0U}}},
     };
     TestSerializationDeserialization(original);
     TestSerializationDeserialization(original, EYsonType::MapFragment);
@@ -400,20 +406,14 @@ TEST(TSerializationTest, MapOnArray)
 
 TEST(TSerializationTest, Enum)
 {
-    for (const auto original : TEnumTraits<ETestEnum>::GetDomainValues()) {
+    for (auto original : TEnumTraits<ETestEnum>::GetDomainValues()) {
         TestSerializationDeserialization(original);
     }
 }
 
-TEST(TSerializationTest, EnumUnknownValue)
-{
-    auto unknownValue = static_cast<ETestEnum>(ToUnderlying(TEnumTraits<ETestEnum>::GetMaxValue()) + 1);
-    TestSerializationDeserialization(unknownValue);
-}
-
 TEST(TSerializationTest, BitEnum)
 {
-    for (const auto original : TEnumTraits<ETestBitEnum>::GetDomainValues()) {
+    for (auto original : TEnumTraits<ETestBitEnum>::GetDomainValues()) {
         TestSerializationDeserialization(original);
     }
     TestSerializationDeserialization(ETestBitEnum::Green | ETestBitEnum::Red);
@@ -422,9 +422,16 @@ TEST(TSerializationTest, BitEnum)
 
 TEST(TSerializationTest, SerializableArcadiaEnum)
 {
-    for (const auto original : GetEnumAllValues<ESerializableArcadiaEnum>()) {
+    for (auto original : GetEnumAllValues<ESerializableArcadiaEnum>()) {
         TestSerializationDeserialization(original);
     }
+}
+
+TEST(TSerializationTest, PlainEnum)
+{
+    TestSerializationDeserialization(EVanillaTestEnum::First);
+
+    TestSerializationDeserialization(static_cast<EVanillaTestEnum>(42));
 }
 
 TEST(TYTreeSerializationTest, Protobuf)
@@ -448,6 +455,30 @@ TEST(TYTreeSerializationTest, ProtobufKeepUnknown)
         auto deserializedYson = ConvertToYsonString(node, NYson::EYsonFormat::Text);
         EXPECT_EQ(RemoveSpaces(canonicalYson.ToString()), deserializedYson.ToString());
     }
+}
+
+TEST(TSerializationTest, ProtobufRepeatedField)
+{
+    google::protobuf::RepeatedField<i64> original;
+    original.Add(1);
+    original.Add(2);
+    original.Add(3);
+
+    auto node = ConvertToNode(original);
+    auto deserialized = ConvertTo<google::protobuf::RepeatedField<i64>>(node);
+    EXPECT_TRUE(std::ranges::equal(original, deserialized));
+}
+
+TEST(TSerializationTest, ProtobufRepeatedPtrField)
+{
+    google::protobuf::RepeatedPtrField<TString> original;
+    original.Add("one");
+    original.Add("two");
+    original.Add("three");
+
+    auto node = ConvertToNode(original);
+    auto deserialized = ConvertTo<google::protobuf::RepeatedPtrField<TString>>(node);
+    EXPECT_TRUE(std::ranges::equal(original, deserialized));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -550,6 +581,58 @@ TEST(TDeserializeTest, Enums)
             Deserialize(deserialized, BuildYsonNodeFluently().BeginList().Item().Value(1.42).EndList()),
             std::exception);
     }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TYsonConceptsTest
+    : public ::testing::Test
+{
+    struct TEmptyStruct
+    { };
+
+    struct TStructWithSerialize
+    { };
+
+    struct TStructWithDeserialize
+    { };
+
+    struct TStructWithBoth
+        : TStructWithSerialize
+        , TStructWithDeserialize
+    { };
+};
+
+[[maybe_unused]] void Serialize(const TYsonConceptsTest::TStructWithSerialize& /*value*/, NYson::IYsonConsumer* /*consumer*/)
+{ }
+
+[[maybe_unused]] void Deserialize(TYsonConceptsTest::TStructWithDeserialize& /*value*/, NYTree::INodePtr /*node*/)
+{ }
+
+TEST_F(TYsonConceptsTest, EmptyStruct)
+{
+    static_assert(!CYsonSerializable<TEmptyStruct>);
+    static_assert(!CYsonDeserializable<TEmptyStruct>);
+    static_assert(!CYsonSerializableDeserializable<TEmptyStruct>);
+}
+
+TEST_F(TYsonConceptsTest, StructWithSerialize)
+{
+    static_assert(CYsonSerializable<TStructWithSerialize>);
+    static_assert(!CYsonDeserializable<TStructWithSerialize>);
+    static_assert(!CYsonSerializableDeserializable<TStructWithSerialize>);
+}
+
+TEST_F(TYsonConceptsTest, StructWithDeserialize)
+{
+    static_assert(!CYsonSerializable<TStructWithDeserialize>);
+    static_assert(CYsonDeserializable<TStructWithDeserialize>);
+    static_assert(!CYsonSerializableDeserializable<TStructWithDeserialize>);
+}
+
+TEST_F(TYsonConceptsTest, StructWithBoth)
+{
+    static_assert(CYsonSerializableDeserializable<TStructWithBoth>);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

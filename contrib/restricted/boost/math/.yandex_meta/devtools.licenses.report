@@ -1,0 +1,804 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     BSL-1.0              0529b38d9dfdde89da63fcb340dc03b9
+BELONGS ya.make
+    License text:
+         * Use, modification and distribution are subject to the
+         * Boost Software License, Version 1.0. (See accompanying file
+         * LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/math/filters/daubechies.hpp [3:5]
+        include/boost/math/special_functions/detail/daubechies_scaling_integer_grid.hpp [4:6]
+
+KEEP     BSL-1.0              118b3ba302185a79b12cdba1c2e58ffc
+BELONGS ya.make
+    License text:
+        // Distributed under the Boost Software License,
+        // Version 1.0. (See accompanying file LICENSE_1_0.txt
+        // or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/cstdfloat.hpp [5:7]
+        include/boost/math/cstdfloat/cstdfloat_complex.hpp [5:7]
+        include/boost/math/cstdfloat/cstdfloat_iostream.hpp [5:7]
+        include/boost/math/cstdfloat/cstdfloat_limits.hpp [5:7]
+        include/boost/math/cstdfloat/cstdfloat_types.hpp [5:7]
+
+KEEP     BSL-1.0              1e1b35c3ae13c65f63b2c7467cce8a87
+BELONGS ya.make
+    License text:
+        // Distributed under the Boost Software License, Version 1.0.
+        // (See accompanying file LICENSE_1_0.txt
+        // or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/math/special_functions/detail/fp_traits.hpp [9:11]
+        include/boost/math/special_functions/nonfinite_num_facets.hpp [8:10]
+
+KEEP     BSL-1.0              1f86bcce1bbfb6d9a7d6c733166e7bba
+BELONGS ya.make
+    License text:
+        //  Use, modification and distribution are subject to the
+        //  Boost Software License, Version 1.0. (See accompanying file
+        //  LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/math/bindings/detail/big_digamma.hpp [2:4]
+        include/boost/math/bindings/detail/big_lanczos.hpp [2:4]
+        include/boost/math/bindings/mpfr.hpp [2:4]
+        include/boost/math/bindings/mpreal.hpp [2:4]
+        include/boost/math/bindings/rr.hpp [2:4]
+        include/boost/math/ccmath/abs.hpp [2:4]
+        include/boost/math/ccmath/ccmath.hpp [2:4]
+        include/boost/math/ccmath/ceil.hpp [2:4]
+        include/boost/math/ccmath/copysign.hpp [2:4]
+        include/boost/math/ccmath/detail/config.hpp [2:4]
+        include/boost/math/ccmath/detail/swap.hpp [2:4]
+        include/boost/math/ccmath/div.hpp [2:4]
+        include/boost/math/ccmath/fabs.hpp [2:4]
+        include/boost/math/ccmath/fdim.hpp [2:4]
+        include/boost/math/ccmath/floor.hpp [2:4]
+        include/boost/math/ccmath/fma.hpp [2:4]
+        include/boost/math/ccmath/fmax.hpp [2:4]
+        include/boost/math/ccmath/fmin.hpp [2:4]
+        include/boost/math/ccmath/fmod.hpp [2:4]
+        include/boost/math/ccmath/fpclassify.hpp [2:4]
+        include/boost/math/ccmath/frexp.hpp [3:5]
+        include/boost/math/ccmath/hypot.hpp [3:5]
+        include/boost/math/ccmath/ilogb.hpp [2:4]
+        include/boost/math/ccmath/isfinite.hpp [2:4]
+        include/boost/math/ccmath/isgreater.hpp [2:4]
+        include/boost/math/ccmath/isgreaterequal.hpp [2:4]
+        include/boost/math/ccmath/isinf.hpp [2:4]
+        include/boost/math/ccmath/isless.hpp [2:4]
+        include/boost/math/ccmath/islessequal.hpp [2:4]
+        include/boost/math/ccmath/isnan.hpp [2:4]
+        include/boost/math/ccmath/isnormal.hpp [2:4]
+        include/boost/math/ccmath/isunordered.hpp [2:4]
+        include/boost/math/ccmath/ldexp.hpp [3:5]
+        include/boost/math/ccmath/logb.hpp [2:4]
+        include/boost/math/ccmath/modf.hpp [2:4]
+        include/boost/math/ccmath/next.hpp [3:5]
+        include/boost/math/ccmath/remainder.hpp [2:4]
+        include/boost/math/ccmath/round.hpp [2:4]
+        include/boost/math/ccmath/scalbln.hpp [2:4]
+        include/boost/math/ccmath/scalbn.hpp [3:5]
+        include/boost/math/ccmath/signbit.hpp [2:4]
+        include/boost/math/ccmath/sqrt.hpp [2:4]
+        include/boost/math/ccmath/trunc.hpp [2:4]
+        include/boost/math/common_factor_rt.hpp [3:5]
+        include/boost/math/complex.hpp [2:4]
+        include/boost/math/complex/acosh.hpp [2:4]
+        include/boost/math/complex/asinh.hpp [2:4]
+        include/boost/math/complex/atan.hpp [2:4]
+        include/boost/math/complex/atanh.hpp [2:4]
+        include/boost/math/complex/details.hpp [2:4]
+        include/boost/math/complex/fabs.hpp [2:4]
+        include/boost/math/concepts/distributions.hpp [2:4]
+        include/boost/math/concepts/real_concept.hpp [2:4]
+        include/boost/math/concepts/real_type_concept.hpp [2:4]
+        include/boost/math/concepts/std_real_concept.hpp [2:4]
+        include/boost/math/constants/constants.hpp [4:6]
+        include/boost/math/constants/info.hpp [2:4]
+        include/boost/math/differentiation/finite_difference.hpp [2:4]
+        include/boost/math/differentiation/lanczos_smoothing.hpp [2:4]
+        include/boost/math/distributions.hpp [4:6]
+        include/boost/math/distributions/cauchy.hpp [5:7]
+        include/boost/math/distributions/complement.hpp [4:6]
+        include/boost/math/distributions/detail/derived_accessors.hpp [3:5]
+        include/boost/math/distributions/detail/generic_quantile.hpp [2:4]
+        include/boost/math/distributions/detail/inv_discrete_quantile.hpp [2:4]
+        include/boost/math/distributions/empirical_cumulative_distribution_function.hpp [2:4]
+        include/boost/math/distributions/exponential.hpp [3:5]
+        include/boost/math/distributions/extreme_value.hpp [3:5]
+        include/boost/math/distributions/find_location.hpp [4:6]
+        include/boost/math/distributions/find_scale.hpp [4:6]
+        include/boost/math/distributions/gamma.hpp [3:5]
+        include/boost/math/distributions/holtsmark.hpp [3:5]
+        include/boost/math/distributions/hyperexponential.hpp [3:5]
+        include/boost/math/distributions/inverse_gamma.hpp [6:8]
+        include/boost/math/distributions/inverse_gaussian.hpp [4:6]
+        include/boost/math/distributions/landau.hpp [3:5]
+        include/boost/math/distributions/laplace.hpp [6:8]
+        include/boost/math/distributions/lognormal.hpp [3:5]
+        include/boost/math/distributions/mapairy.hpp [3:5]
+        include/boost/math/distributions/normal.hpp [4:6]
+        include/boost/math/distributions/pareto.hpp [4:6]
+        include/boost/math/distributions/rayleigh.hpp [3:5]
+        include/boost/math/distributions/saspoint5.hpp [3:5]
+        include/boost/math/distributions/skew_normal.hpp [3:5]
+        include/boost/math/distributions/triangular.hpp [3:5]
+        include/boost/math/distributions/uniform.hpp [4:6]
+        include/boost/math/distributions/weibull.hpp [3:5]
+        include/boost/math/interpolators/cardinal_trigonometric.hpp [2:4]
+        include/boost/math/interpolators/detail/cardinal_trigonometric_detail.hpp [2:4]
+        include/boost/math/policies/error_handling.hpp [4:6]
+        include/boost/math/policies/policy.hpp [3:5]
+        include/boost/math/quadrature/gauss.hpp [2:4]
+        include/boost/math/quadrature/gauss_kronrod.hpp [3:5]
+        include/boost/math/special_functions.hpp [4:6]
+        include/boost/math/special_functions/bessel.hpp [3:5]
+        include/boost/math/special_functions/bessel_prime.hpp [2:4]
+        include/boost/math/special_functions/beta.hpp [3:5]
+        include/boost/math/special_functions/binomial.hpp [2:4]
+        include/boost/math/special_functions/cardinal_b_spline.hpp [2:4]
+        include/boost/math/special_functions/cbrt.hpp [3:5]
+        include/boost/math/special_functions/chebyshev.hpp [2:4]
+        include/boost/math/special_functions/chebyshev_transform.hpp [2:4]
+        include/boost/math/special_functions/cos_pi.hpp [3:5]
+        include/boost/math/special_functions/detail/airy_ai_bi_zero.hpp [2:4]
+        include/boost/math/special_functions/detail/bessel_derivatives_linear.hpp [2:4]
+        include/boost/math/special_functions/detail/bessel_i0.hpp [4:6]
+        include/boost/math/special_functions/detail/bessel_i1.hpp [3:5]
+        include/boost/math/special_functions/detail/bessel_ik.hpp [3:5]
+        include/boost/math/special_functions/detail/bessel_j0.hpp [2:4]
+        include/boost/math/special_functions/detail/bessel_j1.hpp [2:4]
+        include/boost/math/special_functions/detail/bessel_jn.hpp [2:4]
+        include/boost/math/special_functions/detail/bessel_jy.hpp [2:4]
+        include/boost/math/special_functions/detail/bessel_jy_asym.hpp [2:4]
+        include/boost/math/special_functions/detail/bessel_jy_derivatives_asym.hpp [2:4]
+        include/boost/math/special_functions/detail/bessel_jy_derivatives_series.hpp [2:4]
+        include/boost/math/special_functions/detail/bessel_jy_series.hpp [2:4]
+        include/boost/math/special_functions/detail/bessel_jy_zero.hpp [2:4]
+        include/boost/math/special_functions/detail/bessel_k0.hpp [3:5]
+        include/boost/math/special_functions/detail/bessel_k1.hpp [3:5]
+        include/boost/math/special_functions/detail/bessel_kn.hpp [2:4]
+        include/boost/math/special_functions/detail/bessel_y0.hpp [2:4]
+        include/boost/math/special_functions/detail/bessel_y1.hpp [2:4]
+        include/boost/math/special_functions/detail/bessel_yn.hpp [2:4]
+        include/boost/math/special_functions/detail/erf_inv.hpp [3:5]
+        include/boost/math/special_functions/detail/gamma_inva.hpp [3:5]
+        include/boost/math/special_functions/detail/ibeta_inv_ab.hpp [2:4]
+        include/boost/math/special_functions/detail/ibeta_inverse.hpp [3:5]
+        include/boost/math/special_functions/detail/iconv.hpp [2:4]
+        include/boost/math/special_functions/detail/igamma_inverse.hpp [3:5]
+        include/boost/math/special_functions/detail/igamma_large.hpp [3:5]
+        include/boost/math/special_functions/detail/lgamma_small.hpp [3:5]
+        include/boost/math/special_functions/detail/t_distribution_inv.hpp [3:5]
+        include/boost/math/special_functions/detail/unchecked_factorial.hpp [2:4]
+        include/boost/math/special_functions/digamma.hpp [3:5]
+        include/boost/math/special_functions/ellint_1.hpp [4:6]
+        include/boost/math/special_functions/ellint_2.hpp [4:6]
+        include/boost/math/special_functions/ellint_3.hpp [3:5]
+        include/boost/math/special_functions/ellint_d.hpp [4:6]
+        include/boost/math/special_functions/ellint_rc.hpp [3:5]
+        include/boost/math/special_functions/ellint_rd.hpp [3:5]
+        include/boost/math/special_functions/ellint_rf.hpp [3:5]
+        include/boost/math/special_functions/ellint_rg.hpp [2:4]
+        include/boost/math/special_functions/ellint_rj.hpp [3:5]
+        include/boost/math/special_functions/erf.hpp [3:5]
+        include/boost/math/special_functions/expint.hpp [3:5]
+        include/boost/math/special_functions/expm1.hpp [3:5]
+        include/boost/math/special_functions/factorials.hpp [2:4]
+        include/boost/math/special_functions/fpclassify.hpp [4:6]
+        include/boost/math/special_functions/gamma.hpp [6:8]
+        include/boost/math/special_functions/gegenbauer.hpp [3:5]
+        include/boost/math/special_functions/hermite.hpp [4:6]
+        include/boost/math/special_functions/heuman_lambda.hpp [3:5]
+        include/boost/math/special_functions/hypot.hpp [2:4]
+        include/boost/math/special_functions/jacobi.hpp [2:4]
+        include/boost/math/special_functions/jacobi_zeta.hpp [2:4]
+        include/boost/math/special_functions/laguerre.hpp [3:5]
+        include/boost/math/special_functions/lanczos.hpp [2:4]
+        include/boost/math/special_functions/legendre.hpp [2:4]
+        include/boost/math/special_functions/log1p.hpp [2:4]
+        include/boost/math/special_functions/logaddexp.hpp [2:4]
+        include/boost/math/special_functions/logsumexp.hpp [2:4]
+        include/boost/math/special_functions/modf.hpp [3:5]
+        include/boost/math/special_functions/owens_t.hpp [3:5]
+        include/boost/math/special_functions/powm1.hpp [3:5]
+        include/boost/math/special_functions/relative_difference.hpp [2:4]
+        include/boost/math/special_functions/round.hpp [3:5]
+        include/boost/math/special_functions/rsqrt.hpp [2:4]
+        include/boost/math/special_functions/sign.hpp [6:8]
+        include/boost/math/special_functions/sin_pi.hpp [3:5]
+        include/boost/math/special_functions/spherical_harmonic.hpp [3:5]
+        include/boost/math/special_functions/sqrt1pm1.hpp [2:4]
+        include/boost/math/special_functions/trigamma.hpp [3:5]
+        include/boost/math/special_functions/trunc.hpp [3:5]
+        include/boost/math/special_functions/ulp.hpp [2:4]
+        include/boost/math/statistics/bivariate_statistics.hpp [3:5]
+        include/boost/math/statistics/chatterjee_correlation.hpp [2:4]
+        include/boost/math/statistics/detail/rank.hpp [2:4]
+        include/boost/math/statistics/detail/single_pass.hpp [3:5]
+        include/boost/math/statistics/ljung_box.hpp [2:4]
+        include/boost/math/statistics/signal_statistics.hpp [2:4]
+        include/boost/math/statistics/t_test.hpp [3:5]
+        include/boost/math/statistics/univariate_statistics.hpp [3:5]
+        include/boost/math/statistics/z_test.hpp [2:4]
+        include/boost/math/tools/agm.hpp [2:4]
+        include/boost/math/tools/array.hpp [2:4]
+        include/boost/math/tools/assert.hpp [2:4]
+        include/boost/math/tools/bivariate_statistics.hpp [2:4]
+        include/boost/math/tools/centered_continued_fraction.hpp [2:4]
+        include/boost/math/tools/cohen_acceleration.hpp [2:4]
+        include/boost/math/tools/color_maps.hpp [3:5]
+        include/boost/math/tools/complex.hpp [2:4]
+        include/boost/math/tools/concepts.hpp [2:4]
+        include/boost/math/tools/condition_numbers.hpp [2:4]
+        include/boost/math/tools/config.hpp [3:5]
+        include/boost/math/tools/convert_from_string.hpp [3:5]
+        include/boost/math/tools/cstdint.hpp [2:4]
+        include/boost/math/tools/cubic_roots.hpp [2:4]
+        include/boost/math/tools/cxx03_warn.hpp [2:4]
+        include/boost/math/tools/detail/is_const_iterable.hpp [2:4]
+        include/boost/math/tools/detail/polynomial_horner1_10.hpp [2:4]
+        include/boost/math/tools/detail/polynomial_horner1_11.hpp [2:4]
+        include/boost/math/tools/detail/polynomial_horner1_12.hpp [2:4]
+        include/boost/math/tools/detail/polynomial_horner1_13.hpp [2:4]
+        include/boost/math/tools/detail/polynomial_horner1_14.hpp [2:4]
+        include/boost/math/tools/detail/polynomial_horner1_15.hpp [2:4]
+        include/boost/math/tools/detail/polynomial_horner1_16.hpp [2:4]
+        include/boost/math/tools/detail/polynomial_horner1_17.hpp [2:4]
+        include/boost/math/tools/detail/polynomial_horner1_18.hpp [2:4]
+        include/boost/math/tools/detail/polynomial_horner1_19.hpp [2:4]
+        include/boost/math/tools/detail/polynomial_horner1_2.hpp [2:4]
+        include/boost/math/tools/detail/polynomial_horner1_20.hpp [2:4]
+        include/boost/math/tools/detail/polynomial_horner1_3.hpp [2:4]
+        include/boost/math/tools/detail/polynomial_horner1_4.hpp [2:4]
+        include/boost/math/tools/detail/polynomial_horner1_5.hpp [2:4]
+        include/boost/math/tools/detail/polynomial_horner1_6.hpp [2:4]
+        include/boost/math/tools/detail/polynomial_horner1_7.hpp [2:4]
+        include/boost/math/tools/detail/polynomial_horner1_8.hpp [2:4]
+        include/boost/math/tools/detail/polynomial_horner1_9.hpp [2:4]
+        include/boost/math/tools/detail/polynomial_horner2_10.hpp [2:4]
+        include/boost/math/tools/detail/polynomial_horner2_11.hpp [2:4]
+        include/boost/math/tools/detail/polynomial_horner2_12.hpp [2:4]
+        include/boost/math/tools/detail/polynomial_horner2_13.hpp [2:4]
+        include/boost/math/tools/detail/polynomial_horner2_14.hpp [2:4]
+        include/boost/math/tools/detail/polynomial_horner2_15.hpp [2:4]
+        include/boost/math/tools/detail/polynomial_horner2_16.hpp [2:4]
+        include/boost/math/tools/detail/polynomial_horner2_17.hpp [2:4]
+        include/boost/math/tools/detail/polynomial_horner2_18.hpp [2:4]
+        include/boost/math/tools/detail/polynomial_horner2_19.hpp [2:4]
+        include/boost/math/tools/detail/polynomial_horner2_2.hpp [2:4]
+        include/boost/math/tools/detail/polynomial_horner2_3.hpp [2:4]
+        include/boost/math/tools/detail/polynomial_horner2_4.hpp [2:4]
+        include/boost/math/tools/detail/polynomial_horner2_5.hpp [2:4]
+        include/boost/math/tools/detail/polynomial_horner2_6.hpp [2:4]
+        include/boost/math/tools/detail/polynomial_horner2_7.hpp [2:4]
+        include/boost/math/tools/detail/polynomial_horner2_8.hpp [2:4]
+        include/boost/math/tools/detail/polynomial_horner2_9.hpp [2:4]
+        include/boost/math/tools/detail/polynomial_horner3_10.hpp [2:4]
+        include/boost/math/tools/detail/polynomial_horner3_11.hpp [2:4]
+        include/boost/math/tools/detail/polynomial_horner3_12.hpp [2:4]
+        include/boost/math/tools/detail/polynomial_horner3_13.hpp [2:4]
+        include/boost/math/tools/detail/polynomial_horner3_14.hpp [2:4]
+        include/boost/math/tools/detail/polynomial_horner3_15.hpp [2:4]
+        include/boost/math/tools/detail/polynomial_horner3_16.hpp [2:4]
+        include/boost/math/tools/detail/polynomial_horner3_17.hpp [2:4]
+        include/boost/math/tools/detail/polynomial_horner3_18.hpp [2:4]
+        include/boost/math/tools/detail/polynomial_horner3_19.hpp [2:4]
+        include/boost/math/tools/detail/polynomial_horner3_2.hpp [2:4]
+        include/boost/math/tools/detail/polynomial_horner3_20.hpp [2:4]
+        include/boost/math/tools/detail/polynomial_horner3_3.hpp [2:4]
+        include/boost/math/tools/detail/polynomial_horner3_4.hpp [2:4]
+        include/boost/math/tools/detail/polynomial_horner3_5.hpp [2:4]
+        include/boost/math/tools/detail/polynomial_horner3_6.hpp [2:4]
+        include/boost/math/tools/detail/polynomial_horner3_7.hpp [2:4]
+        include/boost/math/tools/detail/polynomial_horner3_8.hpp [2:4]
+        include/boost/math/tools/detail/polynomial_horner3_9.hpp [2:4]
+        include/boost/math/tools/detail/rational_horner1_10.hpp [2:4]
+        include/boost/math/tools/detail/rational_horner1_2.hpp [2:4]
+        include/boost/math/tools/detail/rational_horner1_3.hpp [2:4]
+        include/boost/math/tools/detail/rational_horner1_4.hpp [2:4]
+        include/boost/math/tools/detail/rational_horner1_5.hpp [2:4]
+        include/boost/math/tools/detail/rational_horner1_6.hpp [2:4]
+        include/boost/math/tools/detail/rational_horner1_7.hpp [2:4]
+        include/boost/math/tools/detail/rational_horner1_8.hpp [2:4]
+        include/boost/math/tools/detail/rational_horner1_9.hpp [2:4]
+        include/boost/math/tools/detail/rational_horner2_10.hpp [2:4]
+        include/boost/math/tools/detail/rational_horner2_2.hpp [2:4]
+        include/boost/math/tools/detail/rational_horner2_3.hpp [2:4]
+        include/boost/math/tools/detail/rational_horner2_4.hpp [2:4]
+        include/boost/math/tools/detail/rational_horner2_5.hpp [2:4]
+        include/boost/math/tools/detail/rational_horner2_6.hpp [2:4]
+        include/boost/math/tools/detail/rational_horner2_7.hpp [2:4]
+        include/boost/math/tools/detail/rational_horner2_8.hpp [2:4]
+        include/boost/math/tools/detail/rational_horner2_9.hpp [2:4]
+        include/boost/math/tools/detail/rational_horner3_10.hpp [2:4]
+        include/boost/math/tools/detail/rational_horner3_11.hpp [2:4]
+        include/boost/math/tools/detail/rational_horner3_12.hpp [2:4]
+        include/boost/math/tools/detail/rational_horner3_13.hpp [2:4]
+        include/boost/math/tools/detail/rational_horner3_14.hpp [2:4]
+        include/boost/math/tools/detail/rational_horner3_15.hpp [2:4]
+        include/boost/math/tools/detail/rational_horner3_16.hpp [2:4]
+        include/boost/math/tools/detail/rational_horner3_17.hpp [2:4]
+        include/boost/math/tools/detail/rational_horner3_18.hpp [2:4]
+        include/boost/math/tools/detail/rational_horner3_19.hpp [2:4]
+        include/boost/math/tools/detail/rational_horner3_2.hpp [2:4]
+        include/boost/math/tools/detail/rational_horner3_20.hpp [2:4]
+        include/boost/math/tools/detail/rational_horner3_3.hpp [2:4]
+        include/boost/math/tools/detail/rational_horner3_4.hpp [2:4]
+        include/boost/math/tools/detail/rational_horner3_5.hpp [2:4]
+        include/boost/math/tools/detail/rational_horner3_6.hpp [2:4]
+        include/boost/math/tools/detail/rational_horner3_7.hpp [2:4]
+        include/boost/math/tools/detail/rational_horner3_8.hpp [2:4]
+        include/boost/math/tools/detail/rational_horner3_9.hpp [2:4]
+        include/boost/math/tools/engel_expansion.hpp [2:4]
+        include/boost/math/tools/fraction.hpp [3:5]
+        include/boost/math/tools/header_deprecated.hpp [2:4]
+        include/boost/math/tools/is_constant_evaluated.hpp [2:4]
+        include/boost/math/tools/is_detected.hpp [2:4]
+        include/boost/math/tools/is_standalone.hpp [2:4]
+        include/boost/math/tools/luroth_expansion.hpp [2:4]
+        include/boost/math/tools/minima.hpp [2:4]
+        include/boost/math/tools/mp.hpp [3:5]
+        include/boost/math/tools/norms.hpp [2:4]
+        include/boost/math/tools/nothrow.hpp [2:4]
+        include/boost/math/tools/numeric_limits.hpp [2:4]
+        include/boost/math/tools/numerical_differentiation.hpp [2:4]
+        include/boost/math/tools/polynomial.hpp [5:7]
+        include/boost/math/tools/polynomial_gcd.hpp [3:5]
+        include/boost/math/tools/precision.hpp [2:4]
+        include/boost/math/tools/quartic_roots.hpp [2:4]
+        include/boost/math/tools/random_vector.hpp [3:5]
+        include/boost/math/tools/rational.hpp [2:4]
+        include/boost/math/tools/real_cast.hpp [2:4]
+        include/boost/math/tools/recurrence.hpp [2:4]
+        include/boost/math/tools/roots.hpp [3:5]
+        include/boost/math/tools/series.hpp [2:4]
+        include/boost/math/tools/signal_statistics.hpp [2:4]
+        include/boost/math/tools/simple_continued_fraction.hpp [2:4]
+        include/boost/math/tools/stats.hpp [2:4]
+        include/boost/math/tools/throw_exception.hpp [2:4]
+        include/boost/math/tools/toms748_solve.hpp [3:5]
+        include/boost/math/tools/traits.hpp [3:5]
+        include/boost/math/tools/tuple.hpp [3:5]
+        include/boost/math/tools/type_traits.hpp [2:4]
+        include/boost/math/tools/ulps_plot.hpp [2:4]
+        include/boost/math/tools/univariate_statistics.hpp [2:4]
+        include/boost/math/tools/utility.hpp [2:4]
+        include/boost/math/tools/workaround.hpp [2:4]
+
+KEEP     BSL-1.0              267bc4e38676657a4d90f57e3323ff7c
+BELONGS ya.make
+    License text:
+        //  Use, modification and distribution are subject to the
+        //  Boost Software License, Version 1.0. (See accompanying file
+        //  LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/math/constants/calculate_constants.hpp [4:6]
+        include/boost/math/distributions/students_t.hpp [5:7]
+        include/boost/math/special_functions/detail/lanczos_sse2.hpp [2:4]
+        include/boost/math/special_functions/next.hpp [2:4]
+        include/boost/math/special_functions/zeta.hpp [2:4]
+        include/boost/math/tools/big_constant.hpp [3:5]
+        include/boost/math/tools/detail/polynomial_horner2_20.hpp [2:4]
+        include/boost/math/tools/detail/rational_horner1_11.hpp [2:4]
+        include/boost/math/tools/detail/rational_horner1_12.hpp [2:4]
+        include/boost/math/tools/detail/rational_horner1_13.hpp [2:4]
+        include/boost/math/tools/detail/rational_horner1_14.hpp [2:4]
+        include/boost/math/tools/detail/rational_horner1_15.hpp [2:4]
+        include/boost/math/tools/detail/rational_horner1_16.hpp [2:4]
+        include/boost/math/tools/detail/rational_horner1_17.hpp [2:4]
+        include/boost/math/tools/detail/rational_horner1_18.hpp [2:4]
+        include/boost/math/tools/detail/rational_horner1_19.hpp [2:4]
+        include/boost/math/tools/detail/rational_horner1_20.hpp [2:4]
+        include/boost/math/tools/detail/rational_horner2_11.hpp [2:4]
+        include/boost/math/tools/detail/rational_horner2_12.hpp [2:4]
+        include/boost/math/tools/detail/rational_horner2_13.hpp [2:4]
+        include/boost/math/tools/detail/rational_horner2_14.hpp [2:4]
+        include/boost/math/tools/detail/rational_horner2_15.hpp [2:4]
+        include/boost/math/tools/detail/rational_horner2_16.hpp [2:4]
+        include/boost/math/tools/detail/rational_horner2_17.hpp [2:4]
+        include/boost/math/tools/detail/rational_horner2_18.hpp [2:4]
+        include/boost/math/tools/detail/rational_horner2_19.hpp [2:4]
+        include/boost/math/tools/detail/rational_horner2_20.hpp [2:4]
+
+KEEP     BSL-1.0              2c7a3fa82e66676005cd4ee2608fd7d2
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        LICENSE [1:23]
+
+KEEP     BSL-1.0              3dc626ff78bf44fdf3a99b804f677fe6
+BELONGS ya.make
+    License text:
+        //  Distributed under the Boost
+        //  Software License, Version 1.0. (See accompanying file
+        //  LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/math/special_functions/bernoulli.hpp [7:9]
+        include/boost/math/special_functions/bessel_iterators.hpp [4:6]
+        include/boost/math/special_functions/detail/bernoulli_details.hpp [3:5]
+        include/boost/math/special_functions/detail/hypergeometric_0F1_bessel.hpp [6:8]
+        include/boost/math/special_functions/detail/hypergeometric_1F1_addition_theorems_on_z.hpp [4:6]
+        include/boost/math/special_functions/detail/hypergeometric_1F1_bessel.hpp [6:8]
+        include/boost/math/special_functions/detail/hypergeometric_1F1_by_ratios.hpp [4:6]
+        include/boost/math/special_functions/detail/hypergeometric_1F1_cf.hpp [4:6]
+        include/boost/math/special_functions/detail/hypergeometric_1F1_large_a.hpp [4:6]
+        include/boost/math/special_functions/detail/hypergeometric_1F1_large_abz.hpp [4:6]
+        include/boost/math/special_functions/detail/hypergeometric_1F1_negative_b_regions.hpp [4:6]
+        include/boost/math/special_functions/detail/hypergeometric_1F1_recurrence.hpp [7:9]
+        include/boost/math/special_functions/detail/hypergeometric_1F1_scaled_series.hpp [3:5]
+        include/boost/math/special_functions/detail/hypergeometric_asym.hpp [6:8]
+        include/boost/math/special_functions/detail/hypergeometric_cf.hpp [7:9]
+        include/boost/math/special_functions/detail/hypergeometric_pFq_checked_series.hpp [3:5]
+        include/boost/math/special_functions/detail/hypergeometric_pade.hpp [7:9]
+        include/boost/math/special_functions/detail/hypergeometric_rational.hpp [6:8]
+        include/boost/math/special_functions/detail/hypergeometric_separated_series.hpp [6:8]
+        include/boost/math/special_functions/detail/polygamma.hpp [7:9]
+        include/boost/math/special_functions/hypergeometric_0F1.hpp [6:8]
+        include/boost/math/special_functions/hypergeometric_1F0.hpp [7:9]
+        include/boost/math/special_functions/hypergeometric_1F1.hpp [6:8]
+        include/boost/math/special_functions/hypergeometric_2F0.hpp [6:8]
+        include/boost/math/special_functions/hypergeometric_pFq.hpp [4:6]
+        include/boost/math/special_functions/polygamma.hpp [7:9]
+        include/boost/math/tools/atomic.hpp [3:5]
+
+KEEP     BSL-1.0              65724380ee1601b28f0db6323a0ad006
+BELONGS ya.make
+    License text:
+         * Use, modification and distribution are subject to the
+         * Boost Software License, Version 1.0. (See accompanying file
+         * LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/math/interpolators/detail/quintic_hermite_detail.hpp [3:5]
+        include/boost/math/interpolators/detail/septic_hermite_detail.hpp [3:5]
+        include/boost/math/interpolators/quintic_hermite.hpp [3:5]
+        include/boost/math/interpolators/septic_hermite.hpp [3:5]
+        include/boost/math/optimization/cma_es.hpp [3:5]
+        include/boost/math/optimization/detail/common.hpp [3:5]
+        include/boost/math/optimization/differential_evolution.hpp [3:5]
+        include/boost/math/optimization/jso.hpp [3:5]
+        include/boost/math/optimization/random_search.hpp [3:5]
+        include/boost/math/quadrature/naive_monte_carlo.hpp [3:5]
+        include/boost/math/quadrature/trapezoidal.hpp [3:5]
+        include/boost/math/quadrature/wavelet_transforms.hpp [3:5]
+        include/boost/math/special_functions/daubechies_scaling.hpp [3:5]
+        include/boost/math/special_functions/daubechies_wavelet.hpp [3:5]
+        include/boost/math/special_functions/fourier_transform_daubechies.hpp [4:6]
+        include/boost/math/statistics/anderson_darling.hpp [3:5]
+        include/boost/math/statistics/linear_regression.hpp [4:6]
+        include/boost/math/statistics/runs_test.hpp [3:5]
+        include/boost/math/tools/estrin.hpp [3:5]
+
+KEEP     BSL-1.0              65e937e8455a3a3eea3fd902b60ef37d
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/math_fwd.hpp [3:5]
+
+KEEP     BSL-1.0              732a43b99a41bcb7df6969a215704085
+BELONGS ya.make
+    License text:
+        // Distributed under the Boost Software License,
+        // Version 1.0. (See accompanying file LICENSE_1_0.txt
+        // or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/math/cstdfloat/cstdfloat_cmath.hpp [5:7]
+        include/boost/math/cstdfloat/cstdfloat_complex_std.hpp [5:7]
+
+KEEP     BSL-1.0              74c3bede88a5f37b8b153f47f71ca744
+BELONGS ya.make
+    License text:
+        // Distributed under the Boost Software License, Version 1.0.
+        // (See accompanying file LICENSE_1_0.txt or
+        //  copy at http ://www.boost.org/LICENSE_1_0.txt).
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/math/special_functions/lambert_w.hpp [5:7]
+
+KEEP     BSL-1.0              88b58de1d7149f0278b4887961d64fc8
+BELONGS ya.make
+    License text:
+        // Use, modification and distribution are subject to the
+        // Boost Software License, Version 1.0.
+        // (See accompanying file LICENSE_1_0.txt
+        // or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/math/quadrature/detail/exp_sinh_detail.hpp [2:5]
+        include/boost/math/quadrature/detail/sinh_sinh_detail.hpp [3:6]
+        include/boost/math/quadrature/detail/tanh_sinh_detail.hpp [2:5]
+
+KEEP     BSL-1.0              88c4d29e0aacbf465a938844cbc5d047
+BELONGS ya.make
+    License text:
+        // Use, modification and distribution are subject to the
+        // Boost Software License, Version 1.0.
+        // (See accompanying file LICENSE_1_0.txt
+        // or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/math/distributions/arcsine.hpp [7:10]
+        include/boost/math/distributions/bernoulli.hpp [7:10]
+        include/boost/math/distributions/beta.hpp [7:10]
+        include/boost/math/distributions/binomial.hpp [6:9]
+        include/boost/math/distributions/chi_squared.hpp [4:7]
+        include/boost/math/distributions/detail/common_error_handling.hpp [5:8]
+        include/boost/math/distributions/detail/generic_mode.hpp [3:6]
+        include/boost/math/distributions/detail/hypergeometric_cdf.hpp [3:6]
+        include/boost/math/distributions/detail/hypergeometric_pdf.hpp [4:7]
+        include/boost/math/distributions/detail/hypergeometric_quantile.hpp [3:6]
+        include/boost/math/distributions/fisher_f.hpp [3:6]
+        include/boost/math/distributions/fwd.hpp [6:9]
+        include/boost/math/distributions/geometric.hpp [6:9]
+        include/boost/math/distributions/hypergeometric.hpp [5:8]
+        include/boost/math/distributions/inverse_chi_squared.hpp [4:7]
+        include/boost/math/distributions/logistic.hpp [3:6]
+        include/boost/math/distributions/negative_binomial.hpp [6:9]
+        include/boost/math/distributions/non_central_beta.hpp [5:8]
+        include/boost/math/distributions/non_central_chi_squared.hpp [5:8]
+        include/boost/math/distributions/non_central_f.hpp [5:8]
+        include/boost/math/distributions/non_central_t.hpp [5:8]
+        include/boost/math/distributions/poisson.hpp [7:10]
+        include/boost/math/interpolators/bezier_polynomial.hpp [2:5]
+        include/boost/math/interpolators/bilinear_uniform.hpp [2:5]
+        include/boost/math/interpolators/cardinal_cubic_b_spline.hpp [2:5]
+        include/boost/math/interpolators/cardinal_quadratic_b_spline.hpp [2:5]
+        include/boost/math/interpolators/cardinal_quintic_b_spline.hpp [2:5]
+        include/boost/math/interpolators/catmull_rom.hpp [2:5]
+        include/boost/math/interpolators/cubic_b_spline.hpp [2:5]
+        include/boost/math/interpolators/cubic_hermite.hpp [2:5]
+        include/boost/math/interpolators/detail/bezier_polynomial_detail.hpp [2:5]
+        include/boost/math/interpolators/detail/bilinear_uniform_detail.hpp [2:5]
+        include/boost/math/interpolators/detail/cardinal_cubic_b_spline_detail.hpp [2:5]
+        include/boost/math/interpolators/detail/cardinal_quadratic_b_spline_detail.hpp [2:5]
+        include/boost/math/interpolators/detail/cardinal_quintic_b_spline_detail.hpp [2:5]
+        include/boost/math/interpolators/detail/cubic_b_spline_detail.hpp [2:5]
+        include/boost/math/interpolators/detail/cubic_hermite_detail.hpp [2:5]
+        include/boost/math/interpolators/detail/whittaker_shannon_detail.hpp [2:5]
+        include/boost/math/interpolators/makima.hpp [2:5]
+        include/boost/math/interpolators/pchip.hpp [2:5]
+        include/boost/math/interpolators/whittaker_shannon.hpp [2:5]
+        include/boost/math/quadrature/detail/ooura_fourier_integrals_detail.hpp [2:5]
+        include/boost/math/quadrature/exp_sinh.hpp [2:5]
+        include/boost/math/quadrature/ooura_fourier_integrals.hpp [2:5]
+        include/boost/math/quadrature/sinh_sinh.hpp [3:6]
+        include/boost/math/quadrature/tanh_sinh.hpp [2:5]
+        include/boost/math/special_functions/airy.hpp [3:6]
+        include/boost/math/special_functions/detail/round_fwd.hpp [4:7]
+        include/boost/math/special_functions/fibonacci.hpp [3:6]
+        include/boost/math/special_functions/hankel.hpp [3:6]
+        include/boost/math/special_functions/jacobi_elliptic.hpp [2:5]
+        include/boost/math/special_functions/legendre_stieltjes.hpp [2:5]
+        include/boost/math/special_functions/math_fwd.hpp [9:12]
+        include/boost/math/special_functions/prime.hpp [3:6]
+        include/boost/math/tools/promotion.hpp [8:11]
+        include/boost/math/tools/test_value.hpp [4:7]
+        include/boost/math/tools/user.hpp [4:7]
+
+KEEP     BSL-1.0              8c631061c1944053948acdaf321fc114
+BELONGS ya.make
+    License text:
+        // Use, modification and distribution are subject to the
+        // Boost Software License, Version 1.0. (See accompanying file
+        // LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/math/distributions/kolmogorov_smirnov.hpp [4:6]
+        include/boost/math/special_functions/jacobi_theta.hpp [4:6]
+
+KEEP     BSL-1.0              a4d94028384239d2a9a35e386bb30daf
+BELONGS ya.make
+    License text:
+        // Distributed under the Boost Software License, Version 1.0.
+        // (See accompanying file LICENSE_1_0.txt
+        // or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/math/special_functions/detail/lambert_w_lookup_table.ipp [2:4]
+
+KEEP     BSL-1.0              ab2348e8edf8e5498ae8350b5bf110e4
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/math/special_functions/pow.hpp [6:10]
+
+KEEP     BSL-1.0              b9e77f2981c6cafae2eab017ce81bb09
+BELONGS ya.make
+    License text:
+        // Distributed under the Boost Software License, Version 1.0.
+        //      (See accompanying file LICENSE_1_0.txt or copy at
+        //           https://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/math/differentiation/autodiff.hpp [2:4]
+        include/boost/math/differentiation/autodiff_cpp11.hpp [2:4]
+
+KEEP     BSL-1.0              c433ef677447b140a1c2a340c08bac97
+BELONGS ya.make
+    License text:
+        //  Distributed under the Boost
+        //  Software License, Version 1.0. (See accompanying file
+        //  LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/math/special_functions/detail/hypergeometric_1F1_small_a_negative_b_by_ratio.hpp [4:6]
+        include/boost/math/special_functions/detail/hypergeometric_series.hpp [6:8]
+        include/boost/math/special_functions/detail/unchecked_bernoulli.hpp [7:9]
+
+KEEP     BSL-1.0              c59f2f51498a38af0e57d64a7b0fe0e3
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/math/octonion.hpp [4:8]
+        include/boost/math/quaternion.hpp [4:8]
+        include/boost/math/special_functions/acosh.hpp [5:9]
+        include/boost/math/special_functions/asinh.hpp [5:9]
+        include/boost/math/special_functions/atanh.hpp [5:9]
+        include/boost/math/special_functions/sinc.hpp [4:8]
+        include/boost/math/special_functions/sinhc.hpp [4:8]
+
+KEEP     BSL-1.0              d7f87ea2cced5bb8dd0a81e515f54c30
+BELONGS ya.make
+    License text:
+        //  Distributed under the Boost Software License, Version 1.0. (See accompanying
+        //  file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/math/complex/acos.hpp [2:3]
+        include/boost/math/complex/asin.hpp [2:3]
+
+KEEP     BSL-1.0              f862443d1366b0002c5e50e5579b1c6e
+BELONGS ya.make
+    License text:
+         *  Use, modification and distribution are subject to the
+         *  Boost Software License, Version 1.0. (See accompanying file
+         *  LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/math/interpolators/barycentric_rational.hpp [3:5]
+        include/boost/math/interpolators/detail/barycentric_rational_detail.hpp [3:5]
+        include/boost/math/interpolators/detail/vector_barycentric_rational_detail.hpp [3:5]
+        include/boost/math/interpolators/vector_barycentric_rational.hpp [3:5]
+
+KEEP     BSL-1.0              fcbcf40a265cd169c46d2bba83794f5b
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/math/common_factor.hpp [4:8]
+        include/boost/math/common_factor_ct.hpp [4:8]

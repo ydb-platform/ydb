@@ -32,12 +32,14 @@ struct TParameters {
     TMaybe<ui64> WaitTimeSeconds;
     TMaybe<ui64> CreateTimestampSeconds;
     TMaybe<TString> CustomQueueName;
-    
+
 
     TMap<int, TString> AttributeNames;
     TMap<int, TAttribute> Attributes;
     TMap<int, TMessageAttribute> MessageAttributes;
     TMap<int, TParameters> BatchEntries;
+    TMap<int, TQueueTag> Tags;
+    TMap<int, TString> TagKeys;
 };
 
 class TParametersParser {

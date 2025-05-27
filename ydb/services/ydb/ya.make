@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     ydb_clickhouse_internal.cpp
+    ydb_debug.cpp
     ydb_dummy.cpp
     ydb_export.cpp
     ydb_import.cpp
@@ -30,7 +31,7 @@ PEERDIR(
     ydb/public/api/grpc
     ydb/public/api/grpc/draft
     ydb/public/api/protos
-    ydb/library/yql/public/types
+    yql/essentials/public/types
     contrib/libs/openssl
 )
 
@@ -38,8 +39,6 @@ END()
 
 RECURSE_FOR_TESTS(
     backup_ut
-    sdk_sessions_ut
-    sdk_sessions_pool_ut
     table_split_ut
     ut
 )

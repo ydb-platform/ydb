@@ -16,6 +16,6 @@
 
 Токен авторизации может утекать через логи
 
-Link to CVE: [https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2023-45825](https://nvd.nist.gov/vuln/detail/CVE-2023-45825).
+Ссылка на CVE: [https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2023-45825](https://nvd.nist.gov/vuln/detail/CVE-2023-45825).
 
 Обнаружено благодаря Сергею Фостер.

@@ -3,6 +3,7 @@
 #include "schemeshard_impl.h"
 
 #include <ydb/core/protos/blob_depot_config.pb.h>
+#include <ydb/core/blob_depot/events.h>
 
 namespace NKikimr::NSchemeShard {
 
@@ -92,7 +93,7 @@ namespace NKikimr::NSchemeShard {
 
                     return !txState->ShardsInProgress;
                 }
-                
+
                 TString DebugHint() const override {
                     return TStringBuilder() << "TConfigureBlobDepotParts id# " << OperationId;
                 }
@@ -373,13 +374,13 @@ namespace NKikimr::NSchemeShard {
                 context.OnComplete.PublishToSchemeBoard(OperationId, parentPath->PathId);
                 context.SS->ClearDescribePathCaches(dstPath.Base());
                 context.OnComplete.PublishToSchemeBoard(OperationId, dstPath->PathId);
-                dstPath.DomainInfo()->IncPathsInside();
-                dstPath.DomainInfo()->AddInternalShards(txState);
+                dstPath.DomainInfo()->IncPathsInside(context.SS);
+                dstPath.DomainInfo()->AddInternalShards(txState, context.SS);
                 dstPath->IncShardsInside();
-                parentPath->IncAliveChildren();
+                IncAliveChildrenDirect(OperationId, parentPath, context); // for correct discard of ChildrenExist prop
 
                 SetState(TTxState::CreateParts);
-                
+
                 auto resp = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, txId, ssId);
                 resp->SetPathId(pathId.LocalPathId);
                 return resp;

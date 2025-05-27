@@ -303,7 +303,7 @@ public:
 
         if (auto res = SetAbsentForUnrecoverableAltruistic(altruisticState, state)) {
             return *res;
-        } else if (auto res = ProcessOptimistic(altruisticState, optimisticState, false, state)) {
+        } else if (auto res = ProcessOptimistic(altruisticState, optimisticState, false, state, info)) {
             return *res;
         } else if (auto res = ProcessPessimistic(info, pessimisticState, false, state)) {
             return *res;
@@ -312,8 +312,7 @@ public:
         // Try excluding the slow disk
         bool isDone = false;
         // TODO: Mark disk that does not answer when accelerating requests
-        ui32 slowDiskSubgroupMask = MakeSlowSubgroupDiskMask(state, info, blackboard, false,
-                accelerationParams);
+        ui32 slowDiskSubgroupMask = MakeSlowSubgroupDiskMask(state, blackboard, false, accelerationParams);
         if (slowDiskSubgroupMask >= 0) {
             TBlobStorageGroupInfo::EBlobState fastPessimisticState = TBlobStorageGroupInfo::EBS_DISINTEGRATED;
             TBlobStorageGroupInfo::EBlobState fastOptimisticState = TBlobStorageGroupInfo::EBS_DISINTEGRATED;
@@ -321,7 +320,7 @@ public:
             EvaluateCurrentLayout(logCtx, state, info, &fastPessimisticState, &fastOptimisticState,
                     &fastAltruisticState, true);
             if (!IsUnrecoverableAltruistic(fastAltruisticState)
-                    && !ProcessOptimistic(fastAltruisticState, fastOptimisticState, true, state)) {
+                    && !ProcessOptimistic(fastAltruisticState, fastOptimisticState, true, state, info)) {
                 IssueGetRequests(logCtx, state, info, true, groupDiskRequests);
                 isDone = true;
             }

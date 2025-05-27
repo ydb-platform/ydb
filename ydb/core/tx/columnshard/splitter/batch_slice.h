@@ -3,8 +3,8 @@
 #include "column_info.h"
 #include "blob_info.h"
 #include <ydb/core/formats/arrow/splitter/scheme_info.h>
-#include <ydb/core/formats/arrow/splitter/stats.h>
-#include <ydb/core/formats/arrow/splitter/similar_packer.h>
+#include <ydb/library/formats/arrow/splitter/stats.h>
+#include <ydb/library/formats/arrow/splitter/similar_packer.h>
 #include <ydb/core/tx/columnshard/counters/indexation.h>
 #include <ydb/core/tx/columnshard/engines/scheme/column_features.h>
 #include <ydb/core/tx/columnshard/engines/scheme/abstract_scheme.h>
@@ -33,12 +33,6 @@ public:
     virtual std::shared_ptr<arrow::Field> GetField(const ui32 columnId) const override {
         return Schema->GetFieldByColumnIdOptional(columnId);
     }
-    virtual bool NeedMinMaxForColumn(const ui32 columnId) const override {
-        return Schema->GetIndexInfo().GetMinMaxIdxColumns().contains(columnId);
-    }
-    virtual bool IsSortedColumn(const ui32 columnId) const override {
-        return Schema->GetIndexInfo().IsSortedColumn(columnId);
-    }
 
     virtual std::optional<NArrow::NSplitter::TColumnSerializationStat> GetColumnSerializationStats(const ui32 columnId) const override {
         auto stats = Stats->GetColumnInfo(columnId);
@@ -60,6 +54,7 @@ class TGeneralSerializedSlice {
 private:
     YDB_READONLY(ui32, RecordsCount, 0);
     YDB_READONLY(ui32, InternalSplitsCount, 0);
+
 protected:
     std::vector<TSplittedEntity> Data;
     ui64 Size = 0;
@@ -133,10 +128,6 @@ public:
     void MergeSlice(TGeneralSerializedSlice&& slice);
 
     bool GroupBlobs(std::vector<TSplittedBlob>& blobs, const NSplitter::TEntityGroups& groups);
-
-    bool operator<(const TGeneralSerializedSlice& item) const {
-        return Size < item.Size;
-    }
 };
 
 }

@@ -255,7 +255,7 @@ void TestOffset(ui64 offset, ui64 size, ui64 expectedFirstSector, ui64 expectedL
     ui64 firstSector;
     ui64 lastSector;
     ui64 sectorOffset;
-    bool isOk = ParseSectorOffset(format, nullptr, 0, offset, size, firstSector, lastSector, sectorOffset);
+    bool isOk = ParseSectorOffset(format, nullptr, 0, offset, size, firstSector, lastSector, sectorOffset, "");
     UNIT_ASSERT_C(isOk && firstSector == expectedFirstSector && lastSector == expectedLastSector &&
             sectorOffset == expectedSectorOffset,
             "isOk# " << isOk << "\n"
@@ -298,7 +298,7 @@ void TestPayloadOffset(ui64 firstSector, ui64 lastSector, ui64 currentSector, ui
 
     ui64 payloadSize;
     ui64 payloadOffset;
-    ParsePayloadFromSectorOffset(format, firstSector, lastSector, currentSector, &payloadSize, &payloadOffset);
+    ParsePayloadFromSectorOffset(format, firstSector, lastSector, currentSector, &payloadSize, &payloadOffset, "");
     UNIT_ASSERT_C(payloadSize == expectedPayloadSize && payloadOffset == expectedPayloadOffset,
             "firstSector# " << firstSector << " lastSector# " << lastSector << " currentSector# " << currentSector << "\n"
             "payloadSize# " << payloadSize << " expectedPayloadSize# " << expectedPayloadSize << "\n"
@@ -331,22 +331,24 @@ void TestPayloadOffset(ui64 firstSector, ui64 lastSector, ui64 currentSector, ui
         TSectorsWithData sectors(format.SectorSize, LogErasureDataParts + 1);
         constexpr ui64 magic = 0x123951924;
         ui64 nonce = 1;
-        for (ui32 i = 0; i < LogErasureDataParts + 1; ++i) {
-            memset(sectors[i].Begin(), 0, sectors[i].Size());
-            sectors[i].SetCanary();
-            auto *footer = sectors[i].GetDataFooter();
-            footer->Version = PDISK_DATA_VERSION;
-            footer->Nonce = nonce++;
-            NPDisk::TPDiskHashCalculator hasher;
-            if (i < LogErasureDataParts) {
-                ui64 offset = format.SectorSize * i;
-                footer->Hash = hasher.HashSector(offset, magic, sectors[i].Begin(), sectors[i].Size());
+        for (ui32 useT1haHash = 0; useT1haHash < 2; ++useT1haHash) {
+            for (ui32 i = 0; i < LogErasureDataParts + 1; ++i) {
+                memset(sectors[i].Begin(), 0, sectors[i].Size());
+                sectors[i].SetCanary();
+                auto *footer = sectors[i].GetDataFooter();
+                footer->Version = PDISK_DATA_VERSION;
+                footer->Nonce = nonce++;
+                NPDisk::TPDiskHashCalculator hasher(useT1haHash);
+                if (i < LogErasureDataParts) {
+                    ui64 offset = format.SectorSize * i;
+                    footer->Hash = hasher.HashSector(offset, magic, sectors[i].Begin(), sectors[i].Size());
+                }
             }
+            TSectorRestorator restorator(false, LogErasureDataParts, true, format);
+            restorator.Restore(sectors.Data(), 0, magic, 0, 0);
+            UNIT_ASSERT_C(restorator.GoodSectorCount == LogErasureDataParts + 1,
+                    "restorator.GoodSectorCount# " << restorator.GoodSectorCount);
         }
-        TSectorRestorator restorator(false, LogErasureDataParts, true, format);
-        restorator.Restore(sectors.Data(), 0, magic, 0, 0);
-        UNIT_ASSERT_C(restorator.GoodSectorCount == LogErasureDataParts + 1,
-                "restorator.GoodSectorCount# " << restorator.GoodSectorCount);
     }
 
     Y_UNIT_TEST(SectorRestoratorOldNewHash) {
@@ -356,27 +358,32 @@ void TestPayloadOffset(ui64 firstSector, ui64 lastSector, ui64 currentSector, ui
         const ui64 magic = 0x123951924;
         const ui64 offset = format.SectorSize * 17;
         ui64 nonce = 1;
-        for (ui32 i = 1; i < sectors.Size(); ++i) {
-            memset(sectors[i].Begin(), 13, sectors[i].Size());
-            sectors[i].SetCanary();
-            auto *footer = sectors[i].GetDataFooter();
-            footer->Version = PDISK_DATA_VERSION;
-            footer->Nonce = nonce++;
-            NPDisk::TPDiskHashCalculator hasher;
-            switch (i) {
-            case 1:
-                footer->Hash = hasher.T1ha0HashSector<TT1ha0NoAvxHasher>(offset, magic, sectors[i].Begin(), sectors[i].Size());
-                break;
-            case 2:
-                footer->Hash = hasher.HashSector(offset, magic, sectors[i].Begin(), sectors[i].Size());
-                break;
-            default:
-                UNIT_ASSERT(false);
+        for (ui32 useT1haHash = 0; useT1haHash < 2; ++useT1haHash) {
+            for (ui32 i = 0; i < sectors.Size(); ++i) {
+                memset(sectors[i].Begin(), 13, sectors[i].Size());
+                sectors[i].SetCanary();
+                auto *footer = sectors[i].GetDataFooter();
+                footer->Version = PDISK_DATA_VERSION;
+                footer->Nonce = nonce++;
+                NPDisk::TPDiskHashCalculator hasher(useT1haHash);
+                switch (i) {
+                case 0:
+                    footer->Hash = hasher.OldHashSector(offset, magic, sectors[i].Begin(), sectors[i].Size());
+                    break;
+                case 1:
+                    footer->Hash = hasher.T1ha0HashSector<TT1ha0NoAvxHasher>(offset, magic, sectors[i].Begin(), sectors[i].Size());
+                    break;
+                case 2:
+                    footer->Hash = hasher.HashSector(offset, magic, sectors[i].Begin(), sectors[i].Size());
+                    break;
+                default:
+                    UNIT_ASSERT(false);
+                }
+                TSectorRestorator restorator(false, 1, false, format);
+                restorator.Restore(sectors[i].Begin(), offset, magic, 0, 0);
+                UNIT_ASSERT_C(restorator.GoodSectorCount == 1, "i# " << i
+                        << " GoodSectorCount# " << restorator.GoodSectorCount);
             }
-            TSectorRestorator restorator(false, 1, false, format);
-            restorator.Restore(sectors[i].Begin(), offset, magic, 0, 0);
-            UNIT_ASSERT_C(restorator.GoodSectorCount == 1, "i# " << i
-                    << " GoodSectorCount# " << restorator.GoodSectorCount);
         }
     }
 

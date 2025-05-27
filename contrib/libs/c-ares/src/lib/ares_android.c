@@ -27,6 +27,7 @@
 #  include "ares_private.h"
 #  include <jni.h>
 #  include <sys/prctl.h>
+#  include "ares_android.h"
 
 static JavaVM   *android_jvm                  = NULL;
 static jobject   android_connectivity_manager = NULL;
@@ -83,9 +84,9 @@ static jmethodID jni_get_method_id(JNIEnv *env, jclass cls,
 
 static int jvm_attach(JNIEnv **env)
 {
-  char              name[17] = {0};
+  char             name[17] = { 0 };
 
-  JavaVMAttachArgs  args;
+  JavaVMAttachArgs args;
 
   args.version = JNI_VERSION_1_6;
   if (prctl(PR_GET_NAME, name) == 0) {
@@ -93,7 +94,7 @@ static int jvm_attach(JNIEnv **env)
   } else {
     args.name = NULL;
   }
-  args.group   = NULL;
+  args.group = NULL;
 
   return (*android_jvm)->AttachCurrentThread(android_jvm, env, &args);
 }
@@ -227,7 +228,7 @@ done:
     (*android_jvm)->DetachCurrentThread(android_jvm);
   }
 
-  return ret;
+  return (int)ret;
 }
 
 int ares_library_android_initialized(void)

@@ -6,7 +6,10 @@
  * SPDX-License-Identifier: Apache-2.0.
  */
 
+#include <aws/common/byte_buf.h>
 #include <aws/common/common.h>
+
+AWS_PUSH_SANE_WARNING_LEVEL
 
 enum aws_platform_os {
     AWS_PLATFORM_OS_WINDOWS,
@@ -19,7 +22,53 @@ struct aws_cpu_info {
     bool suspected_hyper_thread;
 };
 
+struct aws_system_environment;
+
 AWS_EXTERN_C_BEGIN
+
+/**
+ * Allocates and initializes information about the system the current process is executing on.
+ * If successful returns an instance of aws_system_environment. If it fails, it will return NULL.
+ *
+ * Note: This api is used internally and is still early in its evolution.
+ * It may change in incompatible ways in the future.
+ */
+AWS_COMMON_API
+struct aws_system_environment *aws_system_environment_load(struct aws_allocator *allocator);
+
+AWS_COMMON_API
+struct aws_system_environment *aws_system_environment_acquire(struct aws_system_environment *env);
+
+AWS_COMMON_API
+void aws_system_environment_release(struct aws_system_environment *env);
+
+/**
+ * Returns the virtualization vendor for the specified compute environment, e.g. "Xen, Amazon EC2, etc..."
+ *
+ * The return value may be empty and in that case no vendor was detected.
+ */
+AWS_COMMON_API
+struct aws_byte_cursor aws_system_environment_get_virtualization_vendor(const struct aws_system_environment *env);
+
+/**
+ * Returns the product name for the specified compute environment. For example, the Amazon EC2 Instance type.
+ *
+ * The return value may be empty and in that case no vendor was detected.
+ */
+AWS_COMMON_API
+struct aws_byte_cursor aws_system_environment_get_virtualization_product_name(const struct aws_system_environment *env);
+
+/**
+ * Returns the number of processors for the specified compute environment.
+ */
+AWS_COMMON_API
+size_t aws_system_environment_get_processor_count(struct aws_system_environment *env);
+
+/**
+ * Returns the number of separate cpu groupings (multi-socket configurations or NUMA).
+ */
+AWS_COMMON_API
+size_t aws_system_environment_get_cpu_group_count(const struct aws_system_environment *env);
 
 /* Returns the OS this was built under */
 AWS_COMMON_API
@@ -101,5 +150,6 @@ AWS_COMMON_API
 void aws_backtrace_log(int log_level);
 
 AWS_EXTERN_C_END
+AWS_POP_SANE_WARNING_LEVEL
 
 #endif /* AWS_COMMON_SYSTEM_INFO_H */

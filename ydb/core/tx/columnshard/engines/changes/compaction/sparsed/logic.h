@@ -5,6 +5,7 @@
 #include <ydb/core/tx/columnshard/engines/changes/compaction/abstract/merger.h>
 
 namespace NKikimr::NOlap::NCompaction {
+
 class TSparsedMerger: public IColumnMerger {
 private:
     static inline auto Registrator = TFactory::TRegistrator<TSparsedMerger>(NArrow::NAccessor::TGlobalConst::SparsedDataAccessorName);
@@ -14,61 +15,87 @@ private:
     private:
         using TBase = TColumnPortionResult;
         const std::shared_ptr<arrow::DataType> DataType;
-        const TColumnMergeContext& Context;
         std::unique_ptr<arrow::ArrayBuilder> IndexBuilder;
         std::unique_ptr<arrow::ArrayBuilder> ValueBuilder;
         arrow::UInt32Builder* IndexBuilderImpl = nullptr;
-        ui32 CurrentRecordIdx = 0;
-        ui32 UsefulRecordsCount = 0;
-
-    public:
-        TWriter(const TColumnMergeContext& context);
-
-        bool HasData() const {
-            return CurrentRecordIdx;
-        }
-
-        bool HasUsefulData() const {
-            return UsefulRecordsCount;
-        }
-
-        ui32 AddPosition() {
-            return ++CurrentRecordIdx;
-        }
-
-        void AddRealData(const std::shared_ptr<arrow::Array>& arr, const ui32 index);
-
-        TColumnPortionResult Flush();
-    };
-
-    class TCursor {
-    private:
-        std::shared_ptr<NArrow::NAccessor::IChunkedArray> Array;
-        std::optional<NArrow::NAccessor::IChunkedArray::TFullChunkedArrayAddress> CurrentOwnedArray;
-        std::shared_ptr<NArrow::NAccessor::TSparsedArray> CurrentSparsedArray;
-        ui32 NextGlobalPosition = 0;
-        ui32 NextLocalPosition = 0;
-        ui32 CommonShift = 0;
-        std::optional<NArrow::NAccessor::TSparsedArrayChunk> Chunk;
         const TColumnMergeContext& Context;
-        void InitArrays(const ui32 position);
-
+        ui32 UsefulRecordsCount = 0;
+        std::optional<ui32> LastRecordIdx;
     public:
-        TCursor(const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& array, const TColumnMergeContext& context)
-            : Array(array)
-            , Context(context) {
-            AFL_VERIFY(Array->GetRecordsCount());
-            InitArrays(0);
+        bool AddRecord(const arrow::Array& colValue, const ui32 idx, const ui32 globalRecordIdx) {
+            AFL_VERIFY(NArrow::Append(*ValueBuilder, colValue, idx));
+            if (LastRecordIdx) {
+                AFL_VERIFY(*LastRecordIdx < globalRecordIdx);
+            }
+            LastRecordIdx = globalRecordIdx;
+            NArrow::TStatusValidator::Validate(IndexBuilderImpl->Append(globalRecordIdx));
+            ++UsefulRecordsCount;
+            return true;
         }
 
-        bool AddIndexTo(const ui32 index, TWriter& writer);
+        TWriter(const TColumnMergeContext& context);
+        TColumnPortionResult Flush(const ui32 recordsCount);
     };
 
-    std::vector<TCursor> Cursors;
-    virtual void DoStart(const std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>>& input) override;
+    class TSparsedChunkCursor: public TBaseIterator<NArrow::NAccessor::TSparsedArray> {
+    private:
+        const ui32 CursorIdx;
+        using TBase = TBaseIterator<NArrow::NAccessor::TSparsedArray>;
+        std::optional<ui32> GlobalResultOffset;
+        const TSourceReverseRemap* RemapToGlobalResult = nullptr;
+        ui32 ScanIndex = 0;
+        [[nodiscard]] bool MoveToSignificant(const std::optional<ui32> lowerBound = std::nullopt);
 
-    virtual std::vector<TColumnPortionResult> DoExecute(
-        const TChunkMergeContext& context, const arrow::UInt16Array& pIdxArray, const arrow::UInt32Array& pRecordIdxArray) override;
+    public:
+        ui32 GetCursorIdx() const {
+            return CursorIdx;
+        }
+
+        TString DebugString() const {
+            TStringBuilder sb;
+            AFL_VERIFY(GlobalResultOffset);
+            AFL_VERIFY(RemapToGlobalResult);
+            sb << "{offset=" << *GlobalResultOffset << ";remap=" << RemapToGlobalResult->DebugString()
+               << ";pos=" << GetGlobalResultIndexImpl().value_or(Max<i64>()) << "}";
+            return sb;
+        }
+        [[nodiscard]] std::optional<i64> GetGlobalResultIndexImpl() const;
+
+        struct THeapComparator {
+            bool operator()(const TSparsedChunkCursor* const item1, const TSparsedChunkCursor* const item2) const {
+                return item2->GetGlobalResultIndexVerified() < item1->GetGlobalResultIndexVerified();
+            }
+        };
+
+        [[nodiscard]] bool InitGlobalRemapping(
+            const TSourceReverseRemap& remapToGlobalResult, const ui32 globalResultOffset, const ui32 globalResultSize);
+
+        [[nodiscard]] ui32 GetGlobalResultIndexVerified() const {
+            std::optional<i64> result = GetGlobalResultIndexImpl();
+            AFL_VERIFY(result);
+            AFL_VERIFY(*result >= 0)("result", result);
+            return *result;
+        }
+
+        bool Next() {
+            ++ScanIndex;
+            return MoveToSignificant();
+        }
+
+        bool AddIndexTo(TWriter& writer);
+        TSparsedChunkCursor(const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& input, const std::shared_ptr<TColumnLoader>& loader, const ui32 cursorIdx)
+            : TBase(input, loader)
+            , CursorIdx(cursorIdx)
+        {
+        }
+    };
+
+    std::vector<TSparsedChunkCursor> Cursors;
+    std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> Inputs;
+
+    virtual void DoStart(const std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>>& input, TMergingContext& mergeContext) override;
+
+    virtual TColumnPortionResult DoExecute(const TChunkMergeContext& context, TMergingContext& mergeContext) override;
 
 public:
     using TBase::TBase;

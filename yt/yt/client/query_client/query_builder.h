@@ -18,72 +18,81 @@ DEFINE_ENUM(ETableJoinType,
     (Left)
 );
 
+DEFINE_ENUM(EWithTotalsMode,
+    (None)
+    (BeforeHaving)
+    (AfterHaving)
+);
+
 ////////////////////////////////////////////////////////////////////////////////
 
 class TQueryBuilder
 {
 public:
-    void SetSource(TString source);
-    void SetSource(TString source, TString alias);
+    void SetSource(std::string source);
+    void SetSource(std::string source, std::string alias);
 
-    int AddSelectExpression(TString expression);
-    int AddSelectExpression(TString expression, TString alias);
+    int AddSelectExpression(std::string expression);
+    int AddSelectExpression(std::string expression, std::string alias);
 
-    void AddWhereConjunct(TString expression);
+    void AddWhereConjunct(std::string expression);
 
-    void AddGroupByExpression(TString expression);
-    void AddGroupByExpression(TString expression, TString alias);
+    void AddGroupByExpression(std::string expression);
+    void AddGroupByExpression(std::string expression, std::string alias);
 
-    void AddHavingConjunct(TString expression);
+    void SetWithTotals(EWithTotalsMode withTotalsMode);
 
-    void AddOrderByExpression(TString expression);
-    void AddOrderByExpression(TString expression, std::optional<EOrderByDirection> direction);
+    void AddHavingConjunct(std::string expression);
 
-    void AddOrderByAscendingExpression(TString expression);
-    void AddOrderByDescendingExpression(TString expression);
+    void AddOrderByExpression(std::string expression);
+    void AddOrderByExpression(std::string expression, std::optional<EOrderByDirection> direction);
 
-    void AddJoinExpression(TString table, TString alias, TString onExpression, ETableJoinType type);
+    void AddOrderByAscendingExpression(std::string expression);
+    void AddOrderByDescendingExpression(std::string expression);
 
+    void AddJoinExpression(std::string table, std::string alias, std::string onExpression, ETableJoinType type);
+
+    void SetOffset(i64 offset);
     void SetLimit(i64 limit);
 
-    TString Build();
+    std::string Build();
 
 private:
     struct TEntryWithAlias
     {
-        TString Expression;
-        std::optional<TString> Alias;
+        std::string Expression;
+        std::optional<std::string> Alias;
     };
 
     struct TOrderByEntry
     {
-        TString Expression;
+        std::string Expression;
         std::optional<EOrderByDirection> Direction;
     };
 
     struct TJoinEntry
     {
-        TString Table;
-        TString Alias;
-        TString OnExpression;
+        std::string Table;
+        std::string Alias;
+        std::string OnExpression;
         ETableJoinType Type;
     };
 
 private:
-    std::optional<TString> Source_;
-    std::optional<TString> SourceAlias_;
+    std::optional<std::string> Source_;
+    std::optional<std::string> SourceAlias_;
     std::vector<TEntryWithAlias> SelectEntries_;
-    std::vector<TString> WhereConjuncts_;
+    std::vector<std::string> WhereConjuncts_;
     std::vector<TOrderByEntry> OrderByEntries_;
     std::vector<TEntryWithAlias> GroupByEntries_;
-    std::vector<TString> HavingConjuncts_;
+    EWithTotalsMode WithTotalsMode_ = EWithTotalsMode::None;
+    std::vector<std::string> HavingConjuncts_;
     std::vector<TJoinEntry> JoinEntries_;
+    std::optional<i64> Offset_;
     std::optional<i64> Limit_;
 
-private:
-    // We overload this functions to allow the corresponding JoinSeq().
-    friend void AppendToString(TString& dst, const TEntryWithAlias& entry);
-    friend void AppendToString(TString& dst, const TOrderByEntry& entry);
+    static void FormatEntryWithAlias(TStringBuilderBase* builder, const TEntryWithAlias& entry);
+    static void FormatOrderByEntry(TStringBuilderBase* builder, const TOrderByEntry& entry);
 };
 
 ////////////////////////////////////////////////////////////////////////////////

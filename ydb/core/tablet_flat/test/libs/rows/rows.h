@@ -53,7 +53,7 @@ namespace NTest {
 
             TRawTypeValue Raw() const
             {
-                return { Cell.Data(), Cell.Size(), NScheme::TTypeInfo(Type) };
+                return { Cell.Data(), Cell.Size(), Type };
             }
 
             NTable::TTag Tag = Max<TTag>();
@@ -93,7 +93,7 @@ namespace NTest {
 
         TRow& Do(NTable::TTag tag, ECellOp op)
         {
-            Y_ABORT_UNLESS(TCellOp::HaveNoPayload(op), "Allowed only payloadless ops");
+            Y_ENSURE(TCellOp::HaveNoPayload(op), "Allowed only payloadless ops");
 
             Cols.emplace_back(tag, 0, op);
 
@@ -176,7 +176,7 @@ namespace NTest {
                 Cols.back().Cell = { static_cast<const char*>(place), len };
             }
 
-            Y_ABORT_UNLESS(Cols.back().Cell.IsInline() == TCell::CanInline(len));
+            Y_ENSURE(Cols.back().Cell.IsInline() == TCell::CanInline(len));
 
             return *this;
         }

@@ -1,9 +1,8 @@
 #pragma once
 #include "defs.h"
 
-#include <ydb/library/yaml_config/yaml_config.h>
-
 #include <ydb/core/base/blobstorage.h>
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/console.pb.h>
 #include <ydb/core/protos/console_base.pb.h>
 #include <ydb/core/protos/console_config.pb.h>
@@ -13,7 +12,7 @@
 
 namespace NKikimr::NConsole {
 
-struct TEvConsole {
+namespace TEvConsole {
     enum EEv {
         // requests
         EvCreateTenantRequest = EventSpaceBegin(TKikimrEvents::ES_CONSOLE),
@@ -57,7 +56,7 @@ struct TEvConsole {
         EvGetAllMetadataRequest,
         EvGetNodeLabelsRequest,
         EvIsYamlReadOnlyRequest,
-
+        EvFetchStartupConfigRequest,
         // responses
         EvCreateTenantResponse = EvCreateTenantRequest + 1024,
         EvAlterTenantResponse,
@@ -103,6 +102,7 @@ struct TEvConsole {
         EvGenericError,
 
         EvIsYamlReadOnlyResponse,
+        EvFetchStartupConfigResponse,
 
         EvEnd
     };
@@ -226,6 +226,10 @@ struct TEvConsole {
 
     struct TEvResolveAllConfigResponse : public TEventShortDebugPB<TEvResolveAllConfigResponse, NKikimrConsole::TResolveAllConfigResponse, EvResolveAllConfigResponse> {};
 
+    struct TEvFetchStartupConfigRequest : public TEventShortDebugPB<TEvFetchStartupConfigRequest, NKikimrConsole::TFetchStartupConfigRequest, EvFetchStartupConfigRequest> {};
+
+    struct TEvFetchStartupConfigResponse : public TEventShortDebugPB<TEvFetchStartupConfigResponse, NKikimrConsole::TFetchStartupConfigResponse, EvFetchStartupConfigResponse> {};
+
     struct TEvUnauthorized : public TEventShortDebugPB<TEvUnauthorized, NKikimrConsole::TUnauthorized, EvUnauthorized> {};
 
     struct TEvDisabled : public TEventShortDebugPB<TEvDisabled, NKikimrConsole::TDisabled, EvDisabled> {};
@@ -344,7 +348,7 @@ struct TEvConsole {
                 Record.AddAffectedKinds(kind);
 
             if (!yamlConfig.empty()) {
-                Record.SetYamlConfig(yamlConfig);
+                Record.SetMainYamlConfig(yamlConfig);
                 for (auto &[id, config] : volatileYamlConfigs) {
                     auto *volatileConfig = Record.AddVolatileConfigs();
                     volatileConfig->SetId(id);
@@ -368,7 +372,7 @@ struct TEvConsole {
                 Record.AddAffectedKinds(kind);
 
             if (!yamlConfig.empty()) {
-                Record.SetYamlConfig(yamlConfig);
+                Record.SetMainYamlConfig(yamlConfig);
                 for (auto &[id, config] : volatileYamlConfigs) {
                     auto *volatileConfig = Record.AddVolatileConfigs();
                     volatileConfig->SetId(id);
@@ -376,6 +380,35 @@ struct TEvConsole {
                 }
             }
         }
+
+        TEvConfigSubscriptionNotification(
+            ui64 generation,
+            const NKikimrConfig::TAppConfig &config,
+            const THashSet<ui32> &affectedKinds,
+            const TString &yamlConfig,
+            const TMap<ui64, TString> &volatileYamlConfigs,
+            const NKikimrConfig::TAppConfig &rawConfig,
+            const TMaybe<TString> databaseYamlConfig)
+        {
+            Record.SetGeneration(generation);
+            Record.MutableConfig()->CopyFrom(config);
+            Record.MutableRawConsoleConfig()->CopyFrom(rawConfig);
+            for (ui32 kind : affectedKinds)
+                Record.AddAffectedKinds(kind);
+
+            if (!yamlConfig.empty()) {
+                Record.SetMainYamlConfig(yamlConfig);
+                for (auto &[id, config] : volatileYamlConfigs) {
+                    auto *volatileConfig = Record.AddVolatileConfigs();
+                    volatileConfig->SetId(id);
+                    volatileConfig->SetConfig(config);
+                }
+            }
+            if (databaseYamlConfig) {
+                Record.SetDatabaseYamlConfig(*databaseYamlConfig);
+            }
+        }
+
     };
 
     /**

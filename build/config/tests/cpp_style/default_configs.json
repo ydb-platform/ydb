@@ -1,0 +1,3 @@
+{
+    "clang_format": "build/config/tests/cpp_style/.clang-format"
+}

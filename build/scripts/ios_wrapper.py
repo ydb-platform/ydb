@@ -1,3 +1,4 @@
+from __future__ import print_function
 import errno
 import json
 import os
@@ -49,13 +50,13 @@ def just_do_it(args):
         elif i.endswith('.strings_tar'):
             strings.append(i)
         else:
-            print >> sys.stderr, 'Unknown input:', i, 'ignoring'
+            print('Unknown input:', i, 'ignoring', file=sys.stderr)
     if not plists:
         raise Exception("Can't find plist files")
     if not plists[0].endswith('.plist'):
-        print >> sys.stderr, "Main plist file can be defined incorretly"
+        print("Main plist file can be defined incorretly", file=sys.stderr)
     if not storyboards:
-        print >> sys.stderr, "Storyboards list are empty"
+        print("Storyboards list are empty", file=sys.stderr)
     if len(signs) > 1:
         raise Exception("Too many .xcent files")
     app_dir = os.path.join(module_dir, app_name + '.app')

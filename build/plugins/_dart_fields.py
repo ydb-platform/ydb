@@ -8,7 +8,6 @@ import shlex
 import sys
 from functools import reduce
 
-import six
 import ymake
 
 import _common
@@ -22,13 +21,23 @@ CANON_OUTPUT_STORAGE = 'canondata_storage'
 KTLINT_CURRENT_EDITOR_CONFIG = "arcadia/build/platform/java/ktlint/.editorconfig"
 KTLINT_OLD_EDITOR_CONFIG = "arcadia/build/platform/java/ktlint_old/.editorconfig"
 
+ARCADIA_ROOT = '${ARCADIA_ROOT}/'
+SOURCE_ROOT_SHORT = '$S/'
+
 
 class DartValueError(ValueError):
     pass
 
 
 def create_dart_record(fields, *args):
-    return reduce(operator.or_, (value for field in fields if (value := field(*args))), {})
+    try:
+        return reduce(operator.or_, (value for field in fields if (value := field(*args))), {})
+    except Exception as e:
+        if str(e) != "":
+            ymake.report_configure_error("Exception: {}".format(e))
+        else:
+            raise (e)
+        return None
 
 
 def with_fields(fields):
@@ -91,7 +100,7 @@ def format_recipes(data: str | None) -> str:
 
 def prepare_recipes(data: str | None) -> bytes:
     formatted = format_recipes(data)
-    return base64.b64encode(six.ensure_binary(formatted))
+    return base64.b64encode(formatted.encode('utf-8'))
 
 
 def prepare_env(data):
@@ -149,7 +158,7 @@ def _get_external_resources_from_canon_data(data):
             if resource:
                 res.add(resource)
         else:
-            for k, v in six.iteritems(data):
+            for k, v in data.items():
                 res.update(_get_external_resources_from_canon_data(v))
     elif isinstance(data, list):
         for e in data:
@@ -256,6 +265,30 @@ def _get_ts_test_data_dirs(unit):
     )
 
 
+@_common.cache_by_second_arg
+def get_linter_configs(unit, config_paths):
+    rel_config_path = _common.rootrel_arc_src(config_paths, unit)
+    arc_config_path = unit.resolve_arc_path(rel_config_path)
+    abs_config_path = unit.resolve(arc_config_path)
+    with open(abs_config_path, 'r') as fd:
+        return json.load(fd)
+
+
+def _reference_group_var(varname: str, extensions: list[str] | None = None) -> str:
+    if extensions is None:
+        return f'"${{join=\\;:{varname}}}"'
+
+    return serialize_list(f'${{ext={ext};join=\\;:{varname}}}' for ext in extensions)
+
+
+def assert_file_exists(unit, path):
+    path = unit.resolve(SOURCE_ROOT_SHORT + path)
+    if not os.path.exists(path):
+        message = 'File {} is not found'.format(path)
+        ymake.report_configure_error(message)
+        raise DartValueError()
+
+
 class AndroidApkTestActivity:
     KEY = 'ANDROID_APK_TEST_ACTIVITY'
 
@@ -326,10 +359,8 @@ class Classpath:
 
     @classmethod
     def value(cls, unit, flat_args, spec_args):
-        ymake_java_test = unit.get('YMAKE_JAVA_TEST') == 'yes'
-        if ymake_java_test:
-            value = '$B/{}/{}.jar ${{DART_CLASSPATH}}'.format(unit.get('MODDIR'), unit.get('REALPRJNAME'))
-            return {cls.KEY: value}
+        value = '$B/{}/{}.jar ${{DART_CLASSPATH}}'.format(unit.get('MODDIR'), unit.get('REALPRJNAME'))
+        return {cls.KEY: value}
 
 
 class ConfigPath:
@@ -360,10 +391,10 @@ class CustomDependencies:
 
     @classmethod
     def depends_with_linter(cls, unit, flat_args, spec_args):
-        deps = []
-        _, linter = flat_args
-        deps.append(os.path.dirname(linter))
-        deps += spec_args.get('DEPENDS', [])
+        linter = Linter.value(unit, flat_args, spec_args)[Linter.KEY]
+        deps = spec_args.get('DEPENDS', []) + [os.path.dirname(linter)]
+        for dep in deps:
+            unit.ondepends(dep)
         return {cls.KEY: " ".join(deps)}
 
     @classmethod
@@ -478,7 +509,7 @@ class JavaClasspathCmdType:
                     unit.path(), java_cp_arg_type
                 )
             )
-            raise DartValueError
+            raise DartValueError()
         return {cls.KEY: java_cp_arg_type}
 
 
@@ -528,8 +559,121 @@ class KtlintBinary:
         return {cls.KEY: value}
 
 
+class Linter:
+    KEY = 'LINTER'
+
+    @classmethod
+    def value(cls, unit, flat_args, spec_args):
+        return {cls.KEY: spec_args['LINTER'][0]}
+
+
+class LintConfigs:
+    KEY = 'LINT-CONFIGS'
+
+    @staticmethod
+    def _from_config_type(unit, spec_args):
+        if not spec_args.get('CONFIG_TYPE') or not spec_args.get('CONFIG_TYPE')[0]:
+            return
+        linter_name = spec_args['NAME'][0]
+        config_type = spec_args.get('CONFIG_TYPE')[0]
+        if config_type not in consts.LINTER_CONFIG_TYPES[linter_name]:
+            message = "Unknown {} linter config type: {}. Allowed types: {}".format(
+                linter_name, config_type, ', '.join(consts.LINTER_CONFIG_TYPES[linter_name])
+            )
+            ymake.report_configure_error(message)
+            raise DartValueError()
+        if common_configs_dir := unit.get('MODULE_COMMON_CONFIGS_DIR'):
+            config = os.path.join(common_configs_dir, config_type)
+            path = unit.resolve(config)
+            if os.path.exists(path):
+                return _common.strip_roots(config)
+            message = "File not found: {}".format(path)
+            ymake.report_configure_error(message)
+            raise DartValueError()
+        else:
+            message = "Config type specifier is only allowed with autoincludes"
+            ymake.report_configure_error(message)
+            raise DartValueError()
+
+    @classmethod
+    def python_configs(cls, unit, flat_args, spec_args):
+        if config := cls._from_config_type(unit, spec_args):
+            # specified by config type, autoincludes scheme
+            return {cls.KEY: serialize_list([config])}
+
+        # default config
+        linter_name = spec_args['NAME'][0]
+        default_configs_path = spec_args['CONFIGS'][0]
+        assert_file_exists(unit, default_configs_path)
+        config = get_linter_configs(unit, default_configs_path).get(linter_name)
+        if not config:
+            message = f"Default config in {default_configs_path} can't be found for a linter {linter_name}"
+            ymake.report_configure_error(message)
+            raise DartValueError()
+        assert_file_exists(unit, config)
+        configs = [config]
+        if linter_name in ('flake8', 'py2_flake8'):
+            configs.extend(spec_args.get('FLAKE_MIGRATIONS_CONFIG', []))
+        return {cls.KEY: serialize_list(configs)}
+
+    @classmethod
+    def cpp_configs(cls, unit, flat_args, spec_args):
+        if config := cls._from_config_type(unit, spec_args):
+            # specified by config type, autoincludes scheme
+            return {cls.KEY: serialize_list([config])}
+
+        # default config
+        linter_name = spec_args['NAME'][0]
+        default_configs_path = spec_args.get('CONFIGS')[0]
+        assert_file_exists(unit, default_configs_path)
+        config = get_linter_configs(unit, default_configs_path).get(linter_name)
+        if not config:
+            message = f"Default config in {default_configs_path} can't be found for a linter {linter_name}"
+            ymake.report_configure_error(message)
+            raise DartValueError()
+        assert_file_exists(unit, config)
+        return {cls.KEY: serialize_list([config])}
+
+
+class LintExtraParams:
+    KEY = 'LINT-EXTRA-PARAMS'
+
+    _CUSTOM_CLANG_FORMAT_ALLOWED_PATHS = ('ads', 'bigrt', 'grut', 'yabs', 'maps')
+
+    @classmethod
+    def from_macro_args(cls, unit, flat_args, spec_args):
+        extra_params = spec_args.get('EXTRA_PARAMS', [])
+        for arg in extra_params:
+            if '=' not in arg:
+                message = 'Wrong EXTRA_PARAMS value: "{}". Values must have format "name=value".'.format(arg)
+                ymake.report_configure_error(message)
+                raise DartValueError()
+            if 'custom_clang_format' in arg:
+                upath = unit.path()[3:]
+                if not upath.startswith(cls._CUSTOM_CLANG_FORMAT_ALLOWED_PATHS):
+                    message = f'Custom clang-format is not allowed in upath: {upath}'
+                    ymake.report_configure_error(message)
+                    raise DartValueError()
+        return {cls.KEY: serialize_list(extra_params)}
+
+
 class LintFileProcessingTime:
     KEY = 'LINT-FILE-PROCESSING-TIME'
+
+    @classmethod
+    def from_macro_args(cls, unit, flat_args, spec_args):
+        return {cls.KEY: spec_args.get('FILE_PROCESSING_TIME', [''])[0]}
+
+
+class LintName:
+    KEY = 'LINT-NAME'
+
+    @classmethod
+    def value(cls, unit, flat_args, spec_args):
+        lint_name = spec_args['NAME'][0]
+        if lint_name in ('flake8', 'py2_flake8') and (unit.get('DISABLE_FLAKE8') or 'no') == 'yes':
+            raise DartValueError()
+        return {cls.KEY: lint_name}
 
 
 class ModuleLang:
@@ -720,14 +864,8 @@ class TestClasspath:
 
     @classmethod
     def value(cls, unit, flat_args, spec_args):
-        test_classpath_origins = unit.get('TEST_CLASSPATH_VALUE')
-        ymake_java_test = unit.get('YMAKE_JAVA_TEST') == 'yes'
-        if test_classpath_origins:
-            value = '${TEST_CLASSPATH_MANAGED}'
-            return {cls.KEY: value}
-        elif ymake_java_test:
-            value = '${DART_CLASSPATH}'
-            return {cls.KEY: value}
+        value = '${DART_CLASSPATH}'
+        return {cls.KEY: value}
 
 
 class TestClasspathDeps:
@@ -735,20 +873,7 @@ class TestClasspathDeps:
 
     @classmethod
     def value(cls, unit, flat_args, spec_args):
-        test_classpath_origins = unit.get('TEST_CLASSPATH_VALUE')
-        ymake_java_test = unit.get('YMAKE_JAVA_TEST') == 'yes'
-        if not test_classpath_origins and ymake_java_test:
-            return {cls.KEY: '${DART_CLASSPATH_DEPS}'}
-
-
-class TestClasspathOrigins:
-    KEY = 'TEST_CLASSPATH_ORIGINS'
-
-    @classmethod
-    def value(cls, unit, flat_args, spec_args):
-        test_classpath_origins = unit.get('TEST_CLASSPATH_VALUE')
-        if test_classpath_origins:
-            return {cls.KEY: test_classpath_origins}
+        return {cls.KEY: '${DART_CLASSPATH_DEPS}'}
 
 
 class TestCwd:
@@ -818,9 +943,7 @@ class TestData:
 
     @classmethod
     def java_style(cls, unit, flat_args, spec_args):
-        ymake_java_test = unit.get('YMAKE_JAVA_TEST') == 'yes'
-        if ymake_java_test:
-            return {cls.KEY: java_srcdirs_to_data(unit, 'ALL_SRCDIRS')}
+        return {cls.KEY: java_srcdirs_to_data(unit, 'ALL_SRCDIRS')}
 
     @classmethod
     def from_unit_with_canonical(cls, unit, flat_args, spec_args):
@@ -841,9 +964,8 @@ class TestData:
 
         props, error_mgs = extract_java_system_properties(unit, get_values_list(unit, 'SYSTEM_PROPERTIES_VALUE'))
         if error_mgs:
-            # TODO move error reporting out of field classes
             ymake.report_configure_error(error_mgs)
-            raise DartValueError
+            raise DartValueError()
         for prop in props:
             if prop['type'] == 'file':
                 test_data.append(prop['path'].replace('${ARCADIA_ROOT}', 'arcadia'))
@@ -853,6 +975,46 @@ class TestData:
     @classmethod
     def from_unit(cls, unit, flat_args, spec_args):
         return {cls.KEY: serialize_list(get_values_list(unit, "TEST_DATA_VALUE"))}
+
+
+class DockerImage:
+    KEY = 'DOCKER-IMAGES'
+
+    @staticmethod
+    def _validate(images):
+        docker_image_re = consts.DOCKER_LINK_RE
+        for img in images:
+            msg = None
+            if "=" in img:
+                link, _ = img.rsplit('=', 1)
+                if docker_image_re.match(link) is None:
+                    msg = 'Invalid docker url format: {}. Link should be provided in format docker://<repo>@sha256:<digest>'.format(
+                        link
+                    )
+            else:
+                msg = 'Invalid docker image: {}. Image should be provided in format <tag>=<link>'.format(img)
+            if msg:
+                ymake.report_configure_error(msg)
+                raise DartValueError(msg)
+
+    @staticmethod
+    def unify_images(images):
+        res = []
+        for image in images:
+            if not image.startswith('docker://'):
+                alias, url = image.split('=', 1)
+                image = url + "=" + alias
+            res.append(image)
+        return res
+
+    @classmethod
+    def value(cls, unit, flat_args, spec_args):
+        images = get_values_list(unit, 'DOCKER_IMAGES_VALUE')
+        if images:
+            images = cls.unify_images(images)
+            images = sorted(images)
+            cls._validate(images)
+        return {cls.KEY: serialize_list(images)}
 
 
 class TsConfigPath:
@@ -949,8 +1111,51 @@ class TestedProjectName:
 
 class TestFiles:
     KEY = 'TEST-FILES'
-    # TODO remove FILES, see DEVTOOLS-7052
+    # TODO remove FILES, see DEVTOOLS-7052, currently it's required
+    # https://a.yandex-team.ru/arcadia/devtools/ya/test/dartfile/__init__.py?rev=r14292146#L10
     KEY2 = 'FILES'
+
+    # XXX: this is a workaround to support very specific linting settings.
+    # Do not use it as a general mechanism!
+    _MAPS_RENDERER_PREFIX = 'maps/renderer'
+    _MAPS_RENDERER_INCLUDE_LINTER_TEST_PATHS = (
+        'maps/renderer/cartograph',
+        'maps/renderer/denormalization',
+        'maps/renderer/libs/api',
+        'maps/renderer/libs/data_sets/geojson_data_set',
+        'maps/renderer/libs/data_sets/yt_data_set',
+        'maps/renderer/libs/design',
+        'maps/renderer/libs/geosx',
+        'maps/renderer/libs/geojson_to_yt',
+        'maps/renderer/libs/gltf',
+        'maps/renderer/libs/golden',
+        'maps/renderer/libs/hd3d',
+        'maps/renderer/libs/image',
+        'maps/renderer/libs/kv_storage',
+        'maps/renderer/libs/mapreduce',
+        'maps/renderer/libs/marking',
+        'maps/renderer/libs/mesh',
+        'maps/renderer/libs/serializers',
+        'maps/renderer/libs/style2',
+        'maps/renderer/libs/style2_layer_bundle',
+        'maps/renderer/libs/terrain',
+        'maps/renderer/libs/threading',
+        'maps/renderer/libs/vec',
+        'maps/renderer/libs/yt',
+        'maps/renderer/tilemill',
+        'maps/renderer/tools/fontograph',
+        'maps/renderer/tools/terrain_cli',
+        'maps/renderer/tools/mapcheck2/lib',
+        'maps/renderer/tools/mapcheck2/tests',
+    )
+
+    # XXX: this is a workaround to support very specific linting settings.
+    # Do not use it as a general mechanism!
+    _MAPS_B2BGEO_PREFIX = 'maps/b2bgeo/mvrp_solver'
+    _MAPS_B2BGEO_INCLUDE_LINTER_TEST_PATHS = (
+        'maps/b2bgeo/mvrp_solver/backend',
+        'maps/b2bgeo/mvrp_solver/aws_docker',
+    )
 
     @classmethod
     def value(cls, unit, flat_args, spec_args):
@@ -993,32 +1198,78 @@ class TestFiles:
     @classmethod
     def test_srcs(cls, unit, flat_args, spec_args):
         test_files = get_values_list(unit, 'TEST_SRCS_VALUE')
-        return {cls.KEY: serialize_list(test_files)}
+        value = serialize_list(test_files)
+        return {cls.KEY: value, cls.KEY2: value}
 
     @classmethod
     def ts_test_srcs(cls, unit, flat_args, spec_args):
         test_files = get_values_list(unit, "_TS_TEST_SRCS_VALUE")
         test_files = _resolve_module_files(unit, unit.get("MODDIR"), test_files)
-        return {cls.KEY: serialize_list(test_files)}
+        value = serialize_list(test_files)
+        return {cls.KEY: value, cls.KEY2: value}
 
     @classmethod
     def ts_input_files(cls, unit, flat_args, spec_args):
         typecheck_files = get_values_list(unit, "TS_INPUT_FILES")
         test_files = [_common.resolve_common_const(f) for f in typecheck_files]
-        return {cls.KEY: serialize_list(test_files)}
+        value = serialize_list(test_files)
+        return {cls.KEY: value, cls.KEY2: value}
 
     @classmethod
     def ts_lint_srcs(cls, unit, flat_args, spec_args):
         test_files = get_values_list(unit, "_TS_LINT_SRCS_VALUE")
         test_files = _resolve_module_files(unit, unit.get("MODDIR"), test_files)
-        return {cls.KEY: serialize_list(test_files)}
+        value = serialize_list(test_files)
+        return {cls.KEY: value, cls.KEY2: value}
 
     @classmethod
     def stylesheets(cls, unit, flat_args, spec_args):
         test_files = get_values_list(unit, "_TS_STYLELINT_FILES")
         test_files = _resolve_module_files(unit, unit.get("MODDIR"), test_files)
+        value = serialize_list(test_files)
+        return {cls.KEY: value, cls.KEY2: value}
 
-        return {cls.KEY: serialize_list(test_files)}
+    @classmethod
+    def py_linter_files(cls, unit, flat_args, spec_args):
+        files = unit.get('PY_LINTER_FILES')
+        if not files:
+            raise DartValueError()
+        files = json.loads(files)
+        test_files = []
+        for path in files:
+            if path.startswith(ARCADIA_ROOT):
+                test_files.append(path.replace(ARCADIA_ROOT, SOURCE_ROOT_SHORT, 1))
+            elif path.startswith(SOURCE_ROOT_SHORT):
+                test_files.append(path)
+        if not test_files:
+            lint_name = LintName.value(unit, flat_args, spec_args)[LintName.KEY]
+            message = 'No files to lint for {}'.format(lint_name)
+            raise DartValueError(message)
+        # XXX: we may have duplicated files because of macroses used to gather extra files for linting
+        # including those that use globs
+        test_files = serialize_list(_common.sort_uniq(test_files))
+        return {cls.KEY: test_files, cls.KEY2: test_files}
+
+    @classmethod
+    def cpp_linter_files(cls, unit, flat_args, spec_args):
+        upath = unit.path()[3:]
+
+        if upath.startswith(cls._MAPS_RENDERER_PREFIX):
+            for path in cls._MAPS_RENDERER_INCLUDE_LINTER_TEST_PATHS:
+                if os.path.commonpath([upath, path]) == path:
+                    break
+            else:
+                raise DartValueError()
+
+        if upath.startswith(cls._MAPS_B2BGEO_PREFIX):
+            for path in cls._MAPS_B2BGEO_INCLUDE_LINTER_TEST_PATHS:
+                if os.path.commonpath([upath, path]) == path:
+                    break
+            else:
+                raise DartValueError()
+
+        files_dart = _reference_group_var("ALL_SRCS", consts.STYLE_CPP_ALL_EXTS)
+        return {cls.KEY: files_dart, cls.KEY2: files_dart}
 
 
 class TestEnv:
@@ -1050,14 +1301,11 @@ class TestJar:
 
     @classmethod
     def value(cls, unit, flat_args, spec_args):
-        test_classpath_origins = unit.get('TEST_CLASSPATH_VALUE')
-        ymake_java_test = unit.get('YMAKE_JAVA_TEST') == 'yes'
-        if not test_classpath_origins and ymake_java_test:
-            if unit.get('UNITTEST_DIR'):
-                value = '${UNITTEST_MOD}'
-            else:
-                value = '{}/{}.jar'.format(unit.get('MODDIR'), unit.get('REALPRJNAME'))
-            return {cls.KEY: value}
+        if unit.get('UNITTEST_DIR'):
+            value = '${UNITTEST_MOD}'
+        else:
+            value = '{}/{}.jar'.format(unit.get('MODDIR'), unit.get('REALPRJNAME'))
+        return {cls.KEY: value}
 
 
 class TestName:
@@ -1097,6 +1345,10 @@ class TestName:
         test_name = os.path.basename(os.path.join(unit.path(), unit.filename()).replace(".pkg", ""))
         return {cls.KEY: os.path.splitext(test_name)[0]}
 
+    @classmethod
+    def name_from_macro_args(cls, unit, flat_args, spec_args):
+        return {cls.KEY: spec_args['NAME'][0]}
+
 
 class TestPartition:
     KEY = 'TEST_PARTITION'
@@ -1104,6 +1356,14 @@ class TestPartition:
     @classmethod
     def value(cls, unit, flat_args, spec_args):
         return {cls.KEY: unit.get("TEST_PARTITION")}
+
+
+class TestExperimentalFork:
+    KEY = 'TEST_EXPERIMENTAL_FORK'
+
+    @classmethod
+    def value(cls, unit, flat_args, spec_args):
+        return {cls.KEY: unit.get("TEST_EXPERIMENTAL_FORK")}
 
 
 class TestRecipes:
@@ -1181,11 +1441,10 @@ class SystemProperties:
     def value(cls, unit, flat_args, spec_args):
         props, error_mgs = extract_java_system_properties(unit, get_values_list(unit, 'SYSTEM_PROPERTIES_VALUE'))
         if error_mgs:
-            # TODO move error reporting out of field classes
             ymake.report_configure_error(error_mgs)
-            raise DartValueError
+            raise DartValueError()
 
-        props = base64.b64encode(six.ensure_binary(json.dumps(props)))
+        props = base64.b64encode(json.dumps(props).encode('utf-8'))
         return {cls.KEY: props}
 
 

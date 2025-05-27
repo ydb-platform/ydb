@@ -2,7 +2,7 @@
 
 {% include [warning.md](_includes/warning.md) %}
 
-`ydbops` можно запустить, указав все необходимые аргументы командной строки при вызове команды. 
+`ydbops` можно запустить, указав все необходимые аргументы командной строки при вызове команды.
 Однако, есть две функции, которые позволяют избежать повторения часто используемых аргументов:
 
 
@@ -46,12 +46,14 @@ ydbops restart \
 
 ```yaml
 current-profile: my-profile
-my-profile:
-  endpoint: grpc://<hostname>:2135
-  user: admin
-  password-file: ~/<password-file>
-  k8s-namespace: <k8s-namespace>
-  kubeconfig: ~/.kube/config
+profiles:
+  my-profile:
+    endpoint: grpcs://<hostname>:2135
+    ca-file: ~/<ca-certificate-file>
+    user: <username>
+    password-file: ~/<password-file>
+    k8s-namespace: <k8s-namespace>
+    kubeconfig: ~/.kube/config
 ```
 
 ### Команды управления профилями
@@ -65,31 +67,33 @@ my-profile:
 Пример файла конфигурации со всеми возможными параметрами и примерами значений (скорее всего, не все опции будут нужны одновременно):
 
 ```yaml
-# специальный ключ `current-profile` может быть указан для 
+# специальный ключ `current-profile` может быть указан для
 # использования в качестве активного профиля по умолчанию при вызове CLI
 current-profile: my-profile
 
-my-profile:
-  endpoint: grpc://your.ydb.cluster.fqdn:2135
+# Описание профилей помещается в ключ `profiles`
+profiles:
+  my-profile:
+    endpoint: grpcs://your.ydb.cluster.fqdn:2135
 
-  # расположение файла CA при использовании grpcs в endpoint
-  ca-file: /path/to/custom/ca/file
+    # расположение файла CA при использовании grpcs в endpoint
+    ca-file: /path/to/custom/ca/file
 
-  # имя пользователя и файл пароля, если используется аутентификация при помощи логина и пароля:
-  user: your-ydb-user-name
-  password-file: /path/to/password-file
+    # имя пользователя и файл пароля, если используется аутентификация при помощи логина и пароля:
+    user: your-ydb-user-name
+    password-file: /path/to/password-file
 
-  # если используется аутентификация при помощи access token
-  token-file: /path/to/ydb/token
+    # если используется аутентификация при помощи access token
+    token-file: /path/to/ydb/token
 
-  # если идет работа с YDB кластерами под Kubernetes, можно указать путь к kubeconfig:
-  kubeconfig: /path/to/kube/config
-  k8s-namespace: <k8s-namespace>
+    # если идет работа с YDB кластерами под Kubernetes, можно указать путь к kubeconfig:
+    kubeconfig: /path/to/kube/config
+    k8s-namespace: <k8s-namespace>
 ```
 
 ## Переменные окружения {#environment-variables}
 
-Кроме того, можно указать несколько переменных окружения вместо передачи аргументов командной строки или использования [файлов конфигурации](#config-files).
+Кроме того, можно указать несколько переменных окружения вместо передачи аргументов командной строки или использования [файлов конфигурации](#config-file).
 
 
 Для справки о приоритете при определении опции в нескольких местах, вызовите `ydbops --help`.
@@ -97,7 +101,7 @@ my-profile:
 - `YDB_TOKEN` может быть передана вместо флага `--token-file` или параметра профиля `token-file`.
 - `YDB_PASSWORD` может быть передана вместо флага `--password-file` или параметра профиля `password-file`.
 - `YDB_USER` может быть передана вместо флага `--user` или параметра профиля `user`.
- 
+
 ## Смотрите также
 
 - [{#T}](index.md)

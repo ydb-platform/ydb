@@ -128,9 +128,7 @@ private:
         auto offsets = GetDirectDenseOffsets();
 
         // Save offsets as diff from expected.
-        ui32 expectedLength;
-        ui32 maxDiff;
-        PrepareDiffFromExpected(&offsets, &expectedLength, &maxDiff);
+        auto [expectedLength, maxDiff] = PrepareDiffFromExpected(&offsets);
 
         auto directDataSize = DirectBuffer_->GetSize();
         auto directData = DirectBuffer_->Finish();
@@ -213,9 +211,7 @@ private:
         auto idsRef = TSharedRef::MakeCopy<TConverterTag>(TRef(ids.data(), sizeof(ui32) * ids.size()));
 
         // 2. Dictionary offsets.
-        ui32 expectedLength;
-        ui32 maxDiff;
-        PrepareDiffFromExpected(&dictionaryOffsets, &expectedLength, &maxDiff);
+        auto [expectedLength, maxDiff] = PrepareDiffFromExpected(&dictionaryOffsets);
         auto dictionaryOffsetsRef = TSharedRef::MakeCopy<TConverterTag>(TRef(dictionaryOffsets.data(), sizeof(ui32) * dictionaryOffsets.size()));
 
         auto primaryColumn = std::make_shared<TBatchColumn>();
@@ -303,8 +299,7 @@ private:
     {
         for (const auto& rowValues : rowsValues) {
             auto unversionedValue = rowValues[ColumnOffset_];
-            YT_VERIFY(unversionedValue);
-            auto value = CaptureValue(*unversionedValue);
+            auto value = CaptureValue(unversionedValue ? *unversionedValue : MakeUnversionedNullValue());
             Values_.push_back(value);
             ++RowCount_;
         }

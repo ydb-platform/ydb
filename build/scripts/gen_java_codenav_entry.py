@@ -1,3 +1,4 @@
+from __future__ import print_function
 import argparse
 import datetime
 import os
@@ -20,23 +21,23 @@ def just_do_it(java, kythe, kythe_to_proto, out_name, binding_only, kindexes):
     open(temp_out_name, 'w').close()
     start = datetime.datetime.now()
     for kindex in kindex_inputs:
-        print >> sys.stderr, '[INFO] Processing:', kindex
+        print('[INFO] Processing:', kindex, file=sys.stderr)
         indexer_start = datetime.datetime.now()
         p = subprocess.Popen(
             [java, '-jar', os.path.join(kythe, 'indexers/java_indexer.jar'), kindex], stdout=subprocess.PIPE
         )
         indexer_out, _ = p.communicate()
-        print >> sys.stderr, '[INFO] Indexer execution time:', (
+        print('[INFO] Indexer execution time:', (
             datetime.datetime.now() - indexer_start
-        ).total_seconds(), 'seconds'
+        ).total_seconds(), 'seconds', file=sys.stderr)
         if p.returncode:
             raise Exception('java_indexer failed with exit code {}'.format(p.returncode))
         dedup_start = datetime.datetime.now()
         p = subprocess.Popen([os.path.join(kythe, 'tools/dedup_stream')], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
         dedup_out, _ = p.communicate(indexer_out)
-        print >> sys.stderr, '[INFO] Dedup execution time:', (
+        print('[INFO] Dedup execution time:', (
             datetime.datetime.now() - dedup_start
-        ).total_seconds(), 'seconds'
+        ).total_seconds(), 'seconds', file=sys.stderr)
         if p.returncode:
             raise Exception('dedup_stream failed with exit code {}'.format(p.returncode))
         entrystream_start = datetime.datetime.now()
@@ -48,18 +49,18 @@ def just_do_it(java, kythe, kythe_to_proto, out_name, binding_only, kindexes):
         p.communicate(dedup_out)
         if p.returncode:
             raise Exception('entrystream failed with exit code {}'.format(p.returncode))
-        print >> sys.stderr, '[INFO] Entrystream execution time:', (
+        print('[INFO] Entrystream execution time:', (
             datetime.datetime.now() - entrystream_start
-        ).total_seconds(), 'seconds'
+        ).total_seconds(), 'seconds', file=sys.stderr)
     preprocess_start = datetime.datetime.now()
     subprocess.check_call(
         [kythe_to_proto, '--preprocess-entry', '--entries', temp_out_name, '--out', out_name]
         + (['--only-binding-data'] if binding_only else [])
     )
-    print >> sys.stderr, '[INFO] Preprocessing execution time:', (
+    print('[INFO] Preprocessing execution time:', (
         datetime.datetime.now() - preprocess_start
-    ).total_seconds(), 'seconds'
-    print >> sys.stderr, '[INFO] Total execution time:', (datetime.datetime.now() - start).total_seconds(), 'seconds'
+    ).total_seconds(), 'seconds', file=sys.stderr)
+    print('[INFO] Total execution time:', (datetime.datetime.now() - start).total_seconds(), 'seconds', file=sys.stderr)
 
 
 if __name__ == '__main__':

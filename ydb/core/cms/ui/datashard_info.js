@@ -105,6 +105,7 @@ function onDataShardInfoLoaded(data) {
     $('#tablet-info-state').text(info.State + (info.IsActive ? ' (active)' : ' (inactive)'));
     $('#tablet-info-shared-blobs').text(info.HasSharedBlobs);
     $('#tablet-info-change-sender').html('<a href="app?TabletID=' + TabletId + '&page=change-sender">Viewer</a>');
+    $('#tablet-info-volatile-txs').html(`<a href="app?TabletID=${TabletId}&page=volatile-txs">Viewer</a>`);
 
     var activities = data.Activities;
     if (activities) {

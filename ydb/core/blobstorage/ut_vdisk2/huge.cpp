@@ -32,7 +32,9 @@ Y_UNIT_TEST_SUITE(VDiskTest) {
                 UNIT_ASSERT_VALUES_EQUAL(res.ResultSize(), 1);
                 const auto& value = res.GetResult(0);
                 UNIT_ASSERT_VALUES_EQUAL(value.GetStatus(), NKikimrProto::OK);
-                UNIT_ASSERT_VALUES_EQUAL(value.GetBufferData(), *datap);
+                UNIT_ASSERT_EQUAL_C(value.GetBufferData(), *datap, "id# " << id
+                    << " got# " << (int)value.GetBufferData().front()
+                    << " expected# " << (int)datap->front());
             }
         };
 
@@ -61,17 +63,19 @@ Y_UNIT_TEST_SUITE(VDiskTest) {
             const ui64 tabletId = tabletIds[RandomNumber(tabletIds.size())];
             TTabletContext& tablet = tablets[tabletId];
 
-            TString& data = blobValues[RandomNumber(blobValues.size())];
+            size_t blobValueIndex = RandomNumber(blobValues.size());
+            TString& data = blobValues[blobValueIndex];
             TLogoBlobID id(tabletId, tablet.Gen, tablet.Step++, channel, data.size(), 0, 1);
 
             auto res = env->Put(id, data);
             UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), NKikimrProto::OK);
-            Cerr << "Put id# " << id << " totalSize# " << totalSize << Endl;
+            Cerr << "Put id# " << id << " totalSize# " << totalSize << " blobValueIndex# " << blobValueIndex << Endl;
 
-            content.emplace(id, &data);
+            const auto [it, inserted] = content.emplace(id, &data);
+            UNIT_ASSERT(inserted);
             totalSize += data.size();
 
-            if (RandomNumber(1000u) < 3) {
+            if (RandomNumber(1000u) < 100) {
                 ui32 minHugeBlobValue;
                 do {
                     minHugeBlobValue = minHugeBlobValues[RandomNumber(minHugeBlobValues.size())];

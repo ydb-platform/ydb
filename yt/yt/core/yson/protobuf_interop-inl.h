@@ -4,6 +4,8 @@
 #include "protobuf_interop.h"
 #endif
 
+#include <library/cpp/yt/error/error.h>
+
 namespace NYT::NYson {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -14,6 +16,82 @@ const TProtobufMessageType* ReflectProtobufMessageType()
     static const auto* type = ReflectProtobufMessageType(T::default_instance().GetDescriptor());
     return type;
 }
+
+////////////////////////////////////////////////////////////////////////////////
+
+#define MAP_PROTOBUF_ELEMENT_TYPE_NAME(elementType, name) \
+template <> \
+consteval std::string_view GetProtobufElementTypeName<elementType>() \
+{ \
+    return name##sv; \
+}
+
+MAP_PROTOBUF_ELEMENT_TYPE_NAME(TProtobufMessageElement, "message")
+MAP_PROTOBUF_ELEMENT_TYPE_NAME(TProtobufScalarElement, "scalar")
+MAP_PROTOBUF_ELEMENT_TYPE_NAME(TProtobufAttributeDictionaryElement, "attributeDictionary")
+MAP_PROTOBUF_ELEMENT_TYPE_NAME(TProtobufRepeatedElement, "repeated")
+MAP_PROTOBUF_ELEMENT_TYPE_NAME(TProtobufMapElement, "map")
+MAP_PROTOBUF_ELEMENT_TYPE_NAME(TProtobufAnyElement, "any")
+
+#undef MAP_PROTOBUF_ELEMENT_TYPE_NAME
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <class... U>
+auto VisitProtobufElement(const TProtobufElement& element, U&&... visitorOverloads)
+{
+    TOverloaded visitor{std::forward<U>(visitorOverloads)...};
+    return Visit(element, [&] <CProtobufElement TElement> (const std::unique_ptr<TElement>& element) {
+        YT_VERIFY(element);
+        return visitor(*element);
+    });
+}
+
+template <CProtobufElement TElementType>
+const TElementType& GetProtobufElementOrThrow(const TProtobufElement& element)
+{
+    const auto* result = std::get_if<std::unique_ptr<TElementType>>(&element);
+    THROW_ERROR_EXCEPTION_UNLESS(result,
+        "Expected protobuf element of type %Qv, but got of type %Qv",
+        GetProtobufElementTypeName<TElementType>(),
+        GetProtobufElementTypeName(element));
+    return *result->get();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <class ProtoType, class Type, bool UseParseOptionsInSerialize>
+static const void* DoRegisterIntermediateProtoInteropRepresentation()
+{
+    NYT::NYson::AddProtobufConverterRegisterAction([] {
+        auto* descriptor = ProtoType::default_instance().GetDescriptor();
+        NYT::NYson::TProtobufMessageConverter converter;
+        converter.Serializer = [] (
+            NYT::NYson::IYsonConsumer* consumer,
+            const google::protobuf::Message* message,
+            const NYson::TProtobufParserOptions& parseOptions = {})
+            {
+                const auto* typedMessage = dynamic_cast<const ProtoType*>(message);
+                YT_VERIFY(typedMessage);
+                Type value;
+                FromProto(&value, *typedMessage);
+                if constexpr (UseParseOptionsInSerialize) {
+                    Serialize(value, consumer, parseOptions);
+                } else {
+                    Serialize(value, consumer);
+                }
+            };
+        converter.Deserializer = [] (google::protobuf::Message* message, const NYT::NYTree::INodePtr& node) {
+            auto* typedMessage = dynamic_cast<ProtoType*>(message);
+            YT_VERIFY(typedMessage);
+            Type value;
+            Deserialize(value, node);
+            ToProto(typedMessage, value);
+        };
+        NYT::NYson::RegisterCustomProtobufConverter(descriptor, converter);
+    });
+    return nullptr;
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -6,10 +6,29 @@
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status/status.h>
 
 namespace NKikimr::NReplication::NController {
 
 class TStreamRemover: public TActorBootstrapped<TStreamRemover> {
+    void RequestPermission() {
+        Send(Parent, new TEvPrivate::TEvRequestDropStream());
+        Become(&TThis::StateRequestPermission);
+    }
+
+    STATEFN(StateRequestPermission) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvPrivate::TEvAllowDropStream, Handle);
+        default:
+            return StateBase(ev);
+        }
+    }
+
+    void Handle(TEvPrivate::TEvAllowDropStream::TPtr& ev) {
+        LOG_T("Handle " << ev->Get()->ToString());
+        DropStream();
+    }
+
     void DropStream() {
         switch (Kind) {
         case TReplication::ETargetKind::Table:
@@ -17,6 +36,8 @@ class TStreamRemover: public TActorBootstrapped<TStreamRemover> {
             Send(YdbProxy, new TEvYdbProxy::TEvAlterTableRequest(SrcPath, NYdb::NTable::TAlterTableSettings()
                 .AppendDropChangefeeds(StreamName)));
             break;
+        case TReplication::ETargetKind::Transfer:
+            Y_ABORT("Unreachable");
         }
 
         Become(&TThis::StateWork);
@@ -26,7 +47,8 @@ class TStreamRemover: public TActorBootstrapped<TStreamRemover> {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvYdbProxy::TEvAlterTableResponse, Handle);
             sFunc(TEvents::TEvWakeup, DropStream);
-            sFunc(TEvents::TEvPoison, PassAway);
+        default:
+            return StateBase(ev);
         }
     }
 
@@ -77,7 +99,19 @@ public:
     }
 
     void Bootstrap() {
-        DropStream();
+        switch (Kind) {
+        case TReplication::ETargetKind::Table:
+        case TReplication::ETargetKind::IndexTable:
+            return RequestPermission();
+        case TReplication::ETargetKind::Transfer:
+            Y_ABORT("Unreachable");
+        }
+    }
+
+    STATEFN(StateBase) {
+        switch (ev->GetTypeRewrite()) {
+            sFunc(TEvents::TEvPoison, PassAway);
+        }
     }
 
 private:

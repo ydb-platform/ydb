@@ -1,16 +1,17 @@
 #include "fiber_scheduler_thread.h"
 
 #include "fiber.h"
+#include "fiber_manager.h"
 #include "moody_camel_concurrent_queue.h"
 #include "private.h"
 
 #include <yt/yt/library/profiling/producer.h>
 
 #include <yt/yt/core/actions/invoker_util.h>
+#include <yt/yt/core/concurrency/scheduler_api.h>
 
 #include <yt/yt/core/misc/finally.h>
 #include <yt/yt/core/misc/shutdown.h>
-#include <yt/yt/core/misc/singleton.h>
 
 #include <library/cpp/yt/threading/spin_lock_count.h>
 
@@ -19,8 +20,6 @@
 #include <library/cpp/yt/error/origin_attributes.h>
 
 #include <library/cpp/yt/global/variable.h>
-
-#include <library/cpp/yt/memory/memory_tag.h>
 
 #include <library/cpp/yt/memory/function_view.h>
 
@@ -49,7 +48,7 @@ using namespace NProfiling;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static constexpr auto& Logger = ConcurrencyLogger;
+constinit const auto Logger = ConcurrencyLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -62,7 +61,7 @@ class TRefCountedGauge
     , public NProfiling::TGauge
 {
 public:
-    TRefCountedGauge(const NProfiling::TRegistry& profiler, const TString& name)
+    TRefCountedGauge(const NProfiling::TRegistry& profiler, const std::string& name)
         : NProfiling::TGauge(profiler.Gauge(name))
     { }
 
@@ -125,7 +124,7 @@ struct TFiberContext
 
     TFiberContext(
         TFiberSchedulerThread* fiberThread,
-        const TString& threadGroupName)
+        const std::string& threadGroupName)
         : FiberThread(fiberThread)
         , WaitingFibersCounter(New<NDetail::TRefCountedGauge>(
             NProfiling::TRegistry("/fiber").WithTag("thread", threadGroupName).WithHot(),
@@ -179,13 +178,6 @@ private:
 };
 
 ////////////////////////////////////////////////////////////////////////////////
-
-Y_FORCE_INLINE TMemoryTag SwapMemoryTag(TMemoryTag tag)
-{
-    auto result = GetCurrentMemoryTag();
-    SetCurrentMemoryTag(tag);
-    return result;
-}
 
 Y_FORCE_INLINE TFiberId SwapCurrentFiberId(TFiberId fiberId)
 {
@@ -393,14 +385,8 @@ public:
         return TFiber::CreateFiber();
     }
 
-    void UpdateMaxIdleFibers(int maxIdleFibers)
-    {
-        MaxIdleFibers_.store(maxIdleFibers, std::memory_order::relaxed);
-    }
-
 private:
     moodycamel::ConcurrentQueue<TFiber*> IdleFibers_;
-    std::atomic<int> MaxIdleFibers_ = DefaultMaxIdleFibers;
 
     // NB(arkady-e1ppa): Construct this last so that every other
     // field is initialized if this callback is ran concurrently.
@@ -460,13 +446,14 @@ private:
 
     void RemoveOverdrawnIdleFibers()
     {
-        // NB: size_t to int conversion.
+        // NB: Size_t to int conversion.
         int size = IdleFibers_.size_approx();
-        if (size <= MaxIdleFibers_.load(std::memory_order::relaxed)) {
+        int maxSize = TFiberManager::GetMaxIdleFibers();
+        if (size <= maxSize) {
             return;
         }
 
-        auto targetSize = std::max<size_t>(1, MaxIdleFibers_ / 2);
+        auto targetSize = std::max<size_t>(1, maxSize / 2);
 
         std::vector<TFiber*> fibers;
         DequeueFibersBulk(&fibers, size - targetSize);
@@ -503,9 +490,9 @@ private:
 Y_FORCE_INLINE TClosure PickCallback(TFiberSchedulerThread* fiberThread)
 {
     TCallback<void()> callback;
+
     // We wrap fiberThread->OnExecute() into a propagating storage guard to ensure
     // that the propagating storage created there won't spill into the fiber callbacks.
-
     TNullPropagatingStorageGuard guard;
     YT_VERIFY(guard.GetOldStorage().IsEmpty());
     callback = fiberThread->OnExecute();
@@ -522,17 +509,14 @@ void FiberTrampoline()
     YT_LOG_DEBUG("Fiber started");
 
     auto* currentFiber = GetCurrentFiber();
-    TFiber* successorFiber = nullptr;
 
     // Break loop to terminate fiber
     while (auto* fiberThread = TryGetFiberThread()) {
         YT_VERIFY(!TryGetResumerFiber());
-        YT_VERIFY(CurrentFls() == nullptr);
-
+        YT_VERIFY(!CurrentFls());
         YT_VERIFY(GetCurrentPropagatingStorage().IsEmpty());
 
         auto callback = PickCallback(fiberThread);
-
         if (!callback) {
             break;
         }
@@ -545,7 +529,7 @@ void FiberTrampoline()
 
         // Trace context can be restored for resumer fiber, so current trace context and memory tag are
         // not necessarily null. Check them after switch from and returning into current fiber.
-        if (successorFiber = ExtractResumerFiber()) {
+        if (auto* successorFiber = ExtractResumerFiber()) {
             // Suspend current fiber.
             TIdleFiberPool::Get()->SwichFromFiberAndMakeItIdle(currentFiber, successorFiber);
         }
@@ -621,7 +605,17 @@ public:
     void SetFuture(TFuture<void> awaitable)
     {
         auto guard = Guard(Lock_);
-        Future_ = std::move(awaitable);
+        if (!IsCanceled()) {
+            Future_ = std::move(awaitable);
+            return;
+        }
+
+        guard.Release();
+
+        ErrorSet_.Wait();
+
+        YT_ASSERT(!CancelationError_.IsOK());
+        awaitable.Cancel(CancelationError_);
     }
 
     void ResetFuture()
@@ -644,6 +638,8 @@ public:
             future = std::move(Future_);
         }
 
+        ErrorSet_.NotifyAll();
+
         if (future) {
             YT_LOG_DEBUG("Sending cancelation to fiber, propagating to the awaited future (TargetFiberId: %x)",
                 FiberId_);
@@ -652,12 +648,6 @@ public:
             YT_LOG_DEBUG("Sending cancelation to fiber (TargetFiberId: %x)",
                 FiberId_);
         }
-    }
-
-    TError GetCancelationError() const
-    {
-        auto guard = Guard(Lock_);
-        return CancelationError_;
     }
 
     void Run(const TError& error)
@@ -680,6 +670,7 @@ private:
     const TFiberId FiberId_;
 
     std::atomic<bool> Canceled_ = false;
+    NThreading::TEvent ErrorSet_;
     NThreading::TSpinLock Lock_;
     TError CancelationError_;
     TFuture<void> Future_;
@@ -811,21 +802,20 @@ protected:
     void OnSwitch()
     {
         FiberId_ = SwapCurrentFiberId(FiberId_);
-        MemoryTag_ = SwapMemoryTag(MemoryTag_);
+        TContextSwitchManager::Get()->OnOut();
         Fls_ = SwapCurrentFls(Fls_);
+        TContextSwitchManager::Get()->OnIn();
         MinLogLevel_ = SwapMinLogLevel(MinLogLevel_);
     }
 
     ~TBaseSwitchHandler()
     {
         YT_VERIFY(FiberId_ == InvalidFiberId);
-        YT_VERIFY(MemoryTag_ == NullMemoryTag);
         YT_VERIFY(!Fls_);
         YT_VERIFY(MinLogLevel_ == ELogLevel::Minimum);
     }
 
 private:
-    TMemoryTag MemoryTag_ = NullMemoryTag;
     TFls* Fls_ = nullptr;
     TFiberId FiberId_ = InvalidFiberId;
     ELogLevel MinLogLevel_ = ELogLevel::Minimum;
@@ -941,8 +931,6 @@ private:
     // On finish fiber running.
     void OnOut()
     {
-        TContextSwitchManager::Get()->OnOut();
-
         for (auto it = UserHandlers_.begin(); it != UserHandlers_.end(); ++it) {
             if (it->Out) {
                 it->Out();
@@ -965,8 +953,6 @@ private:
                 it->In();
             }
         }
-
-        TContextSwitchManager::Get()->OnIn();
     }
 };
 
@@ -983,9 +969,13 @@ Y_NO_INLINE void RunInFiberContext(TFiber* fiber, TClosure callback)
 {
     TFiberSwitchHandler switchHandler(fiber);
     TNullPropagatingStorageGuard nullPropagatingStorageGuard;
+
+    auto cleanup = Finally([&callback] {
+        // To ensure callback is destroyed before switchHandler.
+        callback.Reset();
+    });
+
     callback();
-    // To ensure callback is destroyed before switchHandler.
-    callback.Reset();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1046,13 +1036,12 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 TFiberSchedulerThread::TFiberSchedulerThread(
-    TString threadGroupName,
-    TString threadName,
+    std::string threadGroupName,
+    std::string threadName,
     NThreading::TThreadOptions options)
     : TThread(std::move(threadName), std::move(options))
     , ThreadGroupName_(std::move(threadGroupName))
 { }
-
 
 void TFiberSchedulerThread::ThreadMain()
 {
@@ -1080,24 +1069,17 @@ void TFiberSchedulerThread::ThreadMain()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void UpdateMaxIdleFibers(int maxIdleFibers)
-{
-    NDetail::TIdleFiberPool::Get()->UpdateMaxIdleFibers(maxIdleFibers);
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
 YT_DEFINE_THREAD_LOCAL(TFiberId, CurrentFiberId);
 
 TFiberId GetCurrentFiberId()
 {
-    NYT::NOrigin::EnableOriginOverrides();
+    NYT::NDetail::EnableErrorOriginOverrides();
     return CurrentFiberId();
 }
 
 void SetCurrentFiberId(TFiberId id)
 {
-    NYT::NOrigin::EnableOriginOverrides();
+    NYT::NDetail::EnableErrorOriginOverrides();
     CurrentFiberId() = id;
 }
 
@@ -1136,7 +1118,6 @@ TFiberCanceler GetCurrentFiberCanceler()
     }
 
     if (!switchHandler->Canceler()) {
-        TMemoryTagGuard guard(NullMemoryTag);
         switchHandler->Canceler() = New<NDetail::TCanceler>(GetCurrentFiberId());
     }
 
@@ -1150,8 +1131,6 @@ void WaitUntilSet(TFuture<void> future, IInvokerPtr invoker)
     YT_VERIFY(!IsContextSwitchForbidden());
     YT_VERIFY(future);
     YT_ASSERT(invoker);
-
-    TMemoryTagGuard memoryTagGuard(NullMemoryTag);
 
     auto* currentFiber = NDetail::TryGetCurrentFiber();
     if (!currentFiber) {
@@ -1169,10 +1148,6 @@ void WaitUntilSet(TFuture<void> future, IInvokerPtr invoker)
     GetCurrentFiberCanceler();
 
     const auto& canceler = NDetail::GetFiberSwitchHandler()->Canceler();
-    if (canceler->IsCanceled()) {
-        future.Cancel(canceler->GetCancelationError());
-    }
-
     canceler->SetFuture(future);
     auto finally = Finally([&] {
         canceler->ResetFuture();
@@ -1192,7 +1167,7 @@ void WaitUntilSet(TFuture<void> future, IInvokerPtr invoker)
                 currentFiber,
                 canceler = std::move(canceler)
             ] (const TError&) mutable {
-                YT_LOG_DEBUG("Waking up fiber (TargetFiberId: %x)",
+                YT_LOG_TRACE("Waking up fiber (TargetFiberId: %x)",
                     canceler->GetFiberId());
 
                 invoker->Invoke(

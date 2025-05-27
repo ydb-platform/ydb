@@ -1,8 +1,9 @@
 items:
-- { name: Directory,                                 href: dir.md }
-- { name: Table,                                     href: table.md }
-- { name: View,                                      href: view.md }
-- { name: Topic,                                     href: ../topic.md }
+- { name: Directories,                               href: dir.md }
+- { name: Tables,                                    href: table.md }
+- { name: Views,                                     href: view.md }
+- { name: Topics,                                    href: ../topic.md }
+- { name: Coordination nodes,                         href: coordination-node.md }
 - { name: Secrets,                                   href: secrets.md }
 - { name: External tables,                           href: external_table.md }
 - { name: External data source,                      href: external_data_source.md }

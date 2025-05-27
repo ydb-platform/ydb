@@ -4,8 +4,9 @@
 #include "hyperloglog_bias.h"
 #include "farm_hash.h"
 
-#include <library/cpp/yt/memory/range.h>
 #include <yt/yt_proto/yt/core/misc/proto/hyperloglog.pb.h>
+
+#include <library/cpp/yt/memory/range.h>
 
 #include <cmath>
 
@@ -21,13 +22,13 @@ void FormatValue(TStringBuilderBase* builder, const THyperLogLog<Precision>& val
 
 template <int Precision>
 void ToProto(
-    NProto::THyperLogLog* protoHyperLogLog,
+    NProto::THyperLogLogDigest* protoHyperLogLog,
     const THyperLogLog<Precision>& hyperloglog);
 
 template <int Precision>
 void FromProto(
     THyperLogLog<Precision>* hyperloglog,
-    const NProto::THyperLogLog& protoHyperLogLog);
+    const NProto::THyperLogLogDigest& protoHyperLogLog);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -58,12 +59,12 @@ public:
 
 private:
     friend void ToProto<Precision>(
-        NProto::THyperLogLog* protoHyperLogLog,
+        NProto::THyperLogLogDigest* protoHyperLogLog,
         const THyperLogLog<Precision>& hyperloglog);
 
     friend void FromProto<Precision>(
         THyperLogLog<Precision>* hyperloglog,
-        const NProto::THyperLogLog& protoHyperLogLog);
+        const NProto::THyperLogLogDigest& protoHyperLogLog);
 
     friend void FormatValue<Precision>(TStringBuilderBase* builder, const THyperLogLog<Precision>& value, TStringBuf format);
 
@@ -186,7 +187,7 @@ ui64 THyperLogLog<Precision>::EstimateCardinality(const std::vector<ui64>& value
 
 template <int Precision>
 void ToProto(
-    NProto::THyperLogLog* protoHyperLogLog,
+    NProto::THyperLogLogDigest* protoHyperLogLog,
     const THyperLogLog<Precision>& hyperloglog)
 {
     protoHyperLogLog->set_data(hyperloglog.Data().begin(), hyperloglog.Data().size());
@@ -195,7 +196,7 @@ void ToProto(
 template <int Precision>
 void FromProto(
     THyperLogLog<Precision>* hyperloglog,
-    const NProto::THyperLogLog& protoHyperLogLog)
+    const NProto::THyperLogLogDigest& protoHyperLogLog)
 {
     YT_VERIFY(protoHyperLogLog.data().size() == std::size(hyperloglog->ZeroCounts_));
     std::copy(protoHyperLogLog.data().begin(), protoHyperLogLog.data().end(), hyperloglog->ZeroCounts_.begin());

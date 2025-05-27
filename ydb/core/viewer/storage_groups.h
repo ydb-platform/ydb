@@ -1,14 +1,10 @@
 #pragma once
-#include "json_handlers.h"
 #include "json_pipe_req.h"
 #include "log.h"
 #include "viewer_helper.h"
-#include <library/cpp/protobuf/json/proto2json.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
 
 namespace NKikimr::NViewer {
-
-using namespace NProtobufJson;
 
 using TNodeId = ui32;
 using TGroupId = ui32;
@@ -107,6 +103,7 @@ enum class EGroupFields : ui8 {
     PDiskId,
     VDisk, // VDisk information
     PDisk, // PDisk information
+    Latency,
     COUNT
 };
 
@@ -114,16 +111,15 @@ constexpr ui8 operator +(EGroupFields e) {
     return static_cast<ui8>(e);
 }
 
-using TFieldsType = std::bitset<+EGroupFields::COUNT>;
-
 class TStorageGroups : public TViewerPipeClient {
 public:
     using TBase = TViewerPipeClient;
     using TThis = TStorageGroups;
+    using TFieldsType = std::bitset<+EGroupFields::COUNT>;
 
     // Common
-    std::optional<TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult>> DatabaseNavigateResult;
     std::unordered_map<TPathId, TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult>> NavigateKeySetResult;
+    ui64 NavigateKeySetInFlight = 0;
     std::unordered_map<TPathId, TTabletId> PathId2HiveId;
     std::unordered_map<TTabletId, TRequestResponse<TEvHive::TEvResponseHiveStorageStats>> HiveStorageStats;
     ui64 HiveStorageStatsInFlight = 0;
@@ -131,9 +127,13 @@ public:
     // BSC
     bool FallbackToWhiteboard = false;
     std::optional<TRequestResponse<NSysView::TEvSysView::TEvGetGroupsResponse>> GetGroupsResponse;
+    bool GetGroupsResponseProcessed = false;
     std::optional<TRequestResponse<NSysView::TEvSysView::TEvGetStoragePoolsResponse>> GetStoragePoolsResponse;
+    bool GetStoragePoolsResponseProcessed = false;
     std::optional<TRequestResponse<NSysView::TEvSysView::TEvGetVSlotsResponse>> GetVSlotsResponse;
+    bool GetVSlotsResponseProcessed = false;
     std::optional<TRequestResponse<NSysView::TEvSysView::TEvGetPDisksResponse>> GetPDisksResponse;
+    bool GetPDisksResponseProcessed = false;
 
     // Whiteboard
     std::optional<TRequestResponse<TEvInterconnect::TEvNodesInfo>> NodesInfo;
@@ -145,15 +145,12 @@ public:
     ui64 PDiskStateRequestsInFlight = 0;
 
     ui32 Timeout = 0;
-    TString Database;
-    bool Direct = false;
     TString Filter;
     std::unordered_set<TString> DatabaseStoragePools;
     std::unordered_set<TString> FilterStoragePools;
     std::unordered_set<TGroupId> FilterGroupIds;
     std::unordered_set<TNodeId> FilterNodeIds;
     std::unordered_set<ui32> FilterPDiskIds;
-    std::vector<TNodeId> SubscriptionNodeIds;
 
     enum class EWith {
         Everything,
@@ -168,11 +165,15 @@ public:
 
     EGroupFields SortBy = EGroupFields::PoolName;
     EGroupFields GroupBy = EGroupFields::GroupId;
+    EGroupFields FilterGroupBy = EGroupFields::GroupId;
+    TString FilterGroup;
     EWith With = EWith::Everything;
     bool ReverseSort = false;
     std::optional<std::size_t> Offset;
     std::optional<std::size_t> Limit;
     ui32 SpaceUsageProblem = 90; // %
+
+    using TGroupSortKey = std::variant<TString, ui64, float, bool>;
 
     struct TPDisk {
         ui32 PDiskId = 0;
@@ -236,12 +237,13 @@ public:
         ui64 AllocatedSize = 0;
         ui64 AvailableSize = 0;
         TString Status;
-        NKikimrBlobStorage::EVDiskStatus VDiskStatus = NKikimrBlobStorage::EVDiskStatus::ERROR;
+        std::optional<NKikimrBlobStorage::EVDiskStatus> VDiskStatus;
         ui64 Read = 0;
         ui64 Write = 0;
         NKikimrViewer::EFlag DiskSpace = NKikimrViewer::EFlag::Grey;
         bool Donor = false;
         std::vector<TVSlotId> Donors;
+        bool Present = false;
 
         TString GetVDiskId() const {
             return TStringBuilder() << VDiskId.GroupID.GetRawId() << '-'
@@ -265,6 +267,7 @@ public:
         TString Erasure;
         TErasureType::EErasureSpecies ErasureSpecies = TErasureType::ErasureNone;
         TString State;
+        ui32 StateSortKey = 0;
         ui32 EncryptionMode = 0;
         ui64 AllocationUnits = 0;
         float Usage = 0;
@@ -273,7 +276,7 @@ public:
         ui64 Available = 0;
         ui64 Read = 0;
         ui64 Write = 0;
-        ui32 MissingDisks = 0;
+        ui64 MissingDisks = 0;
         ui64 PutTabletLogLatency = 0;
         ui64 PutUserDataLatency = 0;
         ui64 GetFastLatency = 0;
@@ -288,11 +291,13 @@ public:
             TString result;
             result += ::ToString(failedDomains.size());
             result += '(';
+            bool was_domains = false;
             for (ui8 domains : failedDomains) {
-                if (!result.empty()) {
+                if (was_domains) {
                     result += ',';
                 }
                 result += ::ToString(domains);
+                was_domains = true;
             }
             result += ')';
             return result;
@@ -318,6 +323,27 @@ public:
             return MissingDisks == 0 ? TString("0") : TStringBuilder() << "-" << MissingDisks;
         }
 
+        static int RoundUpTime(int v) {
+            static const int roundUp[] = {1, 5, 10, 50, 100, 200, 500, 1000};
+            auto it = std::lower_bound(std::begin(roundUp), std::end(roundUp), v);
+            if (it == std::end(roundUp)) {
+                return 1000;
+            }
+            return *it;
+        }
+
+        TString GetLatencyForGroup() const {
+            if (PutTabletLogLatency == 0) {
+                return "-";
+            } else if (PutTabletLogLatency < 1000) {
+                return TStringBuilder() << RoundUpTime(PutTabletLogLatency) << "us";
+            } else if (PutTabletLogLatency < 1000000) {
+                return TStringBuilder() << RoundUpTime(PutTabletLogLatency / 1000) << "ms";
+            } else {
+                return TStringBuilder() << RoundUpTime(PutTabletLogLatency / 1000000) << "s";
+            }
+        }
+
         // none: ok, dead:1
         // block-4-2: ok, replicating:1 starting:1, degraded:1, degraded:2, dead:3
         // mirror-3-dc: ok, degraded:1(1), degraded:1(2), degraded:1(3), degraded:2(3,1), dead:3(3,1,1)
@@ -332,7 +358,7 @@ public:
             static_assert(sizeof(TVDiskID::FailRealm) == 1, "expecting byte");
             std::vector<ui8> failedDomainsPerRealm;
             for (const TVDisk& vdisk : VDisks) {
-                if (vdisk.VDiskStatus != NKikimrBlobStorage::EVDiskStatus::READY) {
+                if (vdisk.VDiskStatus && *vdisk.VDiskStatus != NKikimrBlobStorage::EVDiskStatus::READY) {
                     if (ErasureSpecies == TErasureType::ErasureMirror3dc) {
                         if (failedDomainsPerRealm.size() <= vdisk.VDiskId.FailRealm) {
                             failedDomainsPerRealm.resize(vdisk.VDiskId.FailRealm + 1);
@@ -340,12 +366,15 @@ public:
                         failedDomainsPerRealm[vdisk.VDiskId.FailRealm]++;
                     }
                     ++MissingDisks;
-                    if (vdisk.VDiskStatus == NKikimrBlobStorage::EVDiskStatus::INIT_PENDING) {
+                    if (*vdisk.VDiskStatus == NKikimrBlobStorage::EVDiskStatus::INIT_PENDING) {
                         ++startingDisks;
                     }
-                    if (vdisk.VDiskStatus == NKikimrBlobStorage::EVDiskStatus::REPLICATING) {
+                    if (*vdisk.VDiskStatus == NKikimrBlobStorage::EVDiskStatus::REPLICATING) {
                         ++replicatingDisks;
                     }
+                }
+                if (!vdisk.Present) { // no data about disk
+                    ++MissingDisks;
                 }
                 allocated += vdisk.AllocatedSize;
                 limit += vdisk.AllocatedSize + vdisk.AvailableSize;
@@ -354,14 +383,17 @@ public:
             if (MissingDisks == 0) {
                 Overall = NKikimrViewer::EFlag::Green;
                 State = "ok";
+                StateSortKey = 0;
             } else {
                 if (ErasureSpecies == TErasureType::ErasureNone) {
                     TString state;
                     Overall = NKikimrViewer::EFlag::Red;
                     if (MissingDisks == startingDisks) {
                         state = "starting";
+                        StateSortKey = 10;
                     } else {
                         state = "dead";
+                        StateSortKey = 100;
                     }
                     State = TStringBuilder() << state << ':' << MissingDisks;
                 } else if (ErasureSpecies == TErasureType::Erasure4Plus2Block) {
@@ -369,20 +401,25 @@ public:
                     if (MissingDisks > 2) {
                         Overall = NKikimrViewer::EFlag::Red;
                         state = "dead";
+                        StateSortKey = 100;
                     } else if (MissingDisks == 2) {
                         Overall = NKikimrViewer::EFlag::Orange;
                         state = "degraded";
+                        StateSortKey = 50 + MissingDisks;
                     } else if (MissingDisks == 1) {
                         if (MissingDisks == replicatingDisks + startingDisks) {
                             Overall = NKikimrViewer::EFlag::Blue;
                             if (replicatingDisks) {
                                 state = "replicating";
+                                StateSortKey = 20;
                             } else {
                                 state = "starting";
+                                StateSortKey = 10;
                             }
                         } else {
                             Overall = NKikimrViewer::EFlag::Yellow;
                             state = "degraded";
+                            StateSortKey = 50 + MissingDisks;
                         }
                     }
                     State = TStringBuilder() << state << ':' << MissingDisks;
@@ -395,20 +432,25 @@ public:
                     if (failedDomainsPerRealm.size() > 2 || (failedDomainsPerRealm.size() == 2 && failedDomainsPerRealm[1] > 1)) {
                         Overall = NKikimrViewer::EFlag::Red;
                         state = "dead";
+                        StateSortKey = 100;
                     } else if (failedDomainsPerRealm.size() == 2) {
                         Overall = NKikimrViewer::EFlag::Orange;
                         state = "degraded";
+                        StateSortKey = 50 + failedDomainsPerRealm.size() * 10 + MissingDisks;
                     } else if (failedDomainsPerRealm.size()) {
                         if (MissingDisks == replicatingDisks + startingDisks) {
                             Overall = NKikimrViewer::EFlag::Blue;
                             if (replicatingDisks > startingDisks) {
                                 state = "replicating";
+                                StateSortKey = 20;
                             } else {
                                 state = "starting";
+                                StateSortKey = 10;
                             }
                         } else {
                             Overall = NKikimrViewer::EFlag::Yellow;
                             state = "degraded";
+                            StateSortKey = 50 + failedDomainsPerRealm.size() * 10 + MissingDisks;
                         }
                     }
                     State = TStringBuilder() << state << ':' << PrintDomains(failedDomainsPerRealm);
@@ -453,14 +495,127 @@ public:
             Read = read;
             Write = write;
         }
+
+        ui64 GetLatencyForSort() const {
+            return PutTabletLogLatency;
+        }
+
+        TString GetGroupName(EGroupFields groupBy) const {
+            TString groupName;
+            switch (groupBy) {
+                case EGroupFields::GroupId:
+                    groupName = ToString(GroupId);
+                    break;
+                case EGroupFields::Erasure:
+                    groupName = Erasure;
+                    break;
+                case EGroupFields::Usage:
+                    groupName = GetUsageForGroup();
+                    break;
+                case EGroupFields::DiskSpaceUsage:
+                    groupName = GetDiskUsageForGroup();
+                    break;
+                case EGroupFields::PoolName:
+                    groupName = PoolName;
+                    break;
+                case EGroupFields::Kind:
+                    groupName = Kind;
+                    break;
+                case EGroupFields::Encryption:
+                    groupName = GetEncryptionForGroup();
+                    break;
+                case EGroupFields::MediaType:
+                    groupName = MediaType;
+                    break;
+                case EGroupFields::MissingDisks:
+                    groupName = GetMissingDisksForGroup();
+                    break;
+                case EGroupFields::State:
+                    groupName = State;
+                    break;
+                case EGroupFields::Latency:
+                    groupName = GetLatencyForGroup();
+                    break;
+                default:
+                    break;
+            }
+            if (groupName.empty()) {
+                groupName = "unknown";
+            }
+            return groupName;
+        }
+
+        TGroupSortKey GetSortKey(EGroupFields groupBy) const {
+            switch (groupBy) {
+                case EGroupFields::GroupId:
+                case EGroupFields::Erasure:
+                case EGroupFields::PoolName:
+                case EGroupFields::Kind:
+                case EGroupFields::MediaType:
+                    return GetGroupName(groupBy);
+                case EGroupFields::State:
+                    return StateSortKey;
+                case EGroupFields::Usage:
+                    return Usage;
+                case EGroupFields::DiskSpaceUsage:
+                    return DiskSpaceUsage;
+                case EGroupFields::Encryption:
+                    return EncryptionMode;
+                case EGroupFields::MissingDisks:
+                    return MissingDisks;
+                case EGroupFields::Latency:
+                    return PutTabletLogLatency;
+                default:
+                    return TString();
+            }
+        }
     };
+
+    using TGroupData = std::vector<TGroup>;
+    using TGroupView = std::vector<TGroup*>;
 
     struct TGroupGroup {
         TString Name;
-        std::vector<TGroup*> Groups;
+        TGroupSortKey SortKey;
+        TGroupView Groups;
+
+        // stats
+        float Usage = 0; // avg
+        ui64 Used = 0; // sum
+        ui64 Limit = 0; // sum
+        ui64 Available = 0; // sum
+        ui64 Read = 0; // sum
+        ui64 Write = 0; // sum
+        ui64 PutTabletLogLatency = 0; // max
+        ui64 PutUserDataLatency = 0; // max
+        ui64 GetFastLatency = 0; // max
+        float DiskSpaceUsage = 0; // max
+
+        void CalcStats() {
+            for (TGroup* group : Groups) {
+                Usage += group->Usage;
+                Used += group->Used;
+                Limit += group->Limit;
+                Read += group->Read;
+                Write += group->Write;
+                if (Available) {
+                    Available = std::min(Available, group->Available);
+                } else {
+                    Available = group->Available;
+                }
+                PutTabletLogLatency = std::max(PutTabletLogLatency, group->PutTabletLogLatency);
+                PutUserDataLatency = std::max(PutUserDataLatency, group->PutUserDataLatency);
+                GetFastLatency = std::max(GetFastLatency, group->GetFastLatency);
+                DiskSpaceUsage = std::max(DiskSpaceUsage, group->DiskSpaceUsage);
+            }
+            if (!Groups.empty()) {
+                Usage /= Groups.size();
+            }
+        }
     };
 
-    std::vector<TGroup> Groups;
+    TGroupData GroupData;
+    TGroupView GroupView;
     std::vector<TGroupGroup> GroupGroups;
     std::unordered_map<TGroupId, TGroup*> GroupsByGroupId;
     std::unordered_map<TPDiskId, TPDisk> PDisks;
@@ -473,9 +628,7 @@ public:
     const TFieldsType FieldsAll = TFieldsType().set();
     const TFieldsType FieldsBsGroups = TFieldsType().set(+EGroupFields::GroupId)
                                                     .set(+EGroupFields::Erasure)
-                                                    .set(+EGroupFields::Usage)
-                                                    .set(+EGroupFields::Used)
-                                                    .set(+EGroupFields::Limit);
+                                                    .set(+EGroupFields::Latency);
     const TFieldsType FieldsBsPools = TFieldsType().set(+EGroupFields::PoolName)
                                                    .set(+EGroupFields::Kind)
                                                    .set(+EGroupFields::MediaType)
@@ -530,6 +683,15 @@ public:
     ui64 FoundGroups = 0;
     std::vector<TString> Problems;
 
+    void AddProblem(const TString& problem) {
+        for (const auto& p : Problems) {
+            if (p == problem) {
+                return;
+            }
+        }
+        Problems.push_back(problem);
+    }
+
     static EGroupFields ParseEGroupFields(TStringBuf field) {
         EGroupFields result = EGroupFields::COUNT;
         if (field == "PoolName") {
@@ -566,26 +728,27 @@ public:
             result = EGroupFields::PDisk;
         } else if (field == "DiskSpaceUsage") {
             result = EGroupFields::DiskSpaceUsage;
+        } else if (field == "NodeId") {
+            result = EGroupFields::NodeId;
+        } else if (field == "PDiskId") {
+            result = EGroupFields::PDiskId;
+        } else if (field == "Latency") {
+            result = EGroupFields::Latency;
+        } else if (field == "Available") {
+            result = EGroupFields::Available;
         }
         return result;
     }
 
     TStorageGroups(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
-        : TBase(viewer, ev)
+        : TBase(viewer, ev, "/storage/groups")
     {
         const auto& params(Event->Get()->Request.GetParams());
-        InitConfig(params);
         Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
-        Database = params.Get("tenant");
-        if (Database.empty()) {
-            Database = params.Get("database");
-        }
         if (!Database.empty()) {
             FieldsRequired.set(+EGroupFields::PoolName);
             NeedFilter = true;
         }
-        Direct = FromStringWithDefault<bool>(params.Get("direct"), Direct);
-
         FieldsRequired.set(+EGroupFields::GroupId);
         TString filterStoragePool = params.Get("pool");
         if (!filterStoragePool.empty()) {
@@ -614,6 +777,12 @@ public:
             Filter = params.Get("filter");
             FieldsRequired.set(+EGroupFields::PoolName);
             FieldsRequired.set(+EGroupFields::GroupId);
+            NeedFilter = true;
+        }
+        if (params.Has("filter_group") && params.Has("filter_group_by")) {
+            FilterGroup = params.Get("filter_group");
+            FilterGroupBy = ParseEGroupFields(params.Get("filter_group_by"));
+            FieldsRequired.set(+FilterGroupBy);
             NeedFilter = true;
         }
         if (params.Get("with") == "missing") {
@@ -690,205 +859,233 @@ public:
 
 public:
     void Bootstrap() override {
-        Direct |= TBase::Event->Get()->Request.GetUri().StartsWith("/node/"); // we're already forwarding
-        Direct |= (Database == AppData()->TenantName) || Database.empty(); // we're already on the right node or don't use database filter
-
-        if (Database && !Direct) {
-            BLOG_TRACE("Requesting StateStorageEndpointsLookup for " << Database);
-            RequestStateStorageEndpointsLookup(Database); // to find some dynamic node and redirect query there
-        } else {
-            if (Database) {
-                DatabaseNavigateResult = MakeRequestSchemeCacheNavigate(Database, 0);
-            }
-            if (FallbackToWhiteboard) {
-                RequestWhiteboard();
+        if (NeedToRedirect()) {
+            return;
+        }
+        if (Database) {
+            if (!DatabaseNavigateResponse) {
+                DatabaseNavigateResponse = MakeRequestSchemeCacheNavigate(Database, 0);
+                ++NavigateKeySetInFlight;
             } else {
-                if (FieldsNeeded(FieldsBsGroups)) {
-                    GetGroupsResponse = RequestBSControllerGroups();
-                }
-                if (FieldsNeeded(FieldsBsPools)) {
-                    GetStoragePoolsResponse = RequestBSControllerPools();
-                }
-                if (FieldsNeeded(FieldsBsVSlots)) {
-                    GetVSlotsResponse = RequestBSControllerVSlots();
-                }
-                if (FieldsNeeded(FieldsBsPDisks)) {
-                    GetPDisksResponse = RequestBSControllerPDisks();
-                }
+                auto pathId = GetPathId(DatabaseNavigateResponse->GetRef());
+                auto result = NavigateKeySetResult.emplace(pathId, std::move(*DatabaseNavigateResponse));
+                ProcessNavigate(result.first->second, true);
             }
         }
-        if (Requests == 0) {
-            return ReplyAndPassAway();
+        if (FallbackToWhiteboard) {
+            RequestWhiteboard();
+        } else {
+            if (FieldsNeeded(FieldsBsGroups)) {
+                GetGroupsResponse = MakeCachedRequestBSControllerGroups();
+            }
+            if (FieldsNeeded(FieldsBsPools)) {
+                GetStoragePoolsResponse = MakeCachedRequestBSControllerPools();
+            }
+            if (FieldsNeeded(FieldsBsVSlots)) {
+                GetVSlotsResponse = MakeCachedRequestBSControllerVSlots();
+            }
+            if (FieldsNeeded(FieldsBsPDisks)) {
+                GetPDisksResponse = MakeCachedRequestBSControllerPDisks();
+            }
         }
         TBase::Become(&TThis::StateWork);
-        Schedule(TDuration::MilliSeconds(Timeout * 50 / 100), new TEvents::TEvWakeup(TimeoutBSC)); // 50% timeout (for bsc)
-        Schedule(TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup(TimeoutFinal)); // timeout for the rest
-    }
-
-    void Handle(TEvStateStorage::TEvBoardInfo::TPtr& ev) {
-        BLOG_TRACE("Received TEvBoardInfo");
-        TBase::ReplyAndPassAway(MakeForward(GetNodesFromBoardReply(ev)));
-    }
-
-    void PassAway() override {
-        std::vector<bool> passedNodes;
-        for (const TNodeId nodeId : SubscriptionNodeIds) {
-            if (passedNodes.size() <= nodeId) {
-                passedNodes.resize(nodeId + 1);
-            } else {
-                if (passedNodes[nodeId]) {
-                    continue;
-                }
-            }
-            Send(TActivationContext::InterconnectProxy(nodeId), new TEvents::TEvUnsubscribe());
-            passedNodes[nodeId] = true;
+        ProcessResponses(); // to process cached data
+        if (WaitingForResponse()) {
+            Schedule(TDuration::MilliSeconds(Timeout * 50 / 100), new TEvents::TEvWakeup(TimeoutBSC)); // 50% timeout (for bsc)
+            Schedule(TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup(TimeoutFinal)); // timeout for the rest
+        } else {
+            ReplyAndPassAway();
         }
-        TBase::PassAway();
     }
 
     void ApplyFilter() {
         // database pre-filter, affects TotalGroups count
         if (!DatabaseStoragePools.empty()) {
             if (FieldsAvailable.test(+EGroupFields::PoolName)) {
-                for (auto itGroup = Groups.begin(); itGroup != Groups.end();) {
-                    if (DatabaseStoragePools.count(itGroup->PoolName)) {
-                        ++itGroup;
-                        continue;
+                TGroupView groupView;
+                for (TGroup* group : GroupView) {
+                    if (DatabaseStoragePools.count(group->PoolName)) {
+                        groupView.push_back(group);
                     }
-                    itGroup = Groups.erase(itGroup);
                 }
+                GroupView.swap(groupView);
                 DatabaseStoragePools.clear();
-                FoundGroups = TotalGroups = Groups.size();
+                FoundGroups = TotalGroups = GroupView.size();
+                GroupsByGroupId.clear();
+            } else {
+                return;
+            }
+        }
+        // group id pre-filter, affects TotalGroups count
+        if (!FilterGroupIds.empty()) {
+            TGroupView groupView;
+            for (TGroup* group : GroupView) {
+                if (FilterGroupIds.count(group->GroupId)) {
+                    groupView.push_back(group);
+                }
+            }
+            GroupView.swap(groupView);
+            FoundGroups = TotalGroups = GroupView.size();
+            FilterGroupIds.clear();
+            GroupsByGroupId.clear();
+        }
+        // storage pool pre-filter, affects TotalGroups count
+        if (!FilterStoragePools.empty()) {
+            if (FieldsAvailable.test(+EGroupFields::PoolName)) {
+                TGroupView groupView;
+                for (TGroup* group : GroupView) {
+                    if (FilterStoragePools.count(group->PoolName)) {
+                        groupView.push_back(group);
+                    }
+                }
+                GroupView.swap(groupView);
+                FoundGroups = TotalGroups = GroupView.size();
+                FilterStoragePools.clear();
+                GroupsByGroupId.clear();
+            } else {
+                return;
+            }
+        }
+        // node_id + pdisk_id pre-filter, affects TotalGroups count
+        if (!FilterNodeIds.empty() && !FilterPDiskIds.empty()) {
+            if (FieldsAvailable.test(+EGroupFields::NodeId) && FieldsAvailable.test(+EGroupFields::PDiskId)) {
+                TGroupView groupView;
+                for (TGroup* group : GroupView) {
+                    for (const auto& vdisk : group->VDisks) {
+                        if (FilterNodeIds.count(vdisk.VSlotId.NodeId) && FilterPDiskIds.count(vdisk.VSlotId.PDiskId)) {
+                            groupView.push_back(group);
+                            break;
+                        }
+                    }
+                }
+                GroupView.swap(groupView);
+                FoundGroups = TotalGroups = GroupView.size();
+                FilterNodeIds.clear();
+                FilterPDiskIds.clear();
+                GroupsByGroupId.clear();
+            } else {
+                return;
+            }
+        }
+        // node_id pre-filter, affects TotalGroups count
+        if (!FilterNodeIds.empty()) {
+            if (FieldsAvailable.test(+EGroupFields::NodeId)) {
+                TGroupView groupView;
+                for (TGroup* group : GroupView) {
+                    for (const auto& vdisk : group->VDisks) {
+                        if (FilterNodeIds.count(vdisk.VSlotId.NodeId)) {
+                            groupView.push_back(group);
+                            break;
+                        }
+                    }
+                }
+                GroupView.swap(groupView);
+                FoundGroups = TotalGroups = GroupView.size();
+                FilterNodeIds.clear();
+                GroupsByGroupId.clear();
+            } else {
+                return;
+            }
+        }
+        // pdisk_id pre-filter, affects TotalGroups count
+        if (!FilterPDiskIds.empty()) {
+            if (FieldsAvailable.test(+EGroupFields::PDiskId)) {
+                TGroupView groupView;
+                for (TGroup* group : GroupView) {
+                    for (const auto& vdisk : group->VDisks) {
+                        if (FilterPDiskIds.count(vdisk.VSlotId.PDiskId)) {
+                            groupView.push_back(group);
+                            break;
+                        }
+                    }
+                }
+                GroupView.swap(groupView);
+                FoundGroups = TotalGroups = GroupView.size();
+                FilterPDiskIds.clear();
                 GroupsByGroupId.clear();
             } else {
                 return;
             }
         }
         if (NeedFilter) {
-            if (!FilterGroupIds.empty()) {
-                for (auto itGroup = Groups.begin(); itGroup != Groups.end();) {
-                    if (FilterGroupIds.count(itGroup->GroupId)) {
-                        ++itGroup;
-                        continue;
-                    }
-                    itGroup = Groups.erase(itGroup);
-                }
-                FilterGroupIds.clear();
-                GroupsByGroupId.clear();
-            }
-            if (!FilterStoragePools.empty() && FieldsAvailable.test(+EGroupFields::PoolName)) {
-                for (auto itGroup = Groups.begin(); itGroup != Groups.end();) {
-                    if (FilterStoragePools.count(itGroup->PoolName)) {
-                        ++itGroup;
-                        continue;
-                    }
-                    itGroup = Groups.erase(itGroup);
-                }
-                FilterStoragePools.clear();
-                GroupsByGroupId.clear();
-            }
-            if (!FilterNodeIds.empty() && FieldsAvailable.test(+EGroupFields::NodeId)) {
-                for (auto itGroup = Groups.begin(); itGroup != Groups.end();) {
-                    bool found = false;
-                    for (const auto& vdisk : itGroup->VDisks) {
-                        if (FilterNodeIds.count(vdisk.VSlotId.NodeId)) {
-                            found = true;
-                            break;
-                        }
-                    }
-                    if (found) {
-                        ++itGroup;
-                        continue;
-                    }
-                    itGroup = Groups.erase(itGroup);
-                }
-                FilterNodeIds.clear();
-                GroupsByGroupId.clear();
-            }
-            if (!FilterPDiskIds.empty() && FieldsAvailable.test(+EGroupFields::PDiskId)) {
-                for (auto itGroup = Groups.begin(); itGroup != Groups.end();) {
-                    bool found = false;
-                    for (const auto& vdisk : itGroup->VDisks) {
-                        if (FilterPDiskIds.count(vdisk.VSlotId.PDiskId)) {
-                            found = true;
-                            break;
-                        }
-                    }
-                    if (found) {
-                        ++itGroup;
-                        continue;
-                    }
-                    itGroup = Groups.erase(itGroup);
-                }
-                FilterPDiskIds.clear();
-                GroupsByGroupId.clear();
-            }
             if (With == EWith::MissingDisks && FieldsAvailable.test(+EGroupFields::MissingDisks)) {
-                for (auto itGroup = Groups.begin(); itGroup != Groups.end();) {
-                    if (itGroup->MissingDisks != 0) {
-                        ++itGroup;
-                        continue;
+                TGroupView groupView;
+                for (TGroup* group : GroupView) {
+                    if (group->MissingDisks != 0) {
+                        groupView.push_back(group);
                     }
-                    itGroup = Groups.erase(itGroup);
                 }
+                GroupView.swap(groupView);
                 With = EWith::Everything;
                 GroupsByGroupId.clear();
             }
             if (With == EWith::SpaceProblems && FieldsAvailable.test(+EGroupFields::Usage)) {
-                for (auto itGroup = Groups.begin(); itGroup != Groups.end();) {
-                    if (itGroup->Usage >= SpaceUsageProblem) {
-                        ++itGroup;
-                        continue;
+                TGroupView groupView;
+                for (TGroup* group : GroupView) {
+                    if (group->Usage >= SpaceUsageProblem) {
+                        groupView.push_back(group);
                     }
-                    itGroup = Groups.erase(itGroup);
                 }
+                GroupView.swap(groupView);
                 With = EWith::Everything;
                 GroupsByGroupId.clear();
             }
-            if (!Filter.empty() && FieldsAvailable.test(+EGroupFields::PoolName) && FieldsAvailable.test(+EGroupFields::GroupId)) {
-                TVector<TString> filterWords = SplitString(Filter, " ");
-                for (auto itGroup = Groups.begin(); itGroup != Groups.end();) {
-                    bool match = false;
-                    for (const TString& word : filterWords) {
-                        if (itGroup->PoolName.Contains(word)) {
-                            match = true;
-                            break;
-                        }
-                        if (::ToString(itGroup->GroupId).Contains(word)) {
-                            match = true;
-                            break;
+            if (!Filter.empty()) {
+                bool allFieldsPresent =
+                    (!FieldsRequired.test(+EGroupFields::GroupId) || FieldsAvailable.test(+EGroupFields::GroupId)) &&
+                    (!FieldsRequired.test(+EGroupFields::PoolName) || FieldsAvailable.test(+EGroupFields::PoolName));
+                if (allFieldsPresent) {
+                    TVector<TString> filterWords = SplitString(Filter, " ");
+                    TGroupView groupView;
+                    for (TGroup* group : GroupView) {
+                        for (const TString& word : filterWords) {
+                            if (FieldsRequired.test(+EGroupFields::GroupId) && ::ToString(group->GroupId).Contains(word)) {
+                                groupView.push_back(group);
+                                break;
+                            }
+                            if (FieldsRequired.test(+EGroupFields::PoolName) && group->PoolName.Contains(word)) {
+                                groupView.push_back(group);
+                                break;
+                            }
                         }
                     }
-                    if (match) {
-                        ++itGroup;
-                    } else {
-                        itGroup = Groups.erase(itGroup);
+                    GroupView.swap(groupView);
+                    Filter.clear();
+                    GroupsByGroupId.clear();
+                }
+            }
+            if (!FilterGroup.empty() && FieldsAvailable.test(+FilterGroupBy)) {
+                TGroupView groupView;
+                for (TGroup* group : GroupView) {
+                    if (group->GetGroupName(FilterGroupBy) == FilterGroup) {
+                        groupView.push_back(group);
                     }
                 }
-                Filter.clear();
+                GroupView.swap(groupView);
+                FilterGroup.clear();
                 GroupsByGroupId.clear();
             }
-            NeedFilter = (With != EWith::Everything) || !Filter.empty() || !FilterStoragePools.empty() || !FilterNodeIds.empty() || !FilterPDiskIds.empty() || !FilterGroupIds.empty();
-            FoundGroups = Groups.size();
+            NeedFilter = (With != EWith::Everything) || !Filter.empty() || !FilterStoragePools.empty() || !FilterNodeIds.empty() || !FilterPDiskIds.empty() || !FilterGroupIds.empty() || !FilterGroup.empty();
+            FoundGroups = GroupView.size();
         }
     }
 
-    template<typename F>
-    void GroupCollection(F&& groupBy) {
+    void GroupCollection() {
         std::unordered_map<TString, size_t> groupGroups;
         GroupGroups.clear();
-        for (TGroup& group : Groups) {
-            auto gb = groupBy(group);
+        for (TGroup* group : GroupView) {
+            auto gb = group->GetGroupName(GroupBy);
             TGroupGroup* groupGroup = nullptr;
             auto it = groupGroups.find(gb);
             if (it == groupGroups.end()) {
                 groupGroups.emplace(gb, GroupGroups.size());
                 groupGroup = &GroupGroups.emplace_back();
                 groupGroup->Name = gb;
+                groupGroup->SortKey = group->GetSortKey(GroupBy);
             } else {
                 groupGroup = &GroupGroups[it->second];
             }
-            groupGroup->Groups.push_back(&group);
+            groupGroup->Groups.push_back(group);
         }
     }
 
@@ -896,44 +1093,23 @@ public:
         if (!NeedFilter && NeedGroup && FieldsAvailable.test(+GroupBy)) {
             switch (GroupBy) {
                 case EGroupFields::GroupId:
-                    GroupCollection([](const TGroup& group) { return ToString(group.GroupId); });
-                    SortCollection(GroupGroups, [](const TGroupGroup& groupGroup) { return groupGroup.Name; });
-                    break;
                 case EGroupFields::Erasure:
-                    GroupCollection([](const TGroup& group) { return group.Erasure; });
-                    SortCollection(GroupGroups, [](const TGroupGroup& groupGroup) { return groupGroup.Name; });
-                    break;
-                case EGroupFields::Usage:
-                    GroupCollection([](const TGroup& group) { return group.GetUsageForGroup(); });
-                    SortCollection(GroupGroups, [](const TGroupGroup& groupGroup) { return groupGroup.Name; }, true);
-                    break;
-                case EGroupFields::DiskSpaceUsage:
-                    GroupCollection([](const TGroup& group) { return group.GetDiskUsageForGroup(); });
-                    SortCollection(GroupGroups, [](const TGroupGroup& groupGroup) { return groupGroup.Name; }, true);
-                    break;
                 case EGroupFields::PoolName:
-                    GroupCollection([](const TGroup& group) { return group.PoolName; });
-                    SortCollection(GroupGroups, [](const TGroupGroup& groupGroup) { return groupGroup.Name; });
-                    break;
                 case EGroupFields::Kind:
-                    GroupCollection([](const TGroup& group) { return group.Kind; });
-                    SortCollection(GroupGroups, [](const TGroupGroup& groupGroup) { return groupGroup.Name; });
-                    break;
                 case EGroupFields::Encryption:
-                    GroupCollection([](const TGroup& group) { return group.GetEncryptionForGroup(); });
-                    SortCollection(GroupGroups, [](const TGroupGroup& groupGroup) { return groupGroup.Name; });
-                    break;
                 case EGroupFields::MediaType:
-                    GroupCollection([](const TGroup& group) { return group.MediaType; });
-                    SortCollection(GroupGroups, [](const TGroupGroup& groupGroup) { return groupGroup.Name; });
-                    break;
-                case EGroupFields::MissingDisks:
-                    GroupCollection([](const TGroup& group) { return group.GetMissingDisksForGroup(); });
-                    SortCollection(GroupGroups, [](const TGroupGroup& groupGroup) { return groupGroup.Name; }, true);
+                    GroupCollection();
+                    SortCollection(GroupGroups, [](const TGroupGroup& groupGroup) { return groupGroup.SortKey; });
+                    NeedGroup = false;
                     break;
                 case EGroupFields::State:
-                    GroupCollection([](const TGroup& group) { return group.State; });
-                    SortCollection(GroupGroups, [](const TGroupGroup& groupGroup) { return groupGroup.Name; });
+                case EGroupFields::Usage:
+                case EGroupFields::DiskSpaceUsage:
+                case EGroupFields::MissingDisks:
+                case EGroupFields::Latency:
+                    GroupCollection();
+                    SortCollection(GroupGroups, [](const TGroupGroup& groupGroup) { return groupGroup.SortKey; }, true);
+                    NeedGroup = false;
                     break;
                 case EGroupFields::Read:
                 case EGroupFields::Write:
@@ -948,7 +1124,6 @@ public:
                 case EGroupFields::PDiskId:
                     break;
             }
-            NeedGroup = false;
         }
     }
 
@@ -956,52 +1131,55 @@ public:
         if (NeedSort && FieldsAvailable.test(+SortBy)) {
             switch (SortBy) {
                 case EGroupFields::GroupId:
-                    SortCollection(Groups, [](const TGroup& group) { return group.GroupId; }, ReverseSort);
+                    SortCollection(GroupView, [](const TGroup* group) { return group->GroupId; }, ReverseSort);
                     break;
                 case EGroupFields::Erasure:
-                    SortCollection(Groups, [](const TGroup& group) { return group.Erasure; }, ReverseSort);
+                    SortCollection(GroupView, [](const TGroup* group) { return group->Erasure; }, ReverseSort);
                     break;
                 case EGroupFields::Usage:
-                    SortCollection(Groups, [](const TGroup& group) { return group.Usage; }, ReverseSort);
+                    SortCollection(GroupView, [](const TGroup* group) { return group->Usage; }, ReverseSort);
                     break;
                 case EGroupFields::Used:
-                    SortCollection(Groups, [](const TGroup& group) { return group.Used; }, ReverseSort);
+                    SortCollection(GroupView, [](const TGroup* group) { return group->Used; }, ReverseSort);
                     break;
                 case EGroupFields::Limit:
-                    SortCollection(Groups, [](const TGroup& group) { return group.Limit; }, ReverseSort);
+                    SortCollection(GroupView, [](const TGroup* group) { return group->Limit; }, ReverseSort);
                     break;
                 case EGroupFields::Available:
-                    SortCollection(Groups, [](const TGroup& group) { return group.Available; }, ReverseSort);
+                    SortCollection(GroupView, [](const TGroup* group) { return group->Available; }, ReverseSort);
                     break;
                 case EGroupFields::DiskSpaceUsage:
-                    SortCollection(Groups, [](const TGroup& group) { return group.DiskSpaceUsage; }, ReverseSort);
+                    SortCollection(GroupView, [](const TGroup* group) { return group->DiskSpaceUsage; }, ReverseSort);
                     break;
                 case EGroupFields::PoolName:
-                    SortCollection(Groups, [](const TGroup& group) { return group.PoolName; }, ReverseSort);
+                    SortCollection(GroupView, [](const TGroup* group) { return group->PoolName; }, ReverseSort);
                     break;
                 case EGroupFields::Kind:
-                    SortCollection(Groups, [](const TGroup& group) { return group.Kind; }, ReverseSort);
+                    SortCollection(GroupView, [](const TGroup* group) { return group->Kind; }, ReverseSort);
                     break;
                 case EGroupFields::Encryption:
-                    SortCollection(Groups, [](const TGroup& group) { return group.EncryptionMode; }, ReverseSort);
+                    SortCollection(GroupView, [](const TGroup* group) { return group->EncryptionMode; }, ReverseSort);
                     break;
                 case EGroupFields::AllocationUnits:
-                    SortCollection(Groups, [](const TGroup& group) { return group.AllocationUnits; }, ReverseSort);
+                    SortCollection(GroupView, [](const TGroup* group) { return group->AllocationUnits; }, ReverseSort);
                     break;
                 case EGroupFields::MediaType:
-                    SortCollection(Groups, [](const TGroup& group) { return group.MediaType; }, ReverseSort);
+                    SortCollection(GroupView, [](const TGroup* group) { return group->MediaType; }, ReverseSort);
                     break;
                 case EGroupFields::MissingDisks:
-                    SortCollection(Groups, [](const TGroup& group) { return group.MissingDisks; }, ReverseSort);
+                    SortCollection(GroupView, [](const TGroup* group) { return group->MissingDisks; }, ReverseSort);
                     break;
                 case EGroupFields::Read:
-                    SortCollection(Groups, [](const TGroup& group) { return group.Read; }, ReverseSort);
+                    SortCollection(GroupView, [](const TGroup* group) { return group->Read; }, ReverseSort);
                     break;
                 case EGroupFields::Write:
-                    SortCollection(Groups, [](const TGroup& group) { return group.Write; }, ReverseSort);
+                    SortCollection(GroupView, [](const TGroup* group) { return group->Write; }, ReverseSort);
                     break;
                 case EGroupFields::State:
-                    SortCollection(Groups, [](const TGroup& group) { return group.State; }, ReverseSort);
+                    SortCollection(GroupView, [](const TGroup* group) { return group->StateSortKey; }, ReverseSort);
+                    break;
+                case EGroupFields::Latency:
+                    SortCollection(GroupView, [](const TGroup* group) { return group->GetLatencyForSort(); }, ReverseSort);
                     break;
                 case EGroupFields::PDiskId:
                 case EGroupFields::NodeId:
@@ -1018,11 +1196,11 @@ public:
     void ApplyLimit() {
         if (!NeedFilter && !NeedSort && !NeedGroup && NeedLimit) {
             if (Offset) {
-                Groups.erase(Groups.begin(), Groups.begin() + std::min(*Offset, Groups.size()));
+                GroupView.erase(GroupView.begin(), GroupView.begin() + std::min(*Offset, GroupView.size()));
                 GroupsByGroupId.clear();
             }
             if (Limit) {
-                Groups.resize(std::min(*Limit, Groups.size()));
+                GroupView.resize(std::min(*Limit, GroupView.size()));
                 GroupsByGroupId.clear();
             }
             NeedLimit = false;
@@ -1036,9 +1214,12 @@ public:
         ApplyLimit();
     }
 
+    bool CollectedHiveData = false;
+
     void CollectHiveData() {
-        if (FieldsNeeded(FieldsHive)) {
-            if (!Groups.empty()) {
+        static TPathId badPathId(0, 0);
+        if (!CollectedHiveData) {
+            if (!GroupView.empty()) {
                 ui64 hiveId = AppData()->DomainsInfo->GetHive();
                 if (hiveId != TDomainsInfo::BadTabletId) {
                     if (HiveStorageStats.count(hiveId) == 0) {
@@ -1047,44 +1228,256 @@ public:
                     }
                 }
             }
-            for (const TGroup& group : Groups) {
-                TPathId pathId(group.SchemeShardId, group.PathId);
+            for (const TGroup* group : GroupView) {
+                TPathId pathId(group->SchemeShardId, group->PathId);
+                if (pathId == badPathId) {
+                    pathId = {AppData()->DomainsInfo->Domain->SchemeRoot, 1};
+                }
                 if (NavigateKeySetResult.count(pathId) == 0) {
                     ui64 cookie = NavigateKeySetResult.size();
                     NavigateKeySetResult.emplace(pathId, MakeRequestSchemeCacheNavigate(pathId, cookie));
+                    ++NavigateKeySetInFlight;
                 }
             }
+            CollectedHiveData = true;
         }
     }
 
     void RebuildGroupsByGroupId() {
         GroupsByGroupId.clear();
-        for (TGroup& group : Groups) {
-            GroupsByGroupId.emplace(group.GroupId, &group);
+        for (TGroup* group : GroupView) {
+            GroupsByGroupId.emplace(group->GroupId, group);
         }
     }
 
-    void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-        bool firstNavigate = (ev->Cookie == 0);
-        TPathId pathId = GetPathId(ev);
-        if (firstNavigate && DatabaseNavigateResult.has_value() && pathId) {
-            NavigateKeySetResult.emplace(pathId, std::move(*DatabaseNavigateResult));
+    static TString GetMediaType(const TString& mediaType) {
+        if (mediaType.StartsWith("Type:")) {
+            return mediaType.substr(5);
         }
-        auto itNavigateKeySetResult = NavigateKeySetResult.find(pathId);
-        if (itNavigateKeySetResult == NavigateKeySetResult.end()) {
-            BLOG_W("Invalid NavigateKeySetResult PathId: " << pathId << " Path: " << CanonizePath(ev->Get()->Request->ResultSet.begin()->Path));
-            return RequestDone();
+        return mediaType;
+    }
+
+    void FillVDiskFromVSlotInfo(TVDisk& vDisk, TVSlotId vSlotId, const NKikimrSysView::TVSlotInfo& info) {
+        vDisk.VDiskId = TVDiskID(info.GetGroupId(),
+                                info.GetGroupGeneration(),
+                                static_cast<ui8>(info.GetFailRealm()),
+                                static_cast<ui8>(info.GetFailDomain()),
+                                static_cast<ui8>(info.GetVDisk()));
+        vDisk.VSlotId = vSlotId;
+        vDisk.AllocatedSize = info.GetAllocatedSize();
+        vDisk.AvailableSize = info.GetAvailableSize();
+        //vDisk.Kind = info.GetKind();
+        vDisk.Status = info.GetStatusV2();
+        NKikimrBlobStorage::EVDiskStatus vDiskStatus;
+        if (vDisk.Status && NKikimrBlobStorage::EVDiskStatus_Parse(vDisk.Status, &vDiskStatus)) {
+            vDisk.VDiskStatus = vDiskStatus;
         }
-        auto& navigateResult(itNavigateKeySetResult->second);
-        if (ev->Get()->Request->ResultSet.size() == 1) {
-            if (ev->Get()->Request->ResultSet.begin()->Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
-                navigateResult.Set(std::move(ev));
+        vDisk.Present = true;
+    }
+
+    bool AreBSControllerRequestsDone() const {
+        return (!GetGroupsResponse || GetGroupsResponseProcessed) &&
+               (!GetStoragePoolsResponse || GetStoragePoolsResponseProcessed) &&
+               (!GetVSlotsResponse || GetVSlotsResponseProcessed) &&
+               (!GetPDisksResponse || GetPDisksResponseProcessed);
+    }
+
+    bool TimeToAskWhiteboard() const {
+        return AreBSControllerRequestsDone() &&
+               NavigateKeySetInFlight == 0 &&
+               HiveStorageStatsInFlight == 0;
+    }
+
+    void ProcessResponses() {
+        AddEvent("ProcessResponses");
+        if (GetGroupsResponse && GetGroupsResponse->IsDone() && !GetGroupsResponseProcessed) {
+            if (GetGroupsResponse->IsOk()) {
+                GroupData.reserve(GetGroupsResponse->Get()->Record.EntriesSize());
+                for (const NKikimrSysView::TGroupEntry& entry : GetGroupsResponse->Get()->Record.GetEntries()) {
+                    const NKikimrSysView::TGroupInfo& info = entry.GetInfo();
+                    TGroup& group = GroupData.emplace_back();
+                    group.GroupId = entry.GetKey().GetGroupId();
+                    group.GroupGeneration = info.GetGeneration();
+                    group.BoxId = info.GetBoxId();
+                    group.PoolId = info.GetStoragePoolId();
+                    group.Erasure = info.GetErasureSpeciesV2();
+                    group.ErasureSpecies = TErasureType::ErasureSpeciesByName(group.Erasure);
+                    //group.Used = info.GetAllocatedSize();
+                    //group.Limit = info.GetAllocatedSize() + info.GetAvailableSize();
+                    //group.Usage = group.Limit ? 100.0 * group.Used / group.Limit : 0;
+                    group.PutTabletLogLatency = info.GetPutTabletLogLatency();
+                    group.PutUserDataLatency = info.GetPutUserDataLatency();
+                    group.GetFastLatency = info.GetGetFastLatency();
+                }
+                for (TGroup& group : GroupData) {
+                    GroupView.emplace_back(&group);
+                }
+                GroupsByGroupId.clear();
+                FoundGroups = TotalGroups = GroupView.size();
+                FieldsAvailable |= FieldsBsGroups;
+                ApplyEverything();
             } else {
-                navigateResult.Error(TStringBuilder() << "Error " << ev->Get()->Request->ResultSet.begin()->Status);
+                AddProblem("bsc-storage-groups-no-data");
             }
-        } else {
-            navigateResult.Error(TStringBuilder() << "Invalid number of results: " << ev->Get()->Request->ResultSet.size());
+            GetGroupsResponseProcessed = true;
         }
+        if (FieldsAvailable.test(+EGroupFields::GroupId) && GetStoragePoolsResponse && GetStoragePoolsResponse->IsDone() && !GetStoragePoolsResponseProcessed) {
+            if (GetStoragePoolsResponse->IsOk()) {
+                std::unordered_map<std::pair<ui64, ui64>, const NKikimrSysView::TStoragePoolInfo*> indexStoragePool; // (box, id) -> pool
+                for (const NKikimrSysView::TStoragePoolEntry& entry : GetStoragePoolsResponse->Get()->Record.GetEntries()) {
+                    const auto& key = entry.GetKey();
+                    const NKikimrSysView::TStoragePoolInfo& pool = entry.GetInfo();
+                    indexStoragePool.emplace(std::make_pair(key.GetBoxId(), key.GetStoragePoolId()), &pool);
+                }
+                ui64 rootSchemeshardId = AppData()->DomainsInfo->Domain->SchemeRoot;
+                for (TGroup* group : GroupView) {
+                    if (group->BoxId == 0 && group->PoolId == 0) {
+                        group->PoolName = "static";
+                        group->Kind = ""; // TODO ?
+                        group->MediaType = ""; // TODO ?
+                        group->SchemeShardId = rootSchemeshardId;
+                        group->PathId = 1;
+                        group->EncryptionMode = 0; // TODO ?
+                    } else {
+                        auto itStoragePool = indexStoragePool.find({group->BoxId, group->PoolId});
+                        if (itStoragePool != indexStoragePool.end()) {
+                            const NKikimrSysView::TStoragePoolInfo* pool = itStoragePool->second;
+                            group->PoolName = pool->GetName();
+                            group->Kind = pool->GetKind();
+                            group->SchemeShardId = pool->GetSchemeshardId();
+                            group->PathId = pool->GetPathId();
+                            group->MediaType = GetMediaType(pool->GetPDiskFilter());
+                            if (!group->Erasure) {
+                                group->Erasure = pool->GetErasureSpeciesV2();
+                                group->ErasureSpecies = TErasureType::ErasureSpeciesByName(group->Erasure);
+                            }
+                            group->EncryptionMode = pool->GetEncryptionMode();
+                        } else {
+                            BLOG_W("Storage pool not found for group " << group->GroupId << " box " << group->BoxId << " pool " << group->PoolId);
+                        }
+                    }
+                }
+                FieldsAvailable |= FieldsBsPools;
+                ApplyEverything();
+            } else {
+                AddProblem("bsc-storage-pools-no-data");
+            }
+            GetStoragePoolsResponseProcessed = true;
+        }
+        if (FieldsAvailable.test(+EGroupFields::GroupId) && GetVSlotsResponse && GetVSlotsResponse->IsDone() && !GetVSlotsResponseProcessed) {
+            if (GetVSlotsResponse->IsOk()) {
+                if (GroupsByGroupId.empty()) {
+                    RebuildGroupsByGroupId();
+                }
+                size_t totalEntries = GetVSlotsResponse->Get()->Record.EntriesSize();
+                size_t errorEntries = 0;
+                for (const NKikimrSysView::TVSlotEntry& entry : GetVSlotsResponse->Get()->Record.GetEntries()) {
+                    const NKikimrSysView::TVSlotKey& key = entry.GetKey();
+                    const NKikimrSysView::TVSlotInfo& info = entry.GetInfo();
+                    VSlotsByVSlotId[key] = &info;
+                    if (info.GetStatusV2() == "ERROR") {
+                        ++errorEntries;
+                    }
+                    auto itGroup = GroupsByGroupId.find(info.GetGroupId());
+                    if (itGroup != GroupsByGroupId.end() && itGroup->second->GroupGeneration == info.GetGroupGeneration()) {
+                        TGroup& group = *itGroup->second;
+                        TVDisk& vDisk = group.VDisks.emplace_back();
+                        FillVDiskFromVSlotInfo(vDisk, key, info);
+                        group.VDiskNodeIds.push_back(vDisk.VSlotId.NodeId);
+                    }
+                }
+                if (totalEntries > 0 && totalEntries > errorEntries) {
+                    FieldsAvailable |= FieldsBsVSlots;
+                    ApplyEverything();
+                } else {
+                    AddProblem("bsc-wrong-data");
+                }
+            } else {
+                AddProblem("bsc-vslots-no-data");
+            }
+            GetVSlotsResponseProcessed = true;
+        }
+        if (GetPDisksResponse && GetPDisksResponse->IsDone() && !GetPDisksResponseProcessed) {
+            if (GetPDisksResponse->IsOk()) {
+                for (const NKikimrSysView::TPDiskEntry& entry : GetPDisksResponse->Get()->Record.GetEntries()) {
+                    const NKikimrSysView::TPDiskKey& key = entry.GetKey();
+                    const NKikimrSysView::TPDiskInfo& info = entry.GetInfo();
+                    TPDisk& pDisk = PDisks[key];
+                    pDisk.PDiskId = key.GetPDiskId();
+                    pDisk.NodeId = key.GetNodeId();
+                    pDisk.SetCategory(info.GetCategory());
+                    pDisk.Path = info.GetPath();
+                    pDisk.Guid = info.GetGuid();
+                    pDisk.AvailableSize = info.GetAvailableSize();
+                    pDisk.TotalSize = info.GetTotalSize();
+                    pDisk.Status = info.GetStatusV2();
+                    pDisk.StatusChangeTimestamp = TInstant::MicroSeconds(info.GetStatusChangeTimestamp());
+                    pDisk.EnforcedDynamicSlotSize = info.GetEnforcedDynamicSlotSize();
+                    pDisk.ExpectedSlotCount = info.GetExpectedSlotCount();
+                    pDisk.NumActiveSlots = info.GetNumActiveSlots();
+                    pDisk.Category = info.GetCategory();
+                    pDisk.DecommitStatus = info.GetDecommitStatus();
+                }
+                FieldsAvailable |= FieldsBsPDisks;
+                ApplyEverything();
+            } else {
+                AddProblem("bsc-pdisks-no-data");
+            }
+            GetPDisksResponseProcessed = true;;
+        }
+        if (FieldsAvailable.test(+EGroupFields::VDisk)) {
+            if (FieldsNeeded(FieldsGroupState)) {
+                for (TGroup* group : GroupView) {
+                    group->CalcState();
+                }
+                FieldsAvailable |= FieldsGroupState;
+                ApplyEverything();
+            }
+            if (FieldsAvailable.test(+EGroupFields::PDisk)) {
+                if (FieldsNeeded(FieldsGroupAvailableAndDiskSpace)) {
+                    for (TGroup* group : GroupView) {
+                        group->CalcAvailableAndDiskSpace(PDisks);
+                    }
+                    FieldsAvailable |= FieldsGroupAvailableAndDiskSpace;
+                    ApplyEverything();
+                }
+            }
+        }
+        if (AreBSControllerRequestsDone()) {
+            if (FieldsNeeded(FieldsHive) && !CollectedHiveData) {
+                CollectHiveData();
+            }
+            if (FieldsAvailable.test(+EGroupFields::GroupId) && FieldsNeeded(FieldsHive) && NavigateKeySetInFlight == 0 && HiveStorageStatsInFlight == 0) {
+                if (GroupsByGroupId.empty()) {
+                    RebuildGroupsByGroupId();
+                }
+                for (auto& hiveStorageStats : HiveStorageStats) {
+                    if (hiveStorageStats.second.IsOk()) {
+                        for (const auto& pbPool : hiveStorageStats.second->Record.GetPools()) {
+                            for (const auto& pbGroup : pbPool.GetGroups()) {
+                                auto itGroup = GroupsByGroupId.find(pbGroup.GetGroupID());
+                                if (itGroup != GroupsByGroupId.end()) {
+                                    itGroup->second->AllocationUnits += pbGroup.GetAcquiredUnits();
+                                }
+                            }
+                        }
+                    }
+                }
+                FieldsAvailable |= FieldsHive;
+                ApplyEverything();
+            }
+            if (TimeToAskWhiteboard() && FieldsNeeded(FieldsWbDisks)) {
+                AddEvent("TimeToAskWhiteboard");
+                for (TGroup* group : GroupView) {
+                    for (TNodeId nodeId : group->VDiskNodeIds) {
+                        SendWhiteboardDisksRequest(nodeId);
+                    }
+                }
+            }
+        }
+    }
+
+    void ProcessNavigate(TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult>& navigateResult, bool firstNavigate) {
         if (navigateResult.IsOk()) {
             TString path = CanonizePath(navigateResult->Request->ResultSet.begin()->Path);
             TIntrusiveConstPtr<TSchemeCacheNavigate::TDomainDescription> domainDescription = navigateResult->Request->ResultSet.begin()->DomainDescription;
@@ -1106,247 +1499,84 @@ public:
                 }
             }
         }
-        RequestDone();
+    }
+
+    void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+        bool firstNavigate = (ev->Cookie == 0);
+        TPathId pathId = GetPathId(ev);
+        if (firstNavigate && DatabaseNavigateResponse && pathId) {
+            NavigateKeySetResult.emplace(pathId, std::move(*DatabaseNavigateResponse));
+        }
+        auto itNavigateKeySetResult = NavigateKeySetResult.find(pathId);
+        if (itNavigateKeySetResult == NavigateKeySetResult.end()) {
+            BLOG_W("Invalid NavigateKeySetResult PathId: " << pathId << " Path: " << CanonizePath(ev->Get()->Request->ResultSet.begin()->Path));
+            return RequestDone();
+        }
+        auto& navigateResult(itNavigateKeySetResult->second);
+        if (navigateResult.Set(std::move(ev))) {
+            ProcessNavigate(navigateResult, firstNavigate);
+            --NavigateKeySetInFlight;
+            ProcessResponses();
+            RequestDone();
+        }
     }
 
     void Handle(TEvHive::TEvResponseHiveStorageStats::TPtr& ev) {
         auto itHiveStorageStats = HiveStorageStats.find(ev->Cookie);
         if (itHiveStorageStats != HiveStorageStats.end()) {
-            itHiveStorageStats->second.Set(std::move(ev));
-            if (GroupsByGroupId.empty()) {
-                RebuildGroupsByGroupId();
+            if (itHiveStorageStats->second.Set(std::move(ev))) {
+                --HiveStorageStatsInFlight;
+                ProcessResponses();
+                RequestDone();
             }
-            for (const auto& pbPool : itHiveStorageStats->second->Record.GetPools()) {
-                for (const auto& pbGroup : pbPool.GetGroups()) {
-                    auto itGroup = GroupsByGroupId.find(pbGroup.GetGroupID());
-                    if (itGroup != GroupsByGroupId.end()) {
-                        itGroup->second->AllocationUnits += pbGroup.GetAcquiredUnits();
-                    }
-                }
-            }
-
-        }
-        if (--HiveStorageStatsInFlight == 0) {
-            FieldsAvailable |= FieldsHive;
-            ApplyEverything();
-        }
-        RequestDone();
-    }
-
-    static TString GetMediaType(const TString& mediaType) {
-        if (mediaType.StartsWith("Type:")) {
-            return mediaType.substr(5);
-        }
-        return mediaType;
-    }
-
-    void FillVDiskFromVSlotInfo(TVDisk& vDisk, TVSlotId vSlotId, const NKikimrSysView::TVSlotInfo& info) {
-        vDisk.VDiskId = TVDiskID(info.GetGroupId(),
-                                info.GetGroupGeneration(),
-                                static_cast<ui8>(info.GetFailRealm()),
-                                static_cast<ui8>(info.GetFailDomain()),
-                                static_cast<ui8>(info.GetVDisk()));
-        vDisk.VSlotId = vSlotId;
-        vDisk.AllocatedSize = info.GetAllocatedSize();
-        vDisk.AvailableSize = info.GetAvailableSize();
-        //vDisk.Kind = info.GetKind();
-        vDisk.Status = info.GetStatusV2();
-        NKikimrBlobStorage::EVDiskStatus_Parse(info.GetStatusV2(), &vDisk.VDiskStatus);
-    }
-
-    bool AreBSControllerRequestsDone() const {
-        return (!GetGroupsResponse || GetGroupsResponse->IsDone()) &&
-               (!GetStoragePoolsResponse || GetStoragePoolsResponse->IsDone()) &&
-               (!GetVSlotsResponse || GetVSlotsResponse->IsDone()) &&
-               (!GetPDisksResponse || GetPDisksResponse->IsDone());
-    }
-
-    void ProcessBSControllerResponses() {
-        int requestsDone = 0;
-        if (GetGroupsResponse && GetGroupsResponse->IsOk() && FieldsNeeded(FieldsBsGroups)) {
-            Groups.reserve(GetGroupsResponse->Get()->Record.EntriesSize());
-            for (const NKikimrSysView::TGroupEntry& entry : GetGroupsResponse->Get()->Record.GetEntries()) {
-                const NKikimrSysView::TGroupInfo& info = entry.GetInfo();
-                TGroup& group = Groups.emplace_back();
-                group.GroupId = entry.GetKey().GetGroupId();
-                group.GroupGeneration = info.GetGeneration();
-                group.BoxId = info.GetBoxId();
-                group.PoolId = info.GetStoragePoolId();
-                group.Erasure = info.GetErasureSpeciesV2();
-                group.ErasureSpecies = TErasureType::ErasureSpeciesByName(group.Erasure);
-                //group.Used = info.GetAllocatedSize();
-                //group.Limit = info.GetAllocatedSize() + info.GetAvailableSize();
-                //group.Usage = group.Limit ? 100.0 * group.Used / group.Limit : 0;
-                group.PutTabletLogLatency = info.GetPutTabletLogLatency();
-                group.PutUserDataLatency = info.GetPutUserDataLatency();
-                group.GetFastLatency = info.GetGetFastLatency();
-            }
-            GroupsByGroupId.clear();
-            FoundGroups = TotalGroups = Groups.size();
-            FieldsAvailable |= FieldsBsGroups;
-            ApplyEverything();
-            ++requestsDone;
-        }
-        if (FieldsAvailable.test(+EGroupFields::GroupId) && GetStoragePoolsResponse && GetStoragePoolsResponse->IsOk() && FieldsNeeded(FieldsBsPools)) {
-            std::unordered_map<std::pair<ui64, ui64>, const NKikimrSysView::TStoragePoolInfo*> indexStoragePool; // (box, id) -> pool
-            for (const NKikimrSysView::TStoragePoolEntry& entry : GetStoragePoolsResponse->Get()->Record.GetEntries()) {
-                const auto& key = entry.GetKey();
-                const NKikimrSysView::TStoragePoolInfo& pool = entry.GetInfo();
-                indexStoragePool.emplace(std::make_pair(key.GetBoxId(), key.GetStoragePoolId()), &pool);
-            }
-            ui64 rootSchemeshardId = AppData()->DomainsInfo->Domain->SchemeRoot;
-            for (TGroup& group : Groups) {
-                if (group.BoxId == 0 && group.PoolId == 0) {
-                    group.PoolName = "static";
-                    group.Kind = ""; // TODO ?
-                    group.MediaType = ""; // TODO ?
-                    group.SchemeShardId = rootSchemeshardId;
-                    group.PathId = 1;
-                    group.EncryptionMode = 0; // TODO ?
-                } else {
-                    auto itStoragePool = indexStoragePool.find({group.BoxId, group.PoolId});
-                    if (itStoragePool != indexStoragePool.end()) {
-                        const NKikimrSysView::TStoragePoolInfo* pool = itStoragePool->second;
-                        group.PoolName = pool->GetName();
-                        group.Kind = pool->GetKind();
-                        group.SchemeShardId = pool->GetSchemeshardId();
-                        group.PathId = pool->GetPathId();
-                        group.MediaType = GetMediaType(pool->GetPDiskFilter());
-                        if (!group.Erasure) {
-                            group.Erasure = pool->GetErasureSpeciesV2();
-                            group.ErasureSpecies = TErasureType::ErasureSpeciesByName(group.Erasure);
-                        }
-                        group.EncryptionMode = pool->GetEncryptionMode();
-                    } else {
-                        BLOG_W("Storage pool not found for group " << group.GroupId << " box " << group.BoxId << " pool " << group.PoolId);
-                    }
-                }
-            }
-            FieldsAvailable |= FieldsBsPools;
-            ApplyEverything();
-            CollectHiveData();
-            ++requestsDone;
-        }
-        if (FieldsAvailable.test(+EGroupFields::GroupId) && GetVSlotsResponse && GetVSlotsResponse->IsOk() && FieldsNeeded(FieldsBsVSlots)) {
-            if (GroupsByGroupId.empty()) {
-                RebuildGroupsByGroupId();
-            }
-            size_t totalEntries = GetVSlotsResponse->Get()->Record.EntriesSize();
-            size_t errorEntries = 0;
-            for (const NKikimrSysView::TVSlotEntry& entry : GetVSlotsResponse->Get()->Record.GetEntries()) {
-                const NKikimrSysView::TVSlotKey& key = entry.GetKey();
-                const NKikimrSysView::TVSlotInfo& info = entry.GetInfo();
-                VSlotsByVSlotId[key] = &info;
-                if (info.GetStatusV2() == "ERROR") {
-                    ++errorEntries;
-                }
-                auto itGroup = GroupsByGroupId.find(info.GetGroupId());
-                if (itGroup != GroupsByGroupId.end() && itGroup->second->GroupGeneration == info.GetGroupGeneration()) {
-                    TGroup& group = *itGroup->second;
-                    TVDisk& vDisk = group.VDisks.emplace_back();
-                    FillVDiskFromVSlotInfo(vDisk, key, info);
-                    group.VDiskNodeIds.push_back(vDisk.VSlotId.NodeId);
-                }
-            }
-            if (totalEntries > 0 && totalEntries > errorEntries) {
-                FieldsAvailable |= FieldsBsVSlots;
-                ApplyEverything();
-            } else {
-                Problems.emplace_back("bsc-wrong-data");
-            }
-            ++requestsDone;
-        }
-        if (GetPDisksResponse && GetPDisksResponse->IsOk() && FieldsNeeded(FieldsBsPDisks)) {
-            for (const NKikimrSysView::TPDiskEntry& entry : GetPDisksResponse->Get()->Record.GetEntries()) {
-                const NKikimrSysView::TPDiskKey& key = entry.GetKey();
-                const NKikimrSysView::TPDiskInfo& info = entry.GetInfo();
-                TPDisk& pDisk = PDisks[key];
-                pDisk.PDiskId = key.GetPDiskId();
-                pDisk.NodeId = key.GetNodeId();
-                pDisk.SetCategory(info.GetCategory());
-                pDisk.Path = info.GetPath();
-                pDisk.Guid = info.GetGuid();
-                pDisk.AvailableSize = info.GetAvailableSize();
-                pDisk.TotalSize = info.GetTotalSize();
-                pDisk.Status = info.GetStatusV2();
-                pDisk.StatusChangeTimestamp = TInstant::MicroSeconds(info.GetStatusChangeTimestamp());
-                pDisk.EnforcedDynamicSlotSize = info.GetEnforcedDynamicSlotSize();
-                pDisk.ExpectedSlotCount = info.GetExpectedSlotCount();
-                pDisk.NumActiveSlots = info.GetNumActiveSlots();
-                pDisk.Category = info.GetCategory();
-                pDisk.DecommitStatus = info.GetDecommitStatus();
-            }
-            FieldsAvailable |= FieldsBsPDisks;
-            ApplyEverything();
-            ++requestsDone;
-        }
-        if (FieldsAvailable.test(+EGroupFields::VDisk)) {
-            if (FieldsNeeded(FieldsGroupState)) {
-                for (TGroup& group : Groups) {
-                    group.CalcState();
-                }
-                FieldsAvailable |= FieldsGroupState;
-                ApplyEverything();
-            }
-            if (FieldsAvailable.test(+EGroupFields::PDisk)) {
-                if (FieldsNeeded(FieldsGroupAvailableAndDiskSpace)) {
-                    for (TGroup& group : Groups) {
-                        group.CalcAvailableAndDiskSpace(PDisks);
-                    }
-                    FieldsAvailable |= FieldsGroupAvailableAndDiskSpace;
-                    ApplyEverything();
-                }
-            }
-        }
-        if (AreBSControllerRequestsDone() && FieldsNeeded(FieldsWbDisks)) {
-            for (TGroup& group : Groups) {
-                for (TNodeId nodeId : group.VDiskNodeIds) {
-                    SendWhiteboardDisksRequest(nodeId);
-                }
-            }
-        }
-        if (requestsDone) {
-            RequestDone(requestsDone);
         }
     }
 
     void Handle(NSysView::TEvSysView::TEvGetGroupsResponse::TPtr& ev) {
-        GetGroupsResponse->Set(std::move(ev));
-        if (FallbackToWhiteboard) {
+        if (GetGroupsResponse->Set(std::move(ev))) {
+            if (FallbackToWhiteboard) {
+                RequestDone();
+                return;
+            }
+            ProcessResponses();
             RequestDone();
-            return;
         }
-        ProcessBSControllerResponses();
     }
 
     void Handle(NSysView::TEvSysView::TEvGetStoragePoolsResponse::TPtr& ev) {
-        GetStoragePoolsResponse->Set(std::move(ev));
-        if (FallbackToWhiteboard) {
+        if (GetStoragePoolsResponse->Set(std::move(ev))) {
+            if (FallbackToWhiteboard) {
+                RequestDone();
+                return;
+            }
+            ProcessResponses();
             RequestDone();
-            return;
         }
-        ProcessBSControllerResponses();
     }
 
     void Handle(NSysView::TEvSysView::TEvGetVSlotsResponse::TPtr& ev) {
-        GetVSlotsResponse->Set(std::move(ev));
-        if (FallbackToWhiteboard) {
+        if (GetVSlotsResponse->Set(std::move(ev))) {
+            if (FallbackToWhiteboard) {
+                RequestDone();
+                return;
+            }
+            ProcessResponses();
             RequestDone();
-            return;
         }
-        ProcessBSControllerResponses();
     }
 
     void Handle(NSysView::TEvSysView::TEvGetPDisksResponse::TPtr& ev) {
-        GetPDisksResponse->Set(std::move(ev));
-        if (FallbackToWhiteboard) {
+        if (GetPDisksResponse->Set(std::move(ev))) {
+            if (FallbackToWhiteboard) {
+                RequestDone();
+                return;
+            }
+            ProcessResponses();
             RequestDone();
-            return;
         }
-        ProcessBSControllerResponses();
     }
 
-    void RequestNodesList() {
+    void RequestNodesListForStorageGroups() {
         if (!NodesInfo.has_value()) {
             NodesInfo = MakeRequest<TEvInterconnect::TEvNodesInfo>(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes());
         }
@@ -1369,58 +1599,57 @@ public:
 
     void Handle(TEvWhiteboard::TEvBSGroupStateResponse::TPtr& ev) {
         ui64 nodeId = ev.Get()->Cookie;
-        BSGroupStateResponse[nodeId].Set(std::move(ev));
-        BSGroupRequestDone();
+        if (BSGroupStateResponse[nodeId].Set(std::move(ev))) {
+            BSGroupRequestDone();
+        }
     }
 
     void Handle(TEvWhiteboard::TEvVDiskStateResponse::TPtr& ev) {
         ui64 nodeId = ev.Get()->Cookie;
         auto& vDiskStateResponse = VDiskStateResponse[nodeId];
-        vDiskStateResponse.Set(std::move(ev));
-        for (const NKikimrWhiteboard::TVDiskStateInfo& info : vDiskStateResponse->Record.GetVDiskStateInfo()) {
-            for (const auto& vSlotId : info.GetDonors()) {
-                SendWhiteboardDisksRequest(vSlotId.GetNodeId());
+        if (vDiskStateResponse.Set(std::move(ev))) {
+            for (const NKikimrWhiteboard::TVDiskStateInfo& info : vDiskStateResponse->Record.GetVDiskStateInfo()) {
+                for (const auto& vSlotId : info.GetDonors()) {
+                    SendWhiteboardDisksRequest(vSlotId.GetNodeId());
+                }
             }
+            VDiskRequestDone();
         }
-        VDiskRequestDone();
     }
 
     void Handle(TEvWhiteboard::TEvPDiskStateResponse::TPtr& ev) {
         ui64 nodeId = ev.Get()->Cookie;
-        PDiskStateResponse[nodeId].Set(std::move(ev));
-        PDiskRequestDone();
+        if (PDiskStateResponse[nodeId].Set(std::move(ev))) {
+            PDiskRequestDone();
+        }
     }
 
     void ProcessWhiteboardGroups() {
-        std::unordered_map<ui32, const NKikimrWhiteboard::TBSGroupStateInfo*> latestGroupInfo;
-        for (const auto& [nodeId, bsGroupStateResponse] : BSGroupStateResponse) {
-            if (bsGroupStateResponse.IsOk()) {
-                for (const NKikimrWhiteboard::TBSGroupStateInfo& info : bsGroupStateResponse->Record.GetBSGroupStateInfo()) {
-                    TString storagePoolName = info.GetStoragePoolName();
-                    if (storagePoolName.empty()) {
-                        continue;
-                    }
-                    if (info.VDiskNodeIdsSize() == 0) {
-                        continue;
-                    }
-                    auto itLatest = latestGroupInfo.find(info.GetGroupID());
-                    if (itLatest == latestGroupInfo.end()) {
-                        latestGroupInfo.emplace(info.GetGroupID(), &info);
-                    } else {
-                        if (info.GetGroupGeneration() > itLatest->second->GetGroupGeneration()) {
-                            itLatest->second = &info;
+        if (GroupData.empty()) {
+            std::unordered_map<ui32, const NKikimrWhiteboard::TBSGroupStateInfo*> latestGroupInfo;
+            for (const auto& [nodeId, bsGroupStateResponse] : BSGroupStateResponse) {
+                if (bsGroupStateResponse.IsOk()) {
+                    for (const NKikimrWhiteboard::TBSGroupStateInfo& info : bsGroupStateResponse->Record.GetBSGroupStateInfo()) {
+                        TString storagePoolName = info.GetStoragePoolName();
+                        if (storagePoolName.empty()) {
+                            continue;
+                        }
+                        if (info.VDiskNodeIdsSize() == 0) {
+                            continue;
+                        }
+                        auto itLatest = latestGroupInfo.find(info.GetGroupID());
+                        if (itLatest == latestGroupInfo.end()) {
+                            latestGroupInfo.emplace(info.GetGroupID(), &info);
+                        } else {
+                            if (info.GetGroupGeneration() > itLatest->second->GetGroupGeneration()) {
+                                itLatest->second = &info;
+                            }
                         }
                     }
                 }
             }
-        }
-        Groups.reserve(latestGroupInfo.size()); // to keep cache stable after emplace
-        RebuildGroupsByGroupId();
-        size_t capacity = Groups.capacity();
-        for (const auto& [groupId, info] : latestGroupInfo) {
-            auto itGroup = GroupsByGroupId.find(groupId);
-            if (itGroup == GroupsByGroupId.end()) {
-                TGroup& group = Groups.emplace_back();
+            for (const auto& [groupId, info] : latestGroupInfo) {
+                TGroup& group = GroupData.emplace_back();
                 group.GroupId = groupId;
                 group.GroupGeneration = info->GetGroupGeneration();
                 group.Erasure = info->GetErasureSpecies();
@@ -1433,35 +1662,26 @@ public:
                 for (auto& vDiskId : info->GetVDiskIds()) {
                     TVDisk& vDisk = group.VDisks.emplace_back();
                     vDisk.VDiskId = VDiskIDFromVDiskID(vDiskId);
-                    vDisk.VDiskStatus = NKikimrBlobStorage::EVDiskStatus::ERROR;
-                }
-                if (capacity != Groups.capacity()) {
-                    // we expect to never do this
-                    RebuildGroupsByGroupId();
-                    capacity = Groups.capacity();
-                }
-            } else {
-                TGroup& group = *itGroup->second;
-                if (group.VDiskNodeIds.empty()) {
-                    for (auto nodeId : info->GetVDiskNodeIds()) {
-                        group.VDiskNodeIds.push_back(nodeId);
-                    }
                 }
             }
+            GroupView.clear();
+            for (TGroup& group : GroupData) {
+                GroupView.emplace_back(&group);
+            }
+            FieldsAvailable |= FieldsWbGroups;
+            FoundGroups = TotalGroups = GroupView.size();
+            ApplyEverything();
         }
-        FieldsAvailable |= FieldsWbGroups;
-        FoundGroups = TotalGroups = Groups.size();
-        ApplyEverything();
         if (FieldsNeeded(FieldsWbDisks)) {
             std::unordered_set<TNodeId> nodeIds;
-            for (const TGroup& group : Groups) {
-                for (const TVDisk& vdisk : group.VDisks) {
+            for (const TGroup* group : GroupView) {
+                for (const TVDisk& vdisk : group->VDisks) {
                     TNodeId nodeId = vdisk.VSlotId.NodeId;
                     if (nodeIds.insert(nodeId).second) {
                         SendWhiteboardDisksRequest(nodeId);
                     }
                 }
-                for (const TNodeId nodeId : group.VDiskNodeIds) {
+                for (const TNodeId nodeId : group->VDiskNodeIds) {
                     if (nodeIds.insert(nodeId).second) {
                         SendWhiteboardDisksRequest(nodeId);
                     }
@@ -1491,12 +1711,15 @@ public:
                 vDisk.VDiskStatus = info.GetReplicated() ? NKikimrBlobStorage::EVDiskStatus::READY : NKikimrBlobStorage::EVDiskStatus::REPLICATING;
                 break;
         }
-        vDisk.Status = NKikimrBlobStorage::EVDiskStatus_Name(vDisk.VDiskStatus);
+        if (vDisk.VDiskStatus) {
+            vDisk.Status = NKikimrBlobStorage::EVDiskStatus_Name(*vDisk.VDiskStatus);
+        }
         vDisk.DiskSpace = static_cast<NKikimrViewer::EFlag>(info.GetDiskSpace());
         vDisk.Donor = info.GetDonorMode();
         for (auto& donor : info.GetDonors()) {
             vDisk.Donors.emplace_back(donor);
         }
+        vDisk.Present = true;
     }
 
     void ProcessWhiteboardDisks() {
@@ -1569,20 +1792,20 @@ public:
             }
         }
         FieldsAvailable |= FieldsWbDisks;
-        for (TGroup& group : Groups) {
-            group.CalcReadWrite();
+        for (TGroup* group : GroupView) {
+            group->CalcReadWrite();
         }
         ApplyEverything();
         if (FieldsNeeded(FieldsGroupState)) {
-            for (TGroup& group : Groups) {
-                group.CalcState();
+            for (TGroup* group : GroupView) {
+                group->CalcState();
             }
             FieldsAvailable |= FieldsGroupState;
             ApplyEverything();
         }
         if (FieldsNeeded(FieldsGroupAvailableAndDiskSpace)) {
-            for (TGroup& group : Groups) {
-                group.CalcAvailableAndDiskSpace(PDisks);
+            for (TGroup* group : GroupView) {
+                group->CalcAvailableAndDiskSpace(PDisks);
             }
             FieldsAvailable |= FieldsGroupAvailableAndDiskSpace;
             ApplyEverything();
@@ -1617,12 +1840,7 @@ public:
             return;
         }
         if (BSGroupStateResponse.count(nodeId) == 0) {
-            TActorId whiteboardServiceId = MakeNodeWhiteboardServiceId(nodeId);
-            BSGroupStateResponse.emplace(nodeId, MakeRequest<TEvWhiteboard::TEvBSGroupStateResponse>(whiteboardServiceId,
-                new TEvWhiteboard::TEvBSGroupStateRequest(),
-                IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession,
-                nodeId));
-            SubscriptionNodeIds.push_back(nodeId);
+            BSGroupStateResponse.emplace(nodeId, MakeWhiteboardRequest(nodeId, new TEvWhiteboard::TEvBSGroupStateRequest()));
             ++BSGroupStateRequestsInFlight;
         }
     }
@@ -1631,22 +1849,13 @@ public:
         if (nodeId == 0) {
             return;
         }
-        TActorId whiteboardServiceId = MakeNodeWhiteboardServiceId(nodeId);
         if (VDiskStateResponse.count(nodeId) == 0) {
-            VDiskStateResponse.emplace(nodeId, MakeRequest<TEvWhiteboard::TEvVDiskStateResponse>(whiteboardServiceId,
-                new TEvWhiteboard::TEvVDiskStateRequest(),
-                IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession,
-                nodeId));
+            VDiskStateResponse.emplace(nodeId, MakeWhiteboardRequest(nodeId, new TEvWhiteboard::TEvVDiskStateRequest()));
             ++VDiskStateRequestsInFlight;
-            SubscriptionNodeIds.push_back(nodeId);
         }
         if (PDiskStateResponse.count(nodeId) == 0) {
-            PDiskStateResponse.emplace(nodeId, MakeRequest<TEvWhiteboard::TEvPDiskStateResponse>(whiteboardServiceId,
-                new TEvWhiteboard::TEvPDiskStateRequest(),
-                IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession,
-                nodeId));
+            PDiskStateResponse.emplace(nodeId, MakeWhiteboardRequest(nodeId, new TEvWhiteboard::TEvPDiskStateRequest()));
             ++PDiskStateRequestsInFlight;
-            SubscriptionNodeIds.push_back(nodeId);
         }
     }
 
@@ -1680,23 +1889,27 @@ public:
 
     void RequestWhiteboard() {
         FallbackToWhiteboard = true;
-        RequestNodesList();
+        RequestNodesListForStorageGroups();
     }
 
     void OnBscError(const TString& error) {
-        if (GetGroupsResponse.has_value()) {
-            GetGroupsResponse->Error(error);
-        }
-        if (GetStoragePoolsResponse.has_value()) {
-            GetStoragePoolsResponse->Error(error);
-        }
-        if (GetVSlotsResponse.has_value()) {
-            GetVSlotsResponse->Error(error);
-        }
-        if (GetPDisksResponse.has_value()) {
-            GetPDisksResponse->Error(error);
-        }
         RequestWhiteboard();
+        if (GetGroupsResponse && GetGroupsResponse->Error(error)) {
+            ProcessResponses();
+            RequestDone();
+        }
+        if (GetStoragePoolsResponse && GetStoragePoolsResponse->Error(error)) {
+            ProcessResponses();
+            RequestDone();
+        }
+        if (GetVSlotsResponse && GetVSlotsResponse->Error(error)) {
+            ProcessResponses();
+            RequestDone();
+        }
+        if (GetPDisksResponse && GetPDisksResponse->Error(error)) {
+            ProcessResponses();
+            RequestDone();
+        }
     }
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
@@ -1704,22 +1917,21 @@ public:
             TString error = TStringBuilder() << "Failed to establish pipe: " << NKikimrProto::EReplyStatus_Name(ev->Get()->Status);
             auto it = HiveStorageStats.find(ev->Get()->TabletId);
             if (it != HiveStorageStats.end()) {
-                it->second.Error(error);
-                if (--HiveStorageStatsInFlight == 0) {
-                    FieldsAvailable |= FieldsHive;
+                if (it->second.Error(error)) {
+                    --HiveStorageStatsInFlight;
+                    ProcessResponses();
+                    RequestDone();
                 }
             }
             if (ev->Get()->TabletId == GetBSControllerId()) {
+                AddProblem("bsc-error");
                 OnBscError(error);
-                Problems.emplace_back("bsc-error");
             }
         }
-        TBase::Handle(ev); // all RequestDone() are handled by base handler
     }
 
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvStateStorage::TEvBoardInfo, Handle);
             hFunc(NSysView::TEvSysView::TEvGetGroupsResponse, Handle);
             hFunc(NSysView::TEvSysView::TEvGetStoragePoolsResponse, Handle);
             hFunc(NSysView::TEvSysView::TEvGetVSlotsResponse, Handle);
@@ -1741,28 +1953,36 @@ public:
         switch (ev->Get()->Tag) {
             case TimeoutBSC:
                 if (!AreBSControllerRequestsDone()) {
+                    AddProblem("bsc-timeout");
                     OnBscError("timeout");
-                    Problems.emplace_back("bsc-timeout");
-                    RequestDone(FailPipeConnect(GetBSControllerId()));
                 }
                 break;
             case TimeoutFinal:
                 // bread crumbs
+                if (!AreBSControllerRequestsDone()) {
+                    AddProblem("bsc-incomplete");
+                }
+                if (HiveStorageStatsInFlight > 0) {
+                    AddProblem("hive-incomplete");
+                    for (auto& hiveStorageStats : HiveStorageStats) {
+                        if (hiveStorageStats.second.Error("timeout")) {
+                            --HiveStorageStatsInFlight;
+                            ProcessResponses();
+                            //RequestDone();
+                        }
+                    }
+                }
                 if (BSGroupStateRequestsInFlight > 0) {
-                    Problems.emplace_back("wb-incomplete-groups");
+                    AddProblem("wb-incomplete-groups");
                     ProcessWhiteboardGroups();
                 }
                 if (VDiskStateRequestsInFlight > 0 || PDiskStateRequestsInFlight > 0) {
-                    Problems.emplace_back("wb-incomplete-disks");
+                    AddProblem("wb-incomplete-disks");
                     ProcessWhiteboardDisks();
                 }
-                if (HiveStorageStatsInFlight > 0) {
-                    Problems.emplace_back("hive-incomplete");
+                if (!ReplySent) {
+                    ReplyAndPassAway();
                 }
-                if (!AreBSControllerRequestsDone()) {
-                    Problems.emplace_back("bsc-incomplete");
-                }
-                ReplyAndPassAway();
                 break;
         }
     }
@@ -1826,11 +2046,12 @@ public:
     }
 
     void ReplyAndPassAway() override {
+        AddEvent("ReplyAndPassAway");
         ApplyEverything();
         NKikimrViewer::TStorageGroupsInfo json;
-        json.SetVersion(2);
-        json.SetFieldsAvailable(FieldsAvailable.to_ulong());
-        json.SetFieldsRequired(FieldsRequired.to_ulong());
+        json.SetVersion(Viewer->GetCapabilityVersion("/storage/groups"));
+        json.SetFieldsAvailable(FieldsAvailable.to_string());
+        json.SetFieldsRequired(FieldsRequired.to_string());
         if (NeedFilter) {
             json.SetNeedFilter(true);
         }
@@ -1843,84 +2064,125 @@ public:
         if (NeedLimit) {
             json.SetNeedLimit(true);
         }
+        if (CachedDataMaxAge) {
+            json.SetCachedDataMaxAge(CachedDataMaxAge.MilliSeconds());
+        }
         json.SetTotalGroups(TotalGroups);
         json.SetFoundGroups(FoundGroups);
         for (auto problem : Problems) {
             json.AddProblems(problem);
         }
         if (GroupGroups.empty()) {
-            for (const TGroup& group : Groups) {
+            for (const TGroup* group : GroupView) {
                 NKikimrViewer::TStorageGroupInfo& jsonGroup = *json.AddStorageGroups();
-                jsonGroup.SetGroupId(::ToString(group.GroupId));
-                if (group.GroupGeneration) {
-                    jsonGroup.SetGroupGeneration(group.GroupGeneration);
+                jsonGroup.SetGroupId(::ToString(group->GroupId));
+                if (group->GroupGeneration) {
+                    jsonGroup.SetGroupGeneration(group->GroupGeneration);
                 }
                 if (FieldsAvailable.test(+EGroupFields::PoolName)) {
-                    jsonGroup.SetPoolName(group.PoolName);
+                    jsonGroup.SetPoolName(group->PoolName);
                 }
-                for (const TVDisk& vdisk : group.VDisks) {
-                    RenderVDisk(*jsonGroup.AddVDisks(), vdisk);
+                std::vector<const TVDisk*> vdisks;
+                vdisks.resize(group->VDisks.size());
+                for (size_t idx = 0; idx < group->VDisks.size(); ++idx) {
+                    vdisks[idx] = &group->VDisks[idx];
+                }
+                std::sort(vdisks.begin(), vdisks.end(), [](const TVDisk* a, const TVDisk* b) {
+                    return a->VDiskId < b->VDiskId;
+                });
+                for (const TVDisk* vdisk : vdisks) {
+                    RenderVDisk(*jsonGroup.AddVDisks(), *vdisk);
                 }
                 if (FieldsAvailable.test(+EGroupFields::Encryption)) {
-                    jsonGroup.SetEncryption(group.EncryptionMode);
+                    jsonGroup.SetEncryption(group->EncryptionMode);
                 }
-                if (group.Overall != NKikimrViewer::Grey) {
-                    jsonGroup.SetOverall(group.Overall);
+                if (group->Overall != NKikimrViewer::Grey) {
+                    jsonGroup.SetOverall(group->Overall);
                 }
-                if (group.DiskSpace != NKikimrViewer::Grey) {
-                    jsonGroup.SetDiskSpace(group.DiskSpace);
+                if (group->DiskSpace != NKikimrViewer::Grey) {
+                    jsonGroup.SetDiskSpace(group->DiskSpace);
                 }
                 if (FieldsAvailable.test(+EGroupFields::Kind)) {
-                    jsonGroup.SetKind(group.Kind);
+                    jsonGroup.SetKind(group->Kind);
                 }
                 if (FieldsAvailable.test(+EGroupFields::MediaType)) {
-                    jsonGroup.SetMediaType(group.MediaType);
+                    jsonGroup.SetMediaType(group->MediaType);
                 }
                 if (FieldsAvailable.test(+EGroupFields::Erasure)) {
-                    jsonGroup.SetErasureSpecies(group.Erasure);
+                    jsonGroup.SetErasureSpecies(group->Erasure);
                 }
                 if (FieldsAvailable.test(+EGroupFields::AllocationUnits)) {
-                    jsonGroup.SetAllocationUnits(group.AllocationUnits);
+                    jsonGroup.SetAllocationUnits(group->AllocationUnits);
                 }
                 if (FieldsAvailable.test(+EGroupFields::State)) {
-                    jsonGroup.SetState(group.State);
+                    jsonGroup.SetState(group->State);
                 }
                 if (FieldsAvailable.test(+EGroupFields::MissingDisks)) {
-                    jsonGroup.SetMissingDisks(group.MissingDisks);
+                    jsonGroup.SetMissingDisks(group->MissingDisks);
                 }
                 if (FieldsAvailable.test(+EGroupFields::Used)) {
-                    jsonGroup.SetUsed(group.Used);
+                    jsonGroup.SetUsed(group->Used);
                 }
                 if (FieldsAvailable.test(+EGroupFields::Limit)) {
-                    jsonGroup.SetLimit(group.Limit);
+                    jsonGroup.SetLimit(group->Limit);
                 }
                 if (FieldsAvailable.test(+EGroupFields::Read)) {
-                    jsonGroup.SetRead(group.Read);
+                    jsonGroup.SetRead(group->Read);
                 }
                 if (FieldsAvailable.test(+EGroupFields::Write)) {
-                    jsonGroup.SetWrite(group.Write);
+                    jsonGroup.SetWrite(group->Write);
                 }
                 if (FieldsAvailable.test(+EGroupFields::Usage)) {
-                    jsonGroup.SetUsage(group.Usage);
+                    jsonGroup.SetUsage(group->Usage);
                 }
                 if (FieldsAvailable.test(+EGroupFields::Available)) {
-                    jsonGroup.SetAvailable(group.Available);
+                    jsonGroup.SetAvailable(group->Available);
+                }
+                if (FieldsAvailable.test(+EGroupFields::DiskSpaceUsage)) {
+                    jsonGroup.SetDiskSpaceUsage(group->DiskSpaceUsage);
+                }
+                if (FieldsAvailable.test(+EGroupFields::Latency)) {
+                    jsonGroup.SetLatencyPutTabletLog(group->PutTabletLogLatency);
+                    jsonGroup.SetLatencyPutUserData(group->PutUserDataLatency);
+                    jsonGroup.SetLatencyGetFast(group->GetFastLatency);
                 }
             }
         } else {
-            for (const TGroupGroup& groupGroup : GroupGroups) {
+            for (TGroupGroup& groupGroup : GroupGroups) {
                 NKikimrViewer::TStorageGroupGroup& jsonGroupGroup = *json.AddStorageGroupGroups();
                 jsonGroupGroup.SetGroupName(groupGroup.Name);
                 jsonGroupGroup.SetGroupCount(groupGroup.Groups.size());
+                groupGroup.CalcStats();
+                if (FieldsAvailable.test(+EGroupFields::Used)) {
+                    jsonGroupGroup.SetUsed(groupGroup.Used);
+                }
+                if (FieldsAvailable.test(+EGroupFields::Limit)) {
+                    jsonGroupGroup.SetLimit(groupGroup.Limit);
+                }
+                if (FieldsAvailable.test(+EGroupFields::Read)) {
+                    jsonGroupGroup.SetRead(groupGroup.Read);
+                }
+                if (FieldsAvailable.test(+EGroupFields::Write)) {
+                    jsonGroupGroup.SetWrite(groupGroup.Write);
+                }
+                if (FieldsAvailable.test(+EGroupFields::Usage)) {
+                    jsonGroupGroup.SetUsage(groupGroup.Usage);
+                }
+                if (FieldsAvailable.test(+EGroupFields::Available)) {
+                    jsonGroupGroup.SetAvailable(groupGroup.Available);
+                }
+                if (FieldsAvailable.test(+EGroupFields::DiskSpaceUsage)) {
+                    jsonGroupGroup.SetDiskSpaceUsage(groupGroup.DiskSpaceUsage);
+                }
+                if (FieldsAvailable.test(+EGroupFields::Latency)) {
+                    jsonGroupGroup.SetLatencyPutTabletLog(groupGroup.PutTabletLogLatency);
+                    jsonGroupGroup.SetLatencyPutUserData(groupGroup.PutUserDataLatency);
+                    jsonGroupGroup.SetLatencyGetFast(groupGroup.GetFastLatency);
+                }
             }
         }
-        TStringStream out;
-        Proto2Json(json, out, {
-            .EnumMode = TProto2JsonConfig::EnumValueMode::EnumName,
-            .StringifyNumbers = TProto2JsonConfig::EStringifyNumbersMode::StringifyInt64Always,
-            .WriteNanAsString = true,
-        });
-        TBase::ReplyAndPassAway(GetHTTPOKJSON(out.Str()));
+        AddEvent("RenderingResult");
+        TBase::ReplyAndPassAway(GetHTTPOKJSON(json));
     }
 
     static YAML::Node GetSwagger() {
@@ -1928,8 +2190,14 @@ public:
             get:
                 tags:
                   - storage
-                summary: Storage groups
-                description: Information about storage groups
+                summary: Gets information about storage and groups.
+                description: >
+                    It can get groups of storage groups or all storage groups.
+                    It's always better to get groups of storage groups first, then get all storage groups in a group.
+                    To get list of groups of storage groups we call it with `group` parameter first,
+                    then we call it with `filter_group` and `filter_group_by` parameters to get content of a group.
+                    For example, to get groups of storage groups we call it with `group=State` parameter,
+                    then we call it with `filter_group_by=State` and `filter_group=ok` parameters.
                 parameters:
                   - name: database
                     in: query
@@ -1956,26 +2224,6 @@ public:
                     description: group id
                     required: false
                     type: integer
-                  - name: need_groups
-                    in: query
-                    description: return groups information
-                    required: false
-                    type: boolean
-                    default: true
-                  - name: need_disks
-                    in: query
-                    description: return disks information
-                    required: false
-                    type: boolean
-                    default: true
-                  - name: with
-                    in: query
-                    description: >
-                        filter groups by missing or space:
-                          * `missing`
-                          * `space`
-                    required: false
-                    type: string
                   - name: filter
                     description: filter to search for in group ids and pool names
                     required: false
@@ -1983,7 +2231,7 @@ public:
                   - name: sort
                     in: query
                     description: >
-                        sort by:
+                        sort storage groups by:
                           * `PoolName`
                           * `Kind`
                           * `MediaType`
@@ -2001,12 +2249,14 @@ public:
                           * `AllocationUnits`
                           * `Read`
                           * `Write`
+                          * `Latency`
                     required: false
                     type: string
                   - name: group
                     in: query
                     description: >
-                        group by:
+                        returns groups of storage groups with number of storage groups in every group.
+                        grouping by:
                           * `GroupId`
                           * `Erasure`
                           * `Usage`
@@ -2017,6 +2267,30 @@ public:
                           * `MediaType`
                           * `MissingDisks`
                           * `State`
+                          * `Latency`
+                    required: false
+                    type: string
+                  - name: filter_group_by
+                    in: query
+                    description: >
+                        returns conent of a group of storage groups, expects to have filter_group parameter.
+                        grouping by:
+                          * `GroupId`
+                          * `Erasure`
+                          * `Usage`
+                          * `DiskSpaceUsage`
+                          * `PoolName`
+                          * `Kind`
+                          * `Encryption`
+                          * `MediaType`
+                          * `MissingDisks`
+                          * `State`
+                          * `Latency`
+                    required: false
+                    type: string
+                  - name: filter_group
+                    in: query
+                    description: name of a group of storage groups, used for filter_group_by
                     required: false
                     type: string
                   - name: fields_required
@@ -2042,16 +2316,17 @@ public:
                           * `Write`
                           * `PDisk`
                           * `VDisk`
+                          * `Latency`
                     required: false
                     type: string
                   - name: offset
                     in: query
-                    description: skip N nodes
+                    description: skip N nodes, used together with limit to implement paging
                     required: false
                     type: integer
                   - name: limit
                     in: query
-                    description: limit to N nodes
+                    description: limit result to N nodes, used together with offset to implement paging
                     required: false
                     type: integer
                   - name: timeout
@@ -2091,8 +2366,8 @@ public:
             " * `ok` - group is okay\n"
             " * `starting:n` - group is okay, but n disks are starting\n"
             " * `replicating:n` - group is okay, all disks are available, but n disks are replicating\n"
-            " * `degraded:n(m, m...)` - group is okay, but n fail realms are not available (with m fail domains)\n"
-            " * `dead:n` - group is not okay, n fail realms are not available\n";
+            " * `degraded:n(m, m...)` - group is okay, but n data centers / racks are not available (with m devices)\n"
+            " * `dead:n` - group is not okay, n data centers / racks are not available\n";
         storageGroupProperties["Kind"]["description"] = "kind of the disks in this group (specified by the user)";
         storageGroupProperties["MediaType"]["description"] = "actual physical media type of the disks in this group";
         storageGroupProperties["MissingDisks"]["description"] = "number of disks missing";

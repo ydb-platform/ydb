@@ -3,7 +3,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_retry/retry.h>
 #include <ydb/public/sdk/cpp/client/ydb_common_client/impl/iface.h>
 
-namespace NYdb::NRetry {
+namespace NYdb::inline V2::NRetry {
 
 constexpr ui32 MAX_BACKOFF_DURATION_MS = TDuration::Hours(1).MilliSeconds();
 

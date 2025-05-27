@@ -3,7 +3,6 @@
 #include "dispatcher.h"
 #include "helpers.h"
 
-#include <yt/yt/core/misc/singleton.h>
 #include <yt/yt/core/misc/finally.h>
 
 #include <yt/yt/core/rpc/channel.h>
@@ -20,6 +19,8 @@
 #include <library/cpp/yt/threading/rw_spin_lock.h>
 #include <library/cpp/yt/threading/spin_lock.h>
 
+#include <library/cpp/yt/memory/leaky_ref_counted_singleton.h>
+
 #include <array>
 
 namespace NYT::NRpc::NGrpc {
@@ -30,6 +31,8 @@ using namespace NYTree;
 using namespace NYson;
 using namespace NConcurrency;
 using namespace NBus;
+
+using NYT::ToProto;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -126,7 +129,7 @@ DEFINE_ENUM(EClientCallStage,
 );
 
 class TChannel
-    : public IChannel
+    : public NRpc::NGrpc::IGrpcChannel
 {
 public:
     explicit TChannel(TChannelConfigPtr config)
@@ -149,7 +152,7 @@ public:
     }
 
     // IChannel implementation.
-    const TString& GetEndpointDescription() const override
+    const std::string& GetEndpointDescription() const override
     {
         return EndpointAddress_;
     }
@@ -171,11 +174,13 @@ public:
             responseHandler->HandleError(std::move(error));
             return nullptr;
         }
-        return New<TCallHandler>(
+        auto callHandler = New<TCallHandler>(
             this,
             options,
             std::move(request),
             std::move(responseHandler));
+        callHandler->Initialize();
+        return callHandler;
     }
 
     void Terminate(const TError& error) override
@@ -206,7 +211,7 @@ public:
     }
 
     // Custom methods.
-    const TString& GetEndpointAddress() const
+    const std::string& GetEndpointAddress() const
     {
         return EndpointAddress_;
     }
@@ -221,9 +226,14 @@ public:
         return MemoryUsageTracker_;
     }
 
+    grpc_connectivity_state CheckConnectivityState(bool tryToConnect) override
+    {
+        return grpc_channel_check_connectivity_state(Channel_.Unwrap(), tryToConnect);
+    }
+
 private:
     const TChannelConfigPtr Config_;
-    const TString EndpointAddress_;
+    const std::string EndpointAddress_;
     const IAttributeDictionaryPtr EndpointAttributes_;
     const IMemoryUsageTrackerPtr MemoryUsageTracker_ = GetNullMemoryUsageTracker();
 
@@ -252,6 +262,9 @@ private:
             , Request_(std::move(request))
             , ResponseHandler_(std::move(responseHandler))
             , GuardedCompletionQueue_(TDispatcher::Get()->PickRandomGuardedCompletionQueue())
+        { }
+
+        void Initialize()
         {
             YT_LOG_DEBUG("Sending request (RequestId: %v, Method: %v.%v, Timeout: %v)",
                 Request_->GetRequestId(),
@@ -286,7 +299,7 @@ private:
             }
             InitialMetadataBuilder_.Add(RequestIdMetadataKey, ToString(Request_->GetRequestId()));
             InitialMetadataBuilder_.Add(UserMetadataKey, Request_->GetUser());
-            if (Request_->GetUserTag()) {
+            if (!Request_->GetUserTag().empty()) {
                 InitialMetadataBuilder_.Add(UserTagMetadataKey, Request_->GetUserTag());
             }
 
@@ -316,7 +329,7 @@ private:
                 }
             }
 
-            if (const auto traceContext = NTracing::TryGetCurrentTraceContext()) {
+            if (const auto* traceContext = NTracing::TryGetCurrentTraceContext()) {
                 InitialMetadataBuilder_.Add(TracingTraceIdMetadataKey, ToString(traceContext->GetTraceId()));
                 InitialMetadataBuilder_.Add(TracingSpanIdMetadataKey, ToString(traceContext->GetSpanId()));
                 if (traceContext->IsSampled()) {
@@ -335,6 +348,9 @@ private:
             }
 
             try {
+                THROW_ERROR_EXCEPTION_IF(
+                    Request_->IsAttachmentCompressionEnabled(),
+                    "Compression codecs are not supported in RPC over GRPC");
                 RequestBody_ = Request_->Serialize();
             } catch (const std::exception& ex) {
                 auto responseHandler = TryAcquireResponseHandler();
@@ -622,6 +638,8 @@ private:
 
             NRpc::NProto::TResponseHeader responseHeader;
             ToProto(responseHeader.mutable_request_id(), Request_->GetRequestId());
+            ToProto(responseHeader.mutable_service(), Request_->GetService());
+            ToProto(responseHeader.mutable_method(), Request_->GetMethod());
             if (Request_->Header().has_response_codec()) {
                 responseHeader.set_codec(Request_->Header().response_codec());
             }
@@ -722,7 +740,7 @@ class TChannelFactory
     : public IChannelFactory
 {
 public:
-    IChannelPtr CreateChannel(const TString& address) override
+    IChannelPtr CreateChannel(const std::string& address) override
     {
         auto config = New<TChannelConfig>();
         config->Address = address;
@@ -734,7 +752,7 @@ public:
 
 } // namespace
 
-IChannelPtr CreateGrpcChannel(TChannelConfigPtr config)
+IGrpcChannelPtr CreateGrpcChannel(TChannelConfigPtr config)
 {
     return New<TChannel>(std::move(config));
 }

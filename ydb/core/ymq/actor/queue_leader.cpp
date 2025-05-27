@@ -183,7 +183,7 @@ void TQueueLeader::PassAway() {
     LOG_SQS_INFO("Queue " << TLogQueueName(UserName_, QueueName_) << " leader is dying");
 
     if (CurrentStateFunc() != &TThis::StateWorking) {
-        Send(MakeSqsServiceID(SelfId().NodeId()), new TSqsEvents::TEvLeaderStarted());  
+        Send(MakeSqsServiceID(SelfId().NodeId()), new TSqsEvents::TEvLeaderStarted());
     }
 
     for (auto& req : GetConfigurationRequests_) {
@@ -297,15 +297,15 @@ void TQueueLeader::HandleState(const TSqsEvents::TEvExecuted::TRecord& reply) {
             const auto& state = shardStates[i];
             const ui64 shard = IsFifoQueue_ ? 0 : (TablesFormat_ == 1 ? ui32(state["Shard"]) : ui64(state["State"]));
             auto& shardInfo = Shards_[shard];
-            
+
             SetMessagesCount(shard, state["MessageCount"]);
             SetInflyMessagesCount(shard, state["InflyCount"]);
-            
+
             const TValue createdTimestamp = state["CreatedTimestamp"];
             if (!createdTimestamp.IsNull()) {
                 shardInfo.CreatedTimestamp = TInstant::MilliSeconds(ui64(createdTimestamp));
             }
-            
+
             const TValue inflyVersion = state["InflyVersion"];
             if (!inflyVersion.IsNull() && shardInfo.InflyVersion != ui64(inflyVersion)) {
                 shardInfo.NeedInflyReload = true;
@@ -615,7 +615,7 @@ void TQueueLeader::OnMessageSent(const TString& requestId, size_t index, const T
         answer->Statuses.swap(reqInfo.Statuses);
         ui64 bytesWritten = 0;
         for (auto& message : reqInfo.Event->Get()->Messages) {
-            bytesWritten += message.Body.Size();
+            bytesWritten += message.Body.size();
         }
 
         INC_COUNTER_COUPLE(Counters_, SendMessage_Count, sent_count_per_second);
@@ -847,7 +847,7 @@ void TQueueLeader::OnFifoMessagesReadSuccess(const NKikimr::NClient::TValue& val
         ADD_COUNTER(Counters_, MessagesMovedToDLQ, movedMessagesCount);
 
         SetMessagesCount(0, value["newMessagesCount"]);
-        
+
         const auto& moved = value["movedMessages"]; // TODO return only moved offsets
         for (size_t i = 0; i < moved.Size(); ++i) {
             const ui64 offset = moved[i]["SourceOffset"];
@@ -1069,7 +1069,7 @@ void TQueueLeader::OnLoadStdMessagesBatchSuccess(const NKikimr::NClient::TValue&
     for (size_t i = 0; i < list.Size(); ++i) {
         auto msg = list[i];
         const ui64 offset = msg["Offset"];
-        
+
         const bool exists = msg["Exists"];
         const auto wasDeadLetterValue = msg["IsDeadLetter"];
         const bool wasDeadLetter = wasDeadLetterValue.HaveValue() ? bool(wasDeadLetterValue) : false;
@@ -1304,7 +1304,7 @@ void TQueueLeader::OnMessageDeleted(const TString& requestId, ui64 shard, size_t
         const ui64 deleted_number = std::count_if(
             statuses.cbegin(),
             statuses.cend(),
-            [](auto& messageResult) { 
+            [](auto& messageResult) {
                 return messageResult.Status == TSqsEvents::TEvDeleteMessageBatchResponse::EDeleteMessageStatus::OK;
             });
         ADD_COUNTER_COUPLE(Counters_, DeleteMessage_Count, deleted_count_per_second, deleted_number);
@@ -1505,6 +1505,11 @@ void TQueueLeader::AnswerGetConfiguration(TSqsEvents::TEvGetConfiguration::TPtr&
         resp->QueueAttributes = QueueAttributes_;
     }
 
+    if (req->Get()->NeedQueueTags) {
+        Y_ABORT_UNLESS(QueueTags_);
+        resp->QueueTags = QueueTags_;
+    }
+
     Send(req->Sender, std::move(resp));
 }
 
@@ -1514,7 +1519,7 @@ void TQueueLeader::AnswerFailed(TSqsEvents::TEvGetConfiguration::TPtr& ev, bool 
     answer->SqsCoreCounters = Counters_->RootCounters.SqsCounters;
     answer->QueueCounters = Counters_;
     answer->UserCounters = UserCounters_;
-    
+
     answer->SchemeCache = SchemeCache_;
     answer->QuoterResources = QuoterResources_;
     if (queueRemoved) {
@@ -1660,7 +1665,9 @@ void TQueueLeader::AskQueueAttributes() {
         .Params()
             .Uint64("QUEUE_ID_NUMBER", QueueVersion_)
             .Uint64("QUEUE_ID_NUMBER_HASH", GetKeysHash(QueueVersion_))
-        .ParentBuilder().Start();   
+            .Utf8("NAME", QueueName_)
+            .Utf8("USER_NAME", UserName_)
+        .ParentBuilder().Start();
 }
 
 void TQueueLeader::OnQueueAttributes(const TSqsEvents::TEvExecuted::TRecord& ev) {
@@ -1673,6 +1680,10 @@ void TQueueLeader::OnQueueAttributes(const TSqsEvents::TEvExecuted::TRecord& ev)
 
         queueExists = val["queueExists"];
         if (queueExists) {
+            NJson::TJsonMap tagsMap;
+            NJson::ReadJsonTree(TString(val["tags"]), &tagsMap);
+            QueueTags_ = std::move(tagsMap);
+
             const TValue& attrs(val["attrs"]);
 
             TSqsEvents::TQueueAttributes attributes;
@@ -1777,7 +1788,7 @@ void TQueueLeader::StartGatheringMetrics() {
     if (UseCPUOptimization) {
         return;
     }
-    
+
     for (ui64 shard = 0; shard < ShardsCount_; ++shard) {
         if (IsFifoQueue_ || IsDlqQueue_) {
             RequestMessagesCountMetrics(shard);
@@ -1890,7 +1901,7 @@ void TQueueLeader::PlanningRetentionWakeup() {
         now,
         Max(RetentionWakeupPlannedAt_, firstExpiredAt) + RandomRetentionPeriod()
     );
-    
+
     CreateBackgroundActors();
     LOG_SQS_DEBUG("Next retantion wakeup for " << TLogQueueName(UserName_, QueueName_) << " planned at " << nextWakeupAt
         << " retention period " << QueueAttributes_->MessageRetentionPeriod);
@@ -2139,13 +2150,13 @@ void TQueueLeader::OnInflyLoaded(ui64 shard, const TSqsEvents::TEvExecuted::TRec
             !val["readOffset"].HaveValue() ||
             !val["createdTimestamp"].HaveValue()
         ) {
-            return;  
+            return;
         }
         SetMessagesCount(shard, val["messageCount"]);
         SetInflyMessagesCount(shard, val["inflyCount"]);
         shardInfo.ReadOffset = val["readOffset"];
         shardInfo.CreatedTimestamp = TInstant::MilliSeconds(ui64(val["createdTimestamp"]));
-        
+
 
         shardInfo.DelayStatisticsInited = true;
 

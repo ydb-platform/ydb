@@ -56,34 +56,32 @@ public:
 
 class TComputeScheduler {
 public:
-    struct TDistributionRule {
-        double Share;
-        TString Name;
-        TVector<TDistributionRule> SubRules;
-
-        bool empty() {
-            return SubRules.empty() && Name.empty();
-        }
-    };
-
-public:
     TComputeScheduler();
     ~TComputeScheduler();
 
     void ReportCounters(TIntrusivePtr<TKqpCounters>);
 
-    void SetPriorities(TDistributionRule rootRule, double cores, TMonotonic now);
+    
+    void SetCapacity(ui64 cores);
+
+    void UpdateGroupShare(TString name, double share, TMonotonic now, std::optional<double> resourceWeight);
+    void UpdatePerQueryShare(TString name, double share, TMonotonic now);
+
+    ui64 MakePerQueryGroup(TMonotonic now, double share, TString baseGroup);
+    void AddToGroup(TMonotonic now, ui64, TSchedulerEntityHandle&);
+
     void SetMaxDeviation(TDuration);
     void SetForgetInterval(TDuration);
     ::NMonitoring::TDynamicCounters::TCounterPtr GetGroupUsageCounter(TString group) const;
 
-    TSchedulerEntityHandle Enroll(TString group, double weight, TMonotonic now);
+    TSchedulerEntityHandle Enroll(TString group, i64 weight, TMonotonic now);
 
     void AdvanceTime(TMonotonic now);
 
-    void Deregister(TSchedulerEntity& self, TMonotonic now);
+    void Deregister(TSchedulerEntityHandle& self, TMonotonic now);
 
     bool Disabled(TString group);
+    void Disable(TString group, TMonotonic now);
 
 private:
     struct TImpl;
@@ -92,7 +90,7 @@ private:
 
 struct TComputeActorSchedulingOptions {
     TMonotonic Now;
-    NActors::TActorId NodeService;
+    NActors::TActorId SchedulerActorId;
     TSchedulerEntityHandle Handle;
     TComputeScheduler* Scheduler;
     TString Group = "";
@@ -104,7 +102,8 @@ struct TComputeActorSchedulingOptions {
 struct TKqpComputeSchedulerEvents {
     enum EKqpComputeSchedulerEvents {
         EvDeregister = EventSpaceBegin(TKikimrEvents::ES_KQP) + 400,
-        EvAccountTime,
+        EvNewPool,
+        EvPingPool,
     };
 };
 
@@ -116,6 +115,18 @@ struct TEvSchedulerDeregister : public TEventLocal<TEvSchedulerDeregister, TKqpC
     {
     }
 };
+
+struct TEvSchedulerNewPool : public TEventLocal<TEvSchedulerNewPool, TKqpComputeSchedulerEvents::EvNewPool> {
+    TString DatabaseId;
+    TString Pool;
+
+    TEvSchedulerNewPool(TString databaseId, TString pool)
+        : DatabaseId(databaseId)
+        , Pool(pool)
+    {
+    }
+};
+
 
 template<typename TDerived>
 class TSchedulableComputeActorBase : public NYql::NDq::TDqSyncComputeActorBase<TDerived> {
@@ -129,7 +140,7 @@ public:
     TSchedulableComputeActorBase(TComputeActorSchedulingOptions options, TArgs&&... args)
         : TBase(std::forward<TArgs>(args)...)
         , SelfHandle(std::move(options.Handle))
-        , NodeService(options.NodeService)
+        , SchedulerActorId(options.SchedulerActorId)
         , NoThrottle(options.NoThrottle)
         , Counters(options.Counters)
         , Group(options.Group)
@@ -291,7 +302,7 @@ protected:
         }
         if (SelfHandle) {
             auto finishEv = MakeHolder<TEvSchedulerDeregister>(std::move(SelfHandle));
-            this->Send(NodeService, finishEv.Release());
+            this->Send(SchedulerActorId, finishEv.Release());
         }
         TBase::PassAway();
     }
@@ -301,7 +312,7 @@ private:
     TDuration TrackedWork = TDuration::Zero();
     TMaybe<TMonotonic> Throttled;
     TSchedulerEntityHandle SelfHandle;
-    NActors::TActorId NodeService;
+    NActors::TActorId SchedulerActorId;
     bool NoThrottle;
     bool Finished = false;
 
@@ -313,6 +324,16 @@ private:
     TString Group;
     double Weight;
 };
+
+struct TSchedulerActorOptions {
+    std::shared_ptr<TComputeScheduler> Scheduler;
+    TDuration AdvanceTimeInterval;
+    TDuration ForgetOverflowTimeout;
+    TDuration ActivePoolPollingTimeout;
+    TIntrusivePtr<NKikimr::NKqp::TKqpCounters> Counters;
+};
+
+IActor* CreateSchedulerActor(TSchedulerActorOptions);
 
 } // namespace NKqp
 } // namespace NKikimR

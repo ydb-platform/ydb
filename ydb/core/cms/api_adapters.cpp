@@ -2,7 +2,7 @@
 
 #include <ydb/library/yverify_stream/yverify_stream.h>
 #include <ydb/public/api/protos/draft/ydb_maintenance.pb.h>
-#include <ydb/library/yql/public/issue/protos/issue_severity.pb.h>
+#include <yql/essentials/public/issue/protos/issue_severity.pb.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -43,22 +43,74 @@ namespace {
         }
     }
 
+    static bool ConvertToPDiskId(const TString &name, TPDiskID &id) {
+        int size;
+
+        if (sscanf(name.data(), "pdisk-%" SCNu32 "-%" SCNu32 "%n", &id.NodeId, &id.DiskId, &size) != 2) {
+            return false;
+        }
+
+        if (size != static_cast<int>(name.size())) {
+            return false;
+        }
+
+        return true;
+    }
+
     void ConvertAction(const NKikimrCms::TAction& cmsAction, Ydb::Maintenance::LockAction& action) {
         *action.mutable_duration() = TimeUtil::MicrosecondsToDuration(cmsAction.GetDuration());
 
-        ui32 nodeId;
-        if (TryFromString(cmsAction.GetHost(), nodeId)) {
-            action.mutable_scope()->set_node_id(nodeId);
+        if (cmsAction.DevicesSize() > 0) {
+            Y_ABORT_UNLESS(cmsAction.DevicesSize() == 1);
+            auto& device = cmsAction.GetDevices()[0];
+            auto* pdisk = action.mutable_scope()->mutable_pdisk();
+            TPDiskID id;
+            if (ConvertToPDiskId(device, id)) {
+                auto* pdiskId = pdisk->mutable_pdisk_id();
+                pdiskId->set_node_id(id.NodeId);
+                pdiskId->set_pdisk_id(id.DiskId);
+            } else {
+                auto* pdiskLocation = pdisk->mutable_pdisk_location();
+                pdiskLocation->set_host(cmsAction.GetHost());
+                pdiskLocation->set_path(device);
+            }
         } else {
-            action.mutable_scope()->set_host(cmsAction.GetHost());
+            ui32 nodeId;
+            if (TryFromString(cmsAction.GetHost(), nodeId)) {
+                action.mutable_scope()->set_node_id(nodeId);
+            } else {
+                action.mutable_scope()->set_host(cmsAction.GetHost());
+            }
         }
+    }
+
+    Ydb::Maintenance::ActionState::ActionReason ConvertReason(NKikimrCms::TAction::TIssue::EType cmsActionIssueType) {
+        using EIssueType = NKikimrCms::TAction::TIssue;
+        switch (cmsActionIssueType) {
+            case EIssueType::UNKNOWN:
+                return Ydb::Maintenance::ActionState::ACTION_REASON_UNSPECIFIED;
+            case EIssueType::GENERIC:
+                return Ydb::Maintenance::ActionState::ACTION_REASON_GENERIC;
+            case EIssueType::TOO_MANY_UNAVAILABLE_VDISKS:
+                return Ydb::Maintenance::ActionState::ACTION_REASON_TOO_MANY_UNAVAILABLE_VDISKS;
+            case EIssueType::TOO_MANY_UNAVAILABLE_STATE_STORAGE_RINGS:
+                return Ydb::Maintenance::ActionState::ACTION_REASON_TOO_MANY_UNAVAILABLE_STATE_STORAGE_RINGS;
+            case EIssueType::DISABLED_NODES_LIMIT_REACHED:
+                return Ydb::Maintenance::ActionState::ACTION_REASON_DISABLED_NODES_LIMIT_REACHED;
+            case EIssueType::TENANT_DISABLED_NODES_LIMIT_REACHED:
+                return Ydb::Maintenance::ActionState::ACTION_REASON_TENANT_DISABLED_NODES_LIMIT_REACHED;
+            case EIssueType::SYS_TABLETS_NODE_LIMIT_REACHED:
+                return Ydb::Maintenance::ActionState::ACTION_REASON_SYS_TABLETS_NODE_LIMIT_REACHED;
+        }
+        return Ydb::Maintenance::ActionState::ACTION_REASON_UNSPECIFIED;
     }
 
     void ConvertAction(const NKikimrCms::TAction& cmsAction, Ydb::Maintenance::ActionState& actionState) {
         ConvertAction(cmsAction, *actionState.mutable_action()->mutable_lock_action());
         // FIXME: specify action_uid
         actionState.set_status(Ydb::Maintenance::ActionState::ACTION_STATUS_PENDING);
-        actionState.set_reason(Ydb::Maintenance::ActionState::ACTION_REASON_UNSPECIFIED); // FIXME: specify
+        actionState.set_reason(ConvertReason(cmsAction.GetIssue().GetType()));
+        actionState.set_reason_details(cmsAction.GetIssue().GetMessage());
     }
 
     void ConvertActionUid(const TString& taskUid, const TString& permissionId,
@@ -85,6 +137,11 @@ namespace {
         NKikimrCms::TPermission protoPermission;
         permission.CopyTo(protoPermission);
         ConvertPermission(taskUid, protoPermission, actionState);
+    }
+
+    void ConvertInstant(const TInstant& instant, google::protobuf::Timestamp& protoValue) {
+        protoValue.set_seconds(instant.Seconds());
+        protoValue.set_nanos(instant.NanoSecondsOfSecond());
     }
 
 } // anonymous
@@ -290,6 +347,10 @@ public:
         // performed actions: existing permissions
         if (cmsState->MaintenanceTasks.contains(taskUid)) {
             const auto& task = cmsState->MaintenanceTasks.at(taskUid);
+
+            ConvertInstant(task.CreateTime, *result.mutable_create_time());
+            ConvertInstant(task.LastRefreshTime, *result.mutable_last_refresh_time());
+
             for (const auto& id : task.Permissions) {
                 if (!cmsState->Permissions.contains(id) || permissionsSeen.contains(id)) {
                     continue;
@@ -321,6 +382,7 @@ class TCreateMaintenanceTask: public TPermissionResponseProcessor<
         switch (scope.scope_case()) {
         case Ydb::Maintenance::ActionScope::kNodeId:
         case Ydb::Maintenance::ActionScope::kHost:
+        case Ydb::Maintenance::ActionScope::kPdisk:
             return true;
         default:
             Reply(Ydb::StatusIds::BAD_REQUEST, "Unknown scope");
@@ -377,18 +439,35 @@ class TCreateMaintenanceTask: public TPermissionResponseProcessor<
         return true;
     }
 
+    static void ConvertPDiskId(const Ydb::Maintenance::ActionScope_PDiskId& pdiskId, TString& out) {
+        out = Sprintf("pdisk-%" PRIu32 "-%" PRIu32, pdiskId.node_id(), pdiskId.pdisk_id());
+    }
+
     static void ConvertAction(const Ydb::Maintenance::LockAction& action, NKikimrCms::TAction& cmsAction) {
-        cmsAction.SetType(NKikimrCms::TAction::SHUTDOWN_HOST);
         cmsAction.SetDuration(TimeUtil::DurationToMicroseconds(action.duration()));
 
         const auto& scope = action.scope();
         switch (scope.scope_case()) {
         case Ydb::Maintenance::ActionScope::kNodeId:
+            cmsAction.SetType(NKikimrCms::TAction::SHUTDOWN_HOST);
             cmsAction.SetHost(ToString(scope.node_id()));
             break;
         case Ydb::Maintenance::ActionScope::kHost:
+            cmsAction.SetType(NKikimrCms::TAction::SHUTDOWN_HOST);
             cmsAction.SetHost(scope.host());
             break;
+        case Ydb::Maintenance::ActionScope::kPdisk: {
+            cmsAction.SetType(NKikimrCms::TAction::REPLACE_DEVICES);
+            auto& pdisk = scope.pdisk();
+            if (pdisk.has_pdisk_id()) {
+                ConvertPDiskId(pdisk.pdisk_id(), *cmsAction.add_devices());
+            } else if (pdisk.has_pdisk_location()) {
+                auto& pdiskLocation = pdisk.pdisk_location();
+                cmsAction.SetHost(pdiskLocation.host());
+                *cmsAction.add_devices() = pdiskLocation.path();
+            }
+            break;
+        }
         default:
             Y_ABORT("unreachable");
         }
@@ -479,6 +558,8 @@ public:
 
             auto& result = *response->Record.MutableResult();
             result.set_task_uid(taskUid);
+            ConvertInstant(task.CreateTime, *result.mutable_create_time());
+            ConvertInstant(task.LastRefreshTime, *result.mutable_last_refresh_time());
 
             // performed actions
             for (const auto& id : task.Permissions) {
@@ -544,6 +625,8 @@ public:
 
             auto& result = *response->Record.MutableResult();
             result.mutable_task_options()->set_task_uid(taskUid);
+            ConvertInstant(task.CreateTime, *result.mutable_create_time());
+            ConvertInstant(task.LastRefreshTime, *result.mutable_last_refresh_time());
 
             // performed actions
             for (const auto& id : task.Permissions) {
@@ -611,6 +694,10 @@ public:
         // performed actions
         if (cmsState->MaintenanceTasks.contains(taskUid)) {
             const auto& task = cmsState->MaintenanceTasks.at(taskUid);
+
+            ConvertInstant(task.CreateTime, *result.mutable_create_time());
+            ConvertInstant(task.LastRefreshTime, *result.mutable_last_refresh_time());
+
             for (const auto& id : task.Permissions) {
                 if (!cmsState->Permissions.contains(id)) {
                     continue;

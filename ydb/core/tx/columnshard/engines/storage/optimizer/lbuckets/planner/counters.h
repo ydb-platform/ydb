@@ -1,5 +1,6 @@
 #pragma once
 #include <ydb/core/tx/columnshard/counters/engine_logs.h>
+#include <ydb/core/tx/columnshard/counters/portions.h>
 
 namespace NKikimr::NOlap {
 class TPortionInfo;
@@ -7,39 +8,8 @@ class TPortionInfo;
 
 namespace NKikimr::NOlap::NStorageOptimizer::NLBuckets {
 
-class TPortionCategoryCounterAgents: public NColumnShard::TCommonCountersOwner {
-private:
-    using TBase = NColumnShard::TCommonCountersOwner;
-public:
-    const std::shared_ptr<NColumnShard::TValueAggregationAgent> RecordsCount;
-    const std::shared_ptr<NColumnShard::TValueAggregationAgent> Count;
-    const std::shared_ptr<NColumnShard::TValueAggregationAgent> Bytes;
-    TPortionCategoryCounterAgents(NColumnShard::TCommonCountersOwner& base, const TString& categoryName)
-        : TBase(base, "category", categoryName)
-        , RecordsCount(TBase::GetValueAutoAggregations("ByGranule/Portions/RecordsCount"))
-        , Count(TBase::GetValueAutoAggregations("ByGranule/Portions/Count"))
-        , Bytes(TBase::GetValueAutoAggregations("ByGranule/Portions/Bytes"))
-    {
-    }
-};
-
-class TPortionCategoryCounters {
-private:
-    std::shared_ptr<NColumnShard::TValueAggregationClient> RecordsCount;
-    std::shared_ptr<NColumnShard::TValueAggregationClient> Count;
-    std::shared_ptr<NColumnShard::TValueAggregationClient> Bytes;
-public:
-    TPortionCategoryCounters(TPortionCategoryCounterAgents& agents)
-    {
-        RecordsCount = agents.RecordsCount->GetClient();
-        Count = agents.Count->GetClient();
-        Bytes = agents.Bytes->GetClient();
-    }
-
-    void AddPortion(const std::shared_ptr<TPortionInfo>& p);
-
-    void RemovePortion(const std::shared_ptr<TPortionInfo>& p);
-};
+using TPortionCategoryCounterAgents = NColumnShard::TPortionCategoryCounterAgents;
+using TPortionCategoryCounters = NColumnShard::TPortionCategoryCounters;
 
 class TGlobalCounters: public NColumnShard::TCommonCountersOwner {
 private:
@@ -54,6 +24,7 @@ private:
 
     std::shared_ptr<NColumnShard::TValueAggregationAgent> OldestCriticalActuality;
     std::shared_ptr<NColumnShard::TValueAggregationAgent> MergeCoefficient;
+
 public:
     NMonitoring::TDynamicCounters::TCounterPtr FinalBucketTaskCounter;
     NMonitoring::TDynamicCounters::TCounterPtr MiddleBucketTaskCounter;
@@ -65,8 +36,7 @@ public:
     NMonitoring::TDynamicCounters::TCounterPtr OptimizersCount;
 
     TGlobalCounters()
-        : TBase("BucketsStorageOptimizer")
-    {
+        : TBase("BucketsStorageOptimizer") {
         PortionsForMerge = std::make_shared<TPortionCategoryCounterAgents>(*this, "for_merge");
         PortionsAlone = std::make_shared<TPortionCategoryCounterAgents>(*this, "alone");
         SmallPortions = std::make_shared<TPortionCategoryCounterAgents>(*this, "small");
@@ -119,12 +89,12 @@ public:
     static std::shared_ptr<TPortionCategoryCounters> BuildFuturePortionsAggregation() {
         return std::make_shared<TPortionCategoryCounters>(*Singleton<TGlobalCounters>()->FuturePortions);
     }
-
 };
 
 class TCounters {
 private:
     std::shared_ptr<NColumnShard::TValueAggregationClient> OldestCriticalActuality;
+
 public:
     const std::shared_ptr<TPortionCategoryCounters> PortionsForMerge;
     const std::shared_ptr<TPortionCategoryCounters> PortionsAlone;
@@ -140,11 +110,13 @@ public:
         if (isFinalBucket) {
             Singleton<TGlobalCounters>()->FinalBucketTaskCounter->Add(1);
             Singleton<TGlobalCounters>()->HistogramFinalBucketTask->Collect((Now() - youngestSnapshot).MilliSeconds() * 0.001, 1);
-            Singleton<TGlobalCounters>()->HistogramFinalBucketTaskSnapshotsDiff->Collect((youngestSnapshot - oldestSnapshot).MilliSeconds() * 0.001, 1);
+            Singleton<TGlobalCounters>()->HistogramFinalBucketTaskSnapshotsDiff->Collect(
+                (youngestSnapshot - oldestSnapshot).MilliSeconds() * 0.001, 1);
         } else {
             Singleton<TGlobalCounters>()->MiddleBucketTaskCounter->Add(1);
             Singleton<TGlobalCounters>()->HistogramMiddleBucketTask->Collect((Now() - youngestSnapshot).MilliSeconds() * 0.001, 1);
-            Singleton<TGlobalCounters>()->HistogramMiddleBucketTaskSnapshotsDiff->Collect((youngestSnapshot - oldestSnapshot).MilliSeconds() * 0.001, 1);
+            Singleton<TGlobalCounters>()->HistogramMiddleBucketTaskSnapshotsDiff->Collect(
+                (youngestSnapshot - oldestSnapshot).MilliSeconds() * 0.001, 1);
         }
     }
 
@@ -157,15 +129,13 @@ public:
         , MergeCoefficient(TGlobalCounters::BuildMergeCoefficientAggregation())
         , HistogramDiffSnapshots(TGlobalCounters::BuildHistogramDiffSnapshots())
         , BucketsForMerge(Singleton<TGlobalCounters>()->BucketsForMerge->GetClient())
-        , OptimizersCount(std::make_shared<NColumnShard::TValueGuard>(Singleton<TGlobalCounters>()->OptimizersCount))
-    {
+        , OptimizersCount(std::make_shared<NColumnShard::TValueGuard>(Singleton<TGlobalCounters>()->OptimizersCount)) {
         OldestCriticalActuality = TGlobalCounters::BuildOldestCriticalActualityAggregation();
     }
 
     void OnMinProblemSnapshot(const TDuration d) {
         OldestCriticalActuality->SetValue(d.MilliSeconds(), TInstant::Now() + TDuration::Seconds(10));
     }
-
 };
 
-}
+}   // namespace NKikimr::NOlap::NStorageOptimizer::NLBuckets

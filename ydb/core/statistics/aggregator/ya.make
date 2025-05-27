@@ -10,6 +10,8 @@ SRCS(
     tx_ack_timeout.cpp
     tx_aggr_stat_response.cpp
     tx_analyze.cpp
+    tx_analyze_deadline.cpp
+    tx_analyze_table_delivery_problem.cpp
     tx_analyze_table_request.cpp
     tx_analyze_table_response.cpp
     tx_configure.cpp
@@ -31,7 +33,7 @@ PEERDIR(
     ydb/core/tablet
     ydb/core/tablet_flat
     ydb/core/statistics/database
-    ydb/library/minsketch
+    yql/essentials/core/minsketch
 )
 
 YQL_LAST_ABI_VERSION()

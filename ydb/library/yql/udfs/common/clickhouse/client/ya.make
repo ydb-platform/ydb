@@ -402,8 +402,8 @@ IF (CLANG AND NOT WITH_VALGRIND)
         contrib/libs/apache/orc
         contrib/libs/apache/avro
         library/cpp/sanitizer/include
-        ydb/library/yql/minikql/dom
-        ydb/library/yql/utils
+        yql/essentials/minikql/dom
+        yql/essentials/utils
     )
 
     ADDINCL(
@@ -414,7 +414,7 @@ IF (CLANG AND NOT WITH_VALGRIND)
         contrib/libs/pdqsort
         contrib/libs/lz4
         contrib/libs/apache/arrow/src
-        contrib/libs/apache/avro
+        contrib/libs/apache/avro/include
         contrib/libs/apache/orc/c++/include
         ydb/library/yql/udfs/common/clickhouse/client/base
         ydb/library/yql/udfs/common/clickhouse/client/base/pcg-random

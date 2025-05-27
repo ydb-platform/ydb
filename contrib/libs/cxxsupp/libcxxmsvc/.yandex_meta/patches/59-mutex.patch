@@ -1,0 +1,67 @@
+diff --git a/src/mutex.cpp b/src/mutex.cpp
+index 01b7420..c247225 100644
+--- a/src/mutex.cpp
++++ b/src/mutex.cpp
+@@ -11,7 +11,9 @@
+ #include <mutex>
+ #include <system_error>
+ 
++#if !defined(_LIBCPP_ABI_MICROSOFT)
+ #include "include/atomic_support.h"
++#endif
+ 
+ #ifndef _LIBCPP_HAS_NO_THREADS
+ #  if defined(__ELF__) && defined(_LIBCPP_LINK_PTHREAD_LIB)
+@@ -201,12 +203,17 @@ recursive_timed_mutex::unlock() noexcept
+ // keep in sync with:  7741191.
+ 
+ #ifndef _LIBCPP_HAS_NO_THREADS
+-static constinit __libcpp_mutex_t mut = _LIBCPP_MUTEX_INITIALIZER;
+-static constinit __libcpp_condvar_t cv = _LIBCPP_CONDVAR_INITIALIZER;
++static _LIBCPP_CONSTINIT __libcpp_mutex_t mut = _LIBCPP_MUTEX_INITIALIZER;
++static _LIBCPP_CONSTINIT __libcpp_condvar_t cv = _LIBCPP_CONDVAR_INITIALIZER;
+ #endif
+ 
++#ifdef _LIBCPP_ABI_MICROSOFT
++void __call_once(volatile std::atomic<once_flag::_State_type>& flag, void* arg,
++                 void (*func)(void*))
++#else
+ void __call_once(volatile once_flag::_State_type& flag, void* arg,
+                  void (*func)(void*))
++#endif
+ {
+ #if defined(_LIBCPP_HAS_NO_THREADS)
+     if (flag == 0)
+@@ -237,12 +244,20 @@ void __call_once(volatile once_flag::_State_type& flag, void* arg,
+         try
+         {
+ #endif // _LIBCPP_NO_EXCEPTIONS
++#ifdef _LIBCPP_ABI_MICROSOFT
++            flag.store(once_flag::_State_type(1));
++#else
+             __libcpp_relaxed_store(&flag, once_flag::_State_type(1));
++#endif
+             __libcpp_mutex_unlock(&mut);
+             func(arg);
+             __libcpp_mutex_lock(&mut);
++#ifdef _LIBCPP_ABI_MICROSOFT
++            flag.store(~once_flag::_State_type(0), memory_order_release);
++#else
+             __libcpp_atomic_store(&flag, ~once_flag::_State_type(0),
+                                   _AO_Release);
++#endif
+             __libcpp_mutex_unlock(&mut);
+             __libcpp_condvar_broadcast(&cv);
+ #ifndef _LIBCPP_NO_EXCEPTIONS
+@@ -250,7 +265,11 @@ void __call_once(volatile once_flag::_State_type& flag, void* arg,
+         catch (...)
+         {
+             __libcpp_mutex_lock(&mut);
++#ifdef _LIBCPP_ABI_MICROSOFT
++            flag.store(once_flag::_State_type(0), memory_order_relaxed);
++#else
+             __libcpp_relaxed_store(&flag, once_flag::_State_type(0));
++#endif
+             __libcpp_mutex_unlock(&mut);
+             __libcpp_condvar_broadcast(&cv);
+             throw;

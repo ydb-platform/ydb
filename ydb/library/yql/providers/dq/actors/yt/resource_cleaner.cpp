@@ -1,7 +1,7 @@
 #include "yt_wrapper.h"
 
-#include <ydb/library/yql/utils/yql_panic.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/utils/yql_panic.h>
+#include <yql/essentials/utils/log/log.h>
 
 #include <ydb/library/yql/providers/dq/global_worker_manager/coordination_helper.h>
 #include <ydb/library/yql/providers/dq/actors/actor_helpers.h>

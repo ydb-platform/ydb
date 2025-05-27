@@ -7,6 +7,7 @@
 
 #include <aws/auth/private/aws_profile.h>
 #include <aws/auth/private/credentials_utils.h>
+#include <aws/common/hash_table.h>
 #include <aws/common/process.h>
 #include <aws/common/string.h>
 #include <aws/io/tls_channel_handler.h>
@@ -24,6 +25,8 @@ AWS_STRING_FROM_LITERAL(s_role_arn_name, "role_arn");
 AWS_STRING_FROM_LITERAL(s_role_session_name_name, "role_session_name");
 AWS_STRING_FROM_LITERAL(s_credential_source_name, "credential_source");
 AWS_STRING_FROM_LITERAL(s_source_profile_name, "source_profile");
+AWS_STRING_FROM_LITERAL(s_access_key_id_profile_var, "aws_access_key_id");
+AWS_STRING_FROM_LITERAL(s_secret_access_key_profile_var, "aws_secret_access_key");
 
 static struct aws_byte_cursor s_default_session_name_pfx =
     AWS_BYTE_CUR_INIT_FROM_STRING_LITERAL("aws-common-runtime-profile-config");
@@ -134,6 +137,15 @@ static int s_profile_file_credentials_provider_get_credentials_async(
         }
     }
 
+    if (error_code == AWS_ERROR_SUCCESS) {
+        AWS_LOGF_INFO(AWS_LS_AUTH_CREDENTIALS_PROVIDER, "Loaded credentials from profile provider");
+    } else {
+        AWS_LOGF_INFO(
+            AWS_LS_AUTH_CREDENTIALS_PROVIDER,
+            "Failed to load credentials from profile provider: %s",
+            aws_error_str(error_code));
+    }
+
     callback(credentials, error_code, user_data);
 
     /*
@@ -172,9 +184,13 @@ static struct aws_credentials_provider *s_create_profile_based_provider(
     struct aws_string *config_file_path,
     const struct aws_string *profile_name,
     struct aws_profile_collection *profile_collection_cached) {
-
     struct aws_credentials_provider *provider = NULL;
     struct aws_credentials_provider_profile_file_impl *impl = NULL;
+
+    AWS_LOGF_INFO(
+        AWS_LS_AUTH_CREDENTIALS_PROVIDER,
+        "static: profile %s attempting to create profile-based credentials provider",
+        aws_string_c_str(profile_name));
 
     aws_mem_acquire_many(
         allocator,
@@ -203,14 +219,19 @@ static struct aws_credentials_provider *s_create_profile_based_provider(
     return provider;
 }
 
+static struct aws_credentials_provider *s_credentials_provider_new_profile_internal(
+    struct aws_allocator *allocator,
+    const struct aws_credentials_provider_profile_options *options,
+    struct aws_hash_table *source_profiles_table);
+
 /* use the selected property that specifies a role_arn to load an STS based provider. */
 static struct aws_credentials_provider *s_create_sts_based_provider(
     struct aws_allocator *allocator,
     const struct aws_profile_property *role_arn_property,
     const struct aws_profile *profile,
-    struct aws_string *credentials_file_path,
-    struct aws_string *config_file_path,
-    const struct aws_credentials_provider_profile_options *options) {
+    const struct aws_credentials_provider_profile_options *options,
+    struct aws_profile_collection *merged_profiles,
+    struct aws_hash_table *source_profiles_table) {
     struct aws_credentials_provider *provider = NULL;
 
     AWS_LOGF_INFO(
@@ -291,12 +312,13 @@ static struct aws_credentials_provider *s_create_sts_based_provider(
             "static: source_profile set to %s",
             aws_string_c_str(aws_profile_property_get_value(source_profile_property)));
 
-        sts_options.creds_provider = s_create_profile_based_provider(
-            allocator,
-            credentials_file_path,
-            config_file_path,
-            aws_profile_property_get_value(source_profile_property),
-            options->profile_collection_cached);
+        struct aws_credentials_provider_profile_options profile_provider_options = *options;
+        profile_provider_options.profile_name_override =
+            aws_byte_cursor_from_string(aws_profile_property_get_value(source_profile_property));
+        /* reuse profile collection instead of reading it again */
+        profile_provider_options.profile_collection_cached = merged_profiles;
+        sts_options.creds_provider =
+            s_credentials_provider_new_profile_internal(allocator, &profile_provider_options, source_profiles_table);
 
         if (!sts_options.creds_provider) {
             goto done;
@@ -363,9 +385,10 @@ done:
     return provider;
 }
 
-struct aws_credentials_provider *aws_credentials_provider_new_profile(
+static struct aws_credentials_provider *s_credentials_provider_new_profile_internal(
     struct aws_allocator *allocator,
-    const struct aws_credentials_provider_profile_options *options) {
+    const struct aws_credentials_provider_profile_options *options,
+    struct aws_hash_table *source_profiles_table) {
 
     struct aws_credentials_provider *provider = NULL;
     struct aws_profile_collection *config_profiles = NULL;
@@ -374,6 +397,17 @@ struct aws_credentials_provider *aws_credentials_provider_new_profile(
     struct aws_string *credentials_file_path = NULL;
     struct aws_string *config_file_path = NULL;
     struct aws_string *profile_name = NULL;
+    bool first_profile_in_chain = false;
+    if (source_profiles_table == NULL) {
+        source_profiles_table = aws_mem_calloc(allocator, 1, sizeof(struct aws_hash_table));
+        first_profile_in_chain = true;
+        /* source_profiles_table is an hashtable of (char *) -> NULL to detect recursion loop */
+        if (aws_hash_table_init(
+                source_profiles_table, allocator, 3, aws_hash_c_string, aws_hash_callback_c_str_eq, NULL, NULL)) {
+            AWS_LOGF_ERROR(AWS_LS_AUTH_CREDENTIALS_PROVIDER, "hash_table_init failed");
+            goto on_finished;
+        }
+    }
 
     profile_name = aws_get_profile_name(allocator, &options->profile_name_override);
     if (!profile_name) {
@@ -428,10 +462,29 @@ struct aws_credentials_provider *aws_credentials_provider_new_profile(
         goto on_finished;
     }
     const struct aws_profile_property *role_arn_property = aws_profile_get_property(profile, s_role_arn_name);
+    bool profile_contains_access_key = aws_profile_get_property(profile, s_access_key_id_profile_var) != NULL;
+    bool profile_contains_secret_access_key =
+        aws_profile_get_property(profile, s_secret_access_key_profile_var) != NULL;
+    bool profile_contains_credentials = profile_contains_access_key || profile_contains_secret_access_key;
 
-    if (role_arn_property) {
+    struct aws_hash_element *element = NULL;
+    if (aws_hash_table_find(source_profiles_table, (void *)aws_string_c_str(profile_name), &element) == AWS_OP_ERR) {
+        AWS_LOGF_ERROR(AWS_LS_AUTH_CREDENTIALS_PROVIDER, "hash_table_find failed");
+        goto on_finished;
+    }
+    if (element != NULL) {
+        /* self-reference chain of length 1 is allowed with static credentials */
+        if (aws_hash_table_get_entry_count(source_profiles_table) > 1 || !profile_contains_credentials) {
+            AWS_LOGF_ERROR(AWS_LS_AUTH_CREDENTIALS_PROVIDER, "assumeRole chain contains a circular reference");
+            aws_raise_error(AWS_AUTH_PROFILE_STS_CREDENTIALS_PROVIDER_CYCLE_FAILURE);
+            goto on_finished;
+        }
+    }
+
+    aws_hash_table_put(source_profiles_table, (void *)aws_string_c_str(profile_name), NULL, 0);
+    if (role_arn_property && (first_profile_in_chain || !profile_contains_credentials)) {
         provider = s_create_sts_based_provider(
-            allocator, role_arn_property, profile, credentials_file_path, config_file_path, options);
+            allocator, role_arn_property, profile, options, merged_profiles, source_profiles_table);
     } else {
         provider = s_create_profile_based_provider(
             allocator, credentials_file_path, config_file_path, profile_name, options->profile_collection_cached);
@@ -445,10 +498,20 @@ on_finished:
     aws_string_destroy(credentials_file_path);
     aws_string_destroy(config_file_path);
     aws_string_destroy(profile_name);
-
+    if (first_profile_in_chain) {
+        aws_hash_table_clean_up(source_profiles_table);
+        aws_mem_release(allocator, source_profiles_table);
+    }
     if (provider) {
         provider->shutdown_options = options->shutdown_options;
     }
 
     return provider;
+}
+
+struct aws_credentials_provider *aws_credentials_provider_new_profile(
+    struct aws_allocator *allocator,
+    const struct aws_credentials_provider_profile_options *options) {
+
+    return s_credentials_provider_new_profile_internal(allocator, options, NULL);
 }

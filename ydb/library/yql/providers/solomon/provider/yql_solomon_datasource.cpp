@@ -1,15 +1,15 @@
 #include "yql_solomon_provider_impl.h"
 #include "yql_solomon_dq_integration.h"
 
-#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <ydb/library/yql/providers/solomon/expr_nodes/yql_solomon_expr_nodes.h>
 
-#include <ydb/library/yql/providers/common/provider/yql_provider.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
-#include <ydb/library/yql/providers/common/provider/yql_data_provider_impl.h>
-#include <ydb/library/yql/providers/common/config/yql_configuration_transformer.h>
+#include <yql/essentials/providers/common/provider/yql_provider.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
+#include <yql/essentials/providers/common/config/yql_configuration_transformer.h>
 
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/utils/log/log.h>
 
 namespace NYql {
 
@@ -31,6 +31,40 @@ public:
 
     TStringBuf GetName() const override {
         return SolomonProviderName;
+    }
+
+    void AddCluster(const TString& name, const THashMap<TString, TString>& properties) override {
+        const TString& token = properties.Value("token", "");
+
+        TSolomonClusterConfig cluster;
+        cluster.SetName(name);
+        cluster.SetCluster(properties.Value("location", ""));
+        cluster.SetToken(token);
+        cluster.SetUseSsl(properties.Value("use_ssl", "true") == "true"sv);
+
+        if (properties.Value("project", "") && properties.Value("cluster", "")) {
+            cluster.SetClusterType(TSolomonClusterConfig::SCT_MONITORING);
+            cluster.MutablePath()->SetProject(properties.Value("project", ""));
+            cluster.MutablePath()->SetCluster(properties.Value("cluster", ""));
+        } else {
+            cluster.SetClusterType(TSolomonClusterConfig::SCT_SOLOMON);
+        }
+
+        if (auto value = properties.Value("grpc_location", "")) {
+            auto grpcPort = cluster.MutableSettings()->Add();
+            *grpcPort->MutableName() = "grpc_location";
+            *grpcPort->MutableValue() = value;
+        }
+
+        State_->Gateway->AddCluster(cluster);
+
+        State_->Configuration->AddValidCluster(name);
+        State_->Configuration->Tokens[name] = ComposeStructuredTokenJsonForTokenAuthWithSecret(properties.Value("tokenReference", ""), token);
+        State_->Configuration->ClusterConfigs[name] = cluster;
+    }
+
+    const THashMap<TString, TString>* GetClusterTokens() override {
+        return &State_->Configuration->Tokens;
     }
 
     IGraphTransformer& GetConfigurationTransformer() override {

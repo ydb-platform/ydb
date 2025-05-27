@@ -1,0 +1,392 @@
+====================BSL-1.0====================
+//  Distributed under the Boost Software License, Version 1.0.
+//  See accompanying file LICENSE_1_0.txt or copy at
+//  http://www.boost.org/LICENSE_1_0.txt
+
+
+====================BSL-1.0====================
+//  Distributed under the Boost Software License, Version 1.0. (See
+//  accompanying file LICENSE_1_0.txt or copy at
+//  http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+//  Use, modification, and distribution is subject to the Boost Software
+//  License, Version 1.0. (See accompanying file LICENSE_1_0.txt or copy
+//  at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+// (C) Copyright Howard Hinnant 2007-2010. Distributed under the Boost
+// Software License, Version 1.0. (see http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+// (C) Copyright Ion Gaztanaga 2005-2012. Distributed under the Boost
+// Software License, Version 1.0. (See accompanying file
+// LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+// (C) Copyright Ion Gaztanaga 2005-2013. Distributed under the Boost
+// Software License, Version 1.0. (See accompanying file
+// LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+// (C) Copyright Ion Gaztanaga 2005-2015. Distributed under the Boost
+// Software License, Version 1.0. (See accompanying file
+// LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+// (C) Copyright Ion Gaztanaga 2006-2012. Distributed under the Boost
+// Software License, Version 1.0. (See accompanying file
+// LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+// (C) Copyright Ion Gaztanaga 2006-2014. Distributed under the Boost
+// Software License, Version 1.0. (See accompanying file
+// LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+// (C) Copyright Ion Gaztanaga 2006. Distributed under the Boost
+// Software License, Version 1.0. (See accompanying file
+// LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+// (C) Copyright Ion Gaztanaga 2007-2012. Distributed under the Boost
+// Software License, Version 1.0. (See accompanying file
+// LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+// (C) Copyright Ion Gaztanaga 2007-2014. Distributed under the Boost
+// Software License, Version 1.0. (See accompanying file
+// LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+// (C) Copyright Ion Gaztanaga 2008-2012. Distributed under the Boost
+// Software License, Version 1.0. (See accompanying file
+// LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+// (C) Copyright Ion Gaztanaga 2009-2012. Distributed under the Boost
+// Software License, Version 1.0. (See accompanying file
+// LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+// (C) Copyright Ion Gaztanaga 2009. Distributed under the Boost
+// Software License, Version 1.0. (See accompanying file
+// LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+// (C) Copyright Ion Gaztanaga 2010-2012. Distributed under the Boost
+// Software License, Version 1.0. (See accompanying file
+// LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+// (C) Copyright Ion Gaztanaga 2011-2012. Distributed under the Boost
+// Software License, Version 1.0. (See accompanying file
+// LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+// (C) Copyright Ion Gaztanaga 2012-2012. Distributed under the Boost
+// Software License, Version 1.0. (See accompanying file
+// LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+// (C) Copyright Ion Gaztanaga 2012-2013. Distributed under the Boost
+// Software License, Version 1.0. (See accompanying file
+// LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+// (C) Copyright Ion Gaztanaga 2013-2013. Distributed under the Boost
+// Software License, Version 1.0. (See accompanying file
+// LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+// (C) Copyright Ion Gaztanaga 2014-2015. Distributed under the Boost
+// Software License, Version 1.0. (See accompanying file
+// LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+// (C) Copyright Ion Gaztanaga 2020-2021. Distributed under the Boost
+// Software License, Version 1.0. (See accompanying file
+// LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+// (C) Copyright Ion Gaztanaga 2023-2024. Distributed under the Boost
+// Software License, Version 1.0. (See accompanying file
+// LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+// Distributed under the Boost Software License, Version 1.0.
+//    (See accompanying file LICENSE_1_0.txt or copy at
+//    http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+// Distributed under the Boost Software License, Version 1.0.
+// (See accompanying file LICENSE_1_0.txt or copy at
+// http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+// Distributed under the Boost Software License, Version 1.0. (See
+// accompanying file LICENSE_1_0.txt or copy at
+// http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 1998
+ * Silicon Graphics Computer Systems, Inc.
+
+
+====================COPYRIGHT====================
+//  Copyright (C) 2002 Beman Dawes
+//  Copyright (C) 2001 Dietmar Kuehl
+//  Use, modification, and distribution is subject to the Boost Software
+//  License, Version 1.0. (See accompanying file LICENSE_1_0.txt or copy
+
+
+====================COPYRIGHT====================
+//  Copyright (c) 2001, 2002, 2003 Peter Dimov and Multi Media Ltd.
+//  Copyright 2004-2005 Peter Dimov
+//  Copyright 2006      Ion Gaztanaga
+
+
+====================COPYRIGHT====================
+//  Copyright (c) 2001, 2002, 2003 Peter Dimov and Multi Media Ltd.
+//  Copyright 2004-2005 Peter Dimov
+//  Copyright 2007-2012 Ion Gaztanaga
+
+
+====================COPYRIGHT====================
+//  Copyright (c) 2002 Peter Dimov and Multi Media Ltd.
+//  Copyright (c) 2008 Peter Dimov
+
+
+====================COPYRIGHT====================
+// (C) Copyright Greg Colvin and Beman Dawes 1998, 1999.
+// (C) Copyright Peter Dimov 2001, 2002
+// (C) Copyright Ion Gaztanaga 2006-2012. Distributed under the Boost
+// Software License, Version 1.0. (See accompanying file
+// LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================COPYRIGHT====================
+// (C) Copyright Greg Colvin and Beman Dawes 1998, 1999.
+// (C) Copyright Peter Dimov 2001, 2002, 2003
+// (C) Copyright Ion Gaztanaga 2006-2012.
+// Distributed under the Boost Software License, Version 1.0.
+// (See accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+// (C) Copyright Howard Hinnant 2007-2010. Distributed under the Boost
+// Software License, Version 1.0. (see http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================COPYRIGHT====================
+// (C) Copyright Ion Gaztanaga 2005-2012.
+// (C) Copyright Gennaro Prota 2003 - 2004.
+
+
+====================COPYRIGHT====================
+// (C) Copyright Ion Gaztanaga 2005-2012. Distributed under the Boost
+// Software License, Version 1.0. (See accompanying file
+// LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================COPYRIGHT====================
+// (C) Copyright Ion Gaztanaga 2005-2013. Distributed under the Boost
+// Software License, Version 1.0. (See accompanying file
+// LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================COPYRIGHT====================
+// (C) Copyright Ion Gaztanaga 2005-2015. Distributed under the Boost
+// Software License, Version 1.0. (See accompanying file
+// LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================COPYRIGHT====================
+// (C) Copyright Ion Gaztanaga 2005-2016.
+
+
+====================COPYRIGHT====================
+// (C) Copyright Ion Gaztanaga 2006-2012
+// (C) Copyright Markus Schoepflin 2007
+// (C) Copyright Bryce Lelbach 2010
+
+
+====================COPYRIGHT====================
+// (C) Copyright Ion Gaztanaga 2006-2014. Distributed under the Boost
+// Software License, Version 1.0. (See accompanying file
+// LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================COPYRIGHT====================
+// (C) Copyright Ion Gaztanaga 2007-2012. Distributed under the Boost
+// Software License, Version 1.0. (See accompanying file
+// LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================COPYRIGHT====================
+// (C) Copyright Ion Gaztanaga 2007-2014. Distributed under the Boost
+// Software License, Version 1.0. (See accompanying file
+// LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================COPYRIGHT====================
+// (C) Copyright Ion Gaztanaga 2008-2012. Distributed under the Boost
+// Software License, Version 1.0. (See accompanying file
+// LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================COPYRIGHT====================
+// (C) Copyright Ion Gaztanaga 2009-2012. Distributed under the Boost
+// Software License, Version 1.0. (See accompanying file
+// LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================COPYRIGHT====================
+// (C) Copyright Ion Gaztanaga 2009. Distributed under the Boost
+// Software License, Version 1.0. (See accompanying file
+// LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================COPYRIGHT====================
+// (C) Copyright Ion Gaztanaga 2010-2012.
+// Distributed under the Boost Software License, Version 1.0.
+// (See accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+// (C) Copyright Ion Gaztanaga 2011-2012. Distributed under the Boost
+// Software License, Version 1.0. (See accompanying file
+// LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================COPYRIGHT====================
+// (C) Copyright Ion Gaztanaga 2012-2012. Distributed under the Boost
+// Software License, Version 1.0. (See accompanying file
+// LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================COPYRIGHT====================
+// (C) Copyright Ion Gaztanaga 2012-2013. Distributed under the Boost
+// Software License, Version 1.0. (See accompanying file
+// LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================COPYRIGHT====================
+// (C) Copyright Ion Gaztanaga 2014-2015. Distributed under the Boost
+// Software License, Version 1.0. (See accompanying file
+// LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================COPYRIGHT====================
+// (C) Copyright Ion Gaztanaga 2020-2021. Distributed under the Boost
+// Software License, Version 1.0. (See accompanying file
+// LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================COPYRIGHT====================
+// (C) Copyright Ion Gaztanaga 2021-2021.
+
+
+====================COPYRIGHT====================
+// (C) Copyright Ion Gaztanaga 2023-2024. Distributed under the Boost
+// Software License, Version 1.0. (See accompanying file
+// LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================COPYRIGHT====================
+// (C) Copyright John Maddock 2000.
+// (C) Copyright Ion Gaztanaga 2005-2012.
+
+
+====================COPYRIGHT====================
+// (C) Copyright Peter Dimov 2001, 2002
+// (C) Copyright Ion Gaztanaga 2006-2012. Distributed under the Boost
+// Software License, Version 1.0. (See accompanying file
+// LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================COPYRIGHT====================
+// (C) Copyright Peter Dimov 2002
+// (C) Copyright Ion Gaztanaga 2006-2012. Distributed under the Boost
+// Software License, Version 1.0. (See accompanying file
+// LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================COPYRIGHT====================
+// (C) Copyright Peter Dimov 2008.
+// (C) Copyright Ion Gaztanaga 2013-2013. Distributed under the Boost
+// Software License, Version 1.0. (See accompanying file
+// LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================COPYRIGHT====================
+// (C) Copyright Peter Dimov and Multi Media Ltd. 2001, 2002, 2003
+// (C) Copyright Ion Gaztanaga 2006. Distributed under the Boost
+// Software License, Version 1.0. (See accompanying file
+// LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================COPYRIGHT====================
+// (C) Copyright Peter Dimov and Multi Media Ltd. 2001, 2002, 2003
+// (C) Copyright Peter Dimov 2004-2005
+// (C) Copyright Ion Gaztanaga 2006-2012. Distributed under the Boost
+// Software License, Version 1.0. (See accompanying file
+// LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================COPYRIGHT====================
+// (C) Copyright Stephen Cleary 2000.
+// (C) Copyright Ion Gaztanaga 2007-2012.
+
+
+====================COPYRIGHT====================
+// Copyright (C) 2001-2003
+// William E. Kempf
+
+
+====================COPYRIGHT====================
+// Copyright (C) 2011 Vicente J. Botet Escriba
+// Copyright (C) 2021 Ion Gaztanaga
+
+
+====================Mit-Old-Style====================
+ * Permission to use, copy, modify, distribute and sell this software
+ * and its documentation for any purpose is hereby granted without fee,
+ * provided that the above copyright notice appear in all copies and
+ * that both that copyright notice and this permission notice appear
+ * in supporting documentation.  Silicon Graphics makes no
+ * representations about the suitability of this software for any
+ * purpose.  It is provided "as is" without express or implied warranty.
+
+
+====================Mit-Old-Style====================
+// Permission to use, copy, modify, distribute and sell this software
+// and its documentation for any purpose is hereby granted without fee,
+// provided that the above copyright notice appear in all copies and
+// that both that copyright notice and this permission notice appear
+// in supporting documentation.  William E. Kempf makes no representations

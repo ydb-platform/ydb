@@ -1,15 +1,16 @@
 #pragma once
 
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
-#include <ydb/library/accessor/accessor.h>
-
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/task.h>
+
+#include <ydb/library/accessor/accessor.h>
 #include <ydb/library/conclusion/result.h>
+
 #include <library/cpp/object_factory/object_factory.h>
 
 namespace NKikimr::NIceDb {
-    class TNiceDb;
+class TNiceDb;
 }
 
 namespace NKikimr::NOlap {
@@ -21,6 +22,7 @@ class TNormalizerCounters: public NColumnShard::TCommonCountersOwner {
     NMonitoring::TDynamicCounters::TCounterPtr StartedCount;
     NMonitoring::TDynamicCounters::TCounterPtr FinishedCount;
     NMonitoring::TDynamicCounters::TCounterPtr FailedCount;
+
 public:
     TNormalizerCounters(const TString& normalizerName)
         : TBase("Normalizer") {
@@ -49,14 +51,26 @@ public:
     }
 };
 
-enum class ENormalizerSequentialId: ui32 {
+// DONT REMOVE AND DONT CHANGE PLACES! PERSISTENT! ADD Deprecated PREFIX FOR REMOVED NORMALIZER
+enum class ENormalizerSequentialId : ui32 {
     Granules = 1,
     Chunks,
-    PortionsCleaner,
+    DeprecatedPortionsCleaner,
     TablesCleaner,
-    PortionsMetadata,
+    DeprecatedPortionsMetadata,
     CleanGranuleId,
-    EmptyPortionsCleaner,
+    DeprecatedEmptyPortionsCleaner,
+    CleanInsertionDedup,
+    GCCountersNormalizer,
+    DeprecatedRestorePortionFromChunks,
+    SyncPortionFromChunks,
+    DeprecatedRestoreV1Chunks,
+    DeprecatedSyncMinSnapshotFromChunks,
+    DeprecatedRestoreV1Chunks_V1,
+    RestoreV1Chunks_V2,
+    RestoreV2Chunks,
+    CleanDeprecatedSnapshot,
+    RestoreV0ChunksMeta,
 
     MAX
 };
@@ -65,19 +79,20 @@ class TNormalizationContext {
     YDB_ACCESSOR_DEF(TActorId, ResourceSubscribeActor);
     YDB_ACCESSOR_DEF(TActorId, ShardActor);
     std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard> ResourcesGuard;
+
 public:
     void SetResourcesGuard(std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard> rg) {
         ResourcesGuard = rg;
     }
 };
 
-
 class TNormalizationController;
 
 class INormalizerTask {
 public:
     using TPtr = std::shared_ptr<INormalizerTask>;
-    virtual ~INormalizerTask() {}
+    virtual ~INormalizerTask() {
+    }
 
     virtual void Start(const TNormalizationController& controller, const TNormalizationContext& nCtx) = 0;
 };
@@ -85,7 +100,8 @@ public:
 class INormalizerChanges {
 public:
     using TPtr = std::shared_ptr<INormalizerChanges>;
-    virtual ~INormalizerChanges() {}
+    virtual ~INormalizerChanges() {
+    }
 
     virtual bool ApplyOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController& normalizationContext) const = 0;
     virtual void ApplyOnComplete(const TNormalizationController& normalizationContext) const {
@@ -93,10 +109,14 @@ public:
     }
 
     virtual ui64 GetSize() const = 0;
+    virtual TString DebugString() const {
+        return TStringBuilder() << "size=" << GetSize();
+    }
 };
 
 class TTrivialNormalizerTask: public INormalizerTask {
     INormalizerChanges::TPtr Changes;
+
 public:
     TTrivialNormalizerTask(const INormalizerChanges::TPtr& changes)
         : Changes(changes) {
@@ -109,10 +129,24 @@ public:
 class TNormalizationController {
 public:
     class TInitContext {
+    private:
         TIntrusiveConstPtr<TTabletStorageInfo> StorageInfo;
+        const ui64 TabletId;
+        const NActors::TActorId TabletActorId;
+
     public:
-        TInitContext(TTabletStorageInfo* info)
-            : StorageInfo(info) {
+        TInitContext(TTabletStorageInfo* info, const ui64 tabletId, const NActors::TActorId& actorId)
+            : StorageInfo(info)
+            , TabletId(tabletId)
+            , TabletActorId(actorId) {
+        }
+
+        ui64 GetTabletId() const {
+            return TabletId;
+        }
+
+        const NActors::TActorId& GetTabletActorId() const {
+            return TabletActorId;
         }
 
         TIntrusiveConstPtr<TTabletStorageInfo> GetStorageInfo() const {
@@ -124,6 +158,7 @@ public:
     private:
         YDB_READONLY_DEF(TString, ClassName);
         YDB_READONLY_DEF(TString, Description);
+
     public:
         bool operator<(const TNormalizerFullId& item) const {
             if (ClassName == item.ClassName) {
@@ -134,29 +169,36 @@ public:
 
         TNormalizerFullId(const TString& className, const TString& description)
             : ClassName(className)
-            , Description(description)
-        {
-
+            , Description(description) {
         }
     };
 
     class INormalizerComponent {
     private:
         YDB_ACCESSOR(bool, IsRepair, false);
+        YDB_ACCESSOR(bool, IsDryRun, false);
         YDB_ACCESSOR_DEF(TString, UniqueDescription);
         YDB_ACCESSOR(TString, UniqueId, TGUID::CreateTimebased().AsUuidString());
-        
+
         virtual TString DoDebugString() const {
             return "";
         }
 
         virtual std::optional<ENormalizerSequentialId> DoGetEnumSequentialId() const = 0;
 
+    protected:
+        const ui64 TabletId;
+        const NActors::TActorId TabletActorId;
+
     public:
         using TPtr = std::shared_ptr<INormalizerComponent>;
         using TFactory = NObjectFactory::TParametrizedObjectFactory<INormalizerComponent, TString, TInitContext>;
 
-        virtual ~INormalizerComponent() {}
+        virtual ~INormalizerComponent() = default;
+        INormalizerComponent(const TInitContext& context)
+            : TabletId(context.GetTabletId())
+            , TabletActorId(context.GetTabletActorId()) {
+        }
 
         TNormalizerFullId GetNormalizerFullId() const {
             return TNormalizerFullId(GetClassName(), UniqueDescription);
@@ -166,13 +208,10 @@ public:
             return AtomicGet(ActiveTasksCount) > 0;
         }
 
-        void OnResultReady() {
-            AFL_VERIFY(ActiveTasksCount > 0);
-            AtomicDecrement(ActiveTasksCount);
-        }
-
-        i64 GetActiveTasksCount() const {
-            return AtomicGet(ActiveTasksCount);
+        [[nodiscard]] ui64 DecActiveCounters() {
+            const i64 result = AtomicDecrement(ActiveTasksCount);
+            AFL_VERIFY(result >= 0);
+            return result;
         }
 
         std::optional<ENormalizerSequentialId> GetEnumSequentialId() const {
@@ -216,10 +255,12 @@ public:
             }
         }
 
-        TConclusion<std::vector<INormalizerTask::TPtr>> Init(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc);
+        TConclusion<std::vector<INormalizerTask::TPtr>> Init(
+            const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc);
 
     private:
-        virtual TConclusion<std::vector<INormalizerTask::TPtr>> DoInit(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) = 0;
+        virtual TConclusion<std::vector<INormalizerTask::TPtr>> DoInit(
+            const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) = 0;
 
         TAtomic ActiveTasksCount = 0;
     };
@@ -234,11 +275,13 @@ private:
     std::set<TNormalizerFullId> FinishedNormalizers;
     std::map<TNormalizerFullId, TString> StartedNormalizers;
     YDB_READONLY_DEF(std::optional<ui32>, LastSavedNormalizerId);
+
 private:
     INormalizerComponent::TPtr RegisterNormalizer(INormalizerComponent::TPtr normalizer);
 
 public:
-    TNormalizationController(std::shared_ptr<IStoragesManager> storagesManager, const std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TSubscriberCounters>& counters)
+    TNormalizationController(std::shared_ptr<IStoragesManager> storagesManager,
+        const std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TSubscriberCounters>& counters)
         : StoragesManager(storagesManager)
         , TaskSubscription("CS::NORMALIZER", counters) {
     }
@@ -259,7 +302,7 @@ public:
 
     TString DebugString() const {
         return TStringBuilder() << "normalizers_count=" << Normalizers.size()
-            << ";current_normalizer=" << (Normalizers.size() ? Normalizers.front()->DebugString() : "NO_DATA");
+                                << ";current_normalizer=" << (Normalizers.size() ? Normalizers.front()->DebugString() : "NO_DATA");
     }
 
     const INormalizerComponent::TPtr& GetNormalizer() const;
@@ -267,4 +310,4 @@ public:
     bool SwitchNormalizer();
     const TNormalizerCounters& GetCounters() const;
 };
-}
+}   // namespace NKikimr::NOlap

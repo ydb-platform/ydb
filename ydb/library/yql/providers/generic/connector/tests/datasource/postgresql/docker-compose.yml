@@ -1,20 +1,20 @@
 services:
   fq-connector-go:
     container_name: fq-tests-pg-fq-connector-go
-    image: ghcr.io/ydb-platform/fq-connector-go:v0.5.5-rc.1@sha256:06a5685dd13a4263e25043300af09140c8227dee7d69f46954cd4b7dee401d05
+    image: ghcr.io/ydb-platform/fq-connector-go:v0.7.2-rc.4@sha256:3dd675ebdba9ff4a1933443d801ba121d11a9eec20a6da8f0fa5dddc4ba97c0f
     ports:
-    - 2130
+      - 2130
     volumes:
-    - ../../fq-connector-go/:/opt/ydb/cfg/
+      - ../../fq-connector-go/:/opt/ydb/cfg/
   postgresql:
     command:
-    - postgres
-    - -c
-    - log_statement=all
-    - -c
-    - log_connections=on
-    - -c
-    - log_disconnections=on
+      - postgres
+      - -c
+      - log_statement=all
+      - -c
+      - log_connections=on
+      - -c
+      - log_disconnections=on
     container_name: fq-tests-pg-postgresql
     environment:
       POSTGRES_DB: db
@@ -22,5 +22,9 @@ services:
       POSTGRES_USER: user
     image: mirror.gcr.io/library/postgres:15-bullseye@sha256:2e89ed90224245851ea2b01e0b20c4b893e69141eb36e7a1cece7fb9e19f21f0
     ports:
-    - 5432
+      - 5432
+    tmpfs:
+      - /run
+      - /tmp
+      - /var
 version: "3.4"

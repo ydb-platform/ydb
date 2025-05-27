@@ -1,5 +1,6 @@
 #include "ut_common.h"
 #include <ydb/core/persqueue/ut/common/pq_ut_common.h>
+#include <ydb/core/wrappers/fake_storage.h>
 
 namespace NKikimr {
 namespace NSysView {
@@ -26,13 +27,13 @@ NKikimrSubDomains::TSubDomainSettings GetSubDomainDefaultSettings(const TString 
     return subdomain;
 }
 
-TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, ui32 storagePools, ui32 pqTabletsN, bool enableSVP) {
+TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, const TTestEnvSettings& settings) {
     auto mbusPort = PortManager.GetPort();
     auto grpcPort = PortManager.GetPort();
 
     TVector<NKikimrKqp::TKqpSetting> kqpSettings;
 
-    NKikimrProto::TAuthConfig authConfig;
+    NKikimrProto::TAuthConfig authConfig = settings.AuthConfig;
     authConfig.SetUseBuiltinDomain(true);
     Settings = new Tests::TServerSettings(mbusPort, authConfig);
     Settings->SetDomainName("Root");
@@ -44,16 +45,28 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, ui32 storagePools, ui32 
     NKikimrConfig::TFeatureFlags featureFlags;
     featureFlags.SetEnableBackgroundCompaction(false);
     featureFlags.SetEnableResourcePools(true);
+    featureFlags.SetEnableFollowerStats(true);
+    featureFlags.SetEnableVectorIndex(true);
+    featureFlags.SetEnableTieringInColumnShard(true);
+    featureFlags.SetEnableExternalDataSources(true);
+    featureFlags.SetEnableSparsedColumns(settings.EnableSparsedColumns);
+    featureFlags.SetEnableOlapCompression(settings.EnableOlapCompression);
+
     Settings->SetFeatureFlags(featureFlags);
 
-    Settings->SetEnablePersistentQueryStats(enableSVP);
-    Settings->SetEnableDbCounters(enableSVP);
+    Settings->SetEnablePersistentQueryStats(settings.EnableSVP);
+    Settings->SetEnableDbCounters(settings.EnableSVP);
+    Settings->SetEnableForceFollowers(settings.EnableForceFollowers);
+    Settings->SetEnableTablePgTypes(true);
+    Settings->SetEnableShowCreate(true);
 
     NKikimrConfig::TAppConfig appConfig;
     *appConfig.MutableFeatureFlags() = Settings->FeatureFlags;
+    appConfig.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
+    appConfig.MutableColumnShardConfig()->SetAlterObjectEnabled(settings.AlterObjectEnabled);
     Settings->SetAppConfig(appConfig);
 
-    for (ui32 i : xrange(storagePools)) {
+    for (ui32 i : xrange(settings.StoragePools)) {
         TString poolName = Sprintf("test%d", i);
         Settings->AddStoragePool(poolName, TString("/Root:") + poolName, 2);
     }
@@ -62,6 +75,10 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, ui32 storagePools, ui32 
 
     Server = new Tests::TServer(*Settings);
     Server->EnableGRpc(grpcPort);
+
+    if (settings.ShowCreateTable) {
+        this->Server->SetupDefaultProfiles();
+    }
 
     auto* runtime = Server->GetRuntime();
     for (ui32 i = 0; i < runtime->GetNodeCount(); ++i) {
@@ -74,16 +91,22 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, ui32 storagePools, ui32 
 
     Client->InitRootScheme("Root");
 
-    if (pqTabletsN) {
+    if (settings.PqTabletsN) {
         NKikimr::NPQ::FillPQConfig(Settings->PQConfig, "/Root/PQ", true);
-        PqTabletIds = Server->StartPQTablets(pqTabletsN);
+        PqTabletIds = Server->StartPQTablets(settings.PqTabletsN);
     }
 
     Endpoint = "localhost:" + ToString(grpcPort);
-    DriverConfig = NYdb::TDriverConfig().SetEndpoint(Endpoint);
+    if (settings.ShowCreateTable) {
+        DriverConfig = NYdb::TDriverConfig().SetEndpoint(Endpoint).SetDatabase("/Root");
+    } else {
+        DriverConfig = NYdb::TDriverConfig().SetEndpoint(Endpoint);
+    }
     Driver = MakeHolder<NYdb::TDriver>(DriverConfig);
 
     Server->GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NActors::NLog::PRI_DEBUG);
+
+    Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->SetSecretKey("fakeSecret");
 }
 
 TTestEnv::~TTestEnv() {

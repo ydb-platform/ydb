@@ -2,6 +2,7 @@
 #include "datashard_pipeline.h"
 #include "execution_unit_ctors.h"
 
+#include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tablet/tablet_exception.h>
 
 namespace NKikimr {
@@ -38,6 +39,8 @@ private:
     bool CheckCreateCdcStream(TActiveTransaction *activeTx);
     bool CheckAlterCdcStream(TActiveTransaction *activeTx);
     bool CheckDropCdcStream(TActiveTransaction *activeTx);
+    bool CheckCreateIncrementalRestoreSrc(TActiveTransaction *activeTx);
+    bool CheckCreateIncrementalBackupSrc(TActiveTransaction *activeTx);
 
     bool CheckSchemaVersion(TActiveTransaction *activeTx, ui64 proposedSchemaVersion, ui64 currentSchemaVersion, ui64 expectedSchemaVersion);
 
@@ -70,13 +73,13 @@ EExecutionStatus TCheckSchemeTxUnit::Execute(TOperation::TPtr op,
                                              TTransactionContext &txc,
                                              const TActorContext &ctx)
 {
-    Y_ABORT_UNLESS(op->IsSchemeTx());
-    Y_ABORT_UNLESS(!op->IsAborted());
+    Y_ENSURE(op->IsSchemeTx());
+    Y_ENSURE(!op->IsAborted());
 
     Pipeline.RemoveWaitingSchemeOp(op);
 
     TActiveTransaction *activeTx = dynamic_cast<TActiveTransaction*>(op.Get());
-    Y_VERIFY_S(activeTx, "cannot cast operation of kind " << op->GetKind());
+    Y_ENSURE(activeTx, "cannot cast operation of kind " << op->GetKind());
     const NKikimrTxDataShard::TFlatSchemeTransaction &tx = activeTx->GetSchemeTx();
     bool unfreezeTx = false;
     if (tx.HasAlterTable() && tx.GetAlterTable().HasPartitionConfig() &&
@@ -141,7 +144,7 @@ EExecutionStatus TCheckSchemeTxUnit::Execute(TOperation::TPtr op,
     if (existingOp && existingOp->IsSchemeTx()) {
         // Check if we have propose for the same transaction type
         auto *schemaOp = Pipeline.FindSchemaTx(activeTx->GetTxId());
-        Y_VERIFY_S(schemaOp, "Unexpected failure to find schema tx " << activeTx->GetTxId());
+        Y_ENSURE(schemaOp, "Unexpected failure to find schema tx " << activeTx->GetTxId());
 
         // N.B. cannot use existingOp as it may not be loaded yet
         if (activeTx->GetSchemeTxType() != schemaOp->Type) {
@@ -184,7 +187,7 @@ EExecutionStatus TCheckSchemeTxUnit::Execute(TOperation::TPtr op,
 
     // Check scheme tx content.
     if (!CheckSchemeTx(activeTx)) {
-        Y_ABORT_UNLESS(op->Result());
+        Y_ENSURE(op->Result());
         op->Abort(EExecutionUnitKind::FinishPropose);
 
         return EExecutionStatus::ExecutedNoMoreRestarts;
@@ -300,8 +303,8 @@ bool TCheckSchemeTxUnit::HasPathId(TActiveTransaction *activeTx, const T &op, co
 
 template <typename T>
 TPathId TCheckSchemeTxUnit::GetPathId(const T &op) const {
-    auto pathId = PathIdFromPathId(op.GetPathId());
-    Y_ABORT_UNLESS(DataShard.GetPathOwnerId() == pathId.OwnerId);
+    auto pathId = TPathId::FromProto(op.GetPathId());
+    Y_ENSURE(DataShard.GetPathOwnerId() == pathId.OwnerId);
     return pathId;
 }
 
@@ -309,7 +312,7 @@ template <typename T>
 bool TCheckSchemeTxUnit::CheckSchemaVersion(TActiveTransaction *activeTx, ui64 tableId, const T &op) {
     const auto tablePtr = DataShard.GetUserTables().FindPtr(tableId);
 
-    Y_ABORT_UNLESS(tablePtr);
+    Y_ENSURE(tablePtr);
     const auto &table = **tablePtr;
 
     const auto current = table.GetTableSchemaVersion();
@@ -380,6 +383,12 @@ bool TCheckSchemeTxUnit::CheckSchemeTx(TActiveTransaction *activeTx)
     case TSchemaOperation::ETypeDropCdcStream:
         res = CheckDropCdcStream(activeTx);
         break;
+    case TSchemaOperation::ETypeCreateIncrementalRestoreSrc:
+        res = CheckCreateIncrementalRestoreSrc(activeTx);
+        break;
+    case TSchemaOperation::ETypeCreateIncrementalBackupSrc:
+        res = CheckCreateIncrementalBackupSrc(activeTx);
+        break;
     default:
         LOG_ERROR_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD,
                     "Unknown scheme tx type detected at tablet "
@@ -401,11 +410,11 @@ bool TCheckSchemeTxUnit::CheckCreate(TActiveTransaction *activeTx) {
     const auto &create = tx.GetCreateTable();
     ui64 tableId = create.GetId_Deprecated();
     if (create.HasPathId()) {
-        Y_ABORT_UNLESS(DataShard.GetPathOwnerId() == create.GetPathId().GetOwnerId() || DataShard.GetPathOwnerId() == INVALID_TABLET_ID);
+        Y_ENSURE(DataShard.GetPathOwnerId() == create.GetPathId().GetOwnerId() || DataShard.GetPathOwnerId() == INVALID_TABLET_ID);
         tableId = create.GetPathId().GetLocalId();
     }
 
-    Y_ABORT_UNLESS(!DataShard.GetUserTables().contains(tableId));
+    Y_ENSURE(!DataShard.GetUserTables().contains(tableId));
 
     return true;
 }
@@ -420,10 +429,10 @@ bool TCheckSchemeTxUnit::CheckDrop(TActiveTransaction *activeTx) {
     const auto &drop = tx.GetDropTable();
     ui64 tableId = drop.GetId_Deprecated();
     if (drop.HasPathId()) {
-        Y_ABORT_UNLESS(DataShard.GetPathOwnerId() == drop.GetPathId().GetOwnerId());
+        Y_ENSURE(DataShard.GetPathOwnerId() == drop.GetPathId().GetOwnerId());
         tableId = drop.GetPathId().GetLocalId();
     }
-    Y_ABORT_UNLESS(DataShard.GetUserTables().FindPtr(tableId));
+    Y_ENSURE(DataShard.GetUserTables().FindPtr(tableId));
 
     return true;
 }
@@ -431,7 +440,7 @@ bool TCheckSchemeTxUnit::CheckDrop(TActiveTransaction *activeTx) {
 bool TCheckSchemeTxUnit::CheckAlter(TActiveTransaction *activeTx)
 {
     const NKikimrTxDataShard::TFlatSchemeTransaction &tx = activeTx->GetSchemeTx();
-    Y_ABORT_UNLESS(!Pipeline.HasDrop());
+    Y_ENSURE(!Pipeline.HasDrop());
 
     const TStringBuf kind = "Alter";
     if (HasDuplicate(activeTx, kind, &TPipeline::HasAlter)) {
@@ -496,36 +505,37 @@ bool TCheckSchemeTxUnit::CheckAlter(TActiveTransaction *activeTx)
 
     ui64 tableId = alter.GetId_Deprecated();
     if (alter.HasPathId()) {
-        Y_ABORT_UNLESS(DataShard.GetPathOwnerId() == alter.GetPathId().GetOwnerId());
+        Y_ENSURE(DataShard.GetPathOwnerId() == alter.GetPathId().GetOwnerId());
         tableId = alter.GetPathId().GetLocalId();
     }
 
     const auto tablePtr = DataShard.GetUserTables().FindPtr(tableId);
-    Y_VERIFY_S(tablePtr, "tableId: " << tableId);
+    Y_ENSURE(tablePtr, "tableId: " << tableId);
     const TUserTable &table = **tablePtr;
 
     auto curSchemaVersion = table.GetTableSchemaVersion();
 
     for (const auto &col : alter.GetColumns()) {
-        Y_ABORT_UNLESS(col.HasId());
-        Y_ABORT_UNLESS(col.HasTypeId());
-        Y_ABORT_UNLESS(col.HasName());
+        Y_ENSURE(col.HasId());
+        Y_ENSURE(col.HasTypeId());
+        Y_ENSURE(col.HasName());
 
         ui32 colId = col.GetId();
         if (table.Columns.contains(colId)) {
             const TUserTable::TUserColumn &column = table.Columns.at(colId);
-            Y_ABORT_UNLESS(column.Name == col.GetName());
-            // TODO: support pg types
-            Y_ABORT_UNLESS(column.Type.GetTypeId() == col.GetTypeId());
-            Y_ABORT_UNLESS(col.HasFamily());
+            Y_ENSURE(column.Name == col.GetName());
+            const auto& typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(col.GetTypeId(), &col.GetTypeInfo());
+            Y_ENSURE(column.Type == typeInfoMod.TypeInfo);
+            Y_ENSURE(column.TypeMod == typeInfoMod.TypeMod);
+            Y_ENSURE(col.HasFamily());
         }
     }
 
     for (const auto &col : alter.GetDropColumns()) {
         ui32 colId = col.GetId();
         const TUserTable::TUserColumn *userColumn = table.Columns.FindPtr(colId);
-        Y_ABORT_UNLESS(userColumn);
-        Y_ABORT_UNLESS(userColumn->Name == col.GetName());
+        Y_ENSURE(userColumn);
+        Y_ENSURE(userColumn->Name == col.GetName());
     }
 
     auto res = CheckSchemaVersion(activeTx, proposedSchemaVersion, curSchemaVersion, curSchemaVersion + 1);
@@ -536,7 +546,7 @@ bool TCheckSchemeTxUnit::CheckAlter(TActiveTransaction *activeTx)
 bool TCheckSchemeTxUnit::CheckBackup(TActiveTransaction *activeTx)
 {
     const NKikimrTxDataShard::TFlatSchemeTransaction &tx = activeTx->GetSchemeTx();
-    Y_ABORT_UNLESS(!Pipeline.HasDrop());
+    Y_ENSURE(!Pipeline.HasDrop());
 
     const TStringBuf kind = "Backup";
     if (HasDuplicate(activeTx, kind, &TPipeline::HasBackup)) {
@@ -552,7 +562,7 @@ bool TCheckSchemeTxUnit::CheckBackup(TActiveTransaction *activeTx)
     }
 
     const auto &backup = tx.GetBackup();
-    Y_ABORT_UNLESS(DataShard.GetUserTables().contains(backup.GetTableId()));
+    Y_ENSURE(DataShard.GetUserTables().contains(backup.GetTableId()));
 
     return true;
 }
@@ -560,7 +570,7 @@ bool TCheckSchemeTxUnit::CheckBackup(TActiveTransaction *activeTx)
 bool TCheckSchemeTxUnit::CheckRestore(TActiveTransaction *activeTx)
 {
     const NKikimrTxDataShard::TFlatSchemeTransaction &tx = activeTx->GetSchemeTx();
-    Y_ABORT_UNLESS(!Pipeline.HasDrop());
+    Y_ENSURE(!Pipeline.HasDrop());
 
     const TStringBuf kind = "Restore";
     if (HasDuplicate(activeTx, kind, &TPipeline::HasRestore)) {
@@ -576,7 +586,7 @@ bool TCheckSchemeTxUnit::CheckRestore(TActiveTransaction *activeTx)
     }
 
     const auto &restore = tx.GetRestore();
-    Y_ABORT_UNLESS(DataShard.GetUserTables().contains(restore.GetTableId()));
+    Y_ENSURE(DataShard.GetUserTables().contains(restore.GetTableId()));
 
     return true;
 }
@@ -591,10 +601,10 @@ bool TCheckSchemeTxUnit::CheckCopy(TActiveTransaction *activeTx) {
     const auto &snap = tx.GetSendSnapshot();
     ui64 tableId = snap.GetTableId_Deprecated();
     if (snap.HasTableId()) {
-        Y_ABORT_UNLESS(DataShard.GetPathOwnerId() == snap.GetTableId().GetOwnerId());
+        Y_ENSURE(DataShard.GetPathOwnerId() == snap.GetTableId().GetOwnerId());
         tableId = snap.GetTableId().GetTableId();
     }
-    Y_ABORT_UNLESS(DataShard.GetUserTables().contains(tableId));
+    Y_ENSURE(DataShard.GetUserTables().contains(tableId));
 
     return true;
 }
@@ -741,6 +751,37 @@ bool TCheckSchemeTxUnit::CheckDropCdcStream(TActiveTransaction *activeTx) {
     }
 
     return CheckSchemaVersion(activeTx, notice);
+}
+
+bool TCheckSchemeTxUnit::CheckCreateIncrementalRestoreSrc(TActiveTransaction *activeTx) {
+    if (HasDuplicate(activeTx, "CreateIncrementalRestoreSrc", &TPipeline::HasCreateIncrementalRestoreSrc)) {
+        return false;
+    }
+
+    // TODO: add additional checks
+
+    return true;
+}
+
+bool TCheckSchemeTxUnit::CheckCreateIncrementalBackupSrc(TActiveTransaction *activeTx) {
+    if (HasDuplicate(activeTx, "CreateIncrementalBackupSrc", &TPipeline::HasCreateIncrementalBackupSrc)) {
+        return false;
+    }
+
+    const auto &snap = activeTx->GetSchemeTx().GetCreateIncrementalBackupSrc().GetSendSnapshot();
+    ui64 tableId = snap.GetTableId_Deprecated();
+    if (snap.HasTableId()) {
+        Y_ENSURE(DataShard.GetPathOwnerId() == snap.GetTableId().GetOwnerId());
+        tableId = snap.GetTableId().GetTableId();
+    }
+    Y_ENSURE(DataShard.GetUserTables().contains(tableId));
+
+    const auto &notice = activeTx->GetSchemeTx().GetCreateIncrementalBackupSrc().GetCreateCdcStreamNotice();
+    if (!HasPathId(activeTx, notice, "CreateIncrementalBackupSrc")) {
+        return false;
+    }
+
+    return true;
 }
 
 void TCheckSchemeTxUnit::Complete(TOperation::TPtr,

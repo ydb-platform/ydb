@@ -11,6 +11,8 @@
 #include <aws/common/byte_buf.h>
 #include <aws/common/date_time.h>
 
+AWS_PUSH_SANE_WARNING_LEVEL
+
 struct aws_credentials;
 
 typedef bool(aws_should_sign_header_fn)(const struct aws_byte_cursor *name, void *userdata);
@@ -37,6 +39,7 @@ struct aws_signing_config_base {
 enum aws_signing_algorithm {
     AWS_SIGNING_ALGORITHM_V4,
     AWS_SIGNING_ALGORITHM_V4_ASYMMETRIC,
+    AWS_SIGNING_ALGORITHM_V4_S3EXPRESS,
 };
 
 /**
@@ -306,5 +309,6 @@ AWS_AUTH_API
 int aws_validate_aws_signing_config_aws(const struct aws_signing_config_aws *config);
 
 AWS_EXTERN_C_END
+AWS_POP_SANE_WARNING_LEVEL
 
 #endif /* AWS_AUTH_SIGNING_CONFIG_H */

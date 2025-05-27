@@ -15,7 +15,7 @@ using namespace NNet;
 using namespace NYTree;
 using namespace NConcurrency;
 
-static constexpr auto& Logger = HttpLogger;
+constinit const auto Logger = HttpLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -27,13 +27,13 @@ public:
         : RetryChecker_(retryChecker ? std::move(retryChecker) : BIND(&DefaultRetryChecker))
     { }
 
-    virtual bool IsRetriableError(const TError& error) override
+    bool IsRetriableError(const TError& error) override
     {
         return RetryChecker_(error);
     }
 
-    virtual TError CheckError(const IResponsePtr& response) override = 0;
-    virtual NYTree::INodePtr GetFormattedResponse() const override = 0;
+    TError CheckError(const IResponsePtr& response) override = 0;
+    NYTree::INodePtr GetFormattedResponse() const override = 0;
 
 protected:
     static bool DefaultRetryChecker(const TError& /*error*/)

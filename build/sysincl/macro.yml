@@ -163,7 +163,6 @@
       - contrib/restricted/boost/config/include/boost/config/platform/solaris.hpp
       - contrib/restricted/boost/config/include/boost/config/platform/irix.hpp
       - contrib/restricted/boost/config/include/boost/config/platform/hpux.hpp
-      - contrib/restricted/boost/config/include/boost/config/platform/cygwin.hpp
       - contrib/restricted/boost/config/include/boost/config/platform/win32.hpp
       - contrib/restricted/boost/config/include/boost/config/platform/haiku.hpp
       - contrib/restricted/boost/config/include/boost/config/platform/beos.hpp
@@ -959,6 +958,12 @@
       - contrib/libs/nvidia/thrust/thrust/system/omp/detail/for_each.h
       - contrib/libs/nvidia/thrust/thrust/system/tbb/detail/for_each.h
 
+    - __THRUST_DEVICE_SYSTEM_GATHER_HEADER:
+      - contrib/libs/nvidia/thrust/thrust/system/cpp/detail/gather.h
+      - contrib/libs/nvidia/thrust/thrust/system/cuda/detail/gather.h
+      - contrib/libs/nvidia/thrust/thrust/system/omp/detail/gather.h
+      - contrib/libs/nvidia/thrust/thrust/system/tbb/detail/gather.h
+
     - __THRUST_DEVICE_SYSTEM_GENERATE_HEADER:
       - contrib/libs/nvidia/thrust/thrust/system/cpp/detail/generate.h
       - contrib/libs/nvidia/thrust/thrust/system/cuda/detail/generate.h
@@ -1126,8 +1131,8 @@
       - contrib/libs/nvidia/thrust/thrust/system/tbb/detail/unique.h
 
     - THRUST_MR_STD_MR_HEADER:
-      # this macro has a second value <memory_resource> that will not be used
-      - contrib/libs/cxxsupp/libcxx/include/experimental/memory_resource
+      # this macro could be resolved to <memory_resource> or <experimental/memory_resource> of stl
+      - contrib/libs/cxxsupp/libcxx/include/memory_resource
 
 - source_filter: "^contrib/libs/unixodbc/libltdl"
   includes:
@@ -1211,35 +1216,6 @@
   includes:
     - SDBUS_HEADER: contrib/libs/systemd/src/systemd/sd-bus.h
 
-- source_filter: "^smart_devices/third_party/beken_freertos_sdk"
-  includes:
-    - LWIP_ERRNO_INCLUDE: smart_devices/third_party/beken_freertos_sdk/beken378/func/lwip_intf/lwip-2.1.2/src/include/lwip/errno.h
-    - LWIP_HOOK_FILENAME
-    - DHCP_GLOBAL_XID_HEADER
-    - MBEDTLS_CONFIG_FILE: smart_devices/third_party/beken_freertos_sdk/beken378/func/mbedtls/mbedtls-port/inc/aws_mbedtls_config.h
-    - MBEDTLS_USER_CONFIG_FILE
-    - MBEDTLS_PLATFORM_STD_MEM_HDR
-    - YOTTA_CFG_MBEDTLS_TARGET_CONFIG_FILE
-    - YOTTA_CFG_MBEDTLS_USER_CONFIG_FILE
-    - xstr(MQTTCLIENT_PLATFORM_HEADER)
-
 - source_filter: "^contrib/libs/openthread"
   includes:
-    - MBEDTLS_CONFIG_FILE: contrib/libs/openthread/third_party/mbedtls/openthread-mbedtls-config.h
     - OPENTHREAD_CONFIG_FILE
-
-- source_filter: "^smart_devices/platforms/yandexmidi/zigbee/firmware/ncp"
-  includes:
-    - EMBER_AF_API_EMBER_TYPES: smart_devices/third_party/gecko_sdk/protocol/zigbee/stack/include/ember-types.h
-    - EMBER_AF_API_EZSP: smart_devices/third_party/gecko_sdk/protocol/zigbee/app/em260/command-context.h
-    - EMBER_AF_API_NEIGHBOR_HEADER: smart_devices/third_party/gecko_sdk/protocol/zigbee/stack/include/stack-info.h
-    - EMBER_AF_API_MFGLIB: smart_devices/third_party/gecko_sdk/protocol/zigbee/stack/include/mfglib.h
-    - EMBER_AF_API_CBKE: smart_devices/third_party/gecko_sdk/protocol/zigbee/stack/include/cbke-crypto-engine.h
-    - EMBER_AF_API_NVM3: smart_devices/third_party/gecko_sdk/platform/base/hal/plugin/nvm3/nvm3-token.h
-    - EMBER_AF_API_ZIGBEE_PRO: smart_devices/third_party/gecko_sdk/protocol/zigbee/stack/include/ember.h
-    - EMBER_AF_API_STACK: smart_devices/third_party/gecko_sdk/protocol/zigbee/stack/include/ember.h
-
-- source_filter: "^smart_devices/third_party/gecko_sdk"
-  includes:
-    - SL_RAIL_UTIL_PA_CURVE_HEADER: smart_devices/third_party/gecko_sdk/platform/radio/rail_lib/plugin/pa-conversions/pa_curves_efr32.h
-    - SL_RAIL_UTIL_PA_CURVE_TYPES: smart_devices/third_party/gecko_sdk/platform/radio/rail_lib/plugin/pa-conversions/pa_curve_types_efr32.h

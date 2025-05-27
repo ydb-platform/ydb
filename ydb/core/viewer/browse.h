@@ -62,6 +62,7 @@ public:
         switch (type) {
         case NKikimrSchemeOp::EPathType::EPathTypeDir:
         case NKikimrSchemeOp::EPathType::EPathTypeColumnStore: // TODO
+        case NKikimrSchemeOp::EPathType::EPathTypeBackupCollection: // TODO
             return NKikimrViewer::EObjectType::Directory;
         case NKikimrSchemeOp::EPathType::EPathTypeRtmrVolume:
             return NKikimrViewer::EObjectType::RtmrVolume;
@@ -85,6 +86,7 @@ public:
         case NKikimrSchemeOp::EPathType::EPathTypeSequence:
             return NKikimrViewer::EObjectType::Sequence;
         case NKikimrSchemeOp::EPathType::EPathTypeReplication:
+        case NKikimrSchemeOp::EPathType::EPathTypeTransfer:
             return NKikimrViewer::EObjectType::Replication;
         case NKikimrSchemeOp::EPathType::EPathTypeBlobDepot:
             return NKikimrViewer::EObjectType::BlobDepot;
@@ -96,6 +98,8 @@ public:
             return NKikimrViewer::EObjectType::View;
         case NKikimrSchemeOp::EPathType::EPathTypeResourcePool:
             return NKikimrViewer::EObjectType::ResourcePool;
+        case NKikimrSchemeOp::EPathType::EPathTypeSysView:
+            return NKikimrViewer::EObjectType::SysView;
         case NKikimrSchemeOp::EPathType::EPathTypeExtSubDomain:
         case NKikimrSchemeOp::EPathType::EPathTypeTableIndex:
         case NKikimrSchemeOp::EPathType::EPathTypeInvalid:

@@ -3,6 +3,7 @@
 #include "private_events.h"
 
 #include <ydb/core/base/tablet_pipecache.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -43,9 +44,11 @@ class TDstAlterer: public TActorBootstrapped<TDstAlterer> {
         case TReplication::ETargetKind::Table:
         case TReplication::ETargetKind::IndexTable:
             tx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterTable);
-            PathIdFromPathId(DstPathId, tx.MutableAlterTable()->MutablePathId());
+            DstPathId.ToProto(tx.MutableAlterTable()->MutablePathId());
             tx.MutableAlterTable()->MutableReplicationConfig()->SetMode(
                 NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE);
+            break;
+        case TReplication::ETargetKind::Transfer:
             break;
         }
 
@@ -136,22 +139,38 @@ public:
             ui64 rid,
             ui64 tid,
             TReplication::ETargetKind kind,
-            const TPathId& dstPathId)
+            const TPathId& dstPathId,
+            const TReplication::EState desiredState)
         : Parent(parent)
         , SchemeShardId(schemeShardId)
         , ReplicationId(rid)
         , TargetId(tid)
         , Kind(kind)
         , DstPathId(dstPathId)
+        , DesiredState(desiredState)
         , LogPrefix("DstAlterer", ReplicationId, TargetId)
     {
     }
 
     void Bootstrap() {
-        if (!DstPathId) {
-            Success();
-        } else {
-            AllocateTxId();
+        switch (DesiredState) {
+            case TReplication::EState::Done:
+                if (!DstPathId) {
+                    return Success();
+                } else {
+                    switch (Kind) {
+                        case TReplication::ETargetKind::Table:
+                        case TReplication::ETargetKind::IndexTable:
+                            return AllocateTxId();
+                        case TReplication::ETargetKind::Transfer:
+                            return Success();
+                    }
+                }
+            case TReplication::EState::Paused:
+            case TReplication::EState::Ready:
+            case TReplication::EState::Error:
+            case TReplication::EState::Removing:
+                return Success();
         }
     }
 
@@ -170,6 +189,7 @@ private:
     const ui64 TargetId;
     const TReplication::ETargetKind Kind;
     const TPathId DstPathId;
+    const TReplication::EState DesiredState;
     const TActorLogPrefix LogPrefix;
 
     ui64 TxId = 0;
@@ -182,13 +202,13 @@ IActor* CreateDstAlterer(TReplication* replication, ui64 targetId, const TActorC
     const auto* target = replication->FindTarget(targetId);
     Y_ABORT_UNLESS(target);
     return CreateDstAlterer(ctx.SelfID, replication->GetSchemeShardId(),
-        replication->GetId(), target->GetId(), target->GetKind(), target->GetDstPathId());
+        replication->GetId(), target->GetId(), target->GetKind(), target->GetDstPathId(), replication->GetDesiredState());
 }
 
 IActor* CreateDstAlterer(const TActorId& parent, ui64 schemeShardId,
-        ui64 rid, ui64 tid, TReplication::ETargetKind kind, const TPathId& dstPathId)
+        ui64 rid, ui64 tid, TReplication::ETargetKind kind, const TPathId& dstPathId, TReplication::EState desiredState)
 {
-    return new TDstAlterer(parent, schemeShardId, rid, tid, kind, dstPathId);
+    return new TDstAlterer(parent, schemeShardId, rid, tid, kind, dstPathId, desiredState);
 }
 
 }

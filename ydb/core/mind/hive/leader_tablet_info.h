@@ -23,10 +23,9 @@ struct TTabletCategoryInfo {
 struct TStoragePoolInfo;
 
 struct TLeaderTabletInfo : TTabletInfo {
-protected:
+public:
     static TString DEFAULT_STORAGE_POOL_NAME;
 
-public:
     struct TChannel {
         TTabletId TabletId;
         ui32 ChannelId;
@@ -68,7 +67,6 @@ public:
     TTabletTypes::EType Type;
     TFullObjectId ObjectId;
     TSubDomainKey ObjectDomain;
-    TNodeFilter NodeFilter;
     NKikimrHive::TDataCentersPreference DataCentersPreference;
     TIntrusivePtr<TTabletStorageInfo> TabletStorageInfo;
     TChannelsBindings BoundChannels;
@@ -86,6 +84,7 @@ public:
     TActorId LockedToActor;
     TDuration LockedReconnectTimeout;
     ui64 PendingUnlockSeqNo;
+    bool StoppedByTenant = false;
 
     bool SeizedByChild = false; // transient state for migration - need to delete it later
     bool NeedToReleaseFromParent = false; // transient state for migration - need to delete it later
@@ -96,7 +95,6 @@ public:
         , State(ETabletState::Unknown)
         , Type(TTabletTypes::TypeInvalid)
         , ObjectId(0, 0)
-        , NodeFilter(hive)
         , ChannelProfileReassignReason(NKikimrHive::TEvReassignTablet::HIVE_REASSIGN_REASON_NO)
         , KnownGeneration(0)
         , Category(nullptr)

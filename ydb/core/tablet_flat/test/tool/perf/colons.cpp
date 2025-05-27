@@ -18,7 +18,7 @@ TColons::~TColons()
 }
 
 
-TString TColons::Next() noexcept
+TString TColons::Next()
 {
     TString token;
 
@@ -37,7 +37,7 @@ TString TColons::Next() noexcept
 }
 
 
-TString TColons::Token(const TString &def) noexcept
+TString TColons::Token(const TString &def)
 {
     TString token = Next();
 

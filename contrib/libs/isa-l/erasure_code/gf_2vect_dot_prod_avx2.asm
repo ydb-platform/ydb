@@ -54,7 +54,7 @@
  %define PS     8
  %define LOG_PS 3
 
- %define func(x) x:
+ %define func(x) x: endbranch
  %macro FUNC_SAVE 0
 	push	r12
  %endmacro
@@ -131,7 +131,7 @@
 
  %define PS 4
  %define LOG_PS 2
- %define func(x) x:
+ %define func(x) x: endbranch
  %define arg(x) [ebp + PS*2 + PS*x]
  %define var(x) [ebp - PS - PS*x]
 
@@ -248,13 +248,9 @@ section .text
 %endif
 
 align 16
-global gf_2vect_dot_prod_avx2:ISAL_SYM_TYPE_FUNCTION
-func(gf_2vect_dot_prod_avx2)
-%ifidn __OUTPUT_FORMAT__, macho64
-global _gf_2vect_dot_prod_avx2:ISAL_SYM_TYPE_FUNCTION
-func(_gf_2vect_dot_prod_avx2)
-%endif
+global gf_2vect_dot_prod_avx2, function
 
+func(gf_2vect_dot_prod_avx2)
 	FUNC_SAVE
 	SLDR	len, len_m
 	sub	len, 32
@@ -353,8 +349,3 @@ func(_gf_2vect_dot_prod_avx2)
 	ret
 
 endproc_frame
-
-section .data
-
-;;;       func                   core, ver, snum
-slversion gf_2vect_dot_prod_avx2, 04,  05,  0196

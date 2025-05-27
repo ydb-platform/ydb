@@ -109,6 +109,7 @@ public:
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, ResumeOperation);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, CompleteOperation);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, UpdateOperationParameters);
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, PatchOperationSpec);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, GetOperation);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, ListOperations);
 
@@ -121,6 +122,7 @@ public:
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, GetJobInputPaths);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, GetJobSpec);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, GetJobStderr);
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, GetJobTrace);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, GetJobFailContext);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, AbandonJob);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, PollJobShell);
@@ -147,6 +149,8 @@ public:
         .SetStreamingEnabled(true));
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, GetColumnarStatistics);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, PartitionTables);
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, ReadTablePartition,
+        .SetStreamingEnabled(true));
 
     // File caching
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, GetFileFromCache);
@@ -177,6 +181,7 @@ public:
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, RequestRestart);
 
     // Security
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, GetCurrentUser);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, AddMember);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, RemoveMember);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, CheckPermission);
@@ -193,6 +198,7 @@ public:
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, PausePipeline);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, GetPipelineState);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, GetFlowView);
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, FlowExecute);
 
     // Query tracker
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, StartQuery);
@@ -203,6 +209,19 @@ public:
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, ListQueries);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, AlterQuery);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, GetQueryTrackerInfo);
+
+    // Distributed table client
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, StartDistributedWriteSession);
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, FinishDistributedWriteSession);
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, WriteTableFragment,
+        .SetStreamingEnabled(true));
+
+    // Shuffle service
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, StartShuffle);
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, WriteShuffleData,
+        .SetStreamingEnabled(true));
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, ReadShuffleData,
+        .SetStreamingEnabled(true));
 
     // Misc
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, CheckClusterLiveness);

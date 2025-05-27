@@ -4,8 +4,8 @@
 
 $sub1 = (select distinct (d_month_seq)
  	      from {{date_dim}}
-               where d_year = 2002
- 	        and d_moy = 3 );
+               where d_year = 2001
+ 	        and d_moy = 1 );
 
 $sub2 = (select AVG(j.i_current_price) as i_current_price, j.i_category as i_category
  	            from {{item}} as j

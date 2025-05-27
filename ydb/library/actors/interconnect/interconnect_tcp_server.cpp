@@ -41,7 +41,9 @@ namespace NActors {
                 return error;
             }
             SetNonBlock(*Listener);
-            Listener->SetSendBufferSize(ProxyCommonCtx->Settings.GetSendBufferSize()); // TODO(alexvru): WTF?
+            if (const auto& buffer = ProxyCommonCtx->Settings.TCPSocketBufferSize) {
+                Listener->SetSendBufferSize(buffer);
+            }
             SetSockOpt(*Listener, SOL_SOCKET, SO_REUSEADDR, 1);
             if (addr.GetFamily() == AF_INET6) {
                 SetSockOpt(*Listener, IPPROTO_IPV6, IPV6_V6ONLY, 0);
@@ -82,7 +84,7 @@ namespace NActors {
             }
         }
         if (const auto& callback = ProxyCommonCtx->InitWhiteboard) {
-            callback(Port, TlsActivationContext->ExecutorThread.ActorSystem);
+            callback(Port, TActivationContext::ActorSystem());
         }
         const bool success = ctx.Send(MakePollerActorId(), new TEvPollerRegister(Listener, SelfId(), {}));
         Y_ABORT_UNLESS(success);

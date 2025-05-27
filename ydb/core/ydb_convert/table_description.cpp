@@ -3,16 +3,19 @@
 #include "table_settings.h"
 #include "ydb_convert.h"
 
-#include <ydb/core/base/path.h>
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/path.h>
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/formats/arrow/switch/switch_type.h>
-#include <ydb/library/ydb_issue/proto/issue_id.pb.h>
-#include <ydb/library/yql/public/issue/yql_issue.h>
-#include <ydb/core/scheme/scheme_pathid.h>
-#include <ydb/core/protos/kqp_physical.pb.h>
-#include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/protos/follower_group.pb.h>
+#include <ydb/core/protos/kqp_physical.pb.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
+#include <ydb/core/protos/table_stats.pb.h>
+#include <ydb/core/scheme/protos/type_info.pb.h>
+#include <ydb/core/scheme/scheme_pathid.h>
+#include <ydb/core/scheme/scheme_types_proto.h>
+#include <ydb/library/ydb_issue/proto/issue_id.pb.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 
 #include <util/generic/hash.h>
 
@@ -46,8 +49,6 @@ THashSet<EAlterOperationKind> GetAlterOperationKinds(const Ydb::Table::AlterTabl
         req->alter_columns_size() ||
         req->ttl_action_case() !=
             Ydb::Table::AlterTableRequest::TTL_ACTION_NOT_SET ||
-        req->tiering_action_case() !=
-            Ydb::Table::AlterTableRequest::TIERING_ACTION_NOT_SET ||
         req->has_alter_storage_settings() || req->add_column_families_size() ||
         req->alter_column_families_size() || req->set_compaction_policy() ||
         req->has_alter_partitioning_settings() ||
@@ -265,6 +266,22 @@ bool BuildAlterTableModifyScheme(const TString& path, const Ydb::Table::AlterTab
                 minActivePartitions = 1;
             }
             op->SetTopicPartitions(minActivePartitions);
+
+            if (add.topic_partitioning_settings().has_auto_partitioning_settings()) {
+                auto& partitioningSettings = add.topic_partitioning_settings().auto_partitioning_settings();
+                op->SetTopicAutoPartitioning(partitioningSettings.strategy() != ::Ydb::Topic::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_DISABLED);
+
+                i64 maxActivePartitions =
+                    add.topic_partitioning_settings().max_active_partitions();
+                if (maxActivePartitions < 0) {
+                    code = Ydb::StatusIds::BAD_REQUEST;
+                    error = "Topic max active partitions count must be positive";
+                    return false;
+                } else if (maxActivePartitions == 0) {
+                    maxActivePartitions = 50;
+                }
+                op->SetMaxPartitionCount(maxActivePartitions);
+            }
         }
 
         if (!FillChangefeedDescription(*op->MutableStreamDescription(), add, code, error)) {
@@ -388,7 +405,7 @@ static Ydb::Type* AddColumn(Ydb::Table::ColumnMeta* newColumn, const TColumn& co
     newColumn->set_name(column.GetName());
 
     Ydb::Type* columnType = nullptr;
-    auto* typeDesc = NPg::TypeDescFromPgTypeName(column.GetType());
+    auto typeDesc = NPg::TypeDescFromPgTypeName(column.GetType());
     if (typeDesc) {
         columnType = newColumn->mutable_type();
         auto* pg = columnType->mutable_pg_type();
@@ -400,6 +417,16 @@ static Ydb::Type* AddColumn(Ydb::Table::ColumnMeta* newColumn, const TColumn& co
         if (column.GetNotNull()) {
             newColumn->set_not_null(column.GetNotNull());
         }
+    } else if (column.HasTypeInfo() && column.GetTypeInfo().HasDecimalPrecision() && column.GetTypeInfo().HasDecimalScale()) {
+        if (column.GetNotNull()) {
+            columnType = newColumn->mutable_type();
+        } else {
+            columnType = newColumn->mutable_type()->mutable_optional_type()->mutable_item();
+        }
+        Y_ENSURE(columnType);
+        auto typeParams = columnType->mutable_decimal_type();
+        typeParams->set_precision(column.GetTypeInfo().GetDecimalPrecision());
+        typeParams->set_scale(column.GetTypeInfo().GetDecimalScale());
     } else {
         NYql::NProto::TypeIds protoType;
         if (!NYql::NProto::TypeIds_Parse(column.GetType(), &protoType)) {
@@ -412,14 +439,7 @@ static Ydb::Type* AddColumn(Ydb::Table::ColumnMeta* newColumn, const TColumn& co
             columnType = newColumn->mutable_type()->mutable_optional_type()->mutable_item();
         }
         Y_ENSURE(columnType);
-        if (protoType == NYql::NProto::TypeIds::Decimal) {
-            auto typeParams = columnType->mutable_decimal_type();
-            // TODO: Change TEvDescribeSchemeResult to return decimal params
-            typeParams->set_precision(22);
-            typeParams->set_scale(9);
-        } else {
-            NMiniKQL::ExportPrimitiveTypeToProto(protoType, *columnType);
-        }
+        NMiniKQL::ExportPrimitiveTypeToProto(protoType, *columnType);
     }
     return columnType;
 }
@@ -429,7 +449,7 @@ Ydb::Type* AddColumn<NKikimrSchemeOp::TColumnDescription>(Ydb::Table::ColumnMeta
     newColumn->set_name(column.GetName());
 
     Ydb::Type* columnType = nullptr;
-    auto* typeDesc = NPg::TypeDescFromPgTypeName(column.GetType());
+    auto typeDesc = NPg::TypeDescFromPgTypeName(column.GetType());
     if (typeDesc) {
         columnType = newColumn->mutable_type();
         auto* pg = columnType->mutable_pg_type();
@@ -441,6 +461,16 @@ Ydb::Type* AddColumn<NKikimrSchemeOp::TColumnDescription>(Ydb::Table::ColumnMeta
         if (column.GetNotNull()) {
             newColumn->set_not_null(column.GetNotNull());
         }
+    } else if (column.HasTypeInfo() && column.GetTypeInfo().HasDecimalPrecision()) {
+        if (column.GetNotNull()) {
+            columnType = newColumn->mutable_type();
+        } else {
+            columnType = newColumn->mutable_type()->mutable_optional_type()->mutable_item();
+        }
+        Y_ENSURE(columnType);
+        auto typeParams = columnType->mutable_decimal_type();
+        typeParams->set_precision(column.GetTypeInfo().GetDecimalPrecision());
+        typeParams->set_scale(column.GetTypeInfo().GetDecimalScale());
     } else {
         NYql::NProto::TypeIds protoType;
         if (!NYql::NProto::TypeIds_Parse(column.GetType(), &protoType)) {
@@ -453,14 +483,7 @@ Ydb::Type* AddColumn<NKikimrSchemeOp::TColumnDescription>(Ydb::Table::ColumnMeta
             columnType = newColumn->mutable_type()->mutable_optional_type()->mutable_item();
         }
         Y_ENSURE(columnType);
-        if (protoType == NYql::NProto::TypeIds::Decimal) {
-            auto typeParams = columnType->mutable_decimal_type();
-            // TODO: Change TEvDescribeSchemeResult to return decimal params
-            typeParams->set_precision(22);
-            typeParams->set_scale(9);
-        } else {
-            NMiniKQL::ExportPrimitiveTypeToProto(protoType, *columnType);
-        }
+        NMiniKQL::ExportPrimitiveTypeToProto(protoType, *columnType);
     }
     switch (column.GetDefaultValueCase()) {
         case NKikimrSchemeOp::TColumnDescription::kDefaultFromLiteral: {
@@ -483,36 +506,8 @@ Ydb::Type* AddColumn<NKikimrSchemeOp::TColumnDescription>(Ydb::Table::ColumnMeta
     return columnType;
 }
 
-template <typename TYdbProto, typename TTtl>
-static void AddTtl(TYdbProto& out, const TTtl& inTTL) {
-    switch (inTTL.GetColumnUnit()) {
-    case NKikimrSchemeOp::TTTLSettings::UNIT_AUTO: {
-        auto& outTTL = *out.mutable_ttl_settings()->mutable_date_type_column();
-        outTTL.set_column_name(inTTL.GetColumnName());
-        outTTL.set_expire_after_seconds(inTTL.GetExpireAfterSeconds());
-        break;
-    }
-
-    case NKikimrSchemeOp::TTTLSettings::UNIT_SECONDS:
-    case NKikimrSchemeOp::TTTLSettings::UNIT_MILLISECONDS:
-    case NKikimrSchemeOp::TTTLSettings::UNIT_MICROSECONDS:
-    case NKikimrSchemeOp::TTTLSettings::UNIT_NANOSECONDS: {
-        auto& outTTL = *out.mutable_ttl_settings()->mutable_value_since_unix_epoch();
-        outTTL.set_column_name(inTTL.GetColumnName());
-        outTTL.set_column_unit(static_cast<Ydb::Table::ValueSinceUnixEpochModeSettings::Unit>(inTTL.GetColumnUnit()));
-        outTTL.set_expire_after_seconds(inTTL.GetExpireAfterSeconds());
-        break;
-    }
-
-    default:
-        break;
-    }
-
-    if constexpr (std::is_same_v<TTtl, NKikimrSchemeOp::TTTLSettings::TEnabled>) {
-        if (inTTL.HasSysSettings() && inTTL.GetSysSettings().HasRunInterval()) {
-            out.mutable_ttl_settings()->set_run_interval_seconds(TDuration::FromValue(inTTL.GetSysSettings().GetRunInterval()).Seconds());
-        }
-    }
+void FillColumnDescription(Ydb::Table::ColumnMeta& out, const NKikimrSchemeOp::TColumnDescription& in) {
+    AddColumn(&out, in);
 }
 
 template <typename TYdbProto>
@@ -546,11 +541,11 @@ void FillColumnDescriptionImpl(TYdbProto& out,
 
     if (in.HasTTLSettings()) {
         if (in.GetTTLSettings().HasEnabled()) {
-            AddTtl(out, in.GetTTLSettings().GetEnabled());
-        }
-
-        if (in.GetTTLSettings().HasUseTiering()) {
-            out.set_tiering(in.GetTTLSettings().GetUseTiering());
+            Ydb::StatusIds::StatusCode code;
+            TString error;
+            if (!FillTtlSettings(*out.mutable_ttl_settings(), in.GetTTLSettings().GetEnabled(), code, error)) {
+                ythrow yexception() << "invalid TTL settings: " << error;
+            }
         }
     }
 }
@@ -565,12 +560,17 @@ void FillColumnDescription(Ydb::Table::CreateTableRequest& out,
     FillColumnDescriptionImpl(out, splitKeyType, in);
 }
 
-void FillColumnDescription(Ydb::Table::DescribeTableResult& out, const NKikimrSchemeOp::TColumnTableDescription& in) {
+template <typename TYdbProto>
+void FillColumnDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TColumnTableDescription& in) {
     auto& schema = in.GetSchema();
 
     for (const auto& column : schema.GetColumns()) {
         auto newColumn = out.add_columns();
         AddColumn(newColumn, column);
+
+        if (column.HasColumnFamilyName()) {
+            newColumn->set_family(column.GetColumnFamilyName());
+        }
     }
 
     for (auto& name : schema.GetKeyColumnNames()) {
@@ -586,15 +586,23 @@ void FillColumnDescription(Ydb::Table::DescribeTableResult& out, const NKikimrSc
 
     if (in.HasTtlSettings()) {
         if (in.GetTtlSettings().HasEnabled()) {
-            AddTtl(out, in.GetTtlSettings().GetEnabled());
-        }
-
-        if (in.GetTtlSettings().HasUseTiering()) {
-            out.set_tiering(in.GetTtlSettings().GetUseTiering());
+            Ydb::StatusIds::StatusCode status;
+            TString error;
+            if (!FillTtlSettings(*out.mutable_ttl_settings(), in.GetTtlSettings().GetEnabled(), status, error)) {
+                ythrow yexception() << "invalid TTL settings: " << error;
+            }
         }
     }
 
     out.set_store_type(Ydb::Table::StoreType::STORE_TYPE_COLUMN);
+}
+
+void FillColumnDescription(Ydb::Table::DescribeTableResult& out, const NKikimrSchemeOp::TColumnTableDescription& in) {
+    FillColumnDescriptionImpl(out, in);
+}
+
+void FillColumnDescription(Ydb::Table::CreateTableRequest& out, const NKikimrSchemeOp::TColumnTableDescription& in) {
+    FillColumnDescriptionImpl(out, in);
 }
 
 bool ExtractColumnTypeInfo(NScheme::TTypeInfo& outTypeInfo, TString& outTypeMod,
@@ -607,35 +615,25 @@ bool ExtractColumnTypeInfo(NScheme::TTypeInfo& outTypeInfo, TString& outTypeMod,
             typeId = (ui32)itemType.type_id();
             break;
         case Ydb::Type::kDecimalType: {
-            if (itemType.decimal_type().precision() != NScheme::DECIMAL_PRECISION) {
+            ui32 precision = itemType.decimal_type().precision();
+            ui32 scale = itemType.decimal_type().scale();
+            if (!NKikimr::NScheme::TDecimalType::Validate(precision, scale, error)) {
                 status = Ydb::StatusIds::BAD_REQUEST;
-                error = Sprintf("Bad decimal precision. Only Decimal(%" PRIu32
-                                    ",%" PRIu32 ") is supported for table columns",
-                                    NScheme::DECIMAL_PRECISION,
-                                    NScheme::DECIMAL_SCALE);
                 return false;
             }
-            if (itemType.decimal_type().scale() != NScheme::DECIMAL_SCALE) {
-                status = Ydb::StatusIds::BAD_REQUEST;
-                error = Sprintf("Bad decimal scale. Only Decimal(%" PRIu32
-                                    ",%" PRIu32 ") is supported for table columns",
-                                    NScheme::DECIMAL_PRECISION,
-                                    NScheme::DECIMAL_SCALE);
-                return false;
-            }
-            typeId = NYql::NProto::TypeIds::Decimal;
-            break;
+            outTypeInfo = NScheme::TTypeInfo(NScheme::TDecimalType(precision, scale));
+            return true;
         }
         case Ydb::Type::kPgType: {
             const auto& pgType = itemType.pg_type();
             const auto& typeName = pgType.type_name();
-            auto* desc = NPg::TypeDescFromPgTypeName(typeName);
+            auto desc = NPg::TypeDescFromPgTypeName(typeName);
             if (!desc) {
                 status = Ydb::StatusIds::BAD_REQUEST;
                 error = TStringBuilder() << "Invalid PG type name: " << typeName;
                 return false;
             }
-            outTypeInfo = NScheme::TTypeInfo(NScheme::NTypeIds::Pg, desc);
+            outTypeInfo = NScheme::TTypeInfo(desc);
             outTypeMod = pgType.type_modifier();
             return true;
         }
@@ -689,6 +687,10 @@ bool FillColumnDescription(NKikimrSchemeOp::TTableDescription& out,
         }
         cd->SetType(NScheme::TypeName(typeInfo, typeMod));
 
+        if (NScheme::NTypeIds::IsParametrizedType(typeInfo.GetTypeId())) {
+            NScheme::ProtoFromTypeInfo(typeInfo, typeMod, *cd->MutableTypeInfo());
+        }
+
         if (!column.family().empty()) {
             cd->SetFamilyName(column.family());
         }
@@ -715,10 +717,17 @@ bool FillColumnDescription(NKikimrSchemeOp::TTableDescription& out,
     return true;
 }
 
-bool FillColumnDescription(NKikimrSchemeOp::TColumnTableDescription& out,
-    const google::protobuf::RepeatedPtrField<Ydb::Table::ColumnMeta>& in, Ydb::StatusIds::StatusCode& status, TString& error) {
-    auto* schema = out.MutableSchema();
+NKikimrSchemeOp::TOlapColumnDescription* GetAddColumn(NKikimrSchemeOp::TColumnTableDescription& out) {
+    return out.MutableSchema()->AddColumns();
+}
 
+NKikimrSchemeOp::TOlapColumnDescription* GetAddColumn(NKikimrSchemeOp::TAlterColumnTable& out) {
+    return out.MutableAlterSchema()->AddAddColumns();
+}
+
+template <typename TColumnTable>
+bool FillColumnDescriptionImpl(TColumnTable& out, const google::protobuf::RepeatedPtrField<Ydb::Table::ColumnMeta>& in,
+    Ydb::StatusIds::StatusCode& status, TString& error) {
     for (const auto& column : in) {
         if (column.type().has_pg_type()) {
             status = Ydb::StatusIds::BAD_REQUEST;
@@ -726,7 +735,7 @@ bool FillColumnDescription(NKikimrSchemeOp::TColumnTableDescription& out,
             return false;
         }
 
-        auto* columnDesc = schema->AddColumns();
+        auto* columnDesc = GetAddColumn(out);
         columnDesc->SetName(column.name());
 
         NScheme::TTypeInfo typeInfo;
@@ -736,9 +745,155 @@ bool FillColumnDescription(NKikimrSchemeOp::TColumnTableDescription& out,
         }
         columnDesc->SetType(NScheme::TypeName(typeInfo, typeMod));
         columnDesc->SetNotNull(column.not_null());
+
+        if (NScheme::NTypeIds::IsParametrizedType(typeInfo.GetTypeId())) {
+            NScheme::ProtoFromTypeInfo(typeInfo, typeMod, *columnDesc->MutableTypeInfo());
+        }
+
+        if (!column.Getfamily().empty()) {
+            columnDesc->SetColumnFamilyName(column.Getfamily());
+        }
+
+        if (column.has_from_literal()) {
+            status = Ydb::StatusIds::BAD_REQUEST;
+            error = TStringBuilder() << "Default values are not supported in column tables";
+            return false;
+        }
+
+        if (column.has_from_sequence()) {
+            status = Ydb::StatusIds::BAD_REQUEST;
+            error = TStringBuilder() << "Default sequences are not supported in column tables";
+            return false;
+        }
     }
 
     return true;
+}
+
+bool FillColumnDescription(NKikimrSchemeOp::TColumnTableDescription& out, const google::protobuf::RepeatedPtrField<Ydb::Table::ColumnMeta>& in,
+    Ydb::StatusIds::StatusCode& status, TString& error) {
+    return FillColumnDescriptionImpl(out, in, status, error);
+}
+
+bool FillColumnDescription(NKikimrSchemeOp::TAlterColumnTable& out, const google::protobuf::RepeatedPtrField<Ydb::Table::ColumnMeta>& in,
+    Ydb::StatusIds::StatusCode& status, TString& error) {
+    return FillColumnDescriptionImpl(out, in, status, error);
+}
+
+bool FillColumnFamily(
+    const Ydb::Table::ColumnFamily& from, NKikimrSchemeOp::TFamilyDescription* to, Ydb::StatusIds::StatusCode& status, TString& error) {
+    to->SetName(from.name());
+    if (from.has_data()) {
+        status = Ydb::StatusIds::BAD_REQUEST;
+        error = TStringBuilder() << "Field `DATA` is not supported for OLAP tables in column family '" << from.name() << "'";
+        return false;
+    }
+    switch (from.compression()) {
+        case Ydb::Table::ColumnFamily::COMPRESSION_UNSPECIFIED:
+            break;
+        case Ydb::Table::ColumnFamily::COMPRESSION_NONE:
+            to->SetColumnCodec(NKikimrSchemeOp::ColumnCodecPlain);
+            break;
+        case Ydb::Table::ColumnFamily::COMPRESSION_LZ4:
+            to->SetColumnCodec(NKikimrSchemeOp::ColumnCodecLZ4);
+            break;
+        case Ydb::Table::ColumnFamily::COMPRESSION_ZSTD:
+            to->SetColumnCodec(NKikimrSchemeOp::ColumnCodecZSTD);
+            break;
+        default:
+            status = Ydb::StatusIds::BAD_REQUEST;
+            error = TStringBuilder() << "Unsupported compression value " << (ui32)from.compression() << " in column family '" << from.name()
+                                     << "'";
+            return false;
+    }
+    if (from.has_compression_level()) {
+        to->SetColumnCodecLevel(from.compression_level());
+    }
+    return true;
+}
+
+bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::AlterTableRequest* req,
+    NKikimrSchemeOp::TModifyScheme* modifyScheme, Ydb::StatusIds::StatusCode& status, TString& error) {
+    const auto ops = GetAlterOperationKinds(req);
+    if (ops.empty()) {
+        status = Ydb::StatusIds::BAD_REQUEST;
+        error = "Empty alter";
+        return false;
+    }
+
+    if (ops.size() > 1) {
+        status = Ydb::StatusIds::UNSUPPORTED;
+        error = "Mixed alter is unsupported";
+        return false;
+    }
+
+    const auto OpType = *ops.begin();
+
+    std::pair<TString, TString> pathPair;
+    try {
+        pathPair = SplitPathIntoWorkingDirAndName(path);
+    } catch (const std::exception&) {
+        status = Ydb::StatusIds::BAD_REQUEST;
+        return false;
+    }
+
+    const auto& workingDir = pathPair.first;
+    const auto& name = pathPair.second;
+    modifyScheme->SetWorkingDir(workingDir);
+
+    if (OpType == EAlterOperationKind::Common) {
+        auto alterColumnTable = modifyScheme->MutableAlterColumnTable();
+        alterColumnTable->SetName(name);
+        modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterColumnTable);
+
+        for (const auto& drop : req->drop_columns()) {
+            alterColumnTable->MutableAlterSchema()->AddDropColumns()->SetName(drop);
+        }
+
+        if (!FillColumnDescription(*alterColumnTable, req->add_columns(), status, error)) {
+            return false;
+        }
+
+        for (const auto& alter : req->alter_columns()) {
+            auto alterColumn = alterColumnTable->MutableAlterSchema()->AddAlterColumns();
+            alterColumn->SetName(alter.Getname());
+
+            if (!alter.family().empty()) {
+                alterColumn->SetColumnFamilyName(alter.family());
+            }
+        }
+
+        for (const auto& add : req->add_column_families()) {
+            if (add.compression() == Ydb::Table::ColumnFamily::COMPRESSION_UNSPECIFIED) {
+                status = Ydb::StatusIds::BAD_REQUEST;
+                error = TStringBuilder() << "Compression value is not set for column family '" << add.name() << "'";
+            }
+            if (!FillColumnFamily(add, alterColumnTable->MutableAlterSchema()->AddAddColumnFamily(), status, error)) {
+                return false;
+            }
+        }
+
+        for (const auto& alter : req->alter_column_families()) {
+            if (!FillColumnFamily(alter, alterColumnTable->MutableAlterSchema()->AddAlterColumnFamily(), status, error)) {
+                return false;
+            }
+        }
+
+        if (req->has_set_ttl_settings()) {
+            if (!FillTtlSettings(*alterColumnTable->MutableAlterTtlSettings()->MutableEnabled(), req->Getset_ttl_settings(), status, error)) {
+                return false;
+            }
+        } else if (req->has_drop_ttl_settings()) {
+            alterColumnTable->MutableAlterTtlSettings()->MutableDisabled();
+        }
+    }
+
+    return true;
+}
+
+bool BuildAlterColumnTableModifyScheme(
+    const Ydb::Table::AlterTableRequest* req, NKikimrSchemeOp::TModifyScheme* modifyScheme, Ydb::StatusIds::StatusCode& code, TString& error) {
+    return BuildAlterColumnTableModifyScheme(req->path(), req, modifyScheme, code, error);
 }
 
 template <typename TYdbProto>
@@ -860,6 +1015,7 @@ void FillGlobalIndexSettings(Ydb::Table::GlobalIndexSettings& settings,
     }
 
     FillPartitioningSettingsImpl(settings, indexImplTableDescription);
+    FillReadReplicasSettings(settings, indexImplTableDescription);
 }
 
 template <typename TYdbProto>
@@ -899,7 +1055,7 @@ void FillIndexDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TTableDescr
                 tableIndex.GetIndexImplTableDescriptions(0)
             );
             break;
-        case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree:
+        case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree: {
             FillGlobalIndexSettings(
                 *index->mutable_global_vector_kmeans_tree_index()->mutable_level_table_settings(),
                 tableIndex.GetIndexImplTableDescriptions(0)
@@ -908,10 +1064,18 @@ void FillIndexDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TTableDescr
                 *index->mutable_global_vector_kmeans_tree_index()->mutable_posting_table_settings(),
                 tableIndex.GetIndexImplTableDescriptions(1)
             );
+            const bool prefixVectorIndex = tableIndex.GetKeyColumnNames().size() > 1;
+            if (prefixVectorIndex) {
+                FillGlobalIndexSettings(
+                    *index->mutable_global_vector_kmeans_tree_index()->mutable_prefix_table_settings(),
+                    tableIndex.GetIndexImplTableDescriptions(2)
+                );                    
+            }
 
             *index->mutable_global_vector_kmeans_tree_index()->mutable_vector_settings() = tableIndex.GetVectorIndexKmeansTreeDescription().GetSettings();
 
             break;
+        }
         default:
             break;
         };
@@ -1010,69 +1174,73 @@ void FillAttributesImpl(TOutProto& out, const TInProto& in) {
         outAttrs[inAttr.GetKey()] = inAttr.GetValue();
     }
 }
+void FillChangefeedDescription(Ydb::Table::ChangefeedDescription& out,
+    const NKikimrSchemeOp::TCdcStreamDescription& in) {
 
+    out.set_name(in.GetName());
+    out.set_virtual_timestamps(in.GetVirtualTimestamps());
+    out.set_aws_region(in.GetAwsRegion());
+
+    if (const auto value = in.GetResolvedTimestampsIntervalMs()) {
+        out.mutable_resolved_timestamps_interval()->set_seconds(TDuration::MilliSeconds(value).Seconds());
+    }
+
+    switch (in.GetMode()) {
+    case NKikimrSchemeOp::ECdcStreamMode::ECdcStreamModeKeysOnly:
+    case NKikimrSchemeOp::ECdcStreamMode::ECdcStreamModeUpdate:
+    case NKikimrSchemeOp::ECdcStreamMode::ECdcStreamModeNewImage:
+    case NKikimrSchemeOp::ECdcStreamMode::ECdcStreamModeOldImage:
+    case NKikimrSchemeOp::ECdcStreamMode::ECdcStreamModeNewAndOldImages:
+        out.set_mode(static_cast<Ydb::Table::ChangefeedMode::Mode>(in.GetMode()));
+        break;
+    default:
+        break;
+    }
+
+    switch (in.GetFormat()) {
+    case NKikimrSchemeOp::ECdcStreamFormat::ECdcStreamFormatJson:
+        out.set_format(Ydb::Table::ChangefeedFormat::FORMAT_JSON);
+        break;
+    case NKikimrSchemeOp::ECdcStreamFormat::ECdcStreamFormatDynamoDBStreamsJson:
+        out.set_format(Ydb::Table::ChangefeedFormat::FORMAT_DYNAMODB_STREAMS_JSON);
+        break;
+    case NKikimrSchemeOp::ECdcStreamFormat::ECdcStreamFormatDebeziumJson:
+        out.set_format(Ydb::Table::ChangefeedFormat::FORMAT_DEBEZIUM_JSON);
+        break;
+    default:
+        break;
+    }
+
+    switch (in.GetState()) {
+    case NKikimrSchemeOp::ECdcStreamState::ECdcStreamStateReady:
+    case NKikimrSchemeOp::ECdcStreamState::ECdcStreamStateDisabled:
+    case NKikimrSchemeOp::ECdcStreamState::ECdcStreamStateScan:
+        out.set_state(static_cast<Ydb::Table::ChangefeedDescription::State>(in.GetState()));
+        break;
+    default:
+        break;
+    }
+
+    if (in.HasScanProgress()) {
+        auto& scanProgress = *out.mutable_initial_scan_progress();
+        scanProgress.set_parts_total(in.GetScanProgress().GetShardsTotal());
+        scanProgress.set_parts_completed(in.GetScanProgress().GetShardsCompleted());
+    }
+
+    FillAttributesImpl(out, in);
+
+}
 void FillChangefeedDescription(Ydb::Table::DescribeTableResult& out,
         const NKikimrSchemeOp::TTableDescription& in) {
 
     for (const auto& stream : in.GetCdcStreams()) {
-        auto changefeed = out.add_changefeeds();
-
-        changefeed->set_name(stream.GetName());
-        changefeed->set_virtual_timestamps(stream.GetVirtualTimestamps());
-        changefeed->set_aws_region(stream.GetAwsRegion());
-
-        if (const auto value = stream.GetResolvedTimestampsIntervalMs()) {
-            changefeed->mutable_resolved_timestamps_interval()->set_seconds(TDuration::MilliSeconds(value).Seconds());
-        }
-
-        switch (stream.GetMode()) {
-        case NKikimrSchemeOp::ECdcStreamMode::ECdcStreamModeKeysOnly:
-        case NKikimrSchemeOp::ECdcStreamMode::ECdcStreamModeUpdate:
-        case NKikimrSchemeOp::ECdcStreamMode::ECdcStreamModeNewImage:
-        case NKikimrSchemeOp::ECdcStreamMode::ECdcStreamModeOldImage:
-        case NKikimrSchemeOp::ECdcStreamMode::ECdcStreamModeNewAndOldImages:
-            changefeed->set_mode(static_cast<Ydb::Table::ChangefeedMode::Mode>(stream.GetMode()));
-            break;
-        default:
-            break;
-        }
-
-        switch (stream.GetFormat()) {
-        case NKikimrSchemeOp::ECdcStreamFormat::ECdcStreamFormatJson:
-            changefeed->set_format(Ydb::Table::ChangefeedFormat::FORMAT_JSON);
-            break;
-        case NKikimrSchemeOp::ECdcStreamFormat::ECdcStreamFormatDynamoDBStreamsJson:
-            changefeed->set_format(Ydb::Table::ChangefeedFormat::FORMAT_DYNAMODB_STREAMS_JSON);
-            break;
-        case NKikimrSchemeOp::ECdcStreamFormat::ECdcStreamFormatDebeziumJson:
-            changefeed->set_format(Ydb::Table::ChangefeedFormat::FORMAT_DEBEZIUM_JSON);
-            break;
-        default:
-            break;
-        }
-
-        switch (stream.GetState()) {
-        case NKikimrSchemeOp::ECdcStreamState::ECdcStreamStateReady:
-        case NKikimrSchemeOp::ECdcStreamState::ECdcStreamStateDisabled:
-        case NKikimrSchemeOp::ECdcStreamState::ECdcStreamStateScan:
-            changefeed->set_state(static_cast<Ydb::Table::ChangefeedDescription::State>(stream.GetState()));
-            break;
-        default:
-            break;
-        }
-
-        if (stream.HasScanProgress()) {
-            auto& scanProgress = *changefeed->mutable_initial_scan_progress();
-            scanProgress.set_parts_total(stream.GetScanProgress().GetShardsTotal());
-            scanProgress.set_parts_completed(stream.GetScanProgress().GetShardsCompleted());
-        }
-
-        FillAttributesImpl(*changefeed, stream);
+        FillChangefeedDescription(*out.add_changefeeds(), stream);
     }
 }
 
-bool FillChangefeedDescription(NKikimrSchemeOp::TCdcStreamDescription& out,
-        const Ydb::Table::Changefeed& in, Ydb::StatusIds::StatusCode& status, TString& error) {
+template <typename T>
+bool FillChangefeedDescriptionCommon(NKikimrSchemeOp::TCdcStreamDescription& out,
+        const T& in, Ydb::StatusIds::StatusCode& status, TString& error) {
 
     out.SetName(in.name());
     out.SetVirtualTimestamps(in.virtual_timestamps());
@@ -1112,15 +1280,6 @@ bool FillChangefeedDescription(NKikimrSchemeOp::TCdcStreamDescription& out,
         return false;
     }
 
-    if (in.initial_scan()) {
-        if (!AppData()->FeatureFlags.GetEnableChangefeedInitialScan()) {
-            status = Ydb::StatusIds::UNSUPPORTED;
-            error = "Changefeed initial scan is not supported yet";
-            return false;
-        }
-        out.SetState(NKikimrSchemeOp::ECdcStreamState::ECdcStreamStateScan);
-    }
-
     for (const auto& [key, value] : in.attributes()) {
         auto& attr = *out.AddUserAttributes();
         attr.SetKey(key);
@@ -1130,8 +1289,26 @@ bool FillChangefeedDescription(NKikimrSchemeOp::TCdcStreamDescription& out,
     return true;
 }
 
+bool FillChangefeedDescription(NKikimrSchemeOp::TCdcStreamDescription& out,
+        const Ydb::Table::Changefeed& in, Ydb::StatusIds::StatusCode& status, TString& error) {
+    if (in.initial_scan()) {
+        if (!AppData()->FeatureFlags.GetEnableChangefeedInitialScan()) {
+            status = Ydb::StatusIds::UNSUPPORTED;
+            error = "Changefeed initial scan is not supported yet";
+            return false;
+        }
+        out.SetState(NKikimrSchemeOp::ECdcStreamState::ECdcStreamStateScan);
+    }
+    return FillChangefeedDescriptionCommon(out, in, status, error);
+}
+
+bool FillChangefeedDescription(NKikimrSchemeOp::TCdcStreamDescription& out,
+        const Ydb::Table::ChangefeedDescription& in, Ydb::StatusIds::StatusCode& status, TString& error) {
+    return FillChangefeedDescriptionCommon(out, in, status, error);
+}
+
 void FillTableStats(Ydb::Table::DescribeTableResult& out,
-        const NKikimrSchemeOp::TPathDescription& in, bool withPartitionStatistic) {
+        const NKikimrSchemeOp::TPathDescription& in, bool withPartitionStatistic, const TMap<ui64, ui64>& nodeMap) {
 
     auto stats = out.mutable_table_stats();
 
@@ -1140,6 +1317,21 @@ void FillTableStats(Ydb::Table::DescribeTableResult& out,
             auto partition = stats->add_partition_stats();
             partition->set_rows_estimate(tablePartitionStat.GetRowCount());
             partition->set_store_size(tablePartitionStat.GetDataSize() + tablePartitionStat.GetIndexSize());
+        }
+    }
+
+    if (!nodeMap.empty()) {
+        size_t id = 0;
+        if ((size_t)stats->partition_stats_size() != in.TablePartitionsSize()) {
+            ythrow yexception() << "malformed TPathDescription.";
+        }
+
+        for (const auto& part : in.GetTablePartitions()) {
+            auto it = nodeMap.find(part.GetDatashardId());
+            if (it == nodeMap.end()) {
+                ythrow yexception() << "unknown datashardId to fill DescribeTableResult";
+            }
+            stats->mutable_partition_stats(id++)->set_leader_node_id(it->second);
         }
     }
 
@@ -1245,6 +1437,50 @@ void FillStorageSettings(Ydb::Table::CreateTableRequest& out,
     FillStorageSettingsImpl(out, in);
 }
 
+void FillColumnFamily(Ydb::Table::ColumnFamily& out, const NKikimrSchemeOp::TFamilyDescription& in, bool isColumnTable) {
+    if (in.HasName() && !in.GetName().empty()) {
+        out.set_name(in.GetName());
+    } else if (IsDefaultFamily(in)) {
+        out.set_name("default");
+    } else if (in.HasId()) {
+        out.set_name(TStringBuilder() << "<id: " << in.GetId() << ">");
+    } else {
+        out.set_name(in.GetName());
+    }
+
+    if (!isColumnTable && in.HasStorageConfig() && in.GetStorageConfig().HasData()) {
+        FillStoragePool(&out, &Ydb::Table::ColumnFamily::mutable_data, in.GetStorageConfig().GetData());
+    }
+
+    if (in.HasColumnCodec()) {
+        switch (in.GetColumnCodec()) {
+            case NKikimrSchemeOp::ColumnCodecPlain:
+                out.set_compression(Ydb::Table::ColumnFamily::COMPRESSION_NONE);
+                break;
+            case NKikimrSchemeOp::ColumnCodecLZ4:
+                out.set_compression(Ydb::Table::ColumnFamily::COMPRESSION_LZ4);
+                break;
+            case NKikimrSchemeOp::ColumnCodecZSTD: {
+                if (!isColumnTable) {
+                    break; // FIXME: not supported
+                }
+                out.set_compression(Ydb::Table::ColumnFamily::COMPRESSION_ZSTD);
+                break;
+            }
+        }
+    } else if (in.GetCodec() == 1) {
+        // Legacy setting, see datashard
+        out.set_compression(Ydb::Table::ColumnFamily::COMPRESSION_LZ4);
+    } else {
+        out.set_compression(Ydb::Table::ColumnFamily::COMPRESSION_NONE);
+    }
+
+    // Check legacy settings for permanent in-memory cache
+    if (in.GetInMemory() || in.GetColumnCache() == NKikimrSchemeOp::ColumnCacheEver) {
+        out.set_keep_in_memory(Ydb::FeatureFlag::ENABLED);
+    }
+}
+
 template <typename TYdbProto>
 void FillColumnFamiliesImpl(TYdbProto& out,
         const NKikimrSchemeOp::TTableDescription& in) {
@@ -1262,42 +1498,7 @@ void FillColumnFamiliesImpl(TYdbProto& out,
         const auto& family = partConfig.GetColumnFamilies(i);
         auto* r = out.add_column_families();
 
-        if (family.HasName() && !family.GetName().empty()) {
-            r->set_name(family.GetName());
-        } else if (IsDefaultFamily(family)) {
-            r->set_name("default");
-        } else if (family.HasId()) {
-            r->set_name(TStringBuilder() << "<id: " << family.GetId() << ">");
-        } else {
-            r->set_name(family.GetName());
-        }
-
-        if (family.HasStorageConfig() && family.GetStorageConfig().HasData()) {
-            FillStoragePool(r, &Ydb::Table::ColumnFamily::mutable_data, family.GetStorageConfig().GetData());
-        }
-
-        if (family.HasColumnCodec()) {
-            switch (family.GetColumnCodec()) {
-                case NKikimrSchemeOp::ColumnCodecPlain:
-                    r->set_compression(Ydb::Table::ColumnFamily::COMPRESSION_NONE);
-                    break;
-                case NKikimrSchemeOp::ColumnCodecLZ4:
-                    r->set_compression(Ydb::Table::ColumnFamily::COMPRESSION_LZ4);
-                    break;
-                case NKikimrSchemeOp::ColumnCodecZSTD:
-                    break; // FIXME: not supported
-            }
-        } else if (family.GetCodec() == 1) {
-            // Legacy setting, see datashard
-            r->set_compression(Ydb::Table::ColumnFamily::COMPRESSION_LZ4);
-        } else {
-            r->set_compression(Ydb::Table::ColumnFamily::COMPRESSION_NONE);
-        }
-
-        // Check legacy settings for permanent in-memory cache
-        if (family.GetInMemory() || family.GetColumnCache() == NKikimrSchemeOp::ColumnCacheEver) {
-            r->set_keep_in_memory(Ydb::FeatureFlag::ENABLED);
-        }
+        FillColumnFamily(*r, family, false);
     }
 }
 
@@ -1308,6 +1509,28 @@ void FillColumnFamilies(Ydb::Table::DescribeTableResult& out,
 
 void FillColumnFamilies(Ydb::Table::CreateTableRequest& out,
         const NKikimrSchemeOp::TTableDescription& in) {
+    FillColumnFamiliesImpl(out, in);
+}
+
+template <typename TYdbProto>
+void FillColumnFamiliesImpl(TYdbProto& out,
+        const NKikimrSchemeOp::TColumnTableDescription& in) {
+    const auto& schema = in.GetSchema();
+    for (size_t i = 0; i < schema.ColumnFamiliesSize(); ++i) {
+        const auto& family = schema.GetColumnFamilies(i);
+        auto* r = out.add_column_families();
+
+        FillColumnFamily(*r, family, true);
+    }
+}
+
+void FillColumnFamilies(Ydb::Table::DescribeTableResult& out,
+        const NKikimrSchemeOp::TColumnTableDescription& in) {
+    FillColumnFamiliesImpl(out, in);
+}
+
+void FillColumnFamilies(Ydb::Table::CreateTableRequest& out,
+        const NKikimrSchemeOp::TColumnTableDescription& in) {
     FillColumnFamiliesImpl(out, in);
 }
 
@@ -1419,11 +1642,15 @@ void FillReadReplicasSettings(Ydb::Table::CreateTableRequest& out,
     FillReadReplicasSettingsImpl(out, in);
 }
 
+void FillReadReplicasSettings(Ydb::Table::GlobalIndexSettings& out,
+    const NKikimrSchemeOp::TTableDescription& in) {
+    FillReadReplicasSettingsImpl(out, in);
+}
+
 bool FillTableDescription(NKikimrSchemeOp::TModifyScheme& out,
         const Ydb::Table::CreateTableRequest& in, const TTableProfiles& profiles,
         Ydb::StatusIds::StatusCode& status, TString& error, bool indexedTable)
 {
-
     NKikimrSchemeOp::TTableDescription* tableDesc = nullptr;
     if (indexedTable) {
         tableDesc = out.MutableCreateIndexedTable()->MutableTableDescription();
@@ -1465,7 +1692,8 @@ bool FillTableDescription(NKikimrSchemeOp::TModifyScheme& out,
     return true;
 }
 
-bool FillSequenceDescription(Ydb::Table::CreateTableRequest& out, const NKikimrSchemeOp::TTableDescription& in, Ydb::StatusIds::StatusCode& status, TString& error) {
+template <typename TYdbProto>
+bool FillSequenceDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TTableDescription& in, Ydb::StatusIds::StatusCode& status, TString& error) {
     THashMap<TString, NKikimrSchemeOp::TSequenceDescription> sequences;
 
     for (const auto& sequenceDescription : in.GetSequences()) {
@@ -1505,7 +1733,7 @@ bool FillSequenceDescription(Ydb::Table::CreateTableRequest& out, const NKikimrS
                 }
                 if (sequenceDescription.HasDataType()) {
                     auto* dataType = fromSequence->mutable_data_type();
-                    auto* typeDesc = NPg::TypeDescFromPgTypeName(sequenceDescription.GetDataType());
+                    auto typeDesc = NPg::TypeDescFromPgTypeName(sequenceDescription.GetDataType());
                     if (typeDesc) {
                         auto* pg = dataType->mutable_pg_type();
                         auto typeId = NPg::PgTypeIdFromTypeDesc(typeDesc);
@@ -1566,6 +1794,14 @@ bool FillSequenceDescription(Ydb::Table::CreateTableRequest& out, const NKikimrS
     return true;
 }
 
+bool FillSequenceDescription(Ydb::Table::DescribeTableResult& out, const NKikimrSchemeOp::TTableDescription& in, Ydb::StatusIds::StatusCode& status, TString& error) {
+    return FillSequenceDescriptionImpl(out, in, status, error);
+}
+
+bool FillSequenceDescription(Ydb::Table::CreateTableRequest& out, const NKikimrSchemeOp::TTableDescription& in, Ydb::StatusIds::StatusCode& status, TString& error) {
+    return FillSequenceDescriptionImpl(out, in, status, error);
+}
+
 bool FillSequenceDescription(NKikimrSchemeOp::TSequenceDescription& out, const Ydb::Table::SequenceDescription& in, Ydb::StatusIds::StatusCode& status, TString& error) {
     out.SetName(in.name());
     if (in.has_min_value()) {
@@ -1606,7 +1842,7 @@ bool FillSequenceDescription(NKikimrSchemeOp::TSequenceDescription& out, const Y
                 break;
             }
             case NScheme::NTypeIds::Pg: {
-                switch (NPg::PgTypeIdFromTypeDesc(typeInfo.GetTypeDesc())) {
+                switch (NPg::PgTypeIdFromTypeDesc(typeInfo.GetPgTypeDesc())) {
                     case INT2OID:
                     case INT4OID:
                     case INT8OID: {
@@ -1614,7 +1850,7 @@ bool FillSequenceDescription(NKikimrSchemeOp::TSequenceDescription& out, const Y
                         break;
                     }
                     default: {
-                        TString sequenceType = NPg::PgTypeNameFromTypeDesc(typeInfo.GetTypeDesc());
+                        TString sequenceType = NPg::PgTypeNameFromTypeDesc(typeInfo.GetPgTypeDesc());
                         status = Ydb::StatusIds::BAD_REQUEST;
                         error = Sprintf(
                             "Invalid type name %s for sequence: %s", sequenceType.c_str(), out.GetName().data()
@@ -1637,4 +1873,4 @@ bool FillSequenceDescription(NKikimrSchemeOp::TSequenceDescription& out, const Y
     return true;
 }
 
-} // namespace NKikimr
+}  // namespace NKikimr

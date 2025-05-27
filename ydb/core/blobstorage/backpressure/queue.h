@@ -31,16 +31,7 @@ class TBlobStorageQueue {
         }
     };
 
-    template<typename TDerived>
-    struct TSenderNode : public TRbTreeItem<TSenderNode<TDerived>, TCompare<TActorId>> {
-        const TActorId& GetKey() const {
-            return static_cast<const TDerived&>(*this).Event.GetSender();
-        }
-    };
-
-    struct TItem
-        : public TSenderNode<TItem>
-    {
+    struct TItem {
         EItemQueue Queue;
         TCostModel::TMessageCostEssence CostEssence;
         NWilson::TSpan Span;
@@ -103,10 +94,7 @@ class TBlobStorageQueue {
         {}
     };
 
-    using TSenderMap = TRbTree<TSenderNode<TItem>, TCompare<TActorId>>;
-
     TQueues Queues;
-    TSenderMap SenderToItems;
     THashMap<std::pair<ui64, ui64>, TItemList::iterator> InFlightLookup;
 
     ui64 WindowSize;
@@ -233,7 +221,6 @@ public:
 
         newIt->Iterator = newIt;
         SetItemQueue(*newIt, EItemQueue::Waiting);
-        SenderToItems.Insert(&*newIt);
 
         // count item
         ++*QueueItemsPut;

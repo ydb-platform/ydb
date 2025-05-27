@@ -1,5 +1,6 @@
 #include "service_maintenance.h"
 
+#include <ydb/core/base/auth.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/cms/cms.h>
 #include <ydb/core/base/domain.h>
@@ -25,24 +26,6 @@ template <typename TEvRequest, typename TEvCmsRequest, typename TEvCmsResponse>
 class TMaintenanceRPC: public TRpcRequestActor<TMaintenanceRPC<TEvRequest, TEvCmsRequest, TEvCmsResponse>, TEvRequest, true> {
     using TThis = TMaintenanceRPC<TEvRequest, TEvCmsRequest, TEvCmsResponse>;
     using TBase = TRpcRequestActor<TThis, TEvRequest, true>;
-
-    bool CheckAccess() const {
-        if (AppData()->AdministrationAllowedSIDs.empty()) {
-            return true;
-        }
-
-        if (!this->UserToken) {
-            return false;
-        }
-
-        for (const auto& sid : AppData()->AdministrationAllowedSIDs) {
-            if (this->UserToken->IsExist(sid)) {
-                return true;
-            }
-        }
-
-        return false;
-    }
 
     void SendRequest() {
         auto ev = MakeHolder<TEvCmsRequest>();
@@ -97,7 +80,7 @@ public:
     using TBase::TBase;
 
     void Bootstrap() {
-        if (!CheckAccess()) {
+        if (!IsAdministrator(AppData(), this->UserToken.Get())) {
             auto error = TStringBuilder() << "Access denied";
             if (this->UserToken) {
                 error << ": '" << this->UserToken->GetUserSID() << "' is not an admin";

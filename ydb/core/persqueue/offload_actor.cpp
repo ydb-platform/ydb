@@ -63,18 +63,18 @@ public:
     {}
 
     auto CreateReaderFactory() {
-        return [=]() -> IActor* {
+        return [=, this]() -> IActor* {
             return NBackup::NImpl::CreateLocalPartitionReader(ParentTablet, Partition);
         };
     }
 
     auto CreateWriterFactory() {
-        return [=]() -> IActor* {
+        return [=, this]() -> IActor* {
             if (Config.HasIncrementalBackup()) {
-                return NBackup::NImpl::CreateLocalTableWriter(PathIdFromPathId(Config.GetIncrementalBackup().GetDstPathId()));
+                return NBackup::NImpl::CreateLocalTableWriter(TPathId::FromProto(Config.GetIncrementalBackup().GetDstPathId()));
             } else {
                 return NBackup::NImpl::CreateLocalTableWriter(
-                    PathIdFromPathId(Config.GetIncrementalRestore().GetDstPathId()),
+                    TPathId::FromProto(Config.GetIncrementalRestore().GetDstPathId()),
                     NBackup::NImpl::EWriterType::Restore);
             }
         };

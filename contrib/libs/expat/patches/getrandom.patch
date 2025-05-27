@@ -1,0 +1,11 @@
+--- a/expat_config.h
++++ b/expat_config.h
+@@ -14,1 +14,1 @@
+-#define HAVE_ARC4RANDOM_BUF 1
++/* #undef HAVE_ARC4RANDOM_BUF */
+@@ -25,1 +25,1 @@
+-#define HAVE_GETRANDOM 1
++/* #undef HAVE_GETRANDOM */
+@@ -52,1 +52,1 @@
+-#define HAVE_SYSCALL_GETRANDOM 1
++/* #undef HAVE_SYSCALL_GETRANDOM */

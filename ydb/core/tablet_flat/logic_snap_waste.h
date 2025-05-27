@@ -14,7 +14,7 @@ namespace NSnap {
 
         TWaste(ui32 gen) : Since(ui64(gen) << 32) { }
 
-        void Describe(IOutputStream &out, bool full = false) const noexcept
+        void Describe(IOutputStream &out, bool full = false) const
         {
             out
                 << "Waste{" << NFmt::TStamp(Since) << ", " << Level << "b"

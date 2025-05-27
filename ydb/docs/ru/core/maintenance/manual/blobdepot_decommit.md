@@ -47,7 +47,7 @@ dstool -e ... --direct group decommit --group-ids 2181038080 --database=/Root/db
 * IN\_PROGRESS — производится декомиссия группы (все записи уже попадают в блобовницу, чтения — в блобовницу и в старую группу);
 * DONE — декомиссия завершена полностью.
 
-```
+```bash
 $ dstool --cluster=$CLUSTER --direct group list --virtual-groups-only
 ┌────────────┬──────────────┬───────────────┬────────────┬────────────────┬─────────────────┬──────────────┬───────────────────┬──────────────────┬───────────────────┬─────────────┬────────────────┐
 │ GroupId    │ BoxId:PoolId │ PoolName      │ Generation │ ErasureSpecies │ OperatingStatus │ VDisks_TOTAL │ VirtualGroupState │ VirtualGroupName │ BlobDepotId       │ ErrorReason │ DecommitStatus │

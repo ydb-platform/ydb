@@ -1,5 +1,4 @@
 import "ydb/core/scheme/protos/pathid.proto";
-import "ydb/core/protos/data_events.proto";
 
 package NKikimrStat;
 
@@ -14,10 +13,12 @@ message TPathEntry {
     optional uint64 RowCount = 2;
     optional uint64 BytesSize = 3;
     optional bool IsColumnTable = 4;
+    optional bool AreStatsFull = 5;
 }
 
 message TSchemeShardStats {
     repeated TPathEntry Entries = 1;
+    optional bool AreAllStatsFull = 2;
 }
 
 // SS -> SA
@@ -89,6 +90,13 @@ message TEvAnalyze {
 // SA -> KQP
 message TEvAnalyzeResponse {
     optional bytes OperationId = 1;
+
+    enum EStatus {
+        STATUS_UNSPECIFIED = 0;
+        STATUS_SUCCESS = 1;
+        STATUS_ERROR = 2;
+    }
+    optional EStatus Status = 2;    
 }
 
 // KQP -> SA
@@ -118,9 +126,9 @@ message TEvAnalyzeTable {
 
 // Shard -> SA
 message TEvAnalyzeTableResponse {
-    optional bytes OperationId = 1; 
-    optional NKikimrProto.TPathID PathId = 2; 
-    optional fixed64 ShardTabletId = 3;  
+    optional bytes OperationId = 1;
+    optional NKikimrProto.TPathID PathId = 2;
+    optional fixed64 ShardTabletId = 3;
 }
 
 
@@ -148,9 +156,8 @@ message TEvStatisticsResponse {
     enum EStatus {
         STATUS_UNSPECIFIED = 0;
         STATUS_SUCCESS = 1;
-        STATUS_PROCESSING = 2;
-        STATUS_ABORTED = 3;
-        STATUS_ERROR = 4;
+        STATUS_ABORTED = 2;
+        STATUS_ERROR = 3;
     }
     optional EStatus Status = 2;
     optional fixed64 ShardTabletId = 3;

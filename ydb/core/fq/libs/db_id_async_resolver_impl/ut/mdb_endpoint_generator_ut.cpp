@@ -11,7 +11,7 @@ Y_UNIT_TEST_SUITE(MdbEndpoingGenerator) {
             .DatabaseType = NYql::EDatabaseType::ClickHouse,
             .MdbHost = "rc1c-p5waby2y5y1kb5ue.db.yandex.net",
             .UseTls = true,
-            .Protocol = NYql::NConnector::NApi::EProtocol::HTTP,
+            .Protocol = NYql::EGenericProtocol::HTTP,
         };
 
         UNIT_ASSERT_VALUES_EQUAL(
@@ -22,7 +22,7 @@ Y_UNIT_TEST_SUITE(MdbEndpoingGenerator) {
             .DatabaseType = NYql::EDatabaseType::ClickHouse,
             .MdbHost = "ya.ru",
             .UseTls = false,
-            .Protocol = NYql::NConnector::NApi::EProtocol::HTTP,
+            .Protocol = NYql::EGenericProtocol::HTTP,
         };
 
         UNIT_ASSERT_VALUES_EQUAL(
@@ -37,7 +37,7 @@ Y_UNIT_TEST_SUITE(MdbEndpoingGenerator) {
             .DatabaseType = NYql::EDatabaseType::ClickHouse,
             .MdbHost = "rc1a-d6dv17lv47v5mcop.mdb.yandexcloud.net",
             .UseTls = true,
-            .Protocol = NYql::NConnector::NApi::EProtocol::HTTP,
+            .Protocol = NYql::EGenericProtocol::HTTP,
         };
 
         UNIT_ASSERT_VALUES_EQUAL(
@@ -48,7 +48,7 @@ Y_UNIT_TEST_SUITE(MdbEndpoingGenerator) {
             .DatabaseType = NYql::EDatabaseType::PostgreSQL,
             .MdbHost = "rc1b-eyt6dtobu96rwydq.mdb.yandexcloud.net",
             .UseTls = false,
-            .Protocol = NYql::NConnector::NApi::EProtocol::NATIVE,
+            .Protocol = NYql::EGenericProtocol::NATIVE,
         };
 
         UNIT_ASSERT_VALUES_EQUAL(
@@ -65,7 +65,7 @@ Y_UNIT_TEST_SUITE(MdbEndpoingGenerator) {
             .DatabaseType = NYql::EDatabaseType::ClickHouse,
             .MdbHost = "rc1a-d6dv17lv47v5mcop.mdb.yandexcloud.net",
             .UseTls = false,
-            .Protocol = NYql::NConnector::NApi::EProtocol::HTTP,
+            .Protocol = NYql::EGenericProtocol::HTTP,
         };
 
         UNIT_ASSERT_VALUES_EQUAL(
@@ -76,7 +76,7 @@ Y_UNIT_TEST_SUITE(MdbEndpoingGenerator) {
             .DatabaseType = NYql::EDatabaseType::ClickHouse,
             .MdbHost = "rc1a-d6dv17lv47v5mcop.mdb.yandexcloud.net",
             .UseTls = false,
-            .Protocol = NYql::NConnector::NApi::EProtocol::NATIVE,
+            .Protocol = NYql::EGenericProtocol::NATIVE,
         };
 
         UNIT_ASSERT_VALUES_EQUAL(
@@ -87,7 +87,7 @@ Y_UNIT_TEST_SUITE(MdbEndpoingGenerator) {
             .DatabaseType = NYql::EDatabaseType::ClickHouse,
             .MdbHost = "rc1a-d6dv17lv47v5mcop.mdb.yandexcloud.net",
             .UseTls = true,
-            .Protocol = NYql::NConnector::NApi::EProtocol::HTTP,
+            .Protocol = NYql::EGenericProtocol::HTTP,
         };
 
         UNIT_ASSERT_VALUES_EQUAL(
@@ -98,7 +98,7 @@ Y_UNIT_TEST_SUITE(MdbEndpoingGenerator) {
             .DatabaseType = NYql::EDatabaseType::ClickHouse,
             .MdbHost = "rc1a-d6dv17lv47v5mcop.mdb.yandexcloud.net",
             .UseTls = true,
-            .Protocol = NYql::NConnector::NApi::EProtocol::NATIVE,
+            .Protocol = NYql::EGenericProtocol::NATIVE,
         };
 
         UNIT_ASSERT_VALUES_EQUAL(
@@ -111,7 +111,7 @@ Y_UNIT_TEST_SUITE(MdbEndpoingGenerator) {
             .DatabaseType = NYql::EDatabaseType::PostgreSQL,
             .MdbHost = "rc1b-eyt6dtobu96rwydq.mdb.yandexcloud.net",
             .UseTls = true,
-            .Protocol = NYql::NConnector::NApi::EProtocol::NATIVE,
+            .Protocol = NYql::EGenericProtocol::NATIVE,
         };
 
         UNIT_ASSERT_VALUES_EQUAL(

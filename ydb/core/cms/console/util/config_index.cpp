@@ -701,6 +701,15 @@ const THashMap<TActorId, TInMemorySubscription::TPtr> &TInMemorySubscriptionInde
     return Subscriptions;
 }
 
+const TInMemorySubscriptionSet *TInMemorySubscriptionIndex::GetSubscriptions(const TString& path) const
+{
+    if (auto it = SubscriptionsByTenant.find(path); it != SubscriptionsByTenant.end()) {
+        return &(it->second);
+    }
+
+    return nullptr;
+}
+
 void TInMemorySubscriptionIndex::AddSubscription(TInMemorySubscription::TPtr subscription)
 {
     Y_ABORT_UNLESS(!Subscriptions.contains(subscription->Subscriber));

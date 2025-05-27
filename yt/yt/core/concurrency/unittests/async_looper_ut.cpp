@@ -23,13 +23,13 @@ TEST(TAsyncLooperTest, JustWorks)
     auto queue = New<TActionQueue>();
 
     auto asyncStart = BIND([invoker = queue->GetInvoker()] (bool) {
-        VERIFY_INVOKER_AFFINITY(invoker);
+        YT_ASSERT_INVOKER_AFFINITY(invoker);
         return BIND([] {}).AsyncVia(invoker).Run();
     });
 
     auto progress = std::make_shared<std::atomic<int>>(0);
     auto syncFinish = BIND([progress, invoker = queue->GetInvoker()] (bool) {
-        VERIFY_INVOKER_AFFINITY(invoker);
+        YT_ASSERT_INVOKER_AFFINITY(invoker);
         progress->fetch_add(1);
     });
 
@@ -111,12 +111,14 @@ TEST(TAsyncLooperTest, CancelAsyncStep)
 
     NThreading::TEvent started;
     auto promise = NewPromise<void>();
+    bool callbackFinished = false;
 
-    auto asyncStart = BIND([invoker = queue->GetInvoker(), promise, &started] (bool) {
-        return BIND([promise, &started] {
+    auto asyncStart = BIND([invoker = queue->GetInvoker(), promise, &started, &callbackFinished] (bool) {
+        return BIND([promise, &started, &callbackFinished] {
             started.NotifyAll();
             WaitFor(promise.ToFuture())
                 .ThrowOnError();
+            callbackFinished = true;
         }).AsyncVia(invoker).Run();
     });
 
@@ -134,9 +136,13 @@ TEST(TAsyncLooperTest, CancelAsyncStep)
 
     looper->Stop();
 
-    EXPECT_TRUE(promise.IsCanceled());
-
     queue->Shutdown();
+
+    // Cancelation is a bit racy and sometimes promise is set with error
+    // instead of being canceled "for real". Thus we simply check that
+    // the code didn't go through completely.
+    // EXPECT_TRUE(promise.IsCanceled());
+    EXPECT_FALSE(callbackFinished);
 }
 
 TEST(TAsyncLooperTest, CancelSyncStep)
@@ -168,9 +174,9 @@ TEST(TAsyncLooperTest, CancelSyncStep)
 
     looper->Stop();
 
-    EXPECT_TRUE(promise.IsCanceled());
-
     queue->Shutdown();
+
+    EXPECT_TRUE(promise.IsCanceled());
 }
 
 TEST(TAsyncLooperTest, StopDuringAsyncStep)

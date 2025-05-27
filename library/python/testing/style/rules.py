@@ -16,7 +16,7 @@ def _path_skip_reason(path, skip_links=True):
     if '/generated/' in path:
         return "path '{}' contains '/generated/'".format(path)
 
-    if path and '/contrib/' in path:
+    if path and '/contrib/' in path and '/.yandex_meta/' not in path:
         return "path '{}' contains '/contrib/'".format(path)
 
     if path and '/vendor/' in path:
@@ -34,7 +34,7 @@ def _content_skip_reason(path, data):
         '# DO_NOT_STYLE',
         '// DO_NOT_STYLE',
         'THIS SOFTWARE',
-        'WITHOUT WARRANTY',
+        'WITHOUT WARRANT',  # WARRANTY, WARRANTIES
     ]:
         if substr in data:
             return "file '{}' contains '{}'".format(path, substr)

@@ -13,10 +13,9 @@ TString PrepareData(ui32 size, ui32 flavor = 0);
 TString StatusToString(const NKikimrProto::EReplyStatus status);
 TString MakeDatabasePath(const char *dir);
 TString MakePDiskPath(const char *dir);
+TString CreateFile(const char *baseDir, ui32 dataSize);
 void FormatPDiskForTest(TString path, ui64 guid, ui32& chunkSize, ui64 diskSize, bool isErasureEncodeUserLog,
-        TIntrusivePtr<NPDisk::TSectorMap> sectorMap, bool enableSmallDiskOptimization = false);
-void FormatPDiskForTest(TString path, ui64 guid, ui32& chunkSize, bool isErasureEncodeUserLog,
-        TIntrusivePtr<NPDisk::TSectorMap> sectorMap, bool enableSmallDiskOptimization = false);
+        TIntrusivePtr<NPDisk::TSectorMap> sectorMap, bool enableSmallDiskOptimization = false, bool plainDataChunks = false);
 
 void ReadPdiskFile(TTestContext *tc, ui32 dataSize, NPDisk::TAlignedData &outData);
 i64 FindLastDifferingBytes(NPDisk::TAlignedData &dataBefore, NPDisk::TAlignedData &dataAfter, ui32 dataSize);

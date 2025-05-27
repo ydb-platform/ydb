@@ -1,0 +1,19 @@
+(
+#comment
+(let config (DataSource 'config))
+
+(let res_sink (DataSink 'result))
+(let ed (Dict (DictType (DataType 'Int32) (DataType 'String))))
+(let data (Lookup ed (Int32 '0)))
+(let world (Write! world res_sink (Key) data '('('type))))
+(let data (Contains ed (Int32 '0)))
+(let world (Write! world res_sink (Key) data '('('type))))
+(let data (DictItems ed))
+(let world (Write! world res_sink (Key) data '('('type))))
+(let data (DictKeys ed))
+(let world (Write! world res_sink (Key) data '('('type))))
+(let data (DictPayloads ed))
+(let world (Write! world res_sink (Key) data '('('type))))
+(let world (Commit! world res_sink))
+(return world)
+)

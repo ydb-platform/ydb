@@ -175,7 +175,7 @@ static int test_update_no_table(void)
 	ret = cqe->res;
 	io_uring_cqe_seen(&ring, cqe);
 	if (ret != -EMFILE && ret != -EINVAL && ret != -EOVERFLOW &&
-	    ret != -ENXIO) {
+	    ret != -ENXIO && ret != -EBADF) {
 		fprintf(stderr, "Bad cqe res: %d\n", ret);
 		goto fail;
 	}

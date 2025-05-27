@@ -2,10 +2,10 @@
 
 #include "yql_dq_gateway.h"
 
-#include <ydb/library/yql/providers/common/metrics/metrics_registry.h>
-#include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
+#include <yql/essentials/providers/common/metrics/metrics_registry.h>
+#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node.h>
 
 #include <library/cpp/threading/future/async_semaphore.h>
 #include <util/generic/ptr.h>

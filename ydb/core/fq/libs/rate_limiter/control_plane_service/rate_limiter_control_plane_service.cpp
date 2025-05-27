@@ -14,6 +14,9 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
 
+#include <ydb/public/sdk/cpp/adapters/issue/issue.h>
+
+
 #include <deque>
 #include <variant>
 
@@ -185,7 +188,7 @@ private:
                 originalRequest->Sender,
                 new TEvRateLimiter::TEvCreateResourceResponse(
                     RateLimiterPath,
-                    ev->Get()->Result.GetIssues()
+                    NYdb::NAdapters::ToYqlIssues(ev->Get()->Result.GetIssues())
                 ),
                 0, // flags
                 originalRequest->Cookie
@@ -194,7 +197,7 @@ private:
             NActors::TActivationContext::AsActorContext().Send(
                 originalRequest->Sender,
                 new TEvRateLimiter::TEvCreateResourceResponse(
-                    ev->Get()->Result.GetIssues()
+                    NYdb::NAdapters::ToYqlIssues(ev->Get()->Result.GetIssues())
                 ),
                 0, // flags
                 originalRequest->Cookie
@@ -208,7 +211,7 @@ private:
             originalRequest->Sender,
             new TEvRateLimiter::TEvDeleteResourceResponse(
                 ev->Get()->Result.IsSuccess(),
-                ev->Get()->Result.GetIssues()
+                NYdb::NAdapters::ToYqlIssues(ev->Get()->Result.GetIssues())
             ),
             0, // flags
             originalRequest->Cookie
@@ -238,7 +241,7 @@ private:
         }
         // Special case: when resource os already created, but have its quota altered manually
         if (ev->Get()->Result.GetStatus() == NYdb::EStatus::BAD_REQUEST) {
-            for (const NYql::TIssue& i : ev->Get()->Result.GetIssues()) {
+            for (const auto& i : ev->Get()->Result.GetIssues()) {
                 if (i.GetMessage().find("Resource already exists") != TString::npos) {
                     return true;
                 }

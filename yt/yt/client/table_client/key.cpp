@@ -1,5 +1,6 @@
 #include "key.h"
 
+#include "private.h"
 #include "serialize.h"
 
 #include <yt/yt/core/ytree/fluent.h>
@@ -12,8 +13,8 @@ using namespace NYson;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-//! Used only for YT_LOG_FATAL below.
-YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "TableClientKey");
+//! Used only for YT_LOG_FATAL below in debug mode.
+[[maybe_unused]] constinit const auto Logger = TableClientLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 

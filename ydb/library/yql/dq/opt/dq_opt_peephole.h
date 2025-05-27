@@ -4,7 +4,7 @@
 
 #include <ydb/library/yql/dq/common/dq_common.h>
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
-#include <ydb/library/yql/core/yql_type_annotation.h>
+#include <yql/essentials/core/yql_type_annotation.h>
 
 namespace NYql::NDq {
 

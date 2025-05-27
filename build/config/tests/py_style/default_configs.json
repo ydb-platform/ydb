@@ -1,0 +1,7 @@
+{
+    "black": "build/config/tests/py_style/pyproject.toml",
+    "dummy_linter": "build/config/tests/py_style/dummy_linter_config.json",
+    "flake8": "build/config/tests/flake8/flake8.conf",
+    "py2_flake8": "build/config/tests/flake8/flake8.conf",
+    "ruff": "build/config/tests/ruff/ruff.toml"
+}

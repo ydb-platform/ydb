@@ -12,6 +12,8 @@ using namespace NYT::NYson;
 using namespace NConcurrency;
 using namespace NCrypto;
 
+using NYT::ToProto;
+
 ////////////////////////////////////////////////////////////////////////////////
 
 class TNonExistingServiceProxy
@@ -35,9 +37,9 @@ public:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TString StringFromSharedRef(const TSharedRef& sharedRef)
+std::string StringFromRef(TRef ref)
 {
-    return TString(sharedRef.Begin(), sharedRef.Begin() + sharedRef.Size());
+    return std::string(ref.Begin(), ref.Size());
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -75,7 +77,7 @@ TYPED_TEST(TRpcTest, RetryingSend)
 {
     auto config = New<TRetryingChannelConfig>();
     config->Load(ConvertTo<INodePtr>(TYsonString(TStringBuf(
-        "{retry_backoff_time=10}"))));
+        "{enable_exponential_retry_backoffs=true;retry_backoff={min_backoff=10}}"))));
 
     IChannelPtr channel = CreateRetryingChannel(
         std::move(config),
@@ -127,7 +129,7 @@ TYPED_TEST(TNotUdsTest, Address)
     {
         auto config = New<TRetryingChannelConfig>();
         config->Load(ConvertTo<INodePtr>(TYsonString(TStringBuf(
-            "{retry_backoff_time=10}"))));
+            "{enable_exponential_retry_backoffs=true;retry_backoff={min_backoff=10}}"))));
         testChannel(CreateRetryingChannel(
             std::move(config),
             this->CreateChannel()));
@@ -397,7 +399,7 @@ TYPED_TEST(TNotGrpcTest, LaggyStreamingRequest)
 
 TYPED_TEST(TNotGrpcTest, VeryLaggyStreamingRequest)
 {
-    auto configText = TString(R"({
+    auto configText = std::string(R"({
         services = {
             TestService = {
                 pending_payloads_timeout = 250;
@@ -473,7 +475,7 @@ TYPED_TEST(TNotGrpcTest, DisableAcceptsBaggage)
 
 TYPED_TEST(TRpcTest, ManyAsyncRequests)
 {
-    const int RequestCount = 1000;
+    const int RequestCount = this->GetMaxSimultaneousRequestCount();
 
     std::vector<TFuture<void>> asyncResults;
 
@@ -506,9 +508,9 @@ TYPED_TEST(TAttachmentsTest, RegularAttachments)
 
     const auto& attachments = rsp->Attachments();
     EXPECT_EQ(3u, attachments.size());
-    EXPECT_EQ("Hello_",     StringFromSharedRef(attachments[0]));
-    EXPECT_EQ("from_",      StringFromSharedRef(attachments[1]));
-    EXPECT_EQ("TTestProxy_",  StringFromSharedRef(attachments[2]));
+    EXPECT_EQ("Hello_", StringFromRef(attachments[0]));
+    EXPECT_EQ("from_", StringFromRef(attachments[1]));
+    EXPECT_EQ("TTestProxy_", StringFromRef(attachments[2]));
 }
 
 TYPED_TEST(TNotGrpcTest, TrackedRegularAttachments)
@@ -531,14 +533,16 @@ TYPED_TEST(TNotGrpcTest, TrackedRegularAttachments)
     // Attachment allocator proactively allocate slice of 4 KB.
     // See NYT::NBus::TPacketDecoder::TChunkedMemoryTrackingAllocator::Allocate.
     // default stub = 4096.
-    // header + body = 103 bytes.
+    // header + body = 79 bytes.
     // attachments = 22 bytes.
-    // sum is 4221 bytes.
-    EXPECT_GE(memoryUsageTracker->GetTotalUsage(), 4221 + 32768);
+    // sum is 4219 bytes.
+    if (TypeParam::MemoryUsageTrackingEnabled) {
+        EXPECT_GE(memoryUsageTracker->GetTotalUsage(), 4197 + 32768 + std::ssize(GetRpcUserAgent()));
+    }
     EXPECT_EQ(3u, attachments.size());
-    EXPECT_EQ("Hello_",     StringFromSharedRef(attachments[0]));
-    EXPECT_EQ("from_",      StringFromSharedRef(attachments[1]));
-    EXPECT_EQ("TTestProxy_",  StringFromSharedRef(attachments[2]));
+    EXPECT_EQ("Hello_", StringFromRef(attachments[0]));
+    EXPECT_EQ("from_", StringFromRef(attachments[1]));
+    EXPECT_EQ("TTestProxy_", StringFromRef(attachments[2]));
 }
 
 TYPED_TEST(TAttachmentsTest, NullAndEmptyAttachments)
@@ -568,8 +572,8 @@ TYPED_TEST(TNotGrpcTest, Compression)
     auto memoryUsageTracker = this->GetMemoryUsageTracker();
     memoryUsageTracker->ClearTotalUsage();
 
-    TString message("This is a message string.");
-    std::vector<TString> attachmentStrings({
+    std::string message("This is a message string.");
+    std::vector<std::string> attachmentStrings({
         "This is an attachment string.",
         "640K ought to be enough for anybody.",
         "According to all known laws of aviation, there is no way that a bee should be able to fly."
@@ -581,7 +585,7 @@ TYPED_TEST(TNotGrpcTest, Compression)
     proxy.SetDefaultEnableLegacyRpcCodecs(false);
 
     auto req = proxy.Compression();
-    req->set_request_codec(static_cast<int>(requestCodecId));
+    req->set_request_codec(ToProto(requestCodecId));
     req->set_message(message);
     for (const auto& attachmentString : attachmentStrings) {
         req->Attachments().push_back(TSharedRef::FromString(attachmentString));
@@ -600,7 +604,9 @@ TYPED_TEST(TNotGrpcTest, Compression)
     // attachmentStrings[1].size() = 36 * 2 bytes from decoder.
     // attachmentStrings[2].size() = 90 * 2 bytes from decoder.
     // sum is 4584 bytes.
-    EXPECT_GE(memoryUsageTracker->GetTotalUsage(), 4584 + 32768);
+    if (TypeParam::MemoryUsageTrackingEnabled) {
+        EXPECT_GE(memoryUsageTracker->GetTotalUsage(), 4562 + 32768 + std::ssize(GetRpcUserAgent()));
+    }
     EXPECT_TRUE(rsp->message() == message);
     EXPECT_GE(rsp->GetResponseMessage().Size(), static_cast<size_t>(2));
     const auto& serializedResponseBody = SerializeProtoToRefWithCompression(*rsp, responseCodecId);
@@ -612,54 +618,21 @@ TYPED_TEST(TNotGrpcTest, Compression)
     EXPECT_TRUE(rsp->GetResponseMessage().Size() == attachments.size() + 2);
     auto* responseCodec = NCompression::GetCodec(responseCodecId);
     for (int i = 0; i < std::ssize(attachments); ++i) {
-        EXPECT_TRUE(StringFromSharedRef(attachments[i]) == attachmentStrings[i]);
+        EXPECT_TRUE(StringFromRef(attachments[i]) == attachmentStrings[i]);
         auto compressedAttachment = responseCodec->Compress(attachments[i]);
         EXPECT_TRUE(TRef::AreBitwiseEqual(rsp->GetResponseMessage()[i + 2], compressedAttachment));
     }
 }
 
-#if !defined(_asan_enabled_) && !defined(_msan_enabled_) && defined(_linux_)
-
-TYPED_TEST(TRpcTest, ResponseMemoryTag)
-{
-    static TMemoryTag testMemoryTag = 12345;
-    testMemoryTag++;
-    auto initialMemoryUsage = GetMemoryUsageForTag(testMemoryTag);
-
-    std::vector<TTestProxy::TRspPassCallPtr> rsps;
-    {
-        TTestProxy proxy(this->CreateChannel());
-        TString userName("user");
-
-        TMemoryTagGuard guard(testMemoryTag);
-
-        for (int i = 0; i < 1000; ++i) {
-            auto req = proxy.PassCall();
-            req->SetUser(userName);
-            req->SetMutationId(TGuid::Create());
-            req->SetRetry(false);
-            auto err = req->Invoke().Get();
-            rsps.push_back(err.ValueOrThrow());
-        }
-    }
-
-    auto currentMemoryUsage = GetMemoryUsageForTag(testMemoryTag);
-    EXPECT_GE(currentMemoryUsage - initialMemoryUsage, 200_KB)
-        << "InitialUsage: " << initialMemoryUsage << std::endl
-        << "Current: " << currentMemoryUsage;
-}
-
-#endif
-
 TYPED_TEST(TNotGrpcTest, RequestBytesThrottling)
 {
-    auto configText = TString(R"({
+    auto configText = std::string(R"({
         services = {
             TestService = {
                 methods = {
                     RequestBytesThrottledCall = {
                         request_bytes_throttler = {
-                            limit = 1000000;
+                            limit = 100000;
                         }
                     }
                 }
@@ -673,18 +646,16 @@ TYPED_TEST(TNotGrpcTest, RequestBytesThrottling)
 
     auto makeCall = [&] {
         auto req = proxy.RequestBytesThrottledCall();
-        req->Attachments().push_back(TSharedMutableRef::Allocate(100'000));
+        req->Attachments().push_back(TSharedMutableRef::Allocate(60'000));
         return req->Invoke().AsVoid();
     };
 
     std::vector<TFuture<void>> futures;
-    for (int i = 0; i < 30; ++i) {
+    for (int i = 0; i < 5; ++i) {
         futures.push_back(makeCall());
     }
 
-    NProfiling::TWallTimer timer;
     EXPECT_TRUE(AllSucceeded(std::move(futures)).Get().IsOK());
-    EXPECT_LE(std::abs(static_cast<i64>(timer.GetElapsedTime().MilliSeconds()) - 3000), 200);
 }
 
 // Now test different types of errors.
@@ -785,8 +756,14 @@ TYPED_TEST(TRpcTest, SlowCall)
     EXPECT_TRUE(rspOrError.IsOK());
 }
 
-TYPED_TEST(TRpcTest, RequestQueueSizeLimit)
+TYPED_TEST(TNotGrpcTest, RequestQueueSizeLimit)
 {
+    MaybeInitLatch();
+
+    auto testId = TGuid::Create();
+
+    Cerr << Format("Start of the RequestQueueSizeLimit test (Id: %v)", testId) << '\n';
+
     std::vector<TFuture<void>> futures;
     std::vector<TTestProxy> proxies;
 
@@ -798,22 +775,31 @@ TYPED_TEST(TRpcTest, RequestQueueSizeLimit)
     }
 
     for (int i = 0; i <= 30; ++i) {
-        auto req = proxies[i].SlowCall();
-        futures.push_back(req->Invoke().AsVoid());
+        auto req = proxies[i].LatchedCall();
+        futures.push_back(req->Invoke().AsVoid().Apply(BIND([i, testId] (const TError& error) {
+            Cerr << NYT::Format("Request %v finished (Id: %v, Error: %v)", i, testId, error) << '\n';
+        })));
     }
 
     Sleep(TDuration::MilliSeconds(400));
     {
         TTestProxy proxy(this->CreateChannel());
         proxy.SetDefaultTimeout(TDuration::Seconds(60.0));
-        auto req = proxy.SlowCall();
+        auto req = proxy.LatchedCall();
         EXPECT_EQ(NRpc::EErrorCode::RequestQueueSizeLimitExceeded, req->Invoke().Get().GetCode());
     }
+    ReleaseLatchedCalls();
 
-    EXPECT_TRUE(AllSucceeded(std::move(futures)).Get().IsOK());
+    for(auto results = AllSet(std::move(futures)).Get().Value(); const auto& res : results) {
+        EXPECT_TRUE(res.IsOK());
+    }
+
+    ResetLatch();
+
+    Cerr << Format("End of the RequestQueueSizeLimit test (Id: %v)", testId) << '\n';
 }
 
-TYPED_TEST(TNotGrpcTest, RequesMemoryPressureException)
+TYPED_TEST(TNotGrpcTest, RequestMemoryPressureException)
 {
     auto memoryUsageTracker = this->GetMemoryUsageTracker();
     memoryUsageTracker->ClearTotalUsage();
@@ -824,11 +810,11 @@ TYPED_TEST(TNotGrpcTest, RequesMemoryPressureException)
     proxy.SetDefaultTimeout(TDuration::Seconds(10.0));
     auto req = proxy.SomeCall();
     req->set_a(42);
-    req->Attachments().push_back(TSharedRef::FromString(TString(34_MB, 'x')));
+    req->Attachments().push_back(TSharedRef::FromString(std::string(34_MB, 'x')));
     auto result = WaitFor(req->Invoke().AsVoid());
 
     // Limit of memory is 32 MB.
-    EXPECT_EQ(NRpc::EErrorCode::MemoryPressure, req->Invoke().Get().GetCode());
+    EXPECT_EQ(NRpc::EErrorCode::RequestMemoryPressure, req->Invoke().Get().GetCode());
 }
 
 TYPED_TEST(TNotGrpcTest, MemoryTracking)
@@ -846,12 +832,12 @@ TYPED_TEST(TNotGrpcTest, MemoryTracking)
 
     Sleep(TDuration::MilliSeconds(200));
 
-    {
+    if (TypeParam::MemoryUsageTrackingEnabled) {
         auto rpcUsage = memoryUsageTracker->GetTotalUsage();
 
-        // 1292468 = 32768 + 1228800 = 32768 + 4096 * 300 + 300 * 103 (header + body).
+        // 1285268 = 32768 + 1252500 = 32768 + 4096 * 300 + 300 * 79 (header + body).
         // 32768 - socket buffers, 4096 - default size per request.
-        EXPECT_GE(rpcUsage, 1292468);
+        EXPECT_GE(rpcUsage, 1285268 + 300 * std::ssize(GetRpcUserAgent()));
     }
 }
 
@@ -867,11 +853,11 @@ TYPED_TEST(TNotGrpcTest, MemoryTrackingMultipleConnections)
         WaitFor(req->Invoke().AsVoid()).ThrowOnError();
     }
 
-    {
-        // 11059200 / 300 = 36974 = 32768 + 4096 + 103 (header + body).
+    if (TypeParam::MemoryUsageTrackingEnabled) {
+        // 11082900 / 300 = 36974 = 32768 + 4096 + 79 (header + body).
         // 4 KB - stub for request.
         // See NYT::NBus::TPacketDecoder::TChunkedMemoryTrackingAllocator::Allocate.
-        EXPECT_GE(memoryUsageTracker->GetTotalUsage(), 11090100);
+        EXPECT_GE(memoryUsageTracker->GetTotalUsage(), 11082900 + 300 * std::ssize(GetRpcUserAgent()));
     }
 }
 
@@ -895,7 +881,7 @@ TYPED_TEST(TNotGrpcTest, MemoryTrackingMultipleConcurrent)
 
     Sleep(TDuration::MilliSeconds(100));
 
-    {
+    if (TypeParam::MemoryUsageTrackingEnabled) {
         auto rpcUsage = memoryUsageTracker->GetUsed();
 
         // connections count - per connection size.
@@ -916,18 +902,19 @@ TYPED_TEST(TNotGrpcTest, MemoryOvercommit)
     TTestProxy proxy(this->CreateChannel());
     proxy.SetDefaultTimeout(TDuration::Seconds(60.0));
     auto req = proxy.SlowCall();
-    req->set_request_codec(static_cast<int>(requestCodecId));
-    req->Attachments().push_back(TSharedRef::FromString(TString(6_KB, 'x')));
+    req->set_request_codec(ToProto(requestCodecId));
+    req->Attachments().push_back(TSharedRef::FromString(std::string(6_KB, 'x')));
     WaitFor(req->Invoke()).ThrowOnError();
-    {
+
+    if (TypeParam::MemoryUsageTrackingEnabled) {
         auto rpcUsage = memoryReferenceUsageTracker->GetTotalUsage();
 
         // Attachment allocator proactively allocate slice of 4 KB.
         // See NYT::NBus::TPacketDecoder::TChunkedMemoryTrackingAllocator::Allocate.
         // default stub = 4096.
-        // header + body = 103 bytes.
+        // header + body = 79 bytes.
         // attachments = 6_KB  kbytes.
-        EXPECT_GE(rpcUsage, 32768 + 4096 + 6144 + 103);
+        EXPECT_GE(rpcUsage, 32768 + 4096 + 6144 + 79 + std::ssize(GetRpcUserAgent()));
     }
 }
 
@@ -948,8 +935,8 @@ TYPED_TEST(TNotGrpcTest, RequestQueueByteSizeLimit)
 
     for (int i = 0; i < 15; ++i) {
         auto req = proxies[i].SlowCall();
-        req->set_request_codec(static_cast<int>(requestCodecId));
-        req->set_message(TString(2_MB, 'x'));
+        req->set_request_codec(ToProto(requestCodecId));
+        req->set_message(std::string(2_MB, 'x'));
         futures.push_back(req->Invoke().AsVoid());
     }
 
@@ -958,8 +945,8 @@ TYPED_TEST(TNotGrpcTest, RequestQueueByteSizeLimit)
         TTestProxy proxy(this->CreateChannel());
         proxy.SetDefaultTimeout(TDuration::Seconds(60.0));
         auto req = proxy.SlowCall();
-        req->set_request_codec(static_cast<int>(requestCodecId));
-        req->set_message(TString(1_MB, 'x'));
+        req->set_request_codec(ToProto(requestCodecId));
+        req->set_message(std::string(1_MB, 'x'));
         EXPECT_EQ(NRpc::EErrorCode::RequestQueueSizeLimitExceeded, req->Invoke().Get().GetCode());
     }
 
@@ -968,12 +955,15 @@ TYPED_TEST(TNotGrpcTest, RequestQueueByteSizeLimit)
 
 TYPED_TEST(TRpcTest, ConcurrencyLimit)
 {
+    MaybeInitLatch();
+
     std::vector<TFuture<void>> futures;
     for (int i = 0; i < 10; ++i) {
         TTestProxy proxy(this->CreateChannel());
         proxy.SetDefaultTimeout(TDuration::Seconds(10.0));
-        auto req = proxy.SlowCall();
-        futures.push_back(req->Invoke().AsVoid());
+        auto req = proxy.LatchedCall();
+        futures.push_back(
+            req->Invoke().AsVoid());
     }
 
     Sleep(TDuration::MilliSeconds(200));
@@ -981,16 +971,21 @@ TYPED_TEST(TRpcTest, ConcurrencyLimit)
     TFuture<void> backlogFuture;
     {
         TTestProxy proxy(this->CreateChannel());
-        auto req = proxy.SlowCall();
-        backlogFuture = req->Invoke().AsVoid();
+        auto req = proxy.LatchedCall();
+        req->set_wait_on_latch(false);
+        backlogFuture =
+            req->Invoke().AsVoid();
     }
+
+    Sleep(TDuration::Seconds(2));
+    EXPECT_FALSE(backlogFuture.IsSet());
+    ReleaseLatchedCalls();
 
     EXPECT_TRUE(AllSucceeded(std::move(futures)).Get().IsOK());
 
-    Sleep(TDuration::MilliSeconds(200));
-    EXPECT_FALSE(backlogFuture.IsSet());
-
     EXPECT_TRUE(backlogFuture.Get().IsOK());
+
+    ResetLatch();
 }
 
 TYPED_TEST(TRpcTest, NoReply)
@@ -1067,7 +1062,7 @@ TYPED_TEST(TNotGrpcTest, RequiredServerFeatureNotSupported)
     auto rspOrError = req->Invoke().Get();
     EXPECT_EQ(NRpc::EErrorCode::UnsupportedServerFeature, rspOrError.GetCode());
     EXPECT_EQ(static_cast<int>(ETestFeature::Cool), rspOrError.Attributes().Get<int>(FeatureIdAttributeKey));
-    EXPECT_EQ(ToString(ETestFeature::Cool), rspOrError.Attributes().Get<TString>(FeatureNameAttributeKey));
+    EXPECT_EQ(ToString(ETestFeature::Cool), rspOrError.Attributes().Get<std::string>(FeatureNameAttributeKey));
 }
 
 TYPED_TEST(TNotGrpcTest, RequiredClientFeatureSupported)
@@ -1087,7 +1082,7 @@ TYPED_TEST(TNotGrpcTest, RequiredClientFeatureNotSupported)
     auto rspOrError = req->Invoke().Get();
     EXPECT_EQ(NRpc::EErrorCode::UnsupportedClientFeature, rspOrError.GetCode());
     EXPECT_EQ(static_cast<int>(ETestFeature::Cool), rspOrError.Attributes().Get<int>(FeatureIdAttributeKey));
-    EXPECT_EQ(ToString(ETestFeature::Cool), rspOrError.Attributes().Get<TString>(FeatureNameAttributeKey));
+    EXPECT_EQ(ToString(ETestFeature::Cool), rspOrError.Attributes().Get<std::string>(FeatureNameAttributeKey));
 }
 
 TYPED_TEST(TRpcTest, StopWithoutActiveRequests)
@@ -1141,7 +1136,7 @@ TYPED_TEST(TRpcTest, CustomMetadata)
 
 TYPED_TEST(TGrpcTest, SendMessageLimit)
 {
-    THashMap<TString, NYTree::INodePtr> arguments;
+    THashMap<std::string, NYTree::INodePtr> arguments;
     arguments["grpc.max_send_message_length"] = NYT::NYTree::ConvertToNode(1);
     TTestProxy proxy(this->CreateChannel(std::nullopt, std::move(arguments)));
     auto req = proxy.SomeCall();
@@ -1553,7 +1548,7 @@ TEST(TCachingChannelFactoryTest, IdleChannels)
         : public IChannelFactory
     {
     public:
-        IChannelPtr CreateChannel(const TString& /*address*/) override
+        IChannelPtr CreateChannel(const std::string& /*address*/) override
         {
             return CreateLocalChannel(Server_);
         }

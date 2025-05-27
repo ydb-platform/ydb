@@ -31,7 +31,7 @@ TDirectTxErase::EStatus TDirectTxErase::CheckedExecute(
     }
 
     const TUserTable& tableInfo = *self->GetUserTables().at(tableId);
-    Y_ABORT_UNLESS(tableInfo.LocalTid == localTableId);
+    Y_ENSURE(tableInfo.LocalTid == localTableId);
 
     if (request.GetSchemaVersion() && tableInfo.GetTableSchemaVersion()
         && request.GetSchemaVersion() != tableInfo.GetTableSchemaVersion()) {
@@ -94,22 +94,17 @@ TDirectTxErase::EStatus TDirectTxErase::CheckedExecute(
 
         if (keyCells.GetCells().size() != tableInfo.KeyColumnTypes.size()) {
             status = NKikimrTxDataShard::TEvEraseRowsResponse::SCHEME_ERROR;
-            error = "Cell count doesn't match row scheme";
+            error = TStringBuilder() << "Cell count doesn't match row scheme"
+                    << ": got " << keyCells.GetCells().size()
+                    << ", expected " << tableInfo.KeyColumnTypes.size();
             return EStatus::Error;
         }
 
         ui64 keyBytes = 0;
         TVector<TRawTypeValue> key;
         for (size_t ki : xrange(tableInfo.KeyColumnTypes.size())) {
-            const auto& kt = tableInfo.KeyColumnTypes[ki];
+            const NScheme::TTypeId kt = tableInfo.KeyColumnTypes[ki].GetTypeId();
             const TCell& cell = keyCells.GetCells()[ki];
-
-            if (kt.GetTypeId() == NScheme::NTypeIds::Uint8 && !cell.IsNull() && cell.AsValue<ui8>() > 127) {
-                status = NKikimrTxDataShard::TEvEraseRowsResponse::BAD_REQUEST;
-                error = "Keys with Uint8 column values >127 are currently prohibited";
-                return EStatus::Error;
-            }
-
             keyBytes += cell.Size();
             key.emplace_back(TRawTypeValue(cell.AsRef(), kt));
         }
@@ -231,7 +226,7 @@ bool TDirectTxErase::CheckRequest(TDataShard* self, const NKikimrTxDataShard::TE
     case EStatus::Error:
         return false;
     case EStatus::PageFault:
-        Y_ABORT("Unexpected");
+        Y_ENSURE(false, "Unexpected");
     }
 }
 
@@ -270,7 +265,7 @@ bool TDirectTxErase::Execute(TDataShard* self, TTransactionContext& txc,
 }
 
 TDirectTxResult TDirectTxErase::GetResult(TDataShard* self) {
-    Y_ABORT_UNLESS(Result);
+    Y_ENSURE(Result);
 
     if (Result->Record.GetStatus() == NKikimrTxDataShard::TEvEraseRowsResponse::OK) {
         self->IncCounter(COUNTER_ERASE_ROWS_SUCCESS);

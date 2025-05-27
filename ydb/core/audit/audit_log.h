@@ -17,7 +17,7 @@
         }                                                                                                                       \
     } while (0) /**/
 
-#define AUDIT_LOG(expr) AUDIT_LOG_S((::NActors::TlsActivationContext->ExecutorThread.ActorSystem), expr)
+#define AUDIT_LOG(expr) AUDIT_LOG_S((::NActors::TActivationContext::ActorSystem()), expr)
 
 #define AUDIT_PART_NO_COND(key, value) AUDIT_PART_COND(key, value, true)
 #define AUDIT_PART_COND(key, value, condition)                                                                                    \
@@ -36,8 +36,10 @@ namespace NActors {
 
 namespace NKikimr::NAudit {
 
+using TAuditLogParts = TVector<std::pair<TString, TString>>;
+
 extern std::atomic<bool> AUDIT_LOG_ENABLED;
 
-void SendAuditLog(const NActors::TActorSystem* sys, TVector<std::pair<TString, TString>>&& parts);
+void SendAuditLog(const NActors::TActorSystem* sys, TAuditLogParts&& parts);
 
 }   // namespace NKikimr::NAudit

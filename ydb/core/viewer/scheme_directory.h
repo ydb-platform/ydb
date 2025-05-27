@@ -6,11 +6,6 @@
 
 namespace NKikimr::NViewer {
 
-class TSchemeDirectory : public IActor {
-public:
-    TSchemeDirectory(IViewer*, NMon::TEvHttpInfo::TPtr&) {}
-};
-
 using TSchemeDirectoryGetRpc = TJsonLocalRpc<Ydb::Scheme::ListDirectoryRequest,
                                              Ydb::Scheme::ListDirectoryResponse,
                                              Ydb::Scheme::ListDirectoryResult,
@@ -32,41 +27,35 @@ using TSchemeDirectoryDeleteRpc = TJsonLocalRpc<Ydb::Scheme::RemoveDirectoryRequ
 
 template<typename LocalRpcType>
 class TSchemeDirectoryRequest : public LocalRpcType {
-public:
+protected:
     using TBase = LocalRpcType;
+    using TRequestProtoType = TBase::TRequestProtoType;
+    using TBase::Database;
 
+public:
     TSchemeDirectoryRequest(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
         : TBase(viewer, ev)
     {}
 
-    void Bootstrap() override {
-        if (!TBase::PostToRequest()) {
-            return;
+    bool ValidateRequest(TRequestProtoType& request) override {
+        if (TBase::ValidateRequest(request)) {
+            if (Database && request.path()) {
+                TString path = request.path();
+                if (!path.empty() && path[0] != '/') {
+                    path = Database + "/" + path;
+                    request.set_path(path);
+                }
+            }
+            return true;
         }
-
-        const auto& params(TBase::Event->Get()->Request.GetParams());
-        if (params.Has("database")) {
-            TBase::Database = params.Get("database");
-        }
-        if (TBase::Database.empty()) {
-            return TBase::ReplyAndPassAway(TBase::Viewer->GetHTTPBADREQUEST(TBase::Event->Get(), "text/plain", "field 'database' is required"));
-        }
-
-        if (params.Has("path")) {
-            TBase::Request.set_path(params.Get("path"));
-        }
-        if (TBase::Request.path().empty()) {
-            return TBase::ReplyAndPassAway(TBase::Viewer->GetHTTPBADREQUEST(TBase::Event->Get(), "text/plain", "field 'path' is required"));
-        }
-
-        TBase::Bootstrap();
+        return false;
     }
 };
 
-class TJsonSchemeDirectoryHandler : public TJsonHandler<TSchemeDirectory> {
+class TJsonSchemeDirectoryHandler : public TJsonHandler<void> {
 public:
     TJsonSchemeDirectoryHandler()
-        : TJsonHandler<TSchemeDirectory>(GetSwagger())
+        : TJsonHandler(GetSwagger())
     {}
 
     IActor* CreateRequestActor(IViewer* viewer, NMon::TEvHttpInfo::TPtr& event) override {

@@ -20,7 +20,7 @@ protected:
         return Data;
     }
     virtual ui32 DoGetRecordsCountImpl() const override {
-        return Record.GetMeta().GetNumRows();
+        return Record.GetMeta().GetRecordsCount();
     }
     virtual ui64 DoGetRawBytesImpl() const override {
         return Record.GetMeta().GetRawBytes();
@@ -37,8 +37,10 @@ protected:
     virtual std::shared_ptr<arrow::Scalar> DoGetLastScalar() const override {
         return Last;
     }
-    virtual std::shared_ptr<IPortionDataChunk> DoCopyWithAnotherBlob(TString&& data, const TSimpleColumnInfo& columnInfo) const override {
+    virtual std::shared_ptr<IPortionDataChunk> DoCopyWithAnotherBlob(
+        TString&& data, const ui32 rawBytes, const TSimpleColumnInfo& columnInfo) const override {
         TColumnRecord cRecord = Record;
+        cRecord.MutableMeta().SetRawBytes(rawBytes);
         cRecord.ResetBlobRange();
         return std::make_shared<TChunkPreparation>(std::move(data), cRecord, columnInfo);
     }
@@ -59,11 +61,13 @@ public:
     TChunkPreparation(const TString& data, const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& column, const TChunkAddress& address, const TSimpleColumnInfo& columnInfo)
         : TBase(address.GetColumnId())
         , Data(data)
-        , Record(address, column, columnInfo)
+        , Record(address, column)
         , ColumnInfo(columnInfo) {
         Y_ABORT_UNLESS(column->GetRecordsCount());
-        First = column->GetScalar(0);
-        Last = column->GetScalar(column->GetRecordsCount() - 1);
+        if (ColumnInfo.GetPKColumnIndex()) {
+            First = column->GetScalar(0);
+            Last = column->GetScalar(column->GetRecordsCount() - 1);
+        }
         Record.BlobRange.Size = data.size();
     }
 };

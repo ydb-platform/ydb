@@ -12,7 +12,6 @@
 
 #include "liburing.h"
 
-
 static int do_symlinkat(struct io_uring *ring, const char *oldname, const char *newname)
 {
 	int ret;
@@ -103,6 +102,18 @@ int main(int argc, char *argv[])
 	ret = do_symlinkat(&ring, target, "surely/this/does/not/exist");
 	if (ret != -ENOENT) {
 		fprintf(stderr, "test_symlinkat no parent failed: %d\n", ret);
+		goto err1;
+	}
+
+	ret = do_symlinkat(&ring, target, (const char *) (uintptr_t) 0x1234);
+	if (ret != -EFAULT) {
+		fprintf(stderr, "test_symlinkat bad target failed: %d\n", ret);
+		goto err1;
+	}
+
+	ret = do_symlinkat(&ring, (const char *) (uintptr_t) 0x1234, target);
+	if (ret != -EFAULT) {
+		fprintf(stderr, "test_symlinkat bad source failed: %d\n", ret);
 		goto err1;
 	}
 

@@ -1,4 +1,7 @@
 #include "distconf.h"
+#include "node_warden_impl.h"
+
+#include <google/protobuf/util/json_util.h>
 
 namespace NKikimr::NStorage {
 
@@ -151,6 +154,15 @@ namespace NKikimr::NStorage {
                     }
                 }
 
+                DIV_CLASS("panel panel-info") {
+                    DIV_CLASS("panel-heading") {
+                        out << "Main operational parameters";
+                    }
+                    DIV_CLASS("panel-body") {
+                        out << "Self-management enabled: " << (SelfManagementEnabled ? "yes" : "no") << "<br/>";
+                    }
+                }
+
                 auto outputConfig = [&](const char *name, auto *config) {
                     DIV_CLASS("panel panel-info") {
                         DIV_CLASS("panel-heading") {
@@ -158,18 +170,18 @@ namespace NKikimr::NStorage {
                         }
                         DIV_CLASS("panel-body") {
                             if (config) {
-                                TString s;
-                                NProtoBuf::TextFormat::PrintToString(*config, &s);
-                                out << "<pre>" << s << "</pre>";
+                                out << "<pre>";
+                                OutputPrettyMessage(out, *config);
+                                out << "</pre>";
                             } else {
                                 out << "not defined";
                             }
                         }
                     }
                 };
-                outputConfig("StorageConfig", StorageConfig ? &StorageConfig.value() : nullptr);
-                outputConfig("BaseConfig", &BaseConfig);
-                outputConfig("InitialConfig", &InitialConfig);
+                outputConfig("StorageConfig", StorageConfig.get());
+                outputConfig("BaseConfig", BaseConfig.get());
+                outputConfig("InitialConfig", InitialConfig.get());
                 outputConfig("ProposedStorageConfig", ProposedStorageConfig ? &ProposedStorageConfig.value() : nullptr);
 
                 DIV_CLASS("panel panel-info") {

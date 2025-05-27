@@ -10,12 +10,16 @@
 #include <yt/cpp/mapreduce/interface/operation.h>
 
 #include <yt/cpp/mapreduce/interface/logging/logger.h>
+#include <yt/cpp/mapreduce/interface/logging/structured.h>
 #include <yt/cpp/mapreduce/interface/logging/yt_log.h>
 
 #include <yt/cpp/mapreduce/io/job_reader.h>
 
 #include <yt/cpp/mapreduce/common/helpers.h>
 #include <yt/cpp/mapreduce/common/wait_proxy.h>
+
+#include <yt/yt/core/logging/log_manager.h>
+#include <yt/yt/core/logging/config.h>
 
 #include <library/cpp/sighandler/async_signals_handler.h>
 
@@ -38,7 +42,7 @@ namespace {
 
 void WriteVersionToLog()
 {
-    YT_LOG_INFO("Wrapper version: %v",
+    YT_LOG_DEBUG("Wrapper version: %v",
         TProcessState::Get()->ClientVersion);
 }
 
@@ -148,21 +152,69 @@ static void ElevateInitStatus(const EInitStatus newStatus) {
     NDetail::GetInitStatus() = Max(NDetail::GetInitStatus(), newStatus);
 }
 
-void CommonInitialize(int argc, const char** argv)
+NLogging::ELogLevel ToCoreLogLevel(ILogger::ELevel level)
+{
+    switch (level) {
+    case ILogger::FATAL:
+        return NLogging::ELogLevel::Fatal;
+    case ILogger::ERROR:
+        return NLogging::ELogLevel::Error;
+    case ILogger::INFO:
+        return NLogging::ELogLevel::Info;
+    case ILogger::DEBUG:
+        return NLogging::ELogLevel::Debug;
+    }
+    Y_ABORT();
+}
+
+void CommonInitialize(TGuard<TMutex>& g)
 {
     auto logLevelStr = to_lower(TConfig::Get()->LogLevel);
     ILogger::ELevel logLevel;
 
     if (!TryFromString(logLevelStr, logLevel)) {
         Cerr << "Invalid log level: " << TConfig::Get()->LogLevel << Endl;
+        g.Release();
         exit(1);
     }
 
     auto logPath = TConfig::Get()->LogPath;
-    auto logger = logPath.Empty() ? CreateStdErrLogger(logLevel) : CreateFileLogger(logLevel, logPath);
-    SetLogger(logger);
+    if (logPath.empty()) {
+        if (TConfig::Get()->LogUseCore) {
+            SetUseCoreLog();
+            if (!NLogging::TLogManager::Get()->IsDefaultConfigured()) {
+                return;
+            }
 
-    TProcessState::Get()->SetCommandLine(argc, argv);
+            auto coreLoggingConfig = NLogging::TLogManagerConfig::CreateStderrLogger(ToCoreLogLevel(logLevel));
+            for (const auto& rule : coreLoggingConfig->Rules) {
+                rule->ExcludeCategories = TConfig::Get()->LogExcludeCategories;
+            }
+
+            if (auto structuredLogPath = TConfig::Get()->StructuredLog) {
+                InitializeStructuredLogging(coreLoggingConfig, structuredLogPath);
+                RegisterStructuredLogWriterFactory();
+            }
+
+            NLogging::TLogManager::Get()->Configure(coreLoggingConfig);
+        } else {
+            auto logger = CreateStdErrLogger(logLevel);
+            SetLogger(logger);
+        }
+    } else {
+        auto coreLoggingConfig = NLogging::TLogManagerConfig::CreateLogFile(logPath, ToCoreLogLevel(logLevel));
+        for (const auto& rule : coreLoggingConfig->Rules) {
+            rule->ExcludeCategories = TConfig::Get()->LogExcludeCategories;
+        }
+
+        if (auto structuredLogPath = TConfig::Get()->StructuredLog) {
+            InitializeStructuredLogging(coreLoggingConfig, structuredLogPath);
+            RegisterStructuredLogWriterFactory();
+        }
+
+        NLogging::TLogManager::Get()->Configure(coreLoggingConfig);
+        SetUseCoreLog();
+    }
 }
 
 void NonJobInitialize(const TInitializeOptions& options)
@@ -190,11 +242,11 @@ void ExecJob(int argc, const char** argv, const TInitializeOptions& options)
 
         NDetail::OutputTableCount = static_cast<i64>(outputTableCount);
 
-        THolder<IInputStream> jobStateStream;
+        std::unique_ptr<IInputStream> jobStateStream;
         if (hasState) {
-            jobStateStream = MakeHolder<TIFStream>("jobstate");
+            jobStateStream = std::make_unique<TIFStream>("jobstate");
         } else {
-            jobStateStream = MakeHolder<TBufferStream>(0);
+            jobStateStream = std::make_unique<TBufferStream>(0);
         }
 
         int ret = 1;
@@ -240,26 +292,39 @@ void ExecJob(int argc, const char** argv, const TInitializeOptions& options)
     Y_UNREACHABLE();
 }
 
+void EnsureInitialized()
+{
+    if (GetInitStatus() == EInitStatus::NotInitialized) {
+        JoblessInitialize();
+    }
+}
+
 } // namespace NDetail
 
 ////////////////////////////////////////////////////////////////////////////////
 
+static TMutex InitializeLock;
+
 void JoblessInitialize(const TInitializeOptions& options)
 {
-    static const char* fakeArgv[] = {"unknown..."};
-    NDetail::CommonInitialize(1, fakeArgv);
+    auto g = Guard(InitializeLock);
+
+    NDetail::CommonInitialize(g);
     NDetail::NonJobInitialize(options);
     NDetail::ElevateInitStatus(NDetail::EInitStatus::JoblessInitialization);
 }
 
 void Initialize(int argc, const char* argv[], const TInitializeOptions& options)
 {
-    NDetail::CommonInitialize(argc, argv);
+    auto g = Guard(InitializeLock);
+
+    NDetail::CommonInitialize(g);
 
     NDetail::ElevateInitStatus(NDetail::EInitStatus::FullInitialization);
 
     const bool isInsideJob = !GetEnv("YT_JOB_ID").empty();
     if (isInsideJob) {
+        g.Release();
         NDetail::ExecJob(argc, argv, options);
     } else {
         NDetail::NonJobInitialize(options);

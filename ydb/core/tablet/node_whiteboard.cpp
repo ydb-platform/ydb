@@ -9,6 +9,7 @@
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/base/nameservice.h>
 #include <ydb/core/base/counters.h>
+#include <ydb/core/util/cpuinfo.h>
 #include <ydb/core/util/tuples.h>
 
 #include <util/string/split.h>
@@ -23,7 +24,6 @@ class TNodeWhiteboardService : public TActorBootstrapped<TNodeWhiteboardService>
         enum EEv {
             EvUpdateRuntimeStats = EventSpaceBegin(TEvents::ES_PRIVATE),
             EvCleanupDeadTablets,
-            EvUpdateClockSkew,
             EvEnd
         };
 
@@ -31,7 +31,6 @@ class TNodeWhiteboardService : public TActorBootstrapped<TNodeWhiteboardService>
 
         struct TEvUpdateRuntimeStats : TEventLocal<TEvUpdateRuntimeStats, EvUpdateRuntimeStats> {};
         struct TEvCleanupDeadTablets : TEventLocal<TEvCleanupDeadTablets, EvCleanupDeadTablets> {};
-        struct TEvUpdateClockSkew : TEventLocal<TEvUpdateClockSkew, EvUpdateClockSkew> {};
     };
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -44,27 +43,35 @@ public:
         TabletIntrospectionData.Reset(NTracing::CreateTraceCollection(introspectionGroup));
 
         SystemStateInfo.SetHost(FQDNHostName());
-        if (const TString& nodeName = AppData(ctx)->NodeName; !nodeName.Empty()) {
+        if (const TString& nodeName = AppData(ctx)->NodeName; !nodeName.empty()) {
             SystemStateInfo.SetNodeName(nodeName);
         }
         SystemStateInfo.SetNumberOfCpus(NSystemInfo::NumberOfCpus());
+        SystemStateInfo.SetRealNumberOfCpus(NKikimr::RealNumberOfCpus());
         auto version = GetProgramRevision();
         if (!version.empty()) {
             SystemStateInfo.SetVersion(version);
-            auto versionCounter = GetServiceCounters(AppData(ctx)->Counters, "utils")->GetSubgroup("revision", version);
+            TIntrusivePtr<NMonitoring::TDynamicCounters> utils = GetServiceCounters(AppData(ctx)->Counters, "utils");
+            TIntrusivePtr<NMonitoring::TDynamicCounters> versionCounter = utils->GetSubgroup("revision", version);
             *versionCounter->GetCounter("version", false) = 1;
+            TIntrusivePtr<NMonitoring::TDynamicCounters> nodeCounter = utils->GetSubgroup("NodeCount", version);
+            *nodeCounter->GetCounter("NodeCount", false) = 1;
         }
 
         SystemStateInfo.SetStartTime(ctx.Now().MilliSeconds());
         ctx.Send(ctx.SelfID, new TEvPrivate::TEvUpdateRuntimeStats());
 
-        auto group = NKikimr::GetServiceCounters(NKikimr::AppData()->Counters, "utils")
-            ->GetSubgroup("subsystem", "whiteboard");
+        auto utils = NKikimr::GetServiceCounters(NKikimr::AppData()->Counters, "utils");
+        UserTime = utils->GetCounter("Process/UserTime", true);
+        SysTime = utils->GetCounter("Process/SystemTime", true);
+        MinorPageFaults = utils->GetCounter("Process/MinorPageFaults", true);
+        MajorPageFaults = utils->GetCounter("Process/MajorPageFaults", true);
+        NumThreads = utils->GetCounter("Process/NumThreads", false);
+        auto group = utils->GetSubgroup("subsystem", "whiteboard");
         MaxClockSkewWithPeerUsCounter = group->GetCounter("MaxClockSkewWithPeerUs");
         MaxClockSkewPeerIdCounter = group->GetCounter("MaxClockSkewPeerId");
 
         ctx.Schedule(TDuration::Seconds(60), new TEvPrivate::TEvCleanupDeadTablets());
-        ctx.Schedule(TDuration::Seconds(15), new TEvPrivate::TEvUpdateClockSkew());
         Become(&TNodeWhiteboardService::StateFunc);
     }
 
@@ -76,12 +83,24 @@ protected:
     std::unordered_map<ui32, NKikimrWhiteboard::TBSGroupStateInfo> BSGroupStateInfo;
     i64 MaxClockSkewWithPeerUs;
     ui32 MaxClockSkewPeerId;
+    float MaxNetworkUtilization = 0.0;
+    ui64 SumNetworkWriteThroughput = 0;
     NKikimrWhiteboard::TSystemStateInfo SystemStateInfo;
-    NKikimrMemory::TMemoryStats MemoryStats;
     THolder<NTracing::ITraceCollection> TabletIntrospectionData;
 
-    ::NMonitoring::TDynamicCounters::TCounterPtr MaxClockSkewWithPeerUsCounter;
-    ::NMonitoring::TDynamicCounters::TCounterPtr MaxClockSkewPeerIdCounter;
+    NMonitoring::TDynamicCounters::TCounterPtr MaxClockSkewWithPeerUsCounter;
+    NMonitoring::TDynamicCounters::TCounterPtr MaxClockSkewPeerIdCounter;
+    NMonitoring::TDynamicCounters::TCounterPtr UserTime;
+    ui64 SavedUserTime = 0;
+    NMonitoring::TDynamicCounters::TCounterPtr SysTime;
+    ui64 SavedSysTime = 0;
+    NMonitoring::TDynamicCounters::TCounterPtr MinorPageFaults;
+    ui64 SavedMinorPageFaults = 0;
+    NMonitoring::TDynamicCounters::TCounterPtr MajorPageFaults;
+    ui64 SavedMajorPageFaults = 0;
+    NMonitoring::TDynamicCounters::TCounterPtr NumThreads;
+
+    TSystemThreadsMonitor ThreadsMonitor;
 
     template <typename PropertyType>
     static ui64 GetDifference(PropertyType a, PropertyType b) {
@@ -386,6 +405,117 @@ protected:
         return modified;
     }
 
+    static void CopyField(::google::protobuf::Message& protoTo,
+                          const ::google::protobuf::Message& protoFrom,
+                          const ::google::protobuf::Reflection& reflectionTo,
+                          const ::google::protobuf::Reflection& reflectionFrom,
+                          const ::google::protobuf::FieldDescriptor* field) {
+        using namespace ::google::protobuf;
+        if (field->is_repeated()) {
+            FieldDescriptor::CppType type = field->cpp_type();
+            int size = reflectionFrom.FieldSize(protoFrom, field);
+            if (size != 0) {
+                reflectionTo.ClearField(&protoTo, field);
+                for (int i = 0; i < size; ++i) {
+                    switch (type) {
+                    case FieldDescriptor::CPPTYPE_INT32:
+                        reflectionTo.AddInt32(&protoTo, field, reflectionFrom.GetRepeatedInt32(protoFrom, field, i));
+                        break;
+                    case FieldDescriptor::CPPTYPE_INT64:
+                        reflectionTo.AddInt64(&protoTo, field, reflectionFrom.GetRepeatedInt64(protoFrom, field, i));
+                        break;
+                    case FieldDescriptor::CPPTYPE_UINT32:
+                        reflectionTo.AddUInt32(&protoTo, field, reflectionFrom.GetRepeatedUInt32(protoFrom, field, i));
+                        break;
+                    case FieldDescriptor::CPPTYPE_UINT64:
+                        reflectionTo.AddUInt64(&protoTo, field, reflectionFrom.GetRepeatedUInt64(protoFrom, field, i));
+                        break;
+                    case FieldDescriptor::CPPTYPE_DOUBLE:
+                        reflectionTo.AddDouble(&protoTo, field, reflectionFrom.GetRepeatedDouble(protoFrom, field, i));
+                        break;
+                    case FieldDescriptor::CPPTYPE_FLOAT:
+                        reflectionTo.AddFloat(&protoTo, field, reflectionFrom.GetRepeatedFloat(protoFrom, field, i));
+                        break;
+                    case FieldDescriptor::CPPTYPE_BOOL:
+                        reflectionTo.AddBool(&protoTo, field, reflectionFrom.GetRepeatedBool(protoFrom, field, i));
+                        break;
+                    case FieldDescriptor::CPPTYPE_ENUM:
+                        reflectionTo.AddEnum(&protoTo, field, reflectionFrom.GetRepeatedEnum(protoFrom, field, i));
+                        break;
+                    case FieldDescriptor::CPPTYPE_STRING:
+                        reflectionTo.AddString(&protoTo, field, reflectionFrom.GetRepeatedString(protoFrom, field, i));
+                        break;
+                    case FieldDescriptor::CPPTYPE_MESSAGE:
+                        reflectionTo.AddMessage(&protoTo, field)->CopyFrom(reflectionFrom.GetRepeatedMessage(protoFrom, field, i));
+                        break;
+                    }
+                }
+            }
+        } else {
+            if (reflectionFrom.HasField(protoFrom, field)) {
+                FieldDescriptor::CppType type = field->cpp_type();
+                switch (type) {
+                case FieldDescriptor::CPPTYPE_INT32:
+                    reflectionTo.SetInt32(&protoTo, field, reflectionFrom.GetInt32(protoFrom, field));
+                    break;
+                case FieldDescriptor::CPPTYPE_INT64:
+                    reflectionTo.SetInt64(&protoTo, field, reflectionFrom.GetInt64(protoFrom, field));
+                    break;
+                case FieldDescriptor::CPPTYPE_UINT32:
+                    reflectionTo.SetUInt32(&protoTo, field, reflectionFrom.GetUInt32(protoFrom, field));
+                    break;
+                case FieldDescriptor::CPPTYPE_UINT64:
+                    reflectionTo.SetUInt64(&protoTo, field, reflectionFrom.GetUInt64(protoFrom, field));
+                    break;
+                case FieldDescriptor::CPPTYPE_DOUBLE:
+                    reflectionTo.SetDouble(&protoTo, field, reflectionFrom.GetDouble(protoFrom, field));
+                    break;
+                case FieldDescriptor::CPPTYPE_FLOAT:
+                    reflectionTo.SetFloat(&protoTo, field, reflectionFrom.GetFloat(protoFrom, field));
+                    break;
+                case FieldDescriptor::CPPTYPE_BOOL:
+                    reflectionTo.SetBool(&protoTo, field, reflectionFrom.GetBool(protoFrom, field));
+                    break;
+                case FieldDescriptor::CPPTYPE_ENUM:
+                    reflectionTo.SetEnum(&protoTo, field, reflectionFrom.GetEnum(protoFrom, field));
+                    break;
+                case FieldDescriptor::CPPTYPE_STRING:
+                    reflectionTo.SetString(&protoTo, field, reflectionFrom.GetString(protoFrom, field));
+                    break;
+                case FieldDescriptor::CPPTYPE_MESSAGE:
+                    reflectionTo.MutableMessage(&protoTo, field)->CopyFrom(reflectionFrom.GetMessage(protoFrom, field));
+                    break;
+                }
+            }
+        }
+    }
+
+    static void SelectiveCopy(::google::protobuf::Message& protoTo, const ::google::protobuf::Message& protoFrom, const ::google::protobuf::RepeatedField<int>& fields) {
+        using namespace ::google::protobuf;
+        const Descriptor& descriptor = *protoTo.GetDescriptor();
+        const Reflection& reflectionTo = *protoTo.GetReflection();
+        const Reflection& reflectionFrom = *protoFrom.GetReflection();
+        for (auto fieldNumber : fields) {
+            const FieldDescriptor* field = descriptor.FindFieldByNumber(fieldNumber);
+            if (field) {
+                CopyField(protoTo, protoFrom, reflectionTo, reflectionFrom, field);
+            }
+        }
+    }
+
+    template<typename TMessage, typename TRequest>
+    static void Copy(TMessage& to, const TMessage& from, const TRequest& request) {
+        if (request.FieldsRequiredSize() > 0) {
+            if (request.FieldsRequiredSize() == 1 && request.GetFieldsRequired(0) == -1) { // all fields
+                to.CopyFrom(from);
+            } else {
+                SelectiveCopy(to, from, request.GetFieldsRequired());
+            }
+        } else {
+            SelectiveCopy(to, from, GetDefaultWhiteboardFields<TMessage>());
+        }
+    }
+
     void SetRole(TStringBuf roleName) {
         for (const auto& role : SystemStateInfo.GetRoles()) {
             if (role == roleName) {
@@ -399,7 +529,6 @@ protected:
     STRICT_STFUNC(StateFunc,
         HFunc(TEvWhiteboard::TEvTabletStateUpdate, Handle);
         HFunc(TEvWhiteboard::TEvTabletStateRequest, Handle);
-        HFunc(TEvWhiteboard::TEvClockSkewUpdate, Handle);
         HFunc(TEvWhiteboard::TEvNodeStateUpdate, Handle);
         HFunc(TEvWhiteboard::TEvNodeStateDelete, Handle);
         HFunc(TEvWhiteboard::TEvNodeStateRequest, Handle);
@@ -428,7 +557,6 @@ protected:
         HFunc(TEvWhiteboard::TEvSignalBodyRequest, Handle);
         HFunc(TEvPrivate::TEvUpdateRuntimeStats, Handle);
         HFunc(TEvPrivate::TEvCleanupDeadTablets, Handle);
-        HFunc(TEvPrivate::TEvUpdateClockSkew, Handle);
     )
 
     void Handle(TEvWhiteboard::TEvTabletStateUpdate::TPtr &ev, const TActorContext &ctx) {
@@ -442,19 +570,29 @@ protected:
         }
     }
 
-    void Handle(TEvWhiteboard::TEvClockSkewUpdate::TPtr &ev, const TActorContext &) {
-        i64 skew = ev->Get()->Record.GetClockSkewUs();
-        if (abs(skew) > abs(MaxClockSkewWithPeerUs)) {
-            MaxClockSkewWithPeerUs = skew;
-            MaxClockSkewPeerId = ev->Get()->Record.GetPeerNodeId();
-        }
-    }
-
     void Handle(TEvWhiteboard::TEvNodeStateUpdate::TPtr &ev, const TActorContext &ctx) {
         auto& nodeStateInfo = NodeStateInfo[ev->Get()->Record.GetPeerName()];
-        if (CheckedMerge(nodeStateInfo, ev->Get()->Record) >= 100) {
-            nodeStateInfo.SetChangeTime(ctx.Now().MilliSeconds());
+        ui64 previousChangeTime = nodeStateInfo.GetChangeTime();
+        ui64 currentChangeTime = ctx.Now().MilliSeconds();
+        ui64 previousBytesWritten = nodeStateInfo.GetBytesWritten();
+        ui64 currentBytesWritten = ev->Get()->Record.GetBytesWritten();
+        if (previousChangeTime && previousBytesWritten < currentBytesWritten && previousChangeTime < currentChangeTime) {
+            nodeStateInfo.SetWriteThroughput((currentBytesWritten - previousBytesWritten) * 1000 / (currentChangeTime - previousChangeTime));
+        } else {
+            nodeStateInfo.ClearWriteThroughput();
         }
+        if (ev->Get()->Record.GetSameScope()) {
+            i64 skew = ev->Get()->Record.GetClockSkewUs();
+            if (abs(skew) > abs(MaxClockSkewWithPeerUs)) {
+                MaxClockSkewWithPeerUs = skew;
+                MaxClockSkewPeerId = ev->Get()->Record.GetPeerNodeId();
+            }
+        }
+        // TODO: need better way to calculate network utilization
+        MaxNetworkUtilization = std::max(MaxNetworkUtilization, ev->Get()->Record.GetUtilization());
+        SumNetworkWriteThroughput += nodeStateInfo.GetWriteThroughput();
+        nodeStateInfo.MergeFrom(ev->Get()->Record);
+        nodeStateInfo.SetChangeTime(currentChangeTime);
     }
 
     void Handle(TEvWhiteboard::TEvNodeStateDelete::TPtr &ev, const TActorContext &ctx) {
@@ -561,37 +699,47 @@ protected:
     }
 
     void Handle(TEvWhiteboard::TEvMemoryStatsUpdate::TPtr &ev, const TActorContext &ctx) {
-        MemoryStats.Swap(&ev->Get()->Record);
+        const auto& memoryStats = ev->Get()->Record;
 
         // Note: copy stats to sys info fields for backward compatibility
-        NKikimrWhiteboard::TSystemStateInfo systemStateUpdate;
-        if (MemoryStats.HasAnonRss()) {
-            systemStateUpdate.SetMemoryUsed(MemoryStats.GetAnonRss());
+        if (memoryStats.HasAnonRss()) {
+            SystemStateInfo.SetMemoryUsed(memoryStats.GetAnonRss());
+        } else if (memoryStats.HasAllocatedMemory()) {
+            SystemStateInfo.SetMemoryUsed(memoryStats.GetAllocatedMemory());
+        } else {
+            SystemStateInfo.ClearMemoryUsed();
         }
-        if (MemoryStats.HasHardLimit()) {
-            systemStateUpdate.SetMemoryLimit(MemoryStats.GetHardLimit());
+        if (memoryStats.HasAllocatedMemory()) {
+            SystemStateInfo.SetMemoryUsedInAlloc(memoryStats.GetAllocatedMemory());
+        } else {
+            SystemStateInfo.ClearMemoryUsedInAlloc();
         }
-        if (MemoryStats.HasAllocatedMemory()) {
-            systemStateUpdate.SetMemoryUsedInAlloc(MemoryStats.GetAllocatedMemory());
+        if (memoryStats.HasSharedCacheConsumption()) {
+            SystemStateInfo.MutableSharedCacheStats()->SetUsedBytes(memoryStats.GetSharedCacheConsumption());
+        } else {
+            SystemStateInfo.MutableSharedCacheStats()->ClearUsedBytes();
+        }
+        if (memoryStats.HasSharedCacheLimit()) {
+            SystemStateInfo.MutableSharedCacheStats()->SetLimitBytes(memoryStats.GetSharedCacheLimit());
+        } else {
+            SystemStateInfo.MutableSharedCacheStats()->ClearLimitBytes();
         }
 
-        // Note: is rendered in UI as 'Caches', so let's pass aggregated caches stats (not only Shared Cache stats)
-        if (MemoryStats.HasConsumersConsumption()) {
-            systemStateUpdate.MutableSharedCacheStats()->SetUsedBytes(MemoryStats.GetConsumersConsumption());
-        }
-        if (MemoryStats.HasConsumersLimit()) {
-            systemStateUpdate.MutableSharedCacheStats()->SetLimitBytes(MemoryStats.GetConsumersLimit());
-        }
+        SystemStateInfo.MutableMemoryStats()->Swap(&ev->Get()->Record);
 
-        if (CheckedMerge(SystemStateInfo, systemStateUpdate)) {
-            SystemStateInfo.SetChangeTime(ctx.Now().MilliSeconds());
-        }
+        // Note: there is no big reason (and an easy way) to compare the previous and the new memory stats
+        // and allocated memory stat is expected to change every time
+        // so always update change time unconditionally
+        SystemStateInfo.SetChangeTime(ctx.Now().MilliSeconds());
     }
 
     void Handle(TEvWhiteboard::TEvSystemStateAddEndpoint::TPtr &ev, const TActorContext &ctx) {
         auto& endpoint = *SystemStateInfo.AddEndpoints();
         endpoint.SetName(ev->Get()->Name);
         endpoint.SetAddress(ev->Get()->Address);
+        std::sort(SystemStateInfo.MutableEndpoints()->begin(), SystemStateInfo.MutableEndpoints()->end(), [](const auto& a, const auto& b) {
+            return a.GetName() < b.GetName();
+        });
         SystemStateInfo.SetChangeTime(ctx.Now().MilliSeconds());
     }
 
@@ -709,54 +857,60 @@ protected:
         }
     }
 
-    static void CopyTabletStateInfo(
-        NKikimrWhiteboard::TTabletStateInfo& dst,
-        const NKikimrWhiteboard::TTabletStateInfo& src,
-        const NKikimrWhiteboard::TEvTabletStateRequest&)
-    {
-        dst = src;
+    static std::unordered_set<TTabletId> BuildIndex(const ::google::protobuf::RepeatedField<::NProtoBuf::uint64>& array) {
+        std::unordered_set<TTabletId> result;
+        result.reserve(array.size());
+        for (auto id : array) {
+            result.insert(id);
+        }
+        return result;
     }
 
     void Handle(TEvWhiteboard::TEvTabletStateRequest::TPtr &ev, const TActorContext &ctx) {
         auto now = TMonotonic::Now();
         const auto& request = ev->Get()->Record;
+        auto matchesFilter = [
+            changedSince = request.has_changedsince() ? request.changedsince() : 0,
+            filterTabletId = BuildIndex(request.filtertabletid()),
+            filterTenantId = request.has_filtertenantid() ? NKikimr::TSubDomainKey(request.filtertenantid()) : NKikimr::TSubDomainKey()
+        ](const NKikimrWhiteboard::TTabletStateInfo& tabletStateInfo) {
+            return tabletStateInfo.changetime() >= changedSince
+                && (filterTabletId.empty() || filterTabletId.count(tabletStateInfo.tabletid()))
+                && (!filterTenantId || filterTenantId == NKikimr::TSubDomainKey(tabletStateInfo.tenantid()));
+        };
         std::unique_ptr<TEvWhiteboard::TEvTabletStateResponse> response = std::make_unique<TEvWhiteboard::TEvTabletStateResponse>();
         auto& record = response->Record;
         if (request.format() == "packed5") {
-            TEvWhiteboard::TEvTabletStateResponsePacked5* ptr = response->AllocatePackedResponse(TabletStateInfo.size());
+            std::vector<const NKikimrWhiteboard::TTabletStateInfo*> matchedTablets;
             for (const auto& [tabletId, tabletInfo] : TabletStateInfo) {
-                ptr->TabletId = tabletInfo.tabletid();
-                ptr->FollowerId = tabletInfo.followerid();
-                ptr->Generation = tabletInfo.generation();
-                ptr->Type = tabletInfo.type();
-                ptr->State = tabletInfo.state();
+                if (matchesFilter(tabletInfo)) {
+                    matchedTablets.push_back(&tabletInfo);
+                }
+            }
+            TEvWhiteboard::TEvTabletStateResponsePacked5* ptr = response->AllocatePackedResponse(matchedTablets.size());
+            for (auto tabletInfo : matchedTablets) {
+                ptr->TabletId = tabletInfo->tabletid();
+                ptr->FollowerId = tabletInfo->followerid();
+                ptr->Generation = tabletInfo->generation();
+                ptr->Type = tabletInfo->type();
+                ptr->State = tabletInfo->state();
                 ++ptr;
             }
         } else {
             if (request.groupby().empty()) {
-                ui64 changedSince = request.has_changedsince() ? request.changedsince() : 0;
-                if (request.filtertabletid_size() == 0) {
-                    for (const auto& pr : TabletStateInfo) {
-                        if (pr.second.changetime() >= changedSince) {
-                            NKikimrWhiteboard::TTabletStateInfo& tabletStateInfo = *record.add_tabletstateinfo();
-                            CopyTabletStateInfo(tabletStateInfo, pr.second, request);
-                        }
-                    }
-                } else {
-                    for (auto tabletId : request.filtertabletid()) {
-                        auto it = TabletStateInfo.find({tabletId, 0});
-                        if (it != TabletStateInfo.end()) {
-                            if (it->second.changetime() >= changedSince) {
-                                NKikimrWhiteboard::TTabletStateInfo& tabletStateInfo = *record.add_tabletstateinfo();
-                                CopyTabletStateInfo(tabletStateInfo, it->second, request);
-                            }
-                        }
+                for (const auto& pr : TabletStateInfo) {
+                    if (matchesFilter(pr.second)) {
+                        NKikimrWhiteboard::TTabletStateInfo& tabletStateInfo = *record.add_tabletstateinfo();
+                        Copy(tabletStateInfo, pr.second, request);
                     }
                 }
-            } else if (request.groupby() == "Type,State") { // the only supported group-by for now
+            } else if (request.groupby() == "Type,State" || request.groupby() == "NodeId,Type,State") { // the only supported group-by for now
                 std::unordered_map<std::pair<NKikimrTabletBase::TTabletTypes::EType,
                     NKikimrWhiteboard::TTabletStateInfo::ETabletState>, NKikimrWhiteboard::TTabletStateInfo> stateGroupBy;
                 for (const auto& [id, stateInfo] : TabletStateInfo) {
+                    if (!matchesFilter(stateInfo)) {
+                        continue;
+                    }
                     NKikimrWhiteboard::TTabletStateInfo& state = stateGroupBy[{stateInfo.type(), stateInfo.state()}];
                     auto count = state.count();
                     if (count == 0) {
@@ -784,7 +938,7 @@ protected:
         for (const auto& pr : NodeStateInfo) {
             if (pr.second.GetChangeTime() >= changedSince) {
                 NKikimrWhiteboard::TNodeStateInfo &nodeStateInfo = *record.AddNodeStateInfo();
-                nodeStateInfo.CopyFrom(pr.second);
+                Copy(nodeStateInfo, pr.second, request);
             }
         }
         response->Record.SetResponseTime(ctx.Now().MilliSeconds());
@@ -815,7 +969,7 @@ protected:
         for (const auto& pr : PDiskStateInfo) {
             if (pr.second.GetChangeTime() >= changedSince) {
                 NKikimrWhiteboard::TPDiskStateInfo &pDiskStateInfo = *record.AddPDiskStateInfo();
-                pDiskStateInfo.CopyFrom(pr.second);
+                Copy(pDiskStateInfo, pr.second, request);
             }
         }
         response->Record.SetResponseTime(ctx.Now().MilliSeconds());
@@ -839,7 +993,7 @@ protected:
         for (const auto& pr : VDiskStateInfo) {
             if (pr.second.GetChangeTime() >= changedSince) {
                 NKikimrWhiteboard::TVDiskStateInfo &vDiskStateInfo = *record.AddVDiskStateInfo();
-                vDiskStateInfo.CopyFrom(pr.second);
+                Copy(vDiskStateInfo, pr.second, request);
             }
         }
         response->Record.SetResponseTime(ctx.Now().MilliSeconds());
@@ -854,7 +1008,7 @@ protected:
         for (const auto& pr : BSGroupStateInfo) {
             if (pr.second.GetChangeTime() >= changedSince) {
                 NKikimrWhiteboard::TBSGroupStateInfo &bSGroupStateInfo = *record.AddBSGroupStateInfo();
-                bSGroupStateInfo.CopyFrom(pr.second);
+                Copy(bSGroupStateInfo, pr.second, request);
             }
         }
         response->Record.SetResponseTime(ctx.Now().MilliSeconds());
@@ -868,7 +1022,7 @@ protected:
         auto& record = response->Record;
         if (SystemStateInfo.GetChangeTime() >= changedSince) {
             NKikimrWhiteboard::TSystemStateInfo &systemStateInfo = *record.AddSystemStateInfo();
-            systemStateInfo.CopyFrom(SystemStateInfo);
+            Copy(systemStateInfo, SystemStateInfo, request);
         }
         response->Record.SetResponseTime(ctx.Now().MilliSeconds());
         ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
@@ -961,16 +1115,54 @@ protected:
     }
 
     void Handle(TEvPrivate::TEvUpdateRuntimeStats::TPtr &, const TActorContext &ctx) {
-        THolder<TEvWhiteboard::TEvSystemStateUpdate> systemStatsUpdate = MakeHolder<TEvWhiteboard::TEvSystemStateUpdate>();
-        TVector<double> loadAverage = GetLoadAverage();
-        for (double d : loadAverage) {
-            systemStatsUpdate->Record.AddLoadAverage(d);
+        static constexpr int UPDATE_PERIOD_SECONDS = 15;
+        static constexpr TDuration UPDATE_PERIOD = TDuration::Seconds(UPDATE_PERIOD_SECONDS);
+        auto now = TActivationContext::Now();
+
+        {
+            NKikimrWhiteboard::TSystemStateInfo systemStatsUpdate;
+            TVector<double> loadAverage = GetLoadAverage();
+            for (double d : loadAverage) {
+                systemStatsUpdate.AddLoadAverage(d);
+            }
+            if (CheckedMerge(SystemStateInfo, systemStatsUpdate)) {
+                SystemStateInfo.SetChangeTime(now.MilliSeconds());
+            }
         }
-        if (CheckedMerge(SystemStateInfo, systemStatsUpdate->Record)) {
-            SystemStateInfo.SetChangeTime(ctx.Now().MilliSeconds());
+
+        {
+            MaxClockSkewWithPeerUsCounter->Set(abs(MaxClockSkewWithPeerUs));
+            MaxClockSkewPeerIdCounter->Set(MaxClockSkewPeerId);
+
+            SystemStateInfo.SetMaxClockSkewWithPeerUs(MaxClockSkewWithPeerUs);
+            SystemStateInfo.SetMaxClockSkewPeerId(MaxClockSkewPeerId);
+            MaxClockSkewWithPeerUs = 0;
+        }
+
+        {
+            SystemStateInfo.SetNetworkUtilization(MaxNetworkUtilization);
+            MaxNetworkUtilization = 0;
+        }
+        {
+            SystemStateInfo.SetNetworkWriteThroughput(SumNetworkWriteThroughput / UPDATE_PERIOD_SECONDS);
+            SumNetworkWriteThroughput = 0;
+        }
+        auto threadPools = ThreadsMonitor.GetThreadPools(now);
+        SystemStateInfo.ClearThreads();
+        for (const auto& threadPool : threadPools) {
+            auto* threadInfo = SystemStateInfo.AddThreads();
+            threadInfo->SetName(threadPool.Name);
+            threadInfo->SetThreads(threadPool.Threads);
+            threadInfo->SetSystemUsage(threadPool.SystemUsage);
+            threadInfo->SetUserUsage(threadPool.UserUsage);
+            threadInfo->SetMajorPageFaults(threadPool.MajorPageFaults);
+            threadInfo->SetMinorPageFaults(threadPool.MinorPageFaults);
+            for (const auto& state : threadPool.States) {
+                threadInfo->MutableStates()->emplace(state.first, state.second);
+            }
         }
         UpdateSystemState(ctx);
-        ctx.Schedule(TDuration::Seconds(15), new TEvPrivate::TEvUpdateRuntimeStats());
+        ctx.Schedule(UPDATE_PERIOD, new TEvPrivate::TEvUpdateRuntimeStats());
     }
 
     void Handle(TEvPrivate::TEvCleanupDeadTablets::TPtr &, const TActorContext &ctx) {
@@ -1002,17 +1194,31 @@ protected:
         }
         ctx.Schedule(TDuration::Seconds(60), new TEvPrivate::TEvCleanupDeadTablets());
     }
-
-    void Handle(TEvPrivate::TEvUpdateClockSkew::TPtr &, const TActorContext &ctx) {
-        MaxClockSkewWithPeerUsCounter->Set(abs(MaxClockSkewWithPeerUs));
-        MaxClockSkewPeerIdCounter->Set(MaxClockSkewPeerId);
-
-        SystemStateInfo.SetMaxClockSkewWithPeerUs(MaxClockSkewWithPeerUs);
-        SystemStateInfo.SetMaxClockSkewPeerId(MaxClockSkewPeerId);
-        MaxClockSkewWithPeerUs = 0;
-        ctx.Schedule(TDuration::Seconds(15), new TEvPrivate::TEvUpdateClockSkew());
-    }
 };
+
+template<typename TMessage>
+::google::protobuf::RepeatedField<int> InitDefaultWhiteboardFields() {
+    using namespace ::google::protobuf;
+    const Descriptor& descriptor = *TMessage::GetDescriptor();
+    ::google::protobuf::RepeatedField<int> defaultFields;
+    int fieldCount = descriptor.field_count();
+    for (int index = 0; index < fieldCount; ++index) {
+        const FieldDescriptor* field = descriptor.field(index);
+        const auto& options(field->options());
+        if (options.HasExtension(NKikimrWhiteboard::DefaultField)) {
+            if (options.GetExtension(NKikimrWhiteboard::DefaultField)) {
+                defaultFields.Add(field->number());
+            }
+        }
+    }
+    return defaultFields;
+}
+
+template<typename TMessage>
+::google::protobuf::RepeatedField<int> GetDefaultWhiteboardFields() {
+    static ::google::protobuf::RepeatedField<int> defaultFields = InitDefaultWhiteboardFields<TMessage>();
+    return defaultFields;
+}
 
 IActor* CreateNodeWhiteboardService() {
     return new TNodeWhiteboardService();

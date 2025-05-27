@@ -28,9 +28,9 @@ TScheduledInvocationTimePolicy::TScheduledInvocationTimePolicy(
 void TScheduledInvocationTimePolicy::ProcessResult()
 { }
 
-TInstant TScheduledInvocationTimePolicy::KickstartDeadline()
+TInstant TScheduledInvocationTimePolicy::GenerateKickstartDeadline()
 {
-    return NextDeadline();
+    return GenerateNextDeadline();
 }
 
 bool TScheduledInvocationTimePolicy::IsEnabled()
@@ -38,9 +38,9 @@ bool TScheduledInvocationTimePolicy::IsEnabled()
     return static_cast<bool>(Interval_);
 }
 
-bool TScheduledInvocationTimePolicy::ShouldKickstart(const TOptions&)
+bool TScheduledInvocationTimePolicy::ShouldKickstart(const TOptions& interval)
 {
-    return IsEnabled();
+    return static_cast<bool>(interval);
 }
 
 void TScheduledInvocationTimePolicy::SetOptions(TOptions interval)
@@ -53,7 +53,7 @@ void TScheduledInvocationTimePolicy::SetOptions(TOptions interval)
 //! Returns the next time instant which is a multiple of the configured interval.
 //! NB: If the current instant is itself a multiple of the configured interval, this method will return the next
 //! suitable instant.
-TInstant TScheduledInvocationTimePolicy::NextDeadline()
+TInstant TScheduledInvocationTimePolicy::GenerateNextDeadline()
 {
     YT_VERIFY(Interval_);
 

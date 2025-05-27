@@ -169,20 +169,9 @@ const TLoggingCategory* TLogger::GetCategory() const
     return Category_;
 }
 
-bool TLogger::IsLevelEnabledHeavy(ELogLevel level) const
+void TLogger::UpdateCategory() const
 {
-    // Note that we managed to reach this point, i.e. level >= MinLevel_,
-    // which implies that MinLevel_ != ELogLevel::Maximum, so this logger was not
-    // default constructed, thus it has non-trivial category.
-    YT_ASSERT(Category_);
-
-    if (Category_->CurrentVersion != Category_->ActualVersion->load(std::memory_order::relaxed)) {
-        LogManager_->UpdateCategory(const_cast<TLoggingCategory*>(Category_));
-    }
-
-    return
-        level >= Category_->MinPlainTextLevel &&
-        level >= ThreadMinLogLevel();
+    LogManager_->UpdateCategory(const_cast<TLoggingCategory*>(Category_));
 }
 
 bool TLogger::GetAbortOnAlert() const
@@ -195,14 +184,21 @@ bool TLogger::IsEssential() const
     return Essential_;
 }
 
-void TLogger::UpdateAnchor(TLoggingAnchor* anchor) const
+void TLogger::UpdateStaticAnchor(
+    TLoggingAnchor* anchor,
+    std::atomic<bool>* anchorRegistered,
+    ::TSourceLocation sourceLocation,
+    TStringBuf message) const
 {
+    if (!anchorRegistered->exchange(true)) {
+        LogManager_->RegisterStaticAnchor(anchor, sourceLocation, message);
+    }
     LogManager_->UpdateAnchor(anchor);
 }
 
-void TLogger::RegisterStaticAnchor(TLoggingAnchor* anchor, ::TSourceLocation sourceLocation, TStringBuf message) const
+void TLogger::UpdateDynamicAnchor(TLoggingAnchor* anchor) const
 {
-    LogManager_->RegisterStaticAnchor(anchor, sourceLocation, message);
+    LogManager_->UpdateAnchor(anchor);
 }
 
 void TLogger::Write(TLogEvent&& event) const
@@ -210,36 +206,61 @@ void TLogger::Write(TLogEvent&& event) const
     LogManager_->Enqueue(std::move(event));
 }
 
-void TLogger::AddRawTag(const TString& tag)
+void TLogger::AddRawTag(const std::string& tag)
 {
-    if (!Tag_.empty()) {
-        Tag_ += ", ";
+    auto* state = GetMutableCoWState();
+    if (!state->Tag.empty()) {
+        state->Tag += ", ";
     }
-    Tag_ += tag;
+    state->Tag += tag;
 }
 
-TLogger TLogger::WithRawTag(const TString& tag) const
+TLogger TLogger::WithRawTag(const std::string& tag) const &
 {
     auto result = *this;
     result.AddRawTag(tag);
     return result;
 }
 
-TLogger TLogger::WithEssential(bool essential) const
+TLogger TLogger::WithRawTag(const std::string& tag) &&
+{
+    AddRawTag(tag);
+    return std::move(*this);
+}
+
+TLogger TLogger::WithEssential(bool essential) const &
 {
     auto result = *this;
     result.Essential_ = essential;
     return result;
 }
 
-TLogger TLogger::WithStructuredValidator(TStructuredValidator validator) const
+TLogger TLogger::WithEssential(bool essential) &&
+{
+    Essential_ = essential;
+    return std::move(*this);
+}
+
+void TLogger::AddStructuredValidator(TStructuredValidator validator)
+{
+    auto* state = GetMutableCoWState();
+    state->StructuredValidators.push_back(std::move(validator));
+}
+
+TLogger TLogger::WithStructuredValidator(TStructuredValidator validator) const &
 {
     auto result = *this;
-    result.StructuredValidators_.push_back(std::move(validator));
+    result.AddStructuredValidator(std::move(validator));
     return result;
 }
 
-TLogger TLogger::WithMinLevel(ELogLevel minLevel) const
+TLogger TLogger::WithStructuredValidator(TStructuredValidator validator) &&
+{
+    AddStructuredValidator(std::move(validator));
+    return std::move(*this);
+}
+
+TLogger TLogger::WithMinLevel(ELogLevel minLevel) const &
 {
     auto result = *this;
     if (result) {
@@ -248,19 +269,47 @@ TLogger TLogger::WithMinLevel(ELogLevel minLevel) const
     return result;
 }
 
-const TString& TLogger::GetTag() const
+TLogger TLogger::WithMinLevel(ELogLevel minLevel) &&
 {
-    return Tag_;
+    if (*this) {
+        MinLevel_ = minLevel;
+    }
+    return std::move(*this);
+}
+
+const std::string& TLogger::GetTag() const
+{
+    static const std::string emptyResult;
+    return CoWState_ ? CoWState_->Tag : emptyResult;
 }
 
 const TLogger::TStructuredTags& TLogger::GetStructuredTags() const
 {
-    return StructuredTags_;
+    static const TStructuredTags emptyResult;
+    return CoWState_ ? CoWState_->StructuredTags : emptyResult;
 }
 
 const TLogger::TStructuredValidators& TLogger::GetStructuredValidators() const
 {
-    return StructuredValidators_;
+    static const TStructuredValidators emptyResult;
+    return CoWState_ ? CoWState_->StructuredValidators : emptyResult;
+}
+
+TLogger::TCoWState* TLogger::GetMutableCoWState()
+{
+    if (!CoWState_ || GetRefCounter(CoWState_.get())->GetRefCount() > 1) {
+        auto uniquelyOwnedState = New<TCoWState>();
+        if (CoWState_) {
+            *uniquelyOwnedState = *CoWState_;
+        }
+        CoWState_ = StaticPointerCast<const TCoWState>(std::move(uniquelyOwnedState));
+    }
+    return const_cast<TCoWState*>(CoWState_.get());
+}
+
+void TLogger::ResetCoWState()
+{
+    CoWState_.Reset();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -3,7 +3,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_types/fatal_error_handlers/handlers.h>
 #include <util/string/builder.h>
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 
 bool TypesEqual(const Ydb::Type& t1, const Ydb::Type& t2) {
     if (t1.type_case() != t2.type_case()) {

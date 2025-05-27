@@ -1,5 +1,7 @@
 LIBRARY()
 
+VERSION(Service-proxy-version)
+
 LICENSE(
     BSD-1-Clause AND
     BSD-2-Clause AND
@@ -21,8 +23,8 @@ IF (NOT OS_WINDOWS)
     )
 ENDIF()
 
-DISABLE(PROVIDE_GETRANDOM_GETENTROPY)
-DISABLE(PROVIDE_REALLOCARRAY)
+DEFAULT(PROVIDE_GETRANDOM_GETENTROPY "no")
+DEFAULT(PROVIDE_REALLOCARRAY "no")
 
 # Android libc function appearance is documented here:
 # https://android.googlesource.com/platform/bionic/+/master/docs/status.md
@@ -105,14 +107,15 @@ IF (OS_LINUX AND NOT MUSL)
         # getrandom and getentropy were added in glibc=2.25
         ENABLE(PROVIDE_GETRANDOM_GETENTROPY)
 
+        # memfd_create was added in glibc=2.27
+        ENABLE(PROVIDE_MEMFD_CREATE)
+
         SRCS(
             # explicit_bzero was added in glibc=2.25
             explicit_bzero.c
-            # memfd_create was added in glibc=2.27
-            memfd_create.c
         )
     ENDIF()
-    IF (OS_SDK != "ubuntu-20" AND OS_SDK != "ubuntu-22")
+    IF (OS_SDK != "ubuntu-20" AND OS_SDK != "ubuntu-22" AND OS_SDK != "local")
         # reallocarray was added in glibc=2.29
         ENABLE(PROVIDE_REALLOCARRAY)
     ENDIF()
@@ -155,6 +158,15 @@ IF (PROVIDE_GETSERVBYNAME)
         getservbyname/getservbyname.c
         getservbyname/getservbyname_r.c
         getservbyname/lookup_serv.c
+    )
+ENDIF()
+
+IF (PROVIDE_MEMFD_CREATE)
+    SRCS(
+        memfd_create/memfd_create.c
+    )
+    ADDINCL(
+        GLOBAL contrib/libs/libc_compat/memfd_create
     )
 ENDIF()
 

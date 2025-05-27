@@ -3,6 +3,7 @@
 #include <library/cpp/cache/cache.h>
 #include <library/cpp/threading/future/future.h>
 #include <util/thread/pool.h>
+#include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
 #include <ydb/library/yql/providers/s3/credentials/credentials.h>
 
@@ -130,12 +131,14 @@ public:
             Directories.end(),
             std::make_move_iterator(other.Directories.begin()),
             std::make_move_iterator(other.Directories.end()));
+        ListedObjectSize += other.ListedObjectSize;
         return *this;
     }
 
 public:
     std::vector<TObjectListEntry> Objects;
     std::vector<TDirectoryListEntry> Directories;
+    ui64 ListedObjectSize = 0; // total size of all found object, maybe incomplete, intended for use with CBO
 };
 
 enum class EListError {
@@ -145,6 +148,7 @@ enum class EListError {
 struct TListError {
     EListError Type;
     TIssues Issues;
+    ui64 ListedObjectSize = 0;
 };
 using TListResult = std::variant<TListEntries, TListError>;
 
@@ -169,6 +173,7 @@ IS3Lister::TPtr MakeS3Lister(
     const TListingRequest& listingRequest,
     const TMaybe<TString>& delimiter,
     bool allowLocalFiles,
+    NActors::TActorSystem* actorSystem,
     TSharedListingContextPtr sharedCtx = nullptr);
 
 class IS3ListerFactory {
@@ -189,7 +194,8 @@ IS3ListerFactory::TPtr MakeS3ListerFactory(
     size_t maxParallelOps,
     size_t callbackThreadCount,
     size_t callbackPerThreadQueueSize,
-    size_t regexpCacheSize);
+    size_t regexpCacheSize,
+    NActors::TActorSystem* actorSystem);
 
 } // namespace NS3Lister
 } // namespace NYql

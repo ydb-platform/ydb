@@ -1,9 +1,9 @@
 #pragma once
 
-#include <ydb/library/yql/providers/common/config/yql_dispatch.h>
-#include <ydb/library/yql/providers/common/config/yql_setting.h>
+#include <yql/essentials/providers/common/config/yql_dispatch.h>
+#include <yql/essentials/providers/common/config/yql_setting.h>
 
-#include <ydb/library/yql/core/yql_data_provider.h>
+#include <yql/essentials/core/yql_data_provider.h>
 #include <ydb/library/yql/dq/common/dq_common.h>
 #include <ydb/library/yql/dq/proto/dq_transport.pb.h>
 
@@ -15,6 +15,7 @@
 namespace NYql {
 
 struct TDqSettings {
+    friend struct TDqConfiguration;
 
     enum class ETaskRunnerStats {
         Disable,
@@ -56,8 +57,8 @@ struct TDqSettings {
         static constexpr bool ExportStats = false;
         static constexpr ETaskRunnerStats TaskRunnerStats = ETaskRunnerStats::Basic;
         static constexpr ESpillingEngine SpillingEngine = ESpillingEngine::Disable;
-        static constexpr ui32 CostBasedOptimizationLevel = 3;
-        static constexpr ui32 MaxDPccpDPTableSize = 40000U;
+        static constexpr ui32 CostBasedOptimizationLevel = 4;
+        static constexpr ui32 MaxDPHypDPTableSize = 95'000U;
         static constexpr ui64 MaxAttachmentsSize = 2_GB;
         static constexpr bool SplitStageOnDqReplicate = true;
         static constexpr ui64 EnableSpillingNodes = 0;
@@ -66,79 +67,91 @@ struct TDqSettings {
 
     using TPtr = std::shared_ptr<TDqSettings>;
 
-    NCommon::TConfSetting<ui64, false> DataSizePerJob;
-    NCommon::TConfSetting<ui64, false> MaxDataSizePerJob;
-    NCommon::TConfSetting<ui32, false> MaxTasksPerStage;
-    NCommon::TConfSetting<ui32, false> MaxTasksPerOperation;
-    NCommon::TConfSetting<ui32, false> WorkersPerOperation;
-    NCommon::TConfSetting<ui64, false> MaxDataSizePerQuery;
-    NCommon::TConfSetting<bool, false> AnalyticsHopping;
-    NCommon::TConfSetting<bool, false> AnalyzeQuery;
-    NCommon::TConfSetting<int, false> _AnalyzeQueryPercentage;
-    NCommon::TConfSetting<int, false> MaxRetries;
-    NCommon::TConfSetting<int, false> MaxNetworkRetries;
-    NCommon::TConfSetting<ui64, false> RetryBackoffMs;
-    NCommon::TConfSetting<bool, false> CollectCoreDumps;
-    NCommon::TConfSetting<EFallbackPolicy, false> FallbackPolicy;
-    NCommon::TConfSetting<ui64, false> PullRequestTimeoutMs;
-    NCommon::TConfSetting<ui64, false> PingTimeoutMs;
-    NCommon::TConfSetting<bool, false> UseSimpleYtReader;
-    NCommon::TConfSetting<TString, false> OptLLVM;
-    NCommon::TConfSetting<ui64, false> ChannelBufferSize;
-    NCommon::TConfSetting<ui64, false> OutputChunkMaxSize;
-    NCommon::TConfSetting<ui64, false> ChunkSizeLimit;
-    NCommon::TConfSetting<NSize::TSize, false> MemoryLimit;
-    NCommon::TConfSetting<ui64, false> _LiteralTimeout;
-    NCommon::TConfSetting<ui64, false> _TableTimeout;
-    NCommon::TConfSetting<ui64, false> _LongWorkersAllocationWarnTimeout;
-    NCommon::TConfSetting<ui64, false> _LongWorkersAllocationFailTimeout;
-    NCommon::TConfSetting<bool, false> EnableInsert;
-    NCommon::TConfSetting<ui64, false> _AllResultsBytesLimit;
-    NCommon::TConfSetting<ui64, false> _RowsLimitPerWrite;
-    NCommon::TConfSetting<bool, false> EnableStrip;
-    NCommon::TConfSetting<bool, false> EnableComputeActor;
-    NCommon::TConfSetting<TString, false> ComputeActorType;
-    NCommon::TConfSetting<bool, false> _EnablePorto;
-    NCommon::TConfSetting<ui64, false> _PortoMemoryLimit;
-    NCommon::TConfSetting<bool, false> EnableFullResultWrite;
-    NCommon::TConfSetting<bool, false> _OneGraphPerQuery;
-    NCommon::TConfSetting<TString, false> _FallbackOnRuntimeErrors;
-    NCommon::TConfSetting<bool, false> _EnablePrecompute;
-    NCommon::TConfSetting<bool, false> UseFinalizeByKey;
-    NCommon::TConfSetting<bool, false> EnableDqReplicate;
-    NCommon::TConfSetting<TString, false> WatermarksMode;
-    NCommon::TConfSetting<bool, false> WatermarksEnableIdlePartitions;
-    NCommon::TConfSetting<ui64, false> WatermarksGranularityMs;
-    NCommon::TConfSetting<ui64, false> WatermarksLateArrivalDelayMs;
-    NCommon::TConfSetting<bool, false> UseAggPhases;
-    NCommon::TConfSetting<ui64, false> ParallelOperationsLimit;
+private:
+#ifdef YQL_BETTER_CONF_SETTING_API
+    static constexpr NCommon::EConfSettingType Static = NCommon::EConfSettingType::Static;
+#else
+    static constexpr bool Static = false;
+#endif
+public:
 
-    NCommon::TConfSetting<TString, false> WorkerFilter;
-    NCommon::TConfSetting<NDq::EHashJoinMode, false> HashJoinMode;
-    NCommon::TConfSetting<double, false> HashShuffleTasksRatio;
-    NCommon::TConfSetting<ui32, false> HashShuffleMaxTasks;
+    NCommon::TConfSetting<ui64, Static> DataSizePerJob;
+    NCommon::TConfSetting<ui64, Static> MaxDataSizePerJob;
+    NCommon::TConfSetting<ui32, Static> MaxTasksPerStage;
+    NCommon::TConfSetting<ui32, Static> MaxTasksPerOperation;
+    NCommon::TConfSetting<ui32, Static> WorkersPerOperation;
+    NCommon::TConfSetting<ui64, Static> MaxDataSizePerQuery;
+    NCommon::TConfSetting<bool, Static> AnalyticsHopping;
+    NCommon::TConfSetting<bool, Static> AnalyzeQuery;
+    NCommon::TConfSetting<int, Static> _AnalyzeQueryPercentage;
+    NCommon::TConfSetting<int, Static> MaxRetries;
+    NCommon::TConfSetting<int, Static> MaxNetworkRetries;
+    NCommon::TConfSetting<ui64, Static> RetryBackoffMs;
+    NCommon::TConfSetting<bool, Static> CollectCoreDumps;
+    NCommon::TConfSetting<EFallbackPolicy, Static> FallbackPolicy;
+    NCommon::TConfSetting<ui64, Static> PullRequestTimeoutMs;
+    NCommon::TConfSetting<ui64, Static> PingTimeoutMs;
+    NCommon::TConfSetting<bool, Static> UseSimpleYtReader;
+    NCommon::TConfSetting<TString, Static> OptLLVM;
+    NCommon::TConfSetting<ui64, Static> ChannelBufferSize;
+    NCommon::TConfSetting<ui64, Static> OutputChunkMaxSize;
+    NCommon::TConfSetting<ui64, Static> ChunkSizeLimit;
+    NCommon::TConfSetting<NSize::TSize, Static> MemoryLimit;
+    NCommon::TConfSetting<ui64, Static> _LiteralTimeout;
+private:
+    NCommon::TConfSetting<ui64, Static> _TableTimeout;
+    NCommon::TConfSetting<ui64, Static> QueryTimeout; // less or equal than _TableTimeout
+public:
+    NCommon::TConfSetting<ui64, Static> _LongWorkersAllocationWarnTimeout;
+    NCommon::TConfSetting<ui64, Static> _LongWorkersAllocationFailTimeout;
+    NCommon::TConfSetting<bool, Static> EnableInsert;
+    NCommon::TConfSetting<ui64, Static> _AllResultsBytesLimit;
+    NCommon::TConfSetting<ui64, Static> _RowsLimitPerWrite;
+    NCommon::TConfSetting<bool, Static> EnableStrip;
+    NCommon::TConfSetting<bool, Static> EnableComputeActor;
+    NCommon::TConfSetting<TString, Static> ComputeActorType;
+    NCommon::TConfSetting<bool, Static> _EnablePorto;
+    NCommon::TConfSetting<ui64, Static> _PortoMemoryLimit;
+    NCommon::TConfSetting<bool, Static> EnableFullResultWrite;
+    NCommon::TConfSetting<bool, Static> _OneGraphPerQuery;
+    NCommon::TConfSetting<TString, Static> _FallbackOnRuntimeErrors;
+    NCommon::TConfSetting<bool, Static> _EnablePrecompute;
+    NCommon::TConfSetting<bool, Static> UseFinalizeByKey;
+    NCommon::TConfSetting<bool, Static> EnableDqReplicate;
+    NCommon::TConfSetting<TString, Static> WatermarksMode;
+    NCommon::TConfSetting<bool, Static> WatermarksEnableIdlePartitions;
+    NCommon::TConfSetting<ui64, Static> WatermarksGranularityMs;
+    NCommon::TConfSetting<ui64, Static> WatermarksLateArrivalDelayMs;
+    NCommon::TConfSetting<bool, Static> UseAggPhases;
+    NCommon::TConfSetting<ui64, Static> ParallelOperationsLimit;
 
-    NCommon::TConfSetting<bool, false> UseWideChannels;
-    NCommon::TConfSetting<bool, false> UseWideBlockChannels;
-    NCommon::TConfSetting<bool, false> UseFastPickleTransport;
-    NCommon::TConfSetting<bool, false> UseOOBTransport;
+    NCommon::TConfSetting<TString, Static> WorkerFilter;
+    NCommon::TConfSetting<NDq::EHashJoinMode, Static> HashJoinMode;
+    NCommon::TConfSetting<double, Static> HashShuffleTasksRatio;
+    NCommon::TConfSetting<ui32, Static> HashShuffleMaxTasks;
 
-    NCommon::TConfSetting<bool, false> AggregateStatsByStage;
-    NCommon::TConfSetting<bool, false> EnableChannelStats;
-    NCommon::TConfSetting<bool, false> ExportStats;
-    NCommon::TConfSetting<ETaskRunnerStats, false> TaskRunnerStats;
-    NCommon::TConfSetting<bool, false> _SkipRevisionCheck;
-    NCommon::TConfSetting<bool, false> UseBlockReader;
-    NCommon::TConfSetting<ESpillingEngine, false> SpillingEngine;
-    NCommon::TConfSetting<bool, false> DisableLLVMForBlockStages;
-    NCommon::TConfSetting<bool, false> SplitStageOnDqReplicate;
+    NCommon::TConfSetting<bool, Static> UseWideChannels;
+    NCommon::TConfSetting<bool, Static> UseWideBlockChannels;
+    NCommon::TConfSetting<bool, Static> UseFastPickleTransport;
+    NCommon::TConfSetting<bool, Static> UseOOBTransport;
 
-    NCommon::TConfSetting<ui64, false> EnableSpillingNodes;
-    NCommon::TConfSetting<bool, false> EnableSpillingInChannels;
+    NCommon::TConfSetting<bool, Static> AggregateStatsByStage;
+    NCommon::TConfSetting<bool, Static> EnableChannelStats;
+    NCommon::TConfSetting<bool, Static> ExportStats;
+    NCommon::TConfSetting<ETaskRunnerStats, Static> TaskRunnerStats;
+    NCommon::TConfSetting<bool, Static> _SkipRevisionCheck;
+    NCommon::TConfSetting<bool, Static> UseBlockReader;
+    NCommon::TConfSetting<ESpillingEngine, Static> SpillingEngine;
+    NCommon::TConfSetting<bool, Static> DisableLLVMForBlockStages;
+    NCommon::TConfSetting<bool, Static> SplitStageOnDqReplicate;
 
-    NCommon::TConfSetting<ui64, false> _MaxAttachmentsSize;
-    NCommon::TConfSetting<bool, false> DisableCheckpoints;
-    NCommon::TConfSetting<bool, false> UseGraceJoinCoreForMap;
+    NCommon::TConfSetting<ui64, Static> EnableSpillingNodes;
+    NCommon::TConfSetting<bool, Static> EnableSpillingInChannels;
+
+    NCommon::TConfSetting<ui64, Static> _MaxAttachmentsSize;
+    NCommon::TConfSetting<bool, Static> DisableCheckpoints;
+    NCommon::TConfSetting<bool, Static> UseGraceJoinCoreForMap;
+    NCommon::TConfSetting<TString, Static> Scheduler;
 
     // This options will be passed to executor_actor and worker_actor
     template <typename TProtoConfig>
@@ -167,6 +180,7 @@ struct TDqSettings {
         SAVE_SETTING(MemoryLimit);
         SAVE_SETTING(_LiteralTimeout);
         SAVE_SETTING(_TableTimeout);
+        SAVE_SETTING(QueryTimeout);
         SAVE_SETTING(_LongWorkersAllocationWarnTimeout);
         SAVE_SETTING(_LongWorkersAllocationFailTimeout);
         SAVE_SETTING(_AllResultsBytesLimit);
@@ -193,6 +207,7 @@ struct TDqSettings {
         SAVE_SETTING(SpillingEngine);
         SAVE_SETTING(EnableSpillingInChannels);
         SAVE_SETTING(DisableCheckpoints);
+        SAVE_SETTING(Scheduler);
 #undef SAVE_SETTING
     }
 
@@ -216,6 +231,15 @@ struct TDqSettings {
         } else {
             return fastPickle ? NDqProto::EDataTransportVersion::DATA_TRANSPORT_UV_FAST_PICKLE_1_0 : NDqProto::EDataTransportVersion::DATA_TRANSPORT_UV_PICKLE_1_0;
         }
+    }
+
+    ui64 GetQueryTimeout() const {
+        auto upper = _TableTimeout.Get().GetOrElse(TDefault::TableTimeout);
+        if (QueryTimeout.Get().Defined()) {
+            return Min(*QueryTimeout.Get(), upper);
+        }
+
+        return upper;
     }
 
     bool IsSpillingEngineEnabled() const {

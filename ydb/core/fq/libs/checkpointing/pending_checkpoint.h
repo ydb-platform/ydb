@@ -10,6 +10,7 @@ namespace NFq {
 struct TPendingCheckpointStats {
     const TInstant CreatedAt = TInstant::Now();
     ui64 StateSize = 0;
+    bool Aborted = false;
 };
 
 class TPendingCheckpoint {
@@ -26,6 +27,8 @@ public:
     void Acknowledge(const NActors::TActorId& actorId);
 
     void Acknowledge(const NActors::TActorId& actorId, ui64 stateSize);
+
+    void Abort(const NActors::TActorId& actorId);
 
     [[nodiscard]]
     bool GotAllAcknowledges() const;

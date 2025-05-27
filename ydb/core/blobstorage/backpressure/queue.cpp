@@ -46,8 +46,10 @@ TBlobStorageQueue::~TBlobStorageQueue() {
     for (TItemList *queue : {&Queues.Waiting, &Queues.InFlight, &Queues.Unused}) {
         for (TItem& item : *queue) {
             SetItemQueue(item, EItemQueue::NotSet);
+            --*QueueSize;
         }
     }
+    *QueueWindowSize -= WindowSize;
 }
 
 void TBlobStorageQueue::UpdateCostModel(TInstant now, const NKikimrBlobStorage::TVDiskCostSettings& settings,
@@ -339,7 +341,6 @@ TBlobStorageQueue::TItemList::iterator TBlobStorageQueue::EraseItem(TItemList& q
     TItemList::iterator nextIter = std::next(it);
     if (Queues.Unused.size() < MaxUnusedItems) {
         Queues.Unused.splice(Queues.Unused.end(), queue, it);
-        it->TSenderNode::UnLink();
         it->Event.Discard();
     } else {
         queue.erase(it);

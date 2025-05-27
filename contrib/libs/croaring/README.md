@@ -410,16 +410,26 @@ int main() {
     // we can write a bitmap to a pointer and recover it later
     uint32_t expectedsize = roaring_bitmap_portable_size_in_bytes(r1);
     char *serializedbytes = malloc(expectedsize);
+    // When serializing data to a file, we recommend that you also use
+    // checksums so that, at deserialization, you can be confident
+    // that you are recovering the correct data.
     roaring_bitmap_portable_serialize(r1, serializedbytes);
     // Note: it is expected that the input follows the specification
     // https://github.com/RoaringBitmap/RoaringFormatSpec
     // otherwise the result may be unusable.
+    // The 'roaring_bitmap_portable_deserialize_safe' function will not read
+    // beyond expectedsize bytes.
+    // We also recommend that you use checksums to check that serialized data corresponds
+    // to the serialized bitmap. The CRoaring library does not provide checksumming.
     roaring_bitmap_t *t = roaring_bitmap_portable_deserialize_safe(serializedbytes, expectedsize);
     if(t == NULL) { return EXIT_FAILURE; }
     const char *reason = NULL;
+    // If your input came from an untrusted source, then you need to validate the
+    // resulting bitmap. Failing to do so could lead to undefined behavior, crashes and so forth.
     if (!roaring_bitmap_internal_validate(t, &reason)) {
         return EXIT_FAILURE;
     }
+    // At this point, the bitmap is safe.
     assert(roaring_bitmap_equals(r1, t));  // what we recover is equal
     roaring_bitmap_free(t);
     // we can also check whether there is a bitmap at a memory location without
@@ -428,7 +438,11 @@ int main() {
         roaring_bitmap_portable_deserialize_size(serializedbytes, expectedsize);
     assert(sizeofbitmap ==
            expectedsize);  // sizeofbitmap would be zero if no bitmap were found
-    // we can also read the bitmap "safely" by specifying a byte size limit:
+    // We can also read the bitmap "safely" by specifying a byte size limit.
+    // The 'roaring_bitmap_portable_deserialize_safe' function will not read
+    // beyond expectedsize bytes.
+    // We also recommend that you use checksums to check that serialized data corresponds
+    // to the serialized bitmap. The CRoaring library does not provide checksumming.
     t = roaring_bitmap_portable_deserialize_safe(serializedbytes, expectedsize);
     if(t == NULL) {
         printf("Problem during deserialization.\n");
@@ -436,15 +450,14 @@ int main() {
         return EXIT_FAILURE;
     }
     // We can validate the bitmap we recovered to make sure it is proper.
+    // If the data came from an untrusted source, you should call
+    // roaring_bitmap_internal_validate.
     const char *reason_failure = NULL;
     if (!roaring_bitmap_internal_validate(t, &reason_failure)) {
         printf("safely deserialized invalid bitmap: %s\n", reason_failure);
         // We could clear any memory and close any file here.
         return EXIT_FAILURE;
     }
-    // It is still necessary for the content of seriallizedbytes to follow
-    // the standard: https://github.com/RoaringBitmap/RoaringFormatSpec
-    // This is guaranted when calling 'roaring_bitmap_portable_deserialize'.
     assert(roaring_bitmap_equals(r1, t));  // what we recover is equal
     roaring_bitmap_free(t);
 
@@ -500,6 +513,8 @@ We also support efficient 64-bit compressed bitmaps in C:
   roaring64_bitmap_free(r2);
 ```
 
+The API is similar to the conventional 32-bit bitmaps. Please see
+the header file `roaring64.h` (compare with `roaring.h`).
 
 # Conventional bitsets (C)
 
@@ -517,26 +532,26 @@ bitset_free(b); // frees memory
 More advanced example:
 
 ```C
-    bitset_t *b = bitset_create();
-    for (int k = 0; k < 1000; ++k) {
-        bitset_set(b, 3 * k);
-    }
-    // We have bitset_count(b) == 1000.
-    // We have bitset_get(b, 3) is true
-    // You can iterate through the values:
-    size_t k = 0;
-    for (size_t i = 0; bitset_next_set_bit(b, &i); i++) {
-        // You will have i == k
-        k += 3;
-    }
-    // We support a wide range of operations on two bitsets such as
-    // bitset_inplace_symmetric_difference(b1,b2);
-    // bitset_inplace_symmetric_difference(b1,b2);
-    // bitset_inplace_difference(b1,b2);// should make no difference
-    // bitset_inplace_union(b1,b2);
-    // bitset_inplace_intersection(b1,b2);
-    // bitsets_disjoint
-    // bitsets_intersect
+bitset_t *b = bitset_create();
+for (int k = 0; k < 1000; ++k) {
+    bitset_set(b, 3 * k);
+}
+// We have bitset_count(b) == 1000.
+// We have bitset_get(b, 3) is true
+// You can iterate through the values:
+size_t k = 0;
+for (size_t i = 0; bitset_next_set_bit(b, &i); i++) {
+    // You will have i == k
+    k += 3;
+}
+// We support a wide range of operations on two bitsets such as
+// bitset_inplace_symmetric_difference(b1,b2);
+// bitset_inplace_symmetric_difference(b1,b2);
+// bitset_inplace_difference(b1,b2);// should make no difference
+// bitset_inplace_union(b1,b2);
+// bitset_inplace_intersection(b1,b2);
+// bitsets_disjoint
+// bitsets_intersect
 ```
 
 In some instances, you may want to convert a Roaring bitmap into a conventional (uncompressed) bitset.
@@ -544,28 +559,28 @@ Indeed, bitsets have advantages such as higher query performances in some cases.
 illustrates how you may do so:
 
 ```C
-    roaring_bitmap_t *r1 = roaring_bitmap_create();
-    for (uint32_t i = 100; i < 100000; i+= 1 + (i%5)) {
+roaring_bitmap_t *r1 = roaring_bitmap_create();
+for (uint32_t i = 100; i < 100000; i+= 1 + (i%5)) {
      roaring_bitmap_add(r1, i);
-    }
-    for (uint32_t i = 100000; i < 500000; i+= 100) {
+}
+for (uint32_t i = 100000; i < 500000; i+= 100) {
      roaring_bitmap_add(r1, i);
-    }
-    roaring_bitmap_add_range(r1, 500000, 600000);
-    bitset_t * bitset = bitset_create();
-    bool success = roaring_bitmap_to_bitset(r1, bitset);
-    assert(success); // could fail due to memory allocation.
-    assert(bitset_count(bitset) == roaring_bitmap_get_cardinality(r1));
-    // You can then query the bitset:
-    for (uint32_t i = 100; i < 100000; i+= 1 + (i%5)) {
-        assert(bitset_get(bitset,i));
-    }
-    for (uint32_t i = 100000; i < 500000; i+= 100) {
-        assert(bitset_get(bitset,i));
-    }
-    // you must free the memory:
-    bitset_free(bitset);
-    roaring_bitmap_free(r1);
+}
+roaring_bitmap_add_range(r1, 500000, 600000);
+bitset_t * bitset = bitset_create();
+bool success = roaring_bitmap_to_bitset(r1, bitset);
+assert(success); // could fail due to memory allocation.
+assert(bitset_count(bitset) == roaring_bitmap_get_cardinality(r1));
+// You can then query the bitset:
+for (uint32_t i = 100; i < 100000; i+= 1 + (i%5)) {
+    assert(bitset_get(bitset,i));
+}
+for (uint32_t i = 100000; i < 500000; i+= 100) {
+    assert(bitset_get(bitset,i));
+}
+// you must free the memory:
+bitset_free(bitset);
+roaring_bitmap_free(r1);
 ```
 
 You should be aware that a convention bitset (`bitset_t *`) may use much more

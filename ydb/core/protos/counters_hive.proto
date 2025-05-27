@@ -31,6 +31,11 @@ enum ESimpleCounters {
     COUNTER_STORAGE_SCATTER = 21 [(CounterOpts) = {Name: "StorageScatter"}];
     COUNTER_TABLETS_STARTING = 22 [(CounterOpts) = {Name: "TabletsStarting"}];
     COUNTER_PINGQUEUE_SIZE = 23 [(CounterOpts) = {Name: "PingQueueSize"}];
+    COUNTER_NODES_RECOMMENDED = 24 [(CounterOpts) = {Name: "NodesRecommended"}];
+    COUNTER_NODES_RECOMMENDED_DRY_RUN = 25 [(CounterOpts) = {Name: "NodesRecommendedDryRun"}];
+    COUNTER_AVG_CPU_UTILIZATION = 26 [(CounterOpts) = {Name: "AvgCPUUtilization"}];
+    COUNTER_NODES_DOWN = 27 [(CounterOpts) = {Name: "NodesDown"}];
+    COUNTER_NODES_FROZEN = 28 [(CounterOpts) = {Name: "NodesFrozen"}];
 }
 
 enum ECumulativeCounters {
@@ -97,6 +102,7 @@ enum EPercentileCounters {
 
     COUNTER_TABLET_CHANNEL_HISTORY_SIZE = 3 [(CounterOpts) = {
         Name: "TabletChannelHistorySize",
+        Integral: true,
         Ranges: { Value: 1                       }
         Ranges: { Value: 5                       }
         Ranges: { Value: 10                      }
@@ -175,4 +181,6 @@ enum ETxTypes {
     TXTYPE_MON_OBJECT_STATS = 63                          [(TxTypeOpts) = {Name: "TxMonObjectStats"}];
     TXTYPE_MON_SUBACTORS = 64                             [(TxTypeOpts) = {Name: "TxMonSubactors"}];
     TXTYPE_MON_TABLET_AVAILABILITY = 65                   [(TxTypeOpts) = {Name: "TxMonTabletAvailability"}];
+    TXTYPE_UPDATE_DC_FOLLOWERS = 66                       [(TxTypeOpts) = {Name: "TxUpdateDcFollowers"}];
+    TXTYPE_CONFIGURE_SCALE_RECOMMENDER = 67               [(TxTypeOpts) = {Name: "TxConfigureScaleRecommender"}];
 }

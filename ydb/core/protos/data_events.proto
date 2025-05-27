@@ -1,4 +1,5 @@
 import "ydb/library/actors/protos/actors.proto";
+import "ydb/core/protos/base.proto";
 import "ydb/core/protos/query_stats.proto";
 import "ydb/public/api/protos/ydb_issue_message.proto";
 
@@ -37,6 +38,8 @@ message TKqpLocks {
     // This may only be used with generic readsets without any other data and
     // currently limited to volatile transactions.
     optional uint64 ArbiterShard = 5;
+
+    optional uint64 ArbiterColumnShard = 6;
 }
 
 message TTableId {
@@ -62,6 +65,11 @@ message TMvccSnapshot {
     // version is the minimum MVCC version for the operation, shards may use
     // a higher MVCC version when appropriate.
     optional bool RepeatableRead = 12 [default = true];
+}
+
+enum ELockMode {
+    OPTIMISTIC = 0;
+    OPTIMISTIC_SNAPSHOT_ISOLATION = 1;
 }
 
 enum EDataFormat {
@@ -93,6 +101,7 @@ message TEvWrite {
         repeated uint32 ColumnIds = 3 [packed = true];
         optional uint64 PayloadIndex = 4;
         optional EDataFormat PayloadFormat = 5;
+        optional string PayloadSchema = 6;
     }
 
     // Transaction operations
@@ -112,6 +121,8 @@ message TEvWrite {
     // This mostly affects the minimum MVCC version of the resulting write
     optional TMvccSnapshot MvccSnapshot = 8;
     optional uint32 GranuleShardingVersionId = 9;
+
+    optional ELockMode LockMode = 10;
 }
 
 message TEvWriteResult {
@@ -126,6 +137,10 @@ message TEvWriteResult {
         STATUS_BAD_REQUEST = 7;
         STATUS_SCHEME_CHANGED = 8;
         STATUS_LOCKS_BROKEN = 9;
+        STATUS_DISK_SPACE_EXHAUSTED = 10;
+        STATUS_WRONG_SHARD_STATE = 11;
+        STATUS_CONSTRAINT_VIOLATION = 12;
+        STATUS_OUT_OF_SPACE = 13;
     }
 
     // Status
@@ -148,4 +163,7 @@ message TEvWriteResult {
 
     // Statistics
     optional NKikimrQueryStats.TTxStats TxStats = 13;
+
+    // Commit version when available
+    optional NKikimrProto.TRowVersion CommitVersion = 14;
 }

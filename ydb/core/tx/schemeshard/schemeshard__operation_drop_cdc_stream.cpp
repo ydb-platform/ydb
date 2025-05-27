@@ -2,7 +2,10 @@
 
 #include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common.h"
-#include "schemeshard_impl.h"
+
+#include "schemeshard_utils.h"  // for TransactionTemplate
+
+#include "schemeshard__operation_drop_cdc_stream.h"
 
 #define LOG_D(stream) LOG_DEBUG_S (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
 #define LOG_I(stream) LOG_INFO_S  (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
@@ -64,8 +67,8 @@ public:
         Y_ABORT_UNLESS(context.SS->PathsById.contains(path->ParentPathId));
         auto parent = context.SS->PathsById.at(path->ParentPathId);
 
-        context.SS->ResolveDomainInfo(pathId)->DecPathsInside();
-        parent->DecAliveChildren();
+        context.SS->ResolveDomainInfo(pathId)->DecPathsInside(context.SS);
+        DecAliveChildrenDirect(OperationId, parent, context); // for correct discard of ChildrenExist prop
 
         context.SS->ClearDescribePathCaches(path);
         context.OnComplete.PublishToSchemeBoard(OperationId, pathId);
@@ -207,7 +210,7 @@ protected:
         auto table = context.SS->Tables.at(pathId);
 
         auto& notice = *tx.MutableDropCdcStreamNotice();
-        PathIdFromPathId(pathId, notice.MutablePathId());
+        pathId.ToProto(notice.MutablePathId());
         notice.SetTableSchemaVersion(table->AlterVersion + 1);
 
         bool found = false;
@@ -220,11 +223,11 @@ protected:
             }
 
             Y_VERIFY_S(!found, "Too many cdc streams are planned to drop"
-                << ": found# " << PathIdFromPathId(notice.GetStreamPathId())
+                << ": found# " << TPathId::FromProto(notice.GetStreamPathId())
                 << ", another# " << childPathId);
             found = true;
 
-            PathIdFromPathId(childPathId, notice.MutableStreamPathId());
+            childPathId.ToProto(notice.MutableStreamPathId());
         }
     }
 

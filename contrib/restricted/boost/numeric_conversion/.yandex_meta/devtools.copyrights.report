@@ -1,0 +1,115 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 87984591a203f84e6f000f2a12696b5d
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/numeric/conversion/bounds.hpp [1:3]
+        include/boost/numeric/conversion/cast.hpp [1:3]
+        include/boost/numeric/conversion/conversion_traits.hpp [1:3]
+        include/boost/numeric/conversion/converter.hpp [1:3]
+        include/boost/numeric/conversion/converter_policies.hpp [1:3]
+        include/boost/numeric/conversion/detail/bounds.hpp [1:3]
+        include/boost/numeric/conversion/detail/conversion_traits.hpp [1:3]
+        include/boost/numeric/conversion/detail/converter.hpp [1:3]
+        include/boost/numeric/conversion/detail/int_float_mixture.hpp [1:3]
+        include/boost/numeric/conversion/detail/is_subranged.hpp [1:3]
+        include/boost/numeric/conversion/detail/meta.hpp [1:3]
+        include/boost/numeric/conversion/detail/sign_mixture.hpp [1:3]
+        include/boost/numeric/conversion/detail/udt_builtin_mixture.hpp [1:3]
+        include/boost/numeric/conversion/int_float_mixture.hpp [1:3]
+        include/boost/numeric/conversion/int_float_mixture_enum.hpp [1:3]
+        include/boost/numeric/conversion/is_subranged.hpp [1:3]
+        include/boost/numeric/conversion/sign_mixture.hpp [1:3]
+        include/boost/numeric/conversion/sign_mixture_enum.hpp [1:3]
+        include/boost/numeric/conversion/udt_builtin_mixture.hpp [1:3]
+        include/boost/numeric/conversion/udt_builtin_mixture_enum.hpp [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a103e4c3ebf84b433d6fa1717f50fe56
+BELONGS ya.make
+    License text:
+        //! Copyright (c) 2011
+        //! Brandon Kohn
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/numeric/conversion/numeric_cast_traits.hpp [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ca7f81dcda042dfffe2f75e2fa3c6acc
+BELONGS ya.make
+    License text:
+        //  (C) Copyright Antony Polukhin 2014.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/cast.hpp [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL caf6818f96cbd63eb0a359a0d1dd3ac5
+BELONGS ya.make
+    License text:
+        //  (C) Copyright Kevlin Henney and Dave Abrahams 1999.
+        //  Distributed under the Boost
+        //  Software License, Version 1.0. (See accompanying file
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/numeric/conversion/detail/old_numeric_cast.hpp [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e7839fbcad9c12a3056bd593ac5607a1
+BELONGS ya.make
+    License text:
+        //! Copyright (c) 2011-2012
+        //! Brandon Kohn
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/numeric/conversion/detail/numeric_cast_traits.hpp [2:3]
+        include/boost/numeric/conversion/detail/numeric_cast_traits.hpp [29:30]
+        include/boost/numeric/conversion/detail/numeric_cast_traits.hpp [80:81]
+        include/boost/numeric/conversion/detail/preprocessed/numeric_cast_traits_common.hpp [2:3]
+        include/boost/numeric/conversion/detail/preprocessed/numeric_cast_traits_long_long.hpp [2:3]

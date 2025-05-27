@@ -75,6 +75,7 @@ namespace NYT::NHttp {
   XX(428, PreconditionRequired,            Precondition Required)           \
   XX(429, TooManyRequests,                 Too Many Requests)               \
   XX(431, RequestHeaderFieldsTooLarge,     Request Header Fields Too Large) \
+  XX(434, RequestedHostUnavailable,        Requested Host Unavailable)      \
   XX(451, UnavailableForLegalReasons,      Unavailable For Legal Reasons)   \
   XX(499, ClientClosedRequest,             Client Closed Request)           \
   XX(500, InternalServerError,             Internal Server Error)           \
@@ -150,7 +151,7 @@ DEFINE_ENUM(EStatusCode,
 //! define our own.
 
 TStringBuf ToHttpString(EMethod method);
-TStringBuf ToHttpString(EStatusCode code);
+TString ToHttpString(EStatusCode code);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -177,20 +178,20 @@ class THeaders
     : public virtual TRefCounted
 {
 public:
-    using THeaderNames = THashSet<TString, TCaseInsensitiveStringHasher, TCaseInsensitiveStringEqualityComparer>;
+    using THeaderNames = THashSet<std::string, TCaseInsensitiveStringHasher, TCaseInsensitiveStringEqualityComparer>;
 
-    void Add(const TString& header, TString value);
-    void Set(const TString& header, TString value);
+    void Add(std::string header, std::string value);
+    void Set(std::string header, std::string value);
     void Remove(TStringBuf header);
 
-    const TString* Find(TStringBuf header) const;
+    const std::string* Find(TStringBuf header) const;
 
     void RemoveOrThrow(TStringBuf header);
 
     //! Returns first header value, if any. Throws otherwise.
-    TString GetOrThrow(TStringBuf header) const;
+    std::string GetOrThrow(TStringBuf header) const;
 
-    const TCompactVector<TString, 1>& GetAll(TStringBuf header) const;
+    const TCompactVector<std::string, 1>& GetAll(TStringBuf header) const;
 
     void WriteTo(IOutputStream* out, const THeaderNames* filtered = nullptr) const;
 
@@ -198,23 +199,23 @@ public:
 
     void MergeFrom(const THeadersPtr& headers);
 
-    std::vector<std::pair<TString, TString>> Dump(const THeaderNames* filtered = nullptr) const;
+    std::vector<std::pair<std::string, std::string>> Dump(const THeaderNames* filtered = nullptr) const;
 
 private:
     struct TEntry
     {
-        TString OriginalHeaderName;
-        TCompactVector<TString, 1> Values;
+        std::string OriginalHeaderName;
+        TCompactVector<std::string, 1> Values;
     };
 
-    THashMap<TString, TEntry, TCaseInsensitiveStringHasher, TCaseInsensitiveStringEqualityComparer> NameToEntry_;
+    THashMap<std::string, TEntry, TCaseInsensitiveStringHasher, TCaseInsensitiveStringEqualityComparer> NameToEntry_;
 };
 
 DEFINE_REFCOUNTED_TYPE(THeaders)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TString EscapeHeaderValue(TStringBuf value);
+std::string EscapeHeaderValue(TStringBuf value);
 void ValidateHeaderValue(TStringBuf header, TStringBuf value);
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -233,8 +234,9 @@ struct IRequest
 
     virtual const NNet::TNetworkAddress& GetRemoteAddress() const = 0;
 
-    virtual TGuid GetConnectionId() const = 0;
-    virtual TGuid GetRequestId() const = 0;
+    virtual TConnectionId GetConnectionId() const = 0;
+    virtual TRequestId GetRequestId() const = 0;
+
     virtual i64 GetReadByteCount() const = 0;
     virtual TInstant GetStartTime() const = 0;
 

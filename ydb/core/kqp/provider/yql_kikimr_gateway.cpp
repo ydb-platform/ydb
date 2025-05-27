@@ -1,11 +1,11 @@
 #include "yql_kikimr_gateway.h"
 
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
-#include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
-#include <ydb/library/yql/parser/pg_wrapper/interface/type_desc.h>
-#include <ydb/library/yql/utils/yql_panic.h>
-#include <ydb/library/yql/minikql/mkql_node.h>
-#include <ydb/library/yql/minikql/mkql_string_util.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
+#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
+#include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
+#include <yql/essentials/utils/yql_panic.h>
+#include <yql/essentials/minikql/mkql_node.h>
+#include <yql/essentials/minikql/mkql_string_util.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
@@ -76,6 +76,10 @@ void TReplicationSettings::TStaticCredentials::Serialize(NKikimrReplication::TSt
     }
 }
 
+void TReplicationSettings::TGlobalConsistency::Serialize(NKikimrReplication::TConsistencySettings_TGlobalConsistency& proto) const {
+    proto.SetCommitIntervalMilliSeconds(CommitInterval.MilliSeconds());
+}
+
 TFuture<IKikimrGateway::TGenericResult> IKikimrGateway::CreatePath(const TString& path, TCreateDirFunc createDir) {
     auto partsHolder = std::make_shared<TVector<TString>>(NKikimr::SplitPath(path));
     auto& parts = *partsHolder;
@@ -101,15 +105,37 @@ bool TTtlSettings::TryParse(const NNodes::TCoNameValueTupleList& node, TTtlSetti
         if (name == "columnName") {
             YQL_ENSURE(field.Value().Maybe<TCoAtom>());
             settings.ColumnName = field.Value().Cast<TCoAtom>().StringValue();
-        } else if (name == "expireAfter") {
-            YQL_ENSURE(field.Value().Maybe<TCoInterval>());
-            auto value = FromString<i64>(field.Value().Cast<TCoInterval>().Literal().Value());
-            if (value < 0) {
-                error = "Interval value cannot be negative";
-                return false;
-            }
+        } else if (name == "tiers") {
+            YQL_ENSURE(field.Value().Maybe<TExprList>());
+            auto listNode = field.Value().Cast<TExprList>();
 
-            settings.ExpireAfter = TDuration::FromValue(value);
+            for (size_t i = 0; i < listNode.Size(); ++i) {
+                auto tierNode = listNode.Item(i);
+
+                std::optional<TString> storageName;
+                TDuration evictionDelay;
+                YQL_ENSURE(tierNode.Maybe<TCoNameValueTupleList>());
+                for (const auto& tierField : tierNode.Cast<TCoNameValueTupleList>()) {
+                    auto tierFieldName = tierField.Name().Value();
+                    if (tierFieldName == "storageName") {
+                        YQL_ENSURE(tierField.Value().Maybe<TCoAtom>());
+                        storageName = tierField.Value().Cast<TCoAtom>().StringValue();
+                    } else if (tierFieldName == "evictionDelay") {
+                        YQL_ENSURE(tierField.Value().Maybe<TCoInterval>());
+                        auto value = FromString<i64>(tierField.Value().Cast<TCoInterval>().Literal().Value());
+                        if (value < 0) {
+                            error = "Interval value cannot be negative";
+                            return false;
+                        }
+                        evictionDelay = TDuration::FromValue(value);
+                    } else {
+                        error = TStringBuilder() << "Unknown field: " << tierFieldName;
+                        return false;
+                    }
+                }
+
+                settings.Tiers.emplace_back(evictionDelay, storageName);
+            }
         } else if (name == "columnUnit") {
             YQL_ENSURE(field.Value().Maybe<TCoAtom>());
             auto value = field.Value().Cast<TCoAtom>().StringValue();
@@ -176,31 +202,51 @@ EYqlIssueCode YqlStatusFromYdbStatus(ui32 ydbStatus) {
     }
 }
 
-void SetColumnType(Ydb::Type& protoType, const TString& typeName, bool notNull) {
-    auto* typeDesc = NKikimr::NPg::TypeDescFromPgTypeName(typeName);
-    if (typeDesc) {
-        Y_ABORT_UNLESS(!notNull, "It is not allowed to create NOT NULL pg columns");
-        auto* pg = protoType.mutable_pg_type();
-        pg->set_type_name(NKikimr::NPg::PgTypeNameFromTypeDesc(typeDesc));
-        pg->set_type_modifier(NKikimr::NPg::TypeModFromPgTypeName(typeName));
-        pg->set_oid(NKikimr::NPg::PgTypeIdFromTypeDesc(typeDesc));
-        pg->set_typlen(0);
-        pg->set_typmod(0);
-        return;
+bool SetColumnType(const TTypeAnnotationNode* typeNode, bool notNull, Ydb::Type& protoType, TString& error) {
+    switch (typeNode->GetKind()) {
+    case ETypeAnnotationKind::Pg: {
+        const auto* pgTypeNode = typeNode->Cast<TPgExprType>();
+        const auto& typeId = pgTypeNode->GetId();
+        const auto typeDesc = NKikimr::NPg::TypeDescFromPgTypeId(typeId);
+        if (typeDesc) {
+            Y_ABORT_UNLESS(!notNull, "It is not allowed to create NOT NULL pg columns");
+            auto* pg = protoType.mutable_pg_type();
+            pg->set_type_name(NKikimr::NPg::PgTypeNameFromTypeDesc(typeDesc));
+            pg->set_oid(NKikimr::NPg::PgTypeIdFromTypeDesc(typeDesc));
+            pg->set_typlen(0);
+            pg->set_typmod(0);
+            return true;
+        } else {
+            error = TStringBuilder() << "Unknown pg type: " << FormatType(pgTypeNode);
+            return false;
+        }
     }
-
-    NUdf::EDataSlot dataSlot = NUdf::GetDataSlot(typeName);
-    if (dataSlot == NUdf::EDataSlot::Decimal) {
-        auto decimal = notNull ? protoType.mutable_decimal_type() :
-            protoType.mutable_optional_type()->mutable_item()->mutable_decimal_type();
-        // We have no params right now
-        // TODO: Fix decimal params support for kikimr
-        decimal->set_precision(22);
-        decimal->set_scale(9);
-    } else {
-        auto& primitive = notNull ? protoType : *protoType.mutable_optional_type()->mutable_item();
-        auto id = NUdf::GetDataTypeInfo(dataSlot).TypeId;
-        primitive.set_type_id(static_cast<Ydb::Type::PrimitiveTypeId>(id));
+    case ETypeAnnotationKind::Data: {
+        const auto dataTypeNode = typeNode->Cast<TDataExprType>();
+        const TStringBuf typeName = dataTypeNode->GetName();
+        NUdf::EDataSlot dataSlot = NUdf::GetDataSlot(typeName);
+        if (dataSlot == NUdf::EDataSlot::Decimal) {
+            auto dataExprTypeNode = typeNode->Cast<TDataExprParamsType>();
+            ui32 precision = FromString(dataExprTypeNode->GetParamOne());
+            ui32 scale = FromString(dataExprTypeNode->GetParamTwo());
+            if (!NKikimr::NScheme::TDecimalType::Validate(precision, scale, error)) {
+                return false;
+            }
+            auto decimal = notNull ? protoType.mutable_decimal_type() :
+                protoType.mutable_optional_type()->mutable_item()->mutable_decimal_type();
+            decimal->set_precision(precision);
+            decimal->set_scale(scale);
+        } else {
+            auto& primitive = notNull ? protoType : *protoType.mutable_optional_type()->mutable_item();
+            auto id = NUdf::GetDataTypeInfo(dataSlot).TypeId;
+            primitive.set_type_id(static_cast<Ydb::Type::PrimitiveTypeId>(id));
+        }
+        return true;
+    }
+    default: {
+        error = TStringBuilder() << "Unexpected node kind: " << typeNode->GetKind();
+        return false;
+    }
     }
 }
 
@@ -254,7 +300,7 @@ bool ConvertReadReplicasSettingsToProto(const TString settings, Ydb::Table::Read
             << "'. It should be one of: "
             << "1) 'PER_AZ:<read_replicas_count>' to set equal read replicas count for every AZ; "
             << "2) 'ANY_AZ:<read_replicas_count>' to set total read replicas count between all AZs; "
-            << "3) '<az1_name>:<read_replicas_count1>, <az2_name>:<read_replicas_count2>, ...' "
+//          << "3) '<az1_name>:<read_replicas_count1>, <az2_name>:<read_replicas_count2>, ...' "
             << "to specify read replicas count for each AZ in cluster.";
         return false;
     }
@@ -262,15 +308,23 @@ bool ConvertReadReplicasSettingsToProto(const TString settings, Ydb::Table::Read
 }
 
 void ConvertTtlSettingsToProto(const NYql::TTtlSettings& settings, Ydb::Table::TtlSettings& proto) {
-    if (!settings.ColumnUnit) {
-        auto& opts = *proto.mutable_date_type_column();
-        opts.set_column_name(settings.ColumnName);
-        opts.set_expire_after_seconds(settings.ExpireAfter.Seconds());
-    } else {
-        auto& opts = *proto.mutable_value_since_unix_epoch();
-        opts.set_column_name(settings.ColumnName);
-        opts.set_column_unit(static_cast<Ydb::Table::ValueSinceUnixEpochModeSettings::Unit>(*settings.ColumnUnit));
-        opts.set_expire_after_seconds(settings.ExpireAfter.Seconds());
+    for (const auto& tier : settings.Tiers) {
+        auto* outTier = proto.mutable_tiered_ttl()->add_tiers();
+        if (!settings.ColumnUnit) {
+            auto& expr = *outTier->mutable_date_type_column();
+            expr.set_column_name(settings.ColumnName);
+            expr.set_expire_after_seconds(tier.ApplyAfter.Seconds());
+        } else {
+            auto& expr = *outTier->mutable_value_since_unix_epoch();
+            expr.set_column_name(settings.ColumnName);
+            expr.set_column_unit(static_cast<Ydb::Table::ValueSinceUnixEpochModeSettings::Unit>(*settings.ColumnUnit));
+            expr.set_expire_after_seconds(tier.ApplyAfter.Seconds());
+        }
+        if (tier.StorageName) {
+            outTier->mutable_evict_to_external_storage()->set_storage(*tier.StorageName);
+        } else {
+            outTier->mutable_delete_();
+        }
     }
 }
 
@@ -330,8 +384,20 @@ static std::shared_ptr<THashMap<TString, Ydb::Topic::Codec>> GetCodecsMapping() 
 
 static std::shared_ptr<THashMap<TString, Ydb::Topic::AutoPartitioningStrategy>> GetAutoPartitioningStrategiesMapping() {
     static std::shared_ptr<THashMap<TString, Ydb::Topic::AutoPartitioningStrategy>> strategiesMapping;
-    if (strategiesMapping == nullptr) {
-        strategiesMapping = MakeEnumMapping<Ydb::Topic::AutoPartitioningStrategy>(Ydb::Topic::AutoPartitioningStrategy_descriptor(), "auto_partitioning_strategy_");
+    if (!strategiesMapping) {
+        strategiesMapping = MakeEnumMapping<Ydb::Topic::AutoPartitioningStrategy>(
+            Ydb::Topic::AutoPartitioningStrategy_descriptor(), "auto_partitioning_strategy_");
+
+        const TString prefix = "scale_";
+        for (const auto& [key, value] : *strategiesMapping) {
+            if (key.StartsWith(prefix)) {
+                TString newKey = key;
+                newKey.erase(0, prefix.length());
+
+                Y_ABORT_UNLESS(strategiesMapping->find(newKey) == strategiesMapping->end());
+                (*strategiesMapping)[newKey] = value;
+            }
+        }
     }
     return strategiesMapping;
 }

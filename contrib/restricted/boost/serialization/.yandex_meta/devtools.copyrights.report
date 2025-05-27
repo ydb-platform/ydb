@@ -1,0 +1,761 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 07b7558ba450b33ddac49fa00995dc34
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/serialization/export.hpp [19:21]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 099f45e4dfce1e9a04cd9f0fc805912b
+BELONGS ya.make
+    License text:
+        //  (c) Copyright Robert Ramey 2004
+        //  Use, modification, and distribution is subject to the Boost Software
+        //  License, Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/archive/detail/auto_link_archive.hpp [12:14]
+        include/boost/archive/detail/auto_link_warchive.hpp [12:14]
+        include/boost/archive/detail/decl.hpp [12:14]
+        include/boost/serialization/config.hpp [6:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0c1af2120f5b2c990788a2bcf885bea8
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/serialization/queue.hpp [12:14]
+        include/boost/serialization/stack.hpp [12:14]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 106f740568c48f2bea266764c2162b4c
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/polymorphic_binary_iarchive.cpp [4:6]
+        src/polymorphic_binary_oarchive.cpp [4:6]
+        src/polymorphic_text_iarchive.cpp [4:6]
+        src/polymorphic_text_oarchive.cpp [4:6]
+        src/polymorphic_text_wiarchive.cpp [4:6]
+        src/polymorphic_text_woarchive.cpp [4:6]
+        src/polymorphic_xml_iarchive.cpp [4:6]
+        src/polymorphic_xml_oarchive.cpp [4:6]
+        src/polymorphic_xml_wiarchive.cpp [4:6]
+        src/polymorphic_xml_woarchive.cpp [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1090d940152a2cbd19bfff58bf63a13f
+BELONGS ya.make
+    License text:
+        // (C) Copyright 2008 Robert Ramey
+        // Use, modification and distribution is subject to the Boost Software
+        // License, Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/serialization/assume_abstract.hpp [12:14]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 127ca1debadc86c9870fadcd69654480
+BELONGS ya.make
+    License text:
+        //  Copyright (c) 2001, 2002, 2003 Peter Dimov and Multi Media Ltd.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/serialization/detail/shared_count_132.hpp [13:13]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 139227f655286fca021562ae1922e833
+BELONGS ya.make
+    License text:
+        // Copyright Robert Ramey 2007.  Changes made to permit
+        // application throughout the serialization library.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/serialization/singleton.hpp [9:10]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1dda61b33b296fd3f69276f5d576f7dd
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/archive/archive_exception.hpp [12:14]
+        include/boost/archive/basic_archive.hpp [12:14]
+        include/boost/archive/basic_binary_iarchive.hpp [19:21]
+        include/boost/archive/basic_binary_iprimitive.hpp [23:25]
+        include/boost/archive/basic_binary_oarchive.hpp [12:14]
+        include/boost/archive/basic_binary_oprimitive.hpp [12:14]
+        include/boost/archive/basic_text_iarchive.hpp [12:14]
+        include/boost/archive/basic_text_iprimitive.hpp [12:14]
+        include/boost/archive/basic_text_oarchive.hpp [12:14]
+        include/boost/archive/basic_text_oprimitive.hpp [12:14]
+        include/boost/archive/basic_xml_archive.hpp [12:14]
+        include/boost/archive/basic_xml_iarchive.hpp [12:14]
+        include/boost/archive/basic_xml_oarchive.hpp [12:14]
+        include/boost/archive/binary_iarchive.hpp [12:14]
+        include/boost/archive/binary_iarchive_impl.hpp [12:14]
+        include/boost/archive/binary_oarchive.hpp [12:14]
+        include/boost/archive/binary_oarchive_impl.hpp [12:14]
+        include/boost/archive/binary_wiarchive.hpp [12:14]
+        include/boost/archive/binary_woarchive.hpp [12:14]
+        include/boost/archive/detail/abi_prefix.hpp [4:6]
+        include/boost/archive/detail/abi_suffix.hpp [4:6]
+        include/boost/archive/detail/basic_iarchive.hpp [12:14]
+        include/boost/archive/detail/basic_iserializer.hpp [12:14]
+        include/boost/archive/detail/basic_oarchive.hpp [12:14]
+        include/boost/archive/detail/basic_oserializer.hpp [12:14]
+        include/boost/archive/detail/basic_pointer_iserializer.hpp [13:15]
+        include/boost/archive/detail/basic_pointer_oserializer.hpp [13:15]
+        include/boost/archive/detail/basic_serializer.hpp [12:14]
+        include/boost/archive/detail/basic_serializer_map.hpp [12:14]
+        include/boost/archive/detail/common_iarchive.hpp [12:14]
+        include/boost/archive/detail/common_oarchive.hpp [12:14]
+        include/boost/archive/detail/interface_iarchive.hpp [12:14]
+        include/boost/archive/detail/interface_oarchive.hpp [12:14]
+        include/boost/archive/detail/iserializer.hpp [20:22]
+        include/boost/archive/detail/oserializer.hpp [20:22]
+        include/boost/archive/detail/polymorphic_iarchive_route.hpp [12:14]
+        include/boost/archive/detail/polymorphic_oarchive_route.hpp [12:14]
+        include/boost/archive/dinkumware.hpp [12:14]
+        include/boost/archive/impl/archive_serializer_map.ipp [4:6]
+        include/boost/archive/impl/basic_binary_iarchive.ipp [4:6]
+        include/boost/archive/impl/basic_binary_iprimitive.ipp [4:6]
+        include/boost/archive/impl/basic_binary_oarchive.ipp [4:6]
+        include/boost/archive/impl/basic_binary_oprimitive.ipp [4:6]
+        include/boost/archive/impl/basic_text_iarchive.ipp [4:6]
+        include/boost/archive/impl/basic_text_iprimitive.ipp [4:6]
+        include/boost/archive/impl/basic_text_oarchive.ipp [4:6]
+        include/boost/archive/impl/basic_text_oprimitive.ipp [4:6]
+        include/boost/archive/impl/basic_xml_grammar.hpp [12:14]
+        include/boost/archive/impl/basic_xml_iarchive.ipp [4:6]
+        include/boost/archive/impl/basic_xml_oarchive.ipp [4:6]
+        include/boost/archive/impl/text_iarchive_impl.ipp [4:6]
+        include/boost/archive/impl/text_oarchive_impl.ipp [4:6]
+        include/boost/archive/impl/text_wiarchive_impl.ipp [4:6]
+        include/boost/archive/impl/text_woarchive_impl.ipp [4:6]
+        include/boost/archive/impl/xml_iarchive_impl.ipp [4:6]
+        include/boost/archive/impl/xml_oarchive_impl.ipp [4:6]
+        include/boost/archive/impl/xml_wiarchive_impl.ipp [4:6]
+        include/boost/archive/impl/xml_woarchive_impl.ipp [4:6]
+        include/boost/archive/iterators/base64_exception.hpp [12:14]
+        include/boost/archive/iterators/base64_from_binary.hpp [12:14]
+        include/boost/archive/iterators/binary_from_base64.hpp [12:14]
+        include/boost/archive/iterators/dataflow.hpp [12:14]
+        include/boost/archive/iterators/dataflow_exception.hpp [12:14]
+        include/boost/archive/iterators/escape.hpp [12:14]
+        include/boost/archive/iterators/insert_linebreaks.hpp [12:14]
+        include/boost/archive/iterators/istream_iterator.hpp [12:14]
+        include/boost/archive/iterators/mb_from_wchar.hpp [12:14]
+        include/boost/archive/iterators/ostream_iterator.hpp [12:14]
+        include/boost/archive/iterators/remove_whitespace.hpp [12:14]
+        include/boost/archive/iterators/transform_width.hpp [12:14]
+        include/boost/archive/iterators/unescape.hpp [12:14]
+        include/boost/archive/iterators/wchar_from_mb.hpp [12:14]
+        include/boost/archive/iterators/xml_escape.hpp [12:14]
+        include/boost/archive/iterators/xml_unescape.hpp [12:14]
+        include/boost/archive/iterators/xml_unescape_exception.hpp [12:14]
+        include/boost/archive/polymorphic_binary_iarchive.hpp [12:14]
+        include/boost/archive/polymorphic_binary_oarchive.hpp [12:14]
+        include/boost/archive/polymorphic_iarchive.hpp [12:14]
+        include/boost/archive/polymorphic_oarchive.hpp [12:14]
+        include/boost/archive/polymorphic_text_iarchive.hpp [12:14]
+        include/boost/archive/polymorphic_text_oarchive.hpp [12:14]
+        include/boost/archive/polymorphic_text_wiarchive.hpp [12:14]
+        include/boost/archive/polymorphic_text_woarchive.hpp [12:14]
+        include/boost/archive/polymorphic_xml_iarchive.hpp [12:14]
+        include/boost/archive/polymorphic_xml_oarchive.hpp [12:14]
+        include/boost/archive/polymorphic_xml_wiarchive.hpp [12:14]
+        include/boost/archive/polymorphic_xml_woarchive.hpp [12:14]
+        include/boost/archive/text_iarchive.hpp [12:14]
+        include/boost/archive/text_oarchive.hpp [12:14]
+        include/boost/archive/text_wiarchive.hpp [12:14]
+        include/boost/archive/text_woarchive.hpp [12:14]
+        include/boost/archive/tmpdir.hpp [12:14]
+        include/boost/archive/wcslen.hpp [12:14]
+        include/boost/archive/xml_iarchive.hpp [12:14]
+        include/boost/archive/xml_oarchive.hpp [12:14]
+        include/boost/archive/xml_wiarchive.hpp [12:14]
+        include/boost/archive/xml_woarchive.hpp [12:14]
+        include/boost/serialization/access.hpp [12:14]
+        include/boost/serialization/archive_input_unordered_map.hpp [13:16]
+        include/boost/serialization/archive_input_unordered_set.hpp [12:15]
+        include/boost/serialization/base_object.hpp [12:14]
+        include/boost/serialization/binary_object.hpp [12:14]
+        include/boost/serialization/boost_unordered_map.hpp [13:16]
+        include/boost/serialization/boost_unordered_set.hpp [12:15]
+        include/boost/serialization/collection_traits.hpp [12:14]
+        include/boost/serialization/collections_load_imp.hpp [16:18]
+        include/boost/serialization/collections_save_imp.hpp [12:14]
+        include/boost/serialization/deque.hpp [12:14]
+        include/boost/serialization/detail/is_default_constructible.hpp [12:14]
+        include/boost/serialization/detail/stack_constructor.hpp [12:14]
+        include/boost/serialization/export.hpp [12:14]
+        include/boost/serialization/extended_type_info.hpp [12:14]
+        include/boost/serialization/extended_type_info_no_rtti.hpp [14:16]
+        include/boost/serialization/extended_type_info_typeid.hpp [14:16]
+        include/boost/serialization/factory.hpp [12:14]
+        include/boost/serialization/force_include.hpp [12:14]
+        include/boost/serialization/forward_list.hpp [12:14]
+        include/boost/serialization/hash_collections_load_imp.hpp [13:15]
+        include/boost/serialization/hash_collections_save_imp.hpp [12:14]
+        include/boost/serialization/hash_map.hpp [12:14]
+        include/boost/serialization/hash_set.hpp [12:14]
+        include/boost/serialization/level.hpp [12:14]
+        include/boost/serialization/level_enum.hpp [12:14]
+        include/boost/serialization/list.hpp [12:14]
+        include/boost/serialization/nvp.hpp [12:14]
+        include/boost/serialization/priority_queue.hpp [12:14]
+        include/boost/serialization/serialization.hpp [19:21]
+        include/boost/serialization/shared_ptr_132.hpp [12:14]
+        include/boost/serialization/slist.hpp [12:14]
+        include/boost/serialization/smart_cast.hpp [12:14]
+        include/boost/serialization/split_free.hpp [12:14]
+        include/boost/serialization/split_member.hpp [12:14]
+        include/boost/serialization/string.hpp [13:15]
+        include/boost/serialization/strong_typedef.hpp [12:15]
+        include/boost/serialization/tracking.hpp [12:14]
+        include/boost/serialization/tracking_enum.hpp [12:14]
+        include/boost/serialization/traits.hpp [12:14]
+        include/boost/serialization/type_info_implementation.hpp [12:14]
+        include/boost/serialization/unique_ptr.hpp [12:14]
+        include/boost/serialization/unordered_collections_load_imp.hpp [13:16]
+        include/boost/serialization/unordered_collections_save_imp.hpp [12:15]
+        include/boost/serialization/unordered_map.hpp [13:16]
+        include/boost/serialization/unordered_set.hpp [12:15]
+        include/boost/serialization/utility.hpp [13:15]
+        include/boost/serialization/vector.hpp [12:15]
+        include/boost/serialization/version.hpp [12:14]
+        src/basic_archive.cpp [4:6]
+        src/basic_iarchive.cpp [4:6]
+        src/basic_iserializer.cpp [4:6]
+        src/basic_oarchive.cpp [4:6]
+        src/basic_oserializer.cpp [4:6]
+        src/basic_pointer_iserializer.cpp [4:6]
+        src/basic_pointer_oserializer.cpp [4:6]
+        src/basic_serializer_map.cpp [4:6]
+        src/basic_text_iprimitive.cpp [4:6]
+        src/basic_text_wiprimitive.cpp [4:6]
+        src/basic_xml_archive.cpp [4:6]
+        src/basic_xml_grammar.ipp [4:6]
+        src/binary_iarchive.cpp [4:6]
+        src/binary_oarchive.cpp [4:6]
+        src/binary_wiarchive.cpp [4:6]
+        src/binary_woarchive.cpp [4:6]
+        src/extended_type_info.cpp [4:6]
+        src/extended_type_info_no_rtti.cpp [5:7]
+        src/extended_type_info_typeid.cpp [5:7]
+        src/polymorphic_iarchive.cpp [4:6]
+        src/polymorphic_oarchive.cpp [4:6]
+        src/text_iarchive.cpp [4:6]
+        src/text_oarchive.cpp [4:6]
+        src/text_wiarchive.cpp [4:6]
+        src/text_woarchive.cpp [4:6]
+        src/void_cast.cpp [4:6]
+        src/xml_grammar.cpp [4:6]
+        src/xml_iarchive.cpp [4:6]
+        src/xml_oarchive.cpp [4:6]
+        src/xml_wgrammar.cpp [4:6]
+        src/xml_wiarchive.cpp [4:6]
+        src/xml_woarchive.cpp [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 23c8bb4b26b422d99ac7ea9660dc580c
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/serialization/strong_typedef.hpp [12:15]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 2dcf68e9cbb132ca617977536e4e8ad0
+BELONGS ya.make
+    License text:
+        // (C) Copyright 2008 Matthias Troyer
+        // Use, modification and distribution is subject to the Boost Software
+        // License, Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/serialization/vector_135.hpp [5:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 35ef02225c6cf655428bbea46852112f
+BELONGS ya.make
+    License text:
+        // copyright (c) 2019 Samuel Debionne, ESRF
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/serialization/std_variant.hpp [12:12]
+        include/boost/serialization/variant.hpp [16:16]
+        include/boost/serialization/variant2.hpp [12:12]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 44f95982010e27ec7d1e8978f7263b0d
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/archive/detail/helper_collection.hpp [12:14]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4ead388a4bb56a31d7a3106cdc5eb0f6
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/serialization/void_cast.hpp [12:14]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 54505eb07f03e7797ae231f869d8a40e
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/archive/codecvt_null.hpp [12:14]
+        src/basic_text_oprimitive.cpp [4:6]
+        src/basic_text_woprimitive.cpp [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 54b2da91a0751d0f63e2e371f49db3ff
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/serialization/array.hpp [4:6]
+        include/boost/serialization/array_optimization.hpp [4:6]
+        include/boost/serialization/array_wrapper.hpp [4:6]
+        include/boost/serialization/boost_array.hpp [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5665aa24d7a6ea916dcdcce7fb0e04a4
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/codecvt_null.cpp [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 58d478b39bd1a875647210df9056995b
+BELONGS ya.make
+    License text:
+        // (C) Copyright 2005-2006 Matthias Troyer
+        // Use, modification and distribution is subject to the Boost Software
+        // License, Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/serialization/wrapper.hpp [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 593dc5957f6dce93881eb7fe8969d3c7
+BELONGS ya.make
+    License text:
+        // (C) Copyright 2005 Matthias Troyer
+        // Use, modification and distribution is subject to the Boost Software
+        // License, Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/serialization/collection_size_type.hpp [4:6]
+        include/boost/serialization/valarray.hpp [12:14]
+        include/boost/serialization/vector.hpp [12:15]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 596d215980dce936d1d42dadce287430
+BELONGS ya.make
+    License text:
+        //  (C) Copyright Greg Colvin and Beman Dawes 1998, 1999.
+        //  Copyright (c) 2001, 2002 Peter Dimov
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/serialization/detail/shared_ptr_nmt_132.hpp [7:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5ca418207a9a9e57884eb84192e8056e
+BELONGS ya.make
+    License text:
+        // Copyright Vladimir Prus 2004.
+        // Distributed under the Boost Software License, Version 1.0.
+        // (See accompanying file LICENSE_1_0.txt
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/utf8_codecvt_facet.cpp [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 655bf8e1c786a52443545b43e86b4361
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/archive/detail/archive_serializer_map.hpp [13:15]
+        include/boost/archive/detail/check.hpp [20:22]
+        src/archive_exception.cpp [4:6]
+        src/xml_archive_exception.cpp [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6b6f79fc5e7fa6cea0ca8005d59ea5f4
+BELONGS ya.make
+    License text:
+        // Copyright David Abrahams 2006. Distributed under the Boost
+        // Software License, Version 1.0. (See accompanying
+        // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/archive/detail/register_archive.hpp [1:3]
+        include/boost/serialization/singleton.hpp [7:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 75a005781fcbb354b143aa12145fc238
+BELONGS ya.make
+    License text:
+        // copyright (c) 2023
+        // Robert Ramey <ramey@rrsd.com>
+        // http://www.rrsd.com
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/serialization/variant.hpp [18:20]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 791de63e8a85039486e8b095c3912ad1
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/archive/detail/utf8_codecvt_facet.hpp [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7c7c6a82cb1c8bc97100ce19df46e85d
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/serialization/archive_input_unordered_map.hpp [13:16]
+        include/boost/serialization/archive_input_unordered_set.hpp [12:15]
+        include/boost/serialization/boost_unordered_map.hpp [13:16]
+        include/boost/serialization/boost_unordered_set.hpp [12:15]
+        include/boost/serialization/unordered_collections_load_imp.hpp [13:16]
+        include/boost/serialization/unordered_collections_save_imp.hpp [12:15]
+        include/boost/serialization/unordered_map.hpp [13:16]
+        include/boost/serialization/unordered_set.hpp [12:15]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 828392eb47631cd343f70a8a21ef9867
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/serialization/static_warning.hpp [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8b8272837b8bc44df293a85a958ddc81
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/serialization/state_saver.hpp [12:14]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8c848a7abcce1ef1126166b8d49f03f0
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/serialization/map.hpp [13:15]
+        include/boost/serialization/set.hpp [12:14]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8ca6fe2283580e1208a843af7014e9fa
+BELONGS ya.make
+    License text:
+        //  Copyright (c) 2003 Vladimir Prus.
+        // Use, modification and distribution is subject to the Boost Software
+        // License, Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/serialization/scoped_ptr.hpp [8:10]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 930a6e72883713e7b987065a56197739
+BELONGS ya.make
+    License text:
+        //  (C) Copyright Greg Colvin and Beman Dawes 1998, 1999.
+        //  Copyright (c) 2001, 2002, 2003 Peter Dimov
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/serialization/detail/shared_ptr_132.hpp [7:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9f416aa8f1e6678b0d6d5857d642b969
+BELONGS ya.make
+    License text:
+        //  Copyright (c) 2002 Peter Dimov and Multi Media Ltd.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/serialization/throw_exception.hpp [12:12]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a6dc9218b480c1cfac28c3b861e08fb7
+BELONGS ya.make
+    License text:
+        // (C) Copyright 2002-4 Pavel Vozenilek .
+        // Use, modification and distribution is subject to the Boost Software
+        // License, Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/serialization/optional.hpp [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL aec679ee74952b219e93e1261f2a5b69
+BELONGS ya.make
+    License text:
+        // (C) Copyright 2005 Robert Ramey - http://www.rrsd.com
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/archive/basic_streambuf_locale_saver.hpp [12:12]
+        include/boost/serialization/void_cast_fwd.hpp [12:14]
+        src/stl_port.cpp [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b13bccd796707ee307c756c5292480d5
+BELONGS ya.make
+    License text:
+        //  (C) Copyright Greg Colvin and Beman Dawes 1998, 1999.
+        //  Copyright (c) 2001, 2002, 2003 Peter Dimov
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/serialization/detail/shared_ptr_132.hpp [7:8]
+        include/boost/serialization/detail/shared_ptr_nmt_132.hpp [7:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b8264448f2302918d52d12ed19e342eb
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/archive/basic_streambuf_locale_saver.hpp [21:23]
+
+KEEP     COPYRIGHT_SERVICE_LABEL bd2c815ca0e6c7ee8e23105e3a910fe1
+BELONGS ya.make
+    License text:
+        // copyright (c) 2005
+        // troy d. straszheim <troy@resophonic.com>
+        // http://www.resophonic.com
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/serialization/variant.hpp [12:14]
+
+KEEP     COPYRIGHT_SERVICE_LABEL bf20d066d738abb72ed031e29830590e
+BELONGS ya.make
+    License text:
+        // (C) Copyright 2007 Matthias Troyer .
+        // Use, modification and distribution is subject to the Boost Software
+        // License, Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/serialization/complex.hpp [13:15]
+        include/boost/serialization/is_bitwise_serializable.hpp [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c2610a2c021f396c966cab3e8e59744a
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/serialization/library_version_type.hpp [12:14]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c2b774c26af57c9a8aa6c361e73bd74c
+BELONGS ya.make
+    License text:
+            Copyright (c) 2001, Daniel C. Nuffer
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/archive/impl/basic_xml_grammar.hpp [27:27]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c799e605f9c94da077016b9a99210c57
+BELONGS ya.make
+    License text:
+        // Copyright Alexander Grund 2018. Corrections to singleton lifetime
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/serialization/singleton.hpp [12:12]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c9db06a8bf4ea409ad302e3c081fa876
+BELONGS ya.make
+    License text:
+        // (C) Copyright 2004 Robert Ramey and Martin Ecker
+        // Use, modification and distribution is subject to the Boost Software
+        // License, Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/serialization/shared_ptr.hpp [12:14]
+        include/boost/serialization/weak_ptr.hpp [12:14]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c9effb8498cdb387e324169d172eb069
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/serialization/shared_ptr_helper.hpp [12:14]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d7903d14a6322f299ddbba6647135742
+BELONGS ya.make
+    License text:
+        // (C) Copyright 2010 Robert Ramey
+        // Use, modification and distribution is subject to the Boost Software
+        // License, Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/serialization/item_version_type.hpp [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f3bb9876570b28b088005ec3b18e12ba
+BELONGS ya.make
+    License text:
+         * \author    Brian Ravnsgaard Riis
+         * \author    Kenneth Riddile
+         * \date      16.09.2004, updated 04.03.2009
+         * \copyright 2004 Brian Ravnsgaard Riis
+         * \license   Boost Software License 1.0
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/serialization/bitset.hpp [4:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL fa9c01424457f45357412ffbaa103b87
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/archive/xml_archive_exception.hpp [12:14]

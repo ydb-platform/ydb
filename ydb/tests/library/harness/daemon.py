@@ -10,14 +10,12 @@ from yatest.common import process
 import six
 
 from ydb.tests.library.common.wait_for import wait_for
-from ydb.tests.library.common import yatest_common
-from . import param_constants
 
 
 logger = logging.getLogger(__name__)
 
 
-def extract_stderr_details(stderr_file, max_lines=0):
+def _extract_stderr_details(stderr_file, max_lines=0):
     if max_lines == 0:
         return []
 
@@ -43,7 +41,7 @@ class DaemonError(RuntimeError):
                     "Stdout file name: \n{}".format(stdout if stdout is not None else "is not present."),
                     "Stderr file name: \n{}".format(stderr if stderr is not None else "is not present."),
                 ]
-                + extract_stderr_details(stderr, max_stderr_lines)
+                + _extract_stderr_details(stderr, max_stderr_lines)
             )
         )
 
@@ -54,13 +52,15 @@ class SeveralDaemonErrors(RuntimeError):
 
 
 class Daemon(object):
+    """Local process executed as process in current host"""
     def __init__(
         self,
         command,
         cwd,
         timeout,
-        stdout_file=yatest_common.work_path('stdout'),
-        stderr_file=yatest_common.work_path('stderr'),
+        stdout_file="/dev/null",
+        stderr_file="/dev/null",
+        aux_file=None,
         stderr_on_error_lines=0,
         core_pattern=None,
     ):
@@ -72,8 +72,32 @@ class Daemon(object):
         self.killed = False
         self.__core_pattern = core_pattern
         self.logger = logger.getChild(self.__class__.__name__)
-        self.__stdout_file = open(stdout_file, mode='wb')
-        self.__stderr_file = open(stderr_file, mode='wb')
+        self.__stdout_file_name = stdout_file
+        self.__stderr_file_name = stderr_file
+        self.__aux_file_name = aux_file
+        self.__stdout_file = None
+        self.__stderr_file = None
+        self.__aux_file = None
+
+    def update_command(self, new_command):
+        new_command_tuple = tuple(new_command)
+        if self.__command != new_command_tuple:
+            self.__command = new_command_tuple
+
+    def __open_output_files(self):
+        self.__stdout_file = open(self.__stdout_file_name, mode='ab')
+        self.__stderr_file = open(self.__stderr_file_name, mode='ab')
+        if self.__aux_file_name is not None:
+            self.__aux_file = open(self.__aux_file_name, mode='w+b')
+
+    def __close_output_files(self):
+        self.__stdout_file.close()
+        self.__stdout_file = None
+        self.__stderr_file.close()
+        self.__stderr_file = None
+        if self.__aux_file_name is not None:
+            self.__aux_file.close()
+            self.__aux_file = None
 
     @property
     def daemon(self):
@@ -82,14 +106,14 @@ class Daemon(object):
     @property
     def stdout_file_name(self):
         if self.__stdout_file is not sys.stdout:
-            return os.path.abspath(self.__stdout_file.name)
+            return os.path.abspath(self.__stdout_file_name)
         else:
             return None
 
     @property
     def stderr_file_name(self):
         if self.__stderr_file is not sys.stderr:
-            return os.path.abspath(self.__stderr_file.name)
+            return os.path.abspath(self.__stderr_file_name)
         else:
             return None
 
@@ -99,15 +123,13 @@ class Daemon(object):
     def start(self):
         if self.is_alive():
             return
-        stderr_stream = self.__stderr_file
-        if param_constants.kikimr_stderr_to_console():
-            stderr_stream = sys.stderr
+        self.__open_output_files()
         self.__daemon = process.execute(
             self.__command,
             check_exit_code=False,
             cwd=self.__cwd,
             stdout=self.__stdout_file,
-            stderr=stderr_stream,
+            stderr=self.__stderr_file,
             wait=False,
             core_pattern=self.__core_pattern,
         )
@@ -115,6 +137,7 @@ class Daemon(object):
 
         if not self.is_alive():
             self.__check_before_fail()
+            self.__close_output_files()
             raise DaemonError(
                 "Unexpectedly finished on start",
                 exit_code=self.__daemon.exit_code,
@@ -144,6 +167,7 @@ class Daemon(object):
 
         if not self.is_alive():
             self.__check_before_fail()
+            self.__close_output_files()
             raise DaemonError(
                 "Unexpectedly finished before %s" % stop_type,
                 exit_code=self.__daemon.exit_code,
@@ -179,6 +203,7 @@ class Daemon(object):
             wait_for(lambda: not self.is_alive(), self.__timeout)
             is_killed = True
         self.__check_before_end_stop("stop")
+        self.__close_output_files()
 
         if not is_killed:
             exit_code = self.__daemon.exit_code
@@ -204,13 +229,15 @@ class Daemon(object):
         self.killed = True
 
         self.__check_before_end_stop("kill")
+        self.__close_output_files()
 
 
 @six.add_metaclass(abc.ABCMeta)
 class ExternalNodeDaemon(object):
-    def __init__(self, host):
+    """External daemon, executed as process in separate host, managed via ssh"""
+    def __init__(self, host, ssh_username):
         self._host = host
-        self._ssh_username = param_constants.ssh_username
+        self._ssh_username = ssh_username
         self._ssh_options = [
             "-o",
             "UserKnownHostsFile=/dev/null",
@@ -261,12 +288,6 @@ class ExternalNodeDaemon(object):
         self.ssh_command("sudo dmesg --clear", raise_on_error=True)
         self.ssh_command(
             'sudo rm -rf {}/* && sudo service rsyslog restart'.format(self.logs_directory), raise_on_error=True
-        )
-
-    def sky_get_and_move(self, rb_torrent, item_to_move, target_path):
-        self.ssh_command(['sky get -d %s %s' % (self._artifacts_path, rb_torrent)], raise_on_error=True)
-        self.ssh_command(
-            ['sudo mv %s %s' % (os.path.join(self._artifacts_path, item_to_move), target_path)], raise_on_error=True
         )
 
     def send_signal(self, signal):

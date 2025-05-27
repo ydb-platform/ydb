@@ -1,9 +1,11 @@
 #include "write_with_blobs.h"
+
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
 
 namespace NKikimr::NOlap {
 
-void TWritePortionInfoWithBlobsConstructor::TBlobInfo::AddChunk(TWritePortionInfoWithBlobsConstructor& owner, const std::shared_ptr<IPortionDataChunk>& chunk) {
+void TWritePortionInfoWithBlobsConstructor::TBlobInfo::AddChunk(
+    TWritePortionInfoWithBlobsConstructor& owner, const std::shared_ptr<IPortionDataChunk>& chunk) {
     AFL_VERIFY(chunk);
     Y_ABORT_UNLESS(!Finished);
     const TString& data = chunk->GetData();
@@ -17,7 +19,9 @@ void TWritePortionInfoWithBlobsConstructor::TBlobInfo::AddChunk(TWritePortionInf
     chunk->AddIntoPortionBeforeBlob(bRange, owner.GetPortionConstructor());
 }
 
-void TWritePortionInfoWithBlobsResult::TBlobInfo::RegisterBlobId(TWritePortionInfoWithBlobsResult& owner, const TUnifiedBlobId& blobId) const {
+void TWritePortionInfoWithBlobsResult::TBlobInfo::RegisterBlobId(TWritePortionInfoWithBlobsResult& owner, const TUnifiedBlobId& blobId) {
+    AFL_VERIFY(!BlobId);
+    BlobId = blobId;
     const TBlobRangeLink16::TLinkId idx = owner.GetPortionConstructor().RegisterBlobId(blobId);
     for (auto&& i : Chunks) {
         owner.GetPortionConstructor().RegisterBlobIdx(i, idx);
@@ -25,17 +29,23 @@ void TWritePortionInfoWithBlobsResult::TBlobInfo::RegisterBlobId(TWritePortionIn
 }
 
 TWritePortionInfoWithBlobsConstructor TWritePortionInfoWithBlobsConstructor::BuildByBlobs(std::vector<TSplittedBlob>&& chunks,
-    const THashMap<ui32, std::shared_ptr<IPortionDataChunk>>& inplaceChunks,
-    const ui64 granule, const ui64 schemaVersion, const TSnapshot& snapshot, const std::shared_ptr<IStoragesManager>& operators)
-{
-    TPortionInfoConstructor constructor(granule);
-    constructor.SetMinSnapshotDeprecated(snapshot);
-    constructor.SetSchemaVersion(schemaVersion);
+    const THashMap<ui32, std::shared_ptr<IPortionDataChunk>>& inplaceChunks, const TInternalPathId granule, const ui64 schemaVersion,
+    const TSnapshot& /*snapshot*/, const std::shared_ptr<IStoragesManager>& operators, const EPortionType type) {
+    TPortionAccessorConstructor constructor = [&]() {
+        switch (type) {
+            case EPortionType::Written:
+                return TPortionAccessorConstructor(std::make_unique<TWrittenPortionInfoConstructor>(granule));
+            case EPortionType::Compacted:
+                return TPortionAccessorConstructor(std::make_unique<TCompactedPortionInfoConstructor>(granule));
+        }
+    }();
+    constructor.MutablePortionConstructor().SetSchemaVersion(schemaVersion);
     return BuildByBlobs(std::move(chunks), inplaceChunks, std::move(constructor), operators);
 }
 
-TWritePortionInfoWithBlobsConstructor TWritePortionInfoWithBlobsConstructor::BuildByBlobs(
-    std::vector<TSplittedBlob>&& chunks, const THashMap<ui32, std::shared_ptr<IPortionDataChunk>>& inplaceChunks, TPortionInfoConstructor&& constructor, const std::shared_ptr<IStoragesManager>& operators) {
+TWritePortionInfoWithBlobsConstructor TWritePortionInfoWithBlobsConstructor::BuildByBlobs(std::vector<TSplittedBlob>&& chunks,
+    const THashMap<ui32, std::shared_ptr<IPortionDataChunk>>& inplaceChunks, TPortionAccessorConstructor&& constructor,
+    const std::shared_ptr<IStoragesManager>& operators) {
     TWritePortionInfoWithBlobsConstructor result(std::move(constructor));
     for (auto&& blob : chunks) {
         auto storage = operators->GetOperatorVerified(blob.GetGroupName());
@@ -88,4 +98,4 @@ TString TWritePortionInfoWithBlobsResult::GetBlobByRangeVerified(const ui32 enti
     return "";
 }
 
-}
+}   // namespace NKikimr::NOlap

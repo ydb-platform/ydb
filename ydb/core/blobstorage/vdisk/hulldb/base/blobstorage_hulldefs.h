@@ -132,6 +132,7 @@ namespace NKikimr {
         const ui32 HullSstSizeInChunksLevel;
         const double HullCompFreeSpaceThreshold;
         const ui32 FreshCompMaxInFlightWrites;
+        const ui32 FreshCompMaxInFlightReads;
         const ui32 HullCompMaxInFlightWrites;
         const ui32 HullCompMaxInFlightReads;
         const double HullCompReadBatchEfficiencyThreshold;
@@ -139,6 +140,7 @@ namespace NKikimr {
         const TDuration HullCompStorageRatioMaxCalcDuration;
         const bool AddHeader;
 
+        NMonGroup::TCompactionStrategyGroup CompactionStrategyGroup;
         NMonGroup::TLsmHullGroup LsmHullGroup;
         NMonGroup::TLsmHullSpaceGroup LsmHullSpaceGroup;
 
@@ -154,6 +156,7 @@ namespace NKikimr {
                 ui32 hullSstSizeInChunksLevel,
                 double hullCompFreeSpaceThreshold,
                 ui32 freshCompMaxInFlightWrites,
+                ui32 freshCompMaxInFlightReads,
                 ui32 hullCompMaxInFlightWrites,
                 ui32 hullCompMaxInFlightReads,
                 double hullCompReadBatchEfficiencyThreshold,

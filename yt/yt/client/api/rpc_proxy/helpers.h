@@ -2,8 +2,6 @@
 
 #include "public.h"
 
-#include <library/cpp/yt/memory/ref.h>
-
 #include <yt/yt/library/re2/re2.h>
 
 #include <yt/yt/core/rpc/public.h>
@@ -12,13 +10,11 @@
 
 #include <yt/yt_proto/yt/client/api/rpc_proxy/proto/api_service.pb.h>
 
+#include <library/cpp/yt/memory/ref.h>
+
 namespace NYT::NApi::NRpcProxy {
 
 ////////////////////////////////////////////////////////////////////////////////
-
-void SetTimeoutOptions(
-    NRpc::TClientRequest& request,
-    const NApi::TTimeoutOptions& options);
 
 [[noreturn]] void ThrowUnimplemented(const TString& method);
 
@@ -29,6 +25,10 @@ namespace NProto {
 void ToProto(
     NProto::TTransactionalOptions* proto,
     const NApi::TTransactionalOptions& options);
+
+void FromProto(
+    NApi::TTransactionalOptions* options,
+    const NProto::TTransactionalOptions& proto);
 
 void ToProto(
     NProto::TPrerequisiteOptions* proto,
@@ -106,6 +106,14 @@ void FromProto(
     NApi::TListJobsResult* result,
     const NProto::TListJobsResult& proto);
 
+void ToProto(
+    NProto::TJobTraceEvent* proto,
+    const NApi::TJobTraceEvent& result);
+
+void FromProto(
+    NApi::TJobTraceEvent* result,
+    const NProto::TJobTraceEvent& proto);
+
 void ToProto(NProto::TColumnSchema* protoSchema, const NTableClient::TColumnSchema& schema);
 void FromProto(NTableClient::TColumnSchema* schema, const NProto::TColumnSchema& protoSchema);
 
@@ -135,14 +143,6 @@ void ToProto(
 void FromProto(
     NQueryClient::TQueryStatistics* statistics,
     const NProto::TQueryStatistics& protoStatistics);
-
-void ToProto(
-    NProto::TVersionedReadOptions* protoOptions,
-    const NTableClient::TVersionedReadOptions& options);
-
-void FromProto(
-    NTableClient::TVersionedReadOptions* options,
-    const NProto::TVersionedReadOptions& protoOptions);
 
 void ToProto(
     NProto::TOperation* protoOperation,
@@ -196,6 +196,10 @@ void ToProto(
     NProto::TMultiTablePartition* protoMultiTablePartition,
     const NApi::TMultiTablePartition& multiTablePartition);
 
+void ToProto(
+    TProtobufString* protoCookie,
+    const TTablePartitionCookiePtr& cookie);
+
 void FromProto(
     NApi::TMultiTablePartition* multiTablePartition,
     const NProto::TMultiTablePartition& protoMultiTablePartition);
@@ -203,6 +207,10 @@ void FromProto(
 void FromProto(
     NApi::TMultiTablePartitions* multiTablePartitions,
     const NProto::TRspPartitionTables& protoRspPartitionTables);
+
+void FromProto(
+    TTablePartitionCookiePtr* cookie,
+    const TProtobufString& protoCookie);
 
 void ToProto(
     NProto::TRowBatchReadOptions* proto,
@@ -279,6 +287,43 @@ NProto::EQueryState ConvertQueryStateToProto(
 
 NQueryTrackerClient::EQueryState ConvertQueryStateFromProto(
     NProto::EQueryState proto);
+
+////////////////////////////////////////////////////////////////////////////////
+
+void FillRequest(
+    TReqStartDistributedWriteSession* req,
+    const NYPath::TRichYPath& path,
+    const TDistributedWriteSessionStartOptions& options);
+
+void ParseRequest(
+    NYPath::TRichYPath* mutablePath,
+    TDistributedWriteSessionStartOptions* mutableOptions,
+    const TReqStartDistributedWriteSession& req);
+
+////////////////////////////////////////////////////////////////////////////////
+
+void FillRequest(
+    TReqFinishDistributedWriteSession* req,
+    const TDistributedWriteSessionWithResults& sessionWithResults,
+    const TDistributedWriteSessionFinishOptions& options);
+
+void ParseRequest(
+    TDistributedWriteSessionWithResults* mutableSessionWithResults,
+    TDistributedWriteSessionFinishOptions* mutableOptions,
+    const TReqFinishDistributedWriteSession& req);
+
+////////////////////////////////////////////////////////////////////////////////
+
+void FillRequest(
+    TReqWriteTableFragment* req,
+    const TSignedWriteFragmentCookiePtr& cookie,
+    const TTableFragmentWriterOptions& options);
+
+void ParseRequest(
+    TSignedWriteFragmentCookiePtr* mutableCookie,
+    TTableFragmentWriterOptions* mutableOptions,
+    const TReqWriteTableFragment& req);
+
 } // namespace NProto
 
 ////////////////////////////////////////////////////////////////////////////////

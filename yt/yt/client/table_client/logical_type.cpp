@@ -1,6 +1,6 @@
 #include "logical_type.h"
 #include "schema.h"
-#include "yt/yt/client/table_client/row_base.h"
+#include "helpers.h"
 
 #include <yt/yt_proto/yt/client/table_chunk_format/proto/chunk_meta.pb.h>
 
@@ -16,6 +16,8 @@
 namespace NYT::NTableClient {
 
 using namespace NYson;
+
+using NYT::ToProto;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -196,93 +198,450 @@ static bool operator == (const TStructField& lhs, const TStructField& rhs)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TString ToString(const TLogicalType& logicalType)
+class TLogicalTypeParser
 {
-    switch (logicalType.GetMetatype()) {
-        case ELogicalMetatype::Simple:
-            return CamelCaseToUnderscoreCase(ToString(logicalType.AsSimpleTypeRef().GetElement()));
-        case ELogicalMetatype::Decimal:
-            return Format("decimal(%v,%v)",
-                logicalType.AsDecimalTypeRef().GetPrecision(),
-                logicalType.AsDecimalTypeRef().GetScale());
-        case ELogicalMetatype::Optional:
-            return Format("optional<%v>", *logicalType.AsOptionalTypeRef().GetElement());
-        case ELogicalMetatype::List:
-            return Format("list<%v>", *logicalType.AsListTypeRef().GetElement());
-        case ELogicalMetatype::Struct: {
-            TStringStream out;
-            out << "struct<";
-            bool first = true;
-            for (const auto& structItem : logicalType.AsStructTypeRef().GetFields()) {
-                if (first) {
-                    first = false;
-                } else {
-                    out << ';';
-                }
-                out << structItem.Name << '=' << ToString(*structItem.Type);
-            }
-            out << '>';
-            return out.Str();
-        }
-        case ELogicalMetatype::Tuple: {
-            TStringStream out;
-            out << "tuple<";
-            bool first = true;
-            for (const auto& element : logicalType.AsTupleTypeRef().GetElements()) {
-                if (first) {
-                    first = false;
-                } else {
-                    out << ';';
-                }
-                out << ToString(*element);
-            }
-            out << '>';
-            return out.Str();
-        }
-        case ELogicalMetatype::VariantTuple: {
-            TStringStream out;
-            out << "variant<";
-            bool first = true;
-            for (const auto& element : logicalType.AsVariantTupleTypeRef().GetElements()) {
-                if (first) {
-                    first = false;
-                } else {
-                    out << ';';
-                }
-                out << ToString(*element);
-            }
-            out << '>';
-            return out.Str();
-        }
-        case ELogicalMetatype::VariantStruct: {
-            TStringStream out;
-            out << "named_variant<";
-            bool first = true;
-            for (const auto& field : logicalType.AsVariantStructTypeRef().GetFields()) {
-                if (first) {
-                    first = false;
-                } else {
-                    out << ';';
-                }
-                out << field.Name << '=' << ToString(*field.Type);
-            }
-            out << '>';
-            return out.Str();
+public:
+    TLogicalTypeParser() = default;
 
+    TLogicalTypePtr ParseTypeAndValidate(TStringBuf typeString)
+    {
+        *this = {};
+        Str_ = typeString;
+
+        ConsumeWhitespaces();
+
+        auto type = ParseType();
+
+        THROW_ERROR_EXCEPTION_IF(Index_ < Str_.size(),
+            "Expected end-of-string, found %Qv", Str_.SubString(Index_, std::string::npos));
+
+        ValidateLogicalType(TComplexTypeFieldDescriptor(type));
+
+        return type;
+    }
+
+private:
+    TStringBuf Str_;
+
+    size_t Index_ = 0;
+    TStringBuf Identifier_;
+
+    TString UnescapedIdentifierHolder_;
+    bool QuotedIdentifier_ = false;
+
+    TLogicalTypePtr ParseType()
+    {
+        ConsumeIdentifier();
+
+        TLogicalTypePtr type;
+
+        if (auto simpleType = TEnumTraits<ESimpleLogicalValueType>::FindValueByLiteral(Identifier_)) {
+            THROW_ERROR_EXCEPTION_IF(simpleType == ESimpleLogicalValueType::Boolean,
+                "\"Boolean\" is not a valid simple type, try \"Bool\"");
+            type = SimpleLogicalType(*simpleType);
+        } else if (Identifier_ == "Bool") {
+            type = SimpleLogicalType(ESimpleLogicalValueType::Boolean);
+        } else if (Identifier_ == "Variant") {
+            auto [types, names] = ParseFields();
+
+            if (names.empty()) {
+                type = VariantTupleLogicalType(std::move(types));
+            } else {
+                YT_ASSERT(names.size() == types.size());
+
+                std::vector<TStructField> fields;
+                fields.resize(types.size());
+
+                for (int index = 0; index < std::ssize(types); ++index) {
+                    fields[index] = {
+                        .Name = std::move(names[index]),
+                        .Type = std::move(types[index]),
+                    };
+                }
+
+                type = VariantStructLogicalType(std::move(fields));
+            }
+        } else if (auto metatype = TEnumTraits<ELogicalMetatype>::FindValueByLiteral(Identifier_)) {
+            switch (*metatype) {
+                case ELogicalMetatype::Decimal: {
+                    ConsumeCharacterOrThrow('(');
+
+                    ConsumeIdentifier();
+                    const auto precision = std::atoi(Identifier_.begin());
+
+                    ConsumeCharacterOrThrow(',');
+
+                    ConsumeIdentifier();
+                    const auto scale = std::atoi(Identifier_.begin());
+
+                    ConsumeCharacterOrThrow(')');
+
+                    type = DecimalLogicalType(precision, scale);
+                    break;
+                }
+
+                case ELogicalMetatype::List: {
+                    auto [types, names] = ParseFields();
+                    if (types.size() != 1 || !names.empty()) {
+                        THROW_ERROR_EXCEPTION("Expected a single unnamed type for list element");
+                    }
+
+                    type = ListLogicalType(std::move(types[0]));
+                    break;
+                }
+
+                case ELogicalMetatype::Optional: {
+                    auto [types, names] = ParseFields();
+                    if (types.size() != 1 || !names.empty()) {
+                        THROW_ERROR_EXCEPTION("Expected a single unnamed type for optional element");
+                    }
+
+                    type = OptionalLogicalType(std::move(types[0]));
+                    break;
+                }
+
+                case ELogicalMetatype::Dict: {
+                    auto [types, names] = ParseFields();
+                    if (types.size() != 2 || !names.empty()) {
+                        THROW_ERROR_EXCEPTION("Expected unnamed key and value types for dict elements");
+                    }
+
+                    type = DictLogicalType(std::move(types[0]), std::move(types[1]));
+                    break;
+                }
+
+                case ELogicalMetatype::Tuple: {
+                    auto [types, names] = ParseFields();
+                    if (!names.empty()) {
+                        THROW_ERROR_EXCEPTION("Expected unnamed types for tuple elements");
+                    }
+
+                    type = TupleLogicalType(std::move(types));
+                    break;
+                }
+
+                case ELogicalMetatype::Struct: {
+                    auto [types, names] = ParseFields();
+
+                    THROW_ERROR_EXCEPTION_IF(types.size() != names.size(), "Expected named types for struct fields");
+
+                    YT_ASSERT(types.size() == names.size());
+
+                    std::vector<TStructField> fields;
+                    fields.resize(types.size());
+
+                    for (int index = 0; index < std::ssize(types); ++index) {
+                        fields[index] = {
+                            .Name = std::move(names[index]),
+                            .Type = std::move(types[index]),
+                        };
+                    }
+
+                    type = StructLogicalType(std::move(fields));
+                    break;
+                }
+
+                case ELogicalMetatype::Tagged: {
+                    ConsumeCharacterOrThrow('<');
+
+                    auto baseType = ParseType();
+
+                    ConsumeCharacterOrThrow(',');
+
+                    ConsumeIdentifier(/*allowQuotedIdentifier*/ true);
+                    auto tag = TString(Identifier_);
+
+                    ConsumeCharacterOrThrow('>');
+
+                    type = TaggedLogicalType(std::move(tag), std::move(baseType));
+                    break;
+                }
+
+                case ELogicalMetatype::VariantTuple:
+                case ELogicalMetatype::VariantStruct:
+                case ELogicalMetatype::Simple:
+                    THROW_ERROR_EXCEPTION("Unknown type: %Qv", Identifier_);
+            }
+        } else {
+            THROW_ERROR_EXCEPTION("Unknown type %Qv", Identifier_);
         }
-        case ELogicalMetatype::Dict: {
-            const auto& dictType = logicalType.AsDictTypeRef();
-            TStringStream out;
-            out << "dict<" << ToString(*dictType.GetKey()) << ';' << ToString(*dictType.GetValue()) << '>';
-            return out.Str();
+
+        while (!IsAtEnd() && CurrentCharacter() == '?') {
+            type = OptionalLogicalType(type);
+            Step();
+            ConsumeWhitespaces();
         }
-        case ELogicalMetatype::Tagged: {
-            const auto& taggedType = logicalType.AsTaggedTypeRef();
-            TStringStream out;
-            out << "tagged<\"" << ToString(taggedType.GetTag()) << "\";" << ToString(*taggedType.GetElement()) << '>';
-            return out.Str();
+
+        return type;
+    }
+
+    void ConsumeIdentifier(bool allowQuotedIdentifier = false)
+    {
+        Identifier_.Clear();
+
+        if (IsAtEnd()) {
+            return;
+        }
+
+        if (CurrentCharacter() == '_' || isalnum(CurrentCharacter())) {
+            size_t start = Index_;
+            while (!IsAtEnd()) {
+                if (CurrentCharacter() == '_' || isalnum(CurrentCharacter())) {
+                    Step();
+                } else {
+                    break;
+                }
+            }
+
+            Identifier_ = Str_.SubString(start, Index_ - start);
+            QuotedIdentifier_ = false;
+        } else if (CurrentCharacter() == '\'') {
+            THROW_ERROR_EXCEPTION_UNLESS(allowQuotedIdentifier, "Unexpected literal string");
+            // Skip '.
+            Step();
+
+            UnescapedIdentifierHolder_.clear();
+
+            auto start = Index_;
+
+            bool identifierClosed = false;
+
+            while (!IsAtEnd()) {
+                if (CurrentCharacter() == '\\') {
+                    Step();
+                    if (IsAtEnd()) {
+                        break;
+                    }
+                    Step();
+                } else if (CurrentCharacter() == '\'') {
+                    identifierClosed = true;
+                    break;
+                } else {
+                    Step();
+                }
+            }
+
+            if (!identifierClosed) {
+                THROW_ERROR_EXCEPTION("Invalid enclosure: %Qv", Str_.SubStr(start, Index_ - start));
+            }
+
+            UnescapedIdentifierHolder_ = UnescapeC(Str_.SubStr(start, Index_ - start));
+            Identifier_ = UnescapedIdentifierHolder_;
+            QuotedIdentifier_ = true;
+            Step();
+        }
+
+        if (Identifier_.empty()) {
+            THROW_ERROR_EXCEPTION("Unexpected character %qv, expected '_' or alphanumeric", CurrentCharacter());
+        }
+
+        ConsumeWhitespaces();
+    }
+
+    std::pair<std::vector<TLogicalTypePtr>, std::vector<std::string>> ParseFields()
+    {
+        ConsumeCharacterOrThrow('<');
+
+        if (!IsAtEnd() && CurrentCharacter() == '>') {
+            Step();
+            return {};
+        }
+
+        auto start = Index_;
+        std::vector<TLogicalTypePtr> types;
+        std::vector<std::string> names;
+
+        if (types.empty() && names.empty()) {
+            ConsumeIdentifier(/*allowQuotedIdentifier*/ true);
+            if (Y_UNLIKELY(IsAtEnd())) {
+                THROW_ERROR_EXCEPTION("Unexpected end of string encountered, expected '>' or ',' or ':'");
+            }
+            if (CurrentCharacter() == ':') {
+                names.emplace_back(Identifier_);
+                ConsumeCharacterOrThrow(':');
+                types.push_back(ParseType());
+            } else {
+                if (QuotedIdentifier_) {
+                    THROW_ERROR_EXCEPTION("Unexpected quoted identifier where type is expected");
+                }
+                Index_ = start;
+                types.push_back(ParseType());
+            }
+        }
+
+        for (;;) {
+            if (Y_UNLIKELY(IsAtEnd())) {
+                THROW_ERROR_EXCEPTION("Unexpected end of string encountered, expected '>' or ','");
+            }
+
+            if (CurrentCharacter() == '>') {
+                break;
+            }
+
+            if (CurrentCharacter() != ',') {
+                THROW_ERROR_EXCEPTION("Expected '>' or ',' but got %qv", CurrentCharacter());
+            }
+
+            Step();
+            ConsumeWhitespaces();
+
+            if (names.size() == types.size()) {
+                ConsumeIdentifier(/*allowQuotedIdentifier*/ true);
+                names.emplace_back(Identifier_);
+
+                ConsumeCharacterOrThrow(':');
+
+                types.push_back(ParseType());
+            } else {
+                types.push_back(ParseType());
+            }
+        }
+
+        ConsumeCharacterOrThrow('>');
+
+        return {std::move(types), std::move(names)};
+    }
+
+    char CurrentCharacter() const
+    {
+        return Str_[Index_];
+    }
+
+    bool IsAtEnd() const
+    {
+        return Index_ >= Str_.size();
+    }
+
+    void Step()
+    {
+        ++Index_;
+    }
+
+    void ConsumeCharacterOrThrow(char character)
+    {
+        if (Y_UNLIKELY(IsAtEnd())) {
+            THROW_ERROR_EXCEPTION("Unexpected end of string encountered, expected %qv", character);
+        }
+
+        if (Y_LIKELY(CurrentCharacter() == character)) {
+            Step();
+            ConsumeWhitespaces();
+        } else {
+            THROW_ERROR_EXCEPTION("Expected %Qv", character);
         }
     }
+
+    void ConsumeWhitespaces()
+    {
+        while (!IsAtEnd() && isspace(Str_[Index_])) {
+            Index_++;
+        }
+    }
+};
+
+TLogicalTypePtr ParseType(TStringBuf typeString)
+{
+    return TLogicalTypeParser().ParseTypeAndValidate(typeString);
+}
+
+//////////////////////////////////////////////////////////////////////////////
+
+TString ToString(const TLogicalType& logicalType)
+{
+    auto formatTypes = [] (TRange<TLogicalTypePtr> types, TString* destination) {
+        bool first = true;
+        for (const auto& type : types) {
+            if (first) {
+                first = false;
+            } else {
+                destination->append(',');
+            }
+            destination->append(ToString(*type));
+        }
+    };
+
+    auto formatFields = [&] (TRange<TStructField> fields, TString* destination) {
+        bool first = true;
+        for (const auto& field : fields) {
+            if (first) {
+                first = false;
+            } else {
+                destination->append(',');
+            }
+            destination
+                ->append('\'')
+                .append(EscapeCAndSingleQuotes(field.Name))
+                .append('\'')
+                .append(':')
+                .append(ToString(*field.Type));
+        }
+    };
+
+    switch (logicalType.GetMetatype()) {
+        case ELogicalMetatype::Simple: {
+            auto element = logicalType.AsSimpleTypeRef().GetElement();
+            if (element == ESimpleLogicalValueType::Boolean) {
+                return "Bool";
+            }
+            return ToString(element);
+        }
+
+        case ELogicalMetatype::Decimal:
+            return Format("Decimal(%v,%v)",
+                logicalType.AsDecimalTypeRef().GetPrecision(),
+                logicalType.AsDecimalTypeRef().GetScale());
+
+        case ELogicalMetatype::Optional:
+            return Format("Optional<%v>", *logicalType.AsOptionalTypeRef().GetElement());
+
+        case ELogicalMetatype::List:
+            return Format("List<%v>", *logicalType.AsListTypeRef().GetElement());
+
+        case ELogicalMetatype::Struct: {
+            auto typeString = TString("Struct<");
+            formatFields(logicalType.AsStructTypeRef().GetFields(), &typeString);
+            return typeString.append('>');
+        }
+
+        case ELogicalMetatype::Tuple: {
+            auto typeString = TString("Tuple<");
+            formatTypes(logicalType.AsTupleTypeRef().GetElements(), &typeString);
+            return typeString.append('>');
+        }
+
+        case ELogicalMetatype::VariantTuple: {
+            auto typeString = TString("Variant<");
+            formatTypes(logicalType.AsVariantTupleTypeRef().GetElements(), &typeString);
+            return typeString.append('>');
+        }
+
+        case ELogicalMetatype::VariantStruct: {
+            auto typeString = TString("Variant<");
+            formatFields(logicalType.AsVariantStructTypeRef().GetFields(), &typeString);
+            return typeString.append('>');
+        }
+
+        case ELogicalMetatype::Dict: {
+            auto typeString = TString("Dict<");
+            const auto& dictType = logicalType.AsDictTypeRef();
+            auto types = {
+                dictType.GetKey(),
+                dictType.GetValue(),
+            };
+            formatTypes(types, &typeString);
+            return typeString.append('>');
+        }
+
+        case ELogicalMetatype::Tagged: {
+            const auto& taggedType = logicalType.AsTaggedTypeRef();
+            return TString("Tagged<")
+                .append(ToString(*taggedType.GetElement()))
+                .append(",'")
+                .append(EscapeCAndSingleQuotes(taggedType.GetTag()))
+                .append("'>");
+        }
+    }
+
     YT_ABORT();
 }
 
@@ -319,8 +678,15 @@ TDecimalLogicalType::TDecimalLogicalType(int precision, int scale)
     , Scale_(scale)
 { }
 
-size_t TDecimalLogicalType::GetMemoryUsage() const
+i64 TDecimalLogicalType::GetMemoryUsage() const
 {
+    return sizeof(*this);
+}
+
+i64 TDecimalLogicalType::GetMemoryUsage(i64 threshold) const
+{
+    YT_ASSERT(threshold > 0);
+
     return sizeof(*this);
 }
 
@@ -371,13 +737,27 @@ std::optional<ESimpleLogicalValueType> TOptionalLogicalType::Simplify() const
     }
 }
 
-size_t TOptionalLogicalType::GetMemoryUsage() const
+i64 TOptionalLogicalType::GetMemoryUsage() const
 {
     if (Element_->GetMetatype() == ELogicalMetatype::Simple) {
         // All optionals of simple logical types are singletons and therefore we assume they use no space.
         return 0;
     } else {
         return sizeof(*this) + Element_->GetMemoryUsage();
+    }
+}
+
+i64 TOptionalLogicalType::GetMemoryUsage(i64 threshold) const
+{
+    YT_ASSERT(threshold > 0);
+
+    if (Element_->GetMetatype() == ELogicalMetatype::Simple) {
+        // NB: See TOptionalLogicalType::GetMemoryUsage().
+        return 0;
+    } else if (auto sizeOfThis = static_cast<i64>(sizeof(*this)); sizeOfThis >= threshold) {
+        return sizeof(*this);
+    } else {
+        return sizeOfThis + Element_->GetMemoryUsage(threshold - sizeOfThis);
     }
 }
 
@@ -405,9 +785,16 @@ TSimpleLogicalType::TSimpleLogicalType(ESimpleLogicalValueType element)
     , Element_(element)
 { }
 
-size_t TSimpleLogicalType::GetMemoryUsage() const
+i64 TSimpleLogicalType::GetMemoryUsage() const
 {
     // All simple logical types are singletons and therefore we assume they use no space.
+    return 0;
+}
+
+i64 TSimpleLogicalType::GetMemoryUsage(i64 threshold) const
+{
+    YT_ASSERT(threshold > 0);
+
     return 0;
 }
 
@@ -438,9 +825,20 @@ TListLogicalType::TListLogicalType(TLogicalTypePtr element)
     , Element_(std::move(element))
 { }
 
-size_t TListLogicalType::GetMemoryUsage() const
+i64 TListLogicalType::GetMemoryUsage() const
 {
     return sizeof(*this) + Element_->GetMemoryUsage();
+}
+
+i64 TListLogicalType::GetMemoryUsage(i64 threshold) const
+{
+    YT_ASSERT(threshold > 0);
+
+    if (auto sizeOfThis = static_cast<i64>(sizeof(*this)); sizeOfThis >= threshold) {
+        return sizeOfThis;
+    } else {
+        return sizeOfThis + Element_->GetMemoryUsage(threshold - sizeOfThis);
+    }
 }
 
 int TListLogicalType::GetTypeComplexity() const
@@ -466,19 +864,19 @@ TComplexTypeFieldDescriptor::TComplexTypeFieldDescriptor(const NYT::NTableClient
     : TComplexTypeFieldDescriptor(column.Name(), column.LogicalType())
 { }
 
-TComplexTypeFieldDescriptor::TComplexTypeFieldDescriptor(TString columnName, TLogicalTypePtr type)
-    : Descriptor_(std::move(columnName))
+TComplexTypeFieldDescriptor::TComplexTypeFieldDescriptor(const std::string& columnName, TLogicalTypePtr type)
+    : Description_(columnName)
     , Type_(std::move(type))
 { }
 
 TComplexTypeFieldDescriptor TComplexTypeFieldDescriptor::OptionalElement() const
 {
-    return TComplexTypeFieldDescriptor(Descriptor_ + ".<optional-element>", Type_->AsOptionalTypeRef().GetElement());
+    return TComplexTypeFieldDescriptor(Description_ + ".<optional-element>", Type_->AsOptionalTypeRef().GetElement());
 }
 
 TComplexTypeFieldDescriptor TComplexTypeFieldDescriptor::ListElement() const
 {
-    return TComplexTypeFieldDescriptor(Descriptor_ + ".<list-element>", Type_->AsListTypeRef().GetElement());
+    return TComplexTypeFieldDescriptor(Description_ + ".<list-element>", Type_->AsListTypeRef().GetElement());
 }
 
 TComplexTypeFieldDescriptor TComplexTypeFieldDescriptor::Field(size_t i) const
@@ -498,7 +896,7 @@ TComplexTypeFieldDescriptor TComplexTypeFieldDescriptor::StructField(size_t i) c
     const auto& fields = Type_->AsStructTypeRef().GetFields();
     YT_VERIFY(i < fields.size());
     const auto& field = fields[i];
-    return TComplexTypeFieldDescriptor(Descriptor_ + "." + field.Name, field.Type);
+    return TComplexTypeFieldDescriptor(Description_ + "." + field.Name, field.Type);
 }
 
 TComplexTypeFieldDescriptor TComplexTypeFieldDescriptor::Element(size_t i) const
@@ -517,14 +915,14 @@ TComplexTypeFieldDescriptor TComplexTypeFieldDescriptor::TupleElement(size_t i) 
 {
     const auto& elements = Type_->AsTupleTypeRef().GetElements();
     YT_VERIFY(i < elements.size());
-    return TComplexTypeFieldDescriptor(Descriptor_ + Format(".<tuple-element-%v>", i), elements[i]);
+    return TComplexTypeFieldDescriptor(Description_ + Format(".<tuple-element-%v>", i), elements[i]);
 }
 
 TComplexTypeFieldDescriptor TComplexTypeFieldDescriptor::VariantTupleElement(size_t i) const
 {
     const auto& elements = Type_->AsVariantTupleTypeRef().GetElements();
     YT_VERIFY(i < elements.size());
-    return TComplexTypeFieldDescriptor(Descriptor_ + Format(".<variant-element-%v>", i), elements[i]);
+    return TComplexTypeFieldDescriptor(Description_ + Format(".<variant-element-%v>", i), elements[i]);
 }
 
 TComplexTypeFieldDescriptor TComplexTypeFieldDescriptor::VariantStructField(size_t i) const
@@ -532,32 +930,32 @@ TComplexTypeFieldDescriptor TComplexTypeFieldDescriptor::VariantStructField(size
     const auto& fields = Type_->AsVariantStructTypeRef().GetFields();
     YT_VERIFY(i < fields.size());
     const auto& field = fields[i];
-    return TComplexTypeFieldDescriptor(Descriptor_ + "." + field.Name, field.Type);
+    return TComplexTypeFieldDescriptor(Description_ + "." + field.Name, field.Type);
 }
 
 TComplexTypeFieldDescriptor TComplexTypeFieldDescriptor::DictKey() const
 {
-    return TComplexTypeFieldDescriptor(Descriptor_ + ".<key>", Type_->AsDictTypeRef().GetKey());
+    return TComplexTypeFieldDescriptor(Description_ + ".<key>", Type_->AsDictTypeRef().GetKey());
 }
 
 TComplexTypeFieldDescriptor TComplexTypeFieldDescriptor::DictValue() const
 {
-    return TComplexTypeFieldDescriptor(Descriptor_ + ".<value>", Type_->AsDictTypeRef().GetValue());
+    return TComplexTypeFieldDescriptor(Description_ + ".<value>", Type_->AsDictTypeRef().GetValue());
 }
 
 TComplexTypeFieldDescriptor TComplexTypeFieldDescriptor::TaggedElement() const
 {
-    return TComplexTypeFieldDescriptor(Descriptor_ + ".<tagged-element>", Type_->AsTaggedTypeRef().GetElement());
+    return TComplexTypeFieldDescriptor(Description_ + ".<tagged-element>", Type_->AsTaggedTypeRef().GetElement());
 }
 
 TComplexTypeFieldDescriptor TComplexTypeFieldDescriptor::Detag() const
 {
-    return TComplexTypeFieldDescriptor(Descriptor_, DetagLogicalType(Type_));
+    return TComplexTypeFieldDescriptor(Description_, DetagLogicalType(Type_));
 }
 
-const TString& TComplexTypeFieldDescriptor::GetDescription() const
+const std::string& TComplexTypeFieldDescriptor::GetDescription() const
 {
-    return Descriptor_;
+    return Description_;
 }
 
 const TLogicalTypePtr& TComplexTypeFieldDescriptor::GetType() const
@@ -677,14 +1075,28 @@ TStructLogicalTypeBase::TStructLogicalTypeBase(ELogicalMetatype metatype, std::v
     , Fields_(std::move(fields))
 { }
 
-size_t TStructLogicalTypeBase::GetMemoryUsage() const
+i64 TStructLogicalTypeBase::GetMemoryUsage() const
 {
-    size_t result = sizeof(*this);
-    result += sizeof(TStructField) * Fields_.size();
+    auto usage = static_cast<i64>(sizeof(*this));
+    usage += sizeof(TStructField) * Fields_.size();
     for (const auto& field : Fields_) {
-        result += field.Type->GetMemoryUsage();
+        usage += field.Type->GetMemoryUsage();
     }
-    return result;
+    return usage;
+}
+
+i64 TStructLogicalTypeBase::GetMemoryUsage(i64 threshold) const
+{
+    YT_ASSERT(threshold > 0);
+
+    auto usage = static_cast<i64>(sizeof(*this) + sizeof(TStructField) * Fields_.size());
+    for (const auto& field : Fields_) {
+        if (usage >= threshold) {
+            return usage;
+        }
+        usage += field.Type->GetMemoryUsage(threshold - usage);
+    }
+    return usage;
 }
 
 int TStructLogicalTypeBase::GetTypeComplexity() const
@@ -735,14 +1147,28 @@ TTupleLogicalTypeBase::TTupleLogicalTypeBase(ELogicalMetatype metatype, std::vec
     , Elements_(std::move(elements))
 { }
 
-size_t TTupleLogicalTypeBase::GetMemoryUsage() const
+i64 TTupleLogicalTypeBase::GetMemoryUsage() const
 {
-    size_t result = sizeof(*this);
-    result += sizeof(TLogicalTypePtr) * Elements_.size();
+    auto usage = static_cast<i64>(sizeof(*this));
+    usage += sizeof(TLogicalTypePtr) * Elements_.size();
     for (const auto& element : Elements_) {
-        result += element->GetMemoryUsage();
+        usage += element->GetMemoryUsage();
     }
-    return result;
+    return usage;
+}
+
+i64 TTupleLogicalTypeBase::GetMemoryUsage(i64 threshold) const
+{
+    YT_ASSERT(threshold > 0);
+
+    auto usage = static_cast<i64>(sizeof(*this) + sizeof(TLogicalTypePtr) * Elements_.size());
+    for (const auto& element : Elements_) {
+        if (usage >= threshold) {
+            return usage;
+        }
+        usage += element->GetMemoryUsage(threshold - usage);
+    }
+    return usage;
 }
 
 int TTupleLogicalTypeBase::GetTypeComplexity() const
@@ -794,9 +1220,25 @@ TDictLogicalType::TDictLogicalType(TLogicalTypePtr key, TLogicalTypePtr value)
     , Value_(std::move(value))
 { }
 
-size_t TDictLogicalType::GetMemoryUsage() const
+i64 TDictLogicalType::GetMemoryUsage() const
 {
     return sizeof(*this) + Key_->GetMemoryUsage() + Value_->GetMemoryUsage();
+}
+
+i64 TDictLogicalType::GetMemoryUsage(i64 threshold) const
+{
+    YT_ASSERT(threshold > 0);
+
+    auto usage = static_cast<i64>(sizeof(*this));
+    if (usage >= threshold) {
+        return usage;
+    }
+    usage += Key_->GetMemoryUsage(threshold - usage);
+    if (usage >= threshold) {
+        return usage;
+    }
+    usage += Value_->GetMemoryUsage(threshold - usage);
+    return usage;
 }
 
 int TDictLogicalType::GetTypeComplexity() const
@@ -845,6 +1287,12 @@ void TDictLogicalType::ValidateNode(const TWalkContext&) const
                     case ESimpleLogicalValueType::Datetime64:
                     case ESimpleLogicalValueType::Timestamp64:
                     case ESimpleLogicalValueType::Interval64:
+                    case ESimpleLogicalValueType::TzDate:
+                    case ESimpleLogicalValueType::TzDatetime:
+                    case ESimpleLogicalValueType::TzTimestamp:
+                    case ESimpleLogicalValueType::TzDate32:
+                    case ESimpleLogicalValueType::TzDatetime64:
+                    case ESimpleLogicalValueType::TzTimestamp64:
                         return;
                 }
                 YT_ABORT();
@@ -876,9 +1324,21 @@ TTaggedLogicalType::TTaggedLogicalType(TString tag, NYT::NTableClient::TLogicalT
     , Element_(std::move(element))
 { }
 
-size_t TTaggedLogicalType::GetMemoryUsage() const
+i64 TTaggedLogicalType::GetMemoryUsage() const
 {
     return sizeof(*this) + GetElement()->GetMemoryUsage();
+}
+
+i64 TTaggedLogicalType::GetMemoryUsage(i64 threshold) const
+{
+    YT_ASSERT(threshold > 0);
+
+    auto usage = static_cast<i64>(sizeof(*this));
+    if (usage >= threshold) {
+        return usage;
+    }
+    usage += GetElement()->GetMemoryUsage(threshold - usage);
+    return usage;
 }
 
 int TTaggedLogicalType::GetTypeComplexity() const
@@ -1052,9 +1512,11 @@ void ValidateLogicalType(const TComplexTypeFieldDescriptor& rootDescriptor, std:
 
 void ToProto(NProto::TLogicalType* protoLogicalType, const TLogicalTypePtr& logicalType)
 {
+    using NYT::ToProto;
+
     switch (logicalType->GetMetatype()) {
         case ELogicalMetatype::Simple:
-            protoLogicalType->set_simple(static_cast<int>(logicalType->AsSimpleTypeRef().GetElement()));
+            protoLogicalType->set_simple(ToProto(logicalType->AsSimpleTypeRef().GetElement()));
             return;
         case ELogicalMetatype::Decimal:
             protoLogicalType->mutable_decimal()->set_precision(logicalType->AsDecimalTypeRef().GetPrecision());
@@ -1070,7 +1532,7 @@ void ToProto(NProto::TLogicalType* protoLogicalType, const TLogicalTypePtr& logi
             auto protoStruct = protoLogicalType->mutable_struct_();
             for (const auto& structField : logicalType->AsStructTypeRef().GetFields()) {
                 auto protoStructField = protoStruct->add_fields();
-                protoStructField->set_name(structField.Name);
+                protoStructField->set_name(ToProto(structField.Name));
                 ToProto(protoStructField->mutable_type(), structField.Type);
             }
             return;
@@ -1087,7 +1549,7 @@ void ToProto(NProto::TLogicalType* protoLogicalType, const TLogicalTypePtr& logi
             auto protoVariantStruct = protoLogicalType->mutable_variant_struct();
             for (const auto& field : logicalType->AsVariantStructTypeRef().GetFields()) {
                 auto protoField = protoVariantStruct->add_fields();
-                protoField->set_name(field.Name);
+                protoField->set_name(ToProto(field.Name));
                 ToProto(protoField->mutable_type(), field.Type);
             }
             return;
@@ -1120,9 +1582,11 @@ void ToProto(NProto::TLogicalType* protoLogicalType, const TLogicalTypePtr& logi
 
 void FromProto(TLogicalTypePtr* logicalType, const NProto::TLogicalType& protoLogicalType)
 {
+    using NYT::FromProto;
+
     switch (protoLogicalType.type_case()) {
         case NProto::TLogicalType::TypeCase::kSimple:
-            *logicalType = SimpleLogicalType(CheckedEnumCast<ESimpleLogicalValueType>(protoLogicalType.simple()));
+            *logicalType = SimpleLogicalType(FromProto<ESimpleLogicalValueType>(protoLogicalType.simple()));
             return;
         case NProto::TLogicalType::TypeCase::kDecimal:
             *logicalType = DecimalLogicalType(protoLogicalType.decimal().precision(), protoLogicalType.decimal().scale());
@@ -1188,7 +1652,7 @@ void FromProto(TLogicalTypePtr* logicalType, const NProto::TLogicalType& protoLo
         case NProto::TLogicalType::TypeCase::kTagged: {
             TLogicalTypePtr element;
             FromProto(&element, protoLogicalType.tagged().element());
-            *logicalType = TaggedLogicalType(protoLogicalType.tagged().tag(), std::move(element));
+            *logicalType = TaggedLogicalType(FromProto<TString>(protoLogicalType.tagged().tag()), std::move(element));
             return;
         }
         case NProto::TLogicalType::TypeCase::TYPE_NOT_SET:
@@ -1433,6 +1897,13 @@ bool IsComparable(const TLogicalTypePtr& type)
                 case ESimpleLogicalValueType::Datetime64:
                 case ESimpleLogicalValueType::Timestamp64:
                 case ESimpleLogicalValueType::Interval64:
+
+                case ESimpleLogicalValueType::TzDate:
+                case ESimpleLogicalValueType::TzDatetime:
+                case ESimpleLogicalValueType::TzTimestamp:
+                case ESimpleLogicalValueType::TzDate32:
+                case ESimpleLogicalValueType::TzDatetime64:
+                case ESimpleLogicalValueType::TzTimestamp64:
                     return true;
 
                 case ESimpleLogicalValueType::Any:
@@ -1460,6 +1931,26 @@ bool IsComparable(const TLogicalTypePtr& type)
         case ELogicalMetatype::Struct:
         case ELogicalMetatype::VariantStruct:
         case ELogicalMetatype::Dict:
+            return false;
+    }
+}
+
+bool IsTzType(const TLogicalTypePtr& logicalType)
+{
+    switch (logicalType->GetMetatype()) {
+        case ELogicalMetatype::Simple:
+            switch (logicalType->AsSimpleTypeRef().GetElement()) {
+                case ESimpleLogicalValueType::TzDate:
+                case ESimpleLogicalValueType::TzDatetime:
+                case ESimpleLogicalValueType::TzTimestamp:
+                case ESimpleLogicalValueType::TzDate32:
+                case ESimpleLogicalValueType::TzDatetime64:
+                case ESimpleLogicalValueType::TzTimestamp64:
+                    return true;
+                default:
+                    return false;
+            }
+        default:
             return false;
     }
 }
@@ -1506,6 +1997,13 @@ static const std::pair<ESimpleLogicalValueType, TString> V3SimpleLogicalValueTyp
     {ESimpleLogicalValueType::Datetime64,  "datetime64"},
     {ESimpleLogicalValueType::Timestamp64, "timestamp64"},
     {ESimpleLogicalValueType::Interval64,  "interval64"},
+
+    {ESimpleLogicalValueType::TzDate,      "tz_date"},
+    {ESimpleLogicalValueType::TzDatetime,  "tz_datetime"},
+    {ESimpleLogicalValueType::TzTimestamp, "tz_timestamp"},
+    {ESimpleLogicalValueType::TzDate32,      "tz_date32"},
+    {ESimpleLogicalValueType::TzDatetime64,  "tz_datetime64"},
+    {ESimpleLogicalValueType::TzTimestamp64, "tz_timestamp64"},
 };
 static_assert(std::size(V3SimpleLogicalValueTypeEncoding) == TEnumTraits<ESimpleLogicalValueType>::GetDomainSize());
 
@@ -2055,12 +2553,20 @@ public:
 
     const TLogicalTypePtr& GetSimpleType(ESimpleLogicalValueType type)
     {
-        return GetOrCrash(SimpleTypeMap_, type);
+        auto it = SimpleTypeMap_.find(type);
+        if (it == SimpleTypeMap_.end()) {
+            THROW_ERROR_EXCEPTION("Unknown type %Qlv", type);
+        }
+        return it->second;
     }
 
     const TLogicalTypePtr& GetOptionalType(ESimpleLogicalValueType type)
     {
-        return GetOrCrash(OptionalTypeMap_, type);
+        auto it = OptionalTypeMap_.find(type);
+        if (it == OptionalTypeMap_.end()) {
+            THROW_ERROR_EXCEPTION("Unknown type %Qlv", type);
+        }
+        return it->second;
     }
 
 private:
@@ -2161,7 +2667,9 @@ TLogicalTypePtr NullLogicalType()
 
 } // namespace NYT::NTableClient
 
-static inline size_t GetHash(
+namespace {
+
+size_t GetHash(
     const THash<NYT::NTableClient::TLogicalType>& hasher,
     const std::vector<NYT::NTableClient::TLogicalTypePtr>& elements)
 {
@@ -2172,7 +2680,7 @@ static inline size_t GetHash(
     return result;
 }
 
-static inline size_t GetHash(
+size_t GetHash(
     const THash<NYT::NTableClient::TLogicalType>& hasher,
     const std::vector<NYT::NTableClient::TStructField>& fields)
 {
@@ -2184,10 +2692,12 @@ static inline size_t GetHash(
     return result;
 }
 
+} // namespace
+
 size_t THash<NYT::NTableClient::TLogicalType>::operator()(const NYT::NTableClient::TLogicalType& logicalType) const
 {
     using namespace NYT::NTableClient;
-    const auto typeHash = static_cast<size_t>(logicalType.GetMetatype());
+    auto typeHash = static_cast<size_t>(logicalType.GetMetatype());
     switch (logicalType.GetMetatype()) {
         case ELogicalMetatype::Simple:
             return CombineHashes(static_cast<size_t>(logicalType.AsSimpleTypeRef().GetElement()), typeHash);

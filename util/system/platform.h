@@ -115,7 +115,11 @@
     #define _wasm64_
 #endif
 
-#if !defined(sparc) && !defined(__sparc) && !defined(__hpux__) && !defined(__alpha__) && !defined(_ia64_) && !defined(_x86_64_) && !defined(_arm_) && !defined(_i386_) && !defined(_ppc_) && !defined(_ppc64_) && !defined(_wasm64_)
+#if defined(__wasm32__)
+    #define _wasm32_
+#endif
+
+#if !defined(sparc) && !defined(__sparc) && !defined(__hpux__) && !defined(__alpha__) && !defined(_ia64_) && !defined(_x86_64_) && !defined(_arm_) && !defined(_i386_) && !defined(_ppc_) && !defined(_ppc64_) && !defined(_wasm64_) && !defined(_wasm32_)
     #error "platform not defined, please, define one"
 #endif
 
@@ -138,51 +142,51 @@
     #define _console_
 #endif
 
-#if defined(__SSE__) || defined(SSE_ENABLED)
+#if defined(__SSE__)
     #define _sse_
 #endif
 
-#if defined(__SSE2__) || defined(SSE2_ENABLED)
+#if defined(__SSE2__)
     #define _sse2_
 #endif
 
-#if defined(__SSE3__) || defined(SSE3_ENABLED)
+#if defined(__SSE3__)
     #define _sse3_
 #endif
 
-#if defined(__SSSE3__) || defined(SSSE3_ENABLED)
+#if defined(__SSSE3__)
     #define _ssse3_
 #endif
 
-#if defined(__SSE4_1__) || defined(SSE41_ENABLED)
+#if defined(__SSE4_1__)
     #define _sse4_1_
 #endif
 
-#if defined(__SSE4_2__) || defined(SSE42_ENABLED)
+#if defined(__SSE4_2__)
     #define _sse4_2_
 #endif
 
-#if defined(__POPCNT__) || defined(POPCNT_ENABLED)
+#if defined(__POPCNT__)
     #define _popcnt_
 #endif
 
-#if defined(__PCLMUL__) || defined(PCLMUL_ENABLED)
+#if defined(__PCLMUL__)
     #define _pclmul_
 #endif
 
-#if defined(__AES__) || defined(AES_ENABLED)
+#if defined(__AES__)
     #define _aes_
 #endif
 
-#if defined(__AVX__) || defined(AVX_ENABLED)
+#if defined(__AVX__)
     #define _avx_
 #endif
 
-#if defined(__AVX2__) || defined(AVX2_ENABLED)
+#if defined(__AVX2__)
     #define _avx2_
 #endif
 
-#if defined(__FMA__) || defined(FMA_ENABLED)
+#if defined(__FMA__)
     #define _fma_
 #endif
 

@@ -13,7 +13,7 @@ PY_SRCS(
 )
 
 PEERDIR(
-    ydb/library/yql/providers/generic/connector/api/common
+    yql/essentials/providers/common/proto
     ydb/library/yql/providers/generic/connector/tests/utils
     ydb/library/yql/providers/generic/connector/api/service/protos
     ydb/public/api/protos

@@ -19,4 +19,25 @@ void AddTags(TTags& tags, const TColumnsTags& allTags, TProtoColumnsCRef columns
     }
 }
 
+TColumnsTypes GetAllTypes(const TUserTable& tableInfo) {
+    TColumnsTypes result;
+
+    for (const auto& it : tableInfo.Columns) {
+        result[it.second.Name] = it.second.Type;
+    }
+
+    return result;
+}
+
+ui64 CountBytes(TArrayRef<const TCell> key, const NTable::TRowState& row) {
+    ui64 bytes = 0;
+    for (auto& cell : key) {
+        bytes += cell.Size();
+    }
+    for (auto& cell : *row) {
+        bytes += cell.Size();
+    }
+    return bytes;
+}
+
 }

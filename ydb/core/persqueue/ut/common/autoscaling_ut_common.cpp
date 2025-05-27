@@ -20,11 +20,11 @@ TEvTx* CreateRequest(ui64 txId, NKikimrSchemeOp::TModifyScheme&& tx) {
     return ev;
 }
 
-void DoRequest(TTopicSdkTestSetup& setup, ui64& txId, NKikimrSchemeOp::TPersQueueGroupDescription& scheme) {
-    DoRequest(setup.GetRuntime(), txId, scheme);
+ui64 DoRequest(TTopicSdkTestSetup& setup, ui64& txId, NKikimrSchemeOp::TPersQueueGroupDescription& scheme) {
+    return DoRequest(setup.GetRuntime(), txId, scheme);
 }
 
-void DoRequest(NActors::TTestActorRuntime& runtime, ui64& txId, NKikimrSchemeOp::TPersQueueGroupDescription& scheme) {
+ui64 DoRequest(NActors::TTestActorRuntime& runtime, ui64& txId, NKikimrSchemeOp::TPersQueueGroupDescription& scheme) {
     Sleep(TDuration::Seconds(1));
 
     Cerr << "ALTER_SCHEME: " << scheme << Endl << Flush;
@@ -54,25 +54,31 @@ void DoRequest(NActors::TTestActorRuntime& runtime, ui64& txId, NKikimrSchemeOp:
         "Unexpected status " << NKikimrScheme::EStatus_Name(e->Record.GetStatus()) << " " << e->Record.GetReason());
 
     Sleep(TDuration::Seconds(1));
+
+    return e->Record.GetTxId();
 }
 
-void SplitPartition(TTopicSdkTestSetup& setup, ui64& txId, const ui32 partition, TString boundary) {
-    SplitPartition(setup.GetRuntime(), txId, partition, boundary);
+ui64 SplitPartition(TTopicSdkTestSetup& setup, ui64& txId, const ui32 partition, TString boundary) {
+    return SplitPartition(setup.GetRuntime(), txId, partition, boundary);
 }
 
-void SplitPartition(NActors::TTestActorRuntime& runtime, ui64& txId, const ui32 partition, TString boundary) {
+ui64 SplitPartition(NActors::TTestActorRuntime& runtime, ui64& txId, const ui32 partition, TString boundary) {
+    return SplitPartition(runtime, txId, TString{TEST_TOPIC}, partition, boundary);
+}
+
+ui64 SplitPartition(NActors::TTestActorRuntime& runtime, ui64& txId, const TString& topic, const ui32 partition, TString boundary) {
     ::NKikimrSchemeOp::TPersQueueGroupDescription scheme;
-    scheme.SetName(TEST_TOPIC);
+    scheme.SetName(topic);
     auto* split = scheme.AddSplit();
     split->SetPartition(partition);
     split->SetSplitBoundary(boundary);
 
-    DoRequest(runtime, txId, scheme);
+    return DoRequest(runtime, txId, scheme);
 }
 
 void MergePartition(TTopicSdkTestSetup& setup, ui64& txId, const ui32 partitionLeft, const ui32 partitionRight) {
     ::NKikimrSchemeOp::TPersQueueGroupDescription scheme;
-    scheme.SetName(TEST_TOPIC);
+    scheme.SetName(TString{TEST_TOPIC});
     auto* merge = scheme.AddMerge();
     merge->SetPartition(partitionLeft);
     merge->SetAdjacentPartition(partitionRight);
@@ -90,7 +96,9 @@ TTopicSdkTestSetup CreateSetup() {
     NKikimrConfig::TFeatureFlags ff;
     ff.SetEnableTopicSplitMerge(true);
     ff.SetEnablePQConfigTransactionsAtSchemeShard(true);
-    //ff.SetEnableTopicServiceTx(true);
+    ff.SetEnableTopicServiceTx(true);
+    ff.SetEnableTopicAutopartitioningForCDC(true);
+    ff.SetEnableTopicAutopartitioningForReplication(true);
 
     auto settings = TTopicSdkTestSetup::MakeServerSettings();
     settings.SetFeatureFlags(ff);
@@ -162,7 +170,7 @@ struct TTestReadSession : public ITestReadSession {
         TImpl(const TString& name, bool autoCommit)
             : Name(name)
             , AutoCommit(autoCommit)
-            , Semaphore(name.c_str(), SemCount) {}
+            , Semaphore((TStringBuilder() << name << "::" << RandomNumber<size_t>()).c_str(), SemCount) {}
 
         TString Name;
         std::unordered_map<ui32, ui64> Offsets;
@@ -211,7 +219,8 @@ template<>
 std::shared_ptr<TTestReadSession<SdkVersion::Topic>::TSdkReadSession> TTestReadSession<SdkVersion::Topic>::Create(const TestReadSessionSettings& settings) {
     auto readSettings = TReadSessionSettings()
         .ConsumerName(TEST_CONSUMER)
-        .AutoPartitioningSupport(settings.AutoPartitioningSupport);
+        .AutoPartitioningSupport(settings.AutoPartitioningSupport)
+        .MaxLag(settings.ReadLag);
     for (auto& topic : settings.Topics) {
         readSettings.AppendTopics(topic);
     }
@@ -249,10 +258,9 @@ std::shared_ptr<TTestReadSession<SdkVersion::Topic>::TSdkReadSession> TTestReadS
             auto msg = MsgInfo(message.GetPartitionSession()->GetPartitionId(),
                                         message.GetSeqNo(),
                                         message.GetOffset(),
-                                        message.GetData(),
+                                        TString{message.GetData()},
                                         impl->AutoCommit)
                                     .WithMsg(new MsgWrapper(message));
-
             impl->ReceivedMessages.push_back(msg);
 
             if (impl->AutoCommit) {
@@ -272,10 +280,10 @@ std::shared_ptr<TTestReadSession<SdkVersion::Topic>::TSdkReadSession> TTestReadS
                 auto partitionId = ev.GetPartitionSession()->GetPartitionId();
                 auto topic = ev.GetPartitionSession()->GetTopicPath();
                 auto offset = impl->GetOffset(partitionId);
-                impl->Modify([&](std::unordered_map<TString, std::set<size_t>>& s) { s[topic].insert(partitionId); });
+                impl->Modify([&](std::unordered_map<TString, std::set<size_t>>& s) { s[TString{topic}].insert(partitionId); });
                 if (offset) {
                     Cerr << ">>>>> " << impl->Name << " Start reading partition " << partitionId << " from offset " << offset.value() << Endl << Flush;
-                    ev.Confirm(offset.value(), TMaybe<ui64>());
+                    ev.Confirm(offset.value(), std::optional<ui64>());
                 } else {
                     Cerr << ">>>>> " << impl->Name << " Start reading partition " << partitionId << " without offset" << Endl << Flush;
                     ev.Confirm();
@@ -288,7 +296,7 @@ std::shared_ptr<TTestReadSession<SdkVersion::Topic>::TSdkReadSession> TTestReadS
                 Cerr << ">>>>> " << impl->Name << " Received TStopPartitionSessionEvent message " << ev.DebugString() << Endl << Flush;
                 auto partitionId = ev.GetPartitionSession()->GetPartitionId();
                 auto topic = ev.GetPartitionSession()->GetTopicPath();
-                impl->Modify([&](std::unordered_map<TString, std::set<size_t>>& s) { s[topic].erase(partitionId); });
+                impl->Modify([&](std::unordered_map<TString, std::set<size_t>>& s) { s[TString{topic}].erase(partitionId); });
                 Cerr << ">>>>> " << impl->Name << " Stop reading partition " << partitionId << Endl << Flush;
                 ev.Confirm();
     });
@@ -299,7 +307,7 @@ std::shared_ptr<TTestReadSession<SdkVersion::Topic>::TSdkReadSession> TTestReadS
                 Cerr << ">>>>> " << impl->Name << " Received TPartitionSessionClosedEvent message " << ev.DebugString() << Endl << Flush;
                 auto partitionId = ev.GetPartitionSession()->GetPartitionId();
                 auto topic = ev.GetPartitionSession()->GetTopicPath();
-                impl->Modify([&](std::unordered_map<TString, std::set<size_t>>& s) { s[topic].erase(partitionId); });
+                impl->Modify([&](std::unordered_map<TString, std::set<size_t>>& s) { s[TString{topic}].erase(partitionId); });
                 Cerr << ">>>>> " << impl->Name << " Stop (closed) reading partition " << partitionId << Endl << Flush;
     });
 
@@ -329,7 +337,8 @@ std::shared_ptr<TTestReadSession<SdkVersion::PQv1>::TSdkReadSession> TTestReadSe
 
     NYdb::NPersQueue::TReadSessionSettings readSettings;
     readSettings
-        .ConsumerName(TEST_CONSUMER);
+        .ConsumerName(TEST_CONSUMER)
+        .MaxTimeLag(settings.ReadLag);
     for (auto& topic : settings.Topics) {
         readSettings.AppendTopics(topic);
     }
@@ -367,7 +376,7 @@ std::shared_ptr<TTestReadSession<SdkVersion::PQv1>::TSdkReadSession> TTestReadSe
             auto msg = MsgInfo(message.GetPartitionStream()->GetPartitionId(),
                                         message.GetSeqNo(),
                                         message.GetOffset(),
-                                        message.GetData(),
+                                        TString{message.GetData()},
                                         impl->AutoCommit)
                                     .WithMsg(new MsgWrapper(message));
 
@@ -390,10 +399,10 @@ std::shared_ptr<TTestReadSession<SdkVersion::PQv1>::TSdkReadSession> TTestReadSe
                 auto partitionId = ev.GetPartitionStream()->GetPartitionId();
                 auto topic = ev.GetPartitionStream()->GetTopicPath();
                 auto offset = impl->GetOffset(partitionId);
-                impl->Modify([&](std::unordered_map<TString, std::set<size_t>>& s) { s[topic].insert(partitionId); });
+                impl->Modify([&](std::unordered_map<TString, std::set<size_t>>& s) { s[TString{topic}].insert(partitionId); });
                 if (offset) {
                     Cerr << ">>>>> " << impl->Name << " Start reading partition " << partitionId << " from offset " << offset.value() << Endl << Flush;
-                    ev.Confirm(offset.value(), TMaybe<ui64>());
+                    ev.Confirm(offset.value(), std::optional<ui64>());
                 } else {
                     Cerr << ">>>>> " << impl->Name << " Start reading partition " << partitionId << " without offset" << Endl << Flush;
                     ev.Confirm();
@@ -406,7 +415,7 @@ std::shared_ptr<TTestReadSession<SdkVersion::PQv1>::TSdkReadSession> TTestReadSe
                 Cerr << ">>>>> " << impl->Name << " Received TDestroyPartitionStreamEvent message " << ev.DebugString() << Endl << Flush;
                 auto partitionId = ev.GetPartitionStream()->GetPartitionId();
                 auto topic = ev.GetPartitionStream()->GetTopicPath();
-                impl->Modify([&](std::unordered_map<TString, std::set<size_t>>& s) { s[topic].erase(partitionId); });
+                impl->Modify([&](std::unordered_map<TString, std::set<size_t>>& s) { s[TString{topic}].erase(partitionId); });
                 Cerr << ">>>>> " << impl->Name << " Stop reading partition " << partitionId << Endl << Flush;
                 ev.Confirm();
     });
@@ -417,7 +426,7 @@ std::shared_ptr<TTestReadSession<SdkVersion::PQv1>::TSdkReadSession> TTestReadSe
                 Cerr << ">>>>> " << impl->Name << " Received TPartitionSessionClosedEvent message " << ev.DebugString() << Endl << Flush;
                 auto partitionId = ev.GetPartitionStream()->GetPartitionId();
                 auto topic = ev.GetPartitionStream()->GetTopicPath();
-                impl->Modify([&](std::unordered_map<TString, std::set<size_t>>& s) { s[topic].erase(partitionId); });
+                impl->Modify([&](std::unordered_map<TString, std::set<size_t>>& s) { s[TString{topic}].erase(partitionId); });
                 Cerr << ">>>>> " << impl->Name << " Stop (closed) reading partition " << partitionId << Endl << Flush;
     });
 
@@ -440,7 +449,7 @@ void TTestReadSession<Sdk>::WaitAllMessages() {
 
 template<SdkVersion Sdk>
 void TTestReadSession<Sdk>::Commit() {
-    Cerr << ">>>>> " << Impl->Name << " Commit all received messages" << Endl << Flush;
+    Cerr << ">>>>> " << Impl->Name << "Commit all received messages" << Endl << Flush;
     for (auto& m : Impl->ReceivedMessages) {
         if (!m.Commited) {
             m.Msg->Commit();
@@ -480,7 +489,7 @@ NThreading::TFuture<std::unordered_map<TString, std::set<size_t>>> TTestReadSess
 
 template<SdkVersion Sdk>
 void TTestReadSession<Sdk>::Assert(const std::set<size_t>& expected, NThreading::TFuture<std::unordered_map<TString, std::set<size_t>>> f, const TString& message) {
-    Assert(std::unordered_map<TString, std::set<size_t>>{{TEST_TOPIC, expected}}, f, message);
+    Assert(std::unordered_map<TString, std::set<size_t>>{{TString{TEST_TOPIC}, expected}}, f, message);
 }
 
 template<SdkVersion Sdk>
@@ -493,7 +502,7 @@ void TTestReadSession<Sdk>::Assert(const std::unordered_map<TString, std::set<si
 
 template<SdkVersion Sdk>
 void TTestReadSession<Sdk>::WaitAndAssertPartitions(std::set<size_t> partitions, const TString& message) {
-    WaitAndAssert(std::unordered_map<TString, std::set<size_t>>{{TEST_TOPIC, partitions}}, message);
+    WaitAndAssert(std::unordered_map<TString, std::set<size_t>>{{TString{TEST_TOPIC}, partitions}}, message);
 }
 
 template<SdkVersion Sdk>
@@ -514,13 +523,13 @@ template<SdkVersion Sdk>
 void TTestReadSession<Sdk>::Close() {
     Run();
     Cerr << ">>>>> " << Impl->Name << " Closing reading session " << Endl << Flush;
-    Session->Close();
+    Session->Close(TDuration::Seconds(5));
     Session.reset();
 }
 
 template<SdkVersion Sdk>
 std::set<size_t> TTestReadSession<Sdk>::GetPartitions() {
-    return GetPartitionsA()[TEST_TOPIC];
+    return GetPartitionsA()[TString{TEST_TOPIC}];
 }
 
 template<SdkVersion Sdk>

@@ -647,23 +647,23 @@ public:
 
     const char* Begin() const
     {
-        return Data_[Index_].Data();
+        return Data_[Index_].data();
     }
 
     const char* Current() const
     {
-        return Data_[Index_].Data() + Pointer_;
+        return Data_[Index_].data() + Pointer_;
     }
 
     void Skip(size_t size)
     {
         Pointer_ += size;
-        YT_VERIFY(Pointer_ < Data_[Index_].Size());
+        YT_VERIFY(Pointer_ < Data_[Index_].size());
     }
 
     const char* End() const
     {
-        return Data_[Index_].Data() + Data_[Index_].Size();
+        return Data_[Index_].data() + Data_[Index_].size();
     }
 
     void RefreshBlock()

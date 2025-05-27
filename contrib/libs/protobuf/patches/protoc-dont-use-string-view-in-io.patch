@@ -1,0 +1,31 @@
+--- a/src/google/protobuf/compiler/importer.cc	(d9b2a82a272102f9099f5bc0cb767279d3e89e3a)
++++ b/src/google/protobuf/compiler/importer.cc	(0dd6d02cb89a06c67e29040284d9239dfe0024b7)
+@@ -442,7 +442,7 @@ bool DiskSourceTree::VirtualFileToDiskFile(absl::string_view virtual_file,
+   return stream != nullptr;
+ }
+ 
+-io::ZeroCopyInputStream* DiskSourceTree::Open(absl::string_view filename) {
++io::ZeroCopyInputStream* DiskSourceTree::Open(const TProtoStringType& filename) {
+   return OpenVirtualFile(filename, nullptr);
+ }
+ 
+--- a/src/google/protobuf/compiler/importer.h	(d9b2a82a272102f9099f5bc0cb767279d3e89e3a)
++++ b/src/google/protobuf/compiler/importer.h	(0dd6d02cb89a06c67e29040284d9239dfe0024b7)
+@@ -245,7 +245,7 @@ class PROTOBUF_EXPORT SourceTree {
+   // found.  The caller takes ownership of the returned object.  The filename
+   // must be a path relative to the root of the source tree and must not
+   // contain "." or ".." components.
+-  virtual io::ZeroCopyInputStream* Open(absl::string_view filename) = 0;
++  virtual io::ZeroCopyInputStream* Open(const TProtoStringType& filename) = 0;
+ 
+   // If Open() returns NULL, calling this method immediately will return an
+   // description of the error.
+@@ -322,7 +322,7 @@ class PROTOBUF_EXPORT DiskSourceTree : public SourceTree {
+                              TProtoStringType* disk_file);
+ 
+   // implements SourceTree -------------------------------------------
+-  io::ZeroCopyInputStream* Open(absl::string_view filename) override;
++  io::ZeroCopyInputStream* Open(const TProtoStringType& filename) override;
+ 
+   TProtoStringType GetLastErrorMessage() override;
+ 

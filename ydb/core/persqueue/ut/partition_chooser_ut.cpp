@@ -3,7 +3,7 @@
 #include <ydb/core/persqueue/writer/metadata_initializers.h>
 #include <ydb/core/persqueue/writer/partition_chooser_impl.h>
 #include <ydb/core/persqueue/writer/source_id_encoding.h>
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/ut_utils/test_server.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/test_server.h>
 
 #include <ydb/core/persqueue/writer/pipe_utils.h>
 
@@ -162,7 +162,6 @@ Y_UNIT_TEST(THashChooser_GetTabletIdTest) {
     UNIT_ASSERT_VALUES_EQUAL(chooser.GetPartition(2)->PartitionId, 2);
 
     // Not found
-    UNIT_ASSERT(!chooser.GetPartition(3));
     UNIT_ASSERT(!chooser.GetPartition(666));
 }
 
@@ -209,13 +208,18 @@ TWriteSessionMock* ChoosePartition(NPersQueue::TTestServer& server,
     NPersQueue::TTopicConverterPtr fullConverter = CreateTopicConverter();
     TWriteSessionMock* mock = new TWriteSessionMock();
 
+    auto chooser = NPQ::CreatePartitionChooser(config, true);
+    auto graph = NPQ::MakeSharedPartitionGraph(config);
+
     NActors::TActorId parentId = server.GetRuntime()->Register(mock);
-    server.GetRuntime()->Register(NKikimr::NPQ::CreatePartitionChooserActorM(parentId,
+    server.GetRuntime()->Register(NKikimr::NPQ::CreatePartitionChooserActor<NTabletPipe::NTest::TPipeMock>(parentId,
                                                                                    config,
+                                                                                   chooser,
+                                                                                   graph,
                                                                                    fullConverter,
                                                                                    sourceId,
                                                                                    preferedPartition,
-                                                                                   true));
+                                                                                   {}));
 
     mock->Promise.GetFuture().GetValueSync();
 
@@ -338,8 +342,8 @@ void AssertTable(NPersQueue::TTestServer& server, const TString& sourceId, ui32 
     UNIT_ASSERT(parser.TryNextRow());
     NYdb::TValueParser p(parser.GetValue(0));
     NYdb::TValueParser s(parser.GetValue(1));
-    UNIT_ASSERT_VALUES_EQUAL(*p.GetOptionalUint32().Get(), partitionId);
-    UNIT_ASSERT_VALUES_EQUAL(*s.GetOptionalUint64().Get(), seqNo);
+    UNIT_ASSERT_VALUES_EQUAL(p.GetOptionalUint32().value(), partitionId);
+    UNIT_ASSERT_VALUES_EQUAL(s.GetOptionalUint64().value(), seqNo);
 }
 
 class TPQTabletMock: public TActor<TPQTabletMock> {
@@ -679,20 +683,6 @@ Y_UNIT_TEST(TPartitionChooserActor_SplitMergeDisabled_RegisteredSourceId_Test) {
     UNIT_ASSERT_VALUES_EQUAL(r->Result->Get()->PartitionId, 1);
 }
 
-Y_UNIT_TEST(TPartitionChooserActor_SplitMergeDisabled_Inactive_Test) {
-    NPersQueue::TTestServer server = CreateServer();
-
-    auto config = CreateConfig0(false);
-    AddPartition(config, 0, {}, {}, {1});
-    AddPartition(config, 1);
-
-    WriteToTable(server, "A_Source", 0);
-    auto r = ChoosePartition(server, config, "A_Source");
-
-    UNIT_ASSERT(r->Result);
-    UNIT_ASSERT_VALUES_EQUAL(r->Result->Get()->PartitionId, 1);
-}
-
 Y_UNIT_TEST(TPartitionChooserActor_SplitMergeDisabled_PreferedPartition_Test) {
     NPersQueue::TTestServer server = CreateServer();
 
@@ -706,23 +696,11 @@ Y_UNIT_TEST(TPartitionChooserActor_SplitMergeDisabled_PreferedPartition_Test) {
     UNIT_ASSERT_VALUES_EQUAL(r->Result->Get()->PartitionId, 0);
 }
 
-Y_UNIT_TEST(TPartitionChooserActor_SplitMergeDisabled_PreferedPartition_Inactive_Test) {
-    NPersQueue::TTestServer server = CreateServer();
-
-    auto config = CreateConfig0(false);
-    AddPartition(config, 0, {}, {}, {1});
-    AddPartition(config, 1);
-
-    auto r = ChoosePartition(server, config, "A_Source", 0);
-
-    UNIT_ASSERT(r->Error);
-}
-
 Y_UNIT_TEST(TPartitionChooserActor_SplitMergeDisabled_BadSourceId_Test) {
     NPersQueue::TTestServer server = CreateServer();
 
     auto config = CreateConfig0(false);
-    AddPartition(config, 0, {}, {});
+    AddPartition(config, 0);
 
     auto r = ChoosePartition(server, config, "base64:a***");
 

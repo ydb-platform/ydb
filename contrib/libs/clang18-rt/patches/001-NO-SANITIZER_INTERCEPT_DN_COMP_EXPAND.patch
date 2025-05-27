@@ -1,0 +1,11 @@
+--- contrib/libs/clang18-rt/lib/sanitizer_common/sanitizer_platform_interceptors.h      (index)
++++ contrib/libs/clang18-rt/lib/sanitizer_common/sanitizer_platform_interceptors.h      (working tree)
+@@ -236,7 +236,7 @@
+ #define SANITIZER_INTERCEPT_GLOB (SI_GLIBC || SI_SOLARIS)
+ #define SANITIZER_INTERCEPT_GLOB64 SI_GLIBC
+ #define SANITIZER_INTERCEPT___B64_TO SI_LINUX_NOT_ANDROID
++#define SANITIZER_INTERCEPT_DN_COMP_EXPAND 0
+-#define SANITIZER_INTERCEPT_DN_COMP_EXPAND SI_LINUX_NOT_ANDROID
+ #define SANITIZER_INTERCEPT_POSIX_SPAWN SI_POSIX
+ #define SANITIZER_INTERCEPT_WAIT SI_POSIX
+ #define SANITIZER_INTERCEPT_INET SI_POSIX

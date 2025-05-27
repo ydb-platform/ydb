@@ -1,11 +1,5 @@
 LIBRARY()
 
-IF (PROFILE_MEMORY_ALLOCATIONS)
-    CFLAGS(
-        -DPROFILE_MEMORY_ALLOCATIONS
-    )
-ENDIF()
-
 SRCS(
     memory_info.cpp
     monitor.cpp
@@ -14,18 +8,29 @@ SRCS(
     tcmalloc.cpp
 )
 
+IF (OS_LINUX AND ARCH_X86_64)
+    CFLAGS(
+        -DUSE_DWARF_BACKTRACE
+    )
+    PEERDIR(
+        library/cpp/dwarf_backtrace
+    )
+ENDIF()
+
 PEERDIR(
     contrib/libs/tcmalloc/malloc_extension
-    ydb/library/actors/core
-    ydb/library/actors/prof
     library/cpp/html/pcdata
     library/cpp/lfalloc/alloc_profiler
     library/cpp/lfalloc/dbg_info
     library/cpp/malloc/api
     library/cpp/monlib/service/pages
     ydb/core/base
-    ydb/core/control
+    ydb/core/control/lib
+    ydb/core/mon
+    ydb/library/actors/core
+    ydb/library/actors/prof
     ydb/library/services
+    yql/essentials/utils/memory_profiling
 )
 
 END()

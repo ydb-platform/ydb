@@ -5,9 +5,9 @@
 #include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/include/aws/core/utils/stream/ResponseStream.h>
 #include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/include/aws/core/Aws.h>
 #include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/include/aws/core/VersionConfig.h>
-#include <contrib/libs/curl/include/curl/curl.h>
+
 #include <ydb/library/actors/core/actorsystem.h>
-#include <ydb/library/actors/core/log.h>
+
 #include <util/string/cast.h>
 
 #ifndef KIKIMR_DISABLE_S3_OPS
@@ -23,18 +23,20 @@ using namespace Aws::Utils::Stream;
 namespace {
 
 template <typename TEvRequest, typename TEvResponse>
-class TCommonContextBase: public AsyncCallerContext {
-protected:
-    using TRequest = typename TEvRequest::TRequest;
-    using TOutcome = typename TEvResponse::TOutcome;
+class TContextBase: public AsyncCallerContext {
 public:
-    explicit TCommonContextBase(const TActorSystem* sys, const TActorId& sender, IRequestContext::TPtr requestContext, const Aws::S3::Model::StorageClass storageClass, const TReplyAdapterContainer& replyAdapter)
+    explicit TContextBase(
+            const TActorSystem* sys,
+            const TActorId& sender,
+            IRequestContext::TPtr requestContext,
+            const Aws::S3::Model::StorageClass storageClass,
+            const TReplyAdapterContainer& replyAdapter)
         : AsyncCallerContext()
+        , ActorSystem(sys)
+        , Sender(sender)
         , RequestContext(requestContext)
         , StorageClass(storageClass)
         , ReplyAdapter(replyAdapter)
-        , ActorSystem(sys)
-        , Sender(sender)
     {
     }
 
@@ -42,7 +44,7 @@ public:
         return ActorSystem;
     }
 
-    virtual const TRequest& PrepareRequest(typename TEvRequest::TPtr& ev) {
+    virtual const typename TEvRequest::TRequest& PrepareRequest(typename TEvRequest::TPtr& ev) {
         return ev->Get()->GetRequest();
     }
 
@@ -55,91 +57,56 @@ protected:
         Send(Sender, std::move(ev));
     }
 
+private:
+    const TActorSystem* ActorSystem;
+    const TActorId Sender;
+
+protected:
     mutable bool Replied = false;
     IRequestContext::TPtr RequestContext;
     const Aws::S3::Model::StorageClass StorageClass;
     const TReplyAdapterContainer& ReplyAdapter;
-private:
-    const TActorSystem* ActorSystem;
-    const TActorId Sender;
-}; // TCommonContextBase
+
+}; // TContextBase
 
 template <typename TEvRequest, typename TEvResponse>
-class TContextBase: public TCommonContextBase<TEvRequest, TEvResponse> {
-private:
-    using TBase = TCommonContextBase<TEvRequest, TEvResponse>;
-protected:
-    virtual std::unique_ptr<IEventBase> MakeResponse(const typename TEvResponse::TKey& key, const typename TBase::TOutcome& outcome) const {
-        return TBase::ReplyAdapter.RebuildReplyEvent(std::make_unique<TEvResponse>(key, outcome));
-    }
-
+class TBasicContext: public TContextBase<TEvRequest, TEvResponse> {
 public:
-    using TBase::Send;
-    using TBase::TBase;
-    void Reply(const typename TBase::TRequest& request, const typename TBase::TOutcome& outcome) const {
-        Y_ABORT_UNLESS(!std::exchange(TBase::Replied, true), "Double-reply");
+    using TContextBase<TEvRequest, TEvResponse>::TContextBase;
+
+    void Reply(const typename TEvRequest::TRequest&, const typename TEvResponse::TOutcome& outcome) const {
+        Y_ABORT_UNLESS(!std::exchange(this->Replied, true), "Double-reply");
+        this->Send(std::make_unique<TEvResponse>(outcome, this->RequestContext));
+    }
+};
+
+template <typename TEvRequest, typename TEvResponse>
+class TGenericContext: public TContextBase<TEvRequest, TEvResponse> {
+public:
+    using TContextBase<TEvRequest, TEvResponse>::TContextBase;
+
+    void Reply(const typename TEvRequest::TRequest& request, const typename TEvResponse::TOutcome& outcome) const {
+        Y_ABORT_UNLESS(!std::exchange(this->Replied, true), "Double-reply");
 
         typename TEvResponse::TKey key;
         if (request.KeyHasBeenSet()) {
             key = request.GetKey();
         }
-        Send(MakeResponse(key, outcome));
+
+        this->Send(MakeResponse(key, outcome));
     }
-};
 
-template <>
-class TContextBase<TEvListObjectsRequest, TEvListObjectsResponse>
-    : public TCommonContextBase<TEvListObjectsRequest, TEvListObjectsResponse> {
-private:
-    using TBase = TCommonContextBase<TEvListObjectsRequest, TEvListObjectsResponse>;
-public:
-    using TBase::Send;
-    using TBase::TBase;
-    void Reply(const typename TBase::TRequest& /*request*/, const typename TBase::TOutcome& outcome) const {
-        Y_ABORT_UNLESS(!std::exchange(TBase::Replied, true), "Double-reply");
-
-        Send(std::make_unique<TEvListObjectsResponse>(outcome));
-    }
-};
-
-template <>
-class TContextBase<TEvDeleteObjectsRequest, TEvDeleteObjectsResponse>
-    : public TCommonContextBase<TEvDeleteObjectsRequest, TEvDeleteObjectsResponse> {
-private:
-    using TBase = TCommonContextBase<TEvDeleteObjectsRequest, TEvDeleteObjectsResponse>;
-public:
-    using TBase::Send;
-    using TBase::TBase;
-    void Reply(const typename TBase::TRequest& /*request*/, const typename TBase::TOutcome& outcome) const {
-        Y_ABORT_UNLESS(!std::exchange(TBase::Replied, true), "Double-reply");
-
-        Send(std::make_unique<TEvDeleteObjectsResponse>(outcome));
-    }
-};
-
-template <>
-class TContextBase<TEvCheckObjectExistsRequest, TEvCheckObjectExistsResponse>
-    : public TCommonContextBase<TEvCheckObjectExistsRequest, TEvCheckObjectExistsResponse> {
-private:
-    using TBase = TCommonContextBase<TEvCheckObjectExistsRequest, TEvCheckObjectExistsResponse>;
-public:
-    using TBase::Send;
-    using TBase::TBase;
-    void Reply(const typename TBase::TRequest& /*request*/, const typename TBase::TOutcome& outcome) const {
-        Y_ABORT_UNLESS(!std::exchange(TBase::Replied, true), "Double-reply");
-        Send(std::make_unique<TEvCheckObjectExistsResponse>(outcome, RequestContext));
+protected:
+    virtual std::unique_ptr<IEventBase> MakeResponse(
+            const typename TEvResponse::TKey& key,
+            const typename TEvResponse::TOutcome& outcome) const
+    {
+        return this->ReplyAdapter.RebuildReplyEvent(std::make_unique<TEvResponse>(key, outcome));
     }
 };
 
 template <typename TEvRequest, typename TEvResponse>
-class TOutputStreamContext: public TContextBase<TEvRequest, TEvResponse> {
-private:
-    using TBase = TContextBase<TEvRequest, TEvResponse>;
-protected:
-    using TRequest = typename TEvRequest::TRequest;
-    using TOutcome = typename TEvResponse::TOutcome;
-
-private:
+class TOutputStreamContext: public TGenericContext<TEvRequest, TEvResponse> {
     class TOutputStreamBuf: public PreallocatedStreamBuf {
         TOutputStreamBuf(char* data, size_t size)
             : PreallocatedStreamBuf(reinterpret_cast<unsigned char*>(data), size)
@@ -148,53 +115,36 @@ private:
 
     public:
         explicit TOutputStreamBuf(TString& buffer)
-            : TOutputStreamBuf(buffer.Detach(), buffer.Size())
+            : TOutputStreamBuf(buffer.Detach(), buffer.size())
         {
         }
     };
 
-    static bool TryParseRange(const TString& str, std::pair<ui64, ui64>& range) {
-        TStringBuf buf(str);
-        if (!buf.SkipPrefix("bytes=")) {
-            return false;
-        }
-
-        ui64 start;
-        if (!TryFromString(buf.NextTok('-'), start)) {
-            return false;
-        }
-
-        ui64 end;
-        if (!TryFromString(buf, end)) {
-            return false;
-        }
-
-        range = std::make_pair(start, end);
-        return true;
-    }
-
-    std::optional<std::pair<ui64, ui64>> Range;
 public:
-    using TContextBase<TEvRequest, TEvResponse>::TContextBase;
+    using TGenericContext<TEvRequest, TEvResponse>::TGenericContext;
 
-    const TRequest& PrepareRequest(typename TEvRequest::TPtr& ev) override {
+    const typename TEvRequest::TRequest& PrepareRequest(typename TEvRequest::TPtr& ev) override {
         auto& request = ev->Get()->Request;
 
         std::pair<ui64, ui64> range;
-        Y_ABORT_UNLESS(request.RangeHasBeenSet() && TryParseRange(request.GetRange().c_str(), range));
+        Y_ABORT_UNLESS(request.RangeHasBeenSet() && TEvGetObjectResponse::TryParseRange(request.GetRange().c_str(), range));
         Range = range;
 
         Buffer.resize(range.second - range.first + 1);
         request.SetResponseStreamFactory([this]() {
             return Aws::New<DefaultUnderlyingStream>("StreamContext",
                 MakeUnique<TOutputStreamBuf>("StreamContext", Buffer));
-            });
+            }
+        );
 
         return request;
     }
 
 protected:
-    std::unique_ptr<IEventBase> MakeResponse(const typename TEvResponse::TKey& key, const TOutcome& outcome) const override {
+    std::unique_ptr<IEventBase> MakeResponse(
+            const typename TEvResponse::TKey& key,
+            const typename TEvResponse::TOutcome& outcome) const override
+    {
         Y_ABORT_UNLESS(Range);
         std::unique_ptr<TEvResponse> response;
         if (outcome.IsSuccess()) {
@@ -202,42 +152,39 @@ protected:
         } else {
             response = std::make_unique<TEvResponse>(key, *Range, outcome);
         }
-        return TBase::ReplyAdapter.RebuildReplyEvent(std::move(response));
+        return this->ReplyAdapter.RebuildReplyEvent(std::move(response));
     }
 
 private:
+    std::optional<std::pair<ui64, ui64>> Range;
     mutable TString Buffer;
 
 }; // TOutputStreamContext
 
 template <typename TEvRequest, typename TEvResponse>
-class TInputStreamContext: public TContextBase<TEvRequest, TEvResponse> {
-private:
-    using TBase = TContextBase<TEvRequest, TEvResponse>;
-protected:
-    using TRequest = typename TEvRequest::TRequest;
-    using TOutcome = typename TEvResponse::TOutcome;
-
-private:
+class TInputStreamContext: public TGenericContext<TEvRequest, TEvResponse> {
     class TInputStreamBuf: public PreallocatedStreamBuf {
         TInputStreamBuf(char* data, size_t size)
-            : PreallocatedStreamBuf(reinterpret_cast<unsigned char*>(data), size) {
+            : PreallocatedStreamBuf(reinterpret_cast<unsigned char*>(data), size)
+        {
         }
 
         TInputStreamBuf(const char* data, size_t size)
-            : TInputStreamBuf(const_cast<char*>(data), size) {
+            : TInputStreamBuf(const_cast<char*>(data), size)
+        {
         }
 
     public:
         explicit TInputStreamBuf(const TStringBuf buf)
-            : TInputStreamBuf(buf.data(), buf.size()) {
+            : TInputStreamBuf(buf.data(), buf.size())
+        {
         }
     };
 
 public:
-    using TBase::TBase;
+    using TGenericContext<TEvRequest, TEvResponse>::TGenericContext;
 
-    const TRequest& PrepareRequest(typename TEvRequest::TPtr& ev) override {
+    const typename TEvRequest::TRequest& PrepareRequest(typename TEvRequest::TPtr& ev) override {
         auto& request = ev->Get()->MutableRequest();
         Buffer = std::move(ev->Get()->Body);
         request.SetBody(MakeShared<DefaultUnderlyingStream>("StreamContext",
@@ -251,30 +198,31 @@ private:
 
 }; // TInputStreamContext
 
-template <typename TEvRequest, typename TEvResponse>
-class TPutInputStreamContext: public TInputStreamContext<TEvRequest, TEvResponse> {
-private:
-    using TBase = TInputStreamContext<TEvRequest, TEvResponse>;
+template <typename TEvRequest, typename TEvResponse, template <typename, typename> typename TContext = TGenericContext>
+class TContextWithStorageClass: public TContext<TEvRequest, TEvResponse> {
 public:
-    using TBase::TBase;
+    using TContext<TEvRequest, TEvResponse>::TContext;
 
-    const typename TBase::TRequest& PrepareRequest(typename TEvRequest::TPtr& ev) override {
+    const typename TEvRequest::TRequest& PrepareRequest(typename TEvRequest::TPtr& ev) override {
         auto& request = ev->Get()->MutableRequest();
-        auto storageClass = TBase::StorageClass;
-
-        // workaround for minio.
-        // aws s3 treats NOT_SET as STANDARD
-        // but internally sdk just doesn't set corresponding header, while adds it to SignedHeaders
-        // and minio implementation treats it as error, returning to client error
-        // which literally can't be debugged e.g. "There were headers present in the request which were not signed"
-        if (storageClass == Aws::S3::Model::StorageClass::NOT_SET) {
-            storageClass = Aws::S3::Model::StorageClass::STANDARD;
+        if (this->StorageClass != Aws::S3::Model::StorageClass::NOT_SET) {
+            request.WithStorageClass(this->StorageClass);
         }
-
-        request.WithStorageClass(storageClass);
-        return TBase::PrepareRequest(ev);
+        return TContext<TEvRequest, TEvResponse>::PrepareRequest(ev);
     }
-}; // TPutInputStreamContext
+};
+
+template <typename TEvRequest, typename TEvResponse>
+class TPutObjectContext: public TContextWithStorageClass<TEvRequest, TEvResponse, TInputStreamContext> {
+public:
+    using TContextWithStorageClass<TEvRequest, TEvResponse, TInputStreamContext>::TContextWithStorageClass;
+};
+
+template <typename TEvRequest, typename TEvResponse>
+class TCreateMultipartUploadContext: public TContextWithStorageClass<TEvRequest, TEvResponse> {
+public:
+    using TContextWithStorageClass<TEvRequest, TEvResponse>::TContextWithStorageClass;
+};
 
 } // anonymous
 
@@ -292,7 +240,7 @@ void TS3ExternalStorage::Execute(TEvGetObjectRequest::TPtr& ev) const {
 }
 
 void TS3ExternalStorage::Execute(TEvCheckObjectExistsRequest::TPtr& ev) const {
-    Call<TEvCheckObjectExistsRequest, TEvCheckObjectExistsResponse, TContextBase>(
+    Call<TEvCheckObjectExistsRequest, TEvCheckObjectExistsResponse, TBasicContext>(
 #if AWS_SDK_VERSION_MAJOR == 1 && AWS_SDK_VERSION_MINOR >= 11
         ev, &S3Client::HeadObjectAsync<>);
 #else
@@ -301,7 +249,7 @@ void TS3ExternalStorage::Execute(TEvCheckObjectExistsRequest::TPtr& ev) const {
 }
 
 void TS3ExternalStorage::Execute(TEvListObjectsRequest::TPtr& ev) const {
-    Call<TEvListObjectsRequest, TEvListObjectsResponse, TContextBase>(
+    Call<TEvListObjectsRequest, TEvListObjectsResponse, TBasicContext>(
 #if AWS_SDK_VERSION_MAJOR == 1 && AWS_SDK_VERSION_MINOR >= 11
         ev, &S3Client::ListObjectsAsync<>);
 #else
@@ -310,7 +258,7 @@ void TS3ExternalStorage::Execute(TEvListObjectsRequest::TPtr& ev) const {
 }
 
 void TS3ExternalStorage::Execute(TEvHeadObjectRequest::TPtr& ev) const {
-    Call<TEvHeadObjectRequest, TEvHeadObjectResponse, TContextBase>(
+    Call<TEvHeadObjectRequest, TEvHeadObjectResponse, TGenericContext>(
 #if AWS_SDK_VERSION_MAJOR == 1 && AWS_SDK_VERSION_MINOR >= 11
         ev, &S3Client::HeadObjectAsync<>);
 #else
@@ -319,12 +267,12 @@ void TS3ExternalStorage::Execute(TEvHeadObjectRequest::TPtr& ev) const {
 }
 
 void TS3ExternalStorage::Execute(TEvPutObjectRequest::TPtr& ev) const {
-    Call<TEvPutObjectRequest, TEvPutObjectResponse, TPutInputStreamContext>(
+    Call<TEvPutObjectRequest, TEvPutObjectResponse, TPutObjectContext>(
         ev, &S3Client::PutObjectAsync);
 }
 
 void TS3ExternalStorage::Execute(TEvDeleteObjectRequest::TPtr& ev) const {
-    Call<TEvDeleteObjectRequest, TEvDeleteObjectResponse, TContextBase>(
+    Call<TEvDeleteObjectRequest, TEvDeleteObjectResponse, TGenericContext>(
 #if AWS_SDK_VERSION_MAJOR == 1 && AWS_SDK_VERSION_MINOR >= 11
         ev, &S3Client::DeleteObjectAsync<>);
 #else
@@ -333,7 +281,7 @@ void TS3ExternalStorage::Execute(TEvDeleteObjectRequest::TPtr& ev) const {
 }
 
 void TS3ExternalStorage::Execute(TEvDeleteObjectsRequest::TPtr& ev) const {
-    Call<TEvDeleteObjectsRequest, TEvDeleteObjectsResponse, TContextBase>(
+    Call<TEvDeleteObjectsRequest, TEvDeleteObjectsResponse, TBasicContext>(
 #if AWS_SDK_VERSION_MAJOR == 1 && AWS_SDK_VERSION_MINOR >= 11
         ev, &S3Client::DeleteObjectsAsync<>);
 #else
@@ -342,7 +290,7 @@ void TS3ExternalStorage::Execute(TEvDeleteObjectsRequest::TPtr& ev) const {
 }
 
 void TS3ExternalStorage::Execute(TEvCreateMultipartUploadRequest::TPtr& ev) const {
-    Call<TEvCreateMultipartUploadRequest, TEvCreateMultipartUploadResponse, TContextBase>(
+    Call<TEvCreateMultipartUploadRequest, TEvCreateMultipartUploadResponse, TCreateMultipartUploadContext>(
 #if AWS_SDK_VERSION_MAJOR == 1 && AWS_SDK_VERSION_MINOR >= 11
         ev, &S3Client::CreateMultipartUploadAsync<>);
 #else
@@ -360,7 +308,7 @@ void TS3ExternalStorage::Execute(TEvUploadPartRequest::TPtr& ev) const {
 }
 
 void TS3ExternalStorage::Execute(TEvCompleteMultipartUploadRequest::TPtr& ev) const {
-    Call<TEvCompleteMultipartUploadRequest, TEvCompleteMultipartUploadResponse, TContextBase>(
+    Call<TEvCompleteMultipartUploadRequest, TEvCompleteMultipartUploadResponse, TGenericContext>(
 #if AWS_SDK_VERSION_MAJOR == 1 && AWS_SDK_VERSION_MINOR >= 11
         ev, &S3Client::CompleteMultipartUploadAsync<>);
 #else
@@ -369,7 +317,7 @@ void TS3ExternalStorage::Execute(TEvCompleteMultipartUploadRequest::TPtr& ev) co
 }
 
 void TS3ExternalStorage::Execute(TEvAbortMultipartUploadRequest::TPtr& ev) const {
-    Call<TEvAbortMultipartUploadRequest, TEvAbortMultipartUploadResponse, TContextBase>(
+    Call<TEvAbortMultipartUploadRequest, TEvAbortMultipartUploadResponse, TGenericContext>(
 #if AWS_SDK_VERSION_MAJOR == 1 && AWS_SDK_VERSION_MINOR >= 11
         ev, &S3Client::AbortMultipartUploadAsync<>);
 #else
@@ -378,7 +326,7 @@ void TS3ExternalStorage::Execute(TEvAbortMultipartUploadRequest::TPtr& ev) const
 }
 
 void TS3ExternalStorage::Execute(TEvUploadPartCopyRequest::TPtr& ev) const {
-    Call<TEvUploadPartCopyRequest, TEvUploadPartCopyResponse, TContextBase>(
+    Call<TEvUploadPartCopyRequest, TEvUploadPartCopyResponse, TGenericContext>(
 #if AWS_SDK_VERSION_MAJOR == 1 && AWS_SDK_VERSION_MINOR >= 11
         ev, &S3Client::UploadPartCopyAsync<>);
 #else

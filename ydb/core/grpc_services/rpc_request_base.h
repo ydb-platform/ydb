@@ -1,6 +1,6 @@
 #pragma once
 
-#include "grpc_request_proxy.h"
+#include "grpc_request_proxy_handle_methods.h"
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>
@@ -128,10 +128,16 @@ public:
 
     explicit TRpcRequestActor(TRequestCtx* ev)
         : Request(ev)
-        , DatabaseName(Request->GetDatabaseName().GetOrElse(DatabaseFromDomain(AppData())))
+        , UserToken(CreateUserToken(Request.Get()))
     {
-        if (const auto& userToken = Request->GetSerializedToken()) {
-            UserToken = MakeHolder<NACLib::TUserToken>(userToken);
+    }
+
+private:
+    static THolder<const NACLib::TUserToken> CreateUserToken(TRequestCtx* request) {
+        if (const auto& userToken = request->GetSerializedToken()) {
+            return MakeHolder<NACLib::TUserToken>(userToken);
+        } else {
+            return {};
         }
     }
 
@@ -164,9 +170,24 @@ private:
     }
 
 protected:
-    THolder<TRequestCtx> Request;
-    const TString DatabaseName;
-    THolder<const NACLib::TUserToken> UserToken;
+    const TString& GetDatabaseName() const {
+        if (!DatabaseName_.has_value()) {
+            auto name = Request->GetDatabaseName();
+            if (name) {
+                DatabaseName_.emplace(std::move(*name));
+            } else {
+                DatabaseName_.emplace(DatabaseFromDomain(AppData()));
+            }
+        }
+        return *DatabaseName_;
+    }
+
+protected:
+    const THolder<TRequestCtx> Request;
+    const THolder<const NACLib::TUserToken> UserToken;
+
+private:
+    mutable std::optional<TString> DatabaseName_;
 
 }; // TRpcRequestActor
 

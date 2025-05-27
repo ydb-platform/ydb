@@ -36,7 +36,7 @@ namespace NKikimr::NBlobDepot {
             {}
         };
 
-        NKikimrProto::EReplyStatus CheckBlockForTablet(ui64 tabletId, ui32 generation, TQuery *query, ui32 *blockedGeneration);
+        NKikimrProto::EReplyStatus CheckBlockForTablet(ui64 tabletId, std::optional<ui32> generation, TQuery *query, ui32 *blockedGeneration);
         void ProcessResponse(ui64 /*id*/, TRequestContext::TPtr context, TResponse response) override;
         void Handle(TRequestContext::TPtr context, NKikimrBlobDepot::TEvQueryBlocksResult& msg);
         void IssueOnUpdateBlock(TBlock& block);

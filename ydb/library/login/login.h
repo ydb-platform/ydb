@@ -7,6 +7,10 @@
 #include <deque>
 #include <util/generic/string.h>
 #include <ydb/library/login/protos/login.pb.h>
+#include <ydb/library/login/password_checker/password_checker.h>
+#include <ydb/library/login/password_checker/hash_checker.h>
+#include <ydb/library/login/account_lockout/account_lockout.h>
+#include <ydb/library/login/cache/lru.h>
 
 namespace NLogin {
 
@@ -19,12 +23,15 @@ public:
     static constexpr auto KEYS_ROTATION_PERIOD = std::chrono::hours(6);
     static constexpr auto KEY_EXPIRE_TIME = std::chrono::hours(24);
 
-    static constexpr size_t SALT_SIZE = 16;
-    static constexpr size_t HASH_SIZE = 32;
+    static constexpr size_t SALT_SIZE = THashChecker::SALT_SIZE;
+    static constexpr size_t HASH_SIZE = THashChecker::HASH_SIZE;
 
     static constexpr const char* GROUPS_CLAIM_NAME = "https://ydb.tech/groups";
     static constexpr const char* EXTERNAL_AUTH_CLAIM_NAME = "external_authentication";
     static constexpr auto MAX_TOKEN_EXPIRE_TIME = std::chrono::hours(12);
+
+    static constexpr size_t SUCCESS_PASSWORDS_CACHE_CAPACITY = 20;
+    static constexpr size_t WRONG_PASSWORDS_CACHE_CAPACITY = 20;
 
     struct TBasicRequest {};
 
@@ -32,6 +39,22 @@ public:
         TString Error;
         TString Warning;
         TString Notice;
+    };
+
+    struct TCheckLockOutRequest : TBasicRequest {
+        TString User;
+    };
+
+    struct TCheckLockOutResponse : TBasicResponse {
+        enum class EStatus {
+            UNSPECIFIED,
+            SUCCESS,
+            UNLOCKED,
+            INVALID_USER,
+            RESET,
+        };
+
+        EStatus Status = EStatus::UNSPECIFIED;
     };
 
     struct TLoginUserRequest : TBasicRequest {
@@ -47,7 +70,17 @@ public:
     };
 
     struct TLoginUserResponse : TBasicResponse {
+        enum class EStatus {
+            UNSPECIFIED,
+            SUCCESS,
+            INVALID_USER,
+            INVALID_PASSWORD,
+            UNAVAILABLE_KEY
+        };
+
         TString Token;
+        TString SanitizedToken; // Token for audit logs
+        EStatus Status = EStatus::UNSPECIFIED;
     };
 
     struct TValidateTokenRequest : TBasicRequest {
@@ -57,6 +90,7 @@ public:
     struct TValidateTokenResponse : TBasicResponse {
         bool TokenUnrecognized = false;
         bool ErrorRetryable = false;
+        bool WrongAudience = false;
         TString User;
         std::optional<std::vector<TString>> Groups;
         std::chrono::system_clock::time_point ExpiresAt;
@@ -66,16 +100,15 @@ public:
     struct TCreateUserRequest : TBasicRequest {
         TString User;
         TString Password;
+        bool IsHashedPassword = false;
+        bool CanLogin = true;
     };
 
     struct TModifyUserRequest : TBasicRequest {
         TString User;
-        TString Password;
-    };
-
-    struct TRemoveUserRequest : TBasicRequest {
-        TString User;
-        bool MissingOk;
+        std::optional<TString> Password;
+        bool IsHashedPassword = false;
+        std::optional<bool> CanLogin;
     };
 
     struct TRemoveUserResponse : TBasicResponse {
@@ -115,11 +148,6 @@ public:
         std::vector<TString> TouchedGroups;
     };
 
-    struct TRemoveGroupRequest : TBasicRequest {
-        TString Group;
-        bool MissingOk;
-    };
-
     struct TRemoveGroupResponse : TBasicResponse {
         std::vector<TString> TouchedGroups;
     };
@@ -137,14 +165,24 @@ public:
     struct TSidRecord {
         ESidType::SidType Type = ESidType::UNKNOWN;
         TString Name;
-        TString Hash;
+        TString PasswordHash;
+        bool IsEnabled;
         std::unordered_set<TString> Members;
+        std::chrono::system_clock::time_point CreatedAt;
+        ui32 FailedLoginAttemptCount = 0;
+        std::chrono::system_clock::time_point LastFailedLogin;
+        std::chrono::system_clock::time_point LastSuccessfulLogin;
+    };
+
+    struct TCacheSettings {
+        size_t SuccessPasswordsCacheCapacity = SUCCESS_PASSWORDS_CACHE_CAPACITY;
+        size_t WrongPasswordsCacheCapacity = WRONG_PASSWORDS_CACHE_CAPACITY;
     };
 
     // our current audience (database name)
     TString Audience;
 
-    // all users and theirs hashs
+    // all users and groups
     std::unordered_map<TString, TSidRecord> Sids;
 
     // index for fast traversal
@@ -158,34 +196,59 @@ public:
     NLoginProto::TSecurityState GetSecurityState() const;
     void UpdateSecurityState(const NLoginProto::TSecurityState& state);
 
+    bool IsLockedOut(const TSidRecord& user) const;
+    TCheckLockOutResponse CheckLockOutUser(const TCheckLockOutRequest& request);
     TLoginUserResponse LoginUser(const TLoginUserRequest& request);
     TValidateTokenResponse ValidateToken(const TValidateTokenRequest& request);
 
     TBasicResponse CreateUser(const TCreateUserRequest& request);
     TBasicResponse ModifyUser(const TModifyUserRequest& request);
-    TRemoveUserResponse RemoveUser(const TRemoveUserRequest& request);
-    bool CheckUserExists(const TString& name);
+    TRemoveUserResponse RemoveUser(const TString& user);
+    bool CheckUserExists(const TString& user);
 
     TBasicResponse CreateGroup(const TCreateGroupRequest& request);
     TBasicResponse AddGroupMembership(const TAddGroupMembershipRequest& request);
     TBasicResponse RemoveGroupMembership(const TRemoveGroupMembershipRequest& request);
     TRenameGroupResponse RenameGroup(const TRenameGroupRequest& request);
-    TRemoveGroupResponse RemoveGroup(const TRemoveGroupRequest& request);
+    TRemoveGroupResponse RemoveGroup(const TString& group);
+    bool CheckGroupExists(const TString& group);
+
+    void UpdatePasswordCheckParameters(const TPasswordComplexity& passwordComplexity);
+    void UpdateAccountLockout(const TAccountLockout::TInitializer& accountLockoutInitializer);
+    void UpdateCacheSettings(const TCacheSettings& settings);
 
     TLoginProvider();
+    TLoginProvider(const TAccountLockout::TInitializer& accountLockoutInitializer);
+    TLoginProvider(const TPasswordComplexity& passwordComplexity,
+        const TAccountLockout::TInitializer& accountLockoutInitializer,
+        const std::function<bool()>& isCacheUsed,
+        const TCacheSettings& cacheSettings);
     ~TLoginProvider();
 
-    std::vector<TString> GetGroupsMembership(const TString& member);
+    std::vector<TString> GetGroupsMembership(const TString& member) const;
     static TString GetTokenAudience(const TString& token);
     static std::chrono::system_clock::time_point GetTokenExpiresAt(const TString& token);
+    static TString SanitizeJwtToken(const TString& token);
 
 private:
     std::deque<TKeyRecord>::iterator FindKeyIterator(ui64 keyId);
     bool CheckSubjectExists(const TString& name, const ESidType::SidType& type);
     static bool CheckAllowedName(const TString& name);
 
+    bool CheckLockoutByAttemptCount(const TSidRecord& sid) const;
+    bool CheckLockout(const TSidRecord& sid) const;
+    static void ResetFailedLoginAttemptCount(TSidRecord* sid);
+    static void UnlockAccount(TSidRecord* sid);
+    bool ShouldResetFailedAttemptCount(const TSidRecord& sid) const;
+    bool ShouldUnlockAccount(const TSidRecord& sid) const;
+    bool CheckPasswordOrHash(bool IsHashedPassword, const TString& user, const TString& password, TString& error) const;
+
     struct TImpl;
     THolder<TImpl> Impl;
+
+    TPasswordChecker PasswordChecker;
+    THashChecker HashChecker;
+    TAccountLockout AccountLockout;
 };
 
 }

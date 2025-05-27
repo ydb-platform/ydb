@@ -25,11 +25,13 @@ struct TClassifierSettings : public TSettingsBase {
     };
 
     bool operator==(const TClassifierSettings& other) const = default;
+
     std::unordered_map<TString, TProperty> GetPropertiesMap();
+    [[nodiscard]] std::optional<TString> Validate() const;
 
     i64 Rank = -1;  // -1 = max rank + CLASSIFIER_RANK_OFFSET
     TString ResourcePool = DEFAULT_POOL_ID;
-    TString Membername = "";
+    TString MemberName = "";
 };
 
 }  // namespace NKikimr::NResourcePool

@@ -1,0 +1,20 @@
+--- a/include/boost/container/pmr/polymorphic_allocator.hpp	(index)
++++ b/include/boost/container/pmr/polymorphic_allocator.hpp	(working tree)
+@@ -39,6 +39,17 @@ class polymorphic_allocator
+ {
+    public:
+    typedef T value_type;
++   typedef value_type* pointer;
++   typedef const value_type* const_pointer;
++   typedef value_type& reference;
++   typedef const value_type& const_reference;
++   typedef std::size_t size_type;
++   typedef std::ptrdiff_t difference_type;
++
++   template <typename U>
++   struct rebind {
++      typedef ::boost::container::pmr::polymorphic_allocator<U> other;
++   };
+ 
+    //! <b>Effects</b>: Sets m_resource to
+    //! `get_default_resource()`.

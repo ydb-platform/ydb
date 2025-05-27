@@ -27,29 +27,38 @@ public:
         TRefCountedTypeCookie tagCookie,
         IMemoryChunkProviderPtr chunkProvider,
         size_t startChunkSize = TChunkedMemoryPool::DefaultStartChunkSize,
-        IMemoryUsageTrackerPtr tracker = nullptr);
+        IMemoryUsageTrackerPtr tracker = nullptr,
+        bool allowMemoryOvercommit = false);
 
     template <class TTag = TDefaultRowBufferPoolTag>
     explicit TRowBuffer(
         TTag /*tag*/ = TDefaultRowBufferPoolTag(),
         size_t startChunkSize = TChunkedMemoryPool::DefaultStartChunkSize,
-        IMemoryUsageTrackerPtr tracker = nullptr)
+        IMemoryUsageTrackerPtr tracker = nullptr,
+        bool allowMemoryOvercommit = false)
         : MemoryTracker_(std::move(tracker))
+        , AllowMemoryOvercommit_(allowMemoryOvercommit)
         , Pool_(
             TTag(),
             startChunkSize)
-    { }
+    {
+        static_assert(IsEmptyClass<TTag>());
+    }
 
     template <class TTag>
     TRowBuffer(
         TTag /*tag*/,
         IMemoryChunkProviderPtr chunkProvider,
-        IMemoryUsageTrackerPtr tracker = nullptr)
+        IMemoryUsageTrackerPtr tracker = nullptr,
+        bool allowMemoryOvercommit = false)
         : MemoryTracker_(std::move(tracker))
+        , AllowMemoryOvercommit_(allowMemoryOvercommit)
         , Pool_(
             GetRefCountedTypeCookie<TTag>(),
             std::move(chunkProvider))
-    { }
+    {
+        static_assert(IsEmptyClass<TTag>());
+    }
 
     TChunkedMemoryPool* GetPool();
 
@@ -109,11 +118,12 @@ public:
 
 private:
     const IMemoryUsageTrackerPtr MemoryTracker_;
+    const bool AllowMemoryOvercommit_;
 
     TChunkedMemoryPool Pool_;
-    std::optional<TMemoryUsageTrackerGuard> MemoryGuard_;
+    TMemoryUsageTrackerGuard MemoryGuard_;
 
-    void ValidateNoOverflow();
+    void UpdateMemoryUsage();
 };
 
 DEFINE_REFCOUNTED_TYPE(TRowBuffer)

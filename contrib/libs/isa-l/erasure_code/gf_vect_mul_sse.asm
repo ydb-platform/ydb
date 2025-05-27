@@ -38,11 +38,8 @@
  %define arg1  rsi
  %define arg2  rdx
  %define arg3  rcx
- %define arg4  r8
- %define arg5  r9
- %define tmp   r11
  %define return rax
- %define func(x) x:
+ %define func(x) x: endbranch
  %define FUNC_SAVE
  %define FUNC_RESTORE
 
@@ -81,6 +78,7 @@
 %define	src    arg2
 %define dest   arg3
 %define pos    return
+%define tmp   r11
 
 
 ;;; Use Non-temporal load/stor
@@ -112,14 +110,15 @@ section .text
 
 
 align 16
-global gf_vect_mul_sse:ISAL_SYM_TYPE_FUNCTION
+global gf_vect_mul_sse, function
 func(gf_vect_mul_sse)
-%ifidn __OUTPUT_FORMAT__, macho64
-global _gf_vect_mul_sse:ISAL_SYM_TYPE_FUNCTION
-func(_gf_vect_mul_sse)
-%endif
+	; Check if length is multiple of 32 bytes
+	mov     tmp, len
+	and     tmp, 0x1f
+	jnz     return_fail
 
 	FUNC_SAVE
+
 	mov	pos, 0
 	movdqa	xmask0f, [mask0f]	;Load mask of lower nibble in each byte
 	movdqu	xgft_lo, [mul_array]	;Load array Cx{00}, Cx{01}, Cx{02}, ...
@@ -152,15 +151,14 @@ loop32:
 	cmp	pos, len
 	jl	loop32
 
+	FUNC_RESTORE
 
 return_pass:
-	sub	pos, len
-	FUNC_RESTORE
+	xor     return, return
 	ret
 
 return_fail:
 	mov	return, 1
-	FUNC_RESTORE
 	ret
 
 endproc_frame
@@ -170,6 +168,3 @@ section .data
 align 16
 mask0f:
 dq 0x0f0f0f0f0f0f0f0f, 0x0f0f0f0f0f0f0f0f
-
-;;;       func        core, ver, snum
-slversion gf_vect_mul_sse, 00,   03,  0034

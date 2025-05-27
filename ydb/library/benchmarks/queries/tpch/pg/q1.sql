@@ -18,7 +18,7 @@ select
 from
     {{lineitem}}
 where
-    l_shipdate <= date '1998-12-01' - interval '100' day
+    l_shipdate <= date '1998-12-01' - interval '90' day
 group by
     l_returnflag,
     l_linestatus

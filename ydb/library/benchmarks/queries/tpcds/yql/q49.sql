@@ -3,10 +3,6 @@
 -- NB: Subquerys
 -- start query 1 in stream 0 using template query49.tpl and seed 1819994127
 
-$todecimal = ($x) -> {
-  return cast(cast($x as string?) as decimal(15,4))
-};
-
 $non_unique = (select  channel, item, return_ratio, return_rank, currency_rank from
  (select
  'web' as channel
@@ -23,10 +19,10 @@ $non_unique = (select  channel, item, return_ratio, return_rank, currency_rank f
  	,rank() over (order by currency_ratio) as currency_rank
  	from
  	(	select ws.ws_item_sk as item
- 		,(sum(coalesce($todecimal(wr.wr_return_quantity),cast(0 as decimal(15,4))))/
- 		sum(coalesce($todecimal(ws.ws_quantity),cast(0 as decimal(15,4))))) as return_ratio
- 		,(sum(coalesce($todecimal(wr.wr_return_amt),cast(0 as decimal(15,4))))/
- 		sum(coalesce($todecimal(ws.ws_net_paid),cast(0 as decimal(15,4))))) as currency_ratio
+ 		,(sum(coalesce($todecimal(wr.wr_return_quantity, 15, 4),$todecimal(0,15,4)))/
+ 		sum(coalesce($todecimal(ws.ws_quantity, 15, 4),$todecimal(0,15,4)))) as return_ratio
+ 		,(sum(coalesce($todecimal(wr.wr_return_amt, 15, 4),$todecimal(0,15,4)))/
+ 		sum(coalesce($todecimal(ws.ws_net_paid, 15, 4),$todecimal(0,15,4)))) as currency_ratio
  		from
  		 {{web_sales}} ws
          left join {{web_returns}} wr
@@ -39,7 +35,7 @@ $non_unique = (select  channel, item, return_ratio, return_rank, currency_rank f
                          and ws.ws_net_paid > 0
                          and ws.ws_quantity > 0
                          and ws_sold_date_sk = d_date_sk
-                         and d_year = 2000
+                         and d_year = 2001
                          and d_moy = 12
  		group by ws.ws_item_sk
  	) in_web
@@ -67,10 +63,10 @@ $non_unique = (select  channel, item, return_ratio, return_rank, currency_rank f
  	from
  	(	select
  		cs.cs_item_sk as item
- 		,(sum(coalesce($todecimal(cr.cr_return_quantity),cast(0 as decimal(15,4))))/
- 		sum(coalesce($todecimal(cs.cs_quantity),cast(0 as decimal(15,4))))) as return_ratio
- 		,(sum(coalesce($todecimal(cr.cr_return_amount),cast(0 as decimal(15,4))))/
- 		sum(coalesce($todecimal(cs.cs_net_paid),cast(0 as decimal(15,4))))) as currency_ratio
+ 		,(sum(coalesce($todecimal(cr.cr_return_quantity,15,4),$todecimal(0,15,4)))/
+ 		sum(coalesce($todecimal(cs.cs_quantity,15,4),$todecimal(0,15,4)))) as return_ratio
+ 		,(sum(coalesce($todecimal(cr.cr_return_amount,15,4),$todecimal(0,15,4)))/
+ 		sum(coalesce($todecimal(cs.cs_net_paid,15,4),$todecimal(0,15,4)))) as currency_ratio
  		from
  		{{catalog_sales}} cs
         left outer join {{catalog_returns}} cr
@@ -83,7 +79,7 @@ $non_unique = (select  channel, item, return_ratio, return_rank, currency_rank f
                          and cs.cs_net_paid > 0
                          and cs.cs_quantity > 0
                          and cs_sold_date_sk = d_date_sk
-                         and d_year = 2000
+                         and d_year = 2001
                          and d_moy = 12
                  group by cs.cs_item_sk
  	) in_cat
@@ -110,10 +106,10 @@ $non_unique = (select  channel, item, return_ratio, return_rank, currency_rank f
  	,rank() over (order by currency_ratio) as currency_rank
  	from
  	(	select sts.ss_item_sk as item
- 		,(sum(coalesce($todecimal(sr.sr_return_quantity),cast(0 as decimal(15,4))))/
-        sum(coalesce($todecimal(sts.ss_quantity),cast(0 as decimal(15,4))))) as return_ratio
- 		,(sum(coalesce($todecimal(sr.sr_return_amt),cast(0 as decimal(15,4))))/
-        sum(coalesce($todecimal(sts.ss_net_paid),cast(0 as decimal(15,4))))) as currency_ratio
+ 		,(sum(coalesce($todecimal(sr.sr_return_quantity,15,4),$todecimal(0,15,4)))/
+        sum(coalesce($todecimal(sts.ss_quantity,15,4),$todecimal(0,15,4)))) as return_ratio
+ 		,(sum(coalesce($todecimal(sr.sr_return_amt,15,4),$todecimal(0,15,4)))/
+        sum(coalesce($todecimal(sts.ss_net_paid,15,4),$todecimal(0,15,4)))) as currency_ratio
  		from
  		{{store_sales}} sts
         left outer join {{store_returns}} sr
@@ -125,7 +121,7 @@ $non_unique = (select  channel, item, return_ratio, return_rank, currency_rank f
                          and sts.ss_net_paid > 0
                          and sts.ss_quantity > 0
                          and ss_sold_date_sk = d_date_sk
-                         and d_year = 2000
+                         and d_year = 2001
                          and d_moy = 12
  		group by sts.ss_item_sk
  	) in_store

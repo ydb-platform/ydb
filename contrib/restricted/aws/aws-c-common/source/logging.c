@@ -337,11 +337,11 @@ int aws_thread_id_t_to_string(aws_thread_id_t thread_id, char *buffer, size_t bu
         unsigned char c = bytes[i - 1];
         int written = snprintf(buffer + current_index, bufsz - current_index, "%02x", c);
         if (written < 0) {
-            return AWS_OP_ERR;
+            return aws_raise_error(AWS_ERROR_INVALID_ARGUMENT);
         }
         current_index += written;
         if (bufsz <= current_index) {
-            return AWS_OP_ERR;
+            return aws_raise_error(AWS_ERROR_SHORT_BUFFER);
         }
     }
     return AWS_OP_SUCCESS;
@@ -454,7 +454,7 @@ static enum aws_log_level s_noalloc_stderr_logger_get_log_level(struct aws_logge
     return (enum aws_log_level)aws_atomic_load_int(&impl->level);
 }
 
-#define MAXIMUM_NO_ALLOC_LOG_LINE_SIZE 8192
+enum { MAXIMUM_NO_ALLOC_LOG_LINE_SIZE = 8192 };
 
 static int s_noalloc_stderr_logger_log(
     struct aws_logger *logger,
@@ -502,8 +502,8 @@ static int s_noalloc_stderr_logger_log(
 
     int write_result = AWS_OP_SUCCESS;
     if (fwrite(format_buffer, 1, format_data.amount_written, impl->file) < format_data.amount_written) {
-        int errno_value = errno; /* Always cache errno before potential side-effect */
-        aws_translate_and_raise_io_error(errno_value);
+        int errno_value = ferror(impl->file) ? errno : 0; /* Always cache errno before potential side-effect */
+        aws_translate_and_raise_io_error_or(errno_value, AWS_ERROR_FILE_WRITE_FAILURE);
         write_result = AWS_OP_ERR;
     }
 

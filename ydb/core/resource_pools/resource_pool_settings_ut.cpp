@@ -73,6 +73,20 @@ Y_UNIT_TEST_SUITE(ResourcePoolTest) {
         UNIT_ASSERT_VALUES_EQUAL(std::visit(extractor, propertiesMap["query_cancel_after_seconds"]), "15");
         UNIT_ASSERT_VALUES_EQUAL(std::visit(extractor, propertiesMap["query_memory_limit_percent_per_node"]), "0.5");
     }
+
+    Y_UNIT_TEST(SettingsValidation) {
+        {  // Max concurrent query limit validation
+            TPoolSettings settings;
+            settings.ConcurrentQueryLimit = POOL_MAX_CONCURRENT_QUERY_LIMIT + 1;
+            UNIT_ASSERT_STRING_CONTAINS(*settings.Validate(), TStringBuilder() << "Invalid resource pool configuration, concurrent_query_limit is " << settings.ConcurrentQueryLimit << ", that exceeds limit in " << POOL_MAX_CONCURRENT_QUERY_LIMIT);
+        }
+
+        {  // Unused queue size validation
+            TPoolSettings settings;
+            settings.QueueSize = 1;
+            UNIT_ASSERT_STRING_CONTAINS(*settings.Validate(), "Invalid resource pool configuration, queue_size unsupported without concurrent_query_limit or database_load_cpu_threshold");
+        }   
+    }
 }
 
 }  // namespace NKikimr

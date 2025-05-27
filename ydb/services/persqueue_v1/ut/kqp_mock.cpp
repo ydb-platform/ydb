@@ -23,7 +23,7 @@ void TKqpProxyServiceMock::Handle(NKqp::TEvKqp::TEvQueryRequest::TPtr& ev, const
     Y_ABORT_UNLESS(event.GetAction() == NKikimrKqp::QUERY_ACTION_TOPIC);
 
     auto queryResponse = std::make_unique<NKqp::TEvKqp::TEvQueryResponse>();
-    auto* response = queryResponse->Record.GetRef().MutableResponse();
+    auto* response = queryResponse->Record.MutableResponse();
 
     NPQ::TWriteId writeId(0, NextWriteId++);
     NPQ::SetWriteId(*response->MutableTopicOperations(), writeId);

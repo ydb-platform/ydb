@@ -1,9 +1,9 @@
 #include "pipe.h"
 
-#include <yt/yt/client/table_client/row_buffer.h>
-#include <yt/yt/client/table_client/unversioned_reader.h>
-#include <yt/yt/client/table_client/unversioned_writer.h>
-#include <yt/yt/client/table_client/row_batch.h>
+#include "row_batch.h"
+#include "row_buffer.h"
+#include "unversioned_reader.h"
+#include "unversioned_writer.h"
 
 #include <yt/yt/core/misc/ring_queue.h>
 
@@ -42,10 +42,13 @@ struct TSchemafulPipe::TData
     void ResetReaderReadyEvent()
     {
         ReaderReadyEvent = NewPromise<void>();
-        ReaderReadyEvent.OnCanceled(BIND([=, this, this_ = MakeStrong(this)] (const TError& error) {
-            Fail(TError(NYT::EErrorCode::Canceled, "Pipe reader canceled")
-                << error);
-        }));
+        ReaderReadyEvent.OnCanceled(BIND(&TSchemafulPipe::TData::HandleCancel, MakeWeak(this)));
+    }
+
+    void HandleCancel(const TError& error)
+    {
+        Fail(TError(NYT::EErrorCode::Canceled, "Pipe reader canceled")
+            << error);
     }
 
     void Fail(const TError& error)
@@ -122,7 +125,12 @@ public:
 
     TDataStatistics GetDataStatistics() const override
     {
-        return TDataStatistics();
+        return DataStatistics_;
+    }
+
+    void SetDataStatistics(TDataStatistics dataStatistics)
+    {
+        DataStatistics_ = std::move(dataStatistics);
     }
 
     NChunkClient::TCodecStatistics GetDecompressionStatistics() const override
@@ -142,9 +150,9 @@ public:
 
 private:
     const TDataPtr Data_;
+    TDataStatistics DataStatistics_;
 
     TFuture<void> ReadyEvent_ = VoidFuture;
-
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -233,7 +241,6 @@ public:
 
 private:
     const TDataPtr Data_;
-
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -253,7 +260,7 @@ public:
         return Reader_;
     }
 
-    IUnversionedRowsetWriterPtr  GetWriter() const
+    IUnversionedRowsetWriterPtr GetWriter() const
     {
         return Writer_;
     }
@@ -263,11 +270,15 @@ public:
         Data_->Fail(error);
     }
 
+    void SetDataStatistics(TDataStatistics dataStatistics)
+    {
+        Reader_->SetDataStatistics(std::move(dataStatistics));
+    }
+
 private:
     TDataPtr Data_;
     TReaderPtr Reader_;
     TWriterPtr Writer_;
-
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -291,6 +302,11 @@ IUnversionedRowsetWriterPtr TSchemafulPipe::GetWriter() const
 void TSchemafulPipe::Fail(const TError& error)
 {
     Impl_->Fail(error);
+}
+
+void TSchemafulPipe::SetDataStatistics(TDataStatistics dataStatistics)
+{
+    return Impl_->SetDataStatistics(std::move(dataStatistics));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

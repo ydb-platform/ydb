@@ -11,11 +11,13 @@
 #include <ydb/core/persqueue/partition.h>
 #include <ydb/core/persqueue/pq_rl_helpers.h>
 #include <ydb/core/persqueue/write_meta.h>
+#include <ydb/core/persqueue/events/internal.h>
 
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 #include <ydb/services/lib/actors/pq_schema_actor.h>
 #include <ydb/services/lib/sharding/sharding.h>
 #include <ydb/services/persqueue_v1/actors/persqueue_utils.h>
+#include <ydb/core/persqueue/list_all_topics_actor.h>
 
 #include <util/folder/path.h>
 
@@ -93,6 +95,47 @@ namespace NKikimr::NDataStreams::V1 {
             }
 
             return {};
+        }
+
+        void SetShardProperties(::Ydb::DataStreams::V1::Shard* shard,
+                                const ::NKikimrSchemeOp::TPersQueueGroupDescription_TPartition& partition,
+                                const bool autoPartitioningEnabled,
+                                const size_t allShardsCount,
+                                const std::map<ui64, std::pair<ui64, ui64>>& offsets) {
+            shard->set_shard_id(GetShardName(partition.GetPartitionId()));
+
+
+            const auto& parents = partition.GetParentPartitionIds();
+            if (parents.size() > 0) {
+                shard->set_parent_shard_id(GetShardName(parents[0]));
+            }
+            if (parents.size() > 1) {
+                shard->set_adjacent_parent_shard_id(GetShardName(parents[1]));
+            }
+
+            auto* rangeProto = shard->mutable_hash_key_range();
+            if (autoPartitioningEnabled) {
+                NYql::NDecimal::TUint128 from = partition.HasKeyRange() && partition.GetKeyRange().HasFromBound()
+                        ? NPQ::AsInt<NYql::NDecimal::TUint128>(partition.GetKeyRange().GetFromBound()) + 1: 0;
+                NYql::NDecimal::TUint128 to = partition.HasKeyRange() && partition.GetKeyRange().HasToBound()
+                        ? NPQ::AsInt<NYql::NDecimal::TUint128>(partition.GetKeyRange().GetToBound()): -1;
+                rangeProto->set_starting_hash_key(Uint128ToDecimalString(from));
+                rangeProto->set_ending_hash_key(Uint128ToDecimalString(to));
+            } else {
+                auto range = RangeFromShardNumber(partition.GetPartitionId(), allShardsCount);
+                rangeProto->set_starting_hash_key(Uint128ToDecimalString(range.Start));
+                rangeProto->set_ending_hash_key(Uint128ToDecimalString(range.End));
+            }
+
+            auto it = offsets.find(partition.GetPartitionId());
+            if (it != offsets.end()) {
+                auto* rangeProto = shard->mutable_sequence_number_range();
+                rangeProto->set_starting_sequence_number(TStringBuilder() << it->second.first);
+
+                if (::NKikimrPQ::ETopicPartitionStatus::Active != partition.GetStatus()) {
+                    rangeProto->set_ending_sequence_number(TStringBuilder() << it->second.second);
+                }
+            }
         }
     }
 
@@ -430,14 +473,7 @@ namespace NKikimr::NDataStreams::V1 {
         Y_UNUSED(selfInfo);
 
         TString error;
-        if (!GetProtoRequest()->has_partitioning_settings()) {
-            if (!ValidateShardsCount(*GetProtoRequest(), pqGroupDescription, error))
-            {
-                return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, static_cast<size_t>(NYds::EErrorCodes::BAD_REQUEST), error);
-            }
 
-            groupConfig.SetTotalGroupCount(GetProtoRequest()->target_shard_count());
-        }
         switch (GetProtoRequest()->retention_case()) {
             case Ydb::DataStreams::V1::UpdateStreamRequest::RetentionCase::kRetentionPeriodHours:
                 groupConfig.MutablePQTabletConfig()->MutablePartitionConfig()->SetLifetimeSeconds(
@@ -479,7 +515,19 @@ namespace NKikimr::NDataStreams::V1 {
             }
         }
 
-        if (GetProtoRequest()->has_partitioning_settings()) {
+        if (!GetProtoRequest()->has_partitioning_settings() ||
+            (GetProtoRequest()->partitioning_settings().has_auto_partitioning_settings() &&
+            (GetProtoRequest()->partitioning_settings().auto_partitioning_settings().strategy() == Ydb::DataStreams::V1::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_DISABLED) ||
+            (GetProtoRequest()->partitioning_settings().auto_partitioning_settings().strategy() == Ydb::DataStreams::V1::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_UNSPECIFIED))) {
+
+            if (!ValidateShardsCount(*GetProtoRequest(), pqGroupDescription, error))
+            {
+                return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, static_cast<size_t>(NYds::EErrorCodes::BAD_REQUEST), error);
+            }
+
+            groupConfig.SetTotalGroupCount(GetProtoRequest()->target_shard_count());
+
+        } else {
             auto r = ValidatePartitioningSettings(GetProtoRequest()->partitioning_settings());
             if (!r.empty()) {
                 return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, static_cast<size_t>(NYds::EErrorCodes::INVALID_ARGUMENT), r);
@@ -522,8 +570,6 @@ namespace NKikimr::NDataStreams::V1 {
                 t->SetScaleThresholdSeconds(ws.stabilization_window().seconds() ? ws.stabilization_window().seconds() : 300);
                 t->SetScaleUpPartitionWriteSpeedThresholdPercent(ws.up_utilization_percent() ? ws.up_utilization_percent() : 90);
                 t->SetScaleDownPartitionWriteSpeedThresholdPercent(ws.down_utilization_percent() ? ws.down_utilization_percent() : 30);
-            } else if (0 == s.max_active_partitions()) {
-                t->SetMaxPartitionCount(0);
             }
         }
 
@@ -847,32 +893,7 @@ namespace NKikimr::NDataStreams::V1 {
                     break;
                 } else {
                     auto* shard = description.add_shards();
-                    shard->set_shard_id(shardName);
-
-                    const auto& parents = partition.GetParentPartitionIds();
-                    if (parents.size() > 0) {
-                        shard->set_parent_shard_id(GetShardName(parents[0]));
-                    }
-                    if (parents.size() > 1) {
-                        shard->set_adjacent_parent_shard_id(GetShardName(parents[1]));
-                    }
-
-                    auto* rangeProto = shard->mutable_hash_key_range();
-                    if (NPQ::SplitMergeEnabled(pqConfig)) {
-                        NYql::NDecimal::TUint128 from = partition.HasKeyRange() && partition.GetKeyRange().HasFromBound() ? NPQ::AsInt<NYql::NDecimal::TUint128>(partition.GetKeyRange().GetFromBound()) + 1: 0;
-                        NYql::NDecimal::TUint128 to = partition.HasKeyRange() && partition.GetKeyRange().HasToBound() ? NPQ::AsInt<NYql::NDecimal::TUint128>(partition.GetKeyRange().GetToBound()): -1;
-                        rangeProto->set_starting_hash_key(Uint128ToDecimalString(from));
-                        rangeProto->set_ending_hash_key(Uint128ToDecimalString(to));
-                    } else {
-                        auto range = RangeFromShardNumber(partitionId, PQGroup.GetPartitions().size());
-                        rangeProto->set_starting_hash_key(Uint128ToDecimalString(range.Start));
-                        rangeProto->set_ending_hash_key(Uint128ToDecimalString(range.End));
-                    }
-                    auto it = StartEndOffsetsPerPartition.find(partitionId);
-                    if (it != StartEndOffsetsPerPartition.end()) {
-                        auto* rangeProto = shard->mutable_sequence_number_range();
-                        rangeProto->set_starting_sequence_number(TStringBuilder() << it->second.first);
-                    }
+                    SetShardProperties(shard, partition, NPQ::SplitMergeEnabled(pqConfig), PQGroup.GetPartitions().size(), StartEndOffsetsPerPartition);
                 }
             }
         }
@@ -895,13 +916,9 @@ namespace NKikimr::NDataStreams::V1 {
         void Bootstrap(const NActors::TActorContext& ctx);
 
         void StateWork(TAutoPtr<IEventHandle>& ev);
-        void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx);
+        void Handle(TEvPQ::TEvListAllTopicsResponse::TPtr& ev, const TActorContext& ctx);
 
     protected:
-        void SendNavigateRequest(const TActorContext& ctx, const TString& path);
-        void SendPendingRequests(const TActorContext& ctx);
-        void SendResponse(const TActorContext& ctx);
-
         void ReplyWithError(Ydb::StatusIds::StatusCode status, NYds::EErrorCodes errorCode,
                             const TString& messageText, const NActors::TActorContext& ctx) {
 
@@ -909,13 +926,6 @@ namespace NKikimr::NDataStreams::V1 {
             this->Request_->ReplyWithYdbStatus(status);
             this->Die(ctx);
         }
-
-    private:
-        static constexpr ui32 MAX_IN_FLIGHT = 100;
-
-        ui32 RequestsInFlight = 0;
-        std::vector<std::unique_ptr<TEvTxProxySchemeCache::TEvNavigateKeySet>> WaitingList;
-        std::vector<TString> Topics;
     };
 
     TListStreamsActor::TListStreamsActor(NKikimr::NGRpcService::IRequestOpCtx* request)
@@ -931,33 +941,11 @@ namespace NKikimr::NDataStreams::V1 {
         }
 
         if (this->Request_->GetSerializedToken().empty()) {
-            if (AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
+            if (AppData(ctx)->EnforceUserTokenRequirement || AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
                 return ReplyWithError(Ydb::StatusIds::UNAUTHORIZED, NYds::EErrorCodes::BAD_REQUEST,
                                           "Unauthenticated access is forbidden, please provide credentials", ctx);
             }
         }
-
-        SendNavigateRequest(ctx, *Request_->GetDatabaseName());
-        Become(&TListStreamsActor::StateWork);
-    }
-
-    void TListStreamsActor::SendPendingRequests(const TActorContext& ctx) {
-        if (RequestsInFlight < MAX_IN_FLIGHT && WaitingList.size() > 0) {
-            ctx.Send(MakeSchemeCacheID(), WaitingList.back().release());
-            WaitingList.pop_back();
-            RequestsInFlight++;
-        }
-    }
-
-    void TListStreamsActor::SendResponse(const TActorContext& ctx) {
-        Y_ENSURE(WaitingList.size() == 0 && RequestsInFlight == 0);
-
-        for (TString& topic : Topics) {
-            topic = TFsPath(topic).RelativePath(*Request_->GetDatabaseName()).GetPath();
-        }
-        Sort(Topics.begin(), Topics.end());
-        Ydb::DataStreams::V1::ListStreamsResult result;
-
         int limit = GetProtoRequest()->limit() == 0 ? 100 : GetProtoRequest()->limit();
 
         if (limit > 10000) {
@@ -965,86 +953,32 @@ namespace NKikimr::NDataStreams::V1 {
             Request_->ReplyWithYdbStatus(Ydb::StatusIds::BAD_REQUEST);
             return Die(ctx);
         }
-
-        result.set_has_more_streams(false);
-        for (const auto& streamName : Topics) {
-            if (GetProtoRequest()->exclusive_start_stream_name().empty()
-                || GetProtoRequest()->exclusive_start_stream_name() < streamName)
-            {
-                if (result.stream_names().size() >= limit) {
-                    result.set_has_more_streams(true);
-                    break;
-                }
-                result.add_stream_names(streamName);
-            }
-        }
-
-        Request_->SendResult(result, Ydb::StatusIds::SUCCESS);
-        Die(ctx);
+        ctx.Register(NPersQueue::MakeListAllTopicsActor(SelfId(), Request_->GetDatabaseName().GetOrElse(""),
+                                                        this->Request_->GetSerializedToken(), GetProtoRequest()->recurse(),
+                                                        GetProtoRequest()->exclusive_start_stream_name(), limit));
+        Become(&TListStreamsActor::StateWork);
     }
 
-    void TListStreamsActor::SendNavigateRequest(const TActorContext& ctx, const TString &path) {
-        auto schemeCacheRequest = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
-        schemeCacheRequest->DatabaseName = Request().GetDatabaseName().GetRef();
-        NSchemeCache::TSchemeCacheNavigate::TEntry entry;
-        entry.Path = NKikimr::SplitPath(path);
-
-        if (!this->Request_->GetSerializedToken().empty()) {
-            schemeCacheRequest->UserToken = new NACLib::TUserToken(this->Request_->GetSerializedToken());
-        }
-
-        entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpList;
-        schemeCacheRequest->ResultSet.emplace_back(entry);
-        WaitingList.push_back(std::make_unique<TEvTxProxySchemeCache::TEvNavigateKeySet>(schemeCacheRequest.release()));
-        SendPendingRequests(ctx);
-    }
 
     void TListStreamsActor::StateWork(TAutoPtr<IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
+            HFunc(TEvPQ::TEvListAllTopicsResponse, Handle);
             default: TBase::StateWork(ev);
         }
     }
 
-    void TListStreamsActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) {
-        const NSchemeCache::TSchemeCacheNavigate* navigate = ev->Get()->Request.Get();
-        for (const auto& entry : navigate->ResultSet) {
+    void TListStreamsActor::Handle(TEvPQ::TEvListAllTopicsResponse::TPtr& ev, const TActorContext& ctx) {
+        auto topics = std::move(ev->Get()->Topics);
+        Sort(topics.begin(), topics.end());
+        Ydb::DataStreams::V1::ListStreamsResult result;
 
-
-            if (entry.Kind == NSchemeCache::TSchemeCacheNavigate::EKind::KindTable) {
-                for (const auto& stream : entry.CdcStreams) {
-                    TString childFullPath = JoinPath({JoinPath(entry.Path), stream.GetName()});
-                    Topics.push_back(childFullPath);
-                }
-            } else if (entry.Kind == NSchemeCache::TSchemeCacheNavigate::EKind::KindPath
-                || entry.Kind == NSchemeCache::TSchemeCacheNavigate::EKind::KindSubdomain)
-            {
-                Y_ENSURE(entry.ListNodeEntry, "ListNodeEntry is zero");
-                for (const auto& child : entry.ListNodeEntry->Children) {
-                    TString childFullPath = JoinPath({JoinPath(entry.Path), child.Name});
-                    switch (child.Kind) {
-                        case NSchemeCache::TSchemeCacheNavigate::EKind::KindPath:
-                        case NSchemeCache::TSchemeCacheNavigate::EKind::KindTable:
-                            if (GetProtoRequest()->recurse()) {
-                                SendNavigateRequest(ctx, childFullPath);
-                            }
-                            break;
-                        case NSchemeCache::TSchemeCacheNavigate::EKind::KindTopic:
-                            Topics.push_back(childFullPath);
-                            break;
-
-                        default:
-                            break;
-                            // ignore all other types
-                    }
-                }
-            }
+        result.set_has_more_streams(ev->Get()->HaveMoreTopics);
+        for (const auto& streamName : topics) {
+            result.add_stream_names(streamName);
         }
-        RequestsInFlight--;
-        SendPendingRequests(ctx);
-        if (RequestsInFlight == 0) {
-            SendResponse(ctx);
-        }
+
+        Request_->SendResult(result, Ydb::StatusIds::SUCCESS);
+        Die(ctx);
     }
 
     //-----------------------------------------------------------------------------------
@@ -1311,7 +1245,7 @@ namespace NKikimr::NDataStreams::V1 {
             GetProtoRequest()->consumer_name(),
             appData->PQConfig
         );
-        if (!error.Empty()) {
+        if (!error.empty()) {
             return ReplyWithError(Ydb::StatusIds::NOT_FOUND, static_cast<size_t>(NYds::EErrorCodes::NOT_FOUND), error);
         }
     }
@@ -1415,7 +1349,7 @@ namespace NKikimr::NDataStreams::V1 {
         const NSchemeCache::TSchemeCacheNavigate* navigate = ev->Get()->Request.Get();
         auto topicInfo = navigate->ResultSet.begin();
         StreamName = NKikimr::CanonizePath(topicInfo->Path);
-        if (AppData(ActorContext())->PQConfig.GetRequireCredentialsInNewProtocol()) {
+        if (AppData(ActorContext())->EnforceUserTokenRequirement || AppData(ActorContext())->PQConfig.GetRequireCredentialsInNewProtocol()) {
             NACLib::TUserToken token(this->Request_->GetSerializedToken());
 
             if (!topicInfo->SecurityObject->CheckAccess(NACLib::EAccessRights::SelectRow,
@@ -1582,7 +1516,7 @@ namespace NKikimr::NDataStreams::V1 {
         const auto &result = ev->Get()->Request.Get();
         const auto response = result->ResultSet.front();
 
-        if (AppData(ActorContext())->PQConfig.GetRequireCredentialsInNewProtocol()) {
+        if (AppData(ActorContext())->EnforceUserTokenRequirement || AppData(ActorContext())->PQConfig.GetRequireCredentialsInNewProtocol()) {
             NACLib::TUserToken token(this->Request_->GetSerializedToken());
 
             if (!response.SecurityObject->CheckAccess(NACLib::EAccessRights::SelectRow,
@@ -1618,8 +1552,8 @@ namespace NKikimr::NDataStreams::V1 {
         switch (record.GetStatus()) {
             case NMsgBusProxy::MSTATUS_ERROR:
                 switch (record.GetErrorCode()) {
-                    case NPersQueue::NErrorCode::READ_ERROR_TOO_SMALL_OFFSET:
-                    case NPersQueue::NErrorCode::READ_ERROR_TOO_BIG_OFFSET:
+                    case ::NPersQueue::NErrorCode::READ_ERROR_TOO_SMALL_OFFSET:
+                    case ::NPersQueue::NErrorCode::READ_ERROR_TOO_BIG_OFFSET:
                         Result.set_next_shard_iterator(TShardIterator(ShardIterator).Serialize());
                         Result.set_millis_behind_latest(0);
 
@@ -1641,7 +1575,14 @@ namespace NKikimr::NDataStreams::V1 {
         TShardIterator shardIterator(ShardIterator);
         const auto& response = record.GetPartitionResponse();
         if (response.HasCmdReadResult()) {
-            const auto& results = response.GetCmdReadResult().GetResult();
+            const auto& readResult = response.GetCmdReadResult();
+            if (readResult.GetReadingFinished()) {
+                return ReplyWithError(Ydb::StatusIds::StatusCode::StatusIds_StatusCode_NOT_FOUND,
+                        Ydb::PersQueue::ErrorCode::ErrorCode::WRONG_PARTITION_NUMBER,
+                        "Partition ended");
+            }
+
+            const auto& results = readResult.GetResult();
             for (auto& r : results) {
                 auto proto(NKikimr::GetDeserializedData(r.GetData()));
                 auto record = Result.add_records();
@@ -1756,6 +1697,7 @@ namespace NKikimr::NDataStreams::V1 {
         std::vector<NKikimrSchemeOp::TPersQueueGroupDescription::TPartition> Shards;
         ui32 LeftToRead = 0;
         ui32 AllShardsCount = 0;
+        bool AutoPartitioningEnabled = false;
         std::atomic<ui32> GotOffsetResponds;
         std::vector<TActorId> Pipes;
     };
@@ -1834,7 +1776,7 @@ namespace NKikimr::NDataStreams::V1 {
 
         const NSchemeCache::TSchemeCacheNavigate* navigate = ev->Get()->Request.Get();
         auto topicInfo = navigate->ResultSet.front();
-        if (AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
+        if (AppData(ctx)->EnforceUserTokenRequirement || AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
             NACLib::TUserToken token(this->Request_->GetSerializedToken());
 
             if (!topicInfo.SecurityObject->CheckAccess(NACLib::EAccessRights::SelectRow,
@@ -1849,7 +1791,8 @@ namespace NKikimr::NDataStreams::V1 {
         }
 
         using TPartition = NKikimrSchemeOp::TPersQueueGroupDescription::TPartition;
-        const auto& partitions = topicInfo.PQGroupInfo->Description.GetPartitions();
+        const auto& description = topicInfo.PQGroupInfo->Description;
+        const auto& partitions = description.GetPartitions();
         TString startingShardId = this->GetProtoRequest()->Getexclusive_start_shard_id();
         ui64 startingTimepoint{0};
         bool onlyOpenShards{true};
@@ -1896,6 +1839,8 @@ namespace NKikimr::NDataStreams::V1 {
                 return GetShardName(p.GetPartitionId()) >= startingShardId;
             }}
         };
+
+        AutoPartitioningEnabled = NPQ::SplitMergeEnabled(description.GetPQTabletConfig());
 
         const auto alreadyRead = NextToken.GetAlreadyRead();
         if (alreadyRead > (ui32)partitions.size()) {
@@ -1972,21 +1917,7 @@ namespace NKikimr::NDataStreams::V1 {
     void TListShardsActor::SendResponse(const TActorContext& ctx) {
         Ydb::DataStreams::V1::ListShardsResult result;
         for (auto& shard : Shards) {
-            auto awsShard = result.Addshards();
-            // TODO:
-            // awsShard->set_parent_shard_id("");
-            // awsShard->set_adjacent_parent_shard_id(prevShardName);
-            auto range = RangeFromShardNumber(shard.GetPartitionId(), AllShardsCount);
-            awsShard->mutable_hash_key_range()->set_starting_hash_key(
-                Uint128ToDecimalString(range.Start));
-            awsShard->mutable_hash_key_range()->set_ending_hash_key(
-                Uint128ToDecimalString(range.End));
-            awsShard->mutable_sequence_number_range()->set_starting_sequence_number(
-                std::to_string(StartEndOffsetsPerPartition[shard.GetPartitionId()].first));
-            //TODO: fill it only for closed partitions
-            //awsShard->mutable_sequence_number_range()->set_ending_sequence_number(
-            //    std::to_string(StartEndOffsetsPerPartition[shard.GetPartitionId()].second));
-            awsShard->set_shard_id(GetShardName(shard.GetPartitionId()));
+            SetShardProperties(result.Addshards(), shard, AutoPartitioningEnabled, AllShardsCount, StartEndOffsetsPerPartition);
         }
         if (LeftToRead > 0) {
             TNextToken token(StreamName, NextToken.GetAlreadyRead() + Shards.size(), MaxResults, TInstant::Now().MilliSeconds());

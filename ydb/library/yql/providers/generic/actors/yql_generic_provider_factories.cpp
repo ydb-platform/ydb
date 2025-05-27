@@ -13,17 +13,28 @@ namespace NYql::NDq {
         auto readActorFactory = [credentialsFactory, genericClient](
                                     Generic::TSource&& settings,
                                     IDqAsyncIoFactory::TSourceArguments&& args) {
-            return CreateGenericReadActor(genericClient, std::move(settings), args.InputIndex, args.StatsLevel,
-                                          args.SecureParams, args.TaskParams, args.ComputeActorId, credentialsFactory, args.HolderFactory);
+            return CreateGenericReadActor(
+                genericClient,
+                std::move(settings),
+                args.InputIndex,
+                args.StatsLevel,
+                args.SecureParams,
+                args.TaskId,
+                args.TaskParams,
+                args.ReadRanges,
+                args.ComputeActorId,
+                credentialsFactory,
+                args.HolderFactory);
         };
 
-        auto lookupActorFactory = [credentialsFactory, genericClient](NYql::Generic::TLookupSource&& lookupSource, IDqAsyncIoFactory::TLookupSourceArguments&& args) {
+        auto lookupActorFactory = [credentialsFactory, genericClient](Generic::TLookupSource&& lookupSource, IDqAsyncIoFactory::TLookupSourceArguments&& args) {
             return CreateGenericLookupActor(
                 genericClient,
                 credentialsFactory,
                 std::move(args.ParentId),
-                args.Alloc,
-                args.KeyTypeHelper,
+                std::move(args.TaskCounters),
+                std::move(args.Alloc),
+                std::move(args.KeyTypeHelper),
                 std::move(lookupSource),
                 args.KeyType,
                 args.PayloadType,
@@ -32,10 +43,22 @@ namespace NYql::NDq {
                 args.MaxKeysInRequest);
         };
 
-        for (auto& name : {"ClickHouseGeneric", "PostgreSqlGeneric", "YdbGeneric", "MySqlGeneric", "GreenplumGeneric", "MsSQLServerGeneric", "OracleGeneric"}) {
+        for (auto& name : {
+                 "ClickHouseGeneric",
+                 "PostgreSqlGeneric",
+                 "YdbGeneric",
+                 "MySqlGeneric",
+                 "GreenplumGeneric",
+                 "MsSQLServerGeneric",
+                 "OracleGeneric",
+                 "LoggingGeneric",
+                 "IcebergGeneric",
+                 "RedisGeneric",
+                 "PrometheusGeneric",
+                 "MongoDBGeneric"}) {
             factory.RegisterSource<Generic::TSource>(name, readActorFactory);
             factory.RegisterLookupSource<Generic::TLookupSource>(name, lookupActorFactory);
         }
     }
 
-}
+} // namespace NYql::NDq

@@ -1,6 +1,5 @@
 UNITTEST()
 
-    TIMEOUT(60)
     SIZE(SMALL)
 
     PEERDIR(

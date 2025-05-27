@@ -123,7 +123,7 @@ public:
                     db.Table<Schema::Tablet>().Key(TabletId).Update(NIceDb::TUpdate<Schema::Tablet::LeaderNode>(tablet->NodeId),
                                                                     NIceDb::TUpdate<Schema::Tablet::KnownGeneration>(Generation),
                                                                     NIceDb::TUpdate<Schema::Tablet::Statistics>(tablet->Statistics));
-                    Self->UpdateTabletFollowersNumber(leader, db, SideEffects);
+
 
                     // tablet booted successfully, we may actually cut history now
                     while (!leader.DeletedHistory.empty() && leader.DeletedHistory.front().DeletedAtGeneration < leader.KnownGeneration) {
@@ -153,7 +153,7 @@ public:
                     if (Generation < leader.KnownGeneration) {
                         return true;
                     }
-                    if (leader.GetRestartsPerPeriod(now - Self->GetTabletRestartsPeriod()) >= Self->GetTabletRestartsMaxCount()) {
+                    if (leader.GetRestartsPerPeriod(now - Self->GetTabletRestartsPeriodForPenalties()) >= Self->GetTabletRestartsMaxCount()) {
                         if (IsGoodStatusForPenalties()) {
                             leader.PostponeStart(now + Self->GetPostponeStartPeriod());
                             BLOG_D("THive::TTxUpdateTabletStatus::Execute for tablet " << tablet->ToString()

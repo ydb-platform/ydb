@@ -4,7 +4,7 @@
 
 #include <ydb/library/actors/core/actorid.h>
 #include <ydb/core/scheme_types/scheme_types_defs.h>
-#include <ydb/library/yql/parser/pg_wrapper/interface/type_desc.h>
+#include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
 
 #include <util/stream/output.h>
 
@@ -54,13 +54,23 @@ class TStepOrderId : public IIntegerPair<ui64, ui64, NTypeIds::StepOrderId, NNam
 
 ////////////////////////////////////////////////////////
 
-inline ui32 GetFixedSize(TTypeInfo typeInfo) {
+inline ui32 GetFixedSize(TTypeId typeId) {
+    switch (typeId) {
+#define KIKIMR_TYPE_MACRO(typeEnum, typeType, ...) case NTypeIds::typeEnum: return typeType::GetFixedSize();
+    KIKIMR_FOREACH_TYPE(KIKIMR_TYPE_MACRO)
+#undef KIKIMR_TYPE_MACRO
+    default:
+        return 0;
+    }
+}
+
+inline ui32 GetFixedSize(const TTypeInfo& typeInfo) {
     switch (typeInfo.GetTypeId()) {
 #define KIKIMR_TYPE_MACRO(typeEnum, typeType, ...) case NTypeIds::typeEnum: return typeType::GetFixedSize();
     KIKIMR_FOREACH_TYPE(KIKIMR_TYPE_MACRO)
 #undef KIKIMR_TYPE_MACRO
     case NTypeIds::Pg:
-        return NPg::TypeDescGetStoredSize(typeInfo.GetTypeDesc());
+        return NPg::TypeDescGetStoredSize(typeInfo.GetPgTypeDesc());
     default:
         return 0;
     }
@@ -78,7 +88,7 @@ inline ui32 GetFixedSize(TTypeInfo typeInfo) {
  * 
  * Returns empty string on success or an error description in case of failure
  */
-::TString HasUnexpectedValueSize(const ::NKikimr::TCell& value, TTypeInfo typeInfo);
+::TString HasUnexpectedValueSize(const ::NKikimr::TCell& value, const TTypeInfo& typeInfo);
 
 } // namespace NScheme
 } // namespace NKikimr

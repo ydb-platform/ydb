@@ -1,0 +1,134 @@
+[
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "value";
+                                [
+                                    "OptionalType";
+                                    [
+                                        "DataType";
+                                        "Utf8"
+                                    ]
+                                ]
+                            ];
+                            [
+                                "column1";
+                                [
+                                    "OptionalType";
+                                    [
+                                        "DataType";
+                                        "Utf8"
+                                    ]
+                                ]
+                            ];
+                            [
+                                "column2";
+                                [
+                                    "OptionalType";
+                                    [
+                                        "DataType";
+                                        "Utf8"
+                                    ]
+                                ]
+                            ];
+                            [
+                                "column3";
+                                [
+                                    "OptionalType";
+                                    [
+                                        "DataType";
+                                        "Utf8"
+                                    ]
+                                ]
+                            ];
+                            [
+                                "column4";
+                                [
+                                    "OptionalType";
+                                    [
+                                        "DataType";
+                                        "Utf8"
+                                    ]
+                                ]
+                            ];
+                            [
+                                "column5";
+                                [
+                                    "OptionalType";
+                                    [
+                                        "DataType";
+                                        "Utf8"
+                                    ]
+                                ]
+                            ];
+                            [
+                                "column6";
+                                [
+                                    "OptionalType";
+                                    [
+                                        "DataType";
+                                        "Utf8"
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        [
+                            "l\xC3\xA4stig, m\xC3\266chten, ausf\xC3\xBChrlich, sp\xC3\xA4ter, k\xC3\xB6nnen, nat\xC3\xBCrlich, universit\xC3\xA4t, \xC3\266ffentlich, r\xC3\274ckw\xC3\xA4rts, k\xC3\xA4mpfen, m\xC3\xB6gen, \xC3\274berall, regelm\xC3\xA4\xC3\x9Fig"
+                        ];
+                        [
+                            "\xC3\xA4stig, m\xC3\266chten, ausf\xC3\xBChrlich, sp\xC3\xA4ter, k\xC3\xB6nnen, nat\xC3\xBCrlich, universit\xC3\xA4t, \xC3\266ffentlich, r\xC3\274ckw\xC3\xA4rts, k\xC3\xA4mpfen, m\xC3\xB6gen, \xC3\274berall, regelm"
+                        ];
+                        [
+                            "\xC3\266chten, ausf\xC3\xBChrlich, sp\xC3\xA4ter, k\xC3\xB6nnen, nat\xC3\xBCrlich, universit\xC3\xA4t, \xC3\266ffentlich, r\xC3\274ckw\xC3\xA4rts, k\xC3\xA4mpfen, m"
+                        ];
+                        [
+                            "\xC3\xBChrlich, sp\xC3\xA4ter, k\xC3\xB6nnen, nat\xC3\xBCrlich, universit\xC3\xA4t, \xC3\266ffentlich, r\xC3\274ckw\xC3\xA4rts, k\xC3\xA4mpfen, m\xC3\xB6gen, "
+                        ];
+                        [
+                            "\xC3\xA4ter, k\xC3\xB6nnen, nat\xC3\xBCrlich, universit\xC3\xA4t, \xC3\266ffentlich, r\xC3\274ckw\xC3\xA4rts, k"
+                        ];
+                        [
+                            "\xC3\266chten, ausf\xC3\xBChrlich, sp\xC3\xA4ter, k\xC3\xB6nnen, nat\xC3\xBCrlich, universit\xC3\xA4t, \xC3\266ffentlich, r\xC3\274ckw\xC3\xA4rts, k\xC3\xA4mpfen, m"
+                        ];
+                        [
+                            "\xC3\xBCrlich, universit\xC3\xA4t, \xC3\266ffentlich, r"
+                        ]
+                    ];
+                    [
+                        [
+                            "l\xC3\xA4stig, m\xC3\266chten, ausf\xC3\xBChrlich, sp\xC3\xA4ter, k\xC3\xB6nnen, nat\xC3\xBCrlich, universit\xC3\xA4t, \xC3\266ffentlich, r\xC3\274ckw\xC3\xA4rts, k\xC3\xA4mpfen, m\xC3\xB6gen, \xC3\274berall, regelm\xC3\xA4\xC3\x9Fig"
+                        ];
+                        [
+                            "\xC3\xA4stig, m\xC3\266chten, ausf\xC3\xBChrlich, sp\xC3\xA4ter, k\xC3\xB6nnen, nat\xC3\xBCrlich, universit\xC3\xA4t, \xC3\266ffentlich, r\xC3\274ckw\xC3\xA4rts, k\xC3\xA4mpfen, m\xC3\xB6gen, \xC3\274berall, regelm"
+                        ];
+                        [
+                            "\xC3\266chten, ausf\xC3\xBChrlich, sp\xC3\xA4ter, k\xC3\xB6nnen, nat\xC3\xBCrlich, universit\xC3\xA4t, \xC3\266ffentlich, r\xC3\274ckw\xC3\xA4rts, k\xC3\xA4mpfen, m"
+                        ];
+                        [
+                            "\xC3\xBChrlich, sp\xC3\xA4ter, k\xC3\xB6nnen, nat\xC3\xBCrlich, universit\xC3\xA4t, \xC3\266ffentlich, r\xC3\274ckw\xC3\xA4rts, k\xC3\xA4mpfen, m\xC3\xB6gen, "
+                        ];
+                        [
+                            "\xC3\xA4ter, k\xC3\xB6nnen, nat\xC3\xBCrlich, universit\xC3\xA4t, \xC3\266ffentlich, r\xC3\274ckw\xC3\xA4rts, k"
+                        ];
+                        [
+                            "\xC3\266chten, ausf\xC3\xBChrlich, sp\xC3\xA4ter, k\xC3\xB6nnen, nat\xC3\xBCrlich, universit\xC3\xA4t, \xC3\266ffentlich, r\xC3\274ckw\xC3\xA4rts, k\xC3\xA4mpfen, m"
+                        ];
+                        [
+                            "\xC3\xBCrlich, universit\xC3\xA4t, \xC3\266ffentlich, r"
+                        ]
+                    ]
+                ]
+            }
+        ]
+    }
+]

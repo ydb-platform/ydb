@@ -12,6 +12,7 @@ extern "C" {
 #include "liburing.h"
 #include "../src/setup.h"
 #include <arpa/inet.h>
+#include <sys/time.h>
 
 enum t_setup_ret {
 	T_SETUP_OK	= 0,
@@ -100,6 +101,11 @@ static inline int t_io_uring_init_sqarray(unsigned entries, struct io_uring *rin
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
 
 void t_error(int status, int errnum, const char *format, ...);
+
+unsigned long long mtime_since(const struct timeval *s, const struct timeval *e);
+unsigned long long mtime_since_now(struct timeval *tv);
+unsigned long long utime_since(const struct timeval *s, const struct timeval *e);
+unsigned long long utime_since_now(struct timeval *tv);
 
 #ifdef __cplusplus
 }

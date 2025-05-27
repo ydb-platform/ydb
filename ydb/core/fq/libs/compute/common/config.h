@@ -68,6 +68,25 @@ public:
         }
     }
 
+    TVector<TString> GetExternalSourcesAccessSIDs(const TString& scope) const {
+        const auto& controlPlane = ComputeConfig.GetYdb().GetControlPlane();
+        switch (controlPlane.type_case()) {
+            case NConfig::TYdbComputeControlPlane::TYPE_NOT_SET:
+                return {};
+            case NConfig::TYdbComputeControlPlane::kSingle:
+                return {};
+            case NConfig::TYdbComputeControlPlane::kCms:
+                return GetExternalSourcesAccessSIDs(scope, controlPlane.GetCms().GetDatabaseMapping());
+            case NConfig::TYdbComputeControlPlane::kYdbcp:
+                return GetExternalSourcesAccessSIDs(scope, controlPlane.GetYdbcp().GetDatabaseMapping());
+        }
+    }
+
+    TVector<TString> GetExternalSourcesAccessSIDs(const TString& scope, const ::NFq::NConfig::TDatabaseMapping& databaseMapping) const {
+        const auto protoExternalSourcesAccessSIDs = GetComputeDatabaseConfig(scope, databaseMapping).GetAccessConfig().GetExternalSourcesAccessSID();
+        return TVector<TString>{protoExternalSourcesAccessSIDs.begin(), protoExternalSourcesAccessSIDs.end()};
+    }
+
     NFq::NConfig::TYdbStorageConfig GetControlPlaneConnection(const TString& scope) const {
         const auto& controlPlane = ComputeConfig.GetYdb().GetControlPlane();
         switch (controlPlane.type_case()) {
@@ -83,15 +102,8 @@ public:
     }
 
     NFq::NConfig::TYdbStorageConfig GetControlPlaneConnection(const TString& scope, const ::NFq::NConfig::TDatabaseMapping& databaseMapping) const {
-        auto it = databaseMapping.GetScopeToComputeDatabase().find(scope);
-        if (it != databaseMapping.GetScopeToComputeDatabase().end()) {
-            return it->second.GetControlPlaneConnection();
-        }
-        return databaseMapping.GetCommon().empty()
-                   ? NFq::NConfig::TYdbStorageConfig{}
-                   : databaseMapping
-                         .GetCommon(MultiHash(scope) % databaseMapping.GetCommon().size())
-                         .GetControlPlaneConnection();
+        auto computeDatabaseConfig = GetComputeDatabaseConfig(scope, databaseMapping);
+        return computeDatabaseConfig.GetControlPlaneConnection();
     }
 
     NFq::NConfig::TYdbStorageConfig GetExecutionConnection(const TString& scope) const {
@@ -108,25 +120,49 @@ public:
         }
     }
 
-    NFq::NConfig::TYdbStorageConfig GetExecutionConnection(const TString& scope, const ::NFq::NConfig::TDatabaseMapping& databaseMapping) const {
-        auto it = databaseMapping.GetScopeToComputeDatabase().find(scope);
-        if (it != databaseMapping.GetScopeToComputeDatabase().end()) {
-            return it->second.GetExecutionConnection();
-        }
-        return databaseMapping.GetCommon().empty()
-                   ? NFq::NConfig::TYdbStorageConfig{}
-                   : databaseMapping
-                         .GetCommon(MultiHash(scope) % databaseMapping.GetCommon().size())
-                         .GetExecutionConnection();
-    }
-
-    NFq::NConfig::TWorkloadManagerConfig GetWorkloadManagerConfig(const TString& scope) {
+    NFq::NConfig::TYdbStorageConfig GetSchemeConnection(const TString& scope) const {
         const auto& controlPlane = ComputeConfig.GetYdb().GetControlPlane();
         switch (controlPlane.type_case()) {
             case NConfig::TYdbComputeControlPlane::TYPE_NOT_SET:
                 return {};
             case NConfig::TYdbComputeControlPlane::kSingle:
-                return controlPlane.GetSingle().GetWorkloadManagerConfig();
+                return controlPlane.GetSingle().GetConnection();
+            case NConfig::TYdbComputeControlPlane::kCms:
+                return GetSchemeConnection(scope, controlPlane.GetCms().GetDatabaseMapping());
+            case NConfig::TYdbComputeControlPlane::kYdbcp:
+                return GetSchemeConnection(scope, controlPlane.GetYdbcp().GetDatabaseMapping());
+        }
+    }
+
+    NFq::NConfig::TYdbStorageConfig GetSchemeConnection(const TString& scope, const ::NFq::NConfig::TDatabaseMapping& databaseMapping) const {
+        auto it = databaseMapping.GetScopeToComputeDatabase().find(scope);
+        if (it != databaseMapping.GetScopeToComputeDatabase().end()) {
+            return it->second.HasSchemeConnection() ? it->second.GetSchemeConnection() : it->second.GetExecutionConnection(); // TODO: for backward compatibility, cleanup it after migration
+        }
+
+        if (databaseMapping.GetCommon().empty()) {
+            return NFq::NConfig::TYdbStorageConfig{};
+        }
+
+        auto config = databaseMapping.GetCommon(MultiHash(scope) % databaseMapping.GetCommon().size());
+        return config.HasSchemeConnection() ? config.GetSchemeConnection() : config.GetExecutionConnection(); // TODO: for backward compatibility, cleanup it after migration
+    }
+
+    NFq::NConfig::TYdbStorageConfig GetExecutionConnection(const TString& scope, const ::NFq::NConfig::TDatabaseMapping& databaseMapping) const {
+        auto computeDatabaseConfig = GetComputeDatabaseConfig(scope, databaseMapping);
+        return computeDatabaseConfig.GetExecutionConnection();
+    }
+
+    NFq::NConfig::TWorkloadManagerConfig GetWorkloadManagerConfig(const TString& scope) const {
+        const auto& controlPlane = ComputeConfig.GetYdb().GetControlPlane();
+        switch (controlPlane.type_case()) {
+            case NConfig::TYdbComputeControlPlane::TYPE_NOT_SET:
+                return {};
+            case NConfig::TYdbComputeControlPlane::kSingle:
+                if (controlPlane.GetSingle().HasWorkloadManagerConfig()) {
+                    return controlPlane.GetSingle().GetWorkloadManagerConfig();
+                }
+                return controlPlane.GetDefaultWorkloadManagerConfig();
             case NConfig::TYdbComputeControlPlane::kCms:
                 return GetWorkloadManagerConfig(scope, controlPlane.GetCms().GetDatabaseMapping());
             case NConfig::TYdbComputeControlPlane::kYdbcp:
@@ -135,24 +171,36 @@ public:
     }
 
     NFq::NConfig::TWorkloadManagerConfig GetWorkloadManagerConfig(const TString& scope, const ::NFq::NConfig::TDatabaseMapping& databaseMapping) const {
+        auto computeDatabaseConfig = GetComputeDatabaseConfig(scope, databaseMapping);
+        if (computeDatabaseConfig.HasWorkloadManagerConfig()) {
+            return computeDatabaseConfig.GetWorkloadManagerConfig();
+        }
+        return ComputeConfig.GetYdb().GetControlPlane().GetDefaultWorkloadManagerConfig();
+    }
+
+    NFq::NConfig::TComputeDatabaseConfig GetComputeDatabaseConfig(const TString& scope, const ::NFq::NConfig::TDatabaseMapping& databaseMapping) const {
         auto it = databaseMapping.GetScopeToComputeDatabase().find(scope);
         if (it != databaseMapping.GetScopeToComputeDatabase().end()) {
-            return it->second.GetWorkloadManagerConfig();
+            return it->second;
         }
-        return databaseMapping.GetCommon().empty()
-                   ? NFq::NConfig::TWorkloadManagerConfig{}
-                   : databaseMapping
-                         .GetCommon(MultiHash(scope) % databaseMapping.GetCommon().size())
-                         .GetWorkloadManagerConfig();
+        if (databaseMapping.GetCommon().empty()) {
+            return NFq::NConfig::TComputeDatabaseConfig{};
+        }
+        return databaseMapping.GetCommon(MultiHash(scope) % databaseMapping.GetCommon().size());
     }
 
     bool YdbComputeControlPlaneEnabled(const TString& scope) const {
+        return YdbComputeControlPlaneEnabled(scope, FederatedQuery::QueryContent::ANALYTICS) ||  
+                YdbComputeControlPlaneEnabled(scope, FederatedQuery::QueryContent::STREAMING);
+    }
+
+    bool YdbComputeControlPlaneEnabled(const TString& scope, FederatedQuery::QueryContent::QueryType queryType) const {
+        if (queryType == FederatedQuery::QueryContent::QUERY_TYPE_UNSPECIFIED) {
+            return YdbComputeControlPlaneEnabled(scope);
+        }
         return ComputeConfig.GetYdb().GetEnable() &&
                ComputeConfig.GetYdb().GetControlPlane().GetEnable() &&
-               (GetComputeType(FederatedQuery::QueryContent::ANALYTICS, scope) ==
-                    NFq::NConfig::EComputeType::YDB ||
-                GetComputeType(FederatedQuery::QueryContent::STREAMING, scope) ==
-                    NFq::NConfig::EComputeType::YDB);
+               GetComputeType(queryType, scope) == NFq::NConfig::EComputeType::YDB;
     }
 
     bool IsYDBSchemaOperationsEnabled(
@@ -184,6 +232,8 @@ public:
         }
     }
 
+    // This function shows which external data sources are currently supported by the open-source YDB
+    // and which ones are not yet supported.
     bool IsConnectionCaseEnabled(
         const FederatedQuery::ConnectionSetting::ConnectionCase& connectionCase) const {
         switch (connectionCase) {
@@ -193,6 +243,8 @@ public:
             case FederatedQuery::ConnectionSetting::kGreenplumCluster:
             case FederatedQuery::ConnectionSetting::kMysqlCluster:
             case FederatedQuery::ConnectionSetting::kYdbDatabase:
+            case FederatedQuery::ConnectionSetting::kLogging:
+            case FederatedQuery::ConnectionSetting::kIceberg:
                 return true;
             case FederatedQuery::ConnectionSetting::kDataStreams:
             case FederatedQuery::ConnectionSetting::kMonitoring:

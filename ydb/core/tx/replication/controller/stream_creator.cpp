@@ -4,7 +4,9 @@
 #include "target_with_stream.h"
 #include "util.h"
 
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>
+#include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -16,11 +18,44 @@
 namespace NKikimr::NReplication::NController {
 
 class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
-    static NYdb::NTable::TChangefeedDescription MakeChangefeed(const TString& name, const NJson::TJsonMap& attrs) {
+    static NYdb::NTable::TChangefeedDescription MakeChangefeed(
+            const TString& name,
+            const TDuration& retentionPeriod,
+            const std::optional<TDuration>& resolvedTimestamps,
+            const NJson::TJsonMap& attrs)
+    {
         using namespace NYdb::NTable;
-        return TChangefeedDescription(name, EChangefeedMode::Updates, EChangefeedFormat::Json)
+
+        auto desc = TChangefeedDescription(name, EChangefeedMode::Updates, EChangefeedFormat::Json)
+            .WithRetentionPeriod(retentionPeriod)
             .WithInitialScan()
             .AddAttribute("__async_replication", NJson::WriteJson(attrs, false));
+
+        if (resolvedTimestamps) {
+            desc
+                .WithVirtualTimestamps()
+                .WithResolvedTimestamps(*resolvedTimestamps);
+        }
+
+        return desc;
+    }
+
+    void RequestPermission() {
+        Send(Parent, new TEvPrivate::TEvRequestCreateStream());
+        Become(&TThis::StateRequestPermission);
+    }
+
+    STATEFN(StateRequestPermission) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvPrivate::TEvAllowCreateStream, Handle);
+        default:
+            return StateBase(ev);
+        }
+    }
+
+    void Handle(TEvPrivate::TEvAllowCreateStream::TPtr& ev) {
+        LOG_T("Handle " << ev->Get()->ToString());
+        CreateStream();
     }
 
     void CreateStream() {
@@ -30,6 +65,8 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
             Send(YdbProxy, new TEvYdbProxy::TEvAlterTableRequest(SrcPath, NYdb::NTable::TAlterTableSettings()
                 .AppendAddChangefeeds(Changefeed)));
             break;
+        case TReplication::ETargetKind::Transfer:
+            return CreateConsumer();
         }
 
         Become(&TThis::StateCreateStream);
@@ -68,9 +105,11 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
     TString BuildStreamPath() const {
         switch (Kind) {
         case TReplication::ETargetKind::Table:
-            return CanonizePath(ChildPath(SplitPath(SrcPath), Changefeed.GetName()));
+            return CanonizePath(ChildPath(SplitPath(SrcPath), TString{Changefeed.GetName()}));
         case TReplication::ETargetKind::IndexTable:
-            return CanonizePath(ChildPath(SplitPath(SrcPath), {"indexImplTable", Changefeed.GetName()}));
+            return CanonizePath(ChildPath(SplitPath(SrcPath), {"indexImplTable", TString{Changefeed.GetName()}}));
+        case TReplication::ETargetKind::Transfer:
+            return CanonizePath(SplitPath(SrcPath));
         }
     }
 
@@ -78,7 +117,7 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
         const auto streamPath = BuildStreamPath();
         const auto settings = NYdb::NTopic::TAlterTopicSettings()
             .BeginAddConsumer()
-                .ConsumerName(ReplicationConsumerName)
+                .ConsumerName(SrcConsumerName)
             .EndAddConsumer();
 
         Send(YdbProxy, new TEvYdbProxy::TEvAlterTopicRequest(streamPath, settings));
@@ -97,6 +136,10 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
     void Handle(TEvYdbProxy::TEvAlterTopicResponse::TPtr& ev) {
         LOG_T("Handle " << ev->Get()->ToString());
         auto& result = ev->Get()->Result;
+
+        if (result.GetStatus() == NYdb::EStatus::ALREADY_EXISTS) {
+            return Reply(NYdb::TStatus(NYdb::EStatus::SUCCESS, NYdb::NIssue::TIssues()));
+        }
 
         if (!result.IsSuccess()) {
             if (IsRetryableError(result)) {
@@ -130,26 +173,30 @@ public:
             const TActorId& proxy,
             ui64 rid,
             ui64 tid,
-            TReplication::ETargetKind kind,
-            const TString& srcPath,
-            const TString& dstPath,
-            const TString& streamName)
+            const TReplication::ITarget::IConfig::TPtr& config,
+            const TString& streamName,
+            const TString& consumerName,
+            const TDuration& retentionPeriod,
+            const std::optional<TDuration>& resolvedTimestamps,
+            bool supportsTopicAutopartitioning)
         : Parent(parent)
         , YdbProxy(proxy)
         , ReplicationId(rid)
         , TargetId(tid)
-        , Kind(kind)
-        , SrcPath(srcPath)
-        , Changefeed(MakeChangefeed(streamName, NJson::TJsonMap{
-            {"path", dstPath},
+        , Kind(config->GetKind())
+        , SrcPath(config->GetSrcPath())
+        , SrcConsumerName(consumerName)
+        , Changefeed(MakeChangefeed(streamName, retentionPeriod, resolvedTimestamps, NJson::TJsonMap{
+            {"path", config->GetDstPath()},
             {"id", ToString(rid)},
+            {"supports_topic_autopartitioning", supportsTopicAutopartitioning},
         }))
         , LogPrefix("StreamCreator", ReplicationId, TargetId)
     {
     }
 
     void Bootstrap() {
-        CreateStream();
+        RequestPermission();
     }
 
     STATEFN(StateBase) {
@@ -165,6 +212,7 @@ private:
     const ui64 TargetId;
     const TReplication::ETargetKind Kind;
     const TString SrcPath;
+    const TString SrcConsumerName;
     const NYdb::NTable::TChangefeedDescription Changefeed;
     const TActorLogPrefix LogPrefix;
 
@@ -173,15 +221,27 @@ private:
 IActor* CreateStreamCreator(TReplication* replication, ui64 targetId, const TActorContext& ctx) {
     const auto* target = replication->FindTarget(targetId);
     Y_ABORT_UNLESS(target);
+
+    const auto& config = replication->GetConfig().GetConsistencySettings();
+    const auto resolvedTimestamps = config.HasGlobal()
+        ? std::make_optional(TDuration::MilliSeconds(config.GetGlobal().GetCommitIntervalMilliSeconds()))
+        : std::nullopt;
+
     return CreateStreamCreator(ctx.SelfID, replication->GetYdbProxy(),
-        replication->GetId(), target->GetId(), target->GetKind(),
-        target->GetSrcPath(), target->GetDstPath(), target->GetStreamName());
+        replication->GetId(), target->GetId(),
+        target->GetConfig(), target->GetStreamName(), target->GetStreamConsumerName(),
+        TDuration::Seconds(AppData()->ReplicationConfig.GetRetentionPeriodSeconds()), resolvedTimestamps,
+        AppData()->FeatureFlags.GetEnableTopicAutopartitioningForReplication());
 }
 
 IActor* CreateStreamCreator(const TActorId& parent, const TActorId& proxy, ui64 rid, ui64 tid,
-        TReplication::ETargetKind kind, const TString& srcPath, const TString& dstPath, const TString& streamName)
+        const TReplication::ITarget::IConfig::TPtr& config,
+        const TString& streamName, const TString& consumerName, const TDuration& retentionPeriod,
+        const std::optional<TDuration>& resolvedTimestamps,
+        bool supportsTopicAutopartitioning)
 {
-    return new TStreamCreator(parent, proxy, rid, tid, kind, srcPath, dstPath, streamName);
+    return new TStreamCreator(parent, proxy, rid, tid, config,
+        streamName, consumerName, retentionPeriod, resolvedTimestamps, supportsTopicAutopartitioning);
 }
 
 }

@@ -1,7 +1,7 @@
 #include "yql_solomon_mkql_compiler.h"
 
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
-#include <ydb/library/yql/providers/common/mkql/parser.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
+#include <ydb/library/yql/providers/dq/mkql/parser.h>
 
 namespace NYql {
 

@@ -1,10 +1,10 @@
 #include "mkql_engine_flat.h"
 #include "mkql_engine_flat_host.h"
 
-#include <ydb/library/yql/minikql/mkql_function_registry.h>
+#include <yql/essentials/minikql/mkql_function_registry.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
-#include <ydb/library/yql/minikql/mkql_node_serialization.h>
-#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
+#include <yql/essentials/minikql/mkql_node_serialization.h>
+#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <ydb/core/tablet_flat/test/libs/table/test_dummy.h>
 #include <ydb/core/engine/minikql/minikql_engine_host.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>

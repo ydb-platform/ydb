@@ -10,14 +10,22 @@ option java_package = "com.yandex.ydb.ymq.v1";
 
 
 service YmqService {
-    rpc GetQueueUrl(GetQueueUrlRequest) returns (GetQueueUrlResponse);
-    rpc CreateQueue(CreateQueueRequest) returns (CreateQueueResponse);
-    rpc SendMessage(SendMessageRequest) returns (SendMessageResponse);
-    rpc ReceiveMessage(ReceiveMessageRequest) returns (ReceiveMessageResponse);
-    rpc GetQueueAttributes(GetQueueAttributesRequest) returns (GetQueueAttributesResponse);
-    rpc ListQueues(ListQueuesRequest) returns (ListQueuesResponse);
-    rpc DeleteMessage(DeleteMessageRequest) returns (DeleteMessageResponse);
-    rpc PurgeQueue(PurgeQueueRequest) returns (PurgeQueueResponse);
-    rpc DeleteQueue(DeleteQueueRequest) returns (DeleteQueueResponse);
-    rpc ChangeMessageVisibility(ChangeMessageVisibilityRequest) returns (ChangeMessageVisibilityResponse);
+    rpc YmqGetQueueUrl(GetQueueUrlRequest) returns (GetQueueUrlResponse);
+    rpc YmqCreateQueue(CreateQueueRequest) returns (CreateQueueResponse);
+    rpc YmqSendMessage(SendMessageRequest) returns (SendMessageResponse);
+    rpc YmqReceiveMessage(ReceiveMessageRequest) returns (ReceiveMessageResponse);
+    rpc YmqGetQueueAttributes(GetQueueAttributesRequest) returns (GetQueueAttributesResponse);
+    rpc YmqListQueues(ListQueuesRequest) returns (ListQueuesResponse);
+    rpc YmqDeleteMessage(DeleteMessageRequest) returns (DeleteMessageResponse);
+    rpc YmqPurgeQueue(PurgeQueueRequest) returns (PurgeQueueResponse);
+    rpc YmqDeleteQueue(DeleteQueueRequest) returns (DeleteQueueResponse);
+    rpc YmqChangeMessageVisibility(ChangeMessageVisibilityRequest) returns (ChangeMessageVisibilityResponse);
+    rpc YmqSetQueueAttributes(SetQueueAttributesRequest) returns (SetQueueAttributesResponse);
+    rpc YmqSendMessageBatch(SendMessageBatchRequest) returns (SendMessageBatchResponse);
+    rpc YmqDeleteMessageBatch(DeleteMessageBatchRequest) returns (DeleteMessageBatchResponse);
+    rpc YmqChangeMessageVisibilityBatch(ChangeMessageVisibilityBatchRequest) returns (ChangeMessageVisibilityBatchResponse);
+    rpc YmqListDeadLetterSourceQueues(ListDeadLetterSourceQueuesRequest) returns (ListDeadLetterSourceQueuesResponse);
+    rpc YmqListQueueTags(ListQueueTagsRequest) returns (ListQueueTagsResponse);
+    rpc YmqTagQueue(TagQueueRequest) returns (TagQueueResponse);
+    rpc YmqUntagQueue(UntagQueueRequest) returns (UntagQueueResponse);
 }

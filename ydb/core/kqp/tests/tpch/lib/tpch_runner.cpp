@@ -2,7 +2,7 @@
 #include "tpch_tables.h"
 
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
-#include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 
 #include <library/cpp/resource/resource.h>
 
@@ -29,7 +29,7 @@ void ThrowOnError(const TStatus& status) {
 }
 
 template <typename T>
-void BuildRow(const TString& line, const TVector<TTableColumn>& columns, TValueBuilderBase<T>& row) {
+void BuildRow(const std::string& line, const std::vector<TTableColumn>& columns, TValueBuilderBase<T>& row) {
     TVector<TStringBuf> data = StringSplitter(line).Split('|').SkipEmpty();
     Y_ENSURE(data.size() == columns.size());
 
@@ -97,7 +97,7 @@ void BuildRow(const TString& line, const TVector<TTableColumn>& columns, TValueB
             if (optional) {
                 Y_ABORT("Optional<Decimal>");
             } else {
-                cell.Decimal(TDecimalValue(ToString(value)));
+                cell.Decimal(TDecimalValue(ToString(value), typeParser.GetDecimal().Precision, typeParser.GetDecimal().Scale));
             }
         } else {
             Y_ABORT("type kind `%s` not supported yet", ToString(typeParser.GetKind()).c_str());

@@ -130,13 +130,23 @@ void TKesusTablet::Handle(TEvInterconnect::TEvNodeConnected::TPtr& ev) {
 
 void TKesusTablet::Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
     const auto* msg = ev->Get();
-    for (auto* proxy : ProxiesByNode[msg->NodeId]) {
+    auto& nodeProxies = ProxiesByNode[msg->NodeId];
+    for (auto it = nodeProxies.begin(); it != nodeProxies.end(); /* nothing*/) {
+        auto* proxy = *it;
+        if (proxy->InterconnectSession && proxy->InterconnectSession != ev->Sender) {
+            // Skip proxies from a different session
+            ++it;
+            continue;
+        }
         ClearProxy(proxy, TActivationContext::AsActorContext());
         Proxies.erase(proxy->ActorID);
         TabletCounters->Simple()[COUNTER_PROXY_COUNT].Add(-1);
         TabletCounters->Cumulative()[COUNTER_PROXY_KICKED].Increment(1);
+        nodeProxies.erase(it++);
     }
-    ProxiesByNode.erase(msg->NodeId);
+    if (nodeProxies.empty()) {
+        ProxiesByNode.erase(msg->NodeId);
+    }
 }
 
 void TKesusTablet::Handle(TEvents::TEvWakeup::TPtr& ev) {
@@ -197,13 +207,20 @@ void TKesusTablet::Handle(TEvKesus::TEvRegisterProxy::TPtr& ev) {
     }
     proxy->ActorID = ev->Sender;
     proxy->Generation = record.GetProxyGeneration();
+    proxy->InterconnectSession = ev->InterconnectSession;
     // New proxy is always cleared when it registers
     ClearProxy(proxy, TActivationContext::AsActorContext());
     ProxiesByNode[ev->Sender.NodeId()].insert(proxy);
-    Send(ev->Sender,
+
+    // Send result using the same interconnect session the request was received from
+    auto result = std::make_unique<IEventHandle>(ev->Sender, SelfId(),
         new TEvKesus::TEvRegisterProxyResult(record.GetProxyGeneration()),
         IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession,
         ev->Cookie);
+    if (ev->InterconnectSession) {
+        result->Rewrite(TEvInterconnect::EvForward, ev->InterconnectSession);
+    }
+    TActivationContext::Send(result.release());
 }
 
 void TKesusTablet::Handle(TEvKesus::TEvUnregisterProxy::TPtr& ev) {

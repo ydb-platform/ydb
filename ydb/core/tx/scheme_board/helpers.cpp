@@ -109,7 +109,7 @@ ui64 GetPathVersion(const NKikimrSchemeBoard::TEvNotify& record) {
 }
 
 NSchemeBoard::TDomainId GetDomainId(const NKikimrSchemeBoard::TEvNotify& record) {
-    return PathIdFromPathId(record.GetPathSubdomainPathId());
+    return TPathId::FromProto(record.GetPathSubdomainPathId());
 }
 
 TSet<ui64> GetAbandonedSchemeShardIds(const NKikimrSchemeBoard::TEvNotify& record) {

@@ -1,8 +1,12 @@
 #pragma once
 #include "granule.h"
-#include <ydb/core/tx/columnshard/counters/engine_logs.h>
+
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storage.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
+#include <ydb/core/tx/columnshard/counters/engine_logs.h>
+#include <ydb/core/tx/columnshard/data_accessor/events.h>
+#include <ydb/core/tx/columnshard/data_accessor/manager.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 
 namespace NKikimr::NOlap {
 
@@ -11,7 +15,7 @@ private:
     i64 MetadataMemoryPortionsSize = 0;
     const NColumnShard::TEngineLogsCounters Counters;
     bool PackModificationFlag = false;
-    THashMap<ui64, const TGranuleMeta*> PackModifiedGranules;
+    THashMap<TInternalPathId, const TGranuleMeta*> PackModifiedGranules;
 
     static inline TAtomicCounter SumMetadataMemoryPortionsSize = 0;
 
@@ -31,9 +35,7 @@ private:
 
 public:
     TGranulesStat(const NColumnShard::TEngineLogsCounters& counters)
-        : Counters(counters)
-    {
-
+        : Counters(counters) {
     }
 
     const NColumnShard::TEngineLogsCounters& GetCounters() const {
@@ -43,6 +45,7 @@ public:
     class TModificationGuard: TNonCopyable {
     private:
         TGranulesStat& Owner;
+
     public:
         TModificationGuard(TGranulesStat& storage)
             : Owner(storage) {
@@ -89,35 +92,60 @@ public:
         const i64 value = SumMetadataMemoryPortionsSize.Add(portion.GetMetadataMemorySize());
         Counters.OnIndexMetadataUsageBytes(value);
     }
-
 };
 
 class TGranulesStorage {
 private:
     const NColumnShard::TEngineLogsCounters Counters;
+    const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager> DataAccessorsManager;
     std::shared_ptr<IStoragesManager> StoragesManager;
-    THashMap<ui64, std::shared_ptr<TGranuleMeta>> Tables; // pathId into Granule that equal to Table
+    THashMap<TInternalPathId, std::shared_ptr<TGranuleMeta>> Tables;   // pathId into Granule that equal to Table
     std::shared_ptr<TGranulesStat> Stats;
-public:
-    TGranulesStorage(const NColumnShard::TEngineLogsCounters counters, const std::shared_ptr<IStoragesManager>& storagesManager)
-        : Counters(counters)
-        , StoragesManager(storagesManager)
-        , Stats(std::make_shared<TGranulesStat>(Counters))
-    {
 
+public:
+    const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& GetDataAccessorsManager() const {
+        return DataAccessorsManager;
+    }
+
+    std::vector<TCSMetadataRequest> CollectMetadataRequests() {
+        std::vector<TCSMetadataRequest> result;
+        for (auto&& i : Tables) {
+            auto r = i.second->CollectMetadataRequests();
+            if (!r.size()) {
+                continue;
+            }
+            result.insert(result.end(), r.begin(), r.end());
+        }
+        return result;
+    }
+
+    TGranulesStorage(const NColumnShard::TEngineLogsCounters counters,
+        const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
+        const std::shared_ptr<IStoragesManager>& storagesManager)
+        : Counters(counters)
+        , DataAccessorsManager(dataAccessorsManager)
+        , StoragesManager(storagesManager)
+        , Stats(std::make_shared<TGranulesStat>(Counters)) {
+        AFL_VERIFY(DataAccessorsManager);
+        AFL_VERIFY(StoragesManager);
+    }
+
+    void FetchDataAccessors(const std::shared_ptr<TDataAccessorsRequest>& request) const {
+        DataAccessorsManager->AskData(request);
     }
 
     const std::shared_ptr<TGranulesStat>& GetStats() const {
         return Stats;
     }
 
-    std::shared_ptr<TGranuleMeta> RegisterTable(const ui64 pathId, const NColumnShard::TGranuleDataCounters& counters, const TVersionedIndex& versionedIndex) {
+    std::shared_ptr<TGranuleMeta> RegisterTable(
+        const TInternalPathId pathId, const NColumnShard::TGranuleDataCounters& counters, const TVersionedIndex& versionedIndex) {
         auto infoEmplace = Tables.emplace(pathId, std::make_shared<TGranuleMeta>(pathId, *this, counters, versionedIndex));
         AFL_VERIFY(infoEmplace.second);
         return infoEmplace.first->second;
     }
 
-    bool EraseTable(const ui64 pathId) {
+    bool EraseTable(const TInternalPathId pathId) {
         auto it = Tables.find(pathId);
         if (it == Tables.end()) {
             return false;
@@ -125,15 +153,16 @@ public:
         if (!it->second->IsErasable()) {
             return false;
         }
+        DataAccessorsManager->UnregisterController(pathId);
         Tables.erase(it);
         return true;
     }
 
-    const THashMap<ui64, std::shared_ptr<TGranuleMeta>>& GetTables() const {
+    const THashMap<TInternalPathId, std::shared_ptr<TGranuleMeta>>& GetTables() const {
         return Tables;
     }
 
-    void ReturnToIndexes(const THashMap<ui64, THashSet<ui64>>& portions) const {
+    void ReturnToIndexes(const THashMap<TInternalPathId, THashSet<ui64>>& portions) const {
         for (auto&& [g, portionIds] : portions) {
             auto it = Tables.find(g);
             AFL_VERIFY(it != Tables.end());
@@ -141,7 +170,7 @@ public:
         }
     }
 
-    std::vector<std::shared_ptr<TGranuleMeta>> GetTables(const std::optional<ui64> pathIdFrom, const std::optional<ui64> pathIdTo) const {
+    std::vector<std::shared_ptr<TGranuleMeta>> GetTables(const std::optional<TInternalPathId> pathIdFrom, const std::optional<TInternalPathId> pathIdTo) const {
         std::vector<std::shared_ptr<TGranuleMeta>> result;
         for (auto&& i : Tables) {
             if (pathIdFrom && i.first < *pathIdFrom) {
@@ -155,7 +184,7 @@ public:
         return result;
     }
 
-    std::shared_ptr<TPortionInfo> GetPortionOptional(const ui64 pathId, const ui64 portionId) const {
+    std::shared_ptr<TPortionInfo> GetPortionOptional(const TInternalPathId pathId, const ui64 portionId) const {
         auto it = Tables.find(pathId);
         if (it == Tables.end()) {
             return nullptr;
@@ -163,11 +192,17 @@ public:
         return it->second->GetPortionOptional(portionId);
     }
 
-    std::shared_ptr<TGranuleMeta> GetGranuleOptional(const ui64 pathId) const {
+    std::shared_ptr<TGranuleMeta> GetGranuleOptional(const TInternalPathId pathId) const {
         auto it = Tables.find(pathId);
         if (it == Tables.end()) {
             return nullptr;
         }
+        return it->second;
+    }
+
+    std::shared_ptr<TGranuleMeta> GetGranuleVerified(const TInternalPathId pathId) const {
+        auto it = Tables.find(pathId);
+        AFL_VERIFY(it != Tables.end());
         return it->second;
     }
 
@@ -180,7 +215,9 @@ public:
     }
 
     std::shared_ptr<TGranuleMeta> GetGranuleForCompaction(const std::shared_ptr<NDataLocks::TManager>& locksManager) const;
-
+    std::optional<NStorageOptimizer::TOptimizationPriority> GetCompactionPriority(const std::shared_ptr<NDataLocks::TManager>& locksManager,
+        const std::set<TInternalPathId>& pathIds = Default<std::set<TInternalPathId>>(), const std::optional<ui64> waitingPriority = std::nullopt,
+        std::shared_ptr<TGranuleMeta>* granuleResult = nullptr) const;
 };
 
-} // namespace NKikimr::NOlap
+}   // namespace NKikimr::NOlap

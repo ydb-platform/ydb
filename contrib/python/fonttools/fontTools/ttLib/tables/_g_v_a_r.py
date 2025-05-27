@@ -3,6 +3,8 @@ from functools import partial
 from fontTools.misc import sstruct
 from fontTools.misc.textTools import safeEval
 from fontTools.misc.lazyTools import LazyDict
+from fontTools.ttLib import OPTIMIZE_FONT_SPEED
+from fontTools.ttLib.tables.TupleVariation import TupleVariation
 from . import DefaultTable
 import array
 import itertools
@@ -11,10 +13,7 @@ import struct
 import sys
 import fontTools.ttLib.tables.TupleVariation as tv
 
-
 log = logging.getLogger(__name__)
-TupleVariation = tv.TupleVariation
-
 
 # https://www.microsoft.com/typography/otspec/gvar.htm
 # https://www.microsoft.com/typography/otspec/otvarcommonformats.htm
@@ -41,6 +40,16 @@ GVAR_HEADER_SIZE = sstruct.calcsize(GVAR_HEADER_FORMAT)
 
 
 class table__g_v_a_r(DefaultTable.DefaultTable):
+    """Glyph Variations table
+
+    The ``gvar`` table provides the per-glyph variation data that
+    describe how glyph outlines in the ``glyf`` table change across
+    the variation space that is defined for the font in the ``fvar``
+    table.
+
+    See also https://learn.microsoft.com/en-us/typography/opentype/spec/gvar
+    """
+
     dependencies = ["fvar", "glyf"]
 
     def __init__(self, tag=None):
@@ -49,6 +58,7 @@ class table__g_v_a_r(DefaultTable.DefaultTable):
         self.variations = {}
 
     def compile(self, ttFont):
+
         axisTags = [axis.axisTag for axis in ttFont["fvar"].axes]
         sharedTuples = tv.compileSharedTuples(
             axisTags, itertools.chain(*self.variations.values())
@@ -83,6 +93,7 @@ class table__g_v_a_r(DefaultTable.DefaultTable):
         return b"".join(result)
 
     def compileGlyphs_(self, ttFont, axisTags, sharedCoordIndices):
+        optimizeSpeed = ttFont.cfg[OPTIMIZE_FONT_SPEED]
         result = []
         glyf = ttFont["glyf"]
         for glyphName in ttFont.getGlyphOrder():
@@ -93,7 +104,11 @@ class table__g_v_a_r(DefaultTable.DefaultTable):
             pointCountUnused = 0  # pointCount is actually unused by compileGlyph
             result.append(
                 compileGlyph_(
-                    variations, pointCountUnused, axisTags, sharedCoordIndices
+                    variations,
+                    pointCountUnused,
+                    axisTags,
+                    sharedCoordIndices,
+                    optimizeSize=not optimizeSpeed,
                 )
             )
         return result
@@ -248,9 +263,11 @@ class table__g_v_a_r(DefaultTable.DefaultTable):
             return len(getattr(glyph, "coordinates", [])) + NUM_PHANTOM_POINTS
 
 
-def compileGlyph_(variations, pointCount, axisTags, sharedCoordIndices):
+def compileGlyph_(
+    variations, pointCount, axisTags, sharedCoordIndices, *, optimizeSize=True
+):
     tupleVariationCount, tuples, data = tv.compileTupleVariationStore(
-        variations, pointCount, axisTags, sharedCoordIndices
+        variations, pointCount, axisTags, sharedCoordIndices, optimizeSize=optimizeSize
     )
     if tupleVariationCount == 0:
         return b""

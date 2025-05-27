@@ -2,8 +2,6 @@ UNITTEST_FOR(ydb/core/client/minikql_result_lib)
 
 FORK_SUBTESTS()
 
-TIMEOUT(300)
-
 SIZE(MEDIUM)
 
 SRCS(
@@ -19,9 +17,5 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 REQUIREMENTS(network:full)
-
-IF (SANITIZER_TYPE)
-    REQUIREMENTS(ram:13)
-ENDIF()
 
 END()

@@ -81,44 +81,21 @@ void TEngineLogsCounters::OnActualizationTask(const ui32 evictCount, const ui32 
 }
 
 void TEngineLogsCounters::TPortionsInfoGuard::OnNewPortion(const std::shared_ptr<NOlap::TPortionInfo>& portion) const {
-    const ui32 producedId = (ui32)(portion->HasRemoveSnapshot() ? NOlap::NPortion::EProduced::INACTIVE : portion->GetMeta().Produced);
+    const ui32 producedId = (ui32)portion->GetProduced();
     Y_ABORT_UNLESS(producedId < BlobGuards.size());
-    THashSet<NOlap::TUnifiedBlobId> blobIds;
-    for (auto&& i : portion->GetRecords()) {
-        const auto blobId = portion->GetBlobId(i.GetBlobRange().GetBlobIdxVerified());
-        if (blobIds.emplace(blobId).second) {
-            BlobGuards[producedId]->Add(blobId.BlobSize(), blobId.BlobSize());
-        }
-    }
-    for (auto&& i : portion->GetIndexes()) {
-        if (i.HasBlobRange()) {
-            const auto blobId = portion->GetBlobId(i.GetBlobRangeVerified().GetBlobIdxVerified());
-            if (blobIds.emplace(blobId).second) {
-                BlobGuards[producedId]->Add(blobId.BlobSize(), blobId.BlobSize());
-            }
-        }
+    for (auto&& blobId : portion->GetBlobIds()) {
+        BlobGuards[producedId]->Add(blobId.BlobSize(), blobId.BlobSize());
     }
     PortionRecordCountGuards[producedId]->Add(portion->GetRecordsCount(), 1);
     PortionSizeGuards[producedId]->Add(portion->GetTotalBlobBytes(), 1);
 }
 
 void TEngineLogsCounters::TPortionsInfoGuard::OnDropPortion(const std::shared_ptr<NOlap::TPortionInfo>& portion) const {
-    const ui32 producedId = (ui32)(portion->HasRemoveSnapshot() ? NOlap::NPortion::EProduced::INACTIVE : portion->GetMeta().Produced);
+    const ui32 producedId = (ui32)portion->GetProduced();
     Y_ABORT_UNLESS(producedId < BlobGuards.size());
     THashSet<NOlap::TUnifiedBlobId> blobIds;
-    for (auto&& i : portion->GetRecords()) {
-        const auto blobId = portion->GetBlobId(i.GetBlobRange().GetBlobIdxVerified());
-        if (blobIds.emplace(blobId).second) {
-            BlobGuards[producedId]->Sub(blobId.BlobSize(), blobId.BlobSize());
-        }
-    }
-    for (auto&& i : portion->GetIndexes()) {
-        if (i.HasBlobRange()) {
-            const auto blobId = portion->GetBlobId(i.GetBlobRangeVerified().GetBlobIdxVerified());
-            if (blobIds.emplace(blobId).second) {
-                BlobGuards[producedId]->Sub(blobId.BlobSize(), blobId.BlobSize());
-            }
-        }
+    for (auto&& blobId : portion->GetBlobIds()) {
+        BlobGuards[producedId]->Sub(blobId.BlobSize(), blobId.BlobSize());
     }
     PortionRecordCountGuards[producedId]->Sub(portion->GetRecordsCount(), 1);
     PortionSizeGuards[producedId]->Sub(portion->GetTotalBlobBytes(), 1);

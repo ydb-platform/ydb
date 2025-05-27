@@ -37,6 +37,7 @@ class TPreparedQueryAllocHolder;
 struct TPhyTxResultMetadata {
     NKikimr::NMiniKQL::TType* MkqlItemType;
     TVector<ui32> ColumnOrder;
+    TVector<TString> ColumnHints;
 };
 
 struct TTableConstInfoMap : public TAtomicRefCount<TTableConstInfoMap> {
@@ -58,6 +59,10 @@ public:
     const TStagePredictor& GetCalculationPredictor(const size_t stageIdx) const;
 
     const TVector<TPhyTxResultMetadata>& GetTxResultsMeta() const { return TxResultsMeta; }
+
+    bool EnableShuffleElimination() const {
+        return Proto->GetEnableShuffleElimination();
+    }
 
     const NKqpProto::TKqpPhyStage& GetStages(size_t index) const {
         return Proto->GetStages(index);
@@ -143,7 +148,10 @@ private:
 
 public:
 
-    TPreparedQueryHolder(NKikimrKqp::TPreparedQuery* proto, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry);
+    TPreparedQueryHolder(
+        NKikimrKqp::TPreparedQuery* proto,
+        const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
+        bool noFillTables = false);
     ~TPreparedQueryHolder();
 
     using TConstPtr = std::shared_ptr<const TPreparedQueryHolder>;

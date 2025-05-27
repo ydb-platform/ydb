@@ -6,10 +6,21 @@
 #include <ydb/core/scheme/scheme_types_defs.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 
+namespace NKikimrNodeBroker {
+    class TNodeInfoSchema;
+}
+
 namespace NKikimr {
 namespace NNodeBroker {
 
+enum class ENodeState : ui8;
+
 struct Schema : NIceDb::Schema {
+    enum class EMainNodesTable : ui64 {
+        Nodes = 0,
+        NodesV2 = 1,
+    };
+
     struct Nodes : Table<1> {
         struct ID : Column<1, NScheme::NTypeIds::Uint32> {};
         struct Host : Column<2, NScheme::NTypeIds::Utf8> {};
@@ -25,6 +36,7 @@ struct Schema : NIceDb::Schema {
         struct Location : Column<12, NScheme::NTypeIds::String> {};
         struct ServicedSubDomain : Column<13, NScheme::NTypeIds::String> { using Type = NKikimrSubDomains::TDomainKey; };
         struct SlotIndex : Column<14, NScheme::NTypeIds::Uint32> {};
+        struct AuthorizedByCertificate : Column<15, NScheme::NTypeIds::Bool> {};
 
         using TKey = TableKey<ID>;
         using TColumns = TableColumns<
@@ -37,8 +49,24 @@ struct Schema : NIceDb::Schema {
             Expire,
             Location,
             ServicedSubDomain,
-            SlotIndex
+            SlotIndex,
+            AuthorizedByCertificate
         >;
+    };
+
+    struct NodesV2 : Table<4> {
+        struct NodeId : Column<1, NScheme::NTypeIds::Uint32> {};
+        struct NodeInfo : Column<2, NScheme::NTypeIds::String> { using Type = NKikimrNodeBroker::TNodeInfoSchema; };
+        struct State : Column<3, NScheme::NTypeIds::Uint8> { using Type = ENodeState; };
+        struct Version : Column<4, NScheme::NTypeIds::Uint64> {};
+        struct SchemaVersion : Column<5, NScheme::NTypeIds::Uint64> {};
+
+        using TKey = TableKey<NodeId>;
+        using TColumns = TableColumns<NodeId, NodeInfo, State, Version, SchemaVersion>;
+    };
+
+    enum EConfigKey : ui32 {
+        ConfigKeyConfig = 1,
     };
 
     struct Config : Table<2> {
@@ -49,6 +77,18 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<Key, Value>;
     };
 
+    enum EParamKey : ui32 {
+        ParamKeyConfigSubscription = 1,
+        ParamKeyCurrentEpochId = 2,
+        ParamKeyCurrentEpochVersion = 3,
+        ParamKeyCurrentEpochStart = 4,
+        ParamKeyCurrentEpochEnd = 5,
+        ParamKeyNextEpochEnd = 6,
+        ParamKeyApproximateEpochStartId = 7,
+        ParamKeyApproximateEpochStartVersion = 8,
+        ParamKeyMainNodesTable = 9,
+    };
+
     struct Params : Table<3> {
         struct Key : Column<1, NScheme::NTypeIds::Uint32> {};
         struct Value : Column<2, NScheme::NTypeIds::Uint64> {};
@@ -57,7 +97,7 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<Key, Value>;
     };
 
-    using TTables = SchemaTables<Nodes, Config, Params>;
+    using TTables = SchemaTables<Nodes, Config, Params, NodesV2>;
     using TSettings = SchemaSettings<ExecutorLogBatching<true>,
                                      ExecutorLogFlushPeriod<TDuration::MicroSeconds(512).GetValue()>>;
 };

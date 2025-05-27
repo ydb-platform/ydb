@@ -8,8 +8,8 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
 
-#include <ydb/library/yql/dq/actors/compute/retry_queue.h>
-#include <ydb/library/yql/minikql/mkql_string_util.h>
+#include <ydb/library/yql/dq/actors/common/retry_queue.h>
+#include <yql/essentials/minikql/mkql_string_util.h>
 #include <ydb/library/yql/providers/s3/common/util.h>
 
 #include <library/cpp/string_utils/quote/quote.h>
@@ -284,7 +284,7 @@ private:
         IssuesFromMessage(result->Get()->Record.GetIssues(), issues);
         LOG_E("TS3ReadActor", "Error while object listing, details: TEvObjectPathReadError: " << issues.ToOneLineString());
         issues = NS3Util::AddParentIssue(TStringBuilder{} << "Error while object listing", std::move(issues));
-        Send(ComputeActorId, new TEvAsyncInputError(InputIndex, issues, NYql::NDqProto::StatusIds::EXTERNAL_ERROR));
+        Send(ComputeActorId, new TEvAsyncInputError(InputIndex, issues, result->Get()->Record.GetFatalCode()));
     }
 
     void HandleAck(TEvS3Provider::TEvAck::TPtr& ev) {
@@ -419,7 +419,7 @@ private:
 
     void Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
         LOG_T("TS3ReadActor", "Handle undelivered FileQueue ");
-        if (!FileQueueEvents.HandleUndelivered(ev)) {
+        if (FileQueueEvents.HandleUndelivered(ev) != NYql::NDq::TRetryEventsQueue::ESessionState::WrongSession) {
             TIssues issues{TIssue{TStringBuilder() << "FileQueue was lost"}};
             Send(ComputeActorId, new TEvAsyncInputError(InputIndex, issues, NYql::NDqProto::StatusIds::UNAVAILABLE));
         }

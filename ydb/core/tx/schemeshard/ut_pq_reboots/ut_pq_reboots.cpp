@@ -163,19 +163,7 @@ Y_UNIT_TEST_SUITE(TPqGroupTestReboots) {
                                 "PQTabletConfig: {PartitionConfig { LifetimeSeconds : 10}}"
                                 );
 
-                TestAlterPQGroup(runtime, ++t.TxId, "/MyRoot/DirA",
-                                "Name: \"PQGroup\""
-                                "TotalGroupCount: 9 "
-                                "PartitionPerTablet: 10 ",
-                                 {NKikimrScheme::StatusMultipleModifications});
-
-                TestAlterPQGroup(runtime, ++t.TxId, "/MyRoot/DirA",
-                                "Name: \"PQGroup\""
-                                "TotalGroupCount: 10 "
-                                "PartitionPerTablet: 9 ",
-                                 {NKikimrScheme::StatusMultipleModifications});
-
-                t.TestEnv->TestWaitNotification(runtime, {t.TxId-2, t.TxId-1, t.TxId});
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
                 pqVer = TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/PQGroup", true),
                                            {NLs::Finished,

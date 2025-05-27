@@ -1,0 +1,167 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     MIT                  14395d49cccf7dd9c262788c7c3eb609
+BELONGS ya.make
+FILE_INCLUDE AUTHORS found in files: COPYING at line 19, lib/sfparse/COPYING at line 19
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        COPYING [5:22]
+        lib/sfparse/COPYING [5:22]
+
+KEEP     MIT                  8c6b397cbef46628bea401075e15b1d5
+BELONGS ya.make
+    License text:
+        The MIT License
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        COPYING [1:1]
+        lib/sfparse/COPYING [1:1]
+
+KEEP     MIT                  a00cb0c2918046e6e350bbe37dc87fff
+BELONGS ya.make
+    License text:
+        License
+        -------
+        The MIT License
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        README.rst [68:71]
+
+KEEP     MIT                  a3a8f7feced3937b87cd090ba748e24b
+BELONGS ya.make
+FILE_INCLUDE AUTHORS found in files: lib/includes/nghttp3/nghttp3.h at line 22, lib/includes/nghttp3/version.h at line 21, lib/nghttp3_balloc.c at line 21, lib/nghttp3_balloc.h at line 21, lib/nghttp3_buf.c at line 21, lib/nghttp3_buf.h at line 21, lib/nghttp3_conn.c at line 20, lib/nghttp3_conn.h at line 20, lib/nghttp3_conv.c at line 21, lib/nghttp3_conv.h at line 21, lib/nghttp3_debug.c at line 21, lib/nghttp3_debug.h at line 21, lib/nghttp3_err.c at line 20, lib/nghttp3_err.h at line 20, lib/nghttp3_frame.c at line 21, lib/nghttp3_frame.h at line 21, lib/nghttp3_gaptr.c at line 21, lib/nghttp3_gaptr.h at line 21, lib/nghttp3_http.c at line 21, lib/nghttp3_http.h at line 21, lib/nghttp3_idtr.c at line 21, lib/nghttp3_idtr.h at line 21, lib/nghttp3_ksl.c at line 21, lib/nghttp3_ksl.h at line 21, lib/nghttp3_macro.h at line 21, lib/nghttp3_map.c at line 22, lib/nghttp3_map.h at line 22, lib/nghttp3_mem.c at line 22, lib/nghttp3_mem.h at line 22, lib/nghttp3_objalloc.c at line 21, lib/nghttp3_objalloc.h at line 21, lib/nghttp3_opl.c at line 21, lib/nghttp3_opl.h at line 21, lib/nghttp3_pq.c at line 22, lib/nghttp3_pq.h at line 22, lib/nghttp3_qpack.c at line 21, lib/nghttp3_qpack.h at line 21, lib/nghttp3_qpack_huffman.c at line 21, lib/nghttp3_qpack_huffman.h at line 21, lib/nghttp3_qpack_huffman_data.c at line 21, lib/nghttp3_range.c at line 21, lib/nghttp3_range.h at line 21, lib/nghttp3_rcbuf.c at line 21, lib/nghttp3_rcbuf.h at line 21, lib/nghttp3_ringbuf.c at line 21, lib/nghttp3_ringbuf.h at line 21, lib/nghttp3_str.c at line 22, lib/nghttp3_str.h at line 22, lib/nghttp3_stream.c at line 20, lib/nghttp3_stream.h at line 20, lib/nghttp3_tnode.c at line 20, lib/nghttp3_tnode.h at line 20, lib/nghttp3_unreachable.c at line 21, lib/nghttp3_unreachable.h at line 21, lib/nghttp3_vec.c at line 21, lib/nghttp3_vec.h at line 21, lib/nghttp3_version.c at line 20, lib/sfparse/sfparse.c at line 22, lib/sfparse/sfparse.h at line 22
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        lib/includes/nghttp3/nghttp3.h [8:25]
+        lib/includes/nghttp3/version.h [7:24]
+        lib/nghttp3_balloc.c [7:24]
+        lib/nghttp3_balloc.h [7:24]
+        lib/nghttp3_buf.c [7:24]
+        lib/nghttp3_buf.h [7:24]
+        lib/nghttp3_conn.c [6:23]
+        lib/nghttp3_conn.h [6:23]
+        lib/nghttp3_conv.c [7:24]
+        lib/nghttp3_conv.h [7:24]
+        lib/nghttp3_debug.c [7:24]
+        lib/nghttp3_debug.h [7:24]
+        lib/nghttp3_err.c [6:23]
+        lib/nghttp3_err.h [6:23]
+        lib/nghttp3_frame.c [7:24]
+        lib/nghttp3_frame.h [7:24]
+        lib/nghttp3_gaptr.c [7:24]
+        lib/nghttp3_gaptr.h [7:24]
+        lib/nghttp3_http.c [7:24]
+        lib/nghttp3_http.h [7:24]
+        lib/nghttp3_idtr.c [7:24]
+        lib/nghttp3_idtr.h [7:24]
+        lib/nghttp3_ksl.c [7:24]
+        lib/nghttp3_ksl.h [7:24]
+        lib/nghttp3_macro.h [7:24]
+        lib/nghttp3_map.c [8:25]
+        lib/nghttp3_map.h [8:25]
+        lib/nghttp3_mem.c [8:25]
+        lib/nghttp3_mem.h [8:25]
+        lib/nghttp3_objalloc.c [7:24]
+        lib/nghttp3_objalloc.h [7:24]
+        lib/nghttp3_opl.c [7:24]
+        lib/nghttp3_opl.h [7:24]
+        lib/nghttp3_pq.c [8:25]
+        lib/nghttp3_pq.h [8:25]
+        lib/nghttp3_qpack.c [7:24]
+        lib/nghttp3_qpack.h [7:24]
+        lib/nghttp3_qpack_huffman.c [7:24]
+        lib/nghttp3_qpack_huffman.h [7:24]
+        lib/nghttp3_qpack_huffman_data.c [7:24]
+        lib/nghttp3_range.c [7:24]
+        lib/nghttp3_range.h [7:24]
+        lib/nghttp3_rcbuf.c [7:24]
+        lib/nghttp3_rcbuf.h [7:24]
+        lib/nghttp3_ringbuf.c [7:24]
+        lib/nghttp3_ringbuf.h [7:24]
+        lib/nghttp3_str.c [8:25]
+        lib/nghttp3_str.h [8:25]
+        lib/nghttp3_stream.c [6:23]
+        lib/nghttp3_stream.h [6:23]
+        lib/nghttp3_tnode.c [6:23]
+        lib/nghttp3_tnode.h [6:23]
+        lib/nghttp3_unreachable.c [7:24]
+        lib/nghttp3_unreachable.h [7:24]
+        lib/nghttp3_vec.c [7:24]
+        lib/nghttp3_vec.h [7:24]
+        lib/nghttp3_version.c [6:23]
+        lib/sfparse/sfparse.c [8:25]
+        lib/sfparse/sfparse.h [8:25]
+
+KEEP     FSFAP                d02cc4799cbd521d2aa8c3ff19e655f6
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: FSFAP
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.gnu.org/prep/maintain/html_node/License-Notices-for-Other-Files.html, https://spdx.org/licenses/FSFAP
+    Files with this license:
+        INSTALL [7:10]
+
+KEEP     MIT                  f759889bc387afe17a80ab852d7af858
+BELONGS ya.make
+FILE_INCLUDE AUTHORS found in files: lib/sfparse/sfparse.c at line 1076
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        lib/sfparse/sfparse.c [1062:1080]

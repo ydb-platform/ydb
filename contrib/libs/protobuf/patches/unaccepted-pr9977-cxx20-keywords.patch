@@ -1,0 +1,36 @@
+From 43f60b1d59c458749fc947b3c5ddbb36b234d5af Mon Sep 17 00:00:00 2001
+From: Keith Smiley <keithbsmiley@gmail.com>
+Date: Mon, 16 May 2022 10:25:38 -0700
+Subject: [PATCH] Add new C++ 20 keywords
+
+Discovered in https://github.com/envoyproxy/envoy/issues/21010
+---
+ src/google/protobuf/compiler/cpp/helpers.cc | 6 +++++-
+ 1 file changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/src/google/protobuf/compiler/cpp/cpp_helpers.cc b/src/google/protobuf/compiler/cpp/cpp_helpers.cc
+index 4b7c5c9d91..e17cc9c66c 100644
+--- a/src/google/protobuf/compiler/cpp/helpers.cc
++++ b/src/google/protobuf/compiler/cpp/helpers.cc
+@@ -93,9 +93,12 @@ static const char* const kKeywordList[] = {  //
+     "char",
+     "class",
+     "compl",
++    "concept",
+     "const",
+-    "constexpr",
+     "const_cast",
++    "consteval",
++    "constexpr",
++    "constinit",
+     "continue",
+     "decltype",
+     "default",
+@@ -132,6 +135,7 @@ static const char* const kKeywordList[] = {  //
+     "public",
+     "register",
+     "reinterpret_cast",
++    "requires",
+     "return",
+     "short",
+     "signed",

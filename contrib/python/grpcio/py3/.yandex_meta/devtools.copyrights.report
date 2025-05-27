@@ -1,0 +1,304 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0f2ee97b72f8652f2f1b888d86348121
+BELONGS ya.make
+    License text:
+        \# Copyright 2015 gRPC authors.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        commands.py [1:1]
+        grpc/_cython/__init__.py [1:1]
+        grpc/_cython/_cygrpc/__init__.py [1:1]
+        grpc/_cython/_cygrpc/call.pxd.pxi [1:1]
+        grpc/_cython/_cygrpc/call.pyx.pxi [1:1]
+        grpc/_cython/_cygrpc/channel.pxd.pxi [1:1]
+        grpc/_cython/_cygrpc/channel.pyx.pxi [1:1]
+        grpc/_cython/_cygrpc/completion_queue.pxd.pxi [1:1]
+        grpc/_cython/_cygrpc/completion_queue.pyx.pxi [1:1]
+        grpc/_cython/_cygrpc/credentials.pxd.pxi [1:1]
+        grpc/_cython/_cygrpc/credentials.pyx.pxi [1:1]
+        grpc/_cython/_cygrpc/grpc.pxi [1:1]
+        grpc/_cython/_cygrpc/records.pxd.pxi [1:1]
+        grpc/_cython/_cygrpc/records.pyx.pxi [1:1]
+        grpc/_cython/_cygrpc/server.pxd.pxi [1:1]
+        grpc/_cython/_cygrpc/server.pyx.pxi [1:1]
+        grpc/_cython/cygrpc.pxd [1:1]
+        grpc/_cython/cygrpc.pyx [1:1]
+        grpc/_plugin_wrapping.py [1:1]
+        grpc/_utilities.py [1:1]
+        grpc/beta/__init__.py [1:1]
+        grpc/beta/interfaces.py [1:1]
+        grpc/beta/utilities.py [1:1]
+        grpc/framework/__init__.py [1:1]
+        grpc/framework/common/__init__.py [1:1]
+        grpc/framework/common/cardinality.py [1:1]
+        grpc/framework/common/style.py [1:1]
+        grpc/framework/foundation/__init__.py [1:1]
+        grpc/framework/foundation/abandonment.py [1:1]
+        grpc/framework/foundation/callable_util.py [1:1]
+        grpc/framework/foundation/future.py [1:1]
+        grpc/framework/foundation/logging_pool.py [1:1]
+        grpc/framework/foundation/stream.py [1:1]
+        grpc/framework/foundation/stream_util.py [1:1]
+        grpc/framework/interfaces/__init__.py [1:1]
+        grpc/framework/interfaces/base/__init__.py [1:1]
+        grpc/framework/interfaces/base/base.py [1:1]
+        grpc/framework/interfaces/base/utilities.py [1:1]
+        grpc/framework/interfaces/face/__init__.py [1:1]
+        grpc/framework/interfaces/face/face.py [1:1]
+        grpc/framework/interfaces/face/utilities.py [1:1]
+        grpc_core_dependencies.py [1:1]
+        grpc_version.py [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 102c1910c87bee28e8a69885f85346f4
+BELONGS ya.make
+    License text:
+        \# Copyright 2022 gRPC authors.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        grpc/_typing.py [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1393ed0d9a5e8e3a97f2447521ecb0a6
+BELONGS ya.make
+    License text:
+        \# Copyright 2018 gRPC authors.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        grpc/_cython/_cygrpc/arguments.pyx.pxi [1:1]
+        grpc/_cython/_cygrpc/fork_posix.pxd.pxi [1:1]
+        grpc/_cython/_cygrpc/fork_posix.pyx.pxi [1:1]
+        grpc/_cython/_cygrpc/fork_windows.pyx.pxi [1:1]
+        grpc/_cython/_cygrpc/grpc_gevent.pyx.pxi [1:1]
+        grpc/_cython/_cygrpc/time.pxd.pxi [1:1]
+        grpc/_cython/_cygrpc/time.pyx.pxi [1:1]
+        grpc/experimental/__init__.py [1:1]
+        grpc/experimental/gevent.py [1:1]
+        grpc/experimental/session_cache.py [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1ad5a8379223f39b4124906a5bd2437d
+BELONGS ya.make
+    License text:
+        \# Copyright 2019 The gRPC authors.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        grpc/_compression.py [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1c0b49517f30a005a1f30fc39200d3ee
+BELONGS ya.make
+    License text:
+        \# Copyright 2019 gRPC authors.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        grpc/_cython/_cygrpc/aio/call.pxd.pxi [1:1]
+        grpc/_cython/_cygrpc/aio/call.pyx.pxi [1:1]
+        grpc/_cython/_cygrpc/aio/callback_common.pxd.pxi [1:1]
+        grpc/_cython/_cygrpc/aio/callback_common.pyx.pxi [1:1]
+        grpc/_cython/_cygrpc/aio/channel.pxd.pxi [1:1]
+        grpc/_cython/_cygrpc/aio/channel.pyx.pxi [1:1]
+        grpc/_cython/_cygrpc/aio/grpc_aio.pxd.pxi [1:1]
+        grpc/_cython/_cygrpc/aio/grpc_aio.pyx.pxi [1:1]
+        grpc/_cython/_cygrpc/aio/rpc_status.pxd.pxi [1:1]
+        grpc/_cython/_cygrpc/aio/rpc_status.pyx.pxi [1:1]
+        grpc/_cython/_cygrpc/vtable.pxd.pxi [1:1]
+        grpc/_cython/_cygrpc/vtable.pyx.pxi [1:1]
+        grpc/aio/__init__.py [1:1]
+        grpc/aio/_call.py [1:1]
+        grpc/aio/_channel.py [1:1]
+        grpc/aio/_interceptor.py [1:1]
+        grpc/aio/_utils.py [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 249314deafd9b3e055b23b29bdbf09f3
+BELONGS ya.make
+    License text:
+        \# Copyright 2020 gRPC authors.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        grpc/aio/_metadata.py [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 24f793f95f5c432d60ec3ef10b0e1a07
+BELONGS ya.make
+    License text:
+        Copyright 2016, Google Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [208:208]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3f8e6ecc96f8543539ce4b548cdc9afb
+BELONGS ya.make
+    License text:
+        \# Copyright 2021 The gRPC Authors
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        grpc/_cython/_cygrpc/csds.pyx.pxi [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 57712bcea01f379c970232b100dc2326
+BELONGS ya.make
+    License text:
+        \# Copyright 2020 The gRPC authors.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        grpc/_cython/_cygrpc/thread.pyx.pxi [1:1]
+        grpc/_runtime_protos.py [1:1]
+        grpc/_simple_stubs.py [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7b51323881f67ba78a30a266dca846ec
+BELONGS ya.make
+    License text:
+        \# Copyright 2018 The gRPC Authors
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        _parallel_compile_patch.py [1:1]
+        grpc/_cython/_cygrpc/_hooks.pxd.pxi [1:1]
+        grpc/_cython/_cygrpc/_hooks.pyx.pxi [1:1]
+        grpc/_cython/_cygrpc/arguments.pxd.pxi [1:1]
+        grpc/_cython/_cygrpc/channelz.pyx.pxi [1:1]
+        grpc/_cython/_cygrpc/propagation_bits.pxd.pxi [1:1]
+        grpc/_cython/_cygrpc/propagation_bits.pyx.pxi [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8183794cfdcd444d086a2c63a36d9beb
+BELONGS ya.make
+    License text:
+        \# Copyright 2020 The gRPC Authors
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        grpc/_cython/_cygrpc/aio/completion_queue.pxd.pxi [1:1]
+        grpc/_cython/_cygrpc/aio/completion_queue.pyx.pxi [1:1]
+        grpc/aio/_base_channel.py [1:1]
+        grpc/aio/_base_server.py [1:1]
+        grpc/experimental/aio/__init__.py [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 90fc8bbf7a57ec743af147a4496a5eb2
+BELONGS ya.make
+    License text:
+        \# Copyright 2019 The gRPC Authors
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        grpc/_cython/_cygrpc/aio/common.pyx.pxi [1:1]
+        grpc/_cython/_cygrpc/aio/server.pxd.pxi [1:1]
+        grpc/_cython/_cygrpc/aio/server.pyx.pxi [1:1]
+        grpc/aio/_base_call.py [1:1]
+        grpc/aio/_server.py [1:1]
+        grpc/aio/_typing.py [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL cd2dccf3745a79cfb4fea6a49cb170ae
+BELONGS ya.make
+    License text:
+        \# Copyright 2015-2016 gRPC authors.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        grpc/__init__.py [1:1]
+        grpc/beta/implementations.py [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ce123482847d9599548cd2797b1f2978
+BELONGS ya.make
+    License text:
+        \# Copyright 2017 gRPC authors.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        grpc/_cython/_cygrpc/event.pxd.pxi [1:1]
+        grpc/_cython/_cygrpc/event.pyx.pxi [1:1]
+        grpc/_cython/_cygrpc/grpc_gevent.pxd.pxi [1:1]
+        grpc/_cython/_cygrpc/metadata.pxd.pxi [1:1]
+        grpc/_cython/_cygrpc/metadata.pyx.pxi [1:1]
+        grpc/_cython/_cygrpc/operation.pxd.pxi [1:1]
+        grpc/_cython/_cygrpc/operation.pyx.pxi [1:1]
+        grpc/_cython/_cygrpc/tag.pxd.pxi [1:1]
+        grpc/_cython/_cygrpc/tag.pyx.pxi [1:1]
+        grpc/_interceptor.py [1:1]
+        grpc/beta/_metadata.py [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f8fb9a8ebe3e4b096090bd006ebb72cc
+BELONGS ya.make
+    License text:
+        \# Copyright 2016 gRPC authors.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        _spawn_patch.py [1:1]
+        grpc/_auth.py [1:1]
+        grpc/_channel.py [1:1]
+        grpc/_common.py [1:1]
+        grpc/_cython/_cygrpc/grpc_string.pyx.pxi [1:1]
+        grpc/_cython/_cygrpc/security.pxd.pxi [1:1]
+        grpc/_cython/_cygrpc/security.pyx.pxi [1:1]
+        grpc/_server.py [1:1]
+        grpc/beta/_client_adaptations.py [1:1]
+        grpc/beta/_server_adaptations.py [1:1]
+        support.py [1:1]

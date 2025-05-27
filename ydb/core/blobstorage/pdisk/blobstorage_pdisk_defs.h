@@ -2,7 +2,7 @@
 #include "defs.h"
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/blobstorage/crypto/default.h>
-#include <ydb/core/protos/blobstorage.pb.h>
+#include <ydb/core/protos/blobstorage_base.pb.h>
 
 #include "blobstorage_pdisk_signature.h"
 

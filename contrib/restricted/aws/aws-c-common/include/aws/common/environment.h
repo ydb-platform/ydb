@@ -8,6 +8,8 @@
 
 #include <aws/common/common.h>
 
+AWS_PUSH_SANE_WARNING_LEVEL
+
 struct aws_string;
 
 /*
@@ -18,6 +20,22 @@ struct aws_string;
 AWS_EXTERN_C_BEGIN
 
 /*
+ * Get the value of an environment variable.  If the variable is not set, the output string will be set to NULL.
+ * Not thread-safe
+ */
+AWS_COMMON_API
+struct aws_string *aws_get_env(struct aws_allocator *allocator, const char *name);
+
+/*
+ * Get the value of an environment variable.  If the variable is not set or is empty, the output string will be set to
+ * NULL. Not thread-safe
+ */
+AWS_COMMON_API
+struct aws_string *aws_get_env_nonempty(struct aws_allocator *allocator, const char *name);
+
+/*
+ * *DEPRECATED*
+ * Please use the `aws_get_env` or `aws_get_env_nonempty` instead.
  * Get the value of an environment variable.  If the variable is not set, the output string will be set to NULL.
  * Not thread-safe
  */
@@ -42,5 +60,6 @@ AWS_COMMON_API
 int aws_unset_environment_value(const struct aws_string *variable_name);
 
 AWS_EXTERN_C_END
+AWS_POP_SANE_WARNING_LEVEL
 
 #endif /* AWS_COMMON_ENVIRONMENT_H */

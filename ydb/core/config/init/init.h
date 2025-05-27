@@ -2,10 +2,10 @@
 
 #include <ydb/core/driver_lib/run/service_mask.h>
 #include <ydb/core/base/event_filter.h>
-#include <ydb/core/config/init/source_location.h>
+#include <ydb/core/util/source_location.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/library/actors/core/interconnect.h>
-#include <ydb/public/lib/deprecated/kicli/kicli.h>
+#include <ydb/library/yaml_config/yaml_config.h>
 
 #include <library/cpp/getopt/small/last_getopt_opts.h>
 
@@ -30,7 +30,7 @@ struct TConfigItemInfo {
     };
 
     struct TUpdate {
-        const char* File;
+        TString File;
         ui32 Line;
         EUpdateKind Kind;
     };
@@ -77,10 +77,10 @@ class IConfigUpdateTracer {
 public:
     virtual ~IConfigUpdateTracer() {}
     void AddUpdate(ui32 kind, TConfigItemInfo::EUpdateKind update, const NCompat::TSourceLocation location = NCompat::TSourceLocation::current()) {
-        return this->Add(kind, TConfigItemInfo::TUpdate{location.file_name(), location.line(), update});
+        return this->Add(kind, TConfigItemInfo::TUpdate{NUtil::TrimSourceFileName(location.file_name()), location.line(), update});
     }
     void AddUpdate(ui32 kind, TConfigItemInfo::EUpdateKind update, TCallContext ctx) {
-        return this->Add(kind, TConfigItemInfo::TUpdate{ctx.File, ctx.Line, update});
+        return this->Add(kind, TConfigItemInfo::TUpdate{NUtil::TrimSourceFileName(ctx.File), ctx.Line, update});
     }
     virtual void Add(ui32 kind, TConfigItemInfo::TUpdate update) = 0;
     virtual THashMap<ui32, TConfigItemInfo> Dump() const = 0;
@@ -124,7 +124,11 @@ struct TNodeRegistrationSettings {
 class INodeRegistrationResult {
 public:
     virtual ~INodeRegistrationResult() {}
-    virtual void Apply(NKikimrConfig::TAppConfig& appConfig, ui32& nodeId, TKikimrScopeId& scopeId) const = 0;
+    virtual void Apply(
+        NKikimrConfig::TAppConfig& appConfig,
+        ui32& nodeId,
+        TKikimrScopeId& scopeId,
+        TString& nodeName) const = 0;
 };
 
 class INodeBrokerClient {
@@ -153,9 +157,11 @@ class IConfigurationResult {
 public:
     virtual ~IConfigurationResult() {}
     virtual const NKikimrConfig::TAppConfig& GetConfig() const = 0;
-    virtual bool HasYamlConfig() const = 0;
-    virtual const TString& GetYamlConfig() const = 0;
+    virtual bool HasMainYamlConfig() const = 0;
+    virtual const TString& GetMainYamlConfig() const = 0;
     virtual TMap<ui64, TString> GetVolatileYamlConfigs() const = 0;
+    virtual bool HasDatabaseYamlConfig() const = 0;
+    virtual const TString& GetDatabaseYamlConfig() const = 0;
 };
 
 class IDynConfigClient {
@@ -223,6 +229,7 @@ struct TDebugInfo {
 
 struct TConfigsDispatcherInitInfo {
     NKikimrConfig::TAppConfig InitialConfig;
+    TString StartupConfigYaml;
     TMap<TString, TString> Labels;
     std::variant<std::monostate, TDenyList, TAllowList> ItemsServeRules;
     std::optional<TDebugInfo> DebugInfo;
@@ -235,7 +242,7 @@ public:
     virtual ~IInitialConfigurator() {};
     virtual void RegisterCliOptions(NLastGetopt::TOpts& opts) = 0;
     virtual void ValidateOptions(const NLastGetopt::TOpts& opts, const NLastGetopt::TOptsParseResult& parseResult) = 0;
-    virtual void Parse(const TVector<TString>& freeArgs) = 0;
+    virtual void Parse(const TVector<TString>& freeArgs, NYamlConfig::IConfigSwissKnife* csk) = 0;
     virtual void Apply(
         NKikimrConfig::TAppConfig& appConfig,
         ui32& nodeId,
@@ -289,8 +296,8 @@ public:
         Impl->ValidateOptions(opts, parseResult);
     }
 
-    void Parse(const TVector<TString>& freeArgs) {
-        Impl->Parse(freeArgs);
+    void Parse(const TVector<TString>& freeArgs, NYamlConfig::IConfigSwissKnife* csk) {
+        Impl->Parse(freeArgs, csk);
     }
 
     void Apply(

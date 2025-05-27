@@ -5,7 +5,7 @@
 #include <ostream>
 
 #include <ydb/core/raw_socket/sock_impl.h>
-#include <ydb/library/yql/public/decimal/yql_wide_int.h>
+#include <yql/essentials/public/decimal/yql_wide_int.h>
 
 #include <util/generic/buffer.h>
 #include <util/generic/strbuf.h>

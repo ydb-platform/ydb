@@ -1,10 +1,10 @@
 """EBSBackend class with methods for supported APIs."""
 
-from moto.core import ACCOUNT_ID, BaseBackend, BaseModel
+from moto.core import BaseBackend, BaseModel
 from moto.core.utils import BackendDict, unix_time
 from moto.ec2 import ec2_backends
 from moto.ec2.models.elastic_block_store import Snapshot
-from uuid import uuid4
+from moto.moto_api._internal import mock_random
 
 
 class Block(BaseModel):
@@ -13,11 +13,12 @@ class Block(BaseModel):
         self.checksum = checksum
         self.checksum_algorithm = checksum_algorithm
         self.data_length = data_length
-        self.block_token = str(uuid4())
+        self.block_token = str(mock_random.uuid4())
 
 
 class EBSSnapshot(BaseModel):
-    def __init__(self, snapshot: Snapshot):
+    def __init__(self, account_id, snapshot: Snapshot):
+        self.account_id = account_id
         self.snapshot_id = snapshot.id
         self.status = "pending"
         self.start_time = unix_time()
@@ -39,7 +40,7 @@ class EBSSnapshot(BaseModel):
     def to_json(self):
         return {
             "SnapshotId": self.snapshot_id,
-            "OwnerId": ACCOUNT_ID,
+            "OwnerId": self.account_id,
             "Status": self.status,
             "StartTime": self.start_time,
             "VolumeSize": self.volume_size,
@@ -58,7 +59,7 @@ class EBSBackend(BaseBackend):
 
     @property
     def ec2_backend(self):
-        return ec2_backends[self.region_name]
+        return ec2_backends[self.account_id][self.region_name]
 
     def start_snapshot(self, volume_size, tags, description):
         zone_name = f"{self.region_name}a"
@@ -69,7 +70,7 @@ class EBSBackend(BaseBackend):
         if tags:
             tags = {tag["Key"]: tag["Value"] for tag in tags}
             snapshot.add_tags(tags)
-        ebs_snapshot = EBSSnapshot(snapshot=snapshot)
+        ebs_snapshot = EBSSnapshot(account_id=self.account_id, snapshot=snapshot)
         self.snapshots[ebs_snapshot.snapshot_id] = ebs_snapshot
         return ebs_snapshot
 

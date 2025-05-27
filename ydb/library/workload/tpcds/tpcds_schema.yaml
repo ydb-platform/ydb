@@ -1,0 +1,1010 @@
+tables:
+  - name: customer_address
+    columns:
+      - name: ca_address_sk
+        type: Int64
+        not_null: true
+      - name: ca_address_id
+        type: string_type
+      - name: ca_street_number
+        type: string_type
+      - name: ca_street_name
+        type: string_type
+      - name: ca_street_type
+        type: string_type
+      - name: ca_suite_number
+        type: string_type
+      - name: ca_city
+        type: string_type
+      - name: ca_county
+        type: string_type
+      - name: ca_state
+        type: string_type
+      - name: ca_zip
+        type: string_type
+      - name: ca_country
+        type: string_type
+      - name: ca_gmt_offset
+        type: decimal_5_2_type
+      - name: ca_location_type
+        type: string_type
+    primary_key:
+      - ca_address_sk
+
+  - name: customer_demographics
+    columns:
+      - name: cd_demo_sk
+        type: Int64
+        not_null: true
+      - name: cd_gender
+        type: string_type
+      - name: cd_marital_status
+        type: string_type
+      - name: cd_education_status
+        type: string_type
+      - name: cd_purchase_estimate
+        type: Int64
+      - name: cd_credit_rating
+        type: string_type
+      - name: cd_dep_count
+        type: Int64
+      - name: cd_dep_employed_count
+        type: Int64
+      - name: cd_dep_college_count
+        type: Int64        
+    primary_key:
+      - cd_demo_sk
+
+  - name: date_dim
+    columns:
+      - name: d_date_sk
+        type: Int64
+        not_null: true
+      - name: d_date_id
+        type: string_type
+      - name: d_date
+        type: string_type
+      - name: d_month_seq
+        type: Int64
+      - name: d_week_seq
+        type: Int64
+      - name: d_quarter_seq
+        type: Int64
+      - name: d_year
+        type: Int64
+      - name: d_dow
+        type: Int64
+      - name: d_moy
+        type: Int64
+      - name: d_dom
+        type: Int64
+      - name: d_qoy
+        type: Int64
+      - name: d_fy_year
+        type: Int64
+      - name: d_fy_quarter_seq
+        type: Int64
+      - name: d_fy_week_seq
+        type: Int64
+      - name: d_day_name
+        type: string_type
+      - name: d_quarter_name
+        type: string_type
+      - name: d_holiday
+        type: string_type
+      - name: d_weekend
+        type: string_type
+      - name: d_following_holiday
+        type: string_type
+      - name: d_first_dom
+        type: Int64
+      - name: d_last_dom
+        type: Int64
+      - name: d_same_day_ly
+        type: Int64
+      - name: d_same_day_lq
+        type: Int64
+      - name: d_current_day
+        type: string_type
+      - name: d_current_week
+        type: string_type
+      - name: d_current_month
+        type: string_type
+      - name: d_current_quarter
+        type: string_type
+      - name: d_current_year
+        type: string_type
+    primary_key:
+      - d_date_sk
+
+  - name: warehouse
+    columns:
+      - name: w_warehouse_sk
+        type: Int64
+        not_null: true
+      - name: w_warehouse_id
+        type: string_type
+      - name: w_warehouse_name
+        type: string_type
+      - name: w_warehouse_sq_ft
+        type: Int64
+      - name: w_street_number
+        type: string_type
+      - name: w_street_name
+        type: string_type
+      - name: w_street_type
+        type: string_type
+      - name: w_suite_number
+        type: string_type
+      - name: w_city
+        type: string_type
+      - name: w_county
+        type: string_type
+      - name: w_state
+        type: string_type
+      - name: w_zip
+        type: string_type
+      - name: w_country
+        type: string_type
+      - name: w_gmt_offset
+        type: decimal_5_2_type
+    primary_key:
+      - w_warehouse_sk
+
+  - name: ship_mode
+    columns:
+      - name: sm_ship_mode_sk
+        type: Int64
+        not_null: true
+      - name: sm_ship_mode_id
+        type: string_type
+      - name: sm_type
+        type: string_type
+      - name: sm_code
+        type: string_type
+      - name: sm_carrier
+        type: string_type
+      - name: sm_contract
+        type: string_type
+    primary_key:
+      - sm_ship_mode_sk
+
+  - name: time_dim
+    columns:
+      - name: t_time_sk
+        type: Int64
+        not_null: true
+      - name: t_time_id
+        type: string_type
+      - name: t_time
+        type: Int64
+      - name: t_hour
+        type: Int64
+      - name: t_minute
+        type: Int64
+      - name: t_second
+        type: Int64
+      - name: t_am_pm
+        type: string_type
+      - name: t_shift
+        type: string_type
+      - name: t_sub_shift
+        type: string_type
+      - name: t_meal_time
+        type: string_type
+    primary_key:
+      - t_time_sk
+
+  - name: reason
+    columns:
+      - name: r_reason_sk
+        type: Int64
+        not_null: true
+      - name: r_reason_id
+        type: string_type
+      - name: r_reason_desc
+        type: string_type
+    primary_key:
+      - r_reason_sk
+
+  - name: income_band
+    columns:
+      - name: ib_income_band_sk
+        type: Int64
+        not_null: true
+      - name: ib_lower_bound
+        type: Int64
+      - name: ib_upper_bound
+        type: Int64 
+    primary_key:
+      - ib_income_band_sk
+
+  - name: item
+    columns:
+      - name: i_item_sk
+        type: Int64
+        not_null: true
+      - name: i_item_id
+        type: string_type
+      - name: i_rec_start_date
+        type: date_type
+      - name: i_rec_end_date
+        type: date_type
+      - name: i_item_desc
+        type: string_type
+      - name: i_current_price
+        type: decimal_7_2_type
+      - name: i_wholesale_cost
+        type: decimal_7_2_type
+      - name: i_brand_id
+        type: Int64
+      - name: i_brand
+        type: string_type
+      - name: i_class_id
+        type: Int64
+      - name: i_class
+        type: string_type
+      - name: i_category_id
+        type: Int64
+      - name: i_category
+        type: string_type
+      - name: i_manufact_id
+        type: Int64
+      - name: i_manufact
+        type: string_type
+      - name: i_size
+        type: string_type
+      - name: i_formulation
+        type: string_type
+      - name: i_color
+        type: string_type
+      - name: i_units
+        type: string_type
+      - name: i_container
+        type: string_type
+      - name: i_manager_id
+        type: Int64
+      - name: i_product_name
+        type: string_type
+    primary_key:
+      - i_item_sk
+
+  - name: store
+    columns:
+      - name: s_store_sk
+        type: Int64
+        not_null: true
+      - name: s_store_id
+        type: string_type
+      - name: s_rec_start_date
+        type: date_type
+      - name: s_rec_end_date
+        type: date_type
+      - name: s_closed_date_sk
+        type: Int64
+      - name: s_store_name
+        type: string_type
+      - name: s_number_employees
+        type: Int64
+      - name: s_floor_space
+        type: Int64
+      - name: s_hours
+        type: string_type
+      - name: s_manager
+        type: string_type
+      - name: s_market_id
+        type: Int64
+      - name: s_geography_class
+        type: string_type
+      - name: s_market_desc
+        type: string_type
+      - name: s_market_manager
+        type: string_type
+      - name: s_division_id
+        type: Int64
+      - name: s_division_name
+        type: string_type
+      - name: s_company_id
+        type: Int64
+      - name: s_company_name
+        type: string_type
+      - name: s_street_number
+        type: string_type
+      - name: s_street_name
+        type: string_type
+      - name: s_street_type
+        type: string_type
+      - name: s_suite_number
+        type: string_type
+      - name: s_city
+        type: string_type
+      - name: s_county
+        type: string_type
+      - name: s_state
+        type: string_type
+      - name: s_zip
+        type: string_type
+      - name: s_country
+        type: string_type
+      - name: s_gmt_offset
+        type: decimal_5_2_type
+      - name: s_tax_precentage
+        type: decimal_5_2_type
+    primary_key:
+      - s_store_sk
+
+  - name: call_center
+    columns:
+      - name: cc_call_center_sk
+        type: Int64
+        not_null: true
+      - name: cc_call_center_id
+        type: string_type
+      - name: cc_rec_start_date
+        type: date_type
+      - name: cc_rec_end_date
+        type: date_type
+      - name: cc_closed_date_sk
+        type: Int64
+      - name: cc_open_date_sk
+        type: Int64
+      - name: cc_name
+        type: string_type
+      - name: cc_class
+        type: string_type
+      - name: cc_employees
+        type: Int64
+      - name: cc_sq_ft
+        type: Int64
+      - name: cc_hours
+        type: string_type
+      - name: cc_manager
+        type: string_type
+      - name: cc_mkt_id
+        type: Int64
+      - name: cc_mkt_class
+        type: string_type
+      - name: cc_mkt_desc
+        type: string_type
+      - name: cc_market_manager
+        type: string_type
+      - name: cc_division
+        type: Int64
+      - name: cc_division_name
+        type: string_type
+      - name: cc_company
+        type: Int64
+      - name: cc_company_name
+        type: string_type
+      - name: cc_street_number
+        type: string_type
+      - name: cc_street_name
+        type: string_type
+      - name: cc_street_type
+        type: string_type
+      - name: cc_suite_number
+        type: string_type
+      - name: cc_city
+        type: string_type
+      - name: cc_county
+        type: string_type
+      - name: cc_state
+        type: string_type
+      - name: cc_zip
+        type: string_type
+      - name: cc_country
+        type: string_type
+      - name: cc_gmt_offset
+        type: decimal_5_2_type
+      - name: cc_tax_percentage
+        type: decimal_5_2_type
+    primary_key:
+      - cc_call_center_sk
+
+  - name: customer
+    columns:
+      - name: c_customer_sk
+        type: Int64
+        not_null: true
+      - name: c_customer_id
+        type: string_type
+      - name: c_current_cdemo_sk
+        type: Int64
+      - name: c_current_hdemo_sk
+        type: Int64
+      - name: c_current_addr_sk
+        type: Int64
+      - name: c_first_shipto_date_sk
+        type: Int64
+      - name: c_first_sales_date_sk
+        type: Int64
+      - name: c_salutation
+        type: string_type
+      - name: c_first_name
+        type: string_type
+      - name: c_last_name
+        type: string_type
+      - name: c_preferred_cust_flag
+        type: string_type
+      - name: c_birth_day
+        type: Int64
+      - name: c_birth_month
+        type: Int64
+      - name: c_birth_year
+        type: Int64
+      - name: c_birth_country
+        type: string_type
+      - name: c_login
+        type: string_type
+      - name: c_email_address
+        type: string_type
+      - name: c_last_review_date
+        type: string_type
+    primary_key:
+      - c_customer_sk
+
+  - name: web_site
+    columns:
+      - name: web_site_sk
+        type: Int64
+        not_null: true
+      - name: web_site_id
+        type: string_type
+      - name: web_rec_start_date
+        type: date_type
+      - name: web_rec_end_date
+        type: date_type
+      - name: web_name
+        type: string_type
+      - name: web_open_date_sk
+        type: Int64
+      - name: web_close_date_sk
+        type: Int64
+      - name: web_class
+        type: string_type
+      - name: web_manager
+        type: string_type
+      - name: web_mkt_id
+        type: Int64
+      - name: web_mkt_class
+        type: string_type
+      - name: web_mkt_desc
+        type: string_type
+      - name: web_market_manager
+        type: string_type
+      - name: web_company_id
+        type: Int64
+      - name: web_company_name
+        type: string_type
+      - name: web_street_number
+        type: string_type
+      - name: web_street_name
+        type: string_type
+      - name: web_street_type
+        type: string_type
+      - name: web_suite_number
+        type: string_type
+      - name: web_city
+        type: string_type
+      - name: web_county
+        type: string_type
+      - name: web_state
+        type: string_type
+      - name: web_zip
+        type: string_type
+      - name: web_country
+        type: string_type
+      - name: web_gmt_offset
+        type: decimal_5_2_type
+      - name: web_tax_percentage
+        type: decimal_5_2_type
+    primary_key:
+      - web_site_sk
+
+  - name: store_returns
+    columns:
+      - name: sr_returned_date_sk
+        type: Int64
+      - name: sr_return_time_sk
+        type: Int64
+      - name: sr_item_sk
+        type: Int64
+        not_null: true
+      - name: sr_customer_sk
+        type: Int64
+      - name: sr_cdemo_sk
+        type: Int64
+      - name: sr_hdemo_sk
+        type: Int64
+      - name: sr_addr_sk
+        type: Int64
+      - name: sr_store_sk
+        type: Int64
+      - name: sr_reason_sk
+        type: Int64
+      - name: sr_ticket_number
+        type: Int64
+        not_null: true
+      - name: sr_return_quantity
+        type: Int64
+      - name: sr_return_amt
+        type: decimal_7_2_type
+      - name: sr_return_tax
+        type: decimal_7_2_type
+      - name: sr_return_amt_inc_tax
+        type: decimal_7_2_type
+      - name: sr_fee
+        type: decimal_7_2_type
+      - name: sr_return_ship_cost
+        type: decimal_15_2_type
+      - name: sr_refunded_cash
+        type: decimal_7_2_type
+      - name: sr_reversed_charge
+        type: decimal_7_2_type
+      - name: sr_store_credit
+        type: decimal_7_2_type
+      - name: sr_net_loss
+        type: decimal_7_2_type
+    primary_key:
+      - sr_item_sk
+      - sr_ticket_number
+
+  - name: household_demographics
+    columns:
+      - name: hd_demo_sk
+        type: Int64
+        not_null: true
+      - name: hd_income_band_sk
+        type: Int64
+      - name: hd_buy_potential
+        type: string_type
+      - name: hd_dep_count
+        type: Int64
+      - name: hd_vehicle_count
+        type: Int64        
+    primary_key:
+      - hd_demo_sk
+
+  - name: web_page
+    columns:
+      - name: wp_web_page_sk
+        type: Int64
+        not_null: true
+      - name: wp_web_page_id
+        type: string_type
+      - name: wp_rec_start_date
+        type: date_type
+      - name: wp_rec_end_date
+        type: date_type
+      - name: wp_creation_date_sk
+        type: Int64
+      - name: wp_access_date_sk
+        type: Int64
+      - name: wp_autogen_flag
+        type: string_type
+      - name: wp_customer_sk
+        type: Int64
+      - name: wp_url
+        type: string_type
+      - name: wp_type
+        type: string_type
+      - name: wp_char_count
+        type: Int64
+      - name: wp_link_count
+        type: Int64
+      - name: wp_image_count
+        type: Int64
+      - name: wp_max_ad_count
+        type: Int64        
+    primary_key:
+      - wp_web_page_sk
+
+  - name: promotion
+    columns:
+      - name: p_promo_sk
+        type: Int64
+        not_null: true
+      - name: p_promo_id
+        type: string_type
+      - name: p_start_date_sk
+        type: Int64
+      - name: p_end_date_sk
+        type: Int64
+      - name: p_item_sk
+        type: Int64
+      - name: p_cost
+        type: decimal_7_2_type
+      - name: p_response_target
+        type: Int64
+      - name: p_promo_name
+        type: string_type
+      - name: p_channel_dmail
+        type: string_type
+      - name: p_channel_email
+        type: string_type
+      - name: p_channel_catalog
+        type: string_type
+      - name: p_channel_tv
+        type: string_type
+      - name: p_channel_radio
+        type: string_type
+      - name: p_channel_press
+        type: string_type
+      - name: p_channel_event
+        type: string_type
+      - name: p_channel_demo
+        type: string_type
+      - name: p_channel_details
+        type: string_type
+      - name: p_purpose
+        type: string_type
+      - name: p_discount_active
+        type: string_type
+    primary_key:
+      - p_promo_sk
+
+  - name: catalog_page
+    columns:
+      - name: cp_catalog_page_sk
+        type: Int64
+        not_null: true
+      - name: cp_catalog_page_id
+        type: string_type
+      - name: cp_start_date_sk
+        type: Int64
+      - name: cp_end_date_sk
+        type: Int64
+      - name: cp_department
+        type: string_type
+      - name: cp_catalog_number
+        type: Int64
+      - name: cp_catalog_page_number
+        type: Int64
+      - name: cp_description
+        type: string_type
+      - name: cp_type
+        type: string_type
+    primary_key:
+      - cp_catalog_page_sk
+
+  - name: inventory
+    columns:
+      - name: inv_date_sk
+        type: Int64
+        not_null: true
+      - name: inv_item_sk
+        type: Int64
+        not_null: true
+      - name: inv_warehouse_sk
+        type: Int64
+        not_null: true
+      - name: inv_quantity_on_hand
+        type: Int64 
+    primary_key:
+      - inv_date_sk
+      - inv_item_sk
+      - inv_warehouse_sk
+
+  - name: catalog_returns
+    columns:
+      - name: cr_returned_date_sk
+        type: Int64
+      - name: cr_returned_time_sk
+        type: Int64
+      - name: cr_item_sk
+        type: Int64
+        not_null: true
+      - name: cr_refunded_customer_sk
+        type: Int64
+      - name: cr_refunded_cdemo_sk
+        type: Int64
+      - name: cr_refunded_hdemo_sk
+        type: Int64
+      - name: cr_refunded_addr_sk
+        type: Int64
+      - name: cr_returning_customer_sk
+        type: Int64
+      - name: cr_returning_cdemo_sk
+        type: Int64
+      - name: cr_returning_hdemo_sk
+        type: Int64
+      - name: cr_returning_addr_sk
+        type: Int64
+      - name: cr_call_center_sk
+        type: Int64
+      - name: cr_catalog_page_sk
+        type: Int64
+      - name: cr_ship_mode_sk
+        type: Int64
+      - name: cr_warehouse_sk
+        type: Int64
+      - name: cr_reason_sk
+        type: Int64
+      - name: cr_order_number
+        type: Int64
+        not_null: true
+      - name: cr_return_quantity
+        type: Int64
+      - name: cr_return_amount
+        type: decimal_7_2_type
+      - name: cr_return_tax
+        type: decimal_7_2_type
+      - name: cr_return_amt_inc_tax
+        type: decimal_7_2_type
+      - name: cr_fee
+        type: decimal_7_2_type
+      - name: cr_return_ship_cost
+        type: decimal_7_2_type
+      - name: cr_refunded_cash
+        type: decimal_7_2_type
+      - name: cr_reversed_charge
+        type: decimal_7_2_type
+      - name: cr_store_credit
+        type: decimal_7_2_type
+      - name: cr_net_loss
+        type: decimal_7_2_type
+    primary_key:
+      - cr_item_sk
+      - cr_order_number
+
+  - name: web_returns
+    columns:
+      - name: wr_returned_date_sk
+        type: Int64
+      - name: wr_returned_time_sk
+        type: Int64
+      - name: wr_item_sk
+        type: Int64
+        not_null: true
+      - name: wr_refunded_customer_sk
+        type: Int64
+      - name: wr_refunded_cdemo_sk
+        type: Int64
+      - name: wr_refunded_hdemo_sk
+        type: Int64
+      - name: wr_refunded_addr_sk
+        type: Int64
+      - name: wr_returning_customer_sk
+        type: Int64
+      - name: wr_returning_cdemo_sk
+        type: Int64
+      - name: wr_returning_hdemo_sk
+        type: Int64
+      - name: wr_returning_addr_sk
+        type: Int64
+      - name: wr_web_page_sk
+        type: Int64
+      - name: wr_reason_sk
+        type: Int64
+      - name: wr_order_number
+        type: Int64
+        not_null: true
+      - name: wr_return_quantity
+        type: Int64
+      - name: wr_return_amt
+        type: decimal_7_2_type
+      - name: wr_return_tax
+        type: decimal_7_2_type
+      - name: wr_return_amt_inc_tax
+        type: decimal_7_2_type
+      - name: wr_fee
+        type: decimal_7_2_type
+      - name: wr_return_ship_cost
+        type: decimal_7_2_type
+      - name: wr_refunded_cash
+        type: decimal_7_2_type
+      - name: wr_reversed_charge
+        type: decimal_7_2_type
+      - name: wr_account_credit
+        type: decimal_7_2_type
+      - name: wr_net_loss
+        type: decimal_7_2_type
+    primary_key:
+      - wr_item_sk
+      - wr_order_number
+
+  - name: web_sales
+    columns:
+      - name: ws_sold_date_sk
+        type: Int64
+      - name: ws_sold_time_sk
+        type: Int64
+      - name: ws_ship_date_sk
+        type: Int64
+      - name: ws_item_sk
+        type: Int64
+        not_null: true
+      - name: ws_bill_customer_sk
+        type: Int64
+      - name: ws_bill_cdemo_sk
+        type: Int64
+      - name: ws_bill_hdemo_sk
+        type: Int64
+      - name: ws_bill_addr_sk
+        type: Int64
+      - name: ws_ship_customer_sk
+        type: Int64
+      - name: ws_ship_cdemo_sk
+        type: Int64
+      - name: ws_ship_hdemo_sk
+        type: Int64
+      - name: ws_ship_addr_sk
+        type: Int64
+      - name: ws_web_page_sk
+        type: Int64
+      - name: ws_web_site_sk
+        type: Int64
+      - name: ws_ship_mode_sk
+        type: Int64
+      - name: ws_warehouse_sk
+        type: Int64
+      - name: ws_promo_sk
+        type: Int64
+      - name: ws_order_number
+        type: Int64
+        not_null: true
+      - name: ws_quantity
+        type: Int64
+      - name: ws_wholesale_cost
+        type: decimal_7_2_type
+      - name: ws_list_price
+        type: decimal_7_2_type
+      - name: ws_sales_price
+        type: decimal_7_2_type
+      - name: ws_ext_discount_amt
+        type: decimal_7_2_type
+      - name: ws_ext_sales_price
+        type: decimal_7_2_type
+      - name: ws_ext_wholesale_cost
+        type: decimal_7_2_type
+      - name: ws_ext_list_price
+        type: decimal_7_2_type
+      - name: ws_ext_tax
+        type: decimal_7_2_type
+      - name: ws_coupon_amt
+        type: decimal_7_2_type
+      - name: ws_ext_ship_cost
+        type: decimal_7_2_type
+      - name: ws_net_paid
+        type: decimal_7_2_type
+      - name: ws_net_paid_inc_tax
+        type: decimal_7_2_type
+      - name: ws_net_paid_inc_ship
+        type: decimal_7_2_type
+      - name: ws_net_paid_inc_ship_tax
+        type: decimal_7_2_type
+      - name: ws_net_profit
+        type: decimal_7_2_type
+    primary_key:
+      - ws_item_sk
+      - ws_order_number
+
+  - name: catalog_sales
+    columns:
+      - name: cs_sold_date_sk
+        type: Int64
+      - name: cs_sold_time_sk
+        type: Int64
+      - name: cs_ship_date_sk
+        type: Int64
+      - name: cs_bill_customer_sk
+        type: Int64
+      - name: cs_bill_cdemo_sk
+        type: Int64
+      - name: cs_bill_hdemo_sk
+        type: Int64
+      - name: cs_bill_addr_sk
+        type: Int64
+      - name: cs_ship_customer_sk
+        type: Int64
+      - name: cs_ship_cdemo_sk
+        type: Int64
+      - name: cs_ship_hdemo_sk
+        type: Int64
+      - name: cs_ship_addr_sk
+        type: Int64
+      - name: cs_call_center_sk
+        type: Int64
+      - name: cs_catalog_page_sk
+        type: Int64
+      - name: cs_ship_mode_sk
+        type: Int64
+      - name: cs_warehouse_sk
+        type: Int64
+      - name: cs_item_sk
+        type: Int64
+        not_null: true
+      - name: cs_promo_sk
+        type: Int64
+      - name: cs_order_number
+        type: Int64
+        not_null: true
+      - name: cs_quantity
+        type: Int64
+      - name: cs_wholesale_cost
+        type: decimal_7_2_type
+      - name: cs_list_price
+        type: decimal_7_2_type
+      - name: cs_sales_price
+        type: decimal_7_2_type
+      - name: cs_ext_discount_amt
+        type: decimal_7_2_type
+      - name: cs_ext_sales_price
+        type: decimal_7_2_type
+      - name: cs_ext_wholesale_cost
+        type: decimal_7_2_type
+      - name: cs_ext_list_price
+        type: decimal_7_2_type
+      - name: cs_ext_tax
+        type: decimal_7_2_type
+      - name: cs_coupon_amt
+        type: decimal_7_2_type
+      - name: cs_ext_ship_cost
+        type: decimal_7_2_type
+      - name: cs_net_paid
+        type: decimal_7_2_type
+      - name: cs_net_paid_inc_tax
+        type: decimal_7_2_type
+      - name: cs_net_paid_inc_ship
+        type: decimal_7_2_type
+      - name: cs_net_paid_inc_ship_tax
+        type: decimal_7_2_type
+      - name: cs_net_profit
+        type: decimal_7_2_type
+    primary_key:
+      - cs_item_sk
+      - cs_order_number
+
+  - name: store_sales
+    columns:
+      - name: ss_sold_date_sk
+        type: Int64
+      - name: ss_sold_time_sk
+        type: Int64
+      - name: ss_item_sk
+        type: Int64
+        not_null: true
+      - name: ss_customer_sk
+        type: Int64
+      - name: ss_cdemo_sk
+        type: Int64
+      - name: ss_hdemo_sk
+        type: Int64
+      - name: ss_addr_sk
+        type: Int64
+      - name: ss_store_sk
+        type: Int64
+      - name: ss_promo_sk
+        type: Int64
+      - name: ss_ticket_number
+        type: Int64
+        not_null: true
+      - name: ss_quantity
+        type: Int64
+      - name: ss_wholesale_cost
+        type: decimal_7_2_type
+      - name: ss_list_price
+        type: decimal_7_2_type
+      - name: ss_sales_price
+        type: decimal_7_2_type
+      - name: ss_ext_discount_amt
+        type: decimal_7_2_type
+      - name: ss_ext_sales_price
+        type: decimal_7_2_type
+      - name: ss_ext_wholesale_cost
+        type: decimal_7_2_type
+      - name: ss_ext_list_price
+        type: decimal_7_2_type
+      - name: ss_ext_tax
+        type: decimal_7_2_type
+      - name: ss_coupon_amt
+        type: decimal_7_2_type
+      - name: ss_net_paid
+        type: decimal_7_2_type
+      - name: ss_net_paid_inc_tax
+        type: decimal_7_2_type
+      - name: ss_net_profit
+        type: decimal_7_2_type
+    primary_key:
+      - ss_item_sk
+      - ss_ticket_number

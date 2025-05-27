@@ -1,7 +1,7 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -33,7 +33,7 @@ void CreateTableWithMultishardIndex(Tests::TClient& client, NKikimrSchemeOp::EIn
 void TestUpdateWithoutChangingNotNullColumn(TSession& session) {
     {  /* init table */
         const auto query = Q_(R"(
-            UPSERT INTO t (id, val, created_on) VALUES 
+            UPSERT INTO t (id, val, created_on) VALUES
             (123, 'xxx', 1);
         )");
 
@@ -159,8 +159,10 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
         }
     }
 
-    Y_UNIT_TEST(InsertNotNullPkPg) {
-        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
+    Y_UNIT_TEST_TWIN(InsertNotNullPkPg, useSink) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false).SetAppConfig(appConfig));
         auto client = kikimr.GetTableClient();
         auto session = client.CreateSession().GetValueSync().GetSession();
         {
@@ -193,8 +195,12 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
             auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
             UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_BAD_COLUMN_TYPE), result.GetIssues().ToString());
-            UNIT_ASSERT_NO_DIFF(result.GetIssues().ToString(), "<main>: Error: Execution, code: 1060\n"
-            "    <main>: Error: Tried to insert NULL value into NOT NULL column: key, code: 2031\n");
+            if (useSink) {
+                UNIT_ASSERT_NO_DIFF(result.GetIssues().ToString(), "<main>: Error: Tried to insert NULL value into NOT NULL column: key, code: 2031\n");
+            } else {
+                UNIT_ASSERT_NO_DIFF(result.GetIssues().ToString(), "<main>: Error: Execution, code: 1060\n"
+                "    <main>: Error: Tried to insert NULL value into NOT NULL column: key, code: 2031\n");
+            }
         }
 
         {   /* set NULL to not null pk column */
@@ -206,8 +212,12 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
             auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
             UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_BAD_COLUMN_TYPE), result.GetIssues().ToString());
-            UNIT_ASSERT_NO_DIFF(result.GetIssues().ToString(), "<main>: Error: Execution, code: 1060\n"
-            "    <main>: Error: Tried to insert NULL value into NOT NULL column: key, code: 2031\n");
+            if (useSink) {
+                UNIT_ASSERT_NO_DIFF(result.GetIssues().ToString(), "<main>: Error: Tried to insert NULL value into NOT NULL column: key, code: 2031\n");
+            } else {
+                UNIT_ASSERT_NO_DIFF(result.GetIssues().ToString(), "<main>: Error: Execution, code: 1060\n"
+                "    <main>: Error: Tried to insert NULL value into NOT NULL column: key, code: 2031\n");
+            }
         }
 
         {   /* set NULL to nullable column */
@@ -583,7 +593,7 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
 
             auto result = session.ExecuteSchemeQuery(q1).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            
+
             const auto q2 = Q_(R"(
                 CREATE TABLE `/Root/TestInsert` (
                     Key Uint64,
@@ -609,10 +619,13 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
         }
     }
 
-    Y_UNIT_TEST(InsertNotNullPg) {
+    Y_UNIT_TEST_TWIN(InsertNotNullPg, useSink) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false)
-            .SetEnableNotNullDataColumns(true);
+            .SetEnableNotNullDataColumns(true)
+            .SetAppConfig(appConfig);
 
         TKikimrRunner kikimr(settings);
         auto client = kikimr.GetTableClient();
@@ -648,8 +661,13 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
             auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT(!result.IsSuccess());
             UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_BAD_COLUMN_TYPE), result.GetIssues().ToString());
-            UNIT_ASSERT_NO_DIFF(result.GetIssues().ToString(), "<main>: Error: Execution, code: 1060\n"
-            "    <main>: Error: Tried to insert NULL value into NOT NULL column: Value, code: 2031\n");
+            if (useSink) {
+                UNIT_ASSERT_NO_DIFF(result.GetIssues().ToString(),
+                    "<main>: Error: Tried to insert NULL value into NOT NULL column: Value, code: 2031\n");
+            } else {
+                UNIT_ASSERT_NO_DIFF(result.GetIssues().ToString(), "<main>: Error: Execution, code: 1060\n"
+                    "    <main>: Error: Tried to insert NULL value into NOT NULL column: Value, code: 2031\n");
+            }
         }
     }
 
@@ -871,7 +889,7 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
             UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_BAD_COLUMN_TYPE), result.GetIssues().ToString());
         }
     }
-    
+
     Y_UNIT_TEST(UpdateTable_DontChangeNotNull) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);
@@ -964,7 +982,7 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             CompareYson(R"([[1u;1u;123u;"b"]])", FormatResultSetYson(result.GetResultSet(0)));
         }
-         
+
         { /* same fk */
             const auto  query = Q_(R"(
                 UPSERT INTO `/Root/MultiShardIndexed` (key, fk, fk2, value) VALUES
@@ -996,7 +1014,6 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
 
     Y_UNIT_TEST(UpdateTable_UniqIndexPg) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
@@ -1025,7 +1042,7 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
-        { 
+        {
             auto result = db.ExecuteQuery(R"(
                 UPDATE t SET value = 100 WHERE id = 1;
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
@@ -1036,7 +1053,7 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             CompareYson(R"([["1";"100";"label1_1";"label2_1";"1"];["2";"2";"label1_2";"label2_2";"2"]])", FormatResultSetYson(result.GetResultSet(0)));
         }
-        { 
+        {
             auto result = db.ExecuteQuery(R"(
                 UPDATE t SET label2 = 'label2_1' WHERE id = 1;
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
@@ -1047,7 +1064,7 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             CompareYson(R"([["1";"100";"label1_1";"label2_1";"1"];["2";"2";"label1_2";"label2_2";"2"]])", FormatResultSetYson(result.GetResultSet(0)));
         }
-        { 
+        {
             auto result = db.ExecuteQuery(R"(
                 UPDATE t SET side = id + 1, label = 'new_label';
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
@@ -1058,7 +1075,7 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             CompareYson(R"([["1";"100";"new_label";"label2_1";"2"];["2";"2";"new_label";"label2_2";"3"]])", FormatResultSetYson(result.GetResultSet(0)));
         }
-        { 
+        {
             auto result = db.ExecuteQuery(R"(
                 UPDATE t SET value = 100, label = 'new_label' WHERE id = 2;
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
@@ -1092,9 +1109,9 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
             auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
-        { 
+        {
             const auto query = Q_(R"(
-                UPSERT INTO t (id, val, created_on) VALUES 
+                UPSERT INTO t (id, val, created_on) VALUES
                 (123, 'xxx', 1),
                 (124, 'yyy', 2);
             )");
@@ -1114,10 +1131,10 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
             )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
-        }    
+        }
         {
             const auto query = Q_(R"(
-                UPSERT INTO t (id, val, created_on) VALUES 
+                UPSERT INTO t (id, val, created_on) VALUES
                 (123, 'xxx', 1),
                 (124, 'yyy', 2);
             )");
@@ -1137,7 +1154,7 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
             )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             CompareYson(R"([[11u;124u;["abc"]]])", FormatResultSetYson(result.GetResultSet(0)));
-        }    
+        }
     }
 
     Y_UNIT_TEST(UpdateNotNullPg) {
@@ -2024,7 +2041,7 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
             proto.mutable_columns()->begin()->set_not_null(true);
             auto result = session.CreateTable("/Root/NotNullCheck2", TTableDescription(std::move(proto), {})).GetValueSync();
             UNIT_ASSERT_C(!result.GetIssues().Empty(), "ok with faulty protobuf");
-            UNIT_ASSERT(result.GetIssues().ToString().Contains("Error: Not consistent column type and not_null option for column: 1"));
+            UNIT_ASSERT(result.GetIssues().ToString().contains("Error: Not consistent column type and not_null option for column: 1"));
         }
     }
 

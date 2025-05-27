@@ -3,6 +3,7 @@
 #include <ydb/library/actors/helpers/selfping_actor.h>
 #include <util/stream/null.h>
 #include <util/datetime/cputimer.h>
+#include <util/system/compiler.h>
 #include "hive_impl.h"
 #include "balancer.h"
 
@@ -10,16 +11,6 @@
 #define Ctest Cnull
 #else
 #define Ctest Cerr
-#endif
-
-#ifdef address_sanitizer_enabled
-#define SANITIZER_TYPE address
-#endif
-#ifdef memory_sanitizer_enabled
-#define SANITIZER_TYPE memory
-#endif
-#ifdef thread_sanitizer_enabled
-#define SANITIZER_TYPE thread
 #endif
 
 using namespace NKikimr;
@@ -57,7 +48,7 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
 
         double passed = timer.Get().SecondsFloat();
         Ctest << "Create = " << passed << Endl;
-#ifndef SANITIZER_TYPE
+#ifndef _san_enabled_
 #ifndef NDEBUG
         UNIT_ASSERT(passed < 3 * BASE_PERF);
 #else
@@ -67,20 +58,35 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
         timer.Reset();
 
         double maxP = 100;
+        std::vector<TBootQueue::TBootQueueRecord> records;
+        records.reserve(NUM_TABLETS);
+        unsigned i = 0;
 
-        while (!bootQueue.BootQueue.empty()) {
+        while (!bootQueue.Empty()) {
             auto record = bootQueue.PopFromBootQueue();
             UNIT_ASSERT(record.Priority <= maxP);
             maxP = record.Priority;
-            auto itTablet = tablets.find(record.TabletId);
-            if (itTablet != tablets.end()) {
-                bootQueue.AddToWaitQueue(itTablet->second);
+            UNIT_ASSERT(tablets.contains(record.TabletId));
+            records.push_back(record);
+            if (++i == NUM_TABLETS / 2) {
+                // to test both modes 
+                bootQueue.IncludeWaitQueue();
+            }
+        }
+        bootQueue.ExcludeWaitQueue();
+
+        i = 0;
+        for (auto& record : records) {
+            if (++i % 3 == 0) {
+                bootQueue.AddToBootQueue(record);
+            } else {
+                bootQueue.AddToWaitQueue(record);
             }
         }
 
         passed = timer.Get().SecondsFloat();
         Ctest << "Process = " << passed << Endl;
-#ifndef SANITIZER_TYPE
+#ifndef _san_enabled_
 #ifndef NDEBUG
         UNIT_ASSERT(passed < 10 * BASE_PERF);
 #else
@@ -90,11 +96,15 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
 
         timer.Reset();
 
-        bootQueue.MoveFromWaitQueueToBootQueue();
+        bootQueue.IncludeWaitQueue();
+        while (!bootQueue.Empty()) {
+            bootQueue.PopFromBootQueue();
+        }
+        bootQueue.ExcludeWaitQueue();
 
         passed = timer.Get().SecondsFloat();
         Ctest << "Move = " << passed << Endl;
-#ifndef SANITIZER_TYPE
+#ifndef _san_enabled_
 #ifndef NDEBUG
         UNIT_ASSERT(passed < 2 * BASE_PERF);
 #else
@@ -124,7 +134,7 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
             double passed = timer.Get().SecondsFloat();
 
             Ctest << "Time=" << passed << Endl;
-#ifndef SANITIZER_TYPE
+#ifndef _san_enabled_
 #ifndef NDEBUG
             UNIT_ASSERT(passed < 1 * BASE_PERF);
 #else

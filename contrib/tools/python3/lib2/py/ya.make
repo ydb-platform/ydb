@@ -2,6 +2,8 @@ ENABLE(PYBUILD_NO_PYC)
 
 PY3_LIBRARY()
 
+VERSION(Service-proxy-version)
+
 LICENSE(Python-2.0)
 
 NO_PYTHON_INCLUDES()
@@ -49,6 +51,7 @@ PY_SRCS(
     _markupbase.py
     _osx_support.py
     _py_abc.py
+    _pydatetime.py
     _pydecimal.py
     _pyio.py
     _pylong.py

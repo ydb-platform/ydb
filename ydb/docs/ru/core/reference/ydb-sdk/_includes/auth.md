@@ -1,10 +1,10 @@
 # Аутентификация в SDK
 
-Как описано в статье о [подключении к серверу {{ ydb-short-name }}](../../../concepts/connect.md), клиент с каждым запросом должен отправить [аутентификационный токен](../../../concepts/auth.md). Аутентификационный токен проверяется сервером и, в случае успешной аутентификации, запрос авторизуется и выполняется, иначе возвращается ошибка `Unauthenticated`.
+Как описано в статье о [подключении к серверу {{ ydb-short-name }}](../../../concepts/connect.md), клиент с каждым запросом должен отправить [аутентификационный токен](../../../security/authentication.md). Аутентификационный токен проверяется сервером и, в случае успешной аутентификации, запрос авторизуется и выполняется, иначе возвращается ошибка `Unauthenticated`.
 
 {{ ydb-short-name }} SDK использует объект, отвечающий за генерацию таких токенов. SDK предоставляет встроенные cпособы получения такого объекта:
 
-1. Методы с явной передачей параметров, каждый из методов реализует один из [режимов аутентификации](../../../concepts/auth.md).
+1. Методы с явной передачей параметров, каждый из методов реализует один из [режимов аутентификации](../../../security/authentication.md).
 2. Метод определения режима аутентификации и необходимых параметров из переменных окружения.
 
 Обычно объект генерации токенов создается перед инициализацией драйвера {{ ydb-short-name }} и передается параметром в его конструктор. C++ и Go SDK дополнительно позволяют через один драйвер работать с несколькими БД и объектами генерации токенов.
@@ -25,6 +25,7 @@
   Access Token | [ydb.AccessTokenCredentials(token)](https://github.com/yandex-cloud/ydb-python-sdk/tree/master/examples/access-token-credentials) |
   Metadata | [ydb.iam.MetadataUrlCredentials()](https://github.com/yandex-cloud/ydb-python-sdk/tree/master/examples/metadata-credentials)
   Service Account Key | [ydb.iam.ServiceAccountCredentials.from_file(<br/>key_file, iam_endpoint=None, iam_channel_credentials=None)](https://github.com/yandex-cloud/ydb-python-sdk/tree/master/examples/service-account-credentials) |
+  Static Credentials | [ydb.StaticCredentials.from_user_password(user, password)](https://github.com/ydb-platform/ydb-python-sdk/blob/main/examples/static-credentials/example.py) |
   OAuth 2.0 token exchange | [ydb.oauth2_token_exchange.Oauth2TokenExchangeCredentials()](https://github.com/ydb-platform/ydb-python-sdk/blob/main/ydb/oauth2_token_exchange/token_exchange.py),<br/>[ydb.oauth2_token_exchange.Oauth2TokenExchangeCredentials.from_file(cfg_file, iam_endpoint=None)](https://github.com/ydb-platform/ydb-python-sdk/blob/main/ydb/oauth2_token_exchange/token_exchange.py) |
   Определяется по переменным окружения | `ydb.credentials_from_env_variables()` |
 
@@ -72,7 +73,7 @@
   Service Account Key | не поддерживается
   Static Credentials | [ydb::StaticCredentialsAuth](https://github.com/ydb-platform/ydb-rs-sdk/blob/master/ydb/examples/auth-static-credentials.rs)
   Определяется по переменным окружения | не поддерживается
-  Выполнение внешней команды | ydb.CommandLineYcToken (например, для авторизации с помощью [IAM-токена]{% if lang == "ru"%}(https://cloud.yandex.ru/docs/iam/concepts/authorization/iam-token){% endif %}{% if lang == "en" %}(https://cloud.yandex.com/en/docs/iam/concepts/authorization/iam-token){% endif %} {{ yandex-cloud }} с компьютера разработчика ```ydb::CommandLineYcToken.from_cmd("yc iam create-token")```)
+  Выполнение внешней команды | ydb.CommandLineYcToken (например, для авторизации с помощью [IAM-токена](https://cloud.yandex.ru/docs/iam/concepts/authorization/iam-token) {{ yandex-cloud }} с компьютера разработчика ```ydb::CommandLineYcToken.from_cmd("yc iam create-token")```)
 
 - PHP
 
@@ -159,8 +160,10 @@
 {% endnote %}
 
 * Алгоритм работы функции `construct_credentials_from_environ()` {{ ydb-short-name }} Python SDK v2:
-   - Если задано значение переменной окружения `USE_METADATA_CREDENTIALS`, равное 1, то используется режим аутентификации **Metadata**
-   - Иначе, если задано значение переменной окружения `YDB_TOKEN`, то используется режим аутентификации **Access Token**, в который передается значение данной переменной
-   - Иначе, если задано значение переменной окружения `SA_KEY_FILE`, то используется режим аутентификации **System Account Key**, а ключ загружается из файла, имя которого указано в данной переменной
-   - Иначе в запросах не будет добавлена информация об аутентификации.
+
+  - Если задано значение переменной окружения `USE_METADATA_CREDENTIALS`, равное 1, то используется режим аутентификации **Metadata**
+  - Иначе, если задано значение переменной окружения `YDB_TOKEN`, то используется режим аутентификации **Access Token**, в который передается значение данной переменной
+  - Иначе, если задано значение переменной окружения `SA_KEY_FILE`, то используется режим аутентификации **System Account Key**, а ключ загружается из файла, имя которого указано в данной переменной
+  - Иначе в запросах не будет добавлена информация об аутентификации.
+
 * В случае, если при инициализации драйвера не передан никакой объект, отвечающий за генерацию токенов, то применяется [общий порядок](#env) чтения значений переменных окружения.

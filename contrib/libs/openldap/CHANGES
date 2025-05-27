@@ -1,5 +1,31 @@
 OpenLDAP 2.6 Change Log
 
+OpenLDAP 2.6.9 Release (2024/11/26)
+	Fixed libldap TLS connection timeout handling (ITS#8047)
+	Fixed libldap GnuTLS incompatible pointer type (ITS#10253)
+	Fixed libldap OpenSSL set_ciphersuite error handling (ITS#10223)
+	Fixed libldap to check for OpenSSL EVP_Digest* failure (ITS#10224)
+	Fixed slapd cn=config disallowed modification of cn=schema (ITS#10256)
+	Fixed slapd syncrepl assert during refresh at shutdown (ITS#10232)
+	Fixed slapd syncrepl retry state during refreshDone (ITS#10234)
+	Fixed slapd-ldap use of multi-precision add for op counters (ITS#10237)
+	Fixed slapd-mdb idl intersection (ITS#10233)
+	Fixed slapd-wt idl intersection (ITS#10233)
+	Fixed slapo-memberof to omit dynamic values (ITS#10230)
+	Fixed slapo-nestgroup leak in nestgroup_memberFilter (ITS#10249)
+	Fixed slapo-translucent regression with subordinate databases (ITS#10248)
+	Fixed slapo-translucent regression when requesting attributes (ITS#10272)
+	Fixed slappw-argon2 defaults to be more secure (ITS#9827)
+	Minor Cleanup
+		ITS#10155
+		ITS#10218
+		ITS#10219
+		ITS#10227
+		ITS#10231
+		ITS#10235
+		ITS#10263
+		ITS#10264
+
 OpenLDAP 2.6.8 Release (2024/05/21)
 	Fixed libldap exit handling with OpenSSL3 again (ITS#9952)
 	Fixed libldap OpenSSL channel binding digest (ITS#10216)

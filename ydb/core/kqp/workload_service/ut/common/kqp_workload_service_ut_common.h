@@ -8,8 +8,10 @@
 
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_query/client.h>
-#include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
+
+#include <ydb/core/protos/workload_manager_config.pb.h>
 
 
 namespace NKikimr::NKqp::NWorkload {
@@ -26,6 +28,8 @@ struct TQueryRunnerSettings {
     FLUENT_SETTING_DEFAULT(ui32, NodeIndex, 0);
     FLUENT_SETTING_DEFAULT(std::optional<TString>, PoolId, std::nullopt);
     FLUENT_SETTING_DEFAULT(TString, UserSID, "user@" BUILTIN_SYSTEM_DOMAIN);
+    FLUENT_SETTING_DEFAULT(TVector<TString>, GroupSIDs, {});
+    FLUENT_SETTING_DEFAULT(TString, Database, "");
 
     // Runner settings
     FLUENT_SETTING_DEFAULT(bool, HangUpDuringExecution, false);
@@ -66,7 +70,13 @@ struct TYdbSetupSettings {
     // Cluster settings
     FLUENT_SETTING_DEFAULT(ui32, NodeCount, 1);
     FLUENT_SETTING_DEFAULT(TString, DomainName, "Root");
+    FLUENT_SETTING_DEFAULT(bool, CreateSampleTenants, false);
     FLUENT_SETTING_DEFAULT(bool, EnableResourcePools, true);
+    FLUENT_SETTING_DEFAULT(bool, EnableResourcePoolsOnServerless, false);
+    FLUENT_SETTING_DEFAULT(bool, EnableMetadataObjectsOnServerless, true);
+    FLUENT_SETTING_DEFAULT(bool, EnableExternalDataSourcesOnServerless, true);
+    FLUENT_SETTING(NKikimrConfig::TWorkloadManagerConfig, WorkloadManagerConfig);
+    
 
     // Default pool settings
     FLUENT_SETTING_DEFAULT(TString, PoolId, "sample_pool_id");
@@ -78,6 +88,10 @@ struct TYdbSetupSettings {
 
     NResourcePool::TPoolSettings GetDefaultPoolSettings() const;
     TIntrusivePtr<IYdbSetup> Create() const;
+
+    TString GetDedicatedTenantName() const;
+    TString GetSharedTenantName() const;
+    TString GetServerlessTenantName() const;
 };
 
 class IYdbSetup : public TThrRefBase {
@@ -94,6 +108,7 @@ public:
     // Generic query helpers
     virtual TQueryRunnerResult ExecuteQuery(const TString& query, TQueryRunnerSettings settings = TQueryRunnerSettings()) const = 0;
     virtual TQueryRunnerResultAsync ExecuteQueryAsync(const TString& query, TQueryRunnerSettings settings = TQueryRunnerSettings()) const = 0;
+    virtual void ExecuteQueryRetry(const TString& retryMessage, const TString& query, TQueryRunnerSettings settings = TQueryRunnerSettings(), TDuration timeout = FUTURE_WAIT_TIMEOUT) const = 0;
 
     // Async query execution actions
     virtual void WaitQueryExecution(const TQueryRunnerResultAsync& query, TDuration timeout = FUTURE_WAIT_TIMEOUT) const = 0;
@@ -106,6 +121,7 @@ public:
     virtual void WaitPoolHandlersCount(i64 finalCount, std::optional<i64> initialCount = std::nullopt, TDuration timeout = FUTURE_WAIT_TIMEOUT) const = 0;
     virtual void StopWorkloadService(ui64 nodeIndex = 0) const = 0;
     virtual void ValidateWorkloadServiceCounters(bool checkTableCounters = true, const TString& poolId = "") const = 0;
+    virtual TEvFetchDatabaseResponse::TPtr FetchDatabase(const TString& database) const = 0;
 
     // Coomon helpers
     virtual TTestActorRuntime* GetRuntime() const = 0;
@@ -122,15 +138,15 @@ struct TSampleQueries {
     }
 
     template <typename TResult>
-    static void CheckOverloaded(const TResult& result, const TString& poolId) {
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::OVERLOADED, result.GetIssues().ToString());
-        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), TStringBuilder() << "Too many pending requests for pool " << poolId);
+    static void CheckCancelled(const TResult& result) {
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::CANCELLED, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Request was canceled");
     }
 
     template <typename TResult>
-    static void CheckCancelled(const TResult& result) {
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::CANCELLED, result.GetIssues().ToString());
-        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Request timeout exceeded, cancelling after");
+    static void CheckNotFound(const TResult& result, const TString& poolId) {
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::NOT_FOUND, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), TStringBuilder() << "Resource pool " << poolId << " not found or you don't have access permissions");
     }
 
     struct TSelect42 {

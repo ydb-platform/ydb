@@ -7,7 +7,7 @@
 
 namespace NKikimr {
 
-struct TEvBlockStore {
+namespace TEvBlockStore {
     enum EEv {
         EvBegin = EventSpaceBegin(TKikimrEvents::ES_BLOCKSTORE) + 1011,
 

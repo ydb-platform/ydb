@@ -1,8 +1,9 @@
 #include "spilling.h"
 #include "spilling_file.h"
 
+#include <format>
 #include <ydb/library/services/services.pb.h>
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/utils/yql_panic.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -352,7 +353,9 @@ private:
                 closeOp->FileNames.emplace_back(std::move(fp.FileName));
             }
 
-            RunOp("CloseFile", std::move(closeOp), fd);
+            if (!RunOp("CloseFile", std::move(closeOp), fd)) {
+                LOG_E("[CloseFile] Can not run operation");
+            }
         } else {
             MoveFileToClosed(it);
         }
@@ -368,6 +371,8 @@ private:
             return;
         }
 
+        Counters_->SpillingFileDescriptors->Sub(it->second.PartsList.size());
+
         ui64 blobs = 0;
         for (auto& fp : it->second.PartsList) {
             blobs += fp.Blobs.size();
@@ -381,12 +386,12 @@ private:
 
     void HandleWork(TEvDqSpilling::TEvWrite::TPtr& ev) {
         auto& msg = *ev->Get();
-        LOG_D("[Write] from: " << ev->Sender << ", blobId: " << msg.BlobId << ", bytes: " << msg.Blob.size());
+        LOG_D("[Write] from: " << ev->Sender << ", blobId: " << msg.BlobId << ", bytes: " << msg.Blob.Size());
 
         auto it = Files_.find(ev->Sender);
         if (it == Files_.end()) {
             LOG_E("[Write] File not found. "
-                << "From: " << ev->Sender << ", blobId: " << msg.BlobId << ", bytes: " << msg.Blob.size());
+                << "From: " << ev->Sender << ", blobId: " << msg.BlobId << ", bytes: " << msg.Blob.Size());
 
             Send(ev->Sender, new TEvDqSpilling::TEvError("File not found"));
             return;
@@ -396,39 +401,44 @@ private:
 
         if (fd.CloseAt) {
             LOG_E("[Write] File already closed. "
-                << "From: " << ev->Sender << ", blobId: " << msg.BlobId << ", bytes: " << msg.Blob.size());
+                << "From: " << ev->Sender << ", blobId: " << msg.BlobId << ", bytes: " << msg.Blob.Size());
 
             Send(ev->Sender, new TEvDqSpilling::TEvError("File already closed"));
             return;
         }
 
-        if (Config_.MaxFileSize && fd.TotalSize + msg.Blob.size() > Config_.MaxFileSize) {
+        if (Config_.MaxFileSize && fd.TotalSize + msg.Blob.Size() > Config_.MaxFileSize) {
             LOG_E("[Write] File size limit exceeded. "
-                << "From: " << ev->Sender << ", blobId: " << msg.BlobId << ", bytes: " << msg.Blob.size());
+                << "From: " << ev->Sender << ", blobId: " << msg.BlobId << ", bytes: " << msg.Blob.Size());
 
-            Send(ev->Sender, new TEvDqSpilling::TEvError("File size limit exceeded"));
+            const auto usedMb = (fd.TotalSize + msg.Blob.Size()) / 1024 / 1024;
+            const auto limitMb = Config_.MaxFileSize / 1024 / 1024;
+
+            Send(ev->Sender, new TEvDqSpilling::TEvError(std::format("File size limit exceeded: {}/{}Mb", usedMb, limitMb)));
 
             Counters_->SpillingTooBigFileErrors->Inc();
             return;
         }
 
-        if (Config_.MaxTotalSize && TotalSize_ + msg.Blob.size() > Config_.MaxTotalSize) {
+        if (Config_.MaxTotalSize && TotalSize_ + msg.Blob.Size() > Config_.MaxTotalSize) {
             LOG_E("[Write] Total size limit exceeded. "
-                << "From: " << ev->Sender << ", blobId: " << msg.BlobId << ", bytes: " << msg.Blob.size());
+                << "From: " << ev->Sender << ", blobId: " << msg.BlobId << ", bytes: " << msg.Blob.Size());
 
-            Send(ev->Sender, new TEvDqSpilling::TEvError("Total size limit exceeded"));
+            const auto usedMb = (TotalSize_ + msg.Blob.Size()) / 1024 / 1024;
+            const auto limitMb = Config_.MaxTotalSize / 1024 / 1024;
+            Send(ev->Sender, new TEvDqSpilling::TEvError(std::format("Total size limit exceeded: {}/{}Mb", usedMb, limitMb)));
 
             Counters_->SpillingNoSpaceErrors->Inc();
             return;
         }
 
-        fd.TotalSize += msg.Blob.size();
-        TotalSize_ += msg.Blob.size();
+        fd.TotalSize += msg.Blob.Size();
+        TotalSize_ += msg.Blob.Size();
 
         TFileDesc::TFilePart* fp = fd.PartsList.empty() ? nullptr : &fd.PartsList.back();
 
         bool newFile = false;
-        if (!fp || (fd.RemoveBlobsAfterRead && (Config_.MaxFilePartSize && fp->Size + msg.Blob.size() > Config_.MaxFilePartSize))) {
+        if (!fp || (fd.RemoveBlobsAfterRead && (Config_.MaxFilePartSize && fp->Size + msg.Blob.Size() > Config_.MaxFilePartSize))) {
             if (!fd.PartsList.empty()) {
                 fd.PartsList.back().Last = false;
             }
@@ -447,7 +457,7 @@ private:
         }
 
         auto& blobDesc = fp->Blobs[msg.BlobId];
-        blobDesc.Size = msg.Blob.size();
+        blobDesc.Size = msg.Blob.Size();
         blobDesc.Offset = fp->Size;
 
         fp->Size += blobDesc.Size;
@@ -461,7 +471,12 @@ private:
         writeOp->BlobId = msg.BlobId;
         writeOp->Blob = std::move(msg.Blob);
 
-        RunOp("Write", std::move(writeOp), fd);
+        if (!RunOp("Write", std::move(writeOp), fd)) {
+            TString error = "[Write] Can not run operation";
+            LOG_E(error);
+
+            Send(ev->Sender, new TEvDqSpilling::TEvError(error));
+        } 
     }
 
     void HandleWork(TEvPrivate::TEvWriteFileResponse::TPtr& ev) {
@@ -496,6 +511,7 @@ private:
             Counters_->SpillingTotalSpaceUsed->Add(blobDesc.Size);
 
             if (msg.NewFileHandle) {
+                Counters_->SpillingFileDescriptors->Inc();
                 fp->FileHandle.Swap(msg.NewFileHandle);
             }
         } else {
@@ -517,8 +533,15 @@ private:
 
         Counters_->SpillingWriteBlobs->Inc();
 
-        Send(msg.Client, new TEvDqSpilling::TEvWriteResult(msg.BlobId));
-        RunNextOp(fd);
+        if (RunNextOp(fd)) {
+            Send(msg.Client, new TEvDqSpilling::TEvWriteResult(msg.BlobId));
+        } else {
+            TString error = "[WriteFileResponse] Can not run operation";
+            LOG_E(error);
+
+            Send(ev->Sender, new TEvDqSpilling::TEvError(error));
+            return;
+        }
     }
 
     void HandleWork(TEvDqSpilling::TEvRead::TPtr& ev) {
@@ -593,7 +616,12 @@ private:
             readOp->RemoveFile = std::move(fp->FileHandle);
         }
 
-        RunOp("Read", std::move(readOp), fd);
+        if (!RunOp("Read", std::move(readOp), fd)) {
+            TString error = "[Read] Can not run operation";
+            LOG_E(error);
+
+            Send(ev->Sender, new TEvDqSpilling::TEvError(error));
+        } 
     }
 
     void HandleWork(TEvPrivate::TEvReadFileResponse::TPtr& ev) {
@@ -630,6 +658,7 @@ private:
 
                 Counters_->SpillingTotalSpaceUsed->Sub(fp->Size);
                 Counters_->SpillingStoredBlobs->Sub(fp->Blobs.size());
+                Counters_->SpillingFileDescriptors->Dec();
 
                 fd.Parts.erase(msg.BlobId);
                 fd.PartsList.remove_if([fp](const auto& x) { return &x == fp; });
@@ -650,8 +679,15 @@ private:
 
         Counters_->SpillingReadBlobs->Inc();
 
-        Send(msg.Client, new TEvDqSpilling::TEvReadResult(msg.BlobId, std::move(msg.Blob)));
-        RunNextOp(fd);
+        if (RunNextOp(fd)) {
+            Send(msg.Client, new TEvDqSpilling::TEvReadResult(msg.BlobId, std::move(msg.Blob)));
+        } else {
+            TString error = "[ReadFileResponse] Can not run operation";
+            LOG_E(error);
+
+            Send(ev->Sender, new TEvDqSpilling::TEvError(error));
+            return;
+        }
     }
 
     void HandleWork(NMon::TEvHttpInfo::TPtr& ev) {
@@ -675,6 +711,8 @@ private:
 
             TAG(TH2) { s << "Active files"; }
             PRE() { s << "Used space: " << TotalSize_ << Endl; }
+            PRE() { s << "Used file descriptors: " << Counters_->SpillingFileDescriptors->Val() << Endl; }
+            PRE() { s << "IO queue size: " << Counters_->SpillingIOQueueSize->Val() << Endl; }
 
             for (const auto& tx : byTx) {
                 TAG(TH2) { s << "Transaction " << tx.first; }
@@ -778,25 +816,29 @@ private:
     }
 
 private:
-    void RunOp(TStringBuf opName, THolder<IObjectInQueue> op, TFileDesc& fd) {
+
+    bool RunOp(TStringBuf opName, THolder<IObjectInQueue> op, TFileDesc& fd) {
         if (fd.HasActiveOp) {
             fd.Ops.emplace_back(opName, std::move(op));
-        } else {
-            fd.HasActiveOp = true;
-            // TODO: retry if fails
-            IoThreadPool_->SafeAddAndOwn(std::move(op));
+            return true;
         }
+
+        fd.HasActiveOp = true;
+
+        Counters_->SpillingIOQueueSize->Set(IoThreadPool_->Size() + 1);
+        return IoThreadPool_->AddAndOwn(std::move(op));
     }
 
-    void RunNextOp(TFileDesc& fd) {
+    bool RunNextOp(TFileDesc& fd) {
         fd.HasActiveOp = false;
-        if (!fd.Ops.empty()) {
-            auto op = std::move(fd.Ops.front().second);
-            auto opName = fd.Ops.front().first;
-            fd.Ops.pop_front();
-
-            RunOp(opName, std::move(op), fd);
+        if (fd.Ops.empty()) {
+            return true;
         }
+        auto op = std::move(fd.Ops.front().second);
+        auto opName = fd.Ops.front().first;
+        fd.Ops.pop_front();
+
+        return RunOp(opName, std::move(op), fd);
     }
 
     void MoveFileToClosed(TFilesIt it) {
@@ -849,12 +891,12 @@ private:
         TString FileName;
         bool CreateFile = false;
         ui64 BlobId = 0;
-        TRope Blob;
+        TChunkedBuffer Blob;
         TInstant Ts = TInstant::Now();
 
         void Process(void*) override {
             auto now = TInstant::Now();
-            A_LOG_D("[Write async] file: " << FileName << ", blobId: " << BlobId << ", bytes: " << Blob.size()
+            A_LOG_D("[Write async] file: " << FileName << ", blobId: " << BlobId << ", bytes: " << Blob.Size()
                 << ", offset: " << (CreateFile ? 0 : GetFileLength(FileName)));
 
             auto resp = MakeHolder<TEvPrivate::TEvWriteFileResponse>();
@@ -870,9 +912,8 @@ private:
                 } else {
                     file = TFile::ForAppend(FileName);
                 }
-                for (auto it = Blob.Begin(); it.Valid(); ++it) {
-                    file.Write(it.ContiguousData(), it.ContiguousSize());
-                }
+                TUnbufferedFileOutput fout(file);
+                Blob.CopyTo(fout);
             } catch (const yexception& e) {
                 A_LOG_E("[Write async] file: " << FileName << ", io error: " << e.what());
                 resp->Error = e.what();

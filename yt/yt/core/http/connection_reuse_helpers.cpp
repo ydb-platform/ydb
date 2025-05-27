@@ -17,7 +17,7 @@ TReusableConnectionState::TReusableConnectionState(
 
 TReusableConnectionState::~TReusableConnectionState()
 {
-    if (Reusable && OwningPool && Connection->IsIdle()) {
+    if (Reusable && OwningPool && Connection->IsReusable()) {
         OwningPool->Release(std::move(Connection));
     }
 }

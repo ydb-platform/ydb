@@ -21,17 +21,13 @@ public:
     { }
 
     void RegisterStaticAnchor(
-        TLoggingAnchor* anchor,
+        TLoggingAnchor* /*anchor*/,
         ::TSourceLocation /*sourceLocation*/,
         TStringBuf /*anchorMessage*/) override
-    {
-        anchor->Registered = true;
-    }
+    { }
 
-    virtual void UpdateAnchor(TLoggingAnchor* anchor) override
-    {
-        anchor->Enabled = true;
-    }
+    virtual void UpdateAnchor(TLoggingAnchor* /*anchor*/) override
+    { }
 
     virtual void Enqueue(TLogEvent&& event) override
     {
@@ -70,7 +66,7 @@ private:
     IOutputStream* const Output_;
 
     NThreading::TForkAwareSpinLock SpinLock_;
-    THashMap<TString, std::unique_ptr<TLoggingCategory>> NameToCategory_;
+    THashMap<std::string, std::unique_ptr<TLoggingCategory>, THash<TStringBuf>, TEqualTo<TStringBuf>> NameToCategory_;
     std::atomic<int> Version_ = 1;
 
     TPlainTextEventFormatter EventFormatter_{/*enableSourceLocation*/ false};

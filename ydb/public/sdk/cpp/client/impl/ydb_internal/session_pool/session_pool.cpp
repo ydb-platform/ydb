@@ -9,7 +9,7 @@
 
 #include <util/random/random.h>
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 namespace NSessionPool {
 
 using namespace NThreading;
@@ -141,6 +141,7 @@ void TSessionPool::GetSession(std::unique_ptr<IGetSessionCtx> ctx)
         }
         if (!Sessions_.empty()) {
             auto it = std::prev(Sessions_.end());
+            it->second->UpdateServerCloseHandler(nullptr);
             sessionImpl = std::move(it->second);
             Sessions_.erase(it);
         }
@@ -206,6 +207,7 @@ bool TSessionPool::ReturnSession(TKqpSessionCommon* impl, bool active) {
             if (!active)
                 IncrementActiveCounterUnsafe();
         } else {
+            impl->UpdateServerCloseHandler(this);
             Sessions_.emplace(std::make_pair(
                 impl->GetTimeToTouchFast(),
                 impl));
@@ -242,6 +244,7 @@ void TSessionPool::Drain(std::function<bool(std::unique_ptr<TKqpSessionCommon>&&
     std::lock_guard guard(Mtx_);
     Closed_ = close;
     for (auto it = Sessions_.begin(); it != Sessions_.end();) {
+        it->second->UpdateServerCloseHandler(nullptr);
         const bool cont = cb(std::move(it->second));
         it = Sessions_.erase(it);
         if (!cont)
@@ -283,11 +286,16 @@ TPeriodicCb TSessionPool::CreatePeriodicTask(std::weak_ptr<ISessionClient> weakC
                             break;
 
                         if (deletePredicate(it->second.get(), sessions.size())) {
+                            it->second->UpdateServerCloseHandler(nullptr);
                             sessionsToDelete.emplace_back(std::move(it->second));
-                        } else {
+                            sessions.erase(it++);
+                        } else if (cmd) {
+                            it->second->UpdateServerCloseHandler(nullptr);
                             sessionsToTouch.emplace_back(std::move(it->second));
+                            sessions.erase(it++);
+                        } else {
+                            it++;
                         }
-                        sessions.erase(it++);
                     }
                 }
 
@@ -333,6 +341,33 @@ i64 TSessionPool::GetActiveSessionsLimit() const {
 i64 TSessionPool::GetCurrentPoolSize() const {
     std::lock_guard guard(Mtx_);
     return Sessions_.size();
+}
+
+void TSessionPool::OnCloseSession(const TKqpSessionCommon* s, std::shared_ptr<ISessionClient> client) {
+
+    std::unique_ptr<TKqpSessionCommon> session;
+    {
+        std::lock_guard guard(Mtx_);
+        const auto timeToTouch = s->GetTimeToTouchFast();
+        const auto id = s->GetId();
+        auto it = Sessions_.find(timeToTouch);
+        // Sessions_ is multimap of sessions sorted by scheduled time to run periodic task
+        // Scan sessions with same scheduled time to find needed one. In most cases only one session here
+        while (it != Sessions_.end() && it->first == timeToTouch) {
+            if (id != it->second->GetId()) {
+                it++;
+                continue;
+            }
+            session = std::move(it->second);
+            Sessions_.erase(it);
+            break;
+        }
+    }
+
+    if (session) {
+        Y_ABORT_UNLESS(session->GetState() == TKqpSessionCommon::S_IDLE);
+        CloseAndDeleteSession(std::move(session), client);
+    }
 }
 
 void TSessionPool::SetStatCollector(NSdkStats::TStatCollector::TSessionPoolStatCollector statCollector) {

@@ -49,6 +49,9 @@ void TDriverConfig::Register(TRegistrar registrar)
     registrar.Parameter("token", &TThis::Token)
         .Optional();
 
+    registrar.Parameter("multiproxy_target_cluster", &TThis::MultiproxyTargetCluster)
+        .Optional();
+
     registrar.Parameter("proxy_discovery_cache", &TThis::ProxyDiscoveryCache)
         .DefaultNew();
 
@@ -56,6 +59,9 @@ void TDriverConfig::Register(TRegistrar registrar)
         .Default(false);
 
     registrar.Parameter("expect_structured_input_in_structured_batch_commands", &TThis::ExpectStructuredInputInStructuredBatchCommands)
+        .Default(true);
+
+    registrar.Parameter("require_password_in_authentication_commands", &TThis::RequirePasswordInAuthenticationCommands)
         .Default(true);
 
     registrar.Preprocessor([] (TThis* config) {

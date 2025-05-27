@@ -1,0 +1,21 @@
+--- contrib/libs/grpc/src/core/lib/iomgr/event_engine_shims/tcp_client.cc	(index)
++++ contrib/libs/grpc/src/core/lib/iomgr/event_engine_shims/tcp_client.cc	(working tree)
+@@ -16,6 +16,7 @@
+ #include "src/core/lib/iomgr/event_engine_shims/tcp_client.h"
+ 
+ #include "y_absl/status/status.h"
++#include "y_absl/strings/str_cat.h"
+ #include "y_absl/strings/string_view.h"
+ 
+ #include <grpc/event_engine/event_engine.h>
+--- contrib/libs/grpc/src/core/lib/iomgr/tcp_posix.cc	(index)
++++ contrib/libs/grpc/src/core/lib/iomgr/tcp_posix.cc	(working tree)
+@@ -18,6 +18,8 @@
+ 
+ #include <grpc/support/port_platform.h>
+ 
++#include "y_absl/strings/str_cat.h"
++
+ #include <grpc/impl/grpc_types.h>
+ 
+ #include "src/core/lib/iomgr/exec_ctx.h"

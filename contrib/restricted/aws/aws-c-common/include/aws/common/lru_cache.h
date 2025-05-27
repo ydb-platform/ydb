@@ -7,6 +7,7 @@
 
 #include <aws/common/cache.h>
 
+AWS_PUSH_SANE_WARNING_LEVEL
 AWS_EXTERN_C_BEGIN
 
 /**
@@ -38,5 +39,6 @@ AWS_COMMON_API
 void *aws_lru_cache_get_mru_element(const struct aws_cache *cache);
 
 AWS_EXTERN_C_END
+AWS_POP_SANE_WARNING_LEVEL
 
 #endif /* AWS_COMMON_LRU_CACHE_H */

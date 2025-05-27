@@ -30,7 +30,9 @@ enum EQueryId {
     GET_USER_SETTINGS_ID,
     GET_QUEUES_LIST_ID,
     GET_STATE_ID,
-    
+    TAG_QUEUE_ID,
+    UNTAG_QUEUE_ID,
+
     QUERY_VECTOR_SIZE,
 };
 

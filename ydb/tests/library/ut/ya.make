@@ -1,8 +1,14 @@
 PY3TEST()
 
+ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
+
+DEPENDS(
+    ydb/apps/ydbd
+)
+
 PEERDIR(
     ydb/tests/library
-    ydb/library/yql/providers/common/proto
+    yql/essentials/providers/common/proto
 )
 
 TEST_SRCS(

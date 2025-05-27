@@ -5,6 +5,7 @@ SRCS(
     counters.cpp
     task.cpp
     events.cpp
+    container.cpp
 )
 
 PEERDIR(

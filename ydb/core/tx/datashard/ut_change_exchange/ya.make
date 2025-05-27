@@ -4,16 +4,10 @@ FORK_SUBTESTS()
 
 SPLIT_FACTOR(4)
 
-IF (SANITIZER_TYPE)
-    REQUIREMENTS(ram:32)
-ENDIF()
-
 IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
-    TIMEOUT(3600)
     SIZE(LARGE)
     TAG(ya:fat)
 ELSE()
-    TIMEOUT(600)
     SIZE(MEDIUM)
 ENDIF()
 
@@ -23,14 +17,15 @@ PEERDIR(
     library/cpp/regex/pcre
     library/cpp/svnversion
     ydb/core/kqp/ut/common
-    ydb/core/testlib/default
+    ydb/core/testlib/pg
     ydb/core/tx
-    ydb/library/yql/public/udf/service/exception_policy
+    ydb/core/tx/schemeshard/ut_helpers
+    yql/essentials/public/udf/service/exception_policy
     ydb/public/lib/yson_value
-    ydb/public/sdk/cpp/client/ydb_datastreams
-    ydb/public/sdk/cpp/client/ydb_topic
-    ydb/public/sdk/cpp/client/ydb_persqueue_public
-    ydb/public/sdk/cpp/client/ydb_result
+    ydb/public/sdk/cpp/src/client/datastreams
+    ydb/public/sdk/cpp/src/client/topic
+    ydb/public/sdk/cpp/src/client/persqueue_public
+    ydb/public/sdk/cpp/src/client/result
 )
 
 YQL_LAST_ABI_VERSION()

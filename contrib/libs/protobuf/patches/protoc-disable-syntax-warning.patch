@@ -1,0 +1,14 @@
+--- a/src/google/protobuf/compiler/parser.cc	(index)
++++ b/src/google/protobuf/compiler/parser.cc	(working tree)
+@@ -670,11 +670,6 @@ bool Parser::Parse(io::Tokenizer* input, FileDescriptorProto* file) {
+         file->set_syntax(syntax_identifier_);
+       }
+     } else if (!stop_after_syntax_identifier_) {
+-      ABSL_LOG(WARNING) << "No syntax specified for the proto file: "
+-                        << file->name()
+-                        << ". Please use 'syntax = \"proto2\";' "
+-                        << "or 'syntax = \"proto3\";' to specify a syntax "
+-                        << "version. (Defaulted to proto2 syntax.)";
+       syntax_identifier_ = "proto2";
+     }
+ 

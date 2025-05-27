@@ -66,5 +66,5 @@ variable "ssh-keys-lockbox-version-id" {
 
 variable "webhook_container_image" {
   type    = string
-  default = "cr.yandex/crp2lrlsrs36odlvd8dv/github-runner-scale-webhook:1"
+  default = "cr.yandex/crp2lrlsrs36odlvd8dv/github-runner-scale-webhook:2"
 }

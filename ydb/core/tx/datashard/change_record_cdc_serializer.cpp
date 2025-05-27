@@ -1,14 +1,15 @@
 #include "change_record_cdc_serializer.h"
 #include "change_record.h"
-#include "export_common.h"
+#include "type_serialization.h"
 
 #include <ydb/core/protos/change_exchange.pb.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/core/protos/msgbus_pq.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
-#include <ydb/library/binary_json/read.h>
-#include <ydb/library/uuid/uuid.h>
+#include <yql/essentials/types/binary_json/read.h>
+#include <yql/essentials/types/uuid/uuid.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
+#include <ydb/public/api/protos/ydb_topic.pb.h>
 
 #include <library/cpp/digest/md5/md5.h>
 #include <library/cpp/json/json_reader.h>
@@ -61,7 +62,8 @@ public:
         case TChangeRecord::EKind::CdcHeartbeat:
             return SerializeHeartbeat(cmd, record);
         case TChangeRecord::EKind::AsyncIndex:
-            Y_ABORT("Unexpected");
+        case TChangeRecord::EKind::IncrementalRestore:
+            Y_ENSURE(false, "Unexpected");
         }
     }
 
@@ -106,20 +108,29 @@ class TJsonSerializer: public TBaseSerializer {
 protected:
     static auto ParseBody(const TString& protoBody) {
         NKikimrChangeExchange::TDataChange body;
-        Y_ABORT_UNLESS(body.ParseFromArray(protoBody.data(), protoBody.size()));
+        Y_ENSURE(body.ParseFromArray(protoBody.data(), protoBody.size()));
         return body;
     }
 
     static NJson::TJsonValue StringToJson(TStringBuf in) {
         NJson::TJsonValue result;
-        Y_ABORT_UNLESS(NJson::ReadJsonTree(in, &result));
+        Y_ENSURE(NJson::ReadJsonTree(in, &result));
         return result;
     }
 
     static NJson::TJsonValue YsonToJson(TStringBuf in) {
         NJson::TJsonValue result;
-        Y_ABORT_UNLESS(NJson2Yson::DeserializeYsonAsJsonValue(in, &result));
+        Y_ENSURE(NJson2Yson::DeserializeYsonAsJsonValue(in, &result));
         return result;
+    }
+
+    static NJson::TJsonValue UuidToJson(const TCell& cell) {
+        TStringStream ss;
+        ui16 dw[8];
+        Y_ENSURE(cell.Size() == 16);
+        cell.CopyDataInto((char*)dw);
+        NUuid::UuidToString(dw, ss);
+        return NJson::TJsonValue(ss.Str());
     }
 
     static NJson::TJsonValue ToJson(const TCell& cell, NScheme::TTypeInfo type) {
@@ -165,7 +176,7 @@ protected:
         case NScheme::NTypeIds::Timestamp64:
             return NJson::TJsonValue(cell.AsValue<i64>());            
         case NScheme::NTypeIds::Decimal:
-            return NJson::TJsonValue(DecimalToString(cell.AsValue<std::pair<ui64, i64>>()));
+            return NJson::TJsonValue(DecimalToString(cell.AsValue<std::pair<ui64, i64>>(), type));
         case NScheme::NTypeIds::DyNumber:
             return NJson::TJsonValue(DyNumberToString(cell.AsBuf()));
         case NScheme::NTypeIds::String:
@@ -181,27 +192,26 @@ protected:
         case NScheme::NTypeIds::Yson:
             return YsonToJson(cell.AsBuf());
         case NScheme::NTypeIds::Pg:
-            // TODO: support pg types
-            Y_ABORT("pg types are not supported");
+            return NJson::TJsonValue(PgToString(cell.AsBuf(), type));
         case NScheme::NTypeIds::Uuid:
-            return NJson::TJsonValue(NUuid::UuidBytesToString(cell.Data()));
+            return UuidToJson(cell);
         default:
-            Y_ABORT("Unexpected type");
+            Y_ENSURE(false, "Unexpected type");
         }
     }
 
     static void SerializeJsonKey(TUserTable::TCPtr schema, NJson::TJsonValue& key,
         const NKikimrChangeExchange::TDataChange::TSerializedCells& in)
     {
-        Y_ABORT_UNLESS(in.TagsSize() == schema->KeyColumnIds.size());
+        Y_ENSURE(in.TagsSize() == schema->KeyColumnIds.size());
         for (size_t i = 0; i < schema->KeyColumnIds.size(); ++i) {
-            Y_ABORT_UNLESS(in.GetTags(i) == schema->KeyColumnIds.at(i));
+            Y_ENSURE(in.GetTags(i) == schema->KeyColumnIds.at(i));
         }
 
         TSerializedCellVec cells;
-        Y_ABORT_UNLESS(TSerializedCellVec::TryParse(in.GetData(), cells));
+        Y_ENSURE(TSerializedCellVec::TryParse(in.GetData(), cells));
 
-        Y_ABORT_UNLESS(cells.GetCells().size() == schema->KeyColumnTypes.size());
+        Y_ENSURE(cells.GetCells().size() == schema->KeyColumnTypes.size());
         for (size_t i = 0; i < schema->KeyColumnTypes.size(); ++i) {
             const auto type = schema->KeyColumnTypes.at(i);
             const auto& cell = cells.GetCells().at(i);
@@ -213,15 +223,15 @@ protected:
         const NKikimrChangeExchange::TDataChange::TSerializedCells& in)
     {
         TSerializedCellVec cells;
-        Y_ABORT_UNLESS(TSerializedCellVec::TryParse(in.GetData(), cells));
-        Y_ABORT_UNLESS(in.TagsSize() == cells.GetCells().size());
+        Y_ENSURE(TSerializedCellVec::TryParse(in.GetData(), cells));
+        Y_ENSURE(in.TagsSize() == cells.GetCells().size());
 
         for (ui32 i = 0; i < in.TagsSize(); ++i) {
             const auto tag = in.GetTags(i);
             const auto& cell = cells.GetCells().at(i);
 
             auto it = schema->Columns.find(tag);
-            Y_ABORT_UNLESS(it != schema->Columns.end());
+            Y_ENSURE(it != schema->Columns.end());
 
             const auto& column = it->second;
             value.InsertValue(column.Name, ToJson(cell, column.Type));
@@ -229,7 +239,7 @@ protected:
     }
 
     static void ExtendJson(NJson::TJsonValue& value, const NJson::TJsonValue& ext) {
-        Y_ABORT_UNLESS(ext.GetType() == NJson::JSON_MAP);
+        Y_ENSURE(ext.GetType() == NJson::JSON_MAP);
         for (const auto& [k, v] : ext.GetMapSafe()) {
             value.InsertValue(k, v);
         }
@@ -294,19 +304,19 @@ protected:
             return SerializeVirtualTimestamp(json["resolved"], {record.GetStep(), record.GetTxId()});
         }
 
-        Y_ABORT_UNLESS(record.GetSchema());
+        Y_ENSURE(record.GetSchema());
         const auto body = ParseBody(record.GetBody());
 
         switch (record.GetKind()) {
         case TChangeRecord::EKind::AsyncIndex:
-            Y_ABORT_UNLESS(Opts.Debug);
+            Y_ENSURE(Opts.Debug);
             SerializeJsonValue(record.GetSchema(), json["key"], body.GetKey());
             break;
         case TChangeRecord::EKind::CdcDataChange:
             SerializeJsonKey(record.GetSchema(), json["key"], body.GetKey());
             break;
         default:
-            Y_ABORT("Unexpected record");
+            Y_ENSURE(false, "Unexpected record");
         }
 
         if (body.HasOldImage()) {
@@ -335,7 +345,7 @@ protected:
             json["erase"].SetType(NJson::JSON_MAP);
             break;
         default:
-            Y_FAIL_S("Unexpected row operation: " << static_cast<int>(body.GetRowOperationCase()));
+            Y_ENSURE(false, "Unexpected row operation: " << static_cast<int>(body.GetRowOperationCase()));
         }
 
         if (Opts.VirtualTimestamps) {
@@ -353,8 +363,8 @@ class TDynamoDBStreamsJsonSerializer: public TJsonSerializer {
         const NKikimrChangeExchange::TDataChange::TSerializedCells& in)
     {
         TSerializedCellVec cells;
-        Y_ABORT_UNLESS(TSerializedCellVec::TryParse(in.GetData(), cells));
-        Y_ABORT_UNLESS(in.TagsSize() == cells.GetCells().size());
+        Y_ENSURE(TSerializedCellVec::TryParse(in.GetData(), cells));
+        Y_ENSURE(in.TagsSize() == cells.GetCells().size());
 
         for (ui32 i = 0; i < in.TagsSize(); ++i) {
             const auto tag = in.GetTags(i);
@@ -365,7 +375,7 @@ class TDynamoDBStreamsJsonSerializer: public TJsonSerializer {
             }
 
             auto it = schema->Columns.find(tag);
-            Y_ABORT_UNLESS(it != schema->Columns.end());
+            Y_ENSURE(it != schema->Columns.end());
 
             const auto& column = it->second;
             const auto& name = column.Name;
@@ -379,7 +389,7 @@ class TDynamoDBStreamsJsonSerializer: public TJsonSerializer {
                     if (index.Type != TUserTable::TTableIndex::EType::EIndexTypeGlobalAsync) {
                         continue;
                     }
-                    Y_ABORT_UNLESS(index.KeyColumnIds.size() >= 1);
+                    Y_ENSURE(index.KeyColumnIds.size() >= 1);
                     if (index.KeyColumnIds.at(0) == tag) {
                         indexed = true;
                         break;
@@ -415,8 +425,8 @@ class TDynamoDBStreamsJsonSerializer: public TJsonSerializer {
 
 protected:
     void SerializeToJson(NJson::TJsonValue& json, const TChangeRecord& record) override {
-        Y_ABORT_UNLESS(record.GetKind() == TChangeRecord::EKind::CdcDataChange);
-        Y_ABORT_UNLESS(record.GetSchema());
+        Y_ENSURE(record.GetKind() == TChangeRecord::EKind::CdcDataChange);
+        Y_ENSURE(record.GetSchema());
 
         json = NJson::TJsonMap({
             {"awsRegion", Opts.AwsRegion},
@@ -478,7 +488,7 @@ protected:
             json["eventName"] = "REMOVE";
             break;
         default:
-            Y_FAIL_S("Unexpected row operation: " << static_cast<int>(body.GetRowOperationCase()));
+            Y_ENSURE(false, "Unexpected row operation: " << static_cast<int>(body.GetRowOperationCase()));
         }
     }
 
@@ -490,8 +500,8 @@ public:
 class TDebeziumJsonSerializer: public TJsonSerializer {
 protected:
     void SerializeToJson(NJson::TJsonValue& json, const TChangeRecord& record) override {
-        Y_ABORT_UNLESS(record.GetKind() == TChangeRecord::EKind::CdcDataChange);
-        Y_ABORT_UNLESS(record.GetSchema());
+        Y_ENSURE(record.GetKind() == TChangeRecord::EKind::CdcDataChange);
+        Y_ENSURE(record.GetSchema());
 
         const auto body = ParseBody(record.GetBody());
         auto& keyJson = json["key"];
@@ -528,7 +538,7 @@ protected:
                 valueJson["payload"]["op"] = "d"; // d = delete
                 break;
             default:
-                Y_FAIL_S("Unexpected row operation: " << static_cast<int>(body.GetRowOperationCase()));
+                Y_ENSURE(false, "Unexpected row operation: " << static_cast<int>(body.GetRowOperationCase()));
             }
         }
 
@@ -582,7 +592,7 @@ IChangeRecordSerializer* CreateChangeRecordSerializer(const TChangeRecordSeriali
     case TUserTable::TCdcStream::EFormat::ECdcStreamFormatDebeziumJson:
         return new TDebeziumJsonSerializer(opts);
     default:
-        Y_ABORT("Unsupported format");
+        Y_ENSURE(false, "Unsupported format");
     }
 }
 
@@ -595,8 +605,8 @@ TString TChangeRecord::GetPartitionKey() const {
         return *PartitionKey;
     }
 
-    Y_ABORT_UNLESS(Kind == EKind::CdcDataChange);
-    Y_ABORT_UNLESS(Schema);
+    Y_ENSURE(Kind == EKind::CdcDataChange);
+    Y_ENSURE(Schema);
 
     const auto body = TJsonSerializer::ParseBody(Body);
 

@@ -19,22 +19,22 @@ public:
         SwitchGen();
     }
 
-    NIceDb::TNiceDb Begin() noexcept {
+    NIceDb::TNiceDb Begin() {
         Annex->Switch(++Step, /* require step switch */ true);
         DB.Begin({ Gen, Step }, Env.emplace());
         return DB;
     }
 
-    void Commit() noexcept {
+    void Commit() {
         DB.Commit({ Gen, Step }, true, Annex.Get());
         Env.reset();
     }
 
-    TSnapEdge SnapshotTable(ui32 table) noexcept {
+    TSnapEdge SnapshotTable(ui32 table) {
         const auto scn = DB.Head().Serial + 1;
         TTxStamp txStamp(Gen, ++Step);
         DB.SnapshotToLog(table, txStamp);
-        Y_ABORT_UNLESS(scn == DB.Head().Serial);
+        Y_ENSURE(scn == DB.Head().Serial);
         auto chg = DB.Head(table);
         return { txStamp, chg.Epoch };
     }
@@ -47,13 +47,13 @@ public:
         return DB.GetScheme();
     }
 
-    TIntrusiveConstPtr<NKikimr::NTable::TRowScheme> RowScheme(ui32 table) override {
+    TIntrusiveConstPtr<NKikimr::NTable::TRowScheme> RowScheme(ui32 table) const override {
         return DB.GetRowScheme(table);
     }
 
     const TScheme::TTableInfo* TableScheme(ui32 table) override {
         auto* info = DB.GetScheme().GetTableInfo(table);
-        Y_ABORT_UNLESS(info, "Unexpected table");
+        Y_ENSURE(info, "Unexpected table");
         return info;
     }
 
@@ -63,7 +63,7 @@ public:
 
     TPartView TablePart(ui32 table, const TLogoBlobID& label) override {
         auto partView = DB.GetPartView(table, label);
-        Y_ABORT_UNLESS(partView, "Unexpected part %s", label.ToString().c_str());
+        Y_ENSURE(partView, "Unexpected part " << label);
         return partView;
     }
 
@@ -80,7 +80,7 @@ public:
     }
 
     ui64 BeginCompaction(THolder<TCompactionParams> params) override {
-        Y_ABORT_UNLESS(params);
+        Y_ENSURE(params);
         ui64 compactionId = NextCompactionId_++;
         StartedCompactions[compactionId] = std::move(params);
         return compactionId;
@@ -90,45 +90,13 @@ public:
         return StartedCompactions.erase(compactionId) > 0;
     }
 
-    ui64 BeginRead(THolder<ICompactionRead> read) override {
-        Y_ABORT_UNLESS(read);
-        ui64 readId = NextReadId_++;
-        PendingReads[readId] = std::move(read);
-        return readId;
-    }
-
-    bool CancelRead(ui64 readId) override {
-        return PendingReads.erase(readId) > 0;
-    }
-
     void RequestChanges(ui32 table) override {
-        Y_ABORT_UNLESS(table == 1, "Unexpected table");
+        Y_ENSURE(table == 1, "Unexpected table");
         ChangesRequested_ = true;
     }
 
     bool CheckChangesFlag() {
         return std::exchange(ChangesRequested_, false);
-    }
-
-    struct TReadResult {
-        ui64 ReadId;
-        bool Completed;
-    };
-
-    TReadResult RunRead(IPages* env) {
-        Y_ABORT_UNLESS(PendingReads, "There are no pending reads");
-        ui64 readId = PendingReads.begin()->first;
-        return RunRead(readId, env);
-    }
-
-    TReadResult RunRead(ui64 readId, IPages* env) {
-        auto it = PendingReads.find(readId);
-        Y_ABORT_UNLESS(it != PendingReads.end());
-        bool completed = it->second->Execute(env);
-        if (completed) {
-            PendingReads.erase(readId);
-        }
-        return { readId, completed };
     }
 
     struct TRunCompactionResult {
@@ -138,14 +106,14 @@ public:
     };
 
     TRunCompactionResult RunCompaction() {
-        Y_ABORT_UNLESS(StartedCompactions, "There are no started compactions");
+        Y_ENSURE(StartedCompactions, "There are no started compactions");
         ui64 compactionId = StartedCompactions.begin()->first;
         return RunCompaction(compactionId);
     }
 
     TRunCompactionResult RunCompaction(ui64 compactionId) {
         auto it = StartedCompactions.find(compactionId);
-        Y_ABORT_UNLESS(it != StartedCompactions.end());
+        Y_ENSURE(it != StartedCompactions.end());
         auto params = std::move(it->second);
         StartedCompactions.erase(it);
         auto result = RunCompaction(params.Get());
@@ -157,12 +125,15 @@ public:
             SnapshotTable(params->Table);
         }
 
-        auto subset = DB.Subset(params->Table, { }, params->Edge.Head);
+        auto subset = DB.CompactionSubset(params->Table, params->Edge.Head, { });
         if (params->Parts) {
             subset->Flatten.insert(subset->Flatten.end(), params->Parts.begin(), params->Parts.end());
         }
 
-        Y_ABORT_UNLESS(!*subset || subset->IsStickedToHead());
+        // Note: we don't compact TxStatus in these tests
+        Y_ENSURE(subset->TxStatus.empty());
+
+        Y_ENSURE(!*subset || subset->IsStickedToHead());
 
         const auto& scheme = DB.GetScheme();
         auto* family = scheme.DefaultFamilyFor(params->Table);
@@ -192,11 +163,10 @@ public:
         TVector<TPartView> parts(Reserve(eggs.Parts.size()));
         for (auto& part : eggs.Parts) {
             parts.push_back({ part, nullptr, part->Slices });
-            Y_ABORT_UNLESS(parts.back());
+            Y_ENSURE(parts.back());
         }
 
-        auto partsCopy = parts;
-        DB.Replace(params->Table, partsCopy, *subset);
+        DB.Replace(params->Table, *subset, parts, { });
 
         return MakeHolder<TCompactionResult>(subset->Epoch(), std::move(parts));
     }
@@ -213,7 +183,7 @@ public:
 
         for (auto& change : changes.SliceChanges) {
             auto partView = DB.GetPartView(table, change.Label);
-            Y_ABORT_UNLESS(partView, "Cannot find part %s", change.Label.ToString().c_str());
+            Y_ENSURE(partView, "Cannot find part " << change.Label);
             auto replaced = TSlices::Replace(partView.Slices, change.NewSlices);
             DB.ReplaceSlices(table, {{ change.Label, std::move(replaced) }});
         }
@@ -322,7 +292,6 @@ private:
 public:
     TDatabase DB;
     std::optional<TTestEnv> Env;
-    THashMap<ui64, THolder<ICompactionRead>> PendingReads;
     THashMap<ui64, THolder<TCompactionParams>> StartedCompactions;
     THashMap<ui32, THashMap<ui64, TString>> TableState;
     ui64 TabletId = 123;
@@ -332,7 +301,6 @@ private:
     ui32 Gen = 0;
     ui32 Step = 0;
 
-    ui64 NextReadId_ = 1;
     ui64 NextCompactionId_ = 1;
     ui64 NextForcedCompactionId_ = 1001;
 
@@ -404,7 +372,7 @@ private:
 };
 
 struct TSimpleLogger : public NUtil::ILogger {
-    NUtil::TLogLn Log(NUtil::ELnLev level) const noexcept override {
+    NUtil::TLogLn Log(NUtil::ELnLev level) const override {
         return { nullptr, level };
     }
 };

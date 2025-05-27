@@ -5,18 +5,31 @@ items:
   href: build-ya.md
 - name: Релизы
   href: manage-releases.md
+- name: Документация
+  href: documentation/index.md
+  include:
+    mode: link
+    path: documentation/toc_p.yaml
 - name: Ядро
   items:
+  - name: Общая схема
+    href: general-schema.md
+  - name: Распределённое хранилище
+    href: distributed-storage.md
   - name: LocalDB
     items:
     - name: Персистентные незакомиченные изменения
       href: localdb-uncommitted-txs.md
+  - name: Hive
+    href: hive.md
   - name: DataShard
     items:
     - name: Локи и видимость изменений в транзакциях
       href: datashard-locks-and-change-visibility.md
     - name: Распределённые транзакции
       href: datashard-distributed-txs.md
+  - name: Конфигурация V2
+    href: configuration-v2.md
   - name: Тестирование с помощью нагружающих акторов
     href: load-actors-overview.md
     items:

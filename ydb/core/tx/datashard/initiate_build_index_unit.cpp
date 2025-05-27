@@ -1,4 +1,5 @@
 #include "datashard_impl.h"
+#include "datashard_locks_db.h"
 #include "datashard_pipeline.h"
 #include "execution_unit_ctors.h"
 
@@ -18,10 +19,10 @@ public:
     }
 
     EExecutionStatus Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) override {
-        Y_ABORT_UNLESS(op->IsSchemeTx());
+        Y_ENSURE(op->IsSchemeTx());
 
         TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
-        Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
+        Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
 
         auto& schemeTx = tx->GetSchemeTx();
         if (!schemeTx.HasInitiateBuildIndex()) {
@@ -30,11 +31,11 @@ public:
 
         const auto& params = schemeTx.GetInitiateBuildIndex();
 
-        const auto pathId = PathIdFromPathId(params.GetPathId());
-        Y_ABORT_UNLESS(pathId.OwnerId == DataShard.GetPathOwnerId());
+        const auto pathId = TPathId::FromProto(params.GetPathId());
+        Y_ENSURE(pathId.OwnerId == DataShard.GetPathOwnerId());
 
         const auto version = params.GetTableSchemaVersion();
-        Y_ABORT_UNLESS(version);
+        Y_ENSURE(version);
 
         TUserTable::TPtr tableInfo;
         if (params.HasIndexDescription()) {
@@ -52,8 +53,9 @@ public:
             tableInfo = DataShard.AlterTableSchemaVersion(ctx, txc, pathId, version);
         }
 
-        Y_ABORT_UNLESS(tableInfo);
-        DataShard.AddUserTable(pathId, tableInfo);
+        Y_ENSURE(tableInfo);
+        TDataShardLocksDb locksDb(DataShard, txc);
+        DataShard.AddUserTable(pathId, tableInfo, &locksDb);
 
         if (tableInfo->NeedSchemaSnapshots()) {
             DataShard.AddSchemaSnapshot(pathId, version, op->GetStep(), op->GetTxId(), txc, ctx);
@@ -61,7 +63,7 @@ public:
 
         ui64 step = tx->GetStep();
         ui64 txId = tx->GetTxId();
-        Y_ABORT_UNLESS(step != 0);
+        Y_ENSURE(step != 0);
 
         const TSnapshotKey key(pathId, step, txId);
         const ui64 flags = TSnapshot::FlagScheme;

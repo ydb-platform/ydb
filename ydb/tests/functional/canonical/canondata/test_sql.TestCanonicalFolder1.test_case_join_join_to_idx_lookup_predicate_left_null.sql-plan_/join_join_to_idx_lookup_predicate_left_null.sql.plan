@@ -27,7 +27,10 @@
                         "Key1",
                         "Value"
                     ],
-                    "type": "Scan"
+                    "lookup_by": [
+                        "Key1"
+                    ],
+                    "type": "Lookup"
                 }
             ]
         }

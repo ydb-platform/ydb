@@ -9,6 +9,16 @@ enum ESimpleCounters {
     COUNTER_TOTAL_STORED_TRASH_SIZE = 1 [(NKikimr.CounterOpts) = {Name: "TotalStoredTrashSize"}];
     COUNTER_IN_FLIGHT_TRASH_SIZE = 2 [(NKikimr.CounterOpts) = {Name: "InFlightTrashSize"}];
     COUNTER_BYTES_TO_DECOMMIT = 3 [(NKikimr.CounterOpts) = {Name: "BytesToDecommit"}];
+    COUNTER_TOTAL_S3_DATA_OBJECTS = 4 [(NKikimr.CounterOpts) = {Name: "TotalS3DataObjects"}];
+    COUNTER_TOTAL_S3_DATA_SIZE = 5 [(NKikimr.CounterOpts) = {Name: "TotalS3DataSize"}];
+    COUNTER_TOTAL_S3_TRASH_OBJECTS = 6 [(NKikimr.CounterOpts) = {Name: "TotalS3TrashObjects"}];
+    COUNTER_TOTAL_S3_TRASH_SIZE = 7 [(NKikimr.CounterOpts) = {Name: "TotalS3TrashSize"}];
+    COUNTER_MODE_STARTING = 8 [(NKikimr.CounterOpts) = {Name: "Mode/Starting"}];
+    COUNTER_MODE_LOADING_KEYS = 9 [(NKikimr.CounterOpts) = {Name: "Mode/LoadingKeys"}];
+    COUNTER_MODE_LOADED = 10 [(NKikimr.CounterOpts) = {Name: "Mode/Loaded"}];
+    COUNTER_DECOMMIT_MODE_PREPARING = 11 [(NKikimr.CounterOpts) = {Name: "DecommitMode/Preparing"}];
+    COUNTER_DECOMMIT_MODE_IN_PROGRESS = 12 [(NKikimr.CounterOpts) = {Name: "DecommitMode/InProgress"}];
+    COUNTER_DECOMMIT_MODE_DONE = 13 [(NKikimr.CounterOpts) = {Name: "DecommitMode/Done"}];
 }
 
 enum ECumulativeCounters {
@@ -17,6 +27,12 @@ enum ECumulativeCounters {
     COUNTER_PUTS_ERROR = 2 [(NKikimr.CounterOpts) = {Name: "Puts/Error"}];
     COUNTER_DECOMMIT_GET_BYTES = 3 [(NKikimr.CounterOpts) = {Name: "Decommit/GetBytes"}];
     COUNTER_DECOMMIT_PUT_OK_BYTES = 4 [(NKikimr.CounterOpts) = {Name: "Decommit/PutOkBytes"}];
+    COUNTER_S3_PUTS_OK = 5 [(NKikimr.CounterOpts) = {Name: "S3/Puts/Ok"}];
+    COUNTER_S3_PUTS_ERROR = 6 [(NKikimr.CounterOpts) = {Name: "S3/Puts/Error"}];
+    COUNTER_S3_PUTS_BYTES = 7 [(NKikimr.CounterOpts) = {Name: "S3/Puts/OkBytes"}];
+    COUNTER_S3_DELETES_OK = 8 [(NKikimr.CounterOpts) = {Name: "S3/Deletes/Ok"}];
+    COUNTER_S3_DELETES_ERROR = 9 [(NKikimr.CounterOpts) = {Name: "S3/Deletes/Error"}];
+    COUNTER_S3_DELETES_BYTES = 10 [(NKikimr.CounterOpts) = {Name: "S3/Deletes/OkBytes"}];
 }
 
 enum EPercentileCounters {
@@ -61,4 +77,10 @@ enum ETxTypes {
     TXTYPE_COMMIT_BLOB_SEQ = 14 [(NKikimr.TxTypeOpts) = {Name: "TTxCommitBlobSeq"}];
     TXTYPE_UPDATE_BLOCK = 15 [(NKikimr.TxTypeOpts) = {Name: "TTxUpdateBlock"}];
     TXTYPE_HARD_GC = 16 [(NKikimr.TxTypeOpts) = {Name: "TTxHardGC"}];
+    TXTYPE_PREPARE_WRITE_S3 = 17 [(NKikimr.TxTypeOpts) = {Name: "TTxPrepareWriteS3"}];
+    TXTYPE_DELETE_TRASH_S3 = 18 [(NKikimr.TxTypeOpts) = {Name: "TTxDeleteTrashS3"}];
+    TXTYPE_PROCESS_SCANNED_KEYS = 19 [(NKikimr.TxTypeOpts) = {Name: "TTxProcessScannedKeys"}];
+    TXTYPE_DECOMMIT_BLOBS = 20 [(NKikimr.TxTypeOpts) = {Name: "TTxDecommitBlobs"}];
+    TXTYPE_PREPARE = 21 [(NKikimr.TxTypeOpts) = {Name: "TTxPrepare"}];
+    TXTYPE_HARD_COLLECT_ASSIMILATED_BLOBS = 22 [(NKikimr.TxTypeOpts) = {Name: "TTxHardCollectAssimilatedBlobs"}];
 }

@@ -1,8 +1,6 @@
 #pragma once
 
-#include "public.h"
-
-#include <yt/yt/library/profiling/sensor.h>
+#include "private.h"
 
 #include <yt/yt/library/syncmap/map.h>
 
@@ -14,25 +12,24 @@ namespace NYT::NTracing {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TSamplerConfig
+struct TSamplerConfig
     : public NYTree::TYsonStruct
 {
-public:
     //! Request is sampled with probability P.
     double GlobalSampleRate;
 
     //! Additionally, request is sampled with probability P(user).
-    THashMap<TString, double> UserSampleRate;
+    THashMap<std::string, double> UserSampleRate;
 
     //! Spans are sent to specified endpoint.
-    THashMap<TString, TString> UserEndpoint;
+    THashMap<std::string, TString> UserEndpoint;
 
     //! Additionally, sample first N requests for each user in the window.
     ui64 MinPerUserSamples;
     TDuration MinPerUserSamplesPeriod;
 
     //! Clear sampled from from incoming user request.
-    THashMap<TString, bool> ClearSampledFlag;
+    THashMap<std::string, bool> ClearSampledFlag;
 
     REGISTER_YSON_STRUCT(TSamplerConfig);
 
@@ -47,15 +44,18 @@ class TSampler
     : public TRefCounted
 {
 public:
-    TSampler();
-    explicit TSampler(const TSamplerConfigPtr& config);
+    explicit TSampler(
+        TSamplerConfigPtr config = New<TSamplerConfig>(),
+        const NProfiling::TProfiler& profiler = TracingProfiler());
 
-    void SampleTraceContext(const TString& user, const TTraceContextPtr& traceContext);
+    void SampleTraceContext(const std::string& user, const TTraceContextPtr& traceContext);
 
-    void UpdateConfig(const TSamplerConfigPtr& config);
+    void UpdateConfig(TSamplerConfigPtr config);
 
 private:
     TAtomicIntrusivePtr<TSamplerConfig> Config_;
+
+    NProfiling::TProfiler Profiler_;
 
     struct TUserState final
     {
@@ -68,7 +68,7 @@ private:
         NProfiling::TCounter TracesSampledByProbability;
     };
 
-    NConcurrency::TSyncMap<TString, TIntrusivePtr<TUserState>> Users_;
+    NConcurrency::TSyncMap<std::string, TIntrusivePtr<TUserState>> Users_;
     NProfiling::TCounter TracesSampled_;
 };
 

@@ -102,7 +102,7 @@ namespace NPcre {
             Y_ASSERT(workspaceSize >= 0);
             size_t ovecsize = workspaceSize * 3;
             NStackArray::TStackArray<int> ovector(ALLOC_ON_STACK(int, ovecsize));
-            return ConvertReturnCode(TTraits::Exec(Code.Get(), Extra.Get(), (TStringType) string.Data(), string.Size(), 0, executeFlags, ovector.data(), ovecsize));
+            return ConvertReturnCode(TTraits::Exec(Code.Get(), Extra.Get(), (TStringType) string.data(), string.size(), 0, executeFlags, ovector.data(), ovecsize));
         }
 
         //! Find compiled pattern in string.
@@ -123,7 +123,7 @@ namespace NPcre {
             for (size_t i = 0; i < ovecsize; ++i) {
                 ovector[i] = -4;
             }
-            int rc = TTraits::Exec(Code.Get(), Extra.Get(), (TStringType) string.Data(), string.Size(), 0, executeFlags, ovector.data(), ovecsize);
+            int rc = TTraits::Exec(Code.Get(), Extra.Get(), (TStringType) string.data(), string.size(), 0, executeFlags, ovector.data(), ovecsize);
             if (ConvertReturnCode(rc)) {
                 return MakeMaybe<TPcreMatch>(ovector[0], ovector[1]);
             } else {
@@ -153,7 +153,7 @@ namespace NPcre {
             size_t ovecsize = (initialWorkspaceSize + 1) * 3;
             while (true) {
                 NStackArray::TStackArray<int> ovector(ALLOC_ON_STACK(int, ovecsize));
-                int rc = TTraits::Exec(Code.Get(), Extra.Get(), (TStringType) string.Data(), string.Size(), 0, executeFlags, ovector.data(), ovecsize);
+                int rc = TTraits::Exec(Code.Get(), Extra.Get(), (TStringType) string.data(), string.size(), 0, executeFlags, ovector.data(), ovecsize);
                 if (rc > 0) {
                     TPcreMatches result(Reserve(rc >> 1));
                     for (int i = 0, pos = 0; i < rc; ++i) {

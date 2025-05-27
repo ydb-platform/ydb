@@ -1,0 +1,816 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     (Artistic-1.0 OR GPL-1.0-or-later OR LGPL-2.0-or-later) 01630b2dd805fdc66110680e4543d2d7
+BELONGS ya.make
+    # Licensing scheme is explained in COPYING
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LGPL-2.0-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
+    Files with this license:
+        libyasm/bitvect.h [645:663]
+
+KEEP     BSD-3-Clause AND BSD-2-Clause AND (Artistic-1.0 OR GPL-1.0-or-later OR LGPL-2.0-or-later) 0e0627dca570bcf8f4c51033cd5a9a18
+BELONGS ya.make
+FILE_INCLUDE Artistic.txt found in files: frontends/tasm/license.c at line 62, frontends/vsyasm/license.c at line 62, frontends/yasm/license.c at line 62
+FILE_INCLUDE BSD.txt found in files: frontends/tasm/license.c at line 61, frontends/vsyasm/license.c at line 61, frontends/yasm/license.c at line 61
+FILE_INCLUDE GNU_GPL-2.0 found in files: frontends/tasm/license.c at line 63, frontends/vsyasm/license.c at line 63, frontends/yasm/license.c at line 63
+FILE_INCLUDE GNU_LGPL-2.0 found in files: frontends/tasm/license.c at line 64, frontends/vsyasm/license.c at line 64, frontends/yasm/license.c at line 64
+    # Licensing scheme is explained in COPYING
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        frontends/tasm/license.c [56:64]
+        frontends/vsyasm/license.c [56:64]
+        frontends/yasm/license.c [56:64]
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        frontends/tasm/license.c [56:64]
+        frontends/vsyasm/license.c [56:64]
+        frontends/yasm/license.c [56:64]
+    Scancode info:
+        Original SPDX id: Artistic-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/artistic-license-1.0, http://www.perlfoundation.org/, https://spdx.org/licenses/Artistic-1.0
+    Files with this license:
+        frontends/tasm/license.c [56:64]
+        frontends/vsyasm/license.c [56:64]
+        frontends/yasm/license.c [56:64]
+    Scancode info:
+        Original SPDX id: GPL-1.0-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/gpl-1.0-standalone.html, https://spdx.org/licenses/GPL-1.0-or-later
+    Files with this license:
+        frontends/tasm/license.c [56:64]
+        frontends/vsyasm/license.c [56:64]
+        frontends/yasm/license.c [56:64]
+    Scancode info:
+        Original SPDX id: LGPL-2.0-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
+    Files with this license:
+        frontends/tasm/license.c [56:64]
+        frontends/vsyasm/license.c [56:64]
+        frontends/yasm/license.c [56:64]
+
+KEEP     (Artistic-1.0 OR GPL-1.0-or-later OR LGPL-2.0-or-later) 16de935ebcebe2420535844d4f6faefc
+BELONGS ya.make
+FILE_INCLUDE COPYING found in files: GNU_GPL-2.0 at line 60
+    # Licensing scheme is explained in COPYING
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-2.0-only
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.gnu.org/licenses/gpl-2.0.html, http://www.gnu.org/licenses/gpl-2.0.txt, https://spdx.org/licenses/GPL-2.0-only
+    Files with this license:
+        GNU_GPL-2.0 [1:340]
+
+KEEP     BSD-3-Clause AND BSD-2-Clause 209151e206c6acdf17dce2cd44abbe62
+BELONGS ya.make
+    License text:
+        The modules are 2-clause or 3-clause BSD licensed.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        COPYING [43:43]
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        COPYING [43:43]
+
+KEEP     BSD-3-Clause AND BSD-2-Clause AND (Artistic-1.0 OR GPL-1.0-or-later OR LGPL-2.0-or-later) 22c40963b5a5ebff8af9c886b7a7a701
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 96.92
+        Match type      : NOTICE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        COPYING [33:38]
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 96.92
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        COPYING [33:38]
+    Scancode info:
+        Original SPDX id: Artistic-1.0
+        Score           : 96.92
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/artistic-license-1.0, http://www.perlfoundation.org/, https://spdx.org/licenses/Artistic-1.0
+    Files with this license:
+        COPYING [33:38]
+    Scancode info:
+        Original SPDX id: GPL-1.0-or-later
+        Score           : 96.92
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/gpl-1.0-standalone.html, https://spdx.org/licenses/GPL-1.0-or-later
+    Files with this license:
+        COPYING [33:38]
+    Scancode info:
+        Original SPDX id: LGPL-2.0-or-later
+        Score           : 96.92
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
+    Files with this license:
+        COPYING [33:38]
+
+SKIP     LicenseRef-scancode-warranty-disclaimer 2cc708d19728edffd0eacaeb279f98c8
+BELONGS ya.make
+    License text:
+        Yasm has absolutely no warranty; not even for merchantibility or fitness
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-warranty-disclaimer
+        Score           : 90.00
+        Match type      : TEXT
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/warranty-disclaimer.LICENSE
+    Files with this license:
+        COPYING [27:27]
+
+KEEP     BSD-3-Clause         309811621f62a24dbd94192cbad86567
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        frontends/tasm/tasm-options.c [6:28]
+        frontends/yasm/yasm-options.c [6:28]
+        modules/dbgfmts/codeview/cv-symline.c [6:28]
+        modules/dbgfmts/codeview/cv-type.c [6:28]
+        modules/dbgfmts/dwarf2/dwarf2-line.c [6:28]
+        modules/gas-token.c [8:30]
+        modules/parsers/gas/gas-parse-intel.c [6:28]
+        modules/parsers/gas/gas-parse.c [6:28]
+        modules/parsers/gas/gas-parser.c [6:28]
+        modules/parsers/gas/gas-parser.h [6:28]
+
+KEEP     Public-Domain        3845d6ef049b415f8f54f4d7e362f22e
+BELONGS ya.make
+    License text:
+         * The algorithm is due to Ron Rivest.  This code was
+         * written by Colin Plumb in 1993, no copyright is claimed.
+         * This code is in the public domain; do with it what you wish.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        libyasm/md5.c [3:5]
+
+KEEP     Public-Domain        384ec8f38867ef0e67b40973645eaeae
+BELONGS ya.make
+    License text:
+        Use this code in any way you wish.  Public Domain.  It has no warranty.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 70.00
+        Match type      : REFERENCE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        libyasm/phash.h [6:6]
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-warranty-disclaimer
+        Score           : 90.00
+        Match type      : TEXT
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/warranty-disclaimer.LICENSE
+    Files with this license:
+        libyasm/phash.h [6:6]
+
+KEEP     Public-Domain        447b6ebdf92c25e5e117b67e906a0363
+BELONGS ya.make
+    License text:
+        Use this code however you wish.  Public Domain.  No warranty.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain-disclaimer
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain-disclaimer.LICENSE
+    Files with this license:
+        libyasm/phash.c [7:7]
+
+KEEP     BSD-3-Clause AND BSD-2-Clause AND (Artistic-1.0 OR GPL-1.0-or-later OR LGPL-2.0-or-later) 45f921f6f9fedf0718708ea163b16691
+BELONGS ya.make
+FILE_INCLUDE Artistic.txt found in files: COPYING at line 59
+FILE_INCLUDE BSD.txt found in files: COPYING at line 58
+FILE_INCLUDE GNU_GPL-2.0 found in files: COPYING at line 60
+FILE_INCLUDE GNU_LGPL-2.0 found in files: COPYING at line 61
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        COPYING [53:61]
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        COPYING [53:61]
+    Scancode info:
+        Original SPDX id: Artistic-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/artistic-license-1.0, http://www.perlfoundation.org/, https://spdx.org/licenses/Artistic-1.0
+    Files with this license:
+        COPYING [53:61]
+    Scancode info:
+        Original SPDX id: GPL-1.0-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/gpl-1.0-standalone.html, https://spdx.org/licenses/GPL-1.0-or-later
+    Files with this license:
+        COPYING [53:61]
+    Scancode info:
+        Original SPDX id: LGPL-2.0-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
+    Files with this license:
+        COPYING [53:61]
+
+KEEP     BSD-3-Clause AND BSD-2-Clause AND (Artistic-1.0 OR GPL-1.0-or-later OR LGPL-2.0-or-later) 517758e68a374efb77b556946093b05d
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 96.92
+        Match type      : NOTICE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        frontends/tasm/license.c [36:41]
+        frontends/vsyasm/license.c [36:41]
+        frontends/yasm/license.c [36:41]
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 96.92
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        frontends/tasm/license.c [36:41]
+        frontends/vsyasm/license.c [36:41]
+        frontends/yasm/license.c [36:41]
+    Scancode info:
+        Original SPDX id: Artistic-1.0
+        Score           : 96.92
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/artistic-license-1.0, http://www.perlfoundation.org/, https://spdx.org/licenses/Artistic-1.0
+    Files with this license:
+        frontends/tasm/license.c [36:41]
+        frontends/vsyasm/license.c [36:41]
+        frontends/yasm/license.c [36:41]
+    Scancode info:
+        Original SPDX id: GPL-1.0-or-later
+        Score           : 96.92
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/gpl-1.0-standalone.html, https://spdx.org/licenses/GPL-1.0-or-later
+    Files with this license:
+        frontends/tasm/license.c [36:41]
+        frontends/vsyasm/license.c [36:41]
+        frontends/yasm/license.c [36:41]
+    Scancode info:
+        Original SPDX id: LGPL-2.0-or-later
+        Score           : 96.92
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
+    Files with this license:
+        frontends/tasm/license.c [36:41]
+        frontends/vsyasm/license.c [36:41]
+        frontends/yasm/license.c [36:41]
+
+KEEP     BSD-2-Clause         530ba4515921d5010e2094a684e2aa63
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 98.92
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        libyasm.h [8:27]
+        libyasm/arch.h [8:27]
+        libyasm/assocdat.h [8:27]
+        libyasm/bytecode.h [8:27]
+        libyasm/coretype.h [8:27]
+        libyasm/dbgfmt.h [8:27]
+        libyasm/errwarn.h [8:27]
+        libyasm/expr.h [8:27]
+        libyasm/file.h [8:27]
+        libyasm/floatnum.h [10:29]
+        libyasm/insn.h [8:27]
+        libyasm/intnum.h [8:27]
+        libyasm/listfmt.h [8:27]
+        libyasm/objfmt.h [8:27]
+        libyasm/section.h [8:27]
+        libyasm/symrec.h [8:27]
+        libyasm/valparam.h [8:27]
+        libyasm/value.h [8:27]
+
+KEEP     BSD-2-Clause         53953b8c2c4f7930afe5cbe4779ae8fc
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        BSD.txt [51:74]
+
+KEEP     BSD-3-Clause AND BSD-2-Clause AND (Artistic-1.0 OR GPL-1.0-or-later OR LGPL-2.0-or-later) 570e66e1b5a9be1207935c14a2a1b137
+BELONGS ya.make
+    License text:
+        The modules are 2-clause or 3-clause BSD licensed.
+        ---------
+        Frontends
+        ---------
+        The frontends are 2-clause BSD licensed.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 12.70
+        Match type      : NOTICE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        COPYING [43:48]
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 12.70
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        COPYING [43:48]
+    Scancode info:
+        Original SPDX id: Artistic-1.0
+        Score           : 12.70
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/artistic-license-1.0, http://www.perlfoundation.org/, https://spdx.org/licenses/Artistic-1.0
+    Files with this license:
+        COPYING [43:48]
+    Scancode info:
+        Original SPDX id: GPL-1.0-or-later
+        Score           : 12.70
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/gpl-1.0-standalone.html, https://spdx.org/licenses/GPL-1.0-or-later
+    Files with this license:
+        COPYING [43:48]
+    Scancode info:
+        Original SPDX id: LGPL-2.0-or-later
+        Score           : 12.70
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
+    Files with this license:
+        COPYING [43:48]
+
+KEEP     (Artistic-1.0 OR GPL-1.0-or-later OR LGPL-2.0-or-later) 58bcc961847de85b2d21dff88dedd808
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Artistic-1.0-Perl
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://dev.perl.org/licenses/artistic.html, https://spdx.org/licenses/Artistic-1.0-Perl
+    Files with this license:
+        Artistic.txt [5:131]
+
+KEEP     (Artistic-1.0 OR GPL-1.0-or-later OR LGPL-2.0-or-later) 613f5c5fce09176127d05bafbbaf76e8
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Artistic-2.0
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://www.perlfoundation.org/, https://spdx.org/licenses/Artistic-2.0, https://www.perlfoundation.org/artistic_license_2_0
+    Files with this license:
+        libyasm/bitvect.c [3873:3876]
+        libyasm/bitvect.h [492:495]
+
+KEEP     Public-Domain        67180da1da0a70151e74d28696c9ecb7
+BELONGS ya.make
+    License text:
+         *  Based on public-domain x86 assembly code by Randall Hyde (8/28/91).
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 99.00
+        Match type      : TEXT
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        libyasm/floatnum.c [6:6]
+        libyasm/floatnum.h [8:8]
+
+KEEP     (Artistic-1.0 OR GPL-1.0-or-later OR LGPL-2.0-or-later) 693991bd9c68a461994a90731b877f52
+BELONGS ya.make
+FILE_INCLUDE COPYING found in files: GNU_LGPL-2.0 at line 103
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LGPL-2.0-only
+        Score           : 99.88
+        Match type      : TEXT
+        Links           : http://www.gnu.org/licenses/lgpl-2.0.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-only
+    Files with this license:
+        GNU_LGPL-2.0 [1:481]
+
+KEEP     BSD-2-Clause         6aa250feabf2ca599b1be92043bd576c
+BELONGS ya.make
+    License text:
+            "The primary license of Yasm is the 2-clause BSD license.  Please use this",
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        frontends/tasm/license.c [27:27]
+        frontends/vsyasm/license.c [27:27]
+        frontends/yasm/license.c [27:27]
+
+KEEP     (Artistic-1.0 OR GPL-1.0-or-later OR LGPL-2.0-or-later) 6d6c52ccc90291c19402dd360398092f
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Artistic-1.0-Perl
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://dev.perl.org/licenses/artistic.html, https://spdx.org/licenses/Artistic-1.0-Perl
+    Files with this license:
+        libyasm/bitvect.c [3879:4005]
+        libyasm/bitvect.h [498:624]
+
+KEEP     BSD-3-Clause         6daffccbe81cc81cf1b75435c1342138
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        libyasm/compat-queue.h [7:29]
+        libyasm/mergesort.c [10:32]
+        libyasm/replace_path.c [5:27]
+        libyasm/strcasecmp.c [8:30]
+        libyasm/strsep.c [7:29]
+        libyasm/xstrdup.c [7:29]
+
+SKIP     LicenseRef-scancode-warranty-disclaimer 738b61bba211f22231b097a0d2404e86
+BELONGS ya.make
+    License text:
+            "Yasm has absolutely no warranty; not even for merchantibility or fitness",
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-warranty-disclaimer
+        Score           : 90.00
+        Match type      : TEXT
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/warranty-disclaimer.LICENSE
+    Files with this license:
+        frontends/tasm/license.c [30:30]
+        frontends/vsyasm/license.c [30:30]
+        frontends/yasm/license.c [30:30]
+
+KEEP     BSD-2-Clause         7799946dcec024d9d301a562d14bfe9f
+BELONGS ya.make
+    License text:
+        NASM is now licensed under the 2-clause BSD license, also known as the
+        simplified BSD license.
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        BSD.txt [46:47]
+
+KEEP     BSD-3-Clause AND BSD-2-Clause AND (Artistic-1.0 OR GPL-1.0-or-later OR LGPL-2.0-or-later) 8c648ac47ff499f65c29f5ad97f5c6ef
+BELONGS ya.make
+    License text:
+            "The modules are 2-clause or 3-clause BSD licensed.",
+            "",
+            "---------",
+            "Frontends",
+            "---------",
+            "The frontends are 2-clause BSD licensed.",
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 12.70
+        Match type      : NOTICE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        frontends/tasm/license.c [46:51]
+        frontends/vsyasm/license.c [46:51]
+        frontends/yasm/license.c [46:51]
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 12.70
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        frontends/tasm/license.c [46:51]
+        frontends/vsyasm/license.c [46:51]
+        frontends/yasm/license.c [46:51]
+    Scancode info:
+        Original SPDX id: Artistic-1.0
+        Score           : 12.70
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/artistic-license-1.0, http://www.perlfoundation.org/, https://spdx.org/licenses/Artistic-1.0
+    Files with this license:
+        frontends/tasm/license.c [46:51]
+        frontends/vsyasm/license.c [46:51]
+        frontends/yasm/license.c [46:51]
+    Scancode info:
+        Original SPDX id: GPL-1.0-or-later
+        Score           : 12.70
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/gpl-1.0-standalone.html, https://spdx.org/licenses/GPL-1.0-or-later
+    Files with this license:
+        frontends/tasm/license.c [46:51]
+        frontends/vsyasm/license.c [46:51]
+        frontends/yasm/license.c [46:51]
+    Scancode info:
+        Original SPDX id: LGPL-2.0-or-later
+        Score           : 12.70
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
+    Files with this license:
+        frontends/tasm/license.c [46:51]
+        frontends/vsyasm/license.c [46:51]
+        frontends/yasm/license.c [46:51]
+
+KEEP     BSD-2-Clause         9147ff74096462e6166bfefd76188eec
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        BSD.txt [1:20]
+
+KEEP     BSD-3-Clause         93184209bf0d652a988b4c710e912b8f
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        BSD.txt [22:44]
+
+KEEP     BSD-2-Clause         94a840312816a548e34b085d69d3c515
+BELONGS ya.make
+    License text:
+        The primary license of Yasm is the 2-clause BSD license.  Please use this
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        COPYING [24:24]
+
+KEEP     (Artistic-1.0 OR GPL-1.0-or-later OR LGPL-2.0-or-later) 9df69c5646a08260681220cb92de2eac
+BELONGS ya.make
+    License text:
+                  GNU LIBRARY GENERAL PUBLIC LICENSE
+    Scancode info:
+        Original SPDX id: LGPL-2.0-or-later
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
+    Files with this license:
+        GNU_LGPL-2.0 [102:102]
+
+KEEP     (Artistic-1.0 OR GPL-1.0-or-later OR LGPL-2.0-or-later) a24c4a30e7030b6e5d239294d6d1c0cc
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Artistic-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/artistic-license-1.0, http://www.perlfoundation.org/, https://spdx.org/licenses/Artistic-1.0
+    Files with this license:
+        libyasm/bitvect.c [3865:3873]
+        libyasm/bitvect.h [484:492]
+    Scancode info:
+        Original SPDX id: GPL-1.0-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/gpl-1.0-standalone.html, https://spdx.org/licenses/GPL-1.0-or-later
+    Files with this license:
+        libyasm/bitvect.c [3865:3873]
+        libyasm/bitvect.h [484:492]
+    Scancode info:
+        Original SPDX id: LGPL-2.0-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
+    Files with this license:
+        libyasm/bitvect.c [3865:3873]
+        libyasm/bitvect.h [484:492]
+
+KEEP     (Artistic-1.0 OR GPL-1.0-or-later OR LGPL-2.0-or-later) b9dd036121ab4035eda2e36539403592
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LGPL-2.0-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
+    Files with this license:
+        libyasm/bitvect.c [4008:4023]
+        libyasm/bitvect.h [627:642]
+
+KEEP     (Artistic-1.0 OR GPL-1.0-or-later OR LGPL-2.0-or-later) bef493f096780cd8eb4c063134f5fc1a
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LGPL-2.0-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
+    Files with this license:
+        libyasm/bitvect.c [4026:4043]
+
+KEEP     BSD-3-Clause AND BSD-2-Clause dfec515da737050cd09219d36cbca67d
+BELONGS ya.make
+    License text:
+            "The modules are 2-clause or 3-clause BSD licensed.",
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        frontends/tasm/license.c [46:46]
+        frontends/vsyasm/license.c [46:46]
+        frontends/yasm/license.c [46:46]
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        frontends/tasm/license.c [46:46]
+        frontends/vsyasm/license.c [46:46]
+        frontends/yasm/license.c [46:46]
+
+KEEP     Public-Domain        f3c5cf06fad5fb404849bff1c8e976a2
+BELONGS ya.make
+    License text:
+           copyright in any changes I have made; this code remains in the
+           public domain.  */
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        libyasm/md5.c [23:24]
+
+KEEP     BSD-2-Clause         fe4832723218e3ab1ab01aaf01aedce6
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        frontends/tasm/tasm-options.h [6:25]
+        frontends/tasm/tasm.c [7:26]
+        frontends/vsyasm/vsyasm.c [6:25]
+        frontends/yasm/yasm-options.h [6:25]
+        frontends/yasm/yasm-plugin.c [6:25]
+        frontends/yasm/yasm-plugin.h [6:25]
+        frontends/yasm/yasm.c [6:25]
+        libyasm/assocdat.c [6:25]
+        libyasm/bc-align.c [6:25]
+        libyasm/bc-data.c [6:25]
+        libyasm/bc-incbin.c [6:25]
+        libyasm/bc-org.c [6:25]
+        libyasm/bc-reserve.c [6:25]
+        libyasm/bytecode.c [6:25]
+        libyasm/cmake-module.c [6:25]
+        libyasm/errwarn.c [6:25]
+        libyasm/expr.c [6:25]
+        libyasm/file.c [6:25]
+        libyasm/floatnum.c [8:27]
+        libyasm/genmodule.c [7:26]
+        libyasm/hamt.c [11:30]
+        libyasm/hamt.h [8:27]
+        libyasm/insn.c [6:25]
+        libyasm/intnum.c [6:25]
+        libyasm/linemap.c [6:25]
+        libyasm/linemap.h [8:27]
+        libyasm/module.h [6:25]
+        libyasm/parser.h [8:27]
+        libyasm/preproc.h [8:27]
+        libyasm/section.c [6:25]
+        libyasm/symrec.c [6:25]
+        libyasm/valparam.c [6:25]
+        libyasm/value.c [6:25]
+        libyasm/xmalloc.c [6:25]
+        modules/arch/lc3b/lc3barch.c [6:25]
+        modules/arch/lc3b/lc3barch.h [6:25]
+        modules/arch/lc3b/lc3bbc.c [6:25]
+        modules/arch/x86/x86arch.c [6:25]
+        modules/arch/x86/x86arch.h [6:25]
+        modules/arch/x86/x86bc.c [6:25]
+        modules/arch/x86/x86expr.c [6:25]
+        modules/arch/x86/x86id.c [6:25]
+        modules/dbgfmts/codeview/cv-dbgfmt.c [6:25]
+        modules/dbgfmts/codeview/cv-dbgfmt.h [6:25]
+        modules/dbgfmts/dwarf2/dwarf2-aranges.c [6:25]
+        modules/dbgfmts/dwarf2/dwarf2-dbgfmt.c [6:25]
+        modules/dbgfmts/dwarf2/dwarf2-dbgfmt.h [6:25]
+        modules/dbgfmts/dwarf2/dwarf2-info.c [6:25]
+        modules/dbgfmts/null/null-dbgfmt.c [6:25]
+        modules/dbgfmts/stabs/stabs-dbgfmt.c [6:25]
+        modules/lc3bid.c [8:27]
+        modules/listfmts/nasm/nasm-listfmt.c [6:25]
+        modules/nasm-token.c [10:29]
+        modules/objfmts/bin/bin-objfmt.c [6:25]
+        modules/objfmts/coff/coff-objfmt.c [6:25]
+        modules/objfmts/coff/coff-objfmt.h [6:25]
+        modules/objfmts/coff/win64-except.c [6:25]
+        modules/objfmts/dbg/dbg-objfmt.c [6:25]
+        modules/objfmts/elf/elf-machine.h [6:25]
+        modules/objfmts/elf/elf-objfmt.c [6:25]
+        modules/objfmts/elf/elf-x86-amd64.c [6:25]
+        modules/objfmts/elf/elf-x86-x32.c [6:25]
+        modules/objfmts/elf/elf-x86-x86.c [6:25]
+        modules/objfmts/elf/elf.c [6:25]
+        modules/objfmts/elf/elf.h [6:25]
+        modules/objfmts/macho/macho-objfmt.c [7:26]
+        modules/objfmts/rdf/rdf-objfmt.c [6:25]
+        modules/objfmts/xdf/xdf-objfmt.c [6:25]
+        modules/parsers/nasm/nasm-parse.c [6:25]
+        modules/parsers/nasm/nasm-parser-struct.h [6:25]
+        modules/parsers/nasm/nasm-parser.c [6:25]
+        modules/parsers/nasm/nasm-parser.h [6:25]
+        modules/preprocs/cpp/cpp-preproc.c [7:26]
+        modules/preprocs/gas/gas-preproc.c [6:25]
+        modules/preprocs/nasm/genversion.c [7:26]
+        modules/preprocs/nasm/nasm-preproc.c [6:25]
+        modules/preprocs/raw/raw-preproc.c [6:25]
+        util.h [9:28]

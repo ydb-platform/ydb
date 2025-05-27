@@ -4,11 +4,11 @@
 #include <ydb/core/formats/arrow/save_load/loader.h>
 #include <ydb/core/formats/arrow/save_load/saver.h>
 #include <ydb/core/formats/arrow/serializer/native.h>
-#include <ydb/core/formats/arrow/simple_builder/array.h>
-#include <ydb/core/formats/arrow/simple_builder/batch.h>
-#include <ydb/core/formats/arrow/simple_builder/filler.h>
+#include <ydb/library/formats/arrow/simple_builder/array.h>
+#include <ydb/library/formats/arrow/simple_builder/batch.h>
+#include <ydb/library/formats/arrow/simple_builder/filler.h>
 #include <ydb/core/formats/arrow/splitter/scheme_info.h>
-#include <ydb/core/formats/arrow/splitter/similar_packer.h>
+#include <ydb/library/formats/arrow/splitter/similar_packer.h>
 #include <ydb/core/tx/columnshard/counters/indexation.h>
 #include <ydb/core/tx/columnshard/splitter/batch_slice.h>
 #include <ydb/core/tx/columnshard/splitter/settings.h>
@@ -26,17 +26,10 @@ Y_UNIT_TEST_SUITE(Splitter) {
     protected:
         virtual NKikimr::NArrow::NAccessor::TColumnSaver DoGetColumnSaver(const ui32 columnId) const override {
             return NKikimr::NArrow::NAccessor::TColumnSaver(
-                nullptr, std::make_shared<NSerialization::TNativeSerializer>(arrow::ipc::IpcOptions::Defaults()));
+                std::make_shared<NSerialization::TNativeSerializer>(arrow::ipc::IpcOptions::Defaults()));
         }
 
     public:
-        virtual bool NeedMinMaxForColumn(const ui32 /*columnId*/) const override {
-            return true;
-        }
-        virtual bool IsSortedColumn(const ui32 /*columnId*/) const override {
-            return false;
-        }
-
         virtual std::optional<NKikimr::NArrow::NSplitter::TColumnSerializationStat> GetColumnSerializationStats(
             const ui32 /*columnId*/) const override {
             return {};
@@ -47,7 +40,7 @@ Y_UNIT_TEST_SUITE(Splitter) {
         }
 
         NKikimr::NArrow::NAccessor::TColumnLoader GetColumnLoader(const ui32 columnId) const {
-            return NKikimr::NArrow::NAccessor::TColumnLoader(nullptr, NSerialization::TSerializerContainer::GetDefaultSerializer(),
+            return NKikimr::NArrow::NAccessor::TColumnLoader(NSerialization::TSerializerContainer::GetDefaultSerializer(),
                 NKikimr::NArrow::NAccessor::TConstructorContainer::GetDefaultConstructor(), GetField(columnId), nullptr, columnId);
         }
 
@@ -116,7 +109,7 @@ Y_UNIT_TEST_SUITE(Splitter) {
                 auto blobsLocal = slice.GroupChunksByBlobs(groups);
                 internalSplitsCount += slice.GetInternalSplitsCount();
                 blobsCount += blobsLocal.size();
-                THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>> entityChunks;
+                THashMap<ui32, std::map<ui32, std::shared_ptr<IPortionDataChunk>>> entityChunks;
                 ui32 portionSize = 0;
                 for (auto&& b : blobsLocal) {
                     chunksCount += b.GetChunks().size();
@@ -124,16 +117,17 @@ Y_UNIT_TEST_SUITE(Splitter) {
                     for (auto&& c : b.GetChunks()) {
                         bSize += c->GetData().size();
                         AFL_VERIFY(c->GetEntityId());
-                        auto& v = entityChunks[c->GetEntityId()];
-                        if (v.size()) {
-                            AFL_VERIFY(v.back()->GetChunkIdxVerified() + 1 == c->GetChunkIdxVerified());
-                        }
-                        entityChunks[c->GetEntityId()].emplace_back(c);
+//                        auto& v = entityChunks[c->GetEntityId()];
+//                        if (v.size()) {
+//                            AFL_VERIFY(v.back()->GetChunkIdxVerified() + 1 == c->GetChunkIdxVerified())("v", v.back()->GetChunkIdxVerified())(
+//                                                                              "c", c->GetChunkIdxVerified());
+//                        }
+                        AFL_VERIFY(entityChunks[c->GetEntityId()].emplace(c->GetChunkIdxVerified(), c).second);
                     }
                     portionSize += bSize;
                     AFL_VERIFY(bSize < (ui64)settings.GetMaxBlobSize());
-                    AFL_VERIFY(bSize * 1.01 > (ui64)settings.GetMinBlobSize() || (packs.size() == 1 && blobsLocal.size() == 1))(
-                                                                                                           "blob_size", bSize);
+                    AFL_VERIFY(bSize * 1.01 > (ui64)settings.GetMinBlobSize() || (packs.size() == 1 && blobsLocal.size() == 1))("blob_size", bSize)(
+                                                                                                 "min", settings.GetMinBlobSize());
                 }
                 AFL_VERIFY(portionSize >= settings.GetExpectedPortionSize() || packs.size() == 1)("size", portionSize)(
                                                                                    "limit", settings.GetMaxPortionSize());
@@ -144,11 +138,17 @@ Y_UNIT_TEST_SUITE(Splitter) {
                     const std::shared_ptr<arrow::Array> arr = batch->GetColumnByName(Schema->GetColumnName(e.first));
                     AFL_VERIFY(arr);
                     ui32 count = 0;
-                    for (auto&& c : e.second) {
+                    i32 idx = -1;
+                    for (auto&& [idxC, c] : e.second) {
+                        AFL_VERIFY((i32)idxC == idx + 1);
+                        idx = idxC;
                         auto slice = arr->Slice(count + portionShift, c->GetRecordsCountVerified());
-                        auto readBatch = Schema->GetColumnLoader(e.first).ApplyRawVerified(c->GetData());
-                        AFL_VERIFY(slice->length() == readBatch->num_rows());
-                        Y_ABORT_UNLESS(readBatch->column(0)->RangeEquals(*slice, 0, readBatch->num_rows(), 0, arrow::EqualOptions::Defaults()));
+                        auto readBatchArray = Schema->GetColumnLoader(e.first).ApplyVerified(c->GetData(), c->GetRecordsCountVerified());
+                        std::shared_ptr<arrow::ChunkedArray> chunkedArray = readBatchArray->GetChunkedArray();
+                        AFL_VERIFY(chunkedArray->num_chunks() == 1);
+                        AFL_VERIFY(slice->length() == chunkedArray->length());
+                        Y_ABORT_UNLESS(
+                            chunkedArray->chunk(0)->RangeEquals(*slice, 0, chunkedArray->length(), 0, arrow::EqualOptions::Defaults()));
                         count += c->GetRecordsCountVerified();
                         AFL_VERIFY(entitiesByRecordsCount[count].emplace(e.first).second);
                         AFL_VERIFY(entitiesByRecordsCount[count].size() <= (ui32)batch->num_columns());
@@ -160,7 +160,7 @@ Y_UNIT_TEST_SUITE(Splitter) {
                 }
                 AFL_VERIFY(entitiesByRecordsCount.size() >= i.size());
                 AFL_VERIFY(pagesRestore == pagesOriginal || batch->num_columns() == 1)("restore", pagesRestore)("original", pagesOriginal);
-                for (auto&& c : entityChunks.begin()->second) {
+                for (auto&& [_, c] : entityChunks.begin()->second) {
                     portionShift += c->GetRecordsCountVerified();
                 }
             }

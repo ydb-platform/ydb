@@ -1,10 +1,15 @@
 #pragma once
 
-#include <ydb/library/yql/ast/yql_expr.h>
+#include <yql/essentials/ast/yql_expr.h>
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 #include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
 
 #include <util/generic/guid.h>
+
+namespace NYql {
+    class IDqOptimization;
+    struct TTypeAnnotationContext;
+}
 
 namespace NYql::NDq {
 
@@ -37,5 +42,8 @@ bool IsDqDependsOnStageOutput(const NNodes::TExprBase& node, const NNodes::TDqSt
 
 bool CanPushDqExpr(const NNodes::TExprBase& expr, const NNodes::TDqStageBase& stage);
 bool CanPushDqExpr(const NNodes::TExprBase& expr, const NNodes::TDqConnection& connection);
+
+IDqOptimization* GetDqOptCallback(const NNodes::TExprBase& providerCall, const TTypeAnnotationContext& typeAnnCtx);
+
 
 } // namespace NYql::NDq

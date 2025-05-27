@@ -6,9 +6,9 @@
 #include <util/network/address.h>
 #include <util/network/socket.h>
 #include <util/string/builder.h>
-#include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
-#include <ydb/library/yql/utils/log/log.h>
-#include <ydb/library/yql/utils/log/log_component.h>
+#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
+#include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/utils/log/log_component.h>
 
 #include <condition_variable>
 #include <mutex>

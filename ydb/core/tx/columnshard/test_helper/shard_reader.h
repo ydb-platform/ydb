@@ -1,13 +1,16 @@
 #pragma once
+#include <ydb/core/formats/arrow/arrow_helpers.h>
+#include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/testlib/tablet_helpers.h>
-#include <ydb/core/tx/columnshard/common/snapshot.h>
-#include <ydb/library/accessor/accessor.h>
-#include <ydb/core/tx/datashard/datashard.h>
-#include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
-#include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
+#include <ydb/core/tx/columnshard/common/snapshot.h>
+#include <ydb/core/tx/datashard/datashard.h>
+
+#include <ydb/library/accessor/accessor.h>
+
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
+
 #include <optional>
 
 namespace NKikimr::NTxUT {
@@ -25,59 +28,15 @@ private:
     std::optional<TString> SerializedProgram;
     YDB_ACCESSOR(bool, Reverse, false);
     YDB_ACCESSOR(ui32, Limit, 0);
-    std::vector<TString> ReplyColumns;
     std::vector<TSerializedTableRange> Ranges;
 
-    std::unique_ptr<TEvDataShard::TEvKqpScan> BuildStartEvent() const {
-        auto ev = std::make_unique<TEvDataShard::TEvKqpScan>();
-        ev->Record.SetLocalPathId(PathId);
-        ev->Record.MutableSnapshot()->SetStep(Snapshot.GetPlanStep());
-        ev->Record.MutableSnapshot()->SetTxId(Snapshot.GetTxId());
-
-        ev->Record.SetStatsMode(NYql::NDqProto::DQ_STATS_MODE_FULL);
-        ev->Record.SetTxId(Snapshot.GetTxId());
-
-        ev->Record.SetReverse(Reverse);
-        ev->Record.SetItemsLimit(Limit);
-
-        ev->Record.SetDataFormat(NKikimrDataEvents::FORMAT_ARROW);
-
-        auto protoRanges = ev->Record.MutableRanges();
-        protoRanges->Reserve(Ranges.size());
-        for (auto& range : Ranges) {
-            auto newRange = protoRanges->Add();
-            range.Serialize(*newRange);
-        }
-
-        if (ProgramProto) {
-            NKikimrSSA::TOlapProgram olapProgram;
-            {
-                TString programBytes;
-                TStringOutput stream(programBytes);
-                ProgramProto->SerializeToArcadiaStream(&stream);
-                olapProgram.SetProgram(programBytes);
-            }
-            {
-                TString programBytes;
-                TStringOutput stream(programBytes);
-                olapProgram.SerializeToArcadiaStream(&stream);
-                ev->Record.SetOlapProgram(programBytes);
-            }
-            ev->Record.SetOlapProgramType(
-                NKikimrSchemeOp::EOlapProgramType::OLAP_PROGRAM_SSA_PROGRAM_WITH_PARAMETERS
-            );
-        } else if (SerializedProgram) {
-            ev->Record.SetOlapProgram(*SerializedProgram);
-            ev->Record.SetOlapProgramType(
-                NKikimrSchemeOp::EOlapProgramType::OLAP_PROGRAM_SSA_PROGRAM_WITH_PARAMETERS
-            );
-        }
-
-        return ev;
-    }
+    std::unique_ptr<TEvDataShard::TEvKqpScan> BuildStartEvent() const;
 
     std::vector<std::shared_ptr<arrow::RecordBatch>> ResultBatches;
     YDB_READONLY(ui32, IterationsCount, 0);
+
+    std::vector<Ydb::Issue::IssueMessage> Errors;
+
 public:
     ui64 GetReadStat(const TString& paramName) const {
         AFL_VERIFY(IsCorrectlyFinished());
@@ -100,57 +59,7 @@ public:
         return r ? r->num_rows() : 0;
     }
 
-    TShardReader& SetReplyColumns(const std::vector<TString>& replyColumns) {
-        AFL_VERIFY(!SerializedProgram);
-        if (!ProgramProto) {
-            ProgramProto = NKikimrSSA::TProgram();
-        }
-        for (auto&& command : *ProgramProto->MutableCommand()) {
-            if (command.HasProjection()) {
-                NKikimrSSA::TProgram::TProjection proj;
-                for (auto&& i : replyColumns) {
-                    proj.AddColumns()->SetName(i);
-                }
-                *command.MutableProjection() = proj;
-                return *this;
-            }
-        }
-        {
-            auto* command = ProgramProto->AddCommand();
-            NKikimrSSA::TProgram::TProjection proj;
-            for (auto&& i : replyColumns) {
-                proj.AddColumns()->SetName(i);
-            }
-            *command->MutableProjection() = proj;
-        }
-        return *this;
-    }
-
-    TShardReader& SetReplyColumnIds(const std::vector<ui32>& replyColumnIds) {
-        AFL_VERIFY(!SerializedProgram);
-        if (!ProgramProto) {
-            ProgramProto = NKikimrSSA::TProgram();
-        }
-        for (auto&& command : *ProgramProto->MutableCommand()) {
-            if (command.HasProjection()) {
-                NKikimrSSA::TProgram::TProjection proj;
-                for (auto&& i : replyColumnIds) {
-                    proj.AddColumns()->SetId(i);
-                }
-                *command.MutableProjection() = proj;
-                return *this;
-            }
-        }
-        {
-            auto* command = ProgramProto->AddCommand();
-            NKikimrSSA::TProgram::TProjection proj;
-            for (auto&& i : replyColumnIds) {
-                proj.AddColumns()->SetId(i);
-            }
-            *command->MutableProjection() = proj;
-        }
-        return *this;
-    }
+    TShardReader& SetReplyColumnIds(const std::vector<ui32>& replyColumnIds);
 
     TShardReader& SetProgram(const NKikimrSSA::TProgram& p) {
         AFL_VERIFY(!ProgramProto);
@@ -171,7 +80,6 @@ public:
         , TabletId(tabletId)
         , PathId(pathId)
         , Snapshot(snapshot) {
-
     }
 
     bool IsFinished() const {
@@ -186,6 +94,10 @@ public:
         return IsFinished() && *Finished == -1;
     }
 
+    const std::vector<Ydb::Issue::IssueMessage>& GetErrors() const {
+        return Errors;
+    }
+
     bool InitializeScanner() {
         AFL_VERIFY(!ScanActorId);
         const TActorId sender = Runtime.AllocateEdgeActor();
@@ -198,6 +110,9 @@ public:
             ScanActorId = ActorIdFromProto(msg.GetScanActorId());
             return true;
         } else if (auto* evError = std::get<1>(event)) {
+            for (auto issue : evError->Record.GetIssues()) {
+                Errors.emplace_back(issue);
+            }
             Finished = -1;
         } else {
             AFL_VERIFY(false);
@@ -219,7 +134,7 @@ public:
         if (auto* evData = std::get<0>(event)) {
             auto b = evData->ArrowBatch;
             if (b) {
-                ResultBatches.push_back(NArrow::ToBatch(b, true));
+                ResultBatches.push_back(NArrow::ToBatch(b));
                 NArrow::TStatusValidator::Validate(ResultBatches.back()->ValidateFull());
             } else {
                 AFL_VERIFY(evData->Finished);
@@ -230,6 +145,9 @@ public:
                 Finished = 1;
             }
         } else if (auto* evError = std::get<1>(event)) {
+            for (auto issue : evError->Record.GetIssues()) {
+                Errors.emplace_back(issue);
+            }
             Finished = -1;
         } else {
             AFL_VERIFY(false);
@@ -267,4 +185,4 @@ public:
     }
 };
 
-} //namespace NKikimr::NTxUT
+}   //namespace NKikimr::NTxUT

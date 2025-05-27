@@ -1,6 +1,6 @@
 #include "yql_ydb_provider_impl.h"
 
-#include <ydb/library/yql/providers/common/schema/expr/yql_expr_schema.h>
+#include <yql/essentials/providers/common/schema/expr/yql_expr_schema.h>
 
 namespace NYql {
 

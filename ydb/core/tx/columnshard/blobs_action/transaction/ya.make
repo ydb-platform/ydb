@@ -7,6 +7,7 @@ SRCS(
     tx_gc_insert_table.cpp
     tx_gc_indexed.cpp
     tx_remove_blobs.cpp
+    tx_blobs_written.cpp
 )
 
 PEERDIR(

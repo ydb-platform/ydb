@@ -83,19 +83,21 @@ namespace NActors {
             , public TIntrusiveListItem<TEvLog, TEvLogBufferLevelListTag>
         {
         public:
-            TEvLog(TInstant stamp, TLevel level, EComponent comp, const TString &line)
+            TEvLog(TInstant stamp, TLevel level, EComponent comp, const TString &line, bool json = false)
                 : Stamp(stamp)
                 , Level(level)
                 , Component(comp)
                 , Line(line)
+                , Json(json)
             {
             }
 
-            TEvLog(TInstant stamp, TLevel level, EComponent comp, TString &&line)
+            TEvLog(TInstant stamp, TLevel level, EComponent comp, TString &&line, bool json = false)
                 : Stamp(stamp)
                 , Level(level)
                 , Component(comp)
                 , Line(std::move(line))
+                , Json(json)
             {
             }
 
@@ -104,13 +106,44 @@ namespace NActors {
                 , Level(EPrio(prio))
                 , Component(comp)
                 , Line(std::move(line))
+                , Json(false)
+            {
+            }
+
+            TEvLog(EPriority prio, EComponent comp, TString line, bool json, TInstant time = TInstant::Now())
+                : Stamp(time)
+                , Level(EPrio(prio))
+                , Component(comp)
+                , Line(std::move(line))
+                , Json(json)
+            {
+            }
+
+            TEvLog(
+                    EPriority prio,
+                    EComponent comp,
+                    const char* fileName,
+                    ui64 lineNumber,
+                    TString line,
+                    bool json,
+                    TInstant time = TInstant::Now())
+                : Stamp(time)
+                , Level(EPrio(prio))
+                , Component(comp)
+                , FileName(fileName)
+                , LineNumber(lineNumber)
+                , Line(std::move(line))
+                , Json(json)
             {
             }
 
             const TInstant Stamp = TInstant::Max();
             const TLevel Level;
             const EComponent Component = 0;
+            const char* FileName = nullptr;
+            const ui64 LineNumber = 0;
             TString Line;
+            const bool Json;
         };
 
     }

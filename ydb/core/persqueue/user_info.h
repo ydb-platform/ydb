@@ -37,6 +37,25 @@ static const TString CLIENTID_WITHOUT_CONSUMER = "$without_consumer";
 
 typedef TProtobufTabletLabeledCounters<EClientLabeledCounters_descriptor> TUserLabeledCounters;
 
+struct TMessageInfo {
+    TInstant CreateTimestamp;
+    TInstant WriteTimestamp;
+};
+
+struct TConsumerSnapshot {
+    TInstant Now;
+
+    TMessageInfo LastCommittedMessage;
+
+    i64 ReadOffset;
+    TInstant LastReadTimestamp;
+    TMessageInfo LastReadMessage;
+
+    TDuration ReadLag;
+    TDuration CommitedLag;
+    TDuration TotalLag;
+};
+
 struct TUserInfoBase {
     TString User;
     ui64 ReadRuleGeneration = 0;
@@ -45,6 +64,7 @@ struct TUserInfoBase {
     ui32 Generation = 0;
     ui32 Step = 0;
     i64 Offset = 0;
+    bool AnyCommits = false;
 
     bool Important = false;
     TInstant ReadFromTimestamp;
@@ -54,13 +74,20 @@ struct TUserInfoBase {
 };
 
 struct TUserInfo: public TUserInfoBase {
-    TInstant WriteTimestamp;
-    TInstant CreateTimestamp;
-    TInstant ReadTimestamp;
     bool ActualTimestamps = false;
+    // WriteTimestamp of the last committed message
+    TInstant WriteTimestamp;
+    // CreateTimestamp of the last committed message
+    TInstant CreateTimestamp;
+
+    // Timstamp of the last read
+    TInstant ReadTimestamp;
 
     i64 ReadOffset = -1;
+
+    // WriteTimestamp of the last read message
     TInstant ReadWriteTimestamp;
+    // CreateTimestamp of the last read message
     TInstant ReadCreateTimestamp;
     ui64 ReadOffsetRewindSum = 0;
 
@@ -84,7 +111,6 @@ struct TUserInfo: public TUserInfoBase {
     ui32 ActiveReads;
     ui32 ReadsInQuotaQueue;
     ui32 Subscriptions;
-    i64 EndOffset;
 
     TVector<NSlidingWindow::TSlidingWindow<NSlidingWindow::TSumOperation<ui64>>> AvgReadBytes;
 
@@ -98,21 +124,21 @@ struct TUserInfo: public TUserInfoBase {
 
     bool Parsed = false;
 
-    void ForgetSubscription(const TInstant& now) {
+    void ForgetSubscription(i64 endOffset, const TInstant& now) {
         if (Subscriptions > 0)
             --Subscriptions;
-        UpdateReadingTimeAndState(now);
+        UpdateReadingTimeAndState(endOffset, now);
     }
 
     void UpdateReadingState() {
         Counter.UpdateState(Subscriptions > 0 || ActiveReads > 0 || ReadsInQuotaQueue > 0); //no data for read or got read requests from client
     }
 
-    void UpdateReadingTimeAndState(TInstant now) {
+    void UpdateReadingTimeAndState(i64 endOffset, TInstant now) {
         Counter.UpdateWorkingTime(now);
         UpdateReadingState();
 
-        if (EndOffset == GetReadOffset()) { //no data to read, so emulate client empty reads
+        if (endOffset == GetReadOffset()) { //no data to read, so emulate client empty reads
             WriteLagMs.Update(0, now);
         }
         if (Subscriptions > 0) {
@@ -121,7 +147,7 @@ struct TUserInfo: public TUserInfoBase {
     }
 
     void ReadDone(const TActorContext& ctx, const TInstant& now, ui64 readSize, ui32 readCount,
-                  const TString& clientDC, const TActorId& tablet, bool isExternalRead) {
+                  const TString& clientDC, const TActorId& tablet, bool isExternalRead, i64 endOffset) {
         Y_UNUSED(tablet);
         if (BytesRead && !clientDC.empty()) {
             BytesRead.Inc(readSize);
@@ -160,7 +186,7 @@ struct TUserInfo: public TUserInfoBase {
         }
         Y_ABORT_UNLESS(ActiveReads > 0);
         --ActiveReads;
-        UpdateReadingTimeAndState(now);
+        UpdateReadingTimeAndState(endOffset, now);
         ReadTimestamp = now;
     }
 
@@ -171,17 +197,17 @@ struct TUserInfo: public TUserInfoBase {
         const ui64 readRuleGeneration, const bool important, const NPersQueue::TTopicConverterPtr& topicConverter,
         const ui32 partition, const TString& session, ui64 partitionSession, ui32 gen, ui32 step, i64 offset,
         const ui64 readOffsetRewindSum, const TString& dcId, TInstant readFromTimestamp,
-        const TString& dbPath, bool meterRead, const TActorId& pipeClient
+        const TString& dbPath, bool meterRead, const TActorId& pipeClient, bool anyCommits
     )
-        : TUserInfoBase{user, readRuleGeneration, session, gen, step, offset, important,
+        : TUserInfoBase{user, readRuleGeneration, session, gen, step, offset, anyCommits, important,
                         readFromTimestamp, partitionSession, pipeClient}
-        , WriteTimestamp(TAppData::TimeProvider->Now())
-        , CreateTimestamp(TAppData::TimeProvider->Now())
-        , ReadTimestamp(TAppData::TimeProvider->Now())
         , ActualTimestamps(false)
+        , WriteTimestamp(TInstant::Zero())
+        , CreateTimestamp(TInstant::Zero())
+        , ReadTimestamp(TAppData::TimeProvider->Now())
         , ReadOffset(-1)
-        , ReadWriteTimestamp(TAppData::TimeProvider->Now())
-        , ReadCreateTimestamp(TAppData::TimeProvider->Now())
+        , ReadWriteTimestamp(TInstant::Zero())
+        , ReadCreateTimestamp(TInstant::Zero())
         , ReadOffsetRewindSum(readOffsetRewindSum)
         , ReadScheduled(false)
         , HasReadRule(false)
@@ -190,7 +216,6 @@ struct TUserInfo: public TUserInfoBase {
         , ActiveReads(0)
         , ReadsInQuotaQueue(0)
         , Subscriptions(0)
-        , EndOffset(0)
         , AvgReadBytes{{TDuration::Seconds(1), 1000}, {TDuration::Minutes(1), 1000},
                        {TDuration::Hours(1), 2000}, {TDuration::Days(1), 2000}}
         , WriteLagMs(TDuration::Minutes(1), 100)
@@ -269,12 +294,12 @@ struct TUserInfo: public TUserInfoBase {
 
     }
 
-    void UpdateReadOffset(const i64 offset, TInstant writeTimestamp, TInstant createTimestamp, TInstant now) {
+    void UpdateReadOffset(const i64 offset, TInstant writeTimestamp, TInstant createTimestamp, TInstant now, bool force = false) {
         ReadOffset = offset;
         ReadWriteTimestamp = writeTimestamp;
         ReadCreateTimestamp = createTimestamp;
         WriteLagMs.Update((ReadWriteTimestamp - ReadCreateTimestamp).MilliSeconds(), ReadWriteTimestamp);
-        if (Subscriptions > 0) {
+        if (Subscriptions > 0 || force) {
             ReadTimestamp = now;
         }
     }
@@ -335,30 +360,9 @@ struct TUserInfo: public TUserInfoBase {
         return ReadTimestamp;
     }
 
-    TInstant GetWriteTimestamp() const {
-        return Offset == EndOffset ? TAppData::TimeProvider->Now() : WriteTimestamp;
-    }
-
-    TInstant GetCreateTimestamp() const {
-        return Offset == EndOffset ? TAppData::TimeProvider->Now() : CreateTimestamp;
-    }
-
-    TInstant GetReadWriteTimestamp() const {
-        TInstant ts =  ReadOffset == -1 ? WriteTimestamp : ReadWriteTimestamp;
-        ts = GetReadOffset() >= EndOffset ? TAppData::TimeProvider->Now() : ts;
-        return ts;
-    }
-
     ui64 GetWriteLagMs() const {
         return WriteLagMs.GetValue();
     }
-
-    TInstant GetReadCreateTimestamp() const {
-        TInstant ts = ReadOffset == -1 ? CreateTimestamp : ReadCreateTimestamp;
-        ts = GetReadOffset() >= EndOffset ? TAppData::TimeProvider->Now() : ts;
-        return ts;
-    }
-
 };
 
 class TUsersInfoStorage {
@@ -390,7 +394,7 @@ public:
     TUserInfo& Create(
         const TActorContext& ctx, const TString& user, const ui64 readRuleGeneration, bool important, const TString& session,
         ui64 partitionSessionId, ui32 gen, ui32 step, i64 offset, ui64 readOffsetRewindSum,
-        TInstant readFromTimestamp, const TActorId& pipeClient
+        TInstant readFromTimestamp, const TActorId& pipeClient, bool anyCommits
     );
 
     void Clear(const TActorContext& ctx);
@@ -406,7 +410,7 @@ private:
                              const TString& session,
                              ui64 partitionSessionId,
                              ui32 gen, ui32 step, i64 offset, ui64 readOffsetRewindSum,
-                             TInstant readFromTimestamp, const TActorId& pipeClient) const;
+                             TInstant readFromTimestamp, const TActorId& pipeClient, bool anyCommits) const;
 
 private:
     THashMap<TString, TUserInfo> UsersInfo;

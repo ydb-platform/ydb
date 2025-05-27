@@ -1,4 +1,5 @@
 #include "flat_dbase_apply.h"
+#include "util_fmt_abort.h"
 
 #include <ydb/core/base/localdb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
@@ -51,11 +52,15 @@ bool TSchemeModifier::Apply(const TAlterRecord &delta)
             null = TCell(raw.data(), raw.size());
         }
 
-        auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(delta.GetColumnType(),
-            delta.HasColumnTypeInfo() ? &delta.GetColumnTypeInfo() : nullptr);
-        ui32 pgTypeId = NPg::PgTypeIdFromTypeDesc(typeInfoMod.TypeInfo.GetTypeDesc());
-        changes |= AddPgColumn(table, delta.GetColumnName(), delta.GetColumnId(),
-            delta.GetColumnType(), pgTypeId, typeInfoMod.TypeMod, delta.GetNotNull(), null);
+        std::optional<NKikimrProto::TTypeInfo> typeInfoProto;
+        if (delta.HasColumnTypeInfo()) {
+            typeInfoProto = delta.GetColumnTypeInfo();
+        } else if (delta.GetColumnType() == NScheme::NTypeIds::Decimal) {
+            // Migration from table with no decimal typeInfo
+            typeInfoProto = NKikimr::NScheme::DefaultDecimalProto();
+        }
+        changes |= AddColumnWithTypeInfo(table, delta.GetColumnName(), delta.GetColumnId(),
+            delta.GetColumnType(), typeInfoProto, delta.GetNotNull(), null);
     } else if (action == TAlterRecord::DropColumn) {
         changes |= DropColumn(table, delta.GetColumnId());
     } else if (action == TAlterRecord::AddColumnToKey) {
@@ -82,7 +87,7 @@ bool TSchemeModifier::Apply(const TAlterRecord &delta)
 
         auto codec = delta.HasCodec() ? ECodec(delta.GetCodec()) :family.Codec;
 
-        Y_ABORT_UNLESS(ui32(codec) <= 1, "Invalid page encoding code value");
+        Y_ENSURE(ui32(codec) <= 1, "Invalid page encoding code value");
 
         // FIXME: for now these changes will affect old parts on boot only (see RequestInMemPagesForPartStore)
         bool ever = delta.HasInMemory() && delta.GetInMemory();
@@ -92,7 +97,10 @@ bool TSchemeModifier::Apply(const TAlterRecord &delta)
         ui32 small = delta.HasSmall() ? delta.GetSmall() : family.Small;
         ui32 large = delta.HasLarge() ? delta.GetLarge() : family.Large;
 
-        Y_ABORT_UNLESS(ui32(cache) <= 2, "Invalid pages cache policy value");
+        Y_ENSURE(ui32(cache) <= 2, "Invalid pages cache policy value");
+        if (family.Cache != cache && cache == ECache::Ever) {
+            ChangeTableSetting(table, tableInfo.PendingCacheEnable, true);
+        }
         changes |= ChangeTableSetting(table, family.Cache, cache);
         changes |= ChangeTableSetting(table, family.Codec, codec);
         changes |= ChangeTableSetting(table, family.Small, small);
@@ -109,7 +117,17 @@ bool TSchemeModifier::Apply(const TAlterRecord &delta)
         auto &room = tableInfo.Rooms[delta.GetRoomId()];
 
         ui8 main = delta.HasMain() ? delta.GetMain() : room.Main;
-        ui8 blobs = delta.HasBlobs() ? delta.GetBlobs() : room.Blobs;
+        TVector<ui8> blobs;
+        if (delta.ExternalBlobsSize() > 0) {
+            for (auto blob : delta.GetExternalBlobs()) {
+                blobs.push_back(blob);
+            }
+        } else if (delta.HasBlobs()) {
+            // Fallback to old format
+            blobs = {static_cast<ui8>(delta.GetBlobs())};
+        } else {
+            blobs = room.Blobs;
+        }
         ui8 outer = delta.HasOuter() ? delta.GetOuter() : room.Outer;
 
         changes |= ChangeTableSetting(table, room.Main, main);
@@ -160,7 +178,7 @@ bool TSchemeModifier::Apply(const TAlterRecord &delta)
     } else if (action == TAlterRecord::SetCompactionPolicy) {
         changes |= SetCompactionPolicy(table, delta.GetCompactionPolicy());
     } else {
-        Y_ABORT("unknown scheme delta record type");
+        Y_TABLET_ERROR("unknown scheme delta record type");
     }
 
     if (delta.HasTableId() && changes)
@@ -171,7 +189,7 @@ bool TSchemeModifier::Apply(const TAlterRecord &delta)
 bool TSchemeModifier::AddColumnToFamily(ui32 tid, ui32 cid, ui32 family)
 {
     auto* column = Scheme.GetColumnInfo(Table(tid), cid);
-    Y_ABORT_UNLESS(column);
+    Y_ENSURE(column);
 
     if (column->Family != family) {
         PreserveTable(tid);
@@ -199,9 +217,9 @@ bool TSchemeModifier::AddTable(const TString &name, ui32 id)
             }
             return out;
         };
-        Y_VERIFY_S(itName->second == id, describeFailure());
+        Y_ENSURE(itName->second == id, describeFailure());
         // Sanity check that this table really exists
-        Y_ABORT_UNLESS(it != Scheme.Tables.end() && it->second.Name == name);
+        Y_ENSURE(it != Scheme.Tables.end() && it->second.Name == name);
         return false;
     }
 
@@ -217,7 +235,7 @@ bool TSchemeModifier::AddTable(const TString &name, ui32 id)
 
     // Creating a new table
     auto pr = Scheme.Tables.emplace(id, TTable(name, id));
-    Y_ABORT_UNLESS(pr.second);
+    Y_ENSURE(pr.second);
     it = pr.first;
     Scheme.TableNames.emplace(name, id);
 
@@ -243,11 +261,11 @@ bool TSchemeModifier::DropTable(ui32 id)
 
 bool TSchemeModifier::AddColumn(ui32 tid, const TString &name, ui32 id, ui32 type, bool notNull, TCell null)
 {
-    Y_ABORT_UNLESS(type != (ui32)NScheme::NTypeIds::Pg, "No pg type data");
-    return AddPgColumn(tid, name, id, type, 0, "", notNull, null);
+    Y_ENSURE(!NScheme::NTypeIds::IsParametrizedType(type));
+    return AddColumnWithTypeInfo(tid, name, id, type, {}, notNull, null);
 }
 
-bool TSchemeModifier::AddPgColumn(ui32 tid, const TString &name, ui32 id, ui32 type, ui32 pgType, const TString& pgTypeMod, bool notNull, TCell null)
+bool TSchemeModifier::AddColumnWithTypeInfo(ui32 tid, const TString &name, ui32 id, ui32 type, const std::optional<NKikimrProto::TTypeInfo>& typeInfoProto, bool notNull, TCell null)
 {
     auto *table = Table(tid);
 
@@ -255,13 +273,24 @@ bool TSchemeModifier::AddPgColumn(ui32 tid, const TString &name, ui32 id, ui32 t
     auto itName = table->ColumnNames.find(name);
 
     NScheme::TTypeInfo typeInfo;
-    if (pgType != 0) {
-        Y_ABORT_UNLESS((NScheme::TTypeId)type == NScheme::NTypeIds::Pg);
-        auto* typeDesc = NPg::TypeDescFromPgTypeId(pgType);
-        Y_ABORT_UNLESS(typeDesc);
-        typeInfo = NScheme::TTypeInfo(type, typeDesc);
-    } else {
+    TString pgTypeMod;
+    Y_ENSURE((bool)typeInfoProto == NScheme::NTypeIds::IsParametrizedType(type));
+    switch ((NScheme::TTypeId)type) {
+    case NScheme::NTypeIds::Pg: {
+        auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(type, &*typeInfoProto);
+        typeInfo = typeInfoMod.TypeInfo;
+        pgTypeMod = typeInfoMod.TypeMod;
+        break;
+    }
+    case NScheme::NTypeIds::Decimal: {
+        auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(type, &*typeInfoProto);
+        typeInfo = typeInfoMod.TypeInfo;
+        break;
+    }
+    default: {
         typeInfo = NScheme::TTypeInfo(type);
+        break;
+    }
     }
 
     // We verify ids and types match when column with the same name already exists
@@ -276,10 +305,10 @@ bool TSchemeModifier::AddPgColumn(ui32 tid, const TString &name, ui32 id, ui32 t
             }
             return out;
         };
-        Y_VERIFY_S(itName->second == id, describeFailure());
+        Y_ENSURE(itName->second == id, describeFailure());
         // Sanity check that this column exists and types match
-        Y_ABORT_UNLESS(it != table->Columns.end() && it->second.Name == name);
-        Y_VERIFY_S(it->second.PType == typeInfo && it->second.PTypeMod == pgTypeMod,
+        Y_ENSURE(it != table->Columns.end() && it->second.Name == name);
+        Y_ENSURE(it->second.PType == typeInfo && it->second.PTypeMod == pgTypeMod,
             "Table " << tid << " '" << table->Name << "' column " << id << " '" << name
             << "' expected type " << NScheme::TypeName(typeInfo, pgTypeMod)
             << ", existing type " << NScheme::TypeName(it->second.PType, it->second.PTypeMod));
@@ -290,7 +319,7 @@ bool TSchemeModifier::AddPgColumn(ui32 tid, const TString &name, ui32 id, ui32 t
 
     // We assume column is renamed when the same id already exists
     if (it != table->Columns.end()) {
-        Y_VERIFY_S(it->second.PType == typeInfo && it->second.PTypeMod == pgTypeMod,
+        Y_ENSURE(it->second.PType == typeInfo && it->second.PTypeMod == pgTypeMod,
             "Table " << tid << " '" << table->Name << "' column " << id << " '" << it->second.Name << "' renamed to '" << name << "'"
             << " with type " << NScheme::TypeName(typeInfo, pgTypeMod)
             << ", existing type " << NScheme::TypeName(it->second.PType, it->second.PTypeMod));
@@ -301,7 +330,7 @@ bool TSchemeModifier::AddPgColumn(ui32 tid, const TString &name, ui32 id, ui32 t
     }
 
     auto pr = table->Columns.emplace(id, TColumn(name, id, typeInfo, pgTypeMod, notNull));
-    Y_ABORT_UNLESS(pr.second);
+    Y_ENSURE(pr.second);
     it = pr.first;
     table->ColumnNames.emplace(name, id);
 
@@ -327,7 +356,7 @@ bool TSchemeModifier::AddColumnToKey(ui32 tid, ui32 columnId)
 {
     auto *table = Table(tid);
     auto* column = Scheme.GetColumnInfo(table, columnId);
-    Y_ABORT_UNLESS(column);
+    Y_ENSURE(column);
 
     auto keyPos = std::find(table->KeyColumns.begin(), table->KeyColumns.end(), column->Id);
     if (keyPos == table->KeyColumns.end()) {
@@ -369,7 +398,7 @@ bool TSchemeModifier::SetExecutorResourceProfile(const TString &name)
     return ChangeExecutorSetting(Scheme.Executor.ResourceProfile, name);
 }
 
-bool TSchemeModifier::SetCompactionPolicy(ui32 tid, const NKikimrSchemeOp::TCompactionPolicy &proto)
+bool TSchemeModifier::SetCompactionPolicy(ui32 tid, const NKikimrCompaction::TCompactionPolicy &proto)
 {
     auto *table = Table(tid);
     TIntrusiveConstPtr<TCompactionPolicy> policy(new TCompactionPolicy(proto));
@@ -380,7 +409,7 @@ bool TSchemeModifier::SetCompactionPolicy(ui32 tid, const NKikimrSchemeOp::TComp
     return true;
 }
 
-void TSchemeModifier::PreserveTable(ui32 tid) noexcept
+void TSchemeModifier::PreserveTable(ui32 tid)
 {
     if (RollbackState && !RollbackState->Tables.contains(tid)) {
         auto it = Scheme.Tables.find(tid);
@@ -392,14 +421,14 @@ void TSchemeModifier::PreserveTable(ui32 tid) noexcept
     }
 }
 
-void TSchemeModifier::PreserveExecutor() noexcept
+void TSchemeModifier::PreserveExecutor()
 {
     if (RollbackState && !RollbackState->Executor) {
         RollbackState->Executor = Scheme.Executor;
     }
 }
 
-void TSchemeModifier::PreserveRedo() noexcept
+void TSchemeModifier::PreserveRedo()
 {
     if (RollbackState && !RollbackState->Redo) {
         RollbackState->Redo = Scheme.Redo;

@@ -1,0 +1,114 @@
+import "ydb/library/shop/protos/shop.proto";
+
+package NShopSim;
+
+option java_package = "ru.yandex.shopsim.proto";
+
+message TGaussDistrPb {
+    optional double Mean = 1;
+    optional double Disp = 2;
+}
+
+message TExpDistrPb {
+    // Either only should be used
+    optional double Lambda = 1;
+    optional double Period = 2; // 1/Lambda
+}
+
+message TUniformDistrPb {
+    optional double From = 11;
+    optional double To = 12;
+}
+
+message TDistrPb {
+    optional string Name = 1;
+    optional double Weight = 2 [default = 1.0];
+
+    // The only one of types should be set
+    optional TGaussDistrPb Gauss = 11;
+    optional TExpDistrPb Exp = 12;
+    optional TUniformDistrPb Uniform = 13;
+    optional double Const = 14; // not random, just constant value
+
+    optional double MinAbsValue = 101;
+    optional double MaxAbsValue = 102;
+    optional double MinRelValue = 103; // relative to Mean
+    optional double MaxRelValue = 104; // relative to Mean
+}
+
+message TRandomPb {
+    repeated TDistrPb Distr = 2;
+}
+
+message TOperationPb {
+    optional string Name = 1;
+    optional string Queue = 2; // for machine schedulers (overrides TSourcePb.Queue)
+    optional string Machine = 3;
+
+    // cost estimation (any pair have to be set)
+    optional TRandomPb EstCost = 11;
+    optional TRandomPb RealCost = 12;
+    optional TRandomPb EstCostOverRealCost = 13;
+    optional TRandomPb EstCostMinusRealCost = 14;
+}
+
+message TSourcePb {
+    optional string Name = 1;
+    optional string Queue = 2; // for main scheduler
+    optional TRandomPb InterArrival = 3;
+    repeated TOperationPb Operation = 4;
+    // TODO: make it possible to correlate costs in different ops
+}
+
+// TODO: for common worker pool at different machines (aka common resource)
+//message TWorkersPb {
+//    optional string Name = 1;
+//    optional uint64 Count = 2;
+//    optional double Speed = 3;
+//    // TODO: worker scheduling procedure?
+//}
+
+message TFIFOPb {
+    optional string Name = 1;
+}
+
+message TDRRQueuePb {
+    optional string Name = 1;
+    optional uint64 Weight = 2;
+    optional uint64 MaxBurst = 3;
+}
+
+message TDRRPb {
+    optional string Name = 1;
+    optional uint64 Quantum = 2;
+
+    repeated TDRRQueuePb Queue = 3;
+};
+
+message TSchedulerPb {
+    // Only one qdisc should be set
+    optional TFIFOPb FIFO = 1;
+    optional TDRRPb DRR = 2;
+}
+
+message TMachinePb {
+    optional string Name = 1;
+
+    // At first all incoming jobs are pushed to queueing discipline
+    optional TSchedulerPb Scheduler = 101;
+
+    // After job scheduling, operation of a job is processed by worker
+    optional uint64 WorkerCount = 201 [default = 1];
+    optional double Speed = 202 [default = 1.0];
+
+    // After operation processing job waits for random time
+    optional TRandomPb Wait = 301;
+
+    // Machine operates under flow controller
+    optional NShop.TFlowCtlConfig FlowCtl = 401;
+}
+
+message TConfigPb {
+    repeated TMachinePb Machine = 1;
+    repeated TSourcePb Source = 2;
+}

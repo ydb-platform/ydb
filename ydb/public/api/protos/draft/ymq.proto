@@ -25,7 +25,7 @@ message ChangeMessageVisibilityResult {
 message ChangeMessageVisibilityBatchRequestEntry {
     string id = 1;
     string receipt_handle = 2;
-    int32 visibility_timeout = 3;
+    optional int32 visibility_timeout = 3;
 }
 
 message ChangeMessageVisibilityBatchRequest {
@@ -128,7 +128,7 @@ message GetQueueAttributesResult {
 message GetQueueUrlRequest {
     Ydb.Operations.OperationParams operation_params = 1;
     string queue_name = 2;
-    string queue_owner_aws_account_id = 3;
+    optional string queue_owner_a_w_s_account_id = 3;
 }
 
 message GetQueueUrlResponse {
@@ -141,9 +141,9 @@ message GetQueueUrlResult {
 
 message ListQueuesRequest {
     Ydb.Operations.OperationParams operation_params = 1;
-    int64 max_results = 2;
-    string next_token = 3;
-    string queue_name_prefix = 4;
+    optional int64 max_results = 2;
+    optional string next_token = 3;
+    optional string queue_name_prefix = 4;
 }
 
 message ListQueuesResponse {
@@ -178,13 +178,13 @@ message MessageAttribute {
 message ReceiveMessageRequest {
     Ydb.Operations.OperationParams operation_params = 1;
     repeated string attribute_names = 2;
-    int32 max_number_of_messages = 3;
+    optional int32 max_number_of_messages = 3;
     repeated string message_attribute_names = 4;
     repeated string message_system_attribute_names = 5;
     string queue_url = 6;
-    string receive_request_attempt_id = 7;
-    int32 visibility_timeout = 8;
-    int32 wait_time_seconds = 9;
+    optional string receive_request_attempt_id = 7;
+    optional int32 visibility_timeout = 8;
+    optional int32 wait_time_seconds = 9;
 }
 
 message ReceiveMessageResponse {
@@ -194,8 +194,8 @@ message ReceiveMessageResponse {
 message Message {
     map<string, string> attributes = 1;
     string body = 2;
-    string md5_of_body = 3;
-    string md5_of_message_attributes = 4;
+    string m_d_5_of_body = 3 [(Ydb.FieldTransformation.FieldTransformer) = TRANSFORM_EMPTY_TO_NOTHING];
+    string m_d_5_of_message_attributes = 4 [(Ydb.FieldTransformation.FieldTransformer) = TRANSFORM_EMPTY_TO_NOTHING];
     map<string, MessageAttribute>  message_attributes = 5;
     string  message_id = 6;
     string receipt_handle = 7;
@@ -207,11 +207,11 @@ message ReceiveMessageResult {
 
 message SendMessageRequest {
     Ydb.Operations.OperationParams operation_params = 1;
-    int32 delay_seconds = 2;
+    optional int32 delay_seconds = 2;
     map<string, MessageAttribute> message_attributes = 3;
     string message_body = 4;
-    string message_deduplication_id = 5;
-    string message_group_id = 6;
+    optional string message_deduplication_id = 5;
+    optional string message_group_id = 6;
     map<string, MessageAttribute> message_system_attributes = 7;
     string queue_url = 8;
 }
@@ -221,20 +221,11 @@ message SendMessageResponse {
 }
 
 message SendMessageResult {
-    string md5_of_message_attributes = 1;
-    string md5_of_message_body= 2;
-    string md5_of_message_system_attributes= 3;
+    string m_d_5_of_message_attributes = 1 [(Ydb.FieldTransformation.FieldTransformer) = TRANSFORM_EMPTY_TO_NOTHING];
+    string m_d_5_of_message_body= 2 [(Ydb.FieldTransformation.FieldTransformer) = TRANSFORM_EMPTY_TO_NOTHING];
+    string m_d_5_of_message_system_attributes= 3 [(Ydb.FieldTransformation.FieldTransformer) = TRANSFORM_EMPTY_TO_NOTHING];
     string message_id = 4;
     string sequence_number = 5;
-}
-
-message SendMessageBatchRequest {
-    Ydb.Operations.OperationParams operation_params = 1;
-    repeated SendMessageRequest entries = 2;
-}
-
-message SendMessageBatchResponse {
-    Ydb.Operations.Operation operation = 1;
 }
 
 message BatchResultErrorEntry {
@@ -244,15 +235,110 @@ message BatchResultErrorEntry {
     string message = 4;
 }
 
+message SendMessageBatchRequestEntry {
+    string id = 1;
+    optional int32 delay_seconds = 2;
+    map<string, MessageAttribute> message_attributes = 3;
+    string message_body = 4;
+    optional string message_deduplication_id = 5;
+    optional string message_group_id = 6;
+    map<string, MessageAttribute> message_system_attributes = 7;
+    string queue_url = 8;
+}
+
 message SendMessageBatchResultEntry {
-    string md5_of_message_attributes = 1;
-    string md5_of_message_body= 2;
-    string md5_of_message_system_attributes= 3;
-    string message_id = 4;
-    string sequence_number = 5;
+    string id = 1;
+    string m_d_5_of_message_body = 2 [(Ydb.FieldTransformation.FieldTransformer) = TRANSFORM_EMPTY_TO_NOTHING];
+    string message_id = 3;
+    string m_d_5_of_message_attributes = 4 [(Ydb.FieldTransformation.FieldTransformer) = TRANSFORM_EMPTY_TO_NOTHING];
+    string m_d_5_of_message_system_attributes = 5 [(Ydb.FieldTransformation.FieldTransformer) = TRANSFORM_EMPTY_TO_NOTHING];
+    string sequence_number = 6;
+}
+
+message SendMessageBatchRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    repeated SendMessageBatchRequestEntry entries = 2;
+    string queue_url = 3;
+}
+
+message SendMessageBatchResponse {
+    Ydb.Operations.Operation operation = 1;
 }
 
 message SendMessageBatchResult {
     repeated BatchResultErrorEntry failed = 1;
     repeated SendMessageBatchResultEntry successful = 2;
+}
+
+message SetQueueAttributesRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    map<string, string> attributes = 2;
+    string queue_url = 3;
+}
+
+message SetQueueAttributesResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message SetQueueAttributesResult {
+}
+
+message ListDeadLetterSourceQueuesRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    optional int32 max_results = 2;
+    optional string next_token = 3;
+    string queue_url = 4;
+}
+
+message ListDeadLetterSourceQueuesResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message ListDeadLetterSourceQueuesResult {
+    string next_token = 1;
+    repeated string queue_urls = 2;
+}
+
+
+message ListQueueTagsRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    string queue_url = 2;
+}
+
+message ListQueueTagsResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message ListQueueTagsResult {
+    map<string, string> tags = 1;
+}
+
+message TagQueueRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    map<string, string> tags = 2;
+    string queue_url = 3;
+}
+
+message TagQueueResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message TagQueueResult {
+}
+
+message UntagQueueRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    repeated string tag_keys = 2;
+    string queue_url = 3;
+}
+
+message UntagQueueResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message UntagQueueResult {
+}
+
+message QueueTags {
+    map<string,string> Tags = 1;
 }

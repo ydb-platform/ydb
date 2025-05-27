@@ -2,6 +2,7 @@ LIBRARY()
 
 PEERDIR(
     ydb/library/actors/core
+    ydb/library/wilson_ids
     library/cpp/containers/disjoint_interval_tree
     library/cpp/string_utils/base64
     ydb/core/util
@@ -12,6 +13,7 @@ PEERDIR(
     ydb/core/protos
     ydb/core/scheme
     ydb/core/tx/scheme_cache
+    ydb/core/ydb_convert
     ydb/library/aclib
     ydb/library/persqueue/topic_parser
     ydb/public/api/protos
@@ -26,6 +28,8 @@ SRCS(
     codecs.cpp
     commit_offset_actor.h
     commit_offset_actor.cpp
+    distributed_commit_helper.h
+    distributed_commit_helper.cpp
     events.h
     persqueue_utils.h
     persqueue_utils.cpp

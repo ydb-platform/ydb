@@ -7,6 +7,7 @@
 #include "viewer_tabletinfo.h"
 #include "wb_aggregate.h"
 #include "wb_merge.h"
+#include <ydb/core/base/memory_stats.h>
 
 namespace NKikimr::NViewer {
 
@@ -21,6 +22,8 @@ class TJsonTenantInfo : public TViewerPipeClient {
     std::optional<TRequestResponse<NConsole::TEvConsole::TEvListTenantsResponse>> ListTenantsResponse;
     std::unordered_map<TString, TRequestResponse<NConsole::TEvConsole::TEvGetTenantStatusResponse>> TenantStatusResponses;
     std::unordered_map<TString, TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult>> NavigateKeySetResult;
+    std::unordered_map<TString, TRequestResponse<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>> DescribeSchemeResult;
+    std::unordered_map<TTabletId, std::vector<TString>> DescribesBySchemeShard;
     std::unordered_map<TTabletId, TRequestResponse<TEvHive::TEvResponseHiveDomainStats>> HiveDomainStats;
     std::unordered_map<TTabletId, TRequestResponse<TEvHive::TEvResponseHiveStorageStats>> HiveStorageStats;
     std::unordered_map<TNodeId, TRequestResponse<TEvWhiteboard::TEvSystemStateResponse>> SystemStateResponse;
@@ -28,6 +31,7 @@ class TJsonTenantInfo : public TViewerPipeClient {
     std::unordered_map<TNodeId, TRequestResponse<TEvViewer::TEvViewerResponse>> OffloadedSystemStateResponse;
     std::unordered_map<TNodeId, TRequestResponse<TEvViewer::TEvViewerResponse>> OffloadedTabletStateResponse;
     std::unordered_map<TNodeId, TRequestResponse<NHealthCheck::TEvSelfCheckResultProto>> SelfCheckResults;
+    std::unordered_map<TString, TRequestResponse<TEvStateStorage::TEvBoardInfo>> MetadataCacheEndpointsLookup;
 
     THashMap<TString, NKikimrViewer::TTenant> TenantByPath;
     THashMap<TPathId, NKikimrViewer::TTenant> TenantBySubDomainKey;
@@ -40,18 +44,18 @@ class TJsonTenantInfo : public TViewerPipeClient {
     TJsonSettings JsonSettings;
     ui32 Timeout = 0;
     TString User;
-    TString Database;
     TString DomainPath;
     bool Tablets = false;
     bool SystemTablets = false;
     bool Storage = false;
+    bool MemoryStats = false;
     bool Nodes = false;
     bool Users = false;
     bool OffloadMerge = false;
     bool MetadataCache = true;
-    bool Direct = false;
     THashMap<TString, std::vector<TNodeId>> TenantNodes;
     TTabletId RootHiveId = 0;
+    TTabletId RootSchemeShardId = 0;
     TString RootId; // id of root domain (tenant)
     NKikimrViewer::TTenantInfo Result;
 
@@ -63,7 +67,12 @@ class TJsonTenantInfo : public TViewerPipeClient {
 public:
     TJsonTenantInfo(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
         : TBase(viewer, ev)
-    {}
+    {
+        const auto& params(Event->Get()->Request.GetParams());
+        if (Database.empty()) {
+            Database = params.Get("path");
+        }
+    }
 
     TString GetLogPrefix() {
         static TString prefix = "json/tenantinfo ";
@@ -87,68 +96,74 @@ public:
     }
 
     void RequestMetadataCacheHealthCheck(const TString& path) {
-        if (AppData()->FeatureFlags.GetEnableDbMetadataCache() && MetadataCache) {
-            RequestStateStorageMetadataCacheEndpointsLookup(path);
+        if (AppData()->FeatureFlags.GetEnableDbMetadataCache() && MetadataCache && MetadataCacheEndpointsLookup.count(path) == 0) {
+            MetadataCacheEndpointsLookup[path] = MakeRequestStateStorageMetadataCacheEndpointsLookup(path);
         }
     }
 
+    TRequestResponse<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult> MakeRequestSchemeShardDescribe(TTabletId schemeShardId, const TString& path) {
+        NKikimrSchemeOp::TDescribeOptions options;
+        options.SetReturnPartitioningInfo(false);
+        options.SetReturnPartitionConfig(false);
+        options.SetReturnChildren(false);
+        options.SetReturnRangeKey(false);
+        return TBase::MakeRequestSchemeShardDescribe(schemeShardId, path, options);
+    }
+
     void Bootstrap() override {
+        if (NeedToRedirect()) {
+            return;
+        }
         const auto& params(Event->Get()->Request.GetParams());
         JsonSettings.EnumAsNumbers = !FromStringWithDefault<bool>(params.Get("enums"), true);
         JsonSettings.UI64AsString = !FromStringWithDefault<bool>(params.Get("ui64"), false);
         Followers = false;
         Metrics = true;
-        InitConfig(params);
         Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
         Tablets = FromStringWithDefault<bool>(params.Get("tablets"), Tablets);
         SystemTablets = FromStringWithDefault<bool>(params.Get("system_tablets"), Tablets); // Tablets here is by design
         Storage = FromStringWithDefault<bool>(params.Get("storage"), Storage);
+        MemoryStats = FromStringWithDefault<bool>(params.Get("memory"), MemoryStats);
         Nodes = FromStringWithDefault<bool>(params.Get("nodes"), Nodes);
         Users = FromStringWithDefault<bool>(params.Get("users"), Users);
         User = params.Get("user");
-        Database = params.Get("database");
-        if (Database.empty()) {
-            Database = params.Get("path");
-        }
-        Direct = FromStringWithDefault<bool>(params.Get("direct"), Direct);
         OffloadMerge = FromStringWithDefault<bool>(params.Get("offload_merge"), OffloadMerge);
         MetadataCache = FromStringWithDefault<bool>(params.Get("metadata_cache"), MetadataCache);
-        Direct |= (Database == AppData()->TenantName); // we're already on the right node
-        if (Database && !Direct) {
-            RequestStateStorageEndpointsLookup(Database); // to find some dynamic node and redirect query there
-            Become(&TThis::StateResolvingDatabase, TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup());
+
+        TIntrusivePtr<TDomainsInfo> domains = AppData()->DomainsInfo;
+        auto* domain = domains->GetDomain();
+        DomainPath = "/" + domain->Name;
+        RootSchemeShardId = domain->SchemeRoot;
+        TPathId rootPathId(domain->SchemeRoot, 1);
+        RootId = GetDomainId(rootPathId);
+        RootHiveId = domains->GetHive();
+
+        if (Database.empty()) {
+            ListTenantsResponse = MakeRequestConsoleListTenants();
+            NavigateKeySetResult[DomainPath] = MakeRequestSchemeCacheNavigate(DomainPath);
         } else {
-            TIntrusivePtr<TDomainsInfo> domains = AppData()->DomainsInfo;
-            auto* domain = domains->GetDomain();
-            DomainPath = "/" + domain->Name;
-            TPathId rootPathId(domain->SchemeRoot, 1);
-            RootId = GetDomainId(rootPathId);
-            RootHiveId = domains->GetHive();
-
-            if (Database.empty()) {
-                ListTenantsResponse = MakeRequestConsoleListTenants();
-            } else {
+            if (Database != DomainPath) {
                 TenantStatusResponses[Database] = MakeRequestConsoleGetTenantStatus(Database);
-                NavigateKeySetResult[Database] = MakeRequestSchemeCacheNavigate(Database);
             }
-
-            if (Database.empty() || Database == DomainPath) {
-                NKikimrViewer::TTenant& tenant = TenantBySubDomainKey[rootPathId];
-                tenant.SetId(RootId);
-                tenant.SetState(Ydb::Cms::GetDatabaseStatusResult::RUNNING);
-                tenant.SetType(NKikimrViewer::Domain);
-                tenant.SetName(DomainPath);
-                NavigateKeySetResult[DomainPath] = MakeRequestSchemeCacheNavigate(DomainPath);
-                RequestMetadataCacheHealthCheck(DomainPath);
-            }
-
-            HiveDomainStats[RootHiveId] = MakeRequestHiveDomainStats(RootHiveId);
-            if (Storage) {
-                HiveStorageStats[RootHiveId] = MakeRequestHiveStorageStats(RootHiveId);
-            }
-
-            Become(&TThis::StateCollectingInfo, TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup());
+            NavigateKeySetResult[Database] = MakeRequestSchemeCacheNavigate(Database);
         }
+
+        if (Database.empty() || Database == DomainPath) {
+            NKikimrViewer::TTenant& tenant = TenantBySubDomainKey[rootPathId];
+            tenant.SetId(RootId);
+            tenant.SetState(Ydb::Cms::GetDatabaseStatusResult::RUNNING);
+            tenant.SetType(NKikimrViewer::Domain);
+            tenant.SetName(DomainPath);
+        }
+
+        HiveDomainStats[RootHiveId] = MakeRequestHiveDomainStats(RootHiveId);
+        if (Storage) {
+            HiveStorageStats[RootHiveId] = MakeRequestHiveStorageStats(RootHiveId);
+            DescribeSchemeResult[DomainPath] = MakeRequestSchemeShardDescribe(RootSchemeShardId, DomainPath);
+            DescribesBySchemeShard[RootSchemeShardId].emplace_back(DomainPath);
+        }
+
+        Become(&TThis::StateCollectingInfo, TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup());
     }
 
     void PassAway() override {
@@ -158,17 +173,6 @@ public:
             }
         }
         TBase::PassAway();
-    }
-
-    void HandleResolvingDatabase(TEvStateStorage::TEvBoardInfo::TPtr& ev) {
-        TBase::ReplyAndPassAway(MakeForward(GetNodesFromBoardReply(ev)));
-    }
-
-    STATEFN(StateResolvingDatabase) {
-        switch (ev->GetTypeRewrite()) {
-            hFunc(TEvStateStorage::TEvBoardInfo, HandleResolvingDatabase);
-            cFunc(TEvents::TSystem::Wakeup, HandleTimeout);
-        }
     }
 
     STATEFN(StateCollectingInfo) {
@@ -186,6 +190,7 @@ public:
             hFunc(TEvTabletPipe::TEvClientConnected, Handle);
             hFunc(TEvStateStorage::TEvBoardInfo, Handle);
             hFunc(NHealthCheck::TEvSelfCheckResultProto, Handle);
+            hFunc(TEvSchemeShard::TEvDescribeSchemeResult, Handle);
             cFunc(TEvents::TSystem::Wakeup, HandleTimeout);
         }
     }
@@ -213,89 +218,109 @@ public:
                     it->second.Error(error);
                 }
             }
+            auto itDescribes = DescribesBySchemeShard.find(ev->Get()->TabletId);
+            if (itDescribes != DescribesBySchemeShard.end()) {
+                for (const TString& path : itDescribes->second) {
+                    DescribeSchemeResult[path].Error(error);
+                }
+            }
         }
         TBase::Handle(ev); // all RequestDone() are handled by base handler
     }
 
     void Handle(NConsole::TEvConsole::TEvListTenantsResponse::TPtr& ev) {
-        ListTenantsResponse->Set(std::move(ev));
-        Ydb::Cms::ListDatabasesResult listTenantsResult;
-        ListTenantsResponse->Get()->Record.GetResponse().operation().result().UnpackTo(&listTenantsResult);
-        for (const TString& path : listTenantsResult.paths()) {
-            TenantStatusResponses[path] = MakeRequestConsoleGetTenantStatus(path);
-            NavigateKeySetResult[path] = MakeRequestSchemeCacheNavigate(path);
-            RequestMetadataCacheHealthCheck(path);
+        if (ListTenantsResponse->Set(std::move(ev))) {
+            Ydb::Cms::ListDatabasesResult listTenantsResult;
+            ListTenantsResponse->Get()->Record.GetResponse().operation().result().UnpackTo(&listTenantsResult);
+            for (const TString& path : listTenantsResult.paths()) {
+                TenantStatusResponses[path] = MakeRequestConsoleGetTenantStatus(path);
+                NavigateKeySetResult[path] = MakeRequestSchemeCacheNavigate(path);
+            }
+            RequestDone();
         }
-        RequestDone();
     }
 
     void Handle(NConsole::TEvConsole::TEvGetTenantStatusResponse::TPtr& ev) {
         Ydb::Cms::GetDatabaseStatusResult getTenantStatusResult;
         ev->Get()->Record.GetResponse().operation().result().UnpackTo(&getTenantStatusResult);
         TString path = getTenantStatusResult.path();
-        TenantStatusResponses[path].Set(std::move(ev));
-        NKikimrViewer::TTenant& tenant = TenantByPath[path];
-        tenant.SetName(path);
-        tenant.SetState(getTenantStatusResult.state());
-        if (getTenantStatusResult.has_required_shared_resources()) {
-            tenant.SetType(NKikimrViewer::Shared);
-            if (NavigateKeySetResult.count(path) == 0) {
-                NavigateKeySetResult[path] = MakeRequestSchemeCacheNavigate(path);
+        if (TenantStatusResponses[path].Set(std::move(ev))) {
+            NKikimrViewer::TTenant& tenant = TenantByPath[path];
+            tenant.SetName(path);
+            tenant.SetState(getTenantStatusResult.state());
+            if (getTenantStatusResult.has_required_shared_resources()) {
+                tenant.SetType(NKikimrViewer::Shared);
+                if (NavigateKeySetResult.count(path) == 0) {
+                    NavigateKeySetResult[path] = MakeRequestSchemeCacheNavigate(path);
+                }
             }
-        }
-        for (const Ydb::Cms::StorageUnits& unit : getTenantStatusResult.allocated_resources().storage_units()) {
-            NKikimrViewer::TTenantResource& resource = *tenant.MutableResources()->AddAllocated();
-            resource.SetType("storage");
-            resource.SetKind(unit.unit_kind());
-            resource.SetCount(unit.count());
-        }
-        for (const Ydb::Cms::StorageUnits& unit : getTenantStatusResult.required_resources().storage_units()) {
-            NKikimrViewer::TTenantResource& resource = *tenant.MutableResources()->AddRequired();
-            resource.SetType("storage");
-            resource.SetKind(unit.unit_kind());
-            resource.SetCount(unit.count());
-        }
-        for (const Ydb::Cms::ComputationalUnits& unit : getTenantStatusResult.allocated_resources().computational_units()) {
-            NKikimrViewer::TTenantResource& resource = *tenant.MutableResources()->AddAllocated();
-            resource.SetType("compute");
-            resource.SetZone(unit.availability_zone());
-            resource.SetKind(unit.unit_kind());
-            resource.SetCount(unit.count());
-        }
-        for (const Ydb::Cms::ComputationalUnits& unit : getTenantStatusResult.required_resources().computational_units()) {
-            NKikimrViewer::TTenantResource& resource = *tenant.MutableResources()->AddRequired();
-            resource.SetType("compute");
-            resource.SetZone(unit.availability_zone());
-            resource.SetKind(unit.unit_kind());
-            resource.SetCount(unit.count());
-        }
-        Ydb::Cms::DatabaseQuotas& quotas = *tenant.MutableDatabaseQuotas();
-        quotas.MergeFrom(getTenantStatusResult.database_quotas());
+            if (getTenantStatusResult.has_serverless_resources()) {
+                tenant.SetType(NKikimrViewer::Serverless);
+                TString sharedPath = getTenantStatusResult.serverless_resources().shared_database_path();
+                if (NavigateKeySetResult.count(sharedPath) == 0) {
+                    NavigateKeySetResult[sharedPath] = MakeRequestSchemeCacheNavigate(sharedPath);
+                }
+            }
+            for (const Ydb::Cms::StorageUnits& unit : getTenantStatusResult.allocated_resources().storage_units()) {
+                NKikimrViewer::TTenantResource& resource = *tenant.MutableResources()->AddAllocated();
+                resource.SetType("storage");
+                resource.SetKind(unit.unit_kind());
+                resource.SetCount(unit.count());
+            }
+            for (const Ydb::Cms::StorageUnits& unit : getTenantStatusResult.required_resources().storage_units()) {
+                NKikimrViewer::TTenantResource& resource = *tenant.MutableResources()->AddRequired();
+                resource.SetType("storage");
+                resource.SetKind(unit.unit_kind());
+                resource.SetCount(unit.count());
+            }
+            for (const Ydb::Cms::ComputationalUnits& unit : getTenantStatusResult.allocated_resources().computational_units()) {
+                NKikimrViewer::TTenantResource& resource = *tenant.MutableResources()->AddAllocated();
+                resource.SetType("compute");
+                resource.SetZone(unit.availability_zone());
+                resource.SetKind(unit.unit_kind());
+                resource.SetCount(unit.count());
+            }
+            for (const Ydb::Cms::ComputationalUnits& unit : getTenantStatusResult.required_resources().computational_units()) {
+                NKikimrViewer::TTenantResource& resource = *tenant.MutableResources()->AddRequired();
+                resource.SetType("compute");
+                resource.SetZone(unit.availability_zone());
+                resource.SetKind(unit.unit_kind());
+                resource.SetCount(unit.count());
+            }
+            Ydb::Cms::DatabaseQuotas& quotas = *tenant.MutableDatabaseQuotas();
+            quotas.MergeFrom(getTenantStatusResult.database_quotas());
 
-        RequestDone();
+            RequestDone();
+        }
+    }
+
+    void InitSystemStateRequest(NKikimrWhiteboard::TEvSystemStateRequest& request) {
+        request.MutableFieldsRequired()->CopyFrom(GetDefaultWhiteboardFields<NKikimrWhiteboard::TSystemStateInfo>());
+        request.AddFieldsRequired(NKikimrWhiteboard::TSystemStateInfo::kCoresUsedFieldNumber);
+        request.AddFieldsRequired(NKikimrWhiteboard::TSystemStateInfo::kCoresTotalFieldNumber);
+        if (MemoryStats) {
+            request.AddFieldsRequired(NKikimrWhiteboard::TSystemStateInfo::kMemoryStatsFieldNumber);
+        }
+        request.AddFieldsRequired(NKikimrWhiteboard::TSystemStateInfo::kNetworkUtilizationFieldNumber);
+        request.AddFieldsRequired(NKikimrWhiteboard::TSystemStateInfo::kNetworkWriteThroughputFieldNumber);
+        request.AddFieldsRequired(NKikimrWhiteboard::TSystemStateInfo::kRealNumberOfCpusFieldNumber);
     }
 
     void SendWhiteboardSystemStateRequest(const TNodeId nodeId) {
         Subscribers.insert(nodeId);
-        TActorId whiteboardServiceId = MakeNodeWhiteboardServiceId(nodeId);
         if (SystemStateResponse.count(nodeId) == 0) {
-            SystemStateResponse.emplace(nodeId, MakeRequest<TEvWhiteboard::TEvSystemStateResponse>(whiteboardServiceId,
-                new TEvWhiteboard::TEvSystemStateRequest(),
-                IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession,
-                nodeId));
+            auto request = std::make_unique<NNodeWhiteboard::TEvWhiteboard::TEvSystemStateRequest>();
+            InitSystemStateRequest(request->Record);
+            SystemStateResponse.emplace(nodeId, MakeWhiteboardRequest(nodeId, request.release()));
         }
     }
 
     void SendWhiteboardTabletStateRequest(const TNodeId nodeId) {
         Subscribers.insert(nodeId);
-        TActorId whiteboardServiceId = MakeNodeWhiteboardServiceId(nodeId);
         if (TabletStateResponse.count(nodeId) == 0) {
             auto request = std::make_unique<NNodeWhiteboard::TEvWhiteboard::TEvTabletStateRequest>();
             request->Record.SetFormat("packed5");
-            TabletStateResponse.emplace(nodeId, MakeRequest<TEvWhiteboard::TEvTabletStateResponse>(whiteboardServiceId,
-                request.release(),
-                IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession,
-                nodeId));
+            TabletStateResponse.emplace(nodeId, MakeWhiteboardRequest(nodeId, request.release()));
         }
     }
 
@@ -317,7 +342,7 @@ public:
             TNodeId nodeId = *itPos;
             Subscribers.insert(nodeId);
             THolder<TEvViewer::TEvViewerRequest> sysRequest = MakeHolder<TEvViewer::TEvViewerRequest>();
-            sysRequest->Record.MutableSystemRequest();
+            InitSystemStateRequest(*sysRequest->Record.MutableSystemRequest());
             sysRequest->Record.SetTimeout(Timeout / 3);
             for (auto nodeId : nodesIds) {
                 sysRequest->Record.MutableLocation()->AddNodeId(nodeId);
@@ -338,125 +363,158 @@ public:
 
     void Handle(TEvHive::TEvResponseHiveDomainStats::TPtr& ev) {
         auto& response = HiveDomainStats[ev->Cookie];
-        response.Set(std::move(ev));
-        for (const NKikimrHive::THiveDomainStats& hiveStat : response.Get()->Record.GetDomainStats()) {
-            TPathId subDomainKey({hiveStat.GetShardId(), hiveStat.GetPathId()});
-            NKikimrViewer::TTenant& tenant = TenantBySubDomainKey[subDomainKey];
-            TString tenantId = GetDomainId({hiveStat.GetShardId(), hiveStat.GetPathId()});
-            tenant.SetId(tenantId);
-            if (ev->Cookie != RootHiveId || tenant.GetId() == RootId) {
-                if (!tenant.HasMetrics()) {
-                    tenant.MutableMetrics()->CopyFrom(hiveStat.GetMetrics());
+        if (response.Set(std::move(ev))) {
+            for (const NKikimrHive::THiveDomainStats& hiveStat : response.Get()->Record.GetDomainStats()) {
+                TPathId subDomainKey({hiveStat.GetShardId(), hiveStat.GetPathId()});
+                NKikimrViewer::TTenant& tenant = TenantBySubDomainKey[subDomainKey];
+                TString tenantId = GetDomainId({hiveStat.GetShardId(), hiveStat.GetPathId()});
+                tenant.SetId(tenantId);
+                if (ev->Cookie != RootHiveId || tenant.GetId() == RootId) {
+                    if (!tenant.HasMetrics()) {
+                        tenant.MutableMetrics()->CopyFrom(hiveStat.GetMetrics());
+                    }
+                    if (tenant.StateStatsSize() == 0) {
+                        tenant.MutableStateStats()->CopyFrom(hiveStat.GetStateStats());
+                    }
+                    if (tenant.NodeIdsSize() == 0) {
+                        tenant.MutableNodeIds()->CopyFrom(hiveStat.GetNodeIds());
+                    }
+                    if (tenant.GetAliveNodes() == 0) {
+                        tenant.SetAliveNodes(hiveStat.GetAliveNodes());
+                    }
                 }
-                if (tenant.StateStatsSize() == 0) {
-                    tenant.MutableStateStats()->CopyFrom(hiveStat.GetStateStats());
-                }
-                if (tenant.NodeIdsSize() == 0) {
-                    tenant.MutableNodeIds()->CopyFrom(hiveStat.GetNodeIds());
-                }
-                if (tenant.GetAliveNodes() == 0) {
-                    tenant.SetAliveNodes(hiveStat.GetAliveNodes());
-                }
-            }
 
-            std::vector<TNodeId> nodesIds;
-            nodesIds.reserve(hiveStat.NodeIdsSize());
-            for (auto nodeId : hiveStat.GetNodeIds()) {
-                nodesIds.push_back(nodeId);
-                NodeIdsToTenant.insert({nodeId, tenantId});
-            }
-            TenantNodes[tenantId] = nodesIds;
+                std::vector<TNodeId> nodesIds;
+                nodesIds.reserve(hiveStat.NodeIdsSize());
+                for (auto nodeId : hiveStat.GetNodeIds()) {
+                    nodesIds.push_back(nodeId);
+                    NodeIdsToTenant.insert({nodeId, tenantId});
+                }
+                TenantNodes[tenantId] = nodesIds;
 
-            if (Database.empty() || Database == tenant.GetName()) {
-                if (OffloadMerge) {
-                    SendOffloadRequests(tenantId);
-                } else {
-                    for (TNodeId nodeId : hiveStat.GetNodeIds()) {
-                        SendWhiteboardRequests(nodeId);
+                if (Database.empty() || Database == tenant.GetName()) {
+                    if (OffloadMerge) {
+                        SendOffloadRequests(tenantId);
+                    } else {
+                        for (TNodeId nodeId : hiveStat.GetNodeIds()) {
+                            SendWhiteboardRequests(nodeId);
+                        }
                     }
                 }
             }
-        }
 
-        RequestDone();
+            RequestDone();
+        }
     }
 
     void Handle(TEvHive::TEvResponseHiveStorageStats::TPtr& ev) {
-        HiveStorageStats[ev->Cookie].Set(std::move(ev));
-        RequestDone();
+        if (HiveStorageStats[ev->Cookie].Set(std::move(ev))) {
+            RequestDone();
+        }
     }
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
         TString path = GetPath(ev);
         auto& result(NavigateKeySetResult[path]);
-        result.Set(std::move(ev));
-        if (result.Get()->Request->ResultSet.size() == 1 && result.Get()->Request->ResultSet.begin()->Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
-            auto domainInfo = result.Get()->Request->ResultSet.begin()->DomainInfo;
-            TTabletId hiveId = domainInfo->Params.GetHive();
-            if (hiveId) {
-                if (HiveDomainStats.count(hiveId) == 0) {
-                    HiveDomainStats[hiveId] = MakeRequestHiveDomainStats(hiveId);
-                }
-                if (Storage) {
-                    if (HiveStorageStats.count(hiveId) == 0) {
-                        HiveStorageStats[hiveId] = MakeRequestHiveStorageStats(hiveId);
+        if (result.Set(std::move(ev))) {
+            if (result.IsOk()) {
+                auto domainInfo = result.Get()->Request->ResultSet.begin()->DomainInfo;
+                TTabletId hiveId = domainInfo->Params.GetHive();
+                TTabletId schemeShardId = domainInfo->Params.GetSchemeShard();
+                if (hiveId) {
+                    if (HiveDomainStats.count(hiveId) == 0) {
+                        HiveDomainStats[hiveId] = MakeRequestHiveDomainStats(hiveId);
                     }
                 }
-            }
-            NKikimrViewer::TTenant& tenant = TenantBySubDomainKey[domainInfo->DomainKey];
-            if (domainInfo->ResourcesDomainKey != domainInfo->DomainKey) {
-                NKikimrViewer::TTenant& sharedTenant = TenantBySubDomainKey[domainInfo->ResourcesDomainKey];
-                if (sharedTenant.GetType() != NKikimrViewer::Shared) {
-                    sharedTenant.SetType(NKikimrViewer::Shared);
-                    RequestSchemeCacheNavigate(domainInfo->ResourcesDomainKey);
+                if (Storage) {
+                    if (hiveId && HiveStorageStats.count(hiveId) == 0) {
+                        HiveStorageStats[hiveId] = MakeRequestHiveStorageStats(hiveId);
+                    }
+                    if (schemeShardId && DescribeSchemeResult.count(path) == 0) {
+                        DescribeSchemeResult[path] = MakeRequestSchemeShardDescribe(schemeShardId, path);
+                        DescribesBySchemeShard[schemeShardId].emplace_back(path);
+                    }
                 }
-                tenant.SetType(NKikimrViewer::Serverless);
-                tenant.SetResourceId(GetDomainId(domainInfo->ResourcesDomainKey));
+                NKikimrViewer::TTenant& tenant = TenantBySubDomainKey[domainInfo->DomainKey];
+                if (domainInfo->ResourcesDomainKey != domainInfo->DomainKey) {
+                    tenant.SetType(NKikimrViewer::Serverless);
+                    tenant.SetResourceId(GetDomainId(domainInfo->ResourcesDomainKey));
+                } else {
+                    RequestMetadataCacheHealthCheck(path);
+                }
+                TString id = GetDomainId(domainInfo->DomainKey);
+                tenant.SetId(id);
+                tenant.SetName(path);
+                if (tenant.GetType() == NKikimrViewer::UnknownTenantType) {
+                    tenant.SetType(NKikimrViewer::Dedicated);
+                }
             }
-            TString id = GetDomainId(domainInfo->DomainKey);
-            tenant.SetId(id);
-            tenant.SetName(path);
-            if (tenant.GetType() == NKikimrViewer::UnknownTenantType) {
-                tenant.SetType(NKikimrViewer::Dedicated);
-            }
+            RequestDone();
         }
-        RequestDone();
+    }
+
+    void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
+        TString path = ev->Get()->GetRecord().GetPath();
+        if (DescribeSchemeResult[path].Set(std::move(ev))) {
+            RequestDone();
+        }
     }
 
     void Handle(NNodeWhiteboard::TEvWhiteboard::TEvSystemStateResponse::TPtr& ev) {
         ui32 nodeId = ev.Get()->Cookie;
-        SystemStateResponse[nodeId].Set(std::move(ev));
-        RequestDone();
+        if (SystemStateResponse[nodeId].Set(std::move(ev))) {
+            RequestDone();
+        }
     }
 
     void Handle(NNodeWhiteboard::TEvWhiteboard::TEvTabletStateResponse::TPtr& ev) {
         ui32 nodeId = ev.Get()->Cookie;
-        TabletStateResponse[nodeId].Set(std::move(ev));
-        RequestDone();
+        if (TabletStateResponse[nodeId].Set(std::move(ev))) {
+            RequestDone();
+        }
     }
 
     void Handle(NHealthCheck::TEvSelfCheckResultProto::TPtr& ev) {
         TNodeId nodeId = ev->Cookie;
         auto& selfCheckResult(SelfCheckResults[nodeId]);
-        selfCheckResult.Set(std::move(ev));
-        auto& result(selfCheckResult.Get()->Record);
-        if (result.database_status_size() == 1) {
-            HcOverallByTenantPath.emplace(result.database_status(0).name(), GetViewerFlag(result.database_status(0).overall()));
+        if (selfCheckResult.Set(std::move(ev))) {
+            auto& result(selfCheckResult.Get()->Record);
+            if (result.database_status_size() == 1) {
+                HcOverallByTenantPath.emplace(result.database_status(0).name(), GetViewerFlag(result.database_status(0).overall()));
+            }
+            RequestDone();
         }
-        RequestDone();
+    }
+
+    static TString GetDatabaseFromEndpointsBoardPath(const TString& path) {
+        TStringBuf db(path);
+        db.SkipPrefix("metadatacache+");
+        return TString(db);
     }
 
     void Handle(TEvStateStorage::TEvBoardInfo::TPtr& ev) {
-        auto activeNode = TDatabaseMetadataCache::PickActiveNode(ev->Get()->InfoEntries);
-        if (activeNode != 0) {
-            Subscribers.insert(activeNode);
-            std::optional<TActorId> cache = MakeDatabaseMetadataCacheId(activeNode);
-            if (MetadataCacheRequested.insert(ev->Get()->Path).second) {
-                SelfCheckResults[activeNode] = MakeRequest<NHealthCheck::TEvSelfCheckResultProto>(*cache, new NHealthCheck::TEvSelfCheckRequestProto,
-                    IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, activeNode);
+        TString path = GetDatabaseFromEndpointsBoardPath(ev->Get()->Path);
+        auto& result(MetadataCacheEndpointsLookup[path]);
+        if (result.Set(std::move(ev))) {
+            if (result.IsOk()) {
+                auto activeNode = TDatabaseMetadataCache::PickActiveNode(result->InfoEntries);
+                if (activeNode) {
+                    Subscribers.insert(activeNode);
+                    std::optional<TActorId> cache = MakeDatabaseMetadataCacheId(activeNode);
+                    if (MetadataCacheRequested.insert(path).second) {
+                        if (SelfCheckResults.count(activeNode) == 0) {
+                            SelfCheckResults[activeNode] = MakeRequest<NHealthCheck::TEvSelfCheckResultProto>(*cache, new NHealthCheck::TEvSelfCheckRequestProto,
+                                IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, activeNode);
+                            if (SelfCheckResults[activeNode].Span) {
+                                SelfCheckResults[activeNode].Span.Attribute("path", path);
+                                SelfCheckResults[activeNode].Span.Attribute("target_node_id", activeNode);
+                            }
+                        }
+                    }
+                }
             }
+            RequestDone();
         }
-        RequestDone();
     }
 
     void Handle(TEvViewer::TEvViewerResponse::TPtr& ev) {
@@ -464,12 +522,14 @@ public:
         auto tenantId = NodeIdsToTenant[nodeId];
         switch (ev->Get()->Record.GetResponseCase()) {
             case NKikimrViewer::TEvViewerResponse::kTabletResponse:
-                OffloadedTabletStateResponse[nodeId].Set(std::move(ev));
-                RequestDone();
+                if (OffloadedTabletStateResponse[nodeId].Set(std::move(ev))) {
+                    RequestDone();
+                }
                 break;
             case NKikimrViewer::TEvViewerResponse::kSystemResponse:
-                OffloadedSystemStateResponse[nodeId].Set(std::move(ev));
-                RequestDone();
+                if (OffloadedSystemStateResponse[nodeId].Set(std::move(ev))) {
+                    RequestDone();
+                }
                 break;
             default:
                 break;
@@ -549,7 +609,7 @@ public:
     }
 
     void ReplyAndPassAway() override {
-        Result.SetVersion(2);
+        Result.SetVersion(Viewer->GetCapabilityVersion("/viewer/tenantinfo"));
         THashMap<TString, NKikimrViewer::EFlag> OverallByDomainId;
         std::unordered_map<TNodeId, const NKikimrWhiteboard::TSystemStateInfo*> nodeSystemStateInfo;
 
@@ -576,7 +636,7 @@ public:
             THashMap<TTabletId, const NKikimrWhiteboard::TTabletStateInfo*> tabletInfoIndex;
 
             if (Tablets) {
-                const auto& tenantNodes(TenantNodes[name]);
+                const auto& tenantNodes(TenantNodes[id]);
                 bool hasTabletInfo = false;
                 for (TNodeId nodeId : tenantNodes) {
                     auto it = OffloadedTabletStateResponse.find(nodeId);
@@ -656,35 +716,38 @@ public:
                 TIntrusivePtr<TDomainsInfo> domains = AppData()->DomainsInfo;
                 auto* domain = domains->GetDomain();
                 TStackVec<TTabletId, 64> tablets;
-                for (TTabletId tabletId : entry.DomainInfo->Params.GetCoordinators()) {
-                    tablets.emplace_back(tabletId);
-                }
-                for (TTabletId tabletId : entry.DomainInfo->Params.GetMediators()) {
-                    tablets.emplace_back(tabletId);
-                }
-                if (entry.DomainInfo->Params.HasSchemeShard()) {
-                    tablets.emplace_back(entry.DomainInfo->Params.GetSchemeShard());
-                } else {
-
-                    tablets.emplace_back(domain->SchemeRoot);
-                    tablets.emplace_back(MakeBSControllerID());
-                    tablets.emplace_back(MakeConsoleID());
-                }
-                TTabletId hiveId = domains->GetHive();
-                if (entry.DomainInfo->Params.HasHive()) {
-                    hiveId = entry.DomainInfo->Params.GetHive();
-                } else {
-                    if (tenant.GetType() == NKikimrViewer::Serverless) {
-                        auto itResourceNavigate = NavigateKeySetResult.find(tenant.GetResourceId());
-                        if (itResourceNavigate != NavigateKeySetResult.end() && itResourceNavigate->second.IsOk()) {
-                            NSchemeCache::TSchemeCacheNavigate::TEntry entry = itResourceNavigate->second.Get()->Request->ResultSet.front();
-                            if (entry.DomainInfo->Params.HasHive()) {
-                                hiveId = entry.DomainInfo->Params.GetHive();
+                TTabletId hiveId = {};
+                if (entry.DomainInfo) {
+                    for (TTabletId tabletId : entry.DomainInfo->Params.GetCoordinators()) {
+                        tablets.emplace_back(tabletId);
+                    }
+                    for (TTabletId tabletId : entry.DomainInfo->Params.GetMediators()) {
+                        tablets.emplace_back(tabletId);
+                    }
+                    if (entry.DomainInfo->Params.HasSchemeShard()) {
+                        tablets.emplace_back(entry.DomainInfo->Params.GetSchemeShard());
+                    } else {
+                        tablets.emplace_back(domain->SchemeRoot);
+                    }
+                    if (entry.DomainInfo->Params.HasHive()) {
+                        tablets.emplace_back(hiveId = entry.DomainInfo->Params.GetHive());
+                    } else {
+                        if (tenant.GetType() == NKikimrViewer::Serverless) {
+                            auto itResourceNavigate = NavigateKeySetResult.find(tenant.GetResourceId());
+                            if (itResourceNavigate != NavigateKeySetResult.end() && itResourceNavigate->second.IsOk()) {
+                                NSchemeCache::TSchemeCacheNavigate::TEntry entry = itResourceNavigate->second.Get()->Request->ResultSet.front();
+                                if (entry.DomainInfo->Params.HasHive()) {
+                                    tablets.emplace_back(hiveId = entry.DomainInfo->Params.GetHive());
+                                }
                             }
+                        } else {
+                            tablets.emplace_back(hiveId = domains->GetHive());
                         }
                     }
+                } else {
+                    tablets.emplace_back(domain->SchemeRoot);
+                    tablets.emplace_back(hiveId = domains->GetHive());
                 }
-                tablets.emplace_back(hiveId);
 
                 if (SystemTablets) {
                     for (TTabletId tabletId : tablets) {
@@ -734,7 +797,6 @@ public:
                         }
                     }
 
-                    THashMap<NKikimrViewer::TStorageUsage::EType, ui64> tablesStorageByType;
                     THashMap<NKikimrViewer::TStorageUsage::EType, TStorageQuota> storageQuotasByType;
 
                     for (const auto& quota : tenant.GetDatabaseQuotas().storage_quotas()) {
@@ -744,45 +806,53 @@ public:
                         usage.HardQuota += quota.data_size_hard_quota();
                     }
 
-                    if (entry.DomainDescription) {
-                        for (const auto& poolUsage : entry.DomainDescription->Description.GetDiskSpaceUsage().GetStoragePoolsUsage()) {
+                    auto itDescribeScheme = DescribeSchemeResult.find(name);
+                    if (itDescribeScheme != DescribeSchemeResult.end() && itDescribeScheme->second.IsOk()) {
+                        const auto& record = itDescribeScheme->second.Get()->GetRecord();
+                        const auto& domainDescription(record.GetPathDescription().GetDomainDescription());
+                        THashMap<NKikimrViewer::TStorageUsage::EType, ui64> tablesStorageByType;
+
+                        for (const auto& poolUsage : domainDescription.GetDiskSpaceUsage().GetStoragePoolsUsage()) {
                             auto type = GetStorageType(poolUsage.GetPoolKind());
                             tablesStorageByType[type] += poolUsage.GetTotalSize();
                         }
 
-                        if (tablesStorageByType.empty() && entry.DomainDescription->Description.HasDiskSpaceUsage()) {
-                            tablesStorageByType[GuessStorageType(entry.DomainDescription->Description)] =
-                                entry.DomainDescription->Description.GetDiskSpaceUsage().GetTables().GetTotalSize();
+                        if (tablesStorageByType.empty() && domainDescription.HasDiskSpaceUsage()) {
+                            tablesStorageByType[GuessStorageType(domainDescription)] =
+                            domainDescription.GetDiskSpaceUsage().GetTables().GetTotalSize()
+                                + domainDescription.GetDiskSpaceUsage().GetTopics().GetDataSize();
                         }
 
                         if (storageQuotasByType.empty()) {
-                            auto& quotas = storageQuotasByType[GuessStorageType(entry.DomainDescription->Description)];
-                            quotas.HardQuota = entry.DomainDescription->Description.GetDatabaseQuotas().data_size_hard_quota();
-                            quotas.SoftQuota = entry.DomainDescription->Description.GetDatabaseQuotas().data_size_soft_quota();
+                            auto& quotas = storageQuotasByType[GuessStorageType(domainDescription)];
+                            quotas.HardQuota = domainDescription.GetDatabaseQuotas().data_size_hard_quota();
+                            quotas.SoftQuota = domainDescription.GetDatabaseQuotas().data_size_soft_quota();
                         }
-                    }
 
-                    for (const auto& [type, size] : tablesStorageByType) {
-                        auto it = storageQuotasByType.find(type);
-                        auto& tablesStorage = *tenant.AddTablesStorage();
-                        tablesStorage.SetType(type);
-                        tablesStorage.SetSize(size);
-                        if (it != storageQuotasByType.end()) {
-                            tablesStorage.SetLimit(it->second.SoftQuota);
-                            tablesStorage.SetSoftQuota(it->second.SoftQuota);
-                            tablesStorage.SetHardQuota(it->second.HardQuota);
+                        for (const auto& [type, size] : tablesStorageByType) {
+                            auto it = storageQuotasByType.find(type);
+                            auto& tablesStorage = *tenant.AddTablesStorage();
+                            tablesStorage.SetType(type);
+                            tablesStorage.SetSize(size);
+                            if (it != storageQuotasByType.end()) {
+                                tablesStorage.SetLimit(it->second.SoftQuota);
+                                tablesStorage.SetSoftQuota(it->second.SoftQuota);
+                                tablesStorage.SetHardQuota(it->second.HardQuota);
+                            }
                         }
-                    }
 
-                    for (const auto& [type, pr] : databaseStorageByType) {
-                        auto& databaseStorage = *tenant.AddDatabaseStorage();
-                        databaseStorage.SetType(type);
-                        databaseStorage.SetSize(pr.first);
-                        databaseStorage.SetLimit(pr.first + pr.second);
+                        for (const auto& [type, pr] : databaseStorageByType) {
+                            auto& databaseStorage = *tenant.AddDatabaseStorage();
+                            databaseStorage.SetType(type);
+                            databaseStorage.SetSize(pr.first);
+                            databaseStorage.SetLimit(pr.first + pr.second);
+                        }
                     }
                 }
 
                 THashSet<TNodeId> tenantNodes;
+                NMemory::TMemoryStatsAggregator tenantMemoryStats;
+                int nodesWithNetworkUtilization = 0;
 
                 for (TNodeId nodeId : tenant.GetNodeIds()) {
                     auto itNodeInfo = nodeSystemStateInfo.find(nodeId);
@@ -805,14 +875,24 @@ public:
                                 targetPoolStat->SetName(poolName);
                             }
                             double poolUsage = targetPoolStat->GetUsage() * targetPoolStat->GetThreads();
-                            poolUsage += poolStat.GetUsage() * poolStat.GetThreads();
+                            ui32 usageThreads = poolStat.GetLimit() ? poolStat.GetLimit() : poolStat.GetThreads();
+                            poolUsage += poolStat.GetUsage() * usageThreads;
                             ui32 poolThreads = targetPoolStat->GetThreads() + poolStat.GetThreads();
                             if (poolThreads != 0) {
                                 double threadUsage = poolUsage / poolThreads;
                                 targetPoolStat->SetUsage(threadUsage);
                                 targetPoolStat->SetThreads(poolThreads);
                             }
-                            tenant.SetCoresUsed(tenant.GetCoresUsed() + poolStat.GetUsage() * poolStat.GetThreads());
+                            if (nodeInfo.GetCoresTotal() == 0) {
+                                tenant.SetCoresUsed(tenant.GetCoresUsed() + poolStat.GetUsage() * usageThreads);
+                                if (poolStat.GetName() != "IO") {
+                                    tenant.SetCoresTotal(tenant.GetCoresTotal() + poolStat.GetThreads());
+                                }
+                            }
+                        }
+                        if (nodeInfo.GetCoresTotal() > 0) {
+                            tenant.SetCoresUsed(tenant.GetCoresUsed() + nodeInfo.GetCoresUsed());
+                            tenant.SetCoresTotal(tenant.GetCoresTotal() + nodeInfo.GetCoresTotal());
                         }
                         if (nodeInfo.HasMemoryUsed()) {
                             tenant.SetMemoryUsed(tenant.GetMemoryUsed() + nodeInfo.GetMemoryUsed());
@@ -820,16 +900,31 @@ public:
                         if (nodeInfo.HasMemoryLimit()) {
                             tenant.SetMemoryLimit(tenant.GetMemoryLimit() + nodeInfo.GetMemoryLimit());
                         }
+                        if (nodeInfo.HasMemoryStats()) {
+                            tenantMemoryStats.Add(nodeInfo.GetMemoryStats(), nodeInfo.GetHost());
+                        }
+                        if (nodeInfo.HasNetworkUtilization()) {
+                            tenant.SetNetworkUtilization(tenant.GetNetworkUtilization() + nodeInfo.GetNetworkUtilization());
+                            ++nodesWithNetworkUtilization;
+                        }
+                        if (nodeInfo.HasNetworkWriteThroughput()) {
+                            tenant.SetNetworkWriteThroughput(tenant.GetNetworkWriteThroughput() + nodeInfo.GetNetworkWriteThroughput());
+                        }
                         overall = Max(overall, GetViewerFlag(nodeInfo.GetSystemState()));
                     }
                     tenantNodes.emplace(nodeId);
                 }
+                if (nodesWithNetworkUtilization != 0) {
+                    tenant.SetNetworkUtilization(tenant.GetNetworkUtilization() / nodesWithNetworkUtilization);
+                }
+                tenant.MutableMemoryStats()->CopyFrom(tenantMemoryStats.Aggregate());
                 if (tenant.GetType() == NKikimrViewer::Serverless) {
                     tenant.SetStorageAllocatedSize(tenant.GetMetrics().GetStorage());
                     const bool noExclusiveNodes = tenantNodes.empty();
                     if (noExclusiveNodes) {
                         tenant.SetMemoryUsed(tenant.GetMetrics().GetMemory());
                         tenant.ClearMemoryLimit();
+                        tenant.ClearMemoryStats();
                         tenant.SetCoresUsed(static_cast<double>(tenant.GetMetrics().GetCPU()) / 1000000);
                     }
                 }
@@ -897,8 +992,45 @@ public:
     }
 
     void HandleTimeout() {
-        Result.AddErrors("timeout");
+        TString error = "Timeout";
+        if (ListTenantsResponse) {
+            ListTenantsResponse->Error(error);
+        }
+        for (auto& [_, request] : TenantStatusResponses) {
+            request.Error(error);
+        }
+        for (auto& [_, request] : NavigateKeySetResult) {
+            request.Error(error);
+        }
+        for (auto& [_, request] : DescribeSchemeResult) {
+            request.Error(error);
+        }
+        for (auto& [_, request] : HiveDomainStats) {
+            request.Error(error);
+        }
+        for (auto& [_, request] : HiveStorageStats) {
+            request.Error(error);
+        }
+        for (auto& [_, request] : SystemStateResponse) {
+            request.Error(error);
+        }
+        for (auto& [_, request] : TabletStateResponse) {
+            request.Error(error);
+        }
+        for (auto& [_, request] : OffloadedSystemStateResponse) {
+            request.Error(error);
+        }
+        for (auto& [_, request] : OffloadedTabletStateResponse) {
+            request.Error(error);
+        }
+        for (auto& [_, request] : SelfCheckResults) {
+            request.Error(error);
+        }
+        for (auto& [_, request] : MetadataCacheEndpointsLookup) {
+            request.Error(error);
+        }
         ReplyAndPassAway();
+        TBase::HandleTimeout();
     }
 
     static YAML::Node GetSwagger() {
@@ -951,6 +1083,11 @@ public:
         yaml.AddParameter({
             .Name = "storage",
             .Description = "return storage info",
+            .Type = "boolean",
+        });
+        yaml.AddParameter({
+            .Name = "memory",
+            .Description = "return memory info",
             .Type = "boolean",
         });
         yaml.AddParameter({

@@ -8,7 +8,7 @@ SRCS(
 PEERDIR(
     ydb/core/protos
     ydb/core/scheme_types
-    ydb/library/yql/minikql
+    yql/essentials/minikql
 )
 
 YQL_LAST_ABI_VERSION()

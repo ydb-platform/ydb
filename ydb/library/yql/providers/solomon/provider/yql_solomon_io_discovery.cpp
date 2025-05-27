@@ -1,6 +1,6 @@
 #include "yql_solomon_provider_impl.h"
 
-#include <ydb/library/yql/providers/common/provider/yql_provider.h>
+#include <yql/essentials/providers/common/provider/yql_provider.h>
 #include <ydb/library/yql/providers/solomon/expr_nodes/yql_solomon_expr_nodes.h>
 #include <ydb/library/yql/providers/solomon/scheme/yql_solomon_scheme.h>
 
@@ -42,7 +42,7 @@ TVector<TCoAtom> ExtractUserLabels(TPositionHandle pos, TExprContext& ctx, TExpr
 }
 
 const TStructExprType* BuildScheme(TPositionHandle pos, const TVector<TCoAtom>& userLabels, TExprContext& ctx, TVector<TCoAtom>& systemColumns) {
-    auto allSystemColumns = {SOLOMON_SCHEME_KIND, SOLOMON_SCHEME_LABELS, SOLOMON_SCHEME_VALUE, SOLOMON_SCHEME_TS, SOLOMON_SCHEME_TYPE};
+    auto allSystemColumns = {SOLOMON_SCHEME_LABELS, SOLOMON_SCHEME_VALUE, SOLOMON_SCHEME_TS, SOLOMON_SCHEME_TYPE};
     TVector<const TItemExprType*> columnTypes;
     columnTypes.reserve(systemColumns.size() + userLabels.size());
     const TTypeAnnotationNode* stringType = ctx.MakeType<TDataExprType>(EDataSlot::String);
@@ -55,10 +55,10 @@ const TStructExprType* BuildScheme(TPositionHandle pos, const TVector<TCoAtom>& 
         if (systemColumn == SOLOMON_SCHEME_TS) {
             type = ctx.MakeType<TDataExprType>(EDataSlot::Datetime);
         } else if (systemColumn == SOLOMON_SCHEME_VALUE) {
-            type = ctx.MakeType<TDataExprType>(EDataSlot::Double);
+            type = ctx.MakeType<TOptionalExprType>(ctx.MakeType<TDataExprType>(EDataSlot::Double));
         } else if (systemColumn == SOLOMON_SCHEME_LABELS) {
             type = ctx.MakeType<NYql::TDictExprType>(stringType, stringType);
-        } else if (IsIn({ SOLOMON_SCHEME_KIND, SOLOMON_SCHEME_TYPE }, systemColumn)) {
+        } else if (systemColumn = SOLOMON_SCHEME_TYPE) {
             type = stringType;
         } else {
             ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() << "Unknown system column " << systemColumn));
@@ -166,6 +166,7 @@ public:
                         .Object(soObject)
                         .SystemColumns(systemColumnsNode)
                         .LabelNames(labelNamesNode)
+                        .RequiredLabelNames().Build()
                         .RowType(rowTypeNode)
                         .ColumnOrder(std::move(userSchema.back()))
                       .Done().Ptr()
@@ -175,6 +176,7 @@ public:
                         .Object(soObject)
                         .SystemColumns(systemColumnsNode)
                         .LabelNames(labelNamesNode)
+                        .RequiredLabelNames().Build()
                         .RowType(rowTypeNode)
                       .Done().Ptr();
             }

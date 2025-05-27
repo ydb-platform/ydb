@@ -1,0 +1,161 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0b4299a09d63e96056991adca25384c1
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2002-2006 Marcin Kalicinski
+        // Copyright (C) 2015 Sebastian Redl
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/property_tree/json_parser.hpp [2:3]
+        include/boost/property_tree/json_parser/detail/read.hpp [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 188ba6bce942da3ec5a7d3e219272d13
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2002-2007 Marcin Kalicinski
+        // Copyright (C) 2007 Alexey Baskakov
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/property_tree/detail/xml_parser_writer_settings.hpp [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 26ad08d832a34ee06ee9242a2e6f0191
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2002-2006 Marcin Kalicinski
+        // Copyright (C) 2007 Alexey Baskakov
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/property_tree/detail/info_parser_writer_settings.hpp [2:3]
+        include/boost/property_tree/detail/xml_parser_writer_settings.hpp [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3754fd14fa62eae798d8325bcb41f0a7
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2007 Marcin Kalicinski
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/property_tree/detail/xml_parser_read_rapidxml.hpp [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 47c01776d86f7e15fd4b146873ce1e38
+BELONGS ya.make
+    License text:
+        Copyright (c) 2002-2006 Marcin Kalicinski
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        README.md [21:22]
+        include/boost/property_tree/detail/exception_implementation.hpp [2:3]
+        include/boost/property_tree/detail/file_parser_error.hpp [2:2]
+        include/boost/property_tree/detail/info_parser_error.hpp [2:2]
+        include/boost/property_tree/detail/info_parser_read.hpp [2:2]
+        include/boost/property_tree/detail/info_parser_utils.hpp [2:2]
+        include/boost/property_tree/detail/info_parser_write.hpp [2:2]
+        include/boost/property_tree/detail/info_parser_writer_settings.hpp [2:3]
+        include/boost/property_tree/detail/ptree_implementation.hpp [2:3]
+        include/boost/property_tree/detail/ptree_utils.hpp [2:2]
+        include/boost/property_tree/detail/xml_parser_error.hpp [2:2]
+        include/boost/property_tree/detail/xml_parser_flags.hpp [2:2]
+        include/boost/property_tree/detail/xml_parser_utils.hpp [2:2]
+        include/boost/property_tree/detail/xml_parser_write.hpp [2:3]
+        include/boost/property_tree/exceptions.hpp [2:3]
+        include/boost/property_tree/info_parser.hpp [2:2]
+        include/boost/property_tree/ini_parser.hpp [2:3]
+        include/boost/property_tree/json_parser.hpp [2:3]
+        include/boost/property_tree/json_parser/detail/write.hpp [2:2]
+        include/boost/property_tree/json_parser/error.hpp [2:2]
+        include/boost/property_tree/ptree.hpp [2:3]
+        include/boost/property_tree/ptree_fwd.hpp [2:3]
+        include/boost/property_tree/ptree_serialization.hpp [2:2]
+        include/boost/property_tree/xml_parser.hpp [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5cce5dc14f00da42bb6f34ce5b2dfce4
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2002-2006 Marcin Kalicinski
+        // Copyright (C) 2013 Sebastian Redl
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/property_tree/detail/xml_parser_write.hpp [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6093d3f4550b993594511a12e942373f
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2006, 2009 Marcin Kalicinski
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/property_tree/detail/rapidxml.hpp [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL edf0d1dafd8396a0a845cddaf95f73bc
+BELONGS ya.make
+    License text:
+        Copyright (c) 2009 Sebastian Redl
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        README.md [21:22]
+        include/boost/property_tree/detail/exception_implementation.hpp [2:3]
+        include/boost/property_tree/detail/ptree_implementation.hpp [2:3]
+        include/boost/property_tree/exceptions.hpp [2:3]
+        include/boost/property_tree/id_translator.hpp [2:2]
+        include/boost/property_tree/ini_parser.hpp [2:3]
+        include/boost/property_tree/ptree.hpp [2:3]
+        include/boost/property_tree/ptree_fwd.hpp [2:3]
+        include/boost/property_tree/stream_translator.hpp [2:2]
+        include/boost/property_tree/string_path.hpp [2:2]
+        include/boost/property_tree/xml_parser.hpp [2:3]

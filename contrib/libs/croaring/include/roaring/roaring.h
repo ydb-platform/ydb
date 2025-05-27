@@ -387,7 +387,9 @@ void roaring_bitmap_add_range_closed(roaring_bitmap_t *r, uint32_t min,
  */
 inline void roaring_bitmap_add_range(roaring_bitmap_t *r, uint64_t min,
                                      uint64_t max) {
-    if (max <= min) return;
+    if (max <= min || min > (uint64_t)UINT32_MAX + 1) {
+        return;
+    }
     roaring_bitmap_add_range_closed(r, (uint32_t)min, (uint32_t)(max - 1));
 }
 
@@ -407,7 +409,9 @@ void roaring_bitmap_remove_range_closed(roaring_bitmap_t *r, uint32_t min,
  */
 inline void roaring_bitmap_remove_range(roaring_bitmap_t *r, uint64_t min,
                                         uint64_t max) {
-    if (max <= min) return;
+    if (max <= min || min > (uint64_t)UINT32_MAX + 1) {
+        return;
+    }
     roaring_bitmap_remove_range_closed(r, (uint32_t)min, (uint32_t)(max - 1));
 }
 
@@ -434,6 +438,14 @@ bool roaring_bitmap_contains(const roaring_bitmap_t *r, uint32_t val);
  */
 bool roaring_bitmap_contains_range(const roaring_bitmap_t *r,
                                    uint64_t range_start, uint64_t range_end);
+
+/**
+ * Check whether a range of values from range_start (included)
+ * to range_end (included) is present
+ */
+bool roaring_bitmap_contains_range_closed(const roaring_bitmap_t *r,
+                                          uint32_t range_start,
+                                          uint32_t range_end);
 
 /**
  * Check if an items is present, using context from a previous insert or search
@@ -466,6 +478,12 @@ uint64_t roaring_bitmap_range_cardinality(const roaring_bitmap_t *r,
                                           uint64_t range_start,
                                           uint64_t range_end);
 
+/**
+ * Returns the number of elements in the range [range_start, range_end].
+ */
+uint64_t roaring_bitmap_range_cardinality_closed(const roaring_bitmap_t *r,
+                                                 uint32_t range_start,
+                                                 uint32_t range_end);
 /**
  * Returns true if the bitmap is empty (cardinality is zero).
  */
@@ -552,6 +570,10 @@ size_t roaring_bitmap_shrink_to_fit(roaring_bitmap_t *r);
  * This function is endian-sensitive. If you have a big-endian system (e.g., a
  * mainframe IBM s390x), the data format is going to be big-endian and not
  * compatible with little-endian systems.
+ *
+ * When serializing data to a file, we recommend that you also use
+ * checksums so that, at deserialization, you can be confident
+ * that you are recovering the correct data.
  */
 size_t roaring_bitmap_serialize(const roaring_bitmap_t *r, char *buf);
 
@@ -615,7 +637,10 @@ roaring_bitmap_t *roaring_bitmap_portable_deserialize(const char *buf);
  * https://github.com/RoaringBitmap/RoaringFormatSpec
  *
  * The function itself is safe in the sense that it will not cause buffer
- * overflows. However, for correct operations, it is assumed that the bitmap
+ * overflows: it will not read beyond the scope of the provided buffer
+ * (buf,maxbytes).
+ *
+ * However, for correct operations, it is assumed that the bitmap
  * read was once serialized from a valid bitmap (i.e., it follows the format
  * specification). If you provided an incorrect input (garbage), then the bitmap
  * read may not be in a valid state and following operations may not lead to
@@ -624,9 +649,14 @@ roaring_bitmap_t *roaring_bitmap_portable_deserialize(const char *buf);
  * order. This is is guaranteed to happen when serializing an existing bitmap,
  * but not for random inputs.
  *
- * You may use roaring_bitmap_internal_validate to check the validity of the
- * bitmap prior to using it. You may also use other strategies to check for
- * corrupted inputs (e.g., checksums).
+ * If the source is untrusted, you should call
+ * roaring_bitmap_internal_validate to check the validity of the
+ * bitmap prior to using it. Only after calling roaring_bitmap_internal_validate
+ * is the bitmap considered safe for use.
+ *
+ * We also recommend that you use checksums to check that serialized data
+ * corresponds to the serialized bitmap. The CRoaring library does not provide
+ * checksumming.
  *
  * This function is endian-sensitive. If you have a big-endian system (e.g., a
  * mainframe IBM s390x), the data format is going to be big-endian and not
@@ -688,6 +718,10 @@ size_t roaring_bitmap_portable_size_in_bytes(const roaring_bitmap_t *r);
  * This function is endian-sensitive. If you have a big-endian system (e.g., a
  * mainframe IBM s390x), the data format is going to be big-endian and not
  * compatible with little-endian systems.
+ *
+ * When serializing data to a file, we recommend that you also use
+ * checksums so that, at deserialization, you can be confident
+ * that you are recovering the correct data.
  */
 size_t roaring_bitmap_portable_serialize(const roaring_bitmap_t *r, char *buf);
 
@@ -722,6 +756,10 @@ size_t roaring_bitmap_frozen_size_in_bytes(const roaring_bitmap_t *r);
  * This function is endian-sensitive. If you have a big-endian system (e.g., a
  * mainframe IBM s390x), the data format is going to be big-endian and not
  * compatible with little-endian systems.
+ *
+ * When serializing data to a file, we recommend that you also use
+ * checksums so that, at deserialization, you can be confident
+ * that you are recovering the correct data.
  */
 void roaring_bitmap_frozen_serialize(const roaring_bitmap_t *r, char *buf);
 
@@ -851,6 +889,14 @@ roaring_bitmap_t *roaring_bitmap_flip(const roaring_bitmap_t *r1,
                                       uint64_t range_start, uint64_t range_end);
 
 /**
+ * Compute the negation of the bitmap in the interval [range_start, range_end].
+ * The number of negated values is range_end - range_start + 1.
+ * Areas outside the range are passed through unchanged.
+ */
+roaring_bitmap_t *roaring_bitmap_flip_closed(const roaring_bitmap_t *x1,
+                                             uint32_t range_start,
+                                             uint32_t range_end);
+/**
  * compute (in place) the negation of the roaring bitmap within a specified
  * interval: [range_start, range_end). The number of negated values is
  * range_end - range_start.
@@ -858,6 +904,16 @@ roaring_bitmap_t *roaring_bitmap_flip(const roaring_bitmap_t *r1,
  */
 void roaring_bitmap_flip_inplace(roaring_bitmap_t *r1, uint64_t range_start,
                                  uint64_t range_end);
+
+/**
+ * compute (in place) the negation of the roaring bitmap within a specified
+ * interval: [range_start, range_end]. The number of negated values is
+ * range_end - range_start + 1.
+ * Areas outside the range are passed through unchanged.
+ */
+void roaring_bitmap_flip_inplace_closed(roaring_bitmap_t *r1,
+                                        uint32_t range_start,
+                                        uint32_t range_end);
 
 /**
  * Selects the element at index 'rank' where the smallest element is at index 0.
@@ -1130,3 +1186,8 @@ CROARING_DEPRECATED static inline uint32_t roaring_read_uint32_iterator(
 using namespace ::roaring::api;
 #endif
 #endif
+
+// roaring64 will include roaring.h, but we would
+// prefer to avoid having our users include roaring64.h
+// in addition to roaring.h.
+#include <roaring/roaring64.h>

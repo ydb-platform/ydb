@@ -8,6 +8,8 @@
  * SPDX-License-Identifier: Apache-2.0.
  */
 
+AWS_PUSH_SANE_WARNING_LEVEL
+
 /**
  * struct aws_atomic_var represents an atomic variable - a value which can hold an integer or pointer
  * that can be manipulated atomically. struct aws_atomic_vars should normally only be manipulated
@@ -77,14 +79,12 @@ enum aws_memory_order {
 /**
  * Statically initializes an aws_atomic_var to a given size_t value.
  */
-#define AWS_ATOMIC_INIT_INT(x)                                                                                         \
-    { .value = (void *)(uintptr_t)(x) }
+#define AWS_ATOMIC_INIT_INT(x) {.value = (void *)(uintptr_t)(x)}
 
 /**
  * Statically initializes an aws_atomic_var to a given void * value.
  */
-#define AWS_ATOMIC_INIT_PTR(x)                                                                                         \
-    { .value = (void *)(x) }
+#define AWS_ATOMIC_INIT_PTR(x) {.value = (void *)(x)}
 
 AWS_EXTERN_C_BEGIN
 
@@ -318,10 +318,12 @@ size_t aws_atomic_fetch_xor(volatile struct aws_atomic_var *var, size_t n);
 AWS_STATIC_IMPL
 void aws_atomic_thread_fence(enum aws_memory_order order);
 
+AWS_EXTERN_C_END
+
 #ifndef AWS_NO_STATIC_IMPL
 #    include <aws/common/atomics.inl>
 #endif /* AWS_NO_STATIC_IMPL */
 
-AWS_EXTERN_C_END
+AWS_POP_SANE_WARNING_LEVEL
 
 #endif

@@ -1,0 +1,40 @@
+diff --git a/include/cstdlib b/include/cstdlib
+index 9bf0ea3..d9ee863 100644
+--- a/include/cstdlib
++++ b/include/cstdlib
+@@ -142,11 +142,11 @@ using ::wctomb _LIBCPP_USING_IF_EXISTS;
+ using ::mbstowcs _LIBCPP_USING_IF_EXISTS;
+ using ::wcstombs _LIBCPP_USING_IF_EXISTS;
+ #endif
+-#if !defined(_LIBCPP_CXX03_LANG)
++#if !defined(_LIBCPP_CXX03_LANG) && __has_attribute(using_if_exists)
+ using ::at_quick_exit _LIBCPP_USING_IF_EXISTS;
+ using ::quick_exit _LIBCPP_USING_IF_EXISTS;
+ #endif
+-#if _LIBCPP_STD_VER >= 17
++#if _LIBCPP_STD_VER >= 17 && __has_attribute(using_if_exists) && !defined(_LIBCPP_MSVCRT)
+ using ::aligned_alloc _LIBCPP_USING_IF_EXISTS;
+ #endif
+ 
+diff --git a/include/ctime b/include/ctime
+index b61e19d..e537bbe 100644
+--- a/include/ctime
++++ b/include/ctime
+@@ -66,7 +66,7 @@ using ::clock_t _LIBCPP_USING_IF_EXISTS;
+ using ::size_t _LIBCPP_USING_IF_EXISTS;
+ using ::time_t _LIBCPP_USING_IF_EXISTS;
+ using ::tm _LIBCPP_USING_IF_EXISTS;
+-#if _LIBCPP_STD_VER >= 17
++#if _LIBCPP_STD_VER >= 17 && __has_attribute(using_if_exists)
+ using ::timespec _LIBCPP_USING_IF_EXISTS;
+ #endif
+ using ::clock _LIBCPP_USING_IF_EXISTS;
+@@ -78,7 +78,7 @@ using ::ctime _LIBCPP_USING_IF_EXISTS;
+ using ::gmtime _LIBCPP_USING_IF_EXISTS;
+ using ::localtime _LIBCPP_USING_IF_EXISTS;
+ using ::strftime _LIBCPP_USING_IF_EXISTS;
+-#if _LIBCPP_STD_VER >= 17
++#if _LIBCPP_STD_VER >= 17 && __has_attribute(using_if_exists)
+ using ::timespec_get _LIBCPP_USING_IF_EXISTS;
+ #endif
+ 

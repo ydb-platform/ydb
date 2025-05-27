@@ -1,4 +1,10 @@
+#include "node_warden.h"
 #include "node_warden_impl.h"
+
+#include <ydb/core/blobstorage/dsproxy/dsproxy.h>
+#include <ydb/core/blobstorage/dsproxy/mock/dsproxy_mock.h>
+#include <ydb/core/blobstorage/dsproxy/bridge/bridge.h>
+#include <ydb/core/blob_depot/agent/agent.h>
 
 using namespace NKikimr;
 using namespace NStorage;
@@ -7,6 +13,11 @@ TActorId TNodeWarden::StartEjectedProxy(ui32 groupId) {
     STLOG(PRI_DEBUG, BS_NODE, NW10, "StartErrorProxy", (GroupId, groupId));
     return Register(CreateBlobStorageGroupEjectedProxy(groupId, DsProxyNodeMon), TMailboxType::ReadAsFilled, AppData()->SystemPoolId);
 }
+
+#define ADD_CONTROLS_FOR_DEVICE_TYPES(prefix)   \
+    .prefix = prefix,                           \
+    .prefix##HDD = prefix##HDD,                 \
+    .prefix##SSD = prefix##SSD
 
 void TNodeWarden::StartLocalProxy(ui32 groupId) {
     STLOG(PRI_DEBUG, BS_NODE, NW12, "StartLocalProxy", (GroupId, groupId));
@@ -35,13 +46,16 @@ void TNodeWarden::StartLocalProxy(ui32 groupId) {
                 case NKikimrBlobStorage::TGroupDecommitStatus::IN_PROGRESS:
                     // create proxy that will be used by blob depot agent to fetch underlying data
                     proxyActorId = as->Register(CreateBlobStorageGroupProxyConfigured(
-                        TIntrusivePtr<TBlobStorageGroupInfo>(info), false, DsProxyNodeMon, getCounters(info),
-                        TBlobStorageProxyParameters{
+                        TIntrusivePtr<TBlobStorageGroupInfo>(info), group.NodeLayoutInfo, false, DsProxyNodeMon,
+                        getCounters(info), TBlobStorageProxyParameters{
                             .UseActorSystemTimeInBSQueue = Cfg->UseActorSystemTimeInBSQueue,
-                            .EnablePutBatching = EnablePutBatching,
-                            .EnableVPatch = EnableVPatch,
-                            .SlowDiskThreshold = SlowDiskThreshold,
-                            .PredictedDelayMultiplier = PredictedDelayMultiplier,
+                            .Controls = TBlobStorageProxyControlWrappers{
+                                .EnablePutBatching = EnablePutBatching,
+                                .EnableVPatch = EnableVPatch,
+                                ADD_CONTROLS_FOR_DEVICE_TYPES(SlowDiskThreshold),
+                                ADD_CONTROLS_FOR_DEVICE_TYPES(PredictedDelayMultiplier),
+                                ADD_CONTROLS_FOR_DEVICE_TYPES(MaxNumOfSlowDisks),
+                            }
                         }), TMailboxType::ReadAsFilled, AppData()->SystemPoolId);
                     [[fallthrough]];
                 case NKikimrBlobStorage::TGroupDecommitStatus::DONE:
@@ -53,14 +67,20 @@ void TNodeWarden::StartLocalProxy(ui32 groupId) {
                 case NKikimrBlobStorage::TGroupDecommitStatus_E_TGroupDecommitStatus_E_INT_MAX_SENTINEL_DO_NOT_USE_:
                     Y_UNREACHABLE();
             }
+        } else if (info->IsBridged()) {
+            proxy.reset(CreateBridgeProxyActor(info));
         } else {
             // create proxy with configuration
-            proxy.reset(CreateBlobStorageGroupProxyConfigured(TIntrusivePtr<TBlobStorageGroupInfo>(info), false, 
-                DsProxyNodeMon, getCounters(info), TBlobStorageProxyParameters{
-                        .EnablePutBatching = EnablePutBatching,
-                        .EnableVPatch = EnableVPatch,
-                        .SlowDiskThreshold = SlowDiskThreshold,
-                        .PredictedDelayMultiplier = PredictedDelayMultiplier,
+            proxy.reset(CreateBlobStorageGroupProxyConfigured(TIntrusivePtr<TBlobStorageGroupInfo>(info),
+                group.NodeLayoutInfo, false, DsProxyNodeMon, getCounters(info), TBlobStorageProxyParameters{
+                        .UseActorSystemTimeInBSQueue = Cfg->UseActorSystemTimeInBSQueue,
+                        .Controls = TBlobStorageProxyControlWrappers{
+                            .EnablePutBatching = EnablePutBatching,
+                            .EnableVPatch = EnableVPatch,
+                            ADD_CONTROLS_FOR_DEVICE_TYPES(SlowDiskThreshold),
+                            ADD_CONTROLS_FOR_DEVICE_TYPES(PredictedDelayMultiplier),
+                            ADD_CONTROLS_FOR_DEVICE_TYPES(MaxNumOfSlowDisks),
+                        }
                     }
                 )
             );
@@ -68,10 +88,14 @@ void TNodeWarden::StartLocalProxy(ui32 groupId) {
     } else {
         // create proxy without configuration
         proxy.reset(CreateBlobStorageGroupProxyUnconfigured(groupId, DsProxyNodeMon, TBlobStorageProxyParameters{
-            .EnablePutBatching = EnablePutBatching,
-            .EnableVPatch = EnableVPatch,
-            .SlowDiskThreshold = SlowDiskThreshold,
-            .PredictedDelayMultiplier = PredictedDelayMultiplier,
+            .UseActorSystemTimeInBSQueue = Cfg->UseActorSystemTimeInBSQueue,
+            .Controls = TBlobStorageProxyControlWrappers{
+                .EnablePutBatching = EnablePutBatching,
+                .EnableVPatch = EnableVPatch,
+                ADD_CONTROLS_FOR_DEVICE_TYPES(SlowDiskThreshold),
+                ADD_CONTROLS_FOR_DEVICE_TYPES(PredictedDelayMultiplier),
+                ADD_CONTROLS_FOR_DEVICE_TYPES(MaxNumOfSlowDisks),
+            }
         }));
     }
 
@@ -175,3 +199,5 @@ void TNodeWarden::Handle(NNodeWhiteboard::TEvWhiteboard::TEvBSGroupStateUpdate::
         TActivationContext::Send(ev->Forward(WhiteboardId));
     }
 }
+
+#undef ADD_CONTROLS_FOR_DEVICE_TYPES

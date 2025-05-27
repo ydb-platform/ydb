@@ -1,7 +1,7 @@
 #include <ydb/core/statistics/events.h>
 #include <ydb/core/tablet_flat/flat_row_state.h>
 #include <ydb/core/tx/datashard/datashard_impl.h>
-#include <ydb/library/minsketch/count_min_sketch.h>
+#include <yql/essentials/core/minsketch/count_min_sketch.h>
 
 #include <ydb/library/actors/core/hfunc.h>
 
@@ -20,11 +20,11 @@ public:
         , StartKey(std::move(startKey))
     {}
 
-    void Describe(IOutputStream& o) const noexcept override {
+    void Describe(IOutputStream& o) const override {
         o << "StatisticsScan";
     }
 
-    IScan::TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme> scheme) noexcept override {
+    IScan::TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme> scheme) override {
         Driver = driver;
         Scheme = std::move(scheme);
 
@@ -37,13 +37,13 @@ public:
         return {EScan::Feed, {}};
     }
 
-    EScan Seek(TLead& lead, ui64) noexcept override {
+    EScan Seek(TLead& lead, ui64) override {
         lead.To(Scheme->Tags(), StartKey.GetCells(), ESeek::Lower);
 
         return EScan::Feed;
     }
 
-    EScan Feed(TArrayRef<const TCell> key, const TRow& row) noexcept override {
+    EScan Feed(TArrayRef<const TCell> key, const TRow& row) override {
         Y_UNUSED(key);
         auto rowCells = *row;
         for (size_t i = 0; i < rowCells.size(); ++i) {
@@ -53,11 +53,11 @@ public:
         return EScan::Feed;
     }
 
-    EScan Exhausted() noexcept override {
+    EScan Exhausted() override {
         return EScan::Final;
     }
 
-    TAutoPtr<IDestructable> Finish(EAbort abort) noexcept override {
+    TAutoPtr<IDestructable> Finish(EAbort abort) override {
         auto response = std::make_unique<NStat::TEvStatistics::TEvStatisticsResponse>();
         auto& record = response->Record;
         record.SetShardTabletId(ShardTabletId);
@@ -78,7 +78,7 @@ public:
             auto countMinSketch = CountMinSketches[t]->AsStringBuf();
             auto* statCMS = column->AddStatistics();
             statCMS->SetType(NKikimr::NStat::COUNT_MIN_SKETCH);
-            statCMS->SetData(countMinSketch.Data(), countMinSketch.Size());
+            statCMS->SetData(countMinSketch.data(), countMinSketch.size());
         }
 
         TlsActivationContext->Send(new IEventHandle(ReplyTo, TActorId(), response.release(), 0, Cookie));

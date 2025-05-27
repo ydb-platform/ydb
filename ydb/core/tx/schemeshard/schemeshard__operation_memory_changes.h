@@ -30,6 +30,9 @@ class TMemoryChanges: public TSimpleRefCount<TMemoryChanges> {
     using TTableState = std::pair<TPathId, TTableInfo::TPtr>;
     TStack<TTableState> Tables;
 
+    using TSequenceState = std::pair<TPathId, TSequenceInfo::TPtr>;
+    TStack<TSequenceState> Sequences;
+
     using TShardState = std::pair<TShardIdx, THolder<TShardInfo>>;
     TStack<TShardState> Shards;
 
@@ -55,6 +58,12 @@ class TMemoryChanges: public TSimpleRefCount<TMemoryChanges> {
     using TResourcePoolState = std::pair<TPathId, TResourcePoolInfo::TPtr>;
     TStack<TResourcePoolState> ResourcePools;
 
+    using TBackupCollectionState = std::pair<TPathId, TBackupCollectionInfo::TPtr>;
+    TStack<TBackupCollectionState> BackupCollections;
+
+    using TSysViewState = std::pair<TPathId, TSysViewInfo::TPtr>;
+    TStack<TSysViewState> SysViews;
+
 public:
     ~TMemoryChanges() = default;
 
@@ -74,6 +83,9 @@ public:
     void GrabNewIndex(TSchemeShard* ss, const TPathId& pathId);
     void GrabIndex(TSchemeShard* ss, const TPathId& pathId);
 
+    void GrabNewSequence(TSchemeShard* ss, const TPathId& pathId);
+    void GrabSequence(TSchemeShard* ss, const TPathId& pathId);
+
     void GrabNewCdcStream(TSchemeShard* ss, const TPathId& pathId);
     void GrabCdcStream(TSchemeShard* ss, const TPathId& pathId);
 
@@ -90,6 +102,11 @@ public:
     void GrabView(TSchemeShard* ss, const TPathId& pathId);
 
     void GrabResourcePool(TSchemeShard* ss, const TPathId& pathId);
+
+    void GrabBackupCollection(TSchemeShard* ss, const TPathId& pathId);
+
+    void GrabNewSysView(TSchemeShard* ss, const TPathId& pathId);
+    void GrabSysView(TSchemeShard* ss, const TPathId& pathId);
 
     void UnDo(TSchemeShard* ss);
 };

@@ -1,0 +1,40 @@
+--- contrib/python/hypothesis/py2/hypothesis/internal/reflection.py	(index)
++++ contrib/python/hypothesis/py2/hypothesis/internal/reflection.py	(working tree)
+@@ -389,7 +389,7 @@ def extract_lambda_source(f):
+         source_bytes = source.encode(encoding)
+         source_bytes = source_bytes[lambda_ast.col_offset :].strip()
+         source = source_bytes.decode(encoding)
+-    except (OSError, TypeError):
++    except (OSError, TypeError, IOError):
+         source = source[lambda_ast.col_offset :].strip()
+ 
+     # This ValueError can be thrown in Python 3 if:
+--- contrib/python/hypothesis/py2/hypothesis/provisional.py	(index)
++++ contrib/python/hypothesis/py2/hypothesis/provisional.py	(working tree)
+@@ -30,6 +30,8 @@ from __future__ import absolute_import, division, print_function
+ import os.path
+ import string
+ 
++import importlib_resources
++
+ import hypothesis.internal.conjecture.utils as cu
+ import hypothesis.strategies._internal.core as st
+ from hypothesis.errors import InvalidArgument
+@@ -45,16 +47,7 @@ URL_SAFE_CHARACTERS = frozenset(string.ascii_letters + string.digits + "$-_.+!*'
+ 
+ # This file is sourced from http://data.iana.org/TLD/tlds-alpha-by-domain.txt
+ # The file contains additional information about the date that it was last updated.
+-try:
+-    from importlib.resources import read_text  # type: ignore
+-except ImportError:
+-    # If we don't have importlib.resources (Python 3.7+) or the importlib_resources
+-    # backport available, fall back to __file__ and hope we're on a filesystem.
+-    f = os.path.join(os.path.dirname(__file__), "vendor", "tlds-alpha-by-domain.txt")
+-    with open(f) as tld_file:
+-        _tlds = tld_file.read().splitlines()
+-else:  # pragma: no cover  # new in Python 3.7
+-    _tlds = read_text("hypothesis.vendor", "tlds-alpha-by-domain.txt").splitlines()
++_tlds = importlib_resources.read_text("hypothesis.vendor", "tlds-alpha-by-domain.txt").splitlines()
+ assert _tlds[0].startswith("#")
+ TOP_LEVEL_DOMAINS = ["COM"] + sorted(_tlds[1:], key=len)
+ 

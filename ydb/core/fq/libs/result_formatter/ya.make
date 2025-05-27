@@ -8,16 +8,16 @@ PEERDIR(
     library/cpp/json
     library/cpp/json/yson
     ydb/library/mkql_proto
-    ydb/library/yql/ast
-    ydb/library/yql/minikql/computation
-    ydb/library/yql/public/udf
+    yql/essentials/ast
+    yql/essentials/minikql/computation
+    yql/essentials/public/udf
     ydb/public/api/protos
-    ydb/public/sdk/cpp/client/ydb_proto
-    ydb/public/sdk/cpp/client/ydb_result
-    ydb/public/sdk/cpp/client/ydb_value
-    ydb/library/yql/providers/common/codec
-    ydb/library/yql/providers/common/schema/expr
-    ydb/library/yql/providers/common/schema/mkql
+    ydb/public/sdk/cpp/src/client/proto
+    ydb/public/sdk/cpp/src/client/result
+    ydb/public/sdk/cpp/src/client/value
+    yql/essentials/providers/common/codec
+    yql/essentials/providers/common/schema/expr
+    yql/essentials/providers/common/schema/mkql
 )
 
 YQL_LAST_ABI_VERSION()

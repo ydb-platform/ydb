@@ -11,7 +11,11 @@
 #ifdef _linux_
 #include <libgen.h>
 #include <limits.h>
+#if !defined(_musl_)
 #include <linux/fs.h>
+#else
+#include <sys/mount.h>
+#endif
 #include <linux/nvme_ioctl.h>
 #include <stdlib.h>
 #include <sys/ioctl.h>
@@ -626,7 +630,7 @@ static std::optional<TDriveData> GetNvmeDriveData(int fd, TStringStream *outDeta
 
 static std::optional<TDriveData> GetSysfsDriveData(const TString &path, TStringStream *outDetails) {
     char realPath[PATH_MAX];
-    char *res = realpath(path.Data(), realPath);
+    char *res = realpath(path.data(), realPath);
     if (res == NULL) {
         if (errno == ENOENT) {
             ythrow TFileError() << "no such file# " << path;

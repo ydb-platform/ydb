@@ -6,7 +6,11 @@
 
 #include "error.h"
 
+#include <library/cpp/protobuf/interop/cast.h>
+
 #include <library/cpp/yt/assert/assert.h>
+
+#include <library/cpp/yt/misc/cast.h>
 
 namespace NYT {
 
@@ -21,7 +25,13 @@ namespace NYT {
     inline void FromProto(type* original, type serialized)       \
     {                                                            \
         *original = serialized;                                  \
-    }
+    }                                                            \
+                                                                 \
+    template <>                                                  \
+    struct TProtoTraits<type>                                    \
+    {                                                            \
+        using TSerialized = type;                                \
+    };
 
 DEFINE_TRIVIAL_PROTO_CONVERSIONS(i8)
 DEFINE_TRIVIAL_PROTO_CONVERSIONS(ui8)
@@ -37,7 +47,7 @@ DEFINE_TRIVIAL_PROTO_CONVERSIONS(bool)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-#define YT_PROTO_OPTIONAL_CONVERT(...) __VA_OPT__(::NYT::FromProto<__VA_ARGS__>)
+#define YT_OPTIONAL_FROM_PROTO_CONVERT(...) __VA_OPT__(::NYT::FromProto<__VA_ARGS__>)
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -89,6 +99,12 @@ inline void FromProto(std::string* original, std::string serialized)
     *original = std::move(serialized);
 }
 
+template <>
+struct TProtoTraits<std::string>
+{
+    using TSerialized = TProtobufString;
+};
+
 ////////////////////////////////////////////////////////////////////////////////
 
 // These conversions work in case if the patched protobuf that uses
@@ -118,26 +134,24 @@ inline void FromProto(TStringBuf* original, const std::string& serialized)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-inline void ToProto(::google::protobuf::int64* serialized, TDuration original)
+inline void ToProto(::google::protobuf::uint64* serialized, TDuration original)
 {
     *serialized = original.MicroSeconds();
 }
 
-inline void FromProto(TDuration* original, ::google::protobuf::int64 serialized)
+inline void FromProto(TDuration* original, ::google::protobuf::uint64 serialized)
 {
     *original = TDuration::MicroSeconds(serialized);
 }
 
-////////////////////////////////////////////////////////////////////////////////
-
-inline void ToProto(::google::protobuf::int64* serialized, TInstant original)
+inline void ToProto(::google::protobuf::Duration* serialized, TDuration original)
 {
-    *serialized = original.MicroSeconds();
+    *serialized = NProtoInterop::CastToProto(original);
 }
 
-inline void FromProto(TInstant* original, ::google::protobuf::int64 serialized)
+inline void FromProto(TDuration* original, ::google::protobuf::Duration serialized)
 {
-    *original = TInstant::MicroSeconds(serialized);
+    *original = NProtoInterop::CastFromProto(serialized);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -150,6 +164,16 @@ inline void ToProto(::google::protobuf::uint64* serialized, TInstant original)
 inline void FromProto(TInstant* original, ::google::protobuf::uint64 serialized)
 {
     *original = TInstant::MicroSeconds(serialized);
+}
+
+inline void ToProto(::google::protobuf::Timestamp* serialized, TInstant original)
+{
+    *serialized = NProtoInterop::CastToProto(original);
+}
+
+inline void FromProto(TInstant* original, ::google::protobuf::Timestamp serialized)
+{
+    *original = NProtoInterop::CastFromProto(serialized);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -181,7 +205,7 @@ template <class T>
     requires TEnumTraits<T>::IsEnum && (!TEnumTraits<T>::IsBitEnum)
 void FromProto(T* original, int serialized)
 {
-    *original = static_cast<T>(serialized);
+    *original = CheckedEnumCast<T>(serialized);
 }
 
 template <class T>
@@ -195,7 +219,7 @@ template <class T>
     requires TEnumTraits<T>::IsBitEnum
 void FromProto(T* original, ui64 serialized)
 {
-    *original = static_cast<T>(serialized);
+    *original = CheckedEnumCast<T>(serialized);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -350,7 +374,7 @@ void ToProtoArrayImpl(
         if (originalArray.IsValidIndex(key)) {
             const auto& value = originalArray[key];
             auto* pair = serializedArray->Add();
-            pair->set_key(static_cast<i32>(key));
+            pair->set_key(ToProto(key));
             SetPairValueImpl(pair, value);
         }
     }
@@ -383,11 +407,11 @@ void FromProtoArrayImpl(
     originalArray->clear();
     originalArray->reserve(serializedArray.size());
     for (int i = 0; i < serializedArray.size(); ++i) {
-        originalArray->emplace(
-            FromProto<TOriginal>(serializedArray.Get(i)));
+        originalArray->insert(FromProto<TOriginal>(serializedArray.Get(i)));
     }
 }
 
+// Does not check for duplicates.
 template <class TOriginalKey, class TOriginalValue, class TSerializedArray>
 void FromProtoArrayImpl(
     THashMap<TOriginalKey, TOriginalValue>* originalArray,
@@ -396,8 +420,7 @@ void FromProtoArrayImpl(
     originalArray->clear();
     originalArray->reserve(serializedArray.size());
     for (int i = 0; i < serializedArray.size(); ++i) {
-        originalArray->emplace(
-            FromProto<std::pair<TOriginalKey, TOriginalValue>>(serializedArray.Get(i)));
+        originalArray->insert(FromProto<std::pair<TOriginalKey, TOriginalValue>>(serializedArray.Get(i)));
     }
 }
 
@@ -456,6 +479,22 @@ void ToProto(
     NYT::NDetail::ToProtoArrayImpl(serializedArray, originalArray);
 }
 
+template <class TKey, class TValue, class TSerializedKey, class TSerializedValue>
+void ToProto(
+    ::google::protobuf::Map<TSerializedKey, TSerializedValue>* serializedMap,
+    const THashMap<TKey, TValue>& originalMap)
+{
+    serializedMap->clear();
+    for (const auto& [key, value] : originalMap) {
+        auto [_, emplaced] = serializedMap->emplace(ToProto<TSerializedKey>(key), ToProto<TSerializedValue>(value));
+        if (!emplaced) {
+            THROW_ERROR_EXCEPTION("Found duplicate key during protobuf map serialization")
+                << TErrorAttribute("key", key)
+                << TErrorAttribute("serialized_key", ToProto<TSerializedKey>(key));
+        }
+    }
+}
+
 template <class TOriginalArray, class TSerialized, class... TArgs>
 void FromProto(
     TOriginalArray* originalArray,
@@ -492,10 +531,30 @@ void CheckedHashSetFromProto(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-template <class TSerialized, class TOriginal, class... TArgs>
-TSerialized ToProto(const TOriginal& original, TArgs&&... args)
+template <class TKey, class TValue, class TSerializedKey, class TSerializedValue>
+void FromProto(
+    THashMap<TKey, TValue>* originalMap,
+    const ::google::protobuf::Map<TSerializedKey, TSerializedValue>& serializedMap)
 {
-    TSerialized serialized;
+    originalMap->clear();
+    originalMap->reserve(serializedMap.size());
+    for (const auto& [serializedKey, serializedValue] : serializedMap) {
+        auto [_, emplaced] = originalMap->emplace(FromProto<TKey>(serializedKey), FromProto<TValue>(serializedValue));
+        if (!emplaced) {
+            THROW_ERROR_EXCEPTION("Found duplicate key during protobuf map deserialization")
+                << TErrorAttribute("serialized_key", serializedKey)
+                << TErrorAttribute("key", FromProto<TKey>(serializedKey));
+        }
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <class TSerialized, NYT::NDetail::CToProtoOriginal TOriginal, class... TArgs>
+auto ToProto(const TOriginal& original, TArgs&&... args)
+{
+    using NYT::ToProto;
+    typename NYT::NDetail::TToProtoResult<TSerialized, TOriginal>::T serialized;
     ToProto(&serialized, original, std::forward<TArgs>(args)...);
     return serialized;
 }
@@ -503,6 +562,7 @@ TSerialized ToProto(const TOriginal& original, TArgs&&... args)
 template <class TOriginal, class TSerialized, class... TArgs>
 TOriginal FromProto(const TSerialized& serialized, TArgs&&... args)
 {
+    using NYT::FromProto;
     TOriginal original;
     FromProto(&original, serialized, std::forward<TArgs>(args)...);
     return original;
@@ -550,7 +610,7 @@ void TRefCountedProto<TProto>::RegisterExtraSpace()
     auto spaceUsed = TProto::SpaceUsed();
     YT_ASSERT(static_cast<size_t>(spaceUsed) >= sizeof(TProto));
     YT_ASSERT(ExtraSpace_ == 0);
-    ExtraSpace_ = TProto::SpaceUsed() - sizeof (TProto);
+    ExtraSpace_ = TProto::SpaceUsed() - sizeof(TProto);
     auto cookie = GetRefCountedTypeCookie<TRefCountedProto<TProto>>();
     TRefCountedTrackerFacade::AllocateSpace(cookie, ExtraSpace_);
 }

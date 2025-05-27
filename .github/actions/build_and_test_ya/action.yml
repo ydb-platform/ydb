@@ -42,44 +42,45 @@ inputs:
   additional_ya_make_args:
     type: string
     default: ""
+  test_retry_count:
+    default: ""
+    description: "how many times to retry failed tests"
   secs:
     type: string
     default: ""
   vars:
     type: string
     default: ""
+  custom_branch_name:
+    description: "Custom branch name required when workflow branch != checkout branch"
+    type: string
+    required: false
 defaults:
   run:
     shell: bash
 runs:
   using: "composite"
   steps:
-    - name: comment-build-start
-      if: github.event_name == 'pull_request' || github.event_name == 'pull_request_target'
+    - name: Prepare folder prefix
+      id: prepare_prefix
       shell: bash
-      env:
-        BUILD_PRESET: ${{ inputs.build_preset }}
-        GITHUB_TOKEN: ${{ github.token }}
       run: |
-        jobs_url="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs"
-        # tricky: we are searching job with name that contains build_preset
-        check_url=$(curl -s $jobs_url | jq --arg n "$BUILD_PRESET" -r '.jobs[] | select(.name | contains($n)) | .html_url')
-        
-        echo "Pre-commit [check]($check_url) for $(git rev-parse HEAD) has started." | .github/scripts/tests/comment-pr.py --rewrite
-
-        curl -L -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
-          https://api.github.com/repos/${{github.repository}}/statuses/${{github.event.pull_request.head.sha}} \
-          -d '{"state":"pending","description":"The check has been started","context":"build_${{inputs.build_preset}}"}'
-
-        if [[ "${{inputs.run_tests}}" == "true" ]];then
-          curl -L -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
-            https://api.github.com/repos/${{github.repository}}/statuses/${{github.event.pull_request.head.sha}} \
-            -d '{"state":"pending","description":"The check has been started","context":"test_${{inputs.build_preset}}"}'
+        # Check if custom_branch_name is set and not empty
+        if [ -n "${{ inputs.custom_branch_name }}" ]; then
+          # Extract and sanitize custom_branch_name
+          CUSTOM_BRANCH_NAME="${{ inputs.custom_branch_name }}"
+          # Replace all unsupported characters with hyphens
+          SANITIZED_NAME="${CUSTOM_BRANCH_NAME//[^a-zA-Z0-9-]/-}"
+          # Optionally limit the length to, say, 50 characters
+          SANITIZED_NAME="${SANITIZED_NAME:0:50}"
+          # Assign the sanitized name to the folder_prefix
+          FOLDER_PREFIX="ya-${SANITIZED_NAME}-"
+        else
+          # If the branch name is not provided, use a default prefix
+          FOLDER_PREFIX='ya-'
         fi
-   
-    - name: Clean ya cache
-      shell: bash
-      run: rm -rf ~/.ya
+        # Output the folder_prefix for use in subsequent steps
+        echo "folder_prefix=${FOLDER_PREFIX}" >> $GITHUB_ENV
 
     - name: Prepare s3cmd
       uses: ./.github/actions/s3cmd
@@ -88,32 +89,19 @@ runs:
         s3_endpoint: ${{ fromJSON( inputs.vars ).AWS_ENDPOINT }}
         s3_key_id: ${{ fromJSON( inputs.secs ).AWS_KEY_ID }}
         s3_key_secret: ${{ fromJSON( inputs.secs ).AWS_KEY_VALUE }}
-        folder_prefix: ya-
+        folder_prefix: ${{ env.folder_prefix }}
         build_preset: ${{ inputs.build_preset }}
-
-    - name: Generate ya.make with affected test suites and modules list
-      if: inputs.increment == 'true'
-      uses: ./.github/actions/graph_compare
- 
-    - name: Change target in case of incremental
-      id: target_choice
-      shell: bash
-      run: |
-        if [ "${{ inputs.increment }}" == "true" ]; then
-          echo "target=." >> $GITHUB_OUTPUT
-        else
-          echo "target=${{ inputs.build_target }}" >> $GITHUB_OUTPUT
-        fi
 
     - name: Run build and tests
       id: build
       uses: ./.github/actions/test_ya
       with:
-        build_target: ${{ steps.target_choice.outputs.target }}
+        build_target: ${{ inputs.build_target }}
         build_preset: ${{ inputs.build_preset }}
         test_size: ${{ inputs.test_size }}
         test_type: ${{ inputs.test_type }}
         run_tests: ${{ inputs.run_tests }}
+        increment: ${{ inputs.increment }}
         testman_token: ${{ fromJSON( inputs.secs ).TESTMO_TOKEN2 }}
         testman_url: ${{  fromJSON( inputs.vars ).TESTMO_URL }}
         testman_project_id: ${{  fromJSON( inputs.vars ).TESTMO_PROJECT_ID }}
@@ -124,57 +112,5 @@ runs:
         bazel_remote_username: ${{ fromJSON( inputs.secs ).REMOTE_CACHE_USERNAME || '' }}
         bazel_remote_password: ${{ fromJSON( inputs.secs ).REMOTE_CACHE_PASSWORD || '' }}
         put_build_results_to_cache: ${{ inputs.put_build_results_to_cache }}
-        
-    - name: build_stats
-      shell: bash
-      continue-on-error: true
-      if: always()
-      run: |
-        set -x
-        export build_preset="${{ inputs.build_preset }}" 
-        export commit_git_sha="$(git rev-parse HEAD)"
-
-        python3 -m pip install ydb ydb[yc]
-        python3 .github/scripts/send_build_stats.py
-
-    - name: show_build_size_diff
-      shell: bash
-      continue-on-error: true
-      if: always()
-      env:
-        GITHUB_TOKEN: ${{ github.token }}
-      run: |
-        set -x
-        export build_preset="${{ inputs.build_preset }}" 
-        export branch_to_compare="$GITHUB_REF_NAME" 
-        export yellow_treshold=102400
-        export red_treshold=2097152 
-        export commit_git_sha="$(git rev-parse HEAD)"
-
-        python3 -m pip install ydb ydb[yc] humanize
-
-        get_sizes_comment_script=.github/scripts/get_build_diff.py
-        comment_raw=`$get_sizes_comment_script`
-        
-        IFS=';;;'
-        read -ra comment_arr <<< "$comment_raw"
-
-        printf "$comment"
-        if [[ ${comment_raw} != "Error"* ]];then
-          color=${comment_arr[0]}
-          replace=$color";;;"
-          comment=${comment_raw/$replace/""}
-          
-          printf "$comment" | .github/scripts/tests/comment-pr.py --color $color
-
-        else
-          echo "Skipped build size difference, comment_raw = ${comment_raw}"
-        fi
-
-    - name: comment-if-cancel
-      shell: bash
-      if: cancelled() && (github.event_name == 'pull_request' || github.event_name == 'pull_request_target')
-      env:
-        BUILD_PRESET: ${{ inputs.build_preset }}
-        GITHUB_TOKEN: ${{ github.token }}
-      run:  echo "Check cancelled" | .github/scripts/tests/comment-pr.py --color black
+        test_retry_count: ${{ inputs.test_retry_count }}
+        custom_branch_name: ${{ inputs.custom_branch_name }}

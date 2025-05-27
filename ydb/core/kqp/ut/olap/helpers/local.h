@@ -28,8 +28,18 @@ public:
 
     void CreateTestOlapTable(TString tableName = "olapTable", TString storeName = "olapStore",
         ui32 storeShardsCount = 4, ui32 tableShardsCount = 3) {
-        CreateOlapTableWithStore(tableName, storeName, storeShardsCount, tableShardsCount);
+        CreateOlapTablesWithStore({tableName}, storeName, storeShardsCount, tableShardsCount);
     }
+
+    void CreateTestOlapTables(TVector<TString> tableNames = {"olapTable0", "olapTable1"}, TString storeName = "olapStore",
+        ui32 storeShardsCount = 4, ui32 tableShardsCount = 3) {
+        CreateOlapTablesWithStore(tableNames, storeName, storeShardsCount, tableShardsCount);
+    }
+
+    void CreateTestOlapTableWithoutStore(TString tableName = "olapTable", ui32 tableShardsCount = 3) {
+        CreateOlapTables({tableName}, tableShardsCount);
+    }
+
     using TBase::TBase;
 
     TLocalHelper(TKikimrRunner& runner)

@@ -8,8 +8,8 @@
 
 #include <ydb/core/tx/datashard/const.h>
 
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
-#include <ydb/library/yql/providers/common/structured_token/yql_token_builder.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
 #include <ydb/library/yql/providers/s3/actors/yql_s3_applicator_actor.h>
 #include <ydb/library/yql/providers/s3/proto/sink.pb.h>
 

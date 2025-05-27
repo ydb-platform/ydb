@@ -11,7 +11,7 @@ $orders = (
     from
         {{orders}}
     where
-        o_comment NOT LIKE "%unusual%requests%"
+        o_comment NOT LIKE "%special%requests%"
 );
 select
     c_count as c_count,

@@ -1,0 +1,10 @@
+--- a/src/google/protobuf/repeated_field.h
++++ b/src/google/protobuf/repeated_field.h
+@@ -389,6 +389,7 @@
+   // filled from previous memory), and called with (current_size, total_size)
+   // right before (previously annotated) memory is released.
+   void AnnotateSize(int old_size, int new_size) const {
++    return;
+     if (old_size != new_size) {
+       ABSL_ANNOTATE_CONTIGUOUS_CONTAINER(
+           unsafe_elements(), unsafe_elements() + total_size_,

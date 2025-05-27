@@ -2,8 +2,8 @@ UNITTEST_FOR(ydb/core/tx/scheme_board)
 
 PEERDIR(
     library/cpp/testing/unittest
-    ydb/library/yql/sql/pg_dummy
-    ydb/library/yql/public/udf/service/exception_policy
+    yql/essentials/sql/pg_dummy
+    yql/essentials/public/udf/service/exception_policy
 )
 
 SRCS(

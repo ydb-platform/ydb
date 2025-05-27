@@ -1,0 +1,13 @@
+--- a/cpp/src/generated/parquet_types.cpp	(index)
++++ b/cpp/src/generated/parquet_types.cpp	(working tree)
+@@ -6347,7 +6347,9 @@ uint32_t ColumnIndex::read(::apache::thrift::protocol::TProtocol* iprot) {
+             uint32_t _i156;
+             for (_i156 = 0; _i156 < _size152; ++_i156)
+             {
+-              xfer += iprot->readBool(this->null_pages[_i156]);
++              bool result;
++              xfer += iprot->readBool(result);
++              this->null_pages[_i156] = result;
+             }
+             xfer += iprot->readListEnd();
+           }

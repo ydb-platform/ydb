@@ -13,10 +13,10 @@ PEERDIR(
     ydb/library/actors/http
     ydb/library/actors/prof
     ydb/library/actors/protos
-    ydb/library/yql/providers/common/proto
-    ydb/library/yql/public/issue
-    ydb/library/yql/utils
-    ydb/library/yql/utils/log
+    yql/essentials/providers/common/proto
+    yql/essentials/public/issue
+    yql/essentials/utils
+    yql/essentials/utils/log
 )
 
 YQL_LAST_ABI_VERSION()

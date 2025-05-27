@@ -66,10 +66,10 @@ namespace NTest {
             for (auto &value: *tagged) {
                 auto * const info = ColFor(value);
 
-                TRawTypeValue raw(value.Cell.AsRef(), NScheme::TTypeInfo(value.Type));
+                TRawTypeValue raw(value.Cell.AsRef(), value.Type);
 
                 if (info->IsKey()) {
-                    Y_ABORT_UNLESS(value.Op == ECellOp::Set || value.Op == ECellOp::Null);
+                    Y_ENSURE(value.Op == ECellOp::Set || value.Op == ECellOp::Null);
 
                     if (info->Key >= Scheme.Keys->Size()) {
                         ythrow yexception()
@@ -85,7 +85,7 @@ namespace NTest {
                 }
             }
 
-            Y_ABORT_UNLESS(weak || foundKeyCols == Scheme.Keys->Size());
+            Y_ENSURE(weak || foundKeyCols == Scheme.Keys->Size());
 
             return pair;
         }

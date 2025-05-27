@@ -1,0 +1,26 @@
+commit 327e85a6f8e93f45bc8e7912eb2f66546ce3d840
+merge: bc4798e932a2fef2882b465be6e88bf5072bcdfa 74cd5597376b47de689f5f5b5c6ac641cb230aba
+author: thegeorg
+date: 2021-09-18T01:17:41+03:00
+revision: 8642929
+
+    Make python3 compile under ubuntu-20
+    
+    `stropts.h` выпилили из libc6 из ubuntu-20. Сломалась компиляция двух файлов: `fcntlmodule.c` и `posixmodule.c`.
+    
+    В первом правок не потребовалось, во втором добавил недостающий `#define I_PUSH` через `#ifdef` (скопировал значение из старой libc).
+    
+    REVIEW: 2025707
+
+--- contrib/tools/python3/Modules/posixmodule.c	(bc4798e932a2fef2882b465be6e88bf5072bcdfa)
++++ contrib/tools/python3/Modules/posixmodule.c	(327e85a6f8e93f45bc8e7912eb2f66546ce3d840)
+@@ -7289,6 +7289,9 @@ error:
+ #endif /* HAVE_PTY_H */
+ #ifdef HAVE_STROPTS_H
+ #include <stropts.h>
++#else
++    #define __SID  ('S' << 8)
++    #define I_PUSH (__SID | 2)
+ #endif
+ #endif /* defined(HAVE_OPENPTY) || defined(HAVE_FORKPTY) || defined(HAVE_LOGIN_TTY) || defined(HAVE_DEV_PTMX) */
+ 

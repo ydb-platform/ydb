@@ -1,8 +1,8 @@
 #include "service_node_pinger.h"
 #include <ydb/library/yql/providers/dq/worker_manager/interface/events.h>
 
-#include <ydb/library/yql/utils/yql_panic.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/utils/yql_panic.h>
+#include <yql/essentials/utils/log/log.h>
 
 #include <ydb/library/actors/interconnect/interconnect.h>
 #include <ydb/library/actors/core/events.h>
@@ -154,15 +154,14 @@ private:
 
         auto& resp = ev->Get()->Response;
 
-        THolder<TEvInterconnect::TEvNodesInfo>
-            reply(new TEvInterconnect::TEvNodesInfo());
-        reply->Nodes.reserve(resp.GetNodes().size());
         if (resp.GetEpoch()) {
             RuntimeData->Epoch = resp.GetEpoch();
         }
 
+        auto nodes = MakeIntrusive<TIntrusiveVector<TEvInterconnect::TNodeInfo>>();
+        nodes->reserve(resp.GetNodes().size());
         for (auto& node : resp.GetNodes()) {
-            reply->Nodes.emplace_back(
+            nodes->emplace_back(
                 node.GetNodeId(),
                 node.GetAddress(),
                 node.GetAddress(),
@@ -170,6 +169,7 @@ private:
                 node.GetPort(),
                 NActors::TNodeLocation());
         }
+        THolder<TEvInterconnect::TEvNodesInfo> reply(new TEvInterconnect::TEvNodesInfo(nodes));
 
         TVector<TResourceFile> downloadList;
         for (auto& file : resp.GetDownloadList()) {
@@ -269,7 +269,7 @@ private:
             req.AddKnownNodes(node);
         }
 
-        auto* actorSystem = ctx.ExecutorThread.ActorSystem;
+        auto* actorSystem = ctx.ActorSystem();
         auto selfId = SelfId();
 
         Resolver->GetConnection()

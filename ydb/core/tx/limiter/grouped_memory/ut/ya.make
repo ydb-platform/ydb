@@ -4,8 +4,8 @@ SIZE(SMALL)
 
 PEERDIR(
     ydb/core/tx/limiter/grouped_memory/usage
-    ydb/library/yql/public/udf/service/stub
-    ydb/library/yql/parser/pg_wrapper
+    yql/essentials/public/udf/service/stub
+    yql/essentials/parser/pg_wrapper
 )
 
 SRCS(

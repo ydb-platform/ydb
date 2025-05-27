@@ -1,0 +1,22 @@
+{%- if copy_files|length -%}
+{%-     for copy in copy_files -%}
+{%-         set src = copy.args[0] -%}
+{%-         set dst = copy.args[1] -%}
+{%-         set src_split = rsplit(src, "/", 2) -%}
+{%-         set src_path = src_split[0] -%}
+{%-         set src_name = src_split[1] -%}
+{%-         set dst_split = rsplit(dst, "/", 2) -%}
+{%-         set dst_path = dst_split[0] -%}
+{%-         set dst_name = dst_split[1] %}
+
+val {{ varprefix }}{{ copy['_object_index'] }} = tasks.register<Copy>("{{ varprefix }}{{ copy['_object_index'] }}") {
+    from({{ PatchRoots(src_path, copy['flags']|select("eq", "src_is_depend")|length) }}) {
+        include("{{ src_name }}")
+    }
+    into({{ PatchRoots(dst_path, false, true) }})
+{%-         if src_name != dst_name %}
+    rename("{{ src_name }}", "{{ dst_name }}")
+{%-         endif %}
+}
+{%      endfor -%}
+{%- endif -%}

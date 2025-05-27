@@ -54,7 +54,7 @@ TXmlDocument::TXmlDocument(TXmlStringBuilder& builder)
 }
 
 TXmlDocument::~TXmlDocument() noexcept(false) {
-    const bool unwinding = std::uncaught_exception(); // TODO: use C++'17 std::uncaught_exceptions() func
+    const bool unwinding = std::uncaught_exceptions();
     if (!unwinding) {
         if (xmlTextWriterEndDocument((xmlTextWriterPtr)Builder.TextWriter) < 0) {
             ythrow TWriteXmlError() << "Failed to end xml document";
@@ -77,7 +77,7 @@ TXmlRecursiveElement::TXmlRecursiveElement(TXmlStringBuilder& builder, const cha
 }
 
 TXmlRecursiveElement::~TXmlRecursiveElement() noexcept(false) {
-    const bool unwinding = std::uncaught_exception(); // TODO: use C++'17 std::uncaught_exceptions() func
+    const bool unwinding = std::uncaught_exceptions();
     if (!unwinding) {
         if (xmlTextWriterEndElement((xmlTextWriterPtr)Builder.TextWriter) < 0) {
             ythrow TWriteXmlError() << "Failed to end xml element";

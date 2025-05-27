@@ -5,11 +5,14 @@
 
 #include "aws/s3/private/s3_util.h"
 #include "aws/s3/private/s3_client_impl.h"
+#include "aws/s3/private/s3_meta_request_impl.h"
+#include "aws/s3/private/s3_platform_info.h"
+#include "aws/s3/private/s3_request.h"
 #include <aws/auth/credentials.h>
+#include <aws/common/clock.h>
 #include <aws/common/string.h>
 #include <aws/common/xml_parser.h>
 #include <aws/http/request_response.h>
-#include <aws/s3/s3.h>
 #include <aws/s3/s3_client.h>
 #include <inttypes.h>
 
@@ -20,9 +23,11 @@
 
 const struct aws_byte_cursor g_s3_client_version = AWS_BYTE_CUR_INIT_FROM_STRING_LITERAL(AWS_S3_CLIENT_VERSION);
 const struct aws_byte_cursor g_s3_service_name = AWS_BYTE_CUR_INIT_FROM_STRING_LITERAL("s3");
+const struct aws_byte_cursor g_s3express_service_name = AWS_BYTE_CUR_INIT_FROM_STRING_LITERAL("s3express");
 const struct aws_byte_cursor g_host_header_name = AWS_BYTE_CUR_INIT_FROM_STRING_LITERAL("Host");
 const struct aws_byte_cursor g_range_header_name = AWS_BYTE_CUR_INIT_FROM_STRING_LITERAL("Range");
 const struct aws_byte_cursor g_if_match_header_name = AWS_BYTE_CUR_INIT_FROM_STRING_LITERAL("If-Match");
+const struct aws_byte_cursor g_request_id_header_name = AWS_BYTE_CUR_INIT_FROM_STRING_LITERAL("x-amz-request-id");
 const struct aws_byte_cursor g_etag_header_name = AWS_BYTE_CUR_INIT_FROM_STRING_LITERAL("ETag");
 const struct aws_byte_cursor g_content_range_header_name = AWS_BYTE_CUR_INIT_FROM_STRING_LITERAL("Content-Range");
 const struct aws_byte_cursor g_content_type_header_name = AWS_BYTE_CUR_INIT_FROM_STRING_LITERAL("Content-Type");
@@ -53,6 +58,8 @@ const struct aws_byte_cursor g_sha1_complete_mpu_name = AWS_BYTE_CUR_INIT_FROM_S
 const struct aws_byte_cursor g_sha256_complete_mpu_name = AWS_BYTE_CUR_INIT_FROM_STRING_LITERAL("ChecksumSHA256");
 const struct aws_byte_cursor g_accept_ranges_header_name = AWS_BYTE_CUR_INIT_FROM_STRING_LITERAL("accept-ranges");
 const struct aws_byte_cursor g_acl_header_name = AWS_BYTE_CUR_INIT_FROM_STRING_LITERAL("x-amz-acl");
+const struct aws_byte_cursor g_mp_parts_count_header_name =
+    AWS_BYTE_CUR_INIT_FROM_STRING_LITERAL("x-amz-mp-parts-count");
 const struct aws_byte_cursor g_post_method = AWS_BYTE_CUR_INIT_FROM_STRING_LITERAL("POST");
 const struct aws_byte_cursor g_head_method = AWS_BYTE_CUR_INIT_FROM_STRING_LITERAL("HEAD");
 const struct aws_byte_cursor g_delete_method = AWS_BYTE_CUR_INIT_FROM_STRING_LITERAL("DELETE");
@@ -60,17 +67,38 @@ const struct aws_byte_cursor g_delete_method = AWS_BYTE_CUR_INIT_FROM_STRING_LIT
 const struct aws_byte_cursor g_user_agent_header_name = AWS_BYTE_CUR_INIT_FROM_STRING_LITERAL("User-Agent");
 const struct aws_byte_cursor g_user_agent_header_product_name =
     AWS_BYTE_CUR_INIT_FROM_STRING_LITERAL("CRTS3NativeClient");
-
-const struct aws_byte_cursor g_error_body_xml_name = AWS_BYTE_CUR_INIT_FROM_STRING_LITERAL("Error");
-const struct aws_byte_cursor g_code_body_xml_name = AWS_BYTE_CUR_INIT_FROM_STRING_LITERAL("Code");
-
-const struct aws_byte_cursor g_s3_internal_error_code = AWS_BYTE_CUR_INIT_FROM_STRING_LITERAL("InternalError");
-const struct aws_byte_cursor g_s3_slow_down_error_code = AWS_BYTE_CUR_INIT_FROM_STRING_LITERAL("SlowDown");
-/* The special error code as Asynchronous Error Codes */
-const struct aws_byte_cursor g_s3_internal_errors_code = AWS_BYTE_CUR_INIT_FROM_STRING_LITERAL("InternalErrors");
+const struct aws_byte_cursor g_user_agent_header_platform = AWS_BYTE_CUR_INIT_FROM_STRING_LITERAL("platform");
+const struct aws_byte_cursor g_user_agent_header_unknown = AWS_BYTE_CUR_INIT_FROM_STRING_LITERAL("unknown");
 
 const uint32_t g_s3_max_num_upload_parts = 10000;
 const size_t g_s3_min_upload_part_size = MB_TO_BYTES(5);
+
+const char *aws_s3_request_type_operation_name(enum aws_s3_request_type type) {
+    switch (type) {
+        case AWS_S3_REQUEST_TYPE_HEAD_OBJECT:
+            return "HeadObject";
+        case AWS_S3_REQUEST_TYPE_GET_OBJECT:
+            return "GetObject";
+        case AWS_S3_REQUEST_TYPE_LIST_PARTS:
+            return "ListParts";
+        case AWS_S3_REQUEST_TYPE_CREATE_MULTIPART_UPLOAD:
+            return "CreateMultipartUpload";
+        case AWS_S3_REQUEST_TYPE_UPLOAD_PART:
+            return "UploadPart";
+        case AWS_S3_REQUEST_TYPE_ABORT_MULTIPART_UPLOAD:
+            return "AbortMultipartUpload";
+        case AWS_S3_REQUEST_TYPE_COMPLETE_MULTIPART_UPLOAD:
+            return "CompleteMultipartUpload";
+        case AWS_S3_REQUEST_TYPE_UPLOAD_PART_COPY:
+            return "UploadPartCopy";
+        case AWS_S3_REQUEST_TYPE_COPY_OBJECT:
+            return "CopyObject";
+        case AWS_S3_REQUEST_TYPE_PUT_OBJECT:
+            return "PutObject";
+        default:
+            return "";
+    }
+}
 
 void copy_http_headers(const struct aws_http_headers *src, struct aws_http_headers *dest) {
     AWS_PRECONDITION(src);
@@ -85,160 +113,137 @@ void copy_http_headers(const struct aws_http_headers *src, struct aws_http_heade
         aws_http_headers_set(dest, header.name, header.value);
     }
 }
-
-struct top_level_xml_tag_value_with_root_value_user_data {
+/* user_data for XML traversal */
+struct xml_get_body_at_path_traversal {
     struct aws_allocator *allocator;
-    const struct aws_byte_cursor *tag_name;
-    const struct aws_byte_cursor *expected_root_name;
-    bool *root_name_mismatch;
-    struct aws_string *result;
+    const char **path_name_array;
+    size_t path_name_count;
+    size_t path_name_i;
+    struct aws_byte_cursor *out_body;
+    bool found_node;
 };
 
-static bool s_top_level_xml_tag_value_child_xml_node(
-    struct aws_xml_parser *parser,
-    struct aws_xml_node *node,
-    void *user_data) {
+static int s_xml_get_body_at_path_on_node(struct aws_xml_node *node, void *user_data) {
+    struct xml_get_body_at_path_traversal *traversal = user_data;
 
-    struct aws_byte_cursor node_name;
-
-    /* If we can't get the name of the node, stop traversing. */
-    if (aws_xml_node_get_name(node, &node_name)) {
-        return false;
+    /* if we already found what we're looking for, just finish parsing */
+    if (traversal->found_node) {
+        return AWS_OP_SUCCESS;
     }
 
-    struct top_level_xml_tag_value_with_root_value_user_data *xml_user_data = user_data;
+    /* check if this node is on the path */
+    struct aws_byte_cursor node_name = aws_xml_node_get_name(node);
+    const char *expected_name = traversal->path_name_array[traversal->path_name_i];
+    if (aws_byte_cursor_eq_c_str_ignore_case(&node_name, expected_name)) {
 
-    /* If the name of the node is what we are looking for, store the body of the node in our result, and stop
-     * traversing. */
-    if (aws_byte_cursor_eq(&node_name, xml_user_data->tag_name)) {
-
-        struct aws_byte_cursor node_body;
-        aws_xml_node_as_body(parser, node, &node_body);
-
-        xml_user_data->result = aws_string_new_from_cursor(xml_user_data->allocator, &node_body);
-
-        return false;
+        bool is_final_node_on_path = traversal->path_name_i + 1 == traversal->path_name_count;
+        if (is_final_node_on_path) {
+            /* retrieve the body */
+            if (aws_xml_node_as_body(node, traversal->out_body) != AWS_OP_SUCCESS) {
+                return AWS_OP_ERR;
+            }
+            traversal->found_node = true;
+            return AWS_OP_SUCCESS;
+        } else {
+            /* node is on path, but it's not the final node, so traverse its children */
+            traversal->path_name_i++;
+            if (aws_xml_node_traverse(node, s_xml_get_body_at_path_on_node, traversal) != AWS_OP_SUCCESS) {
+                return AWS_OP_ERR;
+            }
+            traversal->path_name_i--;
+            return AWS_OP_SUCCESS;
+        }
+    } else {
+        /* this node is not on the path, continue parsing siblings */
+        return AWS_OP_SUCCESS;
     }
-
-    /* If we made it here, the tag hasn't been found yet, so return true to keep looking. */
-    return true;
 }
 
-static bool s_top_level_xml_tag_value_root_xml_node(
-    struct aws_xml_parser *parser,
-    struct aws_xml_node *node,
-    void *user_data) {
-    struct top_level_xml_tag_value_with_root_value_user_data *xml_user_data = user_data;
-    if (xml_user_data->expected_root_name) {
-        /* If we can't get the name of the node, stop traversing. */
-        struct aws_byte_cursor node_name;
-        if (aws_xml_node_get_name(node, &node_name)) {
-            return false;
-        }
-        if (!aws_byte_cursor_eq(&node_name, xml_user_data->expected_root_name)) {
-            /* Not match the expected root name, stop parsing. */
-            *xml_user_data->root_name_mismatch = true;
-            return false;
-        }
-    }
-
-    /* Traverse the root node, and then return false to stop. */
-    aws_xml_node_traverse(parser, node, s_top_level_xml_tag_value_child_xml_node, user_data);
-    return false;
-}
-
-struct aws_string *aws_xml_get_top_level_tag_with_root_name(
+int aws_xml_get_body_at_path(
     struct aws_allocator *allocator,
-    const struct aws_byte_cursor *tag_name,
-    const struct aws_byte_cursor *expected_root_name,
-    bool *out_root_name_mismatch,
-    struct aws_byte_cursor *xml_body) {
-    AWS_PRECONDITION(allocator);
-    AWS_PRECONDITION(tag_name);
-    AWS_PRECONDITION(xml_body);
+    struct aws_byte_cursor xml_doc,
+    const char **path_name_array,
+    struct aws_byte_cursor *out_body) {
 
-    struct aws_xml_parser_options parser_options = {.doc = *xml_body};
-    struct aws_xml_parser *parser = aws_xml_parser_new(allocator, &parser_options);
-    bool root_name_mismatch = false;
-
-    struct top_level_xml_tag_value_with_root_value_user_data xml_user_data = {
-        allocator,
-        tag_name,
-        expected_root_name,
-        &root_name_mismatch,
-        NULL,
+    struct xml_get_body_at_path_traversal traversal = {
+        .allocator = allocator,
+        .path_name_array = path_name_array,
+        .path_name_count = 0,
+        .out_body = out_body,
     };
 
-    if (aws_xml_parser_parse(parser, s_top_level_xml_tag_value_root_xml_node, (void *)&xml_user_data)) {
-        aws_string_destroy(xml_user_data.result);
-        xml_user_data.result = NULL;
-        goto clean_up;
+    /* find path_name_count */
+    while (path_name_array[traversal.path_name_count] != NULL) {
+        traversal.path_name_count++;
+        AWS_ASSERT(traversal.path_name_count < 4); /* sanity check, increase cap if necessary */
     }
-    if (out_root_name_mismatch) {
-        *out_root_name_mismatch = root_name_mismatch;
+    AWS_ASSERT(traversal.path_name_count > 0);
+
+    /* parse XML */
+    struct aws_xml_parser_options parse_options = {
+        .doc = xml_doc,
+        .on_root_encountered = s_xml_get_body_at_path_on_node,
+        .user_data = &traversal,
+    };
+    if (aws_xml_parse(allocator, &parse_options)) {
+        goto error;
     }
 
-clean_up:
+    if (!traversal.found_node) {
+        aws_raise_error(AWS_ERROR_STRING_MATCH_NOT_FOUND);
+        goto error;
+    }
 
-    aws_xml_parser_destroy(parser);
-
-    return xml_user_data.result;
-}
-
-struct aws_string *aws_xml_get_top_level_tag(
-    struct aws_allocator *allocator,
-    const struct aws_byte_cursor *tag_name,
-    struct aws_byte_cursor *xml_body) {
-    return aws_xml_get_top_level_tag_with_root_name(allocator, tag_name, NULL, NULL, xml_body);
+    return AWS_OP_SUCCESS;
+error:
+    AWS_ZERO_STRUCT(*out_body);
+    return AWS_OP_ERR;
 }
 
 struct aws_cached_signing_config_aws *aws_cached_signing_config_new(
-    struct aws_allocator *allocator,
+    struct aws_s3_client *client,
     const struct aws_signing_config_aws *signing_config) {
-    AWS_PRECONDITION(allocator);
+    AWS_PRECONDITION(client);
     AWS_PRECONDITION(signing_config);
+
+    struct aws_allocator *allocator = client->allocator;
 
     struct aws_cached_signing_config_aws *cached_signing_config =
         aws_mem_calloc(allocator, 1, sizeof(struct aws_cached_signing_config_aws));
 
     cached_signing_config->allocator = allocator;
 
-    cached_signing_config->config.config_type = signing_config->config_type;
-    cached_signing_config->config.algorithm = signing_config->algorithm;
-    cached_signing_config->config.signature_type = signing_config->signature_type;
+    cached_signing_config->config.config_type =
+        signing_config->config_type ? signing_config->config_type : AWS_SIGNING_CONFIG_AWS;
 
     AWS_ASSERT(aws_byte_cursor_is_valid(&signing_config->region));
-
     if (signing_config->region.len > 0) {
         cached_signing_config->region = aws_string_new_from_cursor(allocator, &signing_config->region);
-
-        cached_signing_config->config.region = aws_byte_cursor_from_string(cached_signing_config->region);
+    } else {
+        /* Fall back to client region. */
+        cached_signing_config->region = aws_string_new_from_string(allocator, client->region);
     }
-
-    AWS_ASSERT(aws_byte_cursor_is_valid(&signing_config->service));
+    cached_signing_config->config.region = aws_byte_cursor_from_string(cached_signing_config->region);
 
     if (signing_config->service.len > 0) {
         cached_signing_config->service = aws_string_new_from_cursor(allocator, &signing_config->service);
-
         cached_signing_config->config.service = aws_byte_cursor_from_string(cached_signing_config->service);
+    } else {
+        cached_signing_config->config.service = g_s3_service_name;
     }
 
     cached_signing_config->config.date = signing_config->date;
 
-    cached_signing_config->config.should_sign_header = signing_config->should_sign_header;
-    cached_signing_config->config.flags = signing_config->flags;
-
     AWS_ASSERT(aws_byte_cursor_is_valid(&signing_config->signed_body_value));
 
-    if (signing_config->service.len > 0) {
+    if (signing_config->signed_body_value.len > 0) {
         cached_signing_config->signed_body_value =
             aws_string_new_from_cursor(allocator, &signing_config->signed_body_value);
-
         cached_signing_config->config.signed_body_value =
             aws_byte_cursor_from_string(cached_signing_config->signed_body_value);
+    } else {
+        cached_signing_config->config.signed_body_value = g_aws_signed_body_value_unsigned_payload;
     }
-
-    cached_signing_config->config.signed_body_header = signing_config->signed_body_header;
 
     if (signing_config->credentials != NULL) {
         aws_credentials_acquire(signing_config->credentials);
@@ -250,6 +255,17 @@ struct aws_cached_signing_config_aws *aws_cached_signing_config_new(
         cached_signing_config->config.credentials_provider = signing_config->credentials_provider;
     }
 
+    /* Configs default to Zero. */
+    cached_signing_config->config.algorithm = signing_config->algorithm;
+    cached_signing_config->config.signature_type = signing_config->signature_type;
+    /* TODO: you don't have a way to override this config as the other option is zero. But, you cannot really use the
+     * other value, as it is always required. */
+    cached_signing_config->config.signed_body_header = AWS_SBHT_X_AMZ_CONTENT_SHA256;
+    cached_signing_config->config.should_sign_header = signing_config->should_sign_header;
+    /* It's the user's responsibility to keep the user data around */
+    cached_signing_config->config.should_sign_header_ud = signing_config->should_sign_header_ud;
+
+    cached_signing_config->config.flags = signing_config->flags;
     cached_signing_config->config.expiration_in_seconds = signing_config->expiration_in_seconds;
 
     return cached_signing_config;
@@ -288,31 +304,29 @@ void aws_s3_init_default_signing_config(
     signing_config->signed_body_value = g_aws_signed_body_value_unsigned_payload;
 }
 
-void replace_quote_entities(struct aws_allocator *allocator, struct aws_string *str, struct aws_byte_buf *out_buf) {
-    AWS_PRECONDITION(str);
+static struct aws_byte_cursor s_quote_entity_literal = AWS_BYTE_CUR_INIT_FROM_STRING_LITERAL("&quot;");
+static struct aws_byte_cursor s_quote_literal = AWS_BYTE_CUR_INIT_FROM_STRING_LITERAL("\"");
 
-    aws_byte_buf_init(out_buf, allocator, str->len);
+struct aws_byte_buf aws_replace_quote_entities(struct aws_allocator *allocator, struct aws_byte_cursor src) {
+    struct aws_byte_buf out_buf;
+    aws_byte_buf_init(&out_buf, allocator, src.len);
 
-    struct aws_byte_cursor quote_entity = AWS_BYTE_CUR_INIT_FROM_STRING_LITERAL("&quot;");
-    struct aws_byte_cursor quote = AWS_BYTE_CUR_INIT_FROM_STRING_LITERAL("\"");
+    for (size_t i = 0; i < src.len; ++i) {
+        size_t chars_remaining = src.len - i;
 
-    size_t i = 0;
-
-    while (i < str->len) {
-        size_t chars_remaining = str->len - i;
-
-        if (chars_remaining >= quote_entity.len &&
-            !strncmp((const char *)&str->bytes[i], (const char *)quote_entity.ptr, quote_entity.len)) {
+        if (chars_remaining >= s_quote_entity_literal.len &&
+            !strncmp((const char *)&src.ptr[i], (const char *)s_quote_entity_literal.ptr, s_quote_entity_literal.len)) {
             /* Append quote */
-            aws_byte_buf_append(out_buf, &quote);
-            i += quote_entity.len;
+            aws_byte_buf_append(&out_buf, &s_quote_literal);
+            i += s_quote_entity_literal.len - 1;
         } else {
             /* Append character */
-            struct aws_byte_cursor character_cursor = aws_byte_cursor_from_array(&str->bytes[i], 1);
-            aws_byte_buf_append(out_buf, &character_cursor);
-            ++i;
+            struct aws_byte_cursor character_cursor = aws_byte_cursor_from_array(&src.ptr[i], 1);
+            aws_byte_buf_append(&out_buf, &character_cursor);
         }
     }
+
+    return out_buf;
 }
 
 struct aws_string *aws_strip_quotes(struct aws_allocator *allocator, struct aws_byte_cursor in_cur) {
@@ -325,9 +339,9 @@ struct aws_string *aws_strip_quotes(struct aws_allocator *allocator, struct aws_
     return aws_string_new_from_cursor(allocator, &in_cur);
 }
 
-int aws_last_error_or_unknown() {
+int aws_last_error_or_unknown(void) {
     int error = aws_last_error();
-
+    AWS_ASSERT(error != AWS_ERROR_SUCCESS); /* Someone forgot to call aws_raise_error() */
     if (error == AWS_ERROR_SUCCESS) {
         return AWS_ERROR_UNKNOWN;
     }
@@ -339,11 +353,15 @@ void aws_s3_add_user_agent_header(struct aws_allocator *allocator, struct aws_ht
     AWS_PRECONDITION(allocator);
     AWS_PRECONDITION(message);
 
-    const struct aws_byte_cursor space_delimeter = AWS_BYTE_CUR_INIT_FROM_STRING_LITERAL(" ");
+    const struct aws_byte_cursor space_delimiter = AWS_BYTE_CUR_INIT_FROM_STRING_LITERAL(" ");
     const struct aws_byte_cursor forward_slash = AWS_BYTE_CUR_INIT_FROM_STRING_LITERAL("/");
-
-    const size_t user_agent_product_version_length =
-        g_user_agent_header_product_name.len + forward_slash.len + g_s3_client_version.len;
+    struct aws_byte_cursor platform_cursor = aws_s3_get_current_platform_ec2_intance_type(true /* cached_only */);
+    if (!platform_cursor.len) {
+        platform_cursor = g_user_agent_header_unknown;
+    }
+    const size_t user_agent_length = g_user_agent_header_product_name.len + forward_slash.len +
+                                     g_s3_client_version.len + space_delimiter.len + g_user_agent_header_platform.len +
+                                     forward_slash.len + platform_cursor.len;
 
     struct aws_http_headers *headers = aws_http_message_get_headers(message);
     AWS_ASSERT(headers != NULL);
@@ -355,23 +373,21 @@ void aws_s3_add_user_agent_header(struct aws_allocator *allocator, struct aws_ht
     AWS_ZERO_STRUCT(user_agent_buffer);
 
     if (aws_http_headers_get(headers, g_user_agent_header_name, &current_user_agent_header) == AWS_OP_SUCCESS) {
-        /* If the header was found, then create a buffer with the total size we'll need, and append the curent user
+        /* If the header was found, then create a buffer with the total size we'll need, and append the current user
          * agent header with a trailing space. */
         aws_byte_buf_init(
-            &user_agent_buffer,
-            allocator,
-            current_user_agent_header.len + space_delimeter.len + user_agent_product_version_length);
+            &user_agent_buffer, allocator, current_user_agent_header.len + space_delimiter.len + user_agent_length);
 
         aws_byte_buf_append_dynamic(&user_agent_buffer, &current_user_agent_header);
 
-        aws_byte_buf_append_dynamic(&user_agent_buffer, &space_delimeter);
+        aws_byte_buf_append_dynamic(&user_agent_buffer, &space_delimiter);
 
     } else {
         AWS_ASSERT(aws_last_error() == AWS_ERROR_HTTP_HEADER_NOT_FOUND);
 
         /* If the header was not found, then create a buffer with just the size of the user agent string that is about
          * to be appended to the buffer. */
-        aws_byte_buf_init(&user_agent_buffer, allocator, user_agent_product_version_length);
+        aws_byte_buf_init(&user_agent_buffer, allocator, user_agent_length);
     }
 
     /* Append the client's user-agent string. */
@@ -379,6 +395,10 @@ void aws_s3_add_user_agent_header(struct aws_allocator *allocator, struct aws_ht
         aws_byte_buf_append_dynamic(&user_agent_buffer, &g_user_agent_header_product_name);
         aws_byte_buf_append_dynamic(&user_agent_buffer, &forward_slash);
         aws_byte_buf_append_dynamic(&user_agent_buffer, &g_s3_client_version);
+        aws_byte_buf_append_dynamic(&user_agent_buffer, &space_delimiter);
+        aws_byte_buf_append_dynamic(&user_agent_buffer, &g_user_agent_header_platform);
+        aws_byte_buf_append_dynamic(&user_agent_buffer, &forward_slash);
+        aws_byte_buf_append_dynamic(&user_agent_buffer, &platform_cursor);
     }
 
     /* Apply the updated header. */
@@ -477,22 +497,98 @@ int aws_s3_parse_content_length_response_header(
     return result;
 }
 
-uint32_t aws_s3_get_num_parts(size_t part_size, uint64_t object_range_start, uint64_t object_range_end) {
-    uint32_t num_parts = 1;
+int aws_s3_parse_request_range_header(
+    struct aws_http_headers *request_headers,
+    bool *out_has_start_range,
+    bool *out_has_end_range,
+    uint64_t *out_start_range,
+    uint64_t *out_end_range) {
 
-    uint64_t first_part_size = part_size;
-    uint64_t first_part_alignment_offset = object_range_start % part_size;
+    AWS_PRECONDITION(request_headers);
+    AWS_PRECONDITION(out_has_start_range);
+    AWS_PRECONDITION(out_has_end_range);
+    AWS_PRECONDITION(out_start_range);
+    AWS_PRECONDITION(out_end_range);
 
-    /* If the first part size isn't aligned on the assumed part boundary, make it smaller so that it is. */
-    if (first_part_alignment_offset > 0) {
-        first_part_size = part_size - first_part_alignment_offset;
+    bool has_start_range = false;
+    bool has_end_range = false;
+    uint64_t start_range = 0;
+    uint64_t end_range = 0;
+
+    struct aws_byte_cursor range_header_value;
+
+    if (aws_http_headers_get(request_headers, g_range_header_name, &range_header_value)) {
+        return aws_raise_error(AWS_ERROR_S3_INVALID_RANGE_HEADER);
     }
 
+    struct aws_byte_cursor range_header_start = aws_byte_cursor_from_c_str("bytes=");
+
+    /* verify bytes= */
+    if (!aws_byte_cursor_starts_with(&range_header_value, &range_header_start)) {
+        return aws_raise_error(AWS_ERROR_S3_INVALID_RANGE_HEADER);
+    }
+
+    aws_byte_cursor_advance(&range_header_value, range_header_start.len);
+    struct aws_byte_cursor substr = {0};
+    /* parse start range */
+    if (!aws_byte_cursor_next_split(&range_header_value, '-', &substr)) {
+        return aws_raise_error(AWS_ERROR_S3_INVALID_RANGE_HEADER);
+    }
+    if (substr.len > 0) {
+        if (aws_byte_cursor_utf8_parse_u64(substr, &start_range)) {
+            return aws_raise_error(AWS_ERROR_S3_INVALID_RANGE_HEADER);
+        }
+        has_start_range = true;
+    }
+
+    /* parse end range */
+    if (!aws_byte_cursor_next_split(&range_header_value, '-', &substr)) {
+        return aws_raise_error(AWS_ERROR_S3_INVALID_RANGE_HEADER);
+    }
+    if (substr.len > 0) {
+        if (aws_byte_cursor_utf8_parse_u64(substr, &end_range)) {
+            return aws_raise_error(AWS_ERROR_S3_INVALID_RANGE_HEADER);
+        }
+        has_end_range = true;
+    }
+
+    /* verify that there is nothing extra */
+    if (aws_byte_cursor_next_split(&range_header_value, '-', &substr)) {
+        return aws_raise_error(AWS_ERROR_S3_INVALID_RANGE_HEADER);
+    }
+
+    /* verify that start-range <= end-range */
+    if (has_end_range && start_range > end_range) {
+        return aws_raise_error(AWS_ERROR_S3_INVALID_RANGE_HEADER);
+    }
+
+    /* verify that start-range or end-range is present */
+    if (!has_start_range && !has_end_range) {
+        return aws_raise_error(AWS_ERROR_S3_INVALID_RANGE_HEADER);
+    }
+
+    *out_has_start_range = has_start_range;
+    *out_has_end_range = has_end_range;
+    *out_start_range = start_range;
+    *out_end_range = end_range;
+    return AWS_OP_SUCCESS;
+}
+
+uint32_t aws_s3_calculate_auto_ranged_get_num_parts(
+    size_t part_size,
+    uint64_t first_part_size,
+    uint64_t object_range_start,
+    uint64_t object_range_end) {
+    uint32_t num_parts = 1;
+
+    if (first_part_size == 0) {
+        return num_parts;
+    }
     uint64_t second_part_start = object_range_start + first_part_size;
 
     /* If the range has room for a second part, calculate the additional amount of parts. */
     if (second_part_start <= object_range_end) {
-        uint64_t aligned_range_remainder = object_range_end + 1 - second_part_start;
+        uint64_t aligned_range_remainder = object_range_end + 1 - second_part_start; /* range-end is inclusive */
         num_parts += (uint32_t)(aligned_range_remainder / (uint64_t)part_size);
 
         if ((aligned_range_remainder % part_size) > 0) {
@@ -503,10 +599,11 @@ uint32_t aws_s3_get_num_parts(size_t part_size, uint64_t object_range_start, uin
     return num_parts;
 }
 
-void aws_s3_get_part_range(
+void aws_s3_calculate_auto_ranged_get_part_range(
     uint64_t object_range_start,
     uint64_t object_range_end,
     size_t part_size,
+    uint64_t first_part_size,
     uint32_t part_number,
     uint64_t *out_part_range_start,
     uint64_t *out_part_range_end) {
@@ -518,16 +615,11 @@ void aws_s3_get_part_range(
     const uint32_t part_index = part_number - 1;
 
     /* Part index is assumed to be in a valid range. */
-    AWS_ASSERT(part_index < aws_s3_get_num_parts(part_size, object_range_start, object_range_end));
+    AWS_ASSERT(
+        part_index <
+        aws_s3_calculate_auto_ranged_get_num_parts(part_size, first_part_size, object_range_start, object_range_end));
 
     uint64_t part_size_uint64 = (uint64_t)part_size;
-    uint64_t first_part_size = part_size_uint64;
-    uint64_t first_part_alignment_offset = object_range_start % part_size_uint64;
-
-    /* Shrink the part to a smaller size if need be to align to the assumed part boundary. */
-    if (first_part_alignment_offset > 0) {
-        first_part_size = part_size_uint64 - first_part_alignment_offset;
-    }
 
     if (part_index == 0) {
         /* If this is the first part, then use the first part size. */
@@ -537,7 +629,7 @@ void aws_s3_get_part_range(
         /* Else, find the next part by adding the object range + total number of whole parts before this one + initial
          * part size*/
         *out_part_range_start = object_range_start + ((uint64_t)(part_index - 1)) * part_size_uint64 + first_part_size;
-        *out_part_range_end = *out_part_range_start + part_size_uint64 - 1;
+        *out_part_range_end = *out_part_range_start + part_size_uint64 - 1; /* range-end is inclusive */
     }
 
     /* Cap the part's range end using the object's range end. */
@@ -546,13 +638,101 @@ void aws_s3_get_part_range(
     }
 }
 
-int aws_s3_crt_error_code_from_server_error_code_string(const struct aws_string *error_code_string) {
-    if (aws_string_eq_byte_cursor(error_code_string, &g_s3_slow_down_error_code)) {
+int aws_s3_calculate_optimal_mpu_part_size_and_num_parts(
+    uint64_t content_length,
+    size_t client_part_size,
+    uint64_t client_max_part_size,
+    size_t *out_part_size,
+    uint32_t *out_num_parts) {
+
+    AWS_FATAL_ASSERT(out_part_size);
+    AWS_FATAL_ASSERT(out_num_parts);
+
+    if (content_length == 0) {
+        *out_part_size = 0;
+        *out_num_parts = 0;
+        return AWS_OP_SUCCESS;
+    }
+
+    uint64_t part_size_uint64 = content_length / (uint64_t)g_s3_max_num_upload_parts;
+
+    if ((content_length % g_s3_max_num_upload_parts) > 0) {
+        ++part_size_uint64;
+    }
+
+    if (part_size_uint64 > SIZE_MAX) {
+        AWS_LOGF_ERROR(
+            AWS_LS_S3_META_REQUEST,
+            "Could not create meta request; required part size of %" PRIu64 " bytes is too large for platform.",
+            part_size_uint64);
+
+        return aws_raise_error(AWS_ERROR_INVALID_ARGUMENT);
+    }
+
+    size_t part_size = (size_t)part_size_uint64;
+
+    if (part_size > client_max_part_size) {
+        AWS_LOGF_ERROR(
+            AWS_LS_S3_META_REQUEST,
+            "Could not create meta request; required part size for request is %" PRIu64
+            ", but current maximum part size is %" PRIu64,
+            (uint64_t)part_size,
+            (uint64_t)client_max_part_size);
+        return aws_raise_error(AWS_ERROR_INVALID_ARGUMENT);
+    }
+
+    if (part_size < client_part_size) {
+        part_size = client_part_size;
+    }
+
+    if (content_length < part_size) {
+        /* When the content length is smaller than part size and larger than the threshold, we set one part
+         * with the whole length */
+        part_size = (size_t)content_length;
+    }
+
+    uint32_t num_parts = (uint32_t)(content_length / part_size);
+    if ((content_length % part_size) > 0) {
+        ++num_parts;
+    }
+    AWS_ASSERT(num_parts <= g_s3_max_num_upload_parts);
+
+    *out_part_size = part_size;
+    *out_num_parts = num_parts;
+    return AWS_OP_SUCCESS;
+}
+
+int aws_s3_crt_error_code_from_server_error_code_string(struct aws_byte_cursor error_code_string) {
+    if (aws_byte_cursor_eq_c_str_ignore_case(&error_code_string, "SlowDown")) {
         return AWS_ERROR_S3_SLOW_DOWN;
     }
-    if (aws_string_eq_byte_cursor(error_code_string, &g_s3_internal_error_code) ||
-        aws_string_eq_byte_cursor(error_code_string, &g_s3_internal_errors_code)) {
+    if (aws_byte_cursor_eq_c_str_ignore_case(&error_code_string, "InternalError") ||
+        aws_byte_cursor_eq_c_str_ignore_case(&error_code_string, "InternalErrors")) {
         return AWS_ERROR_S3_INTERNAL_ERROR;
     }
+    if (aws_byte_cursor_eq_c_str_ignore_case(&error_code_string, "RequestTimeTooSkewed")) {
+        return AWS_ERROR_S3_REQUEST_TIME_TOO_SKEWED;
+    }
     return AWS_ERROR_UNKNOWN;
+}
+
+void aws_s3_request_finish_up_metrics_synced(struct aws_s3_request *request, struct aws_s3_meta_request *meta_request) {
+    AWS_PRECONDITION(meta_request);
+    AWS_PRECONDITION(request);
+    ASSERT_SYNCED_DATA_LOCK_HELD(meta_request);
+
+    if (request->send_data.metrics != NULL) {
+        /* Request is done, complete the metrics for the request now. */
+        struct aws_s3_request_metrics *metrics = request->send_data.metrics;
+        aws_high_res_clock_get_ticks((uint64_t *)&metrics->time_metrics.end_timestamp_ns);
+        metrics->time_metrics.total_duration_ns =
+            metrics->time_metrics.end_timestamp_ns - metrics->time_metrics.start_timestamp_ns;
+
+        if (meta_request->telemetry_callback != NULL) {
+            struct aws_s3_meta_request_event event = {.type = AWS_S3_META_REQUEST_EVENT_TELEMETRY};
+            event.u.telemetry.metrics = aws_s3_request_metrics_acquire(metrics);
+            aws_s3_meta_request_add_event_for_delivery_synced(meta_request, &event);
+        }
+        request->send_data.metrics = aws_s3_request_metrics_release(metrics);
+    }
 }

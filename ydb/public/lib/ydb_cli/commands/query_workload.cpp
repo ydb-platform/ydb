@@ -1,10 +1,20 @@
 #include "query_workload.h"
 
 #include <ydb/public/lib/ydb_cli/commands/ydb_common.h>
+#include <ydb/public/lib/ydb_cli/common/format.h>
+#include <ydb/public/lib/ydb_cli/common/interactive.h>
+#include <ydb/public/lib/ydb_cli/common/plan2svg.h>
+#include <ydb/public/lib/ydb_cli/common/progress_indication.h>
+
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
+
 #include <library/cpp/histogram/hdr/histogram.h>
-#include <util/system/thread.h>
+
 #include <util/system/mutex.h>
+#include <util/system/thread.h>
 #include <util/thread/pool.h>
+
 #include <mutex>
 
 namespace NYdb {
@@ -77,14 +87,46 @@ TCommandQueryWorkload::TCommandQueryWorkload()
 }
 
 TCommandQueryWorkloadRun::TCommandQueryWorkloadRun()
-    : TYdbOperationCommand("run", {}, "Run YDB query workload")
+    : TYdbSimpleCommand("run", {}, "Run YDB query workload")
 {}
 
 void TCommandQueryWorkloadRun::Config(TConfig& config) {
-    TYdbOperationCommand::Config(config);
-    config.Opts->AddLongOption('q', "query", "Query to execute") .RequiredArgument("[String]").StoreResult(&Query);
+    TYdbSimpleCommand::Config(config);
+    config.Opts->AddLongOption('q', "query", "Query to execute").RequiredArgument("[String]").StoreResult(&Query);
+    config.Opts->AddLongOption('f', "file", "Path to a file containing the query text to execute. "
+        "The path '-' means reading the query text from stdin.").RequiredArgument("PATH").StoreResult(&QueryFile);
+    config.Opts->AddLongOption("plan", "Query plans report file name")
+        .DefaultValue("")
+        .StoreResult(&PlanFileName);
     config.Opts->AddLongOption('t', "threads", "Number of parallel threads; 1 if not specified").DefaultValue(1).StoreResult(&Threads);
     config.Opts->AddLongOption('d', "delay", "Interval delay in seconds; 1 if not specified").DefaultValue(1).StoreResult(&IntervalSeconds);
+}
+
+void TCommandQueryWorkloadRun::Parse(TConfig& config) {
+    TClientCommand::Parse(config);
+    if (Query && QueryFile) {
+        throw TMisuseException() << "Both mutually exclusive options \"Text of query\" (\"--query\", \"-q\") "
+            << "and \"Path to file with query text\" (\"--file\", \"-f\") were provided.";
+    }
+    if (QueryFile) {
+        if (QueryFile == "-") {
+            if (IsStdinInteractive()) {
+                throw TMisuseException() << "Path to file with query text is \"-\", meaning that query text should be read "
+                    "from stdin. This is only available in non-interactive mode";
+            }
+            Query = Cin.ReadAll();
+        } else {
+            Query = ReadFromFile(QueryFile, "query");
+        }
+    }
+    if (Query.empty()) {
+        Cerr << "Neither text of query (\"--query\", \"-q\") "
+            << "nor path to file with query text (\"--file\", \"-f\") were provided." << Endl;
+        config.PrintHelpAndExit();
+    }
+    if (Threads > 1 && PlanFileName) {
+        throw TMisuseException() << "The query plan report (\"--plan\") is supported with only one thread (\"--t\", \"--threads\")." << Endl;
+    }
 }
 
 int TCommandQueryWorkloadRun::Run(TConfig& config) {
@@ -102,36 +144,95 @@ int TCommandQueryWorkloadRun::Run(TConfig& config) {
         pool.SafeAddFunc([&] {
             try {
                 TDriver driver = CreateDriver(config);
-                NScripting::TScriptingClient client(driver);
+                NQuery::TQueryClient client(driver);
 
-                NScripting::TExecuteYqlRequestSettings settings;
-                settings.CollectQueryStats(NTable::ECollectQueryStatsMode::Basic);
+                NQuery::TExecuteQuerySettings settings;
+
+                auto statsMode = NQuery::EStatsMode::Basic;
+                if (PlanFileName) {
+                    statsMode = NQuery::EStatsMode::Full;
+                }
+                settings.StatsMode(statsMode);
+
+                std::optional<TProgressIndication> progressIndication;
+
+                if (Threads == 1) {
+                    if (statsMode == NQuery::EStatsMode::Basic) {
+                        settings.StatsCollectPeriod(std::chrono::milliseconds(500));
+                    } else {
+                        settings.StatsCollectPeriod(std::chrono::milliseconds(3000));
+                    }
+                    progressIndication = TProgressIndication();
+                }
+
+                TString currentPlanFileNameStats;
+                TString currentPlanWithStatsFileName;
+                TString currentPlanWithStatsFileNameJson;
+                if (PlanFileName) {
+                    currentPlanFileNameStats = TStringBuilder() << PlanFileName << ".stats";
+                    currentPlanWithStatsFileName = TStringBuilder() << PlanFileName << ".svg";
+                    currentPlanWithStatsFileNameJson = TStringBuilder() << PlanFileName << ".json";
+                }
 
                 while (!IsInterrupted() && !ThreadTerminated.load()) {
-                    auto asyncResult = client.StreamExecuteYqlScript(
+                    auto asyncResult = client.StreamExecuteQuery(
                         Query,
+                        NQuery::TTxControl::NoTx(),
                         FillSettings(settings)
                     );
 
                     auto result = asyncResult.GetValueSync();
-                    ThrowOnError(result);
+                    NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
 
                     TDuration local_duration;
 
                     while (!IsInterrupted())
                     {
                         auto streamPart = result.ReadNext().GetValueSync();
-                        if (!streamPart.IsSuccess()) {
-                            if (streamPart.EOS()) {
-                                break;
-                            }
-
-                            ThrowOnError(streamPart);
+                        if (ThrowOnErrorAndCheckEOS(streamPart)) {
+                            break;
                         }
 
-                        if (streamPart.HasQueryStats()) {
-                            const auto& queryStats = streamPart.GetQueryStats();
+                        if (streamPart.GetStats()) {
+                            const auto& queryStats = streamPart.GetStats().value();
                             local_duration += queryStats.GetTotalDuration();
+
+                            if (PlanFileName) {
+                                TFileOutput out(currentPlanFileNameStats);
+                                out << queryStats.ToString();
+                                {
+                                    auto plan = queryStats.GetPlan();
+                                    if (plan) {
+                                        {
+                                            TPlanVisualizer pv;
+                                            TFileOutput out(currentPlanWithStatsFileName);
+                                            try {
+                                                pv.LoadPlans(*queryStats.GetPlan());
+                                                out << pv.PrintSvg();
+                                            } catch (std::exception& e) {
+                                                out << "<svg width='1024' height='256' xmlns='http://www.w3.org/2000/svg'><text>" << e.what() << "<text></svg>";
+                                            }
+                                        }
+                                        {
+                                            TFileOutput out(currentPlanWithStatsFileNameJson);
+                                            TQueryPlanPrinter queryPlanPrinter(EDataFormat::JsonBase64, true, out, 120);
+                                            queryPlanPrinter.Print(*queryStats.GetPlan());
+                                        }
+                                    }
+                                }
+                            }
+
+                            if (progressIndication) {
+                                const auto& protoStats = TProtoAccessor::GetProto(queryStats);
+                                for (const auto& queryPhase : protoStats.query_phases()) {
+                                    for (const auto& tableAccessStats : queryPhase.table_access()) {
+                                        progressIndication->UpdateProgress({tableAccessStats.reads().rows(), tableAccessStats.reads().bytes()});
+                                    }
+                                }
+                                progressIndication->SetDurationUs(protoStats.total_duration_us());
+
+                                progressIndication->Render();
+                            }
                         }
                     }
 

@@ -11,7 +11,7 @@ PEERDIR(
     ydb/core/fq/libs/checkpoint_storage/events
     ydb/core/testlib/default
     ydb/library/security
-    ydb/public/sdk/cpp/client/ydb_table
+    ydb/public/sdk/cpp/src/client/table
 )
 
 INCLUDE(${ARCADIA_ROOT}/ydb/public/tools/ydb_recipe/recipe.inc)

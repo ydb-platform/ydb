@@ -34,7 +34,7 @@ public:
     TRequestId GetRequestId() const override;
     NYT::NBus::TBusNetworkStatistics GetBusNetworkStatistics() const override;
     const NYTree::IAttributeDictionary& GetEndpointAttributes() const override;
-    const TString& GetEndpointDescription() const override;
+    const std::string& GetEndpointDescription() const override;
 
     i64 GetTotalSize() const override;
 
@@ -45,6 +45,7 @@ public:
     std::optional<TInstant> GetFinishInstant() const override;
     std::optional<TDuration> GetWaitDuration() const override;
     std::optional<TDuration> GetExecutionDuration() const override;
+    void RecordThrottling(TDuration throttleDuration) override;
 
     NTracing::TTraceContextPtr GetTraceContext() const override;
     std::optional<TDuration> GetTraceContextTime() const override;
@@ -52,8 +53,8 @@ public:
     bool IsRetry() const override;
     TMutationId GetMutationId() const override;
 
-    std::string GetService() const override;
-    std::string GetMethod() const override;
+    const std::string& GetService() const override;
+    const std::string& GetMethod() const override;
     TRealmId GetRealmId() const override;
     const TAuthenticationIdentity& GetAuthenticationIdentity() const override;
 
@@ -68,7 +69,6 @@ public:
 
     //! \note Thread affinity: any
     TFuture<TSharedRefArray> GetAsyncResponseMessage() const override;
-
     const TSharedRefArray& GetResponseMessage() const override;
 
     using TCanceledCallback = TCallback<void(const TError&)>;
@@ -99,9 +99,9 @@ public:
     NProto::TRequestHeader& RequestHeader() override;
 
     bool IsLoggingEnabled() const override;
-    void SetRawRequestInfo(TString info, bool incremental) override;
+    void SetRawRequestInfo(std::string info, bool incremental) override;
     void SuppressMissingRequestInfoCheck() override;
-    void SetRawResponseInfo(TString info, bool incremental) override;
+    void SetRawResponseInfo(std::string info, bool incremental) override;
 
     const IMemoryUsageTrackerPtr& GetMemoryUsageTracker() const override;
 
@@ -125,11 +125,15 @@ protected:
 
     const NLogging::TLogger Logger;
     const NLogging::ELogLevel LogLevel_;
+    const NLogging::ELogLevel ErrorLogLevel_;
 
     // Set in #Initialize.
     bool LoggingEnabled_;
     TRequestId RequestId_;
     TRealmId RealmId_;
+    TMutationId MutationId_;
+    std::string ServiceName_;
+    std::string MethodName_;
 
     TAuthenticationIdentity AuthenticationIdentity_;
 
@@ -145,8 +149,8 @@ protected:
     std::vector<TSharedRef> ResponseAttachments_;
 
     bool RequestInfoSet_ = false;
-    TCompactVector<TString, 4> RequestInfos_;
-    TCompactVector<TString, 4> ResponseInfos_;
+    TCompactVector<std::string, 4> RequestInfos_;
+    TCompactVector<std::string, 4> ResponseInfos_;
 
     NCompression::ECodec ResponseCodec_ = NCompression::ECodec::None;
     // COMPAT(danilalexeev)
@@ -160,13 +164,15 @@ protected:
         TMemoryUsageTrackerGuard memoryGuard,
         IMemoryUsageTrackerPtr memoryUsageTracker,
         NLogging::TLogger logger,
-        NLogging::ELogLevel logLevel);
+        NLogging::ELogLevel logLevel,
+        std::optional<NLogging::ELogLevel> errorLogLevel = {});
     TServiceContextBase(
         TSharedRefArray requestMessage,
         TMemoryUsageTrackerGuard memoryGuard,
         IMemoryUsageTrackerPtr memoryUsageTracker,
         NLogging::TLogger logger,
-        NLogging::ELogLevel logLevel);
+        NLogging::ELogLevel logLevel,
+        std::optional<NLogging::ELogLevel> errorLogLevel = {});
 
     virtual void DoReply() = 0;
     virtual void DoFlush();
@@ -199,7 +205,7 @@ public:
     NRpc::TRequestId GetRequestId() const override;
     NYT::NBus::TBusNetworkStatistics GetBusNetworkStatistics() const override;
     const NYTree::IAttributeDictionary& GetEndpointAttributes() const override;
-    const TString& GetEndpointDescription() const override;
+    const std::string& GetEndpointDescription() const override;
 
     std::optional<TInstant> GetStartTime() const override;
     std::optional<TDuration> GetTimeout() const override;
@@ -208,6 +214,7 @@ public:
     std::optional<TInstant> GetFinishInstant() const override;
     std::optional<TDuration> GetWaitDuration() const override;
     std::optional<TDuration> GetExecutionDuration() const override;
+    void RecordThrottling(TDuration throttleDuration) override;
 
     NTracing::TTraceContextPtr GetTraceContext() const override;
     std::optional<TDuration> GetTraceContextTime() const override;
@@ -215,8 +222,8 @@ public:
     bool IsRetry() const override;
     TMutationId GetMutationId() const override;
 
-    std::string GetService() const override;
-    std::string GetMethod() const override;
+    const std::string& GetService() const override;
+    const std::string& GetMethod() const override;
     TRealmId GetRealmId() const override;
     const TAuthenticationIdentity& GetAuthenticationIdentity() const override;
 
@@ -260,9 +267,9 @@ public:
     NProto::TRequestHeader& RequestHeader() override;
 
     bool IsLoggingEnabled() const override;
-    void SetRawRequestInfo(TString info, bool incremental) override;
+    void SetRawRequestInfo(std::string info, bool incremental) override;
     void SuppressMissingRequestInfoCheck() override;
-    void SetRawResponseInfo(TString info, bool incremental) override;
+    void SetRawResponseInfo(std::string info, bool incremental) override;
 
     const IMemoryUsageTrackerPtr& GetMemoryUsageTracker() const override;
 
@@ -312,7 +319,7 @@ protected:
     TServerConfigPtr AppliedConfig_;
 
     //! Service name to service.
-    using TServiceMap = THashMap<TString, IServicePtr>;
+    using TServiceMap = THashMap<std::string, IServicePtr>;
     THashMap<TGuid, TServiceMap> RealmIdToServiceMap_;
 
     explicit TServerBase(NLogging::TLogger logger);

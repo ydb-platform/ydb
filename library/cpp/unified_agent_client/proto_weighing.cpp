@@ -84,7 +84,7 @@ namespace NUnifiedAgent::NPW {
     }
 
     void TStringField::SetValue(const TString& value) {
-        Link.SetValueSize(value.Empty(), value.Size() + SizeOf(static_cast<ui32>(value.Size())));
+        Link.SetValueSize(value.empty(), value.size() + SizeOf(static_cast<ui32>(value.size())));
     }
 
     template class TNumberField<ui64>;

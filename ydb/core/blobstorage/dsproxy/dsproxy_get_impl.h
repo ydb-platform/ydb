@@ -3,6 +3,7 @@
 #include "dsproxy.h"
 #include "dsproxy_blackboard.h"
 #include "dsproxy_mon.h"
+#include "request_history.h"
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
 #include <util/generic/set.h>
 
@@ -51,6 +52,13 @@ class TGetImpl {
 
     TAccelerationParams AccelerationParams;
 
+    THistory History;
+
+    bool AtLeastOneResponseWasNotOk = false;
+
+    friend class TBlobStorageGroupGetRequest;
+    friend class THistory;
+
 public:
     TGetImpl(const TIntrusivePtr<TBlobStorageGroupInfo> &info, const TIntrusivePtr<TGroupQueues> &groupQueues,
             TEvBlobStorage::TEvGet *ev, TNodeLayoutInfoPtr&& nodeLayout,
@@ -72,6 +80,7 @@ public:
         , Decommission(ev->Decommission)
         , ReaderTabletData(ev->ReaderTabletData)
         , AccelerationParams(accelerationParams)
+        , History(Info)
     {
         Y_ABORT_UNLESS(QuerySize > 0);
     }
@@ -162,7 +171,7 @@ public:
         Y_ABORT_UNLESS(record.HasStatus());
         const NKikimrProto::EReplyStatus status = record.GetStatus();
         Y_ABORT_UNLESS(status != NKikimrProto::RACE && status != NKikimrProto::BLOCKED && status != NKikimrProto::DEADLINE);
-        R_LOG_DEBUG_SX(logCtx, "BPG57", "handle result# " << ev.ToString());
+        DSP_LOG_DEBUG_SX(logCtx, "BPG57", "handle result# " << ev.ToString());
 
         Y_ABORT_UNLESS(record.HasVDiskID());
         TVDiskID vdisk = VDiskIDFromVDiskID(record.GetVDiskID());
@@ -170,7 +179,7 @@ public:
         ui32 orderNumber = Info->GetOrderNumber(shortId);
         {
             NActors::NLog::EPriority priority = PriorityForStatusInbound(record.GetStatus());
-            A_LOG_LOG_SX(logCtx, priority != NActors::NLog::PRI_DEBUG, priority, "BPG12", "Handle TEvVGetResult"
+            DSP_LOG_LOG_SX(logCtx, priority, "BPG12", "Handle TEvVGetResult"
                 << " status# " << NKikimrProto::EReplyStatus_Name(record.GetStatus()).data()
                 << " From# " << vdisk.ToString()
                 << " orderNumber# " << orderNumber
@@ -198,7 +207,7 @@ public:
             if (resultShift == 0 && resultBuffer.size() == Info->Type.PartSize(blobId)) {
                 bool isCrcOk = CheckCrcAtTheEnd((TErasureType::ECrcMode)blobId.CrcMode(), resultBuffer);
                 if (!isCrcOk) {
-                    R_LOG_ERROR_SX(logCtx, "BPG66", "Error in CheckCrcAtTheEnd on TEvVGetResult, blobId# " << blobId
+                    DSP_LOG_ERROR_SX(logCtx, "BPG66", "Error in CheckCrcAtTheEnd on TEvVGetResult, blobId# " << blobId
                             << " resultShift# " << resultShift << " resultBuffer.Size()# " << resultBuffer.size());
                     NKikimrBlobStorage::TQueryResult *mutableResult = ev.Record.MutableResult(i);
                     mutableResult->SetStatus(NKikimrProto::ERROR);
@@ -213,7 +222,7 @@ public:
 
             if (replyStatus == NKikimrProto::OK) {
                 // TODO(cthulhu): Verify shift and response size, and cookie
-                R_LOG_DEBUG_SX(logCtx, "BPG58", "Got# OK orderNumber# " << orderNumber << " vDiskId# " << vdisk.ToString());
+                DSP_LOG_DEBUG_SX(logCtx, "BPG58", "Got# OK orderNumber# " << orderNumber << " vDiskId# " << vdisk.ToString());
                 resultBuffer.Compact();
                 if (resultBuffer.GetOccupiedMemorySize() > resultBuffer.size() * 2) {
                     auto temp = TRcBuf::Uninitialized(resultBuffer.size());
@@ -222,17 +231,18 @@ public:
                 }
                 Blackboard.AddResponseData(blobId, orderNumber, resultShift, std::move(resultBuffer));
             } else if (replyStatus == NKikimrProto::NODATA) {
-                R_LOG_DEBUG_SX(logCtx, "BPG59", "Got# NODATA orderNumber# " << orderNumber
+                DSP_LOG_DEBUG_SX(logCtx, "BPG59", "Got# NODATA orderNumber# " << orderNumber
                         << " vDiskId# " << vdisk.ToString());
                 Blackboard.AddNoDataResponse(blobId, orderNumber);
             } else if (replyStatus == NKikimrProto::ERROR
                     || replyStatus == NKikimrProto::VDISK_ERROR_STATE
                     || replyStatus == NKikimrProto::CORRUPTED) {
-                R_LOG_DEBUG_SX(logCtx, "BPG60", "Got# " << NKikimrProto::EReplyStatus_Name(replyStatus).data()
+                DSP_LOG_DEBUG_SX(logCtx, "BPG60", "Got# " << NKikimrProto::EReplyStatus_Name(replyStatus).data()
                     << " orderNumber# " << orderNumber << " vDiskId# " << vdisk.ToString());
-                Blackboard.AddErrorResponse(blobId, orderNumber);
+                Blackboard.AddErrorResponse(blobId, orderNumber, record.GetErrorReason());
+                AtLeastOneResponseWasNotOk = true;
             } else if (replyStatus == NKikimrProto::NOT_YET) {
-                R_LOG_DEBUG_SX(logCtx, "BPG67", "Got# NOT_YET orderNumber# " << orderNumber
+                DSP_LOG_DEBUG_SX(logCtx, "BPG67", "Got# NOT_YET orderNumber# " << orderNumber
                         << " vDiskId# " << vdisk.ToString());
                 Blackboard.AddNotYetResponse(blobId, orderNumber);
             } else {
@@ -243,6 +253,7 @@ public:
         ++ResponseIndex;
 
         Step(logCtx, outVGets, outVPuts, outGetResult);
+        History.AddVGetResult(orderNumber, status, record.GetErrorReason());
     }
 
     void OnVPutResult(TLogContext &logCtx, TEvBlobStorage::TEvVPutResult &ev,
@@ -283,6 +294,14 @@ public:
     ui64 GetTimeToAcceleratePutNs(TLogContext &logCtx);
 
     TString DumpFullState() const;
+
+    TString PrintHistory() const {
+        return History.Print((QuerySize == 0) ? nullptr : &Queries[0].Id);
+    }
+
+    bool WasNotOkResponses() {
+        return AtLeastOneResponseWasNotOk;
+    }
 
 protected:
     EStrategyOutcome RunBoldStrategy(TLogContext &logCtx);

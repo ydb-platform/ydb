@@ -1,8 +1,8 @@
 #pragma once
 #include "proxy.h"
 
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
-#include <ydb/library/yql/public/issue/yql_issue_manager.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue_manager.h>
 
 namespace NKikimr {
 namespace NTxProxy {
@@ -20,7 +20,7 @@ namespace NTxProxy {
         TSerializedCellVec ToValues;
         THolder<TKeyDesc> KeyDescription;
         NSchemeCache::TDomainInfo::TPtr DomainInfo;
-        bool IsColumnTable = false;
+        NSchemeCache::TSchemeCacheNavigate::EKind Kind;
     };
 
     using TResolveTableResponses = TVector<TResolveTableResponse>;

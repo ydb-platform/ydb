@@ -9,6 +9,8 @@
 #include <aws/common/platform.h>
 #include <stdio.h>
 
+AWS_PUSH_SANE_WARNING_LEVEL
+
 #ifdef AWS_OS_WINDOWS
 #    define AWS_PATH_DELIM '\\'
 #    define AWS_PATH_DELIM_STR "\\"
@@ -163,6 +165,13 @@ AWS_COMMON_API
 char aws_get_platform_directory_separator(void);
 
 /**
+ * Normalizes the path by replacing any directory separator with the local platform's directory separator.
+ * @param path path to normalize. Must be writeable.
+ */
+AWS_COMMON_API
+void aws_normalize_directory_separator(struct aws_byte_buf *path);
+
+/**
  * Returns the current user's home directory.
  */
 AWS_COMMON_API
@@ -182,6 +191,8 @@ bool aws_path_exists(const struct aws_string *path);
  *   fseeko() on linux
  *
  * whence can either be SEEK_SET or SEEK_END
+ *
+ * Returns AWS_OP_SUCCESS, or AWS_OP_ERR (after an error has been raised).
  */
 AWS_COMMON_API
 int aws_fseek(FILE *file, int64_t offset, int whence);
@@ -197,5 +208,6 @@ AWS_COMMON_API
 int aws_file_get_length(FILE *file, int64_t *length);
 
 AWS_EXTERN_C_END
+AWS_POP_SANE_WARNING_LEVEL
 
 #endif /* AWS_COMMON_FILE_H */

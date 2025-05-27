@@ -7,7 +7,7 @@ import enum
 from collections import deque
 from dataclasses import dataclass, field
 import datetime
-from typing import Union, Any, List, Dict, Deque, Optional
+from typing import Union, Any, List, Dict, Deque, Optional, Tuple
 
 from ydb._grpc.grpcwrapper.ydb_topic import OffsetsRange, Codec
 from ydb._topic_reader import topic_reader_asyncio
@@ -40,6 +40,7 @@ class PublicMessage(ICommittable, ISessionAlive):
     written_at: datetime.datetime
     producer_id: str
     data: Union[bytes, Any]  # set as original decompressed bytes or deserialized object if deserializer set in reader
+    metadata_items: Dict[str, bytes]
     _partition_session: PartitionSession
     _commit_start_offset: int
     _commit_end_offset: int
@@ -54,6 +55,10 @@ class PublicMessage(ICommittable, ISessionAlive):
     @property
     def alive(self) -> bool:
         return not self._partition_session.closed
+
+    @property
+    def partition_id(self) -> int:
+        return self._partition_session.partition_id
 
 
 @dataclass
@@ -107,6 +112,9 @@ class PartitionSession:
             waiter = self._ack_waiters.popleft()
             waiter._finish_ok()
 
+    def _update_last_commited_offset_if_needed(self, offset: int):
+        self.committed_offset = max(self.committed_offset, offset)
+
     def close(self):
         if self.closed:
             return
@@ -120,6 +128,16 @@ class PartitionSession:
     def closed(self):
         return self.state == PartitionSession.State.Stopped
 
+    def end(self):
+        if self.closed:
+            return
+
+        self.state = PartitionSession.State.Ended
+
+    @property
+    def ended(self):
+        return self.state == PartitionSession.State.Ended
+
     def _ensure_not_closed(self):
         if self.state == PartitionSession.State.Stopped:
             raise topic_reader_asyncio.PublicTopicReaderPartitionExpiredError()
@@ -128,6 +146,7 @@ class PartitionSession:
         Active = 1
         GracefulShutdown = 2
         Stopped = 3
+        Ended = 4
 
     @dataclass(order=True)
     class CommitAckWaiter:
@@ -171,3 +190,37 @@ class PublicBatch(ICommittable, ISessionAlive):
 
     def pop_message(self) -> PublicMessage:
         return self.messages.pop(0)
+
+    def _extend(self, batch: PublicBatch) -> None:
+        self.messages.extend(batch.messages)
+        self._bytes_size += batch._bytes_size
+
+    def _pop(self) -> Tuple[List[PublicMessage], bool]:
+        msgs_left = True if len(self.messages) > 1 else False
+        return self.messages.pop(0), msgs_left
+
+    def _pop_batch(self, message_count: int) -> PublicBatch:
+        initial_length = len(self.messages)
+
+        if message_count >= initial_length:
+            raise ValueError("Pop batch with size >= actual size is not supported.")
+
+        one_message_size = self._bytes_size // initial_length
+
+        new_batch = PublicBatch(
+            messages=self.messages[:message_count],
+            _partition_session=self._partition_session,
+            _bytes_size=one_message_size * message_count,
+            _codec=self._codec,
+        )
+
+        self.messages = self.messages[message_count:]
+        self._bytes_size = self._bytes_size - new_batch._bytes_size
+
+        return new_batch
+
+    def _update_partition_offsets(self, tx, exc=None):
+        if exc is not None:
+            return
+        offsets = self._commit_get_offsets_range()
+        self._partition_session._update_last_commited_offset_if_needed(offsets.end)

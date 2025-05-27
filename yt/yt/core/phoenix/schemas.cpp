@@ -1,6 +1,6 @@
 #include "schemas.h"
 
-namespace NYT::NPhoenix2 {
+namespace NYT::NPhoenix {
 
 using namespace NYTree;
 
@@ -35,5 +35,5 @@ void TUniverseSchema::Register(TRegistrar registrar)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NPhoenix2
+} // namespace NYT::NPhoenix
 

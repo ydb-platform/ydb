@@ -1,5 +1,5 @@
 #include <library/cpp/testing/unittest/registar.h>
-#include <ydb/core/util/testactorsys.h>
+#include <ydb/core/util/actorsys_test/testactorsys.h>
 #include <ydb/core/mind/bscontroller/self_heal.h>
 #include <ydb/core/base/blobstorage_common.h>
 #include <ydb/core/mind/bscontroller/impl.h>
@@ -33,7 +33,7 @@ public:
 
     void Handle(TEvBlobStorage::TEvVStatus::TPtr ev) {
         Send(ev->Sender, new TEvBlobStorage::TEvVStatusResult(NKikimrProto::OK,
-            VDiskIDFromVDiskID(ev->Get()->Record.GetVDiskID()), true, true, 1));
+            VDiskIDFromVDiskID(ev->Get()->Record.GetVDiskID()), true, true, false, 1));
     }
 
     STRICT_STFUNC(StateFunc,
@@ -65,11 +65,11 @@ TEvControllerUpdateSelfHealInfo::TGroupContent Convert(const TIntrusivePtr<TBlob
     for (ui32 i = 0; i < info->GetTotalVDisksNum(); ++i) {
         auto& x = res.VDisks[info->GetVDiskId(i)];
         x.Location = {1, 1000 + i, 1000};
-        x.Faulty = x.Bad = faultyIndexes.count(i);
+        x.RequiresReassignment = x.UnavailabilityRisk = faultyIndexes.count(i);
         x.Decommitted = false;
         x.IsSelfHealReasonDecommit = false;
         x.OnlyPhantomsRemain = false;
-        x.IsReady = !x.Faulty;
+        x.IsReady = !x.UnavailabilityRisk;
         x.ReadySince = TMonotonic::Zero();
         x.VDiskStatus = i < status.size() ? status[i] : E::READY;
     }

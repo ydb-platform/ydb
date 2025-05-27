@@ -1,5 +1,7 @@
 #pragma once
 
+#include "fwd.h"
+
 #include <util/datetime/base.h>
 #include <util/generic/maybe.h>
 
@@ -10,7 +12,7 @@ namespace Ydb {
     class Value;
 }
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 
 class TResultSetParser;
 
@@ -224,7 +226,7 @@ private:
 struct TDecimalValue {
     TString ToString() const;
     TDecimalValue(const Ydb::Value& decimalValueProto, const TDecimalType& decimalType);
-    TDecimalValue(const TString& decimalString, ui8 precision = 22, ui8 scale = 9);
+    TDecimalValue(const TString& decimalString, ui8 precision, ui8 scale);
 
     TDecimalType DecimalType_;
     ui64 Low_;

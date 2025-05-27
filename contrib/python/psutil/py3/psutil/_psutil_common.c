@@ -69,15 +69,6 @@ PyErr_SetExcFromWindowsErrWithFilenameObject(PyObject *type,
     return PyErr_SetFromWindowsErrWithFilename(ierr, NULL);
 }
 #endif // !defined(PyErr_SetExcFromWindowsErrWithFilenameObject)
-
-
-// PyPy 2.7
-#if !defined(PyErr_SetFromWindowsErr)
-PyObject *
-PyErr_SetFromWindowsErr(int winerr) {
-    return PyErr_SetFromWindowsErrWithFilename(winerr, "");
-}
-#endif  // !defined(PyErr_SetFromWindowsErr)
 #endif  // defined(PSUTIL_WINDOWS) && defined(PYPY_VERSION)
 
 
@@ -90,7 +81,7 @@ PyErr_SetFromWindowsErr(int winerr) {
  * message.
  */
 PyObject *
-PyErr_SetFromOSErrnoWithSyscall(const char *syscall) {
+psutil_PyErr_SetFromOSErrnoWithSyscall(const char *syscall) {
     char fullmsg[1024];
 
 #ifdef PSUTIL_WINDOWS

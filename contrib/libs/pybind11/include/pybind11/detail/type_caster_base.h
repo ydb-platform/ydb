@@ -9,15 +9,22 @@
 
 #pragma once
 
-#include "../pytypes.h"
+#include <pybind11/pytypes.h>
+
 #include "common.h"
+#if PY_MAJOR_VERSION >= 3
+#include "cpp_conduit.h"
+#endif
 #include "descr.h"
 #include "internals.h"
 #include "typeid.h"
+#include "value_and_holder.h"
 
 #include <cstdint>
+#include <cstring>
 #include <iterator>
 #include <new>
+#include <stdexcept>
 #include <string>
 #include <type_traits>
 #include <typeindex>
@@ -260,67 +267,6 @@ PYBIND11_NOINLINE handle find_registered_python_instance(void *src,
     });
 }
 
-struct value_and_holder {
-    instance *inst = nullptr;
-    size_t index = 0u;
-    const detail::type_info *type = nullptr;
-    void **vh = nullptr;
-
-    // Main constructor for a found value/holder:
-    value_and_holder(instance *i, const detail::type_info *type, size_t vpos, size_t index)
-        : inst{i}, index{index}, type{type},
-          vh{inst->simple_layout ? inst->simple_value_holder
-                                 : &inst->nonsimple.values_and_holders[vpos]} {}
-
-    // Default constructor (used to signal a value-and-holder not found by get_value_and_holder())
-    value_and_holder() = default;
-
-    // Used for past-the-end iterator
-    explicit value_and_holder(size_t index) : index{index} {}
-
-    template <typename V = void>
-    V *&value_ptr() const {
-        return reinterpret_cast<V *&>(vh[0]);
-    }
-    // True if this `value_and_holder` has a non-null value pointer
-    explicit operator bool() const { return value_ptr() != nullptr; }
-
-    template <typename H>
-    H &holder() const {
-        return reinterpret_cast<H &>(vh[1]);
-    }
-    bool holder_constructed() const {
-        return inst->simple_layout
-                   ? inst->simple_holder_constructed
-                   : (inst->nonsimple.status[index] & instance::status_holder_constructed) != 0u;
-    }
-    // NOLINTNEXTLINE(readability-make-member-function-const)
-    void set_holder_constructed(bool v = true) {
-        if (inst->simple_layout) {
-            inst->simple_holder_constructed = v;
-        } else if (v) {
-            inst->nonsimple.status[index] |= instance::status_holder_constructed;
-        } else {
-            inst->nonsimple.status[index] &= (std::uint8_t) ~instance::status_holder_constructed;
-        }
-    }
-    bool instance_registered() const {
-        return inst->simple_layout
-                   ? inst->simple_instance_registered
-                   : ((inst->nonsimple.status[index] & instance::status_instance_registered) != 0);
-    }
-    // NOLINTNEXTLINE(readability-make-member-function-const)
-    void set_instance_registered(bool v = true) {
-        if (inst->simple_layout) {
-            inst->simple_instance_registered = v;
-        } else if (v) {
-            inst->nonsimple.status[index] |= instance::status_instance_registered;
-        } else {
-            inst->nonsimple.status[index] &= (std::uint8_t) ~instance::status_instance_registered;
-        }
-    }
-};
-
 // Container for accessing and iterating over an instance's values/holders
 struct values_and_holders {
 private:
@@ -496,7 +442,7 @@ PYBIND11_NOINLINE void instance::allocate_layout() {
 // NOLINTNEXTLINE(readability-make-member-function-const)
 PYBIND11_NOINLINE void instance::deallocate_layout() {
     if (!simple_layout) {
-        PyMem_Free(nonsimple.values_and_holders);
+        PyMem_Free(reinterpret_cast<void *>(nonsimple.values_and_holders));
     }
 }
 
@@ -680,6 +626,15 @@ public:
         }
         return false;
     }
+#if PY_MAJOR_VERSION >= 3
+    bool try_cpp_conduit(handle src) {
+        value = try_raw_pointer_ephemeral_from_cpp_conduit(src, cpptype);
+        if (value != nullptr) {
+            return true;
+        }
+        return false;
+    }
+#endif
     void check_holder_compat() {}
 
     PYBIND11_NOINLINE static void *local_load(PyObject *src, const type_info *ti) {
@@ -811,6 +766,12 @@ public:
             return true;
         }
 
+#if PY_MAJOR_VERSION >= 3
+        if (convert && cpptype && this_.try_cpp_conduit(src)) {
+            return true;
+        }
+#endif
+
         return false;
     }
 
@@ -837,6 +798,32 @@ public:
     const std::type_info *cpptype = nullptr;
     void *value = nullptr;
 };
+
+inline object cpp_conduit_method(handle self,
+                                 const bytes &pybind11_platform_abi_id,
+                                 const capsule &cpp_type_info_capsule,
+                                 const bytes &pointer_kind) {
+#ifdef PYBIND11_HAS_STRING_VIEW
+    using cpp_str = std::string_view;
+#else
+    using cpp_str = std::string;
+#endif
+    if (cpp_str(pybind11_platform_abi_id) != PYBIND11_PLATFORM_ABI_ID) {
+        return none();
+    }
+    if (std::strcmp(cpp_type_info_capsule.name(), typeid(std::type_info).name()) != 0) {
+        return none();
+    }
+    if (cpp_str(pointer_kind) != "raw_pointer_ephemeral") {
+        throw std::runtime_error("Invalid pointer_kind: \"" + std::string(pointer_kind) + "\"");
+    }
+    const auto *cpp_type_info = cpp_type_info_capsule.get_pointer<const std::type_info>();
+    type_caster_generic caster(*cpp_type_info);
+    if (!caster.load(self, false)) {
+        return none();
+    }
+    return capsule(caster.value, cpp_type_info->name());
+}
 
 /**
  * Determine suitable casting operator for pointer-or-lvalue-casting type casters.  The type caster

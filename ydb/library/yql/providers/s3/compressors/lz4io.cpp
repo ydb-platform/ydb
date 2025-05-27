@@ -6,7 +6,9 @@
 #include <contrib/libs/lz4/lz4.h>
 #include <contrib/libs/lz4/lz4hc.h>
 
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/utils/yql_panic.h>
+#include <yql/essentials/utils/exceptions.h>
+#include <ydb/library/yql/dq/actors/protos/dq_status_codes.pb.h>
 #include "output_queue_impl.h"
 
 namespace NYql {
@@ -53,7 +55,7 @@ EStreamType CheckMagic(const void* data) {
 
 EStreamType CheckMagic(NDB::ReadBuffer& input) {
     char data[4u];
-    YQL_ENSURE(input.read(data, sizeof(data)) == sizeof(data), "Buffer too small.");
+    YQL_ENSURE_CODELINE(input.read(data, sizeof(data)) == sizeof(data), NYql::NDqProto::StatusIds::BAD_REQUEST, "Buffer too small.");
     return CheckMagic(data);
 }
 
@@ -62,7 +64,7 @@ EStreamType CheckMagic(NDB::ReadBuffer& input) {
 TReadBuffer::TReadBuffer(NDB::ReadBuffer& source)
     : NDB::ReadBuffer(nullptr, 0ULL), Source(source), StreamType(CheckMagic(Source)), Pos(0ULL), Remaining(0ULL)
 {
-    YQL_ENSURE(StreamType != EStreamType::Unknown, "Wrong magic.");
+    YQL_ENSURE_CODELINE(StreamType != EStreamType::Unknown, NYql::NDqProto::StatusIds::BAD_REQUEST, "Wrong magic.");
     if (StreamType == EStreamType::Frame) {
         const auto errorCode = LZ4F_createDecompressionContext(&Ctx, LZ4F_VERSION);
         YQL_ENSURE(!LZ4F_isError(errorCode), "Can't create LZ4F context resource: " << LZ4F_getErrorName(errorCode));
@@ -75,7 +77,7 @@ TReadBuffer::TReadBuffer(NDB::ReadBuffer& source)
         WriteLE32(InBuffer.data(), Lz4ioMagicNumber);
 
         NextToLoad = LZ4F_decompress_usingDict(Ctx, OutBuffer.data(), &outSize, InBuffer.data(), &inSize, nullptr, 0ULL, nullptr);
-        YQL_ENSURE(!LZ4F_isError(NextToLoad), "Header error: " << LZ4F_getErrorName(NextToLoad));
+        YQL_ENSURE_CODELINE(!LZ4F_isError(NextToLoad), NYql::NDqProto::StatusIds::BAD_REQUEST, "Header error: " << LZ4F_getErrorName(NextToLoad));
     }
 }
 
@@ -120,7 +122,7 @@ size_t TReadBuffer::DecompressFrame() {
         if (Pos >= Remaining) {
             for (auto toRead = NextToLoad; toRead > 0U;) {
                 const auto sizeCheck = Source.read(InBuffer.data() + NextToLoad - toRead, toRead);
-                YQL_ENSURE(sizeCheck > 0U && sizeCheck <= toRead, "Cannot access compressed block.");
+                YQL_ENSURE_CODELINE(sizeCheck > 0U && sizeCheck <= toRead, NYql::NDqProto::StatusIds::BAD_REQUEST, "Cannot access compressed block.");
                 toRead -= sizeCheck;
             }
 
@@ -132,7 +134,7 @@ size_t TReadBuffer::DecompressFrame() {
         while (Pos < Remaining || (decodedBytes == OutBuffer.size())) {
             decodedBytes = OutBuffer.size();
             NextToLoad = LZ4F_decompress_usingDict(Ctx, OutBuffer.data(), &decodedBytes, InBuffer.data() + Pos, &Remaining, nullptr, 0ULL, nullptr);
-            YQL_ENSURE(!LZ4F_isError(NextToLoad), "Decompression error: " << LZ4F_getErrorName(NextToLoad));
+            YQL_ENSURE_CODELINE(!LZ4F_isError(NextToLoad), NYql::NDqProto::StatusIds::BAD_REQUEST, "Decompression error: " << LZ4F_getErrorName(NextToLoad));
             Pos += Remaining;
 
             if (decodedBytes)
@@ -153,21 +155,21 @@ size_t TReadBuffer::DecompressLegacy() {
     unsigned int blockSize = 0U;
 
     if (const auto sizeCheck = Source.read(InBuffer.data(), 4U)) {
-        YQL_ENSURE(sizeCheck == 4U, "Cannot access block size.");
+        YQL_ENSURE_CODELINE(sizeCheck == 4U, NYql::NDqProto::StatusIds::BAD_REQUEST, "Cannot access block size.");
         blockSize = ReadLE32(InBuffer.data());
-        YQL_ENSURE(blockSize <= LZ4_COMPRESSBOUND(LegacyBlockSize), "Block size out of bounds.");
+        YQL_ENSURE_CODELINE(blockSize <= LZ4_COMPRESSBOUND(LegacyBlockSize), NYql::NDqProto::StatusIds::BAD_REQUEST, "Block size out of bounds.");
     } else
         return 0ULL;
 
     for (auto toRead = blockSize; toRead > 0U;) {
         const auto sizeCheck = Source.read(InBuffer.data() + blockSize - toRead, toRead);
-        YQL_ENSURE(sizeCheck > 0U && sizeCheck <= toRead, "Cannot access compressed block.");
+        YQL_ENSURE_CODELINE(sizeCheck > 0U && sizeCheck <= toRead, NYql::NDqProto::StatusIds::BAD_REQUEST, "Cannot access compressed block.");
         toRead -= sizeCheck;
     }
 
     const auto decodeSize = LZ4_decompress_safe(InBuffer.data(), OutBuffer.data(), (int)blockSize, LegacyBlockSize);
 
-    YQL_ENSURE(decodeSize >= 0, "Corrupted input detected.");
+    YQL_ENSURE_CODELINE(decodeSize >= 0, NYql::NDqProto::StatusIds::BAD_REQUEST, "Corrupted input detected.");
     return size_t(decodeSize);
 }
 

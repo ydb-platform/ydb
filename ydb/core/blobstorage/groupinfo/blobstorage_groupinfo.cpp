@@ -10,8 +10,6 @@
 
 #include <ydb/library/actors/core/interconnect.h>
 
-#include <library/cpp/pop_count/popcount.h>
-
 #include <library/cpp/digest/crc32c/crc32c.h>
 
 #include <util/string/printf.h>
@@ -22,6 +20,8 @@
 #include <util/string/vector.h>
 #include <util/string/type.h>
 #include <util/string/cast.h>
+
+#include <bit>
 
 namespace NKikimr {
 
@@ -85,6 +85,27 @@ public:
             ui32 effectiveReplicas = parts.CountEffectiveReplicas(Top->GType);
             return Top->BlobState(effectiveReplicas, failedDisks.GetNumSetItems());
         }
+    }
+
+    TBlobStorageGroupInfo::EBlobState GetBlobStateWithoutLayoutCheck(const TSubgroupPartLayout& parts,
+            const TBlobStorageGroupInfo::TSubgroupVDisks& failedDisks) const override {
+        if (!CheckFailModelForSubgroup(failedDisks)) {
+            return TBlobStorageGroupInfo::EBS_DISINTEGRATED;
+        }
+
+        const TBlobStorageGroupType type = Top->GType;
+        ui32 effectiveReplicas = parts.CountEffectiveReplicas(type);
+        auto state = Top->BlobState(effectiveReplicas, failedDisks.GetNumSetItems());
+        if (state == TBlobStorageGroupInfo::EBS_FULL) {
+            return state;
+        }
+
+        ui32 distinctParts = parts.CountDistinctParts(type);
+        if (distinctParts < type.MinimalRestorablePartCount()) {
+            return TBlobStorageGroupInfo::EBS_UNRECOVERABLE_FRAGMENTARY;
+        }
+
+        return TBlobStorageGroupInfo::EBS_RECOVERABLE_FRAGMENTARY;
     }
 
     ui32 GetPartsToResurrect(const TSubgroupPartLayout& parts, ui32 idxInSubgroup) const override {
@@ -160,6 +181,11 @@ public:
         } else {
             return TBlobStorageGroupInfo::EBS_UNRECOVERABLE_FRAGMENTARY;
         }
+    }
+
+    TBlobStorageGroupInfo::EBlobState GetBlobStateWithoutLayoutCheck(const TSubgroupPartLayout& parts,
+            const TBlobStorageGroupInfo::TSubgroupVDisks& failedDisks) const override {
+        return GetBlobState(parts, failedDisks);
     }
 
     ui32 GetPartsToResurrect(const TSubgroupPartLayout& parts, ui32 idxInSubgroup) const override {
@@ -275,6 +301,11 @@ quitIter:   ;
         }
     }
 
+    TBlobStorageGroupInfo::EBlobState GetBlobStateWithoutLayoutCheck(const TSubgroupPartLayout& parts,
+            const TBlobStorageGroupInfo::TSubgroupVDisks& failedDisks) const override {
+        return GetBlobState(parts, failedDisks);
+    }
+
     ui32 GetPartsToResurrect(const TSubgroupPartLayout& parts, ui32 idxInSubgroup) const override {
         const TBlobStorageGroupInfo::TSubgroupVDisks& disksWithReplica = parts.GetInvolvedDisks(Top);
         const ui32 myRing = idxInSubgroup % 3;
@@ -287,7 +318,7 @@ quitIter:   ;
             return 0; // we already have a part
         }
         // filter out only parts on their respective disks to filter out possibly incorrectly written parts
-        const ui32 numDisksWithPartInMyRing = PopCount((disksWithPart >> myRing) & 0x49); // binary stencil 001001001
+        const ui32 numDisksWithPartInMyRing = std::popcount((disksWithPart >> myRing) & 0x49); // binary stencil 001001001
         // resurrect matching part if there are less than 2 parts in our datacenter
         return numDisksWithPartInMyRing < 2 ? 1 << myRing : 0;
     }
@@ -719,6 +750,11 @@ TIntrusivePtr<TBlobStorageGroupInfo> TBlobStorageGroupInfo::Parse(const NKikimrB
         }
     }
 
+    // parse bridge mode fields
+    for (const auto& groupId : group.GetBridgeGroupIds()) {
+        res->BridgeGroupIds.push_back(TGroupId::FromValue(groupId));
+    }
+
     // store original group protobuf it was parsed from
     res->Group.emplace(group);
     return res;
@@ -759,6 +795,7 @@ bool TBlobStorageGroupInfo::DecryptGroupKey(TBlobStorageGroupInfo::EEncryptionMo
 }
 
 const TBlobStorageGroupInfo::IQuorumChecker& TBlobStorageGroupInfo::GetQuorumChecker() const {
+    Y_ABORT_UNLESS(!IsBridged());
     return Topology->GetQuorumChecker();
 }
 
@@ -801,7 +838,7 @@ void TBlobStorageGroupInfo::PickSubgroup(ui32 hash, TVDiskIds *outVDisk, TServic
 }
 
 bool TBlobStorageGroupInfo::BelongsToSubgroup(const TVDiskID &vdisk, ui32 hash) const {
-    Y_VERIFY_DEBUG_S(vdisk.GroupID == GroupID, "Expected GroupID# " << GroupID << ", given GroupID# " << vdisk.GroupID);
+    Y_VERIFY_S(vdisk.GroupID == GroupID, "Expected GroupID# " << GroupID << ", given GroupID# " << vdisk.GroupID);
     Y_VERIFY_DEBUG_S(vdisk.GroupGeneration == GroupGeneration, "Expected GroupGeeration# " << GroupGeneration
             << ", given GroupGeneration# " << vdisk.GroupGeneration);
     return Topology->BelongsToSubgroup(TVDiskIdShort(vdisk), hash);
@@ -809,7 +846,7 @@ bool TBlobStorageGroupInfo::BelongsToSubgroup(const TVDiskID &vdisk, ui32 hash) 
 
 // Returns either vdisk idx in the blob subgroup, or BlobSubgroupSize if the vdisk is not in the blob subgroup
 ui32 TBlobStorageGroupInfo::GetIdxInSubgroup(const TVDiskID &vdisk, ui32 hash) const {
-    Y_VERIFY_DEBUG_S(vdisk.GroupID == GroupID, "Expected GroupID# " << GroupID << ", given GroupID# " << vdisk.GroupID);
+    Y_VERIFY_S(vdisk.GroupID == GroupID, "Expected GroupID# " << GroupID << ", given GroupID# " << vdisk.GroupID);
     Y_VERIFY_DEBUG_S(vdisk.GroupGeneration == GroupGeneration, "Expected GroupGeeration# " << GroupGeneration
             << ", given GroupGeneration# " << vdisk.GroupGeneration);
     return Topology->GetIdxInSubgroup(vdisk, hash);
@@ -822,7 +859,7 @@ TVDiskID TBlobStorageGroupInfo::GetVDiskInSubgroup(ui32 idxInSubgroup, ui32 hash
 
 ui32 TBlobStorageGroupInfo::GetOrderNumber(const TVDiskID &vdisk) const {
     Y_VERIFY_S(vdisk.GroupID == GroupID, "Expected GroupID# " << GroupID << ", given GroupID# " << vdisk.GroupID);
-    Y_VERIFY_S(vdisk.GroupGeneration == GroupGeneration, "Expected GroupGeneration# " << GroupGeneration
+    Y_VERIFY_DEBUG_S(vdisk.GroupGeneration == GroupGeneration, "Expected GroupGeneration# " << GroupGeneration
             << ", given GroupGeneration# " << vdisk.GroupGeneration);
     return Topology->GetOrderNumber(vdisk);
 }

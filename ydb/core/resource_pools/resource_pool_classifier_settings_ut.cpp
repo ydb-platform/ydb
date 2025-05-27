@@ -2,6 +2,8 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <ydb/library/aclib/aclib.h>
+
 
 namespace NKikimr {
 
@@ -31,21 +33,27 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifierTest) {
         std::visit(TClassifierSettings::TParser{"test_pool"}, propertiesMap["resource_pool"]);
         UNIT_ASSERT_VALUES_EQUAL(settings.ResourcePool, "test_pool");
 
-        std::visit(TClassifierSettings::TParser{"test@user"}, propertiesMap["membername"]);
-        UNIT_ASSERT_VALUES_EQUAL(settings.Membername, "test@user");
+        std::visit(TClassifierSettings::TParser{"test@user"}, propertiesMap["member_name"]);
+        UNIT_ASSERT_VALUES_EQUAL(settings.MemberName, "test@user");
     }
 
     Y_UNIT_TEST(SettingsExtracting) {
         TClassifierSettings settings;
         settings.Rank = 123;
         settings.ResourcePool = "test_pool";
-        settings.Membername = "test@user";
+        settings.MemberName = "test@user";
         auto propertiesMap = settings.GetPropertiesMap();
 
         TClassifierSettings::TExtractor extractor;
         UNIT_ASSERT_VALUES_EQUAL(std::visit(extractor, propertiesMap["rank"]), "123");
         UNIT_ASSERT_VALUES_EQUAL(std::visit(extractor, propertiesMap["resource_pool"]), "test_pool");
-        UNIT_ASSERT_VALUES_EQUAL(std::visit(extractor, propertiesMap["membername"]), "test@user");
+        UNIT_ASSERT_VALUES_EQUAL(std::visit(extractor, propertiesMap["member_name"]), "test@user");
+    }
+
+    Y_UNIT_TEST(SettingsValidation) {
+        TClassifierSettings settings;
+        settings.MemberName = BUILTIN_ACL_METADATA;
+        UNIT_ASSERT_STRING_CONTAINS(*settings.Validate(), TStringBuilder() << "Invalid resource pool classifier configuration, cannot create classifier for system user " << settings.MemberName);
     }
 }
 

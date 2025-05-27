@@ -2,6 +2,7 @@
 
 #include <ydb/core/tx/columnshard/engines/changes/abstract/compaction_info.h>
 #include <ydb/core/tx/columnshard/engines/changes/with_appended.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 
 namespace NKikimr::NOlap {
 
@@ -12,6 +13,7 @@ private:
     using TBase = TChangesWithAppend;
     bool NeedGranuleStatusProvide = false;
 protected:
+    std::vector<TPortionInfo::TConstPtr> SwitchedPortions;   // Portions that would be replaced by new ones
     std::shared_ptr<TGranuleMeta> GranuleMeta;
 
     virtual void DoWriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context) override;
@@ -24,15 +26,36 @@ protected:
     virtual void OnAbortEmergency() override {
         NeedGranuleStatusProvide = false;
     }
+    virtual NDataLocks::ELockCategory GetLockCategory() const override {
+        return NDataLocks::ELockCategory::Compaction;
+    }
     virtual std::shared_ptr<NDataLocks::ILock> DoBuildDataLockImpl() const override {
-        return std::make_shared<NDataLocks::TListPortionsLock>(TypeString() + "::" + GetTaskIdentifier(), SwitchedPortions);
+        const THashSet<TInternalPathId> pathIds = { GranuleMeta->GetPathId() };
+        return std::make_shared<NDataLocks::TListTablesLock>(TypeString() + "::" + GetTaskIdentifier(), pathIds, GetLockCategory());
+    }
+
+    virtual void OnDataAccessorsInitialized(const TDataAccessorsInitializationContext& context) override {
+        TBase::OnDataAccessorsInitialized(context);
+        THashMap<TString, THashSet<TBlobRange>> blobRanges;
+        for (const auto& p : SwitchedPortions) {
+            GetPortionDataAccessor(p->GetPortionId()).FillBlobRangesByStorage(blobRanges, *context.GetVersionedIndex());
+        }
+
+        for (const auto& p : blobRanges) {
+            auto action = BlobsAction.GetReading(p.first);
+            for (auto&& b : p.second) {
+                action->AddRange(b);
+            }
+        }
     }
 
 public:
-    std::vector<TPortionInfo> SwitchedPortions; // Portions that would be replaced by new ones
-
-    TCompactColumnEngineChanges(std::shared_ptr<TGranuleMeta> granule, const std::vector<std::shared_ptr<TPortionInfo>>& portions, const TSaverContext& saverContext);
+    TCompactColumnEngineChanges(std::shared_ptr<TGranuleMeta> granule, const std::vector<TPortionInfo::TConstPtr>& portions, const TSaverContext& saverContext);
     ~TCompactColumnEngineChanges();
+
+    const std::vector<TPortionInfo::TConstPtr>& GetSwitchedPortions() const {
+        return SwitchedPortions;
+    }
 
     static TString StaticTypeName() {
         return "CS::GENERAL";

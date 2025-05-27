@@ -1,0 +1,13 @@
+diff --git a/src/new.cpp b/src/new.cpp
+index cfef148..7dd17bc 100644
+--- a/src/new.cpp
++++ b/src/new.cpp
+@@ -9,8 +9,6 @@
+ #include <new>
+ #include <stdlib.h>
+ 
+-#include "include/atomic_support.h"
+-
+ #if defined(_LIBCPP_ABI_MICROSOFT)
+ #   if !defined(_LIBCPP_ABI_VCRUNTIME)
+ #       include "support/runtime/new_handler_fallback.ipp"

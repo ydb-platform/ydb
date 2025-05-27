@@ -392,6 +392,14 @@ void TSelectRowsCommandBase<
         .GreaterThan(0)
         .Optional(/*init*/ false);
 
+    registrar.template ParameterWithUniversalAccessor<i64>(
+        "min_row_count_per_subquery",
+        [] (TThis* command) -> auto& {
+            return command->Options.MinRowCountPerSubquery;
+        })
+        .GreaterThan(0)
+        .Optional(/*init*/ false);
+
     registrar.template ParameterWithUniversalAccessor<std::optional<TString>>(
         "udf_registry_path",
         [] (TThis* command) -> auto& {
@@ -417,6 +425,13 @@ void TSelectRowsCommandBase<
         "syntax_version",
         [] (TThis* command) -> auto& {
             return command->Options.SyntaxVersion;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.template ParameterWithUniversalAccessor<int>(
+        "expression_builder_version",
+        [] (TThis* command) -> auto& {
+            return command->Options.ExpressionBuilderVersion;
         })
         .Optional(/*init*/ false);
 }

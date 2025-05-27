@@ -1,0 +1,26 @@
+commit 242ab0166e0b3ae29fd381117df005246a4e4eb9
+merge: 3c801a723b9f0eca043275e810f76c9286a7e0ab 6626b8f9a0ad0f481d29b698fbe42d5158b49aae
+author: robot-brewer
+date: 2024-11-11T09:16:28+03:00
+revision: 15280800
+
+    Release clang18 #3
+    
+    https://github.com/yandex/toolchain-registry/releases/tag/clang18-v3
+    
+    REVIEW: 7167654
+
+--- contrib/libs/grpc/include/grpcpp/impl/call_op_set.h	(3c801a723b9f0eca043275e810f76c9286a7e0ab)
++++ contrib/libs/grpc/include/grpcpp/impl/call_op_set.h	(242ab0166e0b3ae29fd381117df005246a4e4eb9)
+@@ -283,6 +283,11 @@ class CallOpSendInitialMetadata {
+   } maybe_compression_level_;
+ };
+ 
++// win headers create macro SendMessage
++#if defined(_WIN32) && defined(SendMessage)
++#undef SendMessage
++#endif
++
+ class CallOpSendMessage {
+  public:
+   CallOpSendMessage() : send_buf_() {}

@@ -19,17 +19,22 @@ SRCS(
 PEERDIR(
     ydb/library/actors/protos
     ydb/library/yql/dq/expr_nodes
-    ydb/library/yql/dq/integration
     ydb/library/yql/dq/opt
-    ydb/library/yql/providers/common/config
-    ydb/library/yql/providers/common/proto
-    ydb/library/yql/providers/common/provider
-    ydb/library/yql/providers/common/transform
+    ydb/library/yql/providers/common/token_accessor/client
     ydb/library/yql/providers/dq/expr_nodes
-    ydb/library/yql/providers/result/expr_nodes
+    ydb/library/yql/providers/solomon/actors
+    ydb/library/yql/providers/solomon/common
     ydb/library/yql/providers/solomon/expr_nodes
     ydb/library/yql/providers/solomon/proto
     ydb/library/yql/providers/solomon/scheme
+    ydb/library/yql/providers/solomon/solomon_accessor/client
+    ydb/public/sdk/cpp/src/client/types/credentials
+    yql/essentials/core/dq_integration
+    yql/essentials/providers/common/config
+    yql/essentials/providers/common/proto
+    yql/essentials/providers/common/provider
+    yql/essentials/providers/common/transform
+    yql/essentials/providers/result/expr_nodes
 )
 
 YQL_LAST_ABI_VERSION()

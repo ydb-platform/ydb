@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: Werkzeug
-Version: 2.0.3
+Version: 2.2.3
 Summary: The comprehensive WSGI web application library.
 Home-page: https://palletsprojects.com/p/werkzeug/
 Author: Armin Ronacher
@@ -15,7 +15,6 @@ Project-URL: Source Code, https://github.com/pallets/werkzeug/
 Project-URL: Issue Tracker, https://github.com/pallets/werkzeug/issues/
 Project-URL: Twitter, https://twitter.com/PalletsTeam
 Project-URL: Chat, https://discord.gg/pallets
-Platform: UNKNOWN
 Classifier: Development Status :: 5 - Production/Stable
 Classifier: Environment :: Web Environment
 Classifier: Intended Audience :: Developers
@@ -27,10 +26,10 @@ Classifier: Topic :: Internet :: WWW/HTTP :: WSGI
 Classifier: Topic :: Internet :: WWW/HTTP :: WSGI :: Application
 Classifier: Topic :: Internet :: WWW/HTTP :: WSGI :: Middleware
 Classifier: Topic :: Software Development :: Libraries :: Application Frameworks
-Requires-Python: >=3.6
+Requires-Python: >=3.7
 Description-Content-Type: text/x-rst
 License-File: LICENSE.rst
-Requires-Dist: dataclasses ; python_version < "3.7"
+Requires-Dist: MarkupSafe (>=2.1.1)
 Provides-Extra: watchdog
 Requires-Dist: watchdog ; extra == 'watchdog'
 
@@ -125,5 +124,3 @@ Links
 -   Website: https://palletsprojects.com/p/werkzeug/
 -   Twitter: https://twitter.com/PalletsTeam
 -   Chat: https://discord.gg/pallets
-
-

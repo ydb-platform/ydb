@@ -1,6 +1,6 @@
 import argparse
-import itertools
 import os
+import sys
 import tarfile
 
 
@@ -60,14 +60,20 @@ def main():
                 names = tar.getnames()
                 if names and len(names) > 0:
                     parts.append([DELIM_JAVA, src_dir])
-                    parts[-1].extend(itertools.imap(lambda x: os.path.join(src_dir, x), names))
-                    tar.extractall(path=src_dir)
+                    parts[-1].extend(os.path.join(src_dir, x) for x in names)
+                    if sys.version_info >= (3, 12):
+                        tar.extractall(path=src_dir, filter='data')
+                    else:
+                        tar.extractall(path=src_dir)
 
     if args.asrcs and len(args.asrcs):
         for asrc in filter(lambda x: x.endswith('.asrc') and os.path.exists(x), args.asrcs):
             with tarfile.open(asrc, 'r') as tar:
                 files.extend(tar.getnames())
-                tar.extractall(path=args.work)
+                if sys.version_info >= (3, 12):
+                    tar.extractall(path=args.work, filter='data')
+                else:
+                    tar.extractall(path=args.work)
 
     with tarfile.open(args.output, 'w') as out:
         for part in parts:

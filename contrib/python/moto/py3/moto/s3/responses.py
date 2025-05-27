@@ -3,9 +3,10 @@ import os
 import re
 from typing import List, Union
 
+import urllib.parse
+
 from moto import settings
 from moto.core.utils import (
-    amzn_request_id,
     extract_region_from_aws_authorization,
     str_to_rfc_1123_datetime,
 )
@@ -13,15 +14,15 @@ from urllib.parse import parse_qs, urlparse, unquote, urlencode, urlunparse
 
 import xmltodict
 
-from moto.core.responses import _TemplateEnvironmentMixin, ActionAuthenticatorMixin
+from moto.core.responses import BaseResponse
 from moto.core.utils import path_url
-from moto.core import get_account_id
 
 from moto.s3bucket_path.utils import (
     bucket_name_from_url as bucketpath_bucket_name_from_url,
     parse_key_name as bucketpath_parse_key_name,
     is_delete_keys as bucketpath_is_delete_keys,
 )
+from moto.utilities.aws_headers import amzn_request_id
 
 from .exceptions import (
     BucketAlreadyExists,
@@ -51,7 +52,8 @@ from .exceptions import (
     InvalidRange,
     LockNotEnabled,
 )
-from .models import s3_backend, get_canned_acl, FakeGrantee, FakeGrant, FakeAcl, FakeKey
+from .models import s3_backends
+from .models import get_canned_acl, FakeGrantee, FakeGrant, FakeAcl, FakeKey
 from .utils import bucket_name_from_url, metadata_from_headers, parse_region_from_url
 from xml.dom import minidom
 
@@ -151,14 +153,13 @@ def is_delete_keys(request, path):
     )
 
 
-class ResponseObject(_TemplateEnvironmentMixin, ActionAuthenticatorMixin):
-    def __init__(self, backend):
-        super().__init__()
-        self.backend = backend
-        self.method = ""
-        self.path = ""
-        self.data = {}
-        self.headers = {}
+class S3Response(BaseResponse):
+    def __init__(self):
+        super().__init__(service_name="s3")
+
+    @property
+    def backend(self):
+        return s3_backends[self.current_account]["global"]
 
     @property
     def should_autoescape(self):
@@ -253,15 +254,8 @@ class ResponseObject(_TemplateEnvironmentMixin, ActionAuthenticatorMixin):
             return self.bucket_response(request, full_url, headers)
 
     @amzn_request_id
-    def bucket_response(
-        self, request, full_url, headers
-    ):  # pylint: disable=unused-argument
-        self.method = request.method
-        self.path = self._get_path(request)
-        # Make a copy of request.headers because it's immutable
-        self.headers = dict(request.headers)
-        if "Host" not in self.headers:
-            self.headers["Host"] = urlparse(full_url).netloc
+    def bucket_response(self, request, full_url, headers):
+        self.setup_class(request, full_url, headers, use_raw_body=True)
         try:
             response = self._bucket_response(request, full_url)
         except S3ClientError as s3error:
@@ -299,30 +293,18 @@ class ResponseObject(_TemplateEnvironmentMixin, ActionAuthenticatorMixin):
 
         self.data["BucketName"] = bucket_name
 
-        if hasattr(request, "body"):
-            # Boto
-            body = request.body
-        else:
-            # Flask server
-            body = request.data
-        if body is None:
-            body = b""
-        if isinstance(body, bytes):
-            body = body.decode("utf-8")
-        body = "{0}".format(body).encode("utf-8")
-
         if method == "HEAD":
             return self._bucket_response_head(bucket_name, querystring)
         elif method == "GET":
             return self._bucket_response_get(bucket_name, querystring)
         elif method == "PUT":
             return self._bucket_response_put(
-                request, body, region_name, bucket_name, querystring
+                request, region_name, bucket_name, querystring
             )
         elif method == "DELETE":
             return self._bucket_response_delete(bucket_name, querystring)
         elif method == "POST":
-            return self._bucket_response_post(request, body, bucket_name)
+            return self._bucket_response_post(request, bucket_name)
         elif method == "OPTIONS":
             return self._response_options(bucket_name)
         else:
@@ -384,27 +366,25 @@ class ResponseObject(_TemplateEnvironmentMixin, ActionAuthenticatorMixin):
 
         for cors_rule in bucket.cors:
             if cors_rule.allowed_methods is not None:
-                self.headers["Access-Control-Allow-Methods"] = _to_string(
+                self.response_headers["Access-Control-Allow-Methods"] = _to_string(
                     cors_rule.allowed_methods
                 )
             if cors_rule.allowed_origins is not None:
-                self.headers["Access-Control-Allow-Origin"] = _to_string(
+                self.response_headers["Access-Control-Allow-Origin"] = _to_string(
                     cors_rule.allowed_origins
                 )
             if cors_rule.allowed_headers is not None:
-                self.headers["Access-Control-Allow-Headers"] = _to_string(
+                self.response_headers["Access-Control-Allow-Headers"] = _to_string(
                     cors_rule.allowed_headers
                 )
             if cors_rule.exposed_headers is not None:
-                self.headers["Access-Control-Expose-Headers"] = _to_string(
+                self.response_headers["Access-Control-Expose-Headers"] = _to_string(
                     cors_rule.exposed_headers
                 )
             if cors_rule.max_age_seconds is not None:
-                self.headers["Access-Control-Max-Age"] = _to_string(
+                self.response_headers["Access-Control-Max-Age"] = _to_string(
                     cors_rule.max_age_seconds
                 )
-
-        return self.headers
 
     def _response_options(self, bucket_name):
         # Return 200 with the headers from the bucket CORS configuration
@@ -420,7 +400,7 @@ class ResponseObject(_TemplateEnvironmentMixin, ActionAuthenticatorMixin):
 
         self._set_cors_headers(bucket)
 
-        return 200, self.headers, ""
+        return 200, self.response_headers, ""
 
     def _bucket_response_get(self, bucket_name, querystring):
         self._set_action("BUCKET", "GET", querystring)
@@ -456,7 +436,11 @@ class ResponseObject(_TemplateEnvironmentMixin, ActionAuthenticatorMixin):
                     if upload.key_name.startswith(prefix)
                 ]
             template = self.response_template(S3_ALL_MULTIPARTS)
-            return template.render(bucket_name=bucket_name, uploads=multiparts)
+            return template.render(
+                bucket_name=bucket_name,
+                uploads=multiparts,
+                account_id=self.current_account,
+            )
         elif "location" in querystring:
             location = self.backend.get_bucket_location(bucket_name)
             template = self.response_template(S3_BUCKET_LOCATION)
@@ -584,6 +568,13 @@ class ResponseObject(_TemplateEnvironmentMixin, ActionAuthenticatorMixin):
                 return 404, {}, template.render(bucket_name=bucket_name)
             template = self.response_template(S3_REPLICATION_CONFIG)
             return 200, {}, template.render(replication=replication)
+        elif "ownershipControls" in querystring:
+            ownership_rule = self.backend.get_bucket_ownership_controls(bucket_name)
+            if not ownership_rule:
+                template = self.response_template(S3_ERROR_BUCKET_ONWERSHIP_NOT_FOUND)
+                return 404, {}, template.render(bucket_name=bucket_name)
+            template = self.response_template(S3_BUCKET_GET_OWNERSHIP_RULE)
+            return 200, {}, template.render(ownership_rule=ownership_rule)
 
         bucket = self.backend.get_bucket(bucket_name)
         prefix = querystring.get("prefix", [None])[0]
@@ -662,6 +653,12 @@ class ResponseObject(_TemplateEnvironmentMixin, ActionAuthenticatorMixin):
 
         key_count = len(result_keys) + len(result_folders)
 
+        if encoding_type == "url":
+            prefix = urllib.parse.quote(prefix) if prefix else ""
+            result_folders = list(
+                map(lambda folder: urllib.parse.quote(folder), result_folders)
+            )
+
         return template.render(
             bucket=bucket,
             prefix=prefix or "",
@@ -733,15 +730,13 @@ class ResponseObject(_TemplateEnvironmentMixin, ActionAuthenticatorMixin):
                 pass
         return False
 
-    def _parse_pab_config(self, body):
-        parsed_xml = xmltodict.parse(body)
+    def _parse_pab_config(self):
+        parsed_xml = xmltodict.parse(self.body)
         parsed_xml["PublicAccessBlockConfiguration"].pop("@xmlns", None)
 
         return parsed_xml
 
-    def _bucket_response_put(
-        self, request, body, region_name, bucket_name, querystring
-    ):
+    def _bucket_response_put(self, request, region_name, bucket_name, querystring):
         if not request.headers.get("Content-Length"):
             return 411, {}, "Content-Length required"
 
@@ -749,8 +744,7 @@ class ResponseObject(_TemplateEnvironmentMixin, ActionAuthenticatorMixin):
         self._authenticate_and_authorize_s3_action()
 
         if "object-lock" in querystring:
-            body_decoded = body.decode()
-            config = self._lock_config_from_xml(body_decoded)
+            config = self._lock_config_from_body()
 
             if not self.backend.get_bucket(bucket_name).object_lock_enabled:
                 raise BucketMustHaveLockeEnabled
@@ -765,55 +759,54 @@ class ResponseObject(_TemplateEnvironmentMixin, ActionAuthenticatorMixin):
             return 200, {}, ""
 
         if "versioning" in querystring:
-            ver = re.search("<Status>([A-Za-z]+)</Status>", body.decode())
+            body = self.body.decode("utf-8")
+            ver = re.search(r"<Status>([A-Za-z]+)</Status>", body)
             if ver:
-                self.backend.set_bucket_versioning(bucket_name, ver.group(1))
+                self.backend.put_bucket_versioning(bucket_name, ver.group(1))
                 template = self.response_template(S3_BUCKET_VERSIONING)
                 return template.render(bucket_versioning_status=ver.group(1))
             else:
                 return 404, {}, ""
         elif "lifecycle" in querystring:
-            rules = xmltodict.parse(body)["LifecycleConfiguration"]["Rule"]
+            rules = xmltodict.parse(self.body)["LifecycleConfiguration"]["Rule"]
             if not isinstance(rules, list):
                 # If there is only one rule, xmldict returns just the item
                 rules = [rules]
             self.backend.put_bucket_lifecycle(bucket_name, rules)
             return ""
         elif "policy" in querystring:
-            self.backend.put_bucket_policy(bucket_name, body)
+            self.backend.put_bucket_policy(bucket_name, self.body)
             return "True"
         elif "acl" in querystring:
             # Headers are first. If not set, then look at the body (consistent with the documentation):
             acls = self._acl_from_headers(request.headers)
             if not acls:
-                acls = self._acl_from_xml(body)
+                acls = self._acl_from_body()
             self.backend.put_bucket_acl(bucket_name, acls)
             return ""
         elif "tagging" in querystring:
-            tagging = self._bucket_tagging_from_xml(body)
+            tagging = self._bucket_tagging_from_body()
             self.backend.put_bucket_tagging(bucket_name, tagging)
             return ""
         elif "website" in querystring:
-            self.backend.set_bucket_website_configuration(bucket_name, body)
+            self.backend.set_bucket_website_configuration(bucket_name, self.body)
             return ""
         elif "cors" in querystring:
             try:
-                self.backend.put_bucket_cors(bucket_name, self._cors_from_xml(body))
+                self.backend.put_bucket_cors(bucket_name, self._cors_from_body())
                 return ""
             except KeyError:
                 raise MalformedXML()
         elif "logging" in querystring:
             try:
-                self.backend.put_bucket_logging(
-                    bucket_name, self._logging_from_xml(body)
-                )
+                self.backend.put_bucket_logging(bucket_name, self._logging_from_body())
                 return ""
             except KeyError:
                 raise MalformedXML()
         elif "notification" in querystring:
             try:
                 self.backend.put_bucket_notification_configuration(
-                    bucket_name, self._notification_config_from_xml(body)
+                    bucket_name, self._notification_config_from_body()
                 )
                 return ""
             except KeyError:
@@ -822,7 +815,7 @@ class ResponseObject(_TemplateEnvironmentMixin, ActionAuthenticatorMixin):
                 raise e
         elif "accelerate" in querystring:
             try:
-                accelerate_status = self._accelerate_config_from_xml(body)
+                accelerate_status = self._accelerate_config_from_body()
                 self.backend.put_bucket_accelerate_configuration(
                     bucket_name, accelerate_status
                 )
@@ -833,7 +826,7 @@ class ResponseObject(_TemplateEnvironmentMixin, ActionAuthenticatorMixin):
                 raise e
 
         elif "publicAccessBlock" in querystring:
-            pab_config = self._parse_pab_config(body)
+            pab_config = self._parse_pab_config()
             self.backend.put_bucket_public_access_block(
                 bucket_name, pab_config["PublicAccessBlockConfiguration"]
             )
@@ -841,7 +834,7 @@ class ResponseObject(_TemplateEnvironmentMixin, ActionAuthenticatorMixin):
         elif "encryption" in querystring:
             try:
                 self.backend.put_bucket_encryption(
-                    bucket_name, self._encryption_config_from_xml(body)
+                    bucket_name, self._encryption_config_from_body()
                 )
                 return ""
             except KeyError:
@@ -853,9 +846,16 @@ class ResponseObject(_TemplateEnvironmentMixin, ActionAuthenticatorMixin):
             if not bucket.is_versioned:
                 template = self.response_template(S3_NO_VERSIONING_ENABLED)
                 return 400, {}, template.render(bucket_name=bucket_name)
-            replication_config = self._replication_config_from_xml(body)
+            replication_config = self._replication_config_from_xml(self.body)
             self.backend.put_bucket_replication(bucket_name, replication_config)
             return ""
+        elif "ownershipControls" in querystring:
+            ownership_rule = self._ownership_rule_from_body()
+            self.backend.put_bucket_ownership_controls(
+                bucket_name, ownership=ownership_rule
+            )
+            return ""
+
         else:
             # us-east-1, the default AWS region behaves a bit differently
             # - you should not use it as a location constraint --> it fails
@@ -863,17 +863,17 @@ class ResponseObject(_TemplateEnvironmentMixin, ActionAuthenticatorMixin):
             # - LocationConstraint has to be specified if outside us-east-1
             if (
                 region_name != DEFAULT_REGION_NAME
-                and not self._body_contains_location_constraint(body)
+                and not self._body_contains_location_constraint(self.body)
             ):
                 raise IllegalLocationConstraintException()
-            if body:
-                if self._create_bucket_configuration_is_empty(body):
+            if self.body:
+                if self._create_bucket_configuration_is_empty(self.body):
                     raise MalformedXML()
 
                 try:
-                    forced_region = xmltodict.parse(body)["CreateBucketConfiguration"][
-                        "LocationConstraint"
-                    ]
+                    forced_region = xmltodict.parse(self.body)[
+                        "CreateBucketConfiguration"
+                    ]["LocationConstraint"]
 
                     if forced_region == DEFAULT_REGION_NAME:
                         raise S3ClientError(
@@ -912,6 +912,10 @@ class ResponseObject(_TemplateEnvironmentMixin, ActionAuthenticatorMixin):
                 new_bucket.object_lock_enabled = True
                 new_bucket.versioning_status = "Enabled"
 
+            ownership_rule = request.headers.get("x-amz-object-ownership")
+            if ownership_rule:
+                new_bucket.ownership_rule = ownership_rule
+
             template = self.response_template(S3_BUCKET_CREATE_RESPONSE)
             return 200, {}, template.render(bucket=new_bucket)
 
@@ -943,6 +947,9 @@ class ResponseObject(_TemplateEnvironmentMixin, ActionAuthenticatorMixin):
         elif "replication" in querystring:
             self.backend.delete_bucket_replication(bucket_name)
             return 204, {}, ""
+        elif "ownershipControls" in querystring:
+            self.backend.delete_bucket_ownership_controls(bucket_name)
+            return 204, {}, ""
 
         removed_bucket = self.backend.delete_bucket(bucket_name)
 
@@ -955,21 +962,21 @@ class ResponseObject(_TemplateEnvironmentMixin, ActionAuthenticatorMixin):
             template = self.response_template(S3_DELETE_BUCKET_WITH_ITEMS_ERROR)
             return 409, {}, template.render(bucket=removed_bucket)
 
-    def _bucket_response_post(self, request, body, bucket_name):
+    def _bucket_response_post(self, request, bucket_name):
         response_headers = {}
         if not request.headers.get("Content-Length"):
             return 411, {}, "Content-Length required"
 
-        path = self._get_path(request)
+        self.path = self._get_path(request)
 
-        if self.is_delete_keys(request, path, bucket_name):
+        if self.is_delete_keys(request, self.path, bucket_name):
             self.data["Action"] = "DeleteObject"
             try:
                 self._authenticate_and_authorize_s3_action()
-                return self._bucket_response_delete_keys(body, bucket_name)
+                return self._bucket_response_delete_keys(bucket_name)
             except BucketAccessDeniedError:
                 return self._bucket_response_delete_keys(
-                    body, bucket_name, authenticated=False
+                    bucket_name, authenticated=False
                 )
 
         self.data["Action"] = "PutObject"
@@ -1032,9 +1039,9 @@ class ResponseObject(_TemplateEnvironmentMixin, ActionAuthenticatorMixin):
             else path_url(request.url)
         )
 
-    def _bucket_response_delete_keys(self, body, bucket_name, authenticated=True):
+    def _bucket_response_delete_keys(self, bucket_name, authenticated=True):
         template = self.response_template(S3_DELETE_KEYS_RESPONSE)
-        body_dict = xmltodict.parse(body, strip_whitespace=False)
+        body_dict = xmltodict.parse(self.body, strip_whitespace=False)
 
         objects = body_dict["Delete"].get("Object", [])
         if not isinstance(objects, list):
@@ -1102,17 +1109,19 @@ class ResponseObject(_TemplateEnvironmentMixin, ActionAuthenticatorMixin):
             line = body_io.readline()
         return bytes(new_body)
 
+    def _handle_encoded_body(self, body, content_length):
+        body_io = io.BytesIO(body)
+        # first line should equal '{content_length}\r\n
+        body_io.readline()
+        # Body contains actual data next
+        return body_io.read(content_length)
+        # last line should equal
+        # amz-checksum-sha256:<..>\r\n
+
     @amzn_request_id
-    def key_response(
-        self, request, full_url, headers
-    ):  # pylint: disable=unused-argument
+    def key_response(self, request, full_url, headers):
         # Key and Control are lumped in because splitting out the regex is too much of a pain :/
-        self.method = request.method
-        self.path = self._get_path(request)
-        # Make a copy of request.headers because it's immutable
-        self.headers = dict(request.headers)
-        if "Host" not in self.headers:
-            self.headers["Host"] = urlparse(full_url).netloc
+        self.setup_class(request, full_url, headers, use_raw_body=True)
         response_headers = {}
 
         try:
@@ -1160,10 +1169,13 @@ class ResponseObject(_TemplateEnvironmentMixin, ActionAuthenticatorMixin):
                 signed_url = "Signature=" in request.path
             key = self.backend.get_object(bucket_name, key_name)
 
-            if key:
-                if not key.acl.public_read and not signed_url:
+            if key and not signed_url:
+                bucket = self.backend.get_bucket(bucket_name)
+                resource = f"arn:aws:s3:::{bucket_name}/{key_name}"
+                bucket_policy_allows = bucket.allow_action("s3:GetObject", resource)
+                if not bucket_policy_allows and (key.acl and not key.acl.public_read):
                     return 403, {}, ""
-            elif signed_url:
+            elif signed_url and not key:
                 # coming in from requests.get(s3.generate_presigned_url())
                 if self._invalid_headers(request.url, dict(request.headers)):
                     return 403, {}, S3_INVALID_PRESIGNED_PARAMETERS
@@ -1305,7 +1317,7 @@ class ResponseObject(_TemplateEnvironmentMixin, ActionAuthenticatorMixin):
             return 304, response_headers, "Not Modified"
 
         if "acl" in query:
-            acl = s3_backend.get_object_acl(key)
+            acl = self.backend.get_object_acl(key)
             template = self.response_template(S3_OBJECT_ACL_RESPONSE)
             return 200, response_headers, template.render(acl=acl)
         if "tagging" in query:
@@ -1382,6 +1394,26 @@ class ResponseObject(_TemplateEnvironmentMixin, ActionAuthenticatorMixin):
             "x-amz-server-side-encryption-aws-kms-key-id", None
         )
 
+        checksum_algorithm = request.headers.get("x-amz-sdk-checksum-algorithm", "")
+        checksum_header = f"x-amz-checksum-{checksum_algorithm.lower()}"
+        checksum_value = request.headers.get(checksum_header)
+        if not checksum_value and checksum_algorithm:
+            # Extract the checksum-value from the body first
+            search = re.search(rb"x-amz-checksum-\w+:(\w+={1,2})", body)
+            checksum_value = search.group(1) if search else None
+
+        if checksum_value:
+            response_headers.update({checksum_header: checksum_value})
+
+        # Extract the actual data from the body second
+        if (
+            request.headers.get("x-amz-content-sha256", None)
+            == "STREAMING-UNSIGNED-PAYLOAD-TRAILER"
+        ):
+            body = self._handle_encoded_body(
+                body, int(request.headers["x-amz-decoded-content-length"])
+            )
+
         bucket_key_enabled = request.headers.get(
             "x-amz-server-side-encryption-bucket-key-enabled", None
         )
@@ -1416,7 +1448,7 @@ class ResponseObject(_TemplateEnvironmentMixin, ActionAuthenticatorMixin):
             if not lock_enabled:
                 raise LockNotEnabled
             version_id = query.get("VersionId")
-            retention = self._mode_until_from_xml(body)
+            retention = self._mode_until_from_body()
             self.backend.put_object_retention(
                 bucket_name, key_name, version_id=version_id, retention=retention
             )
@@ -1574,13 +1606,19 @@ class ResponseObject(_TemplateEnvironmentMixin, ActionAuthenticatorMixin):
             if if_none_match and key.etag == if_none_match:
                 return 304, response_headers, "Not Modified"
 
+            if part_number:
+                full_key = self.backend.head_object(bucket_name, key_name, version_id)
+                if full_key.multipart:
+                    mp_part_count = str(len(full_key.multipart.partlist))
+                    response_headers["x-amz-mp-parts-count"] = mp_part_count
+
             return 200, response_headers, ""
         else:
             return 404, response_headers, ""
 
-    def _lock_config_from_xml(self, xml):
+    def _lock_config_from_body(self):
         response_dict = {"enabled": False, "mode": None, "days": None, "years": None}
-        parsed_xml = xmltodict.parse(xml)
+        parsed_xml = xmltodict.parse(self.body)
         enabled = (
             parsed_xml["ObjectLockConfiguration"]["ObjectLockEnabled"] == "Enabled"
         )
@@ -1601,8 +1639,8 @@ class ResponseObject(_TemplateEnvironmentMixin, ActionAuthenticatorMixin):
 
         return response_dict
 
-    def _acl_from_xml(self, xml):
-        parsed_xml = xmltodict.parse(xml)
+    def _acl_from_body(self):
+        parsed_xml = xmltodict.parse(self.body)
         if not parsed_xml.get("AccessControlPolicy"):
             raise MalformedACLError()
 
@@ -1718,8 +1756,8 @@ class ResponseObject(_TemplateEnvironmentMixin, ActionAuthenticatorMixin):
 
         return tags
 
-    def _bucket_tagging_from_xml(self, xml):
-        parsed_xml = xmltodict.parse(xml)
+    def _bucket_tagging_from_body(self):
+        parsed_xml = xmltodict.parse(self.body)
 
         tags = {}
         # Optional if no tags are being sent:
@@ -1742,16 +1780,16 @@ class ResponseObject(_TemplateEnvironmentMixin, ActionAuthenticatorMixin):
 
         return tags
 
-    def _cors_from_xml(self, xml):
-        parsed_xml = xmltodict.parse(xml)
+    def _cors_from_body(self):
+        parsed_xml = xmltodict.parse(self.body)
 
         if isinstance(parsed_xml["CORSConfiguration"]["CORSRule"], list):
             return [cors for cors in parsed_xml["CORSConfiguration"]["CORSRule"]]
 
         return [parsed_xml["CORSConfiguration"]["CORSRule"]]
 
-    def _mode_until_from_xml(self, xml):
-        parsed_xml = xmltodict.parse(xml)
+    def _mode_until_from_body(self):
+        parsed_xml = xmltodict.parse(self.body)
         return (
             parsed_xml.get("Retention", None).get("Mode", None),
             parsed_xml.get("Retention", None).get("RetainUntilDate", None),
@@ -1761,8 +1799,8 @@ class ResponseObject(_TemplateEnvironmentMixin, ActionAuthenticatorMixin):
         parsed_xml = xmltodict.parse(xml)
         return parsed_xml["LegalHold"]["Status"]
 
-    def _encryption_config_from_xml(self, xml):
-        parsed_xml = xmltodict.parse(xml)
+    def _encryption_config_from_body(self):
+        parsed_xml = xmltodict.parse(self.body)
 
         if (
             not parsed_xml["ServerSideEncryptionConfiguration"].get("Rule")
@@ -1777,8 +1815,16 @@ class ResponseObject(_TemplateEnvironmentMixin, ActionAuthenticatorMixin):
 
         return parsed_xml["ServerSideEncryptionConfiguration"]
 
-    def _logging_from_xml(self, xml):
-        parsed_xml = xmltodict.parse(xml)
+    def _ownership_rule_from_body(self):
+        parsed_xml = xmltodict.parse(self.body)
+
+        if not parsed_xml["OwnershipControls"]["Rule"].get("ObjectOwnership"):
+            raise MalformedXML()
+
+        return parsed_xml["OwnershipControls"]["Rule"]["ObjectOwnership"]
+
+    def _logging_from_body(self):
+        parsed_xml = xmltodict.parse(self.body)
 
         if not parsed_xml["BucketLoggingStatus"].get("LoggingEnabled"):
             return {}
@@ -1822,8 +1868,8 @@ class ResponseObject(_TemplateEnvironmentMixin, ActionAuthenticatorMixin):
 
         return parsed_xml["BucketLoggingStatus"]["LoggingEnabled"]
 
-    def _notification_config_from_xml(self, xml):
-        parsed_xml = xmltodict.parse(xml)
+    def _notification_config_from_body(self):
+        parsed_xml = xmltodict.parse(self.body)
 
         if not len(parsed_xml["NotificationConfiguration"]):
             return {}
@@ -1897,8 +1943,8 @@ class ResponseObject(_TemplateEnvironmentMixin, ActionAuthenticatorMixin):
 
         return parsed_xml["NotificationConfiguration"]
 
-    def _accelerate_config_from_xml(self, xml):
-        parsed_xml = xmltodict.parse(xml)
+    def _accelerate_config_from_body(self):
+        parsed_xml = xmltodict.parse(self.body)
         config = parsed_xml["AccelerateConfiguration"]
         return config["Status"]
 
@@ -1945,7 +1991,11 @@ class ResponseObject(_TemplateEnvironmentMixin, ActionAuthenticatorMixin):
         self._set_action("KEY", "POST", query)
         self._authenticate_and_authorize_s3_action()
 
+        encryption = request.headers.get("x-amz-server-side-encryption")
+        kms_key_id = request.headers.get("x-amz-server-side-encryption-aws-kms-key-id")
+
         if body == b"" and "uploads" in query:
+            response_headers = {}
             metadata = metadata_from_headers(request.headers)
             tagging = self._tagging_from_headers(request.headers)
             storage_type = request.headers.get("x-amz-storage-class", "STANDARD")
@@ -1953,14 +2003,27 @@ class ResponseObject(_TemplateEnvironmentMixin, ActionAuthenticatorMixin):
             if acl is None:
                 acl = self.backend.get_bucket(bucket_name).acl
             multipart_id = self.backend.create_multipart_upload(
-                bucket_name, key_name, metadata, storage_type, tagging, acl
+                bucket_name,
+                key_name,
+                metadata,
+                storage_type,
+                tagging,
+                acl,
+                encryption,
+                kms_key_id,
             )
+            if encryption:
+                response_headers["x-amz-server-side-encryption"] = encryption
+            if kms_key_id:
+                response_headers[
+                    "x-amz-server-side-encryption-aws-kms-key-id"
+                ] = kms_key_id
 
             template = self.response_template(S3_MULTIPART_INITIATE_RESPONSE)
             response = template.render(
                 bucket_name=bucket_name, key_name=key_name, upload_id=multipart_id
             )
-            return 200, {}, response
+            return 200, response_headers, response
 
         if query.get("uploadId"):
             body = self._complete_multipart_body(body)
@@ -1979,6 +2042,8 @@ class ResponseObject(_TemplateEnvironmentMixin, ActionAuthenticatorMixin):
                 storage=multipart.storage,
                 etag=etag,
                 multipart=multipart,
+                encryption=multipart.sse_encryption,
+                kms_key_id=multipart.kms_key_id,
             )
             key.set_metadata(multipart.metadata)
             self.backend.set_key_tags(key, multipart.tags)
@@ -1988,6 +2053,13 @@ class ResponseObject(_TemplateEnvironmentMixin, ActionAuthenticatorMixin):
             headers = {}
             if key.version_id:
                 headers["x-amz-version-id"] = key.version_id
+
+            if key.encryption:
+                headers["x-amz-server-side-encryption"] = key.encryption
+
+            if key.kms_key_id:
+                headers["x-amz-server-side-encryption-aws-kms-key-id"] = key.kms_key_id
+
             return (
                 200,
                 headers,
@@ -2037,7 +2109,7 @@ class ResponseObject(_TemplateEnvironmentMixin, ActionAuthenticatorMixin):
         return False
 
 
-S3ResponseInstance = ResponseObject(s3_backend)
+S3ResponseInstance = S3Response()
 
 S3_ALL_BUCKETS = """<ListAllMyBucketsResult xmlns="http://s3.amazonaws.com/doc/2006-03-01">
   <Owner>
@@ -2463,8 +2535,7 @@ S3_MULTIPART_COMPLETE_RESPONSE = """<?xml version="1.0" encoding="UTF-8"?>
 </CompleteMultipartUploadResult>
 """
 
-S3_ALL_MULTIPARTS = (
-    """<?xml version="1.0" encoding="UTF-8"?>
+S3_ALL_MULTIPARTS = """<?xml version="1.0" encoding="UTF-8"?>
 <ListMultipartUploadsResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
   <Bucket>{{ bucket_name }}</Bucket>
   <KeyMarker></KeyMarker>
@@ -2476,9 +2547,7 @@ S3_ALL_MULTIPARTS = (
     <Key>{{ upload.key_name }}</Key>
     <UploadId>{{ upload.id }}</UploadId>
     <Initiator>
-      <ID>arn:aws:iam::"""
-    + get_account_id()
-    + """:user/user1-11111a31-17b5-4fb7-9df5-b111111f13de</ID>
+      <ID>arn:aws:iam::{{ account_id }}:user/user1-11111a31-17b5-4fb7-9df5-b111111f13de</ID>
       <DisplayName>user1-11111a31-17b5-4fb7-9df5-b111111f13de</DisplayName>
     </Initiator>
     <Owner>
@@ -2491,7 +2560,6 @@ S3_ALL_MULTIPARTS = (
   {% endfor %}
 </ListMultipartUploadsResult>
 """
-)
 
 S3_NO_POLICY = """<?xml version="1.0" encoding="UTF-8"?>
 <Error>
@@ -2778,4 +2846,22 @@ S3_REPLICATION_CONFIG = """<?xml version="1.0" encoding="UTF-8"?>
 {% endfor %}
 <Role>{{ replication["Role"] }}</Role>
 </ReplicationConfiguration>
+"""
+
+S3_BUCKET_GET_OWNERSHIP_RULE = """<?xml version="1.0" encoding="UTF-8"?>
+<OwnershipControls xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
+    <Rule>
+        <ObjectOwnership>{{ownership_rule}}</ObjectOwnership>
+    </Rule>
+</OwnershipControls>
+"""
+
+S3_ERROR_BUCKET_ONWERSHIP_NOT_FOUND = """
+<Error>
+    <Code>OwnershipControlsNotFoundError</Code>
+    <Message>The bucket ownership controls were not found</Message>
+    <BucketName>{{bucket_name}}</BucketName>
+    <RequestId>294PFVCB9GFVXY2S</RequestId>
+    <HostId>l/tqqyk7HZbfvFFpdq3+CAzA9JXUiV4ZajKYhwolOIpnmlvZrsI88AKsDLsgQI6EvZ9MuGHhk7M=</HostId>
+</Error>
 """

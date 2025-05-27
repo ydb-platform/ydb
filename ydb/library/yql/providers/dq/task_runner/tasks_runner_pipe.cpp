@@ -2,16 +2,15 @@
 
 #include <ydb/library/yql/dq/runtime/dq_input_channel.h>
 #include <ydb/library/yql/dq/runtime/dq_output_channel.h>
-#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
-#include <ydb/library/yql/minikql/mkql_node_serialization.h>
-#include <ydb/library/yql/minikql/mkql_node_cast.h>
-#include <ydb/library/yql/minikql/mkql_program_builder.h>
-#include <ydb/library/yql/minikql/aligned_page_pool.h>
-#include <ydb/library/yql/utils/log/log.h>
-#include <ydb/library/yql/utils/backtrace/backtrace.h>
-#include <ydb/library/yql/utils/yql_panic.h>
-#include <ydb/library/yql/utils/rope_over_buffer.h>
-#include <ydb/library/yql/utils/failure_injector/failure_injector.h>
+#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
+#include <yql/essentials/minikql/mkql_node_serialization.h>
+#include <yql/essentials/minikql/mkql_node_cast.h>
+#include <yql/essentials/minikql/mkql_program_builder.h>
+#include <yql/essentials/minikql/aligned_page_pool.h>
+#include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/utils/backtrace/backtrace.h>
+#include <yql/essentials/utils/yql_panic.h>
+#include <yql/essentials/utils/failure_injector/failure_injector.h>
 
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 
@@ -67,27 +66,32 @@ void Load(IInputStream& input, void* buf, size_t size) {
 
 } // namespace {
 
-i64 SaveRopeToPipe(IOutputStream& output, const TRope& rope) {
+i64 SaveRopeToPipe(IOutputStream& output, const TChunkedBuffer& rope) {
+    // TODO: can this function recieve rope by rvalue?
+    TChunkedBuffer toSave(rope);
     i64 total = 0;
-    for (const auto& [data, size] : rope) {
+    while (!toSave.Empty()) {
+        TStringBuf buf = toSave.Front().Buf;
+        size_t size = buf.size();
         output.Write(&size, sizeof(size_t));
         YQL_ENSURE(size != 0);
-        output.Write(data, size);
+        output.Write(buf.data(), size);
         total += size;
+        toSave.Erase(size);
     }
     size_t zero = 0;
     output.Write(&zero, sizeof(size_t));
     return total;
 }
 
-void LoadRopeFromPipe(IInputStream& input, TRope& rope) {
+void LoadRopeFromPipe(IInputStream& input, TChunkedBuffer& rope) {
     size_t size;
     do {
         Load(input, &size, sizeof(size_t));
         if (size) {
             auto buffer = std::shared_ptr<char[]>(new char[size]);
-            Load(input, buffer.get(), size);            
-            rope.Insert(rope.End(), NYql::MakeReadOnlyRope(buffer, buffer.get(), size));
+            Load(input, buffer.get(), size);
+            rope.Append(TStringBuf(buffer.get(), size), buffer);
         }
     } while (size != 0);
 }
@@ -545,6 +549,11 @@ void LoadFromProto(TDqAsyncStats& stats, const NYql::NDqProto::TDqAsyncBufferSta
     stats.LastMessageTs = TInstant::MilliSeconds(f.GetLastMessageMs());
     stats.WaitTime = TDuration::MicroSeconds(f.GetWaitTimeUs());
     stats.WaitPeriods = f.GetWaitPeriods();
+
+    stats.FilteredBytes = f.GetFilteredBytes();
+    stats.FilteredRows = f.GetFilteredRows();
+    stats.QueuedBytes = f.GetQueuedBytes();
+    stats.QueuedRows = f.GetQueuedRows();
 }
 
 /*______________________________________________________________________________________________*/
@@ -576,7 +585,7 @@ public:
         if (protocolVersion <= 1) {
             return std::numeric_limits<i64>::max();
         }
-        
+
         if (protocolVersion < 6) {
             NDqProto::TCommandHeader header;
             header.SetVersion(2);
@@ -605,7 +614,7 @@ public:
         header.SetChannelId(ChannelId);
         header.Save(&Output);
 
-        i64 written = 0; 
+        i64 written = 0;
         TCountingOutput countingOutput(&Output);
         data.Proto.Save(&countingOutput);
         if (data.IsOOB()) {
@@ -1124,6 +1133,10 @@ public:
         }
     }
 
+    void UpdateSettings(const TDqOutputChannelSettings::TMutable& settings) override {
+        Y_UNUSED(settings);
+    }
+
     template<typename T>
     void FromProto(const T& f)
     {
@@ -1162,7 +1175,7 @@ public:
     const TDqOutputStats& GetPushStats() const override {
         return PushStats;
     }
-    
+
     const TDqAsyncOutputBufferStats& GetPopStats() const override {
         return PopStats;
     }
@@ -1373,15 +1386,17 @@ public:
 
         auto state = TFailureInjector::GetCurrentState();
         for (auto& [k, v]: state) {
-            NDqProto::TCommandHeader header;
-            header.SetVersion(1);
-            header.SetCommand(NDqProto::TCommandHeader::CONFIGURE_FAILURE_INJECTOR);
-            header.Save(&Output);
-            NYql::NDqProto::TConfigureFailureInjectorRequest request;
-            request.SetName(k);
-            request.SetSkip(v.Skip);
-            request.SetFail(v.CountOfFails);
-            request.Save(&Output);
+            if (v.CountOfFails) {
+                NDqProto::TCommandHeader header;
+                header.SetVersion(1);
+                header.SetCommand(NDqProto::TCommandHeader::CONFIGURE_FAILURE_INJECTOR);
+                header.Save(&Output);
+                NYql::NDqProto::TConfigureFailureInjectorRequest request;
+                request.SetName(k);
+                request.SetSkip(v.Skip);
+                request.SetFail(v.CountOfFails);
+                request.Save(&Output);
+            }
         }
 
         return ret;
@@ -1529,7 +1544,7 @@ private:
 
         {
             auto guard = BindAllocator({});
-            ProgramNode = DeserializeRuntimeNode(Task.GetProgram().GetRaw(), GetTypeEnv()); 
+            ProgramNode = DeserializeRuntimeNode(Task.GetProgram().GetRaw(), GetTypeEnv());
         }
 
         auto& programStruct = static_cast<TStructLiteral&>(*ProgramNode.GetNode());
@@ -1967,7 +1982,7 @@ private:
     void ProcessJobs(const TString& exePath, const TPortoSettings& portoSettings) {
         NThreading::TPromise<void> promise = NThreading::NewPromise();
 
-        promise.GetFuture().Apply([=](const NThreading::TFuture<void>&) mutable {
+        promise.GetFuture().Apply([=, this](const NThreading::TFuture<void>&) mutable {
             Start(exePath, portoSettings);
         });
 

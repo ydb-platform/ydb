@@ -4,6 +4,7 @@
 #include <ydb/core/grpc_services/grpc_request_proxy.h>
 #include <ydb/core/grpc_services/rpc_deferrable.h>
 #include <ydb/core/grpc_services/rpc_scheme_base.h>
+#include <ydb/core/protos/sqs.pb.h>
 #include <ydb/core/persqueue/partition.h>
 #include <ydb/core/persqueue/pq_rl_helpers.h>
 #include <ydb/core/persqueue/write_meta.h>
@@ -32,12 +33,24 @@ using grpc::Status;
 
 namespace NKikimr::NYmq::V1 {
 
+    #define COPY_FIELD_IF_PRESENT(from, to) \
+    if (GetProtoRequest()->Has##from()) { \
+        result->Set##to(GetProtoRequest()->Get##from()); \
+    }
+
+    #define COPY_FIELD_IF_PRESENT_IN_ENTRY(from, to) \
+    if (requestEntry.Has##from()) { \
+        entry->Set##to(requestEntry.Get##from()); \
+    }
+
     using namespace NGRpcService;
     using namespace NGRpcProxy::V1;
 
     // Names of queue attributes
     static const TString APPROXIMATE_NUMBER_OF_MESSAGES = "ApproximateNumberOfMessages";
     static const TString APPROXIMATE_NUMBER_OF_MESSAGES_DELAYED = "ApproximateNumberOfMessagesDelayed";
+    static const TString APPROXIMATE_NUMBER_OF_MESSAGES_NOT_VISIBLE = "ApproximateNumberOfMessagesNotVisible";
+    static const TString CONTENT_BASED_DEDUPLICATION = "ContentBasedDeduplication";
     static const TString CREATED_TIMESTAMP = "CreatedTimestamp";
     static const TString DELAY_SECONDS = "DelaySeconds";
     static const TString LAST_MODIFIED_TIMESTAMP = "LastModifiedTimestamp";
@@ -79,7 +92,16 @@ namespace NKikimr::NYmq::V1 {
                 Request->RaiseIssue(issue);
                 Request->ReplyWithYdbStatus(Ydb::StatusIds_StatusCode_STATUS_CODE_UNSPECIFIED);
             } else {
-                Request->SendResult(this->GetResult(resp), Ydb::StatusIds::StatusCode::StatusIds_StatusCode_SUCCESS);
+                Ydb::Operations::Operation operation;
+                operation.set_ready(true);
+                operation.set_status(Ydb::StatusIds::StatusCode::StatusIds_StatusCode_SUCCESS);
+                Ydb::Ymq::V1::QueueTags queueTags;
+                for (const auto& t: resp.GetQueueTags()) {
+                    queueTags.mutable_tags()->emplace(t.GetKey(), t.GetValue());
+                }
+                operation.mutable_metadata()->PackFrom(queueTags);
+                operation.mutable_result()->PackFrom(this->GetResult(resp));
+                Request->SendOperation(operation);
             }
         }
 
@@ -124,11 +146,11 @@ namespace NKikimr::NYmq::V1 {
                 << ", UserSid: " << UserSid
                 << ", RequestId: " << RequestId;
             );
-            auto requestHolder = MakeHolder<TSqsRequest>();
+            TSqsRequest sqsRequest;
 
-            requestHolder->SetRequestId(RequestId);
+            sqsRequest.SetRequestId(RequestId);
 
-            auto request = GetRequest(requestHolder);
+            auto request = GetRequest(sqsRequest);
 
             request->MutableAuth()->SetUserName(CloudId);
             request->MutableAuth()->SetFolderId(FolderId);
@@ -138,14 +160,14 @@ namespace NKikimr::NYmq::V1 {
                 request->MutableCredentials()->SetOAuthToken(SecurityToken);
             }
 
-            auto actor = CreateProxyActionActor(*requestHolder.Release(), CreateReplyCallback(), true);
+            auto actor = CreateProxyActionActor(sqsRequest, CreateReplyCallback(), true);
             ctx.RegisterWithSameMailbox(actor);
 
             TBase::Die(ctx);
         }
 
     protected:
-        virtual TRequest* GetRequest(THolder<TSqsRequest>&) = 0;
+        virtual TRequest* GetRequest(TSqsRequest&) = 0;
         virtual THolder<TReplyCallback> CreateReplyCallback() = 0;
     private:
         const TString FolderId;
@@ -190,8 +212,8 @@ namespace NKikimr::NYmq::V1 {
         using TRpcRequestActor::TRpcRequestActor;
 
     private:
-        NKikimr::NSQS::TGetQueueUrlRequest* GetRequest(THolder<TSqsRequest>& requestHolder) override {
-            auto result = requestHolder->MutableGetQueueUrl();
+        NKikimr::NSQS::TGetQueueUrlRequest* GetRequest(TSqsRequest& requestHolder) override {
+            auto result = requestHolder.MutableGetQueueUrl();
             result->SetQueueName(GetProtoRequest()->queue_name());
             return result;
         }
@@ -223,14 +245,18 @@ namespace NKikimr::NYmq::V1 {
         using TRpcRequestActor::TRpcRequestActor;
 
     private:
-        NKikimr::NSQS::TCreateQueueRequest* GetRequest(THolder<TSqsRequest>& requestHolder) override {
-            auto result = requestHolder->MutableCreateQueue();
+        NKikimr::NSQS::TCreateQueueRequest* GetRequest(TSqsRequest& requestHolder) override {
+            auto result = requestHolder.MutableCreateQueue();
             result->SetQueueName(GetProtoRequest()->queue_name());
-
             for (auto &srcAttribute : GetProtoRequest()->attributes()) {
                 auto dstAttribute = result->MutableAttributes()->Add();
                 dstAttribute->SetName(srcAttribute.first);
                 dstAttribute->SetValue(srcAttribute.second);
+            }
+            for (auto &srcTag : GetProtoRequest()->tags()) {
+                auto dstTag = result->MutableTags()->Add();
+                dstTag->SetKey(srcTag.first);
+                dstTag->SetValue(srcTag.second);
             }
             return result;
         }
@@ -249,8 +275,8 @@ namespace NKikimr::NYmq::V1 {
 
         Ydb::Ymq::V1::SendMessageResult GetResult(const NKikimrClient::TSqsResponse& resp) override {
             Ydb::Ymq::V1::SendMessageResult result;
-            result.set_md5_of_message_attributes(GetResponse(resp).GetMD5OfMessageAttributes());
-            result.set_md5_of_message_body(GetResponse(resp).GetMD5OfMessageBody());
+            result.set_m_d_5_of_message_attributes(GetResponse(resp).GetMD5OfMessageAttributes());
+            result.set_m_d_5_of_message_body(GetResponse(resp).GetMD5OfMessageBody());
             result.set_message_id(GetResponse(resp).GetMessageId());
             result.set_sequence_number(std::to_string(GetResponse(resp).GetSequenceNumber()));
             return result;
@@ -265,8 +291,9 @@ namespace NKikimr::NYmq::V1 {
         using TRpcRequestActor::TRpcRequestActor;
 
     private:
-        NKikimr::NSQS::TSendMessageRequest* GetRequest(THolder<TSqsRequest>& requestHolder) override {
-            auto result = requestHolder->MutableSendMessage();
+        NKikimr::NSQS::TSendMessageRequest* GetRequest(TSqsRequest& requestHolder) override {
+            auto result = requestHolder.MutableSendMessage();
+
             for (auto& srcAttribute: GetProtoRequest()->Getmessage_attributes()) {
                 auto dstAttribute = result->MutableMessageAttributes()->Add();
                 dstAttribute->SetName(srcAttribute.first);
@@ -274,10 +301,14 @@ namespace NKikimr::NYmq::V1 {
                 dstAttribute->SetBinaryValue(srcAttribute.second.Getbinary_value());
                 dstAttribute->SetDataType(srcAttribute.second.Getdata_type());
             }
-            result->SetMessageDeduplicationId(GetProtoRequest()->message_deduplication_id());
-            result->SetMessageGroupId(GetProtoRequest()->message_group_id());
-            result->SetQueueName(CloudIdAndResourceIdFromQueueUrl(GetProtoRequest()->queue_url())->second);
-            result->SetMessageBody(GetProtoRequest()->message_body());
+
+            COPY_FIELD_IF_PRESENT(delay_seconds, DelaySeconds);
+            COPY_FIELD_IF_PRESENT(message_deduplication_id, MessageDeduplicationId);
+            COPY_FIELD_IF_PRESENT(message_group_id, MessageGroupId);
+
+            result->SetQueueName(CloudIdAndResourceIdFromQueueUrl(GetProtoRequest()->Getqueue_url()).second);
+
+            result->SetMessageBody(GetProtoRequest()->Getmessage_body());
 
             return result;
         }
@@ -306,34 +337,31 @@ namespace NKikimr::NYmq::V1 {
             for (const auto& srcMessage: GetResponse(resp).GetMessages()) {
                 Ydb::Ymq::V1::Message dstMessage;
 
-                for (TString& attributeName : AttributesNames) {
-                    if (attributeName == APPROXIMATE_RECEIVE_COUNT) {
-                        dstMessage.Mutableattributes()->at(attributeName)
-                            .assign(srcMessage.GetApproximateReceiveCount());
-                    } else if (attributeName == APPROXIMATE_FIRST_RECEIVE_TIMESTAMP) {
-                        dstMessage.Mutableattributes()->at(attributeName)
-                            .assign(srcMessage.GetApproximateFirstReceiveTimestamp());
-                    } else if (attributeName == MESSAGE_DEDUPLICATION_ID) {
-                        dstMessage.Mutableattributes()->at(attributeName)
-                            .assign(srcMessage.GetMessageDeduplicationId());
-                    } else if (attributeName == MESSAGE_GROUP_ID) {
-                        dstMessage.Mutableattributes()->at(attributeName)
-                            .assign(srcMessage.GetMessageGroupId());
-                    } else if (attributeName == SENDER_ID) {
-                        dstMessage.Mutableattributes()->at(attributeName)
-                            .assign(srcMessage.GetSenderId());
-                    } else if (attributeName == SENT_TIMESTAMP) {
-                        dstMessage.Mutableattributes()->at(attributeName)
-                            .assign(srcMessage.GetSentTimestamp());
-                    } else if (attributeName == SEQUENCE_NUMBER) {
-                        dstMessage.Mutableattributes()->at(attributeName)
-                            .assign(srcMessage.GetSequenceNumber());
-                    }
+                if (srcMessage.HasApproximateReceiveCount()) {
+                    dstMessage.Mutableattributes()->insert({APPROXIMATE_RECEIVE_COUNT, std::to_string(srcMessage.GetApproximateReceiveCount())});
+                }
+                if (srcMessage.HasApproximateFirstReceiveTimestamp()) {
+                    dstMessage.Mutableattributes()->insert({APPROXIMATE_FIRST_RECEIVE_TIMESTAMP, std::to_string(srcMessage.GetApproximateFirstReceiveTimestamp())});
+                }
+                if (srcMessage.HasMessageDeduplicationId()) {
+                    dstMessage.Mutableattributes()->insert({MESSAGE_DEDUPLICATION_ID, srcMessage.GetMessageDeduplicationId()});
+                }
+                if (srcMessage.HasMessageGroupId()) {
+                    dstMessage.Mutableattributes()->insert({MESSAGE_GROUP_ID, srcMessage.GetMessageGroupId()});
+                }
+                if (srcMessage.HasSenderId()) {
+                    dstMessage.Mutableattributes()->insert({SENDER_ID, srcMessage.GetSenderId()});
+                }
+                if (srcMessage.HasSentTimestamp()) {
+                    dstMessage.Mutableattributes()->insert({SENT_TIMESTAMP, std::to_string(srcMessage.GetSentTimestamp())});
+                }
+                if (srcMessage.HasSequenceNumber()) {
+                    dstMessage.Mutableattributes()->insert({SEQUENCE_NUMBER, std::to_string(srcMessage.GetSequenceNumber())});
                 }
 
                 dstMessage.set_body(srcMessage.GetData());
-                dstMessage.set_md5_of_body(srcMessage.GetMD5OfMessageBody());
-                dstMessage.set_md5_of_message_attributes(srcMessage.GetMD5OfMessageAttributes());
+                dstMessage.set_m_d_5_of_body(srcMessage.GetMD5OfMessageBody());
+                dstMessage.set_m_d_5_of_message_attributes(srcMessage.GetMD5OfMessageAttributes());
 
                 for (const auto& srcAttribute: srcMessage.GetMessageAttributes()) {
                     Ydb::Ymq::V1::MessageAttribute dstAttribute;
@@ -361,29 +389,34 @@ namespace NKikimr::NYmq::V1 {
         using TBaseRpcRequestActor::TBaseRpcRequestActor;
 
     private:
-        NKikimr::NSQS::TReceiveMessageRequest* GetRequest(THolder<TSqsRequest>& requestHolder) override {
-            auto result = requestHolder->MutableReceiveMessage();
+        NKikimr::NSQS::TReceiveMessageRequest* GetRequest(TSqsRequest& requestHolder) override {
+            auto result = requestHolder.MutableReceiveMessage();
+
+            result->SetQueueName(CloudIdAndResourceIdFromQueueUrl(GetProtoRequest()->queue_url()).second);
+
+            COPY_FIELD_IF_PRESENT(max_number_of_messages, MaxNumberOfMessages);
+            COPY_FIELD_IF_PRESENT(receive_request_attempt_id, ReceiveRequestAttemptId);
+            COPY_FIELD_IF_PRESENT(visibility_timeout, VisibilityTimeout);
+            COPY_FIELD_IF_PRESENT(wait_time_seconds, WaitTimeSeconds);
+
             auto systemAttributeNames = GetProtoRequest()->Getmessage_system_attribute_names();
             // We ignore AttributeNames if SystemAttributeNames is present,
             // because AttributeNames is deprecated in favour of SystemAttributeNames
             if (systemAttributeNames.size() > 0) {
                 for (int i = 0; i < systemAttributeNames.size(); i++) {
-                    result->SetAttributeName(i, systemAttributeNames[i]);
+                    result->AddAttributeName(systemAttributeNames[i]);
                 }
             } else {
                 auto attributeNames = GetProtoRequest()->Getattribute_names();
                 for (int i = 0; i < attributeNames.size(); i++) {
-                    result->SetAttributeName(i, attributeNames[i]);
+                    result->AddAttributeName(attributeNames[i]);
                 }
             }
-            result->SetMaxNumberOfMessages(GetProtoRequest()->max_number_of_messages());
+
             for (int i = 0; i < GetProtoRequest()->Getmessage_attribute_names().size(); i++) {
-                result->SetMessageAttributeName(i, GetProtoRequest()->Getmessage_attribute_names()[i]);
+                result->AddMessageAttributeName(GetProtoRequest()->Getmessage_attribute_names()[i]);
             }
-            result->SetQueueName(CloudIdAndResourceIdFromQueueUrl(GetProtoRequest()->queue_url())->second);
-            result->SetReceiveRequestAttemptId(GetProtoRequest()->Getreceive_request_attempt_id());
-            result->SetVisibilityTimeout(GetProtoRequest()->Getvisibility_timeout());
-            result->SetWaitTimeSeconds(GetProtoRequest()->Getwait_time_seconds());
+
             return result;
         }
 
@@ -407,6 +440,11 @@ namespace NKikimr::NYmq::V1 {
         result.Mutableattributes()->emplace(name, value);
     };
 
+    template <>
+    void AddAttribute(Ydb::Ymq::V1::GetQueueAttributesResult& result, const TString& name, bool value) {
+        result.Mutableattributes()->emplace(name, value ? "true" : "false");
+    };
+
     class TGetQueueAttributesReplyCallback : public TReplyCallback<
             NKikimr::NSQS::TGetQueueAttributesResponse,
             Ydb::Ymq::V1::GetQueueAttributesResult> {
@@ -428,75 +466,47 @@ namespace NKikimr::NYmq::V1 {
 
         Ydb::Ymq::V1::GetQueueAttributesResult GetResult(const NKikimrClient::TSqsResponse& resp) override {
             Ydb::Ymq::V1::GetQueueAttributesResult result;
-            for (const auto& attributeName : Attributes) {
-                if (attributeName == APPROXIMATE_NUMBER_OF_MESSAGES) {
-                    AddAttribute(
-                        result,
-                        APPROXIMATE_NUMBER_OF_MESSAGES,
-                        GetResponse(resp).GetApproximateNumberOfMessages()
-                    );
-                } else if (attributeName == APPROXIMATE_NUMBER_OF_MESSAGES_DELAYED) {
-                    AddAttribute(
-                        result,
-                        APPROXIMATE_NUMBER_OF_MESSAGES_DELAYED,
-                        GetResponse(resp).GetApproximateNumberOfMessagesDelayed()
-                    );
-                } else if (attributeName == CREATED_TIMESTAMP) {
-                    AddAttribute(
-                        result,
-                        CREATED_TIMESTAMP,
-                        GetResponse(resp).GetCreatedTimestamp()
-                    );
-                } else if (attributeName == DELAY_SECONDS) {
-                    AddAttribute(
-                        result,
-                        DELAY_SECONDS,
-                        GetResponse(resp).GetDelaySeconds()
-                    );
-                } else if (attributeName == LAST_MODIFIED_TIMESTAMP) {
-                    AddAttribute(
-                        result,
-                        LAST_MODIFIED_TIMESTAMP,
-                        GetResponse(resp).GetLastModifiedTimestamp()
-                    );
-                } else if (attributeName == MAXIMUM_MESSAGE_SIZE) {
-                    AddAttribute(
-                        result,
-                        MAXIMUM_MESSAGE_SIZE,
-                        GetResponse(resp).GetMaximumMessageSize()
-                    );
-                } else if (attributeName == MESSAGE_RETENTION_PERIOD) {
-                    AddAttribute(
-                        result,
-                        MESSAGE_RETENTION_PERIOD,
-                        GetResponse(resp).GetMessageRetentionPeriod()
-                    );
-                } else if (attributeName == QUEUE_ARN) {
-                    AddAttribute(
-                        result,
-                        QUEUE_ARN,
-                        GetResponse(resp).GetQueueArn()
-                    );
-                } else if (attributeName == RECEIVE_MESSAGE_WAIT_TIME_SECONDS) {
-                    AddAttribute(
-                        result,
-                        RECEIVE_MESSAGE_WAIT_TIME_SECONDS,
-                        GetResponse(resp).GetReceiveMessageWaitTimeSeconds()
-                    );
-                } else if (attributeName == VISIBILITY_TIMEOUT) {
-                    AddAttribute(
-                        result,
-                        VISIBILITY_TIMEOUT,
-                        GetResponse(resp).GetVisibilityTimeout()
-                    );
-                } else if (attributeName == REDRIVE_POLICY) {
-                    AddAttribute(
-                        result,
-                        REDRIVE_POLICY,
-                        GetResponse(resp).GetRedrivePolicy()
-                    );
-                }
+            const auto& attrs = resp.GetGetQueueAttributes();
+            if (attrs.HasApproximateNumberOfMessages()) {
+                AddAttribute(result, APPROXIMATE_NUMBER_OF_MESSAGES, attrs.GetApproximateNumberOfMessages());
             }
+            if (attrs.HasApproximateNumberOfMessagesDelayed()) {
+                AddAttribute(result, APPROXIMATE_NUMBER_OF_MESSAGES_DELAYED, attrs.GetApproximateNumberOfMessagesDelayed());
+            }
+            if (attrs.HasApproximateNumberOfMessagesNotVisible()) {
+                AddAttribute(result, APPROXIMATE_NUMBER_OF_MESSAGES_NOT_VISIBLE, attrs.GetApproximateNumberOfMessagesNotVisible());
+            }
+            if (attrs.HasContentBasedDeduplication()) {
+                AddAttribute(result, CONTENT_BASED_DEDUPLICATION, attrs.GetContentBasedDeduplication());
+            }
+            if (attrs.HasCreatedTimestamp()) {
+                AddAttribute(result, CREATED_TIMESTAMP, attrs.GetCreatedTimestamp());
+            }
+            if (attrs.HasDelaySeconds()) {
+                AddAttribute(result, DELAY_SECONDS, attrs.GetDelaySeconds());
+            }
+            if (attrs.HasLastModifiedTimestamp()) {
+                AddAttribute(result, LAST_MODIFIED_TIMESTAMP, attrs.GetLastModifiedTimestamp());
+            }
+            if (attrs.HasMaximumMessageSize()) {
+                AddAttribute(result, MAXIMUM_MESSAGE_SIZE, attrs.GetMaximumMessageSize());
+            }
+            if (attrs.HasMessageRetentionPeriod()) {
+                AddAttribute(result, MESSAGE_RETENTION_PERIOD, attrs.GetMessageRetentionPeriod());
+            }
+            if (attrs.HasQueueArn()) {
+                AddAttribute(result, QUEUE_ARN, attrs.GetQueueArn());
+            }
+            if (attrs.HasReceiveMessageWaitTimeSeconds()) {
+                AddAttribute(result, RECEIVE_MESSAGE_WAIT_TIME_SECONDS, attrs.GetReceiveMessageWaitTimeSeconds());
+            }
+            if (attrs.HasVisibilityTimeout()) {
+                AddAttribute(result, VISIBILITY_TIMEOUT, attrs.GetVisibilityTimeout());
+            }
+            if (attrs.HasRedrivePolicy()) {
+                AddAttribute(result, REDRIVE_POLICY, attrs.GetRedrivePolicy());
+            }
+
             return result;
         }
 
@@ -511,9 +521,9 @@ namespace NKikimr::NYmq::V1 {
         using TBaseRpcRequestActor::TBaseRpcRequestActor;
 
     private:
-        NKikimr::NSQS::TGetQueueAttributesRequest* GetRequest(THolder<TSqsRequest>& requestHolder) override {
-            auto result = requestHolder->MutableGetQueueAttributes();
-            result->SetQueueName(CloudIdAndResourceIdFromQueueUrl(GetProtoRequest()->queue_url())->second);
+        NKikimr::NSQS::TGetQueueAttributesRequest* GetRequest(TSqsRequest& requestHolder) override {
+            auto result = requestHolder.MutableGetQueueAttributes();
+            result->SetQueueName(CloudIdAndResourceIdFromQueueUrl(GetProtoRequest()->queue_url()).second);
             for (const auto& attributeName : GetProtoRequest()->Getattribute_names()) {
                 result->MutableNames()->Add()->assign(attributeName);
             }
@@ -557,9 +567,9 @@ namespace NKikimr::NYmq::V1 {
         using TRpcRequestActor::TRpcRequestActor;
 
     private:
-        NKikimr::NSQS::TListQueuesRequest* GetRequest(THolder<TSqsRequest>& requestHolder) override {
-            auto result = requestHolder->MutableListQueues();
-            result->SetQueueNamePrefix(GetProtoRequest()->Getqueue_name_prefix());
+        NKikimr::NSQS::TListQueuesRequest* GetRequest(TSqsRequest& requestHolder) override {
+            auto result = requestHolder.MutableListQueues();
+            COPY_FIELD_IF_PRESENT(queue_name_prefix, QueueNamePrefix);
             return result;
         }
     };
@@ -589,9 +599,9 @@ namespace NKikimr::NYmq::V1 {
         using TRpcRequestActor::TRpcRequestActor;
 
     private:
-        NKikimr::NSQS::TDeleteMessageRequest* GetRequest(THolder<TSqsRequest>& requestHolder) override {
-            auto result = requestHolder->MutableDeleteMessage();
-            result->SetQueueName(CloudIdAndResourceIdFromQueueUrl(GetProtoRequest()->queue_url())->second);
+        NKikimr::NSQS::TDeleteMessageRequest* GetRequest(TSqsRequest& requestHolder) override {
+            auto result = requestHolder.MutableDeleteMessage();
+            result->SetQueueName(CloudIdAndResourceIdFromQueueUrl(GetProtoRequest()->queue_url()).second);
             result->SetReceiptHandle(GetProtoRequest()->receipt_handle());
             return result;
         }
@@ -622,9 +632,9 @@ namespace NKikimr::NYmq::V1 {
         using TRpcRequestActor::TRpcRequestActor;
 
     private:
-        NKikimr::NSQS::TPurgeQueueRequest* GetRequest(THolder<TSqsRequest>& requestHolder) override {
-            auto result = requestHolder->MutablePurgeQueue();
-            result->SetQueueName(CloudIdAndResourceIdFromQueueUrl(GetProtoRequest()->queue_url())->second);
+        NKikimr::NSQS::TPurgeQueueRequest* GetRequest(TSqsRequest& requestHolder) override {
+            auto result = requestHolder.MutablePurgeQueue();
+            result->SetQueueName(CloudIdAndResourceIdFromQueueUrl(GetProtoRequest()->queue_url()).second);
             return result;
         }
     };
@@ -654,9 +664,9 @@ namespace NKikimr::NYmq::V1 {
         using TRpcRequestActor::TRpcRequestActor;
 
     private:
-        NKikimr::NSQS::TDeleteQueueRequest* GetRequest(THolder<TSqsRequest>& requestHolder) override {
-            auto result = requestHolder->MutableDeleteQueue();
-            result->SetQueueName(CloudIdAndResourceIdFromQueueUrl(GetProtoRequest()->queue_url())->second);
+        NKikimr::NSQS::TDeleteQueueRequest* GetRequest(TSqsRequest& requestHolder) override {
+            auto result = requestHolder.MutableDeleteQueue();
+            result->SetQueueName(CloudIdAndResourceIdFromQueueUrl(GetProtoRequest()->queue_url()).second);
             return result;
         }
     };
@@ -686,14 +696,410 @@ namespace NKikimr::NYmq::V1 {
         using TRpcRequestActor::TRpcRequestActor;
 
     private:
-        NKikimr::NSQS::TChangeMessageVisibilityRequest* GetRequest(THolder<TSqsRequest>& requestHolder) override {
-            auto result = requestHolder->MutableChangeMessageVisibility();
-            result->SetQueueName(CloudIdAndResourceIdFromQueueUrl(GetProtoRequest()->queue_url())->second);
+        NKikimr::NSQS::TChangeMessageVisibilityRequest* GetRequest(TSqsRequest& requestHolder) override {
+            auto result = requestHolder.MutableChangeMessageVisibility();
+            result->SetQueueName(CloudIdAndResourceIdFromQueueUrl(GetProtoRequest()->queue_url()).second);
             result->SetReceiptHandle(GetProtoRequest()->Getreceipt_handle());
             result->SetVisibilityTimeout(GetProtoRequest()->Getvisibility_timeout());
             return result;
         }
     };
+
+    class TSetQueueAttributesReplyCallback : public TReplyCallback<
+            NKikimr::NSQS::TSetQueueAttributesResponse,
+            Ydb::Ymq::V1::SetQueueAttributesResult> {
+    public:
+        using TReplyCallback::TReplyCallback;
+
+    private:
+        const NKikimr::NSQS::TSetQueueAttributesResponse& GetResponse(const NKikimrClient::TSqsResponse& resp) override {
+            return resp.GetSetQueueAttributes();
+        }
+
+        Ydb::Ymq::V1::SetQueueAttributesResult GetResult(const NKikimrClient::TSqsResponse&) override {
+            Ydb::Ymq::V1::SetQueueAttributesResult result;
+
+            return result;
+        }
+    };
+
+
+    void AddAttribute(TSqsRequest& requestHolder, const TString& name, TString value) {
+        auto attribute = requestHolder.MutableSetQueueAttributes()->MutableAttributes()->Add();
+        attribute->SetName(name);
+        attribute->SetValue(value);
+    };
+
+    class TSetQueueAttributesActor : public TRpcRequestActor<
+            TEvYmqSetQueueAttributesRequest,
+            NKikimr::NSQS::TSetQueueAttributesRequest,
+            TSetQueueAttributesReplyCallback> {
+    public:
+        using TRpcRequestActor::TRpcRequestActor;
+
+    private:
+        NKikimr::NSQS::TSetQueueAttributesRequest* GetRequest(TSqsRequest& requestHolder) override {
+            auto result = requestHolder.MutableSetQueueAttributes();
+            result->SetQueueName(CloudIdAndResourceIdFromQueueUrl(GetProtoRequest()->queue_url()).second);
+            for (auto& [name, value]: GetProtoRequest()->Getattributes()) {
+                AddAttribute(requestHolder, name, value);
+            }
+            return result;
+        }
+    };
+
+    class TListDeadLetterSourceQueuesReplyCallback : public TReplyCallback<
+            NKikimr::NSQS::TListDeadLetterSourceQueuesResponse,
+            Ydb::Ymq::V1::ListDeadLetterSourceQueuesResult> {
+    public:
+        using TReplyCallback::TReplyCallback;
+
+    private:
+        const NKikimr::NSQS::TListDeadLetterSourceQueuesResponse& GetResponse(const NKikimrClient::TSqsResponse& resp) override {
+            return resp.GetListDeadLetterSourceQueues();
+        }
+
+        Ydb::Ymq::V1::ListDeadLetterSourceQueuesResult GetResult(const NKikimrClient::TSqsResponse& response) override {
+            Ydb::Ymq::V1::ListDeadLetterSourceQueuesResult result;
+            for (const auto& queue : response.GetListDeadLetterSourceQueues().GetQueues()) {
+                result.Mutablequeue_urls()->Add()->assign(queue.GetQueueUrl());
+            }
+            return result;
+        }
+    };
+
+    class TListDeadLetterSourceQueuesActor : public TRpcRequestActor<
+            TEvYmqListDeadLetterSourceQueuesRequest,
+            NKikimr::NSQS::TListDeadLetterSourceQueuesRequest,
+            TListDeadLetterSourceQueuesReplyCallback> {
+    public:
+        using TRpcRequestActor::TRpcRequestActor;
+
+    private:
+        NKikimr::NSQS::TListDeadLetterSourceQueuesRequest* GetRequest(TSqsRequest& requestHolder) override {
+            auto result = requestHolder.MutableListDeadLetterSourceQueues();
+            result->SetQueueName(CloudIdAndResourceIdFromQueueUrl(GetProtoRequest()->queue_url()).second);
+            return result;
+        }
+    };
+
+    class TSendMessageBatchReplyCallback : public TReplyCallback<
+            NKikimr::NSQS::TSendMessageBatchResponse,
+            Ydb::Ymq::V1::SendMessageBatchResult> {
+    public:
+        using TReplyCallback::TReplyCallback;
+
+    private:
+        const NKikimr::NSQS::TSendMessageBatchResponse& GetResponse(const NKikimrClient::TSqsResponse& resp) override {
+            return resp.GetSendMessageBatch();
+        }
+
+        Ydb::Ymq::V1::SendMessageBatchResult GetResult(const NKikimrClient::TSqsResponse& response) override {
+            Ydb::Ymq::V1::SendMessageBatchResult result;
+            for (auto& entry : response.GetSendMessageBatch().GetEntries()) {
+                if (entry.GetError().HasErrorCode()) {
+                    auto currentFailed = result.Addfailed();
+                    currentFailed->Setcode(entry.GetError().GetErrorCode());
+                    currentFailed->Setid(entry.GetId());
+                    currentFailed->Setmessage(entry.GetError().GetMessage());
+
+                    ui32 httpStatus = NSQS::TErrorClass::GetHttpStatus(entry.GetError().GetErrorCode()).GetOrElse(400);
+                    currentFailed->Setsender_fault(400 <= httpStatus && httpStatus < 500);
+                } else {
+                    auto currentSuccessful = result.Addsuccessful();
+                    currentSuccessful->Setid(entry.GetId());
+                    currentSuccessful->set_m_d_5_of_message_attributes(entry.GetMD5OfMessageAttributes());
+                    currentSuccessful->set_m_d_5_of_message_body(entry.GetMD5OfMessageBody());
+                    currentSuccessful->Setmessage_id(entry.GetMessageId());
+                    currentSuccessful->Setsequence_number(std::to_string(entry.GetSequenceNumber()));
+                }
+            }
+            return result;
+        }
+    };
+
+    class TSendMessageBatchActor : public TRpcRequestActor<
+            TEvYmqSendMessageBatchRequest,
+            NKikimr::NSQS::TSendMessageBatchRequest,
+            TSendMessageBatchReplyCallback> {
+    public:
+        using TRpcRequestActor::TRpcRequestActor;
+
+    private:
+        NKikimr::NSQS::TSendMessageBatchRequest* GetRequest(TSqsRequest& requestHolder) override {
+            auto result = requestHolder.MutableSendMessageBatch();
+
+            result->SetQueueName(CloudIdAndResourceIdFromQueueUrl(GetProtoRequest()->Getqueue_url()).second);
+
+            for (auto& requestEntry : GetProtoRequest()->Getentries()) {
+                auto entry = requestHolder.MutableSendMessageBatch()->MutableEntries()->Add();
+
+                entry->SetId(requestEntry.Getid());
+                entry->SetMessageBody(requestEntry.Getmessage_body());
+
+                COPY_FIELD_IF_PRESENT_IN_ENTRY(delay_seconds, DelaySeconds);
+                COPY_FIELD_IF_PRESENT_IN_ENTRY(message_deduplication_id, MessageDeduplicationId);
+                COPY_FIELD_IF_PRESENT_IN_ENTRY(message_group_id, MessageGroupId);
+
+                for (auto& srcAttribute: requestEntry.Getmessage_attributes()) {
+                    auto dstAttribute = entry->MutableMessageAttributes()->Add();
+                    dstAttribute->SetName(srcAttribute.first);
+                    dstAttribute->SetStringValue(srcAttribute.second.Getstring_value());
+                    dstAttribute->SetBinaryValue(srcAttribute.second.Getbinary_value());
+                    dstAttribute->SetDataType(srcAttribute.second.Getdata_type());
+                }
+            }
+            return result;
+        }
+    };
+
+    class TDeleteMessageBatchReplyCallback : public TReplyCallback<
+            NKikimr::NSQS::TDeleteMessageBatchResponse,
+            Ydb::Ymq::V1::DeleteMessageBatchResult> {
+    public:
+        using TReplyCallback::TReplyCallback;
+
+    private:
+        const NKikimr::NSQS::TDeleteMessageBatchResponse& GetResponse(const NKikimrClient::TSqsResponse& resp) override {
+            return resp.GetDeleteMessageBatch();
+        }
+
+        Ydb::Ymq::V1::DeleteMessageBatchResult GetResult(const NKikimrClient::TSqsResponse& response) override {
+            Ydb::Ymq::V1::DeleteMessageBatchResult result;
+            auto entries = response.GetDeleteMessageBatch().GetEntries();
+            for (auto i = 0; i < entries.size(); i++) {
+            auto &entry = response.GetDeleteMessageBatch().GetEntries()[i];
+                if (entry.GetError().HasErrorCode()) {
+                    auto currentFailed = result.Addfailed();
+                    currentFailed->Setcode(entry.GetError().GetErrorCode());
+                    currentFailed->Setid(entry.GetId());
+                    currentFailed->Setmessage(entry.GetError().GetMessage());
+
+                    ui32 httpStatus = NSQS::TErrorClass::GetHttpStatus(entry.GetError().GetErrorCode()).GetOrElse(400);
+                    currentFailed->Setsender_fault(400 <= httpStatus && httpStatus < 500);
+                } else {
+                    auto currentSuccessful = result.Addsuccessful();
+                    currentSuccessful->Setid(entry.GetId());
+                }
+            }
+            return result;
+        }
+    };
+
+    class TDeleteMessageBatchActor : public TRpcRequestActor<
+            TEvYmqDeleteMessageBatchRequest,
+            NKikimr::NSQS::TDeleteMessageBatchRequest,
+            TDeleteMessageBatchReplyCallback> {
+    public:
+        using TRpcRequestActor::TRpcRequestActor;
+
+    private:
+        NKikimr::NSQS::TDeleteMessageBatchRequest* GetRequest(TSqsRequest& requestHolder) override {
+            auto result = requestHolder.MutableDeleteMessageBatch();
+            result->SetQueueName(CloudIdAndResourceIdFromQueueUrl(GetProtoRequest()->Getqueue_url()).second);
+            for (auto& requestEntry : GetProtoRequest()->Getentries()) {
+                auto entry = requestHolder.MutableDeleteMessageBatch()->AddEntries();
+                entry->SetId(requestEntry.Getid());
+                entry->SetReceiptHandle(requestEntry.Getreceipt_handle());
+            }
+            return result;
+        }
+    };
+
+    class TChangeMessageVisibilityBatchReplyCallback : public TReplyCallback<
+            NKikimr::NSQS::TChangeMessageVisibilityBatchResponse,
+            Ydb::Ymq::V1::ChangeMessageVisibilityBatchResult> {
+    public:
+        using TReplyCallback::TReplyCallback;
+
+    private:
+        const NKikimr::NSQS::TChangeMessageVisibilityBatchResponse& GetResponse(const NKikimrClient::TSqsResponse& resp) override {
+            return resp.GetChangeMessageVisibilityBatch();
+        }
+
+        Ydb::Ymq::V1::ChangeMessageVisibilityBatchResult GetResult(const NKikimrClient::TSqsResponse& response) override {
+            Ydb::Ymq::V1::ChangeMessageVisibilityBatchResult result;
+            for (auto& entry : response.GetChangeMessageVisibilityBatch().GetEntries()) {
+                if (entry.GetError().HasErrorCode()) {
+                    auto currentFailed = result.Addfailed();
+                    currentFailed->Setcode(entry.GetError().GetErrorCode());
+                    currentFailed->Setid(entry.GetId());
+                    currentFailed->Setmessage(entry.GetError().GetMessage());
+
+                    ui32 httpStatus = NSQS::TErrorClass::GetHttpStatus(entry.GetError().GetErrorCode()).GetOrElse(400);
+                    currentFailed->Setsender_fault(400 <= httpStatus && httpStatus < 500);
+                } else {
+                    auto currentSuccessful = result.Addsuccessful();
+                    currentSuccessful->Setid(entry.GetId());
+                }
+            }
+            return result;
+        }
+    };
+
+    class TChangeMessageVisibilityBatchActor : public TRpcRequestActor<
+            TEvYmqChangeMessageVisibilityBatchRequest,
+            NKikimr::NSQS::TChangeMessageVisibilityBatchRequest,
+            TChangeMessageVisibilityBatchReplyCallback> {
+    public:
+        using TRpcRequestActor::TRpcRequestActor;
+
+    private:
+        NKikimr::NSQS::TChangeMessageVisibilityBatchRequest* GetRequest(TSqsRequest& requestHolder) override {
+            auto result = requestHolder.MutableChangeMessageVisibilityBatch();
+            result->SetQueueName(CloudIdAndResourceIdFromQueueUrl(GetProtoRequest()->Getqueue_url()).second);
+            for (auto& requestEntry : GetProtoRequest()->Getentries()) {
+                auto entry = requestHolder.MutableChangeMessageVisibilityBatch()->MutableEntries()->Add();
+                entry->SetId(requestEntry.Getid());
+                entry->SetReceiptHandle(requestEntry.Getreceipt_handle());
+                COPY_FIELD_IF_PRESENT_IN_ENTRY(visibility_timeout, VisibilityTimeout)
+            }
+            return result;
+        }
+    };
+
+    class TListQueueTagsReplyCallback : public TReplyCallback<
+            NKikimr::NSQS::TListQueueTagsResponse,
+            Ydb::Ymq::V1::ListQueueTagsResult> {
+    public:
+        TListQueueTagsReplyCallback (
+                std::shared_ptr<NKikimr::NGRpcService::IRequestOpCtx> request)
+            : TReplyCallback<
+                NKikimr::NSQS::TListQueueTagsResponse,
+                Ydb::Ymq::V1::ListQueueTagsResult>(request)
+        {
+        }
+
+    private:
+        const NKikimr::NSQS::TListQueueTagsResponse& GetResponse(const NKikimrClient::TSqsResponse& resp) override {
+            return resp.GetListQueueTags();
+        }
+
+        Ydb::Ymq::V1::ListQueueTagsResult GetResult(const NKikimrClient::TSqsResponse& resp) override {
+            Ydb::Ymq::V1::ListQueueTagsResult result;
+            const auto& tags = GetResponse(resp);
+
+            for (const auto& t: tags.GetTags()) {
+                result.mutable_tags()->emplace(t.GetKey(), t.GetValue());
+            }
+
+            return result;
+        }
+    };
+
+    class TListQueueTagsActor : public TBaseRpcRequestActor<
+            TEvYmqListQueueTagsRequest,
+            NKikimr::NSQS::TListQueueTagsRequest,
+            TListQueueTagsReplyCallback> {
+    public:
+        using TBaseRpcRequestActor::TBaseRpcRequestActor;
+
+    private:
+        NKikimr::NSQS::TListQueueTagsRequest* GetRequest(TSqsRequest& requestHolder) override {
+            auto result = requestHolder.MutableListQueueTags();
+            result->SetQueueName(CloudIdAndResourceIdFromQueueUrl(GetProtoRequest()->queue_url()).second);
+            return result;
+        }
+
+        THolder<TListQueueTagsReplyCallback> CreateReplyCallback() override {
+            return MakeHolder<TListQueueTagsReplyCallback>(Request_);
+        }
+    };
+
+    class TTagQueueReplyCallback : public TReplyCallback<
+            NKikimr::NSQS::TTagQueueResponse,
+            Ydb::Ymq::V1::TagQueueResult> {
+    public:
+        TTagQueueReplyCallback (
+                std::shared_ptr<NKikimr::NGRpcService::IRequestOpCtx> request)
+            : TReplyCallback<
+                NKikimr::NSQS::TTagQueueResponse,
+                Ydb::Ymq::V1::TagQueueResult>(request)
+        {
+        }
+
+    private:
+        const NKikimr::NSQS::TTagQueueResponse& GetResponse(const NKikimrClient::TSqsResponse& resp) override {
+            return resp.GetTagQueue();
+        }
+
+        Ydb::Ymq::V1::TagQueueResult GetResult(const NKikimrClient::TSqsResponse&) override {
+            Ydb::Ymq::V1::TagQueueResult result;
+            return result;
+        }
+    };
+
+    class TTagQueueActor : public TBaseRpcRequestActor<
+            TEvYmqTagQueueRequest,
+            NKikimr::NSQS::TTagQueueRequest,
+            TTagQueueReplyCallback> {
+    public:
+        using TBaseRpcRequestActor::TBaseRpcRequestActor;
+
+    private:
+        NKikimr::NSQS::TTagQueueRequest* GetRequest(TSqsRequest& requestHolder) override {
+            auto result = requestHolder.MutableTagQueue();
+            result->SetQueueName(CloudIdAndResourceIdFromQueueUrl(GetProtoRequest()->queue_url()).second);
+            for (const auto& [key, value]: GetProtoRequest()->Gettags()) {
+                auto tag = requestHolder.MutableTagQueue()->MutableTags()->Add();
+                tag->SetKey(key);
+                tag->SetValue(value);
+            }
+            return result;
+        }
+
+        THolder<TTagQueueReplyCallback> CreateReplyCallback() override {
+            return MakeHolder<TTagQueueReplyCallback>(Request_);
+        }
+    };
+
+    class TUntagQueueReplyCallback : public TReplyCallback<
+            NKikimr::NSQS::TUntagQueueResponse,
+            Ydb::Ymq::V1::UntagQueueResult> {
+    public:
+        TUntagQueueReplyCallback (
+                std::shared_ptr<NKikimr::NGRpcService::IRequestOpCtx> request)
+            : TReplyCallback<
+                NKikimr::NSQS::TUntagQueueResponse,
+                Ydb::Ymq::V1::UntagQueueResult>(request)
+        {
+        }
+
+    private:
+        const NKikimr::NSQS::TUntagQueueResponse& GetResponse(const NKikimrClient::TSqsResponse& resp) override {
+            return resp.GetUntagQueue();
+        }
+
+        Ydb::Ymq::V1::UntagQueueResult GetResult(const NKikimrClient::TSqsResponse&) override {
+            Ydb::Ymq::V1::UntagQueueResult result;
+            return result;
+        }
+    };
+
+    class TUntagQueueActor : public TBaseRpcRequestActor<
+            TEvYmqUntagQueueRequest,
+            NKikimr::NSQS::TUntagQueueRequest,
+            TUntagQueueReplyCallback> {
+    public:
+        using TBaseRpcRequestActor::TBaseRpcRequestActor;
+
+    private:
+        NKikimr::NSQS::TUntagQueueRequest* GetRequest(TSqsRequest& requestHolder) override {
+            auto result = requestHolder.MutableUntagQueue();
+            result->SetQueueName(CloudIdAndResourceIdFromQueueUrl(GetProtoRequest()->queue_url()).second);
+            for (const auto& key: GetProtoRequest()->Gettag_keys()) {
+                requestHolder.MutableUntagQueue()->AddTagKeys(key);
+            }
+            return result;
+        }
+
+        THolder<TUntagQueueReplyCallback> CreateReplyCallback() override {
+            return MakeHolder<TUntagQueueReplyCallback>(Request_);
+        }
+    };
+
+    #undef COPY_FIELD_IF_PRESENT
+    #undef COPY_FIELD_IF_PRESENT_IN_ENTRY
 }
 
 namespace NKikimr::NGRpcService {
@@ -717,5 +1123,13 @@ DECLARE_RPC(DeleteMessage);
 DECLARE_RPC(PurgeQueue);
 DECLARE_RPC(DeleteQueue);
 DECLARE_RPC(ChangeMessageVisibility);
+DECLARE_RPC(SetQueueAttributes);
+DECLARE_RPC(SendMessageBatch);
+DECLARE_RPC(DeleteMessageBatch);
+DECLARE_RPC(ChangeMessageVisibilityBatch);
+DECLARE_RPC(ListDeadLetterSourceQueues);
+DECLARE_RPC(ListQueueTags);
+DECLARE_RPC(TagQueue);
+DECLARE_RPC(UntagQueue);
 
 }

@@ -34,8 +34,10 @@ message TCreateExportRequest {
 message TEvCreateExportRequest {
     optional uint64 TxId = 1;
     optional string DatabaseName = 2;
-    optional string UserSID = 4;
     optional TCreateExportRequest Request = 3;
+    optional string UserSID = 4;
+    optional string PeerName = 5;
+    optional string SanitizedToken = 6;
 }
 
 message TCreateExportResponse {
@@ -70,8 +72,10 @@ message TCancelExportRequest {
 
 message TEvCancelExportRequest {
     optional uint64 TxId = 1;
-    optional string DatabaseName = 3;
     optional TCancelExportRequest Request = 2;
+    optional string DatabaseName = 3;
+    optional string UserSID = 4;
+    optional string PeerName = 5;
 }
 
 message TCancelExportResponse {
@@ -90,8 +94,10 @@ message TForgetExportRequest {
 
 message TEvForgetExportRequest {
     optional uint64 TxId = 1;
-    optional string DatabaseName = 3;
     optional TForgetExportRequest Request = 2;
+    optional string DatabaseName = 3;
+    optional string UserSID = 4;
+    optional string PeerName = 5;
 }
 
 message TForgetExportResponse {

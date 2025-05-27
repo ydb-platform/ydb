@@ -142,8 +142,8 @@ namespace NUnifiedAgent {
         // in library, in Unified Agent and in other systems that respect ordering (e.g., Logbroker)
         //
         // Default: generated automatically by Unified Agent.
-        TSessionParameters& SetSessionId(const TString& sessionId) {
-            SessionId = sessionId;
+        TSessionParameters& SetSessionId(TString sessionId) {
+            SessionId = std::move(sessionId);
             return *this;
         }
 
@@ -151,8 +151,8 @@ namespace NUnifiedAgent {
         // Can be used by agent filters and outputs for validation/routing/enrichment/etc.
         //
         // Default: not set
-        TSessionParameters& SetMeta(const THashMap<TString, TString>& meta) {
-            Meta = meta;
+        TSessionParameters& SetMeta(THashMap<TString, TString> meta) {
+            Meta = std::move(meta);
             return *this;
         }
 

@@ -7,8 +7,8 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/library/yql/public/udf/service/stub
-    ydb/library/yql/utils/log
+    yql/essentials/public/udf/service/stub
+    yql/essentials/utils/log
 )
 
 YQL_LAST_ABI_VERSION()

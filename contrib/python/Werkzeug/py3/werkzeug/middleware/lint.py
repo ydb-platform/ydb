@@ -117,7 +117,7 @@ class ErrorStream:
 
 
 class GuardedWrite:
-    def __init__(self, write: t.Callable[[bytes], None], chunks: t.List[int]) -> None:
+    def __init__(self, write: t.Callable[[bytes], object], chunks: t.List[int]) -> None:
         self._write = write
         self._chunks = chunks
 
@@ -164,7 +164,7 @@ class GuardedIterator:
         self.closed = True
 
         if hasattr(self._iterator, "close"):
-            self._iterator.close()  # type: ignore
+            self._iterator.close()
 
         if self.headers_set:
             status_code, headers = self.headers_set
@@ -288,7 +288,7 @@ class LintMiddleware:
         check_type("status", status, str)
         status_code_str = status.split(None, 1)[0]
 
-        if len(status_code_str) != 3 or not status_code_str.isdigit():
+        if len(status_code_str) != 3 or not status_code_str.isdecimal():
             warn("Status code must be three digits.", WSGIWarning, stacklevel=3)
 
         if len(status) < 4 or status[3] != " ":

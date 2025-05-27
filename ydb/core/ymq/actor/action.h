@@ -56,6 +56,10 @@ public:
         return false;
     }
 
+    static constexpr bool NeedQueueTags() { // override it in TDerived if needed
+        return false;
+    }
+
     // For queue requests
     static constexpr bool NeedExistingQueue() {
         return true;
@@ -73,6 +77,9 @@ public:
         ui64 configurationFlags = 0;
         if (TDerived::NeedQueueAttributes()) {
             configurationFlags |= TSqsEvents::TEvGetConfiguration::EFlags::NeedQueueAttributes;
+        }
+        if (TDerived::NeedQueueTags()) {
+            configurationFlags |= TSqsEvents::TEvGetConfiguration::EFlags::NeedQueueTags;
         }
         if (TProxyActor::NeedCreateProxyActor(Action_)) {
             configurationFlags |= TSqsEvents::TEvGetConfiguration::EFlags::NeedQueueLeader;
@@ -111,15 +118,15 @@ public:
         DoBootstrap();
     }
 
-    void Bootstrap(const NActors::TActorContext&) {    
+    void Bootstrap(const NActors::TActorContext&) {
         #define SQS_REQUEST_CASE(action)                                        \
             const auto& request = SourceSqsRequest_.Y_CAT(Get, action)();       \
             auto response = Response_.Y_CAT(Mutable, action)();                 \
             FillAuthInformation(request);                                       \
             response->SetRequestId(RequestId_);
-            
+
         SQS_SWITCH_REQUEST_CUSTOM(SourceSqsRequest_, ENUMERATE_ALL_ACTIONS, Y_ABORT_UNLESS(false));
-        #undef SQS_REQUEST_CASE 
+        #undef SQS_REQUEST_CASE
 
         RLOG_SQS_DEBUG("Request started. Actor: " << this->SelfId()); // log new request id
         StartTs_ = TActivationContext::Now();
@@ -130,6 +137,7 @@ public:
 
         // Set timeout
         if (cfg.GetRequestTimeoutMs()) {
+            TimeoutCookie_.Reset(ISchedulerCookie::Make2Way());
             this->Schedule(TDuration::MilliSeconds(cfg.GetRequestTimeoutMs()), new TEvWakeup(REQUEST_TIMEOUT_WAKEUP_TAG), TimeoutCookie_.Get());
         }
 
@@ -301,6 +309,13 @@ protected:
             Response_.SetFolderId(FolderId_);
             Response_.SetIsFifo(IsFifo_ ? *IsFifo_ : false);
             Response_.SetResourceId(GetQueueName());
+            if (QueueTags_.Defined()) {
+                for (const auto& [k, v] : QueueTags_->GetMapSafe()) {
+                    auto* tag = Response_.AddQueueTags();
+                    tag->SetKey(k);
+                    tag->SetValue(v.GetStringSafe());
+                }
+            }
         }
 
         AuditLog();
@@ -349,7 +364,10 @@ protected:
                 RESPONSE_BATCH_CASE(SendMessageBatch)
                 RESPONSE_CASE(SetQueueAttributes)
                 RESPONSE_CASE(ListDeadLetterSourceQueues)
-                RESPONSE_CASE(CountQueues) 
+                RESPONSE_CASE(CountQueues)
+                RESPONSE_CASE(ListQueueTags)
+                RESPONSE_CASE(TagQueue)
+                RESPONSE_CASE(UntagQueue)
             case NKikimrClient::TSqsResponse::kDeleteQueueBatch:
             case NKikimrClient::TSqsResponse::kGetQueueAttributesBatch:
             case NKikimrClient::TSqsResponse::kPurgeQueueBatch:
@@ -382,7 +400,7 @@ private:
         );
     }
 
-protected: 
+protected:
     template <class TResponse>
     void AuditLogEntry(const TResponse& response, const TString& requestId, const TError* error = nullptr) {
         if (!error && response.HasError()) {
@@ -555,7 +573,7 @@ private:
         UserName_ = request.GetAuth().GetUserName();
         FolderId_ = request.GetAuth().GetFolderId();
         UserSID_ = request.GetAuth().GetUserSID();
-        
+
         if (IsCloud() && !FolderId_) {
             auto items = ParseCloudSecurityToken(SecurityToken_);
             UserName_ = std::get<0>(items);
@@ -612,6 +630,7 @@ private:
         Shards_   = ev->Get()->Shards;
         IsFifo_ = ev->Get()->Fifo;
         QueueAttributes_ = std::move(ev->Get()->QueueAttributes);
+        QueueTags_ = std::move(ev->Get()->QueueTags);
         SchemeCache_ = ev->Get()->SchemeCache;
         SqsCoreCounters_ = std::move(ev->Get()->SqsCoreCounters);
         QueueCounters_ = std::move(ev->Get()->QueueCounters);
@@ -876,6 +895,7 @@ protected:
     TIntrusivePtr<TUserCounters> UserCounters_;
     TIntrusivePtr<TQueueCounters> QueueCounters_;
     TMaybe<TSqsEvents::TQueueAttributes> QueueAttributes_;
+    TMaybe<NJson::TJsonMap> QueueTags_;
     NKikimrClient::TSqsResponse Response_;
     TActorId SchemeCache_;
     TActorId QueueLeader_;
@@ -885,7 +905,7 @@ protected:
     TIntrusivePtr<TSqsEvents::TQuoterResourcesForActions> QuoterResources_;
     bool NeedReportSqsActionInflyCounter = false;
     bool NeedReportYmqActionInflyCounter = false;
-    TSchedulerCookieHolder TimeoutCookie_ = ISchedulerCookie::Make2Way();
+    TSchedulerCookieHolder TimeoutCookie_;
     NKikimrClient::TSqsRequest SourceSqsRequest_;
 };
 

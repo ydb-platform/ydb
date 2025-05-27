@@ -1,3 +1,4 @@
+#include <contrib/libs/openssl/redef.h>
 /*
  * Copyright 1995-2019 The OpenSSL Project Authors. All Rights Reserved.
  * Copyright (c) 2002, Oracle and/or its affiliates. All rights reserved
@@ -147,6 +148,10 @@ extern "C" {
 
 /* Temporary extension type */
 # define TLSEXT_TYPE_renegotiate                 0xff01
+
+/* ExtensionType value from draft-ietf-quic-tls-27 */
+# define TLSEXT_TYPE_quic_transport_parameters_draft   0xffa5
+# define TLSEXT_TYPE_quic_transport_parameters         0x0039
 
 # ifndef OPENSSL_NO_NEXTPROTONEG
 /* This is not an IANA defined extension number */

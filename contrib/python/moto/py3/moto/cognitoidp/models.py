@@ -3,14 +3,12 @@ import json
 import os
 import time
 import typing
-import uuid
 import enum
-import random
 from jose import jws
 from collections import OrderedDict
 from moto.core import BaseBackend, BaseModel
-from moto.core import get_account_id
 from moto.core.utils import BackendDict
+from moto.moto_api._internal import mock_random as random
 from .exceptions import (
     GroupExistsException,
     NotAuthorizedError,
@@ -24,6 +22,7 @@ from .exceptions import (
 from .utils import (
     create_id,
     check_secret_hash,
+    generate_id,
     validate_username_format,
     flatten_attrs,
     expand_attrs,
@@ -31,6 +30,7 @@ from .utils import (
 )
 from moto.utilities.paginator import paginate
 from moto.utilities.utils import md5_hash
+from ..settings import get_cognito_idp_user_pool_id_strategy
 
 
 class UserStatus(str, enum.Enum):
@@ -366,12 +366,19 @@ DEFAULT_USER_POOL_CONFIG = {
 
 
 class CognitoIdpUserPool(BaseModel):
-    def __init__(self, region, name, extended_config):
+
+    MAX_ID_LENGTH = 56
+
+    def __init__(self, account_id, region, name, extended_config):
+        self.account_id = account_id
         self.region = region
-        self.id = "{}_{}".format(self.region, str(uuid.uuid4().hex))
-        self.arn = "arn:aws:cognito-idp:{}:{}:userpool/{}".format(
-            self.region, get_account_id(), self.id
+
+        user_pool_id = generate_id(
+            get_cognito_idp_user_pool_id_strategy(), region, name, extended_config
         )
+        self.id = "{}_{}".format(self.region, user_pool_id)[: self.MAX_ID_LENGTH]
+        self.arn = f"arn:aws:cognito-idp:{self.region}:{account_id}:userpool/{self.id}"
+
         self.name = name
         self.status = None
 
@@ -433,6 +440,21 @@ class CognitoIdpUserPool(BaseModel):
         ) as f:
             self.json_web_key = json.loads(f.read())
 
+    @property
+    def backend(self):
+        return cognitoidp_backends[self.account_id][self.region]
+
+    @property
+    def domain(self):
+        return next(
+            (
+                upd
+                for upd in self.backend.user_pool_domains.values()
+                if upd.user_pool_id == self.id
+            ),
+            None,
+        )
+
     def _account_recovery_setting(self):
         # AccountRecoverySetting is not present in DescribeUserPool response if the pool was created without
         # specifying it, ForgotPassword works on default settings nonetheless
@@ -473,7 +495,8 @@ class CognitoIdpUserPool(BaseModel):
             user_pool_json["LambdaConfig"] = (
                 self.extended_config.get("LambdaConfig") or {}
             )
-
+        if self.domain:
+            user_pool_json["Domain"] = self.domain.domain
         return user_pool_json
 
     def _get_user(self, username):
@@ -538,7 +561,7 @@ class CognitoIdpUserPool(BaseModel):
         return id_token, expires_in
 
     def create_refresh_token(self, client_id, username):
-        refresh_token = str(uuid.uuid4())
+        refresh_token = str(random.uuid4())
         self.refresh_tokens[refresh_token] = (client_id, username)
         return refresh_token
 
@@ -555,6 +578,8 @@ class CognitoIdpUserPool(BaseModel):
         return access_token, expires_in
 
     def create_tokens_from_refresh_token(self, refresh_token):
+        if self.refresh_tokens.get(refresh_token) is None:
+            raise NotAuthorizedError(refresh_token)
         client_id, username = self.refresh_tokens.get(refresh_token)
         if not username:
             raise NotAuthorizedError(refresh_token)
@@ -607,7 +632,7 @@ class CognitoIdpUserPoolDomain(BaseModel):
         if extended:
             return {
                 "UserPoolId": self.user_pool_id,
-                "AWSAccountId": str(uuid.uuid4()),
+                "AWSAccountId": str(random.uuid4()),
                 "CloudFrontDistribution": distribution,
                 "Domain": self.domain,
                 "S3Bucket": None,
@@ -623,7 +648,7 @@ class CognitoIdpUserPoolClient(BaseModel):
     def __init__(self, user_pool_id, generate_secret, extended_config):
         self.user_pool_id = user_pool_id
         self.id = create_id()
-        self.secret = str(uuid.uuid4())
+        self.secret = str(random.uuid4())
         self.generate_secret = generate_secret or False
         self.extended_config = extended_config or {}
 
@@ -710,7 +735,7 @@ class CognitoIdpGroup(BaseModel):
 
 class CognitoIdpUser(BaseModel):
     def __init__(self, user_pool_id, username, password, status, attributes):
-        self.id = str(uuid.uuid4())
+        self.id = str(random.uuid4())
         self.user_pool_id = user_pool_id
         # Username is None when users sign up with an email or phone_number,
         # and should be given the value of the internal id generate (sub)
@@ -821,6 +846,13 @@ class CognitoResourceServer(BaseModel):
 
 
 class CognitoIdpBackend(BaseBackend):
+    """
+    In some cases, you need to have reproducible IDs for the user pool.
+    For example, a single initialization before the start of integration tests.
+
+    This behavior can be enabled by passing the environment variable: MOTO_COGNITO_IDP_USER_POOL_ID_STRATEGY=HASH.
+    """
+
     def __init__(self, region_name, account_id):
         super().__init__(region_name, account_id)
         self.user_pools = OrderedDict()
@@ -829,7 +861,9 @@ class CognitoIdpBackend(BaseBackend):
 
     # User pool
     def create_user_pool(self, name, extended_config):
-        user_pool = CognitoIdpUserPool(self.region_name, name, extended_config)
+        user_pool = CognitoIdpUserPool(
+            self.account_id, self.region_name, name, extended_config
+        )
         self.user_pools[user_pool.id] = user_pool
         return user_pool
 
@@ -1008,10 +1042,11 @@ class CognitoIdpBackend(BaseBackend):
 
         return user_pool.groups[group_name]
 
+    @paginate(pagination_model=PAGINATION_MODEL)
     def list_groups(self, user_pool_id):
         user_pool = self.describe_user_pool(user_pool_id)
 
-        return user_pool.groups.values()
+        return list(user_pool.groups.values())
 
     def delete_group(self, user_pool_id, group_name):
         user_pool = self.describe_user_pool(user_pool_id)
@@ -1039,9 +1074,11 @@ class CognitoIdpBackend(BaseBackend):
         group.users.add(user)
         user.groups.add(group)
 
+    @paginate(pagination_model=PAGINATION_MODEL)
     def list_users_in_group(self, user_pool_id, group_name):
+        user_pool = self.describe_user_pool(user_pool_id)
         group = self.get_group(user_pool_id, group_name)
-        return list(group.users)
+        return list(filter(lambda user: user in group.users, user_pool.users.values()))
 
     def admin_list_groups_for_user(self, user_pool_id, username):
         user = self.admin_get_user(user_pool_id, username)
@@ -1251,7 +1288,7 @@ class CognitoIdpBackend(BaseBackend):
                 UserStatus.FORCE_CHANGE_PASSWORD,
                 UserStatus.RESET_REQUIRED,
             ]:
-                session = str(uuid.uuid4())
+                session = str(random.uuid4())
                 self.sessions[session] = user_pool
 
                 return {
@@ -1572,13 +1609,13 @@ class CognitoIdpBackend(BaseBackend):
         )
 
         user_pool = None
+        client = None
         for p in self.user_pools.values():
             if client_id in p.clients:
                 user_pool = p
+                client = p.clients.get(client_id)
         if user_pool is None:
             raise ResourceNotFoundError(client_id)
-
-        client = p.clients.get(client_id)
 
         if auth_flow is AuthFlow.USER_SRP_AUTH:
             username = auth_parameters.get("USERNAME")
@@ -1597,15 +1634,15 @@ class CognitoIdpBackend(BaseBackend):
             if user.status is UserStatus.UNCONFIRMED:
                 raise UserNotConfirmedException("User is not confirmed.")
 
-            session = str(uuid.uuid4())
+            session = str(random.uuid4())
             self.sessions[session] = user_pool
 
             return {
                 "ChallengeName": "PASSWORD_VERIFIER",
                 "Session": session,
                 "ChallengeParameters": {
-                    "SALT": uuid.uuid4().hex,
-                    "SRP_B": uuid.uuid4().hex,
+                    "SALT": random.uuid4().hex,
+                    "SRP_B": random.uuid4().hex,
                     "USERNAME": user.username,
                     "USER_ID_FOR_SRP": user.id,
                     "SECRET_BLOCK": session,
@@ -1626,7 +1663,7 @@ class CognitoIdpBackend(BaseBackend):
             if user.status is UserStatus.UNCONFIRMED:
                 raise UserNotConfirmedException("User is not confirmed.")
 
-            session = str(uuid.uuid4())
+            session = str(random.uuid4())
             self.sessions[session] = user_pool
 
             if user.status is UserStatus.FORCE_CHANGE_PASSWORD:
@@ -1694,7 +1731,7 @@ class CognitoIdpBackend(BaseBackend):
                 _, username = user_pool.access_tokens[access_token]
                 self.admin_get_user(user_pool.id, username)
 
-                return {"SecretCode": str(uuid.uuid4())}
+                return {"SecretCode": str(random.uuid4())}
 
         raise NotAuthorizedError(access_token)
 
@@ -1797,24 +1834,24 @@ class RegionAgnosticBackend:
     # This backend will cycle through all backends as a workaround
 
     def _find_backend_by_access_token(self, access_token):
-        account_specific_backends = cognitoidp_backends[get_account_id()]
-        for region, backend in account_specific_backends.items():
-            if region == "global":
-                continue
-            for p in backend.user_pools.values():
-                if access_token in p.access_tokens:
-                    return backend
-        return account_specific_backends["us-east-1"]
+        for account_specific_backends in cognitoidp_backends.values():
+            for region, backend in account_specific_backends.items():
+                if region == "global":
+                    continue
+                for p in backend.user_pools.values():
+                    if access_token in p.access_tokens:
+                        return backend
+        return backend
 
     def _find_backend_for_clientid(self, client_id):
-        account_specific_backends = cognitoidp_backends[get_account_id()]
-        for region, backend in account_specific_backends.items():
-            if region == "global":
-                continue
-            for p in backend.user_pools.values():
-                if client_id in p.clients:
-                    return backend
-        return account_specific_backends["us-east-1"]
+        for account_specific_backends in cognitoidp_backends.values():
+            for region, backend in account_specific_backends.items():
+                if region == "global":
+                    continue
+                for p in backend.user_pools.values():
+                    if client_id in p.clients:
+                        return backend
+        return backend
 
     def sign_up(self, client_id, username, password, attributes):
         backend = self._find_backend_for_clientid(client_id)
@@ -1847,17 +1884,16 @@ cognitoidp_backends = BackendDict(CognitoIdpBackend, "cognito-idp")
 # Hack to help moto-server process requests on localhost, where the region isn't
 # specified in the host header. Some endpoints (change password, confirm forgot
 # password) have no authorization header from which to extract the region.
-def find_region_by_value(key, value):
-    account_specific_backends = cognitoidp_backends[get_account_id()]
-    for region in account_specific_backends:
-        backend = cognitoidp_backends[region]
-        for user_pool in backend.user_pools.values():
-            if key == "client_id" and value in user_pool.clients:
-                return region
+def find_account_region_by_value(key, value):
+    for account_id, account_specific_backend in cognitoidp_backends.items():
+        for region, backend in account_specific_backend.items():
+            for user_pool in backend.user_pools.values():
+                if key == "client_id" and value in user_pool.clients:
+                    return account_id, region
 
-            if key == "access_token" and value in user_pool.access_tokens:
-                return region
+                if key == "access_token" and value in user_pool.access_tokens:
+                    return account_id, region
     # If we can't find the `client_id` or `access_token`, we just pass
     # back a default backend region, which will raise the appropriate
     # error message (e.g. NotAuthorized or NotFound).
-    return list(account_specific_backends)[0]
+    return account_id, region

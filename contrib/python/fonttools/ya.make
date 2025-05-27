@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(4.53.1)
+VERSION(4.57.0)
 
 LICENSE(MIT)
 
@@ -301,6 +301,7 @@ PY_SRCS(
     fontTools/varLib/cff.py
     fontTools/varLib/errors.py
     fontTools/varLib/featureVars.py
+    fontTools/varLib/hvar.py
     fontTools/varLib/instancer/__init__.py
     fontTools/varLib/instancer/__main__.py
     fontTools/varLib/instancer/featureVars.py

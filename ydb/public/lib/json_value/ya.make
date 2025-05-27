@@ -8,9 +8,9 @@ SRCS(
 PEERDIR(
     library/cpp/json/writer
     library/cpp/string_utils/base64
-    ydb/public/sdk/cpp/client/ydb_result
-    ydb/public/sdk/cpp/client/ydb_value
-    ydb/library/uuid
+    ydb/public/sdk/cpp/src/client/result
+    ydb/public/sdk/cpp/src/client/value
+    yql/essentials/types/uuid
 )
 
 END()

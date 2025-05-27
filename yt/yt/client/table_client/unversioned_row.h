@@ -2,6 +2,7 @@
 
 #include "public.h"
 #include "row_base.h"
+#include "serialize.h"
 #include "unversioned_value.h"
 
 #include <yt/yt/core/logging/log.h>
@@ -15,9 +16,7 @@
 
 #include <yt/yt/core/concurrency/fls.h>
 
-#include <yt/yt_proto/yt/core/misc/proto/guid.pb.h>
-
-#include <library/cpp/yt/small_containers/compact_vector.h>
+#include <library/cpp/yt/compact_containers/compact_vector.h>
 
 #include <library/cpp/yt/memory/chunked_memory_pool.h>
 
@@ -78,7 +77,7 @@ public:
     char* GetMutableString()
     {
         YT_VERIFY(IsStringLikeType(Value_.Type));
-        // NB: it is correct to use `const_cast` here to modify the stored string
+        // NB: It is correct to use `const_cast` here to modify the stored string
         // because initially it's allocated as a non-const `char*`.
         return const_cast<char*>(Value_.Data.String);
     }
@@ -965,6 +964,7 @@ struct TBitwiseUnversionedValueRangeHash
 struct TBitwiseUnversionedValueRangeEqual
 {
     bool operator()(TUnversionedValueRange lhs, TUnversionedValueRange rhs) const;
+    static void FormatDiff(TStringBuilderBase* builder, TUnversionedValueRange lhs, TUnversionedValueRange rhs);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -977,6 +977,7 @@ struct TBitwiseUnversionedRowHash
 struct TBitwiseUnversionedRowEqual
 {
     bool operator()(TUnversionedRow lhs, TUnversionedRow rhs) const;
+    static void FormatDiff(TStringBuilderBase* builder, TUnversionedRow lhs, TUnversionedRow rhs);
 };
 
 ////////////////////////////////////////////////////////////////////////////////

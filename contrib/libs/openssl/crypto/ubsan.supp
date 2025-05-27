@@ -1,0 +1,3 @@
+# clang17-rt and later emits diagnostig related to invalid function pointers
+# See also https://github.com/openssl/openssl/issues/22896
+function:*contrib/libs/openssl/*.c

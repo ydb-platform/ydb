@@ -6,8 +6,9 @@
 #include <util/string/cast.h>
 #include <util/generic/yexception.h>
 
-#include <ydb/library/yql/providers/generic/connector/api/common/data_source.pb.h>
+#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 #include <ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h>
+#include <ydb/core/external_sources/iceberg_fields.h>
 
 #include "yql_generic_cluster_config.h"
 
@@ -119,36 +120,6 @@ namespace NYql {
         clusterConfig.SetDatabaseName(it->second);
     }
 
-    void ParseSchema(const THashMap<TString, TString>& properties,
-                     NYql::TGenericClusterConfig& clusterConfig) {
-        auto it = properties.find("schema");
-        if (it == properties.cend()) {
-            // SCHEMA is optional field
-            return;
-        }
-
-        if (!it->second) {
-            // SCHEMA is optional field
-            return;
-        }
-
-        clusterConfig.mutable_datasourceoptions()->insert({TString("schema"), TString(it->second)});
-    }
-
-    void ParseServiceName(const THashMap<TString, TString>& properties,
-                          NYql::TGenericClusterConfig& clusterConfig) {
-        auto it = properties.find("service_name");
-        if (it == properties.cend()) {
-            return;
-        }
-
-        if (!it->second) {
-            return;
-        }
-
-        clusterConfig.mutable_datasourceoptions()->insert({TString("service_name"), TString(it->second)});
-    }
-
     void ParseMdbClusterId(const THashMap<TString, TString>& properties,
                            NYql::TGenericClusterConfig& clusterConfig) {
         auto it = properties.find("mdb_cluster_id");
@@ -200,13 +171,30 @@ namespace NYql {
 
     void ParseProtocol(const THashMap<TString, TString>& properties,
                        NYql::TGenericClusterConfig& clusterConfig) {
-        using namespace NConnector::NApi;
-
-        if (IsIn({EDataSourceKind::GREENPLUM, EDataSourceKind::YDB, EDataSourceKind::MYSQL, EDataSourceKind::MS_SQL_SERVER, EDataSourceKind::ORACLE}, clusterConfig.GetKind())) {
-            clusterConfig.SetProtocol(EProtocol::NATIVE);
+        // For some datasources the PROTOCOL is not required
+        if (clusterConfig.GetKind() == EGenericDataSourceKind::LOGGING) {
+            clusterConfig.SetProtocol(EGenericProtocol::PROTOCOL_UNSPECIFIED);
             return;
         }
 
+        // For the most of transactional databases the PROTOCOL is always NATIVE 
+        if (IsIn({
+                EGenericDataSourceKind::GREENPLUM,
+                EGenericDataSourceKind::YDB,
+                EGenericDataSourceKind::MYSQL,
+                EGenericDataSourceKind::MS_SQL_SERVER,
+                EGenericDataSourceKind::ORACLE,
+                EGenericDataSourceKind::ICEBERG,
+                EGenericDataSourceKind::REDIS,
+                EGenericDataSourceKind::MONGO_DB
+                }, 
+               clusterConfig.GetKind()
+            )) {
+            clusterConfig.SetProtocol(EGenericProtocol::NATIVE);
+            return;
+        }
+
+        // For the rest, parse the property into typed enum value
         auto it = properties.find("protocol");
         if (it == properties.cend()) {
             ythrow yexception() << "missing 'PROTOCOL' value";
@@ -215,13 +203,13 @@ namespace NYql {
         auto input = it->second;
         input.to_upper();
 
-        EProtocol protocol;
-        if (!EProtocol_Parse(input, &protocol)) {
+        EGenericProtocol protocol;
+        if (!NYql::EGenericProtocol_Parse(input, &protocol)) {
             TStringBuilder b;
             b << "invalid 'PROTOCOL' value: '" << it->second << "', valid types are: ";
-            for (auto i = EProtocol_MIN + 1; i < EProtocol_MAX; i++) {
-                b << EProtocol_Name(i);
-                if (i != EProtocol_MAX - 1) {
+            for (auto i = EGenericProtocol_MIN + 1; i < EGenericProtocol_MAX; i++) {
+                b << NYql::EGenericProtocol_Name(i);
+                if (i != EGenericProtocol_MAX - 1) {
                     b << ", ";
                 }
             }
@@ -260,13 +248,66 @@ namespace NYql {
         clusterConfig.SetServiceAccountIdSignature(it->second);
     }
 
-    bool KeyIsSet(const THashMap<TString, TString>& properties, const TString& key) {
-        const auto iter = properties.find(key);
-        if (iter == properties.cend()) {
-            return false;
+    void ParseOptionalField(const THashMap<TString, TString>& properties,
+                     NYql::TGenericClusterConfig& clusterConfig, const TString& fieldName) {
+        auto it = properties.find(fieldName);
+        if (it == properties.cend()) {
+            return;
         }
 
-        return !iter->second.Empty();
+        if (!it->second) {
+            return;
+        }
+
+        clusterConfig.mutable_datasourceoptions()->insert({fieldName, TString(it->second)});
+    }
+
+    ///
+    /// Extract token from properties and copy it to a cluster's config
+    ///
+    void ParseToken(const THashMap<TString, TString>& properties,
+        NYql::TGenericClusterConfig& clusterConfig) {
+        auto it = properties.find("token");
+
+        if (it == properties.cend()) {
+            return;
+        }
+
+        if (!it->second) {
+            return;
+        }
+
+        clusterConfig.SetToken(it->second);
+    }
+
+    ///
+    /// Fill properties for an iceberg data source
+    ///
+    void ParseIcebergFields(const THashMap<TString, TString>& properties,
+        NYql::TGenericClusterConfig& clusterConfig) {
+
+        if (clusterConfig.GetKind() != NYql::EGenericDataSourceKind::ICEBERG) {
+            return;
+        }
+
+        for (auto f : NKikimr::NExternalSource::NIceberg::FieldsToConnector) {
+            auto it = properties.find(f);
+
+            if (properties.end() != it) {
+                clusterConfig.MutableDataSourceOptions()->insert({f, it->second});
+            }
+        }
+    }
+
+    using TProtoProperties = google::protobuf::Map<TProtoStringType, TProtoStringType>;
+
+    TString GetPropertyWithDefault(const TProtoProperties& properties, const TString& key) {
+        const auto iter = properties.find(key);
+        if (iter == properties.cend()) {
+            return TString{};
+        }
+
+        return iter->second;
     }
 
     TGenericClusterConfig GenericClusterConfigFromProperties(const TString& clusterName, const THashMap<TString, TString>& properties) {
@@ -277,14 +318,20 @@ namespace NYql {
         ParseLocation(properties, clusterConfig);
         ParseUseTLS(properties, clusterConfig);
         ParseDatabaseName(properties, clusterConfig);
-        ParseSchema(properties, clusterConfig);
-        ParseServiceName(properties, clusterConfig);
         ParseMdbClusterId(properties, clusterConfig);
         ParseDatabaseId(properties, clusterConfig);
         ParseSourceType(properties, clusterConfig);
         ParseProtocol(properties, clusterConfig);
         ParseServiceAccountId(properties, clusterConfig);
         ParseServiceAccountIdSignature(properties, clusterConfig);
+        ParseToken(properties, clusterConfig);
+        ParseIcebergFields(properties, clusterConfig);
+        ParseOptionalField(properties, clusterConfig, "schema");
+        ParseOptionalField(properties, clusterConfig, "folder_id");
+        ParseOptionalField(properties, clusterConfig, "reading_mode");
+        ParseOptionalField(properties, clusterConfig, "service_name");
+        ParseOptionalField(properties, clusterConfig, "unexpected_type_display_mode");
+        ParseOptionalField(properties, clusterConfig, "unsupported_type_display_mode");
 
         return clusterConfig;
     }
@@ -309,12 +356,14 @@ namespace NYql {
             Token=[{token} char(s)]
             UseSsl={use_ssl},
             DatabaseName={database_name},
-            Protocol={protocol}
+            Protocol={protocol},
+            Schema={schema},
+            FolderId={folder_id}
         )",
             "context"_a = context,
             "msg"_a = msg,
             "name"_a = clusterConfig.GetName(),
-            "kind"_a = NConnector::NApi::EDataSourceKind_Name(clusterConfig.GetKind()),
+            "kind"_a = NYql::EGenericDataSourceKind_Name(clusterConfig.GetKind()),
             "host"_a = clusterConfig.GetEndpoint().Gethost(),
             "port"_a = clusterConfig.GetEndpoint().Getport(),
             "database_id"_a = clusterConfig.GetDatabaseId(),
@@ -325,28 +374,31 @@ namespace NYql {
             "token"_a = ToString(clusterConfig.GetToken().size()),
             "use_ssl"_a = clusterConfig.GetUseSsl() ? "TRUE" : "FALSE",
             "database_name"_a = clusterConfig.GetDatabaseName(),
-            "protocol"_a = NConnector::NApi::EProtocol_Name(clusterConfig.GetProtocol()));
+            "protocol"_a = NYql::EGenericProtocol_Name(clusterConfig.GetProtocol()),
+            "schema"_a = GetPropertyWithDefault(clusterConfig.datasourceoptions(), "schema"),
+            "folder_id"_a = GetPropertyWithDefault(clusterConfig.datasourceoptions(), "folder_id")
+        );
     }
 
-    static const TSet<NConnector::NApi::EDataSourceKind> managedDatabaseKinds{
-        NConnector::NApi::EDataSourceKind::CLICKHOUSE,
-        NConnector::NApi::EDataSourceKind::GREENPLUM,
-        NConnector::NApi::EDataSourceKind::MYSQL,
-        NConnector::NApi::EDataSourceKind::POSTGRESQL,
-        NConnector::NApi::EDataSourceKind::YDB,
+    static const TSet<NYql::EGenericDataSourceKind> managedDatabaseKinds{
+        NYql::EGenericDataSourceKind::CLICKHOUSE,
+        NYql::EGenericDataSourceKind::GREENPLUM,
+        NYql::EGenericDataSourceKind::MYSQL,
+        NYql::EGenericDataSourceKind::POSTGRESQL,
+        NYql::EGenericDataSourceKind::YDB,
     };
 
-    static const TSet<NConnector::NApi::EDataSourceKind> traditionalRelationalDatabaseKinds{
-        NConnector::NApi::EDataSourceKind::CLICKHOUSE,
-        NConnector::NApi::EDataSourceKind::GREENPLUM,
-        NConnector::NApi::EDataSourceKind::MS_SQL_SERVER,
-        NConnector::NApi::EDataSourceKind::MYSQL,
-        NConnector::NApi::EDataSourceKind::ORACLE,
-        NConnector::NApi::EDataSourceKind::POSTGRESQL,
+    static const TSet<NYql::EGenericDataSourceKind> traditionalRelationalDatabaseKinds{
+        NYql::EGenericDataSourceKind::CLICKHOUSE,
+        NYql::EGenericDataSourceKind::GREENPLUM,
+        NYql::EGenericDataSourceKind::MS_SQL_SERVER,
+        NYql::EGenericDataSourceKind::MYSQL,
+        NYql::EGenericDataSourceKind::ORACLE,
+        NYql::EGenericDataSourceKind::POSTGRESQL,
     };
 
-    bool DataSourceMustHaveDataBaseName(const NConnector::NApi::EDataSourceKind& sourceKind) {
-        return traditionalRelationalDatabaseKinds.contains(sourceKind) && sourceKind != NConnector::NApi::ORACLE;
+    bool DataSourceMustHaveDataBaseName(const NYql::EGenericDataSourceKind& sourceKind) {
+        return traditionalRelationalDatabaseKinds.contains(sourceKind) && sourceKind != NYql::EGenericDataSourceKind::ORACLE;
     }
 
     void ValidateGenericClusterConfig(
@@ -407,7 +459,7 @@ namespace NYql {
         // YDB:
         // * set database name when working with on-prem YDB instance;
         // * but set database ID when working with managed YDB.
-        if (clusterConfig.GetKind() == NConnector::NApi::YDB) {
+        if (clusterConfig.GetKind() == NYql::EGenericDataSourceKind::YDB) {
             if (clusterConfig.HasDatabaseName() && clusterConfig.HasDatabaseId()) {
                 return ValidationError(
                     clusterConfig,
@@ -425,7 +477,7 @@ namespace NYql {
 
         // Oracle:
         // * always set service_name for oracle;
-        if (clusterConfig.GetKind() == NConnector::NApi::ORACLE) {
+        if (clusterConfig.GetKind() == NYql::EGenericDataSourceKind::ORACLE) {
             if (!clusterConfig.GetDataSourceOptions().contains("service_name")) {
                 return ValidationError(
                     clusterConfig,
@@ -450,15 +502,10 @@ namespace NYql {
             return ValidationError(clusterConfig, context, "empty field 'Name'");
         }
 
-        if (clusterConfig.GetKind() == NConnector::NApi::EDataSourceKind::DATA_SOURCE_KIND_UNSPECIFIED) {
+        if (clusterConfig.GetKind() == NYql::EGenericDataSourceKind::DATA_SOURCE_KIND_UNSPECIFIED) {
             return ValidationError(clusterConfig, context, "empty field 'Kind'");
         }
 
         // TODO: validate Credentials.basic.password after ClickHouse recipe fix
-        // TODO: validate DatabaseName field during https://st.yandex-team.ru/YQ-2494
-
-        if (clusterConfig.GetProtocol() == NConnector::NApi::EProtocol::PROTOCOL_UNSPECIFIED) {
-            return ValidationError(clusterConfig, context, "empty field 'Protocol'");
-        }
     }
-}
+} // namespace NYql

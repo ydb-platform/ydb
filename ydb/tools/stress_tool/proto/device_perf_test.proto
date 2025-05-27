@@ -1,0 +1,33 @@
+import "ydb/core/protos/load_test.proto";
+
+package NDevicePerfTest;
+
+message TAioTest {
+    optional uint32 DurationSeconds = 1 [default = 0];
+    optional uint32 RequestSize = 2 [default = 0];
+    optional uint32 QueueDepth = 3 [default = 0];
+    optional float ReadProportion = 4 [default = 0.0];
+    // Refill buffer with random numbers before every write operation
+    optional uint32 NumberOfRandomRefills = 5 [default = 0];
+}
+
+message TTrimTest {
+    optional uint32 DurationSeconds = 1 [default = 0];
+    optional uint32 RequestSize = 2 [default = 0];
+}
+
+message TPDiskTest {
+    repeated NKikimr.TEvLoadTestRequest PDiskTestList = 1;
+    optional uint32 DeviceInFlight = 2 [default = 0];
+    optional bool EnableTrim = 3 [default = false];
+}
+
+message TDriveEstimatorTest {
+}
+
+message TPerfTests {
+    repeated TAioTest AioTestList = 1;
+    repeated TTrimTest TrimTestList = 2;
+    repeated TPDiskTest PDiskTestList = 3;
+    optional TDriveEstimatorTest DriveEstimatorTest = 4;
+}

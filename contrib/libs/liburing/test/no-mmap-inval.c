@@ -31,13 +31,15 @@ int main(int argc, char *argv[])
 	p.cq_off.user_addr = (unsigned long long) (uintptr_t) addr;
 
 	ret = io_uring_queue_init_params(2, &ring, &p);
-	if (ret == -EINVAL) {
+	if (ret == -EINVAL || ret == -ENOENT) {
 		/*  kernel doesn't support SETUP_NO_MMAP */
+		free(addr);
 		return T_EXIT_SKIP;
-	} else if (ret && ret != -EFAULT) {
+	} else if (ret && (ret != -EFAULT && ret != -ENOMEM)) {
 		fprintf(stderr, "Got %d, wanted -EFAULT\n", ret);
 		return T_EXIT_FAIL;
 	}
 
+	free(addr);
 	return T_EXIT_PASS;
 }

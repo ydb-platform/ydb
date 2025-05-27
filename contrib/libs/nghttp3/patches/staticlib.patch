@@ -1,0 +1,5 @@
+--- a/lib/includes/nghttp3/nghttp3.h
++++ b/lib/includes/nghttp3/nghttp3.h
+@@ -55,1 +55,1 @@ extern "C" {
+-#ifdef NGHTTP3_STATICLIB
++#if 1

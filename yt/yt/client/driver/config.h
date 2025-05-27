@@ -17,10 +17,9 @@ namespace NYT::NDriver {
 constexpr int ApiVersion3 = 3;
 constexpr int ApiVersion4 = 4;
 
-class TDriverConfig
+struct TDriverConfig
     : public NYTree::TYsonStruct
 {
-public:
     NApi::TFileReaderConfigPtr FileReader;
     NApi::TFileWriterConfigPtr FileWriter;
     NTableClient::TTableReaderConfigPtr TableReader;
@@ -39,11 +38,17 @@ public:
 
     std::optional<TString> Token;
 
+    //! Target cluster for multiproxy mode.
+    std::optional<std::string> MultiproxyTargetCluster;
+
     TAsyncExpiringCacheConfigPtr ProxyDiscoveryCache;
 
     bool EnableInternalCommands;
 
     bool ExpectStructuredInputInStructuredBatchCommands;
+
+    //! Controls whether authentication commands (SetUserPassword, IssueToken, ListUserTokens, etc.) require a correct password to be used.
+    bool RequirePasswordInAuthenticationCommands;
 
     REGISTER_YSON_STRUCT(TDriverConfig);
 
@@ -55,4 +60,3 @@ DEFINE_REFCOUNTED_TYPE(TDriverConfig)
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NDriver
-

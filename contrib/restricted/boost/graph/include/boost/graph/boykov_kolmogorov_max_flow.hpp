@@ -32,6 +32,8 @@
 #ifndef BOOST_BOYKOV_KOLMOGOROV_MAX_FLOW_HPP
 #define BOOST_BOYKOV_KOLMOGOROV_MAX_FLOW_HPP
 
+#pragma clang system_header
+
 #include <boost/config.hpp>
 #include <boost/assert.hpp>
 #include <vector>

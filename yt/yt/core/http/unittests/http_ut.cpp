@@ -99,9 +99,9 @@ TEST(TParseCookiesTest, ParseCookie)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-std::vector<TString> ToVector(const TCompactVector<TString, 1>& v)
+std::vector<std::string> ToVector(const auto& v)
 {
-    return std::vector<TString>(v.begin(), v.end());
+    return {v.begin(), v.end()};
 }
 
 TEST(THeadersTest, Simple)
@@ -110,20 +110,20 @@ TEST(THeadersTest, Simple)
 
     headers->Set("X-Test", "F");
 
-    ASSERT_EQ(std::vector<TString>{{"F"}}, ToVector(headers->GetAll("X-Test")));
-    ASSERT_EQ(TString{"F"}, headers->GetOrThrow("X-Test"));
-    ASSERT_EQ(TString{"F"}, *headers->Find("X-Test"));
+    ASSERT_EQ(std::vector<std::string>{{"F"}}, ToVector(headers->GetAll("X-Test")));
+    ASSERT_EQ(std::string("F"), headers->GetOrThrow("X-Test"));
+    ASSERT_EQ(std::string("F"), *headers->Find("X-Test"));
 
     ASSERT_THROW(headers->GetAll("X-Test2"), TErrorException);
     ASSERT_THROW(headers->GetOrThrow("X-Test2"), TErrorException);
     ASSERT_FALSE(headers->Find("X-Test2"));
 
     headers->Add("X-Test", "H");
-    std::vector<TString> expected = {"F", "H"};
+    std::vector<std::string> expected = {"F", "H"};
     ASSERT_EQ(expected, ToVector(headers->GetAll("X-Test")));
 
     headers->Set("X-Test", "J");
-    ASSERT_EQ(std::vector<TString>{{"J"}}, ToVector(headers->GetAll("X-Test")));
+    ASSERT_EQ(std::vector<std::string>{{"J"}}, ToVector(headers->GetAll("X-Test")));
 }
 
 TEST(THeadersTest, HeaderCaseIsIrrelevant)
@@ -131,8 +131,8 @@ TEST(THeadersTest, HeaderCaseIsIrrelevant)
     auto headers = New<THeaders>();
 
     headers->Set("x-tEsT", "F");
-    ASSERT_EQ(TString("F"), headers->GetOrThrow("x-test"));
-    ASSERT_EQ(TString("F"), headers->GetOrThrow("X-Test"));
+    ASSERT_EQ(std::string("F"), headers->GetOrThrow("x-test"));
+    ASSERT_EQ(std::string("F"), headers->GetOrThrow("X-Test"));
 
     TString buffer;
     TStringOutput output(buffer);
@@ -141,7 +141,6 @@ TEST(THeadersTest, HeaderCaseIsIrrelevant)
     TString expected = "x-tEsT: F\r\n";
     ASSERT_EQ(expected, buffer);
 }
-
 
 TEST(THeadersTest, MessedUpHeaderValuesAreNotAllowed)
 {
@@ -158,6 +157,11 @@ struct TFakeConnection
 {
     TString Input;
     TString Output;
+
+    TConnectionId GetId() const override
+    {
+        return {};
+    }
 
     bool SetNoDelay() override
     {
@@ -201,6 +205,11 @@ struct TFakeConnection
         return true;
     }
 
+    bool IsReusable() const override
+    {
+        return true;
+    }
+
     TFuture<void> Abort() override
     {
         THROW_ERROR_EXCEPTION("Not implemented");
@@ -216,12 +225,12 @@ struct TFakeConnection
         THROW_ERROR_EXCEPTION("Not implemented");
     }
 
-    const TNetworkAddress& LocalAddress() const override
+    const TNetworkAddress& GetLocalAddress() const override
     {
         THROW_ERROR_EXCEPTION("Not implemented");
     }
 
-    const TNetworkAddress& RemoteAddress() const override
+    const TNetworkAddress& GetRemoteAddress() const override
     {
         THROW_ERROR_EXCEPTION("Not implemented");
     }
@@ -1026,7 +1035,7 @@ TEST_P(THttpServerTest, ResponseStreaming)
     Sleep(TDuration::MilliSeconds(10));
 }
 
-static constexpr auto& Logger = HttpLogger;
+constinit const auto Logger = HttpLogger;
 
 class TCancelingHandler
     : public IHttpHandler
@@ -1149,7 +1158,7 @@ TEST_P(THttpServerTest, ConnectionKeepAlive)
 
         auto response = New<THttpInput>(
             connection,
-            connection->RemoteAddress(),
+            connection->GetRemoteAddress(),
             Poller->GetInvoker(),
             EMessageType::Response,
             New<THttpIOConfig>());
@@ -1183,7 +1192,7 @@ TEST_P(THttpServerTest, ConnectionKeepAlive)
 
         auto response = New<THttpInput>(
             connection,
-            connection->RemoteAddress(),
+            connection->GetRemoteAddress(),
             Poller->GetInvoker(),
             EMessageType::Response,
             New<THttpIOConfig>());
@@ -1367,6 +1376,21 @@ TEST(THttpHandlerMatchingTest, Simple)
     EXPECT_EQ(h3.Get(), handlers3->Match(TStringBuf("/a")).Get());
     EXPECT_EQ(h2.Get(), handlers3->Match(TStringBuf("/a/")).Get());
     EXPECT_EQ(h2.Get(), handlers3->Match(TStringBuf("/a/b")).Get());
+
+    {
+        auto handlers = New<TRequestPathMatcher>();
+        handlers->Add("/{$}", h1);
+        handlers->Add("/a/{$}", h2);
+        handlers->Add("/a/b", h3);
+
+        EXPECT_EQ(h1.Get(), handlers->Match(TStringBuf("/")).Get());
+        EXPECT_EQ(h2.Get(), handlers->Match(TStringBuf("/a")).Get());
+        EXPECT_EQ(h2.Get(), handlers->Match(TStringBuf("/a/")).Get());
+        EXPECT_EQ(h3.Get(), handlers->Match(TStringBuf("/a/b")).Get());
+        EXPECT_FALSE(handlers->Match(TStringBuf("/a/b/")).Get());
+        EXPECT_FALSE(handlers->Match(TStringBuf("/a/c")).Get());
+        EXPECT_FALSE(handlers->Match(TStringBuf("/d")).Get());
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

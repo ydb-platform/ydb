@@ -9,7 +9,7 @@ select
 from 
     {{region}}
 where
-    r_name='AMERICA'
+    r_name='EUROPE'
 );
 
 $n = (
@@ -56,8 +56,8 @@ select
 from
     {{part}}
 where
-    p_size = 10
-    and p_type like '%COPPER'
+    p_size = 15
+    and p_type like '%BRASS'
 );
 
 $ps = (

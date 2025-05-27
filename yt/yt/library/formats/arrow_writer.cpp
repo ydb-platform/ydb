@@ -20,16 +20,18 @@
 
 #include <yt/yt/core/misc/blob_output.h>
 #include <yt/yt/core/misc/error.h>
-#include <yt/yt/core/misc/range.h>
+
+#include <library/cpp/yt/memory/range.h>
 
 #include <vector>
 
 namespace NYT::NFormats {
 
-using namespace NTableClient;
+using namespace NColumnConverters;
 using namespace NComplexTypes;
+using namespace NTableClient;
 
-static constexpr auto& Logger = FormatsLogger;
+constinit const auto Logger = FormatsLogger;
 
 using TBodyWriter = std::function<void(TMutableRef)>;
 using TBatchColumn = IUnversionedColumnarRowBatch::TColumn;
@@ -49,14 +51,14 @@ const TString AlignmentString(ArrowAlignment, 0);
 
 flatbuffers::Offset<flatbuffers::String> SerializeString(
     flatbuffers::FlatBufferBuilder* flatbufBuilder,
-    const TString& str)
+    const std::string& str)
 {
     return flatbufBuilder->CreateString(str.data(), str.length());
 }
 
 std::tuple<org::apache::arrow::flatbuf::Type, flatbuffers::Offset<void>> SerializeColumnType(
     flatbuffers::FlatBufferBuilder* flatbufBuilder,
-    TColumnSchema schema)
+    const TColumnSchema& schema)
 {
     auto simpleType = CastToV1Type(schema.LogicalType()).first;
     switch (simpleType) {
@@ -146,6 +148,7 @@ std::tuple<org::apache::arrow::flatbuf::Type, flatbuffers::Offset<void>> Seriali
                     .Union());
 
         case ESimpleLogicalValueType::Utf8:
+        case ESimpleLogicalValueType::Json:
             return std::tuple(
                 org::apache::arrow::flatbuf::Type_Utf8,
                 org::apache::arrow::flatbuf::CreateUtf8(*flatbufBuilder)
@@ -168,6 +171,10 @@ int ExtractTableIndexFromColumn(const TBatchColumn* column)
 
     const auto* valueColumn = column->Rle->ValueColumn;
     auto values = valueColumn->GetTypedValues<ui64>();
+    TRef nullBitmap;
+    if (valueColumn->NullBitmap) {
+        nullBitmap = valueColumn->NullBitmap->Data;
+    }
 
     // Expecting only one element.
     YT_VERIFY(values.size() == 1);
@@ -184,12 +191,14 @@ int ExtractTableIndexFromColumn(const TBatchColumn* column)
         valueColumn->Values->ZigZagEncoded,
         TRange<ui32>(),
         rleIndexes,
+        nullBitmap,
         [&] (auto index) {
             return values[index];
         },
         [&] (auto value) {
             tableIndex = value;
         });
+
     return tableIndex;
 }
 
@@ -494,6 +503,11 @@ void SerializeIntegerColumn(
 
             auto startIndex = column->StartIndex;
 
+            TRef nullBitmap;
+            if (valueColumn->NullBitmap) {
+                nullBitmap = valueColumn->NullBitmap->Data;
+            }
+
             switch (simpleType) {
 #define XX(cppType, ytType)                                 \
     case ESimpleLogicalValueType::ytType: {                 \
@@ -506,6 +520,7 @@ void SerializeIntegerColumn(
             valueColumn->Values->ZigZagEncoded,             \
             TRange<ui32>(),                                 \
             rleIndexes,                                     \
+            nullBitmap,                                     \
             [&] (auto index) {                              \
                 return values[index];                       \
             },                                              \
@@ -562,6 +577,11 @@ void SerializeDateColumn(
                 ? column->GetTypedValues<ui64>()
                 : TRange<ui64>();
 
+            TRef nullBitmap;
+            if (valueColumn->NullBitmap) {
+                nullBitmap = valueColumn->NullBitmap->Data;
+            }
+
             auto startIndex = column->StartIndex;
 
             auto dstValues = GetTypedValues<i32>(dstRef);
@@ -573,6 +593,7 @@ void SerializeDateColumn(
                 valueColumn->Values->ZigZagEncoded,
                 TRange<ui32>(),
                 rleIndexes,
+                nullBitmap,
                 [&] (auto index) {
                     return values[index];
                 },
@@ -613,6 +634,11 @@ void SerializeDatetimeColumn(
                 ? column->GetTypedValues<ui64>()
                 : TRange<ui64>();
 
+            TRef nullBitmap;
+            if (valueColumn->NullBitmap) {
+                nullBitmap = valueColumn->NullBitmap->Data;
+            }
+
             auto startIndex = column->StartIndex;
 
             auto dstValues = GetTypedValues<i64>(dstRef);
@@ -624,6 +650,7 @@ void SerializeDatetimeColumn(
                 valueColumn->Values->ZigZagEncoded,
                 TRange<ui32>(),
                 rleIndexes,
+                nullBitmap,
                 [&] (auto index) {
                     return values[index];
                 },
@@ -663,6 +690,11 @@ void SerializeTimestampColumn(
                 ? column->GetTypedValues<ui64>()
                 : TRange<ui64>();
 
+            TRef nullBitmap;
+            if (valueColumn->NullBitmap) {
+                nullBitmap = valueColumn->NullBitmap->Data;
+            }
+
             auto startIndex = column->StartIndex;
 
             auto dstValues = GetTypedValues<i64>(dstRef);
@@ -674,6 +706,7 @@ void SerializeTimestampColumn(
                 valueColumn->Values->ZigZagEncoded,
                 TRange<ui32>(),
                 rleIndexes,
+                nullBitmap,
                 [&] (auto index) {
                     return values[index];
                 },
@@ -921,7 +954,7 @@ auto SerializeRecordBatch(
             YT_VERIFY(current == dstRef.End());
         });
 }
-///////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 class TArrowWriter
     : public TSchemalessFormatWriterBase
@@ -929,7 +962,8 @@ class TArrowWriter
 public:
     TArrowWriter(
         TNameTablePtr nameTable,
-        const std::vector<NTableClient::TTableSchemaPtr>& tableSchemas,
+        const std::vector<TTableSchemaPtr>& tableSchemas,
+        const std::vector<std::optional<std::vector<std::string>>>& columns,
         NConcurrency::IAsyncOutputStreamPtr output,
         bool enableContextSaving,
         TControlAttributesConfigPtr controlAttributesConfig,
@@ -942,6 +976,7 @@ public:
             keyColumnCount)
     {
         YT_VERIFY(tableSchemas.size() > 0);
+        YT_VERIFY(columns.size() == tableSchemas.size() || columns.size() == 0);
 
         ColumnConverters_.resize(tableSchemas.size());
         TableCount_ = tableSchemas.size();
@@ -950,9 +985,19 @@ public:
         IsFirstBatchForSpecificTable_.assign(tableSchemas.size(), false);
 
         for (int tableIndex = 0; tableIndex < std::ssize(tableSchemas); ++tableIndex) {
+            THashSet<std::string> columnNames;
+            bool hasColumnFilter = false;
+            if (tableIndex < std::ssize(columns) && columns[tableIndex]) {
+                hasColumnFilter = true;
+                for (const auto& columnName : *(columns[tableIndex])) {
+                    columnNames.insert(columnName);
+                }
+            }
             for (const auto& columnSchema : tableSchemas[tableIndex]->Columns()) {
-                auto columnId = NameTable_->GetIdOrRegisterName(columnSchema.Name());
-                ColumnSchemas_[tableIndex][columnId] = columnSchema;
+                if (!hasColumnFilter || columnNames.contains(columnSchema.Name())) {
+                    auto columnId = NameTable_->GetIdOrRegisterName(columnSchema.Name());
+                    ColumnSchemas_[tableIndex][columnId] = columnSchema;
+                }
             }
             if (CheckColumnInNameTable(GetRangeIndexColumnId())) {
                 ColumnSchemas_[tableIndex][GetRangeIndexColumnId()] = GetSystemColumnSchema(NameTable_->GetName(GetRangeIndexColumnId()), GetRangeIndexColumnId());
@@ -1037,7 +1082,7 @@ private:
         ++EncodedRowBatchCount_;
     }
 
-    void DoWriteBatch(NTableClient::IUnversionedRowBatchPtr rowBatch) override
+    void DoWriteBatch(IUnversionedRowBatchPtr rowBatch) override
     {
         auto columnarBatch = rowBatch->TryAsColumnar();
         if (!columnarBatch) {
@@ -1102,9 +1147,10 @@ private:
     std::vector<TTypedBatchColumn> TypedColumns_;
     std::vector<THashMap<int, TColumnSchema>> ColumnSchemas_;
     std::vector<IUnversionedColumnarRowBatch::TDictionaryId> ArrowDictionaryIds_;
-    std::vector<NColumnConverters::TColumnConverters> ColumnConverters_;
+    std::vector<TColumnConverters> ColumnConverters_;
     std::vector<THashMap<int, int>> TableIdToIndex_;
     std::vector<bool> IsFirstBatchForSpecificTable_;
+    TConvertedColumnRange MissingColumns_;
 
     i64 EncodedRowBatchCount_ = 0;
     i64 EncodedColumnarBatchCount_ = 0;
@@ -1126,7 +1172,7 @@ private:
             ControlAttributesConfig_->EnableTabletIndex && IsTabletIndexColumnId(columnIndex);
     }
 
-    bool IsColumnNeedsToAdd(int columnIndex) const
+    bool ShouldColumnBeAdded(int columnIndex) const
     {
         return !IsSystemColumnId(columnIndex)
             || (CheckIfSystemColumnEnable(columnIndex) && !IsTableIndexColumnId(columnIndex));
@@ -1143,24 +1189,23 @@ private:
     void PrepareColumns(const TRange<const TBatchColumn*>& batchColumns, int tableIndex)
     {
         if (!IsFirstBatchForSpecificTable_[tableIndex]) {
-            std::vector<bool> idExists(NameTable_->GetSize(), false);
-            for (const auto* column : batchColumns) {
-                if (IsColumnNeedsToAdd(column->Id)) {
-                    idExists[column->Id] = true;
-                }
-            }
             int currentIndex = 0;
-            for (int columnId = 0; columnId < NameTable_->GetSize(); columnId++) {
-                if (idExists[columnId]) {
+            for (const auto& columnSchema : ColumnSchemas_[tableIndex]) {
+                auto columnId = columnSchema.first;
+                if (ShouldColumnBeAdded(columnId)) {
                     TableIdToIndex_[tableIndex][columnId] = currentIndex;
                     currentIndex++;
                 }
             }
+
             IsFirstBatchForSpecificTable_[tableIndex] = true;
         }
+
         TypedColumns_.resize(TableIdToIndex_[tableIndex].size());
+        std::vector<bool> columnExists(TableIdToIndex_[tableIndex].size());
+
         for (const auto* column : batchColumns) {
-            if (IsColumnNeedsToAdd(column->Id)) {
+            if (ShouldColumnBeAdded(column->Id)) {
                 auto iterIndex = TableIdToIndex_[tableIndex].find(column->Id);
                 YT_VERIFY(iterIndex != TableIdToIndex_[tableIndex].end());
 
@@ -1168,6 +1213,36 @@ private:
                 YT_VERIFY(iterSchema != ColumnSchemas_[tableIndex].end());
                 TypedColumns_[iterIndex->second] = TTypedBatchColumn{
                     column,
+                    iterSchema->second.LogicalType()
+                };
+                columnExists[iterIndex->second] = true;
+            }
+        }
+
+        THashMap<int, TColumnSchema> missingColumnSchemas;
+        for (const auto& columnSchema : ColumnSchemas_[tableIndex]) {
+            auto columnId = columnSchema.first;
+            if (ShouldColumnBeAdded(columnId)) {
+                auto iterIndex = TableIdToIndex_[tableIndex].find(columnId);
+                YT_VERIFY(iterIndex != TableIdToIndex_[tableIndex].end());
+                if (!columnExists[iterIndex->second]) {
+                    missingColumnSchemas[columnId] = columnSchema.second;
+                }
+            }
+        }
+        if (missingColumnSchemas.size() > 0 && RowCount_ > 0) {
+            std::vector<TUnversionedRow> rows(RowCount_);
+            TColumnConverters columnConverter;
+            MissingColumns_ = columnConverter.ConvertRowsToColumns(rows, missingColumnSchemas);
+            for (ssize_t columnIndex = 0; columnIndex < std::ssize(MissingColumns_); columnIndex++) {
+                auto iterIndex = TableIdToIndex_[tableIndex].find(MissingColumns_[columnIndex].RootColumn->Id);
+                YT_VERIFY(iterIndex != TableIdToIndex_[tableIndex].end());
+
+                auto iterSchema = ColumnSchemas_[tableIndex].find(MissingColumns_[columnIndex].RootColumn->Id);
+                YT_VERIFY(iterSchema != ColumnSchemas_[tableIndex].end());
+
+                TypedColumns_[iterIndex->second] = TTypedBatchColumn{
+                    MissingColumns_[columnIndex].RootColumn,
                     iterSchema->second.LogicalType()
                 };
             }
@@ -1435,7 +1510,7 @@ private:
                 output->Write(&metadataAlignSize, sizeof(ui32));
                 output->Write(metadataPtr, metadataSize);
 
-                output->Write(AlignmentString.Data(), metadataAlignSize - metadataSize);
+                output->Write(AlignmentString.data(), metadataAlignSize - metadataSize);
 
                 // Body
                 if (message.BodyWriter) {
@@ -1459,8 +1534,9 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 ISchemalessFormatWriterPtr CreateWriterForArrow(
-    NTableClient::TNameTablePtr nameTable,
-    const std::vector<NTableClient::TTableSchemaPtr>& schemas,
+    TNameTablePtr nameTable,
+    const std::vector<TTableSchemaPtr>& schemas,
+    const std::vector<std::optional<std::vector<std::string>>>& columns,
     NConcurrency::IAsyncOutputStreamPtr output,
     bool enableContextSaving,
     TControlAttributesConfigPtr controlAttributesConfig,
@@ -1469,6 +1545,7 @@ ISchemalessFormatWriterPtr CreateWriterForArrow(
     auto result = New<TArrowWriter>(
         std::move(nameTable),
         schemas,
+        columns,
         std::move(output),
         enableContextSaving,
         std::move(controlAttributesConfig),

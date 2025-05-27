@@ -4,11 +4,16 @@
 
 #include <yt/yt/client/api/rowset.h>
 #include <yt/yt/client/api/skynet.h>
+#include <yt/yt/client/api/table_partition_reader.h>
 
 #include <yt/yt/client/chaos_client/replication_card_serialization.h>
 
 #include <yt/yt/client/formats/config.h>
 #include <yt/yt/client/formats/parser.h>
+
+#include <yt/yt/client/signature/generator.h>
+#include <yt/yt/client/signature/signature.h>
+#include <yt/yt/client/signature/validator.h>
 
 #include <yt/yt/client/table_client/adapters.h>
 #include <yt/yt/client/table_client/blob_reader.h>
@@ -16,6 +21,7 @@
 #include <yt/yt/client/table_client/row_buffer.h>
 #include <yt/yt/client/table_client/table_consumer.h>
 #include <yt/yt/client/table_client/table_output.h>
+#include <yt/yt/client/table_client/timestamped_schema_helpers.h>
 #include <yt/yt/client/table_client/unversioned_writer.h>
 #include <yt/yt/client/table_client/versioned_writer.h>
 #include <yt/yt/client/table_client/wire_protocol.h>
@@ -32,8 +38,10 @@
 namespace NYT::NDriver {
 
 using namespace NApi;
+using namespace NApi::NDetail;
 using namespace NChaosClient;
 using namespace NChunkClient;
+using namespace NCodegen;
 using namespace NConcurrency;
 using namespace NFormats;
 using namespace NHiveClient;
@@ -47,13 +55,17 @@ using namespace NTracing;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static NLogging::TLogger WithCommandTag(
+namespace  {
+
+NLogging::TLogger WithCommandTag(
     const NLogging::TLogger& logger,
     const ICommandContextPtr& context)
 {
     return logger.WithTag("Command: %v",
         context->Request().CommandName);
 }
+
+} // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -125,6 +137,7 @@ void TReadTableCommand::DoExecute(ICommandContextPtr context)
         format,
         reader->GetNameTable(),
         {reader->GetTableSchema()},
+        {Path.GetColumns()},
         context->Request().OutputStream,
         false,
         ControlAttributes,
@@ -223,6 +236,51 @@ void TReadBlobTableCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void TReadTablePartitionCommand::Register(TRegistrar registrar)
+{
+    registrar.Parameter("cookie", &TThis::Cookie);
+}
+
+void TReadTablePartitionCommand::DoExecute(ICommandContextPtr context)
+{
+    auto client = context->GetClient();
+
+    auto cookie = ConvertTo<TTablePartitionCookiePtr>(TYsonString(Cookie));
+
+    auto valid = WaitFor(context->GetDriver()->GetSignatureValidator()->Validate(cookie.Underlying()))
+        .ValueOrThrow();
+
+    if (!valid) {
+        THROW_ERROR_EXCEPTION("Signature validation failed");
+    }
+
+    auto reader = WaitFor(client->CreateTablePartitionReader(cookie))
+        .ValueOrThrow();
+
+    auto format = context->GetOutputFormat();
+    auto formatWriter = CreateStaticTableWriterForFormat(
+        /*format*/ format,
+        /*nameTable*/ reader->GetNameTable(),
+        /*tableSchemas*/ GetTableSchemas(reader),
+        /*columnFilters*/ GetColumnFilters(reader),
+        /*output*/ context->Request().OutputStream,
+        /*enableContextSaving*/ false,
+        /*controlAttributesConfig*/ New<TControlAttributesConfig>(),
+        /*keyColumnCount*/ 0);
+
+    TRowBatchReadOptions options{
+        .MaxRowsPerRead = context->GetConfig()->ReadBufferRowCount,
+        .Columnar = (format.GetType() == EFormatType::Arrow),
+    };
+
+    PipeReaderToWriterByBatches(
+        reader,
+        formatWriter,
+        options);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 void TLocateSkynetShareCommand::Register(TRegistrar registrar)
 {
     registrar.Parameter("path", &TThis::Path);
@@ -261,7 +319,18 @@ void TWriteTableCommand::Register(TRegistrar registrar)
         .Default(1_MB);
 }
 
-void TWriteTableCommand::DoExecute(ICommandContextPtr context)
+NApi::ITableWriterPtr TWriteTableCommand::CreateTableWriter(
+    const ICommandContextPtr& context)
+{
+    PutMethodInfoInTraceContext("write_table");
+
+    return WaitFor(context->GetClient()->CreateTableWriter(
+        Path,
+        Options))
+            .ValueOrThrow();
+}
+
+void TWriteTableCommand::DoExecuteImpl(const ICommandContextPtr& context)
 {
     auto transaction = AttachTransaction(context, false);
 
@@ -273,19 +342,15 @@ void TWriteTableCommand::DoExecute(ICommandContextPtr context)
     Options.PingAncestors = true;
     Options.Config = config;
 
-    PutMethodInfoInTraceContext("write_table");
-
-    auto apiWriter = WaitFor(context->GetClient()->CreateTableWriter(
-        Path,
-        Options))
-        .ValueOrThrow();
+    auto apiWriter = CreateTableWriter(context);
 
     auto schemalessWriter = CreateSchemalessFromApiWriterAdapter(std::move(apiWriter));
 
     TWritingValueConsumer valueConsumer(
         schemalessWriter,
         ConvertTo<TTypeConversionConfigPtr>(context->GetInputFormat().Attributes()),
-        MaxRowBufferSize);
+        MaxRowBufferSize,
+        context->Request().MemoryUsageTracker);
 
     TTableOutput output(CreateParserForFormat(
         context->GetInputFormat(),
@@ -298,7 +363,11 @@ void TWriteTableCommand::DoExecute(ICommandContextPtr context)
 
     WaitFor(schemalessWriter->Close())
         .ThrowOnError();
+}
 
+void TWriteTableCommand::DoExecute(ICommandContextPtr context)
+{
+    DoExecuteImpl(context);
     ProduceEmptyOutput(context);
 }
 
@@ -437,6 +506,12 @@ void TPartitionTablesCommand::Register(TRegistrar registrar)
         .Default(false);
     registrar.Parameter("adjust_data_weight_per_partition", &TThis::AdjustDataWeightPerPartition)
         .Default(true);
+    registrar.Parameter("enable_cookies", &TThis::EnableCookies)
+        .Default(false);
+    registrar.Parameter("use_new_slicing_implementation_in_ordered_pool", &TThis::UseNewSlicingImplementationInOrderedPool)
+        .Default(true);
+    registrar.Parameter("use_new_slicing_implementation_in_unordered_pool", &TThis::UseNewSlicingImplementationInUnorderedPool)
+        .Default(true);
 }
 
 void TPartitionTablesCommand::DoExecute(ICommandContextPtr context)
@@ -450,6 +525,9 @@ void TPartitionTablesCommand::DoExecute(ICommandContextPtr context)
     Options.MaxPartitionCount = MaxPartitionCount;
     Options.EnableKeyGuarantee = EnableKeyGuarantee;
     Options.AdjustDataWeightPerPartition = AdjustDataWeightPerPartition;
+    Options.EnableCookies = EnableCookies;
+    Options.UseNewSlicingImplementationInOrderedPool = UseNewSlicingImplementationInOrderedPool;
+    Options.UseNewSlicingImplementationInUnorderedPool = UseNewSlicingImplementationInUnorderedPool;
 
     auto partitions = WaitFor(context->GetClient()->PartitionTables(Paths, Options))
         .ValueOrThrow();
@@ -549,6 +627,19 @@ void TUnfreezeTableCommand::DoExecute(ICommandContextPtr context)
 {
     auto asyncResult = context->GetClient()->UnfreezeTable(
         Path.GetPath(),
+        Options);
+    WaitFor(asyncResult)
+        .ThrowOnError();
+
+    ProduceEmptyOutput(context);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TCancelTabletTransitionCommand::DoExecute(ICommandContextPtr context)
+{
+    auto asyncResult = context->GetClient()->CancelTabletTransition(
+        TabletId,
         Options);
     WaitFor(asyncResult)
         .ThrowOnError();
@@ -809,7 +900,7 @@ void TSelectRowsCommand::Register(TRegistrar registrar)
         })
         .Optional(/*init*/ false);
 
-    registrar.ParameterWithUniversalAccessor<std::optional<NApi::EExecutionBackend>>(
+    registrar.ParameterWithUniversalAccessor<std::optional<EExecutionBackend>>(
         "execution_backend",
         [] (TThis* command) -> auto& {
             return command->Options.ExecutionBackend;
@@ -820,6 +911,12 @@ void TSelectRowsCommand::Register(TRegistrar registrar)
         "versioned_read_options",
         [] (TThis* command) -> auto& {
             return command->Options.VersionedReadOptions;
+        })
+        .Optional(/*init*/ false);
+    registrar.ParameterWithUniversalAccessor<std::optional<bool>>(
+        "use_lookup_cache",
+        [] (TThis* command) -> auto& {
+            return command->Options.UseLookupCache;
         })
         .Optional(/*init*/ false);
 }
@@ -846,6 +943,12 @@ void TSelectRowsCommand::DoExecute(ICommandContextPtr context)
             Options.Timestamp);
     }
 
+    auto format = context->GetOutputFormat();
+    // Allows to display simple types like `timestamp` correctly in UI (YT-16386).
+    if (format.GetType() == EFormatType::WebJson) {
+        Options.UseOriginalTableSchema = true;
+    }
+
     auto result = WaitFor(clientBase->SelectRows(Query, Options))
         .ValueOrThrow();
 
@@ -860,7 +963,6 @@ void TSelectRowsCommand::DoExecute(ICommandContextPtr context)
         });
     }
 
-    auto format = context->GetOutputFormat();
     auto output = context->Request().OutputStream;
     auto writer = CreateSchemafulWriterForFormat(format, rowset->GetSchema(), output);
 
@@ -1046,6 +1148,13 @@ void TLookupRowsCommand::Register(TRegistrar registrar)
             return command->Options.ReplicaConsistency;
         })
         .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<TVersionedReadOptions>(
+        "versioned_read_options",
+        [] (TThis* command) -> auto& {
+            return command->Options.VersionedReadOptions;
+        })
+        .Optional(/*init*/ false);
 }
 
 void TLookupRowsCommand::DoExecute(ICommandContextPtr context)
@@ -1070,6 +1179,11 @@ void TLookupRowsCommand::DoExecute(ICommandContextPtr context)
             << TErrorAttribute("rich_ypath", Path);
     }
 
+    if (Versioned && Options.VersionedReadOptions.ReadMode != NTableClient::EVersionedIOMode::Default) {
+        THROW_ERROR_EXCEPTION("Versioned lookup does not support versioned read mode %Qlv",
+            Options.VersionedReadOptions.ReadMode);
+    }
+
     struct TLookupRowsBufferTag
     { };
 
@@ -1090,12 +1204,15 @@ void TLookupRowsCommand::DoExecute(ICommandContextPtr context)
     auto nameTable = valueConsumer.GetNameTable();
 
     if (ColumnNames) {
+        auto primarySchema = Options.VersionedReadOptions.ReadMode == NTableClient::EVersionedIOMode::LatestTimestamp
+            ? ToLatestTimestampSchema(tableInfo->Schemas[ETableSchemaKind::Primary])
+            : tableInfo->Schemas[ETableSchemaKind::Primary];
         TColumnFilter::TIndexes columnFilterIndexes;
         columnFilterIndexes.reserve(ColumnNames->size());
         for (const auto& name : *ColumnNames) {
             auto optionalIndex = nameTable->FindId(name);
             if (!optionalIndex) {
-                if (!tableInfo->Schemas[ETableSchemaKind::Primary]->FindColumn(name)) {
+                if (!primarySchema->FindColumn(name)) {
                     THROW_ERROR_EXCEPTION("No such column %Qv",
                         name);
                 }
@@ -1544,6 +1661,21 @@ void TAlterTableReplicaCommand::Register(TRegistrar registrar)
             return command->Options.EnableReplicatedTableTracker;
         })
         .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<TYPath>>(
+        "replica_path",
+        [] (TThis* command) -> auto& {
+            return command->Options.ReplicaPath;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "force",
+        [] (TThis* command) -> auto& {
+            return command->Options.Force;
+        })
+        .Optional(/*init*/ false);
+
 }
 
 void TAlterTableReplicaCommand::DoExecute(ICommandContextPtr context)
@@ -1782,6 +1914,37 @@ void TGetTabletErrorsCommand::DoExecute(ICommandContextPtr context)
                 })
             .EndMap();
     });
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TGetTableMountInfoCommand::Register(TRegistrar registrar)
+{
+    registrar.Parameter("path", &TThis::Path_);
+}
+
+void TGetTableMountInfoCommand::DoExecute(ICommandContextPtr context)
+{
+    auto tableMountCache = context->GetClient()->GetTableMountCache();
+    auto tableInfo = WaitFor(tableMountCache->GetTableInfo(Path_))
+        .ValueOrThrow();
+
+    // Rudimentary, for tests only
+    context->ProduceOutputValue(BuildYsonStringFluently()
+        .BeginMap()
+            .Item("lower_cap_bound").Value(tableInfo->LowerCapBound)
+            .Item("upper_cap_bound").Value(tableInfo->UpperCapBound)
+            .Item("primary_revision").Value(tableInfo->PrimaryRevision)
+            .Item("secondary_revision").Value(tableInfo->SecondaryRevision)
+            .Item("schemas")
+                .DoMap([&tableInfo] (auto fluent) {
+                    for (auto kind : TEnumTraits<ETableSchemaKind>::GetDomainValues()) {
+                        if (auto schemaPtr = tableInfo->Schemas[kind]) {
+                            fluent.Item(ToString(kind)).Value(schemaPtr);
+                        }
+                    }
+                })
+        .EndMap());
 }
 
 ////////////////////////////////////////////////////////////////////////////////

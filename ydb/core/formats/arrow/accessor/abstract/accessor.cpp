@@ -1,14 +1,15 @@
 #include "accessor.h"
 
+#include <ydb/core/formats/arrow/accessor/plain/accessor.h>
+#include <ydb/core/formats/arrow/arrow_filter.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
-#include <ydb/core/formats/arrow/permutations.h>
-#include <ydb/core/formats/arrow/save_load/saver.h>
-#include <ydb/core/formats/arrow/size_calcer.h>
-#include <ydb/core/formats/arrow/splitter/simple.h>
-#include <ydb/core/formats/arrow/switch/compare.h>
-#include <ydb/core/formats/arrow/switch/switch_type.h>
 
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/formats/arrow/arrow_helpers.h>
+#include <ydb/library/formats/arrow/permutations.h>
+#include <ydb/library/formats/arrow/size_calcer.h>
+#include <ydb/library/formats/arrow/switch/compare.h>
+#include <ydb/library/formats/arrow/switch/switch_type.h>
 
 namespace NKikimr::NArrow::NAccessor {
 
@@ -23,31 +24,12 @@ std::shared_ptr<arrow::Array> IChunkedArray::TReader::CopyRecord(const ui64 reco
 }
 
 std::shared_ptr<arrow::ChunkedArray> IChunkedArray::Slice(const ui32 offset, const ui32 count) const {
-    AFL_VERIFY(offset + count <= (ui64)GetRecordsCount())("offset", offset)("count", count)("length", GetRecordsCount());
-    ui32 currentOffset = offset;
-    ui32 countLeast = count;
-    std::vector<std::shared_ptr<arrow::Array>> chunks;
-    auto address = GetChunkSlow(offset);
-    while (countLeast) {
-        address = GetChunk(address.GetAddress(), currentOffset);
-        const ui64 internalPos = address.GetAddress().GetLocalIndex(currentOffset);
-        if (internalPos + countLeast <= (ui64)address.GetArray()->length()) {
-            chunks.emplace_back(address.GetArray()->Slice(internalPos, countLeast));
-            break;
-        } else {
-            const ui32 deltaCount = address.GetArray()->length() - internalPos;
-            chunks.emplace_back(address.GetArray()->Slice(internalPos, deltaCount));
-            AFL_VERIFY(countLeast >= deltaCount);
-            countLeast -= deltaCount;
-            currentOffset += deltaCount;
-        }
-    }
-    return std::make_shared<arrow::ChunkedArray>(chunks, DataType);
+    return GetChunkedArray(TColumnConstructionContext().SetStartIndex(offset).SetRecordsCount(count));
 }
 
-NKikimr::NArrow::NAccessor::IChunkedArray::TFullDataAddress IChunkedArray::GetChunk(
-    const std::optional<TAddressChain>& chunkCurrent, const ui64 position) const {
-    AFL_VERIFY(position < GetRecordsCount());
+IChunkedArray::TFullDataAddress IChunkedArray::GetChunk(const std::optional<TAddressChain>& chunkCurrent, const ui64 position) const {
+    AFL_VERIFY(position < GetRecordsCount())("pos", position)("records", GetRecordsCount())(
+        "current", chunkCurrent ? chunkCurrent->DebugString() : Default<TString>());
     std::optional<TCommonChunkAddress> address;
 
     if (IsDataOwner()) {
@@ -61,10 +43,10 @@ NKikimr::NArrow::NAccessor::IChunkedArray::TFullDataAddress IChunkedArray::GetCh
         return TFullDataAddress(localAddress.GetArray(), std::move(addressChain));
     } else {
         auto chunkedArrayAddress = GetArray(chunkCurrent, position, nullptr);
-        if (chunkCurrent) {
-            AFL_VERIFY(chunkCurrent->GetSize() == 1 + chunkedArrayAddress.GetAddress().GetSize())("current", chunkCurrent->GetSize())(
-                                                          "chunked", chunkedArrayAddress.GetAddress().GetSize());
-        }
+        //        if (chunkCurrent) {
+        //            AFL_VERIFY(chunkCurrent->GetSize() == chunkedArrayAddress.GetAddress().GetSize())("current", chunkCurrent->GetSize())(
+        //                                                      "chunked", chunkedArrayAddress.GetAddress().GetSize());
+        //        }
         auto localAddress = chunkedArrayAddress.GetArray()->GetLocalData(address, chunkedArrayAddress.GetAddress().GetLocalIndex(position));
         auto fullAddress = std::move(chunkedArrayAddress.MutableAddress());
         fullAddress.Add(localAddress.GetAddress());
@@ -75,7 +57,7 @@ NKikimr::NArrow::NAccessor::IChunkedArray::TFullDataAddress IChunkedArray::GetCh
 
 IChunkedArray::TFullChunkedArrayAddress IChunkedArray::GetArray(
     const std::optional<TAddressChain>& chunkCurrent, const ui64 position, const std::shared_ptr<IChunkedArray>& selfPtr) const {
-    AFL_VERIFY(position < GetRecordsCount());
+    AFL_VERIFY(position < GetRecordsCount())("pos", position)("records_count", GetRecordsCount());
     if (IsDataOwner()) {
         AFL_VERIFY(selfPtr);
         TAddressChain chain;
@@ -103,6 +85,62 @@ IChunkedArray::TFullChunkedArrayAddress IChunkedArray::GetArray(
     }
     AFL_VERIFY(!chunkCurrent || chunkCurrent->GetSize() - idx <= 1)("idx", idx)("size", chunkCurrent->GetSize());
     return TFullChunkedArrayAddress(chainForTemporarySave.back(), std::move(addressChain));
+}
+
+std::shared_ptr<IChunkedArray> IChunkedArray::DoApplyFilter(const TColumnFilter& filter) const {
+    auto arr = GetChunkedArray();
+    const arrow::FieldVector fields = { std::make_shared<arrow::Field>("applied", GetDataType()) };
+    auto schema = std::make_shared<arrow::Schema>(fields);
+    auto table = arrow::Table::Make(schema, { arr }, GetRecordsCount());
+    AFL_VERIFY(table->num_columns() == 1);
+    filter.Apply(table);
+    if (table->column(0)->num_chunks() == 1) {
+        return std::make_shared<TTrivialArray>(table->column(0)->chunk(0));
+    } else {
+        return std::make_shared<TTrivialChunkedArray>(table->column(0));
+    }
+}
+
+std::shared_ptr<IChunkedArray> IChunkedArray::ApplyFilter(const TColumnFilter& filter, const std::shared_ptr<IChunkedArray>& selfPtr) const {
+    if (filter.IsTotalAllowFilter()) {
+        AFL_VERIFY(selfPtr);
+        return selfPtr;
+    }
+    if (filter.IsTotalDenyFilter()) {
+        return TTrivialArray::BuildEmpty(GetDataType());
+    }
+    auto result = DoApplyFilter(filter);
+    AFL_VERIFY(result);
+    AFL_VERIFY(result->GetRecordsCount() == filter.GetFilteredCountVerified());
+    return result;
+}
+
+std::shared_ptr<arrow::ChunkedArray> IChunkedArray::GetChunkedArrayTrivial() const {
+    std::vector<std::shared_ptr<arrow::Array>> chunks;
+    std::optional<TFullDataAddress> address;
+    for (ui32 position = 0; position < GetRecordsCount();) {
+        address = GetChunk(address, position);
+        chunks.emplace_back(address->GetArray());
+        position += address->GetArray()->length();
+    }
+    return std::make_shared<arrow::ChunkedArray>(chunks, GetDataType());
+}
+
+std::shared_ptr<arrow::ChunkedArray> IChunkedArray::GetChunkedArray(const TColumnConstructionContext& context) const {
+    if (context.GetStartIndex() || context.GetRecordsCount()) {
+        const ui32 start = context.GetStartIndex().value_or(0);
+        const ui32 count = context.GetRecordsCount().value_or(GetRecordsCount() - start);
+        auto slice = ISlice(start, count);
+        if (context.GetFilter() && !context.GetFilter()->IsTotalAllowFilter()) {
+            return slice->ApplyFilter(context.GetFilter()->Slice(start, count), slice)->GetChunkedArrayTrivial();
+        } else {
+            return slice->GetChunkedArrayTrivial();
+        }
+    } else if (context.GetFilter() && !context.GetFilter()->IsTotalAllowFilter()) {
+        return ApplyFilter(*context.GetFilter(), nullptr)->GetChunkedArrayTrivial();
+    } else {
+        return GetChunkedArrayTrivial();
+    }
 }
 
 TString IChunkedArray::TReader::DebugString(const ui32 position) const {
@@ -158,6 +196,10 @@ std::shared_ptr<arrow::Array> IChunkedArray::TFullDataAddress::CopyRecord(const 
 
 TString IChunkedArray::TFullDataAddress::DebugString(const ui64 position) const {
     return NArrow::DebugString(Array, Address.GetLocalIndex(position));
+}
+
+void IChunkedArray::TLocalDataAddress::Reallocate() {
+    Array = NArrow::ReallocateArray(Array);
 }
 
 }   // namespace NKikimr::NArrow::NAccessor

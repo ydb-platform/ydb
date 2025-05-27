@@ -18,4 +18,4 @@ FROM (
     )
         AS seasons_and_episodes
     ON series.series_id == seasons_and_episodes.series_id
-);
+) ORDER BY series_id;

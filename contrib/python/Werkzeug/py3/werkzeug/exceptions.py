@@ -43,11 +43,11 @@ code, you can add a second except for a specific subclass of an error:
             return e
 
 """
-import sys
 import typing as t
-import warnings
 from datetime import datetime
-from html import escape
+
+from markupsafe import escape
+from markupsafe import Markup
 
 from ._internal import _get_environ
 
@@ -65,6 +65,9 @@ class HTTPException(Exception):
     """The base class for all HTTP exceptions. This exception can be called as a WSGI
     application to render a default error page or you can catch the subclasses
     of it independently and render nicer error messages.
+
+    .. versionchanged:: 2.1
+        Removed the ``wrap`` class method.
     """
 
     code: t.Optional[int] = None
@@ -79,70 +82,6 @@ class HTTPException(Exception):
         if description is not None:
             self.description = description
         self.response = response
-
-    @classmethod
-    def wrap(
-        cls, exception: t.Type[BaseException], name: t.Optional[str] = None
-    ) -> t.Type["HTTPException"]:
-        """Create an exception that is a subclass of the calling HTTP
-        exception and the ``exception`` argument.
-
-        The first argument to the class will be passed to the
-        wrapped ``exception``, the rest to the HTTP exception. If
-        ``e.args`` is not empty and ``e.show_exception`` is ``True``,
-        the wrapped exception message is added to the HTTP error
-        description.
-
-        .. deprecated:: 2.0
-            Will be removed in Werkzeug 2.1. Create a subclass manually
-            instead.
-
-        .. versionchanged:: 0.15.5
-            The ``show_exception`` attribute controls whether the
-            description includes the wrapped exception message.
-
-        .. versionchanged:: 0.15.0
-            The description includes the wrapped exception message.
-        """
-        warnings.warn(
-            "'HTTPException.wrap' is deprecated and will be removed in"
-            " Werkzeug 2.1. Create a subclass manually instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-
-        class newcls(cls, exception):  # type: ignore
-            _description = cls.description
-            show_exception = False
-
-            def __init__(
-                self, arg: t.Optional[t.Any] = None, *args: t.Any, **kwargs: t.Any
-            ) -> None:
-                super().__init__(*args, **kwargs)
-
-                if arg is None:
-                    exception.__init__(self)
-                else:
-                    exception.__init__(self, arg)
-
-            @property
-            def description(self) -> str:
-                if self.show_exception:
-                    return (
-                        f"{self._description}\n"
-                        f"{exception.__name__}: {exception.__str__(self)}"
-                    )
-
-                return self._description  # type: ignore
-
-            @description.setter
-            def description(self, value: str) -> None:
-                self._description = value
-
-        newcls.__module__ = sys._getframe(1).f_globals["__name__"]
-        name = name or cls.__name__ + exception.__name__
-        newcls.__name__ = newcls.__qualname__ = name
-        return newcls
 
     @property
     def name(self) -> str:
@@ -164,7 +103,7 @@ class HTTPException(Exception):
         else:
             description = self.description
 
-        description = escape(description).replace("\n", "<br>")
+        description = escape(description).replace("\n", Markup("<br>"))
         return f"<p>{description}</p>"
 
     def get_body(
@@ -174,7 +113,8 @@ class HTTPException(Exception):
     ) -> str:
         """Get the HTML body."""
         return (
-            '<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 3.2 Final//EN">\n'
+            "<!doctype html>\n"
+            "<html lang=en>\n"
             f"<title>{self.code} {escape(self.name)}</title>\n"
             f"<h1>{escape(self.name)}</h1>\n"
             f"{self.get_description(environ)}\n"
@@ -265,7 +205,7 @@ class BadRequestKeyError(BadRequest, KeyError):
             KeyError.__init__(self, arg)
 
     @property  # type: ignore
-    def description(self) -> str:  # type: ignore
+    def description(self) -> str:
         if self.show_exception:
             return (
                 f"{self._description}\n"

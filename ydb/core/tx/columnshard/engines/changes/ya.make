@@ -1,13 +1,14 @@
 LIBRARY()
 
 SRCS(
-    compaction.cpp
-    ttl.cpp
-    indexation.cpp
     cleanup_portions.cpp
     cleanup_tables.cpp
-    with_appended.cpp
+    compaction.cpp
     general_compaction.cpp
+    indexation.cpp
+    merge_subset.cpp
+    ttl.cpp
+    with_appended.cpp
 )
 
 PEERDIR(

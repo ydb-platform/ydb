@@ -6,12 +6,13 @@
 #include <yt/yt/library/profiling/sensor.h>
 #include <yt/yt/library/profiling/producer.h>
 
-#include <yt/yt/core/misc/singleton.h>
 #include <yt/yt/core/misc/string_builder.h>
 
 #include <library/cpp/ytalloc/api/ytalloc.h>
 
 #include <library/cpp/yt/yson_string/string.h>
+
+#include <library/cpp/yt/memory/leaky_ref_counted_singleton.h>
 
 #include <util/system/env.h>
 
@@ -200,7 +201,6 @@ void EnableYTProfiling(const TYTProfilingConfigPtr& config)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-
 
 namespace {
 

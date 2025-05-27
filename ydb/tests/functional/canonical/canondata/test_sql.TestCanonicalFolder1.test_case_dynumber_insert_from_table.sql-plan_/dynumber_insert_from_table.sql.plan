@@ -21,18 +21,13 @@
         },
         {
             "name": "/local/base_dynumber_insert_from_table_sql_plan/ResultTableDyNumber",
-            "reads": [
-                {
-                    "type": "Lookup"
-                }
-            ],
             "writes": [
                 {
                     "columns": [
                         "Key",
                         "Value"
                     ],
-                    "type": "MultiUpsert"
+                    "type": "MultiInsert"
                 }
             ]
         }

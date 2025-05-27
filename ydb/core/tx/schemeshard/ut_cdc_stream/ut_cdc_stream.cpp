@@ -1,7 +1,9 @@
 #include <ydb/core/metering/metering.h>
+#include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/schemeshard_billing_helpers.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
+#include <ydb/core/tx/schemeshard/schemeshard_private.h>
 
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_writer.h>
@@ -1284,7 +1286,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/SyncIndex"), {NLs::PathVersionEqual(3)});
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/SyncIndex"), {NLs::PathVersionEqual(4)});
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/SyncIndex/indexImplTable"), {NLs::PathVersionEqual(4)});
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/SyncIndex/indexImplTable/Stream"), {NLs::PathExist});
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/SyncIndex/indexImplTable/Stream/streamImpl"), {NLs::PathExist});
@@ -1302,7 +1304,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/SyncIndex"), {NLs::PathVersionEqual(4)});
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/SyncIndex"), {NLs::PathVersionEqual(5)});
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/SyncIndex/indexImplTable"), {NLs::PathVersionEqual(5)});
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/SyncIndex/indexImplTable/Stream"), {
             NLs::StreamState(NKikimrSchemeOp::ECdcStreamStateDisabled),
@@ -1319,7 +1321,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/SyncIndex"), {NLs::PathVersionEqual(5)});
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/SyncIndex"), {NLs::PathVersionEqual(7)});
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/SyncIndex/indexImplTable"), {NLs::PathVersionEqual(6)});
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/SyncIndex/indexImplTable/Stream"), {NLs::PathNotExist});
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/SyncIndex/indexImplTable/Stream/streamImpl"), {NLs::PathNotExist});
@@ -1586,6 +1588,48 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithInitialScanTests) {
         runtime.Send(blockedAlterStream.Release(), 0, true);
     }
 
+    void PqTransactions(bool enable) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions()
+            .EnableChangefeedInitialScan(true)
+            .EnablePQConfigTransactionsAtSchemeShard(enable));
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "value" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table"
+            StreamDescription {
+              Name: "Stream"
+              Mode: ECdcStreamModeKeysOnly
+              Format: ECdcStreamFormatProto
+              State: ECdcStreamStateScan
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        NKikimrSchemeOp::ECdcStreamState state;
+        do {
+            runtime.SimulateSleep(TDuration::Seconds(1));
+            state = DescribePrivatePath(runtime, "/MyRoot/Table/Stream")
+                .GetPathDescription().GetCdcStreamDescription().GetState();
+        } while (state != NKikimrSchemeOp::ECdcStreamStateReady);
+    }
+
+    Y_UNIT_TEST(WithoutPqTransactions) {
+        PqTransactions(false);
+    }
+
+    Y_UNIT_TEST(WithPqTransactions) {
+        PqTransactions(true);
+    }
+
     Y_UNIT_TEST(AlterStream) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions()
@@ -1752,6 +1796,80 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithInitialScanTests) {
             }
         )");
         env.TestWaitNotification(runtime, txId);
+    }
+
+    Y_UNIT_TEST(RacyAlterStreamAndRestart) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions()
+            .EnableChangefeedInitialScan(true));
+        ui64 txId = 100;
+
+        TActorId schemeShardActorId;
+        auto findActorId = runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransactionResult>([&](auto& ev) {
+            if (!schemeShardActorId) {
+                schemeShardActorId = ev->Sender;
+            }
+        });
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "value" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> blockedAlterStream(runtime, [&](auto& ev) {
+            const auto& record = ev->Get()->Record;
+            if (record.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpAlterCdcStream) {
+                txId = record.GetTxId();
+                return true;
+            }
+            return false;
+        });
+
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table"
+            StreamDescription {
+              Name: "Stream"
+              Mode: ECdcStreamModeKeysOnly
+              Format: ECdcStreamFormatProto
+              State: ECdcStreamStateScan
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        runtime.WaitFor("AlterCdcStream", [&]{ return blockedAlterStream.size(); });
+        blockedAlterStream.Stop();
+
+        UNIT_ASSERT(schemeShardActorId);
+
+        TBlockEvents<TEvPrivate::TEvProgressOperation> blockedProgress(runtime, [&](auto& ev) {
+            return schemeShardActorId == ev->Sender;
+        });
+
+        blockedAlterStream.Unblock();
+        runtime.WaitFor("Progress", [&]{ return blockedProgress.size(); });
+        blockedProgress.Stop();
+
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream"), {
+            NLs::PathExist,
+            NLs::StreamState(NKikimrSchemeOp::ECdcStreamStateReady),
+        });
+
+        TestDropCdcStream(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table"
+            StreamName: "Stream"
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream"), {
+            NLs::PathNotExist,
+        });
     }
 
     void Metering(bool serverless) {

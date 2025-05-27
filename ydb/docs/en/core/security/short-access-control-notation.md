@@ -6,6 +6,7 @@ When describing or logging the permissions granted to users (e.g., in the [audit
 
 Each entry begins with a `+` sign and consists of 2 or 3 attributes listed through the `:` symbol.
 These attributes are:
+
 - List of permissions. If there are multiple, they are wrapped in round brackets and separated by `|`. *Mandatory.*
 - SID of the subject granted permissions. *Mandatory.*
 - Inheritance type. *Optional.*
@@ -28,7 +29,7 @@ A short abbreviation is used to record each permission.
 Permission groups are unions of several permissions. Where possible, one of the groups will be indicated in the short notation.
 For example, `+R:subject` — permission to read.
 
-| Group	| Description |
+| Group  | Description |
 |:----:|:----|
 | `L` | (list) enumeration. It consists of permissions to read ACL attributes and describe objects.|
 | `R` | (read) reading. It consists of permissions to enumerate and read from a table and a topic.|
@@ -68,9 +69,9 @@ For example, `+(SR|UR):subject` — permission for reading and updating table re
 
 One or more inheritance flags can be used to describe the passing of permissions to child objects.
 
-| Flag	| Description |
+| Flag  | Description |
 |:----:|:----|
-| `-`	        | without inheritance |
-| `O`	| this entry will be inherited by child objects |
-| `C`	| this entry will be inherited by child containers |
-| `+`	| this entry will be used only for inheritance and will not be used for access checking on the current object |
+| `-`          | without inheritance |
+| `O`  | this entry will be inherited by child objects |
+| `C`  | this entry will be inherited by child containers |
+| `+`  | this entry will be used only for inheritance and will not be used for access checking on the current object |

@@ -1,4 +1,5 @@
 from __future__ import annotations
+import allure
 import json
 import ydb
 import os
@@ -79,6 +80,7 @@ class ResultsProcessor:
         return os.path.join(YdbCluster.ydb_endpoint, YdbCluster.ydb_database, run_id)
 
     @classmethod
+    @allure.step
     def upload_results(
         cls,
         kind: str,
@@ -113,6 +115,10 @@ class ResultsProcessor:
                 report_url = f'https://sandbox.yandex-team.ru/task/{sandbox_task_id}/allure_report'
         if report_url is not None:
             info['report_url'] = report_url
+
+        ci_launch_id = os.getenv('CI_LAUNCH_ID', None)
+        if ci_launch_id:
+            info['ci_launch_id'] = ci_launch_id
 
         data = {
             'Db': cls.get_cluster_id(),

@@ -17,7 +17,7 @@ namespace detail {
 
 template<class T> struct icast_identity
 {
-    typedef T type;
+    using type = T;
 };
 
 } // namespace detail

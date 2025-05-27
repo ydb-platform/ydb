@@ -95,27 +95,27 @@ void TDataShard::EmitHeartbeats() {
         return;
     }
 
+    // We may possibly have more writes at this version
+    TRowVersion edge = GetMvccTxVersion(EMvccTxMode::ReadWrite);
+    bool wait = true;
+
     if (const auto& plan = TransQueue.GetPlan()) {
-        const auto version = Min(plan.begin()->ToRowVersion(), VolatileTxManager.GetMinUncertainVersion());
-        if (CdcStreamHeartbeatManager.ShouldEmitHeartbeat(version)) {
-            return Execute(new TTxCdcStreamEmitHeartbeats(this, version));
-        }
-        return;
+        edge = Min(edge, plan.begin()->ToRowVersion());
+        wait = false;
     }
 
     if (auto version = VolatileTxManager.GetMinUncertainVersion(); !version.IsMax()) {
-        if (CdcStreamHeartbeatManager.ShouldEmitHeartbeat(version)) {
-            return Execute(new TTxCdcStreamEmitHeartbeats(this, version));
-        }
-        return;
+        edge = Min(edge, version);
+        wait = false;
     }
 
-    const TRowVersion nextWrite = GetMvccTxVersion(EMvccTxMode::ReadWrite);
-    if (CdcStreamHeartbeatManager.ShouldEmitHeartbeat(nextWrite)) {
-        return Execute(new TTxCdcStreamEmitHeartbeats(this, nextWrite));
+    if (CdcStreamHeartbeatManager.ShouldEmitHeartbeat(edge)) {
+        return Execute(new TTxCdcStreamEmitHeartbeats(this, edge));
     }
 
-    WaitPlanStep(lowest.Next().Step);
+    if (wait) {
+        WaitPlanStep(lowest.Next().Step);
+    }
 }
 
 void TCdcStreamHeartbeatManager::Reset() {
@@ -148,7 +148,7 @@ bool TCdcStreamHeartbeatManager::Load(NIceDb::TNiceDb& db) {
             rowset.GetValue<Schema::CdcStreamHeartbeats::LastTxId>()
         );
 
-        Y_ABORT_UNLESS(!CdcStreams.contains(streamPathId));
+        Y_ENSURE(!CdcStreams.contains(streamPathId));
         CdcStreams.emplace(streamPathId, THeartbeatInfo{
             .TablePathId = tablePathId,
             .Interval = interval,
@@ -170,7 +170,7 @@ void TCdcStreamHeartbeatManager::AddCdcStream(NTable::TDatabase& db,
 {
     const auto last = TRowVersion::Min();
 
-    Y_ABORT_UNLESS(!CdcStreams.contains(streamPathId));
+    Y_ENSURE(!CdcStreams.contains(streamPathId));
     auto res = CdcStreams.emplace(streamPathId, THeartbeatInfo{
         .TablePathId = tablePathId,
         .Interval = heartbeatInterval,
@@ -215,7 +215,7 @@ bool TCdcStreamHeartbeatManager::ShouldEmitHeartbeat(const TRowVersion& edge) co
         return false;
     }
 
-    if (Schedule.top().Version > edge) {
+    if (Schedule.top().Version >= edge) {
         return false;
     }
 
@@ -225,7 +225,7 @@ bool TCdcStreamHeartbeatManager::ShouldEmitHeartbeat(const TRowVersion& edge) co
 THashMap<TPathId, TCdcStreamHeartbeatManager::THeartbeatInfo> TCdcStreamHeartbeatManager::EmitHeartbeats(
         NTable::TDatabase& db, const TRowVersion& edge)
 {
-    if (Schedule.empty() || Schedule.top().Version > edge) {
+    if (!ShouldEmitHeartbeat(edge)) {
         return {};
     }
 
@@ -234,12 +234,12 @@ THashMap<TPathId, TCdcStreamHeartbeatManager::THeartbeatInfo> TCdcStreamHeartbea
 
     while (true) {
         const auto& top = Schedule.top();
-        if (top.Version > edge) {
+        if (top.Version >= edge) {
             break;
         }
 
         auto it = CdcStreams.find(top.StreamPathId);
-        Y_ABORT_UNLESS(it != CdcStreams.end());
+        Y_ENSURE(it != CdcStreams.end());
 
         const auto& streamPathId = it->first;
         auto& info = it->second;

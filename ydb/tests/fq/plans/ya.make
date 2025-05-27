@@ -14,6 +14,13 @@ DEPENDS(
     contrib/python/moto/bin
 )
 
+IF (SANITIZER_TYPE)
+    SIZE(LARGE)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
+ELSE()
+    SIZE(MEDIUM)
+ENDIF()
+
 TEST_SRCS(
     test_stats_mode.py
 )
@@ -21,7 +28,5 @@ TEST_SRCS(
 PY_SRCS(
     conftest.py
 )
-
-SIZE(MEDIUM)
 
 END()

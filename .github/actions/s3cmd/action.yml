@@ -35,6 +35,13 @@ runs:
         host_base = storage.yandexcloud.net
         host_bucket = %(bucket)s.storage.yandexcloud.net
         EOF
+
+        # specify mime type for correct content-type in s3cmd sync 
+        # we want to .out/.err files treat as text
+        MIME_TYPES_LINE="text/plain                                      out err log"
+        MIME_TYPES_FILE='/etc/mime.types'
+        # add if not exists
+        sudo bash -c "grep -qF -- '$MIME_TYPES_LINE' '$MIME_TYPES_FILE' || echo '$MIME_TYPES_LINE' >> '$MIME_TYPES_FILE'"
       env:
         s3_key_id: ${{ inputs.s3_key_id }}
         s3_secret_access_key: ${{ inputs.s3_key_secret }}
@@ -53,7 +60,7 @@ runs:
           debug)
             folder+="-debug"
             ;;
-          release-*)
+          release*)
             folder+="-${BUILD_PRESET/release-/}"
             ;;
           *)

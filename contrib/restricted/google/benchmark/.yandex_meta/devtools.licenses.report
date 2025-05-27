@@ -1,0 +1,114 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     Apache-2.0           2b42edef8fa55315f34f2370b4715ca9
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        LICENSE [2:202]
+
+SKIP     LicenseRef-scancode-generic-cla 2da03ceea522910659e9713903bad421
+BELONGS ya.make
+    # CONTRIBUTING.md file describe how to contribute
+    License text:
+        Contributions to any Google project must be accompanied by a Contributor
+        License Agreement.  This is not a copyright **assignment**, it simply gives
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-generic-cla
+        Score           : 16.00
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/generic-cla.LICENSE
+    Files with this license:
+        CONTRIBUTING.md [9:10]
+
+SKIP     LicenseRef-scancode-generic-cla 420e75cf90d0e34699d7585d3bb02ac2
+BELONGS ya.make
+    # CONTRIBUTING.md file describe how to contribute
+    License text:
+        \## Contributor License Agreement ##
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-generic-cla
+        Score           : 16.00
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/generic-cla.LICENSE
+    Files with this license:
+        CONTRIBUTING.md [7:7]
+
+KEEP     Apache-2.0           4248d6c827c367ff9f1b5e59ca41408e
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        include/benchmark/benchmark.h [3:13]
+        src/benchmark.cc [3:13]
+        src/benchmark_name.cc [3:13]
+        src/benchmark_register.cc [3:13]
+        src/benchmark_runner.cc [3:13]
+        src/benchmark_runner.h [3:13]
+        src/colorprint.cc [3:13]
+        src/commandlineflags.cc [3:13]
+        src/complexity.cc [3:13]
+        src/complexity.h [3:13]
+        src/console_reporter.cc [3:13]
+        src/counter.cc [3:13]
+        src/counter.h [3:13]
+        src/csv_reporter.cc [3:13]
+        src/json_reporter.cc [3:13]
+        src/perf_counters.cc [3:13]
+        src/perf_counters.h [3:13]
+        src/re.h [3:13]
+        src/reporter.cc [3:13]
+        src/statistics.cc [4:14]
+        src/statistics.h [4:14]
+        src/sysinfo.cc [3:13]
+        src/timers.cc [3:13]
+
+SKIP     LicenseRef-scancode-generic-cla fb537447ba01fe4179d5e9df725ec41b
+BELONGS ya.make
+    # CONTRIBUTING.md file describe how to contribute
+    License text:
+        \# the appropriate Contributor License Agreement, found here:
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-generic-cla
+        Score           : 16.00
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/generic-cla.LICENSE
+    Files with this license:
+        CONTRIBUTORS [8:8]

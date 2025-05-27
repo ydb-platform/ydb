@@ -1,6 +1,6 @@
 #include "yql_kikimr_type_ann_pg.h"
 
-#include <ydb/library/yql/providers/common/provider/yql_provider.h>
+#include <yql/essentials/providers/common/provider/yql_provider.h>
 #include <util/string/join.h>
 
 namespace NYql {

@@ -92,7 +92,7 @@ namespace NKikimr {
             TTask *Task;
 
             double CompactionScoreBasedOnFreeLevels(ui32 freeLevels, ui32 totalLevels) {
-                Y_ABORT_UNLESS(freeLevels <= totalLevels);
+                Y_VERIFY_S(freeLevels <= totalLevels, HullCtx->VCtx->VDiskLogPrefix);
                 if (freeLevels == 0) {
                     return 1000000.0;
                 } else {
@@ -136,7 +136,7 @@ namespace NKikimr {
                     }
                 }
 
-                Y_ABORT_UNLESS(sortedLevelsNum + 1 < layer1Levels);
+                Y_VERIFY_S(sortedLevelsNum + 1 < layer1Levels, this->HullCtx->VCtx->VDiskLogPrefix);
                 return sortedLevelsNum + 1;
             }
 
@@ -144,7 +144,7 @@ namespace NKikimr {
                 ui32 added = 0;
                 auto it = LevelSnap.SliceSnap.GetLevel0SstIterator();
                 it.SeekToFirst();
-                Y_DEBUG_ABORT_UNLESS(it.Valid());
+                Y_VERIFY_DEBUG_S(it.Valid(), this->HullCtx->VCtx->VDiskLogPrefix);
                 // FIXME: check why we have a limit here
                 while (it.Valid() && added < Boundaries->Level0MaxSstsAtOnce) {
                     // push to the task
@@ -153,7 +153,7 @@ namespace NKikimr {
                     added++;
                     it.Next();
                 }
-                Y_ABORT_UNLESS(added > 0);
+                Y_VERIFY_S(added > 0, this->HullCtx->VCtx->VDiskLogPrefix);
                 return added;
             }
 
@@ -244,7 +244,7 @@ namespace NKikimr {
             // Calculate free levels
             ui32 FreeLevels(ui32 layer1Levels, ui32 layer2Levels) {
                 ui32 sortedLevelsNum = LevelSnap.SliceSnap.GetLevelXNumber();
-                Y_ABORT_UNLESS(layer1Levels + layer2Levels >= sortedLevelsNum);
+                Y_VERIFY_S(layer1Levels + layer2Levels >= sortedLevelsNum, this->HullCtx->VCtx->VDiskLogPrefix);
 
                 if (sortedLevelsNum > layer1Levels) {
                     ui32 freeLevels = 0;
@@ -340,4 +340,3 @@ namespace NKikimr {
 
     } // NHullComp
 } // NKikimr
-

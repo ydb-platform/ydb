@@ -363,12 +363,14 @@ std::shared_ptr<IValidatorNode> CreateUsageValidatorNode(const std::shared_ptr<T
         case EWireType::Int32:
         case EWireType::Int64:
         case EWireType::Int128:
+        case EWireType::Int256:
 
         case EWireType::Uint8:
         case EWireType::Uint16:
         case EWireType::Uint32:
         case EWireType::Uint64:
         case EWireType::Uint128:
+        case EWireType::Uint256:
 
         case EWireType::Double:
         case EWireType::Boolean:

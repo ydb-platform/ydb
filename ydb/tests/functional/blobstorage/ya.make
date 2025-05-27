@@ -9,18 +9,13 @@ TEST_SRCS(
 )
 
 IF (SANITIZER_TYPE)
-    REQUIREMENTS(ram:32)
+    REQUIREMENTS(ram:32 cpu:4)
 ENDIF()
 
 IF (SANITIZER_TYPE == "thread")
-    REQUIREMENTS(
-        ram:16
-    )
-    TIMEOUT(1800)
     SIZE(LARGE)
     TAG(ya:fat)
 ELSE()
-    TIMEOUT(600)
     SIZE(MEDIUM)
 ENDIF()
 
@@ -32,6 +27,7 @@ DEPENDS(
 
 PEERDIR(
     ydb/tests/library
+    ydb/tests/library/clients
     contrib/python/PyHamcrest
 )
 

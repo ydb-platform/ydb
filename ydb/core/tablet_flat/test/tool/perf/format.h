@@ -21,7 +21,7 @@ namespace NKikiSched {
                 return sizeof(TVal) * 2;
             }
 
-            TOut& Do(TOut &out) const noexcept
+            TOut& Do(TOut &out) const
             {
                 const char _pad_zero[] = "00000000000000000000";
                 const char _pad_ffff[] = "ff..ffffffffffffffff";
@@ -56,7 +56,7 @@ namespace NKikiSched {
         struct TLarge {
             TLarge(ui64 val, bool pad = false): Val(val), Pad(pad) { }
 
-            TOut& Do(TOut &out) const noexcept
+            TOut& Do(TOut &out) const
             {
                 const ui64 grid[] = {
                         0x00000000000003e8, /* K 10 ** 3    */
@@ -78,7 +78,7 @@ namespace NKikiSched {
             }
 
         protected:
-            inline TOut& Small(TOut &out) const noexcept
+            inline TOut& Small(TOut &out) const
             {
                 char ln_[8];
 
@@ -97,7 +97,7 @@ namespace NKikiSched {
                 return out;
             }
 
-            TOut& Fixed(TOut &out, char suff, ui64 base) const noexcept
+            TOut& Fixed(TOut &out, char suff, ui64 base) const
             {
                 char ln_[8];
 
@@ -115,7 +115,7 @@ namespace NKikiSched {
             TAverage(ui64 over, ui64 val, bool pad = true)
                 : Pad(pad), Ovr(over), Val(val) { }
 
-            TOut& Do(TOut &out) const noexcept
+            TOut& Do(TOut &out) const
             {
                 if (Val > 0 && Val < Ovr * 100) {
                     char ln[8];
@@ -141,7 +141,7 @@ namespace NKikiSched {
         struct TStamp {
             TStamp(TInstant on): On(on) { }
 
-            TOut& Do(TOut &out) const noexcept
+            TOut& Do(TOut &out) const
             {
                 char ln_[24];
 
@@ -162,7 +162,7 @@ namespace NKikiSched {
         struct TDelay {
             TDelay(TDuration val): Val(val) { }
 
-            TOut& Do(TOut &out) const noexcept
+            TOut& Do(TOut &out) const
             {
                 const ui64 grid[] =  {
                         60ull,          /* minute                   */
@@ -189,7 +189,7 @@ namespace NKikiSched {
             }
 
         protected:
-            inline TOut& Small(TOut &out, ui64 secs) const noexcept
+            inline TOut& Small(TOut &out, ui64 secs) const
             {
                 char ln_[8];
 
@@ -216,7 +216,7 @@ namespace NKikiSched {
         struct TDelta {
             TDelta(TInstant on, TInstant to): On(on), To(to) { }
 
-            TOut& Do(TOut &out) const noexcept
+            TOut& Do(TOut &out) const
             {
                 const auto pfx = (On <= To ? '+' : '-');
 

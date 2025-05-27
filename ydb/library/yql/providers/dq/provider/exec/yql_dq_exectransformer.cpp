@@ -3,20 +3,20 @@
 #include <ydb/library/yql/providers/dq/provider/yql_dq_datasource.h>
 #include <ydb/library/yql/providers/dq/provider/yql_dq_state.h>
 
-#include <ydb/library/yql/providers/common/provider/yql_data_provider_impl.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
-#include <ydb/library/yql/providers/common/transform/yql_exec.h>
-#include <ydb/library/yql/providers/common/transform/yql_lazy_init.h>
-#include <ydb/library/yql/providers/common/schema/expr/yql_expr_schema.h>
-#include <ydb/library/yql/providers/result/expr_nodes/yql_res_expr_nodes.h>
+#include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
+#include <yql/essentials/providers/common/provider/yql_provider.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/providers/common/transform/yql_exec.h>
+#include <yql/essentials/providers/common/transform/yql_lazy_init.h>
+#include <yql/essentials/providers/common/schema/expr/yql_expr_schema.h>
+#include <yql/essentials/providers/result/expr_nodes/yql_res_expr_nodes.h>
 
 #include <ydb/library/yql/providers/dq/opt/dqs_opt.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/providers/dq/actors/proto_builder.h>
 #include <ydb/library/yql/providers/dq/counters/counters.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_common.h>
-#include <ydb/library/yql/dq/integration/yql_dq_integration.h>
+#include <yql/essentials/core/dq_integration/yql_dq_integration.h>
 #include <ydb/library/yql/providers/dq/planner/execution_planner.h>
 #include <ydb/library/yql/providers/dq/provider/yql_dq_gateway.h>
 #include <ydb/library/yql/providers/dq/provider/yql_dq_control.h>
@@ -28,22 +28,23 @@
 #include <ydb/library/yql/dq/opt/dq_opt_build.h>
 #include <ydb/library/yql/dq/opt/dq_opt.h>
 
-#include <ydb/library/yql/utils/log/log.h>
-#include <ydb/library/yql/core/services/yql_transform_pipeline.h>
-#include <ydb/library/yql/core/services/yql_out_transformers.h>
+#include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/core/yql_graph_transformer.h>
+#include <yql/essentials/core/services/yql_transform_pipeline.h>
+#include <yql/essentials/core/services/yql_out_transformers.h>
 
-#include <ydb/library/yql/minikql/mkql_alloc.h>
-#include <ydb/library/yql/minikql/mkql_node.h>
-#include <ydb/library/yql/minikql/mkql_node_cast.h>
-#include <ydb/library/yql/minikql/mkql_function_registry.h>
-#include <ydb/library/yql/minikql/mkql_node_serialization.h>
-#include <ydb/library/yql/minikql/aligned_page_pool.h>
+#include <yql/essentials/minikql/mkql_alloc.h>
+#include <yql/essentials/minikql/mkql_node.h>
+#include <yql/essentials/minikql/mkql_node_cast.h>
+#include <yql/essentials/minikql/mkql_function_registry.h>
+#include <yql/essentials/minikql/mkql_node_serialization.h>
+#include <yql/essentials/minikql/aligned_page_pool.h>
 
-#include <ydb/library/yql/core/type_ann/type_ann_expr.h>
-#include <ydb/library/yql/core/yql_type_annotation.h>
-#include <ydb/library/yql/core/yql_graph_transformer.h>
-#include <ydb/library/yql/core/yql_opt_utils.h>
-#include <ydb/library/yql/core/peephole_opt/yql_opt_peephole_physical.h>
+#include <yql/essentials/core/type_ann/type_ann_expr.h>
+#include <yql/essentials/core/yql_type_annotation.h>
+#include <yql/essentials/core/yql_graph_transformer.h>
+#include <yql/essentials/core/yql_opt_utils.h>
+#include <yql/essentials/core/peephole_opt/yql_opt_peephole_physical.h>
 
 #include <library/cpp/yson/node/node_io.h>
 #include <library/cpp/svnversion/svnversion.h>
@@ -109,6 +110,7 @@ public:
         auto& program = *task.MutableProgram();
         program.SetRuntimeVersion(NYql::NDqProto::ERuntimeVersion::RUNTIME_VERSION_YQL_1_0);
         program.SetRaw(lambda);
+        program.SetLangVer(State->TypeCtx->LangVer);
 
         auto outputDesc = task.AddOutputs();
         outputDesc->MutableMap();
@@ -334,7 +336,7 @@ TExprNode::TPtr DqMarkBlockStage(const TDqStatePtr& state, const TPublicIds::TPt
             return false;
         }
 
-        if (node->IsCallable("WideToBlocks") && node->Head().IsCallable("ToFlow") && node->Head().Head().IsArgument()) {
+        if (node->IsCallable("WideToBlocks") && node->Head().IsArgument()) {
             // scalar channel as input
             return false;
         }
@@ -421,7 +423,7 @@ private:
 
 class TSimpleSkiffConverter : public ISkiffConverter {
 public:
-    TString ConvertNodeToSkiff(const TDqStatePtr /*state*/, const IDataProvider::TFillSettings& /*fillSettings*/, const NYT::TNode& /*rowSpec*/, const NYT::TNode& /*item*/) override {
+    TString ConvertNodeToSkiff(const TDqStatePtr /*state*/, const IDataProvider::TFillSettings& /*fillSettings*/, const NYT::TNode& /*rowSpec*/, const NYT::TNode& /*item*/, const TVector<TString>& /*columns*/) override {
         Y_ABORT("not implemented");
     }
 
@@ -948,7 +950,7 @@ private:
                     && !fillSettings.Discard
                     && State->DqGateway
                     && integration
-                    && integration->PrepareFullResultTableParams(result.Ref(), ctx, graphParams, secureParams);
+                    && integration->PrepareFullResultTableParams(result.Ref(), ctx, graphParams, secureParams, TColumnOrder(columns));
                 settings->EnableFullResultWrite = enableFullResultWrite;
             }
 
@@ -989,7 +991,8 @@ private:
                     new TDqsSingleExecutionPlanner(
                         lambda, NActors::TActorId(),
                         NActors::TActorId(1, 0, 1, 0),
-                        result.Input().Ref().GetTypeAnn()));
+                        result.Input().Ref().GetTypeAnn(),
+                        State->TypeCtx->LangVer));
                 auto& tasks = executionPlanner->GetTasks();
                 Yql::DqsProto::TTaskMeta taskMeta;
                 tasks[0].MutableMeta()->UnpackTo(&taskMeta);
@@ -1061,6 +1064,9 @@ private:
                 state->Statistics[state->MetricId++] = res.Statistics;
 
                 if (res.Fallback) {
+                    if (res.Timeout) {
+                        NotifyDqTimeout(state);
+                    }
                     if (state->Settings->FallbackPolicy.Get().GetOrElse(EFallbackPolicy::Default) == EFallbackPolicy::Never || state->TypeCtx->ForceDq) {
                         auto issues = TIssues{TIssue(ctx.GetPosition(input->Pos()), "Gateway Error").SetCode(TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR, TSeverityIds::S_WARNING)};
                         issues.AddIssues(res.Issues());
@@ -1137,7 +1143,7 @@ private:
                             break;
                         }
                         case IDataProvider::EResultFormat::Skiff: {
-                            writer.OnStringScalar(skiffConverter->ConvertNodeToSkiff(state, fillSettings, rowSpec, item));
+                            writer.OnStringScalar(skiffConverter->ConvertNodeToSkiff(state, fillSettings, rowSpec, item, columns));
                             break;
                         }
                         default: {
@@ -1179,7 +1185,7 @@ private:
                             break;
                         }
                         case IDataProvider::EResultFormat::Skiff: {
-                            writer.OnStringScalar(skiffConverter->ConvertNodeToSkiff(state, fillSettings, rowSpec, item));
+                            writer.OnStringScalar(skiffConverter->ConvertNodeToSkiff(state, fillSettings, rowSpec, item, columns));
                             break;
                         }
                         default: {
@@ -1266,7 +1272,7 @@ private:
         YQL_CLOG(TRACE, ProviderDq) << "HandlePull " << NCommon::ExprToPrettyString(ctx, *input);
 
         TInstant startTime = TInstant::Now();
-        ui64 executionTimeout = State->Settings->_TableTimeout.Get().GetOrElse(TDqSettings::TDefault::TableTimeout);
+        ui64 executionTimeout = State->Settings->GetQueryTimeout();
         auto pull = TPull(input);
 
         THashMap<TString, TString> pullSettings;
@@ -1397,6 +1403,7 @@ private:
                 TString lambda = t.GetProgram().GetRaw();
                 fallbackFlag |= BuildUploadList(&uploadList, localRun, &lambda, typeEnv, files);
                 t.MutableProgram()->SetRaw(lambda);
+                t.MutableProgram()->SetLangVer(State->TypeCtx->LangVer);
 
                 Yql::DqsProto::TTaskMeta taskMeta;
                 t.MutableMeta()->UnpackTo(&taskMeta);
@@ -1433,7 +1440,7 @@ private:
             enableFullResultWrite = (ref || autoRef)
                 && !fillSettings.Discard
                 && integration
-                && integration->PrepareFullResultTableParams(pull.Ref(), ctx, graphParams, secureParams);
+                && integration->PrepareFullResultTableParams(pull.Ref(), ctx, graphParams, secureParams, TColumnOrder(columns));
             settings->EnableFullResultWrite = enableFullResultWrite;
         }
 
@@ -1459,7 +1466,6 @@ private:
             settings, progressWriter, UploadCache_->ModulesMapping, fillSettings.Discard, executionTimeout);
 
         future.Subscribe([publicIds, progressWriter = State->ProgressWriter](const NThreading::TFuture<IDqGateway::TResult>& completedFuture) {
-            YQL_ENSURE(!completedFuture.HasException());
             MarkProgressFinished(publicIds->AllPublicIds, completedFuture.GetValueSync().Success(), progressWriter);
         });
         executionPlanner.Destroy();
@@ -1496,6 +1502,9 @@ private:
                     state->Metrics->IncCounter("dq", "Fallback");
                 }
                 state->Statistics[state->MetricId++].Entries.push_back(TOperationStatistics::TEntry("Fallback", 0, 0, 0, 0, 1));
+                if (res.Timeout) {
+                    NotifyDqTimeout(state);
+                }
                 // never fallback will be captured in yql_facade
                 auto issues = TIssues{TIssue(ctx.GetPosition(input->Pos()), "Gateway Error").SetCode(TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR, TSeverityIds::S_WARNING)};
                 issues.AddIssues(res.Issues());
@@ -1588,7 +1597,7 @@ private:
                         break;
                     }
                     case IDataProvider::EResultFormat::Skiff: {
-                        writer.OnStringScalar(skiffConverter->ConvertNodeToSkiff(state, fillSettings, rowSpec, item));
+                        writer.OnStringScalar(skiffConverter->ConvertNodeToSkiff(state, fillSettings, rowSpec, item, columns));
                         break;
                     }
                     default: {
@@ -1615,7 +1624,7 @@ private:
                         break;
                     }
                     case IDataProvider::EResultFormat::Skiff: {
-                        writer.OnStringScalar(skiffConverter->ConvertNodeToSkiff(state, fillSettings, rowSpec, item));
+                        writer.OnStringScalar(skiffConverter->ConvertNodeToSkiff(state, fillSettings, rowSpec, item, columns));
                         break;
                     }
                     default: {
@@ -1856,7 +1865,6 @@ private:
                 if (filesRes.first.Level == TStatus::Async) {
                     precomputeFuture = filesRes.second.Apply([execState = ExecPrecomputeState_, node = input.Get(), logCtx](const TAsyncTransformCallbackFuture& future) {
                         YQL_LOG_CTX_ROOT_SESSION_SCOPE(logCtx);
-                        YQL_ENSURE(!future.HasException());
                         YQL_CLOG(DEBUG, ProviderDq) << "Finishing freezing files";
                         CompleteNode(execState, node, future.GetValue());
                     });
@@ -1941,6 +1949,7 @@ private:
                     TString lambda = t.GetProgram().GetRaw();
                     fallbackFlag |= BuildUploadList(&uploadList, false, &lambda, typeEnv, files);
                     t.MutableProgram()->SetRaw(lambda);
+                    t.MutableProgram()->SetLangVer(State->TypeCtx->LangVer);
 
                     Yql::DqsProto::TTaskMeta taskMeta;
                     t.MutableMeta()->UnpackTo(&taskMeta);
@@ -1980,7 +1989,6 @@ private:
             bool neverFallback = settings->FallbackPolicy.Get().GetOrElse(EFallbackPolicy::Default) == EFallbackPolicy::Never;
             precomputeFuture = future.Apply([publicIds, state = State, startTime, execState = ExecPrecomputeState_, node = input.Get(), neverFallback, logCtx](const NThreading::TFuture<IDqGateway::TResult>& completedFuture) {
                 YQL_LOG_CTX_ROOT_SESSION_SCOPE(logCtx);
-                YQL_ENSURE(!completedFuture.HasException());
                 const IDqGateway::TResult& res = completedFuture.GetValueSync();
 
                 MarkProgressFinished(publicIds->AllPublicIds, res.Success(), state->ProgressWriter);
@@ -2000,6 +2008,9 @@ private:
                             state->Metrics->IncCounter("dq", "Fallback");
                         }
                         state->Statistics[state->MetricId++].Entries.push_back(TOperationStatistics::TEntry("Fallback", 0, 0, 0, 0, 1));
+                        if (res.Timeout) {
+                            NotifyDqTimeout(state);
+                        }
                     }
 
                     CompleteNode(execState, node, [resIssues = res.Issues(), fallback = res.Fallback](const TExprNode::TPtr& input, TExprNode::TPtr&, TExprContext& ctx) -> IGraphTransformer::TStatus {
@@ -2086,6 +2097,14 @@ private:
         }
         YQL_CLOG(TRACE, ProviderDq) << "After PeepHole\n" << NCommon::ExprToPrettyString(ctx, *output);
         return status;
+    }
+
+    static void NotifyDqTimeout(const TDqStatePtr& state) {
+        auto integrations = GetUniqueIntegrations(*state->TypeCtx);
+        std::for_each(integrations.cbegin(), integrations.cend(), std::bind(&IDqIntegration::NotifyDqTimeout, std::placeholders::_1));
+        if (state->Metrics) {
+            state->Metrics->IncCounter("dq", "Timeout");
+        }
     }
 
 private:

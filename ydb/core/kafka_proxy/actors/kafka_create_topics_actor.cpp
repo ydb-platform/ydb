@@ -11,8 +11,8 @@
 
 namespace NKafka {
 
-class TCreateTopicActor : public NKikimr::NGRpcProxy::V1::TPQGrpcSchemaBase<TCreateTopicActor, TKafkaTopicModificationRequest> {
-    using TBase = NKikimr::NGRpcProxy::V1::TPQGrpcSchemaBase<TCreateTopicActor, TKafkaTopicModificationRequest>;
+class TCreateTopicActor : public NKikimr::NGRpcProxy::V1::TPQGrpcSchemaBase<TCreateTopicActor, TKafkaTopicRequestCtx> {
+    using TBase = NKikimr::NGRpcProxy::V1::TPQGrpcSchemaBase<TCreateTopicActor, TKafkaTopicRequestCtx>;
 public:
 
     TCreateTopicActor(
@@ -23,12 +23,12 @@ public:
             ui32 partitionsNumber,
             std::optional<ui64> retentionMs,
             std::optional<ui64> retentionBytes)
-        : TBase(new TKafkaTopicModificationRequest(
+        : TBase(new TKafkaTopicRequestCtx(
             userToken,
             topicPath,
             databaseName,
-            [this](EKafkaErrors status, const TString& message) {
-                this->SendResult(status, message);
+            [this](EKafkaErrors status, const std::string& message, const google::protobuf::Message&) {
+                this->SendResult(status, TString{message});
             })
         )
         , Requester(requester)

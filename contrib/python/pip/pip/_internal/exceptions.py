@@ -15,6 +15,8 @@ import sys
 from itertools import chain, groupby, repeat
 from typing import TYPE_CHECKING, Dict, Iterator, List, Literal, Optional, Union
 
+from pip._vendor.packaging.requirements import InvalidRequirement
+from pip._vendor.packaging.version import InvalidVersion
 from pip._vendor.rich.console import Console, ConsoleOptions, RenderResult
 from pip._vendor.rich.markup import escape
 from pip._vendor.rich.text import Text
@@ -25,6 +27,7 @@ if TYPE_CHECKING:
     from pip._vendor.requests.models import Request, Response
 
     from pip._internal.metadata import BaseDistribution
+    from pip._internal.models.link import Link
     from pip._internal.req.req_install import InstallRequirement
 
 logger = logging.getLogger(__name__)
@@ -429,7 +432,7 @@ class HashErrors(InstallationError):
     """Multiple HashError instances rolled into one for reporting"""
 
     def __init__(self) -> None:
-        self.errors: List["HashError"] = []
+        self.errors: List[HashError] = []
 
     def append(self, error: "HashError") -> None:
         self.errors.append(error)
@@ -774,4 +777,86 @@ class LegacyDistutilsInstall(DiagnosticPipError):
                 "uninstall."
             ),
             hint_stmt=None,
+        )
+
+
+class InvalidInstalledPackage(DiagnosticPipError):
+    reference = "invalid-installed-package"
+
+    def __init__(
+        self,
+        *,
+        dist: "BaseDistribution",
+        invalid_exc: Union[InvalidRequirement, InvalidVersion],
+    ) -> None:
+        installed_location = dist.installed_location
+
+        if isinstance(invalid_exc, InvalidRequirement):
+            invalid_type = "requirement"
+        else:
+            invalid_type = "version"
+
+        super().__init__(
+            message=Text(
+                f"Cannot process installed package {dist} "
+                + (f"in {installed_location!r} " if installed_location else "")
+                + f"because it has an invalid {invalid_type}:\n{invalid_exc.args[0]}"
+            ),
+            context=(
+                "Starting with pip 24.1, packages with invalid "
+                f"{invalid_type}s can not be processed."
+            ),
+            hint_stmt="To proceed this package must be uninstalled.",
+        )
+
+
+class IncompleteDownloadError(DiagnosticPipError):
+    """Raised when the downloader receives fewer bytes than advertised
+    in the Content-Length header."""
+
+    reference = "incomplete-download"
+
+    def __init__(
+        self, link: "Link", received: int, expected: int, *, retries: int
+    ) -> None:
+        # Dodge circular import.
+        from pip._internal.utils.misc import format_size
+
+        download_status = f"{format_size(received)}/{format_size(expected)}"
+        if retries:
+            retry_status = f"after {retries} attempts "
+            hint = "Use --resume-retries to configure resume attempt limit."
+        else:
+            retry_status = ""
+            hint = "Consider using --resume-retries to enable download resumption."
+        message = Text(
+            f"Download failed {retry_status}because not enough bytes "
+            f"were received ({download_status})"
+        )
+
+        super().__init__(
+            message=message,
+            context=f"URL: {link.redacted_url}",
+            hint_stmt=hint,
+            note_stmt="This is an issue with network connectivity, not pip.",
+        )
+
+
+class ResolutionTooDeepError(DiagnosticPipError):
+    """Raised when the dependency resolver exceeds the maximum recursion depth."""
+
+    reference = "resolution-too-deep"
+
+    def __init__(self) -> None:
+        super().__init__(
+            message="Dependency resolution exceeded maximum depth",
+            context=(
+                "Pip cannot resolve the current dependencies as the dependency graph "
+                "is too complex for pip to solve efficiently."
+            ),
+            hint_stmt=(
+                "Try adding lower bounds to constrain your dependencies, "
+                "for example: 'package>=2.0.0' instead of just 'package'. "
+            ),
+            link="https://pip.pypa.io/en/stable/topics/dependency-resolution/#handling-resolution-too-deep-errors",
         )

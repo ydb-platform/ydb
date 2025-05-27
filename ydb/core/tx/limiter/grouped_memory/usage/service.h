@@ -15,13 +15,14 @@ class TServiceOperatorImpl {
 private:
     TConfig ServiceConfig = TConfig::BuildDisabledConfig();
     std::shared_ptr<TCounters> Counters;
-    std::shared_ptr<TStageFeatures> DefaultStageFeatures = std::make_shared<TStageFeatures>("DEFAULT", ((ui64)3) << 30, nullptr, nullptr);
+    std::shared_ptr<TStageFeatures> DefaultStageFeatures =
+        std::make_shared<TStageFeatures>("DEFAULT", ((ui64)3) << 30, ((ui64)10) << 30, nullptr, nullptr);
     using TSelf = TServiceOperatorImpl<TMemoryLimiterPolicy>;
     static void Register(const TConfig& serviceConfig, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters) {
         Singleton<TSelf>()->Counters = std::make_shared<TCounters>(counters, TMemoryLimiterPolicy::Name);
         Singleton<TSelf>()->ServiceConfig = serviceConfig;
-        Singleton<TSelf>()->DefaultStageFeatures = std::make_shared<TStageFeatures>(
-            "GLOBAL", serviceConfig.GetMemoryLimit(), nullptr, Singleton<TSelf>()->Counters->BuildStageCounters("general"));
+        Singleton<TSelf>()->DefaultStageFeatures = std::make_shared<TStageFeatures>("GLOBAL", serviceConfig.GetMemoryLimit(),
+            serviceConfig.GetHardMemoryLimit(), nullptr, Singleton<TSelf>()->Counters->BuildStageCounters("general"));
     }
     static const TString& GetMemoryLimiterName() {
         Y_ABORT_UNLESS(TMemoryLimiterPolicy::Name.size() == 4);
@@ -35,7 +36,7 @@ public:
         } else {
             AFL_VERIFY(Singleton<TSelf>()->DefaultStageFeatures);
             return std::make_shared<TStageFeatures>(
-                name, limit, Singleton<TSelf>()->DefaultStageFeatures, Singleton<TSelf>()->Counters->BuildStageCounters(name));
+                name, limit, Max<ui64>(), Singleton<TSelf>()->DefaultStageFeatures, Singleton<TSelf>()->Counters->BuildStageCounters(name));
         }
     }
 

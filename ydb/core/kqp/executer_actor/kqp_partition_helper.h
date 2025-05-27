@@ -2,8 +2,8 @@
 
 #include "kqp_tasks_graph.h"
 
-
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
+#include <ydb/core/kqp/common/kqp_yql.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 
 #include <util/generic/variant.h>
 
@@ -26,15 +26,12 @@ public:
     ui64 ShardId;
     TShardInfoWithId(const ui64 shardId, TShardInfo&& base)
         : TShardInfo(std::move(base))
-        , ShardId(shardId)
-    {
+        , ShardId(shardId) {
 
     }
 };
 
-struct TPhysicalShardReadSettings {
-    bool Sorted = true;
-    bool Reverse = false;
+struct TPhysicalShardReadSettings: public NYql::TSortingOperator<NYql::ERequestSorting::ASC> {
     ui64 ItemsLimit = 0;
     NKikimr::NMiniKQL::TType* ResultType = nullptr;
 };

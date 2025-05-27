@@ -12,6 +12,7 @@ PEERDIR(
     ydb/library/actors/core
     ydb/library/yql/providers/common/http_gateway
     ydb/library/yql/providers/s3/credentials
+    ydb/public/sdk/cpp/adapters/issue
 )
 
 SRC(

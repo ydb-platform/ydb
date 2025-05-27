@@ -10,7 +10,7 @@ from {{web_sales}} as web_sales
 cross join
      {{date_dim}} as date_dim
 where ws_sold_date_sk=d_date_sk
-  and d_month_seq between 1214 and 1214+11
+  and d_month_seq between 1200 and 1200+11
   and ws_item_sk is not NULL
 group by web_sales.ws_item_sk, date_dim.d_date);
 
@@ -23,7 +23,7 @@ from {{store_sales}} as store_sales
 cross join
     {{date_dim}} as date_dim
 where ss_sold_date_sk=d_date_sk
-  and d_month_seq between 1214 and 1214+11
+  and d_month_seq between 1200 and 1200+11
   and ss_item_sk is not NULL
 group by store_sales.ss_item_sk, date_dim.d_date);
 

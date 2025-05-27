@@ -26,6 +26,8 @@ using TEvImportFromS3Request = TGrpcRequestOperationCall<Ydb::Import::ImportFrom
 
 template <typename TDerived, typename TEvRequest>
 class TImportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, public TImportConv {
+    static constexpr bool IsS3Import = std::is_same_v<TEvRequest, TEvImportFromS3Request>;
+
     TStringBuf GetLogPrefix() const override {
         return "[CreateImport]";
     }
@@ -35,14 +37,16 @@ class TImportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
 
         auto ev = MakeHolder<TEvImport::TEvCreateImportRequest>();
         ev->Record.SetTxId(this->TxId);
-        ev->Record.SetDatabaseName(this->DatabaseName);
+        ev->Record.SetDatabaseName(this->GetDatabaseName());
         if (this->UserToken) {
             ev->Record.SetUserSID(this->UserToken->GetUserSID());
+            ev->Record.SetSanitizedToken(this->UserToken->GetSanitizedToken());
         }
+        ev->Record.SetPeerName(this->Request->GetPeerName());
 
         auto& createImport = *ev->Record.MutableRequest();
         createImport.MutableOperationParams()->CopyFrom(request.operation_params());
-        if (std::is_same_v<TEvRequest, TEvImportFromS3Request>) {
+        if constexpr (IsS3Import) {
             createImport.MutableImportFromS3Settings()->CopyFrom(request.settings());
         }
 
@@ -67,8 +71,53 @@ public:
             return this->Reply(StatusIds::UNSUPPORTED, TIssuesIds::DEFAULT_ERROR, "forget_after is not supported for this type of operation");
         }
 
-        if (request.settings().items().empty()) {
-            return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Items are not set");
+        const auto& settings = request.settings();
+        if constexpr (IsS3Import) {
+            const bool encryptedExportFeatureFlag = AppData()->FeatureFlags.GetEnableEncryptedExport();
+            const bool commonSourcePrefixSpecified = !settings.source_prefix().empty();
+            if (!encryptedExportFeatureFlag) {
+                // Check that no new fields are specified
+                if (commonSourcePrefixSpecified) {
+                    return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Source prefix is not supported in current configuration");
+                }
+                if (!settings.destination_path().empty()) {
+                    return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Destination path is not supported in current configuration");
+                }
+                if (settings.has_encryption_settings()) {
+                    return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Export encryption is not supported in current configuration");
+                }
+            }
+            if (settings.items().empty() && !commonSourcePrefixSpecified) {
+                return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "No source prefix specified. Don't know where to import from");
+            }
+            for (const auto& item : settings.items()) {
+                if (item.source_prefix().empty() && !commonSourcePrefixSpecified) {
+                    return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, TStringBuilder() << "No source prefix or common source prefix specified for item \"" << item.destination_path() << "\"");
+                }
+                if (!item.source_path().empty()) {
+                    if (!encryptedExportFeatureFlag) {
+                        return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Item source path is not supported in current configuration");
+                    }
+                    if (!commonSourcePrefixSpecified) {
+                        return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Common source prefix must be specified for filtering by source path");
+                    }
+                }
+                if (item.source_prefix().empty() && item.source_path().empty() && item.destination_path().empty()) {
+                    return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Empty import item was specified");
+                }
+            }
+            if (settings.has_encryption_settings()) {
+                if (settings.encryption_settings().symmetric_key().key().empty()) {
+                    return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "No encryption key specified");
+                }
+                if (!commonSourcePrefixSpecified) {
+                    return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "No source prefix specified");
+                }
+            }
+        } else {
+            if (settings.items().empty()) {
+                return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Items are not set");
+            }
         }
 
         this->AllocateTxId();

@@ -1,7 +1,7 @@
 #include "column_portion_chunk.h"
 
 #include <ydb/core/formats/arrow/accessor/plain/accessor.h>
-#include <ydb/core/formats/arrow/common/validation.h>
+#include <ydb/library/formats/arrow/validation/validation.h>
 #include <ydb/core/tx/columnshard/engines/changes/counters/general.h>
 #include <ydb/core/tx/columnshard/engines/storage/chunks/column.h>
 
@@ -10,7 +10,6 @@ namespace NKikimr::NOlap::NCompaction {
 ui32 TColumnPortion::AppendSlice(const std::shared_ptr<arrow::Array>& a, const ui32 startIndex, const ui32 length) {
     Y_ABORT_UNLESS(a);
     Y_ABORT_UNLESS(length);
-    Y_ABORT_UNLESS(CurrentPortionRecords < ChunkContext.GetPortionRowsCountLimit());
     Y_ABORT_UNLESS(startIndex + length <= a->length());
     AFL_VERIFY(Type->id() == a->type_id())("own", Type->ToString())("a", a->type()->ToString());
     ui32 i = startIndex;
@@ -21,11 +20,6 @@ ui32 TColumnPortion::AppendSlice(const std::shared_ptr<arrow::Array>& a, const u
             "builder_type", Builder->type()->ToString());
         CurrentChunkRawSize += recordSize;
         PredictedPackedBytes += packedRecordSize ? packedRecordSize : (recordSize / 2);
-        if (++CurrentPortionRecords == ChunkContext.GetPortionRowsCountLimit()) {
-            FlushBuffer();
-            ++i;
-            break;
-        }
         if (CurrentChunkRawSize >= Context.GetChunkRawBytesLimit() || PredictedPackedBytes >= Context.GetExpectedBlobPackedBytes()) {
             FlushBuffer();
         }

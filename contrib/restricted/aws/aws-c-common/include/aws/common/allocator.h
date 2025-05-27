@@ -9,7 +9,24 @@
 #include <aws/common/stdbool.h>
 #include <aws/common/stdint.h>
 
+AWS_PUSH_SANE_WARNING_LEVEL
 AWS_EXTERN_C_BEGIN
+
+/*
+ * Quick guide to allocators:
+ *  CRT offers several flavours of allocators:
+ * - default: basic allocator that invokes system one directly.
+ * - aligned: basic allocator that aligns small allocations on 8 byte
+ *   boundary and big buffers on 32/64 byte (system dependent) boundary.
+ *   Aligned mem can improve perf on some operations, like memcpy or hashes.
+ *   Depending on a system, can result in higher peak memory count in heavy
+ *   acquire/free scenarios (ex. s3), due to memory fragmentation related to how
+ *   aligned allocators work (over allocate, find aligned offset, release extra memory)
+ * - wrapped_cf: wraps MacOS's Security Framework allocator.
+ * - mem_tracer: wraps any allocator and provides tracing functionality to allocations
+ * - small_block_allocator: pools smaller allocations into preallocated buckets.
+ *   Not actively maintained. Avoid if possible.
+ */
 
 /* Allocator structure. An instance of this will be passed around for anything needing memory allocation */
 struct aws_allocator {
@@ -31,9 +48,16 @@ bool aws_allocator_is_valid(const struct aws_allocator *alloc);
 AWS_COMMON_API
 struct aws_allocator *aws_default_allocator(void);
 
+/*
+ * Allocator that align small allocations on 8 byte boundary and big allocations
+ * on 32/64 byte boundary.
+ */
+AWS_COMMON_API
+struct aws_allocator *aws_aligned_allocator(void);
+
 #ifdef __MACH__
 /* Avoid pulling in CoreFoundation headers in a header file. */
-struct __CFAllocator;
+struct __CFAllocator; /* NOLINT(bugprone-reserved-identifier) */
 typedef const struct __CFAllocator *CFAllocatorRef;
 
 /**
@@ -205,5 +229,6 @@ AWS_COMMON_API
 size_t aws_small_block_allocator_page_size_available(struct aws_allocator *sba_allocator);
 
 AWS_EXTERN_C_END
+AWS_POP_SANE_WARNING_LEVEL
 
 #endif /* AWS_COMMON_ALLOCATOR_H */

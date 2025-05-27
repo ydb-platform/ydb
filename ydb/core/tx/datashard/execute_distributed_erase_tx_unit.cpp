@@ -32,10 +32,10 @@ public:
     }
 
     EExecutionStatus Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) override {
-        Y_ABORT_UNLESS(op->IsDistributedEraseTx());
+        Y_ENSURE(op->IsDistributedEraseTx());
 
         TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
-        Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
+        Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
 
         TDataShardLocksDb locksDb(DataShard, txc);
         TSetupSysLocks guardLocks(op, DataShard, &locksDb);
@@ -61,7 +61,7 @@ public:
                 for (ui64 txId : userDb.GetVolatileReadDependencies()) {
                     op->AddVolatileDependency(txId);
                     bool ok = DataShard.GetVolatileTxManager().AttachBlockedOperation(txId, op->GetTxId());
-                    Y_VERIFY_S(ok, "Unexpected failure to attach " << *op << " to volatile tx " << txId);
+                    Y_ENSURE(ok, "Unexpected failure to attach " << *op << " to volatile tx " << txId);
                 }
 
                 if (txc.DB.HasChanges()) {
@@ -83,15 +83,15 @@ public:
         } else if (eraseTx->HasDependencies()) {
             THashMap<ui64, TDynBitMap> presentRows;
             for (const auto& dependency : eraseTx->GetDependencies()) {
-                Y_ABORT_UNLESS(!presentRows.contains(dependency.GetShardId()));
+                Y_ENSURE(!presentRows.contains(dependency.GetShardId()));
                 presentRows.emplace(dependency.GetShardId(), DeserializeBitMap<TDynBitMap>(dependency.GetPresentRows()));
             }
 
             for (const auto& [_, readSets] : op->InReadSets()) {
                 for (const auto& rs : readSets) {
                     NKikimrTxDataShard::TDistributedEraseRS body;
-                    Y_ABORT_UNLESS(body.ParseFromArray(rs.Body.data(), rs.Body.size()));
-                    Y_ABORT_UNLESS(presentRows.contains(rs.Origin));
+                    Y_ENSURE(body.ParseFromArray(rs.Body.data(), rs.Body.size()));
+                    Y_ENSURE(presentRows.contains(rs.Origin));
 
                     auto confirmedRows = DeserializeBitMap<TDynBitMap>(body.GetConfirmedRows());
                     if (!Execute(txc, request, presentRows.at(rs.Origin), confirmedRows, writeVersion, op->GetGlobalTxId())) {
@@ -107,7 +107,7 @@ public:
                 return EExecutionStatus::Continue;
             }
         } else {
-            Y_FAIL_S("Invalid distributed erase tx: " << eraseTx->GetBody().ShortDebugString());
+            Y_ENSURE(false, "Invalid distributed erase tx: " << eraseTx->GetBody().ShortDebugString());
         }
 
         BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE);
@@ -128,7 +128,7 @@ public:
         const ui64 tableId = request.GetTableId();
         const TTableId fullTableId(DataShard.GetPathOwnerId(), tableId);
 
-        Y_ABORT_UNLESS(DataShard.GetUserTables().contains(tableId));
+        Y_ENSURE(DataShard.GetUserTables().contains(tableId));
         const TUserTable& tableInfo = *DataShard.GetUserTables().at(tableId);
 
         const bool breakWriteConflicts = DataShard.SysLocksTable().HasWriteLocks(fullTableId);
@@ -148,14 +148,14 @@ public:
 
             const auto& serializedKey = request.GetKeyColumns(row++);
             TSerializedCellVec keyCells;
-            Y_ABORT_UNLESS(TSerializedCellVec::TryParse(serializedKey, keyCells));
-            Y_ABORT_UNLESS(keyCells.GetCells().size() == tableInfo.KeyColumnTypes.size());
+            Y_ENSURE(TSerializedCellVec::TryParse(serializedKey, keyCells));
+            Y_ENSURE(keyCells.GetCells().size() == tableInfo.KeyColumnTypes.size());
 
             TVector<TRawTypeValue> key;
             for (size_t ki : xrange(tableInfo.KeyColumnTypes.size())) {
-                const auto& kt = tableInfo.KeyColumnTypes[ki];
+                const NScheme::TTypeId vtype = tableInfo.KeyColumnTypes[ki].GetTypeId();
                 const TCell& cell = keyCells.GetCells()[ki];
-                key.emplace_back(TRawTypeValue(cell.AsRef(), kt));
+                key.emplace_back(TRawTypeValue(cell.AsRef(), vtype));
             }
 
             if (breakWriteConflicts || checkVolatileDependencies) {

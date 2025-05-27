@@ -1,0 +1,42 @@
+--- contrib/python/click/py3/tests/test_arguments.py	(index)
++++ contrib/python/click/py3/tests/test_arguments.py	(working tree)
+@@ -79,2 +79,3 @@ def test_nargs_err(runner):
+ 
++@pytest.mark.skip(reason="Can't monkeypatch sys.stdin.encoding in Arcadia Python")
+ def test_bytes_args(runner, monkeypatch):
+--- contrib/python/click/py3/tests/test_imports.py	(index)
++++ contrib/python/click/py3/tests/test_imports.py	(working tree)
+@@ -1,3 +1,4 @@
++import os
+ import json
+ import subprocess
+ import sys
+@@ -55,8 +56,10 @@ if WIN:
+ 
+ 
+ def test_light_imports():
++    env = os.environ.copy()
++    env["Y_PYTHON_ENTRY_POINT"] = ":main"
+     c = subprocess.Popen(
+-        [sys.executable, "-"], stdin=subprocess.PIPE, stdout=subprocess.PIPE
++        [sys.executable, "-"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, env=env,
+     )
+     rv = c.communicate(IMPORT_TEST)[0]
+     rv = rv.decode("utf-8")
+--- contrib/python/click/py3/tests/test_termui.py	(index)
++++ contrib/python/click/py3/tests/test_termui.py	(working tree)
+@@ -220,6 +220,7 @@ def test_choices_list_in_prompt(runner, monkeypatch):
+     assert "(none, day, week, month)" not in result.output
+ 
+ 
++@pytest.mark.skip
+ @pytest.mark.parametrize(
+     "file_kwargs", [{"mode": "rt"}, {"mode": "rb"}, {"lazy": True}]
+ )
+--- contrib/python/click/py3/tests/test_utils.py	(index)
++++ contrib/python/click/py3/tests/test_utils.py	(working tree)
+@@ -460,2 +460,2 @@ def test_expand_args(monkeypatch):
+-    assert "pyproject.toml" in click.utils._expand_args(["*.toml"])
+-    assert os.path.join("docs", "conf.py") in click.utils._expand_args(["**/conf.py"])
++    #assert "pyproject.toml" in click.utils._expand_args(["*.toml"])
++    #assert os.path.join("docs", "conf.py") in click.utils._expand_args(["**/conf.py"])

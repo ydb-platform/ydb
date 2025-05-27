@@ -15,7 +15,6 @@ PEERDIR(
     contrib/python/hyperlink
     contrib/python/incremental
     contrib/python/pyOpenSSL
-    contrib/python/Twisted/py2/twisted/python
     contrib/python/zope.interface
 )
 
@@ -295,6 +294,7 @@ PY_SRCS(
     twisted/python/__init__.py
     twisted/python/_appdirs.py
     twisted/python/_inotify.py
+    twisted/python/_oldstyle.py
     twisted/python/_pydoctor.py
     twisted/python/_release.py
     twisted/python/_setup.py
@@ -302,10 +302,14 @@ PY_SRCS(
     twisted/python/_textattributes.py
     twisted/python/_tzhelper.py
     twisted/python/_url.py
+    twisted/python/compat.py
+    twisted/python/components.py
     twisted/python/constants.py
     twisted/python/context.py
+    twisted/python/deprecate.py
     twisted/python/failure.py
     twisted/python/fakepwd.py
+    twisted/python/filepath.py
     twisted/python/finalize.py
     twisted/python/formmethod.py
     twisted/python/hook.py
@@ -313,12 +317,15 @@ PY_SRCS(
     twisted/python/lockfile.py
     twisted/python/log.py
     twisted/python/logfile.py
+    twisted/python/modules.py
     twisted/python/monkey.py
     twisted/python/procutils.py
     twisted/python/randbytes.py
     twisted/python/rebuild.py
+    twisted/python/reflect.py
     twisted/python/release.py
     twisted/python/roots.py
+    twisted/python/runtime.py
     twisted/python/sendmsg.py
     twisted/python/shortcut.py
     twisted/python/syslog.py
@@ -329,7 +336,10 @@ PY_SRCS(
     twisted/python/url.py
     twisted/python/urlpath.py
     twisted/python/usage.py
+    twisted/python/util.py
     twisted/python/versions.py
+    twisted/python/win32.py
+    twisted/python/zippath.py
     twisted/python/zipstream.py
     twisted/runner/__init__.py
     twisted/runner/inetd.py

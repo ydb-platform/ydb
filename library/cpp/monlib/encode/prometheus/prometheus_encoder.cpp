@@ -106,14 +106,16 @@ namespace NMonitoring {
         private:
             // will replace invalid chars with '_'
             void WriteMetricName(TStringBuf name) {
-                Y_ENSURE(!name.Empty(), "trying to write metric with empty name");
+                Y_ENSURE(!name.empty(), "trying to write metric with empty name");
 
                 char ch = name[0];
-                if (!NPrometheus::IsValidMetricNameStart(ch)) {
+                if (NPrometheus::IsValidMetricNameStart(ch)) {
+                    Out_->Write(ch);
+                } else {
                     Out_->Write('_');
                 }
 
-                for (size_t i = 0, len = name.length(); i < len; i++) {
+                for (size_t i = 1, len = name.length(); i < len; i++) {
                     ch = name[i];
                     if (NPrometheus::IsValidMetricNameContinuation(ch)) {
                         Out_->Write(ch);
@@ -131,7 +133,7 @@ namespace NMonitoring {
                     WriteLabelValue(l.Value());
                     Out_->Write(", "); // trailign comma is supported in parsers
                 }
-                if (!addLabelKey.Empty() && !addLabelValue.Empty()) {
+                if (!addLabelKey.empty() && !addLabelValue.empty()) {
                     Out_->Write(addLabelKey);
                     Out_->Write('=');
                     WriteLabelValue(addLabelValue);
@@ -162,12 +164,12 @@ namespace NMonitoring {
             {
                 // (1) name
                 WriteMetricName(name);
-                if (!suffix.Empty()) {
+                if (!suffix.empty()) {
                     Out_->Write(suffix);
                 }
 
                 // (2) labels
-                if (!labels.Empty() || !addLabelKey.Empty()) {
+                if (!labels.Empty() || !addLabelKey.empty()) {
                     WriteLabels(labels, addLabelKey, addLabelValue);
                 }
                 Out_->Write(' ');

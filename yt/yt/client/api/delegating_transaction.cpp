@@ -41,12 +41,12 @@ DELEGATE_METHOD(TFuture<std::vector<TUnversionedLookupRowsResult>>, MultiLookupR
     (subrequests, options))
 
 DELEGATE_METHOD(TFuture<TSelectRowsResult>, SelectRows, (
-    const TString& query,
+    const std::string& query,
     const TSelectRowsOptions& options),
     (query, options))
 
 DELEGATE_METHOD(TFuture<NYson::TYsonString>, ExplainQuery, (
-    const TString& query,
+    const std::string& query,
     const TExplainQueryOptions& options),
     (query, options))
 
@@ -189,7 +189,7 @@ DELEGATE_METHOD(NTransactionClient::EDurability, GetDurability, () const, ())
 DELEGATE_METHOD(TDuration, GetTimeout, () const, ())
 
 DELEGATE_METHOD(TFuture<void>, Ping, (
-    const NApi::TTransactionPingOptions& options),
+    const NApi::TPrerequisitePingOptions& options),
     (options))
 
 DELEGATE_METHOD(TFuture<TTransactionCommitResult>, Commit, (
@@ -264,7 +264,7 @@ DELEGATE_METHOD(void, LockRows, (
     const NYPath::TYPath& path,
     NTableClient::TNameTablePtr nameTable,
     TSharedRange<NTableClient::TLegacyKey> keys,
-    const std::vector<TString>& locks,
+    const std::vector<std::string>& locks,
     NTableClient::ELockType lockType),
     (path, nameTable, keys, locks, lockType))
 
@@ -311,6 +311,16 @@ DELEGATE_METHOD(TFuture<TPushQueueProducerResult>, PushQueueProducer, (
     const std::vector<TSharedRef>& serializedRows,
     const TPushQueueProducerOptions& options),
     (producerPath, queuePath, sessionId, epoch, nameTable, serializedRows, options))
+
+DELEGATE_METHOD(TFuture<TDistributedWriteSessionWithCookies>, StartDistributedWriteSession, (
+    const NYPath::TRichYPath& path,
+    const TDistributedWriteSessionStartOptions& options),
+    (path, options))
+
+DELEGATE_METHOD(TFuture<void>, FinishDistributedWriteSession, (
+    const TDistributedWriteSessionWithResults& sessionWithResults,
+    const TDistributedWriteSessionFinishOptions& options),
+    (sessionWithResults, options))
 
 #undef DELEGATE_METHOD
 

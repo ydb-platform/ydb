@@ -8,7 +8,7 @@ import subprocess
 logger = logging.getLogger(__name__)
 
 
-DOCKER_IMAGE_YDBD_PACKAGE_SPEC = 'ydb/tools/ydbd_slice/image/pkg.json'
+DOCKER_IMAGE_YDBD_PACKAGE_SPEC = 'ydb/deploy/docker/debug/pkg.json'
 DOCKER_IMAGE_REGISTRY = 'cr.yandex'
 DOCKER_IMAGE_REPOSITORY = 'crpbo4q9lbgkn85vr1rm'
 DOCKER_IMAGE_NAME = 'ydb'
@@ -43,6 +43,16 @@ def get_image_from_args(args):
         return "%s:%s" % (DOCKER_IMAGE_FULL_NAME, tag)
 
 
+def get_image_output_path(image):
+    if ":" in image:
+        image_name, tag = image.split(":")
+    else:
+        image_name, tag = image, "latest"
+    image_base_name = image_name.split("/")[-1]
+
+    return f"{image_base_name}.{tag}.tar"
+
+
 def docker_tag(old, new):
     proc = subprocess.Popen(['docker', 'tag', old, new], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     try:
@@ -68,6 +78,20 @@ def docker_inspect(obj):
         raise RuntimeError("docker inspect: failed with code %d, error: %s" % (proc.returncode, stderr))
     else:
         return json.loads(stdout)
+
+
+def docker_image_save(image, output_path, overwrite):
+    if os.path.exists(output_path) and not overwrite:
+        logger.info(f"Compressed file '{output_path}' already exists, using existing archive")
+        return
+
+    logger.info(f"execute command 'docker save image' for '{image}' to output path '{output_path}'")
+    proc = subprocess.Popen(['docker', 'image', 'save', image, '-o', output_path], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    _, stderr = proc.communicate()
+    if proc.returncode != 0:
+        raise RuntimeError("docker image save: failed with code %d, error: %s" % (proc.returncode, stderr))
+
+    logger.info(f"Docker image '{image}' saved and compressed successfully to '{output_path}'")
 
 
 def docker_push(image):

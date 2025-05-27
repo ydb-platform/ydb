@@ -1,5 +1,6 @@
 #include "datashard_txs.h"
 #include "datashard_locks_db.h"
+#include "memory_state_migration.h"
 
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/tx_processing.h>
@@ -12,9 +13,36 @@ namespace NDataShard {
 
 using namespace NTabletFlatExecutor;
 
-TDataShard::TTxInit::TTxInit(TDataShard* ds)
-    : TBase(ds)
-{}
+class TDataShard::TTxInit : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
+public:
+    TTxInit(TDataShard* self)
+        : TTransactionBase(self)
+    {}
+
+    TTxType GetTxType() const override { return TXTYPE_INIT; }
+
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
+    void Complete(const TActorContext &ctx) override;
+
+private:
+    bool CreateScheme(TTransactionContext &txc);
+    bool ReadEverything(TTransactionContext &txc);
+};
+
+class TDataShard::TTxInitRestored : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
+public:
+    TTxInitRestored(TDataShard* self)
+        : TTransactionBase(self)
+    {}
+
+    TTxType GetTxType() const override { return TXTYPE_INIT_RESTORED; }
+
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
+    void Complete(const TActorContext& ctx) override;
+
+private:
+    bool InMemoryStateActorStarted = false;
+};
 
 bool TDataShard::TTxInit::Execute(TTransactionContext& txc, const TActorContext& ctx) {
     LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "TDataShard::TTxInit::Execute");
@@ -26,6 +54,7 @@ bool TDataShard::TTxInit::Execute(TTransactionContext& txc, const TActorContext&
         Self->NextSeqno = 1;
         Self->NextChangeRecordOrder = 1;
         Self->LastChangeRecordGroup = 1;
+        Self->Pipeline.Reset();
         Self->TransQueue.Reset();
         Self->SnapshotManager.Reset();
         Self->SchemaSnapshotManager.Reset();
@@ -38,31 +67,61 @@ bool TDataShard::TTxInit::Execute(TTransactionContext& txc, const TActorContext&
         Self->ChangesQueue.clear();
         Self->LockChangeRecords.clear();
         Self->CommittedLockChangeRecords.clear();
-        ChangeRecords.clear();
+        Self->InitialState.emplace();
 
         bool done = ReadEverything(txc);
 
         if (done && Self->State != TShardState::Offline) {
-            Self->SnapshotManager.Fix_KIKIMR_12289(txc.DB);
             Self->SnapshotManager.Fix_KIKIMR_14259(txc.DB);
             for (const auto& pr : Self->TableInfos) {
                 pr.second->Fix_KIKIMR_17222(txc.DB);
             }
         }
 
+        if (done) {
+            Self->StartInMemoryRestoreActor();
+        }
+
         return done;
     } catch (const TNotReadyTabletException &) {
         return false;
-    } catch (const TSchemeErrorTabletException &ex) {
-        Y_UNUSED(ex);
-        Y_ABORT();
-    } catch (...) {
-        Y_ABORT("there must be no leaked exceptions");
     }
 }
 
 void TDataShard::TTxInit::Complete(const TActorContext &ctx) {
     LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "TDataShard::TTxInit::Complete");
+}
+
+void TDataShard::OnInMemoryStateRestored() {
+    Execute(CreateTxInitRestored());
+}
+
+bool TDataShard::TTxInitRestored::Execute(TTransactionContext& txc, const TActorContext& ctx) {
+    LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "TDataShard::TTxInitRestored::Execute");
+
+    InMemoryStateActorStarted = Self->StartInMemoryStateActor();
+
+    // We persist the state actor id when either we started it, or decided
+    // not to (e.g. because the feature was disabled) and we need to clear the
+    // previous actor id.
+    if (InMemoryStateActorStarted || Self->InMemoryStatePrevActorId && !Self->InMemoryStateActorId) {
+        NIceDb::TNiceDb db(txc.DB);
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "DataShard " << Self->TabletID()
+            << " persisting started state actor id " << Self->InMemoryStateActorId
+            << " in generation " << Self->Generation());
+        Self->PersistSys(db, Schema::Sys_InMemoryStateActorId, Self->InMemoryStateActorId);
+        Self->PersistSys(db, Schema::Sys_InMemoryStateGeneration, Self->Generation());
+    }
+
+    return true;
+}
+
+void TDataShard::TTxInitRestored::Complete(const TActorContext& ctx) {
+    LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "TDataShard::TTxInitRestored::Complete");
+
+    if (Self->InMemoryStateActor && InMemoryStateActorStarted) {
+        Self->InMemoryStateActor->ConfirmPersistent();
+    }
 
     // Start MakeSnapshot() if we started in SplitSrcMakeSnapshot state
     if (Self->State == TShardState::SplitSrcMakeSnapshot) {
@@ -98,9 +157,7 @@ void TDataShard::TTxInit::Complete(const TActorContext &ctx) {
     {
         // Initialize snapshot expiration queue with current context time
         Self->GetSnapshotManager().InitExpireQueue(ctx.Now());
-
-        if (Self->GetSnapshotManager().HasExpiringSnapshots())
-            Self->PlanCleanup(ctx);
+        Self->PlanCleanup(ctx);
     }
 
     // Find subdomain path id if needed
@@ -113,7 +170,7 @@ void TDataShard::TTxInit::Complete(const TActorContext &ctx) {
     }
 
     Self->CreateChangeSender(ctx);
-    Self->EnqueueChangeRecords(std::move(ChangeRecords));
+    Self->EnqueueChangeRecords(std::move(Self->InitialState->ChangeRecords));
     Self->MaybeActivateChangeSender(ctx);
     Self->EmitHeartbeats();
 
@@ -130,13 +187,13 @@ void TDataShard::TTxInit::Complete(const TActorContext &ctx) {
         }
     }
 
-    // Switch mvcc state if needed
-    Self->CheckMvccStateChangeCanStart(ctx);
+    Self->InitialState.reset();
 }
 
 #define LOAD_SYS_UI64(db, row, value) if (!TDataShard::SysGetUi64(db, row, value)) return false;
 #define LOAD_SYS_BYTES(db, row, value) if (!TDataShard::SysGetBytes(db, row, value)) return false;
 #define LOAD_SYS_BOOL(db, row, value) if (!TDataShard::SysGetBool(db, row, value)) return false;
+#define LOAD_SYS_ACTORID(db, key, value) if (!TDataShard::SysGetActorId(db, key, value)) return false;
 
 bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
     // Note that we should not store any data directly into Self until NoMoreReads() is called
@@ -161,6 +218,7 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
         PRECHARGE_SYS_TABLE(Schema::PlanQueue);
         PRECHARGE_SYS_TABLE(Schema::DeadlineQueue);
         PRECHARGE_SYS_TABLE(Schema::SchemaOperations);
+        PRECHARGE_SYS_TABLE(Schema::ScanProgress);
         PRECHARGE_SYS_TABLE(Schema::SplitSrcSnapshots);
         PRECHARGE_SYS_TABLE(Schema::SplitDstReceivedSnapshots);
         PRECHARGE_SYS_TABLE(Schema::Snapshots);
@@ -178,6 +236,9 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
         PRECHARGE_SYS_TABLE(Schema::Locks);
         PRECHARGE_SYS_TABLE(Schema::LockRanges);
         PRECHARGE_SYS_TABLE(Schema::LockConflicts);
+        PRECHARGE_SYS_TABLE(Schema::LockVolatileDependencies);
+        PRECHARGE_SYS_TABLE(Schema::LockChangeRecords);
+        PRECHARGE_SYS_TABLE(Schema::ChangeRecordCommits);
         PRECHARGE_SYS_TABLE(Schema::TxVolatileDetails);
         PRECHARGE_SYS_TABLE(Schema::TxVolatileParticipants);
         PRECHARGE_SYS_TABLE(Schema::CdcStreamScans);
@@ -188,6 +249,8 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
 
 #undef PRECHARGE_SYS_TABLE
     }
+
+    txc.DB.NoMoreUnprechargedReadsForTx();
 
     // Reads from Sys table
     LOAD_SYS_UI64(db, Schema::Sys_State, Self->State);
@@ -220,9 +283,12 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
         LOAD_SYS_BYTES(db, Schema::Sys_SubDomainInfo, rawProcessingParams);
         if (!rawProcessingParams.empty()) {
             Self->ProcessingParams.reset(new NKikimrSubDomains::TProcessingParams());
-            Y_ABORT_UNLESS(Self->ProcessingParams->ParseFromString(rawProcessingParams));
+            Y_ENSURE(Self->ProcessingParams->ParseFromString(rawProcessingParams));
         }
     }
+
+    LOAD_SYS_ACTORID(db, Schema::Sys_InMemoryStateActorId, Self->InMemoryStatePrevActorId);
+    LOAD_SYS_UI64(db, Schema::Sys_InMemoryStateGeneration, Self->InMemoryStatePrevGeneration);
 
     if (!Self->Pipeline.Load(db))
         return false;
@@ -239,7 +305,7 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
             TString schema = rowset.GetValue<Schema::UserTables::Schema>();
             NKikimrSchemeOp::TTableDescription descr;
             bool parseOk = ParseFromStringNoSizeLimit(descr, schema);
-            Y_ABORT_UNLESS(parseOk);
+            Y_ENSURE(parseOk);
             Self->AddUserTable(TPathId(Self->GetPathOwnerId(), tableId), new TUserTable(localTid, descr, shadowTid));
             if (!rowset.Next())
                 return false;
@@ -276,7 +342,7 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
 
             TAutoPtr<NKikimrTxDataShard::TEvSplitTransferSnapshot> snapshot = new NKikimrTxDataShard::TEvSplitTransferSnapshot;
             bool parseOk = ParseFromStringNoSizeLimit(*snapshot, snapBody);
-            Y_ABORT_UNLESS(parseOk);
+            Y_ENSURE(parseOk);
             Self->SplitSrcSnapshotSender.AddDst(dstTablet);
             Self->SplitSrcSnapshotSender.SaveSnapshotForSending(dstTablet, snapshot);
 
@@ -309,7 +375,7 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
         if (!splitDescr.empty()) {
             Self->DstSplitDescription = std::make_shared<NKikimrTxDataShard::TSplitMergeDescription>();
             bool parseOk = ParseFromStringNoSizeLimit(*Self->DstSplitDescription, splitDescr);
-            Y_ABORT_UNLESS(parseOk);
+            Y_ENSURE(parseOk);
         }
 
         LOAD_SYS_BOOL(db, Schema::Sys_DstSplitSchemaInitialized, Self->DstSplitSchemaInitialized);
@@ -363,7 +429,7 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
         if (!splitDescr.empty()) {
             Self->SrcSplitDescription = std::make_shared<NKikimrTxDataShard::TSplitMergeDescription>();
             bool parseOk = ParseFromStringNoSizeLimit(*Self->SrcSplitDescription, splitDescr);
-            Y_ABORT_UNLESS(parseOk);
+            Y_ENSURE(parseOk);
 
             switch (Self->State) {
             case TShardState::SplitSrcWaitForNoTxInFlight:
@@ -380,15 +446,13 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
         }
     }
 
-    Y_ABORT_UNLESS(Self->State != TShardState::Unknown);
+    Y_ENSURE(Self->State != TShardState::Unknown);
 
-    Y_ABORT_UNLESS(Self->SplitSrcSnapshotSender.AllAcked() || Self->State == TShardState::SplitSrcSendingSnapshot,
-             "Unexpected state %s while having unsent split snapshots at datashard %" PRIu64,
-             DatashardStateName(Self->State).data(), Self->TabletID());
+    Y_ENSURE(Self->SplitSrcSnapshotSender.AllAcked() || Self->State == TShardState::SplitSrcSendingSnapshot,
+             "Unexpected state " << DatashardStateName(Self->State) << " while having unsent split snapshots at datashard " << Self->TabletID());
 
-    Y_ABORT_UNLESS(Self->ReceiveSnapshotsFrom.empty() || Self->State == TShardState::SplitDstReceivingSnapshot,
-             "Unexpected state %s while having non-received split snapshots at datashard %" PRIu64,
-             DatashardStateName(Self->State).data(), Self->TabletID());
+    Y_ENSURE(Self->ReceiveSnapshotsFrom.empty() || Self->State == TShardState::SplitDstReceivingSnapshot,
+             "Unexpected state " << DatashardStateName(Self->State) << " while having non-received split snapshots at datashard " << Self->TabletID());
 
     // Load unsent ReadSets
     if (!Self->OutReadSets.LoadReadSets(db))
@@ -432,7 +496,7 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
     }
 
     if (Self->State != TShardState::Offline && txc.DB.GetScheme().GetTableInfo(Schema::ChangeRecords::TableId)) {
-        if (!Self->LoadChangeRecords(db, ChangeRecords)) {
+        if (!Self->LoadChangeRecords(db, Self->InitialState->ChangeRecords)) {
             return false;
         }
     }
@@ -444,7 +508,7 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
     }
 
     if (Self->State != TShardState::Offline && txc.DB.GetScheme().GetTableInfo(Schema::ChangeRecordCommits::TableId)) {
-        if (!Self->LoadChangeRecordCommits(db, ChangeRecords)) {
+        if (!Self->LoadChangeRecordCommits(db, Self->InitialState->ChangeRecords)) {
             return false;
         }
     }
@@ -591,13 +655,10 @@ public:
 
             Self->PersistSys(db, Schema::Sys_State, Self->State);
 
-            auto state = EMvccState::MvccEnabled;
-            Self->PersistSys(db, Schema::SysMvcc_State, (ui32)state);
-
-            LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, TStringBuilder() << "TxInitSchema.Execute"
-                << " MVCC state switched to  enabled state");
-
-            Self->MvccSwitchState = TSwitchState::DONE;
+            // New shards had mvcc initially enabled for a while now
+            // We need to persist this as long as previous versions could pick
+            // up missing values interpreting it as disabled.
+            Self->PersistSys(db, Schema::SysMvcc_State, (ui32)EMvccState::MvccEnabled);
         }
 
         //remove this code after all datashards upgrade Sys_SubDomainInfo row in Sys
@@ -667,6 +728,10 @@ ITransaction* TDataShard::CreateTxInit() {
     return new TTxInit(this);
 }
 
+ITransaction* TDataShard::CreateTxInitRestored() {
+    return new TTxInitRestored(this);
+}
+
 ITransaction* TDataShard::CreateTxInitSchema() {
     return new TTxInitSchema(this);
 }
@@ -693,7 +758,7 @@ bool TDataShard::SyncSchemeOnFollower(TTransactionContext &txc, const TActorCont
     }
 
     auto* userTablesSchema = scheme.GetTableInfo(Schema::UserTables::TableId);
-    Y_ABORT_UNLESS(userTablesSchema, "UserTables");
+    Y_ENSURE(userTablesSchema, "UserTables");
 
     // Check if tables changed since last time we synchronized them
     NTable::TDatabase::TChangeCounter lastSysUpdate = txc.DB.Head(Schema::Sys::TableId);
@@ -780,7 +845,7 @@ bool TDataShard::SyncSchemeOnFollower(TTransactionContext &txc, const TActorCont
                 TString schema = rowset.GetValue<Schema::UserTables::Schema>();
                 NKikimrSchemeOp::TTableDescription descr;
                 bool parseOk = ParseFromStringNoSizeLimit(descr, schema);
-                Y_ABORT_UNLESS(parseOk);
+                Y_ENSURE(parseOk);
                 tables.push_back(TRow{
                     TPathId(GetPathOwnerId(), tableId),
                     new TUserTable(localTid, descr, shadowTid),
@@ -803,7 +868,7 @@ bool TDataShard::SyncSchemeOnFollower(TTransactionContext &txc, const TActorCont
                 TString schema = rowset.GetValue<Schema::UserTables::Schema>();
                 NKikimrSchemeOp::TTableDescription descr;
                 bool parseOk = ParseFromStringNoSizeLimit(descr, schema);
-                Y_ABORT_UNLESS(parseOk);
+                Y_ENSURE(parseOk);
                 tables.push_back(TRow{
                     TPathId(GetPathOwnerId(), tableId),
                     new TUserTable(localTid, descr, shadowTid),

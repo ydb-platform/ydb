@@ -2,7 +2,7 @@
 
 #include <util/charset/unidata.h>
 
-namespace NYdb::NTopic {
+namespace NYdb::inline V2::NTopic {
 
 ERetryErrorClass GetRetryErrorClass(EStatus status) {
     switch (status) {
@@ -76,7 +76,7 @@ NYql::TIssues MakeIssueWithSubIssues(const TString& description, const NYql::TIs
 }
 
 static TStringBuf SplitPort(TStringBuf endpoint) {
-    for (int i = endpoint.Size() - 1; i >= 0; --i) {
+    for (int i = endpoint.size() - 1; i >= 0; --i) {
         if (endpoint[i] == ':') {
             return endpoint.SubString(i + 1, TStringBuf::npos);
         }
@@ -89,12 +89,12 @@ static TStringBuf SplitPort(TStringBuf endpoint) {
 
 TString ApplyClusterEndpoint(TStringBuf driverEndpoint, const TString& clusterDiscoveryEndpoint) {
     const TStringBuf clusterDiscoveryPort = SplitPort(clusterDiscoveryEndpoint);
-    if (!clusterDiscoveryPort.Empty()) {
+    if (!clusterDiscoveryPort.empty()) {
         return clusterDiscoveryEndpoint;
     }
 
     const TStringBuf driverPort = SplitPort(driverEndpoint);
-    if (driverPort.Empty()) {
+    if (driverPort.empty()) {
         return clusterDiscoveryEndpoint;
     }
 

@@ -28,20 +28,20 @@ namespace NBloom {
     public:
         TEstimator(float error)
         {
-            Y_ABORT_UNLESS(error > 0. && error < 1.,
+            Y_ENSURE(error > 0. && error < 1.,
                 "Invalid error estimation, should be in (0, 1)");
 
             double log2err = Log2(error);
 
             Amp = -1.44 * log2err;
-            Y_ABORT_UNLESS(Amp < 256., "Too high rows amplification factor");
+            Y_ENSURE(Amp < 256., "Too high rows amplification factor");
 
             HashCount = Min(ui64(Max<ui16>()), ui64(ceil(-log2err)));
         }
 
-        ui64 Bits(ui64 rows) const noexcept
+        ui64 Bits(ui64 rows) const
         {
-            Y_ABORT_UNLESS(!(rows >> 54),
+            Y_ENSURE(!(rows >> 54),
                 "Too many rows, probably an invalid value passed");
 
             return ((Max(ui64(ceil(Amp * rows)), ui64(1)) + 63) >> 6) << 6;
@@ -64,7 +64,7 @@ namespace NBloom {
             TEstimator estimator(error);
             Hashes = estimator.Hashes();
             Items = estimator.Bits(rows);
-            Y_ABORT_UNLESS(Hashes && Items);
+            Y_ENSURE(Hashes && Items);
 
             Reset();
         }
@@ -94,8 +94,8 @@ namespace NBloom {
 
             Array = { TDeref<ui64>::At(*out, 0), size_t(Items >> 6) };
 
-            Y_ABORT_UNLESS(size_t(*out) % sizeof(ui64) == 0, "Invalid aligment");
-            Y_ABORT_UNLESS(TDeref<char>::At(Array.end(), 0) == Raw.mutable_end());
+            Y_ENSURE(size_t(*out) % sizeof(ui64) == 0, "Invalid aligment");
+            Y_ENSURE(TDeref<char>::At(Array.end(), 0) == Raw.mutable_end());
 
             std::fill(Array.begin(), Array.end(), 0);
         }

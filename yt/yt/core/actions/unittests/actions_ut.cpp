@@ -94,6 +94,25 @@ TEST(TCancelableRunWithBoundedConcurrencyTest, Cancelation)
     EXPECT_EQ(canceledCount, 4);
 }
 
+TEST(TCancelableRunWithBoundedConcurrencyTest, RecurseRunner)
+{
+    auto threadPool = CreateThreadPool(4, "ThreadPool");
+
+    std::vector<TCallback<TFuture<void>()>> callbacks;
+    for (int i = 0; i < 50'000; ++i) {
+        callbacks.push_back(BIND([] {
+            return VoidFuture;
+        }));
+    }
+
+    auto future = CancelableRunWithBoundedConcurrency<void>(
+        std::move(callbacks),
+        /*concurrencyLimit*/ 5);
+
+    WaitFor(future)
+        .ThrowOnError();
+}
+
 TEST(TAllSucceededBoundedConcurrencyTest, CancelOthers)
 {
     using TCounter = std::atomic<int>;

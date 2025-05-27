@@ -1,0 +1,13 @@
+--- contrib/libs/libidn/lib/idna.h
++++ contrib/libs/libidn/lib/idna.h
+@@ -99,6 +99,10 @@ extern "C"
+ #  define IDNA_ACE_PREFIX "xn--"
+ # endif
+ 
++# ifndef IDNA_LABEL_MAX_LENGTH
++#  define IDNA_LABEL_MAX_LENGTH 255
++# endif
++
+   extern IDNAPI const char *idna_strerror (Idna_rc rc);
+ 
+   /* Core functions */

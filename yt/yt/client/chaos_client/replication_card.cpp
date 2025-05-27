@@ -17,6 +17,8 @@ using namespace NTableClient;
 using namespace NTabletClient;
 using namespace NTransactionClient;
 
+////////////////////////////////////////////////////////////////////////////////
+
 namespace NDetail {
 
 void FormatProgressWithProjection(
@@ -328,6 +330,8 @@ void UpdateReplicationProgress(TReplicationProgress* progress, const TReplicatio
     auto updateEnd = update.Segments.end();
     auto progressTimestamp = NullTimestamp;
     auto updateTimestamp = NullTimestamp;
+
+    segments.reserve(progress->Segments.size() + update.Segments.size());
 
     auto append = [&] (TUnversionedOwningRow key) {
         auto timestamp = std::max(progressTimestamp, updateTimestamp);
@@ -702,7 +706,7 @@ std::vector<TReplicationProgress> ScatterReplicationProgress(
 bool IsReplicaLocationValid(
     const TReplicaInfo* replica,
     const NYPath::TYPath& tablePath,
-    const TString& clusterName)
+    const std::string& clusterName)
 {
     return replica->ReplicaPath == tablePath && replica->ClusterName == clusterName;
 }
@@ -741,19 +745,31 @@ TReplicationProgress BuildMaxProgress(
 
         if (otherIt == otherEnd) {
             cmpResult = -1;
-            if (!upperKeySelected && CompareRows(progressIt->LowerKey, other.UpperKey) >= 0) {
-                upperKeySelected = true;
-                otherTimestamp = NullTimestamp;
-                tryAppendSegment(other.UpperKey, progressTimestamp);
-                continue;
+            if (!upperKeySelected) {
+                int upperKeyCmpResult = CompareRows(progressIt->LowerKey, other.UpperKey);
+                if (upperKeyCmpResult >= 0) {
+                    upperKeySelected = true;
+                    otherTimestamp = NullTimestamp;
+                    if (upperKeyCmpResult > 0) {
+                        // UpperKey is smaller than progressIt->LowerKey so there's a gap to fill with progressTimestamp.
+                        tryAppendSegment(other.UpperKey, progressTimestamp);
+                        continue;
+                    }
+                }
             }
         } else if (progressIt == progressEnd) {
             cmpResult = 1;
-            if (!upperKeySelected && CompareRows(otherIt->LowerKey, progress.UpperKey) >= 0) {
-                upperKeySelected = true;
-                progressTimestamp = NullTimestamp;
-                tryAppendSegment(progress.UpperKey, otherTimestamp);
-                continue;
+            if (!upperKeySelected) {
+                int upperKeyCmpResult = CompareRows(otherIt->LowerKey, progress.UpperKey);
+                if (upperKeyCmpResult >= 0) {
+                    upperKeySelected = true;
+                    progressTimestamp = NullTimestamp;
+                    if (upperKeyCmpResult > 0) {
+                        // UpperKey is smaller than otherIt->LowerKey so there's a gap to fill with otherTimestamp.
+                        tryAppendSegment(progress.UpperKey, otherTimestamp);
+                        continue;
+                    }
+                }
             }
         } else {
             cmpResult = CompareRows(progressIt->LowerKey, otherIt->LowerKey);
@@ -862,6 +878,7 @@ TDuration ComputeReplicationProgressLag(
 THashMap<TReplicaId, TDuration> ComputeReplicasLag(const THashMap<TReplicaId, TReplicaInfo>& replicas)
 {
     TReplicationProgress syncProgress;
+
     for (const auto& [replicaId, replicaInfo] : replicas) {
         if (IsReplicaReallySync(replicaInfo.Mode, replicaInfo.State, replicaInfo.History)) {
             if (syncProgress.Segments.empty()) {
@@ -869,14 +886,24 @@ THashMap<TReplicaId, TDuration> ComputeReplicasLag(const THashMap<TReplicaId, TR
             } else {
                 syncProgress = BuildMaxProgress(syncProgress, replicaInfo.ReplicationProgress);
             }
+
+            // Advance progress to current era start timestamp if replica not in current era
+            auto lastHistoryItemTimestamp = replicaInfo.History.back().Timestamp;
+            if (GetReplicationProgressMinTimestamp(replicaInfo.ReplicationProgress) < lastHistoryItemTimestamp) {
+                syncProgress = AdvanceReplicationProgress(syncProgress, lastHistoryItemTimestamp);
+            }
         }
     }
 
     THashMap<TReplicaId, TDuration> result;
     for (const auto& [replicaId, replicaInfo] : replicas) {
-        if (IsReplicaReallySync(replicaInfo.Mode, replicaInfo.State, replicaInfo.History)) {
+        if (IsReplicaReallySync(replicaInfo.Mode, replicaInfo.State, replicaInfo.History) &&
+            GetReplicationProgressMinTimestamp(replicaInfo.ReplicationProgress) >=
+                replicaInfo.History.back().Timestamp)
+        {
             result.emplace(replicaId, TDuration::Zero());
         } else {
+            // Replica is async or sync, but still in previous era
             result.emplace(
                 replicaId,
                 ComputeReplicationProgressLag(syncProgress, replicaInfo.ReplicationProgress));
@@ -889,4 +916,3 @@ THashMap<TReplicaId, TDuration> ComputeReplicasLag(const THashMap<TReplicaId, TR
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NChaosClient
-

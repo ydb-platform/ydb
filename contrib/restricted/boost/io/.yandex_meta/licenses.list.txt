@@ -1,0 +1,48 @@
+====================BSL-1.0====================
+### License
+
+Distributed under the
+[Boost Software License, Version 1.0](http://www.boost.org/LICENSE_1_0.txt).
+
+====================BSL-1.0====================
+(http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+Distributed under the
+
+
+====================BSL-1.0====================
+Distributed under the Boost Software License, Version 1.0.
+
+
+====================BSL-1.0====================
+Distributed under the Boost Software License, Version 1.0.
+(http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================COPYRIGHT====================
+Copyright 2002 Daryle Walker
+
+
+====================COPYRIGHT====================
+Copyright 2002, 2005 Daryle Walker
+
+
+====================COPYRIGHT====================
+Copyright 2010 Beman Dawes
+
+
+====================COPYRIGHT====================
+Copyright 2019 Glen Joseph Fernandes
+(glenjofe@gmail.com)
+
+
+====================COPYRIGHT====================
+Copyright 2019-2020 Glen Joseph Fernandes
+(glenjofe@gmail.com)
+
+
+====================COPYRIGHT====================
+Copyright 2021-2022 Glen Joseph Fernandes
+(glenjofe@gmail.com)

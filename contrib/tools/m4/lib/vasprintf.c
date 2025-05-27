@@ -1,5 +1,5 @@
 /* Formatted output to strings.
-   Copyright (C) 1999, 2002, 2006-2013 Free Software Foundation, Inc.
+   Copyright (C) 1999, 2002, 2006-2016 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 
 /* Specification.  */
 #ifdef IN_LIBASPRINTF
-# include "vasprintf.h"
+# error #include "vasprintf.h"
 #else
 # include <stdio.h>
 #endif
@@ -40,10 +40,7 @@ vasprintf (char **resultp, const char *format, va_list args)
   if (length > INT_MAX)
     {
       free (result);
-#if (defined _MSC_VER) && (_MSC_VER < 1800)
-#else
       errno = EOVERFLOW;
-#endif
       return -1;
     }
 

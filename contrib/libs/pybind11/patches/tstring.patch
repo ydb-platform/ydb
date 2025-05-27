@@ -1,0 +1,27 @@
+commit 01ca92d3b2fbcc5fc35eb2defb8f2d2966f9fb1e (tf-python)
+author: thegeorg
+date: 2021-03-16T18:13:35+03:00
+
+    Renew python dramatically
+
+--- a/include/pybind11/cast.h
++++ b/include/pybind11/cast.h
+@@ -27,6 +27,7 @@
+ #include <type_traits>
+ #include <utility>
+ #include <vector>
++#include <util/generic/string.h>
+ 
+ PYBIND11_NAMESPACE_BEGIN(PYBIND11_NAMESPACE)
+ PYBIND11_NAMESPACE_BEGIN(detail)
+@@ -513,6 +514,10 @@ template <typename CharT, class Traits, class Allocator>
+                    enable_if_t<is_std_char_type<CharT>::value>>
+     : string_caster<std::basic_string<CharT, Traits, Allocator>> {};
+ 
++template <typename CharT, class Traits>
++struct type_caster<TBasicString<CharT, Traits>, enable_if_t<is_std_char_type<CharT>::value>>
++    : string_caster<TBasicString<CharT, Traits>> {};
++
+ #ifdef PYBIND11_HAS_STRING_VIEW
+ template <typename CharT, class Traits>
+ struct type_caster<std::basic_string_view<CharT, Traits>,

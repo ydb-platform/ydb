@@ -34,25 +34,24 @@ NChunkClient::EChunkFormat DefaultFormatFromOptimizeFor(
 // Mostly used in unittests and for debugging purposes.
 // Quite inefficient.
 TUnversionedOwningRow YsonToSchemafulRow(
-    const TString& yson,
+    TStringBuf yson,
     const TTableSchema& tableSchema,
     bool treatMissingAsNull,
     NYson::EYsonType ysonType = NYson::EYsonType::MapFragment,
     bool validateValues = false);
-TUnversionedOwningRow YsonToSchemalessRow(
-    const TString& yson);
+TUnversionedOwningRow YsonToSchemalessRow(TStringBuf yson);
 TVersionedRow YsonToVersionedRow(
     const TRowBufferPtr& rowBuffer,
-    const TString& keyYson,
-    const TString& valueYson,
+    TStringBuf keyYson,
+    TStringBuf valueYson,
     const std::vector<TTimestamp>& deleteTimestamps = {},
     const std::vector<TTimestamp>& extraWriteTimestamps = {});
 TVersionedOwningRow YsonToVersionedRow(
-    const TString& keyYson,
-    const TString& valueYson,
+    TStringBuf keyYson,
+    TStringBuf valueYson,
     const std::vector<TTimestamp>& deleteTimestamps = {},
     const std::vector<TTimestamp>& extraWriteTimestamps = {});
-TUnversionedOwningRow YsonToKey(const TString& yson);
+TUnversionedOwningRow YsonToKey(TStringBuf yson);
 TString KeyToYson(TUnversionedRow row);
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -75,6 +74,9 @@ void FromUnversionedValue(TString* value, TUnversionedValue unversionedValue);
 
 void ToUnversionedValue(TUnversionedValue* unversionedValue, TStringBuf value, const TRowBufferPtr& rowBuffer, int id = 0, EValueFlags flags = EValueFlags::None);
 void FromUnversionedValue(TStringBuf* value, TUnversionedValue unversionedValue);
+
+void ToUnversionedValue(TUnversionedValue* unversionedValue, const std::string& value, const TRowBufferPtr& rowBuffer, int id = 0, EValueFlags flags = EValueFlags::None);
+void FromUnversionedValue(std::string* value, TUnversionedValue unversionedValue);
 
 void ToUnversionedValue(TUnversionedValue* unversionedValue, const char* value, const TRowBufferPtr& rowBuffer, int id = 0, EValueFlags flags = EValueFlags::None);
 void FromUnversionedValue(const char** value, TUnversionedValue unversionedValue);
@@ -140,6 +142,20 @@ void ToUnversionedValue(
     EValueFlags flags = EValueFlags::None);
 template <class T>
     requires TEnumTraits<T>::IsEnum
+void FromUnversionedValue(
+    T* value,
+    TUnversionedValue unversionedValue);
+
+template <class T>
+    requires (!TEnumTraits<T>::IsEnum) && std::is_enum_v<T>
+void ToUnversionedValue(
+    TUnversionedValue* unversionedValue,
+    T value,
+    const TRowBufferPtr& rowBuffer,
+    int id = 0,
+    EValueFlags flags = EValueFlags::None);
+template <class T>
+    requires (!TEnumTraits<T>::IsEnum) && std::is_enum_v<T>
 void FromUnversionedValue(
     T* value,
     TUnversionedValue unversionedValue);
@@ -361,6 +377,7 @@ struct TUnversionedValueRangeTruncationOptions
     //! Otherwise, all values of primitive (not string-like) types are preserved and the remaining size
     //! is uniformely distributed between truncated versions of the remaining string-like values.
     bool ClipAfterOverflow = false;
+    bool UseOriginalDataWeightInSamples = false;
     //! Limits the total size of the resulting value range.
     //! See value-preservation rules described above.
     i64 MaxTotalSize = NTableClient::MaxSampleSize;
@@ -372,6 +389,16 @@ struct TUnversionedValueRangeTruncationOptions
 //! NB: Newly generated values are captured into the provided row buffer, however, the lifetime of unchanged values remains the responsibility of the caller.
 //! NB: The resulting total binary size can be slightly larger than the limit, since even Null filler values take up some space.
 TUnversionedValueRangeTruncationResult TruncateUnversionedValues(TUnversionedValueRange values, const TRowBufferPtr& rowBuffer, const TUnversionedValueRangeTruncationOptions& options);
+
+////////////////////////////////////////////////////////////////////////////////
+
+bool GetBit(TRef bitmap, i64 index);
+
+void SetBit(TMutableRef bitmap, i64 index, bool value);
+
+////////////////////////////////////////////////////////////////////////////////
+
+TString EscapeCAndSingleQuotes(TStringBuf str);
 
 ////////////////////////////////////////////////////////////////////////////////
 

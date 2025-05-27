@@ -26,29 +26,34 @@ public:
         ::TSourceLocation sourceLocation,
         TStringBuf anchorMessage) override
     {
-        if (anchor->Registered.exchange(true)) {
-            return;
+        if (auto* defaultLogManager = GetDefaultLogManager()) {
+            defaultLogManager->RegisterStaticAnchor(anchor, sourceLocation, anchorMessage);
         }
-
-        anchor->Enabled.store(true);
-
         auto guard = Guard(Mutex_);
         anchor->SourceLocation = sourceLocation;
         anchor->AnchorMessage = anchorMessage;
     }
 
-    void UpdateAnchor(TLoggingAnchor* /*position*/) override
-    { }
+    void UpdateAnchor(TLoggingAnchor* anchor) override
+    {
+        if (auto* defaultLogManager = GetDefaultLogManager()) {
+            defaultLogManager->UpdateAnchor(anchor);
+        }
+    }
 
     void Enqueue(TLogEvent&& event) override
     {
-        auto message = TString(event.MessageRef.ToStringBuf());
-        LogMessage(
-            ToImplLevel(event.Level),
-            ::TSourceLocation(event.SourceFile, event.SourceLine),
-            "%.*s",
-            event.MessageRef.size(),
-            event.MessageRef.begin());
+        if (auto logger = GetLogger()) {
+            LogMessage(
+                logger,
+                ToImplLevel(event.Level),
+                ::TSourceLocation(event.SourceFile, event.SourceLine),
+                "%.*s",
+                event.MessageRef.size(),
+                event.MessageRef.begin());
+        } else if (auto* defaultLogManager = GetDefaultLogManager()) {
+            defaultLogManager->Enqueue(std::move(event));
+        }
     }
 
     const TLoggingCategory* GetCategory(TStringBuf categoryName) override
@@ -87,7 +92,7 @@ private:
         }
     }
 
-    static void LogMessage(ILogger::ELevel level, const ::TSourceLocation& sourceLocation, const char* format, ...)
+    static void LogMessage(const ILoggerPtr& /* logger */, ILogger::ELevel level, const ::TSourceLocation& sourceLocation, const char* format, ...)
     {
         va_list args;
         va_start(args, format);

@@ -1,10 +1,12 @@
 #include "container.h"
 
 #include <ydb/core/formats/arrow/accessor/plain/accessor.h>
+#include <ydb/core/formats/arrow/arrow_filter.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
-#include <ydb/core/formats/arrow/simple_arrays_cache.h>
 
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/formats/arrow/common/vector_operations.h>
+#include <ydb/library/formats/arrow/simple_arrays_cache.h>
 
 namespace NKikimr::NArrow {
 
@@ -59,8 +61,16 @@ TConclusionStatus TGeneralContainer::AddField(const std::shared_ptr<arrow::Field
     return AddField(f, std::make_shared<NAccessor::TTrivialArray>(data));
 }
 
+void TGeneralContainer::DeleteFieldsByIndex(const std::vector<ui32>& idxs) {
+    Schema->DeleteFieldsByIndex(idxs);
+    NUtil::EraseItems(Columns, idxs);
+}
+
 void TGeneralContainer::Initialize() {
     std::optional<ui64> recordsCount;
+    if (Schema->num_fields() == 0) {
+        recordsCount = 0;
+    }
     AFL_VERIFY(Schema->num_fields() == (i32)Columns.size())("schema", Schema->num_fields())("columns", Columns.size());
     for (i32 i = 0; i < Schema->num_fields(); ++i) {
         AFL_VERIFY(Columns[i]);
@@ -128,7 +138,7 @@ TGeneralContainer::TGeneralContainer(const ui32 recordsCount)
     , Schema(std::make_shared<NModifier::TSchema>()) {
 }
 
-std::shared_ptr<NKikimr::NArrow::NAccessor::IChunkedArray> TGeneralContainer::GetAccessorByNameVerified(const std::string& fieldId) const {
+std::shared_ptr<NAccessor::IChunkedArray> TGeneralContainer::GetAccessorByNameVerified(const std::string& fieldId) const {
     auto result = GetAccessorByNameOptional(fieldId);
     AFL_VERIFY(result)("event", "cannot_find_accessor_in_general_container")("field_id", fieldId)("schema", Schema->ToString());
     return result;
@@ -142,27 +152,33 @@ std::shared_ptr<NKikimr::NArrow::TGeneralContainer> TGeneralContainer::BuildEmpt
     return std::make_shared<TGeneralContainer>(Schema, std::move(columns));
 }
 
-std::shared_ptr<arrow::Table> TGeneralContainer::BuildTableOptional(const std::optional<std::set<std::string>>& columnNames /*= {}*/) const {
+std::shared_ptr<arrow::Table> TGeneralContainer::BuildTableOptional(const TTableConstructionContext& context) const {
     std::vector<std::shared_ptr<arrow::ChunkedArray>> columns;
     std::vector<std::shared_ptr<arrow::Field>> fields;
+    std::optional<ui32> count;
     for (i32 i = 0; i < Schema->num_fields(); ++i) {
-        if (columnNames && !columnNames->contains(Schema->field(i)->name())) {
+        if (context.GetColumnNames() && !context.GetColumnNames()->contains(Schema->field(i)->name())) {
             continue;
         }
-        columns.emplace_back(Columns[i]->GetChunkedArray());
+        columns.emplace_back(Columns[i]->GetChunkedArray(context));
+        if (!count) {
+            count = columns.back()->length();
+        } else {
+            AFL_VERIFY(*count == columns.back()->length())("count", count)("local", columns.back()->length());
+        }
         fields.emplace_back(Schema->field(i));
     }
     if (fields.empty()) {
         return nullptr;
     }
-    AFL_VERIFY(RecordsCount);
-    return arrow::Table::Make(std::make_shared<arrow::Schema>(fields), columns, *RecordsCount);
+    AFL_VERIFY(count);
+    return arrow::Table::Make(std::make_shared<arrow::Schema>(fields), columns, *count);
 }
 
-std::shared_ptr<arrow::Table> TGeneralContainer::BuildTableVerified(const std::optional<std::set<std::string>>& columnNames /*= {}*/) const {
-    auto result = BuildTableOptional(columnNames);
+std::shared_ptr<arrow::Table> TGeneralContainer::BuildTableVerified(const TTableConstructionContext& context) const {
+    auto result = BuildTableOptional(context);
     AFL_VERIFY(result);
-    AFL_VERIFY(!columnNames || result->schema()->num_fields() == (i32)columnNames->size());
+    AFL_VERIFY(!context.GetColumnNames() || result->schema()->num_fields() == (i32)context.GetColumnNames()->size());
     return result;
 }
 
@@ -211,13 +227,31 @@ TConclusionStatus TGeneralContainer::SyncSchemaTo(
     return TConclusionStatus::Success();
 }
 
-TString TGeneralContainer::DebugString() const {
-    TStringBuilder result;
+NJson::TJsonValue TGeneralContainer::DebugJson(const bool withData) const {
+    NJson::TJsonValue result;
     if (RecordsCount) {
-        result << "records_count=" << *RecordsCount << ";";
+        result.InsertValue("records_count", *RecordsCount);
     }
-    result << "schema=" << Schema->ToString() << ";";
+    result.InsertValue("schema", Schema->ToString());
+    if (withData) {
+        auto& arrData = result.InsertValue("data", NJson::JSON_ARRAY);
+        for (auto&& i : Columns) {
+            arrData.AppendValue(i->DebugJson());
+        }
+    }
     return result;
+}
+
+TGeneralContainer TGeneralContainer::ApplyFilter(const TColumnFilter& filter) const {
+    if (!Columns.size()) {
+        return *BuildEmptySame();
+    } else {
+        std::vector<std::shared_ptr<NAccessor::IChunkedArray>> columns;
+        for (auto&& i : Columns) {
+            columns.emplace_back(filter.Apply(i));
+        }
+        return TGeneralContainer(Schema->GetFields(), std::move(columns));
+    }
 }
 
 TConclusion<std::shared_ptr<arrow::Scalar>> IFieldsConstructor::GetDefaultColumnElementValue(

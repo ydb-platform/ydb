@@ -2,7 +2,7 @@ from typing import Optional
 
 from sqlalchemy import Table
 
-from clickhouse_connect.driver.query import quote_identifier
+from clickhouse_connect.driver.binding import quote_identifier
 
 
 def full_table(table_name: str, schema: Optional[str] = None) -> str:

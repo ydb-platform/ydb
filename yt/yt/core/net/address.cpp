@@ -15,6 +15,7 @@
 
 #include <yt/yt/core/misc/async_expiring_cache.h>
 #include <yt/yt/core/misc/fs.h>
+#include <yt/yt/core/misc/configurable_singleton_def.h>
 
 #include <yt/yt/core/profiling/timing.h>
 
@@ -52,7 +53,7 @@ using namespace NDns;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static constexpr auto& Logger = NetLogger;
+constinit const auto Logger = NetLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 // These are implemented in local_address.cpp.
@@ -106,6 +107,13 @@ TStringBuf GetServiceHostName(TStringBuf address)
     TStringBuf result;
     ParseServiceAddress(address, &result, nullptr);
     return result;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TString FormatNetworkAddress(TStringBuf address, int port)
+{
+    return Format("[%v]:%v", address, port);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -709,6 +717,13 @@ bool TIP6Address::FromString(TStringBuf str, TIP6Address* address)
     return true;
 }
 
+bool TIP6Address::IsMtn() const
+{
+    static const auto BackboneNetwork = TIP6Network::FromString("2a02:6b8:c00::/40");
+    static const auto FastboneNetwork = TIP6Network::FromString("2a02:6b8:fc00::/40");
+    return BackboneNetwork.Contains(*this) || FastboneNetwork.Contains(*this);
+}
+
 void FormatValue(TStringBuilderBase* builder, const TIP6Address& address, TStringBuf /*spec*/)
 {
     const auto* parts = reinterpret_cast<const ui16*>(address.GetRawBytes());
@@ -966,19 +981,19 @@ void Serialize(const TIP6Network& value, IYsonConsumer* consumer)
 //! Performs asynchronous host name resolution.
 class TAddressResolver::TImpl
     : public virtual TRefCounted
-    , private TAsyncExpiringCache<TString, TNetworkAddress>
+    , private TAsyncExpiringCache<std::string, TNetworkAddress>
 {
 public:
     explicit TImpl(TAddressResolverConfigPtr config)
         : TAsyncExpiringCache(
             config,
             /*logger*/ {},
-            DnsProfiler.WithPrefix("/resolve_cache"))
+            DnsProfiler().WithPrefix("/resolve_cache"))
     {
         Configure(std::move(config));
     }
 
-    TFuture<TNetworkAddress> Resolve(const TString& hostName)
+    TFuture<TNetworkAddress> Resolve(const std::string& hostName)
     {
         // Check if |address| parses into a valid IPv4 or IPv6 address.
         if (auto result = TNetworkAddress::TryParse(hostName); result.IsOK()) {
@@ -1001,23 +1016,26 @@ public:
 
     void EnsureLocalHostName()
     {
-        if (Config_->LocalHostNameOverride) {
+        const auto config = Config_.Acquire();
+        if (config->LocalHostNameOverride) {
             return;
         }
 
-        UpdateLocalHostName(Config_);
+        UpdateLocalHostName(config);
 
         YT_LOG_INFO("Localhost name determined via system call (LocalHostName: %v, ResolveHostNameIntoFqdn: %v)",
             GetLocalHostName(),
-            Config_->ResolveHostNameIntoFqdn);
+            config->ResolveHostNameIntoFqdn);
     }
 
     bool IsLocalAddress(const TNetworkAddress& address)
     {
-        TNetworkAddress localIP{address, 0};
-
+        if (!address.IsIP()) {
+            return false;
+        }
+        TNetworkAddress candidateAddress(address, /*port*/ 0);
         const auto& localAddresses = GetLocalAddresses();
-        return std::find(localAddresses.begin(), localAddresses.end(), localIP) != localAddresses.end();
+        return std::find(localAddresses.begin(), localAddresses.end(), candidateAddress) != localAddresses.end();
     }
 
     void PurgeCache()
@@ -1028,22 +1046,22 @@ public:
 
     void Configure(TAddressResolverConfigPtr config)
     {
-        Config_ = std::move(config);
+        Config_.Store(config);
 
-        SetDnsResolver(CreateAresDnsResolver(Config_));
-        TAsyncExpiringCache::Reconfigure(Config_);
+        SetDnsResolver(CreateAresDnsResolver(config));
+        TAsyncExpiringCache::Reconfigure(config);
 
-        if (Config_->LocalHostNameOverride) {
-            WriteLocalHostName(*Config_->LocalHostNameOverride);
+        if (config->LocalHostNameOverride) {
+            SetLocalHostName(*config->LocalHostNameOverride);
             YT_LOG_INFO("Localhost name configured via config override (LocalHostName: %v)",
-                Config_->LocalHostNameOverride);
+                config->LocalHostNameOverride);
         }
 
-        UpdateLoopbackAddress(Config_);
+        UpdateLoopbackAddress(config);
     }
 
 private:
-    TAddressResolverConfigPtr Config_;
+    TAtomicIntrusivePtr<TAddressResolverConfig> Config_;
 
     std::atomic<bool> HasCachedLocalAddresses_ = false;
     std::vector<TNetworkAddress> CachedLocalAddresses_;
@@ -1053,11 +1071,12 @@ private:
 
     TAtomicIntrusivePtr<IDnsResolver> DnsResolver_;
 
-    TFuture<TNetworkAddress> DoGet(const TString& hostName, bool /*isPeriodicUpdate*/) noexcept override
+    TFuture<TNetworkAddress> DoGet(const std::string& hostName, bool /*isPeriodicUpdate*/) noexcept override
     {
+        const auto config = Config_.Acquire();
         TDnsResolveOptions options{
-            .EnableIPv4 = Config_->EnableIPv4,
-            .EnableIPv6 = Config_->EnableIPv6,
+            .EnableIPv4 = config->EnableIPv4,
+            .EnableIPv6 = config->EnableIPv6,
         };
         return GetDnsResolver()->Resolve(hostName, options)
             .Apply(BIND([=] (const TErrorOr<TNetworkAddress>& result) {
@@ -1102,7 +1121,7 @@ TAddressResolver* TAddressResolver::Get()
     return LeakySingleton<TAddressResolver>();
 }
 
-TFuture<TNetworkAddress> TAddressResolver::Resolve(const TString& address)
+TFuture<TNetworkAddress> TAddressResolver::Resolve(const std::string& address)
 {
     return Impl_->Resolve(address);
 }
@@ -1187,7 +1206,7 @@ TMtnAddress& TMtnAddress::SetHost(ui64 host)
     return *this;
 }
 
-const TIP6Address& TMtnAddress::ToIP6Address() const
+TIP6Address TMtnAddress::ToIP6Address() const
 {
     return Address_;
 }
@@ -1264,7 +1283,7 @@ std::optional<TStringBuf> InferYPClusterFromHostNameRaw(TStringBuf hostName)
     return {cluster};
 }
 
-std::optional<TString> InferYPClusterFromHostName(TStringBuf hostName)
+std::optional<std::string> InferYPClusterFromHostName(TStringBuf hostName)
 {
     if (auto rawResult = InferYPClusterFromHostNameRaw(hostName)) {
         return TString{*rawResult};
@@ -1286,7 +1305,7 @@ std::optional<TStringBuf> InferYTClusterFromClusterUrlRaw(TStringBuf clusterUrl)
     return clusterUrl;
 }
 
-std::optional<TString> InferYTClusterFromClusterUrl(TStringBuf clusterUrl)
+std::optional<std::string> InferYTClusterFromClusterUrl(TStringBuf clusterUrl)
 {
     if (auto rawResult = InferYTClusterFromClusterUrlRaw(clusterUrl)) {
         return TString{*rawResult};

@@ -12,6 +12,8 @@
 #include <yt/yt/core/json/json_parser.h>
 #include <yt/yt/core/json/config.h>
 
+#include <yt/yt/core/net/address.h>
+
 #include <yt/yt/core/ytree/fluent.h>
 
 #include <util/stream/buffer.h>
@@ -25,7 +27,7 @@
 
 namespace NYT::NHttp {
 
-static constexpr auto& Logger = HttpLogger;
+constinit const auto Logger = HttpLogger;
 
 using namespace NJson;
 using namespace NYson;
@@ -60,14 +62,14 @@ void FillYTErrorTrailers(const IResponseWriterPtr& rsp, const TError& error)
 
 TError ParseYTError(const IResponsePtr& rsp, bool fromTrailers)
 {
-    TString source;
-    const TString* errorHeader;
+    std::string source;
+    const std::string* errorHeader;
     if (fromTrailers) {
-        static const TString TrailerSource("trailer");
+        static const std::string TrailerSource("trailer");
         source = TrailerSource;
         errorHeader = rsp->GetTrailers()->Find(XYTErrorHeaderName);
     } else {
-        static const TString HeaderSource("header");
+        static const std::string HeaderSource("header");
         source = HeaderSource;
         errorHeader = rsp->GetHeaders()->Find(XYTErrorHeaderName);
     }
@@ -76,7 +78,7 @@ TError ParseYTError(const IResponsePtr& rsp, bool fromTrailers)
     if (errorHeader) {
         errorJson = *errorHeader;
     } else {
-        static const TString BodySource("body");
+        static const std::string BodySource("body");
         source = BodySource;
         errorJson = ToString(rsp->ReadAll());
     }
@@ -131,7 +133,7 @@ IHttpHandlerPtr WrapYTException(IHttpHandlerPtr underlying)
     return New<TErrorWrappingHttpHandler>(std::move(underlying));
 }
 
-static const auto HeadersWhitelist = JoinSeq(", ", std::vector<TString>{
+static const auto HeadersWhitelist = JoinSeq(", ", std::vector<std::string>{
     "Authorization",
     "Origin",
     "Content-Type",
@@ -164,7 +166,7 @@ static const auto HeadersWhitelist = JoinSeq(", ", std::vector<TString>{
     "X-YT-User-Tag",
 });
 
-static const std::vector<TString> KnownHeaders = {
+static const std::vector<std::string> KnownHeaders = {
     AcceptHeaderName,
     AccessControlAllowCredentialsHeaderName,
     AccessControlAllowHeadersHeaderName,
@@ -210,8 +212,7 @@ bool MaybeHandleCors(
     const IResponseWriterPtr& rsp,
     const TCorsConfigPtr& config)
 {
-    auto origin = req->GetHeaders()->Find("Origin");
-    if (origin) {
+    if (auto origin = req->GetHeaders()->Find("Origin")) {
         auto url = ParseUrl(*origin);
 
         bool allow = false;
@@ -252,14 +253,14 @@ bool MaybeHandleCors(
     return false;
 }
 
-THashMap<TString, TString> ParseCookies(TStringBuf cookies)
+THashMap<std::string, std::string> ParseCookies(TStringBuf cookies)
 {
-    THashMap<TString, TString> map;
+    THashMap<std::string, std::string> map;
     size_t index = 0;
     while (index < cookies.size()) {
         auto nameStartIndex = index;
         auto nameEndIndex = cookies.find('=', index);
-        if (nameEndIndex == TString::npos) {
+        if (nameEndIndex == std::string::npos) {
             THROW_ERROR_EXCEPTION("Malformed cookies");
         }
         auto name = StripString(cookies.substr(nameStartIndex, nameEndIndex - nameStartIndex));
@@ -290,37 +291,38 @@ void ProtectCsrfToken(const IResponseWriterPtr& rsp)
     headers->Set(XDnsPrefetchControlHeaderName, "off");
 }
 
-std::optional<TString> FindHeader(const IRequestPtr& req, const TString& headerName)
+std::optional<std::string> FindHeader(const IRequestPtr& req, TStringBuf headerName)
 {
     auto header = req->GetHeaders()->Find(headerName);
     return header ? std::make_optional(*header) : std::nullopt;
 }
 
-std::optional<TString> FindBalancerRequestId(const IRequestPtr& req)
+std::optional<std::string> FindBalancerRequestId(const IRequestPtr& req)
 {
     return FindHeader(req, "X-Req-Id");
 }
 
-std::optional<TString> FindBalancerRealIP(const IRequestPtr& req)
+std::optional<std::string> FindBalancerRealIP(const IRequestPtr& req)
 {
     const auto& headers = req->GetHeaders();
 
     auto forwardedFor = headers->Find(XForwardedForYHeaderName);
     auto sourcePort = headers->Find(XSourcePortYHeaderName);
 
-    if (forwardedFor && sourcePort) {
-        return Format("[%v]:%v", *forwardedFor, *sourcePort);
+    int port = 0;
+    if (forwardedFor && sourcePort && TryIntFromString<10>(*sourcePort, port)) {
+        return NNet::FormatNetworkAddress(*forwardedFor, port);
     }
 
     return {};
 }
 
-std::optional<TString> FindUserAgent(const IRequestPtr& req)
+std::optional<std::string> FindUserAgent(const IRequestPtr& req)
 {
     return FindHeader(req, "User-Agent");
 }
 
-void SetUserAgent(const THeadersPtr& headers, const TString& value)
+void SetUserAgent(const THeadersPtr& headers, const std::string& value)
 {
     headers->Set("User-Agent", value);
 }
@@ -389,16 +391,16 @@ NTracing::TSpanId GetSpanId(const IRequestPtr& req)
     return IntFromString<NTracing::TSpanId, 16>(*id);
 }
 
-bool TryParseTraceParent(const TString& traceParent, NTracing::TSpanContext& spanContext)
+bool TryParseTraceParent(TStringBuf traceParent, NTracing::TSpanContext& spanContext)
 {
     // An adaptation of https://github.com/census-instrumentation/opencensus-go/blob/ae11cd04b/plugin/ochttp/propagation/tracecontext/propagation.go#L49-L106
 
-    auto parts = StringSplitter(traceParent).Split('-').ToList<TString>();
+    auto parts = StringSplitter(traceParent).Split('-').ToList<std::string>();
     if (parts.size() < 3 || parts.size() > 4) {
         return false;
     }
 
-    // NB: we support three-part form in which version is assumed to be zero.
+    // NB: We support three-part form in which version is assumed to be zero.
     ui8 version = 0;
     if (parts.size() == 4) {
         if (parts[0].size() != 2) {
@@ -413,7 +415,7 @@ bool TryParseTraceParent(const TString& traceParent, NTracing::TSpanContext& spa
     // Now we have exactly three parts: traceId-spanId-options.
 
     // Parse trace context.
-    if (!TGuid::FromStringHex32(parts[0], &spanContext.TraceId)) {
+    if (!NTracing::TTraceId::FromStringHex32(parts[0], &spanContext.TraceId)) {
         return false;
     }
 
@@ -461,8 +463,8 @@ std::optional<std::pair<i64, i64>> FindBytesRange(const THeadersPtr& headers)
         return {};
     }
 
-    const TString bytesPrefix = "bytes=";
-    if (!range->StartsWith(bytesPrefix)) {
+    const std::string bytesPrefix = "bytes=";
+    if (!range->starts_with(bytesPrefix)) {
         THROW_ERROR_EXCEPTION("Invalid range header format")
             << TErrorAttribute("range", *range);
     }
@@ -478,18 +480,18 @@ void SetBytesRange(const THeadersPtr& headers, std::pair<i64, i64> range)
     headers->Set(ContentRangeHeaderName, Format("bytes %v-%v/*", range.first, range.second));
 }
 
-TString SanitizeUrl(const TString& url)
+std::string SanitizeUrl(TStringBuf url)
 {
     // Do not expose URL parameters in error attributes.
     auto urlRef = ParseUrl(url);
     if (urlRef.PortStr.empty()) {
-        return TString(urlRef.Host) + urlRef.Path;
+        return Format("%v%v", urlRef.Host, urlRef.Path);
     } else {
         return Format("%v:%v%v", urlRef.Host, urlRef.PortStr, urlRef.Path);
     }
 }
 
-std::vector<std::pair<TString, TString>> DumpUnknownHeaders(const THeadersPtr& headers)
+std::vector<std::pair<std::string, std::string>> DumpUnknownHeaders(const THeadersPtr& headers)
 {
     static const THeaders::THeaderNames known(KnownHeaders.begin(), KnownHeaders.end());
     return headers->Dump(&known);

@@ -3,21 +3,17 @@
 
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/tx/long_tx_service/public/types.h>
-#include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/tx_columnshard.pb.h>
 #include <ydb/core/tx/columnshard/engines/insert_table/insert_table.h>
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
 #include <ydb/core/tx/columnshard/operations/write.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 
 #include <type_traits>
 
-namespace NKikimr::NOlap {
-class TColumnChunkLoadContext;
-}
-
 namespace NKikimr::NColumnShard {
 
-using NOlap::TWriteId;
+using NOlap::TInsertWriteId;
 using NOlap::IBlobGroupSelector;
 struct TFullTxInfo;
 
@@ -31,6 +27,7 @@ struct Schema : NIceDb::Schema {
     using TSettings = SchemaSettings<EmptySettings>;
 
     using TInsertedData = NOlap::TInsertedData;
+    using TCommittedData = NOlap::TCommittedData;
     using TColumnRecord = NOlap::TColumnRecord;
 
     enum EIndexTables : ui32 {
@@ -58,7 +55,9 @@ struct Schema : NIceDb::Schema {
         ShardingInfoTableId,
         RepairsTableId,
         NormalizersTableId,
-        NormalizerEventsTableId
+        NormalizerEventsTableId,
+        ColumnsV1TableId,
+        ColumnsV2TableId
     };
 
     enum class ETierTables: ui32 {
@@ -85,7 +84,9 @@ struct Schema : NIceDb::Schema {
         LastCompletedTxId = 14,
         LastNormalizerSequentialId = 15,
         GCBarrierPreparationGen = 16,
-        GCBarrierPreparationStep = 17
+        GCBarrierPreparationStep = 17,
+        SubDomainLocalPathId = 18,
+        SubDomainOutOfSpace = 19
     };
 
     enum class EInsertTableIds : ui8 {
@@ -109,7 +110,10 @@ struct Schema : NIceDb::Schema {
         SmallBlobs = 12,
         OneToOneEvictedBlobs = 13,
         BlobsToDeleteWT = 14,
-        InFlightSnapshots = 15
+        InFlightSnapshots = 15,
+        TxDependencies = 16,
+        TxStates = 17,
+        TxEvents = 18
     };
 
     // Tablet tables
@@ -259,6 +263,32 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<PlanStep, TxId>;
     };
 
+    struct TxDependencies: Table<(ui32)ECommonTables::TxDependencies> {
+        struct CommitTxId: Column<1, NScheme::NTypeIds::Uint64> {};
+        struct BrokenTxId: Column<2, NScheme::NTypeIds::Uint64> {};
+
+        using TKey = TableKey<CommitTxId, BrokenTxId>;
+        using TColumns = TableColumns<CommitTxId, BrokenTxId>;
+    };
+
+    struct TxStates: Table<(ui32)ECommonTables::TxStates> {
+        struct TxId: Column<1, NScheme::NTypeIds::Uint64> {};
+        struct Broken: Column<2, NScheme::NTypeIds::Bool> {};
+
+        using TKey = TableKey<TxId>;
+        using TColumns = TableColumns<TxId, Broken>;
+    };
+
+    struct TxEvents: Table<(ui32)ECommonTables::TxEvents> {
+        struct TxId: Column<1, NScheme::NTypeIds::Uint64> {};
+        struct GenerationId: Column<2, NScheme::NTypeIds::Uint64> {};
+        struct GenerationInternalId: Column<3, NScheme::NTypeIds::Uint64> {};
+        struct Data: Column<4, NScheme::NTypeIds::String> {};
+
+        using TKey = TableKey<TxId, GenerationId, GenerationInternalId>;
+        using TColumns = TableColumns<TxId, GenerationId, GenerationInternalId, Data>;
+    };
+
     // Index tables
 
     // InsertTable - common for all indices
@@ -276,9 +306,10 @@ struct Schema : NIceDb::Schema {
 
         struct BlobRangeOffset: Column<11, NScheme::NTypeIds::Uint64> {};
         struct BlobRangeSize: Column<12, NScheme::NTypeIds::Uint64> {};
+        struct InsertWriteId: Column<13, NScheme::NTypeIds::Uint64> {};
 
         using TKey = TableKey<Committed, PlanStep, WriteTxId, PathId, DedupId>;
-        using TColumns = TableColumns<Committed, PlanStep, WriteTxId, PathId, DedupId, BlobId, Meta, IndexPlanStep, IndexTxId, SchemaVersion, BlobRangeOffset, BlobRangeSize>;
+        using TColumns = TableColumns<Committed, PlanStep, WriteTxId, PathId, DedupId, BlobId, Meta, IndexPlanStep, IndexTxId, SchemaVersion, BlobRangeOffset, BlobRangeSize, InsertWriteId>;
     };
 
     struct IndexGranules : NIceDb::Schema::Table<GranulesTableId> {
@@ -472,9 +503,15 @@ struct Schema : NIceDb::Schema {
         struct XTxId: Column<5, NScheme::NTypeIds::Uint64> {};
         struct Metadata: Column<6, NScheme::NTypeIds::String> {}; // NKikimrTxColumnShard.TIndexColumnMeta
         struct ShardingVersion: Column<7, NScheme::NTypeIds::Uint64> {};
+        struct MinSnapshotPlanStep: Column<8, NScheme::NTypeIds::Uint64> {};
+        struct MinSnapshotTxId: Column<9, NScheme::NTypeIds::Uint64> {};
+        struct CommitPlanStep: Column<10, NScheme::NTypeIds::Uint64> {};
+        struct CommitTxId: Column<11, NScheme::NTypeIds::Uint64> {};
+        struct InsertWriteId: Column<12, NScheme::NTypeIds::Uint64> {};
 
         using TKey = TableKey<PathId, PortionId>;
-        using TColumns = TableColumns<PathId, PortionId, SchemaVersion, XPlanStep, XTxId, Metadata, ShardingVersion>;
+        using TColumns = TableColumns<PathId, PortionId, SchemaVersion, XPlanStep, XTxId, Metadata, ShardingVersion, 
+            MinSnapshotPlanStep, MinSnapshotTxId, CommitPlanStep, CommitTxId, InsertWriteId>;
     };
 
     struct BackgroundSessions: Table<BackgroundSessionsTableId> {
@@ -521,6 +558,29 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<NormalizerId, EventId, Instant, EventType, Description>;
     };
 
+    struct IndexColumnsV1: Table<ColumnsV1TableId> {
+        struct PathId: Column<1, NScheme::NTypeIds::Uint64> {};
+        struct PortionId: Column<2, NScheme::NTypeIds::Uint64> {};
+        struct SSColumnId: Column<3, NScheme::NTypeIds::Uint32> {};
+        struct ChunkIdx: Column<4, NScheme::NTypeIds::Uint32> {};
+        struct Metadata: Column<5, NScheme::NTypeIds::String> {};   // NKikimrTxColumnShard.TIndexColumnMeta
+        struct BlobIdx: Column<6, NScheme::NTypeIds::Uint32> {};
+        struct Offset: Column<7, NScheme::NTypeIds::Uint32> {};
+        struct Size: Column<8, NScheme::NTypeIds::Uint32> {};
+
+        using TKey = TableKey<PathId, PortionId, SSColumnId, ChunkIdx>;
+        using TColumns = TableColumns<PathId, PortionId, SSColumnId, ChunkIdx, Metadata, BlobIdx, Offset, Size>;
+    };
+
+    struct IndexColumnsV2: Table<ColumnsV2TableId> {
+        struct PathId: Column<1, NScheme::NTypeIds::Uint64> {};
+        struct PortionId: Column<2, NScheme::NTypeIds::Uint64> {};
+        struct Metadata: Column<3, NScheme::NTypeIds::String> {};
+
+        using TKey = TableKey<PathId, PortionId>;
+        using TColumns = TableColumns<PathId, PortionId, Metadata>;
+    };
+
     using TTables = SchemaTables<
         Value,
         TxInfo,
@@ -555,7 +615,12 @@ struct Schema : NIceDb::Schema {
         ShardingInfo,
         Normalizers,
         NormalizerEvents,
-        InFlightSnapshots
+        InFlightSnapshots,
+        TxDependencies,
+        TxStates,
+        TxEvents,
+        IndexColumnsV1,
+        IndexColumnsV2
         >;
 
     //
@@ -671,8 +736,8 @@ struct Schema : NIceDb::Schema {
     static void SaveTxInfo(NIceDb::TNiceDb& db, const TFullTxInfo& txInfo,
                            const TString& txBody);
 
+    static void UpdateTxInfoBody(NIceDb::TNiceDb& db, const ui64 txId, const TString& txBody);
     static void UpdateTxInfoSource(NIceDb::TNiceDb& db, const TFullTxInfo& txInfo);
-
     static void UpdateTxInfoSource(NIceDb::TNiceDb& db, ui64 txId, const TActorId& source, ui64 cookie) {
         db.Table<TxInfo>().Key(txId).Update(
             NIceDb::TUpdate<TxInfo::Source>(source),
@@ -718,41 +783,39 @@ struct Schema : NIceDb::Schema {
         db.Table<SchemaPresetInfo>().Key(id).Delete();
     }
 
-    static void SaveTableInfo(NIceDb::TNiceDb& db, const ui64 pathId, const TString tieringUsage) {
-        db.Table<TableInfo>().Key(pathId).Update(
-            NIceDb::TUpdate<TableInfo::TieringUsage>(tieringUsage)
-        );
+    static void SaveTableInfo(NIceDb::TNiceDb& db, const TInternalPathId pathId) {
+        db.Table<TableInfo>().Key(pathId.GetRawValue()).Update();
     }
 
 
     static void SaveTableVersionInfo(
             NIceDb::TNiceDb& db,
-            ui64 pathId, const NOlap::TSnapshot& version,
+            TInternalPathId pathId, const NOlap::TSnapshot& version,
             const NKikimrTxColumnShard::TTableVersionInfo& info)
     {
         TString serialized;
         Y_ABORT_UNLESS(info.SerializeToString(&serialized));
-        db.Table<TableVersionInfo>().Key(pathId, version.GetPlanStep(), version.GetTxId()).Update(
+        db.Table<TableVersionInfo>().Key(pathId.GetRawValue(), version.GetPlanStep(), version.GetTxId()).Update(
             NIceDb::TUpdate<TableVersionInfo::InfoProto>(serialized));
     }
 
     static void SaveTableDropVersion(
-            NIceDb::TNiceDb& db, ui64 pathId, ui64 dropStep, ui64 dropTxId)
+            NIceDb::TNiceDb& db, TInternalPathId pathId, ui64 dropStep, ui64 dropTxId)
     {
-        db.Table<TableInfo>().Key(pathId).Update(
+        db.Table<TableInfo>().Key(pathId.GetRawValue()).Update(
             NIceDb::TUpdate<TableInfo::DropStep>(dropStep),
             NIceDb::TUpdate<TableInfo::DropTxId>(dropTxId));
     }
 
-    static void EraseTableVersionInfo(NIceDb::TNiceDb& db, ui64 pathId, const NOlap::TSnapshot& version) {
-        db.Table<TableVersionInfo>().Key(pathId, version.GetPlanStep(), version.GetTxId()).Delete();
+    static void EraseTableVersionInfo(NIceDb::TNiceDb& db, TInternalPathId pathId, const NOlap::TSnapshot& version) {
+        db.Table<TableVersionInfo>().Key(pathId.GetRawValue(), version.GetPlanStep(), version.GetTxId()).Delete();
     }
 
-    static void EraseTableInfo(NIceDb::TNiceDb& db, ui64 pathId) {
-        db.Table<TableInfo>().Key(pathId).Delete();
+    static void EraseTableInfo(NIceDb::TNiceDb& db, TInternalPathId pathId) {
+        db.Table<TableInfo>().Key(pathId.GetRawValue()).Delete();
     }
 
-    static void SaveLongTxWrite(NIceDb::TNiceDb& db, TWriteId writeId, const ui32 writePartId, const NLongTxService::TLongTxId& longTxId, const std::optional<ui32> granuleShardingVersion) {
+    static void SaveLongTxWrite(NIceDb::TNiceDb& db, const TInsertWriteId writeId, const ui32 writePartId, const NLongTxService::TLongTxId& longTxId, const std::optional<ui32> granuleShardingVersion) {
         NKikimrLongTxService::TLongTxId proto;
         longTxId.ToProto(&proto);
         TString serialized;
@@ -764,32 +827,51 @@ struct Schema : NIceDb::Schema {
             );
     }
 
-    static void EraseLongTxWrite(NIceDb::TNiceDb& db, TWriteId writeId) {
+    static void EraseLongTxWrite(NIceDb::TNiceDb& db, const TInsertWriteId writeId) {
         db.Table<LongTxWrites>().Key((ui64)writeId).Delete();
     }
 
     // InsertTable activities
 
-    static void InsertTable_Upsert(NIceDb::TNiceDb& db, EInsertTableIds recType, const TInsertedData& data) {
-        db.Table<InsertTable>().Key((ui8)recType, data.PlanStep, data.WriteTxId, data.PathId, data.DedupId).Update(
-            NIceDb::TUpdate<InsertTable::BlobId>(data.GetBlobRange().GetBlobId().ToStringLegacy()),
-            NIceDb::TUpdate<InsertTable::BlobRangeOffset>(data.GetBlobRange().Offset),
-            NIceDb::TUpdate<InsertTable::BlobRangeSize>(data.GetBlobRange().Size),
-            NIceDb::TUpdate<InsertTable::Meta>(data.GetMeta().SerializeToProto().SerializeAsString()),
-            NIceDb::TUpdate<InsertTable::SchemaVersion>(data.GetSchemaVersion())
-        );
+    static void InsertTable_Upsert(NIceDb::TNiceDb& db, const EInsertTableIds recType, const TInsertedData& data) {
+        db.Table<InsertTable>()
+            .Key((ui8)recType, 0, (ui64)data.GetInsertWriteId(), data.GetPathId().GetRawValue(), "")
+            .Update(NIceDb::TUpdate<InsertTable::BlobId>(data.GetBlobRange().GetBlobId().ToStringLegacy()),
+                NIceDb::TUpdate<InsertTable::BlobRangeOffset>(data.GetBlobRange().Offset),
+                NIceDb::TUpdate<InsertTable::InsertWriteId>((ui64)data.GetInsertWriteId()),
+                NIceDb::TUpdate<InsertTable::BlobRangeSize>(data.GetBlobRange().Size),
+                NIceDb::TUpdate<InsertTable::Meta>(data.GetMeta().SerializeToProto().SerializeAsString()),
+                NIceDb::TUpdate<InsertTable::SchemaVersion>(data.GetSchemaVersion()));
+    }
+
+    static void InsertTable_Upsert(NIceDb::TNiceDb& db, const TCommittedData& data) {
+        db.Table<InsertTable>()
+            .Key((ui8)EInsertTableIds::Committed, data.GetSnapshot().GetPlanStep(), data.GetSnapshot().GetTxId(), data.GetPathId().GetRawValue(),
+                data.GetDedupId())
+            .Update(NIceDb::TUpdate<InsertTable::BlobId>(data.GetBlobRange().GetBlobId().ToStringLegacy()),
+                NIceDb::TUpdate<InsertTable::InsertWriteId>((ui64)data.GetInsertWriteId()),
+                NIceDb::TUpdate<InsertTable::BlobRangeOffset>(data.GetBlobRange().Offset),
+                NIceDb::TUpdate<InsertTable::BlobRangeSize>(data.GetBlobRange().Size),
+                NIceDb::TUpdate<InsertTable::Meta>(data.GetMeta().SerializeToProto().SerializeAsString()),
+                NIceDb::TUpdate<InsertTable::SchemaVersion>(data.GetSchemaVersion()));
     }
 
     static void InsertTable_Erase(NIceDb::TNiceDb& db, EInsertTableIds recType, const TInsertedData& data) {
-        db.Table<InsertTable>().Key((ui8)recType, data.PlanStep, data.WriteTxId, data.PathId, data.DedupId).Delete();
+        db.Table<InsertTable>().Key((ui8)recType, 0, (ui64)data.GetInsertWriteId(), data.GetPathId().GetRawValue(), "").Delete();
+    }
+
+    static void InsertTable_Erase(NIceDb::TNiceDb& db, const TCommittedData& data) {
+        db.Table<InsertTable>()
+            .Key((ui8)EInsertTableIds::Committed, data.GetSnapshot().GetPlanStep(), data.GetSnapshot().GetTxId(), data.GetPathId().GetRawValue(), data.GetDedupId())
+            .Delete();
     }
 
     static void InsertTable_Insert(NIceDb::TNiceDb& db, const TInsertedData& data) {
         InsertTable_Upsert(db, EInsertTableIds::Inserted, data);
     }
 
-    static void InsertTable_Commit(NIceDb::TNiceDb& db, const TInsertedData& data) {
-        InsertTable_Upsert(db, EInsertTableIds::Committed, data);
+    static void InsertTable_Commit(NIceDb::TNiceDb& db, const TCommittedData& data) {
+        InsertTable_Upsert(db, data);
     }
 
     static void InsertTable_Abort(NIceDb::TNiceDb& db, const TInsertedData& data) {
@@ -800,8 +882,8 @@ struct Schema : NIceDb::Schema {
         InsertTable_Erase(db, EInsertTableIds::Inserted, data);
     }
 
-    static void InsertTable_EraseCommitted(NIceDb::TNiceDb& db, const TInsertedData& data) {
-        InsertTable_Erase(db, EInsertTableIds::Committed, data);
+    static void InsertTable_EraseCommitted(NIceDb::TNiceDb& db, const TCommittedData& data) {
+        InsertTable_Erase(db, data);
     }
 
     static void InsertTable_EraseAborted(NIceDb::TNiceDb& db, const TInsertedData& data) {
@@ -842,27 +924,69 @@ struct Schema : NIceDb::Schema {
 }
 
 namespace NKikimr::NOlap {
+class TPortionLoadContext {
+private:
+    YDB_READONLY_DEF(TInternalPathId, PathId);
+    YDB_READONLY(ui64, PortionId, 0);
+    YDB_READONLY_DEF(NKikimrTxColumnShard::TIndexPortionMeta, MetaProto);
+    YDB_READONLY_DEF(std::optional<NOlap::TSnapshot>, DeprecatedMinSnapshot);
+
+public:
+    template <class TSource>
+    TPortionLoadContext(const TSource& rowset) {
+        PathId = TInternalPathId::FromRawValue(rowset.template GetValue<NColumnShard::Schema::IndexPortions::PathId>());
+        PortionId = rowset.template GetValue<NColumnShard::Schema::IndexPortions::PortionId>();
+        const TString metadata = rowset.template GetValue<NColumnShard::Schema::IndexPortions::Metadata>();
+        AFL_VERIFY(rowset.template HaveValue<NColumnShard::Schema::IndexPortions::MinSnapshotPlanStep>() == rowset.template HaveValue<NColumnShard::Schema::IndexPortions::MinSnapshotTxId>());
+        if (rowset.template HaveValue<NColumnShard::Schema::IndexPortions::MinSnapshotPlanStep>()) {
+            DeprecatedMinSnapshot = NOlap::TSnapshot(rowset.template GetValue<NColumnShard::Schema::IndexPortions::MinSnapshotPlanStep>(),
+                rowset.template GetValue<NColumnShard::Schema::IndexPortions::MinSnapshotTxId>());
+        }
+        AFL_VERIFY(MetaProto.ParseFromArray(metadata.data(), metadata.size()))("event", "cannot parse metadata as protobuf");
+    }
+};
+
 class TColumnChunkLoadContext {
 private:
     YDB_READONLY_DEF(TBlobRange, BlobRange);
     TChunkAddress Address;
+    YDB_READONLY_DEF(TInternalPathId, PathId);
+    YDB_READONLY(ui64, PortionId, 0);
     YDB_READONLY_DEF(NKikimrTxColumnShard::TIndexColumnMeta, MetaProto);
+    YDB_READONLY(TSnapshot, RemoveSnapshot, TSnapshot::Zero());
+    YDB_READONLY(TSnapshot, MinSnapshotDeprecated, TSnapshot::Zero());
+
 public:
+    TPortionAddress GetPortionAddress() const {
+        return TPortionAddress(PathId, PortionId);
+    }
+
     const TChunkAddress& GetAddress() const {
         return Address;
     }
 
-    TColumnChunkLoadContext(const TChunkAddress& address, const TBlobRange& bRange, const NKikimrTxColumnShard::TIndexColumnMeta& metaProto)
+    TFullChunkAddress GetFullChunkAddress() const {
+        return TFullChunkAddress(PathId, PortionId, Address.GetEntityId(), Address.GetChunkIdx());
+    }
+
+    TColumnChunkLoadContext(const TInternalPathId pathId, const ui64 portionId, const TChunkAddress& address, const TBlobRange& bRange,
+        const NKikimrTxColumnShard::TIndexColumnMeta& metaProto)
         : BlobRange(bRange)
         , Address(address)
-        , MetaProto(metaProto)
-    {
-
+        , PathId(pathId)
+        , PortionId(portionId)
+        , MetaProto(metaProto) {
     }
 
     template <class TSource>
     TColumnChunkLoadContext(const TSource& rowset, const IBlobGroupSelector* dsGroupSelector)
-        : Address(rowset.template GetValue<NColumnShard::Schema::IndexColumns::ColumnIdx>(), rowset.template GetValue<NColumnShard::Schema::IndexColumns::Chunk>()) {
+        : Address(rowset.template GetValue<NColumnShard::Schema::IndexColumns::ColumnIdx>(),
+              rowset.template GetValue<NColumnShard::Schema::IndexColumns::Chunk>())
+        , RemoveSnapshot(rowset.template GetValue<NColumnShard::Schema::IndexColumns::XPlanStep>(),
+              rowset.template GetValue<NColumnShard::Schema::IndexColumns::XTxId>())
+        , MinSnapshotDeprecated(rowset.template GetValue<NColumnShard::Schema::IndexColumns::PlanStep>(),
+              rowset.template GetValue<NColumnShard::Schema::IndexColumns::TxId>())
+    {
         AFL_VERIFY(Address.GetColumnId())("event", "incorrect address")("address", Address.DebugString());
         TString strBlobId = rowset.template GetValue<NColumnShard::Schema::IndexColumns::Blob>();
         Y_ABORT_UNLESS(strBlobId.size() == sizeof(TLogoBlobID), "Size %" PRISZT "  doesn't match TLogoBlobID", strBlobId.size());
@@ -870,18 +994,100 @@ public:
         BlobRange.BlobId = NOlap::TUnifiedBlobId(dsGroupSelector->GetGroup(logoBlobId), logoBlobId);
         BlobRange.Offset = rowset.template GetValue<NColumnShard::Schema::IndexColumns::Offset>();
         BlobRange.Size = rowset.template GetValue<NColumnShard::Schema::IndexColumns::Size>();
+        PathId = TInternalPathId::FromRawValue(rowset.template GetValue<NColumnShard::Schema::IndexColumns::PathId>());
+        PortionId = rowset.template GetValue<NColumnShard::Schema::IndexColumns::Portion>();
         AFL_VERIFY(BlobRange.BlobId.IsValid() && BlobRange.Size)("event", "incorrect blob")("blob", BlobRange.ToString());
 
         const TString metadata = rowset.template GetValue<NColumnShard::Schema::IndexColumns::Metadata>();
         AFL_VERIFY(MetaProto.ParseFromArray(metadata.data(), metadata.size()))("event", "cannot parse metadata as protobuf");
     }
+};
 
-    const NKikimrTxColumnShard::TIndexPortionMeta* GetPortionMeta() const {
-        if (MetaProto.HasPortionMeta()) {
-            return &MetaProto.GetPortionMeta();
-        } else {
-            return nullptr;
+class TColumnChunkLoadContextV1 {
+private:
+    TChunkAddress Address;
+    YDB_READONLY_DEF(TBlobRangeLink16, BlobRange);
+    YDB_READONLY_DEF(TInternalPathId, PathId);
+    YDB_READONLY(ui64, PortionId, 0);
+    YDB_READONLY_DEF(NKikimrTxColumnShard::TIndexColumnMeta, MetaProto);
+
+public:
+    TPortionAddress GetPortionAddress() const {
+        return TPortionAddress(PathId, PortionId);
+    }
+
+    NKikimrTxColumnShard::TColumnChunkInfo SerializeToDBProto() const {
+        NKikimrTxColumnShard::TColumnChunkInfo proto;
+        proto.SetSSColumnId(Address.GetColumnId());
+        proto.SetChunkIdx(Address.GetChunkIdx());
+        *proto.MutableChunkMetadata() = MetaProto;
+        *proto.MutableBlobRangeLink() = BlobRange.SerializeToProto();
+        return proto;
+    }
+
+    TFullChunkAddress GetFullChunkAddress() const {
+        return TFullChunkAddress(PathId, PortionId, Address.GetEntityId(), Address.GetChunkIdx());
+    }
+
+    const TChunkAddress& GetAddress() const {
+        return Address;
+    }
+
+    TColumnChunkLoadContextV1(const TInternalPathId pathId, const ui64 portionId, const TChunkAddress& address, const TBlobRangeLink16& bRange,
+        const NKikimrTxColumnShard::TIndexColumnMeta& metaProto)
+        : Address(address)
+        , BlobRange(bRange)
+        , PathId(pathId)
+        , PortionId(portionId)
+        , MetaProto(metaProto) {
+    }
+
+    template <class TSource>
+    TColumnChunkLoadContextV1(const TSource& rowset)
+        : Address(rowset.template GetValue<NColumnShard::Schema::IndexColumnsV1::SSColumnId>(),
+              rowset.template GetValue<NColumnShard::Schema::IndexColumnsV1::ChunkIdx>())
+        , BlobRange(rowset.template GetValue<NColumnShard::Schema::IndexColumnsV1::BlobIdx>(),
+              rowset.template GetValue<NColumnShard::Schema::IndexColumnsV1::Offset>(),
+              rowset.template GetValue<NColumnShard::Schema::IndexColumnsV1::Size>())
+    {
+        AFL_VERIFY(Address.GetColumnId())("event", "incorrect address")("address", Address.DebugString());
+        PathId = TInternalPathId::FromRawValue(rowset.template GetValue<NColumnShard::Schema::IndexColumnsV1::PathId>());
+        PortionId = rowset.template GetValue<NColumnShard::Schema::IndexColumnsV1::PortionId>();
+        const TString metadata = rowset.template GetValue<NColumnShard::Schema::IndexColumnsV1::Metadata>();
+        AFL_VERIFY(MetaProto.ParseFromArray(metadata.data(), metadata.size()))("event", "cannot parse metadata as protobuf");
+    }
+};
+
+class TColumnChunkLoadContextV2 {
+private:
+    YDB_READONLY_DEF(TInternalPathId, PathId);
+    YDB_READONLY(ui64, PortionId, 0);
+    YDB_READONLY_DEF(TString, MetadataProto);
+
+public:
+    template <class TSource>
+    TColumnChunkLoadContextV2(const TSource& rowset) {
+        PathId = TInternalPathId::FromRawValue(rowset.template GetValue<NColumnShard::Schema::IndexColumnsV2::PathId>());
+        PortionId = rowset.template GetValue<NColumnShard::Schema::IndexColumnsV2::PortionId>();
+        MetadataProto = rowset.template GetValue<NColumnShard::Schema::IndexColumnsV2::Metadata>();
+    }
+
+    TColumnChunkLoadContextV2(const TInternalPathId pathId, const ui64 portionId, const NKikimrTxColumnShard::TIndexPortionAccessor& proto)
+        : PathId(pathId)
+        , PortionId(portionId)
+        , MetadataProto(proto.SerializeAsString()) {
+    }
+
+    std::vector<TColumnChunkLoadContextV1> BuildRecordsV1() const {
+        std::vector<TColumnChunkLoadContextV1> records;
+        NKikimrTxColumnShard::TIndexPortionAccessor metaProto;
+        AFL_VERIFY(metaProto.ParseFromArray(MetadataProto.data(), MetadataProto.size()))("event", "cannot parse metadata as protobuf");
+        for (auto&& i : metaProto.GetChunks()) {
+            TColumnChunkLoadContextV1 result(PathId, PortionId, TChunkAddress(i.GetSSColumnId(), i.GetChunkIdx()),
+                TBlobRangeLink16::BuildFromProto(i.GetBlobRangeLink()).DetachResult(), i.GetChunkMetadata());
+            records.emplace_back(std::move(result));
         }
+        return records;
     }
 };
 
@@ -889,10 +1095,25 @@ class TIndexChunkLoadContext {
 private:
     YDB_READONLY_DEF(std::optional<TBlobRange>, BlobRange);
     YDB_READONLY_DEF(std::optional<TString>, BlobData);
+    YDB_READONLY_DEF(TInternalPathId, PathId);
+    YDB_READONLY(ui64, PortionId, 0);
     TChunkAddress Address;
     const ui32 RecordsCount;
     const ui32 RawBytes;
 public:
+    ui32 GetRawBytes() const {
+        return RawBytes;
+    }
+
+    ui32 GetDataSize() const {
+        if (BlobRange) {
+            return BlobRange->GetSize();
+        } else {
+            AFL_VERIFY(!!BlobData);
+            return BlobData->size();
+        }
+    }
+
     TIndexChunk BuildIndexChunk(const TBlobRangeLink16::TLinkId blobLinkId) const {
         AFL_VERIFY(BlobRange);
         return TIndexChunk(Address.GetColumnId(), Address.GetChunkIdx(), RecordsCount, RawBytes, BlobRange->BuildLink(blobLinkId));
@@ -903,9 +1124,20 @@ public:
         return TIndexChunk(Address.GetColumnId(), Address.GetChunkIdx(), RecordsCount, RawBytes, *BlobData);
     }
 
+    TIndexChunk BuildIndexChunk(const TPortionInfo& portionInfo) const {
+        if (BlobData) {
+            return BuildIndexChunk();
+        } else {
+            AFL_VERIFY(!!BlobRange);
+            return BuildIndexChunk(portionInfo.GetMeta().GetBlobIdxVerified(BlobRange->BlobId));
+        }
+    }
+
     template <class TSource>
     TIndexChunkLoadContext(const TSource& rowset, const IBlobGroupSelector* dsGroupSelector)
-        : Address(rowset.template GetValue<NColumnShard::Schema::IndexIndexes::IndexId>(), rowset.template GetValue<NColumnShard::Schema::IndexIndexes::ChunkIdx>())
+        : PathId(TInternalPathId::FromRawValue(rowset.template GetValue<NColumnShard::Schema::IndexIndexes::PathId>()))
+        , PortionId(rowset.template GetValue<NColumnShard::Schema::IndexIndexes::PortionId>())
+        , Address(rowset.template GetValue<NColumnShard::Schema::IndexIndexes::IndexId>(), rowset.template GetValue<NColumnShard::Schema::IndexIndexes::ChunkIdx>())
         , RecordsCount(rowset.template GetValue<NColumnShard::Schema::IndexIndexes::RecordsCount>())
         , RawBytes(rowset.template GetValue<NColumnShard::Schema::IndexIndexes::RawBytes>())
     {
@@ -927,4 +1159,122 @@ public:
     }
 };
 
-}
+class TInsertTableRecordLoadContext {
+private:
+    NColumnShard::Schema::EInsertTableIds RecType;
+    ui64 PlanStep;
+    ui64 WriteTxId;
+    TInsertWriteId InsertWriteId;
+    TInternalPathId PathId;
+    YDB_ACCESSOR_DEF(TString, DedupId);
+    ui64 SchemaVersion;
+    TString BlobIdString;
+    std::optional<NOlap::TUnifiedBlobId> BlobId;
+    TString MetadataString;
+    std::optional<NKikimrTxColumnShard::TLogicalMetadata> Metadata;
+    ui64 RangeOffset;
+    ui64 RangeSize;
+
+    void Prepare(const IBlobGroupSelector* dsGroupSelector) {
+        AFL_VERIFY(!PreparedFlag);
+        PreparedFlag = true;
+        TString error;
+        NOlap::TUnifiedBlobId blobId = NOlap::TUnifiedBlobId::ParseFromString(BlobIdString, dsGroupSelector, error);
+        Y_ABORT_UNLESS(blobId.IsValid(), "Failied to parse blob id: %s", error.c_str());
+        BlobId = blobId;
+
+        NKikimrTxColumnShard::TLogicalMetadata meta;
+        AFL_VERIFY(MetadataString);
+        Y_ABORT_UNLESS(meta.ParseFromString(MetadataString));
+        Metadata = std::move(meta);
+    }
+
+    bool PreparedFlag = false;
+    bool ParsedFlag = false;
+
+public:
+    TInsertWriteId GetInsertWriteId() const {
+        AFL_VERIFY(ParsedFlag);
+        return InsertWriteId;
+    }
+
+    ui64 GetTxId() const {
+        AFL_VERIFY(ParsedFlag);
+        AFL_VERIFY(RecType == NColumnShard::Schema::EInsertTableIds::Committed);
+        return WriteTxId;
+    }
+
+    NColumnShard::Schema::EInsertTableIds GetRecType() const {
+        AFL_VERIFY(ParsedFlag);
+        return RecType;
+    }
+
+    ui64 GetPlanStep() const {
+        AFL_VERIFY(ParsedFlag);
+        AFL_VERIFY(RecType == NColumnShard::Schema::EInsertTableIds::Committed);
+        return PlanStep;
+    }
+
+    void Remove(NIceDb::TNiceDb& db) const {
+        AFL_VERIFY(ParsedFlag);
+        db.Table<NColumnShard::Schema::InsertTable>().Key((ui8)RecType, PlanStep, WriteTxId, PathId.GetRawValue(), DedupId).Delete();
+    }
+
+    void Upsert(NIceDb::TNiceDb& db) const {
+        AFL_VERIFY(ParsedFlag);
+        using namespace NColumnShard;
+        db.Table<Schema::InsertTable>()
+            .Key((ui8)RecType, PlanStep, WriteTxId, PathId.GetRawValue(), DedupId)
+            .Update(NIceDb::TUpdate<Schema::InsertTable::BlobId>(BlobIdString),
+                NIceDb::TUpdate<Schema::InsertTable::BlobRangeOffset>(RangeOffset),
+                NIceDb::TUpdate<Schema::InsertTable::BlobRangeSize>(RangeSize), NIceDb::TUpdate<Schema::InsertTable::Meta>(MetadataString),
+                NIceDb::TUpdate<Schema::InsertTable::SchemaVersion>(SchemaVersion));
+    }
+
+    template <class TRowset>
+    void ParseFromDatabase(TRowset& rowset) {
+        AFL_VERIFY(!ParsedFlag)("problem", "duplication parsing");
+        ParsedFlag = true;
+        using namespace NColumnShard;
+        RecType = (Schema::EInsertTableIds)rowset.template GetValue<Schema::InsertTable::Committed>();
+        PlanStep = rowset.template GetValue<Schema::InsertTable::PlanStep>();
+        WriteTxId = rowset.template GetValueOrDefault<Schema::InsertTable::WriteTxId>();
+        AFL_VERIFY(WriteTxId);
+        InsertWriteId = (TInsertWriteId)rowset.template GetValueOrDefault<Schema::InsertTable::InsertWriteId>(WriteTxId);
+
+        PathId = TInternalPathId::FromRawValue(rowset.template GetValue<Schema::InsertTable::PathId>());
+        DedupId = rowset.template GetValue<Schema::InsertTable::DedupId>();
+        SchemaVersion = rowset.template GetValueOrDefault<Schema::InsertTable::SchemaVersion>(0);
+        BlobIdString = rowset.template GetValue<Schema::InsertTable::BlobId>();
+        MetadataString = rowset.template GetValue<Schema::InsertTable::Meta>();
+        AFL_VERIFY(rowset.template HaveValue<Schema::InsertTable::BlobRangeOffset>());
+        AFL_VERIFY(rowset.template HaveValue<Schema::InsertTable::BlobRangeSize>());
+        RangeOffset = rowset.template GetValue<Schema::InsertTable::BlobRangeOffset>();
+        RangeSize = rowset.template GetValue<Schema::InsertTable::BlobRangeSize>();
+    }
+
+    NOlap::TCommittedData BuildCommitted(const IBlobGroupSelector* dsGroupSelector) {
+        Prepare(dsGroupSelector);
+        using namespace NColumnShard;
+        AFL_VERIFY(RecType == Schema::EInsertTableIds::Committed);
+        auto userData = std::make_shared<NOlap::TUserData>(
+            PathId, NOlap::TBlobRange(*BlobId, RangeOffset, RangeSize), *Metadata, SchemaVersion, std::nullopt);
+        AFL_VERIFY(!!DedupId);
+        AFL_VERIFY(PlanStep);
+        return NOlap::TCommittedData(userData, PlanStep, WriteTxId, InsertWriteId, DedupId);
+    }
+
+    NOlap::TInsertedData BuildInsertedOrAborted(const IBlobGroupSelector* dsGroupSelector) {
+        Prepare(dsGroupSelector);
+        using namespace NColumnShard;
+        AFL_VERIFY(InsertWriteId == (TInsertWriteId)WriteTxId)("insert", InsertWriteId)("write", WriteTxId);
+        AFL_VERIFY(RecType != Schema::EInsertTableIds::Committed);
+        auto userData = std::make_shared<NOlap::TUserData>(
+            PathId, NOlap::TBlobRange(*BlobId, RangeOffset, RangeSize), *Metadata, SchemaVersion, std::nullopt);
+        AFL_VERIFY(!DedupId);
+        AFL_VERIFY(!PlanStep);
+        return NOlap::TInsertedData(InsertWriteId, userData);
+    }
+};
+
+}   // namespace NKikimr::NOlap

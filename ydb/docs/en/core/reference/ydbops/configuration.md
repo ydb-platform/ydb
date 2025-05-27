@@ -2,7 +2,6 @@
 
 {% include [warning.md](_includes/warning.md) %}
 
-
 `ydbops` can be run by specifying all the necessary command line arguments on the command invocation. However, it has two features that allow to avoid repeating the commonly used arguments:
 
 - [Config file](#config-file)
@@ -20,6 +19,7 @@ Default configuration file location follows the same convention as {{ ydb-short-
 Certain command line options can be written in the configuration file instead of being specified directly in the `ydbops` invocation.
 
 ### Examples
+
 Calling the `ydbops restart` command without a profile:
 
 ```bash
@@ -44,12 +44,14 @@ For the invocation above, the following `config.yaml` is assumed to be present:
 
 ```yaml
 current-profile: my-profile
-my-profile:
-  endpoint: grpc://<hostname>:2135
-  user: admin
-  password-file: ~/<password-file>
-  k8s-namespace: <k8s-namespace>
-  kubeconfig: ~/.kube/config
+profiles:
+  my-profile:
+    endpoint: grpcs://<hostname>:2135
+    ca-file: ~/<ca-certificate-file>
+    user: <username>
+    password-file: ~/<password-file>
+    k8s-namespace: <k8s-namespace>
+    kubeconfig: ~/.kube/config
 ```
 
 ### Profile management commands
@@ -63,31 +65,33 @@ The configuration file needs to be created and edited manually.
 Here is an example of a configuration file with all possible options that can be specified and example values (most likely, they will not all be needed at the same time):
 
 ```yaml
-# a special key `current-profile` can be specified to 
+# a special key `current-profile` can be specified to
 # be used as the default active profile in the CLI invocation
 current-profile: my-profile
 
-my-profile:
-  endpoint: grpc://your.ydb.cluster.fqdn:2135
+# profile definitions are added as subkeys to the `profiles` key
+profiles:
+  my-profile:
+    endpoint: grpcs://your.ydb.cluster.fqdn:2135
 
-  # CA file location if using grpcs to the endpoint
-  ca-file: /path/to/custom/ca/file
+    # CA file location if using grpcs to the endpoint
+    ca-file: /path/to/custom/ca/file
 
-  # a username and password file if static credentials are used:
-  user: your-ydb-user-name
-  password-file: /path/to/password-file
+    # a username and password file if static credentials are used:
+    user: your-ydb-user-name
+    password-file: /path/to/password-file
 
-  # when using access token
-  token-file: /path/to/ydb/token
+    # when using access token
+    token-file: /path/to/ydb/token
 
-  # if working with YDB clusters in Kubernetes, kubeconfig path can be specified:
-  kubeconfig: /path/to/kube/config
-  k8s-namespace: <k8s-namespace>
+    # if working with YDB clusters in Kubernetes, kubeconfig path can be specified:
+    kubeconfig: /path/to/kube/config
+    k8s-namespace: <k8s-namespace>
 ```
 
 ## Environment variables {#environment-variables}
 
-Alternatively, there is an option to specify several environment variables instead of passing command-line arguments or using [config files](#config-files).
+Alternatively, there is an option to specify several environment variables instead of passing command-line arguments or using [config files](#config-file).
 
 For an explanation of which options take precedence, please invoke `ydbops --help`.
 

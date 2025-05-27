@@ -3,7 +3,7 @@
 #include <ydb/library/conclusion/status.h>
 #include <ydb/core/tx/columnshard/blob.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/read.h>
-#include <ydb/core/tx/columnshard/counters/common/object_counter.h>
+#include <ydb/library/signals/object_counter.h>
 #include <ydb/core/protos/base.pb.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/task.h>
 
@@ -65,7 +65,7 @@ public:
     }
     TString Extract(const TString& storageId, const TBlobRange& range) {
         auto it = BlobsByStorage.find(storageId);
-        AFL_VERIFY(it != BlobsByStorage.end());
+        AFL_VERIFY(it != BlobsByStorage.end())("range", range.ToString())("storage_id", storageId);
         auto result = it->second.Extract(range);
         if (it->second.IsEmpty()) {
             BlobsByStorage.erase(it);
@@ -92,7 +92,7 @@ private:
     const ui64 TaskIdentifier = 0;
     const TString ExternalTaskId;
     bool AbortFlag = false;
-    TString TaskCustomer;
+    YDB_READONLY_DEF(TString, TaskCustomer);
     std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard> ResourcesGuard;
     i64 BlobsWaitingCount = 0;
     bool ResultsExtracted = false;

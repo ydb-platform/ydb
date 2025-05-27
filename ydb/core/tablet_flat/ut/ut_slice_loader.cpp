@@ -9,6 +9,7 @@
 #include <ydb/core/tablet_flat/flat_part_keys.h>
 #include <ydb/core/tablet_flat/flat_sausage_gut.h>
 #include <ydb/core/tablet_flat/flat_store_hotdog.h>
+#include <ydb/core/tablet_flat/util_fmt_abort.h>
 #include <ydb/core/tablet_flat/util_fmt_desc.h>
 #include <ydb/core/tablet_flat/util_basics.h>
 
@@ -22,7 +23,7 @@ using TPageCollectionProtoHelper = NTabletFlatExecutor::TPageCollectionProtoHelp
 using TCache = NTabletFlatExecutor::TPrivatePageCache::TInfo;
 
 namespace {
-    NPage::TConf PageConf() noexcept
+    NPage::TConf PageConf()
     {
         NPage::TConf conf{ true, 2 * 1024 };
 
@@ -78,26 +79,26 @@ namespace {
             return Part->Store->PageCollectionPagesCount(Room);
         }
 
-        NPageCollection::TInfo Page(ui32 page) const noexcept override
+        NPageCollection::TInfo Page(ui32 page) const override
         {
             const auto array = Part->Store->PageCollectionArray(Room);
 
             return { array.at(page).size(), ui32(EPage::Undef) };
         }
 
-        NPageCollection::TBorder Bounds(ui32) const noexcept override
+        NPageCollection::TBorder Bounds(ui32) const override
         {
-            Y_ABORT("Unexpected Bounds(...) call");
+            Y_TABLET_ERROR("Unexpected Bounds(...) call");
         }
 
-        NPageCollection::TGlobId Glob(ui32) const noexcept override
+        NPageCollection::TGlobId Glob(ui32) const override
         {
-            Y_ABORT("Unexpected Glob(...) call");
+            Y_TABLET_ERROR("Unexpected Glob(...) call");
         }
 
-        bool Verify(ui32, TArrayRef<const char>) const noexcept override
+        bool Verify(ui32, TArrayRef<const char>) const override
         {
-            Y_ABORT("Unexpected Verify(...) call");
+            Y_TABLET_ERROR("Unexpected Verify(...) call");
         }
 
         size_t BackingSize() const noexcept override
@@ -158,7 +159,7 @@ namespace {
                     auto* page = part->Store->GetPage(0, pageId);
                     UNIT_ASSERT_C(page, "TLoader wants a missing page " << pageId);
 
-                    env.Save(fetch->Cookie, { pageId, TSharedPageRef::MakePrivate(*page) });
+                    env.Save(fetch->Cookie, { pageId, NSharedCache::TSharedPageRef::MakePrivate(*page) });
                 }
             } else {
                 UNIT_ASSERT_C(false, "TKeysLoader was stalled");
@@ -222,7 +223,7 @@ Y_UNIT_TEST_SUITE(TPartSliceLoader) {
             TTestEnv env;
             auto index = CreateIndexIter(&*Part0(), &env, { });
 
-            Y_ABORT_UNLESS(index->Seek(0) == EReady::Data);
+            Y_ENSURE(index->Seek(0) == EReady::Data);
             while (index->IsValid()) {
                 auto from = index->GetRowId();
                 auto to = Max<TRowId>();
@@ -247,7 +248,7 @@ Y_UNIT_TEST_SUITE(TPartSliceLoader) {
             TVector<TScreen::THole> holes;
             TTestEnv env;
             auto index = CreateIndexIter(&*Part0(), &env, { });
-            Y_ABORT_UNLESS(index->Seek(0) == EReady::Data);
+            Y_ENSURE(index->Seek(0) == EReady::Data);
             while (index->IsValid()) {
                 auto from = index->GetRowId();
                 auto to = Max<TRowId>();
@@ -274,7 +275,7 @@ Y_UNIT_TEST_SUITE(TPartSliceLoader) {
             TVector<TScreen::THole> holes;
             TTestEnv env;
             auto index = CreateIndexIter(&*Part0(), &env, { });
-            Y_ABORT_UNLESS(index->Seek(0) == EReady::Data);
+            Y_ENSURE(index->Seek(0) == EReady::Data);
             while (index->IsValid()) {
                 TRowId begin = index->GetRowId() + 1;
                 TRowId end;

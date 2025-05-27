@@ -3,6 +3,7 @@ on:
   pull_request_target:
     branches:
       - 'main'
+      - 'docs-**'
     types:
       - 'opened'
       - 'edited'
@@ -15,7 +16,7 @@ jobs:
     steps:
       - name: Update PR labels
         id: update-pr-labels
-        uses: actions/github-script@v6
+        uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
@@ -27,6 +28,7 @@ jobs:
               ['* Experimental feature', 'experimental-feature'],
               ['* Improvement', 'improvement'],
               ['* Performance improvement', 'performance'],
+              ['* User Interface', 'ui'],
               ['* Bugfix', 'bugfix'],
               ['* Backward incompatible change', 'backward-incompatible'],
               ['* Documentation', 'documentation'],

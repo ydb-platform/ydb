@@ -1,4 +1,5 @@
 #include "manager.h"
+
 #include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NOlap::NDataLocks {
@@ -15,28 +16,20 @@ void TManager::UnregisterLock(const TString& processId) {
     AFL_VERIFY(ProcessLocks.erase(processId))("process_id", processId);
 }
 
-std::optional<TString> TManager::IsLocked(const TPortionInfo& portion, const THashSet<TString>& excludedLocks) const {
-    for (auto&& i : ProcessLocks) {
-        if (excludedLocks.contains(i.first)) {
-            continue;
-        }
-        if (auto lockName = i.second->IsLocked(portion, excludedLocks)) {
-            return lockName;
-        }
-    }
-    return {};
+std::optional<TString> TManager::IsLocked(
+    const TPortionInfo& portion, const ELockCategory lockCategory, const THashSet<TString>& excludedLocks) const {
+    return IsLockedImpl(portion, lockCategory, excludedLocks);
 }
 
-std::optional<TString> TManager::IsLocked(const TGranuleMeta& granule, const THashSet<TString>& excludedLocks) const {
-    for (auto&& i : ProcessLocks) {
-        if (excludedLocks.contains(i.first)) {
-            continue;
-        }
-        if (auto lockName = i.second->IsLocked(granule, excludedLocks)) {
-            return lockName;
-        }
-    }
-    return {};
+std::optional<TString> TManager::IsLocked(
+    const TGranuleMeta& granule, const ELockCategory lockCategory, const THashSet<TString>& excludedLocks) const {
+    return IsLockedImpl(granule, lockCategory, excludedLocks);
+}
+
+std::optional<TString> TManager::IsLocked(const std::shared_ptr<const TPortionInfo>& portion, const ELockCategory lockCategory,
+    const THashSet<TString>& excludedLocks /*= {}*/) const {
+    AFL_VERIFY(!!portion);
+    return IsLocked(*portion, lockCategory, excludedLocks);
 }
 
 void TManager::Stop() {

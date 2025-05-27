@@ -1,0 +1,90 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1bf0d41af40e40f004ad052d60870e01
+BELONGS ya.make
+    License text:
+        *Copyright &copy; 2014-2021 by Steven G. Johnson, Jiahao Chen, Tony Kelman, Jonas Fonseca, and other contributors listed in the git history.*
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.md [10:10]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1d50473f143812371fcfe0d38cbb5764
+BELONGS ya.make
+    License text:
+         *  Copyright (c) 2014-2021 Steven G. Johnson, Jiahao Chen, Peter Colberg, Tony Kelman, Scott P. Jones, and other contributors.
+         *  Copyright (c) 2009 Public Software Group e. V., Berlin, Germany
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        utf8proc.c [3:4]
+        utf8proc.h [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a46e434110f608cf0cfb9b71e70f5e1c
+BELONGS ya.make
+    License text:
+        *Copyright (c) 1991-2007 Unicode, Inc. All rights reserved. Distributed
+        under the Terms of Use in http://www.unicode.org/copyright.html.*
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.md [59:60]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c19e908094e2721a7c300de68dc25809
+BELONGS ya.make
+    License text:
+        *Copyright (c) 2009, 2013 Public Software Group e. V., Berlin, Germany*
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.md [32:32]
+
+KEEP     COPYRIGHT_SERVICE_LABEL cd60ad4acc98c56e6197736c3447f8de
+BELONGS ya.make
+    License text:
+         *  Copyright (c) 2014-2021 Steven G. Johnson, Jiahao Chen, Peter Colberg, Tony Kelman, Scott P. Jones, and other contributors.
+         *  Copyright (c) 2009 Public Software Group e. V., Berlin, Germany
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        utf8proc.c [3:4]
+        utf8proc.h [2:3]

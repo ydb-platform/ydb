@@ -5,8 +5,8 @@
 #include <util/string/strip.h>
 #include <util/system/env.h>
 
-#include <ydb/library/yql/utils/yql_panic.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/utils/yql_panic.h>
+#include <yql/essentials/utils/log/log.h>
 
 #include <ydb/library/yql/providers/dq/common/attrs.h>
 #include <ydb/library/yql/providers/dq/actors/actor_helpers.h>
@@ -678,6 +678,7 @@ namespace NYql {
                                             fluent.Item("file_paths").Value(*filePaths);
                                         })
                                         .Item("job_count").Value(1)
+                                        .Item("port_count").Value(1)
                                         .DoIf(Options.YtBackend.HasMemoryLimit(), [&] (NYT::TFluentMap fluent) {
                                             fluent.Item("memory_limit").Value(Options.YtBackend.GetMemoryLimit());
                                         })

@@ -58,21 +58,18 @@ message GlobalIndexSettings {
     }
     // Partitioning settings for the table that implements the index.
     PartitioningSettings partitioning_settings = 3;
+    ReadReplicasSettings read_replicas_settings = 4;
 }
 
 message VectorIndexSettings {
-    enum Distance {
-        DISTANCE_UNSPECIFIED = 0;
-        DISTANCE_COSINE = 1;
-        DISTANCE_MANHATTAN = 2;
-        DISTANCE_EUCLIDEAN = 3;
+    enum Metric {
+        METRIC_UNSPECIFIED = 0;
+        SIMILARITY_INNER_PRODUCT = 1;
+        SIMILARITY_COSINE = 2;
+        DISTANCE_COSINE = 3;
+        DISTANCE_MANHATTAN = 4;
+        DISTANCE_EUCLIDEAN = 5;
     }
-
-    enum Similarity {
-        SIMILARITY_UNSPECIFIED = 0;
-        SIMILARITY_COSINE = 1;
-        SIMILARITY_INNER_PRODUCT = 2;
-    }   
 
     enum VectorType {
         VECTOR_TYPE_UNSPECIFIED = 0;
@@ -82,13 +79,19 @@ message VectorIndexSettings {
         VECTOR_TYPE_BIT = 4;
     }
 
-    oneof metric {
-        Distance distance = 1;
-        Similarity similarity = 2;
-    }
-    VectorType vector_type = 3;
+    Metric metric = 1;
 
-    uint32 vector_dimension = 4;
+    VectorType vector_type = 2;
+
+    uint32 vector_dimension = 3;
+}
+
+message KMeansTreeSettings {
+    VectorIndexSettings settings = 1;
+    // average count of clusters on each level of tree, 0 -- means auto
+    uint32 clusters = 2;
+    // average count of levels in the tree, 0 -- means auto
+    uint32 levels = 3;
 }
 
 message GlobalIndex {
@@ -106,7 +109,8 @@ message GlobalUniqueIndex {
 message GlobalVectorKMeansTreeIndex {
     GlobalIndexSettings level_table_settings = 1;
     GlobalIndexSettings posting_table_settings = 2;
-    VectorIndexSettings vector_settings = 3;
+    GlobalIndexSettings prefix_table_settings = 4;
+    KMeansTreeSettings vector_settings = 3;
 }
 
 // Represent secondary index
@@ -327,6 +331,8 @@ message PartitionStats {
     uint64 rows_estimate = 1;
     // Approximate size of shard (bytes)
     uint64 store_size = 2;
+    // id of node that serve shard key range
+    uint32 leader_node_id = 3;
 }
 
 message TableStats {
@@ -429,8 +435,13 @@ message ColumnMeta {
     }
 }
 
+message EvictionToExternalStorageSettings {
+    // Path to external data source
+    string storage = 1;
+}
+
 message DateTypeColumnModeSettings {
-    // The row will be considered as expired at the moment of time, when the value
+    // The row will be considered as expired or assigned a tier at the moment of time, when the value
     // stored in <column_name> is less than or equal to the current time (in epoch
     // time format), and <expire_after_seconds> has passed since that moment;
     // i.e. the expiration threshold is the value of <column_name> plus <expire_after_seconds>.
@@ -467,10 +478,27 @@ message ValueSinceUnixEpochModeSettings {
     uint32 expire_after_seconds = 3;
 }
 
+message TtlTier {
+    oneof expression {
+        DateTypeColumnModeSettings date_type_column = 1;
+        ValueSinceUnixEpochModeSettings value_since_unix_epoch = 2;
+    }
+
+    oneof action {
+        google.protobuf.Empty delete = 3;
+        EvictionToExternalStorageSettings evict_to_external_storage = 4;
+    }
+}
+
+message TieredModeSettings {
+    repeated TtlTier tiers = 1;
+}
+
 message TtlSettings {
     oneof mode {
         DateTypeColumnModeSettings date_type_column = 1;
         ValueSinceUnixEpochModeSettings value_since_unix_epoch = 2;
+        TieredModeSettings tiered_ttl = 4;
     }
 
     // There is no guarantee that expired row will be deleted immediately upon
@@ -514,10 +542,10 @@ message ColumnFamily {
         COMPRESSION_UNSPECIFIED = 0;
         COMPRESSION_NONE = 1;
         COMPRESSION_LZ4 = 2;
+        COMPRESSION_ZSTD = 3;
     }
 
-    // Name of the column family, the name "default" must be used for the
-    // primary column family that contains at least primary key columns
+    // Name of the column family
     string name = 1;
 
     // This specifies data storage settings for column family
@@ -529,6 +557,11 @@ message ColumnFamily {
     // When enabled table data will be kept in memory
     // WARNING: DO NOT USE
     Ydb.FeatureFlag.Status keep_in_memory = 4;
+
+    // Set the compression level for selected compression type. If no value is specified, default value will be chosen.
+    // For ZSTD compression level must be in range [-131072:22]
+    // For other compression types compression level must be empty
+    optional int32 compression_level = 5;
 }
 
 message PartitioningSettings {
@@ -616,8 +649,7 @@ message CreateTableRequest {
     Ydb.FeatureFlag.Status key_bloom_filter = 16;
     // Read replicas settings for table
     ReadReplicasSettings read_replicas_settings = 17;
-    // Tiering rules name. It specifies how data migrates from one tier (logical storage) to another.
-    string tiering = 18;
+    reserved 18;
     // Is temporary table
     bool temporary = 19;
     // Is table column or row oriented
@@ -696,11 +728,7 @@ message AlterTableRequest {
     repeated string drop_changefeeds = 20;
     // Rename existed index
     repeated RenameIndexItem rename_indexes = 21;
-    // Setup or remove tiering
-    oneof tiering_action {
-        string set_tiering = 22;
-        google.protobuf.Empty drop_tiering = 23;
-    }
+    reserved 22, 23;
 }
 
 message AlterTableResponse {
@@ -779,6 +807,10 @@ message DescribeTableRequest {
     bool include_table_stats = 6;
     // Includes partition statistics (required include_table_statistics)
     bool include_partition_stats = 7;
+    // Includes set_val settings for sequences
+    bool include_set_val = 8;
+    // Includes shard -> node id maping (required include_partition_stats)
+    bool include_shard_nodes_info = 9;
 }
 
 message DescribeTableResponse {
@@ -849,12 +881,16 @@ message StaleModeSettings {
 message SnapshotModeSettings {
 }
 
+message SnapshotRWModeSettings {
+}
+
 message TransactionSettings {
     oneof tx_mode {
         SerializableModeSettings serializable_read_write = 1;
         OnlineModeSettings online_read_only = 2;
         StaleModeSettings stale_read_only = 3;
         SnapshotModeSettings snapshot_read_only = 4;
+        SnapshotRWModeSettings snapshot_read_write = 5;
     }
 }
 
@@ -1240,7 +1276,7 @@ message ExecuteScanQueryRequest {
     QueryStatsCollection.Mode collect_stats = 8;
     // works only in mode: MODE_EXPLAIN,
     // collects additional diagnostics about query compilation, including query plan and scheme
-    bool collect_full_diagnostics = 9;
+    bool collect_full_diagnostics = 9 [deprecated=true];
 }
 
 message ExecuteScanQueryPartialResponse {
@@ -1258,5 +1294,47 @@ message ExecuteScanQueryPartialResult {
     Ydb.TableStats.QueryStats query_stats = 6;
     // works only in mode: MODE_EXPLAIN,
     // collects additional diagnostics about query compilation, including query plan and scheme
-    string query_full_diagnostics = 7;
+    string query_full_diagnostics = 7 [deprecated = true];
+    // Optional snapshot that corresponds to the returned data
+    VirtualTimestamp snapshot = 8;
+}
+
+// Returns information about an external data source with a given path.
+message DescribeExternalDataSourceRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    string path = 2;
+}
+
+message DescribeExternalDataSourceResponse {
+    // Holds DescribeExternalDataSourceResult in case of a successful call.
+    Ydb.Operations.Operation operation = 1;
+}
+
+message DescribeExternalDataSourceResult {
+    // Description of a generic scheme object.
+    Ydb.Scheme.Entry self = 1;
+    optional string source_type = 2;
+    optional string location = 3;
+    map<string, string> properties = 4;
+}
+
+// Returns information about an external table with a given path.
+message DescribeExternalTableRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    string path = 2;
+}
+
+message DescribeExternalTableResponse {
+    // Holds DescribeExternalTableResult in case of a successful call.
+    Ydb.Operations.Operation operation = 1;
+}
+
+message DescribeExternalTableResult {
+    // Description of a generic scheme object.
+    Ydb.Scheme.Entry self = 1;
+    optional string source_type = 2;
+    optional string data_source_path = 3;
+    optional string location = 4;
+    repeated ColumnMeta columns = 5;
+    map<string, string> content = 6;
 }

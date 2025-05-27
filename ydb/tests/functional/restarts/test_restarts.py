@@ -5,9 +5,9 @@ import logging
 
 from ydb.tests.library.common.delayed import wait_tablets_are_active
 from ydb.tests.library.common.types import Erasure
-from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
+from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
-from ydb.tests.library.harness.kikimr_client import kikimr_client_factory
+from ydb.tests.library.clients.kikimr_client import kikimr_client_factory
 from ydb.tests.library.kv.helpers import create_tablets_and_wait_for_start
 
 TIMEOUT_SECONDS = 480
@@ -21,7 +21,7 @@ class AbstractLocalClusterTest(object):
     @classmethod
     def setup_class(cls):
         configurator = KikimrConfigGenerator(cls.erasure, use_in_memory_pdisks=False)
-        cls.cluster = kikimr_cluster_factory(configurator=configurator)
+        cls.cluster = KiKiMR(configurator=configurator)
         cls.cluster.start()
 
     @classmethod

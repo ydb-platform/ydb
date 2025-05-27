@@ -2,7 +2,6 @@
 
 #include "context.h"
 #include "host_manager.h"
-#include "retry_request.h"
 
 #include <yt/cpp/mapreduce/client/transaction.h>
 

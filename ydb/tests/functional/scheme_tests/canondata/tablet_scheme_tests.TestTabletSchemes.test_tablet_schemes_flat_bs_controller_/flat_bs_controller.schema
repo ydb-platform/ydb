@@ -7,6 +7,11 @@
         ],
         "ColumnsAdded": [
             {
+                "ColumnId": 29,
+                "ColumnName": "EnableConfigV2",
+                "ColumnType": "Bool"
+            },
+            {
                 "ColumnId": 1,
                 "ColumnName": "FixedKey",
                 "ColumnType": "Bool"
@@ -115,12 +120,33 @@
                 "ColumnId": 23,
                 "ColumnName": "TryToRelocateBrokenDisksLocallyFirst",
                 "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 24,
+                "ColumnName": "YamlConfig",
+                "ColumnType": "String"
+            },
+            {
+                "ColumnId": 26,
+                "ColumnName": "ShredState",
+                "ColumnType": "String"
+            },
+            {
+                "ColumnId": 27,
+                "ColumnName": "StorageYamlConfig",
+                "ColumnType": "String"
+            },
+            {
+                "ColumnId": 28,
+                "ColumnName": "ExpectedStorageYamlConfigVersion",
+                "ColumnType": "Uint64"
             }
         ],
         "ColumnsDropped": [],
         "ColumnFamilies": {
             "0": {
                 "Columns": [
+                    29,
                     1,
                     2,
                     4,
@@ -142,7 +168,11 @@
                     20,
                     21,
                     22,
-                    23
+                    23,
+                    24,
+                    26,
+                    27,
+                    28
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -156,7 +186,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -209,7 +242,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -221,16 +257,6 @@
             2
         ],
         "ColumnsAdded": [
-            {
-                "ColumnId": 17,
-                "ColumnName": "DecommitStatus",
-                "ColumnType": "Uint32"
-            },
-            {
-                "ColumnId": 18,
-                "ColumnName": "Mood",
-                "ColumnType": "Byte"
-            },
             {
                 "ColumnId": 1,
                 "ColumnName": "NodeID",
@@ -300,14 +326,32 @@
                 "ColumnId": 16,
                 "ColumnName": "LastSeenPath",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 17,
+                "ColumnName": "DecommitStatus",
+                "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 18,
+                "ColumnName": "Mood",
+                "ColumnType": "Byte"
+            },
+            {
+                "ColumnId": 19,
+                "ColumnName": "ShredComplete",
+                "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 20,
+                "ColumnName": "MaintenanceStatus",
+                "ColumnType": "Byte"
             }
         ],
         "ColumnsDropped": [],
         "ColumnFamilies": {
             "0": {
                 "Columns": [
-                    17,
-                    18,
                     1,
                     2,
                     3,
@@ -321,7 +365,11 @@
                     13,
                     14,
                     15,
-                    16
+                    16,
+                    17,
+                    18,
+                    19,
+                    20
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -335,7 +383,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -508,7 +559,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -688,7 +742,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -803,7 +860,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -852,7 +912,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -921,7 +984,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -991,7 +1057,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -1039,7 +1108,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -1086,7 +1158,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -1139,7 +1214,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -1198,7 +1276,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -1251,7 +1332,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -1335,7 +1419,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -1408,7 +1495,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -1497,7 +1587,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -1544,7 +1637,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -1586,7 +1682,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -1633,7 +1732,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -1680,7 +1782,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -1752,7 +1857,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -1813,7 +1921,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     }

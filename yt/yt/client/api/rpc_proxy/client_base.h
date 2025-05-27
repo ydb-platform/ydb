@@ -68,11 +68,11 @@ public:
         const TMultiLookupOptions& options = {}) override;
 
     TFuture<NApi::TSelectRowsResult> SelectRows(
-        const TString& query,
+        const std::string& query,
         const NApi::TSelectRowsOptions& options) override;
 
     TFuture<NYson::TYsonString> ExplainQuery(
-        const TString& query,
+        const std::string& query,
         const NApi::TExplainQueryOptions& options) override;
 
     virtual TFuture<TPullRowsResult> PullRows(
@@ -183,6 +183,15 @@ public:
     TFuture<NApi::ITableWriterPtr> CreateTableWriter(
         const NYPath::TRichYPath& path,
         const NApi::TTableWriterOptions& options) override;
+
+    // Distributed table client
+    TFuture<TDistributedWriteSessionWithCookies> StartDistributedWriteSession(
+        const NYPath::TRichYPath& path,
+        const TDistributedWriteSessionStartOptions& options) override;
+
+    TFuture<void> FinishDistributedWriteSession(
+        const TDistributedWriteSessionWithResults& sessionWithResults,
+        const TDistributedWriteSessionFinishOptions& options) override;
 };
 
 DEFINE_REFCOUNTED_TYPE(TClientBase)

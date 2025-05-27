@@ -71,6 +71,9 @@ constexpr bool IsFuture = false;
 template <class T>
 constexpr bool IsFuture<TFuture<T>> = true;
 
+template <class U, class F>
+void InterceptExceptions(const TPromise<U>& promise, const F& func);
+
 } // namespace NDetail
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -453,7 +456,7 @@ public:
 
     //! Similar to #SetFrom but calls #TrySet instead of #Set.
     template <class U>
-    void TrySetFrom(TFuture<U> another) const;
+    void TrySetFrom(const TFuture<U>& another) const;
 
     //! Gets the value.
     /*!
@@ -469,6 +472,9 @@ public:
 
     //! Checks if the promise is canceled.
     bool IsCanceled() const;
+
+    //! Returns cancelation error if one is present.
+    TError GetCancelationError() const;
 
     //! Attaches a cancellation handler.
     /*!
@@ -498,6 +504,10 @@ protected:
     friend void swap(TPromise<U>& lhs, TPromise<U>& rhs);
     template <class U>
     friend struct ::hash;
+    template <class U, class F>
+    friend void ::NYT::NDetail::InterceptExceptions(const TPromise<U>& promise, const F& func);
+
+    void TrySetCanceled(const TError& error);
 };
 
 ////////////////////////////////////////////////////////////////////////////////

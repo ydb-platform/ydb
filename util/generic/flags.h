@@ -9,7 +9,7 @@
 class IOutputStream;
 namespace NPrivate {
     void PrintFlags(IOutputStream& stream, ui64 value, size_t size);
-}
+} // namespace NPrivate
 
 /**
  * `TFlags` wrapper provides a type-safe mechanism for storing OR combinations
@@ -190,7 +190,7 @@ public:
         return *this;
     }
 
-    friend IOutputStream& operator<<(IOutputStream& stream, const TFlags& flags) {
+    friend IOutputStream& operator<<(IOutputStream& stream Y_LIFETIME_BOUND, const TFlags& flags) {
         ::NPrivate::PrintFlags(stream, static_cast<ui64>(flags.Value_), sizeof(TInt));
         return stream;
     }

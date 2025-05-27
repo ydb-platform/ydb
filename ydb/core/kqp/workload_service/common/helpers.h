@@ -9,7 +9,7 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 
-#include <ydb/library/yql/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
@@ -83,11 +83,13 @@ protected:
 
 private:
     static TRetryPolicy::IRetryState::TPtr CreateRetryState() {
-        return TRetryPolicy::GetFixedIntervalPolicy(
+        return TRetryPolicy::GetExponentialBackoffPolicy(
                   [](bool longDelay){return longDelay ? ERetryErrorClass::LongRetry : ERetryErrorClass::ShortRetry;}
                 , TDuration::MilliSeconds(100)
                 , TDuration::MilliSeconds(500)
-                , 100
+                , TDuration::Seconds(1)
+                , std::numeric_limits<size_t>::max()
+                , TDuration::Seconds(10)
             )->CreateRetryState();
     }
 
@@ -98,6 +100,9 @@ private:
     TRetryPolicy::IRetryState::TPtr RetryState;
 };
 
+
+TString CreateDatabaseId(const TString& database, bool serverless, TPathId pathId);
+TString DatabaseIdToDatabase(TStringBuf databaseId);
 
 NYql::TIssues GroupIssues(const NYql::TIssues& issues, const TString& message);
 

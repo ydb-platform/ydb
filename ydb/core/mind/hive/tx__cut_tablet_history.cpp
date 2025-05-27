@@ -30,9 +30,12 @@ public:
                         channelInfo.History.end(),
                         TTabletChannelInfo::THistoryEntry(fromGeneration, groupId));
             if (it != channelInfo.History.end()) {
+                auto& histogram = Self->TabletCounters->Percentile()[NHive::COUNTER_TABLET_CHANNEL_HISTORY_SIZE];
+                histogram.DecrementFor(channelInfo.History.size());
                 Self->TabletCounters->Cumulative()[NHive::COUNTER_HISTORY_CUT].Increment(1);
                 tablet->DeletedHistory.emplace(channel, *it, tablet->KnownGeneration);
                 channelInfo.History.erase(it);
+                histogram.IncrementFor(channelInfo.History.size());
                 NIceDb::TNiceDb db(txc.DB);
                 db.Table<Schema::TabletChannelGen>().Key(tabletId, channel, fromGeneration).Update<Schema::TabletChannelGen::DeletedAtGeneration>(tablet->KnownGeneration);
                 Self->UpdateCounterTabletChannelHistorySize();

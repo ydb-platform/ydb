@@ -1,0 +1,17 @@
+{
+    "_yql_row_spec" = {
+        "Type" = [
+            "StructType";
+            [
+                [
+                    "ftztimestamp";
+                    [
+                        "DataType";
+                        "String"
+                    ]
+                ];
+            ]
+        ]
+    }
+}
+

@@ -185,6 +185,31 @@ paths:
         required: true
         schema:
           type: string
+  '/queries/{query_id}/start':
+    post:
+      responses:
+        '204':
+          description: No Content
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericError'
+      parameters:
+        - $ref: '#/components/parameters/Idempotency-Key'
+        - $ref: '#/components/parameters/Authorization'
+        - $ref: '#/components/parameters/x-request-id'
+        - $ref: '#/components/parameters/db'
+        - $ref: '#/components/parameters/project'
+      summary: start stopped query
+      operationId: start-query
+    parameters:
+      - name: query_id
+        in: path
+        required: true
+        schema:
+          type: string
   '/queries/{query_id}/results/{result_set_index}':
     parameters:
       - name: query_id

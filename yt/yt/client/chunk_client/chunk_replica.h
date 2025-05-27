@@ -6,12 +6,12 @@
 
 #include <yt/yt/client/node_tracker_client/public.h>
 
+#include <yt/yt/core/phoenix/context.h>
+#include <yt/yt/core/phoenix/type_decl.h>
+
+#include <yt/yt/core/misc/protobuf_helpers.h>
+
 namespace NYT::NChunkClient {
-
-////////////////////////////////////////////////////////////////////////////////
-
-void ToProto(ui64* protoReplica, TChunkReplicaWithMedium replica);
-void FromProto(TChunkReplicaWithMedium* replica, ui64 protoReplica);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -32,7 +32,16 @@ public:
     int GetMediumIndex() const;
 
     TChunkReplica ToChunkReplica() const;
-    static TChunkReplicaList ToChunkReplicas(const TChunkReplicaWithMediumList& replicasWithMedia);
+    static TChunkReplicaList ToChunkReplicas(TRange<TChunkReplicaWithMedium> replicasWithMedia);
+
+    friend void ToProto(ui64* value, TChunkReplicaWithMedium replica);
+    friend void ToProto(ui32* value, TChunkReplicaWithMedium replica);
+    friend void FromProto(TChunkReplicaWithMedium* replica, ui64 value);
+    friend void ToProto(NProto::TConfirmChunkReplicaInfo* value, TChunkReplicaWithLocation replica);
+    friend void FromProto(TChunkReplicaWithLocation* replica, NProto::TConfirmChunkReplicaInfo value);
+
+    // Protect from accidently deserializing TChunkReplicaWithMedium from ui32.
+    friend void FromProto(TChunkReplicaWithMedium* replica, ui32 value) = delete;
 
 private:
     /*!
@@ -44,16 +53,7 @@ private:
     ui64 Value_;
 
     explicit TChunkReplicaWithMedium(ui64 value);
-
-    friend void ToProto(ui64* value, TChunkReplicaWithMedium replica);
-    friend void FromProto(TChunkReplicaWithMedium* replica, ui64 value);
-    friend void ToProto(NProto::TConfirmChunkReplicaInfo* value, TChunkReplicaWithLocation replica);
-    friend void FromProto(TChunkReplicaWithLocation* replica, NProto::TConfirmChunkReplicaInfo value);
 };
-
-// These protect from accidently serializing TChunkReplicaWithMedium as ui32.
-void ToProto(ui32* value, TChunkReplicaWithMedium replica) = delete;
-void FromProto(TChunkReplicaWithMedium* replica, ui32 value) = delete;
 
 void FormatValue(TStringBuilderBase* builder, TChunkReplicaWithMedium replica, TStringBuf spec);
 
@@ -109,6 +109,13 @@ public:
     NNodeTrackerClient::TNodeId GetNodeId() const;
     int GetReplicaIndex() const;
 
+    friend void ToProto(ui32* value, TChunkReplica replica);
+    friend void FromProto(TChunkReplica* replica, ui32 value);
+    friend void FromProto(TChunkReplica* replica, ui64 value);
+
+    // Protect from accidently serializing TChunkReplicaWithMedium to ui64.
+    friend void ToProto(ui64* value, TChunkReplica replica) = delete;
+
 private:
     /*!
      *  Bits:
@@ -119,8 +126,11 @@ private:
 
     explicit TChunkReplica(ui32 value);
 
-    friend void ToProto(ui32* value, TChunkReplica replica);
-    friend void FromProto(TChunkReplica* replica, ui32 value);
+    using TLoadContext = NPhoenix::TLoadContext;
+    using TSaveContext = NPhoenix::TSaveContext;
+    using TPersistenceContext = NPhoenix::TPersistenceContext;
+
+    PHOENIX_DECLARE_TYPE(TChunkReplica, 0x004d1b8a);
 };
 
 void FormatValue(TStringBuilderBase* builder, TChunkReplica replica, TStringBuf spec);
@@ -236,16 +246,35 @@ public:
     explicit TChunkReplicaAddressFormatter(NNodeTrackerClient::TNodeDirectoryPtr nodeDirectory);
 
     void operator()(TStringBuilderBase* builder, TChunkReplicaWithMedium replica) const;
-
     void operator()(TStringBuilderBase* builder, TChunkReplica replica) const;
 
 private:
-    NNodeTrackerClient::TNodeDirectoryPtr NodeDirectory_;
+    const NNodeTrackerClient::TNodeDirectoryPtr NodeDirectory_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NChunkClient
+
+namespace NYT {
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <>
+struct TProtoTraits<NChunkClient::TChunkReplica>
+{
+    using TSerialized = ui32;
+};
+
+template <>
+struct TProtoTraits<NChunkClient::TChunkReplicaWithMedium>
+{
+    using TSerialized = ui64;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace
 
 //! A hasher for TChunkIdWithIndex.
 template <>

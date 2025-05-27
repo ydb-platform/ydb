@@ -203,6 +203,36 @@ namespace NActors {
         }
     };
 
+    /**
+     * Allows customizing behavior based on the event type
+     */
+    template<class TEvType>
+    struct TTestEventObserverTraits {
+        static bool Match(IEventHandle::TPtr& ev) noexcept {
+            return ev->GetTypeRewrite() == TEvType::EventType;
+        }
+
+        static typename TEvType::TPtr& Convert(IEventHandle::TPtr& ev) noexcept {
+            return reinterpret_cast<typename TEvType::TPtr&>(ev);
+        }
+    };
+
+    template<>
+    struct TTestEventObserverTraits<IEventHandle> {
+        static constexpr bool Match(IEventHandle::TPtr&) noexcept {
+            return true;
+        }
+
+        static constexpr IEventHandle::TPtr& Convert(IEventHandle::TPtr& ev) noexcept {
+            return ev;
+        }
+    };
+
+    template<class TEvType>
+    struct TTestEventObserverTraits<TEventHandle<TEvType>>
+        : public TTestEventObserverTraits<TEvType>
+    {};
+
     class TTestActorRuntimeBase: public TNonCopyable {
     public:
         class TEdgeActor;
@@ -273,8 +303,9 @@ namespace NActors {
         TActorId Register(IActor* actor, ui32 nodeIndex = 0, ui32 poolId = 0,
             TMailboxType::EType mailboxType = TMailboxType::Simple, ui64 revolvingCounter = 0,
             const TActorId& parentid = TActorId());
-        TActorId Register(IActor *actor, ui32 nodeIndex, ui32 poolId, TMailboxHeader *mailbox, ui32 hint,
+        TActorId Register(IActor *actor, ui32 nodeIndex, ui32 poolId, TMailbox *mailbox,
             const TActorId& parentid = TActorId());
+        TActorId RegisterAlias(TMailbox* mailbox, IActor* actor, ui32 nodeIndex, ui32 poolId);
         TActorId RegisterService(const TActorId& serviceId, const TActorId& actorId, ui32 nodeIndex = 0);
         TActorId AllocateEdgeActor(ui32 nodeIndex = 0);
         TEventsList CaptureEvents();
@@ -303,6 +334,9 @@ namespace NActors {
         bool IsScheduleForActorEnabled(const TActorId& actorId) const;
         TIntrusivePtr<NMonitoring::TDynamicCounters> GetDynamicCounters(ui32 nodeIndex = 0);
         void SetupMonitoring(ui16 monitoringPortOffset = 0, bool monitoringTypeAsync = false);
+        void DisableBreakOnStopCondition() {
+            AllowBreakOnStopCondition = false;
+        }
 
         using TEventObserverCollection = std::list<std::function<void(TAutoPtr<IEventHandle>& event)>>;
         class TEventObserverHolder {
@@ -375,21 +409,16 @@ namespace NActors {
             observerHolder.Remove();
         */
 
-        template <typename TEvType>
+        template <typename TEvType = IEventHandle>
         TEventObserverHolder AddObserver(std::function<void(typename TEvType::TPtr&)> observerFunc)
         {
-            auto baseFunc = [observerFunc](TAutoPtr<IEventHandle>& event) {
-                if (event && event->GetTypeRewrite() == TEvType::EventType)
-                    observerFunc(*(reinterpret_cast<typename TEvType::TPtr*>(&event)));
+            auto baseFunc = [observerFunc](IEventHandle::TPtr& event) {
+                if (event && TTestEventObserverTraits<TEvType>::Match(event)) {
+                    observerFunc(TTestEventObserverTraits<TEvType>::Convert(event));
+                }
             };
 
             auto iter = ObserverFuncs.insert(ObserverFuncs.end(), baseFunc);
-            return TEventObserverHolder(&ObserverFuncs, std::move(iter));
-        }
-
-        TEventObserverHolder AddObserver(std::function<void(TAutoPtr<IEventHandle>&)> observerFunc)
-        {
-            auto iter = ObserverFuncs.insert(ObserverFuncs.end(), observerFunc);
             return TEventObserverHolder(&ObserverFuncs, std::move(iter));
         }
 
@@ -445,15 +474,14 @@ namespace NActors {
                 TDuration simTimeout = TDuration::Max())
         {
             typename TEvent::TPtr handle;
-            const ui32 eventType = TEvent::EventType;
             WaitForEdgeEvents([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
                 Y_UNUSED(runtime);
-                if (event->GetTypeRewrite() != eventType)
+                if (!TTestEventObserverTraits<TEvent>::Match(event))
                     return false;
 
-                typename TEvent::TPtr* typedEvent = reinterpret_cast<typename TEvent::TPtr*>(&event);
-                if (predicate(*typedEvent)) {
-                    handle = *typedEvent;
+                typename TEvent::TPtr& typedEvent = TTestEventObserverTraits<TEvent>::Convert(event);
+                if (predicate(typedEvent)) {
+                    handle = std::move(typedEvent);
                     return true;
                 }
 
@@ -765,7 +793,7 @@ namespace NActors {
         THashMap<TActorId, TString> ActorNames;
         TDispatchContext* CurrentDispatchContext;
         TVector<ui64> TxAllocatorTabletIds;
-
+        bool AllowBreakOnStopCondition = true;
         static ui32 NextNodeId;
     };
 
@@ -809,8 +837,8 @@ namespace NActors {
         const std::function<bool(const typename TEvent::TPtr&)>& predicate) {
         ev.Destroy();
         for (auto& event : events) {
-            if (event && event->GetTypeRewrite() == TEvent::EventType) {
-                if (predicate(reinterpret_cast<const typename TEvent::TPtr&>(event))) {
+            if (event && TTestEventObserverTraits<TEvent>::Match(event)) {
+                if (predicate(TTestEventObserverTraits<TEvent>::Convert(event))) {
                     ev = event;
                     return ev->CastAsLocal<TEvent>();
                 }
@@ -828,12 +856,13 @@ namespace NActors {
 
     struct IReplyChecker {
         virtual ~IReplyChecker() {}
-        virtual void OnRequest(IEventHandle *request) = 0;
+        virtual bool OnRequest(IEventHandle *request) = 0;
         virtual bool IsWaitingForMoreResponses(IEventHandle *response) = 0;
     };
 
     struct TNoneReplyChecker : IReplyChecker {
-        void OnRequest(IEventHandle*) override {
+        bool OnRequest(IEventHandle*) override {
+            return false;
         }
 
         bool IsWaitingForMoreResponses(IEventHandle*) override {

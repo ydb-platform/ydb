@@ -1,0 +1,32 @@
+commit fdc18ea52fca355be23dc48a3818bf01571269c3
+author: dldmitry
+date: 2016-04-28T18:37:37+03:00
+revision: 2292801
+
+    libevent: bind to ipv6 only
+    __BYPASS_CHECKS__
+
+--- libevent/http.c	(index)
++++ libevent/http.c	(working tree)
+@@ -4393,6 +4393,12 @@ bind_socket_ai(struct evutil_addrinfo *ai, int reuse)
+ 			return (-1);
+ 	}
+
++#if defined IPV6_V6ONLY
++	int v6opt = 1;
++	if (ai->ai_family == AF_INET6 && setsockopt(fd, IPPROTO_IPV6, IPV6_V6ONLY, &v6opt, sizeof(v6opt)) < 0)
++		goto out;
++#endif
++
+ 	if (setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, (void *)&on, sizeof(on))<0)
+ 		goto out;
+ 	if (reuse) {
+@@ -4427,6 +4433,8 @@ make_addrinfo(const char *address, ev_uint16_t port)
+ 	static const char* names[] = {
+ 		"127.0.0.1",
+ 		"::1",
++		"0.0.0.0",
++		"::",
+ 		"localhost",
+ 		"localhost.localdomain",
+ 		"localhost6",

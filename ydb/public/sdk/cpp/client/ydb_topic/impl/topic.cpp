@@ -9,7 +9,7 @@
 #include <util/string/cast.h>
 #include <util/string/subst.h>
 
-namespace NYdb::NTopic {
+namespace NYdb::inline V2::NTopic {
 
 class TCommonCodecsProvider {
 public:
@@ -351,6 +351,9 @@ TPartitionConsumerStats::TPartitionConsumerStats(const Ydb::Topic::DescribeConsu
     , LastReadOffset_(partitionStats.last_read_offset())
     , ReaderName_(partitionStats.reader_name())
     , ReadSessionId_(partitionStats.read_session_id())
+    , LastReadTime_(TInstant::Seconds(partitionStats.last_read_time().seconds()))
+    , MaxReadTimeLag_(TDuration::Seconds(partitionStats.max_read_time_lag().seconds()))
+    , MaxWriteTimeLag_(TDuration::Seconds(partitionStats.max_write_time_lag().seconds()))
 {}
 
 ui64 TPartitionConsumerStats::GetCommittedOffset() const {
@@ -367,6 +370,18 @@ TString TPartitionConsumerStats::GetReaderName() const {
 
 TString TPartitionConsumerStats::GetReadSessionId() const {
     return ReadSessionId_;
+}
+
+const TInstant& TPartitionConsumerStats::GetLastReadTime() const {
+    return LastReadTime_;
+}
+
+const TDuration& TPartitionConsumerStats::GetMaxReadTimeLag() const {
+    return MaxReadTimeLag_;
+}
+
+const TDuration& TPartitionConsumerStats::GetMaxWriteTimeLag() const {
+    return MaxWriteTimeLag_;
 }
 
 TPartitionLocation::TPartitionLocation(const Ydb::Topic::PartitionLocation& partitionLocation)

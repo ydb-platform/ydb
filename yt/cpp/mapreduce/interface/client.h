@@ -165,8 +165,15 @@ public:
     /// @see [YT doc](https://ytsaurus.tech/docs/en/api/commands.html#execute_batch)
     virtual TBatchRequestPtr CreateBatchRequest() = 0;
 
-    /// @brief Get root client outside of all transactions.
-    virtual IClientPtr GetParentClient() = 0;
+    ///
+    /// @brief Get root client.
+    ///
+    /// @param ignoreGlobalTx root client could be created already attached to some global transaction, @ref NYT::TConfig::GlobalTx.
+    ///     when ignoreGlobalTx = false original client (attached to GlobalTx) is returned
+    ///     when ignoreGlobalTx = true, returned client is not attached to any transaction.
+    ///
+    /// TODO: rename to GetRootClient()
+    virtual IClientPtr GetParentClient(bool ignoreGlobalTx = false) = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -493,6 +500,18 @@ public:
         const TGetJobStderrOptions& options = TGetJobStderrOptions()) = 0;
 
     ///
+    /// @brief Get trace of a job.
+    ///
+    /// @ref NYT::TErrorResponse exception is thrown if it is missing.
+    ///
+    /// @note YT doesn't store all job traces.
+    ///
+    /// @see [YT doc](https://ytsaurus.tech/docs/en/api/commands.html#get_job_trace)
+    virtual std::vector<TJobTraceEvent> GetJobTrace(
+        const TOperationId& operationId,
+        const TGetJobTraceOptions& options = TGetJobTraceOptions()) = 0;
+
+    ///
     /// @brief Create one or several rbtorrents for files in a blob table.
     ///
     /// If specified, one torrent is created for each value of `KeyColumns` option.
@@ -560,16 +579,19 @@ public:
     virtual void Shutdown() = 0;
 };
 
+/// Create a rpc client for particular cluster.
+IClientPtr CreateRpcClient(
+    const TString& serverName,
+    const TCreateClientOptions& options = {});
 
 /// Create a client for particular MapReduce cluster.
 IClientPtr CreateClient(
     const TString& serverName,
-    const TCreateClientOptions& options = TCreateClientOptions());
-
+    const TCreateClientOptions& options = {});
 
 /// Create a client for mapreduce cluster specified in `YT_PROXY` environment variable.
 IClientPtr CreateClientFromEnv(
-    const TCreateClientOptions& options = TCreateClientOptions());
+    const TCreateClientOptions& options = {});
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -7,11 +7,12 @@
 #include <library/cpp/protobuf/json/proto2json_printer.h>
 #include <library/cpp/string_utils/base64/base64.h>
 #include <ydb/library/naming_conventions/naming_conventions.h>
-#include <ydb/public/sdk/cpp/client/ydb_datastreams/datastreams.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/datastreams/datastreams.h>
 #include <ydb/library/http_proxy/error/error.h>
 #include <contrib/libs/protobuf/src/google/protobuf/message.h>
 #include <contrib/libs/protobuf/src/google/protobuf/reflection.h>
 
+#include <grpcpp/impl/codegen/config_protobuf.h>
 #include <nlohmann/json.hpp>
 
 
@@ -23,11 +24,9 @@ inline TString ProxyFieldNameConverter(const google::protobuf::FieldDescriptor& 
 
 class TYdsProtoToJsonPrinter : public NProtobufJson::TProto2JsonPrinter {
 public:
-    TYdsProtoToJsonPrinter(const google::protobuf::Reflection* reflection,
-                           const NProtobufJson::TProto2JsonConfig& config,
+    TYdsProtoToJsonPrinter(const NProtobufJson::TProto2JsonConfig& config,
                            bool skipBase64Encode)
     : NProtobufJson::TProto2JsonPrinter(config)
-    , ProtoReflection(reflection)
     , SkipBase64Encode(skipBase64Encode)
     {}
 
@@ -61,14 +60,15 @@ protected:
                     return Base64Encode(str);
                 };
 
+                auto* reflection = proto.GetReflection();
                 if (field.is_repeated()) {
-                    for (int i = 0, endI = ProtoReflection->FieldSize(proto, &field); i < endI; ++i) {
+                    for (int i = 0, endI = reflection->FieldSize(proto, &field); i < endI; ++i) {
                         PrintStringValue<false>(field, TStringBuf(),
-                            maybeBase64Encode(proto.GetReflection()->GetRepeatedString(proto, &field, i)), json);
+                            maybeBase64Encode(reflection->GetRepeatedString(proto, &field, i)), json);
                     }
                 } else {
                     PrintStringValue<true>(field, key,
-                        maybeBase64Encode(proto.GetReflection()->GetString(proto, &field)), json);
+                        maybeBase64Encode(reflection->GetString(proto, &field)), json);
                 }
                 return;
             }
@@ -82,13 +82,14 @@ protected:
                     key = MakeKey(field);
                 }
 
+                auto* reflection = proto.GetReflection();
                 if (field.is_repeated()) {
-                    for (int i = 0, endI = ProtoReflection->FieldSize(proto, &field); i < endI; ++i) {
-                        double value = proto.GetReflection()->GetRepeatedInt64(proto, &field, i) / 1000.0;
+                    for (int i = 0, endI = reflection->FieldSize(proto, &field); i < endI; ++i) {
+                        double value = reflection->GetRepeatedInt64(proto, &field, i) / 1000.0;
                         PrintDoubleValue<false>(TStringBuf(), value, json);
                     }
                 } else {
-                    double value = proto.GetReflection()->GetInt64(proto, &field) / 1000.0;
+                    double value = reflection->GetInt64(proto, &field) / 1000.0;
                     PrintDoubleValue<true>(key, value, json);
                 }
                 return;
@@ -103,19 +104,20 @@ protected:
                     key = MakeKey(field);
                 }
 
+                auto* reflection = proto.GetReflection();
                 if (field.is_repeated()) {
-                    for (int i = 0, endI = ProtoReflection->FieldSize(proto, &field); i < endI; ++i) {
-                        auto value = proto.GetReflection()->GetRepeatedString(proto, &field, i);
+                    for (int i = 0, endI = reflection->FieldSize(proto, &field); i < endI; ++i) {
+                        auto value = reflection->GetRepeatedString(proto, &field, i);
                         if (!value.empty()) {
                             PrintStringValue<false>(field, TStringBuf(),
-                                proto.GetReflection()->GetRepeatedString(proto, &field, i), json);
+                                reflection->GetRepeatedString(proto, &field, i), json);
                         }
                     }
                 } else {
-                    auto value = proto.GetReflection()->GetString(proto, &field);
+                    auto value = reflection->GetString(proto, &field);
                     if (!value.empty()) {
                         PrintStringValue<true>(field, key,
-                            proto.GetReflection()->GetString(proto, &field), json);
+                            reflection->GetString(proto, &field), json);
                     }
                 }
                 return;
@@ -126,7 +128,6 @@ protected:
     }
 
 private:
-    const google::protobuf::Reflection* ProtoReflection = nullptr;
     bool SkipBase64Encode;
 };
 
@@ -137,7 +138,7 @@ inline void ProtoToJson(const NProtoBuf::Message& resp, NJson::TJsonValue& value
                   .SetNameGenerator(ProxyFieldNameConverter)
                   .SetMapAsObject(true)
                   .SetEnumMode(NProtobufJson::TProto2JsonConfig::EnumName);
-    TYdsProtoToJsonPrinter printer(resp.GetReflection(), config, skipBase64Encode);
+    TYdsProtoToJsonPrinter printer(config, skipBase64Encode);
     printer.Print(resp, *NProtobufJson::CreateJsonMapOutput(value));
 }
 
@@ -147,59 +148,78 @@ inline void AddJsonObjectToProtoAsMap(
         const google::protobuf::Reflection* reflection,
         grpc::protobuf::Message* message,
         const JSON& jsonObject,
+        ui32 depth,
         std::function<const MAP(const JSON&)> extractMap,
-        std::function<const TString(const JSON&)> valueToString
+        std::function<const TString(const JSON&)> valueToString,
+        std::function<void(const JSON&, grpc::protobuf::Message*, ui32)> jsonObjectToMessage
 ) {
     const auto& protoMap = reflection->GetMutableRepeatedFieldRef<google::protobuf::Message>(message, fieldDescriptor);
     for (const auto& [key, value] : extractMap(jsonObject)) {
-        std::unique_ptr<google::protobuf::Message> stringStringEntry(
+        std::unique_ptr<google::protobuf::Message> mapEntry(
             google::protobuf::MessageFactory::generated_factory()
                 ->GetPrototype(fieldDescriptor->message_type())
                 ->New(message->GetArena())
         );
-        stringStringEntry
+        mapEntry
             ->GetReflection()
-            ->SetString(stringStringEntry.get(), fieldDescriptor->message_type()->field(0), key);
-        stringStringEntry
-            ->GetReflection()
-            ->SetString(stringStringEntry.get(), fieldDescriptor->message_type()->field(1), valueToString(value));
-        protoMap.Add(*stringStringEntry);
+            ->SetString(mapEntry.get(), fieldDescriptor->message_type()->field(0), key);
+
+        auto valueField = fieldDescriptor->message_type()->field(1);
+        if (valueField->cpp_type() == google::protobuf::FieldDescriptor::CPPTYPE_MESSAGE) {
+            auto *msg = mapEntry->GetReflection()->MutableMessage(mapEntry.get(), valueField);
+            jsonObjectToMessage(value, msg, depth);
+        } else if (valueField->cpp_type() == google::protobuf::FieldDescriptor::CPPTYPE_STRING) {
+            mapEntry->GetReflection()->SetString(mapEntry.get(), valueField, valueToString(value));
+        } else {
+            throw NKikimr::NSQS::TSQSException(NKikimr::NSQS::NErrors::INVALID_PARAMETER_VALUE)
+                << "Only String and Object can be converted to protobuf map";
+        }
+        protoMap.Add(std::move(*mapEntry));
     }
 }
+
+void JsonToProto(const NJson::TJsonValue& jsonValue, NProtoBuf::Message* message, ui32 depth = 0);
 
 inline void AddJsonObjectToProtoAsMap(
         const google::protobuf::FieldDescriptor* fieldDescriptor,
         const google::protobuf::Reflection* reflection,
         grpc::protobuf::Message* message,
-        const NJson::TJsonValue& jsonObject
+        const NJson::TJsonValue& jsonObject,
+        ui32 depth
 ) {
     AddJsonObjectToProtoAsMap<NJson::TJsonValue, NJson::TJsonValue::TMapType>(
         fieldDescriptor,
         reflection,
         message,
         jsonObject,
+        depth,
         [](auto& json) { return json.GetMap(); },
-        [](auto& value) -> const TString { return value.GetString(); }
+        [](auto& value) -> const TString { return value.GetString(); },
+        [](auto& json, auto message, auto depth) { JsonToProto(json, message, depth);  }
     );
 }
+void NlohmannJsonToProto(const nlohmann::json& jsonValue, NProtoBuf::Message* message, ui32 depth = 0);
 
 inline void AddJsonObjectToProtoAsMap(
     const google::protobuf::FieldDescriptor* fieldDescriptor,
     const google::protobuf::Reflection* reflection,
     grpc::protobuf::Message* message,
-    const nlohmann::basic_json<>& jsonObject
+    const nlohmann::basic_json<>& jsonObject,
+    ui32 depth
 ) {
     AddJsonObjectToProtoAsMap<nlohmann::basic_json<>, std::map<TString, nlohmann::basic_json<>>>(
         fieldDescriptor,
         reflection,
         message,
         jsonObject,
+        depth,
         [](auto& json) { return json.template get<std::map<TString, nlohmann::basic_json<>>>(); },
-        [](auto& value) -> const TString { return value.template get<TString>(); }
+        [](auto& value) -> const TString { return value.template get<TString>(); },
+        [](auto& json, auto message, auto depth) { NlohmannJsonToProto(json, message, depth);  }
     );
 }
 
-inline void JsonToProto(const NJson::TJsonValue& jsonValue, NProtoBuf::Message* message, ui32 depth = 0) {
+inline void JsonToProto(const NJson::TJsonValue& jsonValue, NProtoBuf::Message* message, ui32 depth) {
     Y_ENSURE(depth < 101, "Json depth is > 100");
     Y_ENSURE_EX(
         !jsonValue.IsNull(),
@@ -348,7 +368,7 @@ inline void JsonToProto(const NJson::TJsonValue& jsonValue, NProtoBuf::Message* 
                             break;
                         case google::protobuf::FieldDescriptor::CPPTYPE_MESSAGE: {
                             if (fieldDescriptor->is_map()) {
-                                AddJsonObjectToProtoAsMap(fieldDescriptor, reflection, message, value);
+                                AddJsonObjectToProtoAsMap(fieldDescriptor, reflection, message, value, depth + 1);
                             } else {
                                 auto *msg = reflection->MutableMessage(message, fieldDescriptor);
                                 JsonToProto(value, msg, depth + 1);
@@ -366,7 +386,7 @@ inline void JsonToProto(const NJson::TJsonValue& jsonValue, NProtoBuf::Message* 
     }
 }
 
-inline void NlohmannJsonToProto(const nlohmann::json& jsonValue, NProtoBuf::Message* message, ui32 depth = 0) {
+inline void NlohmannJsonToProto(const nlohmann::json& jsonValue, NProtoBuf::Message* message, ui32 depth) {
     Y_ENSURE(depth < 101, "Json depth is > 100");
     Y_ENSURE_EX(
         !jsonValue.is_null(),
@@ -518,7 +538,7 @@ inline void NlohmannJsonToProto(const nlohmann::json& jsonValue, NProtoBuf::Mess
                             break;
                         case google::protobuf::FieldDescriptor::CPPTYPE_MESSAGE: {
                             if (fieldDescriptor->is_map()) {
-                                AddJsonObjectToProtoAsMap(fieldDescriptor, reflection, message, value);
+                                AddJsonObjectToProtoAsMap(fieldDescriptor, reflection, message, value, depth);
                             } else {
                                 auto *msg = reflection->MutableMessage(message, fieldDescriptor);
                                 NlohmannJsonToProto(value, msg, depth + 1);

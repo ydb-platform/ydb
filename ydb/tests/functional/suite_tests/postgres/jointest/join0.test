@@ -326,7 +326,8 @@ left join
     (select unique2 as join_key from tenk1 as i2) as ss2
    on foo2.join_key = ss2.join_key
   ) as foo3
-using (join_key);
+using (join_key)
+order by foo1_id;
 
 
 --

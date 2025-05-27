@@ -14,7 +14,7 @@
 #include <ydb/core/protos/follower_group.pb.h>
 #include <ydb/core/protos/msgbus_kv.pb.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 
 #include <functional>
 
@@ -66,6 +66,18 @@ namespace NSchemeShardUT_Private {
         OPTION(std::optional<bool>, EnableReplaceIfExistsForExternalEntities, std::nullopt);
         OPTION(std::optional<TString>, GraphBackendType, std::nullopt);
         OPTION(std::optional<bool>, EnableChangefeedsOnIndexTables, std::nullopt);
+        OPTION(std::optional<bool>, EnableTieringInColumnShard, std::nullopt);
+        OPTION(std::optional<bool>, EnableParameterizedDecimal, std::nullopt);
+        OPTION(std::optional<bool>, EnableTopicAutopartitioningForCDC, std::nullopt);
+        OPTION(std::optional<bool>, EnableBackupService, std::nullopt);
+        OPTION(std::optional<bool>, EnableTopicTransfer, std::nullopt);
+        OPTION(bool, SetupKqpProxy, false);
+        OPTION(bool, EnableStrictAclCheck, false);
+        OPTION(std::optional<bool>, EnableStrictUserManagement, std::nullopt);
+        OPTION(std::optional<bool>, EnableDatabaseAdmin, std::nullopt);
+        OPTION(std::optional<bool>, EnablePermissionsExport, std::nullopt);
+        OPTION(std::optional<bool>, EnableChecksumsExport, std::nullopt);
+        OPTION(TVector<TIntrusivePtr<NFake::TProxyDS>>, DSProxies, {});
 
         #undef OPTION
     };
@@ -89,7 +101,7 @@ namespace NSchemeShardUT_Private {
         static bool ENABLE_SCHEMESHARD_LOG;
 
         TTestEnv(TTestActorRuntime& runtime, ui32 nchannels = 4, bool enablePipeRetries = true,
-            TSchemeShardFactory ssFactory = &CreateFlatTxSchemeShard, bool enableSystemViews = false);
+            TSchemeShardFactory ssFactory = &CreateFlatTxSchemeShard);
         TTestEnv(TTestActorRuntime& runtime, const TTestEnvOptions& opts,
             TSchemeShardFactory ssFactory = &CreateFlatTxSchemeShard, std::shared_ptr<NKikimr::NDataShard::IExportFactory> dsExportFactory = {});
 
@@ -138,6 +150,7 @@ namespace NSchemeShardUT_Private {
 
         void BootSchemeShard(TTestActorRuntime& runtime, ui64 schemeRoot);
         void BootTxAllocator(TTestActorRuntime& runtime, ui64 tabletId);
+        NKikimrConfig::TAppConfig GetAppConfig() const;
     };
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

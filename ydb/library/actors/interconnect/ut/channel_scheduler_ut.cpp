@@ -10,11 +10,11 @@ Y_UNIT_TEST_SUITE(ChannelScheduler) {
         auto common = MakeIntrusive<TInterconnectProxyCommon>();
         common->MonCounters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         std::shared_ptr<IInterconnectMetrics> ctr = CreateInterconnectCounters(common);
-        ctr->SetPeerInfo("peer", "1");
+        ctr->SetPeerInfo(1, "peer", "1");
         auto callback = [](THolder<IEventBase>) {};
         TEventHolderPool pool(common, callback);
         TSessionParams p;
-        TChannelScheduler scheduler(1, {}, ctr, pool, 64 << 20, p);
+        TChannelScheduler scheduler(1, {}, ctr, 64 << 20, p);
 
         ui32 numEvents = 0;
 
@@ -23,7 +23,7 @@ Y_UNIT_TEST_SUITE(ChannelScheduler) {
             auto ev = MakeHolder<IEventHandle>(1, 0, TActorId(), TActorId(), MakeIntrusive<TEventSerializedData>(payload, TEventSerializationInfo{}), 0);
             auto& ch = scheduler.GetOutputChannel(channel);
             const bool wasWorking = ch.IsWorking();
-            ch.Push(*ev);
+            ch.Push(*ev, pool);
             if (!wasWorking) {
                 scheduler.AddToHeap(ch, 0);
             }
@@ -59,8 +59,9 @@ Y_UNIT_TEST_SUITE(ChannelScheduler) {
             while (numEvents) {
                 TEventOutputChannel *channel = scheduler.PickChannelWithLeastConsumedWeight();
                 ui32 before = task.GetDataSize();
-                ui64 weightConsumed = 0;
-                numEvents -= channel->FeedBuf(task, 0, &weightConsumed);
+                ui64 weightConsumed = task.GetDataSize();
+                numEvents -= channel->FeedBuf(task, 0);
+                weightConsumed = task.GetDataSize() - weightConsumed;
                 ui32 after = task.GetDataSize();
                 Y_ABORT_UNLESS(after >= before);
                 scheduler.FinishPick(weightConsumed, 0);

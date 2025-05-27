@@ -15,6 +15,8 @@
 
 #include <yt/yt/client/object_client/helpers.h>
 
+#include <yt/yt/client/security_client/public.h>
+
 #include <yt/yt/core/concurrency/periodic_executor.h>
 
 #include <yt/yt/core/net/address.h>
@@ -32,7 +34,7 @@ using namespace NQueueClient;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static constexpr auto& Logger = FederatedClientLogger;
+constinit const auto Logger = FederatedClientLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -40,19 +42,20 @@ DECLARE_REFCOUNTED_CLASS(TClient)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-std::optional<TString> GetDataCenterByClient(const IClientPtr& client)
+TFuture<std::optional<std::string>> GetDataCenterByClient(const IClientPtr& client)
 {
     TListNodeOptions options;
     options.MaxSize = 1;
 
-    auto items = NConcurrency::WaitFor(client->ListNode(RpcProxiesPath, options))
-        .ValueOrThrow();
-    auto itemsList = NYTree::ConvertTo<NYTree::IListNodePtr>(items);
-    if (!itemsList->GetChildCount()) {
-        return std::nullopt;
-    }
-    auto host = itemsList->GetChildren()[0];
-    return NNet::InferYPClusterFromHostName(host->GetValue<TString>());
+    return client->ListNode(RpcProxiesPath, options)
+        .Apply(BIND([] (const NYson::TYsonString& items) {
+            auto itemsList = NYTree::ConvertTo<NYTree::IListNodePtr>(items);
+            if (!itemsList->GetChildCount()) {
+                return std::optional<std::string>();
+            }
+            auto host = itemsList->GetChildren()[0];
+            return NNet::InferYPClusterFromHostName(host->GetValue<std::string>());
+        }));
 }
 
 class TTransaction
@@ -75,7 +78,7 @@ public:
         const TLookupRowsOptions& options = {}) override;
 
     TFuture<TSelectRowsResult> SelectRows(
-        const TString& query,
+        const std::string& query,
         const TSelectRowsOptions& options = {}) override;
 
     void ModifyRows(
@@ -113,11 +116,11 @@ public:
 
     TFuture<TTransactionFlushResult> Flush() override;
 
-    TFuture<void> Ping(const NApi::TTransactionPingOptions& options = {}) override;
+    TFuture<void> Ping(const TPrerequisitePingOptions& options = {}) override;
 
     TFuture<TTransactionCommitResult> Commit(const TTransactionCommitOptions& options = TTransactionCommitOptions()) override;
 
-    TFuture<void> Abort(const TTransactionAbortOptions& options = TTransactionAbortOptions()) override;
+    TFuture<void> Abort(const TTransactionAbortOptions& options = {}) override;
 
     TFuture<TVersionedLookupRowsResult> VersionedLookupRows(
         const NYPath::TYPath&, NTableClient::TNameTablePtr,
@@ -128,7 +131,7 @@ public:
         const std::vector<TMultiLookupSubrequest>&,
         const TMultiLookupOptions&) override;
 
-    TFuture<NYson::TYsonString> ExplainQuery(const TString&, const TExplainQueryOptions&) override;
+    TFuture<NYson::TYsonString> ExplainQuery(const std::string&, const TExplainQueryOptions&) override;
 
     TFuture<NYson::TYsonString> GetNode(const NYPath::TYPath&, const TGetNodeOptions&) override;
 
@@ -158,17 +161,17 @@ public:
         return Underlying_->GetStartTimestamp();
     }
 
-    virtual NTransactionClient::EAtomicity GetAtomicity() const override
+    NTransactionClient::EAtomicity GetAtomicity() const override
     {
         return Underlying_->GetAtomicity();
     }
 
-    virtual NTransactionClient::EDurability GetDurability() const override
+    NTransactionClient::EDurability GetDurability() const override
     {
         return Underlying_->GetDurability();
     }
 
-    virtual TDuration GetTimeout() const override
+    TDuration GetTimeout() const override
     {
         return Underlying_->GetTimeout();
     }
@@ -233,6 +236,9 @@ public:
     UNIMPLEMENTED_METHOD(IFileWriterPtr, CreateFileWriter, (const NYPath::TRichYPath&, const TFileWriterOptions&));
     UNIMPLEMENTED_METHOD(IJournalReaderPtr, CreateJournalReader, (const NYPath::TYPath&, const TJournalReaderOptions&));
     UNIMPLEMENTED_METHOD(IJournalWriterPtr, CreateJournalWriter, (const NYPath::TYPath&, const TJournalWriterOptions&));
+    UNIMPLEMENTED_METHOD(TFuture<TDistributedWriteSessionWithCookies>, StartDistributedWriteSession, (const NYPath::TRichYPath&, const TDistributedWriteSessionStartOptions&));
+    UNIMPLEMENTED_METHOD(TFuture<void>, FinishDistributedWriteSession, (const TDistributedWriteSessionWithResults&, const TDistributedWriteSessionFinishOptions&));
+    UNIMPLEMENTED_METHOD(TFuture<void>, Abort, (const TPrerequisiteAbortOptions&));
 
 private:
     const TClientPtr Client_;
@@ -246,17 +252,24 @@ DECLARE_REFCOUNTED_TYPE(TTransaction)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+enum class EClientPriority : ui8
+{
+    Local,
+    Remote,
+    Undefined,
+};
+
 DECLARE_REFCOUNTED_STRUCT(TClientDescription)
 
 struct TClientDescription final
 {
-    TClientDescription(IClientPtr client, int priority)
+    TClientDescription(IClientPtr client, EClientPriority priority)
         : Client(std::move(client))
         , Priority(priority)
     { }
 
     IClientPtr Client;
-    int Priority;
+    EClientPriority Priority;
     std::atomic<bool> HasErrors{false};
 };
 
@@ -278,7 +291,7 @@ public:
         const TSharedRange<NTableClient::TLegacyKey>& keys,
         const TLookupRowsOptions& options = {}) override;
     TFuture<TSelectRowsResult> SelectRows(
-        const TString& query,
+        const std::string& query,
         const TSelectRowsOptions& options = {}) override;
     TFuture<std::vector<TUnversionedLookupRowsResult>> MultiLookupRows(
         const std::vector<TMultiLookupSubrequest>&,
@@ -307,7 +320,7 @@ public:
         NTransactionClient::ETransactionType type,
         const NApi::TTransactionStartOptions& options) override;
 
-    TFuture<NYson::TYsonString> ExplainQuery(const TString&, const TExplainQueryOptions&) override;
+    TFuture<NYson::TYsonString> ExplainQuery(const std::string&, const TExplainQueryOptions&) override;
 
     TFuture<NYson::TYsonString> GetNode(const NYPath::TYPath&, const TGetNodeOptions&) override;
     TFuture<NYson::TYsonString> ListNode(const NYPath::TYPath&, const TListNodeOptions&) override;
@@ -324,13 +337,15 @@ public:
 
     ITransactionPtr AttachTransaction(NTransactionClient::TTransactionId, const TTransactionAttachOptions&) override;
 
+    IPrerequisitePtr AttachPrerequisite(NPrerequisiteClient::TPrerequisiteId, const TPrerequisiteAttachOptions&) override;
+
     IConnectionPtr GetConnection() override
     {
         auto [client, _] = GetActiveClient();
         return client->GetConnection();
     }
 
-    std::optional<TStringBuf> GetClusterName(bool fetchIfNull) override
+    TFuture<std::optional<std::string>> GetClusterName(bool fetchIfNull) override
     {
         auto [client, _] = GetActiveClient();
         return client->GetClusterName(fetchIfNull);
@@ -338,6 +353,12 @@ public:
 
     void Terminate() override
     { }
+
+    TFuture<TGetCurrentUserResultPtr> GetCurrentUser(const TGetCurrentUserOptions& options) override
+    {
+        auto [client, _] = GetActiveClient();
+        return client->GetCurrentUser(options);
+    }
 
     // IClientBase unsupported methods.
     UNIMPLEMENTED_METHOD(TFuture<void>, SetNode, (const NYPath::TYPath&, const NYson::TYsonString&, const TSetNodeOptions&));
@@ -367,6 +388,7 @@ public:
     UNIMPLEMENTED_METHOD(TFuture<void>, RemountTable, (const NYPath::TYPath&, const TRemountTableOptions&));
     UNIMPLEMENTED_METHOD(TFuture<void>, FreezeTable, (const NYPath::TYPath&, const TFreezeTableOptions&));
     UNIMPLEMENTED_METHOD(TFuture<void>, UnfreezeTable, (const NYPath::TYPath&, const TUnfreezeTableOptions&));
+    UNIMPLEMENTED_METHOD(TFuture<void>, CancelTabletTransition, (NTabletClient::TTabletId, const TCancelTabletTransitionOptions&));
     UNIMPLEMENTED_METHOD(TFuture<void>, ReshardTable, (const NYPath::TYPath&, const std::vector<NTableClient::TUnversionedOwningRow>&, const TReshardTableOptions&));
     UNIMPLEMENTED_METHOD(TFuture<void>, ReshardTable, (const NYPath::TYPath&, int, const TReshardTableOptions&));
     UNIMPLEMENTED_METHOD(TFuture<std::vector<NTabletClient::TTabletActionId>>, ReshardTableAutomatic, (const NYPath::TYPath&, const TReshardTableAutomaticOptions&));
@@ -377,10 +399,11 @@ public:
     UNIMPLEMENTED_METHOD(TFuture<std::vector<NTabletClient::TTableReplicaId>>, GetInSyncReplicas, (const NYPath::TYPath&, const NTableClient::TNameTablePtr&, const TSharedRange<NTableClient::TUnversionedRow>&, const TGetInSyncReplicasOptions&));
     UNIMPLEMENTED_METHOD(TFuture<std::vector<NTabletClient::TTableReplicaId>>, GetInSyncReplicas, (const NYPath::TYPath&, const TGetInSyncReplicasOptions&));
     UNIMPLEMENTED_METHOD(TFuture<TGetTabletErrorsResult>, GetTabletErrors, (const NYPath::TYPath&, const TGetTabletErrorsOptions&));
-    UNIMPLEMENTED_METHOD(TFuture<std::vector<NTabletClient::TTabletActionId>>, BalanceTabletCells, (const TString&, const std::vector<NYPath::TYPath>&, const TBalanceTabletCellsOptions&));
+    UNIMPLEMENTED_METHOD(TFuture<std::vector<NTabletClient::TTabletActionId>>, BalanceTabletCells, (const std::string&, const std::vector<NYPath::TYPath>&, const TBalanceTabletCellsOptions&));
     UNIMPLEMENTED_METHOD(TFuture<TSkynetSharePartsLocationsPtr>, LocateSkynetShare, (const NYPath::TRichYPath&, const TLocateSkynetShareOptions&));
     UNIMPLEMENTED_METHOD(TFuture<std::vector<NTableClient::TColumnarStatistics>>, GetColumnarStatistics, (const std::vector<NYPath::TRichYPath>&, const TGetColumnarStatisticsOptions&));
     UNIMPLEMENTED_METHOD(TFuture<TMultiTablePartitions>, PartitionTables, (const std::vector<NYPath::TRichYPath>&, const TPartitionTablesOptions&));
+    UNIMPLEMENTED_METHOD(TFuture<ITablePartitionReaderPtr>, CreateTablePartitionReader, (const TTablePartitionCookiePtr&, const TReadTablePartitionOptions&));
     UNIMPLEMENTED_METHOD(TFuture<NYson::TYsonString>, GetTablePivotKeys, (const NYPath::TYPath&, const TGetTablePivotKeysOptions&));
     UNIMPLEMENTED_METHOD(TFuture<void>, CreateTableBackup, (const TBackupManifestPtr&, const TCreateTableBackupOptions&));
     UNIMPLEMENTED_METHOD(TFuture<void>, RestoreTableBackup, (const TBackupManifestPtr&, const TRestoreTableBackupOptions&));
@@ -389,9 +412,9 @@ public:
     UNIMPLEMENTED_METHOD(TFuture<TPutFileToCacheResult>, PutFileToCache, (const NYPath::TYPath&, const TString&, const TPutFileToCacheOptions&));
     UNIMPLEMENTED_METHOD(TFuture<void>, AddMember, (const TString&, const TString&, const TAddMemberOptions&));
     UNIMPLEMENTED_METHOD(TFuture<void>, RemoveMember, (const TString&, const TString&, const TRemoveMemberOptions&));
-    UNIMPLEMENTED_METHOD(TFuture<TCheckPermissionResponse>, CheckPermission, (const TString&, const NYPath::TYPath&, NYTree::EPermission, const TCheckPermissionOptions&));
-    UNIMPLEMENTED_METHOD(TFuture<TCheckPermissionByAclResult>, CheckPermissionByAcl, (const std::optional<TString>&, NYTree::EPermission, NYTree::INodePtr, const TCheckPermissionByAclOptions&));
-    UNIMPLEMENTED_METHOD(TFuture<void>, TransferAccountResources, (const TString&, const TString&, NYTree::INodePtr, const TTransferAccountResourcesOptions&));
+    UNIMPLEMENTED_METHOD(TFuture<TCheckPermissionResponse>, CheckPermission, (const std::string&, const NYPath::TYPath&, NYTree::EPermission, const TCheckPermissionOptions&));
+    UNIMPLEMENTED_METHOD(TFuture<TCheckPermissionByAclResult>, CheckPermissionByAcl, (const std::optional<std::string>&, NYTree::EPermission, NYTree::INodePtr, const TCheckPermissionByAclOptions&));
+    UNIMPLEMENTED_METHOD(TFuture<void>, TransferAccountResources, (const std::string&, const std::string&, NYTree::INodePtr, const TTransferAccountResourcesOptions&));
     UNIMPLEMENTED_METHOD(TFuture<void>, TransferPoolResources, (const TString&, const TString&, const TString&, NYTree::INodePtr, const TTransferPoolResourcesOptions&));
     UNIMPLEMENTED_METHOD(TFuture<NScheduler::TOperationId>, StartOperation, (NScheduler::EOperationType, const NYson::TYsonString&, const TStartOperationOptions&));
     UNIMPLEMENTED_METHOD(TFuture<void>, AbortOperation, (const NScheduler::TOperationIdOrAlias&, const TAbortOperationOptions&));
@@ -399,12 +422,14 @@ public:
     UNIMPLEMENTED_METHOD(TFuture<void>, ResumeOperation, (const NScheduler::TOperationIdOrAlias&, const TResumeOperationOptions&));
     UNIMPLEMENTED_METHOD(TFuture<void>, CompleteOperation, (const NScheduler::TOperationIdOrAlias&, const TCompleteOperationOptions&));
     UNIMPLEMENTED_METHOD(TFuture<void>, UpdateOperationParameters, (const NScheduler::TOperationIdOrAlias&, const NYson::TYsonString&, const TUpdateOperationParametersOptions&));
+    UNIMPLEMENTED_METHOD(TFuture<void>, PatchOperationSpec, (const NScheduler::TOperationIdOrAlias&, const NScheduler::TSpecPatchList&, const TPatchOperationSpecOptions&));
     UNIMPLEMENTED_METHOD(TFuture<TOperation>, GetOperation, (const NScheduler::TOperationIdOrAlias&, const TGetOperationOptions&));
     UNIMPLEMENTED_METHOD(TFuture<void>, DumpJobContext, (NJobTrackerClient::TJobId, const NYPath::TYPath&, const TDumpJobContextOptions&));
     UNIMPLEMENTED_METHOD(TFuture<NConcurrency::IAsyncZeroCopyInputStreamPtr>, GetJobInput, (NJobTrackerClient::TJobId, const TGetJobInputOptions&));
     UNIMPLEMENTED_METHOD(TFuture<NYson::TYsonString>, GetJobInputPaths, (NJobTrackerClient::TJobId, const TGetJobInputPathsOptions&));
     UNIMPLEMENTED_METHOD(TFuture<NYson::TYsonString>, GetJobSpec, (NJobTrackerClient::TJobId, const TGetJobSpecOptions&));
-    UNIMPLEMENTED_METHOD(TFuture<TSharedRef>, GetJobStderr, (const NScheduler::TOperationIdOrAlias&, NJobTrackerClient::TJobId, const TGetJobStderrOptions&));
+    UNIMPLEMENTED_METHOD(TFuture<TGetJobStderrResponse>, GetJobStderr, (const NScheduler::TOperationIdOrAlias&, NJobTrackerClient::TJobId, const TGetJobStderrOptions&));
+    UNIMPLEMENTED_METHOD(TFuture<std::vector<TJobTraceEvent>>, GetJobTrace, (const NScheduler::TOperationIdOrAlias&, const TGetJobTraceOptions&));
     UNIMPLEMENTED_METHOD(TFuture<TSharedRef>, GetJobFailContext, (const NScheduler::TOperationIdOrAlias&, NJobTrackerClient::TJobId, const TGetJobFailContextOptions&));
     UNIMPLEMENTED_METHOD(TFuture<TListOperationsResult>, ListOperations, (const TListOperationsOptions&));
     UNIMPLEMENTED_METHOD(TFuture<TListJobsResult>, ListJobs, (const NScheduler::TOperationIdOrAlias&, const TListJobsOptions&));
@@ -421,14 +446,14 @@ public:
     UNIMPLEMENTED_METHOD(TFuture<void>, ExitReadOnly, (NObjectClient::TCellId, const TExitReadOnlyOptions&));
     UNIMPLEMENTED_METHOD(TFuture<void>, MasterExitReadOnly, (const TMasterExitReadOnlyOptions&));
     UNIMPLEMENTED_METHOD(TFuture<void>, DiscombobulateNonvotingPeers, (NObjectClient::TCellId, const TDiscombobulateNonvotingPeersOptions&));
-    UNIMPLEMENTED_METHOD(TFuture<void>, SwitchLeader, (NObjectClient::TCellId, const TString&, const TSwitchLeaderOptions&));
+    UNIMPLEMENTED_METHOD(TFuture<void>, SwitchLeader, (NObjectClient::TCellId, const std::string&, const TSwitchLeaderOptions&));
     UNIMPLEMENTED_METHOD(TFuture<void>, ResetStateHash, (NObjectClient::TCellId, const TResetStateHashOptions&));
     UNIMPLEMENTED_METHOD(TFuture<void>, GCCollect, (const TGCCollectOptions&));
-    UNIMPLEMENTED_METHOD(TFuture<void>, KillProcess, (const TString&, const TKillProcessOptions&));
-    UNIMPLEMENTED_METHOD(TFuture<TString>, WriteCoreDump, (const TString&, const TWriteCoreDumpOptions&));
-    UNIMPLEMENTED_METHOD(TFuture<TGuid>, WriteLogBarrier, (const TString&, const TWriteLogBarrierOptions&));
+    UNIMPLEMENTED_METHOD(TFuture<void>, KillProcess, (const std::string&, const TKillProcessOptions&));
+    UNIMPLEMENTED_METHOD(TFuture<TString>, WriteCoreDump, (const std::string&, const TWriteCoreDumpOptions&));
+    UNIMPLEMENTED_METHOD(TFuture<TGuid>, WriteLogBarrier, (const std::string&, const TWriteLogBarrierOptions&));
     UNIMPLEMENTED_METHOD(TFuture<TString>, WriteOperationControllerCoreDump, (NJobTrackerClient::TOperationId, const TWriteOperationControllerCoreDumpOptions&));
-    UNIMPLEMENTED_METHOD(TFuture<void>, HealExecNode, (const TString&, const THealExecNodeOptions&));
+    UNIMPLEMENTED_METHOD(TFuture<void>, HealExecNode, (const std::string&, const THealExecNodeOptions&));
     UNIMPLEMENTED_METHOD(TFuture<void>, SuspendCoordinator, (NObjectClient::TCellId, const TSuspendCoordinatorOptions&));
     UNIMPLEMENTED_METHOD(TFuture<void>, ResumeCoordinator, (NObjectClient::TCellId, const TResumeCoordinatorOptions&));
     UNIMPLEMENTED_METHOD(TFuture<void>, MigrateReplicationCards, (NObjectClient::TCellId, const TMigrateReplicationCardsOptions&));
@@ -437,16 +462,17 @@ public:
     UNIMPLEMENTED_METHOD(TFuture<void>, SuspendTabletCells, (const std::vector<NObjectClient::TCellId>&, const TSuspendTabletCellsOptions&));
     UNIMPLEMENTED_METHOD(TFuture<void>, ResumeTabletCells, (const std::vector<NObjectClient::TCellId>&, const TResumeTabletCellsOptions&));
     UNIMPLEMENTED_METHOD(TFuture<void>, UpdateChaosTableReplicaProgress, (NChaosClient::TReplicaId, const TUpdateChaosTableReplicaProgressOptions&));
-    UNIMPLEMENTED_METHOD(TFuture<TMaintenanceIdPerTarget>, AddMaintenance, (EMaintenanceComponent, const TString&, EMaintenanceType, const TString&, const TAddMaintenanceOptions&));
-    UNIMPLEMENTED_METHOD(TFuture<TMaintenanceCountsPerTarget>, RemoveMaintenance, (EMaintenanceComponent, const TString&, const TMaintenanceFilter&, const TRemoveMaintenanceOptions&));
-    UNIMPLEMENTED_METHOD(TFuture<TDisableChunkLocationsResult>, DisableChunkLocations, (const TString&, const std::vector<TGuid>&, const TDisableChunkLocationsOptions&));
-    UNIMPLEMENTED_METHOD(TFuture<TDestroyChunkLocationsResult>, DestroyChunkLocations, (const TString&, bool, const std::vector<TGuid>&, const TDestroyChunkLocationsOptions&));
-    UNIMPLEMENTED_METHOD(TFuture<TResurrectChunkLocationsResult>, ResurrectChunkLocations, (const TString&, const std::vector<TGuid>&, const TResurrectChunkLocationsOptions&));
-    UNIMPLEMENTED_METHOD(TFuture<TRequestRestartResult>, RequestRestart, (const TString&, const TRequestRestartOptions&));
-    UNIMPLEMENTED_METHOD(TFuture<void>, SetUserPassword, (const TString&, const TString&, const TString&, const TSetUserPasswordOptions&));
-    UNIMPLEMENTED_METHOD(TFuture<TIssueTokenResult>, IssueToken, (const TString&, const TString&, const TIssueTokenOptions&));
-    UNIMPLEMENTED_METHOD(TFuture<void>, RevokeToken, (const TString&, const TString&, const TString&, const TRevokeTokenOptions&));
-    UNIMPLEMENTED_METHOD(TFuture<TListUserTokensResult>, ListUserTokens, (const TString&, const TString&, const TListUserTokensOptions&));
+    UNIMPLEMENTED_METHOD(TFuture<TMaintenanceIdPerTarget>, AddMaintenance, (EMaintenanceComponent, const std::string&, EMaintenanceType, const TString&, const TAddMaintenanceOptions&));
+    UNIMPLEMENTED_METHOD(TFuture<TMaintenanceCountsPerTarget>, RemoveMaintenance, (EMaintenanceComponent, const std::string&, const TMaintenanceFilter&, const TRemoveMaintenanceOptions&));
+    UNIMPLEMENTED_METHOD(TFuture<TDisableChunkLocationsResult>, DisableChunkLocations, (const std::string&, const std::vector<TGuid>&, const TDisableChunkLocationsOptions&));
+    UNIMPLEMENTED_METHOD(TFuture<TDestroyChunkLocationsResult>, DestroyChunkLocations, (const std::string&, bool, const std::vector<TGuid>&, const TDestroyChunkLocationsOptions&));
+    UNIMPLEMENTED_METHOD(TFuture<TResurrectChunkLocationsResult>, ResurrectChunkLocations, (const std::string&, const std::vector<TGuid>&, const TResurrectChunkLocationsOptions&));
+    UNIMPLEMENTED_METHOD(TFuture<TRequestRestartResult>, RequestRestart, (const std::string&, const TRequestRestartOptions&));
+    UNIMPLEMENTED_METHOD(TFuture<TCollectCoverageResult>, CollectCoverage, (const std::string&, const TCollectCoverageOptions&));
+    UNIMPLEMENTED_METHOD(TFuture<void>, SetUserPassword, (const std::string&, const TString&, const TString&, const TSetUserPasswordOptions&));
+    UNIMPLEMENTED_METHOD(TFuture<TIssueTokenResult>, IssueToken, (const std::string&, const TString&, const TIssueTokenOptions&));
+    UNIMPLEMENTED_METHOD(TFuture<void>, RevokeToken, (const std::string&, const TString&, const TString&, const TRevokeTokenOptions&));
+    UNIMPLEMENTED_METHOD(TFuture<TListUserTokensResult>, ListUserTokens, (const std::string&, const TString&, const TListUserTokensOptions&));
     UNIMPLEMENTED_METHOD(TFuture<NQueryTrackerClient::TQueryId>, StartQuery, (NQueryTrackerClient::EQueryEngine, const TString&, const TStartQueryOptions&));
     UNIMPLEMENTED_METHOD(TFuture<void>, AbortQuery, (NQueryTrackerClient::TQueryId, const TAbortQueryOptions&));
     UNIMPLEMENTED_METHOD(TFuture<IUnversionedRowsetPtr>, ReadQueryResult, (NQueryTrackerClient::TQueryId, i64, const TReadQueryResultOptions&));
@@ -454,8 +480,8 @@ public:
     UNIMPLEMENTED_METHOD(TFuture<TListQueriesResult>, ListQueries, (const TListQueriesOptions&));
     UNIMPLEMENTED_METHOD(TFuture<void>, AlterQuery, (NQueryTrackerClient::TQueryId, const TAlterQueryOptions&));
     UNIMPLEMENTED_METHOD(TFuture<TGetQueryTrackerInfoResult>, GetQueryTrackerInfo, (const TGetQueryTrackerInfoOptions&));
-    UNIMPLEMENTED_METHOD(TFuture<NBundleControllerClient::TBundleConfigDescriptorPtr>, GetBundleConfig, (const TString&, const NBundleControllerClient::TGetBundleConfigOptions&));
-    UNIMPLEMENTED_METHOD(TFuture<void>, SetBundleConfig, (const TString&, const NBundleControllerClient::TBundleTargetConfigPtr&, const NBundleControllerClient::TSetBundleConfigOptions&));
+    UNIMPLEMENTED_METHOD(TFuture<NBundleControllerClient::TBundleConfigDescriptorPtr>, GetBundleConfig, (const std::string&, const NBundleControllerClient::TGetBundleConfigOptions&));
+    UNIMPLEMENTED_METHOD(TFuture<void>, SetBundleConfig, (const std::string&, const NBundleControllerClient::TBundleTargetConfigPtr&, const NBundleControllerClient::TSetBundleConfigOptions&));
     UNIMPLEMENTED_METHOD(TFuture<ITableReaderPtr>, CreateTableReader, (const NYPath::TRichYPath&, const TTableReaderOptions&));
     UNIMPLEMENTED_METHOD(TFuture<ITableWriterPtr>, CreateTableWriter, (const NYPath::TRichYPath&, const TTableWriterOptions&));
     UNIMPLEMENTED_METHOD(TFuture<IFileReaderPtr>, CreateFileReader, (const NYPath::TYPath&, const TFileReaderOptions&));
@@ -471,6 +497,13 @@ public:
     UNIMPLEMENTED_METHOD(TFuture<void>, PausePipeline, (const NYPath::TYPath&, const TPausePipelineOptions&));
     UNIMPLEMENTED_METHOD(TFuture<TPipelineState>, GetPipelineState, (const NYPath::TYPath&, const TGetPipelineStateOptions&));
     UNIMPLEMENTED_METHOD(TFuture<TGetFlowViewResult>, GetFlowView, (const NYPath::TYPath&, const NYPath::TYPath&, const TGetFlowViewOptions&));
+    UNIMPLEMENTED_METHOD(TFuture<TFlowExecuteResult>, FlowExecute, (const NYPath::TYPath&, const TString&, const NYson::TYsonString&, const TFlowExecuteOptions&));
+    UNIMPLEMENTED_METHOD(TFuture<TDistributedWriteSessionWithCookies>, StartDistributedWriteSession, (const NYPath::TRichYPath&, const TDistributedWriteSessionStartOptions&));
+    UNIMPLEMENTED_METHOD(TFuture<void>, FinishDistributedWriteSession, (const TDistributedWriteSessionWithResults&, const TDistributedWriteSessionFinishOptions&));
+    UNIMPLEMENTED_METHOD(TFuture<ITableFragmentWriterPtr>, CreateTableFragmentWriter, (const TSignedWriteFragmentCookiePtr&, const TTableFragmentWriterOptions&));
+    UNIMPLEMENTED_METHOD(TFuture<TSignedShuffleHandlePtr>, StartShuffle, (const std::string& , int, NObjectClient::TTransactionId, const TStartShuffleOptions&));
+    UNIMPLEMENTED_METHOD(TFuture<IRowBatchReaderPtr>, CreateShuffleReader, (const TSignedShuffleHandlePtr&, int, std::optional<std::pair<int, int>>, const TShuffleReaderOptions&));
+    UNIMPLEMENTED_METHOD(TFuture<IRowBatchWriterPtr>, CreateShuffleWriter, (const TSignedShuffleHandlePtr&, const std::string&, std::optional<int>, const TShuffleWriterOptions&));
 
 private:
     friend class TTransaction;
@@ -493,6 +526,7 @@ private:
 private:
     const TFederationConfigPtr Config_;
     const NConcurrency::TPeriodicExecutorPtr Executor_;
+    const TString LocalDatacenter_;
 
     std::vector<TClientDescriptionPtr> UnderlyingClients_;
     IClientPtr ActiveClient_;
@@ -527,8 +561,8 @@ TFuture<ResultType> TTransaction::MethodName(Y_METHOD_USED_ARGS_DECLARATION(Args
 } Y_SEMICOLON_GUARD
 
 TRANSACTION_METHOD_IMPL(TUnversionedLookupRowsResult, LookupRows, (const NYPath::TYPath&, NTableClient::TNameTablePtr, const TSharedRange<NTableClient::TUnversionedRow>&, const TLookupRowsOptions&));
-TRANSACTION_METHOD_IMPL(TSelectRowsResult, SelectRows, (const TString&, const TSelectRowsOptions&));
-TRANSACTION_METHOD_IMPL(void, Ping, (const NApi::TTransactionPingOptions&));
+TRANSACTION_METHOD_IMPL(TSelectRowsResult, SelectRows, (const std::string&, const TSelectRowsOptions&));
+TRANSACTION_METHOD_IMPL(void, Ping, (const NApi::TPrerequisitePingOptions&));
 TRANSACTION_METHOD_IMPL(TTransactionCommitResult, Commit, (const TTransactionCommitOptions&));
 TRANSACTION_METHOD_IMPL(void, Abort, (const TTransactionAbortOptions&));
 TRANSACTION_METHOD_IMPL(TVersionedLookupRowsResult, VersionedLookupRows, (const NYPath::TYPath&, NTableClient::TNameTablePtr, const TSharedRange<NTableClient::TUnversionedRow>&, const TVersionedLookupRowsOptions&));
@@ -537,7 +571,7 @@ TRANSACTION_METHOD_IMPL(TPullRowsResult, PullRows, (const NYPath::TYPath&, const
 TRANSACTION_METHOD_IMPL(void, AdvanceQueueConsumer, (const NYPath::TRichYPath&, const NYPath::TRichYPath&, int, std::optional<i64>, i64, const TAdvanceQueueConsumerOptions&));
 TRANSACTION_METHOD_IMPL(TPushQueueProducerResult, PushQueueProducer, (const NYPath::TRichYPath&, const NYPath::TRichYPath&, const TQueueProducerSessionId&, TQueueProducerEpoch, NTableClient::TNameTablePtr, TSharedRange<NTableClient::TUnversionedRow>, const TPushQueueProducerOptions&));
 TRANSACTION_METHOD_IMPL(TPushQueueProducerResult, PushQueueProducer, (const NYPath::TRichYPath&, const NYPath::TRichYPath&, const TQueueProducerSessionId&, TQueueProducerEpoch, NTableClient::TNameTablePtr, const std::vector<TSharedRef>&, const TPushQueueProducerOptions&));
-TRANSACTION_METHOD_IMPL(NYson::TYsonString, ExplainQuery, (const TString&, const TExplainQueryOptions&));
+TRANSACTION_METHOD_IMPL(NYson::TYsonString, ExplainQuery, (const std::string&, const TExplainQueryOptions&));
 TRANSACTION_METHOD_IMPL(NYson::TYsonString, GetNode, (const NYPath::TYPath&, const TGetNodeOptions&));
 TRANSACTION_METHOD_IMPL(NYson::TYsonString, ListNode, (const NYPath::TYPath&, const TListNodeOptions&));
 TRANSACTION_METHOD_IMPL(bool, NodeExists, (const NYPath::TYPath&, const TNodeExistsOptions&));
@@ -583,19 +617,14 @@ TClient::TClient(const std::vector<IClientPtr>& underlyingClients, TFederationCo
         NRpc::TDispatcher::Get()->GetLightInvoker(),
         BIND(&TClient::CheckClustersHealth, MakeWeak(this)),
         Config_->ClusterHealthCheckPeriod))
+    , LocalDatacenter_(NNet::GetLocalYPCluster())
 {
     YT_VERIFY(!underlyingClients.empty());
 
     UnderlyingClients_.reserve(underlyingClients.size());
-    const auto& localDatacenter = NNet::GetLocalYPCluster();
     for (const auto& client : underlyingClients) {
-        int priority = GetDataCenterByClient(client) == localDatacenter ? 1 : 0;
-        UnderlyingClients_.push_back(New<TClientDescription>(client, priority));
+        UnderlyingClients_.push_back(New<TClientDescription>(client, EClientPriority::Undefined));
     }
-    std::stable_sort(UnderlyingClients_.begin(), UnderlyingClients_.end(), [] (const auto& lhs, const auto& rhs) {
-        return lhs->Priority > rhs->Priority;
-    });
-
     ActiveClient_ = UnderlyingClients_[0]->Client;
     ActiveClientIndex_ = 0;
 
@@ -605,43 +634,54 @@ TClient::TClient(const std::vector<IClientPtr>& underlyingClients, TFederationCo
 void TClient::CheckClustersHealth()
 {
     TCheckClusterLivenessOptions options;
-    options.CheckCypressRoot = true;
+    options.CheckCypressRoot = Config_->CheckCypressRoot;
     options.CheckTabletCellBundle = Config_->BundleName;
-
-    int activeClientIndex = ActiveClientIndex_.load();
-    std::optional<int> betterClientIndex;
 
     std::vector<TFuture<void>> checks;
     checks.reserve(UnderlyingClients_.size());
-
     for (const auto& clientDescription : UnderlyingClients_) {
         checks.emplace_back(clientDescription->Client->CheckClusterLiveness(options));
     }
 
-    for (int index = 0; index < std::ssize(checks); ++index) {
+    for (int index = 0; index != std::ssize(checks); ++index) {
         const auto& check = checks[index];
-        bool hasErrors = !NConcurrency::WaitFor(check).IsOK();
-        UnderlyingClients_[index]->HasErrors = hasErrors;
-        if (!betterClientIndex && !hasErrors && index < activeClientIndex) {
+        auto error = NConcurrency::WaitFor(check);
+        YT_LOG_DEBUG_UNLESS(error.IsOK(), error, "Cluster %Qv is marked as unhealthy",
+            UnderlyingClients_[index]->Client->GetConnection()->GetClusterName());
+        UnderlyingClients_[index]->HasErrors = !error.IsOK()
+            && !error.FindMatching(NSecurityClient::EErrorCode::AuthorizationError); // Ignore authorization errors.
+    }
+
+    for (int index = 0; index != std::ssize(UnderlyingClients_); ++index) {
+        auto& client = UnderlyingClients_[index];
+        // `Priority` accessed only from this thread so it is not require synchronization.
+        if (client->Priority == EClientPriority::Undefined) {
+            auto clientDatacenter = NConcurrency::WaitFor(GetDataCenterByClient(client->Client));
+            if (clientDatacenter.IsOK()) {
+                client->Priority = clientDatacenter.Value() == LocalDatacenter_
+                    ? EClientPriority::Local
+                    : EClientPriority::Remote;
+            }
+        }
+    }
+    // Compute better activeClientIndex.
+    int betterClientIndex = ActiveClientIndex_.load();
+    auto betterPriority = UnderlyingClients_[betterClientIndex]->HasErrors
+        ? EClientPriority::Undefined
+        : UnderlyingClients_[betterClientIndex]->Priority;
+
+    for (int index  = 0; index != std::ssize(UnderlyingClients_); ++index) {
+        const auto& client = UnderlyingClients_[index];
+        if (!client->HasErrors && client->Priority < betterPriority) {
             betterClientIndex = index;
+            betterPriority = client->Priority;
         }
     }
 
-    if (betterClientIndex && ActiveClientIndex_ == activeClientIndex) {
-        int newClientIndex = *betterClientIndex;
+    if (ActiveClientIndex_ != betterClientIndex) {
         auto guard = NThreading::WriterGuard(Lock_);
-        ActiveClient_ = UnderlyingClients_[newClientIndex]->Client;
-        ActiveClientIndex_ = newClientIndex;
-        return;
-    }
-
-    // If active cluster is not healthy, try changing it.
-    if (UnderlyingClients_[activeClientIndex]->HasErrors) {
-        auto guard = NThreading::WriterGuard(Lock_);
-        // Check that active client wasn't changed.
-        if (ActiveClientIndex_ == activeClientIndex && UnderlyingClients_[activeClientIndex]->HasErrors) {
-            UpdateActiveClient();
-        }
+        ActiveClient_ = UnderlyingClients_[betterClientIndex]->Client;
+        ActiveClientIndex_ = betterClientIndex;
     }
 }
 
@@ -691,13 +731,13 @@ TFuture<ResultType> TClient::MethodName(Y_METHOD_USED_ARGS_DECLARATION(Args))   
 } Y_SEMICOLON_GUARD
 
 CLIENT_METHOD_IMPL(TUnversionedLookupRowsResult, LookupRows, (const NYPath::TYPath&, NTableClient::TNameTablePtr, const TSharedRange<NTableClient::TLegacyKey>&, const TLookupRowsOptions&));
-CLIENT_METHOD_IMPL(TSelectRowsResult, SelectRows, (const TString&, const TSelectRowsOptions&));
+CLIENT_METHOD_IMPL(TSelectRowsResult, SelectRows, (const std::string&, const TSelectRowsOptions&));
 CLIENT_METHOD_IMPL(std::vector<TUnversionedLookupRowsResult>, MultiLookupRows, (const std::vector<TMultiLookupSubrequest>&, const TMultiLookupOptions&));
 CLIENT_METHOD_IMPL(TVersionedLookupRowsResult, VersionedLookupRows, (const NYPath::TYPath&, NTableClient::TNameTablePtr, const TSharedRange<NTableClient::TUnversionedRow>&, const TVersionedLookupRowsOptions&));
 CLIENT_METHOD_IMPL(TPullRowsResult, PullRows, (const NYPath::TYPath&, const TPullRowsOptions&));
 CLIENT_METHOD_IMPL(NQueueClient::IQueueRowsetPtr, PullQueue, (const NYPath::TRichYPath&, i64, int, const NQueueClient::TQueueRowBatchReadOptions&, const TPullQueueOptions&));
 CLIENT_METHOD_IMPL(NQueueClient::IQueueRowsetPtr, PullQueueConsumer, (const NYPath::TRichYPath&, const NYPath::TRichYPath&, std::optional<i64>, int, const NQueueClient::TQueueRowBatchReadOptions&, const TPullQueueConsumerOptions&));
-CLIENT_METHOD_IMPL(NYson::TYsonString, ExplainQuery, (const TString&, const TExplainQueryOptions&));
+CLIENT_METHOD_IMPL(NYson::TYsonString, ExplainQuery, (const std::string&, const TExplainQueryOptions&));
 CLIENT_METHOD_IMPL(NYson::TYsonString, GetNode, (const NYPath::TYPath&, const TGetNodeOptions&));
 CLIENT_METHOD_IMPL(NYson::TYsonString, ListNode, (const NYPath::TYPath&, const TListNodeOptions&));
 CLIENT_METHOD_IMPL(bool, NodeExists, (const NYPath::TYPath&, const TNodeExistsOptions&));
@@ -732,6 +772,21 @@ ITransactionPtr TClient::AttachTransaction(
     THROW_ERROR_EXCEPTION("No client is known for transaction %v", transactionId);
 }
 
+IPrerequisitePtr TClient::AttachPrerequisite(
+    NPrerequisiteClient::TPrerequisiteId prerequisiteId,
+    const TPrerequisiteAttachOptions& options)
+{
+    TTransactionAttachOptions attachOptions = {};
+    attachOptions.AutoAbort = options.AutoAbort;
+    attachOptions.PingPeriod = options.PingPeriod;
+    attachOptions.Ping = options.Ping;
+    attachOptions.PingAncestors = options.PingAncestors;
+
+    static_assert(std::is_convertible_v<ITransaction*, IPrerequisite*>);
+
+    return AttachTransaction(prerequisiteId, attachOptions);
+}
+
 void TClient::HandleError(const TErrorOr<void>& error, int clientIndex)
 {
     if (!NRpc::IsChannelFailureError(error) && !Config_->RetryAnyError) {
@@ -742,42 +797,34 @@ void TClient::HandleError(const TErrorOr<void>& error, int clientIndex)
     if (ActiveClientIndex_ != clientIndex) {
         return;
     }
-
-    auto guard = WriterGuard(Lock_);
-    if (ActiveClientIndex_ != clientIndex) {
-        return;
-    }
-
     UpdateActiveClient();
 }
 
 void TClient::UpdateActiveClient()
 {
-    VERIFY_WRITER_SPINLOCK_AFFINITY(Lock_);
-
-    int activeClientIndex = ActiveClientIndex_.load();
+    YT_ASSERT_THREAD_AFFINITY_ANY();
 
     for (int index = 0; index < std::ssize(UnderlyingClients_); ++index) {
         const auto& clientDescription = UnderlyingClients_[index];
         if (!clientDescription->HasErrors) {
-            if (activeClientIndex != index) {
+            if (ActiveClientIndex_ != index) {
                 YT_LOG_DEBUG("Active client was changed (PreviousClientIndex: %v, NewClientIndex: %v)",
-                    activeClientIndex,
+                    ActiveClientIndex_.load(),
                     index);
+                auto guard = NThreading::WriterGuard(Lock_);
+                ActiveClientIndex_ = index;
+                ActiveClient_ = clientDescription->Client;
             }
-
-            ActiveClient_ = clientDescription->Client;
-            ActiveClientIndex_ = index;
-            break;
+            return;
         }
     }
 }
 
 TClient::TActiveClientInfo TClient::GetActiveClient()
 {
-    auto guard = ReaderGuard(Lock_);
     YT_LOG_TRACE("Request will be send to the active client (ClientIndex: %v)",
         ActiveClientIndex_.load());
+    auto guard = ReaderGuard(Lock_);
     return {ActiveClient_, ActiveClientIndex_.load()};
 }
 

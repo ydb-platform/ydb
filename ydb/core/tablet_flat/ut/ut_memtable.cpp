@@ -22,7 +22,7 @@ Y_UNIT_TEST_SUITE(Memtable)
 {
     using namespace NTest;
 
-    TIntrusiveConstPtr<TRowScheme> BasicRowLayout() noexcept
+    TIntrusiveConstPtr<TRowScheme> BasicRowLayout()
     {
         return
             TLayoutCook()

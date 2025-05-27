@@ -11,7 +11,7 @@
 #include <thread>
 #include <unordered_map>
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 
 constexpr int PESSIMIZATION_DISCOVERY_THRESHOLD = 50; // percent of endpoints pessimized by transport error to start recheck
 constexpr TDuration ENDPOINT_UPDATE_PERIOD = TDuration::Minutes(1); // period to perform endpoints update in "normal" case

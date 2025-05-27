@@ -3,6 +3,7 @@
 #include "scheme_type_info.h"
 
 #include <util/generic/array_ref.h>
+#include <util/generic/yexception.h>
 #include <util/string/builder.h>
 
 namespace NKikimr {
@@ -14,25 +15,24 @@ public:
     TRawTypeValue()
         : Buffer(nullptr)
         , BufferSize(0)
-        , ValueType(0)
+        , ValueType()
     {}
 
-    TRawTypeValue(const void* buf, ui32 bufSize, NScheme::TTypeInfo vtype)
+    TRawTypeValue(const void* buf, size_t bufSize, NScheme::TTypeId vtype)
         : Buffer(buf)
         , BufferSize(bufSize)
         , ValueType(vtype)
     {
-        Y_DEBUG_ABORT_UNLESS(!buf || vtype.GetTypeId() != 0);
+        Y_ASSERT(!buf || vtype != 0);
     }
 
-    TRawTypeValue(TArrayRef<const char> ref, NScheme::TTypeInfo vtype)
+    TRawTypeValue(TArrayRef<const char> ref, NScheme::TTypeId vtype)
         : TRawTypeValue((void*)ref.data(), ref.size(), vtype)
     {}
 
     const void* Data() const { return Buffer; }
     ui32 Size() const { return BufferSize; }
-    NScheme::TTypeId Type() const { return ValueType.GetTypeId(); }
-    NScheme::TTypeInfo TypeInfo() const { return ValueType; }
+    NScheme::TTypeId Type() const { return ValueType; }
 
     // we must distinguish empty raw type value (nothing, buffer == nullptr)
     // and zero-length string (value exists, but zero-length)
@@ -41,7 +41,7 @@ public:
 
     TString ToString() const {
         TStringBuilder builder;
-        builder << "(type:" << ValueType.GetTypeId();
+        builder << "(type:" << ValueType;
         if (!IsEmpty()) {
             builder << ", value:" << TString((const char*)Buffer, BufferSize).Quote();
         }
@@ -60,7 +60,7 @@ public:
 private:
     const void* Buffer;
     ui32 BufferSize;
-    NScheme::TTypeInfo ValueType;
+    NScheme::TTypeId ValueType;
 };
 
 } // namspace NKikimr

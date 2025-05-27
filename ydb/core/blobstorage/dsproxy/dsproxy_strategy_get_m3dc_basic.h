@@ -71,35 +71,14 @@ namespace NKikimr {
             // issue request for a specific disk; returns true if the request was issued and not yet completed, otherwise
             // false
 
-            if (info.GetTotalVDisksNum() > 1) {
-                // find the slowest disk and mark it
-                switch (blackboard.AccelerationMode) {
-                    case TBlackboard::AccelerationModeSkipOneSlowest: {
-                        TDiskDelayPredictions worstDisks;
-                        state.GetWorstPredictedDelaysNs(info, *blackboard.GroupQueues,
-                                HandleClassToQueueId(blackboard.GetHandleClass),
-                                &worstDisks, accelerationParams.PredictedDelayMultiplier);
-
-                        // Check if the slowest disk exceptionally slow, or just not very fast
-                        i32 slowDiskSubgroupIdx = -1;
-                        if (worstDisks[1].PredictedNs > 0 && worstDisks[0].PredictedNs >
-                                worstDisks[1].PredictedNs * accelerationParams.SlowDiskThreshold) {
-                            slowDiskSubgroupIdx = worstDisks[0].DiskIdx;
-                        }
-
-                        // Mark single slow disk
-                        for (size_t diskIdx = 0; diskIdx < state.Disks.size(); ++diskIdx) {
-                            state.Disks[diskIdx].IsSlow = false;
-                        }
-                        if (slowDiskSubgroupIdx >= 0) {
-                            state.Disks[slowDiskSubgroupIdx].IsSlow = true;
-                        }
-                        break;
-                    }
-                    case TBlackboard::AccelerationModeSkipMarked:
-                        // The slowest disk is already marked!
-                        break;
-                }
+            // mark slow disks
+            switch (blackboard.AccelerationMode) {
+                case TBlackboard::AccelerationModeSkipNSlowest:
+                    blackboard.MarkSlowDisks(state, false, accelerationParams);
+                    break;
+                case TBlackboard::AccelerationModeSkipMarked:
+                    // Slow disks are already marked!
+                    break;
             }
 
             // create an array defining order in which we traverse the disks
@@ -175,7 +154,7 @@ namespace NKikimr {
                 return EStrategyOutcome::IN_PROGRESS;
             } else if (!state.Whole.Needed.IsSubsetOf(state.Whole.Here())) {
                 // we haven't requested anything, but there is no required data in buffer, so blob is lost
-                R_LOG_WARN_SX(logCtx, "BPG48", "missing blob# " << state.Id.ToString() << " state# " << state.ToString());
+                DSP_LOG_WARN_SX(logCtx, "BPG48", "missing blob# " << state.Id.ToString() << " state# " << state.ToString());
                 state.WholeSituation = TBlobState::ESituation::Absent;
                 if (PhantomCheck || info.GetQuorumChecker().CheckQuorumForSubgroup(possiblyWritten)) {
                     // this blob is either:

@@ -712,6 +712,28 @@ Y_UNIT_TEST_SUITE(TBsVDiskRepl1) {
         Conf.Shutdown();
         UNIT_ASSERT(success2);
     }
+
+    Y_UNIT_TEST(ReadOnly) {
+        TSmallCommonDataSet dataSet;
+        ui32 domainsNum = 1u;
+        ui32 disksInDomain = 1u;
+        TConfiguration Conf(TAllPDisksConfiguration::MkManyTmp(1, 512u << 10u, 16ull << 30ull, "ROT"),
+                            domainsNum, disksInDomain, NKikimr::TBlobStorageGroupType::ErasureNone);
+        TFastVDiskSetup vdiskSetup;
+        Conf.Prepare(&vdiskSetup);
+        TTestReplDataWriteAndSync testLoad(&dataSet);
+        bool success1 = Conf.Run<TTestReplDataWriteAndSync>(&testLoad, TIMEOUT);
+        UNIT_ASSERT(success1);
+        Conf.Shutdown();
+        TOnePDisk &inst = Conf.PDisks->Get(1);
+        inst.ReadOnly = true;
+
+        Conf.Prepare(&vdiskSetup, false);
+        TReadUntilSuccess testRead(&dataSet, 0, SMALL_TIMEOUT);
+        bool success = Conf.Run<TReadUntilSuccess>(&testRead, TIMEOUT);
+        UNIT_ASSERT(success);
+        Conf.Shutdown();
+    }
 }
 
 Y_UNIT_TEST_SUITE(TBsVDiskRepl2) {

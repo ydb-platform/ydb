@@ -1,8 +1,18 @@
 #include "abstract_scheme.h"
 
-#include <ydb/core/tx/columnshard/engines/index_info.h>
+#include <ydb/core/formats/arrow/accessor/plain/accessor.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
-#include <ydb/core/formats/arrow/simple_arrays_cache.h>
+#include <ydb/core/formats/arrow/serializer/native.h>
+#include <ydb/core/tx/columnshard/engines/portions/write_with_blobs.h>
+#include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
+#include <ydb/core/tx/columnshard/engines/storage/chunks/column.h>
+#include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
+#include <ydb/core/tx/columnshard/splitter/batch_slice.h>
+
+#include <ydb/library/formats/arrow/simple_arrays_cache.h>
+#include <ydb/core/base/appdata_fwd.h>
+#include <ydb/core/protos/config.pb.h>
+
 #include <util/string/join.h>
 
 namespace NKikimr::NOlap {
@@ -14,6 +24,13 @@ std::shared_ptr<arrow::Field> ISnapshotSchema::GetFieldByIndex(const int index) 
     }
     return schema->field(index);
 }
+
+std::shared_ptr<arrow::Field> ISnapshotSchema::GetFieldByIndexVerified(const int index) const {
+    auto schema = GetSchema();
+    AFL_VERIFY(!!schema && index >= 0 && index < schema->num_fields());
+    return schema->field(index);
+}
+
 std::shared_ptr<arrow::Field> ISnapshotSchema::GetFieldByColumnIdOptional(const ui32 columnId) const {
     return GetFieldByIndex(GetFieldIndex(columnId));
 }
@@ -24,7 +41,6 @@ std::set<ui32> ISnapshotSchema::GetPkColumnsIds() const {
         result.emplace(GetColumnId(field->name()));
     }
     return result;
-
 }
 
 TConclusion<std::shared_ptr<NArrow::TGeneralContainer>> ISnapshotSchema::NormalizeBatch(
@@ -35,12 +51,12 @@ TConclusion<std::shared_ptr<NArrow::TGeneralContainer>> ISnapshotSchema::Normali
             return batch;
         }
     }
-    const std::shared_ptr<arrow::Schema>& resultArrowSchema = GetSchema();
+    const std::shared_ptr<NArrow::TSchemaLite>& resultArrowSchema = GetSchema();
 
     std::shared_ptr<NArrow::TGeneralContainer> result = std::make_shared<NArrow::TGeneralContainer>(batch->GetRecordsCount());
     for (size_t i = 0; i < resultArrowSchema->fields().size(); ++i) {
         auto& resultField = resultArrowSchema->fields()[i];
-        auto columnId = GetIndexInfo().GetColumnId(resultField->name());
+        auto columnId = GetIndexInfo().GetColumnIdVerified(resultField->name());
         auto oldField = dataSchema.GetFieldByColumnIdOptional(columnId);
         if (oldField) {
             auto fAccessor = batch->GetAccessorByNameOptional(oldField->name());
@@ -54,14 +70,14 @@ TConclusion<std::shared_ptr<NArrow::TGeneralContainer>> ISnapshotSchema::Normali
         }
         if (restoreColumnIds.contains(columnId)) {
             AFL_VERIFY(!!GetExternalDefaultValueVerified(columnId) || GetIndexInfo().IsNullableVerified(columnId))("column_name",
-                                                                          GetIndexInfo().GetColumnName(columnId, false))("id", columnId);
+                                                                        GetIndexInfo().GetColumnName(columnId, false))("id", columnId);
             result->AddField(resultField, GetColumnLoaderVerified(columnId)->BuildDefaultAccessor(batch->num_rows())).Validate();
         }
     }
     return result;
 }
 
-TConclusion<std::shared_ptr<arrow::RecordBatch>> ISnapshotSchema::PrepareForModification(
+TConclusion<NArrow::TContainerWithIndexes<arrow::RecordBatch>> ISnapshotSchema::PrepareForModification(
     const std::shared_ptr<arrow::RecordBatch>& incomingBatch, const NEvWrite::EModificationType mType) const {
     if (!incomingBatch) {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("error", "DeserializeBatch() failed");
@@ -72,72 +88,92 @@ TConclusion<std::shared_ptr<arrow::RecordBatch>> ISnapshotSchema::PrepareForModi
         return TConclusionStatus::Fail("empty incoming batch");
     }
 
-    auto status = incomingBatch->ValidateFull();
-    if (!status.ok()) {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("error", status.ToString());
-        return TConclusionStatus::Fail("not valid incoming batch: " + status.ToString());
-    }
+#ifndef NDEBUG
+    // its correct (dont check in release) through validation in long tx + validation in kqp streaming
+    NArrow::TStatusValidator::Validate(incomingBatch->ValidateFull());
+#endif
 
-    const std::shared_ptr<arrow::Schema> dstSchema = GetIndexInfo().ArrowSchema();
-
-    auto batch = NArrow::TColumnOperator().SkipIfAbsent().Extract(incomingBatch, dstSchema->field_names());
-
-    for (auto&& i : batch->schema()->fields()) {
-        AFL_VERIFY(GetIndexInfo().HasColumnName(i->name()));
-        if (!dstSchema->GetFieldByName(i->name())->Equals(i)) {
-            return TConclusionStatus::Fail("not equal field types for column '" + i->name() + "': " + i->ToString() + " vs " +
-                                           dstSchema->GetFieldByName(i->name())->ToString());
+    NArrow::TSchemaLiteView dstSchema = GetIndexInfo().ArrowSchema();
+    std::vector<std::shared_ptr<arrow::Array>> pkColumns;
+    pkColumns.resize(GetIndexInfo().GetReplaceKey()->num_fields());
+    ui32 pkColumnsCount = 0;
+    const auto pred = [&](const ui32 incomingIdx, const i32 targetIdx) {
+        if (targetIdx == -1) {
+            return TConclusionStatus::Success();
         }
-        if (GetIndexInfo().IsNullableVerified(i->name())) {
-            continue;
-        }
-        if (NArrow::HasNulls(batch->GetColumnByName(i->name()))) {
-            return TConclusionStatus::Fail("null data for not nullable column '" + i->name() + "'");
-        }
-    }
-
-    AFL_VERIFY(GetIndexInfo().GetPrimaryKey());
-
-    // Check PK is NOT NULL
-    for (auto& field : GetIndexInfo().GetPrimaryKey()->fields()) {
-        auto column = batch->GetColumnByName(field->name());
-        if (!column) {
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("error", TStringBuilder() << "missing PK column '" << field->name() << "'");
-            return TConclusionStatus::Fail("missing PK column: '" + field->name() + "'");
-        }
-        if (NArrow::HasNulls(column)) {
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("error", TStringBuilder() << "PK column '" << field->name() << "' contains NULLs");
-            return TConclusionStatus::Fail(TStringBuilder() << "PK column '" << field->name() << "' contains NULLs");
-        }
-    }
-
-    batch = NArrow::SortBatch(batch, GetIndexInfo().GetPrimaryKey(), true);
-    Y_DEBUG_ABORT_UNLESS(NArrow::IsSortedAndUnique(batch, GetIndexInfo().GetPrimaryKey()));
-
-    switch (mType) {
-        case NEvWrite::EModificationType::Replace:
-        case NEvWrite::EModificationType::Upsert: {
-            AFL_VERIFY(batch->num_columns() <= dstSchema->num_fields());
-            if (batch->num_columns() < dstSchema->num_fields()) {
-                for (auto&& f : dstSchema->fields()) {
-                    if (GetIndexInfo().IsNullableVerified(f->name())) {
-                        continue;
-                    }
-                    if (batch->GetColumnByName(f->name())) {
-                        continue;
-                    }
-                    if (!GetIndexInfo().GetColumnExternalDefaultValueVerified(f->name())) {
-                        return TConclusionStatus::Fail("empty field for non-default column: '" + f->name() + "'");
-                    }
-                }
+        const auto& incomingColumn = incomingBatch->column(incomingIdx);
+        const auto hasNull = NArrow::HasNulls(incomingColumn);
+        const TColumnFeatures& features = GetIndexInfo().GetColumnFeaturesVerifiedByIndex(targetIdx);
+        const std::optional<i32> pkFieldIdx = features.GetPKColumnIndex();
+        if (!features.GetDataAccessorConstructor()->HasInternalConversion() || !!pkFieldIdx) {
+            if (!features.GetArrowField()->type()->Equals(incomingColumn->type())) {
+                return TConclusionStatus::Fail(
+                    "not equal type for column: " + features.GetColumnName() + ": " + features.GetArrowField()->type()->ToString()
+                    + " vs " + incomingColumn->type()->ToString());
             }
-            return batch;
         }
-        case NEvWrite::EModificationType::Delete:
-        case NEvWrite::EModificationType::Insert:
-        case NEvWrite::EModificationType::Update:
-            return batch;
+        if (pkFieldIdx && hasNull && !AppData()->ColumnShardConfig.GetAllowNullableColumnsInPK()) {
+            return TConclusionStatus::Fail("null data for pk column is impossible for '" + dstSchema.field(targetIdx)->name() + "'");
+        }
+        if (hasNull) {
+            switch (mType) {
+                case NEvWrite::EModificationType::Replace:
+                case NEvWrite::EModificationType::Insert:
+                case NEvWrite::EModificationType::Upsert: {
+                    if (!GetIndexInfo().IsNullableVerifiedByIndex(targetIdx) && !GetIndexInfo().GetColumnExternalDefaultValueByIndexVerified(targetIdx))
+                        return TConclusionStatus::Fail("empty field for non-default column: '" + dstSchema.field(targetIdx)->name() + "'");
+                    }
+                case NEvWrite::EModificationType::Delete:
+                case NEvWrite::EModificationType::Update:
+                    break;
+            }
+        }
+        if (pkFieldIdx) {
+            AFL_VERIFY(*pkFieldIdx < (i32)pkColumns.size());
+            AFL_VERIFY(!pkColumns[*pkFieldIdx]);
+            pkColumns[*pkFieldIdx] = incomingBatch->column(incomingIdx);
+            ++pkColumnsCount;
+        }
+        return TConclusionStatus::Success();
+    };
+    const auto nameResolver = [&](const std::string& fieldName) -> i32 {
+        return GetIndexInfo().GetColumnIndexOptional(fieldName).value_or(-1);
+    };
+    auto batchConclusion = NArrow::TColumnOperator().SkipIfAbsent().IgnoreOnDifferentFieldTypes().AdaptIncomingToDestinationExt(
+        incomingBatch, dstSchema, pred, nameResolver);
+    if (batchConclusion.IsFail()) {
+        return batchConclusion;
     }
+    if (pkColumnsCount < pkColumns.size()) {
+        return TConclusionStatus::Fail("not enough pk fields");
+    }
+    auto result = batchConclusion.DetachResult();
+    result.MutableContainer() = NArrow::SortBatch(result.GetContainer(), pkColumns, true);
+    Y_DEBUG_ABORT_UNLESS(NArrow::IsSortedAndUnique(result.GetContainer(), GetIndexInfo().GetPrimaryKey()));
+    return result;
+}
+
+std::set<ui32> ISnapshotSchema::GetColumnIdsToDelete(const ISnapshotSchema::TPtr& targetSchema) const {
+    if (targetSchema->GetVersion() == GetVersion()) {
+        return {};
+    }
+    std::set<ui32> columnIdxsToDelete;
+    for (const auto& columnIdx : GetColumnIds()) {
+        const std::optional<ui32> targetColumnId = targetSchema->GetColumnIdOptional(GetFieldByColumnIdOptional(columnIdx)->name());
+        if (!targetColumnId || *targetColumnId != columnIdx) {
+            columnIdxsToDelete.emplace(columnIdx);
+        }
+    }
+    return columnIdxsToDelete;
+}
+
+std::vector<ui32> ISnapshotSchema::ConvertColumnIdsToIndexes(const std::set<ui32>& idxs) const {
+    std::vector<ui32> columnIndexes;
+    for (const auto& id : idxs) {
+        AFL_VERIFY(HasColumnId(id));
+        columnIndexes.emplace_back(GetFieldIndex(id));
+    }
+    return columnIndexes;
 }
 
 ui32 ISnapshotSchema::GetColumnId(const std::string& columnName) const {
@@ -179,7 +215,7 @@ std::vector<std::string> ISnapshotSchema::GetPKColumnNames() const {
 
 std::vector<std::shared_ptr<arrow::Field>> ISnapshotSchema::GetAbsentFields(const std::shared_ptr<arrow::Schema>& existsSchema) const {
     std::vector<std::shared_ptr<arrow::Field>> result;
-    for (auto&& f : GetIndexInfo().ArrowSchema()->fields()) {
+    for (auto&& f : GetIndexInfo().ArrowSchema()) {
         if (!existsSchema->GetFieldByName(f->name())) {
             result.emplace_back(f);
         }
@@ -189,8 +225,9 @@ std::vector<std::shared_ptr<arrow::Field>> ISnapshotSchema::GetAbsentFields(cons
 
 TConclusionStatus ISnapshotSchema::CheckColumnsDefault(const std::vector<std::shared_ptr<arrow::Field>>& fields) const {
     for (auto&& i : fields) {
-        auto defaultValue = GetExternalDefaultValueVerified(i->name());
-        if (!defaultValue && !GetIndexInfo().IsNullableVerified(i->name())) {
+        const ui32 colId = GetColumnIdVerified(i->name());
+        auto defaultValue = GetExternalDefaultValueVerified(colId);
+        if (!defaultValue && !GetIndexInfo().IsNullableVerified(colId)) {
             return TConclusionStatus::Fail("not nullable field with no default: " + i->name());
         }
     }
@@ -198,11 +235,12 @@ TConclusionStatus ISnapshotSchema::CheckColumnsDefault(const std::vector<std::sh
 }
 
 TConclusion<std::shared_ptr<arrow::RecordBatch>> ISnapshotSchema::BuildDefaultBatch(
-    const std::vector<std::shared_ptr<arrow::Field>>& fields, const ui32 rowsCount, const bool force) const {
+    const NArrow::TSchemaLiteView& schema, const ui32 rowsCount, const bool force) const {
     std::vector<std::shared_ptr<arrow::Array>> columns;
-    for (auto&& i : fields) {
-        auto defaultValue = GetExternalDefaultValueVerified(i->name());
-        if (!defaultValue && !GetIndexInfo().IsNullableVerified(i->name())) {
+    for (auto&& i : schema) {
+        const ui32 columnId = GetColumnIdVerified(i->name());
+        auto defaultValue = GetExternalDefaultValueVerified(columnId);
+        if (!defaultValue && !GetIndexInfo().IsNullableVerified(columnId)) {
             if (force) {
                 defaultValue = NArrow::DefaultScalar(i->type());
             } else {
@@ -211,7 +249,7 @@ TConclusion<std::shared_ptr<arrow::RecordBatch>> ISnapshotSchema::BuildDefaultBa
         }
         columns.emplace_back(NArrow::TThreadSimpleArraysCache::Get(i->type(), defaultValue, rowsCount));
     }
-    return arrow::RecordBatch::Make(std::make_shared<arrow::Schema>(fields), rowsCount, columns);
+    return arrow::RecordBatch::Make(std::make_shared<arrow::Schema>(arrow::FieldVector(schema.begin(), schema.end())), rowsCount, columns);
 }
 
 std::shared_ptr<arrow::Scalar> ISnapshotSchema::GetExternalDefaultValueVerified(const std::string& columnName) const {
@@ -259,4 +297,91 @@ std::set<ui32> ISnapshotSchema::GetColumnsWithDifferentDefaults(
     return result;
 }
 
+class TSchemaIterator {
+private:
+    std::vector<std::shared_ptr<arrow::Field>> Fields;
+    std::vector<std::shared_ptr<arrow::Field>>::const_iterator Current;
+
+public:
+    bool IsValid() const {
+        return Current != Fields.end();
+    }
+
+    const std::shared_ptr<arrow::Field>& GetValue() const {
+        AFL_VERIFY(IsValid());
+        return *Current;
+    }
+};
+
+TConclusion<TWritePortionInfoWithBlobsResult> ISnapshotSchema::PrepareForWrite(const ISnapshotSchema::TPtr& selfPtr, const TInternalPathId pathId,
+    const std::shared_ptr<arrow::RecordBatch>& incomingBatch, const NEvWrite::EModificationType mType,
+    const std::shared_ptr<IStoragesManager>& storagesManager, const std::shared_ptr<NColumnShard::TSplitterCounters>& splitterCounters) const {
+    AFL_VERIFY(incomingBatch->num_rows());
+    auto itIncoming = incomingBatch->schema()->fields().begin();
+    auto itIncomingEnd = incomingBatch->schema()->fields().end();
+    auto itIndex = GetIndexInfo().ArrowSchema().begin();
+    auto itIndexEnd = GetIndexInfo().ArrowSchema().end();
+    THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>> chunks;
+
+    std::shared_ptr<TDefaultSchemaDetails> schemaDetails(
+        new TDefaultSchemaDetails(selfPtr, std::make_shared<NArrow::NSplitter::TSerializationStats>()));
+
+    while (itIncoming != itIncomingEnd && itIndex != itIndexEnd) {
+        if ((*itIncoming)->name() == (*itIndex)->name()) {
+            const ui32 incomingIndex = itIncoming - incomingBatch->schema()->fields().begin();
+            const ui32 columnIndex = itIndex - GetIndexInfo().ArrowSchema().begin();
+            const ui32 columnId = GetIndexInfo().GetColumnIdByIndexVerified(columnIndex);
+            auto loader = GetIndexInfo().GetColumnLoaderVerified(columnId);
+            auto saver = GetIndexInfo().GetColumnSaver(columnId);
+            saver.AddSerializerWithBorder(100, NArrow::NSerialization::TNativeSerializer::GetUncompressed());
+            saver.AddSerializerWithBorder(100000000, NArrow::NSerialization::TNativeSerializer::GetFast());
+            const auto& columnFeatures = GetIndexInfo().GetColumnFeaturesVerified(columnId);
+            auto accessor = std::make_shared<NArrow::NAccessor::TTrivialArray>(incomingBatch->column(incomingIndex));
+            TConclusion<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> arrToWrite =
+                loader->GetAccessorConstructor()->Construct(accessor, loader->BuildAccessorContext(accessor->GetRecordsCount()));
+            if (arrToWrite.IsFail()) {
+                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "cannot build accessor")("reason", arrToWrite.GetErrorMessage());
+                return arrToWrite;
+            }
+
+            std::vector<std::shared_ptr<IPortionDataChunk>> columnChunks = { std::make_shared<NChunks::TChunkPreparation>(
+                loader->GetAccessorConstructor()->SerializeToString(*arrToWrite, loader->BuildAccessorContext(accessor->GetRecordsCount())),
+                *arrToWrite, TChunkAddress(columnId, 0), columnFeatures) };
+            AFL_VERIFY(chunks.emplace(columnId, std::move(columnChunks)).second);
+            ++itIncoming;
+        }
+        ++itIndex;
+    }
+    AFL_VERIFY(itIncoming == itIncomingEnd);
+
+    TGeneralSerializedSlice slice(chunks, schemaDetails, splitterCounters);
+    std::vector<TSplittedBlob> blobs;
+    if (!slice.GroupBlobs(blobs, NSplitter::TEntityGroups(NYDBTest::TControllers::GetColumnShardController()->GetBlobSplitSettings(),
+                                     NBlobOperations::TGlobal::DefaultStorageId))) {
+        return TConclusionStatus::Fail("cannot split data for appropriate blobs size");
+    }
+    auto constructor =
+        TWritePortionInfoWithBlobsConstructor::BuildByBlobs(std::move(blobs), {}, pathId, GetVersion(), GetSnapshot(), storagesManager, EPortionType::Written);
+
+    NArrow::TFirstLastSpecialKeys primaryKeys(slice.GetFirstLastPKBatch(GetIndexInfo().GetReplaceKey()));
+    const ui32 deletionsCount = (mType == NEvWrite::EModificationType::Delete) ? incomingBatch->num_rows() : 0;
+    constructor.GetPortionConstructor().MutablePortionConstructor().AddMetadata(*this, deletionsCount, primaryKeys, std::nullopt);
+    constructor.GetPortionConstructor().MutablePortionConstructor().MutableMeta().SetTierName(IStoragesManager::DefaultStorageId);
+    constructor.GetPortionConstructor().MutablePortionConstructor().MutableMeta().SetCompactionLevel(0);
+    constructor.GetPortionConstructor().MutablePortionConstructor().MutableMeta().UpdateRecordsMeta(NPortion::EProduced::INSERTED);
+    return TWritePortionInfoWithBlobsResult(std::move(constructor));
 }
+
+ui32 ISnapshotSchema::GetIndexesCount() const {
+    return GetIndexInfo().GetIndexes().size();
+}
+
+NIndexes::TIndexMetaContainer ISnapshotSchema::GetIndexVerified(const ui32 indexId) const {
+    return GetIndexInfo().GetIndexVerified(indexId);
+}
+
+NIndexes::TIndexMetaContainer ISnapshotSchema::GetIndexOptional(const ui32 indexId) const {
+    return GetIndexInfo().GetIndexOptional(indexId);
+}
+
+}   // namespace NKikimr::NOlap

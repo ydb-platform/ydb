@@ -1,8 +1,9 @@
 #include "ref_counted_tracker_profiler.h"
 #include "ref_counted_tracker.h"
-#include "singleton.h"
 
 #include <yt/yt/library/profiling/producer.h>
+
+#include <library/cpp/yt/memory/leaky_ref_counted_singleton.h>
 
 namespace NYT {
 
@@ -16,8 +17,8 @@ class TRefCountedTrackerProfiler
 public:
     TRefCountedTrackerProfiler()
     {
-        TProfiler registry{"/ref_counted_tracker"};
-        registry.AddProducer("/total", MakeStrong(this));
+        TProfiler profiler{"/ref_counted_tracker"};
+        profiler.AddProducer("/total", MakeStrong(this));
     }
 
     void CollectSensors(ISensorWriter* writer) override
@@ -34,9 +35,11 @@ public:
     }
 };
 
+////////////////////////////////////////////////////////////////////////////////
+
 void EnableRefCountedTrackerProfiling()
 {
-    LeakyRefCountedSingleton<TRefCountedTrackerProfiler>();
+    Y_UNUSED(LeakyRefCountedSingleton<TRefCountedTrackerProfiler>());
 }
 
 ////////////////////////////////////////////////////////////////////////////////

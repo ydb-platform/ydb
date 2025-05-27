@@ -1,6 +1,7 @@
 #include "interconnect_tcp_proxy.h"
 #include "interconnect_tcp_session.h"
 #include "interconnect_handshake.h"
+#include "interconnect_zc_processor.h"
 
 #include <ydb/library/actors/core/probes.h>
 #include <ydb/library/actors/core/log.h>
@@ -37,8 +38,10 @@ namespace NActors {
         , OutputStuckFlag(false)
         , OutputQueueUtilization(16)
         , OutputCounter(0ULL)
+        , ZcProcessor(proxy->Common->Settings.SocketSendOptimization == ESocketSendOptimization::IC_MSG_ZEROCOPY)
     {
         Proxy->Metrics->SetConnected(0);
+        PartUpdateTimestamp = GetCycleCountFast();
         ReceiveContext.Reset(new TReceiveContext);
     }
 
@@ -53,16 +56,28 @@ namespace NActors {
     }
 
     void TInterconnectSessionTCP::Init() {
-        auto destroyCallback = [as = TlsActivationContext->ExecutorThread.ActorSystem, id = Proxy->Common->DestructorId](THolder<IEventBase> event) {
+        auto destroyCallback = [as = TActivationContext::ActorSystem(), id = Proxy->Common->DestructorId](THolder<IEventBase> event) {
             as->Send(id, event.Release());
         };
-        Pool.ConstructInPlace(Proxy->Common, std::move(destroyCallback));
-        ChannelScheduler.ConstructInPlace(Proxy->PeerNodeId, Proxy->Common->ChannelsConfig, Proxy->Metrics, *Pool,
+        Pool = std::make_unique<TEventHolderPool>(Proxy->Common, std::move(destroyCallback));
+        ChannelScheduler.ConstructInPlace(Proxy->PeerNodeId, Proxy->Common->ChannelsConfig, Proxy->Metrics,
             Proxy->Common->Settings.MaxSerializedEventSize, Params);
 
         LOG_INFO(*TlsActivationContext, NActorsServices::INTERCONNECT_STATUS, "[%u] session created", Proxy->PeerNodeId);
         SetPrefix(Sprintf("Session %s [node %" PRIu32 "]", SelfId().ToString().data(), Proxy->PeerNodeId));
         SendUpdateToWhiteboard();
+    }
+
+    std::optional<ui8> TInterconnectSessionTCP::GetXDCFlags() const {
+        if (XdcSocket) {
+            if (ZcProcessor.ZcStateIsOk()) {
+                return TInterconnectProxyTCP::TProxyStats::MSG_ZERO_COPY_SEND;
+            } else {
+                return TInterconnectProxyTCP::TProxyStats::NONE;
+            }
+        } else {
+            return {};
+        }
     }
 
     void TInterconnectSessionTCP::CloseInputSession() {
@@ -83,6 +98,7 @@ namespace NActors {
         IActor::InvokeOtherActor(*Proxy, &TInterconnectProxyTCP::UnregisterSession, this);
         ShutdownSocket(std::move(reason));
 
+        ReceiveContext->Terminated = true; // prevent further message generation by receiving actor
         for (const auto& kv : Subscribers) {
             Send(kv.first, new TEvInterconnect::TEvNodeDisconnected(Proxy->PeerNodeId), 0, kv.second);
         }
@@ -95,8 +111,10 @@ namespace NActors {
         }
         DelayedEvents.clear();
 
+        std::unique_ptr<NInterconnect::IZcGuard> guard = ZcProcessor.GetGuard();
+
         ChannelScheduler->ForEach([&](TEventOutputChannel& channel) {
-            channel.NotifyUndelivered();
+            channel.ProcessUndelivered(*Pool, guard.get());
         });
 
         if (ReceiverId) {
@@ -113,6 +131,8 @@ namespace NActors {
         if (!Subscribers.empty()) {
             Proxy->Metrics->SubSubscribersCount(Subscribers.size());
         }
+
+        guard->Terminate(std::move(Pool), XdcSocket, TlsActivationContext->AsActorContext());
 
         TActor::PassAway();
     }
@@ -131,7 +151,7 @@ namespace NActors {
         auto& oChannel = ChannelScheduler->GetOutputChannel(evChannel);
         const bool wasWorking = oChannel.IsWorking();
 
-        const auto [dataSize, event] = oChannel.Push(*ev);
+        const auto [dataSize, event] = oChannel.Push(*ev, *Pool);
         LWTRACK(ForwardEvent, event->Orbit, Proxy->PeerNodeId, event->Descr.Type, event->Descr.Flags, LWACTORID(event->Descr.Recipient), LWACTORID(event->Descr.Sender), event->Descr.Cookie, event->EventSerializedSize);
 
         TotalOutputQueueSize += dataSize;
@@ -143,6 +163,9 @@ namespace NActors {
 
         SetOutputStuckFlag(true);
         ++NumEventsInQueue;
+        if (State == EState::Idle) {
+            UpdateState(EState::Utilized);
+        }
         RearmCloseOnIdle();
 
         LWTRACK(EnqueueEvent, event->Orbit, Proxy->PeerNodeId, NumEventsInQueue, GetWriteBlockedTotal(), evChannel, oChannel.GetQueueSize(), oChannel.GetBufferedAmountOfData());
@@ -242,6 +265,10 @@ namespace NActors {
         Socket = std::move(ev->Get()->Socket);
         XdcSocket = std::move(ev->Get()->XdcSocket);
 
+        if (XdcSocket) {
+            ZcProcessor.ApplySocketOption(*XdcSocket);
+        }
+
         // there may be a race
         const ui64 nextPacket = Max(LastConfirmed, ev->Get()->NextPacket);
 
@@ -313,6 +340,8 @@ namespace NActors {
         LastHandshakeDone = TActivationContext::Now();
 
         GenerateTraffic();
+
+        SendUpdateToWhiteboard(true, false);
     }
 
     void TInterconnectSessionTCP::Handle(TEvUpdateFromInputSession::TPtr& ev) {
@@ -353,28 +382,10 @@ namespace NActors {
 
             GenerateTraffic();
 
-            for (;;) {
-                switch (EUpdateState state = ReceiveContext->UpdateState) {
-                    case EUpdateState::NONE:
-                    case EUpdateState::CONFIRMING:
-                        Y_ABORT("unexpected state");
-
-                    case EUpdateState::INFLIGHT:
-                        // this message we are processing was the only one in flight, so we can reset state to NONE here
-                        if (ReceiveContext->UpdateState.compare_exchange_weak(state, EUpdateState::NONE)) {
-                            return;
-                        }
-                        break;
-
-                    case EUpdateState::INFLIGHT_AND_PENDING:
-                        // there is more messages pending from the input session actor, so we have to inform it to release
-                        // that message
-                        if (ReceiveContext->UpdateState.compare_exchange_weak(state, EUpdateState::CONFIRMING)) {
-                            Send(ev->Sender, new TEvConfirmUpdate);
-                            return;
-                        }
-                        break;
-                }
+            Y_ABORT_UNLESS(ReceiveContext->UpdateInFlight);
+            ReceiveContext->UpdateInFlight = false;
+            if (ReceiveContext->NextUpdatePending) {
+                Send(ev->Sender, new TEvConfirmUpdate);
             }
         }
     }
@@ -408,8 +419,14 @@ namespace NActors {
             TimeLimit.emplace(GetMaxCyclesPerEvent());
         }
 
+        if (NumEventsInQueue || OutgoingStream || OutOfBandStream || XdcStream) {
+            UpdateState(EState::Utilized);
+        }
+
         // generate ping request, if needed
         IssuePingRequest();
+
+        bool notEnoughCpu = false;
 
         while (Socket) {
             ProducePackets();
@@ -438,6 +455,7 @@ namespace NActors {
             } else if (TimeLimit->CheckExceeded()) {
                 SetEnoughCpu(++StarvingInRow < StarvingInRowForNotEnoughCpu);
                 IssueRam(false);
+                notEnoughCpu = true;
                 break;
             }
         }
@@ -449,6 +467,10 @@ namespace NActors {
 
         // equalize channel weights
         EqualizeCounter += ChannelScheduler->Equalize();
+
+        // update state
+        const bool finished = !NumEventsInQueue && !OutgoingStream && !OutOfBandStream && !XdcStream;
+        UpdateState(finished ? EState::Idle : notEnoughCpu ? EState::WaitingCpu : EState::Utilized);
     }
 
     void TInterconnectSessionTCP::ProducePackets() {
@@ -527,12 +549,15 @@ namespace NActors {
             CloseOnIdleWatchdog.Disarm();
             LostConnectionWatchdog.Rearm(SelfId());
             Proxy->Metrics->SetConnected(0);
+            Proxy->RegisterDisconnect();
             LOG_INFO(*TlsActivationContext, NActorsServices::INTERCONNECT_STATUS, "[%u] disconnected", Proxy->PeerNodeId);
         }
         if (XdcSocket) {
+            // call shutdown but do not call close and do not free wrapper object - we need descriptor to finish ZC op
             XdcSocket->Shutdown(SHUT_RDWR);
-            XdcSocket.Reset();
         }
+        UpdateState(EState::Idle);
+        SendUpdateToWhiteboard(true, false);
     }
 
     void TInterconnectSessionTCP::ReestablishConnectionExecute() {
@@ -671,6 +696,19 @@ namespace NActors {
             }
         }
 
+        if (XdcSocket) {
+            ZcProcessor.ProcessNotification(*XdcSocket);
+            if (!(ZcProcessor.ZcStateIsOk() || ZcProcessor.ZcStateIsDisabled())) {
+                TString err = ZcProcessor.ExtractErrText();
+                if (err) {
+                    LOG_WARN_IC_SESSION("ICS26", "ZeroCopy op was non success: %s",
+                        err.data());
+
+                    Proxy->UpdateErrorStateLog(TActivationContext::Now(), "zc_error", err.data());
+                }
+            }
+        }
+
         if (const size_t w = process(XdcStream, XdcSocket, XdcPollerToken, &ReceiveContext->XdcWriteBlocked, maxBytesAtOnce)) {
             XdcBytesSent += w;
             XdcOffset += w;
@@ -692,6 +730,25 @@ namespace NActors {
         WriteBlockedByFullSendBuffer = writeBlockedByFullSendBuffer;
     }
 
+    ssize_t TInterconnectSessionTCP::HandleWriteResult(ssize_t r, const TString& err) {
+        if (r > 0) {
+            return r;
+        } else if (-r != EAGAIN && -r != EWOULDBLOCK) {
+            const TString message = r == 0 ? "connection closed by peer"
+                : err ? err
+                : Sprintf("socket: %s", strerror(-r));
+            LOG_NOTICE_NET(Proxy->PeerNodeId, "%s", message.data());
+            if (r == 0 && !NumEventsInQueue && LastConfirmed == OutputCounter) {
+                Terminate(TDisconnectReason::EndOfStream());
+            } else {
+                ReestablishConnectionWithHandshake(r == 0 ? TDisconnectReason::EndOfStream() : TDisconnectReason::FromErrno(-r));
+            }
+            return 0; // error indicator
+        } else {
+            return -1; // temporary error
+        }
+    }
+
     ssize_t TInterconnectSessionTCP::Write(NInterconnect::TOutgoingStream& stream, NInterconnect::TStreamSocket& socket,
             size_t maxBytes) {
         LWPROBE_IF_TOO_LONG(SlowICWriteData, Proxy->PeerNodeId, ms) {
@@ -710,9 +767,15 @@ namespace NActors {
 #endif
             }
 
-            TStackVec<TConstIoVec, iovLimit> wbuffers;
+            // Note1: Zero copy socket write has noticiable overhead for memory managment inside kernel.
+            // So now we try to use ZC only for XDC
+            // Note2: Current socket encryption implementation does not allow to pass flags
+            const bool tryZc = (XdcSocket && !Params.Encryption) ? (int)socket == (int)*XdcSocket : false;
 
-            stream.ProduceIoVec(wbuffers, maxElementsInIOV, maxBytes);
+            TStackVec<TConstIoVec, iovLimit> wbuffers;
+            TStackVec<NInterconnect::TOutgoingStream::TBufController, iovLimit> zeroCtrl;
+
+            stream.ProduceIoVec(wbuffers, maxElementsInIOV, maxBytes, tryZc ? &zeroCtrl : nullptr);
             Y_ABORT_UNLESS(!wbuffers.empty());
 
             TString err;
@@ -720,35 +783,27 @@ namespace NActors {
             { // issue syscall with timing
                 const ui64 begin = GetCycleCountFast();
 
-                do {
-                    if (wbuffers.size() == 1) {
-                        auto& front = wbuffers.front();
-                        r = socket.Send(front.Data, front.Size, &err);
-                    } else {
-                        r = socket.WriteV(reinterpret_cast<const iovec*>(wbuffers.data()), wbuffers.size());
+                if (zeroCtrl) {
+                    r = ZcProcessor.ProcessSend(wbuffers, socket, zeroCtrl);
+                    if (r < 0) {
+                        err = ZcProcessor.GetErrReason();
                     }
-                } while (r == -EINTR);
+                } else {
+                    do {
+                        if (wbuffers.size() == 1) {
+                            auto& front = wbuffers.front();
+                            r = socket.Send(front.Data, front.Size, &err);
+                        } else {
+                            r = socket.WriteV(reinterpret_cast<const iovec*>(wbuffers.data()), wbuffers.size());
+                        }
+                    } while (r == -EINTR);
+                }
 
                 const ui64 end = GetCycleCountFast();
                 Proxy->Metrics->IncSendSyscalls((end - begin) * 1'000'000 / GetCyclesPerMillisecond());
             }
 
-            if (r > 0) {
-                return r;
-            } else if (-r != EAGAIN && -r != EWOULDBLOCK) {
-                const TString message = r == 0 ? "connection closed by peer"
-                    : err ? err
-                    : Sprintf("socket: %s", strerror(-r));
-                LOG_NOTICE_NET(Proxy->PeerNodeId, "%s", message.data());
-                if (r == 0 && !NumEventsInQueue && LastConfirmed == OutputCounter) {
-                    Terminate(TDisconnectReason::EndOfStream());
-                } else {
-                    ReestablishConnectionWithHandshake(r == 0 ? TDisconnectReason::EndOfStream() : TDisconnectReason::FromErrno(-r));
-                }
-                return 0; // error indicator
-            } else {
-                return -1; // temporary error
-            }
+            return HandleWriteResult(r, err);
         }
 
         Y_UNREACHABLE();
@@ -923,7 +978,7 @@ namespace NActors {
         XdcStream.DropFront(bytesDroppedFromXdc);
         if (lastDroppedSerial) {
             ChannelScheduler->ForEach([&](TEventOutputChannel& channel) {
-                channel.DropConfirmed(*lastDroppedSerial);
+                channel.DropConfirmed(*lastDroppedSerial, *Pool);
             });
         }
 
@@ -950,8 +1005,11 @@ namespace NActors {
 
             // generate some data within this channel
             const ui64 netBefore = channel->GetBufferedAmountOfData();
-            ui64 gross = 0;
-            const bool eventDone = channel->FeedBuf(task, serial, &gross);
+            const ui32 grossBefore = task.GetDataSize();
+            const bool eventDone = channel->FeedBuf(task, serial);
+            const ui32 grossAfter = task.GetDataSize();
+            Y_DEBUG_ABORT_UNLESS(grossBefore <= grossAfter);
+            const ui32 gross = grossAfter - grossBefore;
             channel->UnaccountedTraffic += gross;
             const ui64 netAfter = channel->GetBufferedAmountOfData();
             Y_DEBUG_ABORT_UNLESS(netAfter <= netBefore); // net amount should shrink
@@ -961,7 +1019,7 @@ namespace NActors {
             TotalOutputQueueSize -= net;
             Proxy->Metrics->SubOutputBuffersTotalSize(net);
             bytesGenerated += gross;
-            Y_DEBUG_ABORT_UNLESS(!!net == !!gross && gross >= net, "net# %" PRIu64 " gross# %" PRIu64, net, gross);
+            Y_DEBUG_ABORT_UNLESS(gross || !net, "net# %" PRIu64 " gross# %" PRIu32, net, gross);
 
             // return it back to queue or delete, depending on whether this channel is still working or not
             ChannelScheduler->FinishPick(gross, EqualizeCounter);
@@ -996,16 +1054,11 @@ namespace NActors {
         return sumBusy * 1000000 / sumPeriod;
     }
 
-    void TInterconnectSessionTCP::SendUpdateToWhiteboard(bool connected) {
+    void TInterconnectSessionTCP::SendUpdateToWhiteboard(bool connected, bool reschedule) {
+        using EFlag = TWhiteboardSessionStatus::EFlag;
         const ui32 utilization = Socket ? CalculateQueueUtilization() : 0;
 
         if (const auto& callback = Proxy->Common->UpdateWhiteboard) {
-            enum class EFlag {
-                GREEN,
-                YELLOW,
-                ORANGE,
-                RED,
-            };
             EFlag flagState = EFlag::RED;
 
             if (Socket) {
@@ -1030,23 +1083,26 @@ namespace NActors {
                 } while (false);
             }
 
-            // we need track clockskew only if it's one tenant nodes connection
-            // they have one scope in this case
-            bool reportClockSkew = Proxy->Common->LocalScopeId.first != 0 && Proxy->Common->LocalScopeId == Params.PeerScopeId;
-
-            callback({TlsActivationContext->ExecutorThread.ActorSystem,
-                     Proxy->PeerNodeId,
-                     Proxy->Metrics->GetHumanFriendlyPeerHostName(),
-                     connected,
-                     flagState == EFlag::GREEN,
-                     flagState == EFlag::YELLOW,
-                     flagState == EFlag::ORANGE,
-                     flagState == EFlag::RED,
-                     ReceiveContext->ClockSkew_us.load(),
-                     reportClockSkew});
+            callback({
+                .ActorSystem = TActivationContext::ActorSystem(),
+                .PeerNodeId = Proxy->PeerNodeId,
+                .PeerName = Proxy->Metrics->GetHumanFriendlyPeerHostName(),
+                .Connected = connected,
+                .SessionClosed = !connected,
+                .SessionPendingConnection = connected && !Socket,
+                .SessionConnected = connected && Socket,
+                .ConnectStatus = flagState,
+                .ClockSkewUs = ReceiveContext->ClockSkew_us,
+                .SameScope = Proxy->Common->LocalScopeId == Params.PeerScopeId,
+                .PingTimeUs = ReceiveContext->PingRTT_us,
+                .ScopeId = Params.PeerScopeId,
+                .Utilization = Utilized,
+                .ConnectTime = LastHandshakeDone.MilliSeconds(),
+                .BytesWrittenToSocket = BytesWrittenToSocket,
+            });
         }
 
-        if (connected) {
+        if (connected && reschedule) {
             Schedule(TDuration::Seconds(1), new TEvents::TEvWakeup);
         }
     }
@@ -1118,6 +1174,10 @@ namespace NActors {
             MakePacket(false, ev->Get()->Payload | TTcpPacketBuf::PingResponseMask);
             GenerateTraffic();
         }
+    }
+
+    void TInterconnectSessionTCP::UpdateUtilization() {
+        Proxy->Metrics->SetUtilization(1'000'000 * Utilized, 1'000'000 * Starving);
     }
 
     void TInterconnectSessionTCP::GenerateHttpInfo(NMon::TEvHttpInfoRes::TPtr& ev) {
@@ -1332,6 +1392,15 @@ namespace NActors {
                             MON_VAR(CpuStarvationEvents)
                             MON_VAR(CpuStarvationEventsOnWriteData)
 
+                            UpdateState();
+
+                            TABLER() {
+                                TABLED() { str << "Utilization"; }
+                                TABLED() {
+                                    str << Sprintf("%.1f%%", 100 * Utilized) << " / " << Sprintf("%.1f%%", Starving);
+                                }
+                            }
+
                             TString clockSkew;
                             i64 x = GetClockSkew();
                             if (x < 0) {
@@ -1348,6 +1417,28 @@ namespace NActors {
                             MON_VAR(GetTotalInflightAmountOfData())
                             MON_VAR(GetCloseOnIdleTimeout())
                             MON_VAR(Subscribers.size())
+                            TABLER() {
+                                TABLED() { str << "ZeroCopy state"; }
+                                TABLED() { str << ZcProcessor.GetCurrentStateName(); }
+                            }
+                            TABLER() {
+                                TABLED() { str << "ZeroCopy confirmed send with copy / confirmed send total"; }
+                                TABLED() {
+                                    str << Sprintf("%lu / %lu", ZcProcessor.GetConfirmedWithCopy(), ZcProcessor.GetConfirmed());
+                                }
+                            }
+                            TABLER() {
+                                TABLED() { str << "ZeroCopy lag (in transfers)"; }
+                                TABLED() {
+                                    str << ZcProcessor.GetZcLag();
+                                }
+                            }
+                            TABLER() {
+                                TABLED() { str << "ZeroCopy send bytes (total)"; }
+                                TABLED() {
+                                    str << ZcProcessor.GetSendAsZcBytes();
+                                }
+                            }
                         }
                     }
                 }
@@ -1361,7 +1452,17 @@ namespace NActors {
         TActivationContext::Send(h.release());
     }
 
+    void TInterconnectSessionKiller::Bootstrap() {
+        auto sender = SelfId();
+        const auto eventFabric = [&sender](const TActorId& recp) -> IEventHandle* {
+            auto ev = new TEvSessionBufferSizeRequest();
+            return new IEventHandle(recp, sender, ev, IEventHandle::FlagTrackDelivery);
+        };
+        RepliesNumber = TActivationContext::ActorSystem()->BroadcastToProxies(eventFabric);
+        Become(&TInterconnectSessionKiller::StateFunc);
+    }
+
     void CreateSessionKillingActor(TInterconnectProxyCommon::TPtr common) {
-        TlsActivationContext->ExecutorThread.ActorSystem->Register(new TInterconnectSessionKiller(common));
+        TActivationContext::ActorSystem()->Register(new TInterconnectSessionKiller(common));
     }
 }

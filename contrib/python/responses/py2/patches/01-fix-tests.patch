@@ -1,0 +1,12 @@
+--- contrib/python/responses/py2/responses/test_responses.py	(index)
++++ contrib/python/responses/py2/responses/test_responses.py	(working tree)
+@@ -1022,7 +1022,8 @@ def test_response_filebody():
+     """ Adds the possibility to use actual (binary) files as responses """
+ 
+     def run():
+-        current_file = os.path.abspath(__file__)
++        import yatest.common as yc
++        current_file = yc.source_path("contrib/python/responses/py2/responses/test_responses.py")
+         with responses.RequestsMock() as m:
+             with open(current_file, "r") as out:
+                 m.add(responses.GET, "http://example.com", body=out.read(), stream=True)

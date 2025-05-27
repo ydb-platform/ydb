@@ -3,13 +3,9 @@
 #include "config.h"
 
 #include <yt/yt/client/cache/cache.h>
-
+#include <yt/yt/client/cache/config.h>
 
 namespace NYT::NClient::NFederated {
-
-using NCache::IClientsCachePtr;
-using NCache::TClustersConfig;
-using NCache::TConfig;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -18,9 +14,9 @@ using NCache::TConfig;
 //! Which client to create decided by cluster url: if several clusters concatenated by clusterSeparator requested then
 //! federated client it is, generic client otherwise.
 //! For example, for "markov" generic client will be created, and for "seneca-sas+seneca-vla" federated one.
-IClientsCachePtr CreateFederatedClientsCache(
+NCache::IClientsCachePtr CreateFederatedClientsCache(
     TConnectionConfigPtr federatedConfig,
-    const TClustersConfig& clustersConfig,
+    const NCache::TClientsCacheConfigPtr& clientsCacheConfig,
     const NYT::NApi::TClientOptions& options,
     TString clusterSeparator = "+");
 
@@ -29,9 +25,9 @@ IClientsCachePtr CreateFederatedClientsCache(
 //! Which client to create decided by cluster url: if several clusters concatenated by clusterSeparator requested then
 //! federated client it is, generic client otherwise.
 //! For example, for "markov" generic client will be created, and for "seneca-sas+seneca-vla" federated one.
-IClientsCachePtr CreateFederatedClientsCache(
+NCache::IClientsCachePtr CreateFederatedClientsCache(
     TConnectionConfigPtr federatedConfig,
-    const TConfig& config,
+    const NApi::NRpcProxy::TConnectionConfigPtr& cacheConfig,
     const NYT::NApi::TClientOptions& options,
     TString clusterSeparator = "+");
 

@@ -15,6 +15,7 @@
 #include "helpers.h"
 #include "../src/syscall.h"
 
+#ifndef CONFIG_USE_SANITIZER
 int main(int argc, char *argv[])
 {
   if (argc > 1)
@@ -53,3 +54,9 @@ int main(int argc, char *argv[])
   __sys_io_uring_setup(0x7a6, (struct io_uring_params *) 0x20000000UL);
   return T_EXIT_PASS;
 }
+#else
+int main(int argc, char *argv[])
+{
+	return T_EXIT_SKIP;
+}
+#endif

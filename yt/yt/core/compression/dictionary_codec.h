@@ -95,15 +95,28 @@ struct IDictionaryCompressionCodec
     virtual IDictionaryDecompressorPtr CreateDictionaryDecompressor(
         const IDigestedDecompressionDictionaryPtr& digestedDecompressionDictionary) const = 0;
 
-    // NB: Raw #compressionDictionary data will be copied and stored within digested dictionary in a preprocessed form.
+    //! NB: These functions provide means for creating digested (de)compression dictionary,
+    //! i.e. a special in-memory representation of a dictionary that can then be used within (de)compressor
+    //! for fast (de)compression of string values of any size.
+    //! First one must get estimation on size of the digested dictionary with one of the two methods below,
+    //! so memory blob of at least that size can be provided to one of the two construction methods.
     //! #compressionLevel determines compression level that will be applied for each compression with that dictionary later on.
-    virtual IDigestedCompressionDictionaryPtr CreateDigestedCompressionDictionary(
+    virtual i64 EstimateDigestedCompressionDictionarySize(i64 dictionarySize, int compressionLevel) const = 0;
+    virtual i64 EstimateDigestedDecompressionDictionarySize(i64 dictionarySize) const = 0;
+    //! NB: Raw #compressionDictionary data will be copied and stored within digested dictionary in a preprocessed form,
+    //! so the memory corresponding to #compressionDictionary can be freed. Digested dictionary will own the memory,
+    //! referenced by #storage.
+    //! These methods may throw.
+    virtual IDigestedCompressionDictionaryPtr ConstructDigestedCompressionDictionary(
         const TSharedRef& compressionDictionary,
+        TSharedMutableRef storage,
         int compressionLevel) const = 0;
-    virtual IDigestedDecompressionDictionaryPtr CreateDigestedDecompressionDictionary(
-        const TSharedRef& compressionDictionary) const = 0;
+    virtual IDigestedDecompressionDictionaryPtr ConstructDigestedDecompressionDictionary(
+        const TSharedRef& decompressionDictionary,
+        TSharedMutableRef storage) const = 0;
 
     //! Parses header of compressed frame #input and returns specified frame info.
+    //! This method may throw.
     virtual TDictionaryCompressionFrameInfo GetFrameInfo(TRef input) const = 0;
 };
 

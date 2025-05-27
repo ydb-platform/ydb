@@ -2,7 +2,7 @@
 #include <ydb/core/external_sources/object_storage/s3_fetcher.h>
 #include <ydb/core/external_sources/object_storage/inference/arrow_fetcher.h>
 #include <ydb/core/external_sources/object_storage/inference/arrow_inferencinator.h>
-#include <ydb/core/util/testactorsys.h>
+#include <ydb/core/util/actorsys_test/testactorsys.h>
 #include <ydb/library/yql/providers/common/http_gateway/mock/yql_http_mock_gateway.h>
 #include <arrow/buffer.h>
 #include <arrow/table.h>
@@ -49,9 +49,10 @@ public:
     }
 
     NActors::TActorId RegisterInferencinator(TStringBuf formatStr) {
-        auto format = NInference::ConvertFileFormat(formatStr);
-        auto arrowFetcher = ActorSystem.Register(NInference::CreateArrowFetchingActor(S3ActorId, format, {}), 1);
-        return ActorSystem.Register(NInference::CreateArrowInferencinator(arrowFetcher, format, {}), 1);
+        THashMap<TString, TString> params;
+        params["format"] = formatStr;
+        auto arrowFetcher = ActorSystem.Register(NInference::CreateArrowFetchingActor(S3ActorId, params), 1);
+        return ActorSystem.Register(NInference::CreateArrowInferencinator(arrowFetcher), 1);
     }
 
     void TearDown() override {
@@ -92,6 +93,7 @@ TEST_F(ArrowInferenceTest, csv_simple) {
     auto response = event->CastAsLocal<TEvInferredFileSchema>();
     ASSERT_NE(response, nullptr);
 
+    ASSERT_TRUE(response->Status.IsSuccess());
     auto& fields = response->Fields;
     ASSERT_TRUE(fields[0].type().optional_type().item().has_type_id());
     ASSERT_EQ(fields[0].type().optional_type().item().type_id(), Ydb::Type::INT64);
@@ -141,5 +143,126 @@ TEST_F(ArrowInferenceTest, tsv_simple) {
     ASSERT_EQ(fields[2].type().optional_type().item().type_id(), Ydb::Type::DOUBLE);
     ASSERT_EQ(fields[2].name(), "C");
 }
+
+TEST_F(ArrowInferenceTest, tsv_empty) {
+    TString s3Data =
+        "this part should not matter because it will be omitted as a partial row,,";
+
+    Gateway->AddDefaultResponse([=, this](TString url, NYql::IHTTPGateway::THeaders, TString data) -> NYql::IHTTPGateway::TResult {
+        EXPECT_EQ(url, BaseUrl + Path);
+        EXPECT_EQ(data, "");
+
+        NYql::IHTTPGateway::TResult result(NYql::IHTTPGateway::TContent(s3Data, 200));;
+        return result;
+    });
+
+    auto inferencinatorId = RegisterInferencinator("tsv_with_names");
+    ActorSystem.WrapInActorContext(EdgeActorId, [this, inferencinatorId] {
+        NActors::TActivationContext::AsActorContext().Send(inferencinatorId, new TEvInferFileSchema(TString{Path}, 0));
+    });
+
+    std::unique_ptr<NActors::IEventHandle> event = ActorSystem.WaitForEdgeActorEvent({EdgeActorId});
+    auto response = event->CastAsLocal<TEvInferredFileSchema>();
+    ASSERT_NE(response, nullptr);
+    ASSERT_FALSE(response->Status.IsSuccess());
+    Cerr << response->Status.GetIssues().ToOneLineString() << Endl;
+}
+
+TEST_F(ArrowInferenceTest, broken_json) {
+    TString s3Data = "A,B,C\n";
+
+    Gateway->AddDefaultResponse([=, this](TString url, NYql::IHTTPGateway::THeaders, TString data) -> NYql::IHTTPGateway::TResult {
+        EXPECT_EQ(url, BaseUrl + Path);
+        EXPECT_EQ(data, "");
+
+        NYql::IHTTPGateway::TResult result(NYql::IHTTPGateway::TContent(s3Data, 200));;
+        return result;
+    });
+
+    auto inferencinatorId = RegisterInferencinator("json_each_row");
+    ActorSystem.WrapInActorContext(EdgeActorId, [this, inferencinatorId] {
+        NActors::TActivationContext::AsActorContext().Send(inferencinatorId, new TEvInferFileSchema(TString{Path}, 0));
+    });
+
+    std::unique_ptr<NActors::IEventHandle> event = ActorSystem.WaitForEdgeActorEvent({EdgeActorId});
+    auto response = event->CastAsLocal<TEvInferredFileSchema>();
+    ASSERT_NE(response, nullptr);
+    ASSERT_FALSE(response->Status.IsSuccess());
+    Cerr << response->Status.GetIssues().ToOneLineString() << Endl;
+    // ASSERT_EQ(...)
+}
+
+TEST_F(ArrowInferenceTest, empty_json_each_row) {
+    TString s3Data = "";
+
+    Gateway->AddDefaultResponse([=, this](TString url, NYql::IHTTPGateway::THeaders, TString data) -> NYql::IHTTPGateway::TResult {
+        EXPECT_EQ(url, BaseUrl + Path);
+        EXPECT_EQ(data, "");
+
+        NYql::IHTTPGateway::TResult result(NYql::IHTTPGateway::TContent(s3Data, 200));;
+        return result;
+    });
+
+    auto inferencinatorId = RegisterInferencinator("json_each_row");
+    ActorSystem.WrapInActorContext(EdgeActorId, [this, inferencinatorId] {
+        NActors::TActivationContext::AsActorContext().Send(inferencinatorId, new TEvInferFileSchema(TString{Path}, 0));
+    });
+
+    std::unique_ptr<NActors::IEventHandle> event = ActorSystem.WaitForEdgeActorEvent({EdgeActorId});
+    auto response = event->CastAsLocal<TEvInferredFileSchema>();
+    ASSERT_NE(response, nullptr);
+    ASSERT_FALSE(response->Status.IsSuccess());
+    Cerr << response->Status.GetIssues().ToOneLineString() << Endl;
+    // ASSERT_EQ(...)
+}
+
+TEST_F(ArrowInferenceTest, empty_json_list) {
+    TString s3Data = "";
+
+    Gateway->AddDefaultResponse([=, this](TString url, NYql::IHTTPGateway::THeaders, TString data) -> NYql::IHTTPGateway::TResult {
+        EXPECT_EQ(url, BaseUrl + Path);
+        EXPECT_EQ(data, "");
+
+        NYql::IHTTPGateway::TResult result(NYql::IHTTPGateway::TContent(s3Data, 200));;
+        return result;
+    });
+
+    auto inferencinatorId = RegisterInferencinator("json_list");
+    ActorSystem.WrapInActorContext(EdgeActorId, [this, inferencinatorId] {
+        NActors::TActivationContext::AsActorContext().Send(inferencinatorId, new TEvInferFileSchema(TString{Path}, 0));
+    });
+
+    std::unique_ptr<NActors::IEventHandle> event = ActorSystem.WaitForEdgeActorEvent({EdgeActorId});
+    auto response = event->CastAsLocal<TEvInferredFileSchema>();
+    ASSERT_NE(response, nullptr);
+    ASSERT_FALSE(response->Status.IsSuccess());
+    Cerr << response->Status.GetIssues().ToOneLineString() << Endl;
+    // ASSERT_EQ(...)
+}
+
+TEST_F(ArrowInferenceTest, broken_json_list) {
+    TString s3Data = "\nfoobar\n";
+
+    Gateway->AddDefaultResponse([=, this](TString url, NYql::IHTTPGateway::THeaders, TString data) -> NYql::IHTTPGateway::TResult {
+        EXPECT_EQ(url, BaseUrl + Path);
+        EXPECT_EQ(data, "");
+
+        NYql::IHTTPGateway::TResult result(NYql::IHTTPGateway::TContent(s3Data, 200));;
+        return result;
+    });
+
+    auto inferencinatorId = RegisterInferencinator("json_list");
+    ActorSystem.WrapInActorContext(EdgeActorId, [this, inferencinatorId] {
+        NActors::TActivationContext::AsActorContext().Send(inferencinatorId, new TEvInferFileSchema(TString{Path}, 0));
+    });
+
+    std::unique_ptr<NActors::IEventHandle> event = ActorSystem.WaitForEdgeActorEvent({EdgeActorId});
+    auto response = event->CastAsLocal<TEvInferredFileSchema>();
+    ASSERT_NE(response, nullptr);
+    ASSERT_FALSE(response->Status.IsSuccess());
+    Cerr << response->Status.GetIssues().ToOneLineString() << Endl;
+    // ASSERT_EQ(...)
+}
+// TODO: broken_compression, unrecognized_compression, broken_csv, broken_tsv (is there?), mock errors inside arrow::BufferBuilder,...
 
 } // namespace

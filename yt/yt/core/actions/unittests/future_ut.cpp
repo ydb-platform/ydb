@@ -4,6 +4,9 @@
 #include <yt/yt/core/actions/future.h>
 #include <yt/yt/core/actions/invoker_util.h>
 
+#include <yt/yt/core/concurrency/action_queue.h>
+#include <yt/yt/core/concurrency/scheduler_api.h>
+
 #include <yt/yt/core/misc/ref_counted_tracker.h>
 #include <yt/yt/core/misc/mpsc_stack.h>
 
@@ -589,7 +592,7 @@ TEST_F(TFutureTest, ApplyVoidToFutureInt)
     ::TThread thread(&AsynchronousIntSetter, &setter);
 
     auto source = kicker.ToFuture();
-    auto  target = source
+    auto target = source
         .Apply(BIND([&] () -> TFuture<int> {
             ++state;
             thread.Start();
@@ -1114,7 +1117,7 @@ TEST_F(TFutureTest, AllSetWithTimeoutWorks)
     EXPECT_TRUE(resultOrError.Value()[0].IsOK());
 
     EXPECT_TRUE(p2.IsSet());
-    EXPECT_EQ(resultOrError.Value()[1].GetCode(), EErrorCode::Timeout);
+    EXPECT_EQ(resultOrError.Value()[1].GetCode(), NYT::EErrorCode::Timeout);
 
     EXPECT_TRUE(p3.IsSet());
     EXPECT_FALSE(resultOrError.Value()[2].IsOK());
@@ -1410,16 +1413,6 @@ TEST_F(TFutureTest, AnyNCombinerDontPropagateCancelation)
     EXPECT_FALSE(p2.IsCanceled());
 }
 
-TEST_F(TFutureTest, AsyncViaCanceledInvoker)
-{
-    auto context = New<TCancelableContext>();
-    auto invoker = context->CreateInvoker(GetSyncInvoker());
-    auto generator = BIND([] {}).AsyncVia(invoker);
-    context->Cancel(TError("oops"));
-    auto future = generator();
-    auto error = future.Get();
-    ASSERT_EQ(NYT::EErrorCode::Canceled, error.GetCode());
-}
 ////////////////////////////////////////////////////////////////////////////////
 
 TEST_F(TFutureTest, LastPromiseDied)
@@ -1482,7 +1475,7 @@ TEST_F(TFutureTest, WithDeadlineFail)
     auto deadline = TInstant::Now() + SleepQuantum;
     auto f2 = f1.WithDeadline(deadline);
     EXPECT_EQ(NYT::EErrorCode::Timeout, f2.Get().GetCode());
-    EXPECT_EQ(NYson::ConvertToYsonString(deadline), f2.Get().Attributes().FindYson("deadline"));
+    EXPECT_EQ(deadline, f2.Get().Attributes().Get<TInstant>("deadline"));
 }
 
 TEST_F(TFutureTest, WithTimeoutSuccess)
@@ -1511,7 +1504,7 @@ TEST_F(TFutureTest, WithTimeoutFail)
     auto f1 = p.ToFuture();
     auto f2 = f1.WithTimeout(SleepQuantum);
     EXPECT_EQ(NYT::EErrorCode::Timeout, f2.Get().GetCode());
-    EXPECT_EQ(NYson::ConvertToYsonString(SleepQuantum), f2.Get().Attributes().FindYson("timeout"));
+    EXPECT_EQ(SleepQuantum, f2.Get().Attributes().Get<TDuration>("timeout"));
 }
 
 TEST_W(TFutureTest, Holder)
@@ -1543,7 +1536,7 @@ TEST_F(TFutureTest, AbandonTryGet)
     auto promise = NewPromise<void>();
     auto future = promise.ToFuture();
     promise.Reset();
-    EXPECT_EQ(EErrorCode::Canceled, future.TryGet()->GetCode());
+    EXPECT_EQ(NYT::EErrorCode::Canceled, future.TryGet()->GetCode());
 }
 
 TEST_F(TFutureTest, AbandonGet)
@@ -1551,7 +1544,7 @@ TEST_F(TFutureTest, AbandonGet)
     auto promise = NewPromise<void>();
     auto future = promise.ToFuture();
     promise.Reset();
-    EXPECT_EQ(EErrorCode::Canceled, future.Get().GetCode());
+    EXPECT_EQ(NYT::EErrorCode::Canceled, future.Get().GetCode());
 }
 
 TEST_F(TFutureTest, AbandonSubscribe)
@@ -1570,7 +1563,7 @@ TEST_F(TFutureTest, SubscribeAbandon)
     auto promise = NewPromise<void>();
     auto future = promise.ToFuture();
     future.Subscribe(BIND([&] (const TError&) mutable {
-        VERIFY_INVOKER_AFFINITY(GetFinalizerInvoker());
+        YT_ASSERT_INVOKER_AFFINITY(GetFinalizerInvoker());
         called = true;
     }));
     promise.Reset();
@@ -1674,7 +1667,7 @@ TEST_F(TFutureTest, AbandonBeforeGet)
     auto promise = NewPromise<void>();
     auto future = promise.ToFuture();
     promise.Reset();
-    EXPECT_EQ(future.Get().GetCode(), EErrorCode::Canceled);
+    EXPECT_EQ(future.Get().GetCode(), NYT::EErrorCode::Canceled);
 }
 
 TEST_F(TFutureTest, AbandonDuringGet)
@@ -1685,7 +1678,7 @@ TEST_F(TFutureTest, AbandonDuringGet)
         Sleep(TDuration::MilliSeconds(100));
         promise.Reset();
     });
-    EXPECT_EQ(future.Get().GetCode(), EErrorCode::Canceled);
+    EXPECT_EQ(future.Get().GetCode(), NYT::EErrorCode::Canceled);
     thread.join();
 }
 
@@ -1717,7 +1710,162 @@ TEST_F(TFutureTest, CancelAppliedToUncancellable)
     EXPECT_TRUE(future1.Get().IsOK());
 }
 
-///////////////////////////////////////////////////////////////////////////////
+TEST_F(TFutureTest, AsyncViaCanceledInvoker1)
+{
+    auto queue = New<NConcurrency::TActionQueue>();
+    auto context = New<TCancelableContext>();
+    auto invoker = context->CreateInvoker(queue->GetInvoker());
+
+    context->Cancel(TError(NYT::EErrorCode::Canceled, "From cancelable context!"));
+
+    auto error = WaitFor(BIND([] {}).AsyncVia(invoker).Run());
+
+    EXPECT_FALSE(error.IsOK());
+    EXPECT_EQ(error.GetCode(), NYT::EErrorCode::Canceled);
+    EXPECT_TRUE(NYT::ToString(error).Contains("From cancelable context!"))
+        << NYT::ToString(error);
+}
+
+TEST_F(TFutureTest, AsyncViaCanceledInvoker2)
+{
+    auto queue = New<NConcurrency::TActionQueue>();
+    auto context = New<TCancelableContext>();
+    auto invoker = context->CreateInvoker(queue->GetInvoker());
+
+    auto taskReady = NewPromise<void>();
+    auto promise = NewPromise<void>();
+
+    auto future = BIND([promise, taskReady, invoker] {
+        taskReady.Set();
+        WaitFor(promise.ToFuture(), invoker).ThrowOnError();
+    })
+        .AsyncVia(invoker)
+        .Run();
+
+    WaitFor(taskReady.ToFuture()).ThrowOnError();
+
+    context->Cancel(TError(NYT::EErrorCode::Canceled, "From cancelable context!"));
+    promise.Set();
+
+    auto error = WaitFor(future);
+
+    EXPECT_FALSE(error.IsOK());
+    EXPECT_EQ(error.GetCode(), NYT::EErrorCode::Canceled);
+    EXPECT_TRUE(NYT::ToString(error).Contains("From cancelable context!"))
+        << NYT::ToString(error);
+}
+
+TError CreateFiberCanceledError(TError cancelationError)
+{
+    auto aqueue = New<NConcurrency::TActionQueue>();
+    auto invoker = aqueue->GetInvoker();
+    auto leash = NewPromise<void>();
+    auto taskStarted = NewPromise<void>();
+    auto future = BIND([leash, taskStarted] {
+        taskStarted.Set();
+        WaitFor(leash.ToFuture()).ThrowOnError();
+    }).AsyncVia(invoker).Run();
+
+    WaitFor(taskStarted.ToFuture()).ThrowOnError();
+
+    future.Cancel(cancelationError);
+    return WaitFor(future);
+}
+
+TEST_F(TFutureTest, YT_12720)
+{
+    auto error = CreateFiberCanceledError(NYT::TError(NYT::EErrorCode::Canceled, "Fiber canceled in .Reset() of TFiberGuard"));
+    EXPECT_FALSE(error.IsOK());
+    EXPECT_EQ(error.GetCode(), NYT::EErrorCode::Canceled);
+    EXPECT_TRUE(NYT::ToString(error).Contains("Fiber canceled in .Reset() of TFiberGuard"))
+        << NYT::ToString(error);
+}
+
+TEST_F(TFutureTest, DiscardInApply)
+{
+    auto aqueue = New<NConcurrency::TActionQueue>();
+    auto invoker = aqueue->GetInvoker();
+
+    auto promise = NewPromise<void>();
+    auto future = promise.ToFuture();
+
+    // NB(arkady-e1ppa): mutable is required to destructively move promise out of the
+    // closure thus forcing it to be destroyed inside the scope.
+    auto canceled = BIND([p = std::move(promise)] () mutable {
+        auto localPromise = std::move(p);
+        while (true) {
+            Yield();
+        }
+    }).AsyncVia(invoker).Run();
+
+    Sleep(std::chrono::seconds(1));
+
+    canceled.Cancel(TError(NYT::EErrorCode::Canceled, "Canceled!"));
+
+    auto error = WaitFor(future);
+    EXPECT_EQ(error.GetCode(), NYT::EErrorCode::Canceled);
+    EXPECT_TRUE(NYT::ToString(error).Contains("Canceled!"))
+        << NYT::ToString(error);
+}
+
+TEST_F(TFutureTest, ErrorFromException)
+{
+    // Creating error from exception whenever possible is important for FromExceptionEnricher. So test it with enricher.
+
+    static thread_local bool testFromExceptionEnricherEnabled = false;
+    testFromExceptionEnricherEnabled = true;
+    auto finally = Finally([] {
+        testFromExceptionEnricherEnabled = false;
+    });
+
+    static auto getAttribute = [] (const TError& error) {
+        return error.Attributes().Get<TString>("test_attribute", "");
+    };
+
+    TError::RegisterFromExceptionEnricher([](TError* error, const std::exception&) {
+        if (testFromExceptionEnricherEnabled) {
+            *error <<= TErrorAttribute("test_attribute", getAttribute(*error) + "X");
+        }
+    });
+
+    static auto getError = [] (auto&& func) -> TError {
+        return BIND(func).AsyncVia(GetSyncInvoker()).Run().Get();
+    };
+
+    // If there is no exception, there is no error.
+    EXPECT_TRUE(getError([] {}).IsOK());
+
+    // If there is std::exception, there is error and enricher is called.
+    {
+        auto error = getError([] {
+            throw std::runtime_error("test_std");
+        });
+        ASSERT_FALSE(error.IsOK());
+        EXPECT_TRUE(error.GetMessage().contains("test_std"));
+        EXPECT_EQ(getAttribute(error), "X");
+    }
+
+    // If there is TErrorException, there is an error and enricher is called.
+    {
+        auto error = getError([] {
+            THROW_ERROR_EXCEPTION("test_yt");
+        });
+        ASSERT_FALSE(error.IsOK());
+        EXPECT_TRUE(error.GetMessage().contains("test_yt"));
+        EXPECT_EQ(getAttribute(error), "X");
+    }
+
+    // If there is TFiberCanceledException, there is an error, but enricher is not called.
+    {
+        auto error = CreateFiberCanceledError(NYT::TError(NYT::EErrorCode::Canceled, "test_fiber_canceled"));
+
+        ASSERT_FALSE(error.IsOK());
+        EXPECT_TRUE(error.GetMessage().contains("test_fiber_canceled"));
+        EXPECT_EQ(getAttribute(error), "");
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
 
 } // namespace
 } // namespace NYT

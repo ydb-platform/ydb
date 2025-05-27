@@ -1,8 +1,8 @@
 #include "print_operation.h"
 #include "pretty_table.h"
 
-#include <ydb/public/lib/operation_id/operation_id.h>
-#include <ydb/public/sdk/cpp/client/ydb_types/status_codes.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/operation_id/operation_id.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status_codes.h>
 
 #include <util/string/builder.h>
 #include <util/string/cast.h>
@@ -24,7 +24,7 @@ namespace {
 
         auto& row = table.AddRow();
         row
-            .Column(0, ProtoToString(operation.Id()))
+            .Column(0, operation.Id().ToString())
             .Column(1, operation.Ready() ? "true" : "false")
             .Column(2, status.GetStatus() == NYdb::EStatus::STATUS_UNDEFINED ? "" : ToString(status.GetStatus()));
 
@@ -37,7 +37,7 @@ namespace {
             }
         }
         
-        if (!operation.CreatedBy().Empty()) {
+        if (!operation.CreatedBy().empty()) {
             freeText << "Created by: " << operation.CreatedBy() << Endl;
         }
 
@@ -61,7 +61,7 @@ namespace {
             return result;
         }
 
-        if (!metadata.ItemsProgress) {
+        if (metadata.ItemsProgress.empty()) {
             return result;
         }
 
@@ -94,11 +94,11 @@ namespace {
 
         auto& row = table.AddRow();
         row
-            .Column(0, ProtoToString(operation.Id()))
+            .Column(0, operation.Id().ToString())
             .Column(1, operation.Ready() ? "true" : "false")
             .Column(2, status.GetStatus())
             .Column(3, PrintProgress<decltype(metadata.Progress)>(metadata))
-            .Column(4, TStringBuilder() << settings.Host_ << ":" << settings.Port_.GetOrElse(80));
+            .Column(4, TStringBuilder() << settings.Host_ << ":" << settings.Port_.value_or(80));
 
         TStringBuilder freeText;
 
@@ -117,16 +117,16 @@ namespace {
         }
 
         if (settings.Description_) {
-            freeText << "Description: " << settings.Description_.GetRef() << Endl;
+            freeText << "Description: " << settings.Description_.value() << Endl;
         }
 
         if (settings.NumberOfRetries_) {
-            freeText << "Number of retries: " << settings.NumberOfRetries_.GetRef() << Endl;
+            freeText << "Number of retries: " << settings.NumberOfRetries_.value() << Endl;
         }
 
         freeText << "TypeV3: " << (settings.UseTypeV3_ ? "true" : "false") << Endl;
 
-        if (!operation.CreatedBy().Empty()) {
+        if (!operation.CreatedBy().empty()) {
             freeText << "Created by: " << operation.CreatedBy() << Endl;
         }
 
@@ -154,7 +154,7 @@ namespace {
 
         auto& row = table.AddRow();
         row
-            .Column(0, ProtoToString(operation.Id()))
+            .Column(0, operation.Id().ToString())
             .Column(1, operation.Ready() ? "true" : "false")
             .Column(2, status.GetStatus())
             .Column(3, PrintProgress<decltype(metadata.Progress)>(metadata))
@@ -167,6 +167,16 @@ namespace {
             freeText << "StorageClass: " << settings.StorageClass_ << Endl;
             if (settings.Compression_) {
                 freeText << "Compression: " << *settings.Compression_ << Endl;
+            }
+        }
+
+        if constexpr (std::is_same_v<NImport::TImportFromS3Response, T>) {
+            if (settings.NoACL_) {
+                freeText << "NoACL: " << *settings.NoACL_ << Endl;
+            }
+            
+            if (settings.SkipChecksumValidation_) {
+                freeText << "SkipChecksumValidation: " << *settings.SkipChecksumValidation_ << Endl;
             }
         }
 
@@ -185,14 +195,14 @@ namespace {
         }
 
         if (settings.Description_) {
-            freeText << "Description: " << settings.Description_.GetRef() << Endl;
+            freeText << "Description: " << settings.Description_.value() << Endl;
         }
 
         if (settings.NumberOfRetries_) {
-            freeText << "Number of retries: " << settings.NumberOfRetries_.GetRef() << Endl;
+            freeText << "Number of retries: " << settings.NumberOfRetries_.value() << Endl;
         }
 
-        if (!operation.CreatedBy().Empty()) {
+        if (!operation.CreatedBy().empty()) {
             freeText << "Created by: " << operation.CreatedBy() << Endl;
         }
 
@@ -236,7 +246,7 @@ namespace {
 
         auto& row = table.AddRow();
         row
-            .Column(0, ProtoToString(operation.Id()))
+            .Column(0, operation.Id().ToString())
             .Column(1, operation.Ready() ? "true" : "false")
             .Column(2, status.GetStatus() == NYdb::EStatus::STATUS_UNDEFINED ? "" : ToString(status.GetStatus()))
             .Column(3, metadata.State)
@@ -267,7 +277,7 @@ namespace {
 
         auto& row = table.AddRow();
         row
-            .Column(0, ProtoToString(operation.Id()))
+            .Column(0, operation.Id().ToString())
             .Column(1, operation.Ready() ? "true" : "false")
             .Column(2, status.GetStatus() == NYdb::EStatus::STATUS_UNDEFINED ? "" : ToString(status.GetStatus()))
             .Column(3, metadata.ExecutionId)
@@ -288,10 +298,10 @@ namespace {
 
     // Common
     template <typename T>
-    void PrintOperationImpl(const T& operation, EOutputFormat format) {
+    void PrintOperationImpl(const T& operation, EDataFormat format) {
         switch (format) {
-        case EOutputFormat::Default:
-        case EOutputFormat::Pretty:
+        case EDataFormat::Default:
+        case EDataFormat::Pretty:
         {
             auto table = MakeTable(operation);
             PrettyPrint(operation, table);
@@ -299,11 +309,11 @@ namespace {
             break;
         }
 
-        case EOutputFormat::Json:
+        case EDataFormat::Json:
             Cerr << "Warning! Option --json is deprecated and will be removed soon. "
                 << "Use \"--format proto-json-base64\" option instead." << Endl;
             [[fallthrough]];
-        case EOutputFormat::ProtoJsonBase64:
+        case EDataFormat::ProtoJsonBase64:
             Cout << operation.ToJsonString() << Endl;
             break;
 
@@ -313,27 +323,27 @@ namespace {
     }
 
     template <typename T>
-    void PrintOperationsListImpl(const T& operations, EOutputFormat format) {
+    void PrintOperationsListImpl(const T& operations, EDataFormat format) {
         switch (format) {
-        case EOutputFormat::Default:
-        case EOutputFormat::Pretty:
-            if (operations.GetList()) {
+        case EDataFormat::Default:
+        case EDataFormat::Pretty:
+            if (!operations.GetList().empty()) {
                 auto table = MakeTable(operations.GetList().front());
                 for (const auto& operation : operations.GetList()) {
                     PrettyPrint(operation, table);
                 }
                 Cout << table;
             }
-            if (operations.NextPageToken()) {
+            if (!operations.NextPageToken().empty()) {
                 Cout << Endl << "Next page token: " << operations.NextPageToken() << Endl;
             }
             break;
 
-        case EOutputFormat::Json:
+        case EDataFormat::Json:
             Cerr << "Warning! Option --json is deprecated and will be removed soon. "
                 << "Use \"--format proto-json-base64\" option instead." << Endl;
             [[fallthrough]];
-        case EOutputFormat::ProtoJsonBase64:
+        case EDataFormat::ProtoJsonBase64:
             Cout << operations.ToJsonString() << Endl;
             break;
 
@@ -345,53 +355,53 @@ namespace {
 }
 
 /// Common
-void PrintOperation(const TOperation& operation, EOutputFormat format) {
+void PrintOperation(const TOperation& operation, EDataFormat format) {
     PrintOperationImpl(operation, format);
 }
 
 /// YT
-void PrintOperation(const NExport::TExportToYtResponse& operation, EOutputFormat format) {
+void PrintOperation(const NExport::TExportToYtResponse& operation, EDataFormat format) {
     PrintOperationImpl(operation, format);
 }
 
-void PrintOperationsList(const NOperation::TOperationsList<NExport::TExportToYtResponse>& operations, EOutputFormat format) {
+void PrintOperationsList(const NOperation::TOperationsList<NExport::TExportToYtResponse>& operations, EDataFormat format) {
     PrintOperationsListImpl(operations, format);
 }
 
 /// S3
 // export
-void PrintOperation(const NExport::TExportToS3Response& operation, EOutputFormat format) {
+void PrintOperation(const NExport::TExportToS3Response& operation, EDataFormat format) {
     PrintOperationImpl(operation, format);
 }
 
-void PrintOperationsList(const NOperation::TOperationsList<NExport::TExportToS3Response>& operations, EOutputFormat format) {
+void PrintOperationsList(const NOperation::TOperationsList<NExport::TExportToS3Response>& operations, EDataFormat format) {
     PrintOperationsListImpl(operations, format);
 }
 
 // import
-void PrintOperation(const NImport::TImportFromS3Response& operation, EOutputFormat format) {
+void PrintOperation(const NImport::TImportFromS3Response& operation, EDataFormat format) {
     PrintOperationImpl(operation, format);
 }
 
-void PrintOperationsList(const NOperation::TOperationsList<NImport::TImportFromS3Response>& operations, EOutputFormat format) {
+void PrintOperationsList(const NOperation::TOperationsList<NImport::TImportFromS3Response>& operations, EDataFormat format) {
     PrintOperationsListImpl(operations, format);
 }
 
 /// Index build
-void PrintOperation(const NYdb::NTable::TBuildIndexOperation& operation, EOutputFormat format) {
+void PrintOperation(const NYdb::NTable::TBuildIndexOperation& operation, EDataFormat format) {
     PrintOperationImpl(operation, format);
 }
 
-void PrintOperationsList(const NOperation::TOperationsList<NYdb::NTable::TBuildIndexOperation>& operations, EOutputFormat format) {
+void PrintOperationsList(const NOperation::TOperationsList<NYdb::NTable::TBuildIndexOperation>& operations, EDataFormat format) {
     PrintOperationsListImpl(operations, format);
 }
 
 /// QueryService
-void PrintOperation(const NYdb::NQuery::TScriptExecutionOperation& operation, EOutputFormat format) {
+void PrintOperation(const NYdb::NQuery::TScriptExecutionOperation& operation, EDataFormat format) {
     PrintOperationImpl(operation, format);
 }
 
-void PrintOperationsList(const NOperation::TOperationsList<NYdb::NQuery::TScriptExecutionOperation>& operations, EOutputFormat format) {
+void PrintOperationsList(const NOperation::TOperationsList<NYdb::NQuery::TScriptExecutionOperation>& operations, EDataFormat format) {
     PrintOperationsListImpl(operations, format);
 }
 

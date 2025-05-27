@@ -1,18 +1,19 @@
 #include "yql_s3_provider_impl.h"
 #include "yql_s3_listing_strategy.h"
 
-#include <ydb/library/yql/core/yql_expr_optimize.h>
-#include <ydb/library/yql/core/yql_opt_utils.h>
-#include <ydb/library/yql/providers/common/schema/expr/yql_expr_schema.h>
+#include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/core/yql_opt_utils.h>
+#include <yql/essentials/providers/common/schema/expr/yql_expr_schema.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
 #include <ydb/library/yql/providers/s3/object_listers/yql_s3_list.h>
 #include <ydb/library/yql/providers/s3/object_listers/yql_s3_path.h>
 #include <ydb/library/yql/providers/s3/path_generator/yql_s3_path_generator.h>
 #include <ydb/library/yql/providers/s3/range_helpers/path_list_reader.h>
-#include <ydb/library/yql/public/udf/udf_data_type.h>
-#include <ydb/library/yql/utils/log/log.h>
-#include <ydb/library/yql/utils/url_builder.h>
+#include <ydb/library/yql/providers/s3/statistics/yql_s3_statistics.h>
+#include <yql/essentials/public/udf/udf_data_type.h>
+#include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/utils/url_builder.h>
 
 #include <util/generic/size_literals.h>
 #include <util/string/join.h>
@@ -83,7 +84,8 @@ public:
               State_->Configuration->MaxInflightListsPerQuery,
               State_->Configuration->ListingCallbackThreadCount,
               State_->Configuration->ListingCallbackPerThreadQueueSize,
-              State_->Configuration->RegexpCacheSize))
+              State_->Configuration->RegexpCacheSize,
+              State_->ActorSystem))
         , ListingStrategy_(MakeS3ListingStrategy(
               State_->Gateway,
               State_->GatewayRetryPolicy,
@@ -320,6 +322,8 @@ private:
                 generatedColumnsConfig = &it->second;
             }
 
+            auto settings = read.Ref().Child(4)->ChildrenList();
+
             const bool assumeDirectories = generatedColumnsConfig && generatedColumnsConfig->Generator;
             bool needsListingOnActors = false;
             for (auto& req : requests) {
@@ -352,6 +356,18 @@ private:
                 if (!listEntries.Directories.empty()) {
                     needsListingOnActors = true;
                 }
+
+                auto specific = std::make_shared<TS3ProviderStatistics>();
+                specific->RawByteSize = listEntries.ListedObjectSize;
+                for (auto setting : settings) {
+                    if (setting->Head().IsAtom("format")) {
+                        specific->Format = setting->Tail().Content();
+                    } else if (setting->Head().IsAtom("compression")) {
+                        specific->Compression = setting->Tail().Content();
+                    }
+                }
+                auto stats = std::make_shared<TOptimizerStatistics>(EStatisticsType::BaseTable, 0.0, 0, 0.0, 0.0, TIntrusivePtr<TOptimizerStatistics::TKeyColumns>(), TIntrusivePtr<TOptimizerStatistics::TColumnStatMap>(), EStorageType::NA, specific);
+                State_->Types->SetStats(read.DataSource().Raw(), stats);
 
                 for (auto& entry: listEntries.Objects) {
                     TMaybe<TVector<TExtraColumnValue>> extraValues;
@@ -442,7 +458,6 @@ private:
                 );
             }
 
-            auto settings = read.Ref().Child(4)->ChildrenList();
             const auto settingsPos = read.Ref().Child(4)->Pos();
             auto userSchema = ExtractSchema(settings);
             if (pathNodes.empty()) {
@@ -462,7 +477,7 @@ private:
 
             auto format = ExtractFormat(settings);
             if (!format) {
-                ctx.AddError(TIssue(ctx.GetPosition(settingsPos), "No read format specified."));
+                ctx.AddError(TIssue(ctx.GetPosition(settingsPos), "No read format specified.  Please use WITH FORMAT for reading from S3"));
                 return TStatus::Error;
             }
 
@@ -732,6 +747,10 @@ private:
         if (!FindFilePattern(settings, ctx, filePattern)) {
             return false;
         }
+        if (TString errorString = NS3::ValidateWildcards(filePattern)) {
+            ctx.AddError(TIssue(ctx.GetPosition(read.Pos()), TStringBuilder() << "File pattern '" << filePattern << "' contains invalid wildcard: " << errorString));
+            return false;
+        }
         const TString effectiveFilePattern = filePattern ? filePattern : "*";
 
         TVector<TString> paths;
@@ -763,6 +782,11 @@ private:
         }
 
         for (const auto& path : paths) {
+            if (TString errorString = NS3::ValidateWildcards(path)) {
+                ctx.AddError(TIssue(ctx.GetPosition(read.Pos()), TStringBuilder() << "Path '" << path << "' contains invalid wildcard: " << errorString));
+                return false;
+            }
+
             // each path in CONCAT() can generate multiple list requests for explicit partitioning
             TVector<TListRequest> reqs;
 
@@ -777,72 +801,30 @@ private:
                     .MaxResultSet = std::max(State_->Configuration->MaxDiscoveryFilesPerQuery, State_->Configuration->MaxDirectoriesAndFilesPerQuery)
                 }};
 
-            if (partitionedBy.empty()) {
-                if (path.empty()) {
-                    ctx.AddError(TIssue(ctx.GetPosition(read.Pos()), "Can not read from empty path"));
+            if (partitionedBy.empty() || !config.Generator) {
+                auto error = NS3::BuildS3FilePattern(path, filePattern, config.Columns, req.S3Request);
+                if (error) {
+                    ctx.AddError(TIssue(ctx.GetPosition(read.Pos()), *error));
                     return false;
                 }
-                if (path.EndsWith("/")) {
-                    req.S3Request.Pattern = path + effectiveFilePattern;
-                } else {
-                    // treat paths as regular wildcard patterns
-                    if (filePattern) {
-                        ctx.AddError(TIssue(ctx.GetPosition(read.Pos()), TStringBuilder() << "Path pattern cannot be used with file_pattern"));
-                        return false;
-                    }
-
-                    req.S3Request.Pattern = path;
-                }
-                req.S3Request.Pattern = NS3::NormalizePath(req.S3Request.Pattern);
-                req.S3Request.PatternType = NS3Lister::ES3PatternType::Wildcard;
-                req.S3Request.Prefix = req.S3Request.Pattern.substr(
-                    0, NS3::GetFirstWildcardPos(req.S3Request.Pattern));
-                req.Options.IsPartitionedDataset = false;
+                req.Options.IsPartitionedDataset = !partitionedBy.empty();
                 reqs.push_back(req);
             } else {
                 if (NS3::HasWildcards(path)) {
                     ctx.AddError(TIssue(ctx.GetPosition(read.Pos()), TStringBuilder() << "Path prefix: '" << path << "' contains wildcards"));
                     return false;
                 }
-                if (!config.Generator) {
-                    // Hive-style partitioning
-                    req.S3Request.Prefix = path;
-                    if (!path.empty()) {
-                        req.S3Request.Prefix = NS3::NormalizePath(TStringBuilder() << path << "/");
-                        if (req.S3Request.Prefix == "/") {
-                            req.S3Request.Prefix = "";
-                        }
-                    }
-                    TString pp = req.S3Request.Prefix;
-                    if (!pp.empty() && pp.back() == '/') {
-                        pp.pop_back();
-                    }
 
-                    TStringBuilder generated;
-                    generated << NS3::EscapeRegex(pp);
-                    for (auto& col : config.Columns) {
-                        if (!generated.empty()) {
-                            generated << "/";
-                        }
-                        generated << NS3::EscapeRegex(col) << "=(.*?)";
-                    }
-                    generated << '/' << NS3::RegexFromWildcards(effectiveFilePattern);
-                    req.S3Request.Pattern = generated;
-                    req.S3Request.PatternType = NS3Lister::ES3PatternType::Regexp;
+                for (auto& rule : config.Generator->GetRules()) {
+                    YQL_ENSURE(rule.ColumnValues.size() == config.Columns.size());
+                    req.ColumnValues.assign(rule.ColumnValues.begin(), rule.ColumnValues.end());
+                    // Pattern will be directory path
+                    req.S3Request.Pattern = NS3::NormalizePath(TStringBuilder() << path << "/" << rule.Path);
+                    req.S3Request.PatternType = NS3Lister::ES3PatternType::Wildcard;
+                    req.S3Request.Prefix = req.S3Request.Pattern.substr(
+                        0, NS3::GetFirstWildcardPos(req.S3Request.Pattern));
                     req.Options.IsPartitionedDataset = true;
                     reqs.push_back(req);
-                } else {
-                    for (auto& rule : config.Generator->GetRules()) {
-                        YQL_ENSURE(rule.ColumnValues.size() == config.Columns.size());
-                        req.ColumnValues.assign(rule.ColumnValues.begin(), rule.ColumnValues.end());
-                        // Pattern will be directory path
-                        req.S3Request.Pattern = NS3::NormalizePath(TStringBuilder() << path << "/" << rule.Path);
-                        req.S3Request.PatternType = NS3Lister::ES3PatternType::Wildcard;
-                        req.S3Request.Prefix = req.S3Request.Pattern.substr(
-                            0, NS3::GetFirstWildcardPos(req.S3Request.Pattern));
-                        req.Options.IsPartitionedDataset = true;
-                        reqs.push_back(req);
-                    }
                 }
             }
 

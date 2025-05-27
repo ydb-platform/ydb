@@ -1,8 +1,7 @@
 UNITTEST_FOR(ydb/core/blobstorage/ut_blobstorage)
 
-    TIMEOUT(3600)
     SIZE(LARGE)
-    TAG(ya:fat)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 
     SRCS(
         blob_depot_fat.cpp

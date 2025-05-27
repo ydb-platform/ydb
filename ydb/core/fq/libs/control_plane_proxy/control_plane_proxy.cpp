@@ -31,7 +31,7 @@
 #include <ydb/library/ycloud/api/access_service.h>
 #include <ydb/library/ycloud/impl/access_service.h>
 #include <ydb/library/ycloud/impl/mock_access_service.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 #include <library/cpp/lwtrace/mon/mon_lwtrace.h>
 #include <ydb/library/security/util.h>
@@ -43,6 +43,7 @@
 
 #include <ydb/library/folder_service/folder_service.h>
 #include <ydb/library/folder_service/events.h>
+#include <ydb/library/protobuf_printer/security_printer.h>
 
 #include <contrib/libs/fmt/include/fmt/format.h>
 
@@ -402,6 +403,7 @@ class TCreateComputeDatabaseActor : public NActors::TActorBootstrapped<TCreateCo
     std::function<void(const TDuration&, bool, bool)> Probe;
     TEventRequest Event;
     ui32 Cookie;
+    FederatedQuery::QueryContent::QueryType QueryType;
     TInstant StartTime;
 
 public:
@@ -413,7 +415,8 @@ public:
                                 const TString& scope,
                                 const std::function<void(const TDuration&, bool, bool)>& probe,
                                 TEventRequest event,
-                                ui32 cookie)
+                                ui32 cookie,
+                                FederatedQuery::QueryContent::QueryType queryType = FederatedQuery::QueryContent::QUERY_TYPE_UNSPECIFIED)
         : Config(config)
         , ComputeConfig(computeConfig)
         , Sender(sender)
@@ -423,13 +426,14 @@ public:
         , Probe(probe)
         , Event(event)
         , Cookie(cookie)
+        , QueryType(queryType)
         , StartTime(TInstant::Now()) { }
 
     static constexpr char ActorName[] = "YQ_CONTROL_PLANE_PROXY_CREATE_DATABASE";
 
     void Bootstrap() {
         CPP_LOG_T("Create database bootstrap. CloudId: " << CloudId << " Scope: " << Scope << " Actor id: " << SelfId());
-        if (!ComputeConfig.YdbComputeControlPlaneEnabled(Scope)) {
+        if (!ComputeConfig.YdbComputeControlPlaneEnabled(Scope, QueryType)) {
             Event->Get()->ComputeDatabase = FederatedQuery::Internal::ComputeDatabaseInternal{};
             TActivationContext::Send(Event->Forward(ControlPlaneProxyActorId()));
             PassAway();
@@ -450,6 +454,7 @@ public:
     )
 
     void HandleTimeout() {
+        Counters->InFly->Dec();
         CPP_LOG_W("Create database timeout. CloudId: " << CloudId << " Scope: " << Scope << " Actor id: " << SelfId());
         NYql::TIssues issues;
         NYql::TIssue issue = MakeErrorIssue(TIssuesIds::TIMEOUT, "Create database: request timeout. Try repeating the request later");
@@ -525,7 +530,7 @@ public:
         if (mon) {
             ::NMonitoring::TIndexMonPage* actorsMonPage = mon->RegisterIndexPage("actors", "Actors");
             mon->RegisterActorPage(actorsMonPage, "yq_control_plane_proxy", "YQ Control Plane Proxy", false,
-                TlsActivationContext->ExecutorThread.ActorSystem, SelfId());
+                TlsActivationContext->ActorSystem(), SelfId());
         }
 
         const auto& accessServiceProto = Config.Proto.GetAccessService();
@@ -595,7 +600,7 @@ private:
         CPS_LOG_E(requestName << ", validation failed: " << ev->Get()->Scope << " "
                               << ev->Get()->User << " "
                               << NKikimr::MaskTicket(ev->Get()->Token) << " "
-                              << ev->Get()->Request.DebugString()
+                              << SecureDebugString(ev->Get()->Request)
                               << " error: " << issues.ToString());
         Send(ev->Sender, new TProxyResponse(issues, ev->Get()->SubjectType), 0, ev->Cookie);
         requestCounters.IncError();
@@ -648,6 +653,7 @@ private:
         const int byteSize = request.ByteSize();
         TActorId sender = ev->Sender;
         ui64 cookie = ev->Cookie;
+        FederatedQuery::QueryContent::QueryType queryType = request.content().type();
 
         auto probe = [=](const TDuration& delta, bool isSuccess, bool isTimeout) {
             LWPROBE(CreateQueryRequest, scope, user, delta, byteSize, isSuccess, isTimeout);
@@ -688,7 +694,7 @@ private:
                                                 TEvControlPlaneProxy::TEvCreateQueryResponse>
                                                 (Counters.GetCommonCounters(RTC_CREATE_COMPUTE_DATABASE),
                                                  sender, Config, Config.ComputeConfig, cloudId,
-                                                 scope, probe, ev, cookie));
+                                                 scope, probe, ev, cookie, queryType));
             return;
         }
 
@@ -701,6 +707,7 @@ private:
                                               Config,
                                               ControlPlaneStorageServiceActorId(),
                                               requestCounters,
+                                              Counters.GetCommonCounters(RTC_RATE_LIMITER),
                                               probe,
                                               availablePermissions));
     }
@@ -917,6 +924,7 @@ private:
         const int byteSize = request.ByteSize();
         TActorId sender = ev->Sender;
         ui64 cookie = ev->Cookie;
+        FederatedQuery::QueryContent::QueryType queryType = request.content().type();
 
         auto probe = [=](const TDuration& delta, bool isSuccess, bool isTimeout) {
             LWPROBE(ModifyQueryRequest, scope, user, queryId, delta, byteSize, isSuccess, isTimeout);
@@ -957,7 +965,7 @@ private:
                                                 TEvControlPlaneProxy::TEvModifyQueryResponse>
                                                 (Counters.GetCommonCounters(RTC_CREATE_COMPUTE_DATABASE),
                                                  sender, Config, Config.ComputeConfig, cloudId,
-                                                 scope, probe, ev, cookie));
+                                                 scope, probe, ev, cookie, queryType));
             return;
         }
 
@@ -1318,7 +1326,7 @@ private:
     void Handle(TEvControlPlaneProxy::TEvCreateConnectionRequest::TPtr& ev) {
         TInstant startTime = TInstant::Now();
         FederatedQuery::CreateConnectionRequest request = ev->Get()->Request;
-        CPP_LOG_T("CreateConnectionRequest: " << request.DebugString());
+        CPP_LOG_T("CreateConnectionRequest: " << SecureDebugString(request));
         const TString cloudId = ev->Get()->CloudId;
         const TString subjectType = ev->Get()->SubjectType;
         const TString scope = ev->Get()->Scope;
@@ -1349,7 +1357,7 @@ private:
 
         NYql::TIssues issues = ValidatePermissions(ev, requiredPermissions);
         if (issues) {
-            CPS_LOG_E("CreateConnectionRequest, validation failed: " << scope << " " << user << " " << NKikimr::MaskTicket(token) << " " << request.DebugString() << " error: " << issues.ToString());
+            CPS_LOG_E("CreateConnectionRequest, validation failed: " << scope << " " << user << " " << NKikimr::MaskTicket(token) << " " << SecureDebugString(request) << " error: " << issues.ToString());
             Send(ev->Sender, new TEvControlPlaneProxy::TEvCreateConnectionResponse(issues, subjectType), 0, ev->Cookie);
             requestCounters.IncError();
             TDuration delta = TInstant::Now() - startTime;
@@ -1389,7 +1397,7 @@ private:
             if (requestValidationIssues) {
                 CPS_LOG_E("CreateConnectionRequest, validation failed: "
                           << scope << " " << user << " " << NKikimr::MaskTicket(token)
-                          << " " << request.DebugString()
+                          << " " << SecureDebugString(request)
                           << " error: " << requestValidationIssues.ToString());
                 Send(ev->Sender,
                      new TEvControlPlaneProxy::TEvCreateConnectionResponse(
@@ -1603,7 +1611,7 @@ private:
     void Handle(TEvControlPlaneProxy::TEvModifyConnectionRequest::TPtr& ev) {
         TInstant startTime = TInstant::Now();
         FederatedQuery::ModifyConnectionRequest request = ev->Get()->Request;
-        CPP_LOG_T("ModifyConnectionRequest: " << request.DebugString());
+        CPP_LOG_T("ModifyConnectionRequest: " << SecureDebugString(request));
         const TString cloudId = ev->Get()->CloudId;
         const TString subjectType = ev->Get()->SubjectType;
         const TString scope = ev->Get()->Scope;
@@ -1635,7 +1643,7 @@ private:
 
         NYql::TIssues issues = ValidatePermissions(ev, requiredPermissions);
         if (issues) {
-            CPS_LOG_E("ModifyConnectionRequest, validation failed: " << scope << " " << user << " " << NKikimr::MaskTicket(token) << " " << request.DebugString() << " error: " << issues.ToString());
+            CPS_LOG_E("ModifyConnectionRequest, validation failed: " << scope << " " << user << " " << NKikimr::MaskTicket(token) << " " << SecureDebugString(request) << " error: " << issues.ToString());
             Send(ev->Sender, new TEvControlPlaneProxy::TEvModifyConnectionResponse(issues, subjectType), 0, ev->Cookie);
             requestCounters.IncError();
             TDuration delta = TInstant::Now() - startTime;
@@ -1675,7 +1683,7 @@ private:
             if (requestValidationIssues) {
                 CPS_LOG_E("ModifyConnectionRequest, validation failed: "
                           << scope << " " << user << " " << NKikimr::MaskTicket(token)
-                          << " " << request.DebugString()
+                          << " " << SecureDebugString(request)
                           << " error: " << requestValidationIssues.ToString());
                 Send(ev->Sender,
                      new TEvControlPlaneProxy::TEvModifyConnectionResponse(
@@ -1865,6 +1873,7 @@ private:
                                                    Config.RequestTimeout,
                                                    Counters,
                                                    Config.CommonConfig,
+                                                   Config.ComputeConfig,
                                                    Signer));
                 return;
             }
@@ -1876,7 +1885,7 @@ private:
     void Handle(TEvControlPlaneProxy::TEvTestConnectionRequest::TPtr& ev) {
         TInstant startTime = TInstant::Now();
         FederatedQuery::TestConnectionRequest request = ev->Get()->Request;
-        CPP_LOG_T("TestConnectionRequest: " << request.DebugString());
+        CPP_LOG_T("TestConnectionRequest: " << SecureDebugString(request));
         const TString cloudId = ev->Get()->CloudId;
 
         const TString subjectType = ev->Get()->SubjectType;
@@ -1908,7 +1917,7 @@ private:
 
         NYql::TIssues issues = ValidatePermissions(ev, requiredPermissions);
         if (issues) {
-            CPS_LOG_E("TestConnectionRequest, validation failed: " << scope << " " << user << " " << NKikimr::MaskTicket(token) << " " << request.DebugString() << " error: " << issues.ToString());
+            CPS_LOG_E("TestConnectionRequest, validation failed: " << scope << " " << user << " " << NKikimr::MaskTicket(token) << " " << SecureDebugString(request) << " error: " << issues.ToString());
             Send(ev->Sender, new TEvControlPlaneProxy::TEvTestConnectionResponse(issues, subjectType), 0, ev->Cookie);
             requestCounters.IncError();
             TDuration delta = TInstant::Now() - startTime;

@@ -32,6 +32,64 @@ struct TLockLoggerContext {
 // Logger requires an l-value, so we use an empty static variable
 static TLockLoggerContext LockLoggerContext;
 
+// TPointKey
+
+ILocksDb::TLockRange TPointKey::ToSerializedLockRange() const {
+    ILocksDb::TLockRange range;
+    range.TableId = Table->GetTableId();
+    range.Flags = ui64(ELockRangeFlags::Read | ELockRangeFlags::SerializedPointKey);
+    range.Data = TSerializedCellVec::Serialize(Key);
+    return range;
+}
+
+bool TPointKey::ParseSerializedLockRange(const ILocksDb::TLockRange& range) {
+    if (range.Data) {
+        Key = TOwnedCellVec::FromSerialized(range.Data);
+    }
+    return true;
+}
+
+// TRangeKey
+
+ILocksDb::TLockRange TRangeKey::ToSerializedLockRange() const {
+    ILocksDb::TLockRange range;
+    range.TableId = Table->GetTableId();
+    range.Flags = ui64(ELockRangeFlags::Read | ELockRangeFlags::SerializedRangeKey);
+    NKikimrTx::TKeyRange protoRange;
+    if (From) {
+        protoRange.SetFrom(TSerializedCellVec::Serialize(From));
+    }
+    if (To) {
+        protoRange.SetTo(TSerializedCellVec::Serialize(To));
+    }
+    if (InclusiveFrom) {
+        protoRange.SetFromInclusive(true);
+    }
+    if (InclusiveTo) {
+        protoRange.SetToInclusive(true);
+    }
+    bool ok = protoRange.SerializeToString(&range.Data);
+    Y_ENSURE(ok, "Unexpected failure to serialize TRangeKey");
+    return range;
+}
+
+bool TRangeKey::ParseSerializedLockRange(const ILocksDb::TLockRange& range) {
+    NKikimrTx::TKeyRange protoRange;
+    bool ok = protoRange.ParseFromString(range.Data);
+    if (!ok) {
+        return false;
+    }
+    if (protoRange.HasFrom()) {
+        From = TOwnedCellVec::FromSerialized(protoRange.GetFrom());
+    }
+    if (protoRange.HasTo()) {
+        To = TOwnedCellVec::FromSerialized(protoRange.GetTo());
+    }
+    InclusiveFrom = protoRange.GetFromInclusive();
+    InclusiveTo = protoRange.GetToInclusive();
+    return true;
+}
+
 // TLockInfo
 
 TLockInfo::TLockInfo(TLockLocker * locker, ui64 lockId, ui32 lockNodeId)
@@ -51,11 +109,24 @@ TLockInfo::TLockInfo(TLockLocker * locker, const ILocksDb::TLockRow& row)
     , Counter(row.Counter)
     , CreationTime(TInstant::MicroSeconds(row.CreateTs))
     , Flags(ELockFlags(row.Flags))
-    , Persistent(true)
 {
-    if (Counter == Max<ui64>()) {
+    if (row.BreakVersion != TRowVersion::Max()) {
+        BreakVersion.emplace(row.BreakVersion);
+    } else if (Counter == Max<ui64>()) {
         BreakVersion.emplace(TRowVersion::Min());
     }
+    if (IsShardLock()) {
+        for (const auto& tableId : row.ReadTables) {
+            // Note: table could be missing after it's dropped
+            if (auto* table = Locker->FindTablePtr(tableId)) {
+                if (ReadTables.insert(tableId).second) {
+                    table->AddShardLock(this);
+                    UnpersistedRanges = true;
+                }
+            }
+        }
+    }
+    // NOTE: we don't restore WriteTables, they must be persistent
 }
 
 TLockInfo::~TLockInfo() {
@@ -69,13 +140,14 @@ TLockInfo::~TLockInfo() {
 }
 
 void TLockInfo::MakeShardLock() {
-    ShardLock = true;
+    Flags |= ELockFlags::WholeShard;
     Points.clear();
     Ranges.clear();
 }
 
 bool TLockInfo::AddShardLock(const TPathId& pathId) {
-    Y_ABORT_UNLESS(ShardLock);
+    Y_ENSURE(IsShardLock());
+    Y_DEBUG_ABORT_UNLESS(Locker->FindTablePtr(pathId));
     if (ReadTables.insert(pathId).second) {
         UnpersistedRanges = true;
         return true;
@@ -87,23 +159,24 @@ bool TLockInfo::AddPoint(const TPointKey& point) {
     if (ReadTables.insert(point.Table->GetTableId()).second) {
         UnpersistedRanges = true;
     }
-    if (!ShardLock) {
+    if (!IsShardLock()) {
         Points.emplace_back(point);
     }
-    return !ShardLock;
+    return !IsShardLock();
 }
 
 bool TLockInfo::AddRange(const TRangeKey& range) {
     if (ReadTables.insert(range.Table->GetTableId()).second) {
         UnpersistedRanges = true;
     }
-    if (!ShardLock) {
+    if (!IsShardLock()) {
         Ranges.emplace_back(range);
     }
-    return !ShardLock;
+    return !IsShardLock();
 }
 
 bool TLockInfo::AddWriteLock(const TPathId& pathId) {
+    Y_DEBUG_ABORT_UNLESS(Locker->FindTablePtr(pathId));
     if (WriteTables.insert(pathId).second) {
         UnpersistedRanges = true;
         return true;
@@ -112,7 +185,7 @@ bool TLockInfo::AddWriteLock(const TPathId& pathId) {
 }
 
 void TLockInfo::SetBroken(TRowVersion at) {
-    if (Persistent) {
+    if (IsPersistent()) {
         // Persistent locks always break completely
         at = TRowVersion::Min();
     }
@@ -143,24 +216,24 @@ void TLockInfo::OnRemoved() {
 }
 
 void TLockInfo::PersistLock(ILocksDb* db) {
-    Y_ABORT_UNLESS(!IsPersistent());
-    Y_ABORT_UNLESS(db, "Cannot persist lock without a db");
-    db->PersistAddLock(LockId, LockNodeId, Generation, Counter, CreationTime.MicroSeconds(), ui64(Flags));
-    Persistent = true;
+    Y_ENSURE(!IsPersistent());
+    Y_ENSURE(db, "Cannot persist lock without a db");
+    db->PersistAddLock(LockId, LockNodeId, Generation, Counter, CreationTime.MicroSeconds(), ui64(Flags & ELockFlags::PersistentMask));
+    Flags |= ELockFlags::Persistent;
 
     PersistRanges(db);
     PersistConflicts(db);
 }
 
 void TLockInfo::PersistBrokenLock(ILocksDb* db) {
-    Y_ABORT_UNLESS(IsPersistent());
-    Y_ABORT_UNLESS(db, "Cannot persist lock without a db");
+    Y_ENSURE(IsPersistent());
+    Y_ENSURE(db, "Cannot persist lock without a db");
     db->PersistLockCounter(LockId, Max<ui64>());
 }
 
 void TLockInfo::PersistRemoveLock(ILocksDb* db) {
-    Y_ABORT_UNLESS(IsPersistent());
-    Y_ABORT_UNLESS(db, "Cannot persist lock without a db");
+    Y_ENSURE(IsPersistent());
+    Y_ENSURE(db, "Cannot persist lock without a db");
 
     // Remove persistent volatile dependencies
     for (ui64 txId : VolatileDependencies) {
@@ -193,22 +266,24 @@ void TLockInfo::PersistRemoveLock(ILocksDb* db) {
     db->PersistRemoveLock(LockId);
 }
 
-void TLockInfo::PersistRanges(ILocksDb* db) {
-    Y_ABORT_UNLESS(IsPersistent());
+bool TLockInfo::PersistRanges(ILocksDb* db) {
+    Y_ENSURE(IsPersistent());
+    bool changed = false;
     if (UnpersistedRanges) {
         for (const TPathId& pathId : ReadTables) {
-            PersistAddRange(pathId, ELockRangeFlags::Read, db);
+            changed |= PersistAddRange(pathId, ELockRangeFlags::Read, db);
         }
         for (const TPathId& pathId : WriteTables) {
-            PersistAddRange(pathId, ELockRangeFlags::Write, db);
+            changed |= PersistAddRange(pathId, ELockRangeFlags::Write, db);
         }
         UnpersistedRanges = false;
     }
+    return changed;
 }
 
-void TLockInfo::PersistAddRange(const TPathId& tableId, ELockRangeFlags flags, ILocksDb* db) {
-    Y_ABORT_UNLESS(IsPersistent());
-    Y_ABORT_UNLESS(db, "Cannot persist ranges without a db");
+bool TLockInfo::PersistAddRange(const TPathId& tableId, ELockRangeFlags flags, ILocksDb* db) {
+    Y_ENSURE(IsPersistent());
+    Y_ENSURE(db, "Cannot persist ranges without a db");
     // We usually have a single range with flags, so linear search is ok
     ui64 maxId = 0;
     for (auto& range : PersistentRanges) {
@@ -217,8 +292,9 @@ void TLockInfo::PersistAddRange(const TPathId& tableId, ELockRangeFlags flags, I
             range.Flags |= flags;
             if (range.Flags != prevFlags) {
                 db->PersistRangeFlags(LockId, range.Id, ui64(range.Flags));
+                return true;
             }
-            return;
+            return false;
         }
         maxId = Max(maxId, range.Id);
     }
@@ -227,11 +303,13 @@ void TLockInfo::PersistAddRange(const TPathId& tableId, ELockRangeFlags flags, I
     range.TableId = tableId;
     range.Flags = flags;
     db->PersistAddRange(LockId, range.Id, range.TableId, ui64(range.Flags));
+    return true;
 }
 
-void TLockInfo::AddConflict(TLockInfo* otherLock, ILocksDb* db) {
-    Y_ABORT_UNLESS(this != otherLock, "Lock cannot conflict with itself");
-    Y_ABORT_UNLESS(LockId != otherLock->LockId, "Unexpected conflict between a pair of locks with the same id");
+bool TLockInfo::AddConflict(TLockInfo* otherLock, ILocksDb* db) {
+    Y_ENSURE(this != otherLock, "Lock cannot conflict with itself");
+    Y_ENSURE(LockId != otherLock->LockId, "Unexpected conflict between a pair of locks with the same id");
+    bool changed = false;
 
     auto& flags = ConflictLocks[otherLock];
     if (!(flags & ELockConflictFlags::BreakThemOnOurCommit)) {
@@ -240,24 +318,31 @@ void TLockInfo::AddConflict(TLockInfo* otherLock, ILocksDb* db) {
         otherFlags |= ELockConflictFlags::BreakUsOnTheirCommit;
         if (IsPersistent() && otherLock->IsPersistent()) {
             // Any conflict between persistent locks is also persistent
-            Y_ABORT_UNLESS(db, "Cannot persist conflicts without a db");
+            Y_ENSURE(db, "Cannot persist conflicts without a db");
             db->PersistAddConflict(LockId, otherLock->LockId);
+            changed = true;
         }
     }
+
+    return changed;
 }
 
-void TLockInfo::AddVolatileDependency(ui64 txId, ILocksDb* db) {
-    Y_ABORT_UNLESS(LockId != txId, "Unexpected volatile dependency between a lock and itself");
+bool TLockInfo::AddVolatileDependency(ui64 txId, ILocksDb* db) {
+    Y_ENSURE(LockId != txId, "Unexpected volatile dependency between a lock and itself");
+    bool changed = false;
 
     if (VolatileDependencies.insert(txId).second && IsPersistent()) {
-        Y_ABORT_UNLESS(db, "Cannot persist dependencies without a db");
+        Y_ENSURE(db, "Cannot persist dependencies without a db");
         db->PersistAddVolatileDependency(LockId, txId);
+        changed = true;
     }
+    return changed;
 }
 
-void TLockInfo::PersistConflicts(ILocksDb* db) {
-    Y_ABORT_UNLESS(IsPersistent());
-    Y_ABORT_UNLESS(db, "Cannot persist conflicts without a db");
+bool TLockInfo::PersistConflicts(ILocksDb* db) {
+    Y_ENSURE(IsPersistent());
+    Y_ENSURE(db, "Cannot persist conflicts without a db");
+    bool changed = false;
     for (auto& pr : ConflictLocks) {
         TLockInfo* otherLock = pr.first;
         if (!otherLock->IsPersistent()) {
@@ -266,14 +351,18 @@ void TLockInfo::PersistConflicts(ILocksDb* db) {
         }
         if (!!(pr.second & ELockConflictFlags::BreakThemOnOurCommit)) {
             db->PersistAddConflict(LockId, otherLock->LockId);
+            changed = true;
         }
         if (!!(pr.second & ELockConflictFlags::BreakUsOnTheirCommit)) {
             db->PersistAddConflict(otherLock->LockId, LockId);
+            changed = true;
         }
     }
     for (ui64 txId : VolatileDependencies) {
         db->PersistAddVolatileDependency(LockId, txId);
+        changed = true;
     }
+    return changed;
 }
 
 void TLockInfo::CleanupConflicts() {
@@ -298,6 +387,66 @@ void TLockInfo::CleanupConflicts() {
     }
 }
 
+void TLockInfo::RestoreInMemoryState(const ILocksDb::TLockRow& lockRow) {
+    auto flags = ELockFlags(lockRow.Flags);
+    if (IsShardLock() && !(flags & ELockFlags::WholeShard)) {
+        // Lock was not a shard lock in the previous generation
+        Locker->UndoShardLock(this);
+        Flags &= ~ELockFlags::WholeShard;
+    }
+    Flags |= flags;
+    Generation = lockRow.Generation;
+    Counter = lockRow.Counter;
+    if (lockRow.BreakVersion != TRowVersion::Max()) {
+        BreakVersion.emplace(lockRow.BreakVersion);
+    }
+    if (IsShardLock()) {
+        // NOTE: this code path is currently only used for persistent locks. We
+        // should have restored all read ranges already, since they are
+        // persistent. Unless we failed to commit some read ranges this loop
+        // shouldn't really change anything.
+        for (const auto& tableId : lockRow.ReadTables) {
+            if (auto* table = Locker->FindTablePtr(tableId)) {
+                if (ReadTables.insert(tableId).second) {
+                    table->AddShardLock(this);
+                    UnpersistedRanges = true;
+                }
+            }
+        }
+    }
+    // NOTE: we don't restore WriteTables, they must be persistent
+}
+
+bool TLockInfo::RestoreInMemoryRange(const ILocksDb::TLockRange& rangeRow) {
+    auto flags = ELockRangeFlags(rangeRow.Flags);
+    if (!!(flags & ELockRangeFlags::Read)) {
+        if (auto* table = Locker->FindTablePtr(rangeRow.TableId)) {
+            if (IsShardLock()) {
+                if (AddShardLock(rangeRow.TableId)) {
+                    table->AddShardLock(this);
+                }
+            } else if (!!(flags & ELockRangeFlags::SerializedPointKey)) {
+                TPointKey point;
+                point.Table = table;
+                if (!point.ParseSerializedLockRange(rangeRow)) {
+                    Locker->MakeShardLock(this);
+                    return false;
+                }
+                Locker->AddPointLock(this, point);
+            } else if (!!(flags & ELockRangeFlags::SerializedRangeKey)) {
+                TRangeKey range;
+                range.Table = table;
+                if (!range.ParseSerializedLockRange(rangeRow)) {
+                    Locker->MakeShardLock(this);
+                    return false;
+                }
+                Locker->AddRangeLock(this, range);
+            }
+        }
+    }
+    return true;
+}
+
 void TLockInfo::RestorePersistentRange(const ILocksDb::TLockRange& rangeRow) {
     auto& range = PersistentRanges.emplace_back();
     range.Id = rangeRow.RangeId;
@@ -305,41 +454,68 @@ void TLockInfo::RestorePersistentRange(const ILocksDb::TLockRange& rangeRow) {
     range.Flags = ELockRangeFlags(rangeRow.Flags);
 
     if (!!(range.Flags & ELockRangeFlags::Read)) {
-        if (ReadTables.insert(range.TableId).second) {
-            ShardLock = true;
-            if (auto* table = Locker->FindTablePtr(range.TableId)) {
+        // Note: table could be missing after it's dropped
+        if (auto* table = Locker->FindTablePtr(range.TableId)) {
+            if (ReadTables.insert(range.TableId).second) {
+                Flags |= ELockFlags::WholeShard;
                 table->AddShardLock(this);
             }
         }
     }
     if (!!(range.Flags & ELockRangeFlags::Write)) {
-        if (WriteTables.insert(range.TableId).second) {
-            if (auto* table = Locker->FindTablePtr(range.TableId)) {
+        // Note: table could be missing after it's dropped
+        if (auto* table = Locker->FindTablePtr(range.TableId)) {
+            if (WriteTables.insert(range.TableId).second) {
                 table->AddWriteLock(this);
             }
         }
     }
 }
 
-void TLockInfo::RestorePersistentConflict(TLockInfo* otherLock) {
-    Y_ABORT_UNLESS(IsPersistent() && otherLock->IsPersistent());
-
+void TLockInfo::RestoreInMemoryConflict(TLockInfo* otherLock) {
     this->ConflictLocks[otherLock] |= ELockConflictFlags::BreakThemOnOurCommit;
     otherLock->ConflictLocks[this] |= ELockConflictFlags::BreakUsOnTheirCommit;
 }
 
-void TLockInfo::RestorePersistentVolatileDependency(ui64 txId) {
-    Y_ABORT_UNLESS(IsPersistent());
+void TLockInfo::RestorePersistentConflict(TLockInfo* otherLock) {
+    Y_ENSURE(IsPersistent() && otherLock->IsPersistent());
+    RestoreInMemoryConflict(otherLock);
+}
 
+void TLockInfo::RestoreInMemoryVolatileDependency(ui64 txId) {
     VolatileDependencies.insert(txId);
 }
 
+void TLockInfo::RestorePersistentVolatileDependency(ui64 txId) {
+    Y_ENSURE(IsPersistent());
+    RestoreInMemoryVolatileDependency(txId);
+}
+
 void TLockInfo::SetFrozen(ILocksDb* db) {
-    Y_ABORT_UNLESS(IsPersistent());
+    Y_ENSURE(IsPersistent());
     Flags |= ELockFlags::Frozen;
     if (db) {
-        db->PersistLockFlags(LockId, ui64(Flags));
+        db->PersistLockFlags(LockId, ui64(Flags & ELockFlags::PersistentMask));
+        AddWaitPersistentCallback(db);
     }
+}
+
+void TLockInfo::AddWaitPersistentCallback(ILocksDb* db) {
+    ++WaitPersistentCounter;
+    db->OnPersistent([lock = TLockInfo::TPtr(this)]() {
+        --lock->WaitPersistentCounter;
+    });
+}
+
+void TLockInfo::AddWaitPersistentCallback(ILocksDb* db, TVector<TLockInfo::TPtr>&& locks) {
+    for (auto& lock : locks) {
+        ++lock->WaitPersistentCounter;
+    }
+    db->OnPersistent([locks = std::move(locks)]() {
+        for (auto& lock : locks) {
+            --lock->WaitPersistentCounter;
+        }
+    });
 }
 
 // TTableLocks
@@ -349,8 +525,8 @@ void TTableLocks::AddShardLock(TLockInfo* lock) {
 }
 
 void TTableLocks::AddPointLock(const TPointKey& point, TLockInfo* lock) {
-    Y_ABORT_UNLESS(lock->MayHavePointsAndRanges());
-    Y_ABORT_UNLESS(point.Table == this);
+    Y_ENSURE(lock->MayHavePointsAndRanges());
+    Y_ENSURE(point.Table == this);
     TRangeTreeBase::TOwnedRange added(
             point.Key,
             true,
@@ -360,8 +536,8 @@ void TTableLocks::AddPointLock(const TPointKey& point, TLockInfo* lock) {
 }
 
 void TTableLocks::AddRangeLock(const TRangeKey& range, TLockInfo* lock) {
-    Y_ABORT_UNLESS(lock->MayHavePointsAndRanges());
-    Y_ABORT_UNLESS(range.Table == this);
+    Y_ENSURE(lock->MayHavePointsAndRanges());
+    Y_ENSURE(range.Table == this);
     // FIXME: we have to force empty From/To to be inclusive due to outdated
     // scripts/tests assuming missing columns are +inf, and that expect
     // non-inclusive +inf to include everything. This clashes with the new
@@ -402,35 +578,99 @@ void TTableLocks::RemoveWriteLock(TLockInfo* lock) {
 
 // TLockLocker
 
-void TLockLocker::AddPointLock(const TLockInfo::TPtr& lock, const TPointKey& key) {
+namespace {
+
+    static constexpr ui64 DefaultLockLimit() {
+        // Valgrind and sanitizers are too slow
+        // Some tests cannot exhaust default limit in under 5 minutes
+        return NValgrind::PlainOrUnderValgrind(
+                    NSan::PlainOrUnderSanitizer(
+                        20000,
+                        1000),
+                    1000);
+    }
+
+    static constexpr ui64 DefaultLockRangesLimit() {
+        return 50000;
+    }
+
+    static constexpr ui64 DefaultTotalRangesLimit() {
+        return 1000000;
+    }
+
+    static std::atomic<ui64> g_LockLimit{ DefaultLockLimit() };
+    static std::atomic<ui64> g_LockRangesLimit{ DefaultLockRangesLimit() };
+    static std::atomic<ui64> g_TotalRangesLimit{ DefaultTotalRangesLimit() };
+
+} // namespace
+
+ui64 TLockLocker::LockLimit() {
+    return g_LockLimit.load(std::memory_order_relaxed);
+}
+
+ui64 TLockLocker::LockRangesLimit() {
+    return g_LockRangesLimit.load(std::memory_order_relaxed);
+}
+
+ui64 TLockLocker::TotalRangesLimit() {
+    return g_TotalRangesLimit.load(std::memory_order_relaxed);
+}
+
+void TLockLocker::SetLockLimit(ui64 newLimit) {
+    g_LockLimit.store(newLimit, std::memory_order_relaxed);
+}
+
+void TLockLocker::SetLockRangesLimit(ui64 newLimit) {
+    g_LockRangesLimit.store(newLimit, std::memory_order_relaxed);
+}
+
+void TLockLocker::SetTotalRangesLimit(ui64 newLimit) {
+    g_TotalRangesLimit.store(newLimit, std::memory_order_relaxed);
+}
+
+void TLockLocker::AddPointLock(TLockInfo* lock, const TPointKey& key) {
     if (lock->AddPoint(key)) {
-        key.Table->AddPointLock(key, lock.Get());
+        key.Table->AddPointLock(key, lock);
+        LocksWithRanges.PushBack(lock);
     } else {
-        key.Table->AddShardLock(lock.Get());
+        key.Table->AddShardLock(lock);
     }
 }
 
-void TLockLocker::AddRangeLock(const TLockInfo::TPtr& lock, const TRangeKey& key) {
+void TLockLocker::AddRangeLock(TLockInfo* lock, const TRangeKey& key) {
     if (lock->AddRange(key)) {
-        key.Table->AddRangeLock(key, lock.Get());
+        key.Table->AddRangeLock(key, lock);
+        LocksWithRanges.PushBack(lock);
     } else {
-        key.Table->AddShardLock(lock.Get());
+        key.Table->AddShardLock(lock);
+    }
+}
+
+void TLockLocker::MakeShardLock(TLockInfo* lock) {
+    if (!lock->IsShardLock()) {
+        for (const TPathId& tableId : lock->GetReadTables()) {
+            Tables.at(tableId)->RemoveRangeLock(lock);
+        }
+        lock->MakeShardLock();
+        LocksWithRanges.Remove(lock);
+        for (const TPathId& tableId : lock->GetReadTables()) {
+            Tables.at(tableId)->AddShardLock(lock);
+        }
+    }
+}
+
+void TLockLocker::UndoShardLock(TLockInfo* lock) {
+    Y_ENSURE(lock->IsShardLock());
+    for (const TPathId& tableId : lock->GetReadTables()) {
+        Tables.at(tableId)->RemoveShardLock(lock);
     }
 }
 
 void TLockLocker::AddShardLock(const TLockInfo::TPtr& lock, TIntrusiveList<TTableLocks, TTableLocksReadListTag>& readTables) {
-    if (!lock->IsShardLock()) {
-        for (const TPathId& tableId : lock->GetReadTables()) {
-            Tables.at(tableId)->RemoveRangeLock(lock.Get());
-        }
-        lock->MakeShardLock();
-        for (const TPathId& tableId : lock->GetReadTables()) {
-            Tables.at(tableId)->AddShardLock(lock.Get());
-        }
-    }
+    MakeShardLock(lock.Get());
     for (auto& table : readTables) {
         const TPathId& tableId = table.GetTableId();
-        Y_ABORT_UNLESS(Tables.at(tableId).Get() == &table);
+        Y_ENSURE(Tables.at(tableId).Get() == &table);
         if (lock->AddShardLock(tableId)) {
             table.AddShardLock(lock.Get());
         }
@@ -440,19 +680,25 @@ void TLockLocker::AddShardLock(const TLockInfo::TPtr& lock, TIntrusiveList<TTabl
 void TLockLocker::AddWriteLock(const TLockInfo::TPtr& lock, TIntrusiveList<TTableLocks, TTableLocksWriteListTag>& writeTables) {
     for (auto& table : writeTables) {
         const TPathId& tableId = table.GetTableId();
-        Y_ABORT_UNLESS(Tables.at(tableId).Get() == &table);
+        Y_ENSURE(Tables.at(tableId).Get() == &table);
         if (lock->AddWriteLock(tableId)) {
             table.AddWriteLock(lock.Get());
         }
     }
 }
 
-TLockInfo::TPtr TLockLocker::GetLock(ui64 lockTxId, const TRowVersion& at) const {
+TLockInfo::TPtr TLockLocker::GetLock(ui64 lockTxId) const {
     auto it = Locks.find(lockTxId);
     if (it != Locks.end()) {
-        TLockInfo::TPtr lock = it->second;
-        if (!lock->IsBroken(at))
-            return lock;
+        return it->second;
+    }
+    return nullptr;
+}
+
+TLockInfo::TPtr TLockLocker::GetLock(ui64 lockTxId, const TRowVersion& at) const {
+    auto lock = GetLock(lockTxId);
+    if (lock && !lock->IsBroken(at)) {
+        return lock;
     }
     return nullptr;
 }
@@ -519,6 +765,9 @@ void TLockLocker::RemoveBrokenRanges() {
 TLockInfo::TPtr TLockLocker::GetOrAddLock(ui64 lockId, ui32 lockNodeId) {
     auto it = Locks.find(lockId);
     if (it != Locks.end()) {
+        if (it->second->IsInList<TLockInfoRangesListTag>()) {
+            LocksWithRanges.PushBack(it->second.Get());
+        }
         if (it->second->IsInList<TLockInfoExpireListTag>()) {
             ExpireQueue.PushBack(it->second.Get());
         }
@@ -548,8 +797,8 @@ TLockInfo::TPtr TLockLocker::GetOrAddLock(ui64 lockId, ui32 lockNodeId) {
         return nullptr;
     }
 
-    TLockInfo::TPtr lock(new TLockInfo(this, lockId, lockNodeId));
-    Y_ABORT_UNLESS(!lock->IsPersistent());
+    TLockInfo::TPtr lock = MakeIntrusive<TLockInfo>(this, lockId, lockNodeId);
+    Y_ENSURE(!lock->IsPersistent());
     Locks[lockId] = lock;
     if (lockNodeId) {
         PendingSubscribeLocks.emplace_back(lockId, lockNodeId);
@@ -559,15 +808,36 @@ TLockInfo::TPtr TLockLocker::GetOrAddLock(ui64 lockId, ui32 lockNodeId) {
 }
 
 TLockInfo::TPtr TLockLocker::AddLock(const ILocksDb::TLockRow& row) {
-    Y_ABORT_UNLESS(Locks.find(row.LockId) == Locks.end());
+    Y_ENSURE(Locks.find(row.LockId) == Locks.end());
 
-    TLockInfo::TPtr lock(new TLockInfo(this, row));
-    Y_ABORT_UNLESS(lock->IsPersistent());
+    TLockInfo::TPtr lock = MakeIntrusive<TLockInfo>(this, row);
+    Y_ENSURE(lock->IsPersistent());
     Locks[row.LockId] = lock;
     if (row.LockNodeId) {
         PendingSubscribeLocks.emplace_back(row.LockId, row.LockNodeId);
     }
     return lock;
+}
+
+TLockInfo::TPtr TLockLocker::RestoreInMemoryLock(const ILocksDb::TLockRow& row) {
+    auto it = Locks.find(row.LockId);
+    if (it == Locks.end()) {
+        auto flags = ELockFlags(row.Flags);
+        if (!!(flags & ELockFlags::Persistent)) {
+            // Persistent lock must be restored from storage
+            // Since this lock is missing its commit must have failed
+            return nullptr;
+        }
+        TLockInfo::TPtr lock = MakeIntrusive<TLockInfo>(this, row);
+        Locks[row.LockId] = lock;
+        if (row.LockNodeId) {
+            PendingSubscribeLocks.emplace_back(row.LockId, row.LockNodeId);
+        }
+        return lock;
+    } else {
+        it->second->RestoreInMemoryState(row);
+        return it->second;
+    }
 }
 
 void TLockLocker::RemoveOneLock(ui64 lockTxId, ILocksDb* db) {
@@ -591,11 +861,12 @@ void TLockLocker::RemoveOneLock(ui64 lockTxId, ILocksDb* db) {
         for (const TPathId& tableId : txLock->GetWriteTables()) {
             Tables.at(tableId)->RemoveWriteLock(txLock.Get());
         }
+        LocksWithRanges.Remove(txLock.Get());
         txLock->CleanupConflicts();
         Locks.erase(it);
 
         if (txLock->IsPersistent()) {
-            Y_ABORT_UNLESS(db, "Cannot remove persistent locks without a database");
+            Y_ENSURE(db, "Cannot remove persistent locks without a database");
             txLock->PersistRemoveLock(db);
         }
 
@@ -631,9 +902,10 @@ void TLockLocker::RemoveSchema(const TPathId& tableId, ILocksDb* db) {
     }
 
     Tables.erase(tableId);
-    Y_ABORT_UNLESS(Tables.empty());
+    Y_ENSURE(Tables.empty());
     Locks.clear();
     ShardLocks.clear();
+    LocksWithRanges.Clear();
     ExpireQueue.Clear();
     BrokenLocks.Clear();
     BrokenPersistentLocks.Clear();
@@ -643,27 +915,47 @@ void TLockLocker::RemoveSchema(const TPathId& tableId, ILocksDb* db) {
     PendingSubscribeLocks.clear();
 }
 
-bool TLockLocker::ForceShardLock(const TPathId& tableId) const {
-    auto it = Tables.find(tableId);
-    if (it != Tables.end()) {
-        if (it->second->RangeCount() > LockLimit()) {
-            return true;
+bool TLockLocker::ForceShardLock(
+    const TLockInfo::TPtr& lock,
+    const TIntrusiveList<TTableLocks, TTableLocksReadListTag>& readTables,
+    ui64 newRanges)
+{
+    if (lock->NumPoints() + lock->NumRanges() + newRanges > LockRangesLimit()) {
+        // Lock has too many ranges, will never fit in
+        return true;
+    }
+
+    for (auto& table : readTables) {
+        while (table.RangeCount() + newRanges > TotalRangesLimit()) {
+            if (LocksWithRanges.Empty()) {
+                // Too many new ranges (e.g. TotalRangesLimit < LockRangesLimit)
+                return true;
+            }
+
+            // Try to reduce the number of ranges until new ranges fit in
+            TLockInfo* next = LocksWithRanges.PopFront();
+            if (next == lock.Get()) {
+                bool wasLast = LocksWithRanges.Empty();
+                LocksWithRanges.PushBack(next);
+                if (wasLast) {
+                    return true;
+                }
+                // We want to handle the newest lock last
+                continue;
+            }
+
+            // Reduce the number of ranges by making the oldest lock into a shard lock
+            MakeShardLock(next);
+            Self->IncCounter(COUNTER_LOCKS_WHOLE_SHARD);
         }
     }
-    return false;
-}
 
-bool TLockLocker::ForceShardLock(const TIntrusiveList<TTableLocks, TTableLocksReadListTag>& readTables) const {
-    for (auto& table : readTables) {
-        if (table.RangeCount() > LockLimit())
-            return true;
-    }
     return false;
 }
 
 void TLockLocker::ScheduleBrokenLock(TLockInfo* lock) {
     auto it = Locks.find(lock->GetLockId());
-    Y_ABORT_UNLESS(it != Locks.end() && it->second.Get() == lock,
+    Y_ENSURE(it != Locks.end() && it->second.Get() == lock,
         "Sanity check: adding an unknown broken lock");
     if (lock->IsPersistent()) {
         BrokenPersistentLocks.PushBack(lock);
@@ -722,8 +1014,8 @@ TLocksUpdate::~TLocksUpdate() {
 
 // TSysLocks
 
-TVector<TSysLocks::TLock> TSysLocks::ApplyLocks() {
-    Y_ABORT_UNLESS(Update);
+std::pair<TVector<TSysLocks::TLock>, TVector<ui64>> TSysLocks::ApplyLocks() {
+    Y_ENSURE(Update);
 
     TMicrosecTimerCounter measureApplyLocks(*Self, COUNTER_APPLY_LOCKS_USEC);
 
@@ -737,8 +1029,14 @@ TVector<TSysLocks::TLock> TSysLocks::ApplyLocks() {
     Locker.RemoveBrokenRanges();
 
     Update->FlattenBreakLocks();
+
+    TVector<ui64> brokenLocks;
+    brokenLocks.reserve(Update->BreakLocks.Size());
     if (Update->BreakLocks) {
         Locker.BreakLocks(Update->BreakLocks, breakVersion);
+        for (const auto& lock : Update->BreakLocks) {
+            brokenLocks.push_back(lock.GetLockId());
+        }
     }
 
     Locker.SaveBrokenPersistentLocks(Db);
@@ -754,7 +1052,7 @@ TVector<TSysLocks::TLock> TSysLocks::ApplyLocks() {
 
     size_t erases = 0;
     while (Update->EraseLocks) {
-        Y_ABORT_UNLESS(!Update->HasLocks(), "Can't erase and set locks in one Tx");
+        Y_ENSURE(!Update->HasLocks(), "Can't erase and set locks in one Tx");
         auto* lock = Update->EraseLocks.PopFront();
         Locker.RemoveLock(lock->GetLockId(), Db);
         ++erases;
@@ -766,12 +1064,10 @@ TVector<TSysLocks::TLock> TSysLocks::ApplyLocks() {
 
     if (!Update->HasLocks()) {
         // Adding read/write conflicts implies locking
-        Y_ABORT_UNLESS(!Update->ReadConflictLocks);
-        Y_ABORT_UNLESS(!Update->WriteConflictLocks);
-        return TVector<TLock>();
+        Y_ENSURE(!Update->ReadConflictLocks);
+        Y_ENSURE(!Update->WriteConflictLocks);
+        return {TVector<TLock>(), brokenLocks};
     }
-
-    bool shardLock = Locker.ForceShardLock(Update->ReadTables);
 
     TLockInfo::TPtr lock;
     ui64 counter = TLock::ErrorNotSet;
@@ -791,15 +1087,21 @@ TVector<TSysLocks::TLock> TSysLocks::ApplyLocks() {
         } else if (lock->IsBroken()) {
             counter = TLock::ErrorBroken;
         } else {
+            bool shardLock = (
+                lock->IsShardLock() ||
+                Locker.ForceShardLock(
+                    lock,
+                    Update->ReadTables,
+                    Update->PointLocks.size() + Update->RangeLocks.size()));
             if (shardLock) {
                 Locker.AddShardLock(lock, Update->ReadTables);
                 Self->IncCounter(COUNTER_LOCKS_WHOLE_SHARD);
             } else {
                 for (const auto& key : Update->PointLocks) {
-                    Locker.AddPointLock(lock, key);
+                    Locker.AddPointLock(lock.Get(), key);
                 }
                 for (const auto& key : Update->RangeLocks) {
-                    Locker.AddRangeLock(lock, key);
+                    Locker.AddRangeLock(lock.Get(), key);
                 }
             }
             if (Update->WriteTables) {
@@ -808,17 +1110,30 @@ TVector<TSysLocks::TLock> TSysLocks::ApplyLocks() {
             counter = lock->GetCounter();
             Update->Lock = lock;
 
+            bool waitPersistent = false;
+            TVector<TLockInfo::TPtr> waitPersistentMore;
+
             if (lock->IsPersistent()) {
-                lock->PersistRanges(Db);
+                if (lock->PersistRanges(Db)) {
+                    waitPersistent = true;
+                }
             }
             for (auto& readConflictLock : Update->ReadConflictLocks) {
-                readConflictLock.AddConflict(lock.Get(), Db);
+                if (readConflictLock.AddConflict(lock.Get(), Db)) {
+                    waitPersistent = true;
+                    waitPersistentMore.emplace_back(&readConflictLock);
+                }
             }
             for (auto& writeConflictLock : Update->WriteConflictLocks) {
-                lock->AddConflict(&writeConflictLock, Db);
+                if (lock->AddConflict(&writeConflictLock, Db)) {
+                    waitPersistent = true;
+                    waitPersistentMore.emplace_back(&writeConflictLock);
+                }
             }
             for (ui64 txId : Update->VolatileDependencies) {
-                lock->AddVolatileDependency(txId, Db);
+                if (lock->AddVolatileDependency(txId, Db)) {
+                    waitPersistent = true;
+                }
             }
 
             if (lock->GetWriteTables() && !lock->IsPersistent()) {
@@ -826,6 +1141,17 @@ TVector<TSysLocks::TLock> TSysLocks::ApplyLocks() {
                 lock->PersistLock(Db);
                 // Persistent locks cannot expire
                 Locker.ExpireQueue.Remove(lock.Get());
+                // Make sure it tracks persistence progress
+                waitPersistent = true;
+            }
+
+            if (waitPersistent) {
+                if (waitPersistentMore.empty()) {
+                    lock->AddWaitPersistentCallback(Db);
+                } else {
+                    waitPersistentMore.push_back(lock);
+                    TLockInfo::AddWaitPersistentCallback(Db, std::move(waitPersistentMore));
+                }
             }
         }
     }
@@ -838,7 +1164,7 @@ TVector<TSysLocks::TLock> TSysLocks::ApplyLocks() {
         out.emplace_back(MakeLock(Update->LockTxId, lock ? lock->GetGeneration() : Self->Generation(), counter,
             table.GetTableId(), Update->Lock && Update->Lock->IsWriteLock()));
     }
-    return out;
+    return {out, brokenLocks};
 }
 
 void TSysLocks::UpdateCounters() {
@@ -864,7 +1190,7 @@ ui64 TSysLocks::ExtractLockTxId(const TArrayRef<const TCell>& key) const {
     ui64 lockTxId, tabletId;
     bool ok = TLocksTable::ExtractKey(key, TLocksTable::EColumns::LockId, lockTxId);
     ok = ok && TLocksTable::ExtractKey(key, TLocksTable::EColumns::DataShard, tabletId);
-    Y_ABORT_UNLESS(ok && Self->TabletID() == tabletId);
+    Y_ENSURE(ok && Self->TabletID() == tabletId);
     return lockTxId;
 }
 
@@ -872,7 +1198,7 @@ TSysLocks::TLock TSysLocks::GetLock(const TArrayRef<const TCell>& key) const {
     ui64 lockTxId, tabletId;
     bool ok = TLocksTable::ExtractKey(key, TLocksTable::EColumns::LockId, lockTxId);
     ok = ok && TLocksTable::ExtractKey(key, TLocksTable::EColumns::DataShard, tabletId);
-    Y_ABORT_UNLESS(ok && Self->TabletID() == tabletId);
+    Y_ENSURE(ok && Self->TabletID() == tabletId);
 
     if (Cache) {
         auto it = Cache->Locks.find(lockTxId);
@@ -882,17 +1208,17 @@ TSysLocks::TLock TSysLocks::GetLock(const TArrayRef<const TCell>& key) const {
         return TLock();
     }
 
-    Y_ABORT_UNLESS(Update);
+    Y_ENSURE(Update);
 
     auto &checkVersion = Update->CheckVersion;
     TLockInfo::TPtr txLock = Locker.GetLock(lockTxId, checkVersion);
     if (txLock) {
         if (key.size() == 2) { // locks v1
             const auto& tableIds = txLock->GetReadTables();
-            Y_ABORT_UNLESS(tableIds.size() == 1);
+            Y_ENSURE(tableIds.size() == 1);
             return MakeAndLogLock(lockTxId, txLock->GetGeneration(), txLock->GetCounter(checkVersion), *tableIds.begin(), txLock->IsWriteLock());
         } else { // locks v2
-            Y_ABORT_UNLESS(key.size() == 4);
+            Y_ENSURE(key.size() == 4);
             TPathId tableId;
             ok = ok && TLocksTable::ExtractKey(key, TLocksTable::EColumns::SchemeShard, tableId.OwnerId);
             ok = ok && TLocksTable::ExtractKey(key, TLocksTable::EColumns::PathId, tableId.LocalPathId);
@@ -917,21 +1243,21 @@ TSysLocks::TLock TSysLocks::GetLock(const TArrayRef<const TCell>& key) const {
 }
 
 void TSysLocks::EraseLock(ui64 lockId) {
-    Y_ABORT_UNLESS(Update);
+    Y_ENSURE(Update);
     if (auto* lock = Locker.FindLockPtr(lockId)) {
         Update->AddEraseLock(lock);
     }
 }
 
 void TSysLocks::EraseLock(const TArrayRef<const TCell>& key) {
-    Y_ABORT_UNLESS(Update);
+    Y_ENSURE(Update);
     if (auto* lock = Locker.FindLockPtr(GetLockId(key))) {
         Update->AddEraseLock(lock);
     }
 }
 
 void TSysLocks::CommitLock(const TArrayRef<const TCell>& key) {
-    Y_ABORT_UNLESS(Update);
+    Y_ENSURE(Update);
     if (auto* lock = Locker.FindLockPtr(GetLockId(key))) {
         for (auto& pr : lock->ConflictLocks) {
             if (!!(pr.second & ELockConflictFlags::BreakThemOnOurCommit)) {
@@ -943,8 +1269,8 @@ void TSysLocks::CommitLock(const TArrayRef<const TCell>& key) {
 }
 
 void TSysLocks::SetLock(const TTableId& tableId, const TArrayRef<const TCell>& key) {
-    Y_ABORT_UNLESS(Update && Update->LockTxId);
-    Y_ABORT_UNLESS(!TSysTables::IsSystemTable(tableId));
+    Y_ENSURE(Update && Update->LockTxId);
+    Y_ENSURE(!TSysTables::IsSystemTable(tableId));
     if (!Self->IsUserTable(tableId))
         return;
 
@@ -957,8 +1283,8 @@ void TSysLocks::SetLock(const TTableId& tableId, const TTableRange& range) {
         return;
     }
 
-    Y_ABORT_UNLESS(Update && Update->LockTxId);
-    Y_ABORT_UNLESS(!TSysTables::IsSystemTable(tableId));
+    Y_ENSURE(Update && Update->LockTxId);
+    Y_ENSURE(!TSysTables::IsSystemTable(tableId));
     if (!Self->IsUserTable(tableId))
         return;
 
@@ -966,8 +1292,8 @@ void TSysLocks::SetLock(const TTableId& tableId, const TTableRange& range) {
 }
 
 void TSysLocks::SetWriteLock(const TTableId& tableId, const TArrayRef<const TCell>& key) {
-    Y_ABORT_UNLESS(Update && Update->LockTxId);
-    Y_ABORT_UNLESS(!TSysTables::IsSystemTable(tableId));
+    Y_ENSURE(Update && Update->LockTxId);
+    Y_ENSURE(!TSysTables::IsSystemTable(tableId));
     if (!Self->IsUserTable(tableId))
         return;
 
@@ -984,7 +1310,7 @@ void TSysLocks::BreakLock(ui64 lockId) {
 }
 
 void TSysLocks::BreakLocks(const TTableId& tableId, const TArrayRef<const TCell>& key) {
-    Y_ABORT_UNLESS(!tableId.HasSamePath(TTableId(TSysTables::SysSchemeShard, TSysTables::SysTableLocks)));
+    Y_ENSURE(!tableId.HasSamePath(TTableId(TSysTables::SysSchemeShard, TSysTables::SysTableLocks)));
 
     if (auto* table = Locker.FindTablePtr(tableId)) {
         if (table->HasRangeLocks()) {
@@ -1001,7 +1327,7 @@ void TSysLocks::BreakLocks(const TTableId& tableId, const TArrayRef<const TCell>
 }
 
 void TSysLocks::AddReadConflict(ui64 conflictId) {
-    Y_ABORT_UNLESS(Update && Update->LockTxId);
+    Y_ENSURE(Update && Update->LockTxId);
 
     if (conflictId != Update->LockTxId) {
         if (auto* lock = Locker.FindLockPtr(conflictId)) {
@@ -1011,7 +1337,7 @@ void TSysLocks::AddReadConflict(ui64 conflictId) {
 }
 
 void TSysLocks::AddWriteConflict(ui64 conflictId) {
-    Y_ABORT_UNLESS(Update && Update->LockTxId);
+    Y_ENSURE(Update && Update->LockTxId);
 
     if (conflictId != Update->LockTxId) {
         if (auto* lock = Locker.FindLockPtr(conflictId)) {
@@ -1021,7 +1347,7 @@ void TSysLocks::AddWriteConflict(ui64 conflictId) {
 }
 
 void TSysLocks::AddWriteConflict(const TTableId& tableId, const TArrayRef<const TCell>& key) {
-    Y_ABORT_UNLESS(Update && Update->LockTxId);
+    Y_ENSURE(Update && Update->LockTxId);
 
     if (auto* table = Locker.FindTablePtr(tableId)) {
         if (table->HasRangeLocks()) {
@@ -1040,14 +1366,14 @@ void TSysLocks::AddWriteConflict(const TTableId& tableId, const TArrayRef<const 
 }
 
 void TSysLocks::AddVolatileDependency(ui64 txId) {
-    Y_ABORT_UNLESS(Update && Update->LockTxId);
+    Y_ENSURE(Update && Update->LockTxId);
 
     Update->AddVolatileDependency(txId);
 }
 
 void TSysLocks::BreakAllLocks(const TTableId& tableId) {
-    Y_ABORT_UNLESS(Update);
-    Y_ABORT_UNLESS(!tableId.HasSamePath(TTableId(TSysTables::SysSchemeShard, TSysTables::SysTableLocks)));
+    Y_ENSURE(Update);
+    Y_ENSURE(!tableId.HasSamePath(TTableId(TSysTables::SysSchemeShard, TSysTables::SysTableLocks)));
     if (!Self->IsUserTable(tableId))
         return;
 
@@ -1062,7 +1388,7 @@ void TSysLocks::BreakAllLocks(const TTableId& tableId) {
 }
 
 void TSysLocks::BreakSetLocks() {
-    Y_ABORT_UNLESS(Update && Update->LockTxId);
+    Y_ENSURE(Update && Update->LockTxId);
 
     Update->BreakSetLocks();
 }
@@ -1074,7 +1400,7 @@ bool TSysLocks::IsMyKey(const TArrayRef<const TCell>& key) const {
 }
 
 bool TSysLocks::HasCurrentWriteLock(const TTableId& tableId) const {
-    Y_ABORT_UNLESS(Update && Update->LockTxId);
+    Y_ENSURE(Update && Update->LockTxId);
 
     if (Update->WriteTables) {
         if (auto* table = Locker.FindTablePtr(tableId.PathId)) {
@@ -1094,7 +1420,7 @@ bool TSysLocks::HasCurrentWriteLock(const TTableId& tableId) const {
 }
 
 bool TSysLocks::HasCurrentWriteLocks() const {
-    Y_ABORT_UNLESS(Update && Update->LockTxId);
+    Y_ENSURE(Update && Update->LockTxId);
 
     if (Update->WriteTables) {
         return true;
@@ -1124,8 +1450,8 @@ bool TSysLocks::HasWriteLocks(const TTableId& tableId) const {
 }
 
 EEnsureCurrentLock TSysLocks::EnsureCurrentLock() {
-    Y_ABORT_UNLESS(Update && Update->LockTxId);
-    Y_ABORT_UNLESS(Db, "EnsureCurrentLock needs a valid locks database");
+    Y_ENSURE(Update && Update->LockTxId);
+    Y_ENSURE(Db, "EnsureCurrentLock needs a valid locks database");
 
     if (auto* lock = Locker.FindLockPtr(Update->LockTxId)) {
         // We cannot expand a broken lock
@@ -1178,6 +1504,7 @@ bool TSysLocks::Load(ILocksDb& db) {
     Locker.Clear();
 
     for (auto& lockRow : rows) {
+        lockRow.Flags |= ui64(ELockFlags::Persistent);
         TLockInfo::TPtr lock = Locker.AddLock(lockRow);
         for (auto& rangeRow : lockRow.Ranges) {
             lock->RestorePersistentRange(rangeRow);
@@ -1186,7 +1513,7 @@ bool TSysLocks::Load(ILocksDb& db) {
 
     for (auto& lockRow : rows) {
         auto* lock = Locker.FindLockPtr(lockRow.LockId);
-        Y_ABORT_UNLESS(lock);
+        Y_ENSURE(lock);
         for (ui64 conflictId : lockRow.Conflicts) {
             if (auto* otherLock = Locker.FindLockPtr(conflictId)) {
                 lock->RestorePersistentConflict(otherLock);
@@ -1198,6 +1525,35 @@ bool TSysLocks::Load(ILocksDb& db) {
     }
 
     return true;
+}
+
+void TSysLocks::RestoreInMemoryLocks(THashMap<ui64, ILocksDb::TLockRow>&& rows) {
+    for (auto& pr : rows) {
+        auto& lockRow = pr.second;
+        TLockInfo::TPtr lock = Locker.RestoreInMemoryLock(lockRow);
+        if (lock) {
+            for (auto& rangeRow : lockRow.Ranges) {
+                lock->RestoreInMemoryRange(rangeRow);
+            }
+        }
+    }
+
+    for (auto& pr : rows) {
+        auto& lockRow = pr.second;
+        auto* lock = Locker.FindLockPtr(lockRow.LockId);
+        if (!lock) {
+            // Skip locks that have not been restored
+            continue;
+        }
+        for (ui64 conflictId : lockRow.Conflicts) {
+            if (auto* otherLock = Locker.FindLockPtr(conflictId)) {
+                lock->RestoreInMemoryConflict(otherLock);
+            }
+        }
+        for (ui64 txId : lockRow.VolatileDependencies) {
+            lock->RestoreInMemoryVolatileDependency(txId);
+        }
+    }
 }
 
 

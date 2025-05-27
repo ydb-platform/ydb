@@ -1,6 +1,9 @@
 LIBRARY()
 
+VERSION(2.7.18)
+
 LICENSE(PSF-2.0)
+
 
 NO_WSHADOW()
 

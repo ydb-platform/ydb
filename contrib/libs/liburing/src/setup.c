@@ -7,7 +7,6 @@
 #include "liburing.h"
 #include "int_flags.h"
 #include "setup.h"
-#include "liburing/compat.h"
 #include "liburing/io_uring.h"
 
 #define KERN_MAX_ENTRIES	32768
@@ -60,7 +59,7 @@ static int get_sq_cq_entries(unsigned entries, struct io_uring_params *p,
 	return 0;
 }
 
-static void io_uring_unmap_rings(struct io_uring_sq *sq, struct io_uring_cq *cq)
+void io_uring_unmap_rings(struct io_uring_sq *sq, struct io_uring_cq *cq)
 {
 	if (sq->ring_sz)
 		__sys_munmap(sq->ring_ptr, sq->ring_sz);
@@ -68,9 +67,9 @@ static void io_uring_unmap_rings(struct io_uring_sq *sq, struct io_uring_cq *cq)
 		__sys_munmap(cq->ring_ptr, cq->ring_sz);
 }
 
-static void io_uring_setup_ring_pointers(struct io_uring_params *p,
-					 struct io_uring_sq *sq,
-					 struct io_uring_cq *cq)
+void io_uring_setup_ring_pointers(struct io_uring_params *p,
+				  struct io_uring_sq *sq,
+				  struct io_uring_cq *cq)
 {
 	sq->khead = sq->ring_ptr + p->sq_off.head;
 	sq->ktail = sq->ring_ptr + p->sq_off.tail;
@@ -96,8 +95,8 @@ static void io_uring_setup_ring_pointers(struct io_uring_params *p,
 	cq->ring_entries = *cq->kring_entries;
 }
 
-static int io_uring_mmap(int fd, struct io_uring_params *p,
-			 struct io_uring_sq *sq, struct io_uring_cq *cq)
+int io_uring_mmap(int fd, struct io_uring_params *p, struct io_uring_sq *sq,
+		  struct io_uring_cq *cq)
 {
 	size_t size;
 	int ret;
@@ -200,6 +199,8 @@ __cold int io_uring_ring_dontfork(struct io_uring *ring)
 /* FIXME */
 static size_t huge_page_size = 2 * 1024 * 1024;
 
+#define KRING_SIZE	64
+
 /*
  * Returns negative for error, or number of bytes used in the buffer on success
  */
@@ -209,7 +210,7 @@ static int io_uring_alloc_huge(unsigned entries, struct io_uring_params *p,
 {
 	unsigned long page_size = get_page_size();
 	unsigned sq_entries, cq_entries;
-	size_t ring_mem, sqes_mem;
+	size_t ring_mem, sqes_mem, cqes_mem, sqe_size;
 	unsigned long mem_used = 0;
 	void *ptr;
 	int ret;
@@ -218,14 +219,21 @@ static int io_uring_alloc_huge(unsigned entries, struct io_uring_params *p,
 	if (ret)
 		return ret;
 
-	sqes_mem = sq_entries * sizeof(struct io_uring_sqe);
-	sqes_mem = (sqes_mem + page_size - 1) & ~(page_size - 1);
-	ring_mem = cq_entries * sizeof(struct io_uring_cqe);
-	if (p->flags & IORING_SETUP_CQE32)
-		ring_mem *= 2;
+	ring_mem = KRING_SIZE;
+
+	sqe_size = sizeof(struct io_uring_sqe);
+	if (p->flags & IORING_SETUP_SQE128)
+		sqe_size <<= 1;
+	sqes_mem = sq_entries * sqe_size;
 	if (!(p->flags & IORING_SETUP_NO_SQARRAY))
-		ring_mem += sq_entries * sizeof(unsigned);
-	mem_used = sqes_mem + ring_mem;
+		sqes_mem += sq_entries * sizeof(unsigned);
+	sqes_mem = (sqes_mem + page_size - 1) & ~(page_size - 1);
+
+	cqes_mem = cq_entries * sizeof(struct io_uring_cqe);
+	if (p->flags & IORING_SETUP_CQE32)
+		cqes_mem *= 2;
+	ring_mem += sqes_mem + cqes_mem;
+	mem_used = ring_mem;
 	mem_used = (mem_used + page_size - 1) & ~(page_size - 1);
 
 	/*
@@ -426,18 +434,17 @@ __cold void io_uring_queue_exit(struct io_uring *ring)
 {
 	struct io_uring_sq *sq = &ring->sq;
 	struct io_uring_cq *cq = &ring->cq;
-	size_t sqe_size;
+	size_t sqe_size = sizeof(struct io_uring_sqe);
 
-	if (!sq->ring_sz) {
-		sqe_size = sizeof(struct io_uring_sqe);
-		if (ring->flags & IORING_SETUP_SQE128)
-			sqe_size += 64;
+	if (ring->flags & IORING_SETUP_SQE128)
+		sqe_size <<= 1;
+
+	if (!sq->ring_sz && !(ring->int_flags & INT_FLAG_APP_MEM)) {
 		__sys_munmap(sq->sqes, sqe_size * sq->ring_entries);
 		io_uring_unmap_rings(sq, cq);
 	} else {
 		if (!(ring->int_flags & INT_FLAG_APP_MEM)) {
-			__sys_munmap(sq->sqes,
-				*sq->kring_entries * sizeof(struct io_uring_sqe));
+			__sys_munmap(sq->sqes, *sq->kring_entries * sqe_size);
 			io_uring_unmap_rings(sq, cq);
 		}
 	}
@@ -498,8 +505,6 @@ static size_t npages(size_t size, long page_size)
 	size /= page_size;
 	return __fls((int) size);
 }
-
-#define KRING_SIZE	320
 
 static size_t rings_size(struct io_uring_params *p, unsigned entries,
 			 unsigned cq_entries, long page_size)
@@ -592,7 +597,7 @@ __cold ssize_t io_uring_mlock_size(unsigned entries, unsigned flags)
 #if defined(__hppa__)
 static struct io_uring_buf_ring *br_setup(struct io_uring *ring,
 					  unsigned int nentries, int bgid,
-					  unsigned int flags, int *ret)
+					  unsigned int flags, int *err)
 {
 	struct io_uring_buf_ring *br;
 	struct io_uring_buf_reg reg;
@@ -605,10 +610,10 @@ static struct io_uring_buf_ring *br_setup(struct io_uring *ring,
 	reg.bgid = bgid;
 	reg.flags = IOU_PBUF_RING_MMAP;
 
-	*ret = 0;
+	*err = 0;
 	lret = io_uring_register_buf_ring(ring, &reg, flags);
 	if (lret) {
-		*ret = lret;
+		*err = lret;
 		return NULL;
 	}
 
@@ -617,7 +622,7 @@ static struct io_uring_buf_ring *br_setup(struct io_uring *ring,
 	br = __sys_mmap(NULL, ring_size, PROT_READ | PROT_WRITE,
 			MAP_SHARED | MAP_POPULATE, ring->ring_fd, off);
 	if (IS_ERR(br)) {
-		*ret = PTR_ERR(br);
+		*err = PTR_ERR(br);
 		return NULL;
 	}
 
@@ -626,7 +631,7 @@ static struct io_uring_buf_ring *br_setup(struct io_uring *ring,
 #else
 static struct io_uring_buf_ring *br_setup(struct io_uring *ring,
 					  unsigned int nentries, int bgid,
-					  unsigned int flags, int *ret)
+					  unsigned int flags, int *err)
 {
 	struct io_uring_buf_ring *br;
 	struct io_uring_buf_reg reg;
@@ -638,7 +643,7 @@ static struct io_uring_buf_ring *br_setup(struct io_uring *ring,
 	br = __sys_mmap(NULL, ring_size, PROT_READ | PROT_WRITE,
 			MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
 	if (IS_ERR(br)) {
-		*ret = PTR_ERR(br);
+		*err = PTR_ERR(br);
 		return NULL;
 	}
 
@@ -646,11 +651,11 @@ static struct io_uring_buf_ring *br_setup(struct io_uring *ring,
 	reg.ring_entries = nentries;
 	reg.bgid = bgid;
 
-	*ret = 0;
+	*err = 0;
 	lret = io_uring_register_buf_ring(ring, &reg, flags);
 	if (lret) {
 		__sys_munmap(br, ring_size);
-		*ret = lret;
+		*err = lret;
 		br = NULL;
 	}
 
@@ -661,11 +666,11 @@ static struct io_uring_buf_ring *br_setup(struct io_uring *ring,
 struct io_uring_buf_ring *io_uring_setup_buf_ring(struct io_uring *ring,
 						  unsigned int nentries,
 						  int bgid, unsigned int flags,
-						  int *ret)
+						  int *err)
 {
 	struct io_uring_buf_ring *br;
 
-	br = br_setup(ring, nentries, bgid, flags, ret);
+	br = br_setup(ring, nentries, bgid, flags, err);
 	if (br)
 		io_uring_buf_ring_init(br);
 

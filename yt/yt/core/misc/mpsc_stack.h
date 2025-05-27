@@ -10,7 +10,7 @@ namespace NYT {
 
 //! Multiple producer single consumer lock-free stack.
 template <class T>
-class TMpscStack
+class TMpscStack final
 {
 public:
     TMpscStack(const TMpscStack&) = delete;
@@ -43,7 +43,7 @@ private:
     bool DoDequeueAll(bool reverse, F&& functor);
 };
 
-/////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT
 

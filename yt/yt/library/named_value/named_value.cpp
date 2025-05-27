@@ -1,12 +1,16 @@
 #include "named_value.h"
 
+#include <yt/yt/core/ytree/convert.h>
+
+#include <util/string/escape.h>
+
 namespace NYT::NNamedValue {
 
 using namespace NTableClient;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-NTableClient::TUnversionedOwningRow MakeRow(
+TUnversionedOwningRow MakeRow(
     const TNameTablePtr& nameTable,
     const std::initializer_list<TNamedValue>& values)
 {
@@ -17,7 +21,7 @@ NTableClient::TUnversionedOwningRow MakeRow(
     return builder.FinishRow();
 }
 
-NTableClient::TUnversionedOwningRow MakeRow(
+TUnversionedOwningRow MakeRow(
     const TNameTablePtr& nameTable,
     const std::vector<TNamedValue>& values)
 {
@@ -28,9 +32,23 @@ NTableClient::TUnversionedOwningRow MakeRow(
     return builder.FinishRow();
 }
 
+std::vector<TNamedValue> MakeNamedValueList(
+    const TNameTablePtr& nameTable,
+    TUnversionedRow row)
+{
+    std::vector<TNamedValue> result;
+    result.reserve(row.GetCount());
+
+    for (const auto& value : row) {
+        auto namedValue = TNamedValue(TString(nameTable->GetNameOrThrow(value.Id)), TNamedValue::ExtractValue(value));
+        result.push_back(std::move(namedValue));
+    }
+    return result;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
-NTableClient::TUnversionedValue TNamedValue::ToUnversionedValue(const NTableClient::TNameTablePtr& nameTable) const
+TUnversionedValue TNamedValue::ToUnversionedValue(const TNameTablePtr& nameTable) const
 {
     const int valueId = nameTable->GetIdOrRegisterName(Name_);
     return std::visit([valueId] (const auto& value) -> TUnversionedValue {
@@ -56,7 +74,7 @@ NTableClient::TUnversionedValue TNamedValue::ToUnversionedValue(const NTableClie
     }, Value_);
 }
 
-TNamedValue::TValue TNamedValue::ExtractValue(const NTableClient::TUnversionedValue& value)
+TNamedValue::TValue TNamedValue::ExtractValue(const TUnversionedValue& value)
 {
     auto getString = [] (const TUnversionedValue& value) {
         return value.AsString();
@@ -86,8 +104,8 @@ TNamedValue::TValue TNamedValue::ExtractValue(const NTableClient::TUnversionedVa
     YT_ABORT();
 }
 
-TNamedValue::TValue TNamedValue::ToValue(NTableClient::EValueType valueType, TStringBuf value) {
-    using namespace NTableClient;
+TNamedValue::TValue TNamedValue::ToValue(EValueType valueType, TStringBuf value)
+{
     if (valueType == EValueType::String) {
         return TString(value);
     } else if (valueType == EValueType::Any) {
@@ -99,16 +117,34 @@ TNamedValue::TValue TNamedValue::ToValue(NTableClient::EValueType valueType, TSt
     }
 }
 
-////////////////////////////////////////////////////////////////////////////////
-
-bool operator ==(const TNamedValue::TAny& lhs, const TNamedValue::TAny& rhs)
+void FormatValue(TStringBuilderBase* builder, const TNamedValue& value, TStringBuf /*spec*/)
 {
-    return lhs.Value == rhs.Value;
+    using namespace NYson;
+
+    builder->AppendFormat("%Qv=", value.Name_);
+    auto text = std::visit([] (const auto& value) -> TString {
+        using T = std::decay_t<decltype(value)>;
+        if constexpr (std::is_same_v<T, TNamedValue::TAny>) {
+            auto result = TString("<type=any>");
+            result += value.Value;
+            return ConvertToYsonString(TYsonString(result), EYsonFormat::Text).ToString();
+        } else if constexpr (std::is_same_v<T, TNamedValue::TComposite>) {
+            auto result = TString("<type=composite>");
+            result += ConvertToYsonString(TYsonString(value.Value)).ToString();
+            return ConvertToYsonString(TYsonString(result), EYsonFormat::Text).ToString();
+        } else if constexpr (std::is_same_v<T, std::nullptr_t>) {
+            return "#";
+        } else {
+            return ConvertToYsonString(value, EYsonFormat::Text).ToString();
+        }
+    }, value.Value_);
+
+    builder->AppendString(ConvertToYsonString(text, EYsonFormat::Text).AsStringBuf());
 }
 
-bool operator ==(const TNamedValue::TComposite& lhs, const TNamedValue::TComposite& rhs)
+void PrintTo(const TNamedValue& value, std::ostream* os)
 {
-    return lhs.Value == rhs.Value;
+    *os << Format("%v", value);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -4,6 +4,7 @@
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <library/cpp/string_utils/quote/quote.h>
 
+#include <util/string/builder.h>
 #include <util/string/split.h>
 #include <util/system/tls.h>
 
@@ -26,6 +27,19 @@ TMaybe<EFormat> ParseFormat(TStringBuf str) {
     }
 }
 
+namespace {
+
+TStringBuf GetParams(NMonitoring::IMonHttpRequest& request) {
+    TStringBuf uri = request.GetUri();
+    TStringBuf params = uri.After('?');
+    if (params.Size() == uri.Size()) {
+        params.Clear();
+    }
+    return params;
+}
+
+}
+
 void TDynamicCountersPage::Output(NMonitoring::IMonHttpRequest& request) {
     if (OutputCallback) {
         OutputCallback();
@@ -37,28 +51,51 @@ void TDynamicCountersPage::Output(NMonitoring::IMonHttpRequest& request) {
     };
 
     TVector<TStringBuf> parts;
-    StringSplitter(request.GetPathInfo())
-        .Split('/')
-        .SkipEmpty()
-        .Collect(&parts);
+    TMaybe<EFormat> format;
+    TStringBuf params = GetParams(request);
 
-    TMaybe<EFormat> format = !parts.empty() ? ParseFormat(parts.back()) : Nothing();
-    if (format) {
-        parts.pop_back();
-    }
+    if (request.GetPathInfo().empty() && !params.empty()) {
+        StringSplitter(params).Split('&').SkipEmpty().Consume([&](TStringBuf part) {
+            TStringBuf name;
+            TStringBuf value;
+            part.Split('=', name, value);
+            if (name.StartsWith("@")) {
+                if (name == "@format") {
+                    format = ParseFormat(value);
+                } else if (name == "@name_label") {
+                    nameLabel = value;
+                } else if (name == "@private") {
+                    visibility = TCountableBase::EVisibility::Private;
+                }
+            } else {
+                parts.push_back(part);
+            }
+            return true;
+        });
+    } else {
+        StringSplitter(request.GetPathInfo())
+            .Split('/')
+            .SkipEmpty()
+            .Collect(&parts);
 
-    if (!parts.empty() && parts.back().StartsWith(TStringBuf("name_label="))) {
-        TVector<TString> labels;
-        StringSplitter(parts.back()).Split('=').SkipEmpty().Collect(&labels);
-        if (labels.size() == 2U) {
-            nameLabel = labels.back();
+        format = !parts.empty() ? ParseFormat(parts.back()) : Nothing();
+        if (format) {
+            parts.pop_back();
         }
-        parts.pop_back();
-   }
 
-    if (!parts.empty() && parts.back() == TStringBuf("private")) {
-        visibility = TCountableBase::EVisibility::Private;
-        parts.pop_back();
+        if (!parts.empty() && parts.back().StartsWith(TStringBuf("name_label="))) {
+            TVector<TString> labels;
+            StringSplitter(parts.back()).Split('=').SkipEmpty().Collect(&labels);
+            if (labels.size() == 2U) {
+                nameLabel = labels.back();
+            }
+            parts.pop_back();
+        }
+
+        if (!parts.empty() && parts.back() == TStringBuf("private")) {
+            visibility = TCountableBase::EVisibility::Private;
+            parts.pop_back();
+        }
     }
 
     auto counters = Counters;
@@ -105,6 +142,10 @@ void TDynamicCountersPage::Output(NMonitoring::IMonHttpRequest& request) {
     out.Flush();
 }
 
+THolder<ICountableConsumer> TDynamicCountersPage::CreateEncoder(IOutputStream* out, EFormat format, TStringBuf nameLabel, TCountableBase::EVisibility visibility) const {
+    return ::CreateEncoder(out, format, nameLabel, visibility);
+}
+
 void TDynamicCountersPage::HandleAbsentSubgroup(IMonHttpRequest& request) {
     if (UnknownGroupPolicy == EUnknownGroupPolicy::Error) {
         NotFound(request);
@@ -117,9 +158,15 @@ void TDynamicCountersPage::HandleAbsentSubgroup(IMonHttpRequest& request) {
 
 void TDynamicCountersPage::BeforePre(IMonHttpRequest& request) {
     IOutputStream& out = request.Output();
+    TStringBuf params = GetParams(request);
+    TStringBuilder base;
+    base << Path << '?';
+    if (!params.empty()) {
+        base << params << '&';
+    }
     HTML(out) {
         DIV() {
-            out << "<a href='" << request.GetPath() << "/json'>Counters as JSON</a>";
+            out << "<a href='" << base << "@format=json'>Counters as JSON</a>";
             out << " for Solomon";
         }
 
@@ -129,9 +176,11 @@ void TDynamicCountersPage::BeforePre(IMonHttpRequest& request) {
         UL() {
             currentCounters->EnumerateSubgroups([&](const TString& name, const TString& value) {
                 LI() {
-                    TString pathPart = name + "=" + value;
-                    Quote(pathPart, "");
-                    out << "\n<a href='" << request.GetPath() << "/" << pathPart << "'>" << name << " " << value << "</a>";
+                    auto escName = name;
+                    auto escValue = value;
+                    Quote(escName);
+                    Quote(escValue);
+                    out << "\n<a href='" << base << escName << '=' << escValue << "'>" << name << " " << value << "</a>";
                 }
             });
         }

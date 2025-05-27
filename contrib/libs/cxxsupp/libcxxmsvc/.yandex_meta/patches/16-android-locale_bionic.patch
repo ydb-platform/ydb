@@ -1,0 +1,15 @@
+diff --git a/include/__support/android/locale_bionic.h b/include/__support/android/locale_bionic.h
+index 8c6d4bd..733eb83 100644
+--- a/include/__support/android/locale_bionic.h
++++ b/include/__support/android/locale_bionic.h
+@@ -26,7 +26,9 @@ extern "C" {
+ #if defined(__ANDROID__)
+ 
+ #include <android/api-level.h>
+-#include <android/ndk-version.h>
++#if defined(__has_include) && __has_include(<android/ndk-version.h>)
++#   include <android/ndk-version.h>
++#endif
+ #if __ANDROID_API__ < 21
+ #include <__support/xlocale/__posix_l_fallback.h>
+ #endif

@@ -47,6 +47,10 @@ copy=[
 template={ path="dir_cmake_lists.jinja", dest="CMakeLists{PLATFORM}.txt" }
 merge_platform_template={ path="merge_platforms_cmake_lists.jinja", dest="CMakeLists.txt" }
 
+[targets.EXTRA_ONLY]
+template={ path="dir_cmake_lists.jinja", dest="CMakeLists{PLATFORM}.txt" }
+merge_platform_template={ path="merge_platforms_cmake_lists.jinja", dest="CMakeLists.txt" }
+
 [targets.add_executable]
 template={ path="dir_cmake_lists.jinja", dest="CMakeLists{PLATFORM}.txt" }
 merge_platform_template={ path="merge_platforms_cmake_lists.jinja", dest="CMakeLists.txt" }
@@ -73,18 +77,6 @@ is_extra_target = true
 is_extra_target = true
 
 [attrs.root]
-# DEPRECATED - Skipped old hardcoded-cmake attributes
-conan_require="skip"
-conan_require_tool="skip"
-conan_import="skip"
-conan_options="skip"
-add_language="skip"
-set_global_flags="skip"
-find_package="skip"
-include="skip"
-
-# Really used attributes
-
 # All Conan attributes make sorted_set for stability generated conanfile,
 # order has no effect for all conan options
 # All OS conan attributes
@@ -124,11 +116,6 @@ platform_vars-FBS_CPP_FLAGS="str"
 platform_vars-COMMON_PROTOC_FLAGS="str"
 
 [attrs.dir]
-# DEPRECATED - Skipped old hardcoded-cmake attributes
-curdir_masm_flags="skip"
-set_vars="skip"
-
-# Really used attributes
 dir_macroses="list"
 dir_macroses-ITEM="dict"
 dir_macroses-macro="str"
@@ -139,61 +126,6 @@ dir_macroses-args="list"
 dir_includes="set"
 
 [attrs.target]
-# DEPRECATED - Skipped old hardcoded-cmake attributes
-set_target_property="skip"
-append_target_property="skip"
-
-# DEPRECATED - target multiple calls macroses
-generate_enum_serilization="skip"
-target_joined_source="skip"
-target_ragel_lexers="skip"
-target_fbs_source="skip"
-target_flex_lexers="skip"
-target_bison_parser="skip"
-target_yasm_source="skip"
-target_rodata_sources="skip"
-target_sources_custom="skip"
-vcs_info="skip"
-resources="skip"
-llvm_compile_c="skip"
-llvm_compile_cxx="skip"
-
-# DEPRECATED - target unique calls macroses
-target_cuda_flags="skip"
-target_cuda_cflags="skip"
-target_proto_outs="skip"
-target_proto_addincls="skip"
-use_export_script="skip"
-target_cython_options="skip"
-target_cython_include_directories="skip"
-set_python_type_for_cython="skip"
-target_proto_plugin="skip"
-
-# DEPRECATED - target options
-target_compile_options="skip"
-target_include_directories="skip"
-target_link_options="skip"
-target_ev_messages="skip"
-target_proto_messages="skip"
-target_sources="skip"
-target_cuda_sources="skip"
-target_cython_sources="skip"
-library_fake_marker="skip"
-
-# DEPRECATED - target commands
-add_custom_command="skip"
-add_test="skip"
-add_yunittest="skip"
-set_yunittest_property="skip"
-copy_file="skip"
-configure_file="skip"
-run_antlr="skip"
-set_property="skip"
-add_jar="skip"
-set_property_escaped="skip"
-set_yunittest_property_escaped="skip"
-
-# Really used attributes
 is_fake_module="bool"
 
 # Module packages (not induced, applied in current module only)
@@ -227,6 +159,7 @@ target_commands-ITEM="dict"
 target_commands-macro="str"
 target_commands-args="list"
 target_commands-args_escaped="list"
+target_commands-flags="list"
 
 target_macroses="list"
 target_macroses-ITEM="dict"
@@ -237,11 +170,18 @@ target_macroses-merge_args="flag"
 add_test_requirements="list"
 add_ytest_requirements="list"
 
-[attrs.induced]
-# DEPRECATED - target options
-consumer_link_library="skip"
-target_allocator="skip"
+custom_runs="list"
+custom_runs-depends="list"
+custom_runs-env="list"
+custom_runs-command="list"
+custom_runs-outputs="list"
+custom_runs-cwd="str"
+custom_runs-cmake_packages="list"
+custom_runs-cmake_packages-ITEM="dict"
+custom_runs-cmake_packages-name="str"
+custom_runs-cmake_packages-components="list"
 
+[attrs.induced]
 # Induced packages
 packages="list"
 packages-ITEM="dict"
@@ -270,14 +210,19 @@ copy=["cmake/FindJNITarget.cmake"]
 add_values=[{attr="includes", values=["cmake/FindJNITarget.cmake"]}]
 
 [[rules]]
-attrs=["run_antlr"]
+attrs=["custom_runs-command=run_antlr"]
 copy=["cmake/antlr.cmake"]
 add_values=[{attr="includes", values=["cmake/antlr.cmake"]}]
 
 [[rules]]
+attrs=["custom_runs-command=run_antlr4"]
+copy=["cmake/antlr4.cmake"]
+add_values=[{attr="includes", values=["cmake/antlr4.cmake"]}]
+
+[[rules]]
 attrs=[
-    "target_bison_parser",
-    "target_flex_lexers"
+    "target_macroses-macro=target_bison_parser",
+    "target_macroses-macro=target_flex_lexers"
 ]
 copy=["cmake/bison.cmake"]
 add_values=[{attr="includes", values=["cmake/bison.cmake"]}]
@@ -295,8 +240,8 @@ add_values=[{attr="includes", values=["cmake/conan1_deprecated.cmake"]}]
 
 [[rules]]
 attrs=[
-    "target_ev_messages",
-    "target_proto_messages",
+    "target_options-privates-option=target_ev_messages",
+    "target_options-privates-option=target_proto_messages",
     "target_macroses-macro=target_proto_plugin",
     "target_macroses-macro=target_proto_outs",
     "target_macroses-macro=target_proto_addincls",
@@ -368,7 +313,7 @@ add_values=[{attr="includes", values=["cmake/shared_libs.cmake"]}]
 attrs=[
     "target_macroses-macro=target_cuda_flags",
     "target_macroses-macro=target_cuda_cflags",
-    "target_cuda_sources"
+    "target_options-privates-option=target_cuda_sources"
 ]
 copy=["cmake/cuda.cmake"]
 add_values=[{attr="includes", values=["cmake/cuda.cmake"]}]
@@ -380,12 +325,15 @@ add_values=[{attr="includes", values=["cmake/archive.cmake"]}]
 
 [[rules]]
 attrs=[
-    "target_cython_sources",
+    "target_options-privates-option=target_cython_sources",
     "target_macroses-macro=target_cython_options",
     "target_macroses-macro=target_cython_include_directories",
     "target_macroses-macro=set_python_type_for_cython",
 ]
-copy=["cmake/cython.cmake"]
+copy=[
+    "cmake/cython.cmake",
+    "cmake/FindCython.cmake"
+]
 add_values=[{attr="includes", values=["cmake/cython.cmake"]}]
 
 [[rules]]
@@ -398,6 +346,24 @@ copy=[
     "build/scripts/gather_swig_java.cmake"
 ]
 add_values=[{attr="includes", values=["cmake/swig.cmake"]}]
+
+[[rules]]
+attrs=[
+    "packages-name=IDN",
+]
+copy=[
+    "cmake/FindIDN.cmake",
+]
+add_values=[{attr="includes", values=["cmake/FindIDN.cmake"]}]
+
+[[rules]]
+attrs=[
+    "packages-name=AIO",
+]
+copy=[
+    "cmake/FindAIO.cmake",
+]
+add_values=[{attr="includes", values=["cmake/FindAIO.cmake"]}]
 
 # Conan profiles for platforms
 [[rules]]

@@ -26,7 +26,7 @@ public:
         Result->Record.MutableOperationId()->CopyFrom(record.GetOperationId());
         Result->Record.SetOrigin(Self->TabletID());
 
-        const auto pathId = PathIdFromPathId(record.GetPathId());
+        const auto pathId = TPathId::FromProto(record.GetPathId());
         Replication = Self->Find(pathId);
 
         if (!Replication) {
@@ -37,27 +37,58 @@ public:
             return true;
         }
 
+        bool alter = false;
+
+        const auto& oldConfig = Replication->GetConfig();
+        const auto& newConfig = record.GetConfig();
+
+        if (oldConfig.HasTransferSpecific()) {
+            auto& oldSpecific = oldConfig.GetTransferSpecific();
+            auto& newSpecific = newConfig.GetTransferSpecific();
+
+            alter = oldSpecific.GetTarget().GetTransformLambda() != newSpecific.GetTarget().GetTransformLambda()
+                || oldSpecific.GetBatching().GetBatchSizeBytes() != newSpecific.GetBatching().GetBatchSizeBytes()
+                || oldSpecific.GetBatching().GetFlushIntervalMilliSeconds() != newSpecific.GetBatching().GetFlushIntervalMilliSeconds();
+        }
+
+        auto desiredState = Replication->GetState();
+        if (record.HasSwitchState()) {
+            switch (record.GetSwitchState().GetStateCase()) {
+                case NKikimrReplication::TReplicationState::kDone:
+                    desiredState = TReplication::EState::Done;
+                    alter = true;
+                    break;
+                case NKikimrReplication::TReplicationState::kPaused:
+                    desiredState = TReplication::EState::Paused;
+                    alter = true;
+                    break;
+                case NKikimrReplication::TReplicationState::kStandBy:
+                    desiredState = TReplication::EState::Ready;
+                    alter = true;
+                    break;
+                default:
+                    Y_ABORT("Invalid state");
+                }
+        }
+
+        if (alter) {
+            Replication->SetDesiredState(desiredState);
+        }
+
         Replication->SetConfig(std::move(*record.MutableConfig()));
         NIceDb::TNiceDb db(txc.DB);
         db.Table<Schema::Replications>().Key(Replication->GetId()).Update(
-            NIceDb::TUpdate<Schema::Replications::Config>(record.GetConfig().SerializeAsString())
+            NIceDb::TUpdate<Schema::Replications::Config>(record.GetConfig().SerializeAsString()),
+            NIceDb::TUpdate<Schema::Replications::DesiredState>(desiredState)
         );
 
-        if (!record.HasSwitchState()) {
+        if (!alter) {
             Result->Record.SetStatus(NKikimrReplication::TEvAlterReplicationResult::SUCCESS);
             return true;
         }
 
-        switch (record.GetSwitchState().GetStateCase()) {
-        case NKikimrReplication::TReplicationState::kDone:
-            break;
-        default:
-            Y_ABORT("Invalid state");
-        }
-
         Result->Record.SetStatus(NKikimrReplication::TEvAlterReplicationResult::SUCCESS);
 
-        bool alter = false;
         for (ui64 tid = 0; tid < Replication->GetNextTargetId(); ++tid) {
             auto* target = Replication->FindTarget(tid);
             if (!target) {

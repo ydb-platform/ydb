@@ -24,56 +24,56 @@
 
 namespace orc {
 
-  BlockBuffer::BlockBuffer(MemoryPool& pool, uint64_t _blockSize)
-      : memoryPool(pool), currentSize(0), currentCapacity(0), blockSize(_blockSize) {
-    if (blockSize == 0) {
+  BlockBuffer::BlockBuffer(MemoryPool& pool, uint64_t blockSize)
+      : memoryPool_(pool), currentSize_(0), currentCapacity_(0), blockSize_(blockSize) {
+    if (blockSize_ == 0) {
       throw std::logic_error("Block size cannot be zero");
     }
-    reserve(blockSize);
+    reserve(blockSize_);
   }
 
   BlockBuffer::~BlockBuffer() {
-    for (size_t i = 0; i < blocks.size(); ++i) {
-      memoryPool.free(blocks[i]);
+    for (size_t i = 0; i < blocks_.size(); ++i) {
+      memoryPool_.free(blocks_[i]);
     }
-    blocks.clear();
-    currentSize = currentCapacity = 0;
+    blocks_.clear();
+    currentSize_ = currentCapacity_ = 0;
   }
 
   BlockBuffer::Block BlockBuffer::getBlock(uint64_t blockIndex) const {
     if (blockIndex >= getBlockNumber()) {
       throw std::out_of_range("Block index out of range");
     }
-    return Block(blocks[blockIndex], std::min(currentSize - blockIndex * blockSize, blockSize));
+    return Block(blocks_[blockIndex], std::min(currentSize_ - blockIndex * blockSize_, blockSize_));
   }
 
   BlockBuffer::Block BlockBuffer::getNextBlock() {
-    if (currentSize < currentCapacity) {
-      Block emptyBlock(blocks[currentSize / blockSize] + currentSize % blockSize,
-                       blockSize - currentSize % blockSize);
-      currentSize = (currentSize / blockSize + 1) * blockSize;
+    if (currentSize_ < currentCapacity_) {
+      Block emptyBlock(blocks_[currentSize_ / blockSize_] + currentSize_ % blockSize_,
+                       blockSize_ - currentSize_ % blockSize_);
+      currentSize_ = (currentSize_ / blockSize_ + 1) * blockSize_;
       return emptyBlock;
     } else {
-      resize(currentSize + blockSize);
-      return Block(blocks.back(), blockSize);
+      resize(currentSize_ + blockSize_);
+      return Block(blocks_.back(), blockSize_);
     }
   }
 
   void BlockBuffer::resize(uint64_t size) {
     reserve(size);
-    if (currentCapacity >= size) {
-      currentSize = size;
+    if (currentCapacity_ >= size) {
+      currentSize_ = size;
     } else {
       throw std::logic_error("Block buffer resize error");
     }
   }
 
   void BlockBuffer::reserve(uint64_t newCapacity) {
-    while (currentCapacity < newCapacity) {
-      char* newBlockPtr = memoryPool.malloc(blockSize);
+    while (currentCapacity_ < newCapacity) {
+      char* newBlockPtr = memoryPool_.malloc(blockSize_);
       if (newBlockPtr != nullptr) {
-        blocks.push_back(newBlockPtr);
-        currentCapacity += blockSize;
+        blocks_.push_back(newBlockPtr);
+        currentCapacity_ += blockSize_;
       } else {
         break;
       }
@@ -81,7 +81,7 @@ namespace orc {
   }
 
   void BlockBuffer::writeTo(OutputStream* output, WriterMetrics* metrics) {
-    if (currentSize == 0) {
+    if (currentSize_ == 0) {
       return;
     }
     static uint64_t MAX_CHUNK_SIZE = 1024 * 1024 * 1024;
@@ -92,12 +92,12 @@ namespace orc {
     uint64_t ioCount = 0;
     uint64_t blockNumber = getBlockNumber();
     // if only exists one block, currentSize is equal to first block size
-    if (blockNumber == 1 && currentSize <= chunkSize) {
+    if (blockNumber == 1 && currentSize_ <= chunkSize) {
       Block block = getBlock(0);
       output->write(block.data, block.size);
       ++ioCount;
     } else {
-      char* chunk = memoryPool.malloc(chunkSize);
+      char* chunk = memoryPool_.malloc(chunkSize);
       uint64_t chunkOffset = 0;
       for (uint64_t i = 0; i < blockNumber; ++i) {
         Block block = getBlock(i);
@@ -121,7 +121,7 @@ namespace orc {
         output->write(chunk, chunkOffset);
         ++ioCount;
       }
-      memoryPool.free(chunk);
+      memoryPool_.free(chunk);
     }
 
     if (metrics != nullptr) {

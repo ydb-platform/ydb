@@ -8,8 +8,16 @@ from optparse import SUPPRESS_HELP, Values
 from typing import List, Optional
 
 from pip._vendor.packaging.utils import canonicalize_name
+from pip._vendor.requests.exceptions import InvalidProxyURL
 from pip._vendor.rich import print_json
 
+# Eagerly import self_outdated_check to avoid crashes. Otherwise,
+# this module would be imported *after* pip was replaced, resulting
+# in crashes if the new self_outdated_check module was incompatible
+# with the rest of pip that's already imported, or allowing a
+# wheel to execute arbitrary code on install by replacing
+# self_outdated_check.
+import pip._internal.self_outdated_check  # noqa: F401
 from pip._internal.cache import WheelCache
 from pip._internal.cli import cmdoptions
 from pip._internal.cli.cmdoptions import make_target_python
@@ -408,17 +416,11 @@ class InstallCommand(RequirementCommand):
                 # If we're not replacing an already installed pip,
                 # we're not modifying it.
                 modifying_pip = pip_req.satisfied_by is None
-                if modifying_pip:
-                    # Eagerly import this module to avoid crashes. Otherwise, this
-                    # module would be imported *after* pip was replaced, resulting in
-                    # crashes if the new self_outdated_check module was incompatible
-                    # with the rest of pip that's already imported.
-                    import pip._internal.self_outdated_check  # noqa: F401
             protect_pip_from_modification_on_windows(modifying_pip=modifying_pip)
 
             reqs_to_build = [
                 r
-                for r in requirement_set.requirements.values()
+                for r in requirement_set.requirements_to_install
                 if should_build_for_install_command(r)
             ]
 
@@ -432,7 +434,7 @@ class InstallCommand(RequirementCommand):
 
             if build_failures:
                 raise InstallationError(
-                    "ERROR: Failed to build installable wheels for some "
+                    "Failed to build installable wheels for some "
                     "pyproject.toml based projects ({})".format(
                         ", ".join(r.name for r in build_failures)  # type: ignore
                     )
@@ -463,6 +465,7 @@ class InstallCommand(RequirementCommand):
                 warn_script_location=warn_script_location,
                 use_user_site=options.use_user_site,
                 pycompile=options.compile,
+                progress_bar=options.progress_bar,
             )
 
             lib_locations = get_lib_location_guesses(
@@ -762,6 +765,13 @@ def create_os_error_message(
             )
         else:
             parts.append(permissions_part)
+        parts.append(".\n")
+
+    # Suggest to check "pip config debug" in case of invalid proxy
+    if type(error) is InvalidProxyURL:
+        parts.append(
+            'Consider checking your local proxy configuration with "pip config debug"'
+        )
         parts.append(".\n")
 
     # Suggest the user to enable Long Paths if path length is

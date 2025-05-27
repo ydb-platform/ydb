@@ -8,6 +8,8 @@
 
 #include <yt/yt/core/misc/error.h>
 
+#include <yt/yt/library/tz_types/tz_types.h>
+
 #include <util/charset/utf8.h>
 
 #include <cmath>
@@ -25,8 +27,7 @@ static Y_FORCE_INLINE void ValidateNumericRange(TNumber value, TNumber min, TNum
 {
     static_assert(std::is_same_v<TNumber, i64> || std::is_same_v<TNumber, ui64> || std::is_same_v<TNumber, double>);
     if (value < min || value > max) {
-        THROW_ERROR_EXCEPTION(
-            EErrorCode::SchemaViolation,
+        THROW_ERROR_EXCEPTION(NTableClient::EErrorCode::SchemaViolation,
             "Value %v is out of allowed range [%v, %v]",
             value,
             min,
@@ -206,15 +207,47 @@ void ValidateSimpleLogicalType(TStringBuf value)
         // do nothing
     } else if constexpr (type == ESimpleLogicalValueType::Utf8) {
         if (UTF8Detect(value.data(), value.size()) == NotUTF8) {
-            THROW_ERROR_EXCEPTION(
-                EErrorCode::SchemaViolation,
+            THROW_ERROR_EXCEPTION(NTableClient::EErrorCode::SchemaViolation,
                 "Not a valid utf8 string");
         }
     } else if constexpr (type == ESimpleLogicalValueType::Uuid) {
         if (value.size() != 16) {
-            THROW_ERROR_EXCEPTION(
-                EErrorCode::SchemaViolation,
+            THROW_ERROR_EXCEPTION(NTableClient::EErrorCode::SchemaViolation,
                 "Not a valid Uuid");
+        }
+    } else if constexpr (
+        type == ESimpleLogicalValueType::TzDate ||
+        type == ESimpleLogicalValueType::TzDatetime ||
+        type == ESimpleLogicalValueType::TzTimestamp ||
+        type == ESimpleLogicalValueType::TzDate32 ||
+        type == ESimpleLogicalValueType::TzDatetime64 ||
+        type == ESimpleLogicalValueType::TzTimestamp64)
+    {
+        try {
+            constexpr ESimpleLogicalValueType underlyingDateType = GetUnderlyingDateType<type>();
+
+            using TInt = TUnderlyingTimestampIntegerType<underlyingDateType>;
+
+            const auto& [timestamp, tzName] = NTzTypes::ParseTzValue<TInt>(value);
+
+            try {
+                if constexpr (std::is_signed_v<TInt>) {
+                    ValidateSimpleLogicalType<underlyingDateType>(static_cast<i64>(timestamp));
+                } else {
+                    ValidateSimpleLogicalType<underlyingDateType>(static_cast<ui64>(timestamp));
+                }
+            } catch (const std::exception& ex) {
+                THROW_ERROR_EXCEPTION("Cannot validate underlying timestamp of %Qv type", type)
+                    << ex;
+            }
+
+            NTzTypes::ValidateTzName(tzName);
+        } catch (const std::exception& ex) {
+            THROW_ERROR_EXCEPTION(
+                NTableClient::EErrorCode::SchemaViolation,
+                "Not a valid timezone time")
+                << TErrorAttribute("value", value)
+                << ex;
         }
     } else {
         static_assert(type == ESimpleLogicalValueType::String, "Bad logical type");

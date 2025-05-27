@@ -2,6 +2,8 @@ GO_LIBRARY()
 
 LICENSE(BSD-3-Clause)
 
+VERSION(v1.36.5)
+
 SRCS(
     checkinit.go
     decode.go
@@ -18,6 +20,7 @@ SRCS(
     reset.go
     size.go
     size_gen.go
+    wrapperopaque.go
     wrappers.go
 )
 

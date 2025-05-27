@@ -23,7 +23,7 @@ namespace NYT::NThreading {
 YT_DEFINE_THREAD_LOCAL(TThreadId, CurrentUniqueThreadId) ;
 static std::atomic<TThreadId> UniqueThreadIdGenerator;
 
-static constexpr auto& Logger = ThreadingLogger;
+constinit const auto Logger = ThreadingLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -214,7 +214,7 @@ YT_PREVENT_TLS_CACHING void TThread::ThreadMainTrampoline()
     public:
         ~TExitInterceptor()
         {
-            if (Armed_ && !std::uncaught_exceptions()) {
+            if (Armed_ && std::uncaught_exceptions() == 0) {
                 if (auto* logFile = TryGetShutdownLogFile()) {
                     ::fprintf(logFile, "%s\tThread exit interceptor triggered (ThreadId: %" PRISZT ")\n",
                         GetInstant().ToString().c_str(),
@@ -295,10 +295,10 @@ YT_PREVENT_TLS_CACHING void TThread::ConfigureSignalHandlerStack()
 
     // The size of of the custom stack to be provided for signal handlers.
     constexpr size_t SignalHandlerStackSize = 16_KB;
-    thread_local std::unique_ptr<char[]> Stack = std::make_unique<char[]>(SignalHandlerStackSize);
+    SignalHandlerStack_ = std::make_unique<char[]>(SignalHandlerStackSize);
 
     stack_t stack{
-        .ss_sp = Stack.get(),
+        .ss_sp = SignalHandlerStack_.get(),
         .ss_flags = 0,
         .ss_size = SignalHandlerStackSize,
     };

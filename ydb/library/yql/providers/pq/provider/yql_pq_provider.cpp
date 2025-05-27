@@ -2,18 +2,19 @@
 #include "yql_pq_provider_impl.h"
 #include "yql_pq_dq_integration.h"
 
-#include <ydb/library/yql/core/yql_type_annotation.h>
-#include <ydb/library/yql/utils/log/context.h>
-#include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/core/yql_type_annotation.h>
+#include <yql/essentials/utils/log/context.h>
+#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
 
 namespace NYql {
 
 TDataProviderInitializer GetPqDataProviderInitializer(
     IPqGateway::TPtr gateway,
     bool supportRtmrMode,
-    std::shared_ptr<NYql::IDatabaseAsyncResolver> dbResolver) {
-    return [gateway, supportRtmrMode, dbResolver] (
+    std::shared_ptr<NYql::IDatabaseAsyncResolver> dbResolver,
+    const NPq::NProto::StreamingDisposition& disposition) {
+    return [gateway, supportRtmrMode, dbResolver, disposition] (
                const TString& userName,
                const TString& sessionId,
                const TGatewaysConfig* gatewaysConfig,
@@ -38,6 +39,7 @@ TDataProviderInitializer GetPqDataProviderInitializer(
             state->Types = typeCtx.Get();
             state->FunctionRegistry = functionRegistry;
             state->DbResolver = dbResolver;
+            state->Disposition = disposition;
             if (gatewaysConfig) {
                 state->Configuration->Init(gatewaysConfig->GetPq(), typeCtx, dbResolver, state->DatabaseIds);
             }

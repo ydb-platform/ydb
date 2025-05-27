@@ -72,6 +72,7 @@ static struct iovec buffers_iov[__BUF_NR];
 
 static bool has_sendzc;
 static bool has_sendmsg;
+static bool hit_enomem;
 
 static int probe_zc_support(void)
 {
@@ -537,6 +538,17 @@ static int do_test_inet_send(struct io_uring *ring, int sock_client, int sock_se
 			if (cqe->user_data == nr_reqs - 1)
 				expected = chunk_size_last;
 			if (cqe->res != expected) {
+				if (cqe->res == -ENOMEM) {
+					if (!hit_enomem) {
+						fprintf(stderr, "Hit -ENOMEM. "
+							"Increase ulimit -l "
+							"limit for a complete "
+							"test run. Skipping "
+							"parts.\n");
+						hit_enomem = 1;
+					}
+					return 0;
+				}
 				fprintf(stderr, "invalid cqe->res %d expected %d\n",
 						 cqe->res, expected);
 				return 1;
@@ -635,7 +647,8 @@ static int test_inet_send(struct io_uring *ring)
 
 				if (!buffers_iov[buf_index].iov_base)
 					continue;
-				if (!tcp && len > 4 * page_sz)
+				/* UDP IPv4 max datagram size is under 64K */
+				if (!tcp && len > (1U << 15))
 					continue;
 
 				conf.buf_index = buf_index;
@@ -720,6 +733,59 @@ static int test_async_addr(struct io_uring *ring)
 		return 1;
 	}
 	assert(cqe->flags & IORING_CQE_F_NOTIF);
+	io_uring_cqe_seen(ring, cqe);
+
+	close(sock_tx);
+	close(sock_rx);
+	return 0;
+}
+
+static int test_sendzc_report(struct io_uring *ring)
+{
+	struct io_uring_sqe *sqe;
+	struct io_uring_cqe *cqe;
+	struct sockaddr_storage addr;
+	int sock_tx, sock_rx;
+	int ret;
+
+	ret = create_socketpair_ip(&addr, &sock_tx, &sock_rx, true, true, false, true);
+	if (ret) {
+		fprintf(stderr, "sock prep failed %d\n", ret);
+		return 1;
+	}
+
+	sqe = io_uring_get_sqe(ring);
+	io_uring_prep_send_zc(sqe, sock_tx, tx_buffer, 1, 0,
+				IORING_SEND_ZC_REPORT_USAGE);
+	ret = io_uring_submit(ring);
+	if (ret != 1) {
+		fprintf(stderr, "io_uring_submit failed %i\n", ret);
+		return 1;
+	}
+	ret = io_uring_wait_cqe(ring, &cqe);
+	if (ret) {
+		fprintf(stderr, "io_uring_wait_cqe failed %i\n", ret);
+		return 1;
+	}
+	if (cqe->res != 1 && cqe->res != -EINVAL) {
+		fprintf(stderr, "sendzc report failed %u\n", cqe->res);
+		return 1;
+	}
+	if (!(cqe->flags & IORING_CQE_F_MORE)) {
+		fprintf(stderr, "expected notification %i\n", cqe->res);
+		return 1;
+	}
+	io_uring_cqe_seen(ring, cqe);
+
+	ret = io_uring_wait_cqe(ring, &cqe);
+	if (ret) {
+		fprintf(stderr, "io_uring_wait_cqe failed %i\n", ret);
+		return 1;
+	}
+	if (cqe->flags & IORING_CQE_F_MORE) {
+		fprintf(stderr, "F_MORE after notification\n");
+		return 1;
+	}
 	io_uring_cqe_seen(ring, cqe);
 
 	close(sock_tx);
@@ -818,6 +884,12 @@ static int run_basic_tests(void)
 		ret = test_async_addr(&ring);
 		if (ret) {
 			fprintf(stderr, "test_async_addr() failed\n");
+			return T_EXIT_FAIL;
+		}
+
+		ret = test_sendzc_report(&ring);
+		if (ret) {
+			fprintf(stderr, "test_sendzc_report() failed\n");
 			return T_EXIT_FAIL;
 		}
 

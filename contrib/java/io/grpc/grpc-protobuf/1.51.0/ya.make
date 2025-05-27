@@ -1,5 +1,7 @@
 JAVA_CONTRIB()
 
+VERSION(1.51.0)
+
 LICENSE(Apache-2.0)
 
 PEERDIR(
@@ -15,6 +17,9 @@ JAR_RESOURCE(4628902851)
 
 SRC_RESOURCE(4628902574)
 
-EXCLUDE(contrib/java/com/google/protobuf/protobuf-javalite)
+EXCLUDE(
+    contrib/java/com/google/api/api-common
+    contrib/java/com/google/protobuf/protobuf-javalite
+)
 
 END()

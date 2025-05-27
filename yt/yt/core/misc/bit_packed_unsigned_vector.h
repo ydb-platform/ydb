@@ -1,7 +1,6 @@
 #pragma once
 
-#include "range.h"
-
+#include <library/cpp/yt/memory/range.h>
 #include <library/cpp/yt/memory/ref.h>
 
 namespace NYT {
@@ -59,7 +58,7 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void PrepareDiffFromExpected(std::vector<ui32>* values, ui32* expected, ui32* maxDiff);
+std::pair<ui32, ui32> PrepareDiffFromExpected(std::vector<ui32>* values);
 
 ////////////////////////////////////////////////////////////////////////////////
 

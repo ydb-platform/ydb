@@ -37,14 +37,14 @@ const NKikimrConfig::TAppConfig &TConfigurationResult::GetConfig() const
     return Record().GetGetNodeConfigResponse().GetConfig();
 }
 
-bool TConfigurationResult::HasYamlConfig() const
+bool TConfigurationResult::HasMainYamlConfig() const
 {
-    return Record().GetGetNodeConfigResponse().HasYamlConfig();
+    return Record().GetGetNodeConfigResponse().HasMainYamlConfig();
 }
 
-const TString& TConfigurationResult::GetYamlConfig() const
+const TString& TConfigurationResult::GetMainYamlConfig() const
 {
-    return Record().GetGetNodeConfigResponse().GetYamlConfig();
+    return Record().GetGetNodeConfigResponse().GetMainYamlConfig();
 }
 
 TMap<ui64, TString> TConfigurationResult::GetVolatileYamlConfigs() const
@@ -54,6 +54,16 @@ TMap<ui64, TString> TConfigurationResult::GetVolatileYamlConfigs() const
        volatileConfigs.emplace(item.GetId(), item.GetConfig());
     }
     return volatileConfigs;
+}
+
+bool TConfigurationResult::HasDatabaseYamlConfig() const
+{
+    return Record().GetGetNodeConfigResponse().HasDatabaseYamlConfig();
+}
+
+const TString& TConfigurationResult::GetDatabaseYamlConfig() const
+{
+    return Record().GetGetNodeConfigResponse().GetDatabaseYamlConfig();
 }
 
 TNodeConfigurator::TNodeConfigurator(TKikimr& kikimr)

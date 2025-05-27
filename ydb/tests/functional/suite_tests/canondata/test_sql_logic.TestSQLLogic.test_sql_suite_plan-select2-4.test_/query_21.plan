@@ -51,7 +51,7 @@
                                                     }
                                                 ],
                                                 "Name": "Filter",
-                                                "Predicate": "item.a > item.b And item.a != 0"
+                                                "Predicate": "item.a > item.b AND item.a != 0"
                                             }
                                         ],
                                         "PlanNodeId": 2,
@@ -62,6 +62,7 @@
                                                     {
                                                         "Inputs": [],
                                                         "Name": "TableRangeScan",
+                                                        "Path": "/Root/sqllogictest_select2-4.test_plan/t1",
                                                         "ReadColumns": [
                                                             "a",
                                                             "b",

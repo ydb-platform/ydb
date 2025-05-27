@@ -5,8 +5,8 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/library/yql/public/udf/service/stub
-    ydb/library/yql/sql/pg_dummy
+    yql/essentials/public/udf/service/stub
+    yql/essentials/sql/pg_dummy
 )
 
 END()

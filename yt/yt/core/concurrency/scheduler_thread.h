@@ -20,8 +20,8 @@ protected:
 
     TSchedulerThread(
         TIntrusivePtr<NThreading::TEventCount> callbackEventCount,
-        TString threadGroupName,
-        TString threadName,
+        std::string threadGroupName,
+        std::string threadName,
         NThreading::TThreadOptions options = {});
 
     ~TSchedulerThread();

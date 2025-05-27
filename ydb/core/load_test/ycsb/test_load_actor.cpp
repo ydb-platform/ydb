@@ -242,7 +242,7 @@ public:
         LOG_TRACE_S(ctx, NKikimrServices::DS_LOAD_TEST, "TLoad# " << Tag
             << " received from " << ev->Sender << ": " << ev->Get()->Record.DebugString());
 
-        auto& response = ev->Get()->Record.GetRef();
+        auto& response = ev->Get()->Record;
         if (response.GetYdbStatus() != Ydb::StatusIds_StatusCode_SUCCESS) {
             TStringStream ss;
             ss << "KQP query failed in state# " << State << ": " << response.GetYdbStatus();

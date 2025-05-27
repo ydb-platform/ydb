@@ -70,12 +70,14 @@ namespace {
                 size_t len = strlen(name);
                 key = (char*)alloca(len + 1);
                 strcpy(key, name);
-                if (len > MAX_PATH)
+                if (len > MAX_PATH) {
                     *(key + MAX_PATH) = 0;
+                }
                 char* p = key;
                 while (*p) {
-                    if (*p == '\\')
+                    if (*p == '\\') {
                         *p = '/';
+                    }
                     ++p;
                 }
             }
@@ -210,7 +212,7 @@ namespace {
     Y_PRAGMA_DIAGNOSTIC_POP
     #endif
 #endif
-}
+} // namespace
 
 class TSemaphore::TImpl: public TSemaphoreImpl {
 public:

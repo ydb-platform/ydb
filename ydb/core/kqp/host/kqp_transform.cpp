@@ -1,9 +1,9 @@
 #include "kqp_transform.h"
 
 #include <ydb/core/kqp/common/kqp_yql.h>
-#include <ydb/library/yql/minikql/mkql_string_util.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider.h>
-#include <ydb/library/yql/minikql/mkql_node.h>
+#include <yql/essentials/minikql/mkql_string_util.h>
+#include <yql/essentials/providers/common/provider/yql_provider.h>
+#include <yql/essentials/minikql/mkql_node.h>
 
 namespace NKikimr::NKqp {
 
@@ -44,8 +44,10 @@ public:
         Y_UNUSED(ctx);
         output = input;
         if (!TransformCtx.ExplainTransformerInput) {
+            YQL_CVLOG(NYql::NLog::ELevel::TRACE, NYql::NLog::EComponent::Core) << "Saving explain plan";
             TransformCtx.ExplainTransformerInput = input;
         }
+
         return TStatus::Ok;
     }
 

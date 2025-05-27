@@ -6,6 +6,7 @@
 #include <yt/yt/core/misc/proc.h>
 
 #include <yt/yt/core/actions/invoker_util.h>
+#include <yt/yt/core/concurrency/scheduler_api.h>
 
 #include <library/cpp/yt/system/handle_eintr.h>
 #include <library/cpp/yt/system/exit.h>
@@ -28,8 +29,8 @@
     #include <mntent.h>
     #include <sys/vfs.h>
     #include <sys/quota.h>
-    #include <sys/types.h>
     #include <sys/sendfile.h>
+    #include <sys/sysmacros.h>
 #elif defined(_freebsd_) || defined(_darwin_)
     #include <sys/param.h>
     #include <sys/mount.h>
@@ -42,11 +43,9 @@ namespace NYT::NFS {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "FS");
-
-////////////////////////////////////////////////////////////////////////////////
-
 namespace {
+
+YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "FS");
 
 [[maybe_unused]] void ThrowNotSupported()
 {
@@ -261,12 +260,12 @@ void CleanTempFiles(const TString& path)
     }
 }
 
-std::vector<TString> EnumerateFiles(const TString& path, int depth)
+std::vector<TString> EnumerateFiles(const TString& path, int depth, bool sortByName)
 {
     std::vector<TString> result;
     if (NFS::Exists(path)) {
         TFileList list;
-        list.Fill(path, TStringBuf(), TStringBuf(), depth);
+        list.Fill(path, TStringBuf(), TStringBuf(), depth, sortByName);
         int size = list.Size();
         for (int i = 0; i < size; ++i) {
             result.push_back(list.Next());
@@ -385,7 +384,7 @@ TPathStatistics GetPathStatistics(const TString& path)
     statistics.ModificationTime = TInstant::Seconds(fileStat.st_mtime);
     statistics.AccessTime = TInstant::Seconds(fileStat.st_atime);
     statistics.INode = fileStat.st_ino;
-    statistics.DeviceId = fileStat.st_dev;
+    statistics.DeviceId = {major(fileStat.st_dev), minor(fileStat.st_dev)};
 
     return statistics;
 #else
@@ -826,8 +825,9 @@ void WrapIOErrors(std::function<void()> func)
         auto status = ex.Status();
         switch (status) {
             case ENOMEM:
-                fprintf(stderr, "Out-of-memory condition detected during I/O operation; terminating\n");
-                AbortProcess(ToUnderlying(EProcessExitCode::OutOfMemory));
+                AbortProcessDramatically(
+                    EProcessExitCode::OutOfMemory,
+                    "Out-of-memory on I/O operation");
                 break;
 
             case EIO:
@@ -1159,10 +1159,11 @@ TError AttachFindOutput(TError error, const TString& path)
         << TErrorAttribute("find_output", findOutput);
 }
 
-int GetDeviceId(const TString& path)
+TDeviceId GetDeviceId(const TString& path)
 {
 #ifdef _linux_
-    return Stat(path).st_dev;
+    auto deviceId = Stat(path).st_dev;
+    return {major(deviceId), minor(deviceId)};
 #else
     Y_UNUSED(path);
     YT_UNIMPLEMENTED();

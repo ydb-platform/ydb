@@ -183,7 +183,7 @@ std::unique_ptr<ITreeBuilder> CreateBuilderFromFactory(
     INodeFactory* factory,
     int treeSizeLimit)
 {
-    return std::unique_ptr<ITreeBuilder>(new TTreeBuilder(std::move(factory), treeSizeLimit));
+    return std::unique_ptr<ITreeBuilder>(new TTreeBuilder(factory, treeSizeLimit));
 }
 
 std::unique_ptr<ITreeBuilder> CreateBuilderFromFactory(

@@ -2,8 +2,6 @@ UNITTEST_FOR(ydb/core/tx/tx_allocator)
 
 FORK_SUBTESTS()
 
-TIMEOUT(600)
-
 SIZE(MEDIUM)
 
 PEERDIR(

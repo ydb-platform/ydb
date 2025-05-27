@@ -64,6 +64,14 @@ void TMemoryChanges::GrabIndex(TSchemeShard* ss, const TPathId& pathId) {
     Grab<TTableIndexInfo>(pathId, ss->Indexes, Indexes);
 }
 
+void TMemoryChanges::GrabNewSequence(TSchemeShard* ss, const TPathId& pathId) {
+    GrabNew(pathId, ss->Sequences, Sequences);
+}
+
+void TMemoryChanges::GrabSequence(TSchemeShard* ss, const TPathId& pathId) {
+    Grab<TSequenceInfo>(pathId, ss->Sequences, Sequences);
+}
+
 void TMemoryChanges::GrabNewCdcStream(TSchemeShard* ss, const TPathId& pathId) {
     GrabNew(pathId, ss->CdcStreams, CdcStreams);
 }
@@ -108,6 +116,18 @@ void TMemoryChanges::GrabResourcePool(TSchemeShard* ss, const TPathId& pathId) {
     Grab<TResourcePoolInfo>(pathId, ss->ResourcePools, ResourcePools);
 }
 
+void TMemoryChanges::GrabBackupCollection(TSchemeShard* ss, const TPathId& pathId) {
+    Grab<TBackupCollectionInfo>(pathId, ss->BackupCollections, BackupCollections);
+}
+
+void TMemoryChanges::GrabNewSysView(TSchemeShard* ss, const TPathId& pathId) {
+    GrabNew(pathId, ss->SysViews, SysViews);
+}
+
+void TMemoryChanges::GrabSysView(TSchemeShard* ss, const TPathId& pathId) {
+    Grab<TSysViewInfo>(pathId, ss->SysViews, SysViews);
+}
+
 void TMemoryChanges::UnDo(TSchemeShard* ss) {
     // be aware of the order of grab & undo ops
     // stack is the best way to manage it right
@@ -130,6 +150,16 @@ void TMemoryChanges::UnDo(TSchemeShard* ss) {
             ss->Indexes.erase(id);
         }
         Indexes.pop();
+    }
+
+    while (Sequences) {
+        const auto& [id, elem] = Sequences.top();
+        if (elem) {
+            ss->Sequences[id] = elem;
+        } else {
+            ss->Sequences.erase(id);
+        }
+        Sequences.pop();
     }
 
     while (CdcStreams) {
@@ -183,7 +213,7 @@ void TMemoryChanges::UnDo(TSchemeShard* ss) {
             ss->ShardInfos[id] = *elem;
         } else {
             ss->ShardInfos.erase(id);
-            ss->ShardRemoved(id);
+            ss->OnShardRemoved(id);
         }
         Shards.pop();
     }
@@ -243,6 +273,16 @@ void TMemoryChanges::UnDo(TSchemeShard* ss) {
             ss->ResourcePools.erase(id);
         }
         ResourcePools.pop();
+    }
+
+    while (SysViews) {
+        const auto& [id, elem] = SysViews.top();
+        if (elem) {
+            ss->SysViews[id] = elem;
+        } else {
+            ss->SysViews.erase(id);
+        }
+        SysViews.pop();
     }
 }
 

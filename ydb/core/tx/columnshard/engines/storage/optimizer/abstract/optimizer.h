@@ -5,19 +5,20 @@
 #include <ydb/library/conclusion/result.h>
 #include <ydb/services/bg_tasks/abstract/interface.h>
 
-#include <library/cpp/object_factory/object_factory.h>
-
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
+#include <library/cpp/object_factory/object_factory.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 
 namespace NKikimr::NOlap {
 class TColumnEngineChanges;
 class IStoragesManager;
 class TGranuleMeta;
 class TPortionInfo;
+class TPortionAccessorConstructor;
 namespace NDataLocks {
 class TManager;
 }
-}
+}   // namespace NKikimr::NOlap
 
 namespace NKikimr::NOlap::NStorageOptimizer {
 
@@ -28,10 +29,13 @@ private:
     TOptimizationPriority(const i64 level, const i64 levelWeight)
         : Level(level)
         , InternalLevelWeight(levelWeight) {
-
     }
 
 public:
+    ui64 GetGeneralPriority() const {
+        return ((ui64)Level << 56) + InternalLevelWeight;
+    }
+
     bool operator<(const TOptimizationPriority& item) const {
         return std::tie(Level, InternalLevelWeight) < std::tie(item.Level, item.InternalLevelWeight);
     }
@@ -55,7 +59,6 @@ public:
     static TOptimizationPriority Zero() {
         return TOptimizationPriority(0, 0);
     }
-
 };
 
 class TTaskDescription {
@@ -66,11 +69,10 @@ private:
     YDB_ACCESSOR_DEF(TString, Details);
     YDB_ACCESSOR_DEF(ui64, WeightCategory);
     YDB_ACCESSOR_DEF(i64, Weight);
+
 public:
     TTaskDescription(const ui64 taskId)
-        : TaskId(taskId)
-    {
-
+        : TaskId(taskId) {
     }
 
     bool operator<(const TTaskDescription& item) const {
@@ -80,11 +82,17 @@ public:
 
 class IOptimizerPlanner {
 private:
-    const ui64 PathId;
+    const TInternalPathId PathId;
     YDB_READONLY(TInstant, ActualizationInstant, TInstant::Zero());
+
+    virtual bool DoIsOverloaded() const {
+        return false;
+    }
 protected:
-    virtual void DoModifyPortions(const THashMap<ui64, std::shared_ptr<TPortionInfo>>& add, const THashMap<ui64, std::shared_ptr<TPortionInfo>>& remove) = 0;
-    virtual std::shared_ptr<TColumnEngineChanges> DoGetOptimizationTask(std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const = 0;
+    virtual void DoModifyPortions(const THashMap<ui64, std::shared_ptr<TPortionInfo>>& add,
+        const THashMap<ui64, std::shared_ptr<TPortionInfo>>& remove) = 0;
+    virtual std::shared_ptr<TColumnEngineChanges> DoGetOptimizationTask(
+        std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const = 0;
     virtual TOptimizationPriority DoGetUsefulMetric() const = 0;
     virtual void DoActualize(const TInstant currentInstant) = 0;
     virtual TString DoDebugString() const {
@@ -95,12 +103,23 @@ protected:
     }
     virtual bool DoIsLocked(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const = 0;
     virtual std::vector<TTaskDescription> DoGetTasksDescription() const = 0;
+    virtual TConclusionStatus DoCheckWriteData() const {
+        return TConclusionStatus::Success();
+    }
 
 public:
-    IOptimizerPlanner(const ui64 pathId)
-        : PathId(pathId)
-    {
+    virtual ui32 GetAppropriateLevel(const ui32 baseLevel, const TPortionAccessorConstructor& /*info*/) const {
+        return baseLevel;
+    }
 
+    IOptimizerPlanner(const TInternalPathId pathId)
+        : PathId(pathId) {
+    }
+    bool IsOverloaded() const {
+        return DoIsOverloaded();
+    }
+    TConclusionStatus CheckWriteData() const {
+        return DoCheckWriteData();
     }
 
     std::vector<TTaskDescription> GetTasksDescription() const {
@@ -112,13 +131,13 @@ public:
         IOptimizerPlanner& Owner;
         THashMap<ui64, std::shared_ptr<TPortionInfo>> AddPortions;
         THashMap<ui64, std::shared_ptr<TPortionInfo>> RemovePortions;
+
     public:
         TModificationGuard& AddPortion(const std::shared_ptr<TPortionInfo>& portion);
         TModificationGuard& RemovePortion(const std::shared_ptr<TPortionInfo>& portion);
 
         TModificationGuard(IOptimizerPlanner& owner)
-            : Owner(owner)
-        {
+            : Owner(owner) {
         }
         ~TModificationGuard() {
             Owner.ModifyPortions(AddPortions, RemovePortions);
@@ -135,20 +154,19 @@ public:
     }
 
     virtual NArrow::NMerger::TIntervalPositions GetBucketPositions() const = 0;
-    bool IsLocked(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const {
-        return DoIsLocked(dataLocksManager);
-    }
 
     NJson::TJsonValue SerializeToJsonVisual() const {
         return DoSerializeToJsonVisual();
     }
 
-    void ModifyPortions(const THashMap<ui64, std::shared_ptr<TPortionInfo>>& add, const THashMap<ui64, std::shared_ptr<TPortionInfo>>& remove) {
+    void ModifyPortions(const THashMap<ui64, std::shared_ptr<TPortionInfo>>& add,
+        const THashMap<ui64, std::shared_ptr<TPortionInfo>>& remove) {
         NActors::TLogContextGuard g(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("path_id", PathId));
         DoModifyPortions(add, remove);
     }
 
-    std::shared_ptr<TColumnEngineChanges> GetOptimizationTask(std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const;
+    std::shared_ptr<TColumnEngineChanges> GetOptimizationTask(
+        std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const;
     TOptimizationPriority GetUsefulMetric() const {
         return DoGetUsefulMetric();
     }
@@ -162,30 +180,29 @@ class IOptimizerPlannerConstructor {
 public:
     class TBuildContext {
     private:
-        YDB_READONLY(ui64, PathId, 0);
+        YDB_READONLY_DEF(TInternalPathId, PathId);
         YDB_READONLY_DEF(std::shared_ptr<IStoragesManager>, Storages);
         YDB_READONLY_DEF(std::shared_ptr<arrow::Schema>, PKSchema);
+
     public:
-        TBuildContext(const ui64 pathId, const std::shared_ptr<IStoragesManager>& storages, const std::shared_ptr<arrow::Schema>& pkSchema)
+        TBuildContext(const TInternalPathId pathId, const std::shared_ptr<IStoragesManager>& storages, const std::shared_ptr<arrow::Schema>& pkSchema)
             : PathId(pathId)
             , Storages(storages)
             , PKSchema(pkSchema) {
-
         }
     };
 
     using TFactory = NObjectFactory::TObjectFactory<IOptimizerPlannerConstructor, TString>;
     using TProto = NKikimrSchemeOp::TCompactionPlannerConstructorContainer;
+
 private:
     virtual TConclusion<std::shared_ptr<IOptimizerPlanner>> DoBuildPlanner(const TBuildContext& context) const = 0;
     virtual void DoSerializeToProto(TProto& proto) const = 0;
     virtual bool DoDeserializeFromProto(const TProto& proto) = 0;
-    virtual bool DoIsEqualTo(const IOptimizerPlannerConstructor& item) const = 0;
     virtual TConclusionStatus DoDeserializeFromJson(const NJson::TJsonValue& jsonInfo) = 0;
     virtual bool DoApplyToCurrentObject(IOptimizerPlanner& current) const = 0;
 
 public:
-
     static std::shared_ptr<IOptimizerPlannerConstructor> BuildDefault() {
         auto result = TFactory::MakeHolder("l-buckets");
         AFL_VERIFY(!!result);
@@ -216,21 +233,22 @@ public:
 
     bool IsEqualTo(const std::shared_ptr<IOptimizerPlannerConstructor>& item) const {
         AFL_VERIFY(!!item);
-        if (GetClassName() != item->GetClassName()) {
-            return false;
-        }
-        return DoIsEqualTo(*item);
+        TProto selfProto;
+        TProto itemProto;
+        SerializeToProto(selfProto);
+        item->SerializeToProto(itemProto);
+        return selfProto.SerializeAsString() == itemProto.SerializeAsString();
     }
 
     bool DeserializeFromProto(const TProto& proto) {
         return DoDeserializeFromProto(proto);
     }
-
 };
 
 class TOptimizerPlannerConstructorContainer: public NBackgroundTasks::TInterfaceProtoContainer<IOptimizerPlannerConstructor> {
 private:
     using TBase = NBackgroundTasks::TInterfaceProtoContainer<IOptimizerPlannerConstructor>;
+
 public:
     using TBase::TBase;
 
@@ -241,7 +259,6 @@ public:
         }
         return result;
     }
-
 };
 
-} // namespace NKikimr::NOlap
+}   // namespace NKikimr::NOlap::NStorageOptimizer

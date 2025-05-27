@@ -91,22 +91,26 @@ def main():
     tablet_ids = create_tablet(args.owner_idx, args.channels, args.count)
     print('TabletIds# %s' % ', '.join(map(str, tablet_ids)))
 
-    if args.action == 'initialize':
-        cmd = text_format.Parse(args.proto_file.read(), TTestShardControlRequest.TCmdInitialize())
-        if args.tsserver is not None:
-            host, sep, port = args.tsserver.partition(':')
-            port = int(port) if sep else default_tsserver_port
-            sockaddr = None
-            for _, _, _, _, sockaddr in socket.getaddrinfo(host, port, socket.AF_INET6):
-                break
-            if sockaddr is None:
-                print('Failed to resolve hostname %s' % host, file=sys.stderr)
-                sys.exit(1)
-            cmd.StorageServerHost = sockaddr[0]
-        with multiprocessing.Pool(None) as p:
-            status = 0
-            for r in p.imap_unordered(init_tablet, ((tablet_id, cmd) for tablet_id in tablet_ids), 1):
-                if r is not None:
-                    sys.stderr.write(r)
-                    status = 1
-            sys.exit(status)
+    try:
+        if args.action == 'initialize':
+            cmd = text_format.Parse(args.proto_file.read(), TTestShardControlRequest.TCmdInitialize())
+            if args.tsserver is not None:
+                host, sep, port = args.tsserver.partition(':')
+                port = int(port) if sep else default_tsserver_port
+                sockaddr = None
+                for _, _, _, _, sockaddr in socket.getaddrinfo(host, port, socket.AF_INET6):
+                    break
+                if sockaddr is None:
+                    print('Failed to resolve hostname %s' % host, file=sys.stderr)
+                    sys.exit(1)
+                cmd.StorageServerHost = sockaddr[0]
+            with multiprocessing.Pool(None) as p:
+                status = 0
+                for r in p.imap_unordered(init_tablet, ((tablet_id, cmd) for tablet_id in tablet_ids), 1):
+                    if r is not None:
+                        sys.stderr.write(r)
+                        status = 1
+                sys.exit(status)
+    finally:
+        if args.proto_file:
+            args.proto_file.close()

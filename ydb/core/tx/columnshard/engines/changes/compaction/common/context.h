@@ -1,8 +1,10 @@
 #pragma once
-#include <ydb/core/formats/arrow/splitter/stats.h>
+#include <ydb/core/tx/columnshard/counters/indexation.h>
 #include <ydb/core/tx/columnshard/engines/scheme/abstract_scheme.h>
 #include <ydb/core/tx/columnshard/engines/scheme/column_features.h>
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
+
+#include <ydb/library/formats/arrow/splitter/stats.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
 
@@ -58,17 +60,6 @@ public:
         , ColumnStat(columnStat)
         , IndexInfo(schema->GetIndexInfo()) {
         Y_ABORT_UNLESS(ChunkRawBytesLimit);
-    }
-};
-
-class TChunkMergeContext {
-private:
-    YDB_READONLY(ui32, PortionRowsCountLimit, 10000);
-
-public:
-    TChunkMergeContext(const ui32 portionRowsCountLimit)
-        : PortionRowsCountLimit(portionRowsCountLimit) {
-        Y_ABORT_UNLESS(PortionRowsCountLimit);
     }
 };
 }   // namespace NKikimr::NOlap::NCompaction

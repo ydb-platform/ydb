@@ -1,13 +1,14 @@
 #include "yql_generic_provider_impl.h"
 
-#include <ydb/library/yql/ast/yql_type_string.h>
-#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
-#include <ydb/library/yql/providers/common/mkql/parser.h>
-#include <ydb/library/yql/providers/common/provider/yql_data_provider_impl.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/ast/yql_type_string.h>
+#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
+#include <ydb/library/yql/providers/dq/mkql/parser.h>
+#include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
+#include <yql/essentials/providers/common/provider/yql_provider.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
+#include <ydb/library/yql/providers/common/pushdown/type_ann.h>
 #include <ydb/library/yql/providers/generic/expr_nodes/yql_generic_expr_nodes.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/utils/log/log.h>
 
 // You may want to change AST, graph nodes, types, but finally you'll
 // return to the existing structure, inherited from ClickHouse and S3 providers.
@@ -26,6 +27,7 @@ namespace NYql {
         {
             using TSelf = TGenericDataSourceTypeAnnotationTransformer;
             AddHandler({TCoConfigure::CallableName()}, Hndl(&TSelf::HandleConfig));
+            AddHandler({TGenTable::CallableName()}, Hndl(&TSelf::HandleTable));
             AddHandler({TGenReadTable::CallableName()}, Hndl(&TSelf::HandleReadTable));
             AddHandler({TGenSourceSettings::CallableName()}, Hndl(&TSelf::HandleSourceSettings));
         }
@@ -47,36 +49,26 @@ namespace NYql {
             return TStatus::Ok;
         }
 
-        TStatus AnnotateFilterPredicate(const TExprNode::TPtr& input, size_t childIndex, const TStructExprType* itemType, TExprContext& ctx) {
-            if (childIndex >= input->ChildrenSize()) {
+        TStatus HandleTable(const TExprNode::TPtr& input, TExprContext& ctx) {
+            if (!EnsureArgsCount(*input, 1, ctx)) {
                 return TStatus::Error;
             }
 
-            auto& filterLambda = input->ChildRef(childIndex);
-            if (!EnsureLambda(*filterLambda, ctx)) {
+            if (!EnsureAtom(*input->Child(TGenTable::idx_Name), ctx)) {
                 return TStatus::Error;
             }
 
-            if (!UpdateLambdaAllArgumentsTypes(filterLambda, {itemType}, ctx)) {
-                return IGraphTransformer::TStatus::Error;
-            }
+            input->SetTypeAnn(ctx.MakeType<TUnitExprType>());
 
-            if (const auto* filterLambdaType = filterLambda->GetTypeAnn()) {
-                if (filterLambdaType->GetKind() != ETypeAnnotationKind::Data) {
-                    return IGraphTransformer::TStatus::Error;
-                }
-                const TDataExprType* dataExprType = static_cast<const TDataExprType*>(filterLambdaType);
-                if (dataExprType->GetSlot() != EDataSlot::Bool) {
-                    return IGraphTransformer::TStatus::Error;
-                }
-            } else {
-                return IGraphTransformer::TStatus::Repeat;
-            }
             return TStatus::Ok;
         }
 
         TStatus HandleSourceSettings(const TExprNode::TPtr& input, TExprContext& ctx) {
-            if (!EnsureArgsCount(*input, 5, ctx)) {
+            if (!EnsureArgsCount(*input, 6, ctx)) {
+                return TStatus::Error;
+            }
+
+            if (!EnsureWorldType(*input->Child(TGenSourceSettings::idx_World), ctx)) {
                 return TStatus::Error;
             }
 
@@ -104,16 +96,18 @@ namespace NYql {
                 columnSet.insert(child->Content());
             }
 
-            auto [tableMeta, issue] = State_->GetTable(clusterName, tableName, ctx.GetPosition(input->Pos()));
-            if (issue.has_value()) {
-                ctx.AddError(issue.value());
+            auto [tableMeta, issues] = State_->GetTable({clusterName, tableName});
+            if (issues) {
+                for (const auto& issue : issues) {
+                    ctx.AddError(issue);
+                }
                 return TStatus::Error;
             }
 
             // Create type annotation
             TVector<const TItemExprType*> blockRowTypeItems;
 
-            const auto structExprType = tableMeta.value()->ItemType;
+            const auto structExprType = tableMeta->ItemType;
             for (const auto& item : structExprType->GetItems()) {
                 // Filter out columns that are not required in this query
                 if (columnSet.contains(item->GetName())) {
@@ -123,7 +117,7 @@ namespace NYql {
             }
 
             // Filter
-            const TStatus filterAnnotationStatus = AnnotateFilterPredicate(input, TGenSourceSettings::idx_FilterPredicate, structExprType, ctx);
+            const TStatus filterAnnotationStatus = NYql::NPushdown::AnnotateFilterPredicate(input, TGenSourceSettings::idx_FilterPredicate, structExprType, ctx);
             if (filterAnnotationStatus != TStatus::Ok) {
                 return filterAnnotationStatus;
             }
@@ -154,7 +148,7 @@ namespace NYql {
                 return TStatus::Error;
             }
 
-            if (!EnsureAtom(*input->Child(TGenReadTable::idx_Table), ctx)) {
+            if (!EnsureCallable(*input->Child(TGenReadTable::idx_Table), ctx)) {
                 return TStatus::Error;
             }
 
@@ -180,17 +174,31 @@ namespace NYql {
                 }
             }
 
+            // Determine cluster name
             TString clusterName{input->Child(TGenReadTable::idx_DataSource)->Child(1)->Content()};
-            TString tableName{input->Child(TGenReadTable::idx_Table)->Content()};
 
-            auto [tableMeta, issue] = State_->GetTable(clusterName, tableName, ctx.GetPosition(input->Pos()));
-            if (issue.has_value()) {
-                ctx.AddError(issue.value());
+            // Determine table name
+            const auto tableNode = input->Child(TGenReadTable::idx_Table);
+            if (!TGenTable::Match(tableNode)) {
+                ctx.AddError(TIssue(ctx.GetPosition(tableNode->Pos()),
+                                    TStringBuilder() << "Expected " << TGenTable::CallableName()));
                 return TStatus::Error;
             }
 
-            auto itemType = tableMeta.value()->ItemType;
-            auto columnOrder = tableMeta.value()->ColumnOrder;
+            TGenTable table(tableNode);
+            const auto tableName = table.Name().StringValue();
+
+            // Extract table metadata
+            auto [tableMeta, issues] = State_->GetTable({clusterName, tableName});
+            if (issues) {
+                for (const auto& issue : issues) {
+                    ctx.AddError(issue);
+                }
+                return TStatus::Error;
+            }
+
+            auto itemType = tableMeta->ItemType;
+            auto columnOrder = tableMeta->ColumnOrder;
 
             if (columnSet) {
                 YQL_CLOG(INFO, ProviderGeneric) << "custom column set" << ColumnSetToString(*columnSet.Get());
@@ -204,7 +212,7 @@ namespace NYql {
             }
 
             // Filter
-            const TStatus filterAnnotationStatus = AnnotateFilterPredicate(input, TGenReadTable::idx_FilterPredicate, itemType, ctx);
+            const TStatus filterAnnotationStatus = NYql::NPushdown::AnnotateFilterPredicate(input, TGenReadTable::idx_FilterPredicate, itemType, ctx);
             if (filterAnnotationStatus != TStatus::Ok) {
                 return filterAnnotationStatus;
             }

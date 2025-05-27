@@ -6,6 +6,7 @@ SIZE(MEDIUM)
 
 SRCS(
     enum_indexed_array_ut.cpp
+    expiring_set_ut.cpp
     sharded_set_ut.cpp
 )
 

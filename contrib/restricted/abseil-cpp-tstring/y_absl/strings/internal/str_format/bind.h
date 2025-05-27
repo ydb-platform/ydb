@@ -172,8 +172,10 @@ class FormatSpecTemplate
   template <FormatConversionCharSet... C>
   FormatSpecTemplate(const ExtendedParsedFormat<C...>& pc)  // NOLINT
       : Base(&pc) {
+#ifndef __NVCC__
     CheckArity<sizeof...(C), sizeof...(Args)>();
     CheckMatches<C...>(y_absl::make_index_sequence<sizeof...(C)>{});
+#endif
   }
 };
 

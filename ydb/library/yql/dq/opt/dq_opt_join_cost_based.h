@@ -1,12 +1,12 @@
 #pragma once
 
-#include <ydb/library/yql/core/cbo/cbo_optimizer_new.h> 
-#include <ydb/library/yql/core/expr_nodes_gen/yql_expr_nodes_gen.h>
-#include <ydb/library/yql/core/yql_type_annotation.h>
+#include <yql/essentials/core/cbo/cbo_optimizer_new.h>
+#include <yql/essentials/core/expr_nodes_gen/yql_expr_nodes_gen.h>
+#include <yql/essentials/core/yql_type_annotation.h>
 
 namespace NYql::NDq {
 
-using TProviderCollectFunction = 
+using TProviderCollectFunction =
     std::function<void(TVector<std::shared_ptr<TRelOptimizerNode>>&, TStringBuf, const TExprNode::TPtr, const std::shared_ptr<TOptimizerStatistics>&)>;
 
 /*
@@ -24,8 +24,7 @@ NYql::NNodes::TExprBase DqOptimizeEquiJoinWithCosts(
     ui32 optLevel,
     IOptimizerNew& opt,
     const TProviderCollectFunction& providerCollect,
-    TCardinalityHints hints = {},
-    TJoinAlgoHints joinHints = {}
+    const TOptimizerHints& hints = {}
 );
 
 NYql::NNodes::TExprBase DqOptimizeEquiJoinWithCosts(
@@ -36,8 +35,9 @@ NYql::NNodes::TExprBase DqOptimizeEquiJoinWithCosts(
     IOptimizerNew& opt,
     const TProviderCollectFunction& providerCollect,
     int& equiJoinCounter,
-    TCardinalityHints hints = {},
-    TJoinAlgoHints joinHints = {}
+    const TOptimizerHints& hints = {}
 );
+
+IOptimizerNew* MakeNativeOptimizerNew(IProviderContext& ctx, const ui32 maxDPHypDPTableSize, TExprContext& ectx, bool enableShuffleElimination);
 
 } // namespace NYql::NDq

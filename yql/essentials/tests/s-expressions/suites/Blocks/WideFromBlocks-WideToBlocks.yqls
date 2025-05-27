@@ -1,0 +1,24 @@
+(
+# XXX: Explicitly enable PeepHoleBlock and PeepHoleFinalBlock steps.
+(let world (Configure! world (DataSource 'config) 'BlockEngine 'force))
+(let wconf (DataSink 'result))
+
+(let x1 (AsStruct '('"x" (Int32 '"1"))))
+(let x2 (AsStruct '('"x" (Int32 '"2"))))
+(let x3 (AsStruct '('"x" (Int32 '"3"))))
+(let x4 (AsStruct '('"x" (Int32 '"4"))))
+
+(let list (AsList x1 x2 x3 x4))
+
+(let expandLambda (lambda '(item) (Member item '"x")))
+(let wideStream (FromFlow (ExpandMap (ToFlow list) expandLambda)))
+
+(let nopFromBlocksToBlocks (WideFromBlocks (WideToBlocks wideStream)))
+
+(let narrowLambda (lambda '(x) (AsStruct '('"x" x))))
+(let scalarList (ForwardList (NarrowMap (ToFlow nopFromBlocksToBlocks) narrowLambda)))
+
+(let world (Write! world wconf (Key) scalarList '('('type))))
+(let world (Commit! world wconf))
+(return world)
+)

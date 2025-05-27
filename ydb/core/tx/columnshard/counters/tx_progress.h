@@ -1,5 +1,5 @@
 #pragma once
-#include "common/owner.h"
+#include <ydb/library/signals/owner.h>
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <util/generic/hash.h>
@@ -24,6 +24,9 @@ private:
         NMonitoring::TDynamicCounters::TCounterPtr FinishProposeOnComplete;
         NMonitoring::TDynamicCounters::TCounterPtr FinishPlannedTx;
         NMonitoring::TDynamicCounters::TCounterPtr AbortTx;
+        NMonitoring::THistogramPtr HistogramTxExecuteDuration;
+        NMonitoring::THistogramPtr HistogramTxLiveDuration;
+        NMonitoring::THistogramPtr HistogramTxProgressLag;
 
         TProgressCounters(const TCommonCountersOwner& owner)
             : TBase(owner)
@@ -34,13 +37,28 @@ private:
             , FinishProposeOnExecute(TBase::GetDeriviative("FinishProposeOnExecute"))
             , FinishProposeOnComplete(TBase::GetDeriviative("FinishProposeOnComplete"))
             , FinishPlannedTx(TBase::GetDeriviative("FinishPlannedTx"))
-            , AbortTx(TBase::GetDeriviative("AbortTx")) {
+            , AbortTx(TBase::GetDeriviative("AbortTx"))
+            , HistogramTxExecuteDuration(TBase::GetHistogram("TxProgress/Execution/DurationMs", NMonitoring::ExponentialHistogram(18, 2, 5)))
+            , HistogramTxLiveDuration(TBase::GetHistogram("TxProgress/Live/DurationMs", NMonitoring::ExponentialHistogram(18, 2, 5)))
+            , HistogramTxProgressLag(TBase::GetHistogram("TxProgress/LagOnComplete/DurationMs", NMonitoring::ExponentialHistogram(18, 2, 5))) {
         }
     };
 
     THashMap<TOpType, TProgressCounters> CountersByOpType;
 
 public:
+    void OnTxExecuteDuration(const TString& opType, const TDuration d) {
+        GetSubGroup(opType).HistogramTxExecuteDuration->Collect(d.MilliSeconds());
+    }
+
+    void OnTxLiveDuration(const TString& opType, const TDuration d) {
+        GetSubGroup(opType).HistogramTxLiveDuration->Collect(d.MilliSeconds());
+    }
+
+    void OnTxProgressLag(const TString& opType, const TDuration d) {
+        GetSubGroup(opType).HistogramTxProgressLag->Collect(d.MilliSeconds());
+    }
+
     void OnRegisterTx(const TOpType& opType) {
         GetSubGroup(opType).RegisterTx->Add(1);
     }

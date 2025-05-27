@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/library/yql/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 
 #include <util/datetime/base.h>
 

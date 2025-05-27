@@ -1,18 +1,18 @@
 #include "yql_dq_gateway.h"
 
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/providers/dq/api/grpc/api.grpc.pb.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_common.h>
 #include <ydb/library/yql/providers/dq/actors/proto_builder.h>
-#include <ydb/library/yql/utils/backtrace/backtrace.h>
-#include <ydb/library/yql/utils/failure_injector/failure_injector.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/utils/backtrace/backtrace.h>
+#include <yql/essentials/utils/failure_injector/failure_injector.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 #include <ydb/library/yql/providers/dq/config/config.pb.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/utils/log/log.h>
 
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
 
-#include <ydb/library/grpc/client/grpc_client_low.h>
+#include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
 
 #include <library/cpp/yson/node/node_io.h>
 #include <library/cpp/threading/task_scheduler/task_scheduler.h>
@@ -176,6 +176,7 @@ public:
 
         bool error = false;
         bool fallback = false;
+        result.Timeout = resp.GetTimeout();
 
         if (status.Ok()) {
             YQL_CLOG(TRACE, ProviderDq) << "TDqGateway::Ok";
@@ -236,15 +237,24 @@ public:
                     rows.emplace_back(std::move(batch));
                 }
 
-                NYql::NDqs::TProtoBuilder protoBuilder(resultFormatSettings.ResultType, resultFormatSettings.Columns);
-
-                bool ysonTruncated = false;
-                result.Data = protoBuilder.BuildYson(std::move(rows), resultFormatSettings.SizeLimit.GetOrElse(Max<ui64>()),
-                    resultFormatSettings.RowsLimit.GetOrElse(Max<ui64>()), &ysonTruncated);
-
-                result.Truncated = result.Truncated || ysonTruncated;
                 result.AddIssues(issues);
-                result.SetSuccess();
+                try {
+                    NYql::NDqs::TProtoBuilder protoBuilder(resultFormatSettings.ResultType, resultFormatSettings.Columns);
+
+                    bool ysonTruncated = false;
+                    result.Data = protoBuilder.BuildYson(std::move(rows),
+                        result.Truncated ? resultFormatSettings.SizeLimit.GetOrElse(Max<ui64>()) : Max<ui64>(),
+                        result.Truncated ? resultFormatSettings.RowsLimit.GetOrElse(Max<ui64>()) : Max<ui64>(),
+                        &ysonTruncated);
+
+                    result.Truncated = result.Truncated || ysonTruncated;
+                    result.SetSuccess();
+                } catch (...) {
+                    YQL_CLOG(ERROR, ProviderDq) << "Failed to build yson result: " << CurrentExceptionMessage();
+                    error = true;
+                    auto issue = TIssue("Failed to build query result (probably due to malformed UDF)");
+                    result.AddIssue(issue.SetCode(TIssuesIds::DQ_GATEWAY_ERROR, TSeverityIds::S_ERROR));
+                }
             } else {
                 YQL_CLOG(ERROR, ProviderDq) << "Issue " << issues.ToString();
                 result.AddIssues(issues);
@@ -548,6 +558,7 @@ public:
         , Service(GrpcClient.CreateGRpcServiceConnection<Yql::DqsProto::DqService>(GrpcConf))
         , TaskScheduler()
         , OpenSessionTimeout(timeout)
+        , IsStopped(false)
     {
         TaskScheduler.Start();
     }
@@ -557,6 +568,11 @@ public:
     }
 
     void Stop() {
+        bool expected = false;
+        if (!IsStopped.compare_exchange_strong(expected, true)) {
+            return;
+        }
+
         decltype(Sessions) sessions;
         with_lock (Mutex) {
             sessions = std::move(Sessions);
@@ -620,7 +636,7 @@ public:
             } else {
                 YQL_CLOG(ERROR, ProviderDq) << "OpenSession error: " << status.Msg;
                 this_->DropSession(sessionId);
-                promise.SetException(status.Msg);
+                promise.SetException(TString{status.Msg});
             }
         };
 
@@ -719,6 +735,8 @@ private:
 
     TMutex Mutex;
     THashMap<TString, std::shared_ptr<TDqGatewaySession>> Sessions;
+
+    std::atomic<bool> IsStopped;
 };
 
 class TDqGateway: public IDqGateway {
@@ -731,6 +749,7 @@ public:
     }
 
     ~TDqGateway() {
+        Stop();
     }
 
     void Stop() override {

@@ -7,10 +7,10 @@ SRCS(
 PEERDIR(
     library/cpp/retry
     ydb/core/testlib/basics
-    ydb/library/yql/minikql/computation
-    ydb/library/yql/public/udf/service/exception_policy
-    ydb/library/yql/sql
-    ydb/library/yql/providers/common/comp_nodes
+    yql/essentials/minikql/computation
+    yql/essentials/public/udf/service/exception_policy
+    yql/essentials/sql
+    yql/essentials/providers/common/comp_nodes
 )
 
 YQL_LAST_ABI_VERSION()

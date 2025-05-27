@@ -18,7 +18,7 @@
 
 namespace NYT::NHttps {
 
-static constexpr auto& Logger = NHttp::HttpLogger;
+constinit const auto Logger = NHttp::HttpLogger;
 
 using namespace NNet;
 using namespace NHttp;
@@ -160,7 +160,11 @@ IServerPtr CreateServer(
 
     auto configCopy = CloneYsonStruct(config);
     configCopy->IsHttps = true;
-    auto httpServer = NHttp::CreateServer(configCopy, tlsListener, poller, acceptor);
+    auto httpServer = NHttp::CreateServer(
+        configCopy,
+        tlsListener,
+        poller,
+        acceptor);
 
     return New<TServer>(std::move(httpServer), std::move(certificateUpdater));
 }

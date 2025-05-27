@@ -19,12 +19,13 @@ from typing import (
     Any,
     BinaryIO,
     Callable,
-    Dict,
     Generator,
     Iterable,
     Iterator,
     List,
+    Mapping,
     Optional,
+    Sequence,
     TextIO,
     Tuple,
     Type,
@@ -129,12 +130,7 @@ def rmtree(
         onexc = _onerror_ignore
     if onexc is None:
         onexc = _onerror_reraise
-    handler: OnErr = partial(
-        # `[func, path, Union[ExcInfo, BaseException]] -> Any` is equivalent to
-        # `Union[([func, path, ExcInfo] -> Any), ([func, path, BaseException] -> Any)]`.
-        cast(Union[OnExc, OnErr], rmtree_errorhandler),
-        onexc=onexc,
-    )
+    handler: OnErr = partial(rmtree_errorhandler, onexc=onexc)
     if sys.version_info >= (3, 12):
         # See https://docs.python.org/3.12/whatsnew/3.12.html#shutil.
         shutil.rmtree(dir, onexc=handler)  # type: ignore
@@ -555,7 +551,7 @@ class HiddenText:
 
     # This is useful for testing.
     def __eq__(self, other: Any) -> bool:
-        if type(self) != type(other):
+        if type(self) is not type(other):
             return False
 
         # The string being used for redaction doesn't also have to match,
@@ -672,7 +668,7 @@ class ConfiguredBuildBackendHookCaller(BuildBackendHookCaller):
     def build_wheel(
         self,
         wheel_directory: str,
-        config_settings: Optional[Dict[str, Union[str, List[str]]]] = None,
+        config_settings: Optional[Mapping[str, Any]] = None,
         metadata_directory: Optional[str] = None,
     ) -> str:
         cs = self.config_holder.config_settings
@@ -683,7 +679,7 @@ class ConfiguredBuildBackendHookCaller(BuildBackendHookCaller):
     def build_sdist(
         self,
         sdist_directory: str,
-        config_settings: Optional[Dict[str, Union[str, List[str]]]] = None,
+        config_settings: Optional[Mapping[str, Any]] = None,
     ) -> str:
         cs = self.config_holder.config_settings
         return super().build_sdist(sdist_directory, config_settings=cs)
@@ -691,7 +687,7 @@ class ConfiguredBuildBackendHookCaller(BuildBackendHookCaller):
     def build_editable(
         self,
         wheel_directory: str,
-        config_settings: Optional[Dict[str, Union[str, List[str]]]] = None,
+        config_settings: Optional[Mapping[str, Any]] = None,
         metadata_directory: Optional[str] = None,
     ) -> str:
         cs = self.config_holder.config_settings
@@ -700,27 +696,27 @@ class ConfiguredBuildBackendHookCaller(BuildBackendHookCaller):
         )
 
     def get_requires_for_build_wheel(
-        self, config_settings: Optional[Dict[str, Union[str, List[str]]]] = None
-    ) -> List[str]:
+        self, config_settings: Optional[Mapping[str, Any]] = None
+    ) -> Sequence[str]:
         cs = self.config_holder.config_settings
         return super().get_requires_for_build_wheel(config_settings=cs)
 
     def get_requires_for_build_sdist(
-        self, config_settings: Optional[Dict[str, Union[str, List[str]]]] = None
-    ) -> List[str]:
+        self, config_settings: Optional[Mapping[str, Any]] = None
+    ) -> Sequence[str]:
         cs = self.config_holder.config_settings
         return super().get_requires_for_build_sdist(config_settings=cs)
 
     def get_requires_for_build_editable(
-        self, config_settings: Optional[Dict[str, Union[str, List[str]]]] = None
-    ) -> List[str]:
+        self, config_settings: Optional[Mapping[str, Any]] = None
+    ) -> Sequence[str]:
         cs = self.config_holder.config_settings
         return super().get_requires_for_build_editable(config_settings=cs)
 
     def prepare_metadata_for_build_wheel(
         self,
         metadata_directory: str,
-        config_settings: Optional[Dict[str, Union[str, List[str]]]] = None,
+        config_settings: Optional[Mapping[str, Any]] = None,
         _allow_fallback: bool = True,
     ) -> str:
         cs = self.config_holder.config_settings
@@ -733,9 +729,9 @@ class ConfiguredBuildBackendHookCaller(BuildBackendHookCaller):
     def prepare_metadata_for_build_editable(
         self,
         metadata_directory: str,
-        config_settings: Optional[Dict[str, Union[str, List[str]]]] = None,
+        config_settings: Optional[Mapping[str, Any]] = None,
         _allow_fallback: bool = True,
-    ) -> str:
+    ) -> Optional[str]:
         cs = self.config_holder.config_settings
         return super().prepare_metadata_for_build_editable(
             metadata_directory=metadata_directory,
@@ -769,7 +765,7 @@ def warn_if_run_as_root() -> None:
     logger.warning(
         "Running pip as the 'root' user can result in broken permissions and "
         "conflicting behaviour with the system package manager, possibly "
-        "rendering your system unusable."
+        "rendering your system unusable. "
         "It is recommended to use a virtual environment instead: "
         "https://pip.pypa.io/warnings/venv. "
         "Use the --root-user-action option if you know what you are doing and "

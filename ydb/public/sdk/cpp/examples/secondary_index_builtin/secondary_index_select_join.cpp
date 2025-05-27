@@ -1,17 +1,16 @@
 #include "secondary_index.h"
 
-#include <util/string/printf.h>
-
 using namespace NYdb;
 using namespace NYdb::NTable;
+using namespace NYdb::NStatusHelpers;
 using namespace NLastGetopt;
 
-TStatus SelectSeriesWithUserName(TSession session, const TString& path,
-            TVector<TSeries>& selectResult, const TString& name) {
+TStatus SelectSeriesWithUserName(TSession session, const std::string& path,
+            std::vector<TSeries>& selectResult, const std::string& name) {
 
-    auto queryText = Sprintf(R"(
+    auto queryText = std::format(R"(
         --!syntax_v1
-        PRAGMA TablePathPrefix("%s");
+        PRAGMA TablePathPrefix("{}");
 
         DECLARE $userName AS Utf8;
 
@@ -20,7 +19,7 @@ TStatus SelectSeriesWithUserName(TSession session, const TString& path,
         INNER JOIN `users` VIEW name_index AS t2
         ON t1.uploaded_user_id == t2.user_id
         WHERE t2.name == $userName;
-    )", path.c_str());
+    )", path);
 
     auto prepareResult = session.PrepareDataQuery(queryText).ExtractValueSync();
     if (!prepareResult.IsSuccess()) {
@@ -44,25 +43,25 @@ TStatus SelectSeriesWithUserName(TSession session, const TString& path,
     return result;
 }
 
-int SelectJoin(TDriver& driver, const TString& path, int argc, char **argv) {
+int SelectJoin(TDriver& driver, const std::string& path, int argc, char **argv) {
 
     TOpts opts = TOpts::Default();
 
-    TString name;
+    std::string name;
     opts.AddLongOption("name", "User name").Required().RequiredArgument("TYPE")
         .StoreResult(&name);
 
     TOptsParseResult res(&opts, argc, argv);
     TTableClient client(driver);
 
-    TVector<TSeries> selectResult;
+    std::vector<TSeries> selectResult;
 
     ThrowOnError(client.RetryOperationSync([path, &selectResult, name](TSession session) {
         return SelectSeriesWithUserName(session, path, selectResult, name);
     }));
 
     for (auto& item : selectResult) {
-        Cout << item.SeriesId << ' ' << item.Title << Endl;
+        std::cout << item.SeriesId << ' ' << item.Title << std::endl;
     }
 
     return 0;

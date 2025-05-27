@@ -155,11 +155,11 @@ static int __test_poll_cancel_with_timeouts(void)
 		return 1;
 	}
 
-	/* test timeout-offset triggering path during cancellation */
+	/* test timeout-offset triggering path during cancelation */
 	sqe = io_uring_get_sqe(&ring);
 	io_uring_prep_timeout(sqe, &ts, off_nr, 0);
 
-	/* poll ring2 to trigger cancellation on exit() */
+	/* poll ring2 to trigger cancelation on exit() */
 	sqe = io_uring_get_sqe(&ring);
 	io_uring_prep_poll_add(sqe, ring2.ring_fd, POLLIN);
 	sqe->flags |= IOSQE_IO_LINK;

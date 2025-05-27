@@ -717,7 +717,7 @@ struct TBusWww::TImpl {
                 os << HTTP_OK_BIN;
             }
             auto blob = NResource::Find(TString("/") + TString(path));
-            os.Write(blob.Data(), blob.Size());
+            os.Write(blob.data(), blob.size());
         }
 
         void HeaderJsCss() {

@@ -17,6 +17,7 @@ const auto& MockConfig = TFakeNodeWhiteboardService::Config;
 auto& MockNodes = TFakeNodeWhiteboardService::Info;
 
 static constexpr ui32 DefaultStateLimit = 5;
+static constexpr ui32 GoodStateLimit = 5;
 static constexpr ui32 DefaultErrorStateLimit = 60;
 auto DefaultStateLimits = NCms::TCmsSentinelConfig::DefaultStateLimits();
 
@@ -30,6 +31,7 @@ static constexpr NCms::EPDiskState ErrorStates[] = {
     NKikimrBlobStorage::TPDiskState::OpenFileError,
     NKikimrBlobStorage::TPDiskState::ChunkQuotaError,
     NKikimrBlobStorage::TPDiskState::DeviceIoError,
+    NKikimrBlobStorage::TPDiskState::Stopped,
 };
 
 constexpr NCms::EPDiskState FaultyStates[] = {
@@ -81,7 +83,7 @@ class TTestEnv: public TCmsTestEnv {
     }
 
 public:
-    explicit TTestEnv(ui32 nodeCount, ui32 pdisks)
+    explicit TTestEnv(ui32 nodeCount, ui32 pdisks, const NKikimrCms::TCmsConfig &config = {})
         : TCmsTestEnv(nodeCount, pdisks)
     {
         SetLogPriority(NKikimrServices::CMS, NLog::PRI_DEBUG);
@@ -121,6 +123,7 @@ public:
         });
 
         State = new TCmsState;
+        State->Config.Deserialize(config);
         MockClusterInfo(State->ClusterInfo);
         State->CmsActorId = GetSender();
 
@@ -163,6 +166,26 @@ public:
         auto info = std::next(nodes.begin(), idx)->second;
         Y_ABORT_UNLESS(info);
         return info->PDisks;
+    }
+
+    void SetNodeFaulty(ui32 nodeId, bool faulty) {
+        if (faulty) {
+            auto v = TVector<NCms::TEvSentinel::TEvUpdateHostMarkers::THostMarkers>();
+            v.push_back({
+                .NodeId = nodeId,
+                .Markers = {NKikimrCms::EMarker::MARKER_DISK_FAULTY},
+            });
+
+            Send(new IEventHandle(Sentinel, TActorId(), new TEvSentinel::TEvUpdateHostMarkers(std::move(v))));
+        } else {
+            auto v = TVector<NCms::TEvSentinel::TEvUpdateHostMarkers::THostMarkers>();
+            v.push_back({
+                .NodeId = nodeId,
+                .Markers = {},
+            });
+
+            Send(new IEventHandle(Sentinel, TActorId(), new TEvSentinel::TEvUpdateHostMarkers(std::move(v))));
+        }
     }
 
     void SetPDiskState(const TSet<TPDiskID>& pdisks, EPDiskState state) {

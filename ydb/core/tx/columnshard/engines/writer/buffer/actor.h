@@ -28,7 +28,7 @@ public:
             hFunc(TEvAddInsertedDataToBuffer, Handle);
             hFunc(TEvFlushBuffer, Handle);
             default:
-                AFL_VERIFY(false);
+                AFL_VERIFY(false)("ev_type", ev->GetTypeName());
         }
     }
 };

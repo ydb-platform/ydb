@@ -18,7 +18,7 @@ class TJsonCounters : public TActorBootstrapped<TJsonCounters> {
     NMon::TEvHttpInfo::TPtr Event;
     ui32 Requested;
     ui32 Received;
-    THolder<TEvInterconnect::TEvNodesInfo> NodesInfo;
+    TVector<TEvInterconnect::TNodeInfo> Nodes;
     TMap<ui32, NKikimrWhiteboard::TEvVDiskStateResponse> VDiskInfo;
     TMap<ui32, NKikimrWhiteboard::TEvPDiskStateResponse> PDiskInfo;
     TMap<ui32, NKikimrWhiteboard::TEvTabletStateResponse> TabletInfo;
@@ -44,10 +44,8 @@ public:
     }
 
     void Die(const TActorContext& ctx) override {
-        if (NodesInfo != nullptr) {
-            for (const auto& ni : NodesInfo->Nodes) {
-                ctx.Send(TActivationContext::InterconnectProxy(ni.NodeId), new TEvents::TEvUnsubscribe());
-            }
+        for (const auto& ni : Nodes) {
+            ctx.Send(TActivationContext::InterconnectProxy(ni.NodeId), new TEvents::TEvUnsubscribe());
         }
         TBase::Die(ctx);
     }
@@ -65,8 +63,8 @@ public:
     }
 
     void HandleBrowse(TEvInterconnect::TEvNodesInfo::TPtr& ev, const TActorContext& ctx) {
-        NodesInfo = ev->Release();
-        for (const auto& ni : NodesInfo->Nodes) {
+        Nodes = ev->Get()->Nodes;
+        for (const auto& ni : Nodes) {
             SendRequest(ni.NodeId, ctx);
         }
         if (Requested > 0) {
@@ -238,7 +236,7 @@ public:
         json << '{';
         json << "\"sensors\":[";
 
-        Sort(NodesInfo->Nodes, [](
+        Sort(Nodes, [](
              const TEvInterconnect::TNodeInfo& a,
              const TEvInterconnect::TNodeInfo& b) -> bool {
             return a.NodeId < b.NodeId;
@@ -278,7 +276,7 @@ public:
         auto itPDiskInfo = PDiskInfo.begin();
         auto itTabletInfo = TabletInfo.begin();
 
-        for (const auto& nodeInfo : NodesInfo->Nodes) {
+        for (const auto& nodeInfo : Nodes) {
             while (itVDiskInfo != VDiskInfo.end() && itVDiskInfo->first < nodeInfo.NodeId)
                 ++itVDiskInfo;
             if (itVDiskInfo != VDiskInfo.end() && itVDiskInfo->first == nodeInfo.NodeId) {

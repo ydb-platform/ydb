@@ -1,0 +1,16 @@
+--- contrib/libs/fmt/include/fmt/format.h	(index)
++++ contrib/libs/fmt/include/fmt/format.h	(working tree)
+@@ -3087,6 +3087,13 @@ FMT_INLINE auto format_to(OutputIt out, const Locale& loc,
+   return vformat_to(out, loc, fmt, fmt::make_format_args(args...));
+ }
+ 
++// TODO(dakovalkov): Remove after updating fmtlib to newer version.
++// https://github.com/fmtlib/fmt/blob/6e6eb63770a8f69bba48d079fb0f43f036d6b543/include/fmt/format.h#L4269
++template <typename Enum>
++constexpr auto underlying(Enum e) noexcept {
++    return static_cast<std::underlying_type_t<Enum>>(e);
++}
++
+ FMT_MODULE_EXPORT_END
+ FMT_END_NAMESPACE
+ 

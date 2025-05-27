@@ -1,0 +1,9 @@
+$f = Python::f(Callable<(String,y:String)->String>,@@
+def f(x,y):
+    return x + y
+@@);
+
+$f = Udf($f, "bar" as TypeConfig); -- no type config
+
+SELECT
+    $f('foo', '?')

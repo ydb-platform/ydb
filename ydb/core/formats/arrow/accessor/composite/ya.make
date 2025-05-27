@@ -1,8 +1,8 @@
-LIBRARY()
+LIBRARY(library-formats-arrow-accessor-composite)
 
 PEERDIR(
     contrib/libs/apache/arrow
-    ydb/core/formats/arrow/common
+    ydb/library/formats/arrow/common
 )
 
 SRCS(
@@ -10,3 +10,7 @@ SRCS(
 )
 
 END()
+
+RECURSE_FOR_TESTS(
+    ut
+)

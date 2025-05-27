@@ -1,0 +1,14 @@
+--- b/lz4.h
++++ a/lz4.h
+@@ -582,6 +582,11 @@ union LZ4_streamDecode_u {
+  *  Another method is to define LZ4_DISABLE_DEPRECATE_WARNINGS
+  *  before including the header file.
+  */
++
++#ifndef LZ4_DISABLE_DEPRECATE_WARNINGS
++#  define LZ4_DISABLE_DEPRECATE_WARNINGS
++#endif
++
+ #ifdef LZ4_DISABLE_DEPRECATE_WARNINGS
+ #  define LZ4_DEPRECATED(message)   /* disable deprecation warnings */
+ #else

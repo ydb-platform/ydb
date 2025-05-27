@@ -545,9 +545,9 @@ namespace NKikimr::NFlatTxCoordinator::NTest {
             // Rewind to some older time
             runtime.UpdateCurrentTime(oldTimestamp, /* rewind */ true);
 
-            // Start a new bootstrapper, which will boot a new instance in parallel
+            // Start a new tablet instance in parallel
             Cerr << "... starting a new coordinator instance" << Endl;
-            CreateTestBootstrapper(runtime, CreateTestTabletInfo(coordinatorId, TTabletTypes::Coordinator), &CreateFlatTxCoordinator);
+            StartTestTablet(runtime, CreateTestTabletInfo(coordinatorId, TTabletTypes::Coordinator), &CreateFlatTxCoordinator);
 
             // Wait until new coordinator almost receives the in-memory state
             waitFor([&]{ return blockedStateResponses.size() >= 1; }, "migrated state");
@@ -824,9 +824,9 @@ namespace NKikimr::NFlatTxCoordinator::NTest {
             // Rewind to some older time
             runtime.UpdateCurrentTime(oldTimestamp, /* rewind */ true);
 
-            // Start a new bootstrapper, which will boot a new instance in parallel
+            // Start a new tablet instance in parallel
             Cerr << "... starting a new coordinator instance" << Endl;
-            CreateTestBootstrapper(runtime, CreateTestTabletInfo(coordinatorId, TTabletTypes::Coordinator), &CreateFlatTxCoordinator);
+            StartTestTablet(runtime, CreateTestTabletInfo(coordinatorId, TTabletTypes::Coordinator), &CreateFlatTxCoordinator);
 
             // Wait until new coordinator almost receives the in-memory state
             waitFor([&]{ return blockedStateResponses.size() >= 1; }, "migrated state");

@@ -39,6 +39,7 @@ namespace NKikimr {
         HullCompLevelRateThreshold = 1.0;
         HullCompFreeSpaceThreshold = 2.0;
         FreshCompMaxInFlightWrites = 10;
+        FreshCompMaxInFlightReads = 10; // when moving huge blobs
         HullCompMaxInFlightWrites = 10;
         HullCompMaxInFlightReads = 20;
         HullCompReadBatchEfficiencyThreshold = 0.5;  // don't issue reads if there are more gaps than the useful data
@@ -74,6 +75,8 @@ namespace NKikimr {
         ReplPrefetchDataSize = 32 << 20;
         ReplMaxResponseSize = 10 << 20;
         ReplInterconnectChannel = TInterconnectChannels::IC_BLOBSTORAGE_ASYNC_DATA;
+        ReplMaxDonorNotReadyDuration = TDuration::Minutes(10);
+        ReplMaxDonorNotReadyCount = 100;
         HandoffMaxWaitQueueSize = 10000;
         HandoffMaxWaitQueueByteSize = 32u << 20u;
         HandoffMaxInFlightSize = 1000;
@@ -135,9 +138,7 @@ namespace NKikimr {
                 MinHugeBlobInBytes = 512u << 10u;
                 break;
         }
-        OldMinHugeBlobInBytes = MinHugeBlobInBytes; // preserved to migrate entry point state correctly 
         MilestoneHugeBlobInBytes = 512u << 10u;  // for compatibility reasons it must be 512KB
-
     }
 
     void TVDiskConfig::Merge(const NKikimrBlobStorage::TVDiskConfig &update) {

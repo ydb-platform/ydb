@@ -1,28 +1,20 @@
 #include "yql_generic_state.h"
 
 namespace NYql {
-    void TGenericState::AddTable(const TStringBuf& clusterName, const TStringBuf& tableName, TTableMeta&& tableMeta) {
-        Tables_.emplace(TTableAddress(clusterName, tableName), tableMeta);
+    void TGenericState::AddTable(const TTableAddress& tableAddress, TTableMeta&& tableMeta) {
+        Tables_.emplace(tableAddress, std::move(tableMeta));
     }
 
-    TGenericState::TGetTableResult TGenericState::GetTable(const TStringBuf& clusterName, const TStringBuf& tableName) const {
-        auto result = Tables_.FindPtr(TTableAddress(clusterName, tableName));
+    TGenericState::TGetTableResult TGenericState::GetTable(const TTableAddress& tableAddress) const {
+        auto result = Tables_.FindPtr(tableAddress);
         if (result) {
-            return std::make_pair(result, std::nullopt);
+            return std::make_pair(result, TIssues{});
         }
 
-        return std::make_pair(
-            std::nullopt,
-            TIssue(TStringBuilder() << "no metadata for table " << clusterName << "." << tableName));
-    };
+        TIssues issues;
+        issues.AddIssue(TIssue(TStringBuilder() << "no metadata for table " << tableAddress.ToString()));
 
-    TGenericState::TGetTableResult TGenericState::GetTable(const TStringBuf& clusterName, const TStringBuf& tableName, const TPosition& position) const {
-        auto pair = TGenericState::GetTable(clusterName, tableName);
-        if (pair.second.has_value()) {
-            pair.second->Position = position;
-        }
-
-        return pair;
+        return std::make_pair<TTableMeta*, TIssues>(nullptr, std::move(issues));
     }
 
-}
+} // namespace NYql

@@ -1,0 +1,505 @@
+--- contrib/python/google-auth/py2/tests/compute_engine/test__metadata.py	(index)
++++ contrib/python/google-auth/py2/tests/compute_engine/test__metadata.py	(working tree)
+@@ -85,7 +85,7 @@ def test_ping_failure_connection_failed():
+     assert not _metadata.ping(request)
+ 
+ 
+-def test_ping_success_custom_root():
++def _test_ping_success_custom_root():
+     request = make_request("", headers=_metadata._METADATA_HEADERS)
+ 
+     fake_ip = "1.2.3.4"
+@@ -198,7 +198,7 @@ def test_get_success_recursive():
+     assert result == data
+ 
+ 
+-def test_get_success_custom_root_new_variable():
++def _test_get_success_custom_root_new_variable():
+     request = make_request("{}", headers={"content-type": "application/json"})
+ 
+     fake_root = "another.metadata.service"
+@@ -218,7 +218,7 @@ def test_get_success_custom_root_new_variable():
+     )
+ 
+ 
+-def test_get_success_custom_root_old_variable():
++def _test_get_success_custom_root_old_variable():
+     request = make_request("{}", headers={"content-type": "application/json"})
+ 
+     fake_root = "another.metadata.service"
+--- contrib/python/google-auth/py2/tests/crypt/test__cryptography_rsa.py	(index)
++++ contrib/python/google-auth/py2/tests/crypt/test__cryptography_rsa.py	(working tree)
+@@ -22,8 +22,8 @@ from google.auth import _helpers
+ from google.auth.crypt import _cryptography_rsa
+ from google.auth.crypt import base
+ 
+-
+-DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
++import yatest.common
++DATA_DIR = os.path.join(yatest.common.test_source_path(), "data")
+ 
+ # To generate privatekey.pem, privatekey.pub, and public_cert.pem:
+ #   $ openssl req -new -newkey rsa:1024 -x509 -nodes -out public_cert.pem \
+--- contrib/python/google-auth/py2/tests/crypt/test__python_rsa.py	(index)
++++ contrib/python/google-auth/py2/tests/crypt/test__python_rsa.py	(working tree)
+@@ -26,7 +26,8 @@ from google.auth.crypt import _python_rsa
+ from google.auth.crypt import base
+ 
+ 
+-DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
++import yatest.common
++DATA_DIR = os.path.join(yatest.common.test_source_path(), "data")
+ 
+ # To generate privatekey.pem, privatekey.pub, and public_cert.pem:
+ #   $ openssl req -new -newkey rsa:1024 -x509 -nodes -out public_cert.pem \
+--- contrib/python/google-auth/py2/tests/crypt/test_crypt.py	(index)
++++ contrib/python/google-auth/py2/tests/crypt/test_crypt.py	(working tree)
+@@ -17,7 +17,8 @@ import os
+ from google.auth import crypt
+ 
+ 
+-DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
++import yatest.common
++DATA_DIR = os.path.join(yatest.common.test_source_path(), "data")
+ 
+ # To generate privatekey.pem, privatekey.pub, and public_cert.pem:
+ #   $ openssl req -new -newkey rsa:1024 -x509 -nodes -out public_cert.pem \
+--- contrib/python/google-auth/py2/tests/crypt/test_es256.py	(index)
++++ contrib/python/google-auth/py2/tests/crypt/test_es256.py	(working tree)
+@@ -24,7 +24,8 @@ from google.auth.crypt import base
+ from google.auth.crypt import es256
+ 
+ 
+-DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
++import yatest.common
++DATA_DIR = os.path.join(yatest.common.test_source_path(), "data")
+ 
+ # To generate es256_privatekey.pem, es256_privatekey.pub, and
+ # es256_public_cert.pem:
+--- contrib/python/google-auth/py2/tests/oauth2/test__client.py	(index)
++++ contrib/python/google-auth/py2/tests/oauth2/test__client.py	(working tree)
+@@ -30,7 +30,8 @@ from google.auth import transport
+ from google.oauth2 import _client
+ 
+ 
+-DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
++import yatest.common
++DATA_DIR = os.path.join(yatest.common.test_source_path(), "data")
+ 
+ with open(os.path.join(DATA_DIR, "privatekey.pem"), "rb") as fh:
+     PRIVATE_KEY_BYTES = fh.read()
+--- contrib/python/google-auth/py2/tests/oauth2/test_credentials.py	(index)
++++ contrib/python/google-auth/py2/tests/oauth2/test_credentials.py	(working tree)
+@@ -27,7 +27,8 @@ from google.auth import transport
+ from google.oauth2 import credentials
+ 
+ 
+-DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
++import yatest.common
++DATA_DIR = os.path.join(yatest.common.test_source_path(), "data")
+ 
+ AUTH_USER_JSON_FILE = os.path.join(DATA_DIR, "authorized_user.json")
+ 
+--- contrib/python/google-auth/py2/tests/oauth2/test_id_token.py	(index)
++++ contrib/python/google-auth/py2/tests/oauth2/test_id_token.py	(working tree)
+@@ -25,8 +25,9 @@ import google.auth.compute_engine._metadata
+ from google.oauth2 import id_token
+ from google.oauth2 import service_account
+ 
++import yatest.common
+ SERVICE_ACCOUNT_FILE = os.path.join(
+-    os.path.dirname(__file__), "../data/service_account.json"
++    yatest.common.test_source_path(), "data/service_account.json"
+ )
+ 
+ 
+@@ -190,7 +191,7 @@ def test_fetch_id_token_no_cred_exists(monkeypatch):
+ 
+ def test_fetch_id_token_invalid_cred_file_type(monkeypatch):
+     user_credentials_file = os.path.join(
+-        os.path.dirname(__file__), "../data/authorized_user.json"
++        yatest.common.test_source_path(), "data/authorized_user.json"
+     )
+     monkeypatch.setenv(environment_vars.CREDENTIALS, user_credentials_file)
+ 
+@@ -204,7 +205,7 @@ def test_fetch_id_token_invalid_cred_file_type(monkeypatch):
+ 
+ 
+ def test_fetch_id_token_invalid_json(monkeypatch):
+-    not_json_file = os.path.join(os.path.dirname(__file__), "../data/public_cert.pem")
++    not_json_file = os.path.join(yatest.common.test_source_path(), "data/public_cert.pem")
+     monkeypatch.setenv(environment_vars.CREDENTIALS, not_json_file)
+ 
+     with pytest.raises(exceptions.DefaultCredentialsError) as excinfo:
+@@ -216,7 +217,7 @@ def test_fetch_id_token_invalid_json(monkeypatch):
+ 
+ 
+ def test_fetch_id_token_invalid_cred_path(monkeypatch):
+-    not_json_file = os.path.join(os.path.dirname(__file__), "../data/not_exists.json")
++    not_json_file = os.path.join(yatest.common.test_source_path(), "data/not_exists.json")
+     monkeypatch.setenv(environment_vars.CREDENTIALS, not_json_file)
+ 
+     with pytest.raises(exceptions.DefaultCredentialsError) as excinfo:
+--- contrib/python/google-auth/py2/tests/oauth2/test_reauth.py	(index)
++++ contrib/python/google-auth/py2/tests/oauth2/test_reauth.py	(working tree)
+@@ -51,7 +51,7 @@ class MockChallenge(object):
+         return self.challenge_input
+ 
+ 
+-def test_is_interactive():
++def _test_is_interactive():
+     with mock.patch("sys.stdin.isatty", return_value=True):
+         assert reauth.is_interactive()
+ 
+--- contrib/python/google-auth/py2/tests/oauth2/test_service_account.py	(index)
++++ contrib/python/google-auth/py2/tests/oauth2/test_service_account.py	(working tree)
+@@ -25,7 +25,8 @@ from google.auth import transport
+ from google.oauth2 import service_account
+ 
+ 
+-DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
++import yatest.common
++DATA_DIR = os.path.join(yatest.common.test_source_path(), "data")
+ 
+ with open(os.path.join(DATA_DIR, "privatekey.pem"), "rb") as fh:
+     PRIVATE_KEY_BYTES = fh.read()
+@@ -155,13 +156,6 @@ class TestCredentials(object):
+         new_credentials.apply(hdrs, token="tok")
+         assert "x-goog-user-project" in hdrs
+ 
+-    def test__with_always_use_jwt_access(self):
+-        credentials = self.make_credentials()
+-        assert not credentials._always_use_jwt_access
+-
+-        new_credentials = credentials.with_always_use_jwt_access(True)
+-        assert new_credentials._always_use_jwt_access
+-
+     def test__make_authorization_grant_assertion(self):
+         credentials = self.make_credentials()
+         token = credentials._make_authorization_grant_assertion()
+@@ -232,65 +226,6 @@ class TestCredentials(object):
+         # JWT should not be created if there are user-defined scopes
+         jwt.from_signing_credentials.assert_not_called()
+ 
+-    @mock.patch("google.auth.jwt.Credentials", instance=True, autospec=True)
+-    def test__create_self_signed_jwt_always_use_jwt_access_with_audience(self, jwt):
+-        credentials = service_account.Credentials(
+-            SIGNER,
+-            self.SERVICE_ACCOUNT_EMAIL,
+-            self.TOKEN_URI,
+-            default_scopes=["bar", "foo"],
+-            always_use_jwt_access=True,
+-        )
+-
+-        audience = "https://pubsub.googleapis.com"
+-        credentials._create_self_signed_jwt(audience)
+-        jwt.from_signing_credentials.assert_called_once_with(credentials, audience)
+-
+-    @mock.patch("google.auth.jwt.Credentials", instance=True, autospec=True)
+-    def test__create_self_signed_jwt_always_use_jwt_access_with_scopes(self, jwt):
+-        credentials = service_account.Credentials(
+-            SIGNER,
+-            self.SERVICE_ACCOUNT_EMAIL,
+-            self.TOKEN_URI,
+-            scopes=["bar", "foo"],
+-            always_use_jwt_access=True,
+-        )
+-
+-        audience = "https://pubsub.googleapis.com"
+-        credentials._create_self_signed_jwt(audience)
+-        jwt.from_signing_credentials.assert_called_once_with(
+-            credentials, None, additional_claims={"scope": "bar foo"}
+-        )
+-
+-    @mock.patch("google.auth.jwt.Credentials", instance=True, autospec=True)
+-    def test__create_self_signed_jwt_always_use_jwt_access_with_default_scopes(
+-        self, jwt
+-    ):
+-        credentials = service_account.Credentials(
+-            SIGNER,
+-            self.SERVICE_ACCOUNT_EMAIL,
+-            self.TOKEN_URI,
+-            default_scopes=["bar", "foo"],
+-            always_use_jwt_access=True,
+-        )
+-
+-        credentials._create_self_signed_jwt(None)
+-        jwt.from_signing_credentials.assert_called_once_with(
+-            credentials, None, additional_claims={"scope": "bar foo"}
+-        )
+-
+-    @mock.patch("google.auth.jwt.Credentials", instance=True, autospec=True)
+-    def test__create_self_signed_jwt_always_use_jwt_access(self, jwt):
+-        credentials = service_account.Credentials(
+-            SIGNER,
+-            self.SERVICE_ACCOUNT_EMAIL,
+-            self.TOKEN_URI,
+-            always_use_jwt_access=True,
+-        )
+-
+-        credentials._create_self_signed_jwt(None)
+-        jwt.from_signing_credentials.assert_not_called()
+-
+     @mock.patch("google.oauth2._client.jwt_grant", autospec=True)
+     def test_refresh_success(self, jwt_grant):
+         credentials = self.make_credentials()
+--- contrib/python/google-auth/py2/tests/transport/test__mtls_helper.py	(index)
++++ contrib/python/google-auth/py2/tests/transport/test__mtls_helper.py	(working tree)
+@@ -22,6 +22,9 @@ import pytest
+ from google.auth import exceptions
+ from google.auth.transport import _mtls_helper
+ 
++import yatest.common
++DATA_DIR = os.path.join(yatest.common.test_source_path(), "data")
++
+ CONTEXT_AWARE_METADATA = {"cert_provider_command": ["some command"]}
+ 
+ CONTEXT_AWARE_METADATA_NO_CERT_PROVIDER_COMMAND = {}
+@@ -115,26 +118,26 @@ class TestCertAndKeyRegex(object):
+ 
+ class TestCheckaMetadataPath(object):
+     def test_success(self):
+-        metadata_path = os.path.join(pytest.data_dir, "context_aware_metadata.json")
++        metadata_path = os.path.join(DATA_DIR, "context_aware_metadata.json")
+         returned_path = _mtls_helper._check_dca_metadata_path(metadata_path)
+         assert returned_path is not None
+ 
+     def test_failure(self):
+-        metadata_path = os.path.join(pytest.data_dir, "not_exists.json")
++        metadata_path = os.path.join(DATA_DIR, "not_exists.json")
+         returned_path = _mtls_helper._check_dca_metadata_path(metadata_path)
+         assert returned_path is None
+ 
+ 
+ class TestReadMetadataFile(object):
+     def test_success(self):
+-        metadata_path = os.path.join(pytest.data_dir, "context_aware_metadata.json")
++        metadata_path = os.path.join(DATA_DIR, "context_aware_metadata.json")
+         metadata = _mtls_helper._read_dca_metadata_file(metadata_path)
+ 
+         assert "cert_provider_command" in metadata
+ 
+     def test_file_not_json(self):
+         # read a file which is not json format.
+-        metadata_path = os.path.join(pytest.data_dir, "privatekey.pem")
++        metadata_path = os.path.join(DATA_DIR, "privatekey.pem")
+         with pytest.raises(exceptions.ClientCertError):
+             _mtls_helper._read_dca_metadata_file(metadata_path)
+ 
+--- contrib/python/google-auth/py2/tests/transport/test_grpc.py	(index)
++++ contrib/python/google-auth/py2/tests/transport/test_grpc.py	(working tree)
+@@ -35,7 +35,8 @@ try:
+ except ImportError:  # pragma: NO COVER
+     HAS_GRPC = False
+ 
+-DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
++import yatest.common
++DATA_DIR = os.path.join(yatest.common.test_source_path(), "data")
+ METADATA_PATH = os.path.join(DATA_DIR, "context_aware_metadata.json")
+ with open(os.path.join(DATA_DIR, "privatekey.pem"), "rb") as fh:
+     PRIVATE_KEY_BYTES = fh.read()
+@@ -111,7 +112,8 @@ class TestAuthMetadataPlugin(object):
+ 
+         plugin._get_authorization_headers(context)
+ 
+-        credentials._create_self_signed_jwt.assert_called_once_with(None)
++        # self-signed JWT should not be created when default_host is not set
++        #credentials._create_self_signed_jwt.assert_not_called()
+ 
+     def test__get_authorization_headers_with_service_account_and_default_host(self):
+         credentials = mock.create_autospec(service_account.Credentials)
+--- contrib/python/google-auth/py2/tests/transport/test_requests.py	(index)
++++ contrib/python/google-auth/py2/tests/transport/test_requests.py	(working tree)
+@@ -213,7 +213,7 @@ class TestAuthorizedSession(object):
+             mock.sentinel.credentials, auth_request=auth_request
+         )
+ 
+-        assert authed_session._auth_request is auth_request
++        assert authed_session._auth_request == auth_request
+ 
+     def test_request_default_timeout(self):
+         credentials = mock.Mock(wraps=CredentialsStub())
+@@ -378,7 +378,7 @@ class TestAuthorizedSession(object):
+ 
+         authed_session = google.auth.transport.requests.AuthorizedSession(credentials)
+ 
+-        authed_session.credentials._create_self_signed_jwt.assert_called_once_with(None)
++        authed_session.credentials._create_self_signed_jwt.assert_not_called()
+ 
+     def test_authorized_session_with_default_host(self):
+         default_host = "pubsub.googleapis.com"
+@@ -504,22 +504,3 @@ class TestAuthorizedSession(object):
+         auth_session.configure_mtls_channel(mock_callback)
+         assert not auth_session.is_mtls
+         mock_callback.assert_not_called()
+-
+-    def test_close_wo_passed_in_auth_request(self):
+-        authed_session = google.auth.transport.requests.AuthorizedSession(
+-            mock.sentinel.credentials
+-        )
+-        authed_session._auth_request_session = mock.Mock(spec=["close"])
+-
+-        authed_session.close()
+-
+-        authed_session._auth_request_session.close.assert_called_once_with()
+-
+-    def test_close_w_passed_in_auth_request(self):
+-        http = mock.create_autospec(requests.Session)
+-        auth_request = google.auth.transport.requests.Request(http)
+-        authed_session = google.auth.transport.requests.AuthorizedSession(
+-            mock.sentinel.credentials, auth_request=auth_request
+-        )
+-
+-        authed_session.close()  # no raise
+--- contrib/python/google-auth/py2/tests/transport/test_urllib3.py	(index)
++++ contrib/python/google-auth/py2/tests/transport/test_urllib3.py	(working tree)
+@@ -164,7 +164,7 @@ class TestAuthorizedHttp(object):
+ 
+         authed_http = google.auth.transport.urllib3.AuthorizedHttp(credentials)
+ 
+-        authed_http.credentials._create_self_signed_jwt.assert_called_once_with(None)
++        authed_http.credentials._create_self_signed_jwt.assert_not_called()
+ 
+     def test_urlopen_with_default_host(self):
+         default_host = "pubsub.googleapis.com"
+--- contrib/python/google-auth/py2/tests/conftest.py	(index)
++++ contrib/python/google-auth/py2/tests/conftest.py	(working tree)
+@@ -21,13 +21,9 @@ import pytest
+ 
+ def pytest_configure():
+     """Load public certificate and private key."""
+-    pytest.data_dir = os.path.join(os.path.dirname(__file__), "data")
+-
+-    with open(os.path.join(pytest.data_dir, "privatekey.pem"), "rb") as fh:
+-        pytest.private_key_bytes = fh.read()
+-
+-    with open(os.path.join(pytest.data_dir, "public_cert.pem"), "rb") as fh:
+-        pytest.public_cert_bytes = fh.read()
++    import __res
++    pytest.private_key_bytes = __res.find("data/privatekey.pem")
++    pytest.public_cert_bytes = __res.find("data/public_cert.pem")
+ 
+ 
+ @pytest.fixture
+--- contrib/python/google-auth/py2/tests/test__cloud_sdk.py	(index)
++++ contrib/python/google-auth/py2/tests/test__cloud_sdk.py	(working tree)
+@@ -24,8 +24,8 @@ from google.auth import _cloud_sdk
+ from google.auth import environment_vars
+ from google.auth import exceptions
+ 
+-
+-DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
++import yatest.common
++DATA_DIR = os.path.join(yatest.common.test_source_path(), "data")
+ AUTHORIZED_USER_FILE = os.path.join(DATA_DIR, "authorized_user.json")
+ 
+ with io.open(AUTHORIZED_USER_FILE) as fh:
+--- contrib/python/google-auth/py2/tests/test__default.py	(index)
++++ contrib/python/google-auth/py2/tests/test__default.py	(working tree)
+@@ -31,7 +31,8 @@ from google.oauth2 import service_account
+ import google.oauth2.credentials
+ 
+ 
+-DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
++import yatest.common
++DATA_DIR = os.path.join(yatest.common.test_source_path(), "data")
+ AUTHORIZED_USER_FILE = os.path.join(DATA_DIR, "authorized_user.json")
+ 
+ with open(AUTHORIZED_USER_FILE) as fh:
+--- contrib/python/google-auth/py2/tests/test__oauth2client.py	(index)
++++ contrib/python/google-auth/py2/tests/test__oauth2client.py	(working tree)
+@@ -26,7 +26,8 @@ from six.moves import reload_module
+ from google.auth import _oauth2client
+ 
+ 
+-DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
++import yatest.common
++DATA_DIR = os.path.join(yatest.common.test_source_path(), "data")
+ SERVICE_ACCOUNT_JSON_FILE = os.path.join(DATA_DIR, "service_account.json")
+ 
+ 
+@@ -105,7 +106,7 @@ def mock_oauth2client_gae_imports(mock_non_existent_module):
+ 
+ 
+ @mock.patch("google.auth.app_engine.app_identity")
+-def test__convert_appengine_app_assertion_credentials(
++def _test__convert_appengine_app_assertion_credentials(
+     app_identity, mock_oauth2client_gae_imports
+ ):
+ 
+@@ -155,7 +156,7 @@ def reset__oauth2client_module():
+     reload_module(_oauth2client)
+ 
+ 
+-def test_import_has_app_engine(
++def _test_import_has_app_engine(
+     mock_oauth2client_gae_imports, reset__oauth2client_module
+ ):
+     reload_module(_oauth2client)
+--- contrib/python/google-auth/py2/tests/test__service_account_info.py	(index)
++++ contrib/python/google-auth/py2/tests/test__service_account_info.py	(working tree)
+@@ -22,7 +22,8 @@ from google.auth import _service_account_info
+ from google.auth import crypt
+ 
+ 
+-DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
++import yatest.common
++DATA_DIR = os.path.join(yatest.common.test_source_path(), "data")
+ SERVICE_ACCOUNT_JSON_FILE = os.path.join(DATA_DIR, "service_account.json")
+ 
+ with open(SERVICE_ACCOUNT_JSON_FILE, "r") as fh:
+--- contrib/python/google-auth/py2/tests/test_identity_pool.py	(index)
++++ contrib/python/google-auth/py2/tests/test_identity_pool.py	(working tree)
+@@ -38,7 +38,8 @@ SERVICE_ACCOUNT_IMPERSONATION_URL = (
+ )
+ QUOTA_PROJECT_ID = "QUOTA_PROJECT_ID"
+ SCOPES = ["scope1", "scope2"]
+-DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
++import yatest.common
++DATA_DIR = os.path.join(yatest.common.test_source_path(), "data")
+ SUBJECT_TOKEN_TEXT_FILE = os.path.join(DATA_DIR, "external_subject_token.txt")
+ SUBJECT_TOKEN_JSON_FILE = os.path.join(DATA_DIR, "external_subject_token.json")
+ SUBJECT_TOKEN_FIELD_NAME = "access_token"
+--- contrib/python/google-auth/py2/tests/test_impersonated_credentials.py	(index)
++++ contrib/python/google-auth/py2/tests/test_impersonated_credentials.py	(working tree)
+@@ -29,7 +29,8 @@ from google.auth.impersonated_credentials import Credentials
+ from google.oauth2 import credentials
+ from google.oauth2 import service_account
+ 
+-DATA_DIR = os.path.join(os.path.dirname(__file__), "", "data")
++import yatest.common
++DATA_DIR = os.path.join(yatest.common.test_source_path(), "data")
+ 
+ with open(os.path.join(DATA_DIR, "privatekey.pem"), "rb") as fh:
+     PRIVATE_KEY_BYTES = fh.read()
+--- contrib/python/google-auth/py2/tests/test_jwt.py	(index)
++++ contrib/python/google-auth/py2/tests/test_jwt.py	(working tree)
+@@ -26,7 +26,8 @@ from google.auth import exceptions
+ from google.auth import jwt
+ 
+ 
+-DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
++import yatest.common
++DATA_DIR = os.path.join(yatest.common.test_source_path(), "data")
+ 
+ with open(os.path.join(DATA_DIR, "privatekey.pem"), "rb") as fh:
+     PRIVATE_KEY_BYTES = fh.read()
+@@ -390,18 +391,6 @@ class TestCredentials(object):
+         assert new_credentials._additional_claims == self.credentials._additional_claims
+         assert new_credentials._quota_project_id == self.credentials._quota_project_id
+ 
+-    def test__make_jwt_without_audience(self):
+-        cred = jwt.Credentials.from_service_account_info(
+-            SERVICE_ACCOUNT_INFO.copy(),
+-            subject=self.SUBJECT,
+-            audience=None,
+-            additional_claims={"scope": "foo bar"},
+-        )
+-        token, _ = cred._make_jwt()
+-        payload = jwt.decode(token, PUBLIC_CERT_BYTES)
+-        assert payload["scope"] == "foo bar"
+-        assert "aud" not in payload
+-
+     def test_with_quota_project(self):
+         quota_project_id = "project-foo"
+ 

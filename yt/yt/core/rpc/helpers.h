@@ -23,6 +23,12 @@ namespace NYT::NRpc {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void SetTimeoutOptions(
+    NRpc::TClientRequest& request,
+    const TTimeoutOptions& options);
+
+////////////////////////////////////////////////////////////////////////////////
+
 bool IsRetriableError(const TError& error);
 bool IsChannelFailureError(const TError& error);
 
@@ -93,7 +99,10 @@ void WriteAuthenticationIdentityToProto(T* proto, const TAuthenticationIdentity&
 template <class T>
 TAuthenticationIdentity ParseAuthenticationIdentityFromProto(const T& proto);
 
-std::vector<TString> AddressesFromEndpointSet(const NServiceDiscovery::TEndpointSet& endpointSet);
+std::vector<std::string> AddressesFromEndpointSet(
+    const NServiceDiscovery::TEndpointSet& endpointSet,
+    bool useIPv4 = false,
+    bool useIPv6 = false);
 
 ////////////////////////////////////////////////////////////////////////////////
 

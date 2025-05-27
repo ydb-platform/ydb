@@ -30,7 +30,7 @@ bool TPrepareWriteTxInRSUnit::IsReadyToExecute(TOperation::TPtr) const {
 }
 
 EExecutionStatus TPrepareWriteTxInRSUnit::Execute(TOperation::TPtr op, TTransactionContext &txc,
-    const TActorContext &ctx)
+    const TActorContext &)
 {
     TWriteOperation* writeOp = TWriteOperation::CastWriteOperation(op);
 
@@ -43,7 +43,7 @@ EExecutionStatus TPrepareWriteTxInRSUnit::Execute(TOperation::TPtr op, TTransact
             case ERestoreDataStatus::Restart:
                 return EExecutionStatus::Restart;
             case ERestoreDataStatus::Error:
-                Y_ABORT("Failed to restore writeOp data: %s", writeTx->GetErrStr().c_str());
+                Y_ENSURE(false, "Failed to restore writeOp data: " << writeTx->GetErrStr());
         }
     }
 
@@ -54,13 +54,7 @@ EExecutionStatus TPrepareWriteTxInRSUnit::Execute(TOperation::TPtr op, TTransact
         return EExecutionStatus::Executed;
     }
 
-    try {
-        KqpPrepareInReadsets(op->InReadSets(), writeTx->GetKqpLocks() ? writeTx->GetKqpLocks().value() : NKikimrDataEvents::TKqpLocks{}, nullptr, DataShard.TabletID());
-    } catch (const yexception& e) {
-        LOG_CRIT_S(ctx, NKikimrServices::TX_DATASHARD, "Exception while preparing in-readsets for KQP transaction "
-            << *op << " at " << DataShard.TabletID() << ": " << CurrentExceptionMessage());
-        Y_FAIL_S("Unexpected exception in KQP in-readsets prepare: " << CurrentExceptionMessage());
-    }
+    KqpPrepareInReadsets(op->InReadSets(), writeTx->GetKqpLocks() ? writeTx->GetKqpLocks().value() : NKikimrDataEvents::TKqpLocks{}, nullptr, DataShard.TabletID());
 
     return EExecutionStatus::Executed;
 }

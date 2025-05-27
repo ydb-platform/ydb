@@ -33,6 +33,21 @@ protected:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+class TGetCurrentUserCommand
+    : public TCommandBase
+{
+public:
+    REGISTER_YSON_STRUCT_LITE(TGetCurrentUserCommand);
+
+    static void Register(TRegistrar)
+    { }
+
+private:
+    void DoExecute(ICommandContextPtr context) override;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 class TAddMemberCommand
     : public TUpdateMembershipCommand<NApi::TAddMemberOptions>
 {
@@ -114,7 +129,7 @@ public:
     static void Register(TRegistrar registrar);
 
 private:
-    TString User;
+    std::string User;
     NYPath::TRichYPath Path;
     NYTree::EPermission Permission;
 
@@ -132,7 +147,7 @@ public:
     static void Register(TRegistrar registrar);
 
 private:
-    std::optional<TString> User;
+    std::optional<std::string> User;
     NYTree::EPermission Permission;
     NYTree::INodePtr Acl;
 
@@ -150,8 +165,8 @@ public:
     static void Register(TRegistrar registrar);
 
 private:
-    TString SourceAccount;
-    TString DestinationAccount;
+std::string SourceAccount;
+    std::string DestinationAccount;
     NYTree::INodePtr ResourceDelta;
 
     void DoExecute(ICommandContextPtr context) override;
@@ -173,7 +188,7 @@ private:
     TString PoolTree;
     NYTree::INodePtr ResourceDelta;
 
-    virtual void DoExecute(ICommandContextPtr context) override;
+    void DoExecute(ICommandContextPtr context) override;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -184,10 +199,9 @@ struct TExecuteBatchOptions
     int Concurrency;
 };
 
-class TExecuteBatchCommandRequest
+struct TExecuteBatchCommandRequest
     : public NYTree::TYsonStruct
 {
-public:
     TString Command;
     NYTree::IMapNodePtr Parameters;
     NYTree::INodePtr Input;
@@ -230,10 +244,10 @@ public:
     static void Register(TRegistrar registrar);
 
 private:
-    NApi::EProxyType Type;
-    TString Role;
-    NApi::NRpcProxy::EAddressType AddressType;
-    TString NetworkName;
+    NApi::EProxyKind Kind;
+    std::optional<std::string> Role;
+    std::optional<NApi::NRpcProxy::EAddressType> AddressType;
+    std::string NetworkName;
     bool IgnoreBalancers;
 
     void DoExecute(ICommandContextPtr context) override;
@@ -250,7 +264,7 @@ public:
     static void Register(TRegistrar registrar);
 
 private:
-    TString TabletCellBundle;
+    std::string TabletCellBundle;
     std::vector<NYPath::TYPath> MovableTables;
 
     void DoExecute(ICommandContextPtr context) override;

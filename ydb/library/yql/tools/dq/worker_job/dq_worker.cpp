@@ -1,7 +1,7 @@
 #include "dq_worker.h"
 
-#include <ydb/library/yql/utils/signals/signals.h>
-#include <ydb/library/yql/utils/bind_in_range.h>
+#include <yql/essentials/utils/signals/signals.h>
+#include <yql/essentials/utils/network/bind_in_range.h>
 
 #include <ydb/library/yql/providers/dq/stats_collector/pool_stats_collector.h>
 #include <ydb/library/yql/providers/dq/actors/yt/nodeid_assigner.h>
@@ -15,10 +15,10 @@
 
 #include <ydb/library/yql/dq/actors/spilling/spilling_file.h>
 
-#include <ydb/library/yql/utils/log/log.h>
-#include <ydb/library/yql/utils/log/tls_backend.h>
-#include <ydb/library/yql/utils/yql_panic.h>
-#include <ydb/library/yql/utils/range_walker.h>
+#include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/utils/log/tls_backend.h>
+#include <yql/essentials/utils/yql_panic.h>
+#include <yql/essentials/utils/range_walker.h>
 
 #include <yt/yt/core/actions/invoker.h>
 #include <yt/yt/core/concurrency/action_queue.h>
@@ -33,6 +33,7 @@
 #include <util/system/env.h>
 #include <util/system/shellcommand.h>
 #include <util/string/type.h>
+#include <util/system/execpath.h>
 
 using namespace NYql::NDqs;
 
@@ -192,7 +193,7 @@ namespace NYql::NDq::NWorker {
         auto forceIPv4 = IsTrue(GetEnv(TString("YT_SECURE_VAULT_") + NCommonJobVars::YT_FORCE_IPV4, ""));
 
         auto addressResolverStr = GetEnv(NCommonJobVars::ADDRESS_RESOLVER_CONFIG, "");
-        if (!addressResolverStr.Empty()) {
+        if (!addressResolverStr.empty()) {
             auto addressResolverConfig = NYT::NYTree::ConvertTo<NYT::NNet::TAddressResolverConfigPtr>(NYT::NYson::TYsonString(addressResolverStr));
             NYT::NNet::TAddressResolver::Get()->Configure(addressResolverConfig);
         } else if (forceIPv4) {
@@ -222,6 +223,11 @@ namespace NYql::NDq::NWorker {
                 auto archive = layerPath.substr(pos+1);
                 TShellCommand cmd("tar", {"xf", archive, "-C", layerDir});
                 cmd.Run().Wait();
+                TMaybe<int> exitCode = cmd.GetExitCode();
+                if (!exitCode.Defined() || exitCode != 0) {
+                    const TString msg = TStringBuilder() << "'tar' exited with non-zero code, stderr: " << cmd.GetError();
+                    YQL_LOG(ERROR) << msg;
+                }
             }
         } else {
             NFs::MakeDirectoryRecursive("mnt/work");
@@ -235,6 +241,11 @@ namespace NYql::NDq::NWorker {
         NYql::NTaskRunnerProxy::TPipeFactoryOptions pfOptions;
         pfOptions.ExecPath = GetExecPath();
         pfOptions.FileCache = fileCache;
+
+        if (backendConfig.GetUseLocalLDLibraryPath()) {
+            pfOptions.Env["LD_LIBRARY_PATH"] = ".";
+        }
+
         if (deterministicMode) {
             YQL_LOG(DEBUG) << "deterministicMode On";
             pfOptions.Env["YQL_DETERMINISTIC_MODE"] = "1";

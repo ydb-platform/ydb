@@ -1,6 +1,8 @@
 #include "workload.h"
 #include <contrib/libs/fmt/include/fmt/format.h>
 #include <ydb/public/api/protos/ydb_formats.pb.h>
+#include <ydb/library/yaml_json/yaml_to_json.h>
+#include <contrib/libs/yaml-cpp/include/yaml-cpp/node/parse.h>
 #include <util/string/cast.h>
 #include <util/system/spinlock.h>
 
@@ -16,6 +18,15 @@ const TString TWorkloadGeneratorBase::TsvFormatString = [] () {
     return settings.SerializeAsString();
 } ();
 
+const TString TWorkloadGeneratorBase::PsvDelimiter = "|";
+const TString TWorkloadGeneratorBase::PsvFormatString = [] () {
+    Ydb::Formats::CsvSettings settings;
+    settings.set_delimiter(PsvDelimiter);
+    settings.set_header(true);
+    settings.mutable_quoting()->set_disabled(true);
+    return settings.SerializeAsString();
+} ();
+
 const TString TWorkloadGeneratorBase::CsvDelimiter = ",";
 const TString TWorkloadGeneratorBase::CsvFormatString = [] () {
     Ydb::Formats::CsvSettings settings;
@@ -24,52 +35,121 @@ const TString TWorkloadGeneratorBase::CsvFormatString = [] () {
     return settings.SerializeAsString();
 } ();
 
-std::string TWorkloadGeneratorBase::GetDDLQueries() const {
-    TString storageType = "-- ";
-    TString notNull = "";
-    TString createExternalDataSource;
-    TString external;
-    TString partitioning = "AUTO_PARTITIONING_MIN_PARTITIONS_COUNT";
-    TString primaryKey = ", PRIMARY KEY";
-    TString partitionBy = "-- ";
+namespace {
+
+    TString KeysList(const NJson::TJsonValue& table, const TString& key) {
+        TVector<TStringBuf> keysV;
+        for (const auto& k: table[key].GetArray()) {
+            keysV.emplace_back(k.GetString());
+        }
+        return JoinSeq(", ", keysV);
+    }
+
+}
+
+ui32 TWorkloadGeneratorBase::GetDefaultPartitionsCount(const TString& /*tableName*/) const {
+    return 64;
+}
+
+void TWorkloadGeneratorBase::GenerateDDLForTable(IOutputStream& result, const NJson::TJsonValue& table, const NJson::TJsonValue& common, bool single) const {
+    auto specialTypes = GetSpecialDataTypes();
+    specialTypes["string_type"] = Params.GetStringType();
+    specialTypes["date_type"] = Params.GetDateType();
+    specialTypes["datetime_type"] = Params.GetDatetimeType();
+    specialTypes["timestamp_type"] = Params.GetTimestampType();
+
+    const auto& tableName = table["name"].GetString();
+    const auto path = Params.GetFullTableName(single ? nullptr : tableName.c_str());
+    result << Endl << "CREATE ";
+    if (Params.GetStoreType() == TWorkloadBaseParams::EStoreType::ExternalS3) {
+        result << "EXTERNAL ";
+    }
+    result << "TABLE `" << path << "` (" << Endl;
+    TVector<TStringBuilder> columns;
+    for (const auto& column: table["columns"].GetArray()) {
+        const auto& columnName = column["name"].GetString();
+        columns.emplace_back();
+        auto& so = columns.back();
+        so << "    " << columnName << " ";
+        const auto& type = column["type"].GetString();
+        if (const auto* st = MapFindPtr(specialTypes, type)) {
+            so << *st;
+        } else {
+            so << type;
+        }
+        if (column["not_null"].GetBooleanSafe(false) && Params.GetStoreType() != TWorkloadBaseParams::EStoreType::Row) {
+            so << " NOT NULL";
+        }
+    }
+    result << JoinSeq(",\n", columns);
+    const auto keys = KeysList(table, "primary_key");
+    if (Params.GetStoreType() == TWorkloadBaseParams::EStoreType::ExternalS3) {
+        result << Endl;
+    } else {
+        result << "," << Endl << "    PRIMARY KEY (" << keys << ")" << Endl;
+    }
+    result << ")" << Endl;
+
+    if (Params.GetStoreType() == TWorkloadBaseParams::EStoreType::Column) {
+        result << "PARTITION BY HASH (" <<  (table.Has("partition_by") ? KeysList(table, "partition_by") : keys) << ")" << Endl;
+    }
+
+    const ui64 partitioning = table["partitioning"].GetUIntegerSafe(
+        common["partitioning"].GetUIntegerSafe(GetDefaultPartitionsCount(tableName)));
+
+    result << "WITH (" << Endl;
     switch (Params.GetStoreType()) {
+    case TWorkloadBaseParams::EStoreType::ExternalS3:
+        result << "    DATA_SOURCE = \""+ Params.GetFullTableName(nullptr) + "_s3_external_source\", FORMAT = \"parquet\", LOCATION = \"" << Params.GetS3Prefix()
+            << "/" << (single ? TFsPath(Params.GetPath()).GetName() : (tableName + "/")) << "\"" << Endl;
+        break;
     case TWorkloadBaseParams::EStoreType::Column:
-        storageType = "STORE = COLUMN, --";
-        notNull = "NOT NULL";
-        partitionBy = "PARTITION BY HASH";
+        result << "    STORE = COLUMN," << Endl;
+        result << "    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = " << partitioning << Endl;
         break;
-    case TWorkloadBaseParams::EStoreType::ExternalS3: {
-        TString dataSourceName = Params.GetFullTableName(nullptr) + "_s3_external_source";
-        storageType = fmt::format(R"(DATA_SOURCE = "{}", FORMAT = "parquet", LOCATION = )", dataSourceName);
-        notNull = "NOT NULL";
-        createExternalDataSource = fmt::format(R"(
-            CREATE EXTERNAL DATA SOURCE `{}` WITH (
-                SOURCE_TYPE="ObjectStorage",
-                LOCATION="{}",
-                AUTH_METHOD="NONE"
-            );
-        )", dataSourceName, Params.GetS3Endpoint());
-        external = "EXTERNAL";
-        partitioning = "--";
-        primaryKey = "--";
-    }
     case TWorkloadBaseParams::EStoreType::Row:
-        break;
+        result << "    STORE = ROW," << Endl;
+        result << "    AUTO_PARTITIONING_PARTITION_SIZE_MB = " << Params.GetPartitionSizeMb() << ", " << Endl;
+        result << "    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = " << partitioning << Endl;
     }
-    auto createSql = DoGetDDLQueries();
-    SubstGlobal(createSql, "{createExternal}", createExternalDataSource);
-    SubstGlobal(createSql, "{external}", external);
-    SubstGlobal(createSql, "{notnull}", notNull);
-    SubstGlobal(createSql, "{partitioning}", partitioning);
-    SubstGlobal(createSql, "{path}", Params.GetFullTableName(nullptr));
-    SubstGlobal(createSql, "{primary_key}", primaryKey);
-    SubstGlobal(createSql, "{s3_prefix}", Params.GetS3Prefix());
-    SubstGlobal(createSql, "{store}", storageType);
-    SubstGlobal(createSql, "{partition_by}", partitionBy);
-    SubstGlobal(createSql, "{string_type}", Params.GetStringType());
-    SubstGlobal(createSql, "{date_type}", Params.GetDateType());
-    SubstGlobal(createSql, "{timestamp_type}", Params.GetTimestampType());
-    return createSql.c_str();
+    result << ");" << Endl;
+    if (TString actions = table["actions"].GetStringSafe(common["actions"].GetStringSafe(""))) {
+        SubstGlobal(actions, "{table}", path);
+        result << actions << Endl;
+    }
+}
+
+std::string TWorkloadGeneratorBase::GetDDLQueries() const {
+    const auto json = GetTablesJson();
+
+    TStringBuilder result;
+    if (Params.GetStoreType() == TWorkloadBaseParams::EStoreType::ExternalS3) {
+        result << "CREATE EXTERNAL DATA SOURCE `" << Params.GetFullTableName(nullptr) << "_s3_external_source` WITH (" << Endl
+            << "    SOURCE_TYPE=\"ObjectStorage\"," << Endl
+            << "    LOCATION=\"" << Params.GetS3Endpoint() << "\"," << Endl
+            << "    AUTH_METHOD=\"NONE\"" << Endl
+            << ");" << Endl;
+    }
+
+    for (const auto& table: json["tables"].GetArray()) {
+        GenerateDDLForTable(result.Out, table, json["every_table"], false);
+    }
+    if (json.Has("table")) {
+        GenerateDDLForTable(result.Out, json["table"], json["every_table"], true);
+    }
+    if (result) {
+        return "--!syntax_v1\n" + result;
+    }
+    return result;
+}
+
+NJson::TJsonValue TWorkloadGeneratorBase::GetTablesJson() const {
+    const auto tablesYaml = GetTablesYaml();
+    if (!tablesYaml) {
+        return NJson::JSON_NULL;
+    }
+    const auto yaml = YAML::Load(tablesYaml.c_str());
+    return NKikimr::NYaml::Yaml2Json(yaml, true);
 }
 
 TVector<std::string> TWorkloadGeneratorBase::GetCleanPaths() const {
@@ -119,7 +199,9 @@ void TWorkloadBaseParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommand
             .StoreResult(&S3Endpoint);
         opts.AddLongOption("string", "Use String type in tables instead Utf8 one.").NoArgument().StoreValue(&StringType, "String");
         opts.AddLongOption("datetime", "Use Date and Timestamp types in tables instead Date32 and Timestamp64 ones.").NoArgument()
-            .StoreValue(&DateType, "Date").StoreValue(&TimestampType, "Timestamp");
+            .StoreValue(&DateType, "Date").StoreValue(&TimestampType, "Timestamp").StoreValue(&DatetimeType, "Datetime");
+        opts.AddLongOption("partition-size", "Maximum partition size in megabytes (AUTO_PARTITIONING_PARTITION_SIZE_MB) for row tables.")
+            .DefaultValue(PartitionSizeMb).StoreResult(&PartitionSizeMb);
         break;
     case TWorkloadParams::ECommandType::Root:
         opts.AddLongOption('p', "path", "Path where benchmark tables are located")
@@ -135,11 +217,20 @@ void TWorkloadBaseParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommand
 }
 
 TString TWorkloadBaseParams::GetFullTableName(const char* table) const {
-    return TFsPath(DbPath) / Path/ table;
+    return DbPath + "/" + Path + (TStringBuf(table) ? "/" + TString(table) : TString());
 }
 
 TWorkloadGeneratorBase::TWorkloadGeneratorBase(const TWorkloadBaseParams& params)
     : Params(params)
 {}
+
+TString TWorkloadBaseParams::GetTablePathQuote(EQuerySyntax syntax) {
+    switch(syntax) {
+    case EQuerySyntax::YQL:
+        return "`";
+    case EQuerySyntax::PG:
+        return "\"";
+    }
+}
 
 }

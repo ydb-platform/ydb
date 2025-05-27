@@ -48,10 +48,6 @@
 /* Define if --enable-ipv6 is specified */
 #define ENABLE_IPV6 1
 
-/* Define to 1 if your system stores words within floats with the most
-   significant word first */
-/* #undef FLOAT_WORDS_BIGENDIAN */
-
 /* Define if getpgrp() must be called as getpgrp(0). */
 /* #undef GETPGRP_HAVE_ARG */
 
@@ -1339,6 +1335,9 @@
 /* Define to 1 if you have the <sys/param.h> header file. */
 #define HAVE_SYS_PARAM_H 1
 
+/* Define to 1 if you have the <sys/pidfd.h> header file. */
+/* #undef HAVE_SYS_PIDFD_H */
+
 /* Define to 1 if you have the <sys/poll.h> header file. */
 #define HAVE_SYS_POLL_H 1
 
@@ -1439,8 +1438,8 @@
 /* Define to 1 if you have the `truncate' function. */
 #define HAVE_TRUNCATE 1
 
-/* Define to 1 if you have the `ttyname' function. */
-#define HAVE_TTYNAME 1
+/* Define to 1 if you have the `ttyname_r' function. */
+#define HAVE_TTYNAME_R 1
 
 /* Define to 1 if you don't have `tm_zone' but do have the external array
    `tzname'. */
@@ -1612,7 +1611,10 @@
 #define PY_SUPPORT_TIER 1
 
 /* Define if you want to build an interpreter with many run-time checks. */
-/* #undef Py_DEBUG */
+#if !defined(NDEBUG) && !defined(Py_LIMITED_API) && !defined(DISABLE_PYDEBUG)
+#define Py_DEBUG
+#define GC_NDEBUG
+#endif
 
 /* Defined if Python is built as a shared library. */
 /* #undef Py_ENABLE_SHARED */

@@ -17,6 +17,7 @@
 #include "liburing.h"
 #include "helpers.h"
 
+#ifndef CONFIG_USE_SANITIZER
 static void test(void)
 {
 	struct io_uring_sqe *sqe;
@@ -56,5 +57,12 @@ int main(int argc, char *argv[])
 	}
 
 	wait(&wstat);
+	unlink("core");
 	return T_EXIT_PASS;
 }
+#else
+int main(int argc, char *argv[])
+{
+	return T_EXIT_SKIP;
+}
+#endif

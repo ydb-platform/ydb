@@ -23,7 +23,7 @@ public:
     // IClientBase methods
     DELEGATE_METHOD(IConnectionPtr, GetConnection, (), ())
 
-    DELEGATE_METHOD(std::optional<TStringBuf>, GetClusterName,
+    DELEGATE_METHOD(TFuture<std::optional<std::string>>, GetClusterName,
         (bool fetchIfNull),
         (fetchIfNull))
 
@@ -63,12 +63,12 @@ public:
         (subrequests, options))
 
     DELEGATE_METHOD(TFuture<TSelectRowsResult>, SelectRows, (
-        const TString& query,
+        const std::string& query,
         const TSelectRowsOptions& options),
         (query, options))
 
     DELEGATE_METHOD(TFuture<NYson::TYsonString>, ExplainQuery, (
-        const TString& query,
+        const std::string& query,
         const TExplainQueryOptions& options),
         (query, options))
 
@@ -256,6 +256,11 @@ public:
         const TTransactionAttachOptions& options),
         (transactionId, options))
 
+    DELEGATE_METHOD(IPrerequisitePtr, AttachPrerequisite, (
+        NPrerequisiteClient::TPrerequisiteId prerequisiteId,
+        const TPrerequisiteAttachOptions& options),
+        (prerequisiteId, options))
+
     // Tables
     DELEGATE_METHOD(TFuture<void>, MountTable, (
         const NYPath::TYPath& path,
@@ -281,6 +286,11 @@ public:
         const NYPath::TYPath& path,
         const TUnfreezeTableOptions& options),
         (path, options))
+
+    DELEGATE_METHOD(TFuture<void>, CancelTabletTransition, (
+        NTabletClient::TTabletId tabletId,
+        const TCancelTabletTransitionOptions& options),
+        (tabletId, options))
 
     DELEGATE_METHOD(TFuture<void>, ReshardTable, (
         const NYPath::TYPath& path,
@@ -360,7 +370,7 @@ public:
         (path, options))
 
     DELEGATE_METHOD(TFuture<std::vector<NTabletClient::TTabletActionId>>, BalanceTabletCells, (
-        const TString& tabletCellBundle,
+        const std::string& tabletCellBundle,
         const std::vector<NYPath::TYPath>& movableTables,
         const TBalanceTabletCellsOptions& options),
         (tabletCellBundle, movableTables, options))
@@ -389,6 +399,11 @@ public:
         const std::vector<NYPath::TRichYPath>& paths,
         const TPartitionTablesOptions& options),
         (paths, options))
+
+    DELEGATE_METHOD(TFuture<ITablePartitionReaderPtr>, CreateTablePartitionReader, (
+        const TTablePartitionCookiePtr& descriptor,
+        const TReadTablePartitionOptions& options),
+        (descriptor, options))
 
     // Journals
     DELEGATE_METHOD(TFuture<void>, TruncateJournal, (
@@ -423,22 +438,22 @@ public:
         (group, member, options))
 
     DELEGATE_METHOD(TFuture<TCheckPermissionResponse>, CheckPermission, (
-        const TString& user,
+        const std::string& user,
         const NYPath::TYPath& path,
         NYTree::EPermission permission,
         const TCheckPermissionOptions& options),
         (user, path, permission, options))
 
     DELEGATE_METHOD(TFuture<TCheckPermissionByAclResult>, CheckPermissionByAcl, (
-        const std::optional<TString>& user,
+        const std::optional<std::string>& user,
         NYTree::EPermission permission,
         NYTree::INodePtr acl,
         const TCheckPermissionByAclOptions& options),
         (user, permission, acl, options))
 
     DELEGATE_METHOD(TFuture<void>, TransferAccountResources, (
-        const TString& srcAccount,
-        const TString& dstAccount,
+        const std::string& srcAccount,
+        const std::string& dstAccount,
         NYTree::INodePtr resourceDelta,
         const TTransferAccountResourcesOptions& options),
         (srcAccount, dstAccount, resourceDelta, options))
@@ -484,6 +499,12 @@ public:
         const TUpdateOperationParametersOptions& options),
         (operationIdOrAlias, parameters, options))
 
+    DELEGATE_METHOD(TFuture<void>, PatchOperationSpec, (
+        const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
+        const NScheduler::TSpecPatchList& patches,
+        const TPatchOperationSpecOptions& options),
+        (operationIdOrAlias, patches, options))
+
     DELEGATE_METHOD(TFuture<TOperation>, GetOperation, (
         const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
         const TGetOperationOptions& options),
@@ -510,11 +531,16 @@ public:
         const TGetJobSpecOptions& options),
         (jobId, options))
 
-    DELEGATE_METHOD(TFuture<TSharedRef>, GetJobStderr, (
+    DELEGATE_METHOD(TFuture<TGetJobStderrResponse>, GetJobStderr, (
         const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
         NJobTrackerClient::TJobId jobId,
         const TGetJobStderrOptions& options),
         (operationIdOrAlias, jobId, options))
+
+    DELEGATE_METHOD(TFuture<std::vector<TJobTraceEvent>>, GetJobTrace, (
+        const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
+        const TGetJobTraceOptions& options),
+        (operationIdOrAlias, options))
 
     DELEGATE_METHOD(TFuture<TSharedRef>, GetJobFailContext, (
         const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
@@ -599,7 +625,7 @@ public:
 
     DELEGATE_METHOD(TFuture<void>, SwitchLeader, (
         NHydra::TCellId cellId,
-        const TString& newLeaderAddress,
+        const std::string& newLeaderAddress,
         const TSwitchLeaderOptions& options),
         (cellId, newLeaderAddress, options))
 
@@ -613,17 +639,17 @@ public:
         (options))
 
     DELEGATE_METHOD(TFuture<void>, KillProcess, (
-        const TString& address,
+        const std::string& address,
         const TKillProcessOptions& options),
         (address, options))
 
     DELEGATE_METHOD(TFuture<TString>, WriteCoreDump, (
-        const TString& address,
+        const std::string& address,
         const TWriteCoreDumpOptions& options),
         (address, options))
 
     DELEGATE_METHOD(TFuture<TGuid>, WriteLogBarrier, (
-        const TString& address,
+        const std::string& address,
         const TWriteLogBarrierOptions& options),
         (address, options))
 
@@ -633,7 +659,7 @@ public:
         (operationId, options))
 
     DELEGATE_METHOD(TFuture<void>, HealExecNode, (
-        const TString& address,
+        const std::string& address,
         const THealExecNodeOptions& options),
         (address, options))
 
@@ -674,7 +700,7 @@ public:
 
     DELEGATE_METHOD(TFuture<TMaintenanceIdPerTarget>, AddMaintenance, (
         EMaintenanceComponent component,
-        const TString& address,
+        const std::string& address,
         EMaintenanceType type,
         const TString& comment,
         const TAddMaintenanceOptions& options),
@@ -682,60 +708,69 @@ public:
 
     DELEGATE_METHOD(TFuture<TMaintenanceCountsPerTarget>, RemoveMaintenance, (
         EMaintenanceComponent component,
-        const TString& address,
+        const std::string& address,
         const TMaintenanceFilter& filter,
         const TRemoveMaintenanceOptions& options),
         (component, address, filter, options))
 
     DELEGATE_METHOD(TFuture<TDisableChunkLocationsResult>, DisableChunkLocations, (
-        const TString& nodeAddress,
+        const std::string& nodeAddress,
         const std::vector<TGuid>& locationUuids,
         const TDisableChunkLocationsOptions& options),
         (nodeAddress, locationUuids, options))
 
     DELEGATE_METHOD(TFuture<TDestroyChunkLocationsResult>, DestroyChunkLocations, (
-        const TString& nodeAddress,
+        const std::string& nodeAddress,
         bool recoverUnlinkedDisks,
         const std::vector<TGuid>& locationUuids,
         const TDestroyChunkLocationsOptions& options),
         (nodeAddress, recoverUnlinkedDisks, locationUuids, options))
 
     DELEGATE_METHOD(TFuture<TResurrectChunkLocationsResult>, ResurrectChunkLocations, (
-        const TString& nodeAddress,
+        const std::string& nodeAddress,
         const std::vector<TGuid>& locationUuids,
         const TResurrectChunkLocationsOptions& options),
         (nodeAddress, locationUuids, options))
 
     DELEGATE_METHOD(TFuture<TRequestRestartResult>, RequestRestart, (
-        const TString& nodeAddress,
+        const std::string& nodeAddress,
         const TRequestRestartOptions& options),
         (nodeAddress, options))
 
+    DELEGATE_METHOD(TFuture<TCollectCoverageResult>, CollectCoverage, (
+        const std::string& address,
+        const TCollectCoverageOptions& options),
+        (address, options))
+
     DELEGATE_METHOD(TFuture<void>, SetUserPassword, (
-        const TString& user,
+        const std::string& user,
         const TString& currentPasswordSha256,
         const TString& newPasswordSha256,
         const TSetUserPasswordOptions& options),
         (user, currentPasswordSha256, newPasswordSha256, options))
 
     DELEGATE_METHOD(TFuture<TIssueTokenResult>, IssueToken, (
-        const TString& user,
+        const std::string& user,
         const TString& passwordSha256,
         const TIssueTokenOptions& options),
         (user, passwordSha256, options))
 
     DELEGATE_METHOD(TFuture<void>, RevokeToken, (
-        const TString& user,
+        const std::string& user,
         const TString& passwordSha256,
         const TString& tokenSha256,
         const TRevokeTokenOptions& options),
         (user, passwordSha256, tokenSha256, options))
 
     DELEGATE_METHOD(TFuture<TListUserTokensResult>, ListUserTokens, (
-        const TString& user,
+        const std::string& user,
         const TString& passwordSha256,
         const TListUserTokensOptions& options),
         (user, passwordSha256, options))
+
+    DELEGATE_METHOD(TFuture<TGetCurrentUserResultPtr>, GetCurrentUser, (
+        const TGetCurrentUserOptions& options),
+        (options))
 
     // Query tracker
     DELEGATE_METHOD(TFuture<NQueryTrackerClient::TQueryId>, StartQuery, (
@@ -781,12 +816,12 @@ public:
 
     // Bundle Controller
     DELEGATE_METHOD(TFuture<NBundleControllerClient::TBundleConfigDescriptorPtr>, GetBundleConfig, (
-        const TString& bundleName,
+        const std::string& bundleName,
         const NBundleControllerClient::TGetBundleConfigOptions& options),
         (bundleName, options))
 
     DELEGATE_METHOD(TFuture<void>, SetBundleConfig, (
-        const TString& bundleName,
+        const std::string& bundleName,
         const NBundleControllerClient::TBundleTargetConfigPtr& bundleConfig,
         const NBundleControllerClient::TSetBundleConfigOptions& options),
         (bundleName, bundleConfig, options))
@@ -840,6 +875,51 @@ public:
         const TGetFlowViewOptions& options),
         (pipelinePath, viewPath, options))
 
+    DELEGATE_METHOD(TFuture<TFlowExecuteResult>, FlowExecute, (
+        const NYPath::TYPath& pipelinePath,
+        const TString& command,
+        const NYson::TYsonString& argument,
+        const TFlowExecuteOptions& options = {}),
+        (pipelinePath, command, argument, options))
+
+    // Distributed client
+    DELEGATE_METHOD(TFuture<TDistributedWriteSessionWithCookies>, StartDistributedWriteSession, (
+        const NYPath::TRichYPath& path,
+        const TDistributedWriteSessionStartOptions& options),
+        (path, options))
+
+    DELEGATE_METHOD(TFuture<void>, FinishDistributedWriteSession, (
+        const TDistributedWriteSessionWithResults& sessionWithResults,
+        const TDistributedWriteSessionFinishOptions& options),
+        (sessionWithResults, options))
+
+    DELEGATE_METHOD(TFuture<ITableFragmentWriterPtr>, CreateTableFragmentWriter, (
+        const TSignedWriteFragmentCookiePtr& cookie,
+        const TTableFragmentWriterOptions& options),
+        (cookie, options))
+
+    // Shuffle Service
+    DELEGATE_METHOD(TFuture<TSignedShuffleHandlePtr>, StartShuffle, (
+        const std::string& account,
+        int partitionCount,
+        NObjectClient::TTransactionId transactionId,
+        const TStartShuffleOptions& options),
+        (account, partitionCount, transactionId, options))
+
+    DELEGATE_METHOD(TFuture<IRowBatchReaderPtr>, CreateShuffleReader, (
+        const TSignedShuffleHandlePtr& shuffleHandle,
+        int partitionIndex,
+        std::optional<std::pair<int, int>> writerIndexRange,
+        const TShuffleReaderOptions& options),
+        (shuffleHandle, partitionIndex, writerIndexRange, options))
+
+    DELEGATE_METHOD(TFuture<IRowBatchWriterPtr>, CreateShuffleWriter, (
+        const TSignedShuffleHandlePtr& shuffleHandle,
+        const std::string& partitionColumn,
+        std::optional<int> writerIndex,
+        const TShuffleWriterOptions& options),
+        (shuffleHandle, partitionColumn, writerIndex, options))
+
     #undef DELEGATE_METHOD
 
 protected:
@@ -849,4 +929,3 @@ protected:
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NApi
-

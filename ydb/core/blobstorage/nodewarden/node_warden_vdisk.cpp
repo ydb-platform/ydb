@@ -1,6 +1,8 @@
+#include "node_warden.h"
 #include "node_warden_impl.h"
 
 #include <ydb/core/blobstorage/crypto/default.h>
+#include <ydb/core/blobstorage/vdisk/vdisk_actor.h>
 
 #include <util/string/split.h>
 
@@ -184,8 +186,16 @@ namespace NKikimr::NStorage {
         TIntrusivePtr<TVDiskConfig> vdiskConfig = Cfg->AllVDiskKinds->MakeVDiskConfig(baseInfo);
         vdiskConfig->EnableVDiskCooldownTimeout = Cfg->EnableVDiskCooldownTimeout;
         vdiskConfig->ReplPausedAtStart = Cfg->VDiskReplPausedAtStart;
+        if (Cfg->ReplMaxQuantumBytes) {
+            vdiskConfig->ReplMaxQuantumBytes = *Cfg->ReplMaxQuantumBytes;
+        }
+        if (Cfg->ReplMaxDonorNotReadyCount) {
+            vdiskConfig->ReplMaxDonorNotReadyCount = *Cfg->ReplMaxDonorNotReadyCount;
+        }
         vdiskConfig->EnableVPatch = EnableVPatch;
         vdiskConfig->DefaultHugeGarbagePerMille = DefaultHugeGarbagePerMille;
+        vdiskConfig->HugeDefragFreeSpaceBorderPerMille = HugeDefragFreeSpaceBorderPerMille;
+        vdiskConfig->MaxChunksToDefragInflight = MaxChunksToDefragInflight;
 
         vdiskConfig->EnableLocalSyncLogDataCutting = EnableLocalSyncLogDataCutting;
         if (deviceType == NPDisk::EDeviceType::DEVICE_TYPE_ROT) {
@@ -196,12 +206,26 @@ namespace NKikimr::NStorage {
             vdiskConfig->MaxSyncLogChunksInFlight = MaxSyncLogChunksInFlightSSD;
         }
 
+        vdiskConfig->ThrottlingDryRun = ThrottlingDryRun;
+        vdiskConfig->ThrottlingMinLevel0SstCount = ThrottlingMinLevel0SstCount;
+        vdiskConfig->ThrottlingMaxLevel0SstCount = ThrottlingMaxLevel0SstCount;
+        vdiskConfig->ThrottlingMinInplacedSizeHDD = ThrottlingMinInplacedSizeHDD;
+        vdiskConfig->ThrottlingMaxInplacedSizeHDD = ThrottlingMaxInplacedSizeHDD;
+        vdiskConfig->ThrottlingMinInplacedSizeSSD = ThrottlingMinInplacedSizeSSD;
+        vdiskConfig->ThrottlingMaxInplacedSizeSSD = ThrottlingMaxInplacedSizeSSD;
+        vdiskConfig->ThrottlingMinOccupancyPerMille = ThrottlingMinOccupancyPerMille;
+        vdiskConfig->ThrottlingMaxOccupancyPerMille = ThrottlingMaxOccupancyPerMille;
+        vdiskConfig->ThrottlingMinLogChunkCount = ThrottlingMinLogChunkCount;
+        vdiskConfig->ThrottlingMaxLogChunkCount = ThrottlingMaxLogChunkCount;
+
+        vdiskConfig->MaxInProgressSyncCount = MaxInProgressSyncCount;
+
         vdiskConfig->CostMetricsParametersByMedia = CostMetricsParametersByMedia;
 
         vdiskConfig->FeatureFlags = Cfg->FeatureFlags;
 
-        if (StorageConfig.HasBlobStorageConfig() && StorageConfig.GetBlobStorageConfig().HasVDiskPerformanceSettings()) {
-            for (auto &type : StorageConfig.GetBlobStorageConfig().GetVDiskPerformanceSettings().GetVDiskTypes()) {
+        if (StorageConfig->HasBlobStorageConfig() && StorageConfig->GetBlobStorageConfig().HasVDiskPerformanceSettings()) {
+            for (auto &type : StorageConfig->GetBlobStorageConfig().GetVDiskPerformanceSettings().GetVDiskTypes()) {
                 if (type.HasPDiskType() && deviceType == PDiskTypeToPDiskType(type.GetPDiskType())) {
                     if (type.HasMinHugeBlobSizeInBytes()) {
                         vdiskConfig->MinHugeBlobInBytes = type.GetMinHugeBlobSizeInBytes();
@@ -209,6 +233,20 @@ namespace NKikimr::NStorage {
                 }
             }
         }
+
+        vdiskConfig->BalancingEnableSend = Cfg->BlobStorageConfig.GetVDiskBalancingConfig().GetEnableSend();
+        vdiskConfig->BalancingEnableDelete = Cfg->BlobStorageConfig.GetVDiskBalancingConfig().GetEnableDelete();
+        vdiskConfig->BalancingBalanceOnlyHugeBlobs = Cfg->BlobStorageConfig.GetVDiskBalancingConfig().GetBalanceOnlyHugeBlobs();
+        vdiskConfig->BalancingJobGranularity = TDuration::MicroSeconds(Cfg->BlobStorageConfig.GetVDiskBalancingConfig().GetJobGranularityUs());
+        vdiskConfig->BalancingBatchSize = Cfg->BlobStorageConfig.GetVDiskBalancingConfig().GetBatchSize();
+        vdiskConfig->BalancingMaxToSendPerEpoch = Cfg->BlobStorageConfig.GetVDiskBalancingConfig().GetMaxToSendPerEpoch();
+        vdiskConfig->BalancingMaxToDeletePerEpoch = Cfg->BlobStorageConfig.GetVDiskBalancingConfig().GetMaxToDeletePerEpoch();
+        vdiskConfig->BalancingReadBatchTimeout = TDuration::MilliSeconds(Cfg->BlobStorageConfig.GetVDiskBalancingConfig().GetReadBatchTimeoutMs());
+        vdiskConfig->BalancingSendBatchTimeout = TDuration::MilliSeconds(Cfg->BlobStorageConfig.GetVDiskBalancingConfig().GetSendBatchTimeoutMs());
+        vdiskConfig->BalancingRequestBlobsOnMainTimeout = TDuration::MilliSeconds(Cfg->BlobStorageConfig.GetVDiskBalancingConfig().GetRequestBlobsOnMainTimeoutMs());
+        vdiskConfig->BalancingDeleteBatchTimeout = TDuration::MilliSeconds(Cfg->BlobStorageConfig.GetVDiskBalancingConfig().GetDeleteBatchTimeoutMs());
+        vdiskConfig->BalancingEpochTimeout = TDuration::MilliSeconds(Cfg->BlobStorageConfig.GetVDiskBalancingConfig().GetEpochTimeoutMs());
+        vdiskConfig->BalancingTimeToSleepIfNothingToDo = TDuration::Seconds(Cfg->BlobStorageConfig.GetVDiskBalancingConfig().GetSecondsToSleepIfNothingToDo());
 
         // issue initial report to whiteboard before creating actor to avoid races
         Send(WhiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate(vdiskId, groupInfo->GetStoragePoolName(),
@@ -302,6 +340,7 @@ namespace NKikimr::NStorage {
         if (!inserted) {
             // -- check that configuration did not change
         }
+
         record.Config.CopyFrom(vdisk);
 
         if (vdisk.GetDoDestroy() || vdisk.GetEntityStatus() == NKikimrBlobStorage::EEntityStatus::DESTROY) {

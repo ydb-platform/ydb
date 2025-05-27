@@ -7,7 +7,6 @@ TEST_SRCS(
     test_scheme_shard_operations.py
 )
 
-TIMEOUT(600)
 SIZE(MEDIUM)
 
 DEPENDS(

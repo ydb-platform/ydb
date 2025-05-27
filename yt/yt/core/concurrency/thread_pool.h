@@ -18,14 +18,16 @@ struct IThreadPool
 
     //! Returns the current thread count.
     /*!
-     *  This can differ from value set by #Configure
+     *  This can differ from value set by #SetThreadCount
      *  because it clamped between 1 and the maximum thread count.
      */
     virtual int GetThreadCount() = 0;
 
-    //! Enables changing thread pool configuration at runtime.
-    virtual void Configure(int threadCount) = 0;
-    virtual void Configure(TDuration pollingPeriod) = 0;
+    //! Updates thread count at runtime.
+    virtual void SetThreadCount(int threadCount) = 0;
+
+    //! Updates polling period at runtime.
+    virtual void SetPollingPeriod(TDuration pollingPeriod) = 0;
 
     //! Returns the invoker for enqueuing callbacks into the thread pool.
     virtual const IInvokerPtr& GetInvoker() = 0;
@@ -44,7 +46,7 @@ struct TThreadPoolOptions
 
 IThreadPoolPtr CreateThreadPool(
     int threadCount,
-    const TString& threadNamePrefix,
+    const std::string& threadNamePrefix,
     const TThreadPoolOptions& options = {});
 
 ////////////////////////////////////////////////////////////////////////////////

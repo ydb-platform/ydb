@@ -28,6 +28,7 @@ IF (AUTOCHECK)
     )
 ENDIF()
 
+ENV(COMPOSE_HTTP_TIMEOUT=1200)  # during parallel tests execution there could be huge disk io, which triggers timeouts in docker-compose 
 INCLUDE(${ARCADIA_ROOT}/library/recipes/docker_compose/recipe.inc)
 
 IF (OPENSOURCE)
@@ -59,8 +60,8 @@ PEERDIR(
     library/cpp/testing/common
     ydb/core/kqp/ut/common
     ydb/core/kqp/ut/federated_query/common
-    ydb/library/yql/sql/pg_dummy
-    ydb/public/sdk/cpp/client/ydb_types/operation
+    yql/essentials/sql/pg_dummy
+    ydb/public/sdk/cpp/src/client/types/operation
     ydb/library/actors/core
 )
 

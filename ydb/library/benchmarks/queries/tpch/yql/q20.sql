@@ -4,7 +4,7 @@
 -- TPC TPC-H Parameter Substitution (Version 2.17.2 build 0)
 -- using 1680793381 as a seed to the RNG
 
-$border = Date("1993-01-01");
+$border = Date("1994-01-01");
 $threshold = (
 select
     $z0_5_35 * sum(l_quantity) as threshold,
@@ -25,7 +25,7 @@ select
 from
     {{part}}
 where
-    p_name like 'maroon%'
+    p_name like 'forest%'
 );
 
 $join1 = (
@@ -78,7 +78,7 @@ join
 on
     j.s_nationkey = n.n_nationkey
 where
-    n.n_name = 'VIETNAM'
+    n.n_name = 'CANADA'
 order by
     s_name;
 

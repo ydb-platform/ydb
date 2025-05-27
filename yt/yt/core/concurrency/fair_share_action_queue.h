@@ -4,9 +4,11 @@
 
 #include <yt/yt/core/actions/callback.h>
 
-#include <yt/yt/core/misc/range.h>
-
 #include <yt/yt/core/profiling/public.h>
+
+#include <yt/yt/core/threading/thread.h>
+
+#include <library/cpp/yt/memory/range.h>
 
 namespace NYT::NConcurrency {
 
@@ -28,7 +30,8 @@ IFairShareActionQueuePtr CreateFairShareActionQueue(
     const TString& threadName,
     const std::vector<TString>& queueNames,
     const THashMap<TString, std::vector<TString>>& bucketToQueues = {},
-    NProfiling::IRegistryImplPtr registry = {});
+    NThreading::TThreadOptions threadOptions = {},
+    NProfiling::IRegistryPtr registry = {});
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -47,7 +50,8 @@ template <typename EQueue, typename EBucket = EQueue>
 IEnumIndexedFairShareActionQueuePtr<EQueue> CreateEnumIndexedFairShareActionQueue(
     const TString& threadName,
     const THashMap<EBucket, std::vector<EQueue>>& bucketToQueues = {},
-    NProfiling::IRegistryImplPtr registry = {});
+    NThreading::TThreadOptions threadOptions = {},
+    NProfiling::IRegistryPtr registry = {});
 
 ////////////////////////////////////////////////////////////////////////////////
 

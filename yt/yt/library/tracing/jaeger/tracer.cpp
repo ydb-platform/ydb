@@ -1,4 +1,6 @@
+
 #include "tracer.h"
+#include "private.h"
 
 #include <yt/yt/library/tracing/jaeger/model.pb.h>
 
@@ -37,8 +39,10 @@ using namespace NAuth;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "Jaeger");
-YT_DEFINE_GLOBAL(const NProfiling::TProfiler, Profiler, "/tracing");
+constinit const auto Logger = JaegerLogger;
+static constexpr auto& Profiler = TracingProfiler;
+
+////////////////////////////////////////////////////////////////////////////////
 
 static const TString ServiceTicketMetadataName = "x-ya-service-ticket";
 static const TString TracingServiceAlias = "tracing";
@@ -47,7 +51,8 @@ static const TString TracingServiceAlias = "tracing";
 
 void TJaegerTracerDynamicConfig::Register(TRegistrar registrar)
 {
-    registrar.Parameter("collector_channel_config", &TThis::CollectorChannelConfig)
+    registrar.Parameter("collector_channel", &TThis::CollectorChannel)
+        .Alias("collector_channel_config")
         .Optional();
     registrar.Parameter("max_request_size", &TThis::MaxRequestSize)
         .Default();
@@ -107,8 +112,8 @@ TJaegerTracerConfigPtr TJaegerTracerConfig::ApplyDynamic(const TJaegerTracerDyna
 {
     auto config = New<TJaegerTracerConfig>();
     config->CollectorChannelConfig = CollectorChannelConfig;
-    if (dynamicConfig->CollectorChannelConfig) {
-        config->CollectorChannelConfig = dynamicConfig->CollectorChannelConfig;
+    if (dynamicConfig->CollectorChannel) {
+        config->CollectorChannelConfig = dynamicConfig->CollectorChannel;
     }
 
     config->FlushPeriod = dynamicConfig->FlushPeriod.value_or(FlushPeriod);
@@ -165,6 +170,8 @@ void ToProtoUInt64(TString* proto, i64 i)
 
 void ToProto(NProto::Span* proto, const TTraceContextPtr& traceContext)
 {
+    using NYT::ToProto;
+
     ToProtoGuid(proto->mutable_trace_id(), traceContext->GetTraceId());
     ToProtoUInt64(proto->mutable_span_id(), traceContext->GetSpanId());
 
@@ -179,8 +186,8 @@ void ToProto(NProto::Span* proto, const TTraceContextPtr& traceContext)
     for (const auto& [name, value] : traceContext->GetTags()) {
         auto* protoTag = proto->add_tags();
 
-        protoTag->set_key(name);
-        protoTag->set_v_str(value);
+        protoTag->set_key(ToProto(name));
+        protoTag->set_v_str(ToProto(value));
     }
 
     for (const auto& logEntry : traceContext->GetLogEntries()) {
@@ -226,10 +233,7 @@ std::vector<TK> ExtractKeys(THashMap<TK, TV> const& inputMap) {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TBatchInfo::TBatchInfo()
-{ }
-
-TBatchInfo::TBatchInfo(const TString& endpoint)
+TBatchInfo::TBatchInfo(const std::string& endpoint)
     : TracesDequeued_(Profiler().WithTag("endpoint", endpoint).Counter("/traces_dequeued"))
     , TracesDropped_(Profiler().WithTag("endpoint", endpoint).Counter("/traces_dropped"))
     , MemoryUsage_(Profiler().WithTag("endpoint", endpoint).Gauge("/memory_usage"))
@@ -300,9 +304,7 @@ std::tuple<std::vector<TSharedRef>, int, int> TBatchInfo::PeekQueue(const TJaege
 }
 
 TJaegerChannelManager::TJaegerChannelManager()
-    : Channel_()
-    , ReopenTime_(TInstant::Now())
-    , RpcTimeout_()
+    : ReopenTime_(TInstant::Now())
 { }
 
 TJaegerChannelManager::TJaegerChannelManager(
@@ -380,14 +382,14 @@ TInstant TJaegerChannelManager::GetReopenTime()
 }
 
 TJaegerTracer::TJaegerTracer(
-    const TJaegerTracerConfigPtr& config)
+    TJaegerTracerConfigPtr config)
     : ActionQueue_(New<TActionQueue>("Jaeger"))
     , FlushExecutor_(New<TPeriodicExecutor>(
         ActionQueue_->GetInvoker(),
-        BIND(&TJaegerTracer::Flush, MakeStrong(this)),
+        BIND(&TJaegerTracer::DoFlush, MakeStrong(this)),
         config->FlushPeriod))
-    , Config_(config)
     , TvmService_(config->TvmService ? CreateTvmService(config->TvmService) : nullptr)
+    , Config_(std::move(config))
 {
     Profiler().AddFuncGauge("/enabled", MakeStrong(this), [this] {
         return Config_.Acquire()->IsEnabled();
@@ -444,8 +446,8 @@ void TJaegerTracer::DequeueAll(const TJaegerTracerConfigPtr& config)
         return;
     }
 
-    THashMap<TString, NProto::Batch> batches;
-    auto flushBatch = [&] (TString endpoint) {
+    THashMap<std::string, NProto::Batch> batches;
+    auto flushBatch = [&] (std::string endpoint) {
         auto itBatch = batches.find(endpoint);
         if (itBatch == batches.end()) {
             return;
@@ -457,7 +459,7 @@ void TJaegerTracer::DequeueAll(const TJaegerTracerConfigPtr& config)
 
         auto itInfo = BatchInfo_.find(endpoint);
         if (itInfo == BatchInfo_.end()) {
-            itInfo = BatchInfo_.insert({endpoint, TBatchInfo(endpoint)}).first;
+            itInfo = BatchInfo_.emplace(endpoint, TBatchInfo(endpoint)).first;
         }
         auto& currentInfo = itInfo->second;
 
@@ -550,11 +552,21 @@ void TJaegerTracer::DropFullQueue()
     }
 }
 
-void TJaegerTracer::Flush()
+void TJaegerTracer::DoFlush()
 {
     YT_LOG_DEBUG("Started span flush");
 
+
     auto config = Config_.Acquire();
+
+    auto flushStartTime = TInstant::Now();
+
+    if (OpenChannelConfig_ != config->CollectorChannelConfig) {
+        OpenChannelConfig_ = config->CollectorChannelConfig;
+        for (auto& [endpoint, channel] : CollectorChannels_) {
+            CollectorChannels_[endpoint]->ForceReset(flushStartTime);
+        }
+    }
 
     DequeueAll(config);
 
@@ -570,18 +582,7 @@ void TJaegerTracer::Flush()
         return;
     }
 
-    auto flushStartTime = TInstant::Now();
-
-    if (OpenChannelConfig_ != config->CollectorChannelConfig) {
-        OpenChannelConfig_ = config->CollectorChannelConfig;
-        for (auto& [endpoint, channel] : CollectorChannels_) {
-            CollectorChannels_[endpoint].ForceReset(flushStartTime);
-        }
-    }
-
-    std::stack<TString> toRemove;
     auto keys = ExtractKeys(BatchInfo_);
-
     if (keys.empty()) {
         YT_LOG_DEBUG("Span batch info is empty");
         LastSuccessfulFlushTime_ = flushStartTime;
@@ -589,10 +590,11 @@ void TJaegerTracer::Flush()
         return;
     }
 
+    std::stack<TString> toRemove;
     for (const auto& endpoint : keys) {
         auto [batches, batchCount, spanCount] = PeekQueue(config, endpoint);
         if (batchCount <= 0) {
-            if (!CollectorChannels_.contains(endpoint) || flushStartTime > CollectorChannels_[endpoint].GetReopenTime() + config->EndpointChannelTimeout) {
+            if (!CollectorChannels_.contains(endpoint) || flushStartTime > CollectorChannels_[endpoint]->GetReopenTime() + config->EndpointChannelTimeout) {
                 toRemove.push(endpoint);
             }
             YT_LOG_DEBUG("Span queue is empty (Endpoint: %v)", endpoint);
@@ -611,16 +613,16 @@ void TJaegerTracer::Flush()
 
         auto it = CollectorChannels_.find(endpoint);
         if (it == CollectorChannels_.end()) {
-            it = CollectorChannels_.emplace(endpoint, TJaegerChannelManager(config, endpoint, TvmService_)).first;
+            it = CollectorChannels_.emplace(endpoint, New<TJaegerChannelManager>(config, endpoint, TvmService_)).first;
         }
 
         auto& channel = it->second;
 
-        if (channel.NeedsReopen(flushStartTime)) {
-            channel = TJaegerChannelManager(config, endpoint, TvmService_);
+        if (channel->NeedsReopen(flushStartTime)) {
+            channel = New<TJaegerChannelManager>(config, endpoint, TvmService_);
         }
 
-        if (channel.Push(batches, spanCount)) {
+        if (channel->Push(batches, spanCount)) {
             DropQueue(batchCount, endpoint);
             YT_LOG_DEBUG("Spans sent (Endpoint: %v)", endpoint);
             LastSuccessfulFlushTime_ = flushStartTime;

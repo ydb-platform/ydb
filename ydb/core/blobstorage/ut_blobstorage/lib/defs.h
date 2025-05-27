@@ -24,10 +24,11 @@
 #include <ydb/core/tx/tx_allocator/txallocator.h>
 #include <ydb/core/tx/mediator/mediator.h>
 #include <ydb/core/tx/scheme_board/cache.h>
-#include <ydb/core/util/testactorsys.h>
+#include <ydb/core/util/actorsys_test/testactorsys.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/system/rusage.h>
 #include <util/random/fast.h>
+#include <util/stream/null.h>
 
 using namespace NActors;
 using namespace NKikimr;

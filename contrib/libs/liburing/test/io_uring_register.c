@@ -22,6 +22,7 @@
 #include <linux/mman.h>
 #include <sys/time.h>
 #include <sys/resource.h>
+#include <sys/vfs.h>
 #include <limits.h>
 
 #include "helpers.h"
@@ -77,8 +78,13 @@ static int new_io_uring(int entries, struct io_uring_params *p)
 
 #define MAXFDS (UINT_MAX * sizeof(int))
 
+#define OFS_MAGIC	0x794c7630
+#define TMPFS_MAGIC	0x01021994
+#define RAMFS_MAGIC	0x858458f6
+
 static void *map_filebacked(size_t size)
 {
+	struct statfs buf;
 	int fd, ret;
 	void *addr;
 	char template[32] = "io_uring_register-test-XXXXXXXX";
@@ -88,7 +94,20 @@ static void *map_filebacked(size_t size)
 		perror("mkstemp");
 		return NULL;
 	}
+	if (statfs(template, &buf) < 0) {
+		perror("statfs");
+		unlink(template);
+		close(fd);
+		return NULL;
+	}
 	unlink(template);
+
+	/* virtual file systems may not present as file mapped */
+	if (buf.f_type == OFS_MAGIC || buf.f_type == RAMFS_MAGIC ||
+	    buf.f_type == TMPFS_MAGIC) {
+		close(fd);
+		return NULL;
+	}
 
 	ret = ftruncate(fd, size);
 	if (ret < 0) {
@@ -366,12 +385,12 @@ static int test_iovec_size(int fd)
 
 	/* file-backed buffers -- not supported */
 	buf = map_filebacked(2*1024*1024);
-	if (!buf)
-		status = 1;
-	iov.iov_base = buf;
-	iov.iov_len = 2*1024*1024;
-	status |= expect_fail(fd, IORING_REGISTER_BUFFERS, &iov, 1, -EFAULT, -EOPNOTSUPP);
-	munmap(buf, 2*1024*1024);
+	if (buf) {
+		iov.iov_base = buf;
+		iov.iov_len = 2*1024*1024;
+		status |= expect_fail(fd, IORING_REGISTER_BUFFERS, &iov, 1, -EFAULT, -EOPNOTSUPP);
+		munmap(buf, 2*1024*1024);
+	}
 
 	/* bump up against the soft limit and make sure we get EFAULT
 	 * or whatever we're supposed to get.  NOTE: this requires
@@ -418,14 +437,14 @@ static int ioring_poll(struct io_uring *ring, int fd, int fixed)
 	return ret;
 }
 
-static int test_poll_ringfd(void)
+static int __test_poll_ringfd(int ring_flags)
 {
 	int status = 0;
 	int ret;
 	int fd;
 	struct io_uring ring;
 
-	ret = io_uring_queue_init(1, &ring, 0);
+	ret = io_uring_queue_init(2, &ring, ring_flags);
 	if (ret) {
 		perror("io_uring_queue_init");
 		return 1;
@@ -446,6 +465,17 @@ static int test_poll_ringfd(void)
 	io_uring_queue_exit(&ring);
 
 	return status;
+}
+
+static int test_poll_ringfd(void)
+{
+	int ret;
+
+	ret = __test_poll_ringfd(0);
+	if (ret)
+		return ret;
+
+	return __test_poll_ringfd(IORING_SETUP_SQPOLL);
 }
 
 int main(int argc, char **argv)

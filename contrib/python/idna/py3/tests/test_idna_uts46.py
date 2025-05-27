@@ -7,131 +7,166 @@ import unittest
 import idna
 
 _RE_UNICODE = re.compile("\\\\u([0-9a-fA-F]{4})")
-_RE_SURROGATE = re.compile("[\uD800-\uDBFF][\uDC00-\uDFFF]")
+_RE_SURROGATE = re.compile("[\ud800-\udbff][\udc00-\udfff]")
 _SKIP_TESTS = [
     # These are strings that are illegal in IDNA 2008. Older versions of the UTS-46 test suite
     # had these denoted with the 'NV8' marker but this has been removed, so we need to manually
     # review exceptions and add them here to skip them as text vectors if they are invalid.
-    '\U000102F7\u3002\u200D',
-    '\U0001D7F5\u9681\u2BEE\uFF0E\u180D\u200C',
-    '9\u9681\u2BEE.\u180D\u200C',
-    '\u00DF\u200C\uAAF6\u18A5.\u22B6\u2D21\u2D16',
-    'ss\u200C\uAAF6\u18A5.\u22B6\u2D21\u2D16',
-    '\u00DF\u200C\uAAF6\u18A5\uFF0E\u22B6\u2D21\u2D16',
-    'ss\u200C\uAAF6\u18A5\uFF0E\u22B6\u2D21\u2D16',
-    '\U00010A57\u200D\u3002\u2D09\u2D15',
-    '\U00010A57\u200D\uFF61\u2D09\u2D15',
-    '\U0001D7CF\U0001DA19\u2E16.\u200D',
-    '1\U0001DA19\u2E16.\u200D',
-    '\U0001D7E04\U000E01D7\U0001D23B\uFF0E\u200D\U000102F5\u26E7\u200D',
-    '84\U000E01D7\U0001D23B.\u200D\U000102F5\u26E7\u200D',
-    '\u00A1', 'xn--7a', '\u19DA', 'xn--pkf', '\u2615', 'xn--53h',
-    '\U0001E937.\U00010B90\U0001E881\U00010E60\u0624',
-    '\U0001E937.\U00010B90\U0001E881\U00010E60\u0648\u0654',
-    '\U0001E915.\U00010B90\U0001E881\U00010E60\u0648\u0654',
-    '\U0001E915.\U00010B90\U0001E881\U00010E60\u0624',
-    'xn--ve6h.xn--jgb1694kz0b2176a',
-    '\u00DF\u3002\U000102F3\u2D0C\u0FB8',
-    'ss\u3002\U000102F3\u2D0C\u0FB8',
-    'ss.xn--lgd921mvv0m',
-    'ss.\U000102F3\u2D0C\u0FB8',
-    'xn--zca.xn--lgd921mvv0m',
-    '\u00DF.\U000102F3\u2D0C\u0FB8',
-    '\u00DF\uFF61\U000102F3\u2D0C\u0FB8',
-    'ss\uFF61\U000102F3\u2D0C\u0FB8',
-    '\u16AD\uFF61\U0001D320\u00DF\U00016AF1',
-    '\u16AD\u3002\U0001D320\u00DF\U00016AF1',
-    '\u16AD\u3002\U0001D320SS\U00016AF1',
-    '\u16AD\u3002\U0001D320ss\U00016AF1',
-    '\u16AD\u3002\U0001D320Ss\U00016AF1',
-    'xn--hwe.xn--ss-ci1ub261a',
-    '\u16AD.\U0001D320ss\U00016AF1',
-    '\u16AD.\U0001D320SS\U00016AF1',
-    '\u16AD.\U0001D320Ss\U00016AF1',
-    'xn--hwe.xn--zca4946pblnc',
-    '\u16AD.\U0001D320\u00DF\U00016AF1',
-    '\u16AD\uFF61\U0001D320SS\U00016AF1',
-    '\u16AD\uFF61\U0001D320ss\U00016AF1',
-    '\u16AD\uFF61\U0001D320Ss\U00016AF1',
-    '\u2D1A\U000102F8\U000E0104\u30025\uD7F6\u103A',
-    'xn--ilj2659d.xn--5-dug9054m',
-    '\u2D1A\U000102F8.5\uD7F6\u103A',
-    '\u2D1A\U000102F8\U000E0104\u3002\U0001D7DD\uD7F6\u103A',
-    'xn--9-mfs8024b.',
-    '9\u9681\u2BEE.',
-    'xn--ss-4epx629f.xn--ifh802b6a',
-    'ss\uAAF6\u18A5.\u22B6\u2D21\u2D16',
-    'xn--pt9c.xn--0kjya',
-    '\U00010A57.\u2D09\u2D15',
-    '\uA5F7\U00011180.\u075D\U00010A52',
-    'xn--ju8a625r.xn--hpb0073k',
-    '\u03C2.\u0641\u0645\u064A\U0001F79B1.',
-    '\u03A3.\u0641\u0645\u064A\U0001F79B1.',
-    '\u03C3.\u0641\u0645\u064A\U0001F79B1.',
-    'xn--4xa.xn--1-gocmu97674d.',
-    'xn--3xa.xn--1-gocmu97674d.',
-    'xn--1-5bt6845n.',
-    '1\U0001DA19\u2E16.',
-    'xn--84-s850a.xn--59h6326e',
-    '84\U0001D23B.\U000102F5\u26E7',
-    'xn--r97c.',
-    '\U000102F7.',
-
+    "\U000102f7\u3002\u200d",
+    "\U0001d7f5\u9681\u2bee\uff0e\u180d\u200c",
+    "9\u9681\u2bee.\u180d\u200c",
+    "\u00df\u200c\uaaf6\u18a5.\u22b6\u2d21\u2d16",
+    "ss\u200c\uaaf6\u18a5.\u22b6\u2d21\u2d16",
+    "\u00df\u200c\uaaf6\u18a5\uff0e\u22b6\u2d21\u2d16",
+    "ss\u200c\uaaf6\u18a5\uff0e\u22b6\u2d21\u2d16",
+    "\U00010a57\u200d\u3002\u2d09\u2d15",
+    "\U00010a57\u200d\uff61\u2d09\u2d15",
+    "\U0001d7cf\U0001da19\u2e16.\u200d",
+    "1\U0001da19\u2e16.\u200d",
+    "\U0001d7e04\U000e01d7\U0001d23b\uff0e\u200d\U000102f5\u26e7\u200d",
+    "84\U000e01d7\U0001d23b.\u200d\U000102f5\u26e7\u200d",
+    "\u00a1",
+    "xn--7a",
+    "\u19da",
+    "xn--pkf",
+    "\u2615",
+    "xn--53h",
+    "\U0001e937.\U00010b90\U0001e881\U00010e60\u0624",
+    "\U0001e937.\U00010b90\U0001e881\U00010e60\u0648\u0654",
+    "\U0001e915.\U00010b90\U0001e881\U00010e60\u0648\u0654",
+    "\U0001e915.\U00010b90\U0001e881\U00010e60\u0624",
+    "xn--ve6h.xn--jgb1694kz0b2176a",
+    "\u00df\u3002\U000102f3\u2d0c\u0fb8",
+    "ss\u3002\U000102f3\u2d0c\u0fb8",
+    "ss.xn--lgd921mvv0m",
+    "ss.\U000102f3\u2d0c\u0fb8",
+    "xn--zca.xn--lgd921mvv0m",
+    "\u00df.\U000102f3\u2d0c\u0fb8",
+    "\u00df\uff61\U000102f3\u2d0c\u0fb8",
+    "ss\uff61\U000102f3\u2d0c\u0fb8",
+    "\u16ad\uff61\U0001d320\u00df\U00016af1",
+    "\u16ad\u3002\U0001d320\u00df\U00016af1",
+    "\u16ad\u3002\U0001d320SS\U00016af1",
+    "\u16ad\u3002\U0001d320ss\U00016af1",
+    "\u16ad\u3002\U0001d320Ss\U00016af1",
+    "xn--hwe.xn--ss-ci1ub261a",
+    "\u16ad.\U0001d320ss\U00016af1",
+    "\u16ad.\U0001d320SS\U00016af1",
+    "\u16ad.\U0001d320Ss\U00016af1",
+    "xn--hwe.xn--zca4946pblnc",
+    "\u16ad.\U0001d320\u00df\U00016af1",
+    "\u16ad\uff61\U0001d320SS\U00016af1",
+    "\u16ad\uff61\U0001d320ss\U00016af1",
+    "\u16ad\uff61\U0001d320Ss\U00016af1",
+    "\u2d1a\U000102f8\U000e0104\u30025\ud7f6\u103a",
+    "xn--ilj2659d.xn--5-dug9054m",
+    "\u2d1a\U000102f8.5\ud7f6\u103a",
+    "\u2d1a\U000102f8\U000e0104\u3002\U0001d7dd\ud7f6\u103a",
+    "xn--9-mfs8024b.",
+    "9\u9681\u2bee.",
+    "xn--ss-4epx629f.xn--ifh802b6a",
+    "ss\uaaf6\u18a5.\u22b6\u2d21\u2d16",
+    "xn--pt9c.xn--0kjya",
+    "\U00010a57.\u2d09\u2d15",
+    "\ua5f7\U00011180.\u075d\U00010a52",
+    "xn--ju8a625r.xn--hpb0073k",
+    "\u03c2.\u0641\u0645\u064a\U0001f79b1.",
+    "\u03a3.\u0641\u0645\u064a\U0001f79b1.",
+    "\u03c3.\u0641\u0645\u064a\U0001f79b1.",
+    "xn--4xa.xn--1-gocmu97674d.",
+    "xn--3xa.xn--1-gocmu97674d.",
+    "xn--1-5bt6845n.",
+    "1\U0001da19\u2e16.",
+    "xn--84-s850a.xn--59h6326e",
+    "84\U0001d23b.\U000102f5\u26e7",
+    "xn--r97c.",
+    "\U000102f7.",
     # These appear to be errors in the test vectors. All relate to incorrectly applying
     # bidi rules across label boundaries. Appears independently confirmed
     # at http://www.alvestrand.no/pipermail/idna-update/2017-January/007946.html
-    '0\u00E0.\u05D0', '0a\u0300.\u05D0', '0A\u0300.\u05D0', '0\u00C0.\u05D0', 'xn--0-sfa.xn--4db',
-    '\u00E0\u02c7.\u05D0', 'a\u0300\u02c7.\u05D0', 'A\u0300\u02c7.\u05D0', '\u00C0\u02c7.\u05D0',
-    'xn--0ca88g.xn--4db', '0A.\u05D0', '0a.\u05D0', '0a.xn--4db', 'c.xn--0-eha.xn--4db',
-    'c.0\u00FC.\u05D0', 'c.0u\u0308.\u05D0', 'C.0U\u0308.\u05D0', 'C.0\u00DC.\u05D0',
-    'C.0\u00FC.\u05D0', 'C.0\u0075\u0308.\u05D0', '\u06B6\u06DF\u3002\u2087\uA806', '\u06B6\u06DF\u30027\uA806',
-    'xn--pkb6f.xn--7-x93e', '\u06B6\u06DF.7\uA806', '1.\uAC7E6.\U00010C41\u06D0',
-    '1.\u1100\u1165\u11B56.\U00010C41\u06D0', '1.xn--6-945e.xn--glb1794k',
+    "0\u00e0.\u05d0",
+    "0a\u0300.\u05d0",
+    "0A\u0300.\u05d0",
+    "0\u00c0.\u05d0",
+    "xn--0-sfa.xn--4db",
+    "\u00e0\u02c7.\u05d0",
+    "a\u0300\u02c7.\u05d0",
+    "A\u0300\u02c7.\u05d0",
+    "\u00c0\u02c7.\u05d0",
+    "xn--0ca88g.xn--4db",
+    "0A.\u05d0",
+    "0a.\u05d0",
+    "0a.xn--4db",
+    "c.xn--0-eha.xn--4db",
+    "c.0\u00fc.\u05d0",
+    "c.0u\u0308.\u05d0",
+    "C.0U\u0308.\u05d0",
+    "C.0\u00dc.\u05d0",
+    "C.0\u00fc.\u05d0",
+    "C.0\u0075\u0308.\u05d0",
+    "\u06b6\u06df\u3002\u2087\ua806",
+    "\u06b6\u06df\u30027\ua806",
+    "xn--pkb6f.xn--7-x93e",
+    "\u06b6\u06df.7\ua806",
+    "1.\uac7e6.\U00010c41\u06d0",
+    "1.\u1100\u1165\u11b56.\U00010c41\u06d0",
+    "1.xn--6-945e.xn--glb1794k",
 ]
+
 
 def unicode_fixup(string):
     """Replace backslash-u-XXXX with appropriate unicode characters."""
-    return _RE_SURROGATE.sub(lambda match: chr(
-        (ord(match.group(0)[0]) - 0xd800) * 0x400 +
-        ord(match.group(0)[1]) - 0xdc00 + 0x10000),
-        _RE_UNICODE.sub(lambda match: chr(int(match.group(1), 16)), string))
+    return _RE_SURROGATE.sub(
+        lambda match: chr((ord(match.group(0)[0]) - 0xD800) * 0x400 + ord(match.group(0)[1]) - 0xDC00 + 0x10000),
+        _RE_UNICODE.sub(lambda match: chr(int(match.group(1), 16)), string),
+    )
+
 
 def parse_idna_test_table(inputstream):
     """Parse IdnaTestV2.txt and return a list of tuples."""
     for lineno, line in enumerate(inputstream):
-        line = line.decode('utf-8').strip()
-        if '#' in line:
-            line = line.split('#', 1)[0]
+        line = line.decode("utf-8").strip()
+        if "#" in line:
+            line = line.split("#", 1)[0]
         if not line:
             continue
-        yield((lineno + 1, tuple(field.strip() for field in line.split(';'))))
+        yield ((lineno + 1, tuple(field.strip() for field in line.split(";"))))
 
 
 class TestIdnaTest(unittest.TestCase):
     """Run one of the IdnaTestV2.txt test lines."""
+
     def __init__(self, lineno=None, fields=None):
         super().__init__()
         self.lineno = lineno
         self.fields = fields
 
     def id(self):
-        return '{}.{}'.format(super().id(), self.lineno)
+        return "{}.{}".format(super().id(), self.lineno)
 
     def shortDescription(self):
         if not self.fields:
-            return ''
-        return 'IdnaTestV2.txt line {}: {}'.format(self.lineno, '; '.join(self.fields))
+            return ""
+        return "IdnaTestV2.txt line {}: {}".format(self.lineno, "; ".join(self.fields))
 
     def runTest(self):
         if not self.fields:
             return
-        source, to_unicode, to_unicode_status, to_ascii, to_ascii_status, to_ascii_t, to_ascii_t_status = self.fields
+        (
+            source,
+            to_unicode,
+            to_unicode_status,
+            to_ascii,
+            to_ascii_status,
+            to_ascii_t,
+            to_ascii_t_status,
+        ) = self.fields
         if source in _SKIP_TESTS:
             return
         if not to_unicode:
             to_unicode = source
         if not to_unicode_status:
-            to_unicode_status = '[]'
+            to_unicode_status = "[]"
         if not to_ascii:
             to_ascii = to_unicode
         if not to_ascii_status:
@@ -143,48 +178,43 @@ class TestIdnaTest(unittest.TestCase):
 
         try:
             output = idna.decode(source, uts46=True, strict=True)
-            if to_unicode_status != '[]':
-                self.fail('decode() did not emit required error {} for {}'.format(to_unicode, repr(source)))
-            self.assertEqual(output, to_unicode, 'unexpected decode() output')
+            if to_unicode_status != "[]":
+                self.fail("decode() did not emit required error {} for {}".format(to_unicode, repr(source)))
+            self.assertEqual(output, to_unicode, "unexpected decode() output")
         except (idna.IDNAError, UnicodeError, ValueError) as exc:
             if str(exc).startswith("Unknown"):
-                raise unittest.SkipTest("Test requires support for a newer"
-                    " version of Unicode than this Python supports")
-            if to_unicode_status == '[]':
+                raise unittest.SkipTest("Test requires support for a newer" " version of Unicode than this Python supports")
+            if to_unicode_status == "[]":
                 raise
 
         try:
-            output = idna.encode(source, uts46=True, strict=True).decode('ascii')
-            if to_ascii_status != '[]':
-                self.fail('encode() did not emit required error {} for {}'.
-                    format(to_ascii_status, repr(source)))
-            self.assertEqual(output, to_ascii, 'unexpected encode() output')
+            output = idna.encode(source, uts46=True, strict=True).decode("ascii")
+            if to_ascii_status != "[]":
+                self.fail("encode() did not emit required error {} for {}".format(to_ascii_status, repr(source)))
+            self.assertEqual(output, to_ascii, "unexpected encode() output")
         except (idna.IDNAError, UnicodeError, ValueError) as exc:
             if str(exc).startswith("Unknown"):
-                raise unittest.SkipTest("Test requires support for a newer"
-                    " version of Unicode than this Python supports")
-            if to_ascii_status == '[]':
+                raise unittest.SkipTest("Test requires support for a newer" " version of Unicode than this Python supports")
+            if to_ascii_status == "[]":
                 raise
 
         try:
-            output = idna.encode(source, uts46=True, strict=True, transitional=True).decode('ascii')
-            if to_ascii_t_status != '[]':
-                self.fail('encode(transitional=True) did not emit required error {} for {}'.
-                    format(to_ascii_t_status, repr(source)))
-            self.assertEqual(output, to_ascii_t, 'unexpected encode() output')
+            output = idna.encode(source, uts46=True, strict=True, transitional=True).decode("ascii")
+            if to_ascii_t_status != "[]":
+                self.fail(
+                    "encode(transitional=True) did not emit required error {} for {}".format(to_ascii_t_status, repr(source))
+                )
+            self.assertEqual(output, to_ascii_t, "unexpected encode() output")
         except (idna.IDNAError, UnicodeError, ValueError) as exc:
             if str(exc).startswith("Unknown"):
-                raise unittest.SkipTest("Test requires support for a newer"
-                    " version of Unicode than this Python supports")
-            if to_ascii_t_status == '[]':
+                raise unittest.SkipTest("Test requires support for a newer" " version of Unicode than this Python supports")
+            if to_ascii_t_status == "[]":
                 raise
 
 
 def load_tests(loader, tests, pattern):
     """Create a suite of all the individual tests."""
     suite = unittest.TestSuite()
-    with open(os.path.join(os.path.dirname(__file__),
-            'IdnaTestV2.txt'), 'rb') as tests_file:
-        suite.addTests(TestIdnaTest(lineno, fields)
-            for lineno, fields in parse_idna_test_table(tests_file))
+    with open(os.path.join(os.path.dirname(__file__), "IdnaTestV2.txt"), "rb") as tests_file:
+        suite.addTests(TestIdnaTest(lineno, fields) for lineno, fields in parse_idna_test_table(tests_file))
     return suite

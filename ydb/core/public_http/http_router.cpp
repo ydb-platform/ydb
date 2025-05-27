@@ -12,7 +12,7 @@ namespace {
         TStringBuf pathComponent = path.NextTok(delim);
         while (pathPatternComponent && pathComponent) {
             if (pathPatternComponent.StartsWith('{') && pathPatternComponent.EndsWith('}')) {
-                TStringBuf paramName = pathPatternComponent.SubString(1, pathPatternComponent.Size() - 2);
+                TStringBuf paramName = pathPatternComponent.SubString(1, pathPatternComponent.size() - 2);
                 pathParams.emplace(paramName, pathComponent);
             } else {
                 if (pathPatternComponent != pathComponent) {

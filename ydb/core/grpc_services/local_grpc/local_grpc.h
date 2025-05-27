@@ -54,6 +54,8 @@ public:
         return GRPC_COMPRESS_LEVEL_NONE;
     }
 
+    TString GetEndpointId() const override { return {}; }
+
     google::protobuf::Arena* GetArena() override {
         return &Arena_;
     }
@@ -127,11 +129,6 @@ public:
     }
 
     const NProtoBuf::Message* GetRequest() const override {
-        return &Request_;
-    }
-
-    //! Get mutable pointer to the request's message.
-    NProtoBuf::Message* GetRequestMut() override {
         return &Request_;
     }
 

@@ -37,8 +37,8 @@ namespace orc {
   class Int128 {
    public:
     Int128() {
-      highbits = 0;
-      lowbits = 0;
+      highbits_ = 0;
+      lowbits_ = 0;
     }
 
     /**
@@ -46,11 +46,11 @@ namespace orc {
      */
     Int128(int64_t right) {
       if (right >= 0) {
-        highbits = 0;
-        lowbits = static_cast<uint64_t>(right);
+        highbits_ = 0;
+        lowbits_ = static_cast<uint64_t>(right);
       } else {
-        highbits = -1;
-        lowbits = static_cast<uint64_t>(right);
+        highbits_ = -1;
+        lowbits_ = static_cast<uint64_t>(right);
       }
     }
 
@@ -58,8 +58,8 @@ namespace orc {
      * Create from the twos complement representation.
      */
     Int128(int64_t high, uint64_t low) {
-      highbits = high;
-      lowbits = low;
+      highbits_ = high;
+      lowbits_ = low;
     }
 
     /**
@@ -78,16 +78,16 @@ namespace orc {
     static Int128 minimumValue();
 
     Int128& negate() {
-      lowbits = ~lowbits + 1;
-      highbits = ~highbits;
-      if (lowbits == 0) {
-        highbits += 1;
+      lowbits_ = ~lowbits_ + 1;
+      highbits_ = ~highbits_;
+      if (lowbits_ == 0) {
+        highbits_ += 1;
       }
       return *this;
     }
 
     Int128& abs() {
-      if (highbits < 0) {
+      if (highbits_ < 0) {
         negate();
       }
       return *this;
@@ -100,8 +100,8 @@ namespace orc {
     }
 
     Int128& invert() {
-      lowbits = ~lowbits;
-      highbits = ~highbits;
+      lowbits_ = ~lowbits_;
+      highbits_ = ~highbits_;
       return *this;
     }
 
@@ -111,12 +111,12 @@ namespace orc {
      * @return *this
      */
     Int128& operator+=(const Int128& right) {
-      uint64_t sum = lowbits + right.lowbits;
-      highbits += right.highbits;
-      if (sum < lowbits) {
-        highbits += 1;
+      uint64_t sum = lowbits_ + right.lowbits_;
+      highbits_ += right.highbits_;
+      if (sum < lowbits_) {
+        highbits_ += 1;
       }
-      lowbits = sum;
+      lowbits_ = sum;
       return *this;
     }
 
@@ -126,12 +126,12 @@ namespace orc {
      * @return *this
      */
     Int128& operator-=(const Int128& right) {
-      uint64_t diff = lowbits - right.lowbits;
-      highbits -= right.highbits;
-      if (diff > lowbits) {
-        highbits -= 1;
+      uint64_t diff = lowbits_ - right.lowbits_;
+      highbits_ -= right.highbits_;
+      if (diff > lowbits_) {
+        highbits_ -= 1;
       }
-      lowbits = diff;
+      lowbits_ = diff;
       return *this;
     }
 
@@ -162,8 +162,8 @@ namespace orc {
      * @return *this
      */
     Int128& operator|=(const Int128& right) {
-      lowbits |= right.lowbits;
-      highbits |= right.highbits;
+      lowbits_ |= right.lowbits_;
+      highbits_ |= right.highbits_;
       return *this;
     }
 
@@ -173,8 +173,8 @@ namespace orc {
      * @return *this
      */
     Int128& operator&=(const Int128& right) {
-      lowbits &= right.lowbits;
-      highbits &= right.highbits;
+      lowbits_ &= right.lowbits_;
+      highbits_ &= right.highbits_;
       return *this;
     }
 
@@ -196,15 +196,15 @@ namespace orc {
     Int128& operator<<=(uint32_t bits) {
       if (bits != 0) {
         if (bits < 64) {
-          highbits <<= bits;
-          highbits |= (lowbits >> (64 - bits));
-          lowbits <<= bits;
+          highbits_ <<= bits;
+          highbits_ |= (lowbits_ >> (64 - bits));
+          lowbits_ <<= bits;
         } else if (bits < 128) {
-          highbits = static_cast<int64_t>(lowbits) << (bits - 64);
-          lowbits = 0;
+          highbits_ = static_cast<int64_t>(lowbits_) << (bits - 64);
+          lowbits_ = 0;
         } else {
-          highbits = 0;
-          lowbits = 0;
+          highbits_ = 0;
+          lowbits_ = 0;
         }
       }
       return *this;
@@ -217,74 +217,74 @@ namespace orc {
     Int128& operator>>=(uint32_t bits) {
       if (bits != 0) {
         if (bits < 64) {
-          lowbits >>= bits;
-          lowbits |= static_cast<uint64_t>(highbits << (64 - bits));
-          highbits = static_cast<int64_t>(static_cast<uint64_t>(highbits) >> bits);
+          lowbits_ >>= bits;
+          lowbits_ |= static_cast<uint64_t>(highbits_ << (64 - bits));
+          highbits_ = static_cast<int64_t>(static_cast<uint64_t>(highbits_) >> bits);
         } else if (bits < 128) {
-          lowbits = static_cast<uint64_t>(highbits >> (bits - 64));
-          highbits = highbits >= 0 ? 0 : -1l;
+          lowbits_ = static_cast<uint64_t>(highbits_ >> (bits - 64));
+          highbits_ = highbits_ >= 0 ? 0 : -1l;
         } else {
-          highbits = highbits >= 0 ? 0 : -1l;
-          lowbits = static_cast<uint64_t>(highbits);
+          highbits_ = highbits_ >= 0 ? 0 : -1l;
+          lowbits_ = static_cast<uint64_t>(highbits_);
         }
       }
       return *this;
     }
 
     bool operator==(const Int128& right) const {
-      return highbits == right.highbits && lowbits == right.lowbits;
+      return highbits_ == right.highbits_ && lowbits_ == right.lowbits_;
     }
 
     bool operator!=(const Int128& right) const {
-      return highbits != right.highbits || lowbits != right.lowbits;
+      return highbits_ != right.highbits_ || lowbits_ != right.lowbits_;
     }
 
     bool operator<(const Int128& right) const {
-      if (highbits == right.highbits) {
-        return lowbits < right.lowbits;
+      if (highbits_ == right.highbits_) {
+        return lowbits_ < right.lowbits_;
       } else {
-        return highbits < right.highbits;
+        return highbits_ < right.highbits_;
       }
     }
 
     bool operator<=(const Int128& right) const {
-      if (highbits == right.highbits) {
-        return lowbits <= right.lowbits;
+      if (highbits_ == right.highbits_) {
+        return lowbits_ <= right.lowbits_;
       } else {
-        return highbits <= right.highbits;
+        return highbits_ <= right.highbits_;
       }
     }
 
     bool operator>(const Int128& right) const {
-      if (highbits == right.highbits) {
-        return lowbits > right.lowbits;
+      if (highbits_ == right.highbits_) {
+        return lowbits_ > right.lowbits_;
       } else {
-        return highbits > right.highbits;
+        return highbits_ > right.highbits_;
       }
     }
 
     bool operator>=(const Int128& right) const {
-      if (highbits == right.highbits) {
-        return lowbits >= right.lowbits;
+      if (highbits_ == right.highbits_) {
+        return lowbits_ >= right.lowbits_;
       } else {
-        return highbits >= right.highbits;
+        return highbits_ >= right.highbits_;
       }
     }
 
     uint32_t hash() const {
-      return static_cast<uint32_t>(highbits >> 32) ^ static_cast<uint32_t>(highbits) ^
-             static_cast<uint32_t>(lowbits >> 32) ^ static_cast<uint32_t>(lowbits);
+      return static_cast<uint32_t>(highbits_ >> 32) ^ static_cast<uint32_t>(highbits_) ^
+             static_cast<uint32_t>(lowbits_ >> 32) ^ static_cast<uint32_t>(lowbits_);
     }
 
     /**
      * Does this value fit into a long?
      */
     bool fitsInLong() const {
-      switch (highbits) {
+      switch (highbits_) {
         case 0:
-          return 0 == (lowbits & LONG_SIGN_BIT);
+          return 0 == (lowbits_ & LONG_SIGN_BIT);
         case -1:
-          return 0 != (lowbits & LONG_SIGN_BIT);
+          return 0 != (lowbits_ & LONG_SIGN_BIT);
         default:
           return false;
       }
@@ -295,7 +295,7 @@ namespace orc {
      */
     int64_t toLong() const {
       if (fitsInLong()) {
-        return static_cast<int64_t>(lowbits);
+        return static_cast<int64_t>(lowbits_);
       }
       throw std::range_error("Int128 too large to convert to long");
     }
@@ -331,14 +331,14 @@ namespace orc {
      * Get the high bits of the twos complement representation of the number.
      */
     int64_t getHighBits() const {
-      return highbits;
+      return highbits_;
     }
 
     /**
      * Get the low bits of the twos complement representation of the number.
      */
     uint64_t getLowBits() const {
-      return lowbits;
+      return lowbits_;
     }
 
     /**
@@ -352,8 +352,8 @@ namespace orc {
 
    private:
     static const uint64_t LONG_SIGN_BIT = 0x8000000000000000u;
-    int64_t highbits;
-    uint64_t lowbits;
+    int64_t highbits_;
+    uint64_t lowbits_;
   };
 
   /**

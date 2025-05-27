@@ -1,0 +1,26 @@
+{#- default JDK version -#}
+{%- set jdk_version = '17' -%}
+{%- if force_jdk_version -%}
+{%-     set jdk_version = force_jdk_version -%}
+{%- elif target.required_jdk -%}
+{%-     set jdk_version = target.required_jdk -%}
+{%- elif target.jdk_version -%}
+{%-     set jdk_version = target.jdk_version -%}
+{%- elif not target and extra_targets|length -%}
+{%-     set extra_jdk_version = extra_targets|selectattr('jdk_version')|map(attribute='jdk_version')|first -%}
+{%-     if extra_jdk_version -%}
+{%-         set jdk_version = extra_jdk_version -%}
+{%-     endif -%}
+{%- endif -%}
+
+{%- set jdk_path = false -%}
+{%- if target.jdk_path and target.jdk_path != "NOT_FOUND" -%}
+{%-     set jdk_path = target.jdk_path -%}
+{#- If no main target, but exists extra_targets -#}
+{%- elif not target and extra_targets|length -%}
+{%-     set jdk_path_targets = extra_targets|selectattr('jdk_path')|rejectattr('jdk_path', 'eq', 'NOT_FOUND') -%}
+{%-     if jdk_path_targets|length -%}
+{%-         set jdk_path_target = jdk_path_targets|first -%}
+{%-         set jdk_path = jdk_path_target.jdk_path -%}
+{%-     endif -%}
+{%- endif -%}

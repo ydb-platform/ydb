@@ -49,6 +49,7 @@
                                                     {
                                                         "Inputs": [],
                                                         "Name": "TableFullScan",
+                                                        "Path": "/Root/postgres_jointest/join2.test_plan/y",
                                                         "ReadColumns": [
                                                             "y1",
                                                             "y2"
@@ -59,6 +60,7 @@
                                                             "y2 (-\u221e, +\u221e)"
                                                         ],
                                                         "ReadRangesPointPrefixLen": "0",
+                                                        "Reverse": false,
                                                         "Scan": "Sequential",
                                                         "Table": "postgres_jointest/join2.test_plan/y"
                                                     }

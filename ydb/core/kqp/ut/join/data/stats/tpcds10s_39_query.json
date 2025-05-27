@@ -1,0 +1,14 @@
+{
+    "/Root/test/ds/item": {
+        "n_rows": 102000
+    },
+    "/Root/test/ds/warehouse": {
+        "n_rows": 10
+    },
+    "/Root/test/ds/date_dim": {
+        "n_rows": 73049
+    },
+    "/Root/test/ds/inventory": {
+        "n_rows": 1.331e+08
+    }
+}

@@ -54,6 +54,7 @@ public:
     {
         TBase::SetSecurityToken(Request->Record.GetSecurityToken());
         TBase::SetRequireAdminAccess(true);
+        TBase::SetPeerName(msg->MsgContext.GetPeerName());
     }
 
     void Bootstrap(const TActorContext &ctx) {

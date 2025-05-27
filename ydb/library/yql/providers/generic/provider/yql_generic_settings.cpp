@@ -2,8 +2,8 @@
 #include "yql_generic_settings.h"
 #include "yql_generic_utils.h"
 
-#include <ydb/library/yql/providers/common/structured_token/yql_token_builder.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
+#include <yql/essentials/utils/log/log.h>
 
 namespace NYql {
 
@@ -104,4 +104,4 @@ namespace NYql {
         return ValidClusters.contains(cluster);
     }
 
-}
+} // namespace NYql

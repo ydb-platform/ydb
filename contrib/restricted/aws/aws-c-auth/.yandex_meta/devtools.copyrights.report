@@ -1,0 +1,94 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0b26996bfb42c528af128697232328ba
+BELONGS ya.make
+    License text:
+        AWS C Auth
+        Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        NOTICE [1:2]
+        include/aws/auth/auth.h [5:5]
+        include/aws/auth/aws_imds_client.h [5:5]
+        include/aws/auth/credentials.h [5:5]
+        include/aws/auth/exports.h [5:5]
+        include/aws/auth/private/aws_profile.h [5:5]
+        include/aws/auth/private/aws_signing.h [5:5]
+        include/aws/auth/private/credentials_utils.h [5:5]
+        include/aws/auth/private/key_derivation.h [5:5]
+        include/aws/auth/private/sigv4_http_request.h [5:5]
+        include/aws/auth/private/sso_token_providers.h [5:5]
+        include/aws/auth/private/sso_token_utils.h [5:5]
+        include/aws/auth/signing.h [5:5]
+        include/aws/auth/signing_config.h [5:5]
+        include/aws/auth/signing_result.h [5:5]
+        source/auth.c [2:2]
+        source/aws_imds_client.c [2:2]
+        source/aws_profile.c [2:2]
+        source/aws_signing.c [2:2]
+        source/credentials.c [2:2]
+        source/credentials_provider_anonymous.c [2:2]
+        source/credentials_provider_cached.c [2:2]
+        source/credentials_provider_chain.c [2:2]
+        source/credentials_provider_cognito.c [2:2]
+        source/credentials_provider_default_chain.c [2:2]
+        source/credentials_provider_delegate.c [2:2]
+        source/credentials_provider_ecs.c [2:2]
+        source/credentials_provider_environment.c [2:2]
+        source/credentials_provider_imds.c [2:2]
+        source/credentials_provider_process.c [2:2]
+        source/credentials_provider_profile.c [2:2]
+        source/credentials_provider_sso.c [2:2]
+        source/credentials_provider_static.c [2:2]
+        source/credentials_provider_sts.c [2:2]
+        source/credentials_provider_sts_web_identity.c [2:2]
+        source/credentials_provider_x509.c [2:2]
+        source/credentials_utils.c [2:2]
+        source/key_derivation.c [2:2]
+        source/signable.c [2:2]
+        source/signable_chunk.c [2:2]
+        source/signable_http_request.c [2:2]
+        source/signable_trailer.c [2:2]
+        source/signing.c [2:2]
+        source/signing_config.c [2:2]
+        source/signing_result.c [2:2]
+        source/sigv4_http_request.c [2:2]
+        source/sso_token_utils.c [2:2]
+        source/token_provider_sso_profile.c [2:2]
+        source/token_provider_sso_session.c [2:2]

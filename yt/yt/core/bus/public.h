@@ -19,6 +19,9 @@ using TTosLevel = int;
 constexpr int DefaultTosLevel = 0;
 constexpr int BlackHoleTosLevel = -1;
 
+constexpr int DefaultMinMultiplexingParallelism = 1;
+constexpr int DefaultMaxMultiplexingParallelism = 1'000;
+
 constexpr size_t MaxMessagePartCount = 1 << 28;
 constexpr size_t MaxMessagePartSize = 1_GB;
 
@@ -35,6 +38,8 @@ DEFINE_ENUM(EMultiplexingBand,
     ((Interactive)           (3))
     ((RealTime)              (4))
 );
+
+DEFINE_ENUM_UNKNOWN_VALUE(EMultiplexingBand, Default);
 
 YT_DEFINE_ERROR_ENUM(
     ((TransportError)       (100))

@@ -1,0 +1,20 @@
+exclude:
+# Привозим только нужное из оригинального пакета, ниже перечисленное пропускаем
+- future/moves/dbm/gnu.py
+- future/moves/tkinter/*
+- libfuturize/*
+- libpasteurize/*
+- past/translation/*
+keep:
+- _dummy_thread/*
+- _markupbase/*
+- _thread/*
+- builtins/*
+- copyreg/*
+- html/*
+- http/*
+- queue/*
+- reprlib/*
+- socketserver/*
+- winreg/*
+- xmlrpc/*

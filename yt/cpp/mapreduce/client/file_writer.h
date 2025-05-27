@@ -16,6 +16,7 @@ class TFileWriter
 public:
     TFileWriter(
         const TRichYPath& path,
+        const IRawClientPtr& rawClient,
         IClientRetryPolicyPtr clientRetryPolicy,
         ITransactionPingerPtr transactionPinger,
         const TClientContext& context,

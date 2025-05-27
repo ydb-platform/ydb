@@ -3,6 +3,7 @@
 #include "schemeshard_impl.h"
 
 #include <ydb/core/base/subdomain.h>
+#include <ydb/core/mind/hive/hive.h>
 #include <ydb/core/persqueue/config/config.h>
 
 namespace {
@@ -33,7 +34,7 @@ public:
 
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                    DebugHint() << " ProgressState"
-                               << ", at tablet" << ssId);
+                               << ", at tablet# " << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -253,17 +254,16 @@ public:
             return result;
         }
 
-        if (!alter.HasChannelProfileId()) {
-            result->SetError(TEvSchemeShard::EStatus::StatusInvalidParameter, "set channel profile id, please");
-            return result;
-        }
-
         TChannelsBindings channelsBinding;
         bool isResolved = false;
         if (alter.HasStorageConfig()) {
             isResolved = context.SS->ResolveSolomonChannels(alter.GetStorageConfig(), path.GetPathIdForDomain(), channelsBinding);
         } else {
-            isResolved = context.SS->ResolveSolomonChannels(channelProfileId, path.GetPathIdForDomain(), channelsBinding);
+            if (!alter.HasChannelProfileId()) {
+                result->SetError(TEvSchemeShard::EStatus::StatusInvalidParameter, "set channel profile id, please");
+                return result;
+            }
+            isResolved = context.SS->ResolveSolomonChannels(alter.GetChannelProfileId(), path.GetPathIdForDomain(), channelsBinding);
         }
         if (!isResolved) {
             result->SetError(NKikimrScheme::StatusInvalidParameter, "Unable to construct channel binding with the storage pool");
@@ -330,7 +330,7 @@ public:
 
         context.SS->PersistTxState(db, OperationId);
 
-        path.DomainInfo()->AddInternalShards(txState);
+        path.DomainInfo()->AddInternalShards(txState, context.SS);
 
         SetState(NextState());
         return result;

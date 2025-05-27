@@ -9,6 +9,7 @@
 
 #include <yt/yt/core/bus/tcp/config.h>
 #include <yt/yt/core/bus/tcp/client.h>
+#include <yt/yt/core/bus/tcp/dispatcher.h>
 #include <yt/yt/core/bus/tcp/server.h>
 
 #include <yt/yt/core/crypto/config.h>
@@ -20,7 +21,6 @@
 #include <yt/yt/core/bus/public.h>
 
 #include <yt/yt/core/misc/fs.h>
-#include <yt/yt/core/misc/memory_usage_tracker.h>
 
 #include <yt/yt/core/rpc/bus/channel.h>
 #include <yt/yt/core/rpc/bus/server.h>
@@ -50,6 +50,7 @@
 #include <yt/yt/core/rpc/http/channel.h>
 
 #include <yt/yt/core/misc/error.h>
+#include <yt/yt/core/misc/memory_usage_tracker.h>
 #include <yt/yt/core/misc/shutdown.h>
 
 #include <yt/yt/core/tracing/public.h>
@@ -58,6 +59,8 @@
 #include <yt/yt/core/ytree/fluent.h>
 #include <yt/yt/core/ytree/convert.h>
 #include <yt/yt/core/ytree/helpers.h>
+
+#include <yt/yt/build/ya_version.h>
 
 #include <library/cpp/testing/common/env.h>
 #include <library/cpp/testing/common/network.h>
@@ -73,21 +76,25 @@ class TRpcTestBase
 public:
     void SetUp() final
     {
-        bool secure = TImpl::Secure;
-
         WorkerPool_ = NConcurrency::CreateThreadPool(4, "Worker");
         MemoryUsageTracker_ = New<TTestNodeMemoryTracker>(32_MB);
-        TestService_ = CreateTestService(WorkerPool_->GetInvoker(), secure, {}, MemoryUsageTracker_);
+        TestService_ = CreateTestService(WorkerPool_->GetInvoker(), TImpl::Secure, {}, MemoryUsageTracker_);
 
         auto services = std::vector<IServicePtr>{
             TestService_,
-            CreateNoBaggageService(WorkerPool_->GetInvoker())
+            CreateNoBaggageService(WorkerPool_->GetInvoker()),
         };
 
         Host_ = TImpl::CreateTestServerHost(
             NTesting::GetFreePort(),
             std::move(services),
             MemoryUsageTracker_);
+
+        // Make sure local bypass is globally enabled.
+        // Individual tests will toggle per-connection flag to actually enable this feature.
+        auto config = New<NYT::NBus::TTcpDispatcherConfig>();
+        config->EnableLocalBypass = true;
+        NYT::NBus::TTcpDispatcher::Get()->Configure(config);
     }
 
     void TearDown() final
@@ -96,14 +103,13 @@ public:
     }
 
     IChannelPtr CreateChannel(
-        const std::optional<TString>& address = std::nullopt,
-        THashMap<TString, NYTree::INodePtr> grpcArguments = {})
+        const std::optional<std::string>& address = {},
+        THashMap<std::string, NYTree::INodePtr> grpcArguments = {})
     {
-        if (address) {
-            return TImpl::CreateChannel(*address, Host_->GetAddress(), std::move(grpcArguments));
-        } else {
-            return TImpl::CreateChannel(Host_->GetAddress(), Host_->GetAddress(), std::move(grpcArguments));
-        }
+        return TImpl::CreateChannel(
+            address.value_or(Host_->GetAddress()),
+            Host_->GetAddress(),
+            std::move(grpcArguments));
     }
 
     TTestNodeMemoryTrackerPtr GetMemoryUsageTracker() const
@@ -143,6 +149,11 @@ public:
         return false;
     }
 
+    static int GetMaxSimultaneousRequestCount()
+    {
+        return TImpl::MaxSimultaneousRequestCount;
+    }
+
 private:
     NConcurrency::IThreadPoolPtr WorkerPool_;
     TTestNodeMemoryTrackerPtr MemoryUsageTracker_;
@@ -158,13 +169,15 @@ class TRpcOverBus
 public:
     static constexpr bool AllowTransportErrors = false;
     static constexpr bool Secure = false;
+    static constexpr int MaxSimultaneousRequestCount = 1000;
+    static constexpr bool MemoryUsageTrackingEnabled = TImpl::MemoryUsageTrackingEnabled;
 
     static TTestServerHostPtr CreateTestServerHost(
         NTesting::TPortHolder port,
         std::vector<IServicePtr> services,
         TTestNodeMemoryTrackerPtr memoryUsageTracker)
     {
-        auto busServer = MakeBusServer(port, memoryUsageTracker);
+        auto busServer = CreateBusServer(port, memoryUsageTracker);
         auto server = NRpc::NBus::CreateBusServer(busServer);
 
         return New<TTestServerHost>(
@@ -175,41 +188,46 @@ public:
     }
 
     static IChannelPtr CreateChannel(
-        const TString& address,
-        const TString& serverAddress,
-        THashMap<TString, NYTree::INodePtr> grpcArguments)
+        const std::string& address,
+        const std::string& serverAddress,
+        THashMap<std::string, NYTree::INodePtr> grpcArguments)
     {
         return TImpl::CreateChannel(address, serverAddress, std::move(grpcArguments));
     }
 
-    static NYT::NBus::IBusServerPtr MakeBusServer(ui16 port, IMemoryUsageTrackerPtr memoryUsageTracker)
+    static NYT::NBus::IBusServerPtr CreateBusServer(ui16 port, IMemoryUsageTrackerPtr memoryUsageTracker)
     {
-        return TImpl::MakeBusServer(port, memoryUsageTracker);
+        return TImpl::CreateBusServer(port, memoryUsageTracker);
     }
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
-template <bool ForceTcp>
+template <bool EnableLocalBypass>
 class TRpcOverBusImpl
 {
 public:
+    static constexpr bool MemoryUsageTrackingEnabled = !EnableLocalBypass;
+
     static IChannelPtr CreateChannel(
-        const TString& address,
-        const TString& /*serverAddress*/,
-        THashMap<TString, NYTree::INodePtr> /*grpcArguments*/)
+        const std::string& address,
+        const std::string& /*serverAddress*/,
+        THashMap<std::string, NYTree::INodePtr> /*grpcArguments*/)
     {
-        auto client = CreateBusClient(NYT::NBus::TBusClientConfig::CreateTcp(address));
-        return NRpc::NBus::CreateBusChannel(client);
+        auto config = NYT::NBus::TBusClientConfig::CreateTcp(address);
+        config->EnableLocalBypass = EnableLocalBypass;
+        auto client = CreateBusClient(std::move(config));
+        return NRpc::NBus::CreateBusChannel(std::move(client));
     }
 
-    static NYT::NBus::IBusServerPtr MakeBusServer(ui16 port, IMemoryUsageTrackerPtr memoryUsageTracker)
+    static NYT::NBus::IBusServerPtr CreateBusServer(ui16 port, IMemoryUsageTrackerPtr memoryUsageTracker)
     {
-        auto busConfig = NYT::NBus::TBusServerConfig::CreateTcp(port);
-        return CreateBusServer(
-            busConfig,
+        auto config = NYT::NBus::TBusServerConfig::CreateTcp(port);
+        config->EnableLocalBypass = EnableLocalBypass;
+        return NYT::NBus::CreateBusServer(
+            std::move(config),
             NYT::NBus::GetYTPacketTranscoderFactory(),
-            memoryUsageTracker);
+            std::move(memoryUsageTracker));
     }
 };
 
@@ -225,7 +243,7 @@ public:
  * openssl x509 -in server.csr -req -days 10000 -out server_cert.pem -CA root_cert.pem -CAkey root_key.pem -CAcreateserial
  * openssl x509 -in client.csr -req -days 10000 -out client_cert.pem -CA root_cert.pem -CAkey root_key.pem -CAserial root_cert.srl
  */
-inline TString RootCert(
+inline std::string RootCert(
     "-----BEGIN CERTIFICATE-----\n"
     "MIID9DCCAtygAwIBAgIJAJLU9fgmNTujMA0GCSqGSIb3DQEBCwUAMFkxCzAJBgNV\n"
     "BAYTAlJVMRMwEQYDVQQIEwpTb21lLVN0YXRlMSEwHwYDVQQKExhJbnRlcm5ldCBX\n"
@@ -251,7 +269,7 @@ inline TString RootCert(
     "I2TYYgHjI3I=\n"
     "-----END CERTIFICATE-----\n");
 
-inline TString ClientKey(
+inline std::string ClientKey(
     "-----BEGIN RSA PRIVATE KEY-----\n"
     "MIIEpAIBAAKCAQEArZpqucOdMlwZyyTWq+Sz3EGXpAX/4nMpH7s/05d9O4tm0MsK\n"
     "QUhUXRzt3VzOfMOb4cXAVwovHxiQ7NZIFBdmeyCHlT0HVkaqC76Tgi53scUMVKtE\n"
@@ -280,7 +298,7 @@ inline TString ClientKey(
     "OY4A1p2EvY8/L6PmPXAURfsE8RTL0y4ww/7mPJTQXsteTawAPDdVKQ==\n"
     "-----END RSA PRIVATE KEY-----\n");
 
-inline TString ClientCert(
+inline std::string ClientCert(
     "-----BEGIN CERTIFICATE-----\n"
     "MIIDLjCCAhYCCQCZd28+0jJVLTANBgkqhkiG9w0BAQUFADBZMQswCQYDVQQGEwJS\n"
     "VTETMBEGA1UECBMKU29tZS1TdGF0ZTEhMB8GA1UEChMYSW50ZXJuZXQgV2lkZ2l0\n"
@@ -302,7 +320,7 @@ inline TString ClientCert(
     "3SA=\n"
     "-----END CERTIFICATE-----\n");
 
-inline TString ServerKey(
+inline std::string ServerKey(
     "-----BEGIN RSA PRIVATE KEY-----\n"
     "MIIEowIBAAKCAQEAzbAyEJFSmPNJ3pLNNSWQVF53Ltof1Wc4JIfvNazl41LjNyuO\n"
     "SQV7+6GVFMIybBBoeWQ58hVJ/d8KxFBf6XIV6uGH9WtN38hWrxR6UEGkHxpUSfvg\n"
@@ -331,7 +349,7 @@ inline TString ServerKey(
     "CyxY8hFTw3FSk+UYdAAm5qYabGY1DiuvyD1yVAX9aWjAHdbP3H5O\n"
     "-----END RSA PRIVATE KEY-----\n");
 
-inline TString ServerCert(
+inline std::string ServerCert(
     "-----BEGIN CERTIFICATE-----\n"
     "MIIDLjCCAhYCCQCZd28+0jJVLDANBgkqhkiG9w0BAQUFADBZMQswCQYDVQQGEwJS\n"
     "VTETMBEGA1UECBMKU29tZS1TdGF0ZTEhMB8GA1UEChMYSW50ZXJuZXQgV2lkZ2l0\n"
@@ -361,11 +379,12 @@ class TRpcOverGrpcImpl
 public:
     static constexpr bool AllowTransportErrors = true;
     static constexpr bool Secure = EnableSsl;
+    static constexpr int MaxSimultaneousRequestCount = 1000;
 
     static IChannelPtr CreateChannel(
-        const TString& address,
-        const TString& /*serverAddress*/,
-        THashMap<TString, NYTree::INodePtr> grpcArguments)
+        const std::string& address,
+        const std::string& /*serverAddress*/,
+        THashMap<std::string, NYTree::INodePtr> grpcArguments)
     {
         auto channelConfig = New<NGrpc::TChannelConfig>();
         if (EnableSsl) {
@@ -430,29 +449,31 @@ public:
 class TRpcOverUdsImpl
 {
 public:
-    static NYT::NBus::IBusServerPtr MakeBusServer(ui16 port, IMemoryUsageTrackerPtr memoryUsageTracker)
+    static constexpr bool MemoryUsageTrackingEnabled = true;
+
+    static NYT::NBus::IBusServerPtr CreateBusServer(ui16 port, IMemoryUsageTrackerPtr memoryUsageTracker)
     {
         SocketPath_ = GetWorkPath() + "/socket_" + ToString(port);
-        auto busConfig = NYT::NBus::TBusServerConfig::CreateUds(SocketPath_);
-        return CreateBusServer(
-            busConfig,
+        auto config = NYT::NBus::TBusServerConfig::CreateUds(SocketPath_);
+        return NYT::NBus::CreateBusServer(
+            config,
             NYT::NBus::GetYTPacketTranscoderFactory(),
             memoryUsageTracker);
     }
 
     static IChannelPtr CreateChannel(
-        const TString& address,
-        const TString& serverAddress,
-        THashMap<TString, NYTree::INodePtr> /*grpcArguments*/)
+        const std::string& address,
+        const std::string& serverAddress,
+        THashMap<std::string, NYTree::INodePtr> /*grpcArguments*/)
     {
-        auto clientConfig = NYT::NBus::TBusClientConfig::CreateUds(
+        auto config = NYT::NBus::TBusClientConfig::CreateUds(
             address == serverAddress ? SocketPath_ : address);
-        auto client = CreateBusClient(clientConfig);
+        auto client = CreateBusClient(config);
         return NRpc::NBus::CreateBusChannel(client);
     }
 
 private:
-    static TString SocketPath_;
+    static inline std::string SocketPath_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -467,17 +488,21 @@ public:
     // TODO(melkov): Fill ssl_credentials_ext in server code and enable the Secure flag.
     static constexpr bool Secure = false;
 
+    // HTTP will use at least two file descriptors per test connection.
+    // Allow tests to run when the limit for the file descriptors is low.
+    static constexpr int MaxSimultaneousRequestCount = 400;
+
     static IChannelPtr CreateChannel(
-        const TString& address,
-        const TString& /*serverAddress*/,
-        THashMap<TString, NYTree::INodePtr> /*grpcArguments*/)
+        const std::string& address,
+        const std::string& /*serverAddress*/,
+        THashMap<std::string, NYTree::INodePtr> /*grpcArguments*/)
     {
         static auto poller = NConcurrency::CreateThreadPoolPoller(4, "HttpChannelTest");
         auto credentials = New<NHttps::TClientCredentialsConfig>();
         credentials->PrivateKey = New<NCrypto::TPemBlobConfig>();
-        credentials->PrivateKey->Value = ServerKey;
+        credentials->PrivateKey->Value = ClientKey;
         credentials->CertChain = New<NCrypto::TPemBlobConfig>();
-        credentials->CertChain->Value = ServerCert;
+        credentials->CertChain->Value = ClientCert;
         return NHttp::CreateHttpChannel(address, poller, EnableSsl, credentials);
     }
 
@@ -517,9 +542,9 @@ public:
 using TAllTransports = ::testing::Types<
 #ifdef _linux_
     TRpcOverBus<TRpcOverUdsImpl>,
-    TRpcOverBus<TRpcOverBusImpl<true>>,
 #endif
     TRpcOverBus<TRpcOverBusImpl<false>>,
+    TRpcOverBus<TRpcOverBusImpl<true>>,
     TRpcOverGrpcImpl<false, false>,
     TRpcOverGrpcImpl<false, true>,
     TRpcOverGrpcImpl<true, false>,
@@ -531,9 +556,9 @@ using TAllTransports = ::testing::Types<
 using TWithAttachments = ::testing::Types<
 #ifdef _linux_
     TRpcOverBus<TRpcOverUdsImpl>,
-    TRpcOverBus<TRpcOverBusImpl<true>>,
 #endif
     TRpcOverBus<TRpcOverBusImpl<false>>,
+    TRpcOverBus<TRpcOverBusImpl<true>>,
     TRpcOverGrpcImpl<false, false>,
     TRpcOverGrpcImpl<false, true>,
     TRpcOverGrpcImpl<true, false>,
@@ -541,10 +566,8 @@ using TWithAttachments = ::testing::Types<
 >;
 
 using TWithoutUds = ::testing::Types<
-#ifdef _linux_
-    TRpcOverBus<TRpcOverBusImpl<true>>,
-#endif
     TRpcOverBus<TRpcOverBusImpl<false>>,
+    TRpcOverBus<TRpcOverBusImpl<true>>,
     TRpcOverGrpcImpl<false, false>,
     TRpcOverGrpcImpl<true, false>,
     TRpcOverHttpImpl<false>,
@@ -554,9 +577,9 @@ using TWithoutUds = ::testing::Types<
 using TWithoutGrpc = ::testing::Types<
 #ifdef _linux_
     TRpcOverBus<TRpcOverUdsImpl>,
-    TRpcOverBus<TRpcOverBusImpl<true>>,
 #endif
-    TRpcOverBus<TRpcOverBusImpl<false>>
+    TRpcOverBus<TRpcOverBusImpl<false>>,
+    TRpcOverBus<TRpcOverBusImpl<true>>
 >;
 
 using TGrpcOnly = ::testing::Types<

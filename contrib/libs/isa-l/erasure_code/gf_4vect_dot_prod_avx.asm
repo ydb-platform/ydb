@@ -54,7 +54,7 @@
  %define PS     8
  %define LOG_PS 3
 
- %define func(x) x:
+ %define func(x) x: endbranch
  %macro FUNC_SAVE 0
 	push	r12
 	push	r13
@@ -95,15 +95,15 @@
  %define func(x) proc_frame x
  %macro FUNC_SAVE 0
 	alloc_stack	stack_size
-	save_xmm128	xmm6, 0*16
-	save_xmm128	xmm7, 1*16
-	save_xmm128	xmm8, 2*16
-	save_xmm128	xmm9, 3*16
-	save_xmm128	xmm10, 4*16
-	save_xmm128	xmm11, 5*16
-	save_xmm128	xmm12, 6*16
-	save_xmm128	xmm13, 7*16
-	save_xmm128	xmm14, 8*16
+	vmovdqa		[rsp + 0*16], xmm6
+	vmovdqa		[rsp + 1*16], xmm7
+	vmovdqa		[rsp + 2*16], xmm8
+	vmovdqa		[rsp + 3*16], xmm9
+	vmovdqa		[rsp + 4*16], xmm10
+	vmovdqa		[rsp + 5*16], xmm11
+	vmovdqa		[rsp + 6*16], xmm12
+	vmovdqa		[rsp + 7*16], xmm13
+	vmovdqa		[rsp + 8*16], xmm14
 	save_reg	r12,  9*16 + 0*8
 	save_reg	r13,  9*16 + 1*8
 	save_reg	r14,  9*16 + 2*8
@@ -159,7 +159,7 @@
 
  %define PS     4
  %define LOG_PS 2
- %define func(x) x:
+ %define func(x) x: endbranch
  %define arg(x) [ebp + PS*2 + PS*x]
  %define var(x) [ebp - PS - PS*x]
 
@@ -294,13 +294,8 @@ section .text
  %define xp4    xmm5
 %endif
 align 16
-global gf_4vect_dot_prod_avx:ISAL_SYM_TYPE_FUNCTION
+global gf_4vect_dot_prod_avx, function
 func(gf_4vect_dot_prod_avx)
-%ifidn __OUTPUT_FORMAT__, macho64
-global _gf_4vect_dot_prod_avx:ISAL_SYM_TYPE_FUNCTION
-func(_gf_4vect_dot_prod_avx)
-%endif
-
 	FUNC_SAVE
 	SLDR	len, len_m
 	sub	len, 16
@@ -441,6 +436,3 @@ section .data
 
 align 16
 mask0f:	dq 0x0f0f0f0f0f0f0f0f, 0x0f0f0f0f0f0f0f0f
-
-;;;       func                  core, ver, snum
-slversion gf_4vect_dot_prod_avx, 02,  05,  0193

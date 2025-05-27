@@ -1,12 +1,644 @@
+c3d85ce4 update NEWS
+ad14e811 tests/fuzzer/*: add missing <string_view> include
+74cd026e fuzz_utils.cc: fix build error w/WEBP_REDUCE_SIZE
+a027aa93 mux_demux_api_fuzzer.cc: fix -Wshadow warning
+25e17c68 update ChangeLog (tag: v1.5.0-rc1)
+aa2684fc update NEWS
+36923846 bump version to 1.5.0
+ceea8ff6 update AUTHORS
+e4f7a9f0 img2webp: add a warning for unused options
+1b4c967f Merge "Properly check the data size against the end of the RIFF chunk" into main
+9e5ecfaf Properly check the data size against the end of the RIFF chunk
+da0d9c7d examples: exit w/failure w/no args
+fcff86c7 {gif,img}2webp: sync -m help w/cwebp
+b76c4a84 man/img2webp.1: sync -m text w/cwebp.1 & gif2webp.1
+30633519 muxread: fix reading of buffers > riff size
+4c85d860 yuv.h: update RGB<->YUV coefficients in comment
+0ab789e0 Merge changes I6dfedfd5,I2376e2dc into main
+03236450 {ios,xcframework}build.sh: fix compilation w/Xcode 16
+61e2cfda rework AddVectorEq_SSE2
+7bda3deb rework AddVector_SSE2
+2ddaaf0a Fix variable names in SharpYuvComputeConversionMatrix
+a3ba6f19 Makefile.vc: fix gif2webp link error
+f999d94f gif2webp: add -sharp_yuv/-near_lossless
+dfdcb7f9 Merge "lossless.h: fix function declaration mismatches" into main (tag: webp-rfc9649)
+78ed6839 fix overread in Intra4Preds_NEON
+d516a68e lossless.h: fix function declaration mismatches
+87406904 Merge "Improve documentation of SharpYuvConversionMatrix." into main
+fdb229ea Merge changes I07a7e36a,Ib29980f7,I2316122d,I2356e314,I32b53dd3, ... into main
+0c3cd9cc Improve documentation of SharpYuvConversionMatrix.
+169dfbf9 disable Intra4Preds_NEON
+2dd5eb98 dsp/yuv*: use WEBP_RESTRICT qualifier
+23bbafbe dsp/upsampling*: use WEBP_RESTRICT qualifier
+35915b38 dsp/rescaler*: use WEBP_RESTRICT qualifier
+a32b436b dsp/lossless*: use WEBP_RESTRICT qualifier
+04d4b4f3 dsp/filters*: use WEBP_RESTRICT qualifier
+b1cb37e6 dsp/enc*: use WEBP_RESTRICT qualifier
+201894ef dsp/dec*: use WEBP_RESTRICT qualifier
+02eac8a7 dsp/cost*: use WEBP_RESTRICT qualifier
+84b118c9 Merge "webp-container-spec: normalize notes & unknown chunk link" into main
+052cf42f webp-container-spec: normalize notes & unknown chunk link
+220ee529 Search for best predictor transform bits
+78619478 Try to reduce the sampling for the entropy image
+14f09ab7 webp-container-spec: reorder chunk size - N text
+a78c5356 Remove a useless malloc for entropy image
+bc491763 Merge "Refactor predictor finding" into main
+34f92238 man/{cwebp,img2webp}.1: rm 'if needed' from -sharp_yuv
+367ca938 Refactor predictor finding
+a582b53b webp-lossless-bitstream-spec: clarify some text
+0fd25d84 Merge "anim_encode.c: fix function ref in comment" into main
+f8882913 anim_encode.c: fix function ref in comment
+40e4ca60 specs_generation.md: update kramdown command line
+57883c78 img2webp: add -exact/-noexact per-frame options
+1c8eba97 img2webp,cosmetics: add missing '.' spacers to help
+2e81017c Convert predictor_enc.c to fixed point
+94de6c7f Merge "Fix fuzztest link errors w/-DBUILD_SHARED_LIBS=1" into main
+51d9832a Fix fuzztest link errors w/-DBUILD_SHARED_LIBS=1
+7bcb36b8 Merge "Fix static overflow warning." into main
+8e0cc14c Fix static overflow warning.
+cea68462 README.md: add security report note
+615e5874 Merge "make VP8LPredictor[01]_C() static" into main
+233e86b9 Merge changes Ie43dc5ef,I94cd8bab into main
+1a29fd2f make VP8LPredictor[01]_C() static
+dd9d3770 Do*Filter_*: remove row & num_rows parameters
+ab451a49 Do*Filter_C: remove dead 'inverse' code paths
+f9a480f7 {TrueMotion,TM16}_NEON: remove zero extension
+04834aca Merge changes I25c30a9e,I0a192fc6,I4cf89575 into main
+39a602af webp-lossless-bitstream-spec: normalize predictor transform ref
+f28c837d Merge "webp-container-spec: align anim pseudocode w/prose" into main
+74be8e22 Fix implicit conversion issues
+0c01db7c Merge "Increase the transform bits if possible." into main
+f2d6dc1e Increase the transform bits if possible.
+caa19e5b update link to issue tracker
+c9dd9bd4 webp-container-spec: align anim pseudocode w/prose
+8a7c8dc6 WASM: Enable VP8L_USE_FAST_LOAD
+f0c53cd9 WASM: don't use USE_GENERIC_TREE
+eef903d0 WASM: Enable 64-bit BITS caching
+6296cc8d iterator_enc: make VP8IteratorReset() static
+fbd93896 histogram_enc: make VP8LGetHistogramSize static
+cc7ff545 cost_enc: make VP8CalculateLevelCosts[] static
+4e2828ba vp8l_dec: make VP8LClear() static
+d742b24a Intra16Preds_NEON: fix truemotion saturation
+c7bb4cb5 Intra4Preds_NEON: fix truemotion saturation
+952a989b Merge "Remove TODO now that log is using fixed point." into main
+dde11574 Remove TODO now that log is using fixed point.
+a1ca153d Fix hidden myerr in my_error_exit
+3bd94202 Merge changes Iff6e47ed,I24c67cd5,Id781e761 into main
+d27d246e Merge "Convert VP8LFastSLog2 to fixed point" into main
+4838611f Disable msg_code use in fuzzing mode
+314a142a Use QuantizeBlock_NEON for VP8EncQuantizeBlockWHT on Arm
+3bfb05e3 Add AArch64 Neon implementation of Intra16Preds
+baa93808 Add AArch64 Neon implementation of Intra4Preds
+41a5e582 Fix errors when compiling code as C++
+fb444b69 Convert VP8LFastSLog2 to fixed point
+c1c89f51 Fix WEBP_NODISCARD comment and C++ version
+66408c2c Switch the histogram_enc.h API to fixed point
+ac1e410d Remove leftover tiff dep
+b78d3957 Disable TIFF on fuzztest.
+cff21a7d Do not build statically on oss-fuzz.
+6853a8e5 Merge "Move more internal fuzzers to public." into main
+9bc09db4 Merge "Convert VP8LFastLog2 to fixed point" into main
+0a9f1c19 Convert VP8LFastLog2 to fixed point
+db0cb9c2 Move more internal fuzzers to public.
+ff2b5b15 Merge "advanced_api_fuzzer.cc: use crop dims in OOM check" into main
+c4af79d0 Put 0 at the end of a palette and do not store it.
+0ec80aef Delete last references to delta palettization
+96d79f84 advanced_api_fuzzer.cc: use crop dims in OOM check
+c35c7e02 Fix huffman fuzzer to not leak.
+f2fe8dec Bump fuzztest dependency.
+9ce982fd Fix fuzz tests to work on oss-fuzz
+3ba8af1a Do not escape quotes anymore in build.sh
+ea0e121b Allow centipede to be used as a fuzzing engine.
+27731afd make VP8I4ModeOffsets & VP8MakeIntra4Preds static
+ddd6245e oss-fuzz/build.sh: use heredoc for script creation
+50074930 oss-fuzz/build.sh,cosmetics: fix indent
+20e92f7d Limit the possible fuzz engines.
+4f200de5 Switch public fuzz tests to fuzztest.
+64186bb3 Add huffman_fuzzer to .gitignore
+0905f61c Move build script from oss-fuzz repo to here.
+e8678758 Fix link to Javascript documentation
+5e5b8f0c Fix SSE2 Transform_AC3 function name
+45129ee0 Revert "Check all the rows."
+ee26766a Check all the rows.
+7ec51c59 Increase the transform bits if possible.
+3cd16fd3 Revert "Increase the transform bits if possible."
+971a03d8 Increase the transform bits if possible.
+1bf198a2 Allow transform_bits to be different during encoding.
+1e462ca8 Define MAX_TRANSFORM_BITS according to the specification.
+64d1ec23 Use (MIN/NUM)_(TRANSFORM/HUFFMAN)_BITS where appropriate
+a90160e1 Refactor histograms in predictors.
+a7aa7525 Fix some function declarations
+68ff4e1e Merge "jpegdec: add a hint for EOF/READ errors" into main
+79e7968a jpegdec: add a hint for EOF/READ errors
+d33455cd man/*: s/BUGS/REPORTING BUGS/
+a67ff735 normalize example exit status
+edc28909 upsampling_{neon,sse41}: fix int sanitizer warning
+3cada4ce ImgIoUtilReadFile: check ftell() return
+dc950585 Merge tag 'v1.4.0'
+845d5476 update ChangeLog (tag: v1.4.0, origin/1.4.0)
+8a6a55bb update NEWS
+cf7c5a5d provide a way to opt-out/override WEBP_NODISCARD
+cc34288a update ChangeLog (tag: v1.4.0-rc1)
+f13c0886 NEWS: fix date
+74555950 Merge "vwebp: fix window title when options are given" into 1.4.0
+d781646c vwebp: fix window title when options are given
+c2e394de update NEWS
+f6d15cb7 bump version to 1.4.0
+57c388b8 update AUTHORS
+b3d1b2cb Merge changes I26f4aa22,I83386b6c,I320ed1a2 into main
+07216886 webp-container-spec: fix VP8 chunk ref ('VP8'->'VP8 ')
+f88666eb webp_js/*.html: fix canvas mapping
+e2c8f233 cmake,wasm: simplify SDL2 related flags
+d537cd37 cmake: fix vwebp_sdl compile w/libsdl-org release
+6c484cbf CMakeLists.txt: add missing WEBP_BUILD_EXTRAS check
+7b0bc235 man/cwebp.1: add more detail to -partition_limit
+3c0011bb WebPMuxGetChunk: add an assert
+955a3d14 Merge "muxread,MuxGet: add an assert" into main
+00abc000 muxread,MuxGet: add an assert
+40e85a0b Have the window title reflect the filename.
+1bf46358 man/cwebp.1: clarify -pass > 1 behavior w/o -size/-psnr
+eba03acb webp-container-spec: replace 'above' with 'earlier'
+a16d30cb webp-container-spec: clarify chunk order requirements
+8a7e9112 Merge "CMakeLists.txt: apply cmake-format" into main
+7fac6c1b Merge "Copy C code to not have multiplication overflow" into main
+e2922e43 Merge "Check for the presence of the ANDROID_ABI variable" into main
+501d9274 Copy C code to not have multiplication overflow
+fba7d62e CMakeLists.txt: apply cmake-format
+661c1b66 Merge "windows exports: use dllexport attribute, instead of visibility." into main
+8487860a windows exports: use dllexport attribute, instead of visibility.
+8ea678b9 webp/mux.h: data lifetime note w/copy_data=0
+79e05c7f Check for the presence of the ANDROID_ABI variable
+45f995a3 Expose functions for managing non-image chunks on WebPAnimEncoder
+1fb9f3dc gifdec: fix ErrorGIFNotAvailable() declaration
+4723db65 cosmetics: s/SANITY_CHECK/DCHECK/
+f4b9bc9e clear -Wextra-semi-stmt warnings
+713982b8 Limit animdecoder_fuzzer to 320MB
+cbe825e4 cmake: fix sharpyuv simd files' build
+f99305e9 Makefile.vc: add ARM64 support
+5efd6300 mv SharpYuvEstimate420Risk to extras/
+e78e924f Makefile.vc: add sharpyuv_risk_table.obj
+d7a0506d Add YUV420 riskiness metric.
+89c5b917 Merge "BuildHuffmanTable check sorted[] array bounds before writing" into main
+34c80749 Remove alpha encoding pessimization.
+13d9c30b Add a WEBP_NODISCARD
+24d7f9cb Switch code to SDL2.
+0b56dedc BuildHuffmanTable check sorted[] array bounds before writing
+a429c0de sharpyuv: convert some for() to do/while
+f0cd7861 DoSharpArgbToYuv: remove constant from loop
+339231cc SharpYuvConvertWithOptions,cosmetics: fix formatting
+307071f1 Remove medium/large code model-specific inline asm
+deadc339 Fix transfer functions where toGamma and toLinear are swapped.
+e7b78d43 Merge "Fix bug in FromLinearLog100." into main
+15a1309e Merge "webp-lossless-bitstream-spec: delete extra blank line" into main
+54ca9752 Fix bug in FromLinearLog100.
+d2cb2d8c Dereference after NULL check.
+e9d50107 webp-lossless-bitstream-spec: delete extra blank line
+78657971 Merge changes Ief442c90,Ie6e9c9a5 into main
+e30a5884 webp-lossless-bitstream-spec: update variable names
+09ca1368 Merge "webp-container-spec: change assert to MUST be TRUE" into main
+38cb4fc0 iosbuild,xcframeworkbuild: add SharpYuv framework
+40afa926 webp-lossless-bitstream-spec: simplify abstract
+9db21143 webp-container-spec: change assert to MUST be TRUE
+cdbf88ae Fix typo in API docs for incremental decoding
+05c46984 Reformat vcpkg build instructions.
+8534f539 Merge "Never send VP8_STATUS_SUSPENDED back in non-incremental." into main
+35e197bd Never send VP8_STATUS_SUSPENDED back in non-incremental.
+61441425 Add vcpkg installation instructions
+dce8397f Fix next is invalid pointer when WebPSafeMalloc fails
+57c58105 Cmake: wrong public macro WEBP_INCLUDE_DIRS
+c1ffd9ac Merge "vp8l_enc: fix non-C90 code" into main
+a3965948 Merge changes If628bb93,Ic79f6309,I45f0db23 into main
+f80e9b7e vp8l_enc: fix non-C90 code
+accd141d Update lossless spec for two simple codes.
+ac17ffff Fix non-C90 code.
+433c7dca Fix static analyzer warnings.
+5fac76cf Merge tag 'v1.3.2'
+ca332209 update ChangeLog (tag: v1.3.2)
+1ace578c update NEWS
+63234c42 bump version to 1.3.2
+a35ea50d Add a fuzzer for ReadHuffmanCodes
+95ea5226 Fix invalid incremental decoding check.
+2af26267 Fix OOB write in BuildHuffmanTable.
+902bc919 Fix OOB write in BuildHuffmanTable.
+7ba44f80 Homogenize "__asm__ volatile" vs "asm volatile"
+68e27135 webp-container-spec: reorder example chunk layout
+943b932a Merge changes I6a4d0a04,Ibc37b91e into main
+1cc94f95 decode.h: wrap idec example in /* */
+63acdd1e decode.h: fix decode example
+aac5c5d0 ReadHuffmanCode: rm redundant num code lengths check
+a2de25f6 webp-lossless-bitstream-spec: normalize list item case
+68820f0e webp-lossless-bitstream-spec: normalize pixel ref
+cdb31aa8 webp-lossless-bitstream-spec: add missing periods
+0535a8cf webp-lossless-bitstream-spec: fix grammar
+b6c4ce26 normalize numbered list item format
+dd7364c3 Merge "palette.c: fix msvc warnings" into main
+c63c5df6 palette.c: fix msvc warnings
+0a2cad51 webp-container-spec: move terms from intro section
+dd88d2ff webp-lossless-bitstream-spec: color_cache -> color cache
+6e750547 Merge changes I644d7d39,Icf05491e,Ic02e6652,I63b11258 into main
+67a7cc2b webp-lossless-bitstream-spec: fix code blocks
+1432ebba Refactor palette sorting computation.
+cd436142 webp-lossless-bitstream-spec: block -> chunk
+3cb66f64 webp-lossless-bitstream-spec: add some missing commas
+56471a53 webp-lossless-bitstream-spec: normalize item text in 5.1
+af7fbfd2 vp8l_dec,ReadTransform: improve error status reporting
+7d8e0896 vp8l_dec: add VP8LSetError()
+a71ce1cf animencoder_fuzzer: fix error check w/Nallocfuzz
+e94b36d6 webp-lossless-bitstream-spec: relocate details from 5.1
+84628e56 webp-lossless-bitstream-spec: clarify image width changes
+ee722997 alpha_dec: add missing VP8SetError()
+0081693d enc_dec_fuzzer: use WebPDecode()
+0fcb311c enc_dec_fuzzer: fix WebPEncode/pic.error_code check
+982c177c webp-lossless-bitstream-spec: fix struct member refs
+56cf5625 webp-lossless-bitstream-spec: use RFC 7405 for ABNF
+6c6b3fd3 webp-lossless-bitstream-spec,cosmetics: delete blank lines
+29b9eb15 Merge changes Id56ca4fd,I662bd1d7 into main
+47c0af8d ReadHuffmanCodes: rm max_alphabet_size calc
+b92deba3 animencoder_fuzzer: no WebPAnimEncoderAssemble check w/nallocfuzz
+6be9bf8b animencoder_fuzzer: fix leak on alloc failure
+5c965e55 vp8l_dec,cosmetics: add some /*param=*/ comments
+e4fc2f78 webp-lossless-bitstream-spec: add validity note for max_symbol
+71916726 webp-lossless-bitstream-spec: fix max_symbol definition
+eac3bd5c Have the palette code be in its own file.
+e2c85878 Add an initializer for the SharpYuvOptions struct.
+4222b006 Merge tag 'v1.3.1'
+25d94f47 Implement more transfer functions in libsharpyuv
+2153a679 Merge changes Id0300937,I5dba5ccf,I57bb68e0,I2dba7b4e,I172aca36, ... into main
+4298e976 webp-lossless-bitstream-spec: add PredictorTransformOutput
+cd7e02be webp-lossless-bitstream-spec: fix RIFF-header ABNF
+6c3845f9 webp-lossless-bitstream-spec: split LZ77 Backward Ref section
+7f1b6799 webp-lossless-bitstream-spec: split Meta Prefix Codes section
+7b634d8f webp-lossless-bitstream-spec: note transform order
+6d6d4915 webp-lossless-bitstream-spec: update transformations text
+fd7bb21c update ChangeLog (tag: v1.3.1-rc2, tag: v1.3.1)
+e1adea50 update NEWS
+6b1c722a lossless_common.h,cosmetics: fix a typo
+08d60d60 webp-lossless-bitstream-spec: split code length section
+7a12afcc webp-lossless-bitstream-spec: rm unused anchor
+43393320 enc/*: normalize WebPEncodingSetError() calls
+287fdefe enc/*: add missing WebPEncodingSetError() calls
+c3bd7cff EncodeAlphaInternal: add missing error check
+14a9dbfb webp-lossless-bitstream-spec: refine single node text
+64819c7c Implement ExtractGreen_SSE2
+d49cfbb3 vp8l_enc,WriteImage: add missing error check
+2e5a9ec3 muxread,MuxImageParse: add missing error checks
+ebb6f949 cmake,emscripten: explicitly set stack size
+59a2b1f9 WebPDecodeYUV: check u/v/stride/uv_stride ptrs
+8e965ccb Call png_get_channels() to see if image has alpha
+fe80fbbd webp-container-spec: add some missing commas
+e8ed3176 Merge "treat FILTER_NONE as a regular Unfilter[] call" into main
+03a7a048 webp-lossless-bitstream-spec: rm redundant statement
+c437c7aa webp-lossless-bitstream-spec: mv up prefix code group def
+e4f17a31 webp-lossless-bitstream-spec: fix section reference
+e2ecd5e9 webp-lossless-bitstream-spec: clarify ABNF syntax
+8b55425a webp-lossless-bitstream-spec: refine pixel copy text
+29c9f2d4 webp-lossless-bitstream-spec: minor wording updates
+6b02f660 treat FILTER_NONE as a regular Unfilter[] call
+7f75c91c webp-container-spec: fix location of informative msg
+f6499943 webp-container-spec: consistently quote FourCCs
+49918af3 webp-container-spec: minor wording updates
+7f0a3419 update ChangeLog (tag: v1.3.1-rc1)
+bab7efbe update NEWS
+7138bf8f bump version to 1.3.1
+435b4ded update AUTHORS
+47351229 update .mailmap
+46bc4fc9 Merge "Switch ExtraCost to ints and implement it in SSE." into main
+828b4ce0 Switch ExtraCost to ints and implement it in SSE.
+ff6c7f4e CONTRIBUTING.md: add C style / cmake-format notes
+dd530437 add .cmake-format.py
+adbe2cb1 cmake,cosmetics: apply cmake-format
+15b36508 doc/webp-container-spec: rm future codec comment
+c369c4bf doc/webp-lossless-bitstream-spec: improve link text
+1de35f47 doc/webp-container-spec: don't use 'currently'
+bb06a16e doc/webp-container-spec: prefer present tense
+9f38b71e doc/webp-lossless-bitstream-spec: prefer present tense
+7acb6b82 doc/webp-container-spec: avoid i.e. & e.g.
+4967e7cd doc/webp-lossless-bitstream-spec: avoid i.e. & e.g.
+e3366659 Merge "Do not find_package image libraries if not needed." into main
+428588ef clarify single leaf node trees and use of canonical prefix coding
+709ec152 Do not find_package image libraries if not needed.
+8dd80ef8 fuzz_utils.h: lower kFuzzPxLimit w/ASan
+8f187b9f Clean message calls in CMake
+cba30078 WebPConfig.cmake.in: use calculated include path
+6cf9a76a Merge "webp-lossless-bitstream-spec: remove use of 'dynamics'" into main
+740943b2 Merge "Specialize and optimize ITransform_SSE2 using do_two" into main
+2d547e24 Compare kFuzzPxLimit to max_num_operations
+ac42dde1 Specialize and optimize ITransform_SSE2 using do_two
+17e0ef1d webp-lossless-bitstream-spec: remove use of 'dynamics'
+ed274371 neon.h,cosmetics: clear a couple lint warnings
+3fb82947 cpu.h,cosmetics: segment defines
+0c496a4f cpu.h: add WEBP_AARCH64
+8151f388 move VP8GetCPUInfo declaration to cpu.c
+916548c2 Make kFuzzPxLimit sanitizer dependent
+4070b271 advanced_api_fuzzer: reduce scaling limit
+761f49c3 Merge "webp-lossless-bitstream-spec: add missing bits to ABNF" into main
+84d04c48 webp-lossless-bitstream-spec: add missing bits to ABNF
+0696e1a7 advanced_api_fuzzer: reduce scaling limit
+93d88aa2 Merge "deps.cmake: remove unneeded header checks" into main
+118e0035 deps.cmake: remove unneeded header checks
+4c3d7018 webp-lossless-bitstream-spec: condense normal-prefix-code
+a6a09b32 webp-lossless-bitstream-spec: fix 2 code typos
+50ac4f7c Merge "cpu.h: enable NEON w/_M_ARM64EC" into main
+4b7d7b4f Add contribution instructions
+0afbd97b cpu.h: enable NEON w/_M_ARM64EC
+349f4353 Merge changes Ibd89e56b,Ic57e7f84,I89096614 into main
+8f7513b7 upsampling_neon.c: fix WEBP_SWAP_16BIT_CSP check
+cbf624b5 advanced_api_fuzzer: reduce scaling limit
+89edfdd1 Skip slow scaling in libwebp advanced_api_fuzzer
+859f19f7 Reduce libwebp advanced_api_fuzzer threshold
+a4f04835 Merge changes Ic389aaa2,I329ccd79 into main
+1275fac8 Makefile.vc: fix img2webp link w/dynamic cfg
+2fe27bb9 img2webp: normalize help output
+24bed3d9 cwebp: reflow -near_lossless help text
+0825faa4 img2webp: add -sharp_yuv/-near_lossless
+d64e6d7d Merge "PaletteSortModifiedZeng: fix leak on error" into main
+0e12a22d Merge "EncodeAlphaInternal: clear result->bw on error" into main
+0edbb6ea PaletteSortModifiedZeng: fix leak on error
+41ffe04e Merge "Update yapf style from "chromium" to "yapf"" into main
+2d9d9265 Update yapf style from "chromium" to "yapf"
+a486d800 EncodeAlphaInternal: clear result->bw on error
+1347a32d Skip big scaled advanced_api_fuzzer
+52b6f067 Fix scaling limit in advanced_api_fuzzer.c
+73618428 Limit scaling in libwebp advanced_api_fuzzer.c
+b54d21a0 Merge "CMakeLists.txt: allow CMAKE_INSTALL_RPATH to be set empty" into main
+31c28db5 libwebp{,demux,mux}.pc.in: Requires -> Requires.private
+d9a505ff CMakeLists.txt: allow CMAKE_INSTALL_RPATH to be set empty
+bdf33d03 Merge tag 'v1.3.0'
+b5577769 update ChangeLog (tag: v1.3.0-rc1, tag: v1.3.0)
+0ba77244 update NEWS
+e763eb1e bump version to 1.3.0
+2a8686fc update AUTHORS
+106a57c1 Merge "*/Android.mk: add a check for NDK_ROOT" into main
+c5e841c4 Merge "extras: WebpToSDL -> WebPToSDL" into main
+dbc30715 Merge "xcframeworkbuild.sh: bump MACOSX_CATALYST_MIN_VERSION" into main
+6fc1a9f9 */Android.mk: add a check for NDK_ROOT
+d3e151fc doc/api.md,webp_js/README.md: Webp -> WebP
+ed92a626 extras: WebpToSDL -> WebPToSDL
+6eb0189b xcframeworkbuild.sh: bump MACOSX_CATALYST_MIN_VERSION
+1d58575b CMake: align .pc variables with autoconf
+e5fe2cfc webp-lossless-bitstream-spec,cosmetics: reflow paragraphs
+0ceeeab9 webp-lossless-bitstream-spec: add amendment note
+607611cd Merge "webp-container-spec: normalize section title case" into main
+f853685e lossless: SUBTRACT_GREEN -> SUBTRACT_GREEN_TRANSFORM
+786497e4 webp-lossless-bitstream-spec: fix inv color txfm description
+c6ac672d webp-lossless-bitstream-spec: fix num_code_lengths check
+b5700efb webp-lossless-bitstream-spec,cosmetics: grammar/capitalization
+d8ed8c11 webp-container-spec: normalize section title case
+52ec0b8f Merge changes Ie975dbb5,Ifc8c93af,I6ca7c5d6,I2e8d66f5,I152477b8 into main
+5097ef62 webp-container-spec,cosmetics: grammar/capitalization
+e3ba2b1f webp-lossless-bitstream-spec,cosmetics: reflow abstract
+1e8e3ded webp-lossless-bitstream-spec: reword abstract re alpha
+017cb6fa webp-container-spec,cosmetics: normalize range syntax
+f6a4684b webp-lossless-bitstream-spec,cosmetics: normalize range syntax
+54ebd5a3 webp-lossless-bitstream-spec: limit dist map lut to 69 cols
+44741f9c webp-lossless-bitstream-spec: fix dist mapping example
+fad0ece7 pnmdec.c: use snprintf instead of sprintf
+3f73e8f7 sharpyuv: add SharpYuvGetVersion()
+ce2f2d66 SharpYuvConvert: fix a race on SharpYuvGetCPUInfo
+a458e308 sharpyuv_dsp.h: restore sharpyuv_cpu.h include
+9ba800a7 Merge changes Id72fbf3b,Ic59d23a2 into main
+979c0ebb sharpyuv: add SharpYuvGetCPUInfo
+8bab09a4 Merge "*.pc.in: rename lib_prefix to webp_libname_prefix" into main
+769387c5 cpu.c,cosmetics: fix a typo
+a02978c2 sharpyuv/Makefile.am+cmake: add missing -lm
+28aedcb9 *.pc.in: rename lib_prefix to webp_libname_prefix
+c42e6d5a configure.ac: export an empty lib_prefix variable
+dfc843aa Merge "*.pc.in: add lib prefix to lib names w/MSVC" into main
+2498209b *.pc.in: add lib prefix to lib names w/MSVC
+ac252b61 Merge "analysis_enc.c: fix a dead store warning" into main
+56944762 analysis_enc.c: fix a dead store warning
+d34f9b99 Merge "webp-lossless-bitstream-spec: convert BNF to ABNF" into main
+dc05b4db Merge changes I96bc063c,I45880467,If9e18e5a,I6ee938e4,I0a410b28, ... into main
+83270c7f webp-container-spec: add prose for rendering process
+73b19b64 webp-container-spec: note reserved fields MUST be ignored
+57101d3f webp-lossless-bitstream-spec: improve 'small' color table stmt
+dfd32e45 webp-container-spec: remove redundant sentence
+8a6185dd doc/webp-*: fix some punctuation, grammar
+72776530 webp-lossless-bitstream-spec: convert BNF to ABNF
+d992bb08 cmake: rename cpufeatures target to cpufeatures-webp
+3ed2b275 webp-container-spec: clarify background color note
+951c292d webp-container-spec: come too late -> out of order
+902dd787 webp-container-spec: prefer hex literals
+a8f6b5ee webp-container-spec: change SHOULD to MUST w/ANIM chunk
+1dc59435 webp-container-spec: add unknown fields MUST be ignored
+280a810f webp-container-spec: make padding byte=0 a MUST
+41f0bf68 webp-container-spec: update note on trailing data
+6bdd36db webp-container-spec: clarify Chunk Size is in bytes
+87e36c48 Merge "webp_js/README.md,cosmetics: reflow some lines" into main
+5b01f321 Merge "Update Windows makefile to build libsharpyuv library." into main
+19b1a71c webp_js/README.md,cosmetics: reflow some lines
+780db756 Update Windows makefile to build libsharpyuv library.
+e407d4b3 CMakeLists.txt: replace GLUT_glut_LIBRARY w/GLUT::GLUT
+abf73d62 Merge "WebPConfig.cmake.in: add find_dependency(Threads)" into main
+25807fb4 Merge "cmake: restore compatibility with cmake < 3.12" into main
+5dbc4bfa WebPConfig.cmake.in: add find_dependency(Threads)
+b2a175dd Merge "Update wasm instructions." into main
+cb90f76b Update wasm instructions.
+02d15258 cmake: restore compatibility with cmake < 3.12
+5ba046e2 CMake: add_definitions -> add_compile_options
+e68765af dsp,neon: use vaddv in a few more places
+e8f83de2 Set libsharpyuv include dir to 'webp' subdirectory.
+15a91ab1 cmake,cosmetics: apply cmake-format
+0dd49d1a CMakeLists.txt: set @ONLY in configure_file() calls
+62b1bfe8 Merge changes I2877e7bb,I777cad70,I15af7d1a,I686e6740,If10538a9, ... into main
+95c8fe5f Merge changes Iecea3603,I9dc228ab into main
+e7c805cf picture_csp_enc.c: remove SafeInitSharpYuv
+6af8845a sharpyuv: prefer webp/types.h
+639619ce cmake: fix dll exports
+782ed48c sharpyuv,SharpYuvInit: add mutex protection when available
+cad0d5ad sharyuv_{neon,sse2}.c: merge WEBP_USE_* sections
+ef70ee06 add a few missing <stddef.h> includes for NULL
+f0f9eda4 sharpyuv.h: remove <inttypes.h>
+9b902cba Merge "picture_csp_enc.c,CheckNonOpaque: rm unneeded local" into main
+9c1d457c cmake/cpu.cmake: remove unused variable
+9ac25bcb CMakeLists.txt,win32: match naming convention used by nmake
+76c353ba picture_csp_enc.c,CheckNonOpaque: rm unneeded local
+5000de54 Merge "cwebp: fix WebPPictureHasTransparency call" into main
+e1729309 Merge "WebPPictureHasTransparency: add missing pointer check" into main
+00ff988a vp8l_enc,AddSingleSubGreen: clear int sanitizer warnings
+e2fecc22 dsp/lossless_enc.c: clear int sanitizer warnings
+129cf9e9 dsp/lossless.c: clear int sanitizer warnings
+ad7d1753 dsp/lossless_enc.c: clear int sanitizer warnings
+5037220e VP8LSubtractGreenFromBlueAndRed_C: clear int sanitizer warnings
+2ee786c7 upsampling_sse2.c: clear int sanitizer warnings
+4cc157d4 ParseOptionalChunks: clear int sanitizer warning
+892cf033 BuildHuffmanTable: clear int sanitizer warning
+3a9a4d45 VP8GetSigned: clear int sanitizer warnings
+704a3d0a dsp/lossless.c: quiet int sanitizer warnings
+1a6c109c WebPPictureHasTransparency: add missing pointer check
+c626e7d5 cwebp: fix WebPPictureHasTransparency call
+866e349c Merge tag 'v1.2.4'
+c170df38 Merge "Create libsharpyuv.a in makefile.unix." into main
+9d7ff74a Create libsharpyuv.a in makefile.unix.
+0d1f1254 update ChangeLog (tag: v1.2.4)
+fcbc2d78 Merge "doc/*.txt: restrict code to 69 columns" into main
+4ad0e189 Merge "webp-container-spec.txt: normalize fourcc spelling" into main
+980d2488 update NEWS
+9fde8127 bump version to 1.2.4
+7a0a9935 doc/*.txt: restrict code to 69 columns
+c040a615 webp-container-spec.txt: normalize fourcc spelling
+aff1c546 dsp,x86: normalize types w/_mm_cvtsi128_si32 calls
+ab540ae0 dsp,x86: normalize types w/_mm_cvtsi32_si128 calls
+8980362e dsp,x86: normalize types w/_mm_set* calls (2)
+e626925c lossless: fix crunch mode w/WEBP_REDUCE_SIZE
+83539239 dsp,x86: normalize types w/_mm_set* calls
+8a4576ce webp-container-spec.txt: replace &amp; with &
+db870881 Merge "webp-container-spec.txt: make reserved 0 values a MUST" into main
+01d7d378 webp-lossless-bitstream-spec: number all sections
+337cf69f webp-lossless-bitstream-spec: mv Nomenclature after Intro
+79be856e Merge changes I7111d1f7,I872cd62c into main
+5b87983a webp-container-spec.txt: make reserved 0 values a MUST
+bd939123 Merge changes I7a25b1a6,I51b2c2a0,I87d0cbcf,I6ec60af6,I0a3fe9dc into main
+04764b56 libwebp.pc: add libsharpyuv to requires
+7deee810 libsharpyuv: add pkg-config file
+1a64a7e6 webp-container-spec.txt: clarify some SHOULDs
+bec2c88a webp-container-spec.txt: move ChunkHeader to terminology
+c9359332 webp-container-spec.txt: clarify 'VP8 '/'XMP ' fourccs
+70fe3063 webp-container-spec.txt: rightsize table entries
+ddbf3f3f webp-container-spec.txt: update 'key words' text
+c151e95b utils.h,WEBP_ALIGN: make bitmask unsigned
+748e92bb add WebPInt32ToMem
+3fe15b67 Merge "Build libsharpyuv as a full installable library." into main
+4f402f34 add WebPMemToInt32
+a3b68c19 Build libsharpyuv as a full installable library.
+b4994eaa CMake: set rpath for shared objects
+94cd7117 Merge "CMake: fix dylib versioning" into main
+e91451b6 Fix the lossless specs a bit more.
+231bdfb7 CMake: fix dylib versioning
+bfad7ab5 CMakeLists.txt: correct libwebpmux name in WebPConfig.cmake
+c2e3fd30 Revert "cmake: fix webpmux lib name for cmake linking"
+7366f7f3 Merge "lossless: fix crunch mode w/WEBP_REDUCE_SIZE" into main
+84163d9d lossless: fix crunch mode w/WEBP_REDUCE_SIZE
+d01c1eb3 webp-lossless-bitstream-spec,cosmetics: normalize capitalization
+8813ca8e Merge tag 'v1.2.3'
+3c4a0fbf update ChangeLog (tag: v1.2.3)
+56a480e8 dsp/cpu.h: add missing extern "C"
+62b45bdd update ChangeLog (tag: v1.2.3-rc1)
+8764ec7a Merge changes Idb037953,Id582e395 into 1.2.3
+bcb872c3 vwebp: fix file name display in windows unicode build
+67c44ac5 webpmux: fix -frame option in windows unicode build
+8278825a makefile.unix: add sharpyuv objects to clean target
+14a49e01 update NEWS
+34b1dc33 bump version to 1.2.3
+0b397fda update AUTHORS
+c16488ac update .mailmap
+5a2d929c Merge "unicode.h: set console mode before using wprintf" into main
+169f867f unicode.h: set console mode before using wprintf
+a94b855c Merge "libsharpyuv: add version defines" into main
+f83bdb52 libsharpyuv: add version defines
+bef0d797 unicode_gif.h: fix -Wdeclaration-after-statement
+404c1622 Rename Huffman coding to prefix coding in the bitstream spec
+8895f8a3 Merge "run_static_analysis.sh: fix scan-build archive path" into main
+92a673d2 Merge "Add -fvisibility=hidden flag in CMakeLists." into main
+67c1d722 Merge "add WEBP_MSAN" into main
+1124ff66 Add -fvisibility=hidden flag in CMakeLists.
+e15b3560 add WEBP_MSAN
+ec9e782a sharpyuv: remove minimum image size from sharpyuv library
+7bd07f3b run_static_analysis.sh: fix scan-build archive path
+5ecee06f Merge "sharpyuv: increase precision of gamma<->linear conversion" into main
+f81dd7d6 Merge changes I3d17d529,I53026880,I1bd61639,I6bd4b25d,Icfec8fba into main
+2d607ee6 sharpyuv: increase precision of gamma<->linear conversion
+266cbbc5 sharpyuv: add 32bit version of SharpYuvFilterRow.
+9fc12274 CMake: add src to webpinfo includes
+7d18f40a CMake: add WEBP_BUILD_WEBPINFO to list of checks for exampleutil
+11309aa5 CMake: add WEBP_BUILD_WEBPMUX to list of checks for exampleutil
+4bc762f7 CMake: link imageioutil to exampleutil after defined
+0d1b9bc4 WEBP_DEP_LIBRARIES: use Threads::Threads
+20ef48f0 Merge "sharpyuv: add support for 10/12/16 bit rgb and 10/12 bit yuv." into main
+93c54371 sharpyuv: add support for 10/12/16 bit rgb and 10/12 bit yuv.
+53cf2b49 normalize WebPValidatePicture declaration w/definition
+d3006f4b sharpyuv: slightly improve precision
+ea967098 Merge changes Ia01bd397,Ibf3771af into main
+11bc8410 Merge changes I2d317c4b,I9e77f6db into main
+30453ea4 Add an internal WebPValidatePicture.
+6c43219a Some renamings for consistency.
+4f59fa73 update .mailmap
+e74f8a62 webp-lossless-bitstream-spec,cosmetics: normalize range syntax
+5a709ec0 webp-lossless-bitstream-spec,cosmetics: fix code typo
+a2093acc webp-lossless-bitstream-spec: add amendment note
+86c66930 webp-lossless-bitstream-spec: fix BNF
+232f22da webp-lossless-bitstream-spec: fix 'simple code' snippet
+44dd765d webp-lossless-bitstream-spec: fix ColorTransform impl
+7a7e33e9 webp-lossless-bitstream-spec: fix TR-pixel right border note
+86f94ee0 Update lossless spec with Huffman codes.
+a3927cc8 sharpyuv.c,cosmetics: fix indent
+6c45cef7 Make sure the stride has a minimum value in the importer.
+0c8b0e67 sharpyuv: cleanup/cosmetic changes
+dc3841e0 {histogram,predictor}_enc: quiet int -> float warnings
+a19a25bb Replace doubles by floats in lossless misc cost estimations.
+42888f6c Add an option to enable static builds.
+7efcf3cc Merge "Fix typo in color constants: Marix -> Matrix" into main
+8f4b5c62 Fix typo in color constants: Marix -> Matrix
+90084d84 Merge "demux,IsValidExtendedFormat: remove unused variable" into main
+ed643f61 Merge changes I452d2485,Ic6d75475 into main
+8fa053d1 Rename SharpYUV to SharpYuv for consistency.
+99a87562 SharpYuvComputeConversionMatrix: quiet int->float warnings
+deb426be Makefile.vc: add sharpyuv_csp.obj to SHARPYUV_OBJS
+779597d4 demux,IsValidExtendedFormat: remove unused variable
+40e8aa57 Merge "libsharpyuv: add colorspace utilities" into main
+01a05de1 libsharpyuv: add colorspace utilities
+2de4b05a Merge changes Id9890a60,I376d81e6,I1c958838 into main
+b8bca81f Merge "configure.ac: use LT_INIT if available" into main
+e8e77b9c Merge changes I479bc487,I39864691,I5d486c2c,I186d13be into main
+7e7d5d50 Merge ".gitignore: add Android Studio & VS code dirs" into main
+10c50848 normalize label indent
+89f774e6 mux{edit,internal}: fix leaks on error
+2d3293ad ExUtilInitCommandLineArguments: fix leak on error
+ec34fd70 anim_util: fix leaks on error
+e4717287 gif2webp: fix segfault on OOM
+e3cfafaf GetBackwardReferences: fail on alloc error
+a828a59b BackwardReferencesHashChainDistanceOnly: fix segfault on OOM
+fe153fae VP8LEncodeStream: fix segfault on OOM
+919acc0e .gitignore: add Android Studio & VS code dirs
+efa0731b configure.ac: use LT_INIT if available
+0957fd69 tiffdec: add grayscale support
+e685feef Merge "Make libsharpyuv self-contained by removing dependency on cpu.c" into main
+841960b6 Make libsharpyuv self-contained by removing dependency on cpu.c
+617cf036 image_dec: add WebPGetEnabledInputFileFormats()
+7a68afaa Let SharpArgbToYuv caller pass in an RGB>YUV conversion matrix.
+34bb332c man/cwebp.1: add note about crop/resize order
+f0e9351c webp-lossless-bitstream-spec,cosmetics: fix some typos
+5ccbd6ed vp8l_dec.c,cosmetics: fix a few typos
+c3d0c2d7 fix ios build scripts after sharpyuv dep added
+d0d2292e Merge "Make libwebp depend on libsharpyuv." into main
+03d12190 alpha_processing_neon.c: fix 0x01... typo
+d55d447c Make libwebp depend on libsharpyuv.
+e4cbcdd2 Fix lossless encoding for MIPS.
+924e7ca6 alpha_processing_neon.c: fix Dispatch/ExtractAlpha_NEON
+0fa0ea54 Makefile.vc: use /MANIFEST:EMBED
+29cc95ce Basic version of libsharpyuv in libwebp, in C.
+a30f2190 examples/webpmux.c: fix a couple of typos
+66b3ce23 Fix bad overflow check in ReadTIFF()
+54e61a38 Markdownify libwebp docs and reorganize them.
+b4533deb CMakeLists.txt,cosmetics: break long line
+b9d2f9cd quant_enc.c: use WEBP_RESTRICT qualifier
+ec178f2c Add progress hook granularity in lossless
+26139c73 Rename MAX_COST to MAX_BIT_COST in histogram_enc.c
+13b82816 cmake: fix webpmux lib name for cmake linking
+88b6a396 webp-container-spec.txt,cosmetics: normalize formatting
+6f496540 Merge tag 'v1.2.2'
+4074acf8 dsp.h: bump msvc arm64 version requirement to 16.6
+b0a86089 update ChangeLog (tag: v1.2.2)
 6db8248c libwebp: Fix VP8EncTokenLoop() progress
 827a307f BMP enc: fix the transparency case
+db25f1b4 libwebp: Fix VP8EncTokenLoop() progress
 286e7fce libwebp: do not destroy jpeg codec twice on error
+6e8a4126 libwebp: do not destroy jpeg codec twice on error
+faf21968 Merge "BMP enc: fix the transparency case" into main
+480cd51d BMP enc: fix the transparency case
 9195ea05 update ChangeLog (tag: v1.2.2-rc2)
 4acae017 update NEWS
 883f0633 man/img2webp.1: update date
 567e1f44 Reword img2webp synopsis command line
+1b0c15db man/img2webp.1: update date
+17bade38 Merge "Reword img2webp synopsis command line" into main
+a80954a1 Reword img2webp synopsis command line
 f084244d anim_decode: fix alpha blending with big-endian
 b217b4ff webpinfo: fix fourcc comparison w/big-endian
+ec497b75 Merge "anim_decode: fix alpha blending with big-endian" into main
+e4886716 anim_decode: fix alpha blending with big-endian
+e3cb052c webpinfo: fix fourcc comparison w/big-endian
+a510fedb patch-check: detect duplicated files
 f035d2e4 update ChangeLog (tag: v1.2.2-rc1)
 7031946a update NEWS
 973390b6 bump version to 1.2.2
@@ -45,7 +677,7 @@ e23cd548 dsp.h: enable NEON w/VS2019+ ARM64 targets
 42592af8 webp,cmake: Remove unnecessary include dirs
 e298e05f Add patch-check steps in PRESUBMIT.py
 29148919 Merge tag 'v1.2.1'
-9ce5843d update ChangeLog (tag: v1.2.1, origin/1.2.1)
+9ce5843d update ChangeLog (tag: v1.2.1)
 d9191588 fuzzer/*: normalize src/ includes
 c5bc3624 fuzzer/*: normalize src/ includes
 53b6f762 fix indent
@@ -224,7 +856,7 @@ a99078c1 remove call to MBAnalyzeBestIntra4Mode for method >= 5
 6a0ff358 Enc: add a qmin / qmax range for quality factor
 0fa56f30 Merge tag 'v1.1.0'
 6cf504d0 PNM decoding: handle max_value != 255
-d7844e97 update ChangeLog (tag: v1.1.0-rc2, tag: v1.1.0, origin/1.1.0)
+d7844e97 update ChangeLog (tag: v1.1.0-rc2, tag: v1.1.0)
 7f006436 Makefile.vc: fix webp_quality.exe link
 cf047e83 Makefile.vc: fix webp_quality.exe link
 c074c653 update NEWS
@@ -869,7 +1501,7 @@ b016cb91 NEON: faster fancy upsampling
 f04eb376 Merge tag 'v0.5.2'
 341d711c NEON: 5% faster conversion to RGB565 and RGBA4444
 abb54827 remove Clang warnings with unused arch arguments.
-ece9684f update ChangeLog (tag: v0.5.2-rc2, tag: v0.5.2, origin/0.5.2)
+ece9684f update ChangeLog (tag: v0.5.2-rc2, tag: v0.5.2)
 aa7744ca anim_util: quiet implicit conv warnings in 32-bit
 d9120271 jpegdec: correct ContextFill signature
 24eb3940 Remove some errors when compiling the code as C++.
@@ -1156,7 +1788,7 @@ bbb6ecd9 Merge "Add MSA optimized distortion functions"
 c0991a14 io,EmitRescaledAlphaYUV: factor out a common expr
 48bf5ed1 build.gradle: remove tab
 bfef6c9f Merge tag 'v0.5.1'
-3d97bb75 update ChangeLog (tag: v0.5.1, origin/0.5.1)
+3d97bb75 update ChangeLog (tag: v0.5.1)
 deb54d91 Clarify the expected 'config' lifespan in WebPIDecode()
 435308e0 Add MSA optimized encoder transform functions
 dce64bfa Add MSA optimized alpha filter functions

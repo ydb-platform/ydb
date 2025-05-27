@@ -70,7 +70,7 @@ struct IBus
 {
     //! Returns a textual representation of the bus' endpoint.
     //! Typically used for logging.
-    virtual const TString& GetEndpointDescription() const = 0;
+    virtual const std::string& GetEndpointDescription() const = 0;
 
     //! Returns the bus' endpoint attributes.
     //! Typically used for constructing errors.
@@ -78,7 +78,7 @@ struct IBus
 
     //! Returns the bus' endpoint address as it was provided by the configuration (e.g.: non-resolved FQDN).
     //! Empty if it is not supported by the implementation (e.g.: Unix sockets).
-    virtual const TString& GetEndpointAddress() const = 0;
+    virtual const std::string& GetEndpointAddress() const = 0;
 
     //! Returns the bus' endpoint network address (e.g. a resolved IP address).
     //! Null if it is not supported by the implementation (e.g. for a client-side bus).
@@ -126,7 +126,7 @@ struct IBus
     /*!
      *  Does not block -- termination typically happens in background.
      *  It is safe to call this method multiple times.
-     *  On terminated the instance is no longer usable.
+     *  After termination the instance is no longer usable.
 
      *  \note Thread affinity: any.
      */

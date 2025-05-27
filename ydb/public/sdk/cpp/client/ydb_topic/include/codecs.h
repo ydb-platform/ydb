@@ -12,7 +12,7 @@
 
 #include <unordered_map>
 
-namespace NYdb::NTopic {
+namespace NYdb::inline V2::NTopic {
 
 enum class ECodec : ui32 {
     RAW = 1,

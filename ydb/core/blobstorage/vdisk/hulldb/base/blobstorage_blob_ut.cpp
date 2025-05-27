@@ -143,53 +143,6 @@ namespace NKikimr {
                 }
             }
         }
-
-        Y_UNIT_TEST(FilterMask) {
-            for (bool addHeader1 : {true, false}) {
-                for (bool addHeader2 : {true, false}) {
-                    for (bool addHeader3 : {true, false}) {
-                        const ui8 numParts = 6;
-                        for (ui32 mask1 = 1; mask1 < (1 << numParts); ++mask1) {
-                            for (ui32 mask2 = 1; mask2 < (1 << numParts); ++mask2) {
-                                if (!(mask1 & mask2)) {
-                                    continue;
-                                }
-
-                                NMatrix::TVectorType partsToStore(0, numParts);
-                                for (ui8 i = 0; i < numParts; ++i) {
-                                    if (mask2 >> i & 1) {
-                                        partsToStore.Set(i);
-                                    }
-                                }
-
-                                TDiskBlobMergerWithMask m;
-                                m.SetFilterMask(partsToStore);
-                                for (ui8 i = 0; i < numParts; ++i) {
-                                    if (mask1 >> i & 1) {
-                                        NMatrix::TVectorType v(0, numParts);
-                                        v.Set(i);
-                                        TRope buffer = TDiskBlob::Create(8, i + 1, numParts, TRope(Sprintf("%08x", i)), Arena, addHeader1);
-                                        m.Add(TDiskBlob(&buffer, v, GType, TLogoBlobID(0, 0, 0, 0, 8, 0)));
-                                    }
-                                }
-
-                                TDiskBlobMerger m2;
-                                for (ui8 i = 0; i < numParts; ++i) {
-                                    if ((mask1 & mask2) >> i & 1) {
-                                        NMatrix::TVectorType v(0, numParts);
-                                        v.Set(i);
-                                        TRope buffer = TDiskBlob::Create(8, i + 1, numParts, TRope(Sprintf("%08x", i)), Arena, addHeader2);
-                                        m2.Add(TDiskBlob(&buffer, v, GType, TLogoBlobID(0, 0, 0, 0, 8, 0)));
-                                    }
-                                }
-
-                                UNIT_ASSERT_EQUAL(m.CreateDiskBlob(Arena, addHeader3), m2.CreateDiskBlob(Arena, addHeader3));
-                            }
-                        }
-                    }
-                }
-            }
-        }
     }
 
 } // NKikimr

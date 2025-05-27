@@ -2,10 +2,11 @@
 
 #include "traits.h"
 
-#include <library/cpp/pop_count/popcount.h>
 
 #include <util/generic/vector.h>
 #include <util/ysaveload.h>
+
+#include <bit>
 
 template <typename T>
 class TReadonlyBitVector;
@@ -113,7 +114,7 @@ public:
     size_t Count() const {
         size_t count = 0;
         for (size_t i = 0; i < Data_.size(); ++i) {
-            count += (size_t)PopCount(Data_[i]);
+            count += (size_t)std::popcount(Data_[i]);
         }
         return count;
     }

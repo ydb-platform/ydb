@@ -2,18 +2,18 @@
 #include "clusters_from_connections.h"
 #include "table_bindings_from_bindings.h"
 
-#include <ydb/library/yql/ast/yql_expr.h>
+#include <yql/essentials/ast/yql_expr.h>
 #include <ydb/library/yql/dq/actors/compute/dq_checkpoints.h>
 #include <ydb/library/yql/dq/actors/dq.h>
 #include <ydb/library/yql/utils/actor_log/log.h>
-#include <ydb/library/yql/core/services/mounts/yql_mounts.h>
-#include <ydb/library/yql/core/services/yql_out_transformers.h>
-#include <ydb/library/yql/core/facade/yql_facade.h>
-#include <ydb/library/yql/minikql/mkql_function_registry.h>
-#include <ydb/library/yql/minikql/comp_nodes/mkql_factories.h>
-#include <ydb/library/yql/providers/common/udf_resolve/yql_simple_udf_resolver.h>
-#include <ydb/library/yql/providers/common/comp_nodes/yql_factory.h>
-#include <ydb/library/yql/providers/common/schema/mkql/yql_mkql_schema.h>
+#include <yql/essentials/core/services/mounts/yql_mounts.h>
+#include <yql/essentials/core/services/yql_out_transformers.h>
+#include <yql/essentials/core/facade/yql_facade.h>
+#include <yql/essentials/minikql/mkql_function_registry.h>
+#include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
+#include <yql/essentials/providers/common/udf_resolve/yql_simple_udf_resolver.h>
+#include <yql/essentials/providers/common/comp_nodes/yql_factory.h>
+#include <yql/essentials/providers/common/schema/mkql/yql_mkql_schema.h>
 #include <ydb/library/yql/providers/dq/actors/executer_actor.h>
 #include <ydb/library/yql/providers/dq/actors/proto_builder.h>
 #include <ydb/library/yql/providers/dq/actors/task_controller.h>
@@ -24,7 +24,7 @@
 #include <ydb/library/yql/providers/dq/provider/yql_dq_provider.h>
 #include <ydb/library/yql/providers/dq/provider/exec/yql_dq_exectransformer.h>
 #include <ydb/library/yql/providers/generic/provider/yql_generic_provider.h>
-#include <ydb/library/yql/dq/integration/transform/yql_dq_task_transform.h>
+#include <yql/essentials/core/dq_integration/transform/yql_dq_task_transform.h>
 #include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway.h>
 #include <ydb/library/yql/providers/pq/provider/yql_pq_provider.h>
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
@@ -33,16 +33,16 @@
 #include <ydb/library/yql/providers/solomon/gateway/yql_solomon_gateway.h>
 #include <ydb/library/yql/providers/solomon/provider/yql_solomon_provider.h>
 #include <ydb/library/yql/providers/s3/proto/sink.pb.h>
-#include <ydb/library/yql/sql/settings/translation_settings.h>
-#include <ydb/library/yql/minikql/mkql_alloc.h>
-#include <ydb/library/yql/minikql/mkql_program_builder.h>
-#include <ydb/library/yql/minikql/mkql_node_cast.h>
-#include <ydb/library/yql/minikql/mkql_node_serialization.h>
-#include <ydb/library/yql/providers/common/codec/yql_codec.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/sql/settings/translation_settings.h>
+#include <yql/essentials/minikql/mkql_alloc.h>
+#include <yql/essentials/minikql/mkql_program_builder.h>
+#include <yql/essentials/minikql/mkql_node_cast.h>
+#include <yql/essentials/minikql/mkql_node_serialization.h>
+#include <yql/essentials/providers/common/codec/yql_codec.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/providers/dq/worker_manager/interface/events.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
-#include <ydb/library/yql/public/issue/protos/issue_message.pb.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/protos/issue_message.pb.h>
 #include <ydb/library/yql/utils/actor_log/log.h>
 
 #include <ydb/library/mkql_proto/mkql_proto.h>
@@ -67,6 +67,7 @@
 #include <ydb/core/fq/libs/read_rule/read_rule_creator.h>
 #include <ydb/core/fq/libs/read_rule/read_rule_deleter.h>
 #include <ydb/core/fq/libs/tasks_packer/tasks_packer.h>
+#include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
 
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -571,6 +572,7 @@ private:
                         SelfId(),
                         Params.QueryId,
                         Params.YqSharedResources->UserSpaceYdbDriver,
+                        Params.PqGatewayFactory->CreatePqGateway(),
                         Params.Resources.topic_consumers(),
                         PrepareReadRuleCredentials()
                     )
@@ -779,11 +781,7 @@ private:
             mkqlDefaultLimit = 8_GB;
         }
 
-        // This part is for backward compatibility. TODO: remove this part after migration to TS3GatewayConfig
-        auto s3ReadDefaultInflightLimit = Params.Config.GetReadActorsFactoryConfig().GetS3ReadActorFactoryConfig().GetDataInflight();
-        if (s3ReadDefaultInflightLimit == 0) {
-            s3ReadDefaultInflightLimit = Params.Config.GetGateways().GetS3().GetDataInflight();
-        }
+        auto s3ReadDefaultInflightLimit = Params.Config.GetGateways().GetS3().GetDataInflight();
         if (s3ReadDefaultInflightLimit == 0) {
             s3ReadDefaultInflightLimit = 200_MB;
         }
@@ -961,6 +959,7 @@ private:
             Fq::Private::PingTaskRequest request;
             if (proto.issues_size()) {
                 *request.mutable_transient_issues() = proto.issues();
+                NKikimr::NKqp::TruncateIssues(request.mutable_transient_issues());
             }
             if (proto.metric_size()) {
                 TString statistics;
@@ -975,7 +974,7 @@ private:
 
     void SendTransientIssues(const NYql::TIssues& issues) {
         Fq::Private::PingTaskRequest request;
-        NYql::IssuesToMessage(issues, request.mutable_transient_issues());
+        NYql::IssuesToMessage(NKikimr::NKqp::TruncateIssues(issues), request.mutable_transient_issues());
         Send(Pinger, new TEvents::TEvForwardPingRequest(request), 0, RaiseTransientIssuesCookie);
     }
 
@@ -1021,6 +1020,12 @@ private:
                 const auto emptyResultSet = builder.BuildResultSet({});
                 auto* header = QueryStateUpdateRequest.add_result_set_meta();
                 (*header->mutable_column()) = emptyResultSet.columns();
+
+                if (const auto& issues = NKikimr::NKqp::ValidateResultSetColumns(header->column())) {
+                    header->clear_column();
+                    Abort("Invalid result set columns, please contact internal support", FederatedQuery::QueryMeta::FAILED, issues);
+                    return;
+                }
             }
         }
         *request.mutable_result_set_meta() = QueryStateUpdateRequest.result_set_meta();
@@ -1194,7 +1199,7 @@ private:
     }
 
     TIssue WrapInternalIssues(const TIssues& issues) {
-        NYql::IssuesToMessage(issues, QueryStateUpdateRequest.mutable_internal_issues());
+        NYql::IssuesToMessage(NKikimr::NKqp::TruncateIssues(issues), QueryStateUpdateRequest.mutable_internal_issues());
         TString referenceId = GetEntityIdAsString(Params.Config.GetCommon().GetIdsPrefix(), EEntityType::UNDEFINED);
         LOG_E(referenceId << ": " << issues.ToOneLineString());
         return TIssue("Contact technical support and provide query information and this id: " + referenceId + "_" + Now().ToStringUpToSeconds());
@@ -1439,6 +1444,7 @@ private:
                 SelfId(),
                 Params.QueryId,
                 Params.YqSharedResources->UserSpaceYdbDriver,
+                Params.PqGatewayFactory->CreatePqGateway(),
                 Params.Resources.topic_consumers(),
                 PrepareReadRuleCredentials()
             )
@@ -1449,7 +1455,7 @@ private:
         LOG_D("Rate limiter resource creation finished. Success: " << ev->Get()->Status.IsSuccess());
         RateLimiterResourceCreatorId = {};
         if (!ev->Get()->Status.IsSuccess()) {
-            AddIssueWithSubIssues("Problems with rate limiter resource creation", ev->Get()->Status.GetIssues());
+            AddIssueWithSubIssues("Problems with rate limiter resource creation", NYdb::NAdapters::ToYqlIssues(ev->Get()->Status.GetIssues()));
             LOG_D(Issues.ToOneLineString());
             Finish(FederatedQuery::QueryMeta::FAILED);
         } else {
@@ -1542,8 +1548,8 @@ private:
         dqConfiguration->FallbackPolicy = EFallbackPolicy::Never;
 
         bool enableCheckpointCoordinator =
-            Params.QueryType == FederatedQuery::QueryContent::STREAMING && 
-            Params.Config.GetCheckpointCoordinator().GetEnabled() && 
+            Params.QueryType == FederatedQuery::QueryContent::STREAMING &&
+            Params.Config.GetCheckpointCoordinator().GetEnabled() &&
             !dqConfiguration->DisableCheckpoints.Get().GetOrElse(false);
 
         ExecuterId = Register(NYql::NDq::MakeDqExecuter(MakeNodesManagerId(), SelfId(), Params.QueryId, "", dqConfiguration, QueryCounters.Counters, TInstant::Now(), enableCheckpointCoordinator));
@@ -1573,6 +1579,18 @@ private:
             ClearResultFormatSettings();
         }
 
+        TDuration pingPeriod = TDuration::Seconds(3);
+        TDuration aggrPeriod = TDuration::Seconds(1);
+        {
+            const auto& taskControllerConfig = Params.Config.GetTaskController();
+            if (taskControllerConfig.GetPingPeriod()) {
+                Y_ABORT_UNLESS(TDuration::TryParse(taskControllerConfig.GetPingPeriod(), pingPeriod));
+            }
+            if (taskControllerConfig.GetAggrPeriod()) {
+                Y_ABORT_UNLESS(TDuration::TryParse(taskControllerConfig.GetAggrPeriod(), aggrPeriod));
+            }
+        }
+
         if (enableCheckpointCoordinator) {
             ControlId = Register(MakeCheckpointCoordinator(
                 ::NFq::TCoordinatorId(Params.QueryId + "-" + ToString(DqGraphIndex), Params.PreviousQueryRevision),
@@ -1589,8 +1607,8 @@ private:
                 resultId,
                 dqConfiguration,
                 QueryCounters,
-                TDuration::Seconds(3),
-                TDuration::Seconds(1)
+                pingPeriod,
+                aggrPeriod
                 ).Release());
         } else {
             ControlId = Register(NYql::MakeTaskController(
@@ -1599,7 +1617,8 @@ private:
                 resultId,
                 dqConfiguration,
                 QueryCounters,
-                TDuration::Seconds(3)
+                pingPeriod,
+                aggrPeriod
             ).Release());
         }
 
@@ -1880,8 +1899,8 @@ private:
             Issues.Clear();
         }
 
-        NYql::IssuesToMessage(TransientIssues, QueryStateUpdateRequest.mutable_transient_issues());
-        NYql::IssuesToMessage(Issues, QueryStateUpdateRequest.mutable_issues());
+        NYql::IssuesToMessage(NKikimr::NKqp::TruncateIssues(TransientIssues), QueryStateUpdateRequest.mutable_transient_issues());
+        NYql::IssuesToMessage(NKikimr::NKqp::TruncateIssues(Issues), QueryStateUpdateRequest.mutable_issues());
         /*
             1. If the execution has already started then the issue will be put through TEvAbortExecution
             2. If execution hasn't started then the issue will be put in this place
@@ -1970,26 +1989,39 @@ private:
         }
 
         {
-           dataProvidersInit.push_back(GetS3DataProviderInitializer(Params.S3Gateway, Params.CredentialsFactory,
-                Params.Config.GetReadActorsFactoryConfig().HasS3ReadActorFactoryConfig() ? Params.Config.GetReadActorsFactoryConfig().GetS3ReadActorFactoryConfig().GetAllowLocalFiles() : Params.Config.GetGateways().GetS3().GetAllowLocalFiles())); // This part is for backward compatibility. TODO: remove this part after migration to TS3GatewayConfig
+           dataProvidersInit.push_back(GetS3DataProviderInitializer(Params.S3Gateway, Params.CredentialsFactory, NActors::TActivationContext::ActorSystem()));
         }
 
         {
-            NYql::TPqGatewayServices pqServices(
-                Params.YqSharedResources->UserSpaceYdbDriver,
-                Params.PqCmConnections,
-                Params.CredentialsFactory,
-                std::make_shared<NYql::TPqGatewayConfig>(gatewaysConfig.GetPq()),
-                Params.FunctionRegistry
-            );
-            const auto pqGateway = NYql::CreatePqNativeGateway(pqServices);
-            dataProvidersInit.push_back(GetPqDataProviderInitializer(pqGateway, false, dbResolver));
+            auto pqGateway = Params.PqGatewayFactory->CreatePqGateway();
+            pqGateway->UpdateClusterConfigs(std::make_shared<NYql::TPqGatewayConfig>(gatewaysConfig.GetPq()));
+            NYql::NPq::NProto::StreamingDisposition disposition;
+            switch (Params.StreamingDisposition.GetDispositionCase()) {
+                case FederatedQuery::StreamingDisposition::kOldest:
+                    *disposition.mutable_oldest() = Params.StreamingDisposition.oldest();
+                    break;
+                case FederatedQuery::StreamingDisposition::kFresh:
+                    *disposition.mutable_fresh() = Params.StreamingDisposition.fresh();
+                    break;
+                case FederatedQuery::StreamingDisposition::kFromTime:
+                    *disposition.mutable_from_time()->mutable_timestamp() = Params.StreamingDisposition.from_time().timestamp();
+                    break;
+                case FederatedQuery::StreamingDisposition::kTimeAgo:
+                    *disposition.mutable_time_ago()->mutable_duration() = Params.StreamingDisposition.time_ago().duration();
+                    break;
+                case FederatedQuery::StreamingDisposition::kFromLastCheckpoint:
+                    disposition.mutable_from_last_checkpoint()->set_force(Params.StreamingDisposition.from_last_checkpoint().force());
+                    break;
+                case FederatedQuery::StreamingDisposition::DISPOSITION_NOT_SET:
+                    break;
+            }
+            dataProvidersInit.push_back(GetPqDataProviderInitializer(pqGateway, false, dbResolver, std::move(disposition)));
         }
 
         {
             auto solomonConfig = gatewaysConfig.GetSolomon();
             auto solomonGateway = NYql::CreateSolomonGateway(solomonConfig);
-            dataProvidersInit.push_back(GetSolomonDataProviderInitializer(solomonGateway, false));
+            dataProvidersInit.push_back(GetSolomonDataProviderInitializer(solomonGateway, Params.CredentialsFactory, false));
         }
 
         SessionId = TStringBuilder()
@@ -2002,6 +2034,7 @@ private:
         NSQLTranslation::TTranslationSettings sqlSettings;
         sqlSettings.ClusterMapping = clusters;
         sqlSettings.SyntaxVersion = 1;
+        sqlSettings.Antlr4Parser = true;
         sqlSettings.PgParser = (Params.QuerySyntax == FederatedQuery::QueryContent::PG);
         sqlSettings.V0Behavior = NSQLTranslation::EV0Behavior::Disable;
         sqlSettings.Flags.insert({ "DqEngineEnable", "DqEngineForce", "DisableAnsiOptionalAs", "FlexibleTypes", "AnsiInForEmptyOrNullableItemsCollections" });

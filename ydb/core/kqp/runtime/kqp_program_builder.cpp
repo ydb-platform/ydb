@@ -3,8 +3,8 @@
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 
-#include <ydb/library/yql/minikql/mkql_node_cast.h>
-#include <ydb/library/yql/minikql/mkql_runtime_version.h>
+#include <yql/essentials/minikql/mkql_node_cast.h>
+#include <yql/essentials/minikql/mkql_runtime_version.h>
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -17,26 +17,22 @@ TType* GetRowType(const TProgramBuilder& builder, const TArrayRef<TKqpTableColum
         TType* type = nullptr;
         switch (column.Type) {
             case NUdf::TDataType<NUdf::TDecimal>::Id: {
-                type = TDataDecimalType::Create(
-                    NScheme::DECIMAL_PRECISION,
-                    NScheme::DECIMAL_SCALE,
-                    builder.GetTypeEnvironment()
-                );
+                const NScheme::TDecimalType& decimal = column.TypeInfo.GetDecimalType();
+                type = TDataDecimalType::Create(decimal.GetPrecision(), decimal.GetScale(), builder.GetTypeEnvironment());
+                if (!column.NotNull)
+                    type = TOptionalType::Create(type, builder.GetTypeEnvironment());
                 break;
             }
             case NKikimr::NScheme::NTypeIds::Pg: {
-                Y_ABORT_UNLESS(column.TypeDesc, "No pg type description");
-                type = TPgType::Create(NPg::PgTypeIdFromTypeDesc(column.TypeDesc), builder.GetTypeEnvironment());
+                type = TPgType::Create(NPg::PgTypeIdFromTypeDesc(column.TypeInfo.GetPgTypeDesc()), builder.GetTypeEnvironment());
                 break;
             }
             default: {
                 type = TDataType::Create(column.Type, builder.GetTypeEnvironment());
+                if (!column.NotNull)
+                    type = TOptionalType::Create(type, builder.GetTypeEnvironment());
                 break;
             }
-        }
-
-        if (!column.NotNull && column.Type != NKikimr::NScheme::NTypeIds::Pg) {
-            type = TOptionalType::Create(type, builder.GetTypeEnvironment());
         }
 
         rowTypeBuilder.Add(column.Name, type);
@@ -67,22 +63,6 @@ TRuntimeNode BuildColumnIndicesMap(const TProgramBuilder& builder, const TStruct
     }
 
     return TRuntimeNode(indicesMap.Build(), true);
-}
-
-TRuntimeNode BuildKeyPrefixIndicesList(const TProgramBuilder& builder, const TStructType& rowType,
-    const TArrayRef<TKqpTableColumn>& keyColumns)
-{
-    TListLiteralBuilder indicesList(builder.GetTypeEnvironment(),
-        TDataType::Create(NUdf::TDataType<ui32>::Id, builder.GetTypeEnvironment()));
-
-    MKQL_ENSURE_S(rowType.GetMembersCount() <= keyColumns.size());
-    for (ui32 i = 0; i < rowType.GetMembersCount(); ++i) {
-        auto& keyColumn = keyColumns[i];
-        ui32 index = rowType.GetMemberIndex(keyColumn.Name);
-        indicesList.Add(builder.NewDataLiteral<ui32>(index));
-    }
-
-    return TRuntimeNode(indicesList.Build(), true);
 }
 
 TRuntimeNode BuildTableIdLiteral(const TTableId& tableId, TProgramBuilder& builder) {
@@ -171,23 +151,6 @@ bool RightJoinSideOptional(const TString& joinType) {
 TKqpProgramBuilder::TKqpProgramBuilder(const TTypeEnvironment& env, const IFunctionRegistry& functionRegistry)
     : TProgramBuilder(env, functionRegistry) {}
 
-TRuntimeNode TKqpProgramBuilder::KqpReadTable(const TTableId& tableId, const TKqpKeyRange& range,
-    const TArrayRef<TKqpTableColumn>& columns)
-{
-    auto rowType = GetRowType(*this, columns);
-    auto returnType = NewFlowType(rowType);
-
-    TCallableBuilder builder(Env, __func__, returnType);
-    builder.Add(BuildTableIdLiteral(tableId, *this));
-    builder.Add(BuildKeyRangeNode(*this, range));
-    builder.Add(BuildColumnTags(*this, columns));
-    builder.Add(BuildSkipNullKeysNode(*this, range));
-    builder.Add(range.ItemsLimit ? range.ItemsLimit : NewNull());
-    builder.Add(NewDataLiteral(range.Reverse));
-
-    return TRuntimeNode(builder.Build(), false);
-}
-
 TRuntimeNode TKqpProgramBuilder::KqpWideReadTable(const TTableId& tableId, const TKqpKeyRange& range,
     const TArrayRef<TKqpTableColumn>& columns)
 {
@@ -252,24 +215,6 @@ TRuntimeNode TKqpProgramBuilder::KqpBlockReadTableRanges(const TTableId& tableId
     builder.Add(BuildColumnTags(*this, columns));
     builder.Add(ranges.ItemsLimit);
     builder.Add(NewDataLiteral(ranges.Reverse));
-
-    return TRuntimeNode(builder.Build(), false);
-}
-
-TRuntimeNode TKqpProgramBuilder::KqpLookupTable(const TTableId& tableId, const TRuntimeNode& lookupKeys,
-    const TArrayRef<TKqpTableColumn>& keyColumns, const TArrayRef<TKqpTableColumn>& columns)
-{
-    auto keysType = AS_TYPE(TStreamType, lookupKeys.GetStaticType());
-    auto keyType = AS_TYPE(TStructType, keysType->GetItemType());
-
-    auto rowType = GetRowType(*this, columns);
-    auto returnType = NewFlowType(rowType);
-
-    TCallableBuilder builder(Env, __func__, returnType);
-    builder.Add(BuildTableIdLiteral(tableId, *this));
-    builder.Add(lookupKeys);
-    builder.Add(BuildKeyPrefixIndicesList(*this, *keyType, keyColumns));
-    builder.Add(BuildColumnTags(*this, columns));
 
     return TRuntimeNode(builder.Build(), false);
 }

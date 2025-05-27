@@ -11,8 +11,6 @@
 #ifndef BOOST_MATH_DISTRIBUTIONS_FWD_HPP
 #define BOOST_MATH_DISTRIBUTIONS_FWD_HPP
 
-// 33 distributions at Boost 1.9.1 after adding hyperexpon and arcsine
-
 namespace boost{ namespace math{
 
 template <class RealType, class Policy>
@@ -65,6 +63,18 @@ class inverse_gaussian_distribution;
 
 template <class RealType, class Policy>
 class kolmogorov_smirnov_distribution;
+
+template <class RealType, class Policy>
+class landau_distribution;
+
+template <class RealType, class Policy>
+class mapairy_distribution;
+
+template <class RealType, class Policy>
+class holtsmark_distribution;
+
+template <class RealType, class Policy>
+class saspoint5_distribution;
 
 template <class RealType, class Policy>
 class laplace_distribution;
@@ -136,6 +146,10 @@ class weibull_distribution;
    typedef boost::math::inverse_chi_squared_distribution<Type, Policy> inverse_chi_squared;\
    typedef boost::math::inverse_gaussian_distribution<Type, Policy> inverse_gaussian;\
    typedef boost::math::inverse_gamma_distribution<Type, Policy> inverse_gamma;\
+   typedef boost::math::landau_distribution<Type, Policy> landau;\
+   typedef boost::math::mapairy_distribution<Type, Policy> mapairy;\
+   typedef boost::math::holtsmark_distribution<Type, Policy> holtsmark;\
+   typedef boost::math::saspoint5_distribution<Type, Policy> saspoint5;\
    typedef boost::math::laplace_distribution<Type, Policy> laplace;\
    typedef boost::math::logistic_distribution<Type, Policy> logistic;\
    typedef boost::math::lognormal_distribution<Type, Policy> lognormal;\

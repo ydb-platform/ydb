@@ -13,7 +13,7 @@ def add_options(p):
 
 
 def process_vslot(vslot, node_mon_map, blob_id):
-    page = 'vdisk/json/getblob'
+    page = 'node/{vslot.VSlotId.NodeId}/vdisk/json/getblob'
     params = {
         'node_id': vslot.VSlotId.NodeId,
         'pdisk_id': vslot.VSlotId.PDiskId,
@@ -22,8 +22,7 @@ def process_vslot(vslot, node_mon_map, blob_id):
         'to': blob_id,
         'internals': 'yes'
     }
-    host = node_mon_map[vslot.VSlotId.NodeId]
-    data = common.fetch(page, params, host, 'raw').decode('utf-8')
+    data = common.fetch(page, params, fmt='raw').decode('utf-8')
     data = json.loads(data)
     res = []
     if 'logoblobs' in data:

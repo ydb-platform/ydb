@@ -1,4 +1,7 @@
+
 # Running a query
+
+{% include notitle [warning](./_includes/deprecated_command_warning.md) %}
 
 The `table query execute` subcommand is designed for reliable execution of YQL queries. With this sub-command, you can successfully execute your query when certain table partitions are unavailable for a short time (for example, due to being [split or merged](../../concepts/datamodel/table.md#partitioning)) by using built-in retry policies.
 
@@ -20,19 +23,21 @@ View the description of the YQL query command:
 ## Parameters of the subcommand {#options}
 
 #|
-|| **Name** | **Description** ||
+|| Name | Description ||
 || `--timeout` | The time within which the operation should be completed on the server. ||
 || `-t`, `--type` | Query type.
 Acceptable values:
-* `data`: A YQL query that includes [DML]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/Data_Manipulation_Language){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/Data_Manipulation_Language){% endif %} operations; it can be used both to update data in the database and fetch several selections limited to 1,000 rows per selection.
+
+* `data`: A YQL query that includes [DML](https://en.wikipedia.org/wiki/Data_Manipulation_Language) operations; it can be used both to update data in the database and fetch several selections limited to 1,000 rows per selection.
 * `scan`: A YQL query of the [scan](../../concepts/scan_query.md) type. It can only be used to read data from the database. It returns a single selection, but without a limit on the number of records in it. The algorithm of executing a `scan` query on the server is more sophisticated compared to a `data` query. Hence, if you don't need to return more than 1,000 rows, `data` queries are more effective.
-* `scheme`: A YQL query that includes [DDL]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/Data_Definition_Language){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/Data_Definition_Language){% endif %} operations.
+* `scheme`: A YQL query that includes [DDL](https://en.wikipedia.org/wiki/Data_Definition_Language) operations.
     The default value is `data`. ||
 || `--stats` | Statistics mode.
 Acceptable values:
 * `none`: Do not collect statistics.
 * `basic`: Collect statistics for basic events.
 * `full`: Collect statistics for all events.
+
     Defaults to `none`. ||
 || `-s` | Enable statistics collection in the `basic` mode. ||
 || `--tx-mode` | [Transaction mode](../../concepts/transactions.md#modes) (for `data` queries).
@@ -48,6 +53,7 @@ Possible values:
 
 ||
 |#
+
 ### Working with parameterized queries {#parameterized-query}
 
 {% include [parameterized-query](../../_includes/parameterized-query.md) %}
@@ -69,6 +75,7 @@ Possible values:
 ```
 
 ### Populating the table with data {#examples-upsert}
+
 ```bash
 {{ ydb-cli }} -p quickstart table query execute \
   -q '
@@ -94,10 +101,10 @@ UPSERT INTO episodes (series_id, season_id, episode_id, title, air_date) VALUES
 
 ```bash
 {{ ydb-cli }} -p quickstart table query execute -q '
-    SELECT season_id, episode_id, title
-    FROM episodes
-    WHERE series_id = 1
-  '
+  SELECT season_id, episode_id, title
+  FROM episodes
+  WHERE series_id = 1
+'
 ```
 
 Result:

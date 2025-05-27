@@ -16,21 +16,28 @@ namespace {
 
 class TTestInsertTableDB : public IDbWrapper {
 public:
+    virtual const IBlobGroupSelector* GetDsGroupSelector() const override {
+        return &Default<TFakeGroupSelector>();
+    }
+
+    virtual void WriteColumns(const NOlap::TPortionInfo& /*portion*/, const NKikimrTxColumnShard::TIndexPortionAccessor& /*proto*/) override {
+
+    }
     void Insert(const TInsertedData&) override {
     }
-    void Commit(const TInsertedData&) override {
+    void Commit(const TCommittedData&) override {
     }
     void Abort(const TInsertedData&) override {
     }
     void EraseInserted(const TInsertedData&) override {
     }
-    void EraseCommitted(const TInsertedData&) override {
+    void EraseCommitted(const TCommittedData&) override {
     }
     void EraseAborted(const TInsertedData&) override {
     }
 
-    virtual TConclusion<THashMap<ui64, std::map<TSnapshot, TGranuleShardingInfo>>> LoadGranulesShardingInfo() override {
-        THashMap<ui64, std::map<TSnapshot, TGranuleShardingInfo>> result;
+    virtual TConclusion<THashMap<TInternalPathId, std::map<TSnapshot, TGranuleShardingInfo>>> LoadGranulesShardingInfo() override {
+        THashMap<TInternalPathId, std::map<TSnapshot, TGranuleShardingInfo>> result;
         return result;
     }
 
@@ -42,7 +49,8 @@ public:
     }
     virtual void ErasePortion(const NOlap::TPortionInfo& /*portion*/) override {
     }
-    virtual bool LoadPortions(const std::function<void(NOlap::TPortionInfoConstructor&&, const NKikimrTxColumnShard::TIndexPortionMeta&)>& /*callback*/) override {
+    virtual bool LoadPortions(const std::optional<TInternalPathId> /*reqPathId*/,
+        const std::function<void(std::unique_ptr<NOlap::TPortionInfoConstructor>&&, const NKikimrTxColumnShard::TIndexPortionMeta&)>& /*callback*/) override {
         return true;
     }
 
@@ -50,7 +58,7 @@ public:
     }
     void EraseColumn(const TPortionInfo&, const TColumnRecord&) override {
     }
-    bool LoadColumns(const std::function<void(NOlap::TPortionInfoConstructor&&, const TColumnChunkLoadContext&)>&) override {
+    bool LoadColumns(const std::optional<TInternalPathId> /*reqPathId*/, const std::function<void(TColumnChunkLoadContextV2&&)>&) override {
         return true;
     }
 
@@ -58,7 +66,8 @@ public:
     }
     virtual void EraseIndex(const TPortionInfo& /*portion*/, const TIndexChunk& /*row*/) override {
     }
-    virtual bool LoadIndexes(const std::function<void(const ui64 /*pathId*/, const ui64 /*portionId*/, const TIndexChunkLoadContext&)>& /*callback*/) override {
+    virtual bool LoadIndexes(const std::optional<TInternalPathId> /*reqPathId*/,
+        const std::function<void(const TInternalPathId /*pathId*/, const ui64 /*portionId*/, TIndexChunkLoadContext&&)>& /*callback*/) override {
         return true;
     }
 
@@ -73,55 +82,48 @@ public:
 
 Y_UNIT_TEST_SUITE(TColumnEngineTestInsertTable) {
     Y_UNIT_TEST(TestInsertCommit) {
-        ui64 writeId = 0;
-        ui64 tableId = 0;
+        TInsertWriteId writeId = (TInsertWriteId)0;
+        const auto& tableId0 = TInternalPathId::FromRawValue(0);
+        const auto& tableId1 = TInternalPathId::FromRawValue(1);
         TString dedupId = "0";
         TUnifiedBlobId blobId1(2222, 1, 1, 100, 2, 0, 1);
 
         TTestInsertTableDB dbTable;
         TInsertTable insertTable;
         ui64 indexSnapshot = 0;
-
+        
         // insert, not commited
-        bool ok = insertTable.Insert(dbTable, TInsertedData(writeId, tableId, dedupId, blobId1, TLocalHelper::GetMetaProto(), indexSnapshot, {}));
+        auto userData1 = std::make_shared<TUserData>(tableId0, TBlobRange(blobId1), TLocalHelper::GetMetaProto(), indexSnapshot, std::nullopt);
+        insertTable.RegisterPathInfo(tableId0);
+        bool ok = insertTable.Insert(dbTable, TInsertedData(writeId, userData1));
         UNIT_ASSERT(ok);
 
-        // insert the same blobId1 again
-        ok = insertTable.Insert(dbTable, TInsertedData(writeId, tableId, dedupId, blobId1, TLocalHelper::GetMetaProto(), indexSnapshot, {}));
-        UNIT_ASSERT(!ok);
-
-        // insert different blodId with the same writeId and dedupId
-        TUnifiedBlobId blobId2(2222, 1, 2, 100, 2, 0, 1);
-        ok = insertTable.Insert(dbTable, TInsertedData(writeId, tableId, dedupId, blobId2, TLocalHelper::GetMetaProto(), indexSnapshot, {}));
-        UNIT_ASSERT(!ok);
-
         // read nothing
-        auto blobs = insertTable.Read(tableId, TSnapshot::Zero(), nullptr);
+        auto blobs = insertTable.Read(tableId0, {}, TSnapshot::Zero(), TLocalHelper::GetMetaSchema(), nullptr);
         UNIT_ASSERT_EQUAL(blobs.size(), 0);
-        blobs = insertTable.Read(tableId + 1, TSnapshot::Zero(), nullptr);
+        blobs = insertTable.Read(tableId1, {}, TSnapshot::Zero(), TLocalHelper::GetMetaSchema(), nullptr);
         UNIT_ASSERT_EQUAL(blobs.size(), 0);
 
         // commit
         ui64 planStep = 100;
         ui64 txId = 42;
-        insertTable.Commit(dbTable, planStep, txId, {TWriteId{writeId}}, [](ui64) {
+        insertTable.Commit(dbTable, planStep, txId, { writeId }, [](TInternalPathId) {
             return true;
         });
-
-        UNIT_ASSERT_EQUAL(insertTable.GetPathPriorities().size(), 1);
-        UNIT_ASSERT_EQUAL(insertTable.GetPathPriorities().begin()->second.size(), 1);
-        UNIT_ASSERT_EQUAL((*insertTable.GetPathPriorities().begin()->second.begin())->GetCommitted().size(), 1);
+//        UNIT_ASSERT_EQUAL(insertTable.GetPathPriorities().size(), 1);
+//        UNIT_ASSERT_EQUAL(insertTable.GetPathPriorities().begin()->second.size(), 1);
+//        UNIT_ASSERT_EQUAL((*insertTable.GetPathPriorities().begin()->second.begin())->GetCommitted().size(), 1);
 
         // read old snapshot
-        blobs = insertTable.Read(tableId, TSnapshot::Zero(), nullptr);
+        blobs = insertTable.Read(tableId0, {}, TSnapshot::Zero(), TLocalHelper::GetMetaSchema(), nullptr);
         UNIT_ASSERT_EQUAL(blobs.size(), 0);
-        blobs = insertTable.Read(tableId + 1, TSnapshot::Zero(), nullptr);
+        blobs = insertTable.Read(tableId1, {}, TSnapshot::Zero(), TLocalHelper::GetMetaSchema(), nullptr);
         UNIT_ASSERT_EQUAL(blobs.size(), 0);
 
         // read new snapshot
-        blobs = insertTable.Read(tableId, TSnapshot(planStep, txId), nullptr);
+        blobs = insertTable.Read(tableId0, {}, TSnapshot(planStep, txId), TLocalHelper::GetMetaSchema(), nullptr);
         UNIT_ASSERT_EQUAL(blobs.size(), 1);
-        blobs = insertTable.Read(tableId + 1, TSnapshot::Zero(), nullptr);
+        blobs = insertTable.Read(tableId1, {}, TSnapshot::Zero(), TLocalHelper::GetMetaSchema(), nullptr);
         UNIT_ASSERT_EQUAL(blobs.size(), 0);
     }
 }

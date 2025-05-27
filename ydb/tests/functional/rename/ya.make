@@ -16,15 +16,13 @@ FORK_SUBTESTS()
 SPLIT_FACTOR(10)
 
 IF (SANITIZER_TYPE)
-    REQUIREMENTS(ram:32)
+    REQUIREMENTS(ram:32 cpu:2)
 ENDIF()
 
 IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
-    TIMEOUT(3600)
     SIZE(LARGE)
     TAG(ya:fat)
 ELSE()
-    TIMEOUT(600)
     SIZE(MEDIUM)
 ENDIF()
 
@@ -34,6 +32,7 @@ DEPENDS(
 
 PEERDIR(
     ydb/tests/library
+    ydb/tests/library/fixtures
     ydb/tests/oss/ydb_sdk_import
     ydb/public/sdk/python
     contrib/python/tornado/tornado-4

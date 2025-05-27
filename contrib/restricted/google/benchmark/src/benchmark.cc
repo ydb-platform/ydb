@@ -26,6 +26,10 @@
 #include <unistd.h>
 #endif
 
+#ifdef BENCHMARK_OS_LINUX
+#include <sys/personality.h>
+#endif
+
 #include <algorithm>
 #include <atomic>
 #include <condition_variable>
@@ -46,7 +50,6 @@
 #include "commandlineflags.h"
 #include "complexity.h"
 #include "counter.h"
-#include "internal_macros.h"
 #include "log.h"
 #include "mutex.h"
 #include "perf_counters.h"
@@ -91,6 +94,11 @@ BM_DEFINE_double(benchmark_min_warmup_time, 0.0);
 // The number of runs of each benchmark. If greater than 1, the mean and
 // standard deviation of the runs will be reported.
 BM_DEFINE_int32(benchmark_repetitions, 1);
+
+// If enabled, forces each benchmark to execute exactly one iteration and one
+// repetition, bypassing any configured
+// MinTime()/MinWarmUpTime()/Iterations()/Repetitions()
+BM_DEFINE_bool(benchmark_dry_run, false);
 
 // If set, enable random interleaving of repetitions of all benchmarks.
 // See http://github.com/google/benchmark/issues/1051 for details.
@@ -146,13 +154,17 @@ BM_DEFINE_int32(v, 0);
 
 namespace internal {
 
+// NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables)
 std::map<std::string, std::string>* global_context = nullptr;
 
 BENCHMARK_EXPORT std::map<std::string, std::string>*& GetGlobalContext() {
   return global_context;
 }
 
-static void const volatile* volatile global_force_escape_pointer;
+namespace {
+// NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables)
+void const volatile* volatile global_force_escape_pointer;
+}  // namespace
 
 // FIXME: Verify if LTO still messes this up?
 void UseCharPointer(char const volatile* const v) {
@@ -168,7 +180,8 @@ void UseCharPointer(char const volatile* const v) {
 State::State(std::string name, IterationCount max_iters,
              const std::vector<int64_t>& ranges, int thread_i, int n_threads,
              internal::ThreadTimer* timer, internal::ThreadManager* manager,
-             internal::PerfCountersMeasurement* perf_counters_measurement)
+             internal::PerfCountersMeasurement* perf_counters_measurement,
+             ProfilerManager* profiler_manager)
     : total_iterations_(0),
       batch_leftover_(0),
       max_iterations(max_iters),
@@ -182,7 +195,8 @@ State::State(std::string name, IterationCount max_iters,
       threads_(n_threads),
       timer_(timer),
       manager_(manager),
-      perf_counters_measurement_(perf_counters_measurement) {
+      perf_counters_measurement_(perf_counters_measurement),
+      profiler_manager_(profiler_manager) {
   BM_CHECK(max_iterations != 0) << "At least one iteration must be run";
   BM_CHECK_LT(thread_index_, threads_)
       << "thread_index must be less than threads";
@@ -191,7 +205,7 @@ State::State(std::string name, IterationCount max_iters,
   // `PauseTiming`, a new `Counter` will be inserted the first time, which
   // won't have the flag.  Inserting them now also reduces the allocations
   // during the benchmark.
-  if (perf_counters_measurement_) {
+  if (perf_counters_measurement_ != nullptr) {
     for (const std::string& counter_name :
          perf_counters_measurement_->names()) {
       counters[counter_name] = Counter(0.0, Counter::kAvgIterations);
@@ -207,7 +221,7 @@ State::State(std::string name, IterationCount max_iters,
 #if defined(__INTEL_COMPILER)
 #pragma warning push
 #pragma warning(disable : 1875)
-#elif defined(__GNUC__)
+#elif defined(__GNUC__) || defined(__clang__)
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Winvalid-offsetof"
 #endif
@@ -225,7 +239,7 @@ State::State(std::string name, IterationCount max_iters,
       offsetof(State, skipped_) <= (cache_line_size - sizeof(skipped_)), "");
 #if defined(__INTEL_COMPILER)
 #pragma warning pop
-#elif defined(__GNUC__)
+#elif defined(__GNUC__) || defined(__clang__)
 #pragma GCC diagnostic pop
 #endif
 #if defined(__NVCC__)
@@ -240,7 +254,7 @@ void State::PauseTiming() {
   // Add in time accumulated so far
   BM_CHECK(started_ && !finished_ && !skipped());
   timer_->StopTimer();
-  if (perf_counters_measurement_) {
+  if (perf_counters_measurement_ != nullptr) {
     std::vector<std::pair<std::string, double>> measurements;
     if (!perf_counters_measurement_->Stop(measurements)) {
       BM_CHECK(false) << "Perf counters read the value failed.";
@@ -258,7 +272,7 @@ void State::PauseTiming() {
 void State::ResumeTiming() {
   BM_CHECK(started_ && !finished_ && !skipped());
   timer_->StartTimer();
-  if (perf_counters_measurement_) {
+  if (perf_counters_measurement_ != nullptr) {
     perf_counters_measurement_->Start();
   }
 }
@@ -273,7 +287,9 @@ void State::SkipWithMessage(const std::string& msg) {
     }
   }
   total_iterations_ = 0;
-  if (timer_->running()) timer_->StopTimer();
+  if (timer_->running()) {
+    timer_->StopTimer();
+  }
 }
 
 void State::SkipWithError(const std::string& msg) {
@@ -286,7 +302,9 @@ void State::SkipWithError(const std::string& msg) {
     }
   }
   total_iterations_ = 0;
-  if (timer_->running()) timer_->StopTimer();
+  if (timer_->running()) {
+    timer_->StopTimer();
+  }
 }
 
 void State::SetIterationTime(double seconds) {
@@ -302,8 +320,13 @@ void State::StartKeepRunning() {
   BM_CHECK(!started_ && !finished_);
   started_ = true;
   total_iterations_ = skipped() ? 0 : max_iterations;
+  if (BENCHMARK_BUILTIN_EXPECT(profiler_manager_ != nullptr, false)) {
+    profiler_manager_->AfterSetupStart();
+  }
   manager_->StartStopBarrier();
-  if (!skipped()) ResumeTiming();
+  if (!skipped()) {
+    ResumeTiming();
+  }
 }
 
 void State::FinishKeepRunning() {
@@ -315,6 +338,9 @@ void State::FinishKeepRunning() {
   total_iterations_ = 0;
   finished_ = true;
   manager_->StartStopBarrier();
+  if (BENCHMARK_BUILTIN_EXPECT(profiler_manager_ != nullptr, false)) {
+    profiler_manager_->BeforeTeardownStop();
+  }
 }
 
 namespace internal {
@@ -323,7 +349,9 @@ namespace {
 // Flushes streams after invoking reporter methods that write to them. This
 // ensures users get timely updates even when streams are not line-buffered.
 void FlushStreams(BenchmarkReporter* reporter) {
-  if (!reporter) return;
+  if (reporter == nullptr) {
+    return;
+  }
   std::flush(reporter->GetOutputStream());
   std::flush(reporter->GetErrorStream());
 }
@@ -336,16 +364,20 @@ void Report(BenchmarkReporter* display_reporter,
     assert(reporter);
     // If there are no aggregates, do output non-aggregates.
     aggregates_only &= !results.aggregates_only.empty();
-    if (!aggregates_only) reporter->ReportRuns(results.non_aggregates);
-    if (!results.aggregates_only.empty())
+    if (!aggregates_only) {
+      reporter->ReportRuns(results.non_aggregates);
+    }
+    if (!results.aggregates_only.empty()) {
       reporter->ReportRuns(results.aggregates_only);
+    }
   };
 
   report_one(display_reporter, run_results.display_report_aggregates_only,
              run_results);
-  if (file_reporter)
+  if (file_reporter != nullptr) {
     report_one(file_reporter, run_results.file_report_aggregates_only,
                run_results);
+  }
 
   FlushStreams(display_reporter);
   FlushStreams(file_reporter);
@@ -366,10 +398,13 @@ void RunBenchmarks(const std::vector<BenchmarkInstance>& benchmarks,
         std::max<size_t>(name_field_width, benchmark.name().str().size());
     might_have_aggregates |= benchmark.repetitions() > 1;
 
-    for (const auto& Stat : benchmark.statistics())
+    for (const auto& Stat : benchmark.statistics()) {
       stat_field_width = std::max<size_t>(stat_field_width, Stat.name_.size());
+    }
   }
-  if (might_have_aggregates) name_field_width += 1 + stat_field_width;
+  if (might_have_aggregates) {
+    name_field_width += 1 + stat_field_width;
+  }
 
   // Print header here
   BenchmarkReporter::Context context;
@@ -380,7 +415,7 @@ void RunBenchmarks(const std::vector<BenchmarkInstance>& benchmarks,
       per_family_reports;
 
   if (display_reporter->ReportContext(context) &&
-      (!file_reporter || file_reporter->ReportContext(context))) {
+      ((file_reporter == nullptr) || file_reporter->ReportContext(context))) {
     FlushStreams(display_reporter);
     FlushStreams(file_reporter);
 
@@ -402,15 +437,17 @@ void RunBenchmarks(const std::vector<BenchmarkInstance>& benchmarks,
     // Loop through all benchmarks
     for (const BenchmarkInstance& benchmark : benchmarks) {
       BenchmarkReporter::PerFamilyRunReports* reports_for_family = nullptr;
-      if (benchmark.complexity() != oNone)
+      if (benchmark.complexity() != oNone) {
         reports_for_family = &per_family_reports[benchmark.family_index()];
-      benchmarks_with_threads += (benchmark.threads() > 1);
+      }
+      benchmarks_with_threads += static_cast<int>(benchmark.threads() > 1);
       runners.emplace_back(benchmark, &perfcounters, reports_for_family);
       int num_repeats_of_this_instance = runners.back().GetNumRepeats();
       num_repetitions_total +=
           static_cast<size_t>(num_repeats_of_this_instance);
-      if (reports_for_family)
+      if (reports_for_family != nullptr) {
         reports_for_family->num_runs_total += num_repeats_of_this_instance;
+      }
     }
     assert(runners.size() == benchmarks.size() && "Unexpected runner count.");
 
@@ -445,14 +482,17 @@ void RunBenchmarks(const std::vector<BenchmarkInstance>& benchmarks,
     for (size_t repetition_index : repetition_indices) {
       internal::BenchmarkRunner& runner = runners[repetition_index];
       runner.DoOneRepetition();
-      if (runner.HasRepeatsRemaining()) continue;
+      if (runner.HasRepeatsRemaining()) {
+        continue;
+      }
       // FIXME: report each repetition separately, not all of them in bulk.
 
       display_reporter->ReportRunsConfig(
           runner.GetMinTime(), runner.HasExplicitIters(), runner.GetIters());
-      if (file_reporter)
+      if (file_reporter != nullptr) {
         file_reporter->ReportRunsConfig(
             runner.GetMinTime(), runner.HasExplicitIters(), runner.GetIters());
+      }
 
       RunResults run_results = runner.GetResults();
 
@@ -473,7 +513,9 @@ void RunBenchmarks(const std::vector<BenchmarkInstance>& benchmarks,
     }
   }
   display_reporter->Finalize();
-  if (file_reporter) file_reporter->Finalize();
+  if (file_reporter != nullptr) {
+    file_reporter->Finalize();
+  }
   FlushStreams(display_reporter);
   FlushStreams(file_reporter);
 }
@@ -495,6 +537,7 @@ std::unique_ptr<BenchmarkReporter> CreateReporter(
     return PtrType(new CSVReporter());
   }
   std::cerr << "Unexpected format: '" << name << "'\n";
+  std::flush(std::cerr);
   std::exit(1);
 }
 
@@ -533,7 +576,7 @@ ConsoleReporter::OutputOptions GetOutputOptions(bool force_no_color) {
 }  // end namespace internal
 
 BenchmarkReporter* CreateDefaultDisplayReporter() {
-  static auto default_display_reporter =
+  static auto* default_display_reporter =
       internal::CreateReporter(FLAGS_benchmark_format,
                                internal::GetOutputOptions())
           .release();
@@ -567,14 +610,15 @@ size_t RunSpecifiedBenchmarks(BenchmarkReporter* display_reporter,
 size_t RunSpecifiedBenchmarks(BenchmarkReporter* display_reporter,
                               BenchmarkReporter* file_reporter,
                               std::string spec) {
-  if (spec.empty() || spec == "all")
+  if (spec.empty() || spec == "all") {
     spec = ".";  // Regexp that matches all benchmarks
+  }
 
   // Setup the reporters
   std::ofstream output_file;
   std::unique_ptr<BenchmarkReporter> default_display_reporter;
   std::unique_ptr<BenchmarkReporter> default_file_reporter;
-  if (!display_reporter) {
+  if (display_reporter == nullptr) {
     default_display_reporter.reset(CreateDefaultDisplayReporter());
     display_reporter = default_display_reporter.get();
   }
@@ -582,10 +626,9 @@ size_t RunSpecifiedBenchmarks(BenchmarkReporter* display_reporter,
   auto& Err = display_reporter->GetErrorStream();
 
   std::string const& fname = FLAGS_benchmark_out;
-  if (fname.empty() && file_reporter) {
+  if (fname.empty() && (file_reporter != nullptr)) {
     Err << "A custom file reporter was provided but "
-           "--benchmark_out=<file> was not specified."
-        << std::endl;
+           "--benchmark_out=<file> was not specified.\n";
     Out.flush();
     Err.flush();
     std::exit(1);
@@ -593,12 +636,12 @@ size_t RunSpecifiedBenchmarks(BenchmarkReporter* display_reporter,
   if (!fname.empty()) {
     output_file.open(fname);
     if (!output_file.is_open()) {
-      Err << "invalid file name: '" << fname << "'" << std::endl;
+      Err << "invalid file name: '" << fname << "'\n";
       Out.flush();
       Err.flush();
       std::exit(1);
     }
-    if (!file_reporter) {
+    if (file_reporter == nullptr) {
       default_file_reporter = internal::CreateReporter(
           FLAGS_benchmark_out_format, FLAGS_benchmark_counters_tabular
                                           ? ConsoleReporter::OO_Tabular
@@ -624,8 +667,9 @@ size_t RunSpecifiedBenchmarks(BenchmarkReporter* display_reporter,
   }
 
   if (FLAGS_benchmark_list_tests) {
-    for (auto const& benchmark : benchmarks)
+    for (auto const& benchmark : benchmarks) {
       Out << benchmark.name().str() << "\n";
+    }
   } else {
     internal::RunBenchmarks(benchmarks, display_reporter, file_reporter);
   }
@@ -657,6 +701,10 @@ void RegisterMemoryManager(MemoryManager* manager) {
 }
 
 void RegisterProfilerManager(ProfilerManager* manager) {
+  // Don't allow overwriting an existing manager.
+  if (manager != nullptr) {
+    BM_CHECK_EQ(internal::profiler_manager, nullptr);
+  }
   internal::profiler_manager = manager;
 }
 
@@ -676,7 +724,9 @@ void (*HelperPrintf)();
 
 void PrintUsageAndExit() {
   HelperPrintf();
-  exit(0);
+  std::flush(std::cout);
+  std::flush(std::cerr);
+  std::exit(0);
 }
 
 void SetDefaultTimeUnitFromFlag(const std::string& time_unit_flag) {
@@ -700,8 +750,8 @@ void SetDefaultTimeUnitFromFlag(const std::string& time_unit_flag) {
 void ParseCommandLineFlags(int* argc, char** argv) {
   using namespace benchmark;
   BenchmarkReporter::Context::executable_name =
-      (argc && *argc > 0) ? argv[0] : "unknown";
-  for (int i = 1; argc && i < *argc; ++i) {
+      ((argc != nullptr) && *argc > 0) ? argv[0] : "unknown";
+  for (int i = 1; (argc != nullptr) && i < *argc; ++i) {
     if (ParseBoolFlag(argv[i], "benchmark_list_tests",
                       &FLAGS_benchmark_list_tests) ||
         ParseStringFlag(argv[i], "benchmark_filter", &FLAGS_benchmark_filter) ||
@@ -711,6 +761,7 @@ void ParseCommandLineFlags(int* argc, char** argv) {
                         &FLAGS_benchmark_min_warmup_time) ||
         ParseInt32Flag(argv[i], "benchmark_repetitions",
                        &FLAGS_benchmark_repetitions) ||
+        ParseBoolFlag(argv[i], "benchmark_dry_run", &FLAGS_benchmark_dry_run) ||
         ParseBoolFlag(argv[i], "benchmark_enable_random_interleaving",
                       &FLAGS_benchmark_enable_random_interleaving) ||
         ParseBoolFlag(argv[i], "benchmark_report_aggregates_only",
@@ -731,7 +782,9 @@ void ParseCommandLineFlags(int* argc, char** argv) {
         ParseStringFlag(argv[i], "benchmark_time_unit",
                         &FLAGS_benchmark_time_unit) ||
         ParseInt32Flag(argv[i], "v", &FLAGS_v)) {
-      for (int j = i; j != *argc - 1; ++j) argv[j] = argv[j + 1];
+      for (int j = i; j != *argc - 1; ++j) {
+        argv[j] = argv[j + 1];
+      }
 
       --(*argc);
       --i;
@@ -749,6 +802,9 @@ void ParseCommandLineFlags(int* argc, char** argv) {
   if (FLAGS_benchmark_color.empty()) {
     PrintUsageAndExit();
   }
+  if (FLAGS_benchmark_dry_run) {
+    AddCustomContext("dry_run", "true");
+  }
   for (const auto& kv : FLAGS_benchmark_context) {
     AddCustomContext(kv.first, kv.second);
   }
@@ -759,7 +815,50 @@ int InitializeStreams() {
   return 0;
 }
 
+template <typename T>
+std::make_unsigned_t<T> get_as_unsigned(T v) {
+  using UnsignedT = std::make_unsigned_t<T>;
+  return static_cast<UnsignedT>(v);
+}
+
 }  // end namespace internal
+
+void MaybeReenterWithoutASLR(int /*argc*/, char** argv) {
+  // On e.g. Hexagon simulator, argv may be NULL.
+  if (!argv) return;
+
+#ifdef BENCHMARK_OS_LINUX
+  const auto curr_personality = personality(0xffffffff);
+
+  // We should never fail to read-only query the current personality,
+  // but let's be cautious.
+  if (curr_personality == -1) return;
+
+  // If ASLR is already disabled, we have nothing more to do.
+  if (internal::get_as_unsigned(curr_personality) & ADDR_NO_RANDOMIZE) return;
+
+  // Try to change the personality to disable ASLR.
+  const auto proposed_personality =
+      internal::get_as_unsigned(curr_personality) | ADDR_NO_RANDOMIZE;
+  const auto prev_personality = personality(proposed_personality);
+
+  // Have we failed to change the personality? That may happen.
+  if (prev_personality == -1) return;
+
+  // Make sure the parsona has been updated with the no-ASLR flag,
+  // otherwise we will try to reenter infinitely.
+  // This seems impossible, but can happen in some docker configurations.
+  const auto new_personality = personality(0xffffffff);
+  if ((internal::get_as_unsigned(new_personality) & ADDR_NO_RANDOMIZE) == 0)
+    return;
+
+  execv(argv[0], argv);
+  // The exec() functions return only if an error has occurred,
+  // in which case we want to just continue as-is.
+#else
+  return;
+#endif
+}
 
 std::string GetBenchmarkVersion() {
 #ifdef BENCHMARK_VERSION
@@ -777,6 +876,7 @@ void PrintDefaultHelp() {
           "          [--benchmark_min_time=`<integer>x` OR `<float>s` ]\n"
           "          [--benchmark_min_warmup_time=<min_warmup_time>]\n"
           "          [--benchmark_repetitions=<num_repetitions>]\n"
+          "          [--benchmark_dry_run={true|false}]\n"
           "          [--benchmark_enable_random_interleaving={true|false}]\n"
           "          [--benchmark_report_aggregates_only={true|false}]\n"
           "          [--benchmark_display_aggregates_only={true|false}]\n"

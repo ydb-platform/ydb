@@ -1,8 +1,7 @@
 LIBRARY()
 
 RESOURCE_FILES(
-    config.toml
-    config_paths.json
+    pyproject.toml
 )
 
 END()

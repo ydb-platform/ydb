@@ -1,0 +1,203 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+SKIP     OLDAP-2.8            1cae08b3801a70d9fdba3ce5a01f33e7
+BELONGS ya.make
+    # covers ldapdb auxprop plugin which we do not include
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: OLDAP-2.8
+        Score           : 88.03
+        Match type      : NOTICE
+        Links           : http://www.openldap.org/software/release/license.html, https://spdx.org/licenses/OLDAP-2.8
+    Files with this license:
+        README.ldapdb [2:53]
+
+KEEP     Cmu-Computing-Services 2c4875487a0399d6444e92259c3df8ac
+BELONGS ya.make
+    # This is actually
+    # https://github.com/nexB/scancode-toolkit/blob/develop/src/licensedcode/data/licenses/cmu-computing-services.LICENSE
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-other-permissive
+        Score           : 66.36
+        Match type      : TEXT
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/other-permissive.LICENSE
+    Files with this license:
+        lib/config.c [8:20]
+
+KEEP     Cmu-Computing-Services 4dd7e4e6170a3af72b5682a702cccf7d
+BELONGS ya.make
+    # This is actually
+    # https://github.com/nexB/scancode-toolkit/blob/develop/src/licensedcode/data/licenses/cmu-computing-services.LICENSE
+    License text:
+         * 3. The name "Carnegie Mellon University" must not be used to
+         *    endorse or promote products derived from this software without
+         *    prior written permission. For permission or any other legal
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-bsla-no-advert
+        Score           : 17.00
+        Match type      : TEXT
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/bsla-no-advert.LICENSE
+    Files with this license:
+        lib/config.c [20:22]
+
+KEEP     RSA-MD               5d751b4a1eb7895b841b6f94fb57937a
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: RSA-MD
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.faqs.org/rfcs/rfc1321.html, http://www.ietf.org/rfc/rfc1321.txt, https://spdx.org/licenses/RSA-MD
+    Files with this license:
+        lib/md5.c [9:25]
+
+KEEP     LicenseRef-scancode-paul-mackerras-binary 6a5ea96e20b02b6e1c208bc1e65cd0b4
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-paul-mackerras-binary
+        Score           : 92.47
+        Match type      : TEXT
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/paul-mackerras-binary.LICENSE
+    Files with this license:
+        common/plugin_common.c [7:42]
+        common/plugin_common.h [8:43]
+        include/gai.h [10:45]
+        include/sasl/gai.h [10:45]
+        lib/auxprop.c [7:42]
+        lib/canonusr.c [7:42]
+        lib/checkpw.c [8:43]
+        lib/client.c [8:43]
+        lib/common.c [8:43]
+        lib/dlopen.c [8:43]
+        lib/external.c [8:43]
+        lib/saslint.h [8:43]
+        lib/saslutil.c [8:43]
+        lib/server.c [8:43]
+        lib/seterror.c [11:46]
+        lib/staticopen.h [8:43]
+        plugins/anonymous.c [8:43]
+        plugins/cram.c [8:43]
+        plugins/digestmd5.c [10:45]
+        plugins/otp.c [7:42]
+        plugins/otp.h [7:42]
+        plugins/plain.c [8:43]
+        plugins/sasldb.c [8:43]
+        plugins/scram.c [7:42]
+        sasldb/db_none.c [8:43]
+        sasldb/sasldb.h [8:43]
+
+KEEP     Cmu-Computing-Services 6a7baf2f2195a1e7483de02e8e883469
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-cmu-computing-services
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://cyrusimap.org/mediawiki/index.php/Downloads#Licensing, http://www.cmu.edu/computing/, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/cmu-computing-services.LICENSE
+    Files with this license:
+        COPYING [9:43]
+        config-linux.h [9:43]
+        config-win.h [7:41]
+
+KEEP     IBM-pibs             761fa317372a2ed6fdb6b26a3d8023a9
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: IBM-pibs
+        Score           : 37.41
+        Match type      : TEXT
+        Links           : http://git.denx.de/?p=u-boot.git;a=blob;f=arch/powerpc/cpu/ppc4xx/miiphy.c;h=297155fdafa064b955e53e9832de93bfb0cfb85b;hb=9fab4bf4cc077c21e43941866f3f2c196f28670d, https://spdx.org/licenses/IBM-pibs
+    Files with this license:
+        lib/saslutil.c [593:606]
+
+KEEP     RSA-MD               770866dfbd86cb8e8a932d604a4ef9ea
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: RSA-MD
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.faqs.org/rfcs/rfc1321.html, http://www.ietf.org/rfc/rfc1321.txt, https://spdx.org/licenses/RSA-MD
+    Files with this license:
+        include/md5.h [7:22]
+        include/sasl/md5.h [7:22]
+
+KEEP     BSD-4-Clause-UC      8a6ce85cef04d97fc820cd2d8f7a07d6
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-4-Clause-UC
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : ftp://ftp.cs.berkeley.edu/pub/4bsd/README.Impt.License.Change, http://www.xfree86.org/3.3.6/COPYRIGHT2.html, https://spdx.org/licenses/BSD-4-Clause-UC
+    Files with this license:
+        include/exits.h [5:31]
+        include/sasl/exits.h [5:31]
+
+SKIP     LicenseRef-scancode-unknown-license-reference 8b75e92fec3bb5b34741d8f9709c5875
+BELONGS ya.make
+    # part of text
+    License text:
+         *             module is considered to be licensed under IBM copyrights 
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 11.00
+        Match type      : INTRO
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        lib/saslutil.c [596:596]
+
+KEEP     Cmu-Computing-Services 8e052ebd7bb11e7e1ce6cd2b12049466
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-cmu-computing-services
+        Score           : 46.93
+        Match type      : TEXT
+        Links           : http://cyrusimap.org/mediawiki/index.php/Downloads#Licensing, http://www.cmu.edu/computing/, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/cmu-computing-services.LICENSE
+    Files with this license:
+        lib/config.c [20:43]
+
+SKIP     OLDAP-2.8            dc16b04cba6d2745105516f3339fdd9b
+BELONGS ya.make
+    # covers ldapdb auxprop plugin which we do not include
+    License text:
+        (http://www.openldap.org) under the license below.  The code is written by
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown
+        Score           : 16.00
+        Match type      : REFERENCE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown.LICENSE
+    Files with this license:
+        README.ldapdb [2:2]

@@ -3,6 +3,7 @@
 #include <ydb/core/grpc_services/rpc_calls.h>
 #include <ydb/core/viewer/yaml/yaml.h>
 #include <ydb/public/api/grpc/ydb_operation_v1.grpc.pb.h>
+#include <ydb/public/sdk/cpp/src/library/operation_id/protos/operation_id.pb.h>
 
 namespace NKikimr::NViewer {
 
@@ -18,34 +19,29 @@ public:
 
     TOperationList(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
         : TBase(viewer, ev)
-    {}
+    {
+        AllowedMethods = {HTTP_METHOD_GET};
+    }
 
-    void Bootstrap() override {
-        if (Event->Get()->Request.GetMethod() != HTTP_METHOD_GET) {
-            return ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "Only GET method is allowed"));
+    bool ValidateRequest(Ydb::Operations::ListOperationsRequest& request) override {
+        if (!TBase::ValidateRequest(request)) {
+            return false;
         }
-        const auto& params(Event->Get()->Request.GetParams());
-        if (params.Has("database")) {
-            Database = params.Get("database");
-        } else {
-            return ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "field 'database' is required"));
+        ui64 offset = FromStringWithDefault<ui64>(Params.Get("offset"), 0);
+        ui64 limit = FromStringWithDefault<ui64>(Params.Get("limit"), 0);
+        if (offset >= 0 && limit > 0) {
+            if (offset % limit != 0) {
+                ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "offset must be a multiple of limit"));
+                return false;
+            }
+            if (limit > 100) {
+                ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "limit must be less than or equal to 100"));
+                return false;
+            }
+            request.set_page_size(limit);
+            request.set_page_token(std::to_string(offset / limit + 1));
         }
-
-        if (params.Has("kind")) {
-            Request.set_kind(params.Get("kind"));
-        } else {
-            return ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "field 'kind' is required"));
-        }
-
-        if (params.Has("page_size")) {
-            Request.set_page_size(FromStringWithDefault<ui32>(params.Get("page_size"), 0));
-        }
-
-        if (params.Has("page_token")) {
-            Request.set_page_token(params.Get("page_token"));
-        }
-
-        TBase::Bootstrap();
+        return true;
     }
 
     static YAML::Node GetSwagger() {
@@ -63,7 +59,14 @@ public:
                     type: string
                   - name: kind
                     in: query
-                    description: kind
+                    description: >
+                        kind:
+                          * `ss/backgrounds`
+                          * `export`
+                          * `import/S3`
+                          * `import/YT`
+                          * `buildindex`
+                          * `scriptexec`
                     required: true
                     type: string
                   - name: page_size
@@ -76,6 +79,16 @@ public:
                     description: page token
                     required: false
                     type: string
+                  - name: offset
+                    in: query
+                    description: offset. must be a multiple of limit
+                    required: false
+                    type: integer
+                  - name: limit
+                    in: query
+                    description: limit. must be less than or equal to 100
+                    required: false
+                    type: integer
                 responses:
                     200:
                         description: OK

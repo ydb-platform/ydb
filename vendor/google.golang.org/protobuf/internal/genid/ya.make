@@ -2,6 +2,8 @@ GO_LIBRARY()
 
 LICENSE(BSD-3-Clause)
 
+VERSION(v1.36.5)
+
 SRCS(
     any_gen.go
     api_gen.go
@@ -13,6 +15,7 @@ SRCS(
     go_features_gen.go
     goname.go
     map_entry.go
+    name.go
     source_context_gen.go
     struct_gen.go
     timestamp_gen.go

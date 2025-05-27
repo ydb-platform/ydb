@@ -1,0 +1,11 @@
+--- contrib/python/numpy/py3/numpy/tests/test_public_api.py	(index)
++++ contrib/python/numpy/py3/numpy/tests/test_public_api.py	(working tree)
+@@ -339,6 +339,8 @@ SKIP_LIST = [
+ ]
+ if sys.version_info < (3, 12):
+     SKIP_LIST += ["numpy.distutils.msvc9compiler"]
++else:
++    SKIP_LIST += ["numpy.distutils"]
+ 
+ 
+ # suppressing warnings from deprecated modules

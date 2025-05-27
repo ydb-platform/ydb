@@ -25,8 +25,8 @@ $ssr = (select s.s_store_id as s_store_id,
      cross join {{date_dim}} as d
      cross join {{store}} as s
  where date_sk = d_date_sk
-       and cast(d_date as date) between cast('2000-08-19' as date)
-                  and (cast('2000-08-19' as date) +  DateTime::IntervalFromDays(14))
+       and cast(d_date as date) between cast('2000-08-23' as date)
+                  and (cast('2000-08-23' as date) +  DateTime::IntervalFromDays(14))
        and store_sk = s_store_sk
  group by s.s_store_id);
 
@@ -55,8 +55,8 @@ $csr = (select cp.cp_catalog_page_id as cp_catalog_page_id,
      cross join {{date_dim}} as d
      cross join {{catalog_page}} as cp
  where date_sk = d_date_sk
-       and cast(d_date as date) between cast('2000-08-19' as date)
-                  and (cast('2000-08-19' as date) +  DateTime::IntervalFromDays(14))
+       and cast(d_date as date) between cast('2000-08-23' as date)
+                  and (cast('2000-08-23' as date) +  DateTime::IntervalFromDays(14))
        and page_sk = cp_catalog_page_sk
  group by cp.cp_catalog_page_id);
 
@@ -89,8 +89,8 @@ $wsr = (select ws.web_site_id as web_site_id,
      cross join {{date_dim}} as d
      cross join {{web_site}} as ws
  where date_sk = d_date_sk
-       and cast(d_date as date) between cast('2000-08-19' as date)
-                  and (cast('2000-08-19' as date) +  DateTime::IntervalFromDays(14))
+       and cast(d_date as date) between cast('2000-08-23' as date)
+                  and (cast('2000-08-23' as date) +  DateTime::IntervalFromDays(14))
        and wsr_web_site_sk = web_site_sk
  group by ws.web_site_id);
 

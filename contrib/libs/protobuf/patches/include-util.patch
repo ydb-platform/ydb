@@ -1,0 +1,13 @@
+--- a/src/google/protobuf/stubs/port.h	(index)
++++ b/src/google/protobuf/stubs/port.h	(working tree)
+@@ -31,6 +31,10 @@
+ #ifndef GOOGLE_PROTOBUF_STUBS_PORT_H_
+ #define GOOGLE_PROTOBUF_STUBS_PORT_H_
+ 
++#include <util/generic/string.h>
++#include <util/stream/input.h>
++#include <util/stream/output.h>
++#include <util/system/types.h>
+ #include <assert.h>
+ #include <stdlib.h>
+ #include <string.h>

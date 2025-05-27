@@ -60,7 +60,7 @@
                                                     }
                                                 ],
                                                 "Name": "Filter",
-                                                "Predicate": "item.c >= item.b - 2 And item.c <= item.d + 2 And item.e > item.a And item.e < item.b And item.e + item.d >= item.a + item.b - 10 And item.e + item.d <= item.c + 130"
+                                                "Predicate": "item.c >= item.b - 2 AND item.c <= item.d + 2 AND item.e > item.a AND item.e < item.b AND item.e + item.d >= item.a + item.b - 10 AND item.e + item.d <= item.c + 130"
                                             }
                                         ],
                                         "PlanNodeId": 2,
@@ -71,6 +71,7 @@
                                                     {
                                                         "Inputs": [],
                                                         "Name": "TableFullScan",
+                                                        "Path": "/Root/sqllogictest_select1-5.test_plan/t1",
                                                         "ReadColumns": [
                                                             "a",
                                                             "b",

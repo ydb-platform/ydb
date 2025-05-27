@@ -7,6 +7,8 @@
 
 #include "common.h"
 
+#include <library/cpp/yson/writer.h>
+
 #include <library/cpp/type_info/fwd.h>
 
 namespace NYT::NYson {
@@ -84,6 +86,17 @@ void Deserialize(TGUID& value, const TNode& node);
 
 void Serialize(const NTi::TTypePtr& type, NYT::NYson::IYsonConsumer* consumer);
 void Deserialize(NTi::TTypePtr& type, const TNode& node);
+
+template <typename T>
+TString ToYsonText(const T& value)
+{
+    TStringStream out;
+    ::NYson::TYsonWriter writer(&out, ::NYson::EYsonFormat::Text);
+
+    Serialize(value, &writer);
+
+    return out.Str();
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -17,7 +17,7 @@ public:
         : Channel_(std::move(channel))
     { }
 
-    const TString& GetEndpointDescription() const override
+    const std::string& GetEndpointDescription() const override
     {
         YT_UNIMPLEMENTED();
     }
@@ -61,7 +61,7 @@ public:
         Channel_.Set(std::move(channel));
     }
 
-    const TString& GetEndpointDescription() const override
+    const std::string& GetEndpointDescription() const override
     {
         YT_UNIMPLEMENTED();
     }
@@ -99,7 +99,7 @@ class TNeverProvider
     : public IRoamingChannelProvider
 {
 public:
-    const TString& GetEndpointDescription() const override
+    const std::string& GetEndpointDescription() const override
     {
         YT_UNIMPLEMENTED();
     }

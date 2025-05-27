@@ -1,8 +1,10 @@
 import asyncio
 import concurrent.futures
+import logging
 import typing
 from typing import List, Union, Optional
 
+from ydb import issues
 from ydb._grpc.grpcwrapper.common_utils import SupportedDriverType
 from ydb._topic_common.common import (
     _get_shared_event_loop,
@@ -20,11 +22,17 @@ from ydb._topic_reader.topic_reader_asyncio import (
     TopicReaderClosedError,
 )
 
+if typing.TYPE_CHECKING:
+    from ..query.transaction import BaseQueryTxContext
+
+logger = logging.getLogger(__name__)
+
 
 class TopicReaderSync:
     _caller: CallFromSyncToAsync
     _async_reader: PublicAsyncIOReader
     _closed: bool
+    _settings: PublicReaderSettings
     _parent: typing.Any  # need for prevent stop the client by GC
 
     def __init__(
@@ -49,10 +57,17 @@ class TopicReaderSync:
 
         self._async_reader = asyncio.run_coroutine_threadsafe(create_reader(), loop).result()
 
+        self._settings = settings
+
         self._parent = _parent
 
     def __del__(self):
-        self.close(flush=False)
+        if not self._closed:
+            try:
+                logger.warning("Topic reader was not closed properly. Consider using method close().")
+                self.close(flush=False)
+            except BaseException:
+                logger.warning("Something went wrong during reader close in __del__")
 
     def __enter__(self):
         return self
@@ -79,7 +94,7 @@ class TopicReaderSync:
         Returns a future, which will complete when the reader has at least one message in queue.
         If the reader already has a message - the future will complete immediately.
 
-        A message may expire before it gets read so that the attempt to receive the massage will fail
+        A message may expire before it gets read so that the attempt to receive the message will fail
         despite the future has signaled about its availability.
         """
         self._check_closed()
@@ -103,7 +118,34 @@ class TopicReaderSync:
         self._check_closed()
 
         return self._caller.safe_call_with_result(
-            self._async_reader.receive_batch(),
+            self._async_reader.receive_batch(
+                max_messages=max_messages,
+            ),
+            timeout,
+        )
+
+    def receive_batch_with_tx(
+        self,
+        tx: "BaseQueryTxContext",
+        *,
+        max_messages: typing.Union[int, None] = None,
+        max_bytes: typing.Union[int, None] = None,
+        timeout: Union[float, None] = None,
+    ) -> Union[PublicBatch, None]:
+        """
+        Get one messages batch with tx from reader
+        It has no async_ version for prevent lost messages, use async_wait_message as signal for new batches available.
+
+        if no new message in timeout seconds (default - infinite): raise TimeoutError()
+        if timeout <= 0 - it will fast wait only one event loop cycle - without wait any i/o operations or pauses, get messages from internal buffer only.
+        """
+        self._check_closed()
+
+        return self._caller.safe_call_with_result(
+            self._async_reader.receive_batch_with_tx(
+                tx=tx,
+                max_messages=max_messages,
+            ),
             timeout,
         )
 
@@ -115,6 +157,9 @@ class TopicReaderSync:
         (for example if lost connection - commits will not re-send and committed messages will receive again)
         """
         self._check_closed()
+
+        if self._settings.consumer is None:
+            raise issues.Error("Commit operations are not supported for topic reader without consumer.")
 
         self._caller.call_sync(lambda: self._async_reader.commit(mess))
 
@@ -130,6 +175,9 @@ class TopicReaderSync:
         """
         self._check_closed()
 
+        if self._settings.consumer is None:
+            raise issues.Error("Commit operations are not supported for topic reader without consumer.")
+
         return self._caller.unsafe_call_with_result(self._async_reader.commit_with_ack(mess), timeout)
 
     def async_commit_with_ack(
@@ -139,6 +187,9 @@ class TopicReaderSync:
         write commit message to a buffer and return Future for wait result.
         """
         self._check_closed()
+
+        if self._settings.consumer is None:
+            raise issues.Error("Commit operations are not supported for topic reader without consumer.")
 
         return self._caller.unsafe_call_with_future(self._async_reader.commit_with_ack(mess))
 

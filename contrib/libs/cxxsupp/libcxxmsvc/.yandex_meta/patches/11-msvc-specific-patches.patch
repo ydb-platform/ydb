@@ -1,0 +1,59 @@
+diff --git a/include/__bsd_locale_defaults.h b/include/__bsd_locale_defaults.h
+index ce86b41..f537aa0 100644
+--- a/include/__bsd_locale_defaults.h
++++ b/include/__bsd_locale_defaults.h
+@@ -29,8 +29,9 @@
+ #define __libcpp_mbrlen_l(s, n, ps, l)                      mbrlen_l(s, n, ps, l)
+ #define __libcpp_localeconv_l(l)                            localeconv_l(l)
+ #define __libcpp_mbsrtowcs_l(dest, src, len, ps, l)         mbsrtowcs_l(dest, src, len, ps, l)
+-#define __libcpp_snprintf_l(...)                            snprintf_l(__VA_ARGS__)
+-#define __libcpp_asprintf_l(...)                            asprintf_l(__VA_ARGS__)
+-#define __libcpp_sscanf_l(...)                              sscanf_l(__VA_ARGS__)
++// Workaround for Visual Studio preprocessor bug - explicitly mention all non-variadic parameters.
++#define __libcpp_snprintf_l(__s, __n, __l, __f, ...)        snprintf_l(__s, __n, __l, __f, ##__VA_ARGS__)
++#define __libcpp_asprintf_l(__ret, __l, __f, ...)           asprintf_l(__ret, __l, __f, ##__VA_ARGS__)
++#define __libcpp_sscanf_l(__s, __l, __f, ...)               sscanf_l(__s, __l, __f, ##__VA_ARGS__)
+ 
+ #endif // _LIBCPP_BSD_LOCALE_DEFAULTS_H
+diff --git a/include/__functional/weak_result_type.h b/include/__functional/weak_result_type.h
+index e1c553e..1ab9008 100644
+--- a/include/__functional/weak_result_type.h
++++ b/include/__functional/weak_result_type.h
+@@ -27,7 +27,8 @@ struct __has_result_type
+ private:
+     struct __two {char __lx; char __lxx;};
+     template <class _Up> static __two __test(...);
+-    template <class _Up> static char __test(typename _Up::result_type* = 0);
++    // Fix for MSVC which allows to reference private types. Wrap into declval to prevent that.
++    template <class _Up> static char __test(decltype(std::declval<typename _Up::result_type*>()) = 0);
+ public:
+     static const bool value = sizeof(__test<_Tp>(0)) == 1;
+ };
+diff --git a/include/__memory/pointer_traits.h b/include/__memory/pointer_traits.h
+index f1e8070..0316649 100644
+--- a/include/__memory/pointer_traits.h
++++ b/include/__memory/pointer_traits.h
+@@ -74,7 +74,8 @@ private:
+     struct __two {char __lx; char __lxx;};
+     template <class _Xp> static __two __test(...);
+     _LIBCPP_SUPPRESS_DEPRECATED_PUSH
+-    template <class _Xp> static char __test(typename _Xp::template rebind<_Up>* = 0);
++    // Fix for MSVC which allows to reference private types. Wrap into declval to prevent that.
++    template <class _Xp> static char __test(decltype(_VSTD::declval<typename _Xp::template rebind<_Up>*>()) = 0);
+     _LIBCPP_SUPPRESS_DEPRECATED_POP
+ public:
+     static const bool value = sizeof(__test<_Tp>(0)) == 1;
+diff --git a/include/__memory/uses_allocator.h b/include/__memory/uses_allocator.h
+index 05c500c..20147c5 100644
+--- a/include/__memory/uses_allocator.h
++++ b/include/__memory/uses_allocator.h
+@@ -26,7 +26,8 @@ struct __has_allocator_type
+ private:
+     struct __two {char __lx; char __lxx;};
+     template <class _Up> static __two __test(...);
+-    template <class _Up> static char __test(typename _Up::allocator_type* = 0);
++    // Fix for MSVC which allows to reference private types. Wrap into declval to prevent that.
++    template <class _Up> static char __test(decltype(_VSTD::declval<typename _Up::allocator_type*>()) = 0);
+ public:
+     static const bool value = sizeof(__test<_Tp>(0)) == 1;
+ };

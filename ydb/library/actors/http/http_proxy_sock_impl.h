@@ -176,7 +176,7 @@ struct TSecureSocketImpl : TPlainSocketImpl, TSslHelpers {
         BIO_set_nbio(Bio.Get(), 1);
         Ctx = CreateClientContext();
         Ssl = ConstructSsl(Ctx.Get(), Bio.Get());
-        if (!Host.Empty()) {
+        if (!Host.empty()) {
             TVector<TString> items;
             Split(Host, ":", items);
             SSL_set_tlsext_host_name(Ssl.Get(), items[0].c_str());

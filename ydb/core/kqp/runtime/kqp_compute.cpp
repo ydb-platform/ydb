@@ -1,12 +1,12 @@
 #include "kqp_compute.h"
 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders_codegen.h>
-#include <ydb/library/yql/minikql/comp_nodes/mkql_factories.h>
-#include <ydb/library/yql/minikql/mkql_node_cast.h>
-#include <ydb/library/yql/minikql/mkql_program_builder.h>
-#include <ydb/library/yql/public/udf/udf_terminator.h>
-#include <ydb/library/yql/public/udf/udf_type_builder.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_holders_codegen.h>
+#include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
+#include <yql/essentials/minikql/mkql_node_cast.h>
+#include <yql/essentials/minikql/mkql_program_builder.h>
+#include <yql/essentials/public/udf/udf_terminator.h>
+#include <yql/essentials/public/udf/udf_type_builder.h>
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -52,7 +52,7 @@ public:
         BranchInst::Create(good, kill, pass, block);
 
         block = kill;
-        const auto doFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TKqpEnsureWrapper::Throw));
+        const auto doFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TKqpEnsureWrapper::Throw>());
         const auto doFuncArg = ConstantInt::get(Type::getInt64Ty(context), (ui64)this);
         const auto doFuncType = FunctionType::get(Type::getVoidTy(context), { Type::getInt64Ty(context), ctx.Ctx->getType() }, false);
         const auto doFuncPtr = CastInst::Create(Instruction::IntToPtr, doFunc, PointerType::getUnqual(doFuncType), "thrower", block);

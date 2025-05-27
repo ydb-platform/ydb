@@ -10,20 +10,17 @@ void TFetchingInterval::ConstructResult() {
     if (ready != WaitSourcesCount) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "skip_construct_result")("interval_idx", IntervalIdx)(
             "count", WaitSourcesCount)("ready", ready)("interval_id", GetIntervalId());
-        return;
-    } else {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "start_construct_result")("interval_idx", IntervalIdx)(
-            "interval_id", GetIntervalId());
-    }
-    if (AtomicCas(&SourcesFinalized, 1, 0)) {
+    } else if (AtomicCas(&SourcesFinalized, 1, 0)) {
         IntervalStateGuard.SetStatus(NColumnShard::TScanCounters::EIntervalStatus::WaitMergerStart);
 
         MergingContext->SetIntervalChunkMemory(Context->GetMemoryForSources(Sources));
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "start_construct_result")("interval_idx", IntervalIdx)(
+            "interval_id", GetIntervalId())("memory", MergingContext->GetIntervalChunkMemory())("count", WaitSourcesCount);
 
         auto task = std::make_shared<TStartMergeTask>(MergingContext, Context, std::move(Sources));
         task->SetPriority(NConveyor::ITask::EPriority::High);
         NGroupedMemoryManager::TScanMemoryLimiterOperator::SendToAllocation(Context->GetProcessMemoryControlId(),
-            Context->GetCommonContext()->GetScanId(), GetIntervalId(), { task }, (ui32)EStageFeaturesIndexes::Merge);
+            Context->GetCommonContext()->GetScanId(), GetIntervalId(), { task }, (ui32)NArrow::NSSA::IMemoryCalculationPolicy::EStage::Merge);
     }
 }
 
@@ -81,10 +78,12 @@ void TFetchingInterval::OnPartSendingComplete() {
     }
     IntervalStateGuard.SetStatus(NColumnShard::TScanCounters::EIntervalStatus::WaitMergerContinue);
 
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "continue_construct_result")("interval_idx", IntervalIdx)(
+        "interval_id", GetIntervalId())("memory", MergingContext->GetIntervalChunkMemory())("count", WaitSourcesCount);
     auto task = std::make_shared<TContinueMergeTask>(MergingContext, Context, std::move(Merger));
     task->SetPriority(NConveyor::ITask::EPriority::High);
     NGroupedMemoryManager::TScanMemoryLimiterOperator::SendToAllocation(Context->GetProcessMemoryControlId(),
-        Context->GetCommonContext()->GetScanId(), GetIntervalId(), { task }, (ui32)EStageFeaturesIndexes::Merge);
+        Context->GetCommonContext()->GetScanId(), GetIntervalId(), { task }, (ui32)NArrow::NSSA::IMemoryCalculationPolicy::EStage::Merge);
 }
 
 }   // namespace NKikimr::NOlap::NReader::NPlain

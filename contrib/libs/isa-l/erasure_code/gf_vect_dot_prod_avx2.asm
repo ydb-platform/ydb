@@ -51,7 +51,7 @@
  %endmacro
  %define SSTR   SLDR
  %define PS     8
- %define func(x) x:
+ %define func(x) x: endbranch
  %define FUNC_SAVE
  %define FUNC_RESTORE
 %endif
@@ -111,7 +111,7 @@
 
  %define PS 4
  %define LOG_PS 2
- %define func(x) x:
+ %define func(x) x: endbranch
  %define arg(x) [ebp + PS*2 + PS*x]
 
  %define trans   ecx			;trans is for the variables in stack
@@ -202,13 +202,8 @@ section .text
 %define xp     ymm2
 
 align 16
-global gf_vect_dot_prod_avx2:ISAL_SYM_TYPE_FUNCTION
+global gf_vect_dot_prod_avx2, function
 func(gf_vect_dot_prod_avx2)
-%ifidn __OUTPUT_FORMAT__, macho64
-global _gf_vect_dot_prod_avx2:ISAL_SYM_TYPE_FUNCTION
-func(_gf_vect_dot_prod_avx2)
-%endif
-
 	FUNC_SAVE
 	SLDR 	len, len_m
 	sub	len, 32
@@ -278,8 +273,3 @@ func(_gf_vect_dot_prod_avx2)
 	ret
 
 endproc_frame
-
-section .data
-
-;;;       func                  core, ver, snum
-slversion gf_vect_dot_prod_avx2, 04,  05,  0190

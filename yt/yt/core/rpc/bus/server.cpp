@@ -211,12 +211,11 @@ private:
             return;
         }
 
-        NCompression::ECodec codec;
-        int intCodec = header.codec();
-        if (!TryEnumCast(intCodec, &codec)) {
+        auto codecId = TryCheckedEnumCast<NCompression::ECodec>(header.codec());
+        if (!codecId) {
             YT_LOG_WARNING("Streaming payload codec is not supported; canceling request (RequestId: %v, Codec: %v)",
                 requestId,
-                intCodec);
+                header.codec());
             service->HandleRequestCancellation(requestId);
             return;
         }
@@ -228,11 +227,11 @@ private:
             MakeFormattableView(attachments, [] (auto* builder, const auto& attachment) {
                 builder->AppendFormat("%v", GetStreamingAttachmentSize(attachment));
             }),
-            codec,
+            *codecId,
             !attachments.back());
 
         TStreamingPayload payload{
-            codec,
+            *codecId,
             sequenceNumber,
             std::move(attachments)
         };

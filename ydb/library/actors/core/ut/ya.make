@@ -3,17 +3,14 @@ UNITTEST_FOR(ydb/library/actors/core)
 FORK_SUBTESTS()
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
-    TIMEOUT(1200)
-    TAG(ya:fat)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
     SPLIT_FACTOR(20)
     REQUIREMENTS(
         ram:32
     )
 ELSE()
     SIZE(MEDIUM)
-    TIMEOUT(600)
 ENDIF()
-
 
 PEERDIR(
     ydb/library/actors/interconnect
@@ -21,7 +18,10 @@ PEERDIR(
 )
 
 SRCS(
+    actor_basic_ut.cpp
     actor_coroutine_ut.cpp
+    actor_exception_ut.cpp
+    actor_shared_threads.cpp
     benchmark_ut.cpp
     actor_ut.cpp
     actorsystem_ut.cpp
@@ -31,9 +31,12 @@ SRCS(
     event_pb_payload_ut.cpp
     event_pb_ut.cpp
     executor_pool_basic_ut.cpp
+    executor_pool_semaphore_ut.cpp
+    executor_pools_ut.cpp
     log_ut.cpp
     mon_ut.cpp
     scheduler_actor_ut.cpp
+    mailbox_lockfree_ut.cpp
 )
 
 END()

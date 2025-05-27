@@ -1,15 +1,27 @@
 #pragma once
 
-#include <ydb/library/yql/providers/common/structured_token/yql_token_builder.h>
-#include <ydb/library/yql/providers/common/config/yql_dispatch.h>
-#include <ydb/library/yql/providers/common/config/yql_setting.h>
-#include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
+#include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
+#include <yql/essentials/providers/common/config/yql_dispatch.h>
+#include <yql/essentials/providers/common/config/yql_setting.h>
+#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 
 namespace NYql {
 
 struct TSolomonSettings {
     using TConstPtr = std::shared_ptr<const TSolomonSettings>;
-    NCommon::TConfSetting<bool, false> _EnableReading;
+private:
+#ifdef YQL_BETTER_CONF_SETTING_API
+    static constexpr NCommon::EConfSettingType Static = NCommon::EConfSettingType::Static;
+#else
+    static constexpr bool Static = false;
+#endif
+public:
+    NCommon::TConfSetting<bool, Static> _EnableReading;
+    NCommon::TConfSetting<ui64, Static> MetricsQueuePageSize;
+    NCommon::TConfSetting<ui64, Static> MetricsQueuePrefetchSize;
+    NCommon::TConfSetting<ui64, Static> MetricsQueueBatchCountLimit;
+    NCommon::TConfSetting<TString, Static> SolomonClientDefaultReplica;
+    NCommon::TConfSetting<ui64, Static> ComputeActorBatchSize;
 };
 
 struct TSolomonConfiguration

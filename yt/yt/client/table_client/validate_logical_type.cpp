@@ -100,7 +100,7 @@ private:
 
     void ThrowUnexpectedYsonToken(EYsonItemType type, const TFieldId& fieldId)
     {
-        THROW_ERROR_EXCEPTION(EErrorCode::SchemaViolation,
+        THROW_ERROR_EXCEPTION(NTableClient::EErrorCode::SchemaViolation,
             "Cannot parse %Qv: expected %Qlv, found %Qlv",
             GetDescription(fieldId),
             type,
@@ -120,7 +120,7 @@ private:
         if constexpr (type == ESimpleLogicalValueType::Any) {
             switch (Cursor_.GetCurrent().GetType()) {
                 case EYsonItemType::EntityValue:
-                    THROW_ERROR_EXCEPTION(EErrorCode::SchemaViolation,
+                    THROW_ERROR_EXCEPTION(NTableClient::EErrorCode::SchemaViolation,
                         "Cannot parse %Qv; unexpected entity value",
                         GetDescription(fieldId));
                 case EYsonItemType::Int64Value:
@@ -131,8 +131,7 @@ private:
                     Cursor_.Next();
                     return;
                 case EYsonItemType::BeginAttributes:
-                    THROW_ERROR_EXCEPTION(
-                        EErrorCode::SchemaViolation,
+                    THROW_ERROR_EXCEPTION(NTableClient::EErrorCode::SchemaViolation,
                         "Cannot parse %Qv; unexpected top level attributes",
                         GetDescription(fieldId));
 
@@ -148,7 +147,7 @@ private:
             static_assert(type != ESimpleLogicalValueType::Any);
             constexpr auto expectedYsonEventType = ExpectedYsonItemType<GetPhysicalType(type)>();
             if (Cursor_.GetCurrent().GetType() != expectedYsonEventType) {
-                THROW_ERROR_EXCEPTION(EErrorCode::SchemaViolation,
+                THROW_ERROR_EXCEPTION(NTableClient::EErrorCode::SchemaViolation,
                     "Cannot parse %Qv: expected %Qlv, found %Qlv",
                     GetDescription(fieldId),
                     expectedYsonEventType,
@@ -207,6 +206,12 @@ private:
             CASE(ESimpleLogicalValueType::Datetime64)
             CASE(ESimpleLogicalValueType::Timestamp64)
             CASE(ESimpleLogicalValueType::Interval64)
+            CASE(ESimpleLogicalValueType::TzDate)
+            CASE(ESimpleLogicalValueType::TzDatetime)
+            CASE(ESimpleLogicalValueType::TzTimestamp)
+            CASE(ESimpleLogicalValueType::TzDate32)
+            CASE(ESimpleLogicalValueType::TzDatetime64)
+            CASE(ESimpleLogicalValueType::TzTimestamp64)
 #undef CASE
         }
         YT_ABORT();
@@ -225,7 +230,7 @@ private:
         }
 
         if (Cursor_.GetCurrent().GetType() != EYsonItemType::BeginList) {
-            THROW_ERROR_EXCEPTION(EErrorCode::SchemaViolation,
+            THROW_ERROR_EXCEPTION(NTableClient::EErrorCode::SchemaViolation,
                 "Cannot parse %Qv: expected %Qlv, found %Qlv",
                 GetDescription(fieldId),
                 EYsonItemType::BeginList,
@@ -233,13 +238,13 @@ private:
         }
         Cursor_.Next();
         if (Cursor_.GetCurrent().GetType() == EYsonItemType::EndList) {
-            THROW_ERROR_EXCEPTION(EErrorCode::SchemaViolation,
+            THROW_ERROR_EXCEPTION(NTableClient::EErrorCode::SchemaViolation,
                 "Cannot parse %Qv; empty yson",
                 GetDescription(fieldId));
         }
         ValidateLogicalType(type.GetElement(), fieldId.OptionalElement());
         if (Cursor_.GetCurrent().GetType() != EYsonItemType::EndList) {
-            THROW_ERROR_EXCEPTION(EErrorCode::SchemaViolation,
+            THROW_ERROR_EXCEPTION(NTableClient::EErrorCode::SchemaViolation,
                 "Cannot parse %Qv: expected %Qlv, found %Qlv",
                 GetDescription(fieldId),
                 EYsonItemType::EndList,
@@ -251,7 +256,7 @@ private:
     void ValidateListType(const TListLogicalType& type, const TFieldId& fieldId)
     {
         if (Cursor_.GetCurrent().GetType() != EYsonItemType::BeginList) {
-            THROW_ERROR_EXCEPTION(EErrorCode::SchemaViolation,
+            THROW_ERROR_EXCEPTION(NTableClient::EErrorCode::SchemaViolation,
                 "Cannot parse %Qv: expected %Qlv, found %Qlv",
                 GetDescription(fieldId),
                 EYsonItemType::BeginList,
@@ -269,7 +274,7 @@ private:
     void ValidateStructType(const TStructLogicalType& type, const TFieldId& fieldId)
     {
         if (Cursor_.GetCurrent().GetType() != EYsonItemType::BeginList) {
-            THROW_ERROR_EXCEPTION(EErrorCode::SchemaViolation,
+            THROW_ERROR_EXCEPTION(NTableClient::EErrorCode::SchemaViolation,
                 "Cannot parse %Qv: expected %Qlv, found %Qlv",
                 GetDescription(fieldId),
                 EYsonItemType::BeginList,
@@ -282,7 +287,7 @@ private:
                 do {
                     const auto& field = fields[i];
                     if (field.Type->GetMetatype() != ELogicalMetatype::Optional) {
-                        THROW_ERROR_EXCEPTION(EErrorCode::SchemaViolation,
+                        THROW_ERROR_EXCEPTION(NTableClient::EErrorCode::SchemaViolation,
                             "Cannot parse %Qv; struct ended before required field %Qv is set",
                             GetDescription(fieldId),
                             field.Name);
@@ -295,7 +300,7 @@ private:
             ValidateLogicalType(field.Type, fieldId.StructField(i));
         }
         if (Cursor_.GetCurrent().GetType() != EYsonItemType::EndList) {
-            THROW_ERROR_EXCEPTION(EErrorCode::SchemaViolation,
+            THROW_ERROR_EXCEPTION(NTableClient::EErrorCode::SchemaViolation,
                 "Cannot parse %Qv: expected %Qlv, found %Qlv",
                 GetDescription(fieldId),
                 EYsonItemType::EndList,
@@ -307,7 +312,7 @@ private:
     void ValidateTupleType(const TTupleLogicalType& type, const TFieldId& fieldId)
     {
         if (Cursor_.GetCurrent().GetType() != EYsonItemType::BeginList) {
-            THROW_ERROR_EXCEPTION(EErrorCode::SchemaViolation,
+            THROW_ERROR_EXCEPTION(NTableClient::EErrorCode::SchemaViolation,
                 "Cannot parse %Qv: expected %Qlv, found %Qlv",
                 GetDescription(fieldId),
                 EYsonItemType::BeginList,
@@ -317,7 +322,7 @@ private:
         const auto& elements = type.GetElements();
         for (size_t i = 0; i < elements.size(); ++i) {
             if (Cursor_.GetCurrent().GetType() == EYsonItemType::EndList) {
-                THROW_ERROR_EXCEPTION(EErrorCode::SchemaViolation,
+                THROW_ERROR_EXCEPTION(NTableClient::EErrorCode::SchemaViolation,
                     "Cannot parse %Qv; expected %Qv got %Qv",
                     GetDescription(fieldId),
                     GetDescription(fieldId.TupleElement(i)),
@@ -326,7 +331,7 @@ private:
             ValidateLogicalType(elements[i], fieldId.TupleElement(i));
         }
         if (Cursor_.GetCurrent().GetType() != EYsonItemType::EndList) {
-            THROW_ERROR_EXCEPTION(EErrorCode::SchemaViolation,
+            THROW_ERROR_EXCEPTION(NTableClient::EErrorCode::SchemaViolation,
                 "Cannot parse %Qv: expected %Qlv, found %Qlv",
                 GetDescription(fieldId),
                 EYsonItemType::EndList,
@@ -339,7 +344,7 @@ private:
     Y_FORCE_INLINE void ValidateVariantTypeImpl(const T& type, const TFieldId& fieldId)
     {
         if (Cursor_.GetCurrent().GetType() != EYsonItemType::BeginList) {
-            THROW_ERROR_EXCEPTION(EErrorCode::SchemaViolation,
+            THROW_ERROR_EXCEPTION(NTableClient::EErrorCode::SchemaViolation,
                 "Cannot parse %Qv: expected %Qlv, found %Qlv",
                 GetDescription(fieldId),
                 EYsonItemType::BeginList,
@@ -347,7 +352,7 @@ private:
         }
         Cursor_.Next();
         if (Cursor_.GetCurrent().GetType() != EYsonItemType::Int64Value) {
-            THROW_ERROR_EXCEPTION(EErrorCode::SchemaViolation,
+            THROW_ERROR_EXCEPTION(NTableClient::EErrorCode::SchemaViolation,
                 "Cannot parse %Qv: expected %Qlv, found %Qlv",
                 GetDescription(fieldId),
                 EYsonItemType::Int64Value,
@@ -358,13 +363,13 @@ private:
         if constexpr (std::is_same_v<T, TVariantTupleLogicalType>) {
             const auto& elements = type.GetElements();
             if (alternativeIndex < 0) {
-                THROW_ERROR_EXCEPTION(EErrorCode::SchemaViolation,
+                THROW_ERROR_EXCEPTION(NTableClient::EErrorCode::SchemaViolation,
                     "Cannot parse %Qv; variant alternative index %Qv is less than 0",
                     GetDescription(fieldId),
                     alternativeIndex);
             }
             if (alternativeIndex >= std::ssize(elements)) {
-                THROW_ERROR_EXCEPTION(EErrorCode::SchemaViolation,
+                THROW_ERROR_EXCEPTION(NTableClient::EErrorCode::SchemaViolation,
                     "Cannot parse %Qv; variant alternative index %Qv exceeds number of variant elements %Qv",
                     GetDescription(fieldId),
                     alternativeIndex,
@@ -375,13 +380,13 @@ private:
             static_assert(std::is_same_v<T, TVariantStructLogicalType>);
             const auto& fields = type.GetFields();
             if (alternativeIndex < 0) {
-                THROW_ERROR_EXCEPTION(EErrorCode::SchemaViolation,
+                THROW_ERROR_EXCEPTION(NTableClient::EErrorCode::SchemaViolation,
                     "Cannot parse %Qv; variant alternative index %Qv is less than 0",
                     GetDescription(fieldId),
                     alternativeIndex);
             }
             if (alternativeIndex >= std::ssize(fields)) {
-                THROW_ERROR_EXCEPTION(EErrorCode::SchemaViolation,
+                THROW_ERROR_EXCEPTION(NTableClient::EErrorCode::SchemaViolation,
                     "Cannot parse %Qv; variant alternative index %Qv exceeds number of variant elements %Qv",
                     GetDescription(fieldId),
                     alternativeIndex,
@@ -391,7 +396,7 @@ private:
         }
 
         if (Cursor_.GetCurrent().GetType() != EYsonItemType::EndList) {
-            THROW_ERROR_EXCEPTION(EErrorCode::SchemaViolation,
+            THROW_ERROR_EXCEPTION(NTableClient::EErrorCode::SchemaViolation,
                 "Cannot parse %Qv: expected %Qlv, found %Qlv",
                 GetDescription(fieldId),
                 EYsonItemType::EndList,
@@ -441,14 +446,14 @@ private:
                 type.GetPrecision(),
                 type.GetScale());
         } catch (const std::exception& ex) {
-            THROW_ERROR_EXCEPTION(EErrorCode::SchemaViolation, "Error validating field %Qv",
+            THROW_ERROR_EXCEPTION(NTableClient::EErrorCode::SchemaViolation, "Error validating field %Qv",
                 GetDescription(fieldId))
                 << ex;
         }
         Cursor_.Next();
     }
 
-    TString GetDescription(const TFieldId& fieldId) const
+    std::string GetDescription(const TFieldId& fieldId) const
     {
         return fieldId.GetDescriptor(RootDescriptor_).GetDescription();
     }
@@ -509,7 +514,7 @@ private:
         {
             std::vector<int> path;
             const auto* current = this;
-            while (current->Parent_ != nullptr) {
+            while (current->Parent_) {
                 path.push_back(current->SiblingIndex_);
                 current = current->Parent_;
             }
@@ -629,7 +634,7 @@ void ValidateSimpleLogicalType<ESimpleLogicalValueType::Json>(TStringBuf value)
         // We expect all the errors to be thrown.
         YT_VERIFY(ok);
     } catch (const TJsonException& ex) {
-        THROW_ERROR_EXCEPTION(EErrorCode::SchemaViolation, "Invalid JSON: %s", ex.AsStrBuf());
+        THROW_ERROR_EXCEPTION(NTableClient::EErrorCode::SchemaViolation, "Invalid JSON: %s", ex.AsStrBuf());
     }
 }
 

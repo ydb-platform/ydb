@@ -633,7 +633,7 @@ void TUserActionProcessorFixture::SendDataRangeResponse(ui64 begin, ui64 end)
     auto pair = read->AddPair();
     NPQ::TKey key(NPQ::TKeyPrefix::TypeData, 1, begin, 0, end - begin, 0);
     pair->SetStatus(NKikimrProto::OK);
-    pair->SetKey(key.ToString());
+    pair->SetKey(key.Data(), key.Size());
     //pair->SetValueSize();
     pair->SetCreationUnixTime(0);
 
@@ -647,14 +647,14 @@ void TUserActionProcessorFixture::SendProposeTransactionRequest(ui32 partition,
                                                                 bool immediate,
                                                                 ui64 txId)
 {
-    auto event = MakeHolder<TEvPersQueue::TEvProposeTransaction>();
+    auto event = MakeHolder<TEvPersQueue::TEvProposeTransactionBuilder>();
 
     ActorIdToProto(Ctx->Edge, event->Record.MutableSource());
     auto* body = event->Record.MutableTxBody();
     auto* operation = body->MutableOperations()->Add();
     operation->SetPartitionId(partition);
-    operation->SetBegin(begin);
-    operation->SetEnd(end);
+    operation->SetCommitOffsetsBegin(begin);
+    operation->SetCommitOffsetsEnd(end);
     operation->SetConsumer(client);
     operation->SetPath(topic);
     body->SetImmediate(immediate);
@@ -665,7 +665,7 @@ void TUserActionProcessorFixture::SendProposeTransactionRequest(ui32 partition,
 
 void TUserActionProcessorFixture::SendProposeTransactionRequest(const TProposeTransactionParams& params)
 {
-    auto event = MakeHolder<TEvPersQueue::TEvProposeTransaction>();
+    auto event = MakeHolder<TEvPersQueue::TEvProposeTransactionBuilder>();
 
     //
     // Source
@@ -679,8 +679,8 @@ void TUserActionProcessorFixture::SendProposeTransactionRequest(const TProposeTr
     for (auto& txOp : params.TxOps) {
         auto* operation = body->MutableOperations()->Add();
         operation->SetPartitionId(txOp.Partition);
-        operation->SetBegin(txOp.Begin);
-        operation->SetEnd(txOp.End);
+        operation->SetCommitOffsetsBegin(txOp.Begin);
+        operation->SetCommitOffsetsEnd(txOp.End);
         operation->SetConsumer(txOp.Consumer);
         operation->SetPath(txOp.Path);
     }

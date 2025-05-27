@@ -1,0 +1,45 @@
+= __Application_Name__ Protobuf Documentation
+:toc:
+
+{{range .Files}}
+
+== {{.Name}}
+
+{{range .Messages}}
+
+=== {{.LongName}}
+{{nobr .Description}}
+
+{{if .HasFields}}
+|===========================================
+|*Field* |*Type* |*Label* |*Description*
+{{range .Fields}}
+|{{.Name}} | <<{{.FullType}},{{.LongType}}>> |{{.Label}} |{{.Description}}
+{{end}}
+|===========================================
+{{end}}
+{{end}}
+
+{{range .Enums}}
+
+[[{{.LongName}}]]
+=== {{.LongName}}
+{{.Description}}
+
+|=====================================
+|*Name* |*Number* |*Description*
+{{range .Values}}
+|{{.Name}} |{{.Number}} |{{.Description}}
+{{end}}
+|=====================================
+{{end}}
+{{end}}
+
+== Scalar Value Types
+
+|==============================================================
+|*.proto Type* |*Notes* |*C++ Type* |*Java Type* |*Python Type*
+{{range .Scalars}}
+|[[{{.ProtoType}}]] ((({{.ProtoType}}))) {{.ProtoType}} |{{.Notes}} |{{.CppType}} |{{.JavaType}} |{{.PythonType}}
+{{end}}
+|==============================================================

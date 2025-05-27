@@ -6,12 +6,14 @@
 #include <ydb/core/kqp/opt/physical/kqp_opt_phy_rules.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
 
-#include <ydb/library/yql/core/yql_opt_match_recognize.h>
-#include <ydb/library/yql/core/yql_opt_utils.h>
+#include <yql/essentials/core/yql_opt_match_recognize.h>
+#include <yql/essentials/core/yql_opt_utils.h>
 #include <ydb/library/yql/dq/opt/dq_opt_join.h>
 #include <ydb/library/yql/dq/opt/dq_opt_log.h>
 #include <ydb/library/yql/dq/opt/dq_opt_hopping.h>
-#include <ydb/library/yql/providers/common/transform/yql_optimize.h>
+#include <ydb/library/yql/dq/opt/dq_opt_join_cost_based.h>
+#include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/providers/common/transform/yql_optimize.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 
 namespace NKikimr::NKqp::NOpt {
@@ -48,9 +50,9 @@ public:
         AddHandler(0, &TKqlUpsertRowsBase::Match, HNDL(ExcessUpsertInputColumns));
         AddHandler(0, &TCoTake::Match, HNDL(DropTakeOverLookupTable));
         AddHandler(0, &TKqlReadTableBase::Match, HNDL(ApplyExtractMembersToReadTable<false>));
-        AddHandler(0, &TKqlReadTableRangesBase::Match, HNDL(ApplyExtractMembersToReadTableRanges<false>));
+        AddHandler(0, &TKqlReadTableRangesBase::Match, HNDL(ApplyExtractMembersToReadTable<false>));
         AddHandler(0, &TKqpReadOlapTableRangesBase::Match, HNDL(ApplyExtractMembersToReadOlapTable<false>));
-        AddHandler(0, &TKqlLookupTableBase::Match, HNDL(ApplyExtractMembersToLookupTable<false>));
+        AddHandler(0, &TKqlLookupTableBase::Match, HNDL(ApplyExtractMembersToReadTable<false>));
         AddHandler(0, &TCoTop::Match, HNDL(TopSortOverExtend));
         AddHandler(0, &TCoTopSort::Match, HNDL(TopSortOverExtend));
         AddHandler(0, &TCoUnorderedBase::Match, HNDL(UnorderedOverDqReadWrap));
@@ -69,22 +71,34 @@ public:
         AddHandler(1, &TDqReadWrapBase::Match, HNDL(DqReadWrapByProvider));
 
         AddHandler(2, &TKqlReadTableIndex::Match, HNDL(RewriteIndexRead));
-        AddHandler(2, &TKqlLookupIndex::Match, HNDL(RewriteLookupIndex));
         AddHandler(2, &TKqlStreamLookupIndex::Match, HNDL(RewriteStreamLookupIndex));
         AddHandler(2, &TKqlReadTableIndexRanges::Match, HNDL(RewriteIndexRead));
         AddHandler(2, &TDqReadWrap::Match, HNDL(ExtractMembersOverDqReadWrapMultiUsage));
         AddHandler(2, &TDqReadWrapBase::Match, HNDL(UnorderedOverDqReadWrapMultiUsage));
 
-        AddHandler(3, &TKqlLookupTable::Match, HNDL(RewriteLookupTable));
+        AddHandler(3, &TKqlLookupTableBase::Match, HNDL(RewriteLookupTable));
 
         AddHandler(4, &TKqlReadTableBase::Match, HNDL(ApplyExtractMembersToReadTable<true>));
-        AddHandler(4, &TKqlReadTableRangesBase::Match, HNDL(ApplyExtractMembersToReadTableRanges<true>));
+        AddHandler(4, &TKqlReadTableRangesBase::Match, HNDL(ApplyExtractMembersToReadTable<true>));
         AddHandler(4, &TKqpReadOlapTableRangesBase::Match, HNDL(ApplyExtractMembersToReadOlapTable<true>));
-        AddHandler(4, &TKqlLookupTableBase::Match, HNDL(ApplyExtractMembersToLookupTable<true>));
+        AddHandler(4, &TKqlLookupTableBase::Match, HNDL(ApplyExtractMembersToReadTable<true>));
 
 #undef HNDL
 
         SetGlobal(4u);
+    }
+
+public:
+    TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) override {
+        auto status = TOptimizeTransformerBase::DoTransform(input, output, ctx);
+
+        if (status == TStatus::Ok) {
+            for (const auto& hint: KqpCtx.GetOptimizerHints().GetUnappliedString()) {
+                ctx.AddWarning(YqlIssue({}, TIssuesIds::YQL_UNUSED_HINT, "Unapplied hint: " + hint));
+            }
+        }
+
+        return status;
     }
 
 protected:
@@ -103,7 +117,7 @@ protected:
     TMaybeNode<TExprBase> RewriteAggregate(TExprBase node, TExprContext& ctx) {
         TMaybeNode<TExprBase> output;
         auto aggregate = node.Cast<TCoAggregateBase>();
-        auto hopSetting = GetSetting(aggregate.Settings().Ref(), "hopping");        
+        auto hopSetting = GetSetting(aggregate.Settings().Ref(), "hopping");
         if (hopSetting) {
             auto input = aggregate.Input().Maybe<TDqConnection>();
             if (!input) {
@@ -146,31 +160,32 @@ protected:
     }
 
     TMaybeNode<TExprBase> OptimizeEquiJoinWithCosts(TExprBase node, TExprContext& ctx) {
-        auto maxDPccpDPTableSize = Config->MaxDPccpDPTableSize.Get().GetOrElse(TDqSettings::TDefault::MaxDPccpDPTableSize);
+        auto maxDPhypDPTableSize = Config->MaxDPHypDPTableSize.Get().GetOrElse(TDqSettings::TDefault::MaxDPHypDPTableSize);
         auto optLevel = Config->CostBasedOptimizationLevel.Get().GetOrElse(Config->DefaultCostBasedOptimizationLevel);
+        bool enableShuffleElimination = KqpCtx.Config->OptShuffleElimination.Get().GetOrElse(KqpCtx.Config->DefaultEnableShuffleElimination);
         auto providerCtx = TKqpProviderContext(KqpCtx, optLevel);
-        auto opt = std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(providerCtx, maxDPccpDPTableSize));
+        auto opt = std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(providerCtx, maxDPhypDPTableSize, ctx, enableShuffleElimination));
         TExprBase output = DqOptimizeEquiJoinWithCosts(node, ctx, TypesCtx, optLevel,
             *opt, [](auto& rels, auto label, auto node, auto stat) {
-                rels.emplace_back(std::make_shared<TKqpRelOptimizerNode>(TString(label), stat, node));
+                rels.emplace_back(std::make_shared<TKqpRelOptimizerNode>(TString(label), *stat, node));
             },
             KqpCtx.EquiJoinsCount,
-            KqpCtx.GetCardinalityHints(),
-            KqpCtx.GetJoinAlgoHints());
+            KqpCtx.GetOptimizerHints()
+        );
         DumpAppliedRule("OptimizeEquiJoinWithCosts", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 
     TMaybeNode<TExprBase> RewriteEquiJoin(TExprBase node, TExprContext& ctx) {
-        bool useCBO = Config->CostBasedOptimizationLevel.Get().GetOrElse(Config->DefaultCostBasedOptimizationLevel) == 3;
-        TExprBase output = DqRewriteEquiJoin(node, KqpCtx.Config->GetHashJoinMode(), useCBO, ctx, TypesCtx, KqpCtx.JoinsCount);
+        bool useCBO = Config->CostBasedOptimizationLevel.Get().GetOrElse(Config->DefaultCostBasedOptimizationLevel) >= 2;
+        TExprBase output = DqRewriteEquiJoin(node, KqpCtx.Config->GetHashJoinMode(), useCBO, ctx, TypesCtx, KqpCtx.JoinsCount, KqpCtx.GetOptimizerHints());
         DumpAppliedRule("RewriteEquiJoin", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 
     TMaybeNode<TExprBase> JoinToIndexLookup(TExprBase node, TExprContext& ctx) {
-        bool useCBO = Config->CostBasedOptimizationLevel.Get().GetOrElse(Config->DefaultCostBasedOptimizationLevel) == 3;
-        TExprBase output = KqpJoinToIndexLookup(node, ctx, KqpCtx, useCBO);
+        bool useCBO = Config->CostBasedOptimizationLevel.Get().GetOrElse(Config->DefaultCostBasedOptimizationLevel) >= 2;
+        TExprBase output = KqpJoinToIndexLookup(node, ctx, KqpCtx, useCBO, KqpCtx.GetOptimizerHints());
         DumpAppliedRule("JoinToIndexLookup", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
@@ -335,29 +350,11 @@ protected:
     }
 
     template <bool IsGlobal>
-    TMaybeNode<TExprBase> ApplyExtractMembersToReadTableRanges(TExprBase node, TExprContext& ctx,
-        const TGetParents& getParents)
-    {
-        TExprBase output = KqpApplyExtractMembersToReadTableRanges(node, ctx, *getParents(), IsGlobal);
-        DumpAppliedRule("ApplyExtractMembersToReadTableRanges", node.Ptr(), output.Ptr(), ctx);
-        return output;
-    }
-
-    template <bool IsGlobal>
     TMaybeNode<TExprBase> ApplyExtractMembersToReadOlapTable(TExprBase node, TExprContext& ctx,
         const TGetParents& getParents)
     {
         TExprBase output = KqpApplyExtractMembersToReadOlapTable(node, ctx, *getParents(), IsGlobal);
         DumpAppliedRule("ApplyExtractMembersToReadOlapTable", node.Ptr(), output.Ptr(), ctx);
-        return output;
-    }
-
-    template <bool IsGlobal>
-    TMaybeNode<TExprBase> ApplyExtractMembersToLookupTable(TExprBase node, TExprContext& ctx,
-        const TGetParents& getParents)
-    {
-        TExprBase output = KqpApplyExtractMembersToLookupTable(node, ctx, *getParents(), IsGlobal);
-        DumpAppliedRule("ApplyExtractMembersToLookupTable", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 

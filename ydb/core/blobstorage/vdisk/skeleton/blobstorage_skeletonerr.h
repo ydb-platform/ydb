@@ -290,7 +290,7 @@ namespace NKikimr {
             auto result = std::make_unique<TEvBlobStorage::TEvVMultiPutResult>(status, vdiskID, cookie, now,
                 ev->Get()->GetCachedByteSize(), &record, skeletonFrontIDPtr, counterPtr, histoPtr, bufferSizeBytes,
                 vdiskIncarnationGuid, errorReason);
-            Y_ABORT_UNLESS(record.ItemsSize() == statuses.size());
+            Y_VERIFY_S(record.ItemsSize() == statuses.size(), vctx->VDiskLogPrefix);
             for (ui64 itemIdx = 0; itemIdx < record.ItemsSize(); ++itemIdx) {
                 auto &item = record.GetItems(itemIdx);
                 ui64 cookieValue = 0;

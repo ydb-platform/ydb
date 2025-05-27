@@ -42,7 +42,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -107,7 +110,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -196,7 +202,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -256,7 +265,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -324,7 +336,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -401,7 +416,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -443,7 +461,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -485,7 +506,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -586,7 +610,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -627,7 +654,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -662,7 +692,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -709,7 +742,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -768,7 +804,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -842,7 +881,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -895,7 +937,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -935,6 +980,16 @@
                 "ColumnId": 6,
                 "ColumnName": "WrittenRows",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 7,
+                "ColumnName": "ChecksumState",
+                "ColumnType": "String"
+            },
+            {
+                "ColumnId": 8,
+                "ColumnName": "DownloadState",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -946,7 +1001,9 @@
                     3,
                     4,
                     5,
-                    6
+                    6,
+                    7,
+                    8
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -960,7 +1017,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -1049,7 +1109,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -1102,7 +1165,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -1155,7 +1221,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -1190,7 +1259,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -1225,7 +1297,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -1273,7 +1348,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -1341,7 +1419,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -1396,7 +1477,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -1445,7 +1529,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -1486,7 +1573,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -1553,7 +1643,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -1618,7 +1711,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -1684,7 +1780,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -1726,7 +1825,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -1773,7 +1875,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -1815,7 +1920,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -1901,7 +2009,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -1943,7 +2054,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -2017,7 +2131,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -2095,7 +2212,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -2155,7 +2275,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -2214,7 +2337,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     }

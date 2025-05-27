@@ -21,9 +21,6 @@ TString SourceIdHash(const TString& sourceId);
 
 void Migrate(NKikimrPQ::TPQTabletConfig& config);
 
-// This function required for marking the code which required remove after 25-1
-constexpr bool ReadRuleCompatible() { return true; }
-
 bool HasConsumer(const NKikimrPQ::TPQTabletConfig& config, const TString& consumerName);
 size_t ConsumerCount(const NKikimrPQ::TPQTabletConfig& config);
 
@@ -32,6 +29,8 @@ const NKikimrPQ::TPQTabletConfig::TPartition* GetPartitionConfig(const NKikimrPQ
 // The graph of split-merge operations.
 class TPartitionGraph {
 public:
+    using TPtr = std::shared_ptr<TPartitionGraph>;
+
     struct Node {
 
         Node() = default;
@@ -45,13 +44,16 @@ public:
         TString To;
 
         // Direct parents of this node
-        std::vector<Node*> Parents;
+        std::vector<Node*> DirectParents;
         // Direct children of this node
-        std::vector<Node*> Children;
+        std::vector<Node*> DirectChildren;
         // All parents include parents of parents and so on
-        std::set<Node*> HierarhicalParents;
+        std::set<Node*> AllParents;
+        // All children include children of children and so on
+        std::set<Node*> AllChildren;
 
         bool IsRoot() const;
+        bool IsParent(ui32 partitionId) const;
     };
 
     TPartitionGraph();
@@ -63,6 +65,11 @@ public:
     void Travers(const std::function<bool (ui32 id)>& func) const;
     void Travers(ui32 id, const std::function<bool (ui32 id)>& func, bool includeSelf = false) const;
 
+    bool Empty() const;
+    operator bool() const;
+
+    TString DebugString() const;
+
 private:
     std::unordered_map<ui32, Node> Partitions;
 };
@@ -71,12 +78,16 @@ TPartitionGraph MakePartitionGraph(const NKikimrPQ::TPQTabletConfig& config);
 TPartitionGraph MakePartitionGraph(const NKikimrPQ::TUpdateBalancerConfig& config);
 TPartitionGraph MakePartitionGraph(const NKikimrSchemeOp::TPersQueueGroupDescription& config);
 
+TPartitionGraph::TPtr MakeSharedPartitionGraph(const NKikimrPQ::TPQTabletConfig& config);
+TPartitionGraph::TPtr MakeSharedPartitionGraph(const NKikimrSchemeOp::TPersQueueGroupDescription& config);
+
 class TLastCounter {
     static constexpr size_t MaxValueCount = 2;
 
 public:
     void Use(const TString& value, const TInstant& now);
     size_t Count(const TInstant& expirationTime);
+    const TString& LastValue() const;
 
 private:
     struct Data {

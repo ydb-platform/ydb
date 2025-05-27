@@ -14,6 +14,7 @@
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/core/kqp/runtime/kqp_read_actor.h>
 #include <ydb/core/kqp/runtime/kqp_read_iterator_common.h>
+#include <ydb/core/kqp/runtime/kqp_write_actor_settings.h>
 #include <ydb/core/kqp/runtime/kqp_compute_scheduler.h>
 #include <ydb/core/kqp/common/kqp_resolve.h>
 
@@ -42,7 +43,7 @@ namespace {
 // Min interval between stats send from scan/compute actor to executor
 constexpr TDuration MinStatInterval = TDuration::MilliSeconds(20);
 // Max interval in case of no activety
-constexpr TDuration MaxStatInterval = TDuration::MilliSeconds(100);
+constexpr TDuration MaxStatInterval = TDuration::Seconds(1);
 
 template <class TTasksCollection>
 TString TasksIdsStr(const TTasksCollection& tasks) {
@@ -81,12 +82,16 @@ public:
         if (config.HasIteratorReadQuotaSettings()) {
             SetIteratorReadsQuotaSettings(config.GetIteratorReadQuotaSettings());
         }
-        if (config.HasPoolsConfiguration()) {
-            SetPriorities(config.GetPoolsConfiguration());
+        if (config.HasWriteActorSettings()) {
+            SetWriteActorSettings(config.GetWriteActorSettings());
         }
-        Scheduler.ReportCounters(counters);
-        AdvanceTimeInterval = TDuration::MicroSeconds(config.GetComputeSchedulerSettings().GetAdvanceTimeIntervalUsec());
-        Scheduler.SetForgetInterval(TDuration::MicroSeconds(config.GetComputeSchedulerSettings().GetForgetOverflowTimeoutUsec()));
+
+        SchedulerOptions = {
+            .AdvanceTimeInterval = TDuration::MicroSeconds(config.GetComputeSchedulerSettings().GetAdvanceTimeIntervalUsec()),
+            .ForgetOverflowTimeout = TDuration::MicroSeconds(config.GetComputeSchedulerSettings().GetForgetOverflowTimeoutUsec()),
+            .ActivePoolPollingTimeout = TDuration::Seconds(config.GetComputeSchedulerSettings().GetActivePoolPollingSec()),
+            .Counters = counters,
+        };
     }
 
     void Bootstrap() {
@@ -102,18 +107,16 @@ public:
         if (mon) {
             NMonitoring::TIndexMonPage* actorsMonPage = mon->RegisterIndexPage("actors", "Actors");
             mon->RegisterActorPage(actorsMonPage, "kqp_node", "KQP Node", false,
-                TlsActivationContext->ExecutorThread.ActorSystem, SelfId());
+                TActivationContext::ActorSystem(), SelfId());
         }
 
-        Schedule(TDuration::Seconds(1), new TEvents::TEvWakeup(WakeCleaunupTag));
-        Schedule(AdvanceTimeInterval, new TEvents::TEvWakeup(WakeAdvanceTimeTag));
+        Schedule(TDuration::Seconds(1), new TEvents::TEvWakeup());
         Become(&TKqpNodeService::WorkState);
-    }
 
-    enum {
-        WakeCleaunupTag,
-        WakeAdvanceTimeTag
-    };
+        Scheduler = std::make_shared<TComputeScheduler>();
+        SchedulerOptions.Scheduler = Scheduler;
+        SchedulerActorId = RegisterWithSameMailbox(CreateSchedulerActor(SchedulerOptions));
+    }
 
 private:
     STATEFN(WorkState) {
@@ -128,8 +131,6 @@ private:
             hFunc(TEvents::TEvUndelivered, HandleWork);
             hFunc(TEvents::TEvPoison, HandleWork);
             hFunc(NMon::TEvHttpInfo, HandleWork);
-            // sheduling
-            hFunc(TEvSchedulerDeregister, HandleWork);
             default: {
                 Y_ABORT("Unexpected event 0x%x for TKqpResourceManagerService", ev->GetTypeRewrite());
             }
@@ -137,12 +138,6 @@ private:
     }
 
     static constexpr double SecToUsec = 1e6;
-
-    void HandleWork(TEvSchedulerDeregister::TPtr& ev) {
-        if (ev->Get()->SchedulerEntity) {
-            Scheduler.Deregister(*ev->Get()->SchedulerEntity, TMonotonic::Now());
-        }
-    }
 
     void HandleWork(TEvKqpNode::TEvStartKqpTasksRequest::TPtr& ev) {
         NWilson::TSpan sendTasksSpan(TWilsonKqp::KqpNodeSendTasks, NWilson::TTraceId(ev->TraceId), "KqpNode.SendTasks", NWilson::EFlags::AUTO_END);
@@ -154,6 +149,13 @@ private:
         auto requester = ev->Sender;
 
         ui64 txId = msg.GetTxId();
+        TMaybe<ui64> lockTxId = msg.HasLockTxId()
+            ? TMaybe<ui64>(msg.GetLockTxId())
+            : Nothing();
+        ui32 lockNodeId = msg.GetLockNodeId();
+        TMaybe<NKikimrDataEvents::ELockMode> lockMode = msg.HasLockMode()
+            ? TMaybe<NKikimrDataEvents::ELockMode>(msg.GetLockMode())
+            : Nothing();
 
         YQL_ENSURE(msg.GetStartAllOrFail()); // todo: support partial start
 
@@ -198,7 +200,32 @@ private:
         const TString& serializedGUCSettings = ev->Get()->Record.HasSerializedGUCSettings() ?
             ev->Get()->Record.GetSerializedGUCSettings() : "";
 
-        auto schedulerNow = TMonotonic::Now();
+        auto schedulerNow = TlsActivationContext->Monotonic();
+
+        TString schedulerGroup = msg.GetSchedulerGroup();
+
+        if (SchedulerOptions.Scheduler->Disabled(schedulerGroup)) {
+            auto share = msg.GetPoolMaxCpuShare();
+            if (share <= 0 && (msg.HasQueryCpuShare() || msg.HasResourceWeight())) {
+                share = 1.0;
+            }
+            std::optional<double> resourceWeight;
+            if (msg.GetResourceWeight() >= 0) {
+                resourceWeight = msg.GetResourceWeight();
+            }
+
+            if (share > 0) {
+                Scheduler->UpdateGroupShare(schedulerGroup, share, schedulerNow, resourceWeight);
+                Send(SchedulerActorId, new TEvSchedulerNewPool(msg.GetDatabase(), schedulerGroup));
+            } else {
+                schedulerGroup = "";
+            }
+        }
+
+        std::optional<ui64> querySchedulerGroup;
+        if (msg.HasQueryCpuShare() && schedulerGroup) {
+            querySchedulerGroup = Scheduler->MakePerQueryGroup(schedulerNow, msg.GetQueryCpuShare(), schedulerGroup);
+        }
 
         // start compute actors
         TMaybe<NYql::NDqProto::TRlPath> rlPath = Nothing();
@@ -209,31 +236,33 @@ private:
         TIntrusivePtr<NRm::TTxState> txInfo = MakeIntrusive<NRm::TTxState>(
             txId, TInstant::Now(), ResourceManager_->GetCounters(),
             msg.GetSchedulerGroup(), msg.GetMemoryPoolPercent(),
-            msg.GetDatabase());
+            msg.GetDatabase(), Config.GetVerboseMemoryLimitException());
 
         const ui32 tasksCount = msg.GetTasks().size();
         for (auto& dqTask: *msg.MutableTasks()) {
-            TString group = msg.GetSchedulerGroup();
-
-            TComputeActorSchedulingOptions schedulingOptions {
+            TComputeActorSchedulingOptions schedulingTaskOptions {
                 .Now = schedulerNow,
-                .NodeService = SelfId(),
-                .Scheduler = &Scheduler,
-                .Group = group,
+                .SchedulerActorId = SchedulerActorId,
+                .Scheduler = Scheduler.get(),
+                .Group = schedulerGroup,
                 .Weight = 1,
-                .NoThrottle = false,
+                .NoThrottle = schedulerGroup.empty(),
                 .Counters = Counters
             };
 
-            if (Scheduler.Disabled(schedulingOptions.Group)) {
-                schedulingOptions.NoThrottle = true;
-            } else {
-                schedulingOptions.Handle = Scheduler.Enroll(schedulingOptions.Group, schedulingOptions.Weight, schedulingOptions.Now);
+            if (!schedulingTaskOptions.NoThrottle) {
+                schedulingTaskOptions.Handle = SchedulerOptions.Scheduler->Enroll(schedulingTaskOptions.Group, schedulingTaskOptions.Weight, schedulingTaskOptions.Now);
+                if (querySchedulerGroup) {
+                    Scheduler->AddToGroup(schedulerNow, *querySchedulerGroup, schedulingTaskOptions.Handle);
+                }
             }
 
-            auto result = CaFactory_->CreateKqpComputeActor({
+            NComputeActor::IKqpNodeComputeActorFactory::TCreateArgs createArgs{
                 .ExecuterId = request.Executer,
                 .TxId = txId,
+                .LockTxId = lockTxId,
+                .LockNodeId = lockNodeId,
+                .LockMode = lockMode,
                 .Task = &dqTask,
                 .TxInfo = txInfo,
                 .RuntimeSettings = runtimeSettingsBase,
@@ -245,13 +274,22 @@ private:
                 .MemoryPool = memoryPool,
                 .WithSpilling = msgRtSettings.GetUseSpilling(),
                 .StatsMode = msgRtSettings.GetStatsMode(),
+                .WithProgressStats = msgRtSettings.GetWithProgressStats(),
                 .Deadline = TInstant(),
                 .ShareMailbox = false,
                 .RlPath = rlPath,
                 .ComputesByStages = &computesByStage,
                 .State = State_,
-                .SchedulingOptions = std::move(schedulingOptions),
-            });
+                .SchedulingOptions = std::move(schedulingTaskOptions),
+                // TODO: block tracking mode is not set!
+            };
+            if (msg.HasUserToken() && msg.GetUserToken()) {
+                createArgs.UserToken.Reset(MakeIntrusive<NACLib::TUserToken>(msg.GetUserToken()));
+            }
+
+            createArgs.Database = msg.GetDatabase();
+
+            auto result = CaFactory_->CreateKqpComputeActor(std::move(createArgs));
 
             if (const auto* rmResult = std::get_if<NRm::TKqpRMAllocateResult>(&result)) {
                 ReplyError(txId, request.Executer, msg, rmResult->GetStatus(), rmResult->GetFailReason());
@@ -276,10 +314,17 @@ private:
             ActorIdToProto(taskCtx.ComputeActorId, startedTask->MutableActorId());
         }
 
+        TCPULimits cpuLimits;
+        if (msg.GetPoolMaxCpuShare() > 0) {
+            // Share <= 0 means disabled limit
+            cpuLimits.DeserializeFromProto(msg).Validate();
+        }
+
         for (auto&& i : computesByStage) {
             for (auto&& m : i.second.MutableMetaInfo()) {
                 Register(CreateKqpScanFetcher(msg.GetSnapshot(), std::move(m.MutableActorIds()),
-                    m.GetMeta(), runtimeSettingsBase, txId, scanPolicy, Counters, NWilson::TTraceId(ev->TraceId)));
+                    m.GetMeta(), runtimeSettingsBase, txId, lockTxId, lockNodeId, lockMode,
+                    scanPolicy, Counters, NWilson::TTraceId(ev->TraceId), cpuLimits));
             }
         }
 
@@ -343,17 +388,11 @@ private:
     }
 
     void HandleWork(TEvents::TEvWakeup::TPtr& ev) {
-        if (ev->Get()->Tag == WakeAdvanceTimeTag) {
-            Scheduler.AdvanceTime(TMonotonic::Now());
-            Schedule(AdvanceTimeInterval, new TEvents::TEvWakeup(WakeAdvanceTimeTag));
-        }
-        if (ev->Get()->Tag == WakeCleaunupTag) {
-            Schedule(TDuration::Seconds(1), ev->Release().Release());
-            for (auto& bucket : State_->Buckets) {
-                auto expiredRequests = bucket.ClearExpiredRequests();
-                for (auto& cxt : expiredRequests) {
-                    TerminateTx(cxt.TxId, "reached execution deadline", NYql::NDqProto::StatusIds::TIMEOUT);
-                }
+        Schedule(TDuration::Seconds(1), ev->Release().Release());
+        for (auto& bucket : State_->Buckets) {
+            auto expiredRequests = bucket.ClearExpiredRequests();
+            for (auto& cxt : expiredRequests) {
+                TerminateTx(cxt.TxId, "reached execution deadline", NYql::NDqProto::StatusIds::TIMEOUT);
             }
         }
     }
@@ -395,48 +434,12 @@ private:
             SetIteratorReadsQuotaSettings(event.GetConfig().GetTableServiceConfig().GetIteratorReadQuotaSettings());
         }
 
-        if (event.GetConfig().GetTableServiceConfig().HasPoolsConfiguration()) {
-            SetPriorities(event.GetConfig().GetTableServiceConfig().GetPoolsConfiguration());
-        }
-
-        AdvanceTimeInterval = TDuration::MicroSeconds(event.GetConfig().GetTableServiceConfig().GetComputeSchedulerSettings().GetAdvanceTimeIntervalUsec());
-        Scheduler.SetForgetInterval(TDuration::MicroSeconds(event.GetConfig().GetTableServiceConfig().GetComputeSchedulerSettings().GetForgetOverflowTimeoutUsec()));
-
         auto responseEv = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationResponse>(event);
         Send(ev->Sender, responseEv.Release(), IEventHandle::FlagTrackDelivery, ev->Cookie);
     }
 
     void SetIteratorReadsQuotaSettings(const NKikimrConfig::TTableServiceConfig::TIteratorReadQuotaSettings& settings) {
         SetDefaultIteratorQuotaSettings(settings.GetMaxRows(), settings.GetMaxBytes());
-    }
-
-    void SetPriorities(const NKikimrConfig::TTableServiceConfig::TComputePoolConfiguration& conf) {
-        std::function<TComputeScheduler::TDistributionRule(const NKikimrConfig::TTableServiceConfig::TComputePoolConfiguration&)> convert
-            = [&](const NKikimrConfig::TTableServiceConfig::TComputePoolConfiguration& conf)
-        {
-            if (conf.HasName()) {
-                return TComputeScheduler::TDistributionRule{.Share = conf.GetMaxCpuShare(), .Name = conf.GetName()};
-            } else if (conf.HasSubPoolsConfiguration()) {
-                auto res = TComputeScheduler::TDistributionRule{.Share = conf.GetMaxCpuShare()};
-                for (auto& subConf : conf.GetSubPoolsConfiguration().GetSubPools()) {
-                    res.SubRules.push_back(convert(subConf));
-                }
-                return res;
-            } else {
-                Y_ENSURE(false, "unknown case");
-            }
-        };
-        SetPriorities(convert(conf));
-    }
-
-    void SetPriorities(TComputeScheduler::TDistributionRule rule) {
-        NActors::TExecutorPoolStats poolStats;
-        TVector<NActors::TExecutorThreadStats> threadsStats;
-        TlsActivationContext->ActorSystem()->GetPoolStats(SelfId().PoolID(), poolStats, threadsStats);
-        Y_ENSURE(poolStats.MaxThreadCount > 0);
-        Counters->SchedulerCapacity->Set(poolStats.MaxThreadCount);
-
-        Scheduler.SetPriorities(rule, poolStats.MaxThreadCount, TMonotonic::Now());
     }
 
     void SetIteratorReadsRetrySettings(const NKikimrConfig::TTableServiceConfig::TIteratorReadsRetrySettings& settings) {
@@ -454,6 +457,22 @@ private:
         }
         ptr->MaxRetryDelay = TDuration::MilliSeconds(settings.GetMaxDelayMs());
         SetReadIteratorBackoffSettings(ptr);
+    }
+
+    void SetWriteActorSettings(const NKikimrConfig::TTableServiceConfig::TWriteActorSettings& settings) {
+        auto ptr = MakeIntrusive<NKikimr::NKqp::TWriteActorSettings>();
+
+        ptr->InFlightMemoryLimitPerActorBytes = settings.GetInFlightMemoryLimitPerActorBytes();
+
+        ptr->StartRetryDelay = TDuration::MilliSeconds(settings.GetStartRetryDelayMs());
+        ptr->MaxRetryDelay = TDuration::MilliSeconds(settings.GetMaxRetryDelayMs());
+        ptr->UnsertaintyRatio = settings.GetUnsertaintyRatio();
+        ptr->Multiplier = settings.GetMultiplier();
+
+        ptr->MaxWriteAttempts = settings.GetMaxWriteAttempts();
+        ptr->MaxResolveAttempts = settings.GetMaxResolveAttempts();
+
+        NKikimr::NKqp::SetWriteActorSettings(ptr);
     }
 
     void HandleWork(TEvents::TEvUndelivered::TPtr& ev) {
@@ -525,8 +544,9 @@ private:
     NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
     const std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
 
-    TComputeScheduler Scheduler;
-    TDuration AdvanceTimeInterval;
+    std::shared_ptr<TComputeScheduler> Scheduler;
+    TSchedulerActorOptions SchedulerOptions;
+    TActorId SchedulerActorId;
 
     //state sharded by TxId
     std::shared_ptr<TNodeServiceState> State_;

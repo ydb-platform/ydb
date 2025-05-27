@@ -1,0 +1,20 @@
+From: Георгий Кондратьев <orivej@yandex-team.ru>
+Date: Sun, 22 Sep 2019 17:28:22 +0000
+Subject: [PATCH] Rename PCRE POSIX regex symbols. DEVTOOLS-5955
+
+They are subtly ABI-incompatible with libc regex due to values of REG_NOMATCH and other constants.
+
+REVIEW: 962891
+
+--- a/pcreposix.h
++++ b/pcreposix.h
+@@ -134,4 +134,9 @@ file. */
+ /* The functions */
+ 
++#define regcomp pcre_regcomp
++#define regexec pcre_regexec
++#define regerror pcre_regerror
++#define regfree pcre_regfree
++
+ PCREPOSIX_EXP_DECL int regcomp(regex_t *, const char *, int);
+ PCREPOSIX_EXP_DECL int regexec(const regex_t *, const char *, size_t,

@@ -1,8 +1,47 @@
 #include "log_backend.h"
+#include "json_envelope.h"
 #include "log_backend_build.h"
 #include <ydb/core/base/counters.h>
 
+#include <util/system/mutex.h>
+
 namespace NKikimr {
+
+class TLogBackendWithJsonEnvelope : public TLogBackend {
+public:
+    TLogBackendWithJsonEnvelope(const TString& jsonEnvelope, THolder<TLogBackend> logBackend)
+        : JsonEnvelope(jsonEnvelope)
+        , LogBackend(std::move(logBackend))
+    {}
+
+    void WriteData(const TLogRecord& rec) override {
+        TLogRecord record = rec;
+        TString data = JsonEnvelope.ApplyJsonEnvelope(TStringBuf(record.Data, record.Len));
+        record.Data = data.data();
+        record.Len = data.size();
+        LogBackend->WriteData(record);
+    }
+
+    void ReopenLog() override {
+        LogBackend->ReopenLog();
+    }
+
+    void ReopenLogNoFlush() override {
+        LogBackend->ReopenLogNoFlush();
+    }
+
+    ELogPriority FiltrationLevel() const override {
+        return LogBackend->FiltrationLevel();
+    }
+
+    size_t QueueSize() const override {
+        return LogBackend->QueueSize();
+    }
+
+private:
+    const TJsonEnvelope JsonEnvelope;
+    const THolder<TLogBackend> LogBackend;
+};
 
 TAutoPtr<TLogBackend> CreateLogBackendWithUnifiedAgent(
         const TKikimrRunConfig& runConfig,
@@ -10,12 +49,21 @@ TAutoPtr<TLogBackend> CreateLogBackendWithUnifiedAgent(
 {
     if (runConfig.AppConfig.HasLogConfig()) {
         const auto& logConfig = runConfig.AppConfig.GetLogConfig();
+        const auto& dnConfig = runConfig.AppConfig.GetDynamicNameserviceConfig();
         TAutoPtr<TLogBackend> logBackend = TLogBackendBuildHelper::CreateLogBackendFromLogConfig(logConfig);
         if (logConfig.HasUAClientConfig()) {
             const auto& uaClientConfig = logConfig.GetUAClientConfig();
             auto uaCounters = GetServiceCounters(counters, "utils")->GetSubgroup("subsystem", "ua_client");
             auto logName = uaClientConfig.GetLogName();
-            TAutoPtr<TLogBackend> uaLogBackend = TLogBackendBuildHelper::CreateLogBackendFromUAClientConfig(uaClientConfig, uaCounters, logName);
+            auto maxStaticNodeId = dnConfig.GetMaxStaticNodeId();
+            TAutoPtr<TLogBackend> uaLogBackend = TLogBackendBuildHelper::CreateLogBackendFromUAClientConfig(
+                uaClientConfig,
+                uaCounters,
+                logName,
+                runConfig.NodeId <= maxStaticNodeId ? "static" : "slot",
+                runConfig.TenantName,
+                logConfig.HasClusterName() ? logConfig.GetClusterName() : ""
+            );
             logBackend = logBackend ? NActors::CreateCompositeLogBackend({logBackend, uaLogBackend}) : uaLogBackend;
         }
         if (logBackend) {
@@ -47,12 +95,21 @@ TAutoPtr<TLogBackend> CreateMeteringLogBackendWithUnifiedAgent(
 
     if (meteringConfig.GetUnifiedAgentEnable() && runConfig.AppConfig.HasLogConfig() && runConfig.AppConfig.GetLogConfig().HasUAClientConfig()) {
         const auto& logConfig = runConfig.AppConfig.GetLogConfig();
+        const auto& dnConfig = runConfig.AppConfig.GetDynamicNameserviceConfig();
         const auto& uaClientConfig = logConfig.GetUAClientConfig();
         auto uaCounters = GetServiceCounters(counters, "utils")->GetSubgroup("subsystem", "ua_client");
         auto logName = meteringConfig.HasLogName()
             ? meteringConfig.GetLogName()
             : uaClientConfig.GetLogName();
-        TAutoPtr<TLogBackend> uaLogBackend = TLogBackendBuildHelper::CreateLogBackendFromUAClientConfig(uaClientConfig, uaCounters, logName);
+        auto maxStaticNodeId = dnConfig.GetMaxStaticNodeId();
+        TAutoPtr<TLogBackend> uaLogBackend = TLogBackendBuildHelper::CreateLogBackendFromUAClientConfig(
+            uaClientConfig,
+            uaCounters,
+            logName,
+            runConfig.NodeId <= maxStaticNodeId ? "static" : "slot",
+            runConfig.TenantName,
+            logConfig.HasClusterName() ? logConfig.GetClusterName() : ""
+        );
         logBackend = logBackend ? NActors::CreateCompositeLogBackend({logBackend, uaLogBackend}) : uaLogBackend;
     }
 
@@ -95,47 +152,67 @@ TAutoPtr<TLogBackend> CreateAuditLogUnifiedAgentBackend(
     const auto& auditConfig = runConfig.AppConfig.GetAuditConfig();
     if (auditConfig.HasUnifiedAgentBackend() && runConfig.AppConfig.HasLogConfig() && runConfig.AppConfig.GetLogConfig().HasUAClientConfig()) {
         const auto& logConfig = runConfig.AppConfig.GetLogConfig();
+        const auto& dnConfig = runConfig.AppConfig.GetDynamicNameserviceConfig();
         const auto& uaClientConfig = logConfig.GetUAClientConfig();
         auto uaCounters = GetServiceCounters(counters, "utils")->GetSubgroup("subsystem", "ua_client");
         auto logName = runConfig.AppConfig.GetAuditConfig().GetUnifiedAgentBackend().HasLogName()
             ? runConfig.AppConfig.GetAuditConfig().GetUnifiedAgentBackend().GetLogName()
             : uaClientConfig.GetLogName();
-        logBackend = TLogBackendBuildHelper::CreateLogBackendFromUAClientConfig(uaClientConfig, uaCounters, logName);
+        auto maxStaticNodeId = dnConfig.GetMaxStaticNodeId();
+        logBackend = TLogBackendBuildHelper::CreateLogBackendFromUAClientConfig(
+            uaClientConfig,
+            uaCounters,
+            logName,
+            runConfig.NodeId <= maxStaticNodeId ? "static" : "slot",
+            runConfig.TenantName,
+            logConfig.HasClusterName() ? logConfig.GetClusterName() : ""
+        );
     }
 
     return logBackend;
+}
+
+THolder<TLogBackend> MaybeWrapWithJsonEnvelope(THolder<TLogBackend> logBackend, const TString& jsonEnvelope) {
+    Y_ASSERT(logBackend);
+    if (jsonEnvelope.empty()) {
+        return logBackend;
+    }
+
+    return MakeHolder<TLogBackendWithJsonEnvelope>(jsonEnvelope, std::move(logBackend));
 }
 
 TMap<NKikimrConfig::TAuditConfig::EFormat, TVector<THolder<TLogBackend>>> CreateAuditLogBackends(
         const TKikimrRunConfig& runConfig,
         NMonitoring::TDynamicCounterPtr counters) {
     TMap<NKikimrConfig::TAuditConfig::EFormat, TVector<THolder<TLogBackend>>> logBackends;
-    if (runConfig.AppConfig.HasAuditConfig() && runConfig.AppConfig.GetAuditConfig().HasStderrBackend()) {
-        auto logBackend = NActors::CreateStderrBackend();
-        auto format = runConfig.AppConfig.GetAuditConfig().GetStderrBackend().GetFormat();
-        logBackends[format].push_back(std::move(logBackend));
-    }
 
-    if (runConfig.AppConfig.HasAuditConfig() && runConfig.AppConfig.GetAuditConfig().HasFileBackend()) {
-        auto logBackend = CreateAuditLogFileBackend(runConfig);
-        if (logBackend) {
-            auto format = runConfig.AppConfig.GetAuditConfig().GetFileBackend().GetFormat();
-            logBackends[format].push_back(std::move(logBackend));
+    if (runConfig.AppConfig.HasAuditConfig()) {
+        const auto& auditConfig = runConfig.AppConfig.GetAuditConfig();
+        if (auditConfig.HasStderrBackend()) {
+            auto logBackend = NActors::CreateStderrBackend();
+            auto format = auditConfig.GetStderrBackend().GetFormat();
+            logBackends[format].push_back(MaybeWrapWithJsonEnvelope(std::move(logBackend), auditConfig.GetStderrBackend().GetLogJsonEnvelope()));
+        }
+
+        if (auditConfig.HasFileBackend()) {
+            auto logBackend = CreateAuditLogFileBackend(runConfig);
+            if (logBackend) {
+                auto format = auditConfig.GetFileBackend().GetFormat();
+                logBackends[format].push_back(MaybeWrapWithJsonEnvelope(std::move(logBackend), auditConfig.GetFileBackend().GetLogJsonEnvelope()));
+            }
+        }
+
+        if (auditConfig.HasUnifiedAgentBackend()) {
+            auto logBackend = CreateAuditLogUnifiedAgentBackend(runConfig, counters);
+            if (logBackend) {
+                auto format = auditConfig.GetUnifiedAgentBackend().GetFormat();
+                logBackends[format].push_back(MaybeWrapWithJsonEnvelope(std::move(logBackend), auditConfig.GetUnifiedAgentBackend().GetLogJsonEnvelope()));
+            }
         }
     }
-
-    if (runConfig.AppConfig.HasAuditConfig() && runConfig.AppConfig.GetAuditConfig().HasUnifiedAgentBackend()) {
-        auto logBackend = CreateAuditLogUnifiedAgentBackend(runConfig, counters);
-        if (logBackend) {
-            auto format = runConfig.AppConfig.GetAuditConfig().GetUnifiedAgentBackend().GetFormat();
-            logBackends[format].push_back(std::move(logBackend));
-        }
-    }
-
 
     return logBackends;
 }
 
 
 } // NKikimr
-

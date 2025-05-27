@@ -6,11 +6,11 @@ namespace NKikimr::NOlap {
 std::set<ui32> TPKRangeFilter::GetColumnIds(const TIndexInfo& indexInfo) const {
     std::set<ui32> result;
     for (auto&& i : PredicateFrom.GetColumnNames()) {
-        result.emplace(indexInfo.GetColumnId(i));
+        result.emplace(indexInfo.GetColumnIdVerified(i));
         AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("predicate_column", i);
     }
     for (auto&& i : PredicateTo.GetColumnNames()) {
-        result.emplace(indexInfo.GetColumnId(i));
+        result.emplace(indexInfo.GetColumnIdVerified(i));
         AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("predicate_column", i);
     }
     return result;
@@ -34,42 +34,24 @@ std::set<std::string> TPKRangeFilter::GetColumnNames() const {
     return result;
 }
 
-NKikimr::NArrow::TColumnFilter TPKRangeFilter::BuildFilter(const arrow::Datum& data) const {
-    NArrow::TColumnFilter result = PredicateTo.BuildFilter(data);
+NArrow::TColumnFilter TPKRangeFilter::BuildFilter(const std::shared_ptr<NArrow::TGeneralContainer>& data) const {
+    auto result = PredicateTo.BuildFilter(data);
     return result.And(PredicateFrom.BuildFilter(data));
 }
 
-bool TPKRangeFilter::IsPortionInUsage(const TPortionInfo& info) const {
-    if (const auto& from = PredicateFrom.GetReplaceKey()) {
-        const auto& portionEnd = info.IndexKeyEnd();
-        const int commonSize = std::min(from->Size(), portionEnd.Size());
-        if (std::is_gt(from->ComparePartNotNull(portionEnd, commonSize))) {
-            return false;
-        }
-    }
-
-    if (const auto& to = PredicateTo.GetReplaceKey()) {
-        const auto& portionStart = info.IndexKeyStart();
-        const int commonSize = std::min(to->Size(), portionStart.Size());
-        if (std::is_lt(to->ComparePartNotNull(portionStart, commonSize))) {
-            return false;
-        }
-    }
-//    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("start", info.IndexKeyStart().DebugString())("end", info.IndexKeyEnd().DebugString())(
-//        "from", PredicateFrom.DebugString())("to", PredicateTo.DebugString());
-
-    return true;
+bool TPKRangeFilter::IsUsed(const TPortionInfo& info) const {
+    return GetUsageClass(info.IndexKeyStart(), info.IndexKeyEnd()) != TPKRangeFilter::EUsageClass::NoUsage;
 }
 
-TPKRangeFilter::EUsageClass TPKRangeFilter::IsPortionInPartialUsage(const NArrow::TReplaceKey& start, const NArrow::TReplaceKey& end) const {
+TPKRangeFilter::EUsageClass TPKRangeFilter::GetUsageClass(const NArrow::TSimpleRow& start, const NArrow::TSimpleRow& end) const {
     {
         std::partial_ordering equalityStartWithFrom = std::partial_ordering::greater;
         if (const auto& from = PredicateFrom.GetReplaceKey()) {
-            equalityStartWithFrom = start.ComparePartNotNull(*from, from->Size());
+            equalityStartWithFrom = start.ComparePartNotNull(*from, from->GetColumnsCount());
         }
         std::partial_ordering equalityEndWithTo = std::partial_ordering::less;
         if (const auto& to = PredicateTo.GetReplaceKey()) {
-            equalityEndWithTo = end.ComparePartNotNull(*to, to->Size());
+            equalityEndWithTo = end.ComparePartNotNull(*to, to->GetColumnsCount());
         }
         const bool startInternal = (equalityStartWithFrom == std::partial_ordering::equivalent && PredicateFrom.IsInclude()) ||
                                    (equalityStartWithFrom == std::partial_ordering::greater);
@@ -82,27 +64,27 @@ TPKRangeFilter::EUsageClass TPKRangeFilter::IsPortionInPartialUsage(const NArrow
     
 
     if (const auto& from = PredicateFrom.GetReplaceKey()) {
-        const std::partial_ordering equalityEndWithFrom = end.ComparePartNotNull(*from, from->Size());
+        const std::partial_ordering equalityEndWithFrom = end.ComparePartNotNull(*from, from->GetColumnsCount());
         if (equalityEndWithFrom == std::partial_ordering::less) {
-            return EUsageClass::DontUsage;
+            return EUsageClass::NoUsage;
         } else if (equalityEndWithFrom == std::partial_ordering::equivalent) {
             if (PredicateFrom.IsInclude()) {
                 return EUsageClass::PartialUsage;
             } else {
-                return EUsageClass::DontUsage;
+                return EUsageClass::NoUsage;
             }
         }
     }
 
     if (const auto& to = PredicateTo.GetReplaceKey()) {
-        const std::partial_ordering equalityStartWithTo = start.ComparePartNotNull(*to, to->Size());
+        const std::partial_ordering equalityStartWithTo = start.ComparePartNotNull(*to, to->GetColumnsCount());
         if (equalityStartWithTo == std::partial_ordering::greater) {
-            return EUsageClass::DontUsage;
+            return EUsageClass::NoUsage;
         } else if (equalityStartWithTo == std::partial_ordering::equivalent) {
             if (PredicateTo.IsInclude()) {
                 return EUsageClass::PartialUsage;
             } else {
-                return EUsageClass::DontUsage;
+                return EUsageClass::NoUsage;
             }
         }
     }
@@ -121,14 +103,14 @@ TConclusion<TPKRangeFilter> TPKRangeFilter::Build(TPredicateContainer&& from, TP
     return TPKRangeFilter(std::move(from), std::move(to));
 }
 
-bool TPKRangeFilter::CheckPoint(const NArrow::TReplaceKey& point) const {
+bool TPKRangeFilter::CheckPoint(const NArrow::TSimpleRow& point) const {
     std::partial_ordering equalityWithFrom = std::partial_ordering::greater;
     if (const auto& from = PredicateFrom.GetReplaceKey()) {
-        equalityWithFrom = point.ComparePartNotNull(*from, from->Size());
+        equalityWithFrom = point.ComparePartNotNull(*from, from->GetColumnsCount());
     }
     std::partial_ordering equalityWithTo = std::partial_ordering::less;
     if (const auto& to = PredicateTo.GetReplaceKey()) {
-        equalityWithTo = point.ComparePartNotNull(*to, to->Size());
+        equalityWithTo = point.ComparePartNotNull(*to, to->GetColumnsCount());
     }
     const bool startInternal = (equalityWithFrom == std::partial_ordering::equivalent && PredicateFrom.IsInclude()) ||
                                (equalityWithFrom == std::partial_ordering::greater);

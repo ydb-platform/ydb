@@ -12,6 +12,7 @@
 #include "table_writer.h"
 #include "transaction.h"
 
+#include <yt/yt/client/api/distributed_table_session.h>
 #include <yt/yt/client/api/file_reader.h>
 #include <yt/yt/client/api/file_writer.h>
 #include <yt/yt/client/api/journal_reader.h>
@@ -19,6 +20,8 @@
 #include <yt/yt/client/api/rowset.h>
 
 #include <yt/yt/client/chaos_client/replication_card_serialization.h>
+
+#include <yt/yt/client/signature/signature.h>
 
 #include <yt/yt/client/table_client/name_table.h>
 #include <yt/yt/client/table_client/row_base.h>
@@ -34,6 +37,8 @@
 #include <yt/yt/core/net/address.h>
 
 #include <yt/yt/core/ytree/attribute_filter.h>
+
+#include <library/cpp/iterator/zip.h>
 
 namespace NYT::NApi::NRpcProxy {
 
@@ -53,15 +58,26 @@ using NYT::FromProto;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-constexpr i64 MaxTracingTagLength = 1000;
+constexpr i64 MaxTracingTagLength = 1'000;
 static const TString DisabledSelectQueryTracingTag = "Tag is disabled, look for enable_select_query_tracing_tag parameter";
 
-TString SanitizeTracingTag(const TString& originalTag)
+std::string SanitizeTracingTag(TStringBuf originalTag)
 {
     if (originalTag.size() <= MaxTracingTagLength) {
-        return originalTag;
+        return std::string(originalTag);
     }
     return Format("%v ... TRUNCATED", originalTag.substr(0, MaxTracingTagLength));
+}
+
+void EnrichTracingForLookupRequest(NTracing::TTraceContext::TTagList& tagList, TStringBuf path, const auto& columns)
+{
+    if (NTracing::IsCurrentTraceContextRecorded()) {
+        tagList.emplace_back("yt.table_path", path);
+        std::string columnsTag = columns.empty()
+            ? "universal"
+            : SanitizeTracingTag(ConvertToYsonString(columns).ToString());
+        tagList.emplace_back("yt.column_filter", std::move(columnsTag));
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -131,10 +147,8 @@ TFuture<ITransactionPtr> TClientBase::StartTransaction(
     req->SetTimeout(config->RpcTimeout);
 
     req->set_type(static_cast<NProto::ETransactionType>(type));
-    req->set_timeout(ToProto<i64>(timeout));
-    if (options.Deadline) {
-        req->set_deadline(ToProto<ui64>(*options.Deadline));
-    }
+    req->set_timeout(ToProto(timeout));
+    YT_OPTIONAL_SET_PROTO(req, deadline, options.Deadline);
     if (options.Id) {
         ToProto(req->mutable_id(), options.Id);
     }
@@ -240,15 +254,13 @@ TFuture<TYsonString> TClientBase::GetNode(
 
     // COMPAT(max42): after 22.3 is everywhere, drop legacy field.
     if (options.Attributes) {
-        ToProto(req->mutable_legacy_attributes()->mutable_keys(), options.Attributes.Keys);
+        ToProto(req->mutable_legacy_attributes()->mutable_keys(), options.Attributes.Keys());
         ToProto(req->mutable_attributes(), options.Attributes);
     } else {
         req->mutable_legacy_attributes()->set_all(true);
     }
 
-    if (options.MaxSize) {
-        req->set_max_size(*options.MaxSize);
-    }
+    YT_OPTIONAL_SET_PROTO(req, max_size, options.MaxSize);
 
     ToProto(req->mutable_complexity_limits(), options.ComplexityLimits);
 
@@ -278,15 +290,13 @@ TFuture<TYsonString> TClientBase::ListNode(
 
     // COMPAT(max42): after 22.3 is everywhere, drop legacy field.
     if (options.Attributes) {
-        ToProto(req->mutable_legacy_attributes()->mutable_keys(), options.Attributes.Keys);
+        ToProto(req->mutable_legacy_attributes()->mutable_keys(), options.Attributes.Keys());
         ToProto(req->mutable_attributes(), options.Attributes);
     } else {
         req->mutable_legacy_attributes()->set_all(true);
     }
 
-    if (options.MaxSize) {
-        req->set_max_size(*options.MaxSize);
-    }
+    YT_OPTIONAL_SET_PROTO(req, max_size, options.MaxSize);
 
     ToProto(req->mutable_complexity_limits(), options.ComplexityLimits);
 
@@ -311,7 +321,7 @@ TFuture<NCypressClient::TNodeId> TClientBase::CreateNode(
     SetTimeoutOptions(*req, options);
 
     req->set_path(path);
-    req->set_type(ToProto<int>(type));
+    req->set_type(ToProto(type));
 
     if (options.Attributes) {
         ToProto(req->mutable_attributes(), *options.Attributes);
@@ -392,7 +402,7 @@ TFuture<void> TClientBase::MultisetAttributesNode(
     std::sort(children.begin(), children.end());
     for (const auto& [attribute, value] : children) {
         auto* protoSubrequest = req->add_subrequests();
-        protoSubrequest->set_attribute(ToProto<TProtobufString>(attribute));
+        protoSubrequest->set_attribute(ToProto(attribute));
         protoSubrequest->set_value(ConvertToYsonString(value).ToString());
     }
 
@@ -415,15 +425,11 @@ TFuture<TLockNodeResult> TClientBase::LockNode(
     SetTimeoutOptions(*req, options);
 
     req->set_path(path);
-    req->set_mode(ToProto<int>(mode));
+    req->set_mode(ToProto(mode));
 
     req->set_waitable(options.Waitable);
-    if (options.ChildKey) {
-        req->set_child_key(*options.ChildKey);
-    }
-    if (options.AttributeKey) {
-        req->set_attribute_key(*options.AttributeKey);
-    }
+    YT_OPTIONAL_TO_PROTO(req, child_key, options.ChildKey);
+    YT_OPTIONAL_TO_PROTO(req, attribute_key, options.AttributeKey);
 
     ToProto(req->mutable_transactional_options(), options);
     ToProto(req->mutable_prerequisite_options(), options);
@@ -482,6 +488,7 @@ TFuture<NCypressClient::TNodeId> TClientBase::CopyNode(
     req->set_preserve_acl(options.PreserveAcl);
     req->set_pessimistic_quota_check(options.PessimisticQuotaCheck);
     req->set_enable_cross_cell_copying(options.EnableCrossCellCopying);
+    req->set_allow_secondary_index_abandonment(options.AllowSecondaryIndexAbandonment);
 
     ToProto(req->mutable_transactional_options(), options);
     ToProto(req->mutable_prerequisite_options(), options);
@@ -513,8 +520,10 @@ TFuture<NCypressClient::TNodeId> TClientBase::MoveNode(
     req->set_preserve_expiration_time(options.PreserveExpirationTime);
     req->set_preserve_expiration_timeout(options.PreserveExpirationTimeout);
     req->set_preserve_owner(options.PreserveOwner);
+    req->set_preserve_acl(options.PreserveAcl);
     req->set_pessimistic_quota_check(options.PessimisticQuotaCheck);
     req->set_enable_cross_cell_copying(options.EnableCrossCellCopying);
+    req->set_allow_secondary_index_abandonment(options.AllowSecondaryIndexAbandonment);
 
     ToProto(req->mutable_transactional_options(), options);
     ToProto(req->mutable_prerequisite_options(), options);
@@ -583,7 +592,7 @@ TFuture<void> TClientBase::ExternalizeNode(
     SetTimeoutOptions(*req, options);
 
     ToProto(req->mutable_path(), path);
-    req->set_cell_tag(ToProto<int>(cellTag));
+    req->set_cell_tag(ToProto(cellTag));
     ToProto(req->mutable_transactional_options(), options);
 
     return req->Invoke().As<void>();
@@ -611,7 +620,7 @@ TFuture<NObjectClient::TObjectId> TClientBase::CreateObject(
     auto proxy = CreateApiServiceProxy();
     auto req = proxy.CreateObject();
 
-    req->set_type(ToProto<int>(type));
+    req->set_type(ToProto(type));
     req->set_ignore_existing(options.IgnoreExisting);
     req->set_sync(options.Sync);
     if (options.Attributes) {
@@ -634,12 +643,8 @@ TFuture<IFileReaderPtr> TClientBase::CreateFileReader(
     InitStreamingRequest(*req);
 
     req->set_path(path);
-    if (options.Offset) {
-        req->set_offset(*options.Offset);
-    }
-    if (options.Length) {
-        req->set_length(*options.Length);
-    }
+    YT_OPTIONAL_SET_PROTO(req, offset, options.Offset);
+    YT_OPTIONAL_SET_PROTO(req, length, options.Length);
     if (options.Config) {
         req->set_config(ConvertToYsonString(*options.Config).ToString());
     }
@@ -671,7 +676,7 @@ IFileWriterPtr TClientBase::CreateFileWriter(
     return NRpcProxy::CreateFileWriter(std::move(req));
 }
 
-/////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 IJournalReaderPtr TClientBase::CreateJournalReader(
     const TYPath& path,
@@ -683,12 +688,8 @@ IJournalReaderPtr TClientBase::CreateJournalReader(
 
     req->set_path(path);
 
-    if (options.FirstRowIndex) {
-        req->set_first_row_index(*options.FirstRowIndex);
-    }
-    if (options.RowCount) {
-        req->set_row_count(*options.RowCount);
-    }
+    YT_OPTIONAL_SET_PROTO(req, first_row_index, options.FirstRowIndex);
+    YT_OPTIONAL_SET_PROTO(req, row_count, options.RowCount);
     if (options.Config) {
         req->set_config(ConvertToYsonString(*options.Config).ToString());
     }
@@ -749,7 +750,7 @@ TFuture<ITableReaderPtr> TClientBase::CreateTableReader(
     ToProto(req->mutable_suppressable_access_tracking_options(), options);
 
     return NRpc::CreateRpcClientInputStream(std::move(req))
-        .Apply(BIND([=] (IAsyncZeroCopyInputStreamPtr inputStream) {
+        .ApplyUnique(BIND([] (IAsyncZeroCopyInputStreamPtr&& inputStream) {
             return NRpcProxy::CreateTableReader(std::move(inputStream));
         }));
 }
@@ -781,9 +782,48 @@ TFuture<ITableWriterPtr> TClientBase::CreateTableWriter(
 
             FromProto(schema.Get(), meta.schema());
         }))
-        .Apply(BIND([=] (IAsyncZeroCopyOutputStreamPtr outputStream) {
+        .ApplyUnique(BIND([=] (IAsyncZeroCopyOutputStreamPtr&& outputStream) {
             return NRpcProxy::CreateTableWriter(std::move(outputStream), std::move(schema));
         })).As<ITableWriterPtr>();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TFuture<TDistributedWriteSessionWithCookies> TClientBase::StartDistributedWriteSession(
+    const NYPath::TRichYPath& path,
+    const TDistributedWriteSessionStartOptions& options)
+{
+    using TRsp = TIntrusivePtr<NRpc::TTypedClientResponse<NProto::TRspStartDistributedWriteSession>>;
+
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.StartDistributedWriteSession();
+    FillRequest(req.Get(), path, options);
+
+    return req->Invoke()
+        .ApplyUnique(BIND([] (TRsp&& result) -> TDistributedWriteSessionWithCookies {
+            std::vector<TSignedWriteFragmentCookiePtr> cookies;
+            cookies.reserve(result->signed_cookies().size());
+            for (const auto& cookie : result->signed_cookies()) {
+                cookies.push_back(ConvertTo<TSignedWriteFragmentCookiePtr>(TYsonString(cookie)));
+            }
+            TDistributedWriteSessionWithCookies sessionWithCookies;
+            sessionWithCookies.Session = ConvertTo<TSignedDistributedWriteSessionPtr>(TYsonString(result->signed_session())),
+            sessionWithCookies.Cookies = std::move(cookies);
+            return std::move(sessionWithCookies);
+        }));
+}
+
+TFuture<void> TClientBase::FinishDistributedWriteSession(
+    const TDistributedWriteSessionWithResults& sessionWithResults,
+    const TDistributedWriteSessionFinishOptions& options)
+{
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.FinishDistributedWriteSession();
+
+    FillRequest(req.Get(), sessionWithResults, options);
+    return req->Invoke().AsVoid();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -801,29 +841,27 @@ TFuture<TUnversionedLookupRowsResult> TClientBase::LookupRows(
     req->SetTimeout(options.Timeout.value_or(GetRpcProxyConnection()->GetConfig()->DefaultLookupRowsTimeout));
 
     req->set_path(path);
-    if (NTracing::IsCurrentTraceContextRecorded()) {
-        req->TracingTags().emplace_back("yt.table_path", path);
-    }
     req->Attachments() = SerializeRowset(nameTable, keys, req->mutable_rowset_descriptor());
 
     if (!options.ColumnFilter.IsUniversal()) {
         for (auto id : options.ColumnFilter.GetIndexes()) {
-            req->add_columns(TString(nameTable->GetName(id)));
+            auto columnName = nameTable->GetName(id);
+            req->add_columns(TString(columnName));
         }
     }
+    EnrichTracingForLookupRequest(req->TracingTags(), path, req->columns());
     req->set_timestamp(options.Timestamp);
     req->set_retention_timestamp(options.RetentionTimestamp);
     req->set_keep_missing_rows(options.KeepMissingRows);
     req->set_enable_partial_result(options.EnablePartialResult);
     req->set_replica_consistency(static_cast<NProto::EReplicaConsistency>(options.ReplicaConsistency));
-    if (options.UseLookupCache) {
-        req->set_use_lookup_cache(*options.UseLookupCache);
-    }
+    YT_OPTIONAL_SET_PROTO(req, use_lookup_cache, options.UseLookupCache);
 
     req->SetMultiplexingBand(options.MultiplexingBand);
     req->set_multiplexing_band(static_cast<NProto::EMultiplexingBand>(options.MultiplexingBand));
 
     ToProto(req->mutable_tablet_read_options(), options);
+    ToProto(req->mutable_versioned_read_options(), options.VersionedReadOptions);
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspLookupRowsPtr& rsp) {
         auto rowset = DeserializeRowset<TUnversionedRow>(
@@ -848,9 +886,6 @@ TFuture<TVersionedLookupRowsResult> TClientBase::VersionedLookupRows(
     req->SetTimeout(options.Timeout.value_or(GetRpcProxyConnection()->GetConfig()->DefaultLookupRowsTimeout));
 
     req->set_path(path);
-    if (NTracing::IsCurrentTraceContextRecorded()) {
-        req->TracingTags().emplace_back("yt.table_path", path);
-    }
     req->Attachments() = SerializeRowset(nameTable, keys, req->mutable_rowset_descriptor());
 
     if (!options.ColumnFilter.IsUniversal()) {
@@ -858,18 +893,21 @@ TFuture<TVersionedLookupRowsResult> TClientBase::VersionedLookupRows(
             req->add_columns(TString(nameTable->GetName(id)));
         }
     }
+    EnrichTracingForLookupRequest(req->TracingTags(), path, req->columns());
     req->set_timestamp(options.Timestamp);
     req->set_keep_missing_rows(options.KeepMissingRows);
     req->set_enable_partial_result(options.EnablePartialResult);
     req->set_replica_consistency(static_cast<NProto::EReplicaConsistency>(options.ReplicaConsistency));
-    if (options.UseLookupCache) {
-        req->set_use_lookup_cache(*options.UseLookupCache);
-    }
+    YT_OPTIONAL_SET_PROTO(req, use_lookup_cache, options.UseLookupCache);
 
     req->SetMultiplexingBand(options.MultiplexingBand);
     req->set_multiplexing_band(static_cast<NProto::EMultiplexingBand>(options.MultiplexingBand));
     if (options.RetentionConfig) {
         ToProto(req->mutable_retention_config(), *options.RetentionConfig);
+    }
+    if (options.VersionedReadOptions.ReadMode != NTableClient::EVersionedIOMode::Default) {
+        THROW_ERROR_EXCEPTION("Versioned lookup does not support versioned read mode %Qlv",
+            options.VersionedReadOptions.ReadMode);
     }
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspVersionedLookupRowsPtr& rsp) {
@@ -907,25 +945,34 @@ TFuture<std::vector<TUnversionedLookupRowsResult>> TClientBase::MultiLookupRows(
         }
         protoSubrequest->set_keep_missing_rows(subrequestOptions.KeepMissingRows);
         protoSubrequest->set_enable_partial_result(subrequestOptions.EnablePartialResult);
-        if (subrequestOptions.UseLookupCache) {
-            protoSubrequest->set_use_lookup_cache(*subrequestOptions.UseLookupCache);
-        }
+        YT_OPTIONAL_SET_PROTO(protoSubrequest, use_lookup_cache, subrequestOptions.UseLookupCache);
 
         auto rowset = SerializeRowset(
             subrequest.NameTable,
             subrequest.Keys,
             protoSubrequest->mutable_rowset_descriptor());
         protoSubrequest->set_attachment_count(rowset.size());
+        ToProto(protoSubrequest->mutable_versioned_read_options(), subrequest.Options.VersionedReadOptions);
         req->Attachments().insert(req->Attachments().end(), rowset.begin(), rowset.end());
     }
 
     if (NTracing::IsCurrentTraceContextRecorded()) {
-        std::vector<TString> paths;
+        std::vector<std::string> paths;
         paths.reserve(subrequests.size());
-        for (const auto& subrequest : subrequests) {
+
+        std::vector<std::string> columnFilterTags;
+        int columnFiltersTagLength = 0;
+        for (const auto& [subrequest, protoSubrequest] : Zip(subrequests, req->subrequests())) {
             paths.emplace_back(subrequest.Path);
+            if (columnFiltersTagLength <= MaxTracingTagLength) {
+                std::string columnsTag = subrequest.Options.ColumnFilter.IsUniversal()
+                    ? "universal"
+                    : SanitizeTracingTag(NYson::ConvertToYsonString(protoSubrequest.columns()).ToString());
+                columnFiltersTagLength += columnFilterTags.emplace_back(std::move(columnsTag)).size();
+            }
         }
         req->TracingTags().emplace_back("yt.table_paths", SanitizeTracingTag(NYson::ConvertToYsonString(paths).ToString()));
+        req->TracingTags().emplace_back("yt.column_filters", SanitizeTracingTag(NYson::ConvertToYsonString(columnFilterTags).ToString()));
     }
 
     req->set_replica_consistency(static_cast<NProto::EReplicaConsistency>(options.ReplicaConsistency));
@@ -980,13 +1027,14 @@ void FillRequestBySelectRowsOptionsBase(
 }
 
 TFuture<TSelectRowsResult> TClientBase::SelectRows(
-    const TString& query,
+    const std::string& query,
     const TSelectRowsOptions& options)
 {
     auto proxy = CreateApiServiceProxy();
 
     auto req = proxy.SelectRows();
     req->SetResponseHeavy(true);
+    req->SetMultiplexingBand(NRpc::EMultiplexingBand::Interactive);
     req->set_query(query);
 
     const auto& config = GetRpcProxyConnection()->GetConfig();
@@ -1005,29 +1053,22 @@ TFuture<TSelectRowsResult> TClientBase::SelectRows(
     // TODO(lukyan): Move to FillRequestBySelectRowsOptionsBase
     req->SetTimeout(options.Timeout.value_or(config->DefaultSelectRowsTimeout));
 
-    if (options.InputRowLimit) {
-        req->set_input_row_limit(*options.InputRowLimit);
-    }
-    if (options.OutputRowLimit) {
-        req->set_output_row_limit(*options.OutputRowLimit);
-    }
+    YT_OPTIONAL_SET_PROTO(req, input_row_limit, options.InputRowLimit);
+    YT_OPTIONAL_SET_PROTO(req, output_row_limit, options.OutputRowLimit);
     req->set_range_expansion_limit(options.RangeExpansionLimit);
     req->set_max_subqueries(options.MaxSubqueries);
+    req->set_min_row_count_per_subquery(options.MinRowCountPerSubquery);
     req->set_allow_full_scan(options.AllowFullScan);
     req->set_allow_join_without_index(options.AllowJoinWithoutIndex);
 
-    if (options.ExecutionPool) {
-        req->set_execution_pool(*options.ExecutionPool);
-    }
+    YT_OPTIONAL_TO_PROTO(req, execution_pool, options.ExecutionPool);
     if (options.PlaceholderValues) {
         req->set_placeholder_values(options.PlaceholderValues.ToString());
     }
     req->set_fail_on_incomplete_result(options.FailOnIncompleteResult);
     req->set_verbose_logging(options.VerboseLogging);
     req->set_new_range_inference(options.NewRangeInference);
-    if (options.ExecutionBackend) {
-        req->set_execution_backend(static_cast<int>(*options.ExecutionBackend));
-    }
+    YT_OPTIONAL_SET_PROTO(req, execution_backend, options.ExecutionBackend);
     req->set_enable_code_cache(options.EnableCodeCache);
     req->set_memory_limit_per_node(options.MemoryLimitPerNode);
     ToProto(req->mutable_suppressable_access_tracking_options(), options);
@@ -1035,6 +1076,8 @@ TFuture<TSelectRowsResult> TClientBase::SelectRows(
     req->set_use_canonical_null_relations(options.UseCanonicalNullRelations);
     req->set_merge_versioned_rows(options.MergeVersionedRows);
     ToProto(req->mutable_versioned_read_options(), options.VersionedReadOptions);
+    YT_OPTIONAL_SET_PROTO(req, use_lookup_cache, options.UseLookupCache);
+    req->set_expression_builder_version(options.ExpressionBuilderVersion);
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspSelectRowsPtr& rsp) {
         TSelectRowsResult result;
@@ -1047,7 +1090,7 @@ TFuture<TSelectRowsResult> TClientBase::SelectRows(
 }
 
 TFuture<TYsonString> TClientBase::ExplainQuery(
-    const TString& query,
+    const std::string& query,
     const TExplainQueryOptions& options)
 {
     auto proxy = CreateApiServiceProxy();

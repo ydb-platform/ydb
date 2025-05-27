@@ -42,28 +42,28 @@ TEST(TJobCountersTest, Full)
 
     TJobCounters counters(NodeFromYsonString(input));
 
-    EXPECT_EQ(counters.GetTotal(), 105u);
+    EXPECT_EQ(counters.GetTotal(), 105);
 
-    EXPECT_EQ(counters.GetCompleted().GetTotal(), 6u);
-    EXPECT_EQ(counters.GetCompletedNonInterrupted().GetTotal(), 1u);
-    EXPECT_EQ(counters.GetCompletedInterrupted().GetTotal(), 5u);
-    EXPECT_EQ(counters.GetAborted().GetTotal(), 22u);
-    EXPECT_EQ(counters.GetAbortedNonScheduled().GetTotal(), 9u);
-    EXPECT_EQ(counters.GetAbortedScheduled().GetTotal(), 13u);
-    EXPECT_EQ(counters.GetLost().GetTotal(), 8u);
-    EXPECT_EQ(counters.GetInvalidated().GetTotal(), 9u);
-    EXPECT_EQ(counters.GetFailed().GetTotal(), 10u);
-    EXPECT_EQ(counters.GetRunning().GetTotal(), 11u);
-    EXPECT_EQ(counters.GetSuspended().GetTotal(), 12u);
-    EXPECT_EQ(counters.GetPending().GetTotal(), 13u);
-    EXPECT_EQ(counters.GetBlocked().GetTotal(), 14u);
+    EXPECT_EQ(counters.GetCompleted().GetTotal(), 6);
+    EXPECT_EQ(counters.GetCompletedNonInterrupted().GetTotal(), 1);
+    EXPECT_EQ(counters.GetCompletedInterrupted().GetTotal(), 5);
+    EXPECT_EQ(counters.GetAborted().GetTotal(), 22);
+    EXPECT_EQ(counters.GetAbortedNonScheduled().GetTotal(), 9);
+    EXPECT_EQ(counters.GetAbortedScheduled().GetTotal(), 13);
+    EXPECT_EQ(counters.GetLost().GetTotal(), 8);
+    EXPECT_EQ(counters.GetInvalidated().GetTotal(), 9);
+    EXPECT_EQ(counters.GetFailed().GetTotal(), 10);
+    EXPECT_EQ(counters.GetRunning().GetTotal(), 11);
+    EXPECT_EQ(counters.GetSuspended().GetTotal(), 12);
+    EXPECT_EQ(counters.GetPending().GetTotal(), 13);
+    EXPECT_EQ(counters.GetBlocked().GetTotal(), 14);
 
-    EXPECT_EQ(counters.GetCompletedInterrupted().GetValue("whatever_interrupted"), 2u);
-    EXPECT_EQ(counters.GetCompletedInterrupted().GetValue("whatever_else_interrupted"), 3u);
-    EXPECT_EQ(counters.GetAbortedNonScheduled().GetValue("whatever_non_scheduled"), 4u);
-    EXPECT_EQ(counters.GetAbortedNonScheduled().GetValue("whatever_else_non_scheduled"), 5u);
-    EXPECT_EQ(counters.GetAbortedScheduled().GetValue("whatever_scheduled"), 6u);
-    EXPECT_EQ(counters.GetAbortedScheduled().GetValue("whatever_else_scheduled"), 7u);
+    EXPECT_EQ(counters.GetCompletedInterrupted().GetValue("whatever_interrupted"), 2);
+    EXPECT_EQ(counters.GetCompletedInterrupted().GetValue("whatever_else_interrupted"), 3);
+    EXPECT_EQ(counters.GetAbortedNonScheduled().GetValue("whatever_non_scheduled"), 4);
+    EXPECT_EQ(counters.GetAbortedNonScheduled().GetValue("whatever_else_non_scheduled"), 5);
+    EXPECT_EQ(counters.GetAbortedScheduled().GetValue("whatever_scheduled"), 6);
+    EXPECT_EQ(counters.GetAbortedScheduled().GetValue("whatever_else_scheduled"), 7);
 
     EXPECT_THROW(counters.GetCompletedInterrupted().GetValue("Nothingness"), yexception);
 }
@@ -74,21 +74,21 @@ TEST(TJobCountersTest, Empty)
 
     TJobCounters counters(NodeFromYsonString(input));
 
-    EXPECT_EQ(counters.GetTotal(), 0u);
+    EXPECT_EQ(counters.GetTotal(), 0);
 
-    EXPECT_EQ(counters.GetCompleted().GetTotal(), 0u);
-    EXPECT_EQ(counters.GetCompletedNonInterrupted().GetTotal(), 0u);
-    EXPECT_EQ(counters.GetCompletedInterrupted().GetTotal(), 0u);
-    EXPECT_EQ(counters.GetAborted().GetTotal(), 0u);
-    EXPECT_EQ(counters.GetAbortedNonScheduled().GetTotal(), 0u);
-    EXPECT_EQ(counters.GetAbortedScheduled().GetTotal(), 0u);
-    EXPECT_EQ(counters.GetLost().GetTotal(), 0u);
-    EXPECT_EQ(counters.GetInvalidated().GetTotal(), 0u);
-    EXPECT_EQ(counters.GetFailed().GetTotal(), 0u);
-    EXPECT_EQ(counters.GetRunning().GetTotal(), 0u);
-    EXPECT_EQ(counters.GetSuspended().GetTotal(), 0u);
-    EXPECT_EQ(counters.GetPending().GetTotal(), 0u);
-    EXPECT_EQ(counters.GetBlocked().GetTotal(), 0u);
+    EXPECT_EQ(counters.GetCompleted().GetTotal(), 0);
+    EXPECT_EQ(counters.GetCompletedNonInterrupted().GetTotal(), 0);
+    EXPECT_EQ(counters.GetCompletedInterrupted().GetTotal(), 0);
+    EXPECT_EQ(counters.GetAborted().GetTotal(), 0);
+    EXPECT_EQ(counters.GetAbortedNonScheduled().GetTotal(), 0);
+    EXPECT_EQ(counters.GetAbortedScheduled().GetTotal(), 0);
+    EXPECT_EQ(counters.GetLost().GetTotal(), 0);
+    EXPECT_EQ(counters.GetInvalidated().GetTotal(), 0);
+    EXPECT_EQ(counters.GetFailed().GetTotal(), 0);
+    EXPECT_EQ(counters.GetRunning().GetTotal(), 0);
+    EXPECT_EQ(counters.GetSuspended().GetTotal(), 0);
+    EXPECT_EQ(counters.GetPending().GetTotal(), 0);
+    EXPECT_EQ(counters.GetBlocked().GetTotal(), 0);
 }
 
 TEST(TJobCountersTest, Broken)

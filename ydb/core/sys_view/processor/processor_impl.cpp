@@ -186,12 +186,16 @@ void TSysViewProcessor::PersistPartitionResults(NIceDb::TNiceDb& db) {
     auto intervalEnd = IntervalEnd + TotalInterval;
 
     PersistPartitionTopResults<Schema::TopPartitionsOneMinute>(
-        db, PartitionTopMinute, TopPartitionsOneMinute, intervalEnd);
+        db, PartitionTopByCpuMinute, TopPartitionsByCpuOneMinute, intervalEnd);
+    PersistPartitionTopResults<Schema::TopPartitionsByTliOneMinute>(
+        db, PartitionTopByTliMinute, TopPartitionsByTliOneMinute, intervalEnd);
 
     auto hourEnd = EndOfHourInterval(intervalEnd);
 
     PersistPartitionTopResults<Schema::TopPartitionsOneHour>(
-        db, PartitionTopHour, TopPartitionsOneHour, hourEnd);
+        db, PartitionTopByCpuHour, TopPartitionsByCpuOneHour, hourEnd);
+    PersistPartitionTopResults<Schema::TopPartitionsByTliOneHour>(
+        db, PartitionTopByTliHour, TopPartitionsByTliOneHour, hourEnd);
 }
 
 void TSysViewProcessor::ScheduleAggregate() {
@@ -283,7 +287,10 @@ void TSysViewProcessor::Reset(NIceDb::TNiceDb& db, const TActorContext& ctx) {
 
     auto clearPartitionTop = [&] (NKikimrSysView::EStatsType type, TPartitionTop& top) {
         for (const auto& partition : top) {
-            db.Table<Schema::IntervalPartitionTops>().Key((ui32)type, partition->GetTabletId()).Delete();
+            if (partition->GetFollowerId() == 0)
+                db.Table<Schema::IntervalPartitionTops>().Key((ui32)type, partition->GetTabletId()).Delete();
+            else
+                db.Table<Schema::IntervalPartitionFollowerTops>().Key((ui32)type, partition->GetTabletId(), partition->GetFollowerId()).Delete();
         }
         top.clear();
     };
@@ -293,7 +300,8 @@ void TSysViewProcessor::Reset(NIceDb::TNiceDb& db, const TActorContext& ctx) {
     clearQueryTop(NKikimrSysView::TOP_CPU_TIME_ONE_MINUTE, ByCpuTimeMinute);
     clearQueryTop(NKikimrSysView::TOP_REQUEST_UNITS_ONE_MINUTE, ByRequestUnitsMinute);
 
-    clearPartitionTop(NKikimrSysView::TOP_PARTITIONS_ONE_MINUTE, PartitionTopMinute);
+    clearPartitionTop(NKikimrSysView::TOP_PARTITIONS_BY_CPU_ONE_MINUTE, PartitionTopByCpuMinute);
+    clearPartitionTop(NKikimrSysView::TOP_PARTITIONS_BY_TLI_ONE_MINUTE, PartitionTopByTliMinute);
 
     CurrentStage = COLLECT;
     PersistStage(db);
@@ -318,7 +326,8 @@ void TSysViewProcessor::Reset(NIceDb::TNiceDb& db, const TActorContext& ctx) {
     }
 
     if (partitionOldHourEnd != partitionNewHourEnd) {
-        clearPartitionTop(NKikimrSysView::TOP_PARTITIONS_ONE_HOUR, PartitionTopHour);
+        clearPartitionTop(NKikimrSysView::TOP_PARTITIONS_BY_CPU_ONE_HOUR, PartitionTopByCpuHour);
+        clearPartitionTop(NKikimrSysView::TOP_PARTITIONS_BY_TLI_ONE_HOUR, PartitionTopByTliHour);
     }
 
     SVLOG_D("[" << TabletID() << "] Reset: interval end# " << IntervalEnd);
@@ -338,8 +347,10 @@ void TSysViewProcessor::Reset(NIceDb::TNiceDb& db, const TActorContext& ctx) {
     CutHistory<Schema::TopByRequestUnitsOneMinute>(db, TopByRequestUnitsOneMinute, minuteHistorySize);
     CutHistory<Schema::TopByRequestUnitsOneHour>(db, TopByRequestUnitsOneHour, hourHistorySize);
 
-    CutHistory<Schema::TopPartitionsOneMinute>(db, TopPartitionsOneMinute, minuteHistorySize);
-    CutHistory<Schema::TopPartitionsOneHour>(db, TopPartitionsOneHour, hourHistorySize);
+    CutHistory<Schema::TopPartitionsOneMinute>(db, TopPartitionsByCpuOneMinute, minuteHistorySize);
+    CutHistory<Schema::TopPartitionsOneHour>(db, TopPartitionsByCpuOneHour, hourHistorySize);
+    CutHistory<Schema::TopPartitionsByTliOneMinute>(db, TopPartitionsByTliOneMinute, minuteHistorySize);
+    CutHistory<Schema::TopPartitionsByTliOneHour>(db, TopPartitionsByTliOneHour, hourHistorySize);
 }
 
 void TSysViewProcessor::SendRequests() {
@@ -503,11 +514,17 @@ void TSysViewProcessor::Reply(typename TRequest::TPtr& ev) {
     TMap* entries = nullptr;
     if constexpr (std::is_same<TEntry, NKikimrSysView::TTopPartitionsInfo>::value) {
         switch (record.GetType()) {
-            case NKikimrSysView::TOP_PARTITIONS_ONE_MINUTE:
-                entries = &TopPartitionsOneMinute;
+            case NKikimrSysView::TOP_PARTITIONS_BY_CPU_ONE_MINUTE:
+                entries = &TopPartitionsByCpuOneMinute;
                 break;
-            case NKikimrSysView::TOP_PARTITIONS_ONE_HOUR:
-                entries = &TopPartitionsOneHour;
+            case NKikimrSysView::TOP_PARTITIONS_BY_CPU_ONE_HOUR:
+                entries = &TopPartitionsByCpuOneHour;
+                break;
+            case NKikimrSysView::TOP_PARTITIONS_BY_TLI_ONE_MINUTE:
+                entries = &TopPartitionsByTliOneMinute;
+                break;
+            case NKikimrSysView::TOP_PARTITIONS_BY_TLI_ONE_HOUR:
+                entries = &TopPartitionsByTliOneHour;
                 break;
             default:
                 SVLOG_CRIT("[" << TabletID() << "] unexpected stats type: " << (size_t)record.GetType());
@@ -764,10 +781,14 @@ bool TSysViewProcessor::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev,
                     << "  Count: " << TopByRequestUnitsOneMinute.size() << Endl << Endl;
                 str << "TopByRequestUnitsOneHour" << Endl
                     << "  Count: " << TopByRequestUnitsOneHour.size() << Endl << Endl;
-                str << "TopPartitionsOneMinute" << Endl
-                    << "  Count: " << TopPartitionsOneMinute.size() << Endl << Endl;
-                str << "TopPartitionsOneHour" << Endl
-                    << "  Count: " << TopPartitionsOneHour.size() << Endl << Endl;
+                str << "TopPartitionsByCpuOneMinute" << Endl
+                    << "  Count: " << TopPartitionsByCpuOneMinute.size() << Endl << Endl;
+                str << "TopPartitionsByCpuOneHour" << Endl
+                    << "  Count: " << TopPartitionsByCpuOneHour.size() << Endl << Endl;
+                str << "TopPartitionsByTliOneMinute" << Endl
+                    << "  Count: " << TopPartitionsByTliOneMinute.size() << Endl << Endl;
+                str << "TopPartitionsByTliOneHour" << Endl
+                    << "  Count: " << TopPartitionsByTliOneHour.size() << Endl << Endl;
             }
         }
     }

@@ -15,6 +15,7 @@ inline bool Overlaps(const TNodeSet& lhs, const TNodeSet& rhs) {
     return (lhs & rhs) != 0;
 }
 
+/* checks if lhs subset of rhs */
 template <typename TNodeSet>
 inline bool IsSubset(const TNodeSet& lhs, const TNodeSet& rhs) {
     return (lhs & rhs) == lhs;
@@ -35,6 +36,12 @@ inline size_t GetLowestSetBit(TNodeSet nodeSet) {
 
     Y_ASSERT(false);
     return nodeSet.size();
+}
+
+template <>
+inline size_t GetLowestSetBit<std::bitset<64>>(std::bitset<64> nodeSet) {
+    Y_ASSERT(nodeSet.any());
+    return std::countr_zero(nodeSet.to_ullong());
 }
 
 /* Iterates the indecies of the set bits in the TNodeSet. */

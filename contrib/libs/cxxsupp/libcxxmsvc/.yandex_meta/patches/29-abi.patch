@@ -1,0 +1,15 @@
+diff --git a/include/cstddef b/include/cstddef
+index 57cecc7..5dce7c0 100644
+--- a/include/cstddef
++++ b/include/cstddef
+@@ -41,6 +41,10 @@ Types:
+ #  pragma GCC system_header
+ #endif
+ 
++#ifdef _LIBCPP_ABI_VCRUNTIME
++typedef double max_align_t;
++#endif
++
+ _LIBCPP_BEGIN_NAMESPACE_STD
+ 
+ using ::nullptr_t;

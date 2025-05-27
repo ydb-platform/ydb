@@ -1,43 +1,18 @@
 #pragma once
 
-#include "schemeshard.h"
 #include "schemeshard_types.h"
 #include "schemeshard_info_types.h"
 
-#include <ydb/core/tablet/tablet_counters.h>
-#include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/base/table_index.h>
-#include <ydb/core/protos/table_stats.pb.h>
 
-#include <ydb/public/lib/scheme_types/scheme_type_id.h>
-
-#include <ydb/library/yql/minikql/mkql_type_ops.h>
-
-#include <ydb/library/actors/core/actorid.h>
+#include <yql/essentials/minikql/mkql_type_ops.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
-#include <util/generic/intrlist.h>
+
 
 namespace NKikimr {
 namespace NSchemeShard {
-
-inline constexpr TStringBuf SYSTEM_COLUMN_PREFIX = "__ydb_";
-
-inline bool IsAllowedKeyType(NScheme::TTypeInfo typeInfo) {
-    switch (typeInfo.GetTypeId()) {
-        case NScheme::NTypeIds::Json:
-        case NScheme::NTypeIds::Yson:
-        case NScheme::NTypeIds::Float:
-        case NScheme::NTypeIds::Double:
-        case NScheme::NTypeIds::JsonDocument:
-            return false;
-        case NScheme::NTypeIds::Pg:
-            return NPg::TypeDescIsComparable(typeInfo.GetTypeDesc());
-        default:
-            return true;
-    }
-}
 
 inline bool IsValidColumnName(const TString& name, bool allowSystemColumnNames = false) {
     if (!allowSystemColumnNames && name.StartsWith(SYSTEM_COLUMN_PREFIX)) {
@@ -60,76 +35,6 @@ inline NKikimrSchemeOp::TModifyScheme TransactionTemplate(const TString& working
 
     return tx;
 }
-
-TSerializedCellVec ChooseSplitKeyByHistogram(const NKikimrTableStats::THistogram& histogram, ui64 total,
-                                  const TConstArrayRef<NScheme::TTypeInfo>& keyColumnTypes);
-
-class TShardDeleter {
-    struct TPerHiveDeletions {
-        TActorId PipeToHive;
-        THashSet<TShardIdx> ShardsToDelete;
-    };
-
-    ui64 MyTabletID;
-    // Hive TabletID -> non-acked deletions
-    THashMap<TTabletId, TPerHiveDeletions> PerHiveDeletions;
-    // Tablet -> Hive TabletID
-    THashMap<TShardIdx, TTabletId> ShardHive;
-    NTabletPipe::TClientRetryPolicy HivePipeRetryPolicy;
-
-public:
-    explicit TShardDeleter(ui64 myTabletId)
-        : MyTabletID(myTabletId)
-        , HivePipeRetryPolicy({})
-    {}
-
-    TShardDeleter(const TShardDeleter&) = delete;
-    TShardDeleter& operator=(const TShardDeleter&) = delete;
-
-    void Shutdown(const TActorContext& ctx);
-    void SendDeleteRequests(TTabletId hiveTabletId, const THashSet<TShardIdx>& shardsToDelete,
-                            const THashMap<TShardIdx, TShardInfo>& shardsInfos, const TActorContext& ctx);
-    void ResendDeleteRequests(TTabletId hiveTabletId,
-                              const THashMap<TShardIdx, TShardInfo>& shardsInfos, const TActorContext& ctx);
-    void ResendDeleteRequest(TTabletId hiveTabletId,
-                             const THashMap<TShardIdx, TShardInfo>& shardsInfos, TShardIdx shardIdx, const TActorContext& ctx);
-    void RedirectDeleteRequest(TTabletId hiveFromTabletId, TTabletId hiveToTabletId, TShardIdx shardIdx,
-                               const THashMap<TShardIdx, TShardInfo>& shardsInfos, const TActorContext& ctx);
-    void ShardDeleted(TShardIdx shardIdx, const TActorContext& ctx);
-    bool Has(TTabletId hiveTabletId, TActorId pipeClientActorId) const;
-    bool Has(TShardIdx shardIdx) const;
-    bool Empty() const;
-};
-
-// Self ping stuff
-class TSelfPinger {
-private:
-    static constexpr TDuration SELF_PING_INTERVAL = TDuration::MilliSeconds(1000);
-
-public:
-    TSelfPinger(TTabletId id, TTabletCountersBase* counters)
-        : TabletId(id)
-        , TabletCounters(counters)
-        , SelfPingInFlight(false)
-        , SelfPingWakeupScheduled(false)
-    {}
-
-    void Handle(TEvSchemeShard::TEvMeasureSelfResponseTime::TPtr &ev, const TActorContext &ctx);
-    void Handle(TEvSchemeShard::TEvWakeupToMeasureSelfResponseTime::TPtr &ev, const TActorContext &ctx);
-    void OnAnyEvent(const TActorContext &ctx);
-    void DoSelfPing(const TActorContext &ctx);
-    void ScheduleSelfPingWakeup(const TActorContext &ctx);
-
-private:
-    const TTabletId TabletId;
-    TTabletCountersBase * const TabletCounters;
-
-    TDuration LastResponseTime;
-    TInstant SelfPingSentTime;
-    bool SelfPingInFlight;
-    TInstant SelfPingWakeupScheduledTime;
-    bool SelfPingWakeupScheduled;
-};
 
 class PQGroupReserve {
 public:
@@ -160,20 +65,40 @@ NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreeLevelImplTableDesc(
 NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreePostingImplTableDesc(
     const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
-    const TTableColumns& implTableColumns,
+    const THashSet<TString>& indexDataColumns,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc,
     std::string_view suffix = {});
 
 NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreePostingImplTableDesc(
     const NKikimrSchemeOp::TTableDescription& baseTableDescr,
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
-    const TTableColumns& implTableColumns,
+    const THashSet<TString>& indexDataColumns,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc,
     std::string_view suffix = {});
+
+NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreePrefixImplTableDesc(
+    const THashSet<TString>& indexKeyColumns,
+    const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
+    const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
+    const TTableColumns& implTableColumns,
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc);
+
+NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreePrefixImplTableDesc(
+    const THashSet<TString>& indexKeyColumns,
+    const NKikimrSchemeOp::TTableDescription& baseTableDescr,
+    const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
+    const TTableColumns& implTableColumns,
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc);
 
 TTableColumns ExtractInfo(const NSchemeShard::TTableInfo::TPtr& tableInfo);
 TTableColumns ExtractInfo(const NKikimrSchemeOp::TTableDescription& tableDesc);
 TIndexColumns ExtractInfo(const NKikimrSchemeOp::TIndexCreationConfig& indexDesc);
+
+void FillIndexTableColumns(
+    const TMap<ui32, NSchemeShard::TTableInfo::TColumn>& baseTableColumns,
+    std::span<const TString> keys,
+    const THashSet<TString>& columns,
+    NKikimrSchemeOp::TTableDescription& implTableDesc);
 
 using TColumnTypes = THashMap<TString, NScheme::TTypeInfo>;
 
@@ -221,15 +146,20 @@ bool CommonCheck(const TTableDesc& tableDesc, const NKikimrSchemeOp::TIndexCreat
 
     if (indexDesc.GetType() == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
         //We have already checked this in IsCompatibleIndex
-        Y_ABORT_UNLESS(indexKeys.KeyColumns.size() == 1);
+        Y_ABORT_UNLESS(indexKeys.KeyColumns.size() >= 1);
 
-        const TString& indexColumnName = indexKeys.KeyColumns[0];
+        if (indexKeys.KeyColumns.size() > 1 && !IsCompatibleKeyTypes(baseColumnTypes, implTableColumns, uniformTable, error)) {
+            status = NKikimrScheme::EStatus::StatusInvalidParameter;
+            return false;
+        }
+
+        const TString& indexColumnName = indexKeys.KeyColumns.back();
         Y_ABORT_UNLESS(baseColumnTypes.contains(indexColumnName));
         auto typeInfo = baseColumnTypes.at(indexColumnName);
 
         if (typeInfo.GetTypeId() != NScheme::NTypeIds::String) {
             status = NKikimrScheme::EStatus::StatusInvalidParameter;
-            error = TStringBuilder() << "Index column '" << indexColumnName << "' expected type 'String' but got " << NScheme::TypeName(typeInfo); 
+            error = TStringBuilder() << "Index column '" << indexColumnName << "' expected type 'String' but got " << NScheme::TypeName(typeInfo);
             return false;
         }
     } else if (!IsCompatibleKeyTypes(baseColumnTypes, implTableColumns, uniformTable, error)) {

@@ -13,8 +13,8 @@ PEERDIR(
     ydb/core/formats/arrow/serializer
     ydb/core/kqp/ut/common
     ydb/library/yql/providers/common/db_id_async_resolver
-    ydb/library/yql/providers/common/structured_token
-    ydb/library/yql/providers/generic/connector/api/common
+    yql/essentials/providers/common/structured_token
+    yql/essentials/providers/common/proto
     ydb/library/yql/providers/generic/connector/libcpp
 )
 

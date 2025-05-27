@@ -2,6 +2,9 @@
 #include <ydb/core/tx/data_events/payload_helper.h>
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 #include <ydb/core/base/tablet_pipecache.h>
+#include <ydb/core/testlib/actors/block_events.h>
+#include <ydb/core/protos/query_stats.pb.h>
+#include <ydb/core/tx/long_tx_service/public/lock_handle.h>
 #include "datashard_ut_common_kqp.h"
 
 namespace NKikimr {
@@ -12,6 +15,10 @@ using namespace NSchemeShard;
 using namespace Tests;
 
 Y_UNIT_TEST_SUITE(DataShardWrite) {
+
+    constexpr i32 operator""_i32(unsigned long long val) { return static_cast<i32>(val); }
+    constexpr ui32 operator""_ui32(unsigned long long val) { return static_cast<ui32>(val); }
+
     const TString expectedTableState = "key = 0, value = 1\nkey = 2, value = 3\nkey = 4, value = 5\n";
 
     std::tuple<TTestActorRuntime&, Tests::TServer::TPtr, TActorId> TestCreateServer(std::optional<TServerSettings> serverSettings = {}) {
@@ -33,13 +40,19 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
     }
 
     Y_UNIT_TEST_TWIN(ExecSQLUpsertImmediate, EvWrite) {
-        auto [runtime, server, sender] = TestCreateServer();
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableOltpSink(EvWrite);
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings
+            .SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetAppConfig(app);
+
+        auto [runtime, server, sender] = TestCreateServer(serverSettings);
 
         TShardedTableOptions opts;
         auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
-
-        auto rows = EvWrite ? TEvWriteRows{{{0, 1}}, {{2, 3}}, {{4, 5}}} : TEvWriteRows{};
-        auto evWriteObservers = ReplaceEvProposeTransactionWithEvWrite(runtime, rows);
 
         Cout << "========= Send immediate write =========\n";
         {
@@ -56,16 +69,22 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
     }
 
     Y_UNIT_TEST_QUAD(ExecSQLUpsertPrepared, EvWrite, Volatile) {
-        auto [runtime, server, sender] = TestCreateServer();
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableOltpSink(EvWrite);
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings
+            .SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetAppConfig(app);
+
+        auto [runtime, server, sender] = TestCreateServer(serverSettings);
 
         runtime.GetAppData().FeatureFlags.SetEnableDataShardVolatileTransactions(Volatile);
 
         TShardedTableOptions opts;
         auto [shards1, tableId1] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
         auto [shards2, tableId2] = CreateShardedTable(server, sender, "/Root", "table-2", opts);
-
-        auto rows = EvWrite ? TEvWriteRows{{tableId1, {0, 1}}, {tableId2, {2, 3}}} : TEvWriteRows{};
-        auto evWriteObservers = ReplaceEvProposeTransactionWithEvWrite(runtime, rows);
 
         Cout << "========= Send distributed write =========\n";
         {
@@ -389,7 +408,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         Cout << "========= Send immediate insert with duplicate, keys -2, 0, 2 =========\n";
         {
             auto request = MakeWriteRequest(++txId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE, NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT, tableId, opts.Columns_, rowCount, -2);
-            const auto writeResult = Write(runtime, sender, shard, std::move(request), NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
+            const auto writeResult = Write(runtime, sender, shard, std::move(request), NKikimrDataEvents::TEvWriteResult::STATUS_CONSTRAINT_VIOLATION);
         }
 
         Cout << "========= Read table =========\n";
@@ -1242,5 +1261,766 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         }
     }
 
-} // Y_UNIT_TEST_SUITE
+    Y_UNIT_TEST(ImmediateAndPlannedCommittedOpsRace) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            // It's easier to reproduce without volatile transactions, since
+            // then we can block pipeline by blocking readsets
+            .SetEnableDataShardVolatileTransactions(false);
+
+        auto [runtime, server, sender] = TestCreateServer(serverSettings);
+
+        TDisableDataShardLogBatching disableDataShardLogBatching;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSchemeExec(runtime, R"(
+                CREATE TABLE `/Root/table` (key int, value int, PRIMARY KEY (key))
+                WITH (PARTITION_AT_KEYS = (10));
+            )"),
+            "SUCCESS");
+
+        const auto tableId = ResolveTableId(server, sender, "/Root/table");
+        const auto shards = GetTableShards(server, sender, "/Root/table");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 2u);
+
+        TVector<TShardedTableOptions::TColumn> columns{
+            {"key", "Int32", true, false},
+            {"value", "Int32", false, false},
+        };
+
+        const ui64 coordinator = ChangeStateStorage(Coordinator, server->GetSettings().Domain);
+
+        const ui64 lockTxId1 = 1234567890001;
+        const ui64 lockTxId2 = 1234567890002;
+        const ui64 lockTxId3 = 1234567890003;
+        const ui64 lockNodeId = runtime.GetNodeId(0);
+        NLongTxService::TLockHandle lockHandle1(lockTxId1, runtime.GetActorSystem(0));
+        NLongTxService::TLockHandle lockHandle2(lockTxId2, runtime.GetActorSystem(0));
+        NLongTxService::TLockHandle lockHandle3(lockTxId3, runtime.GetActorSystem(0));
+
+        auto shard1 = shards.at(0);
+        auto shard1actor = ResolveTablet(runtime, shard1);
+        auto shard2 = shards.at(1);
+
+        NKikimrDataEvents::TLock lock1shard1;
+        NKikimrDataEvents::TLock lock1shard2;
+        NKikimrDataEvents::TLock lock2;
+
+        // 1. Make a read (lock1 shard1)
+        auto read1sender = runtime.AllocateEdgeActor();
+        {
+            Cerr << "... making a read from " << shard1 << Endl;
+            auto req = std::make_unique<TEvDataShard::TEvRead>();
+            {
+                auto& record = req->Record;
+                record.SetReadId(1);
+                record.MutableTableId()->SetOwnerId(tableId.PathId.OwnerId);
+                record.MutableTableId()->SetTableId(tableId.PathId.LocalPathId);
+                record.AddColumns(1);
+                record.AddColumns(2);
+                record.SetLockTxId(lockTxId1);
+                record.SetLockNodeId(lockNodeId);
+                record.SetResultFormat(NKikimrDataEvents::FORMAT_CELLVEC);
+                i32 key = 1;
+                TVector<TCell> keys;
+                keys.push_back(TCell::Make(key));
+                req->Keys.push_back(TSerializedCellVec(TSerializedCellVec::Serialize(keys)));
+            }
+            ForwardToTablet(runtime, shard1, read1sender, req.release());
+            auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvReadResult>(read1sender);
+            auto* res = ev->Get();
+            UNIT_ASSERT_VALUES_EQUAL(res->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(res->Record.GetFinished(), true);
+            UNIT_ASSERT_VALUES_EQUAL(res->Record.GetTxLocks().size(), 1u);
+            lock1shard1 = res->Record.GetTxLocks().at(0);
+            UNIT_ASSERT_C(lock1shard1.GetCounter() < 1000, "Unexpected lock in the result: " << lock1shard1.ShortDebugString());
+        }
+
+        // 2. Make an uncommitted write (lock1 shard2)
+        {
+            Cerr << "... making an uncommmited write to " << shard2 << Endl;
+            auto req = MakeWriteRequestOneKeyValue(
+                std::nullopt,
+                NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE,
+                NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
+                tableId,
+                columns,
+                11, 1101);
+            req->SetLockId(lockTxId1, lockNodeId);
+            auto result = Write(runtime, sender, shard2, std::move(req));
+            UNIT_ASSERT_VALUES_EQUAL(result.GetTxLocks().size(), 1u);
+            lock1shard2 = result.GetTxLocks().at(0);
+            UNIT_ASSERT_C(lock1shard2.GetCounter() < 1000, "Unexpected lock in the result: " << lock1shard2.ShortDebugString());
+        }
+
+        // 3. Make an uncommitted write (lock2 shard1)
+        {
+            Cerr << "... making an uncommmited write to " << shard1 << Endl;
+            auto req = MakeWriteRequestOneKeyValue(
+                std::nullopt,
+                NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE,
+                NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
+                tableId,
+                columns,
+                2, 202);
+            req->SetLockId(lockTxId2, lockNodeId);
+            auto result = Write(runtime, sender, shard1, std::move(req));
+            UNIT_ASSERT_VALUES_EQUAL(result.GetTxLocks().size(), 1u);
+            lock2 = result.GetTxLocks().at(0);
+            UNIT_ASSERT_C(lock2.GetCounter() < 1000, "Unexpected lock in the result: " << lock2.ShortDebugString());
+        }
+
+        // 4. Break lock2 so later we could make an aborted distributed commit
+        {
+            Cerr << "... making an immediate write to " << shard1 << Endl;
+            auto req = MakeWriteRequestOneKeyValue(
+                std::nullopt,
+                NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE,
+                NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
+                tableId,
+                columns,
+                2, 203);
+            Write(runtime, sender, shard1, std::move(req));
+        }
+
+        // Start blocking readsets
+        TBlockEvents<TEvTxProcessing::TEvReadSet> blockedReadSets(runtime);
+
+        // Prepare an upsert (readsets flow between shards)
+        ui64 txId1 = 1234567890011;
+        auto tx1sender = runtime.AllocateEdgeActor();
+        {
+            auto req1 = MakeWriteRequestOneKeyValue(
+                txId1,
+                NKikimrDataEvents::TEvWrite::MODE_PREPARE,
+                NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
+                tableId,
+                columns,
+                3, 304);
+            req1->Record.MutableLocks()->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
+            req1->Record.MutableLocks()->AddSendingShards(shard1);
+            req1->Record.MutableLocks()->AddSendingShards(shard2);
+            req1->Record.MutableLocks()->AddReceivingShards(shard1);
+            req1->Record.MutableLocks()->AddReceivingShards(shard2);
+            *req1->Record.MutableLocks()->AddLocks() = lock1shard1;
+
+            auto req2 = MakeWriteRequestOneKeyValue(
+                txId1,
+                NKikimrDataEvents::TEvWrite::MODE_PREPARE,
+                NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
+                tableId,
+                columns,
+                13, 1304);
+            req2->Record.MutableLocks()->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
+            req2->Record.MutableLocks()->AddSendingShards(shard1);
+            req2->Record.MutableLocks()->AddSendingShards(shard2);
+            req2->Record.MutableLocks()->AddReceivingShards(shard1);
+            req2->Record.MutableLocks()->AddReceivingShards(shard2);
+            *req2->Record.MutableLocks()->AddLocks() = lock1shard2;
+
+            Cerr << "... preparing tx1 at " << shard1 << Endl;
+            auto res1 = Write(runtime, tx1sender, shard1, std::move(req1));
+            Cerr << "... preparing tx1 at " << shard2 << Endl;
+            auto res2 = Write(runtime, tx1sender, shard2, std::move(req2));
+
+            ui64 minStep = Max(res1.GetMinStep(), res2.GetMinStep());
+            ui64 maxStep = Min(res1.GetMaxStep(), res2.GetMaxStep());
+
+            Cerr << "... planning tx1 at " << coordinator << Endl;
+            SendProposeToCoordinator(
+                runtime, tx1sender, shards, {
+                    .TxId = txId1,
+                    .Coordinator = coordinator,
+                    .MinStep = minStep,
+                    .MaxStep = maxStep,
+                });
+        }
+
+        runtime.WaitFor("blocked readsets", [&]{ return blockedReadSets.size() >= 2; });
+        UNIT_ASSERT_VALUES_EQUAL(blockedReadSets.size(), 2u);
+
+        // Start blocking new plan steps
+        TBlockEvents<TEvTxProcessing::TEvPlanStep> blockedPlanSteps(runtime);
+
+        // Prepare an upsert (readset flows from shard 1 to shard 2, already broken)
+        // Must not conflict with other transactions
+        ui64 txId2 = 1234567890012;
+        auto tx2sender = runtime.AllocateEdgeActor();
+        {
+            auto req1 = MakeWriteRequestOneKeyValue(
+                txId2,
+                NKikimrDataEvents::TEvWrite::MODE_PREPARE,
+                NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
+                tableId,
+                columns,
+                5, 505);
+            req1->Record.MutableLocks()->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
+            req1->Record.MutableLocks()->AddSendingShards(shard1);
+            req1->Record.MutableLocks()->AddReceivingShards(shard2);
+            *req1->Record.MutableLocks()->AddLocks() = lock2;
+
+            auto req2 = MakeWriteRequestOneKeyValue(
+                txId2,
+                NKikimrDataEvents::TEvWrite::MODE_PREPARE,
+                NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
+                tableId,
+                columns,
+                15, 1505);
+            req2->Record.MutableLocks()->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
+            req2->Record.MutableLocks()->AddSendingShards(shard1);
+            req2->Record.MutableLocks()->AddReceivingShards(shard2);
+
+            Cerr << "... preparing tx2 at " << shard1 << Endl;
+            auto res1 = Write(runtime, tx2sender, shard1, std::move(req1));
+            Cerr << "... preparing tx2 at " << shard2 << Endl;
+            auto res2 = Write(runtime, tx2sender, shard2, std::move(req2));
+
+            ui64 minStep = Max(res1.GetMinStep(), res2.GetMinStep());
+            ui64 maxStep = Min(res1.GetMaxStep(), res2.GetMaxStep());
+
+            Cerr << "... planning tx2 at " << coordinator << Endl;
+            SendProposeToCoordinator(
+                runtime, tx2sender, shards, {
+                    .TxId = txId2,
+                    .Coordinator = coordinator,
+                    .MinStep = minStep,
+                    .MaxStep = maxStep,
+                });
+        }
+
+        runtime.WaitFor("blocked plan steps", [&]{ return blockedPlanSteps.size() >= 2; });
+        UNIT_ASSERT_VALUES_EQUAL(blockedPlanSteps.size(), 2u);
+
+        // Block TEvPrivate::TEvProgressTransaction for shard1
+        TBlockEvents<IEventHandle> blockedProgress(runtime,
+            [&](const TAutoPtr<IEventHandle>& ev) {
+                return ev->GetRecipientRewrite() == shard1actor &&
+                    ev->GetTypeRewrite() == EventSpaceBegin(TKikimrEvents::ES_PRIVATE) + 0;
+            });
+
+        blockedPlanSteps.Unblock();
+        runtime.WaitFor("blocked progress", [&]{ return blockedProgress.size() >= 1; });
+        runtime.SimulateSleep(TDuration::MilliSeconds(1)); // let it commit
+        UNIT_ASSERT_VALUES_EQUAL(blockedProgress.size(), 1u);
+
+        // Make an unrelated immediate write, this will pin write (and future snapshot) version to tx2
+        {
+            Cerr << "... making an immediate write to " << shard1 << Endl;
+            auto req = MakeWriteRequestOneKeyValue(
+                std::nullopt,
+                NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE,
+                NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
+                tableId,
+                columns,
+                4, 406);
+            Write(runtime, sender, shard1, std::move(req));
+        }
+
+        // Block commit attempts at shard1
+        TBlockEvents<TEvBlobStorage::TEvPut> blockedCommits(runtime,
+            [&](const TEvBlobStorage::TEvPut::TPtr& ev) {
+                auto* msg = ev->Get();
+                return msg->Id.TabletID() == shard1 && msg->Id.Channel() == 0;
+            });
+
+        // Make an uncommitted write to a key overlapping with tx1
+        // Since tx1 has been validated, and reads are pinned at tx2, tx3 will
+        // be after tx1 and blocked by a read dependency. Since tx2 has not
+        // entered the pipeline yet, version will not be above tx2.
+        auto tx3sender = runtime.AllocateEdgeActor();
+        {
+            Cerr << "... starting uncommitted upsert at " << shard1 << Endl;
+            auto req = MakeWriteRequestOneKeyValue(
+                std::nullopt,
+                NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE,
+                NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
+                tableId,
+                columns,
+                3, 307);
+            req->SetLockId(lockTxId3, lockNodeId);
+            runtime.SendToPipe(shard1, tx3sender, req.release());
+        }
+
+        // Wait for some time and make sure there have been no unexpected
+        // commits, which would indicate the upsert is blocked by tx1.
+        runtime.SimulateSleep(TDuration::MilliSeconds(1));
+        UNIT_ASSERT_VALUES_EQUAL_C(blockedCommits.size(), 0u,
+            "The uncommitted upsert didn't block. Something may have changed and the test needs to be revised.");
+
+        // Now, while blocking commits, unblock progress and let tx2 to execute,
+        // which will abort due to broken locks.
+        blockedProgress.Unblock();
+        blockedProgress.Stop();
+
+        runtime.SimulateSleep(TDuration::MilliSeconds(1));
+        size_t commitsAfterTx2 = blockedCommits.size();
+        Cerr << "... observed " << commitsAfterTx2 << " commits after tx2 unblock" << Endl;
+        UNIT_ASSERT_C(commitsAfterTx2 >= 2,
+            "Expected tx2 to produce at least 2 commits (store out rs + abort tx)"
+            << ", observed " << commitsAfterTx2 << ". Something may have changed.");
+
+        // Now, while still blocking commits, unblock readsets
+        // Everything will unblock and execute tx1 then tx3
+        blockedReadSets.Unblock();
+        blockedReadSets.Stop();
+
+        runtime.SimulateSleep(TDuration::MilliSeconds(1));
+        size_t commitsAfterTx3 = blockedCommits.size() - commitsAfterTx2;
+        Cerr << "... observed " << commitsAfterTx3 << " more commits after readset unblock" << Endl;
+        UNIT_ASSERT_C(commitsAfterTx3 >= 2,
+            "Expected at least 2 commits after readset unblock (tx1, tx3), but only "
+            << commitsAfterTx3 << " have been observed.");
+
+        // Finally, stop blocking commits
+        // We expect completion handlers to run in tx3, tx1, tx2 order, triggering the bug
+        blockedCommits.Unblock();
+        blockedCommits.Stop();
+
+        runtime.SimulateSleep(TDuration::MilliSeconds(1));
+
+        // Check tx3 reply
+        {
+            auto ev = runtime.GrabEdgeEventRethrow<NEvents::TDataEvents::TEvWriteResult>(tx3sender);
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+        }
+
+        // Check tx1 reply
+        {
+            auto ev1 = runtime.GrabEdgeEventRethrow<NEvents::TDataEvents::TEvWriteResult>(tx1sender);
+            UNIT_ASSERT_VALUES_EQUAL(ev1->Get()->Record.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+            auto ev2 = runtime.GrabEdgeEventRethrow<NEvents::TDataEvents::TEvWriteResult>(tx1sender);
+            UNIT_ASSERT_VALUES_EQUAL(ev2->Get()->Record.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+        }
+
+        // Check tx2 reply
+        {
+            auto ev1 = runtime.GrabEdgeEventRethrow<NEvents::TDataEvents::TEvWriteResult>(tx2sender);
+            UNIT_ASSERT_VALUES_EQUAL(ev1->Get()->Record.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN);
+            auto ev2 = runtime.GrabEdgeEventRethrow<NEvents::TDataEvents::TEvWriteResult>(tx2sender);
+            UNIT_ASSERT_VALUES_EQUAL(ev2->Get()->Record.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN);
+        }
+    }
+
+    Y_UNIT_TEST(PreparedDistributedWritePageFault) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetEnableDataShardVolatileTransactions(false);
+
+        auto [runtime, server, sender] = TestCreateServer(serverSettings);
+
+        TDisableDataShardLogBatching disableDataShardLogBatching;
+
+        // Use a policy without levels and very small page sizes, effectively making each row on its own page
+        NLocalDb::TCompactionPolicyPtr policy = NLocalDb::CreateDefaultTablePolicy();
+        policy->MinDataPageSize = 1;
+
+        auto opts = TShardedTableOptions()
+                .Columns({{"key", "Int32", true, false},
+                          {"value", "Int32", false, false}})
+                .Policy(policy.Get());
+        const auto& columns = opts.Columns_;
+        auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table", opts);
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1u);
+
+        const ui64 coordinator = ChangeStateStorage(Coordinator, server->GetSettings().Domain);
+
+        const ui64 lockTxId1 = 1234567890001;
+        const ui64 lockNodeId = runtime.GetNodeId(0);
+        NLongTxService::TLockHandle lockHandle1(lockTxId1, runtime.GetActorSystem(0));
+
+        auto shard1 = shards.at(0);
+        NKikimrDataEvents::TLock lock1shard1;
+
+        // 1. Make an uncommitted write (lock1 shard1)
+        {
+            Cerr << "... making an uncommmited write to " << shard1 << Endl;
+            auto req = MakeWriteRequestOneKeyValue(
+                std::nullopt,
+                NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE,
+                NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
+                tableId,
+                columns,
+                1, 11);
+            req->SetLockId(lockTxId1, lockNodeId);
+            auto result = Write(runtime, sender, shard1, std::move(req));
+            UNIT_ASSERT_VALUES_EQUAL(result.GetTxLocks().size(), 1u);
+            lock1shard1 = result.GetTxLocks().at(0);
+            UNIT_ASSERT_C(lock1shard1.GetCounter() < 1000, "Unexpected lock in the result: " << lock1shard1.ShortDebugString());
+        }
+
+        // 2. Compact and reboot the tablet
+        Cerr << "... compacting shard " << shard1 << Endl;
+        CompactTable(runtime, shard1, tableId, false);
+        Cerr << "... rebooting shard " << shard1 << Endl;
+        RebootTablet(runtime, shard1, sender);
+        runtime.SimulateSleep(TDuration::Seconds(1));
+
+        // 3. Prepare a distributed write (single shard for simplicity)
+        ui64 txId1 = 1234567890011;
+        auto tx1sender = runtime.AllocateEdgeActor();
+        {
+            auto req1 = MakeWriteRequestOneKeyValue(
+                txId1,
+                NKikimrDataEvents::TEvWrite::MODE_PREPARE,
+                NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
+                tableId,
+                columns,
+                1, 22);
+            req1->Record.MutableLocks()->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
+
+            Cerr << "... preparing tx1 at " << shard1 << Endl;
+            auto res1 = Write(runtime, tx1sender, shard1, std::move(req1));
+
+            // Reboot, making sure tx is only loaded after it's planned
+            // This causes tx to skip conflicts cache and go to execution
+            // The first attempt to execute will page fault looking for conflicts
+            // Tx will be released, and will trigger the bug on restore
+            Cerr << "... rebooting shard " << shard1 << Endl;
+            RebootTablet(runtime, shard1, sender);
+            runtime.SimulateSleep(TDuration::Seconds(1));
+
+            ui64 minStep = res1.GetMinStep();
+            ui64 maxStep = res1.GetMaxStep();
+
+            Cerr << "... planning tx1 at " << coordinator << Endl;
+            SendProposeToCoordinator(
+                runtime, tx1sender, { shard1 }, {
+                    .TxId = txId1,
+                    .Coordinator = coordinator,
+                    .MinStep = minStep,
+                    .MaxStep = maxStep,
+                });
+        }
+
+        // 4. Check tx1 reply (it must succeed)
+        {
+            Cerr << "... waiting for tx1 result" << Endl;
+            auto ev = runtime.GrabEdgeEventRethrow<NEvents::TDataEvents::TEvWriteResult>(tx1sender);
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+        }
+    }
+
+    Y_UNIT_TEST(DelayedVolatileTxAndEvWrite) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetEnableDataShardVolatileTransactions(true);
+
+        auto [runtime, server, sender] = TestCreateServer(serverSettings);
+
+        TDisableDataShardLogBatching disableDataShardLogBatching;
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSchemeExec(runtime, R"(
+                CREATE TABLE `/Root/table` (key int, a int, b int, c int, PRIMARY KEY (key))
+                WITH (PARTITION_AT_KEYS = (10));
+            )"),
+            "SUCCESS");
+
+        const auto shards = GetTableShards(server, sender, "/Root/table");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 2u);
+        const auto tableId = ResolveTableId(server, sender, "/Root/table");
+
+        auto [tablesMap, ownerId_] = GetTablesByPathId(server, shards.at(0));
+
+        // Start blocking readsets
+        TBlockEvents<TEvTxProcessing::TEvReadSet> blockedReadSets(runtime);
+
+        // Prepare a distributed upsert
+        Cerr << "... starting a distributed upsert" << Endl;
+        auto upsertFuture = KqpSimpleSend(runtime, R"(
+            UPSERT INTO `/Root/table` (key, a, b, c) VALUES (1, 2, 2, 2), (11, 12, 12, 12);
+        )");
+        runtime.WaitFor("blocked readsets", [&]{ return blockedReadSets.size() >= 4; });
+
+        // 1. Make an upsert to (key, b)
+        {
+            Cerr << "... making a write to " << shards.at(0) << Endl;
+            auto req = MakeWriteRequest(
+                std::nullopt,
+                NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE,
+                NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
+                tableId,
+                { 1_ui32, 3_ui32 },
+                { TCell::Make(1_i32), TCell::Make(3_i32) });
+            Write(runtime, sender, shards.at(0), std::move(req));
+        }
+
+        // 1. Make an upsert to (key, c)
+        {
+            Cerr << "... making a write to " << shards.at(0) << Endl;
+            auto req = MakeWriteRequest(
+                std::nullopt,
+                NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE,
+                NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
+                tableId,
+                { 1_ui32, 4_ui32 },
+                { TCell::Make(1_i32), TCell::Make(4_i32) });
+            Write(runtime, sender, shards.at(0), std::move(req));
+        }
+
+        // Unblock readsets
+        blockedReadSets.Stop().Unblock();
+
+        runtime.SimulateSleep(TDuration::MilliSeconds(1));
+
+        // Make a validating read, the volatile tx changes must not be lost
+        Cerr << "... validating table" << Endl;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, R"(
+                SELECT key, a, b, c FROM `/Root/table` ORDER BY key;
+            )"),
+            "{ items { int32_value: 1 } items { int32_value: 2 } items { int32_value: 3 } items { int32_value: 4 } }, "
+            "{ items { int32_value: 11 } items { int32_value: 12 } items { int32_value: 12 } items { int32_value: 12 } }");
+    }
+
+    Y_UNIT_TEST(DoubleWriteUncommittedThenDoubleReadWithCommit) {
+        TPortManager pm;
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableOltpSink(true);
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetNodeCount(2)
+            .SetUseRealThreads(false)
+            .SetAppConfig(app);
+
+        auto [runtime, server, sender] = TestCreateServer(serverSettings);
+
+        TDisableDataShardLogBatching disableDataShardLogBatching;
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSchemeExec(runtime, R"(
+                CREATE TABLE `/Root/table` (key Int64, index Int64, value Int64, ballast String, PRIMARY KEY (key, index));
+            )"),
+            "SUCCESS");
+
+        ExecSQL(server, sender, R"(
+            UPSERT INTO `/Root/table` (key, index, value) VALUES
+                (251, 0, 1000),
+                (251, 1, 1001),
+                (251, 2, 1002),
+                (251, 3, 1003),
+                (251, 4, 1004),
+                (251, 5, 1005),
+                (252, 0, 2000),
+                (252, 1, 2001),
+                (252, 2, 2002),
+                (252, 3, 2003),
+                (252, 4, 2004),
+                (252, 5, 2005);
+        )");
+
+        TString sqlWrite = R"(
+            DECLARE $write0 AS List<Struct<key:Int64, index:Int64, value:Int64>>;
+            DECLARE $ballast AS Bytes;
+            $write0_keys = (SELECT DISTINCT(key) FROM AS_TABLE($write0));
+            $write0_last_index = (
+                SELECT w.key AS key, MAX(t.index) AS index
+                FROM $write0_keys AS w
+                INNER JOIN `/Root/table` AS t ON t.key = w.key
+                GROUP BY w.key
+            );
+            UPSERT INTO `/Root/table` (
+                SELECT w.key AS key,
+                    COALESCE(li.index + 1, 0) + w.index AS index,
+                    w.value AS value,
+                    $ballast AS ballast
+                FROM AS_TABLE($write0) AS w
+                LEFT JOIN $write0_last_index AS li ON li.key = w.key
+            );
+        )";
+
+        TString sqlRead = R"(
+            DECLARE $read0 AS Int64;
+            DECLARE $read1 AS Int64;
+            SELECT index, value FROM `/Root/table` WHERE key = $read0 ORDER BY index;
+            SELECT index, value FROM `/Root/table` WHERE key = $read1 ORDER BY index;
+        )";
+
+        TString sessionId = CreateSessionRPC(runtime, "/Root");
+
+        // auto chunkReads = runtime.AddObserver<TEvDataShard::TEvRead>(
+        //     [&](TEvDataShard::TEvRead::TPtr& ev) {
+        //         ev->Get()->Record.SetMaxRowsInResult(1);
+        //     });
+
+        Cerr << "... sending write request" << Endl;
+        Ydb::Table::ExecuteDataQueryRequest writeRequest;
+        writeRequest.set_session_id(sessionId);
+        writeRequest.mutable_tx_control()->set_commit_tx(false);
+        writeRequest.mutable_tx_control()->mutable_begin_tx()->mutable_serializable_read_write();
+        writeRequest.mutable_query()->set_yql_text(sqlWrite);
+        auto& writeParams = *writeRequest.mutable_parameters();
+        if (auto* p = &writeParams["$write0"]) {
+            auto* t = p->mutable_type()->mutable_list_type()->mutable_item()->mutable_struct_type();
+            if (auto* m = t->add_members()) {
+                m->set_name("key");
+                m->mutable_type()->set_type_id(Ydb::Type::INT64);
+            }
+            if (auto* m = t->add_members()) {
+                m->set_name("index");
+                m->mutable_type()->set_type_id(Ydb::Type::INT64);
+            }
+            if (auto* m = t->add_members()) {
+                m->set_name("value");
+                m->mutable_type()->set_type_id(Ydb::Type::INT64);
+            }
+            if (auto* row = p->mutable_value()->add_items()) {
+                row->add_items()->set_int64_value(251);
+                row->add_items()->set_int64_value(0);
+                row->add_items()->set_int64_value(5001);
+            }
+            if (auto* row = p->mutable_value()->add_items()) {
+                row->add_items()->set_int64_value(252);
+                row->add_items()->set_int64_value(0);
+                row->add_items()->set_int64_value(5002);
+            }
+        }
+        if (auto* p = &writeParams["$ballast"]) {
+            p->mutable_type()->set_type_id(Ydb::Type::STRING);
+            p->mutable_value()->set_bytes_value("xxx");
+        }
+        auto writeResponse = AwaitResponse(runtime, SendRequest(runtime, std::move(writeRequest), "/Root"));
+        UNIT_ASSERT_C(writeResponse.operation().status() == Ydb::StatusIds::SUCCESS, "ERROR: " << writeResponse.operation().status());
+        Ydb::Table::ExecuteQueryResult writeResult;
+        writeResponse.operation().result().UnpackTo(&writeResult);
+        TString txId = writeResult.tx_meta().id();
+
+        Cerr << "... sending read request" << Endl;
+        Ydb::Table::ExecuteDataQueryRequest readRequest;
+        readRequest.set_session_id(sessionId);
+        readRequest.mutable_tx_control()->set_commit_tx(true);
+        readRequest.mutable_tx_control()->set_tx_id(txId);
+        readRequest.mutable_query()->set_yql_text(sqlRead);
+        auto& readParams = *readRequest.mutable_parameters();
+        if (auto* p = &readParams["$read0"]) {
+            p->mutable_type()->set_type_id(Ydb::Type::INT64);
+            p->mutable_value()->set_int64_value(251);
+        }
+        if (auto* p = &readParams["$read1"]) {
+            p->mutable_type()->set_type_id(Ydb::Type::INT64);
+            p->mutable_value()->set_int64_value(252);
+        }
+        auto readResponse = AwaitResponse(runtime, SendRequest(runtime, std::move(readRequest), "/Root"));
+        UNIT_ASSERT_C(readResponse.operation().status() == Ydb::StatusIds::SUCCESS, "ERROR: " << readResponse.operation().status());
+        Ydb::Table::ExecuteQueryResult readResult;
+        readResponse.operation().result().UnpackTo(&readResult);
+        UNIT_ASSERT_VALUES_EQUAL(FormatResult(readResult),
+            "{ items { int64_value: 0 } items { int64_value: 1000 } }, "
+            "{ items { int64_value: 1 } items { int64_value: 1001 } }, "
+            "{ items { int64_value: 2 } items { int64_value: 1002 } }, "
+            "{ items { int64_value: 3 } items { int64_value: 1003 } }, "
+            "{ items { int64_value: 4 } items { int64_value: 1004 } }, "
+            "{ items { int64_value: 5 } items { int64_value: 1005 } }, "
+            "{ items { int64_value: 6 } items { int64_value: 5001 } }\n"
+            "{ items { int64_value: 0 } items { int64_value: 2000 } }, "
+            "{ items { int64_value: 1 } items { int64_value: 2001 } }, "
+            "{ items { int64_value: 2 } items { int64_value: 2002 } }, "
+            "{ items { int64_value: 3 } items { int64_value: 2003 } }, "
+            "{ items { int64_value: 4 } items { int64_value: 2004 } }, "
+            "{ items { int64_value: 5 } items { int64_value: 2005 } }, "
+            "{ items { int64_value: 6 } items { int64_value: 5002 } }");
+        Cerr << readResult.DebugString();
+    }
+
+    Y_UNIT_TEST(WriteCommitVersion) {
+        TPortManager pm;
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableOltpSink(true);
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetAppConfig(app);
+
+        auto [runtime, server, sender] = TestCreateServer(serverSettings);
+
+        TDisableDataShardLogBatching disableDataShardLogBatching;
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSchemeExec(runtime, R"(
+                CREATE TABLE `/Root/table` (key int, value int, PRIMARY KEY (key))
+                WITH (PARTITION_AT_KEYS = (10, 20));;
+            )"),
+            "SUCCESS"
+        );
+
+        ExecSQL(server, sender, R"(
+            UPSERT INTO `/Root/table` (key, value) VALUES
+                (1, 1001),
+                (11, 1002),
+                (21, 1003);
+        )");
+
+        std::deque<std::optional<TRowVersion>> commitVersions;
+        auto commitVersionObserver = runtime.AddObserver<NKikimr::NEvents::TDataEvents::TEvWriteResult>([&](auto& ev) {
+            auto* msg = ev->Get();
+            if (msg->Record.GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED) {
+                if (msg->Record.HasCommitVersion()) {
+                    commitVersions.emplace_back(TRowVersion::FromProto(msg->Record.GetCommitVersion()));
+                } else {
+                    commitVersions.emplace_back();
+                }
+            }
+        });
+
+        TString sessionId, txId;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleBegin(runtime, sessionId, txId, R"(
+                UPSERT INTO `/Root/table` (key, value) VALUES (2, 2001);
+                SELECT key, value FROM `/Root/table` WHERE key < 10 ORDER BY key;
+            )"),
+            "{ items { int32_value: 1 } items { int32_value: 1001 } }, "
+            "{ items { int32_value: 2 } items { int32_value: 2001 } }"
+        );
+        UNIT_ASSERT_VALUES_EQUAL(commitVersions.size(), 1u);
+        UNIT_ASSERT_C(!commitVersions.front(), "Unexpected commit version: " << commitVersions.front().value());
+        commitVersions.clear();
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleCommit(runtime, sessionId, txId, R"(SELECT 1)"),
+            "{ items { int32_value: 1 } }"
+        );
+        UNIT_ASSERT_VALUES_EQUAL(commitVersions.size(), 1u);
+        UNIT_ASSERT_C(commitVersions.front(), "Missing commit version");
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, R"(
+                SELECT key, value FROM `/Root/table` WHERE key < 20 ORDER BY key;
+            )"),
+            "{ items { int32_value: 1 } items { int32_value: 1001 } }, "
+            "{ items { int32_value: 2 } items { int32_value: 2001 } }, "
+            "{ items { int32_value: 11 } items { int32_value: 1002 } }"
+        );
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, R"(
+                UPSERT INTO `/Root/table` (key, value) VALUES (12, 3001);
+            )"),
+            "<empty>"
+        );
+        UNIT_ASSERT_VALUES_EQUAL(commitVersions.size(), 2u);
+        UNIT_ASSERT_C(commitVersions[0] < commitVersions[1],
+            "Unexpected commit version: " << commitVersions[0].value() << " then " << commitVersions[1].value()
+        );
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, R"(
+                UPSERT INTO `/Root/table` (key, value) VALUES
+                    (13, 4001),
+                    (22, 4002);
+            )"),
+            "<empty>"
+        );
+        UNIT_ASSERT_VALUES_EQUAL(commitVersions.size(), 4u);
+        UNIT_ASSERT_C(commitVersions[1] < commitVersions[2] && commitVersions[2] == commitVersions[3],
+            "Unexpected commit version: " << commitVersions[1].value() << " then "
+            << commitVersions[2].value() << " and " << commitVersions[3].value()
+        );
+    }
+
+} // Y_UNIT_TEST_SUITE(DataShardWrite)
 } // namespace NKikimr

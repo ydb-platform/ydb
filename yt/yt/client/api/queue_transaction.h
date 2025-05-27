@@ -30,6 +30,10 @@ struct TPushQueueProducerOptions
      * what data should be written after fail of the user process.
      */
     NYTree::INodePtr UserMeta;
+
+    //! If this happens to be a push into a replicated table queue,
+    //! controls if at least one sync replica is required.
+    bool RequireSyncReplica = true;
 };
 
 struct TPushQueueProducerResult
@@ -71,7 +75,7 @@ struct IQueueTransaction
         int partitionIndex,
         std::optional<i64> oldOffset,
         i64 newOffset,
-        const TAdvanceQueueConsumerOptions& options) = 0;
+        const TAdvanceQueueConsumerOptions& options = {}) = 0;
 
     //! Writes rows in the queue with checking their sequence number.
     /*!
@@ -107,4 +111,3 @@ struct IQueueTransaction
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NApi
-

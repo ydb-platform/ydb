@@ -1,13 +1,13 @@
 #include "dq_transport.h"
 
 #include <ydb/library/mkql_proto/mkql_proto.h>
-#include <ydb/library/yql/minikql/computation/mkql_block_reader.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_pack.h>
-#include <ydb/library/yql/parser/pg_wrapper/interface/comp_factory.h>
-#include <ydb/library/yql/parser/pg_wrapper/interface/pack.h>
-#include <ydb/library/yql/providers/common/mkql/yql_type_mkql.h>
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/minikql/computation/mkql_block_reader.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_pack.h>
+#include <yql/essentials/parser/pg_wrapper/interface/comp_factory.h>
+#include <yql/essentials/parser/pg_wrapper/interface/pack.h>
+#include <yql/essentials/providers/common/mkql/yql_type_mkql.h>
+#include <yql/essentials/utils/yql_panic.h>
 
 #include <util/system/yassert.h>
 
@@ -20,7 +20,7 @@ using namespace NYql;
 namespace {
 
 TDqSerializedBatch SerializeValue(NDqProto::EDataTransportVersion version, const TType* type, const NUdf::TUnboxedValuePod& value) {
-    TRope packResult;
+    TChunkedBuffer packResult;
     switch (version) {
         case NDqProto::DATA_TRANSPORT_VERSION_UNSPECIFIED:
             version = NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0;
@@ -43,13 +43,14 @@ TDqSerializedBatch SerializeValue(NDqProto::EDataTransportVersion version, const
 
     TDqSerializedBatch result;
     result.Proto.SetTransportVersion(version);
+    result.Proto.SetChunks(1);
     result.Proto.SetRows(1);
     result.SetPayload(std::move(packResult));
     return result;
 }
 
 template<bool Fast>
-TRope DoSerializeBuffer(const TType* type, const TUnboxedValueBatch& buffer) {
+TChunkedBuffer DoSerializeBuffer(const TType* type, const TUnboxedValueBatch& buffer) {
     using TPacker = TValuePackerTransport<Fast>;
 
     TPacker packer(/* stable */ false, type);
@@ -66,7 +67,7 @@ TRope DoSerializeBuffer(const TType* type, const TUnboxedValueBatch& buffer) {
 }
 
 TDqSerializedBatch SerializeBuffer(NDqProto::EDataTransportVersion version, const TType* type, const TUnboxedValueBatch& buffer) {
-    TRope packResult;
+    TChunkedBuffer packResult;
     switch (version) {
         case NDqProto::DATA_TRANSPORT_VERSION_UNSPECIFIED:
             version = NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0;
@@ -87,13 +88,14 @@ TDqSerializedBatch SerializeBuffer(NDqProto::EDataTransportVersion version, cons
 
     TDqSerializedBatch result;
     result.Proto.SetTransportVersion(version);
-    result.Proto.SetRows(buffer.RowCount());
+    result.Proto.SetChunks(buffer.RowCount());
+    result.Proto.SetRows(buffer.RowCount()); // maybe incorrect for Arrow Blocks
     result.SetPayload(std::move(packResult));
     return result;
 }
 
 template<bool Fast>
-void DeserializeValue(const TType* type, TRope&& data, const THolderFactory& holderFactory, NUdf::TUnboxedValue& value)
+void DeserializeValue(const TType* type, TChunkedBuffer&& data, const THolderFactory& holderFactory, NUdf::TUnboxedValue& value)
 {
     using TPacker = TValuePackerTransport<Fast>;
     TPacker packer(/* stable */ false, type);
@@ -101,7 +103,7 @@ void DeserializeValue(const TType* type, TRope&& data, const THolderFactory& hol
 }
 
 template<bool Fast>
-void DeserializeBuffer(const TType* itemType, TRope&& data, const THolderFactory& holderFactory, TUnboxedValueBatch& buffer)
+void DeserializeBuffer(const TType* itemType, TChunkedBuffer&& data, const THolderFactory& holderFactory, TUnboxedValueBatch& buffer)
 {
     using TPacker = TValuePackerTransport<Fast>;
     TPacker packer(/* stable */ false, itemType);
@@ -176,6 +178,7 @@ NDqProto::TData TDqDataSerializer::SerializeParamValue(const TType* type, const 
     NDqProto::TData data;
     data.SetTransportVersion(NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0);
     data.SetRaw(packResult.data(), packResult.size());
+    data.SetChunks(1);
     data.SetRows(1);
 
     return data;

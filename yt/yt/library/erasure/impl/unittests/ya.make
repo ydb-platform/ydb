@@ -2,8 +2,6 @@ GTEST(unittester-library-erasure)
 
 INCLUDE(${ARCADIA_ROOT}/yt/ya_cpp.make.inc)
 
-ALLOCATOR(YT)
-
 SRCS(
     erasure_stability_ut.cpp
 )

@@ -1,14 +1,14 @@
 #include "kikimr_program_builder.h"
 
-#include <ydb/library/yql/minikql/mkql_node_printer.h>
-#include <ydb/library/yql/minikql/mkql_node_serialization.h>
-#include <ydb/library/yql/minikql/mkql_node_visitor.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_impl.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
-#include <ydb/library/yql/minikql/mkql_function_registry.h>
-#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
-#include <ydb/library/yql/minikql/comp_nodes/mkql_factories.h>
+#include <yql/essentials/minikql/mkql_node_printer.h>
+#include <yql/essentials/minikql/mkql_node_serialization.h>
+#include <yql/essentials/minikql/mkql_node_visitor.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_impl.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/minikql/mkql_function_registry.h>
+#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
+#include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
 #include <ydb/core/engine/mkql_keys.h>
 #include <ydb/core/scheme_types/scheme_types_defs.h>
 

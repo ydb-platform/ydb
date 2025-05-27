@@ -8,6 +8,7 @@
 #include <ydb/library/actors/core/executor_pool_basic.h>
 #include <ydb/library/actors/core/scheduler_basic.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/actors/interconnect/poller_actor.h>
 #include <ydb/library/actors/protos/services_common.pb.h>
 #include <google/protobuf/text_format.h>
 #include <ydb/library/actors/core/process_stats.h>
@@ -26,7 +27,9 @@
 #include "mvp.h"
 #include "oidc_client.h"
 
-using namespace NMVP;
+NActors::IActor* CreateMemProfiler();
+
+namespace NMVP::NOIDC {
 
 namespace {
 
@@ -42,7 +45,7 @@ TString AddSchemeToUserToken(const TString& token, const TString& scheme) {
 const ui16 TMVP::DefaultHttpPort = 8788;
 const ui16 TMVP::DefaultHttpsPort = 8789;
 
-const TString& NMVP::GetEServiceName(NActors::NLog::EComponent component) {
+const TString& GetEServiceName(NActors::NLog::EComponent component) {
     static const TString loggerName("LOGGER");
     static const TString mvpName("MVP");
     static const TString grpcName("GRPC");
@@ -65,8 +68,6 @@ const TString& NMVP::GetEServiceName(NActors::NLog::EComponent component) {
 void TMVP::OnTerminate(int) {
     AtomicSet(Quit, true);
 }
-
-NActors::IActor* CreateMemProfiler();
 
 int TMVP::Init() {
     ActorSystem.Start();
@@ -232,6 +233,7 @@ void TMVP::TryGetOidcOptionsFromConfig(const YAML::Node& config) {
     OpenIdConnectSettings.AuthUrlPath = oidc["auth_url_path"].as<std::string>(OpenIdConnectSettings.DEFAULT_AUTH_URL_PATH);
     OpenIdConnectSettings.TokenUrlPath = oidc["token_url_path"].as<std::string>(OpenIdConnectSettings.DEFAULT_TOKEN_URL_PATH);
     OpenIdConnectSettings.ExchangeUrlPath = oidc["exchange_url_path"].as<std::string>(OpenIdConnectSettings.DEFAULT_EXCHANGE_URL_PATH);
+    OpenIdConnectSettings.ImpersonateUrlPath = oidc["impersonate_url_path"].as<std::string>(OpenIdConnectSettings.DEFAULT_IMPERSONATE_URL_PATH);
     Cout << "Started processing allowed_proxy_hosts..." << Endl;
     for (const std::string& host : oidc["allowed_proxy_hosts"].as<std::vector<std::string>>()) {
         Cout << host << " added to allowed_proxy_hosts" << Endl;
@@ -411,7 +413,10 @@ THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup(int argc, char**
 
     setup->Scheduler = new NActors::TBasicSchedulerThread(NActors::TSchedulerConfig(512, 100));
     setup->LocalServices.emplace_back(LoggerSettings->LoggerActorId, NActors::TActorSetupCmd(loggerActor, NActors::TMailboxType::HTSwap, 0));
+    setup->LocalServices.emplace_back(NActors::MakePollerActorId(), NActors::TActorSetupCmd(NActors::CreatePollerActor(), NActors::TMailboxType::HTSwap, 0));
     return setup;
 }
 
 TAtomic TMVP::Quit = false;
+
+} // NMVP::NOIDC

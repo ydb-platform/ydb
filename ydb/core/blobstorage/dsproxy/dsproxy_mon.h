@@ -30,6 +30,8 @@ enum class ERequestType {
     Status,
     Assimilate,
     Block,
+    GetBlock,
+    CheckIntegrity,
 };
 
 struct TRequestMonGroup {
@@ -196,6 +198,8 @@ protected:
     TRequestMonGroup StatusGroup;
     TRequestMonGroup AssimilateGroup;
     TRequestMonGroup BlockGroup;
+    TRequestMonGroup GetBlockGroup;
+    TRequestMonGroup CheckIntegrityGroup;
 
 public:
     TBlobStorageGroupProxyTimeStats TimeStats;
@@ -210,6 +214,7 @@ public:
     // event counters
     ::NMonitoring::TDynamicCounters::TCounterPtr EventGet;
     ::NMonitoring::TDynamicCounters::TCounterPtr EventBlock;
+    ::NMonitoring::TDynamicCounters::TCounterPtr EventGetBlock;
     ::NMonitoring::TDynamicCounters::TCounterPtr EventDiscover;
     ::NMonitoring::TDynamicCounters::TCounterPtr EventRange;
     ::NMonitoring::TDynamicCounters::TCounterPtr EventCollectGarbage;
@@ -221,6 +226,7 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr EventStopGetBatching;
     ::NMonitoring::TDynamicCounters::TCounterPtr EventPatch;
     ::NMonitoring::TDynamicCounters::TCounterPtr EventAssimilate;
+    ::NMonitoring::TDynamicCounters::TCounterPtr EventCheckIntegrity;
 
     ::NMonitoring::TDynamicCounters::TCounterPtr PutsSentViaPutBatching;
     ::NMonitoring::TDynamicCounters::TCounterPtr PutBatchesSent;
@@ -230,6 +236,7 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr ActivePut;
     ::NMonitoring::TDynamicCounters::TCounterPtr ActivePutCapacity;
     ::NMonitoring::TDynamicCounters::TCounterPtr ActiveGet;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ActiveGetBlock;
     ::NMonitoring::TDynamicCounters::TCounterPtr ActiveGetCapacity;
     ::NMonitoring::TDynamicCounters::TCounterPtr ActiveBlock;
     ::NMonitoring::TDynamicCounters::TCounterPtr ActiveDiscover;
@@ -241,9 +248,11 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr ActiveStatus;
     ::NMonitoring::TDynamicCounters::TCounterPtr ActivePatch;
     ::NMonitoring::TDynamicCounters::TCounterPtr ActiveAssimilate;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ActiveCheckIntegrity;
 
     std::optional<TResponseStatusGroup> RespStatPut;
     std::optional<TResponseStatusGroup> RespStatGet;
+    std::optional<TResponseStatusGroup> RespStatGetBlock;
     std::optional<TResponseStatusGroup> RespStatBlock;
     std::optional<TResponseStatusGroup> RespStatDiscover;
     std::optional<TResponseStatusGroup> RespStatRange;
@@ -251,6 +260,7 @@ public:
     std::optional<TResponseStatusGroup> RespStatStatus;
     std::optional<TResponseStatusGroup> RespStatPatch;
     std::optional<TResponseStatusGroup> RespStatAssimilate;
+    std::optional<TResponseStatusGroup> RespStatCheckIntegrity;
 
     // special patch counters
     ::NMonitoring::TDynamicCounters::TCounterPtr VPatchContinueFailed;
@@ -268,6 +278,8 @@ public:
             case ERequestType::Status: return StatusGroup;
             case ERequestType::Assimilate: return AssimilateGroup;
             case ERequestType::Block: return BlockGroup;
+            case ERequestType::GetBlock: return GetBlockGroup;
+            case ERequestType::CheckIntegrity: return CheckIntegrityGroup;
         }
         Y_ABORT();
     }
@@ -374,4 +386,3 @@ public:
 };
 
 } // NKikimr
-

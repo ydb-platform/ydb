@@ -2,7 +2,7 @@
 
 Информационная команда `discovery whoami` позволяет проверить, от имени какой учетной записи воспринимает запросы сервер:
 
-``` bash
+```bash
 {{ ydb-cli }} [connection options] discovery whoami [-g]
 ```
 
@@ -16,7 +16,7 @@
 
 ## Пример
 
-``` bash
+```bash
 $ ydb -p quickstart discovery whoami -g
 User SID: aje5kkjdgs0puc18976co@as
 

@@ -67,6 +67,9 @@ void Deserialize(unsigned long long& value, TYsonPullParserCursor* cursor);
 // double
 void Deserialize(double& value, TYsonPullParserCursor* cursor);
 
+// std::string
+void Deserialize(std::string& value, TYsonPullParserCursor* cursor);
+
 // TString
 void Deserialize(TString& value, TYsonPullParserCursor* cursor);
 
@@ -109,6 +112,9 @@ void Deserialize(
 // Enum.
 template <class T>
     requires TEnumTraits<T>::IsEnum
+void Deserialize(T& value, TYsonPullParserCursor* cursor);
+template <class T>
+    requires (!TEnumTraits<T>::IsEnum) && std::is_enum_v<T>
 void Deserialize(T& value, TYsonPullParserCursor* cursor);
 
 // TCompactVector.

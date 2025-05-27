@@ -5,7 +5,7 @@
 #include <ydb/core/kqp/opt/kqp_opt_impl.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
 
-#include <ydb/library/yql/core/yql_opt_utils.h>
+#include <yql/essentials/core/yql_opt_utils.h>
 #include <ydb/library/yql/dq/opt/dq_opt_log.h>
 
 namespace NKikimr::NKqp::NOpt {
@@ -16,11 +16,15 @@ using namespace NYql::NDq;
 using namespace NYql::NNodes;
 
 TMaybeNode<TExprBase> KqpRewriteLiteralLookup(const TExprBase& node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
-    if (!node.Maybe<TKqlLookupTable>()) {
+    if (!node.Maybe<TKqlLookupTableBase>()) {
         return {};
     }
 
-    const TKqlLookupTable& lookup = node.Cast<TKqlLookupTable>();
+    if (kqpCtx.IsScanQuery())  {
+        return {};
+    }
+
+    const TKqlLookupTableBase& lookup = node.Cast<TKqlLookupTableBase>();
     TMaybeNode<TExprBase> lookupKeys = lookup.LookupKeys();
     TMaybeNode<TCoSkipNullMembers> skipNullMembers;
     if (lookupKeys.Maybe<TCoSkipNullMembers>()) {
@@ -44,7 +48,7 @@ TMaybeNode<TExprBase> KqpRewriteLiteralLookup(const TExprBase& node, TExprContex
         auto flatMapRangeInput = lookupKeysFlatMap.Cast().Input().Maybe<TCoRangeFinalize>();
 
         // This rule should depend on feature flag for safety
-        if (!flatMapRangeInput || !kqpCtx.Config->EnableKqpDataQueryStreamLookup) {
+        if (!flatMapRangeInput) {
             return {};
         }
 
@@ -141,7 +145,7 @@ TMaybeNode<TExprBase> KqpRewriteLiteralLookup(const TExprBase& node, TExprContex
 }
 
 TExprBase KqpRewriteLookupTable(const TExprBase& node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
-    if (!node.Maybe<TKqlLookupTable>()) {
+    if (!node.Maybe<TKqlLookupTableBase>()) {
         return node;
     }
 
@@ -149,18 +153,7 @@ TExprBase KqpRewriteLookupTable(const TExprBase& node, TExprContext& ctx, const 
         return literal.Cast();
     }
 
-    const TKqlLookupTable& lookup = node.Cast<TKqlLookupTable>();
-
-    if (!kqpCtx.Config->EnableKqpDataQueryStreamLookup) {
-        return node;
-    }
-
-    return Build<TKqlStreamLookupTable>(ctx, lookup.Pos())
-        .Table(lookup.Table())
-        .LookupKeys(lookup.LookupKeys())
-        .Columns(lookup.Columns())
-        .LookupStrategy().Build(TKqpStreamLookupStrategyName)
-        .Done();
+    return node;
 }
 
 TExprBase KqpDropTakeOverLookupTable(const TExprBase& node, TExprContext&, const TKqpOptimizeContext& kqpCtx) {

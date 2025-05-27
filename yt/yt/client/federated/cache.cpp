@@ -1,5 +1,4 @@
 #include "cache.h"
-#include "client.h"
 #include "connection.h"
 
 #include <yt/yt/client/api/options.h>
@@ -11,6 +10,8 @@
 
 namespace NYT::NClient::NFederated {
 
+using namespace NYT::NClient::NCache;
+
 namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -20,35 +21,35 @@ class TClientsCache
 {
 public:
     TClientsCache(
-        TClustersConfig clustersConfig,
+        TClientsCacheConfigPtr clientsCacheConfig,
         NApi::TClientOptions options,
         TConnectionConfigPtr federationConfig,
         TString clusterSeparator)
-        : ClustersConfig_(std::move(clustersConfig))
+        : ClientsCacheConfig_(std::move(clientsCacheConfig))
         , Options_(std::move(options))
         , FederationConfig_(std::move(federationConfig))
         , ClusterSeparator_(std::move(clusterSeparator))
-    {}
+    { }
 protected:
     NApi::IClientPtr CreateClient(TStringBuf clusterUrl) override
     {
-        std::vector<TString> clusters;
-        NYT::NApi::IClientPtr client;
+        std::vector<std::string> clusters;
+        NApi::IClientPtr client;
         StringSplitter(clusterUrl).SplitByString(ClusterSeparator_).SkipEmpty().Collect(&clusters);
         switch (clusters.size()) {
             case 0:
                 THROW_ERROR_EXCEPTION("Cannot create client without cluster");
             case 1:
-                return NCache::CreateClient(NCache::MakeClusterConfig(ClustersConfig_, clusterUrl), Options_);
+                return NCache::CreateClient(NCache::GetConnectionConfig(ClientsCacheConfig_, clusterUrl), Options_);
             default:
                 return CreateFederatedClient(clusters);
         }
     }
 
 private:
-    NApi::IClientPtr CreateFederatedClient(const std::vector<TString>& clusters)
+    NApi::IClientPtr CreateFederatedClient(const std::vector<std::string>& clusters)
     {
-        THashSet<TString> seenClusters;
+        THashSet<std::string> seenClusters;
         for (const auto& connectionConfig : FederationConfig_->RpcProxyConnections) {
             THROW_ERROR_EXCEPTION_UNLESS(
                 connectionConfig->ClusterUrl,
@@ -70,14 +71,14 @@ private:
 
         if (!FederatedConnection_) {
             // TODO(ashishkin): use proper invoker here?
-            NYT::NApi::NRpcProxy::TConnectionOptions options;
+            NApi::NRpcProxy::TConnectionOptions options;
             FederatedConnection_ = CreateConnection(FederationConfig_, std::move(options));
         }
         return FederatedConnection_->CreateClient(Options_);
     }
 
 private:
-    const TClustersConfig ClustersConfig_;
+    const TClientsCacheConfigPtr ClientsCacheConfig_;
     const NApi::TClientOptions Options_;
     const NFederated::TConnectionConfigPtr FederationConfig_;
     const TString ClusterSeparator_;
@@ -90,12 +91,12 @@ private:
 
 IClientsCachePtr CreateFederatedClientsCache(
     TConnectionConfigPtr federatedConfig,
-    const TClustersConfig& clustersConfig,
-    const NYT::NApi::TClientOptions& options,
+    const TClientsCacheConfigPtr& clientsCacheConfig,
+    const NApi::TClientOptions& options,
     TString clusterSeparator)
 {
     return NYT::New<TClientsCache>(
-        clustersConfig,
+        clientsCacheConfig,
         options,
         std::move(federatedConfig),
         std::move(clusterSeparator));
@@ -103,15 +104,18 @@ IClientsCachePtr CreateFederatedClientsCache(
 
 IClientsCachePtr CreateFederatedClientsCache(
     TConnectionConfigPtr federatedConfig,
-    const TConfig& config,
-    const NYT::NApi::TClientOptions& options,
+    const NApi::NRpcProxy::TConnectionConfigPtr& connectionConfig,
+    const NApi::TClientOptions& options,
     TString clusterSeparator)
 {
-    TClustersConfig clustersConfig;
-    *clustersConfig.MutableDefaultConfig() = config;
+    auto clientsCacheConfig = New<TClientsCacheConfig>();
+    clientsCacheConfig->DefaultConnection = CloneYsonStruct(
+        connectionConfig,
+        /*postprocess*/ false,
+        /*setDefaults*/ false);
 
     return NYT::New<TClientsCache>(
-        std::move(clustersConfig),
+        std::move(clientsCacheConfig),
         options,
         std::move(federatedConfig),
         std::move(clusterSeparator));

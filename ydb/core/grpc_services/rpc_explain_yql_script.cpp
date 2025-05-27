@@ -42,6 +42,7 @@ public:
         auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
         SetAuthToken(ev, *Request_);
         SetDatabase(ev, *Request_);
+        ev->Record.MutableRequest()->SetClientAddress(Request_->GetPeerName());
 
         if (traceId) {
             ev->Record.SetTraceId(traceId.GetRef());
@@ -81,7 +82,7 @@ public:
     }
 
     void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
-        const auto& record = ev->Get()->Record.GetRef();
+        const auto& record = ev->Get()->Record;
         AddServerHintsIfAny(record);
 
         if (record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {

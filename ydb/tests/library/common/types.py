@@ -8,23 +8,6 @@ from ydb.tests.library.common.generators import int_between, one_of, float_in, s
 
 
 @unique
-class DeltaTypes(IntEnum):
-    AddTable = 1,
-    DropTable = 2,
-    AddColumn = 3,
-    DropColumn = 4,
-    AddColumnToKey = 5,
-    AddColumnToFamily = 6,
-    AddFamily = 7,
-    UpdateExecutorInfo = 8,
-    SetCompactionPolicy = 9,
-    SetRoom = 10,
-    SetFamily = 11,
-    SetRedo = 12,
-    SetTable = 13
-
-
-@unique
 class PDiskCategory(IntEnum):
     ROT = 0
     SSD = 1
@@ -264,6 +247,8 @@ class PType(AbstractTypeEnum):
 
     Double = _ptype_from(32, float_in(-100, 100), float, proto_field='Double')
     Float = _ptype_from(33, float_in(-100, 100), float, proto_field='Float')
+
+    Timestamp = _ptype_from(50, int_between(0, 2 ** 64 - 1), int, proto_field='Timestamp', min_value=0, max_value=2 ** 64 - 1)
 
     # Rework Pair later
     PairUi64Ui64 = _ptype_from(257, int_between(0, 2 ** 64 - 1), int)

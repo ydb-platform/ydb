@@ -1,9 +1,9 @@
-import random
 import string
 import hashlib
 import hmac
 import base64
 import re
+from moto.moto_api._internal import mock_random as random
 
 FORMATS = {
     "email": r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b",
@@ -32,6 +32,18 @@ PAGINATION_MODEL = {
     },
     "list_users": {
         "input_token": "pagination_token",
+        "limit_key": "limit",
+        "limit_default": 60,
+        "unique_attribute": "id",
+    },
+    "list_groups": {
+        "input_token": "next_token",
+        "limit_key": "limit",
+        "limit_default": 60,
+        "unique_attribute": "group_name",
+    },
+    "list_users_in_group": {
+        "input_token": "next_token",
         "limit_key": "limit",
         "limit_default": 60,
         "unique_attribute": "id",
@@ -66,3 +78,26 @@ def flatten_attrs(attrs):
 
 def expand_attrs(attrs):
     return [{"Name": k, "Value": v} for k, v in attrs.items()]
+
+
+ID_HASH_STRATEGY = "HASH"
+
+
+def generate_id(strategy, *args):
+    if strategy == ID_HASH_STRATEGY:
+        return _generate_id_hash(args)
+    else:
+        return _generate_id_uuid()
+
+
+def _generate_id_uuid():
+    return random.uuid4().hex
+
+
+def _generate_id_hash(args):
+    hasher = hashlib.sha256()
+
+    for arg in args:
+        hasher.update(str(arg).encode())
+
+    return hasher.hexdigest()

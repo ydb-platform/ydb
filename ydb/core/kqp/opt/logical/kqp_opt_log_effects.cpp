@@ -2,7 +2,7 @@
 
 #include <ydb/core/kqp/opt/kqp_opt_impl.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
-#include <ydb/library/yql/core/yql_opt_utils.h>
+#include <yql/essentials/core/yql_opt_utils.h>
 
 namespace {
 
@@ -171,6 +171,7 @@ TExprBase KqpDeleteOverLookup(const TExprBase& node, TExprContext& ctx, const TK
     return Build<TKqlDeleteRows>(ctx, deleteRows.Pos())
         .Table(deleteRows.Table())
         .Input(deleteInput.Cast())
+        .IsBatch(deleteRows.IsBatch())
         .ReturningColumns(deleteRows.ReturningColumns())
         .Done();
 }

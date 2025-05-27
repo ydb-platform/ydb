@@ -11,7 +11,7 @@ with ssales as
       ,i_manager_id
       ,i_units
       ,i_size
-      ,sum(ss_sales_price) netpaid
+      ,sum(ss_net_paid) netpaid
 from {{store_sales}}
     ,{{store_returns}}
     ,{{store}}
@@ -26,7 +26,7 @@ where ss_ticket_number = sr_ticket_number
   and c_current_addr_sk = ca_address_sk
   and c_birth_country <> upper(ca_country)
   and s_zip = ca_zip
-and s_market_id=10
+and s_market_id=8
 group by c_last_name
         ,c_first_name
         ,s_store_name
@@ -42,7 +42,7 @@ select c_last_name
       ,s_store_name
       ,sum(netpaid) paid
 from ssales
-where i_color = 'show'
+where i_color = 'peach'
 group by c_last_name
         ,c_first_name
         ,s_store_name
@@ -63,7 +63,7 @@ with ssales as
       ,i_manager_id
       ,i_units
       ,i_size
-      ,sum(ss_sales_price) netpaid
+      ,sum(ss_net_paid) netpaid
 from {{store_sales}}
     ,{{store_returns}}
     ,{{store}}
@@ -78,7 +78,7 @@ where ss_ticket_number = sr_ticket_number
   and c_current_addr_sk = ca_address_sk
   and c_birth_country <> upper(ca_country)
   and s_zip = ca_zip
-  and s_market_id = 10
+  and s_market_id = 8
 group by c_last_name
         ,c_first_name
         ,s_store_name
@@ -94,7 +94,7 @@ select c_last_name
       ,s_store_name
       ,sum(netpaid) paid
 from ssales
-where i_color = 'chiffon'
+where i_color = 'saddle'
 group by c_last_name
         ,c_first_name
         ,s_store_name

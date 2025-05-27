@@ -1,8 +1,8 @@
 #include "conversion.h"
 #include <ydb/core/formats/arrow/switch/switch_type.h>
-#include <ydb/core/formats/arrow/simple_builder/filler.h>
-#include <ydb/core/formats/arrow/simple_builder/array.h>
 #include <ydb/core/formats/arrow/size_calcer.h>
+#include <ydb/library/formats/arrow/simple_builder/filler.h>
+#include <ydb/library/formats/arrow/simple_builder/array.h>
 
 namespace NKikimr::NArrow {
 
@@ -129,13 +129,6 @@ bool IsDictionableArray(const std::shared_ptr<arrow::Array>& data) {
         return true;
     });
     return result;
-}
-
-ui64 GetDictionarySize(const std::shared_ptr<arrow::DictionaryArray>& data) {
-    if (!data) {
-        return 0;
-    }
-    return GetArrayDataSize(data->dictionary()) + GetArrayDataSize(data->indices());
 }
 
 }

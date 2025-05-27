@@ -11,12 +11,12 @@
 #include <ydb/library/yql/providers/dq/api/grpc/api.grpc.pb.h>
 #include <ydb/library/yql/providers/dq/counters/counters.h>
 
-#include <ydb/library/yql/utils/failure_injector/failure_injector.h>
+#include <yql/essentials/utils/failure_injector/failure_injector.h>
 
-#include <ydb/library/yql/utils/yql_panic.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/utils/yql_panic.h>
+#include <yql/essentials/utils/log/log.h>
 
-#include <ydb/library/grpc/client/grpc_client_low.h>
+#include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
 #include <library/cpp/protobuf/util/pb_io.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
@@ -456,7 +456,7 @@ private:
         return std::make_pair(true, "");
     }
 
-    std::pair<bool, TString> MaybeUpload(bool isForwarded, const TVector<TFileResource>& files, bool useCache = false) {
+    std::pair<bool, TString> MaybeUploadUnsafe(bool isForwarded, const TVector<TFileResource>& files, bool useCache = false) {
         if (isForwarded) {
             return std::make_pair(false, "");
         }
@@ -556,6 +556,15 @@ private:
 
         return std::make_pair(flag, "");
     }
+
+    std::pair<bool, TString> MaybeUpload(bool isForwarded, const TVector<TFileResource>& files, bool useCache = false) {
+        try {
+            return MaybeUploadUnsafe(isForwarded, files, useCache);
+        } catch (...) {
+            return {false, CurrentExceptionMessage()};
+        }
+    }
+
 
     void StartUploadAndForward(TEvAllocateWorkersRequest::TPtr& ev, const TActorContext& ctx)
     {
@@ -662,7 +671,7 @@ private:
             Send(value.ActorId, new TEvents::TEvPoison());
         }
         for (const auto sender : Scheduler->Cleanup()) {
-            Send(sender, new TEvAllocateWorkersResponse("StartFollower", NYql::NDqProto::StatusIds::UNSPECIFIED));
+            Send(sender, new TEvAllocateWorkersResponse("Worker reallocation is required because of DQ leader change", NYql::NDqProto::StatusIds::UNAVAILABLE));
         }
         AllocatedResources.clear();
         for (auto& [k, v] : LiteralQueries) {
@@ -674,7 +683,7 @@ private:
 
     void UpdateLeaderInfo(THashMap<TString, NYT::TNode>& attributes) {
         LeaderHost = attributes.at(NCommonAttrs::HOSTNAME_ATTR).AsString();
-        LeaderPort = std::stoi(attributes.at(NCommonAttrs::GRPCPORT_ATTR).AsString().Data());
+        LeaderPort = std::stoi(attributes.at(NCommonAttrs::GRPCPORT_ATTR).AsString().data());
     }
 
     void Bootstrap(const TActorContext& ctx) {

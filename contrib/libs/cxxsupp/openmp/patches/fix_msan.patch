@@ -1,0 +1,29 @@
+diff --git a/kmp_utility.cpp b/kmp_utility.cpp
+index c4bfead..c755788 100644
+--- a/kmp_utility.cpp
++++ b/kmp_utility.cpp
+@@ -16,6 +16,10 @@
+ #include "kmp_wrapper_getpid.h"
+ #include <float.h>
+ 
++#include <util/system/types.h>
++
++const char* CpuBrand(ui32 store[12]) noexcept; //defined in <util/system/cpu_id.h>
++
+ static const char *unknown = "unknown";
+ 
+ #if KMP_ARCH_X86 || KMP_ARCH_X86_64
+@@ -260,12 +264,9 @@ void __kmp_query_cpuid(kmp_cpuinfo_t *p) {
+ 
+   { // Parse CPU brand string for frequency, saving the string for later.
+     int i;
+-    kmp_cpuid_t *base = (kmp_cpuid_t *)&p->name[0];
+ 
+     // Get CPU brand string.
+-    for (i = 0; i < 3; ++i) {
+-      __kmp_x86_cpuid(0x80000002 + i, 0, base + i);
+-    }
++    CpuBrand((ui32 *)&p->name[0]);
+     p->name[sizeof(p->name) - 1] = 0; // Just in case. ;-)
+     KA_TRACE(trace_level, ("cpu brand string: \"%s\"\n", &p->name[0]));
+ 

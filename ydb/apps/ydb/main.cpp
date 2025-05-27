@@ -1,4 +1,4 @@
-#include <ydb/apps/ydb/commands/ydb_cloud_root.h>
+#include <ydb/apps/ydb/commands/ydb_root.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_service_topic.h>
 
 TVector<NYdb::NTopic::ECodec> NYdb::NConsoleClient::InitAllowedCodecs() {
@@ -11,14 +11,18 @@ TVector<NYdb::NTopic::ECodec> NYdb::NConsoleClient::InitAllowedCodecs() {
 
 int main(int argc, char **argv) {
     try {
-        return NYdb::NConsoleClient::NewYCloudClient(argc, argv);
+        return NYdb::NConsoleClient::NewYdbClient(argc, argv);
+    }
+    catch (const NYdb::NConsoleClient::TMisuseWithHelpException& e) {
+        // command help is already printed. Just exit(1)
+        return EXIT_FAILURE;
     }
     catch (const NYdb::NConsoleClient::TMisuseException& e) {
         Cerr << e.what() << Endl;
         Cerr << "Try \"--help\" option for more info." << Endl;
         return EXIT_FAILURE;
     }
-    catch (const NYdb::NConsoleClient::TYdbErrorException& e) {
+    catch (const NYdb::NStatusHelpers::TYdbErrorException& e) {
         Cerr << e;
         return EXIT_FAILURE;
     }

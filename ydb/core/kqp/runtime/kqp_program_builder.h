@@ -1,6 +1,8 @@
 #pragma once
 
-#include <ydb/library/yql/minikql/mkql_program_builder.h>
+#include <ydb/core/scheme_types/scheme_type_info.h>
+
+#include <yql/essentials/minikql/mkql_program_builder.h>
 
 namespace NKikimr {
 
@@ -13,14 +15,14 @@ struct TKqpTableColumn {
     TString Name;
     NUdf::TDataTypeId Type;
     bool NotNull;
-    void* TypeDesc;
+    NScheme::TTypeInfo TypeInfo;
 
-    TKqpTableColumn(ui32 id, const TStringBuf& name, NUdf::TDataTypeId type, bool notNull, void* typeDesc)
+    TKqpTableColumn(ui32 id, const TStringBuf& name, NUdf::TDataTypeId type, bool notNull, const NScheme::TTypeInfo& typeInfo)
         : Id(id)
         , Name(name)
         , Type(type)
         , NotNull(notNull)
-        , TypeDesc(typeDesc) {}
+        , TypeInfo(typeInfo) {}
 };
 
 using TKqpKeyTuple = TVector<TRuntimeNode>;
@@ -46,9 +48,6 @@ class TKqpProgramBuilder: public TProgramBuilder {
 public:
     TKqpProgramBuilder(const TTypeEnvironment& env, const IFunctionRegistry& functionRegistry);
 
-    TRuntimeNode KqpReadTable(const TTableId& tableId, const TKqpKeyRange& range,
-        const TArrayRef<TKqpTableColumn>& columns);
-
     TRuntimeNode KqpWideReadTable(const TTableId& tableId, const TKqpKeyRange& range,
         const TArrayRef<TKqpTableColumn>& columns);
 
@@ -57,9 +56,6 @@ public:
 
     TRuntimeNode KqpBlockReadTableRanges(const TTableId& tableId, const TKqpKeyRanges& range,
         const TArrayRef<TKqpTableColumn>& columns, TType* returnType);
-
-    TRuntimeNode KqpLookupTable(const TTableId& tableId, const TRuntimeNode& lookupKeys,
-        const TArrayRef<TKqpTableColumn>& keyColumns, const TArrayRef<TKqpTableColumn>& columns);
 
     TRuntimeNode KqpUpsertRows(const TTableId& tableId, const TRuntimeNode& rows,
         const TArrayRef<TKqpTableColumn>& upsertColumns, bool isUpdate);

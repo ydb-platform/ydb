@@ -19,7 +19,7 @@ using namespace NYTree;
 
 static constexpr auto TabletCacheSweepPeriod = TDuration::Seconds(60);
 
-///////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 TTabletInfoOwnerCache::TTabletInfoOwnerCache(NLogging::TLogger logger)
     : Logger(std::move(logger))
@@ -27,7 +27,7 @@ TTabletInfoOwnerCache::TTabletInfoOwnerCache(NLogging::TLogger logger)
 
 void TTabletInfoOwnerCache::DropExpiredOwners(std::vector<TWeakPtr<TTableMountInfo>>* owners)
 {
-    VERIFY_WRITER_SPINLOCK_AFFINITY(MapLock_);
+    YT_ASSERT_WRITER_SPINLOCK_AFFINITY(MapLock_);
 
     std::erase_if(*owners, [] (const auto& owner) {
         return owner.IsExpired();
@@ -139,7 +139,7 @@ void TTabletInfoOwnerCache::SweepExpiredEntries()
 
 void TTabletInfoOwnerCache::ProcessNextGCQueueEntry()
 {
-    VERIFY_SPINLOCK_AFFINITY(MapLock_);
+    YT_ASSERT_SPINLOCK_AFFINITY(MapLock_);
 
     auto gcGuard = Guard(GCLock_);
     if (!GCQueue_.empty()) {
@@ -256,7 +256,7 @@ auto TTableMountCacheBase::TryHandleServantNotActiveError(const TError& error)
         return {};
     }
 
-    if (auto siblingCellDescriptor = attributes.ToMap()->FindChild("sibling_servant_cell_descriptor")) {
+    if (auto siblingCellDescriptor = attributes.Find<INodePtr>("sibling_servant_cell_descriptor")) {
         RegisterCell(std::move(siblingCellDescriptor));
     } else {
         return {};
@@ -304,11 +304,14 @@ auto TTableMountCacheBase::TryHandleServantNotActiveError(const TError& error)
             }
         }
 
-        TabletInfoOwnerCache_.Insert(*tabletId, MakeWeak(clone));
         clonedTableInfos.push_back(std::move(clone));
     }
 
     for (const auto& tableInfo : clonedTableInfos) {
+        for (const auto& tabletInfo : tableInfo->Tablets) {
+            TabletInfoOwnerCache_.Insert(tabletInfo->TabletId, MakeWeak(tableInfo));
+        }
+
         TAsyncExpiringCache::Set(tableInfo->Path, tableInfo);
     }
 

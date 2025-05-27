@@ -4,14 +4,14 @@ using namespace NActors;
 
 namespace NYql {
     TActorSystemManager::TActorSystemManager(
-        IMetricsRegistryPtr& metricsRegistry,
+        IMetricsRegistryPtr metricsRegistry,
         NActors::NLog::EPriority loggingLevel,
         TIntrusivePtr<NActors::NLog::TSettings> loggingSettings)
         : Setup_(MakeHolder<TActorSystemSetup>())
         , ActorSystem_(std::nullopt)
         , ActorNodeIDCounter_(0)
         , LoggingSettings_(loggingSettings)
-        , MetricsRegistry_(metricsRegistry)
+        , MetricsRegistry_(std::move(metricsRegistry))
     {
         // Enable default logging
         if (LoggingSettings_ == nullptr) {
@@ -91,4 +91,4 @@ namespace NYql {
     ui32 TActorSystemManager::ObtainNextActorNodeId() {
         return ActorNodeIDCounter_++;
     }
-}
+} // namespace NYql

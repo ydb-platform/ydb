@@ -69,7 +69,7 @@
                                                 ],
                                                 "Limit": "1001",
                                                 "Name": "TopSort",
-                                                "TopSortBy": ""
+                                                "TopSortBy": "[row.col2,row.col1,row.col3]"
                                             },
                                             {
                                                 "Inputs": [
@@ -78,7 +78,7 @@
                                                     }
                                                 ],
                                                 "Name": "Filter",
-                                                "Predicate": "item.c >= item.b - 2 And item.c <= item.d + 2 And item.d > item.e And item.c > item.d"
+                                                "Predicate": "item.c >= item.b - 2 AND item.c <= item.d + 2 AND item.d > item.e AND item.c > item.d"
                                             }
                                         ],
                                         "PlanNodeId": 2,
@@ -89,6 +89,7 @@
                                                     {
                                                         "Inputs": [],
                                                         "Name": "TableFullScan",
+                                                        "Path": "/Root/sqllogictest_select3-2.test_plan/t1",
                                                         "ReadColumns": [
                                                             "a",
                                                             "b",

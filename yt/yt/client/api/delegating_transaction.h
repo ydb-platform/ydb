@@ -41,11 +41,11 @@ public:
         const TMultiLookupOptions& options) override;
 
     TFuture<TSelectRowsResult> SelectRows(
-        const TString& query,
+        const std::string& query,
         const TSelectRowsOptions& options) override;
 
     TFuture<NYson::TYsonString> ExplainQuery(
-        const TString& query,
+        const std::string& query,
         const TExplainQueryOptions& options) override;
 
     TFuture<TPullRowsResult> PullRows(
@@ -163,13 +163,13 @@ public:
     TDuration GetTimeout() const override;
 
     TFuture<void> Ping(
-        const NApi::TTransactionPingOptions& options) override;
+        const NApi::TPrerequisitePingOptions& options) override;
 
     TFuture<TTransactionCommitResult> Commit(
-        const TTransactionCommitOptions& options = TTransactionCommitOptions()) override;
+        const TTransactionCommitOptions& options = {}) override;
 
     TFuture<void> Abort(
-        const TTransactionAbortOptions& options = TTransactionAbortOptions()) override;
+        const TTransactionAbortOptions& options) override;
 
     void Detach() override;
     TFuture<TTransactionFlushResult> Flush() override;
@@ -214,7 +214,7 @@ public:
         const NYPath::TYPath& path,
         NTableClient::TNameTablePtr nameTable,
         TSharedRange<NTableClient::TLegacyKey> keys,
-        const std::vector<TString>& locks,
+        const std::vector<std::string>& locks,
         NTableClient::ELockType lockType) override;
 
     void ModifyRows(
@@ -255,6 +255,15 @@ public:
         NTableClient::TNameTablePtr nameTable,
         const std::vector<TSharedRef>& serializedRows,
         const TPushQueueProducerOptions& options) override;
+
+    // Distributed table client
+    TFuture<TDistributedWriteSessionWithCookies> StartDistributedWriteSession(
+        const NYPath::TRichYPath& path,
+        const TDistributedWriteSessionStartOptions& options = {}) override;
+
+    TFuture<void> FinishDistributedWriteSession(
+        const TDistributedWriteSessionWithResults& sessionWithResults,
+        const TDistributedWriteSessionFinishOptions& options = {}) override;
 
 protected:
     const ITransactionPtr Underlying_;

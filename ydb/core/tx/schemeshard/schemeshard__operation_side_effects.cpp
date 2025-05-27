@@ -13,7 +13,9 @@ void TSideEffects::ProposeToCoordinator(TOperationId opId, TPathId pathId, TStep
 }
 
 void TSideEffects::CoordinatorAck(TActorId coordinator, TStepId stepId, TTxId txId) {
-    CoordinatorAcks.push_back(TCoordinatorAck(coordinator, stepId, txId));
+    if (coordinator) {
+        CoordinatorAcks.push_back(TCoordinatorAck(coordinator, stepId, txId));
+    }
 }
 
 void TSideEffects::MediatorAck(TActorId mediator, TStepId stepId) {
@@ -165,6 +167,7 @@ void TSideEffects::ApplyOnExecute(TSchemeShard* ss, NTabletFlatExecutor::TTransa
     DoDoneParts(ss, ctx);
     DoSetBarriers(ss, ctx);
     DoCheckBarriers(ss, txc, ctx);
+    DoDoneParts(ss, ctx);
 
     DoWaitShardCreated(ss, ctx);
     DoActivateShardCreated(ss, ctx);
@@ -552,7 +555,7 @@ void TSideEffects::DoUpdateTenant(TSchemeShard* ss, NTabletFlatExecutor::TTransa
         }
 
         if (!hasChanges) {
-            LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                        "DoUpdateTenant no hasChanges"
                            << ", pathId: " << pathId
                            << ", tenantLink: " << tenantLink

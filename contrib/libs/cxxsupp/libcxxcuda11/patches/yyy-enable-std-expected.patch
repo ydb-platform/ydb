@@ -1,0 +1,52 @@
+diff --git a/include/__expected/bad_expected_access.h b/include/__expected/bad_expected_access.h
+index 27f01d9..174f97f 100644
+--- a/include/__expected/bad_expected_access.h
++++ b/include/__expected/bad_expected_access.h
+@@ -20,7 +20,7 @@
+ _LIBCPP_PUSH_MACROS
+ #include <__undef_macros>
+ 
+-#if _LIBCPP_STD_VER >= 23
++#if _LIBCPP_STD_VER >= 20
+ 
+ _LIBCPP_BEGIN_NAMESPACE_STD
+ 
+diff --git a/include/__expected/expected.h b/include/__expected/expected.h
+index 045370a..3f468fc 100644
+--- a/include/__expected/expected.h
++++ b/include/__expected/expected.h
+@@ -62,7 +62,7 @@
+ _LIBCPP_PUSH_MACROS
+ #include <__undef_macros>
+ 
+-#if _LIBCPP_STD_VER >= 23
++#if _LIBCPP_STD_VER >= 20
+ 
+ _LIBCPP_BEGIN_NAMESPACE_STD
+ 
+diff --git a/include/__expected/unexpect.h b/include/__expected/unexpect.h
+index df52787..fc3be4c 100644
+--- a/include/__expected/unexpect.h
++++ b/include/__expected/unexpect.h
+@@ -15,7 +15,7 @@
+ #  pragma GCC system_header
+ #endif
+ 
+-#if _LIBCPP_STD_VER >= 23
++#if _LIBCPP_STD_VER >= 20
+ 
+ _LIBCPP_BEGIN_NAMESPACE_STD
+ 
+diff --git a/include/__expected/unexpected.h b/include/__expected/unexpected.h
+index c7fe3c5..928b677 100644
+--- a/include/__expected/unexpected.h
++++ b/include/__expected/unexpected.h
+@@ -34,7 +34,7 @@
+ _LIBCPP_PUSH_MACROS
+ #include <__undef_macros>
+ 
+-#if _LIBCPP_STD_VER >= 23
++#if _LIBCPP_STD_VER >= 20
+ 
+ _LIBCPP_BEGIN_NAMESPACE_STD
+ 

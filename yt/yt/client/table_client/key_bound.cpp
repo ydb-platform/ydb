@@ -1,6 +1,7 @@
 #include "key_bound.h"
 
 #include "helpers.h"
+#include "private.h"
 #include "row_buffer.h"
 #include "serialize.h"
 
@@ -15,7 +16,7 @@ using namespace NLogging;
 ////////////////////////////////////////////////////////////////////////////////
 
 //! Used only for YT_LOG_FATAL below.
-YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "TableClientKey");
+[[maybe_unused]] constinit const auto Logger = TableClientLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 

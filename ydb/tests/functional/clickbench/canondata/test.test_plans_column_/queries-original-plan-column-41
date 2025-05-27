@@ -52,7 +52,7 @@
                                                                 "ExternalPlanNodeId": 4
                                                             }
                                                         ],
-                                                        "Limit": "SUM(10,10000)",
+                                                        "Limit": "Min(If,SUM(10,10000))",
                                                         "Name": "Limit"
                                                     }
                                                 ],
@@ -64,17 +64,26 @@
                                                         "PlanNodeType": "Connection",
                                                         "Plans": [
                                                             {
-                                                                "Node Type": "TopSort",
+                                                                "Node Type": "TopSort-Aggregate",
                                                                 "Operators": [
+                                                                    {
+                                                                        "Inputs": [
+                                                                            {
+                                                                                "InternalOperatorId": 1
+                                                                            }
+                                                                        ],
+                                                                        "Limit": "SUM(10,10000)",
+                                                                        "Name": "TopSort",
+                                                                        "TopSortBy": "argument.Count0"
+                                                                    },
                                                                     {
                                                                         "Inputs": [
                                                                             {
                                                                                 "ExternalPlanNodeId": 2
                                                                             }
                                                                         ],
-                                                                        "Limit": "SUM(10,10000)",
-                                                                        "Name": "TopSort",
-                                                                        "TopSortBy": "argument.Count0"
+                                                                        "Name": "Aggregate",
+                                                                        "Phase": "Final"
                                                                     }
                                                                 ],
                                                                 "PlanNodeId": 3,
@@ -89,11 +98,22 @@
                                                                         "PlanNodeType": "Connection",
                                                                         "Plans": [
                                                                             {
-                                                                                "Node Type": "TableRangeScan",
+                                                                                "Node Type": "Filter-TableRangeScan",
                                                                                 "Operators": [
+                                                                                    {
+                                                                                        "Inputs": [
+                                                                                            {
+                                                                                                "InternalOperatorId": 1
+                                                                                            }
+                                                                                        ],
+                                                                                        "Name": "Filter",
+                                                                                        "Predicate": "IsRefresh == 0 AND DontCountHits == 0 AND URLHash == 2868770270353813622",
+                                                                                        "Pushdown": "True"
+                                                                                    },
                                                                                     {
                                                                                         "Inputs": [],
                                                                                         "Name": "TableRangeScan",
+                                                                                        "Path": "/local/clickbench/plans/column/hits",
                                                                                         "ReadColumns": [
                                                                                             "DontCountHits",
                                                                                             "IsRefresh",
@@ -287,8 +307,7 @@
                                                                                                         ]
                                                                                                     }
                                                                                                 }
-                                                                                            ],
-                                                                                            "Version": 5
+                                                                                            ]
                                                                                         },
                                                                                         "Table": "clickbench/plans/column/hits"
                                                                                     }

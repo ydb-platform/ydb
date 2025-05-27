@@ -1,0 +1,14 @@
+--- a/src/google/protobuf/stubs/common.h	(index)
++++ b/src/google/protobuf/stubs/common.h	(working tree)
+@@ -127,6 +127,11 @@ void StrongReference(const T& var) {
+ }  // namespace protobuf
+ }  // namespace google
+ 
++namespace NProtoBuf {
++  using namespace google;
++  using namespace google::protobuf;
++}
++
+ #include "google/protobuf/port_undef.inc"
+ 
+ #endif  // GOOGLE_PROTOBUF_COMMON_H__

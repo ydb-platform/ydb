@@ -52,7 +52,7 @@
                                                                 "ExternalPlanNodeId": 4
                                                             }
                                                         ],
-                                                        "Limit": "SUM(10,100)",
+                                                        "Limit": "Min(If,SUM(10,100))",
                                                         "Name": "Limit"
                                                     }
                                                 ],
@@ -64,17 +64,26 @@
                                                         "PlanNodeType": "Connection",
                                                         "Plans": [
                                                             {
-                                                                "Node Type": "TopSort",
+                                                                "Node Type": "TopSort-Aggregate",
                                                                 "Operators": [
+                                                                    {
+                                                                        "Inputs": [
+                                                                            {
+                                                                                "InternalOperatorId": 1
+                                                                            }
+                                                                        ],
+                                                                        "Limit": "SUM(10,100)",
+                                                                        "Name": "TopSort",
+                                                                        "TopSortBy": "argument.Count0"
+                                                                    },
                                                                     {
                                                                         "Inputs": [
                                                                             {
                                                                                 "ExternalPlanNodeId": 2
                                                                             }
                                                                         ],
-                                                                        "Limit": "SUM(10,100)",
-                                                                        "Name": "TopSort",
-                                                                        "TopSortBy": "argument.Count0"
+                                                                        "Name": "Aggregate",
+                                                                        "Phase": "Final"
                                                                     }
                                                                 ],
                                                                 "PlanNodeId": 3,
@@ -92,8 +101,8 @@
                                                                                 "Node Type": "Aggregate-Filter-TableRangeScan",
                                                                                 "Operators": [
                                                                                     {
-                                                                                        "Aggregation": "{_yql_agg_0: SUM(state._yql_agg_0,1)}",
-                                                                                        "GroupBy": "",
+                                                                                        "Aggregation": "{SUM(1)}",
+                                                                                        "GroupBy": "[item.EventDate,item.URLHash]",
                                                                                         "Inputs": [
                                                                                             {
                                                                                                 "InternalOperatorId": 1
@@ -102,7 +111,8 @@
                                                                                                 "InternalOperatorId": 1
                                                                                             }
                                                                                         ],
-                                                                                        "Name": "Aggregate"
+                                                                                        "Name": "Aggregate",
+                                                                                        "Phase": "Intermediate"
                                                                                     },
                                                                                     {
                                                                                         "Inputs": [
@@ -111,11 +121,12 @@
                                                                                             }
                                                                                         ],
                                                                                         "Name": "Filter",
-                                                                                        "Predicate": "item.IsRefresh == 0 And If And item.RefererHash == 3594120000172545465"
+                                                                                        "Predicate": "item.IsRefresh == 0 AND If AND item.RefererHash == 3594120000172545465"
                                                                                     },
                                                                                     {
                                                                                         "Inputs": [],
                                                                                         "Name": "TableRangeScan",
+                                                                                        "Path": "/local/clickbench/plans/row/hits",
                                                                                         "ReadColumns": [
                                                                                             "EventDate",
                                                                                             "IsRefresh",

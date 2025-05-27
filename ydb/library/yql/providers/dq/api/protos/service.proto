@@ -98,6 +98,7 @@ message ExecuteGraphResponse {
     Ydb.Operations.Operation Operation = 1;
     repeated ResponseMetric Metric = 2;
     bool Truncated = 3;
+    bool Timeout = 4;
 }
 
 message SvnRevisionRequest {

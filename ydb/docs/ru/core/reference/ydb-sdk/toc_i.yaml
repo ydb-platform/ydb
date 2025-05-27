@@ -9,8 +9,15 @@ items:
     href: parameterized_queries.md
   - name: Работа с топиками
     href: topic.md
+  - name: Работа с узлами координации
+    href: coordination.md
   - name: Обработка ошибок в API
     href: error_handling.md
+    items:
+    - name: Статусы завершения сервера YDB
+      href: ydb-status-codes.md
+    - name: Статусы завершения gRPC
+      href: grpc-status-codes.md
   - name: gRPC API
     items:
     - name: Обзор

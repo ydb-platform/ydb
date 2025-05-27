@@ -29,7 +29,7 @@ void TGRpcYmqService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger)
                 ActorSystem_->Send(GRpcRequestProxyId_,                                                                             \
                     new TGrpcRequestOperationCall<Ydb::Ymq::V1::NAME##Request, Ydb::Ymq::V1::NAME##Response>        \
                         (ctx, CB, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::LIMIT_TYPE), ATTR}));                              \
-            }, &Ydb::Ymq::V1::YmqService::AsyncService::Request ## NAME,                                            \
+            }, &Ydb::Ymq::V1::YmqService::AsyncService::RequestYmq ## NAME,                                            \
             #NAME, logger, getCounterBlock("ymq", #NAME))->Run();
 
     ADD_REQUEST(GetQueueUrl, DoYmqGetQueueUrlRequest, nullptr, Off)
@@ -42,6 +42,14 @@ void TGRpcYmqService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger)
     ADD_REQUEST(PurgeQueue, DoYmqPurgeQueueRequest, nullptr, Off)
     ADD_REQUEST(DeleteQueue, DoYmqDeleteQueueRequest, nullptr, Off)
     ADD_REQUEST(ChangeMessageVisibility, DoYmqChangeMessageVisibilityRequest, nullptr, Off)
+    ADD_REQUEST(SetQueueAttributes, DoYmqSetQueueAttributesRequest, nullptr, Off)
+    ADD_REQUEST(SendMessageBatch, DoYmqSendMessageBatchRequest, nullptr, Off)
+    ADD_REQUEST(DeleteMessageBatch, DoYmqDeleteMessageBatchRequest, nullptr, Off)
+    ADD_REQUEST(ChangeMessageVisibilityBatch, DoYmqChangeMessageVisibilityBatchRequest, nullptr, Off)
+    ADD_REQUEST(ListDeadLetterSourceQueues, DoYmqListDeadLetterSourceQueuesRequest, nullptr, Off)
+    ADD_REQUEST(ListQueueTags, DoYmqListQueueTagsRequest, nullptr, Off)
+    ADD_REQUEST(TagQueue, DoYmqTagQueueRequest, nullptr, Off)
+    ADD_REQUEST(UntagQueue, DoYmqUntagQueueRequest, nullptr, Off)
 
 #undef ADD_REQUEST
 }

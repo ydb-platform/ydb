@@ -2,6 +2,7 @@
 #include "engines/changes/abstract/compaction_info.h"
 #include "engines/portions/meta.h"
 #include <ydb/core/tx/columnshard/counters/counters_manager.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 
 namespace NKikimr::NOlap {
 class TColumnEngineChanges;
@@ -13,8 +14,9 @@ class TBackgroundController {
 private:
     THashMap<TString, TMonotonic> ActiveIndexationTasks;
 
-    using TCurrentCompaction = THashMap<ui64, NOlap::TPlanCompactionInfo>;
+    using TCurrentCompaction = THashMap<TInternalPathId, NOlap::TPlanCompactionInfo>;
     TCurrentCompaction ActiveCompactionInfo;
+    std::optional<ui64> WaitingCompactionPriority;
 
     std::shared_ptr<TBackgroundControllerCounters> Counters;
     bool ActiveCleanupPortions = false;
@@ -25,21 +27,29 @@ public:
     TBackgroundController(std::shared_ptr<TBackgroundControllerCounters> counters)
         : Counters(std::move(counters)) {
     }
-
     THashSet<NOlap::TPortionAddress> GetConflictTTLPortions() const;
     THashSet<NOlap::TPortionAddress> GetConflictCompactionPortions() const;
+
+    void UpdateWaitingPriority(const ui64 priority) {
+        if (!WaitingCompactionPriority || *WaitingCompactionPriority < priority) {
+            WaitingCompactionPriority = priority;
+        }
+    }
+
+    void ResetWaitingPriority() {
+        WaitingCompactionPriority.reset();
+    }
+
+    std::optional<ui64> GetWaitingPriorityOptional() {
+        return WaitingCompactionPriority;
+    }
 
     void CheckDeadlines();
     void CheckDeadlinesIndexation();
 
-    bool StartCompaction(const NOlap::TPlanCompactionInfo& info);
-    void FinishCompaction(const NOlap::TPlanCompactionInfo& info) {
-        Y_ABORT_UNLESS(ActiveCompactionInfo.erase(info.GetPathId()));
-        Counters->OnCompactionFinish(info.GetPathId());
-    }
-    const TCurrentCompaction& GetActiveCompaction() const {
-        return ActiveCompactionInfo;
-    }
+    bool StartCompaction(const TInternalPathId pathId);
+    void FinishCompaction(const TInternalPathId pathId);
+
     ui32 GetCompactionsCount() const {
         return ActiveCompactionInfo.size();
     }

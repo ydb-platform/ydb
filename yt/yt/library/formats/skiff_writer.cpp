@@ -455,6 +455,14 @@ TUnversionedValueToSkiffConverter CreateSimpleValueConverter(
             } else {
                 return CreatePrimitiveValueConverter(wireType, required);
             }
+        case ESimpleLogicalValueType::TzDate:
+        case ESimpleLogicalValueType::TzDatetime:
+        case ESimpleLogicalValueType::TzTimestamp:
+        case ESimpleLogicalValueType::TzDate32:
+        case ESimpleLogicalValueType::TzDatetime64:
+        case ESimpleLogicalValueType::TzTimestamp64:
+            // TODO(nadya02): YT-15805: Support tz types.
+            THROW_ERROR_EXCEPTION("Tz types are not supported now");
     }
 }
 
@@ -473,7 +481,7 @@ TUnversionedValueToSkiffConverter CreateComplexValueConverter(
             input.Reset(value.Data.String, value.Length);
         } else if (value.Type == EValueType::Null) {
             static const TStringBuf empty = "#";
-            input.Reset(empty.Data(), empty.Size());
+            input.Reset(empty.data(), empty.size());
         } else {
             THROW_ERROR_EXCEPTION("Internal error; unexpected value type: expected %Qlv or %Qlv, actual %Qlv",
                 EValueType::Composite,
@@ -506,6 +514,10 @@ TUnversionedValueToSkiffConverter CreateDecimalValueConverter(
             return CreatePrimitiveValueConverter<EValueType::String>(
                 isRequired,
                 TDecimalSkiffWriter<EWireType::Int128>(precision));
+        case EWireType::Int256:
+            return CreatePrimitiveValueConverter<EValueType::String>(
+                isRequired,
+                TDecimalSkiffWriter<EWireType::Int256>(precision));
         case EWireType::Yson32:
             return CreatePrimitiveValueConverter(wireType, isRequired);
         default:
@@ -674,7 +686,7 @@ public:
             auto createComplexValueConverter = [&] (const TFieldDescription& skiffField, bool isSparse) -> TUnversionedValueToSkiffConverter {
                 auto columnSchema = indexedSchemas.GetColumnSchema(tableIndex, skiffField.Name());
 
-                // NB: we don't create complex value converter for simple types
+                // NB: We don't create complex value converter for simple types
                 // (column is missing in schema or has simple type).
                 //   1. Complex value converter expects unversioned values of type ANY
                 //      and simple types have other types.
@@ -1092,7 +1104,7 @@ ISchemalessFormatWriterPtr CreateWriterForSkiff(
             std::move(controlAttributesConfig),
             keyColumnCount);
     } catch (const std::exception& ex) {
-        THROW_ERROR_EXCEPTION(EErrorCode::InvalidFormat, "Failed to parse config for Skiff format") << ex;
+        THROW_ERROR_EXCEPTION(NFormats::EErrorCode::InvalidFormat, "Failed to parse config for Skiff format") << ex;
     }
 }
 

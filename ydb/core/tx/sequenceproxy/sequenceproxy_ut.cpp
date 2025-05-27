@@ -1,5 +1,6 @@
 #include "sequenceproxy.h"
 
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tx/scheme_board/cache.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/sequenceshard/public/events.h>
@@ -125,8 +126,28 @@ Y_UNIT_TEST_SUITE(SequenceProxy) {
             runtime.GrabEdgeEventRethrow<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult>(edge);
         }
 
+        TPathId DescribeSequence(TTestActorRuntime& runtime, const TActorId& sender, const TString& path) {
+            TAutoPtr<IEventHandle> handle;
+
+            auto request = MakeHolder<TEvTxUserProxy::TEvNavigate>();
+            request->Record.MutableDescribePath()->SetPath(path);
+            runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release()));
+            auto reply = runtime.GrabEdgeEventRethrow<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>(handle);
+
+            UNIT_ASSERT(reply->GetRecord().GetPathDescription().HasSequenceDescription());
+
+            const auto& sequenceDescription = reply->GetRecord().GetPathDescription().GetSequenceDescription();
+
+            return TPathId::FromProto(sequenceDescription.GetPathId());
+        }
+
         void SendNextValRequest(TTestActorRuntime& runtime, const TActorId& sender, const TString& path) {
             auto request = MakeHolder<TEvSequenceProxy::TEvNextVal>(path);
+            runtime.Send(new IEventHandle(MakeSequenceProxyServiceID(), sender, request.Release()));
+        }
+
+        void SendGetSequenceRequest(TTestActorRuntime& runtime, const TActorId& sender, const TPathId& pathId) {
+            auto request = MakeHolder<TEvSequenceProxy::TEvGetSequence>(pathId);
             runtime.Send(new IEventHandle(MakeSequenceProxyServiceID(), sender, request.Release()));
         }
 
@@ -137,10 +158,34 @@ Y_UNIT_TEST_SUITE(SequenceProxy) {
             return msg->Status == Ydb::StatusIds::SUCCESS ? msg->Value : 0;
         }
 
+        i64 WaitGetSequenceResult(TTestActorRuntime& runtime, const TActorId& sender, Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS) {
+            auto ev = runtime.GrabEdgeEventRethrow<TEvSequenceProxy::TEvGetSequenceResult>(sender);
+            auto* msg = ev->Get();
+            if (msg->Status != Ydb::StatusIds::SUCCESS) {
+                return 0;
+            }
+            UNIT_ASSERT_VALUES_EQUAL(msg->Status, expectedStatus);
+            UNIT_ASSERT_VALUES_EQUAL(msg->MinValue, 1);
+            UNIT_ASSERT_VALUES_EQUAL(msg->MaxValue, 9223372036854775807LL);
+            UNIT_ASSERT_VALUES_EQUAL(msg->StartValue, 1);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Cache, 1);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Increment, 1);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Cycle, false);
+            UNIT_ASSERT_VALUES_EQUAL(msg->NextUsed, false);
+            return msg->NextValue;
+        }
+
         i64 DoNextVal(TTestActorRuntime& runtime, const TString& path, Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS) {
             auto sender = runtime.AllocateEdgeActor(0);
             SendNextValRequest(runtime, sender, path);
             return WaitNextValResult(runtime, sender, expectedStatus);
+        }
+
+        i64 DoGetSequence(TTestActorRuntime& runtime, const TString& path, Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS) {
+            auto sender = runtime.AllocateEdgeActor(0);
+            auto pathId = DescribeSequence(runtime, sender, path);
+            SendGetSequenceRequest(runtime, sender, pathId);
+            return WaitGetSequenceResult(runtime, sender, expectedStatus);
         }
 
     } // namespace
@@ -148,21 +193,39 @@ Y_UNIT_TEST_SUITE(SequenceProxy) {
     Y_UNIT_TEST(Basics) {
         TTenantTestRuntime runtime(MakeTenantTestConfig(false));
         StartSchemeCache(runtime);
+        auto sender = runtime.AllocateEdgeActor(0);
 
         CreateSequence(runtime, "/dc-1", R"(
             Name: "seq"
         )");
 
-        i64 value = DoNextVal(runtime, "/dc-1/seq");
+        i64 value = DoGetSequence(runtime, "/dc-1/seq");
         UNIT_ASSERT_VALUES_EQUAL(value, 1);
+
+        value = DoNextVal(runtime, "/dc-1/seq");
+        UNIT_ASSERT_VALUES_EQUAL(value, 1);
+
+        value = DoGetSequence(runtime, "/dc-1/seq");
+        UNIT_ASSERT_VALUES_EQUAL(value, 2);
+
+        value = DoGetSequence(runtime, "/dc-1/seq");
+        UNIT_ASSERT_VALUES_EQUAL(value, 2);
+
 
         DoNextVal(runtime, "/dc-1/noseq", Ydb::StatusIds::SCHEME_ERROR);
 
+        SendGetSequenceRequest(runtime, sender, TPathId());
+        WaitGetSequenceResult(runtime, sender, Ydb::StatusIds::SCHEME_ERROR);
+
         ui64 allocateEvents = 0;
+        ui64 getSequenceEvents = 0;
         auto observerFunc = [&](auto& ev) {
             switch (ev->GetTypeRewrite()) {
                 case TEvSequenceShard::TEvAllocateSequence::EventType:
                     ++allocateEvents;
+                    break;
+                case TEvSequenceShard::TEvGetSequence::EventType:
+                    ++getSequenceEvents;
                     break;
 
                 default:
@@ -173,16 +236,36 @@ Y_UNIT_TEST_SUITE(SequenceProxy) {
         };
         auto prevObserver = runtime.SetObserverFunc(observerFunc);
 
-        auto sender = runtime.AllocateEdgeActor(0);
+        auto pathId = DescribeSequence(runtime, sender, "/dc-1/seq");
+
         for (int i = 0; i < 7; ++i) {
             SendNextValRequest(runtime, sender, "/dc-1/seq");
         }
         for (int i = 0; i < 7; ++i) {
-            i64 value = WaitNextValResult(runtime, sender);
+            value = WaitNextValResult(runtime, sender);
             UNIT_ASSERT_VALUES_EQUAL(value, 2 + i);
         }
+        UNIT_ASSERT_C(allocateEvents < 7, "Too many TEvSequenceShard::TEvAllocateSequence events: " << allocateEvents);
 
-        UNIT_ASSERT_C(allocateEvents < 7, "Too many TEvAllocateSequence events: " << allocateEvents);
+        for (int i = 0; i < 7; ++i) {
+            SendGetSequenceRequest(runtime, sender, pathId);
+        }
+        for (int i = 0; i < 7; ++i) {
+            value = WaitGetSequenceResult(runtime, sender);
+            UNIT_ASSERT_VALUES_EQUAL(value, 9);
+        }
+        UNIT_ASSERT_C(getSequenceEvents < 7, "Too many TEvSequenceShard::TEvGetSequence events: " << getSequenceEvents);
+        ui64 prevGetSequenceEvents = getSequenceEvents;
+
+        for (int i = 0; i < 7; ++i) {
+            SendNextValRequest(runtime, sender, "/dc-1/seq");
+            SendGetSequenceRequest(runtime, sender, pathId);
+        }
+        for (int i = 0; i < 7; ++i) {
+            WaitGetSequenceResult(runtime, sender);
+        }
+
+        UNIT_ASSERT_C(getSequenceEvents < 7 + prevGetSequenceEvents, "Too many TEvSequenceShard::TEvGetSequence events: " << getSequenceEvents - prevGetSequenceEvents);
     }
 
     Y_UNIT_TEST(DropRecreate) {

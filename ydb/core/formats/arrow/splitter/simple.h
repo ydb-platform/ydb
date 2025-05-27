@@ -1,6 +1,5 @@
 #pragma once
 #include <ydb/library/accessor/accessor.h>
-#include "stats.h"
 #include "scheme_info.h"
 
 namespace NKikimr::NArrow::NSplitter {
@@ -114,8 +113,9 @@ public:
 
     std::vector<TSaverSplittedChunk> Split(const std::shared_ptr<arrow::Array>& data, const std::shared_ptr<arrow::Field>& field, const ui32 maxBlobSize) const;
     std::vector<TSaverSplittedChunk> Split(const std::shared_ptr<arrow::RecordBatch>& data, const ui32 maxBlobSize) const;
-    std::vector<TSaverSplittedChunk> SplitByRecordsCount(std::shared_ptr<arrow::RecordBatch> data, const std::vector<ui64>& recordsCount) const;
-    std::vector<TSaverSplittedChunk> SplitBySizes(std::shared_ptr<arrow::RecordBatch> data, const TString& dataSerialization, const std::vector<ui64>& splitPartSizesExt) const;
+    std::vector<TSaverSplittedChunk> SplitByRecordsCount(const std::shared_ptr<arrow::RecordBatch>& data, const std::vector<ui32>& recordsCount) const;
+    std::vector<TSaverSplittedChunk> SplitBySizes(
+        std::shared_ptr<arrow::RecordBatch> data, const TString& dataSerialization, const std::vector<ui64>& splitPartSizesExt) const;
 };
 
 }

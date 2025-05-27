@@ -42,10 +42,13 @@ struct Schema : NIceDb::Schema {
         struct LastSeenPath : Column<16, NScheme::NTypeIds::String> {};
         struct DecommitStatus : Column<17, NScheme::NTypeIds::Uint32> { using Type = NKikimrBlobStorage::EDecommitStatus; static constexpr Type Default = Type::DECOMMIT_NONE; };
         struct Mood : Column<18, NScheme::NTypeIds::Uint8> { using Type = TPDiskMood::EValue; static constexpr Type Default = Type::Normal; };
+        struct ShredComplete : Column<19, NScheme::NTypeIds::Bool> { static constexpr Type Default = true; };
+        struct MaintenanceStatus : Column<20, NScheme::NTypeIds::Uint8> { using Type = NKikimrBlobStorage::TMaintenanceStatus::E; static constexpr Type Default = NKikimrBlobStorage::TMaintenanceStatus::NO_REQUEST; };
 
         using TKey = TableKey<NodeID, PDiskID>; // order is important
         using TColumns = TableColumns<NodeID, PDiskID, Path, Category, Guid, SharedWithOs, ReadCentric, NextVSlotId,
-              Status, Timestamp, PDiskConfig, ExpectedSerial, LastSeenSerial, LastSeenPath, DecommitStatus, Mood>;
+              Status, Timestamp, PDiskConfig, ExpectedSerial, LastSeenSerial, LastSeenPath, DecommitStatus, Mood,
+              ShredComplete, MaintenanceStatus>;
     };
 
     struct Group : Table<4> {
@@ -107,13 +110,20 @@ struct Schema : NIceDb::Schema {
         struct CompatibilityInfo : Column<21, NScheme::NTypeIds::String> {};
         struct UseSelfHealLocalPolicy : Column<22, NScheme::NTypeIds::Bool> { static constexpr Type Default = false; };
         struct TryToRelocateBrokenDisksLocallyFirst : Column<23, NScheme::NTypeIds::Bool> { static constexpr Type Default = false; };
+        struct YamlConfig : Column<24, NScheme::NTypeIds::String> {};
+        //struct ConfigVersion : Column<25, NScheme::NTypeIds::Uint32> { static constexpr Type Default = 0; };
+        struct ShredState : Column<26, NScheme::NTypeIds::String> {};
+        struct StorageYamlConfig : Column<27, NScheme::NTypeIds::String> {};
+        struct ExpectedStorageYamlConfigVersion : Column<28, NScheme::NTypeIds::Uint64> {};
+        struct EnableConfigV2 : Column<29, NScheme::NTypeIds::Bool> { static constexpr Type Default = false; };
 
         using TKey = TableKey<FixedKey>;
         using TColumns = TableColumns<FixedKey, NextGroupID, SchemaVersion, NextOperationLogIndex, DefaultMaxSlots,
               InstanceId, SelfHealEnable, DonorModeEnable, ScrubPeriodicity, SerialManagementStage, NextStoragePoolId,
               PDiskSpaceMarginPromille, GroupReserveMin, GroupReservePart, MaxScrubbedDisksAtOnce, PDiskSpaceColorBorder,
               GroupLayoutSanitizer, NextVirtualGroupId, AllowMultipleRealmsOccupation, CompatibilityInfo,
-              UseSelfHealLocalPolicy, TryToRelocateBrokenDisksLocallyFirst>;
+              UseSelfHealLocalPolicy, TryToRelocateBrokenDisksLocallyFirst, YamlConfig, ShredState, StorageYamlConfig,
+              ExpectedStorageYamlConfigVersion, EnableConfigV2>;
     };
 
     struct VSlot : Table<5> {

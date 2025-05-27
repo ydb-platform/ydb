@@ -1,0 +1,158 @@
+--- a/main.cpp
++++ b/main.cpp
+@@ -564,6 +564,11 @@ int main( int argc, const char **argv )
+ 				"\" is the same as the input file" << endp;
+ 	}
+ 
++    for (char* p = (char*)id.inputFileName; *p != 0; p++) {
++        if (*p == '\\')
++            *p = '/';
++    }
++
+ 	process( id );
+ 
+ 	return 0;
+--- a/rlscan.cpp
++++ b/rlscan.cpp
+@@ -45,12 +45,6 @@ enum InlineBlockType
+ 	SemiTerminated
+ };
+ 
+-#ifdef _WIN32
+-#define PATH_SEP '\\'
+-#else
+-#define PATH_SEP '/'
+-#endif
+-
+ 
+ /*
+  * The Scanner for Importing
+@@ -811,12 +805,26 @@ void Scanner::endSection( )
+ bool isAbsolutePath( const char *path )
+ {
+ #ifdef _WIN32
+-	return isalpha( path[0] ) && path[1] == ':' && path[2] == '\\';
++	return isalpha( path[0] ) && path[1] == ':' && (path[2] == '\\' || path[2] == '/');
+ #else
+ 	return path[0] == '/';
+ #endif
+ }
+ 
++inline char* resolvePath(const char* rel, const char* abs) {
++    const size_t l1 = strlen(rel);
++    const size_t l2 = strlen(abs);
++    char* ret = new char[l1 + l2 + 1];
++
++    const char* p = strrchr(abs, '/') + 1;
++    const size_t l3 = p - abs;
++
++    memcpy(ret, abs, l3);
++    strcpy(ret + l3, rel);
++
++    return ret;
++}
++
+ char **Scanner::makeIncludePathChecks( const char *thisFileName, 
+ 		const char *fileName, int fnlen )
+ {
+@@ -836,17 +844,11 @@ char **Scanner::makeIncludePathChecks( const char *thisFileName,
+ 		checks = new char*[2 + id.includePaths.length()];
+ 
+ 		/* Search from the the location of the current file. */
+-		const char *lastSlash = strrchr( thisFileName, PATH_SEP );
++		const char *lastSlash = strrchr( thisFileName, '/' );
+ 		if ( lastSlash == 0 )
+ 			checks[nextCheck++] = data;
+ 		else {
+-			long givenPathLen = (lastSlash - thisFileName) + 1;
+-			long checklen = givenPathLen + length;
+-			char *check = new char[checklen+1];
+-			memcpy( check, thisFileName, givenPathLen );
+-			memcpy( check+givenPathLen, data, length );
+-			check[checklen] = 0;
+-			checks[nextCheck++] = check;
++			checks[nextCheck++] = resolvePath(data, thisFileName);
+ 		}
+ 
+ 		/* Search from the include paths given on the command line. */
+@@ -855,7 +857,7 @@ char **Scanner::makeIncludePathChecks( const char *thisFileName,
+ 			long checkLen = pathLen + 1 + length;
+ 			char *check = new char[checkLen+1];
+ 			memcpy( check, *incp, pathLen );
+-			check[pathLen] = PATH_SEP;
++			check[pathLen] = '/';
+ 			memcpy( check+pathLen+1, data, length );
+ 			check[checkLen] = 0;
+ 			checks[nextCheck++] = check;
+--- a/rlscan.rl
++++ b/rlscan.rl
+@@ -43,12 +43,6 @@ enum InlineBlockType
+ 	SemiTerminated
+ };
+ 
+-#ifdef _WIN32
+-#define PATH_SEP '\\'
+-#else
+-#define PATH_SEP '/'
+-#endif
+-
+ 
+ /*
+  * The Scanner for Importing
+@@ -548,12 +542,26 @@ void Scanner::endSection( )
+ bool isAbsolutePath( const char *path )
+ {
+ #ifdef _WIN32
+-	return isalpha( path[0] ) && path[1] == ':' && path[2] == '\\';
++	return isalpha( path[0] ) && path[1] == ':' && (path[2] == '\\' || path[2] == '/');
+ #else
+ 	return path[0] == '/';
+ #endif
+ }
+ 
++inline char* resolvePath(const char* rel, const char* abs) {
++    const size_t l1 = strlen(rel);
++    const size_t l2 = strlen(abs);
++    char* ret = new char[l1 + l2 + 1];
++
++    const char* p = strrchr(abs, '/') + 1;
++    const size_t l3 = p - abs;
++
++    memcpy(ret, abs, l3);
++    strcpy(ret + l3, rel);
++
++    return ret;
++}
++
+ char **Scanner::makeIncludePathChecks( const char *thisFileName, 
+ 		const char *fileName, int fnlen )
+ {
+@@ -573,17 +581,11 @@ char **Scanner::makeIncludePathChecks( const char *thisFileName,
+ 		checks = new char*[2 + id.includePaths.length()];
+ 
+ 		/* Search from the the location of the current file. */
+-		const char *lastSlash = strrchr( thisFileName, PATH_SEP );
++		const char *lastSlash = strrchr( thisFileName, '/' );
+ 		if ( lastSlash == 0 )
+ 			checks[nextCheck++] = data;
+ 		else {
+-			long givenPathLen = (lastSlash - thisFileName) + 1;
+-			long checklen = givenPathLen + length;
+-			char *check = new char[checklen+1];
+-			memcpy( check, thisFileName, givenPathLen );
+-			memcpy( check+givenPathLen, data, length );
+-			check[checklen] = 0;
+-			checks[nextCheck++] = check;
++			checks[nextCheck++] = resolvePath(data, thisFileName);
+ 		}
+ 
+ 		/* Search from the include paths given on the command line. */
+@@ -592,7 +594,7 @@ char **Scanner::makeIncludePathChecks( const char *thisFileName,
+ 			long checkLen = pathLen + 1 + length;
+ 			char *check = new char[checkLen+1];
+ 			memcpy( check, *incp, pathLen );
+-			check[pathLen] = PATH_SEP;
++			check[pathLen] = '/';
+ 			memcpy( check+pathLen+1, data, length );
+ 			check[checkLen] = 0;
+ 			checks[nextCheck++] = check;

@@ -3,7 +3,7 @@
 #include <ydb/core/scheme/scheme_tabledefs.h>
 
 #include <ydb/library/yql/dq/runtime/dq_output_consumer.h>
-#include <ydb/library/yql/minikql/mkql_node.h>
+#include <yql/essentials/minikql/mkql_node.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -15,9 +15,7 @@ struct TKqpRangePartition {
 
 TTableId ParseTableId(const NMiniKQL::TRuntimeNode& node);
 
-NUdf::TDataTypeId UnwrapDataTypeFromStruct(const NMiniKQL::TStructType& structType, ui32 index);
-NScheme::TTypeInfo UnwrapPgTypeFromStruct(const NMiniKQL::TStructType& structType, ui32 index);
-bool StructHoldsPgType(const NMiniKQL::TStructType& structType, ui32 index);
+NScheme::TTypeInfo UnwrapTypeInfoFromStruct(const NMiniKQL::TStructType& structType, ui32 index);
 
 NYql::NDq::IDqOutputConsumer::TPtr CreateOutputRangePartitionConsumer(
     TVector<NYql::NDq::IDqOutput::TPtr>&& outputs, TVector<TKqpRangePartition>&& partitions,

@@ -101,6 +101,37 @@ IInvokerPtr GetCompressionInvoker(const TWorkloadDescriptor& workloadDescriptor)
     }
 }
 
+bool IsSystemWorkloadCategory(EWorkloadCategory category)
+{
+    switch (category) {
+        case EWorkloadCategory::Idle:
+            return false;
+
+        case EWorkloadCategory::SystemArtifactCacheDownload:
+        case EWorkloadCategory::SystemRepair:
+        case EWorkloadCategory::SystemReincarnation:
+        case EWorkloadCategory::SystemReplication:
+        case EWorkloadCategory::SystemMerge:
+        case EWorkloadCategory::SystemTabletCompaction:
+        case EWorkloadCategory::SystemTabletLogging:
+        case EWorkloadCategory::SystemTabletPartitioning:
+        case EWorkloadCategory::SystemTabletPreload:
+        case EWorkloadCategory::SystemTabletRecovery:
+        case EWorkloadCategory::SystemTabletReplication:
+        case EWorkloadCategory::SystemTabletSnapshot:
+        case EWorkloadCategory::SystemTabletStoreFlush:
+            return true;
+
+        case EWorkloadCategory::UserBatch:
+        case EWorkloadCategory::UserInteractive:
+        case EWorkloadCategory::UserRealtime:
+        case EWorkloadCategory::UserDynamicStoreRead:
+            return false;
+    }
+
+    return false;
+}
+
 struct TSerializableWorkloadDescriptor
     : public TWorkloadDescriptor
     , public TYsonStructLite
@@ -140,15 +171,15 @@ void Deserialize(TWorkloadDescriptor& descriptor, NYson::TYsonPullParserCursor* 
 
 void ToProto(NYT::NProto::TWorkloadDescriptor* protoDescriptor, const TWorkloadDescriptor& descriptor)
 {
-    protoDescriptor->set_category(static_cast<int>(descriptor.Category));
+    protoDescriptor->set_category(ToProto(descriptor.Category));
     protoDescriptor->set_band(descriptor.Band);
-    protoDescriptor->set_instant(ToProto<i64>(descriptor.Instant));
+    protoDescriptor->set_instant(ToProto(descriptor.Instant));
     ToProto(protoDescriptor->mutable_annotations(), descriptor.Annotations);
 }
 
 void FromProto(TWorkloadDescriptor* descriptor, const NYT::NProto::TWorkloadDescriptor& protoDescriptor)
 {
-    descriptor->Category = EWorkloadCategory(protoDescriptor.category());
+    descriptor->Category = FromProto<EWorkloadCategory>(protoDescriptor.category());
     descriptor->Band = protoDescriptor.band();
     descriptor->Instant = FromProto<TInstant>(protoDescriptor.instant());
     FromProto(&descriptor->Annotations, protoDescriptor.annotations());

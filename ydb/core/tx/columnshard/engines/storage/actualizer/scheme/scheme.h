@@ -3,6 +3,7 @@
 #include <ydb/core/tx/columnshard/engines/storage/actualizer/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/engines/storage/actualizer/common/address.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/abstract_scheme.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 
 namespace NKikimr::NOlap::NActualizer {
 
@@ -11,7 +12,7 @@ private:
     const TSchemeCounters Counters;
     THashMap<TRWAddress, THashSet<ui64>> PortionsToActualizeScheme;
     std::shared_ptr<ISnapshotSchema> TargetSchema;
-    const ui64 PathId;
+    const TInternalPathId PathId;
     const TVersionedIndex& VersionedIndex;
 
     class TFindActualizationInfo {
@@ -63,11 +64,7 @@ protected:
 public:
     void Refresh(const TAddExternalContext& externalContext);
 
-    TSchemeActualizer(const ui64 pathId, const TVersionedIndex& versionedIndex)
-        : PathId(pathId)
-        , VersionedIndex(versionedIndex) {
-        Y_UNUSED(PathId);
-    }
+    TSchemeActualizer(const TInternalPathId pathId, const TVersionedIndex& versionedIndex);
 };
 
 }

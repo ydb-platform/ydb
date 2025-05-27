@@ -33,6 +33,19 @@ void TSecretInitializer::DoPrepare(NInitializer::IInitializerInput::TPtr control
     }
     result.emplace_back(NInitializer::TACLModifierConstructor::GetNoAccessModifier(TSecret::GetBehaviour()->GetStorageTablePath(), "acl"));
     result.emplace_back(NInitializer::TACLModifierConstructor::GetNoAccessModifier(TSecret::GetBehaviour()->GetStorageHistoryTablePath(), "acl_history"));
+    {
+        Ydb::Table::AlterTableRequest request;
+        request.set_session_id("");
+        request.set_path(TSecret::GetBehaviour()->GetStorageTablePath());
+        {
+            auto& index = *request.add_add_indexes();
+            index.set_name("index_by_secret_id");
+            index.add_index_columns(TSecret::TDecoder::SecretId);
+            index.add_index_columns(TSecret::TDecoder::OwnerUserId);
+            index.mutable_global_index();
+        }
+        result.emplace_back(new NInitializer::TGenericTableModifier<NRequest::TDialogAlterTable>(request, "add_index_by_secret_id"));
+    }
     controller->OnPreparationFinished(result);
 }
 

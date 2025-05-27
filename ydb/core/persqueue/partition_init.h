@@ -18,6 +18,11 @@ namespace NKikimr::NPQ {
 class TInitializerStep;
 class TPartition;
 
+struct TInitializionContext {
+    std::optional<ui64> StartOffset;
+    std::optional<ui64> EndOffset;
+};
+
 
 /**
  * This class execute independent steps of parttition actor initialization.
@@ -40,13 +45,15 @@ protected:
 private:
     void DoNext(const TActorContext& ctx);
 
+    TString LogPrefix() const;
+
     TPartition* Partition;
 
     bool InProgress;
 
     TVector<THolder<TInitializerStep>> Steps;
     std::vector<THolder<TInitializerStep>>::iterator CurrentStep;
-
+    TInitializionContext Ctx;
 };
 
 /**
@@ -63,7 +70,8 @@ public:
 
     TPartition* Partition() const;
     const TPartitionId& PartitionId() const;
-    TString TopicName() const;
+    const TString& TopicName() const;
+    TInitializionContext& GetContext();
 
     const TString Name;
     const bool SkipNewPartition;
@@ -71,6 +79,8 @@ public:
 protected:
     void Done(const TActorContext& ctx);
     void PoisonPill(const TActorContext& ctx);
+
+    TString LogPrefix() const;
 
 private:
     TInitializer* Initializer;
@@ -150,6 +160,13 @@ public:
 
     void Execute(const TActorContext& ctx) override;
     void Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext& ctx) override;
+};
+
+class TInitEndWriteTimestampStep: public TInitializerStep {
+public:
+    TInitEndWriteTimestampStep(TInitializer* initializer);
+
+    void Execute(const TActorContext& ctx) override;
 };
 
 } // NKikimr::NPQ

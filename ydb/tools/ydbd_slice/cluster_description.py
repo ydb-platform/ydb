@@ -27,7 +27,7 @@ class ClusterDetails(ClusterDetailsProvider):
     SLOTS_PORTS_START = 31000
     PORTS_SHIFT = 10
 
-    def __init__(self, cluster_description_path, walle_provider):
+    def __init__(self, cluster_description_path, walle_provider, validator=None):
         self.__template = None
         self.__details = None
         self.__databases = None
@@ -35,7 +35,7 @@ class ClusterDetails(ClusterDetailsProvider):
         self._cluster_description_file = cluster_description_path
         self._walle_provider = walle_provider
 
-        super(ClusterDetails, self).__init__(self.template, self._walle_provider)
+        super(ClusterDetails, self).__init__(self.template, self._walle_provider, validator=validator, use_new_style_cfg=True)
 
     @property
     def template(self):
@@ -132,6 +132,10 @@ class Configurator(object):
     def detail(self):
         return self.__cluster_details
 
+    @property
+    def hosts_names(self):
+        return self.detail.hosts_names
+
     @staticmethod
     def _generate_fake_keys():
         content = 'Keys {\n'
@@ -140,6 +144,7 @@ class Configurator(object):
         content += '  Id: "fake-secret"\n'
         content += '  Version: 1\n'
         content += '}\n'
+
         return content
 
     @staticmethod

@@ -1,16 +1,30 @@
 #pragma once
+
+#include "common.h"
+
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/accessor/validator.h>
+#include <ydb/library/formats/arrow/splitter/similar_packer.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_base.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/chunked_array.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/scalar.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
+#include <library/cpp/json/writer/json_value.h>
 #include <util/string/builder.h>
+
+namespace NKikimr::NArrow::NSerialization {
+class ISerializer;
+}
+
+namespace NKikimr::NArrow {
+class TColumnFilter;
+
+}
 
 namespace NKikimr::NArrow::NAccessor {
 
-class TColumnSaver;
+class TColumnLoader;
 class IChunkedArray;
 
 class TChunkedArraySerialized {
@@ -24,13 +38,20 @@ public:
 
 class IChunkedArray {
 public:
-    enum class EType {
-        Undefined,
-        Array,
-        ChunkedArray,
-        SerializedChunkedArray,
-        SparsedArray
+// PERSISTENT ENUM!!. DONT CHANGE ELEMENT'S IDS
+    enum class EType : ui8 {
+        Undefined = 0,
+        Array = 1,
+        ChunkedArray = 2,
+        SerializedChunkedArray = 3,
+        CompositeChunkedArray = 4,
+        SparsedArray = 5,
+        SubColumnsArray = 6,
+        SubColumnsPartialArray = 7,
+        Dictionary = 8
     };
+
+    using TValuesSimpleVisitor = std::function<void(std::shared_ptr<arrow::Array>)>;
 
     class TCommonChunkAddress {
     private:
@@ -75,9 +96,13 @@ public:
             return Addresses.size();
         }
 
-        ui32 GetLocalIndex(const ui32 position) const {
-            AFL_VERIFY(Contains(position));
-            return position - GlobalStartPosition;
+        ui32 GetLocalIndex(const ui32 global) const {
+            AFL_VERIFY(Contains(global))("pos", global)("start", GlobalStartPosition);
+            return global - GlobalStartPosition;
+        }
+
+        ui32 GetGlobalIndex(const ui32 local) const {
+            return local + GlobalStartPosition;
         }
 
         bool Contains(const ui32 position) const {
@@ -104,8 +129,12 @@ public:
         }
 
         TString DebugString() const {
-            return TStringBuilder() << "start=" << GlobalStartPosition << ";finish=" << GlobalFinishPosition
-                                    << ";addresses_count=" << Addresses.size() << ";";
+            TStringBuilder sb;
+            sb << "start=" << GlobalStartPosition << ";finish=" << GlobalFinishPosition << ";addresses_count=" << Addresses.size() << ";";
+            for (auto&& i : Addresses) {
+                sb << "addresses=" << i.DebugString() << ";";
+            }
+            return sb;
         }
     };
 
@@ -117,8 +146,7 @@ public:
     public:
         TFullChunkedArrayAddress(const std::shared_ptr<IChunkedArray>& arr, TAddressChain&& address)
             : Array(arr)
-            , Address(std::move(address))
-        {
+            , Address(std::move(address)) {
             AFL_VERIFY(Address.GetSize());
             AFL_VERIFY(Array);
             AFL_VERIFY(Array->GetRecordsCount());
@@ -162,8 +190,7 @@ public:
 
         TFullDataAddress(const std::shared_ptr<arrow::Array>& arr, TAddressChain&& address)
             : Array(arr)
-            , Address(std::move(address))
-        {
+            , Address(std::move(address)) {
             AFL_VERIFY(Array);
             AFL_VERIFY(Address.GetSize());
         }
@@ -175,14 +202,15 @@ public:
         TCommonChunkAddress Address;
 
     public:
+        void Reallocate();
+
         const TCommonChunkAddress& GetAddress() const {
             return Address;
         }
 
         TLocalDataAddress(const std::shared_ptr<arrow::Array>& arr, const ui32 start, const ui32 chunkIdx)
             : Array(arr)
-            , Address(start, start + TValidator::CheckNotNull(arr)->length(), chunkIdx)
-        {
+            , Address(start, start + TValidator::CheckNotNull(arr)->length(), chunkIdx) {
         }
 
         TLocalDataAddress(const std::shared_ptr<arrow::Array>& arr, const TCommonChunkAddress& address)
@@ -208,8 +236,7 @@ public:
 
         TAddress(const std::shared_ptr<arrow::Array>& arr, const ui64 position)
             : Array(arr)
-            , Position(position)
-        {
+            , Position(position) {
             AFL_VERIFY(!!Array);
             AFL_VERIFY(position < (ui32)Array->length());
         }
@@ -221,23 +248,41 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<arrow::DataType>, DataType);
     YDB_READONLY(ui64, RecordsCount, 0);
     YDB_READONLY(EType, Type, EType::Undefined);
+    virtual NJson::TJsonValue DoDebugJson() const {
+        NJson::TJsonValue result = NJson::JSON_MAP;
+        result.InsertValue("data", GetChunkedArray()->ToString());
+        return result;
+    }
     virtual std::optional<ui64> DoGetRawSize() const = 0;
     virtual std::shared_ptr<arrow::Scalar> DoGetScalar(const ui32 index) const = 0;
+    virtual std::optional<bool> DoCheckOneValueAccessor(std::shared_ptr<arrow::Scalar>& /*value*/) const {
+        return std::nullopt;
+    }
 
-    virtual TLocalChunkedArrayAddress DoGetLocalChunkedArray(const std::optional<TCommonChunkAddress>& chunkCurrent, const ui64 position) const = 0;
+    virtual TLocalChunkedArrayAddress DoGetLocalChunkedArray(
+        const std::optional<TCommonChunkAddress>& /*chunkCurrent*/, const ui64 /*position*/) const {
+        AFL_VERIFY(false);
+        return TLocalChunkedArrayAddress(nullptr, 0, 0);
+    }
     virtual TLocalDataAddress DoGetLocalData(const std::optional<TCommonChunkAddress>& chunkCurrent, const ui64 position) const = 0;
+    virtual std::shared_ptr<IChunkedArray> DoISlice(const ui32 offset, const ui32 count) const = 0;
+    virtual ui32 DoGetNullsCount() const = 0;
+    virtual ui32 DoGetValueRawBytes() const = 0;
+    virtual std::shared_ptr<IChunkedArray> DoApplyFilter(const TColumnFilter& filter) const;
+    virtual void DoVisitValues(const TValuesSimpleVisitor& visitor) const = 0;
 
 protected:
-    virtual std::shared_ptr<arrow::ChunkedArray> DoGetChunkedArray() const = 0;
+    virtual std::shared_ptr<arrow::ChunkedArray> GetChunkedArrayTrivial() const;
+
+    std::shared_ptr<arrow::Schema> GetArraySchema() const {
+        const arrow::FieldVector fields = { std::make_shared<arrow::Field>("val", GetDataType()) };
+        return std::make_shared<arrow::Schema>(fields);
+    }
+
     TLocalChunkedArrayAddress GetLocalChunkedArray(const std::optional<TCommonChunkAddress>& chunkCurrent, const ui64 position) const {
         return DoGetLocalChunkedArray(chunkCurrent, position);
     }
-    TLocalDataAddress GetLocalData(const std::optional<TCommonChunkAddress>& chunkCurrent, const ui64 position) const {
-        return DoGetLocalData(chunkCurrent, position);
-    }
     virtual std::shared_ptr<arrow::Scalar> DoGetMaxScalar() const = 0;
-    virtual std::vector<TChunkedArraySerialized> DoSplitBySizes(
-        const TColumnSaver& saver, const TString& fullSerializedData, const std::vector<ui64>& splitSizes) = 0;
 
     template <class TCurrentPosition, class TChunkAccessor>
     void SelectChunk(const std::optional<TCurrentPosition>& chunkCurrent, const ui64 position, const TChunkAccessor& accessor) const {
@@ -246,8 +291,9 @@ protected:
             ui64 idx = 0;
             if (chunkCurrent) {
                 if (position < chunkCurrent->GetFinishPosition()) {
-                    return accessor.OnArray(
-                        chunkCurrent->GetChunkIndex(), chunkCurrent->GetStartPosition());
+                    return accessor.OnArray(chunkCurrent->GetChunkIndex(), chunkCurrent->GetStartPosition());
+                } else if (position == chunkCurrent->GetFinishPosition() && chunkCurrent->GetChunkIndex() + 1 < accessor.GetChunksCount()) {
+                    return accessor.OnArray(chunkCurrent->GetChunkIndex() + 1, position);
                 }
                 AFL_VERIFY(chunkCurrent->GetChunkIndex() < accessor.GetChunksCount());
                 startIndex = chunkCurrent->GetChunkIndex();
@@ -262,6 +308,11 @@ protected:
             }
         } else {
             AFL_VERIFY(chunkCurrent->GetChunkIndex() > 0);
+            if (position + 1 == chunkCurrent->GetStartPosition()) {
+                const ui32 chunkIndex = chunkCurrent->GetChunkIndex() - 1;
+                return accessor.OnArray(chunkIndex, chunkCurrent->GetStartPosition() - accessor.GetChunkLength(chunkIndex));
+            }
+
             ui64 idx = chunkCurrent->GetStartPosition();
             for (i32 i = chunkCurrent->GetChunkIndex() - 1; i >= 0; --i) {
                 AFL_VERIFY(idx >= accessor.GetChunkLength(i))("idx", idx)("length", accessor.GetChunkLength(i));
@@ -283,11 +334,68 @@ protected:
             chunkCurrentInfo << chunkCurrent->DebugString();
         }
         AFL_VERIFY(recordsCountChunks == GetRecordsCount())("pos", position)("count", GetRecordsCount())("chunks_map", sb)(
-            "chunk_current", chunkCurrentInfo);
+            "chunk_current", chunkCurrentInfo)("chunks_count", recordsCountChunks);
         AFL_VERIFY(false)("pos", position)("count", GetRecordsCount())("chunks_map", sb)("chunk_current", chunkCurrentInfo);
     }
 
 public:
+    std::shared_ptr<IChunkedArray> ApplyFilter(const TColumnFilter& filter, const std::shared_ptr<IChunkedArray>& selfPtr) const;
+
+    virtual bool HasWholeDataVolume() const {
+        return true;
+    }
+
+    std::optional<bool> CheckOneValueAccessor(std::shared_ptr<arrow::Scalar>& value) const {
+        return DoCheckOneValueAccessor(value);
+    }
+
+    virtual bool HasSubColumnData(const TString& /*subColumnName*/) const {
+        return true;
+    }
+
+    virtual void Reallocate() {
+    }
+
+    void VisitValues(const TValuesSimpleVisitor& visitor) const {
+        DoVisitValues(visitor);
+    }
+
+    template <class TResult, class TActor>
+    static std::optional<TResult> VisitDataOwners(const std::shared_ptr<IChunkedArray>& arr, const TActor& actor) {
+        AFL_VERIFY(arr);
+        std::optional<IChunkedArray::TFullChunkedArrayAddress> arrCurrent;
+        for (ui32 currentIndex = 0; currentIndex < arr->GetRecordsCount();) {
+            arrCurrent = arr->GetArray(arrCurrent, currentIndex, arr);
+            auto result = actor(arrCurrent->GetArray());
+            if (result) {
+                return result;
+            }
+            currentIndex = currentIndex + arrCurrent->GetArray()->GetRecordsCount();
+        }
+        return std::nullopt;
+    }
+
+    NJson::TJsonValue DebugJson() const {
+        NJson::TJsonValue result = NJson::JSON_MAP;
+        result.InsertValue("type", ::ToString(Type));
+        result.InsertValue("records_count", RecordsCount);
+        result.InsertValue("internal", DoDebugJson());
+        return result;
+    }
+
+    ui32 GetNullsCount() const {
+        return DoGetNullsCount();
+    }
+
+    ui32 GetValueRawBytes() const {
+        return DoGetValueRawBytes();
+    }
+
+    TLocalDataAddress GetLocalData(const std::optional<TCommonChunkAddress>& chunkCurrent, const ui64 position) const {
+        AFL_VERIFY(position < GetRecordsCount())("position", position)("records_count", GetRecordsCount());
+        return DoGetLocalData(chunkCurrent, position);
+    }
+
     class TReader {
     private:
         std::shared_ptr<IChunkedArray> ChunkedArray;
@@ -316,9 +424,18 @@ public:
         return DoGetScalar(index);
     }
 
+    template <class TSerializer>
     std::vector<TChunkedArraySerialized> SplitBySizes(
-        const TColumnSaver& saver, const TString& fullSerializedData, const std::vector<ui64>& splitSizes) {
-        return DoSplitBySizes(saver, fullSerializedData, splitSizes);
+        const TSerializer& serialize, const TString& fullSerializedData, const std::vector<ui64>& splitSizes) {
+        const std::vector<ui32> recordsCount = NSplitter::TSimilarPacker::SizesToRecordsCount(GetRecordsCount(), fullSerializedData, splitSizes);
+        std::vector<TChunkedArraySerialized> result;
+        ui32 currentStartIndex = 0;
+        for (auto&& i : recordsCount) {
+            std::shared_ptr<IChunkedArray> slice = ISlice(currentStartIndex, i);
+            result.emplace_back(slice, serialize(slice));
+            currentStartIndex += i;
+        }
+        return result;
     }
 
     std::shared_ptr<arrow::Scalar> GetMaxScalar() const {
@@ -336,22 +453,32 @@ public:
         return *result;
     }
 
-    std::shared_ptr<arrow::ChunkedArray> GetChunkedArray() const {
-        return DoGetChunkedArray();
-    }
+    virtual std::shared_ptr<arrow::ChunkedArray> GetChunkedArray(
+        const TColumnConstructionContext& context = Default<TColumnConstructionContext>()) const;
     virtual ~IChunkedArray() = default;
 
     std::shared_ptr<arrow::ChunkedArray> Slice(const ui32 offset, const ui32 count) const;
+    std::shared_ptr<IChunkedArray> ISlice(const ui32 offset, const ui32 count) const {
+        AFL_VERIFY(offset + count <= GetRecordsCount())("offset", offset)("count", count)("records", GetRecordsCount());
+        auto result = DoISlice(offset, count);
+        AFL_VERIFY(result);
+        AFL_VERIFY(result->GetRecordsCount() == count)("records", result->GetRecordsCount())("count", count);
+        return result;
+    }
 
     bool IsDataOwner() const {
         switch (Type) {
             case EType::SparsedArray:
             case EType::ChunkedArray:
+            case EType::SubColumnsArray:
+            case EType::SubColumnsPartialArray:
             case EType::Array:
+            case EType::Dictionary:
                 return true;
             case EType::Undefined:
                 AFL_VERIFY(false);
             case EType::SerializedChunkedArray:
+            case EType::CompositeChunkedArray:
                 return false;
         };
     }
@@ -376,7 +503,7 @@ public:
         if (chunkCurrent) {
             return GetArray(chunkCurrent->GetAddress(), position, selfPtr);
         } else {
-            return GetArray(std::optional<TAddressChain>(), position, selfPtr);
+            return GetArraySlow(position, selfPtr);
         }
     }
 

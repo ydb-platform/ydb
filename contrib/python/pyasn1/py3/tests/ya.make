@@ -21,9 +21,6 @@ TEST_SRCS(
     codec/native/test_decoder.py
     codec/native/test_encoder.py
     codec/test_streaming.py
-    compat/__init__.py
-    compat/test_integer.py
-    compat/test_octets.py
     test_debug.py
     type/__init__.py
     type/test_char.py

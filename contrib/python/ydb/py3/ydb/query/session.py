@@ -10,15 +10,20 @@ from typing import (
 from . import base
 
 from .. import _apis, issues, _utilities
+from ..settings import BaseRequestSettings
 from ..connection import _RpcState as RpcState
 from .._grpc.grpcwrapper import common_utils
 from .._grpc.grpcwrapper import ydb_query as _ydb_query
 from .._grpc.grpcwrapper import ydb_query_public_types as _ydb_query_public
 
-from .transaction import BaseQueryTxContext
+from .transaction import QueryTxContext
 
 
 logger = logging.getLogger(__name__)
+
+
+DEFAULT_ATTACH_FIRST_RESP_TIMEOUT = 600
+DEFAULT_ATTACH_LONG_TIMEOUT = 31536000  # year
 
 
 class QuerySessionStateEnum(enum.Enum):
@@ -126,32 +131,57 @@ def wrapper_delete_session(
     return session
 
 
-class BaseQuerySession(base.IQuerySession):
-    _driver: base.SupportedDriverType
+class BaseQuerySession:
+    _driver: common_utils.SupportedDriverType
     _settings: base.QueryClientSettings
     _state: QuerySessionState
 
-    def __init__(self, driver: base.SupportedDriverType, settings: Optional[base.QueryClientSettings] = None):
+    def __init__(self, driver: common_utils.SupportedDriverType, settings: Optional[base.QueryClientSettings] = None):
         self._driver = driver
-        self._settings = settings if settings is not None else base.QueryClientSettings()
+        self._settings = self._get_client_settings(driver, settings)
         self._state = QuerySessionState(settings)
+        self._attach_settings: BaseRequestSettings = (
+            BaseRequestSettings()
+            .with_operation_timeout(DEFAULT_ATTACH_LONG_TIMEOUT)
+            .with_cancel_after(DEFAULT_ATTACH_LONG_TIMEOUT)
+            .with_timeout(DEFAULT_ATTACH_LONG_TIMEOUT)
+        )
 
-    def _create_call(self) -> "BaseQuerySession":
+        self._last_query_stats = None
+
+    @property
+    def last_query_stats(self):
+        return self._last_query_stats
+
+    def _get_client_settings(
+        self,
+        driver: common_utils.SupportedDriverType,
+        settings: Optional[base.QueryClientSettings] = None,
+    ) -> base.QueryClientSettings:
+        if settings is not None:
+            return settings
+        if driver._driver_config.query_client_settings is not None:
+            return driver._driver_config.query_client_settings
+        return base.QueryClientSettings()
+
+    def _create_call(self, settings: Optional[BaseRequestSettings] = None) -> "BaseQuerySession":
         return self._driver(
             _apis.ydb_query.CreateSessionRequest(),
             _apis.QueryService.Stub,
             _apis.QueryService.CreateSession,
             wrap_result=wrapper_create_session,
             wrap_args=(self._state, self),
+            settings=settings,
         )
 
-    def _delete_call(self) -> "BaseQuerySession":
+    def _delete_call(self, settings: Optional[BaseRequestSettings] = None) -> "BaseQuerySession":
         return self._driver(
             _apis.ydb_query.DeleteSessionRequest(session_id=self._state.session_id),
             _apis.QueryService.Stub,
             _apis.QueryService.DeleteSession,
             wrap_result=wrapper_delete_session,
             wrap_args=(self._state, self),
+            settings=settings,
         )
 
     def _attach_call(self) -> Iterable[_apis.ydb_query.SessionState]:
@@ -159,26 +189,32 @@ class BaseQuerySession(base.IQuerySession):
             _apis.ydb_query.AttachSessionRequest(session_id=self._state.session_id),
             _apis.QueryService.Stub,
             _apis.QueryService.AttachSession,
+            settings=self._attach_settings,
         )
 
     def _execute_call(
         self,
         query: str,
+        parameters: dict = None,
         commit_tx: bool = False,
         syntax: base.QuerySyntax = None,
         exec_mode: base.QueryExecMode = None,
-        parameters: dict = None,
+        stats_mode: Optional[base.QueryStatsMode] = None,
         concurrent_result_sets: bool = False,
+        settings: Optional[BaseRequestSettings] = None,
     ) -> Iterable[_apis.ydb_query.ExecuteQueryResponsePart]:
+        self._last_query_stats = None
+
         request = base.create_execute_query_request(
             query=query,
-            session_id=self._state.session_id,
+            parameters=parameters,
             commit_tx=commit_tx,
+            session_id=self._state.session_id,
             tx_mode=None,
             tx_id=None,
             syntax=syntax,
             exec_mode=exec_mode,
-            parameters=parameters,
+            stats_mode=stats_mode,
             concurrent_result_sets=concurrent_result_sets,
         )
 
@@ -186,26 +222,35 @@ class BaseQuerySession(base.IQuerySession):
             request.to_proto(),
             _apis.QueryService.Stub,
             _apis.QueryService.ExecuteQuery,
+            settings=settings,
         )
 
 
-class QuerySessionSync(BaseQuerySession):
+class QuerySession(BaseQuerySession):
     """Session object for Query Service. It is not recommended to control
     session's lifecycle manually - use a QuerySessionPool is always a better choise.
     """
 
     _stream = None
 
-    def _attach(self) -> None:
+    def _attach(self, first_resp_timeout: int = DEFAULT_ATTACH_FIRST_RESP_TIMEOUT) -> None:
         self._stream = self._attach_call()
         status_stream = _utilities.SyncResponseIterator(
             self._stream,
             lambda response: common_utils.ServerStatus.from_proto(response),
         )
 
-        first_response = next(status_stream)
-        if first_response.status != issues.StatusCode.SUCCESS:
-            pass
+        try:
+            first_response = _utilities.get_first_message_with_timeout(
+                status_stream,
+                first_resp_timeout,
+            )
+            if first_response.status != issues.StatusCode.SUCCESS:
+                raise RuntimeError("Failed to attach session")
+        except Exception as e:
+            self._state.reset()
+            status_stream.cancel()
+            raise e
 
         self._state.set_attached(True)
         self._state._change_state(QuerySessionStateEnum.CREATED)
@@ -213,7 +258,7 @@ class QuerySessionSync(BaseQuerySession):
         threading.Thread(
             target=self._check_session_status_loop,
             args=(status_stream,),
-            name="check session status thread",
+            name="attach stream thread",
             daemon=True,
         ).start()
 
@@ -224,12 +269,12 @@ class QuerySessionSync(BaseQuerySession):
                     self._state.reset()
                     self._state._change_state(QuerySessionStateEnum.CLOSED)
         except Exception:
-            pass
+            if not self._state._already_in(QuerySessionStateEnum.CLOSED):
+                self._state.reset()
+                self._state._change_state(QuerySessionStateEnum.CLOSED)
 
-    def delete(self) -> None:
-        """WARNING: This API is experimental and could be changed.
-
-        Deletes a Session of Query Service on server side and releases resources.
+    def delete(self, settings: Optional[BaseRequestSettings] = None) -> None:
+        """Deletes a Session of Query Service on server side and releases resources.
 
         :return: None
         """
@@ -237,30 +282,28 @@ class QuerySessionSync(BaseQuerySession):
             return
 
         self._state._check_invalid_transition(QuerySessionStateEnum.CLOSED)
-        self._delete_call()
+        self._delete_call(settings=settings)
         self._stream.cancel()
 
-    def create(self) -> "QuerySessionSync":
-        """WARNING: This API is experimental and could be changed.
+    def create(self, settings: Optional[BaseRequestSettings] = None) -> "QuerySession":
+        """Creates a Session of Query Service on server side and attaches it.
 
-        Creates a Session of Query Service on server side and attaches it.
-
-        :return: QuerySessionSync object.
+        :return: QuerySession object.
         """
         if self._state._already_in(QuerySessionStateEnum.CREATED):
             return
 
         self._state._check_invalid_transition(QuerySessionStateEnum.CREATED)
-        self._create_call()
+
+        self._create_call(settings=settings)
         self._attach()
 
         return self
 
-    def transaction(self, tx_mode: Optional[base.BaseQueryTxMode] = None) -> base.IQueryTxContext:
-        """WARNING: This API is experimental and could be changed.
+    def transaction(self, tx_mode: Optional[base.BaseQueryTxMode] = None) -> QueryTxContext:
+        """Creates a transaction context manager with specified transaction mode.
 
-        Creates a transaction context manager with specified transaction mode.
-        :param tx_mode: Transaction mode, which is a one from the following choises:
+        :param tx_mode: Transaction mode, which is a one from the following choices:
          1) QuerySerializableReadWrite() which is default mode;
          2) QueryOnlineReadOnly(allow_inconsistent_reads=False);
          3) QuerySnapshotReadOnly();
@@ -273,7 +316,7 @@ class QuerySessionSync(BaseQuerySession):
 
         tx_mode = tx_mode if tx_mode else _ydb_query_public.QuerySerializableReadWrite()
 
-        return BaseQueryTxContext(
+        return QueryTxContext(
             self._driver,
             self._state,
             self,
@@ -283,20 +326,27 @@ class QuerySessionSync(BaseQuerySession):
     def execute(
         self,
         query: str,
+        parameters: dict = None,
         syntax: base.QuerySyntax = None,
         exec_mode: base.QueryExecMode = None,
-        parameters: dict = None,
         concurrent_result_sets: bool = False,
+        settings: Optional[BaseRequestSettings] = None,
+        *,
+        stats_mode: Optional[base.QueryStatsMode] = None,
     ) -> base.SyncResponseContextIterator:
-        """WARNING: This API is experimental and could be changed.
+        """Sends a query to Query Service
 
-        Sends a query to Query Service
         :param query: (YQL or SQL text) to be executed.
-        :param syntax: Syntax of the query, which is a one from the following choises:
+        :param syntax: Syntax of the query, which is a one from the following choices:
          1) QuerySyntax.YQL_V1, which is default;
          2) QuerySyntax.PG.
         :param parameters: dict with parameters and YDB types;
         :param concurrent_result_sets: A flag to allow YDB mix parts of different result sets. Default is False;
+        :param stats_mode: Mode of query statistics to gather, which is a one from the following choices:
+         1) QueryStatsMode:NONE, which is default;
+         2) QueryStatsMode.BASIC;
+         3) QueryStatsMode.FULL;
+         4) QueryStatsMode.PROFILE;
 
         :return: Iterator with result sets
         """
@@ -304,14 +354,22 @@ class QuerySessionSync(BaseQuerySession):
 
         stream_it = self._execute_call(
             query=query,
+            parameters=parameters,
             commit_tx=True,
             syntax=syntax,
             exec_mode=exec_mode,
-            parameters=parameters,
+            stats_mode=stats_mode,
             concurrent_result_sets=concurrent_result_sets,
+            settings=settings,
         )
 
         return base.SyncResponseContextIterator(
             stream_it,
-            lambda resp: base.wrap_execute_query_response(rpc_state=None, response_pb=resp),
+            lambda resp: base.wrap_execute_query_response(
+                rpc_state=None,
+                response_pb=resp,
+                session_state=self._state,
+                session=self,
+                settings=self._settings,
+            ),
         )

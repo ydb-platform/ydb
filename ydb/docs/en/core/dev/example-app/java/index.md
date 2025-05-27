@@ -1,4 +1,6 @@
-# App in Java
+# Example app in Java
+
+<!-- markdownlint-disable blanks-around-fences -->
 
 This page contains a detailed description of the code of a [test app](https://github.com/ydb-platform/ydb-java-examples/tree/master/query-example) that is available as part of the {{ ydb-short-name }} [Java SDK Examples](https://github.com/ydb-platform/ydb-java-examples).
 
@@ -8,25 +10,26 @@ The following execution scenario is based on [Git](https://git-scm.com/downloads
 
 Create a working directory and use it to run from the command line the command to clone the GitHub repository:
 
-``` bash
+```bash
 git clone https://github.com/ydb-platform/ydb-java-examples
 ```
 
 Then build the SDK Examples
 
-``` bash
+```bash
 mvn package -f ./ydb-java-examples
 ```
 
-Next, from the same working directory, run the command to start the test app. The command will differ depending on the database to connect to.
+Next, from the same working directory, run the following command to start the test app:
 
 {% include [run_options.md](_includes/run_options.md) %}
 
 {% include [init.md](../_includes/steps/01_init.md) %}
 
 Main driver initialization parameters
+
 * A connection string containing details about an [endpoint](../../../concepts/connect.md#endpoint) and [database](../../../concepts/connect.md#database). This is the only parameter that is required.
-* [Authentication](../../../recipes/ydb-sdk/auth.md#auth-provider) provider. Unless explicitly specified, an [anonymous connection](../../../concepts/auth.md) is used.
+* [Authentication](../../../recipes/ydb-sdk/auth.md#auth-provider) provider. Unless explicitly specified, an [anonymous connection](../../../security/authentication.md) is used.
 * [Session pool](../../../recipes/ydb-sdk/session-pool-limit.md) settings
 
 App code snippet for driver initialization:
@@ -38,7 +41,7 @@ this.transport = GrpcTransport.forConnectionString(connectionString)
 this.queryClient = QueryClient.newClient(transport).build();
 ```
 
-It is also [recommended] (../../../recipes/ydb-sdk/retry.md) to use the `SessionRetryContext` helper class for execution of operations with the YDB: it ensures proper retries in case the database becomes partially unavailable. Sample code to initialize the retry context:
+It is also [recommended] (../../../recipes/ydb-sdk/retry.md) to use the `SessionRetryContext` helper class for execution of operations with the {{ ydb-short-name }}: it ensures proper retries in case the database becomes partially unavailable. Sample code to initialize the retry context:
 
 ```java
 this.retryCtx = SessionRetryContext.create(queryClient).build();
@@ -217,6 +220,7 @@ private void asyncSelectRead(long seriesID, long seasonID) {
 To ensure interoperability between the transactions and the retry context, each transaction must wholly execute inside the callback passed to `SessionRetryContext`. The callback must return after the entire transaction is completed.
 
 Code template for running complex transactions inside `SessionRetryContext`
+
 ```java
 private void multiStepTransaction(long seriesID, long seasonID) {
     retryCtx.supplyStatus(session -> {

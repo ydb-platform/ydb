@@ -1,8 +1,10 @@
 #include "dsproxy.h"
 #include "dsproxy_mon.h"
 #include "root_cause.h"
+#include <ydb/core/blobstorage/dsproxy/dsproxy_request_reporting.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
 #include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h>
+#include <ydb/core/util/stlog.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <library/cpp/digest/crc32c/crc32c.h>
 #include <util/generic/set.h>
@@ -36,8 +38,7 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
     TRootCause RootCauseTrack;
     NLWTrace::TOrbit Orbit;
     const TInstant Deadline;
-    TInstant StartTime;
-    TInstant StartTimePut;
+    TMonotonic StartTimePut;
     ui32 RequestsSent = 0;
     ui32 ResponsesReceived = 0;
     ui32 GroupSize;
@@ -58,6 +59,7 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
     bool IsPutAccelerateScheduled = false;
 
     TAccelerationParams AccelerationParams;
+    TDuration LongRequestThreshold;
 
     void Handle(TEvAccelerateGet::TPtr &ev) {
         IsGetAccelerateScheduled = false;
@@ -77,6 +79,7 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
         }
         GetsAccelerated++;
 
+        GetImpl.History.AddAcceleration(false);
         TDeque<std::unique_ptr<TEvBlobStorage::TEvVGet>> vGets;
         TDeque<std::unique_ptr<TEvBlobStorage::TEvVPut>> vPuts;
         GetImpl.AccelerateGet(LogCtx, GetUnresponsiveDisksMask(), vGets, vPuts);
@@ -92,6 +95,7 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
         }
         PutsAccelerated++;
 
+        GetImpl.History.AddAcceleration(true);
         TDeque<std::unique_ptr<TEvBlobStorage::TEvVGet>> vGets;
         TDeque<std::unique_ptr<TEvBlobStorage::TEvVPut>> vPuts;
         GetImpl.AcceleratePut(LogCtx, GetUnresponsiveDisksMask(), vGets, vPuts);
@@ -111,7 +115,7 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
         if (vPuts.size()) {
             if (!IsPutStarted) {
                 IsPutStarted = true;
-                StartTimePut = TActivationContext::Now();
+                StartTimePut = TActivationContext::Monotonic();
             }
         }
         for (size_t i = 0; i < vGets.size(); ++i) {
@@ -126,6 +130,13 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
                 DiskCounters.resize(orderNumber + 1);
             }
             DiskCounters[orderNumber].Sent++;
+
+            LWTRACK(
+                DSProxyVGetSent, Orbit,
+                vDiskId.ToStringWOGeneration(),
+                orderNumber,
+                vGets.size()
+            );
         }
         for (size_t i = 0; i < vPuts.size(); ++i) {
             if (RootCauseTrack.IsOn) {
@@ -139,6 +150,16 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
                 DiskCounters.resize(orderNumber + 1);
             }
             DiskCounters[orderNumber].Sent++;
+
+            LWTRACK(
+                DSProxyVPutSent, Orbit,
+                vPuts[i]->Type(),
+                vDiskId.ToStringWOGeneration(),
+                Info->GetFailDomainOrderNumber(vDiskId),
+                1,
+                vPuts[i]->GetBufferBytes(),
+                true
+            );
         }
         for (auto& ev : vGets) {
             const ui64 cookie = ev->Record.GetCookie();
@@ -148,6 +169,7 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
             const ui64 cookie = ev->Record.GetCookie();
             SendToQueue(std::move(ev), cookie);
         }
+        GetImpl.History.AddAllWaiting();
     }
 
     ui32 CountDisksWithActiveRequests() {
@@ -197,7 +219,7 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
         const TVDiskID vdisk = VDiskIDFromVDiskID(record.GetVDiskID());
         const TVDiskIdShort shortId(vdisk);
 
-        LWPROBE(DSProxyVDiskRequestDuration, TEvBlobStorage::EvVGet, totalSize, tabletId, vdisk.GroupID.GetRawId(), channel,
+        LWTRACK(DSProxyVDiskRequestDuration, Orbit, TEvBlobStorage::EvVGet, totalSize, tabletId, vdisk.GroupID.GetRawId(), channel,
                 Info->GetFailDomainOrderNumber(shortId),
                 GetStartTime(record.GetTimestamps()),
                 GetTotalTimeMs(record.GetTimestamps()),
@@ -247,7 +269,7 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
             << " sent over MaxSaneRequests# " << MaxSaneRequests
             << " requests, internal state# " << GetImpl.DumpFullState();
         ErrorReason = err.Str();
-        R_LOG_CRIT_S("BPG70", ErrorReason);
+        DSP_LOG_CRIT_S("BPG70", ErrorReason);
         ReplyAndDie(NKikimrProto::ERROR);
     }
 
@@ -274,13 +296,13 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
         TVDiskIdShort shortId(vDiskId);
         const NKikimrProto::EReplyStatus status = record.GetStatus();
         NActors::NLog::EPriority priority = PriorityForStatusInbound(status);
-        A_LOG_LOG_S(priority != NActors::NLog::PRI_DEBUG, priority, "BPG30", "Handle VPuEventResult"
+        DSP_LOG_LOG_S(priority, "BPG30", "Handle VPuEventResult"
             << " status# " << NKikimrProto::EReplyStatus_Name(status).data()
             << " node# " << GetVDiskActorId(shortId).NodeId());
 
         const TLogoBlobID blob = GetFirstBlobId(ev);
         ui64 sumBlobSize = SumBlobSize(ev);
-        LWPROBE(DSProxyVDiskRequestDuration, TEvBlobStorage::EvVPut, sumBlobSize, blob.TabletID(),
+        LWTRACK(DSProxyVDiskRequestDuration, Orbit, TEvBlobStorage::EvVPut, sumBlobSize, blob.TabletID(),
                 Info->GroupID.GetRawId(), blob.Channel(), Info->GetFailDomainOrderNumber(shortId),
                 GetStartTime(record.GetTimestamps()),
                 GetTotalTimeMs(record.GetTimestamps()),
@@ -321,15 +343,16 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
     }
 
     void TryScheduleGetAcceleration() {
-        if (!IsGetAccelerateScheduled && GetsAccelerated < 2) {
-            // Count VDisks that have requests in flight, if there is no more than 2 such VDisks, Accelerate
-            if (CountDisksWithActiveRequests() <= 2) {
+        if (!IsGetAccelerateScheduled && GetsAccelerated < AccelerationParams.MaxNumOfSlowDisks) {
+            // Count VDisks with requests in flight, if there are <= the maximum number of slow VDisks, Accelerate
+            if (CountDisksWithActiveRequests() <= AccelerationParams.MaxNumOfSlowDisks) {
                 ui64 timeToAccelerateUs = GetImpl.GetTimeToAccelerateGetNs(LogCtx) / 1000;
                 TDuration timeToAccelerate = TDuration::MicroSeconds(timeToAccelerateUs);
-                TInstant now = TActivationContext::Now();
-                TInstant nextAcceleration = StartTime + timeToAccelerate;
+                TMonotonic now = TActivationContext::Monotonic();
+                TMonotonic nextAcceleration = RequestStartTime + timeToAccelerate;
+                LWTRACK(DSProxyScheduleAccelerate, Orbit, nextAcceleration > now ? (nextAcceleration - now).MicroSeconds() / 1000.0 : 0.0, "Get");
                 if (nextAcceleration > now) {
-                    ui64 causeIdx = RootCauseTrack.RegisterAccelerate();
+                    ui64 causeIdx = RootCauseTrack.RegisterAccelerate("Get");
                     Schedule(nextAcceleration - now, new TEvAccelerateGet(causeIdx));
                     IsGetAccelerateScheduled = true;
                 } else {
@@ -340,15 +363,16 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
     }
 
     void TrySchedulePutAcceleration() {
-        if (!IsPutAccelerateScheduled && PutsAccelerated < 2) {
-            // Count VDisks that have requests in flight, if there is no more than 2 such VDisks, Accelerate
-            if (CountDisksWithActiveRequests() <= 2) {
+        if (!IsPutAccelerateScheduled && PutsAccelerated < AccelerationParams.MaxNumOfSlowDisks) {
+            // Count VDisks with requests in flight, if there are <= the maximum number of slow VDisks, Accelerate
+            if (CountDisksWithActiveRequests() <= AccelerationParams.MaxNumOfSlowDisks) {
                 ui64 timeToAccelerateUs = GetImpl.GetTimeToAcceleratePutNs(LogCtx) / 1000;
                 TDuration timeToAccelerate = TDuration::MicroSeconds(timeToAccelerateUs);
-                TInstant now = TActivationContext::Now();
-                TInstant nextAcceleration = StartTime + timeToAccelerate;
+                TMonotonic now = TActivationContext::Monotonic();
+                TMonotonic nextAcceleration = RequestStartTime + timeToAccelerate;
+                LWTRACK(DSProxyScheduleAccelerate, Orbit, nextAcceleration > now ? (nextAcceleration - now).MicroSeconds() / 1000.0 : 0.0, "Put");
                 if (nextAcceleration > now) {
-                    ui64 causeIdx = RootCauseTrack.RegisterAccelerate();
+                    ui64 causeIdx = RootCauseTrack.RegisterAccelerate("Put");
                     Schedule(nextAcceleration - now, new TEvAcceleratePut(causeIdx));
                     IsPutAccelerateScheduled = true;
                 } else {
@@ -359,9 +383,10 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
     }
 
     void SendReplyAndDie(TAutoPtr<TEvBlobStorage::TEvGetResult> &evResult) {
-        const TInstant now = TActivationContext::Now();
-        const TDuration duration = (now > StartTime) ? (now - StartTime) : TDuration::MilliSeconds(0);
-        Mon->CountGetResponseTime(Info->GetDeviceType(), GetImpl.GetHandleClass(), evResult->PayloadSizeBytes(), duration);
+        const TMonotonic now = TActivationContext::Monotonic();
+        const TDuration duration = now - RequestStartTime;
+        NKikimrBlobStorage::EGetHandleClass handleClass = GetImpl.GetHandleClass();
+        Mon->CountGetResponseTime(Info->GetDeviceType(), handleClass, evResult->PayloadSizeBytes(), duration);
         *Mon->ActiveGetCapacity -= ReportedBytes;
         ReportedBytes = 0;
         bool success = evResult->Status == NKikimrProto::OK;
@@ -377,9 +402,28 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
         LWTRACK(DSProxyGetReply, Orbit);
         evResult->Orbit = std::move(Orbit);
         LWPROBE(DSProxyRequestDuration, TEvBlobStorage::EvGet, requestSize, duration.SecondsFloat() * 1000.0, tabletId,
-                evResult->GroupId, channel, NKikimrBlobStorage::EGetHandleClass_Name(GetImpl.GetHandleClass()),
+                evResult->GroupId, channel, NKikimrBlobStorage::EGetHandleClass_Name(handleClass),
                 success);
-        A_LOG_LOG_S(true, success ? NLog::PRI_INFO : NLog::PRI_NOTICE, "BPG68", "Result# " << evResult->Print(false));
+        DSP_LOG_LOG_S(success ? NLog::PRI_INFO : NLog::PRI_NOTICE, "BPG68", "Result# " << evResult->Print(false) <<" GroupId# " << Info->GroupID);
+
+
+        if ((TActivationContext::Monotonic() - RequestStartTime >= LongRequestThreshold) && PopAllowToken(handleClass)) {
+            STLOG(PRI_WARN, BS_PROXY_GET, BPG71, "Long TEvGet request detected",         
+                    (LongRequestThreshold, LongRequestThreshold),
+                    (GroupId, Info->GroupID),
+                    (SubrequestsCount, evResult->ResponseSz),
+                    (RequestTotalSize, requestSize),
+                    (HandleClass, NKikimrBlobStorage::EGetHandleClass_Name(handleClass)),
+                    (RestartCounter, RestartCounter),
+                    (History, GetImpl.PrintHistory()));
+        }
+
+        STLOG(GetImpl.WasNotOkResponses() && PopAllowToken(handleClass) ? PRI_NOTICE : PRI_DEBUG,
+                BS_PROXY_GET, BPG72, "Query history",
+                (GroupId, Info->GroupID),
+                (HandleClass, NKikimrBlobStorage::EGetHandleClass_Name(handleClass)),
+                (History, GetImpl.PrintHistory()));
+
         return SendResponseAndDie(std::unique_ptr<TEvBlobStorage::TEvGetResult>(evResult.Release()));
     }
 
@@ -404,11 +448,11 @@ public:
                 params.AccelerationParams, LogCtx.RequestPrefix)
         , Orbit(std::move(params.Common.Event->Orbit))
         , Deadline(params.Common.Event->Deadline)
-        , StartTime(params.Common.Now)
-        , StartTimePut(StartTime)
+        , StartTimePut(RequestStartTime)
         , GroupSize(Info->Type.BlobSubgroupSize())
         , ReportedBytes(0)
         , AccelerationParams(params.AccelerationParams)
+        , LongRequestThreshold(params.LongRequestThreshold)
     {
         ReportBytes(sizeof(*this));
         MaxSaneRequests = params.Common.Event->QuerySize * Info->Type.TotalPartCount() *
@@ -427,7 +471,7 @@ public:
     }
 
     void Bootstrap() override {
-        A_LOG_INFO_S("BPG01", "bootstrap"
+        DSP_LOG_INFO_S("BPG01", "bootstrap"
             << " ActorId# " << SelfId()
             << " Group# " << Info->GroupID
             << " Query# " << GetImpl.DumpQuery()
@@ -435,6 +479,13 @@ public:
             << " RestartCounter# " << RestartCounter);
 
         LWTRACK(DSProxyGetBootstrap, Orbit);
+
+        LWTRACK(
+            DSProxyGetRequest, Orbit,
+            Info->GroupID.GetRawId(),
+            DeviceTypeStr(Info->GetDeviceType(), true),
+            NKikimrBlobStorage::EGetHandleClass_Name(GetImpl.GetHandleClass())
+        );
 
         TDeque<std::unique_ptr<TEvBlobStorage::TEvVGet>> vGets;
         TDeque<std::unique_ptr<TEvBlobStorage::TEvVPut>> vPuts;

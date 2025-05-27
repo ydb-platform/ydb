@@ -31,9 +31,10 @@ TDerived* TAllocationHolder::Allocate(size_t size, TRefCountedTypeCookie cookie)
 {
     auto requestedSize = sizeof(TDerived) + size;
     auto* ptr = ::malloc(requestedSize);
-
-    if (!ptr) {
-        AbortProcess(ToUnderlying(EProcessExitCode::OutOfMemory));
+    if (Y_UNLIKELY(!ptr)) {
+        AbortProcessDramatically(
+            EProcessExitCode::OutOfMemory,
+            "Out-of-memory during chunked memory pool allocation");
     }
 
 #ifndef _win_
@@ -70,12 +71,14 @@ inline TChunkedMemoryPool::TChunkedMemoryPool(
     : TChunkedMemoryPool(
         GetRefCountedTypeCookie<TTag>(),
         startChunkSize)
-{ }
+{
+    static_assert(IsEmptyClass<TTag>());
+}
 
 inline char* TChunkedMemoryPool::AllocateUnaligned(size_t size)
 {
     // Fast path.
-    if (FreeZoneEnd_ >= FreeZoneBegin_ + size) {
+    if (FreeZoneBegin_ && FreeZoneEnd_ >= FreeZoneBegin_ + size) {
         FreeZoneEnd_ -= size;
         Size_ += size;
         return FreeZoneEnd_;
@@ -87,15 +90,17 @@ inline char* TChunkedMemoryPool::AllocateUnaligned(size_t size)
 
 inline char* TChunkedMemoryPool::AllocateAligned(size_t size, int align)
 {
-    // NB: This can lead to FreeZoneBegin_ >= FreeZoneEnd_ in which case the chunk is full.
-    FreeZoneBegin_ = AlignUp(FreeZoneBegin_, align);
+    if (FreeZoneBegin_) {
+        // NB: This can lead to FreeZoneBegin_ >= FreeZoneEnd_ in which case the chunk is full.
+        FreeZoneBegin_ = AlignUp(FreeZoneBegin_, align);
 
-    // Fast path.
-    if (FreeZoneBegin_ + size <= FreeZoneEnd_) {
-        char* result = FreeZoneBegin_;
-        Size_ += size;
-        FreeZoneBegin_ += size;
-        return result;
+        // Fast path.
+        if (FreeZoneBegin_ + size <= FreeZoneEnd_) {
+            char* result = FreeZoneBegin_;
+            Size_ += size;
+            FreeZoneBegin_ += size;
+            return result;
+        }
     }
 
     // Slow path.

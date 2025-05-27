@@ -41,27 +41,7 @@ TString BinaryPath(TStringBuf path) {
 }
 
 TString GetArcadiaTestsData() {
-    TString atdRoot = NPrivate::GetTestEnv().ArcadiaTestsDataDir;
-    if (atdRoot) {
-        return atdRoot;
-    }
-
-    TString path = NPrivate::GetCwd();
-    const char pathsep = GetDirectorySeparator();
-    while (!path.empty()) {
-        TString dataDir = path + "/arcadia_tests_data";
-        if (IsDir(dataDir)) {
-            return dataDir;
-        }
-
-        size_t pos = path.find_last_of(pathsep);
-        if (pos == TString::npos) {
-            pos = 0;
-        }
-        path.erase(pos);
-    }
-
-    return {};
+    return ArcadiaSourceRoot() + "/atd_ro_snapshot";
 }
 
 TString GetWorkPath() {
@@ -161,7 +141,6 @@ namespace NPrivate {
 
     void TTestEnv::ReInitialize() {
         IsRunningFromTest = false;
-        ArcadiaTestsDataDir = "";
         SourceRoot = "";
         BuildRoot = "";
         WorkPath = "";
@@ -189,11 +168,6 @@ namespace NPrivate {
             value = context.GetValueByPath("runtime.build_root");
             if (value) {
                 BuildRoot = value->GetStringSafe("");
-            }
-
-            value = context.GetValueByPath("runtime.atd_root");
-            if (value) {
-                ArcadiaTestsDataDir = value->GetStringSafe("");
             }
 
             value = context.GetValueByPath("runtime.work_path");
@@ -267,10 +241,6 @@ namespace NPrivate {
 
         if (!BuildRoot) {
             BuildRoot = GetEnv("ARCADIA_BUILD_ROOT");
-        }
-
-        if (!ArcadiaTestsDataDir) {
-            ArcadiaTestsDataDir = GetEnv("ARCADIA_TESTS_DATA_DIR");
         }
 
         if (!WorkPath) {

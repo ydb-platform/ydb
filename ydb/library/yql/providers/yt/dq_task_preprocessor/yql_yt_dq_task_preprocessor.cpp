@@ -1,18 +1,18 @@
 #include "yql_yt_dq_task_preprocessor.h"
 
-#include <ydb/library/yql/providers/yt/gateway/lib/yt_helpers.h>
-#include <ydb/library/yql/providers/yt/codec/yt_codec.h>
-#include <ydb/library/yql/providers/yt/codec/yt_codec_io.h>
-#include <ydb/library/yql/providers/yt/lib/yson_helpers/yson_helpers.h>
-#include <ydb/library/yql/providers/common/codec/yql_codec.h>
-#include <ydb/library/yql/utils/log/log.h>
-#include <ydb/library/yql/utils/failure_injector/failure_injector.h>
-#include <ydb/library/yql/minikql/mkql_function_registry.h>
-#include <ydb/library/yql/minikql/mkql_alloc.h>
-#include <ydb/library/yql/minikql/mkql_node.h>
-#include <ydb/library/yql/minikql/mkql_mem_info.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yt/yql/providers/yt/gateway/lib/yt_helpers.h>
+#include <yt/yql/providers/yt/codec/yt_codec.h>
+#include <yt/yql/providers/yt/codec/yt_codec_io.h>
+#include <yt/yql/providers/yt/lib/yson_helpers/yson_helpers.h>
+#include <yql/essentials/providers/common/codec/yql_codec.h>
+#include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/utils/failure_injector/failure_injector.h>
+#include <yql/essentials/minikql/mkql_function_registry.h>
+#include <yql/essentials/minikql/mkql_alloc.h>
+#include <yql/essentials/minikql/mkql_node.h>
+#include <yql/essentials/minikql/mkql_mem_info.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/utils/yql_panic.h>
 
 #include <yt/cpp/mapreduce/client/client.h>
 #include <yt/cpp/mapreduce/interface/io.h>

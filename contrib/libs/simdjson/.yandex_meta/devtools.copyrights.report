@@ -1,0 +1,155 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 16fd5597ca30d730d6cebcdf3be2ec28
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/simdjson/internal/instruction_set.h [5:14]
+        src/internal/isadetection.h [5:14]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 2067bdaf1585921cf47dfb0b810c88f7
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/simdjson/internal/instruction_set.h [5:14]
+        src/internal/isadetection.h [5:14]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 28cd8898b5e8ce155410a78873d77042
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/simdjson/internal/instruction_set.h [5:14]
+        src/internal/isadetection.h [5:14]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 41b5314d4933d0efce14f33661eb953a
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/simdjson/internal/instruction_set.h [5:14]
+        src/internal/isadetection.h [5:14]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7679e942759de26f76fdd9b1cb62d060
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/simdjson/internal/instruction_set.h [5:14]
+        src/internal/isadetection.h [5:14]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7e2e2b3059e8b51ccc7c129f32aa3c56
+BELONGS ya.make
+    License text:
+           Copyright 2018-2025 The simdjson authors
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [189:189]
+        LICENSE-MIT [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL abfbab3d484099905de04f84551ac607
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/simdjson/internal/instruction_set.h [5:14]
+        src/internal/isadetection.h [5:14]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ae617de2789c827ff457d4d4ee938f87
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/simdjson/internal/instruction_set.h [5:14]
+        src/internal/isadetection.h [5:14]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b52919ca831b9272ba54a8178e0f03e1
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/simdjson/internal/instruction_set.h [5:14]
+        src/internal/isadetection.h [5:14]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ce7525b41b9b057bb4906c82b576055d
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/to_chars.cpp [21:27]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e79b33a1cc4840182edc20a4b9b36924
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/simdjson/internal/instruction_set.h [5:14]
+        src/internal/isadetection.h [5:14]

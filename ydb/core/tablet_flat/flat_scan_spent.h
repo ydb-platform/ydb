@@ -21,17 +21,17 @@ namespace NTable {
 
         }
 
-        void Describe(IOutputStream &out) const noexcept
+        void Describe(IOutputStream &out) const
         {
             const auto now = Time->Now();
 
             out
-                << "Spent{" << NFmt::TDelay(now - Fired)
-                << " wa " << NFmt::TDelay(Waits + (now - Since))
-                << " cnt " << Interrupts << "}";
+                << "Spent{time=" << NFmt::TDelay(now - Fired)
+                << ",wait=" << NFmt::TDelay(Waits + (now - Since))
+                << ",interrupts=" << Interrupts << "}";
         }
 
-        void Alter(bool available) noexcept
+        void Alter(bool available)
         {
             if (bool(available) == bool(Since == TInstant::Max())) {
                 /* State isn't changed since last Alter(...) */

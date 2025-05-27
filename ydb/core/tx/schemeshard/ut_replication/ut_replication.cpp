@@ -168,6 +168,77 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
         UNIT_ASSERT_VALUES_UNEQUAL("root@builtin", params.GetOAuthToken().GetToken());
     }
 
+    Y_UNIT_TEST(ConsistencyLevel) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));
+        ui64 txId = 100;
+
+        SetupLogging(runtime);
+
+        TestCreateReplication(runtime, ++txId, "/MyRoot", R"(
+            Name: "Replication1"
+            Config {
+              Specific {
+                Targets {
+                  SrcPath: "/MyRoot1/Table"
+                  DstPath: "/MyRoot2/Table"
+                }
+              }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        {
+            const auto desc = DescribePath(runtime, "/MyRoot/Replication1");
+            const auto& config = desc.GetPathDescription().GetReplicationDescription().GetConfig();
+            UNIT_ASSERT(config.GetConsistencySettings().HasRow());
+        }
+
+        TestCreateReplication(runtime, ++txId, "/MyRoot", R"(
+            Name: "Replication2"
+            Config {
+              Specific {
+                Targets {
+                  SrcPath: "/MyRoot1/Table"
+                  DstPath: "/MyRoot2/Table"
+                }
+              }
+              ConsistencySettings {
+                Row {}
+              }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        {
+            const auto desc = DescribePath(runtime, "/MyRoot/Replication2");
+            const auto& config = desc.GetPathDescription().GetReplicationDescription().GetConfig();
+            UNIT_ASSERT(config.GetConsistencySettings().HasRow());
+        }
+
+        TestCreateReplication(runtime, ++txId, "/MyRoot", R"(
+            Name: "Replication3"
+            Config {
+              Specific {
+                Targets {
+                  SrcPath: "/MyRoot1/Table"
+                  DstPath: "/MyRoot2/Table"
+                }
+              }
+              ConsistencySettings {
+                Global {
+                  CommitIntervalMilliSeconds: 10000
+                }
+              }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        {
+            const auto desc = DescribePath(runtime, "/MyRoot/Replication3");
+            const auto& config = desc.GetPathDescription().GetReplicationDescription().GetConfig();
+            UNIT_ASSERT(config.GetConsistencySettings().HasGlobal());
+            UNIT_ASSERT_VALUES_EQUAL(config.GetConsistencySettings().GetGlobal().GetCommitIntervalMilliSeconds(), 10000);
+        }
+    }
+
     Y_UNIT_TEST(Alter) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));
@@ -188,7 +259,15 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
               Paused {
               }
             }
-        )", {NKikimrScheme::StatusInvalidParameter});
+        )");
+
+        TestAlterReplication(runtime, ++txId, "/MyRoot", R"(
+          Name: "Replication"
+          State {
+            StandBy {
+            }
+          }
+        )");
 
         TestAlterReplication(runtime, ++txId, "/MyRoot", R"(
             Name: "Replication"
@@ -204,14 +283,6 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
             NLs::PathExist,
             NLs::ReplicationState(NKikimrReplication::TReplicationState::kDone),
         });
-
-        TestAlterReplication(runtime, ++txId, "/MyRoot", R"(
-            Name: "Replication"
-            State {
-              StandBy {
-              }
-            }
-        )", {NKikimrScheme::StatusInvalidParameter});
     }
 
     Y_UNIT_TEST(Describe) {
@@ -353,7 +424,7 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
             Name: "Table"
             ReplicationConfig {
               Mode: REPLICATION_MODE_NONE
-              Consistency: CONSISTENCY_WEAK
+              ConsistencyLevel: CONSISTENCY_LEVEL_ROW
             }
         )")));
         TestModificationResults(runtime, txId, {NKikimrScheme::StatusInvalidParameter});
@@ -369,6 +440,7 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {
             NLs::ReplicationMode(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE),
+            NLs::UserAttrsEqual({}),
         });
     }
 

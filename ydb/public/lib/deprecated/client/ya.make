@@ -8,7 +8,7 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/library/grpc/client
+    ydb/public/sdk/cpp/src/library/grpc/client
     library/cpp/messagebus
     ydb/public/lib/base
 )

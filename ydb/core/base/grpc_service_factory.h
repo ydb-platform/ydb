@@ -32,18 +32,19 @@ private:
     std::unordered_map<TString, std::vector<TServiceParams>> Registry;
 
 public:
-    template <class TService>
+    template <class TService, typename...TParams>
     void Register(
         const TString& name,
         bool enableByDefault = false,
-        std::optional<NActors::TActorId> grpcRequestProxyIdForService = std::nullopt
+        std::optional<NActors::TActorId> grpcRequestProxyIdForService = std::nullopt,
+        TParams...params
     ) {
-        auto method = [](
+        const auto method = [params...](
             NActors::TActorSystem* actorSystem,
             TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
             NActors::TActorId grpcRequestProxyId
         ) {
-            return TServicePtr(new TService(actorSystem, counters, grpcRequestProxyId));
+            return TServicePtr(new TService(actorSystem, counters, grpcRequestProxyId, params...));
         };
         Registry[name].emplace_back(
             method,

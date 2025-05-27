@@ -162,8 +162,8 @@ namespace NMaybe {
         constexpr TMoveAssignBase(TMoveAssignBase&&) = default;
         TMoveAssignBase& operator=(const TMoveAssignBase&) = default;
         TMoveAssignBase& operator=(TMoveAssignBase&& rhs) noexcept(
-            std::is_nothrow_move_assignable<T>::value&&
-                std::is_nothrow_move_constructible<T>::value)
+            std::is_nothrow_move_assignable<T>::value &&
+            std::is_nothrow_move_constructible<T>::value)
         {
             if (this->Defined_) {
                 if (rhs.Defined_) {
@@ -179,7 +179,7 @@ namespace NMaybe {
             return *this;
         }
     };
-}
+} // namespace NMaybe
 
 template <class T>
 using TMaybeBase = NMaybe::TMoveAssignBase<T>;

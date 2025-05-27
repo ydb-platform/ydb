@@ -654,7 +654,7 @@ _GL_WARN_ON_USE (fchmodat, "fchmodat is not portable - "
 
 
 #if 1
-# if 1
+# if 0
 #  if !(defined __cplusplus && defined GNULIB_NAMESPACE)
 #   undef fstat
 #   define fstat rpl_fstat
@@ -944,7 +944,7 @@ _GL_WARN_ON_USE (mknodat, "mknodat is not portable - "
 
 
 #if 1
-# if 1
+# if 0
 /* We can't use the object-like #define stat rpl_stat, because of
    struct stat.  This means that rpl_stat will not be used if the user
    does (stat)(a,b).  Oh well.  */

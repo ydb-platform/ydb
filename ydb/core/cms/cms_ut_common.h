@@ -91,6 +91,10 @@ struct TTestEnvOpts {
     bool EnableSentinel;
     bool EnableCMSRequestPriorities;
     bool EnableSingleCompositeActionGroup;
+    bool EnableDynamicGroups;
+
+    using TNodeLocationCallback = std::function<TNodeLocation(ui32)>;
+    TNodeLocationCallback NodeLocationCallback;
 
     TTestEnvOpts() = default;
 
@@ -107,8 +111,9 @@ struct TTestEnvOpts {
         , UseMirror3dcErasure(false)
         , AdvanceCurrentTime(false)
         , EnableSentinel(false)
-        , EnableCMSRequestPriorities(false)
+        , EnableCMSRequestPriorities(true)
         , EnableSingleCompositeActionGroup(true)
+        , EnableDynamicGroups(false)
     {
     }
 
@@ -122,8 +127,18 @@ struct TTestEnvOpts {
         return *this;
     }
 
-    TTestEnvOpts& WithEnableCMSRequestPriorities() {
-        EnableCMSRequestPriorities = true;
+    TTestEnvOpts& WithoutEnableCMSRequestPriorities() {
+        EnableCMSRequestPriorities = false;
+        return *this;
+    }
+
+    TTestEnvOpts& WithNodeLocationCallback(TNodeLocationCallback nodeLocationCallback) {
+        NodeLocationCallback = nodeLocationCallback;
+        return *this;
+    }
+
+    TTestEnvOpts& WithDynamicGroups() {
+        EnableDynamicGroups = true;
         return *this;
     }
 };
@@ -323,6 +338,8 @@ public:
         return CheckRequest(user, id, dry, NKikimrCms::MODE_MAX_AVAILABILITY, res, count);
     }
 
+    void CheckBSCUpdateRequests(std::set<ui32> expectedNodes, NKikimrBlobStorage::EDriveStatus expectedStatus);
+
     void CheckWalleStoreTaskIsFailed(NCms::TEvCms::TEvStoreWalleTask *req);
 
     template <typename... Ts>
@@ -396,10 +413,47 @@ public:
         return CheckResetMarker(req, code);
     }
 
+    Ydb::Maintenance::MaintenanceTaskResult CheckMaintenanceTaskRefresh(
+            const TString &taskUid,
+            Ydb::StatusIds::StatusCode code) 
+    {
+        auto ev = std::make_unique<NCms::TEvCms::TEvRefreshMaintenanceTaskRequest>();
+
+        auto *req = ev->Record.MutableRequest();
+        req->set_task_uid(taskUid);
+
+        SendToPipe(CmsId, Sender, ev.release(), 0, GetPipeConfigWithRetries());
+        TAutoPtr<IEventHandle> handle;
+        auto reply = GrabEdgeEventRethrow<NCms::TEvCms::TEvMaintenanceTaskResponse>(handle);
+
+        const auto &rec = reply->Record;
+        UNIT_ASSERT_VALUES_EQUAL(rec.GetStatus(), code);
+        return rec.GetResult();
+    }
+
+    Ydb::Maintenance::GetMaintenanceTaskResult CheckMaintenanceTaskGet(
+        const TString &taskUid,
+        Ydb::StatusIds::StatusCode code) 
+    {
+        auto ev = std::make_unique<NCms::TEvCms::TEvGetMaintenanceTaskRequest>();
+
+        auto *req = ev->Record.MutableRequest();
+        req->set_task_uid(taskUid);
+
+        SendToPipe(CmsId, Sender, ev.release(), 0, GetPipeConfigWithRetries());
+        TAutoPtr<IEventHandle> handle;
+        auto reply = GrabEdgeEventRethrow<NCms::TEvCms::TEvGetMaintenanceTaskResponse>(handle);
+
+        const auto &rec = reply->Record;
+        UNIT_ASSERT_VALUES_EQUAL(rec.GetStatus(), code);
+        return rec.GetResult();
+    }
+
     template <typename... Ts>
     Ydb::Maintenance::MaintenanceTaskResult CheckMaintenanceTaskCreate(
             const TString &taskUid,
             Ydb::StatusIds::StatusCode code,
+            Ydb::Maintenance::AvailabilityMode availabilityMode,
             const Ts&... actionGroups) 
     {
         auto ev = std::make_unique<NCms::TEvCms::TEvCreateMaintenanceTaskRequest>();
@@ -407,7 +461,7 @@ public:
 
         auto *req = ev->Record.MutableRequest();
         req->mutable_task_options()->set_task_uid(taskUid);
-        req->mutable_task_options()->set_availability_mode(Ydb::Maintenance::AVAILABILITY_MODE_STRONG);
+        req->mutable_task_options()->set_availability_mode(availabilityMode);
         AddActionGroups(*req, actionGroups...);
 
         SendToPipe(CmsId, Sender, ev.release(), 0, GetPipeConfigWithRetries());
@@ -417,6 +471,15 @@ public:
         const auto &rec = reply->Record;
         UNIT_ASSERT_VALUES_EQUAL(rec.GetStatus(), code);
         return rec.GetResult();
+    }
+
+    template <typename... Ts>
+    Ydb::Maintenance::MaintenanceTaskResult CheckMaintenanceTaskCreate(
+            const TString &taskUid,
+            Ydb::StatusIds::StatusCode code,
+            const Ts&... actionGroups) 
+    {   
+        return CheckMaintenanceTaskCreate(taskUid, code, Ydb::Maintenance::AVAILABILITY_MODE_STRONG, actionGroups...);
     }
 
     void EnableBSBaseConfig();

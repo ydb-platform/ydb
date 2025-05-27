@@ -34,6 +34,8 @@ message TEvCreateImportRequest {
     optional string DatabaseName = 2;
     optional string UserSID = 3;
     optional TCreateImportRequest Request = 4;
+    optional string PeerName = 5;
+    optional string SanitizedToken = 6;
 }
 
 message TCreateImportResponse {
@@ -68,8 +70,10 @@ message TCancelImportRequest {
 
 message TEvCancelImportRequest {
     optional uint64 TxId = 1;
-    optional string DatabaseName = 3;
     optional TCancelImportRequest Request = 2;
+    optional string DatabaseName = 3;
+    optional string UserSID = 4;
+    optional string PeerName = 5;
 }
 
 message TCancelImportResponse {
@@ -88,8 +92,10 @@ message TForgetImportRequest {
 
 message TEvForgetImportRequest {
     optional uint64 TxId = 1;
-    optional string DatabaseName = 3;
     optional TForgetImportRequest Request = 2;
+    optional string DatabaseName = 3;
+    optional string UserSID = 4;
+    optional string PeerName = 5;
 }
 
 message TForgetImportResponse {
@@ -122,4 +128,17 @@ message TListImportsResponse {
 
 message TEvListImportsResponse {
     optional TListImportsResponse Response = 1;
+}
+
+message TEvListObjectsInS3ExportRequest {
+    optional Ydb.Operations.OperationParams OperationParams = 1;
+    optional Ydb.Import.ListObjectsInS3ExportSettings Settings = 2;
+    optional int64 PageSize = 3;
+    optional string PageToken = 4;
+}
+
+message TEvListObjectsInS3ExportResponse {
+    optional Ydb.StatusIds.StatusCode Status = 1;
+    repeated Ydb.Issue.IssueMessage Issues = 2;
+    optional Ydb.Import.ListObjectsInS3ExportResult Result = 3;
 }

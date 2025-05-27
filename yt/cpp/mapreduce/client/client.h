@@ -5,6 +5,7 @@
 #include "transaction_pinger.h"
 
 #include <yt/cpp/mapreduce/interface/client.h>
+#include <yt/cpp/mapreduce/interface/raw_client.h>
 
 #include <yt/cpp/mapreduce/http/context.h>
 #include <yt/cpp/mapreduce/http/requests.h>
@@ -29,6 +30,7 @@ class TClientBase
 {
 public:
     TClientBase(
+        IRawClientPtr rawClient,
         const TClientContext& context,
         const TTransactionId& transactionId,
         IClientRetryPolicyPtr retryPolicy);
@@ -128,6 +130,11 @@ public:
         const TFormat& format,
         const TTableReaderOptions& options) override;
 
+    TRawTableReaderPtr CreateRawTablePartitionReader(
+        const TString& cookie,
+        const TFormat& format,
+        const TTablePartitionReaderOptions& options) override;
+
     TRawTableWriterPtr CreateRawWriter(
         const TRichYPath& path,
         const TFormat& format,
@@ -220,7 +227,7 @@ public:
 
     TBatchRequestPtr CreateBatchRequest() override;
 
-    IClientPtr GetParentClient() override;
+    IRawClientPtr GetRawClient() const;
 
     const TClientContext& GetContext() const;
 
@@ -232,6 +239,7 @@ protected:
     virtual TClientPtr GetParentClientImpl() = 0;
 
 protected:
+    const IRawClientPtr RawClient_;
     const TClientContext Context_;
     TTransactionId TransactionId_;
     IClientRetryPolicyPtr ClientRetryPolicy_;
@@ -265,6 +273,21 @@ private:
         const ISkiffRowSkipperPtr& skipper,
         const NSkiff::TSkiffSchemaPtr& schema) override;
 
+    ::TIntrusivePtr<INodeReaderImpl> CreateNodeTablePartitionReader(
+        const TString& cookie,
+        const TTablePartitionReaderOptions& options) override;
+
+    ::TIntrusivePtr<IProtoReaderImpl> CreateProtoTablePartitionReader(
+        const TString& cookie,
+        const TTablePartitionReaderOptions& options,
+        const Message* prototype) override;
+
+    ::TIntrusivePtr<ISkiffRowReaderImpl> CreateSkiffRowTablePartitionReader(
+        const TString& cookie,
+        const TTablePartitionReaderOptions& options,
+        const ISkiffRowSkipperPtr& skipper,
+        const NSkiff::TSkiffSchemaPtr& schema) override;
+
     ::TIntrusivePtr<INodeWriterImpl> CreateNodeWriter(
         const TRichYPath& path, const TTableWriterOptions& options) override;
 
@@ -287,6 +310,7 @@ public:
     //
     // Start a new transaction.
     TTransaction(
+        const IRawClientPtr& rawClient,
         TClientPtr parentClient,
         const TClientContext& context,
         const TTransactionId& parentTransactionId,
@@ -295,6 +319,7 @@ public:
     //
     // Attach an existing transaction.
     TTransaction(
+        const IRawClientPtr& rawClient,
         TClientPtr parentClient,
         const TClientContext& context,
         const TTransactionId& transactionId,
@@ -321,12 +346,14 @@ public:
 
     ITransactionPingerPtr GetTransactionPinger() override;
 
+    IClientPtr GetParentClient(bool ignoreGlobalTx) override;
+
 protected:
     TClientPtr GetParentClientImpl() override;
 
 private:
     ITransactionPingerPtr TransactionPinger_;
-    THolder<TPingableTransaction> PingableTx_;
+    std::unique_ptr<TPingableTransaction> PingableTx_;
     TClientPtr ParentClient_;
 };
 
@@ -338,6 +365,7 @@ class TClient
 {
 public:
     TClient(
+        IRawClientPtr rawClient,
         const TClientContext& context,
         const TTransactionId& globalId,
         IClientRetryPolicyPtr retryPolicy);
@@ -449,6 +477,10 @@ public:
         const TJobId& jobId,
         const TGetJobStderrOptions& options = TGetJobStderrOptions()) override;
 
+    std::vector<TJobTraceEvent> GetJobTrace(
+        const TOperationId& operationId,
+        const TGetJobTraceOptions& options = TGetJobTraceOptions()) override;
+
     TNode::TListType SkyShareTable(
         const std::vector<TYPath>& tablePaths,
         const TSkyShareTableOptions& options = TSkyShareTableOptions()) override;
@@ -476,6 +508,8 @@ public:
 
     ITransactionPingerPtr GetTransactionPinger() override;
 
+    IClientPtr GetParentClient(bool ignoreGlobalTx) override;
+
     // Helper methods
     TYtPoller& GetYtPoller();
 
@@ -483,26 +517,29 @@ protected:
     TClientPtr GetParentClientImpl() override;
 
 private:
-    template <class TOptions>
-    void SetTabletParams(
-        THttpHeader& header,
-        const TYPath& path,
-        const TOptions& options);
-
     void CheckShutdown() const;
 
+private:
     ITransactionPingerPtr TransactionPinger_;
 
     std::atomic<bool> Shutdown_ = false;
     TMutex Lock_;
-    THolder<TYtPoller> YtPoller_;
+    std::unique_ptr<TYtPoller> YtPoller_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void SetupClusterContext(
+    TClientContext& context,
+    const TString& serverName);
+
+TClientContext CreateClientContext(
+    const TString& serverName,
+    const TCreateClientOptions& options);
+
 TClientPtr CreateClientImpl(
     const TString& serverName,
-    const TCreateClientOptions& options = TCreateClientOptions());
+    const TCreateClientOptions& options = {});
 
 ////////////////////////////////////////////////////////////////////////////////
 

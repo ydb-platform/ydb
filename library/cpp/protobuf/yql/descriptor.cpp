@@ -19,6 +19,7 @@
 
 #include <google/protobuf/text_format.h>
 #include <google/protobuf/io/zero_copy_stream_impl_lite.h>
+#include <google/protobuf/io/coded_stream.h>
 
 using namespace NProtoBuf;
 
@@ -73,6 +74,7 @@ TDynamicInfoRef TDynamicInfo::Create(const TStringBuf& typeConfig) {
     info->SkipBytes_ = data.SkipBytes;
     info->OptionalLists_ = data.OptionalLists;
     info->SyntaxAware_ = data.SyntaxAware;
+    info->Deterministic_ = data.Deterministic;
     return info;
 }
 
@@ -146,7 +148,16 @@ TString TDynamicInfo::Serialize(const Message& proto) {
     switch (ProtoFormat_) {
         case PF_PROTOBIN: {
             result.ReserveAndResize(proto.ByteSize());
-            if (!proto.SerializeToArray(result.begin(), result.size())) {
+            bool success = false;
+            if (Deterministic_) {
+                io::ArrayOutputStream arrOut(result.begin(), result.size());
+                io::CodedOutputStream codedOut(&arrOut);
+                codedOut.SetSerializationDeterministic(true);
+                success = proto.SerializeToCodedStream(&codedOut);
+            } else {
+                success = proto.SerializeToArray(result.begin(), result.size());
+            }
+            if (!success) {
                 ythrow yexception() << "can't serialize protobin message";
             }
             break;
@@ -159,7 +170,9 @@ TString TDynamicInfo::Serialize(const Message& proto) {
         }
         case PF_JSON: {
             NJson::TJsonValue value;
-            NProtobufJson::Proto2Json(proto, value);
+            NProtobufJson::TProto2JsonConfig config;
+            config.SetSortMapKeys(Deterministic_);
+            NProtobufJson::Proto2Json(proto, value, config);
             result = NJson::WriteJson(value);
             break;
         }
@@ -219,10 +232,17 @@ TString GenerateProtobufTypeConfig(
         case ERecursionTraits::Bytes:
             ret["view"]["recursion"] = "bytes";
             break;
+        case ERecursionTraits::BytesV2:
+            ret["view"]["recursion"] = "bytesV2";
+            break;
     }
 
     if (options.YtMode) {
          ret["view"]["yt_mode"] = true;
+    }
+
+    if (options.Deterministic) {
+        ret["view"]["deterministic"] = true;
     }
 
     return NJson::WriteJson(ret, false);
@@ -268,6 +288,7 @@ TProtoTypeConfig ParseTypeConfig(const TStringBuf& config) {
                 result.OptionalLists = value["lists"]["optional"].GetBooleanSafe(true);
                 result.SyntaxAware = value["syntax"]["aware"].GetBooleanSafe(false);
                 result.YtMode = value["view"]["yt_mode"].GetBooleanSafe(false);
+                result.Deterministic = value["view"]["deterministic"].GetBooleanSafe(false);
 
                 if (protoFormat == "protobin") {
                     result.ProtoFormat = PF_PROTOBIN;
@@ -296,6 +317,8 @@ TProtoTypeConfig ParseTypeConfig(const TStringBuf& config) {
                     result.Recursion = ERecursionTraits::Ignore;
                 } else if (recursion == "bytes") {
                     result.Recursion = ERecursionTraits::Bytes;
+                } else if (recursion == "bytesV2") {
+                    result.Recursion = ERecursionTraits::BytesV2;
                 } else {
                     ythrow yexception() << "unsupported recursion trait "
                                         << recursion;

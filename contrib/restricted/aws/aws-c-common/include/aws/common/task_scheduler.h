@@ -10,6 +10,8 @@
 #include <aws/common/linked_list.h>
 #include <aws/common/priority_queue.h>
 
+AWS_PUSH_SANE_WARNING_LEVEL
+
 struct aws_task;
 
 typedef enum aws_task_status {
@@ -125,5 +127,6 @@ AWS_COMMON_API
 const char *aws_task_status_to_c_str(enum aws_task_status status);
 
 AWS_EXTERN_C_END
+AWS_POP_SANE_WARNING_LEVEL
 
 #endif /* AWS_COMMON_TASK_SCHEDULER_H */

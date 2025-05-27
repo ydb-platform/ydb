@@ -11,13 +11,13 @@ import time
 import ydb
 
 import yatest.common
+from ydb.tests.library.common.helpers import plain_or_under_sanitizer
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.kikimr_port_allocator import KikimrPortManagerPortAllocator
 from ydb.tests.library.harness.util import LogLevels
-import ydb.tests.library.common.yatest_common as yatest_common
 
-from ydb.library.yql.providers.common.proto import gateways_config_pb2
+from yql.essentials.providers.common.proto import gateways_config_pb2
 
 from ydb.tests.tools.fq_runner.kikimr_metrics import load_metrics
 
@@ -29,6 +29,13 @@ from concurrent.futures import TimeoutError
 logging.getLogger("urllib3.connectionpool").setLevel("INFO")
 logging.getLogger("ydb.tests.library.harness.kikimr_runner").setLevel("INFO")
 logging.getLogger("library.python.retry").setLevel("ERROR")
+
+
+def plain_or_under_sanitizer_wrapper(plain, sanitized):
+    try:
+        return plain_or_under_sanitizer(plain, sanitized)
+    except Exception:
+        return plain
 
 
 class BaseTenant(abc.ABC):
@@ -117,6 +124,7 @@ class BaseTenant(abc.ABC):
         self.enable_logging("FQ_QUOTA_PROXY")
         self.enable_logging("PUBLIC_HTTP")
         self.enable_logging("FQ_CONTROL_PLANE_CONFIG")
+        self.enable_logging("FQ_ROW_DISPATCHER", LogLevels.TRACE)
         # self.enable_logging("GRPC_SERVER")
 
     @abc.abstractclassmethod
@@ -146,6 +154,7 @@ class BaseTenant(abc.ABC):
         gateways['yql_core'] = {}
         gateways['yql_core']['flags'] = []
         gateways['yql_core']['flags'].append({'name': "_EnableMatchRecognize"})
+        gateways['yql_core']['flags'].append({'name': "_EnableStreamLookupJoin"})
 
     def fill_storage_config(self, storage, directory):
         storage['endpoint'] = os.getenv("YDB_ENDPOINT")
@@ -213,14 +222,14 @@ class BaseTenant(abc.ABC):
             {"subsystem": "worker_manager", "sensor": "ActiveWorkers"})
         return result if result is not None else 0
 
-    def wait_worker_count(self, node_index, activity, expected_count, timeout=yatest_common.plain_or_under_sanitizer(30, 150)):
+    def wait_worker_count(self, node_index, activity, expected_count, timeout=plain_or_under_sanitizer_wrapper(30, 150)):
         deadline = time.time() + timeout
         while True:
             count = self.get_actor_count(node_index, activity)
             if count >= expected_count:
                 break
             assert time.time() < deadline, "Wait actor count failed"
-            time.sleep(yatest_common.plain_or_under_sanitizer(0.5, 2))
+            time.sleep(plain_or_under_sanitizer_wrapper(0.5, 2))
         pass
 
     def get_mkql_limit(self, node_index):
@@ -265,7 +274,7 @@ class BaseTenant(abc.ABC):
                 self.wait_bootstrap(n)
             assert self.get_actor_count(n, "GRPC_PROXY") > 0, "Node {} died".format(n)
 
-    def wait_bootstrap(self, node_index=None, wait_time=yatest_common.plain_or_under_sanitizer(90, 400)):
+    def wait_bootstrap(self, node_index=None, wait_time=plain_or_under_sanitizer_wrapper(90, 400)):
         if node_index is None:
             for n in self.kikimr_cluster.nodes:
                 self.wait_bootstrap(n, wait_time)
@@ -278,13 +287,13 @@ class BaseTenant(abc.ABC):
                     if self.get_actor_count(node_index, "GRPC_PROXY") == 0:
                         continue
                 except Exception:
-                    time.sleep(yatest_common.plain_or_under_sanitizer(0.3, 2))
+                    time.sleep(plain_or_under_sanitizer_wrapper(0.3, 2))
                     continue
                 break
             self.bootstraped_nodes.add(node_index)
             logging.debug("Node {} has been bootstrapped".format(node_index))
 
-    def wait_discovery(self, node_index=None, wait_time=yatest_common.plain_or_under_sanitizer(30, 150)):
+    def wait_discovery(self, node_index=None, wait_time=plain_or_under_sanitizer_wrapper(30, 150)):
         if node_index is None:
             for n in self.kikimr_cluster.nodes:
                 self.wait_discovery(n, wait_time)
@@ -299,12 +308,12 @@ class BaseTenant(abc.ABC):
                     if peer_count is None or peer_count < self.node_count:
                         continue
                 except Exception:
-                    time.sleep(yatest_common.plain_or_under_sanitizer(0.3, 2))
+                    time.sleep(plain_or_under_sanitizer_wrapper(0.3, 2))
                     continue
                 break
             logging.debug("Node {} discovery finished".format(node_index))
 
-    def wait_workers(self, worker_count, wait_time=yatest_common.plain_or_under_sanitizer(30, 150)):
+    def wait_workers(self, worker_count, wait_time=plain_or_under_sanitizer_wrapper(30, 150)):
         ca_count = worker_count * 2  # we count 2x CAs
         deadline = time.time() + wait_time
         while True:
@@ -355,17 +364,17 @@ class BaseTenant(abc.ABC):
                                                       expect_counters_exist=expect_counters_exist)
 
     def wait_completed_checkpoints(self, query_id, checkpoints_count,
-                                   timeout=yatest_common.plain_or_under_sanitizer(30, 150),
+                                   timeout=plain_or_under_sanitizer_wrapper(30, 150),
                                    expect_counters_exist=False):
         deadline = time.time() + timeout
         while True:
             completed = self.get_completed_checkpoints(query_id, expect_counters_exist=expect_counters_exist)
             if completed >= checkpoints_count:
                 break
-            assert time.time() < deadline, "Wait zero checkpoint failed"
-            time.sleep(yatest_common.plain_or_under_sanitizer(0.5, 2))
+            assert time.time() < deadline, "Wait zero checkpoint failed, actual completed: " + str(completed)
+            time.sleep(plain_or_under_sanitizer_wrapper(0.5, 2))
 
-    def wait_zero_checkpoint(self, query_id, timeout=yatest_common.plain_or_under_sanitizer(30, 150),
+    def wait_zero_checkpoint(self, query_id, timeout=plain_or_under_sanitizer_wrapper(30, 150),
                              expect_counters_exist=False):
         self.wait_completed_checkpoints(query_id, 1, timeout, expect_counters_exist)
 
@@ -397,8 +406,6 @@ class YdbTenant(BaseTenant):
             KikimrConfigGenerator(
                 domain_name='local',
                 use_in_memory_pdisks=True,
-                disable_iterator_reads=True,
-                disable_iterator_lookups=True,
                 port_allocator=port_allocator,
                 dynamic_storage_pools=[
                     dict(name="dynamic_storage_pool:1",
@@ -476,6 +483,13 @@ class YqTenant(BaseTenant):
         fq_config['test_connection'] = {'enabled': True}
         fq_config['common']['keep_internal_errors'] = True
 
+        fq_config['common']['ydb_driver_config'] = {}
+        fq_config['common']['ydb_driver_config']['network_threads_num'] = 1
+        fq_config['common']['ydb_driver_config']['client_threads_num'] = 1
+
+        fq_config['common']['topic_client_handlers_executor_threads_num'] = 1
+        fq_config['common']['topic_client_compression_executor_threads_num'] = 1
+
         if self.mvp_mock_port is not None:
             fq_config['common']['ydb_mvp_cloud_endpoint'] = "localhost:" + str(self.mvp_mock_port)
 
@@ -484,7 +498,7 @@ class YqTenant(BaseTenant):
             self.config_generator.yaml_config['grpc_config']['skip_scheme_check'] = True
             self.config_generator.yaml_config['grpc_config']['services'] = ["local_discovery", "yq", "yq_private"]
             # yq services
-            fq_config['control_plane_storage']['task_lease_ttl'] = "10s"
+            fq_config['control_plane_storage']['task_lease_ttl'] = "20s"
             self.fill_storage_config(fq_config['control_plane_storage']['storage'], "DbPoolStorage_" + self.uuid)
         else:
             self.config_generator.yaml_config.pop('grpc_config', None)
@@ -504,6 +518,9 @@ class YqTenant(BaseTenant):
             if len(self.config_generator.dc_mapping) > 0:
                 fq_config['nodes_manager']['use_data_center'] = True
             fq_config['enable_task_counters'] = True
+            fq_config['task_controller'] = {}
+            fq_config['task_controller']['ping_period'] = "5s"      # task_lease_ttl / 4
+            fq_config['task_controller']['aggr_period'] = "1s"
         else:
             fq_config['nodes_manager']['enabled'] = False
             fq_config['pending_fetcher']['enabled'] = False
@@ -513,19 +530,26 @@ class YqTenant(BaseTenant):
         self.fill_storage_config(fq_config['checkpoint_coordinator']['storage'],
                                  "CheckpointCoordinatorStorage_" + self.uuid)
 
+        fq_config['row_dispatcher'] = {
+            'enabled': True,
+            'timeout_before_start_session_sec': 5,
+            'send_status_period_sec': 2,
+            'max_session_used_memory': 1000000,
+            'without_consumer': True}
+        fq_config['row_dispatcher']['coordinator'] = {'coordination_node_path': "row_dispatcher"}
+        fq_config['row_dispatcher']['coordinator']['database'] = {}
+        self.fill_storage_config(fq_config['row_dispatcher']['coordinator']['database'],
+                                 "RowDispatcher_" + self.uuid)
+
         fq_config['quotas_manager'] = {'enabled': True}
+        fq_config['quotas_manager']['quota_descriptions'] = [{
+            'subject_type': 'cloud',
+            'metric_name': 'yq.cpuPercent.count',
+            'hard_limit': 10000,
+            'default_limit': 10000}]
 
         fq_config['rate_limiter'] = {'enabled': True}
-        fq_config['quotas_manager'] = {'enabled': True}
         self.fill_rate_limiter_config(fq_config['rate_limiter'], "RateLimiter_" + self.uuid)
-
-        fq_config['read_actors_factory_config'] = {
-            's3_read_actor_factory_config': {
-                'retry_config': {
-                    'max_retry_time_ms': 3000
-                }
-            }
-        }
 
 
 class TenantType(Enum):

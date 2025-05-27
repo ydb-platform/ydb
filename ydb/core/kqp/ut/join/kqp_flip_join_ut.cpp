@@ -106,7 +106,7 @@ Y_UNIT_TEST_SUITE(KqpFlipJoin) {
 
         Cerr << result.GetQueryPlan() << Endl;
 
-        AssertTableReads(result, "/Root/FJ_Table_1", 2);
+        AssertTableReads(result, "/Root/FJ_Table_1", 4);
         AssertTableReads(result, "/Root/FJ_Table_2", 2);
     }
 
@@ -130,7 +130,7 @@ Y_UNIT_TEST_SUITE(KqpFlipJoin) {
             R"([[["Value31"];["Value21"];["Value4_101"]]])");
 
         AssertTableReads(result, "/Root/FJ_Table_2", 2);
-        AssertTableReads(result, "/Root/FJ_Table_3", 1);
+        AssertTableReads(result, "/Root/FJ_Table_3", 4);
         AssertTableReads(result, "/Root/FJ_Table_4", 1);
     }
 
@@ -159,7 +159,7 @@ Y_UNIT_TEST_SUITE(KqpFlipJoin) {
 
         AssertTableReads(result, "/Root/FJ_Table_1", 4);
         AssertTableReads(result, "/Root/FJ_Table_2", 2);
-        AssertTableReads(result, "/Root/FJ_Table_3", 2);
+        AssertTableReads(result, "/Root/FJ_Table_3", 4);
     }
 
     // simple left semi join, only 2 tables
@@ -203,7 +203,7 @@ Y_UNIT_TEST_SUITE(KqpFlipJoin) {
 
         auto result = ExecQueryAndTestResult(session, query, NoParams, R"([[[1];["Value11"]];[[2];["Value12"]]])");
         
-        AssertTableReads(result, "/Root/FJ_Table_1", 3);
+        AssertTableReads(result, "/Root/FJ_Table_1", 2);
         AssertTableReads(result, "/Root/FJ_Table_2", 2);
         AssertTableReads(result, "/Root/FJ_Table_3", 4);
     }

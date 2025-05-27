@@ -4,9 +4,10 @@
 #include <ydb/core/fq/libs/ydb/util.h>
 #include <ydb/core/fq/libs/ydb/ydb.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
+#include <ydb/public/sdk/cpp/adapters/issue/issue.h>
 
-#include <ydb/library/yql/minikql/comp_nodes/mkql_saveload.h>
+#include <yql/essentials/minikql/comp_nodes/mkql_saveload.h>
 
 #include <util/stream/str.h>
 #include <util/string/join.h>
@@ -56,8 +57,8 @@ public:
 
             while (!buf.empty()) {
                 auto nodeStateSize = NKikimr::NMiniKQL::ReadUi64(buf);
-                Y_ENSURE(buf.Size() >= nodeStateSize, "State/buf is corrupted");
-                TStringBuf nodeStateBuf(buf.Data(), nodeStateSize);
+                Y_ENSURE(buf.size() >= nodeStateSize, "State/buf is corrupted");
+                TStringBuf nodeStateBuf(buf.data(), nodeStateSize);
                 buf.Skip(nodeStateSize);
 
                 NKikimr::NMiniKQL::TInputSerializer reader(nodeStateBuf);
@@ -68,7 +69,7 @@ public:
                 switch (type) {
                     case NKikimr::NMiniKQL::EMkqlStateType::SIMPLE_BLOB:
                     {
-                        nodeState.SimpleBlobNodeState = TString(nodeStateBuf.Data(), nodeStateBuf.Size());
+                        nodeState.SimpleBlobNodeState = TString(nodeStateBuf.data(), nodeStateBuf.size());
                     }
                     break;
                     case NKikimr::NMiniKQL::EMkqlStateType::SNAPSHOT:
@@ -105,8 +106,8 @@ public:
                 NYql::NUdf::TUnboxedValue saved =
                      NKikimr::NMiniKQL::TOutputSerializer::MakeSnapshotState(nodeState.Items, 0);
                 const TStringBuf savedBuf = saved.AsStringRef();
-                NKikimr::NMiniKQL::WriteUi64(result, savedBuf.Size());
-                result.AppendNoAlias(savedBuf.Data(), savedBuf.Size());
+                NKikimr::NMiniKQL::WriteUi64(result, savedBuf.size());
+                result.AppendNoAlias(savedBuf.data(), savedBuf.size());
             }
         }
         auto& stateData = state.MiniKqlProgram.ConstructInPlace().Data;
@@ -124,8 +125,8 @@ public:
         TStringBuf buf(blob);
         while (!buf.empty()) {
             auto nodeStateSize = NKikimr::NMiniKQL::ReadUi64(buf);
-            Y_ENSURE(buf.Size() >= nodeStateSize, "State/buf is corrupted");
-            TStringBuf nodeStateBuf(buf.Data(), nodeStateSize);
+            Y_ENSURE(buf.size() >= nodeStateSize, "State/buf is corrupted");
+            TStringBuf nodeStateBuf(buf.data(), nodeStateSize);
             if (NKikimr::NMiniKQL::TInputSerializer(nodeStateBuf).GetType() == NKikimr::NMiniKQL::EMkqlStateType::INCREMENT) {
                 return EStateType::Increment;
             }
@@ -282,7 +283,6 @@ TStatus ProcessRowState(
 ////////////////////////////////////////////////////////////////////////////////
 
 class TStateStorage : public IStateStorage {
-    TYqSharedResources::TPtr YqSharedResources;
     TYdbConnectionPtr YdbConnection;
     const NConfig::TYdbStorageConfig StorageConfig;
     const NConfig::TCheckpointCoordinatorConfig Config;
@@ -290,8 +290,7 @@ class TStateStorage : public IStateStorage {
 public:
     explicit TStateStorage(
         const NConfig::TCheckpointCoordinatorConfig& config,
-        const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
-        const TYqSharedResources::TPtr& yqSharedResources);
+        const TYdbConnectionPtr& ydbConnection);
     ~TStateStorage() = default;
 
     TFuture<TIssues> Init() override;
@@ -357,10 +356,8 @@ private:
 
 TStateStorage::TStateStorage(
     const NConfig::TCheckpointCoordinatorConfig& config,
-    const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
-    const TYqSharedResources::TPtr& yqSharedResources)
-    : YqSharedResources(yqSharedResources)
-    , YdbConnection(NewYdbConnection(config.GetStorage(), credentialsProviderFactory, YqSharedResources->UserSpaceYdbDriver))
+    const TYdbConnectionPtr& ydbConnection)
+    : YdbConnection(ydbConnection)
     , StorageConfig(config.GetStorage())
     , Config(config)
 {
@@ -374,7 +371,7 @@ TFuture<TIssues> TStateStorage::Init() {
         //LOG_STREAMS_STORAGE_SERVICE_INFO("Creating directory: " << YdbConnection->TablePathPrefix);
         auto status = YdbConnection->SchemeClient.MakeDirectory(YdbConnection->TablePathPrefix).GetValueSync();
         if (!status.IsSuccess() && status.GetStatus() != EStatus::ALREADY_EXISTS) {
-            issues = status.GetIssues();
+            issues = NYdb::NAdapters::ToYqlIssues(status.GetIssues());
 
             TStringStream ss;
             ss << "Failed to create path '" << YdbConnection->TablePathPrefix << "': " << status.GetStatus();
@@ -401,7 +398,7 @@ TFuture<TIssues> TStateStorage::Init() {
 
     auto status = CreateTable(YdbConnection, StatesTable, std::move(stateDesc)).GetValueSync();
     if (!IsTableCreated(status)) {
-        issues = status.GetIssues();
+        issues = NYdb::NAdapters::ToYqlIssues(status.GetIssues());
 
         TStringStream ss;
         ss << "Failed to create " << StatesTable << " table: " << status.GetStatus();
@@ -550,9 +547,9 @@ TFuture<IStateStorage::TGetStateResult> TStateStorage::GetState(
         })
         .Apply([context, thisPtr = TIntrusivePtr(this)](const TFuture<TStatus>& result) {
             if (!result.GetValue().IsSuccess()) {
-                return IStateStorage::TGetStateResult{{}, result.GetValue().GetIssues()};
+                return IStateStorage::TGetStateResult{{}, NYdb::NAdapters::ToYqlIssues(result.GetValue().GetIssues())};
             }
-            NYql::TIssues issues = result.GetValue().GetIssues();
+            NYql::TIssues issues = NYdb::NAdapters::ToYqlIssues(result.GetValue().GetIssues());
 
             auto states = thisPtr->ApplyIncrements(context, issues);
             return IStateStorage::TGetStateResult{std::move(states), issues};
@@ -678,21 +675,21 @@ TFuture<TStatus> TStateStorage::ListStates(const TContextPtr& context) {
                             auto cnt = parser.ColumnParser("cnt").GetUint64();
 
                             if (!taskId || !coordinatorGeneration || !seqNo) {
-                                return TStatus(EStatus::BAD_REQUEST, NYql::TIssues{NYql::TIssue{"Unexpected empty field"}});
+                                return TStatus(EStatus::BAD_REQUEST, NYdb::NIssue::TIssues{NYdb::NIssue::TIssue{"Unexpected empty field"}});
                             }
                             const auto taskIt = std::find_if(context->Tasks.begin(), context->Tasks.end(), [&] (const auto& item) { return item.TaskId == *taskId; } );
                             if (taskIt == context->Tasks.end()) {
-                                return TStatus(EStatus::BAD_REQUEST, NYql::TIssues{NYql::TIssue{"Got unexpected task id"}});
+                                return TStatus(EStatus::BAD_REQUEST, NYdb::NIssue::TIssues{NYdb::NIssue::TIssue{"Got unexpected task id"}});
                             }
 
                             auto& taskInfo = *taskIt;
                             TCheckpointId checkpointId(*coordinatorGeneration, *seqNo);
                             taskInfo.ListOfStatesForReading.push_back(TContext::TStateInfo{checkpointId, cnt});
-                            LOG_STORAGE_DEBUG(context, "taskId " << taskId <<  " checkpoint id: " << checkpointId << ", rows count: " << cnt);
+                            LOG_STORAGE_DEBUG(context, "taskId " << (taskId ? ToString(taskId.value()) : "(empty maybe)") <<  " checkpoint id: " << checkpointId << ", rows count: " << cnt);
                         }
                     }
                     catch (const std::exception& e) {
-                        return TStatus(EStatus::BAD_REQUEST, NYql::TIssues{NYql::TIssue{e.what()}});
+                        return TStatus(EStatus::BAD_REQUEST, NYdb::NIssue::TIssues{NYdb::NIssue::TIssue{e.what()}});
                     }
                     return status;
             });
@@ -725,8 +722,8 @@ TFuture<TIssues> TStateStorage::DeleteGraph(const TString& graphId) {
 
                 DELETE
                 FROM %s
-                WHERE graph_id = "%s";
-            )", prefix.c_str(), StatesTable, graphId.c_str());
+                WHERE graph_id = $graph_id;
+            )", prefix.c_str(), StatesTable);
 
             auto future = session.ExecuteDataQuery(
                 query,
@@ -800,7 +797,7 @@ TFuture<TStatus> TStateStorage::SelectRowState(const TContextPtr& context) {
                     return ProcessRowState(future.GetValue(), context);
                 }
                 catch (const std::exception& e) {
-                    return TStatus(EStatus::INTERNAL_ERROR, NYql::TIssues{NYql::TIssue{e.what()}});
+                    return TStatus(EStatus::INTERNAL_ERROR, NYdb::NIssue::TIssues{NYdb::NIssue::TIssue{e.what()}});
                 }
             });
         });
@@ -911,17 +908,17 @@ TFuture<TStatus> TStateStorage::SkipStatesInFuture(const TContextPtr& context) {
             }
             if (it->CheckpointId < context->CheckpointId) {
                 // ListOfStatesForReading sorted by "time"
-                return MakeFuture(TStatus{EStatus::INTERNAL_ERROR, NYql::TIssues{NYql::TIssue{"Checkpoint is not found"}}});
+                return MakeFuture(TStatus{EStatus::INTERNAL_ERROR, NYdb::NIssue::TIssues{NYdb::NIssue::TIssue{"Checkpoint is not found"}}});
             }
             it = taskInfo.ListOfStatesForReading.erase(it);
             ++eraseCount;
         }
         if (taskInfo.ListOfStatesForReading.empty()) {
-            return MakeFuture(TStatus{EStatus::INTERNAL_ERROR, NYql::TIssues{NYql::TIssue{"Checkpoint is not found"}}});
+            return MakeFuture(TStatus{EStatus::INTERNAL_ERROR, NYdb::NIssue::TIssues{NYdb::NIssue::TIssue{"Checkpoint is not found"}}});
         }
     }
     LOG_STORAGE_DEBUG(context, "SkipStatesInFuture, skip " << eraseCount << " checkpoints");
-    return MakeFuture(TStatus{EStatus::SUCCESS,  NYql::TIssues{}});
+    return MakeFuture(TStatus{EStatus::SUCCESS, NYdb::NIssue::TIssues{}});
 }
 
 TFuture<TStatus> TStateStorage::ReadRows(const TContextPtr& context) {
@@ -945,7 +942,7 @@ TFuture<TStatus> TStateStorage::ReadRows(const TContextPtr& context) {
                         taskInfo.ListOfStatesForReading.pop_front();
                         taskInfo.CurrentProcessingRow = 0;
                         if (taskInfo.ListOfStatesForReading.empty()) {
-                            promise.SetValue(TStatus{EStatus::INTERNAL_ERROR, NYql::TIssues{NYql::TIssue{"Checkpoint is not found"}}});
+                            promise.SetValue(TStatus{EStatus::INTERNAL_ERROR, NYdb::NIssue::TIssues{NYdb::NIssue::TIssue{"Checkpoint is not found"}}});
                             context->Callback = nullptr;
                             return;
                         }
@@ -956,14 +953,14 @@ TFuture<TStatus> TStateStorage::ReadRows(const TContextPtr& context) {
                     }
                     else {
                         context->Callback = nullptr;
-                        promise.SetValue(TStatus{EStatus::SUCCESS,  NYql::TIssues{}});
+                        promise.SetValue(TStatus{EStatus::SUCCESS, NYdb::NIssue::TIssues{}});
                         return;
                     }
                 }
                 auto nextFuture = thisPtr->SelectRowState(context);
                 nextFuture.Subscribe(context->Callback);
             } catch (...) {
-                promise.SetValue(TStatus{EStatus::INTERNAL_ERROR, NYql::TIssues{NYql::TIssue{CurrentExceptionMessage()}}});
+                promise.SetValue(TStatus{EStatus::INTERNAL_ERROR, NYdb::NIssue::TIssues{NYdb::NIssue::TIssue{CurrentExceptionMessage()}}});
                 context->Callback = nullptr;
                 return;
             }
@@ -1004,9 +1001,8 @@ std::vector<NYql::NDq::TComputeActorState> TStateStorage::ApplyIncrements(
 
 TStateStoragePtr NewYdbStateStorage(
     const NConfig::TCheckpointCoordinatorConfig& config,
-    const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
-    const TYqSharedResources::TPtr& yqSharedResources) {
-    return new TStateStorage(config, credentialsProviderFactory, yqSharedResources);
+    const TYdbConnectionPtr& ydbConnection) {
+    return new TStateStorage(config, ydbConnection);
 }
 
 } // namespace NFq

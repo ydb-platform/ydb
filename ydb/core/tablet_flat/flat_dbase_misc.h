@@ -12,9 +12,9 @@ namespace NTable {
 
     struct TDbStats {
 
-        void Describe(IOutputStream &out) const noexcept
+        void Describe(IOutputStream &out) const
         {
-            const ui64 sys = Parts.IndexBytes + Parts.ByKeyBytes + Parts.OtherBytes;
+            const ui64 sys = Parts.FlatIndexBytes + Parts.BTreeIndexBytes + Parts.ByKeyBytes + Parts.OtherBytes;
 
             out
                 << "DBase{" << Tables << "t " << Parts.PartsCount << "p"
@@ -29,7 +29,10 @@ namespace NTable {
         ui64 MemTableOps = 0;
         TPartStats Parts;
         THashMap<ui64, TPartStats> PartsPerTablet;
+        THashMap<ui32, float> NormalizedFreeSpaceShareByChannel;
     };
+
+    using TDbRuntimeStats = TTableRuntimeStats;
 
 }
 }

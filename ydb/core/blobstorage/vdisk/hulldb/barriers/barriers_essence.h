@@ -20,10 +20,9 @@ namespace NGcOpt {
 
         TKeepFlagStat() = default;
 
-        template<typename TKey, typename TMemRec>
-        TKeepFlagStat(const TRecordMergerBase<TKey, TMemRec>& subs, const TRecordMergerBase<TKey, TMemRec>& whole)
-            : Needed(subs.GetNumDoNotKeepFlags() == whole.GetNumDoNotKeepFlags() && // DoNotKeep flag only in this record
-                     subs.GetNumKeepFlags() < whole.GetNumKeepFlags()) // and Keep flag somewhere else
+        TKeepFlagStat(ui32 subsKeep, ui32 subsDoNotKeep, ui32 wholeKeep, ui32 wholeDoNotKeep)
+            : Needed(subsDoNotKeep == wholeDoNotKeep && // DoNotKeep flag only in this record
+                     subsKeep < wholeKeep) // and Keep flag somewhere else
         {
             // Needed is set to true when we are going to compact this record, but this is the only metadata record that
             // contains DoNotKeep flag for the blob; in this case we have to keep the record without any data to prevent

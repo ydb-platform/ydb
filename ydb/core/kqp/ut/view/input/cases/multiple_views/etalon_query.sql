@@ -9,4 +9,4 @@ FROM (
     JOIN `/Root/view_seasons`
         AS seasons
     ON series.series_id == seasons.series_id
-);
+) ORDER BY series_title, seasons_title;

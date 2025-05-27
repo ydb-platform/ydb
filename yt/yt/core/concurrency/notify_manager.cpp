@@ -5,7 +5,7 @@
 
 namespace NYT::NConcurrency {
 
-static constexpr auto& Logger = ConcurrencyLogger;
+constinit const auto Logger = ConcurrencyLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -174,12 +174,11 @@ NThreading::TEventCount* TNotifyManager::GetEventCount()
     return EventCount_.Get();
 }
 
-void TNotifyManager::Reconfigure(TDuration pollingPeriod)
+void TNotifyManager::SetPollingPeriod(TDuration pollingPeriod)
 {
     PollingPeriod_.store(pollingPeriod);
 }
 
-// Returns true if was locked.
 bool TNotifyManager::UnlockNotifies()
 {
     return NotifyLock_.exchange(false);

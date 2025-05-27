@@ -23,7 +23,7 @@
 #include <yt/yt/core/ytree/convert.h>
 #include <yt/yt/core/ytree/fluent.h>
 
-#include <library/cpp/yt/small_containers/compact_vector.h>
+#include <library/cpp/yt/compact_containers/compact_vector.h>
 
 #include <library/cpp/string_utils/quote/quote.h>
 
@@ -75,7 +75,7 @@ public:
             BIND_NO_PROPAGATE(&TServer::Shutdown, MakeWeak(this), /*graceful*/ true),
             /*priority*/ GrpcServerShutdownPriority))
         , LibraryLock_(TDispatcher::Get()->GetLibraryLock())
-        , Profiler_(GrpcServerProfiler.WithTag("name", Config_->ProfilingName))
+        , Profiler_(GrpcServerProfiler().WithTag("name", Config_->ProfilingName))
         , CompletionQueue_(TDispatcher::Get()->PickRandomGuardedCompletionQueue()->UnwrapUnsafe())
     {
         Profiler_.AddFuncGauge("/call_handler_count", MakeStrong(this), [this] {
@@ -238,7 +238,7 @@ private:
         { }
 
         // IBus overrides.
-        const TString& GetEndpointDescription() const override
+        const std::string& GetEndpointDescription() const override
         {
             return PeerAddressString_;
         }
@@ -253,7 +253,7 @@ private:
             return {};
         }
 
-        const TString& GetEndpointAddress() const override
+        const std::string& GetEndpointAddress() const override
         {
             return PeerAddressString_;
         }
@@ -307,7 +307,7 @@ private:
     private:
         const TWeakPtr<TCallHandler> Handler_;
         const TNetworkAddress PeerAddress_;
-        const TString PeerAddressString_;
+        const std::string PeerAddressString_;
         const IAttributeDictionaryPtr EndpointAttributes_;
 
         TSingleShotCallbackList<void(const TError&)> TerminatedList_;
@@ -402,19 +402,19 @@ private:
         bool CancelRequested_ = false;
         TSharedRefArray ResponseMessage_;
 
-        TString PeerAddressString_;
+        std::string PeerAddressString_;
         TNetworkAddress PeerAddress_;
 
         TRequestId RequestId_;
-        std::optional<TString> User_;
-        std::optional<TString> UserTag_;
-        std::optional<TString> UserAgent_;
+        std::optional<std::string> User_;
+        std::optional<std::string> UserTag_;
+        std::optional<std::string> UserAgent_;
         std::optional<NGrpc::NProto::TSslCredentialsExt> SslCredentialsExt_;
         std::optional<NRpc::NProto::TCredentialsExt> RpcCredentialsExt_;
         std::optional<NRpc::NProto::TCustomMetadataExt> CustomMetadataExt_;
         std::optional<NTracing::NProto::TTracingExt> TraceContext_;
-        TString ServiceName_;
-        TString MethodName_;
+        std::string ServiceName_;
+        std::string MethodName_;
         std::optional<TDuration> Timeout_;
         NCompression::ECodec RequestCodec_ = NCompression::ECodec::None;
         NCompression::ECodec ResponseCodec_ = NCompression::ECodec::None;
@@ -430,7 +430,7 @@ private:
         std::optional<ui32> RequestMessageBodySize_;
         TProtocolVersion ProtocolVersion_ = DefaultProtocolVersion;
         TGrpcByteBufferPtr ResponseBodyBuffer_;
-        TString ErrorMessage_;
+        std::string ErrorMessage_;
         TGrpcSlice ErrorMessageSlice_;
         int RawCanceled_ = 0;
 
@@ -549,20 +549,20 @@ private:
         bool TryParsePeerAddress()
         {
             auto addressString = MakeGprString(grpc_call_get_peer(Call_.Unwrap()));
-            PeerAddressString_ = TString(addressString.get());
+            PeerAddressString_ = std::string(addressString.get());
 
             // Drop ipvN: prefix.
-            if (PeerAddressString_.StartsWith("ipv6:") || PeerAddressString_.StartsWith("ipv4:")) {
+            if (PeerAddressString_.starts_with("ipv6:") || PeerAddressString_.starts_with("ipv4:")) {
                 PeerAddressString_ = PeerAddressString_.substr(5);
             }
 
-            if (PeerAddressString_.StartsWith("unix:")) {
+            if (PeerAddressString_.starts_with("unix:")) {
                 PeerAddress_ = NNet::TNetworkAddress::CreateUnixDomainSocketAddress(PeerAddressString_.substr(5));
                 return true;
             }
 
             // Decode URL-encoded square brackets.
-            CGIUnescape(PeerAddressString_);
+            PeerAddressString_ = CGIUnescapeRet(PeerAddressString_);
 
             auto address = NNet::TNetworkAddress::TryParse(PeerAddressString_);
             if (!address.IsOK()) {
@@ -643,7 +643,7 @@ private:
                 return;
             }
 
-            User_ = TString(userString);
+            User_ = std::string(userString);
         }
 
         void ParseUserTag()
@@ -653,7 +653,7 @@ private:
                 return;
             }
 
-            UserTag_ = TString(userTagString);
+            UserTag_ = std::string(userTagString);
         }
 
         void ParseUserAgent()
@@ -663,7 +663,7 @@ private:
                 return;
             }
 
-            UserAgent_ = TString(userAgentString);
+            UserAgent_ = std::string(userAgentString);
         }
 
         void ParseRequestCodec()
@@ -673,21 +673,21 @@ private:
                 return;
             }
 
-            NCompression::ECodec codecId;
             int intCodecId;
             if (!TryFromString(requestCodecString, intCodecId)) {
                 YT_LOG_WARNING("Failed to parse request codec from request metadata (RequestId: %v)",
                     RequestId_);
                 return;
             }
-            if (!TryEnumCast(intCodecId, &codecId)) {
+            auto codecId = TryCheckedEnumCast<NCompression::ECodec>(intCodecId);
+            if (!codecId) {
                 YT_LOG_WARNING("Request codec %v is not supported (RequestId: %v)",
                     intCodecId,
                     RequestId_);
                 return;
             }
 
-            RequestCodec_ = codecId;
+            RequestCodec_ = *codecId;
         }
 
         void ParseResponseCodec()
@@ -697,21 +697,21 @@ private:
                 return;
             }
 
-            NCompression::ECodec codecId;
             int intCodecId;
             if (!TryFromString(responseCodecString, intCodecId)) {
                 YT_LOG_WARNING("Failed to parse response codec from request metadata (RequestId: %v)",
                     RequestId_);
                 return;
             }
-            if (!TryEnumCast(intCodecId, &codecId)) {
-                YT_LOG_WARNING("Response codec %v is not supported (RequestId: %v)",
-                    intCodecId,
-                    RequestId_);
+            auto codecId = TryCheckedEnumCast<NCompression::ECodec>(intCodecId);
+            if (!codecId) {
+                YT_LOG_WARNING("Response codec is not supported (RequestId: %v, Codec: %v)",
+                    RequestId_,
+                    intCodecId);
                 return;
             }
 
-            ResponseCodec_ = codecId;
+            ResponseCodec_ = *codecId;
         }
 
         void ParseRpcCredentials()
@@ -734,19 +734,19 @@ private:
             RpcCredentialsExt_.emplace();
 
             if (tokenString) {
-                RpcCredentialsExt_->set_token(TString(tokenString));
+                RpcCredentialsExt_->set_token(std::string(tokenString));
             }
             if (sessionIdString) {
-                RpcCredentialsExt_->set_session_id(TString(sessionIdString));
+                RpcCredentialsExt_->set_session_id(std::string(sessionIdString));
             }
             if (sslSessionIdString) {
-                RpcCredentialsExt_->set_ssl_session_id(TString(sslSessionIdString));
+                RpcCredentialsExt_->set_ssl_session_id(std::string(sslSessionIdString));
             }
             if (userTicketString) {
-                RpcCredentialsExt_->set_user_ticket(TString(userTicketString));
+                RpcCredentialsExt_->set_user_ticket(std::string(userTicketString));
             }
             if (serviceTicketString) {
-                RpcCredentialsExt_->set_service_ticket(TString(serviceTicketString));
+                RpcCredentialsExt_->set_service_ticket(std::string(serviceTicketString));
             }
         }
 
@@ -779,7 +779,7 @@ private:
             std::optional<NGrpc::NProto::TSslCredentialsExt> sslCredentialsExtension;
 
             ParsePeerIdentity(authContext, &sslCredentialsExtension);
-            ParseIssuer(authContext, &sslCredentialsExtension);
+            ParseIssuerAndSerialNumber(authContext, &sslCredentialsExtension);
 
             return sslCredentialsExtension;
         }
@@ -800,10 +800,10 @@ private:
             if (!sslCredentialsExtension->has_value()) {
                 sslCredentialsExtension->emplace();
             }
-            (*sslCredentialsExtension)->set_peer_identity(TString(peerIdentityProperty->value, peerIdentityProperty->value_length));
+            (*sslCredentialsExtension)->set_peer_identity(std::string(peerIdentityProperty->value, peerIdentityProperty->value_length));
         }
 
-        static void ParseIssuer(const TGrpcAuthContextPtr& authContext, std::optional<NGrpc::NProto::TSslCredentialsExt>* sslCredentialsExtension)
+        static void ParseIssuerAndSerialNumber(const TGrpcAuthContextPtr& authContext, std::optional<NGrpc::NProto::TSslCredentialsExt>* sslCredentialsExtension)
         {
             const char* peerIdentityPropertyName = grpc_auth_context_peer_identity_property_name(authContext.Unwrap());
             if (!peerIdentityPropertyName) {
@@ -816,15 +816,23 @@ private:
                 return;
             }
 
-            auto issuer = ParseIssuerFromX509(TStringBuf(pemCertProperty->value, pemCertProperty->value_length));
-            if (!issuer) {
+            auto pemCertX509 = ParsePemCertToX509(TStringBuf(pemCertProperty->value, pemCertProperty->value_length));
+            if (!pemCertX509) {
                 return;
             }
 
-            if (!sslCredentialsExtension->has_value()) {
-                sslCredentialsExtension->emplace();
+            if (auto issuer = ParseIssuerFromX509(pemCertX509)) {
+                if (!sslCredentialsExtension->has_value()) {
+                    sslCredentialsExtension->emplace();
+                }
+                (*sslCredentialsExtension)->set_issuer(std::move(*issuer));
             }
-            (*sslCredentialsExtension)->set_issuer(std::move(*issuer));
+            if (auto serialNumber = ParseSerialNumberFromX509(pemCertX509)) {
+                if (!sslCredentialsExtension->has_value()) {
+                    sslCredentialsExtension->emplace();
+                }
+                (*sslCredentialsExtension)->set_serial_number(std::move(*serialNumber));
+            }
         }
 
         void ParseTimeout()
@@ -938,11 +946,11 @@ private:
             header->set_method(MethodName_);
             header->set_protocol_version_major(ProtocolVersion_.Major);
             header->set_protocol_version_minor(ProtocolVersion_.Minor);
-            header->set_request_codec(ToProto<int>(RequestCodec_));
-            header->set_response_codec(ToProto<int>(ResponseCodec_));
+            header->set_request_codec(ToProto(RequestCodec_));
+            header->set_response_codec(ToProto(ResponseCodec_));
 
             if (Timeout_) {
-                header->set_timeout(ToProto<i64>(*Timeout_));
+                header->set_timeout(ToProto(*Timeout_));
             }
             if (SslCredentialsExt_) {
                 *header->MutableExtension(NGrpc::NProto::TSslCredentialsExt::ssl_credentials_ext) = std::move(*SslCredentialsExt_);

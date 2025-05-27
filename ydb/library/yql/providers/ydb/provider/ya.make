@@ -23,30 +23,31 @@ PEERDIR(
     library/cpp/time_provider
     library/cpp/yson/node
     ydb/core/fq/libs/common
-    ydb/library/yql/ast
-    ydb/library/yql/minikql/comp_nodes
-    ydb/library/yql/providers/common/structured_token
+    yql/essentials/ast
+    yql/essentials/minikql/comp_nodes
+    yql/essentials/providers/common/structured_token
     ydb/library/yql/providers/common/token_accessor/client
-    ydb/library/yql/core
-    ydb/library/yql/core/type_ann
+    yql/essentials/core
+    yql/essentials/core/type_ann
     ydb/library/yql/dq/expr_nodes
-    ydb/library/yql/dq/integration
-    ydb/library/yql/providers/common/config
+    yql/essentials/core/dq_integration
+    yql/essentials/providers/common/config
     ydb/library/yql/providers/common/db_id_async_resolver
-    ydb/library/yql/providers/common/dq
-    ydb/library/yql/providers/common/mkql
-    ydb/library/yql/providers/common/proto
-    ydb/library/yql/providers/common/provider
-    ydb/library/yql/providers/common/schema/expr
-    ydb/library/yql/providers/common/transform
+    yql/essentials/providers/common/dq
+    yql/essentials/providers/common/mkql
+    yql/essentials/providers/common/proto
+    yql/essentials/providers/common/provider
+    yql/essentials/providers/common/schema/expr
+    yql/essentials/providers/common/transform
     ydb/library/yql/providers/dq/common
     ydb/library/yql/providers/dq/expr_nodes
-    ydb/library/yql/providers/result/expr_nodes
+    yql/essentials/providers/result/expr_nodes
     ydb/library/yql/providers/ydb/expr_nodes
     ydb/library/yql/providers/ydb/proto
     ydb/public/lib/experimental
-    ydb/public/sdk/cpp/client/ydb_driver
-    ydb/public/sdk/cpp/client/ydb_table
+    ydb/public/sdk/cpp/adapters/issue
+    ydb/public/sdk/cpp/src/client/driver
+    ydb/public/sdk/cpp/src/client/table
 )
 
 YQL_LAST_ABI_VERSION()

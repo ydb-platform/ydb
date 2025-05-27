@@ -20,8 +20,8 @@ left outer join {{catalog_returns}} on (cr_item_sk = cs_item_sk and cr_order_num
 where d1.d_week_seq = d2.d_week_seq
   and inv_quantity_on_hand < cs_quantity
   and d3.d_date > d1.d_date + 5
-  and hd_buy_potential = '1001-5000'
-  and d1.d_year = 2000
+  and hd_buy_potential = '>10000'
+  and d1.d_year = 1999
   and cd_marital_status = 'D'
 group by i_item_desc,w_warehouse_name,d1.d_week_seq
 order by total_cnt desc, i_item_desc, w_warehouse_name, d_week_seq

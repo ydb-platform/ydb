@@ -4,9 +4,9 @@
 #include <array>
 
 #include <google/protobuf/repeated_field.h>
-#include <ydb/library/yql/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 #include <ydb/public/api/protos/draft/fq.pb.h>
-#include <ydb/public/sdk/cpp/client/ydb_types/status/status.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status/status.h>
 
 #include <library/cpp/iterator/mapped.h>
 #include <util/generic/string.h>
@@ -74,6 +74,8 @@ TMaybe<TString> GetPassword(const FederatedQuery::ConnectionSetting& setting);
 EYdbComputeAuth GetYdbComputeAuthMethod(const FederatedQuery::ConnectionSetting& setting);
 
 FederatedQuery::IamAuth GetAuth(const FederatedQuery::Connection& connection);
+
+FederatedQuery::IamAuth* GetMutableAuth(FederatedQuery::ConnectionSetting& setting);
 
 TString RemoveDatabaseFromStr(TString str, const TString& substr);
 

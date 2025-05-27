@@ -9,9 +9,9 @@
 
 #include <ydb/public/api/grpc/ydb_scheme_v1.grpc.pb.h>
 
-#include <ydb/public/sdk/cpp/client/resources/ydb_resources.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/resources/ydb_resources.h>
 
-#include <ydb/library/grpc/client/grpc_client_low.h>
+#include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <library/cpp/logger/backend.h>
@@ -27,33 +27,13 @@
             << " got# " << Ydb::StatusIds::StatusCode_Name(got.status()) << " issues# "  << got.issues()) \
 // UNIT_ASSERT_CHECK_STATUS
 
-
 namespace NKikimr::NGRpcService {
 
 
-struct TKikimrTestSettings {
-    static constexpr bool SSL = false;
-    static constexpr bool AUTH = false;
-    static constexpr bool PrecreatePools = true;
-    static constexpr bool EnableSystemViews = true;
-};
 
-struct TKikimrTestWithAuth : TKikimrTestSettings {
-    static constexpr bool AUTH = true;
-};
-
-struct TKikimrTestWithAuthAndSsl : TKikimrTestWithAuth {
-    static constexpr bool SSL = true;
-};
-
-struct TKikimrTestNoSystemViews : TKikimrTestSettings {
-    static constexpr bool EnableSystemViews = false;
-};
-
-template <typename TestSettings = TKikimrTestSettings>
-class TBasicKikimrWithGrpcAndRootSchema {
+class TKikimrWithGrpcAndRootSchema {
 public:
-    TBasicKikimrWithGrpcAndRootSchema(
+    TKikimrWithGrpcAndRootSchema(
             NKikimrConfig::TAppConfig appConfig = {},
             TAutoPtr<TLogBackend> logBackend = {})
     {
@@ -64,19 +44,13 @@ public:
         ServerSettings->SetLogBackend(logBackend);
         ServerSettings->SetDomainName("Root");
         ServerSettings->SetDynamicNodeCount(1);
-        if (TestSettings::PrecreatePools) {
-            ServerSettings->AddStoragePool("ssd");
-            ServerSettings->AddStoragePool("hdd");
-            ServerSettings->AddStoragePool("hdd1");
-            ServerSettings->AddStoragePool("hdd2");
-        } else {
-            ServerSettings->AddStoragePoolType("ssd");
-            ServerSettings->AddStoragePoolType("hdd");
-            ServerSettings->AddStoragePoolType("hdd1");
-            ServerSettings->AddStoragePoolType("hdd2");
-        }
+        ServerSettings->AddStoragePool("ssd", "ssd-pool");
+        ServerSettings->AddStoragePool("hdd", "hdd-pool");
+        ServerSettings->AddStoragePool("hdd1", "hdd1-pool");
+        ServerSettings->AddStoragePool("hdd2", "hdd2-pool");
         ServerSettings->Formats = new TFormatFactory;
         ServerSettings->FeatureFlags = appConfig.GetFeatureFlags();
+        ServerSettings->FeatureFlags.SetAllowUpdateChannelsBindingOfSolomonPartitions(true);
         ServerSettings->RegisterGrpcService<NKikimr::NGRpcService::TKeyValueGRpcService>("keyvalue");
 
         Server_.Reset(new Tests::TServer(*ServerSettings));
@@ -102,9 +76,6 @@ public:
         //Server_->GetRuntime()->SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
 
         NYdbGrpc::TServerOptions grpcOption;
-        if (TestSettings::AUTH) {
-            grpcOption.SetUseAuth(true);
-        }
         grpcOption.SetPort(grpc);
         Server_->EnableGRpc(grpcOption);
 
@@ -146,7 +117,6 @@ private:
     ui16 GRpcPort_;
 };
 
-using TKikimrWithGrpcAndRootSchema = TBasicKikimrWithGrpcAndRootSchema<TKikimrTestSettings>;
 
 Y_UNIT_TEST_SUITE(KeyValueGRPCService) {
 
@@ -238,13 +208,20 @@ Y_UNIT_TEST_SUITE(KeyValueGRPCService) {
         createVolumeResponse.operation().result().UnpackTo(&createVolumeResult);
     }
 
-    void AlterVolume(auto &channel, const TString &path, ui32 partition_count = 1) {
+    void AlterVolume(auto &channel, const TString &path, ui32 partition_count = 1, std::optional<Ydb::KeyValue::StorageConfig> storage_config = {}) {
         std::unique_ptr<Ydb::KeyValue::V1::KeyValueService::Stub> stub;
         stub = Ydb::KeyValue::V1::KeyValueService::NewStub(channel);
 
         Ydb::KeyValue::AlterVolumeRequest alterVolumeRequest;
         alterVolumeRequest.set_path(path);
         alterVolumeRequest.set_alter_partition_count(partition_count);
+        if (storage_config) {
+            auto *storageConfig = alterVolumeRequest.mutable_storage_config();
+            for (const auto &channel : storage_config->channel()) {
+                auto *channelBind = storageConfig->add_channel();
+                channelBind->set_media(channel.media());
+            }
+        }
 
         Ydb::KeyValue::AlterVolumeResponse alterVolumeResponse;
         Ydb::KeyValue::AlterVolumeResult alterVolumeResult;
@@ -634,6 +611,47 @@ Y_UNIT_TEST_SUITE(KeyValueGRPCService) {
         });
     }
 
+    Y_UNIT_TEST(SimpleWriteReadWithGetChannelStatus) {
+        TString tablePath = "/Root/mydb/kvtable";
+        MakeSimpleTest(tablePath, [tablePath](const std::unique_ptr<Ydb::KeyValue::V1::KeyValueService::Stub> &stub){
+            Ydb::KeyValue::GetStorageChannelStatusRequest getStatusRequest;
+            getStatusRequest.set_path(tablePath);
+            getStatusRequest.add_storage_channel(0);
+            getStatusRequest.add_storage_channel(1);
+            getStatusRequest.add_storage_channel(2);
+            Ydb::KeyValue::GetStorageChannelStatusResponse getStatusResponse;
+            grpc::ClientContext getStatusCtx;
+            AdjustCtxForDB(getStatusCtx);
+            stub->GetStorageChannelStatus(&getStatusCtx, getStatusRequest, &getStatusResponse);
+            UNIT_ASSERT_CHECK_STATUS(getStatusResponse.operation(), Ydb::StatusIds::SUCCESS);
+
+            Write(tablePath, 0, "key", "value", 0, stub);
+
+            Ydb::KeyValue::GetStorageChannelStatusRequest getStatusRequest2;
+            getStatusRequest2.set_path(tablePath);
+            getStatusRequest2.add_storage_channel(0);
+            getStatusRequest2.add_storage_channel(1);
+            getStatusRequest2.add_storage_channel(2);
+            Ydb::KeyValue::GetStorageChannelStatusResponse getStatusResponse2;
+            grpc::ClientContext getStatusCtx2;
+            AdjustCtxForDB(getStatusCtx2);
+            stub->GetStorageChannelStatus(&getStatusCtx2, getStatusRequest2, &getStatusResponse2);
+            UNIT_ASSERT_CHECK_STATUS(getStatusResponse2.operation(), Ydb::StatusIds::SUCCESS);
+
+            Ydb::KeyValue::ReadRequest readRequest;
+            readRequest.set_path(tablePath);
+            readRequest.set_partition_id(0);
+            readRequest.set_key("key");
+            Ydb::KeyValue::ReadResponse readResponse;
+            Ydb::KeyValue::ReadResult readResult;
+
+            grpc::ClientContext readCtx;
+            AdjustCtxForDB(readCtx);
+            stub->Read(&readCtx, readRequest, &readResponse);
+            UNIT_ASSERT_CHECK_STATUS(readResponse.operation(), Ydb::StatusIds::SUCCESS);
+        });
+    }
+
     Y_UNIT_TEST(SimpleWriteReadOverrun) {
         TString tablePath = "/Root/mydb/kvtable";
         MakeSimpleTest(tablePath, [tablePath](const std::unique_ptr<Ydb::KeyValue::V1::KeyValueService::Stub> &stub){
@@ -770,15 +788,35 @@ Y_UNIT_TEST_SUITE(KeyValueGRPCService) {
         UNIT_ASSERT_VALUES_EQUAL(listDirectoryResult.self().name(), "mydb");
         UNIT_ASSERT_VALUES_EQUAL(listDirectoryResult.children(0).name(), "mytable");
 
-        UNIT_ASSERT_VALUES_EQUAL(1, DescribeVolume(channel, tablePath).partition_count());
+        auto describeVolumeResult = DescribeVolume(channel, tablePath);
+        UNIT_ASSERT_VALUES_EQUAL(1, describeVolumeResult.partition_count());
+        UNIT_ASSERT(describeVolumeResult.has_storage_config());
+        UNIT_ASSERT_VALUES_EQUAL(describeVolumeResult.storage_config().channel_size(), 3);
+        for (const auto& channel : describeVolumeResult.storage_config().channel()) {
+            UNIT_ASSERT_VALUES_EQUAL(channel.media(), "ssd");
+        }
 
         AlterVolume(channel, tablePath, 2);
         listDirectoryResult = ListDirectory(channel, path);
         UNIT_ASSERT_VALUES_EQUAL(listDirectoryResult.self().name(), "mydb");
         UNIT_ASSERT_VALUES_EQUAL(listDirectoryResult.children(0).name(), "mytable");
 
+        describeVolumeResult = DescribeVolume(channel, tablePath);
+        UNIT_ASSERT_VALUES_EQUAL(2, describeVolumeResult.partition_count());
+        UNIT_ASSERT(describeVolumeResult.has_storage_config());
+        UNIT_ASSERT_VALUES_EQUAL(describeVolumeResult.storage_config().channel_size(), 3);
+        for (const auto& channel : describeVolumeResult.storage_config().channel()) {
+            UNIT_ASSERT_VALUES_EQUAL(channel.media(), "ssd");
+        }
 
-        UNIT_ASSERT_VALUES_EQUAL(2, DescribeVolume(channel, tablePath).partition_count());
+        AlterVolume(channel, tablePath, 3, describeVolumeResult.storage_config());
+        describeVolumeResult = DescribeVolume(channel, tablePath);
+        UNIT_ASSERT_VALUES_EQUAL(3, describeVolumeResult.partition_count());
+        UNIT_ASSERT(describeVolumeResult.has_storage_config());
+        UNIT_ASSERT_VALUES_EQUAL(describeVolumeResult.storage_config().channel_size(), 3);
+        for (const auto& channel : describeVolumeResult.storage_config().channel()) {
+            UNIT_ASSERT_VALUES_EQUAL(channel.media(), "ssd");
+        }
 
         DropVolume(channel, tablePath);
         listDirectoryResult = ListDirectory(channel, path);

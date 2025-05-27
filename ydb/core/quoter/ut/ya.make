@@ -17,12 +17,10 @@ IF (NOT OS_WINDOWS)
 
     IF (WITH_VALGRIND)
         SIZE(LARGE)
-        TIMEOUT(2400)
         TAG(ya:fat)
         SPLIT_FACTOR(20)
     ELSE()
         SIZE(MEDIUM)
-        TIMEOUT(600)
     ENDIF()
 
     END()

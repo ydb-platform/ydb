@@ -14,7 +14,6 @@
 #include <util/generic/map.h>
 #include <util/generic/maybe.h>
 #include <util/generic/ptr.h>
-#include <util/system/type_name.h>
 #include <util/generic/vector.h>
 
 #include <google/protobuf/message.h>
@@ -412,6 +411,9 @@ enum EValueType : int
     VT_TIMESTAMP64,
     // Interval64, difference between two timestamps64 (signed)
     VT_INTERVAL64,
+
+    // Universally unique identifier according to RFC-4122.
+    VT_UUID,
 };
 
 ///
@@ -646,11 +648,6 @@ public:
     NTi::TTypePtr TypeV3() const;
     /// @}
 
-    ///
-    /// @brief Raw yson representation of column type
-    /// @deprecated Prefer to use `TypeV3` methods.
-    FLUENT_FIELD_OPTION_ENCAPSULATED(TNode, RawTypeV3);
-
     /// Column sort order
     FLUENT_FIELD_OPTION_ENCAPSULATED(ESortOrder, SortOrder);
 
@@ -693,10 +690,21 @@ public:
     TColumnSchema Type(EValueType type, bool required) &&;
     /// @}
 
+    ///
+    /// @{
+    ///
+    /// @brief Raw yson representation of column type
+    /// @deprecated Prefer to use `TypeV3` methods.
+    const TMaybe<TNode>& RawTypeV3() const;
+    TColumnSchema& RawTypeV3(TNode rawTypeV3)&;
+    TColumnSchema RawTypeV3(TNode rawTypeV3)&&;
+    /// @}
+
+
 private:
     friend void Deserialize(TColumnSchema& columnSchema, const TNode& node);
     NTi::TTypePtr TypeV3_;
-    bool Required_ = false;
+    TMaybe<TNode> RawTypeV3_;
 };
 
 /// Equality check checks all fields of column schema.
@@ -872,6 +880,9 @@ struct TKeyBound
     /// @endcond
 };
 
+/// Equality check checks all fields of TKeyBound
+bool operator==(const TKeyBound& lhs, const TKeyBound& rhs) noexcept;
+
 ///
 /// @brief Description of the read limit.
 ///
@@ -915,6 +926,9 @@ struct TReadLimit
     FLUENT_FIELD_OPTION(i64, TabletIndex);
 };
 
+/// Equality check checks all fields of TReadLimit
+bool operator==(const TReadLimit& lhs, const TReadLimit& rhs) noexcept;
+
 ///
 /// @brief Range of a table or a file
 ///
@@ -954,6 +968,9 @@ struct TReadRange
             .UpperLimit(TReadLimit().Key(upperKeyExclusive));
     }
 };
+
+/// Equality check checks all fields of TReadRange
+bool operator==(const TReadRange& lhs, const TReadRange& rhs) noexcept;
 
 ///
 /// @brief Path with additional attributes.
@@ -1016,7 +1033,7 @@ struct TRichYPath
     ///
     /// @{
     ///
-    /// Get range view, that is convenient way to iterate through all ranges.
+    /// Get range view, that is a convenient way to iterate through all ranges.
     TArrayRef<TReadRange> MutableRangesView()
     {
         if (Ranges_.Defined()) {
@@ -1115,10 +1132,21 @@ struct TRichYPath
     /// Allows to start cross-transactional operations.
     FLUENT_FIELD_OPTION(TTransactionId, TransactionId);
 
+    ///
+    /// @brief Wether to create operation output path.
+    ///
+    /// If set to `true` output path is created by YT server.
+    /// If set to `false` output path is not created explicitly (and operation will fail if it doesn't exist)
+    /// If attribute is not set output path is created by this library using explicit master call.
+    FLUENT_FIELD_OPTION(bool, Create);
+
     using TRenameColumnsDescriptor = THashMap<TString, TString>;
 
     /// Specifies columnar mapping which will be applied to columns before transfer to job.
     FLUENT_FIELD_OPTION(TRenameColumnsDescriptor, RenameColumns);
+
+    /// Specifies cluster for the YPath
+    FLUENT_FIELD_OPTION(TString, Cluster);
 
     /// Create empty path with no attributes
     TRichYPath()
@@ -1220,6 +1248,9 @@ struct TMultiTablePartition
 
     /// Aggregate statistics of all the table ranges in the partition.
     TStatistics AggregateStatistics;
+
+    /// Partition cookie that can be passed to @ref NYT::IClientBase::CreatePartitionReader
+    TMaybe<TString> Cookie;
 };
 
 /// Table partitions from GetTablePartitions command.

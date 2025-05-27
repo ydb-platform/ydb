@@ -4,12 +4,13 @@
 #include <ydb/core/protos/table_service_config.pb.h>
 #include <ydb/core/kqp/common/simple/kqp_event_ids.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_pattern_cache.h>
+#include <yql/essentials/minikql/computation/mkql_computation_pattern_cache.h>
 
 #include <ydb/library/actors/core/actor.h>
 
 #include <util/datetime/base.h>
 #include <util/string/builder.h>
+#include <util/stream/format.h>
 
 #include "kqp_resource_estimation.h"
 
@@ -117,48 +118,103 @@ public:
     const TString PoolId;
     const double MemoryPoolPercent;
     const TString Database;
+    const bool CollectBacktrace;
 
 private:
     std::atomic<ui64> TxScanQueryMemory = 0;
     std::atomic<ui64> TxExternalDataQueryMemory = 0;
     std::atomic<ui32> TxExecutionUnits = 0;
+    std::atomic<ui64> TxMaxAllocationSize = 0;
+
+    // TODO(ilezhankin): it's better to use std::atomic<std::shared_ptr<>> which is not supported at the moment.
+    std::atomic<TBackTrace*> TxMaxAllocationBacktrace = nullptr;
+
+    // NOTE: it's hard to maintain atomic pointer in case of tracking the last failed allocation backtrace,
+    //       because while we try to print one - the new last may emerge and delete previous.
+    mutable std::mutex BacktraceMutex;
+    std::atomic<ui64> TxFailedAllocationSize = 0; // protected by BacktraceMutex (only if CollectBacktrace == true)
+    TBackTrace TxFailedAllocationBacktrace;       // protected by BacktraceMutex
+    std::atomic<bool> HasFailedAllocationBacktrace = false;
 
 public:
     explicit TTxState(ui64 txId, TInstant now, TIntrusivePtr<TKqpCounters> counters, const TString& poolId, const double memoryPoolPercent,
-        const TString& database)
+        const TString& database, bool collectBacktrace)
         : TxId(txId)
         , CreatedAt(now)
         , Counters(std::move(counters))
         , PoolId(poolId)
         , MemoryPoolPercent(memoryPoolPercent)
         , Database(database)
+        , CollectBacktrace(collectBacktrace)
     {}
+
+    ~TTxState() {
+        delete TxMaxAllocationBacktrace.load();
+    }
 
     std::pair<TString, TString> MakePoolId() const {
         return std::make_pair(Database, PoolId);
     }
 
     TString ToString() const {
-        auto res = TStringBuilder() << "TxResourcesInfo{ "
+        // use unique_lock to safely unlock mutex in case of exceptions
+        std::unique_lock backtraceLock(BacktraceMutex, std::defer_lock);
+
+        auto res = TStringBuilder() << "TxResourcesInfo { "
             << "TxId: " << TxId
-            << "Database: " << Database;
+            << ", Database: " << Database;
 
         if (!PoolId.empty()) {
             res << ", PoolId: " << PoolId
-                << ", MemoryPoolPercent: " << Sprintf("%.2f", MemoryPoolPercent);
+                << ", MemoryPoolPercent: " << Sprintf("%.2f", MemoryPoolPercent > 0 ? MemoryPoolPercent : 100);
         }
 
-        res << ", memory initially granted resources: " << TxExternalDataQueryMemory.load()
-            << ", extra allocations " << TxScanQueryMemory.load()
-            << ", execution units: " << TxExecutionUnits.load()
+        if (CollectBacktrace) {
+            backtraceLock.lock();
+        }
+
+        res << ", tx initially granted memory: " << HumanReadableSize(TxExternalDataQueryMemory.load(), SF_BYTES)
+            << ", tx total memory allocations: " << HumanReadableSize(TxScanQueryMemory.load(), SF_BYTES)
+            << ", tx largest successful memory allocation: " << HumanReadableSize(TxMaxAllocationSize.load(), SF_BYTES)
+            << ", tx last failed memory allocation: " << HumanReadableSize(TxFailedAllocationSize.load(), SF_BYTES)
+            << ", tx total execution units: " << TxExecutionUnits.load()
             << ", started at: " << CreatedAt
-            << " }";
+            << " }" << Endl;
+
+        if (CollectBacktrace && HasFailedAllocationBacktrace.load()) {
+            res << "TxFailedAllocationBacktrace:" << Endl << TxFailedAllocationBacktrace.PrintToString();
+        }
+
+        if (CollectBacktrace) {
+            backtraceLock.unlock();
+        }
+
+        if (CollectBacktrace && TxMaxAllocationBacktrace.load()) {
+            res << "TxMaxAllocationBacktrace:" << Endl << TxMaxAllocationBacktrace.load()->PrintToString();
+        }
 
         return res;
     }
 
     ui64 GetExtraMemoryAllocatedSize() {
         return TxScanQueryMemory.load();
+    }
+
+    void AckFailedMemoryAlloc(ui64 memory) {
+        // use unique_lock to safely unlock mutex in case of exceptions
+        std::unique_lock backtraceLock(BacktraceMutex, std::defer_lock);
+
+        if (CollectBacktrace) {
+            backtraceLock.lock();
+        }
+
+        TxFailedAllocationSize = memory;
+
+        if (CollectBacktrace) {
+            TxFailedAllocationBacktrace.Capture();
+            HasFailedAllocationBacktrace = true;
+            backtraceLock.unlock();
+        }
     }
 
     void Released(TIntrusivePtr<TTaskState>& taskState, const TKqpResourcesRequest& resources) {
@@ -195,6 +251,25 @@ public:
         Counters->RmMemory->Add(resources.Memory);
         if (resources.Memory) {
             Counters->RmExtraMemAllocs->Inc();
+        }
+
+        auto* oldBacktrace = TxMaxAllocationBacktrace.load();
+        ui64 maxAlloc = TxMaxAllocationSize.load();
+        bool exchanged = false;
+
+        while(maxAlloc < resources.Memory && !exchanged) {
+            exchanged = TxMaxAllocationSize.compare_exchange_weak(maxAlloc, resources.Memory);
+        }
+
+        if (exchanged) {
+            auto* newBacktrace = new TBackTrace();
+            newBacktrace->Capture();
+            if (TxMaxAllocationBacktrace.compare_exchange_strong(oldBacktrace, newBacktrace)) {
+                // XXX(ilezhankin): technically it's possible to have a race with `ToString()`, but it's very unlikely.
+                delete oldBacktrace;
+            } else {
+                delete newBacktrace;
+            }
         }
 
         TxExecutionUnits.fetch_add(resources.ExecutionUnits);
@@ -236,6 +311,13 @@ struct TKqpLocalNodeResources {
     std::array<ui64, EKqpMemoryPool::Count> Memory;
 };
 
+struct TPlannerPlacingOptions {
+    ui64 MaxNonParallelTasksExecutionLimit = 8;
+    ui64 MaxNonParallelDataQueryTasksLimit = 1000;
+    ui64 MaxNonParallelTopStageExecutionLimit = 1;
+    bool PreferLocalDatacenterExecution = true;
+};
+
 /// per node singleton with instant API
 class IKqpResourceManager : private TNonCopyable {
 public:
@@ -245,6 +327,7 @@ public:
 
     virtual TKqpRMAllocateResult AllocateResources(TIntrusivePtr<TTxState>& tx, TIntrusivePtr<TTaskState>& task, const TKqpResourcesRequest& resources) = 0;
 
+    virtual TPlannerPlacingOptions GetPlacingOptions() = 0;
     virtual TTaskResourceEstimation EstimateTaskResources(const NYql::NDqProto::TDqTask& task, const ui32 tasksCount) = 0;
     virtual void EstimateTaskResources(TTaskResourceEstimation& result, const ui32 tasksCount) = 0;
 

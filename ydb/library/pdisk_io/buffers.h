@@ -66,6 +66,16 @@ public:
             spdkState->Free(AlignedBuffer);
         }
     }
+
+    friend bool operator==(const TAlignedData& lhs, const TAlignedData& rhs) {
+        if (lhs.Size() != rhs.Size())
+            return false;
+
+        if (memcmp(lhs.Get(), rhs.Get(), rhs.Size()) != 0)
+            return false;
+
+        return true;
+    }
 };
 
 //
@@ -174,4 +184,3 @@ TBufferPool *CreateBufferPool(ui64 size, ui32 bufferCount, bool UseHugePages, TB
 
 } // NPDisk
 } // NKikimr
-

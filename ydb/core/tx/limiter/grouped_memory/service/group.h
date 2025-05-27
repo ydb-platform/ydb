@@ -1,11 +1,13 @@
 #pragma once
 #include "allocation.h"
 
+#include <ydb/library/signals/object_counter.h>
+
 namespace NKikimr::NOlap::NGroupedMemoryManager {
 
 class TProcessMemoryScope;
 
-class TGrouppedAllocations {
+class TGrouppedAllocations: public NColumnShard::TMonitoringObjectsCounter<TGrouppedAllocations> {
 private:
     THashMap<ui64, std::shared_ptr<TAllocationInfo>> Allocations;
 

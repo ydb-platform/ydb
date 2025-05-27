@@ -4,8 +4,8 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/kqp/workload_service/actors/actors.h>
-#include <ydb/core/kqp/workload_service/common/events.h>
 #include <ydb/core/protos/console_config.pb.h>
+#include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/core/resource_pools/resource_pool_classifier_settings.h>
 
 #include <ydb/library/query_actor/query_actor.h>
@@ -20,17 +20,42 @@ using namespace NResourcePool;
 using namespace NWorkload;
 
 
+struct TEvPrivate {
+    // Event ids
+    enum EEv : ui32 {
+        EvRanksCheckerResponse = EventSpaceBegin(TEvents::ES_PRIVATE),
+
+        EvEnd
+    };
+
+    static_assert(EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE)");
+
+    struct TEvRanksCheckerResponse : public TEventLocal<TEvRanksCheckerResponse, EvRanksCheckerResponse> {
+        TEvRanksCheckerResponse(Ydb::StatusIds::StatusCode status, i64 maxRank, ui64 numberClassifiers, NYql::TIssues issues)
+            : Status(status)
+            , MaxRank(maxRank)
+            , NumberClassifiers(numberClassifiers)
+            , Issues(std::move(issues))
+        {}
+
+        const Ydb::StatusIds::StatusCode Status;
+        const i64 MaxRank;
+        const ui64 NumberClassifiers;
+        const NYql::TIssues Issues;
+    };
+};
+
 class TRanksCheckerActor : public NKikimr::TQueryBase {
     using TBase = NKikimr::TQueryBase;
 
 public:
-    TRanksCheckerActor(const TString& database, const TString& sessionId, const TString& transactionId, const std::unordered_map<i64, TString>& ranksToCheck)
+    TRanksCheckerActor(const TString& databaseId, const TString& sessionId, const TString& transactionId, const std::unordered_map<i64, TString>& ranksToCheck)
         : TBase(NKikimrServices::KQP_GATEWAY, sessionId)
-        , Database(database)
+        , DatabaseId(databaseId)
         , RanksToCheck(ranksToCheck)
     {
         TxId = transactionId;
-        SetOperationInfo(__func__, Database);
+        SetOperationInfo(__func__, DatabaseId);
     }
 
     void OnRunQuery() override {
@@ -38,13 +63,13 @@ public:
 
         TStringBuilder sql = TStringBuilder() << R"(
             -- TRanksCheckerActor::OnRunQuery
-            DECLARE $database AS Text;
+            DECLARE $database_id AS Text;
         )";
 
         NYdb::TParamsBuilder params;
         params
-            .AddParam("$database")
-                .Utf8(CanonizePath(Database))
+            .AddParam("$database_id")
+                .Utf8(CanonizePath(DatabaseId))
                 .Build();
 
         if (!RanksToCheck.empty()) {
@@ -55,7 +80,7 @@ public:
                 SELECT
                     rank, name
                 FROM `)" << tablePath << R"(`
-                WHERE database = $database
+                WHERE database = $database_id
                   AND rank IN $ranks;
             )";
 
@@ -73,7 +98,7 @@ public:
                 MAX(rank) AS MaxRank,
                 COUNT(*) AS NumberClassifiers
             FROM `)" << tablePath << R"(`
-            WHERE database = $database;
+            WHERE database = $database_id;
         )";
 
         RunDataQuery(sql, &params, TTxControl::ContinueTx());
@@ -89,12 +114,12 @@ public:
         if (!RanksToCheck.empty()) {
             NYdb::TResultSetParser result(ResultSets[resultSetId++]);
             while (result.TryNextRow()) {
-                TMaybe<i64> rank = result.ColumnParser("rank").GetOptionalInt64();
+                std::optional<i64> rank = result.ColumnParser("rank").GetOptionalInt64();
                 if (!rank) {
                     continue;
                 }
 
-                TMaybe<TString> name = result.ColumnParser("name").GetOptionalUtf8();
+                std::optional<TString> name = result.ColumnParser("name").GetOptionalUtf8();
                 if (!name) {
                     continue;
                 }
@@ -113,7 +138,7 @@ public:
                 return;
             }
 
-            MaxRank = result.ColumnParser("MaxRank").GetOptionalInt64().GetOrElse(0);
+            MaxRank = result.ColumnParser("MaxRank").GetOptionalInt64().value_or(0);
             NumberClassifiers = result.ColumnParser("NumberClassifiers").GetUint64();
         }
 
@@ -125,7 +150,7 @@ public:
     }
 
 private:
-    const TString Database;
+    const TString DatabaseId;
     const std::unordered_map<i64, TString> RanksToCheck;
 
     ui64 ExpectedResultSets = 1;
@@ -177,7 +202,7 @@ public:
         TryFinish();
     }
 
-    void Handle(TEvPrivate::TEvFetchDatabaseResponse::TPtr& ev) {
+    void Handle(TEvFetchDatabaseResponse::TPtr& ev) {
         if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
             FailAndPassAway("Database check failed", ev->Get()->Status, ev->Get()->Issues);
             return;
@@ -211,8 +236,8 @@ public:
             TResourcePoolClassifierConfig object;
             TResourcePoolClassifierConfig::TDecoder::DeserializeFromRecord(object, objectRecord);
 
-            if (!snapshot->GetClassifierConfig(CanonizePath(object.GetDatabase()), object.GetName())) {
-                FailAndPassAway(TStringBuilder() << "Classifier with name " << object.GetName() << " not found in database " << object.GetDatabase());
+            if (!snapshot->GetClassifierConfig(object.GetDatabase(), object.GetName())) {
+                FailAndPassAway(TStringBuilder() << "Classifier with name " << object.GetName() << " not found in database with id " << object.GetDatabase());
                 return;
             }
         }
@@ -223,7 +248,7 @@ public:
 
     STRICT_STFUNC(StateFunc,
         hFunc(TEvPrivate::TEvRanksCheckerResponse, Handle);
-        hFunc(TEvPrivate::TEvFetchDatabaseResponse, Handle);
+        hFunc(TEvFetchDatabaseResponse, Handle);
         hFunc(TEvents::TEvUndelivered, Handle);
         hFunc(NConsole::TEvConfigsDispatcher::TEvGetConfigResponse, Handle);
         hFunc(NMetadata::NProvider::TEvRefreshSubscriberData, Handle)
@@ -255,7 +280,7 @@ private:
         }
 
         Register(new TQueryRetryActor<TRanksCheckerActor, TEvPrivate::TEvRanksCheckerResponse, TString, TString, TString, std::unordered_map<i64, TString>>(
-            SelfId(), Context.GetExternalData().GetDatabase(), AlterContext.GetSessionId(), AlterContext.GetTransactionId(), ranksToNames
+            SelfId(), Context.GetExternalData().GetDatabaseId(), AlterContext.GetSessionId(), AlterContext.GetTransactionId(), ranksToNames
         ));
     }
 

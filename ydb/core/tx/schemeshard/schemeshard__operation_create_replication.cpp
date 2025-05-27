@@ -1,7 +1,9 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard_impl.h"
+#include "schemeshard__op_traits.h"
 
+#include <ydb/core/mind/hive/hive.h>
 #include <ydb/core/tx/replication/controller/public_events.h>
 
 #define LOG_D(stream) LOG_DEBUG_S (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
@@ -12,6 +14,94 @@
 namespace NKikimr::NSchemeShard {
 
 namespace {
+
+struct IStrategy {
+    virtual TPathElement::EPathType GetPathType() const = 0;
+    virtual bool Validate(TProposeResponse& result, const NKikimrSchemeOp::TReplicationDescription& desc, const TOperationContext& context) const = 0;
+    virtual void Proccess(NKikimrReplication::TReplicationConfig& config, const TString& owner) const = 0;
+};
+
+struct TReplicationStrategy : public IStrategy {
+    TPathElement::EPathType GetPathType() const override {
+        return TPathElement::EPathType::EPathTypeReplication;
+    };
+
+    bool Validate(TProposeResponse& result, const NKikimrSchemeOp::TReplicationDescription& desc, const TOperationContext&) const override {
+        if (desc.GetConfig().HasTransferSpecific()) {
+            result.SetError(NKikimrScheme::StatusInvalidParameter, "Wrong replication configuration");
+            return true;
+        }
+        if (desc.HasState()) {
+            result.SetError(NKikimrScheme::StatusInvalidParameter, "Cannot create replication with explicit state");
+            return true;
+        }
+
+        return false;
+    }
+
+    void Proccess(NKikimrReplication::TReplicationConfig&, const TString&) const override {
+    }
+};
+
+struct TTransferStrategy : public IStrategy {
+    TPathElement::EPathType GetPathType() const override {
+        return TPathElement::EPathType::EPathTypeTransfer;
+    };
+
+    bool Validate(TProposeResponse& result, const NKikimrSchemeOp::TReplicationDescription& desc, const TOperationContext& context) const override {
+        if (!AppData()->FeatureFlags.GetEnableTopicTransfer()) {
+            result.SetError(NKikimrScheme::StatusInvalidParameter, "Topic transfer creation is disabled");
+            return true;
+        }
+        if (!desc.GetConfig().HasTransferSpecific()) {
+            result.SetError(NKikimrScheme::StatusInvalidParameter, "Wrong transfer configuration");
+            return true;
+        }
+        if (desc.HasState()) {
+            result.SetError(NKikimrScheme::StatusInvalidParameter, "Cannot create transfer with explicit state");
+            return true;
+        }
+
+        const auto& batching = desc.GetConfig().GetTransferSpecific().GetBatching();
+        if (batching.HasBatchSizeBytes() && batching.GetBatchSizeBytes() > 1_GB) {
+            result.SetError(NKikimrScheme::StatusInvalidParameter, "Batch size must be less than or equal to 1Gb");
+            return true;
+        }
+        if (batching.HasFlushIntervalMilliSeconds() && batching.GetFlushIntervalMilliSeconds() < TDuration::Seconds(1).MilliSeconds()) {
+            result.SetError(NKikimrScheme::StatusInvalidParameter, "Flush interval must be greater than or equal to 1 second");
+            return true;
+        }
+        if (batching.HasFlushIntervalMilliSeconds() && batching.GetFlushIntervalMilliSeconds() > TDuration::Hours(24).MilliSeconds()) {
+            result.SetError(NKikimrScheme::StatusInvalidParameter, "Flush interval must be less than or equal to 24 hours");
+            return true;
+        }
+
+        const auto& target = desc.GetConfig().GetTransferSpecific().GetTarget();
+        auto targetPath = TPath::Resolve(target.GetDstPath(), context.SS);
+        if (!targetPath.IsResolved() || targetPath.IsUnderDeleting() || targetPath->IsUnderMoving() || targetPath.IsDeleted()) {
+            result.SetError(NKikimrScheme::StatusNotAvailable, TStringBuilder() << "The transfer destination path '" << target.GetDstPath() << "' not found");
+            return true;
+        }
+        if (!targetPath->IsColumnTable() && !targetPath->IsTable()) {
+            result.SetError(NKikimrScheme::StatusNotAvailable, TStringBuilder() << "The transfer destination path '" << target.GetDstPath() << "' isn`t a table");
+            return true;
+        }
+
+        if (!AppData()->TransferWriterFactory) {
+            result.SetError(NKikimrScheme::StatusNotAvailable, "The transfer is only available in the Enterprise version");
+            return true;
+        }
+
+        return false;
+    }
+
+    void Proccess(NKikimrReplication::TReplicationConfig& config, const TString& owner) const override {
+        config.MutableTransferSpecific()->SetRunAsUser(owner);
+    }
+};
+
+static constexpr TReplicationStrategy ReplicationStrategy;
+static constexpr TTransferStrategy TransferStrategy;
 
 class TConfigureParts: public TSubOperationState {
     TString DebugHint() const override {
@@ -55,7 +145,7 @@ public:
                 context.OnComplete.WaitShardCreated(shard.Idx, OperationId);
             } else {
                 auto ev = MakeHolder<NReplication::TEvController::TEvCreateReplication>();
-                PathIdFromPathId(pathId, ev->Record.MutablePathId());
+                pathId.ToProto(ev->Record.MutablePathId());
                 ev->Record.MutableOperationId()->SetTxId(ui64(OperationId.GetTxId()));
                 ev->Record.MutableOperationId()->SetPartId(ui32(OperationId.GetSubTxId()));
                 ev->Record.MutableConfig()->CopyFrom(alterData->Description.GetConfig());
@@ -234,6 +324,18 @@ class TCreateReplication: public TSubOperation {
 public:
     using TSubOperation::TSubOperation;
 
+    explicit TCreateReplication(const TOperationId& id, TTxState::ETxState state, const IStrategy* strategy)
+        : TSubOperation(id, state)
+        , Strategy(strategy)
+    {
+    }
+
+    explicit TCreateReplication(const TOperationId& id, const TTxTransaction& tx, const IStrategy* strategy)
+        : TSubOperation(id, tx)
+        , Strategy(strategy)
+    {
+    }
+
     THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
         const auto& workingDir = Transaction.GetWorkingDir();
         auto desc = Transaction.GetReplication();
@@ -267,6 +369,10 @@ public:
             }
         }
 
+        if (Strategy->Validate(*result, desc, context)) {
+            return result;
+        }
+
         auto path = parentPath.Child(name);
         {
             const auto checks = path.Check();
@@ -277,7 +383,7 @@ public:
                 checks
                     .IsResolved()
                     .NotUnderDeleting()
-                    .FailOnExist(TPathElement::EPathType::EPathTypeReplication, acceptExisted);
+                    .FailOnExist(Strategy->GetPathType(), acceptExisted);
             } else {
                 checks
                     .NotEmpty()
@@ -318,25 +424,26 @@ public:
             return result;
         }
 
-        if (desc.HasState()) {
-            result->SetError(NKikimrScheme::StatusInvalidParameter, "Cannot create replication with explicit state");
-            return result;
-        }
-
         path.MaterializeLeaf(owner);
         path->CreateTxId = OperationId.GetTxId();
         path->LastTxId = OperationId.GetTxId();
         path->PathState = TPathElement::EPathState::EPathStateCreate;
-        path->PathType = TPathElement::EPathType::EPathTypeReplication;
+        path->PathType = Strategy->GetPathType();
         result->SetPathId(path->PathId.LocalPathId);
 
         context.SS->IncrementPathDbRefCount(path->PathId);
-        parentPath->IncAliveChildren();
-        parentPath.DomainInfo()->IncPathsInside();
+        IncAliveChildrenDirect(OperationId, parentPath, context); // for correct discard of ChildrenExist prop
+        parentPath.DomainInfo()->IncPathsInside(context.SS);
 
         if (desc.GetConfig().GetSrcConnectionParams().GetCredentialsCase() == NKikimrReplication::TConnectionParams::CREDENTIALS_NOT_SET) {
             desc.MutableConfig()->MutableSrcConnectionParams()->MutableOAuthToken()->SetToken(BUILTIN_ACL_ROOT);
         }
+
+        if (desc.GetConfig().GetConsistencySettings().GetLevelCase() == NKikimrReplication::TConsistencySettings::LEVEL_NOT_SET) {
+            desc.MutableConfig()->MutableConsistencySettings()->MutableRow();
+        }
+
+        Strategy->Proccess(*desc.MutableConfig(), owner);
 
         desc.MutableState()->MutableStandBy();
         auto replication = TReplicationInfo::Create(std::move(desc));
@@ -355,7 +462,7 @@ public:
         txState.State = TTxState::CreateParts;
 
         path->IncShardsInside();
-        parentPath.DomainInfo()->AddInternalShards(txState);
+        parentPath.DomainInfo()->AddInternalShards(txState, context.SS);
 
         if (parentPath->HasActiveChanges()) {
             const auto parentTxId = parentPath->PlannedToCreate() ? parentPath->CreateTxId : parentPath->LastTxId;
@@ -414,16 +521,44 @@ public:
         context.OnComplete.DoneOperation(OperationId);
     }
 
+private:
+    const IStrategy* Strategy;
+
 }; // TCreateReplication
 
 } // anonymous
 
+using TTag = TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateReplication>;
+
+namespace NOperation {
+
+template <>
+std::optional<TString> GetTargetName<TTag>(TTag, const TTxTransaction& tx) {
+    return tx.GetReplication().GetName();
+}
+
+template <>
+bool SetName<TTag>(TTag, TTxTransaction& tx, const TString& name) {
+    tx.MutableReplication()->SetName(name);
+    return true;
+}
+
+} // namespace NOperation
+
 ISubOperation::TPtr CreateNewReplication(TOperationId id, const TTxTransaction& tx) {
-    return MakeSubOperation<TCreateReplication>(id, tx);
+    return MakeSubOperation<TCreateReplication>(id, tx, &ReplicationStrategy);
 }
 
 ISubOperation::TPtr CreateNewReplication(TOperationId id, TTxState::ETxState state) {
-    return MakeSubOperation<TCreateReplication>(id, state);
+    return MakeSubOperation<TCreateReplication>(id, state, &ReplicationStrategy);
+}
+
+ISubOperation::TPtr CreateNewTransfer(TOperationId id, const TTxTransaction& tx) {
+    return MakeSubOperation<TCreateReplication>(id, tx, &TransferStrategy);
+}
+
+ISubOperation::TPtr CreateNewTransfer(TOperationId id, TTxState::ETxState state) {
+    return MakeSubOperation<TCreateReplication>(id, state, &TransferStrategy);
 }
 
 }

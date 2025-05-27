@@ -898,6 +898,13 @@ nextresp2:
 
 				if ( lr != &dummy_lr ) {
 					ldap_return_request( ld, lr, 1 );
+				} else {
+					if ( lr->lr_res_matched ) {
+						LDAP_FREE( lr->lr_res_matched );
+					}
+					if ( lr->lr_res_error ) {
+						LDAP_FREE( lr->lr_res_error );
+					}
 				}
 				lr = NULL;
 			}

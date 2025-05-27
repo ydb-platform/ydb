@@ -1,0 +1,12 @@
+requirements:
+  - contrib/restricted/boost/format
+  - contrib/restricted/boost/math
+disable_includes:
+  - arm_sve.h
+  - xtl/xcomplex.hpp
+  - riscv_vector.h
+  - wasm_simd128.h
+exclude:
+  - pythran/boost/*
+  - pythran/pythonic/include/numpy/.hpp
+  - pythran/pythonic/numpy/.hpp

@@ -16,10 +16,10 @@
 /*15*/ SELECT UserID, COUNT(*) as cnt FROM $data GROUP BY UserID ORDER BY cnt DESC LIMIT 10;
 /*16*/ SELECT UserID, SearchPhrase, COUNT(*) as cnt FROM $data GROUP BY UserID, SearchPhrase ORDER BY cnt DESC LIMIT 10;
 /*17*/ SELECT UserID, SearchPhrase, COUNT(*) as u FROM $data GROUP BY UserID, SearchPhrase ORDER BY UserID, SearchPhrase, u LIMIT 10;
-/*18*/ SELECT UserID, m, SearchPhrase, COUNT(*) as cnt FROM $data GROUP BY UserID, DateTime::GetMinute(EventTime) AS m, SearchPhrase ORDER BY cnt DESC, UserID, m, SearchPhrase LIMIT 10;
+/*18*/ SELECT UserID, m, SearchPhrase, COUNT(*) as cnt FROM $data GROUP BY UserID, DateTime::GetMinute(Cast(EventTime as Timestamp)) AS m, SearchPhrase ORDER BY cnt DESC, UserID, m, SearchPhrase LIMIT 10;
 /*19*/ SELECT UserID FROM $data WHERE UserID = 435090932899640449;
 /*20*/ SELECT COUNT(*) FROM $data WHERE URL LIKE '%google%';
-/*21*/ SELECT SearchPhrase, MIN(URL), COUNT(*) AS c FROM $data WHERE URL LIKE '%google%' AND SearchPhrase <> '' GROUP BY SearchPhrase ORDER BY c DESC LIMIT 10;
+/*21*/ SELECT SearchPhrase, MIN(URL), COUNT(*) AS c FROM $data WHERE URL LIKE '%google%' AND SearchPhrase <> '' GROUP BY SearchPhrase ORDER BY c DESC, SearchPhrase LIMIT 10;
 /*22*/ SELECT SearchPhrase, MIN(URL), MIN(Title), COUNT(*) AS c, COUNT(DISTINCT UserID) FROM $data WHERE Title LIKE '%Google%' AND URL NOT LIKE '%.google.%' AND SearchPhrase <> '' GROUP BY SearchPhrase ORDER BY c DESC, SearchPhrase, column1, column2 LIMIT 10;
 /*23*/ SELECT * FROM $data WHERE URL LIKE '%google%' ORDER BY EventTime LIMIT 10;
 /*24*/ SELECT SearchPhrase, EventTime FROM $data WHERE SearchPhrase <> '' ORDER BY EventTime, SearchPhrase LIMIT 10;
@@ -40,4 +40,4 @@
 /*39*/ SELECT TraficSourceID, SearchEngineID, AdvEngineID, Src, Dst, COUNT(*) AS PageViews FROM $data WHERE CounterID = 62 AND EventDate >= Date('2013-07-01') AND EventDate <= Date('2013-07-31') AND IsRefresh = 0 GROUP BY TraficSourceID, SearchEngineID, AdvEngineID, CASE WHEN (SearchEngineID = 0 AND AdvEngineID = 0) THEN Referer ELSE '' END AS Src, URL AS Dst ORDER BY PageViews DESC, Dst, Src DESC LIMIT 10 OFFSET 1000;
 /*40*/ SELECT URLHash, EventDate, COUNT(*) AS PageViews FROM $data WHERE CounterID = 62 AND EventDate >= Date('2013-07-01') AND EventDate <= Date('2013-07-31') AND IsRefresh = 0 AND TraficSourceID IN (-1, 6) AND RefererHash = 3594120000172545465 GROUP BY URLHash, EventDate ORDER BY PageViews DESC, URLHash DESC LIMIT 10 OFFSET 100;
 /*41*/ SELECT WindowClientWidth, WindowClientHeight, COUNT(*) AS PageViews FROM $data WHERE CounterID = 62 AND EventDate >= Date('2013-07-01') AND EventDate <= Date('2013-07-31') AND IsRefresh = 0 AND DontCountHits = 0 AND URLHash = 2868770270353813622 GROUP BY WindowClientWidth, WindowClientHeight ORDER BY PageViews DESC, WindowClientWidth DESC, WindowClientHeight DESC LIMIT 10 OFFSET 10000;
-/*42*/ SELECT Minute, COUNT(*) AS PageViews FROM $data WHERE CounterID = 62 AND EventDate >= Date('2013-07-14') AND EventDate <= Date('2013-07-15') AND IsRefresh = 0 AND DontCountHits = 0 GROUP BY DateTime::ToSeconds(EventTime)/60 As Minute ORDER BY Minute LIMIT 10 OFFSET 1000;
+/*42*/ SELECT Minute, COUNT(*) AS PageViews FROM $data WHERE CounterID = 62 AND CAST(EventDate AS Date) >= Date('2013-07-14') AND CAST(EventDate AS Date) <= Date('2013-07-15') AND IsRefresh = 0 AND DontCountHits = 0 GROUP BY DateTime::ToSeconds(Cast(EventTime as Timestamp))/60 As Minute ORDER BY Minute LIMIT 10 OFFSET 1000;

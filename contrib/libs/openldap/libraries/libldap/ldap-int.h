@@ -368,6 +368,7 @@ typedef struct ldap_conn {
 #define LDAP_CONNST_NEEDSOCKET		1
 #define LDAP_CONNST_CONNECTING		2
 #define LDAP_CONNST_CONNECTED		3
+#define LDAP_CONNST_TLS_INPROGRESS	4
 	LDAPURLDesc		*lconn_server;
 	BerElement		*lconn_ber;	/* ber receiving on this conn. */
 

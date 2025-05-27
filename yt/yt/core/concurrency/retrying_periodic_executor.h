@@ -25,7 +25,7 @@ public:
 
     void ProcessResult(TCallbackResult result);
 
-    using TDefaultInvocationTimePolicy::KickstartDeadline;
+    using TDefaultInvocationTimePolicy::GenerateKickstartDeadline;
 
     using TDefaultInvocationTimePolicy::IsEnabled;
 
@@ -41,7 +41,7 @@ public:
         std::optional<NConcurrency::TPeriodicExecutorOptions> periodicOptions,
         std::optional<TExponentialBackoffOptions> backofOptions);
 
-    TInstant NextDeadline();
+    TInstant GenerateNextDeadline();
 
     bool IsOutOfBandProhibited();
 
@@ -58,6 +58,8 @@ private:
     TBackoffStrategy Backoff_;
 
     bool IsInBackoffMode() const;
+
+    bool ShouldRestartBackoff(const std::optional<TExponentialBackoffOptions>& newBackoffOptions) const;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

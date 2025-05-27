@@ -3,7 +3,7 @@ import logging
 
 from abc import ABC
 from math import log
-from typing import NamedTuple, Dict, Type, Any, Sequence, MutableSequence, Optional, Union, Collection
+from typing import NamedTuple, Dict, Type, Any, Sequence, MutableSequence, Union, Collection
 
 from clickhouse_connect.driver.common import array_type, int_size, write_array, write_uint64, low_card_version
 from clickhouse_connect.driver.context import BaseQueryContext
@@ -94,6 +94,10 @@ class ClickHouseType(ABC):
             name = f'{wrapper}({name})'
         return name
 
+    @property
+    def insert_name(self):
+        return self.name
+
     def data_size(self, sample: Sequence) -> int:
         if self.low_card:
             values = set(sample)
@@ -104,10 +108,13 @@ class ClickHouseType(ABC):
             d_size += 1
         return d_size
 
-    def _data_size(self, _sample: Collection) -> int:
+    def _data_size(self, sample: Collection) -> int:
         if self.byte_size:
             return self.byte_size
-        return 0
+        total = 0
+        for x in sample:
+            total += len(str(x))
+        return total / len(sample) + 1
 
     def write_column_prefix(self, dest: bytearray):
         """
@@ -119,7 +126,7 @@ class ClickHouseType(ABC):
         if self.low_card:
             write_uint64(low_card_version, dest)
 
-    def read_column_prefix(self, source: ByteSource):
+    def read_column_prefix(self, source: ByteSource, _ctx: QueryContext):
         """
         Read the low cardinality version.  Like the write method, this has to happen immediately for container classes
         :param source: The native protocol binary read buffer
@@ -139,7 +146,7 @@ class ClickHouseType(ABC):
         :param ctx: QueryContext for query specific settings
         :return: The decoded column data as a sequence and the updated location pointer
         """
-        self.read_column_prefix(source)
+        self.read_column_prefix(source, ctx)
         return self.read_column_data(source, num_rows, ctx)
 
     def read_column_data(self, source: ByteSource, num_rows: int, ctx: QueryContext) -> Sequence:
@@ -274,16 +281,9 @@ class ClickHouseType(ABC):
         write_uint64(len(index), dest)
         self._write_column_binary(index, dest, ctx)
         write_uint64(len(keys), dest)
-        write_array(array_type(1 << ix_type, False), keys, dest)
+        write_array(array_type(1 << ix_type, False), keys, dest, ctx.column_name)
 
     def _active_null(self, _ctx: QueryContext) -> Any:
-        return None
-
-    def _first_value(self, column: Sequence) -> Optional[Any]:
-        if self.nullable:
-            return next((x for x in column if x is not None), None)
-        if len(column):
-            return column[0]
         return None
 
 
@@ -338,7 +338,7 @@ class ArrayType(ClickHouseType, ABC, registered=False):
     def _write_column_binary(self, column: Union[Sequence, MutableSequence], dest: bytearray, ctx: InsertContext):
         if len(column) and self.nullable:
             column = [0 if x is None else x for x in column]
-        write_array(self._array_type, column, dest)
+        write_array(self._array_type, column, dest, ctx.column_name)
 
     def _active_null(self, ctx: QueryContext):
         if ctx.as_pandas and ctx.use_extended_dtypes:

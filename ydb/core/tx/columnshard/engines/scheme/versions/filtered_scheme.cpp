@@ -4,66 +4,58 @@
 
 namespace NKikimr::NOlap {
 
-TFilteredSnapshotSchema::TFilteredSnapshotSchema(ISnapshotSchema::TPtr originalSnapshot, const std::vector<ui32>& columnIds)
-    : TFilteredSnapshotSchema(originalSnapshot, std::set(columnIds.begin(), columnIds.end()))
-{}
+TFilteredSnapshotSchema::TFilteredSnapshotSchema(const ISnapshotSchema::TPtr& originalSnapshot, const std::set<ui32>& columnIds)
+    : TFilteredSnapshotSchema(originalSnapshot, std::vector(columnIds.begin(), columnIds.end())) {
+}
 
-TFilteredSnapshotSchema::TFilteredSnapshotSchema(ISnapshotSchema::TPtr originalSnapshot, const std::set<ui32>& columnIds)
+TFilteredSnapshotSchema::TFilteredSnapshotSchema(const ISnapshotSchema::TPtr& originalSnapshot, const std::vector<ui32>& columnIds)
     : OriginalSnapshot(originalSnapshot)
     , ColumnIds(columnIds)
 {
     std::vector<std::shared_ptr<arrow::Field>> schemaFields;
-    for (auto&& i : OriginalSnapshot->GetSchema()->fields()) {
-        if (!ColumnIds.contains(OriginalSnapshot->GetIndexInfo().GetColumnId(i->name()))) {
-            continue;
-        }
-        schemaFields.emplace_back(i);
+    for (auto&& i : columnIds) {
+        IdIntoIndex.emplace(i, schemaFields.size());
+        schemaFields.emplace_back(originalSnapshot->GetFieldByColumnIdVerified(i));
     }
-    Schema = std::make_shared<arrow::Schema>(schemaFields);
-}
-
-TFilteredSnapshotSchema::TFilteredSnapshotSchema(ISnapshotSchema::TPtr originalSnapshot, const std::set<std::string>& columnNames)
-    : OriginalSnapshot(originalSnapshot) {
-    for (auto&& i : columnNames) {
-        ColumnIds.emplace(OriginalSnapshot->GetColumnId(i));
-    }
-    std::vector<std::shared_ptr<arrow::Field>> schemaFields;
-    for (auto&& i : OriginalSnapshot->GetSchema()->fields()) {
-        if (!columnNames.contains(i->name())) {
-            continue;
-        }
-        schemaFields.emplace_back(i);
-    }
-    Schema = std::make_shared<arrow::Schema>(schemaFields);
+    Schema = std::make_shared<NArrow::TSchemaLite>(schemaFields);
 }
 
 TColumnSaver TFilteredSnapshotSchema::GetColumnSaver(const ui32 columnId) const {
-    Y_ABORT_UNLESS(ColumnIds.contains(columnId));
+    AFL_VERIFY(IdIntoIndex.contains(columnId));
     return OriginalSnapshot->GetColumnSaver(columnId);
 }
 
 std::shared_ptr<TColumnLoader> TFilteredSnapshotSchema::GetColumnLoaderOptional(const ui32 columnId) const {
-    Y_ABORT_UNLESS(ColumnIds.contains(columnId));
+    AFL_VERIFY(IdIntoIndex.contains(columnId));
     return OriginalSnapshot->GetColumnLoaderOptional(columnId);
 }
 
 std::optional<ui32> TFilteredSnapshotSchema::GetColumnIdOptional(const std::string& columnName) const {
-    return OriginalSnapshot->GetColumnIdOptional(columnName);
+    auto result = OriginalSnapshot->GetColumnIdOptional(columnName);
+    if (!result) {
+        return result;
+    }
+    if (!IdIntoIndex.contains(*result)) {
+        return std::nullopt;
+    }
+    return result;
+}
+
+ui32 TFilteredSnapshotSchema::GetColumnIdVerified(const std::string& columnName) const {
+    auto result = OriginalSnapshot->GetColumnIdVerified(columnName);
+    AFL_VERIFY(IdIntoIndex.contains(result));
+    return result;
 }
 
 int TFilteredSnapshotSchema::GetFieldIndex(const ui32 columnId) const {
-    if (!ColumnIds.contains(columnId)) {
+    auto it = IdIntoIndex.find(columnId);
+    if (it == IdIntoIndex.end()) {
         return -1;
     }
-    TString columnName = OriginalSnapshot->GetIndexInfo().GetColumnName(columnId, false);
-    if (!columnName) {
-        return -1;
-    }
-    std::string name(columnName.data(), columnName.size());
-    return Schema->GetFieldIndex(name);
+    return it->second;
 }
 
-const std::shared_ptr<arrow::Schema>& TFilteredSnapshotSchema::GetSchema() const {
+const std::shared_ptr<NArrow::TSchemaLite>& TFilteredSnapshotSchema::GetSchema() const {
     return Schema;
 }
 

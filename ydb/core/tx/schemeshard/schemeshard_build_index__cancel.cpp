@@ -28,37 +28,36 @@ public:
         const TPathId domainPathId = database.GetPathIdForDomain();
 
         TIndexBuildId indexBuildId = TIndexBuildId(record.GetIndexBuildId());
-
-        if (!Self->IndexBuilds.contains(indexBuildId)) {
+        const auto* indexBuildInfoPtr = Self->IndexBuilds.FindPtr(indexBuildId);
+        if (!indexBuildInfoPtr) {
             return Reply(
                 Ydb::StatusIds::NOT_FOUND,
                 TStringBuilder() << "Index build process with id <" << indexBuildId << "> not found"
             );
         }
-
-        TIndexBuildInfo::TPtr indexBuildInfo = Self->IndexBuilds.at(indexBuildId);
-        if (indexBuildInfo->DomainPathId != domainPathId) {
+        auto& indexBuildInfo = *indexBuildInfoPtr->Get();
+        if (indexBuildInfo.DomainPathId != domainPathId) {
             return Reply(
                 Ydb::StatusIds::NOT_FOUND,
                 TStringBuilder() << "Index build process with id <" << indexBuildId << "> not found in database <" << record.GetDatabaseName() << ">"
             );
         }
 
-        if (indexBuildInfo->IsFinished()) {
+        if (indexBuildInfo.IsFinished()) {
             return Reply(
                 Ydb::StatusIds::PRECONDITION_FAILED,
                 TStringBuilder() << "Index build process with id <" << indexBuildId << "> has been finished already"
             );
         }
 
-        if (indexBuildInfo->IsCancellationRequested()) {
+        if (indexBuildInfo.IsCancellationRequested()) {
             return Reply(
                 Ydb::StatusIds::PRECONDITION_FAILED,
                 TStringBuilder() << "Index build process with id <" << indexBuildId << "> canceling already"
             );
         }
 
-        if (indexBuildInfo->State > TIndexBuildInfo::EState::Filling) {
+        if (indexBuildInfo.State > TIndexBuildInfo::EState::Filling) {
             return Reply(
                 Ydb::StatusIds::PRECONDITION_FAILED,
                 TStringBuilder() << "Index build process with id <" << indexBuildId << "> are almost done, cancellation has no sense"
@@ -66,10 +65,10 @@ public:
         }
 
         NIceDb::TNiceDb db(txc.DB);
-        indexBuildInfo->CancelRequested = true;
+        indexBuildInfo.CancelRequested = true;
         Self->PersistBuildIndexCancelRequest(db, indexBuildInfo);
 
-        Progress(indexBuildInfo->Id);
+        Progress(indexBuildInfo.Id);
 
         return Reply();
     }

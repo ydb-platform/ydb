@@ -1,0 +1,105 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     ((GPL-2.0-only WITH Linux-syscall-note) OR Linux-OpenIB) 8d03ddad687ea840ff26243486272c6a
+BELONGS ya.make
+    License text:
+        /* SPDX-License-Identifier: ((GPL-2.0 WITH Linux-syscall-note) OR Linux-OpenIB) */
+    Scancode info:
+        Original SPDX id: GPL-2.0-only
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://www.gnu.org/licenses/gpl-2.0.html, http://www.gnu.org/licenses/gpl-2.0.txt, https://spdx.org/licenses/GPL-2.0-only
+    Files with this license:
+        include/infiniband/ib_user_ioctl_verbs.h [1:1]
+    Scancode info:
+        Original SPDX id: Linux-syscall-note
+        Score           : 100.00
+        Match type      : TAG
+        Links           : https://spdx.org/licenses/Linux-syscall-note
+    Files with this license:
+        include/infiniband/ib_user_ioctl_verbs.h [1:1]
+    Scancode info:
+        Original SPDX id: Linux-OpenIB
+        Score           : 100.00
+        Match type      : TAG
+        Links           : https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/drivers/infiniband/core/sa.h, https://github.com/ofiwg/libfabric/blob/master/contrib/buildrpm/README, https://spdx.org/licenses/Linux-OpenIB
+    Files with this license:
+        include/infiniband/ib_user_ioctl_verbs.h [1:1]
+
+KEEP     (GPL-2.0-only OR Linux-OpenIB) d9a213bfda5adf8a9e62b5eb7e9db985
+BELONGS ya.make
+	# This software is available to you under a choice of one of two licenses
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-2.0-only
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-2.0.html, http://www.gnu.org/licenses/gpl-2.0.txt, https://spdx.org/licenses/GPL-2.0-only
+    Files with this license:
+        include/infiniband/arch.h [2:28]
+        include/infiniband/ib.h [4:30]
+        include/infiniband/ib_user_ioctl_verbs.h [5:31]
+        include/infiniband/mlx5_api.h [4:30]
+        include/infiniband/mlx5_user_ioctl_verbs.h [4:30]
+        include/infiniband/mlx5dv.h [4:30]
+        include/infiniband/opcode.h [4:30]
+        include/infiniband/sa-kern-abi.h [2:28]
+        include/infiniband/sa.h [5:31]
+        include/infiniband/tm_types.h [4:30]
+        include/infiniband/verbs.h [7:33]
+        include/infiniband/verbs_api.h [4:30]
+        include/rdma/rdma_cma.h [5:31]
+        include/rdma/rdma_cma_abi.h [4:30]
+        include/rdma/rdma_verbs.h [4:30]
+        include/rdma/rsocket.h [4:30]
+    Scancode info:
+        Original SPDX id: Linux-OpenIB
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/drivers/infiniband/core/sa.h, https://github.com/ofiwg/libfabric/blob/master/contrib/buildrpm/README, https://spdx.org/licenses/Linux-OpenIB
+    Files with this license:
+        include/infiniband/arch.h [2:28]
+        include/infiniband/ib.h [4:30]
+        include/infiniband/ib_user_ioctl_verbs.h [5:31]
+        include/infiniband/mlx5_api.h [4:30]
+        include/infiniband/mlx5_user_ioctl_verbs.h [4:30]
+        include/infiniband/mlx5dv.h [4:30]
+        include/infiniband/opcode.h [4:30]
+        include/infiniband/sa-kern-abi.h [2:28]
+        include/infiniband/sa.h [5:31]
+        include/infiniband/tm_types.h [4:30]
+        include/infiniband/verbs.h [7:33]
+        include/infiniband/verbs_api.h [4:30]
+        include/rdma/rdma_cma.h [5:31]
+        include/rdma/rdma_cma_abi.h [4:30]
+        include/rdma/rdma_verbs.h [4:30]
+        include/rdma/rsocket.h [4:30]

@@ -49,7 +49,8 @@ extern const char* const MatchQueueAttributesQuery = R"__(
         (let retention       (Parameter 'RETENTION         (DataType 'Uint64)))
         (let dlqName         (Parameter 'DLQ_TARGET_NAME   (DataType 'Utf8String)))
         (let maxReceiveCount (Parameter 'MAX_RECEIVE_COUNT (DataType 'Uint64)))
-        (let userName   (Parameter 'USER_NAME  (DataType 'Utf8String)))
+        (let userName        (Parameter 'USER_NAME         (DataType 'Utf8String)))
+        (let tags            (Parameter 'TAGS              (DataType 'Utf8String)))
 
         (let attrsTable ')__" QUEUE_TABLES_FOLDER_PARAM R"__(/Attributes)
         (let queuesTable ')__" ROOT_PARAM R"__(/.Queues)
@@ -70,7 +71,8 @@ extern const char* const MatchQueueAttributesQuery = R"__(
             'Shards
             'Partitions
             'DlqName
-            'Version))
+            'Version
+            'Tags))
         (let queuesRead (SelectRow queuesTable queuesRow queuesSelect))
 
         (let queueExists
@@ -92,11 +94,13 @@ extern const char* const MatchQueueAttributesQuery = R"__(
             (Coalesce
                 (And
                     (And
-                        (And (Equal (Member queuesRead 'Shards) shards)
+                        (And
+                            (And (Equal (Member queuesRead 'Shards) shards)
+                                 (Equal (Coalesce (Member queuesRead 'Tags) (Utf8String '"{}")) tags))
                             (Equal (Member queuesRead 'Partitions) partitions))
                         (Equal (Member queuesRead 'FifoQueue) fifo))
                     (Equal  (Coalesce (Member queuesRead 'DlqName) (Utf8String '"")) dlqName))
-                (Bool 'true)))
+                (Bool 'false)))
 
         (let attrRow '(
             )__" ATTRS_KEYS_PARAM R"__(
@@ -118,7 +122,7 @@ extern const char* const MatchQueueAttributesQuery = R"__(
                                 (Equal (Member attrRead 'MessageRetentionPeriod) retention)))
                         (Equal (Member attrRead 'VisibilityTimeout) visibility))
                     (Equal (Coalesce (Member attrRead 'MaxReceiveCount) (Uint64 '0)) maxReceiveCount))
-                (Bool 'true)))
+                (Bool 'false)))
 
         (let sameVersion
             (Equal currentVersion expectedVersion))

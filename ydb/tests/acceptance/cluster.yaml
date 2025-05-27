@@ -117,6 +117,7 @@ grpc:
   - cms
   - discovery
   - legacy
+  - tablet_service
   - experimental
   - pq
   - clickhouse_internal

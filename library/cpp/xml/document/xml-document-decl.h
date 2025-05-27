@@ -328,6 +328,14 @@ namespace NXml {
         /**
         * get node attribute
         * @param name: attribute name
+        * returns value if exists
+        */
+        template <class T>
+        TMaybe<T> TryAttr(TZtStringBuf name) const;
+
+        /**
+        * get node attribute
+        * @param name: attribute name
         * returns default value if attribute not found
         */
         template <class T>
@@ -595,6 +603,16 @@ namespace NXml {
 
         TConstNode NextSibling() const {
             return ActualNode.NextSibling();
+        }
+
+        /**
+        * get node attribute
+        * @param name: attribute name
+        * returns value if exists
+        */
+        template <class T>
+        TMaybe<T> TryAttr(TZtStringBuf name) const {
+            return ActualNode.TryAttr<T>(name);
         }
 
         /**

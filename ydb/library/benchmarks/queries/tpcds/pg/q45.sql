@@ -1,6 +1,6 @@
 {% include 'header.sql.jinja' %}
 
-select  ca_zip, ca_county, sum(ws_sales_price)
+select  ca_zip, ca_city, sum(ws_sales_price)
  from {{web_sales}}, {{customer}}, {{customer_address}}, {{date_dim}}, {{item}}
  where ws_bill_customer_sk = c_customer_sk
  	and c_current_addr_sk = ca_address_sk
@@ -13,9 +13,9 @@ select  ca_zip, ca_county, sum(ws_sales_price)
                              )
  	    )
  	and ws_sold_date_sk = d_date_sk
- 	and d_qoy = 1 and d_year = 1998
- group by ca_zip, ca_county
- order by ca_zip nulls first, ca_county nulls first
+ 	and d_qoy = 2 and d_year = 2001
+ group by ca_zip, ca_city
+ order by ca_zip nulls first, ca_city nulls first
  limit 100;
 
 -- end query 1 in stream 0 using template ../query_templates/query45.tpl

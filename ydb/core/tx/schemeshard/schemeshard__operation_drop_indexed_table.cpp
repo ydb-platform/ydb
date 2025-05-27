@@ -5,6 +5,7 @@
 #include "schemeshard_impl.h"
 
 #include <ydb/core/base/path.h>
+#include <ydb/core/mind/hive/hive.h>
 #include <ydb/core/base/table_vector_index.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
@@ -36,10 +37,10 @@ void DropPath(NIceDb::TNiceDb& db, TOperationContext& context,
     context.SS->PersistUserAttributes(db, path->PathId, path->UserAttrs, nullptr);
 
     auto domainInfo = context.SS->ResolveDomainInfo(path->PathId);
-    domainInfo->DecPathsInside();
+    domainInfo->DecPathsInside(context.SS);
 
     auto parentDir = path.Parent();
-    parentDir->DecAliveChildren();
+    DecAliveChildrenDirect(operationId, parentDir.Base(), context); // for correct discard of ChildrenExist prop
     ++parentDir->DirAlterVersion;
     context.SS->PersistPathDirAlterVersion(db, parentDir.Base());
 
@@ -138,7 +139,7 @@ public:
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                    DebugHint() << " HandleReply TEvPrivate::TEvCompletePublication"
                                << ", msg: " << ev->Get()->ToString()
-                               << ", at tablet" << ssId);
+                               << ", at tablet# " << ssId);
 
         Y_ABORT_UNLESS(ActivePathId == ev->Get()->PathId);
 
@@ -159,7 +160,7 @@ public:
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                    DebugHint() << " ProgressState"
                                << ", operation type: " << TTxState::TypeName(txState->TxType)
-                               << ", at tablet" << ssId);
+                               << ", at tablet# " << ssId);
 
         TPath path = TPath::Init(txState->TargetPathId, context.SS);
         if (path.IsActive()) {
@@ -207,7 +208,7 @@ public:
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                    DebugHint() << " HandleReply TEvPrivate::TEvCompleteBarrier"
                                << ", msg: " << ev->Get()->ToString()
-                               << ", at tablet" << ssId);
+                               << ", at tablet# " << ssId);
 
         NIceDb::TNiceDb db(context.GetDB());
 
@@ -232,7 +233,7 @@ public:
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                    DebugHint() << " ProgressState"
                                << ", operation type: " << TTxState::TypeName(txState->TxType)
-                               << ", at tablet" << ssId);
+                               << ", at tablet# " << ssId);
 
         context.OnComplete.Barrier(OperationId, "RenamePathBarrier");
 
@@ -396,11 +397,10 @@ TVector<ISubOperation::TPtr> CreateDropIndexedTable(TOperationId nextId, const T
     auto dropOperation = tx.GetDrop();
 
     const TString parentPathStr = tx.GetWorkingDir();
-    const TString name = dropOperation.GetName();
 
     TPath table = dropOperation.HasId()
         ? TPath::Init(TPathId(context.SS->TabletID(), dropOperation.GetId()), context.SS)
-        : TPath::Resolve(parentPathStr, context.SS).Dive(name);
+        : TPath::Resolve(parentPathStr, context.SS).Dive(dropOperation.GetName());
 
     {
         TPath::TChecker checks = table.Check();
@@ -425,8 +425,10 @@ TVector<ISubOperation::TPtr> CreateDropIndexedTable(TOperationId nextId, const T
                 checks
                     .IsTable()
                     .NotUnderDeleting()
-                    .NotUnderOperation()
-                    .IsCommonSensePath();
+                    .NotUnderOperation();
+                if (!table.Parent()->IsTableIndex() || !NTableIndex::IsBuildImplTable(table.LeafName())) {
+                    checks.IsCommonSensePath();
+                }
             }
         }
 

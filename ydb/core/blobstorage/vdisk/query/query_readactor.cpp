@@ -1,5 +1,6 @@
 #include "query_readbatch.h"
 #include <ydb/core/blobstorage/base/vdisk_priorities.h>
+#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
 #include <util/generic/algorithm.h>

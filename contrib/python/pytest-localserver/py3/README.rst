@@ -91,12 +91,13 @@ poking around in the code itself.
     * ``content`` - content of next response (str, bytes, or iterable of either)
     * ``headers`` - response headers (dict)
     * ``chunked`` - whether to chunk-encode the response (enumeration)
+    * ``store_request_data`` - whether to store request data for later use
 
     Once these attributes are set, all subsequent requests will be answered with
     these values until they are changed or the server is stopped. A more
     convenient way to change these is ::
 
-        httpserver.serve_content(content=None, code=200, headers=None, chunked=pytest_localserver.http.Chunked.NO)
+        httpserver.serve_content(content=None, code=200, headers=None, chunked=pytest_localserver.http.Chunked.NO, store_request_data=True)
 
     The ``chunked`` attribute or parameter can be set to
 
@@ -107,6 +108,11 @@ poking around in the code itself.
 
     If chunk encoding is applied, each str or bytes in ``content`` becomes one
     chunk in the response.
+
+    You can use ``store_request_data=False`` to disable loading the request data into
+    memory. This will make it impossible to check the request data using
+    ``httpserver.requests[index].data`` but may make sense when posting a larger amount of
+    data and you don't need to check this.
 
     The server address can be found in property
 

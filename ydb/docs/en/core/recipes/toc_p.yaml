@@ -7,8 +7,13 @@ items:
   href: ydb-cli/index.md
   include:
     mode: link
-    path: ydb-cli/toc_p.yaml    
+    path: ydb-cli/toc_p.yaml
 - name: YQL
   include:
     mode: link
-    path: yql/toc_p.yaml
+    path: ../yql/reference/recipes/toc_i.yaml
+- name:  For Analysts
+  href: ../olap/index.md
+  include:
+    mode: link
+    path: ../olap/toc_p.yaml

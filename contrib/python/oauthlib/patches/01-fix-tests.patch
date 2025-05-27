@@ -1,0 +1,31 @@
+--- contrib/python/oauthlib/tests/openid/connect/core/endpoints/test_claims_handling.py	(index)
++++ contrib/python/oauthlib/tests/openid/connect/core/endpoints/test_claims_handling.py	(working tree)
+@@ -11,7 +11,7 @@ from unittest import mock
+ from oauthlib.openid import RequestValidator
+ from oauthlib.openid.connect.core.endpoints.pre_configured import Server
+ 
+-from tests.oauth2.rfc6749.endpoints.test_utils import get_query_credentials
++from __tests__.oauth2.rfc6749.endpoints.test_utils import get_query_credentials
+ from tests.unittest import TestCase
+ 
+ 
+--- contrib/python/oauthlib/tests/openid/connect/core/grant_types/test_authorization_code.py	(index)
++++ contrib/python/oauthlib/tests/openid/connect/core/grant_types/test_authorization_code.py	(working tree)
+@@ -14,1 +14,1 @@ from oauthlib.openid.connect.core.grant_types.authorization_code import (
+-from tests.oauth2.rfc6749.grant_types.test_authorization_code import (
++from __tests__.oauth2.rfc6749.grant_types.test_authorization_code import (
+--- contrib/python/oauthlib/tests/openid/connect/core/grant_types/test_hybrid.py	(index)
++++ contrib/python/oauthlib/tests/openid/connect/core/grant_types/test_hybrid.py	(working tree)
+@@ -8,1 +8,1 @@ from oauthlib.oauth2.rfc6749 import errors
+-from tests.oauth2.rfc6749.grant_types.test_authorization_code import (
++from __tests__.oauth2.rfc6749.grant_types.test_authorization_code import (
+--- contrib/python/oauthlib/tests/openid/connect/core/grant_types/test_implicit.py	(index)
++++ contrib/python/oauthlib/tests/openid/connect/core/grant_types/test_implicit.py	(working tree)
+@@ -9,1 +9,1 @@ from oauthlib.oauth2.rfc6749 import errors
+-from tests.oauth2.rfc6749.grant_types.test_implicit import ImplicitGrantTest
++from __tests__.oauth2.rfc6749.grant_types.test_implicit import ImplicitGrantTest
+--- contrib/python/oauthlib/tests/openid/connect/core/grant_types/test_refresh_token.py	(index)
++++ contrib/python/oauthlib/tests/openid/connect/core/grant_types/test_refresh_token.py	(working tree)
+@@ -8,1 +8,1 @@ from oauthlib.common import Request
+-from tests.oauth2.rfc6749.grant_types.test_refresh_token import (
++from __tests__.oauth2.rfc6749.grant_types.test_refresh_token import (

@@ -15,7 +15,7 @@
 
 namespace boost { namespace locale {
 
-    /// \brief Geneneric utf8 codecvt facet, it allows to convert UTF-8 strings to UTF-16 and UTF-32 using wchar_t,
+    /// \brief Generic utf8 codecvt facet, it allows to convert UTF-8 strings to UTF-16 and UTF-32 using wchar_t,
     /// char32_t and char16_t
     template<typename CharType>
     class utf8_codecvt : public generic_codecvt<CharType, utf8_codecvt<CharType>> {

@@ -11,14 +11,19 @@
 
 #include <aws/common/stdint.h>
 
+AWS_PUSH_SANE_WARNING_LEVEL
+
 struct aws_array_list;
 
 typedef uint32_t aws_crt_statistics_category_t;
 
 /* Each library gets space for 2^^8 category entries */
-#define AWS_CRT_STATISTICS_CATEGORY_STRIDE_BITS 8
+enum {
+    AWS_CRT_STATISTICS_CATEGORY_STRIDE_BITS = 8,
+};
+
 #define AWS_CRT_STATISTICS_CATEGORY_STRIDE (1U << AWS_CRT_STATISTICS_CATEGORY_STRIDE_BITS)
-#define AWS_CRT_STATISTICS_CATEGORY_BEGIN_RANGE(x) ((x)*AWS_CRT_STATISTICS_CATEGORY_STRIDE)
+#define AWS_CRT_STATISTICS_CATEGORY_BEGIN_RANGE(x) ((x) * AWS_CRT_STATISTICS_CATEGORY_STRIDE)
 #define AWS_CRT_STATISTICS_CATEGORY_END_RANGE(x) (((x) + 1) * AWS_CRT_STATISTICS_CATEGORY_STRIDE - 1)
 
 /**
@@ -136,5 +141,6 @@ AWS_COMMON_API
 void aws_crt_statistics_handler_destroy(struct aws_crt_statistics_handler *handler);
 
 AWS_EXTERN_C_END
+AWS_POP_SANE_WARNING_LEVEL
 
 #endif /* AWS_COMMON_STATISTICS_H */

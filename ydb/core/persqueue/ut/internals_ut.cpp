@@ -1,7 +1,7 @@
 #include "blob.h"
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
-#include <ydb/library/yql/public/decimal/yql_decimal.h>
+#include <yql/essentials/public/decimal/yql_decimal.h>
 #include <util/generic/size_literals.h>
 #include <util/stream/format.h>
 
@@ -38,39 +38,40 @@ void Test(bool headCompacted, ui32 parts, ui32 partSize, ui32 leftInHead)
 
     THead head;
     head.Offset = 100;
-    TString value(100_KB, 'a');
-    head.Batches.push_back(TBatch(head.Offset, 0, TVector<TClientBlob>()));
+    head.AddBatch(TBatch(head.Offset, 0));
     for (ui32 i = 0; i < 50; ++i) {
-        head.Batches.back().AddBlob(TClientBlob(
-            "sourceId" + TString(1,'a' + rand() % 26), i + 1, value, TMaybe<TPartData>(),
+        TString value(100_KB, 'a');
+        head.AddBlob(TClientBlob(
+            "sourceId" + TString(1,'a' + rand() % 26), i + 1, std::move(value), TMaybe<TPartData>(),
             TInstant::MilliSeconds(i + 1),  TInstant::MilliSeconds(i + 1), 1, "", ""
         ));
         if (!headCompacted)
-            all.push_back(head.Batches.back().Blobs.back());
+            all.push_back(head.GetLastBatch().Blobs.back());
     }
-    head.Batches.back().Pack();
-    UNIT_ASSERT(head.Batches.back().Header.GetFormat() == NKikimrPQ::TBatchHeader::ECompressed);
-    head.Batches.back().Unpack();
-    head.Batches.back().Pack();
+    head.MutableLastBatch().Pack();
+    UNIT_ASSERT(head.GetLastBatch().Header.GetFormat() == NKikimrPQ::TBatchHeader::ECompressed);
+    head.MutableLastBatch().Unpack();
+    head.MutableLastBatch().Pack();
     TString str;
-    head.Batches.back().SerializeTo(str);
+    head.GetLastBatch().SerializeTo(str);
     auto header = ExtractHeader(str.c_str(), str.size());
     TBatch batch(header, str.c_str() + header.ByteSize() + sizeof(ui16));
     batch.Unpack();
 
-    head.PackedSize = head.Batches.back().GetPackedSize();
-    UNIT_ASSERT(head.Batches.back().GetUnpackedSize() + GetMaxHeaderSize() >= head.Batches.back().GetPackedSize());
+    head.PackedSize = head.GetLastBatch().GetPackedSize();
+    UNIT_ASSERT(head.GetLastBatch().GetUnpackedSize() + GetMaxHeaderSize() >= head.GetLastBatch().GetPackedSize());
     THead newHead;
     newHead.Offset = head.GetNextOffset();
-    newHead.Batches.push_back(TBatch(newHead.Offset, 0, TVector<TClientBlob>()));
+    newHead.AddBatch(TBatch(newHead.Offset, 0));
     for (ui32 i = 0; i < 10; ++i) {
-        newHead.Batches.back().AddBlob(TClientBlob(
-            "sourceId2", i + 1, value, TMaybe<TPartData>(),
+        TString value(100_KB, 'a');
+        newHead.AddBlob(TClientBlob(
+            "sourceId2", i + 1, std::move(value), TMaybe<TPartData>(),
             TInstant::MilliSeconds(i + 1000), TInstant::MilliSeconds(i + 1000), 1, "", ""
         ));
-        all.push_back(newHead.Batches.back().Blobs.back()); //newHead always glued
+        all.push_back(newHead.GetLastBatch().Blobs.back()); //newHead always glued
     }
-    newHead.PackedSize = newHead.Batches.back().GetUnpackedSize();
+    newHead.PackedSize = newHead.GetLastBatch().GetUnpackedSize();
     TString value2(partSize, 'b');
     ui32 maxBlobSize = 8 << 20;
     TPartitionedBlob blob(TPartitionId(0), newHead.GetNextOffset(), "sourceId3", 1, parts, parts * value2.size(), head, newHead, headCompacted, false, maxBlobSize);
@@ -82,8 +83,9 @@ void Test(bool headCompacted, ui32 parts, ui32 partSize, ui32 leftInHead)
         UNIT_ASSERT(!blob.IsComplete());
         UNIT_ASSERT(blob.IsNextPart("sourceId3", 1, i, &error));
         TMaybe<TPartData> partData = TPartData(i, parts, value2.size());
+        TString v = value2;
         TClientBlob clientBlob(
-            "soruceId3", 1, value2, std::move(partData),
+            "soruceId3", 1, std::move(v), std::move(partData),
             TInstant::MilliSeconds(1), TInstant::MilliSeconds(1), 1, "", ""
         );
         all.push_back(clientBlob);
@@ -125,16 +127,16 @@ void Test(bool headCompacted, ui32 parts, ui32 partSize, ui32 leftInHead)
     if (formed.empty()) { //nothing compacted - newHead must be here
 
         if (!headCompacted) {
-            for (auto& p : head.Batches) {
-                p.Unpack();
-                for (const auto& b : p.Blobs)
+            for (ui32 pp = 0; pp < head.GetBatches().size(); ++pp) {
+                head.MutableBatch(pp).Unpack();
+                for (const auto& b : head.GetBatch(pp).Blobs)
                     real.push_back(b);
             }
         }
 
-        for (auto& p : newHead.Batches) {
-            p.Unpack();
-            for (const auto& b : p.Blobs)
+        for (ui32 pp = 0; pp < newHead.GetBatches().size(); ++pp) {
+            newHead.MutableBatch(pp).Unpack();
+            for (const auto& b : newHead.GetBatch(pp).Blobs)
                 real.push_back(b);
         }
     }
@@ -173,11 +175,11 @@ Y_UNIT_TEST(TestPartitionedBigTest) {
 }
 
 Y_UNIT_TEST(TestBatchPacking) {
-    TString value(10, 'a');
     TBatch batch;
     for (ui32 i = 0; i < 100; ++i) {
+    TString value(10, 'a');
         batch.AddBlob(TClientBlob(
-            "sourceId1", i + 1, value, TMaybe<TPartData>(),
+            "sourceId1", i + 1, std::move(value), TMaybe<TPartData>(),
             TInstant::MilliSeconds(1), TInstant::MilliSeconds(1), 0, "", ""
         ));
     }
@@ -297,26 +299,69 @@ Y_UNIT_TEST(TestToHex) {
 }
 
 Y_UNIT_TEST(StoreKeys) {
-    TKey keyOld(TKeyPrefix::TypeData, TPartitionId{9}, 8, 7, 6, 5, false);
+    // key for Body
+    auto keyOld = TKey::ForBody(TKeyPrefix::TypeData, TPartitionId{9}, 8, 7, 6, 5);
     UNIT_ASSERT_VALUES_EQUAL(keyOld.ToString(), "d0000000009_00000000000000000008_00007_0000000006_00005");
 
-    TKey keyNew(TKeyPrefix::TypeData, TPartitionId{5, TWriteId{0, 1}, 9}, 8, 7, 6, 5, false);
+    auto keyNew = TKey::ForBody(TKeyPrefix::TypeData, TPartitionId{5, TWriteId{0, 1}, 9}, 8, 7, 6, 5);
     UNIT_ASSERT_VALUES_EQUAL(keyNew.ToString(), "D0000000009_00000000000000000008_00007_0000000006_00005");
 
     keyNew.SetType(TKeyPrefix::TypeInfo);
     UNIT_ASSERT_VALUES_EQUAL(keyNew.ToString(), "M0000000009_00000000000000000008_00007_0000000006_00005");
+
+    // key for Head
+    auto keyHead = TKey::ForHead(TKeyPrefix::TypeData, TPartitionId{9}, 8, 7, 6, 5);
+    UNIT_ASSERT_VALUES_EQUAL(keyHead.ToString(), "d0000000009_00000000000000000008_00007_0000000006_00005|");
+
+    keyHead = TKey::FromKey(keyHead, TKeyPrefix::TypeData, TPartitionId{10}, 11);
+    UNIT_ASSERT_VALUES_EQUAL(keyHead.ToString(), "d0000000010_00000000000000000011_00007_0000000006_00005|");
+
+    // key for FastWrite
+    auto keyFastWrite = TKey::ForFastWrite(TKeyPrefix::TypeData, TPartitionId{9}, 8, 7, 6, 5);
+    UNIT_ASSERT_VALUES_EQUAL(keyFastWrite.ToString(), "d0000000009_00000000000000000008_00007_0000000006_00005?");
+
+    keyFastWrite = TKey::FromKey(keyFastWrite, TKeyPrefix::TypeData, TPartitionId{12}, 13);
+    UNIT_ASSERT_VALUES_EQUAL(keyFastWrite.ToString(), "d0000000012_00000000000000000013_00007_0000000006_00005?");
 }
 
 Y_UNIT_TEST(RestoreKeys) {
+    // the key from the string
     {
-        TKey key("X0000000001_00000000000000000002_00003_0000000004_00005");
+        auto key = TKey::FromString("X0000000001_00000000000000000002_00003_0000000004_00005");
         UNIT_ASSERT(key.GetType() == TKeyPrefix::TypeTmpData);
         UNIT_ASSERT_VALUES_EQUAL(key.GetPartition().InternalPartitionId, 1);
+        UNIT_ASSERT_VALUES_EQUAL(key.GetOffset(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(key.GetPartNo(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(key.GetCount(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(key.GetInternalPartsCount(), 5);
+        UNIT_ASSERT(!key.HasSuffix());
     }
+
+    // blob type
     {
-        TKey key("i0000000001_00000000000000000002_00003_0000000004_00005");
+        auto key = TKey::FromString("i0000000001_00000000000000000002_00003_0000000004_00005");
         UNIT_ASSERT(key.GetType() == TKeyPrefix::TypeMeta);
-        UNIT_ASSERT_VALUES_EQUAL(key.GetPartition().InternalPartitionId, 1);
+    }
+
+    // the `partitionId` is being replaced
+    {
+        auto key = TKey::FromString("d0000000002_00000000000000000013_00007_0000000006_00005", TPartitionId{3});
+        UNIT_ASSERT_VALUES_EQUAL(key.GetPartition().InternalPartitionId, 3);
+        UNIT_ASSERT(!key.HasSuffix());
+    }
+
+    // key for FastWrite
+    {
+        auto key = TKey::FromString("d0000000002_00000000000000000013_00007_0000000006_00005?", TPartitionId{4});
+        UNIT_ASSERT_VALUES_EQUAL(key.GetPartition().InternalPartitionId, 4);
+        UNIT_ASSERT(key.HasSuffix());
+    }
+
+    // key for head
+    {
+        auto key = TKey::FromString("d0000000002_00000000000000000013_00007_0000000006_00005|", TPartitionId{8});
+        UNIT_ASSERT_VALUES_EQUAL(key.GetPartition().InternalPartitionId, 8);
+        UNIT_ASSERT(key.HasSuffix());
     }
 }
 

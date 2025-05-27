@@ -1,14 +1,17 @@
 #pragma once
 
+#include <unordered_map>
 #include "events.h"
 #include "partition_id.h"
 
 #include <ydb/library/actors/core/actorid.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/services/persqueue_v1/actors/distributed_commit_helper.h>
 #include <library/cpp/containers/disjoint_interval_tree/disjoint_interval_tree.h>
 
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/persqueue/events/global.h>
+#include <ydb/core/persqueue/utils.h>
 #include <ydb/core/util/ulid.h>
 
 #include <ydb/library/services/services.pb.h>
@@ -65,15 +68,16 @@ private:
     static constexpr ui32 MAX_PIPE_RESTARTS = 100; //after 100 restarts without progress kill session
     static constexpr ui32 RESTART_PIPE_DELAY_MS = 100;
 
-    static constexpr ui32 MAX_COMMITS_INFLY = 3;
+    static constexpr ui32 MAX_COMMITS_INFLY = 1;
 
 
 public:
      TPartitionActor(const TActorId& parentId, const TString& clientId, const TString& clientPath, const ui64 cookie,
                      const TString& session, const TPartitionId& partition, ui32 generation, ui32 step,
                      const ui64 tabletID, const TTopicCounters& counters, const bool commitsDisabled,
-                     const TString& clientDC, bool rangesMode, const NPersQueue::TTopicConverterPtr& topic, bool directRead,
-                     bool useMigrationProtocol);
+                     const TString& clientDC, bool rangesMode, const NPersQueue::TTopicConverterPtr& topic, const TString& database, bool directRead,
+                     bool useMigrationProtocol, ui32 maxTimeLagMs, ui64 readTimestampMs, const std::set<NPQ::TPartitionGraph::Node*>& parents,
+                     const std::unordered_set<ui64>& notCommitedToFinishParents);
     ~TPartitionActor();
 
     void Bootstrap(const NActors::TActorContext& ctx);
@@ -100,6 +104,12 @@ private:
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
             HFunc(TEvPersQueue::TEvResponse, Handle);
             HFunc(TEvPersQueue::TEvHasDataInfoResponse, Handle);
+
+            HFunc(NKqp::TEvKqp::TEvCreateSessionResponse, Handle);
+            HFunc(NKqp::TEvKqp::TEvQueryResponse, Handle);
+
+            HFunc(TEvPQProxy::TEvParentCommitedToFinish, Handle);
+
         default:
             break;
         };
@@ -123,12 +133,22 @@ private:
     void Handle(TEvPersQueue::TEvResponse::TPtr& ev, const NActors::TActorContext& ctx);
     void Handle(TEvPersQueue::TEvHasDataInfoResponse::TPtr& ev, const NActors::TActorContext& ctx);
 
+    void Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev, const NActors::TActorContext& ctx);
+    void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx);
+
+    void Handle(TEvPQProxy::TEvParentCommitedToFinish::TPtr& ev, const TActorContext& ctx);
+
     void HandlePoison(NActors::TEvents::TEvPoisonPill::TPtr& ev, const NActors::TActorContext& ctx);
     void HandleWakeup(const NActors::TActorContext& ctx);
     void DoWakeup(const NActors::TActorContext& ctx);
 
     void InitLockPartition(const NActors::TActorContext& ctx);
     void InitStartReading(const NActors::TActorContext& ctx);
+    void RestartDirectReadSession();
+    void    OnDirectReadsRestored();
+    [[nodiscard]] bool SendNextRestorePrepareOrForget();
+    [[nodiscard]] bool SendNextRestorePublishRequest();
+    void ResendRecentRequests();
 
     void RestartPipe(const NActors::TActorContext& ctx, const TString& reason, const NPersQueue::NErrorCode::EErrorCode errorCode);
     void WaitDataInPartition(const NActors::TActorContext& ctx);
@@ -137,6 +157,11 @@ private:
     void SendPublishDirectRead(const ui64 directReadId, const TActorContext& ctx);
     void SendForgetDirectRead(const ui64 directReadId, const TActorContext& ctx);
     void SendPartitionReady(const TActorContext& ctx);
+    void CommitDone(ui64 cookie, const TActorContext& ctx);
+    NKikimrClient::TPersQueueRequest MakeCreateSessionRequest(bool initial) const;
+    NKikimrClient::TPersQueueRequest MakeReadRequest(ui64 readOffset, ui64 lastOffset, ui64 maxCount,
+                                                                      ui64 maxSize, ui64 maxTimeLagMs, ui64 readTimestampMs,
+                                                                      ui64 directReadId, ui64 sizeEstimate = 0) const;
 
 
 private:
@@ -153,9 +178,13 @@ private:
 
     const ui64 TabletID;
 
+    const ui32 MaxTimeLagMs;
+    const ui64 ReadTimestampMs;
+
     ui64 ReadOffset;
     ui64 ClientReadOffset;
     TMaybe<ui64> ClientCommitOffset;
+    bool ClientHasAnyCommits;
     bool ClientVerifyReadOffset;
     ui64 CommittedOffset;
     ui64 WriteTimestampEstimateMs;
@@ -198,22 +227,44 @@ private:
     };
 
     std::deque<std::pair<ui64, TCommitInfo>> CommitsInfly; //ReadId, Offset
+    std::unordered_map<ui64, std::shared_ptr<TDistributedCommitHelper>> Kqps;
+
+    std::set<NPQ::TPartitionGraph::Node*> Parents;
 
     TTopicCounters Counters;
 
     bool CommitsDisabled;
     ui64 CommitCookie;
     NPersQueue::TTopicConverterPtr Topic;
+    TString Database;
 
     bool DirectRead = false;
 
     ui64 DirectReadId = 1;
-    std::map<ui64, NKikimrClient::TPersQueuePartitionResponse::TCmdPrepareDirectReadResult> DirectReads;
+    std::map<ui64, NKikimrClient::TPersQueuePartitionResponse::TCmdPrepareDirectReadResult> DirectReadResults;
+    std::set<ui64> PublishedDirectReads;
+
+    std::map<ui64, NKikimrClient::TPersQueuePartitionResponse::TCmdPrepareDirectReadResult> DirectReadsToRestore;
+    std::set<ui64> DirectReadsToPublish;
+    std::set<ui64> UnpublishedDirectReads;
+    std::set<ui64> DirectReadsToForget;
+
+    enum class EDirectReadRestoreStage {
+        None,
+        Session,
+        Prepare,
+        Publish,
+        Forget
+    };
+    ui64 RestoredDirectReadId = 0;
+    EDirectReadRestoreStage DirectReadRestoreStage = EDirectReadRestoreStage::None;
 
     bool UseMigrationProtocol;
 
     bool FirstRead;
     bool ReadingFinishedSent;
+
+    std::unordered_set<ui64> NotCommitedToFinishParents;
 };
 
 

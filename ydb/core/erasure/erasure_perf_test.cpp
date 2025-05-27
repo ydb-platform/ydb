@@ -225,7 +225,7 @@ Y_UNIT_TEST_SUITE(TErasurePerfTest) {
 }
 
 inline TRope RopeFromStringReference(TString string) {
-    if (string.Empty()) {
+    if (string.empty()) {
         return TRope();
     }
     return TRope(std::move(string));

@@ -1,0 +1,7 @@
+--- contrib/python/psutil/py3/psutil/arch/windows/proc.h	(index)
++++ contrib/python/psutil/py3/psutil/arch/windows/proc.h	(working tree)
+@@ -9,2 +9,2 @@
+-PyObject *TimeoutExpired;
+-PyObject *TimeoutAbandoned;
++extern PyObject *TimeoutExpired;
++extern PyObject *TimeoutAbandoned;

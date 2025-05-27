@@ -6,7 +6,7 @@
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/public/lib/json_value/ydb_json_value.h>
-#include <ydb/public/sdk/cpp/client/ydb_result/result.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 
 namespace NKikimr::NViewer {
 
@@ -144,7 +144,6 @@ public:
             hFunc(NKqp::TEvKqp::TEvQueryResponse, HandleReply);
             hFunc(NKqp::TEvKqp::TEvAbortExecution, HandleReply);
             hFunc(NKqp::TEvKqpExecuter::TEvStreamData, HandleReply);
-            hFunc(NKqp::TEvKqpExecuter::TEvStreamProfile, HandleReply);
 
             cFunc(TEvents::TSystem::Wakeup, HandleTimeout);
         }
@@ -158,6 +157,7 @@ public:
         auto event = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
         NKikimrKqp::TQueryRequest& request = *event->Record.MutableRequest();
         request.SetQuery(Query);
+        request.SetClientAddress(Event->Get()->Request.GetRemoteAddr());
         if (Action.empty() || Action == "execute-script" || Action == "execute") {
             request.SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
             request.SetType(NKikimrKqp::QUERY_TYPE_SQL_SCRIPT);
@@ -230,7 +230,7 @@ public:
             RequestStateStorageEndpointsLookup(Database); // to find some dynamic node and redirect query there
         }
 
-        if (Requests == 0) {
+        if (!WaitingForResponse()) {
             SendKpqProxyRequest();
         }
         Become(&TThis::StateWork, TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup());
@@ -413,7 +413,7 @@ private:
     }
 
     void HandleReply(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev) {
-        Handle(ev->Get()->Record.GetRef());
+        Handle(ev->Get()->Record);
     }
 
     void HandleReply(TEvViewer::TEvViewerResponse::TPtr& ev) {
@@ -429,18 +429,13 @@ private:
         Y_UNUSED(ev);
     }
 
-    void HandleReply(NKqp::TEvKqpExecuter::TEvStreamProfile::TPtr& ev) {
-        Y_UNUSED(ev);
-    }
-
     void HandleReply(NKqp::TEvKqpExecuter::TEvStreamData::TPtr& ev) {
         const NKikimrKqp::TEvExecuterStreamData& data(ev->Get()->Record);
 
         ResultSets.emplace_back();
         ResultSets.back() = std::move(data.GetResultSet());
 
-        THolder<NKqp::TEvKqpExecuter::TEvStreamDataAck> ack = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>();
-        ack->Record.SetSeqNo(ev->Get()->Record.GetSeqNo());
+        THolder<NKqp::TEvKqpExecuter::TEvStreamDataAck> ack = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(ev->Get()->Record.GetSeqNo(), ev->Get()->Record.GetChannelId());
         Send(ev->Sender, ack.Release());
     }
 
@@ -493,14 +488,8 @@ private:
     void MakeOkReply(NJson::TJsonValue& jsonResponse, NKikimrKqp::TEvQueryResponse& record) {
         const auto& response = record.GetResponse();
 
-        if (response.ResultsSize() > 0 || response.YdbResultsSize() > 0) {
+        if (response.YdbResultsSize() > 0) {
             try {
-                for (const auto& result : response.GetResults()) {
-                    Ydb::ResultSet resultSet;
-                    NKqp::ConvertKqpQueryResultToDbResult(result, &resultSet);
-                    ResultSets.emplace_back(std::move(resultSet));
-                }
-
                 for (const auto& result : response.GetYdbResults()) {
                     ResultSets.emplace_back(result);
                 }

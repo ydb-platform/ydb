@@ -103,7 +103,19 @@ Y_UNIT_TEST_SUITE(TStripStringTest) {
                 StripStringLeft(TString(test.Str), EqualsStripAdapter('/')),
                 test.ResultLeft);
             UNIT_ASSERT_EQUAL(
+                StripStringLeft(TStringBuf(test.Str), EqualsStripAdapter('/')),
+                test.ResultLeft);
+            UNIT_ASSERT_EQUAL(
+                StripStringLeft(std::string_view(test.Str), EqualsStripAdapter('/')),
+                test.ResultLeft);
+            UNIT_ASSERT_EQUAL(
                 StripStringRight(TString(test.Str), EqualsStripAdapter('/')),
+                test.ResultRight);
+            UNIT_ASSERT_EQUAL(
+                StripStringRight(TStringBuf(test.Str), EqualsStripAdapter('/')),
+                test.ResultRight);
+            UNIT_ASSERT_EQUAL(
+                StripStringRight(std::string_view(test.Str), EqualsStripAdapter('/')),
                 test.ResultRight);
         };
     }
@@ -127,6 +139,16 @@ Y_UNIT_TEST_SUITE(TStripStringTest) {
                 TWtringBuf(u"/abc/"),
                 EqualsStripAdapter(u'/')),
             u"abc");
+    }
+
+    Y_UNIT_TEST(TestSelfRefStringStrip) {
+        TStringBuf sb = "  abc ";
+        StripString(sb, sb);
+        UNIT_ASSERT_EQUAL(sb, "abc");
+
+        TString str = "  abc ";
+        StripString(str, str);
+        UNIT_ASSERT_EQUAL(str, "abc");
     }
 
     Y_UNIT_TEST(TestCollapseUtf32) {
@@ -191,4 +213,4 @@ Y_UNIT_TEST_SUITE(TStripStringTest) {
         UNIT_ASSERT_EQUAL(abs2 == "Very long description string written in unknown ...", true);
         UNIT_ASSERT_EQUAL(abs3 == "Very long description string written in ...", true);
     }
-}
+} // Y_UNIT_TEST_SUITE(TStripStringTest)

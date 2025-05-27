@@ -10,7 +10,7 @@ namespace NKikimr::NOlap::NReader::NSysView::NAbstract {
 
 class ISysViewPolicy {
 private:
-    virtual std::unique_ptr<IScannerConstructor> DoCreateConstructor(const TSnapshot& snapshot, const ui64 itemsLimit, const bool reverse) const = 0;
+    virtual std::unique_ptr<IScannerConstructor> DoCreateConstructor(const TScannerConstructorContext& request) const = 0;
     virtual std::shared_ptr<IMetadataFiller> DoCreateMetadataFiller() const = 0;
 public:
     virtual ~ISysViewPolicy() = default;
@@ -24,8 +24,8 @@ public:
         AFL_VERIFY(!!result);
         return result;
     }
-    std::unique_ptr<IScannerConstructor> CreateConstructor(const TSnapshot& snapshot, const ui64 itemsLimit, const bool reverse) const {
-        auto result = DoCreateConstructor(snapshot, itemsLimit, reverse);
+    std::unique_ptr<IScannerConstructor> CreateConstructor(const TScannerConstructorContext& request) const {
+        auto result = DoCreateConstructor(request);
         AFL_VERIFY(!!result);
         return result;
     }

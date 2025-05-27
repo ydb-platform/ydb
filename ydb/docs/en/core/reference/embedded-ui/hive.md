@@ -29,11 +29,13 @@ Then there is a table where each row represents a node managed by Hive. It has t
 * **Running**: The number of tablets running.
 * **Types**: Tablet distribution by type.
 * **Usage**: A normalized dominant resource.
-* **Resources** :
+* **Resources**:
+
   * **cnt**: The number of tablets that are not using any resources.
   * **cpu**: CPU usage by tablets.
   * **mem**: RAM usage by tablets.
   * **net**: Bandwidth usage by tablets.
+
 * **Active**: Enables/disables the node to move tablets to this node.
 * **Freeze**: Disables tablets to be deployed on other nodes.
 * **Kick**: Moves all tablets from the node at once.

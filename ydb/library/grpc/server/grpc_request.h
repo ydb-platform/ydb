@@ -74,7 +74,7 @@ public:
         , Writer_(new grpc::ServerAsyncResponseWriter<TUniversalResponseRef<TOut>>(&this->Context))
         , StateFunc_(&TThis::SetRequestDone)
         , Request_(google::protobuf::Arena::CreateMessage<TIn>(&Arena_))
-        , AuthState_(Server_->NeedAuth())
+        , AuthState_(server->NeedAuth())
     {
         Y_ABORT_UNLESS(Request_);
         GRPC_LOG_DEBUG(Logger_, "[%p] created request Name# %s", this, Name_);
@@ -101,7 +101,7 @@ public:
         , StreamWriter_(new grpc::ServerAsyncWriter<TUniversalResponse<TOut>>(&this->Context))
         , StateFunc_(&TThis::SetRequestDone)
         , Request_(google::protobuf::Arena::CreateMessage<TIn>(&Arena_))
-        , AuthState_(Server_->NeedAuth())
+        , AuthState_(server->NeedAuth())
         , StreamAdaptor_(CreateStreamAdaptor())
     {
         Y_ABORT_UNLESS(Request_);
@@ -118,13 +118,6 @@ public:
 
     bool IsStreamCall() const override {
         return bool(StreamAdaptor_);
-    }
-
-    TString GetPeer() const override {
-        // Decode URL-encoded square brackets
-        auto ip = TString(this->Context.peer());
-        CGIUnescape(ip);
-        return ip;
     }
 
     bool SslServer() const override {
@@ -168,6 +161,10 @@ public:
         UnRef();
     }
 
+    TString GetPeer() const override {
+        return TBaseAsyncContext<TService>::GetPeer();
+    }
+
     TInstant Deadline() const override {
         return TBaseAsyncContext<TService>::Deadline();
     }
@@ -188,15 +185,14 @@ public:
         return TBaseAsyncContext<TService>::GetCompressionLevel();
     }
 
+    TString GetEndpointId() const override {
+        return Server_->GetEndpointId();
+    }
+
     //! Get pointer to the request's message.
     const NProtoBuf::Message* GetRequest() const override {
         return Request_;
     }
-
-    NProtoBuf::Message* GetRequestMut() override {
-        return Request_;
-    }
-
 
     TAuthState& GetAuthState() override {
         return AuthState_;
@@ -255,10 +251,10 @@ private:
         if (!Server_->IsShuttingDown()) {
             if (RequestCallback_) {
                 MakeIntrusive<TThis>(
-                    Server_, this->Service, this->CQ, Cb_, RequestCallback_, Name_, Logger_, Counters_->Clone(), RequestLimiter_)->Run();
+                    static_cast<TService*>(Server_), this->Service, this->CQ, Cb_, RequestCallback_, Name_, Logger_, Counters_->Clone(), RequestLimiter_)->Run();
             } else {
                 MakeIntrusive<TThis>(
-                    Server_, this->Service, this->CQ, Cb_, StreamRequestCallback_, Name_, Logger_, Counters_->Clone(), RequestLimiter_)->Run();
+                    static_cast<TService*>(Server_), this->Service, this->CQ, Cb_, StreamRequestCallback_, Name_, Logger_, Counters_->Clone(), RequestLimiter_)->Run();
             }
         }
     }
@@ -426,7 +422,7 @@ private:
         if (IncRequest()) {
             // Adjust counters.
             RequestSize = Request_->ByteSize();
-            Counters_->StartProcessing(RequestSize);
+            Counters_->StartProcessing(RequestSize, Deadline());
             RequestTimer.Reset();
 
             if (!SslServer()) {
@@ -547,7 +543,7 @@ private:
     }
 
     using TStateFunc = bool (TThis::*)(bool);
-    TService* Server_ = nullptr;
+    TGrpcServiceProtectiable* Server_ = nullptr;
     TOnRequest Cb_;
     TRequestCallback RequestCallback_;
     TStreamRequestCallback StreamRequestCallback_;
@@ -605,8 +601,9 @@ public:
                  typename TBase::TStreamRequestCallback requestCallback,
                  const char* name,
                  TLoggerPtr logger,
-                 ICounterBlockPtr counters)
-        : TBase{server, service, cq, std::move(cb), std::move(requestCallback), name, std::move(logger), std::move(counters), nullptr}
+                 ICounterBlockPtr counters,
+                 IGRpcRequestLimiterPtr limiter = nullptr)
+        : TBase{server, service, cq, std::move(cb), std::move(requestCallback), name, std::move(logger), std::move(counters), std::move(limiter)}
     {
     }
 };

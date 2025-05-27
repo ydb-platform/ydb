@@ -2,6 +2,8 @@
 
 #include "public.h"
 
+#include <yt/yt/core/misc/serialize.h>
+
 #include <library/cpp/yt/yson_string/string.h>
 
 namespace NYT::NYson {

@@ -1,0 +1,9 @@
+exclude:
+  - tests/test_py3.py
+  - tests/testmem.py
+  - tests/testordereddict.py
+  - tests/testsubclass.py
+  - tests/timeordereddict.py
+copy:
+  - __init__.py
+  - ordereddict.[ch]

@@ -26,8 +26,6 @@
 namespace benchmark {
 namespace internal {
 
-constexpr size_t PerfCounterValues::kMaxCounters;
-
 #if defined HAVE_LIBPFM
 
 size_t PerfCounterValues::Read(const std::vector<int>& leaders) {
@@ -218,7 +216,7 @@ PerfCounters PerfCounters::Create(
       GetErrorLogInstance() << "***WARNING*** Failed to start counters. "
                                "Claring out all counters.\n";
 
-      // Close all peformance counters
+      // Close all performance counters
       for (int id : counter_ids) {
         ::close(id);
       }

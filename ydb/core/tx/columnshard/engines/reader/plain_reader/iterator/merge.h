@@ -71,12 +71,15 @@ protected:
 
     [[nodiscard]] std::optional<NArrow::NMerger::TCursor> DrainMergerLinearScan(const std::optional<ui32> resultBufferLimit);
 
-    void PrepareResultBatch();
+    TConclusionStatus PrepareResultBatch();
 
 private:
     virtual bool DoApply(IDataReader& indexedDataRead) const override;
     virtual bool DoOnAllocated(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& guard,
         const std::shared_ptr<NGroupedMemoryManager::IAllocation>& allocation) override;
+    virtual void DoOnAllocationImpossible(const TString& errorMessage) override {
+        Context->GetCommonContext()->AbortWithError("cannot allocate memory for merge task: '" + errorMessage + "'");
+    }
 
 public:
     TBaseMergeTask(const std::shared_ptr<TMergingContext>& mergingContext, const std::shared_ptr<TSpecialReadContext>& readContext)

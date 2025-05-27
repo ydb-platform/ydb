@@ -1,12 +1,144 @@
 #include "kqp_translate.h"
 
 #include <ydb/core/kqp/provider/yql_kikimr_results.h>
-#include <ydb/library/yql/sql/sql.h>
+#include <yql/essentials/sql/sql.h>
+#include <yql/essentials/sql/v0/sql.h>
+#include <yql/essentials/sql/v1/sql.h>
+#include <yql/essentials/sql/v1/lexer/antlr3/lexer.h>
+#include <yql/essentials/sql/v1/lexer/antlr3_ansi/lexer.h>
+#include <yql/essentials/sql/v1/proto_parser/antlr3/proto_parser.h>
+#include <yql/essentials/sql/v1/proto_parser/antlr3_ansi/proto_parser.h>
+#include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
+#include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>
+#include <yql/essentials/sql/v1/proto_parser/antlr4/proto_parser.h>
+#include <yql/essentials/sql/v1/proto_parser/antlr4_ansi/proto_parser.h>
+
+#include <yql/essentials/parser/pg_wrapper/interface/parser.h>
 #include <ydb/public/api/protos/ydb_query.pb.h>
 
 
 namespace NKikimr {
 namespace NKqp {
+
+TKqpAutoParamBuilder::TKqpAutoParamBuilder()
+    : TypeProxy(*this)
+    , DataProxy(*this)
+{}
+
+ui32 TKqpAutoParamBuilder::Size() const {
+    return Values.size();
+}
+
+bool TKqpAutoParamBuilder::Contains(const TString& name) const {
+    return Values.contains(name);
+}
+
+NYql::IAutoParamTypeBuilder& TKqpAutoParamBuilder::Add(const TString& name) {
+    auto [it, inserted] = Values.emplace(name, Ydb::TypedValue{});
+    CurrentParam = &it->second;
+    TypeProxy.CurrentType = CurrentParam->mutable_type();
+    DataProxy.CurrentValue = CurrentParam->mutable_value();
+    return TypeProxy;
+}
+
+TKqpAutoParamBuilder::TTypeProxy::TTypeProxy(TKqpAutoParamBuilder& owner)
+    : Owner(owner)
+{}
+
+void TKqpAutoParamBuilder::TTypeProxy::Push() {
+    Stack.push_back(CurrentType);
+}
+
+void TKqpAutoParamBuilder::TTypeProxy::Pop() {
+    CurrentType = Stack.back();
+    Stack.pop_back();
+}
+
+void TKqpAutoParamBuilder::TTypeProxy::Pg(const TString& name) {
+    auto oid = NYql::NPg::LookupType(name).TypeId;
+    CurrentType->mutable_pg_type()->set_oid(oid);
+}
+
+void TKqpAutoParamBuilder::TTypeProxy::BeginList() {
+    Push();
+    CurrentType = CurrentType->mutable_list_type()->mutable_item();
+}
+
+void TKqpAutoParamBuilder::TTypeProxy::EndList() {
+    Pop();
+}
+
+void TKqpAutoParamBuilder::TTypeProxy::BeginTuple() {
+}
+
+void TKqpAutoParamBuilder::TTypeProxy::EndTuple() {
+}
+
+void TKqpAutoParamBuilder::TTypeProxy::BeforeItem() {
+    Push();
+    CurrentType = CurrentType->mutable_tuple_type()->add_elements();
+}
+
+void TKqpAutoParamBuilder::TTypeProxy::AfterItem() {
+    Pop();
+}
+
+NYql::IAutoParamDataBuilder& TKqpAutoParamBuilder::TTypeProxy::FinishType() {
+    CurrentType = nullptr;
+    return Owner.DataProxy;
+}
+
+TKqpAutoParamBuilder::TDataProxy::TDataProxy(TKqpAutoParamBuilder& owner)
+    : Owner(owner)
+{}
+
+void TKqpAutoParamBuilder::TDataProxy::Pg(const TMaybe<TString>& value) {
+    if (!value) {
+        CurrentValue->set_null_flag_value(NProtoBuf::NULL_VALUE);
+    } else {
+        CurrentValue->set_text_value(*value);
+    }
+}
+
+void TKqpAutoParamBuilder::TDataProxy::Push() {
+    Stack.push_back(CurrentValue);
+}
+
+void TKqpAutoParamBuilder::TDataProxy::Pop() {
+    CurrentValue = Stack.back();
+    Stack.pop_back();
+}
+
+void TKqpAutoParamBuilder::TDataProxy::BeginList() {
+}
+
+void TKqpAutoParamBuilder::TDataProxy::EndList() {
+}
+
+void TKqpAutoParamBuilder::TDataProxy::BeginTuple() {
+}
+
+void TKqpAutoParamBuilder::TDataProxy::EndTuple() {
+}
+
+void TKqpAutoParamBuilder::TDataProxy::BeforeItem() {
+    Push();
+    CurrentValue = CurrentValue->mutable_items()->Add();
+}
+
+void TKqpAutoParamBuilder::TDataProxy::AfterItem() {
+    Pop();
+}
+
+NYql::IAutoParamBuilder& TKqpAutoParamBuilder::TDataProxy::FinishData() {
+    Owner.CurrentParam = nullptr;
+    CurrentValue = nullptr;
+    return Owner;
+}
+
+NYql::IAutoParamBuilderPtr TKqpAutoParamBuilderFactory::MakeBuilder() {
+    return MakeIntrusive<TKqpAutoParamBuilder>();
+}
 
 NSQLTranslation::EBindingsMode RemapBindingsMode(NKikimrConfig::TTableServiceConfig::EBindingsMode mode) {
     switch (mode) {
@@ -54,14 +186,19 @@ NYql::EKikimrQueryType ConvertType(NKikimrKqp::EQueryType type) {
             YQL_ENSURE(false, "Unexpected query type: " << type);
     }
 }
-           
+
 NSQLTranslation::TTranslationSettings TKqpTranslationSettingsBuilder::Build(NYql::TExprContext& ctx) {
     NSQLTranslation::TTranslationSettings settings;
     settings.PgParser = UsePgParser && *UsePgParser;
-
+    settings.Antlr4Parser = false;
+    settings.EmitReadsForExists = true;
     if (settings.PgParser) {
         settings.AutoParametrizeEnabled = IsEnablePgConstsToParams ;
         settings.AutoParametrizeValuesStmt = IsEnablePgConstsToParams;
+    }
+
+    if (!settings.PgParser) {
+        settings.Antlr4Parser = IsEnableAntlr4Parser;
     }
 
     if (QueryType == NYql::EKikimrQueryType::Scan || QueryType == NYql::EKikimrQueryType::Query) {
@@ -86,6 +223,7 @@ NSQLTranslation::TTranslationSettings TKqpTranslationSettingsBuilder::Build(NYql
         settings.SaveWorldDependencies = true;
     }
 
+    settings.PGDisable = !IsEnablePgSyntax;
     settings.InferSyntaxVersion = true;
     settings.V0ForceDisable = false;
     settings.WarnOnV0 = false;
@@ -153,13 +291,34 @@ NSQLTranslation::TTranslationSettings TKqpTranslationSettingsBuilder::Build(NYql
 }
 
 NYql::TAstParseResult ParseQuery(const TString& queryText, bool isSql, TMaybe<ui16>& sqlVersion, bool& deprecatedSQL,
-        NYql::TExprContext& ctx, TKqpTranslationSettingsBuilder& settingsBuilder, bool& keepInCache, TMaybe<TString>& commandTagName) {
+        NYql::TExprContext& ctx, TKqpTranslationSettingsBuilder& settingsBuilder, bool& keepInCache, TMaybe<TString>& commandTagName,
+        NSQLTranslation::TTranslationSettings* effectiveSettings) {
     NYql::TAstParseResult astRes;
     settingsBuilder.SetSqlVersion(sqlVersion);
     if (isSql) {
         auto settings = settingsBuilder.Build(ctx);
+        TKqpAutoParamBuilderFactory autoParamBuilderFactory;
+        settings.AutoParamBuilderFactory = &autoParamBuilderFactory;
         NYql::TStmtParseInfo stmtParseInfo;
-        auto ast = NSQLTranslation::SqlToYql(queryText, settings, nullptr, &stmtParseInfo);
+
+        NSQLTranslationV1::TLexers lexers;
+        lexers.Antlr3 = NSQLTranslationV1::MakeAntlr3LexerFactory();
+        lexers.Antlr3Ansi = NSQLTranslationV1::MakeAntlr3AnsiLexerFactory();
+        lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
+        lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
+        NSQLTranslationV1::TParsers parsers;
+        parsers.Antlr3 = NSQLTranslationV1::MakeAntlr3ParserFactory();
+        parsers.Antlr3Ansi = NSQLTranslationV1::MakeAntlr3AnsiParserFactory();
+        parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory();
+        parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory();
+
+        NSQLTranslation::TTranslators translators(
+            NSQLTranslationV0::MakeTranslator(),
+            NSQLTranslationV1::MakeTranslator(lexers, parsers),
+            NSQLTranslationPG::MakeTranslator()
+        );
+
+        auto ast = NSQLTranslation::SqlToYql(translators, queryText, settings, nullptr, &stmtParseInfo, effectiveSettings);
         deprecatedSQL = (ast.ActualSyntaxType == NYql::ESyntaxType::YQLv0);
         sqlVersion = ast.ActualSyntaxType == NYql::ESyntaxType::YQLv1 ? 1 : 0;
         keepInCache = stmtParseInfo.KeepInCache;
@@ -193,11 +352,30 @@ TVector<TQueryAst> ParseStatements(const TString& queryText, bool isSql, TMaybe<
         NYql::TExprContext& ctx, TKqpTranslationSettingsBuilder& settingsBuilder) {
     TVector<TQueryAst> result;
     settingsBuilder.SetSqlVersion(sqlVersion);
+    NSQLTranslationV1::TLexers lexers;
+    lexers.Antlr3 = NSQLTranslationV1::MakeAntlr3LexerFactory();
+    lexers.Antlr3Ansi = NSQLTranslationV1::MakeAntlr3AnsiLexerFactory();
+    lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
+    lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
+    NSQLTranslationV1::TParsers parsers;
+    parsers.Antlr3 = NSQLTranslationV1::MakeAntlr3ParserFactory();
+    parsers.Antlr3Ansi = NSQLTranslationV1::MakeAntlr3AnsiParserFactory();
+    parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory();
+    parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory();
+
+    NSQLTranslation::TTranslators translators(
+        NSQLTranslationV0::MakeTranslator(),
+        NSQLTranslationV1::MakeTranslator(lexers, parsers),
+        NSQLTranslationPG::MakeTranslator()
+    );
+
     if (isSql) {
         auto settings = settingsBuilder.Build(ctx);
+        TKqpAutoParamBuilderFactory autoParamBuilderFactory;
+        settings.AutoParamBuilderFactory = &autoParamBuilderFactory;
         ui16 actualSyntaxVersion = 0;
         TVector<NYql::TStmtParseInfo> stmtParseInfo;
-        auto astStatements = NSQLTranslation::SqlToAstStatements(queryText, settings, nullptr, &actualSyntaxVersion, &stmtParseInfo);
+        auto astStatements = NSQLTranslation::SqlToAstStatements(translators, queryText, settings, nullptr, &actualSyntaxVersion, &stmtParseInfo);
         deprecatedSQL = (actualSyntaxVersion == 0);
         sqlVersion = actualSyntaxVersion;
         YQL_ENSURE(astStatements.size() == stmtParseInfo.size());

@@ -2,23 +2,23 @@
 
 namespace NYT {
 
-////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 namespace {
-    ui64 CountTotal(const TNode& data)
+    i64 CountTotal(const TNode& data)
     {
         if (data.IsMap()) {
             if (auto totalPtr = data.AsMap().FindPtr("total")) {
-                return data["total"].IntCast<ui64>();
+                return data["total"].IntCast<i64>();
             } else {
-                ui64 total = 0;
+                i64 total = 0;
                 for (const auto& keyVal: data.AsMap()) {
                     total += CountTotal(keyVal.second);
                 }
                 return total;
             }
         } else {
-            return data.IntCast<ui64>();
+            return data.IntCast<i64>();
         }
     }
 
@@ -31,7 +31,7 @@ namespace {
     }
 } // namespace
 
-////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 TJobCounter::TJobCounter(TNode data)
     : Data_(std::move(data))
@@ -41,16 +41,16 @@ TJobCounter::TJobCounter(TNode data)
     }
 }
 
-TJobCounter::TJobCounter(ui64 total)
+TJobCounter::TJobCounter(i64 total)
     : Total_(total)
 { }
 
-ui64 TJobCounter::GetTotal() const
+i64 TJobCounter::GetTotal() const
 {
     return Total_;
 }
 
-ui64 TJobCounter::GetValue(const TStringBuf key) const
+i64 TJobCounter::GetValue(const TStringBuf key) const
 {
     if (Data_.HasValue()) {
         return CountTotal(Data_[key]);
@@ -58,7 +58,7 @@ ui64 TJobCounter::GetValue(const TStringBuf key) const
     return 0;
 }
 
-////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 TJobCounters::TJobCounters(const TNode& counters)
     : Total_(0)
@@ -154,11 +154,11 @@ const TJobCounter& TJobCounters::GetBlocked() const
     return Blocked_;
 }
 
-ui64 TJobCounters::GetTotal() const
+i64 TJobCounters::GetTotal() const
 {
     return Total_;
 }
 
-////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT

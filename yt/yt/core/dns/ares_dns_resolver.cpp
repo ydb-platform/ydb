@@ -118,7 +118,7 @@ using namespace NNet;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static constexpr auto& Logger = DnsLogger;
+constinit const auto Logger = DnsLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -164,7 +164,7 @@ public:
     }
 
     TFuture<TNetworkAddress> Resolve(
-        const TString& hostName,
+        const std::string& hostName,
         const TDnsResolveOptions& options) override
     {
         EnsureRunning();
@@ -180,7 +180,7 @@ public:
 private:
     const TAresDnsResolverConfigPtr Config_;
 
-    const NProfiling::TProfiler Profiler_ = DnsProfiler.WithPrefix("/ares_resolver");
+    const NProfiling::TProfiler Profiler_ = DnsProfiler().WithPrefix("/ares_resolver");
     const NProfiling::TCounter RequestCounter_ = Profiler_.Counter("/request_count");
     const NProfiling::TCounter FailureCounter_ = Profiler_.Counter("/failure_count");
     const NProfiling::TCounter TimeoutCounter_ = Profiler_.Counter("/timeout_count");
@@ -191,7 +191,7 @@ private:
         TAresDnsResolver* Owner;
         TGuid RequestId;
         TPromise<TNetworkAddress> Promise;
-        TString HostName;
+        std::string HostName;
         TDnsResolveOptions Options;
         NProfiling::TWallTimer Timer;
         TDelayedExecutorCookie TimeoutCookie;
@@ -594,7 +594,7 @@ private:
     }
 
     std::unique_ptr<TResolveRequest> PrepareRequest(
-        const TString& hostName,
+        const std::string& hostName,
         const TDnsResolveOptions& options)
     {
         auto requestId = TGuid::Create();

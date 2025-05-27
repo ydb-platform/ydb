@@ -44,24 +44,24 @@
 #include <ydb/core/base/events.h>
 #include <ydb/library/services/services.pb.h>
 
-#include <ydb/library/yql/core/yql_expr_type_annotation.h>
-#include <ydb/library/yql/dq/actors/compute/retry_queue.h>
-#include <ydb/library/yql/minikql/mkql_string_util.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_impl.h>
-#include <ydb/library/yql/minikql/mkql_program_builder.h>
-#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
-#include <ydb/library/yql/minikql/mkql_function_registry.h>
-#include <ydb/library/yql/minikql/mkql_node_cast.h>
-#include <ydb/library/yql/minikql/mkql_terminator.h>
-#include <ydb/library/yql/minikql/comp_nodes/mkql_factories.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
+#include <ydb/library/yql/dq/actors/common/retry_queue.h>
+#include <yql/essentials/minikql/mkql_string_util.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_impl.h>
+#include <yql/essentials/minikql/mkql_program_builder.h>
+#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
+#include <yql/essentials/minikql/mkql_function_registry.h>
+#include <yql/essentials/minikql/mkql_node_cast.h>
+#include <yql/essentials/minikql/mkql_terminator.h>
+#include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_default_retry_policy.h>
-#include <ydb/library/yql/providers/common/schema/mkql/yql_mkql_schema.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
-#include <ydb/library/yql/public/udf/arrow/block_builder.h>
-#include <ydb/library/yql/public/udf/arrow/block_reader.h>
-#include <ydb/library/yql/public/udf/arrow/util.h>
-#include <ydb/library/yql/utils/yql_panic.h>
-#include <ydb/library/yql/parser/pg_wrapper/interface/arrow.h>
+#include <yql/essentials/providers/common/schema/mkql/yql_mkql_schema.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/udf/arrow/block_builder.h>
+#include <yql/essentials/public/udf/arrow/block_reader.h>
+#include <yql/essentials/public/udf/arrow/util.h>
+#include <yql/essentials/utils/yql_panic.h>
+#include <yql/essentials/parser/pg_wrapper/interface/arrow.h>
 
 #include <ydb/library/yql/providers/s3/common/util.h>
 #include <ydb/library/yql/providers/s3/common/source_context.h>
@@ -183,6 +183,7 @@ public:
         , FileSizeLimit(fileSizeLimit)
         , ReadLimit(readLimit)
         , MaybeIssues(Nothing())
+        , FatalCode(NYql::NDqProto::StatusIds::EXTERNAL_ERROR)
         , UseRuntimeListing(useRuntimeListing)
         , ConsumersCount(consumersCount)
         , BatchSizeLimit(batchSizeLimit)
@@ -302,6 +303,7 @@ public:
                                     << " and exceeds limit = " << FileSizeLimit;
                 LOG_E("TS3FileQueueActor", errorMessage);
                 MaybeIssues = TIssues{TIssue{errorMessage}};
+                FatalCode = NYql::NDqProto::StatusIds::PRECONDITION_FAILED;
                 return false;
             }
             LOG_T("TS3FileQueueActor", "SaveRetrievedResults adding path: " << object.Path);
@@ -377,7 +379,7 @@ public:
         LOG_D(
             "TS3FileQueueActor",
             "HandleGetNextBatchForErrorState Giving away rest of Objects");
-        Send(ev->Sender, new TEvS3Provider::TEvObjectPathReadError(*MaybeIssues, ev->Get()->Record.GetTransportMeta()));
+        Send(ev->Sender, new TEvS3Provider::TEvObjectPathReadError(*MaybeIssues, FatalCode, ev->Get()->Record.GetTransportMeta()));
         TryFinish(ev->Sender, ev->Get()->Record.GetTransportMeta().GetSeqNo());
     }
 
@@ -502,7 +504,8 @@ private:
                     PatternType,
                     object.GetPath()},
                 Nothing(),
-                AllowLocalFiles);
+                AllowLocalFiles,
+                NActors::TActivationContext::ActorSystem());
             Fetch();
             return true;
         }
@@ -557,7 +560,7 @@ private:
                     if (!MaybeIssues.Defined()) {
                         SendObjects(consumer, requests.front());
                     } else {
-                        Send(consumer, new TEvS3Provider::TEvObjectPathReadError(*MaybeIssues, requests.front()));
+                        Send(consumer, new TEvS3Provider::TEvObjectPathReadError(*MaybeIssues, FatalCode, requests.front()));
                         TryFinish(consumer, requests.front().GetSeqNo());
                     }
                     requests.pop_front();
@@ -602,6 +605,7 @@ private:
     size_t CurrentDirectoryPathIndex = 0;
     THashMap<NActors::TActorId, TDeque<NDqProto::TMessageTransportMeta>> PendingRequests;
     TMaybe<TIssues> MaybeIssues;
+    NYql::NDqProto::StatusIds::StatusCode FatalCode;
     bool UseRuntimeListing;
     ui64 ConsumersCount;
     ui64 BatchSizeLimit;

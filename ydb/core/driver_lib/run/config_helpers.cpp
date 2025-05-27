@@ -1,5 +1,9 @@
 #include "config_helpers.h"
 
+#include <ydb/core/base/localdb.h>
+#include <ydb/core/protos/bootstrap.pb.h>
+#include <ydb/core/protos/resource_broker.pb.h>
+
 #include <ydb/library/actors/util/affinity.h>
 
 
@@ -52,6 +56,7 @@ void AddExecutorPool(NActors::TCpuManagerConfig& cpuManager, const NKikimrConfig
             NActors::TBasicExecutorPoolConfig basic;
             basic.PoolId = poolId;
             basic.PoolName = poolConfig.GetName();
+            basic.UseRingQueue = systemConfig.HasUseRingQueue() && systemConfig.GetUseRingQueue();
             if (poolConfig.HasMaxAvgPingDeviation() && counters) {
                 auto poolGroup = counters->GetSubgroup("execpool", basic.PoolName);
                 auto &poolInfo = cpuManager.PingInfoByPool[poolId];
@@ -81,7 +86,14 @@ void AddExecutorPool(NActors::TCpuManagerConfig& cpuManager, const NKikimrConfig
             basic.MaxThreadCount = poolConfig.GetMaxThreads();
             basic.DefaultThreadCount = poolConfig.GetThreads();
             basic.Priority = poolConfig.GetPriority();
+            if (poolConfig.HasMinLocalQueueSize()) {
+                basic.MinLocalQueueSize = poolConfig.GetMinLocalQueueSize();
+            }
+            if (poolConfig.HasMaxLocalQueueSize()) {
+                basic.MaxLocalQueueSize = poolConfig.GetMaxLocalQueueSize();
+            }
             cpuManager.Basic.emplace_back(std::move(basic));
+            
             break;
         }
 
@@ -92,6 +104,7 @@ void AddExecutorPool(NActors::TCpuManagerConfig& cpuManager, const NKikimrConfig
             io.Threads = poolConfig.GetThreads();
             io.Affinity = ParseAffinity(poolConfig.GetAffinity());
             cpuManager.IO.emplace_back(std::move(io));
+            io.UseRingQueue = systemConfig.HasUseRingQueue() && systemConfig.GetUseRingQueue();
             break;
         }
 
@@ -111,5 +124,32 @@ NActors::TSchedulerConfig CreateSchedulerConfig(const NKikimrConfig::TActorSyste
 }
 
 }  // namespace NActorSystemConfigHelpers
+
+namespace NKikimrConfigHelpers {
+
+NMemory::TResourceBrokerConfig CreateMemoryControllerResourceBrokerConfig(const NKikimrConfig::TAppConfig& config) {
+    NMemory::TResourceBrokerConfig resourceBrokerSelfConfig; // for backward compatibility
+    auto mergeResourceBrokerConfigs = [&](const NKikimrResourceBroker::TResourceBrokerConfig& resourceBrokerConfig) {
+        if (resourceBrokerConfig.HasResourceLimit() && resourceBrokerConfig.GetResourceLimit().HasMemory()) {
+            resourceBrokerSelfConfig.LimitBytes = resourceBrokerConfig.GetResourceLimit().GetMemory();
+        }
+        for (const auto& queue : resourceBrokerConfig.GetQueues()) {
+            if (queue.GetName() == NLocalDb::KqpResourceManagerQueue) {
+                if (queue.HasLimit() && queue.GetLimit().HasMemory()) {
+                    resourceBrokerSelfConfig.QueryExecutionLimitBytes = queue.GetLimit().GetMemory();
+                }
+            }
+        }
+    };
+    if (config.HasBootstrapConfig() && config.GetBootstrapConfig().HasResourceBroker()) {
+        mergeResourceBrokerConfigs(config.GetBootstrapConfig().GetResourceBroker());
+    }
+    if (config.HasResourceBrokerConfig()) {
+        mergeResourceBrokerConfigs(config.GetResourceBrokerConfig());
+    }
+    return resourceBrokerSelfConfig;
+}
+
+}  // namespace NKikimrConfigHelpers
 
 }  // namespace NKikimr

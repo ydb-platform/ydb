@@ -2,7 +2,10 @@
 #include "schemeshard__operation_common.h"
 #include "schemeshard_impl.h"
 
+#include "schemeshard_utils.h"  // for PQGroupReserve
+
 #include <ydb/core/base/subdomain.h>
+#include <ydb/core/persqueue/events/global.h>
 
 namespace {
 
@@ -16,7 +19,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TDropPQ TDropParts"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
 public:
@@ -186,7 +189,7 @@ public:
         const PQGroupReserve reserve(config, pqGroup->ActivePartitionCount);
 
         auto domainInfo = context.SS->ResolveDomainInfo(pathId);
-        domainInfo->DecPathsInside();
+        domainInfo->DecPathsInside(context.SS);
         domainInfo->DecPQPartitionsInside(pqGroup->TotalPartitionCount);
         domainInfo->DecPQReservedStorage(reserve.Storage);
         domainInfo->AggrDiskSpaceUsage({}, pqGroup->Stats);
@@ -202,7 +205,7 @@ public:
 
         context.SS->TabletCounters->Simple()[COUNTER_STREAM_SHARDS_COUNT].Sub(pqGroup->TotalPartitionCount);
 
-        parentDir->DecAliveChildren();
+        DecAliveChildrenDirect(OperationId, parentDir, context); // for correct discard of ChildrenExist prop
 
         if (!AppData()->DisableSchemeShardCleanupOnDropForTest) {
             context.SS->PersistRemovePersQueueGroup(db, pathId);

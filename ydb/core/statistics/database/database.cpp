@@ -10,8 +10,9 @@ namespace NKikimr::NStat {
 
 class TStatisticsTableCreator : public TActorBootstrapped<TStatisticsTableCreator> {
 public:
-    explicit TStatisticsTableCreator(std::unique_ptr<NActors::IEventBase> resultEvent)
+    explicit TStatisticsTableCreator(std::unique_ptr<NActors::IEventBase> resultEvent, const TString& database)
         : ResultEvent(std::move(resultEvent))
+        , Database(database)
     {}
 
     void Registered(NActors::TActorSystem* sys, const NActors::TActorId& owner) override {
@@ -21,6 +22,10 @@ public:
 
     void Bootstrap() {
         Become(&TStatisticsTableCreator::StateFunc);
+
+        NKikimrSchemeOp::TPartitioningPolicy partitioningPolicy;
+        partitioningPolicy.SetSizeToSplit(2 << 30);
+
         Register(
             CreateTableCreator(
                 { ".metadata", "_statistics" },
@@ -34,7 +39,9 @@ public:
                 { "owner_id", "local_path_id", "stat_type", "column_tag"},
                 NKikimrServices::STATISTICS,
                 Nothing(),
-                true
+                Database,
+                true,
+                std::move(partitioningPolicy)
             )
         );
     }
@@ -62,11 +69,12 @@ private:
 
 private:
     std::unique_ptr<NActors::IEventBase> ResultEvent;
+    const TString Database;
     NActors::TActorId Owner;
 };
 
-NActors::IActor* CreateStatisticsTableCreator(std::unique_ptr<NActors::IEventBase> event) {
-    return new TStatisticsTableCreator(std::move(event));
+NActors::IActor* CreateStatisticsTableCreator(std::unique_ptr<NActors::IEventBase> event, const TString& database) {
+    return new TStatisticsTableCreator(std::move(event), database);
 }
 
 
@@ -76,14 +84,15 @@ private:
     const ui64 StatType;
     const std::vector<ui32> ColumnTags;
     const std::vector<TString> Data;
+
 public:
-    TSaveStatisticsQuery(const TPathId& pathId, ui64 statType,
-        std::vector<ui32>&& columnTags, std::vector<TString>&& data)
-        : NKikimr::TQueryBase(NKikimrServices::STATISTICS, {}, {}, true)
+    TSaveStatisticsQuery(const TString& database, const TPathId& pathId, ui64 statType,
+        const std::vector<ui32>& columnTags, const std::vector<TString>& data)
+        : NKikimr::TQueryBase(NKikimrServices::STATISTICS, {}, database, true)
         , PathId(pathId)
         , StatType(statType)
-        , ColumnTags(std::move(columnTags))
-        , Data(std::move(data))
+        , ColumnTags(columnTags)
+        , Data(data)
     {
         Y_ABORT_UNLESS(ColumnTags.size() == Data.size());
     }
@@ -143,15 +152,64 @@ public:
     void OnFinish(Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) override {
         Y_UNUSED(issues);
         auto response = std::make_unique<TEvStatistics::TEvSaveStatisticsQueryResponse>();
+        response->Status = status;
+        response->Issues = std::move(issues);
         response->Success = (status == Ydb::StatusIds::SUCCESS);
+        response->PathId = PathId;
         Send(Owner, response.release());
     }
 };
 
-NActors::IActor* CreateSaveStatisticsQuery(const TPathId& pathId, ui64 statType,
-    std::vector<ui32>&& columnTags, std::vector<TString>&& data)
+class TSaveStatisticsRetryingQuery : public TActorBootstrapped<TSaveStatisticsRetryingQuery> {
+private:
+    const NActors::TActorId ReplyActorId;
+    const TString Database;
+    const TPathId PathId;
+    const ui64 StatType;
+    const std::vector<ui32> ColumnTags;
+    const std::vector<TString> Data;
+
+public:
+    using TSaveRetryingQuery = TQueryRetryActor<
+        TSaveStatisticsQuery, TEvStatistics::TEvSaveStatisticsQueryResponse,
+        const TString&, const TPathId&, ui64, const std::vector<ui32>&, const std::vector<TString>&>;
+
+    TSaveStatisticsRetryingQuery(const NActors::TActorId& replyActorId, const TString& database,
+        const TPathId& pathId, ui64 statType, std::vector<ui32>&& columnTags, std::vector<TString>&& data)
+        : ReplyActorId(replyActorId)
+        , Database(database)
+        , PathId(pathId)
+        , StatType(statType)
+        , ColumnTags(std::move(columnTags))
+        , Data(std::move(data))
+    {}
+
+    void Bootstrap() {
+        Register(new TSaveRetryingQuery(
+            SelfId(),
+            TSaveRetryingQuery::IRetryPolicy::GetExponentialBackoffPolicy(
+                TSaveRetryingQuery::Retryable, TDuration::MilliSeconds(10),
+                TDuration::MilliSeconds(200), TDuration::Seconds(1),
+                std::numeric_limits<size_t>::max(), TDuration::Seconds(1)),
+            Database, PathId, StatType, ColumnTags, Data
+        ));
+        Become(&TSaveStatisticsRetryingQuery::StateFunc);
+    }
+
+    STRICT_STFUNC(StateFunc,
+        hFunc(TEvStatistics::TEvSaveStatisticsQueryResponse, Handle);
+    )
+
+    void Handle(TEvStatistics::TEvSaveStatisticsQueryResponse::TPtr& ev) {
+        Send(ReplyActorId, ev->Release().Release());
+        PassAway();
+    }
+};
+
+NActors::IActor* CreateSaveStatisticsQuery(const NActors::TActorId& replyActorId, const TString& database,
+    const TPathId& pathId, ui64 statType, std::vector<ui32>&& columnTags, std::vector<TString>&& data)
 {
-    return new TSaveStatisticsQuery(pathId, statType, std::move(columnTags), std::move(data));
+    return new TSaveStatisticsRetryingQuery(replyActorId, database, pathId, statType, std::move(columnTags), std::move(data));
 }
 
 
@@ -160,17 +218,15 @@ private:
     const TPathId PathId;
     const ui64 StatType;
     const ui32 ColumnTag;
-    const ui64 Cookie;
 
     std::optional<TString> Data;
 
 public:
-    TLoadStatisticsQuery(const TPathId& pathId, ui64 statType, ui32 columnTag, ui64 cookie)
-        : NKikimr::TQueryBase(NKikimrServices::STATISTICS, {}, {}, true)
+    TLoadStatisticsQuery(const TString& database, const TPathId& pathId, ui64 statType, ui32 columnTag)
+        : NKikimr::TQueryBase(NKikimrServices::STATISTICS, {}, database, true)
         , PathId(pathId)
         , StatType(statType)
         , ColumnTag(columnTag)
-        , Cookie(cookie)
     {}
 
     void OnRunQuery() override {
@@ -226,8 +282,9 @@ public:
     void OnFinish(Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) override {
         Y_UNUSED(issues);
         auto response = std::make_unique<TEvStatistics::TEvLoadStatisticsQueryResponse>();
+        response->Status = status;
+        response->Issues = std::move(issues);
         response->Success = (status == Ydb::StatusIds::SUCCESS);
-        response->Cookie = Cookie;
         if (response->Success) {
             response->Data = Data;
         }
@@ -235,10 +292,54 @@ public:
     }
 };
 
-NActors::IActor* CreateLoadStatisticsQuery(const TPathId& pathId, ui64 statType,
-    ui32 columnTag, ui64 cookie)
+class TLoadStatisticsRetryingQuery : public TActorBootstrapped<TLoadStatisticsRetryingQuery> {
+private:
+    const NActors::TActorId ReplyActorId;
+    const TString Database;
+    const TPathId PathId;
+    const ui64 StatType;
+    const ui32 ColumnTag;
+
+public:
+    using TLoadRetryingQuery = TQueryRetryActor<
+        TLoadStatisticsQuery, TEvStatistics::TEvLoadStatisticsQueryResponse,
+        const TString&, const TPathId&, ui64, ui32>;
+
+    TLoadStatisticsRetryingQuery(const NActors::TActorId& replyActorId, const TString& database,
+        const TPathId& pathId, ui64 statType, ui32 columnTag)
+        : ReplyActorId(replyActorId)
+        , Database(database)
+        , PathId(pathId)
+        , StatType(statType)
+        , ColumnTag(columnTag)
+    {}
+
+    void Bootstrap() {
+        Register(new TLoadRetryingQuery(
+            SelfId(),
+            TLoadRetryingQuery::IRetryPolicy::GetExponentialBackoffPolicy(
+                TLoadRetryingQuery::Retryable, TDuration::MilliSeconds(10),
+                TDuration::MilliSeconds(200), TDuration::Seconds(1),
+                std::numeric_limits<size_t>::max(), TDuration::Seconds(1)),
+            Database, PathId, StatType, ColumnTag
+        ));
+        Become(&TLoadStatisticsRetryingQuery::StateFunc);
+    }
+
+    STRICT_STFUNC(StateFunc,
+        hFunc(TEvStatistics::TEvLoadStatisticsQueryResponse, Handle);
+    )
+
+    void Handle(TEvStatistics::TEvLoadStatisticsQueryResponse::TPtr& ev) {
+        Send(ReplyActorId, ev->Release().Release());
+        PassAway();
+    }
+};
+
+NActors::IActor* CreateLoadStatisticsQuery(const NActors::TActorId& replyActorId,
+    const TString& database, const TPathId& pathId, ui64 statType, ui32 columnTag)
 {
-    return new TLoadStatisticsQuery(pathId, statType, columnTag, cookie);
+    return new TLoadStatisticsRetryingQuery(replyActorId, database, pathId, statType, columnTag);
 }
 
 
@@ -247,8 +348,8 @@ private:
     const TPathId PathId;
 
 public:
-    TDeleteStatisticsQuery(const TPathId& pathId)
-        : NKikimr::TQueryBase(NKikimrServices::STATISTICS, {}, {}, true)
+    TDeleteStatisticsQuery(const TString& database, const TPathId& pathId)
+        : NKikimr::TQueryBase(NKikimrServices::STATISTICS, {}, database, true)
         , PathId(pathId)
     {
     }
@@ -283,14 +384,57 @@ public:
     void OnFinish(Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) override {
         Y_UNUSED(issues);
         auto response = std::make_unique<TEvStatistics::TEvDeleteStatisticsQueryResponse>();
+        response->Status = status;
+        response->Issues = std::move(issues);
         response->Success = (status == Ydb::StatusIds::SUCCESS);
         Send(Owner, response.release());
     }
 };
 
-NActors::IActor* CreateDeleteStatisticsQuery(const TPathId& pathId)
+class TDeleteStatisticsRetryingQuery : public TActorBootstrapped<TDeleteStatisticsRetryingQuery> {
+private:
+    const NActors::TActorId ReplyActorId;
+    const TString Database;
+    const TPathId PathId;
+
+public:
+    using TDeleteRetryingQuery = TQueryRetryActor<
+        TDeleteStatisticsQuery, TEvStatistics::TEvDeleteStatisticsQueryResponse,
+        const TString&, const TPathId&>;
+
+    TDeleteStatisticsRetryingQuery(const NActors::TActorId& replyActorId, const TString& database,
+        const TPathId& pathId)
+        : ReplyActorId(replyActorId)
+        , Database(database)
+        , PathId(pathId)
+    {}
+
+    void Bootstrap() {
+        Register(new TDeleteRetryingQuery(
+            SelfId(),
+            TDeleteRetryingQuery::IRetryPolicy::GetExponentialBackoffPolicy(
+                TDeleteRetryingQuery::Retryable, TDuration::MilliSeconds(10),
+                TDuration::MilliSeconds(200), TDuration::Seconds(1),
+                std::numeric_limits<size_t>::max(), TDuration::Seconds(1)),
+            Database, PathId
+        ));
+        Become(&TDeleteStatisticsRetryingQuery::StateFunc);
+    }
+
+    STRICT_STFUNC(StateFunc,
+        hFunc(TEvStatistics::TEvDeleteStatisticsQueryResponse, Handle);
+    )
+
+    void Handle(TEvStatistics::TEvDeleteStatisticsQueryResponse::TPtr& ev) {
+        Send(ReplyActorId, ev->Release().Release());
+        PassAway();
+    }
+};
+
+NActors::IActor* CreateDeleteStatisticsQuery(const NActors::TActorId& replyActorId, const TString& database,
+    const TPathId& pathId)
 {
-    return new TDeleteStatisticsQuery(pathId);
+    return new TDeleteStatisticsRetryingQuery(replyActorId, database, pathId);
 }
 
 } // NKikimr::NStat

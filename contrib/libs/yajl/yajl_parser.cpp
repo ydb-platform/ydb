@@ -1,4 +1,4 @@
-#include "yajl_parser.h"
+#include "src/yajl_parser.h"
 
 #include <errno.h>
 

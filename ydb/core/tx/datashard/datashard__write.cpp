@@ -65,7 +65,7 @@ bool TDataShard::TTxWrite::Execute(TTransactionContext& txc, const TActorContext
         }
 
         if (Ev) {
-            Y_ABORT_UNLESS(!Op);
+            Y_ENSURE(!Op);
 
             if (Self->CheckDataTxRejectAndReply(Ev, ctx)) {
                 Ev = nullptr;
@@ -73,14 +73,14 @@ bool TDataShard::TTxWrite::Execute(TTransactionContext& txc, const TActorContext
             }
 
             TOperation::TPtr op = Self->Pipeline.BuildOperation(std::move(Ev), ReceivedAt, TieBreakerIndex, txc, std::move(DatashardTransactionSpan));
-            Y_ABORT_UNLESS(!Ev);
+            Y_ENSURE(!Ev);
 
             TWriteOperation* writeOp = TWriteOperation::CastWriteOperation(op);
 
             // Unsuccessful operation parse.
             if (op->IsAborted()) {
                 LWTRACK(ProposeTransactionParsed, op->Orbit, false);
-                Y_ABORT_UNLESS(writeOp->GetWriteResult());
+                Y_ENSURE(writeOp->GetWriteResult());
                 op->OperationSpan.EndError("Unsuccessful operation parse");
                 ctx.Send(op->GetTarget(), writeOp->ReleaseWriteResult().release());
                 return true;
@@ -95,7 +95,7 @@ bool TDataShard::TTxWrite::Execute(TTransactionContext& txc, const TActorContext
             Op->IncrementInProgress();
         }
 
-        Y_ABORT_UNLESS(Op && Op->IsInProgress() && !Op->GetExecutionPlan().empty());
+        Y_ENSURE(Op && Op->IsInProgress() && !Op->GetExecutionPlan().empty());
 
         auto status = Self->Pipeline.RunExecutionPlan(Op, CompleteList, txc, ctx);
 
@@ -125,7 +125,7 @@ bool TDataShard::TTxWrite::Execute(TTransactionContext& txc, const TActorContext
                 break;
 
             default:
-                Y_FAIL_S("unexpected execution status " << status << " for operation " << *Op << " " << Op->GetKind() << " at " << Self->TabletID());
+                Y_ENSURE(false, "unexpected execution status " << status << " for operation " << *Op << " " << Op->GetKind() << " at " << Self->TabletID());
         }
 
         if (WaitComplete || !CompleteList.empty()) {
@@ -141,15 +141,6 @@ bool TDataShard::TTxWrite::Execute(TTransactionContext& txc, const TActorContext
     } catch (const TNotReadyTabletException&) {
         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "TX [" << 0 << " : " << TxId << "] can't prepare (tablet's not ready) at tablet " << Self->TabletID());
         return false;
-    } catch (const TSchemeErrorTabletException& ex) {
-        Y_UNUSED(ex);
-        Y_ABORT();
-    } catch (const TMemoryLimitExceededException& ex) {
-        Y_ABORT("there must be no leaked exceptions: TMemoryLimitExceededException");
-    } catch (const std::exception& e) {
-        Y_ABORT("there must be no leaked exceptions: %s", e.what());
-    } catch (...) {
-        Y_ABORT("there must be no leaked exceptions");
     }
 
     return true;
@@ -159,7 +150,7 @@ void TDataShard::TTxWrite::Complete(const TActorContext& ctx) {
     LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "TTxWrite complete: at tablet# " << Self->TabletID());
 
     if (Op) {
-        Y_ABORT_UNLESS(!Op->GetExecutionPlan().empty());
+        Y_ENSURE(!Op->GetExecutionPlan().empty());
         if (!CompleteList.empty()) {
             auto commitTime = AppData()->TimeProvider->Now() - CommitStart;
             Op->SetCommitTime(CompleteList.front(), commitTime);
@@ -184,7 +175,6 @@ void TDataShard::TTxWrite::Complete(const TActorContext& ctx) {
     }
 
     Self->CheckSplitCanStart(ctx);
-    Self->CheckMvccStateChangeCanStart(ctx);
 }
 
 
@@ -226,7 +216,7 @@ void TDataShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActorCo
             UpdateProposeQueueSize();
             return;
         } else {
-            Y_ABORT("Unexpected failure to add a waiting unrejected tx");
+            Y_ENSURE(false, "Unexpected failure to add a waiting unrejected tx");
         }
     }
 
@@ -242,7 +232,7 @@ ui64 NEvWrite::TConvertor::GetTxId(const TAutoPtr<IEventHandle>& ev) {
         case NEvents::TDataEvents::TEvWrite::EventType:
             return ev->Get<NEvents::TDataEvents::TEvWrite>()->GetTxId();
         default:
-            Y_FAIL_S("Unexpected event type " << ev->GetTypeRewrite());
+            Y_ENSURE(false, "Unexpected event type " << ev->GetTypeRewrite());
     }
 }
 
@@ -255,7 +245,7 @@ ui64 NEvWrite::TConvertor::GetProposeFlags(NKikimrDataEvents::TEvWrite::ETxMode 
         case NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE:
             return TTxFlags::Immediate;
         default:
-            Y_FAIL_S("Unexpected tx mode " << txMode);
+            Y_ENSURE(false, "Unexpected tx mode " << txMode);
     }
 }
 
@@ -293,8 +283,9 @@ NKikimrDataEvents::TEvWriteResult::EStatus NEvWrite::TConvertor::ConvertErrCode(
         case NKikimrTxDataShard::TError_EKind_SCHEME_CHANGED:
             return NKikimrDataEvents::TEvWriteResult::STATUS_SCHEME_CHANGED;
         case NKikimrTxDataShard::TError_EKind_OUT_OF_SPACE:
-        case NKikimrTxDataShard::TError_EKind_DISK_SPACE_EXHAUSTED:
             return NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED;
+        case NKikimrTxDataShard::TError_EKind_DISK_SPACE_EXHAUSTED:
+            return NKikimrDataEvents::TEvWriteResult::STATUS_DISK_SPACE_EXHAUSTED;
         default:
             return NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR;
     }
@@ -314,7 +305,7 @@ TOperation::TPtr NEvWrite::TConvertor::MakeOperation(EOperationKind kind, const 
         case EOperationKind::DirectTx:
         case EOperationKind::ReadTx:
         case EOperationKind::Unknown:
-            Y_ABORT("Unsupported");
+            Y_ENSURE(false, "Unsupported");
     }
 }
 }

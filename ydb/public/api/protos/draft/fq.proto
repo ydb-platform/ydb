@@ -205,6 +205,10 @@ message ResultSetMeta {
     bool truncated = 3;
 }
 
+message QueryTimeline {
+    string svg = 1; // No validation because generated on server side
+}
+
 message Query {
     QueryMeta meta = 1;
     QueryContent content = 2;
@@ -214,6 +218,7 @@ message Query {
     QueryStatistics statistics = 6;
     repeated ResultSetMeta result_set_meta = 7;
     QueryAst ast = 8;
+    QueryTimeline timeline = 9;
 }
 
 message QueryStatistics {
@@ -426,11 +431,16 @@ message ServiceAccountAuth {
     string id = 1 [(Ydb.length).le = 1024];
 }
 
+message TokenAuth {
+    string token = 1 [(Ydb.length).le = 1024, (Ydb.sensitive) = true];
+}
+
 message IamAuth {
     oneof identity {
         CurrentIAMTokenAuth current_iam = 1;
         ServiceAccountAuth service_account = 2;
         NoneAuth none = 3;
+        TokenAuth token = 4;
     }
 }
 
@@ -442,6 +452,7 @@ message DataStreams {
     string endpoint = 3 [(Ydb.length).le = 1024];
     string database = 4 [(Ydb.length).le = 1024];
     bool secure = 5;
+    bool shared_reading = 6;
 }
 
 message Monitoring {
@@ -509,6 +520,66 @@ message MySQLCluster {
     IamAuth auth = 5;
 }
 
+message Logging {
+    string folder_id = 1;
+    IamAuth auth = 2;
+}
+
+// TIcebergWarehouse represents settings specific to iceberg warehouse
+message IcebergWarehouse {
+    // Iceberg data located in a S3 storage
+    message S3 {
+        // Bucket in a storage
+        // e.g., s3a://iceberg-bucket
+        optional string bucket = 1 [(Ydb.length).le = 1024];
+
+        // Path in a bucket
+         // e.g., /storage
+        optional string path = 2 [(Ydb.length).le = 1024];
+    }
+
+    oneof payload {
+        S3 s3 = 1;
+    }
+}
+
+// TIcebergCatalog represents settings specific to iceberg catalog
+message IcebergCatalog {
+    // Hadoop Iceberg Catalog which is built on top of a storage
+    message Hadoop {
+        // Directory where iceberg tables are located. In case of a S3 storage the location
+        // will be "S3.uri + S3.path + Hadoop.path", e.g., if "Hadoop.path" is equal "warehouse" then
+        // the final location will be "s3a://iceberg-bucket/storage/warehouse"
+        optional string directory = 1 [(Ydb.length).le = 1024];
+    }
+
+    // Hive Iceberg Catalog which is based on a Hive Metastore
+    message HiveMetastore {
+        // Location of a hive metastore
+        // e.g., thrift://host:9083/
+        optional string uri = 1 [(Ydb.length).le = 1024];
+
+        // Hive metastore database which holds iceberg namespace
+        optional string database_name = 2 [(Ydb.length).le = 1024];
+    }
+
+    oneof payload {
+        Hadoop hadoop = 1;
+        HiveMetastore hive_metastore = 2;
+    }
+}
+
+message Iceberg {
+    // credentials to access a warehouse
+    IamAuth warehouse_auth = 2;
+
+    // warehouse config
+    IcebergWarehouse warehouse = 3;
+
+    // catalog config
+    IcebergCatalog catalog = 4;
+}
+
 message ConnectionSetting {
     enum ConnectionType {
         CONNECTION_TYPE_UNSPECIFIED = 0;
@@ -520,6 +591,8 @@ message ConnectionSetting {
         POSTGRESQL_CLUSTER = 6;
         GREENPLUM_CLUSTER = 7;
         MYSQL_CLUSTER = 8;
+        LOGGING = 9;
+        ICEBERG = 10;
     }
 
     oneof connection {
@@ -531,6 +604,8 @@ message ConnectionSetting {
         PostgreSQLCluster postgresql_cluster = 6;
         GreenplumCluster greenplum_cluster = 7;
         MySQLCluster mysql_cluster = 8;
+        Logging logging = 9;
+        Iceberg iceberg = 10;
     }
 }
 

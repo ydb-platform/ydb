@@ -37,6 +37,10 @@ bool BuildAlterTableModifyScheme(const TString& path, const Ydb::Table::AlterTab
 bool BuildAlterTableModifyScheme(const Ydb::Table::AlterTableRequest* req, NKikimrSchemeOp::TModifyScheme* modifyScheme,
     const TTableProfiles& profiles, const TPathId& resolvedPathId,
     Ydb::StatusIds::StatusCode& status, TString& error);
+bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::AlterTableRequest* req,
+    NKikimrSchemeOp::TModifyScheme* modifyScheme, Ydb::StatusIds::StatusCode& status, TString& error);
+bool BuildAlterColumnTableModifyScheme(
+    const Ydb::Table::AlterTableRequest* req, NKikimrSchemeOp::TModifyScheme* modifyScheme, Ydb::StatusIds::StatusCode& status, TString& error);
 
 bool FillAlterTableSettingsDesc(NKikimrSchemeOp::TTableDescription& out,
     const Ydb::Table::AlterTableRequest& in, const TTableProfiles& profiles,
@@ -47,16 +51,20 @@ bool BuildAlterTableAddIndexRequest(const Ydb::Table::AlterTableRequest* req, NK
     Ydb::StatusIds::StatusCode& status, TString& error);
 
 // out
+void FillColumnDescription(Ydb::Table::ColumnMeta& out, const NKikimrSchemeOp::TColumnDescription& in);
 void FillColumnDescription(Ydb::Table::DescribeTableResult& out,
     NKikimrMiniKQL::TType& splitKeyType, const NKikimrSchemeOp::TTableDescription& in);
 void FillColumnDescription(Ydb::Table::CreateTableRequest& out,
     NKikimrMiniKQL::TType& splitKeyType, const NKikimrSchemeOp::TTableDescription& in);
 void FillColumnDescription(Ydb::Table::DescribeTableResult& out, const NKikimrSchemeOp::TColumnTableDescription& in);
+void FillColumnDescription(Ydb::Table::CreateTableRequest& out, const NKikimrSchemeOp::TColumnTableDescription& in);
 // in
 bool FillColumnDescription(NKikimrSchemeOp::TTableDescription& out,
     const google::protobuf::RepeatedPtrField<Ydb::Table::ColumnMeta>& in, Ydb::StatusIds::StatusCode& status, TString& error);
-bool FillColumnDescription(NKikimrSchemeOp::TColumnTableDescription& out,
-    const google::protobuf::RepeatedPtrField<Ydb::Table::ColumnMeta>& in, Ydb::StatusIds::StatusCode& status, TString& error);
+bool FillColumnDescription(NKikimrSchemeOp::TColumnTableDescription& out, const google::protobuf::RepeatedPtrField<Ydb::Table::ColumnMeta>& in,
+    Ydb::StatusIds::StatusCode& status, TString& error);
+bool FillColumnDescription(NKikimrSchemeOp::TAlterColumnTable& out, const google::protobuf::RepeatedPtrField<Ydb::Table::ColumnMeta>& in,
+    Ydb::StatusIds::StatusCode& status, TString& error);
 bool ExtractColumnTypeInfo(NScheme::TTypeInfo& outTypeInfo, TString& outTypeMod,
     const Ydb::Type& inType, Ydb::StatusIds::StatusCode& status, TString& error);
 
@@ -76,15 +84,19 @@ bool FillIndexDescription(NKikimrSchemeOp::TIndexedTableCreationConfig& out,
     const Ydb::Table::CreateTableRequest& in, Ydb::StatusIds::StatusCode& status, TString& error);
 
 // out
+void FillChangefeedDescription(Ydb::Table::ChangefeedDescription& out,
+    const NKikimrSchemeOp::TCdcStreamDescription& in);
 void FillChangefeedDescription(Ydb::Table::DescribeTableResult& out,
     const NKikimrSchemeOp::TTableDescription& in);
 // in
 bool FillChangefeedDescription(NKikimrSchemeOp::TCdcStreamDescription& out,
     const Ydb::Table::Changefeed& in, Ydb::StatusIds::StatusCode& status, TString& error);
+bool FillChangefeedDescription(NKikimrSchemeOp::TCdcStreamDescription& out,
+    const Ydb::Table::ChangefeedDescription& in, Ydb::StatusIds::StatusCode& status, TString& error);
 
 // out
 void FillTableStats(Ydb::Table::DescribeTableResult& out,
-    const NKikimrSchemeOp::TPathDescription& in, bool withPartitionStatistic);
+    const NKikimrSchemeOp::TPathDescription& in, bool withPartitionStatistic, const TMap<ui64, ui64>& nodeMap);
 
 // out
 void FillStorageSettings(Ydb::Table::DescribeTableResult& out,
@@ -97,6 +109,10 @@ void FillColumnFamilies(Ydb::Table::DescribeTableResult& out,
     const NKikimrSchemeOp::TTableDescription& in);
 void FillColumnFamilies(Ydb::Table::CreateTableRequest& out,
     const NKikimrSchemeOp::TTableDescription& in);
+void FillColumnFamilies(Ydb::Table::DescribeTableResult& out,
+    const NKikimrSchemeOp::TColumnTableDescription& in);
+void FillColumnFamilies(Ydb::Table::CreateTableRequest& out,
+    const NKikimrSchemeOp::TColumnTableDescription& in);
 
 // out
 void FillAttributes(Ydb::Table::DescribeTableResult& out,
@@ -125,6 +141,8 @@ void FillReadReplicasSettings(Ydb::Table::DescribeTableResult& out,
     const NKikimrSchemeOp::TTableDescription& in);
 void FillReadReplicasSettings(Ydb::Table::CreateTableRequest& out,
     const NKikimrSchemeOp::TTableDescription& in);
+void FillReadReplicasSettings(Ydb::Table::GlobalIndexSettings& out,
+    const NKikimrSchemeOp::TTableDescription& in);
 
 // in
 bool FillTableDescription(NKikimrSchemeOp::TModifyScheme& out,
@@ -133,12 +151,13 @@ bool FillTableDescription(NKikimrSchemeOp::TModifyScheme& out,
 
 
 // out
-bool FillSequenceDescription(Ydb::Table::CreateTableRequest& out, const NKikimrSchemeOp::TTableDescription& in, 
-    Ydb::StatusIds::StatusCode& status, TString& error);
+bool FillSequenceDescription(Ydb::Table::DescribeTableResult& out, const NKikimrSchemeOp::TTableDescription& in, Ydb::StatusIds::StatusCode& status, TString& error);
+
+bool FillSequenceDescription(Ydb::Table::CreateTableRequest& out, const NKikimrSchemeOp::TTableDescription& in, Ydb::StatusIds::StatusCode& status, TString& error);
 
 // in
 bool FillSequenceDescription(
-    NKikimrSchemeOp::TSequenceDescription& out, const Ydb::Table::SequenceDescription& in, 
+    NKikimrSchemeOp::TSequenceDescription& out, const Ydb::Table::SequenceDescription& in,
     Ydb::StatusIds::StatusCode& status, TString& error);
 
 } // namespace NKikimr

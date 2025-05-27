@@ -21,7 +21,7 @@ namespace {
         return statistics;
     }
 
-}
+} // namespace
 
 Y_UNIT_TEST_SUITE(MatchPredicate) {
     Y_UNIT_TEST(EmptyMatch) {
@@ -134,4 +134,4 @@ Y_UNIT_TEST_SUITE(MatchPredicate) {
                                 }
                             )proto")));
     }
-}
+} // Y_UNIT_TEST_SUITE(MatchPredicate)

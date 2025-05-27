@@ -1,6 +1,6 @@
 import pytest
 
-from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EDataSourceKind
+from yql.essentials.providers.common.proto.gateways_config_pb2 import EGenericDataSourceKind
 from ydb.library.yql.providers.generic.connector.tests.utils.settings import Settings
 from ydb.library.yql.providers.generic.connector.tests.utils.run.runners import runner_types, configure_runner
 from ydb.library.yql.providers.generic.connector.tests.utils.clients.postgresql import Client
@@ -16,7 +16,7 @@ import ydb.library.yql.providers.generic.connector.tests.common_test_cases.selec
 
 # Global collection of test cases dependent on environment
 tc_collection = Collection(
-    Settings.from_env(docker_compose_dir=docker_compose_dir, data_source_kinds=[EDataSourceKind.POSTGRESQL])
+    Settings.from_env(docker_compose_dir=docker_compose_dir, data_source_kinds=[EGenericDataSourceKind.POSTGRESQL])
 )
 
 

@@ -1,0 +1,106 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     LGPL-2.1-only        06c4217e8353c11713418f4140ca72ad
+BELONGS dynamic/ya.make static/ya.make
+FILE_INCLUDE COPYING found in files: COPYING at line 119
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LGPL-2.1-only
+        Score           : 99.98
+        Match type      : TEXT
+        Links           : http://www.gnu.org/licenses/lgpl-2.1.html, http://www.gnu.org/licenses/lgpl-2.1.txt, https://spdx.org/licenses/LGPL-2.1-only
+    Files with this license:
+        COPYING [2:513]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     GPL-2.0-only WITH Linux-syscall-note 0a81ea6890789c282ee36f30d20ccf57
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+        /* SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note */
+    Scancode info:
+        Original SPDX id: GPL-2.0-only
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://www.gnu.org/licenses/gpl-2.0.html, http://www.gnu.org/licenses/gpl-2.0.txt, https://spdx.org/licenses/GPL-2.0-only
+    Files with this license:
+        src/syscall-generic.h [1:1]
+    Scancode info:
+        Original SPDX id: Linux-syscall-note
+        Score           : 100.00
+        Match type      : TAG
+        Links           : https://spdx.org/licenses/Linux-syscall-note
+    Files with this license:
+        src/syscall-generic.h [1:1]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     LGPL-2.0-or-later    343bafa2636ca498af257b49310b97ff
+BELONGS dynamic/ya.make static/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LGPL-2.0-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
+    Files with this license:
+        src/aio_ring.h [5:17]
+        src/io_cancel.c [5:17]
+        src/io_destroy.c [5:17]
+        src/io_getevents.c [5:17]
+        src/io_pgetevents.c [5:17]
+        src/io_queue_init.c [5:17]
+        src/io_queue_release.c [5:17]
+        src/io_queue_run.c [5:17]
+        src/io_queue_wait.c [5:17]
+        src/io_setup.c [5:17]
+        src/io_submit.c [5:17]
+        src/vsys_def.h [4:16]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     LGPL-2.0-or-later    efd0b88f1751e46cb88598dd37b75a41
+BELONGS dynamic/ya.make static/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LGPL-2.0-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
+    Files with this license:
+        src/libaio.h [9:21]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make

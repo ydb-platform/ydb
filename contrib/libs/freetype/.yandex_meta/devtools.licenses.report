@@ -1,0 +1,898 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+IGNORE_FILES docs/CHANGES docs/MAKEPP
+
+KEEP     BSL-1.0              066680c0324a757d88e233277374abb3
+BELONGS ya.make
+    License text:
+        // Distributed under the Boost Software License, Version 1.0.
+        // See accompanying file LICENSE or copy at http://www.boost.org/LICENSE_1_0.txt
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 96.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/dlg/dlg.h [2:3]
+        include/dlg/output.h [2:3]
+        src/dlg/dlg.c [2:3]
+
+SKIP     GPL-1.0-or-later     0873b49a5188bf5ba7170a658f70d080
+BELONGS ya.make
+    # Not a license
+    License text:
+            This license is suited to products which don't use the GNU General
+            Public License.
+    Scancode info:
+        Original SPDX id: GPL-1.0-or-later
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.gnu.org/licenses/old-licenses/gpl-1.0-standalone.html, https://spdx.org/licenses/GPL-1.0-or-later
+    Files with this license:
+        LICENSE.TXT [17:18]
+
+KEEP     FTL OR GPL-2.0-or-later 0c56182a2e6acf0f590cf8667bc28a5f
+BELONGS ya.make
+    # This library is dual-licensed under FTL or GPLv2 or later, see LICENSE.TXT
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-2.0-only
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.gnu.org/licenses/gpl-2.0.html, http://www.gnu.org/licenses/gpl-2.0.txt, https://spdx.org/licenses/GPL-2.0-only
+    Files with this license:
+        docs/GPLv2.TXT [1:340]
+
+KEEP     FTL OR GPL-2.0-or-later 1fea8e76b4c89cfb5a2afd274c7c1478
+BELONGS ya.make
+FILE_INCLUDE LICENSE.TXT found in files: src/base/ftbbox.c at line 12, src/pshinter/pshalgo.c at line 12, src/pshinter/pshglob.c at line 13, src/raster/ftraster.h at line 12
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: FTL
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.freetype.org/FTL.TXT, http://www.freetype.org/license.html, https://spdx.org/licenses/FTL
+    Files with this license:
+        src/base/ftbbox.c [10:14]
+        src/pshinter/pshalgo.c [10:14]
+        src/pshinter/pshglob.c [11:15]
+        src/raster/ftraster.h [10:14]
+
+SKIP     GPL-3.0-only         2592ee3eb4a93f0f69aef209920b6f5f
+BELONGS ya.make
+    # Not a license
+    License text:
+            Note that  this license  is compatible to  the GNU  General Public
+            License version 3, but not version 2.
+    Scancode info:
+        Original SPDX id: GPL-3.0-only
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.gnu.org/licenses/gpl-3.0-standalone.html, http://www.gnu.org/licenses/gpl-3.0.html, https://spdx.org/licenses/GPL-3.0-only
+    Files with this license:
+        LICENSE.TXT [20:21]
+
+KEEP     FTL OR GPL-2.0-or-later 3310d8fd9c9eb636fc6ae56775f317e1
+BELONGS ya.make
+FILE_INCLUDE docs/FTL.TXT found in files: docs/FTL.TXT at line 110
+FILE_INCLUDE docs/release found in files: docs/FTL.TXT at line 69
+    # This library is dual-licensed under FTL and GPLv2 or later, see LICENSE.TXT
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: FTL
+        Score           : 99.15
+        Match type      : TEXT
+        Links           : http://www.freetype.org/FTL.TXT, http://www.freetype.org/license.html, https://spdx.org/licenses/FTL
+    Files with this license:
+        docs/FTL.TXT [1:164]
+
+SKIP     Public-Domain        44103ae8289e9c5f1d0840ae437a527a
+BELONGS ya.make
+    # Not a license
+    License text:
+        builds) is in the public domain.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        LICENSE.TXT [43:43]
+
+KEEP     MIT                  4e30ec0d253f2494c9f8e45c79a9526f
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        include/freetype/internal/fthash.h [14:30]
+        src/base/fthash.c [14:30]
+        src/bdf/bdf.h [5:21]
+        src/bdf/bdferror.h [4:20]
+        src/bdf/bdflib.c [6:22]
+
+KEEP     FTL OR GPL-2.0-or-later 57c85c2abcfe40a58a536fbbf4bd0005
+BELONGS ya.make
+FILE_INCLUDE LICENSE.TXT found in files: README at line 102, README.git at line 97, docs/CUSTOMIZE at line 147, docs/DOCGUIDE at line 293, docs/INSTALL at line 109, docs/INSTALL.ANY at line 152, docs/INSTALL.CROSS at line 172, docs/INSTALL.GNU at line 176, docs/INSTALL.UNIX at line 134, docs/release at line 219
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: FTL
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.freetype.org/FTL.TXT, http://www.freetype.org/license.html, https://spdx.org/licenses/FTL
+    Files with this license:
+        README [100:104]
+        README.git [95:99]
+        docs/CUSTOMIZE [145:149]
+        docs/DOCGUIDE [291:295]
+        docs/INSTALL [107:111]
+        docs/INSTALL.ANY [150:154]
+        docs/INSTALL.CROSS [170:174]
+        docs/INSTALL.GNU [174:178]
+        docs/INSTALL.UNIX [132:136]
+        docs/release [217:221]
+
+KEEP     Public-Domain        5c874ed316f5b266c37d6f43b0b9f411
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 85.59
+        Match type      : NOTICE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        src/base/md5.h [5:21]
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-other-permissive
+        Score           : 85.59
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/other-permissive.LICENSE
+    Files with this license:
+        src/base/md5.h [5:21]
+
+KEEP     MIT                  62574968655dfadc849b1ab4123aba22
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        src/bdf/bdf.c [8:24]
+        src/bdf/bdfdrivr.c [8:24]
+        src/bdf/bdfdrivr.h [8:24]
+        src/pcf/pcf.c [8:24]
+        src/pcf/pcf.h [8:24]
+        src/pcf/pcfdrivr.c [8:24]
+        src/pcf/pcfdrivr.h [8:24]
+        src/pcf/pcfread.c [8:24]
+        src/pcf/pcfread.h [8:24]
+        src/pcf/pcfutil.h [8:24]
+
+KEEP     Zlib                 62bce9ead950c58d512fb7a3f4761d53
+BELONGS ya.make
+    License text:
+        The gzip  module uses the  zlib license (see  `src/gzip/zlib.h`) which
+    Scancode info:
+        Original SPDX id: Zlib
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.gzip.org/zlib/zlib_license.html, http://www.zlib.net/, https://spdx.org/licenses/Zlib
+    Files with this license:
+        LICENSE.TXT [35:35]
+
+KEEP     FTL                  66a91dff4d8410e3cf57197bf0993527
+BELONGS ya.make
+FILE_INCLUDE LICENSE.TXT found in files: include/freetype/config/ftconfig.h at line 12, include/freetype/config/ftheader.h at line 12, include/freetype/config/ftoption.h at line 12, include/freetype/config/ftstdlib.h at line 13, include/freetype/config/integer-types.h at line 12, include/freetype/config/public-macros.h at line 12, include/freetype/freetype.h at line 12, include/freetype/ftadvanc.h at line 12, include/freetype/ftbbox.h at line 12, include/freetype/ftbdf.h at line 12, include/freetype/ftbitmap.h at line 12, include/freetype/ftbzip2.h at line 12, include/freetype/ftcache.h at line 12, include/freetype/ftcid.h at line 12, include/freetype/ftcolor.h at line 12, include/freetype/ftdriver.h at line 12, include/freetype/fterrdef.h at line 12, include/freetype/fterrors.h at line 12, include/freetype/ftfntfmt.h at line 12, include/freetype/ftgasp.h at line 12, include/freetype/ftglyph.h at line 12, include/freetype/ftgxval.h at line 13, include/freetype/ftgzip.h at line 12, include/freetype/ftimage.h at line 13, include/freetype/ftincrem.h at line 12, include/freetype/ftlcdfil.h at line 13, include/freetype/ftlist.h at line 12, include/freetype/ftlogging.h at line 12, include/freetype/ftlzw.h at line 12, include/freetype/ftmac.h at line 12, include/freetype/ftmm.h at line 12, include/freetype/ftmodapi.h at line 12, include/freetype/ftmoderr.h at line 12, include/freetype/ftotval.h at line 12, include/freetype/ftoutln.h at line 13, include/freetype/ftparams.h at line 12, include/freetype/ftpfr.h at line 12, include/freetype/ftrender.h at line 12, include/freetype/ftsizes.h at line 12, include/freetype/ftsnames.h at line 15, include/freetype/ftstroke.h at line 12, include/freetype/ftsynth.h at line 13, include/freetype/ftsystem.h at line 12, include/freetype/fttrigon.h at line 12, include/freetype/fttypes.h at line 12, include/freetype/ftwinfnt.h at line 12, include/freetype/internal/autohint.h at line 12, include/freetype/internal/cffotypes.h at line 12, include/freetype/internal/cfftypes.h at line 13, include/freetype/internal/compiler-macros.h at line 12, include/freetype/internal/ftcalc.h at line 12, include/freetype/internal/ftdebug.h at line 12, include/freetype/internal/ftdrv.h at line 12, include/freetype/internal/ftgloadr.h at line 12, include/freetype/internal/ftmemory.h at line 12, include/freetype/internal/ftmmtypes.h at line 14, include/freetype/internal/ftobjs.h at line 12, include/freetype/internal/ftpsprop.h at line 12, include/freetype/internal/ftrfork.h at line 12, include/freetype/internal/ftserv.h at line 12, include/freetype/internal/ftstream.h at line 12, include/freetype/internal/fttrace.h at line 12, include/freetype/internal/ftvalid.h at line 12, include/freetype/internal/psaux.h at line 13, include/freetype/internal/pshints.h at line 14, include/freetype/internal/services/svbdf.h at line 12, include/freetype/internal/services/svcfftl.h at line 12, include/freetype/internal/services/svcid.h at line 12, include/freetype/internal/services/svfntfmt.h at line 12, include/freetype/internal/services/svgldict.h at line 12, include/freetype/internal/services/svgxval.h at line 13, include/freetype/internal/services/svkern.h at line 12, include/freetype/internal/services/svmetric.h at line 12, include/freetype/internal/services/svmm.h at line 12, include/freetype/internal/services/svotval.h at line 12, include/freetype/internal/services/svpfr.h at line 12, include/freetype/internal/services/svpostnm.h at line 12, include/freetype/internal/services/svprop.h at line 12, include/freetype/internal/services/svpscmap.h at line 12, include/freetype/internal/services/svpsinfo.h at line 12, include/freetype/internal/services/svsfnt.h at line 12, include/freetype/internal/services/svttcmap.h at line 13, include/freetype/internal/services/svtteng.h at line 12, include/freetype/internal/services/svttglyf.h at line 12, include/freetype/internal/services/svwinfnt.h at line 12, include/freetype/internal/sfnt.h at line 12, include/freetype/internal/svginterface.h at line 12, include/freetype/internal/t1types.h at line 13, include/freetype/internal/tttypes.h at line 13, include/freetype/internal/wofftypes.h at line 13, include/freetype/otsvg.h at line 12, include/freetype/t1tables.h at line 13, include/freetype/ttnameid.h at line 12, include/freetype/tttables.h at line 13, include/freetype/tttags.h at line 12, include/ft2build.h at line 12, src/autofit/afblue.h at line 15, src/autofit/afcjk.c at line 12, src/autofit/afcjk.h at line 12, src/autofit/afcover.h at line 12, src/autofit/afdummy.c at line 13, src/autofit/afdummy.h at line 13, src/autofit/aferrors.h at line 12, src/autofit/afglobal.c at line 12, src/autofit/afglobal.h at line 13, src/autofit/afhints.c at line 12, src/autofit/afhints.h at line 12, src/autofit/afindic.c at line 12, src/autofit/afindic.h at line 13, src/autofit/aflatin.c at line 12, src/autofit/aflatin.h at line 13, src/autofit/afloader.c at line 12, src/autofit/afloader.h at line 12, src/autofit/afmodule.c at line 12, src/autofit/afmodule.h at line 12, src/autofit/afranges.c at line 12, src/autofit/afranges.h at line 12, src/autofit/afscript.h at line 12, src/autofit/afshaper.c at line 12, src/autofit/afshaper.h at line 12, src/autofit/afstyles.h at line 12, src/autofit/aftypes.h at line 12, src/autofit/afws-decl.h at line 12, src/autofit/afws-iter.h at line 12, src/autofit/autofit.c at line 12, src/base/ftadvanc.c at line 12, src/base/ftbase.c at line 12, src/base/ftbase.h at line 12, src/base/ftbdf.c at line 12, src/base/ftbitmap.c at line 12, src/base/ftcalc.c at line 12, src/base/ftcid.c at line 12, src/base/ftcolor.c at line 12, src/base/ftdbgmem.c at line 12, src/base/ftdebug.c at line 12, src/base/fterrors.c at line 12, src/base/ftfntfmt.c at line 12, src/base/ftfstype.c at line 12, src/base/ftgasp.c at line 12, src/base/ftgloadr.c at line 12, src/base/ftglyph.c at line 12, src/base/ftgxval.c at line 13, src/base/ftinit.c at line 12, src/base/ftlcdfil.c at line 12, src/base/ftmac.c at line 16, src/base/ftmm.c at line 12, src/base/ftobjs.c at line 12, src/base/ftotval.c at line 12, src/base/ftoutln.c at line 12, src/base/ftpatent.c at line 13, src/base/ftpfr.c at line 12, src/base/ftpsprop.c at line 13, src/base/ftrfork.c at line 15, src/base/ftsnames.c at line 15, src/base/ftstream.c at line 12, src/base/ftstroke.c at line 12, src/base/ftsynth.c at line 12, src/base/ftsystem.c at line 12, src/base/fttrigon.c at line 12, src/base/fttype1.c at line 12, src/base/ftutil.c at line 12, src/base/ftwinfnt.c at line 12, src/bzip2/ftbzip2.c at line 18, src/cache/ftcache.c at line 12, src/cache/ftcbasic.c at line 12, src/cache/ftccache.c at line 12, src/cache/ftccache.h at line 12, src/cache/ftccback.h at line 12, src/cache/ftccmap.c at line 12, src/cache/ftcerror.h at line 12, src/cache/ftcglyph.c at line 12, src/cache/ftcglyph.h at line 12, src/cache/ftcimage.c at line 12, src/cache/ftcimage.h at line 12, src/cache/ftcmanag.c at line 12, src/cache/ftcmanag.h at line 12, src/cache/ftcmru.c at line 12, src/cache/ftcmru.h at line 12, src/cache/ftcsbits.c at line 12, src/cache/ftcsbits.h at line 12, src/cff/cff.c at line 12, src/cff/cffcmap.c at line 12, src/cff/cffcmap.h at line 12, src/cff/cffdrivr.c at line 12, src/cff/cffdrivr.h at line 12, src/cff/cfferrs.h at line 12, src/cff/cffgload.c at line 12, src/cff/cffgload.h at line 12, src/cff/cffload.c at line 12, src/cff/cffload.h at line 12, src/cff/cffobjs.c at line 12, src/cff/cffobjs.h at line 12, src/cff/cffparse.c at line 12, src/cff/cffparse.h at line 12, src/cff/cfftoken.h at line 12, src/cid/ciderrs.h at line 12, src/cid/cidgload.c at line 12, src/cid/cidgload.h at line 12, src/cid/cidload.c at line 12, src/cid/cidload.h at line 12, src/cid/cidobjs.c at line 12, src/cid/cidobjs.h at line 12, src/cid/cidparse.c at line 12, src/cid/cidparse.h at line 12, src/cid/cidriver.c at line 12, src/cid/cidriver.h at line 12, src/cid/cidtoken.h at line 12, src/cid/type1cid.c at line 12, src/dlg/dlgwrap.c at line 12, src/gzip/ftgzip.c at line 16, src/lzw/ftlzw.c at line 18, src/lzw/ftzopen.c at line 16, src/lzw/ftzopen.h at line 16, src/pcf/pcferror.h at line 12, src/pfr/pfr.c at line 12, src/pfr/pfrcmap.c at line 12, src/pfr/pfrcmap.h at line 12, src/pfr/pfrdrivr.c at line 12, src/pfr/pfrdrivr.h at line 12, src/pfr/pfrerror.h at line 12, src/pfr/pfrgload.c at line 12, src/pfr/pfrgload.h at line 12, src/pfr/pfrload.c at line 12, src/pfr/pfrload.h at line 12, src/pfr/pfrobjs.c at line 12, src/pfr/pfrobjs.h at line 12, src/pfr/pfrsbit.c at line 12, src/pfr/pfrsbit.h at line 12, src/pfr/pfrtypes.h at line 12, src/psaux/afmparse.c at line 12, src/psaux/afmparse.h at line 12, src/psaux/cffdecode.c at line 12, src/psaux/cffdecode.h at line 12, src/psaux/psaux.c at line 12, src/psaux/psauxerr.h at line 12, src/psaux/psauxmod.c at line 12, src/psaux/psauxmod.h at line 12, src/psaux/psconv.c at line 12, src/psaux/psconv.h at line 12, src/psaux/psobjs.c at line 12, src/psaux/psobjs.h at line 12, src/psaux/t1cmap.c at line 12, src/psaux/t1cmap.h at line 12, src/psaux/t1decode.c at line 12, src/psaux/t1decode.h at line 12, src/pshinter/pshalgo.h at line 12, src/pshinter/pshglob.h at line 12, src/pshinter/pshinter.c at line 12, src/pshinter/pshmod.c at line 12, src/pshinter/pshmod.h at line 12, src/pshinter/pshnterr.h at line 12, src/pshinter/pshrec.c at line 12, src/pshinter/pshrec.h at line 12, src/psnames/psmodule.c at line 12, src/psnames/psmodule.h at line 12, src/psnames/psnamerr.h at line 12, src/psnames/psnames.c at line 12, src/psnames/pstables.h at line 12, src/raster/ftraster.c at line 12, src/raster/ftrend1.c at line 12, src/raster/ftrend1.h at line 12, src/raster/raster.c at line 12, src/raster/rasterrs.h at line 12, src/sdf/ftbsdf.c at line 14, src/sdf/ftsdf.c at line 14, src/sdf/ftsdf.h at line 14, src/sdf/ftsdfcommon.c at line 14, src/sdf/ftsdfcommon.h at line 14, src/sdf/ftsdferrs.h at line 14, src/sdf/ftsdfrend.c at line 14, src/sdf/ftsdfrend.h at line 14, src/sdf/sdf.c at line 14, src/sfnt/pngshim.c at line 13, src/sfnt/pngshim.h at line 13, src/sfnt/sfdriver.c at line 12, src/sfnt/sfdriver.h at line 12, src/sfnt/sferrors.h at line 12, src/sfnt/sfnt.c at line 12, src/sfnt/sfobjs.c at line 12, src/sfnt/sfobjs.h at line 12, src/sfnt/sfwoff.c at line 12, src/sfnt/sfwoff.h at line 12, src/sfnt/sfwoff2.c at line 12, src/sfnt/sfwoff2.h at line 12, src/sfnt/ttbdf.c at line 12, src/sfnt/ttbdf.h at line 12, src/sfnt/ttcmap.c at line 12, src/sfnt/ttcmap.h at line 12, src/sfnt/ttcmapc.h at line 12, src/sfnt/ttcolr.c at line 14, src/sfnt/ttcolr.h at line 14, src/sfnt/ttcpal.c at line 14, src/sfnt/ttcpal.h at line 14, src/sfnt/ttgpos.c at line 20, src/sfnt/ttgpos.h at line 14, src/sfnt/ttkern.c at line 13, src/sfnt/ttkern.h at line 13, src/sfnt/ttload.c at line 13, src/sfnt/ttload.h at line 13, src/sfnt/ttmtx.c at line 12, src/sfnt/ttmtx.h at line 12, src/sfnt/ttpost.c at line 13, src/sfnt/ttpost.h at line 13, src/sfnt/ttsbit.c at line 15, src/sfnt/ttsbit.h at line 12, src/sfnt/ttsvg.c at line 12, src/sfnt/ttsvg.h at line 12, src/sfnt/woff2tags.c at line 12, src/sfnt/woff2tags.h at line 12, src/smooth/ftgrays.c at line 12, src/smooth/ftsmerrs.h at line 12, src/smooth/ftsmooth.c at line 12, src/smooth/ftsmooth.h at line 12, src/smooth/smooth.c at line 12, src/svg/ftsvg.c at line 12, src/svg/ftsvg.h at line 12, src/svg/svg.c at line 12, src/svg/svgtypes.h at line 12, src/truetype/truetype.c at line 12, src/truetype/ttdriver.c at line 12, src/truetype/ttdriver.h at line 12, src/truetype/tterrors.h at line 12, src/truetype/ttgload.c at line 12, src/truetype/ttgload.h at line 12, src/truetype/ttgxvar.c at line 12, src/truetype/ttgxvar.h at line 12, src/truetype/ttinterp.c at line 12, src/truetype/ttinterp.h at line 12, src/truetype/ttobjs.c at line 12, src/truetype/ttobjs.h at line 12, src/truetype/ttpload.c at line 12, src/truetype/ttpload.h at line 12, src/type1/t1afm.c at line 12, src/type1/t1afm.h at line 12, src/type1/t1driver.c at line 12, src/type1/t1driver.h at line 12, src/type1/t1errors.h at line 12, src/type1/t1gload.c at line 12, src/type1/t1gload.h at line 12, src/type1/t1load.c at line 12, src/type1/t1load.h at line 12, src/type1/t1objs.c at line 12, src/type1/t1objs.h at line 12, src/type1/t1parse.c at line 12, src/type1/t1parse.h at line 12, src/type1/t1tokens.h at line 12, src/type1/type1.c at line 12, src/type42/t42drivr.c at line 12, src/type42/t42drivr.h at line 12, src/type42/t42error.h at line 12, src/type42/t42objs.c at line 12, src/type42/t42objs.h at line 12, src/type42/t42parse.c at line 12, src/type42/t42parse.h at line 12, src/type42/t42types.h at line 12, src/type42/type42.c at line 12, src/winfonts/fnterrs.h at line 12, src/winfonts/winfnt.c at line 14, src/winfonts/winfnt.h at line 13
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: FTL
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.freetype.org/FTL.TXT, http://www.freetype.org/license.html, https://spdx.org/licenses/FTL
+    Files with this license:
+        include/freetype/config/ftconfig.h [10:14]
+        include/freetype/config/ftheader.h [10:14]
+        include/freetype/config/ftoption.h [10:14]
+        include/freetype/config/ftstdlib.h [11:15]
+        include/freetype/config/integer-types.h [10:14]
+        include/freetype/config/public-macros.h [10:14]
+        include/freetype/freetype.h [10:14]
+        include/freetype/ftadvanc.h [10:14]
+        include/freetype/ftbbox.h [10:14]
+        include/freetype/ftbdf.h [10:14]
+        include/freetype/ftbitmap.h [10:14]
+        include/freetype/ftbzip2.h [10:14]
+        include/freetype/ftcache.h [10:14]
+        include/freetype/ftcid.h [10:14]
+        include/freetype/ftcolor.h [10:14]
+        include/freetype/ftdriver.h [10:14]
+        include/freetype/fterrdef.h [10:14]
+        include/freetype/fterrors.h [10:14]
+        include/freetype/ftfntfmt.h [10:14]
+        include/freetype/ftgasp.h [10:14]
+        include/freetype/ftglyph.h [10:14]
+        include/freetype/ftgxval.h [11:15]
+        include/freetype/ftgzip.h [10:14]
+        include/freetype/ftimage.h [11:15]
+        include/freetype/ftincrem.h [10:14]
+        include/freetype/ftlcdfil.h [11:15]
+        include/freetype/ftlist.h [10:14]
+        include/freetype/ftlogging.h [10:14]
+        include/freetype/ftlzw.h [10:14]
+        include/freetype/ftmac.h [10:14]
+        include/freetype/ftmm.h [10:14]
+        include/freetype/ftmodapi.h [10:14]
+        include/freetype/ftmoderr.h [10:14]
+        include/freetype/ftotval.h [10:14]
+        include/freetype/ftoutln.h [11:15]
+        include/freetype/ftparams.h [10:14]
+        include/freetype/ftpfr.h [10:14]
+        include/freetype/ftrender.h [10:14]
+        include/freetype/ftsizes.h [10:14]
+        include/freetype/ftsnames.h [13:17]
+        include/freetype/ftstroke.h [10:14]
+        include/freetype/ftsynth.h [11:15]
+        include/freetype/ftsystem.h [10:14]
+        include/freetype/fttrigon.h [10:14]
+        include/freetype/fttypes.h [10:14]
+        include/freetype/ftwinfnt.h [10:14]
+        include/freetype/internal/autohint.h [10:14]
+        include/freetype/internal/cffotypes.h [10:14]
+        include/freetype/internal/cfftypes.h [11:15]
+        include/freetype/internal/compiler-macros.h [10:14]
+        include/freetype/internal/ftcalc.h [10:14]
+        include/freetype/internal/ftdebug.h [10:14]
+        include/freetype/internal/ftdrv.h [10:14]
+        include/freetype/internal/ftgloadr.h [10:14]
+        include/freetype/internal/ftmemory.h [10:14]
+        include/freetype/internal/ftmmtypes.h [12:16]
+        include/freetype/internal/ftobjs.h [10:14]
+        include/freetype/internal/ftpsprop.h [10:14]
+        include/freetype/internal/ftrfork.h [10:14]
+        include/freetype/internal/ftserv.h [10:14]
+        include/freetype/internal/ftstream.h [10:14]
+        include/freetype/internal/fttrace.h [10:14]
+        include/freetype/internal/ftvalid.h [10:14]
+        include/freetype/internal/psaux.h [11:15]
+        include/freetype/internal/pshints.h [12:16]
+        include/freetype/internal/services/svbdf.h [10:14]
+        include/freetype/internal/services/svcfftl.h [10:14]
+        include/freetype/internal/services/svcid.h [10:14]
+        include/freetype/internal/services/svfntfmt.h [10:14]
+        include/freetype/internal/services/svgldict.h [10:14]
+        include/freetype/internal/services/svgxval.h [11:15]
+        include/freetype/internal/services/svkern.h [10:14]
+        include/freetype/internal/services/svmetric.h [10:14]
+        include/freetype/internal/services/svmm.h [10:14]
+        include/freetype/internal/services/svotval.h [10:14]
+        include/freetype/internal/services/svpfr.h [10:14]
+        include/freetype/internal/services/svpostnm.h [10:14]
+        include/freetype/internal/services/svprop.h [10:14]
+        include/freetype/internal/services/svpscmap.h [10:14]
+        include/freetype/internal/services/svpsinfo.h [10:14]
+        include/freetype/internal/services/svsfnt.h [10:14]
+        include/freetype/internal/services/svttcmap.h [11:15]
+        include/freetype/internal/services/svtteng.h [10:14]
+        include/freetype/internal/services/svttglyf.h [10:14]
+        include/freetype/internal/services/svwinfnt.h [10:14]
+        include/freetype/internal/sfnt.h [10:14]
+        include/freetype/internal/svginterface.h [10:14]
+        include/freetype/internal/t1types.h [11:15]
+        include/freetype/internal/tttypes.h [11:15]
+        include/freetype/internal/wofftypes.h [11:15]
+        include/freetype/otsvg.h [10:14]
+        include/freetype/t1tables.h [11:15]
+        include/freetype/ttnameid.h [10:14]
+        include/freetype/tttables.h [11:15]
+        include/freetype/tttags.h [10:14]
+        include/ft2build.h [10:14]
+        src/autofit/afblue.h [13:17]
+        src/autofit/afcjk.c [10:14]
+        src/autofit/afcjk.h [10:14]
+        src/autofit/afcover.h [10:14]
+        src/autofit/afdummy.c [11:15]
+        src/autofit/afdummy.h [11:15]
+        src/autofit/aferrors.h [10:14]
+        src/autofit/afglobal.c [10:14]
+        src/autofit/afglobal.h [11:15]
+        src/autofit/afhints.c [10:14]
+        src/autofit/afhints.h [10:14]
+        src/autofit/afindic.c [10:14]
+        src/autofit/afindic.h [11:15]
+        src/autofit/aflatin.c [10:14]
+        src/autofit/aflatin.h [11:15]
+        src/autofit/afloader.c [10:14]
+        src/autofit/afloader.h [10:14]
+        src/autofit/afmodule.c [10:14]
+        src/autofit/afmodule.h [10:14]
+        src/autofit/afranges.c [10:14]
+        src/autofit/afranges.h [10:14]
+        src/autofit/afscript.h [10:14]
+        src/autofit/afshaper.c [10:14]
+        src/autofit/afshaper.h [10:14]
+        src/autofit/afstyles.h [10:14]
+        src/autofit/aftypes.h [10:14]
+        src/autofit/afws-decl.h [10:14]
+        src/autofit/afws-iter.h [10:14]
+        src/autofit/autofit.c [10:14]
+        src/base/ftadvanc.c [10:14]
+        src/base/ftbase.c [10:14]
+        src/base/ftbase.h [10:14]
+        src/base/ftbdf.c [10:14]
+        src/base/ftbitmap.c [10:14]
+        src/base/ftcalc.c [10:14]
+        src/base/ftcid.c [10:14]
+        src/base/ftcolor.c [10:14]
+        src/base/ftdbgmem.c [10:14]
+        src/base/ftdebug.c [10:14]
+        src/base/fterrors.c [10:14]
+        src/base/ftfntfmt.c [10:14]
+        src/base/ftfstype.c [10:14]
+        src/base/ftgasp.c [10:14]
+        src/base/ftgloadr.c [10:14]
+        src/base/ftglyph.c [10:14]
+        src/base/ftgxval.c [11:15]
+        src/base/ftinit.c [10:14]
+        src/base/ftlcdfil.c [10:14]
+        src/base/ftmac.c [14:18]
+        src/base/ftmm.c [10:14]
+        src/base/ftobjs.c [10:14]
+        src/base/ftotval.c [10:14]
+        src/base/ftoutln.c [10:14]
+        src/base/ftpatent.c [11:15]
+        src/base/ftpfr.c [10:14]
+        src/base/ftpsprop.c [11:15]
+        src/base/ftrfork.c [13:17]
+        src/base/ftsnames.c [13:17]
+        src/base/ftstream.c [10:14]
+        src/base/ftstroke.c [10:14]
+        src/base/ftsynth.c [10:14]
+        src/base/ftsystem.c [10:14]
+        src/base/fttrigon.c [10:14]
+        src/base/fttype1.c [10:14]
+        src/base/ftutil.c [10:14]
+        src/base/ftwinfnt.c [10:14]
+        src/bzip2/ftbzip2.c [16:20]
+        src/cache/ftcache.c [10:14]
+        src/cache/ftcbasic.c [10:14]
+        src/cache/ftccache.c [10:14]
+        src/cache/ftccache.h [10:14]
+        src/cache/ftccback.h [10:14]
+        src/cache/ftccmap.c [10:14]
+        src/cache/ftcerror.h [10:14]
+        src/cache/ftcglyph.c [10:14]
+        src/cache/ftcglyph.h [10:14]
+        src/cache/ftcimage.c [10:14]
+        src/cache/ftcimage.h [10:14]
+        src/cache/ftcmanag.c [10:14]
+        src/cache/ftcmanag.h [10:14]
+        src/cache/ftcmru.c [10:14]
+        src/cache/ftcmru.h [10:14]
+        src/cache/ftcsbits.c [10:14]
+        src/cache/ftcsbits.h [10:14]
+        src/cff/cff.c [10:14]
+        src/cff/cffcmap.c [10:14]
+        src/cff/cffcmap.h [10:14]
+        src/cff/cffdrivr.c [10:14]
+        src/cff/cffdrivr.h [10:14]
+        src/cff/cfferrs.h [10:14]
+        src/cff/cffgload.c [10:14]
+        src/cff/cffgload.h [10:14]
+        src/cff/cffload.c [10:14]
+        src/cff/cffload.h [10:14]
+        src/cff/cffobjs.c [10:14]
+        src/cff/cffobjs.h [10:14]
+        src/cff/cffparse.c [10:14]
+        src/cff/cffparse.h [10:14]
+        src/cff/cfftoken.h [10:14]
+        src/cid/ciderrs.h [10:14]
+        src/cid/cidgload.c [10:14]
+        src/cid/cidgload.h [10:14]
+        src/cid/cidload.c [10:14]
+        src/cid/cidload.h [10:14]
+        src/cid/cidobjs.c [10:14]
+        src/cid/cidobjs.h [10:14]
+        src/cid/cidparse.c [10:14]
+        src/cid/cidparse.h [10:14]
+        src/cid/cidriver.c [10:14]
+        src/cid/cidriver.h [10:14]
+        src/cid/cidtoken.h [10:14]
+        src/cid/type1cid.c [10:14]
+        src/dlg/dlgwrap.c [10:14]
+        src/gzip/ftgzip.c [14:18]
+        src/lzw/ftlzw.c [16:20]
+        src/lzw/ftzopen.c [14:18]
+        src/lzw/ftzopen.h [14:18]
+        src/pcf/pcferror.h [10:14]
+        src/pfr/pfr.c [10:14]
+        src/pfr/pfrcmap.c [10:14]
+        src/pfr/pfrcmap.h [10:14]
+        src/pfr/pfrdrivr.c [10:14]
+        src/pfr/pfrdrivr.h [10:14]
+        src/pfr/pfrerror.h [10:14]
+        src/pfr/pfrgload.c [10:14]
+        src/pfr/pfrgload.h [10:14]
+        src/pfr/pfrload.c [10:14]
+        src/pfr/pfrload.h [10:14]
+        src/pfr/pfrobjs.c [10:14]
+        src/pfr/pfrobjs.h [10:14]
+        src/pfr/pfrsbit.c [10:14]
+        src/pfr/pfrsbit.h [10:14]
+        src/pfr/pfrtypes.h [10:14]
+        src/psaux/afmparse.c [10:14]
+        src/psaux/afmparse.h [10:14]
+        src/psaux/cffdecode.c [10:14]
+        src/psaux/cffdecode.h [10:14]
+        src/psaux/psaux.c [10:14]
+        src/psaux/psauxerr.h [10:14]
+        src/psaux/psauxmod.c [10:14]
+        src/psaux/psauxmod.h [10:14]
+        src/psaux/psconv.c [10:14]
+        src/psaux/psconv.h [10:14]
+        src/psaux/psobjs.c [10:14]
+        src/psaux/psobjs.h [10:14]
+        src/psaux/t1cmap.c [10:14]
+        src/psaux/t1cmap.h [10:14]
+        src/psaux/t1decode.c [10:14]
+        src/psaux/t1decode.h [10:14]
+        src/pshinter/pshalgo.h [10:14]
+        src/pshinter/pshglob.h [10:14]
+        src/pshinter/pshinter.c [10:14]
+        src/pshinter/pshmod.c [10:14]
+        src/pshinter/pshmod.h [10:14]
+        src/pshinter/pshnterr.h [10:14]
+        src/pshinter/pshrec.c [10:14]
+        src/pshinter/pshrec.h [10:14]
+        src/psnames/psmodule.c [10:14]
+        src/psnames/psmodule.h [10:14]
+        src/psnames/psnamerr.h [10:14]
+        src/psnames/psnames.c [10:14]
+        src/psnames/pstables.h [10:14]
+        src/raster/ftraster.c [10:14]
+        src/raster/ftrend1.c [10:14]
+        src/raster/ftrend1.h [10:14]
+        src/raster/raster.c [10:14]
+        src/raster/rasterrs.h [10:14]
+        src/sdf/ftbsdf.c [12:16]
+        src/sdf/ftsdf.c [12:16]
+        src/sdf/ftsdf.h [12:16]
+        src/sdf/ftsdfcommon.c [12:16]
+        src/sdf/ftsdfcommon.h [12:16]
+        src/sdf/ftsdferrs.h [12:16]
+        src/sdf/ftsdfrend.c [12:16]
+        src/sdf/ftsdfrend.h [12:16]
+        src/sdf/sdf.c [12:16]
+        src/sfnt/pngshim.c [11:15]
+        src/sfnt/pngshim.h [11:15]
+        src/sfnt/sfdriver.c [10:14]
+        src/sfnt/sfdriver.h [10:14]
+        src/sfnt/sferrors.h [10:14]
+        src/sfnt/sfnt.c [10:14]
+        src/sfnt/sfobjs.c [10:14]
+        src/sfnt/sfobjs.h [10:14]
+        src/sfnt/sfwoff.c [10:14]
+        src/sfnt/sfwoff.h [10:14]
+        src/sfnt/sfwoff2.c [10:14]
+        src/sfnt/sfwoff2.h [10:14]
+        src/sfnt/ttbdf.c [10:14]
+        src/sfnt/ttbdf.h [10:14]
+        src/sfnt/ttcmap.c [10:14]
+        src/sfnt/ttcmap.h [10:14]
+        src/sfnt/ttcmapc.h [10:14]
+        src/sfnt/ttcolr.c [12:16]
+        src/sfnt/ttcolr.h [12:16]
+        src/sfnt/ttcpal.c [12:16]
+        src/sfnt/ttcpal.h [12:16]
+        src/sfnt/ttgpos.c [18:22]
+        src/sfnt/ttgpos.h [12:16]
+        src/sfnt/ttkern.c [11:15]
+        src/sfnt/ttkern.h [11:15]
+        src/sfnt/ttload.c [11:15]
+        src/sfnt/ttload.h [11:15]
+        src/sfnt/ttmtx.c [10:14]
+        src/sfnt/ttmtx.h [10:14]
+        src/sfnt/ttpost.c [11:15]
+        src/sfnt/ttpost.h [11:15]
+        src/sfnt/ttsbit.c [13:17]
+        src/sfnt/ttsbit.h [10:14]
+        src/sfnt/ttsvg.c [10:14]
+        src/sfnt/ttsvg.h [10:14]
+        src/sfnt/woff2tags.c [10:14]
+        src/sfnt/woff2tags.h [10:14]
+        src/smooth/ftgrays.c [10:14]
+        src/smooth/ftsmerrs.h [10:14]
+        src/smooth/ftsmooth.c [10:14]
+        src/smooth/ftsmooth.h [10:14]
+        src/smooth/smooth.c [10:14]
+        src/svg/ftsvg.c [10:14]
+        src/svg/ftsvg.h [10:14]
+        src/svg/svg.c [10:14]
+        src/svg/svgtypes.h [10:14]
+        src/truetype/truetype.c [10:14]
+        src/truetype/ttdriver.c [10:14]
+        src/truetype/ttdriver.h [10:14]
+        src/truetype/tterrors.h [10:14]
+        src/truetype/ttgload.c [10:14]
+        src/truetype/ttgload.h [10:14]
+        src/truetype/ttgxvar.c [10:14]
+        src/truetype/ttgxvar.h [10:14]
+        src/truetype/ttinterp.c [10:14]
+        src/truetype/ttinterp.h [10:14]
+        src/truetype/ttobjs.c [10:14]
+        src/truetype/ttobjs.h [10:14]
+        src/truetype/ttpload.c [10:14]
+        src/truetype/ttpload.h [10:14]
+        src/type1/t1afm.c [10:14]
+        src/type1/t1afm.h [10:14]
+        src/type1/t1driver.c [10:14]
+        src/type1/t1driver.h [10:14]
+        src/type1/t1errors.h [10:14]
+        src/type1/t1gload.c [10:14]
+        src/type1/t1gload.h [10:14]
+        src/type1/t1load.c [10:14]
+        src/type1/t1load.h [10:14]
+        src/type1/t1objs.c [10:14]
+        src/type1/t1objs.h [10:14]
+        src/type1/t1parse.c [10:14]
+        src/type1/t1parse.h [10:14]
+        src/type1/t1tokens.h [10:14]
+        src/type1/type1.c [10:14]
+        src/type42/t42drivr.c [10:14]
+        src/type42/t42drivr.h [10:14]
+        src/type42/t42error.h [10:14]
+        src/type42/t42objs.c [10:14]
+        src/type42/t42objs.h [10:14]
+        src/type42/t42parse.c [10:14]
+        src/type42/t42parse.h [10:14]
+        src/type42/t42types.h [10:14]
+        src/type42/type42.c [10:14]
+        src/winfonts/fnterrs.h [10:14]
+        src/winfonts/winfnt.c [12:16]
+        src/winfonts/winfnt.h [11:15]
+
+KEEP     MIT                  6b21fe03795256387532b3d8a975f168
+BELONGS ya.make
+    License text:
+        the 'Old MIT' license, compatible to the above two licenses.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        LICENSE.TXT [40:40]
+
+KEEP     FTL                  83a2c5ed5e0c6bdfc5afdcf10f8d37b4
+BELONGS ya.make
+FILE_INCLUDE LICENSE.TXT found in files: src/psaux/psarrst.c at line 13, src/psaux/psarrst.h at line 13, src/psaux/psblues.c at line 13, src/psaux/psblues.h at line 13, src/psaux/pserror.c at line 13, src/psaux/pserror.h at line 13, src/psaux/psfixed.h at line 13, src/psaux/psfont.c at line 13, src/psaux/psfont.h at line 13, src/psaux/psft.c at line 13, src/psaux/psft.h at line 13, src/psaux/psglue.h at line 13, src/psaux/pshints.c at line 13, src/psaux/pshints.h at line 13, src/psaux/psintrp.c at line 13, src/psaux/psintrp.h at line 13, src/psaux/psread.c at line 13, src/psaux/psread.h at line 13, src/psaux/psstack.c at line 13, src/psaux/psstack.h at line 13, src/psaux/pstypes.h at line 13
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: FTL
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.freetype.org/FTL.TXT, http://www.freetype.org/license.html, https://spdx.org/licenses/FTL
+    Files with this license:
+        src/psaux/psarrst.c [9:34]
+        src/psaux/psarrst.h [9:34]
+        src/psaux/psblues.c [9:34]
+        src/psaux/psblues.h [9:34]
+        src/psaux/pserror.c [9:34]
+        src/psaux/pserror.h [9:34]
+        src/psaux/psfixed.h [9:34]
+        src/psaux/psfont.c [9:34]
+        src/psaux/psfont.h [9:34]
+        src/psaux/psft.c [9:34]
+        src/psaux/psft.h [9:34]
+        src/psaux/psglue.h [9:34]
+        src/psaux/pshints.c [9:34]
+        src/psaux/pshints.h [9:34]
+        src/psaux/psintrp.c [9:34]
+        src/psaux/psintrp.h [9:34]
+        src/psaux/psread.c [9:34]
+        src/psaux/psread.h [9:34]
+        src/psaux/psstack.c [9:34]
+        src/psaux/psstack.h [9:34]
+        src/psaux/pstypes.h [9:34]
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-freetype-patent
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/freetype-patent.LICENSE, https://www.freetype.org/
+    Files with this license:
+        src/psaux/psarrst.c [9:34]
+        src/psaux/psarrst.h [9:34]
+        src/psaux/psblues.c [9:34]
+        src/psaux/psblues.h [9:34]
+        src/psaux/pserror.c [9:34]
+        src/psaux/pserror.h [9:34]
+        src/psaux/psfixed.h [9:34]
+        src/psaux/psfont.c [9:34]
+        src/psaux/psfont.h [9:34]
+        src/psaux/psft.c [9:34]
+        src/psaux/psft.h [9:34]
+        src/psaux/psglue.h [9:34]
+        src/psaux/pshints.c [9:34]
+        src/psaux/pshints.h [9:34]
+        src/psaux/psintrp.c [9:34]
+        src/psaux/psintrp.h [9:34]
+        src/psaux/psread.c [9:34]
+        src/psaux/psread.h [9:34]
+        src/psaux/psstack.c [9:34]
+        src/psaux/psstack.h [9:34]
+        src/psaux/pstypes.h [9:34]
+
+KEEP     MIT                  85d26f1af9c8b337eb178e683bef6ae6
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        src/bdf/README [128:144]
+
+KEEP     MIT                  8d18be6409468bae48b33b87db85824a
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        src/bdf/README [104:121]
+        src/pcf/README [71:88]
+
+SKIP     LicenseRef-scancode-generic-exception 999b43691b7ab7819b0829369e4d98cf
+BELONGS ya.make
+    # Not a license
+    License text:
+            As  a  special exception,  'makepp'  can  also  be used  to  build
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-generic-exception
+        Score           : 16.00
+        Match type      : INTRO
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/generic-exception.LICENSE
+    Files with this license:
+        docs/INSTALL.UNIX [28:28]
+
+KEEP     FTL  OR GPL-2.0-or-later 9ca03287004572c68168833d37e160cb
+BELONGS ya.make
+FILE_INCLUDE LICENSE.TXT found in files: docs/CHANGES at line 5716, docs/INSTALL.VMS at line 64, docs/TODO at line 35, docs/raster.txt at line 626
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: FTL
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.freetype.org/FTL.TXT, http://www.freetype.org/license.html, https://spdx.org/licenses/FTL
+    Files with this license:
+        docs/INSTALL.VMS [62:66]
+        docs/TODO [33:37]
+        docs/raster.txt [624:628]
+
+KEEP     MIT-Modern-Variant   9f9cae778b69fdc859bc4e69e000361d
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT-Modern-Variant
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://fedoraproject.org/wiki/Licensing/MIT, https://spdx.org/licenses/MIT-Modern-Variant
+    Files with this license:
+        src/autofit/ft-hb.c [5:21]
+
+KEEP     FTL OR GPL-2.0-or-later a14991036409f727e5ae01a4e7b3d554
+BELONGS ya.make
+    # This library is dual-licensed under FTL or GPLv2 or later, see LICENSE.TXT
+    License text:
+            `docs/GPLv2.TXT`  (any  later  version  can  be  used  also),  for
+    Scancode info:
+        Original SPDX id: GPL-2.0-only
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.gnu.org/licenses/gpl-2.0.html, http://www.gnu.org/licenses/gpl-2.0.txt, https://spdx.org/licenses/GPL-2.0-only
+    Files with this license:
+        LICENSE.TXT [24:24]
+
+SKIP     GPL-2.0-or-later     a7f726d25c2e8810dcf14dd8e3e3d0e1
+BELONGS ya.make
+    # Not a license
+    License text:
+            incompatible with GPLv2 due to its advertisement clause.
+    Scancode info:
+        Original SPDX id: GPL-2.0-only
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.gnu.org/licenses/gpl-2.0.html, http://www.gnu.org/licenses/gpl-2.0.txt, https://spdx.org/licenses/GPL-2.0-only
+    Files with this license:
+        LICENSE.TXT [26:26]
+
+KEEP     Public-Domain        aa9ddf39ee4e3b6b568d5b27c00ae8ec
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 86.44
+        Match type      : NOTICE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        src/base/md5.c [5:23]
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-other-permissive
+        Score           : 86.44
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/other-permissive.LICENSE
+    Files with this license:
+        src/base/md5.c [5:23]
+
+KEEP     FTL                  c11c31d0c602d093e3dc11396e5ecbba
+BELONGS ya.make
+FILE_INCLUDE LICENSE.TXT found in files: include/freetype/config/mac-support.h at line 12
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: FTL
+        Score           : 60.24
+        Match type      : NOTICE
+        Links           : http://www.freetype.org/FTL.TXT, http://www.freetype.org/license.html, https://spdx.org/licenses/FTL
+    Files with this license:
+        include/freetype/config/mac-support.h [10:25]
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-autoconf-simple-exception-2.0
+        Score           : 60.24
+        Match type      : NOTICE
+        Links           : https://git.savannah.gnu.org/gitweb/?p=config.git;a=blob;f=config.guess;h=a7448442748cc6f98a066d2d1051fad3b043761a;hb=HEAD, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/autoconf-simple-exception-2.0.LICENSE
+    Files with this license:
+        include/freetype/config/mac-support.h [10:25]
+
+KEEP     FTL                  cce648481427ee73679fba3698a7cfc4
+BELONGS ya.make
+FILE_INCLUDE LICENSE.TXT found in files: src/autofit/afblue.c at line 15
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: FTL
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.freetype.org/FTL.TXT, http://www.freetype.org/license.html, https://spdx.org/licenses/FTL
+    Files with this license:
+        src/autofit/afblue.c [13:17]
+
+KEEP     FTL OR GPL-2.0-or-later d0312561c19360f6fa8d9350e5fd8610
+BELONGS ya.make
+    # Not a license
+    License text:
+          - The   GNU   General   Public   License   version   2,   found   in
+    Scancode info:
+        Original SPDX id: GPL-2.0-only
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.gnu.org/licenses/gpl-2.0.html, http://www.gnu.org/licenses/gpl-2.0.txt, https://spdx.org/licenses/GPL-2.0-only
+    Files with this license:
+        LICENSE.TXT [23:23]
+
+SKIP     GPL-1.0-or-later     d35e5b52577516060af609f616a3d5f7
+BELONGS ya.make
+    # Not a license
+    License text:
+            programs  which  already  use  the  GPL.  Note  that  the  FTL  is
+    Scancode info:
+        Original SPDX id: GPL-1.0-or-later
+        Score           : 85.00
+        Match type      : REFERENCE
+        Links           : http://www.gnu.org/licenses/old-licenses/gpl-1.0-standalone.html, https://spdx.org/licenses/GPL-1.0-or-later
+    Files with this license:
+        LICENSE.TXT [25:25]
+
+KEEP     MIT-open-group       e152fafc023fa7bc8d97938577404aa9
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT-open-group
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.xfree86.org/current/LICENSE5.html, https://spdx.org/licenses/MIT-open-group
+    Files with this license:
+        src/pcf/pcfutil.c [5:23]
+
+SKIP     BSD-3-Clause AND LicenseRef-scancode-unknown e6eae0f8377ee1fdb4436afe2b559eaf
+BELONGS ya.make
+    # Not a license
+    License text:
+            similar to the  original BSD license *with*  an advertising clause
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 99.00
+        Match type      : REFERENCE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE.TXT [14:14]
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown
+        Score           : 11.00
+        Match type      : REFERENCE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown.LICENSE
+    Files with this license:
+        LICENSE.TXT [14:14]
+
+KEEP     FTL                  f1e968703880d0e469176a82d88d4ad4
+BELONGS ya.make
+FILE_INCLUDE LICENSE.TXT found in files: docs/DEBUG at line 305, docs/formats.txt at line 214
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: FTL
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.freetype.org/FTL.TXT, http://www.freetype.org/license.html, https://spdx.org/licenses/FTL
+    Files with this license:
+        docs/DEBUG [303:307]
+        docs/formats.txt [212:216]
+
+KEEP     FTL                  fc8f51aafccf7c888013e4f8f7b7d0d4
+BELONGS ya.make
+FILE_INCLUDE LICENSE.TXT found in files: src/smooth/ftgrays.h at line 12
+FILE_INCLUDE include/freetype/ftimage.h found in files: src/smooth/ftgrays.h at line 28
+FILE_INCLUDE src/smooth/ftgrays.h found in files: src/smooth/ftgrays.h at line 37
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: FTL
+        Score           : 60.24
+        Match type      : NOTICE
+        Links           : http://www.freetype.org/FTL.TXT, http://www.freetype.org/license.html, https://spdx.org/licenses/FTL
+    Files with this license:
+        src/smooth/ftgrays.h [10:37]
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-autoconf-simple-exception-2.0
+        Score           : 60.24
+        Match type      : NOTICE
+        Links           : https://git.savannah.gnu.org/gitweb/?p=config.git;a=blob;f=config.guess;h=a7448442748cc6f98a066d2d1051fad3b043761a;hb=HEAD, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/autoconf-simple-exception-2.0.LICENSE
+    Files with this license:
+        src/smooth/ftgrays.h [10:37]
+
+KEEP     FTL                  fcf80cd87fd7e7718b1f0cfb03da22a6
+BELONGS ya.make
+FILE_INCLUDE LICENSE.TXT found in files: docs/VERSIONS.TXT at line 133
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: FTL
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.freetype.org/FTL.TXT, http://www.freetype.org/license.html, https://spdx.org/licenses/FTL
+    Files with this license:
+        docs/VERSIONS.TXT [131:135]

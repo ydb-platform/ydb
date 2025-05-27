@@ -58,6 +58,8 @@ TDistributedTransaction::TDistributedTransaction(const NKikimrPQ::TTransaction& 
     if (tx.HasWriteId()) {
         WriteId = GetWriteId(tx);
     }
+
+    PartitionsData = std::move(tx.GetPartitions());
 }
 
 TString TDistributedTransaction::LogPrefix() const
@@ -75,7 +77,7 @@ void TDistributedTransaction::InitPartitions(const google::protobuf::RepeatedPtr
     Partitions.clear();
 
     for (auto& o : operations) {
-        if (!o.HasBegin()) {
+        if (!o.HasCommitOffsetsBegin()) {
             HasWriteOperations = true;
         }
 
@@ -183,16 +185,16 @@ void TDistributedTransaction::OnProposeTransaction(const NKikimrPQ::TConfigTrans
             continue;
         }
 
-        if (node->Children.empty()) {
-            for (const auto* r : node->Parents) {
+        if (node->DirectChildren.empty()) {
+            for (const auto* r : node->DirectParents) {
                 if (extractTabletId != r->TabletId) {
                     PredicatesReceived[r->TabletId].SetTabletId(r->TabletId);
                 }
             }
         }
 
-        for (const auto* r : node->Children) {
-            if (r->Children.empty()) {
+        for (const auto* r : node->DirectChildren) {
+            if (r->DirectChildren.empty()) {
                 if (extractTabletId != r->TabletId) {
                     PredicateRecipients[r->TabletId] = false;
                 }
@@ -215,27 +217,50 @@ void TDistributedTransaction::OnTxCalcPredicateResult(const TEvPQ::TEvTxCalcPred
 {
     PQ_LOG_D("Handle TEvTxCalcPredicateResult");
 
-    OnPartitionResult(event,
-                      event.Predicate ? NKikimrTx::TReadSetData::DECISION_COMMIT : NKikimrTx::TReadSetData::DECISION_ABORT);
+    TMaybe<EDecision> decision;
+
+    if (event.Predicate.Defined()) {
+        decision = *event.Predicate ? NKikimrTx::TReadSetData::DECISION_COMMIT : NKikimrTx::TReadSetData::DECISION_ABORT;
+    }
+
+    OnPartitionResult(event, decision);
 }
 
-void TDistributedTransaction::OnProposePartitionConfigResult(const TEvPQ::TEvProposePartitionConfigResult& event)
+void UpdatePartitionsData(NKikimrPQ::TPartitions& partitionsData, NKikimrPQ::TPartitions::TPartitionInfo& partition) {
+    NKikimrPQ::TPartitions::TPartitionInfo* info = nullptr;
+    for (auto& p : *partitionsData.MutablePartition()) {
+        if (p.GetPartitionId() == partition.GetPartitionId()) {
+            info = &p;
+            break;
+        }
+    }
+    if (!info) {
+        info = partitionsData.AddPartition();
+    }
+    *info = std::move(partition);
+}
+
+void TDistributedTransaction::OnProposePartitionConfigResult(TEvPQ::TEvProposePartitionConfigResult& event)
 {
     PQ_LOG_D("Handle TEvProposePartitionConfigResult");
+
+    UpdatePartitionsData(PartitionsData, event.Data);
 
     OnPartitionResult(event,
                       NKikimrTx::TReadSetData::DECISION_COMMIT);
 }
 
 template<class E>
-void TDistributedTransaction::OnPartitionResult(const E& event, EDecision decision)
+void TDistributedTransaction::OnPartitionResult(const E& event, TMaybe<EDecision> decision)
 {
     Y_ABORT_UNLESS(Step == event.Step);
     Y_ABORT_UNLESS(TxId == event.TxId);
 
     Y_ABORT_UNLESS(Partitions.contains(event.Partition.OriginalPartitionId));
 
-    SetDecision(SelfDecision, decision);
+    if (decision.Defined()) {
+        SetDecision(SelfDecision, *decision);
+    }
 
     ++PartitionRepliesCount;
 
@@ -265,6 +290,16 @@ void TDistributedTransaction::OnReadSet(const NKikimrTx::TEvReadSet& event,
 
             PQ_LOG_D("Predicates " << ReadSetCount << "/" << PredicatesReceived.size());
         }
+
+        NKikimrPQ::TPartitions d;
+        if (data.HasData()) {
+            auto r = data.GetData().UnpackTo(&d);
+            Y_ABORT_UNLESS(r, "Unexpected data");
+        }
+
+        for (auto& v : *d.MutablePartition()) {
+            UpdatePartitionsData(PartitionsData, v);
+        }
     } else {
         Y_DEBUG_ABORT("unknown sender tablet %" PRIu64, event.GetTabletProducer());
     }
@@ -277,8 +312,13 @@ void TDistributedTransaction::OnReadSetAck(const NKikimrTx::TEvReadSetAck& event
     Y_ABORT_UNLESS(event.HasStep() && (Step == event.GetStep()));
     Y_ABORT_UNLESS(event.HasTxId() && (TxId == event.GetTxId()));
 
-    if (PredicateRecipients.contains(event.GetTabletConsumer())) {
-        PredicateRecipients[event.GetTabletConsumer()] = true;
+    OnReadSetAck(event.GetTabletConsumer());
+}
+
+void TDistributedTransaction::OnReadSetAck(ui64 tabletId)
+{
+    if (PredicateRecipients.contains(tabletId)) {
+        PredicateRecipients[tabletId] = true;
         ++PredicateAcksCount;
 
         PQ_LOG_D("Predicate acks " << PredicateAcksCount << "/" << PredicateRecipients.size());
@@ -330,6 +370,22 @@ bool TDistributedTransaction::HaveAllRecipientsReceive() const
 void TDistributedTransaction::AddCmdWrite(NKikimrClient::TKeyValueRequest& request,
                                           EState state)
 {
+    auto tx = Serialize(state);
+    PQ_LOG_D("save tx " << tx.ShortDebugString());
+
+    TString value;
+    Y_ABORT_UNLESS(tx.SerializeToString(&value));
+
+    auto command = request.AddCmdWrite();
+    command->SetKey(GetKey());
+    command->SetValue(value);
+}
+
+NKikimrPQ::TTransaction TDistributedTransaction::Serialize() {
+    return Serialize(State);
+}
+
+NKikimrPQ::TTransaction TDistributedTransaction::Serialize(EState state) {
     NKikimrPQ::TTransaction tx;
 
     tx.SetKind(Kind);
@@ -367,15 +423,11 @@ void TDistributedTransaction::AddCmdWrite(NKikimrClient::TKeyValueRequest& reque
     Y_ABORT_UNLESS(SourceActor != TActorId());
     ActorIdToProto(SourceActor, tx.MutableSourceActor());
 
-    PQ_LOG_D("save tx " << tx.ShortDebugString());
+    *tx.MutablePartitions() = PartitionsData;
 
-    TString value;
-    Y_ABORT_UNLESS(tx.SerializeToString(&value));
-
-    auto command = request.AddCmdWrite();
-    command->SetKey(GetKey());
-    command->SetValue(value);
+    return tx;
 }
+
 
 void TDistributedTransaction::AddCmdWriteDataTx(NKikimrPQ::TTransaction& tx)
 {
@@ -402,14 +454,9 @@ TString TDistributedTransaction::GetKey() const
     return GetTxKey(TxId);
 }
 
-void TDistributedTransaction::BindMsgToPipe(ui64 tabletId, const IEventBase& event)
+void TDistributedTransaction::BindMsgToPipe(ui64 tabletId, const TEvTxProcessing::TEvReadSet& event)
 {
-    Y_ABORT_UNLESS(event.IsSerializable());
-
-    TAllocChunkSerializer serializer;
-    Y_ABORT_UNLESS(event.SerializeToArcadiaStream(&serializer));
-    auto data = serializer.Release(event.CreateSerializationInfo());
-    OutputMsgs[tabletId].emplace_back(event.Type(), std::move(data));
+    OutputMsgs[tabletId].push_back(event.Record);
 }
 
 void TDistributedTransaction::UnbindMsgsFromPipe(ui64 tabletId)
@@ -417,13 +464,13 @@ void TDistributedTransaction::UnbindMsgsFromPipe(ui64 tabletId)
     OutputMsgs.erase(tabletId);
 }
 
-auto TDistributedTransaction::GetBindedMsgs(ui64 tabletId) -> const TVector<TSerializedMessage>&
+const TVector<NKikimrTx::TEvReadSet>& TDistributedTransaction::GetBindedMsgs(ui64 tabletId)
 {
     if (auto p = OutputMsgs.find(tabletId); p != OutputMsgs.end()) {
         return p->second;
     }
 
-    static TVector<TSerializedMessage> empty;
+    static TVector<NKikimrTx::TEvReadSet> empty;
 
     return empty;
 }

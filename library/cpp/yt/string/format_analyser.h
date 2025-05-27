@@ -4,6 +4,7 @@
 
 #include <util/generic/strbuf.h>
 
+#include <algorithm>
 #include <array>
 #include <string_view>
 
@@ -14,37 +15,29 @@ namespace NYT::NDetail {
 struct TFormatAnalyser
 {
 public:
+    using TMarkerLocation = std::tuple<int, int>;
+    // NB(arkady-e1ppa): Location is considered invalid (e.g. not filled)
+    // if get<0> == get<1> == 0.
+    template <class... TArgs>
+    using TMarkerLocations = std::array<TMarkerLocation, sizeof...(TArgs)>;
+    // NB(arkady-e1ppa): We can't cover all of them since that would require
+    // dynamic storage for their coordinates and we do not have
+    // constexpr context large enough to deallocate dynamic memory at the
+    // correct time. Thus we store first 5 position and scanning afterwards
+    // is pessimized. |-1| is for no position at all.
+    // |-2| is used to imply runtime format.
+    using TEscapeLocations = std::array<int, 5>;
+
     // TODO(arkady-e1ppa): Until clang-19 consteval functions
     // defined out of line produce symbols in rare cases
     // causing linker to crash.
     template <class... TArgs>
-    static consteval void ValidateFormat(std::string_view fmt)
+    static consteval auto AnalyzeFormat(std::string_view fmt)
     {
-        DoValidateFormat<TArgs...>(fmt);
+        return DoAnalyzeFormat<TArgs...>(fmt);
     }
 
 private:
-    // Non-constexpr function call will terminate compilation.
-    // Purposefully undefined and non-constexpr/consteval
-    template <class T>
-    static void CrashCompilerNotFormattable(std::string_view /*msg*/)
-    { /*Suppress "internal linkage but undefined" warning*/ }
-    static void CrashCompilerNotEnoughArguments(std::string_view /*msg*/)
-    { }
-
-    static void CrashCompilerTooManyArguments(std::string_view /*msg*/)
-    { }
-
-    static void CrashCompilerWrongTermination(std::string_view /*msg*/)
-    { }
-
-    static void CrashCompilerMissingTermination(std::string_view /*msg*/)
-    { }
-
-    static void CrashCompilerWrongFlagSpecifier(std::string_view /*msg*/)
-    { }
-
-
     static consteval bool Contains(std::string_view sv, char symbol)
     {
         return sv.find(symbol) != std::string_view::npos;
@@ -59,10 +52,6 @@ private:
     template <class TArg>
     static consteval auto GetSpecifiers()
     {
-        if constexpr (!CFormattable<TArg>) {
-            CrashCompilerNotFormattable<TArg>("Your specialization of TFormatArg is broken");
-        }
-
         return TSpecifiers{
             .Conversion = std::string_view{
                 std::data(TFormatArg<TArg>::ConversionSpecifiers),
@@ -76,10 +65,15 @@ private:
     static constexpr char IntroductorySymbol = '%';
 
     template <class... TArgs>
-    static consteval void DoValidateFormat(std::string_view format)
+    static consteval auto DoAnalyzeFormat(std::string_view format)
     {
-        std::array<std::string_view, sizeof...(TArgs)> markers = {};
         std::array<TSpecifiers, sizeof...(TArgs)> specifiers{GetSpecifiers<TArgs>()...};
+
+        TMarkerLocations<TArgs...> markerLocations = {};
+        TEscapeLocations escapeLocations = {};
+        std::ranges::fill(escapeLocations, -1);
+
+        int escapesCount = 0;
 
         int markerCount = 0;
         int currentMarkerStart = -1;
@@ -103,26 +97,29 @@ private:
             if (symbol == IntroductorySymbol) {
                 if (currentMarkerStart + 1 != index) {
                     // '%a% detected'
-                    CrashCompilerWrongTermination("You may not terminate flag sequence other than %% with \'%\' symbol");
-                    return;
+                    throw "You may not terminate flag sequence other than %% with \'%\' symbol";
                 }
                 // '%%' detected --- skip
+                if (escapesCount < std::ssize(escapeLocations)) {
+                    escapeLocations[escapesCount] = currentMarkerStart;
+                    ++escapesCount;
+                }
+
                 currentMarkerStart = -1;
                 continue;
             }
 
             // We are inside of marker.
-            if (markerCount == std::ssize(markers)) {
-                // To many markers
-                CrashCompilerNotEnoughArguments("Number of arguments supplied to format is smaller than the number of flag sequences");
-                return;
+            if (markerCount == std::ssize(markerLocations)) {
+                // Too many markers
+                throw "Number of arguments supplied to format is smaller than the number of flag sequences";
             }
 
             if (Contains(specifiers[markerCount].Conversion, symbol)) {
                 // Marker has finished.
 
-                markers[markerCount]
-                    = std::string_view(format.begin() + currentMarkerStart, index - currentMarkerStart + 1);
+                markerLocations[markerCount]
+                    = std::tuple{currentMarkerStart, index + 1};
                 currentMarkerStart = -1;
                 ++markerCount;
 
@@ -130,24 +127,23 @@ private:
             }
 
             if (!Contains(specifiers[markerCount].Flags, symbol)) {
-                CrashCompilerWrongFlagSpecifier("Symbol is not a valid flag specifier; See FlagSpecifiers");
+                throw "Symbol is not a valid flag specifier; See FlagSpecifiers";
             }
         }
 
         if (currentMarkerStart != -1) {
             // Runaway marker.
-            CrashCompilerMissingTermination("Unterminated flag sequence detected; Use \'%%\' to type plain %");
-            return;
+            throw "Unterminated flag sequence detected; Use \'%%\' to type plain %";
         }
 
-        if (markerCount < std::ssize(markers)) {
+        if (markerCount < std::ssize(markerLocations)) {
             // Missing markers.
-            CrashCompilerTooManyArguments("Number of arguments supplied to format is greater than the number of flag sequences");
-            return;
+            throw "Number of arguments supplied to format is greater than the number of flag sequences";
         }
 
         // TODO(arkady-e1ppa): Consider per-type verification
         // of markers.
+        return std::tuple(markerLocations, escapeLocations);
     }
 };
 

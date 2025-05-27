@@ -2,7 +2,7 @@
 
 #include <ydb/public/sdk/cpp/client/ydb_common_client/impl/client.h>
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 namespace NDiscovery {
 
 TListEndpointsResult::TListEndpointsResult(TStatus&& status, const Ydb::Discovery::ListEndpointsResult& proto)
@@ -205,7 +205,7 @@ public:
         request.set_address(settings.Address_);
         request.set_domain_path(settings.DomainPath_);
         request.set_fixed_node_id(settings.FixedNodeId_);
-        if (!settings.Path_.Empty()) {
+        if (!settings.Path_.empty()) {
             request.set_path(settings.Path_);
         }
 

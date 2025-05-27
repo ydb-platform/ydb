@@ -6,26 +6,27 @@
 #include "monitorable_actor.h"
 #include "subscriber.h"
 
-#include <ydb/core/tx/locks/sys_tables.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/domain.h>
+#include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/tabletid.h>
-#include <ydb/core/base/feature_flags.h>
+#include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
 #include <ydb/core/persqueue/utils.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
-#include <ydb/library/services/services.pb.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/sys_view/common/schema.h>
+#include <ydb/core/tx/locks/sys_tables.h>
 #include <ydb/core/tx/schemeshard/schemeshard_types.h>
 #include <ydb/core/tx/sharding/sharding.h>
-#include <ydb/library/yverify_stream/yverify_stream.h>
-
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/services/services.pb.h>
+#include <ydb/library/yverify_stream/yverify_stream.h>
+
 #include <library/cpp/json/writer/json.h>
 
 #include <util/generic/algorithm.h>
@@ -99,10 +100,11 @@ namespace {
         SetError(context, entry, TResolve::EStatus::LookupError, TKeyDesc::EStatus::NotExists);
     }
 
-    template <typename TRequest, typename TEvRequest, typename TDerived>
+    template <typename TEvRequest, typename TDerived>
     class TDbResolver: public TActorBootstrapped<TDerived> {
         void Handle() {
-            TlsActivationContext->Send(new IEventHandle(Cache, Sender, new TEvRequest(Request.Release())));
+            Request->Rewrite(Request->GetTypeRewrite(), Cache);
+            this->Send(Request.Release());
             this->PassAway();
         }
 
@@ -111,17 +113,16 @@ namespace {
             return NKikimrServices::TActivity::SCHEME_BOARD_DB_RESOLVER;
         }
 
-        TDbResolver(const TActorId& cache, const TActorId& sender, THolder<TRequest> request, ui64 domainOwnerId)
+        TDbResolver(const TActorId& cache, typename TEvRequest::TPtr& request, ui64 domainOwnerId)
             : Cache(cache)
-            , Sender(sender)
-            , Request(std::move(request))
+            , Request(request)
             , DomainOwnerId(domainOwnerId)
         {
         }
 
         void Bootstrap() {
             TNavigate::TEntry entry;
-            entry.Path = SplitPath(Request->DatabaseName);
+            entry.Path = SplitPath(Request->Get()->Request->DatabaseName);
             entry.Operation = TNavigate::EOp::OpPath;
             entry.RedirectRequired = false;
 
@@ -139,32 +140,31 @@ namespace {
             }
         }
 
-        using TBase = TDbResolver<TRequest, TEvRequest, TDerived>;
+        using TBase = TDbResolver<TEvRequest, TDerived>;
 
     private:
         const TActorId Cache;
-        const TActorId Sender;
-        THolder<TRequest> Request;
+        typename TEvRequest::TPtr Request;
         const ui64 DomainOwnerId;
 
     }; // TDbResolver
 
-    class TDbResolverNavigate: public TDbResolver<TNavigate, TEvNavigate, TDbResolverNavigate> {
+    class TDbResolverNavigate: public TDbResolver<TEvNavigate, TDbResolverNavigate> {
     public:
         using TBase::TBase;
     };
 
-    class TDbResolverResolve: public TDbResolver<TResolve, TEvResolve, TDbResolverResolve> {
+    class TDbResolverResolve: public TDbResolver<TEvResolve, TDbResolverResolve> {
     public:
         using TBase::TBase;
     };
 
-    IActor* CreateDbResolver(const TActorId& cache, const TActorId& sender, THolder<TNavigate> request, ui64 domainOwnerId) {
-        return new TDbResolverNavigate(cache, sender, std::move(request), domainOwnerId);
+    IActor* CreateDbResolver(const TActorId& cache, TEvNavigate::TPtr& request, ui64 domainOwnerId) {
+        return new TDbResolverNavigate(cache, request, domainOwnerId);
     }
 
-    IActor* CreateDbResolver(const TActorId& cache, const TActorId& sender, THolder<TResolve> request, ui64 domainOwnerId) {
-        return new TDbResolverResolve(cache, sender, std::move(request), domainOwnerId);
+    IActor* CreateDbResolver(const TActorId& cache, TEvResolve::TPtr& request, ui64 domainOwnerId) {
+        return new TDbResolverResolve(cache, request, domainOwnerId);
     }
 
     template <typename TContextPtr, typename TEvResult, typename TDerived>
@@ -199,10 +199,6 @@ namespace {
             return entry.Access;
         }
 
-        static ui32 GetAccessForEnhancedError() {
-            return NACLib::EAccessRights::DescribeSchema;
-        }
-
         static void SetErrorAndClear(TNavigateContext* context, TNavigate::TEntry& entry, const bool isDescribeDenied) {
             if (isDescribeDenied) {
                 SetError(context, entry, TNavigate::EStatus::AccessDenied);
@@ -229,6 +225,7 @@ namespace {
             entry.Columns.clear();
             entry.NotNullColumns.clear();
             entry.Indexes.clear();
+            entry.Sequences.clear();
             entry.CdcStreams.clear();
             entry.RTMRVolumeInfo.Drop();
             entry.KesusInfo.Drop();
@@ -242,6 +239,8 @@ namespace {
             entry.BlobDepotInfo.Drop();
             entry.BlockStoreVolumeInfo.Drop();
             entry.FileStoreInfo.Drop();
+            entry.BackupCollectionInfo.Drop();
+            entry.SysViewInfo.Drop();
         }
 
         static void SetErrorAndClear(TResolveContext* context, TResolve::TEntry& entry, const bool isDescribeDenied) {
@@ -251,7 +250,7 @@ namespace {
                 SetError(context, entry, TResolve::EStatus::PathErrorNotExist, TKeyDesc::EStatus::NotExists);
             }
 
-            entry.Kind = TResolve::KindUnknown;
+            entry.Kind = NSchemeCache::ETableKind::KindUnknown;
             entry.DomainInfo.Drop();
             TKeyDesc& keyDesc = *entry.KeyDescription;
             keyDesc.ColumnInfos.clear();
@@ -291,23 +290,21 @@ namespace {
                     }
                 }
 
-                if (Context->Request->UserToken) {
+                if (const auto token = Context->Request->UserToken) {
                     auto securityObject = GetSecurityObject(entry);
                     if (securityObject == nullptr) {
                         continue;
                     }
 
                     const ui32 access = GetAccess(entry);
-                    if (!securityObject->CheckAccess(access, *Context->Request->UserToken)) {
+                    if (!securityObject->CheckAccess(access, *token)) {
                         SBC_LOG_W("Access denied"
                             << ": self# " << this->SelfId()
-                            << ", for# " << Context->Request->UserToken->GetUserSID()
+                            << ", for# " << token->GetUserSID()
                             << ", access# " << NACLib::AccessRightsToString(access));
 
-                        SetErrorAndClear(
-                            Context.Get(),
-                            entry,
-                            securityObject->CheckAccess(GetAccessForEnhancedError(), *Context->Request->UserToken));
+                        const auto hasDescribeAccess = securityObject->CheckAccess(NACLib::DescribeSchema, *token);
+                        SetErrorAndClear(Context.Get(), entry, hasDescribeAccess);
                     }
                 }
             }
@@ -718,7 +715,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
         void Clear() {
             Status.Clear();
             Kind = TNavigate::KindUnknown;
-            TableKind = TResolve::KindUnknown;
+            TableKind = NSchemeCache::ETableKind::KindUnknown;
             Created = false;
             CreateStep = 0;
 
@@ -739,6 +736,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             KeyColumnTypes.clear();
             NotNullColumns.clear();
             Indexes.clear();
+            Sequences.clear();
             CdcStreams.clear();
             Partitioning = std::make_shared<TVector<TKeyDesc::TPartitionInfo>>();
 
@@ -761,6 +759,8 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             FileStoreInfo.Drop();
             ViewInfo.Drop();
             ResourcePoolInfo.Drop();
+            BackupCollectionInfo.Drop();
+            SysViewInfo.Drop();
         }
 
         void FillTableInfo(const NKikimrSchemeOp::TPathDescription& pathDesc) {
@@ -801,6 +801,11 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             Indexes.reserve(tableDesc.TableIndexesSize());
             for (const auto& index : tableDesc.GetTableIndexes()) {
                 Indexes.push_back(index);
+            }
+
+            Sequences.reserve(tableDesc.SequencesSize());
+            for (const auto& sequence : tableDesc.GetSequences()) {
+                Sequences.push_back(sequence);
             }
 
             CdcStreams.reserve(tableDesc.CdcStreamsSize());
@@ -870,16 +875,28 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             }
         }
 
-        static TResolve::EKind PathSubTypeToTableKind(NKikimrSchemeOp::EPathSubType subType) {
+        void FillSystemViewInfo(const NKikimrSchemeOp::TPathDescription& pathDesc) {
+            if (auto schema = Owner->SystemViewResolver->GetSystemViewSchema(pathDesc.GetSysViewDescription().GetType())) {
+                Columns = std::move(schema->Columns);
+                KeyColumnTypes = std::move(schema->KeyColumnTypes);
+                for (const auto& [id, column] : Columns) {
+                    if (column.IsNotNullColumn) {
+                        NotNullColumns.insert(column.Name);
+                    }
+                }
+            }
+        }
+
+        static NSchemeCache::ETableKind PathSubTypeToTableKind(NKikimrSchemeOp::EPathSubType subType) {
             switch (subType) {
             case NKikimrSchemeOp::EPathSubTypeSyncIndexImplTable:
-                return TResolve::KindSyncIndexTable;
+                return NSchemeCache::ETableKind::KindSyncIndexTable;
             case NKikimrSchemeOp::EPathSubTypeAsyncIndexImplTable:
-                return TResolve::KindAsyncIndexTable;
+                return NSchemeCache::ETableKind::KindAsyncIndexTable;
             case NKikimrSchemeOp::EPathSubTypeVectorKmeansTreeIndexImplTable:
-                return TResolve::KindVectorIndexTable;
+                return NSchemeCache::ETableKind::KindVectorIndexTable;
             default:
-                return TResolve::KindRegularTable;
+                return NSchemeCache::ETableKind::KindRegularTable;
             }
         }
 
@@ -890,7 +907,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 case NKikimrSchemeOp::EPathSubTypeSyncIndexImplTable:
                 case NKikimrSchemeOp::EPathSubTypeAsyncIndexImplTable:
                 case NKikimrSchemeOp::EPathSubTypeVectorKmeansTreeIndexImplTable:
-                    return true;
+                    return !AppData()->FeatureFlags.GetEnableAccessToIndexImplTables();
                 default:
                     return false;
                 }
@@ -979,6 +996,73 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             return partitions;
         }
 
+        static void FillTopicPartitioning(
+                const NKikimrSchemeOp::TPersQueueGroupDescription& pqDesc,
+                TVector<NScheme::TTypeInfo>& schema,
+                TVector<NKikimr::TKeyDesc::TPartitionInfo>& partitioning)
+        {
+            const auto& pqConfig = pqDesc.GetPQTabletConfig();
+
+            if (::NKikimrPQ::TPQTabletConfig::TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_DISABLED != pqConfig.GetPartitionStrategy().GetPartitionStrategyType()) {
+                partitioning.reserve(pqDesc.GetPartitions().size());
+                for (const auto& partition : pqDesc.GetPartitions()) {
+                    if (NKikimrPQ::ETopicPartitionStatus::Active == partition.GetStatus()) {
+                        partitioning.emplace_back(partition.GetPartitionId());
+                    }
+                }
+
+                return;
+            }
+
+            if (pqConfig.GetPartitionKeySchema().empty()) {
+                return;
+            }
+
+            schema.reserve(pqConfig.PartitionKeySchemaSize());
+            for (const auto& keySchema : pqConfig.GetPartitionKeySchema()) {
+                auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(keySchema.GetTypeId(),
+                    keySchema.HasTypeInfo() ? &keySchema.GetTypeInfo() : nullptr);
+                schema.push_back(NScheme::TTypeInfo(typeInfoMod.TypeInfo));
+            }
+
+            partitioning.reserve(pqDesc.PartitionsSize());
+            for (const auto& partition : pqDesc.GetPartitions()) {
+                auto keyRange = NPQ::TPartitionKeyRange::Parse(partition.GetKeyRange());
+                Y_ABORT_UNLESS(!keyRange.FromBound || keyRange.FromBound->GetCells().size() == schema.size());
+                Y_ABORT_UNLESS(!keyRange.ToBound || keyRange.ToBound->GetCells().size() == schema.size());
+
+                auto& info = partitioning.emplace_back(partition.GetPartitionId());
+                if (keyRange.ToBound) {
+                    info.Range = NKikimr::TKeyDesc::TPartitionRangeInfo{
+                        .EndKeyPrefix = *keyRange.ToBound,
+                    };
+                } else {
+                    info.Range = NKikimr::TKeyDesc::TPartitionRangeInfo{};
+                }
+            }
+
+            const size_t emptyEndKeyPrefixCount = CountIf(partitioning, [](const auto& partition) {
+                Y_ABORT_UNLESS(partition.Range);
+                return !partition.Range->EndKeyPrefix;
+            });
+            Y_ABORT_UNLESS(emptyEndKeyPrefixCount <= 1);
+            Sort(partitioning.begin(), partitioning.end(), [&schema](const auto& lhs, const auto& rhs) {
+                const bool lhsHasEndKeyPrefix{lhs.Range->EndKeyPrefix};
+                const bool rhsHasEndKeyPrefix{rhs.Range->EndKeyPrefix};
+                if (!lhsHasEndKeyPrefix || !rhsHasEndKeyPrefix) {
+                    return lhsHasEndKeyPrefix > rhsHasEndKeyPrefix;
+                }
+
+                const int compares = CompareTypedCellVectors(
+                    lhs.Range->EndKeyPrefix.GetCells().data(),
+                    rhs.Range->EndKeyPrefix.GetCells().data(),
+                    schema.data(), schema.size()
+                );
+
+                return (compares < 0);
+            });
+        }
+
         bool IsSysTable() const {
             return Kind == TNavigate::KindTable && PathId.OwnerId == TSysTables::SysSchemeShard;
         }
@@ -1033,7 +1117,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             , Subscriber(subscriber)
             , Filled(false)
             , Kind(TNavigate::EKind::KindUnknown)
-            , TableKind(TResolve::EKind::KindUnknown)
+            , TableKind(NSchemeCache::ETableKind::KindUnknown)
             , Created(false)
             , CreateStep(0)
             , IsPrivatePath(false)
@@ -1099,12 +1183,13 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             NJsonWriter::TBuf json;
             auto root = json.BeginObject();
 
-            root.WriteKey("Subscriber").BeginObject()
-                .WriteKey("ActorId").WriteString(::ToString(Subscriber.Subscriber))
-                .WriteKey("DomainOwnerId").WriteULongLong(Subscriber.DomainOwnerId)
-                .WriteKey("Type").WriteInt(static_cast<int>(Subscriber.Type))
-                .WriteKey("SyncCookie").WriteULongLong(Subscriber.SyncCookie)
-            .EndObject();
+            root.WriteKey("Subscriber")
+                .BeginObject()
+                    .WriteKey("ActorId").WriteString(::ToString(Subscriber.Subscriber))
+                    .WriteKey("DomainOwnerId").WriteULongLong(Subscriber.DomainOwnerId)
+                    .WriteKey("Type").WriteInt(static_cast<int>(Subscriber.Type))
+                    .WriteKey("SyncCookie").WriteULongLong(Subscriber.SyncCookie)
+                .EndObject();
 
             root.WriteKey("Filled").WriteBool(Filled);
             root.WriteKey("Path").WriteString(Path);
@@ -1144,11 +1229,12 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             }
 
             if (DomainInfo) {
-                root.WriteKey("DomainInfo").BeginObject()
-                    .WriteKey("DomainKey").WriteString(::ToString(DomainInfo->DomainKey))
-                    .WriteKey("ResourcesDomainKey").WriteString(::ToString(DomainInfo->ResourcesDomainKey))
-                    .WriteKey("Params").UnsafeWriteValue(ProtoJsonString(DomainInfo->Params))
-                .EndObject();
+                root.WriteKey("DomainInfo")
+                    .BeginObject()
+                        .WriteKey("DomainKey").WriteString(::ToString(DomainInfo->DomainKey))
+                        .WriteKey("ResourcesDomainKey").WriteString(::ToString(DomainInfo->ResourcesDomainKey))
+                        .WriteKey("Params").UnsafeWriteValue(ProtoJsonString(DomainInfo->Params))
+                    .EndObject();
             }
 
             if (Self) {
@@ -1159,12 +1245,13 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 auto children = root.WriteKey("Children").BeginList();
 
                 for (const auto& child : ListNodeEntry->Children) {
-                    children.BeginObject()
-                        .WriteKey("Name").WriteString(child.Name)
-                        .WriteKey("PathId").WriteString(::ToString(child.PathId))
-                        .WriteKey("SchemaVersion").WriteULongLong(child.SchemaVersion)
-                        .WriteKey("Kind").WriteInt(static_cast<int>(child.Kind))
-                    .EndObject();
+                    children
+                        .BeginObject()
+                            .WriteKey("Name").WriteString(child.Name)
+                            .WriteKey("PathId").WriteString(::ToString(child.PathId))
+                            .WriteKey("SchemaVersion").WriteULongLong(child.SchemaVersion)
+                            .WriteKey("Kind").WriteInt(static_cast<int>(child.Kind))
+                        .EndObject();
                 }
 
                 children.EndList();
@@ -1174,12 +1261,14 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 auto columns = root.WriteKey("Columns").BeginList();
 
                 for (const auto& [_, column] : Columns) {
-                    columns.BeginObject()
-                        .WriteKey("Id").WriteULongLong(column.Id)
-                        .WriteKey("Name").WriteString(column.Name)
-                        .WriteKey("Type").WriteULongLong(column.PType.GetTypeId()) // TODO: support pg types
-                        .WriteKey("KeyOrder").WriteInt(column.KeyOrder)
-                    .EndObject();
+                    columns
+                        .BeginObject()
+                            .WriteKey("Id").WriteULongLong(column.Id)
+                            .WriteKey("Name").WriteString(column.Name)
+                            .WriteKey("Type").WriteULongLong(column.PType.GetTypeId())
+                            .WriteKey("TypeName").WriteString(NScheme::TypeName(column.PType, column.PTypeMod))
+                            .WriteKey("KeyOrder").WriteInt(column.KeyOrder)
+                        .EndObject();
                 }
 
                 columns.EndList();
@@ -1207,6 +1296,8 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             DESCRIPTION_PART(FileStoreInfo);
             DESCRIPTION_PART(ViewInfo);
             DESCRIPTION_PART(ResourcePoolInfo);
+            DESCRIPTION_PART(BackupCollectionInfo);
+            DESCRIPTION_PART(SysViewInfo);
 
             #undef DESCRIPTION_PART
 
@@ -1455,6 +1546,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 break;
             case NKikimrSchemeOp::EPathTypeColumnTable:
                 Kind = TNavigate::KindColumnTable;
+                TableKind = PathSubTypeToTableKind(entryDesc.GetPathSubType());
                 if (Created) {
                     FillTableInfoFromColumnTable(pathDesc);
                 }
@@ -1487,6 +1579,9 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 if (Created) {
                     NPQ::Migrate(*pathDesc.MutablePersQueueGroup()->MutablePQTabletConfig());
                     FillInfo(Kind, PQGroupInfo, std::move(*pathDesc.MutablePersQueueGroup()));
+                    FillTopicPartitioning(PQGroupInfo->Description, PQGroupInfo->Schema, PQGroupInfo->Partitioning);
+                    PQGroupInfo->PartitionChooser = NPQ::CreatePartitionChooser(PQGroupInfo->Description);
+                    PQGroupInfo->PartitionGraph = std::make_shared<NPQ::TPartitionGraph>(NPQ::MakePartitionGraph(PQGroupInfo->Description));
                 }
                 break;
             case NKikimrSchemeOp::EPathTypeCdcStream:
@@ -1506,6 +1601,10 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 break;
             case NKikimrSchemeOp::EPathTypeReplication:
                 Kind = TNavigate::KindReplication;
+                FillInfo(Kind, ReplicationInfo, std::move(*pathDesc.MutableReplicationDescription()));
+                break;
+            case NKikimrSchemeOp::EPathTypeTransfer:
+                Kind = TNavigate::KindTransfer;
                 FillInfo(Kind, ReplicationInfo, std::move(*pathDesc.MutableReplicationDescription()));
                 break;
             case NKikimrSchemeOp::EPathTypeBlobDepot:
@@ -1535,6 +1634,17 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             case NKikimrSchemeOp::EPathTypeResourcePool:
                 Kind = TNavigate::KindResourcePool;
                 FillInfo(Kind, ResourcePoolInfo, std::move(*pathDesc.MutableResourcePoolDescription()));
+                break;
+            case NKikimrSchemeOp::EPathTypeBackupCollection:
+                Kind = TNavigate::KindBackupCollection;
+                FillInfo(Kind, BackupCollectionInfo, std::move(*pathDesc.MutableBackupCollectionDescription()));
+                break;
+            case NKikimrSchemeOp::EPathTypeSysView:
+                Kind = TNavigate::KindSysView;
+                if (Created) {
+                    FillSystemViewInfo(pathDesc);
+                }
+                FillInfo(Kind, SysViewInfo, std::move(*pathDesc.MutableSysViewDescription()));
                 break;
             case NKikimrSchemeOp::EPathTypeInvalid:
                 Y_DEBUG_ABORT("Invalid path type");
@@ -1588,6 +1698,9 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                     case NKikimrSchemeOp::EPathTypeReplication:
                         ListNodeEntry->Children.emplace_back(name, pathId, TNavigate::KindReplication);
                         break;
+                    case NKikimrSchemeOp::EPathTypeTransfer:
+                        ListNodeEntry->Children.emplace_back(name, pathId, TNavigate::KindTransfer);
+                        break;
                     case NKikimrSchemeOp::EPathTypeBlobDepot:
                         ListNodeEntry->Children.emplace_back(name, pathId, TNavigate::KindBlobDepot);
                         break;
@@ -1608,6 +1721,12 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                         break;
                     case NKikimrSchemeOp::EPathTypeResourcePool:
                         ListNodeEntry->Children.emplace_back(name, pathId, TNavigate::KindResourcePool);
+                        break;
+                    case NKikimrSchemeOp::EPathTypeBackupCollection:
+                        ListNodeEntry->Children.emplace_back(name, pathId, TNavigate::KindBackupCollection);
+                        break;
+                    case NKikimrSchemeOp::EPathTypeSysView:
+                        ListNodeEntry->Children.emplace_back(name, pathId, TNavigate::KindSysView);
                         break;
                     case NKikimrSchemeOp::EPathTypeTableIndex:
                     case NKikimrSchemeOp::EPathTypeInvalid:
@@ -1715,7 +1834,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             entry.DomainInfo = DomainInfo;
         }
 
-        void FillEntry(TNavigateContext* context, TNavigate::TEntry& entry, const TResponseProps& props = TResponseProps()) const {
+        void FillEntry(TNavigateContext* context, TNavigate::TEntry& entry, const TResponseProps& props = {}) const {
             SBC_LOG_D("FillEntry for TNavigate"
                 << ": self# " << Owner->SelfId()
                 << ", cacheItem# " << ToString()
@@ -1734,7 +1853,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 return SetError(context, entry, TNavigate::EStatus::LookupError);
             }
 
-            if (!entry.TableId.SysViewInfo.empty()) {
+            if (!entry.TableId.SysViewInfo.empty() && Kind != TNavigate::KindSysView) {
                 if (Kind == TNavigate::KindPath) {
                     auto split = SplitPath(Path);
                     if (split.size() == 1) {
@@ -1763,12 +1882,17 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 || Kind == TNavigate::KindView;
             const bool isTopic = Kind == TNavigate::KindTopic
                 || Kind == TNavigate::KindCdcStream;
+            const bool isSysView = Kind == TNavigate::KindSysView;
 
-            if (entry.Operation == TNavigate::OpTable && !isTable) {
+            if (entry.Operation == TNavigate::OpTable && !(isTable || isSysView)) {
                 return SetError(context, entry, TNavigate::EStatus::PathNotTable);
             }
 
-            if (!Created && (isTable || isTopic)) {
+            if (!Created && (isTable || isTopic || isSysView)) {
+                return SetError(context, entry, TNavigate::EStatus::PathErrorUnknown);
+            }
+
+            if (isSysView && !Columns) {
                 return SetError(context, entry, TNavigate::EStatus::PathErrorUnknown);
             }
 
@@ -1793,6 +1917,9 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             if (entry.RequestType == TNavigate::TEntry::ERequestType::ByPath) {
                 if (Kind == TNavigate::KindTable || Kind == TNavigate::KindColumnTable) {
                     entry.TableId = TTableId(PathId.OwnerId, PathId.LocalPathId, SchemaVersion);
+                } else if (Kind == TNavigate::KindSysView) {
+                    entry.TableId.PathId.OwnerId = PathId.OwnerId;
+                    entry.TableId.PathId.LocalPathId = PathId.LocalPathId;
                 } else {
                     entry.TableId = TTableId(PathId.OwnerId, PathId.LocalPathId);
                 }
@@ -1813,6 +1940,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             entry.NotNullColumns = NotNullColumns;
             entry.Indexes = Indexes;
             entry.CdcStreams = CdcStreams;
+            entry.Sequences = Sequences;
             entry.DomainDescription = DomainDescription;
             entry.RTMRVolumeInfo = RtmrVolumeInfo;
             entry.KesusInfo = KesusInfo;
@@ -1830,6 +1958,9 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             entry.FileStoreInfo = FileStoreInfo;
             entry.ViewInfo = ViewInfo;
             entry.ResourcePoolInfo = ResourcePoolInfo;
+            entry.BackupCollectionInfo = BackupCollectionInfo;
+            entry.SysViewInfo = SysViewInfo;
+            entry.TableKind = TableKind;
         }
 
         bool CheckColumns(TResolveContext* context, TResolve::TEntry& entry,
@@ -1924,7 +2055,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             keyDesc.Status = TKeyDesc::EStatus::Ok;
         }
 
-        void FillEntry(TResolveContext* context, TResolve::TEntry& entry, const TResponseProps& props = TResponseProps()) const {
+        void FillEntry(TResolveContext* context, TResolve::TEntry& entry, const TResponseProps& props = {}) const {
             SBC_LOG_D("FillEntry for TResolve"
                 << ": self# " << Owner->SelfId()
                 << ", cacheItem# " << ToString()
@@ -1945,7 +2076,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 return SetError(context, entry, TResolve::EStatus::LookupError, TKeyDesc::EStatus::NotExists);
             }
 
-            if (!keyDesc.TableId.SysViewInfo.empty()) {
+            if (!keyDesc.TableId.SysViewInfo.empty() && Kind != TNavigate::KindSysView) {
                 if (Kind == TNavigate::KindPath) {
                     auto split = SplitPath(Path);
                     if (split.size() == 1) {
@@ -2027,7 +2158,8 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 }
             }
 
-            if (keyDesc.GetPartitions().empty()) {
+            const bool isSysView = Kind == TNavigate::KindSysView;
+            if (keyDesc.GetPartitions().empty() && !isSysView) {
                 entry.Status = TResolve::EStatus::TypeCheckError;
                 keyDesc.Status = TKeyDesc::EStatus::OperationNotSupported;
             }
@@ -2055,7 +2187,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
         // common
         TMaybe<NKikimrScheme::EStatus> Status;
         TNavigate::EKind Kind;
-        TResolve::EKind TableKind;
+        NSchemeCache::ETableKind TableKind;
         bool Created;
         ui64 CreateStep;
         TPathId PathId;
@@ -2080,6 +2212,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
         THashSet<TString> NotNullColumns;
         TVector<NKikimrSchemeOp::TIndexDescription> Indexes;
         TVector<NKikimrSchemeOp::TCdcStreamDescription> CdcStreams;
+        TVector<NKikimrSchemeOp::TSequenceDescription> Sequences;
         std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>> Partitioning;
 
         TIntrusivePtr<TNavigate::TDirEntryInfo> Self;
@@ -2127,6 +2260,12 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
 
         // ResourcePool specific
         TIntrusivePtr<TNavigate::TResourcePoolInfo> ResourcePoolInfo;
+
+        // BackupCollection specific
+        TIntrusivePtr<TNavigate::TBackupCollectionInfo> BackupCollectionInfo;
+
+        // SysView specific
+        TIntrusivePtr<TNavigate::TSysViewInfo> SysViewInfo;
 
     }; // TCacheItem
 
@@ -2310,8 +2449,10 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
     }
 
     template <typename TProtoNotify>
-    TCacheItem* ResolveCacheItem(const TProtoNotify& notify,
-                                 const TDomainId& notifyDomainId = {}, const TSet<ui64>& abandonedSchemeShardIds = {})
+    TCacheItem* ResolveCacheItem(
+            const TProtoNotify& notify,
+            const TDomainId& notifyDomainId = {},
+            const TSet<ui64>& abandonedSchemeShardIds = {})
     {
         TCacheItem* byPath = Cache.FindPtr(notify.Path);
         TCacheItem* byPathId = Cache.FindPtr(notify.PathId);
@@ -2517,7 +2658,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             return false;
         }
 
-        Register(CreateDbResolver(SelfId(), ev->Sender, THolder(request.Release()), it->second));
+        Register(CreateDbResolver(SelfId(), ev, it->second));
         return true;
     }
 

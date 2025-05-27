@@ -2,7 +2,7 @@
 
 #include "public.h"
 
-namespace NYT::NPhoenix2 {
+namespace NYT::NPhoenix {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -19,7 +19,7 @@ namespace NYT::NPhoenix2 {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NPhoenix2
+} // namespace NYT::NPhoenix
 
 #define YSON_DECL_INL_H_
 #include "yson_decl-inl.h"

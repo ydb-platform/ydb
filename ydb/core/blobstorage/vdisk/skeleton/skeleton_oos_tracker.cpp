@@ -5,6 +5,7 @@
 #include <ydb/core/blobstorage/vdisk/common/vdisk_mongroups.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_mon.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_pdiskctx.h>
+#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 
 namespace NKikimr {
@@ -81,8 +82,9 @@ namespace NKikimr {
 
             CHECK_PDISK_RESPONSE(VCtx, ev, ctx);
 
-            Y_ABORT_UNLESS(msg->Status == NKikimrProto::OK, "Expected OK from PDisk on every TEvCheckSpace request, "
-                     "but got Status# %s", NKikimrProto::EReplyStatus_Name(msg->Status).data());
+            Y_VERIFY_S(msg->Status == NKikimrProto::OK, VCtx->VDiskLogPrefix
+                    << "Expected OK from PDisk on every TEvCheckSpace request, "
+                    << "but got Status# " << NKikimrProto::EReplyStatus_Name(msg->Status));
 
             TotalChunks = msg->TotalChunks;
             FreeChunks = msg->FreeChunks;
@@ -106,7 +108,7 @@ namespace NKikimr {
         }
 
         void Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorContext &ctx) {
-            Y_DEBUG_ABORT_UNLESS(ev->Get()->SubRequestId == TDbMon::DskSpaceTrackerId);
+            Y_VERIFY_DEBUG_S(ev->Get()->SubRequestId == TDbMon::DskSpaceTrackerId, VCtx->VDiskLogPrefix);
             TStringStream str;
             auto oosStatus = VCtx->OutOfSpaceState.GetGlobalStatusFlags();
 

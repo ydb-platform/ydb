@@ -228,9 +228,9 @@ namespace NKikimr::NMediatorTimeCastTest {
 
             TBlockEvents<TEvTxProcessing::TEvPlanStepAck> blockAcks(runtime);
             TBlockEvents<TEvTxProcessing::TEvPlanStep> blockPlan1(runtime,
-                [&](auto& ev) { return ev->Get()->Record.GetTabletID() == tablet1; });
+                [&](const auto& ev) { return ev->Get()->Record.GetTabletID() == tablet1; });
             TBlockEvents<TEvTxProcessing::TEvPlanStep> blockPlan2(runtime,
-                [&](auto& ev) { return ev->Get()->Record.GetTabletID() == tablet2; });
+                [&](const auto& ev) { return ev->Get()->Record.GetTabletID() == tablet2; });
 
             ui64 stepTx1 = PlanTx(server, 1, { tablet1, tablet2 });
             Cerr << "... tx1 planned at step " << stepTx1 << Endl;

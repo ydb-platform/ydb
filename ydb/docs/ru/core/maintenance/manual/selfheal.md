@@ -23,6 +23,8 @@ SelfHeal включен по умолчанию.
 ydb-dstool -e <bs_endpoint> cluster set --enable-self-heal
 ```
 
+`<bs_endpoint>` - эндпоинт произвольного [узла хранения](../../concepts/glossary.md#storage-node) кластера.
+
 Чтобы выключить SelfHeal выполните команду:
 
 ```bash
@@ -35,7 +37,7 @@ ydb-dstool -e <bs_endpoint> cluster set --disable-self-heal
 
 Вы можете настроить SelfHeal в **Viewer** → **Cluster Management System** → **CmsConfigItems**.
 
-Чтобы создать настройки впервые, нажмите кнопку **Create**. Если вам нужно изменить существующие настройки, нажмите кнопку ![](../../_assets/pencil.svg).
+Чтобы создать настройки впервые, нажмите кнопку **Create**. Если вам нужно изменить существующие настройки, нажмите кнопку ![карандаш](../../_assets/pencil.svg).
 
 Доступны следующие настройки:
 
@@ -65,6 +67,7 @@ ydb-dstool -e <bs_endpoint> cluster set --disable-self-heal
 | **Missing**                              | Нода отвечает, но в её списке нет данного PDisk. Переход в `FAULTY`. |
 | **Timeout**                              | Нода не ответила за отведенный таймаут. Переход в `FAULTY`. |
 | **NodeDisconnected**                     | Отключение ноды. Переход в `FAULTY`. |
+| **Stopped**                              | PDisk остановлен. Переход в `FAULTY`. |
 | **Unknown**                              | Неожиданный ответ, например, ответ `TEvUndelivered` на запрос состояния. Переход в `FAULTY`. |
 
 ## Работа с дисками-донорами {#disks}

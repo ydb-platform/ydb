@@ -2,10 +2,10 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/host/kqp_host.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
 #include <ydb/library/yql/dq/common/dq_value.h>
-#include <ydb/library/yql/core/services/mounts/yql_mounts.h>
+#include <yql/essentials/core/services/mounts/yql_mounts.h>
 
 #include <library/cpp/protobuf/util/pb_io.h>
 #include <ydb/core/protos/config.pb.h>
@@ -42,7 +42,7 @@ NKqpProto::TKqpPhyTx BuildTxPlan(const TString& sql, TIntrusivePtr<IKqpGateway> 
 [[maybe_unused]]
 TIntrusivePtr<IKqpGateway> MakeIcGateway(const TKikimrRunner& kikimr) {
     auto actorSystem = kikimr.GetTestServer().GetRuntime()->GetAnyNodeActorSystem();
-    return CreateKikimrIcGateway(TString(DefaultKikimrClusterName), "/Root", TKqpGatewaySettings(),
+    return CreateKikimrIcGateway(TString(DefaultKikimrClusterName), "/Root", "/Root", TKqpGatewaySettings(),
         actorSystem, kikimr.GetTestServer().GetRuntime()->GetNodeId(0),
         TAlignedPagePoolCounters(), kikimr.GetTestServer().GetSettings().AppConfig->GetQueryServiceConfig());
 }

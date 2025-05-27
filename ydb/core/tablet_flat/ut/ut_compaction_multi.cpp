@@ -57,7 +57,7 @@ Y_UNIT_TEST_SUITE(TCompactionMulti) {
             // Verify the last page contains a single row
             TTestEnv env;
             auto iter = CreateIndexIter(initialPart, &env, { });
-            Y_ABORT_UNLESS(iter->SeekLast() == EReady::Data, "Unexpected failure to find the last index page");
+            Y_ENSURE(iter->SeekLast() == EReady::Data, "Unexpected failure to find the last index page");
             auto count = iter->GetEndRowId() - iter->GetRowId();
             UNIT_ASSERT_C(count == 1, "Unexpected " << count << " rows on the last page");
         }

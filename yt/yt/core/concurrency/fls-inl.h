@@ -5,8 +5,6 @@
 #endif
 #undef FLS_INL_H_
 
-#include <library/cpp/yt/memory/memory_tag.h>
-
 #include <library/cpp/yt/misc/tls.h>
 
 namespace NYT::NConcurrency {
@@ -22,6 +20,7 @@ int AllocateFlsSlot(TFlsSlotDtor dtor);
 TFls* GetPerThreadFls();
 
 YT_DECLARE_THREAD_LOCAL(TFls*, CurrentFls);
+YT_DECLARE_THREAD_LOCAL(TFls*, PerThreadFls);
 
 } // namespace NDetail
 
@@ -49,6 +48,17 @@ inline TFls* GetCurrentFls()
         fls = NDetail::GetPerThreadFls();
     }
     return fls;
+}
+
+inline TFls* TryGetCurrentFls()
+{
+    if (auto* fls = NDetail::CurrentFls()) {
+        return fls;
+    }
+    if (auto* fls = NDetail::PerThreadFls()) {
+        return fls;
+    }
+    return nullptr;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -95,9 +105,14 @@ Y_FORCE_INLINE T* TFlsSlot<T>::GetOrCreate() const
 }
 
 template <class T>
+Y_FORCE_INLINE T* TFlsSlot<T>::MaybeGet() const
+{
+    return static_cast<T*>(GetCurrentFls()->Get(Index_));
+}
+
+template <class T>
 T* TFlsSlot<T>::Create() const
 {
-    TMemoryTagGuard guard(NullMemoryTag);
     auto cookie = new T();
     GetCurrentFls()->Set(Index_, cookie);
     return static_cast<T*>(cookie);
@@ -112,7 +127,8 @@ const T* TFlsSlot<T>::Get(const TFls& fls) const
 template <class T>
 Y_FORCE_INLINE bool TFlsSlot<T>::IsInitialized() const
 {
-    return static_cast<bool>(GetCurrentFls()->Get(Index_));
+    const auto* fls = TryGetCurrentFls();
+    return fls && fls->Get(Index_);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

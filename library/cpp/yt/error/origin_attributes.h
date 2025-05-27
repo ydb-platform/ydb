@@ -1,5 +1,7 @@
 #pragma once
 
+#include "public.h"
+
 #include <library/cpp/yt/global/access.h>
 
 #include <library/cpp/yt/memory/ref.h>
@@ -41,7 +43,7 @@ struct TOriginAttributes
     static constexpr size_t ExtensionDataByteSizeCap = 64;
     using TErasedExtensionData = TErasedStorage<ExtensionDataByteSizeCap>;
 
-    TProcessId Pid;
+    TProcessId Pid = 0;
 
     NThreading::TThreadId Tid;
     TThreadName ThreadName;
@@ -74,7 +76,15 @@ inline constexpr NGlobal::TVariableTag ExtractFromDictionaryTag = {};
 // NB(arkady-e1ppa): ExtractFromDictionary symbol is left in yt/yt/core/misc/origin_attributes
 // because it depends on ytree for now.
 std::optional<TOriginAttributes::TErasedExtensionData> GetExtensionData();
-TString FormatOrigin(const TOriginAttributes& attributes);
+std::string FormatOrigin(const TOriginAttributes& attributes);
+
+////////////////////////////////////////////////////////////////////////////////
+
+// Weak symbol.
+TOriginAttributes ExtractFromDictionary(TErrorAttributes* attributes);
+
+// Default impl of weak symbol.
+TOriginAttributes ExtractFromDictionaryDefault(TErrorAttributes* attributes);
 
 } // namespace NDetail
 

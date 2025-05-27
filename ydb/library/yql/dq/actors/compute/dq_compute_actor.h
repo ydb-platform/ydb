@@ -8,8 +8,8 @@
 #include <ydb/library/yql/dq/runtime/dq_async_stats.h>
 #include <ydb/library/yql/dq/runtime/dq_tasks_runner.h>
 #include <ydb/library/yql/dq/runtime/dq_transport.h>
-#include <ydb/library/yql/public/issue/yql_issue.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -256,6 +256,8 @@ struct TComputeRuntimeSettings {
 
     i64 AsyncInputPushLimit = std::numeric_limits<i64>::max();
 
+    bool WithProgressStats = false;
+
     inline bool CollectNone() const {
         return StatsMode <= NDqProto::DQ_STATS_MODE_NONE;
     }
@@ -376,6 +378,8 @@ struct TComputeMemoryLimits {
     ui64 MinMemAllocSize = 30_MB;
     ui64 MinMemFreeSize = 30_MB;
     ui64 OutputChunkMaxSize = GetDqExecutionSettings().FlowControl.MaxOutputChunkSize;
+    ui64 ChunkSizeLimit = 48_MB;
+    TMaybe<ui8> ArrayBufferMinFillPercentage; // Used by DqOutputHashPartitionConsumer and DqOutputChannel
 
     IMemoryQuotaManager::TPtr MemoryQuotaManager;
 };
@@ -386,7 +390,7 @@ using TTaskRunnerFactory = std::function<
 
 void FillAsyncStats(NDqProto::TDqAsyncBufferStats& proto, TDqAsyncStats stats);
 
-void FillTaskRunnerStats(ui64 taskId, ui32 stageId, const TTaskRunnerStatsBase& taskStats,
+void FillTaskRunnerStats(ui64 taskId, ui32 stageId, const TDqTaskRunnerStats& taskStats,
     NDqProto::TDqTaskStats* protoTask, TCollectStatsLevel level);
 
 NActors::IActor* CreateDqComputeActor(const NActors::TActorId& executerId, const TTxId& txId, NDqProto::TDqTask* task,

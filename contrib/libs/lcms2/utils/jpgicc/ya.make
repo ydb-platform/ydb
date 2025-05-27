@@ -9,7 +9,7 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(2.16)
+VERSION(2.17)
 
 PEERDIR(
     contrib/libs/lcms2

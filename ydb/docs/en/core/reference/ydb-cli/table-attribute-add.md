@@ -20,8 +20,8 @@ Look up the description of the command to add a custom attribute:
 
 ## Parameters of the subcommand {#options}
 
-| Name | Description |
----|---
+| Name          | Description                                                                                                                              |
+|---------------|------------------------------------------------------------------------------------------------------------------------------------------|
 | `--attribute` | The custom attribute in the `<key>=<value>` format. You can use `--attribute` many times to add multiple attributes by a single command. |
 
 ## Examples {examples}

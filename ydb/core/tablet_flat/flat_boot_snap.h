@@ -9,6 +9,7 @@
 #include "flat_writer_banks.h"
 #include "flat_executor_gclogic.h"
 #include "flat_executor_txloglogic.h"
+#include "util_fmt_abort.h"
 
 #include <ydb/core/tablet_flat/flat_executor.pb.h>
 #include <ydb/core/util/pb.h>
@@ -30,18 +31,18 @@ namespace NBoot {
             , Deps(std::move(deps))
             , Snap(snap)
         {
-            Y_ABORT_UNLESS(!(Deps && Snap), "Need either deps or raw snap");
+            Y_ENSURE(!(Deps && Snap), "Need either deps or raw snap");
         }
 
     private: /* IStep, boot logic DSL actor interface   */
-        void Start() noexcept override
+        void Start() override
         {
             GrabSnapFromDeps();
 
             if (!Snap) {
                 ProcessDeps(), Env->Finish(this);
             } else if (Snap->LargeGlobId.Lead.Step() == 0) {
-                Y_Fail("Invalid TLogoBlobID of snaphot: " << Snap->LargeGlobId.Lead);
+                Y_TABLET_ERROR("Invalid TLogoBlobID of snaphot: " << Snap->LargeGlobId.Lead);
             } else if (Snap->Body) {
                 Apply(Snap->LargeGlobId, Snap->Body);
             } else {
@@ -49,7 +50,7 @@ namespace NBoot {
             }
         }
 
-        void HandleStep(TIntrusivePtr<IStep> step) noexcept override
+        void HandleStep(TIntrusivePtr<IStep> step) override
         {
             auto *load = step->ConsumeAs<TLoadBlobs>(Pending);
 
@@ -57,7 +58,7 @@ namespace NBoot {
         }
 
     private:
-        void Apply(const NPageCollection::TLargeGlobId &snap, TArrayRef<const char> body) noexcept
+        void Apply(const NPageCollection::TLargeGlobId &snap, TArrayRef<const char> body)
         {
             if (EIdx::SnapLz4 == TCookie(snap.Lead.Cookie()).Index()) {
                 Decode(snap, Codec->Decode(body));
@@ -68,10 +69,10 @@ namespace NBoot {
             ProcessSnap(snap), ProcessDeps(), Env->Finish(this);
         }
 
-        void Decode(const NPageCollection::TLargeGlobId &snap, TArrayRef<const char> body) noexcept
+        void Decode(const NPageCollection::TLargeGlobId &snap, TArrayRef<const char> body)
         {
             bool ok = ParseFromStringNoSizeLimit(Proto, body);
-            Y_VERIFY_S(ok, "Failed to parse snapshot " << snap.Lead);
+            Y_ENSURE(ok, "Failed to parse snapshot " << snap.Lead);
 
             bool huge = (body.size() > 10*1024*1024);
 
@@ -94,7 +95,7 @@ namespace NBoot {
                 NTable::TAbi().Check(abi->GetTail(), abi->GetHead(), "snap");
         }
 
-        void ProcessSnap(const NPageCollection::TLargeGlobId &snap) noexcept
+        void ProcessSnap(const NPageCollection::TLargeGlobId &snap)
         {
             Back->Snap = snap;
             Back->Serial = Proto.GetSerial();
@@ -137,7 +138,7 @@ namespace NBoot {
             ReadWaste();
         }
 
-        void ReadAlterLog() noexcept
+        void ReadAlterLog()
         {
             TVector<TLogoBlobID> blobs;
 
@@ -164,7 +165,7 @@ namespace NBoot {
             }
         }
 
-        void ReadRedoSnap() noexcept
+        void ReadRedoSnap()
         {
             /* Merge of two lists with redo log records preferring records with
                 embedded bodies. Later merge will be dropped and replaced with
@@ -200,7 +201,7 @@ namespace NBoot {
             }
         }
 
-        void ReadGcSnap() noexcept
+        void ReadGcSnap()
         {
             if (auto *logic = Logic->Result().GcLogic.Get()) {
                 const auto &lead = Back->Snap.Lead;
@@ -232,7 +233,7 @@ namespace NBoot {
             }
         }
 
-        void ReadWaste() const noexcept
+        void ReadWaste() const
         {
             if (auto *waste = Back->Waste.Get()) {
                 if (Proto.HasWaste()) {
@@ -252,7 +253,7 @@ namespace NBoot {
             }
         }
 
-        void GrabSnapFromDeps() noexcept
+        void GrabSnapFromDeps()
         {
             auto *entry = (Deps && Deps->Entries) ? &Deps->Entries[0] : nullptr;
 
@@ -262,9 +263,9 @@ namespace NBoot {
                 const auto span = NPageCollection::TGroupBlobsByCookie(entry->References).Do();
                 const auto largeGlobId = NPageCollection::TGroupBlobsByCookie::ToLargeGlobId(span, Logic->GetBSGroupFor(span[0]));
 
-                Y_ABORT_UNLESS(span.size() == entry->References.size());
-                Y_ABORT_UNLESS(TCookie(span[0].Cookie()).Type() == TCookie::EType::Log);
-                Y_ABORT_UNLESS(largeGlobId, "Cannot make TLargeGlobId for snapshot");
+                Y_ENSURE(span.size() == entry->References.size());
+                Y_ENSURE(TCookie(span[0].Cookie()).Type() == TCookie::EType::Log);
+                Y_ENSURE(largeGlobId, "Cannot make TLargeGlobId for snapshot");
 
                 if (auto logl = Env->Logger()->Log(ELnLev::Debug)) {
                     logl
@@ -279,16 +280,16 @@ namespace NBoot {
             }
         }
 
-        void ProcessDeps() noexcept
+        void ProcessDeps()
         {
             if (Deps) {
                 for (auto &entry : Deps->Entries) {
-                    Y_ABORT_UNLESS(!entry.IsSnapshot);
+                    Y_ENSURE(!entry.IsSnapshot);
 
                     TTxStamp stamp{ entry.Id.first, entry.Id.second };
 
                     if (entry.EmbeddedLogBody) {
-                        Y_ABORT_UNLESS(entry.References.empty());
+                        Y_ENSURE(entry.References.empty());
                         Back->RedoLog.emplace_back(stamp, entry.EmbeddedLogBody);
                     } else {
                         NPageCollection::TGroupBlobsByCookie chop(entry.References);
@@ -323,7 +324,7 @@ namespace NBoot {
 
         void SortLogoSpan(TTxStamp stamp, NPageCollection::TGroupBlobsByCookie::TArray span)
         {
-            Y_ABORT_UNLESS(TCookie(span[0].Cookie()).Type() == TCookie::EType::Log);
+            Y_ENSURE(TCookie(span[0].Cookie()).Type() == TCookie::EType::Log);
 
             const auto group = Logic->GetBSGroupFor(span[0]);
             const auto index = TCookie(span[0].Cookie()).Index();
@@ -355,7 +356,7 @@ namespace NBoot {
             } else if (TCookie::CookieRangeRaw().Has(span[0].Cookie())) {
                 /* Annex (external blobs for redo log), isn't used here */
             } else {
-                Y_Fail(
+                Y_TABLET_ERROR(
                     NFmt::Do(*Back) << " got on booting blob " << span[0]
                     << " with unknown TCookie structue, EIdx " << ui32(index));
             }

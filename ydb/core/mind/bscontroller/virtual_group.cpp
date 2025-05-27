@@ -1,5 +1,6 @@
 #include "impl.h"
 #include "config.h"
+#include "group_geometry_info.h"
 
 namespace NKikimr::NBsController {
 
@@ -89,10 +90,15 @@ namespace NKikimr::NBsController {
 
         GroupFailureModelChanged.insert(group->ID);
         group->CalculateGroupStatus();
+        group->CalculateLayoutStatus(&Self, group->Topology.get(), {});
 
         NKikimrBlobDepot::TBlobDepotConfig config;
         config.SetVirtualGroupId(group->ID.GetRawId());
         config.MutableChannelProfiles()->CopyFrom(cmd.GetChannelProfiles());
+        if (cmd.HasS3BackendSettings()) {
+            config.MutableS3BackendSettings()->CopyFrom(cmd.GetS3BackendSettings());
+        }
+        config.SetName(cmd.GetName());
 
         const bool success = config.SerializeToString(&group->BlobDepotConfig.ConstructInPlace());
         Y_ABORT_UNLESS(success);
@@ -248,13 +254,21 @@ namespace NKikimr::NBsController {
                 if (const TGroupInfo *group = Self->FindGroup(GroupId); !group || group->VirtualGroupSetupMachineId != MachineId) {
                     return true; // another machine is already running
                 }
-                State.emplace(*Self, Self->HostRecords, TActivationContext::Now());
+                State.emplace(*Self, Self->HostRecords, TActivationContext::Now(), TActivationContext::Monotonic());
                 TGroupInfo *group = State->Groups.FindForUpdate(GroupId);
                 Y_ABORT_UNLESS(group);
                 if (!Callback(*group, *State)) {
                     State->DeleteExistingGroup(group->ID);
                 }
                 group->CalculateGroupStatus();
+                group->CalculateLayoutStatus(Self, group->Topology.get(), [&] {
+                    const auto& pools = State->StoragePools.Get();
+                    if (const auto it = pools.find(group->StoragePoolId); it != pools.end()) {
+                        return TGroupGeometryInfo(group->Topology->GType, it->second.GetGroupGeometry());
+                    }
+                    Y_DEBUG_ABORT();
+                    return TGroupGeometryInfo();
+                });
                 TString error;
                 if (State->Changed() && !Self->CommitConfigUpdates(*State, true, true, true, txc, &error)) {
                     STLOG(PRI_ERROR, BS_CONTROLLER, BSCVG08, "failed to commit update", (VirtualGroupId, GroupId), (Error, error));
@@ -294,7 +308,7 @@ namespace NKikimr::NBsController {
                 if (Token.expired()) {
                     return true; // actor is already dead
                 }
-                State.emplace(*Self, Self->HostRecords, TActivationContext::Now());
+                State.emplace(*Self, Self->HostRecords, TActivationContext::Now(), TActivationContext::Monotonic());
                 const size_t n = State->BlobDepotDeleteQueue.Unshare().erase(GroupId);
                 Y_ABORT_UNLESS(n == 1);
                 TString error;
@@ -510,7 +524,7 @@ namespace NKikimr::NBsController {
 
                 auto descr = item.DomainDescription;
 
-                Self->Execute(std::make_unique<TTxUpdateGroup>(this, [=](TGroupInfo& group, TConfigState&) {
+                Self->Execute(std::make_unique<TTxUpdateGroup>(this, [=, this](TGroupInfo& group, TConfigState&) {
                     auto& config = GetConfig(&group);
                     if (hiveId != RootHiveId) {
                         config.SetTenantHiveId(hiveId);
@@ -897,7 +911,7 @@ namespace NKikimr::NBsController {
             TTxType GetTxType() const override { return NBlobStorageController::TXTYPE_DECOMMIT_GROUP; }
 
             bool Execute(TTransactionContext& txc, const TActorContext&) override {
-                State.emplace(*Self, Self->HostRecords, TActivationContext::Now());
+                State.emplace(*Self, Self->HostRecords, TActivationContext::Now(), TActivationContext::Monotonic());
                 Action(*State);
                 TString error;
                 if (State->Changed() && !Self->CommitConfigUpdates(*State, true, true, true, txc, &error)) {

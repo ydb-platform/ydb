@@ -95,6 +95,18 @@ struct TProcessorSchema : NIceDb::Schema {
         using TColumns = TableColumns<TypeCol, TabletId, Data>;
     };
 
+    struct IntervalPartitionFollowerTops : Table<19> {
+        struct TypeCol  : Column<1, NScheme::NTypeIds::Uint32> {
+            static TString GetColumnName(const TString&) { return "Type"; }
+        };
+        struct TabletId : Column<2, NScheme::NTypeIds::Uint64> {};
+        struct FollowerId : Column<3, NScheme::NTypeIds::Uint32> {};
+        struct Data     : Column<4, NScheme::NTypeIds::String> {};
+
+        using TKey = TableKey<TypeCol, TabletId, FollowerId>;
+        using TColumns = TableColumns<TypeCol, TabletId, FollowerId, Data>;
+    };    
+
 #define RESULT_PARTITION_TABLE(TableName, TableID)                       \
     struct TableName : Table<TableID> {                                  \
         struct IntervalEnd : Column<1, NScheme::NTypeIds::Timestamp> {}; \
@@ -107,6 +119,8 @@ struct TProcessorSchema : NIceDb::Schema {
 
     RESULT_PARTITION_TABLE(TopPartitionsOneMinute, 17)
     RESULT_PARTITION_TABLE(TopPartitionsOneHour, 18)
+    RESULT_PARTITION_TABLE(TopPartitionsByTliOneMinute, 20)
+    RESULT_PARTITION_TABLE(TopPartitionsByTliOneHour, 21)
 
 #undef RESULT_PARTITION_TABLE
 
@@ -127,8 +141,11 @@ struct TProcessorSchema : NIceDb::Schema {
         TopByRequestUnitsOneMinute,
         TopByRequestUnitsOneHour,
         IntervalPartitionTops,
+        IntervalPartitionFollowerTops,
         TopPartitionsOneMinute,
-        TopPartitionsOneHour
+        TopPartitionsOneHour,
+        TopPartitionsByTliOneMinute,
+        TopPartitionsByTliOneHour
     >;
 
     using TSettings = SchemaSettings<

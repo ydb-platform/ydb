@@ -2,12 +2,12 @@
 
 namespace NKikimr::NBlobDepot {
 
-    NKikimrProto::EReplyStatus TBlobDepotAgent::TBlocksManager::CheckBlockForTablet(ui64 tabletId, ui32 generation,
+    NKikimrProto::EReplyStatus TBlobDepotAgent::TBlocksManager::CheckBlockForTablet(ui64 tabletId, std::optional<ui32> generation,
             TQuery *query, ui32 *blockedGeneration) {
         NKikimrProto::EReplyStatus status = NKikimrProto::UNKNOWN;
         auto& block = Blocks[tabletId];
         const TMonotonic now = TActivationContext::Monotonic();
-        if (generation <= block.BlockedGeneration) {
+        if (generation && generation <= block.BlockedGeneration) {
             status = NKikimrProto::BLOCKED;
         } else if (now < block.ExpirationTimestamp) {
             if (blockedGeneration) {

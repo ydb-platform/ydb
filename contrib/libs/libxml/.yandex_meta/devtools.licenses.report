@@ -1,0 +1,237 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     MIT                  0585e7e428d74d4344eca1dc6d89be08
+BELONGS ya.make
+    License text:
+         * The MIT License (MIT)
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        timsort.h [9:9]
+
+KEEP     MIT                  0675902ab96cd7f15c07246a24e9e42b
+BELONGS ya.make
+FILE_INCLUDE Copyright found in files: xpath.c at line 11
+    License text:
+         * See Copyright for the status of this software
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 44.00
+        Match type      : REFERENCE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        xpath.c [11:11]
+
+KEEP     MIT                  4138c95edb8e207b0c56cfaf284bd9fd
+BELONGS ya.make
+FILE_INCLUDE Copyright found in files: README.md at line 18
+    License text:
+        This code is released under the MIT License, see the Copyright file.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        README.md [18:18]
+
+KEEP     Mit-Veillard-Variant 43589b25dd99faeb77ea58a7ea046a1f
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-mit-veillard-variant
+        Score           : 98.57
+        Match type      : TEXT
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/mit-veillard-variant.LICENSE, https://raw.githubusercontent.com/GNOME/libxml2/4c2e7c651f6c2f0d1a74f350cbda95f7df3e7017/hash.c
+    Files with this license:
+        dict.c [7:14]
+        hash.c [8:15]
+        list.c [6:13]
+
+KEEP     MIT                  4372cff0d21afdacf852b4c78b18140d
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        timsort.h [15:31]
+
+KEEP     MIT                  5b8492d2305940023465527cf5f375e6
+BELONGS ya.make
+FILE_INCLUDE Copyright found in files: buf.h at line 8, enc.h at line 7, include/libxml/DOCBparser.h at line 6, include/libxml/HTMLparser.h at line 8, include/libxml/HTMLtree.h at line 6, include/libxml/SAX.h at line 6, include/libxml/SAX2.h at line 6, include/libxml/c14n.h at line 13, include/libxml/catalog.h at line 12, include/libxml/debugXML.h at line 6, include/libxml/dict.h at line 6, include/libxml/encoding.h at line 17, include/libxml/entities.h at line 6, include/libxml/globals.h at line 9, include/libxml/hash.h at line 6, include/libxml/list.h at line 6, include/libxml/nanoftp.h at line 6, include/libxml/nanohttp.h at line 6, include/libxml/parser.h at line 5, include/libxml/parserInternals.h at line 7, include/libxml/pattern.h at line 6, include/libxml/relaxng.h at line 5, include/libxml/schemasInternals.h at line 8, include/libxml/schematron.h at line 5, include/libxml/threads.h at line 6, include/libxml/tree.h at line 7, include/libxml/uri.h at line 6, include/libxml/valid.h at line 5, include/libxml/xinclude.h at line 8, include/libxml/xlink.h at line 5, include/libxml/xmlIO.h at line 5, include/libxml/xmlautomata.h at line 5, include/libxml/xmlerror.h at line 5, include/libxml/xmlexports.h at line 5, include/libxml/xmlmemory.h at line 6, include/libxml/xmlmodule.h at line 6, include/libxml/xmlreader.h at line 5, include/libxml/xmlregexp.h at line 6, include/libxml/xmlsave.h at line 5, include/libxml/xmlschemas.h at line 6, include/libxml/xmlschemastypes.h at line 6, include/libxml/xmlstring.h at line 6, include/libxml/xmlversion.h at line 5, include/libxml/xmlwriter.h at line 5, include/libxml/xpath.h at line 14, include/libxml/xpathInternals.h at line 7, include/libxml/xpointer.h at line 12, save.h at line 7
+    License text:
+         * Copy: See Copyright for the status of this software.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 50.00
+        Match type      : REFERENCE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        buf.h [8:8]
+        enc.h [7:7]
+        include/libxml/DOCBparser.h [6:6]
+        include/libxml/HTMLparser.h [8:8]
+        include/libxml/HTMLtree.h [6:6]
+        include/libxml/SAX.h [6:6]
+        include/libxml/SAX2.h [6:6]
+        include/libxml/c14n.h [13:13]
+        include/libxml/catalog.h [12:12]
+        include/libxml/debugXML.h [6:6]
+        include/libxml/dict.h [6:6]
+        include/libxml/encoding.h [17:17]
+        include/libxml/entities.h [6:6]
+        include/libxml/globals.h [9:9]
+        include/libxml/hash.h [6:6]
+        include/libxml/list.h [6:6]
+        include/libxml/nanoftp.h [6:6]
+        include/libxml/nanohttp.h [6:6]
+        include/libxml/parser.h [5:5]
+        include/libxml/parserInternals.h [7:7]
+        include/libxml/pattern.h [6:6]
+        include/libxml/relaxng.h [5:5]
+        include/libxml/schemasInternals.h [8:8]
+        include/libxml/schematron.h [5:5]
+        include/libxml/threads.h [6:6]
+        include/libxml/tree.h [7:7]
+        include/libxml/uri.h [6:6]
+        include/libxml/valid.h [5:5]
+        include/libxml/xinclude.h [8:8]
+        include/libxml/xlink.h [5:5]
+        include/libxml/xmlIO.h [5:5]
+        include/libxml/xmlautomata.h [5:5]
+        include/libxml/xmlerror.h [5:5]
+        include/libxml/xmlexports.h [5:5]
+        include/libxml/xmlmemory.h [6:6]
+        include/libxml/xmlmodule.h [6:6]
+        include/libxml/xmlreader.h [5:5]
+        include/libxml/xmlregexp.h [6:6]
+        include/libxml/xmlsave.h [5:5]
+        include/libxml/xmlschemas.h [6:6]
+        include/libxml/xmlschemastypes.h [6:6]
+        include/libxml/xmlstring.h [6:6]
+        include/libxml/xmlversion.h [5:5]
+        include/libxml/xmlwriter.h [5:5]
+        include/libxml/xpath.h [14:14]
+        include/libxml/xpathInternals.h [7:7]
+        include/libxml/xpointer.h [12:12]
+        save.h [7:7]
+
+KEEP     MIT                  67030fb1e5a0ebbf03d13c4f04ba5e8e
+BELONGS ya.make
+FILE_INCLUDE Copyright found in files: tree.c at line 7
+    License text:
+         * See Copyright for the status of this software.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 44.00
+        Match type      : REFERENCE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        tree.c [7:7]
+
+KEEP     MIT                  78d4c8870de0cf03b21661637338ced8
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        Copyright [7:23]
+
+KEEP     MIT                  bc9814146b7ce77f5ac6f5aa8ae1c4e9
+BELONGS ya.make
+    License text:
+         * See COPYRIGHT for the status of this software
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 44.00
+        Match type      : REFERENCE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        libxml.h [4:4]
+
+KEEP     MIT                  db4a32b2f76695e476e159b02d538062
+BELONGS xmllint/ya.make ya.make
+FILE_INCLUDE Copyright found in files: HTMLparser.c at line 4, HTMLtree.c at line 4, SAX.c at line 5, SAX2.c at line 4, buf.c at line 10, c14n.c at line 8, catalog.c at line 10, debugXML.c at line 5, encoding.c at line 16, entities.c at line 4, error.c at line 4, globals.c at line 8, legacy.c at line 5, nanohttp.c at line 9, parser.c at line 28, parserInternals.c at line 5, pattern.c at line 9, relaxng.c at line 4, schematron.c at line 4, threads.c at line 4, uri.c at line 6, valid.c at line 5, xinclude.c at line 7, xlink.c at line 5, xmlIO.c at line 4, xmllint.c at line 4, xmlmodule.c at line 4, xmlreader.c at line 8, xmlregexp.c at line 12, xmlsave.c at line 4, xmlschemas.c at line 5, xmlschemastypes.c at line 5, xmlstring.c at line 8, xpointer.c at line 12, xzlib.c at line 5
+    License text:
+         * See Copyright for the status of this software.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 44.00
+        Match type      : REFERENCE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        HTMLparser.c [4:4]
+        HTMLtree.c [4:4]
+        SAX.c [5:5]
+        SAX2.c [4:4]
+        buf.c [10:10]
+        c14n.c [8:8]
+        catalog.c [10:10]
+        debugXML.c [5:5]
+        encoding.c [16:16]
+        entities.c [4:4]
+        error.c [4:4]
+        globals.c [8:8]
+        legacy.c [5:5]
+        nanohttp.c [9:9]
+        parser.c [28:28]
+        parserInternals.c [5:5]
+        pattern.c [9:9]
+        relaxng.c [4:4]
+        schematron.c [4:4]
+        threads.c [4:4]
+        uri.c [6:6]
+        valid.c [5:5]
+        xinclude.c [7:7]
+        xlink.c [5:5]
+        xmlIO.c [4:4]
+        xmllint.c [4:4]
+        xmlmodule.c [4:4]
+        xmlreader.c [8:8]
+        xmlregexp.c [12:12]
+        xmlsave.c [4:4]
+        xmlschemas.c [5:5]
+        xmlschemastypes.c [5:5]
+        xmlstring.c [8:8]
+        xpointer.c [12:12]
+        xzlib.c [5:5]
+    Belongs difference:
+        + xmllint/ya.make

@@ -29,6 +29,7 @@ public:
     }
 
     [[nodiscard]] ui64 ExtractInternalIdVerified(const ui64 externalId);
+    [[nodiscard]] std::optional<ui64> ExtractInternalIdOptional(const ui64 externalId);
 
     ui64 GetMinInternalIdVerified() const;
     ui64 GetExternalIdVerified(const ui64 internalId) const;

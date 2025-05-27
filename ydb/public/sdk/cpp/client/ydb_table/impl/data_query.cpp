@@ -2,7 +2,7 @@
 
 #include <openssl/sha.h>
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 namespace NTable {
 
 TString GetQueryHash(const TString& text) {

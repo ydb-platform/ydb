@@ -10,16 +10,16 @@
 
 #include <ydb/core/fq/libs/protos/fq_private.pb.h>
 #include <ydb/public/api/protos/draft/fq.pb.h>
-#include <ydb/public/sdk/cpp/client/ydb_params/params.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/params/params.h>
 
-#include <ydb/library/yql/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 
 #include <ydb/core/fq/libs/common/debug_info.h>
 #include <ydb/core/fq/libs/control_plane_config/events/events.h>
 #include <ydb/core/fq/libs/control_plane_storage/proto/yq_internal.pb.h>
 #include <ydb/core/fq/libs/events/event_subspace.h>
 #include <ydb/core/fq/libs/quota_manager/events/events.h>
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
 namespace NFq {
 
@@ -34,7 +34,7 @@ struct TAuditDetails {
         return sizeof(*this)
                 + (Before.Empty() ? 0 : Before->ByteSizeLong())
                 + (After.Empty() ? 0 : After->ByteSizeLong())
-                + CloudId.Size();
+                + CloudId.size();
     }
 };
 
@@ -202,11 +202,11 @@ struct TEvControlPlaneStorage {
 
         size_t GetByteSize() const {
             return sizeof(*this)
-                    + Scope.Size()
+                    + Scope.size()
                     + Request.ByteSizeLong()
-                    + User.Size()
-                    + Token.Size()
-                    + CloudId.Size();
+                    + User.size()
+                    + Token.size()
+                    + CloudId.size();
         }
 
         TString Scope;
@@ -392,6 +392,7 @@ struct TEvControlPlaneStorage {
 
     // internal messages
     struct TEvWriteResultDataRequest : NActors::TEventLocal<TEvWriteResultDataRequest, EvWriteResultDataRequest> {
+        using TProto = Fq::Private::WriteTaskResultRequest;
 
         TEvWriteResultDataRequest() = default;
 
@@ -410,6 +411,8 @@ struct TEvControlPlaneStorage {
 
     struct TEvWriteResultDataResponse : NActors::TEventLocal<TEvWriteResultDataResponse, EvWriteResultDataResponse> {
         static constexpr bool Auditable = false;
+
+        using TProto = Fq::Private::WriteTaskResultResult;
 
         explicit TEvWriteResultDataResponse(
             const Fq::Private::WriteTaskResultResult& record)
@@ -434,6 +437,7 @@ struct TEvControlPlaneStorage {
     };
 
     struct TEvGetTaskRequest : NActors::TEventLocal<TEvGetTaskRequest, EvGetTaskRequest> {
+        using TProto = Fq::Private::GetTaskRequest;
 
         TEvGetTaskRequest() = default;
 
@@ -453,6 +457,8 @@ struct TEvControlPlaneStorage {
 
     struct TEvGetTaskResponse : NActors::TEventLocal<TEvGetTaskResponse, EvGetTaskResponse> {
         static constexpr bool Auditable = false;
+
+        using TProto = Fq::Private::GetTaskResult;
 
         explicit TEvGetTaskResponse(
             const Fq::Private::GetTaskResult& record)
@@ -489,16 +495,17 @@ struct TEvControlPlaneStorage {
 
         size_t GetByteSize() const {
             return sizeof(*this)
-                    + DatabaseId.Size()
-                    + Database.Size()
-                    + TopicPath.Size()
-                    + ConsumerName.Size()
-                    + ClusterEndpoint.Size()
-                    + TokenName.Size();
+                    + DatabaseId.size()
+                    + Database.size()
+                    + TopicPath.size()
+                    + ConsumerName.size()
+                    + ClusterEndpoint.size()
+                    + TokenName.size();
         }
     };
 
     struct TEvPingTaskRequest : NActors::TEventLocal<TEvPingTaskRequest, EvPingTaskRequest> {
+        using TProto = Fq::Private::PingTaskRequest;
 
         TEvPingTaskRequest() = default;
 
@@ -518,6 +525,8 @@ struct TEvControlPlaneStorage {
 
     struct TEvPingTaskResponse : NActors::TEventLocal<TEvPingTaskResponse, EvPingTaskResponse> {
         static constexpr bool Auditable = false;
+
+        using TProto = Fq::Private::PingTaskResult;
 
         explicit TEvPingTaskResponse(
             const Fq::Private::PingTaskResult& record)
@@ -542,6 +551,7 @@ struct TEvControlPlaneStorage {
     };
 
     struct TEvNodesHealthCheckRequest : NActors::TEventLocal<TEvNodesHealthCheckRequest, EvNodesHealthCheckRequest> {
+        using TProto = Fq::Private::NodesHealthCheckRequest;
 
         TEvNodesHealthCheckRequest() = default;
 
@@ -560,6 +570,8 @@ struct TEvControlPlaneStorage {
 
     struct TEvNodesHealthCheckResponse : NActors::TEventLocal<TEvNodesHealthCheckResponse, EvNodesHealthCheckResponse> {
         static constexpr bool Auditable = false;
+
+        using TProto = Fq::Private::NodesHealthCheckResult;
 
         explicit TEvNodesHealthCheckResponse(
             const Fq::Private::NodesHealthCheckResult& record)
@@ -668,31 +680,36 @@ struct TEvControlPlaneStorage {
     };
 
     struct TEvCreateDatabaseRequest : NActors::TEventLocal<TEvCreateDatabaseRequest, EvCreateDatabaseRequest> {
+        using TProto = FederatedQuery::Internal::ComputeDatabaseInternal;
+
         TEvCreateDatabaseRequest() = default;
 
         explicit TEvCreateDatabaseRequest(const TString& cloudId, const TString& scope, const FederatedQuery::Internal::ComputeDatabaseInternal& record)
             : CloudId(cloudId)
             , Scope(scope)
-            , Record(record)
+            , Request(record)
         {}
 
         size_t GetByteSize() const {
             return sizeof(*this)
-                    + CloudId.Size()
-                    + Scope.Size()
-                    + Record.ByteSizeLong();
+                    + CloudId.size()
+                    + Scope.size()
+                    + Request.ByteSizeLong();
         }
 
         TString CloudId;
         TString Scope;
-        FederatedQuery::Internal::ComputeDatabaseInternal Record;
+        FederatedQuery::Internal::ComputeDatabaseInternal Request;
     };
 
     struct TEvCreateDatabaseResponse : NActors::TEventLocal<TEvCreateDatabaseResponse, EvCreateDatabaseResponse> {
+        using TProto = google::protobuf::Empty;
+
         static constexpr bool Auditable = false;
 
-        explicit TEvCreateDatabaseResponse()
-        {}
+        explicit TEvCreateDatabaseResponse(const google::protobuf::Empty& response = {}) {
+            Y_UNUSED(response);
+        }
 
         explicit TEvCreateDatabaseResponse(const NYql::TIssues& issues)
             : Issues(issues)
@@ -709,6 +726,7 @@ struct TEvControlPlaneStorage {
     };
 
     struct TEvDescribeDatabaseRequest : NActors::TEventLocal<TEvDescribeDatabaseRequest, EvDescribeDatabaseRequest> {
+        using TProto = google::protobuf::Empty;
 
         TEvDescribeDatabaseRequest() = default;
 
@@ -720,8 +738,8 @@ struct TEvControlPlaneStorage {
         size_t GetByteSize() const {
             return sizeof(*this)
                     + Request.ByteSizeLong()
-                    + CloudId.Size()
-                    + Scope.Size();
+                    + CloudId.size()
+                    + Scope.size();
         }
 
         google::protobuf::Empty Request;
@@ -731,6 +749,8 @@ struct TEvControlPlaneStorage {
 
     struct TEvDescribeDatabaseResponse : NActors::TEventLocal<TEvDescribeDatabaseResponse, EvDescribeDatabaseResponse> {
         static constexpr bool Auditable = false;
+
+        using TProto = FederatedQuery::Internal::ComputeDatabaseInternal;
 
         explicit TEvDescribeDatabaseResponse(const FederatedQuery::Internal::ComputeDatabaseInternal& record)
             : Record(record)
@@ -755,6 +775,8 @@ struct TEvControlPlaneStorage {
     };
 
     struct TEvModifyDatabaseRequest : NActors::TEventLocal<TEvModifyDatabaseRequest, EvModifyDatabaseRequest> {
+        using TProto = google::protobuf::Empty;
+
         TEvModifyDatabaseRequest() = default;
 
         explicit TEvModifyDatabaseRequest(const TString& cloudId, const TString& scope)
@@ -764,10 +786,12 @@ struct TEvControlPlaneStorage {
 
         size_t GetByteSize() const {
             return sizeof(*this)
-                    + CloudId.Size()
-                    + Scope.Size();
+                    + Request.ByteSizeLong()
+                    + CloudId.size()
+                    + Scope.size();
         }
 
+        google::protobuf::Empty Request;
         TString CloudId;
         TString Scope;
         TMaybe<bool> Synchronized;
@@ -776,10 +800,13 @@ struct TEvControlPlaneStorage {
     };
 
     struct TEvModifyDatabaseResponse : NActors::TEventLocal<TEvModifyDatabaseResponse, EvModifyDatabaseResponse> {
+        using TProto = google::protobuf::Empty;
+
         static constexpr bool Auditable = false;
 
-        explicit TEvModifyDatabaseResponse()
-        {}
+        explicit TEvModifyDatabaseResponse(const google::protobuf::Empty& response = {}) {
+            Y_UNUSED(response);
+        }
 
         explicit TEvModifyDatabaseResponse(const NYql::TIssues& issues)
             : Issues(issues)

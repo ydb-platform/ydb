@@ -1,5 +1,6 @@
 #include "memory_usage_tracker.h"
-#include "singleton.h"
+
+#include <library/cpp/yt/memory/leaky_ref_counted_singleton.h>
 
 namespace NYT {
 
@@ -233,9 +234,14 @@ TError TMemoryUsageTrackerGuard::SetSizeImpl(i64 size, auto acquirer)
     return {};
 }
 
-void TMemoryUsageTrackerGuard::IncrementSize(i64 sizeDelta)
+void TMemoryUsageTrackerGuard::IncreaseSize(i64 sizeDelta)
 {
     SetSize(Size_ + sizeDelta);
+}
+
+void TMemoryUsageTrackerGuard::DecreaseSize(i64 sizeDelta)
+{
+    SetSize(Size_ - sizeDelta);
 }
 
 TMemoryUsageTrackerGuard TMemoryUsageTrackerGuard::TransferMemory(i64 size)

@@ -1,3 +1,5 @@
+syntax = "proto2";
+
 import "google/protobuf/descriptor.proto";
 
 package NYT;
@@ -91,6 +93,8 @@ extend google.protobuf.FieldOptions
     repeated EWrapperFieldFlag.Enum flags = 56788;
     optional string column_name = 56789;
     optional string key_column_name = 56790;
+    // TODO(ignat): use consistent tag number.
+    optional uint64 max_inline_hunk_size = 60130;
 }
 
 extend google.protobuf.MessageOptions

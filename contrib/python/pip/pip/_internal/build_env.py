@@ -1,5 +1,4 @@
-"""Build Environment used for isolation during sdist building
-"""
+"""Build Environment used for isolation during sdist building"""
 
 import logging
 import os
@@ -11,7 +10,6 @@ from collections import OrderedDict
 from types import TracebackType
 from typing import TYPE_CHECKING, Iterable, List, Optional, Set, Tuple, Type, Union
 
-from pip._vendor.certifi import where
 from pip._vendor.packaging.version import Version
 
 from pip import __file__ as pip_location
@@ -242,6 +240,14 @@ class BuildEnvironment:
             prefix.path,
             "--no-warn-script-location",
             "--disable-pip-version-check",
+            # As the build environment is ephemeral, it's wasteful to
+            # pre-compile everything, especially as not every Python
+            # module will be used/compiled in most cases.
+            "--no-compile",
+            # The prefix specified two lines above, thus
+            # target from config file or env var should be ignored
+            "--target",
+            "",
         ]
         if logger.getEffectiveLevel() <= logging.DEBUG:
             args.append("-vv")
@@ -266,21 +272,25 @@ class BuildEnvironment:
         for link in finder.find_links:
             args.extend(["--find-links", link])
 
+        if finder.proxy:
+            args.extend(["--proxy", finder.proxy])
         for host in finder.trusted_hosts:
             args.extend(["--trusted-host", host])
+        if finder.custom_cert:
+            args.extend(["--cert", finder.custom_cert])
+        if finder.client_cert:
+            args.extend(["--client-cert", finder.client_cert])
         if finder.allow_all_prereleases:
             args.append("--pre")
         if finder.prefer_binary:
             args.append("--prefer-binary")
         args.append("--")
         args.extend(requirements)
-        extra_environ = {"_PIP_STANDALONE_CERT": where()}
         with open_spinner(f"Installing {kind}") as spinner:
             call_subprocess(
                 args,
                 command_desc=f"pip subprocess to install {kind}",
                 spinner=spinner,
-                extra_environ=extra_environ,
             )
 
 

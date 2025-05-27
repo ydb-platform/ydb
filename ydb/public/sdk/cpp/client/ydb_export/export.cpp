@@ -15,7 +15,7 @@
 
 #include <util/stream/str.h>
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 namespace NExport {
 
 using namespace NThreading;

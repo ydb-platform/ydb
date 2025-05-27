@@ -1,8 +1,10 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard_impl.h"
+#include "schemeshard__op_traits.h"
 
 #include <ydb/core/base/subdomain.h>
+#include <ydb/core/mind/hive/hive.h>
 #include <ydb/core/persqueue/config/config.h>
 
 namespace {
@@ -109,7 +111,7 @@ public:
 
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                    DebugHint() << " ProgressState"
-                               << ", at tablet" << ssId);
+                               << ", at tablet# " << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -416,11 +418,11 @@ public:
         IncParentDirAlterVersionWithRepublish(OperationId, dstPath, context);
 
         Y_ABORT_UNLESS(shardsToCreate == txState.Shards.size());
-        dstPath.DomainInfo()->IncPathsInside();
-        dstPath.DomainInfo()->AddInternalShards(txState);
+        dstPath.DomainInfo()->IncPathsInside(context.SS);
+        dstPath.DomainInfo()->AddInternalShards(txState, context.SS);
 
         dstPath.Base()->IncShardsInside(shardsToCreate);
-        parentPath.Base()->IncAliveChildren();
+        IncAliveChildrenDirect(OperationId, parentPath, context); // for correct discard of ChildrenExist prop
 
         SetState(NextState());
         return result;
@@ -444,6 +446,30 @@ public:
 }
 
 namespace NKikimr::NSchemeShard {
+
+using TTag = TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateSolomonVolume>;
+
+namespace NOperation {
+
+template <>
+std::optional<TString> GetTargetName<TTag>(
+    TTag,
+    const TTxTransaction& tx)
+{
+    return tx.GetCreateSolomonVolume().GetName();
+}
+
+template <>
+bool SetName<TTag>(
+    TTag,
+    TTxTransaction& tx,
+    const TString& name)
+{
+    tx.MutableCreateSolomonVolume()->SetName(name);
+    return true;
+}
+
+} // namespace NOperation
 
 ISubOperation::TPtr CreateNewSolomon(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TCreateSolomon>(id, tx);

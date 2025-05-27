@@ -1,9 +1,10 @@
 #pragma once
 
 #include <ydb/core/testlib/test_client.h>
-#include <ydb/public/sdk/cpp/client/ydb_result/result.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
-#include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/query.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -16,14 +17,25 @@ NKikimrSubDomains::TSubDomainSettings GetSubDomainDeclareSettings(
 NKikimrSubDomains::TSubDomainSettings GetSubDomainDefaultSettings(
     const TString &name, const TStoragePools &pools = {});
 
+struct TTestEnvSettings {
+    ui32 StoragePools = 0;
+    ui32 PqTabletsN = 0;
+    bool EnableSVP = false;
+    bool EnableForceFollowers = false;
+    bool ShowCreateTable = false;
+    bool AlterObjectEnabled = false;
+    bool EnableSparsedColumns = false;
+    bool EnableOlapCompression = false;
+    NKikimrProto::TAuthConfig AuthConfig = {};
+};
+
 class TTestEnv {
 public:
     class TDisableSourcesTag {};
     static TDisableSourcesTag DisableSourcesTag;
 
 public:
-    TTestEnv(ui32 staticNodes = 1, ui32 dynamicNodes = 4, ui32 storagePools = 0,
-        ui32 pqTabletsN = 0, bool enableSVP = false);
+    TTestEnv(ui32 staticNodes = 1, ui32 dynamicNodes = 4, const TTestEnvSettings& settings = {});
 
     ~TTestEnv();
 

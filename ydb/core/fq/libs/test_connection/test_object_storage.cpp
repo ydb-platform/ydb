@@ -9,8 +9,8 @@
 #include <ydb/library/security/util.h>
 
 #include <ydb/library/yql/providers/s3/provider/yql_s3_provider_impl.h>
-#include <ydb/library/yql/providers/common/structured_token/yql_token_builder.h>
-#include <ydb/library/yql/utils/url_builder.h>
+#include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
+#include <yql/essentials/utils/url_builder.h>
 
 #ifdef THROW
 #undef THROW
@@ -157,7 +157,7 @@ private:
         const auto authToken = credentialsProviderFactory->CreateProvider()->GetAuthInfo();
 
         TString requestId = CreateGuidAsString();
-        NYql::IHTTPGateway::THeaders headers = NYql::IHTTPGateway::MakeYcHeaders(requestId, authToken, {});
+        NYql::IHTTPGateway::THeaders headers = NYql::IHTTPGateway::MakeYcHeaders(requestId, TString{authToken}, {});
 
         const auto retryPolicy = NYql::IHTTPGateway::TRetryPolicy::GetExponentialBackoffPolicy(RetryS3SlowDown);
 

@@ -23,6 +23,8 @@ public:
     virtual void Push(TDqSerializedBatch&& batch, i64 space) = 0;
  
     virtual void Finish() = 0;
+
+    virtual bool IsPending() const { return false; };
 };
 
 IDqAsyncInputBuffer::TPtr CreateDqAsyncInputBuffer(ui64 inputIndex, const TString& type, NKikimr::NMiniKQL::TType* inputType, ui64 maxBufferBytes,

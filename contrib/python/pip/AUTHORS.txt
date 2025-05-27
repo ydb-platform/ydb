@@ -7,6 +7,7 @@ abs51295
 AceGentile
 Adam Chainz
 Adam Tse
+Adam Turner
 Adam Wentz
 admin
 Adolfo Ochagavía
@@ -30,6 +31,7 @@ Alex Hedges
 Alex Loosley
 Alex Morega
 Alex Stachowiak
+Alexander Regueiro
 Alexander Shtyrov
 Alexandre Conrad
 Alexey Popravka
@@ -57,6 +59,7 @@ Anthony Sottile
 Antoine Musso
 Anton Ovchinnikov
 Anton Patrushev
+Anton Zelenov
 Antonio Alvarado Hernandez
 Antony Lee
 Antti Kaihola
@@ -105,6 +108,7 @@ Bogdan Opanchuk
 BorisZZZ
 Brad Erickson
 Bradley Ayers
+Bradley Reynolds
 Branch Vincent
 Brandon L. Reiss
 Brandt Bucher
@@ -124,6 +128,7 @@ burrows
 Bussonnier Matthias
 bwoodsend
 c22
+Caleb Brown
 Caleb Martinez
 Calvin Smith
 Carl Meyer
@@ -133,6 +138,7 @@ Carter Thayer
 Cass
 Chandrasekhar Atina
 Charlie Marsh
+charwick
 Chih-Hsuan Yen
 Chris Brinker
 Chris Hunt
@@ -218,6 +224,7 @@ Denise Yu
 dependabot[bot]
 derwolfe
 Desetude
+developer
 Devesh Kumar Singh
 devsagul
 Diego Caraballo
@@ -225,6 +232,7 @@ Diego Ramirez
 DiegoCaraballo
 Dimitri Merejkowsky
 Dimitri Papadopoulos
+Dimitri Papadopoulos Orfanos
 Dirk Stolle
 Dmitry Gladkov
 Dmitry Volodin
@@ -280,6 +288,7 @@ Florian Rathgeber
 Francesco
 Francesco Montesano
 Fredrik Orderud
+Fredrik Roubert
 Frost Ming
 Gabriel Curio
 Gabriel de Perthuis
@@ -287,6 +296,7 @@ Garry Polley
 gavin
 gdanielson
 Geoffrey Sneddon
+George Margaritis
 George Song
 Georgi Valkov
 Georgy Pchelkin
@@ -338,11 +348,13 @@ Inada Naoki
 Ionel Cristian Mărieș
 Ionel Maries Cristian
 Itamar Turner-Trauring
+iTrooz
 Ivan Pozdeev
 J. Nick Koston
 Jacob Kim
 Jacob Walls
 Jaime Sanz
+Jake Lishman
 jakirkham
 Jakub Kuczys
 Jakub Stasiak
@@ -379,8 +391,10 @@ Jim Garrison
 Jinzhe Zeng
 Jiun Bae
 Jivan Amara
+Joa
 Joe Bylund
 Joe Michelini
+Johannes Altmanninger
 John Paton
 John Sirois
 John T. Wodder II
@@ -401,18 +415,22 @@ Josh Cannon
 Josh Hansen
 Josh Schneier
 Joshua
+JoshuaPerdue
 Juan Luis Cano Rodríguez
 Juanjo Bazán
 Judah Rand
 Julian Berman
 Julian Gethmann
 Julien Demoor
+July Tikhonov
 Jussi Kukkonen
+Justin van Heek
 jwg4
 Jyrki Pulliainen
 Kai Chen
 Kai Mueller
 Kamal Bin Mustafa
+Karolina Surma
 kasium
 kaustav haldar
 keanemind
@@ -430,6 +448,7 @@ Klaas van Schelven
 KOLANICH
 konstin
 kpinc
+Krishan Bhasin
 Krishna Oza
 Kumar McMillan
 Kuntal Majumder
@@ -459,6 +478,7 @@ luojiebin
 luz.paz
 László Kiss Kollár
 M00nL1ght
+Malcolm Smith
 Marc Abramowitz
 Marc Tamlyn
 Marcus Smith
@@ -499,6 +519,7 @@ Maxim Kurnikov
 Maxime Rouyrre
 mayeut
 mbaluna
+Md Sujauddin Sekh
 mdebi
 memoselyk
 meowmeowcat
@@ -550,10 +571,12 @@ Noah
 Noah Gorny
 Nowell Strite
 NtaleGrey
+nucccc
 nvdv
 OBITORASU
 Ofek Lev
 ofrinevo
+Oleg Burnaev
 Oliver Freund
 Oliver Jeeves
 Oliver Mannion
@@ -623,6 +646,7 @@ R. David Murray
 Rafael Caricio
 Ralf Schmitt
 Ran Benita
+Randy Döring
 Razzi Abuissa
 rdb
 Reece Dunham
@@ -690,6 +714,7 @@ snook92
 socketubs
 Sorin Sbarnea
 Srinivas Nyayapati
+Srishti Hegde
 Stavros Korokithakis
 Stefan Scherfke
 Stefano Rivera

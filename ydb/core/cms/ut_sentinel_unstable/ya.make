@@ -2,8 +2,6 @@ UNITTEST_FOR(ydb/core/cms)
 
 SIZE(MEDIUM)
 
-TIMEOUT(600)
-
 PEERDIR(
     library/cpp/getopt
     library/cpp/svnversion

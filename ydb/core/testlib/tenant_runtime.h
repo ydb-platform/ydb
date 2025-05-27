@@ -97,6 +97,7 @@ struct TTenantTestConfig {
     TVector<TNodeConfig> Nodes;
     ui32 DataCenterCount;
     bool CreateConfigsDispatcher = false;
+    bool RegisterFeatureFlagsConfigurator = false;
 };
 
 extern const ui64 SCHEME_SHARD1_ID;

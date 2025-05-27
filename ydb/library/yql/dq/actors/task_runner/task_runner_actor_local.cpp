@@ -2,8 +2,8 @@
 
 #include <ydb/library/services/services.pb.h>
 
-#include <ydb/library/yql/core/issue/yql_issue.h>
-#include <ydb/library/yql/core/issue/protos/issue_id.pb.h>
+#include <yql/essentials/core/issue/yql_issue.h>
+#include <yql/essentials/core/issue/protos/issue_id.pb.h>
 
 #include <ydb/library/yql/dq/actors/dq.h>
 
@@ -83,6 +83,7 @@ public:
                 /*flags=*/0,
                 ev->Cookie);
         }
+        ActorElapsedTicks += NActors::TlsActivationContext->GetCurrentEventTicks();
     }
 
 private:
@@ -99,7 +100,7 @@ private:
             inputTransforms[inputTransformId] = TaskRunner->GetInputTransform(inputTransformId)->second.Get();
         }
 
-        ev->Get()->Stats = TDqTaskRunnerStatsView(TaskRunner->GetStats(), std::move(sinks), std::move(inputTransforms));
+        ev->Get()->Stats = TDqTaskRunnerStatsView(TaskRunner->GetStats(), std::move(sinks), std::move(inputTransforms), ActorElapsedTicks);
         Send(
             ParentId,
             ev->Release().Release(),
@@ -142,6 +143,18 @@ private:
             }
             if (!input->Empty()) {
                 return false;
+            }
+        }
+        for (const auto transformId: InputTransforms) {
+            const auto t = TaskRunner->GetInputTransform(transformId);
+            if (t) {
+                auto [_, transform] = *t;
+                if (!transform->Empty()) {
+                    return false;
+                }
+                if (transform->IsPending()) {
+                    return false;
+                }
             }
         }
         return true;
@@ -235,7 +248,7 @@ private:
                 inputTransforms[inputTransformId] = TaskRunner->GetInputTransform(inputTransformId)->second.Get();
             }
 
-            st->Stats = TDqTaskRunnerStatsView(TaskRunner->GetStats(), std::move(sinks), std::move(inputTransforms));
+            st->Stats = TDqTaskRunnerStatsView(TaskRunner->GetStats(), std::move(sinks), std::move(inputTransforms), ActorElapsedTicks);
             Send(ParentId, st.Release());
         }
 
@@ -400,7 +413,7 @@ private:
         const bool finished = sink->IsFinished();
         const bool changed = finished || size > 0 || hasCheckpoint;
 
-        Parent->SinkSend(ev->Get()->Index, std::move(batch), std::move(maybeCheckpoint), checkpointSize, size, finished, changed);
+        Parent->SinkSend(ev->Get()->Index, std::move(batch), std::move(maybeCheckpoint), size, checkpointSize, finished, changed);
     }
 
     void OnDqTask(TEvTaskRunnerCreate::TPtr& ev) {
@@ -443,6 +456,7 @@ private:
         for (auto i = 0; i != inputs.size(); ++i) {
             if (auto t = TaskRunner->GetInputTransform(i)) {
                 inputTransforms[i] = *t;
+                InputTransforms.emplace(i);
             }
         }
 
@@ -490,10 +504,12 @@ private:
     const TTxId TxId;
     const ui64 TaskId;
     THashSet<ui32> Inputs;
+    THashSet<ui32> InputTransforms;
     THashSet<ui32> Sources;
     TIntrusivePtr<NDq::IDqTaskRunner> TaskRunner;
     THashSet<ui32> InputChannelsWithDisabledCheckpoints;
     THolder<TDqMemoryQuota> MemoryQuota;
+    ui64 ActorElapsedTicks = 0;
 };
 
 struct TLocalTaskRunnerActorFactory: public ITaskRunnerActorFactory {

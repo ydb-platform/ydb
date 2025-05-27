@@ -142,7 +142,7 @@ def parse_columns(expr: str):
                 pos += 1
         else:
             if level == 0:
-                if char == ' ':
+                if char in (' ', '='):
                     if label and not named:
                         names.append(unescape_identifier(label))
                         label = ''

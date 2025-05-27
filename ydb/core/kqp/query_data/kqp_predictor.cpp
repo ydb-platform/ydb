@@ -2,10 +2,10 @@
 #include "kqp_request_predictor.h"
 
 #include <ydb/core/base/appdata.h>
-#include <ydb/library/yql/core/yql_expr_optimize.h>
+#include <yql/essentials/core/yql_expr_optimize.h>
 #include <util/system/info.h>
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
-#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <ydb/core/kqp/expr_nodes/kqp_expr_nodes.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/library/services/services.pb.h>
@@ -16,9 +16,7 @@ using namespace NActors;
 
 void TStagePredictor::Prepare() {
     InputDataPrediction = 1;
-    if (HasLookupFlag) {
-        InputDataPrediction = 0.5;
-    } else if (HasRangeScanFlag) {
+    if (HasRangeScanFlag) {
         InputDataPrediction = 1;
     } else if (InputDataVolumes.size()) {
         InputDataPrediction = 0;
@@ -48,8 +46,6 @@ void TStagePredictor::Scan(const NYql::TExprNode::TPtr& stageNode) {
             HasCondenseFlag = true;
         } else if (node.Maybe<NYql::NNodes::TKqpWideReadTable>()) {
             HasRangeScanFlag = true;
-        } else if (node.Maybe<NYql::NNodes::TKqpLookupTable>()) {
-            HasLookupFlag = true;
         } else if (node.Maybe<NYql::NNodes::TKqpUpsertRows>()) {
         } else if (node.Maybe<NYql::NNodes::TKqpDeleteRows>()) {
 
@@ -97,7 +93,6 @@ void TStagePredictor::SerializeToKqpSettings(NYql::NDqProto::TProgram::TSettings
     kqpProto.SetHasTop(HasTopFlag);
     kqpProto.SetHasRangeScan(HasRangeScanFlag);
     kqpProto.SetHasCondense(HasCondenseFlag);
-    kqpProto.SetHasLookup(HasLookupFlag);
     kqpProto.SetNodesCount(NodesCount);
     kqpProto.SetInputDataPrediction(InputDataPrediction);
     kqpProto.SetOutputDataPrediction(OutputDataPrediction);
@@ -116,7 +111,6 @@ bool TStagePredictor::DeserializeFromKqpSettings(const NYql::NDqProto::TProgram:
     HasTopFlag = kqpProto.GetHasTop();
     HasRangeScanFlag = kqpProto.GetHasRangeScan();
     HasCondenseFlag = kqpProto.GetHasCondense();
-    HasLookupFlag = kqpProto.GetHasLookup();
     NodesCount = kqpProto.GetNodesCount();
     InputDataPrediction = kqpProto.GetInputDataPrediction();
     OutputDataPrediction = kqpProto.GetOutputDataPrediction();
@@ -131,7 +125,7 @@ ui32 TStagePredictor::GetUsableThreads() {
         userPoolSize = TlsActivationContext->ActorSystem()->GetPoolThreadsCount(AppData()->UserPoolId);
     }
     if (!userPoolSize) {
-        ALS_ERROR(NKikimrServices::KQP_EXECUTER) << "user pool is undefined for executer tasks construction";
+        ALS_INFO(NKikimrServices::KQP_EXECUTER) << "user pool is undefined for executer tasks construction";
         userPoolSize = NSystemInfo::NumberOfCpus();
     }
     return Max<ui32>(1, *userPoolSize);

@@ -4,7 +4,7 @@ Find out the number of unique episodes within every season of every series.
 
 {% include [yql-reference-prerequisites](_includes/yql_tutorial_prerequisites.md) %}
 
-```sql
+```yql
 SELECT
     series_id,
     season_id,

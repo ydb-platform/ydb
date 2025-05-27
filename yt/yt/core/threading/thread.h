@@ -75,6 +75,7 @@ private:
 
     TThreadId ThreadId_ = InvalidThreadId;
     ::TThread UnderlyingThread_;
+    std::unique_ptr<char[]> SignalHandlerStack_;
 
     void SetThreadPriority();
     void ConfigureSignalHandlerStack();

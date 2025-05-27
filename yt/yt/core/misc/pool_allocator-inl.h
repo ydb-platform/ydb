@@ -45,7 +45,7 @@ inline TPoolAllocator::TPoolAllocator(
 
 inline void* TPoolAllocator::Allocate() noexcept
 {
-    VERIFY_THREAD_AFFINITY(HomeThread);
+    YT_ASSERT_THREAD_AFFINITY(HomeThread);
 
     if (Y_UNLIKELY(!FirstFree_)) {
         AllocateChunk();
@@ -83,7 +83,7 @@ YT_PREVENT_TLS_CACHING std::unique_ptr<T> TPoolAllocator::New(TArgs&&... args)
 
 inline void TPoolAllocator::DoFree(void* ptr)
 {
-    VERIFY_THREAD_AFFINITY(HomeThread);
+    YT_ASSERT_THREAD_AFFINITY(HomeThread);
 
     auto* header = static_cast<TFreeBlockHeader*>(ptr) - 1;
     new(header) TFreeBlockHeader(FirstFree_);

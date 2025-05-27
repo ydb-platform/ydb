@@ -1,18 +1,16 @@
-UNITTEST()
+UNITTEST_FOR(ydb/library/actors/core)
 
 FORK_SUBTESTS()
 
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
-    TIMEOUT(2400)
-    TAG(ya:fat)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
     SPLIT_FACTOR(20)
     REQUIREMENTS(
         ram:32
     )
 ELSE()
     SIZE(LARGE)
-    TIMEOUT(1200)
     TAG(ya:fat)
     SPLIT_FACTOR(20)
 ENDIF()
@@ -24,6 +22,7 @@ PEERDIR(
 
 SRCS(
     actor_benchmark.cpp
+    waiting_benchs.cpp
 )
 
 END()

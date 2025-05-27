@@ -10,7 +10,7 @@
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/interconnect/events_local.h>
 
-#include <ydb/library/yql/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 
 #include <util/digest/multi.h>
 
@@ -46,8 +46,14 @@ struct TTenantInfo {
             return pinTenants[MultiHash(cloudId) % pinTenants.size()];
         }
 
-        auto it = SubjectMapping.find(SUBJECT_TYPE_CLOUD);
-        auto vTenant = it == SubjectMapping.end() ? "" : it->second.Value(cloudId, "");
+        auto it = SubjectMapping.find(SUBJECT_TYPE_SCOPE);
+        auto vTenant = it == SubjectMapping.end() ? "" : it->second.Value(scope, "");
+
+        if (!vTenant) {
+            auto it = SubjectMapping.find(SUBJECT_TYPE_CLOUD);
+            vTenant = it == SubjectMapping.end() ? "" : it->second.Value(cloudId, "");
+        }
+
         if (!vTenant && CommonVTenants.size()) {
             vTenant = CommonVTenants[MultiHash(cloudId) % CommonVTenants.size()];
         }

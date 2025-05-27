@@ -18,8 +18,8 @@ public:
     }
 
     void MoveChangeRecords(NIceDb::TNiceDb& db, const NKikimrTxDataShard::TMoveIndex& move, TVector<IDataShardChangeCollector::TChange>& changeRecords) {
-        const auto remapPrevId = PathIdFromPathId(move.GetReMapIndex().GetSrcPathId());
-        const auto remapNewId = PathIdFromPathId(move.GetReMapIndex().GetDstPathId());
+        const auto remapPrevId = TPathId::FromProto(move.GetReMapIndex().GetSrcPathId());
+        const auto remapNewId = TPathId::FromProto(move.GetReMapIndex().GetDstPathId());
 
         for (auto& record: changeRecords) {
             if (record.PathId == remapPrevId) {
@@ -43,10 +43,10 @@ public:
     }
 
     EExecutionStatus Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) override {
-        Y_ABORT_UNLESS(op->IsSchemeTx());
+        Y_ENSURE(op->IsSchemeTx());
 
         TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
-        Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
+        Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
 
         if (tx->GetSchemeTxType() != TSchemaOperation::ETypeMoveIndex) {
             return EExecutionStatus::Executed;

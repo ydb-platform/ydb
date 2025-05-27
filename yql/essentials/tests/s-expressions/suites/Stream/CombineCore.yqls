@@ -1,0 +1,14 @@
+(
+#comment
+(let config (DataSource 'config))
+(let res_sink (DataSink 'result))
+(let stream (Iterator (AsList (Int32 '1) (Int32 '2) (Int32 '3))))
+(let keyExtractor (lambda '(item) item))
+(let init (lambda '(key item) item))
+(let update (lambda '(key item state) (+ item state)))
+(let finish (lambda '(key state) (Just state)))
+(let data (Sort (Collect (CombineCore stream keyExtractor init update finish)) (Bool 'true) keyExtractor))
+(let world (Write! world res_sink (Key) data '('('type))))
+(let world (Commit! world res_sink))
+(return world)
+)

@@ -28,6 +28,9 @@ struct TStatisticsAggregator::TTxAggregateStatisticsResponse : public TTxBase {
 
         ++Self->KeepAliveSeqNo; // cancel timeout events
 
+        Self->TabletCounters->Simple()[COUNTER_AGGREGATION_TIME].Set(0);
+        Self->AggregationRequestBeginTime = TInstant::Zero();
+
         NIceDb::TNiceDb db(txc.DB);
 
         for (auto& column : Record.GetColumns()) {
@@ -43,7 +46,7 @@ struct TStatisticsAggregator::TTxAggregateStatisticsResponse : public TTxBase {
                         currentIt->second.reset(TCountMinSketch::Create());
                     }
 
-                    auto* data = statistic.GetData().Data();
+                    auto* data = statistic.GetData().data();
                     auto* sketch = reinterpret_cast<const TCountMinSketch*>(data);
                     *(currentIt->second) += *sketch;
                 }
@@ -122,6 +125,7 @@ struct TStatisticsAggregator::TTxAggregateStatisticsResponse : public TTxBase {
         case EAction::SendAggregate:
             ctx.Send(MakeStatServiceID(Self->SelfId().NodeId()), Request.release());
             ctx.Schedule(KeepAliveTimeout, new TEvPrivate::TEvAckTimeout(++Self->KeepAliveSeqNo));
+            Self->AggregationRequestBeginTime = AppData(ctx)->TimeProvider->Now();
             break;
 
         default:

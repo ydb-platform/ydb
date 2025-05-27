@@ -1,30 +1,33 @@
 #include "bit_packed_unsigned_vector.h"
-#include "numeric_helpers.h"
 
 #include <library/cpp/yt/coding/zig_zag.h>
+
+#include <library/cpp/yt/misc/numeric_helpers.h>
 
 namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void PrepareDiffFromExpected(std::vector<ui32>* values, ui32* expected, ui32* maxDiff)
+std::pair<ui32, ui32> PrepareDiffFromExpected(std::vector<ui32>* values)
 {
+    ui32 expected = 0;
+    ui32 maxDiff = 0;
+
     if (values->empty()) {
-        *expected = 0;
-        *maxDiff = 0;
-        return;
+        return {expected, maxDiff};
     }
 
-    *expected = DivRound<int>(values->back(), values->size());
+    expected = DivRound<int>(values->back(), values->size());
 
-    *maxDiff = 0;
     i64 expectedValue = 0;
     for (int i = 0; i < std::ssize(*values); ++i) {
-        expectedValue += *expected;
-        i32 diff = values->at(i) - expectedValue;
+        expectedValue += expected;
+        i32 diff = (*values)[i] - expectedValue;
         (*values)[i] = ZigZagEncode32(diff);
-        *maxDiff = std::max(*maxDiff, (*values)[i]);
+        maxDiff = std::max(maxDiff, (*values)[i]);
     }
+
+    return {expected, maxDiff};
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -1,7 +1,11 @@
 #include "schema.h"
 
 #include <ydb/core/base/appdata.h>
-#include <ydb/library/yql/parser/pg_catalog/catalog.h>
+#include <yql/essentials/parser/pg_catalog/catalog.h>
+
+namespace {
+    using NKikimrSysView::ESysViewType;
+}
 
 namespace NKikimr {
 namespace NSysView {
@@ -21,7 +25,7 @@ TVector<Schema::PgColumn> GetPgStaticTableColumns(const TString& schema, const T
 
 Schema::PgColumn::PgColumn(NIceDb::TColumnId columnId, TStringBuf columnTypeName, TStringBuf columnName)
     : _ColumnId(columnId)
-    , _ColumnTypeInfo(NScheme::NTypeIds::Pg, NPg::TypeDescFromPgTypeId(NYql::NPg::LookupType(TString(columnTypeName)).TypeId))
+    , _ColumnTypeInfo(NPg::TypeDescFromPgTypeId(NYql::NPg::LookupType(TString(columnTypeName)).TypeId))
     , _ColumnName(columnName)
 {}
 
@@ -53,6 +57,73 @@ bool MaybeSystemViewFolderPath(const TVector<TString>& path) {
     }
     return true;
 }
+
+template <typename Table>
+struct TSchemaFiller {
+
+    using TSchema = ISystemViewResolver::TSchema;
+
+    template <typename...>
+    struct TFiller;
+
+    template <typename Column>
+    struct TFiller<Column> {
+        static void Fill(TSchema& schema) {
+            schema.Columns[Column::ColumnId] = TSysTables::TTableColumnInfo(
+                Table::template TableColumns<Column>::GetColumnName(),
+                Column::ColumnId, NScheme::TTypeInfo(Column::ColumnType), "", -1);
+        }
+    };
+
+    template <typename Column, typename... Columns>
+    struct TFiller<Column, Columns...> {
+        static void Fill(TSchema& schema) {
+            TFiller<Column>::Fill(schema);
+            TFiller<Columns...>::Fill(schema);
+        }
+    };
+
+    template <typename... Columns>
+    using TColumnsType = typename Table::template TableColumns<Columns...>;
+
+    template <typename... Columns>
+    static void FillColumns(TSchema& schema, TColumnsType<Columns...>) {
+        TFiller<Columns...>::Fill(schema);
+    }
+
+    template <typename...>
+    struct TKeyFiller;
+
+    template <typename Key>
+    struct TKeyFiller<Key> {
+        static void Fill(TSchema& schema, i32 index) {
+            auto& column = schema.Columns[Key::ColumnId];
+            column.KeyOrder = index;
+            schema.KeyColumnTypes.push_back(column.PType);
+        }
+    };
+
+    template <typename Key, typename... Keys>
+    struct TKeyFiller<Key, Keys...> {
+        static void Fill(TSchema& schema, i32 index) {
+            TKeyFiller<Key>::Fill(schema, index);
+            TKeyFiller<Keys...>::Fill(schema, index + 1);
+        }
+    };
+
+    template <typename... Keys>
+    using TKeysType = typename Table::template TableKey<Keys...>;
+
+    template <typename... Keys>
+    static void FillKeys(TSchema& schema, TKeysType<Keys...>) {
+        TKeyFiller<Keys...>::Fill(schema, 0);
+    }
+
+    static void Fill(TSchema& schema) {
+        FillColumns(schema, typename Table::TColumns());
+        FillKeys(schema, typename Table::TKey());
+    }
+};
 
 class TSystemViewResolver : public ISystemViewResolver {
 public:
@@ -103,6 +174,11 @@ public:
         return view ? TMaybe<TSchema>(*view) : Nothing();
     }
 
+    TMaybe<TSchema> GetSystemViewSchema(ESysViewType viewType) const override final {
+        const TSchema* view = SystemViews.FindPtr(viewType);
+        return view ? TMaybe<TSchema>(*view) : Nothing();
+    }
+
     TVector<TString> GetSystemViewNames(ETarget target) const override {
         TVector<TString> result;
         switch (target) {
@@ -134,76 +210,19 @@ public:
         return result;
     }
 
+    bool IsSystemView(const TStringBuf viewName) const override final {
+        return DomainSystemViews.contains(viewName) ||
+            SubDomainSystemViews.contains(viewName) ||
+            OlapStoreSystemViews.contains(viewName) ||
+            ColumnTableSystemViews.contains(viewName);
+    }
+
 private:
-    template <typename Table>
-    struct TSchemaFiller {
-
-        template <typename...>
-        struct TFiller;
-
-        template <typename Column>
-        struct TFiller<Column> {
-            static void Fill(TSchema& schema) {
-                schema.Columns[Column::ColumnId] = TSysTables::TTableColumnInfo(
-                    Table::template TableColumns<Column>::GetColumnName(),
-                    Column::ColumnId, NScheme::TTypeInfo(Column::ColumnType), "", -1);
-            }
-        };
-
-        template <typename Column, typename... Columns>
-        struct TFiller<Column, Columns...> {
-            static void Fill(TSchema& schema) {
-                TFiller<Column>::Fill(schema);
-                TFiller<Columns...>::Fill(schema);
-            }
-        };
-
-        template <typename... Columns>
-        using TColumnsType = typename Table::template TableColumns<Columns...>;
-
-        template <typename... Columns>
-        static void FillColumns(TSchema& schema, TColumnsType<Columns...>) {
-            TFiller<Columns...>::Fill(schema);
-        }
-
-        template <typename...>
-        struct TKeyFiller;
-
-        template <typename Key>
-        struct TKeyFiller<Key> {
-            static void Fill(TSchema& schema, i32 index) {
-                auto& column = schema.Columns[Key::ColumnId];
-                column.KeyOrder = index;
-                schema.KeyColumnTypes.push_back(column.PType);
-            }
-        };
-
-        template <typename Key, typename... Keys>
-        struct TKeyFiller<Key, Keys...> {
-            static void Fill(TSchema& schema, i32 index) {
-                TKeyFiller<Key>::Fill(schema, index);
-                TKeyFiller<Keys...>::Fill(schema, index + 1);
-            }
-        };
-
-        template <typename... Keys>
-        using TKeysType = typename Table::template TableKey<Keys...>;
-
-        template <typename... Keys>
-        static void FillKeys(TSchema& schema, TKeysType<Keys...>) {
-            TKeyFiller<Keys...>::Fill(schema, 0);
-        }
-
-        static void Fill(TSchema& schema) {
-            FillColumns(schema, typename Table::TColumns());
-            FillKeys(schema, typename Table::TKey());
-        }
-    };
-
     void RegisterPgTablesSystemViews() {
-        auto registerView = [&](TStringBuf tableName, const TVector<Schema::PgColumn>& columns) {
+        auto registerView = [&](TStringBuf tableName, ESysViewType type, const TVector<Schema::PgColumn>& columns) {
             auto& dsv  = DomainSystemViews[tableName];
             auto& sdsv = SubDomainSystemViews[tableName];
+            auto& sv = SystemViews[type];
             for (const auto& column : columns) {
                 dsv.Columns[column._ColumnId + 1] = TSysTables::TTableColumnInfo(
                     column._ColumnName, column._ColumnId + 1, column._ColumnTypeInfo, "", -1
@@ -211,31 +230,39 @@ private:
                 sdsv.Columns[column._ColumnId + 1] = TSysTables::TTableColumnInfo(
                     column._ColumnName, column._ColumnId + 1, column._ColumnTypeInfo, "", -1
                 );
+                sv.Columns[column._ColumnId + 1] = TSysTables::TTableColumnInfo(
+                    column._ColumnName, column._ColumnId + 1, column._ColumnTypeInfo, "", -1
+                );
             }
         };
         registerView(
             PgTablesName,
+            ESysViewType::EPgTables,
             Singleton<Schema::PgTablesSchemaProvider>()->GetColumns(PgTablesName)
         );
         registerView(
             InformationSchemaTablesName,
+            ESysViewType::EInformationSchemaTables,
             Singleton<Schema::PgTablesSchemaProvider>()->GetColumns(InformationSchemaTablesName)
         );
         registerView(
             PgClassName,
+            ESysViewType::EPgClass,
             Singleton<Schema::PgTablesSchemaProvider>()->GetColumns(PgClassName)
         );
     }
 
     template <typename Table>
-    void RegisterSystemView(const TStringBuf& name) {
+    void RegisterSystemView(const TStringBuf& name, ESysViewType type) {
         TSchemaFiller<Table>::Fill(DomainSystemViews[name]);
         TSchemaFiller<Table>::Fill(SubDomainSystemViews[name]);
+        TSchemaFiller<Table>::Fill(SystemViews[type]);
     }
 
     template <typename Table>
-    void RegisterDomainSystemView(const TStringBuf& name) {
+    void RegisterDomainSystemView(const TStringBuf& name, ESysViewType type) {
         TSchemaFiller<Table>::Fill(DomainSystemViews[name]);
+        TSchemaFiller<Table>::Fill(SystemViews[type]);
     }
 
     template <typename Table>
@@ -249,29 +276,29 @@ private:
     }
 
     void RegisterSystemViews() {
-        RegisterSystemView<Schema::PartitionStats>(PartitionStatsName);
+        RegisterSystemView<Schema::PartitionStats>(PartitionStatsName, ESysViewType::EPartitionStats);
 
-        RegisterSystemView<Schema::Nodes>(NodesName);
+        RegisterSystemView<Schema::Nodes>(NodesName, ESysViewType::ENodes);
 
-        RegisterSystemView<Schema::QueryStats>(TopQueriesByDuration1MinuteName);
-        RegisterSystemView<Schema::QueryStats>(TopQueriesByDuration1HourName);
-        RegisterSystemView<Schema::QueryStats>(TopQueriesByReadBytes1MinuteName);
-        RegisterSystemView<Schema::QueryStats>(TopQueriesByReadBytes1HourName);
-        RegisterSystemView<Schema::QueryStats>(TopQueriesByCpuTime1MinuteName);
-        RegisterSystemView<Schema::QueryStats>(TopQueriesByCpuTime1HourName);
-        RegisterSystemView<Schema::QueryStats>(TopQueriesByRequestUnits1MinuteName);
-        RegisterSystemView<Schema::QueryStats>(TopQueriesByRequestUnits1HourName);
-        RegisterSystemView<Schema::QuerySessions>(QuerySessions);
+        RegisterSystemView<Schema::QueryStats>(TopQueriesByDuration1MinuteName, ESysViewType::ETopQueriesByDurationOneMinute);
+        RegisterSystemView<Schema::QueryStats>(TopQueriesByDuration1HourName, ESysViewType::ETopQueriesByDurationOneHour);
+        RegisterSystemView<Schema::QueryStats>(TopQueriesByReadBytes1MinuteName, ESysViewType::ETopQueriesByReadBytesOneMinute);
+        RegisterSystemView<Schema::QueryStats>(TopQueriesByReadBytes1HourName, ESysViewType::ETopQueriesByReadBytesOneHour);
+        RegisterSystemView<Schema::QueryStats>(TopQueriesByCpuTime1MinuteName, ESysViewType::ETopQueriesByCpuTimeOneMinute);
+        RegisterSystemView<Schema::QueryStats>(TopQueriesByCpuTime1HourName, ESysViewType::ETopQueriesByCpuTimeOneHour);
+        RegisterSystemView<Schema::QueryStats>(TopQueriesByRequestUnits1MinuteName, ESysViewType::ETopQueriesByRequestUnitsOneMinute);
+        RegisterSystemView<Schema::QueryStats>(TopQueriesByRequestUnits1HourName, ESysViewType::ETopQueriesByRequestUnitsOneHour);
+        RegisterSystemView<Schema::QuerySessions>(QuerySessions, ESysViewType::EQuerySessions);
 
-        RegisterDomainSystemView<Schema::PDisks>(PDisksName);
-        RegisterDomainSystemView<Schema::VSlots>(VSlotsName);
-        RegisterDomainSystemView<Schema::Groups>(GroupsName);
-        RegisterDomainSystemView<Schema::StoragePools>(StoragePoolsName);
-        RegisterDomainSystemView<Schema::StorageStats>(StorageStatsName);
+        RegisterDomainSystemView<Schema::PDisks>(PDisksName, ESysViewType::EPDisks);
+        RegisterDomainSystemView<Schema::VSlots>(VSlotsName, ESysViewType::EVSlots);
+        RegisterDomainSystemView<Schema::Groups>(GroupsName, ESysViewType::EGroups);
+        RegisterDomainSystemView<Schema::StoragePools>(StoragePoolsName, ESysViewType::EStoragePools);
+        RegisterDomainSystemView<Schema::StorageStats>(StorageStatsName, ESysViewType::EStorageStats);
 
-        RegisterDomainSystemView<Schema::Tablets>(TabletsName);
+        RegisterDomainSystemView<Schema::Tablets>(TabletsName, ESysViewType::ETablets);
 
-        RegisterSystemView<Schema::QueryMetrics>(QueryMetricsName);
+        RegisterSystemView<Schema::QueryMetrics>(QueryMetricsName, ESysViewType::EQueryMetricsOneMinute);
 
         RegisterOlapStoreSystemView<Schema::PrimaryIndexStats>(StorePrimaryIndexStatsName);
         RegisterOlapStoreSystemView<Schema::PrimaryIndexPortionStats>(StorePrimaryIndexPortionStatsName);
@@ -282,10 +309,25 @@ private:
         RegisterColumnTableSystemView<Schema::PrimaryIndexGranuleStats>(TablePrimaryIndexGranuleStatsName);
         RegisterColumnTableSystemView<Schema::PrimaryIndexOptimizerStats>(TablePrimaryIndexOptimizerStatsName);
 
-        RegisterSystemView<Schema::TopPartitions>(TopPartitions1MinuteName);
-        RegisterSystemView<Schema::TopPartitions>(TopPartitions1HourName);
+        RegisterSystemView<Schema::TopPartitions>(TopPartitionsByCpu1MinuteName, ESysViewType::ETopPartitionsByCpuOneMinute);
+        RegisterSystemView<Schema::TopPartitions>(TopPartitionsByCpu1HourName, ESysViewType::ETopPartitionsByCpuOneHour);
+        RegisterSystemView<Schema::TopPartitionsTli>(TopPartitionsByTli1MinuteName, ESysViewType::ETopPartitionsByTliOneMinute);
+        RegisterSystemView<Schema::TopPartitionsTli>(TopPartitionsByTli1HourName, ESysViewType::ETopPartitionsByTliOneHour);
 
         RegisterPgTablesSystemViews();
+
+        RegisterSystemView<Schema::ResourcePoolClassifiers>(ResourcePoolClassifiersName, ESysViewType::EResourcePoolClassifiers);
+        RegisterSystemView<Schema::ResourcePools>(ResourcePoolsName, ESysViewType::EResourcePools);
+
+        {
+            using namespace NAuth;
+            RegisterSystemView<Schema::AuthUsers>(UsersName, ESysViewType::EAuthUsers);
+            RegisterSystemView<Schema::AuthGroups>(NAuth::GroupsName, ESysViewType::EAuthGroups);
+            RegisterSystemView<Schema::AuthGroupMembers>(GroupMembersName, ESysViewType::EAuthGroupMembers);
+            RegisterSystemView<Schema::AuthOwners>(OwnersName, ESysViewType::EAuthOwners);
+            RegisterSystemView<Schema::AuthPermissions>(PermissionsName, ESysViewType::EAuthPermissions);
+            RegisterSystemView<Schema::AuthPermissions>(EffectivePermissionsName, ESysViewType::EAuthEffectivePermissions);
+        }
     }
 
 private:
@@ -293,10 +335,60 @@ private:
     THashMap<TString, TSchema> SubDomainSystemViews;
     THashMap<TString, TSchema> OlapStoreSystemViews;
     THashMap<TString, TSchema> ColumnTableSystemViews;
+    THashMap<ESysViewType, TSchema> SystemViews;
+};
+
+class TSystemViewRewrittenResolver : public ISystemViewResolver {
+public:
+
+    TSystemViewRewrittenResolver() {
+        TSchemaFiller<Schema::ShowCreate>::Fill(SystemViews[ShowCreateName]);
+    }
+
+    bool IsSystemViewPath(const TVector<TString>& path, TSystemViewPath& sysViewPath) const override final {
+        if (MaybeSystemViewPath(path)) {
+            auto maybeSystemViewName = path.back();
+            if (!SystemViews.contains(maybeSystemViewName)) {
+                return false;
+            }
+            TVector<TString> realPath(path.begin(), path.end() - 2);
+            sysViewPath.Parent = std::move(realPath);
+            sysViewPath.ViewName = path.back();
+            return true;
+        }
+        return false;
+    }
+
+    TMaybe<TSchema> GetSystemViewSchema(const TStringBuf viewName, ETarget target) const override final {
+        Y_UNUSED(target);
+        const TSchema* view = SystemViews.FindPtr(viewName);
+        return view ? TMaybe<TSchema>(*view) : Nothing();
+    }
+
+    TMaybe<TSchema> GetSystemViewSchema(ESysViewType sysViewType) const override final {
+        Y_UNUSED(sysViewType);
+        return Nothing();
+    }
+
+    TVector<TString> GetSystemViewNames(ETarget target) const override {
+        Y_UNUSED(target);
+        return {};
+    }
+
+    bool IsSystemView(const TStringBuf viewName) const override final {
+        return SystemViews.contains(viewName);
+    }
+
+private:
+    THashMap<TString, TSchema> SystemViews;
 };
 
 ISystemViewResolver* CreateSystemViewResolver() {
     return new TSystemViewResolver();
+}
+
+ISystemViewResolver* CreateSystemViewRewrittenResolver() {
+    return new TSystemViewRewrittenResolver();
 }
 
 } // NSysView

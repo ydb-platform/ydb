@@ -8,9 +8,10 @@ import yatest.common
 
 from ydb.tests.tools.fq_runner.fq_client import FederatedQueryClient
 from ydb.tests.tools.fq_runner.custom_hooks import *  # noqa: F401,F403 Adding custom hooks for YQv2 support
-from ydb.tests.tools.fq_runner.kikimr_utils import AddInflightExtension
+from ydb.tests.tools.fq_runner.kikimr_utils import AddAllowConcurrentListingsExtension
 from ydb.tests.tools.fq_runner.kikimr_utils import AddDataInflightExtension
 from ydb.tests.tools.fq_runner.kikimr_utils import AddFormatSizeLimitExtension
+from ydb.tests.tools.fq_runner.kikimr_utils import AddInflightExtension
 from ydb.tests.tools.fq_runner.kikimr_utils import DefaultConfigExtension
 from ydb.tests.tools.fq_runner.kikimr_utils import YQv2Extension
 from ydb.tests.tools.fq_runner.kikimr_utils import ComputeExtension
@@ -87,9 +88,10 @@ def kikimr_params(request: pytest.FixtureRequest):
 
 def get_kikimr_extensions(s3: S3, yq_version: str, kikimr_settings, mvp_external_ydb_endpoint):
     return [
-        AddInflightExtension(),
-        AddDataInflightExtension(),
         AddFormatSizeLimitExtension(),
+        AddInflightExtension(),
+        AddAllowConcurrentListingsExtension(),
+        AddDataInflightExtension(),
         DefaultConfigExtension(s3.s3_url),
         YQv2Extension(yq_version, kikimr_settings.get("is_replace_if_exists", False)),
         ComputeExtension(),

@@ -2,8 +2,6 @@ UNITTEST_FOR(ydb/services/keyvalue)
 
 SIZE(MEDIUM)
 
-TIMEOUT(100)
-
 SRCS(
     grpc_service_ut.cpp
 )

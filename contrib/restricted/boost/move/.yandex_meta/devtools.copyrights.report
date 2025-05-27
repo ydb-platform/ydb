@@ -1,0 +1,368 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0e00627118b1aa126c93a4d188f1689d
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/move/move.hpp [3:6]
+        include/boost/move/traits.hpp [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0e20cc85ddff90b5ad54f1b16cc40ada
+BELONGS ya.make
+    License text:
+        // (C) Copyright Ion Gaztanaga 2017-2017.
+        // Distributed under the Boost Software License, Version 1.0.
+        // (See accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/move/algo/detail/set_difference.hpp [3:5]
+        include/boost/move/algo/unique.hpp [3:5]
+        include/boost/move/detail/to_raw_pointer.hpp [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1877c8c0d80d7b1ea728c21778641fa6
+BELONGS ya.make
+    License text:
+        // (C) Copyright John Maddock 2000.
+        // (C) Copyright Ion Gaztanaga 2005-2015.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/move/detail/type_traits.hpp [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1a3253e5b49a77f2dc95004f816c7fa1
+BELONGS ya.make
+    License text:
+        // (C) Copyright Ion Gaztanaga 2012-2015.
+        // Distributed under the Boost Software License, Version 1.0.
+        // (See accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/move/detail/meta_utils.hpp [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1d8064d8327f097ff9fbf8db31ebb009
+BELONGS ya.make
+    License text:
+        // (C) Copyright Ion Gaztanaga 2022-2022.
+        // Distributed under the Boost Software License, Version 1.0.
+        // (See accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/move/algo/detail/search.hpp [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 20879b64ae4df4b3c40306efb7928c57
+BELONGS ya.make
+    License text:
+        // (C) Copyright Ion Gaztanaga 2014-2014. Distributed under the Boost
+        // Software License, Version 1.0. (See accompanying file
+        // LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/move/algo/detail/insertion_sort.hpp [3:5]
+        include/boost/move/default_delete.hpp [3:5]
+        include/boost/move/detail/fwd_macros.hpp [3:5]
+        include/boost/move/detail/iterator_traits.hpp [3:5]
+        include/boost/move/detail/reverse_iterator.hpp [3:3]
+        include/boost/move/detail/workaround.hpp [3:5]
+        include/boost/move/unique_ptr.hpp [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 2be4c5530322f675f4699b1fecb8bdd0
+BELONGS ya.make
+    License text:
+        // (C) Copyright John Maddock 2000.
+        // (C) Copyright Ion Gaztanaga 2005-2015.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/move/detail/type_traits.hpp [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 2eac2a7e626c242b613fa68d3431bb40
+BELONGS ya.make
+    License text:
+        //  Copyright Beman Dawes 1994-2007, 2011
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/move/detail/nsec_clock.hpp [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 32f3e9a485f1df17b5b5c669b5cf8a43
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/move/adl_move_swap.hpp [3:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 339fcf7433771e1324c39962a53efb58
+BELONGS ya.make
+    License text:
+        // (C) Copyright Ion Gaztanaga 2015-2016.
+        // Distributed under the Boost Software License, Version 1.0.
+        // (See accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/move/algo/adaptive_merge.hpp [3:5]
+        include/boost/move/algo/adaptive_sort.hpp [3:5]
+        include/boost/move/algo/detail/adaptive_sort_merge.hpp [3:5]
+        include/boost/move/algo/detail/basic_op.hpp [3:5]
+        include/boost/move/algo/detail/merge.hpp [3:5]
+        include/boost/move/algo/detail/merge_sort.hpp [3:5]
+        include/boost/move/algo/predicate.hpp [3:5]
+        include/boost/move/detail/destruct_n.hpp [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 38b8d9f6332e5a688b471b92d217a79b
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/move/adl_move_swap.hpp [3:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 49a63dac4d2a7520d366071cadc7cba7
+BELONGS ya.make
+    License text:
+        // (C) Copyright Orson Peters  2017.
+        // (C) Copyright Ion Gaztanaga 2017-2018.
+        // Distributed under the Boost Software License, Version 1.0.
+        // (See accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/move/algo/detail/pdqsort.hpp [3:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 75ef7529f27f9a710eea2869f97333f1
+BELONGS ya.make
+    License text:
+        //  Copyright Beman Dawes 2008
+        //  Copyright 2009-2010 Vicente J. Botet Escriba
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/move/detail/nsec_clock.hpp [7:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7776713baab3f172d0d3c56b0cf3c911
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/move/algo/detail/pdqsort.hpp [24:28]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 82a5c9cddab57527910d79d3fe2ae9db
+BELONGS ya.make
+    License text:
+        // (C) Copyright Ion Gaztanaga 2014-2017. Distributed under the Boost
+        // Software License, Version 1.0. (See accompanying file
+        // LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/move/detail/pointer_element.hpp [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 890cdbbeb01b608880e13a28e9d21fad
+BELONGS ya.make
+    License text:
+        //  Copyright Beman Dawes 2008
+        //  Copyright 2009-2010 Vicente J. Botet Escriba
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/move/detail/nsec_clock.hpp [7:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 93298a574c18187d2a2c7398406ca6da
+BELONGS ya.make
+    License text:
+        // (C) Copyright Ion Gaztanaga 2012-2012.
+        // Distributed under the Boost Software License, Version 1.0.
+        // (See accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/move/algorithm.hpp [3:5]
+        include/boost/move/core.hpp [3:5]
+        include/boost/move/detail/config_begin.hpp [3:5]
+        include/boost/move/detail/config_end.hpp [3:5]
+        include/boost/move/detail/unique_ptr_meta_utils.hpp [3:5]
+        include/boost/move/iterator.hpp [3:5]
+        include/boost/move/utility.hpp [3:5]
+        include/boost/move/utility_core.hpp [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 96fa27d0421cf1ee2e170382d2a3520d
+BELONGS ya.make
+    License text:
+        // (C) Copyright Ion Gaztanaga 2012-2016.
+        // Distributed under the Boost Software License, Version 1.0.
+        // (See accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/move/algo/move.hpp [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b0acda8e3df319a68e9a5e75c455f627
+BELONGS ya.make
+    License text:
+        // (C) Copyright Ion Gaztanaga 2010-2016.
+        // Distributed under the Boost Software License, Version 1.0.
+        // (See accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/move/detail/move_helpers.hpp [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ca20b75eb2dae2abec8bb941a89db522
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/move/move.hpp [3:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL cba287530567f506b4683cd1a18cce1d
+BELONGS ya.make
+    License text:
+        // (C) Copyright Ion Gaztanaga 2014-2015. Distributed under the Boost
+        // Software License, Version 1.0. (See accompanying file
+        // LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/move/detail/addressof.hpp [3:5]
+        include/boost/move/detail/force_ptr.hpp [3:5]
+        include/boost/move/detail/iterator_to_raw_pointer.hpp [3:5]
+        include/boost/move/detail/launder.hpp [3:5]
+        include/boost/move/detail/placement_new.hpp [5:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d7ec3b31087d40f4ec8d4f38c2654306
+BELONGS ya.make
+    License text:
+        // (C) Copyright Ion Gaztanaga 2015-2015.
+        // Distributed under the Boost Software License, Version 1.0.
+        // (See accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/move/detail/meta_utils_core.hpp [3:5]
+        include/boost/move/detail/std_ns_begin.hpp [3:5]
+        include/boost/move/detail/std_ns_end.hpp [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d8ab6dc2e99ae45932147e5d4ad21728
+BELONGS ya.make
+    License text:
+        //  Copyright 2020 Ion Gaztanaga
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/move/detail/nsec_clock.hpp [16:16]
+
+KEEP     COPYRIGHT_SERVICE_LABEL dade72e8f17d6f5ad231015a08f18f49
+BELONGS ya.make
+    License text:
+        // (C) Copyright Ion Gaztanaga 2006-2014. Distributed under the Boost
+        // Software License, Version 1.0. (See accompanying file
+        // LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/move/make_unique.hpp [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ef7d8354f40bb9b4612d75303421dce4
+BELONGS ya.make
+    License text:
+        // (C) Copyright Ion Gaztanaga 2017-2018.
+        // Distributed under the Boost Software License, Version 1.0.
+        // (See accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/move/algo/detail/heap_sort.hpp [3:5]
+        include/boost/move/algo/detail/is_sorted.hpp [5:7]
+        include/boost/move/algo/detail/pdqsort.hpp [3:6]

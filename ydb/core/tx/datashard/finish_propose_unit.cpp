@@ -1,5 +1,6 @@
 #include "datashard_failpoints.h"
 #include "datashard_impl.h"
+#include "datashard_integrity_trails.h"
 #include "datashard_pipeline.h"
 #include "execution_unit_ctors.h"
 #include "probes.h"
@@ -82,7 +83,7 @@ EExecutionStatus TFinishProposeUnit::Execute(TOperation::TPtr op,
         op->SetWaitCompletionFlag(true);
     } else if (DataShard.IsFollower()) {
         // It doesn't matter whether we wait or not
-    } else if (DataShard.IsMvccEnabled() && op->IsImmediate()) {
+    } else if (op->IsImmediate()) {
         auto res = PromoteImmediatePostExecuteEdges(op.Get(), txc);
 
         if (res.HadWrites) {
@@ -154,7 +155,7 @@ void TFinishProposeUnit::CompleteRequest(TOperation::TPtr op,
                                          const TActorContext &ctx)
 {
     auto res = std::move(op->Result());
-    Y_ABORT_UNLESS(res);
+    Y_ENSURE(res);
 
     TDuration duration = TAppData::TimeProvider->Now() - op->GetReceivedAt();
     res->Record.SetProposeLatency(duration.MilliSeconds());
@@ -173,11 +174,14 @@ void TFinishProposeUnit::CompleteRequest(TOperation::TPtr op,
                     << res->GetStatus() << " errors: " << errors);
     }
 
+    if (op->IsImmediate() && !op->IsReadOnly() && op->IsKqpDataTransaction()) {
+        NDataIntegrity::LogIntegrityTrailsFinish<NKikimrTxDataShard::TEvProposeTransactionResult>(ctx, DataShard.TabletID(), op->GetGlobalTxId(), res->GetStatus());
+    }
+
     if (res->IsPrepared()) {
         DataShard.IncCounter(COUNTER_PREPARE_SUCCESS_COMPLETE_LATENCY, duration);
     } else {
         DataShard.CheckSplitCanStart(ctx);
-        DataShard.CheckMvccStateChangeCanStart(ctx);
     }
 
     if (op->HasNeedDiagnosticsFlag())
@@ -222,7 +226,7 @@ void TFinishProposeUnit::UpdateCounters(TOperation::TPtr op,
                                         const TActorContext &ctx)
 {
     auto &res = op->Result();
-    Y_ABORT_UNLESS(res);
+    Y_ENSURE(res);
     auto execLatency = TAppData::TimeProvider->Now() - op->GetReceivedAt();
 
     res->Record.SetExecLatency(execLatency.MilliSeconds());

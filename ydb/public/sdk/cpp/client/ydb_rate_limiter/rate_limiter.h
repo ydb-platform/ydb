@@ -9,7 +9,7 @@ class DescribeResourceResult;
 class HierarchicalDrrSettings;
 } // namespace Ydb::RateLimiter
 
-namespace NYdb::NRateLimiter {
+namespace NYdb::inline V2::NRateLimiter {
 
 // Settings for hierarchical deficit round robin (HDRR) algorithm.
 template <class TDerived>
@@ -19,20 +19,20 @@ struct THierarchicalDrrSettings : public TOperationRequestSettings<TDerived> {
     // Resource consumption speed limit.
     // Value is required for root resource.
     // Must be nonnegative.
-    FLUENT_SETTING_OPTIONAL(double, MaxUnitsPerSecond);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(double, MaxUnitsPerSecond);
 
     // Maximum burst size of resource consumption across the whole cluster
     // divided by max_units_per_second.
     // Default value is 1.
     // This means that maximum burst size might be equal to max_units_per_second.
     // Must be nonnegative.
-    FLUENT_SETTING_OPTIONAL(double, MaxBurstSizeCoefficient);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(double, MaxBurstSizeCoefficient);
 
     // Prefetch in local bucket up to PrefetchCoefficient*MaxUnitsPerSecond units (full size).
     // Default value is inherited from parent or 0.2 for root.
     // Disables prefetching if any negative value is set
     // (It is useful to avoid bursts in case of large number of local buckets).
-    FLUENT_SETTING_OPTIONAL(double, PrefetchCoefficient);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(double, PrefetchCoefficient);
 
     void DisablePrefetching() {
         PrefetchCoefficient_ = -1.0;
@@ -41,7 +41,7 @@ struct THierarchicalDrrSettings : public TOperationRequestSettings<TDerived> {
     // Prefetching starts if there is less than PrefetchWatermark fraction of full local bucket left.
     // Default value is inherited from parent or 0.75 for root.
     // Must be nonnegative and less than or equal to 1.
-    FLUENT_SETTING_OPTIONAL(double, PrefetchWatermark);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(double, PrefetchWatermark);
 };
 
 // Settings for create resource request.
@@ -60,7 +60,7 @@ struct TListResourcesSettings : public TOperationRequestSettings<TListResourcesS
     using TSelf = TListResourcesSettings;
 
     // List resources recursively, including children.
-    FLUENT_SETTING_FLAG(Recursive);
+    FLUENT_SETTING_FLAG_DEPRECATED(Recursive);
 };
 
 // Settings for describe resource request.
@@ -83,8 +83,8 @@ private:
 struct TAcquireResourceSettings : public TOperationRequestSettings<TAcquireResourceSettings> {
     using TSelf = TAcquireResourceSettings;
 
-    FLUENT_SETTING_OPTIONAL(ui64, Amount);
-    FLUENT_SETTING_FLAG(IsUsedAmount);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(ui64, Amount);
+    FLUENT_SETTING_FLAG_DEPRECATED(IsUsedAmount);
 };
 
 using TAsyncListResourcesResult = NThreading::TFuture<TListResourcesResult>;
@@ -161,6 +161,11 @@ public:
     TAsyncDescribeResourceResult DescribeResource(const TString& coordinationNodePath, const TString& resourcePath, const TDescribeResourceSettings& = {});
 
     // Acquire resources's units inside a coordination node.
+    // If CancelAfter is set greater than zero and less than OperationTimeout
+    // and resource is not ready after CancelAfter time,
+    // the result code of this operation will be CANCELLED and resource will not be spent.
+    // It is recommended to specify both OperationTimeout and CancelAfter.
+    // CancelAfter should be less than OperationTimeout.
     TAsyncStatus AcquireResource(const TString& coordinationNodePath, const TString& resourcePath, const TAcquireResourceSettings& = {});
 
 private:

@@ -1,12 +1,12 @@
 #include "local_partition_reader.h"
 #include "logging.h"
 
-#include <ydb/library/actors/core/actor.h>
-#include <ydb/library/services/services.pb.h>
-
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/core/tx/replication/service/worker.h>
+#include <ydb/core/tx/replication/ydb_proxy/topic_message.h>
+#include <ydb/library/actors/core/actor.h>
+#include <ydb/library/services/services.pb.h>
 
 using namespace NActors;
 using namespace NKikimr::NReplication::NService;
@@ -37,7 +37,7 @@ private:
         if (!LogPrefix) {
             LogPrefix = TStringBuilder()
                 << "[LocalPartitionReader]"
-                << "[" << PQTablet << "]"
+                << PQTablet
                 << "[" << Partition << "]"
                 << SelfId() << " ";
         }
@@ -62,14 +62,14 @@ private:
 
     void HandleInit(TEvWorker::TEvHandshake::TPtr& ev) {
         Worker = ev->Sender;
-        LOG_D("Handshake"
+        LOG_D("HandleInit TEvWorker::TEvHandshake"
             << ": worker# " << Worker);
 
         Send(PQTablet, CreateGetOffsetRequest().Release());
     }
 
     void HandleInit(TEvPersQueue::TEvResponse::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
+        LOG_D("HandleInit " << ev->Get()->ToString());
         auto& record = ev->Get()->Record;
         if (record.GetErrorCode() == NPersQueue::NErrorCode::INITIALIZING) {
             Schedule(TDuration::Seconds(1), new NActors::TEvents::TEvWakeup);
@@ -131,7 +131,7 @@ private:
         }
 
         auto gotOffset = Offset;
-        TVector<TEvWorker::TEvData::TRecord> records(::Reserve(readResult.ResultSize()));
+        TVector<NReplication::TTopicMessage> records(::Reserve(readResult.ResultSize()));
 
         for (auto& result : readResult.GetResult()) {
             gotOffset = std::max(gotOffset, result.GetOffset());
@@ -139,7 +139,7 @@ private:
         }
         SentOffset = gotOffset + 1;
 
-        Send(Worker, new TEvWorker::TEvData(ToString(Partition), std::move(records)));
+        Send(Worker, new TEvWorker::TEvData(Partition, ToString(Partition), std::move(records)));
     }
 
     void Leave(TEvWorker::TEvGone::EStatus status) {

@@ -19,23 +19,21 @@ enum HealthCheckResponseFormat {
 class TJsonHealthCheck : public TViewerPipeClient {
     using TThis = TJsonHealthCheck;
     using TBase = TViewerPipeClient;
-    IViewer* Viewer;
     static const bool WithRetry = false;
-    NMon::TEvHttpInfo::TPtr Event;
     TJsonSettings JsonSettings;
     ui32 Timeout = 0;
     HealthCheckResponseFormat Format;
     TString Database;
     bool Cache = true;
     bool MergeRecords = false;
+    TViewerPipeClient::TRequestResponse<TEvStateStorage::TEvBoardInfo> MetadataCacheEndpointsLookup;
     std::optional<Ydb::Monitoring::SelfCheckResult> Result;
-    std::optional<TNodeId> SubscribedNodeId;
+    std::optional<TRequestResponse<NHealthCheck::TEvSelfCheckResult>> SelfCheckResult;
     Ydb::Monitoring::StatusFlag::Status MinStatus = Ydb::Monitoring::StatusFlag::UNSPECIFIED;
 
 public:
     TJsonHealthCheck(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
-        : Viewer(viewer)
-        , Event(ev)
+        : TViewerPipeClient(viewer, ev)
     {}
 
     THolder<NHealthCheck::TEvSelfCheckRequest> MakeSelfCheckRequest() {
@@ -54,19 +52,22 @@ public:
         if (params.Has("merge_records")) {
             request->Request.set_merge_records(MergeRecords);
         }
+        if (params.Has("return_hints")) {
+            request->Request.set_return_hints(FromStringWithDefault<bool>(params.Get("return_hints"), false));
+        }
         SetDuration(TDuration::MilliSeconds(Timeout), *request->Request.mutable_operation_params()->mutable_operation_timeout());
         return request;
     }
 
     void SendHealthCheckRequest() {
-        auto request = MakeSelfCheckRequest();
-        Send(NHealthCheck::MakeHealthCheckID(), request.Release());
+        SelfCheckResult = MakeRequest<NHealthCheck::TEvSelfCheckResult>(NHealthCheck::MakeHealthCheckID(), MakeSelfCheckRequest().Release());
     }
 
     void Bootstrap() override {
+        if (NeedToRedirect()) {
+            return;
+        }
         const auto& params(Event->Get()->Request.GetParams());
-        InitConfig(params);
-
         Format = HealthCheckResponseFormat::JSON;
         if (params.Has("format")) {
             auto& format = params.Get("format");
@@ -99,11 +100,10 @@ public:
         Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
 
         if (params.Get("min_status") && !Ydb::Monitoring::StatusFlag_Status_Parse(params.Get("min_status"), &MinStatus)) {
-            Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "The field 'min_status' cannot be parsed"), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
-            return PassAway();
+            return TBase::ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "The field 'min_status' cannot be parsed"));
         }
         if (AppData()->FeatureFlags.GetEnableDbMetadataCache() && Cache && Database && MergeRecords) {
-            RequestStateStorageMetadataCacheEndpointsLookup(Database);
+            MetadataCacheEndpointsLookup = MakeRequestStateStorageMetadataCacheEndpointsLookup(Database);
         } else {
             SendHealthCheckRequest();
         }
@@ -111,17 +111,10 @@ public:
         Become(&TThis::StateRequestedInfo, TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup());
     }
 
-    void PassAway() override {
-        if (SubscribedNodeId.has_value()) {
-            Send(TActivationContext::InterconnectProxy(SubscribedNodeId.value()), new TEvents::TEvUnsubscribe());
-        }
-        TBase::PassAway();
-    }
-
     STFUNC(StateRequestedInfo) {
         switch (ev->GetTypeRewrite()) {
             hFunc(NHealthCheck::TEvSelfCheckResult, Handle);
-            cFunc(TEvents::TSystem::Wakeup, HandleTimeout);
+            cFunc(TEvents::TSystem::Wakeup, TBase::HandleTimeout);
             hFunc(NHealthCheck::TEvSelfCheckResultProto, Handle);
             cFunc(TEvents::TSystem::Undelivered, SendHealthCheckRequest);
             hFunc(TEvStateStorage::TEvBoardInfo, Handle);
@@ -152,12 +145,6 @@ public:
         }
 
         return MakeHolder<THashMap<TMetricRecord, ui32>>(recordCounters);
-    }
-
-    void HandleJSON() {
-        TStringStream json;
-        TProtoToJson::ProtoToJson(json, *Result, JsonSettings);
-        Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKJSON(Event->Get(), json.Str()), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
     }
 
     void HandlePrometheus() {
@@ -205,22 +192,26 @@ public:
         e->OnMetricEnd();
         e->OnStreamEnd();
 
-        Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKTEXT(Event->Get()) + ss.Str(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+        TBase::ReplyAndPassAway(GetHTTPOK("text/plain", ss.Str()));
     }
 
     void ReplyAndPassAway() override {
-        if (Result) {
-            if (Format == HealthCheckResponseFormat::JSON) {
-                HandleJSON();
+        if (!Result) {
+            return TBase::ReplyAndPassAway(GetHTTPINTERNALERROR("text/plain", "No result"));
+        } else {
+            if (Format == HealthCheckResponseFormat::PROMETHEUS) {
+                return HandlePrometheus();
             } else {
-                HandlePrometheus();
+                TStringStream json;
+                TProtoToJson::ProtoToJson(json, *Result, JsonSettings);
+                return TBase::ReplyAndPassAway(GetHTTPOKJSON(json.Str()));
             }
         }
-        PassAway();
     }
 
     void Handle(NHealthCheck::TEvSelfCheckResult::TPtr& ev) {
-        Result = std::move(ev->Get()->Result);
+        SelfCheckResult->Set(std::move(ev));
+        Result = std::move(SelfCheckResult->Get()->Result);
         ReplyAndPassAway();
     }
 
@@ -231,20 +222,17 @@ public:
     }
 
     void Handle(TEvStateStorage::TEvBoardInfo::TPtr& ev) {
-        auto activeNode = TDatabaseMetadataCache::PickActiveNode(ev->Get()->InfoEntries);
-        if (activeNode != 0) {
-            SubscribedNodeId = activeNode;
-            std::optional<TActorId> cache = MakeDatabaseMetadataCacheId(activeNode);
-            auto request = MakeHolder<NHealthCheck::TEvSelfCheckRequestProto>();
-            Send(*cache, request.Release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, activeNode);
-        } else {
-            SendHealthCheckRequest();
+        MetadataCacheEndpointsLookup.Set(std::move(ev));
+        if (MetadataCacheEndpointsLookup.IsOk()) {
+            auto activeNode = TDatabaseMetadataCache::PickActiveNode(MetadataCacheEndpointsLookup->InfoEntries);
+            if (activeNode != 0) {
+                TActorId cache = MakeDatabaseMetadataCacheId(activeNode);
+                auto request = MakeHolder<NHealthCheck::TEvSelfCheckRequestProto>();
+                Send(cache, request.Release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, activeNode);
+            } else {
+                SendHealthCheckRequest();
+            }
         }
-    }
-
-    void HandleTimeout() {
-        Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPGATEWAYTIMEOUT(Event->Get()), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
-        PassAway();
     }
 
     static YAML::Node GetSwagger() {
@@ -255,24 +243,10 @@ public:
             .Description = "Performs self-check and returns result",
         });
         yaml.AddParameter({
-            .Name = "enums",
-            .Description = "convert enums to strings",
-            .Type = "boolean",
-        });
-        yaml.AddParameter({
-            .Name = "ui64",
-            .Description = "return ui64 as number",
-            .Type = "boolean",
-        });
-        yaml.AddParameter({
-            .Name = "timeout",
-            .Description = "timeout in ms",
-            .Type = "integer",
-        });
-        yaml.AddParameter({
             .Name = "database",
-            .Description = "database name",
+            .Description = "database name, use cluster domain name to get cluster storage status",
             .Type = "string",
+            .Required = true,
         });
         yaml.AddParameter({
             .Name = "cache",

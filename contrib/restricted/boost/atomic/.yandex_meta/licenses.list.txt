@@ -1,0 +1,168 @@
+====================BSL-1.0====================
+ * Distributed under the Boost Software License, Version 1.0.
+ *    (See accompanying file LICENSE_1_0.txt or copy at
+ *          http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+ * Distributed under the Boost Software License, Version 1.0.
+ * (See accompanying file LICENSE_1_0.txt or copy at
+ * http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+* Submit your patches as [pull requests](https://github.com/boostorg/atomic/compare) against **develop** branch. Note that by submitting patches you agree to license your modifications under the [Boost Software License, Version 1.0](https://www.boost.org/LICENSE_1_0.txt).
+
+
+====================BSL-1.0====================
+//  Distributed under the Boost Software License, Version 1.0.
+//  See accompanying file LICENSE_1_0.txt or copy at
+//  http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+Distributed under the [Boost Software License, Version 1.0](https://www.boost.org/LICENSE_1_0.txt).
+
+====================COPYRIGHT====================
+ *             Copyright Andrey Semashev 2020.
+ * Distributed under the Boost Software License, Version 1.0.
+ *    (See accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+ * (C) Copyright 2013 Tim Blechmann
+ * (C) Copyright 2013, 2020 Andrey Semashev
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 2009 Helge Bahmann
+ * Copyright (c) 2009 Phil Endecott
+ * Copyright (c) 2013 Tim Blechmann
+ * ARM Code by Phil Endecott, based on other architectures.
+ * Copyright (c) 2014, 2020, 2022 Andrey Semashev
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 2009 Helge Bahmann
+ * Copyright (c) 2012 Tim Blechmann
+ * Copyright (c) 2013 - 2014 Andrey Semashev
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 2009 Helge Bahmann
+ * Copyright (c) 2012 Tim Blechmann
+ * Copyright (c) 2013 - 2020 Andrey Semashev
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 2009 Helge Bahmann
+ * Copyright (c) 2012 Tim Blechmann
+ * Copyright (c) 2013-2018, 2020-2021 Andrey Semashev
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 2009 Helge Bahmann
+ * Copyright (c) 2012 Tim Blechmann
+ * Copyright (c) 2014, 2019 Andrey Semashev
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 2009 Helge Bahmann
+ * Copyright (c) 2013 Tim Blechmann
+ * Copyright (c) 2012 - 2014 Andrey Semashev
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 2009 Helge Bahmann
+ * Copyright (c) 2014-2018, 2020 Andrey Semashev
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 2009, 2011 Helge Bahmann
+ * Copyright (c) 2009 Phil Endecott
+ * Copyright (c) 2013 Tim Blechmann
+ * Linux-specific code by Phil Endecott
+ * Copyright (c) 2014 Andrey Semashev
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 2010 Helge Bahmann
+ * Copyright (c) 2013 Tim Blechmann
+ * Copyright (c) 2014 Andrey Semashev
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 2011 Helge Bahmann
+ * Copyright (c) 2013 Tim Blechmann
+ * Copyright (c) 2014, 2020 Andrey Semashev
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 2011 Helge Bahmann
+ * Copyright (c) 2013 Tim Blechmann
+ * Copyright (c) 2014-2020 Andrey Semashev
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 2011 Helge Bahmann
+ * Copyright (c) 2013-2014, 2020 Andrey Semashev
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 2012 Hartmut Kaiser
+ * Copyright (c) 2014-2018, 2020-2021 Andrey Semashev
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 2014 Andrey Semashev
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 2015 Andrey Semashev
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 2017 - 2018 Andrey Semashev
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 2017 Andrey Semashev
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 2018, 2021 Andrey Semashev
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 2018-2023 Andrey Semashev
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 2020, 2022 Andrey Semashev
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 2020-2021 Andrey Semashev
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 2021 Andrey Semashev
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 2023 Andrey Semashev
+
+
+====================COPYRIGHT====================
+//  Copyright (c) 2008, 2009 Peter Dimov
+//  Copyright (c) 2018 Andrey Semashev
+
+
+====================COPYRIGHT====================
+//  Copyright (c) 2009 Helge Bahmann
+//  Copyright (c) 2012 - 2014, 2017 Andrey Semashev
+
+
+====================COPYRIGHT====================
+//  Copyright (c) 2011 Helge Bahmann
+//  Copyright (c) 2020 Andrey Semashev

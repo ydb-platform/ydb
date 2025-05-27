@@ -1,5 +1,5 @@
 #pragma once
-#include <ydb/core/tx/columnshard/counters/common/owner.h>
+#include <ydb/library/signals/owner.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 
 namespace NKikimr::NOlap::NActualizer {
@@ -34,13 +34,13 @@ public:
     }
 
     void AddPortion(const std::shared_ptr<TPortionInfo>& p) {
-        RecordsCount->Add(p->NumRows());
+        RecordsCount->Add(p->GetRecordsCount());
         Count->Add(1);
         Bytes->Add(p->GetTotalBlobBytes());
     }
 
     void RemovePortion(const std::shared_ptr<TPortionInfo>& p) {
-        RecordsCount->Remove(p->NumRows());
+        RecordsCount->Remove(p->GetRecordsCount());
         Count->Remove(1);
         Bytes->Remove(p->GetTotalBlobBytes());
     }

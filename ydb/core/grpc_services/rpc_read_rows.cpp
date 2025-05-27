@@ -10,17 +10,17 @@
 #include <ydb/core/tx/tx_proxy/upload_rows_common_impl.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 
-#include <ydb/library/yql/parser/pg_wrapper/interface/type_desc.h>
-#include <ydb/library/yql/public/udf/udf_types.h>
-#include <ydb/library/yql/minikql/dom/yson.h>
-#include <ydb/library/yql/minikql/dom/json.h>
-#include <ydb/library/yql/utils/utf8.h>
-#include <ydb/library/yql/public/decimal/yql_decimal.h>
+#include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
+#include <yql/essentials/public/udf/udf_types.h>
+#include <yql/essentials/minikql/dom/yson.h>
+#include <yql/essentials/minikql/dom/json.h>
+#include <yql/essentials/utils/utf8.h>
+#include <yql/essentials/public/decimal/yql_decimal.h>
 
-#include <ydb/library/binary_json/write.h>
-#include <ydb/library/dynumber/dynumber.h>
+#include <yql/essentials/types/binary_json/write.h>
+#include <yql/essentials/types/dynumber/dynumber.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
 #include <util/string/vector.h>
 #include <util/generic/size_literals.h>
@@ -35,6 +35,11 @@ namespace {
 struct RequestedKeyColumn {
     TString Name;
     Ydb::Type Type;
+};
+
+struct TShardReadState {
+    std::vector<TOwnedCellVec> Keys;
+    ui32 FirstUnprocessedQuery = 0;
 };
 
 }
@@ -82,8 +87,8 @@ class TReadRowsRPC : public TActorBootstrapped<TReadRowsRPC> {
 
     static constexpr TDuration DEFAULT_TIMEOUT = TDuration::Seconds(60);
 public:
-    explicit TReadRowsRPC(std::unique_ptr<IRequestNoOpCtx> request)
-        : Request(std::move(request))
+    explicit TReadRowsRPC(IRequestNoOpCtx* request)
+        : Request(request)
         , PipeCache(MakePipePerNodeCacheID(true))
         , Span(TWilsonGrpc::RequestActor, Request->GetWilsonTraceId(), "ReadRowsRpc")
     {}
@@ -148,58 +153,49 @@ public:
             }
             const auto& colInfo = *colInfoPtr;
 
-            i32 typmod = -1;
-            if (typeInProto.type_id()) {
-                // TODO check Arrow types
-            } else if (typeInProto.has_decimal_type() && colInfo.PType.GetTypeId() == NScheme::NTypeIds::Decimal) {
-                int precision = typeInProto.decimal_type().precision();
-                int scale = typeInProto.decimal_type().scale();
-                if (precision != NScheme::DECIMAL_PRECISION || scale != NScheme::DECIMAL_SCALE) {
-                    errorMessage = Sprintf("Unsupported Decimal(%d,%d) for column %s: expected Decimal(%d,%d)",
-                                           precision, scale,
-                                           name.c_str(),
-                                           NScheme::DECIMAL_PRECISION, NScheme::DECIMAL_SCALE);
+            TString columnTypeName = NScheme::TypeName(colInfo.PType, colInfo.PTypeMod);
 
-                    return false;
-                }
-            } else if (typeInProto.has_pg_type()) {
-                const auto& typeName = typeInProto.pg_type().type_name();
-                auto* typeDesc = NPg::TypeDescFromPgTypeName(typeName);
-                if (!typeDesc) {
-                    errorMessage = Sprintf("Unknown pg type for column %s: %s",
-                                           name.c_str(), typeName.c_str());
-                    return false;
-                }
+            TString parseProtoError;
+            NScheme::TTypeInfoMod inTypeInfoMod;
+            if (!NScheme::TypeInfoFromProto(typeInProto, inTypeInfoMod, parseProtoError)){
+                errorMessage = Sprintf("Type parse error for column %s: %s",
+                    name.c_str(), parseProtoError.c_str());
+                return false;
+            }
+            const NScheme::TTypeInfo& inTypeInfo = inTypeInfoMod.TypeInfo;
 
-                const auto typeInRequest = NScheme::TTypeInfo(NScheme::NTypeIds::Pg, typeDesc);
-                if (typeInRequest != colInfo.PType) {
-                    errorMessage = Sprintf("Type mismatch for column %s: expected %s, got %s",
-                                           name.c_str(), NScheme::TypeName(colInfo.PType).c_str(),
-                                           NScheme::TypeName(typeInRequest).c_str());
-                    return false;
-                }
+            TString inTypeName = NScheme::TypeName(inTypeInfo, inTypeInfo.GetPgTypeMod(colInfo.PTypeMod));
 
-                if (!colInfo.PTypeMod.empty() && NPg::TypeDescNeedsCoercion(typeDesc)) {
-                    const auto result = NPg::BinaryTypeModFromTextTypeMod(colInfo.PTypeMod, typeDesc);
-                    if (result.Error) {
-                        errorMessage = Sprintf("Invalid typemod for column %s: type %s, error %s",
-                            name.c_str(), NScheme::TypeName(colInfo.PType, colInfo.PTypeMod).c_str(),
-                            result.Error->c_str());
+            if (inTypeInfo != colInfo.PType) {
+                errorMessage = Sprintf("Type mismatch, got type %s for column %s, but expected %s",
+                    inTypeName.c_str(), name.c_str(), columnTypeName.c_str());
+                return false;
+            }
+
+            i32 pgTypeMod = -1;
+            if (typeInProto.has_pg_type()) {
+                if (!colInfo.PTypeMod.empty() && NPg::TypeDescNeedsCoercion(inTypeInfo.GetPgTypeDesc())) {
+                    if (inTypeInfoMod.TypeMod != colInfo.PTypeMod) {
+                        errorMessage = Sprintf("Typemod mismatch, got type %s for column %s, type mod %s, but expected %s",
+                            inTypeName.c_str(), name.c_str(), inTypeInfoMod.TypeMod.c_str(), colInfo.PTypeMod.c_str());
                         return false;
                     }
-                    typmod = result.Typmod;
+
+                    const auto result = NPg::BinaryTypeModFromTextTypeMod(inTypeInfoMod.TypeMod, inTypeInfo.GetPgTypeDesc());
+                    if (result.Error) {
+                        errorMessage = Sprintf("Invalid typemod %s, got type %s for column %s, error %s",
+                           inTypeInfoMod.TypeMod.c_str(), inTypeName.c_str(), name.c_str(), result.Error->c_str());
+                        return false;
+                    }
+                    pgTypeMod = result.Typmod;
                 }
-            } else {
-                errorMessage = Sprintf("Unexpected type for column %s: expected %s",
-                                       name.c_str(), NScheme::TypeName(colInfo.PType).c_str());
-                return false;
             }
 
             KeyColumnTypes.resize(Max<size_t>(KeyColumnTypes.size(), colInfo.KeyOrder + 1));
             KeyColumnTypes[colInfo.KeyOrder] = colInfo.PType;
 
             bool notNull = notNullColumns.contains(colInfo.Name);
-            KeyColumnPositions[colInfo.KeyOrder] = NTxProxy::TFieldDescription{colInfo.Id, colInfo.Name, static_cast<ui32>(pos), colInfo.PType, typmod, notNull};
+            KeyColumnPositions[colInfo.KeyOrder] = NTxProxy::TFieldDescription{colInfo.Id, colInfo.Name, static_cast<ui32>(pos), colInfo.PType, pgTypeMod, notNull};
             keyColumnsLeft.erase(colInfo.Name);
         }
 
@@ -454,7 +450,7 @@ public:
                         return (cmp < 0);
                 });
             Y_ABORT_UNLESS(it != partitions.end());
-            ShardIdToKeys[it->ShardId].emplace_back(std::move(key));
+            ShardIdToReadState[it->ShardId].Keys.emplace_back(std::move(key));
         }
     }
 
@@ -471,12 +467,13 @@ public:
         auto keyRange = resolvePartitionsResult->ResultSet[0].KeyDescription.Get();
 
         CreateShardToKeysMapping(keyRange);
-        for (const auto& [shardId, keys] : ShardIdToKeys) {
-            SendRead(shardId, keys);
+        for (const auto& [shardId, state] : ShardIdToReadState) {
+            SendRead(shardId, state);
         }
     }
 
-    void SendRead(ui64 shardId, const std::vector<TOwnedCellVec>& keys) {
+    void SendRead(ui64 shardId, const TShardReadState& readState) {
+        auto& keys = readState.Keys;
         auto request = std::make_unique<TEvDataShard::TEvRead>();
         auto& record = request->Record;
 
@@ -491,8 +488,8 @@ public:
 
         record.SetResultFormat(::NKikimrDataEvents::FORMAT_CELLVEC);
 
-        for (auto& key : keys) {
-            request->Keys.emplace_back(TSerializedCellVec::Serialize(key));
+        for (size_t i = readState.FirstUnprocessedQuery; i < keys.size(); ++i) {
+            request->Keys.emplace_back(TSerializedCellVec::Serialize(keys[i]));
         }
 
         LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::RPC_REQUEST, "TReadRowsRPC send TEvRead shardId : " << shardId << " keys.size(): " << keys.size());
@@ -509,7 +506,7 @@ public:
             // ReadRows can reply with the following statuses:
             // * SUCCESS
             // * INTERNAL_ERROR -- only if MaxRetries is reached
-            // * OVERLOADED -- client will retrie it with backoff
+            // * OVERLOADED -- client will retry it with backoff
             // * ABORTED -- code is used for all other DataShard errors
 
             const auto& status = msg->Record.GetStatus();
@@ -518,17 +515,20 @@ public:
 
             ui64 shardId = msg->Record.GetReadId();
 
+            auto it = ShardIdToReadState.find(shardId);
+            if (it == ShardIdToReadState.end()) {
+                TStringStream ss;
+                ss << "Got unknown shardId from TEvReadResult# " << shardId << ", status# " << statusCode;
+                ReplyWithError(statusCode, ss.Str(), &issues);
+                return;
+            }
+
             switch (statusCode) {
             case Ydb::StatusIds::SUCCESS:
                 break;
             case Ydb::StatusIds::INTERNAL_ERROR: {
-                auto it = ShardIdToKeys.find(shardId);
                 ++Retries;
-                if (it == ShardIdToKeys.end()) {
-                    TStringStream ss;
-                    ss << "Got unknown shardId from TEvReadResult# " << shardId << ", status# " << statusCode;
-                    ReplyWithError(statusCode, ss.Str(), &issues);
-                } else if (Retries < MaxTotalRetries) {
+                if (Retries < MaxTotalRetries) {
                     TStringStream ss;
                     ss << "Reached MaxRetries count for DataShard# " << shardId << ", status# " << statusCode;
                     ReplyWithError(statusCode, ss.Str(), &issues);
@@ -549,8 +549,21 @@ public:
                 return;
             }
             }
+            if (!msg->Record.HasFinished() || !msg->Record.GetFinished()) {
+                // We should have received continuation token if read is not finished.
+                TMaybe<TString> continuationToken = msg->Record.GetContinuationToken();
+
+                Y_ABORT_UNLESS(continuationToken);
+
+                NKikimrTxDataShard::TReadContinuationToken token;
+                Y_ABORT_UNLESS(token.ParseFromString(*continuationToken), "Failed to parse continuation token");
+
+                // Save continuation token in case we will have to retry on error, but for now
+                // we just wait for the next batch of results.
+                it->second.FirstUnprocessedQuery = token.GetFirstUnprocessedQuery();
+                ReadsInFlight++;
+            }
         }
-        Y_ABORT_UNLESS(msg->Record.HasFinished() && msg->Record.GetFinished());
         LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::RPC_REQUEST, "TReadRowsRPC TEvReadResult RowsCount: " << msg->GetRowsCount());
 
         EvReadResults.emplace_back(ev->Release().Release());
@@ -567,24 +580,38 @@ public:
         auto& ioStats = stats.ReadIOStat;
 
         const auto getPgTypeFromColMeta = [](const auto &colMeta) {
-            return NYdb::TPgType(NPg::PgTypeNameFromTypeDesc(colMeta.Type.GetTypeDesc()),
+            return NYdb::TPgType(NPg::PgTypeNameFromTypeDesc(colMeta.Type.GetPgTypeDesc()),
                                  colMeta.PTypeMod);
         };
 
         const auto getTypeFromColMeta = [&](const auto &colMeta) {
-            if (colMeta.Type.GetTypeId() == NScheme::NTypeIds::Pg) {
+            const NScheme::TTypeInfo& typeInfo = colMeta.Type;
+            switch (typeInfo.GetTypeId()) {
+            case NScheme::NTypeIds::Pg: {
                 return NYdb::TTypeBuilder().Pg(getPgTypeFromColMeta(colMeta)).Build();
-            } else {
-                return NYdb::TTypeBuilder()
-                    .Primitive((NYdb::EPrimitiveType)colMeta.Type.GetTypeId())
+            }
+            case NScheme::NTypeIds::Decimal: {
+                return NYdb::TTypeBuilder().Decimal(NYdb::TDecimalType(
+                        typeInfo.GetDecimalType().GetPrecision(), 
+                        typeInfo.GetDecimalType().GetScale()))
                     .Build();
+            }
+            default :{
+                return NYdb::TTypeBuilder()
+                    .Primitive((NYdb::EPrimitiveType)typeInfo.GetTypeId())
+                    .Build();
+            }
             }
         };
 
         for (const auto& colMeta : RequestedColumnsMeta) {
             const auto type = getTypeFromColMeta(colMeta);
             auto* col = resultSet->Addcolumns();
-            *col->mutable_type() = NYdb::TProtoAccessor::GetProto(type);
+            if (colMeta.IsNotNullColumn || colMeta.Type.GetTypeId() == NScheme::NTypeIds::Pg) { // pg type in nullable itself
+                *col->mutable_type() = NYdb::TProtoAccessor::GetProto(type);
+            } else {
+                *col->mutable_type()->mutable_optional_type()->mutable_item() = NYdb::TProtoAccessor::GetProto(type);
+            }
             *col->mutable_name() = colMeta.Name;
         }
 
@@ -602,18 +629,55 @@ public:
                     );
                     const auto& cell = row[i];
                     vb.AddMember(colMeta.Name);
-                    if (colMeta.Type.GetTypeId() == NScheme::NTypeIds::Pg)
-                    {
-                        const NPg::TConvertResult& pgResult = NPg::PgNativeTextFromNativeBinary(cell.AsBuf(), colMeta.Type.GetTypeDesc());
+                    switch (colMeta.Type.GetTypeId()) {
+                    case NScheme::NTypeIds::Pg: {
+                        const NPg::TConvertResult& pgResult = NPg::PgNativeTextFromNativeBinary(cell.AsBuf(), colMeta.Type.GetPgTypeDesc());
                         if (pgResult.Error) {
                             LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::RPC_REQUEST, "PgNativeTextFromNativeBinary error " << *pgResult.Error);
                         }
                         const NYdb::TPgValue pgValue{cell.IsNull() ? NYdb::TPgValue::VK_NULL : NYdb::TPgValue::VK_TEXT, pgResult.Str, getPgTypeFromColMeta(colMeta)};
                         vb.Pg(pgValue);
+                        break;
                     }
-                    else
-                    {
-                        ProtoValueFromCell(vb, colMeta.Type, cell);
+                    case NScheme::NTypeIds::Decimal: {
+                        using namespace NYql::NDecimal;
+
+                        NYdb::TDecimalType decimalType{
+                            static_cast<ui8>(colMeta.Type.GetDecimalType().GetPrecision()),
+                            static_cast<ui8>(colMeta.Type.GetDecimalType().GetScale())
+                        };
+
+                        if (cell.IsNull()) {
+                            vb.EmptyOptional(NYdb::TTypeBuilder().Decimal(decimalType).Build());
+                        } else {
+                            const auto loHi = cell.AsValue<std::pair<ui64, i64>>();
+                            Ydb::Value valueProto;
+                            valueProto.set_low_128(loHi.first);
+                            valueProto.set_high_128(loHi.second);
+                            if (colMeta.IsNotNullColumn) {
+                                vb.Decimal({valueProto, decimalType});
+                            } else {
+                                vb.BeginOptional();
+                                vb.Decimal({valueProto, decimalType});
+                                vb.EndOptional();
+                            }
+                        }
+                        break;
+                    }
+                    default: {
+                        if (cell.IsNull()) {
+                            vb.EmptyOptional((NYdb::EPrimitiveType)colMeta.Type.GetTypeId());
+                        } else {
+                            if (colMeta.IsNotNullColumn) {
+                                ProtoValueFromCell(vb, colMeta.Type, cell);
+                            } else {
+                                vb.BeginOptional();
+                                ProtoValueFromCell(vb, colMeta.Type, cell);
+                                vb.EndOptional();
+                            }
+                        }
+                        break;
+                    }
                     }
                     sz += cell.Size();
                 }
@@ -634,7 +698,7 @@ public:
     {
         auto* resp = CreateResponse();
         resp->set_status(status);
-        if (!errorMsg.Empty() || issues) {
+        if (!errorMsg.empty() || issues) {
             const NYql::TIssue& issue = MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, errorMsg);
             auto* protoIssue = resp->add_issues();
             NYql::IssueToMessage(issue, protoIssue);
@@ -668,6 +732,14 @@ public:
         SendResult(status, errorMsg, issues);
     }
 
+    void Handle(TEvents::TEvUndelivered::TPtr&) {
+        return ReplyWithError(Ydb::StatusIds::INTERNAL_ERROR, "Internal error: pipe cache is not available, the cluster might not be configured properly");
+    }
+
+    void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr &ev) {
+        return ReplyWithError(Ydb::StatusIds::UNAVAILABLE, TStringBuilder() << "Failed to connect to shard " << ev->Get()->TabletId);
+    }
+
     void PassAway() override {
         Send(PipeCache, new TEvPipeCache::TEvUnlink(0));
         if (TimeoutTimerActorId) {
@@ -683,6 +755,9 @@ public:
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
             hFunc(TEvTxProxySchemeCache::TEvResolveKeySetResult, Handle);
             hFunc(TEvDataShard::TEvReadResult, Handle);
+
+            hFunc(TEvents::TEvUndelivered, Handle);
+            hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
 
             hFunc(TEvents::TEvWakeup, HandleTimeout);
         }
@@ -707,6 +782,7 @@ private:
             , Name(colInfo.Name)
             , Type(colInfo.PType)
             , PTypeMod(colInfo.PTypeMod)
+            , IsNotNullColumn(colInfo.IsNotNullColumn)
         {
         }
 
@@ -714,10 +790,11 @@ private:
         TString Name;
         NScheme::TTypeInfo Type;
         TString PTypeMod;
+        bool IsNotNullColumn;
     };
     TVector<TColumnMeta> RequestedColumnsMeta;
 
-    std::map<ui64, std::vector<TOwnedCellVec>> ShardIdToKeys;
+    std::map<ui64, TShardReadState> ShardIdToReadState;
     std::vector<std::unique_ptr<TEvDataShard::TEvReadResult>> EvReadResults;
     // TEvRead interface
     ui64 ReadsInFlight = 0;
@@ -730,8 +807,13 @@ private:
     NWilson::TSpan Span;
 };
 
-void DoReadRowsRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f) {
-    f.RegisterActor(new TReadRowsRPC(std::move(p)));
+ void DoReadRowsRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f) {
+    f.RegisterActor(new TReadRowsRPC(p.release()));
+}
+
+template<>
+IActor* TEvReadRowsRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestNoOpCtx* msg) {
+    return new TReadRowsRPC(msg);
 }
 
 } // namespace NKikimr::NGRpcService

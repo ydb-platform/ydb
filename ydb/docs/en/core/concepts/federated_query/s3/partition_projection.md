@@ -1,10 +1,10 @@
-# Advanced partitioning
+# Eхtended Partitioning in S3 ({{ objstorage-full-name }})
 
-[Partitioning](partitioning.md) allows you to specify  for {{ ydb-full-name }} rules for data placement in S3 ({{ objstorage-full-name }}).
+[Partitioning](partitioning.md) allows you to specify rules for {{ ydb-full-name }} data placement in S3 ({{ objstorage-full-name }}).
 
 Assume the data in S3 ({{ objstorage-full-name }}) is stored in the following directory structure:
 
-```
+```text
 year=2021
     month=01
     month=02
@@ -14,12 +14,13 @@ year=2022
 ```
 
 When executing the query below, {{ ydb-full-name }} will perform the following actions:
+
 1. Retrieve a full list of subdirectories within '/'.
 2. Attempt to process the name of each subdirectory in the format `year=<DIGITS>`.
 3. For each subdirectory `year=<DIGITS>`, retrieve a list of all subdirectories in the format `month=<DIGITS>`.
 4. Process the read data.
 
-```sql
+```yql
 SELECT
     *
 FROM
@@ -51,7 +52,7 @@ Advanced partitioning is called "partition projection" and is specified through 
 
 Example of specifying advanced partitioning:
 
-```sql
+```yql
 SELECT
     *
 FROM
@@ -86,7 +87,7 @@ The example above specifies that data exists for each year and each month from 2
 
 In general, the advanced partitioning setup looks as follows:
 
-```sql
+```yql
 SELECT
     *
 FROM
@@ -107,7 +108,7 @@ WITH
 )
 ```
 
-## Field descriptions { #field_types }
+## Field Descriptions { #field_types }
 
 | Field name                 | Description                                        | Allowed values           |
 |----------------------------|----------------------------------------------------|--------------------------|
@@ -115,7 +116,7 @@ WITH
 | `projection.<field1_name>.type` | Data type of the field                         | `integer`, `enum`, `date`|
 | `projection.<field1_name>.XXX`  | Specific properties of the type                |                          |
 
-### Integer field type { #integer_type }
+### Integer Field Type { #integer_type }
 
 It is used for columns whose values can be represented as integers ranging from 2^-63^ to 2^63^-1.
 
@@ -127,7 +128,7 @@ It is used for columns whose values can be represented as integers ranging from 
 | `projection.<field_name>.interval` | No, default is `1` | Specifies the step between elements within the value range. For example, a step of 3 within the range 2 to 10 will result in the values: 2, 5, 8 | 2<br/>11             |
 | `projection.<field_name>.digits` | No, default is `0` | Specifies the number of digits in the number. If the number of significant digits in the number is less than the specified value, the value is padded with leading zeros up to the specified number of digits. For example, if .digits=3 is specified and the number 2 is passed, it will be converted to 002 | 2<br/>4 |
 
-### Enum field type { #enum_type }
+### Enum Field Type { #enum_type }
 
 It is used for columns whose values can be represented as a set of enumerated values.
 
@@ -136,7 +137,7 @@ It is used for columns whose values can be represented as a set of enumerated va
 | `projection.<field_name>.type` | Yes     | Data type of the field                                | enum                    |
 | `projection.<field_name>.values` | Yes   | Specifies the allowable values, separated by commas. Spaces are not ignored | 1, 2<br/>A,B,C |
 
-### Date field type { #date_type }
+### Date Field Type { #date_type }
 
 It is used for columns whose values can be represented as dates. The allowable date range is from 1970-01-01 to 2105-01-01.
 
@@ -149,18 +150,19 @@ It is used for columns whose values can be represented as dates. The allowable d
 | `projection.<field_name>.unit` | No, default is `DAYS` | Time interval units. Allowed values: `YEARS`, `MONTHS`, `WEEKS`, `DAYS`, `HOURS`, `MINUTES`, `SECONDS`, `MILLISECONDS` | SECONDS<br/>YEARS |
 | `projection.<field_name>.interval` | No, default is `1` | Specifies the step between elements within the value range with the specified dimension in `projection.<field_name>.unit`. For example, for the range 2021-02-02 to 2021-03-05 with a step of 15 and the dimension DAYS, the values will be: 2021-02-17, 2021-03-04 | 2<br/>6 |
 
-## Working with the NOW macro substitution
+## Working with the NOW Macro Substitution
 
 1. A number of arithmetic operations with the NOW macro substitution are supported: adding and subtracting time intervals. For example: `NOW-3DAYS`, `NOW+1MONTH`, `NOW-6YEARS`, `NOW+4HOURS`, `NOW-5MINUTES`, `NOW+6SECONDS`. The possible usage options for the macro substitution are described by the regular expression: `^\s*(NOW)\s*(([\+\-])\s*([0-9]+)\s*(YEARS?|MONTHS?|WEEKS?|DAYS?|HOURS?|MINUTES?|SECONDS?)\s*)?$`
 2. Allowed interval dimensions: YEARS, MONTHS, WEEKS, DAYS, HOURS, MINUTES, SECONDS, MILLISECONDS.
 3. Only one arithmetic operation is allowed in expressions; expressions like `NOW-5MINUTES+6SECONDS` are not supported.
 4. Working with intervals always results in obtaining a valid date, but depending on the dimension, the final results may vary:
+
    - Adding `MONTHS` to a date adds a calendar month, not a fixed number of days. For example, if the current date is `2023-01-31`, adding `1 MONTHS` will result in the date `2023-02-28`.
    - Adding `30 DAYS` to a date adds a fixed number of days. For example, if the current date is `2023-01-31`, adding `30 DAYS` will result in the date `2023-03-02`.
    - The earliest possible date is `1970-01-01` (time 0 in [Unix time](https://en.wikipedia.org/wiki/Unix_time)). If the result of calculations is a date earlier than the minimum, the entire query fails with an error.
    - The latest possible date is `2105-12-31` (the maximum date in [Unix time](https://en.wikipedia.org/wiki/Unix_time)). If the result of calculations is a date later than the maximum, the entire query fails with an error.
 
-## Path templates { #storage_location_template }
+## Path Templates { #storage_location_template }
 
 Data in S3 ({{objstorage-full-name}}) buckets can be placed in directories with arbitrary names. The `storage.location.template` setting allows you to specify the naming rules for the directories where the data is stored.
 
@@ -168,4 +170,4 @@ Data in S3 ({{objstorage-full-name}}) buckets can be placed in directories with 
 |---------------------------|----------------------------------------------------|--------------------------|
 | `storage.location.template` | Path template for directory names. The path is specified as a text string with parameter macro substitutions `...${<field_name>}...${<field_name>}...` | `root/a/${year}/b/${month}/d`<br/>`${year}/${month}` |
 
-If the path contains the characters `$`, `\`, or the characters `{}`, they must be escaped with the `\` character. For example, to work with a directory named `my$folder`, it needs to be specified as`my\$folder`.
+If the path contains the characters `$`, `\`, or the characters `{}`, they must be escaped with the `\` character. For example, to work with a directory named `my$folder`, it needs to be specified as `my\$folder`.

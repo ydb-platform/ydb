@@ -6,7 +6,7 @@
 #include <ydb/core/kqp/provider/yql_kikimr_provider.h>
 #include <ydb/core/kqp/opt/logical/kqp_opt_log.h>
 
-#include <ydb/library/yql/ast/yql_expr.h>
+#include <yql/essentials/ast/yql_expr.h>
 
 #include <library/cpp/json/writer/json.h>
 
@@ -27,6 +27,9 @@ enum class EPlanTableWriteType {
     MultiUpsert,
     Erase,
     MultiErase,
+    MultiReplace,
+    MultiInsert,
+    MultiUpdate,
 };
 
 /*
@@ -34,8 +37,8 @@ enum class EPlanTableWriteType {
  * table accesses is stored in top-level TKqpPhyQuery.QueryPlan.
  */
 void PhyQuerySetTxPlans(NKqpProto::TKqpPhyQuery& queryProto, const NYql::NNodes::TKqpPhysicalQuery& query,
-    TVector<TVector<NKikimrMiniKQL::TResult>> pureTxResults, NYql::TExprContext& ctx, const TString& cluster,
-    const TIntrusivePtr<NYql::TKikimrTablesData> tablesData, NYql::TKikimrConfiguration::TPtr config,
+    TVector<TVector<NKikimrMiniKQL::TResult>> pureTxResults, NYql::TExprContext& ctx, const TString& database,
+    const TString& cluster, const TIntrusivePtr<NYql::TKikimrTablesData> tablesData, NYql::TKikimrConfiguration::TPtr config,
     NYql::TTypeAnnotationContext& typeCtx, TIntrusivePtr<NOpt::TKqpOptimizeContext> optCtx);
 
 /*

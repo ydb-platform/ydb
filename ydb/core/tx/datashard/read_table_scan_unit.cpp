@@ -64,7 +64,7 @@ EExecutionStatus TReadTableScanUnit::Execute(TOperation::TPtr op,
                                              const TActorContext &ctx)
 {
     TActiveTransaction *tx = dynamic_cast<TActiveTransaction*>(op.Get());
-    Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
+    Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
 
     // Pass aborted operations (e.g. while waiting for stream clearance, or because of a split/merge)
     if (op->Result() || op->HasResultSentFlag() || op->IsImmediate() && CheckRejectDataTx(op, ctx)) {
@@ -96,7 +96,7 @@ EExecutionStatus TReadTableScanUnit::Execute(TOperation::TPtr op,
         const auto& record = tx->GetDataTx()->GetReadTableTransaction();
 
         if (record.HasSnapshotStep() && record.HasSnapshotTxId()) {
-            Y_ABORT_UNLESS(op->HasAcquiredSnapshotKey(), "Missing snapshot reference in ReadTable tx");
+            Y_ENSURE(op->HasAcquiredSnapshotKey(), "Missing snapshot reference in ReadTable tx");
 
             bool wait = false;
             TRowVersion snapshot(record.GetSnapshotStep(), record.GetSnapshotTxId());
@@ -106,7 +106,7 @@ EExecutionStatus TReadTableScanUnit::Execute(TOperation::TPtr op,
                 }
                 op->AddVolatileDependency(info->TxId);
                 bool ok = DataShard.GetVolatileTxManager().AttachWaitingRemovalOperation(info->TxId, op->GetTxId());
-                Y_VERIFY_S(ok, "Unexpected failure to attach TxId# " << op->GetTxId() << " to volatile tx " << info->TxId);
+                Y_ENSURE(ok, "Unexpected failure to attach TxId# " << op->GetTxId() << " to volatile tx " << info->TxId);
                 wait = true;
             }
 
@@ -116,8 +116,6 @@ EExecutionStatus TReadTableScanUnit::Execute(TOperation::TPtr op,
                 // be visible without any special tx map.
                 return EExecutionStatus::Continue;
             }
-        } else if (!DataShard.IsMvccEnabled()) {
-            Y_ABORT_UNLESS(tx->GetScanSnapshotId(), "Missing snapshot in ReadTable tx");
         }
 
         auto tid = record.GetTableId().GetTableId();
@@ -132,7 +130,7 @@ EExecutionStatus TReadTableScanUnit::Execute(TOperation::TPtr op,
             // With persistent snapshots we don't need to mark any preceding transactions
             auto readVersion = TRowVersion(record.GetSnapshotStep(), record.GetSnapshotTxId());
             options.SetSnapshotRowVersion(readVersion);
-        } else if (DataShard.IsMvccEnabled()) {
+        } else {
             // Note: this mode is only used in legacy tests and may not work with volatile transactions
             // With mvcc we have to mark all preceding transactions as logically complete
             auto readVersion = DataShard.GetReadWriteVersions(tx).ReadVersion;
@@ -141,11 +139,6 @@ EExecutionStatus TReadTableScanUnit::Execute(TOperation::TPtr op,
                 hadWrites |= DataShard.PromoteCompleteEdge(op.Get(), txc);
             }
             options.SetSnapshotRowVersion(readVersion);
-        } else {
-            // Without mvcc transactions are already marked using legacy rules
-            options.SetSnapshotId(tx->GetScanSnapshotId());
-
-            tx->SetScanSnapshotId(0);
         }
 
         // FIXME: we need to tie started scan to a write above being committed
@@ -230,7 +223,7 @@ void TReadTableScanUnit::Abort(const TString &err,
                                const TActorContext &ctx)
 {
     TActiveTransaction *tx = dynamic_cast<TActiveTransaction*>(op.Get());
-    Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
+    Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
 
     BuildResult(op)->AddError(NKikimrTxDataShard::TError::WRONG_SHARD_STATE, err);
     if (tx->GetScanSnapshotId()) {

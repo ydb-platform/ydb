@@ -417,7 +417,6 @@ template<typename T, typename Traits> class ConcurrentQueue;
 template<typename T, typename Traits> class BlockingConcurrentQueue;
 class ConcurrentQueueTests;
 
-
 namespace details
 {
     struct ConcurrentQueueProducerTypelessBase

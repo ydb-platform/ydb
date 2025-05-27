@@ -2,6 +2,7 @@
 #include "vdisk_events.h"
 #include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h>
 #include <util/generic/queue.h>
+#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 
 namespace NKikimr {
 
@@ -121,7 +122,7 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
                         }
                 }
                 Queue.pop();
-                ctx.ExecutorThread.Send(ev.release());
+                ctx.Send(ev.release());
             }
         }
 
@@ -141,7 +142,7 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
             if (lsnSegmentStart == CurSentLsn + 1) {
                 // rewrite and send message;
                 LWTRACK(VDiskRecoveryLogWriterVPutIsSent, converted->Get<NPDisk::TEvLog>()->Orbit, Owner, lsn);
-                ctx.ExecutorThread.Send(converted.release());
+                ctx.Send(converted.release());
                 CurSentLsn = lsn;
                 // proceed with elements waiting in the queue
                 ProcessQueue(ctx);
@@ -174,7 +175,7 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
 
             if (lsnSegmentStart == CurSentLsn + 1) {
                 // rewrite and send message;
-                ctx.ExecutorThread.Send(converted.release());
+                ctx.Send(converted.release());
                 CurSentLsn = lsn;
                 // proceed with elements waiting in the queue
                 ProcessQueue(ctx);

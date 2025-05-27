@@ -5,17 +5,17 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/library/yql/core/expr_nodes
-    ydb/library/yql/providers/common/provider
+    yql/essentials/core/expr_nodes
+    yql/essentials/providers/common/provider
 )
 
 SRCDIR(
-    ydb/library/yql/core/expr_nodes_gen
+    yql/essentials/core/expr_nodes_gen
 )
 
 IF(EXPORT_CMAKE)
     RUN_PYTHON3(
-        ${ARCADIA_ROOT}/ydb/library/yql/core/expr_nodes_gen/gen/__main__.py
+        ${ARCADIA_ROOT}/yql/essentials/core/expr_nodes_gen/gen/__main__.py
             yql_expr_nodes_gen.jnj
             yql_solomon_expr_nodes.json
             yql_solomon_expr_nodes.gen.h
@@ -27,12 +27,12 @@ IF(EXPORT_CMAKE)
         OUT yql_solomon_expr_nodes.decl.inl.h
         OUT yql_solomon_expr_nodes.defs.inl.h
         OUTPUT_INCLUDES
-        ${ARCADIA_ROOT}/ydb/library/yql/core/expr_nodes_gen/yql_expr_nodes_gen.h
+        ${ARCADIA_ROOT}/yql/essentials/core/expr_nodes_gen/yql_expr_nodes_gen.h
         ${ARCADIA_ROOT}/util/generic/hash_set.h
     )
 ELSE()
     RUN_PROGRAM(
-        ydb/library/yql/core/expr_nodes_gen/gen
+        yql/essentials/core/expr_nodes_gen/gen
             yql_expr_nodes_gen.jnj
             yql_solomon_expr_nodes.json
             yql_solomon_expr_nodes.gen.h
@@ -44,7 +44,7 @@ ELSE()
         OUT yql_solomon_expr_nodes.decl.inl.h
         OUT yql_solomon_expr_nodes.defs.inl.h
         OUTPUT_INCLUDES
-        ${ARCADIA_ROOT}/ydb/library/yql/core/expr_nodes_gen/yql_expr_nodes_gen.h
+        ${ARCADIA_ROOT}/yql/essentials/core/expr_nodes_gen/yql_expr_nodes_gen.h
         ${ARCADIA_ROOT}/util/generic/hash_set.h
     )
 ENDIF()

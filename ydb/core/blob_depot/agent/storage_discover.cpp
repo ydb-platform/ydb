@@ -1,14 +1,12 @@
 #include "agent_impl.h"
-#include "blocks.h"
 #include "blob_mapping_cache.h"
 
 namespace NKikimr::NBlobDepot {
 
     template<>
-    TBlobDepotAgent::TQuery *TBlobDepotAgent::CreateQuery<TEvBlobStorage::EvDiscover>(std::unique_ptr<IEventHandle> ev) {
+    TBlobDepotAgent::TQuery *TBlobDepotAgent::CreateQuery<TEvBlobStorage::EvDiscover>(std::unique_ptr<IEventHandle> ev,
+            TMonotonic received) {
         class TDiscoverQuery : public TBlobStorageQuery<TEvBlobStorage::TEvDiscover> {
-            ui32 GetBlockedGenerationRetriesRemain = 10;
-
             bool DoneWithBlockedGeneration = false;
             bool DoneWithData = false;
 
@@ -27,17 +25,15 @@ namespace NKikimr::NBlobDepot {
 
                 GenerateInitialResolve();
                 IssueResolve();
+                CheckBlockedGeneration();
+            }
 
-                if (Request.DiscoverBlockedGeneration) {
-                    const auto status = Agent.BlocksManager.CheckBlockForTablet(Request.TabletId, Max<ui32>(), this, &BlockedGeneration);
-                    if (status == NKikimrProto::OK) {
-                        DoneWithBlockedGeneration = true;
-                    } else if (status != NKikimrProto::UNKNOWN) {
-                        EndWithError(status, "tablet was deleted");
-                    }
-                } else {
-                    DoneWithBlockedGeneration = true;
+            void CheckBlockedGeneration() {
+                if (!DoneWithBlockedGeneration) {
+                    DoneWithBlockedGeneration = !Request.DiscoverBlockedGeneration || 
+                        CheckBlockForTablet(Request.TabletId, std::nullopt, &BlockedGeneration) == NKikimrProto::OK;
                 }
+                CheckIfDone();
             }
 
             void GenerateInitialResolve() {
@@ -85,16 +81,7 @@ namespace NKikimr::NBlobDepot {
             void OnUpdateBlock() override {
                 STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA18, "OnUpdateBlock", (AgentId, Agent.LogId),
                     (QueryId, GetQueryId()));
-
-                const auto status = Agent.BlocksManager.CheckBlockForTablet(Request.TabletId, Max<ui32>(), this, &BlockedGeneration);
-                if (status == NKikimrProto::OK) {
-                    DoneWithBlockedGeneration = true;
-                    CheckIfDone();
-                } else if (status != NKikimrProto::UNKNOWN) {
-                    EndWithError(status, "tablet was deleted");
-                } else if (!--GetBlockedGenerationRetriesRemain) {
-                    EndWithError(NKikimrProto::ERROR, "too many retries to obtain blocked generation");
-                }
+                CheckBlockedGeneration();
             }
 
             void HandleResolveResult(ui64 id, TRequestContext::TPtr context, TEvBlobDepot::TEvResolveResult& msg) {
@@ -196,7 +183,7 @@ namespace NKikimr::NBlobDepot {
             }
         };
 
-        return new TDiscoverQuery(*this, std::move(ev));
+        return new TDiscoverQuery(*this, std::move(ev), received);
     }
 
 } // NKikimr::NBlobDepot

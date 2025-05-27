@@ -1,0 +1,3 @@
+{%- if common_dir_classpath -%}
+{%-     set classpath = classpath|replace(common_dir_classpath, '"')|replace('""', '":"') -%}
+{%- endif -%}

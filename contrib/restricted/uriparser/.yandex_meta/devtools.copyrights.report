@@ -1,0 +1,198 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1554f1a2d022c93e7a1ff07ee6f2f3ee
+BELONGS tool/ya.make
+    License text:
+         * Copyright (C) 2013, Radu Hociung <radu.uriparser@ohmi.org>
+         * Copyright (C) 2013, Sebastian Pipping <sebastian@pipping.org>
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        tool/uriparse.c [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5f6c453b7fc97ece376d765ac4bfa2e1
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2018, Weijia Song <songweijia@gmail.com>
+         * Copyright (C) 2018, Sebastian Pipping <sebastian@pipping.org>
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/UriMemory.c [4:6]
+        src/UriMemory.h [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 93ebab08ca0f174629dd3a2bd9e43bf0
+BELONGS test/ya.make ya.make
+    License text:
+        Copyright (C) 2007, Weijia Song <songweijia@gmail.com>
+        Copyright (C) 2007, Sebastian Pipping <sebastian@pipping.org>
+        All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [3:5]
+        include/uriparser/Uri.h [5:7]
+        include/uriparser/UriBase.h [4:6]
+        include/uriparser/UriDefsAnsi.h [4:6]
+        include/uriparser/UriDefsConfig.h [4:6]
+        include/uriparser/UriDefsUnicode.h [4:6]
+        include/uriparser/UriIp4.h [4:6]
+        src/UriCommon.c [4:6]
+        src/UriCommon.h [4:6]
+        src/UriCompare.c [4:6]
+        src/UriEscape.c [4:6]
+        src/UriFile.c [4:6]
+        src/UriIp4.c [4:6]
+        src/UriIp4Base.c [4:6]
+        src/UriIp4Base.h [4:6]
+        src/UriNormalize.c [4:6]
+        src/UriNormalizeBase.c [4:6]
+        src/UriNormalizeBase.h [4:6]
+        src/UriParse.c [4:6]
+        src/UriParseBase.c [4:6]
+        src/UriParseBase.h [4:6]
+        src/UriQuery.c [4:6]
+        src/UriRecompose.c [4:6]
+        src/UriResolve.c [4:6]
+        src/UriShorten.c [4:6]
+        test/FourSuite.cpp [4:5]
+        test/MemoryManagerSuite.cpp [4:5]
+        test/test.cpp [4:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a3b2661e2b01cef097971c5118b623b7
+BELONGS tool/ya.make
+    License text:
+         * Copyright (C) 2013, Radu Hociung <radu.uriparser@ohmi.org>
+         * Copyright (C) 2013, Sebastian Pipping <sebastian@pipping.org>
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        tool/uriparse.c [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL bf82654b941d6b404dc8afa3bea407ff
+BELONGS test/ya.make
+    License text:
+         * Copyright (C) 2014, Sebastian Pipping <sebastian@pipping.org>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        test/VersionSuite.cpp [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c0a580767e4df988cbeb3a33fe57d251
+BELONGS test/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        test/COPYING [428:433]
+
+KEEP     COPYRIGHT_SERVICE_LABEL cea1b82351539a871d540971f218116e
+BELONGS test/ya.make
+    License text:
+         Copyright (C) 1991, 1999 Free Software Foundation, Inc.
+             59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+         Everyone is permitted to copy and distribute verbatim copies
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        test/COPYING [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d59741a3f91b83f55dba27b27016d1f8
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2018, Sebastian Pipping <sebastian@pipping.org>
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        UriConfig.h [4:5]
+        src/UriMemory.c [4:6]
+        src/UriMemory.h [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL dc546ac6f116e23a5572cd498b804b23
+BELONGS test/ya.make ya.make
+    License text:
+        Copyright (C) 2007, Weijia Song <songweijia@gmail.com>
+        Copyright (C) 2007, Sebastian Pipping <sebastian@pipping.org>
+        All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [3:5]
+        include/uriparser/Uri.h [5:7]
+        include/uriparser/UriBase.h [4:6]
+        include/uriparser/UriDefsAnsi.h [4:6]
+        include/uriparser/UriDefsConfig.h [4:6]
+        include/uriparser/UriDefsUnicode.h [4:6]
+        include/uriparser/UriIp4.h [4:6]
+        src/UriCommon.c [4:6]
+        src/UriCommon.h [4:6]
+        src/UriCompare.c [4:6]
+        src/UriEscape.c [4:6]
+        src/UriFile.c [4:6]
+        src/UriIp4.c [4:6]
+        src/UriIp4Base.c [4:6]
+        src/UriIp4Base.h [4:6]
+        src/UriNormalize.c [4:6]
+        src/UriNormalizeBase.c [4:6]
+        src/UriNormalizeBase.h [4:6]
+        src/UriParse.c [4:6]
+        src/UriParseBase.c [4:6]
+        src/UriParseBase.h [4:6]
+        src/UriQuery.c [4:6]
+        src/UriRecompose.c [4:6]
+        src/UriResolve.c [4:6]
+        src/UriShorten.c [4:6]
+        test/FourSuite.cpp [4:5]
+        test/MemoryManagerSuite.cpp [4:5]
+        test/test.cpp [4:5]

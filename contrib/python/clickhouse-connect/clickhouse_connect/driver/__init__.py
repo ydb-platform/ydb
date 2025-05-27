@@ -84,7 +84,7 @@ def create_client(*,
         database = database or parsed.path
         for k, v in parse_qs(parsed.query).items():
             kwargs[k] = v[0]
-    use_tls = str(secure).lower() == 'true' or interface == 'https' or (not interface and port in (443, 8443))
+    use_tls = str(secure).lower() == 'true' or interface == 'https' or (not interface and str(port) in ('443', '8443'))
     if not host:
         host = 'localhost'
     if not interface:
@@ -133,6 +133,7 @@ async def create_async_client(*,
                               dsn: Optional[str] = None,
                               settings: Optional[Dict[str, Any]] = None,
                               generic_args: Optional[Dict[str, Any]] = None,
+                              executor_threads: Optional[int] = None,
                               **kwargs) -> AsyncClient:
     """
     The preferred method to get an async ClickHouse Connect Client instance.
@@ -154,6 +155,8 @@ async def create_async_client(*,
     :param settings: ClickHouse server settings to be used with the session/every request
     :param generic_args: Used internally to parse DBAPI connection strings into keyword arguments and ClickHouse settings.
       It is not recommended to use this parameter externally
+    :param: executor_threads 'max_worker' threads used by the client ThreadPoolExecutor.  If not set, the default
+      of 4 + detected CPU cores will be used
     :param kwargs -- Recognized keyword arguments (used by the HTTP client), see below
 
     :param compress: Enable compression for ClickHouse HTTP inserts and query results.  True will select the preferred
@@ -194,4 +197,4 @@ async def create_async_client(*,
 
     loop = asyncio.get_running_loop()
     _client = await loop.run_in_executor(None, _create_client)
-    return AsyncClient(client=_client)
+    return AsyncClient(client=_client, executor_threads=executor_threads)

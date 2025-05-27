@@ -43,6 +43,8 @@ int HandleResponse(const NThreading::TFuture<ResultType>& future, std::function<
     return callback(result);
 }
 
+std::optional<TString> AcquireSecurityToken(TClientCommand::TConfig& config);
+
 int InvokeThroughKikimr(TClientCommand::TConfig& config, std::function<int(NClient::TKikimr&)> handler);
 
 template <typename RequestType>
@@ -54,8 +56,6 @@ void PrepareRequest(TClientCommand::TConfig& config, TAutoPtr<NMsgBusProxy::TBus
 void PrepareRequest(TClientCommand::TConfig& config, TAutoPtr<NMsgBusProxy::TBusSchemeDescribe>& request);
 void PrepareRequest(TClientCommand::TConfig& config, TAutoPtr<NMsgBusProxy::TBusCmsRequest>& request);
 void PrepareRequest(TClientCommand::TConfig& config, TAutoPtr<NMsgBusProxy::TBusConsoleRequest>& request);
-void PrepareRequest(TClientCommand::TConfig& config, TAutoPtr<NMsgBusProxy::TBusTabletLocalMKQL>& request);
-void PrepareRequest(TClientCommand::TConfig& config, TAutoPtr<NMsgBusProxy::TBusTabletLocalSchemeTx>& request);
 void PrepareRequest(TClientCommand::TConfig& config, TAutoPtr<NMsgBusProxy::TBusFillNode>& request);
 void PrepareRequest(TClientCommand::TConfig& config, TAutoPtr<NMsgBusProxy::TBusDrainNode>& request);
 

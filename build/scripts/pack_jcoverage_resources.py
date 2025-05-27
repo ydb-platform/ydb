@@ -1,3 +1,4 @@
+from __future__ import print_function
 import sys
 import tarfile
 import os
@@ -11,7 +12,7 @@ def main(args):
     res = subprocess.call(args[args.index('-end') + 1 :])
 
     if not os.path.exists(report_file):
-        print >> sys.stderr, 'Can\'t find jacoco exec file'
+        print('Can\'t find jacoco exec file', file=sys.stderr)
         return res
 
     with tarfile.open(output_file, 'w') as outf:

@@ -5,7 +5,7 @@
 
 using namespace yandex::cloud::iam::v1;
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 
 TCredentialsProviderFactoryPtr CreateIamJwtFileCredentialsProviderFactory(const TIamJwtFilename& params) {
     TIamJwtParams jwtParams = { params, ReadJwtKeyFile(params.JwtFilename) };

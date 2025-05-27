@@ -2,17 +2,14 @@
 
 #include "public.h"
 #include "schema.h"
+#include "unversioned_reader.h"
+#include "unversioned_row.h"
+#include "unversioned_writer.h"
+#include "versioned_row.h"
 
 #include <yt/yt/client/api/public.h>
 
-#include <yt/yt/client/table_client/unversioned_reader.h>
-#include <yt/yt/client/table_client/unversioned_writer.h>
-#include <yt/yt/client/table_client/versioned_row.h>
-#include <yt/yt/client/table_client/unversioned_row.h>
-
 #include <yt/yt_proto/yt/client/table_chunk_format/proto/wire_protocol.pb.h>
-
-#include <yt/yt/core/misc/range.h>
 
 #include <yt/yt/core/compression/public.h>
 
@@ -20,6 +17,7 @@
 
 #include <library/cpp/yt/misc/enum.h>
 
+#include <library/cpp/yt/memory/range.h>
 #include <library/cpp/yt/memory/ref.h>
 
 namespace NYT::NTableClient {
@@ -281,13 +279,27 @@ public:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TWireProtocolOptions
+{
+    i64 MaxStringValueLength = NTableClient::MaxStringValueLength;
+    i64 MaxAnyValueLength = NTableClient::MaxAnyValueLength;
+    i64 MaxCompositeValueLength = NTableClient::MaxCompositeValueLength;
+    i64 MaxTimestampCountPerRow = NTableClient::MaxTimestampCountPerRow;
+    i64 MaxVersionedRowDataWeight = NTableClient::MaxServerVersionedRowDataWeight;
+};
+
+TWireProtocolOptions CreateUnlimitedWireProtocolOptions();
+
+////////////////////////////////////////////////////////////////////////////////
+
 //! Creates wire protocol reader.
 /*!
  *  If #rowBuffer is null, a default one is created.
  */
 std::unique_ptr<IWireProtocolReader> CreateWireProtocolReader(
     TSharedRef data,
-    TRowBufferPtr rowBuffer = TRowBufferPtr());
+    TRowBufferPtr rowBuffer = TRowBufferPtr(),
+    TWireProtocolOptions options = {});
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -302,7 +314,9 @@ IWireProtocolRowsetReaderPtr CreateWireProtocolRowsetReader(
     NCompression::ECodec codecId,
     NTableClient::TTableSchemaPtr schema,
     bool schemaful,
-    const NLogging::TLogger& logger);
+    IMemoryChunkProviderPtr memoryChunkProvider,
+    const NLogging::TLogger& logger,
+    TWireProtocolOptions options = {});
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -316,7 +330,7 @@ DEFINE_REFCOUNTED_TYPE(IWireProtocolRowsetWriter)
 
 IWireProtocolRowsetWriterPtr CreateWireProtocolRowsetWriter(
     NCompression::ECodec codecId,
-    size_t desiredUncompressedBlockSize,
+    i64 desiredUncompressedBlockSize,
     NTableClient::TTableSchemaPtr schema,
     bool isSchemaful,
     const NLogging::TLogger& logger);

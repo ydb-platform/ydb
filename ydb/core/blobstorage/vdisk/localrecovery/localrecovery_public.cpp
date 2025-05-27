@@ -124,7 +124,7 @@ namespace NKikimr {
         void SignalSuccessAndDie(const TActorContext &ctx) {
             // recover Lsn and ConfirmedLsn:
             // Db->Lsn now contains last seen lsn
-            Y_DEBUG_ABORT_UNLESS(LocRecCtx->HullDbRecovery->GetHullDs());
+            Y_VERIFY_DEBUG_S(LocRecCtx->HullDbRecovery->GetHullDs(), LocRecCtx->VCtx->VDiskLogPrefix);
 
             LocRecCtx->RecovInfo->SuccessfulRecovery = true;
             LocRecCtx->RecovInfo->CheckConsistency();
@@ -162,7 +162,8 @@ namespace NKikimr {
             for (iter.SeekToFirst(); iter.Valid(); iter.Next()) {
                 TLogoBlobsSstPtr segment = iter.Get().SstPtr;
                 if (segment->Info.IsCreatedByRepl()) {
-                    Y_ABORT_UNLESS(segment->Info.FirstLsn == 0 && segment->Info.LastLsn == 0);
+                    Y_VERIFY_S(segment->Info.FirstLsn == 0 && segment->Info.LastLsn == 0,
+                        LocRecCtx->VCtx->VDiskLogPrefix);
                     const auto& item = logoBlobs->CurSlice->BulkFormedSegments.FindIntactBulkFormedSst(segment->GetEntryPoint());
                     segment->Info.FirstLsn = item.FirstBlobLsn;
                     segment->Info.LastLsn = item.LastBlobLsn;
@@ -189,6 +190,37 @@ namespace NKikimr {
 
             Become(&TThis::StateLoadBulkFormedSegments);
             VDiskMonGroup.VDiskLocalRecoveryState() = TDbMon::TDbLocalRecovery::LoadBulkFormedSegments;
+
+            // find all the huge blobs and track their slot size
+            {
+                TIntrusivePtr<TLogoBlobsDs>& logoBlobs = LocRecCtx->HullDbRecovery->GetHullDs()->LogoBlobs;
+                TLevelSlice<TKeyLogoBlob, TMemRecLogoBlob>::TSstIterator iter(logoBlobs->CurSlice.Get(),
+                    logoBlobs->CurSlice->Level0CurSstsNum());
+
+                for (iter.SeekToFirst(); iter.Valid(); iter.Next()) {
+                    struct TMerger {
+                        TThis* const Self;
+
+                        void AddFromSegment(const TMemRecLogoBlob& memRec, const TDiskPart *outbound,
+                                const TKeyLogoBlob& /*key*/, ui64 /*circaLsn*/, const void* /*sst*/) {
+                            if (memRec.GetType() == TBlobType::HugeBlob || memRec.GetType() == TBlobType::ManyHugeBlobs) {
+                                TDiskDataExtractor extr;
+                                memRec.GetDiskData(&extr, outbound);
+                                for (const TDiskPart *location = extr.Begin; location != extr.End; ++location) {
+                                    if (location->ChunkIdx && location->Size) {
+                                        Self->LocRecCtx->RepairedHuge->RegisterBlob(*location);
+                                    }
+                                }
+                            }
+                        }
+                    } merger{this};
+
+                    TLevelSegment<TKeyLogoBlob, TMemRecLogoBlob>::TMemIterator blobIter(iter.Get().SstPtr.Get());
+                    for (blobIter.SeekToFirst(); blobIter.Valid(); blobIter.Next()) {
+                        blobIter.PutToMerger(&merger);
+                    }
+                }
+            }
 
             // start loading bulk-formed segments that are already not in index, but still required to recover SyncLog
             auto aid = ctx.Register(LocRecCtx->HullDbRecovery->GetHullDs()->LogoBlobs->CurSlice->BulkFormedSegments.CreateLoaderActor(
@@ -348,7 +380,7 @@ namespace NKikimr {
                                   "Db PDiskGuid is not equal to PDiskGuid stored in SyncLog entry point");
                 return false;
             }
-            LocRecCtx->SyncLogRecovery = new NSyncLog::TSyncLogRecovery(std::move(repaired));
+            LocRecCtx->SyncLogRecovery = new NSyncLog::TSyncLogRecovery(LocRecCtx->VCtx->VDiskLogPrefix, std::move(repaired));
             SyncLogInitialized = true;
             VDiskIncarnationGuid = LocRecCtx->SyncLogRecovery->GetSyncLogHeader().VDiskIncarnationGuid;
             return true;
@@ -392,13 +424,8 @@ namespace NKikimr {
         bool InitHugeBlobKeeper(const TStartingPoints &startingPoints, const TActorContext &ctx) {
             Y_UNUSED(ctx);
             const ui32 blocksInChunk = LocRecCtx->PDiskCtx->Dsk->ChunkSize / LocRecCtx->PDiskCtx->Dsk->AppendBlockSize;
-            Y_ABORT_UNLESS(LocRecCtx->PDiskCtx->Dsk->AppendBlockSize * blocksInChunk == LocRecCtx->PDiskCtx->Dsk->ChunkSize);
-
-            ui32 MaxLogoBlobDataSizeInBlocks = Config->MaxLogoBlobDataSize / LocRecCtx->PDiskCtx->Dsk->AppendBlockSize;
-            MaxLogoBlobDataSizeInBlocks += !!(Config->MaxLogoBlobDataSize -
-                    MaxLogoBlobDataSizeInBlocks * LocRecCtx->PDiskCtx->Dsk->AppendBlockSize);
-            const ui32 slotsInChunk = blocksInChunk / MaxLogoBlobDataSizeInBlocks;
-            Y_ABORT_UNLESS(slotsInChunk > 1);
+            Y_VERIFY_S(LocRecCtx->PDiskCtx->Dsk->AppendBlockSize * blocksInChunk == LocRecCtx->PDiskCtx->Dsk->ChunkSize,
+                LocRecCtx->VCtx->VDiskLogPrefix);
 
             auto logFunc = [&] (const TString &msg) {
                 LOG_DEBUG(ctx, BS_HULLHUGE, msg);
@@ -413,9 +440,8 @@ namespace NKikimr {
                             LocRecCtx->PDiskCtx->Dsk->ChunkSize,
                             LocRecCtx->PDiskCtx->Dsk->AppendBlockSize,
                             LocRecCtx->PDiskCtx->Dsk->AppendBlockSize,
-                            Config->OldMinHugeBlobInBytes,
                             Config->MilestoneHugeBlobInBytes,
-                            Config->MaxLogoBlobDataSize,
+                            Config->MaxLogoBlobDataSize + TDiskBlob::HeaderSize,
                             Config->HugeBlobOverhead,
                             Config->HugeBlobsFreeChunkReservation,
                             logFunc);
@@ -435,14 +461,14 @@ namespace NKikimr {
                             LocRecCtx->PDiskCtx->Dsk->ChunkSize,
                             LocRecCtx->PDiskCtx->Dsk->AppendBlockSize,
                             LocRecCtx->PDiskCtx->Dsk->AppendBlockSize,
-                            Config->OldMinHugeBlobInBytes,
                             Config->MilestoneHugeBlobInBytes,
-                            Config->MaxLogoBlobDataSize,
+                            Config->MaxLogoBlobDataSize + TDiskBlob::HeaderSize,
                             Config->HugeBlobOverhead,
                             Config->HugeBlobsFreeChunkReservation,
                             lsn, entryPoint, logFunc);
             }
             HugeBlobCtx = std::make_shared<THugeBlobCtx>(
+                    LocRecCtx->VCtx->VDiskLogPrefix,
                     LocRecCtx->RepairedHuge->Heap->BuildHugeSlotsMap(),
                     Config->AddHeader);
             HugeKeeperInitialized = true;
@@ -477,7 +503,7 @@ namespace NKikimr {
                     "INIT: TEvYardInit OK PDiskId# %s", LocRecCtx->PDiskCtx->PDiskIdString.data()));
 
                 // create context for HullDs
-                Y_ABORT_UNLESS(LocRecCtx->VCtx && LocRecCtx->VCtx->Top);
+                Y_VERIFY_S(LocRecCtx->VCtx && LocRecCtx->VCtx->Top, LocRecCtx->VCtx->VDiskLogPrefix);
                 auto hullCtx = MakeIntrusive<THullCtx>(
                         LocRecCtx->VCtx,
                         ui32(LocRecCtx->PDiskCtx->Dsk->ChunkSize),
@@ -490,6 +516,7 @@ namespace NKikimr {
                         Config->HullSstSizeInChunksLevel,
                         Config->HullCompFreeSpaceThreshold,
                         Config->FreshCompMaxInFlightWrites,
+                        Config->FreshCompMaxInFlightReads,
                         Config->HullCompMaxInFlightWrites,
                         Config->HullCompMaxInFlightReads,
                         Config->HullCompReadBatchEfficiencyThreshold,
@@ -701,4 +728,3 @@ namespace NKikimr {
     }
 
 } // NKikimr
-

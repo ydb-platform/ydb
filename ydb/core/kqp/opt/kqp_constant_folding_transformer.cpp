@@ -1,8 +1,8 @@
 #include "kqp_constant_folding_transformer.h"
 
 #include <ydb/library/yql/dq/opt/dq_opt_stat.h>
-#include <ydb/library/yql/utils/log/log.h>
-#include <ydb/library/yql/core/yql_expr_type_annotation.h>
+#include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
 
 using namespace NYql;
 using namespace NYql::NNodes;
@@ -14,7 +14,7 @@ namespace {
      * Traverse a lambda and create a mapping from nodes to nodes wrapped in EvaluateExpr callable
      * We check for literals specifically, since they shouldn't be evaluated
      */
-    void ExtractConstantExprs(const TExprNode::TPtr& input, TNodeOnNodeOwnedMap& replaces, TExprContext& ctx) {
+    void ExtractConstantExprs(const TExprNode::TPtr& input, TNodeOnNodeOwnedMap& replaces, TExprContext& ctx, bool foldUdfs = true) {
         if (TCoLambda::Match(input.Get())) {
             auto lambda = TExprBase(input).Cast<TCoLambda>();
             return ExtractConstantExprs(lambda.Body().Ptr(), replaces, ctx);
@@ -24,7 +24,7 @@ namespace {
             return;
         }
 
-        if (IsConstantExpr(input) && !input->IsCallable("PgConst")) {
+        if (IsConstantExpr(input, foldUdfs) && !input->IsCallable("PgConst")) {
             TNodeOnNodeOwnedMap deepClones;
             auto inputClone = ctx.DeepCopy(*input, ctx, deepClones, false, true, true);
 
@@ -64,6 +64,8 @@ IGraphTransformer::TStatus TKqpConstantFoldingTransformer::DoTransform(TExprNode
         return IGraphTransformer::TStatus::Ok;
     }
 
+    bool foldUdfs = Config->EnableFoldUdfs;
+
     TNodeOnNodeOwnedMap replaces;
 
     VisitExpr(input, [&](const TExprNode::TPtr& node) {
@@ -78,7 +80,7 @@ IGraphTransformer::TStatus TKqpConstantFoldingTransformer::DoTransform(TExprNode
                 return true;
             }
 
-            ExtractConstantExprs(flatmap.Lambda().Body().Ptr(), replaces, ctx);
+            ExtractConstantExprs(flatmap.Lambda().Body().Ptr(), replaces, ctx, foldUdfs);
 
             return replaces.empty();
         }

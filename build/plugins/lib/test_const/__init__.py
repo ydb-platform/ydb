@@ -173,10 +173,6 @@ SANDBOX_RUN_TEST_YT_TOKEN_VALUE_NAME = 'YA_MAKE_SANDBOX_RUN_TEST_YT_TOKEN'
 # global resources
 ANDROID_AVD_ROOT = 'ANDROID_AVD_RESOURCE_GLOBAL'
 ANDROID_SDK_ROOT = 'ANDROID_SDK_RESOURCE_GLOBAL'
-COVERAGE_PUSH_TOOL_LOCAL = 'USE_SYSTEM_COVERAGE_PUSH_TOOL'
-COVERAGE_PUSH_TOOL_RESOURCE = 'COVERAGE_PUSH_TOOL_RESOURCE_GLOBAL'
-COVERAGE_PUSH_TOOL_LB_LOCAL = 'USE_SYSTEM_COVERAGE_PUSH_TOOL_LB'
-COVERAGE_PUSH_TOOL_LB_RESOURCE = 'COVERAGE_PUSH_TOOL_LB_RESOURCE_GLOBAL'
 FLAKE8_PY2_RESOURCE = 'FLAKE8_PY2_RESOURCE_GLOBAL'
 FLAKE8_PY3_RESOURCE = 'FLAKE8_PY3_RESOURCE_GLOBAL'
 GO_TOOLS_RESOURCE = 'GO_TOOLS_RESOURCE_GLOBAL'
@@ -184,6 +180,7 @@ JSTYLE_RUNNER_LIB = 'JSTYLE_LIB_RESOURCE_GLOBAL'
 NODEJS_RESOURCE = 'NODEJS_RESOURCE_GLOBAL'
 NYC_RESOURCE = 'NYC_RESOURCE_GLOBAL'
 RUFF_RESOURCE = 'RUFF_RESOURCE_GLOBAL'
+CLANG_FORMAT_RESOURCE = 'CLANG_FORMAT_RESOURCE_GLOBAL'
 
 # test_tool resource for host platform.
 # source - build/platform/test_tool/host.ya.make.inc.
@@ -209,6 +206,10 @@ XCODE_TOOLS_RESOURCE = 'XCODE_TOOLS_ROOT_RESOURCE_GLOBAL'
 WINE_TOOL = 'WINE_TOOL_RESOURCE_GLOBAL'
 WINE32_TOOL = 'WINE32_TOOL_RESOURCE_GLOBAL'
 
+DEFAULT_CRASHED_STATUS_COMMENT = "Test crashed"
+
+DOCKER_LINK_RE = re.compile(r"(docker:\/\/)(\S+?)(\/\S*)?\@sha\d+:(\w+)")
+
 
 class Enum(object):
     @classmethod
@@ -229,6 +230,7 @@ class TestRequirements(Enum):
     Dns = 'dns'
     Kvm = 'kvm'
     Network = 'network'
+    PortoLayers = 'porto_layers'
     Ram = 'ram'
     RamDisk = 'ram_disk'
     SbVault = 'sb_vault'
@@ -368,16 +370,20 @@ class TestSize(Enum):
 
 
 class ModuleLang(Enum):
-    ABSENT = "absent"
-    NUMEROUS = "numerous"
-    UNKNOWN = "unknown"
     CPP = "cpp"
     DOCS = "docs"
     GO = "go"
     JAVA = "java"
     KOTLIN = "kotlin"
+    LANG_AGNOSTIC = "agnostic"  # This module (or node) is not language specific
     PY = "py"
     TS = "ts"
+    UNKNOWN = "unknown"
+
+
+class AggregateLang(Enum):
+    ABSENT = "absent"
+    NUMEROUS = "numerous"
 
 
 class NodeType(Enum):
@@ -396,6 +402,8 @@ class TestRunExitCode(Enum):
 
 class YaTestTags(Enum):
     AlwaysMinimize = "ya:always_minimize"
+    CopyData = "ya:copydata"
+    CopyDataRO = "ya:copydataro"
     Dirty = "ya:dirty"
     DumpNodeEnvironment = "ya:dump_node_env"
     DumpTestEnvironment = "ya:dump_test_env"
@@ -407,9 +415,11 @@ class YaTestTags(Enum):
     GoNoSubtestReport = "ya:go_no_subtest_report"
     GoTotalReport = "ya:go_total_report"
     HugeLogs = "ya:huge_logs"
+    JavaTmpInRamDisk = "ya:java_tmp_in_ram_disk"
     Manual = "ya:manual"
     MapRootUser = "ya:map_root_user"
     NoGracefulShutdown = "ya:no_graceful_shutdown"
+    NoPstreeTrim = "ya:no_pstree_trim"
     Norestart = "ya:norestart"
     Noretries = "ya:noretries"
     NotAutocheck = "ya:not_autocheck"
@@ -422,13 +432,76 @@ class YaTestTags(Enum):
     SequentialRun = "ya:sequential_run"
     TraceOutput = "ya:trace_output"
     YtRunner = "ya:yt"
-    CopyData = "ya:copydata"
-    CopyDataRO = "ya:copydataro"
-    NoPstreeTrim = "ya:no_pstree_trim"
 
 
 class ServiceTags(Enum):
     AnyTag = "ya:anytag"
+
+
+# NOTE: Linter constants are used in ya style, ya ide, config validator check (devtools/ya/handlers/style/config_validator).
+# ya and validator have different release cycles, make sure you preserve compatibility:
+# - don't delete anything from here until you get rid of all usages and roll out the changes;
+# - keep in mind that changes of constants used in multiple tools may get to production at different times;
+
+
+# Linter names must match `NAME` set in `_ADD_*_LINTER_CHECK`
+class PythonLinterName(Enum):
+    Black = "black"
+    DummyLinter = "dummy_linter"
+    Flake8 = "flake8"
+    Py2Flake8 = "py2_flake8"
+    Ruff = "ruff"
+
+
+class CppLinterName(Enum):
+    ClangFormat = "clang_format"
+    ClangFormatYT = "clang_format_yt"
+    ClangFormat15 = "clang_format_15"
+    ClangFormat18Vanilla = "clang_format_18_vanilla"
+
+
+class DefaultLinterConfig(Enum):
+    Cpp = "build/config/tests/cpp_style/default_configs.json"
+    Python = "build/config/tests/py_style/default_configs.json"
+
+
+class LinterConfigsValidationRules(Enum):
+    Cpp = "build/config/tests/cpp_style/configs_validation_rules.json"
+    Python = "build/config/tests/py_style/configs_validation_rules.json"
+
+
+# XXX: if a new linter is added to this mapping respective path to rules file must be available in the json
+LINTER_TO_DEFAULT_CONFIGS = {
+    CppLinterName.ClangFormat: DefaultLinterConfig.Cpp,
+    PythonLinterName.Black: DefaultLinterConfig.Python,
+    PythonLinterName.Ruff: DefaultLinterConfig.Python,
+}
+
+# Fill up like
+"""
+{
+    PythonLinterName.Ruff: LinterConfigsValidationRules.Python,
+}
+"""
+# XXX: if a new linter is added to this mapping respective path to rules file must be available in the json
+LINTER_TO_VALIDATION_CONFIGS = {}
+
+LINTER_CONFIG_TYPES = {
+    CppLinterName.ClangFormat: (".clang-format",),
+    CppLinterName.ClangFormat15: (".clang-format",),
+    CppLinterName.ClangFormat18Vanilla: (".clang-format",),
+    CppLinterName.ClangFormatYT: (".clang-format",),
+    PythonLinterName.Black: ("pyproject.toml",),
+    PythonLinterName.Ruff: ("pyproject.toml", "ruff.toml"),
+}
+
+AUTOINCLUDE_PATHS = (
+    'build/conf/autoincludes.json',
+    'build/internal/conf/autoincludes.json',
+)
+
+
+# End of linter constants
 
 
 class Status(object):

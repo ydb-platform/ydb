@@ -1,14 +1,18 @@
-# Working with MySQL databases
+# Working with MySQL Databases
 
-This section provides basic information about working with an external [MySQL](https://www.mysql.com/) databases.
+This section provides basic information about working with external [MySQL](https://www.mysql.com/) databases.
 
 To work with an external MySQL database, you need to follow these steps:
+
 1. Create a [secret](../datamodel/secrets.md) containing the password for connecting to the database.
-    ```sql
+
+    ```yql
     CREATE OBJECT mysql_datasource_user_password (TYPE SECRET) WITH (value = "<password>");
     ```
-1. Create an [external data source](../datamodel/external_data_source.md) that describes a specific MySQL database. The `LOCATION` parameter contains the network address of the MySQL instance to connect to. The `DATABASE_NAME` specifies the database name (for example, `mysql`). The `LOGIN` and `PASSWORD_SECRET_NAME` parameters are used for authentication to the external database. You can enable encryption for connections to the external database using the `USE_TLS="TRUE"` parameter.
-    ```sql
+
+2. Create an [external data source](../datamodel/external_data_source.md) that describes a specific MySQL database. The `LOCATION` parameter contains the network address of the MySQL instance to connect to. The `DATABASE_NAME` specifies the database name (for example, `mysql`). The `LOGIN` and `PASSWORD_SECRET_NAME` parameters are used for authentication to the external database. You can enable encryption for connections to the external database using the `USE_TLS="TRUE"` parameter.
+
+    ```yql
     CREATE EXTERNAL DATA SOURCE mysql_datasource WITH (
         SOURCE_TYPE="MySQL",
         LOCATION="<host>:<port>",
@@ -19,19 +23,22 @@ To work with an external MySQL database, you need to follow these steps:
         USE_TLS="TRUE"
     );
     ```
-1. {% include [!](_includes/connector_deployment.md) %}
-1. [Execute a query](#query) to the database.
 
-## Query syntax { #query }
+3. {% include [!](_includes/connector_deployment.md) %}
+4. [Execute a query](#query) to the database.
+
+## Query Syntax {#query}
+
 The following SQL query format is used to work with MySQL:
 
-```sql
+```yql
 SELECT * FROM mysql_datasource.<table_name>
 ```
 
 where:
+
 - `mysql_datasource` - the external data source identifier;
-- `<table_name> - the table name within the external data source.
+- `<table_name>` - the table name within the external data source.
 
 ## Limitations
 
@@ -41,9 +48,23 @@ When working with MySQL clusters, there are a number of limitations:
 2. {% include [!](_includes/datetime_limits.md) %}
 3. {% include [!](_includes/predicate_pushdown.md) %}
 
-## Supported data types
+    |{{ ydb-short-name }} Data Type|
+    |----|
+    |`Bool`|
+    |`Int8`|
+    |`Uint8`|
+    |`Int16`|
+    |`Uint16`|
+    |`Int32`|
+    |`Uint32`|
+    |`Int64`|
+    |`Uint64`|
+    |`Float`|
+    |`Double`|
 
-In the MySQL database, the optionality of column values (whether the column can contain `NULL` values or not) is not a part of the data type system. The `NOT NULL` constraint for any column of any table is stored within the `IS_NULLABLE` column the [INFORMATION_SCHEMA.COLUMNS](https://dev.mysql.com/doc/refman/8.4/en/information-schema-columns-table.html) system table, i.e., at the table metadata level. Therefore, all basic MySQL types can contain `NULL` values by default, and in the {{ ydb-full-name }} type system they should be mapped to [optional](../../yql/reference/types/optional.md).
+## Supported Data Types
+
+In the MySQL database, the optionality of column values (whether the column can contain `NULL` values or not) is not a part of the data type system. The `NOT NULL` constraint for any column of any table is stored within the `IS_NULLABLE` column in the [INFORMATION_SCHEMA.COLUMNS](https://dev.mysql.com/doc/refman/8.4/en/information-schema-columns-table.html) system table, i.e., at the table metadata level. Therefore, all basic MySQL types can contain `NULL` values by default, and in the {{ ydb-full-name }} type system they should be mapped to [optional](../../yql/reference/types/optional.md).
 
 Below is a correspondence table between MySQL types and {{ ydb-short-name }} types. All other data types, except those listed, are not supported.
 

@@ -1,7 +1,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
-#include <ydb/core/formats/arrow/hash/xx_hash.h>
 #include <ydb/core/formats/arrow/hash/calcer.h>
+#include <ydb/library/formats/arrow/hash/xx_hash.h>
 
 Y_UNIT_TEST_SUITE(Hash) {
 

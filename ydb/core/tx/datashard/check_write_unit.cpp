@@ -1,4 +1,5 @@
 #include "datashard_impl.h"
+#include "datashard_integrity_trails.h"
 #include "datashard_pipeline.h"
 
 #include "ydb/core/tx/datashard/datashard_write_operation.h"
@@ -41,7 +42,7 @@ EExecutionStatus TCheckWriteUnit::Execute(TOperation::TPtr op,
                                            TTransactionContext &,
                                            const TActorContext &ctx)
 {
-    Y_ABORT_UNLESS(!op->IsAborted());
+    Y_ENSURE(!op->IsAborted());
 
     if (CheckRejectDataTx(op, ctx)) {
         op->Abort(EExecutionUnitKind::FinishProposeWrite);
@@ -51,8 +52,8 @@ EExecutionStatus TCheckWriteUnit::Execute(TOperation::TPtr op,
 
     TWriteOperation* writeOp = TWriteOperation::CastWriteOperation(op);
     auto writeTx = writeOp->GetWriteTx();
-    Y_ABORT_UNLESS(writeTx);
-    Y_ABORT_UNLESS(writeTx->Ready() || writeTx->RequirePrepare());
+    Y_ENSURE(writeTx);
+    Y_ENSURE(writeTx->Ready() || writeTx->RequirePrepare());
 
     // Check if we are out of space and tx wants to update user
     // or system table.
@@ -64,7 +65,7 @@ EExecutionStatus TCheckWriteUnit::Execute(TOperation::TPtr op,
 
         DataShard.IncCounter(COUNTER_WRITE_OUT_OF_SPACE);
 
-        writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED, err);
+        writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_OUT_OF_SPACE, err);
         op->Abort(EExecutionUnitKind::FinishProposeWrite);
 
         DataShard.SetOverloadSubscribed(writeOp->GetWriteTx()->GetOverloadSubscribe(), writeOp->GetRecipient(), op->GetTarget(), ERejectReasons::YellowChannels, writeOp->GetWriteResult()->Record);
@@ -88,9 +89,9 @@ EExecutionStatus TCheckWriteUnit::Execute(TOperation::TPtr op,
                             // Updates are not allowed when database is out of space
                             TString err = "Cannot perform writes: database is out of disk space";
 
-                            DataShard.IncCounter(COUNTER_WRITE_OUT_OF_SPACE);
+                            DataShard.IncCounter(COUNTER_WRITE_DISK_SPACE_EXHAUSTED);
 
-                            writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED, err);
+                            writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_DISK_SPACE_EXHAUSTED, err);
                             op->Abort(EExecutionUnitKind::FinishProposeWrite);
 
                             DataShard.SetOverloadSubscribed(writeOp->GetWriteTx()->GetOverloadSubscribe(), writeOp->GetRecipient(), op->GetTarget(), ERejectReasons::YellowChannels, writeOp->GetWriteResult()->Record);
@@ -105,11 +106,16 @@ EExecutionStatus TCheckWriteUnit::Execute(TOperation::TPtr op,
         }
     }
 
+    if (!op->IsReadOnly() && op->HasKeysInfo()) {
+        const NMiniKQL::IEngineFlat::TValidationInfo& keys = op->GetKeysInfo();
+        NDataIntegrity::LogIntegrityTrailsKeys(ctx, DataShard.TabletID(), op->GetGlobalTxId(), keys);
+    }
+
     if (!op->IsImmediate()) {
         if (!Pipeline.AssignPlanInterval(op)) {
             TString err = TStringBuilder() << "Can't propose tx " << op->GetTxId() << " at blocked shard " << DataShard.TabletID();
 
-            writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR, err);
+            writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED, err);
             op->Abort(EExecutionUnitKind::FinishProposeWrite);
 
             LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, err);

@@ -19,7 +19,7 @@ NRpc::IChannelPtr CreateTimestampProviderChannel(
 NRpc::IChannelPtr CreateTimestampProviderChannelFromAddresses(
     TRemoteTimestampProviderConfigPtr config,
     NRpc::IChannelFactoryPtr channelFactory,
-    const std::vector<TString>& addresses);
+    const std::vector<std::string>& addresses);
 
 ITimestampProviderPtr CreateBatchingTimestampProvider(
     ITimestampProviderPtr underlying,

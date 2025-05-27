@@ -95,20 +95,41 @@ public:
 
 private:
     /*
-     * we do not want dependancy on cstdlib here...
+     * we do not want a dependency on cstdlib here...
      */
     static void DoDestroy(void* t) noexcept;
 };
+
+namespace NDetail {
+    [[noreturn]] void NullDerefenceThrowImpl();
+} // namespace NDetail
 
 template <class Base, class T>
 class TPointerCommon {
 public:
     using TValueType = T;
 
+    /*
+     * for compatibility with std:: smart pointers.
+     */
+    using element_type = T;
+
     inline T* operator->() const noexcept {
         T* ptr = AsT();
         Y_ASSERT(ptr);
         return ptr;
+    }
+
+    inline typename std::add_lvalue_reference<T>::type GetRef() const {
+        T* ptr = AsT();
+        if (Y_UNLIKELY(!ptr)) {
+            NDetail::NullDerefenceThrowImpl();
+        }
+        if constexpr (std::is_void<T>::value) {
+            return;
+        } else {
+            return *ptr;
+        }
     }
 
 #ifndef __cpp_impl_three_way_comparison
@@ -156,7 +177,7 @@ public:
 };
 
 /*
- * void*-like pointers does not have operator*
+ * void*-like pointers do not have operator*
  */
 template <class Base>
 class TPointerBase<Base, void>: public TPointerCommon<Base, void> {
@@ -211,6 +232,13 @@ public:
     }
 
     inline T* Get() const noexcept {
+        return T_;
+    }
+
+    /*
+     * for compatibility with std:: smart pointers.
+     */
+    inline T* get() const noexcept {
         return T_;
     }
 
@@ -306,6 +334,13 @@ public:
     }
 
     inline T* Get() const noexcept {
+        return T_;
+    }
+
+    /*
+     * for compatibility with std:: smart pointers.
+     */
+    inline T* get() const noexcept {
         return T_;
     }
 
@@ -560,6 +595,13 @@ public:
         return T_;
     }
 
+    /*
+     * for compatibility with std:: smart pointers.
+     */
+    inline T* get() const noexcept {
+        return T_;
+    }
+
     inline void Swap(TIntrusivePtr& r) noexcept {
         DoSwap(T_, r.T_);
     }
@@ -677,6 +719,13 @@ public:
     }
 
     inline const T* Get() const noexcept {
+        return T_;
+    }
+
+    /*
+     * for compatibility with std:: smart pointers.
+     */
+    inline const T* get() const noexcept {
         return T_;
     }
 
@@ -883,6 +932,13 @@ public:
         return T_;
     }
 
+    /*
+     * for compatibility with std:: smart pointers.
+     */
+    inline T* get() const noexcept {
+        return T_;
+    }
+
     inline C* ReferenceCounter() const noexcept {
         return C_;
     }
@@ -995,8 +1051,9 @@ class TCopyClone {
 public:
     template <class T>
     static inline T* Copy(T* t) {
-        if (t)
+        if (t) {
             return t->Clone();
+        }
         return nullptr;
     }
 };
@@ -1005,8 +1062,9 @@ class TCopyNew {
 public:
     template <class T>
     static inline T* Copy(T* t) {
-        if (t)
+        if (t) {
             return new T(*t);
+        }
         return nullptr;
     }
 };
@@ -1075,8 +1133,9 @@ public:
 #endif
 private:
     inline void DoDestroy() noexcept {
-        if (T_)
+        if (T_) {
             D::Destroy(T_);
+        }
     }
 
 private:
@@ -1102,6 +1161,13 @@ public:
     }
 
     inline const T* Get() const noexcept {
+        return Const();
+    }
+
+    /*
+     * for compatibility with std:: smart pointers.
+     */
+    inline const T* get() const noexcept {
         return Const();
     }
 

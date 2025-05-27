@@ -61,7 +61,6 @@ int main(int argc, char *argv[])
 
 	sqe = io_uring_get_sqe(&ring);
 	io_uring_prep_readv(sqe, evfd, &vec, 1, 0);
-	sqe->flags |= IOSQE_IO_LINK;
 	sqe->user_data = 2;
 
 	ret = io_uring_submit(&ring);

@@ -3,9 +3,9 @@ LIBRARY()
 PEERDIR(
     ydb/library/actors/core
     ydb/library/actors/interconnect
-    ydb/library/yql/utils/log
+    yql/essentials/utils/log
     ydb/library/yql/dq/common
-    ydb/library/yql/providers/common/metrics
+    yql/essentials/providers/common/metrics
     ydb/library/yql/providers/dq/api/grpc
     ydb/library/yql/providers/dq/api/protos
 )

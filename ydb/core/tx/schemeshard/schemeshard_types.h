@@ -39,8 +39,9 @@ struct TSchemeLimits {
 
     // table
     ui64 MaxTableColumns = 200;
+    ui64 MaxColumnTableColumns = 10000;
     ui64 MaxTableColumnNameLength = 255;
-    ui64 MaxTableKeyColumns = 20;
+    ui64 MaxTableKeyColumns = 30;
     ui64 MaxTableIndices = 20;
     ui64 MaxTableCdcStreams = 5;
     ui64 MaxShards = 200*1000; // In each database
@@ -160,6 +161,13 @@ struct TTempDirInfo {
     TString WorkingDir;
     TString Name;
     TActorId TempDirOwnerActorId;
+};
+
+enum class EDataErasureStatus : ui32 {
+    UNSPECIFIED = 0,
+    COMPLETED = 1,
+    IN_PROGRESS = 2,
+    IN_PROGRESS_BSC = 3,
 };
 
 }

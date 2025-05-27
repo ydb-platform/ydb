@@ -1,0 +1,22 @@
+{%- if has_test %}
+val testsJar by tasks.registering(Jar::class) {
+    dependsOn(JavaPlugin.COMPILE_TEST_JAVA_TASK_NAME)
+    archiveClassifier.set("tests")
+    from(sourceSets["test"].output)
+}
+
+artifacts.add(configurations.create("testArtifacts").name, testsJar)
+
+tasks.test {
+    testLogging {
+        showStandardStreams = true
+        events("passed", "skipped", "failed")
+    }
+}
+{%  endif -%}
+
+{%- if has_junit5_test %}
+tasks.named<Test>("test") {
+    useJUnitPlatform()
+}
+{%  endif -%}

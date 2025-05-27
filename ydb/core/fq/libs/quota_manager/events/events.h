@@ -11,13 +11,14 @@
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/event_local.h>
-#include <ydb/library/yql/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 
 #include <ydb/core/fq/libs/quota_manager/proto/quota_internal.pb.h>
 
 namespace NFq {
 
 constexpr auto SUBJECT_TYPE_CLOUD = "cloud";
+constexpr auto SUBJECT_TYPE_SCOPE = "scope";
 
 // Quota per cloud
 constexpr auto QUOTA_ANALYTICS_COUNT_LIMIT    = "yq.analyticsQuery.count";

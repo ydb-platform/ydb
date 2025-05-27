@@ -1,4 +1,5 @@
 #include "datashard_impl.h"
+#include "datashard_integrity_trails.h"
 #include "datashard_pipeline.h"
 #include "execution_unit_ctors.h"
 
@@ -42,8 +43,8 @@ EExecutionStatus TCheckDataTxUnit::Execute(TOperation::TPtr op,
                                            TTransactionContext &,
                                            const TActorContext &ctx)
 {
-    Y_ABORT_UNLESS(op->IsDataTx() || op->IsReadTable());
-    Y_ABORT_UNLESS(!op->IsAborted());
+    Y_ENSURE(op->IsDataTx() || op->IsReadTable());
+    Y_ENSURE(!op->IsAborted());
 
     if (CheckRejectDataTx(op, ctx)) {
         op->Abort(EExecutionUnitKind::FinishPropose);
@@ -52,15 +53,15 @@ EExecutionStatus TCheckDataTxUnit::Execute(TOperation::TPtr op,
     }
 
     TActiveTransaction *tx = dynamic_cast<TActiveTransaction*>(op.Get());
-    Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
+    Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
     auto dataTx = tx->GetDataTx();
-    Y_ABORT_UNLESS(dataTx);
-    Y_ABORT_UNLESS(dataTx->Ready() || dataTx->RequirePrepare());
+    Y_ENSURE(dataTx);
+    Y_ENSURE(dataTx->Ready() || dataTx->RequirePrepare());
 
     if (dataTx->Ready()) {
         DataShard.IncCounter(COUNTER_MINIKQL_PROGRAM_SIZE, dataTx->ProgramSize());
     } else {
-        Y_ABORT_UNLESS(dataTx->RequirePrepare());
+        Y_ENSURE(dataTx->RequirePrepare());
         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
                     "Require prepare Tx " << op->GetTxId() <<  " at " << DataShard.TabletID()
                     << ": " << dataTx->GetErrors());
@@ -90,18 +91,6 @@ EExecutionStatus TCheckDataTxUnit::Execute(TOperation::TPtr op,
             TString err = TStringBuilder()
                 << "Operation " << *op << " cannot read from snapshot " << snapshot
                 << " using data tx on a follower " << DataShard.TabletID();
-
-            BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::BAD_REQUEST)
-                ->AddError(NKikimrTxDataShard::TError::BAD_ARGUMENT, err);
-            op->Abort(EExecutionUnitKind::FinishPropose);
-
-            LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, err);
-
-            return EExecutionStatus::Executed;
-        } else if (!DataShard.IsMvccEnabled()) {
-            TString err = TStringBuilder()
-                << "Operation " << *op << " reads from snapshot " << snapshot
-                << " with MVCC feature disabled at " << DataShard.TabletID();
 
             BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::BAD_REQUEST)
                 ->AddError(NKikimrTxDataShard::TError::BAD_ARGUMENT, err);
@@ -212,9 +201,9 @@ EExecutionStatus TCheckDataTxUnit::Execute(TOperation::TPtr op,
                             // Updates are not allowed when database is out of space
                             TString err = "Cannot perform writes: database is out of disk space";
 
-                            DataShard.IncCounter(COUNTER_PREPARE_OUT_OF_SPACE);
+                            DataShard.IncCounter(COUNTER_PREPARE_DISK_SPACE_EXHAUSTED);
 
-                            BuildResult(op)->AddError(NKikimrTxDataShard::TError::OUT_OF_SPACE, err);
+                            BuildResult(op)->AddError(NKikimrTxDataShard::TError::DISK_SPACE_EXHAUSTED, err);
                             op->Abort(EExecutionUnitKind::FinishPropose);
 
                             LOG_LOG_S_THROTTLE(DataShard.GetLogThrottler(TDataShard::ELogThrottlerType::CheckDataTxUnit_Execute), ctx, NActors::NLog::PRI_ERROR, NKikimrServices::TX_DATASHARD, err);
@@ -224,6 +213,11 @@ EExecutionStatus TCheckDataTxUnit::Execute(TOperation::TPtr op,
                     }
                 }
             }
+        }
+
+        if (!op->IsReadOnly() && op->IsKqpDataTransaction() && op->HasKeysInfo()) {
+            const NMiniKQL::IEngineFlat::TValidationInfo& keys = op->GetKeysInfo();
+            NDataIntegrity::LogIntegrityTrailsKeys(ctx, DataShard.TabletID(), op->GetGlobalTxId(), keys);
         }
     }
 

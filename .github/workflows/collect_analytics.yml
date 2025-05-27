@@ -1,33 +1,81 @@
 name: Collect-analytics-run
 on:
   schedule:
-    - cron: "0 */4 * * *"  # Every 4 h
+    - cron: "0 1-23/2 * * *" # Every 2 hours starting from 1:00 to 23:00.
   workflow_dispatch:
-    inputs:
-      commit_sha:
-        type: string
-        default: ""
-        
+
+
 defaults:
   run:
     shell: bash
+
 jobs:
   main:
-    name: Checkout and setup
-    runs-on: [ self-hosted ]
+    name: Checkout, setup and collect testowners
+    runs-on: [ self-hosted, auto-provisioned, build-preset-analytic-node]
     steps:
     - name: Checkout
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       with:
-        ref: ${{ inputs.commit_sha }}
+        ref: ${{ github.ref }}
     - name: Setup ydb access
       uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
       with:
         ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
     - name: Install dependencies
       run: |
-        python3 -m pip install ydb ydb[yc] codeowners
-    - name: Collect test history data with window 5 days
-      run: python3 .github/scripts/analytics/flaky_tests_history.py --days-window=5
-    - name: Collect test history data with window 1 day 
-      run: python3 .github/scripts/analytics/flaky_tests_history.py --days-window=1
+        python3 -m pip install ydb ydb[yc] codeowners pandas
+    - name: Collect testowners
+      run: python3 .github/scripts/analytics/upload_testowners.py
+
+  matrix-job:
+    name: Test collection on ${{ matrix.branch }}
+    runs-on: [ self-hosted, auto-provisioned, build-preset-analytic-node]
+    needs: main
+    strategy:
+      fail-fast: false
+      matrix:
+        branch: [ main, stable-25-1, stable-25-1-analytics ]
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        ref: ${{ github.ref }}
+    - name: Setup ydb access
+      uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
+      with:
+        ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
+    - name: Install dependencies
+      run: |
+        python3 -m pip install ydb ydb[yc] codeowners pandas
+    - name: Collect all muted and not muted tests
+      run: |
+        # Save the original muted_ya.txt file
+        cp .github/config/muted_ya.txt .github/config/muted_ya.txt.bak
+
+        # Download muted_ya.txt from the specified branch
+        BRANCH=${{ matrix.branch }}
+        URL="https://raw.githubusercontent.com/ydb-platform/ydb/${BRANCH}/.github/config/muted_ya.txt"
+        wget -O .github/config/muted_ya.txt $URL
+
+        # Run the script
+        python3 .github/scripts/tests/get_muted_tests.py upload_muted_tests --branch $BRANCH 
+
+        # Restore the original muted_ya.txt file
+        mv .github/config/muted_ya.txt.bak .github/config/muted_ya.txt
+    - name: Set build types
+      id: set-build-types
+      run: |
+        echo "BUILD_TYPES=relwithdebinfo release-asan release-msan release-tsan" >> $GITHUB_ENV
+    - name: Collect test history data for all build types
+      run: |
+        for BUILD_TYPE in $BUILD_TYPES; do
+          echo "Processing test history for build type: $BUILD_TYPE"
+          python3 .github/scripts/analytics/flaky_tests_history.py --days-window=1 --branch ${{ matrix.branch }} --build_type $BUILD_TYPE
+        done
+    - name: Collect all test monitor for all build types
+      run: |
+        for BUILD_TYPE in $BUILD_TYPES; do
+          echo "Processing test monitor for build type: $BUILD_TYPE"
+          python3 .github/scripts/analytics/tests_monitor.py --branch ${{ matrix.branch }} --build_type $BUILD_TYPE
+        done

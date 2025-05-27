@@ -1,6 +1,8 @@
 default:
   lang: en
   pub-cover-size: 700x400
+  yandex_docs: https://yandex.cloud/en/docs
+  azure_docs: https://learn.microsoft.com/en-us
   team:
       blinkov:
         name: Ivan Blinkov
@@ -14,6 +16,10 @@ default:
         name: Evgenii Ivanov
         position: Senior developer
         profile: https://www.linkedin.com/in/eivanov89/  
+      zevaykin:
+        name: Alexander Zevaykin
+        position: Team leader
+        profile: https://www.linkedin.com/in/alexander-zevaykin-6bb8162bb/         
       ozeritskiy:
         name: Alexey Ozeritskiy
         position: Lead Software Engineer
@@ -22,3 +28,8 @@ default:
         name: Alexander Smirnov
         position: Technology Expert at Nebius
         profile: https://www.linkedin.com/in/alexander-smirnov-bb990434/
+      kalinina:
+        name: Elena Kalinina
+        position: Technical Project Manager
+        profile: https://www.linkedin.com/in/elena-kalinina-2907b398/
+

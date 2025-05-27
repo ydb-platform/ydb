@@ -1,0 +1,91 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 2bcd6ce55018dc41cdc0909bae29419c
+BELONGS ya.make
+    License text:
+         *  Portions Copyright (c) 2010-2020 Leonid Yuriev <leo@yuriev.ru>,
+         *  The 1Hippeus project (t1h).
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/t1ha0.c [5:6]
+        src/t1ha0_ia32aes_a.h [5:6]
+        src/t1ha0_ia32aes_b.h [5:6]
+        src/t1ha0_selfcheck.c [5:6]
+        src/t1ha1.c [5:6]
+        src/t1ha1_selfcheck.c [5:6]
+        src/t1ha2.c [5:6]
+        src/t1ha2_selfcheck.c [5:6]
+        src/t1ha_bits.h [5:6]
+        src/t1ha_selfcheck.c [5:6]
+        src/t1ha_selfcheck.h [5:6]
+        src/t1ha_selfcheck_all.c [5:6]
+        t1ha.h [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 64208635e3cd89ac504c10191a1b9b17
+BELONGS ya.make
+    License text:
+         Portions Copyright (c) 2010-2013 Leonid Yuriev <leo@yuriev.ru>,
+         The 1Hippeus project (t1h).
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [6:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b9735a026c714df3c5d00d00fc4d2e3c
+BELONGS ya.make
+    License text:
+         Copyright (c) 2016-2020 Positive Technologies, https://www.ptsecurity.com,
+         Fast Positive Hash.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [3:4]
+        src/t1ha0.c [2:3]
+        src/t1ha0_ia32aes_a.h [2:3]
+        src/t1ha0_ia32aes_b.h [2:3]
+        src/t1ha0_selfcheck.c [2:3]
+        src/t1ha1.c [2:3]
+        src/t1ha1_selfcheck.c [2:3]
+        src/t1ha2.c [2:3]
+        src/t1ha2_selfcheck.c [2:3]
+        src/t1ha_bits.h [2:3]
+        src/t1ha_selfcheck.c [2:3]
+        src/t1ha_selfcheck.h [2:3]
+        src/t1ha_selfcheck_all.c [2:3]
+        t1ha.h [2:3]

@@ -1,0 +1,20 @@
+--- contrib/libs/clang18-rt/lib/ubsan/ubsan_diag.cpp
++++ contrib/libs/clang18-rt/lib/ubsan/ubsan_diag.cpp
+@@ -412,11 +412,17 @@ static const char *kSuppressionTypes[] = {
+     kVptrCheck,
+ };
+
++SANITIZER_INTERFACE_WEAK_DEF(const char *, __ubsan_default_suppressions, void) {
++  return "";
++}
++
+ void __ubsan::InitializeSuppressions() {
+   CHECK_EQ(nullptr, suppression_ctx);
+   suppression_ctx = new (suppression_placeholder)
+       SuppressionContext(kSuppressionTypes, ARRAY_SIZE(kSuppressionTypes));
+   suppression_ctx->ParseFromFile(flags()->suppressions);
++  if (&__ubsan_default_suppressions)
++    suppression_ctx->Parse(__ubsan_default_suppressions());
+ }
+
+ bool __ubsan::IsVptrCheckSuppressed(const char *TypeName) {

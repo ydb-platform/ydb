@@ -1,24 +1,29 @@
 __all__ = [
+    "BaseQueryTxMode",
     "QueryOnlineReadOnly",
     "QuerySerializableReadWrite",
     "QuerySnapshotReadOnly",
     "QueryStaleReadOnly",
     "QuerySessionPool",
-    "QueryClientSync",
-    "QuerySessionSync",
+    "QueryClientSettings",
+    "QuerySession",
+    "QueryStatsMode",
+    "QueryTxContext",
 ]
 
 import logging
 
 from .base import (
-    IQueryClient,
-    SupportedDriverType,
     QueryClientSettings,
+    QueryStatsMode,
 )
 
-from .session import QuerySessionSync
+from .session import QuerySession
+from .transaction import QueryTxContext
 
+from .._grpc.grpcwrapper import common_utils
 from .._grpc.grpcwrapper.ydb_query_public_types import (
+    BaseQueryTxMode,
     QueryOnlineReadOnly,
     QuerySerializableReadWrite,
     QuerySnapshotReadOnly,
@@ -30,11 +35,10 @@ from .pool import QuerySessionPool
 logger = logging.getLogger(__name__)
 
 
-class QueryClientSync(IQueryClient):
-    def __init__(self, driver: SupportedDriverType, query_client_settings: QueryClientSettings = None):
-        logger.warning("QueryClientSync is an experimental API, which could be changed.")
+class QueryClientSync:
+    def __init__(self, driver: common_utils.SupportedDriverType, query_client_settings: QueryClientSettings = None):
         self._driver = driver
         self._settings = query_client_settings
 
-    def session(self) -> QuerySessionSync:
-        return QuerySessionSync(self._driver, self._settings)
+    def session(self) -> QuerySession:
+        return QuerySession(self._driver, self._settings)

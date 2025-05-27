@@ -29,7 +29,7 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "TopSort-Sort",
+                                        "Node Type": "TopSort-Aggregate-Sort",
                                         "Operators": [
                                             {
                                                 "Inputs": [
@@ -40,6 +40,15 @@
                                                 "Limit": "1001",
                                                 "Name": "TopSort",
                                                 "TopSortBy": "argument._yql_RowNumber0"
+                                            },
+                                            {
+                                                "Inputs": [
+                                                    {
+                                                        "InternalOperatorId": 2
+                                                    }
+                                                ],
+                                                "Name": "Aggregate",
+                                                "Phase": "Intermediate"
                                             },
                                             {
                                                 "Inputs": [
@@ -79,7 +88,18 @@
                                                                 "PlanNodeType": "Connection",
                                                                 "Plans": [
                                                                     {
-                                                                        "Node Type": "Stage",
+                                                                        "Node Type": "Aggregate",
+                                                                        "Operators": [
+                                                                            {
+                                                                                "Inputs": [
+                                                                                    {
+                                                                                        "ExternalPlanNodeId": 3
+                                                                                    }
+                                                                                ],
+                                                                                "Name": "Aggregate",
+                                                                                "Phase": "Final"
+                                                                            }
+                                                                        ],
                                                                         "PlanNodeId": 4,
                                                                         "Plans": [
                                                                             {
@@ -94,14 +114,15 @@
                                                                                         "Node Type": "Aggregate",
                                                                                         "Operators": [
                                                                                             {
-                                                                                                "Aggregation": "{_yql_agg_0: SUM(item.salary,state._yql_agg_0)}",
+                                                                                                "Aggregation": "{SUM(item.salary)}",
                                                                                                 "GroupBy": "item.depname",
                                                                                                 "Inputs": [
                                                                                                     {
                                                                                                         "ExternalPlanNodeId": 1
                                                                                                     }
                                                                                                 ],
-                                                                                                "Name": "Aggregate"
+                                                                                                "Name": "Aggregate",
+                                                                                                "Phase": "Intermediate"
                                                                                             }
                                                                                         ],
                                                                                         "PlanNodeId": 2,
@@ -112,6 +133,7 @@
                                                                                                     {
                                                                                                         "Inputs": [],
                                                                                                         "Name": "TableFullScan",
+                                                                                                        "Path": "/Root/postgres_window.test_plan/empsalary",
                                                                                                         "ReadColumns": [
                                                                                                             "depname",
                                                                                                             "salary"

@@ -14,7 +14,8 @@ namespace NKikimr::NKqp::NScanPrivate {
 
 class IExternalObjectsProvider {
 public:
-    virtual std::unique_ptr<TEvDataShard::TEvKqpScan> BuildEvKqpScan(const ui32 scanId, const ui32 gen, const TSmallVec<TSerializedTableRange>& ranges) const = 0;
+    virtual std::unique_ptr<TEvDataShard::TEvKqpScan> BuildEvKqpScan(const ui32 scanId, const ui32 gen, const TSmallVec<TSerializedTableRange>& ranges,
+        const std::optional<NKikimrKqp::TEvKqpScanCursor>& cursor) const = 0;
     virtual const TVector<NScheme::TTypeInfo>& GetKeyColumnTypes() const = 0;
 };
 
@@ -31,6 +32,7 @@ private:
     const ui64 FreeSpace = (ui64)8 << 20;
     bool NeedAck = true;
     bool Finished = false;
+    bool AllowPings = false;
 
     void DoAck() {
         if (Finished) {
@@ -61,7 +63,7 @@ public:
 
         const auto& keyColumnTypes = externalObjectsProvider.GetKeyColumnTypes();
         auto ranges = state.GetScanRanges(keyColumnTypes);
-        auto ev = externalObjectsProvider.BuildEvKqpScan(ScanId, Generation, ranges);
+        auto ev = externalObjectsProvider.BuildEvKqpScan(ScanId, Generation, ranges, state.LastCursorProto);
 
         AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "start_scanner")("tablet_id", TabletId)("generation", Generation)
             ("info", state.ToString(keyColumnTypes))("range", DebugPrintRanges(keyColumnTypes, ranges, *AppData()->TypeRegistry))
@@ -69,6 +71,22 @@ public:
 
         NActors::TActivationContext::AsActorContext().Send(MakePipePerNodeCacheID(false),
             new TEvPipeCache::TEvForward(ev.release(), TabletId, !subscribed), IEventHandle::FlagTrackDelivery);
+    }
+
+    ui64 GetTabletId() const {
+        return TabletId;
+    }
+
+    TString ToString() const {
+        TStringBuilder builder;
+
+        if (ActorId) {
+            builder << "ActorId: " << *ActorId;
+        }
+
+        builder << "TabletId: " << TabletId << ", ScanId: " << ScanId;
+
+        return builder;
     }
 
     void Stop(const bool finalFlag, const TString& message) {
@@ -84,10 +102,21 @@ public:
         }
     }
 
-    void Start(const TActorId& actorId) {
+    bool Stopped() {
+        return !ActorId.has_value();
+    }
+
+    void PingIfNeeded() {
+        if (AllowPings && !!ActorId) {
+            NActors::TActivationContext::AsActorContext().Send(*ActorId, new TEvKqpCompute::TEvScanPing());
+        }
+    }
+
+    void Start(const TActorId& actorId, bool allowPings) {
         AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "start_scanner")("actor_id", actorId);
         AFL_ENSURE(!ActorId);
         ActorId = actorId;
+        AllowPings = allowPings;
         DoAck();
     }
 
@@ -263,6 +292,12 @@ public:
         }
     }
 
+    void PingAllScanners() {
+        for (auto&& itTablet : ShardScanners) {
+            itTablet.second->PingIfNeeded();
+        }
+    }
+
     std::shared_ptr<TShardState> GetShardStateByActorId(const NActors::TActorId& actorId) const {
         auto it = ShardsByActorId.find(actorId);
         if (it == ShardsByActorId.end()) {
@@ -286,7 +321,7 @@ public:
         }
     }
 
-    void RegisterScannerActor(const ui64 tabletId, const ui64 generation, const TActorId& scanActorId) {
+    void RegisterScannerActor(const ui64 tabletId, const ui64 generation, const TActorId& scanActorId, bool allowPings) {
         auto state = GetShardState(tabletId);
         if (!state || generation != state->Generation) {
             AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "register_scanner_actor_dropped")
@@ -305,7 +340,7 @@ public:
         state->ResetRetry();
         AFL_ENSURE(ShardsByActorId.emplace(scanActorId, state).second);
 
-        GetShardScannerVerified(tabletId)->Start(scanActorId);
+        GetShardScannerVerified(tabletId)->Start(scanActorId, allowPings);
     }
 
     void StartScanner(TShardState& state) {

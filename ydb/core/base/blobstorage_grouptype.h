@@ -113,8 +113,8 @@ struct TBlobStorageGroupType : public TErasureType {
             : PartCount(partCount)
         {}
 
-        TResult(const TString &error)
-            : Error(error)
+        TResult(TString error)
+            : Error(std::move(error))
         {}
 
         bool Good() const {

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <yt/yt/client/api/distributed_table_session.h>
 #include <yt/yt/client/api/file_writer.h>
 #include <yt/yt/client/api/journal_reader.h>
 #include <yt/yt/client/api/journal_writer.h>
@@ -42,11 +43,11 @@ public:
         const TMultiLookupOptions& options), (override));
 
     MOCK_METHOD(TFuture<TSelectRowsResult>, SelectRows, (
-        const TString& query,
+        const std::string& query,
         const TSelectRowsOptions& options), (override));
 
     MOCK_METHOD(TFuture<NYson::TYsonString>, ExplainQuery, (
-        const TString& query,
+        const std::string& query,
         const TExplainQueryOptions& options), (override));
 
     MOCK_METHOD(TFuture<TPullRowsResult>, PullRows, (
@@ -150,6 +151,16 @@ public:
         const NYPath::TYPath& path,
         const TJournalWriterOptions& options), (override));
 
+    MOCK_METHOD(TFuture<TDistributedWriteSessionWithCookies>, StartDistributedWriteSession, (
+        const NYPath::TRichYPath& path,
+        const TDistributedWriteSessionStartOptions& options),
+        (override));
+
+    MOCK_METHOD(TFuture<void>, FinishDistributedWriteSession, (
+        const TDistributedWriteSessionWithResults& sessionWithResults,
+        const TDistributedWriteSessionFinishOptions& options),
+        (override));
+
     // ITransaction
     IClientPtr Client;
     NTransactionClient::ETransactionType Type;
@@ -186,7 +197,7 @@ public:
         return Timeout;
     }
 
-    MOCK_METHOD(TFuture<void>, Ping, (const NApi::TTransactionPingOptions& options), (override));
+    MOCK_METHOD(TFuture<void>, Ping, (const NApi::TPrerequisitePingOptions& options), (override));
     MOCK_METHOD(TFuture<TTransactionCommitResult>, Commit, (const TTransactionCommitOptions& options), (override));
     MOCK_METHOD(TFuture<void>, Abort, (const TTransactionAbortOptions& options), (override));
     MOCK_METHOD(void, Detach, (), (override));

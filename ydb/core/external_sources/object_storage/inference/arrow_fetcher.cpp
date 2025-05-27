@@ -1,10 +1,13 @@
 #include "arrow_fetcher.h"
 #include "arrow_inferencinator.h"
+#include "infer_config.h"
 
 #include <arrow/buffer.h>
 #include <arrow/buffer_builder.h>
 #include <arrow/csv/chunker.h>
 #include <arrow/csv/options.h>
+#include <arrow/json/chunker.h>
+#include <arrow/json/options.h>
 #include <arrow/io/memory.h>
 #include <arrow/util/endian.h>
 
@@ -25,11 +28,11 @@ namespace NKikimr::NExternalSource::NObjectStorage::NInference {
 class TArrowFileFetcher : public NActors::TActorBootstrapped<TArrowFileFetcher> {
     static constexpr uint64_t PrefixSize = 10_MB;
 public:
-    TArrowFileFetcher(NActors::TActorId s3FetcherId, EFileFormat format, const THashMap<TString, TString>& params)
+    TArrowFileFetcher(NActors::TActorId s3FetcherId, const THashMap<TString, TString>& params)
         : S3FetcherId_{s3FetcherId}
-        , Format_{format}
+        , Config_{MakeFormatConfig(params)}
     {
-        Y_ABORT_UNLESS(IsArrowInferredFormat(Format_));
+        Y_ABORT_UNLESS(IsArrowInferredFormat(Config_->Format));
         
         auto decompression = params.FindPtr("compression");
         if (decompression) {
@@ -56,9 +59,11 @@ public:
             .MetadataRequest = false,
         };
 
-        switch (Format_) {
+        switch (Config_->Format) {
             case EFileFormat::CsvWithNames:
-            case EFileFormat::TsvWithNames: {
+            case EFileFormat::TsvWithNames:
+            case EFileFormat::JsonEachRow:
+            case EFileFormat::JsonList: {
                 RequestPartialFile(std::move(localRequest), ctx, 0, 10_MB);
                 break;
             }
@@ -68,7 +73,11 @@ public:
                 break;
             }
             default: {
-                ctx.Send(localRequest.Requester, MakeError(localRequest.Path, NFq::TIssuesIds::UNSUPPORTED, TStringBuilder{} << "unsupported format for inference: " << ConvertFileFormat(Format_)));
+                ctx.Send(localRequest.Requester, MakeError(
+                    localRequest.Path,
+                    NFq::TIssuesIds::UNSUPPORTED,
+                    TStringBuilder{} << "unsupported format for inference: " << ConvertFileFormat(Config_->Format))
+                );
                 return;
             }
             case EFileFormat::Undefined:
@@ -93,16 +102,14 @@ public:
         }
 
         std::shared_ptr<arrow::io::RandomAccessFile> file;
-        switch (Format_) {
+        switch (Config_->Format) {
             case EFileFormat::CsvWithNames:
             case EFileFormat::TsvWithNames: {
-                // TODO: obtain from request
-                arrow::csv::ParseOptions options;
-                if (Format_ == EFileFormat::TsvWithNames) {
-                    options.delimiter = '\t';
+                file = CleanupCsvFile(data, request, std::dynamic_pointer_cast<CsvConfig>(Config_)->ParseOpts, ctx);
+                if (!file) {
+                    return;
                 }
-                file = CleanupCsvFile(data, request, options, ctx);
-                ctx.Send(request.Requester, new TEvArrowFile(std::move(file), request.Path));
+                ctx.Send(request.Requester, new TEvArrowFile(Config_, std::move(file), request.Path));
                 break;
             }
             case EFileFormat::Parquet: {
@@ -111,7 +118,19 @@ public:
                     return;
                 }
                 file = BuildParquetFileFromMetadata(data, request, ctx);
-                ctx.Send(request.Requester, new TEvArrowFile(std::move(file), request.Path));
+                if (!file) {
+                    return;
+                }
+                ctx.Send(request.Requester, new TEvArrowFile(Config_, std::move(file), request.Path));
+                break;
+            }
+            case EFileFormat::JsonEachRow:
+            case EFileFormat::JsonList: {
+                file = CleanupJsonFile(data, request, std::dynamic_pointer_cast<JsonConfig>(Config_)->ParseOpts, ctx);
+                if (!file) {
+                    return;
+                }
+                ctx.Send(request.Requester, new TEvArrowFile(Config_, std::move(file), request.Path));
                 break;
             }
             case EFileFormat::Undefined:
@@ -161,9 +180,10 @@ private:
     }
 
     void HandleAsRAFile(TRequest&& insertedRequest, const NActors::TActorContext& ctx) {
+        auto format = Config_->Format;
         auto error = MakeError(
             insertedRequest.Path, NFq::TIssuesIds::UNSUPPORTED,
-            TStringBuilder{} << "got unsupported format: " << ConvertFileFormat(Format_) << '(' << static_cast<ui32>(Format_) << ')'
+            TStringBuilder{} << "got unsupported format: " << ConvertFileFormat(format) << '(' << static_cast<ui32>(format) << ')'
         );
         SendError(ctx, error);
     }
@@ -197,7 +217,7 @@ private:
                 decompressedData << decompressedChunk;
             }
             return std::move(decompressedData);
-        } catch (const yexception& error) {
+        } catch (const std::exception& error) {
             auto errorEv = MakeError(
                 request.Path,
                 NFq::TIssuesIds::INTERNAL_ERROR,
@@ -220,22 +240,9 @@ private:
     std::shared_ptr<arrow::io::RandomAccessFile> CleanupCsvFile(const TString& data, const TRequest& request, const arrow::csv::ParseOptions& options, const NActors::TActorContext& ctx) {
         auto chunker = arrow::csv::MakeChunker(options);
         std::shared_ptr<arrow::Buffer> whole, partial;
-        auto arrowData = std::make_shared<arrow::Buffer>(nullptr, 0);
-        {
-            arrow::BufferBuilder builder;
-            auto buildRes = builder.Append(data.data(), data.size());
-            if (buildRes.ok()) {
-                buildRes = builder.Finish(&arrowData);
-            }
-            if (!buildRes.ok()) {
-                auto error = MakeError(
-                    request.Path,
-                    NFq::TIssuesIds::INTERNAL_ERROR,
-                    TStringBuilder{} << "couldn't consume buffer from S3Fetcher: " << buildRes.ToString()
-                );
-                SendError(ctx, error);
-                return nullptr;
-            }
+        auto arrowData = BuildBufferFromData(data, request, ctx);
+        if (!arrowData) {
+            return nullptr;
         }
         auto status = chunker->Process(arrowData, &whole, &partial);
 
@@ -277,7 +284,56 @@ private:
     }
 
     std::shared_ptr<arrow::io::RandomAccessFile> BuildParquetFileFromMetadata(const TString& data, const TRequest& request, const NActors::TActorContext& ctx) {
-        auto arrowData = std::make_shared<arrow::Buffer>(nullptr, 0);
+        auto arrowData = BuildBufferFromData(data, request, ctx);
+        if (!arrowData) {
+            return nullptr;
+        }
+        return std::make_shared<arrow::io::BufferReader>(std::move(arrowData));
+    }
+
+    std::shared_ptr<arrow::io::RandomAccessFile> CleanupJsonFile(const TString& data, const TRequest& request, const arrow::json::ParseOptions& options, const NActors::TActorContext& ctx) {
+        auto chunker = arrow::json::MakeChunker(options);
+        std::shared_ptr<arrow::Buffer> whole, partial;
+        auto arrowData = BuildBufferFromData(data, request, ctx);
+        if (!arrowData) {
+            return nullptr;
+        }
+
+        if (Config_->Format == EFileFormat::JsonList) {
+            auto empty = std::make_shared<arrow::Buffer>(nullptr, 0);
+            int64_t count = 1;
+            auto status = chunker->ProcessSkip(empty, arrowData, false, &count, &whole);
+            
+            if (!status.ok()) {
+                auto error = MakeError(
+                    request.Path,
+                    NFq::TIssuesIds::INTERNAL_ERROR,
+                    TStringBuilder{} << "couldn't run arrow json chunker for " << request.Path << ": " << status.ToString()
+                );
+                SendError(ctx, error);
+                return nullptr;
+            }
+
+            arrowData = std::move(whole);
+        }
+
+        auto status = chunker->Process(arrowData, &whole, &partial);
+
+        if (!status.ok()) {
+            auto error = MakeError(
+                request.Path,
+                NFq::TIssuesIds::INTERNAL_ERROR,
+                TStringBuilder{} << "couldn't run arrow json chunker for " << request.Path << ": " << status.ToString()
+            );
+            SendError(ctx, error);
+            return nullptr;
+        }
+
+        return std::make_shared<arrow::io::BufferReader>(std::move(whole));
+    }
+
+    std::shared_ptr<arrow::Buffer> BuildBufferFromData(const TString& data, const TRequest& request, const NActors::TActorContext& ctx) {
+        auto dataBuffer = std::make_shared<arrow::Buffer>(nullptr, 0);
         arrow::BufferBuilder builder;
         auto buildRes = builder.Append(data.data(), data.size());
         if (!buildRes.ok()) {
@@ -290,7 +346,7 @@ private:
             return nullptr;
         }
 
-        buildRes = builder.Finish(&arrowData);
+        buildRes = builder.Finish(&dataBuffer);
         if (!buildRes.ok()) {
             auto error = MakeError(
                 request.Path,
@@ -301,7 +357,7 @@ private:
             return nullptr;
         }
 
-        return std::make_shared<arrow::io::BufferReader>(std::move(arrowData));
+        return dataBuffer;
     }
 
     // Utility
@@ -316,12 +372,12 @@ private:
 
     // Fields
     NActors::TActorId S3FetcherId_;
-    EFileFormat Format_;
+    std::shared_ptr<FormatConfig> Config_;
     TMaybe<TString> DecompressionFormat_;
     std::unordered_map<TString, TRequest> InflightRequests_; // Path -> Request
 };
 
-NActors::IActor* CreateArrowFetchingActor(NActors::TActorId s3FetcherId, EFileFormat format, const THashMap<TString, TString>& params) {
-    return new TArrowFileFetcher{s3FetcherId, format, params};
+NActors::IActor* CreateArrowFetchingActor(NActors::TActorId s3FetcherId, const THashMap<TString, TString>& params) {
+    return new TArrowFileFetcher{s3FetcherId, params};
 }
 } // namespace NKikimr::NExternalSource::NObjectStorage::NInference

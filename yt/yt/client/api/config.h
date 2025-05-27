@@ -29,10 +29,9 @@ DEFINE_ENUM(EConnectionType,
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TTableMountCacheConfig
+struct TTableMountCacheConfig
     : public NTabletClient::TTableMountCacheConfig
 {
-public:
     int OnErrorRetryCount;
     TDuration OnErrorSlackPeriod;
 
@@ -45,12 +44,11 @@ DEFINE_REFCOUNTED_TYPE(TTableMountCacheConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TConnectionConfig
+struct TConnectionConfig
     : public virtual NYTree::TYsonStruct
 {
-public:
     EConnectionType ConnectionType;
-    std::optional<TString> ClusterName;
+    std::optional<std::string> ClusterName;
     TTableMountCacheConfigPtr TableMountCache;
     NChaosClient::TReplicationCardCacheConfigPtr ReplicationCardCache;
 
@@ -63,10 +61,9 @@ DEFINE_REFCOUNTED_TYPE(TConnectionConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TConnectionDynamicConfig
+struct TConnectionDynamicConfig
     : public virtual NYTree::TYsonStruct
 {
-public:
     NTabletClient::TTableMountCacheDynamicConfigPtr TableMountCache;
 
     TExponentialBackoffOptions TabletWriteBackoff;
@@ -80,10 +77,9 @@ DEFINE_REFCOUNTED_TYPE(TConnectionDynamicConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TPersistentQueuePollerConfig
+struct TPersistentQueuePollerConfig
     : public virtual NYTree::TYsonStruct
 {
-public:
     //! Try to keep at most this many prefetched rows in memory. This limit is approximate.
     i64 MaxPrefetchRowCount;
 
@@ -124,10 +120,9 @@ DEFINE_REFCOUNTED_TYPE(TPersistentQueuePollerConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TFileReaderConfig
+struct TFileReaderConfig
     : public virtual NChunkClient::TMultiChunkReaderConfig
 {
-public:
     REGISTER_YSON_STRUCT(TFileReaderConfig);
 
     static void Register(TRegistrar)
@@ -138,11 +133,10 @@ DEFINE_REFCOUNTED_TYPE(TFileReaderConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TFileWriterConfig
+struct TFileWriterConfig
     : public NChunkClient::TMultiChunkWriterConfig
     , public NFileClient::TFileChunkWriterConfig
 {
-public:
     REGISTER_YSON_STRUCT(TFileWriterConfig);
 
     static void Register(TRegistrar)
@@ -153,11 +147,10 @@ DEFINE_REFCOUNTED_TYPE(TFileWriterConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TJournalReaderConfig
+struct TJournalReaderConfig
     : public NJournalClient::TChunkReaderConfig
     , public TWorkloadConfig
 {
-public:
     REGISTER_YSON_STRUCT(TJournalReaderConfig);
 
     static void Register(TRegistrar)
@@ -168,10 +161,9 @@ DEFINE_REFCOUNTED_TYPE(TJournalReaderConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TJournalChunkWriterConfig
+struct TJournalChunkWriterConfig
     : public virtual TWorkloadConfig
 {
-public:
     int MaxBatchRowCount;
     i64 MaxBatchDataSize;
     TDuration MaxBatchDelay;
@@ -205,10 +197,9 @@ DEFINE_REFCOUNTED_TYPE(TJournalChunkWriterConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TJournalWriterConfig
+struct TJournalWriterConfig
     : public TJournalChunkWriterConfig
 {
-public:
     int MaxChunkRowCount;
     i64 MaxChunkDataSize;
     TDuration MaxChunkSessionDuration;
@@ -217,6 +208,9 @@ public:
     int OpenSessionRetryCount;
 
     TDuration PrerequisiteTransactionProbePeriod;
+
+    bool EnableChecksums;
+    bool ValidateErasureCoding;
 
     // For testing purposes only.
     bool DontClose;
@@ -234,10 +228,9 @@ DEFINE_REFCOUNTED_TYPE(TJournalWriterConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TJournalChunkWriterOptions
+struct TJournalChunkWriterOptions
     : public NYTree::TYsonStruct
 {
-public:
     int ReplicationFactor;
     NErasure::ECodec ErasureCodec;
 

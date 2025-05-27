@@ -68,11 +68,14 @@ struct aws_auth_http_system_vtable {
     aws_http_stream_release_fn *aws_http_stream_release;
 
     aws_http_connection_close_fn *aws_http_connection_close;
+
+    int (*aws_high_res_clock_get_ticks)(uint64_t *timestamp);
 };
 
 enum aws_parse_credentials_expiration_format {
     AWS_PCEF_STRING_ISO_8601_DATE,
     AWS_PCEF_NUMBER_UNIX_EPOCH,
+    AWS_PCEF_NUMBER_UNIX_EPOCH_MS,
 };
 
 struct aws_parse_credentials_from_json_doc_options {
@@ -80,6 +83,7 @@ struct aws_parse_credentials_from_json_doc_options {
     const char *secret_access_key_name;
     const char *token_name;
     const char *expiration_name;
+    const char *top_level_object_name;
     enum aws_parse_credentials_expiration_format expiration_format;
     bool token_required;
     bool expiration_required;
@@ -154,11 +158,19 @@ struct aws_credentials *aws_parse_credentials_from_aws_json_object(
 AWS_AUTH_API
 struct aws_credentials *aws_parse_credentials_from_json_document(
     struct aws_allocator *allocator,
-    const char *json_document,
+    struct aws_byte_cursor json_document,
     const struct aws_parse_credentials_from_json_doc_options *options);
 
 AWS_AUTH_API
 enum aws_retry_error_type aws_credentials_provider_compute_retry_error_type(int response_code, int error_code);
+
+/*
+ * Loads an aws config profile collection
+ */
+AWS_AUTH_API
+struct aws_profile_collection *aws_load_profile_collection_from_config_file(
+    struct aws_allocator *allocator,
+    struct aws_byte_cursor config_file_name_override);
 
 AWS_EXTERN_C_END
 

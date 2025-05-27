@@ -2,6 +2,7 @@
 #include "scanner.h"
 
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_metadata.h>
+#include <ydb/core/tx/columnshard/engines/reader/common/result.h>
 
 #include <ydb/library/actors/core/log.h>
 
@@ -10,7 +11,7 @@ namespace NKikimr::NOlap::NReader::NPlain {
 void TScanHead::OnIntervalResult(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& allocationGuard,
     const std::optional<NArrow::TShardedRecordBatch>& newBatch, const std::shared_ptr<arrow::RecordBatch>& lastPK,
     std::unique_ptr<NArrow::NMerger::TMergePartialStream>&& merger, const ui32 intervalIdx, TPlainReadData& reader) {
-    if (Context->GetReadMetadata()->Limit && (!newBatch || newBatch->GetRecordsCount() == 0) && InFlightLimit < MaxInFlight) {
+    if (Context->GetReadMetadata()->HasLimit() && (!newBatch || newBatch->GetRecordsCount() == 0) && InFlightLimit < MaxInFlight) {
         InFlightLimit = std::min<ui32>(MaxInFlight, InFlightLimit * 4);
     }
     auto itInterval = FetchingIntervals.find(intervalIdx);
@@ -20,14 +21,16 @@ void TScanHead::OnIntervalResult(std::shared_ptr<NGroupedMemoryManager::TAllocat
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "interval_result_received")("interval_idx", intervalIdx)(
         "intervalId", itInterval->second->GetIntervalId());
     if (newBatch && newBatch->GetRecordsCount()) {
-        std::optional<ui32> callbackIdxSubscriver;
+        std::optional<TPartialSourceAddress> callbackIdxSubscriver;
         std::shared_ptr<NGroupedMemoryManager::TGroupGuard> gGuard;
         if (itInterval->second->HasMerger()) {
-            callbackIdxSubscriver = intervalIdx;
+            callbackIdxSubscriver = TPartialSourceAddress(itInterval->second->GetIntervalId(), intervalIdx, 0);
         } else {
             gGuard = itInterval->second->GetGroupGuard();
         }
-        AFL_VERIFY(ReadyIntervals.emplace(intervalIdx, std::make_shared<TPartialReadResult>(std::move(allocationGuard), std::move(gGuard), *newBatch, lastPK, callbackIdxSubscriver)).second);
+        std::vector<std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>> guards = { std::move(allocationGuard) };
+        AFL_VERIFY(ReadyIntervals.emplace(intervalIdx, std::make_shared<TPartialReadResult>(guards, std::move(gGuard), *newBatch,
+            std::make_shared<TPlainScanCursor>(std::make_shared<NArrow::TSimpleRow>(lastPK, 0)), Context->GetCommonContext(), callbackIdxSubscriver)).second);
     } else {
         AFL_VERIFY(ReadyIntervals.emplace(intervalIdx, nullptr).second);
     }
@@ -67,24 +70,24 @@ void TScanHead::OnIntervalResult(std::shared_ptr<NGroupedMemoryManager::TAllocat
 }
 
 TConclusionStatus TScanHead::Start() {
-    const bool guaranteeExclusivePK = Context->GetCommonContext()->GetReadMetadata()->HasGuaranteeExclusivePK();
     TScanContext context;
     for (auto itPoint = BorderPoints.begin(); itPoint != BorderPoints.end(); ++itPoint) {
         auto& point = itPoint->second;
         context.OnStartPoint(point);
         if (context.GetIsSpecialPoint()) {
-            auto detectorResult = DetectSourcesFeatureInContextIntervalScan(context.GetCurrentSources(), guaranteeExclusivePK);
             for (auto&& i : context.GetCurrentSources()) {
                 i.second->IncIntervalsCount();
             }
-            if (!detectorResult) {
-                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "scanner_initializer_aborted")(
-                    "reason", detectorResult.GetErrorMessage());
-                Abort();
-                return detectorResult;
-            }
         }
+        const bool isExclusive = context.GetCurrentSources().size() == 1;
+        for (auto&& i : context.GetCurrentSources()) {
+            i.second->SetExclusiveIntervalOnly((isExclusive && i.second->GetExclusiveIntervalOnly() && !context.GetIsSpecialPoint()));
+        }
+
         for (auto&& i : point.GetFinishSources()) {
+            if (!i->NeedAccessorsFetching()) {
+                i->SetSourceInMemory(true);
+            }
             i->InitFetchingPlan(Context->GetColumnsFetchingPlan(i));
         }
         context.OnFinishPoint(point);
@@ -94,14 +97,6 @@ TConclusionStatus TScanHead::Start() {
             context.OnNextPointInfo(itPointNext->second);
             for (auto&& i : context.GetCurrentSources()) {
                 i.second->IncIntervalsCount();
-            }
-            auto detectorResult =
-                DetectSourcesFeatureInContextIntervalScan(context.GetCurrentSources(), guaranteeExclusivePK || context.GetIsExclusiveInterval());
-            if (!detectorResult) {
-                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "scanner_initializer_aborted")(
-                    "reason", detectorResult.GetErrorMessage());
-                Abort();
-                return detectorResult;
             }
         }
     }
@@ -116,7 +111,7 @@ TScanHead::TScanHead(std::deque<std::shared_ptr<IDataSource>>&& sources, const s
         }
     }
 
-    if (Context->GetReadMetadata()->Limit) {
+    if (Context->GetReadMetadata()->HasLimit()) {
         InFlightLimit = 1;
     } else {
         InFlightLimit = MaxInFlight;
@@ -129,126 +124,8 @@ TScanHead::TScanHead(std::deque<std::shared_ptr<IDataSource>>&& sources, const s
     }
 }
 
-class TSourcesStorageForMemoryOptimization {
-private:
-    class TSourceInfo {
-    private:
-        YDB_READONLY_DEF(std::shared_ptr<IDataSource>, Source);
-        YDB_READONLY_DEF(std::shared_ptr<TFetchingScript>, FetchingInfo);
-
-    public:
-        TSourceInfo(const std::shared_ptr<IDataSource>& source, const std::shared_ptr<TFetchingScript>& fetchingInfo)
-            : Source(source)
-            , FetchingInfo(fetchingInfo) {
-        }
-
-        NJson::TJsonValue DebugJson() const {
-            NJson::TJsonValue result = NJson::JSON_MAP;
-            result.InsertValue("source", Source->DebugJsonForMemory());
-            //            result.InsertValue("fetching", Fetching->DebugJsonForMemory());
-            return result;
-        }
-    };
-
-    std::map<ui64, THashMap<ui32, TSourceInfo>> Sources;
-    YDB_READONLY(ui64, MemorySum, 0);
-    YDB_READONLY_DEF(std::set<ui64>, PathIds);
-
-public:
-    TString DebugString() const {
-        NJson::TJsonValue resultJson;
-        auto& memorySourcesArr = resultJson.InsertValue("sources_by_memory", NJson::JSON_ARRAY);
-        resultJson.InsertValue("sources_by_memory_count", Sources.size());
-        for (auto it = Sources.rbegin(); it != Sources.rend(); ++it) {
-            auto& sourceMap = memorySourcesArr.AppendValue(NJson::JSON_MAP);
-            sourceMap.InsertValue("memory", it->first);
-            auto& sourcesArr = sourceMap.InsertValue("sources", NJson::JSON_ARRAY);
-            for (auto&& s : it->second) {
-                sourcesArr.AppendValue(s.second.DebugJson());
-            }
-        }
-        return resultJson.GetStringRobust();
-    }
-
-    void UpdateSource(const ui64 oldMemoryInfo, const ui32 sourceIdx) {
-        auto it = Sources.find(oldMemoryInfo);
-        AFL_VERIFY(it != Sources.end());
-        auto itSource = it->second.find(sourceIdx);
-        AFL_VERIFY(itSource != it->second.end());
-        auto sourceInfo = itSource->second;
-        it->second.erase(itSource);
-        if (it->second.empty()) {
-            Sources.erase(it);
-        }
-        AFL_VERIFY(MemorySum >= oldMemoryInfo);
-        MemorySum -= oldMemoryInfo;
-        AddSource(sourceInfo.GetSource(), sourceInfo.GetFetchingInfo());
-    }
-
-    void AddSource(const std::shared_ptr<IDataSource>& source, const std::shared_ptr<TFetchingScript>& fetching) {
-        const ui64 sourceMemory = fetching->PredictRawBytes(source);
-        MemorySum += sourceMemory;
-        AFL_VERIFY(Sources[sourceMemory].emplace(source->GetSourceIdx(), TSourceInfo(source, fetching)).second);
-        PathIds.emplace(source->GetPathId());
-    }
-
-    bool Optimize(const ui64 memoryLimit) {
-        bool modified = true;
-        while (MemorySum > memoryLimit && modified) {
-            modified = false;
-            for (auto it = Sources.rbegin(); it != Sources.rend(); ++it) {
-                for (auto&& [sourceIdx, sourceInfo] : it->second) {
-                    if (!sourceInfo.GetFetchingInfo()->InitSourceSeqColumnIds(sourceInfo.GetSource())) {
-                        continue;
-                    }
-                    modified = true;
-                    UpdateSource(it->first, sourceIdx);
-                    break;
-                }
-                if (modified) {
-                    break;
-                }
-            }
-        }
-        return MemorySum < memoryLimit;
-    }
-};
-
-TConclusionStatus TScanHead::DetectSourcesFeatureInContextIntervalScan(
-    const THashMap<ui32, std::shared_ptr<IDataSource>>& intervalSources, const bool isExclusiveInterval) const {
-    TSourcesStorageForMemoryOptimization optimizer;
-    for (auto&& i : intervalSources) {
-        if (!isExclusiveInterval) {
-            i.second->SetExclusiveIntervalOnly(false);
-        }
-        auto fetchingPlan = Context->GetColumnsFetchingPlan(i.second);
-        optimizer.AddSource(i.second, fetchingPlan);
-    }
-    const ui64 startMemory = optimizer.GetMemorySum();
-    if (!optimizer.Optimize(Context->ReduceMemoryIntervalLimit) && Context->RejectMemoryIntervalLimit < optimizer.GetMemorySum()) {
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "next_internal_broken")("reason", "a lot of memory need")("start", startMemory)(
-            "reduce_limit", Context->ReduceMemoryIntervalLimit)("reject_limit", Context->RejectMemoryIntervalLimit)(
-            "need", optimizer.GetMemorySum())("path_ids", JoinSeq(",", optimizer.GetPathIds()))(
-            "details", IS_LOG_PRIORITY_ENABLED(NActors::NLog::PRI_DEBUG, NKikimrServices::TX_COLUMNSHARD_SCAN) ? optimizer.DebugString()
-                                                                                                               : "NEED_DEBUG_LEVEL");
-        Context->GetCommonContext()->GetCounters().OnOptimizedIntervalMemoryFailed(optimizer.GetMemorySum());
-        return TConclusionStatus::Fail("We need a lot of memory in time for interval scanner: " + ::ToString(optimizer.GetMemorySum()) +
-                                       " path_ids: " + JoinSeq(",", optimizer.GetPathIds()) + ". We need wait compaction processing. Sorry.");
-    } else if (optimizer.GetMemorySum() < startMemory) {
-        AFL_INFO(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "memory_reduce_active")("reason", "need reduce memory")("start", startMemory)(
-            "reduce_limit", Context->ReduceMemoryIntervalLimit)("reject_limit", Context->RejectMemoryIntervalLimit)(
-            "need", optimizer.GetMemorySum())("path_ids", JoinSeq(",", optimizer.GetPathIds()));
-        Context->GetCommonContext()->GetCounters().OnOptimizedIntervalMemoryReduced(startMemory - optimizer.GetMemorySum());
-    }
-    Context->GetCommonContext()->GetCounters().OnOptimizedIntervalMemoryRequired(optimizer.GetMemorySum());
-    return TConclusionStatus::Success();
-}
-
 TConclusion<bool> TScanHead::BuildNextInterval() {
-    if (Context->IsAborted()) {
-        return false;
-    }
-    while (BorderPoints.size()) {
+    while (BorderPoints.size() && !Context->IsAborted()) {
         if (BorderPoints.begin()->second.GetStartSources().size()) {
             if (FetchingIntervals.size() >= InFlightLimit) {
                 AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "skip_next_interval")("reason", "too many intervals in flight")(
@@ -324,6 +201,15 @@ void TScanHead::Abort() {
     FetchingIntervals.clear();
     BorderPoints.clear();
     Y_ABORT_UNLESS(IsFinished());
+}
+
+void TScanHead::OnSentDataFromInterval(const TPartialSourceAddress& address) const {
+    if (Context->IsAborted()) {
+        return;
+    }
+    auto it = FetchingIntervals.find(address.GetSourceIdx());
+    AFL_VERIFY(it != FetchingIntervals.end())("interval_idx", address.GetSourceIdx())("count", FetchingIntervals.size());
+    it->second->OnPartSendingComplete();
 }
 
 }   // namespace NKikimr::NOlap::NReader::NPlain

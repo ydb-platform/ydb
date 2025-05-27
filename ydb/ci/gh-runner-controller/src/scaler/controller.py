@@ -190,7 +190,7 @@ class ScaleController:
 
         vm_labels = {self.prefix: runner_name}
         user_data = create_userdata(self.gh.html_url, new_runner_token, runner_name, labels, self.cfg.ssh_keys,
-                                    self.cfg.agent_mirror_url_prefix)
+                                    self.cfg.agent_mirror_url_prefix, preset_name)
 
         placement = random.choice(self.cfg.yc_zones)
         zone_id = placement['zone_id']

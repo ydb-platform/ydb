@@ -2,17 +2,21 @@
 #include "service.h"
 #include "table_writer.h"
 #include "topic_reader.h"
+#include "transfer_writer_factory.h"
 #include "worker.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/domain.h>
 #include <ydb/core/base/statestorage.h>
-
+#include <ydb/core/fq/libs/row_dispatcher/purecalc_compilation/compile_service.h>
+#include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 
 #include <util/generic/hash.h>
+#include <util/generic/hash_set.h>
+#include <util/generic/map.h>
 #include <util/generic/size_literals.h>
 
 #include <tuple>
@@ -20,6 +24,20 @@
 namespace NKikimr::NReplication::NService {
 
 class TSessionInfo {
+    struct TWorkerInfo {
+        const TActorId ActorId;
+        TRowVersion Heartbeat;
+
+        explicit TWorkerInfo(const TActorId& actorId)
+            : ActorId(actorId)
+        {
+        }
+
+        operator TActorId() const {
+            return ActorId;
+        }
+    };
+
 public:
     explicit TSessionInfo(const TActorId& actorId)
         : ActorId(actorId)
@@ -35,10 +53,30 @@ public:
         return Generation;
     }
 
-    void Update(const TActorId& actorId, ui64 generation) {
+    void Handle(IActorOps* ops, TEvService::TEvHandshake::TPtr& ev) {
+        const ui64 generation = ev->Get()->Record.GetController().GetGeneration();
         Y_ABORT_UNLESS(Generation <= generation);
-        ActorId = actorId;
+
+        ActorId = ev->Sender;
         Generation = generation;
+
+        auto status = MakeHolder<TEvService::TEvStatus>();
+        auto& record = status->Record;
+
+        for (const auto& [id, _] : Workers) {
+            id.Serialize(*record.AddWorkers());
+        }
+
+        ops->Send(ActorId, status.Release());
+
+        TVector<TRowVersion> versionsWithoutTxId;
+        for (const auto& [version, _] : PendingTxId) {
+            versionsWithoutTxId.push_back(version);
+        }
+
+        if (versionsWithoutTxId) {
+            ops->Send(ActorId, new TEvService::TEvGetTxId(versionsWithoutTxId));
+        }
     }
 
     bool HasWorker(const TWorkerId& id) const {
@@ -100,15 +138,108 @@ public:
         ops->Send(ActorId, new TEvService::TEvWorkerStatus(id, std::forward<Args>(args)...));
     }
 
-    void SendStatus(IActorOps* ops) const {
-        auto ev = MakeHolder<TEvService::TEvStatus>();
+    void SendWorkerDataEnd(IActorOps* ops, const TWorkerId& id, ui64 partitionId,
+            const TVector<ui64>&& adjacentPartitionsIds, const TVector<ui64>&& childPartitionsIds)
+    {
+        auto ev = MakeHolder<TEvService::TEvWorkerDataEnd>();
         auto& record = ev->Record;
 
-        for (const auto& [id, _] : Workers) {
-            id.Serialize(*record.AddWorkers());
+        id.Serialize(*record.MutableWorker());
+        record.SetPartitionId(partitionId);
+        for (auto id : adjacentPartitionsIds) {
+            record.AddAdjacentPartitionsIds(id);
+        }
+        for (auto id : childPartitionsIds) {
+            record.AddChildPartitionsIds(id);
         }
 
         ops->Send(ActorId, ev.Release());
+    }
+
+    void Handle(IActorOps* ops, TEvService::TEvGetTxId::TPtr& ev) {
+        TMap<TRowVersion, ui64> result;
+        TVector<TRowVersion> versionsWithoutTxId;
+
+        for (const auto& v : ev->Get()->Record.GetVersions()) {
+            const auto version = TRowVersion::FromProto(v);
+            if (auto it = TxIds.upper_bound(version); it != TxIds.end()) {
+                result[it->first] = it->second;
+            } else {
+                versionsWithoutTxId.push_back(version);
+                PendingTxId[version].insert(ev->Sender);
+            }
+        }
+
+        if (versionsWithoutTxId) {
+            ops->Send(ActorId, new TEvService::TEvGetTxId(versionsWithoutTxId));
+        }
+
+        if (result) {
+            SendTxIdResult(ops, ev->Sender, result);
+        }
+    }
+
+    void Handle(IActorOps* ops, TEvService::TEvTxIdResult::TPtr& ev) {
+        THashMap<TActorId, TMap<TRowVersion, ui64>> results;
+
+        for (const auto& kv : ev->Get()->Record.GetVersionTxIds()) {
+            const auto version = TRowVersion::FromProto(kv.GetVersion());
+            TxIds.emplace(version, kv.GetTxId());
+
+            for (auto it = PendingTxId.begin(); it != PendingTxId.end();) {
+                if (it->first >= version) {
+                    break;
+                }
+
+                for (const auto& actorId : it->second) {
+                    results[actorId].emplace(version, kv.GetTxId());
+                }
+
+                PendingTxId.erase(it++);
+            }
+        }
+
+        for (const auto& [actorId, result] : results) {
+            SendTxIdResult(ops, actorId, result);
+        }
+    }
+
+    void Handle(IActorOps* ops, TEvService::TEvHeartbeat::TPtr& ev) {
+        const auto id = GetWorkerId(ev->Sender);
+        if (!Workers.contains(id)) {
+            return;
+        }
+
+        auto& worker = Workers.at(id);
+        auto& record = ev->Get()->Record;
+        const auto version = TRowVersion::FromProto(record.GetVersion());
+
+        if (const auto& prevVersion = worker.Heartbeat) {
+            if (version <= prevVersion) {
+                return;
+            }
+
+            auto it = WorkersByHeartbeat.find(prevVersion);
+            if (it != WorkersByHeartbeat.end()) {
+                it->second.erase(id);
+                if (it->second.empty()) {
+                    WorkersByHeartbeat.erase(it);
+                }
+            }
+        }
+
+        worker.Heartbeat = version;
+        WorkersWithHeartbeat.insert(id);
+        WorkersByHeartbeat[version].insert(id);
+
+        if (Workers.size() == WorkersWithHeartbeat.size()) {
+            while (!TxIds.empty() && WorkersByHeartbeat.begin()->first < TxIds.begin()->first) {
+                TxIds.erase(TxIds.begin());
+            }
+        }
+
+        id.Serialize(*record.MutableWorker());
+        ops->Send(ActorId, ev->ReleaseBase().Release(), ev->Flags, ev->Cookie);
     }
 
     void Shutdown(IActorOps* ops) const {
@@ -118,10 +249,28 @@ public:
     }
 
 private:
+    static void SendTxIdResult(IActorOps* ops, const TActorId& recipient, const TMap<TRowVersion, ui64>& result) {
+        auto ev = MakeHolder<TEvService::TEvTxIdResult>();
+
+        for (const auto& [version, txId] : result) {
+            auto& item = *ev->Record.AddVersionTxIds();
+            version.ToProto(item.MutableVersion());
+            item.SetTxId(txId);
+        }
+
+        ops->Send(recipient, ev.Release());
+    }
+
+private:
     TActorId ActorId;
     ui64 Generation;
-    THashMap<TWorkerId, TActorId> Workers;
+    THashMap<TWorkerId, TWorkerInfo> Workers;
     THashMap<TActorId, TWorkerId> ActorIdToWorkerId;
+
+    TMap<TRowVersion, ui64> TxIds;
+    TMap<TRowVersion, THashSet<TActorId>> PendingTxId;
+    THashSet<TWorkerId> WorkersWithHeartbeat;
+    TMap<TRowVersion, THashSet<TWorkerId>> WorkersByHeartbeat;
 
 }; // TSessionInfo
 
@@ -212,8 +361,7 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
             return;
         }
 
-        session.Update(ev->Sender, controller.GetGeneration());
-        session.SendStatus(this);
+        session.Handle(this, ev);
     }
 
     template <typename... Args>
@@ -229,7 +377,7 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
         return it->second;
     }
 
-    std::function<IActor*(void)> ReaderFn(const NKikimrReplication::TRemoteTopicReaderSettings& settings) {
+    std::function<IActor*(void)> ReaderFn(const NKikimrReplication::TRemoteTopicReaderSettings& settings, bool autoCommit) {
         TActorId ydbProxy;
         const auto& params = settings.GetConnectionParams();
         switch (params.GetCredentialsCase()) {
@@ -246,6 +394,7 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
         auto topicReaderSettings = TEvYdbProxy::TTopicReaderSettings()
             .MaxMemoryUsageBytes(1_MB)
             .ConsumerName(settings.GetConsumerName())
+            .AutoCommit(autoCommit)
             .AppendTopics(NYdb::NTopic::TTopicReadSettings()
                 .Path(settings.GetTopicPath())
                 .AppendPartitionIds(settings.GetTopicPartitionId())
@@ -256,9 +405,37 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
         };
     }
 
-    static std::function<IActor*(void)> WriterFn(const NKikimrReplication::TLocalTableWriterSettings& settings) {
-        return [tablePathId = PathIdFromPathId(settings.GetPathId())]() {
-            return CreateLocalTableWriter(tablePathId);
+    static std::function<IActor*(void)> WriterFn(
+            const NKikimrReplication::TLocalTableWriterSettings& writerSettings,
+            const NKikimrReplication::TConsistencySettings& consistencySettings)
+    {
+        const auto mode = consistencySettings.HasGlobal()
+            ? EWriteMode::Consistent
+            : EWriteMode::Simple;
+        return [tablePathId = TPathId::FromProto(writerSettings.GetPathId()), mode]() {
+            return CreateLocalTableWriter(tablePathId, mode);
+        };
+    }
+
+    std::function<IActor*(void)> TransferWriterFn(
+            const NKikimrReplication::TTransferWriterSettings& writerSettings,
+            const ITransferWriterFactory* transferWriterFactory)
+    {
+        if (!CompilationService) {
+            CompilationService = Register(
+                NFq::NRowDispatcher::CreatePurecalcCompileService({}, MakeIntrusive<NMonitoring::TDynamicCounters>())
+            );
+        }
+
+        return [
+            tablePathId = TPathId::FromProto(writerSettings.GetPathId()),
+            transformLambda = writerSettings.GetTransformLambda(),
+            compilationService = *CompilationService,
+            batchingSettings = writerSettings.GetBatching(),
+            transferWriterFactory = transferWriterFactory,
+            runAsUser = writerSettings.GetRunAsUser()
+        ]() {
+            return transferWriterFactory->Create({transformLambda, tablePathId, compilationService, batchingSettings, runAsUser});
         };
     }
 
@@ -298,9 +475,26 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
         const auto& cmd = record.GetCommand();
         // TODO: validate settings
         const auto& readerSettings = cmd.GetRemoteTopicReader();
-        const auto& writerSettings = cmd.GetLocalTableWriter();
+        bool autoCommit = true;
+        std::function<IActor*(void)> writerFn;
+        if (cmd.HasLocalTableWriter()) {
+            const auto& writerSettings = cmd.GetLocalTableWriter();
+            const auto& consistencySettings = cmd.GetConsistencySettings();
+            writerFn = WriterFn(writerSettings, consistencySettings);
+        } else if (cmd.HasTransferWriter()) {
+            const auto& writerSettings = cmd.GetTransferWriter();
+            const auto* transferWriterFactory = AppData()->TransferWriterFactory.get();
+            if (!transferWriterFactory) {
+                LOG_C("Run transfer but TransferWriterFactory does not exists.");
+                return;
+            }
+            autoCommit = false;
+            writerFn = TransferWriterFn(writerSettings, transferWriterFactory);
+        } else {
+            Y_ABORT("Unsupported");
+        }
         const auto actorId = session.RegisterWorker(this, id,
-            CreateWorker(SelfId(), ReaderFn(readerSettings), WriterFn(writerSettings)));
+            CreateWorker(SelfId(), ReaderFn(readerSettings, autoCommit), std::move(writerFn)));
         WorkerActorIdToSession[actorId] = controller.GetTabletId();
     }
 
@@ -338,6 +532,89 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
             << ": worker# " << id);
         WorkerActorIdToSession.erase(session.GetWorkerActorId(id));
         session.StopWorker(this, id);
+    }
+
+    void Handle(TEvService::TEvGetTxId::TPtr& ev) {
+        LOG_D("Handle " << ev->Get()->ToString());
+
+        auto* session = SessionFromWorker(ev->Sender);
+        if (!session) {
+            return;
+        }
+
+        if (!session->HasWorker(ev->Sender)) {
+            LOG_E("Cannot find worker"
+                << ": worker# " << ev->Sender);
+            return;
+        }
+
+        session->Handle(this, ev);
+    }
+
+    void Handle(TEvService::TEvTxIdResult::TPtr& ev) {
+        LOG_D("Handle " << ev->Get()->ToString());
+
+        const auto& record = ev->Get()->Record;
+        const auto& controller = record.GetController();
+
+        auto it = Sessions.find(controller.GetTabletId());
+        if (it == Sessions.end()) {
+            LOG_W("Cannot process tx id result"
+                << ": controller# " << controller.GetTabletId()
+                << ", reason# " << R"("unknown session")");
+            return;
+        }
+
+        auto& session = it->second;
+        if (session.GetGeneration() != controller.GetGeneration()) {
+            LOG_W("Cannot process tx id result"
+                << ": controller# " << controller.GetTabletId()
+                << ", generation# " << controller.GetGeneration()
+                << ", reason# " << R"("generation mismatch")");
+            return;
+        }
+
+        session.Handle(this, ev);
+    }
+
+    void Handle(TEvService::TEvHeartbeat::TPtr& ev) {
+        LOG_D("Handle " << ev->Get()->ToString());
+
+        auto* session = SessionFromWorker(ev->Sender);
+        if (!session) {
+            return;
+        }
+
+        if (!session->HasWorker(ev->Sender)) {
+            LOG_E("Cannot find worker"
+                << ": worker# " << ev->Sender);
+            return;
+        }
+
+        LOG_I("Heartbeat"
+            << ": worker# " << ev->Sender
+            << ", version# " << TRowVersion::FromProto(ev->Get()->Record.GetVersion()));
+        session->Handle(this, ev);
+    }
+
+    void Handle(TEvWorker::TEvDataEnd::TPtr& ev) {
+        LOG_T("Handle " << ev->Get()->ToString());
+
+        auto* session = SessionFromWorker(ev->Sender);
+        if (!session) {
+            return;
+        }
+
+        if (!session->HasWorker(ev->Sender)) {
+            LOG_E("Cannot find worker"
+                << ": worker# " << ev->Sender);
+            return;
+        }
+
+        LOG_I("Worker has ended"
+            << ": worker# " << ev->Sender);
+        session->SendWorkerDataEnd(this, session->GetWorkerId(ev->Sender), ev->Get()->PartitionId,
+            std::move(ev->Get()->AdjacentPartitionsIds), std::move(ev->Get()->ChildPartitionsIds));
     }
 
     void Handle(TEvWorker::TEvGone::TPtr& ev) {
@@ -410,6 +687,10 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
             Send(actorId, new TEvents::TEvPoison());
         }
 
+        if (CompilationService) {
+            Send(*CompilationService, new TEvents::TEvPoison());
+        }
+
         TActorBootstrapped<TReplicationService>::PassAway();
     }
 
@@ -428,6 +709,10 @@ public:
             hFunc(TEvService::TEvHandshake, Handle);
             hFunc(TEvService::TEvRunWorker, Handle);
             hFunc(TEvService::TEvStopWorker, Handle);
+            hFunc(TEvService::TEvGetTxId, Handle);
+            hFunc(TEvService::TEvTxIdResult, Handle);
+            hFunc(TEvService::TEvHeartbeat, Handle);
+            hFunc(TEvWorker::TEvDataEnd, Handle);
             hFunc(TEvWorker::TEvGone, Handle);
             hFunc(TEvWorker::TEvStatus, Handle);
             sFunc(TEvents::TEvPoison, PassAway);
@@ -440,6 +725,7 @@ private:
     THashMap<ui64, TSessionInfo> Sessions;
     THashMap<TConnectionParams, TActorId> YdbProxies;
     THashMap<TActorId, ui64> WorkerActorIdToSession;
+    mutable TMaybe<TActorId> CompilationService;
 
 }; // TReplicationService
 

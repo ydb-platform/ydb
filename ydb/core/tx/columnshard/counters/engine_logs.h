@@ -1,6 +1,8 @@
 #pragma once
-#include "common/owner.h"
-#include "common/histogram.h"
+
+#include "common_data.h"
+#include <ydb/library/signals/owner.h>
+#include <ydb/library/signals/histogram.h>
 #include <ydb/core/tx/columnshard/common/portion.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <util/string/builder.h>
@@ -8,6 +10,7 @@
 
 namespace NKikimr::NOlap {
 class TPortionInfo;
+class TColumnEngineForLogs;
 }
 
 namespace NKikimr::NColumnShard {
@@ -229,6 +232,7 @@ private:
     std::vector<std::shared_ptr<TIncrementalHistogram>> PortionRecordsDistribution;
 
 public:
+    friend class NKikimr::NOlap::TColumnEngineForLogs;
 
     class TPortionsInfoGuard {
     private:

@@ -16,7 +16,7 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(2.13.2)
+VERSION(2.13.3)
 
 ORIGINAL_SOURCE(https://gitlab.freedesktop.org/freetype/freetype/)
 

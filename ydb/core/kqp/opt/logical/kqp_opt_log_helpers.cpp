@@ -1,6 +1,6 @@
 #include "kqp_opt_log_impl.h"
 
-#include <ydb/library/yql/core/yql_opt_utils.h>
+#include <yql/essentials/core/yql_opt_utils.h>
 
 namespace NKikimr::NKqp::NOpt {
 
@@ -98,7 +98,7 @@ TMaybe<TPrefixLookup> RewriteReadToPrefixLookup(TKqlReadTableBase read, TExprCon
 
     // we don't need to make filter for point selection
     if (!(prefixSize == from.ArgCount() &&
-         prefixSize == to.ArgCount() && 
+         prefixSize == to.ArgCount() &&
          from.template Maybe<TKqlKeyInc>() &&
          to.template Maybe<TKqlKeyInc>()))
     {
@@ -158,7 +158,7 @@ TMaybe<TPrefixLookup> RewriteReadToPrefixLookup(TKqlReadTableRangesBase read, TE
 
     if (auto indexRead = read.template Maybe<TKqlReadTableIndexRanges>()) {
         const auto& tableDesc = GetTableData(*kqpCtx.Tables, kqpCtx.Cluster, read.Table().Path());
-        const auto& [indexMeta, _ ] = tableDesc.Metadata->GetIndexMetadata(indexRead.Index().Cast().StringValue());
+        const auto& [indexMeta, _ ] = tableDesc.Metadata->GetIndexMetadata(indexRead.Index().Cast().Value());
         lookupTable = indexMeta->Name;
         indexName = indexRead.Cast().Index().StringValue();
     } else {

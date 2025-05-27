@@ -5,22 +5,41 @@
 
 #include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/scheme/protos/key_range.pb.h>
-#include <ydb/core/scheme_types/scheme_types.h>
 #include <ydb/library/aclib/aclib.h>
+#include <ydb/core/scheme_types/scheme_type_info.h>  // for NScheme::TTypeInfo
+#include <ydb/public/lib/scheme_types/scheme_type_id.h>  // for NScheme::NTypeIds
+
+#include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>  // for NPg::TypeDescIsComparable
 
 #include <library/cpp/deprecated/enum_codegen/enum_codegen.h>
 
 #include <util/generic/maybe.h>
 #include <util/generic/map.h>
+#include <util/generic/yexception.h>
 
 namespace NKikimr {
-
-using TSchemaVersion = ui64;
 
 enum class EColumnTypeConstraint {
     Nullable,
     NotNull,
 };
+
+inline bool IsAllowedKeyType(NScheme::TTypeInfo typeInfo) {
+    switch (typeInfo.GetTypeId()) {
+        case NScheme::NTypeIds::Json:
+        case NScheme::NTypeIds::Yson:
+        case NScheme::NTypeIds::Float:
+        case NScheme::NTypeIds::Double:
+        case NScheme::NTypeIds::JsonDocument:
+            return false;
+        case NScheme::NTypeIds::Pg:
+            return NPg::TypeDescIsComparable(typeInfo.GetPgTypeDesc());
+        default:
+            return true;
+    }
+}
+
+using TSchemaVersion = ui64;
 
 // ident for table, must be unique in selected scope
 // for global transactions ownerid is tabletid of owning schemeshard and tableid is counter designated by schemeshard
@@ -180,7 +199,7 @@ public:
         , Point(point)
     {
         if (Point) {
-            Y_DEBUG_ABORT_UNLESS(toValues.empty() || fromValues.size() == toValues.size());
+            Y_ASSERT(toValues.empty() || fromValues.size() == toValues.size());
         }
     }
 
@@ -244,7 +263,7 @@ public:
         range.SetFrom(From.GetBuffer());
         range.SetFromInclusive(FromInclusive);
         if (Point) {
-            Y_DEBUG_ABORT_UNLESS(FromInclusive);
+            Y_ENSURE(FromInclusive);
             range.SetTo(From.GetBuffer());
             range.SetToInclusive(true);
         } else {
@@ -264,10 +283,10 @@ template <typename T>
 int ComparePointAndRange(const TConstArrayRef<TCell>& point, const TTableRange& range,
                          const T& pointTypes, const T& rangeTypes)
 {
-    Y_ABORT_UNLESS(!range.Point);
-    Y_ABORT_UNLESS(rangeTypes.size() <= pointTypes.size());
-    Y_ABORT_UNLESS(range.From.size() <= rangeTypes.size());
-    Y_ABORT_UNLESS(range.To.size() <= rangeTypes.size());
+    Y_ENSURE(!range.Point);
+    Y_ENSURE(rangeTypes.size() <= pointTypes.size());
+    Y_ENSURE(range.From.size() <= rangeTypes.size());
+    Y_ENSURE(range.To.size() <= rangeTypes.size());
 
     int cmpFrom = CompareTypedCellVectors(point.data(), range.From.data(), pointTypes.data(), range.From.size());
     if (!range.InclusiveFrom && cmpFrom == 0) {
@@ -353,15 +372,15 @@ int CompareBorders(TConstArrayRef<TCell> first, TConstArrayRef<TCell> second, bo
 inline int CompareRanges(const TTableRange& rangeX, const TTableRange& rangeY,
                          const TConstArrayRef<NScheme::TTypeInfo> types)
 {
-    Y_ABORT_UNLESS(!rangeX.Point);
-    Y_ABORT_UNLESS(!rangeY.Point);
+    Y_ENSURE(!rangeX.Point);
+    Y_ENSURE(!rangeY.Point);
 
-    int xStart_yEnd = CompareBorders<true, false>(
+    int xStart_yEnd = CompareBorders<false, true>(
         rangeX.From, rangeY.To, rangeX.InclusiveFrom, rangeY.InclusiveTo, types);
     if (xStart_yEnd > 0)
         return 1;
 
-    int xEnd_yStart = CompareBorders<false, true>(
+    int xEnd_yStart = CompareBorders<true, false>(
         rangeX.To, rangeY.From, rangeX.InclusiveTo, rangeY.InclusiveFrom, types);
     if (xEnd_yStart < 0)
         return -1;
@@ -583,7 +602,7 @@ struct TSecurityObject : TAtomicRefCount<TSecurityObject>, NACLib::TSecurityObje
 
     static NACLib::TSecurityObject FromByteStream(const NACLibProto::TSecurityObject* parent, const TString& owner, const TString& acl, bool isContainer) {
         NACLib::TSecurityObject object(owner, isContainer);
-        Y_ABORT_UNLESS(object.MutableACL()->ParseFromString(acl));
+        Y_ENSURE(object.MutableACL()->ParseFromString(acl));
         return parent != nullptr ? object.MergeWithParent(*parent) : object;
     }
 
@@ -695,7 +714,7 @@ public:
     std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>> Partitioning;
     TIntrusivePtr<TSecurityObject> SecurityObject;
 
-    const TVector<TKeyDesc::TPartitionInfo>& GetPartitions() const { Y_ABORT_UNLESS(Partitioning); return *Partitioning; }
+    const TVector<TKeyDesc::TPartitionInfo>& GetPartitions() const { Y_ENSURE(Partitioning); return *Partitioning; }
     bool IsSystemView() const { return GetPartitions().empty(); }
 
     template<typename TKeyColumnTypes, typename TColumns>
@@ -737,14 +756,14 @@ bool IsSystemColumn(ui32 columnId);
 bool IsSystemColumn(const TStringBuf columnName);
 
 inline int ComparePointKeys(const TKeyDesc& point1, const TKeyDesc& point2) {
-    Y_ABORT_UNLESS(point1.Range.Point);
-    Y_ABORT_UNLESS(point2.Range.Point);
+    Y_ENSURE(point1.Range.Point);
+    Y_ENSURE(point2.Range.Point);
     return CompareTypedCellVectors(
         point1.Range.From.data(), point2.Range.From.data(), point1.KeyColumnTypes.data(), point1.KeyColumnTypes.size());
 }
 
 inline int ComparePointAndRangeKeys(const TKeyDesc& point, const TKeyDesc& range) {
-    Y_ABORT_UNLESS(point.Range.Point);
+    Y_ENSURE(point.Range.Point);
     return ComparePointAndRange(point.Range.From, range.Range, point.KeyColumnTypes, range.KeyColumnTypes);
 }
 

@@ -23,7 +23,7 @@ jobs:
           echo "No new commits on the main branch to merge, exiting"
           exit 0
         fi
-        git clone -b main --shallow-exclude cmakebuild https://$TOKEN@github.com/$REPO.git ydb
+        git clone -b main https://$TOKEN@github.com/$REPO.git ydb
         git config --global user.email "alex@ydb.tech"
         git config --global user.name "Alexander Smirnov"
         cd ydb
@@ -34,12 +34,29 @@ jobs:
         mainsha=$(git rev-parse HEAD)
         git checkout cmakebuild
         prevsha=$(git rev-parse HEAD)
+        
+        conflicts_file=$(mktemp)
+        for i in $(seq 1 10);do
+          (git merge main --no-commit --no-ff main > $conflicts_file) | true
+          git reset HEAD --hard > /dev/null
+          git clean -fd > /dev/null
+          if [ -s $conflicts_file ];then
+            echo "Conflicts detected, trying to remove referenced CMakeLists* files"
+            grep -E -o '\s\S*CMakeLists\S*\s' $conflicts_file | xargs rm -f
+            git add .
+            git commit -m "Remove conflicted CMakeLists"
+          else
+            break
+          fi
+        done
+        
         git merge main --no-edit
         currsha=$(git rev-parse HEAD)
         if [ ${prevsha} == ${currsha} ];then
           echo "Merge did not bring any changes, exiting"
           exit
         fi
+        # Generate cmakelists
         ./generate_cmake -k
         echo ${mainsha} > ydb/ci/cmakegen.txt
         git add .

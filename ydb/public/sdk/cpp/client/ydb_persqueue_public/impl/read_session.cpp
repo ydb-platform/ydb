@@ -8,7 +8,7 @@
 
 #include <util/generic/guid.h>
 
-namespace NYdb::NPersQueue {
+namespace NYdb::inline V2::NPersQueue {
 
 static const TString DRIVER_IS_STOPPING_DESCRIPTION = "Driver is stopping";
 

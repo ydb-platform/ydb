@@ -1,9 +1,13 @@
 #include "bootstrapper.h"
+#include "bootstrapper_impl.h"
 
 #include <ydb/core/base/tablet.h>
+#include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/base/statestorage.h>
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/node_whiteboard/node_whiteboard.h>
 
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <library/cpp/random_provider/random_provider.h>
@@ -12,138 +16,39 @@
 
 namespace NKikimr {
 
-struct TEvBootstrapper::TEvWatch : public TEventPB<TEvWatch, NKikimrBootstrapper::TEvWatch, EvWatch> {
-    TEvWatch()
-    {}
+class TBootstrapper : public TActorBootstrapped<TBootstrapper> {
+    const TIntrusivePtr<TTabletStorageInfo> TabletInfo;
+    const TIntrusivePtr<TBootstrapperInfo> BootstrapperInfo;
+    bool ModeStandby;
+    TVector<ui32> OtherNodes;
+    THashMap<ui32, size_t> OtherNodesIndex;
 
-    TEvWatch(ui64 tabletId, ui64 selfSeed, ui64 round)
-    {
-        Record.SetTabletID(tabletId);
-        Record.SetSelfSeed(selfSeed);
-        Record.SetRound(round);
-    }
-};
-
-struct TEvBootstrapper::TEvWatchResult : public TEventPB<TEvWatchResult, NKikimrBootstrapper::TEvWatchResult, EvWatchResult> {
-    TEvWatchResult()
-    {}
-
-    TEvWatchResult(ui64 tabletId, NKikimrBootstrapper::TEvWatchResult::EState state, ui64 seed, ui64 round)
-    {
-        Record.SetTabletID(tabletId);
-        Record.SetState(state);
-        Record.SetSeed(seed);
-        Record.SetRound(round);
-    }
-};
-
-struct TEvBootstrapper::TEvNotify : public TEventPB<TEvNotify, NKikimrBootstrapper::TEvNotify, EvNotify> {
-    TEvNotify()
-    {}
-
-    TEvNotify(ui64 tabletId, NKikimrBootstrapper::TEvNotify::EOp op, ui64 round)
-    {
-        Record.SetTabletID(tabletId);
-        Record.SetOp(op);
-        Record.SetRound(round);
-    }
-};
-
-
-class TBootstrapper : public TActor<TBootstrapper> {
-    TIntrusivePtr<TTabletStorageInfo> TabletInfo;
-    TIntrusivePtr<TBootstrapperInfo> BootstrapperInfo;
+    TActorId KnownLeaderPipe;
 
     TActorId LookOnActorID;
     TActorId FollowerActorID;
 
-    ui64 RoundCounter;
-    ui64 SelfSeed;
+    ui64 RoundCounter = 0xdeadbeefdeadbeefull;
+    ui64 SelfSeed = 0xdeadbeefdeadbeefull;
 
     TInstant BootDelayedUntil;
 
-    // we watch someone and do not act w/o shutdown
-    struct TWatch {
-        struct TWatched {
-            TActorId ActorID;
-            bool Owner;
-
-            TWatched()
-                : Owner(false)
-            {}
-            TWatched(const TActorId &actorID, bool owner)
-                : ActorID(actorID)
-                , Owner(owner)
-            {}
-        };
-
-        bool CheckWatch(ui32 fromNode) {
-            bool seenOwner = false;
-            for (TWatched &x : Watched) {
-                seenOwner |= x.Owner;
-                if (x.ActorID.NodeId() == fromNode)
-                    return (x.Owner == false);
-            }
-            return !seenOwner;
-        }
-
-        bool RemoveAlienEntry(ui32 idx) {
-            Watched[idx] = Watched.back();
-            Watched.pop_back();
-            if (!AnyOf(Watched, [](const TWatch::TWatched &x) { return x.Owner; }))
-                Watched.clear();
-            return Watched.empty();
-        }
-
-        bool RemoveAlien(const TActorId &alien) {
-            for (ui32 i = 0, e = Watched.size(); i != e; ++i) {
-                if (Watched[i].ActorID == alien)
-                    return RemoveAlienEntry(i);
-            }
-            return false;
-        }
-
-        bool RemoveAlienNode(ui32 node) {
-            for (ui32 i = 0, e = Watched.size(); i != e; ++i) {
-                if (Watched[i].ActorID.NodeId() == node)
-                    return RemoveAlienEntry(i);
-            }
-            return false;
-        }
-
-        TVector<TWatched> Watched;
+private:
+    /**
+     * A remote watcher waiting for our notification
+     */
+    struct TWatcher {
+        TActorId ActorId{};
+        ui64 Round{};
     };
 
-    // we are under watch, must notify on error
-    struct TWatched {
-        struct TWatcher {
-            TActorId ActorID;
-            ui64 Round;
-
-            TWatcher()
-                : ActorID()
-                , Round()
-            {}
-            TWatcher(const TActorId &actorID, ui64 round)
-                : ActorID(actorID)
-                , Round(round)
-            {}
-        };
-
-        void AddWatcher(const TActorId &actorId, ui64 round) {
-            for (TWatcher &x : Watchers) {
-                if (actorId.NodeId() == x.ActorID.NodeId()) {
-                    x.ActorID = actorId;
-                    x.Round = round;
-                    return;
-                }
-            }
-            Watchers.push_back(TWatcher(actorId, round));
-        }
-
-        TVector<TWatcher> Watchers;
-    };
-
+private:
+    /**
+     * Present when this bootstrapper initiates a voting round
+     * We wait for the state of other nodes, when all other nodes are either
+     * free or unavailable the node with the minimum seed becomes owner and
+     * boots the tablet.
+     */
     struct TRound {
         enum class EAlienState {
             Wait,
@@ -154,26 +59,77 @@ class TBootstrapper : public TActor<TBootstrapper> {
         };
 
         struct TAlien {
-            EAlienState State;
-            ui64 Seed;
-
-            TAlien()
-                : State(EAlienState::Wait)
-                , Seed()
-            {}
-            TAlien(EAlienState state, ui64 seed)
-                : State(state)
-                , Seed(seed)
-            {}
+            EAlienState State = EAlienState::Wait;
+            ui64 Seed = Max<ui64>();
         };
 
         TVector<TAlien> Aliens;
+        TVector<TWatcher> Watchers;
+        size_t Waiting;
+
+        explicit TRound(size_t count)
+            : Aliens(count)
+            , Watchers(count)
+            , Waiting(count)
+        {}
     };
 
-    TAutoPtr<TWatch> Watches; // we watch them
-    TAutoPtr<TWatched> Watched; // we are under watch
-    TAutoPtr<TRound> Round;
+    std::optional<TRound> Round;
 
+private:
+    /**
+     * Present when we watch some other node
+     * To avoid cycles we only ever watch a single node per round
+     */
+    struct TWatching {
+        TActorId ActorId;
+        bool Owner;
+
+        TWatching(const TActorId& actorId, bool owner)
+            : ActorId(actorId)
+            , Owner(owner)
+        {}
+
+        /**
+         * Called when TEvWatch is received from another node while watching
+         * Returns true when we should move to a new cycle
+         */
+        bool OnWatch(ui32 node) {
+            return ActorId.NodeId() == node;
+        }
+
+        /**
+         * Called when TEvNotify indicates that a node is no longer owner/waiting
+         * Returns true when we should move to a new cycle
+         */
+        bool OnNotify(const TActorId& actorId) {
+            return ActorId == actorId;
+        }
+
+        /**
+         * Called when a node has disconnected
+         * Returns true when we should move to a new cycle
+         */
+        bool OnDisconnect(ui32 node) {
+            return ActorId.NodeId() == node;
+        }
+    };
+
+    std::optional<TWatching> Watching;
+
+private:
+    /**
+     * A set of watchers waiting for our notification
+     */
+    struct TWatchedBy : public THashMap<ui32, TWatcher> {
+        void Add(const TActorId& actorId, ui64 round) {
+            (*this)[actorId.NodeId()] = TWatcher{ actorId, round };
+        }
+    };
+
+    std::optional<TWatchedBy> WatchedBy; // we are watched by others
+
+private:
     const char* GetTabletTypeName() {
         return TTabletTypes::TypeToStr((TTabletTypes::EType)TabletInfo->TabletType);
     }
@@ -182,157 +138,383 @@ class TBootstrapper : public TActor<TBootstrapper> {
         return NKikimrBootstrapper::TEvWatchResult::EState_Name(state).c_str();
     }
 
-    ui32 AlienIndex(ui32 alienNodeId) {
-        for (ui32 i = 0, e = BootstrapperInfo->OtherNodes.size(); i != e; ++i)
-            if (BootstrapperInfo->OtherNodes[i] == alienNodeId)
-                return i;
-        return Max<ui32>();
+    void BuildOtherNodes() {
+        ui32 selfNodeId = SelfId().NodeId();
+        for (ui32 nodeId : BootstrapperInfo->Nodes) {
+            if (nodeId != selfNodeId && !OtherNodesIndex.contains(nodeId)) {
+                size_t index = OtherNodes.size();
+                OtherNodes.push_back(nodeId);
+                OtherNodesIndex[nodeId] = index;
+            }
+        }
     }
 
-    void BeginNewRound(const TActorContext &ctx) {
-        if (BootstrapperInfo->OtherNodes.empty())
-            return Boot(ctx);
+    size_t AlienIndex(ui32 alienNodeId) {
+        auto it = OtherNodesIndex.find(alienNodeId);
+        if (it != OtherNodesIndex.end()) {
+            return it->second;
+        }
+        return Max<size_t>();
+    }
 
-        SelfSeed = AppData(ctx)->RandomProvider->GenRand64();
-        LOG_INFO(ctx, NKikimrServices::BOOTSTRAPPER, "tablet: %" PRIu64 ", type: %s, begin new round, seed: %" PRIu64,
-                 TabletInfo->TabletID, GetTabletTypeName(), SelfSeed);
+    TDuration GetSleepDuration() {
+        TDuration wx = BootstrapperInfo->WatchThreshold;
+        // Note: we use RandomProvider for repeatability between test runs
+        ui64 seed = AppData()->RandomProvider->GenRand64();
+        float k = float(seed % 0x10000) / 0x20000;
+        return wx * (0.5f + k);
+    }
 
-        const ui64 tabletId = TabletInfo->TabletID;
+    ui64 GenerateSeed() {
+        ui64 seed = AppData()->RandomProvider->GenRand64();
+        if (Y_UNLIKELY(seed == 0)) {
+            seed = 1; // avoid value zero (used by forced winners)
+        } else if (Y_UNLIKELY(seed == Max<ui64>())) {
+            seed = Max<ui64>() - 1; // avoid max value (used by non-participants)
+        }
+        return seed;
+    }
+
+private:
+    /**
+     * Starts a new cycle:
+     * - lookup tablet in state storage (sleep when unavailable)
+     * - begin voting round when tablet has no leader address
+     * - try connecting to leader address
+     * - begin voting round when connect fails
+     * - wait until pipe disconnects
+     * - notify watchers and start new cycle
+     */
+    void BeginNewCycle() {
         ++RoundCounter;
 
-        Round.Reset(new TRound());
-        Round->Aliens.resize(BootstrapperInfo->OtherNodes.size());
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BOOTSTRAPPER,
+            "tablet: " << TabletInfo->TabletID << ", type: " << GetTabletTypeName()
+            << ", begin new cycle (lookup in state storage)");
 
-        for (ui32 alienNode : BootstrapperInfo->OtherNodes) {
-            ctx.Send(MakeBootstrapperID(tabletId, alienNode), new TEvBootstrapper::TEvWatch(tabletId, SelfSeed, RoundCounter), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, RoundCounter);
-        }
+        // We shouldn't start a new cycle with a connected leader pipe
+        Y_ABORT_UNLESS(!KnownLeaderPipe);
 
-        Become(&TThis::StateFree); // todo: global timeout?
+        Send(MakeStateStorageProxyID(), new TEvStateStorage::TEvLookup(TabletInfo->TabletID, 0), IEventHandle::FlagTrackDelivery);
+        Become(&TThis::StateLookup);
     }
 
-    void Boot(const TActorContext &ctx) {
-        Y_ABORT_UNLESS(!LookOnActorID);
+    void HandleUnknown(TEvBootstrapper::TEvWatch::TPtr& ev) {
+        const NKikimrBootstrapper::TEvWatch& record = ev->Get()->Record;
+        Y_ABORT_UNLESS(record.GetTabletID() == TabletInfo->TabletID);
 
-        LOG_NOTICE(ctx, NKikimrServices::BOOTSTRAPPER, "tablet: %" PRIu64 ", type: %s, boot",
-                   TabletInfo->TabletID, GetTabletTypeName());
-
-        if (FollowerActorID) {
-            LookOnActorID = FollowerActorID;
-            FollowerActorID = TActorId();
-            ctx.Send(LookOnActorID, new TEvTablet::TEvPromoteToLeader(0, TabletInfo));
-        } else {
-            TTabletSetupInfo *x = BootstrapperInfo->SetupInfo.Get();
-            LookOnActorID = x->Tablet(TabletInfo.Get(), ctx.SelfID, ctx, 0, AppData(ctx)->ResourceProfiles);
-        }
-
-        Y_ABORT_UNLESS(LookOnActorID);
-
-        Watched.Reset(new TWatched());
-
-        Become(&TThis::StateOwner);
+        Send(ev->Sender, new TEvBootstrapper::TEvWatchResult(record.GetTabletID(),
+            NKikimrBootstrapper::TEvWatchResult::UNKNOWN, Max<ui64>(), record.GetRound()));
     }
 
-    void Handle(TEvTablet::TEvTabletDead::TPtr &ev, const TActorContext &ctx) {
-        if (ev->Sender == LookOnActorID) {
-            LOG_INFO(ctx, NKikimrServices::BOOTSTRAPPER, "tablet: %" PRIu64 ", type: %s, tablet dead",
-                     TabletInfo->TabletID, GetTabletTypeName());
+    void HandleLookup(TEvStateStorage::TEvInfo::TPtr& ev) {
+        auto* msg = ev->Get();
 
-            LookOnActorID = TActorId();
-            NotifyAndRound(ctx);
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BOOTSTRAPPER,
+            "tablet: " << TabletInfo->TabletID << ", type: " << GetTabletTypeName()
+            << ", lookup: " << msg->Status << ", leader: " << msg->CurrentLeader);
+
+        switch (msg->Status) {
+            case NKikimrProto::OK: {
+                // We have state storage quorum and some known leader
+                KnownLeaderPipe = RegisterWithSameMailbox(
+                    NTabletPipe::CreateClient(SelfId(), TabletInfo->TabletID, {
+                        .RetryPolicy = NTabletPipe::TClientRetryPolicy::WithoutRetries(),
+                        .HintTablet = msg->CurrentLeader,
+                    }));
+                Become(&TThis::StateConnectLeader);
+                return;
+            }
+            case NKikimrProto::RACE: {
+                // State storage is working, but data is inconsistent
+                [[fallthrough]];
+            }
+            case NKikimrProto::NODATA: {
+                // We have state storage quorum and no known leader
+                BeginNewRound();
+                return;
+            }
+            default: {
+                // We have unavailable storage storage, sleep and retry
+                auto sleepDuration = GetSleepDuration();
+                LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BOOTSTRAPPER,
+                    "tablet: " << TabletInfo->TabletID << ", type: " << GetTabletTypeName()
+                    << ", state storage unavailable, sleeping for " << sleepDuration);
+                Schedule(sleepDuration, new TEvents::TEvWakeup(RoundCounter));
+                return;
+            }
         }
     }
 
-    void Stop() {
-        if (LookOnActorID) {
-            Send(LookOnActorID, new TEvents::TEvPoisonPill());
-            LookOnActorID = TActorId();
+    void HandleLookup(TEvents::TEvWakeup::TPtr& ev) {
+        if (ev->Get()->Tag != RoundCounter) {
+            return;
         }
 
-        if (FollowerActorID) {
-            Send(FollowerActorID, new TEvents::TEvPoisonPill());
-            FollowerActorID = TActorId();
+        BeginNewCycle();
+    }
+
+    void HandleConnectLeader(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
+        if (ev->Sender != KnownLeaderPipe) {
+            return;
         }
 
+        auto* msg = ev->Get();
+
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BOOTSTRAPPER,
+            "tablet: " << TabletInfo->TabletID << ", type: " << GetTabletTypeName()
+            << ", connect: " << msg->Status);
+
+        if (msg->Status != NKikimrProto::OK) {
+            // Current leader unavailable, begin new round
+            KnownLeaderPipe = {};
+            BeginNewRound();
+            return;
+        }
+
+        LOG_INFO_S(*TlsActivationContext, NKikimrServices::BOOTSTRAPPER,
+            "tablet: " << TabletInfo->TabletID << ", type: " << GetTabletTypeName()
+            << ", connected to leader, waiting");
+
+        // We have connected to leader, wait until it disconnects
+        WatchedBy.emplace();
+        BootDelayedUntil = {};
+        Become(&TThis::StateWatchLeader);
+
+        BootFollower();
+    }
+
+    void HandleWatchLeader(TEvBootstrapper::TEvWatch::TPtr& ev) {
+        const NKikimrBootstrapper::TEvWatch& record = ev->Get()->Record;
+        Y_ABORT_UNLESS(record.GetTabletID() == TabletInfo->TabletID);
+
+        WatchedBy.value().Add(ev->Sender, record.GetRound());
+        Send(ev->Sender, new TEvBootstrapper::TEvWatchResult(record.GetTabletID(),
+            NKikimrBootstrapper::TEvWatchResult::WAITFOR, 0, record.GetRound()));
+    }
+
+    void HandleWatchLeader(TEvTabletPipe::TEvClientDestroyed::TPtr& ev) {
+        if (ev->Sender != KnownLeaderPipe) {
+            return;
+        }
+
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BOOTSTRAPPER,
+            "tablet: " << TabletInfo->TabletID << ", type: " << GetTabletTypeName()
+            << ", disconnected");
+
+        KnownLeaderPipe = {};
         NotifyWatchers();
-
-        BootDelayedUntil = { };
-        Round.Destroy();
+        BeginNewCycle();
     }
 
-    void HandlePoison() {
-        Stop();
-        PassAway();
-    }
+private:
+    /**
+     * Begins new voting round between bootstrapper nodes
+     * - Starts watching all other nodes
+     * - Based on the cluster state may become owner, watcher or sleeper
+     * - Owner boots a new leader tablet
+     * - Watcher waits for notification from some other node
+     * - Sleeper sleeps before starting a new cycle
+     */
+    void BeginNewRound() {
+        // Note: make sure notifications from previous states don't interfere
+        ++RoundCounter;
 
-    void Standby() {
-        Stop();
-        Become(&TThis::StateStandBy);
-    }
-
-    void BecomeWatch(const TActorId &watchOn, bool owner, const TActorContext &ctx) {
-        Y_UNUSED(ctx);
-
-        BootDelayedUntil = { };
-        Round.Destroy();
-
-        LOG_INFO(ctx, NKikimrServices::BOOTSTRAPPER, "tablet: %" PRIu64 ", type: %s, become watch",
-                 TabletInfo->TabletID, GetTabletTypeName());
-
-        Watches.Reset(new TWatch());
-        Watched.Reset(new TWatched());
-
-        LOG_DEBUG(ctx, NKikimrServices::BOOTSTRAPPER, "tablet: %" PRIu64 ", type: %s, add watched node: %" PRIu32,
-                  TabletInfo->TabletID, GetTabletTypeName(), watchOn.NodeId());
-        Watches->Watched.push_back(TWatch::TWatched(watchOn, owner));
-
-        if (BootstrapperInfo->StartFollowers && !FollowerActorID) {
-            LOG_NOTICE(ctx, NKikimrServices::BOOTSTRAPPER, "tablet: %" PRIu64 ", type: %s, boot follower",
-                       TabletInfo->TabletID, GetTabletTypeName());
-            TTabletSetupInfo *x = BootstrapperInfo->SetupInfo.Get();
-            FollowerActorID = x->Follower(TabletInfo.Get(), ctx.SelfID, ctx, 0, AppData(ctx)->ResourceProfiles);
+        if (OtherNodes.empty()) {
+            return Boot();
         }
 
-        Become(&TThis::StateWatch);
+        SelfSeed = GenerateSeed();
+        LOG_INFO_S(*TlsActivationContext, NKikimrServices::BOOTSTRAPPER,
+            "tablet:" << TabletInfo->TabletID << ", type: " << GetTabletTypeName()
+            << ", begin new round, seed: " << SelfSeed);
+
+        const ui64 tabletId = TabletInfo->TabletID;
+
+        Round.emplace(OtherNodes.size());
+        for (ui32 alienNode : OtherNodes) {
+            Send(MakeBootstrapperID(tabletId, alienNode),
+                new TEvBootstrapper::TEvWatch(tabletId, SelfSeed, RoundCounter),
+                IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession,
+                RoundCounter);
+        }
+
+        Become(&TThis::StateFree);
     }
 
-    bool ApplyAlienState(const TActorId &alien, NKikimrBootstrapper::TEvWatchResult::EState state, ui64 seed, const TActorContext &ctx) {
-        const ui32 alienNodeIdx = AlienIndex(alien.NodeId());
-        if (alienNodeIdx == Max<ui32>())
+    void HandleFree(TEvBootstrapper::TEvWatch::TPtr& ev) {
+        const NKikimrBootstrapper::TEvWatch& record = ev->Get()->Record;
+        Y_ABORT_UNLESS(record.GetTabletID() == TabletInfo->TabletID);
+
+        Send(ev->Sender, new TEvBootstrapper::TEvWatchResult(record.GetTabletID(),
+            NKikimrBootstrapper::TEvWatchResult::FREE, SelfSeed, record.GetRound()));
+
+        const size_t alienNodeIdx = AlienIndex(ev->Sender.NodeId());
+        if (alienNodeIdx == Max<size_t>())
+            return;
+
+        auto& watcher = Round.value().Watchers.at(alienNodeIdx);
+        watcher.ActorId = ev->Sender;
+        watcher.Round = record.GetRound();
+
+        // We may have previously observed some state (e.g. UNKNOWN or DISCONNECTED)
+        // Since we have received a new TEvWatch afterwards, it implies that node
+        // has started a new voting round. Make sure we reflect that in our
+        // current state.
+        if (ApplyAlienState(ev->Sender, NKikimrBootstrapper::TEvWatchResult::FREE, record.GetSelfSeed(), /* updateOnly */ true))
+            return;
+
+        CheckRoundCompletion();
+    }
+
+    void HandleFree(TEvBootstrapper::TEvWatchResult::TPtr& ev) {
+        const NKikimrBootstrapper::TEvWatchResult& record = ev->Get()->Record;
+        Y_ABORT_UNLESS(record.GetTabletID() == TabletInfo->TabletID);
+
+        if (record.GetRound() != RoundCounter)
+            return;
+
+        if (ApplyAlienState(ev->Sender, record.GetState(), record.GetSeed()))
+            return;
+
+        CheckRoundCompletion();
+    }
+
+    void HandleFree(TEvents::TEvUndelivered::TPtr& ev) {
+        const ui64 round = ev->Cookie;
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BOOTSTRAPPER,
+            "tablet: " << TabletInfo->TabletID << ", type: " << GetTabletTypeName()
+            << ", undelivered from " << ev->Sender << ", round " << round);
+
+        if (round != RoundCounter)
+            return;
+
+        if (ApplyAlienState(ev->Sender, NKikimrBootstrapper::TEvWatchResult::UNDELIVERED, Max<ui64>()))
+            return;
+
+        CheckRoundCompletion();
+    }
+
+    void HandleFree(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
+        const ui32 node = ev->Get()->NodeId;
+        const ui64 round = ev->Cookie;
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BOOTSTRAPPER,
+            "tablet: " << TabletInfo->TabletID << ", type: " << GetTabletTypeName()
+            << ", disconnected from " << node << ", round " << round);
+
+        if (round != RoundCounter)
+            return;
+
+        if (ApplyAlienState(TActorId(node, 0, 0, 0), NKikimrBootstrapper::TEvWatchResult::DISCONNECTED, Max<ui64>()))
+            return;
+
+        CheckRoundCompletion();
+    }
+
+    bool ApplyAlienState(const TActorId& alien, NKikimrBootstrapper::TEvWatchResult::EState state, ui64 seed, bool updateOnly = false) {
+        const size_t alienNodeIdx = AlienIndex(alien.NodeId());
+        if (alienNodeIdx == Max<size_t>())
             return true;
 
-        if (Round->Aliens[alienNodeIdx].State != TRound::EAlienState::Wait)
-            return false;
+        // Note: a single alien may be updated multiple times
+        auto& alienEntry = Round.value().Aliens.at(alienNodeIdx);
+        if (updateOnly && alienEntry.State == TRound::EAlienState::Wait) {
+            // This update should only be applied after the initial result
+            return true;
+        }
 
-        LOG_DEBUG(ctx, NKikimrServices::BOOTSTRAPPER, "tablet: %" PRIu64 ", type: %s, apply alien %" PRIu32 " state: %s",
-                  TabletInfo->TabletID, GetTabletTypeName(), alien.NodeId(), GetStateName(state));
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BOOTSTRAPPER,
+            "tablet: " << TabletInfo->TabletID << ", type: " << GetTabletTypeName()
+            << ", apply alien " << alien.NodeId() << " state: " << GetStateName(state));
+
+        if (alienEntry.State == TRound::EAlienState::Wait) {
+            Y_ABORT_UNLESS(Round->Waiting-- > 0);
+        }
+
+        alienEntry.Seed = seed;
 
         switch (state) {
-        case NKikimrBootstrapper::TEvWatchResult::UNKNOWN:
-            Round->Aliens[alienNodeIdx] = TRound::TAlien(TRound::EAlienState::Unknown, Max<ui64>());
-            return false;
-        case NKikimrBootstrapper::TEvWatchResult::FREE:
-            Round->Aliens[alienNodeIdx] = TRound::TAlien(TRound::EAlienState::Free, seed);
-            return false;
-        case NKikimrBootstrapper::TEvWatchResult::OWNER:
-            BecomeWatch(alien, true, ctx);
-            return true;
-        case NKikimrBootstrapper::TEvWatchResult::WAITFOR:
-            BecomeWatch(alien, false, ctx);
-            return true;
-        case NKikimrBootstrapper::TEvWatchResult::UNDELIVERED:
-            Round->Aliens[alienNodeIdx] = TRound::TAlien(TRound::EAlienState::Undelivered, Max<ui64>());
-            return false;
-        case NKikimrBootstrapper::TEvWatchResult::DISCONNECTED:
-            Round->Aliens[alienNodeIdx] = TRound::TAlien(TRound::EAlienState::Disconnected, Max<ui64>());
-            return false;
-        default:
-            Y_ABORT("unhandled case");
+            case NKikimrBootstrapper::TEvWatchResult::UNKNOWN:
+                alienEntry.State = TRound::EAlienState::Unknown;
+                return false;
+            case NKikimrBootstrapper::TEvWatchResult::FREE:
+                alienEntry.State = TRound::EAlienState::Free;
+                return false;
+            case NKikimrBootstrapper::TEvWatchResult::OWNER:
+                BecomeWatch(alien, true);
+                return true;
+            case NKikimrBootstrapper::TEvWatchResult::WAITFOR:
+                BecomeWatch(alien, false);
+                return true;
+            case NKikimrBootstrapper::TEvWatchResult::UNDELIVERED:
+                alienEntry.State = TRound::EAlienState::Undelivered;
+                return false;
+            case NKikimrBootstrapper::TEvWatchResult::DISCONNECTED:
+                alienEntry.State = TRound::EAlienState::Disconnected;
+                return false;
+            default:
+                Y_ABORT("unhandled case");
         }
     }
 
-    bool CheckBootPermitted(size_t undelivered, size_t disconnected, const TActorContext &ctx) {
+    void CheckRoundCompletion() {
+        auto& round = Round.value();
+        if (round.Waiting > 0) {
+            return;
+        }
+
+        ui64 winnerSeed = SelfSeed;
+        ui32 winner = SelfId().NodeId();
+
+        size_t undelivered = 0;
+        size_t disconnected = 0;
+        for (size_t i = 0, e = round.Aliens.size(); i != e; ++i) {
+            const auto& alien = round.Aliens[i];
+            const ui32 node = OtherNodes.at(i);
+            switch (alien.State) {
+                case TRound::EAlienState::Wait:
+                    Y_DEBUG_ABORT("Unexpected Wait state");
+                    return;
+                case TRound::EAlienState::Unknown:
+                    break;
+                case TRound::EAlienState::Free:
+                    if (winnerSeed > alien.Seed || winnerSeed == alien.Seed && winner > node) {
+                        winnerSeed = alien.Seed;
+                        winner = node;
+                    }
+                    break;
+                case TRound::EAlienState::Undelivered:
+                    ++undelivered;
+                    break;
+                case TRound::EAlienState::Disconnected:
+                    ++disconnected;
+                    break;
+            }
+        }
+
+        if (winner != SelfId().NodeId()) {
+            auto sleepDuration = GetSleepDuration();
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BOOTSTRAPPER,
+                "tablet: " << TabletInfo->TabletID << ", type: " << GetTabletTypeName()
+                << ", lost round, wait for " << sleepDuration);
+
+            Round.reset();
+            Schedule(sleepDuration, new TEvents::TEvWakeup(RoundCounter));
+            Become(&TThis::StateSleep);
+            return;
+        }
+
+        if (!CheckBootPermitted(undelivered, disconnected)) {
+            return;
+        }
+
+        // Note: current Round is used by Boot to update watchers
+        Boot();
+    }
+
+    bool CheckBootPermitted(size_t undelivered, size_t disconnected) {
         // Total number of nodes that participate in tablet booting
-        size_t total = 1 + BootstrapperInfo->OtherNodes.size();
+        size_t total = 1 + OtherNodes.size();
         Y_DEBUG_ABORT_UNLESS(total >= 1 + undelivered + disconnected);
 
         // Ignore nodes that don't have bootstrapper running
@@ -349,203 +531,290 @@ class TBootstrapper : public TActor<TBootstrapper> {
 
         // If there are enough nodes online, just boot immediately
         if (online >= quorum) {
-            BootDelayedUntil = { };
+            BootDelayedUntil = {};
             return true;
         }
 
-        auto now = ctx.Now();
+        auto now = TActivationContext::Now();
         if (!BootDelayedUntil) {
             // Delay boot decision until some later time
             BootDelayedUntil = now + BootstrapperInfo->OfflineDelay;
         } else if (BootDelayedUntil <= now) {
             // We don't have enough online nodes, but try to boot anyway
-            BootDelayedUntil = { };
+            BootDelayedUntil = {};
             return true;
         }
 
-        LOG_DEBUG(ctx, NKikimrServices::BOOTSTRAPPER, "tablet: %" PRIu64 ", type: %s, %" PRISZT "/%" PRISZT " nodes online (need %" PRISZT "), wait for threshold",
-                    TabletInfo->TabletID, GetTabletTypeName(), online, total, quorum);
+        auto sleepDuration = Min(GetSleepDuration(), BootDelayedUntil - now);
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BOOTSTRAPPER,
+            "tablet:" << TabletInfo->TabletID << ", type: " << GetTabletTypeName()
+            << ", " << online << "/" << total << " nodes online (need " << quorum << ")"
+            << ", wait for " << sleepDuration);
 
-        const ui64 wx = BootstrapperInfo->WatchThreshold.MicroSeconds();
-        const auto sleepDuration = TDuration::MicroSeconds(wx / 2 + wx * (SelfSeed % 0x10000) / 0x20000);
-
-        ctx.ExecutorThread.ActorSystem->Schedule(
-            Min(sleepDuration, BootDelayedUntil - now),
-            new IEventHandle(ctx.SelfID, ctx.SelfID, new TEvents::TEvWakeup(), 0, RoundCounter));
+        Round.reset();
+        Schedule(sleepDuration, new TEvents::TEvWakeup(RoundCounter));
         Become(&TThis::StateSleep);
         return false;
     }
 
-    void CheckRoundCompletion(const TActorContext &ctx) {
-        ui64 minAlienSeed = Max<ui64>();
-        ui32 minAlien = Max<ui32>();
-        size_t undelivered = 0;
-        size_t disconnected = 0;
-        for (ui32 i = 0, e = Round->Aliens.size(); i != e; ++i) {
-            const TRound::TAlien &alien = Round->Aliens[i];
-            switch (alien.State) {
-            case TRound::EAlienState::Wait:
-                return;
-            case TRound::EAlienState::Unknown:
-                break;
-            case TRound::EAlienState::Free:
-                if (minAlienSeed > alien.Seed) {
-                    minAlienSeed = alien.Seed;
-                    minAlien = BootstrapperInfo->OtherNodes[i];
+private:
+    /**
+     * Starts a watcher phase
+     * - Starts an optional follower
+     * - Waits for notification from some other owner or watcher
+     * - When watched by others will notify on state change
+     * - Begins a new cycle when notified or disconnected
+     */
+    void BecomeWatch(const TActorId& watchOn, bool owner) {
+        LOG_INFO_S(*TlsActivationContext, NKikimrServices::BOOTSTRAPPER,
+            "tablet: " << TabletInfo->TabletID << ", type: " << GetTabletTypeName()
+            << ", become watch on node " << watchOn.NodeId() << (owner ? " (owner)" : ""));
+
+        Watching.emplace(watchOn, owner);
+        WatchedBy.emplace();
+
+        FinishRound(NKikimrBootstrapper::TEvWatchResult::WAITFOR);
+
+        Become(&TThis::StateWatch);
+        BootFollower();
+    }
+
+    void FinishRound(NKikimrBootstrapper::TEvWatchResult::EState state) {
+        if (Round) {
+            for (auto& watcher : Round->Watchers) {
+                if (watcher.ActorId) {
+                    Send(watcher.ActorId, new TEvBootstrapper::TEvWatchResult(
+                        TabletInfo->TabletID, state, 0, watcher.Round));
+                    WatchedBy.value().Add(watcher.ActorId, watcher.Round);
                 }
-                break;
-            case TRound::EAlienState::Undelivered:
-                ++undelivered;
-                break;
-            case TRound::EAlienState::Disconnected:
-                ++disconnected;
-                break;
             }
-        }
 
-        Round.Destroy();
-
-        // ok, we got all reactions, now boot tablet or sleep for threshold
-        if (minAlienSeed < SelfSeed || minAlienSeed == SelfSeed && ctx.SelfID.NodeId() > minAlien) {
-            LOG_DEBUG(ctx, NKikimrServices::BOOTSTRAPPER, "tablet: %" PRIu64 ", type: %s, lost round, wait for threshold",
-                      TabletInfo->TabletID, GetTabletTypeName());
-
-            const ui64 wx = BootstrapperInfo->WatchThreshold.MicroSeconds();
-            const auto sleepDuration = TDuration::MicroSeconds(wx / 2 + wx * (SelfSeed % 0x10000) / 0x20000);
-
-            Become(&TThis::StateSleep);
-            ctx.ExecutorThread.ActorSystem->Schedule(sleepDuration, new IEventHandle(ctx.SelfID, ctx.SelfID, new TEvents::TEvWakeup(), 0, RoundCounter));
-            return;
-        } else if (!CheckBootPermitted(undelivered, disconnected, ctx)) {
-            return;
-        } else {
-            Boot(ctx);
-            return;
+            BootDelayedUntil = {};
+            Round.reset();
         }
     }
 
-    void NotifyWatchers() {
-        if (Watched) {
-            for (const TWatched::TWatcher &xw : Watched->Watchers)
-                Send(xw.ActorID, new TEvBootstrapper::TEvNotify(TabletInfo->TabletID, NKikimrBootstrapper::TEvNotify::DROP, xw.Round));
-            Watched.Destroy();
-            Watches.Destroy();
+    void BootFollower() {
+        if (BootstrapperInfo->StartFollowers && !FollowerActorID) {
+            LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::BOOTSTRAPPER,
+                "tablet: " << TabletInfo->TabletID << ", type: " << GetTabletTypeName()
+                << ", boot follower");
+            TTabletSetupInfo* x = BootstrapperInfo->SetupInfo.Get();
+            FollowerActorID = x->Follower(TabletInfo.Get(),
+                SelfId(), TActivationContext::ActorContextFor(SelfId()),
+                0, AppData()->ResourceProfiles);
         }
     }
 
-    void NotifyAndRound(const TActorContext &ctx) {
-        NotifyWatchers();
-        BeginNewRound(ctx);
-    }
-
-    void HandleFree(TEvBootstrapper::TEvWatchResult::TPtr &ev, const TActorContext &ctx) {
-        const NKikimrBootstrapper::TEvWatchResult &record = ev->Get()->Record;
+    void HandleWatch(TEvBootstrapper::TEvWatch::TPtr& ev) {
+        const NKikimrBootstrapper::TEvWatch& record = ev->Get()->Record;
         Y_ABORT_UNLESS(record.GetTabletID() == TabletInfo->TabletID);
 
-        if (record.GetRound() != RoundCounter)
+        if (Watching.value().OnWatch(ev->Sender.NodeId())) {
+            // We have been watching this node, but now it's trying to watch us
+            // This guards against notify/disconnect getting lost (shouldn't happen)
+            NotifyWatchers();
+            Send(ev->Sender, new TEvBootstrapper::TEvWatchResult(record.GetTabletID(),
+                NKikimrBootstrapper::TEvWatchResult::UNKNOWN, 0, record.GetRound()));
+            BeginNewCycle();
             return;
+        }
 
-        if (ApplyAlienState(ev->Sender, record.GetState(), record.GetSeed(), ctx))
-            return;
-
-        CheckRoundCompletion(ctx);
+        WatchedBy.value().Add(ev->Sender, record.GetRound());
+        Send(ev->Sender, new TEvBootstrapper::TEvWatchResult(record.GetTabletID(),
+            NKikimrBootstrapper::TEvWatchResult::WAITFOR, 0, record.GetRound()));
     }
 
-    void HandleFree(TEvents::TEvUndelivered::TPtr &ev, const TActorContext &ctx) {
+    void HandleWatch(TEvBootstrapper::TEvNotify::TPtr& ev) {
+        if (ev->Get()->Record.GetRound() != RoundCounter)
+            return;
+
+        if (Watching.value().OnNotify(ev->Sender)) {
+            NotifyWatchers();
+            BeginNewCycle();
+        }
+    }
+
+    void HandleWatch(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
+        const ui32 node = ev->Get()->NodeId;
         const ui64 round = ev->Cookie;
-        LOG_DEBUG(ctx, NKikimrServices::BOOTSTRAPPER, "tablet: %" PRIu64 ", type: %s, undelivered from %s, round %" PRIu64,
-                    TabletInfo->TabletID, GetTabletTypeName(), ev->Sender.ToString().c_str(), round);
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BOOTSTRAPPER,
+            "tablet: " << TabletInfo->TabletID << ", type: " << GetTabletTypeName()
+            << ", disconnected from " << node << ", round " << round);
 
         if (round != RoundCounter)
             return;
 
-        if (ApplyAlienState(ev->Sender, NKikimrBootstrapper::TEvWatchResult::UNDELIVERED, Max<ui64>(), ctx))
-            return;
-
-        CheckRoundCompletion(ctx);
-    }
-
-    void HandleFree(TEvInterconnect::TEvNodeDisconnected::TPtr &ev, const TActorContext &ctx) {
-        const ui32 node = ev->Get()->NodeId;
-        LOG_DEBUG(ctx, NKikimrServices::BOOTSTRAPPER, "tablet: %" PRIu64 ", type: %s, disconnected from %" PRIu32,
-                    TabletInfo->TabletID, GetTabletTypeName(), node);
-
-        if (ApplyAlienState(TActorId(node, 0, 0, 0), NKikimrBootstrapper::TEvWatchResult::DISCONNECTED, Max<ui64>(), ctx))
-            return;
-
-        CheckRoundCompletion(ctx);
-    }
-
-    void HandleFree(TEvBootstrapper::TEvWatch::TPtr &ev, const TActorContext &ctx) {
-        const NKikimrBootstrapper::TEvWatch &record = ev->Get()->Record;
-        Y_ABORT_UNLESS(record.GetTabletID() == TabletInfo->TabletID);
-
-        ctx.Send(ev->Sender, new TEvBootstrapper::TEvWatchResult(record.GetTabletID(), NKikimrBootstrapper::TEvWatchResult::FREE, SelfSeed, record.GetRound()));
-    }
-
-    void HandleWatch(TEvBootstrapper::TEvNotify::TPtr &ev, const TActorContext &ctx) {
-        const TActorId alien = ev->Sender;
-        if (Watches->RemoveAlien(alien)) {
-            NotifyAndRound(ctx);
+        if (Watching.value().OnDisconnect(node)) {
+            NotifyWatchers();
+            BeginNewCycle();
         }
     }
 
-    void HandleWatch(TEvInterconnect::TEvNodeDisconnected::TPtr &ev, const TActorContext &ctx) {
-        const ui32 node = ev->Get()->NodeId;
-        LOG_DEBUG(ctx, NKikimrServices::BOOTSTRAPPER, "tablet: %" PRIu64 ", type: %s, disconnected from %" PRIu32,
-                    TabletInfo->TabletID, GetTabletTypeName(), node);
+    void NotifyWatchers() {
+        if (WatchedBy) {
+            for (const auto& pr : *WatchedBy) {
+                Send(pr.second.ActorId,
+                    new TEvBootstrapper::TEvNotify(
+                        TabletInfo->TabletID, NKikimrBootstrapper::TEvNotify::DROP, pr.second.Round));
+            }
 
-        if (Watches->RemoveAlienNode(node)) {
-            NotifyAndRound(ctx);
+            WatchedBy.reset();
+            Watching.reset();
         }
     }
 
-    void HandleOwner(TEvBootstrapper::TEvWatch::TPtr &ev, const TActorContext &ctx) {
-        const NKikimrBootstrapper::TEvWatch &record = ev->Get()->Record;
+private:
+    /**
+     * Starts an owner phase
+     * - Boots a new leader tablet (or promotes an existing follower)
+     * - When watched by others will notify on state change
+     * - Waits until the new instance stops
+     * - Begins a new cycle
+     */
+    void Boot() {
+        Y_ABORT_UNLESS(!LookOnActorID);
+
+        LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::BOOTSTRAPPER,
+            "tablet: " << TabletInfo->TabletID << ", type: " << GetTabletTypeName()
+            << ", boot");
+
+        if (FollowerActorID) {
+            LookOnActorID = FollowerActorID;
+            FollowerActorID = {};
+            Send(LookOnActorID, new TEvTablet::TEvPromoteToLeader(0, TabletInfo));
+        } else {
+            TTabletSetupInfo* x = BootstrapperInfo->SetupInfo.Get();
+            LookOnActorID = x->Tablet(TabletInfo.Get(),
+                SelfId(), TActivationContext::ActorContextFor(SelfId()),
+                0, AppData()->ResourceProfiles);
+        }
+
+        Y_ABORT_UNLESS(LookOnActorID);
+
+        WatchedBy.emplace();
+        FinishRound(NKikimrBootstrapper::TEvWatchResult::OWNER);
+
+        Become(&TThis::StateOwner);
+    }
+
+    void HandleOwner(TEvBootstrapper::TEvWatch::TPtr& ev) {
+        const NKikimrBootstrapper::TEvWatch& record = ev->Get()->Record;
         Y_ABORT_UNLESS(record.GetTabletID() == TabletInfo->TabletID);
 
         // add to watchers list (if node not already there)
-        Watched->AddWatcher(ev->Sender, record.GetRound());
-        ctx.Send(ev->Sender, new TEvBootstrapper::TEvWatchResult(record.GetTabletID(), NKikimrBootstrapper::TEvWatchResult::OWNER, 0, record.GetRound()));
+        WatchedBy.value().Add(ev->Sender, record.GetRound());
+        Send(ev->Sender, new TEvBootstrapper::TEvWatchResult(record.GetTabletID(),
+            NKikimrBootstrapper::TEvWatchResult::OWNER, 0, record.GetRound()));
     }
 
-    void HandleWatch(TEvBootstrapper::TEvWatch::TPtr &ev, const TActorContext &ctx) {
-        const NKikimrBootstrapper::TEvWatch &record = ev->Get()->Record;
-        Y_ABORT_UNLESS(record.GetTabletID() == TabletInfo->TabletID);
+    void Handle(TEvTablet::TEvTabletDead::TPtr& ev) {
+        if (ev->Sender == LookOnActorID) {
+            LOG_INFO_S(*TlsActivationContext, NKikimrServices::BOOTSTRAPPER,
+                "tablet: " << TabletInfo->TabletID << ", type: " << GetTabletTypeName()
+                << ", tablet dead");
 
-        if (Watches->CheckWatch(ev->Sender.NodeId())) {
-            ctx.Send(ev->Sender, new TEvBootstrapper::TEvWatchResult(record.GetTabletID(), NKikimrBootstrapper::TEvWatchResult::UNKNOWN, 0, record.GetRound()));
-        } else {
-            Watched->AddWatcher(ev->Sender, record.GetRound());
-            ctx.Send(ev->Sender, new TEvBootstrapper::TEvWatchResult(record.GetTabletID(), NKikimrBootstrapper::TEvWatchResult::WAITFOR, 0, record.GetRound()));
+            LookOnActorID = {};
+            NotifyWatchers();
+            BeginNewCycle();
+        } else if (ev->Sender == FollowerActorID) {
+            FollowerActorID = {};
+            BootFollower();
         }
     }
 
-    void HandleSleep(TEvBootstrapper::TEvWatch::TPtr &ev, const TActorContext &ctx) {
-        HandleFree(ev, ctx);
-    }
-
-    void HandleSleep(TEvents::TEvWakeup::TPtr &ev, const TActorContext &ctx) {
-        const ui64 roundCookie = ev->Cookie;
-        if (roundCookie != RoundCounter)
-            return;
-
-        BeginNewRound(ctx);
-    }
-
-    void HandleStandBy(TEvBootstrapper::TEvWatch::TPtr &ev, const TActorContext &ctx) {
-        const NKikimrBootstrapper::TEvWatch &record = ev->Get()->Record;
+private:
+    void HandleSleep(TEvBootstrapper::TEvWatch::TPtr& ev) {
+        const NKikimrBootstrapper::TEvWatch& record = ev->Get()->Record;
         Y_ABORT_UNLESS(record.GetTabletID() == TabletInfo->TabletID);
 
-        ctx.Send(ev->Sender, new TEvBootstrapper::TEvWatchResult(record.GetTabletID(), NKikimrBootstrapper::TEvWatchResult::UNKNOWN, Max<ui64>(), record.GetRound()));
+        // We have lost the round and are not going to boot right now
+        // However make sure our round seed is somewhat stable while sleeping
+        Send(ev->Sender, new TEvBootstrapper::TEvWatchResult(record.GetTabletID(),
+            NKikimrBootstrapper::TEvWatchResult::FREE, SelfSeed, record.GetRound()));
+    }
+
+    void HandleSleep(TEvents::TEvWakeup::TPtr& ev) {
+        if (ev->Get()->Tag != RoundCounter)
+            return;
+
+        BeginNewCycle();
+    }
+
+private:
+    /**
+     * Switches bootstrapper to a cold standby
+     * - Stops all activity (including followers)
+     * - Waits until explicitly activated
+     */
+    void Standby() {
+        Y_ABORT_UNLESS(!ModeStandby);
+        Stop();
+        ModeStandby = true;
+        Become(&TThis::StateStandBy);
+    }
+
+    /**
+     * Activates a cold standby and begins a new cycle
+     */
+    void Activate() {
+        Y_ABORT_UNLESS(ModeStandby);
+        ModeStandby = false;
+        OnActivated();
+        BeginNewCycle();
+    }
+
+    void OnActivated() {
+        auto localNodeId = SelfId().NodeId();
+        auto whiteboardId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(localNodeId);
+        Send(whiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateAddRole("Bootstrapper"));
+    }
+
+    void HandleStandBy(TEvBootstrapper::TEvWatch::TPtr& ev) {
+        const NKikimrBootstrapper::TEvWatch& record = ev->Get()->Record;
+        Y_ABORT_UNLESS(record.GetTabletID() == TabletInfo->TabletID);
+
+        Send(ev->Sender, new TEvBootstrapper::TEvWatchResult(record.GetTabletID(),
+            NKikimrBootstrapper::TEvWatchResult::UNKNOWN, Max<ui64>(), record.GetRound()));
     }
 
     void HandlePoisonStandBy() {
         PassAway();
     }
 
+private:
+    /**
+     * Common cleanup that may stop any phase
+     */
+    void Stop() {
+        if (KnownLeaderPipe) {
+            NTabletPipe::CloseClient(SelfId(), KnownLeaderPipe);
+            KnownLeaderPipe = {};
+        }
+
+        if (LookOnActorID) {
+            Send(LookOnActorID, new TEvents::TEvPoisonPill());
+            LookOnActorID = {};
+        }
+
+        if (FollowerActorID) {
+            Send(FollowerActorID, new TEvents::TEvPoisonPill());
+            FollowerActorID = {};
+        }
+
+        NotifyWatchers();
+
+        BootDelayedUntil = {};
+        Round.reset();
+    }
+
+    void HandlePoison() {
+        Stop();
+        PassAway();
+    }
+
     void PassAway() override {
-        for (ui32 nodeId : BootstrapperInfo->OtherNodes) {
+        for (ui32 nodeId : OtherNodes) {
             Send(TActivationContext::InterconnectProxy(nodeId), new TEvents::TEvUnsubscribe);
         }
         NotifyWatchers();
@@ -557,52 +826,73 @@ public:
         return NKikimrServices::TActivity::TABLET_BOOTSTRAPPER;
     }
 
-    TBootstrapper(TTabletStorageInfo *tabletInfo, TBootstrapperInfo *bootstrapperInfo, bool standby)
-        : TActor(standby ? &TThis::StateStandBy : &TThis::StateBoot)
-        , TabletInfo(tabletInfo)
+    TBootstrapper(TTabletStorageInfo* tabletInfo, TBootstrapperInfo* bootstrapperInfo, bool standby)
+        : TabletInfo(tabletInfo)
         , BootstrapperInfo(bootstrapperInfo)
-        , RoundCounter(0xdeadbeefdeadbeefull)
-        , SelfSeed(0xdeadbeefdeadbeefull)
+        , ModeStandby(standby)
     {
         Y_ABORT_UNLESS(TTabletTypes::TypeInvalid != TabletInfo->TabletType);
     }
 
-    TAutoPtr<IEventHandle> AfterRegister(const TActorId &selfId, const TActorId &parentId) override {
-        Y_UNUSED(parentId);
-        return new IEventHandle(selfId, selfId, new TEvents::TEvBootstrap());
+    void Bootstrap() {
+        BuildOtherNodes();
+        if (ModeStandby) {
+            Become(&TThis::StateStandBy);
+        } else {
+            OnActivated();
+            BeginNewCycle();
+        }
     }
 
-    STFUNC(StateBoot) {
+    STFUNC(StateLookup) {
         switch (ev->GetTypeRewrite()) {
-            CFunc(TEvents::TSystem::Bootstrap, BeginNewRound);
+            hFunc(TEvBootstrapper::TEvWatch, HandleUnknown);
+            hFunc(TEvStateStorage::TEvInfo, HandleLookup);
+            hFunc(TEvTablet::TEvTabletDead, Handle);
+            hFunc(TEvents::TEvWakeup, HandleLookup);
+            cFunc(TEvents::TSystem::PoisonPill, HandlePoison); // => die
+            cFunc(TEvBootstrapper::EvStandBy, Standby);
+        }
+    }
+
+    STFUNC(StateConnectLeader) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvBootstrapper::TEvWatch, HandleUnknown);
+            hFunc(TEvTabletPipe::TEvClientConnected, HandleConnectLeader);
+            hFunc(TEvTablet::TEvTabletDead, Handle);
+            cFunc(TEvents::TSystem::PoisonPill, HandlePoison); // => die
+            cFunc(TEvBootstrapper::EvStandBy, Standby);
+        }
+    }
+
+    STFUNC(StateWatchLeader) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvBootstrapper::TEvWatch, HandleWatchLeader);
+            hFunc(TEvTabletPipe::TEvClientDestroyed, HandleWatchLeader);
+            hFunc(TEvTablet::TEvTabletDead, Handle);
+            cFunc(TEvents::TSystem::PoisonPill, HandlePoison); // => die
+            cFunc(TEvBootstrapper::EvStandBy, Standby);
         }
     }
 
     STFUNC(StateFree) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvBootstrapper::TEvWatchResult, HandleFree); // => noop|sleep|owner|watch
-            HFunc(TEvBootstrapper::TEvWatch, HandleFree); // => reply
-            HFunc(TEvents::TEvUndelivered, HandleFree); // => watchresult with unknown
+            hFunc(TEvBootstrapper::TEvWatch, HandleFree); // => reply
+            hFunc(TEvBootstrapper::TEvWatchResult, HandleFree); // => noop|sleep|owner|watch
+            hFunc(TEvents::TEvUndelivered, HandleFree); // => watchresult with unknown
+            hFunc(TEvInterconnect::TEvNodeDisconnected, HandleFree); // => watchresult with unknown
+            hFunc(TEvTablet::TEvTabletDead, Handle);
             cFunc(TEvents::TSystem::PoisonPill, HandlePoison); // => die
-            HFunc(TEvInterconnect::TEvNodeDisconnected, HandleFree); // => watchresult with unknown
-            cFunc(TEvBootstrapper::EvStandBy, Standby);
-        }
-    }
-
-    STFUNC(StateSleep) {
-        switch (ev->GetTypeRewrite()) {
-            HFunc(TEvBootstrapper::TEvWatch, HandleSleep);
-            HFunc(TEvents::TEvWakeup, HandleSleep);
-            cFunc(TEvents::TSystem::PoisonPill, HandlePoison);
             cFunc(TEvBootstrapper::EvStandBy, Standby);
         }
     }
 
     STFUNC(StateWatch) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvBootstrapper::TEvWatch, HandleWatch);
-            HFunc(TEvBootstrapper::TEvNotify, HandleWatch);
-            HFunc(TEvInterconnect::TEvNodeDisconnected, HandleWatch);
+            hFunc(TEvBootstrapper::TEvWatch, HandleWatch);
+            hFunc(TEvBootstrapper::TEvNotify, HandleWatch);
+            hFunc(TEvInterconnect::TEvNodeDisconnected, HandleWatch);
+            hFunc(TEvTablet::TEvTabletDead, Handle);
             cFunc(TEvents::TSystem::PoisonPill, HandlePoison);
             cFunc(TEvBootstrapper::EvStandBy, Standby);
         }
@@ -610,8 +900,18 @@ public:
 
     STFUNC(StateOwner) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvBootstrapper::TEvWatch, HandleOwner);
-            HFunc(TEvTablet::TEvTabletDead, Handle);
+            hFunc(TEvBootstrapper::TEvWatch, HandleOwner);
+            hFunc(TEvTablet::TEvTabletDead, Handle);
+            cFunc(TEvents::TSystem::PoisonPill, HandlePoison);
+            cFunc(TEvBootstrapper::EvStandBy, Standby);
+        }
+    }
+
+    STFUNC(StateSleep) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvBootstrapper::TEvWatch, HandleSleep);
+            hFunc(TEvents::TEvWakeup, HandleSleep);
+            hFunc(TEvTablet::TEvTabletDead, Handle);
             cFunc(TEvents::TSystem::PoisonPill, HandlePoison);
             cFunc(TEvBootstrapper::EvStandBy, Standby);
         }
@@ -619,14 +919,14 @@ public:
 
     STFUNC(StateStandBy) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvBootstrapper::TEvWatch, HandleStandBy);
-            CFunc(TEvBootstrapper::EvActivate, BeginNewRound);
+            hFunc(TEvBootstrapper::TEvWatch, HandleStandBy);
+            cFunc(TEvBootstrapper::EvActivate, Activate);
             cFunc(TEvents::TSystem::PoisonPill, HandlePoisonStandBy);
         }
     }
 };
 
-IActor* CreateBootstrapper(TTabletStorageInfo *tabletInfo, TBootstrapperInfo *bootstrapperInfo, bool standby) {
+IActor* CreateBootstrapper(TTabletStorageInfo* tabletInfo, TBootstrapperInfo* bootstrapperInfo, bool standby) {
     return new TBootstrapper(tabletInfo, bootstrapperInfo, standby);
 }
 

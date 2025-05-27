@@ -1,6 +1,6 @@
 #include "credentials.h"
 
-#include <ydb/library/yql/providers/common/structured_token/yql_token_builder.h>
+#include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
 #include <ydb/library/yql/providers/s3/proto/credentials.pb.h>
 
 namespace NYql {

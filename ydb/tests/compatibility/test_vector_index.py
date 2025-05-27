@@ -1,4 +1,5 @@
 import pytest
+import time
 import random
 from ydb.tests.library.compatibility.fixtures import RestartToAnotherVersionFixture
 from ydb.tests.oss.ydb_sdk_import import ydb
@@ -6,7 +7,7 @@ from ydb.tests.oss.ydb_sdk_import import ydb
 TABLE_NAME = "table"
 
 
-class TestStatisticsFollowers(RestartToAnotherVersionFixture):
+class TestVectorIndex(RestartToAnotherVersionFixture):
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):
 
@@ -51,6 +52,24 @@ class TestStatisticsFollowers(RestartToAnotherVersionFixture):
         with ydb.QuerySessionPool(self.driver) as session_pool:
             session_pool.execute_with_retries(create_index_sql)
 
+    def wait_inddex_ready(self, targets, vector_types, vector_type, distance, order, distance_func):
+        for i in range(10):
+            time.sleep(7)
+
+            try:
+                self.select_from_index(
+                    target=targets[distance][distance_func],
+                    name=vector_types[vector_type],
+                    data_type=vector_type,
+                    order=order,
+                )
+            except Exception as ex:
+                if "No global indexes for table" in str(ex):
+                    continue
+                raise ex
+            return
+        raise Exception("Error getting index status")
+
     def _drop_index(self):
         drop_index_sql = f"""
             ALTER TABLE {TABLE_NAME}
@@ -72,7 +91,7 @@ class TestStatisticsFollowers(RestartToAnotherVersionFixture):
         with ydb.QuerySessionPool(self.driver) as session_pool:
             session_pool.execute_with_retries(upsert_sql)
 
-    def check_statistics(self, target, name, data_type, order):
+    def select_from_index(self, target, name, data_type, order):
         vector = self._get_random_vector(data_type, self.vector_dimension)
         select_sql = f"""
             $Target = {name}(Cast([{vector}] AS List<{data_type}>));
@@ -84,7 +103,10 @@ class TestStatisticsFollowers(RestartToAnotherVersionFixture):
         """
         with ydb.QuerySessionPool(self.driver) as session_pool:
             result_sets = session_pool.execute_with_retries(select_sql)
-            assert len(result_sets[0].rows) > 0
+            assert len(result_sets[0].rows) > 0, "Query returned an empty set"
+            rows = result_sets[0].rows
+            for row in rows:
+                assert row['target'] > 0, "the distance is zero"
 
     def create_table(self):
         with ydb.QuerySessionPool(self.driver) as session_pool:
@@ -117,7 +139,7 @@ class TestStatisticsFollowers(RestartToAnotherVersionFixture):
             ("Float", "distance", "euclidean"),
         ],
     )
-    def test_statistics_followers(self, vector_type, distance, distance_func):
+    def test_vector_index(self, vector_type, distance, distance_func):
         self.rows_count = 30
         self.index_name = "vector_idx"
         self.vector_dimension = 5
@@ -148,7 +170,15 @@ class TestStatisticsFollowers(RestartToAnotherVersionFixture):
                 distance=distance_func,
             )
         order = "ASC" if distance != "similarity" else "DESC"
-        self.check_statistics(
+        self.wait_inddex_ready(
+            targets=targets,
+            vector_types=vector_types,
+            vector_type=vector_type,
+            distance=distance,
+            order=order,
+            distance_func=distance_func,
+        )
+        self.select_from_index(
             target=targets[distance][distance_func], name=vector_types[vector_type], data_type=vector_type, order=order
         )
         self._drop_index()
@@ -166,6 +196,6 @@ class TestStatisticsFollowers(RestartToAnotherVersionFixture):
                 distance=distance_func,
             )
 
-        self.check_statistics(
+        self.select_from_index(
             target=targets[distance][distance_func], name=vector_types[vector_type], data_type=vector_type, order=order
         )

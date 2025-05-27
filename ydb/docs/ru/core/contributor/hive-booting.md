@@ -7,13 +7,17 @@
 * Узел, на котором была запущена таблетка, прислал сообщение о том, что она прекратила работу (например, из-за потери связи с дисковой подсистемой кластера).
 * При перевозе таблетки в рамках [автобалансировки](hive.md#autobalancing).
 
-В любой из этих ситуаций таблетка сначала кладётся в очередь на запуск, или *Boot queue*, затем при обработке очереди для неё выбирается подходящий узел, и на этот узел отправляется команда о запуске таблетки.
+В любой из этих ситуаций происходит следующее:
+
+1. Таблетка кладётся в [очередь на запуск](#bootqueue).
+1. При обработке очереди для неё [выбирается подходящий узел](#findbestnode).
+1. На  узел отправляется команда о [запуске таблетки](#booting).
 
 ## Очередь {#bootqueue}
 
-Очередь на запуск хранится в памяти Hive и является приоритетной. Приоритет таблетки определяется следующими факторами:
+Очередь на запуск, или *Boot queue*, хранится в памяти Hive и является приоритетной. Приоритет таблетки определяется следующими факторами:
 
-1. Тип таблетки — системные таблетки имеют более высокий приоритет, чем пользовательские.
+1. [Тип таблетки](../concepts/glossary.md#tablet-types) — системные таблетки имеют более высокий приоритет, чем пользовательские.
 1. [Метрики потребления ресурсов](hive.md#resources): таблетки с бóльшим потреблением имеют бóльший приоритет.
 1. Таблетки, которые часто перезапускаются, имеют пониженный приоритет.
 
@@ -55,15 +59,36 @@ stateDiagram-v2
 ```mermaid
 block-beta
     columns 6
-    Node11("Node 1\nallowed") Node12("Node 2\nallowed") Node13("Node 3\nmarked down") Node14("Node 4\nallowed") Node15("Node 5\noverloaded") Node16("Node 6\nallowed")
+    Node11("Node 1\nDC: dc-1\nallowed") Node12("Node 2\nDC: dc-2\nallowed") Node13("Node 3\nDC: dc-2\nmarked down") Node14("Node 4\nDC: dc-2\nallowed") Node15("Node 5\nDC: dc-3\noverloaded") Node16("Node 6\nDC: dc-3\nallowed")
     Arrow1<["Step 1"]>(down):6
     Node21("Node 1\nDC: dc-1\nPriority:0") Node22("Node 2\nDC: dc-2\nPriority: 1") space Node24("Node 4\nDC: dc-2\nPriority: 1") space Node26("Node 6\nDC: dc-3\nPriority: 0")
     Arrow2<["Step 2"]>(down):6
-    space Node32("Node 2\nUsage: 60%") space Node34("Node 4\nUsage: 30%") space:2
+    space Node32("Node 2\nDC: dc-2\nUsage: 60%") space Node34("Node 4\nDC: dc-2\nUsage: 30%") space:2
     Arrow3<["Step 3"]>(down):6
     Pick["Pick Node 4"]:6
+
+    classDef dc1 fill:brown;
+    classDef dc2 fill:grey;
+    classDef dc3 fill:yellow;
+    class Node11 dc1
+    class Node21 dc1
+    class Node12 dc2
+    class Node22 dc2
+    class Node32 dc2
+    class Node13 dc2
+    class Node14 dc2
+    class Node24 dc2
+    class Node34 dc2
+    class Node15 dc3
+    class Node16 dc3
+    class Node26 dc3
 ```
 
 ## Процесс запуска {#booting}
 
-На каждом узле запущен сервис [Local](../concepts/glossary.md#local), отвечающий за взаимодействие с Hive. При запуске таблетки Hive отправляет в Local нужного узла команду старта таблетки, содержащую всю необходимую для запуска информацию: [TabletID](../concepts/glossary.md#tabletid), [поколение](../concepts/glossary.md#tablet-generation), [историю каналов](general-schema.md#history) и режим запуска ([лидер](../concepts/glossary.md#tablet-leader) или [подписчик](../concepts/glossary.md#tablet-follower)). После того, как таблетка запускается, Local сообщает об этом в Hive. С этого момента таблетка считается запущенной с точки зрения Hive и остаётся такой, пока либо Local не сообщит об остановке её работы, либо связь с Local не будет нарушена. В этих ситуациях вновь начнётся процесс запуска уже для следующего поколения таблетки.
+На каждом узле запущен сервис [Local](../concepts/glossary.md#local), отвечающий за взаимодействие с Hive. При запуске таблетки Hive отправляет в Local нужного узла команду старта таблетки, содержащую всю необходимую для запуска информацию: [TabletID](../concepts/glossary.md#tabletid), [поколение](../concepts/glossary.md#tablet-generation), [историю каналов](general-schema.md#history) и режим запуска ([лидер](../concepts/glossary.md#tablet-leader) или [подписчик](../concepts/glossary.md#tablet-follower)). После того, как таблетка запускается, Local сообщает об этом в Hive. С этого момента таблетка считается запущенной с точки зрения Hive и остаётся такой, пока:
+
+* Local не сообщит об остановке её работы;
+* связь с Local не будет нарушена. 
+
+В этих ситуациях вновь начнётся процесс запуска уже для следующего поколения таблетки.

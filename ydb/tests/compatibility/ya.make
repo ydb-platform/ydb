@@ -16,6 +16,7 @@ TEST_SRCS(
     test_statistics.py
     test_rolling.py
     test_datetime2.py
+    test_digest.py
 )
 
 SIZE(LARGE)

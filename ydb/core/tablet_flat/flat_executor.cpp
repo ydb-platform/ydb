@@ -3546,7 +3546,7 @@ void TExecutor::Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled) 
         }
 
         if (msg->Exception) {
-            Y_TABLET_ERROR(msg->Exception);
+            std::rethrow_exception(msg->Exception);
         }
 
         CheckYellow(std::move(msg->YellowMoveChannels), std::move(msg->YellowStopChannels), /* terminal */ true);

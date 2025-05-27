@@ -48,7 +48,7 @@ namespace NTabletFlatExecutor {
         }
 
         bool Success = false;
-        TString Exception;
+        std::exception_ptr Exception;
         ui32 Step = Max<ui32>();
         TResults Results;
         TVector<TIntrusiveConstPtr<NTable::TTxStatusPart>> TxStatus;
@@ -333,7 +333,7 @@ namespace NTabletFlatExecutor {
             auto *prod = new TProdCompact(!fail, Mask.Step(), std::move(Conf->Params),
                     std::move(YellowMoveChannels), std::move(YellowStopChannels));
             if (exc) {
-                prod->Exception = exc->what();
+                prod->Exception = std::current_exception();
             }
 
             if (fail) {

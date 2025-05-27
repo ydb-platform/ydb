@@ -955,8 +955,8 @@ class TSubscriber: public TMonitorableActor<TDerived> {
                 << ", RingGroup# " << groupIdx
                 << ", size# " << size
                 << ", half# " << half
-                << ", successes# " << successes
-                << ", faulires# " << failures
+                << ", successes# " << successes[groupIdx]
+                << ", faulires# " << failures[groupIdx]
                 << ", partial# " << partial;
             if (!partial) {
                 SBS_LOG_D(done);

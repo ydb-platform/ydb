@@ -663,10 +663,9 @@ namespace {
           
           for (ui64 i = 0; i < topicsCount; ++i) {
             auto topic = NDescUT::TTopic(i, (topicsCount == 1 || i > 0) ? consumersCount : 0);
-            Cerr << topic.GetPublic().c_str() << Endl;
-            TestCreatePQGroup(Runtime(), ++txId, "/MyRoot", topic.GetSheme());
+            TestCreatePQGroup(Runtime(), ++txId, "/MyRoot", topic.GetScheme().DebugString());
             Env().TestWaitNotification(Runtime(), txId);
-            requestItems.push_back(topic.GetRequestItem());
+            requestItems.push_back(topic.GetExportRequestItem());
             expected.push_back(topic);
           }
 
@@ -680,15 +679,14 @@ namespace {
 
           for (ui64 i = 0; i < topicsCount; ++i) {
             const auto& topicExpected = expected.at(i);
-            const auto& topicPath = topicExpected.GetCreateTopicPath();
+            const auto& topicPath = topicExpected.GetPath();
             UNIT_ASSERT(HasS3File(topicPath));
-            NDescUT::IDescriber::CompareStringsAsProto<Ydb::Topic::CreateTopicRequest>(GetS3FileContent(topicPath), topicExpected.GetPublic());
+            UNIT_ASSERT(topicExpected.CompareWithString(GetS3FileContent(topicPath)));
 
             if (enablePermissions) {
-              auto permissionsPath = topicExpected.GetParmissions().GetPath();
+              auto permissionsPath = topicExpected.GetPermissions().GetPath();
               UNIT_ASSERT(HasS3File(permissionsPath));
-              NDescUT::IDescriber::CompareStringsAsProto<Ydb::Scheme::ModifyPermissionsRequest>(GetS3FileContent(permissionsPath), topicExpected.GetParmissions().GetContent());
-              UNIT_ASSERT_STRINGS_EQUAL(GetS3FileContent(permissionsPath), topicExpected.GetParmissions().GetContent());
+              UNIT_ASSERT(topicExpected.GetPermissions().CompareWithString(GetS3FileContent(permissionsPath)));
             }
           }
         }

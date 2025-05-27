@@ -690,6 +690,7 @@ NThreading::TFuture<TStatus> GetNewOrderTask(
     }
 
     if (hasInvalidItem) {
+        co_await tx.Rollback();
         throw TUserAbortedException();
     }
 

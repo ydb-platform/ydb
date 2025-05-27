@@ -318,12 +318,8 @@ private:
 
         bool enableSnapshotIsolationRW = TableServiceConfig.GetEnableSnapshotIsolationRW();
 
-<<<<<<< HEAD
-=======
-        bool enableNewRBO = TableServiceConfig.GetEnableNewRBO();
         bool enableSpillingInHashJoinShuffleConnections = TableServiceConfig.GetEnableSpillingInHashJoinShuffleConnections();
 
->>>>>>> cf9ba923977 (Use Spilling in Hash Shuffle Connections on Join Inputs (#18261))
         TableServiceConfig.Swap(event.MutableConfig()->MutableTableServiceConfig());
         LOG_INFO(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, "Updated config");
 

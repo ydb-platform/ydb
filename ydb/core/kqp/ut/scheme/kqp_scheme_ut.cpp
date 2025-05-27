@@ -8,13 +8,16 @@
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_replication.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 #include <ydb/core/testlib/cs_helper.h>
 #include <ydb/core/testlib/common_helper.h>
+#include <ydb/library/yql/utils/actor_log/log.h>
 #include <yql/essentials/types/uuid/uuid.h>
 #include <yql/essentials/types/binary_json/write.h>
+#include <ydb/core/tx/datashard/datashard.h>
 
 #include <library/cpp/threading/local_executor/local_executor.h>
 
@@ -2956,7 +2959,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
         // a user which does not have any implicit permissions
         auto userSession = kikimr.GetTableClient(NYdb::NTable::TClientSettings()
-            .AuthToken("user@builtin")).CreateSession().GetValueSync().GetSession();        
+            .AuthToken("user@builtin")).CreateSession().GetValueSync().GetSession();
 
         constexpr int minPartitionsCount = 10;
         auto setPartitioningQuery = [&]() {
@@ -2969,7 +2972,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             return userSession.ExecuteSchemeQuery(Sprintf(R"(
                     ALTER TABLE `%s` SET READ_REPLICAS_SETTINGS "PER_AZ:%d";
                 )", implTablePath, replicasCount)).ExtractValueSync();
-        };        
+        };
         auto setForbiddenSettingsQuery = [&]() {
             return userSession.ExecuteSchemeQuery(Sprintf(R"(
                     ALTER TABLE `%s` SET KEY_BLOOM_FILTER ENABLED;
@@ -2998,7 +3001,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 result.GetIssues().ToString()
             );
         }
-      
+
         // grant necessary permission
         Grant(adminSession, "DESCRIBE SCHEMA", tablePath, "user@builtin");
         Grant(adminSession, "ALTER SCHEMA", tablePath, "user@builtin");
@@ -3011,7 +3014,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         {
             auto result = setReplicasQuery();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }        
+        }
         // check result
         {
             auto describe = userSession.DescribeTable(implTablePath).ExtractValueSync();
@@ -3019,13 +3022,13 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto tableDesc = describe.GetTableDescription();
 
             UNIT_ASSERT_VALUES_EQUAL(tableDesc.GetPartitioningSettings().GetMinPartitionsCount(), minPartitionsCount);
-            
+
             const auto readReplicasSettings = tableDesc.GetReadReplicasSettings();
             UNIT_ASSERT(readReplicasSettings);
             UNIT_ASSERT(readReplicasSettings->GetMode() == NYdb::NTable::TReadReplicasSettings::EMode::PerAz);
             UNIT_ASSERT_VALUES_EQUAL(readReplicasSettings->GetReadReplicasCount(), replicasCount);
         }
-       
+
 
         // try altering non-partitioning setting of indexImplTable as non-superuser
         {
@@ -3048,7 +3051,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
         // become superuser
         kikimr.GetTestServer().GetRuntime()->GetAppData().AdministrationAllowedSIDs.emplace_back("user@builtin");
-        
+
         // alter non-partitioning setting of indexImplTable as superuser
         {
             auto result = setForbiddenSettingsQuery();
@@ -3249,6 +3252,282 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetIndexType(), EIndexType::GlobalUnique);
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetIndexColumns().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetDataColumns().size(), 0);
+        }
+    }
+
+    class TKikimrRunnerWithPauseIndexBuild : public TKikimrRunner {
+    public:
+        static TKikimrSettings MakeSettings() {
+            NKikimrConfig::TFeatureFlags featureFlags;
+            featureFlags.SetEnableAddUniqueIndex(true);
+
+            TKikimrSettings settings;
+            settings
+                .SetFeatureFlags(featureFlags)
+                .SetUseRealThreads(false);
+
+            return settings;
+        }
+
+        TKikimrRunnerWithPauseIndexBuild(bool yqlDetailedLogging = false)
+            : TKikimrRunner(MakeSettings())
+            , BuildIndexRequestPromise(NThreading::NewPromise<void>())
+            , BuildIndexRequest(BuildIndexRequestPromise.GetFuture())
+        {
+            GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+            if (yqlDetailedLogging) {
+                GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_YQL, NActors::NLog::PRI_TRACE);
+                GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_TRACE);
+                NYql::NDq::SetYqlLogLevels(NActors::NLog::PRI_TRACE);
+            }
+
+            GetTestServer().GetRuntime()->SetObserverFunc([this](TAutoPtr<IEventHandle>& event) -> NActors::TTestActorRuntimeBase::EEventAction {
+                if (!BuildIndexEventIsIntercepted && event->Type == static_cast<ui32>(NKikimr::TEvDataShard::EvBuildIndexCreateRequest)) {
+                    Cerr << "NKikimr::TEvDataShard::TEvBuildIndexCreateRequest is intercepted\n";
+                    BuildIndexEventIsIntercepted = true;
+                    BuildIndexRequestPromise.SetValue();
+                    BuildIndexRequestEvent.Swap(event);
+                    return NActors::TTestActorRuntimeBase::EEventAction::DROP;
+                }
+                return NActors::TTestActorRuntimeBase::EEventAction::PROCESS;
+            });
+        }
+
+        void WaitBuildIndex() {
+            BuildIndexRequest.Wait();
+        }
+
+        void ContinueBuildIndex() {
+            GetTestServer().GetRuntime()->Send(BuildIndexRequestEvent.Release());
+        }
+
+    private:
+        NThreading::TPromise<void> BuildIndexRequestPromise;
+        NThreading::TFuture<void> BuildIndexRequest;
+        TAutoPtr<IEventHandle> BuildIndexRequestEvent;
+        bool BuildIndexEventIsIntercepted = false;
+    };
+
+    void BuildingUniqIndexDeniesTableModifications(bool sqlInterface) {
+        TKikimrRunnerWithPauseIndexBuild kikimr(false /* yqlDetailedLogging */);
+        kikimr.RunCall([&]
+        {
+            auto db = kikimr.GetTableClient();
+            auto queryClient = kikimr.GetQueryClient();
+            auto session = db.CreateSession().GetValueSync().GetSession();
+
+            NYdb::TOperation::TOperationId alterOpId; // grpc
+            NYdb::NQuery::TAsyncExecuteQueryResult alterTableResultFuture; // sql
+
+            if (sqlInterface) {
+                TString createQuery = R"sql(
+                    CREATE TABLE `/Root/TestTable` (
+                        Key Uint64,
+                        Value String,
+                        PRIMARY KEY (Key)
+                    );
+                )sql";
+                auto result = queryClient.ExecuteQuery(createQuery, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+                if (!result.IsSuccess()) {
+                    ythrow yexception() << "Unexpected status create table: " << result.GetStatus() << ": " << result.GetIssues().ToString();
+                }
+
+                TString alterQuery = R"sql(
+                    ALTER TABLE `/Root/TestTable`
+                    ADD INDEX uniq_value_idx GLOBAL UNIQUE ON (`Value`);
+                )sql";
+                alterTableResultFuture = queryClient.ExecuteQuery(alterQuery, NYdb::NQuery::TTxControl::NoTx());
+            } else {
+                auto builder = TTableBuilder()
+                    .AddNullableColumn("Key", EPrimitiveType::Uint64)
+                    .AddNullableColumn("Value", EPrimitiveType::String)
+                    .SetPrimaryKeyColumn("Key");
+
+                auto result = session.CreateTable("/Root/TestTable", builder.Build()).ExtractValueSync();
+                if (!result.IsSuccess()) {
+                    ythrow yexception() << "Unexpected status create table: " << result.GetStatus() << ": " << result.GetIssues().ToString();
+                }
+
+                TAlterTableSettings settings;
+                settings.AppendAddIndexes(TIndexDescription(
+                    "uniq_value_idx",
+                    EIndexType::GlobalUnique,
+                    {"Value"}
+                ));
+                auto op = session.AlterTableLong("/Root/TestTable", settings).ExtractValueSync();
+                alterOpId = op.Id();
+            }
+
+            kikimr.WaitBuildIndex();
+
+            TString upsertQuery = R"sql(
+                UPSERT INTO `/Root/TestTable` (Key, Value) VALUES (1, "1");
+            )sql";
+
+            TString insertQuery = R"sql(
+                INSERT INTO `/Root/TestTable` (Key, Value) VALUES (2, "2");
+            )sql";
+
+            TString updateQuery = R"sql(
+                UPDATE `/Root/TestTable` SET Value = "11" WHERE Key = 1;
+            )sql";
+
+            TString deleteQuery = R"sql(
+                DELETE FROM `/Root/TestTable` WHERE Key = 2;
+            )sql";
+
+            TString returningQuery = R"sql(
+                REPLACE INTO `/Root/TestTable` (Key, Value) VALUES (1, "1") RETURNING Key, Value;
+            )sql";
+
+            auto modificationQueries = {
+                upsertQuery,
+                insertQuery,
+                updateQuery,
+                deleteQuery,
+                returningQuery,
+            };
+
+            for (const TString& query : modificationQueries) {
+                Cerr << "Running query:\n" << query << Endl;
+                auto result = queryClient.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+                if (result.GetStatus() != EStatus::GENERIC_ERROR
+                    || result.GetIssues().ToString().find("Table `/Root/TestTable` modification is disabled: Unique index uniq_value_idx is under construction") == TString::npos)
+                {
+                    Cerr << "Execute query issues. Query: " << query << Endl;
+                    Cerr << "Execute issues:\n" << result.GetIssues().ToString() << Endl;
+                    ythrow yexception() << "Unexpected status of modification query: " << result.GetStatus() << ": " << result.GetIssues().ToString();
+                }
+            }
+
+            auto checkBulkUpsert = [&]{
+                NYdb::TValueBuilder rows;
+                rows.BeginList();
+                rows.AddListItem()
+                    .BeginStruct()
+                    .AddMember("Key").Uint64(42)
+                    .AddMember("Value").String("42")
+                    .EndStruct();
+                rows.EndList();
+
+                auto bulkUpsertResult = db.BulkUpsert("/Root/TestTable", rows.Build()).GetValueSync();
+                if (bulkUpsertResult.IsSuccess()
+                    || bulkUpsertResult.GetIssues().ToString().find("Only async-indexed tables are supported by BulkUpsert") == TString::npos)
+                {
+                    ythrow yexception() << "Unexpected status of bulk upsert: " << bulkUpsertResult.GetStatus() << ": " << bulkUpsertResult.GetIssues().ToString();
+                }
+            };
+
+            checkBulkUpsert();
+
+            kikimr.ContinueBuildIndex();
+
+            // Wait for index to be built
+            if (sqlInterface) {
+                auto result = alterTableResultFuture.GetValueSync();
+                if (!result.IsSuccess()) {
+                    ythrow yexception() << "Unexpected status of index build: " << result.GetStatus() << ": " << result.GetIssues().ToString();
+                }
+            } else {
+                bool ready = false;
+                TMaybe<NYdb::NTable::TBuildIndexOperation> buildOp;
+                while (!ready) {
+                    Sleep(TDuration::MilliSeconds(100));
+                    NYdb::NOperation::TOperationClient opClient(kikimr.GetDriver());
+                    buildOp = opClient.Get<NYdb::NTable::TBuildIndexOperation>(alterOpId).GetValueSync();
+                    ready = buildOp->Ready();
+                }
+                if (!buildOp->Status().IsSuccess()) {
+                    ythrow yexception() << "Unexpected status of index build: " << buildOp->Status().GetStatus() << ": " << buildOp->Status().GetIssues().ToString();
+                }
+            }
+
+            for (const TString& query : modificationQueries) {
+                auto result = queryClient.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+                if (result.GetStatus() != EStatus::SUCCESS) {
+                    Cerr << "Execute query issues. Query: " << query << Endl;
+                    Cerr << "Execute issues:\n" << result.GetIssues().ToString() << Endl;
+                    ythrow yexception() << "Unexpected status of upsert query: " << result.GetStatus() << ": " << result.GetIssues().ToString();
+                }
+            }
+
+            // Bulk upsert must be denied even after index is built
+            checkBulkUpsert();
+        });
+    }
+
+    Y_UNIT_TEST(BuildingUniqIndexDeniesTableModificationsPublicApi) {
+        BuildingUniqIndexDeniesTableModifications(false);
+    }
+
+    Y_UNIT_TEST(BuildingUniqIndexDeniesTableModificationsSql) {
+        BuildingUniqIndexDeniesTableModifications(true);
+    }
+
+    Y_UNIT_TEST(AlterTableAddUniqIndexSqlFeatureOff) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableAddUniqueIndex(false);
+        auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+        TKikimrRunner kikimr(settings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_YQL, NActors::NLog::PRI_TRACE);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_TRACE);
+        NYql::NDq::SetYqlLogLevels(NActors::NLog::PRI_TRACE);
+
+        auto db = kikimr.GetQueryClient();
+
+        {
+            TString createQuery = R"sql(
+                CREATE TABLE `/Root/TestTable` (
+                    Key Uint64,
+                    Value String,
+                    PRIMARY KEY (Key)
+                );
+            )sql";
+            auto result = db.ExecuteQuery(createQuery, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            TString alterQuery = R"sql(
+                ALTER TABLE `/Root/TestTable`
+                ADD INDEX uniq_value_idx GLOBAL UNIQUE ON (`Value`);
+            )sql";
+            auto result = db.ExecuteQuery(alterQuery, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "unsupported index type to build");
+        }
+    }
+
+    Y_UNIT_TEST(AlterTableAddUniqIndexPublicApiFeatureOff) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableAddUniqueIndex(false);
+        auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+        TKikimrRunner kikimr(settings);
+
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        {
+            auto builder = TTableBuilder()
+                .AddNullableColumn("Key", EPrimitiveType::Uint64)
+                .AddNullableColumn("Value", EPrimitiveType::String)
+                .SetPrimaryKeyColumn("Key");
+
+            auto result = session.CreateTable("/Root/TestTable", builder.Build()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            TAlterTableSettings settings;
+            settings.AppendAddIndexes(TIndexDescription(
+                "uniq_value_idx",
+                EIndexType::GlobalUnique,
+                {"Value"}
+            ));
+            auto op = session.AlterTableLong("/Root/TestTable", settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(op.Status().GetStatus(), EStatus::BAD_REQUEST, op.Status().GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(op.Status().GetIssues().ToString(), "unsupported index type to build");
         }
     }
 
@@ -3491,7 +3770,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto describePostingTable = session.DescribeTable("/Root/TestTable/RenamedIndex/indexImplPostingTable").GetValueSync();
             UNIT_ASSERT_C(describePostingTable.IsSuccess(), describePostingTable.GetIssues().ToString());
         }
-    }    
+    }
 
     Y_UNIT_TEST(RenameTableWithVectorIndex) {
         NKikimrConfig::TFeatureFlags featureFlags;
@@ -3524,7 +3803,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto describePostingTable = session.DescribeTable("/Root/TestTableRenamed/vector_idx/indexImplPostingTable").GetValueSync();
             UNIT_ASSERT_C(describePostingTable.IsSuccess(), describePostingTable.GetIssues().ToString());
         }
-    }     
+    }
 
     Y_UNIT_TEST(AlterTableWithDecimalColumn) {
         TKikimrRunner kikimr;
@@ -4027,7 +4306,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             }
         }
     }
-    
+
     void CheckOwner(TSession& session, const TString& path, const TString& name) {
         TDescribeTableResult describe = session.DescribeTable(path).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
@@ -9883,7 +10162,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 CONCURRENT_QUERY_LIMIT=)" << NResourcePool::POOL_MAX_CONCURRENT_QUERY_LIMIT + 1 << R"(
             );)").GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
-        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), 
+        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
             TStringBuilder() << "Invalid resource pool configuration, concurrent_query_limit is " << NResourcePool::POOL_MAX_CONCURRENT_QUERY_LIMIT + 1 << ", that exceeds limit in " << NResourcePool::POOL_MAX_CONCURRENT_QUERY_LIMIT,
             result.GetIssues().ToString()
         );
@@ -10237,7 +10516,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 MEMBER_NAME=")" << BUILTIN_ACL_METADATA << R"("
             );)").GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
-        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), 
+        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
             TStringBuilder() << "Invalid resource pool classifier configuration, cannot create classifier for system user " << BUILTIN_ACL_METADATA,
             result.GetIssues().ToString()
         );

@@ -487,6 +487,9 @@ namespace NTypeAnnImpl {
             imports.push_back(&x.second);
         }
 
+        Cout << "Crab 1" << Types.UdfResolver->RefCount() << Endl;
+        Cout << "Crab 2" << Types.UserDataStorage->RefCount() << Endl;
+
         if (!Types.UdfResolver->LoadMetadata(imports, functions, Expr, Types.RuntimeLogLevel, Types.UserDataStorage->GetHoldingFileStorage())) {
             return false;
         }

@@ -248,6 +248,7 @@ struct TPushdownFixture: public NUnitTest::TBaseFixture {
 
         FunctionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry())->Clone(); // TODO: remove Clone()
         TypesCtx->UdfResolver = NYql::NCommon::CreateSimpleUdfResolver(FunctionRegistry.Get());
+        TypesCtx->UserDataStorage = MakeIntrusive<TUserDataStorage>(nullptr, TUserDataTable(), nullptr, nullptr);
 
         {
             auto* setting = GatewaysCfg.MutableGeneric()->AddDefaultSettings();

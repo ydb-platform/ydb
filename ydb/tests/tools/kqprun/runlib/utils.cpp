@@ -28,15 +28,18 @@ void TerminateHandler() {
     abort();
 }
 
+TString SignalToString(int signal) {
+#ifndef _unix_
+    return TStringBuilder() << "signal " << signal;
+#else
+    return strsignal(signal);
+#endif
+}
+
 void BackTraceSignalHandler(int signal) {
     NColorizer::TColors colors = NColorizer::AutoColors(Cerr);
 
-#ifndef _unix_
-    Cerr << colors.Red() << "======= signal " << signal << " call stack ========" << colors.Default() << Endl;
-#else
-    Cerr << colors.Red() << "======= " << strsignal(signal) << " call stack ========" << colors.Default() << Endl;
-#endif
-
+    Cerr << colors.Red() << "======= " << SignalToString(signal) << " call stack ========" << colors.Default() << Endl;
     FormatBackTrace(&Cerr);
     Cerr << colors.Red() << "===============================================" << colors.Default() << Endl;
 

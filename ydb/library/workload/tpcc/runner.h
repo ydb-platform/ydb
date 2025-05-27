@@ -7,8 +7,7 @@
 namespace NYdb::NTPCC {
 
 struct TRunConfig {
-    TRunConfig(const NConsoleClient::TClientCommand::TConfig& connectionConfig);
-    NConsoleClient::TClientCommand::TConfig ConnectionConfig;
+    TRunConfig() = default;
 
     int WarehouseCount = 0;
     int WarmupSeconds = 0;
@@ -18,10 +17,15 @@ struct TRunConfig {
 
     TString Path;
 
+    // advanced settings (normally, used by developer only)
+
+    int ThreadCount = 0;
+    int DriverCount = 0;
     ELogPriority LogPriority = ELogPriority::TLOG_INFO;
     bool NoSleep = false;
+    bool Developer = false;
 };
 
-void RunSync(const TRunConfig& config);
+void RunSync(const NConsoleClient::TClientCommand::TConfig& connectionConfig, const TRunConfig& runConfig);
 
 } // namespace NYdb::NTPCC

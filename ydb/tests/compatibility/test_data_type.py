@@ -111,5 +111,6 @@ class TestDataType(RestartToAnotherVersionFixture):
 
         self.change_cluster_version()
 
+        self.check_table()
         self.write_data()
         self.check_table()

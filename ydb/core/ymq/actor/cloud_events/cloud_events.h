@@ -28,7 +28,8 @@ namespace NCloudEvents {
         static constexpr std::string_view ResourceType = "message-queue";
         // ResourceId = FolderId
 
-        TString Id;                                         // We need (generate on audit.log as guid; but in cloud we send smth like Type$Id$CreatedAt)
+        uint_fast64_t OriginalId;                           // Generated on audit.log as random number
+        TString Id;                                         // We need (generated as Type$OriginalId$CreatedAt)
         TString Type;                                       // We need
         uint_fast64_t CreatedAt;                            // We need
         TString CloudId;                                    // We need
@@ -40,36 +41,36 @@ namespace NCloudEvents {
 
         TString Issue = "";                                 // Is always empty?
 
-        TString Name;                                       // We need
+        TString QueueName;                                              // We need
         THashMap<TBasicString<char>, NJson::TJsonValue> Labels;        // We need it as a string
     };
 
     /*
         CREATE TABLE `/Root/.CloudEventsYmq` (
             Id Uint64,
-            Name String,
-
-            Type String,
+            QueueName String,
             CreatedAt Uint64,
-            CloudId String,
-            FolderId String,
-            UserSID String,
-            UserSanitizedToken String,
-            AuthType String,
-            PeerName String,
-            RequestId String,
-            IdempotencyId String,
-            Labels String,
-            PRIMARY KEY(Id, Name)
+
+            Type Utf8,
+            CloudId Utf8,
+            FolderId Utf8,
+            UserSID Utf8,
+            UserSanitizedToken Utf8,
+            AuthType Utf8,
+            PeerName Utf8,
+            RequestId Utf8,
+            IdempotencyId Utf8,
+            Labels Utf8,
+            PRIMARY KEY(Id, QueueName)
         );
     */
 
     /*
     UPSERT INTO CloudEventsYmq (
     Id,
-    Name,
-    Type,
+    QueueName,
     CreatedAt,
+    Type,
     CloudId,
     FolderId,
     UserSID,
@@ -157,7 +158,7 @@ namespace NCloudEvents {
 
     class TProcessor : public NActors::TActorBootstrapped<TProcessor> {
     private:
-        static constexpr std::string_view EventTableName =  NKikimr::NSQS::TSqsService::CloudEventsTableName;
+        static constexpr std::string_view EventTableName = NKikimr::NSQS::TSqsService::CloudEventsTableName;
         static constexpr TDuration DefaultRetryTimeout = TDuration::Seconds(10);
         static constexpr std::string_view DefaultEventTypePrefix = "yandex.cloud.events.ymq.";
 
@@ -181,7 +182,7 @@ namespace NCloudEvents {
             Delete
         } LastQuery = ELastQueryType::None;
 
-        void RunQuery(TString query, std::unique_ptr<NYdb::TParams> params = nullptr);
+        void RunQuery(TString query, std::unique_ptr<NYdb::TParams> params = nullptr, bool readOnly = true);
         void UpdateSessionId(const NKqp::TEvKqp::TEvQueryResponse::TPtr& ev);
         void StopSession();
         void ProcessFailure();

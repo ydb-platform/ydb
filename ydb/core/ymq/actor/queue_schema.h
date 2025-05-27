@@ -10,7 +10,22 @@
 
 #include <util/generic/maybe.h>
 
+#include <ctime>
+#include <random>
+
 namespace NKikimr::NSQS {
+
+class TCloudEventIdGenerator {
+private:
+    inline static std::mt19937_64 Randomizer64 = std::mt19937_64(
+        std::chrono::time_point_cast<std::chrono::microseconds>(
+            std::chrono::high_resolution_clock::now()
+        ).time_since_epoch().count()
+    );
+
+public:
+    static uint64_t Generate();
+};
 
 class TCreateQueueSchemaActorV2
     : public TActorBootstrapped<TCreateQueueSchemaActorV2>

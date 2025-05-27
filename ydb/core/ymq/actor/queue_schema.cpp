@@ -737,11 +737,26 @@ static const char* const CommitQueueParamsQuery = R"__(
         (let userName               (Parameter 'USER_NAME         (DataType 'Utf8String)))
         (let tags                   (Parameter 'TAGS              (DataType 'Utf8String)))
 
+        (let cloudEventsId                      (Parameter 'CLOUD_EVENT_ID (DataType 'Uint64)))
+        (let cloudEventsQueueName               (Parameter 'NAME (DataType 'Utf8String)))
+        (let cloudEventsCreatedAt               (Parameter 'NOW (DataType 'Uint64)))
+        (let cloudEventsType                    (Parameter 'CLOUD_EVENT_TYPE (DataType 'Utf8String)))
+        (let cloudEventsCloudId                 (Parameter 'CLOUD_EVENT_CLOUD_ID (DataType 'Utf8String)))
+        (let cloudEventsFolderId                (Parameter 'CLOUD_EVENT_FOLDER_ID (DataType 'Utf8String)))
+        (let cloudEventsUserSID                 (Parameter 'USER_NAME (DataType 'Utf8String)))
+        (let cloudEventsUserSanitizedToken      (Parameter 'CLOUD_EVENT_USER_SANITIZED_TOKEN (DataType 'Utf8String)))
+        (let cloudEventsAuthType                (Parameter 'CLOUD_EVENT_AUTHTYPE (DataType 'Utf8String)))
+        (let cloudEventsPeerName                (Parameter 'CLOUD_EVENT_PEERNAME (DataType 'Utf8String)))
+        (let cloudEventsRequestId               (Parameter 'CLOUD_EVENT_REQUEST_ID (DataType 'Utf8String)))
+        (let cloudEventsIdempotencyId           (Parameter 'CLOUD_EVENT_IDEMPOTENCY_ID (DataType 'Utf8String)))
+        (let cloudEventsQueueTags               (Parameter 'TAGS (DataType 'Utf8String)))
+
         (let attrsTable '%1$s/Attributes)
         (let stateTable '%1$s/State)
         (let settingsTable '%2$s/.Settings)
         (let queuesTable '%2$s/.Queues)
         (let eventsTable '%2$s/.Events)
+        (let cloudEventsTable '%2$s/.CloudEventsYmq)
 
         (let maxQueuesCountSettingRow '(
             '('Account userName)
@@ -767,6 +782,10 @@ static const char* const CommitQueueParamsQuery = R"__(
             '('Account userName)
             '('QueueName name)
             '('EventType (Uint64 '1))))
+
+        (let cloudEventsRow '(
+            '('Id cloudEventsId)
+            '('QueueName cloudEventsQueueName)))
 
         (let queuesSelect '(
             'QueueState
@@ -845,6 +864,20 @@ static const char* const CommitQueueParamsQuery = R"__(
             '('FolderId folderId)
             '('Labels tags)))
 
+        (let cloudEventsUpdate '(
+            '('CreatedAt cloudEventsCreatedAt)
+            '('Type cloudEventsType)
+            '('CloudId cloudEventsCloudId)
+            '('FolderId cloudEventsFolderId)
+            '('UserSID cloudEventsUserSID)
+            '('UserSanitizedToken cloudEventsUserSanitizedToken)
+            '('AuthType cloudEventsAuthType)
+            '('PeerName cloudEventsPeerName)
+            '('RequestId cloudEventsRequestId)
+            '('IdempotencyId cloudEventsIdempotencyId)
+            '('Labels cloudEventsQueueTags)))
+
+
         (let attrRow '(%3$s))
 
         (let attrUpdate '(
@@ -888,6 +921,7 @@ static const char* const CommitQueueParamsQuery = R"__(
 
             (ListIf queueExists (SetResult 'meta queuesRead))
 
+            (ListIf willCommit (UpdateRow cloudEventsTable cloudEventsRow cloudEventsUpdate))
             (ListIf willCommit (UpdateRow queuesTable queuesRow queuesUpdate))
             (ListIf willCommit (UpdateRow eventsTable eventsRow eventsUpdate))
             (ListIf willCommit (UpdateRow attrsTable attrRow attrUpdate))
@@ -947,6 +981,20 @@ TString GetQueueIdAndShardHashesList(ui64 version, ui32 shards) {
     return hashes;
 }
 
+
+/*
+    This function returns only one random number
+    intended to identify an event of the CloudEvent type.
+
+    However, it is worth noting that the factor that outputs logs
+    to the unified agent actually generates a more complex form of the event id.
+
+    So, GenerateEventCloudId does not GenerateEventCloudId the 'real' CloudEvent id.
+*/
+uint64_t TCloudEventIdGenerator::Generate() {
+    return Randomizer64();
+}
+
 void TCreateQueueSchemaActorV2::CommitNewVersion() {
     Become(&TCreateQueueSchemaActorV2::FinalizeAndCommit);
 
@@ -995,7 +1043,16 @@ void TCreateQueueSchemaActorV2::CommitNewVersion() {
         .Uint64("MAX_RECEIVE_COUNT", ValidatedAttributes_.RedrivePolicy.MaxReceiveCount ? *ValidatedAttributes_.RedrivePolicy.MaxReceiveCount : 0)
         .Uint64("DEFAULT_MAX_QUEUES_COUNT", Cfg().GetAccountSettingsDefaults().GetMaxQueuesCount())
         .Utf8("USER_NAME", QueuePath_.UserName)
-        .Utf8("TAGS", TagsJson_);
+        .Utf8("TAGS", TagsJson_)
+        .Uint64("CLOUD_EVENT_ID", TCloudEventIdGenerator::Generate())
+        .Utf8("CLOUD_EVENT_TYPE", "CreateMessageQueue")
+        .Utf8("CLOUD_EVENT_CLOUD_ID", "")
+        .Utf8("CLOUD_EVENT_FOLDER_ID", "")
+        .Utf8("CLOUD_EVENT_USER_SANITIZED_TOKEN", "")
+        .Utf8("CLOUD_EVENT_AUTHTYPE", "")
+        .Utf8("CLOUD_EVENT_PEERNAME", "")
+        .Utf8("CLOUD_EVENT_REQUEST_ID", "")
+        .Utf8("CLOUD_EVENT_IDEMPOTENCY_ID", "");
 
     Register(new TMiniKqlExecutionActor(SelfId(), RequestId_, std::move(ev), false, QueuePath_, GetTransactionCounters(UserCounters_)));
 }
@@ -1224,9 +1281,24 @@ static const char* EraseQueueRecordQuery = R"__(
         (let queueIdNumber      (Parameter 'QUEUE_ID_NUMBER (DataType 'Uint64)))
         (let queueIdNumberHash  (Parameter 'QUEUE_ID_NUMBER_HASH (DataType 'Uint64)))
 
+        (let cloudEventsId                      (Parameter 'CLOUD_EVENT_ID (DataType 'Uint64)))
+        (let cloudEventsQueueName               (Parameter 'NAME (DataType 'Utf8String)))
+        (let cloudEventsCreatedAt               (Parameter 'NOW (DataType 'Uint64)))
+        (let cloudEventsType                    (Parameter 'CLOUD_EVENT_TYPE (DataType 'Utf8String)))
+        (let cloudEventsCloudId                 (Parameter 'CLOUD_EVENT_CLOUD_ID (DataType 'Utf8String)))
+        (let cloudEventsFolderId                (Parameter 'CLOUD_EVENT_FOLDER_ID (DataType 'Utf8String)))
+        (let cloudEventsUserSID                 (Parameter 'USER_NAME (DataType 'Utf8String)))
+        (let cloudEventsUserSanitizedToken      (Parameter 'CLOUD_EVENT_USER_SANITIZED_TOKEN (DataType 'Utf8String)))
+        (let cloudEventsAuthType                (Parameter 'CLOUD_EVENT_AUTHTYPE (DataType 'Utf8String)))
+        (let cloudEventsPeerName                (Parameter 'CLOUD_EVENT_PEERNAME (DataType 'Utf8String)))
+        (let cloudEventsRequestId               (Parameter 'CLOUD_EVENT_REQUEST_ID (DataType 'Utf8String)))
+        (let cloudEventsIdempotencyId           (Parameter 'CLOUD_EVENT_IDEMPOTENCY_ID (DataType 'Utf8String)))
+        (let cloudEventsQueueTags               (Parameter 'CLOUD_EVENT_LABELS (DataType 'Utf8String)))
+
         (let queuesTable '%2$s/.Queues)
         (let removedQueuesTable '%2$s/.RemovedQueues)
         (let eventsTable '%2$s/.Events)
+        (let cloudEventsTable '%2$s/.CloudEventsYmq)
         (let stateTable '%3$s/State)
 
         (let queuesRow '(
@@ -1236,6 +1308,9 @@ static const char* EraseQueueRecordQuery = R"__(
             '('Account userName)
             '('QueueName name)
             '('EventType (Uint64 '0))))
+        (let cloudEventsRow '(
+            '('Id cloudEventsId)
+            '('QueueName cloudEventsQueueName)))
 
         (let queuesSelect '(
             'QueueState
@@ -1337,11 +1412,25 @@ static const char* EraseQueueRecordQuery = R"__(
             '('FolderId folderId)
             '('Labels queueTags)))
 
+        (let cloudEventsUpdate '(
+            '('CreatedAt cloudEventsCreatedAt)
+            '('Type cloudEventsType)
+            '('CloudId cloudEventsCloudId)
+            '('FolderId cloudEventsFolderId)
+            '('UserSID cloudEventsUserSID)
+            '('UserSanitizedToken cloudEventsUserSanitizedToken)
+            '('AuthType cloudEventsAuthType)
+            '('PeerName cloudEventsPeerName)
+            '('RequestId cloudEventsRequestId)
+            '('IdempotencyId cloudEventsIdempotencyId)
+            '('Labels cloudEventsQueueTags)))
+
         (return (Extend
             (AsList
                 (SetResult 'exists queueExists)
                 (SetResult 'version currentVersion)
                 (SetResult 'fields queuesRead)
+                (If queueExists (UpdateRow cloudEventsTable cloudEventsRow cloudEventsUpdate) (Void))
                 (If queueExists (UpdateRow eventsTable eventsRow eventsUpdate) (Void))
                 (If queueExists (UpdateRow removedQueuesTable removedQueueRow removedQueueUpdate) (Void))
                 (If queueExists (EraseRow queuesTable queuesRow) (Void))
@@ -1382,8 +1471,17 @@ void TDeleteQueueSchemaActorV2::NextAction() {
                 .Uint64("QUEUE_ID_NUMBER", QueuePath_.Version)
                 .Uint64("QUEUE_ID_NUMBER_HASH", GetKeysHash(QueuePath_.Version))
                 .Utf8("USER_NAME", QueuePath_.UserName)
-                .Uint64("NOW", nowMs);
-
+                .Uint64("NOW", nowMs)
+                .Utf8("CLOUD_EVENT_LABELS", "")
+                .Uint64("CLOUD_EVENT_ID", TCloudEventIdGenerator::Generate())
+                .Utf8("CLOUD_EVENT_TYPE", "DeleteMessageQueue")
+                .Utf8("CLOUD_EVENT_CLOUD_ID", "")
+                .Utf8("CLOUD_EVENT_FOLDER_ID", "")
+                .Utf8("CLOUD_EVENT_USER_SANITIZED_TOKEN", "")
+                .Utf8("CLOUD_EVENT_AUTHTYPE", "")
+                .Utf8("CLOUD_EVENT_PEERNAME", "")
+                .Utf8("CLOUD_EVENT_REQUEST_ID", "")
+                .Utf8("CLOUD_EVENT_IDEMPOTENCY_ID", "");
             Register(new TMiniKqlExecutionActor(SelfId(), RequestId_, std::move(ev), false, QueuePath_, GetTransactionCounters(UserCounters_)));
             break;
         }

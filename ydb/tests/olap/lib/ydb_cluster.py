@@ -516,6 +516,7 @@ class YdbCluster:
         LOGGER.info(f"Executing local command: {cmd}")
         try:
             if isinstance(cmd, list):
+                #yatest.common.execute(cmd, raise_on_error=raise_on_error, timeout=timeout)
                 result = subprocess.run(cmd, capture_output=True, text=True, check=False, timeout=timeout)
             else:
                 result = subprocess.run(cmd, shell=True, capture_output=True, text=True, check=False, timeout=timeout)
@@ -586,7 +587,7 @@ class YdbCluster:
             # Always return both stdout and stderr
             output = result.stdout or ""
             if result.stderr:
-                output += "\nSTDERR:\n" + result.stderr.decode('utf-8')
+                output += "\nSTDERR:\n" + result.stderr
             
             # If command failed and we should raise
             if result.returncode != 0 and raise_on_error:

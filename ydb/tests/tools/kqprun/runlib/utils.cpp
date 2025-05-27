@@ -31,7 +31,12 @@ void TerminateHandler() {
 void BackTraceSignalHandler(int signal) {
     NColorizer::TColors colors = NColorizer::AutoColors(Cerr);
 
+#ifndef _unix_
+    Cerr << colors.Red() << "======= signal " << signal << " call stack ========" << colors.Default() << Endl;
+#else
     Cerr << colors.Red() << "======= " << strsignal(signal) << " call stack ========" << colors.Default() << Endl;
+#endif
+
     FormatBackTrace(&Cerr);
     Cerr << colors.Red() << "===============================================" << colors.Default() << Endl;
 

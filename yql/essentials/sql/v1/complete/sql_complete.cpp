@@ -119,7 +119,7 @@ namespace NSQLComplete {
 
             if (context.Cluster) {
                 TClusterName::TConstraints constraints;
-                constraints.Namespace = context.Cluster->Provider;
+                constraints.Namespace = ""; // TODO(YQL-19747): filter by provider
                 request.Constraints.Cluster = std::move(constraints);
             }
 

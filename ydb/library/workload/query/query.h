@@ -13,7 +13,7 @@ public:
     TWorkloadDataInitializer::TList CreateDataInitializers() const override;
     TString GetWorkloadName() const override;
 
-    YDB_READONLY_DEF(TFsPath, DataPath);
+    YDB_READONLY_DEF(TFsPath, SuitePath);
     YDB_READONLY_DEF(TVector<TString>, CustomQueries);
 };
 

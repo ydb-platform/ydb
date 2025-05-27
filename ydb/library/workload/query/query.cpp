@@ -13,11 +13,13 @@ void TQueryWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const EComman
             break;
         case TWorkloadParams::ECommandType::Root:
             TWorkloadBaseParams::ConfigureOpts(opts, commandType, workloadType);
-            opts.AddLongOption('d', "data-path", "Path to workload data.")
-                .RequiredArgument("PATH").StoreResult(&DataPath);
             break;
         case TWorkloadParams::ECommandType::Run:
+        case TWorkloadParams::ECommandType::Init:
             opts.AddLongOption('q', "query", "Query to execute. Can be used multiple times.").AppendTo(&CustomQueries);
+            TWorkloadBaseParams::ConfigureOpts(opts, commandType, workloadType);
+            opts.AddLongOption("suite-path", "Path to suite directory.")
+                .RequiredArgument("PATH").StoreResult(&SuitePath);
             break;
     }
 }
@@ -86,8 +88,8 @@ std::string TQueryGenerator::GetDDLQueriesFromDir(const TFsPath& dir) const {
 
 TQueryInfoList TQueryGenerator::GetWorkload(int /*type*/) {
     TQueryInfoList result;
-    const auto runPath = Params.GetDataPath() / "run";
-    if (Params.GetDataPath().IsDefined() && runPath.IsDirectory()) {
+    const auto runPath = Params.GetSuitePath() / "run";
+    if (Params.GetSuitePath().IsDefined() && runPath.IsDirectory()) {
         result.splice(result.end(), GetWorkloadFromDir(runPath, ""));
     }
 
@@ -101,12 +103,16 @@ TQueryInfoList TQueryGenerator::GetWorkload(int /*type*/) {
 TVector<IWorkloadQueryGenerator::TWorkloadType> TQueryGenerator::GetSupportedWorkloadTypes() const {
     return {
         IWorkloadQueryGenerator::TWorkloadType(0, "olap", "Hard analitics queries from external source. One thread, more stats for every query.", IWorkloadQueryGenerator::TWorkloadType::EKind::Benchmark),
-        IWorkloadQueryGenerator::TWorkloadType(0, "oltp", "Many light queries from external source, witch be lanch by some threads many times.", IWorkloadQueryGenerator::TWorkloadType::EKind::Workload)
     };
 }
 
 std::string TQueryGenerator::GetDDLQueries() const {
-    return  GetDDLQueriesFromDir(Params.GetDataPath() / "create");
+    std::stringstream result;
+    for (const auto& cq: Params.GetCustomQueries()) {
+        result << cq.c_str() << ";" << std::endl;
+    }
+    result << GetDDLQueriesFromDir(Params.GetSuitePath() / "create");
+    return result.str();
 }
 
 TQueryInfoList TQueryGenerator::GetInitialData() {

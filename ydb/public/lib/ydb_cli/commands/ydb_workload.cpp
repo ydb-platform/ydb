@@ -432,11 +432,8 @@ TWorkloadCommandRoot::TWorkloadCommandRoot(const TString& key)
     , Params(NYdbWorkload::TWorkloadFactory::MakeHolder(key))
 {
     AddCommand(std::make_unique<TWorkloadCommandInit>(*Params));
-    {
-        auto initializers = Params->CreateDataInitializers();
-        if (!initializers.empty()) {
-            AddCommand(std::make_unique<TWorkloadCommandImport>(*Params, std::move(initializers)));
-        }
+    if (auto import = TWorkloadCommandImport::Create(*Params)) {
+        AddCommand(std::move(import));
     }
     auto supportedWorkloads = Params->CreateGenerator()->GetSupportedWorkloadTypes();
     switch (supportedWorkloads.size()) {

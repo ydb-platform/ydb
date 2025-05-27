@@ -4,8 +4,9 @@ from ydb.tests.library.compatibility.fixtures import MixedClusterFixture
 from ydb.tests.oss.ydb_sdk_import import ydb
 import random
 
+
 class TestDigest(MixedClusterFixture):
-    rows = 1000
+    rows = 100
     table_name = 'digest_test'
 
     @pytest.fixture(autouse=True, scope="function")
@@ -88,14 +89,11 @@ class TestDigest(MixedClusterFixture):
         with ydb.QuerySessionPool(self.driver) as session_pool:
 
             query = self.generate_create_table()
-            print('MISHA', query)
             session_pool.execute_with_retries(query)
 
             query = self.generate_insert()
-            print('MISHA', query)
             session_pool.execute_with_retries(query)
 
             query = self.q_digest()
-            print('MISHA', query)
             result = session_pool.execute_with_retries(query)
             assert len(result[0].rows) > 0

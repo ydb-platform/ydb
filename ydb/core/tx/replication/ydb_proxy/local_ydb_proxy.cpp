@@ -175,11 +175,11 @@ class TLocalTopicPartitionReaderActor : public TBaseLocalTopicPartitionActor<TLo
     };
 
 public:
-    TLocalTopicPartitionReaderActor(const std::string& database, const TEvYdbProxy::TTopicReaderSettings& settings)
+    TLocalTopicPartitionReaderActor(const TActorId& parent, const std::string& database, const TEvYdbProxy::TTopicReaderSettings& settings)
         : TBaseLocalTopicPartitionActor(database, std::move(settings.GetBase().Topics_[0].Path_), settings.GetBase().Topics_[0].PartitionIds_[0])
+        , Parent(parent)
         , Consumer(std::move(settings.GetBase().ConsumerName_))
         , AutoCommit(settings.AutoCommit_) {
-        AFL_VERIFY(1 == settings.GetBase().Topics_[0].PartitionIds_.size())("size", settings.GetBase().Topics_[0].PartitionIds_.size()); // TODO Move check
     }
 
 protected:
@@ -188,11 +188,11 @@ protected:
     }
 
     void OnError(const TString& error) override {
-        Send(SelfId() /* TODO*/, CreateError(NYdb::EStatus::UNAVAILABLE, error));
+        Send(Parent, CreateError(NYdb::EStatus::UNAVAILABLE, error));
     }
 
     void OnFatalError(const TString& error) override {
-        Send(SelfId() /* TODO*/, CreateError(NYdb::EStatus::SCHEME_ERROR, error));
+        Send(Parent, CreateError(NYdb::EStatus::SCHEME_ERROR, error));
     }
 
     std::unique_ptr<TEvYdbProxy::TEvTopicReaderGone> CreateError(NYdb::EStatus status, const TString& error) {
@@ -394,6 +394,7 @@ private:
     }
 
 private:
+    const TActorId Parent;
     const TString Consumer;
     const bool AutoCommit;
 
@@ -426,7 +427,10 @@ private:
         auto args = std::move(ev->Get()->GetArgs());
         const auto& settings = std::get<TEvYdbProxy::TTopicReaderSettings>(args);
 
-        auto actor = new TLocalTopicPartitionReaderActor(Database, settings);
+        AFL_VERIFY(1 == settings.GetBase().Topics_.size())("topic count", settings.GetBase().Topics_.size());
+        AFL_VERIFY(1 == settings.GetBase().Topics_[0].PartitionIds_.size())("partition count", settings.GetBase().Topics_[0].PartitionIds_.size());
+
+        auto actor = new TLocalTopicPartitionReaderActor(ev->Sender, Database, settings);
         auto reader = TlsActivationContext->RegisterWithSameMailbox(actor, SelfId());
         Send(ev->Sender, new TEvYdbProxy::TEvCreateTopicReaderResponse(reader));
     }

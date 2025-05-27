@@ -158,11 +158,11 @@
                                         "Name": "Iterator"
                                     }
                                 ],
-                                "PlanNodeId": 1
+                                "PlanNodeId": 1,
+                                "Tables": [
+                                    "base_table_types_script_script/TableTypes"
+                                ]
                             }
-                        ],
-                        "Tables": [
-                            "base_table_types_script_script/TableTypes"
                         ]
                     }
                 ],

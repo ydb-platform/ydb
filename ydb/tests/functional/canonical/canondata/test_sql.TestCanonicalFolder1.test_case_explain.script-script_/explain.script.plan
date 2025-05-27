@@ -542,11 +542,11 @@
                                         "Name": "Iterator"
                                     }
                                 ],
-                                "PlanNodeId": 1
+                                "PlanNodeId": 1,
+                                "Tables": [
+                                    "base_explain_script_script/ScriptingTest"
+                                ]
                             }
-                        ],
-                        "Tables": [
-                            "base_explain_script_script/ScriptingTest"
                         ]
                     }
                 ],
@@ -598,11 +598,11 @@
                                         "Name": "Iterator"
                                     }
                                 ],
-                                "PlanNodeId": 1
+                                "PlanNodeId": 1,
+                                "Tables": [
+                                    "base_explain_script_script/ScriptingTest"
+                                ]
                             }
-                        ],
-                        "Tables": [
-                            "base_explain_script_script/ScriptingTest"
                         ]
                     }
                 ],

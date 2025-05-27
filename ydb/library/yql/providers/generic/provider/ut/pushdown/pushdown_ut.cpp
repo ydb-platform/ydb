@@ -217,6 +217,9 @@ private:
     bool* DqSourceSettingsWereBuilt_;
 };
 
+
+NYql::NUdf::TUniquePtr<NYql::NUdf::IUdfModule> CreateRe2Module();
+
 struct TPushdownFixture: public NUnitTest::TBaseFixture {
     TExprContext Ctx;
     TTypeAnnotationContextPtr TypesCtx;
@@ -246,7 +249,10 @@ struct TPushdownFixture: public NUnitTest::TBaseFixture {
         TypesCtx = MakeIntrusive<TTypeAnnotationContext>();
         TypesCtx->RandomProvider = CreateDeterministicRandomProvider(1);
 
-        FunctionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry())->Clone(); // TODO: remove Clone()
+        auto funcRegistry = CreateFunctionRegistry(CreateBuiltinRegistry())->Clone();
+        funcRegistry->AddModule("", "Re2", CreateRe2Module());
+        FunctionRegistry = std::move(funcRegistry);
+
         TypesCtx->UdfResolver = NYql::NCommon::CreateSimpleUdfResolver(FunctionRegistry.Get());
         TypesCtx->UserDataStorage = MakeIntrusive<TUserDataStorage>(nullptr, TUserDataTable(), nullptr, nullptr);
 

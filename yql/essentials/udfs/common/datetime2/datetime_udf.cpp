@@ -4,6 +4,8 @@
 #include <yql/essentials/minikql/datetime/datetime.h>
 #include <yql/essentials/minikql/datetime/datetime64.h>
 
+#include <yql/essentials/minikql/mkql_runtime_version.h>
+
 #include <yql/essentials/public/udf/arrow/udf_arrow_helpers.h>
 
 #include <util/datetime/base.h>
@@ -2292,6 +2294,16 @@ private:
             }
 
             auto resourceType = builder.Resource(TMResourceName);
+
+            // FIXME: The condition below is required to untie the
+            // Gordian knot with the upgrade, when two MiniKQL
+            // runtimes with different versions are being used.
+            // See YQL-19967 for more info.
+            if (MKQL_RUNTIME_VERSION < 51U && typesOnly) {
+                builder.Args()->Add(resourceType).Flags(ICallablePayload::TArgumentFlags::AutoMap);
+                builder.RunConfig<char*>().Returns<char*>();
+                return true;
+            }
 
             auto stringType = builder.SimpleType<char*>();
 

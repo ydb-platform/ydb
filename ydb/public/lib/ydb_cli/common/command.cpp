@@ -335,7 +335,8 @@ void TClientCommand::RenderCommandDescription(
     bool renderTree,
     const NColorizer::TColors& colors,
     RenderEntryType type,
-    TString prefix
+    TString prefix,
+    bool shortForm
 ) {
     Y_UNUSED(renderTree);
     if (Hidden && type != BEGIN) {
@@ -356,7 +357,14 @@ void TClientCommand::RenderCommandDescription(
             stream << TString(DESCRIPTION_ALIGNMENT - namePartLength, ' ');
         else
             stream << ' ';
-        stream << Description;
+        if (shortForm) {
+            TStringBuf descr(Description), line;
+            while (descr.ReadLine(line) && line.empty()) {
+            }
+            stream << line;
+        } else {
+            stream << Description;
+        }
         if (!Aliases.empty()) {
             stream << " (aliases: ";
             for (auto it = Aliases.begin(); it != Aliases.end(); ++it) {
@@ -419,13 +427,8 @@ void TClientCommandTree::Config(TConfig& config) {
     stream << Endl << Endl
         << colors.BoldColor() << "Description" << colors.OldColor() << ": " << Description << Endl << Endl
         << colors.BoldColor() << "Subcommands" << colors.OldColor() << ":" << Endl;
-    const auto descr = Description;
-    TString line;
-    TStringInput(Description).ReadLine(line);
-    Description = line;
-    RenderCommandDescription(stream, config.HelpCommandVerbosiltyLevel > 1, colors);
+    RenderCommandDescription(stream, config.HelpCommandVerbosiltyLevel > 1, colors, BEGIN, "", true);
     stream << Endl;
-    Description = descr;
     PrintParentOptions(stream, config, colors);
     config.Opts->SetCmdLineDescr(stream.Str());
 }
@@ -499,9 +502,10 @@ void TClientCommandTree::RenderCommandDescription(
     bool renderTree,
     const NColorizer::TColors& colors,
     RenderEntryType type,
-    TString prefix
+    TString prefix,
+    bool shortForm
 ) {
-    TClientCommand::RenderCommandDescription(stream, false, colors, type, prefix);
+    TClientCommand::RenderCommandDescription(stream, false, colors, type, prefix, shortForm);
     if (type == BEGIN || renderTree) {
         if (type == MIDDLE) {
             prefix += "│  ";
@@ -518,7 +522,7 @@ void TClientCommandTree::RenderCommandDescription(
 
         for (auto it = visibleSubCommands.begin(); it != visibleSubCommands.end(); ++it) {
             bool lastCommand = (std::next(it) == visibleSubCommands.end());
-            (*it)->RenderCommandDescription(stream, renderTree, colors, lastCommand ? END : MIDDLE, prefix);
+            (*it)->RenderCommandDescription(stream, renderTree, colors, lastCommand ? END : MIDDLE, prefix, shortForm);
         }
     }
 }

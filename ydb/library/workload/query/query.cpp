@@ -36,8 +36,29 @@ TString TQueryWorkloadParams::GetWorkloadName() const {
     return "Query";
 }
 
-TString TQueryWorkloadParams::GetDescription() const {
-    return R"(Workload defined by the user.
+TString TQueryWorkloadParams::GetDescription(ECommandType commandType, int /*workloadType*/) const {
+    switch (commandType) {
+    default:
+        return "";
+
+    case ECommandType::Init:
+        return R"(Initialization of tables, their configuration, etc.
+All files with the "sql" and "yql" extensions will be used from subdirectory "init" in suite dir, including those in nested directories. It is assumed that they contain DDL queries. It is also possible to specify such queries directly from the command line, using the "--query" parameter of the "init" command.
+
+Next aliases can be used in queries:
+  * {db} - absolute path in database to workload root. It is combination of --database and --path option values.)";
+
+    case ECommandType::Import:
+        return R"(Filling tables with data.
+Upload data from subdirectory "import" in suite dir.
+This folder is expected to contain subfolders whose names correspond to the names of the tables. They already contain files with data. The following formats are supported: csv (coma separated values), tsv (tab separated values), csv.gz (compressed csv) and tsv.gz (compressed tsv).)";
+
+    case ECommandType::Run:
+        return R"(Run load testing.
+All files with the extensions "sql" and "yql" will be used from subdirectory "run" in suite dir, including those in nested directories. It is also possible to specify queries directly from the command line, using the "--query" parameter of the "run" command.)";
+
+    case ECommandType::Root:
+        return R"(Workload defined by the user.
 The load testing cycle consists of stages.
 The user creates a directory with subdirectories corresponding to each stage. Let's call this directory suite. The path to the suite is passed through the "--suite-path" parameter of each command.
 
@@ -55,6 +76,7 @@ Run load testing. In this directory, all files with the extensions "sql" and "yq
 Cleaning, deleting tables used for load testing. This step does not require any data from the user, only the path to the database.
 
 Details can be found in the description of the commands, using the "--help" option.)";
+    }
 }
 
 TQueryInfo TQueryGenerator::MakeQuery(const TString& queryText, const TString& queryName) const {

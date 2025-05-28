@@ -366,7 +366,11 @@ TWorkloadCommandBase::TWorkloadCommandBase(const TString& name, NYdbWorkload::TW
     , CommandType(commandType)
     , Params(params)
     , Type(type)
-{}
+{
+    if (const auto desc = Params.GetDescription(CommandType, Type)) {
+        Description = desc;
+    }
+}
 
 void TWorkloadCommandBase::Config(TConfig& config) {
     TYdbCommand::Config(config);
@@ -431,7 +435,7 @@ TWorkloadCommandRoot::TWorkloadCommandRoot(const TString& key)
       )
     , Params(NYdbWorkload::TWorkloadFactory::MakeHolder(key))
 {
-    if (const auto desc = Params->GetDescription()) {
+    if (const auto desc = Params->GetDescription(NYdbWorkload::TWorkloadParams::ECommandType::Root, 0)) {
         Description = desc;
     }
     AddCommand(std::make_unique<TWorkloadCommandInit>(*Params));

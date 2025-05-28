@@ -178,7 +178,7 @@ public:
         return {};
     }
     virtual TString GetWorkloadName() const = 0;
-    virtual TString GetDescription() const {
+    virtual TString GetDescription(ECommandType /*commandType*/, int /*workloadType*/) const {
         return TString();
     }
 

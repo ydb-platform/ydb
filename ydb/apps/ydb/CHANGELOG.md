@@ -1,3 +1,5 @@
+* `ydb workload query` deep reworked. Now it can be used for user defined full cicle load testing.
+
 * Added object names completion in interactive mode
 
 * Added `--threads` option to `ydb workload clickbench run`, `ydb workload tpch run` and `ydb workload tpcds run`. It allows to send workload queries by multiple threads.

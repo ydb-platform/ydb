@@ -106,7 +106,7 @@ public:
     TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme>) noexcept final
     {
         TActivationContext::AsActorContext().RegisterWithSameMailbox(this);
-        LOG_D("Prepare " << Debug());
+        LOG_I("Prepare " << Debug());
 
         Driver = driver;
         return {EScan::Feed, {}};
@@ -136,8 +136,6 @@ public:
 
     TAutoPtr<IDestructable> Finish(EAbort abort) noexcept final
     {
-        LOG_D("Finish " << Debug());
-
         if (Uploader) {
             Send(Uploader, new TEvents::TEvPoison);
             Uploader = {};
@@ -156,6 +154,8 @@ public:
             record.SetStatus(NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
         }
         NYql::IssuesToMessage(UploadStatus.Issues, record.MutableIssues());
+
+        LOG_N("Finish" << Debug() << " " << Response->Record.ShortDebugString());
         Send(ResponseActorId, Response.Release());
 
         Driver = nullptr;
@@ -201,7 +201,7 @@ protected:
 
     void HandleWakeup()
     {
-        LOG_T("Retry upload " << Debug());
+        LOG_I("Retry upload " << Debug());
 
         if (!WriteBuf.IsEmpty()) {
             Upload(true);
@@ -285,14 +285,17 @@ public:
         : TReshuffleKMeansScanBase{table, std::move(lead), request, responseActorId, std::move(response)}
     {
         this->Dimensions = request.GetSettings().vector_dimension();
-        LOG_D("Create " << Debug());
+        LOG_I("Create " << Debug());
     }
 
-    EScan Feed(TArrayRef<const TCell> key, const TRow& row) noexcept final
+    EScan Feed(TArrayRef<const TCell> key, const TRow& row_) noexcept final
     {
         LOG_T("Feed " << Debug());
+        
         ++ReadRows;
-        ReadBytes += CountBytes(key, row);
+        ReadBytes += CountBytes(key, row_);
+        auto row = *row_;
+        
         switch (UploadState) {
             case EState::UPLOAD_MAIN_TO_BUILD:
                 return FeedUploadMain2Build(key, row);
@@ -308,40 +311,40 @@ public:
     }
 
 private:
-    EScan FeedUploadMain2Build(TArrayRef<const TCell> key, const TRow& row) noexcept
+    EScan FeedUploadMain2Build(TArrayRef<const TCell> key, TArrayRef<const TCell> row) noexcept
     {
         const ui32 pos = FeedEmbedding(*this, Clusters, row, EmbeddingPos);
-        if (pos > K) {
+        if (pos >= K) {
             return EScan::Feed;
         }
         AddRowMain2Build(ReadBuf, Child + pos, key, row);
         return FeedUpload();
     }
 
-    EScan FeedUploadMain2Posting(TArrayRef<const TCell> key, const TRow& row) noexcept
+    EScan FeedUploadMain2Posting(TArrayRef<const TCell> key, TArrayRef<const TCell> row) noexcept
     {
         const ui32 pos = FeedEmbedding(*this, Clusters, row, EmbeddingPos);
-        if (pos > K) {
+        if (pos >= K) {
             return EScan::Feed;
         }
         AddRowMain2Posting(ReadBuf, Child + pos, key, row, DataPos);
         return FeedUpload();
     }
 
-    EScan FeedUploadBuild2Build(TArrayRef<const TCell> key, const TRow& row) noexcept
+    EScan FeedUploadBuild2Build(TArrayRef<const TCell> key, TArrayRef<const TCell> row) noexcept
     {
         const ui32 pos = FeedEmbedding(*this, Clusters, row, EmbeddingPos);
-        if (pos > K) {
+        if (pos >= K) {
             return EScan::Feed;
         }
         AddRowBuild2Build(ReadBuf, Child + pos, key, row);
         return FeedUpload();
     }
 
-    EScan FeedUploadBuild2Posting(TArrayRef<const TCell> key, const TRow& row) noexcept
+    EScan FeedUploadBuild2Posting(TArrayRef<const TCell> key, TArrayRef<const TCell> row) noexcept
     {
         const ui32 pos = FeedEmbedding(*this, Clusters, row, EmbeddingPos);
-        if (pos > K) {
+        if (pos >= K) {
             return EScan::Feed;
         }
         AddRowBuild2Posting(ReadBuf, Child + pos, key, row, DataPos);

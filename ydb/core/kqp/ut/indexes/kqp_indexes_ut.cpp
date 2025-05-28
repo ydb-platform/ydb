@@ -2208,18 +2208,24 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
     }
 
     void DoPositiveQueriesVectorIndex(TSession& session, const TString& mainQuery, const TString& indexQuery) {
-        // TODO(mbkkt) results are not precise so for now can differ between main and index
-        // But they're still should contains exactly 3 unique rows
+        auto toStr = [](const auto& rs) -> TString {
+            TStringBuilder b;
+            for (const auto& r : rs) {
+                b << r << ", ";
+            }
+            return b;
+        };
         auto mainResults = DoPositiveQueryVectorIndex(session, mainQuery);
-        UNIT_ASSERT_EQUAL(mainResults.size(), 3);
-        auto indexResults = DoPositiveQueryVectorIndex(session, indexQuery);
-        UNIT_ASSERT_EQUAL(indexResults.size(), 3);
-
         absl::c_sort(mainResults);
-        UNIT_ASSERT(std::unique(mainResults.begin(), mainResults.end()) == mainResults.end());
+        UNIT_ASSERT_EQUAL_C(mainResults.size(), 3, toStr(mainResults));
+        UNIT_ASSERT_C(std::unique(mainResults.begin(), mainResults.end()) == mainResults.end(), toStr(mainResults));
 
+        auto indexResults = DoPositiveQueryVectorIndex(session, indexQuery);
         absl::c_sort(indexResults);
-        UNIT_ASSERT(std::unique(indexResults.begin(), indexResults.end()) == indexResults.end());
+        UNIT_ASSERT_EQUAL_C(indexResults.size(), 3, toStr(indexResults));
+        UNIT_ASSERT_C(std::unique(indexResults.begin(), indexResults.end()) == indexResults.end(), toStr(indexResults));
+
+        UNIT_ASSERT_VALUES_EQUAL(mainResults, indexResults);
     }
 
     void DoPositiveQueriesVectorIndexOrderBy(
@@ -2228,7 +2234,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         std::string_view direction,
         std::string_view left,
         std::string_view right) {
-        constexpr std::string_view target = "$target = \"\x67\x73\x03\";";
+        constexpr std::string_view target = "$target = \"\x67\x71\x03\";";
         std::string metric = std::format("Knn::{}({}, {})", function, left, right);
         // no metric in result
         {
@@ -2333,11 +2339,11 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                 "(0, \"\x03\x30\x03\", \"0\"),"
                 "(1, \"\x13\x31\x03\", \"1\"),"
                 "(2, \"\x23\x32\x03\", \"2\"),"
-                "(3, \"\x33\x33\x03\", \"3\"),"
+                "(3, \"\x53\x33\x03\", \"3\"),"
                 "(4, \"\x43\x34\x03\", \"4\"),"
-                "(5, \"\x60\x60\x03\", \"5\"),"
-                "(6, \"\x61\x61\x03\", \"6\"),"
-                "(7, \"\x62\x62\x03\", \"7\"),"
+                "(5, \"\x50\x60\x03\", \"5\"),"
+                "(6, \"\x61\x11\x03\", \"6\"),"
+                "(7, \"\x12\x62\x03\", \"7\"),"
                 "(8, \"\x75\x76\x03\", \"8\"),"
                 "(9, \"\x76\x76\x03\", \"9\");"
             ));
@@ -2687,102 +2693,69 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         DoPositiveQueriesVectorIndexOrderByCosine(session);
     }
 
-    std::vector<i64> DoPositiveQueryPrefixedVectorIndex(TSession& session, const TString& query) {
-        {
-            auto result = session.ExplainDataQuery(query).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(),
-                "Failed to explain: `" << query << "` with " << result.GetIssues().ToString());
-        }
-        {
-            auto result = session.ExecuteDataQuery(query,
-                TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()
-            ).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(),
-                "Failed to execute: `" << query << "` with " << result.GetIssues().ToString());
-
-            std::vector<i64> r;
-            auto sets = result.GetResultSets();
-            for (const auto& set : sets) {
-                TResultSetParser parser{set};
-                while (parser.TryNextRow()) {
-                    auto value = parser.GetValue("pk");
-                    UNIT_ASSERT_C(value.GetProto().has_int64_value(), value.GetProto().ShortUtf8DebugString());
-                    r.push_back(value.GetProto().int64_value());
-                }
-            }
-            return r;
-        }
-    }
-
-    void DoPositiveQueriesPrefixedVectorIndex(TSession& session, const TString& mainQuery, const TString& indexQuery) {
-        // TODO(mbkkt) results are not precise so for now can differ between main and index
-        // But they're still should contains exactly 3 unique rows
-        auto mainResults = DoPositiveQueryPrefixedVectorIndex(session, mainQuery);
-        UNIT_ASSERT_EQUAL(mainResults.size(), 3);
-        auto indexResults = DoPositiveQueryPrefixedVectorIndex(session, indexQuery);
-        UNIT_ASSERT_EQUAL(indexResults.size(), 3);
-
-        absl::c_sort(mainResults);
-        UNIT_ASSERT(std::unique(mainResults.begin(), mainResults.end()) == mainResults.end());
-
-        absl::c_sort(indexResults);
-        UNIT_ASSERT(std::unique(indexResults.begin(), indexResults.end()) == indexResults.end());
-    }
-
     void DoPositiveQueriesPrefixedVectorIndexOrderBy(
         TSession& session,
         std::string_view function,
         std::string_view direction,
         std::string_view left,
         std::string_view right) {
-        constexpr std::string_view target = "$target = \"\x67\x73\x03\";";
+        constexpr std::string_view init = 
+            "$target = \"\x67\x68\x03\";\n"
+            "$user = \"user_b\";";
         std::string metric = std::format("Knn::{}({}, {})", function, left, right);
         // no metric in result
         {
             const TString plainQuery(Q1_(std::format(R"({}
                 SELECT * FROM `/Root/TestTable`
+                WHERE user = $user
                 ORDER BY {} {}
                 LIMIT 3;
-            )", target, metric, direction)));
+            )", init, metric, direction)));
             const TString indexQuery(Q1_(std::format(R"(
                 pragma ydb.KMeansTreeSearchTopSize = "3";
                 {}
                 SELECT * FROM `/Root/TestTable` VIEW index
+                WHERE user = $user
                 ORDER BY {} {}
                 LIMIT 3;
-            )", target, metric, direction)));
-            DoPositiveQueriesPrefixedVectorIndex(session, plainQuery, indexQuery);
+            )", init, metric, direction)));
+            DoPositiveQueriesVectorIndex(session, plainQuery, indexQuery);
         }
         // metric in result
         {
             const TString plainQuery(Q1_(std::format(R"({}
                 SELECT {}, `/Root/TestTable`.* FROM `/Root/TestTable`
+                WHERE user = $user
                 ORDER BY {} {}
                 LIMIT 3;
-            )", target, metric, metric, direction)));
+            )", init, metric, metric, direction)));
             const TString indexQuery(Q1_(std::format(R"({}
                 pragma ydb.KMeansTreeSearchTopSize = "2";
                 SELECT {}, `/Root/TestTable`.* FROM `/Root/TestTable` VIEW index
+                WHERE user = $user
                 ORDER BY {} {}
                 LIMIT 3;
-            )", target, metric, metric, direction)));
-            DoPositiveQueriesPrefixedVectorIndex(session, plainQuery, indexQuery);
+            )", init, metric, metric, direction)));
+            DoPositiveQueriesVectorIndex(session, plainQuery, indexQuery);
         }
         // metric as result
-        {
+        // TODO(mbkkt) fix this behavior too
+        if constexpr (false) {
             const TString plainQuery(Q1_(std::format(R"({}
                 SELECT {} AS m, `/Root/TestTable`.* FROM `/Root/TestTable`
+                WHERE user = $user
                 ORDER BY m {}
                 LIMIT 3;
-            )", target, metric, direction)));
+            )", init, metric, direction)));
             const TString indexQuery(Q1_(std::format(R"(
                 pragma ydb.KMeansTreeSearchTopSize = "1";
                 {}
                 SELECT {} AS m, `/Root/TestTable`.* FROM `/Root/TestTable` VIEW index
+                WHERE user = $user
                 ORDER BY m {}
                 LIMIT 3;
-            )", target, metric, direction)));
-            DoPositiveQueriesPrefixedVectorIndex(session, plainQuery, indexQuery);
+            )", init, metric, direction)));
+            DoPositiveQueriesVectorIndex(session, plainQuery, indexQuery);
         }
     }
 
@@ -2828,8 +2801,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                 .SetMinPartitionsCount(3)
             .EndPartitioningSettings();
             auto partitions = TExplicitPartitions{}
-                .AppendSplitPoints(TValueBuilder{}.BeginTuple().AddElement().OptionalInt64(4).EndTuple().Build())
-                .AppendSplitPoints(TValueBuilder{}.BeginTuple().AddElement().OptionalInt64(6).EndTuple().Build());
+                .AppendSplitPoints(TValueBuilder{}.BeginTuple().AddElement().OptionalInt64(40).EndTuple().Build())
+                .AppendSplitPoints(TValueBuilder{}.BeginTuple().AddElement().OptionalInt64(60).EndTuple().Build());
             tableBuilder.SetPartitionAtKeys(partitions);
             auto result = session.CreateTable("/Root/TestTable", tableBuilder.Build()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
@@ -2839,38 +2812,38 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         {
             const TString query1(Q_(R"(
                 UPSERT INTO `/Root/TestTable` (pk, user, emb, data) VALUES)"
-                "(0, \"user_a\", \"\x03\x30\x03\", \"0\"),"
-                "(1, \"user_a\", \"\x13\x31\x03\", \"1\"),"
-                "(2, \"user_a\", \"\x23\x32\x03\", \"2\"),"
-                "(3, \"user_a\", \"\x33\x33\x03\", \"3\"),"
-                "(4, \"user_a\", \"\x43\x34\x03\", \"4\"),"
-                "(5, \"user_a\", \"\x60\x60\x03\", \"5\"),"
-                "(6, \"user_a\", \"\x61\x61\x03\", \"6\"),"
-                "(7, \"user_a\", \"\x62\x62\x03\", \"7\"),"
-                "(8, \"user_a\", \"\x75\x76\x03\", \"8\"),"
-                "(9, \"user_a\", \"\x76\x76\x03\", \"9\"),"
+                "( 1, \"user_a\", \"\x03\x30\x03\", \"0\"),"
+                "(11, \"user_a\", \"\x13\x31\x03\", \"1\"),"
+                "(21, \"user_a\", \"\x23\x32\x03\", \"2\"),"
+                "(31, \"user_a\", \"\x53\x33\x03\", \"3\"),"
+                "(41, \"user_a\", \"\x43\x34\x03\", \"4\"),"
+                "(51, \"user_a\", \"\x50\x60\x03\", \"5\"),"
+                "(61, \"user_a\", \"\x61\x61\x03\", \"6\"),"
+                "(71, \"user_a\", \"\x12\x62\x03\", \"7\"),"
+                "(81, \"user_a\", \"\x75\x76\x03\", \"8\"),"
+                "(91, \"user_a\", \"\x76\x76\x03\", \"9\"),"
 
-                "(0, \"user_b\", \"\x03\x30\x03\", \"0\"),"
-                "(1, \"user_b\", \"\x13\x31\x03\", \"1\"),"
-                "(2, \"user_b\", \"\x23\x32\x03\", \"2\"),"
-                "(3, \"user_b\", \"\x33\x33\x03\", \"3\"),"
-                "(4, \"user_b\", \"\x43\x34\x03\", \"4\"),"
-                "(5, \"user_b\", \"\x60\x60\x03\", \"5\"),"
-                "(6, \"user_b\", \"\x61\x61\x03\", \"6\"),"
-                "(7, \"user_b\", \"\x62\x62\x03\", \"7\"),"
-                "(8, \"user_b\", \"\x75\x76\x03\", \"8\"),"
-                "(9, \"user_b\", \"\x76\x76\x03\", \"9\"),"
+                "( 2, \"user_b\", \"\x03\x30\x03\", \"0\"),"
+                "(12, \"user_b\", \"\x13\x31\x03\", \"1\"),"
+                "(22, \"user_b\", \"\x23\x32\x03\", \"2\"),"
+                "(32, \"user_b\", \"\x53\x33\x03\", \"3\"),"
+                "(42, \"user_b\", \"\x43\x34\x03\", \"4\"),"
+                "(52, \"user_b\", \"\x50\x60\x03\", \"5\"),"
+                "(62, \"user_b\", \"\x61\x61\x03\", \"6\"),"
+                "(72, \"user_b\", \"\x12\x62\x03\", \"7\"),"
+                "(82, \"user_b\", \"\x75\x76\x03\", \"8\"),"
+                "(92, \"user_b\", \"\x76\x76\x03\", \"9\"),"
 
-                "(0, \"user_c\", \"\x03\x30\x03\", \"0\"),"
-                "(1, \"user_c\", \"\x13\x31\x03\", \"1\"),"
-                "(2, \"user_c\", \"\x23\x32\x03\", \"2\"),"
-                "(3, \"user_c\", \"\x33\x33\x03\", \"3\"),"
-                "(4, \"user_c\", \"\x43\x34\x03\", \"4\"),"
-                "(5, \"user_c\", \"\x60\x60\x03\", \"5\"),"
-                "(6, \"user_c\", \"\x61\x61\x03\", \"6\"),"
-                "(7, \"user_c\", \"\x62\x62\x03\", \"7\"),"
-                "(8, \"user_c\", \"\x75\x76\x03\", \"8\"),"
-                "(9, \"user_c\", \"\x76\x76\x03\", \"9\");"
+                "( 3, \"user_c\", \"\x03\x30\x03\", \"0\"),"
+                "(13, \"user_c\", \"\x13\x31\x03\", \"1\"),"
+                "(23, \"user_c\", \"\x23\x32\x03\", \"2\"),"
+                "(33, \"user_c\", \"\x53\x33\x03\", \"3\"),"
+                "(43, \"user_c\", \"\x43\x34\x03\", \"4\"),"
+                "(53, \"user_c\", \"\x50\x60\x03\", \"5\"),"
+                "(63, \"user_c\", \"\x61\x61\x03\", \"6\"),"
+                "(73, \"user_c\", \"\x12\x62\x03\", \"7\"),"
+                "(83, \"user_c\", \"\x75\x76\x03\", \"8\"),"
+                "(93, \"user_c\", \"\x76\x76\x03\", \"9\");"
             ));
 
             auto result = session.ExecuteDataQuery(
@@ -2924,8 +2897,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
             UNIT_ASSERT_EQUAL(settings.Levels, 1);
             UNIT_ASSERT_EQUAL(settings.Clusters, 2);
         }
-        // TODO(mbkkt) enable it when kqp part will be ready
-        // DoPositiveQueriesPrefixedVectorIndexOrderByCosine(session);
+        DoPositiveQueriesPrefixedVectorIndexOrderByCosine(session);
     }
 
     Y_UNIT_TEST(PrefixedVectorIndexOrderByCosineSimilarityNotNullableLevel1) {
@@ -2970,8 +2942,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
             UNIT_ASSERT_EQUAL(settings.Levels, 1);
             UNIT_ASSERT_EQUAL(settings.Clusters, 2);
         }
-        // TODO(mbkkt) enable it when kqp part will be ready
-        // DoPositiveQueriesPrefixedVectorIndexOrderByCosine(session);
+        DoPositiveQueriesPrefixedVectorIndexOrderByCosine(session);
     }
 
     Y_UNIT_TEST(PrefixedVectorIndexOrderByCosineDistanceNullableLevel1) {
@@ -3016,8 +2987,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
             UNIT_ASSERT_EQUAL(settings.Levels, 1);
             UNIT_ASSERT_EQUAL(settings.Clusters, 2);
         }
-        // TODO(mbkkt) enable it when kqp part will be ready
-        // DoPositiveQueriesPrefixedVectorIndexOrderByCosine(session);
+        DoPositiveQueriesPrefixedVectorIndexOrderByCosine(session);
     }
 
     Y_UNIT_TEST(PrefixedVectorIndexOrderByCosineSimilarityNullableLevel1) {
@@ -3062,8 +3032,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
             UNIT_ASSERT_EQUAL(settings.Levels, 1);
             UNIT_ASSERT_EQUAL(settings.Clusters, 2);
         }
-        // TODO(mbkkt) enable it when kqp part will be ready
-        // DoPositiveQueriesPrefixedVectorIndexOrderByCosine(session);
+        DoPositiveQueriesPrefixedVectorIndexOrderByCosine(session);
     }
 
     Y_UNIT_TEST(PrefixedVectorIndexOrderByCosineDistanceNotNullableLevel2) {
@@ -3108,8 +3077,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
             UNIT_ASSERT_EQUAL(settings.Levels, 2);
             UNIT_ASSERT_EQUAL(settings.Clusters, 2);
         }
-        // TODO(mbkkt) enable it when kqp part will be ready
-        // DoPositiveQueriesPrefixedVectorIndexOrderByCosine(session);
+        DoPositiveQueriesPrefixedVectorIndexOrderByCosine(session);
     }
 
     Y_UNIT_TEST(PrefixedVectorIndexOrderByCosineSimilarityNotNullableLevel2) {
@@ -3154,8 +3122,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
             UNIT_ASSERT_EQUAL(settings.Levels, 2);
             UNIT_ASSERT_EQUAL(settings.Clusters, 2);
         }
-        // TODO(mbkkt) enable it when kqp part will be ready
-        // DoPositiveQueriesPrefixedVectorIndexOrderByCosine(session);
+        DoPositiveQueriesPrefixedVectorIndexOrderByCosine(session);
     }
 
     Y_UNIT_TEST(PrefixedVectorIndexOrderByCosineDistanceNullableLevel2) {
@@ -3200,8 +3167,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
             UNIT_ASSERT_EQUAL(settings.Levels, 2);
             UNIT_ASSERT_EQUAL(settings.Clusters, 2);
         }
-        // TODO(mbkkt) enable it when kqp part will be ready
-        // DoPositiveQueriesPrefixedVectorIndexOrderByCosine(session);
+        DoPositiveQueriesPrefixedVectorIndexOrderByCosine(session);
     }
 
     Y_UNIT_TEST(PrefixedVectorIndexOrderByCosineSimilarityNullableLevel2) {
@@ -3246,8 +3212,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
             UNIT_ASSERT_EQUAL(settings.Levels, 2);
             UNIT_ASSERT_EQUAL(settings.Clusters, 2);
         }
-        // TODO(mbkkt) enable it when kqp part will be ready
-        // DoPositiveQueriesPrefixedVectorIndexOrderByCosine(session);
+        DoPositiveQueriesPrefixedVectorIndexOrderByCosine(session);
     }
 
     Y_UNIT_TEST(ExplainCollectFullDiagnostics) {

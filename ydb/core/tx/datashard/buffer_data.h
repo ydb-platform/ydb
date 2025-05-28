@@ -16,7 +16,7 @@ public:
         return Rows->size();
     }
 
-    auto GetRowsData() const {
+    std::shared_ptr<NTxProxy::TUploadRows> GetRowsData() const {
         return Rows;
     }
 

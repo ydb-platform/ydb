@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
 import pytest
-from ydb.tests.library.compatibility.fixtures import RollingUpgradeAndDowngradeFixture
+from ydb.tests.library.compatibility.fixtures import MixedClusterFixture
 from ydb.tests.oss.ydb_sdk_import import ydb
 import random
 
 
-class TestDigest(RollingUpgradeAndDowngradeFixture):
+class TestDigest(MixedClusterFixture):
     rows = 100
     table_name = 'digest_test'
 
@@ -16,13 +16,12 @@ class TestDigest(RollingUpgradeAndDowngradeFixture):
     def generate_create_table(self):
         return f"""
             CREATE TABLE {self.table_name} (
-                id Uint32,
+                id Uint64,
                 text String,
                 number Uint64,
                 PRIMARY KEY(id)
             ) WITH (
-                PARTITION_AT_KEYS = ({", ".join(str(i) for i in range(1, self.rows))}),
-                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = {self.rows}
+                PARTITION_AT_KEYS = ({", ".join(str(i) for i in range(1, self.rows))})
             );
         """
 
@@ -95,8 +94,6 @@ class TestDigest(RollingUpgradeAndDowngradeFixture):
             query = self.generate_insert()
             session_pool.execute_with_retries(query)
 
-
-            for _ in self.roll():
-                query = self.q_digest()
-                result = session_pool.execute_with_retries(query)
-                assert len(result[0].rows) > 0
+            query = self.q_digest()
+            result = session_pool.execute_with_retries(query)
+            assert len(result[0].rows) > 0

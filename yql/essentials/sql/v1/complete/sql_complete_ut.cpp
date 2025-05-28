@@ -200,7 +200,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         auto engine = MakeSqlCompletionEngineUT();
         {
             TVector<TCandidate> expected = {
-                {TableName, "`maxim`"},
+                {TableName, "`maxim"},
                 {ClusterName, "example"},
                 {ClusterName, "saurus"},
                 {Keyword, "ANY"},
@@ -214,10 +214,10 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         }
         {
             TVector<TCandidate> expected = {
-                {FolderName, "`.sys/`"},
-                {FolderName, "`local/`"},
-                {FolderName, "`prod/`"},
-                {FolderName, "`test/`"},
+                {FolderName, "`.sys/"},
+                {FolderName, "`local/"},
+                {FolderName, "`prod/"},
+                {FolderName, "`test/"},
                 {ClusterName, "example"},
                 {ClusterName, "saurus"},
                 {Keyword, "ANY"},
@@ -279,10 +279,10 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         auto engine = MakeSqlCompletionEngineUT();
         {
             TVector<TCandidate> expected = {
-                {FolderName, "`.sys/`"},
-                {FolderName, "`local/`"},
-                {FolderName, "`prod/`"},
-                {FolderName, "`test/`"},
+                {FolderName, "`.sys/"},
+                {FolderName, "`local/"},
+                {FolderName, "`prod/"},
+                {FolderName, "`test/"},
                 {ClusterName, "example"},
                 {ClusterName, "saurus"},
                 {Keyword, "IF NOT EXISTS"},
@@ -328,10 +328,10 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
 
     Y_UNIT_TEST(DropObject) {
         TVector<TCandidate> expected = {
-            {FolderName, "`.sys/`"},
-            {FolderName, "`local/`"},
-            {FolderName, "`prod/`"},
-            {FolderName, "`test/`"},
+            {FolderName, "`.sys/"},
+            {FolderName, "`local/"},
+            {FolderName, "`prod/"},
+            {FolderName, "`test/"},
             {ClusterName, "example"},
             {ClusterName, "saurus"},
             {Keyword, "IF EXISTS"},
@@ -524,10 +524,10 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         auto engine = MakeSqlCompletionEngineUT();
         {
             TVector<TCandidate> expected = {
-                {FolderName, "`.sys/`"},
-                {FolderName, "`local/`"},
-                {FolderName, "`prod/`"},
-                {FolderName, "`test/`"},
+                {FolderName, "`.sys/"},
+                {FolderName, "`local/"},
+                {FolderName, "`prod/"},
+                {FolderName, "`test/"},
                 {ClusterName, "example"},
                 {ClusterName, "saurus"},
                 {Keyword, "ANY"},
@@ -537,7 +537,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         {
             TString input = "SELECT * FROM pr";
             TVector<TCandidate> expected = {
-                {FolderName, "`prod/`"},
+                {FolderName, "`prod/"},
             };
             TCompletion actual = engine->Complete(SharpedInput(input));
             UNIT_ASSERT_VALUES_EQUAL(actual.Candidates, expected);
@@ -642,13 +642,13 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         }
         {
             TVector<TCandidate> expected = {
-                {TableName, "`maxim`"},
+                {TableName, "`maxim"},
             };
             UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "SELECT * FROM yt:saurus."), expected);
         }
         {
             TVector<TCandidate> expected = {
-                {TableName, "`people`"},
+                {TableName, "`people"},
             };
             UNIT_ASSERT_VALUES_EQUAL(CompleteTop(1, engine, "SELECT * FROM example."), expected);
         }
@@ -664,7 +664,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         auto engine = MakeSqlCompletionEngineUT();
         {
             TVector<TCandidate> expected = {
-                {TableName, "`maxim`"},
+                {TableName, "`maxim"},
                 {ClusterName, "example"},
                 {ClusterName, "saurus"},
                 {Keyword, "ANY"},
@@ -673,14 +673,14 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         }
         {
             TVector<TCandidate> expected = {
-                {TableName, "`people`"},
-                {FolderName, "`yql/`"},
+                {TableName, "`people"},
+                {FolderName, "`yql/"},
             };
             UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "USE yt:saurus; SELECT * FROM example."), expected);
         }
         {
             TVector<TCandidate> expected = {
-                {TableName, "`maxim`"},
+                {TableName, "`maxim"},
                 {ClusterName, "example"},
                 {ClusterName, "saurus"},
                 {Keyword, "ANY"},
@@ -689,7 +689,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         }
         {
             TVector<TCandidate> expected = {
-                {TableName, "`maxim`"},
+                {TableName, "`maxim"},
                 {ClusterName, "example"},
                 {ClusterName, "saurus"},
                 {Keyword, "ANY"},
@@ -704,8 +704,8 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         }
         {
             TVector<TCandidate> expected = {
-                {TableName, "`people`"},
-                {FolderName, "`yql/`"},
+                {TableName, "`people"},
+                {FolderName, "`yql/"},
                 {ClusterName, "example"},
                 {ClusterName, "saurus"},
                 {Keyword, "ANY"},
@@ -776,10 +776,10 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         auto engine = MakeSqlCompletionEngineUT();
         {
             TVector<TCandidate> expected = {
-                {FolderName, "`.sys/`"},
-                {FolderName, "`local/`"},
-                {FolderName, "`prod/`"},
-                {FolderName, "`test/`"},
+                {FolderName, "`.sys/"},
+                {FolderName, "`local/"},
+                {FolderName, "`prod/"},
+                {FolderName, "`test/"},
                 {ClusterName, "example"},
                 {ClusterName, "saurus"},
             };

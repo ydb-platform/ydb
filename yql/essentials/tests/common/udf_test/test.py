@@ -79,6 +79,8 @@ def test(case):
         pytest.skip('xfail is not supported on non-default target platform')
     langver = yql_utils.get_langver(cfg)
     envs = yql_utils.get_envs(cfg)
+    if not langver:
+        langver = "unknown"
     # no default version, because UDFs may have different release cycles
 
     extra_env = dict(os.environ)

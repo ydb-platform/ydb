@@ -3,7 +3,7 @@ import json
 import os
 import io
 
-from six.moves.urllib import parse as urlparse
+import urllib.parse as urlparse
 
 from ..base import BaseLockfile, LockfilePackageMeta, LockfilePackageMetaInvalidError
 

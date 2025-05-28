@@ -316,9 +316,16 @@ private:
 
         {
             TTableRange range(MinKey.GetCells(), MinKeyInclusive, MaxKey.GetCells(), MaxKeyInclusive);
+            TMaybe<NKikimrSysView::ESysViewType> sysViewType;
+            const auto& entry = ResolveNamesResult->ResultSet.front();
+            if (entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindSysView) {
+                Y_ABORT_UNLESS(entry.SysViewInfo);
+                sysViewType = entry.SysViewInfo->Description.GetType();
+            }
             auto tableScanActor = NSysView::CreateSystemViewScan(ctx.SelfID, 0,
-                ResolveNamesResult->ResultSet.front().TableId,
-                JoinPath(ResolveNamesResult->ResultSet.front().Path),
+                entry.TableId,
+                JoinPath(entry.Path),
+                sysViewType,
                 range,
                 columns,
                 Request->GetInternalToken(),

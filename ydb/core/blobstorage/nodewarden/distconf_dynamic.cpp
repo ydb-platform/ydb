@@ -112,7 +112,7 @@ namespace NKikimr::NStorage {
         } else if (auto *target = record.MutableConfig(); SelfManagementEnabled) {
             target->CopyFrom(*StorageConfig);
         } else {
-            target->CopyFrom(BaseConfig);
+            target->CopyFrom(*BaseConfig);
         }
         auto handle = std::make_unique<IEventHandle>(actorId, SelfId(), ev.release());
         handle->Rewrite(TEvInterconnect::EvForward, sessionId);

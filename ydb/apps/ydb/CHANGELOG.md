@@ -1,3 +1,11 @@
+
+* Added `ydb admin cluster config verion` command to show configuration version (V1/V2) on nodes.
+* Removed `--executor` option from `ydb workload run` commands. Use always `generic`.
+* Added object names completion in interactive mode
+* Added `--threads` option to `ydb workload clickbench run`, `ydb workload tpch run` and `ydb workload tpcds run`. It allows to send workload queries by multiple threads.
+
+## 2.21.0 ##
+
 * Fixed a bug where ydb cli was trying to read parameters from stdin even if it had no data.
 * Add `--replace` option to `ydb tools restore` command. If enabled, scheme objects present in the backup would be dropped before restoring.
 * Added date range parameters (--date-to, --date-from to support uniform PK distribution) for ydb workload log run operations including bulk_upsert, insert, and upsert

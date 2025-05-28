@@ -1,0 +1,7 @@
+LIBRARY()
+
+END()
+
+RECURSE(
+    global
+)

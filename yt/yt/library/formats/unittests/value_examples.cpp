@@ -151,10 +151,11 @@ std::vector<TValueExample> GetPrimitiveValueExamples()
             allValueTypes.erase(example.LogicalType->AsSimpleTypeRef().GetElement());
         }
     }
-    if (!allValueTypes.empty()) {
-        THROW_ERROR_EXCEPTION("PrimitiveTypeExample variable doesn't contain values: %v",
-            allValueTypes);
-    }
+    // TODO(nadya02): YT-15805: Support tz types.
+    // if (!allValueTypes.empty()) {
+    //     THROW_ERROR_EXCEPTION("PrimitiveTypeExample variable doesn't contain values: %v",
+    //         allValueTypes);
+    // }
     return valueExamples;
 }
 

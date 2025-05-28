@@ -10,9 +10,9 @@ Y_UNIT_TEST_SUITE(TCircularQueueTest) {
     Y_UNIT_TEST(ShouldReportEmptyInitially) {
         TCircularQueue<int> queue;
         queue.Resize(3);
-        UNIT_ASSERT(queue.IsEmpty());
+        UNIT_ASSERT(queue.Empty());
         UNIT_ASSERT(!queue.IsFull());
-        UNIT_ASSERT_VALUES_EQUAL(queue.GetSize(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(queue.Size(), 0);
     }
 
     Y_UNIT_TEST(ShouldPushAndPopSingleItem) {
@@ -20,13 +20,13 @@ Y_UNIT_TEST_SUITE(TCircularQueueTest) {
         queue.Resize(1);
 
         UNIT_ASSERT(queue.TryPush(42));
-        UNIT_ASSERT(!queue.IsEmpty());
+        UNIT_ASSERT(!queue.Empty());
         UNIT_ASSERT(queue.IsFull());
 
         int value = 0;
         UNIT_ASSERT(queue.TryPop(value));
         UNIT_ASSERT_VALUES_EQUAL(value, 42);
-        UNIT_ASSERT(queue.IsEmpty());
+        UNIT_ASSERT(queue.Empty());
     }
 
     Y_UNIT_TEST(ShouldRejectPushWhenFull) {
@@ -37,7 +37,7 @@ Y_UNIT_TEST_SUITE(TCircularQueueTest) {
         UNIT_ASSERT(!queue.TryPush(3)); // Full
 
         UNIT_ASSERT(queue.IsFull());
-        UNIT_ASSERT_VALUES_EQUAL(queue.GetSize(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(queue.Size(), 2);
     }
 
     Y_UNIT_TEST(ShouldRejectPopWhenEmpty) {
@@ -103,6 +103,6 @@ Y_UNIT_TEST_SUITE(TCircularQueueTest) {
         UNIT_ASSERT_VALUES_EQUAL(val, "a");
         UNIT_ASSERT(queue.TryPop(val));
         UNIT_ASSERT_VALUES_EQUAL(val, "b");
-        UNIT_ASSERT(queue.IsEmpty());
+        UNIT_ASSERT(queue.Empty());
     }
 }

@@ -1687,4 +1687,29 @@ void SetBit(TMutableRef bitmap, i64 index, bool value)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TString EscapeCAndSingleQuotes(TStringBuf str)
+{
+    auto escaped = TString();
+    escaped.reserve(str.size() * 2);
+
+    EscapeC(str, escaped);
+
+    auto size = escaped.size();
+    auto newSize = size + std::count(escaped.cbegin(), escaped.cend(), '\'');
+
+    escaped.resize(newSize);
+
+    auto rit = escaped.rbegin();
+    std::for_each(rit + (newSize - size), escaped.rend(), [&] (char character) {
+        *rit++ = character;
+        if (character == '\'') {
+            *rit++ = '\\';
+        }
+    });
+
+    return escaped;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NYT::NTableClient

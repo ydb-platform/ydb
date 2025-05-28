@@ -22,25 +22,30 @@
 namespace NKikimr::NDataShard {
 using namespace NKMeans;
 
-// This scan needed to run local (not distributed) kmeans.
-// We have this local stage because we construct kmeans tree from top to bottom.
-// And bottom kmeans can be constructed completely locally in datashards to avoid extra communication.
-// Also it can be used for small tables.
-//
-// This class is kind of state machine, it has 3 phases.
-// Each of them corresponds to 1-N rounds of NTable::IScan (which is kind of state machine itself).
-// 1. First iteration collect sample of clusters
-// 2. Then N iterations recompute clusters (main cycle of batched kmeans)
-// 3. Finally last iteration upload clusters to level table and postings to corresponding posting table
-//
-// These phases maps to State:
-// 1. -- EState::SAMPLE
-// 2. -- EState::KMEANS
-// 3. -- EState::UPLOAD*
-//
-// Which UPLOAD* will be used depends on that will client of this scan request (see UploadState)
-//
-// NTable::IScan::Seek used to switch from current state to the next one.
+/*
+ * TEvLocalKMeans executes a "local" (single-shard) K-means job across a single table shard.
+ * It scans either a MAIN or BUILD table shard, while the output rows go to the BUILD or POSTING table.
+ *
+ * Request:
+ * - The client sends TEvLocalKMeans with:
+ *   - ParentFrom and ParentTo, specifying the key range in the input table shard
+ *     - If ParentFrom=0 and ParentTo=0, the entire table shard is scanned
+ *   - Child, serving as the base ID for the new cluster IDs computed in this local stage
+ *   - The embedding column name and additional data columns to be used for K-means
+ *   - K (number of clusters), initial random seed, and the vector dimensionality
+ *   - Upload mode (MAIN_TO_BUILD, MAIN_TO_POSTING, BUILD_TO_BUILD or BUILD_TO_POSTING)
+ *     determining input and output layouts
+ *   - Names of target tables for centroids ("level") and row results ("posting" or "build")
+ *
+ * Execution Flow:
+ * - A TLocalKMeansScan iterates over the table shard in key order, processing one rows group
+ *   of each input cluster (one cluster has same parent for BUILD and the whole shard for MAIN):
+ *   - SAMPLE: Samples embeddings to initialize cluster centers for this group
+ *   - KMEANS: Performs iterative refinement of cluster centroids
+ *   - UPLOAD: When final centroids are computed
+ *     - Level: centroid vectors with assigned cluster IDs
+ *     - Output: rows annotated with cluster IDs and optional data columns
+ */
 
 class TLocalKMeansScanBase: public TActor<TLocalKMeansScanBase>, public NTable::IScan {
 protected:
@@ -67,7 +72,7 @@ protected:
     TBatchRowsUploader Uploader;
 
     TBufferData* LevelBuf = nullptr;
-    TBufferData* PostingBuf = nullptr;
+    TBufferData* OutputBuf = nullptr;
     TBufferData* UploadBuf = nullptr;
 
     const ui32 Dimensions = 0;
@@ -127,10 +132,8 @@ public:
     {
         const auto& embedding = request.GetEmbeddingColumn();
         const auto& data = request.GetDataColumns();
-        // scan tags
-        ScanTags = MakeUploadTags(table, embedding, data, EmbeddingPos, DataPos, EmbeddingTag);
+        ScanTags = MakeScanTags(table, embedding, data, EmbeddingPos, DataPos, EmbeddingTag);
         Lead.SetTags(ScanTags);
-        // upload types
         {
             Ydb::Type type;
             auto levelTypes = std::make_shared<NTxProxy::TUploadTypes>(3);
@@ -141,7 +144,7 @@ public:
             (*levelTypes)[2] = {NTableIndex::NTableVectorKmeansTreeIndex::CentroidColumn, type};
             LevelBuf = Uploader.AddDestination(request.GetLevelName(), std::move(levelTypes));
         }
-        PostingBuf = Uploader.AddDestination(request.GetPostingName(), MakeUploadTypes(table, UploadState, embedding, data));
+        OutputBuf = Uploader.AddDestination(request.GetOutputName(), MakeOutputTypes(table, UploadState, embedding, data));
     }
 
     TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme>) final
@@ -406,16 +409,16 @@ private:
                 FeedKMeans(row);
                 break;
             case EState::UPLOAD_MAIN_TO_BUILD:
-                FeedUploadMain2Build(key, row);
+                FeedMainToBuild(key, row);
                 break;
             case EState::UPLOAD_MAIN_TO_POSTING:
-                FeedUploadMain2Posting(key, row);
+                FeedMainToPosting(key, row);
                 break;
             case EState::UPLOAD_BUILD_TO_BUILD:
-                FeedUploadBuild2Build(key, row);
+                FeedBuildToBuild(key, row);
                 break;
             case EState::UPLOAD_BUILD_TO_POSTING:
-                FeedUploadBuild2Posting(key, row);
+                FeedBuildToPosting(key, row);
                 break;
             default:
                 Y_ASSERT(false);
@@ -436,48 +439,46 @@ private:
 
     void FeedKMeans(TArrayRef<const TCell> row)
     {
-        if (auto pos = Clusters.FindCluster(row, EmbeddingPos); pos != Max<ui32>()) {
-            Clusters.AggregateToCluster(pos, row.at(EmbeddingPos).Data());
+        if (auto pos = Clusters.FindCluster(row, EmbeddingPos); pos) {
+            Clusters.AggregateToCluster(*pos, row.at(EmbeddingPos).Data());
         }
     }
 
-    void FeedUploadMain2Build(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
+    void FeedMainToBuild(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
-        if (auto pos = Clusters.FindCluster(row, EmbeddingPos); pos != Max<ui32>()) {
-            AddRowMain2Build(*PostingBuf, Child + pos, key, row);
+        if (auto pos = Clusters.FindCluster(row, EmbeddingPos); pos) {
+            AddRowMainToBuild(*OutputBuf, Child + *pos, key, row);
         }
     }
 
-    void FeedUploadMain2Posting(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
+    void FeedMainToPosting(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
-        if (auto pos = Clusters.FindCluster(row, EmbeddingPos); pos != Max<ui32>()) {
-            AddRowMain2Posting(*PostingBuf, Child + pos, key, row, DataPos);
+        if (auto pos = Clusters.FindCluster(row, EmbeddingPos); pos) {
+            AddRowMainToPosting(*OutputBuf, Child + *pos, key, row, DataPos);
         }
     }
 
-    void FeedUploadBuild2Build(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
+    void FeedBuildToBuild(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
-        if (auto pos = Clusters.FindCluster(row, EmbeddingPos); pos != Max<ui32>()) {
-            AddRowBuild2Build(*PostingBuf, Child + pos, key, row);
+        if (auto pos = Clusters.FindCluster(row, EmbeddingPos); pos) {
+            AddRowBuildToBuild(*OutputBuf, Child + *pos, key, row);
         }
     }
 
-    void FeedUploadBuild2Posting(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
+    void FeedBuildToPosting(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
-        if (auto pos = Clusters.FindCluster(row, EmbeddingPos); pos != Max<ui32>()) {
-            AddRowBuild2Posting(*PostingBuf, Child + pos, key, row, DataPos);
+        if (auto pos = Clusters.FindCluster(row, EmbeddingPos); pos) {
+            AddRowBuildToPosting(*OutputBuf, Child + *pos, key, row, DataPos);
         }
     }
 
     void FormLevelRows()
     {
-        std::array<TCell, 2> pk;
-        std::array<TCell, 1> data;
+        const bool isPostingLevel = UploadState == NKikimrTxDataShard::UPLOAD_MAIN_TO_POSTING
+            || UploadState == NKikimrTxDataShard::UPLOAD_BUILD_TO_POSTING;
+
         for (NTable::TPos pos = 0; const auto& row : Clusters.GetClusters()) {
-            pk[0] = TCell::Make(Parent);
-            pk[1] = TCell::Make(Child + pos);
-            data[0] = TCell{row};
-            LevelBuf->AddRow(TSerializedCellVec{pk}, TSerializedCellVec::Serialize(data));
+            AddRowToLevel(*LevelBuf, Parent, Child + pos, row, isPostingLevel);
             ++pos;
         }
     }
@@ -594,10 +595,19 @@ void TDataShard::HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const
     const auto parentFrom = request.GetParentFrom();
     const auto parentTo = request.GetParentTo();
     NTable::TLead lead;
-    if (parentFrom == 0 && parentTo == 0) {
+    if (parentFrom == 0) {
+        if (request.GetUpload() == NKikimrTxDataShard::UPLOAD_BUILD_TO_BUILD 
+            || request.GetUpload() == NKikimrTxDataShard::UPLOAD_BUILD_TO_POSTING)
+        {
+            badRequest("Wrong upload for zero parent");
+        }
         lead.To({}, NTable::ESeek::Lower);
     } else if (parentFrom > parentTo) {
         badRequest(TStringBuilder() << "Parent from " << parentFrom << " should be less or equal to parent to " << parentTo);
+    } else if (request.GetUpload() == NKikimrTxDataShard::UPLOAD_MAIN_TO_BUILD 
+        || request.GetUpload() == NKikimrTxDataShard::UPLOAD_MAIN_TO_POSTING)
+    {
+        badRequest("Wrong upload for non-zero parent");
     } else {
         TCell from = TCell::Make(parentFrom - 1);
         TCell to = TCell::Make(parentTo);
@@ -616,8 +626,8 @@ void TDataShard::HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const
     if (!request.HasLevelName()) {
         badRequest(TStringBuilder() << "Empty level table name");
     }
-    if (!request.HasPostingName()) {
-        badRequest(TStringBuilder() << "Empty posting table name");
+    if (!request.HasOutputName()) {
+        badRequest(TStringBuilder() << "Empty output table name");
     }
 
     auto tags = GetAllTags(userTable);

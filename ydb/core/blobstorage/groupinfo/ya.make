@@ -15,6 +15,7 @@ SRCS(
     blobstorage_groupinfo_blobmap.h
     blobstorage_groupinfo.cpp
     blobstorage_groupinfo.h
+    blobstorage_groupinfo_data_check.h
     blobstorage_groupinfo_iter.h
     blobstorage_groupinfo_partlayout.cpp
     blobstorage_groupinfo_partlayout.h

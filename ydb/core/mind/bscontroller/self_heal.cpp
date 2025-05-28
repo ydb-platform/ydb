@@ -1040,15 +1040,15 @@ namespace NKikimr::NBsController {
     }
 
     void TBlobStorageController::PushStaticGroupsToSelfHeal() {
-        if (!SelfHealId || !StorageConfigObtained || !StorageConfig.HasBlobStorageConfig() || !SelfManagementEnabled) {
+        if (!SelfHealId || !StorageConfigObtained || !StorageConfig->HasBlobStorageConfig() || !SelfManagementEnabled) {
             return;
         }
 
         auto sh = std::make_unique<TEvControllerUpdateSelfHealInfo>();
 
-        if (const auto& bsConfig = StorageConfig.GetBlobStorageConfig(); bsConfig.HasServiceSet()) {
+        if (const auto& bsConfig = StorageConfig->GetBlobStorageConfig(); bsConfig.HasServiceSet()) {
             const auto& ss = bsConfig.GetServiceSet();
-            const auto& smConfig = StorageConfig.GetSelfManagementConfig();
+            const auto& smConfig = StorageConfig->GetSelfManagementConfig();
             for (const auto& group : ss.GetGroups()) {
                 auto& content = sh->GroupsToUpdate[TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetGroupID)];
                 const TBlobStorageGroupType gtype(static_cast<TBlobStorageGroupType::EErasureSpecies>(group.GetErasureSpecies()));
@@ -1108,7 +1108,7 @@ namespace NKikimr::NBsController {
                 if (const TGroupInfo *group = slot->Group) {
                     const bool wasReady = slot->IsReady;
                     if (slot->GetStatus() != m.GetStatus() || slot->OnlyPhantomsRemain != m.GetOnlyPhantomsRemain()) {
-                        slot->SetStatus(m.GetStatus(), mono, now, m.GetOnlyPhantomsRemain());
+                        slot->SetStatus(m.GetStatus(), mono, now, m.GetOnlyPhantomsRemain(), this);
                         if (slot->IsReady != wasReady) {
                             ScrubState.UpdateVDiskState(slot);
                             if (wasReady) {

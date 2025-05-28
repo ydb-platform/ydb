@@ -33,6 +33,7 @@ private:
     int Discovery();
     int InitDatabase();
     int ImportDatabase();
+    int ExportDatabase();
     int StartServer();
 
     static THolder<NActors::TActorSystemSetup> BuildActorSystemSetup();
@@ -48,7 +49,7 @@ private:
     std::string Database, Endpoint, Token, CA, Folder;
     ui16 ListeningPort = 2379U;
     std::string Root, Cert, Key;
-    std::string ImportFrom_, ImportPrefix_;
+    std::string ImportFrom_, ImportPrefix_, ExportTo_;
 };
 
 }

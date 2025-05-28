@@ -51,7 +51,6 @@ class TestVectorIndexNegative(VectorBase):
         }
 
     def test_vector_index_negative(self):
-        table_path = self.table_name
         prefix_data = {"String": lambda i: f"{i}"}
         vector = {"String": lambda i: f"{i}"}
         vector_type = "uint8"
@@ -75,8 +74,10 @@ class TestVectorIndexNegative(VectorBase):
             "vec_": vector.keys(),
         }
         pk_columns = {"pk_": pk_types.keys()}
+        prefixs = ["", "prefix_String"]
+        covers = [[], [f"col_{cleanup_type_name(type_name)}" for type_name in all_types.keys()]]
         create_table_sql = create_table_sql_request(
-            table_name=table_path,
+            table_name=self.table_name,
             columns=columns,
             pk_colums=pk_columns,
             index_colums={},
@@ -84,73 +85,58 @@ class TestVectorIndexNegative(VectorBase):
             sync="",
         )
         self.query(create_table_sql)
-        self._upsert_values(
-            table_name=table_path,
-            all_types=all_types,
-            prefix=prefix_data,
-            pk_types=pk_types,
-            vector_type=vector_type,
-            vector_dimension=vector_dimension,
-            to_binary_string_converters=self.to_binary_string_converters,
-        )
-        try:
-            self._select(
-                table_path=table_path,
-                vector_type=vector_type,
-                vector_name="vec_String",
-                col_name="vec_String",
-                knn_func="Knn::ManhattanDistance",
-                numb=1,
-                prefix="",
-                vector_dimension=vector_dimension,
-                to_binary_string_converters=self.to_binary_string_converters,
-            )
-        except Exception as ex:
-            if "No global indexes for table /Root/table" not in str(ex):
-                raise ex
+        for presix in prefixs:
+            for cover in covers:
+                self._upsert_values(
+                    all_types=all_types,
+                    prefix=prefix_data,
+                    pk_types=pk_types,
+                    vector_type=vector_type,
+                    vector_dimension=vector_dimension,
+                    to_binary_string_converters=self.to_binary_string_converters,
+                )
+                try:
+                    self._select(
+                        vector_type=vector_type,
+                        vector_name="vec_String",
+                        col_name="vec_String",
+                        knn_func="Knn::ManhattanDistance",
+                        numb=1,
+                        prefix=presix,
+                        vector_dimension=vector_dimension,
+                        to_binary_string_converters=self.to_binary_string_converters,
+                    )
+                except Exception as ex:
+                    if "No global indexes for table /Root/table" not in str(ex):
+                        raise ex
 
-        self._create_index(
-            table_path=table_path,
-            function="distance",
-            distance="manhattan",
-            vector_type=vector_type,
-            vector_dimension=vector_dimension,
-            levels=1,
-            clusters=10,
-            prefix="",
-            cover={},
-        )
+                self._create_index(
+                    table_path=self.table_name,
+                    function="distance",
+                    distance="manhattan",
+                    vector_type=vector_type,
+                    vector_dimension=vector_dimension,
+                    levels=1,
+                    clusters=10,
+                    prefix=presix,
+                    cover=cover,
+                )
 
-        try:
-            self._select(
-                table_path=table_path,
-                vector_type=vector_type,
-                vector_name="vec_String",
-                col_name="vec_String",
-                knn_func="Knn::EuclideanDistance",
-                numb=1,
-                prefix="",
-                vector_dimension=vector_dimension,
-                to_binary_string_converters=self.to_binary_string_converters,
-            )
-        except Exception as ex:
-            if "Given predicate is not suitable for used index: idx_vector_vec_String" not in str(ex):
-                raise ex
-
-        rows = self._select(
-            table_path=table_path,
-            vector_type=vector_type,
-            vector_name="vec_String",
-            col_name="vec_String",
-            knn_func="Knn::ManhattanDistance",
-            numb=1,
-            prefix="",
-            vector_dimension=5,
-            to_binary_string_converters=self.to_binary_string_converters,
-        )
-        print(rows)
-        rows = self.query(f"select * from {table_path}")
-        print(rows)
+                try:
+                    self._select(
+                        vector_type=vector_type,
+                        vector_name="vec_String",
+                        col_name="vec_String",
+                        knn_func="Knn::EuclideanDistance",
+                        numb=1,
+                        prefix=presix,
+                        vector_dimension=vector_dimension,
+                        to_binary_string_converters=self.to_binary_string_converters,
+                    )
+                except Exception as ex:
+                    if "Given predicate is not suitable for used index: idx_vector_vec_String" not in str(ex):
+                        raise ex
+                self.drop_index()
 
     def _create_index(
         self, table_path, function, distance, vector_type, vector_dimension, levels, clusters, prefix, cover
@@ -174,7 +160,6 @@ class TestVectorIndexNegative(VectorBase):
 
     def _upsert_values(
         self,
-        table_name,
         all_types,
         prefix,
         pk_types,
@@ -199,7 +184,7 @@ class TestVectorIndexNegative(VectorBase):
                     '''
             )
         upsert_sql = f"""
-            UPSERT INTO `{table_name}` (
+            UPSERT INTO `{self.table_name}` (
                 {", ".join([f"pk_{cleanup_type_name(type_name)}" for type_name in pk_types.keys()])},
                 {", ".join([f"col_{cleanup_type_name(type_name)}" for type_name in all_types.keys()])},
                 {", ".join([f"prefix_{cleanup_type_name(type_name)}" for type_name in prefix.keys()])},
@@ -212,7 +197,6 @@ class TestVectorIndexNegative(VectorBase):
 
     def _select(
         self,
-        table_path,
         vector_type,
         vector_name,
         col_name,
@@ -226,10 +210,17 @@ class TestVectorIndexNegative(VectorBase):
         select_sql = f"""
                                         $Target = {to_binary_string_converters[vector_type].name}(Cast([{vector}] AS List<{vector_type}>));
                                         select  *
-                                        from {table_path} view idx_vector_{vector_name}
+                                        from {self.table_name} view idx_vector_{vector_name}
                                         {f"WHERE prefix_String = {prefix}" if prefix != "" else ""}
                                         order by {knn_func}({col_name}, $Target) {"DESC" if knn_func in targets["similarity"].values() else "ASC"}
                                         limit 10;
                                         """
         print(select_sql)
         return self.query(select_sql)
+
+    def drop_index(self):
+        drop_index_sql = f"""
+            ALTER TABLE `{self.table_name}`
+            DROP INDEX `{self.index_name}`;
+        """
+        self.query(drop_index_sql)

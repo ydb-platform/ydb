@@ -3590,6 +3590,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         bool deserializeRes = ParseFromStringNoSizeLimit(proto, extraData);
                         Y_ABORT_UNLESS(deserializeRes);
                         txState.CdcPathId = TPathId::FromProto(proto.GetTxCopyTableExtraData().GetCdcPathId());
+                        if (proto.GetTxCopyTableExtraData().HasTargetPathTargetState()) {
+                            txState.TargetPathTargetState = proto.GetTxCopyTableExtraData().GetTargetPathTargetState();
+                        }
                     }
                 }
 

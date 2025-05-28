@@ -91,7 +91,7 @@ set_yunittest_property(
   ydb-core-external_sources-s3-ut
   PROPERTY
   ENVIRONMENT
-  "COMPOSE_PROJECT_NAME=s3;COMPOSE_HTTP_TIMEOUT=1200"
+  "COMPOSE_PROJECT_NAME=s3;TZ=UTC+13;COMPOSE_HTTP_TIMEOUT=1200"
 )
 
 vcs_info(ydb-core-external_sources-s3-ut)

@@ -3001,6 +3001,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         Filling = 40,
         DropBuild = 45,
         CreateBuild = 46,
+        LockBuild = 47,
         Applying = 50,
         Unlocking = 60,
         Done = 200,

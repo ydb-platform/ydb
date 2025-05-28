@@ -243,4 +243,27 @@ inline void StartScan(TDataShard* dataShard, TAutoPtr<NTable::IScan>&& scan, ui6
     scanManager.Set(id, seqNo).push_back(scanId);
 }
 
+template<typename TResponse> 
+inline void FailScan(ui64 scanId, ui64 tabletId, TActorId sender, TScanRecord::TSeqNo seqNo, const std::exception& exc)
+{
+    LOG_E("Unhandled exception " << TypeName<TResponse>() << " TabletId: " << tabletId 
+        << " " << TypeName(exc) << ": " << exc.what() << Endl
+        << TBackTrace::FromCurrentException().PrintToString());
+
+    GetServiceCounters(AppData()->Counters, "tablets")->GetCounter("alerts_scan_broken", true)->Inc();
+
+    auto response = MakeHolder<TResponse>();
+    response->Record.SetId(scanId);
+    response->Record.SetTabletId(tabletId);
+    response->Record.SetRequestSeqNoGeneration(seqNo.Generation);
+    response->Record.SetRequestSeqNoRound(seqNo.Round);
+    response->Record.SetStatus(NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
+
+    auto issue = response->Record.AddIssues();
+    issue->set_severity(NYql::TSeverityIds::S_ERROR);
+    issue->set_message(TStringBuilder() << "Scan failed " << exc.what());
+
+    TlsActivationContext->Send(new IEventHandle(sender, TActorId(), response.Release()));
+}
+
 }

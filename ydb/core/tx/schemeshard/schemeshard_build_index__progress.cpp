@@ -708,7 +708,7 @@ private:
 
     void SendBuildSecondaryIndexRequest(TShardIdx shardIdx, TIndexBuildInfo& buildInfo) {
         auto ev = MakeHolder<TEvDataShard::TEvBuildIndexCreateRequest>();
-        ev->Record.SetBuildIndexId(ui64(BuildId));
+        ev->Record.SetId(ui64(BuildId));
 
         ev->Record.SetOwnerId(buildInfo.TablePathId.OwnerId);
         ev->Record.SetPathId(buildInfo.TablePathId.LocalPathId);
@@ -2168,9 +2168,9 @@ public:
     bool DoExecute(TTransactionContext& txc, const TActorContext& ctx) override {
         const NKikimrTxDataShard::TEvBuildIndexProgressResponse& record = ShardProgress->Get()->Record;
 
-        LOG_I("TTxReply : TEvBuildIndexProgressResponse, id# " << record.GetBuildIndexId());
+        LOG_I("TTxReply : TEvBuildIndexProgressResponse, id# " << record.GetId());
 
-        const auto buildId = TIndexBuildId(record.GetBuildIndexId());
+        const auto buildId = TIndexBuildId(record.GetId());
         const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(buildId);
         if (!buildInfoPtr) {
             return true;

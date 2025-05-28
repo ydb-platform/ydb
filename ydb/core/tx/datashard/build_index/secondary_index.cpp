@@ -231,7 +231,7 @@ public:
         }
 
         TAutoPtr<TEvDataShard::TEvBuildIndexProgressResponse> progress = new TEvDataShard::TEvBuildIndexProgressResponse;
-        progress->Record.SetBuildIndexId(BuildIndexId);
+        progress->Record.SetId(BuildIndexId);
         progress->Record.SetTabletId(DataShardId);
         progress->Record.SetRequestSeqNoGeneration(SeqNo.Generation);
         progress->Record.SetRequestSeqNoRound(SeqNo.Round);
@@ -335,7 +335,7 @@ private:
 
             //send progress
             TAutoPtr<TEvDataShard::TEvBuildIndexProgressResponse> progress = new TEvDataShard::TEvBuildIndexProgressResponse;
-            progress->Record.SetBuildIndexId(BuildIndexId);
+            progress->Record.SetId(BuildIndexId);
             progress->Record.SetTabletId(DataShardId);
             progress->Record.SetRequestSeqNoGeneration(SeqNo.Generation);
             progress->Record.SetRequestSeqNoRound(SeqNo.Round);
@@ -514,114 +514,118 @@ void TDataShard::Handle(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, cons
 
 void TDataShard::HandleSafe(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, const TActorContext& ctx) {
     auto& request = ev->Get()->Record;
-    const ui64 id = request.GetBuildIndexId();
+    const ui64 id = request.GetId();
     TRowVersion rowVersion(request.GetSnapshotStep(), request.GetSnapshotTxId());
     TScanRecord::TSeqNo seqNo = {request.GetSeqNoGeneration(), request.GetSeqNoRound()};
 
-    auto response = MakeHolder<TEvDataShard::TEvBuildIndexProgressResponse>();
-    response->Record.SetBuildIndexId(request.GetBuildIndexId());
-    response->Record.SetTabletId(TabletID());
-    response->Record.SetRequestSeqNoGeneration(seqNo.Generation);
-    response->Record.SetRequestSeqNoRound(seqNo.Round);
+    try {
+        auto response = MakeHolder<TEvDataShard::TEvBuildIndexProgressResponse>();
+        response->Record.SetId(request.GetId());
+        response->Record.SetTabletId(TabletID());
+        response->Record.SetRequestSeqNoGeneration(seqNo.Generation);
+        response->Record.SetRequestSeqNoRound(seqNo.Round);
 
-    LOG_N("Starting TBuildIndexScan TabletId: " << TabletID() 
-        << " " << request.ShortDebugString()
-        << " row version " << rowVersion);
+        LOG_N("Starting TBuildIndexScan TabletId: " << TabletID() 
+            << " " << request.ShortDebugString()
+            << " row version " << rowVersion);
 
-    // Note: it's very unlikely that we have volatile txs before this snapshot
-    if (VolatileTxManager.HasVolatileTxsAtSnapshot(rowVersion)) {
-        VolatileTxManager.AttachWaitingSnapshotEvent(rowVersion, std::unique_ptr<IEventHandle>(ev.Release()));
-        return;
-    }
-
-    auto badRequest = [&](const TString& error) {
-        response->Record.SetStatus(NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST);
-        auto issue = response->Record.AddIssues();
-        issue->set_severity(NYql::TSeverityIds::S_ERROR);
-        issue->set_message(error);
-    };
-    auto trySendBadRequest = [&] {
-        if (response->Record.GetStatus() == NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST) {
-            LOG_E("Rejecting TBuildIndexScan bad request TabletId: " << TabletID()
-                << " " << request.ShortDebugString()
-                << " with response " << response->Record.ShortDebugString());
-            ctx.Send(ev->Sender, std::move(response));
-            return true;
-        } else {
-            return false;
+        // Note: it's very unlikely that we have volatile txs before this snapshot
+        if (VolatileTxManager.HasVolatileTxsAtSnapshot(rowVersion)) {
+            VolatileTxManager.AttachWaitingSnapshotEvent(rowVersion, std::unique_ptr<IEventHandle>(ev.Release()));
+            return;
         }
-    };
 
-    // 1. Validating table and path existence
-    const auto tableId = TTableId(request.GetOwnerId(), request.GetPathId());
-    if (request.GetTabletId() != TabletID()) {
-        badRequest(TStringBuilder() << "Wrong shard " << request.GetTabletId() << " this is " << TabletID());
-    }
-    if (!IsStateActive()) {
-        badRequest(TStringBuilder() << "Shard " << TabletID() << " is " << State << " and not ready for requests");
-    }
-    if (!GetUserTables().contains(tableId.PathId.LocalPathId)) {
-        badRequest(TStringBuilder() << "Unknown table id: " << tableId.PathId.LocalPathId);
-    }
-    if (trySendBadRequest()) {
-        return;
-    }
-    const auto& userTable = *GetUserTables().at(tableId.PathId.LocalPathId);
+        auto badRequest = [&](const TString& error) {
+            response->Record.SetStatus(NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST);
+            auto issue = response->Record.AddIssues();
+            issue->set_severity(NYql::TSeverityIds::S_ERROR);
+            issue->set_message(error);
+        };
+        auto trySendBadRequest = [&] {
+            if (response->Record.GetStatus() == NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST) {
+                LOG_E("Rejecting TBuildIndexScan bad request TabletId: " << TabletID()
+                    << " " << request.ShortDebugString()
+                    << " with response " << response->Record.ShortDebugString());
+                ctx.Send(ev->Sender, std::move(response));
+                return true;
+            } else {
+                return false;
+            }
+        };
 
-    // 2. Validating request fields
-    if (!request.HasSnapshotStep() || !request.HasSnapshotTxId()) {
-        badRequest(TStringBuilder() << "Empty snapshot");
-    }
-    const TSnapshotKey snapshotKey(tableId.PathId, rowVersion.Step, rowVersion.TxId);
-    if (!SnapshotManager.FindAvailable(snapshotKey)) {
-        badRequest(TStringBuilder() << "Unknown snapshot for path id " << tableId.PathId.OwnerId << ":" << tableId.PathId.LocalPathId
-            << ", snapshot step is " << snapshotKey.Step << ", snapshot tx is " << snapshotKey.TxId);
-    }
-
-    TSerializedTableRange requestedRange;
-    requestedRange.Load(request.GetKeyRange());
-    auto scanRange = Intersect(userTable.KeyColumnTypes, requestedRange.ToTableRange(), userTable.Range.ToTableRange());
-    if (scanRange.IsEmptyRange(userTable.KeyColumnTypes)) {
-        badRequest(TStringBuilder() << " requested range doesn't intersect with table range"
-            << " requestedRange: " << DebugPrintRange(userTable.KeyColumnTypes, requestedRange.ToTableRange(), *AppData()->TypeRegistry)
-            << " tableRange: " << DebugPrintRange(userTable.KeyColumnTypes, userTable.Range.ToTableRange(), *AppData()->TypeRegistry)
-            << " scanRange: " << DebugPrintRange(userTable.KeyColumnTypes, scanRange, *AppData()->TypeRegistry));
-    }
-
-    if (!request.HasTargetName()) {
-        badRequest(TStringBuilder() << "Empty target table name");
-    }
-
-    auto tags = GetAllTags(userTable);
-    for (auto column : request.GetIndexColumns()) {
-        if (!tags.contains(column)) {
-            badRequest(TStringBuilder() << "Unknown index column: " << column);
+        // 1. Validating table and path existence
+        const auto tableId = TTableId(request.GetOwnerId(), request.GetPathId());
+        if (request.GetTabletId() != TabletID()) {
+            badRequest(TStringBuilder() << "Wrong shard " << request.GetTabletId() << " this is " << TabletID());
         }
-    }
-    for (auto column : request.GetDataColumns()) {
-        if (!tags.contains(column)) {
-            badRequest(TStringBuilder() << "Unknown data column: " << column);
+        if (!IsStateActive()) {
+            badRequest(TStringBuilder() << "Shard " << TabletID() << " is " << State << " and not ready for requests");
         }
+        if (!GetUserTables().contains(tableId.PathId.LocalPathId)) {
+            badRequest(TStringBuilder() << "Unknown table id: " << tableId.PathId.LocalPathId);
+        }
+        if (trySendBadRequest()) {
+            return;
+        }
+        const auto& userTable = *GetUserTables().at(tableId.PathId.LocalPathId);
+
+        // 2. Validating request fields
+        if (!request.HasSnapshotStep() || !request.HasSnapshotTxId()) {
+            badRequest(TStringBuilder() << "Empty snapshot");
+        }
+        const TSnapshotKey snapshotKey(tableId.PathId, rowVersion.Step, rowVersion.TxId);
+        if (!SnapshotManager.FindAvailable(snapshotKey)) {
+            badRequest(TStringBuilder() << "Unknown snapshot for path id " << tableId.PathId.OwnerId << ":" << tableId.PathId.LocalPathId
+                << ", snapshot step is " << snapshotKey.Step << ", snapshot tx is " << snapshotKey.TxId);
+        }
+
+        TSerializedTableRange requestedRange;
+        requestedRange.Load(request.GetKeyRange());
+        auto scanRange = Intersect(userTable.KeyColumnTypes, requestedRange.ToTableRange(), userTable.Range.ToTableRange());
+        if (scanRange.IsEmptyRange(userTable.KeyColumnTypes)) {
+            badRequest(TStringBuilder() << " requested range doesn't intersect with table range"
+                << " requestedRange: " << DebugPrintRange(userTable.KeyColumnTypes, requestedRange.ToTableRange(), *AppData()->TypeRegistry)
+                << " tableRange: " << DebugPrintRange(userTable.KeyColumnTypes, userTable.Range.ToTableRange(), *AppData()->TypeRegistry)
+                << " scanRange: " << DebugPrintRange(userTable.KeyColumnTypes, scanRange, *AppData()->TypeRegistry));
+        }
+
+        if (!request.HasTargetName()) {
+            badRequest(TStringBuilder() << "Empty target table name");
+        }
+
+        auto tags = GetAllTags(userTable);
+        for (auto column : request.GetIndexColumns()) {
+            if (!tags.contains(column)) {
+                badRequest(TStringBuilder() << "Unknown index column: " << column);
+            }
+        }
+        for (auto column : request.GetDataColumns()) {
+            if (!tags.contains(column)) {
+                badRequest(TStringBuilder() << "Unknown data column: " << column);
+            }
+        }
+
+        if (trySendBadRequest()) {
+            return;
+        }
+
+        // 3. Creating scan
+        TAutoPtr<NTable::IScan> scan = CreateBuildIndexScan(id,
+            request.GetTargetName(),
+            seqNo,
+            request.GetTabletId(),
+            ev->Sender,
+            requestedRange,
+            request.GetIndexColumns(),
+            request.GetDataColumns(),
+            request.GetColumnBuildSettings(),
+            userTable,
+            request.GetScanSettings());
+
+        StartScan(this, std::move(scan), id, seqNo, rowVersion, userTable.LocalTid);
+    } catch (const std::exception& exc) {
+        FailScan<TEvDataShard::TEvBuildIndexProgressResponse>(id, TabletID(), ev->Sender, seqNo, exc);
     }
-
-    if (trySendBadRequest()) {
-        return;
-    }
-
-    // 3. Creating scan
-    TAutoPtr<NTable::IScan> scan = CreateBuildIndexScan(id,
-        request.GetTargetName(),
-        seqNo,
-        request.GetTabletId(),
-        ev->Sender,
-        requestedRange,
-        request.GetIndexColumns(),
-        request.GetDataColumns(),
-        request.GetColumnBuildSettings(),
-        userTable,
-        request.GetScanSettings());
-
-    StartScan(this, std::move(scan), id, seqNo, rowVersion, userTable.LocalTid);
 }
 
 }

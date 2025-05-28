@@ -629,6 +629,10 @@ public:
         }
 
         for (const auto type : TEnumTraits<ESimpleLogicalValueType>::GetDomainValues()) {
+            if (IsTzType(SimpleLogicalType(type))) {
+                // TODO(nadya02): YT-15805: Support tz types.
+                continue;
+            }
             auto logicalType = OptionalLogicalType(SimpleLogicalType(type));
             if (IsV3Composite(logicalType)) {
                 // Optional<Null> is not v1 type

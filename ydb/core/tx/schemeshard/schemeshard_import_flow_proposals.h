@@ -20,14 +20,14 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
     ui32 itemIdx
 );
 
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> RestorePropose(
+THolder<TEvSchemeShard::TEvModifySchemeTransaction> RestoreTableDataPropose(
     TSchemeShard* ss,
     TTxId txId,
     const TImportInfo& importInfo,
     ui32 itemIdx
 );
 
-THolder<TEvSchemeShard::TEvCancelTx> CancelRestorePropose(
+THolder<TEvSchemeShard::TEvCancelTx> CancelRestoreTableDataPropose(
     const TImportInfo& importInfo,
     TTxId restoreTxId
 );

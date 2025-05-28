@@ -19,6 +19,7 @@ TS3Configuration::TS3Configuration()
     REGISTER_SETTING(*this, ArrowRowGroupReordering);
     REGISTER_SETTING(*this, ParallelDownloadCount);
     REGISTER_SETTING(*this, UseBlocksSource);
+    REGISTER_SETTING(*this, UseBlocksSink);
     REGISTER_SETTING(*this, AtomicUploadCommit);
     REGISTER_SETTING(*this, UseConcurrentDirectoryLister);
     REGISTER_SETTING(*this, MaxDiscoveryFilesPerDirectory).Lower(1);

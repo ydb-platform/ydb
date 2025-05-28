@@ -2886,7 +2886,7 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
         TPathId DstPathId;
         TString SrcPrefix;
         TString SrcPath; // Src path from schema mapping
-        Ydb::Table::CreateTableRequest Scheme;
+        TMaybe<Ydb::Table::CreateTableRequest> Table;
         TMaybe<Ydb::Topic::CreateTopicRequest> Topic;
         TString CreationQuery;
         TMaybe<NKikimrSchemeOp::TModifyScheme> PreparedCreationQuery;
@@ -3460,7 +3460,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
             State = EState::Collect;
         }
 
-        void Set(ui64 probability, TString data) {
+        void Add(ui64 probability, TString data) {
             Rows.emplace_back(probability, std::move(data));
             MaxProbability = std::max(probability + 1, MaxProbability + 1) - 1;
         }

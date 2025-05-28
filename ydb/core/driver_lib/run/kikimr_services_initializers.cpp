@@ -987,14 +987,16 @@ void TBSNodeWardenInitializer::InitializeServices(NActors::TActorSystemSetup* se
 template<typename TCreateFunc>
 void StartLocalStateStorageReplicas(TCreateFunc createFunc, TStateStorageInfo *info, ui32 poolId, TActorSystemSetup &setup) {
     ui32 index = 0;
-    for (auto &ring : info->Rings) {
-        for (TActorId replica : ring.Replicas) {
-            if (replica.NodeId() == setup.NodeId) {
-                setup.LocalServices.emplace_back(
-                    replica,
-                    TActorSetupCmd(createFunc(info, index), TMailboxType::ReadAsFilled, poolId));
+    for (auto &ringGroup : info->RingGroups) {
+        for (auto &ring : ringGroup.Rings) {
+            for (TActorId replica : ring.Replicas) {
+                if (replica.NodeId() == setup.NodeId) {
+                    setup.LocalServices.emplace_back(
+                        replica,
+                        TActorSetupCmd(createFunc(info, index), TMailboxType::ReadAsFilled, poolId));
+                }
+                ++index;
             }
-            ++index;
         }
     }
 }
@@ -2783,7 +2785,7 @@ void TKafkaProxyServiceInitializer::InitializeServices(NActors::TActorSystemSetu
         );
         
         setup->LocalServices.emplace_back(
-            NKafka::MakeTransactionsServiceID(),
+            NKafka::MakeTransactionsServiceID(NodeId),
             TActorSetupCmd(NKafka::CreateTransactionsCoordinator(),
                 TMailboxType::HTSwap, appData->UserPoolId
             )

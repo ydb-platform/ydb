@@ -6,14 +6,127 @@
 
 namespace NKikimr::NSQS {
 namespace NCloudEvents {
+    void PrintMessageFields(const google::protobuf::Message& message, int indent = 0) {
+        const google::protobuf::Descriptor* descriptor = message.GetDescriptor();
+        const google::protobuf::Reflection* reflection = message.GetReflection();
+
+        std::string indentation(indent, ' ');
+
+        std::cerr << indentation << "Message type: " << descriptor->full_name() << std::endl;
+        std::cerr << indentation << "Fields (" << descriptor->field_count() << "):" << std::endl;
+
+        for (int i = 0; i < descriptor->field_count(); i++) {
+            const google::protobuf::FieldDescriptor* field = descriptor->field(i);
+
+            std::cerr << indentation << "  " << i+1 << ". " << field->name()
+                    << " (type: " << field->type_name() << ", "
+                    << (field->is_repeated() ? "repeated" : "singular") << ")";
+
+            if (field->is_repeated()) {
+                int count = reflection->FieldSize(message, field);
+                std::cerr << " [" << count << " elements]";
+
+                if (field->type() == google::protobuf::FieldDescriptor::TYPE_MESSAGE) {
+                    std::cerr << std::endl;
+
+                    if (count > 0) {
+                        for (int j = 0; j < count; j++) {
+                            std::cerr << indentation << "    Element " << j << ":" << std::endl;
+                            const google::protobuf::Message& nested_message =
+                                reflection->GetRepeatedMessage(message, field, j);
+                            PrintMessageFields(nested_message, indent + 6);
+                        }
+                    } else {
+                        std::cerr << indentation << "    Structure of repeated message element:" << std::endl;
+                        const google::protobuf::Message& prototype =
+                            *reflection->GetMessageFactory()->GetPrototype(field->message_type());
+                        PrintMessageFields(prototype, indent + 6);
+                    }
+                } else {
+                    std::cerr << std::endl;
+                }
+            } else {
+                if (reflection->HasField(message, field)) {
+                    std::cerr << " (has value)";
+
+                    if (field->type() == google::protobuf::FieldDescriptor::TYPE_MESSAGE) {
+                        std::cerr << std::endl;
+                        const google::protobuf::Message& nested_message =
+                            reflection->GetMessage(message, field);
+                        PrintMessageFields(nested_message, indent + 4);
+                    } else {
+                        std::cerr << std::endl;
+                    }
+                } else {
+                    std::cerr << " (not set)";
+
+                    if (field->type() == google::protobuf::FieldDescriptor::TYPE_MESSAGE) {
+                        std::cerr << std::endl;
+                        std::cerr << indentation << "    Structure of nested message:" << std::endl;
+                        PrintMessageFields(*reflection->GetMessageFactory()->GetPrototype(field->message_type()), indent + 6);
+                    } else {
+                        std::cerr << std::endl;
+                    }
+                }
+            }
+
+            if (!field->is_repeated() && field->has_default_value() &&
+                field->type() != google::protobuf::FieldDescriptor::TYPE_MESSAGE) {
+                std::cerr << indentation << "    Default value: ";
+                switch (field->type()) {
+                    case google::protobuf::FieldDescriptor::TYPE_INT32:
+                    case google::protobuf::FieldDescriptor::TYPE_INT64:
+                    case google::protobuf::FieldDescriptor::TYPE_UINT32:
+                    case google::protobuf::FieldDescriptor::TYPE_UINT64:
+                        std::cerr << field->default_value_int64();
+                        break;
+                    case google::protobuf::FieldDescriptor::TYPE_FLOAT:
+                    case google::protobuf::FieldDescriptor::TYPE_DOUBLE:
+                        std::cerr << field->default_value_double();
+                        break;
+                    case google::protobuf::FieldDescriptor::TYPE_BOOL:
+                        std::cerr << (field->default_value_bool() ? "true" : "false");
+                        break;
+                    case google::protobuf::FieldDescriptor::TYPE_STRING:
+                    case google::protobuf::FieldDescriptor::TYPE_BYTES:
+                        std::cerr << "\"" << field->default_value_string() << "\"";
+                        break;
+                    default:
+                        std::cerr << "[complex type]";
+                }
+                std::cerr << std::endl;
+            }
+        }
+
+        for (int i = 0; i < descriptor->enum_type_count(); i++) {
+            const google::protobuf::EnumDescriptor* enum_type = descriptor->enum_type(i);
+            std::cerr << indentation << "  Enum: " << enum_type->name() << std::endl;
+            for (int j = 0; j < enum_type->value_count(); j++) {
+                std::cerr << indentation << "    " << enum_type->value(j)->name()
+                        << " = " << enum_type->value(j)->number() << std::endl;
+            }
+        }
+
+        for (int i = 0; i < descriptor->nested_type_count(); i++) {
+            const google::protobuf::Descriptor* nested_type = descriptor->nested_type(i);
+            std::cerr << indentation << "  Nested message type: " << nested_type->name() << std::endl;
+        }
+    }
+
     template<typename TProtoEvent>
     void TFiller<TProtoEvent>::FillAuthentication() {
+        static constexpr auto extractSubjectType = [](const TString& authType) {
+            using ESubjectType = ::yandex::cloud::events::Authentication;
+            static const TMap<TString, ESubjectType::SubjectType> Types {
+                {"service_account", ESubjectType::SERVICE_ACCOUNT},
+                {"federated_account", ESubjectType::FEDERATED_USER_ACCOUNT},
+                {"user_account", ESubjectType::YANDEX_PASSPORT_USER_ACCOUNT},
+            };
+            return Types.Value(authType, ESubjectType::SUBJECT_TYPE_UNSPECIFIED);
+        };
         Ev.mutable_authentication()->set_authenticated(true);
         Ev.mutable_authentication()->set_subject_id(EventInfo.UserSID);
-        // Ev.mutable_authentication()->set_subject_type(EventInfo.AuthType); TODO
-        if (!EventInfo.UserSanitizedToken.empty()) {
-            // Ev.mutable_authentication()->mutable_token_info()->set_masked_iam_token(EventInfo.UserSanitizedToken); // TODO compile
-        }
+        Ev.mutable_authentication()->set_subject_type(extractSubjectType(EventInfo.AuthType));
     }
 
     template<typename TProtoEvent>
@@ -25,9 +138,14 @@ namespace NCloudEvents {
         // permissions.authorized оставляем пустым.
 
         Ev.mutable_authorization()->set_authorized(true);
-        // Ev.mutable_authorization()->mutable_permissions()->set_permission(EventInfo.Permission); // TODO compile
-        // Ev.mutable_authorization()->mutable_permissions()->set_resource_type(EventInfo.ResourceType); // TODO compile
-        // Ev.mutable_authorization()->mutable_permissions()->set_resource_id(EventInfo.FolderId); // TODO compile
+        auto* permission = Ev.mutable_authorization()->add_permissions();
+            permission->set_permission(EventInfo.Permission);
+            permission->set_resource_type(EventInfo.ResourceType);
+            permission->set_resource_id(EventInfo.FolderId);
+
+        if (!EventInfo.UserSanitizedToken.empty()) {
+            Ev.mutable_authorization()->mutable_token_info()->set_masked_iam_token(EventInfo.UserSanitizedToken);
+        }
     }
 
     template<typename TProtoEvent>
@@ -64,7 +182,7 @@ namespace NCloudEvents {
         } else {
             Ev.set_event_status(EStatus::ERROR);
             Ev.mutable_error()->set_code(grpc::StatusCode::UNKNOWN);
-            // Ev.mutable_error()->set_error(EventInfo.Issue);
+            Ev.mutable_error()->set_message(EventInfo.Issue);
         }
     }
 
@@ -91,8 +209,7 @@ namespace NCloudEvents {
 
     template<typename TProtoEvent>
     void TAuditSender::Send(const TProtoEvent& ev) {
-        std::cerr << "cloud_events.cpp: I got the audit message!!!" << std::endl;
-        std::cerr << "cloud_events.cpp: auditsender: type: " << ev.event_metadata().event_type() << std::endl;
+        PrintMessageFields(ev);
     }
 
     template void TAuditSender::Send<TCreateQueueEvent>(const TCreateQueueEvent&);
@@ -136,11 +253,13 @@ namespace NCloudEvents {
 
     TProcessor::TProcessor
     (
-        TString root,
-        TString database
+        const TString& root,
+        const TString& database,
+        const TDuration& retryTimeout
     )
         : Root(root)
         , Database(database)
+        , RetryTimeout(retryTimeout)
         , SelectQuery(GetInitSelectQuery())
         , DeleteQuery(GetInitDeleteQuery())
     {
@@ -182,7 +301,7 @@ namespace NCloudEvents {
     }
 
     void TProcessor::Bootstrap() {
-        Schedule(DefaultRetryTimeout, new TEvents::TEvWakeup);
+        Schedule(RetryTimeout, new TEvents::TEvWakeup);
         Become(&TProcessor::StateWaitWakeUp);
     }
 
@@ -197,7 +316,7 @@ namespace NCloudEvents {
 
     void TProcessor::ProcessFailure() {
         StopSession();
-        Schedule(DefaultRetryTimeout, new TEvents::TEvWakeup);
+        Schedule(RetryTimeout, new TEvents::TEvWakeup);
         Become(&TProcessor::StateWaitWakeUp);
     }
 
@@ -232,21 +351,21 @@ namespace NCloudEvents {
             auto& cloudEvent = result.back();
 
             cloudEvent.OriginalId = *parser.ColumnParser(0).GetOptionalUint64();
-            TString type = *parser.ColumnParser(1).GetOptionalUtf8();
-            cloudEvent.Type = DefaultEventTypePrefix + type;
+            cloudEvent.QueueName = *parser.ColumnParser(1).GetOptionalUtf8();
             cloudEvent.CreatedAt = *parser.ColumnParser(2).GetOptionalUint64();
+            TString type = *parser.ColumnParser(3).GetOptionalUtf8();
+            cloudEvent.Type = DefaultEventTypePrefix + type;
 
             cloudEvent.Id = convertId(cloudEvent.OriginalId, cloudEvent.Type, cloudEvent.CreatedAt);
 
-            cloudEvent.CloudId = *parser.ColumnParser(3).GetOptionalUtf8();
-            cloudEvent.FolderId = *parser.ColumnParser(4).GetOptionalUtf8();
-            cloudEvent.UserSID = *parser.ColumnParser(5).GetOptionalUtf8();
-            cloudEvent.UserSanitizedToken = *parser.ColumnParser(6).GetOptionalUtf8();
-            cloudEvent.AuthType = *parser.ColumnParser(7).GetOptionalUtf8();
-            cloudEvent.RemoteAddress = *parser.ColumnParser(8).GetOptionalUtf8();
-            cloudEvent.RequestId = *parser.ColumnParser(9).GetOptionalUtf8();
-            cloudEvent.IdempotencyId = *parser.ColumnParser(10).GetOptionalUtf8();
-            cloudEvent.QueueName = *parser.ColumnParser(11).GetOptionalUtf8();
+            cloudEvent.CloudId = *parser.ColumnParser(4).GetOptionalUtf8();
+            cloudEvent.FolderId = *parser.ColumnParser(5).GetOptionalUtf8();
+            cloudEvent.UserSID = *parser.ColumnParser(6).GetOptionalUtf8();
+            cloudEvent.UserSanitizedToken = *parser.ColumnParser(7).GetOptionalUtf8();
+            cloudEvent.AuthType = *parser.ColumnParser(8).GetOptionalUtf8();
+            cloudEvent.RemoteAddress = *parser.ColumnParser(9).GetOptionalUtf8();
+            cloudEvent.RequestId = *parser.ColumnParser(10).GetOptionalUtf8();
+            cloudEvent.IdempotencyId = *parser.ColumnParser(11).GetOptionalUtf8();
             cloudEvent.Labels = convertLabels(*parser.ColumnParser(12).GetOptionalUtf8());
         }
 
@@ -344,12 +463,12 @@ namespace NCloudEvents {
                 filler.Fill();
                 TAuditSender::Send<TDeleteQueueEvent>(ev);
             } else {
-                // Y_UNREACHABLE();
+                Y_UNREACHABLE();
             }
         }
 
         LastQuery = ELastQueryType::None;
-        Schedule(DefaultRetryTimeout, new TEvents::TEvWakeup);
+        Schedule(RetryTimeout, new TEvents::TEvWakeup);
         Become(&TProcessor::StateWaitWakeUp);
     }
 } // namespace NCloudEvents

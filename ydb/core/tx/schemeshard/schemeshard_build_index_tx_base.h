@@ -32,6 +32,7 @@ private:
 
 protected:
     void Send(TActorId dst, THolder<IEventBase> message, ui32 flags = 0, ui64 cookie = 0);
+    void AllocateTxId(TIndexBuildId buildId);
     void ChangeState(TIndexBuildId id, TIndexBuildInfo::EState state);
     void Progress(TIndexBuildId id);
     void Fill(NKikimrIndexBuilder::TIndexBuild& index, const TIndexBuildInfo& indexInfo);

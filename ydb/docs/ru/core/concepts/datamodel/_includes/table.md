@@ -280,4 +280,4 @@ WITH (STORE = COLUMN)
 AS SELECT * FROM s3_external_table
 ```
 
-Подробнее смотрите: ["Экспорт и импорт данных между колоночными таблицами и S3"](../../federated_query/s3/import_and_export.md).
+Подробнее см. в статье [{#T}](../../federated_query/s3/import_and_export.md).

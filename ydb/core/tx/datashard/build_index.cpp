@@ -103,7 +103,7 @@ class TBuildScanUpload: public TActor<TBuildScanUpload<Activity>>, public NTable
     using TBase = TActor<TThis>;
 
 protected:
-    const TUploadLimits Limits;
+    const TIndexBuildScanSettings ScanSettings;
 
     const ui64 BuildIndexId;
     const TString TargetTable;
@@ -129,7 +129,7 @@ protected:
     TSerializedCellVec LastUploadedKey;
 
     TActorId Uploader;
-    ui64 RetryCount = 0;
+    ui32 RetryCount = 0;
 
     TUploadMonStats Stats = TUploadMonStats("tablets", "build_index_upload");
     TUploadStatus UploadStatus;
@@ -141,9 +141,9 @@ protected:
                      const TActorId& progressActorId,
                      const TSerializedTableRange& range,
                      const TUserTable& tableInfo,
-                     TUploadLimits limits)
+                     const TIndexBuildScanSettings& scanSettings)
         : TBase(&TThis::StateWork)
-        , Limits(limits)
+        , ScanSettings(scanSettings)
         , BuildIndexId(buildIndexId)
         , TargetTable(target)
         , SeqNo(seqNo)
@@ -161,7 +161,7 @@ protected:
 
         addRow();
 
-        if (!ReadBuf.IsReachLimits(Limits)) {
+        if (!HasReachedLimits(ReadBuf, ScanSettings)) {
             return EScan::Feed;
         }
 
@@ -354,7 +354,7 @@ private:
 
             this->Send(ProgressActorId, progress.Release());
 
-            if (!ReadBuf.IsEmpty() && ReadBuf.IsReachLimits(Limits)) {
+            if (HasReachedLimits(ReadBuf, ScanSettings)) {
                 ReadBuf.FlushTo(WriteBuf);
                 Upload();
             }
@@ -363,10 +363,10 @@ private:
             return;
         }
 
-        if (RetryCount < Limits.MaxUploadRowsRetryCount && UploadStatus.IsRetriable()) {
+        if (RetryCount < ScanSettings.GetMaxBatchRetries() && UploadStatus.IsRetriable()) {
             LOG_N("Got retriable error, " << Debug());
 
-            ctx.Schedule(Limits.GetTimeoutBackoff(RetryCount), new TEvents::TEvWakeup());
+            ctx.Schedule(GetRetryWakeupTimeoutBackoff(RetryCount), new TEvents::TEvWakeup());
             return;
         }
 
@@ -412,8 +412,8 @@ public:
                     TProtoColumnsCRef targetIndexColumns,
                     TProtoColumnsCRef targetDataColumns,
                     const TUserTable& tableInfo,
-                    TUploadLimits limits)
-        : TBuildScanUpload(buildIndexId, target, seqNo, dataShardId, progressActorId, range, tableInfo, limits)
+                    const TIndexBuildScanSettings& scanSettings)
+        : TBuildScanUpload(buildIndexId, target, seqNo, dataShardId, progressActorId, range, tableInfo, scanSettings)
         , TargetDataColumnPos(targetIndexColumns.size()) {
         ScanTags = BuildTags(tableInfo, targetIndexColumns, targetDataColumns);
         UploadColumnsTypes = BuildTypes(tableInfo, targetIndexColumns, targetDataColumns);
@@ -444,8 +444,8 @@ public:
                       const TSerializedTableRange& range,
                       const NKikimrIndexBuilder::TColumnBuildSettings& columnBuildSettings,
                       const TUserTable& tableInfo,
-                      TUploadLimits limits)
-        : TBuildScanUpload(buildIndexId, target, seqNo, dataShardId, progressActorId, range, tableInfo, limits) {
+                      const TIndexBuildScanSettings& scanSettings)
+        : TBuildScanUpload(buildIndexId, target, seqNo, dataShardId, progressActorId, range, tableInfo, scanSettings) {
         Y_ABORT_UNLESS(columnBuildSettings.columnSize() > 0);
         UploadColumnsTypes = BuildTypes(tableInfo, columnBuildSettings);
         UploadMode = NTxProxy::EUploadRowsMode::UpsertIfExists;
@@ -481,13 +481,13 @@ TAutoPtr<NTable::IScan> CreateBuildIndexScan(
     TProtoColumnsCRef targetDataColumns,
     const NKikimrIndexBuilder::TColumnBuildSettings& columnsToBuild,
     const TUserTable& tableInfo,
-    TUploadLimits limits) {
+    const TIndexBuildScanSettings& scanSettings) {
     if (columnsToBuild.columnSize() > 0) {
         return new TBuildColumnsScan(
-            buildIndexId, target, seqNo, dataShardId, progressActorId, range, columnsToBuild, tableInfo, limits);
+            buildIndexId, target, seqNo, dataShardId, progressActorId, range, columnsToBuild, tableInfo, scanSettings);
     }
     return new TBuildIndexScan(
-        buildIndexId, target, seqNo, dataShardId, progressActorId, range, targetIndexColumns, targetDataColumns, tableInfo, limits);
+        buildIndexId, target, seqNo, dataShardId, progressActorId, range, targetIndexColumns, targetDataColumns, tableInfo, scanSettings);
 }
 
 class TDataShard::TTxHandleSafeBuildIndexScan: public NTabletFlatExecutor::TTransactionBase<TDataShard> {
@@ -608,17 +608,6 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, 
     scanOpts.SetSnapshotRowVersion(rowVersion);
     scanOpts.SetResourceBroker("build_index", 10);
 
-    TUploadLimits limits;
-    if (record.HasMaxBatchRows()) {
-        limits.BatchRowsLimit = record.GetMaxBatchRows();
-    }
-    if (record.HasMaxBatchBytes()) {
-        limits.BatchBytesLimit = record.GetMaxBatchBytes();
-    }
-    if (record.HasMaxRetries()) {
-        limits.MaxUploadRowsRetryCount = record.GetMaxRetries();
-    }
-
     const auto scanId = QueueScan(userTable.LocalTid,
                                   CreateBuildIndexScan(buildIndexId,
                                                        record.GetTargetName(),
@@ -630,7 +619,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, 
                                                        record.GetDataColumns(),
                                                        record.GetColumnBuildSettings(),
                                                        userTable,
-                                                       limits),
+                                                       record.GetScanSettings()),
                                   0,
                                   scanOpts);
 

@@ -63,10 +63,10 @@ void TSchemeShard::PersistCreateBuildIndex(NIceDb::TNiceDb& db, const TIndexBuil
         NIceDb::TUpdate<Schema::IndexBuild::TableLocalId>(info.TablePathId.LocalPathId),
         NIceDb::TUpdate<Schema::IndexBuild::IndexName>(info.IndexName),
         NIceDb::TUpdate<Schema::IndexBuild::IndexType>(info.IndexType),
-        NIceDb::TUpdate<Schema::IndexBuild::MaxBatchRows>(info.Limits.MaxBatchRows),
-        NIceDb::TUpdate<Schema::IndexBuild::MaxBatchBytes>(info.Limits.MaxBatchBytes),
-        NIceDb::TUpdate<Schema::IndexBuild::MaxShards>(info.Limits.MaxShards),
-        NIceDb::TUpdate<Schema::IndexBuild::MaxRetries>(info.Limits.MaxRetries),
+        NIceDb::TUpdate<Schema::IndexBuild::MaxBatchRows>(info.ScanSettings.GetMaxBatchRows()),
+        NIceDb::TUpdate<Schema::IndexBuild::MaxBatchBytes>(info.ScanSettings.GetMaxBatchBytes()),
+        NIceDb::TUpdate<Schema::IndexBuild::MaxShards>(info.MaxInProgressShards),
+        NIceDb::TUpdate<Schema::IndexBuild::MaxRetries>(info.ScanSettings.GetMaxBatchRetries()),
         NIceDb::TUpdate<Schema::IndexBuild::BuildKind>(ui32(info.BuildKind))
     );
     // Persist details of the index build operation: ImplTableDescriptions and SpecializedIndexDescription.

@@ -71,18 +71,4 @@ struct TUploadStatus {
     }
 };
 
-struct TUploadRetryLimits {
-    ui32 MaxUploadRowsRetryCount = 50;
-    ui32 BackoffCeiling = 3;
-
-    TDuration GetTimeoutBackoff(ui32 retryNo) const {
-        return TDuration::Seconds(1u << Min(retryNo, BackoffCeiling));
-    }
-};
-
-struct TUploadLimits: TUploadRetryLimits {
-    ui64 BatchRowsLimit = 50000;
-    ui64 BatchBytesLimit = 8388608; // 8MB
-};
-
 }

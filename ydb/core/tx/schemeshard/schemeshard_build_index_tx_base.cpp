@@ -296,10 +296,8 @@ void TSchemeShard::TIndexBuilder::TTxBase::Fill(NKikimrIndexBuilder::TIndexBuild
         }
     }
 
-    settings.set_max_batch_bytes(info.Limits.MaxBatchBytes);
-    settings.set_max_batch_rows(info.Limits.MaxBatchRows);
-    settings.set_max_shards_in_flight(info.Limits.MaxShards);
-    settings.set_max_retries_upload_batch(info.Limits.MaxRetries);
+    settings.MutableScanSettings()->CopyFrom(info.ScanSettings);
+    settings.set_max_shards_in_flight(info.MaxInProgressShards);
 }
 
 void TSchemeShard::TIndexBuilder::TTxBase::AddIssue(::google::protobuf::RepeatedPtrField<::Ydb::Issue::IssueMessage>* issues,

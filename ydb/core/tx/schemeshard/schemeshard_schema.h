@@ -1926,13 +1926,24 @@ struct Schema : NIceDb::Schema {
         struct Level : Column<2, NScheme::NTypeIds::Uint32> {};
         struct State : Column<3, NScheme::NTypeIds::Uint32> {};
         struct Parent : Column<4, ClusterIdTypeId> {};
+        struct ParentBegin : Column<5, ClusterIdTypeId> {};
+        struct Child : Column<6, ClusterIdTypeId> {};
+        struct ChildBegin : Column<7, ClusterIdTypeId> {};
+        struct TableSize : Column<8, NScheme::NTypeIds::Uint64> {};
+        // TableSize required for prefixed kmeans tree
+        // But can be filled and used for other kmeans tree for "auto" settings choice
+        // Also for "auto" settings will needs to save K
 
         using TKey = TableKey<Id>;
         using TColumns = TableColumns<
             Id,
             Level,
             State,
-            Parent
+            Parent,
+            ParentBegin,
+            Child,
+            ChildBegin,
+            TableSize
         >;
     };
 

@@ -8,6 +8,7 @@
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tx/datashard/range_ops.h>
 #include <ydb/core/tx/datashard/upload_stats.h>
+#include <ydb/core/tx/datashard/scan_common.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/tx_proxy/upload_rows.h>
 
@@ -20,9 +21,6 @@
 
 namespace NKikimr {
 namespace NSchemeShard {
-
-// TODO(mbkkt) get table rows count (but even better to have unique prefixes count)
-static constexpr ui64 TableSize = 1'000;
 
 static constexpr const char* Name(TIndexBuildInfo::EState state) noexcept {
     switch (state) {
@@ -88,7 +86,7 @@ protected:
     TString LogPrefix;
     TString TargetTable;
 
-    NDataShard::TUploadRetryLimits Limits;
+    const NKikimrIndexBuilder::TIndexBuildScanSettings ScanSettings;
 
     TActorId ResponseActorId;
     ui64 BuildIndexId = 0;
@@ -107,13 +105,14 @@ protected:
 
 public:
     TUploadSampleK(TString targetTable,
-                   const TIndexBuildInfo::TLimits& limits,
+                   const NKikimrIndexBuilder::TIndexBuildScanSettings& scanSettings,
                    const TActorId& responseActorId,
                    ui64 buildIndexId,
                    TIndexBuildInfo::TSample::TRows init,
                    NTableIndex::TClusterId parent,
                    NTableIndex::TClusterId child)
         : TargetTable(std::move(targetTable))
+        , ScanSettings(scanSettings)
         , ResponseActorId(responseActorId)
         , BuildIndexId(buildIndexId)
         , Init(std::move(init))
@@ -123,7 +122,6 @@ public:
         LogPrefix = TStringBuilder()
             << "TUploadSampleK: BuildIndexId: " << BuildIndexId
             << " ResponseActorId: " << ResponseActorId;
-        Limits.MaxUploadRowsRetryCount = limits.MaxRetries;
         Y_ASSERT(!Init.empty());
         Y_ASSERT(Parent < Child);
         Y_ASSERT(Child != 0);
@@ -209,10 +207,10 @@ private:
         UploadStatus.StatusCode = ev->Get()->Status;
         UploadStatus.Issues = std::move(ev->Get()->Issues);
 
-        if (UploadStatus.IsRetriable() && RetryCount < Limits.MaxUploadRowsRetryCount) {
+        if (UploadStatus.IsRetriable() && RetryCount < ScanSettings.GetMaxBatchRetries()) {
             LOG_N("Got retriable error, " << Debug() << " RetryCount: " << RetryCount);
 
-            this->Schedule(Limits.GetTimeoutBackoff(RetryCount), new TEvents::TEvWakeup());
+            this->Schedule(NDataShard::GetRetryWakeupTimeoutBackoff(RetryCount), new TEvents::TEvWakeup());
             return;
         }
         TAutoPtr<TEvIndexBuilder::TEvUploadSampleKResponse> response = new TEvIndexBuilder::TEvUploadSampleKResponse;
@@ -681,7 +679,8 @@ private:
         ev->Record.SetNeedsRounds(3); // TODO(mbkkt) should be configurable
 
         const auto shardIndex = buildInfo.Shards.at(shardIdx).Index;
-        ev->Record.SetChild(buildInfo.KMeans.ChildBegin + (1 + TableSize) * shardIndex);
+        // about 2 * TableSize see comment in PrefixIndexDone
+        ev->Record.SetChild(buildInfo.KMeans.ChildBegin + (2 * buildInfo.KMeans.TableSize) * shardIndex);
 
         ev->Record.SetPostingName(path.Dive(buildInfo.KMeans.WriteTo()).PathString());
         path.Rise().Dive(NTableIndex::NTableVectorKmeansTreeIndex::LevelTable);
@@ -744,9 +743,7 @@ private:
 
         ev->Record.SetTargetName(buildInfo.TargetName);
 
-        ev->Record.SetMaxBatchRows(buildInfo.Limits.MaxBatchRows);
-        ev->Record.SetMaxBatchBytes(buildInfo.Limits.MaxBatchBytes);
-        ev->Record.SetMaxRetries(buildInfo.Limits.MaxRetries);
+        ev->Record.MutableScanSettings()->CopyFrom(buildInfo.ScanSettings);
 
         auto shardId = CommonFillRecord(ev->Record, shardIdx, buildInfo);
 
@@ -762,7 +759,7 @@ private:
                         .Dive(NTableIndex::NTableVectorKmeansTreeIndex::LevelTable);
         Y_ASSERT(buildInfo.Sample.Rows.size() <= buildInfo.KMeans.K);
         auto actor = new TUploadSampleK(path.PathString(),
-            buildInfo.Limits, Self->SelfId(), ui64(BuildId),
+            buildInfo.ScanSettings, Self->SelfId(), ui64(BuildId),
             buildInfo.Sample.Rows, buildInfo.KMeans.Parent, buildInfo.KMeans.Child);
 
         TActivationContext::AsActorContext().MakeFor(Self->SelfId()).Register(actor);
@@ -780,7 +777,7 @@ private:
 
     template<typename Send>
     bool SendToShards(TIndexBuildInfo& buildInfo, Send&& send) {
-        while (!buildInfo.ToUploadShards.empty() && buildInfo.InProgressShards.size() < buildInfo.Limits.MaxShards) {
+        while (!buildInfo.ToUploadShards.empty() && buildInfo.InProgressShards.size() < buildInfo.MaxInProgressShards) {
             auto shardIdx = buildInfo.ToUploadShards.front();
             buildInfo.ToUploadShards.pop_front();
             buildInfo.InProgressShards.emplace(shardIdx);
@@ -932,7 +929,11 @@ private:
         db.Table<Schema::KMeansTreeProgress>().Key(buildInfo.Id).Update(
             NIceDb::TUpdate<Schema::KMeansTreeProgress::Level>(buildInfo.KMeans.Level),
             NIceDb::TUpdate<Schema::KMeansTreeProgress::State>(buildInfo.KMeans.State),
-            NIceDb::TUpdate<Schema::KMeansTreeProgress::Parent>(buildInfo.KMeans.Parent)
+            NIceDb::TUpdate<Schema::KMeansTreeProgress::Parent>(buildInfo.KMeans.Parent),
+            NIceDb::TUpdate<Schema::KMeansTreeProgress::ParentBegin>(buildInfo.KMeans.ParentBegin),
+            NIceDb::TUpdate<Schema::KMeansTreeProgress::Child>(buildInfo.KMeans.Child),
+            NIceDb::TUpdate<Schema::KMeansTreeProgress::ChildBegin>(buildInfo.KMeans.ChildBegin),
+            NIceDb::TUpdate<Schema::KMeansTreeProgress::TableSize>(buildInfo.KMeans.TableSize)
         );
     }
 
@@ -945,7 +946,9 @@ private:
             const ui64 doneShards = buildInfo.DoneShards.size();
 
             ClearDoneShards(txc, buildInfo);
-            Y_ABORT_UNLESS(buildInfo.KMeans.PrefixTableDone(TableSize, doneShards));
+            // it's approximate but upper bound, so it's ok
+            buildInfo.KMeans.TableSize = std::max<ui64>(1, buildInfo.Processed.GetUploadRows());
+            buildInfo.KMeans.PrefixIndexDone(doneShards);
             PersistKMeansState(txc, buildInfo);
             NIceDb::TNiceDb db{txc.DB};
             Self->PersistBuildIndexUploadReset(db, buildInfo);
@@ -1317,14 +1320,14 @@ public:
         auto tableColumns = NTableIndex::ExtractInfo(table); // skip dropped columns
         TSerializedTableRange shardRange = InfiniteRange(tableColumns.Keys.size());
         static constexpr std::string_view LogPrefix = "";
-        LOG_D("infinite range " << buildInfo.KMeans.RangeToDebugStr(shardRange));
+        LOG_D("infinite range " << buildInfo.KMeans.RangeToDebugStr(shardRange, buildInfo.IsBuildPrefixedVectorIndex() ? 2 : 1));
 
         buildInfo.Cluster2Shards.clear();
         for (const auto& x: table->GetPartitions()) {
             Y_ABORT_UNLESS(Self->ShardInfos.contains(x.ShardIdx));
             TSerializedCellVec bound{x.EndOfRange};
             shardRange.To = bound;
-            LOG_D("shard " << x.ShardIdx << " range " << buildInfo.KMeans.RangeToDebugStr(shardRange));
+            LOG_D("shard " << x.ShardIdx << " range " << buildInfo.KMeans.RangeToDebugStr(shardRange, buildInfo.IsBuildPrefixedVectorIndex() ? 2 : 1));
             buildInfo.AddParent(shardRange, x.ShardIdx);
             auto [it, emplaced] = buildInfo.Shards.emplace(x.ShardIdx, TIndexBuildInfo::TShardStatus{std::move(shardRange), "", buildInfo.Shards.size()});
             Y_ASSERT(emplaced);

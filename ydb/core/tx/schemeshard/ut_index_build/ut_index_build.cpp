@@ -497,10 +497,10 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
         {
             NKikimrIndexBuilder::TIndexBuildSettings settings;
             settings.set_source_path("/MyRoot/Table");
-            settings.set_max_batch_rows(1);
-            settings.set_max_batch_bytes(1<<10);
+            settings.MutableScanSettings()->SetMaxBatchRows(0); // row by row
+            settings.MutableScanSettings()->SetMaxBatchBytes(1<<10);
+            settings.MutableScanSettings()->SetMaxBatchRetries(0);
             settings.set_max_shards_in_flight(1);
-            settings.set_max_retries_upload_batch(0);
 
             Ydb::Table::TableIndex& index = *settings.mutable_index();
             index.set_name("index1");

@@ -1374,6 +1374,10 @@ struct Schema : NIceDb::Schema {
         struct ReadRowsProcessed : Column<39, NScheme::NTypeIds::Uint64> {};
         struct ReadBytesProcessed : Column<40, NScheme::NTypeIds::Uint64> {};
 
+        struct StartTime : Column<41, NScheme::NTypeIds::Uint64> {};
+        struct EndTime : Column<42, NScheme::NTypeIds::Uint64> {};
+        struct UserSID : Column<43, NScheme::NTypeIds::Utf8> {};
+
         using TKey = TableKey<Id>;
         using TColumns = TableColumns<
             Id,
@@ -1415,7 +1419,10 @@ struct Schema : NIceDb::Schema {
             UploadRowsProcessed,
             UploadBytesProcessed,
             ReadRowsProcessed,
-            ReadBytesProcessed
+            ReadBytesProcessed,
+            StartTime,
+            EndTime,
+            UserSID
         >;
     };
 

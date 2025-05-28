@@ -5114,6 +5114,21 @@
                 "ColumnId": 40,
                 "ColumnName": "ReadBytesProcessed",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 41,
+                "ColumnName": "StartTime",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 42,
+                "ColumnName": "EndTime",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 43,
+                "ColumnName": "UserSID",
+                "ColumnType": "Utf8"
             }
         ],
         "ColumnsDropped": [],
@@ -5159,7 +5174,10 @@
                     37,
                     38,
                     39,
-                    40
+                    40,
+                    41,
+                    42,
+                    43
                 ],
                 "RoomID": 0,
                 "Codec": 0,

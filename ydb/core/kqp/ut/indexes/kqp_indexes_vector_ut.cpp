@@ -6,6 +6,7 @@
 #include <ydb/core/kqp/gateway/kqp_metadata_loader.h>
 #include <ydb/core/kqp/host/kqp_host_impl.h>
 
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
@@ -607,6 +608,52 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         }
         // TODO: fix somehow?
         // DoPositiveQueriesVectorIndexOrderByCosine(session);
+    }
+
+    Y_UNIT_TEST(BuildIndexTimesAndUser) {
+        NKikimrConfig::TAppConfig appConfig;
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableVectorIndex(true);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetFeatureFlags(featureFlags)
+            .SetKqpSettings({setting});
+
+        TKikimrRunner kikimr(serverSettings);
+
+        auto now = TInstant::Now();
+
+        auto driver = NYdb::TDriver(NYdb::TDriverConfig()
+            .SetEndpoint(kikimr.GetEndpoint())
+            .SetDatabase("/Root")
+            .SetAuthToken("root@builtin"));
+        auto db = NYdb::NTable::TTableClient(driver);
+        auto session = DoCreateTableForVectorIndex(db, false);
+        {
+            const TString createIndex(Q_(R"(
+                ALTER TABLE `/Root/TestTable`
+                    ADD INDEX index
+                    GLOBAL USING vector_kmeans_tree
+                    ON (emb)
+                    WITH (distance=cosine, vector_type="uint8", vector_dimension=2, levels=2, clusters=2);
+            )"));
+
+            auto result = session.ExecuteSchemeQuery(createIndex)
+                          .ExtractValueSync();
+
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            NYdb::NOperation::TOperationClient client(kikimr.GetDriver());
+            auto list = client.List<NYdb::NTable::TBuildIndexOperation>().ExtractValueSync();
+            UNIT_ASSERT_EQUAL(list.GetList().size(), 1);
+            auto & op = list.GetList()[0];
+            UNIT_ASSERT_EQUAL(op.Status().GetStatus(), NYdb::EStatus::SUCCESS);
+            UNIT_ASSERT(op.CreateTime() >= TInstant::Seconds(now.Seconds()));
+            UNIT_ASSERT(op.EndTime() >= op.CreateTime());
+            UNIT_ASSERT_EQUAL(op.CreatedBy(), "root@builtin");
+        }
     }
 
     Y_UNIT_TEST(VectorIndexIsNotUpdatable) {

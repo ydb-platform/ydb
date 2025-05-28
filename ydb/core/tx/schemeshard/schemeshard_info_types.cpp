@@ -2588,5 +2588,12 @@ std::optional<std::pair<i64, i64>> ValidateSequenceType(const TString& sequenceN
     return {{dataTypeMinValue, dataTypeMaxValue}};
 }
 
+NProtoBuf::Timestamp SecondsToProtoTimeStamp(ui64 sec) {
+    NProtoBuf::Timestamp timestamp;
+    timestamp.set_seconds((i64)(sec));
+    timestamp.set_nanos(0);
+    return timestamp;
+}
+
 } // namespace NSchemeShard
 } // namespace NKikimr

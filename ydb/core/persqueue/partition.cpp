@@ -3198,7 +3198,7 @@ void TPartition::CommitUserAct(TEvPQ::TEvSetClientInfo& act) {
         return;
     }
 
-    if (strictCommitOffset && act.Offset < BlobEncoder.StartOffset) {
+    if (strictCommitOffset && act.Offset < CompactionBlobEncoder.StartOffset) {
         // strict commit to past, reply error
         TabletCounters.Cumulative()[COUNTER_PQ_SET_CLIENT_OFFSET_ERROR].Increment(1);
         ScheduleReplyError(act.Cookie,

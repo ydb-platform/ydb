@@ -18,6 +18,7 @@ from ydb.tests.olap.lib.allure_utils import allure_test_description, NodeErrors
 from ydb.tests.olap.lib.results_processor import ResultsProcessor
 from ydb.tests.olap.lib.utils import get_external_param
 from ydb.tests.olap.scenario.helpers.scenario_tests_helper import ScenarioTestHelper
+from ydb.tests.olap.lib.remote_execution import is_localhost
 
 LOGGER = logging.getLogger(__name__)
 
@@ -110,7 +111,7 @@ class LoadSuiteBase:
     @staticmethod
     def __execute_ssh(host: str, cmd: str):
         # Проверяем, является ли хост localhost
-        if YdbCluster._is_localhost(host):
+        if is_localhost(host):
             LOGGER.info(f"Detected localhost ({host}), executing command locally: {cmd}")
             
             # Выполняем команду локально

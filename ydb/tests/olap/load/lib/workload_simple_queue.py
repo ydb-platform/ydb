@@ -7,6 +7,7 @@ import logging
 from .conftest import LoadSuiteBase
 from ydb.tests.olap.lib.ydb_cli import YdbCliHelper
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
+from ydb.tests.olap.lib.remote_execution import execute_command, deploy_binary, deploy_binaries_to_hosts
 from ydb.tests.olap.lib.utils import get_external_param
 from enum import Enum
 
@@ -61,22 +62,23 @@ class SimpleQueueBase(LoadSuiteBase):
     @pytest.mark.parametrize('table_type', [t.value for t in TableType])
     def test_workload_simple_queue(self, table_type: str):
         #self.save_nodes_state()
-        # Распаковываем бинарный файл из ресурсов
-        binary_path = [
-            self._unpack_workload_binary(WORKLOAD_BINARY_NAME),
-            self._unpack_workload_binary(YDB_CLI_BINARY_NAME)
-        ]
+        # Распаковываем бинарные файлы из ресурсов
+        workload_binary_path = self._unpack_workload_binary(WORKLOAD_BINARY_NAME)
+        cli_binary_path = self._unpack_workload_binary(YDB_CLI_BINARY_NAME)
+        binary_files = [workload_binary_path, cli_binary_path]
 
-        # Разворачиваем бинарный файл на всех нодах кластера
-        deploy_results = YdbCluster.deploy_binaries_to_nodes(
-            binary_path, STRESS_BINARIES_DEPLOY_PATH)
-
-        # Для каждой ноды в кластере
-        # role=YdbCluster.Node.Role.STORAGE надо получить ROle storage = stat nodes
+        # Получаем хосты нод кластера
         nodes = YdbCluster.get_cluster_nodes()
-        node = nodes[0]
+        hosts = list(set(node.host for node in nodes))
+        
+        # Разворачиваем бинарные файлы на всех хостах кластера используя новую утилитную функцию
+        deploy_results = deploy_binaries_to_hosts(
+            binary_files, hosts, STRESS_BINARIES_DEPLOY_PATH)
 
+        # Выбираем первую ноду для выполнения workload
+        node = nodes[0]
         node_host = node.host
+        
         # Проверяем, успешно ли был развернут бинарный файл
         binary_result = deploy_results.get(node_host, {}).get(WORKLOAD_BINARY_NAME, {})
         success = binary_result.get('success', False)
@@ -111,8 +113,8 @@ class SimpleQueueBase(LoadSuiteBase):
                 LOGGER.info(f"Executing command on node {node.host}")
 
                 try:
-                    stdout, stderr = node.execute_command(
-                        cmd, raise_on_error=True,
+                    stdout, stderr = execute_command(
+                        node.host, cmd, raise_on_error=True,
                         timeout=int(self.timeout * 2), raise_on_timeout=False)
                     command_result = stdout
                     command_error = stderr
@@ -131,10 +133,12 @@ class SimpleQueueBase(LoadSuiteBase):
 
         with allure.step('Checking scheme state'):
             cli_path = deploy_results.get(node_host, {}).get(YDB_CLI_BINARY_NAME, {})['path']
-            stdout, stderr = node.execute_command(
+            stdout, stderr = execute_command(
+                node.host,
                 [cli_path, '--endpoint', f'{YdbCluster.ydb_endpoint}',
                  '--database', f'/{YdbCluster.ydb_database}',
-                 "scheme", "ls", "-lR"], raise_on_error=False)
+                 "scheme", "ls", "-lR"], 
+                raise_on_error=False)
             allure.attach(stdout, 'Scheme state stdout', allure.attachment_type.TEXT)
             if stderr:
                 allure.attach(stderr, 'Scheme state stderr', allure.attachment_type.TEXT)

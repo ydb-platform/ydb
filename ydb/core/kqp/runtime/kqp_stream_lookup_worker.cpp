@@ -13,6 +13,8 @@
 namespace NKikimr {
 namespace NKqp {
 
+constexpr ui64 MAX_IN_FLIGHT_LIMIT = 500;
+
 namespace {
 std::vector<std::pair<ui64, TOwnedTableRange>> GetRangePartitioning(const TKqpStreamLookupWorker::TPartitionInfo& partitionInfo,
     const std::vector<NScheme::TTypeInfo>& keyColumnTypes, const TOwnedTableRange& range) {
@@ -334,12 +336,15 @@ public:
         ReadResults.emplace_back(std::move(result));
     }
 
+    bool IsOverloaded() final {
+        return false;
+    }
+
     TReadResultStats ReplyResult(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, i64 freeSpace) final {
         TReadResultStats resultStats;
-        bool sizeLimitExceeded = false;
         batch.clear();
 
-        while (!ReadResults.empty() && !sizeLimitExceeded) {
+        while (!ReadResults.empty() && !resultStats.SizeLimitExceeded) {
             auto& result = ReadResults.front();
             for (; result.UnprocessedResultRow < result.ReadResult->Get()->GetRowsCount(); ++result.UnprocessedResultRow) {
                 const auto& resultRow = result.ReadResult->Get()->GetCells(result.UnprocessedResultRow);
@@ -365,10 +370,10 @@ public:
                 }
 
                 if (rowSize + (i64)resultStats.ResultBytesCount > freeSpace) {
-                    sizeLimitExceeded = true;
+                    resultStats.SizeLimitExceeded = true;
                 }
 
-                if (resultStats.ResultRowsCount && sizeLimitExceeded) {
+                if (resultStats.ResultRowsCount && resultStats.SizeLimitExceeded) {
                     row.DeleteUnreferenced();
                     break;
                 }
@@ -499,6 +504,10 @@ public:
         }
 
         UnprocessedRows.emplace_back(std::make_pair(TOwnedCellVec(joinKeyCells), std::move(inputRow.GetElement(1))));
+    }
+
+    bool IsOverloaded() final {
+        return UnprocessedRows.size() >= MAX_IN_FLIGHT_LIMIT || PendingLeftRowsByKey.size() >= MAX_IN_FLIGHT_LIMIT || ResultRowsBySeqNo.size() >= MAX_IN_FLIGHT_LIMIT;
     }
 
     std::vector<THolder<TEvDataShard::TEvRead>> RebuildRequest(const ui64& prevReadId, ui32 firstUnprocessedQuery,
@@ -768,7 +777,6 @@ public:
 
     TReadResultStats ReplyResult(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, i64 freeSpace) final {
         TReadResultStats resultStats;
-        bool sizeLimitExceeded = false;
         batch.clear();
 
         // we should process left rows that haven't matches on the right
@@ -797,7 +805,7 @@ public:
             return ResultRowsBySeqNo.find(CurrentResultSeqNo);
         };
 
-        while (!sizeLimitExceeded) {
+        while (!resultStats.SizeLimitExceeded) {
             auto resultIt = getNextResult();
             if (resultIt == ResultRowsBySeqNo.end()) {
                 break;
@@ -808,7 +816,7 @@ public:
                 auto& row = result.Rows[result.FirstUnprocessedRow];
 
                 if (resultStats.ResultRowsCount && resultStats.ResultBytesCount + row.Stats.ResultBytesCount > (ui64)freeSpace) {
-                    sizeLimitExceeded = true;
+                    resultStats.SizeLimitExceeded = true;
                     break;
                 }
 

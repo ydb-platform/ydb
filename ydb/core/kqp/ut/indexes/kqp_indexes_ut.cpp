@@ -3239,6 +3239,77 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         DoPositiveQueriesPrefixedVectorIndexOrderByCosine(session);
     }
 
+    Y_UNIT_TEST(VectorIndexIsNotUpdatable) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableVectorIndex(true);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetFeatureFlags(featureFlags)
+            .SetKqpSettings({setting});
+
+        TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+
+        auto db = kikimr.GetTableClient();
+        auto session = DoCreateTableForVectorIndex(db, true);
+
+        // Add first index
+        {
+            const TString createIndex(Q_(R"(
+                ALTER TABLE `/Root/TestTable`
+                    ADD INDEX index1
+                    GLOBAL USING vector_kmeans_tree
+                    ON (emb)
+                    WITH (similarity=cosine, vector_type="uint8", vector_dimension=2, levels=2, clusters=2);
+            )"));
+
+            auto result = session.ExecuteSchemeQuery(createIndex).ExtractValueSync();
+
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        const TString originalPostingTable = ReadTablePartToYson(session, "/Root/TestTable/index1/indexImplPostingTable");
+
+        // Upsert to the table with index should succeed
+        {
+            const TString query1(Q_(R"(
+                UPSERT INTO `/Root/TestTable` (pk, emb, data) VALUES)"
+                "(10, \"\x76\x76\x03\", \"10\");"
+            ));
+
+            auto result = session.ExecuteDataQuery(
+                                 query1,
+                                 TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                          .ExtractValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+        }
+
+        const TString postingTable1 = ReadTablePartToYson(session, "/Root/TestTable/index1/indexImplPostingTable");
+        
+        // First index is not updated
+        UNIT_ASSERT_STRINGS_EQUAL(originalPostingTable, postingTable1);
+
+        // Add second index
+        {
+            const TString createIndex(Q_(R"(
+                ALTER TABLE `/Root/TestTable`
+                    ADD INDEX index2
+                    GLOBAL USING vector_kmeans_tree
+                    ON (emb)
+                    WITH (similarity=cosine, vector_type="uint8", vector_dimension=2, levels=2, clusters=2);
+            )"));
+
+            auto result = session.ExecuteSchemeQuery(createIndex).ExtractValueSync();
+
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }     
+        
+        const TString postingTable2 = ReadTablePartToYson(session, "/Root/TestTable/index2/indexImplPostingTable");
+        
+        // Second index is different
+        UNIT_ASSERT_STRINGS_UNEQUAL(originalPostingTable, postingTable2);
+    }    
+
     Y_UNIT_TEST(ExplainCollectFullDiagnostics) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()

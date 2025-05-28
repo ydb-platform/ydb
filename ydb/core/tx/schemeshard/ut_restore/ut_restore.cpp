@@ -5914,7 +5914,6 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
             }
 
             const ui64 importId = ++t.TxId;
-            Cerr << "REQUEST FINISHED: \n" << Sprintf(importSettings.data(), port) << Endl;
             AsyncImport(runtime, importId, "/MyRoot", Sprintf(importSettings.data(), port));
             t.TestEnv->TestWaitNotification(runtime, importId);
 

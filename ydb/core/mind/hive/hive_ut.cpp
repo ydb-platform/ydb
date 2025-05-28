@@ -838,18 +838,13 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         return ev->Get()->Record;
     }
 
-    ui64 GetSimpleCounter(TTestBasicRuntime& runtime, ui64 tabletId, const TString& name) {
-        const auto counters = GetCounters(runtime, tabletId);
-        for (const auto& counter : counters.GetTabletCounters().GetAppCounters().GetSimpleCounters()) {
-            if (name != counter.GetName()) {
-                continue;
-            }
-
-            return counter.GetValue();
-        }
-
-        UNIT_ASSERT_C(false, "Counter not found: " << name);
-        return 0; // unreachable
+    ui64 GetSimpleCounter(TTestBasicRuntime & runtime, ui64 tabletId,
+                          const NHive::ESimpleCounters &counter) {
+      return GetCounters(runtime, tabletId)
+          .GetTabletCounters()
+          .GetAppCounters()
+          .GetSimpleCounters(counter)
+          .GetValue();
     }
 
     void WaitForBootQueue(TTestBasicRuntime& runtime, ui64 hiveTabletId) {
@@ -5491,7 +5486,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         };
 
         auto tabletNode = [](const TDistribution& distribution, ui64 tabletId) -> std::optional<size_t> {
-            auto hasTablet = [tabletId](const std::vector<ui64>& tablets) { 
+            auto hasTablet = [tabletId](const std::vector<ui64>& tablets) {
                 return std::find(tablets.begin(), tablets.end(), tabletId) != tablets.end();
             };
             auto it = std::find_if(distribution.begin(), distribution.end(), hasTablet);
@@ -7537,6 +7532,44 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         MakeSureTabletIsUp(runtime, tablet1, 0);
         MakeSureTabletIsUp(runtime, tablet2, 0);
     }
+
+    Y_UNIT_TEST(TestStartingTabletsCounter) {
+      TTestBasicRuntime runtime(1, false);
+      Setup(runtime, true);
+      const ui64 hiveTablet = MakeDefaultHiveID();
+      const ui64 testerTablet = MakeTabletID(false, 1);
+      CreateTestBootstrapper(
+          runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive),
+          &CreateDefaultHive);
+      MakeSureTabletIsUp(runtime, hiveTablet, 0);
+      TTabletTypes::EType tabletType = TTabletTypes::Dummy;
+
+      auto getStartingTabletsCounter = [&]() {
+        return GetSimpleCounter(runtime, hiveTablet,
+                                NHive::COUNTER_TABLETS_STARTING);
+      };
+
+      UNIT_ASSERT_VALUES_EQUAL(0, getStartingTabletsCounter());
+
+      TBlockEvents<TEvLocal::TEvTabletStatus> blockStatus(runtime);
+
+      ui64 tabletId = SendCreateTestTablet(
+          runtime, hiveTablet, testerTablet,
+          MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 0, tabletType,
+                                               BINDED_CHANNELS),
+          0, false);
+
+      while (blockStatus.empty()) {
+        runtime.DispatchEvents({}, TDuration::MilliSeconds(100));
+      }
+
+      UNIT_ASSERT_VALUES_EQUAL(1, getStartingTabletsCounter());
+      blockStatus.Stop().Unblock();
+
+      MakeSureTabletIsUp(runtime, tabletId, 0);
+
+      UNIT_ASSERT_VALUES_EQUAL(0, getStartingTabletsCounter());
+    }
 }
 
 Y_UNIT_TEST_SUITE(THeavyPerfTest) {
@@ -7840,7 +7873,7 @@ Y_UNIT_TEST_SUITE(TScaleRecommenderTest) {
         ui32 targetCPUUtilization)
     {
         const auto sender = runtime.AllocateEdgeActor();
-        
+
         auto request = std::make_unique<TEvHive::TEvConfigureScaleRecommender>();
         request->Record.MutableDomainKey()->SetSchemeShard(subdomainKey.GetSchemeShard());
         request->Record.MutableDomainKey()->SetPathId(subdomainKey.GetPathId());

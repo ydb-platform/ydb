@@ -3,10 +3,6 @@ items:
   href: cluster_expansion.md
 - name: Adding storage groups
   href: adding_storage_groups.md
-- name: Moving a State Storage
-  href: ../../devops/manual/state-storage-move.md
-- name: Moving a static group
-  href: ../../devops/manual/static-group-move.md
 - name: Safe restart and shutdown of nodes
   href: node_restarting.md
 - name: Enabling/disabling Scrubbing
@@ -14,7 +10,7 @@ items:
 - name: Working with SelfHeal
   href: selfheal.md
 - name: Decommissioning a cluster part
-  href: ../../devops/manual/decommissioning.md
+  href: ../../devops/deployment-options/manual/decommissioning.md
 - name: Moving VDisks
   href: moving_vdisks.md
 - name: Staying within the failure model
@@ -29,7 +25,15 @@ items:
   href: config-overview.md
 - name: Dynamic cluster configuration
   href: dynamic-config.md
-- name: Cluster configuration DSL    
+- name: Cluster configuration DSL
   href: dynamic-config-selectors.md
 - name: Temporary configurations
-  href: dynamic-config-volatile-config.md  
+  href: dynamic-config-volatile-config.md
+- name: CMS
+  href: cms.md
+- name: Changing actor system configs
+  href: change_actorsystem_configs.md
+- name: BlobDepot
+  href: blobdepot.md
+- name: BlobDepot decommit
+  href: blobdepot_decommit.md

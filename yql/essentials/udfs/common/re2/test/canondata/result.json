@@ -24,6 +24,21 @@
             "uri": "file://test.test_FindAndConsumeEmpty_/results.txt"
         }
     ],
+    "test.test[InvalidCaptureRegexFail]": [
+        {
+            "uri": "file://test.test_InvalidCaptureRegexFail_/extracted"
+        }
+    ],
+    "test.test[InvalidRegexFail]": [
+        {
+            "uri": "file://test.test_InvalidRegexFail_/extracted"
+        }
+    ],
+    "test.test[InvalidRegexSuccess]": [
+        {
+            "uri": "file://test.test_InvalidRegexSuccess_/results.txt"
+        }
+    ],
     "test.test[LikeEscape]": [
         {
             "uri": "file://test.test_LikeEscape_/results.txt"

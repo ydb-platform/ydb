@@ -87,7 +87,7 @@ protected:
     ui32 RetryCount = 0;
 
     TActorId Uploader;
-    TUploadLimits Limits;
+    const TIndexBuildScanSettings ScanSettings;
 
     NTable::TTag EmbeddingTag;
     TTags ScanTags;
@@ -132,6 +132,7 @@ public:
         , LevelTable{request.GetLevelName()}
         , PostingTable{request.GetPostingName()}
         , PrefixTable{request.GetPrefixName()}
+        , ScanSettings(request.GetScanSettings())
         , ResponseActorId{responseActorId}
         , Response{std::move(response)}
         , PrefixColumns{request.GetPrefixColumns()}
@@ -206,7 +207,7 @@ public:
         }
         NYql::IssuesToMessage(UploadStatus.Issues, record.MutableIssues());
 
-        LOG_N("Finish" << Debug() << " " << Response->Record.ShortDebugString());
+        LOG_N("Finish " << Debug() << " " << Response->Record.ShortDebugString());
         Send(ResponseActorId, Response.Release());
 
         Driver = nullptr;
@@ -292,10 +293,10 @@ protected:
             return;
         }
 
-        if (RetryCount < Limits.MaxUploadRowsRetryCount && UploadStatus.IsRetriable()) {
+        if (RetryCount < ScanSettings.GetMaxBatchRetries() && UploadStatus.IsRetriable()) {
             LOG_N("Got retriable error, " << Debug() << " " << UploadStatus.ToString());
 
-            ctx.Schedule(Limits.GetTimeoutBackoff(RetryCount), new TEvents::TEvWakeup());
+            ctx.Schedule(GetRetryWakeupTimeoutBackoff(RetryCount), new TEvents::TEvWakeup());
             return;
         }
 
@@ -311,7 +312,7 @@ protected:
 
     bool ShouldWaitUpload()
     {
-        if (!LevelBuf.IsReachLimits(Limits) && !PostingBuf.IsReachLimits(Limits) && !PrefixBuf.IsReachLimits(Limits)) {
+        if (!HasReachedLimits(LevelBuf, ScanSettings) && !HasReachedLimits(PostingBuf, ScanSettings) && !HasReachedLimits(PrefixBuf, ScanSettings)) {
             return false;
         }
 
@@ -323,7 +324,7 @@ protected:
             || TryUpload(PostingBuf, PostingTable, PostingTypes, true)
             || TryUpload(PrefixBuf, PrefixTable, PrefixTypes, true);
 
-        return !LevelBuf.IsReachLimits(Limits) && !PostingBuf.IsReachLimits(Limits) && !PrefixBuf.IsReachLimits(Limits);
+        return !HasReachedLimits(LevelBuf, ScanSettings) && !HasReachedLimits(PostingBuf, ScanSettings) && !HasReachedLimits(PrefixBuf, ScanSettings);
     }
 
     void UploadImpl()
@@ -363,7 +364,7 @@ protected:
             return true;
         }
 
-        if (!buffer.IsEmpty() && (!byLimit || buffer.IsReachLimits(Limits))) {
+        if (!buffer.IsEmpty() && (!byLimit || HasReachedLimits(buffer, ScanSettings))) {
             buffer.FlushTo(UploadBuf);
             InitUpload(table, types);
             return true;
@@ -475,7 +476,7 @@ public:
 
         if (IsFirstPrefixFeed && IsPrefixRowsValid) {
             PrefixRows.AddRow(TSerializedCellVec{key}, TSerializedCellVec::Serialize(*row));
-            if (PrefixRows.IsReachLimits(Limits)) {
+            if (HasReachedLimits(PrefixRows, ScanSettings)) {
                 PrefixRows.Clear();
                 IsPrefixRowsValid = false;
             }

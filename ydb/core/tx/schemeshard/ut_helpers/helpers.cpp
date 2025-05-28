@@ -1686,7 +1686,7 @@ namespace NSchemeShardUT_Private {
     TEvIndexBuilder::TEvCreateRequest* CreateBuildIndexRequest(ui64 id, const TString& dbName, const TString& src, const TBuildIndexConfig& cfg) {
         NKikimrIndexBuilder::TIndexBuildSettings settings;
         settings.set_source_path(src);
-        settings.set_max_batch_rows(2);
+        settings.MutableScanSettings()->SetMaxBatchRows(1);
         settings.set_max_shards_in_flight(2);
 
         Ydb::Table::TableIndex& index = *settings.mutable_index();
@@ -1740,7 +1740,7 @@ namespace NSchemeShardUT_Private {
     std::unique_ptr<TEvIndexBuilder::TEvCreateRequest> CreateBuildColumnRequest(ui64 id, const TString& dbName, const TString& src, const TString& columnName, const Ydb::TypedValue& literal) {
         NKikimrIndexBuilder::TIndexBuildSettings settings;
         settings.set_source_path(src);
-        settings.set_max_batch_rows(2);
+        settings.MutableScanSettings()->SetMaxBatchRows(1);
         settings.set_max_shards_in_flight(2);
 
         auto* col = settings.mutable_column_build_operation()->add_column();

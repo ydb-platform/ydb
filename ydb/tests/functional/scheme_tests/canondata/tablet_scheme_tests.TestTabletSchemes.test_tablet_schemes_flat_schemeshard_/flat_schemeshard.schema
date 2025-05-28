@@ -8166,6 +8166,26 @@
                 "ColumnId": 4,
                 "ColumnName": "Parent",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 5,
+                "ColumnName": "ParentBegin",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 6,
+                "ColumnName": "Child",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 7,
+                "ColumnName": "ChildBegin",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 8,
+                "ColumnName": "TableSize",
+                "ColumnType": "Uint64"
             }
         ],
         "ColumnsDropped": [],
@@ -8175,7 +8195,11 @@
                     1,
                     2,
                     3,
-                    4
+                    4,
+                    5,
+                    6,
+                    7,
+                    8
                 ],
                 "RoomID": 0,
                 "Codec": 0,

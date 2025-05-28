@@ -52,9 +52,8 @@ public:
         return Rows->size();
     }
 
-    bool IsReachLimits(const TUploadLimits& Limits) {
-        // TODO(mbkkt) why [0..BatchRowsLimit) but [0..BatchBytesLimit]
-        return Rows->size() >= Limits.BatchRowsLimit || ByteSize > Limits.BatchBytesLimit;
+    bool HasReachedLimits(size_t rowsLimit, ui64 bytesLimit) const {
+        return Rows->size() > rowsLimit || ByteSize > bytesLimit;
     }
 
     auto&& ExtractLastKey() {

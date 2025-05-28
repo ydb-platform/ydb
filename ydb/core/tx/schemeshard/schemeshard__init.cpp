@@ -4561,8 +4561,12 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     auto& buildInfo = *buildInfoPtr->Get();
                     buildInfo.KMeans.Set(
                         rowset.GetValue<Schema::KMeansTreeProgress::Level>(),
+                        rowset.GetValue<Schema::KMeansTreeProgress::ParentBegin>(),
                         rowset.GetValue<Schema::KMeansTreeProgress::Parent>(),
-                        rowset.GetValue<Schema::KMeansTreeProgress::State>()
+                        rowset.GetValue<Schema::KMeansTreeProgress::ChildBegin>(),
+                        rowset.GetValue<Schema::KMeansTreeProgress::Child>(),
+                        rowset.GetValue<Schema::KMeansTreeProgress::State>(),
+                        rowset.GetValue<Schema::KMeansTreeProgress::TableSize>()
                     );
                     buildInfo.Sample.Rows.reserve(buildInfo.KMeans.K * 2);
 

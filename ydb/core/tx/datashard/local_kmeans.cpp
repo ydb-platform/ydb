@@ -49,7 +49,7 @@ public:
         Size = 0;
         lock.unlock();
 
-        LOG_N("FinishTLocalKMeansScan " << Response->Record.ShortDebugString());
+        LOG_N("Finish TLocalKMeansScan " << Response->Record.ShortDebugString());
         ctx.Send(ResponseActorId, std::move(Response));
     }
 
@@ -139,7 +139,7 @@ protected:
     ui32 RetryCount = 0;
 
     TActorId Uploader;
-    TUploadLimits Limits;
+    const TIndexBuildScanSettings ScanSettings;
 
     NTable::TTag KMeansScan;
     TTags UploadScan;
@@ -172,6 +172,7 @@ public:
         , Rng{request.GetSeed()}
         , TargetTable{request.GetLevelName()}
         , NextTable{request.GetPostingName()}
+        , ScanSettings(request.GetScanSettings())
         , Result{std::move(result)}
     {
         const auto& embedding = request.GetEmbeddingColumn();
@@ -296,7 +297,7 @@ protected:
             UploadRows += WriteBuf.GetRows();
             UploadBytes += WriteBuf.GetBytes();
             WriteBuf.Clear();
-            if (!ReadBuf.IsEmpty() && ReadBuf.IsReachLimits(Limits)) {
+            if (HasReachedLimits(ReadBuf, ScanSettings)) {
                 ReadBuf.FlushTo(WriteBuf);
                 Upload(false);
             }
@@ -305,10 +306,10 @@ protected:
             return;
         }
 
-        if (RetryCount < Limits.MaxUploadRowsRetryCount && UploadStatus.IsRetriable()) {
+        if (RetryCount < ScanSettings.GetMaxBatchRetries() && UploadStatus.IsRetriable()) {
             LOG_N("Got retriable error, " << Debug() << UploadStatus.ToString());
 
-            ctx.Schedule(Limits.GetTimeoutBackoff(RetryCount), new TEvents::TEvWakeup());
+            ctx.Schedule(GetRetryWakeupTimeoutBackoff(RetryCount), new TEvents::TEvWakeup());
             return;
         }
 
@@ -319,7 +320,7 @@ protected:
 
     EScan FeedUpload()
     {
-        if (!ReadBuf.IsReachLimits(Limits)) {
+        if (!HasReachedLimits(ReadBuf, ScanSettings)) {
             return EScan::Feed;
         }
         if (!WriteBuf.IsEmpty()) {

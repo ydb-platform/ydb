@@ -291,6 +291,10 @@ public:
         return ShardedWriteController->IsEmpty();
     }
 
+    const TTableId& GetTableId() const {
+        return TableId;
+    }
+
     TVector<NKikimrDataEvents::TLock> GetLocks() const {
         return TxManager->GetLocks();
     }
@@ -1267,6 +1271,7 @@ public:
         Stats.AffectedPartitions.clear();
     }
 
+private:
     NActors::TActorId PipeCacheId = NKikimr::MakePipePerNodeCacheID(false);
 
     TString LogPrefix;
@@ -1504,7 +1509,8 @@ private:
                 RuntimeError(
                     NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
                     NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED,
-                    TStringBuilder() << "Stream write can't be used for this query.",
+                    TStringBuilder() << "Out of buffer memory. Used " << GetMemory()
+                        << " bytes of " << MessageSettings.InFlightMemoryLimitPerActorBytes << " bytes.",
                     {});
                 return;
             }
@@ -1633,11 +1639,11 @@ private:
 namespace {
 
 struct TWriteToken {
-    TTableId TableId;
+    TPathId PathId;
     ui64 Cookie;
 
     bool IsEmpty() const {
-        return !TableId;
+        return !PathId;
     }
 };
 
@@ -1774,7 +1780,7 @@ public:
                 InconsistentTx = settings.TransactionSettings.InconsistentTx;
             }
 
-            auto& writeInfo = WriteInfos[settings.TableId];
+            auto& writeInfo = WriteInfos[settings.TableId.PathId];
             if (!writeInfo.WriteTableActor) {
                 TVector<NScheme::TTypeInfo> keyColumnTypes;
                 keyColumnTypes.reserve(settings.KeyColumns.size());
@@ -1803,6 +1809,19 @@ public:
                 CA_LOG_D("Create new TableWriteActor for table `" << settings.TablePath << "` (" << settings.TableId << "). lockId=" << LockTxId << " " << writeInfo.WriteTableActorId);
             }
 
+            if (writeInfo.WriteTableActor->GetTableId().SchemaVersion != settings.TableId.SchemaVersion) {
+                CA_LOG_E("Scheme changed for table `"
+                    << settings.TablePath << "`.");
+                ReplyErrorAndDie(
+                    NYql::NDqProto::StatusIds::SCHEME_ERROR,
+                    NYql::TIssuesIds::KIKIMR_SCHEME_MISMATCH,
+                    TStringBuilder() << "Scheme changed. Table: `"
+                        << settings.TablePath << "`.",
+                    {});
+                return;
+            }
+            AFL_ENSURE(writeInfo.WriteTableActor->GetTableId() == settings.TableId);
+
             EnableStreamWrite &= settings.EnableStreamWrite;
 
             auto cookie = writeInfo.WriteTableActor->Open(
@@ -1811,12 +1830,12 @@ public:
                 std::move(settings.Columns),
                 std::move(settings.WriteIndex),
                 settings.Priority);
-            token = TWriteToken{settings.TableId, cookie};
+            token = TWriteToken{settings.TableId.PathId, cookie};
         } else {
             token = *ev->Get()->Token;
         }
 
-        auto& queue = DataQueues[token.TableId];
+        auto& queue = DataQueues[token.PathId];
         queue.emplace();
         auto& message = queue.back();
 
@@ -1848,11 +1867,11 @@ public:
     }
 
     void ProcessRequestQueue() {
-        for (auto& [tableId, queue] : DataQueues) {
-            auto& writeInfo = WriteInfos.at(tableId);
+        for (auto& [pathId, queue] : DataQueues) {
+            auto& writeInfo = WriteInfos.at(pathId);
 
             if (!writeInfo.WriteTableActor->IsReady()) {
-                CA_LOG_D("ProcessRequestQueue " << tableId << " NOT READY queue=" << queue.size());
+                CA_LOG_D("ProcessRequestQueue " << pathId << " NOT READY queue=" << queue.size());
                 return;
             }
 
@@ -1904,7 +1923,8 @@ public:
             ReplyErrorAndDie(
                 NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
                 NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED,
-                TStringBuilder() << "Stream write queries aren't allowed.",
+                TStringBuilder() << "Out of buffer memory. Used " << GetTotalMemory()
+                        << " bytes of " << MessageSettings.InFlightMemoryLimitPerActorBytes << " bytes.",
                 {});
             return false;
         }
@@ -2161,7 +2181,7 @@ public:
     }
 
     i64 GetFreeSpace(TWriteToken token) const {
-        auto& info = WriteInfos.at(token.TableId);
+        auto& info = WriteInfos.at(token.PathId);
         return info.WriteTableActor->IsReady()
             ? MessageSettings.InFlightMemoryLimitPerActorBytes - info.WriteTableActor->GetMemory()
             : std::numeric_limits<i64>::min(); // Can't use zero here because compute can use overcommit!
@@ -2899,11 +2919,11 @@ private:
         TActorId WriteTableActorId;
     };
 
-    THashMap<TTableId, TWriteInfo> WriteInfos;
+    THashMap<TPathId, TWriteInfo> WriteInfos;
 
     EState State;
     bool HasError = false;
-    THashMap<TTableId, std::queue<TBufferWriteMessage>> DataQueues;
+    THashMap<TPathId, std::queue<TBufferWriteMessage>> DataQueues;
 
     struct TAckMessage {
         TActorId ForwardActorId;

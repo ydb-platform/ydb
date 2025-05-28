@@ -1839,7 +1839,7 @@ protected:
                         task.Meta.Type = TTaskMeta::TTaskType::Scan;
                         task.SetMetaId(t);
                         FillSecureParamsFromStage(task.Meta.SecureParams, stage);
-                        BuildSinks(stage, task);
+                        BuildSinks(stage, stageInfo, task);
 
                         for (const auto& readInfo: *task.Meta.Reads) {
                             Y_ENSURE(hashByShardId.contains(readInfo.ShardId));

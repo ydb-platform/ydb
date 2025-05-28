@@ -19,7 +19,6 @@ ydb/core/keyvalue/ut_trace TKeyValueTracingTest.WriteSmall
 ydb/core/kqp/ut/batch_operations [*/*] chunk chunk
 ydb/core/kqp/ut/cost KqpCost.OlapWriteRow
 ydb/core/kqp/ut/federated_query/s3 sole chunk chunk
-ydb/core/kqp/ut/olap KqpOlapDelete.DeleteWithDiffrentTypesPKColumns-isStream
 ydb/core/kqp/ut/olap KqpOlapDictionary.DifferentPages
 ydb/core/kqp/ut/olap KqpOlapJson.CompactionVariants
 ydb/core/kqp/ut/olap KqpOlapJson.DuplicationCompactionVariants
@@ -177,11 +176,6 @@ ydb/tests/olap/scenario test_alter_tiering.py.TestAlterTiering.test[many_tables]
 ydb/tests/olap/scenario test_insert.py.TestInsert.test[read_data_during_bulk_upsert]
 ydb/tests/olap/scenario test_insert.py.TestInsert.test_multi[read_data_during_bulk_upsert]
 ydb/tests/olap/scenario test_read_update_write_load.py.TestReadUpdateWriteLoad.test[read_update_write_load]
-ydb/tests/olap/ttl_tiering [*/*] chunk chunk
-ydb/tests/olap/ttl_tiering [data_migration_when_alter_ttl.py] chunk chunk
-ydb/tests/olap/ttl_tiering [ttl_delete_s3.py] chunk chunk
-ydb/tests/olap/ttl_tiering data_migration_when_alter_ttl.py.TestDataMigrationWhenAlterTtl.test
-ydb/tests/olap/ttl_tiering sole chunk chunk
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[Test64BitErrorChecking]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestAppendEncodedText]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestAppendEscapedTextExistingBuffer]

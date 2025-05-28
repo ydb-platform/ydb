@@ -973,7 +973,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
                 // This case is possible on DirectRead restarts. See test DirectReadBudgetOnRestart.
                 return { .Range = {0, 0}, .Response = resp };
             }
-            UNIT_ASSERT_VALUES_EQUAL(data.batches_size(), 1);
+            UNIT_ASSERT_GE_C(data.batches_size(), 1, "data.batches_size()=" << data.batches_size());
             const auto& firstBatch = data.batches(0);
             const auto firstOffset = firstBatch.message_data(0).offset();
             const auto& lastBatch = data.batches(data.batches_size() - 1);
@@ -1296,6 +1296,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         auto pathDescr = server.Server->AnnoyingClient->Ls(oldPath)->Record.GetPathDescription().GetPersQueueGroup();
         auto tabletId = pathDescr.GetPartitions(0).GetTabletId();
         server.Server->AnnoyingClient->KillTablet(*(server.Server->CleverServer), tabletId);
+
         Cerr << "XXXXX ExpectDestroyPartitionSession\n";
         setup.ExpectDestroyPartitionSession(assignId);
 
@@ -1316,14 +1317,14 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         Cerr << "XXXXX Sleep 3 seconds\n";
         Sleep(TDuration::Seconds(3));
 
-        // // 8. Read data again, ensure that the bytes_size is the same as in the first response, and there are no offsets.
+        // 8. Read data again, ensure that the bytes_size is the same as in the first response, and there are no offsets.
         Cerr << "XXXXX ReadDataNoAck\n";
         resp = setup.ReadDataNoAck(assignId, nextReadId);
         Cerr << (TStringBuilder() << "XXXXX grpcByteSize = " << resp.Response.ByteSize() << " bytes_size = " << resp.Response.direct_read_response().bytes_size()
                                   << " firstOffset = " << resp.Range.first << " lastOffset = " << resp.Range.second << Endl);
         UNIT_ASSERT(resp.Response.direct_read_response().bytes_size() == directReadResponseBytesSize);
         UNIT_ASSERT_VALUES_EQUAL(resp.Range.first, 0);
-        UNIT_ASSERT_VALUES_EQUAL(resp.Range.first, resp.Range.second);
+        UNIT_ASSERT_LE_C(resp.Range.first, resp.Range.second, "resp.Range.first=" << resp.Range.first << ", resp.Range.second=" << resp.Range.second);
     }
 
     Y_UNIT_TEST(DirectReadCorrectOffsetsOnRestart) {

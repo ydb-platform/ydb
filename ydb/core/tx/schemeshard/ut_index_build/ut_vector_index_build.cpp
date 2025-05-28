@@ -90,27 +90,9 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
         env.TestWaitNotification(runtime, txId, tenantSchemeShard);
 
         // Write data directly into shards
-        auto fillRows = [&](const TString & tablePath, ui32 shard, ui32 min, ui32 max) {
-            TVector<TCell> cells;
-            ui8 str[6] = { 0 };
-            str[4] = (ui8)Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8;
-            for (ui32 key = min; key < max; ++key) {
-                str[0] = ((key+106)* 7) % 256;
-                str[1] = ((key+106)*17) % 256;
-                str[2] = ((key+106)*37) % 256;
-                str[3] = ((key+106)*47) % 256;
-                cells.emplace_back(TCell::Make(key));
-                cells.emplace_back(TCell((const char*)str, 5));
-            }
-            std::vector<ui32> columnIds{1, 2};
-            TSerializedCellMatrix matrix(cells, max-min, 2);
-            WriteOp(runtime, tenantSchemeShard, ++txId, tablePath,
-                shard, NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
-                columnIds, std::move(matrix), true);
-        };
-        fillRows("/MyRoot/ServerLessDB/Table", 0, 0, 50);
-        fillRows("/MyRoot/ServerLessDB/Table", 1, 50, 150);
-        fillRows("/MyRoot/ServerLessDB/Table", 2, 150, 200);
+        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", false, 0, 0, 50);
+        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", false, 1, 50, 150);
+        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", false, 2, 150, 200);
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
@@ -293,7 +275,7 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
         )");
         env.TestWaitNotification(runtime, txId, tenantSchemeShard);
 
-        fillRows("/MyRoot/CommonDB/Table", 0, 100, 300);
+        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/CommonDB/Table", false, 0, 100, 300);
 
         TVector<TString> billRecords;
         observerHolder = runtime.AddObserver<NMetering::TEvMetering::TEvWriteMeteringJson>([&](NMetering::TEvMetering::TEvWriteMeteringJson::TPtr& event) {

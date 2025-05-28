@@ -36,7 +36,6 @@ public:
         , TasksGraph(tasksGraph) {}
 
     void Bootstrap() {
-        FillKqpTasksGraphStages(TasksGraph, Transactions);
         ResolveKeys();
     }
 

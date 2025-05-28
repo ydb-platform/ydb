@@ -2198,14 +2198,14 @@ void TPDisk::Slay(TSlay &evSlay) {
         for (auto& pendingInit : PendingYardInits) {
             if (vDiskId == pendingInit->VDiskIdWOGeneration()) {
                 TStringStream str;
-                str << PCtx->PDiskLogPrefix << "Can't slay VDiskId# " << evSlay.VDiskId
+                str << "PDiskId# " << (ui32)PDiskId << " Can't slay VDiskId# " << evSlay.VDiskId
                     << " as it has pending YardInit Marker# BPD48";
                 LOG_ERROR(*ActorSystem, NKikimrServices::BS_PDISK, "%s", str.Str().c_str());
                 THolder<NPDisk::TEvSlayResult> result(new NPDisk::TEvSlayResult(
                     NKikimrProto::NOTREADY,
                     GetStatusFlags(evSlay.Owner, evSlay.OwnerGroupType), evSlay.VDiskId, evSlay.SlayOwnerRound,
                     evSlay.PDiskId, evSlay.VSlotId, str.Str()));
-                PCtx->ActorSystem->Send(evSlay.Sender, result.Release());
+                ActorSystem->Send(evSlay.Sender, result.Release());
                 Mon.YardSlay.CountResponse();
                 return;
             }

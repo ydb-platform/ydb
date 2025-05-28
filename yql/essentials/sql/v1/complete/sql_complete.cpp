@@ -1,5 +1,6 @@
 #include "sql_complete.h"
 
+#include <yql/essentials/sql/v1/complete/syntax/grammar.h>
 #include <yql/essentials/sql/v1/complete/text/word.h>
 #include <yql/essentials/sql/v1/complete/name/service/static/name_service.h>
 #include <yql/essentials/sql/v1/complete/syntax/local.h>
@@ -18,17 +19,17 @@ namespace NSQLComplete {
             INameService::TPtr names,
             ISqlCompletionEngine::TConfiguration configuration)
             : Configuration_(std::move(configuration))
-            , SyntaxAnalysis_(MakeLocalSyntaxAnalysis(lexer))
+            , SyntaxAnalysis_(MakeLocalSyntaxAnalysis(lexer, Configuration_.IgnoredRules))
             , GlobalAnalysis_(MakeGlobalAnalysis())
             , Names_(std::move(names))
         {
         }
 
         TCompletion Complete(TCompletionInput input) override {
-            return CompleteAsync(std::move(input)).ExtractValueSync();
+            return CompleteAsync(std::move(input), {}).ExtractValueSync();
         }
 
-        virtual NThreading::TFuture<TCompletion> CompleteAsync(TCompletionInput input) override {
+        virtual NThreading::TFuture<TCompletion> CompleteAsync(TCompletionInput input, TEnvironment env) override {
             if (
                 input.CursorPosition < input.Text.length() &&
                     IsUTF8ContinuationByte(input.Text.at(input.CursorPosition)) ||
@@ -41,7 +42,7 @@ namespace NSQLComplete {
             TLocalSyntaxContext context = SyntaxAnalysis_->Analyze(input);
             auto keywords = context.Keywords;
 
-            TGlobalContext global = GlobalAnalysis_->Analyze(input);
+            TGlobalContext global = GlobalAnalysis_->Analyze(input, std::move(env));
 
             TNameRequest request = NameRequestFrom(input, context, global);
             if (request.IsEmpty()) {
@@ -118,7 +119,7 @@ namespace NSQLComplete {
 
             if (context.Cluster) {
                 TClusterName::TConstraints constraints;
-                constraints.Namespace = context.Cluster->Provider;
+                constraints.Namespace = ""; // TODO(YQL-19747): filter by provider
                 request.Constraints.Cluster = std::move(constraints);
             }
 
@@ -212,6 +213,45 @@ namespace NSQLComplete {
         IGlobalAnalysis::TPtr GlobalAnalysis_;
         INameService::TPtr Names_;
     };
+
+    ISqlCompletionEngine::TConfiguration MakeConfiguration(THashSet<TString> allowedStmts) {
+        allowedStmts.emplace("sql_stmt");
+
+        ISqlCompletionEngine::TConfiguration config;
+        for (const std::string& name : GetSqlGrammar().GetAllRules()) {
+            if (name.ends_with("_stmt") && !allowedStmts.contains(name)) {
+                config.IgnoredRules.emplace(name);
+            }
+        }
+        return config;
+    }
+
+    ISqlCompletionEngine::TConfiguration MakeYDBConfiguration() {
+        return {
+            .IgnoredRules = {},
+        };
+    }
+
+    ISqlCompletionEngine::TConfiguration MakeYQLConfiguration() {
+        return MakeConfiguration(/* allowedStmts = */ {
+            "lambda_stmt",
+            "pragma_stmt",
+            "select_stmt",
+            "named_nodes_stmt",
+            "drop_table_stmt",
+            "use_stmt",
+            "into_table_stmt",
+            "commit_stmt",
+            "declare_stmt",
+            "import_stmt",
+            "export_stmt",
+            "do_stmt",
+            "define_action_or_subquery_stmt",
+            "if_stmt",
+            "for_stmt",
+            "values_stmt",
+        });
+    }
 
     ISqlCompletionEngine::TPtr MakeSqlCompletionEngine(
         TLexerSupplier lexer,

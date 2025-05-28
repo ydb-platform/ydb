@@ -1,8 +1,10 @@
 #include <yql/essentials/public/udf/udf_helpers.h>
+#include <yql/essentials/public/udf/udf_type_ops.h>
 #include <yql/essentials/public/udf/udf_value_builder.h>
 
 #include <contrib/libs/re2/re2/re2.h>
 
+#include <util/system/env.h>
 #include <util/charset/utf8.h>
 #include <util/string/cast.h>
 
@@ -36,7 +38,37 @@ namespace {
                                                 xx(WordBoundary, 11, bool, false, set_word_boundary, Id) \
                                                     xx(OneLine, 12, bool, false, set_one_line, Id)
 
-    enum EOptionsField : ui32 {
+    ui64 GetFailProbability() {
+        auto envResult = TryGetEnv("YQL_RE2_REGEXP_PROBABILITY_FAIL");
+        if (!envResult) {
+            return 0;
+        }
+        ui64 result;
+        bool isValid = TryIntFromString<10, ui64>(envResult->data(), envResult->size(), result);
+        Y_ENSURE(isValid, TStringBuilder() << "Error while parsing YQL_RE2_REGEXP_PROBABILITY_FAIL. Actual value is: " << *envResult);
+        return result;
+    }
+
+    bool ShouldFailOnInvalidRegexp(const std::string_view regexp) {
+        THashType hash = GetStringHash(regexp) % 100;
+        ui64 failProbability = GetFailProbability();
+        return hash < failProbability;
+    }
+
+    RE2::Options CreateDefaultOptions(){
+        RE2::Options options;
+#define FIELD_HANDLE(name, index, type, defVal, setter, conv) options.setter(conv(defVal));
+        OPTIONS_MAP(FIELD_HANDLE)
+#undef FIELD_HANDLE
+        options.set_log_errors(false);
+        return options;
+    }
+
+    TString FormatRegexpError(const RE2& Regexp) {
+        return TStringBuilder() << "Regexp compilation failed. Regexp: \"" << Regexp.pattern() << "\". Original error is: \"" << Regexp.error() << "\"";
+    }
+
+    enum EOptionsField: ui32 {
         OPTIONS_MAP(ENUM_VALUE_GEN)
             Count
     };
@@ -141,7 +173,7 @@ namespace {
                 auto patternValue = runConfig.GetElement(0);
                 auto optionsValue = runConfig.GetElement(1);
                 const std::string_view pattern(patternValue.AsStringRef());
-                RE2::Options options;
+                RE2::Options options = CreateDefaultOptions();
 
                 options.set_posix_syntax(posix);
                 bool needUtf8 = (UTF8Detect(pattern) == UTF8);
@@ -154,9 +186,14 @@ namespace {
 #define FIELD_HANDLE(name, index, type, defVal, setter, conv) options.setter(conv(optionsValue.GetElement(OptionsSchema.Indices[index]).Get<type>()));
                     OPTIONS_MAP(FIELD_HANDLE)
 #undef FIELD_HANDLE
+                    options.set_log_errors(false);
                 }
 
                 Regexp = std::make_unique<RE2>(StringPiece(pattern.data(), pattern.size()), options);
+
+                if (!Regexp->ok() && ShouldFailOnInvalidRegexp(pattern)) {
+                    throw yexception() << FormatRegexpError(*Regexp);
+                }
 
                 if (mode == EMode::CAPTURE) {
                     Captured = std::make_unique<StringPiece[]>(Regexp->NumberOfCapturingGroups() + 1);
@@ -457,7 +494,12 @@ namespace {
                 TRegexpGroups groups;
                 auto optionalStringType = builder.Optional()->Item<char*>().Build();
                 auto structBuilder = builder.Struct();
-                RE2 regexp(StringPiece(typeConfig.Data(), typeConfig.Size()));
+                RE2::Options options = CreateDefaultOptions();
+                RE2 regexp(StringPiece(typeConfig.Data(), typeConfig.Size()), options);
+                if (!regexp.ok()) {
+                    builder.SetError(FormatRegexpError(regexp));
+                    return;
+                }
                 const auto& groupNames = regexp.CapturingGroupNames();
                 int groupCount = regexp.NumberOfCapturingGroups();
                 if (groupCount >= 0) {
@@ -491,11 +533,8 @@ namespace {
                     }
 
                 } else {
-                    if (regexp.ok()) {
-                        builder.SetError("Regexp contains no capturing groups");
-                    } else {
-                        builder.SetError(regexp.error());
-                    }
+                    Y_ENSURE(regexp.ok());
+                    builder.SetError("Regexp contains no capturing groups");
                 }
             } else if (isReplace) {
                 builder.SimpleSignature<TOptional<char*>(TOptional<char*>, char*)>()

@@ -205,6 +205,8 @@ private:
         function.IsStrict = info.IsStrict;
         function.SupportsBlocks = info.SupportsBlocks;
         function.Messages = info.Messages;
+        function.MinLangVer = info.MinLangVer;
+        function.MaxLangVer = info.MaxLangVer;
         return true;
     }
 

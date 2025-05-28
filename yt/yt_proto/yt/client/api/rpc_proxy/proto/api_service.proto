@@ -69,10 +69,13 @@ enum EReplicaConsistency
 
 enum EMasterReadKind
 {
+    // These options cover the majority of cases.
     MRK_LEADER = 0;
     MRK_FOLLOWER = 1;
     MRK_CACHE = 2;
-    MRK_MASTER_CACHE = 3;
+
+    // These are advanced options. Typically you don't need these.
+    MRK_MASTER_SIDE_CACHE = 3;
 }
 
 enum ERowsetKind
@@ -809,6 +812,8 @@ message TReqCreateQueueProducerSession
     optional bytes queue_path = 2; // RichYPath
     optional string session_id = 3;
     optional bytes user_meta = 4; // YSON
+
+    optional TMutatingOptions mutating_options = 103;
 }
 
 message TRspCreateQueueProducerSession

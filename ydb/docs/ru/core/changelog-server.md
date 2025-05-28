@@ -18,6 +18,7 @@
   * [поддержка](https://github.com/ydb-platform/ydb/issues/7054) потока изменений (changefeed) (флаги `enable_changefeeds_export` и `enable_changefeeds_import`),
   * [поддержка](https://github.com/ydb-platform/ydb/issues/12724) представлений (VIEW) (флаг `enable_view_export`).
 * [Добавлена](https://github.com/ydb-platform/ydb/pull/12909) автоматическая проверка целостности резервных копий при импорте, которая предотвращает восстановление из поврежденных бекапов и защищает от потери данных.
+* [Добавлена](https://github.com/ydb-platform/ydb/pull/15570) возможность создания представлений (VIEW), использующих [UDF](../yql/reference/builtins/basic#udf) в своих запросах.
 * Добавлены системные представления с информацией о [настройках прав доступа](./dev/system-views#auth) и [партициях строковых таблиц](./dev/system-views#partitions).
 * Добавлены новые параметры в операторы [CREATE USER](./yql/reference/syntax/create-user) и [ALTER USER](./yql/reference/syntax/alter-user):
   * `HASH` - возможность задания пароля в зашифрованном виде,
@@ -78,7 +79,6 @@
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/16269) проблема зависания операции Drop Tablet в PQ tablet особенно во время задержек в работе Interconnect.
 * https://github.com/ydb-platform/ydb/pull/9122 NodeBroker теперь отправляет дельты при регистрации нод в кластере.
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/16194) ошибка, возникавшая во время [компакшн](../concepts/glossary#compaction) VDisk.
-* [Добавлена](https://github.com/ydb-platform/ydb/pull/15570) возможность создания представлений (VIEW), использующих [UDF](../yql/reference/builtins/basic#udf) в своих запросах.
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/15233) проблема, из-за которой длительные сессии чтения топика завершались с ошибками "too big inflight".
 * [Исправлено](https://github.com/ydb-platform/ydb/pull/15515) зависание при чтении топика, если хотя бы одна партиция не имела входящих данных, но читалась несколькими потребителями.
 * [Оптимизировано](https://github.com/ydb-platform/ydb/pull/18302) использование памяти в транзакциях с большим количеством участников за счет изменения механизма хранения и повторной отправки сообщений TEvReadSet.

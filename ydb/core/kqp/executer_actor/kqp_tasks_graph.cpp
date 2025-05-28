@@ -548,6 +548,7 @@ void BuildKqpStageChannels(TKqpTasksGraph& tasksGraph, TStageInfo& stageInfo,
                 break;
             case NKqpProto::TKqpPhyConnection::kHashShuffle: {
                 ui32 hashKind = NHashKind::EUndefined;
+                auto forceSpilling = input.GetHashShuffle().GetUseSpilling();
                 switch (input.GetHashShuffle().GetHashKindCase()) {
                     case NKqpProto::TKqpPhyCnHashShuffle::kHashV1: {
                         hashKind = NHashKind::EHashV1;
@@ -591,7 +592,8 @@ void BuildKqpStageChannels(TKqpTasksGraph& tasksGraph, TStageInfo& stageInfo,
                     input.GetHashShuffle().GetKeyColumns(),
                     enableSpilling,
                     log,
-                    hashKind
+                    hashKind,
+                    forceSpilling
                 );
                 break;
             }

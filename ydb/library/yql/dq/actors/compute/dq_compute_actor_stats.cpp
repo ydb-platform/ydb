@@ -65,8 +65,14 @@ void FillTaskRunnerStats(ui64 taskId, ui32 stageId, const TDqTaskRunnerStats& ta
 
     protoTask->SetWaitInputTimeUs(taskStats.WaitInputTime.MicroSeconds());
     protoTask->SetWaitOutputTimeUs(taskStats.WaitOutputTime.MicroSeconds());
-    protoTask->SetCurrentWaitInputTimeUs(taskStats.CurrentWaitInputTime.MicroSeconds());
-    protoTask->SetCurrentWaitOutputTimeUs(taskStats.CurrentWaitOutputTime.MicroSeconds());
+
+    auto now = TInstant::Now();
+    if (taskStats.CurrentWaitInputStartTime) {
+        protoTask->SetCurrentWaitInputTimeUs((now - taskStats.CurrentWaitInputStartTime).MicroSeconds());
+    }
+    if (taskStats.CurrentWaitOutputStartTime) {
+        protoTask->SetCurrentWaitOutputTimeUs((now - taskStats.CurrentWaitOutputStartTime).MicroSeconds());
+    }
 
     if (StatsLevelCollectFull(level)) {
         protoTask->SetSpillingComputeWriteBytes(taskStats.SpillingComputeWriteBytes);

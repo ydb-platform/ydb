@@ -11,7 +11,7 @@ class TestVectorIndex(RestartToAnotherVersionFixture):
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):
         self.table_name = TABLE_NAME
-        self.rows_count = 30
+        self.rows_count = 15
         self.index_name = "vector_idx"
         self.vector_dimension = 5
         yield from self.setup_cluster(extra_feature_flags={"enable_vector_index": True})
@@ -95,7 +95,7 @@ class TestVectorIndex(RestartToAnotherVersionFixture):
             session_pool.execute_with_retries(upsert_sql)
 
     def select_from_index(self, target, name, data_type, order):
-        vector = self._get_random_vector(data_type, self.vector_dimension)
+        vector = self._get_random_vector(f"{data_type}Vector", self.vector_dimension)
         select_sql = f"""
             $Target = {name}(Cast([{vector}] AS List<{data_type}>));
             SELECT key, vec, {target}(vec, $Target) as target
@@ -181,8 +181,12 @@ class TestVectorIndex(RestartToAnotherVersionFixture):
         self.select_from_index(
             target=targets[distance][distance_func], name=vector_types[vector_type], data_type=vector_type, order=order
         )
-        self._drop_index()
         self.change_cluster_version()
+        
+        self.select_from_index(
+            target=targets[distance][distance_func], name=vector_types[vector_type], data_type=vector_type, order=order
+        )
+        self._drop_index()
 
         self.write_data(name=vector_types[vector_type], vector_type=f"{vector_type}Vector")
         if distance == "similarity":

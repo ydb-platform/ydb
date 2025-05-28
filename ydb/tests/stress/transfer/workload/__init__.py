@@ -3,6 +3,7 @@ import ydb
 
 import time
 import unittest
+import uuid
 
 
 class Workload(unittest.TestCase):
@@ -13,9 +14,10 @@ class Workload(unittest.TestCase):
         self.pool = ydb.QuerySessionPool(self.driver)
         self.duration = duration
         self.mode = mode
-        self.table_name = f"transfer_target_table_{mode}"
-        self.topic_name = f"transfer_source_topic_{mode}"
-        self.transfer_name = f"transfer_{mode}"
+        self.id = f"{uuid.uuid1()}".replace("-", "_");
+        self.table_name = f"transfer_target_table_{mode}_{self.id}"
+        self.topic_name = f"transfer_source_topic_{mode}_{self.id}"
+        self.transfer_name = f"transfer_{mode}_{self.id}"
 
     def create_table(self):
         self.pool.execute_with_retries(

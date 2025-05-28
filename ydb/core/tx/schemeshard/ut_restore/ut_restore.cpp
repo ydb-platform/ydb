@@ -5653,7 +5653,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         });
     }
 
-    Y_UNIT_TEST(TopicImport) {
+    void TestTopic(bool isCorrupted = false) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
@@ -5662,7 +5662,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
 
         const auto data = GenerateTestData({
                 EPathTypePersQueueGroup,
-                topic.GetPublic().DebugString()
+                isCorrupted ? topic.GetCorruptedPublicFile() : topic.GetPublic().DebugString()
         });
 
         THashMap<TString, TTestDataWithScheme> bucketContent;
@@ -5677,6 +5677,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
 
         TestImport(runtime, ++txId, "/MyRoot", NDescUT::TImportRequest(port, {topic.GetImportRequestItem()}).GetRequest());
         env.TestWaitNotification(runtime, txId);
+        TestGetImport(runtime, txId, "/MyRoot",  isCorrupted ? Ydb::StatusIds::CANCELLED : Ydb::StatusIds::SUCCESS);
 
         auto consumers = topic.GetConsumers();
 
@@ -5687,6 +5688,14 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             NLs::ConsumerExist(consumers.at(0).name()),
             NLs::ConsumerExist(consumers.at(1).name()),
         });
+    }
+
+    Y_UNIT_TEST(TopicImport) {
+        TestTopic();
+    }
+
+    Y_UNIT_TEST(CorruptedTopicImport) {
+        TestTopic(true);
     }
 
     Y_UNIT_TEST(TopicExportImport) {
@@ -5717,6 +5726,11 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         TestImport(runtime, ++txId, "/MyRoot", NDescUT::TImportRequest(port, {topic.GetImportRequestItem()}).GetRequest());
         env.TestWaitNotification(runtime, txId);
         TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+
+        auto describePath = DescribePath(runtime, "/MyRoot" + topic.GetRestoredDir());
+        TestDescribeResult(describePath, {
+            NLs::PathExist,
+        });
     }
 }
 
@@ -5765,6 +5779,7 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
             }
 
             const ui64 importId = ++t.TxId;
+            Cerr << "REQUEST FINISHED: \n" << Sprintf(importSettings.data(), port) << Endl;
             AsyncImport(runtime, importId, "/MyRoot", Sprintf(importSettings.data(), port));
             t.TestEnv->TestWaitNotification(runtime, importId);
 
@@ -6239,20 +6254,11 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
 
     Y_UNIT_TEST(ShouldSucceedOnSingleTopic) {
         auto topic = NDescUT::TTopic(0, 2);
-        ShouldSucceed({{"",
+        ShouldSucceed({{topic.GetDir(),
             {
                 EPathTypePersQueueGroup,
                 topic.GetPublic().DebugString()
             }
-        }}, R"(
-                ImportFromS3Settings {
-                    endpoint: "localhost:%d"
-                    scheme: HTTP
-                    items {
-                        source_prefix: ""
-                        destination_path: "/MyRoot/Topic"
-                    }
-                }
-            )");
+        }}, NDescUT::TImportRequest({topic.GetImportRequestItem()}).GetRequest());
     }
 }

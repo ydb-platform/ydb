@@ -199,8 +199,17 @@ private:
 
 class TXxportRequest {
 public:
-    TXxportRequest(const char* type, ui16 port, const TVector<TString>& items) {
-        Request = Sprintf(RequestTemp, type, port, Reduce(items).c_str());
+    TXxportRequest(const char* type, const TVector<TString>& items, ui16 port) {
+        Request = Sprintf(RequestTemp, type, Reduce(items).c_str(), port);
+    }
+
+    TXxportRequest(const char* type, const TVector<TString>& items) {
+        Request = Sprintf(RequestTemp, type, Reduce(items).c_str());
+        ui64 pos = Request.find("localhost:0");
+        if (pos != std::string::npos) {
+            Request.erase(pos, 11);
+            Request.insert(pos, "localhost:%d");
+        }
     }
 
     const TString& GetRequest() const {
@@ -220,9 +229,9 @@ private:
     TString Request;
     const char* RequestTemp = R"(
         %sSettings {
+            %s
             endpoint: "localhost:%d"
             scheme: HTTP
-            %s
         }
     )";
 };
@@ -230,13 +239,19 @@ private:
 class TExportRequest : public TXxportRequest {
 public:
     TExportRequest(ui16 port, const TVector<TString>& items)
-                  : TXxportRequest("ExportToS3", port, items) {}
+                  : TXxportRequest("ExportToS3", items, port) {}
+    
+    TExportRequest(const TVector<TString>& items)
+                  : TXxportRequest("ExportToS3", items) {}
 };
 
 class TImportRequest : public TXxportRequest {
 public:
     TImportRequest(ui16 port, const TVector<TString>& items)
-                  : TXxportRequest("ImportFromS3", port, items) {}
+                  : TXxportRequest("ImportFromS3", items, port) {}
+    
+    TImportRequest(const TVector<TString>& items)
+                  : TXxportRequest("ImportFromS3", items) {}
 };
 
 class TTopic : public TSchemeObjectDescriber<NKikimrSchemeOp::TPersQueueGroupDescription,
@@ -282,8 +297,17 @@ public:
         }
     }
 
-    ::google::protobuf::RepeatedPtrField<Ydb::Topic::Consumer> GetConsumers() {
+    const ::google::protobuf::RepeatedPtrField<Ydb::Topic::Consumer>& GetConsumers() const {
         return Public.consumers();
+    }
+
+    TString GetCorruptedPublicFile() const {
+        Ydb::Topic::CreateTopicRequest corrupted = this->GetPublic();
+        google::protobuf::Duration duration;
+        duration.set_seconds(-1);
+        duration.set_nanos(0);
+        *corrupted.mutable_retention_period() = duration;
+        return corrupted.DebugString();
     }
 
 private:

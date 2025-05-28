@@ -22,6 +22,83 @@ Y_UNIT_TEST_SUITE(Transfer)
         testCase.DropTopic();
     }
 
+    Y_UNIT_TEST(ConnectionString_BadChar)
+    {
+        MainTestCase testCase;
+
+        testCase.CreateTable(R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8,
+                    PRIMARY KEY (Key)
+                )  WITH (
+                    STORE = COLUMN
+                );
+            )");
+        testCase.CreateTopic(1);
+        testCase.ExecuteDDL(Sprintf(R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            Key: 1,
+                            Message:CAST("Message-1" AS Utf8)
+                        |>
+                    ];
+                };
+
+                CREATE TRANSFER %s
+                FROM %s TO %s USING $l
+                WITH (
+                    CONNECTION_STRING = "grp§c://localhost:2135"
+                )
+            )", testCase.TransferName.data(), testCase.TopicName.data(), testCase.TableName.data()));
+
+        testCase.CheckTransferStateError("DNS resolution failed for grp§c://localhost:2135");
+
+        testCase.DropTransfer();
+        testCase.DropTable();
+        testCase.DropTopic();
+    }
+
+    Y_UNIT_TEST(ConnectionString_BadDNSName)
+    {
+        MainTestCase testCase;
+
+        testCase.CreateTable(R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8,
+                    PRIMARY KEY (Key)
+                )  WITH (
+                    STORE = COLUMN
+                );
+            )");
+        testCase.CreateTopic(1);
+        testCase.ExecuteDDL(Sprintf(R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            Key: 1,
+                            Message:CAST("Message-1" AS Utf8)
+                        |>
+                    ];
+                };
+
+                CREATE TRANSFER %s
+                FROM %s TO %s USING $l
+                WITH (
+                    CONNECTION_STRING = "grpc://domain-not-exists-localhost:2135"
+                )
+            )", testCase.TransferName.data(), testCase.TopicName.data(), testCase.TableName.data()));
+
+        testCase.CheckTransferStateError("Grpc error response on endpoint domain-not-exists-localhost:2135");
+
+        testCase.DropTransfer();
+        testCase.DropTable();
+        testCase.DropTopic();
+    }
+
+
     Y_UNIT_TEST(Create_WithPermission)
     {
         auto id = RandomNumber<ui16>();

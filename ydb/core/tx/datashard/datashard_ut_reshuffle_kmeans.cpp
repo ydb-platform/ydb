@@ -20,10 +20,10 @@ static constexpr const char* kMainTable = "/Root/table-main";
 static constexpr const char* kPostingTable = "/Root/table-posting";
 
 Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
+
     static void DoBadRequest(Tests::TServer::TPtr server, TActorId sender,
-                             std::unique_ptr<TEvDataShard::TEvReshuffleKMeansRequest> & ev, size_t dims = 2,
-                             VectorIndexSettings::VectorType type = VectorIndexSettings::VECTOR_TYPE_FLOAT,
-                             VectorIndexSettings::Metric metric = VectorIndexSettings::DISTANCE_COSINE)
+        std::function<void(NKikimrTxDataShard::TEvReshuffleKMeansRequest&)> setupRequest,
+        TString expectedError, bool expectedErrorSubstring = false)
     {
         auto id = sId.fetch_add(1, std::memory_order_relaxed);
         auto& runtime = *server->GetRuntime();
@@ -35,53 +35,50 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
         TString err;
         UNIT_ASSERT(datashards.size() == 1);
 
-        for (auto tid : datashards) {
-            auto& rec = ev->Record;
-            rec.SetId(1);
+        auto ev = std::make_unique<TEvDataShard::TEvReshuffleKMeansRequest>();
+        auto& rec = ev->Record;
+        rec.SetId(1);
 
-            rec.SetSeqNoGeneration(id);
-            rec.SetSeqNoRound(1);
+        rec.SetSeqNoGeneration(id);
+        rec.SetSeqNoRound(1);
 
-            if (!rec.HasTabletId()) {
-                rec.SetTabletId(tid);
-            }
-            if (!rec.HasPathId()) {
-                tableId.PathId.ToProto(rec.MutablePathId());
-            }
+        rec.SetTabletId(datashards[0]);
+        tableId.PathId.ToProto(rec.MutablePathId());
 
-            rec.SetSnapshotTxId(snapshot.TxId);
-            rec.SetSnapshotStep(snapshot.Step);
+        rec.SetSnapshotTxId(snapshot.TxId);
+        rec.SetSnapshotStep(snapshot.Step);
 
-            VectorIndexSettings settings;
-            settings.set_vector_dimension(dims);
-            settings.set_vector_type(type);
-            settings.set_metric(metric);
-            *rec.MutableSettings() = settings;
+        VectorIndexSettings settings;
+        settings.set_vector_dimension(2);
+        settings.set_vector_type(VectorIndexSettings::VECTOR_TYPE_FLOAT);
+        settings.set_metric(VectorIndexSettings::DISTANCE_COSINE);
+        *rec.MutableSettings() = settings;
 
-            rec.SetUpload(NKikimrTxDataShard::EKMeansState::UPLOAD_MAIN_TO_POSTING);
+        rec.SetUpload(NKikimrTxDataShard::EKMeansState::UPLOAD_MAIN_TO_POSTING);
 
-            rec.SetParent(0);
-            rec.SetChild(1);
+        rec.SetParent(0);
+        rec.SetChild(1);
 
-            if (rec.ClustersSize() == 0) {
-                rec.AddClusters("something");
-            } else {
-                rec.ClearClusters();
-            }
+        rec.AddClusters("something");
 
-            if (rec.HasEmbeddingColumn()) {
-                rec.ClearEmbeddingColumn();
-            } else {
-                rec.SetEmbeddingColumn("embedding");
-            }
+        rec.SetEmbeddingColumn("embedding");
 
-            rec.SetPostingName(kPostingTable);
+        rec.SetPostingName(kPostingTable);
 
-            runtime.SendToPipe(tid, sender, ev.release(), 0, GetPipeConfigWithRetries());
+        setupRequest(rec);
 
-            TAutoPtr<IEventHandle> handle;
-            auto reply = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvReshuffleKMeansResponse>(handle);
-            UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus(), NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST);
+        runtime.SendToPipe(datashards[0], sender, ev.release(), 0, GetPipeConfigWithRetries());
+
+        TAutoPtr<IEventHandle> handle;
+        auto reply = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvReshuffleKMeansResponse>(handle);
+        UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus(), NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST);
+
+        NYql::TIssues issues;
+        NYql::IssuesFromMessage(reply->Record.GetIssues(), issues);
+        if (expectedErrorSubstring) {
+            UNIT_ASSERT_STRING_CONTAINS(issues.ToOneLineString(), expectedError);
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(issues.ToOneLineString(), expectedError);
         }
     }
 
@@ -192,7 +189,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
         CreateShardedTable(server, sender, "/Root", name, options);
     }
 
-    Y_UNIT_TEST (BadRequest) {
+    Y_UNIT_TEST(BadRequest) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root");
@@ -202,94 +199,87 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
         auto sender = runtime.AllocateEdgeActor();
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
-
-        InitRoot(server, sender);
-
-        CreateShardedTable(server, sender, "/Root", "table-main", 1);
-
-        {
-            auto ev = std::make_unique<TEvDataShard::TEvReshuffleKMeansRequest>();
-            auto& rec = ev->Record;
-
-            rec.AddClusters("to make it empty");
-            DoBadRequest(server, sender, ev);
-        }
-        {
-            auto ev = std::make_unique<TEvDataShard::TEvReshuffleKMeansRequest>();
-            auto& rec = ev->Record;
-
-            rec.SetEmbeddingColumn("to make it empty");
-            DoBadRequest(server, sender, ev);
-        }
-        {
-            auto ev = std::make_unique<TEvDataShard::TEvReshuffleKMeansRequest>();
-            auto& rec = ev->Record;
-
-            rec.SetTabletId(0);
-            DoBadRequest(server, sender, ev);
-        }
-        {
-            auto ev = std::make_unique<TEvDataShard::TEvReshuffleKMeansRequest>();
-            auto& rec = ev->Record;
-
-            TPathId(0, 0).ToProto(rec.MutablePathId());
-            DoBadRequest(server, sender, ev);
-        }
-        {
-            auto ev = std::make_unique<TEvDataShard::TEvReshuffleKMeansRequest>();
-
-            DoBadRequest(server, sender, ev, 0);
-        }
-        {
-            auto ev = std::make_unique<TEvDataShard::TEvReshuffleKMeansRequest>();
-
-            // TODO(mbkkt) bit vector not supported for now
-            DoBadRequest(server, sender, ev, 2, VectorIndexSettings::VECTOR_TYPE_BIT);
-        }
-        {
-            auto ev = std::make_unique<TEvDataShard::TEvReshuffleKMeansRequest>();
-
-            DoBadRequest(server, sender, ev, 2, VectorIndexSettings::VECTOR_TYPE_UNSPECIFIED);
-        }
-        {
-            auto ev = std::make_unique<TEvDataShard::TEvReshuffleKMeansRequest>();
-
-            DoBadRequest(server, sender, ev, 2, VectorIndexSettings::VECTOR_TYPE_FLOAT,
-                         VectorIndexSettings::METRIC_UNSPECIFIED);
-        }
-        // TODO(mbkkt) For now all build_index, sample_k, build_columns, local_kmeans doesn't really check this
-        // {
-        //     auto ev = std::make_unique<TEvDataShard::TEvReshuffleKMeansRequest>();
-        //     auto snapshotCopy = snapshot;
-        //     snapshotCopy.Step++;
-        //     DoBadRequest(server, sender, ev);
-        // }
-        // {
-        //     auto ev = std::make_unique<TEvDataShard::TEvReshuffleKMeansRequest>();
-        //     auto snapshotCopy = snapshot;
-        //     snapshotCopy.TxId++;
-        //     DoBadRequest(server, sender, ev);
-        // }
-    }
-
-    Y_UNIT_TEST (MainToPosting) {
-        TPortManager pm;
-        TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root");
-
-        Tests::TServer::TPtr server = new TServer(serverSettings);
-        auto& runtime = *server->GetRuntime();
-        auto sender = runtime.AllocateEdgeActor();
-
-        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
-
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+        
         InitRoot(server, sender);
 
         TShardedTableOptions options;
         options.EnableOutOfOrder(true); // TODO(mbkkt) what is it?
         options.Shards(1);
-
         CreateMainTable(server, sender, options);
+
+        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvReshuffleKMeansRequest& request) {
+            request.SetTabletId(0);
+        }, TStringBuilder() << "{ <main>: Error: Wrong shard 0 this is " << GetTableShards(server, sender, kMainTable)[0] << " }");
+        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvReshuffleKMeansRequest& request) {
+            TPathId(0, 0).ToProto(request.MutablePathId());
+        }, "{ <main>: Error: Unknown table id: 0 }");
+
+        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvReshuffleKMeansRequest& request) {
+            request.SetSnapshotStep(request.GetSnapshotStep() + 1);
+        }, "Error: Unknown snapshot", true);
+        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvReshuffleKMeansRequest& request) {
+            request.SetSnapshotTxId(request.GetSnapshotTxId() + 1);
+        }, "Error: Unknown snapshot", true);
+
+        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvReshuffleKMeansRequest& request) {
+            request.MutableSettings()->set_vector_type(VectorIndexSettings::VECTOR_TYPE_UNSPECIFIED);
+        }, "{ <main>: Error: Wrong vector type }");
+        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvReshuffleKMeansRequest& request) {
+            request.MutableSettings()->set_vector_type(VectorIndexSettings::VECTOR_TYPE_BIT);
+        }, "{ <main>: Error: TODO(mbkkt) bit vector type is not supported }");
+        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvReshuffleKMeansRequest& request) {
+            request.MutableSettings()->set_metric(VectorIndexSettings::METRIC_UNSPECIFIED);
+        }, "{ <main>: Error: Wrong similarity }");
+
+        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvReshuffleKMeansRequest& request) {
+            request.SetUpload(NKikimrTxDataShard::UNSPECIFIED);
+        }, "{ <main>: Error: Wrong upload }");
+        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvReshuffleKMeansRequest& request) {
+            request.SetUpload(NKikimrTxDataShard::SAMPLE);
+        }, "{ <main>: Error: Wrong upload }");
+
+        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvReshuffleKMeansRequest& request) {
+            request.ClearClusters();
+        }, "{ <main>: Error: Should be requested at least single cluster }");
+
+        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvReshuffleKMeansRequest& request) {
+            request.ClearPostingName();
+        }, "{ <main>: Error: Empty posting table name }");
+
+        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvReshuffleKMeansRequest& request) {
+            request.SetEmbeddingColumn("some");
+        }, "{ <main>: Error: Unknown embedding column: some }");
+        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvReshuffleKMeansRequest& request) {
+            request.AddDataColumns("some");
+        }, "{ <main>: Error: Unknown data column: some }");
+
+        // test multiple issues:
+        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvReshuffleKMeansRequest& request) {
+            request.ClearClusters();
+            request.SetEmbeddingColumn("some");
+        }, "[ { <main>: Error: Should be requested at least single cluster } { <main>: Error: Unknown embedding column: some } ]");
+    }
+
+    Y_UNIT_TEST(MainToPosting) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root");
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto& runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+        
+        InitRoot(server, sender);
+
+        TShardedTableOptions options;
+        options.EnableOutOfOrder(true); // TODO(mbkkt) what is it?
+        options.Shards(1);
+        CreateMainTable(server, sender, options);
+
         // Upsert some initial values
         ExecSQL(server, sender,
                 R"(
@@ -357,7 +347,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
         }
     }
 
-    Y_UNIT_TEST (MainToBuild) {
+    Y_UNIT_TEST(MainToBuild) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root");
@@ -367,14 +357,15 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
         auto sender = runtime.AllocateEdgeActor();
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
-
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+        
         InitRoot(server, sender);
 
         TShardedTableOptions options;
         options.EnableOutOfOrder(true); // TODO(mbkkt) what is it?
         options.Shards(1);
-
         CreateMainTable(server, sender, options);
+
         // Upsert some initial values
         ExecSQL(server, sender,
                 R"(
@@ -442,7 +433,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
         }
     }
 
-    Y_UNIT_TEST (BuildToPosting) {
+    Y_UNIT_TEST(BuildToPosting) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root");
@@ -452,7 +443,8 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
         auto sender = runtime.AllocateEdgeActor();
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
-
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+        
         InitRoot(server, sender);
 
         TShardedTableOptions options;
@@ -529,7 +521,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
         }
     }
 
-    Y_UNIT_TEST (BuildToBuild) {
+    Y_UNIT_TEST(BuildToBuild) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root");
@@ -539,7 +531,8 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
         auto sender = runtime.AllocateEdgeActor();
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
-
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+        
         InitRoot(server, sender);
 
         TShardedTableOptions options;

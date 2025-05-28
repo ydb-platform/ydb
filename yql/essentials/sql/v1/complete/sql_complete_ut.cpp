@@ -2,7 +2,6 @@
 
 #include <yql/essentials/sql/v1/complete/syntax/grammar.h>
 #include <yql/essentials/sql/v1/complete/name/cluster/static/discovery.h>
-#include <yql/essentials/sql/v1/complete/name/object/dispatch/schema.h>
 #include <yql/essentials/sql/v1/complete/name/object/simple/schema.h>
 #include <yql/essentials/sql/v1/complete/name/object/simple/static/schema.h>
 #include <yql/essentials/sql/v1/complete/name/service/ranking/frequency.h>
@@ -17,6 +16,8 @@
 #include <yql/essentials/sql/v1/lexer/antlr4_pure_ansi/lexer.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/iterator/iterate_keys.h>
+#include <library/cpp/iterator/functools.h>
 
 #include <util/charset/utf8.h>
 
@@ -79,7 +80,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
             },
         };
 
-        THashMap<TString, THashMap<TString, TVector<TFolderEntry>>> fss = {
+        THashMap<TString, THashMap<TString, TVector<TFolderEntry>>> fs = {
             {"", {{"/", {{"Folder", "local"},
                          {"Folder", "test"},
                          {"Folder", "prod"},
@@ -99,30 +100,19 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
              {{"/", {{"Table", "maxim"}}}}},
         };
 
-        TVector<TString> clusters;
-        for (const auto& [cluster, _] : fss) {
-            clusters.emplace_back(cluster);
-        }
-        EraseIf(clusters, [](const auto& s) { return s.empty(); });
+        auto clustersIt = NFuncTools::Filter(
+            [](const auto& x) { return !x.empty(); }, IterateKeys(fs));
+        TVector<TString> clusters(begin(clustersIt), end(clustersIt));
 
         TFrequencyData frequency;
 
-        IRanking::TPtr ranking = MakeDefaultRanking(frequency);
-
-        THashMap<TString, ISchema::TPtr> schemasByCluster;
-        for (auto& [cluster, fs] : fss) {
-            schemasByCluster[std::move(cluster)] =
-                MakeSimpleSchema(
-                    MakeStaticSimpleSchema(std::move(fs)));
-        }
-
         TVector<INameService::TPtr> children = {
             MakeStaticNameService(std::move(names), frequency),
-            MakeSchemaNameService(MakeDispatchSchema(std::move(schemasByCluster))),
+            MakeSchemaNameService(MakeSimpleSchema(MakeStaticSimpleSchema(std::move(fs)))),
             MakeClusterNameService(MakeStaticClusterDiscovery(std::move(clusters))),
         };
-
-        INameService::TPtr service = MakeUnionNameService(std::move(children), ranking);
+        INameService::TPtr service = MakeUnionNameService(
+            std::move(children), MakeDefaultRanking(frequency));
 
         return MakeSqlCompletionEngine(std::move(lexer), std::move(service));
     }

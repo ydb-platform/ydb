@@ -8,6 +8,7 @@ import ydb
 import subprocess
 import yatest
 import socket
+import shutil
 from ydb.tests.olap.lib.utils import get_external_param
 from copy import deepcopy
 from time import sleep, time
@@ -64,7 +65,7 @@ class YdbCluster:
         def execute_command(self, cmd: Union[str, list], raise_on_error: bool = True,
                             timeout: Optional[float] = None, raise_on_timeout: bool = True) -> tuple[str, str]:
             """
-            Выполняет команду на ноде через SSH
+            Выполняет команду на ноде через SSH или локально
 
             Args:
                 cmd: команда для выполнения (строка или список)
@@ -75,94 +76,35 @@ class YdbCluster:
             Returns:
                 tuple[str, str]: (stdout, stderr) - вывод команды
             """
-            # Определяем хост для SSH подключения
-            ssh_host = self.host
-
-            # Если хост является localhost, заменяем его на 'localhost' для SSH
-            if YdbCluster._is_localhost(self.host):
-                ssh_host = 'localhost'
-                LOGGER.info(f"Detected localhost-like host ({self.host}), using 'localhost' for SSH")
-
-            ssh_cmd = ['ssh', "-o", "StrictHostKeyChecking=no",
-                       "-o", "UserKnownHostsFile=/dev/null"]
-
-            # Добавляем SSH пользователя, если указан
-            ssh_user = os.getenv('SSH_USER')
-            if ssh_user is not None:
-                ssh_cmd += ['-l', ssh_user]
-
-            # Добавляем ключ SSH, если указан
-            ssh_key_file = os.getenv('SSH_KEY_FILE')
-            if ssh_key_file is not None:
-                ssh_cmd += ['-i', ssh_key_file]
-
-            if isinstance(cmd, list):
-                full_cmd = ssh_cmd + [ssh_host] + cmd
-            else:
-                full_cmd = ssh_cmd + [ssh_host, cmd]
-
-            LOGGER.info(f"Executing SSH command on {ssh_host} (original: {self.host}): {full_cmd}")
-            try:
-                execution = yatest.common.execute(
-                    full_cmd,
-                    wait=True,
-                    check_exit_code=False,  # Проверяем exit code сами
-                    timeout=timeout
-                )
-
-                # Декодируем stdout и stderr отдельно
-                stdout = (YdbCluster._safe_decode(execution.std_out)
-                          if hasattr(execution, 'std_out') and execution.std_out else "")
-                stderr = (YdbCluster._safe_decode(execution.std_err)
-                          if hasattr(execution, 'std_err') and execution.std_err else "")
-
-                # Фильтруем SSH предупреждения из stderr
-                stderr = YdbCluster._filter_ssh_warnings(stderr)
-
-                # Проверяем exit code
-                exit_code = getattr(execution, 'exit_code', getattr(execution, 'returncode', 0))
-                if exit_code != 0 and raise_on_error:
-                    raise subprocess.CalledProcessError(
-                        exit_code,
-                        full_cmd,
-                        stdout,
-                        stderr
-                    )
-
-                return stdout, stderr
-
-            except yatest.common.ExecutionTimeoutError as e:
-                # Извлекаем информацию о команде и частичном выводе
-                timeout_info = (f"SSH command timed out after {timeout} seconds "
-                                f"on {ssh_host} (original: {self.host})")
+            
+            def _handle_timeout_error(e: yatest.common.ExecutionTimeoutError, 
+                                    full_cmd: Union[str, list], 
+                                    is_local: bool) -> tuple[str, str]:
+                """Обрабатывает ошибки таймаута"""
+                cmd_type = "Local" if is_local else "SSH"
+                timeout_info = f"{cmd_type} command timed out after {timeout} seconds on {self.host}"
                 stdout = ""
                 stderr = ""
 
-                # ExecutionTimeoutError имеет атрибут execution_result с объектом выполнения
+                # Извлекаем информацию из execution_result
                 if hasattr(e, 'execution_result') and e.execution_result:
                     execution_obj = e.execution_result
-
-                    # Извлекаем stdout и stderr из объекта выполнения
                     if hasattr(execution_obj, 'std_out') and execution_obj.std_out:
                         stdout = YdbCluster._safe_decode(execution_obj.std_out)
                     if hasattr(execution_obj, 'std_err') and execution_obj.std_err:
                         stderr = YdbCluster._safe_decode(execution_obj.std_err)
-                        # Фильтруем SSH предупреждения из stderr даже при таймауте
-                        stderr = YdbCluster._filter_ssh_warnings(stderr)
-
-                    # Добавляем информацию о команде
+                        if not is_local:
+                            stderr = YdbCluster._filter_ssh_warnings(stderr)
                     if hasattr(execution_obj, 'command'):
                         timeout_info += f"\nCommand: {execution_obj.command}"
 
-                # Логируем детальную информацию о таймауте
+                # Логирование
                 if raise_on_timeout:
-                    LOGGER.error(f"SSH command timed out after {timeout} seconds "
-                                 f"on {ssh_host} (original: {self.host})")
+                    LOGGER.error(f"{cmd_type} command timed out after {timeout} seconds on {self.host}")
                     LOGGER.error(f"Full command: {full_cmd}")
                     LOGGER.error(f"Original command: {cmd}")
                 else:
-                    LOGGER.warning(f"SSH command timed out after {timeout} seconds "
-                                   f"on {ssh_host} (original: {self.host})")
+                    LOGGER.warning(f"{cmd_type} command timed out after {timeout} seconds on {self.host}")
                     LOGGER.info(f"Full command: {full_cmd}")
                     LOGGER.info(f"Original command: {cmd}")
 
@@ -173,40 +115,38 @@ class YdbCluster:
                     LOGGER.debug("No partial output available")
 
                 if raise_on_timeout:
-                    raise subprocess.TimeoutExpired(
-                        full_cmd, timeout, output=stdout, stderr=stderr)
+                    raise subprocess.TimeoutExpired(full_cmd, timeout, output=stdout, stderr=stderr)
 
-                # Возвращаем частичный вывод с информацией о таймауте
-                return (f"{timeout_info}\n{stdout}" if stdout else timeout_info,
-                        stderr)
+                return (f"{timeout_info}\n{stdout}" if stdout else timeout_info, stderr)
 
-            except yatest.common.ExecutionError as e:
+            def _handle_execution_error(e: yatest.common.ExecutionError, 
+                                      full_cmd: Union[str, list], 
+                                      is_local: bool) -> tuple[str, str]:
+                """Обрабатывает ошибки выполнения"""
+                cmd_type = "Local" if is_local else "SSH"
                 stdout = ""
                 stderr = ""
-                exit_code = 1  # Значение по умолчанию
-                
-                # ExecutionError имеет атрибут execution_result с объектом выполнения
+                exit_code = 1
+
+                # Извлекаем информацию из execution_result
                 if hasattr(e, 'execution_result') and e.execution_result:
                     execution_obj = e.execution_result
-                    
-                    # Извлекаем stdout и stderr из объекта выполнения
                     if hasattr(execution_obj, 'std_out') and execution_obj.std_out:
                         stdout = YdbCluster._safe_decode(execution_obj.std_out)
                     if hasattr(execution_obj, 'std_err') and execution_obj.std_err:
                         stderr = YdbCluster._safe_decode(execution_obj.std_err)
-                    
-                    # Получаем exit code
                     if hasattr(execution_obj, 'exit_code'):
                         exit_code = execution_obj.exit_code
                     elif hasattr(execution_obj, 'returncode'):
                         exit_code = execution_obj.returncode
-                
-                # Фильтруем SSH предупреждения из stderr
-                stderr = YdbCluster._filter_ssh_warnings(stderr)
-                
+
+                # Фильтруем SSH предупреждения для удаленных команд
+                if not is_local:
+                    stderr = YdbCluster._filter_ssh_warnings(stderr)
+
                 if raise_on_error:
                     # Логируем детальную информацию об ошибке
-                    LOGGER.error(f"SSH command failed with exit code {exit_code} on {ssh_host} (original: {self.host})")
+                    LOGGER.error(f"{cmd_type} command failed with exit code {exit_code} on {self.host}")
                     LOGGER.error(f"Full command: {full_cmd}")
                     LOGGER.error(f"Original command: {cmd}")
                     if stdout:
@@ -214,29 +154,106 @@ class YdbCluster:
                     if stderr:
                         LOGGER.error(f"Command stderr:\n{stderr}")
                     
-                    # Преобразуем yatest.common.ExecutionError в стандартное исключение
-                    raise subprocess.CalledProcessError(
-                        exit_code,
-                        full_cmd,
-                        stdout,
-                        stderr
-                    )
+                    raise subprocess.CalledProcessError(exit_code, full_cmd, stdout, stderr)
                 
-                LOGGER.error(f"Error executing SSH command on {ssh_host} (original: {self.host}): {e}")
+                LOGGER.error(f"Error executing {cmd_type.lower()} command on {self.host}: {e}")
                 if stdout:
                     LOGGER.error(f"Command stdout:\n{stdout}")
                 if stderr:
                     LOGGER.error(f"Command stderr:\n{stderr}")
                 
-                # Возвращаем реальные stdout и stderr из результата выполнения
                 return stdout, stderr
 
-            except Exception as e:
-                if raise_on_error:
-                    raise
-                LOGGER.error(f"Unexpected error executing SSH command on {ssh_host} (original: {self.host}): {e}")
-                # При неожиданной ошибке возвращаем пустые строки
-                return "", ""
+            def _execute_local_command(cmd: Union[str, list]) -> tuple[str, str]:
+                """Выполняет команду локально"""
+                LOGGER.info(f"Detected localhost ({self.host}), executing command locally: {cmd}")
+                
+                full_cmd = cmd
+                try:
+                    execution = yatest.common.execute(
+                        full_cmd,
+                        wait=True,
+                        check_exit_code=False,
+                        timeout=timeout,
+                        shell=isinstance(cmd, str)
+                    )
+
+                    stdout = (YdbCluster._safe_decode(execution.std_out)
+                              if hasattr(execution, 'std_out') and execution.std_out else "")
+                    stderr = (YdbCluster._safe_decode(execution.std_err)
+                              if hasattr(execution, 'std_err') and execution.std_err else "")
+
+                    exit_code = getattr(execution, 'exit_code', getattr(execution, 'returncode', 0))
+                    if exit_code != 0 and raise_on_error:
+                        raise subprocess.CalledProcessError(exit_code, full_cmd, stdout, stderr)
+
+                    return stdout, stderr
+
+                except yatest.common.ExecutionTimeoutError as e:
+                    return _handle_timeout_error(e, full_cmd, is_local=True)
+                except yatest.common.ExecutionError as e:
+                    return _handle_execution_error(e, full_cmd, is_local=True)
+                except Exception as e:
+                    if raise_on_error:
+                        raise
+                    LOGGER.error(f"Unexpected error executing local command on {self.host}: {e}")
+                    return "", ""
+
+            def _execute_ssh_command(cmd: Union[str, list]) -> tuple[str, str]:
+                """Выполняет команду через SSH"""
+                LOGGER.info(f"Executing SSH command on {self.host}: {cmd}")
+                
+                ssh_cmd = ['ssh', "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null"]
+
+                # Добавляем SSH пользователя и ключ
+                ssh_user = os.getenv('SSH_USER')
+                if ssh_user is not None:
+                    ssh_cmd += ['-l', ssh_user]
+                ssh_key_file = os.getenv('SSH_KEY_FILE')
+                if ssh_key_file is not None:
+                    ssh_cmd += ['-i', ssh_key_file]
+
+                if isinstance(cmd, list):
+                    full_cmd = ssh_cmd + [self.host] + cmd
+                else:
+                    full_cmd = ssh_cmd + [self.host, cmd]
+
+                try:
+                    execution = yatest.common.execute(
+                        full_cmd,
+                        wait=True,
+                        check_exit_code=False,
+                        timeout=timeout
+                    )
+
+                    stdout = (YdbCluster._safe_decode(execution.std_out)
+                              if hasattr(execution, 'std_out') and execution.std_out else "")
+                    stderr = (YdbCluster._safe_decode(execution.std_err)
+                              if hasattr(execution, 'std_err') and execution.std_err else "")
+
+                    stderr = YdbCluster._filter_ssh_warnings(stderr)
+
+                    exit_code = getattr(execution, 'exit_code', getattr(execution, 'returncode', 0))
+                    if exit_code != 0 and raise_on_error:
+                        raise subprocess.CalledProcessError(exit_code, full_cmd, stdout, stderr)
+
+                    return stdout, stderr
+
+                except yatest.common.ExecutionTimeoutError as e:
+                    return _handle_timeout_error(e, full_cmd, is_local=False)
+                except yatest.common.ExecutionError as e:
+                    return _handle_execution_error(e, full_cmd, is_local=False)
+                except Exception as e:
+                    if raise_on_error:
+                        raise
+                    LOGGER.error(f"Unexpected error executing SSH command on {self.host}: {e}")
+                    return "", ""
+
+            # Основная логика: выбираем локальное или SSH выполнение
+            if YdbCluster._is_localhost(self.host):
+                return _execute_local_command(cmd)
+            else:
+                return _execute_ssh_command(cmd)
 
         def copy_file(self, local_path: str, remote_path: str, raise_on_error: bool = True) -> str:
             """
@@ -683,7 +700,7 @@ class YdbCluster:
     def copy_file_to_remote(local_path: str, remote_host: str, remote_path: str,
                             raise_on_error: bool = True) -> str:
         """
-        Копирует файл на удаленный хост через SCP
+        Копирует файл на удаленный хост через SCP или локально
 
         Args:
             local_path: путь к локальному файлу
@@ -694,26 +711,6 @@ class YdbCluster:
         Returns:
             str: вывод команды копирования
         """
-        # Определяем хост для SCP подключения
-        scp_host = remote_host
-
-        # Если хост является localhost, заменяем его на 'localhost' для SCP
-        if YdbCluster._is_localhost(remote_host):
-            scp_host = 'localhost'
-            LOGGER.info(f"Detected localhost-like host ({remote_host}), using 'localhost' for SCP")
-
-        scp_cmd = ['scp', "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null"]
-
-        # Добавляем SSH пользователя, если указан
-        ssh_user = os.getenv('SSH_USER')
-        if ssh_user is not None:
-            scp_host = f"{ssh_user}@{scp_host}"
-
-        # Добавляем ключ SSH, если указан
-        ssh_key_file = os.getenv('SSH_KEY_FILE')
-        if ssh_key_file is not None:
-            scp_cmd += ['-i', ssh_key_file]
-
         # Проверяем существование локального файла
         if not os.path.exists(local_path):
             error_msg = f"Local file does not exist: {local_path}"
@@ -729,6 +726,78 @@ class YdbCluster:
         except OSError as e:
             LOGGER.warning(f"Could not get file size: {e}")
 
+        # Проверяем, является ли хост localhost
+        if YdbCluster._is_localhost(remote_host):
+            LOGGER.info(f"Detected localhost ({remote_host}), copying file locally: {local_path} -> {remote_path}")
+            
+            try:
+                # Создаем директорию назначения, если она не существует
+                remote_dir = os.path.dirname(remote_path)
+                if remote_dir and not os.path.exists(remote_dir):
+                    os.makedirs(remote_dir, exist_ok=True)
+                    LOGGER.debug(f"Created directory: {remote_dir}")
+                
+                # Проверяем, не является ли целевой файл занятым
+                if os.path.exists(remote_path):
+                    try:
+                        # Пытаемся открыть файл для записи, чтобы проверить, не занят ли он
+                        with open(remote_path, 'r+b'):
+                            pass
+                    except (OSError, IOError) as e:
+                        if "Text file busy" in str(e) or "Resource temporarily unavailable" in str(e):
+                            # Генерируем новое имя файла с постфиксом
+                            timestamp = int(time())
+                            remote_filename = os.path.basename(remote_path)
+                            new_remote_filename = f"{remote_filename}.{timestamp}"
+                            remote_path = os.path.join(remote_dir, new_remote_filename)
+                            LOGGER.warning(f"Target file is busy, using new filename: {remote_path}")
+                
+                # Копируем файл
+                shutil.copy2(local_path, remote_path)
+                
+                # Проверяем, что файл скопирован успешно
+                if os.path.exists(remote_path):
+                    copied_size = os.path.getsize(remote_path)
+                    original_size = os.path.getsize(local_path)
+                    if copied_size == original_size:
+                        LOGGER.info(f"Successfully copied file locally: {local_path} -> {remote_path}")
+                        return f"Local copy successful: {remote_path}"
+                    else:
+                        error_msg = f"File size mismatch after copy: original={original_size}, copied={copied_size}"
+                        LOGGER.error(error_msg)
+                        if raise_on_error:
+                            raise IOError(error_msg)
+                        return None
+                else:
+                    error_msg = f"File was not created at destination: {remote_path}"
+                    LOGGER.error(error_msg)
+                    if raise_on_error:
+                        raise IOError(error_msg)
+                    return None
+                    
+            except Exception as e:
+                error_msg = f"Error copying file locally: {e}"
+                LOGGER.error(error_msg)
+                if raise_on_error:
+                    raise IOError(error_msg) from e
+                return None
+
+        # Для удаленных хостов используем SCP
+        LOGGER.info(f"Copying {local_path} to {remote_host} via SCP")
+        
+        scp_cmd = ['scp', "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null"]
+
+        # Добавляем SSH пользователя, если указан
+        ssh_user = os.getenv('SSH_USER')
+        scp_host = remote_host
+        if ssh_user is not None:
+            scp_host = f"{ssh_user}@{scp_host}"
+
+        # Добавляем ключ SSH, если указан
+        ssh_key_file = os.getenv('SSH_KEY_FILE')
+        if ssh_key_file is not None:
+            scp_cmd += ['-i', ssh_key_file]
+
         def _try_copy(target_path: str) -> tuple[bool, str, str]:
             """
             Попытка копирования файла
@@ -737,7 +806,7 @@ class YdbCluster:
                 tuple[bool, str, str]: (success, stdout, stderr_filtered)
             """
             cmd = scp_cmd + [local_path, f"{scp_host}:{target_path}"]
-            LOGGER.info(f"Copying {local_path} to {scp_host}:{target_path} (original host: {remote_host})")
+            LOGGER.info(f"Copying {local_path} to {scp_host}:{target_path}")
 
             try:
                 execution = yatest.common.execute(

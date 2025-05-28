@@ -109,6 +109,19 @@ class LoadSuiteBase:
 
     @staticmethod
     def __execute_ssh(host: str, cmd: str):
+        # Проверяем, является ли хост localhost
+        if YdbCluster._is_localhost(host):
+            LOGGER.info(f"Detected localhost ({host}), executing command locally: {cmd}")
+            
+            # Выполняем команду локально
+            return yatest.common.execute(
+                cmd,
+                wait=False,
+                text=True,
+                shell=True  # Используем shell для строковых команд
+            )
+        
+        # Для удаленных хостов используем SSH
         ssh_cmd = ['ssh', "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null"]
         ssh_user = os.getenv('SSH_USER')
         if ssh_user is not None:

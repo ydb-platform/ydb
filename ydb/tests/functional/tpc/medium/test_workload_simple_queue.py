@@ -1,5 +1,4 @@
 import ydb.tests.olap.load.lib.workload_simple_queue as workload_simple_queue
-import yatest.common
 from ydb.tests.functional.tpc.lib.conftest import FunctionalTestBase
 
 

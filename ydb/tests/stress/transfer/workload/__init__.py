@@ -14,7 +14,7 @@ class Workload(unittest.TestCase):
         self.pool = ydb.QuerySessionPool(self.driver)
         self.duration = duration
         self.mode = mode
-        self.id = f"{uuid.uuid1()}".replace("-", "_");
+        self.id = f"{uuid.uuid1()}".replace("-", "_")
         self.table_name = f"transfer_target_table_{mode}_{self.id}"
         self.topic_name = f"transfer_source_topic_{mode}_{self.id}"
         self.transfer_name = f"transfer_{mode}_{self.id}"

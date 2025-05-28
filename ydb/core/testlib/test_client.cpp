@@ -1299,7 +1299,11 @@ namespace Tests {
                     Settings->SolomonGateway ? Settings->SolomonGateway : NYql::CreateSolomonGateway(queryServiceConfig.GetSolomon()),
                     Settings->ComputationFactory,
                     NYql::NDq::CreateReadActorFactoryConfig(queryServiceConfig.GetS3()),
-                    Settings->DqTaskTransformFactory
+                    Settings->DqTaskTransformFactory,
+                    queryServiceConfig.GetPq(),
+                    Settings->PqGateway ? Settings->PqGateway : NKqp::MakePqGateway(queryServiceConfig.GetPq()),
+                    std::make_shared<NKikimr::TDeferredActorLogBackend::TAtomicActorSystemPtr>(nullptr),
+                    nullptr
                 );
             }
 

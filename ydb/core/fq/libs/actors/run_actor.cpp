@@ -1953,6 +1953,9 @@ private:
         *gatewaysConfig.MutableGeneric() = Params.Config.GetGateways().GetGeneric();
         gatewaysConfig.MutableGeneric()->ClearClusterMapping();
 
+        *gatewaysConfig.MutableSolomon() = Params.Config.GetGateways().GetSolomon();
+        gatewaysConfig.MutableSolomon()->ClearClusterMapping();
+
         THashMap<TString, TString> clusters;
 
         TString monitoringEndpoint = Params.Config.GetCommon().GetMonitoringEndpoint();

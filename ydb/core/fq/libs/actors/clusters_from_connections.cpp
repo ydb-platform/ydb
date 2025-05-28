@@ -120,7 +120,7 @@ void FillSolomonClusterConfig(NYql::TSolomonClusterConfig& clusterConfig,
     clusterConfig.SetClusterType(TSolomonClusterConfig::SCT_MONITORING);
     clusterConfig.MutablePath()->SetProject(monitoring.project());
     clusterConfig.MutablePath()->SetCluster(monitoring.cluster());
-    clusterConfig.SetUseSsl(useSsl);
+    clusterConfig.SetUseSsl(monitoring.use_tls());
 
     auto grpcSetting = clusterConfig.MutableSettings()->Add();
     grpcSetting->set_name("grpc_location");

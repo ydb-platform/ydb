@@ -518,6 +518,9 @@ namespace NKikimr::NPersQueueTests {
                                       "api.grpc.topic.stream_read.messages",
                                       "topic.read.bytes",
                                       "topic.read.messages",
+                                      "topic.compaction.lag_milliseconds_max",
+                                      "topic.compaction.unprocessed_bytes_max",
+                                      "topic.compaction.unprocessed_count_max",
                                   },
                                   topicName, "", "", ""
                                   );
@@ -728,6 +731,9 @@ namespace NKikimr::NPersQueueTests {
                                       "api.grpc.topic.stream_read.messages",
                                       "topic.read.bytes",
                                       "topic.read.messages",
+                                      "topic.compaction.lag_milliseconds_max",
+                                      "topic.compaction.unprocessed_bytes_max",
+                                      "topic.compaction.unprocessed_count_max",
                                   },
                                   topicName, "", "", ""
                                   );

@@ -2508,6 +2508,7 @@ struct TCdcStreamSettings {
     OPTION(EFormat, Format);
     OPTION(bool, VirtualTimestamps);
     OPTION(TDuration, ResolvedTimestamps);
+    OPTION(bool, SchemaChanges);
     OPTION(TString, AwsRegion);
     OPTION(EState, State);
 
@@ -2555,6 +2556,7 @@ struct TCdcStreamInfo
             .WithFormat(desc.GetFormat())
             .WithVirtualTimestamps(desc.GetVirtualTimestamps())
             .WithResolvedTimestamps(TDuration::MilliSeconds(desc.GetResolvedTimestampsIntervalMs()))
+            .WithSchemaChanges(desc.GetSchemaChanges())
             .WithAwsRegion(desc.GetAwsRegion()));
         TPtr alterData = result->CreateNextVersion();
         alterData->State = EState::ECdcStreamStateReady;
@@ -2571,6 +2573,7 @@ struct TCdcStreamInfo
         desc.SetFormat(Format);
         desc.SetVirtualTimestamps(VirtualTimestamps);
         desc.SetResolvedTimestampsIntervalMs(ResolvedTimestamps.MilliSeconds());
+        desc.SetSchemaChanges(SchemaChanges);
         desc.SetAwsRegion(AwsRegion);
         desc.SetState(State);
         if (ScanShards) {

@@ -745,13 +745,22 @@ class TSubscriber: public TMonitorableActor<TDerived> {
         return notify;
     }
 
+    bool IsWriteOnly(TActorId id) const {
+        Y_ABORT_UNLESS(ProxyToGroupMap.contains(id));
+        return ProxyGroups[ProxyToGroupMap.at(id)].WriteOnly;
+    }
     TMap<TActorId, TState>::const_iterator SelectStateImpl() const {
         Y_ABORT_UNLESS(!States.empty());
 
         auto it = States.begin();
+        while (IsWriteOnly(it->first) && it != States.end())
+            it++;
         auto newest = it;
 
         while (++it != States.end()) {
+            if(IsWriteOnly(it->first)) {
+                continue;
+            }
             if (newest->second.LessThan(it->second)) {
                 newest = it;
             }
@@ -775,13 +784,15 @@ class TSubscriber: public TMonitorableActor<TDerived> {
         auto it = InitialResponses.find(newest->first);
         Y_ABORT_UNLESS(it != InitialResponses.end());
 
-        return &it->second.second;
+        return &it->second;
     }
 
     bool IsMajorityReached() const {
         TVector<ui32> cnt(ProxyGroups.size());
-        for(auto &[r, pair] : InitialResponses)
-            cnt[pair.first]++;
+        for(auto &[p, _] : InitialResponses) {
+            Y_ABORT_UNLESS(ProxyToGroupMap.contains(p));
+            cnt[ProxyToGroupMap.at(p)]++;
+        }
         for (ui32 groupIdx : xrange(ProxyGroups.size())) {
             if (ProxyGroups[groupIdx].WriteOnly)
                 continue;
@@ -830,7 +841,7 @@ class TSubscriber: public TMonitorableActor<TDerived> {
 
         States[ev->Sender] = TState::FromNotify(notifyResponse);
         if (!IsMajorityReached()) {
-            InitialResponses[ev->Sender] = std::make_pair(ReplicaToGroupMap[ev->Sender], std::move(notifyResponse));
+            InitialResponses[ev->Sender] = std::move(notifyResponse);
             if (IsMajorityReached()) {
                 MaybeRunVersionSync();
                 selectedNotify = SelectResponse();
@@ -921,16 +932,18 @@ class TSubscriber: public TMonitorableActor<TDerived> {
 
         PendingSync.erase(it);
         Y_ABORT_UNLESS(!ReceivedSync.contains(ev->Sender));
+        Y_ABORT_UNLESS(ProxyToGroupMap.contains(ev->Sender));
         
-        ReceivedSync[ev->Sender] = std::make_pair(ReplicaToGroupMap[ev->Sender], ev->Get()->Record.GetPartial());
+        ReceivedSync[ev->Sender] = ev->Get()->Record.GetPartial();
 
         TVector<ui32> successes(ProxyGroups.size());
         TVector<ui32> failures(ProxyGroups.size());
-        for (const auto& [_, pair] : ReceivedSync) {
-            if (!pair.second) {
-                ++successes[pair.first];
+        for (const auto& [p, received] : ReceivedSync) {
+            Y_ABORT_UNLESS(ProxyToGroupMap.contains(p));
+            if (!received) {
+                ++successes[ProxyToGroupMap.at(p)];
             } else {
-                ++failures[pair.first];
+                ++failures[ProxyToGroupMap.at(p)];
             }
         }
         bool partial = true;
@@ -956,7 +969,7 @@ class TSubscriber: public TMonitorableActor<TDerived> {
                 << ", size# " << size
                 << ", half# " << half
                 << ", successes# " << successes[groupIdx]
-                << ", faulires# " << failures[groupIdx]
+                << ", failures# " << failures[groupIdx]
                 << ", partial# " << partial;
             if (!partial) {
                 SBS_LOG_D(done);
@@ -998,7 +1011,7 @@ class TSubscriber: public TMonitorableActor<TDerived> {
                 newReplicas.insert(replica);
             }
         }
-        ReplicaToGroupMap.clear();
+        ProxyToGroupMap.clear();
         ProxyGroups.clear();
         ProxyGroups.resize(replicaGroups.size());
         for (size_t groupIdx = 0; groupIdx < replicaGroups.size(); ++groupIdx) {
@@ -1017,12 +1030,15 @@ class TSubscriber: public TMonitorableActor<TDerived> {
                     proxy.Proxy = this->RegisterWithSameMailbox(new TProxyDerived(this->SelfId(), i, msgGroup.Replicas.size(),
                                                                 msgGroup.Replicas[i], Path, DomainOwnerId));
                 }
-                ReplicaToGroupMap[proxy.Replica] = groupIdx;
+                ProxyToGroupMap[proxy.Proxy] = groupIdx;
             }
         }
         for(auto &[r, p] : oldProxies) {
-            if(!newReplicas.contains(r))
+            if(!newReplicas.contains(r)) {
                 TActivationContext::Send(new IEventHandle(TEvPrivate::EvSwitchReplica, 0, p, r, nullptr, 0));
+                States.erase(p);
+                InitialResponses.erase(p);
+            }
         }
 
         this->Become(&TDerived::StateWork);
@@ -1180,16 +1196,16 @@ private:
         bool WriteOnly;
     };
 
-    TMap<TActorId, ui32> ReplicaToGroupMap;
+    THashMap<TActorId, ui32> ProxyToGroupMap;
     std::vector<TProxyGroup> ProxyGroups;
     TMap<TActorId, TState> States;
-    TMap<TActorId, std::pair<ui32, TNotifyResponse>> InitialResponses;
+    TMap<TActorId, TNotifyResponse> InitialResponses;
     TMaybe<TState> State;
 
     ui64 DelayedSyncRequest;
     ui64 CurrentSyncRequest;
     TSet<TActorId> PendingSync;
-    TMap<TActorId, std::pair<ui32, bool>> ReceivedSync;
+    TMap<TActorId, bool> ReceivedSync;
 
 }; // TSubscriber
 

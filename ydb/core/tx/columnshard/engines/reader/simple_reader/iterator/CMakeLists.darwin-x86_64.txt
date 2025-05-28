@@ -26,6 +26,7 @@ target_link_libraries(reader-simple_reader-iterator PUBLIC
   reader-common_reader-iterator
   simple_reader-iterator-collections
   simple_reader-iterator-sync_points
+  reader-simple_reader-duplicates
   tx-conveyor-usage
   limiter-grouped_memory-usage
 )

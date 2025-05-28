@@ -12,18 +12,18 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(constructor)
-add_subdirectory(iterator)
-add_subdirectory(duplicates)
-
-add_library(engines-reader-simple_reader INTERFACE)
+add_library(reader-simple_reader-duplicates)
 
 
-target_link_libraries(engines-reader-simple_reader INTERFACE
+target_link_libraries(reader-simple_reader-duplicates PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  reader-simple_reader-constructor
-  reader-simple_reader-iterator
+  reader-common_reader-iterator
+)
+
+target_sources(reader-simple_reader-duplicates PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/simple_reader/duplicates/manager.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/simple_reader/duplicates/events.cpp
 )
 

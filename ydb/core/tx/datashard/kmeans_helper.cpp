@@ -33,7 +33,8 @@ void AddRowMain2Build(TBufferData& buffer, NTableIndex::TClusterId parent, TArra
     cells[0] = TCell::Make(parent);
     auto pk = TSerializedCellVec::Serialize(cells);
     TSerializedCellVec::UnsafeAppendCells(key, pk);
-    buffer.AddRow(TSerializedCellVec{key}, TSerializedCellVec{std::move(pk)}, TSerializedCellVec::Serialize(*row));
+    buffer.AddRow(TSerializedCellVec{std::move(pk)}, TSerializedCellVec::Serialize(*row),
+        TSerializedCellVec{key});
 }
 
 void AddRowMain2Posting(TBufferData& buffer, NTableIndex::TClusterId parent, TArrayRef<const TCell> key, const NTable::TRowState& row,
@@ -43,27 +44,30 @@ void AddRowMain2Posting(TBufferData& buffer, NTableIndex::TClusterId parent, TAr
     cells[0] = TCell::Make(parent);
     auto pk = TSerializedCellVec::Serialize(cells);
     TSerializedCellVec::UnsafeAppendCells(key, pk);
-    buffer.AddRow(TSerializedCellVec{key}, TSerializedCellVec{std::move(pk)},
-                  TSerializedCellVec::Serialize((*row).Slice(dataPos)));
+    buffer.AddRow(TSerializedCellVec{std::move(pk)}, TSerializedCellVec::Serialize((*row).Slice(dataPos)),
+        TSerializedCellVec{key});
 }
 
-void AddRowBuild2Build(TBufferData& buffer, NTableIndex::TClusterId parent, TArrayRef<const TCell> key, const NTable::TRowState& row) {
-    std::array<TCell, 1> cells;
-    cells[0] = TCell::Make(parent);
-    auto pk = TSerializedCellVec::Serialize(cells);
-    TSerializedCellVec::UnsafeAppendCells(key.Slice(1), pk);
-    buffer.AddRow(TSerializedCellVec{key}, TSerializedCellVec{std::move(pk)}, TSerializedCellVec::Serialize(*row));
-}
-
-void AddRowBuild2Posting(TBufferData& buffer, NTableIndex::TClusterId parent, TArrayRef<const TCell> key, const NTable::TRowState& row,
-                         ui32 dataPos)
+void AddRowBuild2Build(TBufferData& buffer, NTableIndex::TClusterId parent, TArrayRef<const TCell> key, const NTable::TRowState& row,
+                       ui32 prefixColumns)
 {
     std::array<TCell, 1> cells;
     cells[0] = TCell::Make(parent);
     auto pk = TSerializedCellVec::Serialize(cells);
-    TSerializedCellVec::UnsafeAppendCells(key.Slice(1), pk);
-    buffer.AddRow(TSerializedCellVec{key}, TSerializedCellVec{std::move(pk)},
-                  TSerializedCellVec::Serialize((*row).Slice(dataPos)));
+    TSerializedCellVec::UnsafeAppendCells(key.Slice(prefixColumns), pk);
+    buffer.AddRow(TSerializedCellVec{std::move(pk)}, TSerializedCellVec::Serialize(*row),
+        TSerializedCellVec{key});
+}
+
+void AddRowBuild2Posting(TBufferData& buffer, NTableIndex::TClusterId parent, TArrayRef<const TCell> key, const NTable::TRowState& row,
+                         ui32 dataPos, ui32 prefixColumns)
+{
+    std::array<TCell, 1> cells;
+    cells[0] = TCell::Make(parent);
+    auto pk = TSerializedCellVec::Serialize(cells);
+    TSerializedCellVec::UnsafeAppendCells(key.Slice(prefixColumns), pk);
+    buffer.AddRow(TSerializedCellVec{std::move(pk)}, TSerializedCellVec::Serialize((*row).Slice(dataPos)),
+        TSerializedCellVec{key});
 }
 
 TTags MakeUploadTags(const TUserTable& table, const TProtoStringType& embedding,
@@ -88,12 +92,13 @@ TTags MakeUploadTags(const TUserTable& table, const TProtoStringType& embedding,
 
 std::shared_ptr<NTxProxy::TUploadTypes>
 MakeUploadTypes(const TUserTable& table, NKikimrTxDataShard::TEvLocalKMeansRequest::EState uploadState,
-                const TProtoStringType& embedding, const google::protobuf::RepeatedPtrField<TProtoStringType>& data)
+                const TProtoStringType& embedding, const google::protobuf::RepeatedPtrField<TProtoStringType>& data,
+                ui32 prefixColumns)
 {
     auto types = GetAllTypes(table);
 
     auto uploadTypes = std::make_shared<NTxProxy::TUploadTypes>();
-    uploadTypes->reserve(1 + 1 + std::min(table.KeyColumnTypes.size() + data.size(), types.size()));
+    uploadTypes->reserve(1 + 1 + std::min((table.KeyColumnTypes.size() - prefixColumns) + data.size(), types.size()));
 
     Ydb::Type type;
     type.set_type_id(NTableIndex::ClusterIdType);
@@ -107,7 +112,7 @@ MakeUploadTypes(const TUserTable& table, NKikimrTxDataShard::TEvLocalKMeansReque
             types.erase(it);
         }
     };
-    for (const auto& column : table.KeyColumnIds) {
+    for (const auto& column : table.KeyColumnIds | std::views::drop(prefixColumns)) {
         addType(table.Columns.at(column).Name);
     }
     switch (uploadState) {

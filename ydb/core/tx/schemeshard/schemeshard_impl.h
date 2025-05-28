@@ -1434,6 +1434,7 @@ public:
         struct TTxReplySampleK;
         struct TTxReplyReshuffleKMeans;
         struct TTxReplyLocalKMeans;
+        struct TTxReplyPrefixKMeans;
         struct TTxReplyUpload;
 
         struct TTxPipeReset;
@@ -1453,6 +1454,7 @@ public:
     NTabletFlatExecutor::ITransaction* CreateTxReply(TEvDataShard::TEvSampleKResponse::TPtr& sampleK);
     NTabletFlatExecutor::ITransaction* CreateTxReply(TEvDataShard::TEvReshuffleKMeansResponse::TPtr& reshuffle);
     NTabletFlatExecutor::ITransaction* CreateTxReply(TEvDataShard::TEvLocalKMeansResponse::TPtr& local);
+    NTabletFlatExecutor::ITransaction* CreateTxReply(TEvDataShard::TEvPrefixKMeansResponse::TPtr& prefix);
     NTabletFlatExecutor::ITransaction* CreateTxReply(TEvIndexBuilder::TEvUploadSampleKResponse::TPtr& upload);
     NTabletFlatExecutor::ITransaction* CreatePipeRetry(TIndexBuildId indexBuildId, TTabletId tabletId);
     NTabletFlatExecutor::ITransaction* CreateTxBilling(TEvPrivate::TEvIndexBuildingMakeABill::TPtr& ev);
@@ -1467,6 +1469,7 @@ public:
     void Handle(TEvDataShard::TEvSampleKResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvReshuffleKMeansResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvLocalKMeansResponse::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvPrefixKMeansResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvIndexBuilder::TEvUploadSampleKResponse::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvPrivate::TEvIndexBuildingMakeABill::TPtr& ev, const TActorContext& ctx);

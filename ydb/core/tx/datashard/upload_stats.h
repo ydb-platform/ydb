@@ -75,7 +75,7 @@ struct TUploadRetryLimits {
     ui32 MaxUploadRowsRetryCount = 50;
     ui32 BackoffCeiling = 3;
 
-    TDuration GetTimeoutBackouff(ui32 retryNo) const {
+    TDuration GetTimeoutBackoff(ui32 retryNo) const {
         return TDuration::Seconds(1u << Min(retryNo, BackoffCeiling));
     }
 };

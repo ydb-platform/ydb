@@ -330,7 +330,7 @@ private:
     }
 
     TStringBuilder LogPrefix() {
-        return TStringBuilder() << "Bulk upsert to table '" << GetTable() << "'";
+        return TStringBuilder() << "Bulk upsert to table '" << GetTable() << "' ";
     }
 
     static bool SameDstType(NScheme::TTypeInfo type1, NScheme::TTypeInfo type2, bool allowConvert) {

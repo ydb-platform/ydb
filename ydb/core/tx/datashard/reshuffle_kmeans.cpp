@@ -239,7 +239,7 @@ protected:
         if (RetryCount < Limits.MaxUploadRowsRetryCount && UploadStatus.IsRetriable()) {
             LOG_N("Got retriable error, " << Debug() << UploadStatus.ToString());
 
-            Schedule(Limits.GetTimeoutBackouff(RetryCount), new TEvents::TEvWakeup);
+            Schedule(Limits.GetTimeoutBackoff(RetryCount), new TEvents::TEvWakeup);
             return;
         }
 
@@ -384,6 +384,9 @@ void TDataShard::HandleSafe(TEvDataShard::TEvReshuffleKMeansRequest::TPtr& ev, c
     if (!needsSnapshot) {
         rowVersion = GetMvccTxVersion(EMvccTxMode::ReadOnly);
     }
+
+    LOG_N("Starting TReshuffleKMeansScan " << record.ShortDebugString()
+        << " row version " << rowVersion);
 
     // Note: it's very unlikely that we have volatile txs before this snapshot
     if (VolatileTxManager.HasVolatileTxsAtSnapshot(rowVersion)) {

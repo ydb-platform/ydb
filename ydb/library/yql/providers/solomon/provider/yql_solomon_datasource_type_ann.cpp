@@ -92,7 +92,7 @@ public:
         bool hasSelectors = !selectors.Content().empty();
 
         if (hasSelectors && !State_->Configuration->_EnableRuntimeListing.Get().GetOrElse(false)) {
-            ctx.AddError(TIssue(ctx.GetPosition(selectors.Pos()), "Runtime listing is disabled"));
+            ctx.AddError(TIssue(ctx.GetPosition(selectors.Pos()), "Runtime listing is disabled. Please enable the '_EnableRuntimeListing' configuration parameter to proceed."));
             return TStatus::Error;
         }
 

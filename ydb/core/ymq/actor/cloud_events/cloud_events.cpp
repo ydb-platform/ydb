@@ -269,7 +269,7 @@ namespace NCloudEvents {
         auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
         auto* request = ev->Record.MutableRequest();
 
-        request->SetKeepSession(true);
+        request->SetKeepSession(true); // todo : fix
 
         if (!SessionId.empty()) {
             request->SetSessionId(SessionId);
@@ -325,7 +325,6 @@ namespace NCloudEvents {
     }
 
     void TProcessor::HandleWakeup(const NActors::TEvents::TEvWakeup::TPtr&) {
-        LastQuery = ELastQueryType::Select;
         RunQuery(SelectQuery);
         Become(&TProcessor::StateWaitSelectResponse);
     }
@@ -397,33 +396,56 @@ namespace NCloudEvents {
 
         const auto& response = record.GetResponse();
 
-        EventsList = ConvertSelectResponseToEventList(response);
-
+        auto eventsList = ConvertSelectResponseToEventList(response);
         UpdateSessionId(ev);
 
-        LastQuery = ELastQueryType::Delete;
+        if (!eventsList.empty()) {
+            for (const auto& cloudEvent : eventsList) {
+                std::string_view typeView(cloudEvent.Type.begin() + DefaultEventTypePrefix.size(), cloudEvent.Type.end());
 
-        NYdb::TParamsBuilder paramsBuilder;
+                if (typeView == "CreateMessageQueue") {
+                    TCreateQueueEvent ev;
+                    TFiller<TCreateQueueEvent> filler(cloudEvent, ev);
+                    filler.Fill();
+                    TAuditSender::Send<TCreateQueueEvent>(ev);
+                } else if (typeView == "UpdateMessageQueue") {
+                    TUpdateQueueEvent ev;
+                    TFiller<TUpdateQueueEvent> filler(cloudEvent, ev);
+                    filler.Fill();
+                    TAuditSender::Send<TUpdateQueueEvent>(ev);
+                } else if (typeView == "DeleteMessageQueue") {
+                    TDeleteQueueEvent ev;
+                    TFiller<TDeleteQueueEvent> filler(cloudEvent, ev);
+                    filler.Fill();
+                    TAuditSender::Send<TDeleteQueueEvent>(ev);
+                } else {
+                    Y_UNREACHABLE();
+                }
+            }
 
-        auto& param = paramsBuilder.AddParam("$Events");
-        param.BeginList();
+            NYdb::TParamsBuilder paramsBuilder;
 
-        for (const auto& cloudEv : EventsList) {
-            param.AddListItem()
-                .BeginStruct()
-                .AddMember("Id")
-                    .Uint64(cloudEv.OriginalId)
-                .AddMember("QueueName")
-                    .Utf8(cloudEv.QueueName)
-                .EndStruct();
+            auto& param = paramsBuilder.AddParam("$Events");
+            param.BeginList();
+
+            for (const auto& cloudEv : eventsList) {
+                param.AddListItem()
+                    .BeginStruct()
+                    .AddMember("Id")
+                        .Uint64(cloudEv.OriginalId)
+                    .AddMember("QueueName")
+                        .Utf8(cloudEv.QueueName)
+                    .EndStruct();
+            }
+
+            param.EndList();
+            param.Build();
+
+            auto params = paramsBuilder.Build();
+
+            RunQuery(DeleteQuery, std::make_unique<decltype(params)>(params), false);
         }
 
-        param.EndList();
-        param.Build();
-
-        auto params = paramsBuilder.Build();
-
-        RunQuery(DeleteQuery, std::make_unique<decltype(params)>(params), false);
         Become(&TProcessor::StateWaitDeleteResponse);
     }
 
@@ -444,30 +466,6 @@ namespace NCloudEvents {
 
         UpdateSessionId(ev);
 
-        for (const auto& cloudEvent : EventsList) {
-            std::string_view typeView(cloudEvent.Type.begin() + DefaultEventTypePrefix.size(), cloudEvent.Type.end());
-
-            if (typeView == "CreateMessageQueue") {
-                TCreateQueueEvent ev;
-                TFiller<TCreateQueueEvent> filler(cloudEvent, ev);
-                filler.Fill();
-                TAuditSender::Send<TCreateQueueEvent>(ev);
-            } else if (typeView == "UpdateMessageQueue") {
-                TUpdateQueueEvent ev;
-                TFiller<TUpdateQueueEvent> filler(cloudEvent, ev);
-                filler.Fill();
-                TAuditSender::Send<TUpdateQueueEvent>(ev);
-            } else if (typeView == "DeleteMessageQueue") {
-                TDeleteQueueEvent ev;
-                TFiller<TDeleteQueueEvent> filler(cloudEvent, ev);
-                filler.Fill();
-                TAuditSender::Send<TDeleteQueueEvent>(ev);
-            } else {
-                Y_UNREACHABLE();
-            }
-        }
-
-        LastQuery = ELastQueryType::None;
         Schedule(RetryTimeout, new TEvents::TEvWakeup);
         Become(&TProcessor::StateWaitWakeUp);
     }

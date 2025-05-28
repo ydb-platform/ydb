@@ -207,6 +207,8 @@ private:
         TString idempotencyKey = "idemp1";
         TString labels = "{\"k1\" : \"v1\"}";
 
+        Sleep(TDuration::Seconds(1));
+
         runner.AddEvent(
             queueName,
             "CreateMessageQueue",

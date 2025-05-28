@@ -77,8 +77,6 @@ namespace NCloudEvents {
         static constexpr std::string_view EventTableName = NKikimr::NSQS::TSqsService::CloudEventsTableName;
         static constexpr std::string_view DefaultEventTypePrefix = "yandex.cloud.events.ymq.";
 
-        std::vector<TEventInfo> EventsList;
-
         const TString Root;
         const TString Database;
 
@@ -93,12 +91,6 @@ namespace NCloudEvents {
         TString GetInitDeleteQuery() const;
 
         TString SessionId = TString();
-
-        enum ELastQueryType {
-            None,
-            Select,
-            Delete
-        } LastQuery = ELastQueryType::None;
 
         void RunQuery(TString query, std::unique_ptr<NYdb::TParams> params = nullptr, bool readOnly = true);
         void UpdateSessionId(const NKqp::TEvKqp::TEvQueryResponse::TPtr& ev);
@@ -137,7 +129,7 @@ namespace NCloudEvents {
         )
 
         STRICT_STFUNC(
-            StateWaitDeleteResponse,
+            StateWaitDeleteResponse,                                        // For error's tracking
             hFunc(NActors::TEvents::TEvUndelivered, HandleUndelivered);
             hFunc(NKqp::TEvKqp::TEvQueryResponse, HandleDeleteResponse);
             cFunc(TEvPoisonPill::EventType, PassAway);

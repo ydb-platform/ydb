@@ -67,6 +67,9 @@ struct TAllStatistics {
 
             InternalInflightWaitTimeMs = TaskThreadStats->InternalInflightWaitTimeMs;
             InternalInflightWaitTimeMs.Sub(prev.TaskThreadStats->InternalInflightWaitTimeMs);
+
+            ExternalQueueTimeMs = TaskThreadStats->ExternalQueueTimeMs;
+            ExternalQueueTimeMs.Sub(prev.TaskThreadStats->ExternalQueueTimeMs);
         }
 
         std::unique_ptr<ITaskQueue::TThreadStats> TaskThreadStats;
@@ -79,6 +82,7 @@ struct TAllStatistics {
         double ExecutingTime = 0;
         double TotalTime = 0;
         THistogram InternalInflightWaitTimeMs{ITaskQueue::TThreadStats::BUCKET_COUNT, ITaskQueue::TThreadStats::MAX_HIST_VALUE};
+        THistogram ExternalQueueTimeMs{ITaskQueue::TThreadStats::BUCKET_COUNT, ITaskQueue::TThreadStats::MAX_HIST_VALUE};
     };
 
     TAllStatistics(size_t threadCount)
@@ -384,9 +388,11 @@ void TPCCRunner::UpdateDisplayDeveloperMode() {
               << std::setw(20) << "inflight queue"
               << std::setw(20) << "wait p50, ms"
               << std::setw(20) << "wait p90, ms"
+              << std::setw(20) << "ewait p50, ms"
+              << std::setw(20) << "ewait p90, ms"
               << std::endl;
 
-    std::cout << std::string(135, '-') << std::endl;
+    std::cout << std::string(175, '-') << std::endl;
 
     for (size_t i = 0; i < LastStatisticsSnapshot->StatVec.size(); ++i) {
         const auto& stats = LastStatisticsSnapshot->StatVec[i];
@@ -400,6 +406,8 @@ void TPCCRunner::UpdateDisplayDeveloperMode() {
                   << std::setw(20) << stats.TaskThreadStats->InternalTasksWaitingInflight
                   << std::setw(20) << std::setprecision(2) << stats.InternalInflightWaitTimeMs.GetValueAtPercentile(50)
                   << std::setw(20) << std::setprecision(2) << stats.InternalInflightWaitTimeMs.GetValueAtPercentile(90)
+                  << std::setw(20) << std::setprecision(2) << stats.ExternalQueueTimeMs.GetValueAtPercentile(50)
+                  << std::setw(20) << std::setprecision(2) << stats.ExternalQueueTimeMs.GetValueAtPercentile(90)
                   << std::endl;
     }
 

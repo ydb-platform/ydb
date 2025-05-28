@@ -3189,18 +3189,18 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
             TableSize = tableSize;
         }
 
-        NKikimrTxDataShard::TEvLocalKMeansRequest::EState GetUpload() const {
+        NKikimrTxDataShard::EKMeansState GetUpload() const {
             if (Level == 1) {
                 if (NeedsAnotherLevel()) {
-                    return NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_MAIN_TO_BUILD;
+                    return NKikimrTxDataShard::EKMeansState::UPLOAD_MAIN_TO_BUILD;
                 } else {
-                    return NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_MAIN_TO_POSTING;
+                    return NKikimrTxDataShard::EKMeansState::UPLOAD_MAIN_TO_POSTING;
                 }
             } else {
                 if (NeedsAnotherLevel()) {
-                    return NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_BUILD_TO_BUILD;
+                    return NKikimrTxDataShard::EKMeansState::UPLOAD_BUILD_TO_BUILD;
                 } else {
-                    return NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_BUILD_TO_POSTING;
+                    return NKikimrTxDataShard::EKMeansState::UPLOAD_BUILD_TO_POSTING;
                 }
             }
         }

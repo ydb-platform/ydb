@@ -887,7 +887,7 @@ public:
         const TTableFragmentWriterOptions& options),
         (override));
 
-    MOCK_METHOD(TFuture<TShuffleHandlePtr>, StartShuffle, (
+    MOCK_METHOD(TFuture<TSignedShuffleHandlePtr>, StartShuffle, (
         const std::string& account,
         int partitionCount,
         NObjectClient::TTransactionId parentTransactionId,
@@ -895,14 +895,14 @@ public:
         (override));
 
     MOCK_METHOD(TFuture<IRowBatchReaderPtr>, CreateShuffleReader, (
-        const TShuffleHandlePtr& shuffleHandle,
+        const TSignedShuffleHandlePtr& shuffleHandle,
         int partitionIndex,
         std::optional<TRange> writerIndexRange,
         const TShuffleReaderOptions& options),
         (override));
 
     MOCK_METHOD(TFuture<IRowBatchWriterPtr>, CreateShuffleWriter, (
-        const TShuffleHandlePtr& shuffleHandle,
+        const TSignedShuffleHandlePtr& shuffleHandle,
         const std::string& partitionColumn,
         std::optional<int> writerIndex,
         const TShuffleWriterOptions& options),

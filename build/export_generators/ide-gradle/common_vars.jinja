@@ -17,9 +17,6 @@
 {#-     KAPT -#}
 {%-     set with_kapt = target.with_kapt -%}
 {%-     set with_test_kapt = extra_targets|selectattr('with_kapt', 'eq', true)|map(attribute='with_kapt')|length -%}
-{#-         WAIT ya-bin release, disable just now -#}
-{%-     set with_kapt = false -%}
-{%-     set with_test_kapt = false -%}
 {%- endif -%}
 
 {#-     ErrorProne -#}

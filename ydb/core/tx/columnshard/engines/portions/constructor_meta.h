@@ -37,6 +37,12 @@ public:
     TPortionMetaConstructor() = default;
     TPortionMetaConstructor(const TPortionMeta& meta, const bool withBlobs);
 
+    ui64 GetTotalBlobBytes() const {
+        AFL_VERIFY(ColumnBlobBytes);
+        AFL_VERIFY(IndexBlobBytes);
+        return *ColumnBlobBytes + *IndexBlobBytes;
+    }
+
     const TBlobRange RestoreBlobRange(const TBlobRangeLink16& linkRange) const {
         return linkRange.RestoreRange(GetBlobId(linkRange.GetBlobIdxVerified()));
     }

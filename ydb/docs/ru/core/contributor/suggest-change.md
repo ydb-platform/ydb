@@ -12,9 +12,10 @@
 
 * Для подключения к GitHub вы можете использовать: ssh/token/ssh из yubikey/password и т.д. Рекомендуемый метод - ssh-ключи.
 * Если у вас еще нет созданных ключей (или yubikey), то просто создайте новые ключи. Полные инструкции находятся на [этой странице GitHub](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/generating-a-new-ssh-key-and-adding-it-to-the-ssh-agent#generating-a-new-ssh-key).
-* Если у вас есть свои личные ключи, и вы используете skotty как ssh-agent: 
+* Если у вас есть свои личные ключи, и вы используете skotty как ssh-agent:
   * Добавьте ключи в skotty командой [ssh-add](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/generating-a-new-ssh-key-and-adding-it-to-the-ssh-agent#adding-your-ssh-key-to-the-ssh-agent)
   * Отредактируйте файл `~/.skotty/config.yaml`, добавив секцию:
+
     ```yaml
     keys_order:
         - added
@@ -22,6 +23,7 @@
         - legacy
         - secure
     ```
+
 * Если у вас есть yubikey, вы можете использовать legacy ключ из yubikey:
 
   * Предположим, что у вас уже есть настроенный yubikey (или вы настроили yubikey локально)

@@ -14,6 +14,7 @@ class TColumnEngineChanges;
 class IStoragesManager;
 class TGranuleMeta;
 class TPortionInfo;
+class TPortionAccessorConstructor;
 namespace NDataLocks {
 class TManager;
 }
@@ -87,7 +88,6 @@ private:
     virtual bool DoIsOverloaded() const {
         return false;
     }
-
 protected:
     virtual void DoModifyPortions(const THashMap<ui64, std::shared_ptr<TPortionInfo>>& add,
         const THashMap<ui64, std::shared_ptr<TPortionInfo>>& remove) = 0;
@@ -108,6 +108,10 @@ protected:
     }
 
 public:
+    virtual ui32 GetAppropriateLevel(const ui32 baseLevel, const TPortionAccessorConstructor& /*info*/) const {
+        return baseLevel;
+    }
+
     IOptimizerPlanner(const TInternalPathId pathId)
         : PathId(pathId) {
     }
@@ -195,7 +199,6 @@ private:
     virtual TConclusion<std::shared_ptr<IOptimizerPlanner>> DoBuildPlanner(const TBuildContext& context) const = 0;
     virtual void DoSerializeToProto(TProto& proto) const = 0;
     virtual bool DoDeserializeFromProto(const TProto& proto) = 0;
-    virtual bool DoIsEqualTo(const IOptimizerPlannerConstructor& item) const = 0;
     virtual TConclusionStatus DoDeserializeFromJson(const NJson::TJsonValue& jsonInfo) = 0;
     virtual bool DoApplyToCurrentObject(IOptimizerPlanner& current) const = 0;
 
@@ -230,10 +233,11 @@ public:
 
     bool IsEqualTo(const std::shared_ptr<IOptimizerPlannerConstructor>& item) const {
         AFL_VERIFY(!!item);
-        if (GetClassName() != item->GetClassName()) {
-            return false;
-        }
-        return DoIsEqualTo(*item);
+        TProto selfProto;
+        TProto itemProto;
+        SerializeToProto(selfProto);
+        item->SerializeToProto(itemProto);
+        return selfProto.SerializeAsString() == itemProto.SerializeAsString();
     }
 
     bool DeserializeFromProto(const TProto& proto) {

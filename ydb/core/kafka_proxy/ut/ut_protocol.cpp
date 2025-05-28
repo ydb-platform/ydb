@@ -1392,7 +1392,6 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             auto result = pqClient.DescribeTopic("/Root/topic-986-test", describeTopicSettings).GetValueSync();
             UNIT_ASSERT(!result.IsSuccess());
         }
-
     }
 
     Y_UNIT_TEST(CreateTopicsScenarioWithKafkaAuth) {
@@ -1519,6 +1518,85 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             UNIT_ASSERT_EQUAL(result1.GetTopicDescription().GetPartitions().size(), 11);
         }
     } // Y_UNIT_TEST(CreatePartitionsScenario)
+
+    void RunCreateTopicsWithCleanupPolicy(TInsecureTestServer& testServer, TKafkaTestClient& client) {
+        NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
+
+        TString topic1 = "topic-999-test", topic2 = "topic-998-test";
+
+        {
+            // Creation of two topics
+            auto msg = client.CreateTopics({
+                TTopicConfig(topic1, 12, std::nullopt, std::nullopt, {{"cleanup.policy", "compact"}}),
+                TTopicConfig(topic2, 13, std::nullopt, std::nullopt, {{"cleanup.policy", "delete"}}),
+                TTopicConfig("topic_bad", 13, std::nullopt, std::nullopt, {{"cleanup.policy", "bad"}})
+            });
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics.size(), 3);
+
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics[0].ErrorCode, NONE_ERROR);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics[0].Name.value(), topic1);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics[1].ErrorCode, NONE_ERROR);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics[1].Name.value(), topic2);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics[2].ErrorCode, INVALID_REQUEST);
+        }
+
+        auto getConfigsMap = [&](const auto& describeResult) {
+            THashMap<TString, TDescribeConfigsResponseData::TDescribeConfigsResult::TDescribeConfigsResourceResult> configs;
+            for (const auto& config : describeResult.Configs) {
+                configs[TString(config.Name->data())] = config;
+            }
+            return configs;
+        };
+
+        struct TDescribeTopicResult {
+            TString name;
+            TString policy;
+        };
+
+        auto checkDescribeTopic = [&](const std::vector<TDescribeTopicResult>& topics) {
+            std::vector<TString> topicNames;
+            for (const auto& topic : topics) {
+                topicNames.push_back(topic.name);
+            }
+
+            auto msg = client.DescribeConfigs(topicNames);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Results.size(), topics.size());
+            for (auto i = 0u; i < topics.size(); ++i) {
+                const auto& res = msg->Results[i];
+                UNIT_ASSERT_VALUES_EQUAL(res.ResourceName.value(), topics[i].name);
+                UNIT_ASSERT_VALUES_EQUAL(res.ErrorCode, NONE_ERROR);
+                UNIT_ASSERT_VALUES_EQUAL_C(getConfigsMap(res).find("cleanup.policy")->second.Value->data(),
+                                           topics[i].policy, res.ResourceName.value());
+            }
+        };
+
+        checkDescribeTopic({{topic1, "compact"}, {topic2, "delete"}});
+
+        {
+            auto msg = client.AlterConfigs({
+                TTopicConfig(topic1, 12, std::nullopt, std::nullopt, {{"cleanup.policy", "bad"}}),
+                TTopicConfig(topic2, 13, std::nullopt, std::nullopt, {{"cleanup.policy", "compact"}}),
+            });
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].ErrorCode, INVALID_REQUEST);
+            checkDescribeTopic({{topic1, "compact"}, {topic2, "compact"}});
+        }
+        {
+            auto msg = client.AlterConfigs({
+                TTopicConfig(topic1, 12, std::nullopt, std::nullopt, {{"cleanup.policy", "delete"}}),
+                TTopicConfig(topic2, 13, std::nullopt, std::nullopt, {{"cleanup.policy", ""}})
+            });
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[1].ErrorCode, INVALID_REQUEST);
+            checkDescribeTopic({{topic1, "delete"}, {topic2, "compact"}});
+        }
+    }
+
+
+    Y_UNIT_TEST(TopicsWithCleaunpPolicyScenario) {
+        TInsecureTestServer testServer("2");
+        TKafkaTestClient client(testServer.Port);
+
+        RunCreateTopicsWithCleanupPolicy(testServer, client);
+    }
 
     Y_UNIT_TEST(DescribeConfigsScenario) {
         TInsecureTestServer testServer("2");

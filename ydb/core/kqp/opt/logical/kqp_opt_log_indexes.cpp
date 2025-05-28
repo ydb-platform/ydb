@@ -730,56 +730,6 @@ TExprBase KqpRewriteIndexRead(const TExprBase& node, TExprContext& ctx, const TK
     return node;
 }
 
-TExprBase KqpRewriteLookupIndex(const TExprBase& node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
-    if (kqpCtx.IsScanQuery()) {
-        // TODO: Enable index lookup for scan queries as we now support stream lookups.
-        return node;
-    }
-
-    if (auto maybeLookupIndex = node.Maybe<TKqlLookupIndex>()) {
-        auto lookupIndex = maybeLookupIndex.Cast();
-
-        const auto& tableDesc = GetTableData(*kqpCtx.Tables, kqpCtx.Cluster, lookupIndex.Table().Path());
-        const auto indexName = lookupIndex.Index().Value();
-        auto [implTable, indexDesc] = tableDesc.Metadata->GetIndex(indexName);
-        // TODO(mbkkt) instead of ensure should be warning and main table lookup?
-        YQL_ENSURE(indexDesc->Type != TIndexDescription::EType::GlobalSyncVectorKMeansTree,
-            "lookup doesn't support vector index: " << indexName);
-
-        const bool isCovered = CheckIndexCovering(lookupIndex.Columns(), implTable);
-
-        if (isCovered) {
-            TKqpStreamLookupSettings settings;
-            settings.Strategy = EStreamLookupStrategyType::LookupRows;
-            return Build<TKqlStreamLookupTable>(ctx, node.Pos())
-                .Table(BuildTableMeta(*implTable, node.Pos(), ctx))
-                .LookupKeys(lookupIndex.LookupKeys())
-                .Columns(lookupIndex.Columns())
-                .Settings(settings.BuildNode(ctx, node.Pos()))
-                .Done();
-        }
-
-        auto keyColumnsList = BuildKeyColumnsList(tableDesc, node.Pos(), ctx);
-
-        TKqpStreamLookupSettings settings;
-        settings.Strategy = EStreamLookupStrategyType::LookupRows;
-        TExprBase lookupIndexTable = Build<TKqlStreamLookupTable>(ctx, node.Pos())
-            .Table(BuildTableMeta(*implTable, node.Pos(), ctx))
-            .LookupKeys(lookupIndex.LookupKeys())
-            .Columns(keyColumnsList)
-            .Settings(settings.BuildNode(ctx, node.Pos()))
-            .Done();
-
-        return Build<TKqlStreamLookupTable>(ctx, node.Pos())
-            .Table(lookupIndex.Table())
-            .LookupKeys(lookupIndexTable.Ptr())
-            .Columns(lookupIndex.Columns())
-            .Settings(settings.BuildNode(ctx, node.Pos()))
-            .Done();
-    }
-
-    return node;
-}
 
 TExprBase KqpRewriteStreamLookupIndex(const TExprBase& node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
     if (!node.Maybe<TKqlStreamLookupIndex>()) {

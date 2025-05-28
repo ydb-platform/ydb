@@ -703,4 +703,9 @@ def deploy_binaries_to_hosts(
                     f"to {host}: {error_msg}",
                     f"Deploy {os.path.basename(binary_file)} to {host} failed",
                     attachment_type=allure.attachment_type.TEXT
-                ) 
+                )
+        
+        # Store the host results in the main results dictionary
+        results[host] = host_results
+    
+    return results 

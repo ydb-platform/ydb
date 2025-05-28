@@ -114,7 +114,7 @@ class SimpleQueueBase(LoadSuiteBase):
 
                 try:
                     stdout, stderr = execute_command(
-                        node.host, cmd, raise_on_error=True,
+                        node.host, cmd, raise_on_error=False,
                         timeout=int(self.timeout * 2), raise_on_timeout=False)
                     command_result = stdout
                     command_error = stderr

@@ -212,6 +212,9 @@ struct TTask<void> {
 class ITaskQueue {
 public:
     struct TThreadStats {
+        constexpr static size_t BUCKET_COUNT = 128;
+        constexpr static size_t MAX_HIST_VALUE = 32768;
+
         TThreadStats() = default;
 
         TThreadStats(const TThreadStats& other) = delete;
@@ -226,6 +229,9 @@ public:
             dst.ExternalTasksReady.fetch_add(ExternalTasksReady.load(std::memory_order_relaxed), std::memory_order_relaxed);
             dst.InternalTasksResumed.fetch_add(InternalTasksResumed.load(std::memory_order_relaxed), std::memory_order_relaxed);
             dst.ExternalTasksResumed.fetch_add(ExternalTasksResumed.load(std::memory_order_relaxed), std::memory_order_relaxed);
+
+            dst.ExecutingTime.fetch_add(ExecutingTime.load(std::memory_order_relaxed), std::memory_order_relaxed);
+            dst.TotalTime.fetch_add(TotalTime.load(std::memory_order_relaxed), std::memory_order_relaxed);
 
             TGuard guard(HistLock);
             dst.InternalInflightWaitTimeMs.Add(InternalInflightWaitTimeMs);
@@ -242,10 +248,13 @@ public:
         std::atomic<ui64> InternalTasksResumed{0};
         std::atomic<ui64> ExternalTasksResumed{0};
 
+        std::atomic<double> ExecutingTime{0};
+        std::atomic<double> TotalTime{0};
+
         TSpinLock HistLock;
-        THistogram InternalInflightWaitTimeMs{128, 512};
-        THistogram InternalQueueTimeMs{128, 512};
-        THistogram ExternalQueueTimeMs{128, 512};
+        THistogram InternalInflightWaitTimeMs{BUCKET_COUNT, MAX_HIST_VALUE};
+        THistogram InternalQueueTimeMs{BUCKET_COUNT, MAX_HIST_VALUE};
+        THistogram ExternalQueueTimeMs{BUCKET_COUNT, MAX_HIST_VALUE};
     };
 
     ITaskQueue() = default;
@@ -259,6 +268,7 @@ public:
 
     virtual void Run() = 0;
     virtual void Join() = 0;
+    virtual void WakeupAndNeverSleep() = 0;
 
     // functions are called from the thread executing the coroutine, no locks needed
 
@@ -277,6 +287,8 @@ public:
     virtual bool CheckCurrentThread() const = 0;
 
     virtual void CollectStats(size_t threadIndex, TThreadStats& dst) = 0;
+
+    virtual size_t GetRunningCount() const = 0;
 };
 
 std::unique_ptr<ITaskQueue> CreateTaskQueue(

@@ -106,6 +106,24 @@ selector_config:
         entry: !append
         - component: CONSOLE_HANDSHAKE
           level: 6
+  - description: "Selector by node_id"
+    selector:
+      node_id: 1
+      test: node_id
+    config:
+      actor_system_config:
+        use_auto_config: true
+        node_type: STORAGE
+        cpu_count: 1
+  - description: "Selector by node_host"
+    selector:
+      node_host: localhost
+      test: node_host
+    config:
+      actor_system_config:
+        use_auto_config: true
+        node_type: STORAGE
+        cpu_count: 50
 )";
 
         TTempFileHandle tempFile = TTempFileHandle::InCurrentDir("test_config", ".yaml");
@@ -234,5 +252,32 @@ selector_config:
         UNIT_ASSERT_EQUAL(logConfig.GetDefaultLevel(), 5);
         UNIT_ASSERT_EQUAL(logConfig.GetEntry(0).GetLevel(), 7);
         UNIT_ASSERT_EQUAL(logConfig.GetEntry(1).GetLevel(), 6);
+    }
+
+    Y_UNIT_TEST(TestStaticNodeSelectorByNodeId) {
+        TTempFileHandle configFile = CreateConfigFile();
+        TVector<TString> args;
+        PreFillArgs(args, configFile.Name());
+        args.push_back("--label");
+        args.push_back("test=node_id");
+        NKikimrConfig::TAppConfig appConfig = TransformConfig(args);
+
+        UNIT_ASSERT(appConfig.HasActorSystemConfig());
+        const auto& actorConfig = appConfig.GetActorSystemConfig();
+        UNIT_ASSERT_EQUAL(actorConfig.GetCpuCount(), 1);
+    }
+
+    Y_UNIT_TEST(TestStaticNodeSelectorByNodeHost) {
+        TTempFileHandle configFile = CreateConfigFile();
+        TVector<TString> args;
+        PreFillArgs(args, configFile.Name());
+        args.push_back("--label");
+        args.push_back("test=node_host");
+
+        NKikimrConfig::TAppConfig appConfig = TransformConfig(args);
+
+        UNIT_ASSERT(appConfig.HasActorSystemConfig());
+        const auto& actorConfig = appConfig.GetActorSystemConfig();
+        UNIT_ASSERT_EQUAL(actorConfig.GetCpuCount(), 50);
     }
 }

@@ -20,114 +20,30 @@ namespace NCloudEvents {
     using EStatus = yandex::cloud::events::EventStatus;
 
     struct TEventInfo {
-        TString UserSID;                                    // We need
-        TString UserSanitizedToken;                         // We need
-        TString AuthType;                                   // We need 
+        TString UserSID;
+        TString UserSanitizedToken;
+        TString AuthType;
 
         static constexpr std::string_view Permission = "ymq.queues.list";
         static constexpr std::string_view ResourceType = "message-queue";
         // ResourceId = FolderId
 
-        uint_fast64_t OriginalId;                           // Generated on audit.log as random number
-        TString Id;                                         // We need (generated as Type$OriginalId$CreatedAt)
-        TString Type;                                       // We need
-        uint_fast64_t CreatedAt;                            // We need
-        TString CloudId;                                    // We need
-        TString FolderId;                                   // We need
+        uint_fast64_t OriginalId;
+        TString Id;
+        TString Type;
+        uint_fast64_t CreatedAt;
+        TString CloudId;
+        TString FolderId;
 
-        TString RemoteAddress;                              // We need
-        TString RequestId;                                  // We need
-        TString IdempotencyId;                              // We need
+        TString RemoteAddress;
+        TString RequestId;
+        TString IdempotencyId;
 
-        TString Issue = "";                                 // Is always empty?
+        TString Issue = "";
 
-        TString QueueName;                                              // We need
-        THashMap<TBasicString<char>, NJson::TJsonValue> Labels;        // We need it as a string
+        TString QueueName;
+        THashMap<TBasicString<char>, NJson::TJsonValue> Labels;
     };
-
-    /*
-        CREATE TABLE `/Root/.CloudEventsYmq` (
-            Id Uint64,
-            QueueName String,
-            CreatedAt Uint64,
-
-            Type Utf8,
-            CloudId Utf8,
-            FolderId Utf8,
-            UserSID Utf8,
-            UserSanitizedToken Utf8,
-            AuthType Utf8,
-            PeerName Utf8,
-            RequestId Utf8,
-            IdempotencyId Utf8,
-            Labels Utf8,
-            PRIMARY KEY(Id, QueueName)
-        );
-    */
-
-    /*
-    UPSERT INTO CloudEventsYmq (
-    Id,
-    QueueName,
-    CreatedAt,
-    Type,
-    CloudId,
-    FolderId,
-    UserSID,
-    UserSanitizedToken,
-    AuthType,
-    PeerName,
-    RequestId,
-    IdempotencyId,
-    Labels
-    )
-    VALUES
-    (
-    1001,
-    "test_name_1",
-    "create",
-    1696506100,
-    "cloud123",
-    "folderABC",
-    "userSID_1",
-    "sanitizedToken_1",
-    "OAuth",
-    "peer_name_1",
-    "req_id_1",
-    "idemp_1",
-    "label_1"
-    ),
-    (
-    1002,
-    "test_name_2",
-    "delete",
-    1696506200,
-    "cloud456",
-    "folderXYZ",
-    "userSID_2",
-    "sanitizedToken_2",
-    "IamToken",
-    "peer_name_2",
-    "req_id_2",
-    "idemp_2",
-    "label_2"
-    ),
-    (
-    1003,
-    "test_name_3",
-    "update",
-    1696506300,
-    "cloud789",
-    "folderLMN",
-    "userSID_3",
-    "sanitizedToken_3",
-    "ApiKey",
-    "peer_name_3",
-    "req_id_3",
-    "idemp_3",
-    "label_3"
-    );
-    */
 
     template<typename TProtoEvent>
     class TFiller {
@@ -159,7 +75,6 @@ namespace NCloudEvents {
     class TProcessor : public NActors::TActorBootstrapped<TProcessor> {
     private:
         static constexpr std::string_view EventTableName = NKikimr::NSQS::TSqsService::CloudEventsTableName;
-        static constexpr TDuration DefaultRetryTimeout = TDuration::Seconds(10);
         static constexpr std::string_view DefaultEventTypePrefix = "yandex.cloud.events.ymq.";
 
         std::vector<TEventInfo> EventsList;
@@ -167,8 +82,11 @@ namespace NCloudEvents {
         const TString Root;
         const TString Database;
 
+        const TDuration RetryTimeout;
+
         const TString SelectQuery;
         const TString DeleteQuery;
+
 
         TString GetFullTablePath() const;
         TString GetInitSelectQuery() const;
@@ -191,8 +109,9 @@ namespace NCloudEvents {
 
     public:
         TProcessor(
-            TString root,
-            TString database
+            const TString& root,
+            const TString& database,
+            const TDuration& retryTimeout = TDuration::Seconds(10)
         );
 
         void Bootstrap();

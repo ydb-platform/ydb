@@ -40,7 +40,11 @@ private:
         TActorId ProcessorId;
         TString FullTablePath;
 
-        TTestRunner(const TString& name, TCloudEventsProcessorTests* parent)
+        TTestRunner(
+            const TString& name,
+            TCloudEventsProcessorTests* parent,
+            const TDuration& retryTimeout
+        )
             : TestName(name)
             , SchemePath(parent->Root + "/" + name)
             , Processor()
@@ -49,7 +53,8 @@ private:
             auto* runtime = parent->Server->GetRuntime();
             Processor = new NCloudEvents::TProcessor(
                 SchemePath,
-                TString()
+                TString(),
+                retryTimeout
             );
             ProcessorId = runtime->Register(Processor);
             runtime->EnableScheduleForActor(ProcessorId, true);
@@ -189,7 +194,8 @@ private:
     UNIT_TEST_SUITE_END();
 
     void TestCreateCloudEventProcessor() {
-        TTestRunner runner("CreateCloudEventProcessor", this);
+        TDuration retryTimeout = TDuration::Seconds(2);
+        TTestRunner runner("CreateCloudEventProcessor", this, retryTimeout);
         TString queueName = "queue1";
         TString cloudId = "cloud1";
         TString folderId = "folder1";
@@ -243,8 +249,7 @@ private:
             labels
         );
 
-
-        Sleep(TDuration::Seconds(15));
+        Sleep(retryTimeout * 3);
     }
 };
 UNIT_TEST_SUITE_REGISTRATION(TCloudEventsProcessorTests);

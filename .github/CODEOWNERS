@@ -78,3 +78,10 @@
 /ydb/apps/ydb @ydb-platform/cli
 /ydb/public/lib/ydb_cli @ydb-platform/cli
 /ydb/public/sdk/cpp @ydb-platform/cpp-sdk
+
+/ydb/core/security @ydb-platform/Security
+/ydb/core/tx/schemeshard/ut_login* @ydb-platform/Security
+/ydb/library/login @ydb-platform/Security
+/ydb/library/aclib @ydb-platform/Security
+/ydb/services/ydb/ydb_ldap_login_ut.cpp @ydb-platform/Security
+/ydb/services/ydb/ydb_register_node_ut.cpp @ydb-platform/Security

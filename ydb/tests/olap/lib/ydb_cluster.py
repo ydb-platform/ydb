@@ -5,12 +5,8 @@ import os
 import requests
 import yaml
 import ydb
-import subprocess
-import yatest
-import socket
-import shutil
 from ydb.tests.olap.lib.utils import get_external_param
-from ydb.tests.olap.lib.remote_execution import RemoteExecutor, execute_command, is_localhost, deploy_binaries_to_hosts
+from ydb.tests.olap.lib.remote_execution import execute_command, deploy_binaries_to_hosts
 from copy import deepcopy
 from time import sleep, time
 from typing import List, Optional, Callable, Dict, Any, Union

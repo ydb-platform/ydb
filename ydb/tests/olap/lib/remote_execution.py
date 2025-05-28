@@ -9,7 +9,7 @@ import yatest.common
 import shutil
 import allure
 from time import time
-from typing import Union, Optional, tuple, List, Dict, Any
+from typing import Union, Optional, Tuple, List, Dict, Any
 
 LOGGER = logging.getLogger(__name__)
 
@@ -112,7 +112,7 @@ class RemoteExecutor:
 
     @classmethod
     def execute_command(cls, host: str, cmd: Union[str, list], raise_on_error: bool = True,
-                       timeout: Optional[float] = None, raise_on_timeout: bool = True) -> tuple[str, str]:
+                       timeout: Optional[float] = None, raise_on_timeout: bool = True) -> Tuple[str, str]:
         """
         Выполняет команду на хосте через SSH или локально
 
@@ -124,12 +124,12 @@ class RemoteExecutor:
             raise_on_timeout: вызывать ли исключение при таймауте (по умолчанию True)
 
         Returns:
-            tuple[str, str]: (stdout, stderr) - вывод команды
+            Tuple[str, str]: (stdout, stderr) - вывод команды
         """
         
         def _handle_timeout_error(e: yatest.common.ExecutionTimeoutError, 
                                 full_cmd: Union[str, list], 
-                                is_local: bool) -> tuple[str, str]:
+                                is_local: bool) -> Tuple[str, str]:
             """Обрабатывает ошибки таймаута"""
             cmd_type = "Local" if is_local else "SSH"
             timeout_info = f"{cmd_type} command timed out after {timeout} seconds on {host}"
@@ -171,7 +171,7 @@ class RemoteExecutor:
 
         def _handle_execution_error(e: yatest.common.ExecutionError, 
                                   full_cmd: Union[str, list], 
-                                  is_local: bool) -> tuple[str, str]:
+                                  is_local: bool) -> Tuple[str, str]:
             """Обрабатывает ошибки выполнения"""
             cmd_type = "Local" if is_local else "SSH"
             stdout = ""
@@ -214,7 +214,7 @@ class RemoteExecutor:
             
             return stdout, stderr
 
-        def _execute_local_command(cmd: Union[str, list]) -> tuple[str, str]:
+        def _execute_local_command(cmd: Union[str, list]) -> Tuple[str, str]:
             """Выполняет команду локально"""
             LOGGER.info(f"Detected localhost ({host}), executing command locally: {cmd}")
             
@@ -249,7 +249,7 @@ class RemoteExecutor:
                 LOGGER.error(f"Unexpected error executing local command on {host}: {e}")
                 return "", ""
 
-        def _execute_ssh_command(cmd: Union[str, list]) -> tuple[str, str]:
+        def _execute_ssh_command(cmd: Union[str, list]) -> Tuple[str, str]:
             """Выполняет команду через SSH"""
             LOGGER.info(f"Executing SSH command on {host}: {cmd}")
             
@@ -308,7 +308,7 @@ class RemoteExecutor:
 
 # Удобные функции для прямого использования
 def execute_command(host: str, cmd: Union[str, list], raise_on_error: bool = True,
-                   timeout: Optional[float] = None, raise_on_timeout: bool = True) -> tuple[str, str]:
+                   timeout: Optional[float] = None, raise_on_timeout: bool = True) -> Tuple[str, str]:
     """
     Удобная функция для выполнения команды на хосте
     
@@ -320,7 +320,7 @@ def execute_command(host: str, cmd: Union[str, list], raise_on_error: bool = Tru
         raise_on_timeout: вызывать ли исключение при таймауте
 
     Returns:
-        tuple[str, str]: (stdout, stderr) - вывод команды
+        Tuple[str, str]: (stdout, stderr) - вывод команды
     """
     return RemoteExecutor.execute_command(host, cmd, raise_on_error, timeout, raise_on_timeout)
 
@@ -456,12 +456,12 @@ def copy_file(local_path: str, host: str, remote_path: str, raise_on_error: bool
             return None
 
     # Для удаленных хостов используем SCP
-    def _try_scp_copy(target_path: str) -> tuple[bool, str, str]:
+    def _try_scp_copy(target_path: str) -> Tuple[bool, str, str]:
         """
         Попытка копирования файла через SCP
         
         Returns:
-            tuple[bool, str, str]: (success, stdout, stderr)
+            Tuple[bool, str, str]: (success, stdout, stderr)
         """
         # Формируем SCP команду
         scp_cmd = ['scp', "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null"]

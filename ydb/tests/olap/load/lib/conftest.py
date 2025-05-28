@@ -11,7 +11,7 @@ from copy import deepcopy
 from datetime import datetime
 from pytz import timezone
 from time import time
-from typing import Optional
+from typing import Optional, Union
 from ydb.tests.olap.lib.ydb_cli import YdbCliHelper, WorkloadType, CheckCanonicalPolicy
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.olap.lib.allure_utils import allure_test_description, NodeErrors
@@ -19,6 +19,7 @@ from ydb.tests.olap.lib.results_processor import ResultsProcessor
 from ydb.tests.olap.lib.utils import get_external_param
 from ydb.tests.olap.scenario.helpers.scenario_tests_helper import ScenarioTestHelper
 
+LOGGER = logging.getLogger(__name__)
 
 class LoadSuiteBase:
     class QuerySettings:
@@ -140,14 +141,14 @@ class LoadSuiteBase:
                         container=f' -m k8s_container:{c}' if c else ''
                     ))
                 except BaseException as e:
-                    logging.error(e)
+                    LOGGER.error(e)
             for c in exec_start.keys():
                 try:
                     exec_start[c][host] = cls.__execute_ssh(host, cmd.format(
                         storage='kikimr-start',
                         container=f' -m k8s_container:{c}' if c else ''))
                 except BaseException as e:
-                    logging.error(e)
+                    LOGGER.error(e)
 
         error_log = ''
         for c, execs in exec_start.items():
@@ -182,7 +183,7 @@ class LoadSuiteBase:
         for h, exec in core_processes.items():
             exec.wait(check_exit_code=False)
             if exec.returncode != 0:
-                logging.error(f'Error while process coredumps on host {h}: {exec.stderr}')
+                LOGGER.error(f'Error while process coredumps on host {h}: {exec.stderr}')
             exec = cls.__execute_ssh(h, ('find /coredumps/ -name "sended_*.json" '
                                          f'-mmin -{(10 + time() - start_time) / 60} -mmin +{(-10 + time() - end_time) / 60}'
                                          ' | while read FILE; do cat $FILE; echo -n ","; done'))
@@ -193,7 +194,7 @@ class LoadSuiteBase:
                     core_hashes.setdefault(slot, [])
                     core_hashes[slot].append((core.get('core_id', ''), core.get('core_hash', '')))
             else:
-                logging.error(f'Error while search coredumps on host {h}: {exec.stderr}')
+                LOGGER.error(f'Error while search coredumps on host {h}: {exec.stderr}')
         return core_hashes
 
     @classmethod
@@ -210,7 +211,7 @@ class LoadSuiteBase:
                 if exec.stdout:
                     ooms.add(h)
             else:
-                logging.error(f'Error while search OOMs on host {h}: {exec.stderr}')
+                LOGGER.error(f'Error while search OOMs on host {h}: {exec.stderr}')
         return ooms
 
     @classmethod
@@ -358,6 +359,67 @@ class LoadSuiteBase:
         first_node_start_time = min(nodes_start_time) if len(nodes_start_time) > 0 else 0
         result.start_time = max(start_time - 600, first_node_start_time)
         cls.process_query_result(result, query_name, True)
+
+    @classmethod
+    def teardown_class(cls) -> None:
+        """
+        Общий метод очистки для всех тестовых классов.
+        Может быть переопределен в наследниках для специфичной очистки.
+        """
+        with allure.step('Base teardown: checking for custom cleanup'):
+            if hasattr(cls, 'do_teardown_class'):
+                try:
+                    LOGGER.info(f"Executing custom teardown for {cls.__name__}")
+                    cls.do_teardown_class()
+                    allure.attach(
+                        f"Custom teardown completed for {cls.__name__}", 
+                        'Custom teardown result', 
+                        allure.attachment_type.TEXT
+                    )
+                except Exception as e:
+                    error_msg = f"Error during custom teardown for {cls.__name__}: {e}"
+                    LOGGER.error(error_msg)
+                    allure.attach(error_msg, 'Custom teardown error', allure.attachment_type.TEXT)
+            else:
+                LOGGER.info(f"No custom teardown defined for {cls.__name__}")
+                allure.attach(
+                    f"No custom teardown needed for {cls.__name__}", 
+                    'Teardown result', 
+                    allure.attachment_type.TEXT
+                )
+
+    @classmethod
+    def kill_workload_processes(cls, process_names: Union[str, list[str]], 
+                                target_dir: Optional[str] = None) -> None:
+        """
+        Удобный метод для остановки workload процессов на всех нодах кластера.
+        Использует YdbCluster.kill_processes_on_nodes.
+
+        Args:
+            process_names: имя процесса или список имен процессов для остановки
+            target_dir: директория, в которой искать процессы (опционально)
+        """
+        with allure.step(f'Killing workload processes: {process_names}'):
+            try:
+                results = YdbCluster.kill_processes_on_nodes(
+                    process_names=process_names,
+                    target_dir=target_dir
+                )
+                
+                total_killed = 0
+                for host, host_results in results.items():
+                    for process_name, process_result in host_results.items():
+                        total_killed += process_result.get('killed_count', 0)
+                
+                success_msg = f"Successfully processed {len(results)} hosts, killed {total_killed} processes"
+                LOGGER.info(success_msg)
+                allure.attach(success_msg, 'Kill processes result', allure.attachment_type.TEXT)
+                
+            except Exception as e:
+                error_msg = f"Error killing workload processes: {e}"
+                LOGGER.error(error_msg)
+                allure.attach(error_msg, 'Kill processes error', allure.attachment_type.TEXT)
+                raise
 
     def run_workload_test(self, path: str, query_num: Optional[int] = None, query_name: Optional[str] = None) -> None:
         assert query_num is not None or query_name is not None

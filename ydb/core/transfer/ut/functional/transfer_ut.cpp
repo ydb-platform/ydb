@@ -87,11 +87,11 @@ Y_UNIT_TEST_SUITE(Transfer)
                 CREATE TRANSFER %s
                 FROM %s TO %s USING $l
                 WITH (
-                    CONNECTION_STRING = "grpc://domain-not-exists-localhost:2135"
+                    CONNECTION_STRING = "grpc://domain-not-exists-localhost.com.moc:2135"
                 )
             )", testCase.TransferName.data(), testCase.TopicName.data(), testCase.TableName.data()));
 
-        testCase.CheckTransferStateError("Grpc error response on endpoint domain-not-exists-localhost:2135");
+        testCase.CheckTransferStateError("Grpc error response on endpoint domain-not-exists-localhost.com.moc:2135");
 
         testCase.DropTransfer();
         testCase.DropTable();

@@ -781,7 +781,7 @@ private:
     }
 
     void Handle(TEvTxUserProxy::TEvUploadRowsResponse::TPtr& ev) {
-        LOG_E("Handle TEvTxUserProxy::TEvUploadRowsResponse"
+        LOG_D("Handle TEvTxUserProxy::TEvUploadRowsResponse"
             << ": worker# " << Worker
             << " status# " << ev->Get()->Status
             << " issues# " << ev->Get()->Issues.ToOneLineString());

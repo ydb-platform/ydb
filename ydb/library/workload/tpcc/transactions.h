@@ -45,22 +45,27 @@ struct TUserAbortedException : public yexception {
 
 NThreading::TFuture<TStatus> GetNewOrderTask(
     TTransactionContext& context,
+    TDuration& latency,
     NQuery::TSession session);
 
 NThreading::TFuture<TStatus> GetDeliveryTask(
     TTransactionContext& context,
+    TDuration& latency,
     NQuery::TSession session);
 
 NThreading::TFuture<TStatus> GetOrderStatusTask(
     TTransactionContext& context,
+    TDuration& latency,
     NQuery::TSession session);
 
 NThreading::TFuture<TStatus> GetPaymentTask(
     TTransactionContext& context,
+    TDuration& latency,
     NQuery::TSession session);
 
 NThreading::TFuture<TStatus> GetStockLevelTask(
     TTransactionContext& context,
+    TDuration& latency,
     NQuery::TSession session);
 
 } // namespace NYdb::NTPCC

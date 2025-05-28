@@ -17,7 +17,7 @@ namespace NYdb::NTPCC {
 namespace {
 
 struct TTerminalTransaction {
-    using TTaskFunc = NThreading::TFuture<TStatus> (*)(TTransactionContext&, NQuery::TSession);
+    using TTaskFunc = NThreading::TFuture<TStatus> (*)(TTransactionContext&, TDuration&, NQuery::TSession);
 
     TString Name;
     double Weight;
@@ -110,6 +110,7 @@ TTerminalTask TTerminal::Run() {
                 }
             }
 
+            auto startTime = std::chrono::steady_clock::now();
             co_await TTaskHasInflight(TaskQueue, Context.TerminalID);
             if (StopToken.stop_requested()) {
                 TaskQueue.DecInflight();
@@ -119,23 +120,25 @@ TTerminalTask TTerminal::Run() {
             LOG_T("Terminal " << Context.TerminalID << " starting " << transaction.Name << " transaction");
 
             size_t execCount = 0;
-            auto startTime = std::chrono::steady_clock::now();
+            auto startTimeTransaction = std::chrono::steady_clock::now();
+            TDuration latencyPure;
 
             // the block helps to ensure, that session is destroyed before we sleep right after the block
             {
-                auto future = Context.Client->RetryQuery([this, &transaction, &execCount](TSession session) mutable {
+                auto future = Context.Client->RetryQuery([this, &transaction, &execCount, &latencyPure](TSession session) mutable {
                     auto& Log = Context.Log;
                     LOG_T("Terminal " << Context.TerminalID << " started RetryQuery for " << transaction.Name);
                     ++execCount;
-                    return transaction.TaskFunc(Context, session);
+                    return transaction.TaskFunc(Context, latencyPure, session);
                 });
 
                 auto result = co_await TSuspendWithFuture(future, Context.TaskQueue, Context.TerminalID);
                 auto endTime = std::chrono::steady_clock::now();
-                auto latency = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
+                auto latencyFull = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
+                auto latencyTransaction = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTimeTransaction);
 
                 if (result.IsSuccess()) {
-                    Stats->AddOK(static_cast<TTerminalStats::ETransactionType>(txIndex), latency);
+                    Stats->AddOK(static_cast<TTerminalStats::ETransactionType>(txIndex), latencyTransaction, latencyFull, latencyPure);
                     LOG_T("Terminal " << Context.TerminalID << " " << transaction.Name << " transaction finished in "
                         << execCount << " execution(s): " << result.GetStatus());
                 } else {

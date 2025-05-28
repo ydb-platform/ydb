@@ -40,6 +40,8 @@ public:
 
             TGuard guard(HistLock);
             dst.LatencyHistogramMs.Add(LatencyHistogramMs);
+            dst.LatencyHistogramFullMs.Add(LatencyHistogramMs);
+            dst.LatencyHistogramPure.Add(LatencyHistogramMs);
         }
 
         void Clear() {
@@ -48,14 +50,28 @@ public:
             UserAborted.store(0, std::memory_order_relaxed);
             TGuard guard(HistLock);
             LatencyHistogramMs.Reset();
+            LatencyHistogramFullMs.Reset();
+            LatencyHistogramPure.Reset();
         }
 
         std::atomic<size_t> OK = 0;
         std::atomic<size_t> Failed = 0;
         std::atomic<size_t> UserAborted = 0;
 
+        // histograms protected by lock
+
         mutable TSpinLock HistLock;
+
+        // Transaction latency observed by the terminal, i.e., includes session acquisition
+        // and retries performed by the SDK
         THistogram LatencyHistogramMs{256, 32768};
+
+        // As LatencyHistogramMs plus inflight wait time in the terminal
+        THistogram LatencyHistogramFullMs{256, 32768};
+
+        // Latency of a successful transaction measured directly in the transaction code,
+        // when there is nothing to wait for except the queries
+        THistogram LatencyHistogramPure{256, 32768};
     };
 
 public:
@@ -65,12 +81,19 @@ public:
         return Stats[type];
     }
 
-    void AddOK(ETransactionType type, std::chrono::milliseconds latency) {
+    void AddOK(
+        ETransactionType type,
+        std::chrono::milliseconds latency,
+        std::chrono::milliseconds latencyFull,
+        TDuration latencyPure)
+    {
         auto& stats = Stats[type];
         stats.OK.fetch_add(1, std::memory_order_relaxed);
         {
             TGuard guard(stats.HistLock);
             stats.LatencyHistogramMs.RecordValue(latency.count());
+            stats.LatencyHistogramFullMs.RecordValue(latencyFull.count());
+            stats.LatencyHistogramPure.RecordValue(latencyPure.MilliSeconds());
         }
     }
 

@@ -452,6 +452,8 @@ void TPCCRunner::DumpFinalStats() {
     size_t totalFailed = 0;
     size_t totalUserAborted = 0;
 
+    size_t tableWidth = Config.Developer ? 95 : 65;
+
     // Print header
     std::cout << "\nTransaction Statistics:\n";
     std::cout << "----------------------\n";
@@ -459,9 +461,15 @@ void TPCCRunner::DumpFinalStats() {
               << std::setw(10) << "OK"
               << std::setw(10) << "Failed"
               << std::setw(15) << "User Aborted"
-              << std::setw(20) << "Latency p90 (ms)"
-              << std::endl;
-    std::cout << std::string(65, '-') << std::endl;
+              << std::setw(10) << "p90 (ms)";
+
+    if (Config.Developer) {
+        std::cout << std::setw(15) << "terminal p90 (ms)"
+            << std::setw(15) << "pure p90 (ms)";
+    }
+
+    std::cout << std::endl;
+    std::cout << std::string(tableWidth, '-') << std::endl;
 
     size_t totalNewOrders = 0;
 
@@ -483,18 +491,24 @@ void TPCCRunner::DumpFinalStats() {
                   << std::setw(10) << txStats.OK
                   << std::setw(10) << txStats.Failed
                   << std::setw(15) << txStats.UserAborted
-                  << std::setw(15) << txStats.LatencyHistogramMs.GetValueAtPercentile(90)
-                  << std::endl;
+                  << std::setw(10) << txStats.LatencyHistogramFullMs.GetValueAtPercentile(90);
+
+        if (Config.Developer) {
+            std::cout << std::setw(15) << txStats.LatencyHistogramMs.GetValueAtPercentile(90)
+                << std::setw(15) << txStats.LatencyHistogramPure.GetValueAtPercentile(90);
+        }
+
+        std::cout << std::endl;
     }
 
     // Print totals
-    std::cout << std::string(65, '-') << std::endl;
+    std::cout << std::string(tableWidth, '-') << std::endl;
     std::cout << std::setw(15) << "TOTAL"
               << std::setw(10) << totalOK
               << std::setw(10) << totalFailed
               << std::setw(15) << totalUserAborted
               << std::endl;
-    std::cout << std::string(65, '-') << std::endl;
+    std::cout << std::string(tableWidth, '-') << std::endl;
 
     if (minutesPassed >= 1) {
         size_t tpmC = size_t(totalNewOrders / minutesPassed);

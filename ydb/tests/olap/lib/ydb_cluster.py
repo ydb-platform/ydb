@@ -7,6 +7,7 @@ import yaml
 import ydb
 import subprocess
 import yatest
+import socket
 from ydb.tests.olap.lib.utils import get_external_param
 from copy import deepcopy
 from time import sleep, time
@@ -74,6 +75,14 @@ class YdbCluster:
             Returns:
                 tuple[str, str]: (stdout, stderr) - вывод команды
             """
+            # Определяем хост для SSH подключения
+            ssh_host = self.host
+
+            # Если хост является localhost, заменяем его на 'localhost' для SSH
+            if YdbCluster._is_localhost(self.host):
+                ssh_host = 'localhost'
+                LOGGER.info(f"Detected localhost-like host ({self.host}), using 'localhost' for SSH")
+
             ssh_cmd = ['ssh', "-o", "StrictHostKeyChecking=no",
                        "-o", "UserKnownHostsFile=/dev/null"]
 
@@ -88,11 +97,11 @@ class YdbCluster:
                 ssh_cmd += ['-i', ssh_key_file]
 
             if isinstance(cmd, list):
-                full_cmd = ssh_cmd + [self.host] + cmd
+                full_cmd = ssh_cmd + [ssh_host] + cmd
             else:
-                full_cmd = ssh_cmd + [self.host, cmd]
+                full_cmd = ssh_cmd + [ssh_host, cmd]
 
-            LOGGER.info(f"Executing SSH command on {self.host}: {full_cmd}")
+            LOGGER.info(f"Executing SSH command on {ssh_host} (original: {self.host}): {full_cmd}")
             try:
                 execution = yatest.common.execute(
                     full_cmd,
@@ -125,7 +134,7 @@ class YdbCluster:
             except yatest.common.ExecutionTimeoutError as e:
                 # Извлекаем информацию о команде и частичном выводе
                 timeout_info = (f"SSH command timed out after {timeout} seconds "
-                                f"on {self.host}")
+                                f"on {ssh_host} (original: {self.host})")
                 stdout = ""
                 stderr = ""
 
@@ -148,12 +157,12 @@ class YdbCluster:
                 # Логируем детальную информацию о таймауте
                 if raise_on_timeout:
                     LOGGER.error(f"SSH command timed out after {timeout} seconds "
-                                 f"on {self.host}")
+                                 f"on {ssh_host} (original: {self.host})")
                     LOGGER.error(f"Full command: {full_cmd}")
                     LOGGER.error(f"Original command: {cmd}")
                 else:
                     LOGGER.warning(f"SSH command timed out after {timeout} seconds "
-                                   f"on {self.host}")
+                                   f"on {ssh_host} (original: {self.host})")
                     LOGGER.info(f"Full command: {full_cmd}")
                     LOGGER.info(f"Original command: {cmd}")
 
@@ -183,7 +192,7 @@ class YdbCluster:
                         YdbCluster._safe_decode(e.execution_result.std_out),
                         stderr_filtered
                     )
-                LOGGER.error(f"Error executing SSH command on {self.host}: {e}")
+                LOGGER.error(f"Error executing SSH command on {ssh_host} (original: {self.host}): {e}")
                 # Возвращаем реальные stdout и stderr из результата выполнения
                 stdout = YdbCluster._safe_decode(e.execution_result.std_out)
                 stderr = YdbCluster._safe_decode(e.execution_result.std_err)
@@ -193,7 +202,7 @@ class YdbCluster:
             except Exception as e:
                 if raise_on_error:
                     raise
-                LOGGER.error(f"Unexpected error executing SSH command on {self.host}: {e}")
+                LOGGER.error(f"Unexpected error executing SSH command on {ssh_host} (original: {self.host}): {e}")
                 # При неожиданной ошибке возвращаем пустые строки
                 return "", ""
 
@@ -629,13 +638,13 @@ class YdbCluster:
         """
         if not stderr:
             return stderr
-        
+
         # Фильтруем строки, начинающиеся с "Warning: Permanently added"
         filtered_lines = []
         for line in stderr.splitlines():
-            if not line.startswith('Warning: Permanently added') and not line.startswith('(!) New version of YDB CLI is available.'):
+            if (not line.startswith('Warning: Permanently added') and not line.startswith('(!) New version of YDB CL')):
                 filtered_lines.append(line)
-        
+
         return '\n'.join(filtered_lines)
 
     @staticmethod
@@ -653,22 +662,26 @@ class YdbCluster:
         Returns:
             str: вывод команды копирования
         """
+        # Определяем хост для SCP подключения
+        scp_host = remote_host
+
+        # Если хост является localhost, заменяем его на 'localhost' для SCP
+        if YdbCluster._is_localhost(remote_host):
+            scp_host = 'localhost'
+            LOGGER.info(f"Detected localhost-like host ({remote_host}), using 'localhost' for SCP")
+
         scp_cmd = ['scp', "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null"]
 
         # Добавляем SSH пользователя, если указан
         ssh_user = os.getenv('SSH_USER')
         if ssh_user is not None:
-            remote_host = f"{ssh_user}@{remote_host}"
+            scp_host = f"{ssh_user}@{scp_host}"
 
         # Добавляем ключ SSH, если указан
         ssh_key_file = os.getenv('SSH_KEY_FILE')
         if ssh_key_file is not None:
             scp_cmd += ['-i', ssh_key_file]
 
-        scp_cmd += [local_path, f"{remote_host}:{remote_path}"]
-
-        LOGGER.info(f"Copying {local_path} to {remote_host}:{remote_path}")
-        
         # Проверяем существование локального файла
         if not os.path.exists(local_path):
             error_msg = f"Local file does not exist: {local_path}"
@@ -676,115 +689,126 @@ class YdbCluster:
             if raise_on_error:
                 raise FileNotFoundError(error_msg)
             return None
-        
+
         # Логируем размер файла для диагностики
         try:
             file_size = os.path.getsize(local_path)
             LOGGER.debug(f"File size: {file_size} bytes")
         except OSError as e:
             LOGGER.warning(f"Could not get file size: {e}")
-        
-        try:
-            execution = yatest.common.execute(
-                scp_cmd,
-                wait=True,
-                check_exit_code=False,  # Проверяем exit code сами
-            )
 
-            # Декодируем stdout и stderr отдельно
-            stdout = (YdbCluster._safe_decode(execution.std_out)
-                      if hasattr(execution, 'std_out') and execution.std_out else "")
-            stderr = (YdbCluster._safe_decode(execution.std_err)
-                      if hasattr(execution, 'std_err') and execution.std_err else "")
+        def _try_copy(target_path: str) -> tuple[bool, str, str]:
+            """
+            Попытка копирования файла
+            
+            Returns:
+                tuple[bool, str, str]: (success, stdout, stderr_filtered)
+            """
+            cmd = scp_cmd + [local_path, f"{scp_host}:{target_path}"]
+            LOGGER.info(f"Copying {local_path} to {scp_host}:{target_path} (original host: {remote_host})")
 
-            # Фильтруем SSH предупреждения из stderr
-            stderr_filtered = YdbCluster._filter_ssh_warnings(stderr)
-            
-            # Логируем детальную информацию
-            if stdout:
-                LOGGER.debug(f"SCP stdout: {stdout}")
-            if stderr_filtered:
-                LOGGER.warning(f"SCP stderr: {stderr_filtered}")
-            
-            # Проверяем exit code
-            exit_code = getattr(execution, 'exit_code', getattr(execution, 'returncode', 0))
-            if exit_code != 0:
-                error_msg = f"SCP command failed with exit code {exit_code}"
+            try:
+                execution = yatest.common.execute(
+                    cmd,
+                    wait=True,
+                    check_exit_code=False,  # Проверяем exit code сами
+                )
+
+                # Декодируем stdout и stderr отдельно
+                stdout = (YdbCluster._safe_decode(execution.std_out)
+                          if hasattr(execution, 'std_out') and execution.std_out else "")
+                stderr = (YdbCluster._safe_decode(execution.std_err)
+                          if hasattr(execution, 'std_err') and execution.std_err else "")
+
+                # Фильтруем SSH предупреждения из stderr
+                stderr_filtered = YdbCluster._filter_ssh_warnings(stderr)
+
+                # Логируем детальную информацию
+                if stdout:
+                    LOGGER.debug(f"SCP stdout: {stdout}")
                 if stderr_filtered:
-                    error_msg += f". Error: {stderr_filtered}"
-                    
-                    # Анализируем частые ошибки для более понятной диагностики
-                    if "Permission denied" in stderr_filtered:
-                        error_msg += "\nPossible causes: SSH key authentication failed, wrong user, or insufficient permissions"
-                    elif "No such file or directory" in stderr_filtered:
-                        error_msg += "\nPossible causes: Remote directory doesn't exist or remote host unreachable"
-                    elif "Connection refused" in stderr_filtered:
-                        error_msg += "\nPossible causes: SSH service not running on remote host or wrong port"
-                    elif "Host key verification failed" in stderr_filtered:
-                        error_msg += "\nPossible causes: SSH host key verification issue (should not happen with our settings)"
-                    elif "Network is unreachable" in stderr_filtered:
-                        error_msg += "\nPossible causes: Network connectivity issue to remote host"
-                
-                LOGGER.error(error_msg)
-                
-                if raise_on_error:
-                    raise subprocess.CalledProcessError(
-                        exit_code,
-                        scp_cmd,
-                        stdout,
-                        stderr_filtered
-                    )
-                return None
-            
+                    LOGGER.warning(f"SCP stderr: {stderr_filtered}")
+
+                # Проверяем exit code
+                exit_code = getattr(execution, 'exit_code', getattr(execution, 'returncode', 0))
+                if exit_code == 0:
+                    return True, stdout, stderr_filtered
+
+                return False, stdout, stderr_filtered
+
+            except yatest.common.ExecutionError as e:
+                # Возвращаем реальные stdout и stderr из результата выполнения
+                stdout = YdbCluster._safe_decode(e.execution_result.std_out)
+                stderr = YdbCluster._safe_decode(e.execution_result.std_err)
+                stderr_filtered = YdbCluster._filter_ssh_warnings(stderr)
+
+                if stderr_filtered:
+                    LOGGER.warning(f"SCP stderr: {stderr_filtered}")
+
+                return False, stdout, stderr_filtered
+
+            except Exception as e:
+                LOGGER.error(f"Unexpected error during SCP: {e}")
+                return False, "", str(e)
+
+        # Первая попытка копирования с оригинальным именем
+        success, stdout, stderr_filtered = _try_copy(remote_path)
+        
+        if success:
             return stdout
 
-        except yatest.common.ExecutionError as e:
-            if raise_on_error:
-                # Преобразуем yatest.common.ExecutionError в стандартное исключение
-                stderr_filtered = YdbCluster._filter_ssh_warnings(
-                    YdbCluster._safe_decode(e.execution_result.std_err)
-                )
-                
-                error_msg = f"SCP command failed with exit code {e.execution_result.exit_code}"
-                if stderr_filtered:
-                    error_msg += f". Error: {stderr_filtered}"
-                    
-                    # Анализируем частые ошибки для более понятной диагностики
-                    if "Permission denied" in stderr_filtered:
-                        error_msg += "\nPossible causes: SSH key authentication failed, wrong user, or insufficient permissions"
-                    elif "No such file or directory" in stderr_filtered:
-                        error_msg += "\nPossible causes: Remote directory doesn't exist or remote host unreachable"
-                    elif "Connection refused" in stderr_filtered:
-                        error_msg += "\nPossible causes: SSH service not running on remote host or wrong port"
-                    elif "Host key verification failed" in stderr_filtered:
-                        error_msg += "\nPossible causes: SSH host key verification issue (should not happen with our settings)"
-                    elif "Network is unreachable" in stderr_filtered:
-                        error_msg += "\nPossible causes: Network connectivity issue to remote host"
-                
-                LOGGER.error(error_msg)
-                raise subprocess.CalledProcessError(
-                    e.execution_result.exit_code,
-                    scp_cmd,
-                    YdbCluster._safe_decode(e.execution_result.std_out),
-                    stderr_filtered
-                )
+        # Проверяем, является ли ошибка "Text file busy"
+        if "Text file busy" in stderr_filtered:
+            LOGGER.warning(f"File {remote_path} is busy, trying with postfix")
             
-            LOGGER.error(f"Error copying file to remote: {e}")
-            # Возвращаем реальные stdout и stderr из результата выполнения
-            stdout = YdbCluster._safe_decode(e.execution_result.std_out)
-            stderr = YdbCluster._safe_decode(e.execution_result.std_err)
-            stderr_filtered = YdbCluster._filter_ssh_warnings(stderr)
+            # Генерируем новое имя файла с постфиксом
+            import time
+            timestamp = int(time.time())
             
-            if stderr_filtered:
-                LOGGER.warning(f"SCP stderr: {stderr_filtered}")
+            # Разделяем путь на директорию и имя файла
+            remote_dir = os.path.dirname(remote_path)
+            remote_filename = os.path.basename(remote_path)
             
-            return None
+            # Добавляем постфикс к имени файла
+            new_remote_filename = f"{remote_filename}.{timestamp}"
+            new_remote_path = os.path.join(remote_dir, new_remote_filename)
+            
+            LOGGER.info(f"Retrying copy with new filename: {new_remote_path}")
 
-        except Exception as e:
-            if raise_on_error:
-                raise
-            LOGGER.error(f"Unexpected error copying file to remote: {e}")
-            return None
+            # Вторая попытка с новым именем
+            success, stdout, stderr_filtered = _try_copy(new_remote_path)
+
+            if success:
+                LOGGER.info(f"Successfully copied file with postfix: {new_remote_path}")
+                return stdout
+
+        # Если копирование не удалось, обрабатываем ошибку
+        error_msg = "SCP command failed with exit code 1"
+        if stderr_filtered:
+            error_msg += f". Error: {stderr_filtered}"
+
+            # Анализируем частые ошибки для более понятной диагностики
+            if "Permission denied" in stderr_filtered:
+                error_msg += "\nPossible causes: SSH key authentication failed"
+            elif "No such file or directory" in stderr_filtered:
+                error_msg += "\nPossible causes: Remote directory doesn't exist or remote host unreachable"
+            elif "Connection refused" in stderr_filtered:
+                error_msg += "\nPossible causes: SSH service not running on remote host or wrong port"
+            elif "Host key verification failed" in stderr_filtered:
+                error_msg += "\nPossible causes: SSH host key verification issue"
+            elif "Network is unreachable" in stderr_filtered:
+                error_msg += "\nPossible causes: Network connectivity issue to remote host"
+
+        LOGGER.error(error_msg)
+
+        if raise_on_error:
+            raise subprocess.CalledProcessError(
+                1,
+                scp_cmd + [local_path, f"{scp_host}:{remote_path}"],
+                stdout,
+                stderr_filtered
+            )
+        return None
 
     @classmethod
     @allure.step('Deploy binaries to cluster nodes')
@@ -938,3 +962,209 @@ class YdbCluster:
                 break
             sleep(1)
         return error
+
+    @staticmethod
+    def _is_localhost(hostname: str) -> bool:
+        """
+        Проверяет, является ли хост localhost
+
+        Args:
+            hostname: имя хоста для проверки
+
+        Returns:
+            bool: True если хост является localhost
+        """
+        if not hostname:
+            return False
+
+        # Очевидные случаи localhost
+        localhost_names = {
+            'localhost',
+            '127.0.0.1',
+            '::1',
+            socket.gethostname(),
+            socket.getfqdn(),
+        }
+
+        if hostname in localhost_names:
+            return True
+
+        try:
+            # Получаем IP адрес хоста
+            host_ip = socket.gethostbyname(hostname)
+
+            # Получаем локальные IP адреса
+            local_ips = set()
+
+            # Добавляем localhost адреса
+            local_ips.update(['127.0.0.1', '::1'])
+
+            # Получаем IP адреса всех сетевых интерфейсов
+            hostname_local = socket.gethostname()
+            try:
+                local_ips.add(socket.gethostbyname(hostname_local))
+            except socket.gaierror:
+                pass
+
+            # Проверяем, совпадает ли IP хоста с локальными IP
+            return host_ip in local_ips
+
+        except (socket.gaierror, socket.herror):
+            # Если не можем разрешить имя хоста, считаем что это не localhost
+            return False
+
+    @classmethod
+    @allure.step('Kill processes on cluster nodes')
+    def kill_processes_on_nodes(
+        cls,
+        process_names: Union[str, list[str]],
+        target_dir: Optional[str] = None,
+        nodes: Optional[list[YdbCluster.Node]] = None
+    ) -> Dict[str, Dict[str, Any]]:
+        """
+        Останавливает процессы с указанными именами на нодах кластера
+
+        Args:
+            process_names: имя процесса или список имен процессов для остановки
+            target_dir: директория, в которой искать процессы (опционально)
+            nodes: список нод для обработки (если None, используются все ноды кластера)
+
+        Returns:
+            Dict: словарь с результатами остановки процессов по хостам
+        """
+        if isinstance(process_names, str):
+            process_names = [process_names]
+
+        if nodes is None:
+            nodes = cls.get_cluster_nodes()
+
+        results = {}
+        processed_hosts = set()
+
+        for node in nodes:
+            # Избегаем дублирования обработки одного хоста
+            if node.host in processed_hosts:
+                continue
+            processed_hosts.add(node.host)
+
+            node_results = {}
+            allure.attach(f"Node: {node.host}", "Processing Node", attachment_type=allure.attachment_type.TEXT)
+
+            for process_name in process_names:
+                try:
+                    result = cls._kill_process_on_node(node, process_name, target_dir)
+                    node_results[process_name] = result
+
+                    if result['killed_count'] > 0:
+                        allure.attach(
+                            f"Successfully killed {result['killed_count']} processes "
+                            f"'{process_name}' on {node.host}",
+                            f"Kill {process_name} on {node.host}",
+                            attachment_type=allure.attachment_type.TEXT
+                        )
+                    else:
+                        allure.attach(
+                            f"No processes '{process_name}' found on {node.host}",
+                            f"Kill {process_name} on {node.host}",
+                            attachment_type=allure.attachment_type.TEXT
+                        )
+
+                except Exception as e:
+                    error_msg = str(e)
+                    node_results[process_name] = {
+                        'success': False,
+                        'error': error_msg,
+                        'killed_count': 0
+                    }
+
+                    allure.attach(
+                        f"Exception when killing '{process_name}' on {node.host}: {error_msg}",
+                        f"Kill {process_name} on {node.host} failed",
+                        attachment_type=allure.attachment_type.TEXT
+                    )
+
+            results[node.host] = node_results
+
+        return results
+
+    @classmethod
+    def _kill_process_on_node(cls, node: YdbCluster.Node, process_name: str, 
+                              target_dir: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Останавливает процессы с указанным именем на конкретной ноде
+
+        Args:
+            node: нода для обработки
+            process_name: имя процесса для остановки
+            target_dir: директория, в которой искать процессы (опционально)
+
+        Returns:
+            Dict: результат остановки процессов
+        """
+        result = {
+            'success': False,
+            'killed_count': 0,
+            'commands_executed': []
+        }
+
+        try:
+            commands_to_try = []
+
+            # Команда для поиска и остановки процессов по имени
+            commands_to_try.append(f"pkill -f {process_name}")
+
+            # Если указана директория, добавляем команду для поиска по полному пути
+            if target_dir:
+                full_path = os.path.join(target_dir, process_name)
+                commands_to_try.append(f"pkill -f {full_path}")
+                
+                # Дополнительно останавливаем любые процессы из указанной директории
+                commands_to_try.append(f"pkill -f {target_dir}")
+
+            total_killed = 0
+            
+            for cmd in commands_to_try:
+                try:
+                    # Сначала проверяем, есть ли процессы для остановки
+                    check_cmd = cmd.replace('pkill', 'pgrep')
+                    stdout, stderr = node.execute_command(check_cmd, raise_on_error=False)
+                    
+                    if stdout.strip():
+                        # Есть процессы для остановки
+                        process_count = len([pid for pid in stdout.strip().split('\n') if pid.strip()])
+                        
+                        # Останавливаем процессы
+                        stdout, stderr = node.execute_command(cmd, raise_on_error=False)
+                        
+                        result['commands_executed'].append({
+                            'command': cmd,
+                            'processes_found': process_count,
+                            'stdout': stdout,
+                            'stderr': stderr
+                        })
+                        
+                        total_killed += process_count
+                        LOGGER.info(f"Killed {process_count} processes on {node.host} with command: {cmd}")
+                    else:
+                        result['commands_executed'].append({
+                            'command': cmd,
+                            'processes_found': 0,
+                            'stdout': '',
+                            'stderr': ''
+                        })
+
+                except Exception as e:
+                    LOGGER.warning(f"Error executing command '{cmd}' on {node.host}: {e}")
+                    result['commands_executed'].append({
+                        'command': cmd,
+                        'error': str(e)
+                    })
+
+            result['killed_count'] = total_killed
+            result['success'] = True
+
+        except Exception as e:
+            result['error'] = str(e)
+            LOGGER.error(f"Error killing processes '{process_name}' on {node.host}: {e}")
+
+        return result

@@ -44,6 +44,20 @@ class SimpleQueueBase(LoadSuiteBase):
         """Распаковывает бинарный файл из ресурсов и возвращает путь к нему"""
         return self._unpack_resource(workload_binary_name)
 
+    @classmethod
+    def do_teardown_class(cls):
+        """
+        Специфичная очистка для SimpleQueue тестов.
+        Останавливает все запущенные workload процессы.
+        """
+        LOGGER.info("Starting SimpleQueue teardown: stopping workload processes")
+        
+        # Останавливаем процессы simple_queue на всех нодах
+        cls.kill_workload_processes(
+            process_names=[WORKLOAD_BINARY_NAME],
+            target_dir=STRESS_BINARIES_DEPLOY_PATH
+        )
+
     @pytest.mark.parametrize('table_type', [t.value for t in TableType])
     def test_workload_simple_queue(self, table_type: str):
         self.save_nodes_state()
@@ -73,20 +87,26 @@ class SimpleQueueBase(LoadSuiteBase):
 
         # Запускаем бинарный файл на ноде, если он был успешно развернут
         if not success:
-            error_msg = (f"Binary deployment failed on node {node.host}. "
-                            f"Binary result: {binary_result}")
+            error_msg = (
+                f"Binary deployment failed on node {node.host}. "
+                f"Binary result: {binary_result}"
+            )
             LOGGER.error(f"Error: {error_msg}")
             allure.attach(error_msg, 'Binary deployment error', allure.attachment_type.TEXT)
             command_error = error_msg
             raise Exception(f"Binary deployment failed on node. Binary result: {binary_result}")
 
         else:
-             with allure.step(f'Running workload on node {node.host} '
-                         f'with table type {table_type}'):
+            with allure.step(
+                f'Running workload on node {node.host} '
+                f'with table type {table_type}'
+            ):
                 target_path = binary_result['path']
-                cmd = (f"{target_path} --endpoint {YdbCluster.ydb_endpoint} "
-                        f"--database /{YdbCluster.ydb_database} "
-                        f"--duration {self.timeout} --mode {table_type}")
+                cmd = (
+                    f"{target_path} --endpoint {YdbCluster.ydb_endpoint} "
+                    f"--database /{YdbCluster.ydb_database} "
+                    f"--duration {self.timeout} --mode {table_type}"
+                )
                 allure.attach(cmd, 'Command to execute', allure.attachment_type.TEXT)
                 LOGGER.info(f"Executing command on node {node.host}")
 
@@ -100,7 +120,7 @@ class SimpleQueueBase(LoadSuiteBase):
                     allure.attach(command_result, 'Workload stdout', allure.attachment_type.TEXT)
                     if command_error:
                         LOGGER.warning(f"Workload stderr: {command_error}")
-                        allure.attach(command_error[:100], 'Workload stderr', allure.attachment_type.TEXT) 
+                        allure.attach(command_error[:100], 'Workload stderr', allure.attachment_type.TEXT)
 
                 except Exception as e:
                     error_msg = f"Command execution failed: {str(e)}"

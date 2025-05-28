@@ -154,7 +154,6 @@ class TJsonNodes : public TViewerPipeClient {
         Pools,
         Groups,
         VSlots,
-        DoneOrError,
     };
 
     enum class EPeerRole {
@@ -1111,10 +1110,11 @@ public:
             GroupsResponse = MakeCachedRequestBSControllerGroups();
             VSlotsResponse = MakeCachedRequestBSControllerVSlots();
             FilterStorageStage = EFilterStorageStage::Pools;
-        } else if (!FilterGroupIds.empty()) {
+        } else if (!FilterGroupIds.empty() || FieldsRequired.test(+ENodeFields::VDisks)) {
             VSlotsResponse = MakeCachedRequestBSControllerVSlots();
             FilterStorageStage = EFilterStorageStage::VSlots;
         }
+
         if (With != EWith::Everything) {
             PDisksResponse = MakeCachedRequestBSControllerPDisks();
         }
@@ -1132,11 +1132,6 @@ public:
         if (FieldsRequired.test(+ENodeFields::PDisks)) {
             if (!PDisksResponse) {
                 PDisksResponse = MakeCachedRequestBSControllerPDisks();
-            }
-        }
-        if (FieldsRequired.test(+ENodeFields::VDisks)) {
-            if (!VSlotsResponse) {
-                VSlotsResponse = MakeCachedRequestBSControllerVSlots();
             }
         }
         if (FieldsNeeded(FieldsHiveNodeStat) && !FilterDatabase && !FilterPath) {
@@ -1170,11 +1165,11 @@ public:
     }
 
     bool PreFilterDone() const {
-        return !FilterDatabase && FilterStorageStage == EFilterStorageStage::None && FilterPeerRole != EPeerRole::Static  && FilterPeerRole != EPeerRole::Other;
+        return (!PDisksResponse || PDisksProcessed) && !FilterDatabase && FilterPeerRole != EPeerRole::Static && FilterPeerRole != EPeerRole::Other;
     }
 
     bool FilterDone() const {
-        return PreFilterDone() && !NeedFilter;
+        return PreFilterDone() && FilterStorageStage == EFilterStorageStage::None && !NeedFilter;
     }
 
     void ApplyFilter() {
@@ -1226,6 +1221,9 @@ public:
         }
         // storage/nodes pre-filter, affects TotalNodes count
         if (FilterStorageStage != EFilterStorageStage::None) {
+            return;
+        }
+        if (PDisksResponse && !PDisksProcessed) {
             return;
         }
         if (FilterPeerRole == EPeerRole::Static || FilterPeerRole == EPeerRole::Other) {
@@ -2037,7 +2035,7 @@ public:
                 FilterStorageStage = EFilterStorageStage::Groups;
             } else {
                 AddProblem("bsc-storage-pools-no-data");
-                FilterStorageStage = EFilterStorageStage::DoneOrError;
+                FilterStorageStage = EFilterStorageStage::None;
             }
             StoragePoolsResponse.reset();
         }
@@ -2054,10 +2052,10 @@ public:
                 FilterStorageStage = EFilterStorageStage::VSlots;
             } else {
                 AddProblem("bsc-storage-groups-no-data");
-                FilterStorageStage = EFilterStorageStage::DoneOrError;
+                FilterStorageStage = EFilterStorageStage::None;
             }
         }
-        if ((FilterStorageStage == EFilterStorageStage::VSlots || FilterStorageStage == EFilterStorageStage::None) && VSlotsResponse && VSlotsResponse->IsDone()) {
+        if (FilterStorageStage == EFilterStorageStage::VSlots && VSlotsResponse && VSlotsResponse->IsDone()) {
             if (VSlotsResponse->IsOk()) {
                 std::unordered_set<TNodeId> prevFilterNodeIds = std::move(FilterNodeIds);
                 std::unordered_map<std::pair<TNodeId, ui32>, std::size_t> slotsPerDisk;
@@ -2066,28 +2064,22 @@ public:
                         if (prevFilterNodeIds.empty() || prevFilterNodeIds.count(slotEntry.GetKey().GetNodeId()) > 0) {
                             FilterNodeIds.insert(slotEntry.GetKey().GetNodeId());
                         }
-                        TNode* node = FindNode(slotEntry.GetKey().GetNodeId());
-                        if (node) {
-                            node->SysViewVDisks.emplace_back(slotEntry);
-                            node->HasDisks = true;
-                        }
-                    } else {
-                        TNode* node = FindNode(slotEntry.GetKey().GetNodeId());
-                        if (node) {
-                            node->HasDisks = true;
-                        }
+                    }
+                    TNode* node = FindNode(slotEntry.GetKey().GetNodeId());
+                    if (node) {
+                        node->SysViewVDisks.emplace_back(slotEntry);
+                        node->HasDisks = true;
                     }
                     auto& slots = slotsPerDisk[{slotEntry.GetKey().GetNodeId(), slotEntry.GetKey().GetPDiskId()}];
                     ++slots;
                     MaximumSlotsPerDisk = std::max(MaximumSlotsPerDisk.value_or(0), slots);
                 }
                 FieldsAvailable.set(+ENodeFields::HasDisks);
-                FilterStorageStage = EFilterStorageStage::DoneOrError;
-                ApplyEverything();
             } else {
                 AddProblem("bsc-storage-slots-no-data");
-                FilterStorageStage = EFilterStorageStage::DoneOrError;
             }
+            FilterStorageStage = EFilterStorageStage::None;
+            ApplyEverything();
         }
         if (PDisksResponse && PDisksResponse->IsDone() && !PDisksProcessed) {
             if (PDisksResponse->IsOk()) {
@@ -2112,6 +2104,7 @@ public:
                 AddProblem("bsc-pdisks-no-data");
             }
             PDisksProcessed = true;
+            ApplyEverything();
         }
 
         if (!TimeToAskWhiteboard()) {

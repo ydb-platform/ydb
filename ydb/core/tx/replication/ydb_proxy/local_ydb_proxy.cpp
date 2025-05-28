@@ -156,6 +156,9 @@ protected:
 
 protected:
     void PassAway() {
+        if (PartitionPipeClient) {
+            NTabletPipe::CloseAndForgetClient(SelfId(), PartitionPipeClient);
+        }
         IActor::PassAway();
     }
 
@@ -184,7 +187,7 @@ class TLocalTopicPartitionReaderActor : public TBaseLocalTopicPartitionActor {
     };
 
 public:
-    TLocalTopicPartitionReaderActor(const TActorId& parent, const std::string& database, const TEvYdbProxy::TTopicReaderSettings& settings)
+    TLocalTopicPartitionReaderActor(const TActorId& parent, const std::string& database, TEvYdbProxy::TTopicReaderSettings& settings)
         : TBaseLocalTopicPartitionActor(database, std::move(settings.GetBase().Topics_[0].Path_), settings.GetBase().Topics_[0].PartitionIds_[0])
         , Parent(parent)
         , Consumer(std::move(settings.GetBase().ConsumerName_))
@@ -514,11 +517,28 @@ private:
     const ui64 Offset;
 };
 
+class TLocalAlterTopicActor: public TActorBootstrapped<TLocalAlterTopicActor> {
+public:
+    TLocalAlterTopicActor(TActorId parent, TString&& path, NYdb::NTopic::TAlterTopicSettings&& settings)
+        : Parent(parent)
+        , Path(std::move(path))
+        , Settings(std::move(settings)) {
+    }
+
+    void Bootstrap() {
+    }
+
+private:
+    const TActorId Parent;
+    const TString Path;
+    const NYdb::NTopic::TAlterTopicSettings Settings;
+};
+
 class TLocalProxyActor: public TActorBootstrapped<TLocalProxyActor> {
 private:
     void Handle(TEvYdbProxy::TEvCreateTopicReaderRequest::TPtr& ev) {
         auto args = std::move(ev->Get()->GetArgs());
-        const auto& settings = std::get<TEvYdbProxy::TTopicReaderSettings>(args);
+        auto& settings = std::get<TEvYdbProxy::TTopicReaderSettings>(args);
 
         AFL_VERIFY(1 == settings.GetBase().Topics_.size())("topic count", settings.GetBase().Topics_.size());
         AFL_VERIFY(1 == settings.GetBase().Topics_[0].PartitionIds_.size())("partition count", settings.GetBase().Topics_[0].PartitionIds_.size());
@@ -529,15 +549,19 @@ private:
     }
 
     void Handle(TEvYdbProxy::TEvAlterTopicRequest::TPtr& ev) {
-        Y_UNUSED(ev);
-        // TODO
+        auto args = std::move(ev->Get()->GetArgs());
+        auto& path = std::get<TString>(args);
+        auto& settings = std::get<NYdb::NTopic::TAlterTopicSettings>(args);
+
+        auto* actor = new TLocalAlterTopicActor(ev->Sender, std::move(path), std::move(settings));
+        TlsActivationContext->RegisterWithSameMailbox(actor, SelfId());
     }
 
     void Handle(TEvYdbProxy::TEvCommitOffsetRequest::TPtr& ev) {
         auto args = std::move(ev->Get()->GetArgs());
         auto& [topicName, partitionId, consumerName, offset, settings] = args;
 
-        auto actor = new TLocalTopicPartitionCommitActor(ev->Sender, Database, std::move(topicName), partitionId, std::move(consumerName), std::move(settings.ReadSessionId_), offset);
+        auto* actor = new TLocalTopicPartitionCommitActor(ev->Sender, Database, std::move(topicName), partitionId, std::move(consumerName), std::move(settings.ReadSessionId_), offset);
         TlsActivationContext->RegisterWithSameMailbox(actor, SelfId());
     }
 

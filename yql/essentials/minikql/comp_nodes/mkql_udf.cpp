@@ -338,17 +338,30 @@ IComputationNode* WrapUdf(TCallable& callable, const TComputationNodeFactoryCont
                                            << TruncateTypeDiff(diff)).c_str());
         }
 
+        const auto callableFuncType = AS_TYPE(TCallableType, funcInfo.FunctionType);
+        const auto callableNodeType = AS_TYPE(TCallableType, callable.GetType()->GetReturnType());
+
+        const auto callableType = runConfigNodeType->IsVoid()
+                                ? callableNodeType : callableFuncType;
+        const auto runConfigType = runConfigNodeType->IsVoid()
+                                 ? runConfigFuncType : runConfigNodeType;
+
         // If so, check the following invariants:
         // * The first argument of the head function in the sequence
         //   of the curried functions has to be the same as the
         //   run config type.
+        // * All other arguments of the head function in the sequence
+        //   of the curried function have to be optional.
         // * The type of the resulting callable has to be the same
         //   as the function type.
-        const auto firstArgType = runConfigNodeType->IsVoid()
-                                ? callable.GetType()->GetArgumentType(0)
-                                : funcInfo.FunctionType->GetArgumentType(0);
-        const auto runConfigType = runConfigNodeType->IsVoid()
-                                 ? runConfigFuncType : runConfigNodeType;
+        if (callableType->GetArgumentsCount() - callableType->GetOptionalArgumentsCount() != 1U) {
+            UdfTerminate((TStringBuilder() << pos
+                                           << " Udf Function '"
+                                           << funcName
+                                           << "' wrapper has more than one required argument: "
+                                           << PrintNode(callableType)).c_str());
+        }
+        const auto firstArgType = callableType->GetArgumentType(0);
         if (!runConfigType->IsSameType(*firstArgType)) {
             TString diff = TStringBuilder()
                 << "type mismatch, expected run config type: "
@@ -361,18 +374,18 @@ IComputationNode* WrapUdf(TCallable& callable, const TComputationNodeFactoryCont
                                            << "' "
                                            << TruncateTypeDiff(diff)).c_str());
         }
-        const auto callableFuncType = runConfigNodeType->IsVoid()
-                                    ? funcInfo.FunctionType
-                                    : funcInfo.FunctionType->GetReturnType();
-        const auto callableNodeType = runConfigNodeType->IsVoid()
-                                    ? AS_TYPE(TCallableType, callable.GetType()->GetReturnType())->GetReturnType()
-                                    : callable.GetType()->GetReturnType();
-        if (!callableNodeType->IsSameType(*callableFuncType)) {
+        const auto closureFuncType = runConfigNodeType->IsVoid()
+                                   ? callableFuncType
+                                   : AS_TYPE(TCallableType, callableFuncType)->GetReturnType();
+        const auto closureNodeType = runConfigNodeType->IsVoid()
+                                   ? AS_TYPE(TCallableType, callableNodeType)->GetReturnType()
+                                   : callableNodeType;
+        if (!closureNodeType->IsSameType(*closureFuncType)) {
             TString diff = TStringBuilder()
                 << "type mismatch, expected return type: "
-                << PrintNode(callableNodeType, true)
+                << PrintNode(closureNodeType, true)
                 << ", actual: "
-                << PrintNode(callableFuncType, true);
+                << PrintNode(closureFuncType, true);
             UdfTerminate((TStringBuilder() << pos
                                            << " Udf Function '"
                                            << funcName

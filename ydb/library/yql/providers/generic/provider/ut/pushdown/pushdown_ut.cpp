@@ -322,7 +322,10 @@ struct TPushdownFixture: public NUnitTest::TBaseFixture {
              << program << Endl;
         TAstParseResult astRes = ParseAst(program);
         UNIT_ASSERT_C(astRes.IsOk(), astRes.Issues.ToString());
-        UNIT_ASSERT_C(CompileExpr(*astRes.Root, InitialExprRoot, Ctx, nullptr, nullptr), astRes.Issues.ToString());
+        auto x = CompileExpr(*astRes.Root, InitialExprRoot, Ctx, nullptr, nullptr);
+        Cout << "HERE: " << astRes.Issues.ToString();
+        UNIT_ASSERT(x);
+        // UNIT_ASSERT_C(CompileExpr(*astRes.Root, InitialExprRoot, Ctx, nullptr, nullptr), astRes.Issues.ToString());
 
         ExprRoot = InitialExprRoot;
         auto status = SyncTransform(*Transformer, ExprRoot, Ctx);
@@ -722,7 +725,27 @@ Y_UNIT_TEST_SUITE_F(PushdownTest, TPushdownFixture) {
             // Test REGEXP pushdown with a simple pattern matching digits
             R"ast(
                 (Coalesce
-                    (Apply (Udf '"Re2.Grep") '"\\\\d+" (Member $row '"col_string"))
+                    (Apply (Udf '"Re2.Grep" '((String '"\\\\d+") (Nothing 
+                        (OptionalType 
+                            (StructType 
+                                '('"CaseSensitive" (DataType 'Bool))
+                                '('"DotNl" (DataType 'Bool)) 
+                                '('"Literal" (DataType 'Bool)) 
+                                '('"LogErrors" (DataType 'Bool)) 
+                                '('"LongestMatch" (DataType 'Bool)) 
+                                '('"MaxMem" (DataType 'Uint64)) 
+                                '('"NeverCapture" (DataType 'Bool)) 
+                                '('"NeverNl" (DataType 'Bool)) 
+                                '('"OneLine" (DataType 'Bool)) 
+                                '('"PerlClasses" (DataType 'Bool)) 
+                                '('"PosixSyntax" (DataType 'Bool)) 
+                                '('"Utf8" (DataType 'Bool)) 
+                                '('"WordBoundary" (DataType 'Bool))
+                            )
+                        )
+                    ))) 
+                        (Member $row '"col_string")
+                    )
                     (Bool '"false")
                 )
                 )ast",

@@ -1728,6 +1728,9 @@ namespace NSchemeShardUT_Private {
                 if (cfg.GlobalIndexSettings.size() > 1) {
                     cfg.GlobalIndexSettings[1].SerializeTo(*settings.mutable_posting_table_settings());
                 }
+                if (cfg.GlobalIndexSettings.size() > 2) {
+                    cfg.GlobalIndexSettings[2].SerializeTo(*settings.mutable_prefix_table_settings());
+                }
             }
         } break;
         default:
@@ -1789,7 +1792,7 @@ namespace NSchemeShardUT_Private {
         TEvIndexBuilder::TEvCreateResponse* event = runtime.GrabEdgeEvent<TEvIndexBuilder::TEvCreateResponse>(handle);
         UNIT_ASSERT(event);
 
-        Cerr << "BUILDINDEX RESPONSE CREATE: " << event->ToString() << Endl;
+        Cerr << "BUILDCOLUMN RESPONSE CREATE: " << event->ToString() << Endl;
         UNIT_ASSERT_EQUAL_C(event->Record.GetStatus(), expectedStatus,
                             "status mismatch"
                                 << " got " << Ydb::StatusIds::StatusCode_Name(event->Record.GetStatus())

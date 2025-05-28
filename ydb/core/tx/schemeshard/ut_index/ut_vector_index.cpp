@@ -12,6 +12,7 @@
 using namespace NKikimr;
 using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
+using namespace NKikimr::NTableIndex;
 using namespace NKikimr::NTableIndex::NTableVectorKmeansTreeIndex;
 
 Y_UNIT_TEST_SUITE(TVectorIndexTests) {
@@ -241,7 +242,7 @@ Y_UNIT_TEST_SUITE(TVectorIndexTests) {
               NLs::CheckColumns(PostingTable, {ParentColumn, "id1", "id2", "covered1", "covered2"}, {}, {ParentColumn, "id1", "id2"}, true) });
     }
 
-    Y_UNIT_TEST(VectorKmeansTreePostingImplTable) {
+    Y_UNIT_TEST(VectorKmeansTreeImplTable) {
       // partition
       NKikimrSchemeOp::TPartitionConfig baseTablePartitionConfig;
       NKikimrSchemeOp::TTableDescription indexTableDesc;
@@ -258,15 +259,38 @@ Y_UNIT_TEST_SUITE(TVectorIndexTests) {
       {
         auto* data2 = baseTableDescr.AddColumns();
         *data2->MutableName() = "data2";
+      }
+      {
+        auto* prefix = baseTableDescr.AddColumns();
+        *prefix->MutableName() = "prefix";
+      }
 
+      {
+        auto desc = CalcVectorKmeansTreeLevelImplTableDesc(baseTablePartitionConfig, indexTableDesc);
+        std::string_view expected[] = {ParentColumn, IdColumn, CentroidColumn};
+        for (size_t i = 0; auto& column : desc.GetColumns()) {
+          UNIT_ASSERT_STRINGS_EQUAL(column.GetName(), expected[i]);
+          ++i;
+        }
       }
-      NTableIndex::TTableColumns implTableColumns = {{"data2", "data1"}, {}};
-      auto desc = CalcVectorKmeansTreePostingImplTableDesc({}, baseTableDescr, baseTablePartitionConfig, implTableColumns, indexTableDesc, "something");
-      std::string_view expected[] = {NTableIndex::NTableVectorKmeansTreeIndex::ParentColumn, "data1", "data2"};
-      for (size_t i = 0; auto& column : desc.GetColumns()) {
-        UNIT_ASSERT_STRINGS_EQUAL(column.GetName(), expected[i]);
-        ++i;
+      {
+        NTableIndex::TTableColumns implTableColumns = {{"data2", "data1"}, {}};
+        auto desc = CalcVectorKmeansTreePostingImplTableDesc({}, baseTableDescr, baseTablePartitionConfig, implTableColumns, indexTableDesc, "something");
+        std::string_view expected[] = {ParentColumn, "data1", "data2"};
+        for (size_t i = 0; auto& column : desc.GetColumns()) {
+          UNIT_ASSERT_STRINGS_EQUAL(column.GetName(), expected[i]);
+          ++i;
+        }
       }
+      {
+        NTableIndex::TTableColumns implTableColumns = {{"prefix"}, {}};
+        auto desc = CalcVectorKmeansTreePrefixImplTableDesc({}, baseTableDescr, baseTablePartitionConfig, implTableColumns, indexTableDesc);
+        std::string_view expected[] = {IdColumn};
+        for (size_t i = 0; auto& column : desc.GetColumns()) {
+          UNIT_ASSERT_STRINGS_EQUAL(column.GetName(), expected[i]);
+          ++i;
+        }
+      }      
     }
 
     Y_UNIT_TEST(CreateTableWithError) {
@@ -288,7 +312,7 @@ Y_UNIT_TEST_SUITE(TVectorIndexTests) {
               Type: EIndexTypeGlobalVectorKmeansTree
               VectorIndexKmeansTreeDescription: { Settings: { settings: { metric: DISTANCE_COSINE, vector_type: VECTOR_TYPE_FLOAT, vector_dimension: 1024 } } }
             }
-        )", NTableIndex::NTableVectorKmeansTreeIndex::ParentColumn, NTableIndex::NTableVectorKmeansTreeIndex::ParentColumn), {NKikimrScheme::StatusInvalidParameter});
+        )", ParentColumn, ParentColumn), {NKikimrScheme::StatusInvalidParameter});
 
         // pk should not be covered
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(

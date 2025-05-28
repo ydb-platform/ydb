@@ -219,10 +219,12 @@ public:
 
     TAutoPtr<IDestructable> Finish(EStatus status) override {
         auto outcome = EExportOutcome::Success;
-        if (!Success || status == EStatus::Exception) {
+        if (status != EStatus::Done) {
+            outcome = status == EStatus::Exception
+                ? EExportOutcome::Error
+                : EExportOutcome::Aborted;
+        } else if (!Success) {
             outcome = EExportOutcome::Error;
-        } else if (status != EStatus::Done) {
-            outcome = EExportOutcome::Aborted;
         }
 
         PassAway();

@@ -178,10 +178,12 @@ class TCondEraseScan: public IActorCallback, public IActorExceptionHandler, publ
         auto response = MakeHolder<TEvDataShard::TEvConditionalEraseRowsResponse>();
         response->Record.SetTabletID(DataShard.TabletId);
 
-        if (!Success || status == EStatus::Exception) {
+        if (status != EStatus::Done) {
+            response->Record.SetStatus(status == EStatus::Exception
+                ? NKikimrTxDataShard::TEvConditionalEraseRowsResponse::ERASE_ERROR
+                : NKikimrTxDataShard::TEvConditionalEraseRowsResponse::ABORTED);
+        } else if (!Success) {
             response->Record.SetStatus(NKikimrTxDataShard::TEvConditionalEraseRowsResponse::ERASE_ERROR);
-        } else if (status != EStatus::Done) {
-            response->Record.SetStatus(NKikimrTxDataShard::TEvConditionalEraseRowsResponse::ABORTED);
         } else if (!NoMoreData) {
             response->Record.SetStatus(NKikimrTxDataShard::TEvConditionalEraseRowsResponse::PARTIAL);
         } else {

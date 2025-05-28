@@ -6,8 +6,9 @@ namespace NSchemeShardUT_Private {
 
 class TTestWithTabletReboots: public TTestWithReboots {
 public:
-    explicit TTestWithTabletReboots(bool killOnCommit = false): TTestWithReboots(killOnCommit) {
-    }
+    explicit TTestWithTabletReboots(bool killOnCommit = false)
+        : TTestWithReboots(killOnCommit)
+    {}
     void Run(std::function<void(TTestActorRuntime& runtime, bool& activeZone)> testScenario) {
         TDatashardLogBatchingSwitch logBatchingSwitch(false /* without batching */);
         RunWithTabletReboots(testScenario);

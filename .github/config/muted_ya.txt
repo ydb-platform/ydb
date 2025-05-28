@@ -129,9 +129,6 @@ ydb/tests/olap test_log_scenario.py.TestLogScenario.test[1051200]
 ydb/tests/olap test_log_scenario.py.TestLogScenario.test[180]
 ydb/tests/olap/column_family/compression alter_compression.py.TestAlterCompression.test_availability_data
 ydb/tests/olap/column_family/compression sole chunk chunk
-ydb/tests/olap/data_quotas [*/*] chunk chunk
-ydb/tests/olap/data_quotas test_quota_exhaustion.py.TestYdbWorkload.test
-ydb/tests/olap/data_quotas test_quota_exhaustion.py.TestYdbWorkload.test_duplicates
 ydb/tests/olap/scenario sole chunk chunk
 ydb/tests/olap/scenario test_alter_compression.py.TestAlterCompression.test[alter_compression]
 ydb/tests/olap/scenario test_alter_tiering.py.TestAlterTiering.test[many_tables]

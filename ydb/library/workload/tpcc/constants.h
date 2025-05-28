@@ -48,4 +48,8 @@ constexpr std::chrono::seconds ORDER_STATUS_THINK_TIME{10};
 constexpr std::chrono::seconds DELIVERY_THINK_TIME{5};
 constexpr std::chrono::seconds STOCK_LEVEL_THINK_TIME{5};
 
+// this constant is from TPC-C standard (#4.1). It is calculated based on
+// thinking and keying times and number of terminals per warehouse
+constexpr double MAX_TPMC_PER_WAREHOUSE = 12.86;
+
 } // namespace NYdb::NTPCC

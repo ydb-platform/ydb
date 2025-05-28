@@ -62,7 +62,7 @@ TTerminal::TTerminal(size_t terminalID,
                      size_t warehouseID,
                      size_t warehouseCount,
                      ITaskQueue& taskQueue,
-                     TDriver& driver,
+                     std::shared_ptr<NQuery::TQueryClient>& client,
                      const TString& path,
                      bool noSleep,
                      std::stop_token stopToken,
@@ -70,8 +70,7 @@ TTerminal::TTerminal(size_t terminalID,
                      std::shared_ptr<TTerminalStats>& stats,
                      std::shared_ptr<TLog>& log)
     : TaskQueue(taskQueue)
-    , Driver(driver)
-    , Context(terminalID, warehouseID, warehouseCount, TaskQueue, std::make_shared<NQuery::TQueryClient>(Driver), path, log)
+    , Context(terminalID, warehouseID, warehouseCount, TaskQueue, client, path, log)
     , NoSleep(noSleep)
     , StopToken(stopToken)
     , StopWarmup(stopWarmup)
@@ -81,7 +80,10 @@ TTerminal::TTerminal(size_t terminalID,
 }
 
 void TTerminal::Start() {
-    TaskQueue.TaskReady(Task.Handle, Context.TerminalID);
+    if (!Started) {
+        TaskQueue.TaskReadyThreadSafe(Task.Handle, Context.TerminalID);
+        Started = true;
+    }
 }
 
 TTerminalTask TTerminal::Run() {
@@ -109,46 +111,54 @@ TTerminalTask TTerminal::Run() {
             }
 
             co_await TTaskHasInflight(TaskQueue, Context.TerminalID);
+            if (StopToken.stop_requested()) {
+                TaskQueue.DecInflight();
+                break;
+            }
 
             LOG_T("Terminal " << Context.TerminalID << " starting " << transaction.Name << " transaction");
 
             size_t execCount = 0;
             auto startTime = std::chrono::steady_clock::now();
 
-            auto future = Context.Client->RetryQuery([this, &transaction, &execCount](TSession session) mutable {
-                auto& Log = Context.Log;
-                LOG_T("Terminal " << Context.TerminalID << " started RetryQuery for " << transaction.Name);
-                ++execCount;
-                return transaction.TaskFunc(Context, session);
-            });
+            // the block helps to ensure, that session is destroyed before we sleep right after the block
+            {
+                auto future = Context.Client->RetryQuery([this, &transaction, &execCount](TSession session) mutable {
+                    auto& Log = Context.Log;
+                    LOG_T("Terminal " << Context.TerminalID << " started RetryQuery for " << transaction.Name);
+                    ++execCount;
+                    return transaction.TaskFunc(Context, session);
+                });
 
-            auto result = co_await TSuspendWithFuture(future, Context.TaskQueue, Context.TerminalID);
-            auto endTime = std::chrono::steady_clock::now();
-            auto latency = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
+                auto result = co_await TSuspendWithFuture(future, Context.TaskQueue, Context.TerminalID);
+                auto endTime = std::chrono::steady_clock::now();
+                auto latency = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
 
-            if (result.IsSuccess()) {
-                Stats->AddOK(static_cast<TTerminalStats::ETransactionType>(txIndex), latency);
-                LOG_T("Terminal " << Context.TerminalID << " " << transaction.Name << " transaction finished in "
-                    << execCount << " execution(s): " << result.GetStatus());
-            } else {
-                Stats->IncFailed(static_cast<TTerminalStats::ETransactionType>(txIndex));
-                LOG_E("Terminal " << Context.TerminalID << " " << transaction.Name << " transaction failed in "
-                    << execCount << " execution(s): " << result.GetStatus() << ", "
-                    << result.GetIssues().ToOneLineString());
+                if (result.IsSuccess()) {
+                    Stats->AddOK(static_cast<TTerminalStats::ETransactionType>(txIndex), latency);
+                    LOG_T("Terminal " << Context.TerminalID << " " << transaction.Name << " transaction finished in "
+                        << execCount << " execution(s): " << result.GetStatus());
+                } else {
+                    Stats->IncFailed(static_cast<TTerminalStats::ETransactionType>(txIndex));
+                    LOG_E("Terminal " << Context.TerminalID << " " << transaction.Name << " transaction failed in "
+                        << execCount << " execution(s): " << result.GetStatus() << ", "
+                        << result.GetIssues().ToOneLineString());
+                }
             }
-
+            TaskQueue.DecInflight();
             if (!NoSleep) {
                 LOG_T("Terminal " << Context.TerminalID << " is going to sleep for "
                     << transaction.ThinkTime.count() << "s (think time)");
                 co_await TSuspend(TaskQueue, Context.TerminalID, transaction.ThinkTime);
             }
+            continue;
         } catch (const TUserAbortedException& ex) {
             // it's OK, inc statistics and ignore
             Stats->IncUserAborted(static_cast<TTerminalStats::ETransactionType>(txIndex));
             LOG_T("Terminal " << Context.TerminalID << " " << transaction.Name << " transaction aborted by user");
         } catch (const yexception& ex) {
             TStringStream ss;
-            ss << "Terminal " << Context.TerminalID << " got exception while transaction execution: "
+            ss << "Terminal " << Context.TerminalID << " got exception while " << transaction.Name << " execution: "
                 << ex.what();
             const auto* backtrace = ex.BackTrace();
             if (backtrace) {
@@ -157,6 +167,8 @@ TTerminalTask TTerminal::Run() {
             LOG_E(ss.Str());
             std::quick_exit(1);
         }
+
+        // only here if exception cought
 
         TaskQueue.DecInflight();
     }

@@ -101,6 +101,7 @@ TAsyncExecuteQueryResult GetStockCount(
 NThreading::TFuture<TStatus> GetStockLevelTask(TTransactionContext& context,
     TSession session)
 {
+    TTransactionInflightGuard guard;
     co_await TTaskReady(context.TaskQueue, context.TerminalID);
 
     auto& Log = context.Log;

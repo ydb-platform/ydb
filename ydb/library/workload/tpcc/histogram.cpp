@@ -39,6 +39,17 @@ void THistogram::Add(const THistogram& other) {
     TotalCount_ += other.TotalCount_;
 }
 
+void THistogram::Sub(const THistogram& other) {
+    if (HdrTill_ != other.HdrTill_ || MaxValue_ != other.MaxValue_) {
+        throw std::invalid_argument("Cannot sub histograms with different parameters");
+    }
+
+    for (size_t i = 0; i < Buckets_.size() && i < other.Buckets_.size(); ++i) {
+        Buckets_[i] -= other.Buckets_[i];
+    }
+    TotalCount_ -= other.TotalCount_;
+}
+
 uint64_t THistogram::GetValueAtPercentile(double percentile) const {
     if (percentile < 0.0 || percentile > 100.0) {
         throw std::invalid_argument("Percentile must be between 0 and 100");

@@ -1,4 +1,5 @@
 #include "init_impl.h"
+#include "mock.h"
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/system/tempfile.h>
@@ -79,7 +80,7 @@ config:
     - disk1
     - disk2
   hosts:
-    - host: mr-nvme-testing-002.ydb.yandex.net
+    - host: localhost
       port: 2135
 
   log_config:
@@ -140,8 +141,11 @@ selector_config:
         auto memLogInit = NConfig::MakeNoopMemLogInitializer();
         auto nodeBrokerClient = NConfig::MakeNoopNodeBrokerClient();
         auto dynConfigClient = NConfig::MakeNoopDynConfigClient();
-        auto env = NConfig::MakeDefaultEnv();
         auto logger = NConfig::MakeNoopInitLogger();
+
+        auto envMock = std::make_unique<NConfig::TEnvMock>();
+        envMock->SavedHostName = "localhost";
+        envMock->SavedFQDNHostName = "localhost";
 
         NConfig::TInitialConfiguratorDependencies deps{
             *errorCollector,
@@ -150,7 +154,7 @@ selector_config:
             *memLogInit,
             *nodeBrokerClient,
             *dynConfigClient,
-            *env,
+            *envMock,
             *logger,
         };
         auto initCfg = NConfig::MakeDefaultInitialConfigurator(deps);

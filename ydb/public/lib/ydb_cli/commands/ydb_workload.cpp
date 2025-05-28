@@ -523,10 +523,4 @@ int TWorkloadCommandClean::DoRun(NYdbWorkload::IWorkloadQueryGenerator& workload
     return EXIT_SUCCESS;
 }
 
-NTable::TSession TWorkloadCommandInit::GetSession() {
-    NTable::TCreateSessionResult result = TableClient->GetSession(NTable::TCreateSessionSettings()).GetValueSync();
-    NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
-    return result.GetSession();
-}
-
 } // namespace NYdb::NConsoleClient

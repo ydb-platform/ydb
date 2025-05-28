@@ -327,10 +327,11 @@ NThreading::TFuture<TStatus> GetDeliveryTask(TTransactionContext& context,
     co_await TTaskReady(context.TaskQueue, context.TerminalID);
 
     auto& Log = context.Log;
-    LOG_T("Terminal " << context.TerminalID << " started Delivery transaction");
 
     const int warehouseID = context.WarehouseID;
     const int carrierID = RandomNumber(1, 10);
+
+    LOG_T("Terminal " << context.TerminalID << " started Delivery transaction in " << warehouseID);
 
     size_t processedOrderCount = 0;
     std::optional<TTransaction> tx;

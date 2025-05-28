@@ -160,10 +160,10 @@ class YdbCliHelper:
             self.returncode = None
             self.stderr = None
             self.stdout = None
-            prefix = md5(','.join(query_names).encode()).hexdigest() if len(query_names) != 1 else [q for q in query_names][0]
-            self.__plan_path = f'{prefix}.plan'
-            self.__query_output_path = f'{prefix}.result'
-            self.json_path = f'{prefix}.stats.json'
+            self.__prefix = md5(','.join(query_names).encode()).hexdigest() if len(query_names) != 1 else [q for q in query_names][0]
+            self.__plan_path = f'{self.__prefix}.plan'
+            self.__query_output_path = f'{self.__prefix}.result'
+            self.json_path = f'{self.__prefix}.stats.json'
 
         def get_plan_path(self, query_name: str, plan_name: Any) -> str:
             return f'{self.__plan_path}.{query_name}.{plan_name}'
@@ -180,7 +180,6 @@ class YdbCliHelper:
             cmd += [
                 '--json', self.json_path,
                 '--output', self.__query_output_path,
-                '--executer', 'generic',
                 '--include', ','.join(self.query_names),
                 '--iterations', str(self.iterations),
                 '--plan', self.__plan_path,
@@ -203,11 +202,11 @@ class YdbCliHelper:
             try:
                 if not self.result.add_error(YdbCluster.wait_ydb_alive(int(os.getenv('WAIT_CLUSTER_ALIVE_TIMEOUT', 20 * 60)), self.db_path)):
                     if os.getenv('SECRET_REQUESTS', '') == '1':
-                        with open(f'{self.query_name}.stdout', "wt") as sout, open(f'{self.query_name}.stderr', "wt") as serr:
+                        with open(f'{self.__prefix}.stdout', "wt") as sout, open(f'{self.__prefix}.stderr', "wt") as serr:
                             cmd = self.__get_cmd()
                             logging.info(f'Run ydb cli: {cmd}')
                             process = subprocess.run(cmd, check=False, text=True, stdout=sout, stderr=serr)
-                        with open(f'{self.query_name}.stdout', "rt") as sout, open(f'{self.query_name}.stderr', "rt") as serr:
+                        with open(f'{self.__prefix}.stdout', "rt") as sout, open(f'{self.__prefix}.stderr', "rt") as serr:
                             self.stderr = serr.read()
                             self.stdout = sout.read()
                     else:

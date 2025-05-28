@@ -972,6 +972,7 @@ Y_UNIT_TEST(TestPartitionedBlobFails) {
         tc.Prepare(dispatchName, setup, activeZone);
         activeZone = false;
         tc.Runtime->SetScheduledLimit(200);
+        tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsCount(0);
 
         // One important client, never delete
         PQTabletPrepare({.maxSizeInPartition=200_MB}, {{"user1", true}}, tc);
@@ -1785,6 +1786,7 @@ Y_UNIT_TEST(TestPQReadAhead) {
         activeZone = false;
 
         tc.Runtime->SetScheduledLimit(200);
+        tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsCount(0);
 
         PQTabletPrepare({}, {{"aaa", true}}, tc); //important client - never delete
 

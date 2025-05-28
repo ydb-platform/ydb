@@ -968,7 +968,7 @@ bool CheckCmdReadResult(const TPQCmdReadSettings& settings, TEvPersQueue::TEvRes
         UNIT_ASSERT_C(result->Record.GetPartitionResponse().HasCmdReadResult(), result->Record.GetPartitionResponse().DebugString());
         auto res = result->Record.GetPartitionResponse().GetCmdReadResult();
 
-        UNIT_ASSERT_C(res.ResultSize() >= settings.ResCount,
+        UNIT_ASSERT_GE_C(res.ResultSize(), settings.ResCount,
                       "res.ResultSize()=" << res.ResultSize() << ", settings.ResCount=" << settings.ResCount);
         ui64 off = settings.Offset;
 

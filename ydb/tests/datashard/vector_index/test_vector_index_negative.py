@@ -50,7 +50,7 @@ class TestVectorIndexNegative(VectorBase):
             "int8": BinaryStringConverter(name="Knn::ToBinaryStringInt8", data_type="Int8", vector_type="Int8Vector"),
         }
 
-    def test_t(self):
+    def test_vector_index_negative(self):
         table_path = self.table_name
         prefix_data = {"String": lambda i: f"{i}"}
         vector = {"String": lambda i: f"{i}"}
@@ -92,8 +92,6 @@ class TestVectorIndexNegative(VectorBase):
             vector_type=vector_type,
             vector_dimension=vector_dimension,
             to_binary_string_converters=self.to_binary_string_converters,
-            rows_count=self.rows_count,
-            count_prefix=self.count_prefix,
         )
         try:
             self._select(
@@ -102,13 +100,10 @@ class TestVectorIndexNegative(VectorBase):
                 vector_name="vec_String",
                 col_name="vec_String",
                 knn_func="Knn::ManhattanDistance",
-                statements=self.create_statements(all_types),
                 numb=1,
                 prefix="",
                 vector_dimension=vector_dimension,
                 to_binary_string_converters=self.to_binary_string_converters,
-                rows_count=self.rows_count,
-                count_prefix=self.count_prefix,
             )
         except Exception as ex:
             if "No global indexes for table /Root/table" not in str(ex):
@@ -133,19 +128,29 @@ class TestVectorIndexNegative(VectorBase):
                 vector_name="vec_String",
                 col_name="vec_String",
                 knn_func="Knn::EuclideanDistance",
-                statements=self.create_statements(all_types),
                 numb=1,
                 prefix="",
                 vector_dimension=vector_dimension,
                 to_binary_string_converters=self.to_binary_string_converters,
-                rows_count=self.rows_count,
-                count_prefix=self.count_prefix,
             )
         except Exception as ex:
             if "Given predicate is not suitable for used index: idx_vector_vec_String" not in str(ex):
                 raise ex
 
-        self.query(f"select * from {self.table_name}")
+        rows = self._select(
+            table_path=table_path,
+            vector_type=vector_type,
+            vector_name="vec_String",
+            col_name="vec_String",
+            knn_func="Knn::ManhattanDistance",
+            numb=1,
+            prefix="",
+            vector_dimension=5,
+            to_binary_string_converters=self.to_binary_string_converters,
+        )
+        print(rows)
+        rows = self.query(f"select * from {table_path}")
+        print(rows)
 
     def _create_index(
         self, table_path, function, distance, vector_type, vector_dimension, levels, clusters, prefix, cover
@@ -167,9 +172,6 @@ class TestVectorIndexNegative(VectorBase):
         print(vector_index_sql_request)
         self.query(vector_index_sql_request)
 
-    def create_statements(self, all_types):
-        return [f"col_{type_name}" for type_name in all_types.keys()]
-
     def _upsert_values(
         self,
         table_name,
@@ -179,13 +181,11 @@ class TestVectorIndexNegative(VectorBase):
         vector_type,
         vector_dimension,
         to_binary_string_converters,
-        rows_count,
-        count_prefix,
     ):
         converter = to_binary_string_converters[vector_type]
         values = []
 
-        for key in range(1, rows_count + 1):
+        for key in range(1, self.rows_count + 1):
             vector = get_vector(vector_type, key % 127, vector_dimension)
             name = converter.name
             vector_type = converter.vector_type
@@ -193,7 +193,7 @@ class TestVectorIndexNegative(VectorBase):
                 f'''(
                     {", ".join([format_sql_value(key, type_name) for type_name in pk_types.keys()])},
                     {", ".join([format_sql_value(key, type_name) for type_name in all_types.keys()])},
-                    {", ".join([format_sql_value(key % count_prefix, type_name) for type_name in prefix.keys()])},
+                    {", ".join([format_sql_value(key % self.count_prefix, type_name) for type_name in prefix.keys()])},
                     Untag({name}([{vector}]), "{vector_type}")
                     )
                     '''
@@ -217,22 +217,19 @@ class TestVectorIndexNegative(VectorBase):
         vector_name,
         col_name,
         knn_func,
-        statements,
         numb,
         prefix,
         vector_dimension,
         to_binary_string_converters,
-        rows_count,
-        count_prefix,
     ):
         vector = get_vector(vector_type, numb, vector_dimension)
         select_sql = f"""
                                         $Target = {to_binary_string_converters[vector_type].name}(Cast([{vector}] AS List<{vector_type}>));
-                                        select {", ".join(statements)}
+                                        select  *
                                         from {table_path} view idx_vector_{vector_name}
                                         {f"WHERE prefix_String = {prefix}" if prefix != "" else ""}
                                         order by {knn_func}({col_name}, $Target) {"DESC" if knn_func in targets["similarity"].values() else "ASC"}
-                                        limit {rows_count//count_prefix if prefix != "" else rows_count};
+                                        limit 10;
                                         """
         print(select_sql)
         return self.query(select_sql)

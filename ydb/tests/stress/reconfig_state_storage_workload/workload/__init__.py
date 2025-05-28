@@ -4,9 +4,14 @@ import time
 import random
 import threading
 import requests
+import logging
 from enum import Enum
 
 from ydb.tests.stress.common.common import WorkloadBase
+from hamcrest import assert_that, contains_inanyorder
+
+logger = logging.getLogger(__name__)
+
 
 supported_pk_types = [
     # Bool https://github.com/ydb-platform/ydb/issues/13037
@@ -116,7 +121,7 @@ class WorkloadTablesCreateDrop(WorkloadBase):
         while not self.is_stop_requested():
             n = self._get_table_to_delete()
             if n is None:
-                print("create_drop: No tables to delete")
+                logger.info("create_drop: No tables to delete")
                 time.sleep(10)
                 continue
             self.client.drop_table(self.get_table_path(str(n)))
@@ -224,26 +229,64 @@ class WorkloadReconfigStateStorage(WorkloadBase):
             newRingGroup = [
                 {"RingGroupActorIdOffset": self.ringGroupActorIdOffset,"NToSelect": 3, "Ring": [{"Node": [4]}, {"Node": [5]}, {"Node": [6]}]}
                 ]
-            print(f"From: {defaultRingGroup} To: {newRingGroup}")
+            logger.info(f"From: {defaultRingGroup} To: {newRingGroup}")
             for i in range(len(newRingGroup)):
                 newRingGroup[i]["WriteOnly"] = True
-            print(self.do_request({"ReconfigStateStorage": {f"{self.config_name}Config": {
+            logger.info(self.do_request({"ReconfigStateStorage": {f"{self.config_name}Config": {
                         "RingGroups": defaultRingGroup + newRingGroup}}}))
             time.sleep(3)
             for i in range(len(newRingGroup)):
                 newRingGroup[i]["WriteOnly"] = False
-            print(self.do_request({"ReconfigStateStorage": {f"{self.config_name}Config": {
+            logger.info(self.do_request({"ReconfigStateStorage": {f"{self.config_name}Config": {
                         "RingGroups": defaultRingGroup + newRingGroup}}}))
             time.sleep(3)
-            print(self.do_request({"ReconfigStateStorage": {f"{self.config_name}Config": {
+            logger.info(self.do_request({"ReconfigStateStorage": {f"{self.config_name}Config": {
                         "RingGroups": newRingGroup}}}))
             time.sleep(3)
             curConfig = self.do_request_config()[f"{self.config_name}Config"]
             expectedConfig = {"Ring": newRingGroup[0]} if len(newRingGroup) == 1 else {"RingGroups": newRingGroup}
             if curConfig != expectedConfig:
                 raise Exception(f"Incorrect reconfig: expected:{curConfig}, actual:{expectedConfig}")
-            self.ringGroupActorIdOffset += 1
+            with self.lock:
+                self.ringGroupActorIdOffset += 1
         
+    def get_workload_thread_funcs(self):
+        return [self._loop]
+
+
+class WorkloadDiscovery(WorkloadBase):
+
+    def __init__(self, client, cluster, prefix, stop):
+        super().__init__(client, prefix, "discovery", stop)
+        self.cluster = cluster
+        self.lock = threading.Lock()
+        self.cnt = 0
+        self.endpoints = None
+
+    def get_stat(self):
+        with self.lock:
+            return f"Discovery: {self.cnt}"
+
+    def _loop(self):
+        while not self.is_stop_requested():
+            url = "%s:%s" % (self.cluster.nodes[1].host, self.cluster.nodes[1].port)
+            driver_config = ydb.DriverConfig(
+                url, self.client.database)
+            resolver = ydb.DiscoveryEndpointsResolver(driver_config)
+            result = resolver.resolve()
+            if result is not None:
+                if not self.endpoints is None:
+                    # logger.info(result.endpoints)
+                    assert_that(self.endpionts, contains_inanyorder(result.endpoints))
+                else:
+                    self.endpionts = result.endpoints
+            else:
+                raise Exception(f"Discovery empty")
+
+            with self.lock:
+                self.cnt += 1
+            time.sleep(1)
+
     def get_workload_thread_funcs(self):
         return [self._loop]
 
@@ -268,9 +311,9 @@ class WorkloadRunner:
         self._cleanup()
 
     def _cleanup(self):
-        print(f"Cleaning up {self.tables_prefix}...")
+        logger.info(f"Cleaning up {self.tables_prefix}...")
         deleted = self.client.remove_recursively(self.tables_prefix)
-        print(f"Cleaning up {self.tables_prefix}... done, {deleted} tables deleted")
+        logger.info(f"Cleaning up {self.tables_prefix}... done, {deleted} tables deleted")
 
     def run(self):
         stop = threading.Event()
@@ -278,18 +321,19 @@ class WorkloadRunner:
         workloads = [
             WorkloadTablesCreateDrop(self.client, self.name, stop, self.allow_nullables_in_pk),
             WorkloadInsertDelete(self.client, self.name, stop),
-            WorkloadReconfigStateStorage(self.client, self.cluster, self.name, stop, self.config_name)
+            WorkloadReconfigStateStorage(self.client, self.cluster, self.name, stop, self.config_name),
+            WorkloadDiscovery(self.client, self.cluster, self.name, stop)
         ]
         for w in workloads:
             w.start()
         started_at = time.time()
         while time.time() - started_at < self.duration:
-            print(f"Elapsed {(int)(time.time() - started_at)} seconds, stat:")
+            logger.info(f"Elapsed {(int)(time.time() - started_at)} seconds, stat:")
             for w in workloads:
-                print(f"\t{w.name}: {w.get_stat()}")
+                logger.info(f"\t{w.name}: {w.get_stat()}")
             time.sleep(5)
         stop.set()
-        print("Waiting for stop...")
+        logger.info("Waiting for stop...")
         for w in workloads:
             w.join()
-        print("Waiting for stop... stopped")
+        logger.info("Waiting for stop... stopped")

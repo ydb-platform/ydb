@@ -25,7 +25,8 @@ class TestReconfigStateStorageWorkload(object):
             },
             additional_log_configs={
                 'BS_NODE': LogLevels.DEBUG,
-                'STATESTORAGE': LogLevels.DEBUG,
+                'BOARD_LOOKUP': LogLevels.DEBUG,
+                # 'STATESTORAGE': LogLevels.DEBUG,
             }
         ))
         cls.cluster.start()
@@ -43,7 +44,7 @@ class TestReconfigStateStorageWorkload(object):
     def test_state_storage_board(self):
         with WorkloadRunner(self.client, self.cluster, 'reconfig_state_storage_workload', 120, True, "StateStorageBoard") as runner:
             runner.run()
-    
+
     # def test_scheme_board(self):
     #     with WorkloadRunner(self.client, self.cluster, 'reconfig_state_storage_workload', 120, True, "SchemeBoard") as runner:
     #         runner.run()

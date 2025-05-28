@@ -70,6 +70,20 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
         TVector<TReplica> Replicas;
         bool WriteOnly;
         ui32 WaitForReplicasToSuccess;
+
+        TString ToString() {
+            TStringStream str;
+            str << "{ WriteOnly: " << WriteOnly << ", WaitForReplicasToSuccess: " << WaitForReplicasToSuccess << ", Replicas:[";
+            bool first = true;
+            for (auto& r : Replicas) {
+                if (!first)
+                    str << ", ";
+                str << r.Replica.ToString() << " " << (ui32)r.State;
+                first = false;
+            } 
+            str << "] }";
+            return str.Str();
+        }
     };
 
     TVector<TReplicaGroup> ReplicaGroups;
@@ -245,7 +259,7 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
             default:
                 Y_ABORT("unsupported mode");
             }
-
+            BLOG_D("Handle TEvResolveReplicasList: Mode: " << (ui32)Mode << " groupIdx: " << replicaGroupIdx << " Group: " << replicaGroups.ToString());
         }
         Become(&TThis::StateLookup);
     }
@@ -319,7 +333,8 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
             return;
         }
         auto &replica = ReplicaGroups[groupIdx].Replicas[idx];
-
+        BLOG_D("Handle TEvReplicaBoardInfo: groupIdx: " << groupIdx << " idx: " << idx << " reconnectNumber: " 
+            << reconnectNumber << " replica.ReconnectNumber: " << replica.ReconnectNumber);
         if (reconnectNumber != replica.ReconnectNumber) {
             return;
         }

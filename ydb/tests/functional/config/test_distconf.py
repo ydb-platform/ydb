@@ -312,6 +312,15 @@ class KiKiMRDistConfReassignStateStorageTest(DistConfKiKiMRTest):
                     "RingGroups": defaultRingGroup + newRingGroup}}}))
         time.sleep(1)
         assert_eq(self.do_request_config()[f"{configName}Config"], {"RingGroups": defaultRingGroup + newRingGroup})
+
+        time.sleep(1)
+        for i in range(len(defaultRingGroup)):
+            defaultRingGroup[i]["WriteOnly"] = True
+        logger.info(self.do_load_and_test({"ReconfigStateStorage": {f"{configName}Config": {
+                    "RingGroups": newRingGroup + defaultRingGroup}}}))
+        time.sleep(1)
+        assert_eq(self.do_request_config()[f"{configName}Config"], {"RingGroups": newRingGroup + defaultRingGroup})
+
         time.sleep(1)
         logger.info(self.do_load_and_test({"ReconfigStateStorage": {f"{configName}Config": {
                     "RingGroups": newRingGroup}}}))

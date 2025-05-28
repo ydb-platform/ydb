@@ -5780,15 +5780,17 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         env.TestWaitNotification(runtime, txId);
         TestGetImport(runtime, txId, "/MyRoot",  isCorrupted ? Ydb::StatusIds::CANCELLED : Ydb::StatusIds::SUCCESS);
 
-        auto consumers = topic.GetConsumers();
+        if (!isCorrupted) {
+            auto consumers = topic.GetConsumers();
 
-        auto describePath = DescribePath(runtime, "/MyRoot" + topic.GetRestoredDir());
-        TestDescribeResult(describePath, {
-            NLs::PathExist,
-            NLs::ConsumersSize(consumers.size()),
-            NLs::ConsumerExist(consumers.at(0).name()),
-            NLs::ConsumerExist(consumers.at(1).name()),
-        });
+            auto describePath = DescribePath(runtime, "/MyRoot" + topic.GetRestoredDir());
+            TestDescribeResult(describePath, {
+                NLs::PathExist,
+                NLs::ConsumersSize(consumers.size()),
+                NLs::ConsumerExist(consumers.at(0).name()),
+                NLs::ConsumerExist(consumers.at(1).name()),
+            });
+        }
     }
 
     Y_UNIT_TEST(TopicImport) {

@@ -406,6 +406,15 @@ void FillSpec(NYT::TNode& spec,
         }
     }
 
+    auto probabily = TString(std::to_string(settings->_EnforceRegexpProbabilityFail.Get().GetOrElse(0)));
+    if (opProps.HasFlags(EYtOpProp::WithMapper)) {
+        spec["mapper"]["environment"]["YQL_RE2_REGEXP_PROBABILITY_FAIL"] = probabily;
+    }
+
+    if (opProps.HasFlags(EYtOpProp::WithReducer)) {
+        spec["reducer"]["environment"]["YQL_RE2_REGEXP_PROBABILITY_FAIL"] = probabily;
+    }
+
     if (settings->SuspendIfAccountLimitExceeded.Get(cluster).GetOrElse(false)) {
         spec["suspend_operation_if_account_limit_exceeded"] = true;
     }

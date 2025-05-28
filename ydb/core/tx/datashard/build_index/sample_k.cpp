@@ -1,8 +1,8 @@
-#include "datashard_impl.h"
 #include "kmeans_helper.h"
-#include "range_ops.h"
-#include "scan_common.h"
-#include "upload_stats.h"
+#include "../datashard_impl.h"
+#include "../range_ops.h"
+#include "../scan_common.h"
+#include "../upload_stats.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>

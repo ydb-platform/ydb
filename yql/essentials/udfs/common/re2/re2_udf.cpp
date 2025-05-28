@@ -1,3 +1,4 @@
+#include <yql/essentials/public/langver/yql_langver.h>
 #include <yql/essentials/public/udf/udf_helpers.h>
 #include <yql/essentials/public/udf/udf_type_ops.h>
 #include <yql/essentials/public/udf/udf_value_builder.h>
@@ -49,7 +50,10 @@ namespace {
         return result;
     }
 
-    bool ShouldFailOnInvalidRegexp(const std::string_view regexp) {
+    bool ShouldFailOnInvalidRegexp(const std::string_view regexp, NYql::TLangVersion currentLangVersion) {
+        if (currentLangVersion >= NYql::MakeLangVersion(2025, 3)) {
+            return true;
+        }
         THashType hash = GetStringHash(regexp) % 100;
         ui64 failProbability = GetFailProbability();
         return hash < failProbability;
@@ -101,11 +105,13 @@ namespace {
                 EMode mode,
                 const TOptionsSchema& optionsSchema,
                 TSourcePosition pos,
+                NYql::TLangVersion currentlangVersion,
                 const TRegexpGroups& regexpGroups = TRegexpGroups())
                 : Mode(mode)
                 , OptionsSchema(optionsSchema)
                 , Pos_(pos)
                 , RegexpGroups(regexpGroups)
+                , CurrentLangVersion(currentlangVersion)
             {
             }
 
@@ -121,13 +127,15 @@ namespace {
                         Mode,
                         posix,
                         OptionsSchema,
-                        Pos_));
+                        Pos_,
+                        CurrentLangVersion));
             }
 
             EMode Mode;
             const TOptionsSchema OptionsSchema;
             TSourcePosition Pos_;
             const TRegexpGroups RegexpGroups;
+            NYql::TLangVersion CurrentLangVersion;
         };
 
         static const TStringRef& Name(EMode mode) {
@@ -162,13 +170,14 @@ namespace {
             EMode mode,
             bool posix,
             const TOptionsSchema& optionsSchema,
-            TSourcePosition pos)
+            TSourcePosition pos,
+            NYql::TLangVersion currentLangVersion)
             : RegexpGroups(regexpGroups)
             , Mode(mode)
             , Captured()
             , OptionsSchema(optionsSchema)
             , Pos_(pos)
-        {
+            , CurrentLangVersion(currentLangVersion) {
             try {
                 auto patternValue = runConfig.GetElement(0);
                 auto optionsValue = runConfig.GetElement(1);
@@ -191,7 +200,7 @@ namespace {
 
                 Regexp = std::make_unique<RE2>(StringPiece(pattern.data(), pattern.size()), options);
 
-                if (!Regexp->ok() && ShouldFailOnInvalidRegexp(pattern)) {
+                if (!Regexp->ok() && ShouldFailOnInvalidRegexp(pattern, CurrentLangVersion)) {
                     throw yexception() << FormatRegexpError(*Regexp);
                 }
 
@@ -289,6 +298,7 @@ namespace {
         std::unique_ptr<StringPiece[]> Captured;
         const TOptionsSchema OptionsSchema;
         TSourcePosition Pos_;
+        NYql::TLangVersion CurrentLangVersion;
 
         TUnboxedValue BuildEmptyStruct(const IValueBuilder* valueBuilder) const {
             TUnboxedValue* items = nullptr;
@@ -488,7 +498,7 @@ namespace {
 
                 if (!typesOnly) {
                     const auto mode = isMatch ? TRe2Udf::EMode::MATCH : TRe2Udf::EMode::GREP;
-                    builder.Implementation(new TRe2Udf::TFactory<posix>(mode, optionsSchema, builder.GetSourcePosition()));
+                    builder.Implementation(new TRe2Udf::TFactory<posix>(mode, optionsSchema, builder.GetSourcePosition(), builder.GetCurrentLangVer()));
                 }
             } else if (isCapture) {
                 TRegexpGroups groups;
@@ -529,7 +539,7 @@ namespace {
 
                     if (!typesOnly) {
                         builder.Implementation(
-                            new TRe2Udf::TFactory<posix>(TRe2Udf::EMode::CAPTURE, optionsSchema, builder.GetSourcePosition(), groups));
+                            new TRe2Udf::TFactory<posix>(TRe2Udf::EMode::CAPTURE, optionsSchema, builder.GetSourcePosition(), builder.GetCurrentLangVer(), groups));
                     }
 
                 } else {
@@ -541,20 +551,20 @@ namespace {
                     .RunConfig(MakeRunConfigType(builder, optOptionsStructType));
 
                 if (!typesOnly) {
-                    builder.Implementation(new TRe2Udf::TFactory<posix>(TRe2Udf::EMode::REPLACE, optionsSchema, builder.GetSourcePosition()));
+                    builder.Implementation(new TRe2Udf::TFactory<posix>(TRe2Udf::EMode::REPLACE, optionsSchema, builder.GetSourcePosition(), builder.GetCurrentLangVer()));
                 }
             } else if (isCount) {
                 builder.SimpleSignature<ui32(TOptional<char*>)>()
                     .RunConfig(MakeRunConfigType(builder, optOptionsStructType));
 
                 if (!typesOnly) {
-                    builder.Implementation(new TRe2Udf::TFactory<posix>(TRe2Udf::EMode::COUNT, optionsSchema, builder.GetSourcePosition()));
+                    builder.Implementation(new TRe2Udf::TFactory<posix>(TRe2Udf::EMode::COUNT, optionsSchema, builder.GetSourcePosition(), builder.GetCurrentLangVer()));
                 }
             } else if (isFindAndConsume) {
                 builder.SimpleSignature<TListType<char*>(TOptional<char*>)>()
                     .RunConfig(MakeRunConfigType(builder, optOptionsStructType));
                 if (!typesOnly) {
-                    builder.Implementation(new TRe2Udf::TFactory<posix>(TRe2Udf::EMode::FIND_AND_CONSUME, optionsSchema, builder.GetSourcePosition()));
+                    builder.Implementation(new TRe2Udf::TFactory<posix>(TRe2Udf::EMode::FIND_AND_CONSUME, optionsSchema, builder.GetSourcePosition(), builder.GetCurrentLangVer()));
                 }
             } else if (!(
                             TEscape::DeclareSignature(name, userType, builder, typesOnly) ||

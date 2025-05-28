@@ -1053,7 +1053,7 @@ private:
 
         for (const auto& operation : queryBlock.Operations()) {
             auto& tableData = SessionCtx->Tables().ExistingTable(operation.Cluster(), operation.Table());
-            if (tableData.Metadata->IsOlap() || !tableData.Metadata->SysView.empty()) {
+            if (tableData.Metadata->IsOlap() || tableData.Metadata->Kind == EKikimrTableKind::SysView) {
                 // Always use ScanQuery for queries with OLAP and system tables.
                 return true;
             }
@@ -1536,7 +1536,7 @@ private:
             return nullptr;
         }
 
-        if (SessionCtx->Config().EnableNewRBO) {  
+        if (SessionCtx->Config().EnableNewRBO) {
             return MakeIntrusive<TAsyncPrepareYqlResult>(compileResult.QueryExpr.Get(), ctx, *YqlTransformerNewRBO, SessionCtx->QueryPtr(),
                 query.Text, sqlVersion, TransformCtx, compileResult.KeepInCache, compileResult.CommandTagName, DataProvidersFinalizer);
         }

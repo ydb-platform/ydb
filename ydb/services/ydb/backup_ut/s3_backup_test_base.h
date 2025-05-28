@@ -11,6 +11,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <util/generic/scope.h>
 #include <util/system/env.h>
 
 class TS3BackupTestFixture : public NUnitTest::TBaseFixture {
@@ -242,6 +243,50 @@ protected:
         return l;
     }
 
+    static TString ModifyHexEncodedString(TString value) {
+        UNIT_ASSERT_GT(value.size(), 0);
+        char c = value.front();
+        if (c == '9' || c == 'f' || c == 'F') {
+            --c;
+        } else {
+            ++c;
+        }
+        value[0] = c;
+        return value;
+    }
+
+    void ModifyChecksumAndCheckThatImportFails(const TString& checksumFile, const NYdb::NImport::TImportFromS3Settings& importSettings) {
+        const auto checksumFileIt = S3Mock().GetData().find(checksumFile);
+        UNIT_ASSERT_C(checksumFileIt != S3Mock().GetData().end(), "No checksum file: " << checksumFile);
+
+        // Automatic return to the previous state
+        const TString checksumValue = checksumFileIt->second;
+        Y_DEFER {
+            S3Mock().GetData()[checksumFile] = checksumValue;
+        };
+
+        checksumFileIt->second = ModifyHexEncodedString(checksumValue);
+
+        auto res = YdbImportClient().ImportFromS3(importSettings).GetValueSync();
+        WaitOpStatus(res, NYdb::EStatus::CANCELLED);
+    }
+
+    void ModifyChecksumAndCheckThatImportFails(const std::initializer_list<TString>& checksumFiles, const NYdb::NImport::TImportFromS3Settings& importSettings) {
+        auto copySettings = [&]() {
+            NYdb::NImport::TImportFromS3Settings settings = importSettings;
+            settings.DestinationPath(TStringBuilder() << "/Root/Prefix_" << RestoreAttempt++);
+            return settings;
+        };
+
+        // Check that settings are OK
+        auto res = YdbImportClient().ImportFromS3(copySettings()).GetValueSync();
+        WaitOpSuccess(res);
+
+        for (const TString& checksumFile : checksumFiles) {
+            ModifyChecksumAndCheckThatImportFails(checksumFile, copySettings());
+        }
+    }
+
 private:
     TDataShardExportFactory DataShardExportFactory;
     TMaybe<NYdb::TKikimrWithGrpcAndRootSchema> Server_;
@@ -249,4 +294,5 @@ private:
     TMaybe<NKikimr::NWrappers::NTestHelpers::TS3Mock> S3Mock_;
     TMaybe<NYdb::TDriverConfig> DriverConfig;
     TMaybe<NYdb::TDriver> Driver;
+    size_t RestoreAttempt = 0;
 };

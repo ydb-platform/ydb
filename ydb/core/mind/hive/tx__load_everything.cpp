@@ -611,7 +611,8 @@ public:
 
                     if (followerGroup.RequireAllDataCenters && !followerGroup.FollowerCountPerDataCenter) {
                         followerGroup.FollowerCountPerDataCenter = true;
-                        followerGroup.SetFollowerCount((followerGroup.GetRawFollowerCount() - 1) / Self->DataCenters.size() + 1);
+                        auto dataCenters = Self->DataCenters.size() ? Self->DataCenters.size() : 3ull;
+                        followerGroup.SetFollowerCount((followerGroup.GetRawFollowerCount() + dataCenters - 1) / dataCenters); // round up
                     }
                 } else {
                     ++numMissingTablets;
@@ -737,6 +738,7 @@ public:
                         leaderOrFollower->MutableResourceMetricsAggregates().MaximumCPU.InitializeFrom(metricsRowset.GetValueOrDefault<Schema::Metrics::MaximumCPU>());
                         leaderOrFollower->MutableResourceMetricsAggregates().MaximumMemory.InitializeFrom(metricsRowset.GetValueOrDefault<Schema::Metrics::MaximumMemory>());
                         leaderOrFollower->MutableResourceMetricsAggregates().MaximumNetwork.InitializeFrom(metricsRowset.GetValueOrDefault<Schema::Metrics::MaximumNetwork>());
+                        leaderOrFollower->UsageImpact = metricsRowset.GetValueOrDefault<Schema::Metrics::UsageImpact>();
                         // do not reorder
                         leaderOrFollower->UpdateResourceUsage(metricsRowset.GetValueOrDefault<Schema::Metrics::ProtoMetrics>());
                     }

@@ -145,7 +145,7 @@ void TServiceContextBase::ReplyEpilogue()
         LoggingEnabled_ &&
         TDispatcher::Get()->ShouldAlertOnMissingRequestInfo())
     {
-        static constexpr auto& Logger = RpcServerLogger;
+        const auto& Logger = RpcServerLogger();
         YT_LOG_ALERT("Missing request info (RequestId: %v, Method: %v.%v)",
             RequestId_,
             RequestHeader_->service(),

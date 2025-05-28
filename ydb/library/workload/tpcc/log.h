@@ -10,6 +10,7 @@
     } \
     Y_SEMICOLON_GUARD
 
+#define LOG_T(message) LOG_IMPL(Log, ELogPriority::TLOG_RESOURCES, message)
 #define LOG_D(message) LOG_IMPL(Log, ELogPriority::TLOG_DEBUG, message)
 #define LOG_I(message) LOG_IMPL(Log, ELogPriority::TLOG_INFO, message)
 #define LOG_W(message) LOG_IMPL(Log, ELogPriority::TLOG_WARNING, message)

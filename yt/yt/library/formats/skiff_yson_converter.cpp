@@ -722,6 +722,14 @@ TYsonToSkiffConverter CreateSimpleYsonToSkiffConverter(
             case ESimpleLogicalValueType::Interval64:
                 CheckWireType(wireType, {EWireType::Int32, EWireType::Int64, EWireType::String32});
                 return CreatePrimitiveTypeYsonToSkiffConverter(std::move(descriptor), wireType);
+            case ESimpleLogicalValueType::TzDate32:
+            case ESimpleLogicalValueType::TzDatetime64:
+            case ESimpleLogicalValueType::TzTimestamp64:
+            case ESimpleLogicalValueType::TzDate:
+            case ESimpleLogicalValueType::TzDatetime:
+            case ESimpleLogicalValueType::TzTimestamp:
+                // TODO(nadya02): YT-15805: support tz types.
+                THROW_ERROR_EXCEPTION("Tz types are not supported now");
         }
     } catch (const std::exception& ex) {
         RethrowCannotMatchField(descriptor, skiffSchema, ex);
@@ -1430,6 +1438,14 @@ TSkiffToYsonConverter CreateSimpleSkiffToYsonConverter(
             case ESimpleLogicalValueType::Interval64:
                 CheckWireType(wireType, {EWireType::Int32, EWireType::Int64, EWireType::String32});
                 return CreatePrimitiveTypeSkiffToYsonConverter(wireType);
+            case ESimpleLogicalValueType::TzDate:
+            case ESimpleLogicalValueType::TzDatetime:
+            case ESimpleLogicalValueType::TzTimestamp:
+            case ESimpleLogicalValueType::TzDate32:
+            case ESimpleLogicalValueType::TzDatetime64:
+            case ESimpleLogicalValueType::TzTimestamp64:
+                // TODO(nadya02): YT-15805: Support tz types.
+                THROW_ERROR_EXCEPTION("Tz types are not supported now");
         }
         YT_ABORT();
     } catch (const std::exception& ex) {

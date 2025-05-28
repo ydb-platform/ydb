@@ -321,6 +321,8 @@ struct Schema : NIceDb::Schema {
         struct PutUserDataLatency : Column<14, NScheme::NTypeIds::Interval> {};
         struct GetFastLatency : Column<15, NScheme::NTypeIds::Interval> {};
         struct LayoutCorrect : Column<16, NScheme::NTypeIds::Bool> {};
+        struct OperatingStatus : Column<17, NScheme::NTypeIds::Utf8> {};
+        struct ExpectedStatus : Column<18, NScheme::NTypeIds::Utf8> {};
 
         using TKey = TableKey<GroupId>;
         using TColumns = TableColumns<
@@ -337,7 +339,9 @@ struct Schema : NIceDb::Schema {
             PutTabletLogLatency,
             PutUserDataLatency,
             GetFastLatency,
-            LayoutCorrect>;
+            LayoutCorrect,
+            OperatingStatus,
+            ExpectedStatus>;
     };
 
     struct StoragePools : Table<7> {

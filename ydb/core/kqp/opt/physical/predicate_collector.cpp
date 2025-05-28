@@ -433,7 +433,7 @@ void CollectPredicates(const TExprBase& predicate, TOLAPPredicateNode& predicate
         predicateTree.CanBePushedApply = CoalesceCanBePushed(maybeCoalesce.Cast(), lambdaArg, lambdaBody, {true, options.PushdownSubstring});
     } else if (const auto maybeCompare = predicate.Maybe<TCoCompare>()) {
         predicateTree.CanBePushed = CompareCanBePushed(maybeCompare.Cast(), lambdaArg, lambdaBody, {false, options.PushdownSubstring});
-        predicateTree.CanBePushedApply = CompareCanBePushed(maybeCompare.Cast(), lambdaArg, lambdaBody, {false, options.PushdownSubstring});
+        predicateTree.CanBePushedApply = CompareCanBePushed(maybeCompare.Cast(), lambdaArg, lambdaBody, {true, options.PushdownSubstring});
     } else if (const auto maybeExists = predicate.Maybe<TCoExists>()) {
         predicateTree.CanBePushed = ExistsCanBePushed(maybeExists.Cast(), lambdaArg);
         predicateTree.CanBePushedApply = predicateTree.CanBePushed;

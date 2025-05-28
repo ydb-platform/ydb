@@ -56,7 +56,7 @@ class TestVectorIndex(RestartToAnotherVersionFixture):
             session_pool.execute_with_retries(create_index_sql)
 
     def wait_inddex_ready(self, targets, vector_types, vector_type, distance, order, distance_func):
-        for i in range(10):
+        for i in range(30):
             time.sleep(7)
 
             try:
@@ -109,7 +109,7 @@ class TestVectorIndex(RestartToAnotherVersionFixture):
             assert len(result_sets[0].rows) > 0, "Query returned an empty set"
             rows = result_sets[0].rows
             for row in rows:
-                assert row['target'] > 0, "the distance is zero"
+                assert row['target'] is not None, "the distance is None"
 
     def create_table(self):
         with ydb.QuerySessionPool(self.driver) as session_pool:

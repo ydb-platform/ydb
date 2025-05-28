@@ -38,9 +38,12 @@ bool IsImplTable(std::string_view tableName);
 bool IsBuildImplTable(std::string_view tableName);
 
 using TClusterId = ui64;
-
 inline constexpr auto ClusterIdType = Ydb::Type::UINT64;
 inline constexpr const char* ClusterIdTypeName = "Uint64";
+
+void EnsureNoPostingParentFlag(TClusterId parent);
+
+TClusterId SetPostingParentFlag(TClusterId parent);
 
 }
 }

@@ -118,8 +118,8 @@ std::shared_ptr<TJoinOptimizerNodeInternal> MakeJoinInternal(
 */
 std::shared_ptr<TJoinOptimizerNode> ConvertFromInternal(
     const std::shared_ptr<IBaseOptimizerNode>& internal,
-    const TFDStorage& fdStorage,
-    bool enableShuffleElimination
+    bool enableShuffleElimination,
+    const TFDStorage* fdStorage
 );
 
 } // namespace NYql::NDq

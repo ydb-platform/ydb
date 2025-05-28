@@ -1571,7 +1571,14 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             R"(dt32 <= ts64 - inter64)",
 
             R"(dt <= CAST('2001-01-01' as Date))",
-            R"(dt <= Date('2001-01-01'))"
+            R"(dt <= Date('2001-01-01'))",
+
+            R"((`dt`, `id`) >= (CAST('1998-12-01' AS Date) - Interval64("P100D"), 3))",
+            R"((`ts`, `id`) >= (Timestamp("1970-01-01T00:00:03.000001Z"), 3))",
+            R"((`dt32`, `id`) >= (CAST('1998-12-01' AS Date32), 3))",
+            R"((`dtm`, `id`) >= (CAST('1998-12-01' AS DateTime), 3))",
+            R"((`dtm64`, `id`) >= (CAST('1998-12-01' AS DateTime64), 3))",
+            R"((`ts64`, `id`) >= (Timestamp("1970-01-01T00:00:03.000001Z"), 3))"
         };
 
         auto queryPrefix = R"(

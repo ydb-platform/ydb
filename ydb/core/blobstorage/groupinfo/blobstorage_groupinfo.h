@@ -156,6 +156,26 @@ public:
     };
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // BLOB PART DATA INTEGRITY CHECKER
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    struct IDataIntegrityChecker {
+        virtual ~IDataIntegrityChecker() = default;
+
+        using TPart = std::pair<ui32, TRope>;
+
+        struct TPartsData {
+            std::vector<std::vector<TPart>> Parts; // partId - 1 -> [ {diskIdx; data} ]
+        };
+
+        struct TPartsState {
+            bool IsOk = true;
+            TString DataErrorInfo;
+        };
+
+        virtual TPartsState GetDataState(const TLogoBlobID& id, const TPartsData& partsData) const = 0;
+    };
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // TOPOLOGY
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     struct TVDiskInfo {
@@ -198,6 +218,8 @@ public:
         std::unique_ptr<IQuorumChecker> QuorumChecker;
         // map to quickly get (Short)VDisk id from its order number inside the group
         TVector<TVDiskIdShort> VDiskIdForOrderNumber;
+        // data integrity checker
+        std::unique_ptr<IDataIntegrityChecker> DataIntegrityChecker;
 
         TTopology(TBlobStorageGroupType gtype);
         TTopology(TBlobStorageGroupType gtype, ui32 numFailRealms, ui32 numFailDomainsPerFailRealm, ui32 numVDisksPerFailDomain,
@@ -236,6 +258,8 @@ public:
         ui32 GetNumFailDomainsPerFailRealm() const { return FailRealms[0].FailDomains.size(); }
         // get quorum checker
         const IQuorumChecker& GetQuorumChecker() const { return *QuorumChecker; }
+        // get data integrity checker
+        const IDataIntegrityChecker& GetDataIntegrityChecker() const { return *DataIntegrityChecker; }
 
         //////////////////////////////////////////////////////////////////////////////////////
         // IBlobToDiskMapper interface
@@ -277,6 +301,7 @@ public:
     private:
         static IBlobToDiskMapper *CreateMapper(TBlobStorageGroupType gtype, const TTopology *topology);
         static IQuorumChecker *CreateQuorumChecker(const TTopology *topology);
+        static IDataIntegrityChecker *CreateDataIntegrityChecker(const TTopology *topology);
     };
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

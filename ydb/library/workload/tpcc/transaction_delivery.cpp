@@ -25,10 +25,13 @@ struct TOrderData {
         OrderLineNumbers.reserve(MAX_ITEMS);
     }
 
-    int OrderID;
-    int CustomerId;
+    int OrderID = 0;
+    int CustomerId = 0;
+    double TotalAmount = 0;
+    double DeliveryCount = 0;
+    double CustomerBalance = 0;
+
     std::vector<int> OrderLineNumbers;
-    double TotalAmount;
 };
 
 //-----------------------------------------------------------------------------
@@ -151,14 +154,14 @@ TAsyncExecuteQueryResult UpdateCarrierID(
         DECLARE $o_w_id AS Int32;
         DECLARE $o_carrier_id AS Int32;
 
-        UPSERT INTO `oorder` (O_ID, O_D_ID, O_W_ID, O_CARRIER_ID)
-         VALUES ($o_id, $o_d_id, $o_w_id, $o_carrier_id);
+        UPSERT INTO `oorder` (O_W_ID, O_D_ID, O_ID, O_CARRIER_ID)
+         VALUES ($o_w_id, $o_d_id, $o_id, $o_carrier_id);
     )", context.Path.c_str());
 
     auto params = TParamsBuilder()
-        .AddParam("$o_id").Int32(orderID).Build()
-        .AddParam("$o_d_id").Int32(districtID).Build()
         .AddParam("$o_w_id").Int32(warehouseID).Build()
+        .AddParam("$o_d_id").Int32(districtID).Build()
+        .AddParam("$o_id").Int32(orderID).Build()
         .AddParam("$o_carrier_id").Int32(carrierID).Build()
         .Build();
 
@@ -168,6 +171,44 @@ TAsyncExecuteQueryResult UpdateCarrierID(
         std::move(params));
 
     LOG_T("Terminal " << context.TerminalID << " waiting for carrier ID update result");
+    return result;
+}
+
+TAsyncExecuteQueryResult UpdateDeliveryDate(
+    TSession& session, const TTransaction& tx, TTransactionContext& context,
+    int districtID, int warehouseID, const TOrderData& orderData, TInstant timestamp)
+{
+    auto& Log = context.Log;
+    static std::string query = std::format(R"(
+        PRAGMA TablePathPrefix("{}");
+
+        DECLARE $values as List<Struct<p1:Int,p2:Int32,p3:Int32,p4:Int32,p5:Timestamp>>;
+        $mapper = ($row) -> (AsStruct(
+            $row.p1 as OL_W_ID, $row.p2 as OL_D_ID, $row.p3 as OL_O_ID,
+            $row.p4 as OL_NUMBER, $row.p5 as OL_DELIVERY_D));
+        UPSERT INTO `order_line` SELECT * FROM as_table(ListMap($values, $mapper));
+    )", context.Path.c_str());
+
+    auto paramsBuilder = TParamsBuilder();
+    auto& listBuilder = paramsBuilder.AddParam("$values").BeginList();
+    for (const auto& lineNum : orderData.OrderLineNumbers) {
+        listBuilder.AddListItem().BeginStruct()
+            .AddMember("p1").Int32(warehouseID)
+            .AddMember("p2").Int32(districtID)
+            .AddMember("p3").Int32(orderData.OrderID)
+            .AddMember("p4").Int32(lineNum)
+            .AddMember("p5").Timestamp(timestamp)
+        .EndStruct();
+    }
+
+    auto params = listBuilder.EndList().Build().Build();
+
+    auto result = session.ExecuteQuery(
+        query,
+        TTxControl::Tx(tx),
+        std::move(params));
+
+    LOG_T("Terminal " << context.TerminalID << " waiting for delivery date update result");
     return result;
 }
 
@@ -204,43 +245,6 @@ TAsyncExecuteQueryResult GetOrderLines(
         std::move(params));
 
     LOG_T("Terminal " << context.TerminalID << " waiting for order lines result");
-    return result;
-}
-
-//-----------------------------------------------------------------------------
-
-TAsyncExecuteQueryResult UpdateOrderLineDeliveryDate(
-    TSession& session, const TTransaction& tx, TTransactionContext& context,
-    int warehouseID, int districtID, int orderID, int lineNumber, TInstant deliveryDate)
-{
-    auto& Log = context.Log;
-    static std::string query = std::format(R"(
-        PRAGMA TablePathPrefix("{}");
-
-        DECLARE $ol_w_id AS Int32;
-        DECLARE $ol_d_id AS Int32;
-        DECLARE $ol_o_id AS Int32;
-        DECLARE $ol_number AS Int32;
-        DECLARE $ol_delivery_d AS Timestamp;
-
-        UPSERT INTO `order_line` (OL_W_ID, OL_D_ID, OL_O_ID, OL_NUMBER, OL_DELIVERY_D)
-         VALUES ($ol_w_id, $ol_d_id, $ol_o_id, $ol_number, $ol_delivery_d);
-    )", context.Path.c_str());
-
-    auto params = TParamsBuilder()
-        .AddParam("$ol_w_id").Int32(warehouseID).Build()
-        .AddParam("$ol_d_id").Int32(districtID).Build()
-        .AddParam("$ol_o_id").Int32(orderID).Build()
-        .AddParam("$ol_number").Int32(lineNumber).Build()
-        .AddParam("$ol_delivery_d").Timestamp(deliveryDate).Build()
-        .Build();
-
-    auto result = session.ExecuteQuery(
-        query,
-        TTxControl::Tx(tx),
-        std::move(params));
-
-    LOG_T("Terminal " << context.TerminalID << " waiting for order line delivery date update result");
     return result;
 }
 
@@ -284,7 +288,7 @@ TAsyncExecuteQueryResult GetCustomerData(
 
 TAsyncExecuteQueryResult UpdateCustomerBalanceAndDeliveryCount(
     TSession& session, const TTransaction& tx, TTransactionContext& context,
-    int warehouseID, int districtID, int customerID, double balance, int deliveryCount)
+    int warehouseID, int districtID, const TOrderData& orderData)
 {
     auto& Log = context.Log;
     static std::string query = std::format(R"(
@@ -303,9 +307,9 @@ TAsyncExecuteQueryResult UpdateCustomerBalanceAndDeliveryCount(
     auto params = TParamsBuilder()
         .AddParam("$c_w_id").Int32(warehouseID).Build()
         .AddParam("$c_d_id").Int32(districtID).Build()
-        .AddParam("$c_id").Int32(customerID).Build()
-        .AddParam("$c_balance").Double(balance).Build()
-        .AddParam("$c_delivery_cnt").Int32(deliveryCount).Build()
+        .AddParam("$c_id").Int32(orderData.CustomerId).Build()
+        .AddParam("$c_balance").Double(orderData.CustomerBalance).Build()
+        .AddParam("$c_delivery_cnt").Int32(orderData.DeliveryCount).Build()
         .Build();
 
     auto result = session.ExecuteQuery(
@@ -324,16 +328,20 @@ TAsyncExecuteQueryResult UpdateCustomerBalanceAndDeliveryCount(
 NThreading::TFuture<TStatus> GetDeliveryTask(TTransactionContext& context,
     TSession session)
 {
+    TTransactionInflightGuard guard;
     co_await TTaskReady(context.TaskQueue, context.TerminalID);
 
     auto& Log = context.Log;
-    LOG_T("Terminal " << context.TerminalID << " started Delivery transaction");
 
     const int warehouseID = context.WarehouseID;
     const int carrierID = RandomNumber(1, 10);
 
+    LOG_T("Terminal " << context.TerminalID << " started Delivery transaction in " << warehouseID);
+
     size_t processedOrderCount = 0;
     std::optional<TTransaction> tx;
+
+    std::array<std::optional<TOrderData>, DISTRICT_HIGH_ID - DISTRICT_LOW_ID + 1> orders;
 
     for (int districtID = DISTRICT_LOW_ID; districtID <= DISTRICT_HIGH_ID; ++districtID) {
         // Get the oldest new order for this district
@@ -359,10 +367,12 @@ NThreading::TFuture<TStatus> GetDeliveryTask(TTransactionContext& context,
             LOG_T("Terminal " << context.TerminalID << " no new orders for district " << districtID);
             continue;
         }
-        int orderID = orderParser.ColumnParser("NO_O_ID").GetInt32();
+        orders[districtID - 1] = TOrderData();
+        auto& currentOrder = *orders[districtID - 1];
+        currentOrder.OrderID = orderParser.ColumnParser("NO_O_ID").GetInt32();
 
         // Get the customer ID from the order
-        auto customerIdFuture = GetCustomerID(session, *tx, context, orderID, districtID, warehouseID);
+        auto customerIdFuture = GetCustomerID(session, *tx, context, currentOrder.OrderID, districtID, warehouseID);
         auto customerIdResult = co_await TSuspendWithFuture(customerIdFuture, context.TaskQueue, context.TerminalID);
         if (!customerIdResult.IsSuccess()) {
             if (ShouldExit(customerIdResult)) {
@@ -376,13 +386,13 @@ NThreading::TFuture<TStatus> GetDeliveryTask(TTransactionContext& context,
         TResultSetParser customerParser(customerIdResult.GetResultSet(0));
         if (!customerParser.TryNextRow()) {
             LOG_E("Terminal " << context.TerminalID << " failed to get customerID "
-                << warehouseID << ", " <<  districtID << ", " << ", " << orderID);
+                << warehouseID << ", " <<  districtID << ", " << ", " << currentOrder.OrderID);
             std::quick_exit(1);
         }
-        int customerID = *customerParser.ColumnParser("O_C_ID").GetOptionalInt32();
+        currentOrder.CustomerId = *customerParser.ColumnParser("O_C_ID").GetOptionalInt32();
 
         // Get customer data
-        auto customerDataFuture = GetCustomerData(session, *tx, context, warehouseID, districtID, customerID);
+        auto customerDataFuture = GetCustomerData(session, *tx, context, warehouseID, districtID, currentOrder.CustomerId);
         auto customerDataResult = co_await TSuspendWithFuture(customerDataFuture, context.TaskQueue, context.TerminalID);
         if (!customerDataResult.IsSuccess()) {
             if (ShouldExit(customerDataResult)) {
@@ -396,15 +406,15 @@ NThreading::TFuture<TStatus> GetDeliveryTask(TTransactionContext& context,
         TResultSetParser customerDataParser(customerDataResult.GetResultSet(0));
         if (!customerDataParser.TryNextRow()) {
             LOG_E("Terminal " << context.TerminalID << " failed to get customer data for "
-                << warehouseID << ", " <<  districtID << ", " << ", " << customerID);
+                << warehouseID << ", " <<  districtID << ", " << ", " << currentOrder.CustomerId);
             std::quick_exit(1);
         }
 
-        double customerBalance = *customerDataParser.ColumnParser("C_BALANCE").GetOptionalDouble();
-        double deliveryCount = *customerDataParser.ColumnParser("C_DELIVERY_CNT").GetOptionalInt32();
+        currentOrder.CustomerBalance = *customerDataParser.ColumnParser("C_BALANCE").GetOptionalDouble();
+        currentOrder.DeliveryCount = *customerDataParser.ColumnParser("C_DELIVERY_CNT").GetOptionalInt32();
 
         // Get information about the order lines
-        auto orderLinesFuture = GetOrderLines(session, *tx, context, orderID, districtID, warehouseID);
+        auto orderLinesFuture = GetOrderLines(session, *tx, context, currentOrder.OrderID, districtID, warehouseID);
         auto orderLinesResult = co_await TSuspendWithFuture(orderLinesFuture, context.TaskQueue, context.TerminalID);
         if (!orderLinesResult.IsSuccess()) {
             if (ShouldExit(orderLinesResult)) {
@@ -415,33 +425,34 @@ NThreading::TFuture<TStatus> GetDeliveryTask(TTransactionContext& context,
             co_return orderLinesResult;
         }
 
-        // Process order lines and calculate total amount
-        TOrderData orderData;
-        orderData.OrderID = orderID;
-        orderData.CustomerId = customerID;
-        orderData.TotalAmount = 0.0;
-
         TResultSetParser orderLinesParser(orderLinesResult.GetResultSet(0));
         while (orderLinesParser.TryNextRow()) {
             int lineNumber = orderLinesParser.ColumnParser("OL_NUMBER").GetInt32();
             double amount = *orderLinesParser.ColumnParser("OL_AMOUNT").GetOptionalDouble();
 
-            orderData.OrderLineNumbers.push_back(lineNumber);
-            orderData.TotalAmount += amount;
+            currentOrder.OrderLineNumbers.push_back(lineNumber);
+            currentOrder.TotalAmount += amount;
         }
 
-        if (orderData.OrderLineNumbers.empty()) {
+        if (currentOrder.OrderLineNumbers.empty()) {
             LOG_E("Terminal " << context.TerminalID << " failed to get order lines for "
-                << warehouseID << ", " <<  districtID << ", " << ", " << orderID);
+                << warehouseID << ", " <<  districtID << ", " << ", " << currentOrder.OrderID);
             std::quick_exit(1);
         }
 
         // Update customer balance and delivery count
-        customerBalance += orderData.TotalAmount;
-        deliveryCount += 1;
+        currentOrder.CustomerBalance += currentOrder.TotalAmount;
+        currentOrder.DeliveryCount += 1;
+    }
+
+    for (int districtID = DISTRICT_LOW_ID; districtID <= DISTRICT_HIGH_ID; ++districtID) {
+        if (!orders[districtID - 1]) {
+            continue;
+        }
+        auto& currentOrder = *orders[districtID - 1];
 
         // Delete the entry from the new order table
-        auto deleteOrderFuture = DeleteNewOrder(session, *tx, context, orderID, districtID, warehouseID);
+        auto deleteOrderFuture = DeleteNewOrder(session, *tx, context, currentOrder.OrderID, districtID, warehouseID);
         auto deleteOrderResult = co_await TSuspendWithFuture(deleteOrderFuture, context.TaskQueue, context.TerminalID);
         if (!deleteOrderResult.IsSuccess()) {
             if (ShouldExit(deleteOrderResult)) {
@@ -453,7 +464,7 @@ NThreading::TFuture<TStatus> GetDeliveryTask(TTransactionContext& context,
         }
 
         // Update the carrier ID in the order
-        auto updateCarrierFuture = UpdateCarrierID(session, *tx, context, orderID, districtID, warehouseID, carrierID);
+        auto updateCarrierFuture = UpdateCarrierID(session, *tx, context, currentOrder.OrderID, districtID, warehouseID, carrierID);
         auto updateCarrierResult = co_await TSuspendWithFuture(updateCarrierFuture, context.TaskQueue, context.TerminalID);
         if (!updateCarrierResult.IsSuccess()) {
             if (ShouldExit(updateCarrierResult)) {
@@ -466,26 +477,20 @@ NThreading::TFuture<TStatus> GetDeliveryTask(TTransactionContext& context,
 
         // Update all the order lines with the delivery date
         TInstant deliveryDate = TInstant::Now();
-        for (int lineNumber : orderData.OrderLineNumbers) {
-            auto updateDeliveryDateFuture = UpdateOrderLineDeliveryDate(
-                session, *tx, context, warehouseID, districtID, orderID, lineNumber, deliveryDate);
-
-            auto updateDeliveryDateResult = co_await TSuspendWithFuture(
-                updateDeliveryDateFuture, context.TaskQueue, context.TerminalID);
-
-            if (!updateDeliveryDateResult.IsSuccess()) {
-                if (ShouldExit(updateDeliveryDateResult)) {
-                    LOG_E("Terminal " << context.TerminalID << " update delivery date failed: "
-                        << updateDeliveryDateResult.GetIssues().ToOneLineString());
-                    std::quick_exit(1);
-                }
-                co_return updateDeliveryDateResult;
+        auto updateDeliveryDateFuture = UpdateDeliveryDate(
+            session, *tx, context, districtID, warehouseID, currentOrder, deliveryDate);
+        auto updateDeliveryResult = co_await TSuspendWithFuture(updateDeliveryDateFuture, context.TaskQueue, context.TerminalID);
+        if (!updateDeliveryResult.IsSuccess()) {
+            if (ShouldExit(updateDeliveryResult)) {
+                LOG_E("Terminal " << context.TerminalID << " update delivery date failed: "
+                    << updateDeliveryResult.GetIssues().ToOneLineString());
+                std::quick_exit(1);
             }
+            co_return updateDeliveryResult;
         }
 
-       auto updateCustomerFuture = UpdateCustomerBalanceAndDeliveryCount(
-            session, *tx, context, warehouseID, districtID, customerID, customerBalance, deliveryCount);
-
+        auto updateCustomerFuture = UpdateCustomerBalanceAndDeliveryCount(
+            session, *tx, context, warehouseID, districtID, currentOrder);
         auto updateCustomerResult = co_await TSuspendWithFuture(updateCustomerFuture, context.TaskQueue, context.TerminalID);
         if (!updateCustomerResult.IsSuccess()) {
             if (ShouldExit(updateCustomerResult)) {

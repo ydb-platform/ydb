@@ -120,6 +120,10 @@ namespace NKikimr::NStorage {
 
         config->SetSelfAssemblyUUID(selfAssemblyUUID);
 
+        if (auto error = UpdateClusterState(config)) {
+            return error;
+        }
+
         return std::nullopt;
     }
 

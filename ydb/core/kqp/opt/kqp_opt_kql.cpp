@@ -1069,7 +1069,13 @@ TMaybe<TKqlQueryList> BuildKqlQuery(TKiDataQueryBlocks dataQueryBlocks, const TK
         TVector<TExprBase> kqlEffects;
         TNodeOnNodeOwnedMap effectsMap;
         for (const auto& effect : block.Effects()) {
+            TString cluster;
+            TString table;
+
             if (auto maybeWrite = effect.Maybe<TKiWriteTable>()) {
+                cluster = maybeWrite.Cast().DataSink().Cluster();
+                table = maybeWrite.Cast().Table().Value();
+
                 auto writeOp = HandleWriteTable(maybeWrite.Cast(), ctx, *kqpCtx, tablesData);
                 if (!writeOp) {
                     return {};
@@ -1079,6 +1085,9 @@ TMaybe<TKqlQueryList> BuildKqlQuery(TKiDataQueryBlocks dataQueryBlocks, const TK
             }
 
             if (auto maybeUpdate = effect.Maybe<TKiUpdateTable>()) {
+                cluster = maybeUpdate.Cast().DataSink().Cluster();
+                table = maybeUpdate.Cast().Table().Value();
+
                 auto updateOp = HandleUpdateTable(maybeUpdate.Cast(), ctx, *kqpCtx, tablesData, withSystemColumns);
                 if (!updateOp) {
                     return {};
@@ -1087,11 +1096,26 @@ TMaybe<TKqlQueryList> BuildKqlQuery(TKiDataQueryBlocks dataQueryBlocks, const TK
             }
 
             if (auto maybeDelete = effect.Maybe<TKiDeleteTable>()) {
+                cluster = maybeDelete.Cast().DataSink().Cluster();
+                table = maybeDelete.Cast().Table().Value();
+
                 auto deleteOp = HandleDeleteTable(maybeDelete.Cast(), ctx, *kqpCtx, tablesData, withSystemColumns);
                 if (!deleteOp) {
                     return {};
                 }
                 kqlEffects.push_back(TExprBase(deleteOp));
+            }
+
+            if (cluster && table) {
+                auto& tableData = GetTableData(tablesData, cluster, table);
+                if (tableData.Metadata->WritesToTableAreDisabled) {
+                    NYql::TIssues issues;
+                    issues.AddIssue(NYql::TIssue(ctx.GetPosition(effect.Pos()),
+                        TStringBuilder() << "Table `" << tableData.Metadata->Name << "` modification is disabled: "
+                            << tableData.Metadata->DisableWritesReason));
+                    ctx.IssueManager.AddIssues(ctx.GetPosition(effect.Pos()), issues);
+                    return {};
+                }
             }
 
             if (TExprNode::TPtr result = HandleExternalWrite(effect, ctx, typesCtx)) {

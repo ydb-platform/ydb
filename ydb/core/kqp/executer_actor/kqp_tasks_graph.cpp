@@ -939,6 +939,9 @@ void FillTaskMeta(const TStageInfo& stageInfo, const TTask& task, NYql::NDqProto
         NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta protoTaskMeta;
 
         FillTableMeta(stageInfo, protoTaskMeta.MutableTable());
+        if (stageInfo.Meta.TableConstInfo->SysViewType) {
+            protoTaskMeta.MutableTable()->SetSysViewType(*stageInfo.Meta.TableConstInfo->SysViewType);
+        }
 
         const auto& tableInfo = stageInfo.Meta.TableConstInfo;
 

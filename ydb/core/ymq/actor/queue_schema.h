@@ -117,6 +117,8 @@ public:
         AddQuoterResource,
         Commit
     };
+private:
+    static TString GenerateCommitQueueParamsQuery();
 
 private:
     const TQueuePath QueuePath_;
@@ -185,6 +187,8 @@ public:
     }
 
 private:
+    static TString GenerateEraseQueueRecordQuery();
+
     void PrepareCleanupPlan(const bool isFifo, const ui64 shardCount);
 
     void NextAction();

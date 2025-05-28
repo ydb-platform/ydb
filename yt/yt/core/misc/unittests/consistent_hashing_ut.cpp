@@ -254,7 +254,7 @@ public:
 
         std::swap(Items_.back(), Items_[deleteIndex]);
         Items_.pop_back();
-        return std::move(deleteItem);
+        return deleteItem;
     }
 
     std::vector<TCrpItemWithToken>::iterator begin()

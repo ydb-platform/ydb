@@ -114,7 +114,6 @@ public:
                     description: pdisk identifier
                     required: true
                     type: integer
-                    required: true
                   - name: timeout
                     in: query
                     description: timeout in ms

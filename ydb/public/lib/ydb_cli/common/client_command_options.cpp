@@ -262,6 +262,12 @@ TClientCommandOption& TClientCommandOption::DefaultValue(const TString& defaultV
     return *this;
 }
 
+TClientCommandOption& TClientCommandOption::ManualDefaultValueDescription(const TString& description) {
+    ManualDefaultOptionValueDescription = description;
+    RebuildHelpMessage();
+    return *this;
+}
+
 void TClientCommandOption::RebuildHelpMessage() {
     NColorizer::TColors& colors = NColorizer::AutoColors(Cout);
     TStringBuilder helpMessage;
@@ -303,8 +309,12 @@ void TClientCommandOption::RebuildHelpMessage() {
         if (CanParseFromProfile) {
             helpMessage << Endl << indent << indent << currentPoint++ << ". Active configuration profile";
         }
-        if (DefaultOptionValue) {
-            helpMessage << Endl << indent << indent << currentPoint++ << ". Default value: " << colors.Cyan() << DefaultOptionValue << colors.OldColor();
+        if (DefaultOptionValue || ManualDefaultOptionValueDescription) {
+            if (DefaultOptionValue) {
+                helpMessage << Endl << indent << indent << currentPoint++ << ". Default value: " << colors.Cyan() << DefaultOptionValue << colors.OldColor();
+            } else {
+                helpMessage << Endl << indent << indent << currentPoint++ << ". " << ManualDefaultOptionValueDescription;
+            }
         }
     } else {
         if (!EnvInfo.empty()) {

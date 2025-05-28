@@ -70,6 +70,7 @@ public:
         if (SpecialReadContext->IsActive()) {
             Abort("unexpected on destructor");
         }
+        SpecialReadContext->UnregisterActors();
     }
 };
 

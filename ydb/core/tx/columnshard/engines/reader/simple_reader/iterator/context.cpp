@@ -107,8 +107,14 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
 void TSpecialReadContext::RegisterActors() {
     AFL_VERIFY(!DuplicatesManager);
     if (GetReadMetadata()->GetDeduplicationPolicy() == EDeduplicationPolicy::PREVENT_DUPLICATES) {
-        DuplicatesManager =
-            NActors::TActivationContext::Register(new NDuplicateFiltering::TDuplicateManager(*this), GetCommonContext()->GetScanActorId());
+        DuplicatesManager = NActors::TActivationContext::Register(new NDuplicateFiltering::TDuplicateManager(*this));
+    }
+}
+
+void TSpecialReadContext::UnregisterActors() {
+    if (DuplicatesManager) {
+        NActors::TActivationContext::AsActorContext().Send(DuplicatesManager, new NActors::TEvents::TEvPoison);
+        DuplicatesManager = TActorId();
     }
 }
 

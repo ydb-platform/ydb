@@ -35,6 +35,7 @@ public:
     virtual TString ProfileDebugString() const override;
 
     void RegisterActors();
+    void UnregisterActors();
 
     const TActorId& GetDuplicatesManagerVerified() const {
         AFL_VERIFY(DuplicatesManager);
@@ -43,6 +44,10 @@ public:
 
     TSpecialReadContext(const std::shared_ptr<TReadContext>& commonContext)
         : TBase(commonContext) {
+    }
+
+    ~TSpecialReadContext() {
+        AFL_VERIFY(!DuplicatesManager);
     }
 };
 

@@ -367,12 +367,8 @@ Y_UNIT_TEST_SUITE(RowDispatcherTests) {
         MockSessionError(topicSession1, ReadActorId1, PartitionId0);
         ExpectSessionError(ReadActorId1);
 
-        ProcessData(ReadActorId1, PartitionId1, topicSession2);
         ProcessData(ReadActorId2, PartitionId0, topicSession3);
         ProcessData(ReadActorId2, PartitionId1, topicSession4);
-
-        MockStopSession(Source1, ReadActorId1);
-        ExpectStopSession(topicSession2);
         
         MockStopSession(Source2, ReadActorId2);
         ExpectStopSession(topicSession3);
@@ -474,7 +470,7 @@ Y_UNIT_TEST_SUITE(RowDispatcherTests) {
         ExpectStopSession(topicSessionId);
     }
 
-    Y_UNIT_TEST_F(ProcessFatalError, TFixture) {
+    Y_UNIT_TEST_F(SessionFatalError, TFixture) {
         MockAddSession(Source1, {PartitionId0, PartitionId1}, ReadActorId1);
         auto session0 = ExpectRegisterTopicSession();
         auto session1 = ExpectRegisterTopicSession();
@@ -487,22 +483,34 @@ Y_UNIT_TEST_SUITE(RowDispatcherTests) {
         ExpectStartSession(session0);
         ExpectStartSession(session1);
 
-        MockSessionError(session0, ReadActorId1, PartitionId0, true);
+        MockSessionError(session0, ReadActorId1, PartitionId0, true);       // consumer (ReadActorId1) deleted
         ExpectSessionError(ReadActorId1);
         ExpectPoisonPill(session0);
+        ExpectStopSession(session1);
 
-        ProcessData(ReadActorId2, PartitionId1, session1);      // still working
+        // 1 topic session / 1 consumer (ReadActorId2) 
 
-        // MockAddSession(Source1, {PartitionId0}, ReadActorId1);
-        // auto new_session = ExpectRegisterTopicSession();
+        ProcessData(ReadActorId2, PartitionId1, session1);                  // still working
 
-        // MockSessionError(session0, ReadActorId2, PartitionId0, true);          // late event
-        // ExpectSessionError(ReadActorId2);
+        MockAddSession(Source1, {PartitionId0, PartitionId1}, ReadActorId1);
+        auto new_session0 = ExpectRegisterTopicSession();
+        ExpectStartSession(new_session0);
+        ExpectStartSession(session1);
 
-        // MockAddSession(Source1, {PartitionId0}, ReadActorId2);
-        // ProcessData(ReadActorId1, PartitionId0, new_session);
-        // ProcessData(ReadActorId2, PartitionId0, new_session);
+        // 2 topic session / 2 consumer 
 
+        MockSessionError(session0, ReadActorId2, PartitionId0, true);      // late event, delete ReadActorId2 consumer
+        ExpectSessionError(ReadActorId2);
+
+         // 2 topic session / 1 consumer 
+
+        MockAddSession(Source1, {PartitionId0, PartitionId1}, ReadActorId2);
+        ExpectStartSession(new_session0);
+        ExpectStartSession(session1);
+        ProcessData(ReadActorId1, PartitionId0, new_session0);
+        ProcessData(ReadActorId2, PartitionId0, new_session0);
+        ProcessData(ReadActorId1, PartitionId1, session1);
+        ProcessData(ReadActorId2, PartitionId1, session1);
     }
 }
 

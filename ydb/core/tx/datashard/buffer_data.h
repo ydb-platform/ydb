@@ -38,10 +38,10 @@ public:
         LastKey = {};
     }
 
-    void AddRow(TSerializedCellVec&& key, TSerializedCellVec&& targetPk, TString&& targetValue) {
-        Rows->emplace_back(std::move(targetPk), std::move(targetValue));
+    void AddRow(TSerializedCellVec&& rowKey, TString&& rowValue, TSerializedCellVec&& originalKey = {}) {
+        Rows->emplace_back(std::move(rowKey), std::move(rowValue));
         ByteSize += Rows->back().first.GetBuffer().size() + Rows->back().second.size();
-        LastKey = std::move(key);
+        LastKey = std::move(originalKey);
     }
 
     bool IsEmpty() const {

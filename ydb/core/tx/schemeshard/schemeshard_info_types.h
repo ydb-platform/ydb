@@ -3056,6 +3056,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         BuildKindUnspecified = 0,
         BuildSecondaryIndex = 10,
         BuildVectorIndex = 11,
+        BuildPrefixedVectorIndex = 12,
         BuildColumns = 20,
     };
 
@@ -3101,42 +3102,46 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
 
         EState State = Sample;
 
-        NTableIndex::TClusterId Parent = 0;
-        NTableIndex::TClusterId ParentEnd = 0;  // included
+        NTableIndex::TClusterId ParentBegin = 0;  // included
+        NTableIndex::TClusterId Parent = ParentBegin;
 
         NTableIndex::TClusterId ChildBegin = 1;  // included
+        NTableIndex::TClusterId Child = ChildBegin;
+
+        ui64 ParentEnd() const noexcept {  // included
+            return ChildBegin - 1;
+        }
+        ui64 ChildEnd() const noexcept {  // included
+            return ChildBegin + ChildCount() - 1;
+        }
+
+        ui64 ParentCount() const noexcept {
+            return ParentEnd() - ParentBegin + 1;
+        }
+        ui64 ChildCount() const noexcept {
+            return ParentCount() * K;
+        }
 
         TString ToStr() const {
             return TStringBuilder()
                 << "{ K = " << K
                 << ", Level = " << Level << " / " << Levels
-                << ", Parent = " << Parent << " / " << ParentEnd
-                << ", State = " << State << " }";
+                << ", Parent = [" << ParentBegin << ".." << Parent << ".." << ParentEnd()
+                << "], Child = [" << ChildBegin << ".." << Child << ".." << ChildEnd()
+                << "], State = " << State << " }";
         }
 
-        static NTableIndex::TClusterId BinPow(NTableIndex::TClusterId k, ui32 l) {
-            NTableIndex::TClusterId r = 1;
-            while (l != 0) {
-                if (l % 2 != 0) {
-                    r *= k;
-                }
-                k *= k;
-                l /= 2;
-            }
-            return r;
-        }
-
-        bool NeedsAnotherLevel() const {
+        bool NeedsAnotherLevel() const noexcept {
             return Level < Levels;
         }
-        bool NeedsAnotherParent() const {
-            return Parent < ParentEnd;
+        bool NeedsAnotherParent() const noexcept {
+            return Parent < ParentEnd();
         }
-        bool NeedsAnotherState() const {
+        bool NeedsAnotherState() const noexcept {
             return State == Sample /*|| State == Recompute*/;
         }
 
-        bool NextState() {
+        bool NextState() noexcept {
             if (!NeedsAnotherState()) {
                 return false;
             }
@@ -3144,25 +3149,32 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
             return true;
         }
 
-        bool NextParent() {
+        bool NextParent() noexcept {
             if (!NeedsAnotherParent()) {
                 return false;
             }
-            ChildBegin += K;
             State = Sample;
             ++Parent;
+            Child += K;
             return true;
         }
 
-        bool NextLevel() {
+        bool NextLevel() noexcept {
             if (!NeedsAnotherLevel()) {
                 return false;
             }
-            ChildBegin += K;
             State = Sample;
-            ++Parent;
-            ParentEnd += BinPow(K, Level);
-            ++Level;
+            NextLevel(ChildCount());
+            return true;
+        }
+
+        bool PrefixTableDone(ui64 tableSize, ui64 shards) {
+            if (!NeedsAnotherLevel()) {
+                return false;
+            }
+            State = MultiLocal;
+            NextLevel((1 + tableSize) * shards);
+            Parent = ParentEnd();
             return true;
         }
 
@@ -3178,7 +3190,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         }
 
         NKikimrTxDataShard::TEvLocalKMeansRequest::EState GetUpload() const {
-            if (Parent == 0) {
+            if (Level == 1) {
                 if (NeedsAnotherLevel()) {
                     return NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_MAIN_TO_BUILD;
                 } else {
@@ -3202,7 +3214,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
             return name;
         }
         TString ReadFrom() const {
-            Y_ASSERT(Parent != 0);
+            Y_ASSERT(Level > 1);
             using namespace NTableIndex::NTableVectorKmeansTreeIndex;
             TString name = PostingTable;
             name += Level % 2 != 0 ? BuildSuffix1 : BuildSuffix0;
@@ -3210,11 +3222,8 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         }
 
         std::pair<NTableIndex::TClusterId, NTableIndex::TClusterId> RangeToBorders(const TSerializedTableRange& range) const {
-            Y_ASSERT(ParentEnd != 0);
-            const NTableIndex::TClusterId maxParent = ParentEnd;
-            const NTableIndex::TClusterId levelSize = TKMeans::BinPow(K, Level - 1);
-            Y_ASSERT(levelSize <= maxParent);
-            const NTableIndex::TClusterId minParent = maxParent - levelSize + 1;
+            const NTableIndex::TClusterId minParent = ParentBegin;
+            const NTableIndex::TClusterId maxParent = ParentEnd();
             const NTableIndex::TClusterId parentFrom = [&, from = range.From.GetCells()] {
                 if (!from.empty()) {
                     if (!from[0].IsNull()) {
@@ -3231,9 +3240,9 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
                 }
                 return maxParent;
             }();
-            Y_VERIFY_DEBUG_S(minParent <= parentFrom, "minParent(" << minParent << ") > parentFrom(" << parentFrom << ")");
-            Y_VERIFY_DEBUG_S(parentFrom <= parentTo, "parentFrom(" << parentFrom << ") > parentTo(" << parentTo << ")");
-            Y_VERIFY_DEBUG_S(parentTo <= maxParent, "parentTo(" << parentTo << ") > maxParent(" << maxParent << ")");
+            Y_VERIFY_DEBUG_S(minParent <= parentFrom, "minParent(" << minParent << ") > parentFrom(" << parentFrom << ") " << ToStr());
+            Y_VERIFY_DEBUG_S(parentFrom <= parentTo, "parentFrom(" << parentFrom << ") > parentTo(" << parentTo << ") " << ToStr());
+            Y_VERIFY_DEBUG_S(parentTo <= maxParent, "parentTo(" << parentTo << ") > maxParent(" << maxParent << ") " << ToStr());
             return {parentFrom, parentTo};
         }
 
@@ -3257,6 +3266,15 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
                 return str << " }";
             };
             return TStringBuilder{} << "{ From: " << toStr(range.From) << ", To: " << toStr(range.To) << " }";
+        }
+
+    private:
+        void NextLevel(ui64 childCount) noexcept {
+            ParentBegin = ChildBegin;
+            Parent = ParentBegin;
+            ChildBegin = ParentBegin + childCount;
+            Child = ChildBegin;
+            ++Level;
         }
     };
     TKMeans KMeans;
@@ -3297,6 +3315,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         TSerializedTableRange Range;
         TString LastKeyAck;
         ui64 SeqNoRound = 0;
+        size_t Index = 0;  // size of Shards map before this element was added
 
         NKikimrIndexBuilder::EBuildStatus Status = NKikimrIndexBuilder::EBuildStatus::INVALID;
 
@@ -3305,7 +3324,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
 
         TBillingStats Processed;
 
-        TShardStatus(TSerializedTableRange range, TString lastKeyAck);
+        TShardStatus(TSerializedTableRange range, TString lastKeyAck, size_t shardsCount);
 
         TString ToString(TShardIdx shardIdx = InvalidShardIdx) const {
             TStringBuilder result;
@@ -3494,6 +3513,12 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         indexInfo->IndexName = row.template GetValue<Schema::IndexBuild::IndexName>();
         indexInfo->IndexType = row.template GetValue<Schema::IndexBuild::IndexType>();
 
+        // note: please note that here we specify BuildSecondaryIndex as operation default,
+        // because previosly this table was dedicated for build secondary index operations only.
+        indexInfo->BuildKind = TIndexBuildInfo::EBuildKind(
+            row.template GetValueOrDefault<Schema::IndexBuild::BuildKind>(
+                ui32(TIndexBuildInfo::EBuildKind::BuildSecondaryIndex)));
+
         // Restore the operation details: ImplTableDescriptions and SpecializedIndexDescription.
         if (row.template HaveValue<Schema::IndexBuild::CreationConfig>()) {
             NKikimrSchemeOp::TIndexCreationConfig creationConfig;
@@ -3509,7 +3534,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
                 case NKikimrSchemeOp::TIndexCreationConfig::kVectorIndexKmeansTreeDescription: {
                     auto& desc = *creationConfig.MutableVectorIndexKmeansTreeDescription();
                     indexInfo->KMeans.K = std::max<ui32>(2, desc.settings().clusters());
-                    indexInfo->KMeans.Levels = std::max<ui32>(1, desc.settings().levels());
+                    indexInfo->KMeans.Levels = indexInfo->IsBuildPrefixedVectorIndex() + std::max<ui32>(1, desc.settings().levels());
                     indexInfo->SpecializedIndexDescription =std::move(desc);
                 } break;
                 case NKikimrSchemeOp::TIndexCreationConfig::SPECIALIZEDINDEXDESCRIPTION_NOT_SET:
@@ -3575,19 +3600,12 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
             row.template GetValueOrDefault<Schema::IndexBuild::UnlockTxDone>(
                 indexInfo->UnlockTxDone);
 
-        // note: please note that here we specify BuildSecondaryIndex as operation default,
-        // because previosly this table was dedicated for build secondary index operations only.
-        indexInfo->BuildKind = TIndexBuildInfo::EBuildKind(
-            row.template GetValueOrDefault<Schema::IndexBuild::BuildKind>(
-                ui32(TIndexBuildInfo::EBuildKind::BuildSecondaryIndex)));
-
         indexInfo->AlterMainTableTxId =
             row.template GetValueOrDefault<Schema::IndexBuild::AlterMainTableTxId>(
                 indexInfo->AlterMainTableTxId);
         indexInfo->AlterMainTableTxStatus =
-            row
-                .template GetValueOrDefault<Schema::IndexBuild::AlterMainTableTxStatus>(
-                    indexInfo->AlterMainTableTxStatus);
+            row.template GetValueOrDefault<Schema::IndexBuild::AlterMainTableTxStatus>(
+                indexInfo->AlterMainTableTxStatus);
         indexInfo->AlterMainTableTxDone =
             row.template GetValueOrDefault<Schema::IndexBuild::AlterMainTableTxDone>(
                 indexInfo->AlterMainTableTxDone);
@@ -3632,7 +3650,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
             "AddShardStatus id# " << Id << " shard " << shardIdx << " range " << KMeans.RangeToDebugStr(bound));
         AddParent(bound, shardIdx);
         Shards.emplace(
-            shardIdx, TIndexBuildInfo::TShardStatus(std::move(bound), std::move(lastKeyAck)));
+            shardIdx, TIndexBuildInfo::TShardStatus(std::move(bound), std::move(lastKeyAck), Shards.size()));
         TIndexBuildInfo::TShardStatus &shardStatus = Shards.at(shardIdx);
 
         shardStatus.Status =
@@ -3670,8 +3688,12 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         return BuildKind == EBuildKind::BuildSecondaryIndex;
     }
 
+    bool IsBuildPrefixedVectorIndex() const {
+        return BuildKind == EBuildKind::BuildPrefixedVectorIndex;
+    }
+
     bool IsBuildVectorIndex() const {
-        return BuildKind == EBuildKind::BuildVectorIndex;
+        return BuildKind == EBuildKind::BuildVectorIndex || IsBuildPrefixedVectorIndex();
     }
 
     bool IsBuildIndex() const {
@@ -3710,16 +3732,8 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
                 && toUpload == 0 && inProgress == 0) {
                 return 100.f;
             }
-            auto percent = static_cast<float>(KMeans.Level - 1) / KMeans.Levels;
-            auto multiply = 1.f / KMeans.Levels;
-            if (KMeans.State == TKMeans::MultiLocal) {
-                percent += (multiply * (total - inProgress - toUpload)) / total;
-            } else {
-                const auto parentSize = KMeans.BinPow(KMeans.K, KMeans.Level - 1);
-                const auto parentFrom = KMeans.ParentEnd - parentSize + 1;
-                percent += (multiply * (KMeans.Parent - parentFrom)) / parentSize;
-            }
-            return 100.f * percent;
+            // TODO(mbkkt) more detailed progress?
+            return (100.f * (KMeans.Level - 1)) / KMeans.Levels;
         }
         if (Shards) {
             return (100.f * done) / total;

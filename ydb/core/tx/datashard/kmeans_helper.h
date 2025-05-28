@@ -206,10 +206,11 @@ void AddRowMain2Build(TBufferData& buffer, NTableIndex::TClusterId parent, TArra
 void AddRowMain2Posting(TBufferData& buffer, NTableIndex::TClusterId parent, TArrayRef<const TCell> key, const NTable::TRowState& row,
                         ui32 dataPos);
 
-void AddRowBuild2Build(TBufferData& buffer, NTableIndex::TClusterId parent, TArrayRef<const TCell> key, const NTable::TRowState& row);
+void AddRowBuild2Build(TBufferData& buffer, NTableIndex::TClusterId parent, TArrayRef<const TCell> key, const NTable::TRowState& row,
+                       ui32 prefixColumns = 1);
 
 void AddRowBuild2Posting(TBufferData& buffer, NTableIndex::TClusterId parent, TArrayRef<const TCell> key, const NTable::TRowState& row,
-                         ui32 dataPos);
+                         ui32 dataPos, ui32 prefixColumns = 1);
 
 TTags MakeUploadTags(const TUserTable& table, const TProtoStringType& embedding,
                      const google::protobuf::RepeatedPtrField<TProtoStringType>& data, ui32& embeddingPos,
@@ -217,7 +218,8 @@ TTags MakeUploadTags(const TUserTable& table, const TProtoStringType& embedding,
 
 std::shared_ptr<NTxProxy::TUploadTypes>
 MakeUploadTypes(const TUserTable& table, NKikimrTxDataShard::TEvLocalKMeansRequest::EState uploadState,
-                const TProtoStringType& embedding, const google::protobuf::RepeatedPtrField<TProtoStringType>& data);
+                const TProtoStringType& embedding, const google::protobuf::RepeatedPtrField<TProtoStringType>& data,
+                ui32 prefixColumns = 0);
 
 void MakeScan(auto& record, const auto& createScan, const auto& badRequest)
 {

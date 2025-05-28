@@ -893,7 +893,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 case NKikimrSchemeOp::EPathSubTypeSyncIndexImplTable:
                 case NKikimrSchemeOp::EPathSubTypeAsyncIndexImplTable:
                 case NKikimrSchemeOp::EPathSubTypeVectorKmeansTreeIndexImplTable:
-                    return true;
+                    return !AppData()->FeatureFlags.GetEnableAccessToIndexImplTables();
                 default:
                     return false;
                 }

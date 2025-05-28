@@ -625,9 +625,7 @@ private:
             buildInfo.SpecializedIndexDescription).GetSettings().settings();
         ev->Record.SetK(buildInfo.KMeans.K);
         ev->Record.SetUpload(buildInfo.KMeans.GetUpload());
-        ev->Record.SetState(NKikimrTxDataShard::TEvLocalKMeansRequest::SAMPLE);
 
-        ev->Record.SetDoneRounds(0);
         ev->Record.SetNeedsRounds(3); // TODO(mbkkt) should be configurable
 
         if (buildInfo.KMeans.State != TIndexBuildInfo::TKMeans::MultiLocal) {

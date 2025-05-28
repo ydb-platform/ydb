@@ -91,7 +91,7 @@ TTags MakeUploadTags(const TUserTable& table, const TProtoStringType& embedding,
 }
 
 std::shared_ptr<NTxProxy::TUploadTypes>
-MakeUploadTypes(const TUserTable& table, NKikimrTxDataShard::TEvLocalKMeansRequest::EState uploadState,
+MakeUploadTypes(const TUserTable& table, NKikimrTxDataShard::EKMeansState uploadState,
                 const TProtoStringType& embedding, const google::protobuf::RepeatedPtrField<TProtoStringType>& data,
                 ui32 prefixColumns)
 {
@@ -116,12 +116,12 @@ MakeUploadTypes(const TUserTable& table, NKikimrTxDataShard::TEvLocalKMeansReque
         addType(table.Columns.at(column).Name);
     }
     switch (uploadState) {
-        case NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_MAIN_TO_BUILD:
-        case NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_BUILD_TO_BUILD:
+        case NKikimrTxDataShard::EKMeansState::UPLOAD_MAIN_TO_BUILD:
+        case NKikimrTxDataShard::EKMeansState::UPLOAD_BUILD_TO_BUILD:
             addType(embedding);
             [[fallthrough]];
-        case NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_MAIN_TO_POSTING:
-        case NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_BUILD_TO_POSTING: {
+        case NKikimrTxDataShard::EKMeansState::UPLOAD_MAIN_TO_POSTING:
+        case NKikimrTxDataShard::EKMeansState::UPLOAD_BUILD_TO_POSTING: {
             for (const auto& column : data) {
                 addType(column);
             }

@@ -463,6 +463,7 @@ message TPredicate {
             STARTS_WITH = 9; 
             ENDS_WITH = 10; 
             CONTAINS = 11;
+            REGEXP = 12;
         }
 
         EOperation operation = 1;
@@ -471,10 +472,10 @@ message TPredicate {
     }
 
     // "$column REGEXP $pattern"
-    message TRegexp {
-        TExpression value = 1;
-        TExpression pattern = 2;
-    }
+    // message TRegexp {
+    //     TExpression value = 1;
+    //     TExpression pattern = 2;
+    // }
 
     oneof payload {
         TNegation negation = 1;
@@ -488,7 +489,7 @@ message TPredicate {
         TBoolExpression bool_expression = 9;
         TCoalesce coalesce = 10;
         TIf if = 11;
-        TRegexp regexp = 12;
+        // TRegexp regexp = 12;
     }
 }
 

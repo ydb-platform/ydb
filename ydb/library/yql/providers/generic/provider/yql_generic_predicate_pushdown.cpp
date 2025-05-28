@@ -436,9 +436,10 @@ namespace NYql {
                 return false;
             }
 
-            auto* dstProto = proto->mutable_regexp();
-            return SerializeExpression(TExprBase(runConfig.ChildPtr(0)), dstProto->mutable_pattern(), ctx, depth + 1)
-                && SerializeExpression(TExprBase(children[1]), dstProto->mutable_value(), ctx, depth + 1);
+            auto* dstProto = proto->mutable_comparison();
+            dstProto->set_operation(TPredicate::TComparison::REGEXP);
+            return SerializeExpression(TExprBase(runConfig.ChildPtr(0)), dstProto->mutable_right_value(), ctx, depth + 1)
+                && SerializeExpression(TExprBase(children[1]), dstProto->mutable_left_value(), ctx, depth + 1);
         }
 
         bool SerializeApply(const TCoApply& apply, TPredicate* proto, TSerializationContext& ctx, ui64 depth) {
@@ -789,6 +790,12 @@ namespace NYql {
         return "(" + statement + " IS NOT NULL)";
     }
 
+    TString FormatRegexp(const TPredicate::TComparison& regexp) {
+        const auto& value = FormatExpression(regexp.left_value());
+        const auto& pattern = FormatExpression(regexp.right_value());
+        return TStringBuilder() << "(" << value << " REGEXP " << pattern << ")";
+    }
+
     TString FormatComparison(TPredicate_TComparison comparison) {
         TString operation;
 
@@ -803,6 +810,8 @@ namespace NYql {
                 return TStringBuilder() << "EndsWith(" << left << ", " << right << ")";
             case TPredicate_TComparison::CONTAINS:
                 return TStringBuilder() << "String::Contains(" << left << ", " << right << ")";
+            case TPredicate_TComparison::REGEXP:
+                return FormatRegexp(comparison);
             default:
                 break;
         }
@@ -860,12 +869,6 @@ namespace NYql {
         return list.Str();
     }
 
-    TString FormatRegexp(const TPredicate::TRegexp& regexp) {
-        const auto& value = FormatExpression(regexp.value());
-        const auto& pattern = FormatExpression(regexp.pattern());
-        return TStringBuilder() << "(" << value << " REGEXP " << pattern << ")";
-    }
-
     TString FormatPredicate(const TPredicate& predicate) {
         switch (predicate.payload_case()) {
             case TPredicate::PAYLOAD_NOT_SET:
@@ -890,8 +893,6 @@ namespace NYql {
                 return FormatExpression(predicate.bool_expression().value());
             case TPredicate::kIn:
                 return FormatIn(predicate.in());
-            case TPredicate::kRegexp:
-                return FormatRegexp(predicate.regexp());
             default:
                 throw yexception() << "UnimplementedPredicateType, payload_case " << static_cast<ui64>(predicate.payload_case());
         }

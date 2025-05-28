@@ -126,6 +126,7 @@ namespace NYql::NGenericPushDown {
                 case ::NYql::NConnector::NApi::TPredicate::TComparison::STARTS_WITH:
                 case ::NYql::NConnector::NApi::TPredicate::TComparison::ENDS_WITH:
                 case ::NYql::NConnector::NApi::TPredicate::TComparison::CONTAINS:
+                case ::NYql::NConnector::NApi::TPredicate::TComparison::REGEXP:
                 case ::NYql::NConnector::NApi::TPredicate::TComparison::COMPARISON_OPERATION_UNSPECIFIED:
                 case ::NYql::NConnector::NApi::TPredicate_TComparison_EOperation_TPredicate_TComparison_EOperation_INT_MIN_SENTINEL_DO_NOT_USE_:
                 case ::NYql::NConnector::NApi::TPredicate_TComparison_EOperation_TPredicate_TComparison_EOperation_INT_MAX_SENTINEL_DO_NOT_USE_:
@@ -163,6 +164,7 @@ namespace NYql::NGenericPushDown {
                 case ::NYql::NConnector::NApi::TPredicate::TComparison::STARTS_WITH:
                 case ::NYql::NConnector::NApi::TPredicate::TComparison::ENDS_WITH:
                 case ::NYql::NConnector::NApi::TPredicate::TComparison::CONTAINS:
+                case ::NYql::NConnector::NApi::TPredicate::TComparison::REGEXP:
                 case ::NYql::NConnector::NApi::TPredicate::TComparison::COMPARISON_OPERATION_UNSPECIFIED:
                 case ::NYql::NConnector::NApi::TPredicate_TComparison_EOperation_TPredicate_TComparison_EOperation_INT_MIN_SENTINEL_DO_NOT_USE_:
                 case ::NYql::NConnector::NApi::TPredicate_TComparison_EOperation_TPredicate_TComparison_EOperation_INT_MAX_SENTINEL_DO_NOT_USE_:

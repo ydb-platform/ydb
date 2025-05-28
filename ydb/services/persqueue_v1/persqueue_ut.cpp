@@ -2169,14 +2169,15 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         UNIT_ASSERT(readStream);
 
         auto driver = pqClient -> GetDriver();
-        auto writer = CreateSimpleWriter(*driver, "acc/topic1", "source", /*partitionGroup=*/{}, /*codec=*/{"raw"});
 
         Ydb::Topic::StreamReadMessage::FromClient req;
         Ydb::Topic::StreamReadMessage::FromServer resp;
 
         auto WriteSome = [&](ui64 size) {
             TString data(size, 'x');
+            auto writer = CreateSimpleWriter(*driver, "acc/topic1", "source", /*partitionGroup=*/{}, /*codec=*/{"raw"});
             UNIT_ASSERT(writer->Write(data));
+            UNIT_ASSERT(writer->Close(TDuration::Seconds(10)));
         };
 
         i64 budget = 0;
@@ -2285,8 +2286,6 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         }
 
         AwaitExpected(1);
-
-        UNIT_ASSERT(writer->Close(TDuration::Seconds(10)));
     } // Y_UNIT_TEST(TopicServiceReadBudget)
 
     Y_UNIT_TEST(TopicServiceSimpleHappyWrites) {

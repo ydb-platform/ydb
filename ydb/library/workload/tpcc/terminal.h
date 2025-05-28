@@ -145,6 +145,8 @@ public:
         std::shared_ptr<NQuery::TQueryClient>& client,
         const TString& path,
         bool noSleep,
+        int simulateTransactionMs,
+        int simulateTransactionSelect1Count,
         std::stop_token stopToken,
         std::atomic<bool>& stopWarmup,
         std::shared_ptr<TTerminalStats>& stats,

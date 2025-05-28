@@ -65,12 +65,14 @@ TTerminal::TTerminal(size_t terminalID,
                      std::shared_ptr<NQuery::TQueryClient>& client,
                      const TString& path,
                      bool noSleep,
+                     int simulateTransactionMs,
+                     int simulateTransactionSelect1Count,
                      std::stop_token stopToken,
                      std::atomic<bool>& stopWarmup,
                      std::shared_ptr<TTerminalStats>& stats,
                      std::shared_ptr<TLog>& log)
     : TaskQueue(taskQueue)
-    , Context(terminalID, warehouseID, warehouseCount, TaskQueue, client, path, log)
+    , Context(terminalID, warehouseID, warehouseCount, TaskQueue, simulateTransactionMs, simulateTransactionSelect1Count, client, path, log)
     , NoSleep(noSleep)
     , StopToken(stopToken)
     , StopWarmup(stopWarmup)
@@ -125,12 +127,18 @@ TTerminalTask TTerminal::Run() {
 
             // the block helps to ensure, that session is destroyed before we sleep right after the block
             {
-                auto future = Context.Client->RetryQuery([this, &transaction, &execCount, &latencyPure](TSession session) mutable {
-                    auto& Log = Context.Log;
-                    LOG_T("Terminal " << Context.TerminalID << " started RetryQuery for " << transaction.Name);
-                    ++execCount;
-                    return transaction.TaskFunc(Context, latencyPure, session);
-                });
+                bool real = Context.SimulateTransactionMs == 0 && Context.SimulateTransactionSelect1 == 0;
+                auto future = Context.Client->RetryQuery(
+                    [this, real, &transaction, &execCount, &latencyPure](TSession session) mutable {
+                        auto& Log = Context.Log;
+                        LOG_T("Terminal " << Context.TerminalID << " started RetryQuery for " << transaction.Name);
+                        ++execCount;
+                        if (real) {
+                            return transaction.TaskFunc(Context, latencyPure, session);
+                        } else {
+                            return GetSimulationTask(Context, latencyPure, session);
+                        }
+                    });
 
                 auto result = co_await TSuspendWithFuture(future, Context.TaskQueue, Context.TerminalID);
                 auto endTime = std::chrono::steady_clock::now();

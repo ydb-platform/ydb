@@ -235,6 +235,8 @@ TPCCRunner::TPCCRunner(const NConsoleClient::TClientCommand::TConfig& connection
             clients[i % drivers.size()],
             Config.Path,
             Config.NoSleep,
+            Config.SimulateTransactionMs,
+            Config.SimulateTransactionSelect1Count,
             TerminalsStopSource.get_token(),
             StopWarmup,
             StatsVec[i % threadCount],

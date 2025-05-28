@@ -33,6 +33,8 @@ struct TTransactionContext {
     size_t WarehouseID;
     size_t WarehouseCount;
     ITaskQueue& TaskQueue;
+    int SimulateTransactionMs;
+    int SimulateTransactionSelect1;
     std::shared_ptr<NQuery::TQueryClient> Client;
     const TString Path;
     std::shared_ptr<TLog> Log;
@@ -64,6 +66,11 @@ NThreading::TFuture<TStatus> GetPaymentTask(
     NQuery::TSession session);
 
 NThreading::TFuture<TStatus> GetStockLevelTask(
+    TTransactionContext& context,
+    TDuration& latency,
+    NQuery::TSession session);
+
+NThreading::TFuture<TStatus> GetSimulationTask(
     TTransactionContext& context,
     TDuration& latency,
     NQuery::TSession session);

@@ -2394,6 +2394,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 stats.FullCompactionTs = rowSet.GetValueOrDefault<Schema::TablePartitionStats::FullCompactionTs>();
                 stats.MemDataSize = rowSet.GetValueOrDefault<Schema::TablePartitionStats::MemDataSize>();
 
+                stats.LocksAcquired = rowSet.GetValueOrDefault<Schema::TablePartitionStats::LocksAcquired>();
+                stats.LocksWholeShard = rowSet.GetValueOrDefault<Schema::TablePartitionStats::LocksWholeShard>();
+                stats.LocksBroken = rowSet.GetValueOrDefault<Schema::TablePartitionStats::LocksBroken>();
+
                 tableInfo->UpdateShardStats(shardIdx, stats);
 
                 // note that we don't update shard metrics here, because we will always update

@@ -19,50 +19,40 @@ get_built_tool_path(
   rescompiler
 )
 
-add_subdirectory(ut_utils)
-add_subdirectory(with_direct_read_ut)
-
-add_executable(ydb-public-sdk-cpp-src-client-topic-ut)
+add_executable(src-client-topic-ut-with_direct_read_ut)
 
 
-target_compile_options(ydb-public-sdk-cpp-src-client-topic-ut PRIVATE
+target_compile_options(src-client-topic-ut-with_direct_read_ut PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
 
-target_include_directories(ydb-public-sdk-cpp-src-client-topic-ut PRIVATE
+target_include_directories(src-client-topic-ut-with_direct_read_ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/topic
 )
 
-target_link_libraries(ydb-public-sdk-cpp-src-client-topic-ut PUBLIC
+target_link_libraries(src-client-topic-ut-with_direct_read_ut PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
   cpp-testing-unittest_main
   src-client-topic
-  cpp-testing-gmock_in_unittest
   core-testlib-default
+  cpp-testing-gmock_in_unittest
   public-lib-json_value
   public-lib-yson_value
   src-client-driver
-  src-client-persqueue_public
-  client-persqueue_public-impl
-  persqueue_public-ut-ut_utils
-  src-client-query
-  src-client-table
-  client-topic-common
-  client-topic-impl
   topic-ut-ut_utils
-  src-library-issue
-  tx-schemeshard-ut_helpers
+  persqueue_public-ut-ut_utils
   persqueue-ut-common
+  tx-schemeshard-ut_helpers
   library-cpp-resource
 )
 
-target_allocator(ydb-public-sdk-cpp-src-client-topic-ut
+target_allocator(src-client-topic-ut-with_direct_read_ut
   cpp-malloc-jemalloc
 )
 
-target_link_options(ydb-public-sdk-cpp-src-client-topic-ut PRIVATE
+target_link_options(src-client-topic-ut-with_direct_read_ut PRIVATE
   -ldl
   -lrt
   -Wl,--no-as-needed
@@ -73,19 +63,19 @@ target_link_options(ydb-public-sdk-cpp-src-client-topic-ut PRIVATE
   -lutil
 )
 
-target_sources(ydb-public-sdk-cpp-src-client-topic-ut PRIVATE
+target_sources(src-client-topic-ut-with_direct_read_ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/topic/ut/basic_usage_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/topic/ut/describe_topic_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/topic/ut/direct_read_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/topic/ut/local_partition_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/topic/ut/topic_to_table_ut.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/topic/ut/trace_ut.cpp
-  ${PROJECT_BINARY_DIR}/ydb/public/sdk/cpp/src/client/topic/ut/595c8d08f14d8e7791461abe94aa0089.cpp
+  ${PROJECT_BINARY_DIR}/ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut/595c8d08f14d8e7791461abe94aa0089.cpp
 )
 
 
 set_property(
   TARGET
-  ydb-public-sdk-cpp-src-client-topic-ut
+  src-client-topic-ut-with_direct_read_ut
   PROPERTY
   SPLIT_FACTOR
   10
@@ -93,9 +83,9 @@ set_property(
 
 add_yunittest(
   NAME
-  ydb-public-sdk-cpp-src-client-topic-ut
+  src-client-topic-ut-with_direct_read_ut
   TEST_TARGET
-  ydb-public-sdk-cpp-src-client-topic-ut
+  src-client-topic-ut-with_direct_read_ut
   TEST_ARG
   --print-before-suite
   --print-before-test
@@ -106,7 +96,7 @@ add_yunittest(
 
 set_yunittest_property(
   TEST
-  ydb-public-sdk-cpp-src-client-topic-ut
+  src-client-topic-ut-with_direct_read_ut
   PROPERTY
   LABELS
   MEDIUM
@@ -114,13 +104,14 @@ set_yunittest_property(
 
 set_yunittest_property(
   TEST
-  ydb-public-sdk-cpp-src-client-topic-ut
+  src-client-topic-ut-with_direct_read_ut
   PROPERTY
   ENVIRONMENT
+  "PQ_EXPERIMENTAL_DIRECT_READ=1"
 )
 
-resources(ydb-public-sdk-cpp-src-client-topic-ut
-  ${PROJECT_BINARY_DIR}/ydb/public/sdk/cpp/src/client/topic/ut/595c8d08f14d8e7791461abe94aa0089.cpp
+resources(src-client-topic-ut-with_direct_read_ut
+  ${PROJECT_BINARY_DIR}/ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut/595c8d08f14d8e7791461abe94aa0089.cpp
   INPUTS
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/topic/ut/resources/topic_A_partition_0_v24-4-2.dat
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/topic/ut/resources/topic_A_partition_1_v24-4-2.dat
@@ -130,11 +121,11 @@ resources(ydb-public-sdk-cpp-src-client-topic-ut
   OPTS
 )
 
-vcs_info(ydb-public-sdk-cpp-src-client-topic-ut)
+vcs_info(src-client-topic-ut-with_direct_read_ut)
 
 set_yunittest_property(
   TEST
-  ydb-public-sdk-cpp-src-client-topic-ut
+  src-client-topic-ut-with_direct_read_ut
   PROPERTY
   PROCESSORS
   1

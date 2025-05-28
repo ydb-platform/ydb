@@ -37,6 +37,7 @@ target_link_libraries(client-topic-impl PUBLIC
 target_sources(client-topic-impl PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/topic/impl/common.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/topic/impl/deferred_commit.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/topic/impl/direct_reader.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/topic/impl/event_handlers.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/topic/impl/offsets_collector.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/topic/impl/proto_accessor.cpp
@@ -49,6 +50,7 @@ target_sources(client-topic-impl PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/topic/impl/write_session.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/topic/impl/common.h
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/topic/impl/counters_logger.h
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/topic/impl/direct_reader.h
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/topic/impl/read_session_impl.ipp
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/topic/impl/read_session.h
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/topic/impl/topic_impl.h

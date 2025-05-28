@@ -20,6 +20,7 @@ get_built_tool_path(
 )
 
 add_subdirectory(ut_utils)
+add_subdirectory(with_direct_read_ut)
 
 add_executable(ydb-public-sdk-cpp-src-client-topic-ut)
 

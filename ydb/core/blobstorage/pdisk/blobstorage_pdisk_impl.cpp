@@ -2200,7 +2200,7 @@ void TPDisk::Slay(TSlay &evSlay) {
                 TStringStream str;
                 str << PCtx->PDiskLogPrefix << "Can't slay VDiskId# " << evSlay.VDiskId
                     << " as it has pending YardInit Marker# BPD48";
-                P_LOG(PRI_ERROR, BPD48, str.Str());
+                LOG_ERROR(*ActorSystem, NKikimrServices::BS_PDISK, "%s", str.Str().c_str());
                 THolder<NPDisk::TEvSlayResult> result(new NPDisk::TEvSlayResult(
                     NKikimrProto::NOTREADY,
                     GetStatusFlags(evSlay.Owner, evSlay.OwnerGroupType), evSlay.VDiskId, evSlay.SlayOwnerRound,

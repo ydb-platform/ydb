@@ -22,6 +22,26 @@
 namespace NKikimr::NDataShard {
 using namespace NKMeans;
 
+/*
+ * TSampleKScan performs K-sampling over a single table shard to extract a probabilistic sample
+ * of embeddings or rows. This is used as a lightweight pre-clustering step (e.g. centroid seeding).
+ *
+ * Request:
+ * - The client sends TEvSampleKRequest with:
+ *   - K: the number of rows to sample
+ *   - KeyRange: optional key range within the shard to restrict the scan
+ *
+ * Execution Flow:
+ * - TSampleKScan performs a linear scan over the specified key range:
+ *   - For each row, it computes an inclusion probability based on the max probability bound
+ *   - Uses reservoir or weighted sampling to probabilistically select up to K rows
+ *   - Sampled rows and their inclusion probabilities are retained in memory
+ *
+ * Response:
+ * - TEvSampleKResponse is returned when scanning completes:
+ *   - Contains up to K sampled rows (serialized), with associated probabilities
+ */
+
 class TSampleKScan final: public TActor<TSampleKScan>, public NTable::IScan {
 protected:
     const TTags ScanTags;

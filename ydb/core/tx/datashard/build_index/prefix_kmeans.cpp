@@ -22,6 +22,35 @@
 namespace NKikimr::NDataShard {
 using namespace NKMeans;
 
+/*
+ * TPrefixKMeansScan executes a "prefix-aware" K-means clustering job across a single table shard.
+ * It performs clustering separately for each distinct prefix (based on specified prefix length).
+ * It scans a BUILD table shard, while the output rows go to the BUILD or POSTING table.
+ *
+ * Request:
+ * - The client sends TEvPrefixKMeansRequest with:
+*   - Child: base ID from which new cluster IDs are assigned within this request.
+ *     - Each prefix group processed will be assigned cluster IDs starting at Child + 1.
+ *     - For a request with K clusters per prefix, the IDs used for the first prefix group are
+ *       (Child + 1) to (Child + K), and the parent ID for these is Child.
+ *     - The next prefix group will increment the parent/child cluster ID range accordingly,
+ *       allowing consistent hierarchical labeling.
+ *   - The embedding column name and optional data columns used during clustering
+ *   - K (number of clusters per prefix group), random seed, and vector dimensionality
+ *   - Upload mode (BUILD_TO_BUILD or BUILD_TO_POSTING), determining output layout
+ *   - Names of target tables for centroids ("level"), row results ("posting" or "build"),
+ *     and the prefix mapping ("prefix")
+ *
+ * Execution Flow:
+ * - TPrefixKMeansScan iterates over the table shard in key order, processing one prefix group at a time:
+ *   - SAMPLE: Samples embeddings to initialize cluster centers for this prefix group
+ *   - KMEANS: Performs iterative refinement of cluster centroids
+ *   - UPLOAD: Writes results to designated tables:
+ *     - Level: centroid vectors with assigned cluster IDs
+ *     - Output: rows annotated with cluster IDs and optional data columns
+ *     - Prefix: records the (prefix key, parent cluster ID) mapping
+ */
+
 class TPrefixKMeansScanBase: public TActor<TPrefixKMeansScanBase>, public NTable::IScan {
 protected:
     using EState = NKikimrTxDataShard::EKMeansState;
@@ -47,7 +76,7 @@ protected:
     TBatchRowsUploader Uploader;
 
     TBufferData* LevelBuf = nullptr;
-    TBufferData* PostingBuf = nullptr;
+    TBufferData* OutputBuf = nullptr;
     TBufferData* PrefixBuf = nullptr;
 
     const ui32 Dimensions = 0;
@@ -100,10 +129,8 @@ public:
     {
         const auto& embedding = request.GetEmbeddingColumn();
         const auto& data = request.GetDataColumns();
-        // scan tags
-        ScanTags = MakeUploadTags(table, embedding, data, EmbeddingPos, DataPos, EmbeddingTag);
+        ScanTags = MakeScanTags(table, embedding, data, EmbeddingPos, DataPos, EmbeddingTag);
         Lead.To(ScanTags, {}, NTable::ESeek::Lower);
-        // upload types
         {
             Ydb::Type type;
             auto levelTypes = std::make_shared<NTxProxy::TUploadTypes>(3);
@@ -114,8 +141,7 @@ public:
             (*levelTypes)[2] = {NTableIndex::NTableVectorKmeansTreeIndex::CentroidColumn, type};
             LevelBuf = Uploader.AddDestination(request.GetLevelName(), std::move(levelTypes));
         }
-        PostingBuf = Uploader.AddDestination(request.GetPostingName(), MakeUploadTypes(table, UploadState, embedding, data, PrefixColumns));
-        // prefix types
+        OutputBuf = Uploader.AddDestination(request.GetOutputName(), MakeOutputTypes(table, UploadState, embedding, data, PrefixColumns));
         {
             auto types = GetAllTypes(table);
 
@@ -413,10 +439,10 @@ private:
                 FeedKMeans(row);
                 break;
             case EState::UPLOAD_BUILD_TO_BUILD:
-                FeedUploadBuild2Build(key, row);
+                FeedBuildToBuild(key, row);
                 break;
             case EState::UPLOAD_BUILD_TO_POSTING:
-                FeedUploadBuild2Posting(key, row);
+                FeedBuildToPosting(key, row);
                 break;
             default:
                 Y_ASSERT(false);
@@ -437,34 +463,31 @@ private:
 
     void FeedKMeans(TArrayRef<const TCell> row)
     {
-        if (auto pos = Clusters.FindCluster(row, EmbeddingPos); pos != Max<ui32>()) {
-            Clusters.AggregateToCluster(pos, row.at(EmbeddingPos).Data());
+        if (auto pos = Clusters.FindCluster(row, EmbeddingPos); pos) {
+            Clusters.AggregateToCluster(*pos, row.at(EmbeddingPos).Data());
         }
     }
 
-    void FeedUploadBuild2Build(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
+    void FeedBuildToBuild(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
-        if (auto pos = Clusters.FindCluster(row, EmbeddingPos); pos != Max<ui32>()) {
-            AddRowBuild2Build(*PostingBuf, Child + pos, key, row, PrefixColumns);
+        if (auto pos = Clusters.FindCluster(row, EmbeddingPos); pos) {
+            AddRowBuildToBuild(*OutputBuf, Child + *pos, key, row, PrefixColumns);
         }
     }
 
-    void FeedUploadBuild2Posting(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
+    void FeedBuildToPosting(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
-        if (auto pos = Clusters.FindCluster(row, EmbeddingPos); pos != Max<ui32>()) {
-            AddRowBuild2Posting(*PostingBuf, Child + pos, key, row, DataPos, PrefixColumns);
+        if (auto pos = Clusters.FindCluster(row, EmbeddingPos); pos) {
+            AddRowBuildToPosting(*OutputBuf, Child + *pos, key, row, DataPos, PrefixColumns);
         }
     }
 
     void FormLevelRows()
     {
-        std::array<TCell, 2> pk;
-        std::array<TCell, 1> data;
+        const bool isPostingLevel = UploadState == NKikimrTxDataShard::UPLOAD_BUILD_TO_POSTING;
+
         for (NTable::TPos pos = 0; const auto& row : Clusters.GetClusters()) {
-            pk[0] = TCell::Make(Parent);
-            pk[1] = TCell::Make(Child + pos);
-            data[0] = TCell{row};
-            LevelBuf->AddRow(TSerializedCellVec{pk}, TSerializedCellVec::Serialize(data));
+            AddRowToLevel(*LevelBuf, Parent, Child + pos, row, isPostingLevel);
             ++pos;
         }
     }
@@ -569,8 +592,8 @@ void TDataShard::HandleSafe(TEvDataShard::TEvPrefixKMeansRequest::TPtr& ev, cons
     if (!request.HasLevelName()) {
         badRequest(TStringBuilder() << "Empty level table name");
     }
-    if (!request.HasPostingName()) {
-        badRequest(TStringBuilder() << "Empty posting table name");
+    if (!request.HasOutputName()) {
+        badRequest(TStringBuilder() << "Empty output table name");
     }
     if (!request.HasPrefixName()) {
         badRequest(TStringBuilder() << "Empty prefix table name");

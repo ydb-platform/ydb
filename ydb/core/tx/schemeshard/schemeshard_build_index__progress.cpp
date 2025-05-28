@@ -45,12 +45,13 @@ class TUploadSampleK: public TActorBootstrapped<TUploadSampleK> {
 
 protected:
     TString LogPrefix;
-    TString TargetTable;
+    const TString TargetTable;
+    const bool IsPostingLevel;
 
     const NKikimrIndexBuilder::TIndexBuildScanSettings ScanSettings;
 
-    TActorId ResponseActorId;
-    ui64 BuildIndexId = 0;
+    const TActorId ResponseActorId;
+    const ui64 BuildIndexId = 0;
     TIndexBuildInfo::TSample::TRows Init;
 
     std::shared_ptr<NTxProxy::TUploadTypes> Types;
@@ -59,13 +60,14 @@ protected:
     TActorId Uploader;
     ui32 RetryCount = 0;
     ui32 RowsBytes = 0;
-    NTableIndex::TClusterId Parent = 0;
+    const NTableIndex::TClusterId Parent = 0;
     NTableIndex::TClusterId Child = 0;
 
     NDataShard::TUploadStatus UploadStatus;
 
 public:
     TUploadSampleK(TString targetTable,
+                   bool isPostingLevel,
                    const NKikimrIndexBuilder::TIndexBuildScanSettings& scanSettings,
                    const TActorId& responseActorId,
                    ui64 buildIndexId,
@@ -73,6 +75,7 @@ public:
                    NTableIndex::TClusterId parent,
                    NTableIndex::TClusterId child)
         : TargetTable(std::move(targetTable))
+        , IsPostingLevel(isPostingLevel)
         , ScanSettings(scanSettings)
         , ResponseActorId(responseActorId)
         , BuildIndexId(buildIndexId)
@@ -108,16 +111,23 @@ public:
     void Bootstrap() {
         Rows = std::make_shared<NTxProxy::TUploadRows>();
         Rows->reserve(Init.size());
-        std::array<TCell, 2> PrimaryKeys;
-        PrimaryKeys[0] = TCell::Make(Parent);
+        std::array<TCell, 2> pk;
+        pk[0] = TCell::Make(Parent);
         for (auto& [_, row] : Init) {
             RowsBytes += row.size();
-            PrimaryKeys[1] = TCell::Make(Child++);
+            auto child = Child++;
+            if (IsPostingLevel) {
+                child = SetPostingParentFlag(child);
+            } else {
+                EnsureNoPostingParentFlag(child);
+            }
+            pk[1] = TCell::Make(child);
+
             // TODO(mbkkt) we can avoid serialization of PrimaryKeys every iter
-            Rows->emplace_back(TSerializedCellVec{PrimaryKeys}, std::move(row));
+            Rows->emplace_back(TSerializedCellVec{pk}, std::move(row));
         }
         Init = {}; // release memory
-        RowsBytes += Rows->size() * TSerializedCellVec::SerializedSize(PrimaryKeys);
+        RowsBytes += Rows->size() * TSerializedCellVec::SerializedSize(pk);
 
         Types = std::make_shared<NTxProxy::TUploadTypes>(3);
         Ydb::Type type;
@@ -578,13 +588,14 @@ private:
         ev->Record.SetParent(buildInfo.KMeans.Parent);
         ev->Record.SetChild(buildInfo.KMeans.Child);
 
+        Y_VERIFY_DEBUG(buildInfo.Sample.Rows.size() <= buildInfo.KMeans.K);
         auto& clusters = *ev->Record.MutableClusters();
         clusters.Reserve(buildInfo.Sample.Rows.size());
         for (const auto& [_, row] : buildInfo.Sample.Rows) {
             *clusters.Add() = TSerializedCellVec::ExtractCell(row, 0).AsBuf();
         }
 
-        ev->Record.SetPostingName(path.Dive(buildInfo.KMeans.WriteTo()).PathString());
+        ev->Record.SetOutputName(path.Dive(buildInfo.KMeans.WriteTo()).PathString());
 
         ev->Record.SetEmbeddingColumn(buildInfo.IndexColumns.back());
         *ev->Record.MutableDataColumns() = {
@@ -636,7 +647,7 @@ private:
             ev->Record.SetChild(childBegin);
         }
 
-        ev->Record.SetPostingName(path.Dive(buildInfo.KMeans.WriteTo()).PathString());
+        ev->Record.SetOutputName(path.Dive(buildInfo.KMeans.WriteTo()).PathString());
         path.Rise().Dive(NTableIndex::NTableVectorKmeansTreeIndex::LevelTable);
         ev->Record.SetLevelName(path.PathString());
 
@@ -674,7 +685,7 @@ private:
         // about 2 * TableSize see comment in PrefixIndexDone
         ev->Record.SetChild(buildInfo.KMeans.ChildBegin + (2 * buildInfo.KMeans.TableSize) * shardIndex);
 
-        ev->Record.SetPostingName(path.Dive(buildInfo.KMeans.WriteTo()).PathString());
+        ev->Record.SetOutputName(path.Dive(buildInfo.KMeans.WriteTo()).PathString());
         path.Rise().Dive(NTableIndex::NTableVectorKmeansTreeIndex::LevelTable);
         ev->Record.SetLevelName(path.PathString());
         path.Rise().Dive(NTableIndex::NTableVectorKmeansTreeIndex::PrefixTable);
@@ -748,12 +759,14 @@ private:
         buildInfo.Sample.MakeStrictTop(buildInfo.KMeans.K);
         auto path = GetBuildPath(Self, buildInfo, NTableIndex::NTableVectorKmeansTreeIndex::LevelTable);
         Y_ASSERT(buildInfo.Sample.Rows.size() <= buildInfo.KMeans.K);
-        auto actor = new TUploadSampleK(path.PathString(),
+        auto actor = new TUploadSampleK(path.PathString(), !buildInfo.KMeans.NeedsAnotherLevel(),
             buildInfo.ScanSettings, Self->SelfId(), ui64(BuildId),
             buildInfo.Sample.Rows, buildInfo.KMeans.Parent, buildInfo.KMeans.Child);
 
         TActivationContext::AsActorContext().MakeFor(Self->SelfId()).Register(actor);
         buildInfo.Sample.State = TIndexBuildInfo::TSample::EState::Upload;
+
+        LOG_N("TTxBuildProgress: TUploadSampleK: " << buildInfo);
     }
 
     void ClearAfterFill(const TActorContext& ctx, TIndexBuildInfo& buildInfo) {
@@ -840,14 +853,6 @@ private:
             InitMultiKMeans(buildInfo);
             return false;
         }
-        std::array<NScheme::TTypeInfo, 1> typeInfos{ClusterIdTypeId};
-        auto range = ParentRange(buildInfo.KMeans.Parent);
-        auto addRestricted = [&] (const auto& idx) {
-            const auto& status = buildInfo.Shards.at(idx);
-            if (!Intersect(typeInfos, range.ToTableRange(), status.Range.ToTableRange()).IsEmptyRange(typeInfos)) {
-                AddShard(buildInfo, idx, status);
-            }
-        };
         if (buildInfo.KMeans.Parent == 0) {
             AddAllShards(buildInfo);
         } else {
@@ -855,7 +860,8 @@ private:
             Y_ASSERT(it != buildInfo.Cluster2Shards.end());
             if (it->second.Local == InvalidShardIdx) {
                 for (const auto& idx : it->second.Global) {
-                    addRestricted(idx);
+                    const auto& status = buildInfo.Shards.at(idx);
+                    AddShard(buildInfo, idx, status);
                 }
             }
         }
@@ -884,7 +890,6 @@ private:
     }
 
     bool SendKMeansSample(TIndexBuildInfo& buildInfo) {
-        buildInfo.Sample.MakeStrictTop(buildInfo.KMeans.K);
         if (buildInfo.Sample.MaxProbability == 0) {
             buildInfo.ToUploadShards.clear();
             buildInfo.InProgressShards.clear();
@@ -894,6 +899,7 @@ private:
     }
 
     bool SendKMeansReshuffle(TIndexBuildInfo& buildInfo) {
+        buildInfo.Sample.MakeStrictTop(buildInfo.KMeans.K);
         return SendToShards(buildInfo, [&](TShardIdx shardIdx) { SendKMeansReshuffleRequest(shardIdx, buildInfo); });
     }
 
@@ -997,6 +1003,7 @@ private:
     }
 
     bool FillVectorIndex(TTransactionContext& txc, TIndexBuildInfo& buildInfo) {
+        // FIXME: Very non-intuitive state machine, rework it by adding an explicit vector index fill state
         LOG_D("FillVectorIndex Start " << buildInfo.DebugString());
 
         if (buildInfo.Sample.State == TIndexBuildInfo::TSample::EState::Upload) {
@@ -1608,7 +1615,7 @@ public:
                 }
                 for (; from < sample.size(); ++from) {
                     db.Table<Schema::KMeansTreeSample>().Key(buildInfo.Id, from).Update(
-                        NIceDb::TUpdate<Schema::KMeansTreeSample::Row>(sample[from].P),
+                        NIceDb::TUpdate<Schema::KMeansTreeSample::Probability>(sample[from].P),
                         NIceDb::TUpdate<Schema::KMeansTreeSample::Data>(sample[from].Row)
                     );
                 }

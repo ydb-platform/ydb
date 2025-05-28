@@ -54,6 +54,7 @@
 
 namespace NKikimr {
 namespace NSchemeShard {
+using namespace NTableIndex;
 
 class TSchemeShard;
 
@@ -3417,7 +3418,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
             State = EState::Collect;
         }
 
-        void Set(ui64 probability, TString data) {
+        void Add(ui64 probability, TString data) {
             Rows.emplace_back(probability, std::move(data));
             MaxProbability = std::max(probability + 1, MaxProbability + 1) - 1;
         }

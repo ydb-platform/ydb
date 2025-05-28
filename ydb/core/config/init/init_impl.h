@@ -1319,14 +1319,47 @@ public:
         }
     }
 
-    void InitStaticNode() {
+    class TAppConfigFieldsPreserver {
+    public:
+        TAppConfigFieldsPreserver(NKikimrConfig::TAppConfig& appConfig) 
+            : AppConfig(appConfig)
+            , ConfigDirPath(appConfig.GetConfigDirPath())
+            , StoredConfigYaml(appConfig.GetStoredConfigYaml())
+            , StartupConfigYaml(appConfig.GetStartupConfigYaml())
+            , StartupStorageYaml(appConfig.GetStartupStorageYaml())
+        {}
 
+        ~TAppConfigFieldsPreserver() {
+            if (ConfigDirPath) {
+                AppConfig.SetConfigDirPath(*ConfigDirPath);
+            }
+            if (StoredConfigYaml) {
+                AppConfig.MutableStoredConfigYaml()->CopyFrom(*StoredConfigYaml);
+            }
+            if (StartupConfigYaml) {
+                AppConfig.SetStartupConfigYaml(*StartupConfigYaml);
+            }
+            if (StartupStorageYaml) {
+                AppConfig.SetStartupStorageYaml(*StartupStorageYaml);
+            }
+        }
+    private:
+        NKikimrConfig::TAppConfig& AppConfig;
+        std::optional<TString> ConfigDirPath;
+        std::optional<NKikimrBlobStorage::TYamlConfig> StoredConfigYaml;
+        std::optional<TString> StartupConfigYaml;
+        std::optional<TString> StartupStorageYaml;
+    };
+
+    void InitStaticNode() {
         Labels["dynamic"] = "false";
         Labels["static"] = "true";
 
         if (!AppConfig.HasStartupConfigYaml()) {
             return;
         }
+
+        TAppConfigFieldsPreserver preserver(AppConfig);
 
         NKikimrConfig::TAppConfig appConfig;
         NYamlConfig::ResolveAndParseYamlConfig(AppConfig.GetStartupConfigYaml(), {}, Labels, appConfig);

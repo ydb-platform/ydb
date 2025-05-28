@@ -387,8 +387,7 @@ namespace NCloudEvents {
                 error += issue.message() + "\n";
             }
 
-            std::cerr << error << std::endl;
-            // LOG_ERROR_S(this->ActorContext(), NKikimrServices::SQS, error);
+            LOG_ERROR_S(TActivationContext::AsActorContext(), NKikimrServices::SQS, error);
 
             ProcessFailure();
             return;
@@ -457,8 +456,7 @@ namespace NCloudEvents {
                 error += issue.message() + "\n";
             }
 
-            std::cerr << error << std::endl;
-            // LOG_ERROR_S(this->ActorContext(), NKikimrServices::SQS, error);
+            LOG_ERROR_S(TActivationContext::AsActorContext(), NKikimrServices::SQS, error);
 
             ProcessFailure();
             return;

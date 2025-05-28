@@ -38,6 +38,41 @@ void TNodeWarden::Handle(NMon::TEvHttpInfo::TPtr &ev) {
         }
         result = std::make_unique<NMon::TEvHttpInfoRes>(NMonitoring::HTTPOKJSON + out.Str(), 0,
                 NMon::IEvHttpInfoRes::EContentType::Custom);
+    } else if (pathInfo.StartsWith("/slayer")) {
+        HTTP_METHOD method = ev->Get()->Request.GetMethod();
+        if (method != HTTP_METHOD_POST) {
+            out << "Only POST method is supported for /slayer endpoint";
+        } else {
+            const TCgiParameters& postCgi = ev->Get()->Request.GetPostParams();
+            if (postCgi.Has("vdiskId") && postCgi.Has("pdiskId")) {
+                TString vdiskIdStr = postCgi.Get("vdiskId");
+                ui32 pdiskId = FromStringWithDefault<ui32>(postCgi.Get("pdiskId"), 0);
+                if (vdiskIdStr && pdiskId) {
+                    TVDiskID vdiskId = VDiskIDFromString(vdiskIdStr);
+                    ui32 groupId = vdiskId.GroupID.GetRawId();
+                    bool hasVDisk = false;
+                    for (const auto& kv : LocalVDisks) {
+                        if (kv.second.GetGroupId() == groupId) {
+                            hasVDisk = true;
+                            out << "GroupId " << groupId << " has actual working VDisk " << kv.second.GetVDiskId() << ", cannot slay it";
+                            break;
+                        }
+                    }
+                    if (!hasVDisk) {
+                        const TActorId pdiskServiceId = MakeBlobStoragePDiskID(LocalNodeId, pdiskId);
+                        const ui64 round = NextLocalPDiskInitOwnerRound();
+                        Send(pdiskServiceId, new NPDisk::TEvSlay(vdiskId, round, 0, 0));
+                        out << "OK";
+                    }
+                } else {
+                    out << "Invalid groupId or pdiskId";
+                }
+            } else {
+                out << "Missing groupId or pdiskId parameters";
+            }
+        }
+        result = std::make_unique<NMon::TEvHttpInfoRes>(NMonitoring::HTTPOKJSON + out.Str(), 0,
+                NMon::IEvHttpInfoRes::EContentType::Custom);
     } else {
         RenderWholePage(out);
         result = std::make_unique<NMon::TEvHttpInfoRes>(out.Str());

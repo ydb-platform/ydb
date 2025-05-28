@@ -2491,11 +2491,34 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
     std::variant<std::monostate, NKikimrSchemeOp::TVectorIndexKmeansTreeDescription> SpecializedIndexDescription;
 };
 
-struct TCdcStreamInfo : public TSimpleRefCount<TCdcStreamInfo> {
-    using TPtr = TIntrusivePtr<TCdcStreamInfo>;
+struct TCdcStreamSettings {
+    using TSelf = TCdcStreamSettings;
     using EMode = NKikimrSchemeOp::ECdcStreamMode;
     using EFormat = NKikimrSchemeOp::ECdcStreamFormat;
     using EState = NKikimrSchemeOp::ECdcStreamState;
+
+    #define OPTION(type, name) \
+        TSelf& With##name(type value) { \
+            name = value; \
+            return *this; \
+        } \
+        type name;
+
+    OPTION(EMode, Mode);
+    OPTION(EFormat, Format);
+    OPTION(bool, VirtualTimestamps);
+    OPTION(TDuration, ResolvedTimestamps);
+    OPTION(TString, AwsRegion);
+    OPTION(EState, State);
+
+    #undef OPTION
+};
+
+struct TCdcStreamInfo
+    : public TCdcStreamSettings
+    , public TSimpleRefCount<TCdcStreamInfo>
+{
+    using TPtr = TIntrusivePtr<TCdcStreamInfo>;
 
     // shards of the table
     struct TShardStatus {
@@ -2506,14 +2529,9 @@ struct TCdcStreamInfo : public TSimpleRefCount<TCdcStreamInfo> {
         {}
     };
 
-    TCdcStreamInfo(ui64 version, EMode mode, EFormat format, bool vt, const TDuration& rt, const TString& awsRegion, EState state)
-        : AlterVersion(version)
-        , Mode(mode)
-        , Format(format)
-        , VirtualTimestamps(vt)
-        , ResolvedTimestamps(rt)
-        , AwsRegion(awsRegion)
-        , State(state)
+    TCdcStreamInfo(ui64 version, const TCdcStreamSettings& settings)
+        : TCdcStreamSettings(settings)
+        , AlterVersion(version)
     {}
 
     TCdcStreamInfo(const TCdcStreamInfo&) = default;
@@ -2526,13 +2544,17 @@ struct TCdcStreamInfo : public TSimpleRefCount<TCdcStreamInfo> {
         return result;
     }
 
-    static TPtr New(EMode mode, EFormat format, bool vt, const TDuration& rt, const TString& awsRegion) {
-        return new TCdcStreamInfo(0, mode, format, vt, rt, awsRegion, EState::ECdcStreamStateInvalid);
+    static TPtr New(TCdcStreamSettings settings) {
+        return new TCdcStreamInfo(0, settings.WithState(EState::ECdcStreamStateInvalid));
     }
 
     static TPtr Create(const NKikimrSchemeOp::TCdcStreamDescription& desc) {
-        TPtr result = New(desc.GetMode(), desc.GetFormat(), desc.GetVirtualTimestamps(),
-            TDuration::MilliSeconds(desc.GetResolvedTimestampsIntervalMs()), desc.GetAwsRegion());
+        TPtr result = New(TCdcStreamSettings()
+            .WithMode(desc.GetMode())
+            .WithFormat(desc.GetFormat())
+            .WithVirtualTimestamps(desc.GetVirtualTimestamps())
+            .WithResolvedTimestamps(TDuration::MilliSeconds(desc.GetResolvedTimestampsIntervalMs()))
+            .WithAwsRegion(desc.GetAwsRegion()));
         TPtr alterData = result->CreateNextVersion();
         alterData->State = EState::ECdcStreamStateReady;
         if (desc.HasState()) {
@@ -2542,28 +2564,31 @@ struct TCdcStreamInfo : public TSimpleRefCount<TCdcStreamInfo> {
         return result;
     }
 
+    void Serialize(NKikimrSchemeOp::TCdcStreamDescription& desc) const {
+        desc.SetSchemaVersion(AlterVersion);
+        desc.SetMode(Mode);
+        desc.SetFormat(Format);
+        desc.SetVirtualTimestamps(VirtualTimestamps);
+        desc.SetResolvedTimestampsIntervalMs(ResolvedTimestamps.MilliSeconds());
+        desc.SetAwsRegion(AwsRegion);
+        desc.SetState(State);
+        if (ScanShards) {
+            auto& scanProgress = *desc.MutableScanProgress();
+            scanProgress.SetShardsTotal(ScanShards.size());
+            scanProgress.SetShardsCompleted(DoneShards.size());
+        }
+    }
+
     void FinishAlter() {
         Y_ABORT_UNLESS(AlterData);
 
         AlterVersion = AlterData->AlterVersion;
-        Mode = AlterData->Mode;
-        Format = AlterData->Format;
-        VirtualTimestamps = AlterData->VirtualTimestamps;
-        ResolvedTimestamps = AlterData->ResolvedTimestamps;
-        AwsRegion = AlterData->AwsRegion;
-        State = AlterData->State;
+        static_cast<TCdcStreamSettings&>(*this) = static_cast<TCdcStreamSettings&>(*AlterData);
 
         AlterData.Reset();
     }
 
     ui64 AlterVersion = 1;
-    EMode Mode;
-    EFormat Format;
-    bool VirtualTimestamps;
-    TDuration ResolvedTimestamps;
-    TString AwsRegion;
-    EState State;
-
     TCdcStreamInfo::TPtr AlterData = nullptr;
 
     TMap<TShardIdx, TShardStatus> ScanShards;

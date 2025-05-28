@@ -2,7 +2,6 @@
 #include "../datashard_impl.h"
 #include "../range_ops.h"
 #include "../scan_common.h"
-#include "../upload_stats.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
@@ -21,12 +20,10 @@
 #include <util/string/builder.h>
 
 namespace NKikimr::NDataShard {
+using namespace NKMeans;
 
 class TSampleKScan final: public TActor<TSampleKScan>, public NTable::IScan {
 protected:
-    const TAutoPtr<TEvDataShard::TEvSampleKResponse> Response;
-    const TActorId ResponseActorId;
-
     const TTags ScanTags;
     const TVector<NScheme::TTypeInfo> KeyTypes;
 
@@ -34,27 +31,20 @@ protected:
     const TSerializedTableRange RequestedRange;
     const ui64 K;
 
-    struct TProbability {
-        ui64 P = 0;
-        ui64 I = 0;
-
-        auto operator<=>(const TProbability&) const noexcept = default;
-    };
-
     ui64 TabletId = 0;
     ui64 BuildId = 0;
 
     ui64 ReadRows = 0;
     ui64 ReadBytes = 0;
 
-    // We are using binary heap, because we don't want to do batch processing here,
-    // serialization is more expensive than compare
-    ui64 MaxProbability = 0;
-    TReallyFastRng32 Rng;
-    std::vector<TProbability> MaxRows;
-    std::vector<TString> DataRows;
+    TSampler Sampler;
 
     IDriver* Driver = nullptr;
+
+    TLead Lead;
+
+    const TAutoPtr<TEvDataShard::TEvSampleKResponse> Response;
+    const TActorId ResponseActorId;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -65,8 +55,6 @@ public:
                  const TActorId& responseActorId, TAutoPtr<TEvDataShard::TEvSampleKResponse>&& response,
                  const TSerializedTableRange& range)
         : TActor(&TThis::StateWork)
-        , Response(std::move(response))
-        , ResponseActorId(responseActorId)
         , ScanTags(BuildTags(table, request.GetColumns()))
         , KeyTypes(table.KeyColumnTypes)
         , TableRange(table.Range)
@@ -74,13 +62,25 @@ public:
         , K(request.GetK())
         , TabletId(tabletId)
         , BuildId(request.GetId())
-        , MaxProbability(request.GetMaxProbability())
-        , Rng(request.GetSeed()) 
+        , Sampler(request.GetK(), request.GetSeed(), request.GetMaxProbability())
+        , Response(std::move(response))
+        , ResponseActorId(responseActorId)
     {
         LOG_I("Create " << Debug());
-    }
 
-    ~TSampleKScan() final = default;
+        auto scanRange = Intersect(KeyTypes, RequestedRange.ToTableRange(), TableRange.ToTableRange());
+
+        if (scanRange.From) {
+            auto seek = scanRange.InclusiveFrom ? NTable::ESeek::Lower : NTable::ESeek::Upper;
+            Lead.To(ScanTags, scanRange.From, seek);
+        } else {
+            Lead.To(ScanTags, {}, NTable::ESeek::Lower);
+        }
+
+        if (scanRange.To) {
+            Lead.Until(scanRange.To, scanRange.InclusiveTo);
+        }
+    }
 
     TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme>) noexcept final {
         TActivationContext::AsActorContext().RegisterWithSameMailbox(this);
@@ -93,65 +93,47 @@ public:
     }
 
     EScan Seek(TLead& lead, ui64 seq) noexcept final {
-        Y_ABORT_UNLESS(seq == 0);
-        LOG_D("Seek " << Debug());
+        LOG_D("Seek " << seq << " " << Debug());
 
-        auto scanRange = Intersect(KeyTypes, RequestedRange.ToTableRange(), TableRange.ToTableRange());
-
-        if (scanRange.From) {
-            auto seek = scanRange.InclusiveFrom ? NTable::ESeek::Lower : NTable::ESeek::Upper;
-            lead.To(ScanTags, scanRange.From, seek);
-        } else {
-            lead.To(ScanTags, {}, NTable::ESeek::Lower);
-        }
-
-        if (scanRange.To) {
-            lead.Until(scanRange.To, scanRange.InclusiveTo);
-        }
+        lead = Lead;
 
         return EScan::Feed;
     }
 
     EScan Feed(TArrayRef<const TCell> key, const TRow& row) noexcept final {
-        LOG_T("Feed key " << DebugPrintPoint(KeyTypes, key, *AppData()->TypeRegistry) << " " << Debug());
+        LOG_T("Feed " << Debug());
+
         ++ReadRows;
         ReadBytes += CountBytes(key, row);
 
-        const auto probability = GetProbability();
-        if (probability > MaxProbability) {
-            return EScan::Feed;
-        }
+        Sampler.Add([&row](){
+            return TSerializedCellVec::Serialize(*row);
+        });
 
-        if (DataRows.size() < K) {
-            MaxRows.push_back({probability, DataRows.size()});
-            DataRows.emplace_back(TSerializedCellVec::Serialize(*row));
-            if (DataRows.size() == K) {
-                std::make_heap(MaxRows.begin(), MaxRows.end());
-                MaxProbability = MaxRows.front().P;
-            }
-        } else {
-            // TODO(mbkkt) use tournament tree to make less compare and swaps
-            std::pop_heap(MaxRows.begin(), MaxRows.end());
-            TSerializedCellVec::Serialize(DataRows[MaxRows.back().I], *row);
-            MaxRows.back().P = probability;
-            std::push_heap(MaxRows.begin(), MaxRows.end());
-            MaxProbability = MaxRows.front().P;
-        }
-
-        if (MaxProbability == 0) {
+        if (Sampler.GetMaxProbability() == 0) {
             return EScan::Final;
         }
+
         return EScan::Feed;
     }
 
+    EScan Exhausted() final
+    {
+        LOG_D("Exhausted " << Debug());
+
+        return EScan::Final;
+    }
+
     TAutoPtr<IDestructable> Finish(EAbort abort) noexcept final {
-        Y_ABORT_UNLESS(Response);
-        Response->Record.SetReadRows(ReadRows);
-        Response->Record.SetReadBytes(ReadBytes);
-        if (abort == EAbort::None) {
-            FillResponse();
+        auto& record = Response->Record;
+        record.SetReadRows(ReadRows);
+        record.SetReadBytes(ReadBytes);
+
+        if (abort != NTable::EAbort::None) {
+            record.SetStatus(NKikimrIndexBuilder::EBuildStatus::ABORTED);
         } else {
-            Response->Record.SetStatus(NKikimrIndexBuilder::EBuildStatus::ABORTED);
+            record.SetStatus(NKikimrIndexBuilder::EBuildStatus::DONE);
+            FillResponse();
         }
 
         if (Response->Record.GetStatus() == NKikimrIndexBuilder::DONE) {
@@ -160,6 +142,7 @@ public:
             LOG_E("Failed " << Debug() << " " << Response->Record.ShortDebugString());
         }
         Send(ResponseActorId, Response.Release());
+
         Driver = nullptr;
         PassAway();
         return nullptr;
@@ -169,13 +152,10 @@ public:
         out << Debug();
     }
 
-    EScan Exhausted() noexcept final {
-        return EScan::Final;
-    }
-
     TString Debug() const {
         return TStringBuilder() << "TSampleKScan TabletId: " << TabletId << " Id: " << BuildId
-            << " K: " << K << " Clusters: " << MaxRows.size();
+            << " K: " << K
+            << " " << Sampler.Debug();
     }
 
 private:
@@ -188,23 +168,15 @@ private:
     }
 
     void FillResponse() {
-        std::sort(MaxRows.begin(), MaxRows.end());
+        auto [maxRows, dataRows] = Sampler.Finish();
+
+        std::sort(maxRows.begin(), maxRows.end());
         auto& record = Response->Record;
-        for (auto& [p, i] : MaxRows) {
+        for (auto& [p, i] : maxRows) {
             record.AddProbabilities(p);
-            record.AddRows(std::move(DataRows[i]));
+            record.AddRows(std::move(dataRows[i]));
         }
         record.SetStatus(NKikimrIndexBuilder::EBuildStatus::DONE);
-    }
-
-    ui64 GetProbability() {
-        while (true) {
-            auto p = Rng.GenRand64();
-            // We exclude max ui64 from generated probabilities, so we can use this value as initial max
-            if (Y_LIKELY(p != std::numeric_limits<ui64>::max())) {
-                return p;
-            }
-        }
     }
 };
 
@@ -337,23 +309,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvSampleKRequest::TPtr& ev, const TAc
         request, ev->Sender, std::move(response),
         requestedRange);
 
-    if (const auto* recCard = ScanManager.Get(id)) {
-        if (recCard->SeqNo == seqNo) {
-            // do no start one more scan
-            return;
-        }
-
-        for (auto scanId : recCard->ScanIds) {
-            CancelScan(userTable.LocalTid, scanId);
-        }
-        ScanManager.Drop(id);
-    }
-
-    TScanOptions scanOpts;
-    scanOpts.SetSnapshotRowVersion(rowVersion);
-    scanOpts.SetResourceBroker("build_index", 10); // TODO(mbkkt) Should be different group?
-    const auto scanId = QueueScan(userTable.LocalTid, std::move(scan), 0, scanOpts);
-    ScanManager.Set(id, seqNo).push_back(scanId);
+    StartScan(this, std::move(scan), id, seqNo, rowVersion, userTable.LocalTid);
 }
 
 }

@@ -56,12 +56,14 @@ target_sources(core-cms-console PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/configs_cache.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/configs_config.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/configs_dispatcher.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/configs_dispatcher_proxy.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/console.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/console_audit.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/console_handshake.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/console_configs_manager.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/console_configs_provider.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/console_configs_subscriber.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/console_configuration_info_collector.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/console_tenants_manager.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/console__add_config_subscription.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/console__alter_tenant.cpp
@@ -107,11 +109,13 @@ target_sources(core-cms-console PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/configs_cache.h
   ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/configs_config.h
   ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/configs_dispatcher.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/configs_dispatcher_proxy.h
   ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/console.h
   ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/console_audit.h
   ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/console_configs_manager.h
   ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/console_configs_provider.h
   ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/console_configs_subscriber.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/console_configuration_info_collector.h
   ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/console_impl.h
   ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/console_tenants_manager.h
   ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/console__scheme.h

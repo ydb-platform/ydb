@@ -92,7 +92,7 @@ class Workload(unittest.TestCase):
             if last_offset + 1 == self.message_count:
                 return
 
-        self.assertTrue(False, f"Transfer still work after {iterations} seconds. Last offset is {last_offset}")
+        raise Exception(f"Transfer still work after {iterations} seconds. Last offset is {last_offset}")
 
     def loop(self):
         self.create_table()

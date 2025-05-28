@@ -1,10 +1,11 @@
 # -*- coding: utf-8 -*-
+import os
 import pytest
+import yatest
 
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.common.types import Erasure
-from ydb.tests.stress.transfer.workload import Workload
 
 
 class TestYdbTransferWorkload(object):
@@ -24,5 +25,11 @@ class TestYdbTransferWorkload(object):
 
     @pytest.mark.parametrize("store_type", ["row", "column"])
     def test(self, store_type):
-        with Workload(f'grpc://localhost:{self.cluster.nodes[1].grpc_port}', '/Root', 60, store_type) as workload:
-            workload.loop()
+        cmd = [
+            yatest.common.binary_path(os.getenv("YDB_TEST_PATH")),
+            "--endpoint", f'grpc://localhost:{self.cluster.nodes[1].grpc_port}',
+            "--database", "/Root",
+            "--duration", "60",
+            "--mode", store_type
+        ]
+        yatest.common.execute(cmd, wait=True)

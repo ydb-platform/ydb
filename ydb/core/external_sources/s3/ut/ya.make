@@ -4,6 +4,7 @@ NO_CHECK_IMPORTS()
 
 DATA(arcadia/ydb/core/external_sources/s3/ut/docker-compose.yml)
 ENV(COMPOSE_PROJECT_NAME=s3)
+ENV(TZ="UTC+13")
 
 IF (AUTOCHECK) 
     # Temporarily disable these tests due to infrastructure incompatibility

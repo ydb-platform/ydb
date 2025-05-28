@@ -87,9 +87,6 @@ TString GetOrEmpty(const NYql::TCreateObjectSettings& container, const TString& 
         "service_name", // oracle
         "folder_id", // logging
         "use_ssl", // solomon
-        "reading_mode", // mongodb
-        "unexpected_type_display_mode", // mongodb
-        "unsupported_type_display_mode", // mongodb
         "grpc_location", // solomon
         "project", // solomon
         "cluster" // solomon

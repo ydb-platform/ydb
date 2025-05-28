@@ -62,51 +62,53 @@ class SimpleQueueBase(LoadSuiteBase):
         nodes = YdbCluster.get_cluster_nodes()
         node = nodes[0]
 
-        with allure.step(f'Running workload on node {node.host} '
+        node_host = node.host
+        # Проверяем, успешно ли был развернут бинарный файл
+        binary_result = deploy_results.get(node_host, {}).get(WORKLOAD_BINARY_NAME, {})
+        success = binary_result.get('success', False)
+
+        # Инициализируем переменные для результата
+        command_result = None
+        command_error = None
+
+        # Запускаем бинарный файл на ноде, если он был успешно развернут
+        if not success:
+            error_msg = (f"Binary deployment failed on node {node.host}. "
+                            f"Binary result: {binary_result}")
+            LOGGER.error(f"Error: {error_msg}")
+            allure.attach(error_msg, 'Binary deployment error', allure.attachment_type.TEXT)
+            command_error = error_msg
+            raise Exception(f"Binary deployment failed on node. Binary result: {binary_result}")
+
+        else:
+             with allure.step(f'Running workload on node {node.host} '
                          f'with table type {table_type}'):
-            node_host = node.host
-            # Проверяем, успешно ли был развернут бинарный файл
-            binary_result = deploy_results.get(node_host, {}).get(WORKLOAD_BINARY_NAME, {})
-            success = binary_result.get('success', False)
-
-            # Инициализируем переменные для результата
-            command_result = None
-            command_error = None
-
-            # Запускаем бинарный файл на ноде, если он был успешно развернут
-            if success:
                 target_path = binary_result['path']
                 cmd = (f"{target_path} --endpoint {YdbCluster.ydb_endpoint} "
-                       f"--database /{YdbCluster.ydb_database} "
-                       f"--duration {self.timeout} --mode {table_type}")
+                        f"--database /{YdbCluster.ydb_database} "
+                        f"--duration {self.timeout} --mode {table_type}")
                 allure.attach(cmd, 'Command to execute', allure.attachment_type.TEXT)
                 LOGGER.info(f"Executing command on node {node.host}")
 
                 try:
                     stdout, stderr = node.execute_command(
                         cmd, raise_on_error=True,
-                        timeout=int(self.timeout * 3), raise_on_timeout=False)
-                    LOGGER.info(f"Command executed successfully. STDOUT: {stdout}")
-                    if stderr:
-                        LOGGER.warning(f"Command stderr: {stderr}")
-                    allure.attach(stdout, 'Command stdout', allure.attachment_type.TEXT)
-                    if stderr:
-                        allure.attach(stderr, 'Command stderr', allure.attachment_type.TEXT)
+                        timeout=int(self.timeout * 2), raise_on_timeout=False)
                     command_result = stdout
                     command_error = stderr
+                    LOGGER.info(f"Command executed successfully. STDOUT: {command_result}")
+                    allure.attach(command_result, 'Workload stdout', allure.attachment_type.TEXT)
+                    if command_error:
+                        LOGGER.warning(f"Workload stderr: {command_error}")
+                        allure.attach(command_error[:100], 'Workload stderr', allure.attachment_type.TEXT) 
+
                 except Exception as e:
                     error_msg = f"Command execution failed: {str(e)}"
                     LOGGER.error(error_msg)
-                    allure.attach(error_msg, 'Command execution error', allure.attachment_type.TEXT)
-                    allure.attach(str(e), 'Exception details', allure.attachment_type.TEXT)
-                    command_error = str(e)
-                    raise  # Перебрасываем исключение, чтобы тест упал
-            else:
-                error_msg = (f"Binary deployment failed on node {node.host}. "
-                             f"Binary result: {binary_result}")
-                LOGGER.error(f"Error: {error_msg}")
-                allure.attach(error_msg, 'Binary deployment error', allure.attachment_type.TEXT)
-                command_error = error_msg
+                    allure.attach(error_msg, 'Workload execution error', allure.attachment_type.TEXT)
+                    command_error = 'Error in workload, check logs:\n' + str(e)[:200] + '...'
+                    raise Exception(f"Workload get errors in run: {command_error}")
+
         with allure.step('Checking scheme state'):
             cli_path = deploy_results.get(node_host, {}).get(YDB_CLI_BINARY_NAME, {})['path']
             stdout, stderr = node.execute_command(

@@ -6,7 +6,7 @@ import requests
 import yaml
 import ydb
 import subprocess
-import yatest.common
+import yatest
 from ydb.tests.olap.lib.utils import get_external_param
 from copy import deepcopy
 from time import sleep, time
@@ -107,6 +107,9 @@ class YdbCluster:
                 stderr = (YdbCluster._safe_decode(execution.std_err)
                           if hasattr(execution, 'std_err') and execution.std_err else "")
 
+                # Фильтруем SSH предупреждения из stderr
+                stderr = YdbCluster._filter_ssh_warnings(stderr)
+
                 # Проверяем exit code
                 exit_code = getattr(execution, 'exit_code', getattr(execution, 'returncode', 0))
                 if exit_code != 0 and raise_on_error:
@@ -126,15 +129,17 @@ class YdbCluster:
                 stdout = ""
                 stderr = ""
 
-                # ExecutionTimeoutError содержит объект выполнения как первый аргумент
-                if hasattr(e, 'args') and len(e.args) > 0:
-                    execution_obj = e.args[0]
+                # ExecutionTimeoutError имеет атрибут execution_result с объектом выполнения
+                if hasattr(e, 'execution_result') and e.execution_result:
+                    execution_obj = e.execution_result
 
-                    # Пытаемся извлечь stdout и stderr из объекта выполнения
+                    # Извлекаем stdout и stderr из объекта выполнения
                     if hasattr(execution_obj, 'std_out') and execution_obj.std_out:
                         stdout = YdbCluster._safe_decode(execution_obj.std_out)
                     if hasattr(execution_obj, 'std_err') and execution_obj.std_err:
                         stderr = YdbCluster._safe_decode(execution_obj.std_err)
+                        # Фильтруем SSH предупреждения из stderr даже при таймауте
+                        stderr = YdbCluster._filter_ssh_warnings(stderr)
 
                     # Добавляем информацию о команде
                     if hasattr(execution_obj, 'command'):
@@ -169,20 +174,28 @@ class YdbCluster:
             except yatest.common.ExecutionError as e:
                 if raise_on_error:
                     # Преобразуем yatest.common.ExecutionError в стандартное исключение
+                    stderr_filtered = YdbCluster._filter_ssh_warnings(
+                        YdbCluster._safe_decode(e.execution_result.std_err)
+                    )
                     raise subprocess.CalledProcessError(
                         e.execution_result.exit_code,
                         full_cmd,
                         YdbCluster._safe_decode(e.execution_result.std_out),
-                        YdbCluster._safe_decode(e.execution_result.std_err)
+                        stderr_filtered
                     )
                 LOGGER.error(f"Error executing SSH command on {self.host}: {e}")
-                return f"Error: {str(e)}", ""
+                # Возвращаем реальные stdout и stderr из результата выполнения
+                stdout = YdbCluster._safe_decode(e.execution_result.std_out)
+                stderr = YdbCluster._safe_decode(e.execution_result.std_err)
+                stderr = YdbCluster._filter_ssh_warnings(stderr)
+                return stdout, stderr
 
             except Exception as e:
                 if raise_on_error:
                     raise
                 LOGGER.error(f"Unexpected error executing SSH command on {self.host}: {e}")
-                return f"Error: {str(e)}", ""
+                # При неожиданной ошибке возвращаем пустые строки
+                return "", ""
 
         def copy_file(self, local_path: str, remote_path: str, raise_on_error: bool = True) -> str:
             """
@@ -604,6 +617,28 @@ class YdbCluster:
         return str(data)
 
     @staticmethod
+    def _filter_ssh_warnings(stderr: str) -> str:
+        """
+        Фильтрует SSH предупреждения из stderr
+
+        Args:
+            stderr: строка с выводом stderr
+
+        Returns:
+            str: отфильтрованная строка stderr без SSH предупреждений
+        """
+        if not stderr:
+            return stderr
+        
+        # Фильтруем строки, начинающиеся с "Warning: Permanently added"
+        filtered_lines = []
+        for line in stderr.splitlines():
+            if not line.startswith('Warning: Permanently added') and not line.startswith('(!) New version of YDB CLI is available.'):
+                filtered_lines.append(line)
+        
+        return '\n'.join(filtered_lines)
+
+    @staticmethod
     def copy_file_to_remote(local_path: str, remote_host: str, remote_path: str,
                             raise_on_error: bool = True) -> str:
         """
@@ -633,13 +668,122 @@ class YdbCluster:
         scp_cmd += [local_path, f"{remote_host}:{remote_path}"]
 
         LOGGER.info(f"Copying {local_path} to {remote_host}:{remote_path}")
+        
+        # Проверяем существование локального файла
+        if not os.path.exists(local_path):
+            error_msg = f"Local file does not exist: {local_path}"
+            LOGGER.error(error_msg)
+            if raise_on_error:
+                raise FileNotFoundError(error_msg)
+            return None
+        
+        # Логируем размер файла для диагностики
         try:
-            result = subprocess.run(scp_cmd, capture_output=True, text=True, check=raise_on_error)
-            return result.stdout
-        except subprocess.SubprocessError as e:
+            file_size = os.path.getsize(local_path)
+            LOGGER.debug(f"File size: {file_size} bytes")
+        except OSError as e:
+            LOGGER.warning(f"Could not get file size: {e}")
+        
+        try:
+            execution = yatest.common.execute(
+                scp_cmd,
+                wait=True,
+                check_exit_code=False,  # Проверяем exit code сами
+            )
+
+            # Декодируем stdout и stderr отдельно
+            stdout = (YdbCluster._safe_decode(execution.std_out)
+                      if hasattr(execution, 'std_out') and execution.std_out else "")
+            stderr = (YdbCluster._safe_decode(execution.std_err)
+                      if hasattr(execution, 'std_err') and execution.std_err else "")
+
+            # Фильтруем SSH предупреждения из stderr
+            stderr_filtered = YdbCluster._filter_ssh_warnings(stderr)
+            
+            # Логируем детальную информацию
+            if stdout:
+                LOGGER.debug(f"SCP stdout: {stdout}")
+            if stderr_filtered:
+                LOGGER.warning(f"SCP stderr: {stderr_filtered}")
+            
+            # Проверяем exit code
+            exit_code = getattr(execution, 'exit_code', getattr(execution, 'returncode', 0))
+            if exit_code != 0:
+                error_msg = f"SCP command failed with exit code {exit_code}"
+                if stderr_filtered:
+                    error_msg += f". Error: {stderr_filtered}"
+                    
+                    # Анализируем частые ошибки для более понятной диагностики
+                    if "Permission denied" in stderr_filtered:
+                        error_msg += "\nPossible causes: SSH key authentication failed, wrong user, or insufficient permissions"
+                    elif "No such file or directory" in stderr_filtered:
+                        error_msg += "\nPossible causes: Remote directory doesn't exist or remote host unreachable"
+                    elif "Connection refused" in stderr_filtered:
+                        error_msg += "\nPossible causes: SSH service not running on remote host or wrong port"
+                    elif "Host key verification failed" in stderr_filtered:
+                        error_msg += "\nPossible causes: SSH host key verification issue (should not happen with our settings)"
+                    elif "Network is unreachable" in stderr_filtered:
+                        error_msg += "\nPossible causes: Network connectivity issue to remote host"
+                
+                LOGGER.error(error_msg)
+                
+                if raise_on_error:
+                    raise subprocess.CalledProcessError(
+                        exit_code,
+                        scp_cmd,
+                        stdout,
+                        stderr_filtered
+                    )
+                return None
+            
+            return stdout
+
+        except yatest.common.ExecutionError as e:
+            if raise_on_error:
+                # Преобразуем yatest.common.ExecutionError в стандартное исключение
+                stderr_filtered = YdbCluster._filter_ssh_warnings(
+                    YdbCluster._safe_decode(e.execution_result.std_err)
+                )
+                
+                error_msg = f"SCP command failed with exit code {e.execution_result.exit_code}"
+                if stderr_filtered:
+                    error_msg += f". Error: {stderr_filtered}"
+                    
+                    # Анализируем частые ошибки для более понятной диагностики
+                    if "Permission denied" in stderr_filtered:
+                        error_msg += "\nPossible causes: SSH key authentication failed, wrong user, or insufficient permissions"
+                    elif "No such file or directory" in stderr_filtered:
+                        error_msg += "\nPossible causes: Remote directory doesn't exist or remote host unreachable"
+                    elif "Connection refused" in stderr_filtered:
+                        error_msg += "\nPossible causes: SSH service not running on remote host or wrong port"
+                    elif "Host key verification failed" in stderr_filtered:
+                        error_msg += "\nPossible causes: SSH host key verification issue (should not happen with our settings)"
+                    elif "Network is unreachable" in stderr_filtered:
+                        error_msg += "\nPossible causes: Network connectivity issue to remote host"
+                
+                LOGGER.error(error_msg)
+                raise subprocess.CalledProcessError(
+                    e.execution_result.exit_code,
+                    scp_cmd,
+                    YdbCluster._safe_decode(e.execution_result.std_out),
+                    stderr_filtered
+                )
+            
+            LOGGER.error(f"Error copying file to remote: {e}")
+            # Возвращаем реальные stdout и stderr из результата выполнения
+            stdout = YdbCluster._safe_decode(e.execution_result.std_out)
+            stderr = YdbCluster._safe_decode(e.execution_result.std_err)
+            stderr_filtered = YdbCluster._filter_ssh_warnings(stderr)
+            
+            if stderr_filtered:
+                LOGGER.warning(f"SCP stderr: {stderr_filtered}")
+            
+            return None
+
+        except Exception as e:
             if raise_on_error:
                 raise
-            LOGGER.error(f"Error copying file to remote: {e}")
+            LOGGER.error(f"Unexpected error copying file to remote: {e}")
             return None
 
     @classmethod

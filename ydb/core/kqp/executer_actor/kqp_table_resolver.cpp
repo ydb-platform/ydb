@@ -315,10 +315,6 @@ private:
 
 private:
     void ResolveKeys() {
-<<<<<<< HEAD
-
-=======
->>>>>>> 9566518cca9 (Merge pull request #18123 from nikvas0/evwrite-fixes-2)
         auto requestNavigate = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
         auto request = MakeHolder<NSchemeCache::TSchemeCacheRequest>();
         request->ResultSet.reserve(TasksGraph.GetStagesInfo().size());

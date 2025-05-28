@@ -463,7 +463,7 @@ message TPredicate {
             STARTS_WITH = 9; 
             ENDS_WITH = 10; 
             CONTAINS = 11;
-            REGEXP = 12;
+            REGEXP = 12; // "$column REGEXP $pattern"
         }
 
         EOperation operation = 1;
@@ -471,11 +471,13 @@ message TPredicate {
         TExpression right_value = 3;
     }
 
-    // "$column REGEXP $pattern"
-    // message TRegexp {
-    //     TExpression value = 1;
-    //     TExpression pattern = 2;
-    // }
+    // This type will be removed in future. Use TComparison instead.
+    message TRegexp {
+        option deprecated = true;
+
+        TExpression value = 1;
+        TExpression pattern = 2;
+    }
 
     oneof payload {
         TNegation negation = 1;
@@ -489,7 +491,8 @@ message TPredicate {
         TBoolExpression bool_expression = 9;
         TCoalesce coalesce = 10;
         TIf if = 11;
-        // TRegexp regexp = 12;
+        // This field will be removed in future. Use TComparison instead.
+        TRegexp regexp = 12 [deprecated = true];
     }
 }
 

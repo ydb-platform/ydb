@@ -29,14 +29,19 @@
             "uri": "file://test.test_InvalidCaptureRegexFail_/extracted"
         }
     ],
-    "test.test[InvalidRegexFail]": [
+    "test.test[InvalidRegexFail_2025.02]": [
         {
-            "uri": "file://test.test_InvalidRegexFail_/extracted"
+            "uri": "file://test.test_InvalidRegexFail_2025.02_/extracted"
         }
     ],
-    "test.test[InvalidRegexSuccess]": [
+    "test.test[InvalidRegexFail_2025.03]": [
         {
-            "uri": "file://test.test_InvalidRegexSuccess_/results.txt"
+            "uri": "file://test.test_InvalidRegexFail_2025.03_/extracted"
+        }
+    ],
+    "test.test[InvalidRegexSuccess_2025.02]": [
+        {
+            "uri": "file://test.test_InvalidRegexSuccess_2025.02_/results.txt"
         }
     ],
     "test.test[LikeEscape]": [

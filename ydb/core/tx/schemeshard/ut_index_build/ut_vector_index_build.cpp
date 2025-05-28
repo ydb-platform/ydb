@@ -8,6 +8,7 @@
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/metering/metering.h>
 
+#include <ydb/public/lib/deprecated/kicli/kicli.h>
 #include <ydb-cpp-sdk/client/table/table.h>
 
 using namespace NKikimr;
@@ -79,30 +80,37 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
 
         // Just create main table
         TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB", R"(
-              Name: "Table"
-              Columns { Name: "key"       Type: "Uint32" }
-              Columns { Name: "embedding" Type: "String" }
-              KeyColumnNames: ["key"]
+            Name: "Table"
+            Columns { Name: "key"       Type: "Uint32" }
+            Columns { Name: "embedding" Type: "String" }
+            KeyColumnNames: ["key"]
+            SplitBoundary { KeyPrefix { Tuple { Optional { Uint32: 50 } } } }
+            SplitBoundary { KeyPrefix { Tuple { Optional { Uint32: 150 } } } }
         )");
         env.TestWaitNotification(runtime, txId, tenantSchemeShard);
 
-        auto fnWriteRow = [&](ui64 tabletId, ui32 key, TString embedding, const char* table) {
-            TString writeQuery = Sprintf(R"(
-                (
-                    (let key   '( '('key       (Uint32 '%u ) ) ) )
-                    (let row   '( '('embedding (String '%s ) ) ) )
-                    (return (AsList (UpdateRow '__user__%s key row) ))
-                )
-            )", key, embedding.c_str(), table);
-            NKikimrMiniKQL::TResult result;
-            TString err;
-            NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, writeQuery, result, err);
-            UNIT_ASSERT_VALUES_EQUAL(err, "");
-            UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);
+        // Write data directly into shards
+        auto fillRows = [&](const TString & tablePath, ui32 shard, ui32 min, ui32 max) {
+            TVector<TCell> cells;
+            ui8 str[6] = { 0 };
+            str[4] = (ui8)Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8;
+            for (ui32 key = min; key < max; ++key) {
+                str[0] = ((key+106)* 7) % 256;
+                str[1] = ((key+106)*17) % 256;
+                str[2] = ((key+106)*37) % 256;
+                str[3] = ((key+106)*47) % 256;
+                cells.emplace_back(TCell::Make(key));
+                cells.emplace_back(TCell((const char*)str, 5));
+            }
+            std::vector<ui32> columnIds{1, 2};
+            TSerializedCellMatrix matrix(cells, max-min, 2);
+            WriteOp(runtime, tenantSchemeShard, ++txId, tablePath,
+                shard, NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
+                columnIds, std::move(matrix), true);
         };
-        for (ui32 key = 0; key < 200; ++key) {
-            fnWriteRow(TTestTxConfig::FakeHiveTablets + 6, key, std::to_string(key), "Table");
-        }
+        fillRows("/MyRoot/ServerLessDB/Table", 0, 0, 50);
+        fillRows("/MyRoot/ServerLessDB/Table", 1, 50, 150);
+        fillRows("/MyRoot/ServerLessDB/Table", 2, 150, 200);
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
@@ -118,18 +126,95 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
             meteringMessages << event->Get()->MeteringJson;
         });
 
-        TestBuildVectorIndex(runtime, ++txId, tenantSchemeShard, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", "index1", "embedding");
+        TBlockEvents<TEvDataShard::TEvReshuffleKMeansRequest> reshuffleBlocker(runtime, [&](const auto& ) {
+            return true;
+        });
+
+        AsyncBuildVectorIndex(runtime, ++txId, tenantSchemeShard, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", "index1", "embedding");
         ui64 buildIndexId = txId;
+
+        // Wait for the first "reshuffle" request (samples will be already collected on the first level)
+        // and reboot the scheme shard to verify that its intermediate state is persisted correctly.
+        // The bug checked here: Sample.Probability was not persisted (#18236).
+        runtime.WaitFor("ReshuffleKMeansRequest", [&]{ return reshuffleBlocker.size(); });
+        Cerr << "... rebooting scheme shard" << Endl;
+        RebootTablet(runtime, tenantSchemeShard, runtime.AllocateEdgeActor());
+
+        // Now wait for the 1st level to be finalized
+        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> level1Blocker(runtime, [&](auto& ev) {
+            const auto& record = ev->Get()->Record;
+            if (record.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpInitiateBuildIndexImplTable) {
+                txId = record.GetTxId();
+                return true;
+            }
+            return false;
+        });
+        reshuffleBlocker.Stop();
+        reshuffleBlocker.Unblock(reshuffleBlocker.size());
+
+        // Reshard the first level table (0build)
+        // First bug checked here: after restarting the schemeshard during reshuffle it
+        //   generates more clusters than requested and dies with VERIFY on shard boundaries (#18278).
+        // Second bug checked here: posting table doesn't contain all rows from the main table
+        //   when the build table is resharded during build (#18355).
+        {
+            auto indexDesc = DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table/index1/indexImplPostingTable0build", true, true, true);
+            auto parts = indexDesc.GetPathDescription().GetTablePartitions();
+            UNIT_ASSERT_EQUAL(parts.size(), 4);
+            ui64 cluster = 1;
+            for (const auto & x: parts) {
+                TestSplitTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table/index1/indexImplPostingTable0build", Sprintf(R"(
+                    SourceTabletId: %lu
+                    SplitBoundary { KeyPrefix { Tuple { Optional { Uint64: %lu } } Tuple { Optional { Uint32: 50 } } } }
+                    SplitBoundary { KeyPrefix { Tuple { Optional { Uint64: %lu } } Tuple { Optional { Uint32: 150 } } } }
+                )", x.GetDatashardId(), cluster, cluster));
+                env.TestWaitNotification(runtime, txId);
+                cluster++;
+            }
+        }
+
+        level1Blocker.Stop();
+        level1Blocker.Unblock(level1Blocker.size());
+
+        // Now wait for the index build
+        {
+            auto expectedStatus = Ydb::StatusIds::SUCCESS;
+            TAutoPtr<IEventHandle> handle;
+            TEvIndexBuilder::TEvCreateResponse* event = runtime.GrabEdgeEvent<TEvIndexBuilder::TEvCreateResponse>(handle);
+            UNIT_ASSERT(event);
+
+            Cerr << "BUILDINDEX RESPONSE CREATE: " << event->ToString() << Endl;
+            UNIT_ASSERT_EQUAL_C(event->Record.GetStatus(), expectedStatus,
+                                "status mismatch"
+                                    << " got " << Ydb::StatusIds::StatusCode_Name(event->Record.GetStatus())
+                                    << " expected "  << Ydb::StatusIds::StatusCode_Name(expectedStatus)
+                                    << " issues was " << event->Record.GetIssues());
+        }
+
+        env.TestWaitNotification(runtime, buildIndexId, tenantSchemeShard);
+
+        // Check row count in the posting table
+        {
+            auto indexDesc = DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table/index1/indexImplPostingTable", true, true, true);
+            auto parts = indexDesc.GetPathDescription().GetTablePartitions();
+            ui32 rows = 0;
+            for (const auto & x: parts) {
+                auto result = ReadTable(runtime, x.GetDatashardId(), "indexImplPostingTable",
+                    {NKikimr::NTableIndex::NTableVectorKmeansTreeIndex::ParentColumn, "key"}, {"key"});
+                auto value = NClient::TValue::Create(result);
+                rows += value["Result"]["List"].Size();
+            }
+            Cerr << "... posting table contains " << rows << " rows" << Endl;
+            UNIT_ASSERT_VALUES_EQUAL(rows, 200);
+        }
 
         auto listing = TestListBuildIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB");
         UNIT_ASSERT_VALUES_EQUAL(listing.EntriesSize(), 1);
 
-        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
-
-        auto descr = TestGetBuildIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB", txId);
+        auto descr = TestGetBuildIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB", buildIndexId);
         UNIT_ASSERT_VALUES_EQUAL(descr.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE);
 
-        const TString meteringData = R"({"usage":{"start":0,"quantity":128,"finish":0,"unit":"request_unit","type":"delta"},"tags":{},"id":"106-72075186233409549-2-0-0-0-0-200-0-1290-0","cloud_id":"CLOUD_ID_VAL","source_wt":0,"source_id":"sless-docapi-ydb-ss","resource_id":"DATABASE_ID_VAL","schema":"ydb.serverless.requests.v1","folder_id":"FOLDER_ID_VAL","version":"1.0.0"})""\n";
+        const TString meteringData = R"({"usage":{"start":0,"quantity":431,"finish":0,"unit":"request_unit","type":"delta"},"tags":{},"id":"109-72075186233409549-2-0-0-0-0-619-605-11328-10960","cloud_id":"CLOUD_ID_VAL","source_wt":0,"source_id":"sless-docapi-ydb-ss","resource_id":"DATABASE_ID_VAL","schema":"ydb.serverless.requests.v1","folder_id":"FOLDER_ID_VAL","version":"1.0.0"})""\n";
 
         UNIT_ASSERT_NO_DIFF(meteringMessages, meteringData);
 
@@ -152,6 +237,7 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
         )");
         env.TestWaitNotification(runtime, txId, tenantSchemeShard);
 
+        Cerr << "... rebooting scheme shard" << Endl;
         RebootTablet(runtime, tenantSchemeShard, runtime.AllocateEdgeActor());
 
         TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"),
@@ -200,16 +286,14 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
                             NLs::ExtractTenantSchemeshard(&tenantSchemeShard)});
 
         TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/CommonDB", R"(
-              Name: "Table"
-              Columns { Name: "key"       Type: "Uint32" }
-              Columns { Name: "embedding" Type: "String" }
-              KeyColumnNames: ["key"]
+            Name: "Table"
+            Columns { Name: "key"       Type: "Uint32" }
+            Columns { Name: "embedding" Type: "String" }
+            KeyColumnNames: ["key"]
         )");
         env.TestWaitNotification(runtime, txId, tenantSchemeShard);
 
-        for (ui32 key = 100; key < 300; ++key) {
-            fnWriteRow(TTestTxConfig::FakeHiveTablets + 6, key, std::to_string(key), "Table");
-        }
+        fillRows("/MyRoot/CommonDB/Table", 0, 100, 300);
 
         TVector<TString> billRecords;
         observerHolder = runtime.AddObserver<NMetering::TEvMetering::TEvWriteMeteringJson>([&](NMetering::TEvMetering::TEvWriteMeteringJson::TPtr& event) {

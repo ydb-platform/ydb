@@ -558,11 +558,16 @@ private:
     }
 
     void Handle(TEvYdbProxy::TEvCommitOffsetRequest::TPtr& ev) {
-        auto args = std::move(ev->Get()->GetArgs());
-        auto& [topicName, partitionId, consumerName, offset, settings] = args;
+        Y_UNUSED(ev);
+        //auto args = std::move(ev->Get()->GetArgs());
+        //auto& [topicName, partitionId, consumerName, offset, settings] = args;
 
-        auto* actor = new TLocalTopicPartitionCommitActor(ev->Sender, Database, std::move(topicName), partitionId, std::move(consumerName), std::move(settings.ReadSessionId_), offset);
-        TlsActivationContext->RegisterWithSameMailbox(actor, SelfId());
+        //auto* actor = new TLocalTopicPartitionCommitActor(ev->Sender, Database, std::move(topicName), partitionId, std::move(consumerName), std::move(settings.ReadSessionId_), offset);
+        //TlsActivationContext->RegisterWithSameMailbox(actor, SelfId());
+    }
+
+    void Handle(TEvYdbProxy::TEvDescribeTopicRequest::TPtr& ev) {
+        Y_UNUSED(ev);
     }
 
     STATEFN(StateWork) {
@@ -570,6 +575,7 @@ private:
             hFunc(TEvYdbProxy::TEvCreateTopicReaderRequest, Handle);
             hFunc(TEvYdbProxy::TEvAlterTopicRequest, Handle);
             hFunc(TEvYdbProxy::TEvCommitOffsetRequest, Handle);
+            hFunc(TEvYdbProxy::TEvDescribeTopicRequest, Handle);
             sFunc(TEvents::TEvPoison, PassAway);
         default:
             Y_UNREACHABLE();

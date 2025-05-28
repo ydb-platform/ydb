@@ -548,6 +548,33 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         vdisk.SendEvLogSync();
     }
 
+    Y_UNIT_TEST(PDiskOwnerSlayRace) {
+        TActorTestContext testCtx{{}};
+        testCtx.GetPDisk(); // inits pdisk
+        TVDiskMock vdisk(&testCtx);
+
+        testCtx.TestResponse<NPDisk::TEvYardControlResult>(
+            new NPDisk::TEvYardControl(NPDisk::TEvYardControl::ActionPause, nullptr),
+            NKikimrProto::OK);
+
+        auto* yardInit = new NPDisk::TEvYardInit(TVDiskMock::OwnerRound.fetch_add(1), vdisk.VDiskID, testCtx.TestCtx.PDiskGuid, testCtx.Sender);
+        testCtx.Send(yardInit);
+        auto* slay = new NPDisk::TEvSlay(vdisk.VDiskID, TVDiskMock::OwnerRound.load(), 0, 0);
+        testCtx.Send(slay);
+
+        testCtx.TestResponse<NPDisk::TEvYardControlResult>(
+            new NPDisk::TEvYardControl(NPDisk::TEvYardControl::ActionResume, nullptr),
+            NKikimrProto::OK);
+
+        auto slayResult = testCtx.Recv<NPDisk::TEvSlayResult>();
+
+        UNIT_ASSERT_VALUES_EQUAL(NKikimrProto::NOTREADY, slayResult->Status);
+
+        testCtx.TestResponse<NPDisk::TEvSlayResult>(
+            new NPDisk::TEvSlay(vdisk.VDiskID, TVDiskMock::OwnerRound.load(), 0, 0),
+            NKikimrProto::OK);
+    }
+
     Y_UNIT_TEST(PDiskRestartManyLogWrites) {
         TActorTestContext testCtx({ false });
 

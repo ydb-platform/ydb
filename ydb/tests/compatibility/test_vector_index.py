@@ -182,7 +182,7 @@ class TestVectorIndex(RestartToAnotherVersionFixture):
             target=targets[distance][distance_func], name=vector_types[vector_type], data_type=vector_type, order=order
         )
         self.change_cluster_version()
-        
+
         self.select_from_index(
             target=targets[distance][distance_func], name=vector_types[vector_type], data_type=vector_type, order=order
         )

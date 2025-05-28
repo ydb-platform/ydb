@@ -821,7 +821,7 @@ TFuture<TDistributedWriteSessionWithCookies> TClientBase::StartDistributedWriteS
             TDistributedWriteSessionWithCookies sessionWithCookies;
             sessionWithCookies.Session = ConvertTo<TSignedDistributedWriteSessionPtr>(TYsonString(result->signed_session())),
             sessionWithCookies.Cookies = std::move(cookies);
-            return std::move(sessionWithCookies);
+            return sessionWithCookies;
         }));
 }
 

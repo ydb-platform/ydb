@@ -33,6 +33,7 @@ namespace NSQLComplete {
     struct TCandidate {
         ECandidateKind Kind;
         TString Content;
+        size_t CursorShift = 0;
 
         friend bool operator==(const TCandidate& lhs, const TCandidate& rhs) = default;
     };

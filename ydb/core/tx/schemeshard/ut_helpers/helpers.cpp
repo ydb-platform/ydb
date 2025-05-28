@@ -2687,4 +2687,31 @@ namespace NSchemeShardUT_Private {
 
         return result;
     }
+
+    void WriteVectorTableRows(TTestActorRuntime& runtime, ui64 schemeShardId, ui64 txId, const TString & tablePath, bool withValue, ui32 shard, ui32 min, ui32 max) {
+        TVector<TCell> cells;
+        ui8 str[6] = { 0 };
+        str[4] = (ui8)Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8;
+        for (ui32 key = min; key < max; ++key) {
+            str[0] = ((key+106)* 7) % 256;
+            str[1] = ((key+106)*17) % 256;
+            str[2] = ((key+106)*37) % 256;
+            str[3] = ((key+106)*47) % 256;
+            cells.emplace_back(TCell::Make(key));
+            cells.emplace_back(TCell((const char*)str, 5));
+            if (withValue) {
+                // optionally use the same value for an additional covered string column
+                cells.emplace_back(TCell((const char*)str, 5));
+            }
+        }
+        std::vector<ui32> columnIds{1, 2};
+        if (withValue) {
+            columnIds.push_back(3);
+        }
+        TSerializedCellMatrix matrix(cells, max-min, withValue ? 3 : 2);
+        WriteOp(runtime, schemeShardId, txId, tablePath,
+            shard, NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
+            columnIds, std::move(matrix), true);
+    };
+
 }

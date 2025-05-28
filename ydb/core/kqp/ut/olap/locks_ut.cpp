@@ -155,14 +155,14 @@ Y_UNIT_TEST_SUITE(KqpOlapLocks) {
         if (shardCount > 1 && reboot) {
             const auto deleteUnavailiable = resultDelete.GetStatus() == NYdb::Dev::EStatus::UNAVAILABLE;
             const auto deleteUndetermined = resultDelete.GetStatus() == NYdb::Dev::EStatus::UNDETERMINED;
-            UNIT_ASSERT(
+            UNIT_ASSERT_C(
                 // If UNAVAILABLE: row should still exist in DB
                 (deleteUnavailiable && resultSet.RowsCount() == 1) ||
 
                 // If UNDETERMINED: operation might have succeeded or failed
-                deleteUndetermined
+                deleteUndetermined,
 
-                // Any other status is unexpected and will fail this assertion
+                resultDelete.GetStatus()
             );
         } else {
             UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 0); // not need locks
@@ -172,11 +172,13 @@ Y_UNIT_TEST_SUITE(KqpOlapLocks) {
         const auto resultDelete2 =
             client.ExecuteQuery("DELETE from `/Root/ttt` WHERE id < 100", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
         if (shardCount > 1 && reboot) {
-            UNIT_ASSERT(
+            UNIT_ASSERT_C(
                 (!resultDelete2.IsSuccess() && resultSet.RowsCount() == 1) ||
 
                 // Delete success due to optimisations
-                (resultDelete2.IsSuccess() && (resultSet.RowsCount() == 0))
+                (resultDelete2.IsSuccess() && (resultSet.RowsCount() == 0)),
+
+                resultDelete2.GetIssues().ToString()
             );
         } else {
             UNIT_ASSERT_C(resultDelete2.IsSuccess(), resultDelete2.GetIssues().ToString());

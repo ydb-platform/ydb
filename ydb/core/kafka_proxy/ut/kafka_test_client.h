@@ -101,7 +101,7 @@ class TKafkaTestClient {
 
         TMessagePtr<TOffsetFetchResponseData> OffsetFetch(TOffsetFetchRequestData request);
 
-        TMessagePtr<TListGroupsResponseData> ListGroupsFetch(TListGroupsRequestData request);
+        TMessagePtr<TListGroupsResponseData> ListGroups(TListGroupsRequestData request);
 
         TMessagePtr<TFetchResponseData> Fetch(const std::vector<std::pair<TString, std::vector<i32>>>& topics, i64 offset = 0);
 

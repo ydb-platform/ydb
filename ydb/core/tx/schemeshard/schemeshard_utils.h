@@ -150,6 +150,11 @@ bool CommonCheck(const TTableDesc& tableDesc, const NKikimrSchemeOp::TIndexCreat
         //We have already checked this in IsCompatibleIndex
         Y_ABORT_UNLESS(indexKeys.KeyColumns.size() >= 1);
 
+        if (indexKeys.KeyColumns.size() > 1 && !IsCompatibleKeyTypes(baseColumnTypes, implTableColumns, uniformTable, error)) {
+            status = NKikimrScheme::EStatus::StatusInvalidParameter;
+            return false;
+        }
+
         const TString& indexColumnName = indexKeys.KeyColumns.back();
         Y_ABORT_UNLESS(baseColumnTypes.contains(indexColumnName));
         auto typeInfo = baseColumnTypes.at(indexColumnName);

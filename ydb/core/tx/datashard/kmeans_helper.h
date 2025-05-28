@@ -19,6 +19,7 @@
 // TODO(mbkkt) BUILD_INDEX_DATASHARD
 #define LOG_T(stream) LOG_TRACE_S (*TlsActivationContext, NKikimrServices::BUILD_INDEX, stream)
 #define LOG_D(stream) LOG_DEBUG_S (*TlsActivationContext, NKikimrServices::BUILD_INDEX, stream)
+#define LOG_I(stream) LOG_INFO_S  (*TlsActivationContext, NKikimrServices::BUILD_INDEX, stream)
 #define LOG_N(stream) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX, stream)
 #define LOG_E(stream) LOG_ERROR_S (*TlsActivationContext, NKikimrServices::BUILD_INDEX, stream)
 
@@ -191,25 +192,25 @@ struct TCalculation: TMetric {
 
 template <typename TMetric>
 ui32 FeedEmbedding(const TCalculation<TMetric>& calculation, std::span<const TString> clusters,
-                   const NTable::TRowState& row, NTable::TPos embeddingPos)
+                   TArrayRef<const TCell> row, NTable::TPos embeddingPos)
 {
-    Y_ASSERT(embeddingPos < row.Size());
-    const auto embedding = row.Get(embeddingPos).AsRef();
+    Y_ASSERT(embeddingPos < row.size());
+    const auto embedding = row.at(embeddingPos).AsRef();
     if (!calculation.IsExpectedSize(embedding)) {
         return std::numeric_limits<ui32>::max();
     }
     return calculation.FindClosest(clusters, embedding);
 }
 
-void AddRowMain2Build(TBufferData& buffer, NTableIndex::TClusterId parent, TArrayRef<const TCell> key, const NTable::TRowState& row);
+void AddRowMain2Build(TBufferData& buffer, NTableIndex::TClusterId parent, TArrayRef<const TCell> key, TArrayRef<const TCell> row);
 
-void AddRowMain2Posting(TBufferData& buffer, NTableIndex::TClusterId parent, TArrayRef<const TCell> key, const NTable::TRowState& row,
+void AddRowMain2Posting(TBufferData& buffer, NTableIndex::TClusterId parent, TArrayRef<const TCell> key, TArrayRef<const TCell> row,
                         ui32 dataPos);
 
-void AddRowBuild2Build(TBufferData& buffer, NTableIndex::TClusterId parent, TArrayRef<const TCell> key, const NTable::TRowState& row,
+void AddRowBuild2Build(TBufferData& buffer, NTableIndex::TClusterId parent, TArrayRef<const TCell> key, TArrayRef<const TCell> row,
                        ui32 prefixColumns = 1);
 
-void AddRowBuild2Posting(TBufferData& buffer, NTableIndex::TClusterId parent, TArrayRef<const TCell> key, const NTable::TRowState& row,
+void AddRowBuild2Posting(TBufferData& buffer, NTableIndex::TClusterId parent, TArrayRef<const TCell> key, TArrayRef<const TCell> row,
                          ui32 dataPos, ui32 prefixColumns = 1);
 
 TTags MakeUploadTags(const TUserTable& table, const TProtoStringType& embedding,

@@ -244,9 +244,9 @@ inline void StartScan(TDataShard* dataShard, TAutoPtr<NTable::IScan>&& scan, ui6
 }
 
 template<typename TResponse> 
-inline void FailScan(ui64 scanId, ui64 tabletId, TActorId sender, TScanRecord::TSeqNo seqNo, const std::exception& exc)
+inline void FailScan(ui64 scanId, ui64 tabletId, TActorId sender, TScanRecord::TSeqNo seqNo, const std::exception& exc, const TString& logScanType)
 {
-    LOG_E("Unhandled exception " << TypeName<TResponse>() << " TabletId: " << tabletId 
+    LOG_E("Unhandled exception " << logScanType << " TabletId: " << tabletId 
         << " " << TypeName(exc) << ": " << exc.what() << Endl
         << TBackTrace::FromCurrentException().PrintToString());
 

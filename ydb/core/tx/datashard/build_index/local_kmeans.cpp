@@ -660,10 +660,9 @@ void TDataShard::HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const
             return;
         }
 
-        Y_ENSURE(false, "test test");
         StartScan(this, std::move(scan), id, seqNo, rowVersion, userTable.LocalTid);
     } catch (const std::exception& exc) {
-        FailScan<TEvDataShard::TEvLocalKMeansResponse>(id, TabletID(), ev->Sender, seqNo, exc);
+        FailScan<TEvDataShard::TEvLocalKMeansResponse>(id, TabletID(), ev->Sender, seqNo, exc, "TLocalKMeansScan");
     }
 }
 

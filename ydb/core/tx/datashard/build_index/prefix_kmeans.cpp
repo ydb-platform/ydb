@@ -630,7 +630,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvPrefixKMeansRequest::TPtr& ev, cons
 
         StartScan(this, std::move(scan), id, seqNo, rowVersion, userTable.LocalTid);
     } catch (const std::exception& exc) {
-        FailScan<TEvDataShard::TEvPrefixKMeansResponse>(id, TabletID(), ev->Sender, seqNo, exc);
+        FailScan<TEvDataShard::TEvPrefixKMeansResponse>(id, TabletID(), ev->Sender, seqNo, exc, "TPrefixKMeansScan");
     }
 }
 

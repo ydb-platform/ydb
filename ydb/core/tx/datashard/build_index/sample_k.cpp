@@ -332,7 +332,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvSampleKRequest::TPtr& ev, const TAc
 
         StartScan(this, std::move(scan), id, seqNo, rowVersion, userTable.LocalTid);
     } catch (const std::exception& exc) {
-        FailScan<TEvDataShard::TEvSampleKResponse>(id, TabletID(), ev->Sender, seqNo, exc);
+        FailScan<TEvDataShard::TEvSampleKResponse>(id, TabletID(), ev->Sender, seqNo, exc, "TSampleKScan");
     }
 }
 

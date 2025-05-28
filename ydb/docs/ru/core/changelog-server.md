@@ -69,7 +69,7 @@
 * [Исправлены](https://github.com/ydb-platform/ydb/pull/18507) ошибки обработки опциональных столбцов и столбцов с типом UUID в строковых таблицах.
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/10460) ошибка из-за отправки сообщения о подтверждении обработки сообщения в транзакции, которая приводила к неконсистентному чтению из топика.
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/12220) ошибка, из-за которой автопартиционирование некорректно работало при работе с топиком в рамках транзакции.
-* [Исправлены](https://github.com/ydb-platform/ydb/pull/12905) зависания транзакций при работе с топиками во время перезапуска таблеток. 
+* [Исправлены](https://github.com/ydb-platform/ydb/pull/12905) зависания транзакций при работе с топиками во время перезапуска таблеток.
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/17122) редкая ошибка зависания клиентских приложений во время выполнения коммита.
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/16649) ошибка, из-за которой distconf выдавал ошибку проверки и зависал при удалении узлов через устаревший интерфейс управления конфигурацией консоли.
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/13910) ошибка "Key is out of range" при импорте из S3-совместимого хранилища.
@@ -77,14 +77,12 @@
 * [Добавлена](https://github.com/ydb-platform/ydb/pull/16420) ошибка Ydb::StatusIds::TIMEOUT в список, подлежащий ретраям, что улучшает возможность построения больших вторичных индексов.
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/16635) ошибка выполнения выражения `RETURNING` в операциях INSERT/UPSERT.
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/16269) проблема зависания операции Drop Tablet в PQ tablet особенно во время задержек в работе Interconnect.
-* https://github.com/ydb-platform/ydb/pull/9122 NodeBroker теперь отправляет дельты при регистрации нод в кластере.
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/16194) ошибка, возникавшая во время [компакшн](../concepts/glossary#compaction) VDisk.
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/15233) проблема, из-за которой длительные сессии чтения топика завершались с ошибками "too big inflight".
 * [Исправлено](https://github.com/ydb-platform/ydb/pull/15515) зависание при чтении топика, если хотя бы одна партиция не имела входящих данных, но читалась несколькими потребителями.
 * [Оптимизировано](https://github.com/ydb-platform/ydb/pull/18302) использование памяти в транзакциях с большим количеством участников за счет изменения механизма хранения и повторной отправки сообщений TEvReadSet.
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/18270) ошибка репликации.
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/18625) ошибка, из-за которой неверно рассчитывалось использование памяти узлами.
-* [Устранена](https://github.com/ydb-platform/ydb/pull/18621) проблема зависания процесса обработки новых таблеток в Hive.
 * [Устранена](https://github.com/ydb-platform/ydb/pull/18614) редкая проблема перезагрузок PQ tablet.
 * 18504:Avoid expensive table merge checks when operation inflight limits have already been exceeded. Fixes #18473. [#18504](https://github.com/ydb-platform/ydb/pull/18504) ([Aleksei Borzenkov](https://github.com/snaury))
 * [Устранена](https://github.com/ydb-platform/ydb/pull/18378) проблема, при которой после обновления версии кластера Hive запускал подписчиков в дата-центрах без работающих узлов баз данных.

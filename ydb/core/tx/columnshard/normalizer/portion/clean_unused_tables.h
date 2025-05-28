@@ -24,7 +24,8 @@ public:
 
     TString GetClassName() const override { return ClassName(); }
     std::optional<ENormalizerSequentialId> DoGetEnumSequentialId() const override {
-        return ENormalizerSequentialId::CleanUnusedTables;
+        // return ENormalizerSequentialId::CleanUnusedTables;
+        return std::nullopt;
     }
 
     TConclusion<std::vector<INormalizerTask::TPtr>>

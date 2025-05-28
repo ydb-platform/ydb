@@ -71,7 +71,6 @@ enum class ENormalizerSequentialId : ui32 {
     RestoreV2Chunks,
     CleanDeprecatedSnapshot,
     RestoreV0ChunksMeta,
-    CleanUnusedTables,
 
     MAX
 };

@@ -66,6 +66,7 @@ protected:
 
     TLead Lead;
 
+    ui64 TabletId = 0;
     ui64 BuildId = 0;
 
     ui64 ReadRows = 0;
@@ -133,7 +134,7 @@ public:
         return NKikimrServices::TActivity::LOCAL_KMEANS_SCAN_ACTOR;
     }
 
-    TLocalKMeansScanBase(const TUserTable& table,
+    TLocalKMeansScanBase(ui64 tabletId, const TUserTable& table,
                          const NKikimrTxDataShard::TEvLocalKMeansRequest& request,
                          const TActorId& responseActorId,
                          TAutoPtr<TEvDataShard::TEvLocalKMeansResponse>&& response,
@@ -147,6 +148,7 @@ public:
         , State{EState::SAMPLE}
         , UploadState{request.GetUpload()}
         , Lead{std::move(lead)}
+        , TabletId(tabletId)
         , BuildId{request.GetId()}
         , Rng{request.GetSeed()}
         , LevelTable{request.GetLevelName()}
@@ -204,7 +206,11 @@ public:
         }
         NYql::IssuesToMessage(UploadStatus.Issues, record.MutableIssues());
 
-        LOG_N("Finish " << Debug() << " " << Response->Record.ShortDebugString());
+        if (Response->Record.GetStatus() == NKikimrIndexBuilder::DONE) {
+            LOG_N("Done " << Debug() << " " << Response->Record.ShortDebugString());
+        } else {
+            LOG_E("Failed " << Debug() << " " << Response->Record.ShortDebugString());
+        }
         Send(ResponseActorId, Response.Release());
 
         Driver = nullptr;
@@ -219,7 +225,8 @@ public:
 
     TString Debug() const
     {
-        return TStringBuilder() << "TLocalKMeansScan Id: " << BuildId << " Parent: " << Parent << " Child: " << Child
+        return TStringBuilder() << "TLocalKMeansScan TabletId: " << TabletId << " Id: " << BuildId
+            << " Parent: " << Parent << " Child: " << Child
             << " K: " << K << " Clusters: " << Clusters.size()
             << " State: " << State << " Round: " << Round << " / " << MaxRounds
             << " LevelBuf size: " << LevelBuf.Size() << " PostingBuf size: " << PostingBuf.Size()
@@ -414,10 +421,10 @@ class TLocalKMeansScan final: public TLocalKMeansScanBase, private TCalculation<
     }
 
 public:
-    TLocalKMeansScan(const TUserTable& table, NKikimrTxDataShard::TEvLocalKMeansRequest& request,
+    TLocalKMeansScan(ui64 tabletId, const TUserTable& table, NKikimrTxDataShard::TEvLocalKMeansRequest& request,
         const TActorId& responseActorId, TAutoPtr<TEvDataShard::TEvLocalKMeansResponse>&& response,
         TLead&& lead)
-        : TLocalKMeansScanBase{table, request, responseActorId, std::move(response), std::move(lead)}
+        : TLocalKMeansScanBase{tabletId, table, request, responseActorId, std::move(response), std::move(lead)}
     {
         this->Dimensions = request.GetSettings().vector_dimension();
         LOG_I("Create " << Debug());
@@ -754,11 +761,20 @@ void TDataShard::Handle(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const TAc
 void TDataShard::HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const TActorContext& ctx)
 {
     auto& request = ev->Get()->Record;
+    const ui64 id = request.GetId();
     auto rowVersion = request.HasSnapshotStep() || request.HasSnapshotTxId()
         ? TRowVersion(request.GetSnapshotStep(), request.GetSnapshotTxId())
         : GetMvccTxVersion(EMvccTxMode::ReadOnly);
+    TScanRecord::TSeqNo seqNo = {request.GetSeqNoGeneration(), request.GetSeqNoRound()};
 
-    LOG_N("Starting TLocalKMeansScan " << request.ShortDebugString()
+    auto response = MakeHolder<TEvDataShard::TEvLocalKMeansResponse>();
+    response->Record.SetId(id);
+    response->Record.SetTabletId(TabletID());
+    response->Record.SetRequestSeqNoGeneration(seqNo.Generation);
+    response->Record.SetRequestSeqNoRound(seqNo.Round);
+
+    LOG_N("Starting TLocalKMeansScan TabletId: " << TabletID() 
+        << " " << request.ShortDebugString()
         << " row version " << rowVersion);
 
     // Note: it's very unlikely that we have volatile txs before this snapshot
@@ -766,38 +782,120 @@ void TDataShard::HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const
         VolatileTxManager.AttachWaitingSnapshotEvent(rowVersion, std::unique_ptr<IEventHandle>(ev.Release()));
         return;
     }
-    const ui64 id = request.GetId();
-
-    auto response = MakeHolder<TEvDataShard::TEvLocalKMeansResponse>();
-    response->Record.SetId(id);
-    response->Record.SetTabletId(TabletID());
-
-    TScanRecord::TSeqNo seqNo = {request.GetSeqNoGeneration(), request.GetSeqNoRound()};
-    response->Record.SetRequestSeqNoGeneration(seqNo.Generation);
-    response->Record.SetRequestSeqNoRound(seqNo.Round);
 
     auto badRequest = [&](const TString& error) {
         response->Record.SetStatus(NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST);
         auto issue = response->Record.AddIssues();
         issue->set_severity(NYql::TSeverityIds::S_ERROR);
         issue->set_message(error);
-        ctx.Send(ev->Sender, std::move(response));
-        response.Reset();
+    };
+    auto trySendBadRequest = [&] {
+        if (response->Record.GetStatus() == NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST) {
+            LOG_E("Rejecting TLocalKMeansScan bad request TabletId: " << TabletID()
+                << " " << request.ShortDebugString()
+                << " with response " << response->Record.ShortDebugString());
+            ctx.Send(ev->Sender, std::move(response));
+            return true;
+        } else {
+            return false;
+        }
     };
 
-    if (const ui64 shardId = request.GetTabletId(); shardId != TabletID()) {
-        badRequest(TStringBuilder() << "Wrong shard " << shardId << " this is " << TabletID());
-        return;
+    // 1. Validating table and path existence
+    if (request.GetTabletId() != TabletID()) {
+        badRequest(TStringBuilder() << "Wrong shard " << request.GetTabletId() << " this is " << TabletID());
     }
-
+    if (!IsStateActive()) {
+        badRequest(TStringBuilder() << "Shard " << TabletID() << " is " << State << " and not ready for requests");
+    }
     const auto pathId = TPathId::FromProto(request.GetPathId());
     const auto* userTableIt = GetUserTables().FindPtr(pathId.LocalPathId);
     if (!userTableIt) {
         badRequest(TStringBuilder() << "Unknown table id: " << pathId.LocalPathId);
+    }
+    if (trySendBadRequest()) {
         return;
     }
-    Y_ABORT_UNLESS(*userTableIt);
     const auto& userTable = **userTableIt;
+
+    // 2. Validating request fields
+    if (request.HasSnapshotStep() || request.HasSnapshotTxId()) {
+        const TSnapshotKey snapshotKey(pathId, rowVersion.Step, rowVersion.TxId);
+        if (!SnapshotManager.FindAvailable(snapshotKey)) {
+            badRequest(TStringBuilder() << "Unknown snapshot for path id " << pathId.OwnerId << ":" << pathId.LocalPathId
+                << ", snapshot step is " << snapshotKey.Step << ", snapshot tx is " << snapshotKey.TxId);
+        }
+    }
+
+    if (request.GetUpload() != NKikimrTxDataShard::UPLOAD_MAIN_TO_BUILD
+        && request.GetUpload() != NKikimrTxDataShard::UPLOAD_MAIN_TO_POSTING
+        && request.GetUpload() != NKikimrTxDataShard::UPLOAD_BUILD_TO_BUILD
+        && request.GetUpload() != NKikimrTxDataShard::UPLOAD_BUILD_TO_POSTING)
+    {
+        badRequest("Wrong upload");
+    }
+
+    if (request.GetK() < 2) {
+        badRequest("Should be requested partition on at least two rows");
+    }
+
+    const auto parentFrom = request.GetParentFrom();
+    const auto parentTo = request.GetParentTo();
+    NTable::TLead lead;
+    if (parentFrom == 0 && parentTo == 0) {
+        lead.To({}, NTable::ESeek::Lower);
+    } else if (parentFrom > parentTo) {
+        badRequest(TStringBuilder() << "Parent from " << parentFrom << " should be less or equal to parent to " << parentTo);
+    } else {
+        TCell from = TCell::Make(parentFrom - 1);
+        TCell to = TCell::Make(parentTo);
+        TTableRange range{{&from, 1}, false, {&to, 1}, true};
+        auto scanRange = Intersect(userTable.KeyColumnTypes, range, userTable.Range.ToTableRange());
+        if (scanRange.IsEmptyRange(userTable.KeyColumnTypes)) {
+            badRequest(TStringBuilder() << "Requested range doesn't intersect with table range:"
+                << " requestedRange: " << DebugPrintRange(userTable.KeyColumnTypes, range, *AppData()->TypeRegistry)
+                << " tableRange: " << DebugPrintRange(userTable.KeyColumnTypes, userTable.Range.ToTableRange(), *AppData()->TypeRegistry)
+                << " scanRange: " << DebugPrintRange(userTable.KeyColumnTypes, scanRange, *AppData()->TypeRegistry));
+        }
+        lead.To(range.From, NTable::ESeek::Upper);
+        lead.Until(range.To, true);
+    }
+
+    if (!request.HasLevelName()) {
+        badRequest(TStringBuilder() << "Empty level table name");
+    }
+    if (!request.HasPostingName()) {
+        badRequest(TStringBuilder() << "Empty posting table name");
+    }
+
+    auto tags = GetAllTags(userTable);
+    if (!tags.contains(request.GetEmbeddingColumn())) {
+        badRequest(TStringBuilder() << "Unknown embedding column: " << request.GetEmbeddingColumn());
+    }
+    for (auto dataColumn : request.GetDataColumns()) {
+        if (!tags.contains(dataColumn)) {
+            badRequest(TStringBuilder() << "Unknown data column: " << dataColumn);
+        }
+    }
+
+    if (trySendBadRequest()) {
+        return;
+    }
+
+    // 3. Validating vector index settings
+    TAutoPtr<NTable::IScan> scan;
+    auto createScan = [&]<typename T> {
+        scan = new TLocalKMeansScan<T>{
+            TabletID(), userTable, request, ev->Sender, std::move(response),
+            std::move(lead)
+        };
+    };
+    MakeScan(request, createScan, badRequest);
+    if (!scan) {
+        auto sent = trySendBadRequest();
+        Y_ENSURE(sent);
+        return;
+    }
 
     if (const auto* recCard = ScanManager.Get(id)) {
         if (recCard->SeqNo == seqNo) {
@@ -809,65 +907,6 @@ void TDataShard::HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const
             CancelScan(userTable.LocalTid, scanId);
         }
         ScanManager.Drop(id);
-    }
-
-    if (request.HasSnapshotStep() || request.HasSnapshotTxId()) {
-        const TSnapshotKey snapshotKey(pathId, rowVersion.Step, rowVersion.TxId);
-        if (!SnapshotManager.FindAvailable(snapshotKey)) {
-            badRequest(TStringBuilder() << "no snapshot has been found" << " , path id is " << pathId.OwnerId << ":"
-                                        << pathId.LocalPathId << " , snapshot step is " << snapshotKey.Step
-                                        << " , snapshot tx is " << snapshotKey.TxId);
-            return;
-        }
-    }
-
-    if (!IsStateActive()) {
-        badRequest(TStringBuilder() << "Shard " << TabletID() << " is not ready for requests");
-        return;
-    }
-
-    if (request.GetK() < 2) {
-        badRequest("Should be requested partition on at least two rows");
-        return;
-    }
-
-    const auto parentFrom = request.GetParentFrom();
-    const auto parentTo = request.GetParentTo();
-    if (parentFrom > parentTo) {
-        badRequest(TStringBuilder() << "Parent from " << parentFrom << " should be less or equal to parent to " << parentTo);
-        return;
-    }
-
-    NTable::TLead lead;
-    if (parentFrom == 0 && parentTo == 0) {
-        lead.To({}, NTable::ESeek::Lower);
-    } else {
-        TCell from = TCell::Make(parentFrom - 1);
-        TCell to = TCell::Make(parentTo);
-        TTableRange range{{&from, 1}, false, {&to, 1}, true};
-        auto scanRange = Intersect(userTable.KeyColumnTypes, range, userTable.Range.ToTableRange());
-        if (scanRange.IsEmptyRange(userTable.KeyColumnTypes)) {
-            badRequest(TStringBuilder() << " requested range doesn't intersect with table range"
-                                        << " requestedRange: " << DebugPrintRange(userTable.KeyColumnTypes, range, *AppData()->TypeRegistry)
-                                        << " tableRange: " << DebugPrintRange(userTable.KeyColumnTypes, userTable.Range.ToTableRange(), *AppData()->TypeRegistry)
-                                        << " scanRange: " << DebugPrintRange(userTable.KeyColumnTypes, scanRange, *AppData()->TypeRegistry));
-            return;
-        }
-        lead.To(range.From, NTable::ESeek::Upper);
-        lead.Until(range.To, true);
-    }
-    
-    TAutoPtr<NTable::IScan> scan;
-    auto createScan = [&]<typename T> {
-        scan = new TLocalKMeansScan<T>{
-            userTable, request, ev->Sender, std::move(response),
-            std::move(lead)
-        };
-    };
-    MakeScan(request, createScan, badRequest);
-    if (!scan) {
-        Y_ASSERT(!response);
-        return;
     }
 
     TScanOptions scanOpts;

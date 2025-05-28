@@ -125,9 +125,11 @@ MakeUploadTypes(const TUserTable& table, NKikimrTxDataShard::EKMeansState upload
             for (const auto& column : data) {
                 addType(column);
             }
-        } break;
+            break;
+        }
         default:
-            Y_UNREACHABLE();
+            Y_ASSERT(false);
+
     }
     return uploadTypes;
 }

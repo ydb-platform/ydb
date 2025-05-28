@@ -33,7 +33,7 @@ enum EDatashardState {
     Readonly = 3;
     Offline = 4;
     PreOffline = 5;     // Offline but waits for loaned snapshots to be returned and for SchemaChangedResult to be received
-    Frozen = 6; // Read only transactions are allowed. Scheme modification is forbiden
+    Frozen = 6; // Read only transactions are allowed. Scheme modification is forbidden
 
     // Split/Merge Src states
     SplitSrcWaitForNoTxInFlight = 101;    // Temporary state: split src waits for all Tx to finish and then starts splitting
@@ -1427,14 +1427,14 @@ message TEvConditionalEraseRowsResponse {
 }
 
 message TEvBuildIndexCreateRequest {
-    optional uint64 BuildIndexId = 1;          // unique id of build index proccess
+    optional uint64 BuildIndexId = 1;          // unique id of build index process
 
     optional uint64 TabletId = 2;
     optional uint64 OwnerId = 3;
     optional uint64 PathId = 4;
 
     optional string TargetName = 5;
-    repeated string IndexColumns = 6;          // key columns that is needed to transer in terms of target table
+    repeated string IndexColumns = 6;          // key columns that is needed to transfer in terms of target table
 
     optional NKikimrTx.TKeyRange KeyRange = 7; // key range to transfer in term of source table
 
@@ -1484,9 +1484,10 @@ message TEvSampleKRequest {
     optional NKikimrProto.TPathID PathId = 3;
 
     optional uint64 K = 4;
-    // For now we use tablet id as seed value, but it's not convinient for tests
+
     optional uint64 Seed = 5;
-    // We want to sample small instead of large probabilites
+
+    // We want to sample small instead of large probabilities
     // because size of message will be smaller (varint)
     optional uint64 MaxProbability = 6;
 
@@ -1631,9 +1632,6 @@ message TEvReshuffleKMeansResponse {
     optional uint64 UploadBytes = 9;
     optional uint64 ReadRows = 10;
     optional uint64 ReadBytes = 11;
-
-    // TODO(mbkkt) implement slow-path (reliable-path)
-    // optional last written primary key
 }
 
 message TEvPrefixKMeansRequest {

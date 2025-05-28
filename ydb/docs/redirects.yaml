@@ -177,6 +177,8 @@ common:
     to: /yql/reference/syntax/alter-topic.md
   - from: /yql/reference/syntax/create_topic.md
     to: /yql/reference/syntax/create-topic.md
+  - from: /yql/reference/ddl/create-index.md
+    to: /yql/reference/syntax/create_table/secondary_index.md
 
 # Security-related redirects
   - from: /cluster/access.md

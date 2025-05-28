@@ -181,22 +181,54 @@ class YdbCluster:
                         stderr)
 
             except yatest.common.ExecutionError as e:
-                if raise_on_error:
-                    # Преобразуем yatest.common.ExecutionError в стандартное исключение
-                    stderr_filtered = YdbCluster._filter_ssh_warnings(
-                        YdbCluster._safe_decode(e.execution_result.std_err)
-                    )
-                    raise subprocess.CalledProcessError(
-                        e.execution_result.exit_code,
-                        full_cmd,
-                        YdbCluster._safe_decode(e.execution_result.std_out),
-                        stderr_filtered
-                    )
-                LOGGER.error(f"Error executing SSH command on {ssh_host} (original: {self.host}): {e}")
-                # Возвращаем реальные stdout и stderr из результата выполнения
-                stdout = YdbCluster._safe_decode(e.execution_result.std_out)
-                stderr = YdbCluster._safe_decode(e.execution_result.std_err)
+                stdout = ""
+                stderr = ""
+                exit_code = 1  # Значение по умолчанию
+                
+                # ExecutionError имеет атрибут execution_result с объектом выполнения
+                if hasattr(e, 'execution_result') and e.execution_result:
+                    execution_obj = e.execution_result
+                    
+                    # Извлекаем stdout и stderr из объекта выполнения
+                    if hasattr(execution_obj, 'std_out') and execution_obj.std_out:
+                        stdout = YdbCluster._safe_decode(execution_obj.std_out)
+                    if hasattr(execution_obj, 'std_err') and execution_obj.std_err:
+                        stderr = YdbCluster._safe_decode(execution_obj.std_err)
+                    
+                    # Получаем exit code
+                    if hasattr(execution_obj, 'exit_code'):
+                        exit_code = execution_obj.exit_code
+                    elif hasattr(execution_obj, 'returncode'):
+                        exit_code = execution_obj.returncode
+                
+                # Фильтруем SSH предупреждения из stderr
                 stderr = YdbCluster._filter_ssh_warnings(stderr)
+                
+                if raise_on_error:
+                    # Логируем детальную информацию об ошибке
+                    LOGGER.error(f"SSH command failed with exit code {exit_code} on {ssh_host} (original: {self.host})")
+                    LOGGER.error(f"Full command: {full_cmd}")
+                    LOGGER.error(f"Original command: {cmd}")
+                    if stdout:
+                        LOGGER.error(f"Command stdout:\n{stdout}")
+                    if stderr:
+                        LOGGER.error(f"Command stderr:\n{stderr}")
+                    
+                    # Преобразуем yatest.common.ExecutionError в стандартное исключение
+                    raise subprocess.CalledProcessError(
+                        exit_code,
+                        full_cmd,
+                        stdout,
+                        stderr
+                    )
+                
+                LOGGER.error(f"Error executing SSH command on {ssh_host} (original: {self.host}): {e}")
+                if stdout:
+                    LOGGER.error(f"Command stdout:\n{stdout}")
+                if stderr:
+                    LOGGER.error(f"Command stderr:\n{stderr}")
+                
+                # Возвращаем реальные stdout и stderr из результата выполнения
                 return stdout, stderr
 
             except Exception as e:
@@ -762,8 +794,7 @@ class YdbCluster:
             LOGGER.warning(f"File {remote_path} is busy, trying with postfix")
             
             # Генерируем новое имя файла с постфиксом
-            import time
-            timestamp = int(time.time())
+            timestamp = int(time())
             
             # Разделяем путь на директорию и имя файла
             remote_dir = os.path.dirname(remote_path)
@@ -1091,7 +1122,7 @@ class YdbCluster:
     def _kill_process_on_node(cls, node: YdbCluster.Node, process_name: str, 
                               target_dir: Optional[str] = None) -> Dict[str, Any]:
         """
-        Останавливает процессы с указанным именем на конкретной ноде
+        Останавливает процессы с указанным именем на конкретной ноде используя ps и kill
 
         Args:
             node: нода для обработки
@@ -1104,64 +1135,151 @@ class YdbCluster:
         result = {
             'success': False,
             'killed_count': 0,
+            'found_processes': [],
             'commands_executed': []
         }
 
         try:
-            commands_to_try = []
-
-            # Команда для поиска и остановки процессов по имени
-            commands_to_try.append(f"pkill -f {process_name}")
-
-            # Если указана директория, добавляем команду для поиска по полному пути
+            # Создаем список паттернов для поиска
+            search_patterns = [process_name]
+            
+            # Если указана директория, добавляем поиск по полному пути
             if target_dir:
                 full_path = os.path.join(target_dir, process_name)
-                commands_to_try.append(f"pkill -f {full_path}")
-                
-                # Дополнительно останавливаем любые процессы из указанной директории
-                commands_to_try.append(f"pkill -f {target_dir}")
+                search_patterns.append(full_path)
+                # Также ищем любые процессы из указанной директории
+                search_patterns.append(target_dir)
 
-            total_killed = 0
+            all_found_pids = set()
             
-            for cmd in commands_to_try:
+            for pattern in search_patterns:
                 try:
-                    # Сначала проверяем, есть ли процессы для остановки
-                    check_cmd = cmd.replace('pkill', 'pgrep')
-                    stdout, stderr = node.execute_command(check_cmd, raise_on_error=False)
+                    # Ищем процессы с помощью ps -aux | grep
+                    # Используем [p]attern чтобы исключить сам grep из результатов
+                    escaped_pattern = pattern.replace('[', r'\[').replace(']', r'\]')
+                    if len(escaped_pattern) > 0:
+                        first_char = escaped_pattern[0]
+                        rest_pattern = escaped_pattern[1:]
+                        grep_pattern = f"[{first_char}]{rest_pattern}"
+                    else:
+                        grep_pattern = escaped_pattern
+                    
+                    ps_cmd = f"ps -aux | grep '{grep_pattern}'"
+                    stdout, stderr = node.execute_command(ps_cmd, raise_on_error=False)
+                    
+                    result['commands_executed'].append({
+                        'command': ps_cmd,
+                        'stdout': stdout,
+                        'stderr': stderr,
+                        'pattern': pattern
+                    })
                     
                     if stdout.strip():
-                        # Есть процессы для остановки
-                        process_count = len([pid for pid in stdout.strip().split('\n') if pid.strip()])
+                        # Парсим вывод ps для извлечения PID
+                        lines = stdout.strip().split('\n')
+                        found_pids = []
                         
-                        # Останавливаем процессы
-                        stdout, stderr = node.execute_command(cmd, raise_on_error=False)
+                        for line in lines:
+                            if line.strip():
+                                # Формат ps -aux: USER PID %CPU %MEM VSZ RSS TTY STAT START TIME COMMAND
+                                parts = line.split(None, 10)  # Разделяем на максимум 11 частей
+                                if len(parts) >= 2:
+                                    try:
+                                        pid = int(parts[1])
+                                        command = parts[10] if len(parts) > 10 else ""
+                                        
+                                        # Дополнительная проверка, что это действительно наш процесс
+                                        if pattern in command:
+                                            found_pids.append(pid)
+                                            all_found_pids.add(pid)
+                                            result['found_processes'].append({
+                                                'pid': pid,
+                                                'command': command,
+                                                'pattern': pattern,
+                                                'user': parts[0] if len(parts) > 0 else "unknown"
+                                            })
+                                    except (ValueError, IndexError):
+                                        # Пропускаем строки, которые не удается распарсить
+                                        continue
                         
-                        result['commands_executed'].append({
-                            'command': cmd,
-                            'processes_found': process_count,
-                            'stdout': stdout,
-                            'stderr': stderr
-                        })
-                        
-                        total_killed += process_count
-                        LOGGER.info(f"Killed {process_count} processes on {node.host} with command: {cmd}")
-                    else:
-                        result['commands_executed'].append({
-                            'command': cmd,
-                            'processes_found': 0,
-                            'stdout': '',
-                            'stderr': ''
-                        })
-
+                        LOGGER.info(f"Found {len(found_pids)} processes matching pattern '{pattern}' on {node.host}")
+                    
                 except Exception as e:
-                    LOGGER.warning(f"Error executing command '{cmd}' on {node.host}: {e}")
+                    LOGGER.warning(f"Error searching for pattern '{pattern}' on {node.host}: {e}")
                     result['commands_executed'].append({
-                        'command': cmd,
-                        'error': str(e)
+                        'command': ps_cmd,
+                        'error': str(e),
+                        'pattern': pattern
                     })
 
-            result['killed_count'] = total_killed
+            # Теперь убиваем все найденные процессы
+            killed_count = 0
+            if all_found_pids:
+                pids_list = list(all_found_pids)
+                
+                # Сначала пробуем мягкое завершение (SIGTERM)
+                for signal_type, signal_name in [('TERM', 'SIGTERM'), ('KILL', 'SIGKILL')]:
+                    if not pids_list:  # Если все процессы уже завершены
+                        break
+                        
+                    pids_str = ' '.join(map(str, pids_list))
+                    kill_cmd = f"kill -{signal_type} {pids_str}"
+                    
+                    try:
+                        stdout, stderr = node.execute_command(kill_cmd, raise_on_error=False)
+                        
+                        result['commands_executed'].append({
+                            'command': kill_cmd,
+                            'stdout': stdout,
+                            'stderr': stderr,
+                            'signal': signal_name
+                        })
+                        
+                        LOGGER.info(f"Sent {signal_name} to {len(pids_list)} processes on {node.host}")
+                        
+                        # Ждем немного и проверяем, какие процессы еще живы
+                        sleep(1)
+                        
+                        # Проверяем, какие процессы еще существуют
+                        still_alive = []
+                        for pid in pids_list:
+                            check_cmd = f"kill -0 {pid}"
+                            stdout_check, stderr_check = node.execute_command(check_cmd, raise_on_error=False)
+                            # kill -0 возвращает 0 если процесс существует
+                            if "No such process" not in stderr_check:
+                                still_alive.append(pid)
+                        
+                        # Подсчитываем убитые процессы
+                        newly_killed = len(pids_list) - len(still_alive)
+                        killed_count += newly_killed
+                        pids_list = still_alive
+                        
+                        LOGGER.info(f"After {signal_name}: {newly_killed} processes killed, {len(still_alive)} still alive on {node.host}")
+                        
+                        # Если это был SIGTERM и остались живые процессы, переходим к SIGKILL
+                        if signal_type == 'TERM' and still_alive:
+                            LOGGER.warning(f"Some processes didn't respond to SIGTERM, will try SIGKILL on {node.host}")
+                            sleep(2)  # Даем больше времени перед SIGKILL
+                            continue
+                        else:
+                            break
+                            
+                    except Exception as e:
+                        LOGGER.error(f"Error executing kill command '{kill_cmd}' on {node.host}: {e}")
+                        result['commands_executed'].append({
+                            'command': kill_cmd,
+                            'error': str(e),
+                            'signal': signal_name
+                        })
+                        break
+
+            result['killed_count'] = killed_count
             result['success'] = True
+            
+            if killed_count > 0:
+                LOGGER.info(f"Successfully killed {killed_count} processes matching '{process_name}' on {node.host}")
+            else:
+                LOGGER.info(f"No processes matching '{process_name}' found on {node.host}")
 
         except Exception as e:
             result['error'] = str(e)

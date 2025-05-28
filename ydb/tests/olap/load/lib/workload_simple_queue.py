@@ -54,13 +54,13 @@ class SimpleQueueBase(LoadSuiteBase):
         
         # Останавливаем процессы simple_queue на всех нодах
         cls.kill_workload_processes(
-            process_names=[WORKLOAD_BINARY_NAME],
+            process_names=[STRESS_BINARIES_DEPLOY_PATH + WORKLOAD_BINARY_NAME],
             target_dir=STRESS_BINARIES_DEPLOY_PATH
         )
 
     @pytest.mark.parametrize('table_type', [t.value for t in TableType])
     def test_workload_simple_queue(self, table_type: str):
-        self.save_nodes_state()
+        #self.save_nodes_state()
         # Распаковываем бинарный файл из ресурсов
         binary_path = [
             self._unpack_workload_binary(WORKLOAD_BINARY_NAME),
@@ -178,4 +178,4 @@ class SimpleQueueBase(LoadSuiteBase):
 
 class TestSimpleQueue(SimpleQueueBase):
     """Тест с таймаутом из get_external_param"""
-    timeout = get_external_param('workload_duration', 100)
+    timeout = int(get_external_param('workload_duration', 100))

@@ -69,24 +69,32 @@ Diagnostics are collected when statistics gathering is enabled `--stats full`, a
 ```bash
 ydb -e <endpoint> -d <database> sql -s "SELECT * FROM users WHERE email = 'alice@example.com';" --stats full --diagnostics-file diagnostics.json
 ```
+
 In the `diagnostics.json` file, in the **`meta.query_text`** field, the following string will appear:
+
 ```json
 "query_text": "INSERT INTO users (id, name, email) VALUES (1, 'Alice', 'alice@example.com');"
 ```
+
 This contains sensitive information — a user’s email address.
 
 Before sharing the diagnostics file, it is recommended to replace actual values with placeholders:
+
 ```json
 "query_text": "SELECT * FROM users WHERE email = '<EMAIL>';"
 ```
+
 Email addresses can also be found in fields such as **`plan`** and **`ast`**, for example:
+
 ```json
 "plan":
         ...
         "Predicate" : "item.emails == \"alice@example.com\"",
         ...
 ```
+
 Such entries should also be replaced, for example:
+
 ```json
 "plan":
         ...

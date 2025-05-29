@@ -69,24 +69,32 @@
 ```bash
 ydb -e <endpoint> -d <database> sql -s "SELECT * FROM users WHERE email = 'alice@example.com';" --stats full --diagnostics-file diagnostics.json
 ```
+
 В диагностическом файле `diagnostics.json` в поле **`meta.query_text`** будет содержаться такая строка:
+
 ```json
 "query_text": "INSERT INTO users (id, name, email) VALUES (1, 'Alice', 'alice@example.com');"
 ```
+
 Здесь присутствует чувствительная информация — адрес электронной почты пользователя.
 
 Перед передачей диагностического файла рекомендуется заменить реальные значения на шаблонные:
+
 ```json
 "query_text": "SELECT * FROM users WHERE email = '<EMAIL>';"
 ```
+
 Адрес электронной почты можно обнаружить в полях **`plan`** и **`ast`**, например:
+
 ```json
 "plan":
         ...
         "Predicate" : "item.emails == \"alice@example.com\"",
         ...
 ```
+
 Такие вхождения тоже нужно заменить, например:
+
 ```json
 "plan":
         ...

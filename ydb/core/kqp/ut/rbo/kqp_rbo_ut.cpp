@@ -376,7 +376,7 @@ CREATE TABLE `/Root/foo_0` (
      
     )";
 
-        auto time = TimeQuery(schema, query, 100);
+        auto time = TimeQuery(schema, query, 10);
 
         Cout << "Time per query: " << time;     
     }

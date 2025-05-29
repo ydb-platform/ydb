@@ -734,6 +734,11 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         UNIT_ASSERT(CheckNoSortings(plan));
     }
 
+    Y_UNIT_TEST(SortingsByPrefixWithAttrEquiToPK) {
+        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/sortings_by_prefix_with_attr_equiv_to_pk.sql", "stats/sortings.json", true, false);
+        UNIT_ASSERT(CheckNoSortings(plan));
+    }
+
     Y_UNIT_TEST(SortingsByPKWithLookupJoin) {
         auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/sortings_by_pk_with_lookupjoin.sql", "stats/sortings.json", true, false);
         UNIT_ASSERT(CheckNoSortings(plan));

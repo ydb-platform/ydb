@@ -2092,9 +2092,18 @@ void THive::Handle(TEvHive::TEvRequestHiveNodeStats::TPtr& ev) {
                     }
                 }
             } else {
+                std::optional<TSubDomainKey> filterObjectDomain;
+                if (request.HasFilterTabletsByObjectDomain()) {
+                    filterObjectDomain = TSubDomainKey(request.GetFilterTabletsByObjectDomain());
+                }
                 for (const auto& [state, set] : node.Tablets) {
                     std::vector<ui32> tabletTypeToCount;
                     for (const TTabletInfo* tablet : set) {
+                        if (filterObjectDomain) {
+                            if (tablet->NodeFilter.ObjectDomain != *filterObjectDomain) {
+                                continue;
+                            }
+                        }
                         TTabletTypes::EType type = tablet->GetTabletType();
                         if (static_cast<size_t>(type) >= tabletTypeToCount.size()) {
                             tabletTypeToCount.resize(type + 1);
@@ -3553,7 +3562,7 @@ void THive::Handle(TEvPrivate::TEvUpdateFollowers::TPtr&) {
 
 void THive::MakeScaleRecommendation() {
     BLOG_D("[MSR] Started");
-    
+
     if (AreWeRootHive()) {
         return;
     }

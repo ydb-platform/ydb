@@ -323,6 +323,7 @@ message TEvRequestHiveNodeStats {
     // The next 2 fields should always be used together
     optional uint64 FilterTabletsByPathId = 7;
     optional uint64 FilterTabletsBySchemeShardId = 8;
+    optional NKikimrSubDomains.TDomainKey FilterTabletsByObjectDomain = 9;
 }
 
 message THiveNodeStats {
@@ -616,7 +617,7 @@ message TScaleRecommenderPolicies {
     message TScaleRecommenderPolicy {
         message TTargetTrackingPolicy {
             oneof Target {
-                uint32 AverageCpuUtilizationPercent = 1; 
+                uint32 AverageCpuUtilizationPercent = 1;
             }
         }
 

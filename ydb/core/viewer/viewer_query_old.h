@@ -230,7 +230,7 @@ public:
             RequestStateStorageEndpointsLookup(Database); // to find some dynamic node and redirect query there
         }
 
-        if (Requests == 0) {
+        if (!WaitingForResponse()) {
             SendKpqProxyRequest();
         }
         Become(&TThis::StateWork, TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup());

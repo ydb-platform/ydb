@@ -71,8 +71,9 @@ class TJsonTabletInfo : public TJsonWhiteboardRequest<TEvWhiteboard::TEvTabletSt
     using TBase = TJsonWhiteboardRequest<TEvWhiteboard::TEvTabletStateRequest, TEvWhiteboard::TEvTabletStateResponse>;
     using TThis = TJsonTabletInfo;
     THashMap<ui64, NKikimrTabletBase::TTabletTypes::EType> Tablets;
+    std::unordered_set<ui64> DeadTablets;
     std::unordered_map<ui64, TString> EndOfRangeKeyPrefix;
-    TTabletId HiveId;
+    TTabletId HiveId = 0;
     bool IsBase64Encode = true;
     NKikimr::TSubDomainKey FilterTenantId;
 
@@ -122,7 +123,11 @@ public:
         if (params.Has("path")) {
             TBase::RequestSettings.Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
             IsBase64Encode = FromStringWithDefault<bool>(params.Get("base64"), IsBase64Encode);
-            RequestTxProxyDescribe(params.Get("path"));
+            NKikimrSchemeOp::TDescribeOptions options;
+            options.SetReturnBoundaries(true);
+            options.SetReturnIndexTableBoundaries(true);
+            options.SetShowPrivateTable(true);
+            RequestTxProxyDescribe(params.Get("path"), options);
             Become(&TThis::StateRequestedDescribe, TDuration::MilliSeconds(TBase::RequestSettings.Timeout), new TEvents::TEvWakeup());
         } else {
             TBase::Bootstrap();
@@ -315,6 +320,8 @@ public:
                     if (domainDescription.GetProcessingParams().HasHive()) {
                         Tablets[pathDescription.GetDomainDescription().GetProcessingParams().GetHive()] = NKikimrTabletBase::TTabletTypes::Hive;
                         HiveId = domainDescription.GetProcessingParams().GetHive();
+                    } else {
+                        HiveId = domainDescription.GetSharedHive();
                     }
                     if (domainDescription.GetProcessingParams().HasGraphShard()) {
                         Tablets[pathDescription.GetDomainDescription().GetProcessingParams().GetGraphShard()] = NKikimrTabletBase::TTabletTypes::GraphShard;
@@ -363,6 +370,12 @@ public:
 
     virtual void FilterResponse(NKikimrWhiteboard::TEvTabletStateResponse& response) override {
         if (!Tablets.empty()) {
+            if (ReplyWithDeadTabletsInfo) {
+                DeadTablets.reserve(Tablets.size());
+                for (const auto& [tabletId, tabletType] : Tablets) {
+                    DeadTablets.insert(tabletId);
+                }
+            }
             NKikimrWhiteboard::TEvTabletStateResponse result;
             for (const NKikimrWhiteboard::TTabletStateInfo& info : response.GetTabletStateInfo()) {
                 auto tablet = Tablets.find(info.GetTabletId());
@@ -373,16 +386,19 @@ public:
                     if (itKey != EndOfRangeKeyPrefix.end()) {
                         tabletInfo->SetEndOfRangeKeyPrefix(itKey->second);
                     }
-                    Tablets.erase(tablet->first);
+                    DeadTablets.erase(tablet->first);
                 }
             }
             if (ReplyWithDeadTabletsInfo) {
-                for (auto tablet : Tablets) {
+                for (auto tabletId : DeadTablets) {
                     auto deadTablet = result.MutableTabletStateInfo()->Add();
-                    deadTablet->SetTabletId(tablet.first);
+                    deadTablet->SetTabletId(tabletId);
                     deadTablet->SetState(NKikimrWhiteboard::TTabletStateInfo::Dead);
-                    deadTablet->SetType(tablet.second);
+                    deadTablet->SetType(Tablets[tabletId]);
                     deadTablet->SetHiveId(HiveId);
+                    if (FilterTenantId) {
+                        deadTablet->MutableTenantId()->CopyFrom(FilterTenantId);
+                    }
                 }
             }
             result.SetResponseTime(response.GetResponseTime());

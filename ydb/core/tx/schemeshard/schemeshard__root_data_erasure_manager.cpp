@@ -131,7 +131,8 @@ void TRootDataErasureManager::Run(NIceDb::TNiceDb& db) {
         Status = EDataErasureStatus::IN_PROGRESS_BSC;
     }
     db.Table<Schema::DataErasureGenerations>().Key(Generation).Update<Schema::DataErasureGenerations::Status,
-                                                                     Schema::DataErasureGenerations::StartTime>(Status, StartTime.MicroSeconds());
+                                                                      Schema::DataErasureGenerations::StartTime,
+                                                                      Schema::DataErasureGenerations::BscGeneration>(Status, StartTime.MicroSeconds(), BscGeneration);
 
     const auto ctx = SchemeShard->ActorContext();
     LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -388,11 +389,13 @@ bool TRootDataErasureManager::Restore(NIceDb::TNiceDb& db) {
             Status = EDataErasureStatus::UNSPECIFIED;
         } else {
             Generation = 0;
+            BscGeneration = 0;
             Status = EDataErasureStatus::UNSPECIFIED;
             while (!rowset.EndOfSet()) {
                 ui64 generation = rowset.GetValue<Schema::DataErasureGenerations::Generation>();
                 if (generation >= Generation) {
                     Generation = generation;
+                    BscGeneration = rowset.GetValue<Schema::DataErasureGenerations::BscGeneration>();
                     StartTime = TInstant::FromValue(rowset.GetValue<Schema::DataErasureGenerations::StartTime>());
                     Status = rowset.GetValue<Schema::DataErasureGenerations::Status>();
                 }
@@ -633,15 +636,16 @@ struct TSchemeShard::TTxCompleteDataErasureBSC : public TSchemeShard::TRwTxBase 
 
         const auto& record = Ev->Get()->Record;
         auto& manager = Self->DataErasureManager;
+        NIceDb::TNiceDb db(txc.DB);
         if (ui64 currentBscGeneration = record.GetCurrentGeneration(); currentBscGeneration > manager->GetBscGeneration()) {
             LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                 "TTxCompleteDataErasureBSC Unknown generation#" << currentBscGeneration << ", Expected gen# " << manager->GetBscGeneration() << " at schemestard: " << Self->TabletID());
             manager->SetBscGeneration(currentBscGeneration + 1);
+            db.Table<Schema::DataErasureGenerations>().Key(Self->DataErasureManager->GetGeneration()).Update<Schema::DataErasureGenerations::BscGeneration>(manager->GetBscGeneration());
             manager->SendRequestToBSC();
             return;
         }
 
-        NIceDb::TNiceDb db(txc.DB);
         if (record.GetCompleted()) {
             LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxCompleteDataErasureBSC: Data shred in BSC is completed");
             manager->Complete();

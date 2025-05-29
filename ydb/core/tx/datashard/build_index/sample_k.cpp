@@ -137,7 +137,7 @@ public:
         return EScan::Feed;
     }
 
-    EScan Exhausted() final
+    EScan Exhausted() noexcept final
     {
         LOG_D("Exhausted " << Debug());
 

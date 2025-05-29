@@ -544,11 +544,10 @@ void VectorReadMain(
             .Columns(mainColumns)
             .Done().Ptr();
     } else {
-        read = Build<TKqlStreamLookupTable>(ctx, pos)
+        read = Build<TKqlLookupTable>(ctx, pos)
             .Table(postingTable)
             .LookupKeys(read)
             .Columns(mainColumns)
-            .Settings(settings.BuildNode(ctx, pos))
         .Done().Ptr();
     }
 }

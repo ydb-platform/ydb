@@ -18,6 +18,7 @@
 #include <ydb/public/api/protos/ydb_export.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/protos/auth.pb.h>
+#include <ydb/public/lib/deprecated/kicli/kicli.h>
 #include <ydb-cpp-sdk/client/table/table.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -2626,6 +2627,24 @@ namespace NSchemeShardUT_Private {
         UNIT_ASSERT_VALUES_EQUAL(error, "");
 
         return result;
+    }
+
+    ui32 CountRows(TTestActorRuntime& runtime, ui64 schemeshardId, const TString& table) {
+        auto tableDesc = DescribePath(runtime, schemeshardId, table, true, false, true);
+        const auto& pathDesc = tableDesc.GetPathDescription();
+        const auto& key = pathDesc.GetTable().GetKeyColumnNames();
+        ui32 rows = 0;
+        for (const auto& x : pathDesc.GetTablePartitions()) {
+            auto result = ReadTable(runtime, x.GetDatashardId(), pathDesc.GetSelf().GetName(),
+                {key.begin(), key.end()}, {pathDesc.GetTable().GetKeyColumnNames()[0]});
+            auto value = NClient::TValue::Create(result);
+            rows += value["Result"]["List"].Size();
+        }
+        return rows;
+    }
+
+    ui32 CountRows(TTestActorRuntime& runtime, const TString& table) {
+        return CountRows(runtime, TTestTxConfig::SchemeShard, table);
     }
 
     void WriteVectorTableRows(TTestActorRuntime& runtime, ui64 schemeShardId, ui64 txId, const TString & tablePath, bool withValue, ui32 shard, ui32 min, ui32 max) {

@@ -8,7 +8,6 @@
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/metering/metering.h>
 
-#include <ydb/public/lib/deprecated/kicli/kicli.h>
 #include <ydb-cpp-sdk/client/table/table.h>
 
 using namespace NKikimr;
@@ -177,15 +176,7 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
 
         // Check row count in the posting table
         {
-            auto indexDesc = DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table/index1/indexImplPostingTable", true, true, true);
-            auto parts = indexDesc.GetPathDescription().GetTablePartitions();
-            ui32 rows = 0;
-            for (const auto & x: parts) {
-                auto result = ReadTable(runtime, x.GetDatashardId(), "indexImplPostingTable",
-                    {NKikimr::NTableIndex::NTableVectorKmeansTreeIndex::ParentColumn, "key"}, {"key"});
-                auto value = NClient::TValue::Create(result);
-                rows += value["Result"]["List"].Size();
-            }
+            auto rows = CountRows(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table/index1/indexImplPostingTable");
             Cerr << "... posting table contains " << rows << " rows" << Endl;
             UNIT_ASSERT_VALUES_EQUAL(rows, 200);
         }

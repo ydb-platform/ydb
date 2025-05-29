@@ -1581,6 +1581,23 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             R"((`ts64`, `id`) >= (Timestamp("1970-01-01T00:00:03.000001Z"), 3))"
         };
 
+        std::vector<TString> testDataBlocks = {
+            // Columns
+            R"(dtm >= dt)",
+            //R"(dt >= dt)", Failed in runtime
+
+            // Constants 
+            R"(dt <= Date('2001-01-01'))",
+            R"(dt32 <= Date32('2001-01-01'))",
+            R"(dtm >= DateTime('1998-12-01T15:30:00Z'))",
+            R"(dtm64 >= DateTime64('1998-12-01T15:30:00Z'))",
+            R"(ts64 >= Timestamp64("1970-01-01T00:00:03.000001Z"))",
+            //R"(inter64 >= Interval64("P100D"))",
+
+            // Math
+            //R"(dt <= (Date('2001-01-01') - Interval("P100D")))",
+        };
+
         auto queryPrefix = R"(
                 SELECT * FROM `/Root/foo`
                 WHERE
@@ -1614,6 +1631,25 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             //    Cout << "Error in query: " << query << "\n";
             //    continue;
             //}
+        }
+
+        for (const auto& predicate: testDataBlocks) {
+            auto query = queryPrefix + predicate + ";";
+
+            auto result = session2.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+            TString plan = *result.GetStats()->GetPlan();
+            auto ast = *result.GetStats()->GetAst();
+    
+            UNIT_ASSERT_C(ast.find("KqpOlapFilter") != std::string::npos,
+                              TStringBuilder() << "Predicate not pushed down. Query: " << query);
+                            
+            UNIT_ASSERT_C(ast.find("KqpOlapApply") == std::string::npos,
+                              TStringBuilder() << "Predicate pushed by scalar apply. Query: " << query);
+ 
+            result = session2.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
         }
     }
 

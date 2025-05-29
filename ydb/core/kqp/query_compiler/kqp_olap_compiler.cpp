@@ -202,7 +202,7 @@ public:
     bool CheckYqlCompatibleArgType(const TExprBase& expression) const {
         if (const auto maybe = expression.Maybe<TCoAtom>()) {
             if (const auto type = GetColumnTypeByName(maybe.Cast().Value()); type->GetKind() == ETypeAnnotationKind::Data) {
-                if (const auto info = GetDataTypeInfo(type->Cast<TDataExprType>()->GetSlot()); !(info.Features & (NUdf::EDataTypeFeatures::StringType | NUdf::EDataTypeFeatures::NumericType))) {
+                if (const auto info = GetDataTypeInfo(type->Cast<TDataExprType>()->GetSlot()); !(info.Features & (NUdf::EDataTypeFeatures::StringType | NUdf::EDataTypeFeatures::NumericType | NUdf::EDataTypeFeatures::DateType))) {
                     return false;
                 }
             }
@@ -307,7 +307,9 @@ ui64 ConvertValueToColumn(const TCoDataCtor& value, TKqpOlapCompileContext& ctx)
     } else if (value.Maybe<TCoTimestamp>()) {
         ssaValue->MutableConstant()->SetTimestamp(FromString<ui64>(nodeValue));
     } else if (value.Maybe<TCoDate>()) {
-        ssaValue->MutableConstant()->SetTimestamp(FromString<ui16>(nodeValue));
+        ssaValue->MutableConstant()->SetUint16(FromString<ui16>(nodeValue));
+    } else if (value.Maybe<TCoDatetime>()) {
+        ssaValue->MutableConstant()->SetUint32(FromString<ui32>(nodeValue));
     } else {
         YQL_ENSURE(false, "Unsupported content: " << value.Ref().Content());
     }
@@ -841,6 +843,7 @@ ui64 CompileCondition(const TExprBase& condition, TKqpOlapCompileContext& ctx) {
     if (const auto maybeCompare = condition.Maybe<TKqpOlapFilterUnaryOp>()) {
         return CompileYqlKernelUnaryOperation(maybeCompare.Cast(), ctx).Id;
     }
+
 
     if (const auto maybeCompare = condition.Maybe<TKqpOlapFilterBinaryOp>()) {
         return CompileComparison(maybeCompare.Cast(), ctx);

@@ -1954,7 +1954,7 @@ void TPersQueue::HandleCreateSessionRequest(const ui64 responseCookie, NWilson::
         }
         if (cmd.GetRestoreSession()) {
             Y_ABORT_UNLESS(isDirectRead);
-            auto fakeResponse = MakeHolder<TEvPQ::TEvProxyResponse>(responseCookie);
+            auto fakeResponse = MakeHolder<TEvPQ::TEvProxyResponse>(responseCookie, false);
             auto& record = *fakeResponse->Response;
             record.SetStatus(NMsgBusProxy::MSTATUS_OK);
             auto& partResponse = *record.MutablePartitionResponse();
@@ -2403,7 +2403,7 @@ void TPersQueue::HandlePublishReadRequest(
         return ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST, error);
     }
     InitResponseBuilder(responseCookie, 1, COUNTER_LATENCY_PQ_PUBLISH_READ);
-    THolder<TEvPQ::TEvProxyResponse> publishDoneEvent = MakeHolder<TEvPQ::TEvProxyResponse>(responseCookie);
+    THolder<TEvPQ::TEvProxyResponse> publishDoneEvent = MakeHolder<TEvPQ::TEvProxyResponse>(responseCookie, false);
     publishDoneEvent->Response->SetStatus(NMsgBusProxy::MSTATUS_OK);
     publishDoneEvent->Response->SetErrorCode(NPersQueue::NErrorCode::OK);
 
@@ -2433,7 +2433,7 @@ void TPersQueue::HandleForgetReadRequest(
         return ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST, error);
     }
     InitResponseBuilder(responseCookie, 1, COUNTER_LATENCY_PQ_FORGET_READ);
-    THolder<TEvPQ::TEvProxyResponse> forgetDoneEvent = MakeHolder<TEvPQ::TEvProxyResponse>(responseCookie);
+    THolder<TEvPQ::TEvProxyResponse> forgetDoneEvent = MakeHolder<TEvPQ::TEvProxyResponse>(responseCookie, false);
     forgetDoneEvent->Response->SetStatus(NMsgBusProxy::MSTATUS_OK);
     forgetDoneEvent->Response->SetErrorCode(NPersQueue::NErrorCode::OK);
     forgetDoneEvent->Response->MutablePartitionResponse()->MutableCmdForgetReadResult()->SetDirectReadId(key.ReadId);
@@ -5186,6 +5186,13 @@ void TPersQueue::Handle(TEvPQ::TEvPartitionScaleStatusChanged::TPtr& ev, const T
     }
 }
 
+void TPersQueue::Handle(TEvPQ::TEvAllocateCookie::TPtr& ev)
+{
+    ev->Get()->StartCookie = NextResponseCookie + 1;
+    NextResponseCookie += ev->Get()->Count;
+    Send(ev->Sender, ev->Release());
+}
+
 void TPersQueue::DeletePartition(const TPartitionId& partitionId, const TActorContext& ctx)
 {
     auto p = Partitions.find(partitionId);
@@ -5356,6 +5363,7 @@ bool TPersQueue::HandleHook(STFUNC_SIG)
         HFuncTraced(TEvPQ::TEvReadingPartitionStatusRequest, Handle);
         HFuncTraced(TEvPQ::TEvDeletePartitionDone, Handle);
         HFuncTraced(TEvPQ::TEvTransactionCompleted, Handle);
+        hFuncTraced(TEvPQ::TEvAllocateCookie, Handle);
         default:
             return false;
     }

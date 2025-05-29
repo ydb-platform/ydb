@@ -1539,7 +1539,7 @@ void TPartition::ReplyToProposeOrPredicate(TSimpleSharedPtr<TTransaction>& tx, b
 }
 
 void TPartition::Handle(TEvPQ::TEvGetMaxSeqNoRequest::TPtr& ev, const TActorContext& ctx) {
-    auto response = MakeHolder<TEvPQ::TEvProxyResponse>(ev->Get()->Cookie);
+    auto response = MakeHolder<TEvPQ::TEvProxyResponse>(ev->Get()->Cookie, false);
     NKikimrClient::TResponse& resp = *response->Response;
 
     resp.SetStatus(NMsgBusProxy::MSTATUS_OK);
@@ -1599,7 +1599,7 @@ void TPartition::OnReadComplete(TReadInfo& info,
         TabletCounters.Cumulative()[COUNTER_PQ_READ_BYTES].Increment(resp->ByteSize());
     }
 
-    ctx.Send(info.Destination != 0 ? Tablet : ctx.SelfID, answer.Event.Release());
+    ctx.Send((info.Destination != 0 && !info.IsInternal) ? Tablet : ctx.SelfID, answer.Event.Release());
 
     OnReadRequestFinished(info.Destination, answer.Size, info.User, ctx);
 }
@@ -2253,6 +2253,9 @@ void TPartition::RunPersist() {
         AddCmdWriteTxMeta(PersistRequest->Record);
         AddCmdWriteUserInfos(PersistRequest->Record);
         AddCmdWriteConfig(PersistRequest->Record);
+    }
+    if (Compacter) {
+        Compacter->TryCompactionIfPossible();
     }
     if (PersistRequest->Record.CmdDeleteRangeSize() || PersistRequest->Record.CmdWriteSize() || PersistRequest->Record.CmdRenameSize()) {
         // Apply counters
@@ -2982,6 +2985,16 @@ void TPartition::EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
     Send(WriteQuotaTrackerActor, new TEvPQ::TEvChangePartitionConfig(TopicConverter, Config));
     TotalPartitionWriteSpeed = config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond();
 
+    if (Config.GetEnableCompactification()) {
+        if (!Compacter) {
+            ui64 readQuota = AppData()->PQConfig.GetQuotingConfig().GetEnableQuoting() ? TotalPartitionWriteSpeed : std::numeric_limits<ui64>::max();
+            Compacter = MakeHolder<TPartitionCompaction>(0, 1000, 2000, this, readQuota); // ToDo
+        }
+        Compacter->TryCompactionIfPossible();
+    } else {
+        Compacter.Reset();
+    }
+
     if (MirroringEnabled(Config)) {
         if (Mirrorer) {
             ctx.Send(Mirrorer->Actor, new TEvPQ::TEvChangePartitionConfig(TopicConverter,
@@ -3687,7 +3700,7 @@ TUserInfoBase* TPartition::GetPendingUserIfExists(const TString& user)
 
 THolder<TEvPQ::TEvProxyResponse> TPartition::MakeReplyOk(const ui64 dst)
 {
-    auto response = MakeHolder<TEvPQ::TEvProxyResponse>(dst);
+    auto response = MakeHolder<TEvPQ::TEvProxyResponse>(dst, false);
     NKikimrClient::TResponse& resp = *response->Response;
 
     resp.SetStatus(NMsgBusProxy::MSTATUS_OK);
@@ -3703,7 +3716,7 @@ THolder<TEvPQ::TEvProxyResponse> TPartition::MakeReplyGetClientOffsetOk(const ui
                                                                         bool consumerHasAnyCommits,
                                                                         const std::optional<TString>& committedMetadata)
 {
-    auto response = MakeHolder<TEvPQ::TEvProxyResponse>(dst);
+    auto response = MakeHolder<TEvPQ::TEvProxyResponse>(dst, false);
     NKikimrClient::TResponse& resp = *response->Response;
 
     resp.SetStatus(NMsgBusProxy::MSTATUS_OK);

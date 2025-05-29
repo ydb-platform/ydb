@@ -2080,13 +2080,15 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
 
         TString topic1 = "topic-999-test", topic2 = "topic-998-test";
+        TStringBuilder topic1FullPath;
+        topic1FullPath << "/Root/" << topic1;
 
         {
             // Creation of two topics
             auto msg = client.CreateTopics({
-                TTopicConfig(topic1, 12, std::nullopt, std::nullopt, {{"cleanup.policy", "compact"}}),
-                TTopicConfig(topic2, 13, std::nullopt, std::nullopt, {{"cleanup.policy", "delete"}}),
-                TTopicConfig("topic_bad", 13, std::nullopt, std::nullopt, {{"cleanup.policy", "bad"}})
+                TTopicConfig(topic1, 1, std::nullopt, std::nullopt, {{"cleanup.policy", "compact"}}),
+                TTopicConfig(topic2, 1, std::nullopt, std::nullopt, {{"cleanup.policy", "delete"}}),
+                TTopicConfig("topic_bad", 1, std::nullopt, std::nullopt, {{"cleanup.policy", "bad"}})
             });
             UNIT_ASSERT_VALUES_EQUAL(msg->Topics.size(), 3);
 
@@ -2109,10 +2111,27 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             TString name;
             TString policy;
         };
-
         auto checkDescribeTopic = [&](const std::vector<TDescribeTopicResult>& topics) {
             std::vector<TString> topicNames;
+
             for (const auto& topic : topics) {
+                bool hasCompactionConsumer = false;
+                auto result0 = pqClient.DescribeTopic(topic.name, NTopic::TDescribeTopicSettings{}).GetValueSync();
+                UNIT_ASSERT(result0.IsSuccess());
+                const auto& consumers = result0.GetTopicDescription().GetConsumers();
+                Cerr << "Check consumers for topic: " << topic.name << " with policy: " << topic.policy << Endl;
+                for (const auto& consumer : consumers) {
+                    Cerr << "Got consumer with name: " << consumer.GetConsumerName() << Endl;
+                    if (consumer.GetConsumerName() == NKikimr::NPQ::CLIENTID_COMPACTION_CONSUMER) {
+                        hasCompactionConsumer = true;
+                        break;
+                    }
+                }
+                if (topic.policy == "compact") {
+                    UNIT_ASSERT_C(hasCompactionConsumer, topic.name);
+                } else {
+                    UNIT_ASSERT_C(!hasCompactionConsumer, topic.name);
+                }
                 topicNames.push_back(topic.name);
             }
 
@@ -2140,9 +2159,50 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
                     UNIT_ASSERT_C(!hasCompConsumer, topics[i].name);
                 }
             }
+
+        };
+        //ui64 offset = 1, seqNo = 1;
+        TString valueBase{700u, 'a'};
+        TString largeValueBase{1'000'000u, 'a'};
+        NYdb::NTopic::TWriteSessionSettings wSSettings{topic1FullPath, "producer1", ""};
+        wSSettings.Codec(NTopic::ECodec::RAW);
+        auto writeSession = pqClient.CreateSimpleBlockingWriteSession(wSSettings);
+        auto produce = [&](const TString& key) {
+            NYdb::NTopic::TWriteMessage message1{key + largeValueBase};
+            NYdb::NTopic::TWriteMessage message2{key + valueBase};
+            NYdb::NTopic::TWriteMessage::TMessageMeta meta1, meta2;
+            meta1.push_back(std::make_pair("__key", key));
+            meta2.push_back(std::make_pair("__key", key + "-big"));
+            message1.MessageMeta(meta1);
+            message2.MessageMeta(meta2);
+            // TString value = key + valueBase;
+
+            // TKafkaRecordBatch batch;
+            // batch.BaseOffset = offset++;
+            // batch.BaseSequence = seqNo++;
+            // batch.Magic = 2; // Current supported
+            // batch.Records.resize(1);
+            // batch.Records[0].Key = TKafkaRawBytes(key.data(), key.size());
+            // batch.Records[0].Value = TKafkaRawBytes(value.data(), value.size());
+
+            // auto msg = client.Produce(topic1, 0, batch);
+
+            // UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].Name, topic1);
+            // UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].PartitionResponses[0].Index, 0);
+            // UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].PartitionResponses[0].ErrorCode,
+            //                          static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+            writeSession->Write(std::move(message1));
+            writeSession->Write(std::move(message2));
         };
 
         checkDescribeTopic({{topic1, "compact"}, {topic2, "delete"}});
+        for (auto i = 0u; i < 10; i++) {
+            produce("key1");
+            produce("key2");
+            produce("key3");
+            produce("key4");
+        }
+        writeSession->Close(TDuration::Seconds(50));
 
         {
             auto msg = client.AlterConfigs({
@@ -2188,6 +2248,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             UNIT_ASSERT_VALUES_EQUAL(configs1.find("cleanup.policy")->second.Value->data(), "delete");
         }
     }
+
 
     Y_UNIT_TEST(TopicsWithCleaunpPolicyScenario) {
         TInsecureTestServer testServer("2");

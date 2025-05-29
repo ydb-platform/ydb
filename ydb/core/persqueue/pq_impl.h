@@ -179,6 +179,8 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
 
     void Handle(TEvPQ::TEvPartitionScaleStatusChanged::TPtr& ev, const TActorContext& ctx);
 
+    void Handle(TEvPQ::TEvAllocateCookie::TPtr& ev);
+
     TString LogPrefix() const;
 
     static constexpr const char * KeyConfig() { return "_config"; }

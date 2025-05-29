@@ -1022,6 +1022,12 @@ void TPartition::Initialize(const TActorContext& ctx) {
             SetupTopicCounters(ctx);
         }
     }
+    if (Config.GetEnableCompactification()) {
+        Cerr << "=== Create compacter on init\n";
+        ui64 readQuota = AppData()->PQConfig.GetQuotingConfig().GetEnableQuoting() ? TotalPartitionWriteSpeed : std::numeric_limits<ui64>::max();
+        Compacter = MakeHolder<TPartitionCompaction>(0, 1000, 2000, this, readQuota); //ToDo!!
+        Compacter->TryCompactionIfPossible();
+    }
 }
 
 void TPartition::SetupTopicCounters(const TActorContext& ctx) {

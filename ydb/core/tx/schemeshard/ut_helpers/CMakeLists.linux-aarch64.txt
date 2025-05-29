@@ -43,6 +43,7 @@ target_link_libraries(tx-schemeshard-ut_helpers PUBLIC
   core-tx-tx_proxy
   public-lib-scheme_types
   essentials-public-issue
+  lib-deprecated-kicli
   src-client-driver
   src-client-table
 )

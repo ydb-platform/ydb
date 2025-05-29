@@ -101,14 +101,17 @@ TAsyncExecuteQueryResult GetStockCount(
 NThreading::TFuture<TStatus> GetStockLevelTask(TTransactionContext& context,
     TSession session)
 {
+    TTransactionInflightGuard guard;
     co_await TTaskReady(context.TaskQueue, context.TerminalID);
 
     auto& Log = context.Log;
-    LOG_T("Terminal " << context.TerminalID << " started StockLevel transaction");
 
     const int warehouseID = context.WarehouseID;
     const int districtID = RandomNumber(DISTRICT_LOW_ID, DISTRICT_HIGH_ID);
     const int threshold = RandomNumber(10, 20);
+
+    LOG_T("Terminal " << context.TerminalID << " started StockLevel transaction in "
+        << warehouseID << ", " << districtID);
 
     // Get next order ID from district
     auto districtFuture = GetDistrictOrderId(session, context, warehouseID, districtID);

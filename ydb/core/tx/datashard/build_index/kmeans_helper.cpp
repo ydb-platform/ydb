@@ -56,8 +56,7 @@ void AddRowMainToBuild(TBufferData& buffer, TClusterId parent, TArrayRef<const T
         TSerializedCellVec{key});
 }
 
-void AddRowMainToPosting(TBufferData& buffer, TClusterId parent, TArrayRef<const TCell> key, TArrayRef<const TCell> row,
-                        ui32 dataPos)
+void AddRowMainToPosting(TBufferData& buffer, TClusterId parent, TArrayRef<const TCell> key, TArrayRef<const TCell> row, ui32 dataPos)
 {
     parent = SetPostingParentFlag(parent);
 
@@ -69,8 +68,7 @@ void AddRowMainToPosting(TBufferData& buffer, TClusterId parent, TArrayRef<const
         TSerializedCellVec{key});
 }
 
-void AddRowBuildToBuild(TBufferData& buffer, TClusterId parent, TArrayRef<const TCell> key, TArrayRef<const TCell> row,
-                       ui32 prefixColumns)
+void AddRowBuildToBuild(TBufferData& buffer, TClusterId parent, TArrayRef<const TCell> key, TArrayRef<const TCell> row, ui32 prefixColumns)
 {
     EnsureNoPostingParentFlag(parent);
 
@@ -82,8 +80,7 @@ void AddRowBuildToBuild(TBufferData& buffer, TClusterId parent, TArrayRef<const 
         TSerializedCellVec{key});
 }
 
-void AddRowBuildToPosting(TBufferData& buffer, TClusterId parent, TArrayRef<const TCell> key, TArrayRef<const TCell> row,
-                         ui32 dataPos, ui32 prefixColumns)
+void AddRowBuildToPosting(TBufferData& buffer, TClusterId parent, TArrayRef<const TCell> key, TArrayRef<const TCell> row, ui32 dataPos, ui32 prefixColumns)
 {
     parent = SetPostingParentFlag(parent);
 
@@ -95,45 +92,44 @@ void AddRowBuildToPosting(TBufferData& buffer, TClusterId parent, TArrayRef<cons
         TSerializedCellVec{key});
 }
 
-TTags MakeUploadTags(const TUserTable& table, const TProtoStringType& embedding,
-                     const google::protobuf::RepeatedPtrField<TProtoStringType>& data, ui32& embeddingPos,
-                     ui32& dataPos, NTable::TTag& embeddingTag)
+TTags MakeScanTags(const TUserTable& table, const TProtoStringType& embedding, 
+    const google::protobuf::RepeatedPtrField<TProtoStringType>& data, ui32& embeddingPos,
+    ui32& dataPos, NTable::TTag& embeddingTag)
 {
     auto tags = GetAllTags(table);
-    TTags uploadTags;
-    uploadTags.reserve(1 + data.size());
+    TTags result;
+    result.reserve(1 + data.size());
     embeddingTag = tags.at(embedding);
     if (auto it = std::find(data.begin(), data.end(), embedding); it != data.end()) {
         embeddingPos = it - data.begin();
         dataPos = 0;
     } else {
-        uploadTags.push_back(embeddingTag);
+        result.push_back(embeddingTag);
     }
     for (const auto& column : data) {
-        uploadTags.push_back(tags.at(column));
+        result.push_back(tags.at(column));
     }
-    return uploadTags;
+    return result;
 }
 
-std::shared_ptr<NTxProxy::TUploadTypes>
-MakeUploadTypes(const TUserTable& table, NKikimrTxDataShard::EKMeansState uploadState,
-                const TProtoStringType& embedding, const google::protobuf::RepeatedPtrField<TProtoStringType>& data,
-                ui32 prefixColumns)
+std::shared_ptr<NTxProxy::TUploadTypes> MakeOutputTypes(const TUserTable& table, NKikimrTxDataShard::EKMeansState uploadState,
+    const TProtoStringType& embedding, const google::protobuf::RepeatedPtrField<TProtoStringType>& data,
+    ui32 prefixColumns)
 {
     auto types = GetAllTypes(table);
 
-    auto uploadTypes = std::make_shared<NTxProxy::TUploadTypes>();
-    uploadTypes->reserve(1 + 1 + std::min((table.KeyColumnTypes.size() - prefixColumns) + data.size(), types.size()));
+    auto result = std::make_shared<NTxProxy::TUploadTypes>();
+    result->reserve(1 + 1 + std::min((table.KeyColumnTypes.size() - prefixColumns) + data.size(), types.size()));
 
     Ydb::Type type;
     type.set_type_id(NTableIndex::ClusterIdType);
-    uploadTypes->emplace_back(NTableIndex::NTableVectorKmeansTreeIndex::ParentColumn, type);
+    result->emplace_back(NTableIndex::NTableVectorKmeansTreeIndex::ParentColumn, type);
 
     auto addType = [&](const auto& column) {
         auto it = types.find(column);
         if (it != types.end()) {
             NScheme::ProtoFromTypeInfo(it->second, type);
-            uploadTypes->emplace_back(it->first, type);
+            result->emplace_back(it->first, type);
             types.erase(it);
         }
     };
@@ -155,10 +151,10 @@ MakeUploadTypes(const TUserTable& table, NKikimrTxDataShard::EKMeansState upload
             break;
         }
         default:
-            Y_ASSERT(false);
+            Y_ENSURE(false);
 
     }
-    return uploadTypes;
+    return result;
 }
 
 }

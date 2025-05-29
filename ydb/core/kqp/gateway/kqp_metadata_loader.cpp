@@ -122,6 +122,24 @@ void IndexProtoToMetadata(const TIndexProto& indexes, NYql::TKikimrTableMetadata
     }
 }
 
+template<typename TIndexProto>
+void CheckWritesAreDisabled(const TIndexProto& indexes, NYql::TKikimrTableMetadataPtr tableMeta) {
+    TStringBuilder disableReason;
+    for (const NKikimrSchemeOp::TIndexDescription& index : indexes) {
+        if (index.GetType() == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalUnique && index.GetState() != NKikimrSchemeOp::EIndexState::EIndexStateReady) {
+            if (disableReason) {
+                disableReason << ", ";
+            }
+            disableReason << "Unique index " << index.GetName() << " is under construction";
+        }
+    }
+
+    if (disableReason) {
+        tableMeta->WritesToTableAreDisabled = true;
+        tableMeta->DisableWritesReason = disableReason;
+    }
+}
+
 TString GetTypeName(const NScheme::TTypeInfoMod& typeInfoMod) {
     return NScheme::TypeName(typeInfoMod.TypeInfo, typeInfoMod.TypeMod);
 }
@@ -234,6 +252,9 @@ TTableMetadataResult GetTableMetadataResult(const NSchemeCache::TSchemeCacheNavi
     }
 
     IndexProtoToMetadata(entry.Indexes, tableMeta);
+
+    // Check if we have unique indexes that are not built
+    CheckWritesAreDisabled(entry.Indexes, tableMeta);
 
     return result;
 }

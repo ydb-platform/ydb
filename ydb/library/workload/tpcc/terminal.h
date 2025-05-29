@@ -55,7 +55,7 @@ public:
         std::atomic<size_t> UserAborted = 0;
 
         mutable TSpinLock HistLock;
-        THistogram LatencyHistogramMs{256, 8192};
+        THistogram LatencyHistogramMs{256, 32768};
     };
 
 public:
@@ -119,7 +119,7 @@ public:
         size_t warehouseID,
         size_t warehouseCount,
         ITaskQueue& taskQueue,
-        TDriver& driver,
+        std::shared_ptr<NQuery::TQueryClient>& client,
         const TString& path,
         bool noSleep,
         std::stop_token stopToken,
@@ -133,6 +133,10 @@ public:
     TTerminal(TTerminal&&) = delete;
     TTerminal& operator=(TTerminal&&) = delete;
 
+    size_t GetID() const {
+        return Context.TerminalID;
+    }
+
     void Start();
 
     bool IsDone() const;
@@ -142,7 +146,6 @@ private:
 
 private:
     ITaskQueue& TaskQueue;
-    TDriver Driver;
     TTransactionContext Context;
     bool NoSleep;
     std::stop_token StopToken;
@@ -151,6 +154,7 @@ private:
 
     TTerminalTask Task;
 
+    bool Started = false;
     bool WarmupWasStopped = false;
 };
 

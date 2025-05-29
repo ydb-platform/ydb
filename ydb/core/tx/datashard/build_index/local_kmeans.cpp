@@ -395,7 +395,7 @@ private:
             return true;
         }
 
-        Y_ASSERT(false);
+        Y_ENSURE(false);
         return true;
     }
 
@@ -421,7 +421,7 @@ private:
                 FeedBuildToPosting(key, row);
                 break;
             default:
-                Y_ASSERT(false);
+                Y_ENSURE(false);
         }
     }
 

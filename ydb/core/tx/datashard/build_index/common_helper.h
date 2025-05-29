@@ -127,6 +127,12 @@ public:
         return true;
     }
 
+    void AddIssue(const std::exception& exc) {
+        UploadStatus.Issues.AddIssue(NYql::TIssue(TStringBuilder()
+            << "Scan failed " << exc.what()));
+        HasBuildError = true;
+    }
+
     template<typename TResponse> 
     void Finish(TResponse& response, NTable::EAbort abort) {
         if (UploaderId) {
@@ -136,18 +142,20 @@ public:
 
         response.SetUploadRows(UploadRows);
         response.SetUploadBytes(UploadBytes);
-        if (abort != NTable::EAbort::None) {
+        if (HasBuildError) {
+            response.SetStatus(NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
+        } else if (abort != NTable::EAbort::None) {
             response.SetStatus(NKikimrIndexBuilder::EBuildStatus::ABORTED);
         } else if (UploadStatus.IsNone() || UploadStatus.IsSuccess()) {
             response.SetStatus(NKikimrIndexBuilder::EBuildStatus::DONE);
             if (UploadStatus.IsNone()) {
                 UploadStatus.Issues.AddIssue(NYql::TIssue("Shard or requested range is empty"));
             }
-            NYql::IssuesToMessage(UploadStatus.Issues, response.MutableIssues());
         } else {
             response.SetStatus(NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
-            NYql::IssuesToMessage(UploadStatus.Issues, response.MutableIssues());
         }
+
+        NYql::IssuesToMessage(UploadStatus.Issues, response.MutableIssues());
     }
 
     const TUploadStatus& GetUploadStatus() const {
@@ -193,10 +201,10 @@ private:
     void StartUploadRowsInternal() {
         LOG_D("TBatchRowsUploader StartUploadRowsInternal " << Debug());
 
-        Y_ASSERT(Uploading);
-        Y_ASSERT(!Uploading.Buffer.IsEmpty());
-        Y_ASSERT(!UploaderId);
-        Y_ASSERT(Owner);
+        Y_ENSURE(Uploading);
+        Y_ENSURE(!Uploading.Buffer.IsEmpty());
+        Y_ENSURE(!UploaderId);
+        Y_ENSURE(Owner);
         auto actor = NTxProxy::CreateUploadRowsInternal(
             Owner, Uploading.Table, Uploading.Types, Uploading.Buffer.GetRowsData(),
             NTxProxy::EUploadRowsMode::WriteToTableShadow,
@@ -217,6 +225,7 @@ private:
     ui64 UploadRows = 0;
     ui64 UploadBytes = 0;
     ui32 RetryCount = 0;
+    bool HasBuildError = false;
 };
 
 inline void StartScan(TDataShard* dataShard, TAutoPtr<NTable::IScan>&& scan, ui64 id, 

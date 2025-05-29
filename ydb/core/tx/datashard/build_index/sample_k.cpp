@@ -60,6 +60,8 @@ protected:
     TSampler Sampler;
 
     IDriver* Driver = nullptr;
+    NYql::TIssues Issues;
+    bool HasBuildError = false;
 
     TLead Lead;
 
@@ -149,12 +151,16 @@ public:
         record.SetReadRows(ReadRows);
         record.SetReadBytes(ReadBytes);
 
-        if (abort != NTable::EAbort::None) {
+        if (HasBuildError) {
+            record.SetStatus(NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
+        } else if (abort != EAbort::None) {
             record.SetStatus(NKikimrIndexBuilder::EBuildStatus::ABORTED);
         } else {
             record.SetStatus(NKikimrIndexBuilder::EBuildStatus::DONE);
             FillResponse();
         }
+
+        NYql::IssuesToMessage(Issues, record.MutableIssues());
 
         if (Response->Record.GetStatus() == NKikimrIndexBuilder::DONE) {
             LOG_N("Done " << Debug() << " " << Response->Record.ShortDebugString());

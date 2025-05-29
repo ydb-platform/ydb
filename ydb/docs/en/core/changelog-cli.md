@@ -20,7 +20,7 @@
 * **_(Requires server v25.1+)_** **_(Experimental)_** Improved the `{{ ydb-cli }} debug latency` command:
   * Added the `--min-inflight` parameter to set minimum number of concurrent requests (default: 1).
   * Added the `--percentile` option to specify custom latency percentiles.
-  * Enhanced the output with additional GRPC ping measurements.
+  * Enhanced the output with additional gRPC ping measurements.
 
 ### Bug fixes
 

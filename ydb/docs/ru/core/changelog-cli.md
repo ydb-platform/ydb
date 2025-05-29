@@ -4,7 +4,7 @@
 
 ### Функциональность
 
-* Добавлена [глобальный параметр](./reference/ydb-cli/commands/global-options.md) `--no-discovery`, позволяющий пропустить процесс discovery и подключиться напрямую к указанному пользователем эндпоинту.
+* Добавлен [глобальный параметр](./reference/ydb-cli/commands/global-options.md) `--no-discovery`, позволяющий пропустить процесс discovery и подключиться напрямую к указанному пользователем эндпоинту.
 * Добавлены новые опции для команд нагрузочного тестирования:
   * Добавлена опция `--scale` в [команды](./reference/ydb-cli/workload-tpch.md) `{{ ydb-cli }} workload tpch init` и `{{ ydb-cli }} workload tpcds init` для установки процента размера данных и нагрузки относительно максимальной нагрузки.
   * Добавлена опция `--retries` в [команды](./reference/ydb-cli/workload-click-bench.md) `{{ ydb-cli }} workload <clickbench|tpch|tpcds> run` для указания максимального количества повторов каждого запроса.

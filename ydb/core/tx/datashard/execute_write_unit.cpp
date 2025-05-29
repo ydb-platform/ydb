@@ -449,6 +449,8 @@ public:
                     isArbiter,
                     txc
                 );
+            } else {
+                awaitingDecisions.clear();
             }
 
             if (userDb.GetPerformedUserReads()) {

@@ -362,6 +362,8 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
                 dataTx->GetVolatileCommitOrdered(),
                 isArbiter,
                 txc);
+        } else {
+            awaitingDecisions.clear();
         }
 
         if (dataTx->GetPerformedUserReads()) {

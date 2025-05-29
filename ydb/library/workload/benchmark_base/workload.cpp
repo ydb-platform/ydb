@@ -153,7 +153,15 @@ NJson::TJsonValue TWorkloadGeneratorBase::GetTablesJson() const {
 }
 
 TVector<std::string> TWorkloadGeneratorBase::GetCleanPaths() const {
-    return { Params.GetPath().c_str() };
+    const auto json = GetTablesJson();
+    TVector<std::string> result;
+    for (const auto& table: json["tables"].GetArray()) {
+        result.emplace_back(table["name"].GetString());
+    }
+    if (json.Has("table")) {
+        result.emplace_back(json["table"]["name"].GetString());
+    }
+    return result;
 }
 
 TWorkloadDataInitializerBase::TWorkloadDataInitializerBase(const TString& name, const TString& description, const TWorkloadBaseParams& params)

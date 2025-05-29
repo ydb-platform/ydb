@@ -760,10 +760,13 @@ struct TEvTablet {
     struct TEvCheckBlobstorageStatusResult : public TEventLocal<TEvCheckBlobstorageStatusResult, EvCheckBlobstorageStatusResult> {
         TVector<ui32> LightYellowMoveGroups;
         TVector<ui32> YellowStopGroups;
+        TVector<ui32> LightOrangeGroups;
 
-        TEvCheckBlobstorageStatusResult(TVector<ui32> &&lightYellowMoveGroups, TVector<ui32> &&yellowStopGroups)
+        TEvCheckBlobstorageStatusResult(TVector<ui32> &&lightYellowMoveGroups, TVector<ui32> &&yellowStopGroups,
+            TVector<ui32> &&lightOrangeGroups)
             : LightYellowMoveGroups(std::move(lightYellowMoveGroups))
             , YellowStopGroups(std::move(yellowStopGroups))
+            , LightOrangeGroups(std::move(lightOrangeGroups))
 
         {}
     };

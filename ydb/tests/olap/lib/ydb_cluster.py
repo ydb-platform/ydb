@@ -392,7 +392,7 @@ class YdbCluster:
         # Получаем уникальные хосты из нод кластера
         nodes = cls.get_cluster_nodes(db_only=True)
         hosts = list(set(node.host for node in nodes))
-        
+
         # Используем утилитную функцию для развертывания
         return deploy_binaries_to_hosts(binary_files, hosts, target_dir)
 
@@ -555,7 +555,7 @@ class YdbCluster:
         return results
 
     @classmethod
-    def _kill_process_on_node(cls, node: YdbCluster.Node, process_name: str, 
+    def _kill_process_on_node(cls, node: YdbCluster.Node, process_name: str,
                               target_dir: Optional[str] = None) -> Dict[str, Any]:
         """
         Останавливает процессы с указанным именем на конкретной ноде используя ps и kill
@@ -578,7 +578,7 @@ class YdbCluster:
         try:
             # Создаем список паттернов для поиска
             search_patterns = [process_name]
-            
+
             # Если указана директория, добавляем поиск по полному пути
             if target_dir:
                 full_path = os.path.join(target_dir, process_name)
@@ -587,7 +587,7 @@ class YdbCluster:
                 search_patterns.append(target_dir)
 
             all_found_pids = set()
-            
+
             for pattern in search_patterns:
                 try:
                     # Ищем процессы с помощью ps -aux | grep
@@ -599,22 +599,22 @@ class YdbCluster:
                         grep_pattern = f"[{first_char}]{rest_pattern}"
                     else:
                         grep_pattern = escaped_pattern
-                    
+
                     ps_cmd = f"ps -aux | grep '{grep_pattern}'"
                     stdout, stderr = execute_command(node.host, ps_cmd, raise_on_error=False)
-                    
+
                     result['commands_executed'].append({
                         'command': ps_cmd,
                         'stdout': stdout,
                         'stderr': stderr,
                         'pattern': pattern
                     })
-                    
+
                     if stdout.strip():
                         # Парсим вывод ps для извлечения PID
                         lines = stdout.strip().split('\n')
                         found_pids = []
-                        
+
                         for line in lines:
                             if line.strip():
                                 # Формат ps -aux: USER PID %CPU %MEM VSZ RSS TTY STAT START TIME COMMAND
@@ -623,7 +623,7 @@ class YdbCluster:
                                     try:
                                         pid = int(parts[1])
                                         command = parts[10] if len(parts) > 10 else ""
-                                        
+
                                         # Дополнительная проверка, что это действительно наш процесс
                                         if pattern in command:
                                             found_pids.append(pid)
@@ -637,9 +637,9 @@ class YdbCluster:
                                     except (ValueError, IndexError):
                                         # Пропускаем строки, которые не удается распарсить
                                         continue
-                        
+
                         LOGGER.info(f"Found {len(found_pids)} processes matching pattern '{pattern}' on {node.host}")
-                    
+
                 except Exception as e:
                     LOGGER.warning(f"Error searching for pattern '{pattern}' on {node.host}: {e}")
                     result['commands_executed'].append({
@@ -652,30 +652,30 @@ class YdbCluster:
             killed_count = 0
             if all_found_pids:
                 pids_list = list(all_found_pids)
-                
+
                 # Сначала пробуем мягкое завершение (SIGTERM)
                 for signal_type, signal_name in [('TERM', 'SIGTERM'), ('KILL', 'SIGKILL')]:
                     if not pids_list:  # Если все процессы уже завершены
                         break
-                        
+
                     pids_str = ' '.join(map(str, pids_list))
                     kill_cmd = f"kill -{signal_type} {pids_str}"
-                    
+
                     try:
                         stdout, stderr = execute_command(node.host, kill_cmd, raise_on_error=False)
-                        
+
                         result['commands_executed'].append({
                             'command': kill_cmd,
                             'stdout': stdout,
                             'stderr': stderr,
                             'signal': signal_name
                         })
-                        
+
                         LOGGER.info(f"Sent {signal_name} to {len(pids_list)} processes on {node.host}")
-                        
+
                         # Ждем немного и проверяем, какие процессы еще живы
                         sleep(1)
-                        
+
                         # Проверяем, какие процессы еще существуют
                         still_alive = []
                         for pid in pids_list:
@@ -684,14 +684,17 @@ class YdbCluster:
                             # kill -0 возвращает 0 если процесс существует
                             if "No such process" not in stderr_check:
                                 still_alive.append(pid)
-                        
+
                         # Подсчитываем убитые процессы
                         newly_killed = len(pids_list) - len(still_alive)
                         killed_count += newly_killed
                         pids_list = still_alive
-                        
-                        LOGGER.info(f"After {signal_name}: {newly_killed} processes killed, {len(still_alive)} still alive on {node.host}")
-                        
+
+                        LOGGER.info(
+                            f"After {signal_name}: {newly_killed} processes killed,"
+                            " {len(still_alive)} still alive on {node.host}"
+                        )
+
                         # Если это был SIGTERM и остались живые процессы, переходим к SIGKILL
                         if signal_type == 'TERM' and still_alive:
                             LOGGER.warning(f"Some processes didn't respond to SIGTERM, will try SIGKILL on {node.host}")
@@ -699,7 +702,7 @@ class YdbCluster:
                             continue
                         else:
                             break
-                            
+
                     except Exception as e:
                         LOGGER.error(f"Error executing kill command '{kill_cmd}' on {node.host}: {e}")
                         result['commands_executed'].append({
@@ -711,7 +714,7 @@ class YdbCluster:
 
             result['killed_count'] = killed_count
             result['success'] = True
-            
+
             if killed_count > 0:
                 LOGGER.info(f"Successfully killed {killed_count} processes matching '{process_name}' on {node.host}")
             else:

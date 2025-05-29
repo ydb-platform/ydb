@@ -22,6 +22,7 @@ from ydb.tests.olap.lib.remote_execution import is_localhost
 
 LOGGER = logging.getLogger(__name__)
 
+
 class LoadSuiteBase:
     class QuerySettings:
         def __init__(self, iterations: Optional[int] = None, timeout: Optional[float] = None, query_prefix: Optional[str] = None) -> None:
@@ -113,7 +114,7 @@ class LoadSuiteBase:
         # Проверяем, является ли хост localhost
         if is_localhost(host):
             LOGGER.info(f"Detected localhost ({host}), executing command locally: {cmd}")
-            
+
             # Выполняем команду локально
             return yatest.common.execute(
                 cmd,
@@ -121,7 +122,7 @@ class LoadSuiteBase:
                 text=True,
                 shell=True  # Используем shell для строковых команд
             )
-        
+
         # Для удаленных хостов используем SSH
         ssh_cmd = ['ssh', "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null"]
         ssh_user = os.getenv('SSH_USER')
@@ -387,8 +388,8 @@ class LoadSuiteBase:
                     LOGGER.info(f"Executing custom teardown for {cls.__name__}")
                     cls.do_teardown_class()
                     allure.attach(
-                        f"Custom teardown completed for {cls.__name__}", 
-                        'Custom teardown result', 
+                        f"Custom teardown completed for {cls.__name__}",
+                        'Custom teardown result',
                         allure.attachment_type.TEXT
                     )
                 except Exception as e:
@@ -398,13 +399,13 @@ class LoadSuiteBase:
             else:
                 LOGGER.info(f"No custom teardown defined for {cls.__name__}")
                 allure.attach(
-                    f"No custom teardown needed for {cls.__name__}", 
-                    'Teardown result', 
+                    f"No custom teardown needed for {cls.__name__}",
+                    'Teardown result',
                     allure.attachment_type.TEXT
                 )
 
     @classmethod
-    def kill_workload_processes(cls, process_names: Union[str, list[str]], 
+    def kill_workload_processes(cls, process_names: Union[str, list[str]],
                                 target_dir: Optional[str] = None) -> None:
         """
         Удобный метод для остановки workload процессов на всех нодах кластера.
@@ -420,16 +421,16 @@ class LoadSuiteBase:
                     process_names=process_names,
                     target_dir=target_dir
                 )
-                
+
                 total_killed = 0
                 for host, host_results in results.items():
                     for process_name, process_result in host_results.items():
                         total_killed += process_result.get('killed_count', 0)
-                
+
                 success_msg = f"Successfully processed {len(results)} hosts, killed {total_killed} processes"
                 LOGGER.info(success_msg)
                 allure.attach(success_msg, 'Kill processes result', allure.attachment_type.TEXT)
-                
+
             except Exception as e:
                 error_msg = f"Error killing workload processes: {e}"
                 LOGGER.error(error_msg)

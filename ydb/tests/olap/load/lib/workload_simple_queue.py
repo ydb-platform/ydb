@@ -7,7 +7,7 @@ import logging
 from .conftest import LoadSuiteBase
 from ydb.tests.olap.lib.ydb_cli import YdbCliHelper
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
-from ydb.tests.olap.lib.remote_execution import execute_command, deploy_binary, deploy_binaries_to_hosts
+from ydb.tests.olap.lib.remote_execution import execute_command, deploy_binaries_to_hosts
 from ydb.tests.olap.lib.utils import get_external_param
 from enum import Enum
 
@@ -52,7 +52,7 @@ class SimpleQueueBase(LoadSuiteBase):
         Останавливает все запущенные workload процессы.
         """
         LOGGER.info("Starting SimpleQueue teardown: stopping workload processes")
-        
+
         # Останавливаем процессы simple_queue на всех нодах
         cls.kill_workload_processes(
             process_names=[STRESS_BINARIES_DEPLOY_PATH + WORKLOAD_BINARY_NAME],
@@ -61,7 +61,7 @@ class SimpleQueueBase(LoadSuiteBase):
 
     @pytest.mark.parametrize('table_type', [t.value for t in TableType])
     def test_workload_simple_queue(self, table_type: str):
-        #self.save_nodes_state()
+        # self.save_nodes_state()
         # Распаковываем бинарные файлы из ресурсов
         workload_binary_path = self._unpack_workload_binary(WORKLOAD_BINARY_NAME)
         cli_binary_path = self._unpack_workload_binary(YDB_CLI_BINARY_NAME)
@@ -70,7 +70,7 @@ class SimpleQueueBase(LoadSuiteBase):
         # Получаем хосты нод кластера
         nodes = YdbCluster.get_cluster_nodes()
         hosts = list(set(node.host for node in nodes))
-        
+
         # Разворачиваем бинарные файлы на всех хостах кластера используя новую утилитную функцию
         deploy_results = deploy_binaries_to_hosts(
             binary_files, hosts, STRESS_BINARIES_DEPLOY_PATH)
@@ -78,7 +78,7 @@ class SimpleQueueBase(LoadSuiteBase):
         # Выбираем первую ноду для выполнения workload
         node = nodes[0]
         node_host = node.host
-        
+
         # Проверяем, успешно ли был развернут бинарный файл
         binary_result = deploy_results.get(node_host, {}).get(WORKLOAD_BINARY_NAME, {})
         success = binary_result.get('success', False)
@@ -137,7 +137,7 @@ class SimpleQueueBase(LoadSuiteBase):
                 node.host,
                 [cli_path, '--endpoint', f'{YdbCluster.ydb_endpoint}',
                  '--database', f'/{YdbCluster.ydb_database}',
-                 "scheme", "ls", "-lR"], 
+                 "scheme", "ls", "-lR"],
                 raise_on_error=False)
             allure.attach(stdout, 'Scheme state stdout', allure.attachment_type.TEXT)
             if stderr:

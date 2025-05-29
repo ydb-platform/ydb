@@ -16,7 +16,7 @@ LOGGER = logging.getLogger(__name__)
 
 class RemoteExecutor:
     """Класс для выполнения команд на удаленных хостах и localhost"""
-    
+
     @staticmethod
     def _safe_decode(data) -> str:
         """
@@ -51,8 +51,10 @@ class RemoteExecutor:
         # Фильтруем строки, начинающиеся с "Warning: Permanently added"
         filtered_lines = []
         for line in stderr.splitlines():
-            if (not line.startswith('Warning: Permanently added') and 
-                not line.startswith('(!) New version of YDB CL')):
+            if (
+                not line.startswith('Warning: Permanently added') and
+                not line.startswith('(!) New version of YDB CL')
+            ):
                 filtered_lines.append(line)
 
         return '\n'.join(filtered_lines)
@@ -111,8 +113,10 @@ class RemoteExecutor:
             return False
 
     @classmethod
-    def execute_command(cls, host: str, cmd: Union[str, list], raise_on_error: bool = True,
-                       timeout: Optional[float] = None, raise_on_timeout: bool = True) -> Tuple[str, str]:
+    def execute_command(
+        cls, host: str, cmd: Union[str, list], raise_on_error: bool = True,
+        timeout: Optional[float] = None, raise_on_timeout: bool = True
+    ) -> Tuple[str, str]:
         """
         Выполняет команду на хосте через SSH или локально
 
@@ -126,10 +130,12 @@ class RemoteExecutor:
         Returns:
             Tuple[str, str]: (stdout, stderr) - вывод команды
         """
-        
-        def _handle_timeout_error(e: yatest.common.ExecutionTimeoutError, 
-                                full_cmd: Union[str, list], 
-                                is_local: bool) -> Tuple[str, str]:
+
+        def _handle_timeout_error(
+            e: yatest.common.ExecutionTimeoutError,
+            full_cmd: Union[str, list],
+            is_local: bool
+        ) -> Tuple[str, str]:
             """Обрабатывает ошибки таймаута"""
             cmd_type = "Local" if is_local else "SSH"
             timeout_info = f"{cmd_type} command timed out after {timeout} seconds on {host}"
@@ -169,9 +175,11 @@ class RemoteExecutor:
 
             return (f"{timeout_info}\n{stdout}" if stdout else timeout_info, stderr)
 
-        def _handle_execution_error(e: yatest.common.ExecutionError, 
-                                  full_cmd: Union[str, list], 
-                                  is_local: bool) -> Tuple[str, str]:
+        def _handle_execution_error(
+            e: yatest.common.ExecutionError,
+            full_cmd: Union[str, list],
+            is_local: bool
+        ) -> Tuple[str, str]:
             """Обрабатывает ошибки выполнения"""
             cmd_type = "Local" if is_local else "SSH"
             stdout = ""
@@ -203,21 +211,21 @@ class RemoteExecutor:
                     LOGGER.error(f"Command stdout:\n{stdout}")
                 if stderr:
                     LOGGER.error(f"Command stderr:\n{stderr}")
-                
+
                 raise subprocess.CalledProcessError(exit_code, full_cmd, stdout, stderr)
-            
+
             LOGGER.error(f"Error executing {cmd_type.lower()} command on {host}: {e}")
             if stdout:
                 LOGGER.error(f"Command stdout:\n{stdout}")
             if stderr:
                 LOGGER.error(f"Command stderr:\n{stderr}")
-            
+
             return stdout, stderr
 
         def _execute_local_command(cmd: Union[str, list]) -> Tuple[str, str]:
             """Выполняет команду локально"""
             LOGGER.info(f"Detected localhost ({host}), executing command locally: {cmd}")
-            
+
             full_cmd = cmd
             try:
                 execution = yatest.common.execute(
@@ -252,7 +260,7 @@ class RemoteExecutor:
         def _execute_ssh_command(cmd: Union[str, list]) -> Tuple[str, str]:
             """Выполняет команду через SSH"""
             LOGGER.info(f"Executing SSH command on {host}: {cmd}")
-            
+
             ssh_cmd = ['ssh', "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null"]
 
             # Добавляем SSH пользователя и ключ
@@ -307,11 +315,13 @@ class RemoteExecutor:
 
 
 # Удобные функции для прямого использования
-def execute_command(host: str, cmd: Union[str, list], raise_on_error: bool = True,
-                   timeout: Optional[float] = None, raise_on_timeout: bool = True) -> Tuple[str, str]:
+def execute_command(
+    host: str, cmd: Union[str, list], raise_on_error: bool = True,
+    timeout: Optional[float] = None, raise_on_timeout: bool = True
+) -> Tuple[str, str]:
     """
     Удобная функция для выполнения команды на хосте
-    
+
     Args:
         host: имя хоста для выполнения команды
         cmd: команда для выполнения (строка или список)
@@ -328,7 +338,7 @@ def execute_command(host: str, cmd: Union[str, list], raise_on_error: bool = Tru
 def is_localhost(hostname: str) -> bool:
     """
     Удобная функция для проверки, является ли хост localhost
-    
+
     Args:
         hostname: имя хоста для проверки
 
@@ -402,14 +412,14 @@ def copy_file(local_path: str, host: str, remote_path: str, raise_on_error: bool
     # Проверяем, является ли хост localhost
     if is_localhost(host):
         LOGGER.info(f"Detected localhost ({host}), copying file locally: {local_path} -> {remote_path}")
-        
+
         try:
             # Создаем директорию назначения, если она не существует
             remote_dir = os.path.dirname(remote_path)
             if remote_dir and not os.path.exists(remote_dir):
                 os.makedirs(remote_dir, exist_ok=True)
                 LOGGER.debug(f"Created directory: {remote_dir}")
-            
+
             # Проверяем, не является ли целевой файл занятым
             if os.path.exists(remote_path):
                 try:
@@ -424,10 +434,10 @@ def copy_file(local_path: str, host: str, remote_path: str, raise_on_error: bool
                         new_remote_filename = f"{remote_filename}.{timestamp}"
                         remote_path = os.path.join(remote_dir, new_remote_filename)
                         LOGGER.warning(f"Target file is busy, using new filename: {remote_path}")
-            
+
             # Копируем файл
             shutil.copy2(local_path, remote_path)
-            
+
             # Проверяем, что файл скопирован успешно
             if os.path.exists(remote_path):
                 copied_size = os.path.getsize(remote_path)
@@ -447,7 +457,7 @@ def copy_file(local_path: str, host: str, remote_path: str, raise_on_error: bool
                 if raise_on_error:
                     raise IOError(error_msg)
                 return None
-                
+
         except Exception as e:
             error_msg = f"Error copying file locally: {e}"
             LOGGER.error(error_msg)
@@ -459,7 +469,7 @@ def copy_file(local_path: str, host: str, remote_path: str, raise_on_error: bool
     def _try_scp_copy(target_path: str) -> Tuple[bool, str, str]:
         """
         Попытка копирования файла через SCP
-        
+
         Returns:
             Tuple[bool, str, str]: (success, stdout, stderr)
         """
@@ -479,7 +489,7 @@ def copy_file(local_path: str, host: str, remote_path: str, raise_on_error: bool
 
         # Добавляем источник и назначение
         scp_cmd += [local_path, f"{scp_host}:{target_path}"]
-        
+
         LOGGER.info(f"Copying {local_path} to {scp_host}:{target_path}")
 
         try:
@@ -517,7 +527,7 @@ def copy_file(local_path: str, host: str, remote_path: str, raise_on_error: bool
                     stdout = RemoteExecutor._safe_decode(e.execution_result.std_out)
                 if hasattr(e.execution_result, 'std_err') and e.execution_result.std_err:
                     stderr = RemoteExecutor._safe_decode(e.execution_result.std_err)
-            
+
             stderr_filtered = RemoteExecutor._filter_ssh_warnings(stderr)
             if stderr_filtered:
                 LOGGER.warning(f"SCP stderr: {stderr_filtered}")
@@ -532,25 +542,25 @@ def copy_file(local_path: str, host: str, remote_path: str, raise_on_error: bool
 
     # Первая попытка копирования с оригинальным именем
     success, stdout, stderr_filtered = _try_scp_copy(remote_path)
-    
+
     if success:
         return stdout
 
     # Проверяем, является ли ошибка "Text file busy"
     if "Text file busy" in stderr_filtered:
         LOGGER.warning(f"File {remote_path} is busy, trying with postfix")
-        
+
         # Генерируем новое имя файла с постфиксом
         timestamp = int(time())
-        
+
         # Разделяем путь на директорию и имя файла
         remote_dir = os.path.dirname(remote_path)
         remote_filename = os.path.basename(remote_path)
-        
+
         # Добавляем постфикс к имени файла
         new_remote_filename = f"{remote_filename}.{timestamp}"
         new_remote_path = os.path.join(remote_dir, new_remote_filename)
-        
+
         LOGGER.info(f"Retrying copy with new filename: {new_remote_path}")
 
         # Вторая попытка с новым именем
@@ -603,7 +613,7 @@ def deploy_binary(local_path: str, host: str, target_dir: str, make_executable: 
         dict: результат деплоя
     """
     import os
-    
+
     binary_name = os.path.basename(local_path)
     target_path = os.path.join(target_dir, binary_name)
     result = {
@@ -704,8 +714,8 @@ def deploy_binaries_to_hosts(
                     f"Deploy {os.path.basename(binary_file)} to {host} failed",
                     attachment_type=allure.attachment_type.TEXT
                 )
-        
+
         # Store the host results in the main results dictionary
         results[host] = host_results
-    
-    return results 
+
+    return results

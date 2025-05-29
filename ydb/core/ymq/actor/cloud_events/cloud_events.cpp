@@ -218,7 +218,11 @@ namespace NCloudEvents {
 
 // ===============================================================
     TString TProcessor::GetFullTablePath() const {
-        return TStringBuilder() << Root << "/" << EventTableName;
+        if (!Root.empty()) {
+            return TStringBuilder() << Root << "/" << EventTableName;
+        } else {
+            return TString(EventTableName);
+        }
     }
 
     TString TProcessor::GetInitSelectQuery() const {

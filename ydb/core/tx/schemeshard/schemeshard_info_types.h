@@ -2500,7 +2500,7 @@ struct TCdcStreamSettings {
     #define OPTION(type, name) \
         TSelf&& With##name(type value) && { \
             name = std::move(value); \
-            return *this; \
+            return std::move(*this); \
         } \
         type name;
 
@@ -2529,8 +2529,8 @@ struct TCdcStreamInfo
         {}
     };
 
-    TCdcStreamInfo(ui64 version, const TCdcStreamSettings& settings)
-        : TCdcStreamSettings(settings)
+    TCdcStreamInfo(ui64 version, TCdcStreamSettings&& settings)
+        : TCdcStreamSettings(std::move(settings))
         , AlterVersion(version)
     {}
 
@@ -2545,7 +2545,8 @@ struct TCdcStreamInfo
     }
 
     static TPtr New(TCdcStreamSettings settings) {
-        return new TCdcStreamInfo(0, settings.WithState(EState::ECdcStreamStateInvalid));
+        settings.State = EState::ECdcStreamStateInvalid;
+        return new TCdcStreamInfo(0, std::move(settings));
     }
 
     static TPtr Create(const NKikimrSchemeOp::TCdcStreamDescription& desc) {

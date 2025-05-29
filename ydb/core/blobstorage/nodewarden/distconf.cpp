@@ -487,6 +487,9 @@ namespace NKikimr::NStorage {
                             return "can't determine correct pile state for ring group";
                         }
                         group->SetPileState(*state);
+                        if (*state != T::PRIMARY) { // TODO(alexvru): HACK!!!
+                            group->SetWriteOnly(true);
+                        }
                     } else {
                         return "bridge pile id is out of bounds";
                     }

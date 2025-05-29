@@ -443,6 +443,7 @@ message TReqCommitTransaction
     required NYT.NProto.TGuid transaction_id = 1;
     reserved 6;
     repeated NYT.NProto.TGuid additional_participant_cell_ids = 7;
+    optional uint64 max_allowed_commit_timestamp = 8;
 
     optional TPrerequisiteOptions prerequisite_options = 101;
     optional TMutatingOptions mutating_options = 103;

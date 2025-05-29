@@ -1652,34 +1652,33 @@ value {
         env.TestWaitNotification(runtime, txId);
         TestGetImport(runtime, txId, "/MyRoot");
 
-        if (!emptyTable) {
-            TString expectedJson = TStringBuilder() << "[[[[["
-                << "[%true];" // bool
-                << "[\"" << -12 << "\"];" // date32
-                << "[\"" << 8 << "\"];" // date
-                << "[\"" << -13 << "\"];" // datetime64
-                << "[\"" << 9 << "\"];" // datetime
-                << "[\"" << "555555555555555.123456789" << "\"];" // decimal35
-                << "[\"" << "16.17" << "\"];" // decimal
-                << "[\"" << 6.66 << "\"];" // double
-                << "[\"" << ".18e2" << "\"];" // dynumber
-                << "[\"" << 7.77f << "\"];" // float
-                << "[\"" << -1 << "\"];" // int32
-                << "[\"" << -3 << "\"];" // int64
-                << "[\"" << -15 << "\"];" // interval64
-                << "[\"" << -11 << "\"];" // interval
-                << "[\"" << "{\\\"key\\\": \\\"value\\\"}" << "\"];" // json
-                << "[\"" << "{\\\"key\\\":\\\"value\\\"}" << "\"];" // jsondoc
-                << "[\"" << 1 << "\"];" // key
-                << "[\"" << "test string" << "\"];" // string
-                << "[\"" << -14 << "\"];" // timestamp64
-                << "[\"" << 10 << "\"];" // timestamp
-                << "[\"" << 2 << "\"];" // uint32
-                << "[\"" << 4 << "\"];" // uint64
-                << "[\"" << 5 << "\"];" // uint8
-                << "[\"" << "test string" << "\"];" // utf8
-                << "[[\"" << "wR7fZX2pskeuVjwCPabujA==" << "\"]]" // uuid
-            << "]];\%false]]]";
+        TString expectedJson = TStringBuilder() << "[[[[["
+            << "[%true];" // bool
+            << "[\"" << -12 << "\"];" // date32
+            << "[\"" << 8 << "\"];" // date
+            << "[\"" << -13 << "\"];" // datetime64
+            << "[\"" << 9 << "\"];" // datetime
+            << "[\"" << "555555555555555.123456789" << "\"];" // decimal35
+            << "[\"" << "16.17" << "\"];" // decimal
+            << "[\"" << 6.66 << "\"];" // double
+            << "[\"" << ".18e2" << "\"];" // dynumber
+            << "[\"" << 7.77f << "\"];" // float
+            << "[\"" << -1 << "\"];" // int32
+            << "[\"" << -3 << "\"];" // int64
+            << "[\"" << -15 << "\"];" // interval64
+            << "[\"" << -11 << "\"];" // interval
+            << "[\"" << "{\\\"key\\\": \\\"value\\\"}" << "\"];" // json
+            << "[\"" << "{\\\"key\\\":\\\"value\\\"}" << "\"];" // jsondoc
+            << "[\"" << 1 << "\"];" // key
+            << "[\"" << "test string" << "\"];" // string
+            << "[\"" << -14 << "\"];" // timestamp64
+            << "[\"" << 10 << "\"];" // timestamp
+            << "[\"" << 2 << "\"];" // uint32
+            << "[\"" << 4 << "\"];" // uint64
+            << "[\"" << 5 << "\"];" // uint8
+            << "[\"" << "test string" << "\"];" // utf8
+            << "[[\"" << "wR7fZX2pskeuVjwCPabujA==" << "\"]]" // uuid
+        << "]];\%false]]]";
 
         const TVector<TString> readColumns = {
             "key",

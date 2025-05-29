@@ -2498,8 +2498,8 @@ struct TCdcStreamSettings {
     using EState = NKikimrSchemeOp::ECdcStreamState;
 
     #define OPTION(type, name) \
-        TSelf& With##name(type value) { \
-            name = value; \
+        TSelf&& With##name(type value) && { \
+            name = std::move(value); \
             return *this; \
         } \
         type name;

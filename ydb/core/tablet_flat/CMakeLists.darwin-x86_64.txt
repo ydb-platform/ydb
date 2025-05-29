@@ -208,3 +208,9 @@ generate_enum_serilization(ydb-core-tablet_flat
   INCLUDE_HEADERS
   ydb/core/tablet_flat/flat_row_eggs.h
 )
+
+generate_enum_serilization(ydb-core-tablet_flat
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_scan_iface.h
+  INCLUDE_HEADERS
+  ydb/core/tablet_flat/flat_scan_iface.h
+)

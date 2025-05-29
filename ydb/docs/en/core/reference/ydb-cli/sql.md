@@ -62,14 +62,15 @@ Diagnostics are collected when statistics gathering is enabled `--stats full`, a
 - **`ast`** — abstract syntax tree (AST) for the query.
 
 > **Important:**
-> The diagnostics file may contain confidential information in the **`meta.query_text`**, **`plan`**, and **`ast`** fields. Before sharing this file with third parties (e.g., technical support), it is recommended to carefully review and edit its contents to remove or replace any sensitive data.
+> The diagnostics file may contain confidential information,  especially in the **`meta.query_text`**, **`plan`**, and **`ast`** fields. Before sharing this file with third parties (e.g., technical support), it is recommended to carefully review and edit its contents to remove or replace any sensitive data.
 
 **Examples:**
 
-Example command to collect diagnostics in the `diagnostics.json` file:
+Example command to collect diagnostics in the `diagnostics.json` file and check its contents:
 
 ```bash
 ydb -e <endpoint> -d <database> sql -s "SELECT * FROM users WHERE email = 'alice@example.com';" --stats full --diagnostics-file diagnostics.json
+cat diagnostics.json
 ```
 
 If you want to collect diagnostics related to a query plan without actually executing the query, you can execute an `EXPLAIN` query instead:
@@ -81,7 +82,7 @@ ydb -e <endpoint> -d <database> sql -s "SELECT * FROM users WHERE email = 'alice
 In the `diagnostics.json` file, in the **`meta.query_text`** field, the following string will appear:
 
 ```json
-"query_text": "INSERT INTO users (id, name, email) VALUES (1, 'Alice', 'alice@example.com');"
+"query_text": "SELECT * FROM users WHERE email = 'alice@example.com';"
 ```
 
 This contains sensitive information — a user’s email address.
@@ -92,23 +93,7 @@ Before sharing the diagnostics file, it is recommended to replace actual values 
 "query_text": "SELECT * FROM users WHERE email = '<EMAIL>';"
 ```
 
-Email addresses can also be found in fields such as **`plan`** and **`ast`**, for example:
-
-```json
-"plan":
-        ...
-        "Predicate" : "item.emails == \"alice@example.com\"",
-        ...
-```
-
-Such entries should also be replaced, for example:
-
-```json
-"plan":
-        ...
-        "Predicate" : "item.emails == \"<EMAIL>\"",
-        ...
-```
+In this example, the email address can also be found in fields such as **`plan`** and **`ast`**, such entries should also be replaced.
 
 ### Working with parameterized queries {#parameterized-query}
 

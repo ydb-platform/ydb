@@ -159,7 +159,7 @@ IExternalSourceFactory::TPtr CreateExternalSourceFactory(const std::vector<TStri
         },
         {
             ToString(NYql::EDatabaseType::DataStreams),
-            CreateExternalDataSource(TString{NYql::PqProviderName}, {"BASIC"}, {"database_name", "use_tls"}, hostnamePatternsRegEx)
+            CreateExternalDataSource(TString{NYql::PqProviderName}, {"NONE", "TOKEN"}, {"database_name", "use_tls"}, hostnamePatternsRegEx)
         }
     },
     allExternalDataSourcesAreAvailable,

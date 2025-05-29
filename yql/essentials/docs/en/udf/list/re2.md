@@ -16,6 +16,13 @@ The Re2 module supports regular expressions based on [google::RE2](https://githu
 
 By default, the UTF-8 mode is enabled automatically if the regular expression is a valid UTF-8-encoded string, but is not a valid ASCII string. You can manually control the settings of the re2 library, if you pass the result of the `Re2::Options` function as the second argument to other module functions, next to the regular expression.
 
+{% note info "Note" %}
+
+All regular expressions passed to functions must be valid. Otherwise, your query may fail.
+Starting from version [2025.03](../../changelog/2025.03.md#re2-module), such a query will definitely fail.
+
+{% endnote %}
+
 {% note warning %}
 
 Make sure to double all the backslashes in your regular expressions (if they are within a quoted string): standard string literals are treated as C-escaped strings in SQL. You can also format regular expressions as raw strings `@@regexp@@`: double slashes are not needed in this case.
@@ -119,4 +126,3 @@ SELECT
 ```
 
 In both cases, the word FOO will be found. Using the raw string @@regexp@@ lets you avoid double slashes.
-

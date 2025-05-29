@@ -41,10 +41,6 @@ public:
         for (auto consumer : Consumers) {
             switch(consumer->GetFillLevel()) {
                 case HardLimit:
-                {
-                    auto& obj = *consumer.Get();
-                    Cerr << typeid(obj).name() << " HARD\n";
-                }
                     return HardLimit;
                 case SoftLimit:
                     break;

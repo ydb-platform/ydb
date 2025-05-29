@@ -14,7 +14,10 @@ class TestBatchOperations(RollingUpgradeAndDowngradeFixture):
 
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):
-        yield from self.setup_cluster()
+        yield from self.setup_cluster(table_service_config={
+            "enable_oltp_sink": True,
+            "enable_batch_updates": True,
+        })
 
     def test_batch_update(self):
         self._fill_table()

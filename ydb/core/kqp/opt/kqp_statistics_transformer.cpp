@@ -1076,18 +1076,19 @@ private:
                 true
             );
 
+            auto lambdaStats = TypeCtx.GetStats(lambdaBody.Raw());
             computer.Compute(lambdaBody);
+            
+            TTableAliasMap* tableAliases = lambdaStats? lambdaStats->TableAliases.Get(): nullptr;
+            for (const auto& [lMember, rMember]: computer.GetMemberEqualities()) {
+                auto lhs = GetColumnFromMember(lMember);
+                auto rhs = GetColumnFromMember(rMember);
+                bool alwaysActive = IsRead(flatMapBase.Input().Raw());
+                FDStorage.AddEquivalence(lhs, rhs, alwaysActive, tableAliases);
+            }
 
             for (const auto& member: computer.GetConstantMembers()) {
-                TTableAliasMap* tableAliases = nullptr;
-
-                TJoinColumn constant = TJoinColumn::FromString(member.Name().StringValue());
-                if (auto stats = TypeCtx.GetStats(member.Raw()); constant.RelName.empty()) {
-                    if (stats->Aliases && stats->Aliases->size() == 1) {
-                        constant.RelName = *stats->Aliases->begin();
-                    }
-                    tableAliases = stats->TableAliases.Get();
-                }
+                TJoinColumn constant = GetColumnFromMember(member);
                 bool alwaysActive = IsRead(flatMapBase.Input().Raw());
                 FDStorage.AddConstant(constant, alwaysActive, tableAliases);
             }
@@ -1101,6 +1102,16 @@ private:
             return
                 TMaybeNode<TKqlReadTableRangesBase>(input) ||
                 TMaybeNode<TKqlReadTableBase>(input);
+        }
+
+        TJoinColumn GetColumnFromMember(const TCoMember& member) {
+            TJoinColumn column = TJoinColumn::FromString(member.Name().StringValue());
+            if (auto stats = TypeCtx.GetStats(member.Raw()); column.RelName.empty()) {
+                if (stats->Aliases && stats->Aliases->size() == 1) {
+                    column.RelName = *stats->Aliases->begin();
+                }
+            }
+            return column;
         }
     };
 

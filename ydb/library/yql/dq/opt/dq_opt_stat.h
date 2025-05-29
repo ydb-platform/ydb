@@ -63,15 +63,6 @@ public:
         TVector<TColumnStatisticsUsedMember> Data{};
     };
 
-    // this class exists to add functional dependencies later for Cost Based Optimizer
-    struct TMemberEqualities {
-        void Add(const NNodes::TCoMember& lhs, const NNodes::TCoMember& rhs) {
-            Data.emplace_back(std::move(lhs), std::move(rhs));
-        }
-
-        TVector<std::pair<NNodes::TCoMember, NNodes::TCoMember>> Data{};
-    };
-
 public:
     TPredicateSelectivityComputer(
         std::shared_ptr<TOptimizerStatistics> stats,
@@ -92,7 +83,7 @@ public:
         return ColumnStatsUsedMembers;
     }
 
-    TMemberEqualities GetMemberEqualities() {
+    TVector<std::pair<NNodes::TCoMember, NNodes::TCoMember>> GetMemberEqualities() {
         return MemberEqualities;
     }
 
@@ -131,7 +122,7 @@ private:
     TColumnStatisticsUsedMembers ColumnStatsUsedMembers{};
 
     bool CollectMemberEqualities = false;
-    TMemberEqualities MemberEqualities{};
+    TVector<std::pair<NNodes::TCoMember, NNodes::TCoMember>> MemberEqualities{};
 
     bool CollectConstantMembers = false;
     TVector<NNodes::TCoMember> ConstantMembers{};

@@ -286,16 +286,16 @@ double NYql::NDq::TPredicateSelectivityComputer::ComputeInequalitySelectivity(co
 double NYql::NDq::TPredicateSelectivityComputer::ComputeEqualitySelectivity(
     const TExprBase& left,
     const TExprBase& right,
-    bool collectConstantMembers
+    bool collectMembers
 ) {
     if (IsAttribute(right) && IsConstantExprWithParams(left.Ptr())) {
-        return ComputeEqualitySelectivity(right, left, collectConstantMembers);
+        return ComputeEqualitySelectivity(right, left, collectMembers);
     }
 
     if (auto attribute = IsAttribute(left)) {
         // In case both arguments refer to an attribute, return 0.2
         if (IsAttribute(right)) {
-            if (CollectMemberEqualities) {
+            if (collectMembers) {
                 auto maybeMember = IsMember(left);
                 auto maybeAnotherMember = IsMember(right);
                 if (maybeMember && maybeAnotherMember) {
@@ -313,8 +313,11 @@ double NYql::NDq::TPredicateSelectivityComputer::ComputeEqualitySelectivity(
                 return DefaultSelectivity(Stats, attributeName);
             }
 
-            if (collectConstantMembers) {
-                ConstantMembers.push_back(*maybeMember.Get());
+            if (collectMembers) {
+                auto maybeMember = IsMember(left);
+                if (maybeMember) {
+                    ConstantMembers.push_back(*maybeMember.Get());
+                }
             }
 
             if (Stats == nullptr || Stats->ColumnStatistics == nullptr) {
@@ -363,7 +366,7 @@ double NYql::NDq::TPredicateSelectivityComputer::ComputeComparisonSelectivity(co
 }
 
 double TPredicateSelectivityComputer::Compute(const NNodes::TExprBase& input) {
-    return ComputeImpl(input, false, CollectConstantMembers);
+    return ComputeImpl(input, false, CollectConstantMembers || CollectMemberEqualities);
 }
 
 /**
@@ -372,18 +375,18 @@ double TPredicateSelectivityComputer::Compute(const NNodes::TExprBase& input) {
 double TPredicateSelectivityComputer::ComputeImpl(
     const TExprBase& input,
     bool underNot,
-    bool collectConstantMembers
+    bool collectMembers
 ) {
     std::optional<double> resSelectivity;
 
     // Process OptionalIf, just return the predicate statistics
     if (auto optIf = input.Maybe<TCoOptionalIf>()) {
-        resSelectivity = ComputeImpl(optIf.Cast().Predicate(), underNot, collectConstantMembers);
+        resSelectivity = ComputeImpl(optIf.Cast().Predicate(), underNot, collectMembers);
     }
 
     // Same with Coalesce
     else if (auto coalesce = input.Maybe<TCoCoalesce>()) {
-        resSelectivity = ComputeImpl(coalesce.Cast().Predicate(), underNot, collectConstantMembers);
+        resSelectivity = ComputeImpl(coalesce.Cast().Predicate(), underNot, collectMembers);
     }
 
     else if (
@@ -394,7 +397,7 @@ double TPredicateSelectivityComputer::ComputeImpl(
         input.Ptr()->IsCallable("Udf")
     ) {
         auto child = TExprBase(input.Ptr()->ChildRef(0));
-        resSelectivity = ComputeImpl(child, underNot, collectConstantMembers);
+        resSelectivity = ComputeImpl(child, underNot, collectMembers);
     }
 
     else if(input.Ptr()->IsCallable("Find") || input.Ptr()->IsCallable("StringContains")) {
@@ -414,17 +417,17 @@ double TPredicateSelectivityComputer::ComputeImpl(
     else if (auto andNode = input.Maybe<TCoAnd>()) {
         double tmpSelectivity = 1.0;
         for (size_t i = 0; i < andNode.Cast().ArgCount(); i++) {
-            tmpSelectivity *= ComputeImpl(andNode.Cast().Arg(i), underNot, !underNot && collectConstantMembers);
+            tmpSelectivity *= ComputeImpl(andNode.Cast().Arg(i), underNot, !underNot && collectMembers);
         }
         resSelectivity = tmpSelectivity;
     } else if (auto orNode = input.Maybe<TCoOr>()) {
         double tmpSelectivity = 0.0;
         for (size_t i = 0; i < orNode.Cast().ArgCount(); i++) {
-            tmpSelectivity += ComputeImpl(orNode.Cast().Arg(i), underNot, underNot && collectConstantMembers);
+            tmpSelectivity += ComputeImpl(orNode.Cast().Arg(i), underNot, underNot && collectMembers);
         }
         resSelectivity = tmpSelectivity;
     } else if (auto notNode = input.Maybe<TCoNot>()) {
-        double argSel = ComputeImpl(notNode.Cast().Value(), !underNot, collectConstantMembers);
+        double argSel = ComputeImpl(notNode.Cast().Value(), !underNot, collectMembers);
         resSelectivity = 1.0 - (argSel == 1.0 ? 0.95 : argSel);
     }
 
@@ -433,7 +436,7 @@ double TPredicateSelectivityComputer::ComputeImpl(
         auto left = equality.Cast().Left();
         auto right = equality.Cast().Right();
 
-        resSelectivity = ComputeEqualitySelectivity(left, right, !underNot && collectConstantMembers);
+        resSelectivity = ComputeEqualitySelectivity(left, right, !underNot && collectMembers);
     }
 
     else if (auto less = input.Maybe<TCoCmpLess>()) {
@@ -468,7 +471,7 @@ double TPredicateSelectivityComputer::ComputeImpl(
         auto left = TExprBase(input.Ptr()->ChildPtr(2));
         auto right = TExprBase(input.Ptr()->ChildPtr(3));
 
-        resSelectivity = ComputeEqualitySelectivity(left, right, !underNot && collectConstantMembers);
+        resSelectivity = ComputeEqualitySelectivity(left, right, !underNot && collectMembers);
     }
 
     // Process the not equal predicate
@@ -476,7 +479,7 @@ double TPredicateSelectivityComputer::ComputeImpl(
         auto left = equality.Cast().Left();
         auto right = equality.Cast().Right();
 
-        double eqSel = ComputeEqualitySelectivity(left, right, underNot && collectConstantMembers);
+        double eqSel = ComputeEqualitySelectivity(left, right, underNot && collectMembers);
         resSelectivity = 1.0 - (eqSel == 1.0 ? 0.95 : eqSel);
     }
 
@@ -484,7 +487,7 @@ double TPredicateSelectivityComputer::ComputeImpl(
         auto left = TExprBase(input.Ptr()->ChildPtr(2));
         auto right = TExprBase(input.Ptr()->ChildPtr(3));
 
-        double eqSel = ComputeEqualitySelectivity(left, right, underNot && collectConstantMembers);
+        double eqSel = ComputeEqualitySelectivity(left, right, underNot && collectMembers);
         resSelectivity = 1.0 - (eqSel == 1.0 ? 0.95 : eqSel);
     }
 

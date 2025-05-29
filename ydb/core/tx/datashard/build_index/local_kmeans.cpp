@@ -288,7 +288,7 @@ public:
         return EScan::Feed;
     }
 
-    EScan Feed(TArrayRef<const TCell> key, const TRow& row) final
+    EScan Feed(TArrayRef<const TCell> key, const TRow& row) noexcept final
     {
         LOG_T("Feed " << Debug());
 
@@ -322,7 +322,7 @@ public:
         return Uploader.ShouldWaitUpload() ? EScan::Sleep : EScan::Feed;
     }
 
-    EScan Exhausted() final
+    EScan Exhausted() noexcept final
     {
         LOG_D("Exhausted " << Debug());
 

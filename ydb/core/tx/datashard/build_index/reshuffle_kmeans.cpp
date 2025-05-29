@@ -232,7 +232,7 @@ public:
         LOG_I("Create " << Debug());
     }
 
-    EScan Seek(TLead& lead, ui64 seq) final
+    EScan Seek(TLead& lead, ui64 seq) noexcept final
     {
         LOG_D("Seek " << seq << " " << Debug());
 
@@ -259,7 +259,7 @@ public:
         return Uploader.ShouldWaitUpload() ? EScan::Sleep : EScan::Feed;
     }
 
-    EScan Exhausted() final
+    EScan Exhausted() noexcept final
     {
         LOG_D("Exhausted " << Debug());
 

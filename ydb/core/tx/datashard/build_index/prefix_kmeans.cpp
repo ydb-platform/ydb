@@ -168,7 +168,7 @@ public:
         }
     }
 
-    TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme>) final
+    TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme>) noexcept final
     {
         TActivationContext::AsActorContext().RegisterWithSameMailbox(this);
         LOG_I("Prepare " << Debug());
@@ -179,7 +179,7 @@ public:
         return {EScan::Feed, {}};
     }
 
-    TAutoPtr<IDestructable> Finish(EAbort abort) final
+    TAutoPtr<IDestructable> Finish(EAbort abort) noexcept final
     {
         auto& record = Response->Record;
         record.SetReadRows(ReadRows);
@@ -199,12 +199,12 @@ public:
         return nullptr;
     }
 
-    void Describe(IOutputStream& out) const final
+    void Describe(IOutputStream& out) const noexcept final
     {
         out << Debug();
     }
 
-    EScan PageFault() final
+    EScan PageFault() noexcept final
     {
         LOG_T("PageFault " << Debug());
         return EScan::Feed;
@@ -293,7 +293,7 @@ public:
         LOG_I("Create " << Debug());
     }
 
-    EScan Seek(TLead& lead, ui64 seq) final
+    EScan Seek(TLead& lead, ui64 seq) noexcept final
     {
         LOG_D("Seek " << seq << " " << Debug());
 
@@ -308,7 +308,7 @@ public:
         return EScan::Feed;
     }
 
-    EScan Feed(TArrayRef<const TCell> key, const TRow& row) final
+    EScan Feed(TArrayRef<const TCell> key, const TRow& row) noexcept final
     {
         LOG_T("Feed " << Debug());
 
@@ -346,7 +346,7 @@ public:
         return Uploader.ShouldWaitUpload() ? EScan::Sleep : EScan::Feed;
     }
 
-    EScan Exhausted() final
+    EScan Exhausted() noexcept final
     {
         LOG_D("Exhausted " << Debug());
 

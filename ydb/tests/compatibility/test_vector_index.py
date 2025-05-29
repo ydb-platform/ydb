@@ -1,27 +1,27 @@
 import pytest
 import time
 import random
+
+from ydb.tests.library.common.wait_for import wait_for
 from ydb.tests.library.compatibility.fixtures import RestartToAnotherVersionFixture
 from ydb.tests.oss.ydb_sdk_import import ydb
-
-TABLE_NAME = "table"
 
 
 class TestVectorIndex(RestartToAnotherVersionFixture):
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):
-        self.table_name = TABLE_NAME
+        self.table_name = "table"
         self.rows_count = 15
         self.index_name = "vector_idx"
         self.vector_dimension = 5
         yield from self.setup_cluster(extra_feature_flags={"enable_vector_index": True})
 
-    def _get_random_vector(self, type, size):
-        if type == "FloatVector":
+    def _get_random_vector(self, vector_type, size):
+        if vector_type == "FloatVector":
             values = [round(random.uniform(-100, 100), 2) for _ in range(size)]
             return ",".join(f'{val}f' for val in values)
 
-        if type == "Uint8Vector":
+        if vector_type == "Uint8Vector":
             values = [random.randint(0, 255) for _ in range(size)]
         else:
             values = [random.randint(-127, 127) for _ in range(size)]
@@ -55,10 +55,8 @@ class TestVectorIndex(RestartToAnotherVersionFixture):
         with ydb.QuerySessionPool(self.driver) as session_pool:
             session_pool.execute_with_retries(create_index_sql)
 
-    def wait_inddex_ready(self, targets, vector_types, vector_type, distance, order, distance_func):
-        for i in range(30):
-            time.sleep(7)
-
+    def wait_index_ready(self, targets, vector_types, vector_type, distance, order, distance_func):
+        def predicate():
             try:
                 self.select_from_index(
                     target=targets[distance][distance_func],
@@ -68,10 +66,10 @@ class TestVectorIndex(RestartToAnotherVersionFixture):
                 )
             except Exception as ex:
                 if "No global indexes for table" in str(ex):
-                    continue
+                    return False
                 raise ex
-            return
-        raise Exception("Error getting index status")
+            return True
+        assert wait_for(predicate, timeout_seconds=100, step_seconds=1), "Error getting index status"
 
     def _drop_index(self):
         drop_index_sql = f"""
@@ -106,6 +104,7 @@ class TestVectorIndex(RestartToAnotherVersionFixture):
         """
         with ydb.QuerySessionPool(self.driver) as session_pool:
             result_sets = session_pool.execute_with_retries(select_sql)
+            print(result_sets[0].rows)
             assert len(result_sets[0].rows) > 0, "Query returned an empty set"
             rows = result_sets[0].rows
             for row in rows:
@@ -170,7 +169,7 @@ class TestVectorIndex(RestartToAnotherVersionFixture):
                 distance=distance_func,
             )
         order = "ASC" if distance != "similarity" else "DESC"
-        self.wait_inddex_ready(
+        self.wait_index_ready(
             targets=targets,
             vector_types=vector_types,
             vector_type=vector_type,
@@ -199,7 +198,7 @@ class TestVectorIndex(RestartToAnotherVersionFixture):
                 vector_type=vector_type,
                 distance=distance_func,
             )
-        self.wait_inddex_ready(
+        self.wait_index_ready(
             targets=targets,
             vector_types=vector_types,
             vector_type=vector_type,

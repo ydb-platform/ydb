@@ -20,7 +20,7 @@ using TFetchingScript = NCommon::TFetchingScript;
 class TSpecialReadContext: public NCommon::TSpecialReadContext, TNonCopyable {
 private:
     using TBase = NCommon::TSpecialReadContext;
-    YDB_READONLY_DEF(TActorId, DuplicatesManager);
+    TActorId DuplicatesManager = TActorId();
 
 private:
     std::shared_ptr<TFetchingScript> BuildColumnsFetchingPlan(const bool needSnapshots, const bool partialUsageByPredicateExt,
@@ -30,22 +30,24 @@ private:
     std::shared_ptr<TFetchingScript> AskAccumulatorsScript;
 
     virtual std::shared_ptr<TFetchingScript> DoGetColumnsFetchingPlan(const std::shared_ptr<NCommon::IDataSource>& source) override;
-    virtual void DoAbort() override {
-        if (DuplicatesManager) {
-            NActors::TActivationContext::AsActorContext().Send(DuplicatesManager, new NActors::TEvents::TEvPoison());
-            DuplicatesManager = TActorId();
-        }
-    }
 
 public:
     virtual TString ProfileDebugString() const override;
 
-    TSpecialReadContext(const std::shared_ptr<TReadContext>& commonContext);
+    void RegisterActors();
+    void UnregisterActors();
+
+    const TActorId& GetDuplicatesManagerVerified() const {
+        AFL_VERIFY(DuplicatesManager);
+        return DuplicatesManager;
+    }
+
+    TSpecialReadContext(const std::shared_ptr<TReadContext>& commonContext)
+        : TBase(commonContext) {
+    }
 
     ~TSpecialReadContext() {
-        if (DuplicatesManager) {
-            NActors::TActivationContext::AsActorContext().Send(DuplicatesManager, new NActors::TEvents::TEvPoison());
-        }
+        AFL_VERIFY(!DuplicatesManager);
     }
 };
 

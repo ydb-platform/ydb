@@ -6,7 +6,7 @@
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/source.h>
 #include <ydb/core/tx/conveyor/usage/abstract.h>
 
-namespace NKikimr::NOlap::NReader::NSimple {
+namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering  {
 
 class TBuildDuplicateFilters: public NConveyor::ITask {
     class TFiltersBuilder: public NArrow::NMerger::IMergeResultBuilder {

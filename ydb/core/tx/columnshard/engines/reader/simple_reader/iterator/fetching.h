@@ -217,13 +217,13 @@ class TDuplicateFilter: public IFetchingStep {
 private:
     using TBase = IFetchingStep;
 
-    class TFilterSubscriber: public IFilterSubscriber {
+    class TFilterSubscriber: public NDuplicateFiltering::IFilterSubscriber {
     private:
         std::weak_ptr<IDataSource> Source;
         TFetchingScriptCursor Step;
         NColumnShard::TCounterGuard TaskGuard;
 
-        virtual void OnFilterReady(const NArrow::TColumnFilter& filter) override;
+        virtual void OnFilterReady(NArrow::TColumnFilter&& filter) override;
         virtual void OnFailure(const TString& reason) override;
 
     public:

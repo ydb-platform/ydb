@@ -8,7 +8,7 @@
 #include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/source.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
 
-namespace NKikimr::NOlap::NReader::NSimple {
+namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering  {
 
 #define LOCAL_LOG_TRACE \
     AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("component", "duplicates_manager")("self", TActivationContext::AsActorContext().SelfID)

@@ -1,6 +1,6 @@
 #include "merge.h"
 
-namespace NKikimr::NOlap::NReader::NSimple {
+namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering  {
 
 void TBuildDuplicateFilters::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) {
     NArrow::NMerger::TMergePartialStream merger(PKSchema, nullptr, false, VersionColumnNames, MaxVersion);

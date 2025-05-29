@@ -2,7 +2,7 @@
 
 #include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/source.h>
 
-namespace NKikimr::NOlap::NReader::NSimple {
+namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering  {
 
 TSourceCache::TResponseConstructor::TResponseConstructor(
     const std::vector<std::shared_ptr<IDataSource>>& sources, std::unique_ptr<ISubscriber>&& callback)

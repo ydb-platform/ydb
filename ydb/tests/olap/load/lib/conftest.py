@@ -1,10 +1,11 @@
 from __future__ import annotations
-import pytest
 import allure
 import json
-import yatest
-import os
 import logging
+import os
+import pytest
+import yatest
+
 from allure_commons._core import plugin_manager
 from allure_pytest.listener import AllureListener
 from copy import deepcopy
@@ -12,11 +13,11 @@ from datetime import datetime
 from pytz import timezone
 from time import time
 from typing import Optional
-from ydb.tests.olap.lib.ydb_cli import YdbCliHelper, WorkloadType, CheckCanonicalPolicy
-from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.olap.lib.allure_utils import allure_test_description, NodeErrors
 from ydb.tests.olap.lib.results_processor import ResultsProcessor
 from ydb.tests.olap.lib.utils import get_external_param
+from ydb.tests.olap.lib.ydb_cli import YdbCliHelper, WorkloadType, CheckCanonicalPolicy
+from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.olap.scenario.helpers.scenario_tests_helper import ScenarioTestHelper
 
 
@@ -374,7 +375,7 @@ class LoadSuiteBase:
         self.save_nodes_state()
         result = YdbCliHelper.workload_run(
             path=path,
-            query_names={query_name},
+            query_names=[query_name],
             iterations=qparams.iterations,
             workload_type=self.workload_type,
             timeout=qparams.timeout,
@@ -388,7 +389,7 @@ class LoadSuiteBase:
 
 
 class LoadSuiteParallel(LoadSuiteBase):
-    threads: int = 8
+    threads: int = 0
 
     def get_query_list() -> list[str]:
         return []
@@ -404,7 +405,7 @@ class LoadSuiteParallel(LoadSuiteBase):
         cls.save_nodes_state()
         cls.__results = YdbCliHelper.workload_run(
             path=cls.get_path(),
-            query_names=set(cls.get_query_list()),
+            query_names=cls.get_query_list(),
             iterations=qparams.iterations,
             workload_type=cls.workload_type,
             timeout=qparams.timeout,
@@ -422,4 +423,4 @@ class LoadSuiteParallel(LoadSuiteBase):
 
 def pytest_generate_tests(metafunc):
     if issubclass(metafunc.cls, LoadSuiteParallel):
-        metafunc.parametrize("query_name", metafunc.cls.get_query_list())
+        metafunc.parametrize("query_name", metafunc.cls.get_query_list() + ["Sum"])

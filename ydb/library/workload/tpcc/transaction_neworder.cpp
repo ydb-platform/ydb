@@ -12,6 +12,8 @@
 
 namespace NYdb::NTPCC {
 
+std::atomic<size_t> TransactionsInflight{0};
+
 namespace {
 
 //-----------------------------------------------------------------------------
@@ -530,6 +532,7 @@ NThreading::TFuture<TStatus> GetNewOrderTask(
     TTransactionContext& context,
     TSession session)
 {
+    TTransactionInflightGuard guard;
     co_await TTaskReady(context.TaskQueue, context.TerminalID);
 
     auto& Log = context.Log;
@@ -687,6 +690,7 @@ NThreading::TFuture<TStatus> GetNewOrderTask(
     }
 
     if (hasInvalidItem) {
+        co_await tx.Rollback();
         throw TUserAbortedException();
     }
 

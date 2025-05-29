@@ -14,6 +14,20 @@ namespace NYdb::NTPCC {
 
 //-----------------------------------------------------------------------------
 
+extern std::atomic<size_t> TransactionsInflight;
+
+struct TTransactionInflightGuard {
+    TTransactionInflightGuard() {
+        TransactionsInflight.fetch_add(1, std::memory_order_relaxed);
+    }
+
+    ~TTransactionInflightGuard() {
+        TransactionsInflight.fetch_sub(1, std::memory_order_relaxed);
+    }
+};
+
+//-----------------------------------------------------------------------------
+
 struct TTransactionContext {
     size_t TerminalID; // unrelated to TPC-C, part of implementation
     size_t WarehouseID;

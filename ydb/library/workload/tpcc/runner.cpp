@@ -4,6 +4,7 @@
 #include "log.h"
 #include "task_queue.h"
 #include "terminal.h"
+#include "transactions.h"
 
 #include <ydb/public/lib/ydb_cli/commands/ydb_command.h>
 
@@ -27,6 +28,8 @@ namespace {
 
 constexpr auto SleepMsEveryIterationMainLoop = std::chrono::milliseconds(50);
 constexpr auto DisplayUpdateInterval = std::chrono::seconds(15);
+constexpr auto GracefulShutdownTimeout = std::chrono::seconds(5);
+constexpr auto MinWarmupPerTerminal = std::chrono::milliseconds(1);
 
 constexpr auto MaxPerTerminalTransactionsInflight = 1;
 
@@ -55,6 +58,18 @@ struct TAllStatistics {
             NewOrderFailPerSecond = 1.0 *
                 (TerminalStats->GetStats(TTerminalStats::E_NEW_ORDER).Failed.load(std::memory_order_relaxed) -
                     prev.TerminalStats->GetStats(TTerminalStats::E_NEW_ORDER).Failed.load(std::memory_order_relaxed)) / seconds;
+
+            ExecutingTime = TaskThreadStats->ExecutingTime.load(std::memory_order_relaxed) -
+                prev.TaskThreadStats->ExecutingTime.load(std::memory_order_relaxed);
+
+            TotalTime = TaskThreadStats->TotalTime.load(std::memory_order_relaxed) -
+                prev.TaskThreadStats->TotalTime.load(std::memory_order_relaxed);
+
+            InternalInflightWaitTimeMs = TaskThreadStats->InternalInflightWaitTimeMs;
+            InternalInflightWaitTimeMs.Sub(prev.TaskThreadStats->InternalInflightWaitTimeMs);
+
+            ExternalQueueTimeMs = TaskThreadStats->ExternalQueueTimeMs;
+            ExternalQueueTimeMs.Sub(prev.TaskThreadStats->ExternalQueueTimeMs);
         }
 
         std::unique_ptr<ITaskQueue::TThreadStats> TaskThreadStats;
@@ -64,6 +79,10 @@ struct TAllStatistics {
         size_t QueriesPerSecond = 0;
         double NewOrderOkPerSecond = 0;
         double NewOrderFailPerSecond = 0;
+        double ExecutingTime = 0;
+        double TotalTime = 0;
+        THistogram InternalInflightWaitTimeMs{ITaskQueue::TThreadStats::BUCKET_COUNT, ITaskQueue::TThreadStats::MAX_HIST_VALUE};
+        THistogram ExternalQueueTimeMs{ITaskQueue::TThreadStats::BUCKET_COUNT, ITaskQueue::TThreadStats::MAX_HIST_VALUE};
     };
 
     TAllStatistics(size_t threadCount)
@@ -145,9 +164,6 @@ TPCCRunner::TPCCRunner(const NConsoleClient::TClientCommand::TConfig& connection
     , Config(runConfig)
     , Log(std::make_shared<TLog>(CreateLogBackend("cerr", Config.LogPriority, true)))
 {
-    signal(SIGINT, InterruptHandler);
-    signal(SIGTERM, InterruptHandler);
-
     ConnectionConfig.IsNetworkIntensive = true;
     ConnectionConfig.UsePerChannelTcpConnection = true;
 
@@ -171,10 +187,22 @@ TPCCRunner::TPCCRunner(const NConsoleClient::TClientCommand::TConfig& connection
     // For now, we don't have more than 32 network threads (check TYdbCommand::GetNetworkThreadNum()),
     // so that maxTerminalThreads will be around more or less around 100.
     const size_t driverCount = Config.DriverCount == 0 ? threadCount : Config.DriverCount;
+
+    const size_t maxSessionsPerClient = (Config.MaxInflight + driverCount - 1) / driverCount;
+    NQuery::TSessionPoolSettings sessionPoolSettings;
+    sessionPoolSettings.MaxActiveSessions(maxSessionsPerClient);
+    sessionPoolSettings.MinPoolSize(maxSessionsPerClient);
+
+    NQuery::TClientSettings clientSettings;
+    clientSettings.SessionPoolSettings(sessionPoolSettings);
+
     std::vector<TDriver> drivers;
     drivers.reserve(driverCount);
+    std::vector<std::shared_ptr<NQuery::TQueryClient>> clients;
+    clients.reserve(driverCount);
     for (size_t i = 0; i < driverCount; ++i) {
-        drivers.emplace_back(NConsoleClient::TYdbCommand::CreateDriver(ConnectionConfig));
+        auto& driver = drivers.emplace_back(NConsoleClient::TYdbCommand::CreateDriver(ConnectionConfig));
+        clients.emplace_back(std::make_shared<NQuery::TQueryClient>(driver, clientSettings));
     }
 
     StatsVec.reserve(threadCount);
@@ -193,7 +221,8 @@ TPCCRunner::TPCCRunner(const NConsoleClient::TClientCommand::TConfig& connection
         Log);
 
     LOG_I("Creating " << terminalsCount << " terminals and " << threadCount
-        << " workers on " << cpuCount << " cpus");
+        << " workers on " << cpuCount << " cpus, " << driverCount << " query clients with at most "
+        << maxSessionsPerClient << " sessions per client");
 
     Terminals.reserve(terminalsCount);
     for (size_t i = 0; i < terminalsCount; ++i) {
@@ -203,7 +232,7 @@ TPCCRunner::TPCCRunner(const NConsoleClient::TClientCommand::TConfig& connection
             warehouseID,
             Config.WarehouseCount,
             *TaskQueue,
-            drivers[i % drivers.size()],
+            clients[i % drivers.size()],
             Config.Path,
             Config.NoSleep,
             TerminalsStopSource.get_token(),
@@ -214,12 +243,14 @@ TPCCRunner::TPCCRunner(const NConsoleClient::TClientCommand::TConfig& connection
         Terminals.emplace_back(std::move(terminalPtr));
     }
 
+    // we set handler as late as possible to overwrite
+    // any handlers set deeply inside
+    signal(SIGINT, InterruptHandler);
+    signal(SIGTERM, InterruptHandler);
+
     // we want to have even load distribution and not start terminals from first INFLIGHT warehouses,
     // then next, etc. Long warmup resolves this, but we want to have a good start even without warmup
     std::random_shuffle(Terminals.begin(), Terminals.end());
-    for (auto& terminal: Terminals) {
-        terminal->Start();
-    }
 }
 
 TPCCRunner::~TPCCRunner() {
@@ -233,10 +264,34 @@ void TPCCRunner::Join() {
     }
 
     LOG_I("Stopping the terminals...");
-    TerminalsStopSource.request_stop();
 
-    // we don't have to wait terminals to finish suspended coroutines, just stop
-    // threads executing coroutines
+    // to gracefully shutdown, we must wait for all termianls
+    // and especially running queries to finish
+    TerminalsStopSource.request_stop();
+    TaskQueue->WakeupAndNeverSleep();
+
+    auto shutdownTs = Clock::now();
+    for (const auto& terminal: Terminals) {
+        // terminals should wait for their query coroutines to finish
+        if (!terminal->IsDone()) {
+            LOG_T("Waiting for terminal " << terminal->GetID());
+        }
+        while (!terminal->IsDone()) {
+            std::this_thread::sleep_for(SleepMsEveryIterationMainLoop);
+            auto now = Clock::now();
+            auto delta = now - shutdownTs;
+            if (delta >= GracefulShutdownTimeout) {
+                LOG_E("Graceful shutdown timeout on terminal " << terminal->GetID());
+                break;
+            }
+        }
+        auto now = Clock::now();
+        auto delta = now - shutdownTs;
+        if (delta >= GracefulShutdownTimeout) {
+            break;
+        }
+    }
+
     LOG_I("Stopping task queue");
     TaskQueue->Join();
     LOG_I("Runner stopped");
@@ -248,20 +303,43 @@ void TPCCRunner::RunSync() {
     TaskQueue->Run();
 
     // TODO: convert to minutes when needed
-    LOG_D("Starting warmup");
+
+    // We don't want to start all terminals at the same time, because then there will be
+    // a huge queue of ready terminals, which we can't handle
+
+    int minWarmupSeconds = Terminals.size() * MinWarmupPerTerminal.count() / 1000 + 1;
+    int warmupSeconds;
+    if (Config.WarmupSeconds < minWarmupSeconds) {
+        LOG_I("Forced minimal warmup time: " << minWarmupSeconds << " seconds");
+        warmupSeconds = minWarmupSeconds;
+    } else {
+        warmupSeconds = Config.WarmupSeconds;
+    }
+
+    LOG_I("Starting warmup for " << warmupSeconds << " seconds");
 
     LastStatisticsSnapshot = std::make_unique<TAllStatistics>(StatsVec.size());
     LastStatisticsSnapshot->Ts = Clock::now();
 
     auto warmupStartTs = Clock::now();
-    auto warmupStopDeadline = warmupStartTs + std::chrono::seconds(Config.WarmupSeconds);
-    while (!StopByInterrupt.stop_requested()) {
+    auto warmupStopDeadline = warmupStartTs + std::chrono::seconds(warmupSeconds);
+
+    size_t startedTerminalId = 0;
+    for (; startedTerminalId < Terminals.size() && !StopByInterrupt.stop_requested(); ++startedTerminalId) {
         if (now >= warmupStopDeadline) {
             break;
         }
-        std::this_thread::sleep_for(SleepMsEveryIterationMainLoop);
+        Terminals[startedTerminalId]->Start();
+
+        std::this_thread::sleep_for(MinWarmupPerTerminal);
         now = Clock::now();
         UpdateDisplayIfNeeded(now);
+    }
+    ++startedTerminalId;
+
+    // start the rest of terminals
+    for (; startedTerminalId < Terminals.size() && !StopByInterrupt.stop_requested(); ++startedTerminalId) {
+        Terminals[startedTerminalId]->Start();
     }
 
     StopWarmup.store(true, std::memory_order_relaxed);
@@ -303,32 +381,39 @@ void TPCCRunner::UpdateDisplayDeveloperMode() {
 
     std::cout << std::left
               << std::setw(5) << "Thr"
+              << std::setw(5) << "Load"
               << std::setw(15) << "terminals/s"
               << std::setw(15) << "queries/s"
-              << std::setw(20) << "NewOrder OK/s"
               << std::setw(20) << "NewOrder Fail/s"
               << std::setw(20) << "inflight queue"
-              << std::setw(20) << "ready terminals"
-              << std::setw(20) << "ready queries"
+              << std::setw(20) << "wait p50, ms"
+              << std::setw(20) << "wait p90, ms"
+              << std::setw(20) << "ewait p50, ms"
+              << std::setw(20) << "ewait p90, ms"
               << std::endl;
 
-    std::cout << std::string(128, '-') << std::endl;
+    std::cout << std::string(175, '-') << std::endl;
 
     for (size_t i = 0; i < LastStatisticsSnapshot->StatVec.size(); ++i) {
         const auto& stats = LastStatisticsSnapshot->StatVec[i];
+        double load = LastStatisticsSnapshot->StatVec[i].ExecutingTime / LastStatisticsSnapshot->StatVec[i].TotalTime;
         std::cout << std::left
                   << std::setw(5) << i
+                  << std::setw(5) << std::setprecision(2) << load
                   << std::setw(15) << std::fixed << stats.TerminalsPerSecond
                   << std::setw(15) << std::fixed << stats.QueriesPerSecond
-                  << std::setw(20) << std::fixed << std::setprecision(2) << stats.NewOrderOkPerSecond
                   << std::setw(20) << std::fixed << std::setprecision(2) << stats.NewOrderFailPerSecond
                   << std::setw(20) << stats.TaskThreadStats->InternalTasksWaitingInflight
-                  << std::setw(20) << stats.TaskThreadStats->InternalTasksReady
-                  << std::setw(20) << stats.TaskThreadStats->ExternalTasksReady
+                  << std::setw(20) << std::setprecision(2) << stats.InternalInflightWaitTimeMs.GetValueAtPercentile(50)
+                  << std::setw(20) << std::setprecision(2) << stats.InternalInflightWaitTimeMs.GetValueAtPercentile(90)
+                  << std::setw(20) << std::setprecision(2) << stats.ExternalQueueTimeMs.GetValueAtPercentile(50)
+                  << std::setw(20) << std::setprecision(2) << stats.ExternalQueueTimeMs.GetValueAtPercentile(90)
                   << std::endl;
     }
 
-    std::cout << "\ntpmC: " << std::fixed << std::setprecision(2) << LastStatisticsSnapshot->Tpmc << std::endl;
+    std::cout << "\nRunning terminals: " << TaskQueue->GetRunningCount();
+    std::cout << "\nRunning transactions: " << TransactionsInflight.load(std::memory_order_relaxed);
+    std::cout << "\nCurrent tpmC: " << std::fixed << std::setprecision(2) << LastStatisticsSnapshot->Tpmc << std::endl;
 }
 
 std::unique_ptr<TAllStatistics> TPCCRunner::CollectStatistics(Clock::time_point now) {
@@ -413,7 +498,10 @@ void TPCCRunner::DumpFinalStats() {
 
     if (minutesPassed >= 1) {
         size_t tpmC = size_t(totalNewOrders / minutesPassed);
+        double efficiency = 1.0 * tpmC * 100 / Config.WarehouseCount / MAX_TPMC_PER_WAREHOUSE;
+        std::cout << "warehouses: " << Config.WarehouseCount << std::endl;
         std::cout << "tpmC: " << tpmC << std::endl;
+        std::cout << "efficiency: " << std::setprecision(2) << efficiency << "%" << std::endl;
     } else {
         std::cout << "Less than minute passed, tpmC calculation skipped" << std::endl;
     }

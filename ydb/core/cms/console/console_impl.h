@@ -115,6 +115,7 @@ private:
             FFunc(TEvConsole::EvResolveConfigRequest, ForwardToConfigsManager);
             FFunc(TEvConsole::EvResolveAllConfigRequest, ForwardToConfigsManager);
             FFunc(TEvConsole::EvFetchStartupConfigRequest, ForwardToConfigsManager);
+            FFunc(TEvConsole::EvGetConfigurationVersionRequest, ForwardToConfigsManager);
             FFunc(TEvConsole::EvGetConfigSubscriptionRequest, ForwardToConfigsManager);
             FFunc(TEvConsole::EvGetNodeConfigItemsRequest, ForwardToConfigsManager);
             FFunc(TEvConsole::EvGetNodeConfigRequest, ForwardToConfigsManager);

@@ -1071,13 +1071,13 @@ void TCreateQueueSchemaActorV2::CommitNewVersion() {
             .Utf8("TAGS", TagsJson_)
             .Uint64("CLOUD_EVENT_ID", TCloudEventIdGenerator::Generate())
             .Utf8("CLOUD_EVENT_TYPE", "CreateMessageQueue")
-            .Utf8("CLOUD_EVENT_CLOUD_ID", "")
-            .Utf8("CLOUD_EVENT_FOLDER_ID", "")
-            .Utf8("CLOUD_EVENT_USER_SANITIZED_TOKEN", "")
-            .Utf8("CLOUD_EVENT_AUTHTYPE", "")
-            .Utf8("CLOUD_EVENT_PEERNAME", "")
-            .Utf8("CLOUD_EVENT_REQUEST_ID", "")
-            .Utf8("CLOUD_EVENT_IDEMPOTENCY_ID", "");
+            .Utf8("CLOUD_EVENT_CLOUD_ID", "default_value_of_cloud_id")
+            .Utf8("CLOUD_EVENT_FOLDER_ID", FolderId_)
+            .Utf8("CLOUD_EVENT_USER_SANITIZED_TOKEN", "default_value_of_sanitized_token")
+            .Utf8("CLOUD_EVENT_AUTHTYPE", "default_value_of_authtype")
+            .Utf8("CLOUD_EVENT_PEERNAME", "default_value_of_peername")
+            .Utf8("CLOUD_EVENT_REQUEST_ID", RequestId_)
+            .Utf8("CLOUD_EVENT_IDEMPOTENCY_ID", "default_value_of_idempotency_id");
     } else {
         TParameters(trans->MutableParams()->MutableProto())
             .Utf8("NAME", QueuePath_.QueueName)
@@ -1557,13 +1557,13 @@ void TDeleteQueueSchemaActorV2::NextAction() {
                     .Utf8("CLOUD_EVENT_LABELS", "")
                     .Uint64("CLOUD_EVENT_ID", TCloudEventIdGenerator::Generate())
                     .Utf8("CLOUD_EVENT_TYPE", "DeleteMessageQueue")
-                    .Utf8("CLOUD_EVENT_CLOUD_ID", "")
-                    .Utf8("CLOUD_EVENT_FOLDER_ID", "")
-                    .Utf8("CLOUD_EVENT_USER_SANITIZED_TOKEN", "")
-                    .Utf8("CLOUD_EVENT_AUTHTYPE", "")
-                    .Utf8("CLOUD_EVENT_PEERNAME", "")
-                    .Utf8("CLOUD_EVENT_REQUEST_ID", "")
-                    .Utf8("CLOUD_EVENT_IDEMPOTENCY_ID", "");
+                    .Utf8("CLOUD_EVENT_CLOUD_ID", "default_value_of_cloud_id")
+                    .Utf8("CLOUD_EVENT_FOLDER_ID", "default_value_of_folder_id")
+                    .Utf8("CLOUD_EVENT_USER_SANITIZED_TOKEN", "default_value_of_sanitized_token")
+                    .Utf8("CLOUD_EVENT_AUTHTYPE", "default_value_of_auth_type")
+                    .Utf8("CLOUD_EVENT_PEERNAME", "default_value_of_peername")
+                    .Utf8("CLOUD_EVENT_REQUEST_ID", RequestId_)
+                    .Utf8("CLOUD_EVENT_IDEMPOTENCY_ID", "default_value_of_idempotency_id");
             } else {
                 TParameters(trans->MutableParams()->MutableProto())
                     .Utf8("NAME", QueuePath_.QueueName)

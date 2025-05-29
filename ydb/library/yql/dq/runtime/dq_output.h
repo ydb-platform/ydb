@@ -28,7 +28,7 @@ struct TDqOutputStats : public TDqAsyncStats {
     ui64 MaxRowsInMemory = 0;
 };
 
-enum TDqFillLevel {
+enum EDqFillLevel {
     NoLimit,
     SoftLimit,
     HardLimit
@@ -40,19 +40,19 @@ struct TDqFillAggregator {
 
     alignas(64) std::array<std::atomic<ui64>, FILL_COUNTERS_SIZE> Counts;
 
-    ui64 GetCount(TDqFillLevel level) {
+    ui64 GetCount(EDqFillLevel level) {
         ui32 index = static_cast<ui32>(level);
         YQL_ENSURE(index < FILL_COUNTERS_SIZE);
         return Counts[index].load();
     }
 
-    void AddCount(TDqFillLevel level) {
+    void AddCount(EDqFillLevel level) {
         ui32 index = static_cast<ui32>(level);
         YQL_ENSURE(index < FILL_COUNTERS_SIZE);
         Counts[index]++;
     }
 
-    void UpdateCount(TDqFillLevel prevLevel, TDqFillLevel level) {
+    void UpdateCount(EDqFillLevel prevLevel, EDqFillLevel level) {
         ui32 index1 = static_cast<ui32>(prevLevel);
         ui32 index2 = static_cast<ui32>(level);
         YQL_ENSURE(index1 < FILL_COUNTERS_SIZE && index2 < FILL_COUNTERS_SIZE);
@@ -60,6 +60,16 @@ struct TDqFillAggregator {
             Counts[index1]--;
             Counts[index2]++;
         }
+    }
+
+    EDqFillLevel GetFillLevel() const {
+        if (Counts[static_cast<ui32>(HardLimit)].load()) {
+            return HardLimit;
+        }
+        if (Counts[static_cast<ui32>(NoLimit)].load()) {
+            return NoLimit;
+        }
+        return SoftLimit;
     }
 };
 
@@ -72,7 +82,7 @@ public:
     virtual const TDqOutputStats& GetPushStats() const = 0;
 
     // <| producer methods
-    virtual TDqFillLevel UpdateFillLevel() = 0;
+    virtual EDqFillLevel UpdateFillLevel() = 0;
     virtual void SetFillAggregator(std::shared_ptr<TDqFillAggregator> aggregator) = 0;
     // can throw TDqChannelStorageException
     virtual void Push(NUdf::TUnboxedValue&& value) = 0;

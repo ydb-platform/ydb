@@ -74,7 +74,7 @@ public:
         return PopStats;
     }
 
-    TDqFillLevel CalcFillLevel() const {
+    EDqFillLevel CalcFillLevel() const {
         if (Storage) {
             return FirstStoredId < NextStoredId ? (Storage->IsFull() ? HardLimit : SoftLimit) : NoLimit;
         } else {
@@ -82,7 +82,7 @@ public:
         }
     }
 
-    TDqFillLevel UpdateFillLevel() override {
+    EDqFillLevel UpdateFillLevel() override {
         auto result = CalcFillLevel();
         if (FillLevel != result) {
             if (Aggregator) {
@@ -478,7 +478,7 @@ private:
     TMaybe<NDqProto::TWatermark> Watermark;
     TMaybe<NDqProto::TCheckpoint> Checkpoint;
     std::shared_ptr<TDqFillAggregator> Aggregator;
-    TDqFillLevel FillLevel = NoLimit;
+    EDqFillLevel FillLevel = NoLimit;
 };
 
 } // anonymous namespace

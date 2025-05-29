@@ -32,22 +32,15 @@ public:
         MKQL_ENSURE_S(KeyColumnTypes.size() == KeyColumnIndices.size());
 
         SortPartitions(Partitions, KeyColumnTypes, [](const auto& partition) { return partition.Range; });
+
+        Aggregator = std::make_shared<TDqFillAggregator>();
+        for (auto output : Outputs) {
+            output->SetFillAggregator(Aggregator);
+        }
     }
 
-    TDqFillLevel GetFillLevel() const override {
-        TDqFillLevel result = SoftLimit;
-        for (auto output : Outputs) {
-            switch(output->UpdateFillLevel()) {
-                case HardLimit:
-                    return HardLimit;
-                case SoftLimit:
-                    break;
-                case NoLimit:
-                    result = NoLimit;
-                    break;
-            }
-        }
-        return result;
+    EDqFillLevel GetFillLevel() const override {
+        return Aggregator->GetFillLevel();
     }
 
     void Consume(TUnboxedValue&& value) final {
@@ -79,6 +72,7 @@ private:
     TVector<TKqpRangePartition> Partitions;
     TVector<NScheme::TTypeInfo> KeyColumnTypes;
     TVector<ui32> KeyColumnIndices;
+    std::shared_ptr<TDqFillAggregator> Aggregator;
 };
 
 } // namespace

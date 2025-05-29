@@ -36,8 +36,8 @@ public:
         YQL_ENSURE(!Consumers.empty());
     }
 
-    TDqFillLevel GetFillLevel() const override {
-        TDqFillLevel result = SoftLimit;
+    EDqFillLevel GetFillLevel() const override {
+        EDqFillLevel result = SoftLimit;
         for (auto consumer : Consumers) {
             switch(consumer->GetFillLevel()) {
                 case HardLimit:
@@ -91,7 +91,7 @@ public:
     TDqOutputMapConsumer(IDqOutput::TPtr output)
         : Output(output) {}
 
-    TDqFillLevel GetFillLevel() const override {
+    EDqFillLevel GetFillLevel() const override {
         return Output->UpdateFillLevel();
     }
 
@@ -301,14 +301,8 @@ public:
         }
     }
 
-    TDqFillLevel GetFillLevel() const override {
-        if (Aggregator->GetCount(HardLimit)) {
-            return HardLimit;
-        }
-        if (Aggregator->GetCount(NoLimit)) {
-            return NoLimit;
-        }
-        return SoftLimit;
+    EDqFillLevel GetFillLevel() const override {
+        return Aggregator->GetFillLevel();
     }
 
     void Consume(TUnboxedValue&& value) final {
@@ -435,14 +429,8 @@ public:
         }
     }
 private:
-    TDqFillLevel GetFillLevel() const override {
-        if (Aggregator->GetCount(HardLimit)) {
-            return HardLimit;
-        }
-        if (Aggregator->GetCount(NoLimit)) {
-            return NoLimit;
-        }
-        return SoftLimit;
+    EDqFillLevel GetFillLevel() const override {
+        return Aggregator->GetFillLevel();
     }
 
     void Consume(TUnboxedValue&& value) final {
@@ -563,14 +551,8 @@ public:
     }
 
 private:
-    TDqFillLevel GetFillLevel() const override {
-        if (Aggregator->GetCount(HardLimit)) {
-            return HardLimit;
-        }
-        if (Aggregator->GetCount(NoLimit)) {
-            return NoLimit;
-        }
-        return SoftLimit;
+    EDqFillLevel GetFillLevel() const override {
+        return Aggregator->GetFillLevel();
     }
 
     void Consume(TUnboxedValue&& value) final {
@@ -761,10 +743,14 @@ public:
         , OutputWidth(outputWidth)
         , Tmp(outputWidth.Defined() ? *outputWidth : 0u)
     {
+        Aggregator = std::make_shared<TDqFillAggregator>();
+        for (auto output : Outputs) {
+            output->SetFillAggregator(Aggregator);
+        }
     }
 
-    TDqFillLevel GetFillLevel() const override {
-        return AnyOf(Outputs, [](const auto& output) { return output->UpdateFillLevel() != NoLimit; }) ? HardLimit : NoLimit;
+    EDqFillLevel GetFillLevel() const override {
+        return Aggregator->GetFillLevel();
     }
 
     void Consume(TUnboxedValue&& value) final {
@@ -799,6 +785,7 @@ private:
     TVector<IDqOutput::TPtr> Outputs;
     const TMaybe<ui32> OutputWidth;
     TUnboxedValueVector Tmp;
+    std::shared_ptr<TDqFillAggregator> Aggregator;
 };
 
 } // namespace

@@ -15,7 +15,7 @@ public:
     TKqpApplyEffectsConsumer(NUdf::IApplyContext* applyCtx)
         : ApplyCtx(applyCtx) {}
 
-    TDqFillLevel GetFillLevel() const override {
+    EDqFillLevel GetFillLevel() const override {
         return NoLimit;
     }
 

@@ -17,7 +17,7 @@ using namespace NYql;
 using namespace NYql::NDq;
 
 template<>
-void Out<NYql::NDq::TDqFillLevel>(IOutputStream& os, const NYql::NDq::TDqFillLevel l) {
+void Out<NYql::NDq::EDqFillLevel>(IOutputStream& os, const NYql::NDq::EDqFillLevel l) {
     os << static_cast<ui32>(l);
 }
 
@@ -108,6 +108,21 @@ struct TTestContext {
         return result;
     }
 
+    TUnboxedValueBatch CreateVariantRow(ui32 value, ui32 varIndex) {
+        UNIT_ASSERT(!IsWide);
+        NUdf::TUnboxedValue* items;
+        auto row = Vb.NewArray(OutputType->GetMembersCount(), items);
+        items[0] = NUdf::TUnboxedValuePod(value);
+        items[1] = NUdf::TUnboxedValuePod((ui64) (value * value));
+        if (OutputType->GetMembersCount() == 3) {
+            items[2] = NMiniKQL::MakeString("***");
+        }
+        UNIT_ASSERT(row.TryMakeVariant(varIndex));
+        TUnboxedValueBatch result(OutputType);
+        result.emplace_back(std::move(row));
+        return result;
+    }
+
     TUnboxedValueBatch CreateBigRow(ui32 value, ui32 size) {
         if (IsWide) {
             TUnboxedValueBatch result(WideOutputType);
@@ -128,6 +143,21 @@ struct TTestContext {
         if (OutputType->GetMembersCount() == 3) {
             items[2] = NMiniKQL::MakeString(std::string(size, '*'));
         }
+        TUnboxedValueBatch result(OutputType);
+        result.emplace_back(std::move(row));
+        return result;
+    }
+
+    TUnboxedValueBatch CreateBigVariantRow(ui32 value, ui32 size, ui32 varIndex) {
+        UNIT_ASSERT(!IsWide);
+        NUdf::TUnboxedValue* items;
+        auto row = Vb.NewArray(OutputType->GetMembersCount(), items);
+        items[0] = NUdf::TUnboxedValuePod(value);
+        items[1] = NUdf::TUnboxedValuePod((ui64) (value * value));
+        if (OutputType->GetMembersCount() == 3) {
+            items[2] = NMiniKQL::MakeString(std::string(size, '*'));
+        }
+        UNIT_ASSERT(row.TryMakeVariant(varIndex));
         TUnboxedValueBatch result(OutputType);
         result.emplace_back(std::move(row));
         return result;
@@ -640,7 +670,7 @@ Y_UNIT_TEST(Overflow) {
 
 }
 
-void TestBackPressureInMemory(TTestContext& ctx) {
+void TestBackPressureInMemory(TTestContext& ctx, bool multi) {
     TDqOutputChannelSettings settings;
     settings.MaxStoredBytes = 100;
     settings.MaxChunkBytes = 100;
@@ -648,46 +678,76 @@ void TestBackPressureInMemory(TTestContext& ctx) {
     settings.TransportVersion = ctx.TransportVersion;
 
     TVector<IDqOutputChannel::TPtr> channels;
-    TVector<IDqOutput::TPtr> outputs;
 
-    for (i32 i = 0; i < 4; i++) {
+    constexpr ui32 CHANNEL_BITS = 3;
+    constexpr ui32 CHANNEL_COUNT = 1 << CHANNEL_BITS;
+    constexpr ui32 MSG_PER_CHANNEL = 4;
+
+    for (ui32 i = 0; i < CHANNEL_COUNT; i++) {
         auto channel = CreateDqOutputChannel(i, 1000, ctx.GetOutputType(), ctx.HolderFactory, settings, Log);
         channels.emplace_back(channel);
-        outputs.emplace_back(channel);
     }
 
     TMaybe<ui8> minFillPercentage;
     minFillPercentage = 100;
-
     NDqProto::TTaskOutputHashPartition hashPartition;
-    TVector<TColumnInfo> keyColumns;
-    keyColumns.emplace_back(GetColumnInfo(ctx.GetOutputType(), "0")); // index !!!
+    IDqOutputConsumer::TPtr consumer;
 
-    auto consumer = CreateOutputHashPartitionConsumer(std::move(outputs), std::move(keyColumns), ctx.GetOutputType(), ctx.HolderFactory, minFillPercentage, hashPartition, nullptr);
+    if (multi) {
+        TVector<IDqOutputConsumer::TPtr> consumers;
+        {
+            TVector<IDqOutput::TPtr> outputs;
+            for (ui32 i = 0; i < CHANNEL_COUNT / 2; i++) {
+                outputs.emplace_back(channels[i]);
+            }
+            TVector<TColumnInfo> keyColumns;
+            keyColumns.emplace_back(GetColumnInfo(ctx.GetOutputType(), "x"));
+            consumers.emplace_back(CreateOutputHashPartitionConsumer(std::move(outputs), std::move(keyColumns), ctx.GetOutputType(), ctx.HolderFactory, minFillPercentage, hashPartition, nullptr));
+        }
+        {
+            TVector<IDqOutput::TPtr> outputs;
+            for (ui32 i = CHANNEL_COUNT / 2; i < CHANNEL_COUNT; i++) {
+                outputs.emplace_back(channels[i]);
+            }
+            TVector<TColumnInfo> keyColumns;
+            keyColumns.emplace_back(GetColumnInfo(ctx.GetOutputType(), "x"));
+            consumers.emplace_back(CreateOutputHashPartitionConsumer(std::move(outputs), std::move(keyColumns), ctx.GetOutputType(), ctx.HolderFactory, minFillPercentage, hashPartition, nullptr));
+        }
+        consumer = CreateOutputMultiConsumer(std::move(consumers));
+    } else {
+        TVector<IDqOutput::TPtr> outputs;
+        for (auto c : channels) {
+            outputs.emplace_back(c);
+        }
+        TVector<TColumnInfo> keyColumns;
+        keyColumns.emplace_back(GetColumnInfo(ctx.GetOutputType(), "0")); // index !!!
+        consumer = CreateOutputHashPartitionConsumer(std::move(outputs), std::move(keyColumns), ctx.GetOutputType(), ctx.HolderFactory, minFillPercentage, hashPartition, nullptr);
+    }
+
 
     UNIT_ASSERT_VALUES_EQUAL(NoLimit, consumer->GetFillLevel());
 
-    for (i32 i = 0; i < 16; ++i) {
-        auto row = ctx.CreateRow(i);
+    for (ui32 i = 0; i < CHANNEL_COUNT * MSG_PER_CHANNEL; ++i) {
+        auto row = multi ? ctx.CreateVariantRow(i, (i >> (CHANNEL_BITS - 1)) & 1) : ctx.CreateRow(i);
         ConsumeRow(ctx, std::move(row), consumer);
         UNIT_ASSERT_VALUES_EQUAL(NoLimit, consumer->GetFillLevel());
     }
 
     for (auto c : channels) {
-        UNIT_ASSERT_VALUES_EQUAL(16 / 4, c->GetValuesCount());
+        UNIT_ASSERT_VALUES_EQUAL(MSG_PER_CHANNEL, c->GetValuesCount());
         UNIT_ASSERT_VALUES_EQUAL(NoLimit, c->UpdateFillLevel());
     }
 
-    i32 channel0 = 0;
+    ui32 channel0 = 0;
 
     {
-        auto row = ctx.CreateBigRow(0, 10000);
+        auto row = multi ? ctx.CreateBigVariantRow(0, 10000, 0) : ctx.CreateBigRow(0, 10000);
         ConsumeRow(ctx, std::move(row), consumer);
 
         UNIT_ASSERT_VALUES_EQUAL(HardLimit, consumer->GetFillLevel());
 
-        for (auto i = 0; i < 4; i ++) {
-            if (channels[i]->GetValuesCount() == 5) {
+        for (ui32 i = 0; i < CHANNEL_COUNT; i ++) {
+            if (channels[i]->GetValuesCount() == MSG_PER_CHANNEL + 1) {
                 channel0 = i;
                 break;
             }
@@ -706,7 +766,7 @@ void TestBackPressureInMemory(TTestContext& ctx) {
     }
 }
 
-void TestBackPressureWithSpilling(TTestContext& ctx) {
+void TestBackPressureWithSpilling(TTestContext& ctx, bool multi) {
     TDqOutputChannelSettings settings;
     settings.MaxStoredBytes = 100;
     settings.MaxChunkBytes = 100;
@@ -714,42 +774,71 @@ void TestBackPressureWithSpilling(TTestContext& ctx) {
     settings.TransportVersion = ctx.TransportVersion;
 
     TVector<IDqOutputChannel::TPtr> channels;
-    TVector<IDqOutput::TPtr> outputs;
 
-    for (i32 i = 0; i < 4; i++) {
+    constexpr ui32 CHANNEL_BITS = 3;
+    constexpr ui32 CHANNEL_COUNT = 1 << CHANNEL_BITS;
+    constexpr ui32 MSG_PER_CHANNEL = 4;
+
+    for (ui32 i = 0; i < CHANNEL_COUNT; i++) {
         // separate Storage for each channel is required
         settings.ChannelStorage = MakeIntrusive<TMockChannelStorage>(100000ul);
         auto channel = CreateDqOutputChannel(i, 1000, ctx.GetOutputType(), ctx.HolderFactory, settings, Log);
         channels.emplace_back(channel);
-        outputs.emplace_back(channel);
     }
 
     TMaybe<ui8> minFillPercentage;
     minFillPercentage = 100;
-
     NDqProto::TTaskOutputHashPartition hashPartition;
-    TVector<TColumnInfo> keyColumns;
-    keyColumns.emplace_back(GetColumnInfo(ctx.GetOutputType(), "0")); // index !!!
+    IDqOutputConsumer::TPtr consumer;
 
-    auto consumer = CreateOutputHashPartitionConsumer(std::move(outputs), std::move(keyColumns), ctx.GetOutputType(), ctx.HolderFactory, minFillPercentage, hashPartition, nullptr);
+    if (multi) {
+        TVector<IDqOutputConsumer::TPtr> consumers;
+        {
+            TVector<IDqOutput::TPtr> outputs;
+            for (ui32 i = 0; i < CHANNEL_COUNT / 2; i++) {
+                outputs.emplace_back(channels[i]);
+            }
+            TVector<TColumnInfo> keyColumns;
+            keyColumns.emplace_back(GetColumnInfo(ctx.GetOutputType(), "x"));
+            consumers.emplace_back(CreateOutputHashPartitionConsumer(std::move(outputs), std::move(keyColumns), ctx.GetOutputType(), ctx.HolderFactory, minFillPercentage, hashPartition, nullptr));
+        }
+        {
+            TVector<IDqOutput::TPtr> outputs;
+            for (ui32 i = CHANNEL_COUNT / 2; i < CHANNEL_COUNT; i++) {
+                outputs.emplace_back(channels[i]);
+            }
+            TVector<TColumnInfo> keyColumns;
+            keyColumns.emplace_back(GetColumnInfo(ctx.GetOutputType(), "x"));
+            consumers.emplace_back(CreateOutputHashPartitionConsumer(std::move(outputs), std::move(keyColumns), ctx.GetOutputType(), ctx.HolderFactory, minFillPercentage, hashPartition, nullptr));
+        }
+        consumer = CreateOutputMultiConsumer(std::move(consumers));
+    } else {
+        TVector<IDqOutput::TPtr> outputs;
+        for (auto c : channels) {
+            outputs.emplace_back(c);
+        }
+        TVector<TColumnInfo> keyColumns;
+        keyColumns.emplace_back(GetColumnInfo(ctx.GetOutputType(), "0")); // index !!!
+        consumer = CreateOutputHashPartitionConsumer(std::move(outputs), std::move(keyColumns), ctx.GetOutputType(), ctx.HolderFactory, minFillPercentage, hashPartition, nullptr);
+    }
 
     UNIT_ASSERT_VALUES_EQUAL(NoLimit, consumer->GetFillLevel());
 
-    for (i32 i = 0; i < 16; ++i) {
-        auto row = ctx.CreateRow(i);
+    for (ui32 i = 0; i < CHANNEL_COUNT * MSG_PER_CHANNEL; ++i) {
+        auto row = multi ? ctx.CreateVariantRow(i, (i >> (CHANNEL_BITS - 1)) & 1) : ctx.CreateRow(i);
         ConsumeRow(ctx, std::move(row), consumer);
         UNIT_ASSERT_VALUES_EQUAL(NoLimit, consumer->GetFillLevel());
     }
 
     for (auto c : channels) {
-        UNIT_ASSERT_VALUES_EQUAL(16 / 4, c->GetValuesCount());
+        UNIT_ASSERT_VALUES_EQUAL(MSG_PER_CHANNEL, c->GetValuesCount());
         UNIT_ASSERT_VALUES_EQUAL(NoLimit, c->UpdateFillLevel());
     }
 
-    i32 channel0 = 0;
+    ui32 channel0 = 0;
 
     {
-        auto row = ctx.CreateBigRow(0, 10000);
+        auto row = multi ? ctx.CreateBigVariantRow(0, 10000, 0) : ctx.CreateBigRow(0, 10000);
         ConsumeRow(ctx, std::move(row), consumer);
 
         for (auto i = 0; i < 4; i ++) {
@@ -761,9 +850,9 @@ void TestBackPressureWithSpilling(TTestContext& ctx) {
 
         UNIT_ASSERT_VALUES_EQUAL(SoftLimit, channels[channel0]->UpdateFillLevel());
 
-        for (auto i = 1; i < 4; i ++) {
+        for (ui32 i = 1; i < CHANNEL_COUNT; i ++) {
             UNIT_ASSERT_VALUES_EQUAL(NoLimit, consumer->GetFillLevel());
-            auto row = ctx.CreateBigRow(i, 10000);
+            auto row = multi ? ctx.CreateBigVariantRow(i, 10000, (i >> (CHANNEL_BITS - 1)) & 1) : ctx.CreateBigRow(i, 10000);
             ConsumeRow(ctx, std::move(row), consumer);
         }
 
@@ -784,12 +873,22 @@ Y_UNIT_TEST_SUITE(HashShuffle) {
 
 Y_UNIT_TEST(BackPressureInMemory) {
     TTestContext ctx(WIDE_CHANNEL, NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0, true);
-    TestBackPressureInMemory(ctx);
+    TestBackPressureInMemory(ctx, false);
+}
+
+Y_UNIT_TEST(BackPressureInMemoryMulti) {
+    TTestContext ctx(NARROW_CHANNEL, NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0, true);
+    TestBackPressureInMemory(ctx, true);
 }
 
 Y_UNIT_TEST(BackPressureWithSpilling) {
     TTestContext ctx(WIDE_CHANNEL, NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0, true);
-    TestBackPressureWithSpilling(ctx);
+    TestBackPressureWithSpilling(ctx, false);
+}
+
+Y_UNIT_TEST(BackPressureWithSpillingMulti) {
+    TTestContext ctx(NARROW_CHANNEL, NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0, true);
+    TestBackPressureWithSpilling(ctx, true);
 }
 
 }

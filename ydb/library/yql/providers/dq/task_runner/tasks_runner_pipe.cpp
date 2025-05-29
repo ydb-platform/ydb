@@ -1012,7 +1012,7 @@ public:
     }
 
     // <| producer methods
-    TDqFillLevel UpdateFillLevel() override {
+    EDqFillLevel UpdateFillLevel() override {
         ythrow yexception() << "unimplemented";
     };
 
@@ -1252,7 +1252,7 @@ public:
         Y_ABORT("Checkpoints are not supported");
     }
 
-    TDqFillLevel UpdateFillLevel() override {
+    EDqFillLevel UpdateFillLevel() override {
         Y_ABORT("Unimplemented");
     }
 

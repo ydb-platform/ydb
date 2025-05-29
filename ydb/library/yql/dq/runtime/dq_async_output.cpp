@@ -75,7 +75,7 @@ public:
         return PopStats;
     }
 
-    TDqFillLevel UpdateFillLevel() override {
+    EDqFillLevel UpdateFillLevel() override {
         auto result = EstimatedStoredBytes >= MaxStoredBytes ? HardLimit : NoLimit;
         if (FillLevel != result) {
             if (Aggregator) {
@@ -334,7 +334,7 @@ private:
     std::deque<TValueDesc> Values;
     ui64 EstimatedRowBytes = 0;
     std::shared_ptr<TDqFillAggregator> Aggregator;
-    TDqFillLevel FillLevel = NoLimit;
+    EDqFillLevel FillLevel = NoLimit;
 };
 
 } // namespace

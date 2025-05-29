@@ -245,8 +245,8 @@ class TDefaultNodeBrokerClient
                                                   env);
                 if (result.IsSuccess()) {
                     logger.Out() << "Success. Registered as " << result.GetNodeId() << Endl;
-                    logger.Out() << "Node name: ";
                     if (result.HasNodeName()) {
+                        logger.Out() << "Node name: ";
                         logger.Out() << result.GetNodeName();
                     }
                     logger.Out() << Endl;

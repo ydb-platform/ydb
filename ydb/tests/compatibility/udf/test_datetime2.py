@@ -244,6 +244,14 @@ class TestDatetime2(MixedClusterFixture):
             self.q_parse()
         ]
 
+        """
+        UDFs are compiled once on the node that initially receives the request.
+        The compiled UDF is then propagated to all other nodes. Executing the query a single time only verifies
+        compatibility in one direction—either from old to new or from new to old. Performing multiple retries
+        increases the likelihood that the UDF will be compiled on both the old and new versions, thereby improving coverage of compatibility testing.
+
+        Additionally, a session pool always sends requests to the same node. To ensure distribution across nodes, the session pool is recreated for each SELECT request.
+        """
         for _ in range(10):
             with ydb.QuerySessionPool(self.driver) as session_pool:
                 for query in queries:

@@ -209,7 +209,7 @@ private:
         TTableAliasMap* tableAliases = nullptr
     );
 
-    std::size_t GetIdxByColumn(
+    i64 GetIdxByColumn(
         const TJoinColumn& column,
         bool createIfNotExists,
         TTableAliasMap* tableAliases = nullptr

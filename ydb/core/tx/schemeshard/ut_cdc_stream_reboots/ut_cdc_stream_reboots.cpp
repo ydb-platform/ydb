@@ -196,7 +196,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
                 StreamDescription {
                   Name: "Stream"
                   Mode: ECdcStreamModeKeysOnly
-                  Format: ECdcStreamFormatProto
+                  Format: ECdcStreamFormatJson
                   SchemaChanges: true
                 }
             )");

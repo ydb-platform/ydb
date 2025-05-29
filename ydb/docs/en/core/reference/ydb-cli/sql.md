@@ -43,7 +43,7 @@ View the description of this command by calling it with `--help` option:
 
 The `--diagnostics-file <path_to_diagnostics>` option allows you to save extended information about SQL query execution to a separate JSON file.
 
-Diagnostics are collected when statistics gathering is enabled (`--stats full` or `--stats profile`), as well as during execution of `EXPLAIN` queries. For each query, a file named `<path_to_diagnostics>` will be created with the following fields:
+Diagnostics are collected when statistics gathering is enabled `--stats full`, as well as during execution of `EXPLAIN` queries. For each query, a file named `<path_to_diagnostics>` will be created with the following fields:
 
 - **`plan`** — query execution plan.
 - **`stats`** — query execution statistics.

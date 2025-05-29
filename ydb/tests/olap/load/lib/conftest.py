@@ -425,7 +425,7 @@ class LoadSuiteBase:
         assert query_num is not None or query_name is not None
         for plugin in plugin_manager.get_plugin_manager().get_plugins():
             if isinstance(plugin, AllureListener):
-                allure_test_result = plugin.allure_logging.get_test(None)
+                allure_test_result = plugin.allure_logger.get_test(None)
                 if allure_test_result is not None:
                     for param in allure_test_result.parameters:
                         if param.name in {'query_num', 'query_name'}:

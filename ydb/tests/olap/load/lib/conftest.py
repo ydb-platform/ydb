@@ -22,8 +22,6 @@ from ydb.tests.olap.lib.ydb_cli import YdbCliHelper, WorkloadType, CheckCanonica
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.olap.scenario.helpers.scenario_tests_helper import ScenarioTestHelper
 
-LOGGER = logging.getLogger(__name__)
-
 
 class LoadSuiteBase:
     class QuerySettings:
@@ -145,14 +143,14 @@ class LoadSuiteBase:
                         container=f' -m k8s_container:{c}' if c else ''
                     ))
                 except BaseException as e:
-                    LOGGER.error(e)
+                    logging.error(e)
             for c in exec_start.keys():
                 try:
                     exec_start[c][host] = cls.__execute_ssh(host, cmd.format(
                         storage='kikimr-start',
                         container=f' -m k8s_container:{c}' if c else ''))
                 except BaseException as e:
-                    LOGGER.error(e)
+                    logging.error(e)
 
         error_log = ''
         for c, execs in exec_start.items():
@@ -187,7 +185,7 @@ class LoadSuiteBase:
         for h, exec in core_processes.items():
             exec.wait(check_exit_code=False)
             if exec.returncode != 0:
-                LOGGER.error(f'Error while process coredumps on host {h}: {exec.stderr}')
+                logging.error(f'Error while process coredumps on host {h}: {exec.stderr}')
             exec = cls.__execute_ssh(h, ('find /coredumps/ -name "sended_*.json" '
                                          f'-mmin -{(10 + time() - start_time) / 60} -mmin +{(-10 + time() - end_time) / 60}'
                                          ' | while read FILE; do cat $FILE; echo -n ","; done'))
@@ -198,7 +196,7 @@ class LoadSuiteBase:
                     core_hashes.setdefault(slot, [])
                     core_hashes[slot].append((core.get('core_id', ''), core.get('core_hash', '')))
             else:
-                LOGGER.error(f'Error while search coredumps on host {h}: {exec.stderr}')
+                logging.error(f'Error while search coredumps on host {h}: {exec.stderr}')
         return core_hashes
 
     @classmethod
@@ -215,7 +213,7 @@ class LoadSuiteBase:
                 if exec.stdout:
                     ooms.add(h)
             else:
-                LOGGER.error(f'Error while search OOMs on host {h}: {exec.stderr}')
+                logging.error(f'Error while search OOMs on host {h}: {exec.stderr}')
         return ooms
 
     @classmethod
@@ -373,7 +371,7 @@ class LoadSuiteBase:
         with allure.step('Base teardown: checking for custom cleanup'):
             if hasattr(cls, 'do_teardown_class'):
                 try:
-                    LOGGER.info(f"Executing custom teardown for {cls.__name__}")
+                    logging.info(f"Executing custom teardown for {cls.__name__}")
                     cls.do_teardown_class()
                     allure.attach(
                         f"Custom teardown completed for {cls.__name__}",
@@ -382,10 +380,10 @@ class LoadSuiteBase:
                     )
                 except Exception as e:
                     error_msg = f"Error during custom teardown for {cls.__name__}: {e}"
-                    LOGGER.error(error_msg)
+                    logging.error(error_msg)
                     allure.attach(error_msg, 'Custom teardown error', allure.attachment_type.TEXT)
             else:
-                LOGGER.info(f"No custom teardown defined for {cls.__name__}")
+                logging.info(f"No custom teardown defined for {cls.__name__}")
                 allure.attach(
                     f"No custom teardown needed for {cls.__name__}",
                     'Teardown result',
@@ -416,12 +414,12 @@ class LoadSuiteBase:
                         total_killed += process_result.get('killed_count', 0)
 
                 success_msg = f"Successfully processed {len(results)} hosts, killed {total_killed} processes"
-                LOGGER.info(success_msg)
+                logging.info(success_msg)
                 allure.attach(success_msg, 'Kill processes result', allure.attachment_type.TEXT)
 
             except Exception as e:
                 error_msg = f"Error killing workload processes: {e}"
-                LOGGER.error(error_msg)
+                logging.error(error_msg)
                 allure.attach(error_msg, 'Kill processes error', allure.attachment_type.TEXT)
                 raise
 
@@ -429,7 +427,7 @@ class LoadSuiteBase:
         assert query_num is not None or query_name is not None
         for plugin in plugin_manager.get_plugin_manager().get_plugins():
             if isinstance(plugin, AllureListener):
-                allure_test_result = plugin.allure_logger.get_test(None)
+                allure_test_result = plugin.allure_logging.get_test(None)
                 if allure_test_result is not None:
                     for param in allure_test_result.parameters:
                         if param.name in {'query_num', 'query_name'}:

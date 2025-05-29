@@ -1,4 +1,4 @@
-PY3_PROGRAM(olap_workload)
+PY3_PROGRAM(reconfig_state_storage_workload)
 
 PY_SRCS(
     __main__.py

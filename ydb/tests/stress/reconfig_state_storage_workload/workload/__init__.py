@@ -227,8 +227,8 @@ class WorkloadReconfigStateStorage(WorkloadBase):
             time.sleep(3)
             defaultRingGroup = [self.do_request_config()[f"{self.config_name}Config"]["Ring"]]
             newRingGroup = [
-                {"RingGroupActorIdOffset": self.ringGroupActorIdOffset,"NToSelect": 3, "Ring": [{"Node": [4]}, {"Node": [5]}, {"Node": [6]}]},
-                {"RingGroupActorIdOffset": self.ringGroupActorIdOffset + 1,"NToSelect": 3, "Ring": [{"Node": [4]}, {"Node": [5]}, {"Node": [6]}]}
+                {"RingGroupActorIdOffset": self.ringGroupActorIdOffset, "NToSelect": 3, "Ring": [{"Node": [4]}, {"Node": [5]}, {"Node": [6]}]},
+                {"RingGroupActorIdOffset": self.ringGroupActorIdOffset + 1, "NToSelect": 3, "Ring": [{"Node": [4]}, {"Node": [5]}, {"Node": [6]}]}
                 ]
             logger.info(f"From: {defaultRingGroup} To: {newRingGroup}")
             for i in range(len(newRingGroup)):
@@ -250,7 +250,7 @@ class WorkloadReconfigStateStorage(WorkloadBase):
                 raise Exception(f"Incorrect reconfig: expected:{curConfig}, actual:{expectedConfig}")
             with self.lock:
                 self.ringGroupActorIdOffset += 2
-        
+
     def get_workload_thread_funcs(self):
         return [self._loop]
 
@@ -276,13 +276,13 @@ class WorkloadDiscovery(WorkloadBase):
             resolver = ydb.DiscoveryEndpointsResolver(driver_config)
             result = resolver.resolve()
             if result is not None:
-                if not self.endpoints is None:
+                if self.endpoints is not None:
                     # logger.info(result.endpoints)
                     assert_that(self.endpionts, contains_inanyorder(result.endpoints))
                 else:
                     self.endpionts = result.endpoints
             else:
-                raise Exception(f"Discovery empty")
+                raise Exception("Discovery empty")
 
             with self.lock:
                 self.cnt += 1
@@ -294,6 +294,7 @@ class WorkloadDiscovery(WorkloadBase):
 
 class WorkloadRunner:
     config_name = "StateStorage"
+
     def __init__(self, client, cluster, path, duration, allow_nullables_in_pk, config_name):
         self.client = client
         self.name = path

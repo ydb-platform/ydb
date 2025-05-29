@@ -4,6 +4,7 @@
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/persqueue/utils.h>
+#include <ydb/core/persqueue/user_info.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/jwt/jwt.h>
 
@@ -856,6 +857,13 @@ namespace NKikimr::NGRpcProxy::V1 {
                 return Ydb::StatusIds::BAD_REQUEST;
             }
         }
+        if(pqTabletConfig->GetEnableCompactification()) {
+            Ydb::PersQueue::V1::TopicSettings::ReadRule compConsumer;
+            compConsumer.set_consumer_name(NKikimr::NPQ::CLIENTID_COMPACTION_CONSUMER);
+            compConsumer.set_important(true);
+            compConsumer.set_starting_message_timestamp_ms(0);
+            AddReadRuleToConfig(pqTabletConfig, compConsumer, supportedClientServiceTypes, pqConfig);
+        }
         if (settings.has_remote_mirror_rule()) {
             auto mirrorFrom = partConfig->MutableMirrorFrom();
             if (!local) {
@@ -1147,7 +1155,14 @@ namespace NKikimr::NGRpcProxy::V1 {
                 return TYdbPqCodes(Ydb::StatusIds::BAD_REQUEST, messageAndCode.PQCode);
             }
         }
-
+        if (pqTabletConfig->GetEnableCompactification()) {
+            Ydb::Topic::Consumer compConsumer;
+            compConsumer.set_name(NKikimr::NPQ::CLIENTID_COMPACTION_CONSUMER);
+            compConsumer.set_important(true);
+            compConsumer.mutable_read_from()->set_seconds(0);
+            AddReadRuleToConfig(pqTabletConfig, compConsumer, supportedClientServiceTypes, false, pqConfig,
+                                appData->FeatureFlags.GetEnableTopicDiskSubDomainQuota());
+        }
         return TYdbPqCodes(CheckConfig(*pqTabletConfig, supportedClientServiceTypes, error, pqConfig, Ydb::StatusIds::BAD_REQUEST),
                            Ydb::PersQueue::ErrorCode::VALIDATION_ERROR);
     }
@@ -1321,17 +1336,27 @@ namespace NKikimr::NGRpcProxy::V1 {
         std::vector<std::pair<bool, Ydb::Topic::Consumer>> consumers;
 
         i32 dropped = 0;
-
+        bool hasCompactionConsumer = false;
+        bool compactedTopic = pqTabletConfig->GetEnableCompactification();
+        Cerr << "Check consumers list for topic with compaction enabled = " << compactedTopic << Endl;
         for (const auto& c : pqTabletConfig->GetConsumers()) {
             auto& oldName = c.GetName();
+            Cerr << "Check consumer " << oldName << Endl;
             auto name = NPersQueue::ConvertOldConsumerName(oldName, pqConfig);
-
             bool erase = false;
             for (auto consumer: request.drop_consumers()) {
                 if (consumer == name || consumer == oldName) {
                     erase = true;
                     ++dropped;
                     break;
+                }
+            }
+            if (oldName == NKikimr::NPQ::CLIENTID_COMPACTION_CONSUMER) {
+                if (!compactedTopic) {
+                    Cerr << "Have compacted consumer and will drop it\n";
+                    continue; // drop compaction consumer;
+                } else {
+                    hasCompactionConsumer = true; // check if we have compaction consumer or need to add it later;
                 }
             }
             if (erase) continue;
@@ -1346,6 +1371,13 @@ namespace NKikimr::NGRpcProxy::V1 {
             for (ui32 codec : c.GetCodec().GetIds()) {
                 consumer.mutable_supported_codecs()->add_codecs(codec + 1);
             }
+        }
+        if (compactedTopic && !hasCompactionConsumer) {
+            Cerr << "Dont' have compacted consumer, will add it\n";
+            consumers.push_back({false, Ydb::Topic::Consumer{}});
+            auto& consumer = consumers.back().second;
+            consumer.set_name(NKikimr::NPQ::CLIENTID_COMPACTION_CONSUMER);
+            consumer.set_important(true);
         }
 
         for (auto& cons : request.add_consumers()) {

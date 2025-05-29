@@ -6641,7 +6641,11 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST(CreateExternalDataSourceWithSa) {
-        TKikimrRunner kikimr;
+        NKikimrConfig::TAppConfig config;
+        config.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
+        config.MutableQueryServiceConfig()->MutableS3()->SetGeneratorPathsLimit(50000);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetAppConfig(config));
+
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -6689,6 +6693,70 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "External data sources are disabled. Please contact your system administrator to enable it");
     }
 
+    Y_UNIT_TEST(DisableS3ExternalDataSource) {
+        NKikimrConfig::TAppConfig appCfg;
+        appCfg.MutableQueryServiceConfig()->SetAllExternalDataSourcesAreAvailable(false);
+        appCfg.MutableQueryServiceConfig()->AddAvailableExternalDataSources("PostgreSQL");
+        TKikimrRunner kikimr(appCfg);
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
+        {
+            auto db = kikimr.GetTableClient();
+            auto session = db.CreateSession().GetValueSync().GetSession();
+            TString externalDataSourceName = "/Root/ExternalDataSource2";
+            auto query = TStringBuilder() << R"(
+                CREATE EXTERNAL DATA SOURCE `)" << externalDataSourceName << R"(` WITH (
+                    SOURCE_TYPE="ObjectStorage",
+                    LOCATION="my-bucket",
+                    AUTH_METHOD="NONE"
+                );)";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "External source with type ObjectStorage is disabled. Please contact your system administrator to enable it", result.GetIssues().ToString());
+
+            auto query2 = TStringBuilder() << R"(
+                CREATE OBJECT `baz2` (TYPE SECRET) WITH value=`MySecretData`;
+
+                CREATE EXTERNAL DATA SOURCE `)" << externalDataSourceName << R"(` WITH (
+                    SOURCE_TYPE="PostgreSQL",
+                    LOCATION="my-bucket",
+                    AUTH_METHOD="BASIC",
+                    LOGIN="admin",
+                    PASSWORD_SECRET_NAME = "baz2",
+                    DATABASE_NAME="cheburashka"
+                );)";
+            result = session.ExecuteSchemeQuery(query2).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            auto client = kikimr.GetQueryClient();
+            auto session = client.GetSession().GetValueSync().GetSession();
+            TString externalDataSourceName = "/Root/ExternalDataSource";
+            auto query = TStringBuilder() << R"(
+                CREATE EXTERNAL DATA SOURCE `)" << externalDataSourceName << R"(` WITH (
+                    SOURCE_TYPE="ObjectStorage",
+                    LOCATION="my-bucket",
+                    AUTH_METHOD="NONE"
+                );)";
+            auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "External source with type ObjectStorage is disabled. Please contact your system administrator to enable it", result.GetIssues().ToString());
+
+            auto query2 = TStringBuilder() << R"(
+                CREATE OBJECT `baz` (TYPE SECRET) WITH value=`MySecretData`;
+
+                CREATE EXTERNAL DATA SOURCE `)" << externalDataSourceName << R"(` WITH (
+                    SOURCE_TYPE="PostgreSQL",
+                    LOCATION="my-bucket",
+                    AUTH_METHOD="BASIC",
+                    LOGIN="admin",
+                    PASSWORD_SECRET_NAME = "baz",
+                    DATABASE_NAME="cheburashka"
+                );)";
+            result = session.ExecuteQuery(query2, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+    }
+
     Y_UNIT_TEST(CreateExternalDataSourceValidationAuthMethod) {
         TKikimrRunner kikimr;
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
@@ -6709,7 +6777,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     Y_UNIT_TEST(CreateExternalDataSourceValidationLocation) {
         NKikimrConfig::TAppConfig appCfg;
         appCfg.MutableQueryServiceConfig()->AddHostnamePatterns("common-bucket");
-
+        appCfg.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
         TKikimrRunner kikimr(appCfg);
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
         auto db = kikimr.GetTableClient();
@@ -6727,7 +6795,11 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST(DropExternalDataSource) {
-        TKikimrRunner kikimr;
+        NKikimrConfig::TAppConfig config;
+        config.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
+        config.MutableQueryServiceConfig()->MutableS3()->SetGeneratorPathsLimit(50000);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetAppConfig(config));
+
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -6767,7 +6839,11 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST(DoubleCreateExternalDataSource) {
-        TKikimrRunner kikimr;
+        NKikimrConfig::TAppConfig config;
+        config.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
+        config.MutableQueryServiceConfig()->MutableS3()->SetGeneratorPathsLimit(50000);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetAppConfig(config));
+
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -6808,7 +6884,11 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST(CreateExternalTable) {
-        TKikimrRunner kikimr;
+        NKikimrConfig::TAppConfig config;
+        config.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
+        config.MutableQueryServiceConfig()->MutableS3()->SetGeneratorPathsLimit(50000);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetAppConfig(config));
+
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -6895,7 +6975,11 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST(DropExternalTable) {
-        TKikimrRunner kikimr;
+        NKikimrConfig::TAppConfig config;
+        config.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
+        config.MutableQueryServiceConfig()->MutableS3()->SetGeneratorPathsLimit(50000);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetAppConfig(config));
+
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -6952,7 +7036,11 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST(CreateExternalTableWithSettings) {
-        TKikimrRunner kikimr;
+        NKikimrConfig::TAppConfig config;
+        config.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
+        config.MutableQueryServiceConfig()->MutableS3()->SetGeneratorPathsLimit(50000);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetAppConfig(config));
+
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -7000,7 +7088,11 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST(CreateExternalTableWithUpperCaseSettings) {
-        TKikimrRunner kikimr;
+        NKikimrConfig::TAppConfig config;
+        config.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
+        config.MutableQueryServiceConfig()->MutableS3()->SetGeneratorPathsLimit(50000);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetAppConfig(config));
+
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -7048,7 +7140,11 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST(DoubleCreateExternalTable) {
-        TKikimrRunner kikimr;
+        NKikimrConfig::TAppConfig config;
+        config.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
+        config.MutableQueryServiceConfig()->MutableS3()->SetGeneratorPathsLimit(50000);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetAppConfig(config));
+
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -7098,7 +7194,11 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST(DropDependentExternalDataSource) {
-        TKikimrRunner kikimr;
+        NKikimrConfig::TAppConfig config;
+        config.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
+        config.MutableQueryServiceConfig()->MutableS3()->SetGeneratorPathsLimit(50000);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetAppConfig(config));
+
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();

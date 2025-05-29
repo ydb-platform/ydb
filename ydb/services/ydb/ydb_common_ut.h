@@ -120,6 +120,9 @@ public:
         ServerSettings->SetEnableYq(enableYq);
         ServerSettings->Formats = new TFormatFactory;
         ServerSettings->PQConfig = appConfig.GetPQConfig();
+        ServerSettings->AppConfig->MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
+        ServerSettings->AppConfig->MutableQueryServiceConfig()->AddAvailableExternalDataSources("PostgreSQL");
+
         if (appConfig.HasMeteringConfig() && appConfig.GetMeteringConfig().HasMeteringFilePath()) {
             ServerSettings->SetMeteringFilePath(appConfig.GetMeteringConfig().GetMeteringFilePath());
         }

@@ -260,3 +260,16 @@ federated_query_config:
       uri: ""
   pinger:
     ping_period: "30s"
+query_service_config:
+  available_external_data_sources:
+    - ObjectStorage
+    - ClickHouse
+    - PostgreSQL
+    - MySQL
+    - Ydb
+    - YT
+    - Greenplum
+    - MsSQLServer
+    - Oracle
+    - Logging
+    - Solomon

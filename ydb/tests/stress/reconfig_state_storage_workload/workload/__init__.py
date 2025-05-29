@@ -227,7 +227,8 @@ class WorkloadReconfigStateStorage(WorkloadBase):
             time.sleep(3)
             defaultRingGroup = [self.do_request_config()[f"{self.config_name}Config"]["Ring"]]
             newRingGroup = [
-                {"RingGroupActorIdOffset": self.ringGroupActorIdOffset,"NToSelect": 3, "Ring": [{"Node": [4]}, {"Node": [5]}, {"Node": [6]}]}
+                {"RingGroupActorIdOffset": self.ringGroupActorIdOffset,"NToSelect": 3, "Ring": [{"Node": [4]}, {"Node": [5]}, {"Node": [6]}]},
+                {"RingGroupActorIdOffset": self.ringGroupActorIdOffset + 1,"NToSelect": 3, "Ring": [{"Node": [4]}, {"Node": [5]}, {"Node": [6]}]}
                 ]
             logger.info(f"From: {defaultRingGroup} To: {newRingGroup}")
             for i in range(len(newRingGroup)):
@@ -248,7 +249,7 @@ class WorkloadReconfigStateStorage(WorkloadBase):
             if curConfig != expectedConfig:
                 raise Exception(f"Incorrect reconfig: expected:{curConfig}, actual:{expectedConfig}")
             with self.lock:
-                self.ringGroupActorIdOffset += 1
+                self.ringGroupActorIdOffset += 2
         
     def get_workload_thread_funcs(self):
         return [self._loop]

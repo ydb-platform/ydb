@@ -1050,6 +1050,8 @@ private:
     void UpdateCompactionCounters();
     bool ThereIsUncompactedData() const;
     TInstant GetFirstUncompactedBlobTimestamp() const;
+
+    void TryCorrectStartOffset(TMaybe<ui64> offset);
 };
 
 } // namespace NKikimr::NPQ

@@ -4,14 +4,14 @@
 
 ### Функциональность
 
-* Добавлена опция `--no-discovery` в корневую команду `{{ ydb-cli }}`, позволяющая пропустить процесс discovery и подключиться напрямую к указанному пользователем эндпоинту.
+* Добавлена [глобальный параметр](./reference/ydb-cli/commands/global-options.md) `--no-discovery`, позволяющий пропустить процесс discovery и подключиться напрямую к указанному пользователем эндпоинту.
 * Добавлены новые опции для команд нагрузочного тестирования:
   * Добавлена опция `--scale` в [команды](./reference/ydb-cli/workload-tpch.md) `{{ ydb-cli }} workload tpch init` и `{{ ydb-cli }} workload tpcds init` для установки процента размера данных и нагрузки относительно максимальной нагрузки.
   * Добавлена опция `--retries` в [команды](./reference/ydb-cli/workload-click-bench.md) `{{ ydb-cli }} workload <clickbench|tpch|tpcds> run` для указания максимального количества повторов каждого запроса.
   * Добавлена опция `--partition-size` в [команды](./reference/ydb-cli/workload-click-bench.md) `{{ ydb-cli }} workload <clickbench|tpcds|tpch> init` для установки максимального размера партиции в мегабайтах для строчных таблиц.
   * Добавлены параметры диапазона дат (`--date-to`, `--date-from`) в операции `{{ ydb-cli }} workload log run` для поддержки равномерного распределения первичных ключей.
 * Улучшена функциональность резервного копирования и восстановления:
-  * Добавлена опция `--replace` в [команду](./reference/ydb-cli/export-import/tools-restore.md#schema-objects) `{{ ydb-cli }} tools restore` для удаления существующих объектов, совпадающих с объектами в резервной копии, перед восстановлением.
+  * Добавлены опции `--replace` и `--verify-existence` в [команду](./reference/ydb-cli/export-import/tools-restore.md#schema-objects) `{{ ydb-cli }} tools restore` для управления удалением существующих объектов, совпадающих с объектами в резервной копии, перед восстановлением.
   * Улучшена [команда](./reference/ydb-cli/export-import/tools-dump.md#schema-objects) `{{ ydb-cli }} tools dump`: [таблицы-реплики](./concepts/async-replication.md) у ASYNC REPLICATION и их [потоки изменений](./concepts/glossary.md#changefeed) не сохраняются в локальные резервные копии. Это предотвращает дублирование потоков изменений и уменьшает размер резервной копии на диске.
 * Изменения, повышающие удобство использования CLI:
   * Вывод подробной справки (`-hh`) теперь показывает всё дерево подкоманд.

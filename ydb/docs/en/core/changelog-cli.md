@@ -4,14 +4,14 @@
 
 ### Features
 
-* Added the `--no-discovery` option to the root `{{ ydb-cli }}` command, allowing to skip discovery and connect to user-provided endpoint directly.
+* Added the `--no-discovery` [global option](./reference/ydb-cli/commands/global-options.md), allowing to skip discovery and connect to user-provided endpoint directly.
 * Added new options for workload commands:
   * Added the `--scale` option to the `{{ ydb-cli }} workload tpch init` and `{{ ydb-cli }} workload tpcds init` [commands](./reference/ydb-cli/workload-tpch.md) to set the percentage of the benchmark's data size and workload to use, relative to full scale.
   * Added the `--retries` option to the `{{ ydb-cli }} workload <clickbench|tpch|tpcds> run` [commands](./reference/ydb-cli/workload-click-bench.md) to specify maximum retry count for every request.
   * Added the `--partition-size` option to the `{{ ydb-cli }} workload <clickbench|tpcds|tpch> init` [commands](./reference/ydb-cli/workload-click-bench.md) to set maximum partition size in megabytes for row tables.
   * Added date range parameters (`--date-to`, `--date-from`) to the `{{ ydb-cli }} workload log run` command to support uniform primary key distribution.
 * Enhanced backup and restore functionality:
-  * Added the `--replace` option to the `{{ ydb-cli }} tools restore` [command](./reference/ydb-cli/export-import/tools-restore.md#schema-objects) to remove existing objects that match those in the backup before restoration.
+  * Added the `--replace` and `--verify-existence` options to the `{{ ydb-cli }} tools restore` [command](./reference/ydb-cli/export-import/tools-restore.md#schema-objects) to control the removal of existing objects that match those in the backup before restoration.
   * Improved the `{{ ydb-cli }} tools dump` [command](./reference/ydb-cli/export-import/tools-dump.md#schema-objects) by not saving [replica tables](./concepts/async-replication.md) with ASYNC REPLICATION and their [changefeeds](./concepts/glossary.md#changefeed) to local backups. It prevents duplication of changefeeds and reduces the amount of space the backup takes on disk.
 * Enhanced CLI usability:
   * Detailed help message (`-hh`) now shows the whole subcommand tree.

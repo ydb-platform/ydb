@@ -17,6 +17,7 @@ TEST_SRCS(
     test_rolling.py
     test_datetime2.py
     test_digest.py
+    udf/test_digest.py
 )
 
 SIZE(LARGE)
@@ -24,6 +25,7 @@ REQUIREMENTS(cpu:all)
 REQUIREMENTS(ram:all)
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/s3_recipe/recipe.inc)
+TIMEOUT(3600)
 
 DEPENDS(
     ydb/apps/ydb

@@ -9,17 +9,18 @@ from decimal import Decimal
 
 
 class TestCompatibility(RestartToAnotherVersionFixture):
-    @pytest.fixture(autouse=True, scope="function")
+    @pytest.fixture(autouse=True)
     def setup(self):
         output_path = yatest.common.test_output_path()
         self.output_f = open(os.path.join(output_path, "out.log"), "w")
         yield from self.setup_cluster(
             extra_feature_flags={
-                # "enable_table_datetime64": True # uncomment for 64 datetime in tpc-h/tpc-ds
-                },
+                "enable_column_store": True,
+            },
+
             column_shard_config={
-                'disabled_on_scheme_shard': False,
-            }
+                "disabled_on_scheme_shard": False,
+            },
         )
 
     def execute_scan_query(self, query_body):

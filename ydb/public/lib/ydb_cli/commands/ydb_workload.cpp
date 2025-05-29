@@ -427,6 +427,7 @@ void TWorkloadCommandBase::RmParentIfEmpty(TStringBuf path, TConfig& config) {
     auto fullPath = std::string(config.Database.c_str()) + "/" + std::string(path.cbegin(), path.cend());
     auto lsResult = SchemeClient->ListDirectory(fullPath).GetValueSync();
     if (lsResult.IsSuccess() && lsResult.GetChildren().empty()) {
+        Cout << "Folder " << path << " is empty, remove it..." << Endl;
         NStatusHelpers::ThrowOnErrorOrPrintIssues(SchemeClient->RemoveDirectory(fullPath).GetValueSync());
     }
     RmParentIfEmpty(path, config);

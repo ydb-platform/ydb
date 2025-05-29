@@ -10,8 +10,6 @@ using namespace NYdb::NTopic;
 
 class TPartitionEndWatcher {
     inline void MaybeSendPartitionEnd(const TActorId& client) {
-        Cerr << ">>>>> MaybeSendPartitionEnd " << PendingCommittedOffset << " == " << CommittedOffset << Endl << Flush;
-
         if (!EndPartitionSessionEvent || CommittedOffset != PendingCommittedOffset) {
             return;
         }
@@ -37,18 +35,15 @@ public:
             } else {
                 PendingCommittedOffset = event.GetMessages().back().GetOffset();
             }
-            Cerr << ">>>>> UpdatePendingCommittedOffset=" << PendingCommittedOffset << Endl << Flush;
         }
     }
 
     inline void SetCommittedOffset(ui64 offset, const TActorId& client) {
-        Cerr << ">>>>> SetCommittedOffset=" << offset << Endl << Flush;
         CommittedOffset = offset;
         MaybeSendPartitionEnd(client);
     }
 
     inline void Clear(ui64 committedOffset) {
-        Cerr << ">>>>> CLEAR=" << committedOffset << Endl << Flush;
         PendingCommittedOffset = committedOffset;
         CommittedOffset = committedOffset;
         EndPartitionSessionEvent.Clear();

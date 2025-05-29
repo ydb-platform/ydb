@@ -49,37 +49,26 @@ Y_UNIT_TEST_SUITE(TransferLarge)
     void WaitAllMessagesHaveBeenCommitted(MainTestCase& setup, size_t expected, const TDuration timeout = TDuration::Seconds(10)) {
         TInstant endTime = TInstant::Now() + timeout;
 
-        size_t messages = 0;
-        std::map<size_t, size_t> offsets;
+        bool allPartitionsHaveBeenCommitted = false;
 
         while(TInstant::Now() < endTime) {
-            offsets.clear();
-
-            auto d = setup.DescribeTopic();
-            for (auto& p : d.GetTopicDescription().GetPartitions()) {
-                offsets[p.GetPartitionId()] = p.GetPartitionStats()->GetEndOffset();
+            std::map<size_t, size_t> offsets;
+            {
+                auto d = setup.DescribeTopic();
+                for (auto& p : d.GetTopicDescription().GetPartitions()) {
+                    offsets[p.GetPartitionId()] = p.GetPartitionStats()->GetEndOffset();
+                }
             }
 
-            messages = 0;
+            size_t messages = 0;
             for (auto& [partitionId, count] : offsets) {
                 Cerr << "PARTITION " << partitionId << " END OFFSET " << count << Endl << Flush;
                 messages += count;
             }
 
             Cerr << "ALL MESSAGES " << messages << " EXPECTED " << expected << Endl << Flush;
-            if (messages >= expected) {
-                break;
-            }
+            UNIT_ASSERT_VALUES_EQUAL(expected, messages);
 
-            Sleep(TDuration::Seconds(1));
-        }
-
-        //UNIT_ASSERT_VALUES_EQUAL(expected, messages);
-
-        bool allPartitionsHaveBeenCommitted = false;
-
-        endTime = TInstant::Now() + timeout;
-        while(TInstant::Now() < endTime) {
             auto d = setup.DescribeConsumer();
             auto& p = d.GetConsumerDescription().GetPartitions();
             allPartitionsHaveBeenCommitted = AllOf(p.begin(), p.end(), [&](auto& x) {

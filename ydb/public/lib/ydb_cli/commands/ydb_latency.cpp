@@ -200,7 +200,6 @@ void TCommandLatency::Parse(TConfig& config) {
     TClientCommand::Parse(config);
 
     if (MaxInflight >= 2) {
-        config.IsNetworkIntensive = true;
         config.UsePerChannelTcpConnection = true;
     }
 
@@ -234,7 +233,7 @@ int TCommandLatency::Run(TConfig& config) {
     };
 
     // note that each thread (normally) will have own driver: we enforce each thread to has own gRPC channel and own
-    // TCP connection (config.IsNetworkIntensive set). This helps to avoid bottleneck here, in the client,
+    // TCP connection (config.UsePerChannelTcpConnection set). This helps to avoid bottleneck here, in the client,
     // in case of low latency network between the client and the server
 
     auto plainGrpcPingFactory = [&getDebugClient] () {

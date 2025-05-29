@@ -300,7 +300,7 @@ Y_UNIT_TEST_SUITE(KqpS3PlanTest) {
         UNIT_ASSERT(NJson::ReadJsonTree(*queryResult.GetStats()->GetPlan(), &plan));
 
         const auto& writeStagePlan = plan["Plan"]["Plans"][0]["Plans"][0];
-        UNIT_ASSERT_VALUES_EQUAL(writeStagePlan["Node Type"].GetStringSafe(), "Stage-Sink");
+        UNIT_ASSERT_VALUES_EQUAL(writeStagePlan["Node Type"].GetStringSafe(), "Stage");
         UNIT_ASSERT_VALUES_EQUAL(writeStagePlan["Stats"]["Tasks"], 42);
 
         const auto& readStagePlan = plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0];

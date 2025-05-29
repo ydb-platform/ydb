@@ -4,6 +4,7 @@
 #include "streams.h"
 #include "printout.h"
 #include "subprocess.h"
+#include "kqp_setup.h"
 
 #include <yql/essentials/minikql/comp_nodes/ut/mkql_computation_node_ut.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
@@ -22,9 +23,9 @@ namespace NMiniKQL {
 namespace {
 
 template<bool LLVM>
-THolder<IComputationGraph> BuildGraph(TSetup<LLVM>& setup, IDataSampler& sampler, size_t memLimit)
+THolder<IComputationGraph> BuildGraph(TKqpSetup<LLVM>& setup, IDataSampler& sampler, size_t memLimit)
 {
-    TProgramBuilder& pb = *setup.PgmBuilder;
+    TKqpProgramBuilder& pb = setup.GetKqpBuilder();
 
     const auto streamItemType = pb.NewMultiType({sampler.GetKeyType(pb), pb.NewDataType(NUdf::TDataType<ui64>::Id)});
     const auto streamType = pb.NewStreamType(streamItemType);
@@ -52,7 +53,7 @@ THolder<IComputationGraph> BuildGraph(TSetup<LLVM>& setup, IDataSampler& sampler
 template<bool LLVM>
 TRunResult RunTestOverGraph(const TRunParams& params, const bool needsVerification, const bool measureReferenceMemory)
 {
-    TSetup<LLVM> setup(GetPerfTestFactory());
+    TKqpSetup<LLVM> setup(GetPerfTestFactory());
 
     NYql::NLog::InitLogger("cerr", false);
 

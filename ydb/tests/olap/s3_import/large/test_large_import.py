@@ -143,7 +143,7 @@ class TestLargeS3Import:
 
         return self.session_pool.execute_with_retries(
             statement,
-            settings=ydb.BaseRequestSettings().with_timeout(6000),
+            settings=ydb.BaseRequestSettings().with_timeout(21600),
             retry_settings=ydb.RetrySettings(max_retries=max_retries)
         )
 

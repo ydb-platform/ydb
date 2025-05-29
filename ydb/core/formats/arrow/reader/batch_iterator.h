@@ -6,7 +6,6 @@ namespace NKikimr::NArrow::NMerger {
 
 class TBatchIterator {
 private:
-    YDB_READONLY_DEF(ui64, SourceId);
     bool ControlPointFlag;
     TRWSortableBatchPosition KeyColumns;
     TRWSortableBatchPosition VersionColumns;
@@ -53,11 +52,10 @@ public:
 
     template <class TDataContainer>
     TBatchIterator(std::shared_ptr<TDataContainer> batch, const ui64 start, std::shared_ptr<NArrow::TColumnFilter> filter,
-        const std::vector<std::string>& keyColumns, const std::vector<std::string>& dataColumns, const bool reverseSort,
+        const arrow::Schema& keySchema, const arrow::Schema& dataSchema, const bool reverseSort,
         const std::vector<std::string>& versionColumnNames, const ui64 sourceId)
-        : SourceId(sourceId)
-        , ControlPointFlag(false)
-        , KeyColumns(batch, start, keyColumns, dataColumns, reverseSort)
+        : ControlPointFlag(false)
+        , KeyColumns(batch, start, keySchema.field_names(), dataSchema.field_names(), reverseSort)
         , VersionColumns(batch, start, versionColumnNames, {}, false)
         , RecordsCount(batch->num_rows())
         , ReverseSortKff(reverseSort ? -1 : 1)

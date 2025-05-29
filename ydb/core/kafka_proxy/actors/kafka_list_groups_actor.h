@@ -10,6 +10,32 @@
 
 namespace NKafka {
 
+static const TString SELECT_GROUPS_NO_FILTER = R"sql(
+    DECLARE $Database AS Utf8;
+    SELECT * FROM (
+        SELECT
+            `<consumer_state_table_name>`.*,
+            ROW_NUMBER() OVER (PARTITION BY consumer_group ORDER BY generation DESC) AS row_num
+        FROM `<consumer_state_table_name>`
+        WHERE database = $Database
+    )
+    WHERE row_num = 1;
+)sql";
+
+static const TString SELECT_GROUPS_WITH_FILTER = R"sql(
+    DECLARE $Database AS Utf8;
+    DECLARE $StatesFilter AS List<Uint32>;
+
+    SELECT * FROM (
+        SELECT
+            `<consumer_state_table_name>`.*,
+            ROW_NUMBER() OVER (PARTITION BY consumer_group ORDER BY generation DESC) AS row_num
+        FROM `<consumer_state_table_name>`
+        WHERE database = $Database
+    )
+    WHERE row_num = 1 AND state in $StatesFilter;
+)sql";
+
 class TKafkaListGroupsActor: public NActors::TActorBootstrapped<TKafkaListGroupsActor> {
 
 public:
@@ -17,16 +43,16 @@ public:
         : Context(context)
         , CorrelationId(correlationId)
         , ListGroupsRequestData(message)
-        , ListGroupsResponseData(new TListGroupsResponseData()) {
+        , DatabasePath(context->DatabasePath) {
     }
 
-    enum EKafkaTxnKqpRequests : ui8 {
-            NO_REQUEST = 0,
-            SELECT
-        };
 
 void Bootstrap(const NActors::TActorContext& ctx);
 
+
+TStringBuilder LogPrefix() const {
+    return TStringBuilder() << "KafkaListGroupsActor{DatabasePath=" << DatabasePath << "}: ";
+}
 
 private:
     STATEFN(StateWork) {
@@ -39,28 +65,24 @@ private:
     void StartKqpSession(const TActorContext& ctx);
     void SendToKqpConsumerGroupsRequest(const TActorContext& ctx);
     void Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev, const TActorContext& ctx);
-    TString GetYqlWithTablesNames(const TString& templateStr);
+    TString GetYqlWithTableNames(const TString& templateStr);
     TListGroupsResponseData ParseGroupsMetadata(const NKqp::TEvKqp::TEvQueryResponse& response);
     void HandleSelectResponse(const NKqp::TEvKqp::TEvQueryResponse& response, const TActorContext& ctx);
     NYdb::TParams BuildSelectParams();
     void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx);
 
-    template<class ErrorResponseType, class EventType>
-    void SendFailResponse(TAutoPtr<TEventHandle<EventType>>& evHandle, EKafkaErrors errorCode, const TString& errorMessage);
+    void SendFailResponse(EKafkaErrors errorCode, const std::optional<TString>& errorMessage);
 
-    TMaybe<TString> GetErrorFromYdbResponse(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev);
+    TMaybe<TString> GetErrorFromYdbResponse(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev,
+                                            const TActorContext& ctx);
     void Die(const TActorContext &ctx);
     const TContext::TPtr Context;
     const ui64 CorrelationId;
     const TMessagePtr<TListGroupsRequestData> ListGroupsRequestData;
-    const TListGroupsResponseData::TPtr ListGroupsResponseData;
-
-    // EKafkaErrors ErrorCode = EKafkaErrors::NONE_ERROR;
 
     std::unique_ptr<TKqpTxHelper> Kqp;
 
-    const TString DatabasePath="/Root";
-    TAutoPtr<TEventHandle<TEvKafka::TEvEndTxnRequest>> EndTxnRequestPtr;
+    const TString DatabasePath;
 
     TString KqpSessionId;
     ui64 KqpCookie = 0;

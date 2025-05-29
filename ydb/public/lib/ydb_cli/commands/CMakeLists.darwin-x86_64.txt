@@ -113,12 +113,6 @@ target_sources(clicommands PRIVATE
 
 
 generate_enum_serilization(clicommands
-  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/ydb_benchmark.h
-  INCLUDE_HEADERS
-  ydb/public/lib/ydb_cli/commands/ydb_benchmark.h
-)
-
-generate_enum_serilization(clicommands
   ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/ydb_ping.h
   INCLUDE_HEADERS
   ydb/public/lib/ydb_cli/commands/ydb_ping.h

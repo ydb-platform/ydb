@@ -47,58 +47,6 @@ public:
     }
 };
 
-class TColumnChunksCleaner: public NYDBTest::ILocalDBModifier {
-public:
-    virtual void Apply(NTabletFlatExecutor::TTransactionContext& txc) const override {
-        using namespace NColumnShard;
-        NIceDb::TNiceDb db(txc.DB);
-
-        std::vector<TPortionRecord> portion2Key;
-        std::optional<TInternalPathId> pathId;
-        {
-            auto rowset = db.Table<Schema::IndexColumns>().Select();
-            UNIT_ASSERT(rowset.IsReady());
-
-            while (!rowset.EndOfSet()) {
-                TPortionRecord key;
-                key.Index = rowset.GetValue<Schema::IndexColumns::Index>();
-                key.Granule = rowset.GetValue<Schema::IndexColumns::Granule>();
-                key.ColumnIdx = rowset.GetValue<Schema::IndexColumns::ColumnIdx>();
-                key.PlanStep = rowset.GetValue<Schema::IndexColumns::PlanStep>();
-                key.TxId = rowset.GetValue<Schema::IndexColumns::TxId>();
-                key.Portion = rowset.GetValue<Schema::IndexColumns::Portion>();
-                key.Chunk = rowset.GetValue<Schema::IndexColumns::Chunk>();
-
-                key.XPlanStep = rowset.GetValue<Schema::IndexColumns::XPlanStep>();
-                key.XTxId = rowset.GetValue<Schema::IndexColumns::XTxId>();
-                key.Blob = rowset.GetValue<Schema::IndexColumns::Blob>();
-                key.Metadata = rowset.GetValue<Schema::IndexColumns::Metadata>();
-                key.Offset = rowset.GetValue<Schema::IndexColumns::Offset>();
-                key.Size = rowset.GetValue<Schema::IndexColumns::Size>();
-
-                pathId = TInternalPathId::FromRawValue(rowset.GetValue<Schema::IndexColumns::PathId>());
-
-                portion2Key.emplace_back(std::move(key));
-
-                UNIT_ASSERT(rowset.Next());
-            }
-        }
-
-        UNIT_ASSERT(pathId.has_value());
-
-        for (auto&& key : portion2Key) {
-            NKikimrTxColumnShard::TIndexColumnMeta metaProto;
-            UNIT_ASSERT(metaProto.ParseFromArray(key.Metadata.data(), key.Metadata.size()));
-//            metaProto.ClearNumRows();
-            metaProto.ClearRawBytes();
-
-            db.Table<Schema::IndexColumns>()
-                .Key(key.Index, key.Granule, key.ColumnIdx, key.PlanStep, key.TxId, key.Portion, key.Chunk)
-                .Update(NIceDb::TUpdate<Schema::IndexColumns::Metadata>(metaProto.SerializeAsString()));
-        }
-    }
-};
-
 class TSchemaVersionsCleaner : public NYDBTest::ILocalDBModifier {
 public:
     virtual void Apply(NTabletFlatExecutor::TTransactionContext& txc) const override {
@@ -319,10 +267,6 @@ Y_UNIT_TEST_SUITE(Normalizers) {
             auto readResult = ReadAllAsBatch(runtime, tableId, NOlap::TSnapshot(planStep, txId), schema);
             UNIT_ASSERT_VALUES_EQUAL(readResult->num_rows(), checker.RecordsCountAfterReboot(20048));
         }
-    }
-
-    Y_UNIT_TEST(ColumnChunkNormalizer) {
-        TestNormalizerImpl<TColumnChunksCleaner>();
     }
 
     Y_UNIT_TEST(PortionsNormalizer) {

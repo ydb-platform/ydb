@@ -78,7 +78,6 @@ PEERDIR(
     yql/essentials/public/decimal
 )
 
-GENERATE_ENUM_SERIALIZATION(ydb_benchmark.h)
 GENERATE_ENUM_SERIALIZATION(ydb_ping.h)
 GENERATE_ENUM_SERIALIZATION(ydb_latency.h)
 

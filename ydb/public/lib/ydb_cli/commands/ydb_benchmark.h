@@ -11,11 +11,6 @@ namespace BenchmarkUtils {
 
 class TWorkloadCommandBenchmark final: public TWorkloadCommandBase {
 public:
-    enum class EQueryExecutor {
-        Scan /* "scan" */,
-        Generic /* "generic" */
-    };
-
     TWorkloadCommandBenchmark(NYdbWorkload::TWorkloadParams& params, const NYdbWorkload::IWorkloadQueryGenerator::TWorkloadType& workload);
     virtual void Config(TConfig& config) override;
 
@@ -47,7 +42,7 @@ private:
     TDuration RequestTimeout = TDuration::Zero();
     TInstant GlobalDeadline = TInstant::Max();
     NYdb::NRetry::TRetryOperationSettings RetrySettings;
-    ui32 Threads = 1;
+    ui32 Threads = 0;
 };
 
 }

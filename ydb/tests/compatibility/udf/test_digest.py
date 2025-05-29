@@ -95,6 +95,16 @@ class TestDigest(MixedClusterFixture):
             query = self.generate_insert()
             session_pool.execute_with_retries(query)
 
-            query = self.q_digest()
-            result = session_pool.execute_with_retries(query)
-            assert len(result[0].rows) > 0
+        query = self.q_digest()
+        """
+        UDFs are compiled once on the node that initially receives the request.
+        The compiled UDF is then propagated to all other nodes. Executing the query a single time only verifies
+        compatibility in one direction—either from old to new or from new to old. Performing multiple retries
+        increases the likelihood that the UDF will be compiled on both the old and new versions, thereby improving coverage of compatibility testing.
+
+        Additionally, a session pool always sends requests to the same node. To ensure distribution across nodes, the session pool is recreated for each SELECT request.
+        """
+        for _ in range(10):
+            with ydb.QuerySessionPool(self.driver) as session_pool:
+                result = session_pool.execute_with_retries(query)
+                assert len(result[0].rows) > 0

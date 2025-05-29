@@ -1282,7 +1282,7 @@ namespace Tests {
                             genericGatewayConfig.GetYdbMvpEndpoint(),
                             genericGatewayConfig.GetMdbGateway(),
                             NFq::MakeMdbEndpointGeneratorGeneric(queryServiceConfig.GetMdbTransformHost())
-                        );
+                    );
                     }
                 }
 
@@ -1303,7 +1303,7 @@ namespace Tests {
                     queryServiceConfig.GetPq(),
                     Settings->PqGateway ? Settings->PqGateway : NKqp::MakePqGateway(queryServiceConfig.GetPq()),
                     std::make_shared<NKikimr::TDeferredActorLogBackend::TAtomicActorSystemPtr>(nullptr),
-                    nullptr
+                    std::make_shared<NYdb::TDriver>(NYdb::TDriverConfig())
                 );
             }
 

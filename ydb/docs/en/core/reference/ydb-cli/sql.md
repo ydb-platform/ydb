@@ -39,25 +39,30 @@ View the description of this command by calling it with `--help` option:
 ||
 |#
 
-### Diagnostics Collection
+### Diagnostics collection
 
 The `--diagnostics-file <path_to_diagnostics>` option allows you to save extended information about SQL query execution to a separate JSON file.
 
-Diagnostics are collected when statistics gathering is enabled (`--stats full` or `--stats profile`), as well as during execution of `EXPLAIN` queries. For each query, a file named `<path_to_diagnostics>.json` will be created with the following fields:
+Diagnostics are collected when statistics gathering is enabled (`--stats full` or `--stats profile`), as well as during execution of `EXPLAIN` queries. For each query, a file named `<path_to_diagnostics>` will be created with the following fields:
 
-- **`created_at`** — query start time (timestamp)
-- **`query_cluster`** — name of the cluster or provider
-- **`query_database`** — path to the database
-- **`query_id`** — unique query identifier
-- **`query_plan`** — query execution plan
-- **`query_syntax`** — query syntax used
-- **`query_text`** — text of the SQL query
-  **Note!** This field may contain sensitive or private user data, including parameter values used in the query.
-- **`query_type`** — type of the query
-- **`table_metadata`** — schemas, indexes, and table statistics involved in the query (in JSON format)
+- **`plan`** — query execution plan.
+- **`stats`** — query execution statistics.
+- **`meta`** — additional query information in JSON format, including the following fields:
+    - **`created_at`** — query start time (timestamp);
+    - **`query_cluster`** — cluster or provider name;
+    - **`query_database`** — database path;
+    - **`query_id`** — unique query identifier;
+    - **`query_syntax`** — query syntax used;
+    - **`query_text`** — SQL query text.
+
+      **Note:** This field may contain sensitive or personal data, including parameter values;
+
+    - **`query_type`** — query type;
+    - **`table_metadata`** — schemas, indexes, and statistics of the tables involved in the query (JSON format).
+- **`ast`** — abstract syntax tree (AST) for the query.
 
 > **Important:**
-> The diagnostics file may contain confidential data, especially in the **`query_text`** field. Before sharing this file with third parties (e.g., technical support), it is recommended to manually review and edit its contents to remove or replace any sensitive information.
+> The diagnostics file may contain confidential information, especially in the **`meta.query_text`** field. Before sharing this file with third parties (such as technical support), it is strongly recommended to review and edit the file contents to remove or replace any sensitive data.
 
 ### Working with parameterized queries {#parameterized-query}
 

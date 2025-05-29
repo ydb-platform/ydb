@@ -1,8 +1,6 @@
 import allure
 import pytest
 import os
-import stat
-import tempfile
 import yatest
 import logging
 from .conftest import LoadSuiteBase
@@ -11,8 +9,6 @@ from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.olap.lib.remote_execution import execute_command, deploy_binaries_to_hosts
 from ydb.tests.olap.lib.utils import get_external_param
 from enum import Enum
-
-from library.python import resource
 
 LOGGER = logging.getLogger(__name__)
 

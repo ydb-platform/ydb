@@ -152,7 +152,7 @@ message TDefineStoragePool {
     string Kind = 8; // kind of storage pool (user-defined)
     uint32 NumGroups = 9; // explicit number of groups to create
     repeated bytes UserId = 10; // allowed users
-    repeated TPDiskFilter PDiskFilter = 11; // matching PDisks
+    repeated TPDiskFilter PDiskFilter = 11; // matching PDisks (disjunction, i.e. multiple filters are logically ORed)
     TExistingGroups ExistingGroups = 12; // existing groups (used while migrating from old-style configuration)
     NActorsInterconnect.TScopeId ScopeId = 13; // scope id for the pool clients
     bool RandomizeGroupMapping = 14; // minimize correlation of groups and drives
@@ -163,6 +163,9 @@ message TDefineStoragePool {
 
     // encryption mode: 0 for none, 1 for the current mode (chacha8)
     uint32 EncryptionMode = 101;
+
+    // This value is only accounted when a new group is added to the pool.
+    uint32 DefaultGroupSizeInUnits = 102;
 }
 
 message TReadStoragePool {
@@ -319,6 +322,14 @@ message TMoveGroups {
     uint64 TargetStoragePoolId = 4;
     uint64 TargetStoragePoolGeneration = 5;
     repeated uint32 ExplicitGroupId = 6; // if no groups are provided, then all groups of origin storage pool are moved
+}
+
+message TChangeGroupSizeInUnits {
+    uint64 BoxId = 1;
+    uint64 StoragePoolId = 2;
+    uint64 StoragePoolGeneration = 3;
+    repeated uint32 GroupId = 4; // if absent, then all groups in the pool are resized
+    uint32 SizeInUnits = 5;
 }
 
 message TAddMigrationPlan {
@@ -577,6 +588,7 @@ message TConfigRequest {
             TSetPDiskReadOnly SetPDiskReadOnly = 49;
             TStopPDisk StopPDisk = 50;
             TGetInterfaceVersion GetInterfaceVersion = 51;
+            TChangeGroupSizeInUnits ChangeGroupSizeInUnits = 52;
 
             // commands intended for internal use
             TReassignGroupDisk ReassignGroupDisk = 19;
@@ -699,6 +711,7 @@ message TBaseConfig {
         TGroupStatus.E OperatingStatus = 8; // group status based on latest VDisk reports only
         TGroupStatus.E ExpectedStatus = 9; // status based not only on operational report, but on PDisk status and plans too
         TVirtualGroupInfo VirtualGroupInfo = 10;
+        uint32 GroupSizeInUnits = 11;
     }
     message TNode {
         uint32 NodeId = 1;

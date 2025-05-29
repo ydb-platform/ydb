@@ -340,6 +340,7 @@ public:
         ui32 ExpectedSlotCount = 0;
         bool HasExpectedSlotCount = false;
         ui32 NumActiveSlots = 0; // number of active VSlots created over this PDisk
+        ui32 SlotSizeInUnits = 0;
         TMap<Schema::VSlot::VSlotID::Type, TIndirectReferable<TVSlotInfo>::TPtr> VSlotsOnPDisk; // vslots over this PDisk
 
         bool Operational = false; // set to true when both containing node is connected and Operational is reported in Metrics
@@ -447,9 +448,14 @@ public:
             ExpectedSlotCount = defaultMaxSlots;
 
             NKikimrBlobStorage::TPDiskConfig pdiskConfig;
-            if (pdiskConfig.ParseFromString(PDiskConfig) && pdiskConfig.HasExpectedSlotCount()) {
-                ExpectedSlotCount = pdiskConfig.GetExpectedSlotCount();
-                HasExpectedSlotCount = true;
+            if (pdiskConfig.ParseFromString(PDiskConfig)) {
+                if (pdiskConfig.HasExpectedSlotCount()) {
+                    ExpectedSlotCount = pdiskConfig.GetExpectedSlotCount();
+                    HasExpectedSlotCount = true;
+                }
+                if (pdiskConfig.HasSlotSizeInUnits()) {
+                    SlotSizeInUnits = pdiskConfig.GetSlotSizeInUnits();
+                }
             }
         }
 
@@ -579,6 +585,8 @@ public:
 
         Table::DecommitStatus::Type DecommitStatus = NKikimrBlobStorage::TGroupDecommitStatus::NONE;
 
+        Table::GroupSizeInUnits::Type GroupSizeInUnits;
+
         TMaybe<Table::VirtualGroupName::Type> VirtualGroupName;
         TMaybe<Table::VirtualGroupState::Type> VirtualGroupState;
         TMaybe<Table::HiveId::Type> HiveId;
@@ -656,6 +664,7 @@ public:
                     Table::MainKeyVersion,
                     Table::SeenOperational,
                     Table::DecommitStatus,
+                    Table::GroupSizeInUnits,
                     Table::VirtualGroupName,
                     Table::VirtualGroupState,
                     Table::HiveId,
@@ -678,6 +687,7 @@ public:
                     &TGroupInfo::MainKeyVersion,
                     &TGroupInfo::SeenOperational,
                     &TGroupInfo::DecommitStatus,
+                    &TGroupInfo::GroupSizeInUnits,
                     &TGroupInfo::VirtualGroupName,
                     &TGroupInfo::VirtualGroupState,
                     &TGroupInfo::HiveId,
@@ -704,6 +714,7 @@ public:
                    Schema::Group::MainKeyVersion::Type mainKeyVersion,
                    Schema::Group::Down::Type down,
                    Schema::Group::SeenOperational::Type seenOperational,
+                   Schema::Group::GroupSizeInUnits::Type groupSizeInUnits,
                    TBoxStoragePoolId storagePoolId,
                    ui32 numFailRealms,
                    ui32 numFailDomainsPerFailRealm,
@@ -722,6 +733,7 @@ public:
             , MainKeyVersion(mainKeyVersion)
             , PersistedDown(down)
             , SeenOperational(seenOperational)
+            , GroupSizeInUnits(groupSizeInUnits)
             , Down(PersistedDown)
             , VDisksInGroup(numFailRealms * numFailDomainsPerFailRealm * numVDisksPerFailDomain)
             , StoragePoolId(storagePoolId)
@@ -1205,6 +1217,7 @@ public:
         TMaybe<ui64> SchemeshardId;
         TMaybe<ui64> PathItemId;
         bool RandomizeGroupMapping;
+        Table::DefaultGroupSizeInUnits::Type DefaultGroupSizeInUnits;
 
         bool IsSameGeometry(const TStoragePoolInfo& other) const {
             return ErasureSpecies == other.ErasureSpecies
@@ -1307,6 +1320,7 @@ public:
                     Table::SchemeshardId,
                     Table::PathItemId,
                     Table::RandomizeGroupMapping,
+                    Table::DefaultGroupSizeInUnits,
                     TInlineTable<TUserIds, Schema::BoxStoragePoolUser>,
                     TInlineTable<TPDiskFilters, Schema::BoxStoragePoolPDiskFilter>
                 > adapter(
@@ -1333,6 +1347,7 @@ public:
                     &TStoragePoolInfo::SchemeshardId,
                     &TStoragePoolInfo::PathItemId,
                     &TStoragePoolInfo::RandomizeGroupMapping,
+                    &TStoragePoolInfo::DefaultGroupSizeInUnits,
                     &TStoragePoolInfo::UserIds,
                     &TStoragePoolInfo::PDiskFilters
                 );
@@ -2221,13 +2236,19 @@ public:
     void UpdatePDisksCounters() {
         ui32 numWithoutSlotCount = 0;
         ui32 numWithoutSerial = 0;
+        ui32 numWithSlotSizeUnspecified = 0;
         for (const auto& [id, pdisk] : PDisks) {
             numWithoutSlotCount += !pdisk->HasExpectedSlotCount;
             numWithoutSerial += !pdisk->ExpectedSerial;
+            numWithSlotSizeUnspecified += !pdisk->SlotSizeInUnits;
         }
         auto& counters = TabletCounters->Simple();
         counters[NBlobStorageController::COUNTER_PDISKS_WITHOUT_EXPECTED_SLOT_COUNT].Set(numWithoutSlotCount);
+        counters[NBlobStorageController::COUNTER_PDISKS_WITH_SLOT_SIZE_UNSPECIFIED].Set(numWithSlotSizeUnspecified);
         counters[NBlobStorageController::COUNTER_PDISKS_WITHOUT_EXPECTED_SERIAL].Set(numWithoutSerial);
+        // TODO(ydynnikov)
+        // counters[NBlobStorageController::COUNTER_SINGLE_UNIT_VDISKS_OCCUPYING_DOUBLE_PDISK_SLOTS].Set(0);
+        // counters[NBlobStorageController::COUNTER_DOUBLE_UNIT_VDISKS_OCCUPYING_TWO_SINGLE_PDISK_SLOTS].Set(0);
 
         ui32 numFree = 0;
         ui32 numAdded = 0;
@@ -2363,11 +2384,13 @@ public:
         TMonotonic VDiskStatusTimestamp;
         TMonotonic ReadySince = TMonotonic::Max(); // when IsReady becomes true for this disk; Max() in non-READY state
         bool MetricsDirty = false;
+        ui32 GroupSizeInUnits = 0;
 
         TStaticVSlotInfo(const NKikimrBlobStorage::TNodeWardenServiceSet::TVDisk& vdisk,
                 std::map<TVSlotId, TStaticVSlotInfo>& prev, TMonotonic mono)
             : VDiskId(VDiskIDFromVDiskID(vdisk.GetVDiskID()))
             , VDiskKind(vdisk.GetVDiskKind())
+            , GroupSizeInUnits(vdisk.GetGroupSizeInUnits())
         {
             const auto& loc = vdisk.GetVDiskLocation();
             const TVSlotId vslotId(loc.GetNodeID(), loc.GetPDiskID(), loc.GetVDiskSlotID());

@@ -219,6 +219,7 @@ public:
                                                    groups.GetValueOrDefault<T::MainKeyVersion>(),
                                                    groups.GetValueOrDefault<T::Down>(),
                                                    groups.GetValueOrDefault<T::SeenOperational>(),
+                                                   groups.GetValueOrDefault<T::GroupSizeInUnits>(),
                                                    storagePoolId,
                                                    std::get<0>(geom),
                                                    std::get<1>(geom),

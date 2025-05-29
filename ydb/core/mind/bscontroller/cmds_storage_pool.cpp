@@ -93,6 +93,7 @@ namespace NKikimr::NBsController {
         storagePool.NumGroups = cmd.GetNumGroups();
         storagePool.EncryptionMode = cmd.GetEncryptionMode();
         storagePool.RandomizeGroupMapping = cmd.GetRandomizeGroupMapping();
+        storagePool.DefaultGroupSizeInUnits = cmd.GetDefaultGroupSizeInUnits();
 
         for (const auto &userId : cmd.GetUserId()) {
             storagePool.UserIds.emplace(boxId, storagePoolId, userId);
@@ -443,6 +444,66 @@ namespace NKikimr::NBsController {
             // correct the number of groups in the pools
             --origin.NumGroups;
             ++target.NumGroups;
+        }
+    }
+
+    void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TChangeGroupSizeInUnits& cmd, TStatus& /*status*/) {
+        auto& storagePools = StoragePools.Unshare();
+
+        const TBoxStoragePoolId poolId(cmd.GetBoxId(), cmd.GetStoragePoolId());
+
+        auto getPool = [&](TBoxStoragePoolId poolId, ui64 poolGeneration) -> TStoragePoolInfo& {
+            if (auto it = storagePools.find(poolId); it != storagePools.end()) {
+                TStoragePoolInfo& pool = it->second;
+                const ui64 generation = pool.Generation.GetOrElse(1);
+                if (generation != poolGeneration) {
+                    throw TExError() << "StoragePoolId# " << poolId << " Generation# " << generation
+                        << " does not match expected Generation# " << poolGeneration;
+                }
+                pool.Generation = generation + 1;
+                return pool;
+            } else {
+                throw TExError() << "StoragePoolId# " << poolId << " not found";
+            }
+        };
+
+        TStoragePoolInfo& poolInfo = getPool(poolId, cmd.GetStoragePoolGeneration());
+        Y_UNUSED(poolInfo);
+
+        auto& storagePoolGroups = StoragePoolGroups.Unshare();
+
+        // create a list of groups to be resized
+        const auto& m = cmd.GetGroupId();
+        TVector<TGroupId> groups;
+        std::transform(m.begin(), m.end(), std::back_inserter(groups), [](ui32 id) { return TGroupId::FromValue(id); });
+        if (!groups) {
+            for (auto it = storagePoolGroups.lower_bound(poolId); it != storagePoolGroups.end() && it->first == poolId; ++it) {
+                groups.push_back(it->second);
+            }
+        }
+
+        for (TGroupId groupId : groups) {
+            // find the group
+            TGroupInfo *group = Groups.FindForUpdate(groupId);
+            if (!group || group->StoragePoolId != poolId) {
+                throw TExError() << "GroupId# " << groupId << " not found in StoragePoolId# " << poolId;
+            }
+
+            auto oldSizeInUnits = group->GroupSizeInUnits;
+            auto newSizeInUnits = cmd.GetSizeInUnits();
+            for (auto& vdisk: group->VDisksInGroup) {
+                TVSlotId vslotId = vdisk->VSlotId;
+                TPDiskInfo* pdisk = PDisks.FindForUpdate(vslotId.ComprisingPDiskId());
+                Y_ABORT_UNLESS(pdisk);
+
+                pdisk->NumActiveSlots -= TPDiskConfig::GetOwnerWeight(oldSizeInUnits, pdisk->SlotSizeInUnits);
+                pdisk->NumActiveSlots += TPDiskConfig::GetOwnerWeight(newSizeInUnits, pdisk->SlotSizeInUnits);
+            }
+
+            // update the group size
+            group->GroupSizeInUnits = newSizeInUnits;
+            GroupContentChanged.insert(groupId);
+            Fit.PoolsAndGroups.emplace(poolId, groupId);
         }
     }
 

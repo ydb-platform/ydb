@@ -62,7 +62,7 @@ Diagnostics are collected when statistics gathering is enabled `--stats full`, a
 - **`ast`** — abstract syntax tree (AST) for the query.
 
 > **Important:**
-> The diagnostics file may contain confidential information,  especially in the **`meta.query_text`**, **`plan`**, and **`ast`** fields. Before sharing this file with third parties (e.g., technical support), it is recommended to carefully review and edit its contents to remove or replace any sensitive data.
+> The diagnostics file may contain confidential information, especially in the **`meta.query_text`**, **`plan`**, and **`ast`** fields. Before sharing this file with third parties (e.g., technical support), it is recommended to carefully review and edit its contents to remove or replace any sensitive data.
 
 **Examples:**
 

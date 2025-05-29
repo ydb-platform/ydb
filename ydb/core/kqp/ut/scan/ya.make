@@ -14,6 +14,7 @@ SRCS(
     kqp_flowcontrol_ut.cpp
     kqp_scan_ut.cpp
     kqp_split_ut.cpp
+    kqp_parallel_range_ut.cpp
 )
 
 PEERDIR(

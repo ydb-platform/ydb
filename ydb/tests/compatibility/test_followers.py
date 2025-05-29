@@ -7,10 +7,13 @@ from ydb.tests.library.harness.util import LogLevels
 from ydb.tests.library.clients.kikimr_http_client import SwaggerClient
 from ydb.tests.library.common.types import TabletStates, TabletTypes
 from ydb.tests.oss.ydb_sdk_import import ydb
-from ydb.tests.library.compatibility.fixtures import MixedClusterFixture
+from ydb.tests.library.compatibility.fixtures import MixedClusterFixture, RestartToAnotherVersionFixture
 
 
 logger = logging.getLogger(__name__)
+
+TABLE_NAME = "table"
+INDEX_NAME = "idx"
 
 
 class TestFollowersCompatibility(MixedClusterFixture):
@@ -130,3 +133,94 @@ class TestFollowersCompatibility(MixedClusterFixture):
                             break
                         time.sleep(backoff)
                         backoff *= 2
+
+
+class TestSecondaryIndexFollowers(RestartToAnotherVersionFixture):
+    @pytest.fixture(autouse=True, scope="function")
+    def setup(self):
+        yield from self.setup_cluster(
+            extra_feature_flags={
+                "enable_follower_stats": True
+            }
+        )
+
+    def create_table(self, enable_followers):
+        with ydb.QuerySessionPool(self.driver) as session_pool:
+            create_table_query = f"""
+                CREATE TABLE `{TABLE_NAME}` (
+                    key Int64 NOT NULL,
+                    subkey Int64 NOT NULL,
+                    value Utf8 NOT NULL,
+                    PRIMARY KEY (key)
+                );
+
+                ALTER TABLE `{TABLE_NAME}` ADD INDEX `{INDEX_NAME}` GLOBAL ASYNC ON (`subkey`) COVER (`value`);
+            """
+            session_pool.execute_with_retries(create_table_query)
+
+            if enable_followers:
+                alter_index_query = f"""
+                    ALTER TABLE `{TABLE_NAME}` ALTER INDEX `{INDEX_NAME}` SET READ_REPLICAS_SETTINGS "PER_AZ:1";
+                """
+                session_pool.execute_with_retries(alter_index_query)
+
+    def write_data(self):
+        def operation(session):
+            for key in range(100):
+                session.transaction().execute(
+                    f"""
+                    UPSERT INTO {TABLE_NAME} (key, subkey, value) VALUES ({key}, {key // 10}, 'Hello, YDB {key}!')
+                    """,
+                    commit_tx=True
+                )
+
+        with ydb.QuerySessionPool(self.driver) as session_pool:
+            session_pool.retry_operation_sync(operation)
+
+    def read_data(self):
+        def operation(session):
+            for key in range(100):
+                session.transaction(ydb.QueryStaleReadOnly()).execute(
+                    f"""
+                    SELECT * FROM `{TABLE_NAME}` VIEW `{INDEX_NAME}` WHERE subkey == {key // 10};
+                    """,
+                    commit_tx=True
+                )
+
+        with ydb.QuerySessionPool(self.driver) as session_pool:
+            session_pool.retry_operation_sync(operation)
+
+    def check_statistics(self, enable_followers):
+        queries = [
+            f"""
+                SELECT *
+                FROM `/Root/.sys/partition_stats`
+                WHERE FollowerId != 0 AND (RowReads != 0 OR RangeReads != 0) AND Path = '/Root/{TABLE_NAME}/{INDEX_NAME}/indexImplTable'
+            """
+        ]
+
+        with ydb.QuerySessionPool(self.driver) as session_pool:
+            for query in queries:
+                result_sets = session_pool.execute_with_retries(query)
+
+                result_row_count = len(result_sets[0].rows)
+                if enable_followers:
+                    assert result_row_count > 0
+                else:
+                    assert result_row_count == 0
+
+    @pytest.mark.parametrize("enable_followers", [True, False])
+    def test_secondary_index_followers(self, enable_followers):
+        self.create_table(enable_followers)
+
+        self.write_data()
+        time.sleep(10)
+        self.read_data()
+        time.sleep(10)
+        self.check_statistics(enable_followers)
+
+        self.change_cluster_version()
+        time.sleep(10)
+        self.read_data()
+        time.sleep(10)
+        self.check_statistics(enable_followers)

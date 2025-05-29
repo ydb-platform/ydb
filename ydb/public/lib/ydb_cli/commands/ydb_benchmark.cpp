@@ -142,6 +142,7 @@ TVector<TString> ColumnNames {
     "RttMin",
     "RttMax",
     "RttAvg",
+    "GrossTime",
     "SuccessCount",
     "FailsCount",
     "DiffsCount"
@@ -158,6 +159,8 @@ struct TTestInfoProduct {
     double Median = 1;
     double UnixBench = 1;
     double Std = 0;
+    std::vector<TDuration> ClientTimings;
+
     void operator *=(const BenchmarkUtils::TTestInfo& other) {
         ColdTime *= other.ColdTime.MillisecondsFloat();
         Min *= other.Min.MillisecondsFloat();
@@ -279,6 +282,11 @@ void CollectStats(TPrettyTable& table, IOutputStream* csv, NJson::TJsonValue* js
     CollectField<true>(row, index++, csv, json, name, testInfo.RttMin);
     CollectField<true>(row, index++, csv, json, name, testInfo.RttMax);
     CollectField<true>(row, index++, csv, json, name, testInfo.RttMean);
+    auto grossTime = TDuration::Zero();
+    for (const auto& clientTime: testInfo.ClientTimings) {
+        grossTime += clientTime;
+    }
+    CollectField<true>(row, index++, csv, json, name, grossTime);
     CollectField(row, index++, csv, json, name, sCount);
     CollectField(row, index++, csv, json, name, fCount);
     CollectField(row, index++, csv, json, name, dCount);
@@ -303,7 +311,7 @@ public:
 
     void Process(void*) override {
         bool execute = Iteration >= 0; // explain in other case
-        if (Owner.Threads <= 1) {
+        if (Owner.Threads == 0) {
             PrintQueryHeader();
         }
         auto t1 = TInstant::Now();
@@ -331,7 +339,7 @@ public:
         }
         ClientDuration = TInstant::Now() - t1;
         Owner.SavePlans(Result, QueryName, execute ? ToString(Iteration) : "explain");
-        if (Owner.Threads <= 1) {
+        if (Owner.Threads == 0) {
             PrintResult();
         }
     }
@@ -396,7 +404,7 @@ int TWorkloadCommandBenchmark::RunBench(NYdbWorkload::IWorkloadQueryGenerator& w
             iterations.emplace_back(MakeIntrusive<TIterationExecution>(*this, query, queryName, qInfo.ExpectedResult.c_str()));
         }
     }
-    if (Threads > 1) {
+    if (Threads > 0) {
         Shuffle(iterations.begin(), iterations.end());
     }
     TMap<TString, TIterations> queryExecByName;
@@ -408,11 +416,13 @@ int TWorkloadCommandBenchmark::RunBench(NYdbWorkload::IWorkloadQueryGenerator& w
 
     GlobalDeadline = (GlobalTimeout != TDuration::Zero()) ? Now() + GlobalTimeout : TInstant::Max();
     TThreadPool pool;
-    pool.Start(Threads > 1 ? Threads : 0);
+    pool.Start(Threads);
+    const auto startTime = Now();
     for (auto iter: iterations) {
         pool.SafeAdd(iter.Get());
     }
     pool.Stop();
+    const auto grossTime = Now() - startTime;
 
     ui32 queriesWithAllSuccess = 0;
     ui32 queriesWithSomeFails = 0;
@@ -448,7 +458,7 @@ int TWorkloadCommandBenchmark::RunBench(NYdbWorkload::IWorkloadQueryGenerator& w
         std::optional<TString> prevResult;
         TOFStream outFStream(TStringBuilder() << OutFilePath << "." << queryName << ".out");
         for (const auto& iterExec: queryExec) {
-            if (Threads > 1) {
+            if (Threads > 0) {
                 iterExec->PrintQueryHeader();
                 iterExec->PrintResult();
             }
@@ -506,8 +516,10 @@ int TWorkloadCommandBenchmark::RunBench(NYdbWorkload::IWorkloadQueryGenerator& w
     }
 
     if (queriesWithAllSuccess) {
+        sumInfo.ClientTimings.push_back(grossTime);
         CollectStats(statTable, csvReport.Get(), jsonReport.Get(), "Sum", queriesWithAllSuccess, queriesWithSomeFails, queriesWithDiff, sumInfo);
         sumInfo /= queriesWithAllSuccess;
+        sumInfo.ClientTimings.back() = grossTime / queriesWithAllSuccess;
         CollectStats(statTable, csvReport.Get(), jsonReport.Get(), "Avg", queriesWithAllSuccess, queriesWithSomeFails, queriesWithDiff, sumInfo);
         productInfo ^= queriesWithAllSuccess;
         CollectStats(statTable, csvReport.Get(), jsonReport.Get(), "GAvg", queriesWithAllSuccess, queriesWithSomeFails, queriesWithDiff, productInfo);

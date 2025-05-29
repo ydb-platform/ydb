@@ -24,7 +24,7 @@ class TestClickbench(LoadSuiteBase):
         fail_count = 0
         results = YdbCliHelper.workload_run(
             path=cls.path,
-            query_names=set(QUERY_NAMES),
+            query_names=QUERY_NAMES,
             iterations=1,
             workload_type=cls.workload_type,
             timeout=cls._get_query_settings().timeout,
@@ -50,9 +50,9 @@ class TestClickbenchPg(TestClickbench):
     query_syntax = 'pg'
 
 
-class TestClickbenchParallel(LoadSuiteParallel):
+class ClickbenchParallelBase(LoadSuiteParallel):
     workload_type: WorkloadType = WorkloadType.Clickbench
-    iterations: int = 10
+    iterations: int = 5
 
     def get_query_list() -> list[str]:
         return QUERY_NAMES
@@ -65,3 +65,23 @@ class TestClickbenchParallel(LoadSuiteParallel):
         if cls.verify_data and getenv('NO_VERIFY_DATA', '0') != '1' and getenv('NO_VERIFY_DATA_CLICKBENCH', '0') != '1':
             cls.check_tables_size(folder=None, tables={'clickbench/hits': 99997497})
         super().do_setup_class()
+
+
+class TestClickbenchParallel1(ClickbenchParallelBase):
+    threads: int = 1
+
+
+class TestClickbenchParallel2(ClickbenchParallelBase):
+    threads: int = 2
+
+
+class TestClickbenchParallel4(ClickbenchParallelBase):
+    threads: int = 4
+
+
+class TestClickbenchParallel8(ClickbenchParallelBase):
+    threads: int = 8
+
+
+class TestClickbenchParallel16(ClickbenchParallelBase):
+    threads: int = 16

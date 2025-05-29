@@ -8,19 +8,25 @@
 #include <ydb/library/conclusion/result.h>
 
 namespace NKikimr::NOlap::NReader::NSimple {
-
 class IDataSource;
+}
+
+namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering {
 
 class IFilterSubscriber {
 public:
-    virtual void OnFilterReady(const NArrow::TColumnFilter&) = 0;
+    virtual void OnFilterReady(NArrow::TColumnFilter&&) = 0;
     virtual void OnFailure(const TString& reason) = 0;
     virtual ~IFilterSubscriber() = default;
 };
 
 class TEvRequestFilter: public NActors::TEventLocal<TEvRequestFilter, NColumnShard::TEvPrivate::EvRequestFilter> {
 private:
-    YDB_READONLY_DEF(std::shared_ptr<IDataSource>, Source);
+    NArrow::TSimpleRow MinPK;
+    NArrow::TSimpleRow MaxPK;
+    YDB_READONLY_DEF(ui64, SourceId);
+    YDB_READONLY_DEF(ui64, RecordsCount);
+    TSnapshot MaxVersion;
     YDB_READONLY_DEF(std::shared_ptr<IFilterSubscriber>, Subscriber);
     YDB_READONLY_DEF(std::shared_ptr<const TAtomicCounter>, AbortionFlag);
 
@@ -33,6 +39,19 @@ public:
 
     ui64 GetRawSize() const {
         return MemoryGuard->GetMemory();
+    }
+};
+
+class TEvDuplicateFilterDataFetched
+    : public NActors::TEventLocal<TEvDuplicateFilterDataFetched, NColumnShard::TEvPrivate::EvDuplicateFilterDataFetched> {
+private:
+    YDB_READONLY_DEF(ui64, SourceId);
+    YDB_READONLY(TConclusion<TColumnsData>, Result, TConclusionStatus::Success());
+
+public:
+    TEvDuplicateFilterDataFetched(const ui64 sourceId, TConclusion<TColumnsData>&& result)
+        : SourceId(sourceId)
+        , Result(std::move(result)) {
     }
 };
 

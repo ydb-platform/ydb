@@ -381,6 +381,7 @@ void TKafkaReadSessionActor::FillTopicsFromJoinGroupMetadata(TKafkaBytes& metada
         if (topic.has_value()) {
             auto normalizedTopicName = NormalizePath(Context->DatabasePath, topic.value());
             OriginalTopicNames[normalizedTopicName] = topic.value();
+            OriginalTopicNames[normalizedTopicName + "/streamImpl"] = topic.value();
             topics.emplace(normalizedTopicName);
             KAFKA_LOG_D("JOIN_GROUP requested topic to read: " << topic);
         }
@@ -434,7 +435,7 @@ void TKafkaReadSessionActor::ProcessBalancerDead(ui64 tabletId, const TActorCont
 void TKafkaReadSessionActor::AuthAndFindBalancers(const TActorContext& ctx) {
 
     auto topicConverterFactory = std::make_shared<NPersQueue::TTopicNamesConverterFactory>(
-        AppData(ctx)->PQConfig, ""
+        true, "", ""
     );
     auto topicHandler = std::make_unique<NPersQueue::TTopicsListController>(
         topicConverterFactory

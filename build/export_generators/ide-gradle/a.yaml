@@ -5,12 +5,12 @@ arcanum:
   review:
     auto_assign: true
     groups:
-      - name: ya_ide_gradle
-        roles: developer
+      - name: ya_ide_gradle_developer
+        roles: ["ya_ide_gradle:developer"]
 
     rules:
       - reviewers:
-        - name: ya_ide_gradle
+        - name: ya_ide_gradle_developer
           ship: 1
           assign: 1
           ignore_self_ship: false

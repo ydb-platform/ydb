@@ -25,7 +25,8 @@ bool IsSequoiaNode(NObjectClient::EObjectType type)
 {
     return
         type == EObjectType::SequoiaMapNode ||
-        type == EObjectType::SequoiaLink;
+        type == EObjectType::SequoiaLink ||
+        type == EObjectType::Scion;
 }
 
 bool IsVersionedType(EObjectType type)

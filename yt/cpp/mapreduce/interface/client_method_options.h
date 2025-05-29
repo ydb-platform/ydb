@@ -1136,6 +1136,13 @@ struct TCreateClientOptions
     /// @brief Use unix domain socket for connection.
     /// Typically you will need this option when the RPC proxy is enabled within the job proxy.
     FLUENT_FIELD_DEFAULT(bool, UseProxyUnixDomainSocket, false);
+
+    /// @brief Defines which cluster should handle incoming RPC requests.
+    ///
+    /// @note Multiproxy mode must be activated on the server side.
+    /// This mode allows a proxy from one cluster to forward requests to another.
+    /// Availability and specific usage might vary based on server configuration.
+    FLUENT_FIELD_OPTION(TString, MultiproxyTargetCluster);
 };
 
 ///

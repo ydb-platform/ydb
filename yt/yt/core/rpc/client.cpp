@@ -105,8 +105,7 @@ TSharedRefArray TClientRequest::Serialize()
     auto headerlessMessage = GetHeaderlessMessage();
 
     if (!retry) {
-        auto output = CreateRequestMessage(Header_, headerlessMessage);
-        return std::move(output);
+        return CreateRequestMessage(Header_, headerlessMessage);
     }
 
     if (StreamingEnabled_) {
@@ -116,8 +115,7 @@ TSharedRefArray TClientRequest::Serialize()
     auto patchedHeader = Header_;
     patchedHeader.set_retry(true);
 
-    auto output = CreateRequestMessage(patchedHeader, headerlessMessage);
-    return std::move(output);
+    return CreateRequestMessage(patchedHeader, headerlessMessage);
 }
 
 IClientRequestControlPtr TClientRequest::Send(IClientResponseHandlerPtr responseHandler)
@@ -219,6 +217,11 @@ std::string TClientRequest::GetService() const
 std::string TClientRequest::GetMethod() const
 {
     return FromProto<std::string>(Header_.method());
+}
+
+const std::optional<std::string>& TClientRequest::GetRequestInfo() const
+{
+    return RequestInfo_;
 }
 
 void TClientRequest::DeclareClientFeature(int featureId)

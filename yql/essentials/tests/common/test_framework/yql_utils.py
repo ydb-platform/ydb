@@ -503,6 +503,14 @@ def get_langver(cfg):
     return None
 
 
+def get_envs(cfg):
+    envs = dict()
+    for item in cfg:
+        if item[0] == 'env':
+            envs[item[1]] = item[2]
+    return envs
+
+
 def is_skip_forceblocks(cfg):
     for item in cfg:
         if item[0] == 'skip_forceblocks':

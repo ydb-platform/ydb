@@ -5,6 +5,6 @@
 namespace NSQLComplete {
 
     ISimpleSchema::TPtr MakeStaticSimpleSchema(
-        THashMap<TString, TVector<TFolderEntry>> fs);
+        THashMap<TString, THashMap<TString, TVector<TFolderEntry>>> fs);
 
 } // namespace NSQLComplete

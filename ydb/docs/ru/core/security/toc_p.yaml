@@ -3,6 +3,11 @@ items:
   href: authentication.md
 - name: Авторизация
   href: authorization.md
+  items:
+  - name: Права доступа
+    href: access-rights.md
+  - name: Уровни доступа
+    href: access-levels.md
 - name: Начальная настройка безопасности
   href: builtin-security.md
 - name: Аудитный лог

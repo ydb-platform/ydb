@@ -264,8 +264,8 @@ TAutoPtr<IGraphTransformer> CreateKqpPgRewriteTransformer(const TIntrusivePtr<TK
     return new TKqpPgRewriteTransformer(kqpCtx, typeCtx);
 }
 
-TAutoPtr<IGraphTransformer> CreateKqpNewRBOTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, TTypeAnnotationContext& typeCtx, const TKikimrConfiguration::TPtr& config, TAutoPtr<IGraphTransformer> typeAnnTransformer) {
-    return new TKqpNewRBOTransformer(kqpCtx, typeCtx, config, typeAnnTransformer);
+TAutoPtr<IGraphTransformer> CreateKqpNewRBOTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, TTypeAnnotationContext& typeCtx, const TKikimrConfiguration::TPtr& config, TAutoPtr<IGraphTransformer> typeAnnTransformer, TAutoPtr<IGraphTransformer> peephole) {
+    return new TKqpNewRBOTransformer(kqpCtx, typeCtx, config, typeAnnTransformer, peephole);
 }
 
 TAutoPtr<IGraphTransformer> CreateKqpRBOCleanupTransformer(TTypeAnnotationContext& typeCtx) {

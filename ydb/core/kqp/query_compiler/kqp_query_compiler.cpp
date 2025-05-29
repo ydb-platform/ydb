@@ -796,6 +796,7 @@ private:
                 outputsCount = 1;
             }
         } else {
+            YQL_CLOG(TRACE, ProviderKqp) << "Stage " << stage.Ptr()->UniqueId() << " type ann kind " << resultType->GetKind();
             YQL_ENSURE(resultType->GetKind() == ETypeAnnotationKind::Void, "got " << *resultType);
         }
 

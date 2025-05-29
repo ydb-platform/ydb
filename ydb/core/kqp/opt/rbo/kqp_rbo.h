@@ -56,11 +56,13 @@ class TRuleBasedOptimizer {
         const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, 
         TTypeAnnotationContext& typeCtx, 
         const TKikimrConfiguration::TPtr& config,
-        TAutoPtr<IGraphTransformer> typeAnnTransformer) : Stages(stages),
+        TAutoPtr<IGraphTransformer> typeAnnTransformer,
+        TAutoPtr<IGraphTransformer> peephole) : Stages(stages),
         KqpCtx(kqpCtx),
         TypeCtx(typeCtx),
         Config(config),
-        TypeAnnTransformer(typeAnnTransformer) {}
+        TypeAnnTransformer(typeAnnTransformer),
+        PeepholeTransformer(peephole) {}
     
     TExprNode::TPtr Optimize(TOpRoot & root,  TExprContext& ctx);
 
@@ -69,9 +71,10 @@ class TRuleBasedOptimizer {
     TTypeAnnotationContext& TypeCtx;
     const TKikimrConfiguration::TPtr& Config;
     TAutoPtr<IGraphTransformer> TypeAnnTransformer;
+    TAutoPtr<IGraphTransformer> PeepholeTransformer;
 };
 
-TExprNode::TPtr ConvertToPhysical(TOpRoot & root,  TExprContext& ctx, TAutoPtr<IGraphTransformer> typeAnnTransformer);
+TExprNode::TPtr ConvertToPhysical(TOpRoot & root,  TExprContext& ctx, TTypeAnnotationContext& types, TAutoPtr<IGraphTransformer> typeAnnTransformer, TAutoPtr<IGraphTransformer> peepholeTransformer, TKikimrConfiguration::TPtr config);
 
 }
 }

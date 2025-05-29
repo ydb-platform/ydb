@@ -36,10 +36,10 @@ TAutoPtr<IGraphTransformer> CreateKqpPgRewriteTransformer(const TIntrusivePtr<TK
 
 class TKqpNewRBOTransformer : public TSyncTransformerBase {
     public:
-        TKqpNewRBOTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, TTypeAnnotationContext& typeCtx, const TKikimrConfiguration::TPtr& config, TAutoPtr<IGraphTransformer> typeAnnTransformer) : 
+        TKqpNewRBOTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, TTypeAnnotationContext& typeCtx, const TKikimrConfiguration::TPtr& config, TAutoPtr<IGraphTransformer> typeAnnTransformer, TAutoPtr<IGraphTransformer> peephole) : 
             TypeCtx(typeCtx),
             KqpCtx(*kqpCtx),
-            RBO({RuleStage1, RuleStage2}, kqpCtx, typeCtx, config, typeAnnTransformer) {}
+            RBO({RuleStage1, RuleStage2}, kqpCtx, typeCtx, config, typeAnnTransformer, peephole) {}
 
         // Main method of the transformer
         IGraphTransformer::TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final;
@@ -51,7 +51,7 @@ class TKqpNewRBOTransformer : public TSyncTransformerBase {
         TRuleBasedOptimizer RBO;
 };
 
-TAutoPtr<IGraphTransformer> CreateKqpNewRBOTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, TTypeAnnotationContext& typeCtx, const TKikimrConfiguration::TPtr& config, TAutoPtr<IGraphTransformer> typeAnnTransformer);
+TAutoPtr<IGraphTransformer> CreateKqpNewRBOTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, TTypeAnnotationContext& typeCtx, const TKikimrConfiguration::TPtr& config, TAutoPtr<IGraphTransformer> typeAnnTransformer, TAutoPtr<IGraphTransformer> peepholeTransformer);
 
 class TKqpRBOCleanupTransformer : public TSyncTransformerBase {
     public:

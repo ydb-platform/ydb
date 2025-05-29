@@ -151,7 +151,7 @@ std::shared_ptr<NTxProxy::TUploadTypes> MakeOutputTypes(const TUserTable& table,
             break;
         }
         default:
-            Y_ASSERT(false);
+            Y_ENSURE(false);
 
     }
     return result;

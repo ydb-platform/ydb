@@ -15,7 +15,7 @@ enum class ERequestSorting {
 
 enum class EDeduplicationPolicy {
     ALLOW_DUPLICATES = 0,
-    NO_DUPLICATES,
+    PREVENT_DUPLICATES,
 };
 
 // Describes read/scan request
@@ -40,7 +40,7 @@ public:
     // operations with potentially different columns. We have to remove columns to support -Inf (Null) and +Inf.
     std::shared_ptr<NOlap::TPKRangesFilter> PKRangesFilter;
     NYql::NDqProto::EDqStatsMode StatsMode = NYql::NDqProto::EDqStatsMode::DQ_STATS_MODE_NONE;
-    EDeduplicationPolicy DeduplicationPolicy = EDeduplicationPolicy::NO_DUPLICATES;
+    EDeduplicationPolicy DeduplicationPolicy = EDeduplicationPolicy::PREVENT_DUPLICATES;
 
     // List of columns
     std::vector<ui32> ColumnIds;

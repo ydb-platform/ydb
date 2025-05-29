@@ -104,7 +104,6 @@ class TestVectorIndex(RestartToAnotherVersionFixture):
         """
         with ydb.QuerySessionPool(self.driver) as session_pool:
             result_sets = session_pool.execute_with_retries(select_sql)
-            print(result_sets[0].rows)
             assert len(result_sets[0].rows) > 0, "Query returned an empty set"
             rows = result_sets[0].rows
             for row in rows:

@@ -114,7 +114,7 @@ TMessagePtr<TProduceResponseData> TKafkaTestClient::Produce(const TString& topic
     return Produce(topicName, msgs);
 }
 
-TMessagePtr<TProduceResponseData> TKafkaTestClient::Produce(const TString& topicName, const std::vector<std::pair<ui32, TKafkaRecordBatch>> msgs) {
+TMessagePtr<TProduceResponseData> TKafkaTestClient::Produce(const TString& topicName, const std::vector<std::pair<ui32, TKafkaRecordBatch>> msgs, std::optional<TString> transactionalId) {
     Cerr << ">>>>> TProduceRequestData\n";
 
     TRequestHeaderData header = Header(NKafka::EApiKey::PRODUCE, 9);
@@ -128,7 +128,34 @@ TMessagePtr<TProduceResponseData> TKafkaTestClient::Produce(const TString& topic
         request.TopicData[0].PartitionData[i].Records = msgs[i].second;
     }
 
+    if (transactionalId) {
+        request.TransactionalId = *transactionalId;
+    }
+
     return WriteAndRead<TProduceResponseData>(header, request);
+}
+
+TMessagePtr<TProduceResponseData> TKafkaTestClient::Produce(const TTopicPartition topicPartition, 
+                                                            const std::vector<std::pair<TString, TString>> keyValueMessages, 
+                                                            ui32 baseSequence, 
+                                                            std::optional<TProducerInstanceId> producerInstanceId, 
+                                                            std::optional<TString> transactionalId) {
+    TKafkaRecordBatch batch;
+    batch.BaseSequence = baseSequence;
+    batch.Magic = 2; // Current supported
+    batch.Records.resize(keyValueMessages.size());
+    for (ui32 i = 0; i < keyValueMessages.size(); i++) {
+        auto& keyValueMessage = keyValueMessages[i];
+        batch.Records[i].Key = TKafkaRawBytes(keyValueMessage.first.data(), keyValueMessage.first.size());
+        batch.Records[i].Value = TKafkaRawBytes(keyValueMessage.second.data(), keyValueMessage.second.size());
+    }
+    if (producerInstanceId) {
+        batch.ProducerId = producerInstanceId->Id;
+        batch.ProducerEpoch = producerInstanceId->Epoch;
+    }
+    std::vector<std::pair<ui32, TKafkaRecordBatch>> msgs;
+    msgs.emplace_back(topicPartition.PartitionId, batch);
+    return Produce(topicPartition.TopicPath, msgs, transactionalId);
 }
 
 TMessagePtr<TListOffsetsResponseData> TKafkaTestClient::ListOffsets(std::vector<std::pair<i32,i64>>& partitions, const TString& topic) {
@@ -525,6 +552,71 @@ TMessagePtr<TDescribeConfigsResponseData> TKafkaTestClient::DescribeConfigs(std:
     }
 
     return WriteAndRead<TDescribeConfigsResponseData>(header, request);
+}
+
+TMessagePtr<TAddPartitionsToTxnResponseData> TKafkaTestClient::AddPartitionsToTxn(const TString& transactionalId, const TProducerInstanceId& producerInstanceId, const std::unordered_map<TString, std::vector<ui32>>& topicPartitions) {
+    TRequestHeaderData header = Header(EApiKey::ADD_PARTITIONS_TO_TXN, 3);
+    TAddPartitionsToTxnRequestData request;
+    request.TransactionalId = transactionalId;
+    request.ProducerId = producerInstanceId.Id;
+    request.ProducerEpoch = producerInstanceId.Epoch;
+    for (auto& [topicName, partitions] : topicPartitions) {
+        NKafka::TAddPartitionsToTxnRequestData::TAddPartitionsToTxnTopic topic;
+        topic.Name = topicName;
+        topic.Partitions.reserve(partitions.size());
+        for (auto part : partitions) {
+            topic.Partitions.push_back(part);
+        }
+        request.Topics.push_back(topic);
+    }
+
+    return WriteAndRead<TAddPartitionsToTxnResponseData>(header, request);
+}
+
+TMessagePtr<TAddOffsetsToTxnResponseData> TKafkaTestClient::AddOffsetsToTxn(const TString& transactionalId, const TProducerInstanceId& producerInstanceId, const TString& groupId) {
+    TRequestHeaderData header = Header(EApiKey::ADD_OFFSETS_TO_TXN, 3);
+    TAddOffsetsToTxnRequestData request;
+    request.TransactionalId = transactionalId;
+    request.ProducerId = producerInstanceId.Id;
+    request.ProducerEpoch = producerInstanceId.Epoch;
+    request.GroupId = groupId;
+
+    return WriteAndRead<TAddOffsetsToTxnResponseData>(header, request);
+}
+
+TMessagePtr<TTxnOffsetCommitResponseData> TKafkaTestClient::TxnOffsetCommit(const TString& transactionalId, const TProducerInstanceId& producerInstanceId, const TString& groupName, ui32 generation, const std::unordered_map<TString, std::vector<std::pair<ui32, ui64>>>& paritionOffsetsToTopic) {
+    TRequestHeaderData header = Header(EApiKey::TXN_OFFSET_COMMIT, 3);
+    TTxnOffsetCommitRequestData request;
+    request.TransactionalId = transactionalId;
+    request.ProducerId = producerInstanceId.Id;
+    request.ProducerEpoch = producerInstanceId.Epoch;
+    request.GroupId = groupName;
+    request.GenerationId = generation;
+    for (auto& [topicName, partitionsAndOffsets] : paritionOffsetsToTopic) {
+        NKafka::TTxnOffsetCommitRequestData::TTxnOffsetCommitRequestTopic topic;
+        topic.Name = topicName;
+        topic.Partitions.reserve(partitionsAndOffsets.size());
+        for (auto partitionAndOffset : partitionsAndOffsets) {
+            NKafka::TTxnOffsetCommitRequestData::TTxnOffsetCommitRequestTopic::TTxnOffsetCommitRequestPartition partition;
+            partition.PartitionIndex = partitionAndOffset.first;
+            partition.CommittedOffset = partitionAndOffset.second;
+            topic.Partitions.push_back(partition);
+        }
+        request.Topics.push_back(topic);
+    }
+
+    return WriteAndRead<TTxnOffsetCommitResponseData>(header, request);
+}
+
+TMessagePtr<TEndTxnResponseData> TKafkaTestClient::EndTxn(const TString& transactionalId, const TProducerInstanceId& producerInstanceId, bool commit) {
+    TRequestHeaderData header = Header(EApiKey::END_TXN, 3);
+    TEndTxnRequestData request;
+    request.TransactionalId = transactionalId;
+    request.ProducerId = producerInstanceId.Id;
+    request.ProducerEpoch = producerInstanceId.Epoch;
+    request.Committed = commit;
+
+    return WriteAndRead<TEndTxnResponseData>(header, request);
 }
 
 void TKafkaTestClient::UnknownApiKey() {

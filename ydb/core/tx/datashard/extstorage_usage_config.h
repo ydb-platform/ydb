@@ -53,10 +53,10 @@ public:
         }
 
     private:
-        TMaybe<NBackup::TEncryptionIV> GetIV(NBackup::EBackupFileType fileType, ui32 itemNumber = 0) const {
+        TMaybe<NBackup::TEncryptionIV> GetIV(NBackup::EBackupFileType fileType, ui32 shardNumber = 0) const {
             TMaybe<NBackup::TEncryptionIV> iv;
             if (IV) {
-                iv = NBackup::TEncryptionIV::Combine(*IV, fileType, itemNumber, 0);
+                iv = NBackup::TEncryptionIV::Combine(*IV, fileType, 0 /* backupItemNumber */, shardNumber);
             }
             return iv;
         }
@@ -122,7 +122,7 @@ public:
         return TStringBuilder() << ObjectKeyPattern << '/'<< changefeedPrefix << '/' << NBackupRestoreTraits::TopicKeySuffix(EncryptionSettings.EncryptedBackup);
     }
 
-     inline TString GetChangefeedKey(const TString& changefeedPrefix) const {
+    inline TString GetChangefeedKey(const TString& changefeedPrefix) const {
         return TStringBuilder() << ObjectKeyPattern << '/' << changefeedPrefix << '/' << NBackupRestoreTraits::ChangefeedKeySuffix(EncryptionSettings.EncryptedBackup);
     }
 

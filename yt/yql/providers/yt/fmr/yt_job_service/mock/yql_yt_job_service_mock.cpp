@@ -1,5 +1,6 @@
-#include "yql_yt_yt_service_mock.h"
+#include "yql_yt_job_service_mock.h"
 
+#include <yt/cpp/mapreduce/common/helpers.h>
 #include <yt/cpp/mapreduce/interface/io.h>
 #include <yql/essentials/utils/yql_panic.h>
 
@@ -58,14 +59,20 @@ private:
     TBuffer Buffer_;
 };
 
-class TMockYtService: public NYql::NFmr::IYtService {
+class TMockYtJobService: public NYql::NFmr::IYtJobService {
 public:
-    TMockYtService(const std::unordered_map<TYtTableRef, TString>& inputTables, std::unordered_map<TYtTableRef, TString>& outputTables)
+    TMockYtJobService(const std::unordered_map<TString, TString>& inputTables, std::unordered_map<TYtTableRef, TString>& outputTables)
         : InputTables_(inputTables), OutputTables_(outputTables) {}
 
-    NYT::TRawTableReaderPtr MakeReader(const TYtTableRef& ytTableRef, const TClusterConnection&, const TYtReaderSettings&) override {
-        YQL_ENSURE(InputTables_.contains(ytTableRef));
-        return MakeIntrusive<TMockYtTableReader>(InputTables_[ytTableRef]);
+    virtual NYT::TRawTableReaderPtr MakeReader(
+        const std::variant<NYT::TRichYPath, TString>& inputTableRef,
+        const TClusterConnection& /*clusterConnection*/,
+        const TYtReaderSettings& /*settings*/
+    ) override {
+        auto richPath = std::get<NYT::TRichYPath>(inputTableRef);
+        TString richPathStr = NYT::NodeToCanonicalYsonString(NYT::PathToNode(richPath));
+        YQL_ENSURE(InputTables_.contains(richPathStr));
+        return {MakeIntrusive<TMockYtTableReader>(InputTables_[richPathStr])};
     }
 
     NYT::TRawTableWriterPtr MakeWriter(const TYtTableRef& ytTableRef, const TClusterConnection&, const TYtWriterSettings&) override {
@@ -76,14 +83,14 @@ public:
     }
 
 private:
-    std::unordered_map<TYtTableRef, TString> InputTables_; // table -> textYsonContent
+    std::unordered_map<TString, TString> InputTables_; // rich yt path in string form -> total textYsonContent of it
     std::unordered_map<TYtTableRef, TString>& OutputTables_;
 };
 
 } // namespace
 
-IYtService::TPtr MakeMockYtService(const std::unordered_map<TYtTableRef, TString>& inputTables, std::unordered_map<TYtTableRef, TString>& outputTables) {
-    return MakeIntrusive<TMockYtService>(inputTables, outputTables);
+IYtJobService::TPtr MakeMockYtJobService(const std::unordered_map<TString, TString>& inputTables, std::unordered_map<TYtTableRef, TString>& outputTables) {
+    return MakeIntrusive<TMockYtJobService>(inputTables, outputTables);
 }
 
 } // namespace NYql::NFmr

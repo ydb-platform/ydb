@@ -244,116 +244,6 @@ class YdbCluster:
             raise
 
     @classmethod
-    @allure.step('Execute raw upsert query')
-    def execute_raw_upsert_query(cls, query, timeout=10):
-        """
-        Выполняет произвольный upsert запрос в YDB, переданный как строка.
-
-        Args:
-            query (str): Полный SQL запрос UPSERT.
-            timeout (int): Таймаут выполнения запроса в секундах.
-
-        Returns:
-            bool: True если операция выполнена успешно.
-
-        Raises:
-            Exception: Если произошла ошибка при выполнении запроса.
-        """
-        # Прикрепляем запрос к отчету Allure
-        allure.attach(query, 'raw upsert query', attachment_type=allure.attachment_type.TEXT)
-
-        try:
-            # Создаем сессию
-            session = cls.get_ydb_driver().table_client.session().create()
-
-            # Устанавливаем таймаут
-            settings = ydb.BaseRequestSettings().with_timeout(timeout)
-
-            # Выполняем запрос
-            session.transaction().execute(
-                query,
-                settings=settings,
-                commit_tx=True
-            )
-
-            LOGGER.info("Successfully executed upsert query")
-            return True
-        except Exception as e:
-            LOGGER.error(f"Error during raw upsert into YDB: {str(e)}")
-            raise
-
-    @classmethod
-    @allure.step('Create table in YDB')
-    def create_table(cls, ddl_query: str) -> Dict[str, Any]:
-        """
-        Создает таблицу в YDB используя DDL запрос
-
-        Args:
-            ddl_query: DDL запрос для создания таблицы
-            session_timeout: Таймаут сессии в секундах
-
-        Returns:
-            Dict: Результат операции с информацией об успехе или ошибке
-        """
-        result = {
-            'success': False,
-            'query': ddl_query,
-            'timestamp': time(),
-        }
-
-        try:
-            # Получаем драйвер YDB
-            driver = cls.get_ydb_driver()
-
-            allure.attach(ddl_query, "DDL Query", attachment_type=allure.attachment_type.TEXT)
-            LOGGER.info(f"Executing DDL query:\n{ddl_query}")
-
-            # Создаем сессию
-            session = driver.table_client.session().create()
-
-            # Выполняем DDL запрос
-            session.execute_scheme(ddl_query)
-
-            # Если запрос выполнился без ошибок, помечаем операцию как успешную
-            result['success'] = True
-            result['message'] = "Table created successfully"
-            LOGGER.info("Table created successfully")
-
-        except Exception as e:
-            # Обрабатываем возможные ошибки
-            error_message = str(e)
-            LOGGER.error(f"Error creating table: {error_message}")
-            result['error'] = error_message
-            result['exception_type'] = type(e).__name__
-
-            # Прикрепляем информацию об ошибке к отчету
-            allure.attach(error_message, "Error creating table", attachment_type=allure.attachment_type.TEXT)
-
-        return result
-
-    @classmethod
-    def table_exists(cls, table_path: str) -> bool:
-        """
-        Проверяет существование таблицы по указанному пути
-
-        Args:
-            table_path: Путь к таблице
-
-        Returns:
-            bool: True если таблица существует, False в противном случае
-        """
-        try:
-            # Получаем описание объекта по пути
-            obj = cls._describe_path_impl(table_path)
-
-            # Проверяем, является ли объект таблицей
-            return obj is not None and obj.is_any_table()
-
-        except Exception as e:
-            LOGGER.error(f"Error checking if table exists: {e}")
-            return False
-
-    @classmethod
     def get_dyn_nodes_count(cls) -> int:
         if cls._dyn_nodes_count is None:
             cls._dyn_nodes_count = 0
@@ -417,8 +307,7 @@ class YdbCluster:
             if expected_nodes_count:
                 LOGGER.debug(f'Expected nodes count: {expected_nodes_count}')
                 if nodes_count < expected_nodes_count:
-                    errors.append(f"{expected_nodes_count - nodes_count} nodes from "
-                                  f"{expected_nodes_count} don't alive")
+                    errors.append(f"{expected_nodes_count - nodes_count} nodes from {expected_nodes_count} don't alive")
             ok_node_count = 0
             node_errors = []
             for n in nodes:
@@ -428,8 +317,7 @@ class YdbCluster:
                 else:
                     ok_node_count += 1
             if ok_node_count < nodes_count:
-                errors.append(f'Only {ok_node_count} from {nodes_count} dynnodes are ok: '
-                              f'{",".join(node_errors)}')
+                errors.append(f'Only {ok_node_count} from {nodes_count} dynnodes are ok: {",".join(node_errors)}')
             paths_to_balance = []
             if isinstance(balanced_paths, str):
                 paths_to_balance += cls._get_tables(balanced_paths)
@@ -447,8 +335,7 @@ class YdbCluster:
                     tablet_count = 0
                     for tablet in tn.tablets:
                         if tablet.count > 0 and tablet.state != "Green":
-                            warnings.append(f'Node {tn.host}: {tablet.count} tablets of type '
-                                            f'{tablet.type} in {tablet.state} state')
+                            warnings.append(f'Node {tn.host}: {tablet.count} tablets of type {tablet.type} in {tablet.state} state')
                         if tablet.type in {"ColumnShard", "DataShard"}:
                             tablet_count += tablet.count
                     if tablet_count > 0:

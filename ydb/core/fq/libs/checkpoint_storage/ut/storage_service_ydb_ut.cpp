@@ -3,6 +3,7 @@
 #include <ydb/core/fq/libs/actors/logging/log.h>
 #include <ydb/core/fq/libs/checkpointing_common/defs.h>
 #include <ydb/core/fq/libs/checkpoint_storage/events/events.h>
+#include <ydb/core/fq/libs/ydb/util.h>
 
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
 
@@ -39,12 +40,15 @@ using TRuntimePtr = std::unique_ptr<TTestActorRuntime>;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TRuntimePtr PrepareTestActorRuntime(const char* tablePrefix, bool enableGc = false) {
+TRuntimePtr PrepareTestActorRuntime(const char* tablePrefix, bool enableGc = false, bool useTtl = false) {
     TRuntimePtr runtime(new TTestBasicRuntime(1, true));
     runtime->SetLogPriority(NKikimrServices::STREAMS_STORAGE_SERVICE, NLog::PRI_DEBUG);
 
     NConfig::TCheckpointCoordinatorConfig config;
     config.SetEnabled(true);
+    if (useTtl) {
+        config.SetCheckpointsTtl("1d");
+    }
     auto& checkpointConfig = *config.MutableStorage();
     checkpointConfig.SetEndpoint(GetEnv("YDB_ENDPOINT"));
     checkpointConfig.SetDatabase(GetEnv("YDB_DATABASE"));
@@ -542,6 +546,43 @@ Y_UNIT_TEST_SUITE(TStorageServiceTest) {
                 throw yexception() << "gc not finished yet";
             }
         }, TRetryOptions(100, TDuration::MilliSeconds(100)), true);
+    }
+
+    Y_UNIT_TEST(ShouldSetExpireAt)
+    {
+        NYdb::TDriver driver(NYdb::TDriverConfig().SetEndpoint(GetEnv("YDB_ENDPOINT")).SetDatabase(GetEnv("YDB_DATABASE")));
+        NYdb::NTable::TTableClient tableClient(driver);
+        auto session = tableClient.CreateSession().GetValueSync();
+        UNIT_ASSERT(session.IsSuccess());
+
+        auto test = [&](bool useTtl) {
+            NKikimr::NMiniKQL::TScopedAlloc Alloc(__LOCATION__);
+            TString prefix("ShouldSetExpireAt" + ToString(useTtl));
+            auto runtime = PrepareTestActorRuntime(prefix.c_str(), true, useTtl);
+
+            RegisterDefaultCoordinator(runtime);
+            CreateCompletedCheckpoint(runtime, GraphId, Generation, CheckpointId1);
+            SaveState(runtime, 1317, CheckpointId1, MakeState("some random state"));
+
+            auto checkTable = [&](const TString& tableName) {
+                TStringBuilder query;
+                query << "PRAGMA TablePathPrefix(\"" << NFq::JoinPath(GetEnv("YDB_DATABASE"), prefix) << "\");" << Endl;
+                query << "SELECT expire_at FROM " << tableName << ";" << Endl;
+                auto queryResult = session.GetSession().ExecuteDataQuery(query, NYdb::NTable::TTxControl::BeginTx().CommitTx()).GetValueSync();
+                UNIT_ASSERT_C(queryResult.IsSuccess(), queryResult.GetIssues().ToString());
+                
+                NYdb::TResultSetParser parser(queryResult.GetResultSet(0));
+                UNIT_ASSERT(parser.TryNextRow());
+                auto dateTime = parser.ColumnParser("expire_at").GetOptionalTimestamp();
+                UNIT_ASSERT_VALUES_EQUAL(dateTime.has_value(), useTtl);
+            };
+            checkTable("checkpoints_graphs_description");
+            checkTable("coordinators_sync");
+            checkTable("checkpoints_metadata");
+            checkTable("states");
+        };
+        test(false);
+        test(true);
     }
 };
 

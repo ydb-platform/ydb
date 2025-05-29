@@ -484,6 +484,10 @@ message TPredicate {
             ENDS_WITH = 3; 
             CONTAINS = 4;
         }
+
+        EOperation operation = 1;
+        TExpression left_value = 2;
+        TExpression right_value = 3;
     }
 
     /*

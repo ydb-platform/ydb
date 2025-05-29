@@ -750,11 +750,12 @@ Y_UNIT_TEST_SUITE_F(PushdownTest, TPushdownFixture) {
                 )
                 )ast",
             R"proto(
-                regexp {
-                    value {
+                string_comparison {
+                    operation: REGEXP
+                    left_value {
                         column: "col_string"
                     }
-                    pattern {
+                    right_value {
                         typed_value {
                             type {
                                 type_id: STRING

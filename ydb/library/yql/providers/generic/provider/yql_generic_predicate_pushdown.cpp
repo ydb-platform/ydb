@@ -272,9 +272,6 @@ namespace NYql {
             EXPR_NODE_TO_COMPARE_TYPE(TCoCmpGreaterOrEqual, GE);
             EXPR_NODE_TO_COMPARE_TYPE(TCoAggrEqual, IND);
             EXPR_NODE_TO_COMPARE_TYPE(TCoAggrNotEqual, ID);
-            EXPR_NODE_TO_COMPARE_TYPE(TCoCmpStartsWith, STARTS_WITH);
-            EXPR_NODE_TO_COMPARE_TYPE(TCoCmpEndsWith, ENDS_WITH);
-            EXPR_NODE_TO_COMPARE_TYPE(TCoCmpStringContains, CONTAINS);
 
             if (proto->operation() == TPredicate::TComparison::COMPARISON_OPERATION_UNSPECIFIED) {
                 ctx.Err << "unknown compare operation: " << compare.Raw()->Content();
@@ -418,6 +415,26 @@ namespace NYql {
             return SerializeMember(member, proto->mutable_bool_expression()->mutable_value(), ctx);
         }
 
+        bool SerializeStringComparison(const TCoCompare& compare, TPredicate* proto, TSerializationContext& ctx, ui64 depth) {
+            // Use string_comparison fields for the operation and values
+            auto* stringCompProto = proto->mutable_string_comparison();
+            
+            if (compare.Maybe<TCoCmpStartsWith>()) {
+                stringCompProto->set_operation(TPredicate::TStringComparison::STARTS_WITH);
+            } else if (compare.Maybe<TCoCmpEndsWith>()) {
+                stringCompProto->set_operation(TPredicate::TStringComparison::ENDS_WITH);
+            } else if (compare.Maybe<TCoCmpStringContains>()) {
+                stringCompProto->set_operation(TPredicate::TStringComparison::CONTAINS);
+            } else {
+                ctx.Err << "unknown string comparison operation: " << compare.Raw()->Content();
+                return false;
+            }
+            
+            // Use string_comparison fields for the values
+            return SerializeExpression(compare.Left(), stringCompProto->mutable_left_value(), ctx, depth + 1) &&
+                   SerializeExpression(compare.Right(), stringCompProto->mutable_right_value(), ctx, depth + 1);
+        }
+
         bool SerializeRegexp(const TCoUdf& regexp, const TExprNode::TListType& children, TPredicate* proto, TSerializationContext& ctx, ui64 depth) {
             if (children.size() != 2) {
                 ctx.Err << "expected exactly one argument for UDF function Re2.Grep, but got: " << children.size() - 1;
@@ -436,9 +453,11 @@ namespace NYql {
                 return false;
             }
 
-            auto* dstProto = proto->mutable_regexp();
-            return SerializeExpression(TExprBase(runConfig.ChildPtr(0)), dstProto->mutable_pattern(), ctx, depth + 1)
-                && SerializeExpression(TExprBase(children[1]), dstProto->mutable_value(), ctx, depth + 1);
+            // Use string_comparison fields for the operation and values
+            auto* stringCompProto = proto->mutable_string_comparison();
+            stringCompProto->set_operation(TPredicate::TStringComparison::REGEXP);
+            return SerializeExpression(TExprBase(children[1]), stringCompProto->mutable_left_value(), ctx, depth + 1)
+                && SerializeExpression(TExprBase(runConfig.ChildPtr(0)), stringCompProto->mutable_right_value(), ctx, depth + 1);
         }
 
         bool SerializeApply(const TCoApply& apply, TPredicate* proto, TSerializationContext& ctx, ui64 depth) {
@@ -459,6 +478,12 @@ namespace NYql {
 
         bool SerializePredicate(const TExprBase& predicate, TPredicate* proto, TSerializationContext& ctx, ui64 depth) {
             if (auto compare = predicate.Maybe<TCoCompare>()) {
+                // Check if it's a string comparison operation
+                if (compare.Cast().Maybe<TCoCmpStartsWith>() ||
+                    compare.Cast().Maybe<TCoCmpEndsWith>() ||
+                    compare.Cast().Maybe<TCoCmpStringContains>()) {
+                    return SerializeStringComparison(compare.Cast(), proto, ctx, depth);
+                }
                 return SerializeCompare(compare.Cast(), proto, ctx, depth);
             }
             if (auto coalesce = predicate.Maybe<TCoCoalesce>()) {
@@ -789,23 +814,29 @@ namespace NYql {
         return "(" + statement + " IS NOT NULL)";
     }
 
+    TString FormatStringComparison(const TPredicate::TStringComparison& stringCompOp) {
+        auto left = FormatExpression(stringCompOp.left_value());
+        auto right = FormatExpression(stringCompOp.right_value());
+
+        switch (stringCompOp.operation()) {
+            case TPredicate::TStringComparison::STARTS_WITH:
+                return TStringBuilder() << "StartsWith(" << left << ", " << right << ")";
+            case TPredicate::TStringComparison::ENDS_WITH:
+                return TStringBuilder() << "EndsWith(" << left << ", " << right << ")";
+            case TPredicate::TStringComparison::CONTAINS:
+                return TStringBuilder() << "String::Contains(" << left << ", " << right << ")";
+            case TPredicate::TStringComparison::REGEXP:
+                return TStringBuilder() << "(" << left << " REGEXP " << right << ")";
+            default:
+                throw yexception() << "UnimplementedStringComparisonOperation, operation " << static_cast<ui64>(stringCompOp.operation());
+        }
+    }
+
     TString FormatComparison(TPredicate_TComparison comparison) {
         TString operation;
 
         auto left = FormatExpression(comparison.left_value());
         auto right = FormatExpression(comparison.right_value());
-
-        // Distinct branch handling LIKE operator
-        switch (comparison.operation()) {
-            case TPredicate_TComparison::STARTS_WITH:
-                return TStringBuilder() << "StartsWith(" << left << ", " << right << ")";
-            case TPredicate_TComparison::ENDS_WITH:
-                return TStringBuilder() << "EndsWith(" << left << ", " << right << ")";
-            case TPredicate_TComparison::CONTAINS:
-                return TStringBuilder() << "String::Contains(" << left << ", " << right << ")";
-            default:
-                break;
-        }
 
         // General comparisons
         switch (comparison.operation()) {
@@ -860,11 +891,6 @@ namespace NYql {
         return list.Str();
     }
 
-    TString FormatRegexp(const TPredicate::TRegexp& regexp) {
-        const auto& value = FormatExpression(regexp.value());
-        const auto& pattern = FormatExpression(regexp.pattern());
-        return TStringBuilder() << "(" << value << " REGEXP " << pattern << ")";
-    }
 
     TString FormatPredicate(const TPredicate& predicate) {
         switch (predicate.payload_case()) {
@@ -885,13 +911,15 @@ namespace NYql {
             case TPredicate::kIsNotNull:
                 return FormatIsNotNull(predicate.is_not_null());
             case TPredicate::kComparison:
-                return FormatComparison(predicate.comparison());
+                if (predicate.has_string_comparison()) {
+                    return FormatStringComparison(predicate.string_comparison());
+                } else {
+                    return FormatComparison(predicate.comparison());
+                }
             case TPredicate::kBoolExpression:
                 return FormatExpression(predicate.bool_expression().value());
             case TPredicate::kIn:
                 return FormatIn(predicate.in());
-            case TPredicate::kRegexp:
-                return FormatRegexp(predicate.regexp());
             default:
                 throw yexception() << "UnimplementedPredicateType, payload_case " << static_cast<ui64>(predicate.payload_case());
         }

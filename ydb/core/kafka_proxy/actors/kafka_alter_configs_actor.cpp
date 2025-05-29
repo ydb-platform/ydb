@@ -7,6 +7,7 @@
 #include <ydb/services/lib/actors/pq_schema_actor.h>
 
 #include <ydb/core/kafka_proxy/kafka_constants.h>
+#include <ydb/core/persqueue/user_info.h>
 
 
 namespace NKafka {
@@ -64,8 +65,8 @@ public:
         Y_UNUSED(appData);
         Y_UNUSED(pqGroupDescription);
         Y_UNUSED(selfInfo);
-
-        auto partitionConfig = groupConfig.MutablePQTabletConfig()->MutablePartitionConfig();
+        auto* tabletConfig = groupConfig.MutablePQTabletConfig();
+        auto partitionConfig = tabletConfig->MutablePartitionConfig();
 
         if (RetentionMs.has_value()) {
             partitionConfig->SetLifetimeSeconds(RetentionMs.value() / 1000);
@@ -75,8 +76,30 @@ public:
             partitionConfig->SetStorageLimitBytes(RetentionBytes.value());
         }
         if (CleanupPolicy.has_value()) {
-            groupConfig.MutablePQTabletConfig()->SetEnableCompactification(CleanupPolicy.value() == ECleanupPolicy::COMPACT);
+            tabletConfig->SetEnableCompactification(CleanupPolicy.value() == ECleanupPolicy::COMPACT);
         }
+        const auto& pqConfig = appData->PQConfig;
+
+        if (!tabletConfig->GetEnableCompactification()) {
+            NKikimr::NGRpcProxy::V1::RemoveReadRuleFromConfig(
+                groupConfig.MutablePQTabletConfig(),
+                pqGroupDescription.GetPQTabletConfig(),
+                NKikimr::NPQ::CLIENTID_COMPACTION_CONSUMER,
+                appData->PQConfig
+            );
+        } else {
+            Ydb::PersQueue::V1::TopicSettings::ReadRule compConsumer;
+            compConsumer.set_consumer_name(NKikimr::NPQ::CLIENTID_COMPACTION_CONSUMER);
+            compConsumer.set_important(true);
+            compConsumer.set_starting_message_timestamp_ms(0);
+            compConsumer.set_supported_format(Ydb::PersQueue::V1::TopicSettings::FORMAT_BASE);
+            auto code = AddReadRuleToConfig(tabletConfig, compConsumer,
+                          NKikimr::NGRpcProxy::V1::GetSupportedClientServiceTypes(pqConfig), pqConfig);
+            if (code.PQCode != Ydb::PersQueue::ErrorCode::OK) {
+                Y_ABORT();
+            }
+        }
+
     }
 
 private:

@@ -1,36 +1,30 @@
 #pragma once
 
-#include <ydb/core/tx/columnshard/columnshard_schema.h>
+#include "clean_unused_tables_template.h"
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
+#include <ydb/core/tx/columnshard/columnshard_schema.h>
 
 namespace NKikimr::NOlap::NCleanUnusedTables {
+using namespace NColumnShard;
 
 class TCleanUnusedTablesNormalizer final
-      : public TNormalizationController::INormalizerComponent
-{
-    using TBase = TNormalizationController::INormalizerComponent;
+    : public TCleanUnusedTablesNormalizerTemplate<Schema::IndexColumns> {
+  using TBase = TCleanUnusedTablesNormalizerTemplate<Schema::IndexColumns>;
 
-    static TString ClassName() { return "CleanUnusedTables"; }
-    static inline auto Registrator =
-        INormalizerComponent::TFactory::TRegistrator<TCleanUnusedTablesNormalizer>(ClassName());
+  static TString ClassName() { return "CleanUnusedTables"; }
+  static inline auto Registrator = INormalizerComponent::TFactory::TRegistrator<
+      TCleanUnusedTablesNormalizer>(ClassName());
 
 public:
-    using TKey = std::tuple<ui32, ui64, ui32, ui64, ui64, ui64, ui32>;
+  explicit TCleanUnusedTablesNormalizer(
+      const TNormalizationController::TInitContext &ctx)
+      : TBase(ctx) {}
 
-    static constexpr size_t BATCH = 1000;
-    
-    explicit TCleanUnusedTablesNormalizer(const TNormalizationController::TInitContext& ctx)
-        : TBase(ctx) {}
-
-    TString GetClassName() const override { return ClassName(); }
-    std::optional<ENormalizerSequentialId> DoGetEnumSequentialId() const override {
-        // return ENormalizerSequentialId::CleanUnusedTables;
-        return std::nullopt;
-    }
-
-    TConclusion<std::vector<INormalizerTask::TPtr>>
-    DoInit(const TNormalizationController&,
-           NTabletFlatExecutor::TTransactionContext& txc) override;
+  TString GetClassName() const override { return ClassName(); }
+  std::optional<ENormalizerSequentialId>
+  DoGetEnumSequentialId() const override {
+    return std::nullopt;
+  }
 };
 
 } // namespace NKikimr::NOlap::NCleanUnusedTables

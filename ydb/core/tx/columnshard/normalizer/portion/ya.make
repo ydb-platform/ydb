@@ -14,6 +14,7 @@ SRCS(
     GLOBAL leaked_blobs.cpp
     GLOBAL clean_deprecated_snapshot.cpp
     GLOBAL chunks_v0_meta.cpp
+    GLOBAL clean_unused_tables_template.cpp
     GLOBAL clean_unused_tables.cpp
 )
 

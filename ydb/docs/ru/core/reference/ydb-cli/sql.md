@@ -64,10 +64,18 @@
 > **Важно:**
 > Файл диагностики может содержать конфиденциальные данные в полях **`meta.query_text`**, **`plan`** и **`ast`**. Перед передачей такого файла сторонним лицам (например, в техническую поддержку) рекомендуется вручную просмотреть и отредактировать содержимое файла, чтобы удалить или заменить чувствительную информацию.
 
-**Пример запроса с чувствительной информацией:**
+**Примеры:**
+
+Пример команды, чтобы собрать диагностику в файл `diagnostics.json`:
 
 ```bash
 ydb -e <endpoint> -d <database> sql -s "SELECT * FROM users WHERE email = 'alice@example.com';" --stats full --diagnostics-file diagnostics.json
+```
+
+Если вы хотите получить диагностические данные, относящиеся к плану запроса, без фактического выполнения запроса, вы можете вместо этого выполнить `EXPLAIN`-запрос:
+
+```bash
+ydb -e <endpoint> -d <database> sql -s "SELECT * FROM users WHERE email = 'alice@example.com';" --explain --diagnostics-file diagnostics.json
 ```
 
 В диагностическом файле `diagnostics.json` в поле **`meta.query_text`** будет содержаться такая строка:
@@ -101,6 +109,8 @@ ydb -e <endpoint> -d <database> sql -s "SELECT * FROM users WHERE email = 'alice
         "Predicate" : "item.emails == \"<EMAIL>\"",
         ...
 ```
+
+Для сбора диагностической информации относительно плана для запроса,
 
 ### Работа с параметризованными запросами {#parameterized-query}
 

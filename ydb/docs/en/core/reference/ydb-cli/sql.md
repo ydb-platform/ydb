@@ -64,10 +64,18 @@ Diagnostics are collected when statistics gathering is enabled `--stats full`, a
 > **Important:**
 > The diagnostics file may contain confidential information in the **`meta.query_text`**, **`plan`**, and **`ast`** fields. Before sharing this file with third parties (e.g., technical support), it is recommended to carefully review and edit its contents to remove or replace any sensitive data.
 
-**Example of a query containing sensitive information:**
+**Examples:**
+
+Example command to collect diagnostics in the `diagnostics.json` file:
 
 ```bash
 ydb -e <endpoint> -d <database> sql -s "SELECT * FROM users WHERE email = 'alice@example.com';" --stats full --diagnostics-file diagnostics.json
+```
+
+If you want to collect diagnostics related to a query plan without actually executing the query, you can execute an `EXPLAIN` query instead:
+
+```bash
+ydb -e <endpoint> -d <database> sql -s "SELECT * FROM users WHERE email = 'alice@example.com';" --explain --diagnostics-file diagnostics.json
 ```
 
 In the `diagnostics.json` file, in the **`meta.query_text`** field, the following string will appear:

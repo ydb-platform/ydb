@@ -120,6 +120,7 @@ struct TTransaction {
 
     TInstant WriteInfoResponseTimestamp;
 };
+class TPartitionCompaction;
 
 class TPartition : public TActorBootstrapped<TPartition> {
     friend TInitializer;
@@ -136,6 +137,7 @@ class TPartition : public TActorBootstrapped<TPartition> {
     friend TPartitionSourceManager;
 
     friend class TPartitionTestWrapper;
+    friend class TPartitionCompaction;
 
 public:
     const TString& TopicName() const;
@@ -986,6 +988,8 @@ private:
 
     TInstant LastUsedStorageMeterTimestamp;
 
+    THolder<TPartitionCompaction> Compacter;
+
     using TPendingEvent = std::variant<
         std::unique_ptr<TEvPQ::TEvTxCalcPredicate>,
         std::unique_ptr<TEvPQ::TEvTxCommit>,
@@ -1057,6 +1061,91 @@ private:
     TDeque<NWilson::TSpan> TxForPersistSpans;
 
     bool CanProcessUserActionAndTransactionEvents() const;
+};
+
+
+class TPartitionCompaction {
+public:
+    TPartitionCompaction(ui64 lastCompactedOffset, ui64 startCookie, ui64 endCookie, TPartition* partitionActor, ui64 readQuota);
+
+    enum class EStep {
+        PENDING,
+        READING,
+        COMPACTING,
+        PERSISTING,
+    };
+    class TReadState {
+        friend TPartitionCompaction;
+        constexpr static const ui64 MAX_DATA_KEYS = 5000;
+
+        ui64 OffsetToRead;
+        ui64 LastOffset = 0;
+        ui64 NextPartNo = 0;
+        THashMap<TString, ui64> TopicData; //Key -> Offset
+
+        TPartition* PartitionActor;
+        TMaybe<NKikimrClient::TCmdReadResult::TResult> LastMessage;
+
+    public:
+        TReadState(ui64 firstOffset, TPartition* partitionActor);
+
+        bool ProcessResponse(TEvPQ::TEvProxyResponse::TPtr& ev);
+        EStep ContinueIfPossible(ui64 nextRequestCookie);
+        THashMap<TString, ui64>&& GetData();
+        ui64 GetLastOffset();
+        void UpdateConfig(ui64 maxBurst, ui64 readQuota); //ToDo;
+    };
+
+    class TCompactState {
+        friend TPartitionCompaction;
+        THolder<TEvKeyValue::TEvRequest> Request;
+        ui64 RequestSize;
+        //TKey NextDataKey;
+        ui64 NextOffset;
+        ui64 MaxOffset;
+        std::shared_ptr<TQuotaTracker> QuotaTracker;
+        THashMap<TString, ui64> TopicData;
+        TPartition* PartitionActor;
+
+        TCompactState(THashMap<TString, ui64>&& data, ui64 firstUncompactedOffset, ui64 maxOffset,
+                      const std::shared_ptr<TQuotaTracker> quotaTracker, TPartition* partitionActor)
+            : NextOffset(firstUncompactedOffset)
+            , MaxOffset(maxOffset)
+            , QuotaTracker(quotaTracker)
+            , TopicData(std::move(data))
+            , PartitionActor(partitionActor)
+        {}
+
+        EStep ProcessResponse(TEvKeyValue::TEvResponse::TPtr& ev);
+        bool ContinueIfPossible(ui64 nextCookie);
+        void RunPersistRequest();
+    };
+
+    EStep Step = EStep::PENDING;
+    std::shared_ptr<TQuotaTracker> QuotaTracker;
+    ui64 FirstUncompactedOffset = 0;
+    bool HaveRequestInflight = false;
+    ui64 StartCookie = 0;
+    ui64 EndCookie = 0;
+    ui64 CurrentCookie = 0; //ToDo: assign cookies;
+
+
+    std::optional<TReadState> ReadState;
+    std::optional<TCompactState> CompactState;
+    TPartition* PartitionActor;
+
+    ui64 GetNextCookie() {
+        CurrentCookie++;
+        if (CurrentCookie > EndCookie) {
+            CurrentCookie = StartCookie;
+        }
+        return CurrentCookie;
+    }
+
+    void TryCompactionIfPossible();
+    void UpdatePartitionConifg();
+    void ProcessResponse(TEvPQ::TEvProxyResponse::TPtr& ev);
+
 };
 
 } // namespace NKikimr::NPQ

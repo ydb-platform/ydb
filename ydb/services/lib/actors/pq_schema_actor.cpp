@@ -4,6 +4,7 @@
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/persqueue/utils.h>
+#include <ydb/core/persqueue/user_info.h>
 
 #include <ydb-cpp-sdk/library/jwt/jwt.h>
 
@@ -835,7 +836,7 @@ namespace NKikimr::NGRpcProxy::V1 {
         }
 
         //TODO: check all values with defaults
-
+        bool haveCompConsumer = false;
         if (settings.read_rules().size() > MAX_READ_RULES_COUNT) {
             error = TStringBuilder() << "read rules count cannot be more than "
                                      << MAX_READ_RULES_COUNT << ", provided " << settings.read_rules().size();
@@ -855,7 +856,18 @@ namespace NKikimr::NGRpcProxy::V1 {
                 error = messageAndCode.Message;
                 return Ydb::StatusIds::BAD_REQUEST;
             }
+            if (rr.consumer_name() == NKikimr::NPQ::CLIENTID_COMPACTION_CONSUMER) {
+                haveCompConsumer = true;
+            }
         }
+        if(pqTabletConfig->GetEnableCompactification() && !haveCompConsumer) {
+            Ydb::PersQueue::V1::TopicSettings::ReadRule compConsumer;
+            compConsumer.set_consumer_name(NKikimr::NPQ::CLIENTID_COMPACTION_CONSUMER);
+            compConsumer.set_important(true);
+            compConsumer.set_starting_message_timestamp_ms(0);
+            AddReadRuleToConfig(pqTabletConfig, compConsumer, supportedClientServiceTypes, pqConfig);
+        }
+
         if (settings.has_remote_mirror_rule()) {
             auto mirrorFrom = partConfig->MutableMirrorFrom();
             if (!local) {
@@ -1147,7 +1159,14 @@ namespace NKikimr::NGRpcProxy::V1 {
                 return TYdbPqCodes(Ydb::StatusIds::BAD_REQUEST, messageAndCode.PQCode);
             }
         }
-
+        if (pqTabletConfig->GetEnableCompactification()) {
+            Ydb::Topic::Consumer compConsumer;
+            compConsumer.set_name(NKikimr::NPQ::CLIENTID_COMPACTION_CONSUMER);
+            compConsumer.set_important(true);
+            compConsumer.mutable_read_from()->set_seconds(0);
+            AddReadRuleToConfig(pqTabletConfig, compConsumer, supportedClientServiceTypes, false, pqConfig,
+                                appData->FeatureFlags.GetEnableTopicDiskSubDomainQuota());
+        }
         return TYdbPqCodes(CheckConfig(*pqTabletConfig, supportedClientServiceTypes, error, pqConfig, Ydb::StatusIds::BAD_REQUEST),
                            Ydb::PersQueue::ErrorCode::VALIDATION_ERROR);
     }
@@ -1324,8 +1343,8 @@ namespace NKikimr::NGRpcProxy::V1 {
 
         for (const auto& c : pqTabletConfig->GetConsumers()) {
             auto& oldName = c.GetName();
+            Cerr << "Check consumer " << oldName << Endl;
             auto name = NPersQueue::ConvertOldConsumerName(oldName, pqConfig);
-
             bool erase = false;
             for (auto consumer: request.drop_consumers()) {
                 if (consumer == name || consumer == oldName) {

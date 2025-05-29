@@ -65,7 +65,6 @@ public:
         Y_UNUSED(selfInfo);
         const auto& pqConfig = appData->PQConfig;
 
-
         auto partitionConfig = groupConfig.MutablePQTabletConfig()->MutablePartitionConfig();
 
         if (RetentionMs.has_value()) {
@@ -76,7 +75,7 @@ public:
             partitionConfig->SetStorageLimitBytes(RetentionBytes.value());
         }
         if (CleanupPolicy.has_value()) {
-            groupConfig.MutablePQTabletConfig()->SetEnableCompactification(CleanupPolicy.value() == ECleanupPolicy::COMPACT);
+            tabletConfig->SetEnableCompactification(CleanupPolicy.value() == ECleanupPolicy::COMPACT);
         }
         if (pqGroupDescription.GetPQTabletConfig().GetEnableCompactification() && !groupConfig.GetPQTabletConfig().GetEnableCompactification()) {
             NKikimr::NGRpcProxy::V1::RemoveReadRuleFromConfig(

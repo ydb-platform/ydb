@@ -864,7 +864,6 @@ namespace NKikimr::NGRpcProxy::V1 {
                 haveCompConsumer = true;
             }
         }
-
         if(pqTabletConfig->GetEnableCompactification() && !haveCompConsumer) {
             Ydb::PersQueue::V1::TopicSettings::ReadRule compConsumer;
             compConsumer.set_consumer_name(NKikimr::NPQ::CLIENTID_COMPACTION_CONSUMER);
@@ -1176,7 +1175,14 @@ namespace NKikimr::NGRpcProxy::V1 {
             AddReadRuleToConfig(pqTabletConfig, compConsumer, supportedClientServiceTypes, false, pqConfig,
                                 appData->FeatureFlags.GetEnableTopicDiskSubDomainQuota());
         }
-
+        if (pqTabletConfig->GetEnableCompactification()) {
+            Ydb::Topic::Consumer compConsumer;
+            compConsumer.set_name(NKikimr::NPQ::CLIENTID_COMPACTION_CONSUMER);
+            compConsumer.set_important(true);
+            compConsumer.mutable_read_from()->set_seconds(0);
+            AddReadRuleToConfig(pqTabletConfig, compConsumer, supportedClientServiceTypes, false, pqConfig,
+                                appData->FeatureFlags.GetEnableTopicDiskSubDomainQuota());
+        }
         return TYdbPqCodes(CheckConfig(*pqTabletConfig, supportedClientServiceTypes, error, pqConfig, Ydb::StatusIds::BAD_REQUEST),
                            Ydb::PersQueue::ErrorCode::VALIDATION_ERROR);
     }
@@ -1353,8 +1359,8 @@ namespace NKikimr::NGRpcProxy::V1 {
         bool hasCompConsumer = false;
         for (const auto& c : pqTabletConfig->GetConsumers()) {
             auto& oldName = c.GetName();
+            Cerr << "Check consumer " << oldName << Endl;
             auto name = NPersQueue::ConvertOldConsumerName(oldName, pqConfig);
-
             bool erase = false;
             for (auto consumer: request.drop_consumers()) {
                 if (consumer == name || consumer == oldName) {
@@ -1382,7 +1388,6 @@ namespace NKikimr::NGRpcProxy::V1 {
                 consumer.mutable_supported_codecs()->add_codecs(codec + 1);
             }
         }
-
 
         for (auto& cons : request.add_consumers()) {
             consumers.push_back({true, cons}); // check service type for added consumers is true

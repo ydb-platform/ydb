@@ -180,6 +180,8 @@ public:
                 return NKikimrViewer::file_store;
             case TNavigate::KindView:
                 return NKikimrViewer::view;
+            case TNavigate::KindSysView:
+                return NKikimrViewer::sys_view;
             default:
                 return NKikimrViewer::dir;
         }

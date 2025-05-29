@@ -98,14 +98,15 @@ public:
                 }
             }
 
+            auto affectedShards = Reads.AffectedShards();
             // TODO: use evread statistics after KIKIMR-16924
             tableStats->SetReadRows(tableStats->GetReadRows() + rowsReadEstimate);
             tableStats->SetReadBytes(tableStats->GetReadBytes() + bytesReadEstimate);
-            tableStats->SetAffectedPartitions(tableStats->GetAffectedPartitions() + ReadsPerShard.size());
+            tableStats->SetAffectedPartitions(tableStats->GetAffectedPartitions() + affectedShards.size());
 
             NKqpProto::TKqpTableExtraStats tableExtraStats;
             auto readActorTableAggrExtraStats = tableExtraStats.MutableReadActorTableAggrExtraStats();
-            for (const auto& [shardId, _] : ReadsPerShard) {
+            for (const auto& shardId : affectedShards) {
                 readActorTableAggrExtraStats->AddAffectedShards(shardId);
             }
 
@@ -117,6 +118,7 @@ private:
     enum class EReadState {
         Initial,
         Running,
+        Blocked, // Read can't accept new data, but not finished yet
         Finished,
     };
 
@@ -124,6 +126,7 @@ private:
         switch (state) {
             case EReadState::Initial: return "Initial"sv;
             case EReadState::Running: return "Running"sv;
+            case EReadState::Blocked: return "Blocked"sv;
             case EReadState::Finished: return "Finished"sv;
         }
     }
@@ -134,12 +137,12 @@ private:
             , ShardId(shardId)
             , State(EReadState::Initial) {}
 
-        void SetFinished() {
-            State = EReadState::Finished;
-        }
-
         bool Finished() const {
             return (State == EReadState::Finished);
+        }
+
+        void SetBlocked() {
+            State = EReadState::Blocked;
         }
 
         const ui64 Id;
@@ -152,7 +155,68 @@ private:
 
     struct TShardState {
         ui64 RetryAttempts = 0;
-        std::vector<TReadState*> Reads;
+        std::unordered_set<ui64> Reads;
+    };
+
+    struct TReads {
+        std::unordered_map<ui64, TReadState> Reads;
+        std::unordered_map<ui64, TShardState> ReadsPerShard;
+
+        std::unordered_map<ui64, TReadState>::iterator begin() { return Reads.begin(); }
+
+        std::unordered_map<ui64, TReadState>::iterator end() { return Reads.end(); }
+
+        std::unordered_map<ui64, TReadState>::iterator find(ui64 readId) {
+            return Reads.find(readId);
+        }
+
+        void insert(TReadState&& read) {
+            const auto [readIt, succeeded] = Reads.insert({read.Id, std::move(read)});
+            YQL_ENSURE(succeeded);
+            ReadsPerShard[readIt->second.ShardId].Reads.emplace(readIt->second.Id);
+        }
+
+        size_t InFlightReads() const {
+            return Reads.size();
+        }
+
+        std::vector<ui64> AffectedShards() const {
+            std::vector<ui64> result;
+            result.reserve(ReadsPerShard.size());
+            for(const auto& [shard, _]: ReadsPerShard) {
+                result.push_back(shard);
+            }
+            return result;
+        }
+
+        bool CheckShardRetriesExeeded(TReadState& failedRead) {
+            const auto& shardState = ReadsPerShard[failedRead.ShardId];
+            return shardState.RetryAttempts + 1 > MaxShardRetries();
+        }
+
+        TDuration CalcDelayForShard(TReadState& failedRead, bool allowInstantRetry) {
+            auto& shardState = ReadsPerShard[failedRead.ShardId];
+            ++shardState.RetryAttempts;
+            return CalcDelay(shardState.RetryAttempts, allowInstantRetry);
+        }
+
+        void erase(TReadState& read) {
+            ReadsPerShard[read.ShardId].Reads.erase(read.Id);
+            Reads.erase(read.Id);
+        }
+
+        std::vector<TReadState*> GetShardReads(ui64 shardId) {
+            auto it = ReadsPerShard.find(shardId);
+            YQL_ENSURE(it != ReadsPerShard.end());
+            std::vector<TReadState*> result;
+            for(ui64 readId: it->second.Reads) {
+                auto it = Reads.find(readId);
+                YQL_ENSURE(it != Reads.end());
+                result.push_back(&it->second);
+            }
+
+            return result;
+        }
     };
 
     struct TEvPrivate {
@@ -217,13 +281,15 @@ private:
         ReadRowsCount += replyResultStats.ReadRowsCount;
         ReadBytesCount += replyResultStats.ReadBytesCount;
 
-        auto status = FetchInputRows();
+        if (!StreamLookupWorker->IsOverloaded()) {
+            FetchInputRows();
+        }
 
         if (Partitioning) {
             ProcessInputRows();
         }
 
-        const bool inputRowsFinished = status == NUdf::EFetchStatus::Finish;
+        const bool inputRowsFinished = LastFetchStatus == NUdf::EFetchStatus::Finish;
         const bool allReadsFinished = AllReadsFinished();
         const bool allRowsProcessed = StreamLookupWorker->AllRowsProcessed();
 
@@ -276,6 +342,7 @@ private:
     }
 
     void Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& ev) {
+        ResoleShardsInProgress = false;
         CA_LOG_D("TEvResolveKeySetResult was received for table: " << StreamLookupWorker->GetTablePath());
         if (ev->Get()->Request->ErrorCount > 0) {
             TString errorMsg = TStringBuilder() << "Failed to get partitioning for table: "
@@ -297,18 +364,19 @@ private:
     void Handle(TEvDataShard::TEvReadResult::TPtr& ev) {
         const auto& record = ev->Get()->Record;
 
-
         auto readIt = Reads.find(record.GetReadId());
         if (readIt == Reads.end() || readIt->second.State != EReadState::Running) {
-            CA_LOG_D("Drop read with readId: " << record.GetReadId() << ", because it's already completed");
+            CA_LOG_D("Drop read with readId: " << record.GetReadId() << ", because it's already completed or blocked");
             return;
         }
 
         auto& read = readIt->second;
+        ui64 shardId = read.ShardId;
 
         CA_LOG_D("Recv TEvReadResult (stream lookup) from ShardID=" << read.ShardId
             << ", Table = " << StreamLookupWorker->GetTablePath()
-            << ", ReadId=" << record.GetReadId()
+            << ", ReadId=" << record.GetReadId() << " (current ReadId=" << ReadId << ")"
+            << ", SeqNo=" << record.GetSeqNo()
             << ", Status=" << Ydb::StatusIds::StatusCode_Name(record.GetStatus().GetCode())
             << ", Finished=" << record.GetFinished()
             << ", RowCount=" << record.GetRowCount()
@@ -344,31 +412,59 @@ private:
             Counters->DataShardIteratorFails->Inc();
         }
 
+        auto getIssues = [&record]() {
+            NYql::TIssues issues;
+            NYql::IssuesFromMessage(record.GetStatus().GetIssues(), issues);
+            return issues;
+        };
+
+        auto replyError = [&](auto message, auto status) {
+            return RuntimeError(message, status, getIssues());
+        };
+
         switch (record.GetStatus().GetCode()) {
             case Ydb::StatusIds::SUCCESS:
                 break;
-            case Ydb::StatusIds::NOT_FOUND: {
+            case Ydb::StatusIds::NOT_FOUND:
+            {
                 StreamLookupWorker->ResetRowsProcessing(read.Id, read.FirstUnprocessedQuery, read.LastProcessedKey);
-                read.SetFinished();
+                CA_LOG_D("NOT_FOUND was received from tablet: " << read.ShardId << ". "
+                    << getIssues().ToOneLineString());
+                Reads.erase(read);
                 return ResolveTableShards();
             }
             case Ydb::StatusIds::OVERLOADED: {
+                if (CheckTotalRetriesExeeded() || Reads.CheckShardRetriesExeeded(read)) {
+                    return replyError(
+                        TStringBuilder() << "Table '" << StreamLookupWorker->GetTablePath() << "' retry limit exceeded.",
+                        NYql::NDqProto::StatusIds::OVERLOADED);
+                }
+                CA_LOG_D("OVERLOADED was received from tablet: " << read.ShardId << "."
+                    << getIssues().ToOneLineString());
+                read.SetBlocked();
                 return RetryTableRead(read, /*allowInstantRetry = */false);
             }
             case Ydb::StatusIds::INTERNAL_ERROR: {
+                if (CheckTotalRetriesExeeded() || Reads.CheckShardRetriesExeeded(read)) {
+                    return replyError(
+                        TStringBuilder() << "Table '" << StreamLookupWorker->GetTablePath() << "' retry limit exceeded.",
+                        NYql::NDqProto::StatusIds::INTERNAL_ERROR);
+                }
+                CA_LOG_D("INTERNAL_ERROR was received from tablet: " << read.ShardId << "."
+                    << getIssues().ToOneLineString());
+                read.SetBlocked();
                 return RetryTableRead(read);
             }
             default: {
-                NYql::TIssues issues;
-                NYql::IssuesFromMessage(record.GetStatus().GetIssues(), issues);
-                return RuntimeError("Read request aborted", NYql::NDqProto::StatusIds::ABORTED, issues);
+                return replyError("Read request aborted", NYql::NDqProto::StatusIds::ABORTED);
             }
         }
 
+        YQL_ENSURE(read.LastSeqNo < record.GetSeqNo());
         read.LastSeqNo = record.GetSeqNo();
 
         if (record.GetFinished()) {
-            read.SetFinished();
+            Reads.erase(read);
         } else {
             YQL_ENSURE(record.HasContinuationToken(), "Successful TEvReadResult should contain continuation token");
             NKikimrTxDataShard::TReadContinuationToken continuationToken;
@@ -379,6 +475,8 @@ private:
             if (continuationToken.HasLastProcessedKey()) {
                 TSerializedCellVec lastKey(continuationToken.GetLastProcessedKey());
                 read.LastProcessedKey = TOwnedCellVec(lastKey.GetCells());
+            } else {
+                read.LastProcessedKey.Clear();
             }
 
             Counters->SentIteratorAcks->Inc();
@@ -404,7 +502,7 @@ private:
 
         auto guard = BindAllocator();
         StreamLookupWorker->AddResult(TKqpStreamLookupWorker::TShardReadResult{
-            read.ShardId, THolder<TEventHandle<TEvDataShard::TEvReadResult>>(ev.Release())
+            shardId, THolder<TEventHandle<TEvDataShard::TEvReadResult>>(ev.Release())
         });
         Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
     }
@@ -413,17 +511,16 @@ private:
         CA_LOG_D("TEvDeliveryProblem was received from tablet: " << ev->Get()->TabletId);
 
         const auto& tabletId = ev->Get()->TabletId;
-        auto shardIt = ReadsPerShard.find(tabletId);
-        YQL_ENSURE(shardIt != ReadsPerShard.end());
 
         TVector<TReadState*> toRetry;
-        for (auto* read : shardIt->second.Reads) {
+        for (auto* read : Reads.GetShardReads(tabletId)) {
             if (read->State == EReadState::Running) {
                 Counters->IteratorDeliveryProblems->Inc();
                 toRetry.push_back(read);
             }
         }
         for (auto* read : toRetry) {
+            read->SetBlocked();
             RetryTableRead(*read);
         }
     }
@@ -435,6 +532,7 @@ private:
         if (!Partitioning) {
             LookupActorStateSpan.EndError("timeout exceeded");
             CA_LOG_D("Retry attempt to resolve shards for table: " << StreamLookupWorker->GetTablePath());
+            ResoleShardsInProgress = false;
             ResolveTableShards();
         }
     }
@@ -444,29 +542,28 @@ private:
         YQL_ENSURE(readIt != Reads.end(), "Unexpected readId: " << ev->Get()->ReadId);
         auto& read = readIt->second;
 
-        if (read.State == EReadState::Running && read.LastSeqNo <= ev->Get()->LastSeqNo) {
+        YQL_ENSURE(read.State != EReadState::Blocked || read.LastSeqNo <= ev->Get()->LastSeqNo);
+
+        if ((read.State == EReadState::Running && read.LastSeqNo <= ev->Get()->LastSeqNo) || read.State == EReadState::Blocked) {
             if (ev->Get()->InstantStart) {
-                read.SetFinished();
                 auto requests = StreamLookupWorker->RebuildRequest(read.Id, read.FirstUnprocessedQuery, read.LastProcessedKey, ReadId);
                 for (auto& request : requests) {
                     StartTableRead(read.ShardId, std::move(request));
                 }
+                Reads.erase(read);
             } else {
                 RetryTableRead(read);
             }
         }
     }
 
-    NUdf::EFetchStatus FetchInputRows() {
+    void FetchInputRows() {
         auto guard = BindAllocator();
 
-        NUdf::EFetchStatus status;
         NUdf::TUnboxedValue row;
-        while ((status = Input.Fetch(row)) == NUdf::EFetchStatus::Ok) {
+        while ((LastFetchStatus = Input.Fetch(row)) == NUdf::EFetchStatus::Ok) {
             StreamLookupWorker->AddInputRow(std::move(row));
         }
-
-        return status;
     }
 
     void ProcessInputRows() {
@@ -523,9 +620,7 @@ private:
 
         auto readId = read.Id;
         auto lastSeqNo = read.LastSeqNo;
-        const auto [readIt, succeeded] = Reads.insert({readId, std::move(read)});
-        YQL_ENSURE(succeeded);
-        ReadsPerShard[shardId].Reads.push_back(&readIt->second);
+        Reads.insert(std::move(read));
 
         if (auto delay = ShardTimeout()) {
             TlsActivationContext->Schedule(
@@ -534,32 +629,34 @@ private:
         }
     }
 
+    bool CheckTotalRetriesExeeded() {
+        const auto limit = MaxTotalRetries();
+        return limit && TotalRetryAttempts + 1 > *limit;
+    }
+
     void RetryTableRead(TReadState& failedRead, bool allowInstantRetry = true) {
         CA_LOG_D("Retry reading of table: " << StreamLookupWorker->GetTablePath() << ", readId: " << failedRead.Id
             << ", shardId: " << failedRead.ShardId);
 
-        ++TotalRetryAttempts;
-        auto totalRetriesLimit = MaxTotalRetries();
-        if (totalRetriesLimit && TotalRetryAttempts > *totalRetriesLimit) {
+        if (CheckTotalRetriesExeeded()) {
             return RuntimeError(TStringBuilder() << "Table '" << StreamLookupWorker->GetTablePath() << "' retry limit exceeded",
                 NYql::NDqProto::StatusIds::UNAVAILABLE);
         }
+        ++TotalRetryAttempts;
 
-        auto& shardState = ReadsPerShard[failedRead.ShardId];
-        ++shardState.RetryAttempts;
-        if (shardState.RetryAttempts > MaxShardRetries()) {
+        if (Reads.CheckShardRetriesExeeded(failedRead)) {
             StreamLookupWorker->ResetRowsProcessing(failedRead.Id, failedRead.FirstUnprocessedQuery, failedRead.LastProcessedKey);
-            failedRead.SetFinished();
+            Reads.erase(failedRead);
             return ResolveTableShards();
         }
 
-        auto delay = CalcDelay(shardState.RetryAttempts, allowInstantRetry);
+        auto delay = Reads.CalcDelayForShard(failedRead, allowInstantRetry);
         if (delay == TDuration::Zero()) {
-            failedRead.SetFinished();
             auto requests = StreamLookupWorker->RebuildRequest(failedRead.Id, failedRead.FirstUnprocessedQuery, failedRead.LastProcessedKey, ReadId);
             for (auto& request : requests) {
                 StartTableRead(failedRead.ShardId, std::move(request));
             }
+            Reads.erase(failedRead);
         } else {
             CA_LOG_D("Schedule retry atempt for readId: " << failedRead.Id << " after " << delay);
             TlsActivationContext->Schedule(
@@ -569,12 +666,17 @@ private:
     }
 
     void ResolveTableShards() {
+        if (ResoleShardsInProgress) {
+            return;
+        }
+
         if (++TotalResolveShardsAttempts > MaxShardResolves()) {
             return RuntimeError(TStringBuilder() << "Table '" << StreamLookupWorker->GetTablePath() << "' resolve attempts limit exceeded",
                 NYql::NDqProto::StatusIds::UNAVAILABLE);
         }
 
         CA_LOG_D("Resolve shards for table: " << StreamLookupWorker->GetTablePath());
+        ResoleShardsInProgress = true;
 
         Partitioning.reset();
 
@@ -601,13 +703,7 @@ private:
     }
 
     bool AllReadsFinished() const {
-        for (const auto& [_, read] : Reads) {
-            if (!read.Finished()) {
-                return false;
-            }
-        }
-
-        return true;
+        return Reads.InFlightReads() == 0;
     }
 
     TGuard<NKikimr::NMiniKQL::TScopedAlloc> BindAllocator() {
@@ -642,8 +738,8 @@ private:
     const bool AllowInconsistentReads;
     const TMaybe<ui64> LockTxId;
     const TMaybe<ui32> NodeLockId;
-    std::unordered_map<ui64, TReadState> Reads;
-    std::unordered_map<ui64, TShardState> ReadsPerShard;
+    TReads Reads;
+    NUdf::EFetchStatus LastFetchStatus = NUdf::EFetchStatus::Yield;
     std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>> Partitioning;
     const TDuration SchemeCacheRequestTimeout;
     NActors::TActorId SchemeCacheRequestTimeoutTimer;
@@ -654,6 +750,7 @@ private:
     ui64 ReadId = 0;
     size_t TotalRetryAttempts = 0;
     size_t TotalResolveShardsAttempts = 0;
+    bool ResoleShardsInProgress = false;
 
     // stats
     ui64 ReadRowsCount = 0;

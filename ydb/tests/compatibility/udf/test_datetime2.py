@@ -68,7 +68,7 @@ class TestDatetime2(MixedClusterFixture):
                 PRIMARY KEY(id)
             ) WITH (
                 PARTITION_AT_KEYS = ({", ".join(str(i) for i in range(1, self.rows))}),
-                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = {self.rows} 
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = {self.rows}
             );
         """
 

@@ -28,7 +28,7 @@ public:
     TString ToString() const { return TStringBuilder() << Raw; }
 
     template<typename TProto>
-    void CopyToProto(TProto *message, void (TProto::*pfn)(T value)) {
+    void CopyToProto(TProto *message, void (TProto::*pfn)(T value)) const {
         std::invoke(pfn, message, Raw);
     }
 

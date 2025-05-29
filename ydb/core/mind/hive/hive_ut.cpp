@@ -838,8 +838,8 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         return ev->Get()->Record;
     }
 
-    ui64 GetSimpleCounter(TTestBasicRuntime & runtime, ui64 tabletId,
-                          const NHive::ESimpleCounters &counter) {
+    ui64 GetSimpleCounter(TTestBasicRuntime& runtime, ui64 tabletId,
+                          NHive::ESimpleCounters counter) {
       return GetCounters(runtime, tabletId)
           .GetTabletCounters()
           .GetAppCounters()
@@ -7567,6 +7567,44 @@ Y_UNIT_TEST_SUITE(THiveTest) {
       blockStatus.Stop().Unblock();
 
       MakeSureTabletIsUp(runtime, tabletId, 0);
+
+      UNIT_ASSERT_VALUES_EQUAL(0, getStartingTabletsCounter());
+    }
+
+    // Y_UNIT_TEST(TestCreateExternalTablet) {
+    Y_UNIT_TEST(TestStartingTabletsCounterExternalBoot) {
+      TTestBasicRuntime runtime(1, false);
+      Setup(runtime, true);
+      const ui64 hiveTablet = MakeDefaultHiveID();
+      const ui64 testerTablet = MakeTabletID(false, 1);
+      CreateTestBootstrapper(
+          runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive),
+          &CreateDefaultHive);
+      MakeSureTabletIsUp(runtime, hiveTablet, 0);
+      TTabletTypes::EType tabletType = TTabletTypes::Dummy;
+
+      auto getStartingTabletsCounter = [&]() {
+        return GetSimpleCounter(runtime, hiveTablet,
+                                NHive::COUNTER_TABLETS_STARTING);
+      };
+
+      UNIT_ASSERT_VALUES_EQUAL(0, getStartingTabletsCounter());
+
+      TBlockEvents<TEvLocal::TEvTabletStatus> blockStatus(runtime);
+
+      THolder<TEvHive::TEvCreateTablet> ev(new TEvHive::TEvCreateTablet(testerTablet, 0, tabletType, BINDED_CHANNELS));
+      ev->Record.SetTabletBootMode(NKikimrHive::TABLET_BOOT_MODE_EXTERNAL);
+      ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet,
+                                           std::move(ev), 0, false);
+
+      while (blockStatus.empty()) {
+        runtime.DispatchEvents({}, TDuration::MilliSeconds(100));
+      }
+
+      UNIT_ASSERT_VALUES_EQUAL(1, getStartingTabletsCounter());
+      blockStatus.Stop().Unblock();
+
+      MakeSureTabletIsDown(runtime, tabletId, 0);
 
       UNIT_ASSERT_VALUES_EQUAL(0, getStartingTabletsCounter());
     }

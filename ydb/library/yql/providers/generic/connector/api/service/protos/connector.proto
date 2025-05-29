@@ -460,9 +460,11 @@ message TPredicate {
             G = 6;  // "$column > value"
             IND = 7;// "$column IS NOT DISTINCT value"
             ID = 8; // "$column IS DISTINCT value"
+            /*
             STARTS_WITH = 9; 
             ENDS_WITH = 10; 
             CONTAINS = 11;
+            */
         }
 
         EOperation operation = 1;
@@ -470,11 +472,29 @@ message TPredicate {
         TExpression right_value = 3;
     }
 
-    // "$column REGEXP $pattern"
+    // A subset of comparators corresponding to the string comparison operations.
+    // In general string comparison should not be considered as binary operation
+    // as it may use some additional options and settings.
+    message TStringComparison {
+        // An operation code.
+        enum EOperation {
+            STRING_COMPARISON_OPERATION_UNSPECIFIED = 0;
+            REGEXP = 1; // "$column REGEXP $pattern"
+            STARTS_WITH = 2; 
+            ENDS_WITH = 3; 
+            CONTAINS = 4;
+        }
+    }
+
+    /*
+    // This type will be removed in future. Use TComparison instead.
     message TRegexp {
+        option deprecated = true;
+
         TExpression value = 1;
         TExpression pattern = 2;
     }
+    */
 
     oneof payload {
         TNegation negation = 1;
@@ -488,7 +508,8 @@ message TPredicate {
         TBoolExpression bool_expression = 9;
         TCoalesce coalesce = 10;
         TIf if = 11;
-        TRegexp regexp = 12;
+        // TRegexp regexp = 12 [deprecated = true]; // This field will be removed in future. Use TComparison instead.
+        TStringComparison string_comparison = 13;
     }
 }
 

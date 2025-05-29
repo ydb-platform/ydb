@@ -6,10 +6,13 @@
 
 namespace NKikimr::NOlap::NCleanUnusedTables {
 using namespace NColumnShard;
+using TUnusedTables = TCleanUnusedTablesNormalizerTemplate<
+    Schema::IndexColumns
+>;
 
 class TCleanUnusedTablesNormalizer final
-    : public TCleanUnusedTablesNormalizerTemplate<Schema::IndexColumns> {
-  using TBase = TCleanUnusedTablesNormalizerTemplate<Schema::IndexColumns>;
+    : public TUnusedTables {
+  using TBase = TUnusedTables;
 
   static TString ClassName() { return "CleanUnusedTables"; }
   static inline auto Registrator = INormalizerComponent::TFactory::TRegistrator<

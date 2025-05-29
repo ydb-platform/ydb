@@ -641,6 +641,7 @@ namespace NSchemeShardUT_Private {
     void UpdateRow(TTestActorRuntime& runtime, const TString& table, const ui32 key, const TString& value, ui64 tabletId = TTestTxConfig::FakeHiveTablets);
     void UpdateRowPg(TTestActorRuntime& runtime, const TString& table, const ui32 key, ui32 value, ui64 tabletId = TTestTxConfig::FakeHiveTablets);
     void UploadRow(TTestActorRuntime& runtime, const TString& tablePath, int partitionIdx, const TVector<ui32>& keyTags, const TVector<ui32>& valueTags, const TVector<TCell>& keys, const TVector<TCell>& values);
+    void WriteOp(TTestActorRuntime& runtime, ui64 schemeshardId, const ui64 txId, const TString& tablePath, int partitionIdx, NKikimrDataEvents::TEvWrite_TOperation::EOperationType operationType, const std::vector<ui32>& columnIds, TSerializedCellMatrix&& data, bool successIsExpected);
     void WriteRow(TTestActorRuntime& runtime, ui64 schemeshardId, const ui64 txId, const TString& tablePath, int partitionIdx, const ui32 key, const TString& value, bool successIsExpected = true);
     void WriteRow(TTestActorRuntime& runtime, const ui64 txId, const TString& tablePath, int partitionIdx, const ui32 key, const TString& value, bool successIsExpected = true);
     void DeleteRow(TTestActorRuntime& runtime, ui64 schemeshardId, const ui64 txId, const TString& tablePath, int partitionIdx, const ui32 key, bool successIsExpected = true);
@@ -653,5 +654,11 @@ namespace NSchemeShardUT_Private {
     i64 DoNextVal(
         TTestActorRuntime& runtime, const TString& path,
         Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
+
+    NKikimrMiniKQL::TResult ReadTable(TTestActorRuntime& runtime, ui64 tabletId,
+        const TString& table, const TVector<TString>& pk, const TVector<TString>& columns, const TString& rangeFlags = "");
+
+    void WriteVectorTableRows(TTestActorRuntime& runtime, ui64 schemeShardId, ui64 txId, const TString & tablePath,
+        bool withValue, ui32 shard, ui32 min, ui32 max);
 
 } //NSchemeShardUT_Private

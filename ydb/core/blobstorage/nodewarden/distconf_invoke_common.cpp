@@ -125,8 +125,17 @@ namespace NKikimr::NStorage {
             case TQuery::kBootstrapCluster:
                 return BootstrapCluster(record.GetBootstrapCluster().GetSelfAssemblyUUID());
 
+            case TQuery::kSwitchBridgeClusterState:
+                return SwitchBridgeClusterState(record.GetSwitchBridgeClusterState().GetNewClusterState());
+
             case TQuery::REQUEST_NOT_SET:
                 return FinishWithError(TResult::ERROR, "Request field not set");
+            
+            case TQuery::kReconfigStateStorage:
+                return ReconfigStateStorage(record.GetReconfigStateStorage());
+
+            case TQuery::kGetStateStorageConfig:
+                return GetStateStorageConfig();
         }
 
         FinishWithError(TResult::ERROR, "unhandled request");
@@ -185,6 +194,9 @@ namespace NKikimr::NStorage {
 
     void TInvokeRequestHandlerActor::StartProposition(NKikimrBlobStorage::TStorageConfig *config, bool updateFields) {
         if (updateFields) {
+            if (auto error = UpdateClusterState(config)) {
+                return FinishWithError(TResult::ERROR, *error);
+            }
             config->MutablePrevConfig()->CopyFrom(*Self->StorageConfig);
             config->MutablePrevConfig()->ClearPrevConfig();
             UpdateFingerprint(config);

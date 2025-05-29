@@ -514,6 +514,9 @@ class StaticConfigGenerator(object):
         if self.__cluster_details.memory_controller_config is not None:
             normalized_config["memory_controller_config"] = self.__cluster_details.memory_controller_config
 
+        if self.__cluster_details.kafka_proxy_config is not None:
+            normalized_config["kafka_proxy_config"] = self.__cluster_details.kafka_proxy_config
+
         if self.__cluster_details.s3_proxy_resolver_config is not None:
             normalized_config["s3_proxy_resolver_config"] = self.__cluster_details.s3_proxy_resolver_config
 

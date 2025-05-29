@@ -175,9 +175,10 @@ namespace NKikimr::NStorage {
         const bool IsSelfStatic = false;
         TIntrusivePtr<TNodeWardenConfig> Cfg;
         bool SelfManagementEnabled = false;
+        TBridgeInfo::TPtr BridgeInfo;
 
         // currently active storage config
-        std::optional<NKikimrBlobStorage::TStorageConfig> StorageConfig;
+        std::shared_ptr<const NKikimrBlobStorage::TStorageConfig> StorageConfig;
         TString MainConfigYaml; // the part we have to push (unless this is storage-only) to console
         std::optional<ui64> MainConfigYamlVersion;
         TString MainConfigFetchYaml; // the part we would get is we fetch from console
@@ -185,10 +186,10 @@ namespace NKikimr::NStorage {
         std::optional<TString> StorageConfigYaml; // set if dedicated storage yaml is enabled; otherwise nullopt
 
         // base config from config file
-        NKikimrBlobStorage::TStorageConfig BaseConfig;
+        std::shared_ptr<const NKikimrBlobStorage::TStorageConfig> BaseConfig;
 
         // initial config based on config file and stored committed configs
-        NKikimrBlobStorage::TStorageConfig InitialConfig;
+        std::shared_ptr<const NKikimrBlobStorage::TStorageConfig> InitialConfig;
         std::vector<TString> DrivesToRead;
 
         // proposed storage configuration of the cluster
@@ -286,8 +287,8 @@ namespace NKikimr::NStorage {
             return NKikimrServices::TActivity::NODEWARDEN_DISTRIBUTED_CONFIG;
         }
 
-        TDistributedConfigKeeper(TIntrusivePtr<TNodeWardenConfig> cfg, const NKikimrBlobStorage::TStorageConfig& baseConfig,
-            bool isSelfStatic);
+        TDistributedConfigKeeper(TIntrusivePtr<TNodeWardenConfig> cfg,
+            std::shared_ptr<const NKikimrBlobStorage::TStorageConfig> baseConfig, bool isSelfStatic);
 
         void Bootstrap();
         void PassAway() override;
@@ -750,6 +751,8 @@ namespace NKikimr::NStorage {
 
     std::optional<TString> DecomposeConfig(const TString& configComposite, TString *mainConfigYaml,
         ui64 *mainConfigVersion, TString *mainConfigFetchYaml);
+
+    std::optional<TString> UpdateClusterState(NKikimrBlobStorage::TStorageConfig *config);
 
 } // NKikimr::NStorage
 

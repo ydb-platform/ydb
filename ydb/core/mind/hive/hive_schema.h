@@ -229,13 +229,14 @@ struct Schema : NIceDb::Schema {
         struct TabletID : Column<1, Tablet::ID::ColumnType> {};
         struct FollowerID : Column<2, TabletFollowerTablet::FollowerID::ColumnType> {};
         struct ProtoMetrics : Column<3, NScheme::NTypeIds::String> { using Type = NKikimrTabletBase::TMetrics; };
+        struct UsageImpact : Column<4, NScheme::NTypeIds::Double> {};
 
         struct MaximumCPU : Column<100 + (int)NMetrics::EResource::CPU, NScheme::NTypeIds::String> { using Type = NKikimrMetricsProto::TMaximumValueUI64; };
         struct MaximumMemory : Column<100 + (int)NMetrics::EResource::Memory, NScheme::NTypeIds::String> { using Type = NKikimrMetricsProto::TMaximumValueUI64; };
         struct MaximumNetwork : Column<100 + (int)NMetrics::EResource::Network, NScheme::NTypeIds::String> { using Type = NKikimrMetricsProto::TMaximumValueUI64; };
 
         using TKey = TableKey<TabletID, FollowerID>;
-        using TColumns = TableColumns<TabletID, FollowerID, ProtoMetrics, MaximumCPU, MaximumMemory, MaximumNetwork>;
+        using TColumns = TableColumns<TabletID, FollowerID, ProtoMetrics, UsageImpact, MaximumCPU, MaximumMemory, MaximumNetwork>;
     };
 
     struct TabletTypeMetrics : Table<13> {

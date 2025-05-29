@@ -2536,7 +2536,7 @@ TFuture<TGetQueryTrackerInfoResult> TClient::GetQueryTrackerInfo(
             .QueryTrackerStage = FromProto<TString>(rsp->query_tracker_stage()),
             .ClusterName = FromProto<std::string>(rsp->cluster_name()),
             .SupportedFeatures = TYsonString(rsp->supported_features()),
-            .AccessControlObjects = FromProto<std::vector<TString>>(rsp->access_control_objects()),
+            .AccessControlObjects = FromProto<std::vector<std::string>>(rsp->access_control_objects()),
             .Clusters = FromProto<std::vector<std::string>>(rsp->clusters())
         };
     }));
@@ -2781,7 +2781,7 @@ TFuture<TFlowExecuteResult> TClient::FlowExecute(
     }));
 }
 
-TFuture<TShuffleHandlePtr> TClient::StartShuffle(
+TFuture<TSignedShuffleHandlePtr> TClient::StartShuffle(
     const std::string& account,
     int partitionCount,
     TTransactionId parentTransactionId,
@@ -2803,12 +2803,12 @@ TFuture<TShuffleHandlePtr> TClient::StartShuffle(
     }
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspStartShufflePtr& rsp) {
-        return ConvertTo<TShuffleHandlePtr>(TYsonString(rsp->shuffle_handle()));
+        return ConvertTo<TSignedShuffleHandlePtr>(TYsonStringBuf(rsp->signed_shuffle_handle()));
     }));
 }
 
 TFuture<IRowBatchReaderPtr> TClient::CreateShuffleReader(
-    const TShuffleHandlePtr& shuffleHandle,
+    const TSignedShuffleHandlePtr& signedShuffleHandle,
     int partitionIndex,
     std::optional<std::pair<int, int>> writerIndexRange,
     const TShuffleReaderOptions& options)
@@ -2818,7 +2818,7 @@ TFuture<IRowBatchReaderPtr> TClient::CreateShuffleReader(
     auto req = proxy.ReadShuffleData();
     InitStreamingRequest(*req);
 
-    req->set_shuffle_handle(ConvertToYsonString(shuffleHandle).ToString());
+    req->set_signed_shuffle_handle(ConvertToYsonString(signedShuffleHandle).ToString());
     req->set_partition_index(partitionIndex);
     if (options.Config) {
         req->set_reader_config(ConvertToYsonString(options.Config).ToString());
@@ -2836,7 +2836,7 @@ TFuture<IRowBatchReaderPtr> TClient::CreateShuffleReader(
 }
 
 TFuture<IRowBatchWriterPtr> TClient::CreateShuffleWriter(
-    const TShuffleHandlePtr& shuffleHandle,
+    const TSignedShuffleHandlePtr& signedShuffleHandle,
     const std::string& partitionColumn,
     std::optional<int> writerIndex,
     const TShuffleWriterOptions& options)
@@ -2845,7 +2845,7 @@ TFuture<IRowBatchWriterPtr> TClient::CreateShuffleWriter(
     auto req = proxy.WriteShuffleData();
     InitStreamingRequest(*req);
 
-    req->set_shuffle_handle(ConvertToYsonString(shuffleHandle).ToString());
+    req->set_signed_shuffle_handle(ConvertToYsonString(signedShuffleHandle).ToString());
     req->set_partition_column(ToProto(partitionColumn));
     if (options.Config) {
         req->set_writer_config(ConvertToYsonString(options.Config).ToString());

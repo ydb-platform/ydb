@@ -115,6 +115,7 @@ Download the [datashard.json](https://raw.githubusercontent.com/ydb-platform/ydb
 [Hive](../../../contributor/hive.md) metrics for the selected database.
 
 The dashboard includes the following filters:
+
 * database – selects the database for which metrics are displayed;
 * ds – selects the Prometheus data source the dashboard will use;
 * Tx type – determines the transaction type for which "`{Tx type}` average time" panel is displayed.

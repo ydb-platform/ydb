@@ -136,7 +136,7 @@ struct TListOperationsOptions
     std::optional<TInstant> ToTime;
     std::optional<TInstant> CursorTime;
     EOperationSortDirection CursorDirection = EOperationSortDirection::Past;
-    std::optional<TString> UserFilter;
+    std::optional<std::string> UserFilter;
 
     TListOperationsAccessFilterPtr AccessFilter;
 
@@ -354,7 +354,7 @@ struct TListOperationsResult
     std::vector<TOperation> Operations;
     std::optional<THashMap<TString, i64>> PoolTreeCounts;
     std::optional<THashMap<TString, i64>> PoolCounts;
-    std::optional<THashMap<TString, i64>> UserCounts;
+    std::optional<THashMap<std::string, i64>> UserCounts;
     std::optional<TEnumIndexedArray<NScheduler::EOperationState, i64>> StateCounts;
     std::optional<TEnumIndexedArray<NScheduler::EOperationType, i64>> TypeCounts;
     std::optional<i64> FailedJobsCount;

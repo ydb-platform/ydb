@@ -50,7 +50,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
 
         VectorIndexSettings settings;
         settings.set_vector_dimension(2);
-        settings.set_vector_type(VectorIndexSettings::VECTOR_TYPE_FLOAT);
+        settings.set_vector_type(VectorIndexSettings::VECTOR_TYPE_UINT8);
         settings.set_metric(VectorIndexSettings::DISTANCE_COSINE);
         *rec.MutableSettings() = settings;
 
@@ -67,7 +67,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
         rec.SetPrefixColumns(1);
         
         rec.SetLevelName(kLevelTable);
-        rec.SetPostingName(kPostingTable);
+        rec.SetOutputName(kPostingTable);
         rec.SetPrefixName(kPrefixTable);
 
         setupRequest(rec);
@@ -133,7 +133,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
 
                 rec.SetPrefixName(kPrefixTable);
                 rec.SetLevelName(kLevelTable);
-                rec.SetPostingName(kPostingTable);
+                rec.SetOutputName(kPostingTable);
 
                 rec.MutableScanSettings()->SetMaxBatchRows(maxBatchRows);
             };
@@ -282,8 +282,8 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
             request.ClearLevelName();
         }, "{ <main>: Error: Empty level table name }");
         DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvPrefixKMeansRequest& request) {
-            request.ClearPostingName();
-        }, "{ <main>: Error: Empty posting table name }");
+            request.ClearOutputName();
+        }, "{ <main>: Error: Empty output table name }");
         DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvPrefixKMeansRequest& request) {
             request.ClearPrefixName();
         }, "{ <main>: Error: Empty prefix table name }");
@@ -373,24 +373,24 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
                 "user = user-2, __ydb_id = 43\n"
             );
             UNIT_ASSERT_VALUES_EQUAL(level, 
-                "__ydb_parent = 40, __ydb_id = 41, __ydb_centroid = mm\3\n"
-                "__ydb_parent = 40, __ydb_id = 42, __ydb_centroid = 11\3\n"
+                "__ydb_parent = 40, __ydb_id = 9223372036854775849, __ydb_centroid = mm\3\n"
+                "__ydb_parent = 40, __ydb_id = 9223372036854775850, __ydb_centroid = 11\3\n"
 
-                "__ydb_parent = 43, __ydb_id = 44, __ydb_centroid = 11\3\n"
-                "__ydb_parent = 43, __ydb_id = 45, __ydb_centroid = mm\3\n"
+                "__ydb_parent = 43, __ydb_id = 9223372036854775852, __ydb_centroid = 11\3\n"
+                "__ydb_parent = 43, __ydb_id = 9223372036854775853, __ydb_centroid = mm\3\n"
             );
             UNIT_ASSERT_VALUES_EQUAL(posting, 
-                "__ydb_parent = 41, key = 14, data = 1-four\n"
-                "__ydb_parent = 41, key = 15, data = 1-five\n"
-                "__ydb_parent = 42, key = 11, data = 1-one\n"
-                "__ydb_parent = 42, key = 12, data = 1-two\n"
-                "__ydb_parent = 42, key = 13, data = 1-three\n"
+                "__ydb_parent = 9223372036854775849, key = 14, data = 1-four\n"
+                "__ydb_parent = 9223372036854775849, key = 15, data = 1-five\n"
+                "__ydb_parent = 9223372036854775850, key = 11, data = 1-one\n"
+                "__ydb_parent = 9223372036854775850, key = 12, data = 1-two\n"
+                "__ydb_parent = 9223372036854775850, key = 13, data = 1-three\n"
 
-                "__ydb_parent = 44, key = 21, data = 2-one\n"
-                "__ydb_parent = 44, key = 22, data = 2-two\n"
-                "__ydb_parent = 44, key = 23, data = 2-three\n"
-                "__ydb_parent = 45, key = 24, data = 2-four\n"
-                "__ydb_parent = 45, key = 25, data = 2-five\n"
+                "__ydb_parent = 9223372036854775852, key = 21, data = 2-one\n"
+                "__ydb_parent = 9223372036854775852, key = 22, data = 2-two\n"
+                "__ydb_parent = 9223372036854775852, key = 23, data = 2-three\n"
+                "__ydb_parent = 9223372036854775853, key = 24, data = 2-four\n"
+                "__ydb_parent = 9223372036854775853, key = 25, data = 2-five\n"
             );
             recreate();
         }}
@@ -407,24 +407,24 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
                 "user = user-2, __ydb_id = 43\n"
             );
             UNIT_ASSERT_VALUES_EQUAL(level, 
-                "__ydb_parent = 40, __ydb_id = 41, __ydb_centroid = 11\3\n"
-                "__ydb_parent = 40, __ydb_id = 42, __ydb_centroid = mm\3\n"
+                "__ydb_parent = 40, __ydb_id = 9223372036854775849, __ydb_centroid = 11\3\n"
+                "__ydb_parent = 40, __ydb_id = 9223372036854775850, __ydb_centroid = mm\3\n"
 
-                "__ydb_parent = 43, __ydb_id = 44, __ydb_centroid = 11\3\n"
-                "__ydb_parent = 43, __ydb_id = 45, __ydb_centroid = mm\3\n"
+                "__ydb_parent = 43, __ydb_id = 9223372036854775852, __ydb_centroid = 11\3\n"
+                "__ydb_parent = 43, __ydb_id = 9223372036854775853, __ydb_centroid = mm\3\n"
             );
             UNIT_ASSERT_VALUES_EQUAL(posting, 
-                "__ydb_parent = 41, key = 11, data = 1-one\n"
-                "__ydb_parent = 41, key = 12, data = 1-two\n"
-                "__ydb_parent = 41, key = 13, data = 1-three\n"
-                "__ydb_parent = 42, key = 14, data = 1-four\n"
-                "__ydb_parent = 42, key = 15, data = 1-five\n"
+                "__ydb_parent = 9223372036854775849, key = 11, data = 1-one\n"
+                "__ydb_parent = 9223372036854775849, key = 12, data = 1-two\n"
+                "__ydb_parent = 9223372036854775849, key = 13, data = 1-three\n"
+                "__ydb_parent = 9223372036854775850, key = 14, data = 1-four\n"
+                "__ydb_parent = 9223372036854775850, key = 15, data = 1-five\n"
 
-                "__ydb_parent = 44, key = 21, data = 2-one\n"
-                "__ydb_parent = 44, key = 22, data = 2-two\n"
-                "__ydb_parent = 44, key = 23, data = 2-three\n"
-                "__ydb_parent = 45, key = 24, data = 2-four\n"
-                "__ydb_parent = 45, key = 25, data = 2-five\n"
+                "__ydb_parent = 9223372036854775852, key = 21, data = 2-one\n"
+                "__ydb_parent = 9223372036854775852, key = 22, data = 2-two\n"
+                "__ydb_parent = 9223372036854775852, key = 23, data = 2-three\n"
+                "__ydb_parent = 9223372036854775853, key = 24, data = 2-four\n"
+                "__ydb_parent = 9223372036854775853, key = 25, data = 2-five\n"
             );
             recreate();
         }}
@@ -440,22 +440,22 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
                 "user = user-2, __ydb_id = 43\n"
             );
             UNIT_ASSERT_VALUES_EQUAL(level, 
-                "__ydb_parent = 40, __ydb_id = 41, __ydb_centroid = II\3\n"
+                "__ydb_parent = 40, __ydb_id = 9223372036854775849, __ydb_centroid = II\3\n"
 
-                "__ydb_parent = 43, __ydb_id = 44, __ydb_centroid = II\3\n"
+                "__ydb_parent = 43, __ydb_id = 9223372036854775852, __ydb_centroid = II\3\n"
             );
             UNIT_ASSERT_VALUES_EQUAL(posting, 
-                "__ydb_parent = 41, key = 11, data = 1-one\n"
-                "__ydb_parent = 41, key = 12, data = 1-two\n"
-                "__ydb_parent = 41, key = 13, data = 1-three\n"
-                "__ydb_parent = 41, key = 14, data = 1-four\n"
-                "__ydb_parent = 41, key = 15, data = 1-five\n"
+                "__ydb_parent = 9223372036854775849, key = 11, data = 1-one\n"
+                "__ydb_parent = 9223372036854775849, key = 12, data = 1-two\n"
+                "__ydb_parent = 9223372036854775849, key = 13, data = 1-three\n"
+                "__ydb_parent = 9223372036854775849, key = 14, data = 1-four\n"
+                "__ydb_parent = 9223372036854775849, key = 15, data = 1-five\n"
 
-                "__ydb_parent = 44, key = 21, data = 2-one\n"
-                "__ydb_parent = 44, key = 22, data = 2-two\n"
-                "__ydb_parent = 44, key = 23, data = 2-three\n"
-                "__ydb_parent = 44, key = 24, data = 2-four\n"
-                "__ydb_parent = 44, key = 25, data = 2-five\n"
+                "__ydb_parent = 9223372036854775852, key = 21, data = 2-one\n"
+                "__ydb_parent = 9223372036854775852, key = 22, data = 2-two\n"
+                "__ydb_parent = 9223372036854775852, key = 23, data = 2-three\n"
+                "__ydb_parent = 9223372036854775852, key = 24, data = 2-four\n"
+                "__ydb_parent = 9223372036854775852, key = 25, data = 2-five\n"
             );
             recreate();
         }}

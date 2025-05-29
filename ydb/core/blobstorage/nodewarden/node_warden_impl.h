@@ -637,8 +637,9 @@ namespace NKikimr::NStorage {
         void StartDistributedConfigKeeper();
         void ForwardToDistributedConfigKeeper(STATEFN_SIG);
 
-        NKikimrBlobStorage::TStorageConfig StorageConfig;
+        std::shared_ptr<const NKikimrBlobStorage::TStorageConfig> StorageConfig;
         bool SelfManagementEnabled = false;
+        TBridgeInfo::TPtr BridgeInfo;
         THashSet<TActorId> StorageConfigSubscribers;
 
         void Handle(TEvNodeWardenQueryStorageConfig::TPtr ev);

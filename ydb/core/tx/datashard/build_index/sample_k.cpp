@@ -22,7 +22,27 @@
 namespace NKikimr::NDataShard {
 using namespace NKMeans;
 
-class TSampleKScan final: public TActor<TSampleKScan>, public NTable::IScan {
+/*
+ * TSampleKScan performs K-sampling over a single table shard to extract a probabilistic sample
+ * of embeddings or rows. This is used as a lightweight pre-clustering step (e.g. centroid seeding).
+ *
+ * Request:
+ * - The client sends TEvSampleKRequest with:
+ *   - K: the number of rows to sample
+ *   - KeyRange: optional key range within the shard to restrict the scan
+ *
+ * Execution Flow:
+ * - TSampleKScan performs a linear scan over the specified key range:
+ *   - For each row, it computes an inclusion probability based on the max probability bound
+ *   - Uses reservoir or weighted sampling to probabilistically select up to K rows
+ *   - Sampled rows and their inclusion probabilities are retained in memory
+ *
+ * Response:
+ * - TEvSampleKResponse is returned when scanning completes:
+ *   - Contains up to K sampled rows (serialized), with associated probabilities
+ */
+
+class TSampleKScan final: public TActor<TSampleKScan>, public IActorExceptionHandler, public NTable::IScan {
 protected:
     const TTags ScanTags;
     const TVector<NScheme::TTypeInfo> KeyTypes;
@@ -40,6 +60,7 @@ protected:
     TSampler Sampler;
 
     IDriver* Driver = nullptr;
+    NYql::TIssues Issues;
 
     TLead Lead;
 
@@ -124,17 +145,28 @@ public:
         return EScan::Final;
     }
 
-    TAutoPtr<IDestructable> Finish(EAbort abort) final {
+    TAutoPtr<IDestructable> Finish(const std::exception& exc) final
+    {
+        Issues.AddIssue(NYql::TIssue(TStringBuilder()
+            << "Scan failed " << exc.what()));
+        return Finish(EStatus::Exception);
+    }
+
+    TAutoPtr<IDestructable> Finish(EStatus status) final {
         auto& record = Response->Record;
         record.SetReadRows(ReadRows);
         record.SetReadBytes(ReadBytes);
 
-        if (abort != NTable::EAbort::None) {
+        if (status == EStatus::Exception) {
+            record.SetStatus(NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
+        } else if (status != NTable::EStatus::Done) {
             record.SetStatus(NKikimrIndexBuilder::EBuildStatus::ABORTED);
         } else {
             record.SetStatus(NKikimrIndexBuilder::EBuildStatus::DONE);
             FillResponse();
         }
+
+        NYql::IssuesToMessage(Issues, record.MutableIssues());
 
         if (Response->Record.GetStatus() == NKikimrIndexBuilder::DONE) {
             LOG_N("Done " << Debug() << " " << Response->Record.ShortDebugString());
@@ -146,6 +178,14 @@ public:
         Driver = nullptr;
         PassAway();
         return nullptr;
+    }
+
+    bool OnUnhandledException(const std::exception& exc) final {
+        if (!Driver) {
+            return false;
+        }
+        Driver->Throw(exc);
+        return true;
     }
 
     void Describe(IOutputStream& out) const final {

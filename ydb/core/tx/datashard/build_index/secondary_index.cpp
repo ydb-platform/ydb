@@ -92,7 +92,7 @@ bool BuildExtraColumns(TVector<TCell>& cells, const NKikimrIndexBuilder::TColumn
 }
 
 template <NKikimrServices::TActivity::EType Activity>
-class TBuildScanUpload: public TActor<TBuildScanUpload<Activity>>, public NTable::IScan {
+class TBuildScanUpload: public TActor<TBuildScanUpload<Activity>>, public IActorExceptionHandler, public NTable::IScan {
     using TThis = TBuildScanUpload<Activity>;
     using TBase = TActor<TThis>;
 
@@ -224,7 +224,14 @@ public:
         return EScan::Feed;
     }
 
-    TAutoPtr<IDestructable> Finish(EAbort abort) override {
+    TAutoPtr<IDestructable> Finish(const std::exception& exc) final
+    {
+        UploadStatus.Issues.AddIssue(NYql::TIssue(TStringBuilder()
+            << "Scan failed " << exc.what()));
+        return Finish(EStatus::Exception);
+    }
+
+    TAutoPtr<IDestructable> Finish(EStatus status) override {
         if (Uploader) {
             this->Send(Uploader, new TEvents::TEvPoisonPill);
             Uploader = {};
@@ -236,11 +243,10 @@ public:
         progress->Record.SetRequestSeqNoGeneration(SeqNo.Generation);
         progress->Record.SetRequestSeqNoRound(SeqNo.Round);
 
-        if (abort != EAbort::None) {
+        if (status == EStatus::Exception) {
+            progress->Record.SetStatus(NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
+        } else if (status != EStatus::Done) {
             progress->Record.SetStatus(NKikimrIndexBuilder::EBuildStatus::ABORTED);
-            UploadStatus.Issues.AddIssue(NYql::TIssue("Aborted by scan host env"));
-
-            LOG_W(Debug());
         } else if (!UploadStatus.IsSuccess()) {
             progress->Record.SetStatus(NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
         } else {
@@ -259,6 +265,14 @@ public:
         Driver = nullptr;
         this->PassAway();
         return nullptr;
+    }
+
+    bool OnUnhandledException(const std::exception& exc) override {
+        if (!Driver) {
+            return false;
+        }
+        Driver->Throw(exc);
+        return true;
     }
 
     void UploadStatusToMessage(NKikimrTxDataShard::TEvBuildIndexProgressResponse& msg) {
@@ -390,7 +404,8 @@ private:
             UploadColumnsTypes,
             WriteBuf.GetRowsData(),
             UploadMode,
-            true /*writeToPrivateTable*/);
+            true /*writeToPrivateTable*/,
+            true /*writeToIndexImplTable*/);
 
         Uploader = this->Register(actor);
     }

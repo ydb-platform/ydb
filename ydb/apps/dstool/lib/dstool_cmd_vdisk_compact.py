@@ -3,6 +3,7 @@ import sys
 
 description = 'Run compaction on vdisks'
 
+
 def add_options(p):
     common.add_vdisk_ids_option(p, required=True)
     p.add_argument('--full', action='store_true', default=False,
@@ -14,6 +15,7 @@ def add_options(p):
     p.add_argument('--compact-barriers', action='store_true', default=False,
                    help='Compact Barriers')
     common.add_basic_format_options(p)
+
 
 def do(args):
     base_config = common.fetch_base_config()
@@ -51,7 +53,7 @@ def do(args):
                     'action': 'compact'
                 }
                 try:
-                    response = common.fetch(path, params, fmt='raw')
+                    common.fetch(path, params, fmt='raw')
                 except Exception as e:
                     common.print_if_not_quiet(args, f"Failed to send compaction request to VDisk {vdisk_id} for {dbname}: {e}")
                     error_count += 1

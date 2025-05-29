@@ -63,7 +63,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
 
         rec.SetEmbeddingColumn("embedding");
 
-        rec.SetPostingName(kPostingTable);
+        rec.SetOutputName(kPostingTable);
 
         setupRequest(rec);
 
@@ -127,7 +127,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
                 rec.SetEmbeddingColumn("embedding");
                 rec.AddDataColumns("data");
 
-                rec.SetPostingName(kPostingTable);
+                rec.SetOutputName(kPostingTable);
             };
             fill(ev1);
             fill(ev2);
@@ -246,8 +246,8 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
         }, "{ <main>: Error: Should be requested at least single cluster }");
 
         DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvReshuffleKMeansRequest& request) {
-            request.ClearPostingName();
-        }, "{ <main>: Error: Empty posting table name }");
+            request.ClearOutputName();
+        }, "{ <main>: Error: Empty output table name }");
 
         DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvReshuffleKMeansRequest& request) {
             request.SetEmbeddingColumn("some");

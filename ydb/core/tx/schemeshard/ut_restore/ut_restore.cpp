@@ -399,41 +399,11 @@ namespace {
         return ConvertTestData({{"", data}});
     }
 
-    NKikimrMiniKQL::TResult ReadTableImpl(TTestActorRuntime& runtime, ui64 tabletId, const TString& query) {
-        NKikimrMiniKQL::TResult result;
-
-        TString error;
-        NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, query, result, error);
-        UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::EReplyStatus::OK, error);
-        UNIT_ASSERT_VALUES_EQUAL(error, "");
-
-        return result;
-    }
-
     struct TReadKeyDesc {
         TString Name;
         TString Type;
         TString Atom;
     };
-
-    NKikimrMiniKQL::TResult ReadTable(TTestActorRuntime& runtime, ui64 tabletId,
-            const TString& table = "Table",
-            const TReadKeyDesc& keyDesc = {"key", "Utf8", "\"\""},
-            const TVector<TString>& columns = {"key", "value"},
-            const TString& rangeFlags = "") {
-
-        const auto rangeFmt = Sprintf("'%s (%s '%s)", keyDesc.Name.data(), keyDesc.Type.data(), keyDesc.Atom.data());
-        const auto columnsFmt = "'" + JoinSeq(" '", columns);
-
-        return ReadTableImpl(runtime, tabletId, Sprintf(R"(
-            (
-                (let range '(%s '(%s (Void) )))
-                (let columns '(%s) )
-                (let result (SelectRange '__user__%s range columns '()))
-                (return (AsList (SetResult 'Result result) ))
-            )
-        )", rangeFlags.c_str(), rangeFmt.data(), columnsFmt.data(), table.data()));
-    }
 
     using TDelayFunc = std::function<bool(TAutoPtr<IEventHandle>&)>;
 
@@ -518,7 +488,7 @@ Y_UNIT_TEST_SUITE(TRestoreTests) {
             KeyColumnNames: ["key"]
         )", {data});
 
-        auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets);
+        auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, {"key", "value"});
         NKqp::CompareYson(data.YsonStr, content);
     }
 
@@ -600,7 +570,7 @@ value {
             KeyColumnNames: ["key"]
         )", {data});
 
-        auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets);
+        auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, {"key", "value"});
         NKqp::CompareYson(data.YsonStr, content);
 
         const auto desc = DescribePath(runtime, "/MyRoot/Table", true, true);
@@ -630,11 +600,11 @@ value {
         )", {a, b});
 
         {
-            auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 0);
+            auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 0, "Table", {"key"}, {"key", "value"});
             NKqp::CompareYson(a.YsonStr, content);
         }
         {
-            auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 1);
+            auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 1, "Table", {"key"}, {"key", "value"});
             NKqp::CompareYson(b.YsonStr, content);
         }
     }
@@ -652,7 +622,7 @@ value {
             KeyColumnNames: ["key"]
         )", {data});
 
-        auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key", "Uint32", "0"});
+        auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, {"key", "value"});
         NKqp::CompareYson(data.YsonStr, content);
     }
 
@@ -668,7 +638,7 @@ value {
             KeyColumnNames: ["key"]
         )", {data}, batchSize);
 
-        auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets);
+        auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, {"key", "value"});
         NKqp::CompareYson(data.YsonStr, content);
     }
 
@@ -750,7 +720,7 @@ value {
         UNIT_ASSERT_VALUES_EQUAL(result->GetRowsProcessed(), 2);
 
         env.TestWaitNotification(runtime, txId);
-        auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets);
+        auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, {"key", "value"});
         NKqp::CompareYson(data.YsonStr, content);
     }
 
@@ -792,7 +762,7 @@ value {
             KeyColumnNames: ["key"]
         )", {data}, batchSize);
 
-        auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets);
+        auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, {"key", "value"});
         NKqp::CompareYson(data.YsonStr, content);
     }
 
@@ -887,7 +857,7 @@ value {
             KeyColumnNames: ["key"]
         )_", {data}, data.Data.size() + 1);
 
-        auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key", "Uint64", "0"}, {
+        auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, {
             "key",
             "int32_value",
             "uint32_value",
@@ -1409,7 +1379,7 @@ value {
                     << R"(["valueA"])" // value
                 << "];"
             << "];\%false]]]";
-            auto content = ReadTable(runtime, restoredFirstTablet, "Restored", {"key", "Uint32", "0"});
+            auto content = ReadTable(runtime, restoredFirstTablet, "Restored", {"key"}, {"key", "value"});
             NKqp::CompareYson(expectedJson, content);
         }
         {
@@ -1419,7 +1389,7 @@ value {
                     << R"(["valueB"])" // value
                 << "];"
             << "];\%false]]]";
-            auto content = ReadTable(runtime, restoredSecondTablet, "Restored", {"key", "Uint32", "0"});
+            auto content = ReadTable(runtime, restoredSecondTablet, "Restored", {"key"}, {"key", "value"});
             NKqp::CompareYson(expectedJson, content);
         }
     }
@@ -1566,12 +1536,12 @@ value {
                     << R"(["valueB"])" // value
                 << "];"
             << "];\%false]]]";
-            auto content = ReadTable(runtime, restoredFirstTablet, "Restored", {"key", "Uint32", "0"});
+            auto content = ReadTable(runtime, restoredFirstTablet, "Restored", {"key"}, {"key", "value"});
             NKqp::CompareYson(expectedJson, content);
         }
         {
             auto expectedJson = "[[[[];\%false]]]";
-            auto content = ReadTable(runtime, restoredSecondTablet, "Restored", {"key", "Uint32", "0"});
+            auto content = ReadTable(runtime, restoredSecondTablet, "Restored", {"key"}, {"key", "value"});
             NKqp::CompareYson(expectedJson, content);
         }
     }
@@ -1759,8 +1729,6 @@ value {
                 << "[[\"" << "wR7fZX2pskeuVjwCPabujA==" << "\"]]" // uuid
             << "]];\%false]]]";
 
-            const TReadKeyDesc readKeyDesc = {"key", "Uint64", "0"};
-
             const TVector<TString> readColumns = {
                 "key",
                 "int32_value",
@@ -1789,10 +1757,10 @@ value {
                 "uuid_value",
             };
 
-            auto contentOriginalTable = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", readKeyDesc, readColumns);
+            auto contentOriginalTable = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, readColumns);
             NKqp::CompareYson(expectedJson, contentOriginalTable);
 
-            auto contentRestoredTable = ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 2, commonPrefix ? "Table" : "Restored", readKeyDesc, readColumns);
+            auto contentRestoredTable = ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 2, commonPrefix ? "Table" : "Restored", {"key"}, readColumns);
             NKqp::CompareYson(expectedJson, contentRestoredTable);
         }
     }
@@ -2145,7 +2113,7 @@ value {
                     << R"(["valueA"])" // value
                 << "];"
             << "];\%false]]]";
-            auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 2, "Restored", {"key", "Uint32", "0"});
+            auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 2, "Restored", {"key"}, {"key", "value"});
             NKqp::CompareYson(expectedJson, content);
         }
     }
@@ -2402,7 +2370,7 @@ value {
         UNIT_ASSERT(requests > expected);
         UNIT_ASSERT_VALUES_EQUAL(responses, expected);
 
-        auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key", "Uint32", "0"});
+        auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, {"key", "value"});
         NKqp::CompareYson(data.YsonStr, content);
     }
 
@@ -2421,7 +2389,7 @@ value {
             KeyColumnNames: ["key"]
         )", {data}, batchSize);
 
-        auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets);
+        auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, {"key", "value"});
         NKqp::CompareYson(data.YsonStr, content);
     }
 
@@ -2447,7 +2415,7 @@ value {
             KeyColumnNames: ["key"]
         )", {data});
 
-        auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets);
+        auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, {"key", "value"});
         NKqp::CompareYson(data.YsonStr, content);
     }
 
@@ -2465,7 +2433,7 @@ value {
             KeyColumnNames: ["key"]
         )", {data});
 
-        auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key", "Uint64", "0"});
+        auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, {"key", "value"});
         NKqp::CompareYson(data.YsonStr, content);
     }
 
@@ -2488,11 +2456,11 @@ value {
         )", {a, b});
 
         {
-            auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 0);
+            auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 0, "Table", {"key"}, {"key", "value"});
             NKqp::CompareYson(a.YsonStr, content);
         }
         {
-            auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 1);
+            auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 1, "Table", {"key"}, {"key", "value"});
             NKqp::CompareYson(b.YsonStr, content);
         }
     }
@@ -2510,7 +2478,7 @@ value {
             KeyColumnNames: ["key"]
         )", {data});
 
-        auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets);
+        auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, {"key", "value"});
         NKqp::CompareYson(data.YsonStr, content);
     }
 
@@ -2612,7 +2580,7 @@ value {
         TestCancelTxTable(runtime, ++txId, restoreTxId);
         env.TestWaitNotification(runtime, {restoreTxId, txId});
 
-        auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets);
+        auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, {"key", "value"});
         NKqp::CompareYson(data.YsonStr, content);
     }
 
@@ -2678,7 +2646,7 @@ value {
         runtime.Send(progress.Release(), 0, true);
         env.TestWaitNotification(runtime, {restoreTxId, txId});
 
-        auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets);
+        auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, {"key", "value"});
         NKqp::CompareYson(data.YsonStr, content);
     }
 }
@@ -2740,7 +2708,7 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
             {
                 TInactiveZone inactive(activeZone);
 
-                auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets);
+                auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, {"key", "value"});
                 NKqp::CompareYson(data.YsonStr, content);
             }
         });
@@ -2770,11 +2738,11 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
             {
                 TInactiveZone inactive(activeZone);
                 {
-                    auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 0);
+                    auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 0, "Table", {"key"}, {"key", "value"});
                     NKqp::CompareYson(a.YsonStr, content);
                 }
                 {
-                    auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 1);
+                    auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 1, "Table", {"key"}, {"key", "value"});
                     NKqp::CompareYson(b.YsonStr, content);
                 }
             }
@@ -2822,11 +2790,11 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
             {
                 TInactiveZone inactive(activeZone);
                 {
-                    auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 0);
+                    auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 0, "Table", {"key"}, {"key", "value"});
                     NKqp::CompareYson(a.YsonStr, content);
                 }
                 {
-                    auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 1);
+                    auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 1, "Table", {"key"}, {"key", "value"});
                     NKqp::CompareYson(b.YsonStr, content);
                 }
             }
@@ -2852,7 +2820,7 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
             {
                 TInactiveZone inactive(activeZone);
 
-                auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key", "Uint32", "0"});
+                auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, {"key", "value"});
                 NKqp::CompareYson(data.YsonStr, content);
             }
         });
@@ -2877,7 +2845,7 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
             {
                 TInactiveZone inactive(activeZone);
 
-                auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets);
+                auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, {"key", "value"});
                 NKqp::CompareYson(data.YsonStr, content);
             }
         });
@@ -2903,7 +2871,7 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
             {
                 TInactiveZone inactive(activeZone);
 
-                auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets);
+                auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, {"key", "value"});
                 NKqp::CompareYson(data.YsonStr, content);
             }
         });
@@ -2929,7 +2897,7 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
             {
                 TInactiveZone inactive(activeZone);
 
-                auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets);
+                auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, {"key", "value"});
                 NKqp::CompareYson(data.YsonStr, content);
             }
         });
@@ -2955,7 +2923,7 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
             {
                 TInactiveZone inactive(activeZone);
 
-                auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key", "Uint64", "0"});
+                auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, {"key", "value"});
                 NKqp::CompareYson(data.YsonStr, content);
             }
         });
@@ -2985,11 +2953,11 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
             {
                 TInactiveZone inactive(activeZone);
                 {
-                    auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 0);
+                    auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 0, "Table", {"key"}, {"key", "value"});
                     NKqp::CompareYson(a.YsonStr, content);
                 }
                 {
-                    auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 1);
+                    auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 1, "Table", {"key"}, {"key", "value"});
                     NKqp::CompareYson(b.YsonStr, content);
                 }
             }
@@ -3189,7 +3157,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             }
         )");
 
-        auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets);
+        auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, {"key", "value"});
         NKqp::CompareYson(data.Data[0].YsonStr, content);
     }
 
@@ -3226,11 +3194,11 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         )");
 
         {
-            auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 0);
+            auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 0, "Table", {"key"}, {"key", "value"});
             NKqp::CompareYson(data.Data[0].YsonStr, content);
         }
         {
-            auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 1);
+            auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 1, "Table", {"key"}, {"key", "value"});
             NKqp::CompareYson(data.Data[1].YsonStr, content);
         }
     }
@@ -3274,13 +3242,12 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         )");
 
         {
-            auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 0);
+            auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 0, "Table", {"key"}, {"key", "value"});
             NKqp::CompareYson(data.Data[0].YsonStr, content);
         }
 
         for (ui32 i = 0; i < indexes; ++i) {
-            auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 1 + i,
-                "indexImplTable", {"value", "Utf8", "\"\""}, {"value", "key"}, "'ExcFrom");
+            auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 1 + i, "indexImplTable", {"value"}, {"value", "key"}, "'ExcFrom ");
             NKqp::CompareYson(data.Data[0].YsonStr, content);
         }
     }
@@ -3340,11 +3307,11 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         )");
 
         {
-            auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 0, "TableA");
+            auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 0, "TableA", {"key"}, {"key", "value"});
             NKqp::CompareYson(a.Data[0].YsonStr, content);
         }
         {
-            auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 1, "TableB");
+            auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 1, "TableB", {"key"}, {"key", "value"});
             NKqp::CompareYson(b.Data[0].YsonStr, content);
         }
     }
@@ -3377,7 +3344,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             }
         )");
 
-        auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets);
+        auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, {"key", "value"});
         NKqp::CompareYson(data.Data[0].YsonStr, content);
     }
 

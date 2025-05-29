@@ -142,23 +142,19 @@ void AddRowToLevel(TBufferData& buffer, TClusterId parent, TClusterId child, con
 
 void AddRowMainToBuild(TBufferData& buffer, TClusterId parent, TArrayRef<const TCell> key, TArrayRef<const TCell> row);
 
-void AddRowMainToPosting(TBufferData& buffer, TClusterId parent, TArrayRef<const TCell> key, TArrayRef<const TCell> row,
-                        ui32 dataPos);
+void AddRowMainToPosting(TBufferData& buffer, TClusterId parent, TArrayRef<const TCell> key, TArrayRef<const TCell> row, ui32 dataPos);
 
-void AddRowBuildToBuild(TBufferData& buffer, TClusterId parent, TArrayRef<const TCell> key, TArrayRef<const TCell> row,
-                       ui32 prefixColumns = 1);
+void AddRowBuildToBuild(TBufferData& buffer, TClusterId parent, TArrayRef<const TCell> key, TArrayRef<const TCell> row, ui32 prefixColumns = 1);
 
-void AddRowBuildToPosting(TBufferData& buffer, TClusterId parent, TArrayRef<const TCell> key, TArrayRef<const TCell> row,
-                         ui32 dataPos, ui32 prefixColumns = 1);
+void AddRowBuildToPosting(TBufferData& buffer, TClusterId parent, TArrayRef<const TCell> key, TArrayRef<const TCell> row, ui32 dataPos, ui32 prefixColumns = 1);
 
-TTags MakeUploadTags(const TUserTable& table, const TProtoStringType& embedding,
-                     const google::protobuf::RepeatedPtrField<TProtoStringType>& data, ui32& embeddingPos,
-                     ui32& dataPos, NTable::TTag& embeddingTag);
+TTags MakeScanTags(const TUserTable& table, const TProtoStringType& embedding, 
+    const google::protobuf::RepeatedPtrField<TProtoStringType>& data, ui32& embeddingPos,
+    ui32& dataPos, NTable::TTag& embeddingTag);
 
-std::shared_ptr<NTxProxy::TUploadTypes>
-MakeUploadTypes(const TUserTable& table, NKikimrTxDataShard::EKMeansState uploadState,
-                const TProtoStringType& embedding, const google::protobuf::RepeatedPtrField<TProtoStringType>& data,
-                ui32 prefixColumns = 0);
+std::shared_ptr<NTxProxy::TUploadTypes> MakeOutputTypes(const TUserTable& table, NKikimrTxDataShard::EKMeansState uploadState,
+    const TProtoStringType& embedding, const google::protobuf::RepeatedPtrField<TProtoStringType>& data,
+    ui32 prefixColumns = 0);
 
 void MakeScan(auto& record, const auto& createScan, const auto& badRequest)
 {

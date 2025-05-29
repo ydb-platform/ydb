@@ -30,7 +30,6 @@
 namespace NYdb::NConsoleClient::BenchmarkUtils {
 
 using namespace NYdb;
-using namespace NYdb::NTable;
 
 TTestInfo::TTestInfo(std::vector<TDuration>&& clientTimings, std::vector<TDuration>&& serverTimings)
     : ClientTimings(std::move(clientTimings))
@@ -166,8 +165,7 @@ public:
         }
     }
 
-    template <typename TIterator>
-    TStatus Scan(TIterator& it, std::optional<TString> planFileName = std::nullopt) {
+    TStatus Scan(NQuery::TExecuteQueryIterator& it, std::optional<TString> planFileName = std::nullopt) {
 
         TProgressIndication progressIndication;
         TMaybe<NQuery::TExecStats> execStats;
@@ -184,54 +182,46 @@ public:
             auto streamPart = it.ReadNext().ExtractValueSync();
             ui64 rsIndex = 0;
 
-            if constexpr (std::is_same_v<TIterator, NTable::TScanQueryPartIterator>) {
-                if (streamPart.HasQueryStats()) {
-                    ServerTiming += streamPart.GetQueryStats().GetTotalDuration();
-                    QueryPlan = streamPart.GetQueryStats().GetPlan().value_or("");
-                    PlanAst = streamPart.GetQueryStats().GetAst().value_or("");
-                }
-            } else {
-                if (streamPart.HasStats()) {
-                    execStats = streamPart.ExtractStats();
+            if (streamPart.HasStats()) {
+                execStats = streamPart.ExtractStats();
 
-                    if (planFileName) {
-                        TFileOutput out(currentPlanFileNameStats);
-                        out << execStats->ToString();
-                        {
-                            auto plan = execStats->GetPlan();
-                            if (plan) {
-                                {
-                                    TPlanVisualizer pv;
-                                    TFileOutput out(currentPlanWithStatsFileName);
-                                    try {
-                                        pv.LoadPlans(*execStats->GetPlan());
-                                        out << pv.PrintSvg();
-                                    } catch (std::exception& e) {
-                                        out << "<svg width='1024' height='256' xmlns='http://www.w3.org/2000/svg'><text>" << e.what() << "<text></svg>";
-                                    }
+                if (planFileName) {
+                    TFileOutput out(currentPlanFileNameStats);
+                    out << execStats->ToString();
+                    {
+                        auto plan = execStats->GetPlan();
+                        if (plan) {
+                            {
+                                TPlanVisualizer pv;
+                                TFileOutput out(currentPlanWithStatsFileName);
+                                try {
+                                    pv.LoadPlans(*execStats->GetPlan());
+                                    out << pv.PrintSvg();
+                                } catch (std::exception& e) {
+                                    out << "<svg width='1024' height='256' xmlns='http://www.w3.org/2000/svg'><text>" << e.what() << "<text></svg>";
                                 }
-                                {
-                                    TFileOutput out(currentPlanWithStatsFileNameJson);
-                                    TQueryPlanPrinter queryPlanPrinter(EDataFormat::JsonBase64, true, out, 120);
-                                    queryPlanPrinter.Print(*execStats->GetPlan());
-                                }
+                            }
+                            {
+                                TFileOutput out(currentPlanWithStatsFileNameJson);
+                                TQueryPlanPrinter queryPlanPrinter(EDataFormat::JsonBase64, true, out, 120);
+                                queryPlanPrinter.Print(*execStats->GetPlan());
                             }
                         }
                     }
-
-                    const auto& protoStats = TProtoAccessor::GetProto(execStats.GetRef());
-                    for (const auto& queryPhase : protoStats.query_phases()) {
-                        for (const auto& tableAccessStats : queryPhase.table_access()) {
-                            progressIndication.UpdateProgress({tableAccessStats.reads().rows(), tableAccessStats.reads().bytes()});
-                        }
-                    }
-                    progressIndication.SetDurationUs(protoStats.total_duration_us());
-
-                    progressIndication.Render();
                 }
 
-                rsIndex = streamPart.GetResultSetIndex();
+                const auto& protoStats = TProtoAccessor::GetProto(execStats.GetRef());
+                for (const auto& queryPhase : protoStats.query_phases()) {
+                    for (const auto& tableAccessStats : queryPhase.table_access()) {
+                        progressIndication.UpdateProgress({tableAccessStats.reads().rows(), tableAccessStats.reads().bytes()});
+                    }
+                }
+                progressIndication.SetDurationUs(protoStats.total_duration_us());
+
+                progressIndication.Render();
             }
+
+            rsIndex = streamPart.GetResultSetIndex();
 
             if (!streamPart.IsSuccess()) {
                 if (!streamPart.EOS()) {
@@ -284,8 +274,7 @@ TQueryBenchmarkResult  ConstructResultByStatus(const TStatus& status, const THol
     return TQueryBenchmarkResult::Error(errorInfo, plan, ast);
 }
 
-template<class TSettings>
-TMaybe<TQueryBenchmarkResult> SetTimeoutSettings(TSettings& settings, const TQueryBenchmarkDeadline& deadline) {
+TMaybe<TQueryBenchmarkResult> SetTimeoutSettings(NQuery::TExecuteQuerySettings& settings, const TQueryBenchmarkDeadline& deadline) {
     if (deadline.Deadline != TInstant::Max()) {
         auto now = Now();
         if (now >= deadline.Deadline) {
@@ -294,34 +283,6 @@ TMaybe<TQueryBenchmarkResult> SetTimeoutSettings(TSettings& settings, const TQue
         settings.ClientTimeout(deadline.Deadline - now);
     }
     return Nothing();
-}
-
-TQueryBenchmarkResult ExecuteImpl(const TString& query, TStringBuf expected, NTable::TTableClient& client, const TQueryBenchmarkSettings& benchmarkSettings, bool explainOnly) {
-    TStreamExecScanQuerySettings settings;
-    settings.CollectQueryStats(ECollectQueryStatsMode::Full);
-    settings.Explain(explainOnly);
-    if (const auto error = SetTimeoutSettings(settings, benchmarkSettings.Deadline)) {
-        return *error;
-    }
-    THolder<TQueryResultScanner> composite;
-    const auto resStatus = client.RetryOperationSync([&composite, &benchmarkSettings, &query, &settings](NTable::TTableClient& tc) -> TStatus {
-        auto it = tc.StreamExecuteScanQuery(query, settings).GetValueSync();
-        if (!it.IsSuccess()) {
-            return it;
-        }
-        composite = MakeHolder<TQueryResultScanner>();
-        composite->SetDeadlineName(benchmarkSettings.Deadline.Name);
-        return composite->Scan(it);
-    }, benchmarkSettings.RetrySettings);
-    return ConstructResultByStatus(resStatus, composite, expected, benchmarkSettings);
-}
-
-TQueryBenchmarkResult Execute(const TString& query, TStringBuf expected, NTable::TTableClient& client, const TQueryBenchmarkSettings& settings) {
-    return ExecuteImpl(query, expected, client, settings, false);
-}
-
-TQueryBenchmarkResult Explain(const TString& query, NTable::TTableClient& client, const TQueryBenchmarkSettings& settings) {
-    return ExecuteImpl(query, TStringBuf(), client, settings, true);
 }
 
 TQueryBenchmarkResult ExecuteImpl(const TString& query, TStringBuf expected, NQuery::TQueryClient& client, const TQueryBenchmarkSettings& benchmarkSettings, bool explainOnly) {

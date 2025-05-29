@@ -1,12 +1,10 @@
 #pragma once
 
 #include <library/cpp/json/json_value.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 #include <ydb/library/accessor/accessor.h>
 
 #include <util/generic/map.h>
-#include <vector>
 
 namespace NYdb::NConsoleClient::BenchmarkUtils {
 
@@ -90,9 +88,7 @@ struct TQueryBenchmarkSettings {
 
 TString FullTablePath(const TString& database, const TString& table);
 bool HasCharsInString(const TString& str);
-TQueryBenchmarkResult Execute(const TString& query, TStringBuf expected, NTable::TTableClient & client, const TQueryBenchmarkSettings& settings);
 TQueryBenchmarkResult Execute(const TString& query, TStringBuf expected, NQuery::TQueryClient & client, const TQueryBenchmarkSettings& settings);
-TQueryBenchmarkResult Explain(const TString& query, NTable::TTableClient & client, const TQueryBenchmarkSettings& settings);
 TQueryBenchmarkResult Explain(const TString& query, NQuery::TQueryClient & client, const TQueryBenchmarkSettings& settings);
 NJson::TJsonValue GetQueryLabels(TStringBuf queryId);
 NJson::TJsonValue GetSensorValue(TStringBuf sensor, TDuration& value, TStringBuf queryId);

@@ -173,7 +173,7 @@ public:
             NUdf::TSourcePosition pos,
             IComputationNode* runConfigNode,
             ui32 runConfigArgs,
-            const TCallableType* functionType,
+            const TCallableType* callableType,
             TType* userType)
         : TBaseComputation(mutables, EValueRepresentation::Boxed)
         , FunctionName(std::move(functionName))
@@ -181,7 +181,7 @@ public:
         , Pos(pos)
         , RunConfigNode(runConfigNode)
         , RunConfigArgs(runConfigArgs)
-        , FunctionType(functionType)
+        , CallableType(callableType)
         , UserType(userType)
         , UdfIndex(mutables.CurValueIndex++)
     {
@@ -267,7 +267,7 @@ private:
 
     void Wrap(NUdf::TUnboxedValue& callable) const {
         MKQL_ENSURE(bool(callable), "Returned empty value in function: " << FunctionName);
-        TValidate<TValidatePolicy,TValidateMode>::WrapCallable(FunctionType, callable, TStringBuilder() << "FunctionWithConfig<" << FunctionName << ">");
+        TValidate<TValidatePolicy,TValidateMode>::WrapCallable(CallableType, callable, TStringBuilder() << "FunctionWithConfig<" << FunctionName << ">");
     }
 
     void RegisterDependencies() const final {
@@ -279,7 +279,7 @@ private:
     const NUdf::TSourcePosition Pos;
     IComputationNode* const RunConfigNode;
     const ui32 RunConfigArgs;
-    const TCallableType* FunctionType;
+    const TCallableType* CallableType;
     TType* const UserType;
     const ui32 UdfIndex;
 };
@@ -422,7 +422,7 @@ IComputationNode* WrapUdf(TCallable& callable, const TComputationNodeFactoryCont
         const auto runConfigArgs = funcInfo.FunctionType->GetArgumentsCount();
         return runConfigNodeType->IsVoid()
             ? CreateUdfWrapper<true>(ctx, std::move(funcName), std::move(typeConfig), pos, callableNodeType, callableFuncType, userType)
-            : CreateUdfWrapper<false>(ctx, std::move(funcName), std::move(typeConfig), pos, runConfigCompNode, runConfigArgs, callableFuncType, userType);
+            : CreateUdfWrapper<false>(ctx, std::move(funcName), std::move(typeConfig), pos, runConfigCompNode, runConfigArgs, callableNodeType, userType);
     }
     MKQL_ENSURE(callableFuncType->IsConvertableTo(*callableNodeType, true),
                 "Function '" << funcName << "' type mismatch, expected return type: " << PrintNode(callableNodeType, true) <<
@@ -440,7 +440,7 @@ IComputationNode* WrapUdf(TCallable& callable, const TComputationNodeFactoryCont
     }
 
     const auto runCfgCompNode = LocateNode(ctx.NodeLocator, *runCfgNode.GetNode());
-    return CreateUdfWrapper<false>(ctx, std::move(funcName), std::move(typeConfig), pos, runCfgCompNode, 1U, callableFuncType, userType);
+    return CreateUdfWrapper<false>(ctx, std::move(funcName), std::move(typeConfig), pos, runCfgCompNode, 1U, callableNodeType, userType);
 }
 
 IComputationNode* WrapScriptUdf(TCallable& callable, const TComputationNodeFactoryContext& ctx) {

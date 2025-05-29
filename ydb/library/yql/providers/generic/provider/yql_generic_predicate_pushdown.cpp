@@ -911,11 +911,9 @@ namespace NYql {
             case TPredicate::kIsNotNull:
                 return FormatIsNotNull(predicate.is_not_null());
             case TPredicate::kComparison:
-                if (predicate.has_string_comparison()) {
-                    return FormatStringComparison(predicate.string_comparison());
-                } else {
-                    return FormatComparison(predicate.comparison());
-                }
+                return FormatComparison(predicate.comparison());
+            case TPredicate::kStringComparison:
+                return FormatStringComparison(predicate.string_comparison());
             case TPredicate::kBoolExpression:
                 return FormatExpression(predicate.bool_expression().value());
             case TPredicate::kIn:

@@ -319,12 +319,11 @@ namespace NYql::NGenericPushDown {
                     return MatchBetween(columns, predicate.between());
                 }
                 case NYql::NConnector::NApi::TPredicate::kComparison: {
-                    // Check if this is a string comparison operation
-                    if (predicate.has_string_comparison()) {
-                        // String comparison operations are not supported for statistics matching
-                        return Triple::Unknown;
-                    }
                     return MatchComparison(columns, predicate.comparison());
+                }
+                case NYql::NConnector::NApi::TPredicate::kStringComparison: {
+                    // String comparison operations are not supported for statistics matching
+                    return Triple::Unknown;
                 }
                 case NConnector::NApi::TPredicate::PAYLOAD_NOT_SET:
                     return Triple::Unknown;

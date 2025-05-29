@@ -15,7 +15,8 @@ TEST_SRCS(
     test_stress.py
     test_statistics.py
     test_rolling.py
-    test_datetime2.py
+    udf/test_datetime2.py
+    udf/test_digest.py
 )
 
 SIZE(LARGE)

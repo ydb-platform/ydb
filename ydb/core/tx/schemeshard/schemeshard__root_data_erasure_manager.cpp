@@ -351,11 +351,11 @@ void TRootDataErasureManager::ScheduleRequestToBSC() {
 void TRootDataErasureManager::SendRequestToBSC() {
     auto ctx = SchemeShard->ActorContext();
     LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-        "[RootDataErasureManager] SendRequestToBSC: Generation# " << Generation);
+        "[RootDataErasureManager] SendRequestToBSC: Generation# " << BscGeneration);
 
     IsRequestToBSCScheduled = false;
     std::unique_ptr<TEvBlobStorage::TEvControllerShredRequest> request(
-        new TEvBlobStorage::TEvControllerShredRequest(Generation));
+        new TEvBlobStorage::TEvControllerShredRequest(BscGeneration));
     SchemeShard->PipeClientCache->Send(ctx, MakeBSControllerID(), request.release());
 }
 
@@ -633,9 +633,11 @@ struct TSchemeShard::TTxCompleteDataErasureBSC : public TSchemeShard::TRwTxBase 
 
         const auto& record = Ev->Get()->Record;
         auto& manager = Self->DataErasureManager;
-        if (record.GetCurrentGeneration() != manager->GetGeneration()) {
+        if (ui64 currentBscGeneration = record.GetCurrentGeneration(); currentBscGeneration > manager->GetBscGeneration()) {
             LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                "TTxCompleteDataErasureBSC Unknown generation#" << record.GetCurrentGeneration() << ", Expected gen# " << manager->GetGeneration() << " at schemestard: " << Self->TabletID());
+                "TTxCompleteDataErasureBSC Unknown generation#" << currentBscGeneration << ", Expected gen# " << manager->GetBscGeneration() << " at schemestard: " << Self->TabletID());
+            manager->SetBscGeneration(currentBscGeneration + 1);
+            manager->SendRequestToBSC();
             return;
         }
 

@@ -25,6 +25,7 @@ protected:
     TSchemeShard* const SchemeShard;
     EDataErasureStatus Status = EDataErasureStatus::UNSPECIFIED;
     ui64 Generation = 0;
+    ui64 BscGeneration = 0;
     bool Running = false;
 
     ui64 CounterDataErasureOk = 0;
@@ -62,7 +63,9 @@ public:
 
     void IncGeneration();
     void SetGeneration(ui64 generation);
+    void SetBscGeneration(ui64 generation);
     ui64 GetGeneration() const;
+    ui64 GetBscGeneration() const;
 
     bool IsRunning() const;
 };

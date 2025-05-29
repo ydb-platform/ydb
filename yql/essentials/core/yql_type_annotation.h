@@ -383,11 +383,26 @@ inline TString GetRandomKey<TGUID>() {
 }
 
 struct TTypeAnnotationContext: public TThrRefBase {
+<<<<<<< HEAD
+<<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> b947f977639 (revert)
     TSimpleSharedPtr<NDq::TOrderingsStateMachine> SortingsFSM;
     TSimpleSharedPtr<NDq::TOrderingsStateMachine> OrderingsFSM;
     TLangVersion LangVer = MinLangVersion;
     EBackportCompatibleFeaturesMode BackportMode = EBackportCompatibleFeaturesMode::None;
     bool UseTypeDiffForConvertToError = false;
+<<<<<<< HEAD
+=======
+    TLangVersion LangVer = UnknownLangVersion;
+=======
+>>>>>>> f1b0ceae238 (Update yql_type_annotation.h)
+    TSimpleSharedPtr<NDq::TOrderingsStateMachine> OrderingsFSM;
+    TSimpleSharedPtr<NDq::TOrderingsStateMachine> SortingsFSM;
+>>>>>>> 6370ac2adec ([] ...)
+=======
+>>>>>>> b947f977639 (revert)
     THashMap<TString, TIntrusivePtr<TOptimizerStatistics::TColumnStatMap>> ColumnStatisticsByTableName;
     THashMap<ui64, std::shared_ptr<TOptimizerStatistics>> StatisticsMap;
     TIntrusivePtr<ITimeProvider> TimeProvider;

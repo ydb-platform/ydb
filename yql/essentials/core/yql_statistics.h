@@ -123,12 +123,27 @@ struct TOptimizerStatistics {
     TIntrusivePtr<NDq::TTableAliasMap> TableAliases;
 
     NDq::TOrderingsStateMachine::TLogicalOrderings LogicalOrderings;
+<<<<<<< HEAD
+<<<<<<< HEAD
 
     NDq::TOrderingsStateMachine::TLogicalOrderings SortingOrderings;
     NDq::TOrderingsStateMachine::TLogicalOrderings ReversedSortingOrderings;
 
     std::optional<std::size_t> ShuffleOrderingIdx;
     std::int64_t SortingOrderingIdx = -1;
+
+    // special flag for equijoin
+    bool CBOFired = false;
+=======
+=======
+
+>>>>>>> e0b2d57f2d4 ([] ...)
+    NDq::TOrderingsStateMachine::TLogicalOrderings SortingOrderings;
+    NDq::TOrderingsStateMachine::TLogicalOrderings ReversedSortingOrderings;
+
+    std::optional<std::size_t> ShuffleOrderingIdx;
+    std::int64_t SortingOrderingIdx = -1;
+>>>>>>> 6370ac2adec ([] ...)
 
     // special flag for equijoin
     bool CBOFired = false;

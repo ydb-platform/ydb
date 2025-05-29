@@ -52,6 +52,20 @@ struct TOrdering {
             Directions.size() == Items.size() && type == TOrdering::ESorting
         );
     }
+<<<<<<< HEAD
+
+    TOrdering(
+        std::vector<std::size_t> items,
+        EType type
+    )
+        : TOrdering(
+            std::move(items),
+            std::vector<TItem::EDirection>{},
+            type
+        )
+    {}
+=======
+>>>>>>> 2e255116ede ([] ...)
 
     TOrdering(
         std::vector<std::size_t> items,
@@ -153,6 +167,22 @@ private:
 private:
     THashMap<TString, TString> TableByAlias_;
     THashMap<TString, TBaseColumn> BaseColumnByRename_;
+<<<<<<< HEAD
+};
+
+struct TSorting {
+    TSorting(
+        std::vector<TJoinColumn> ordering,
+        std::vector<TOrdering::TItem::EDirection> directions
+    )
+        : Ordering(std::move(ordering))
+        , Directions(std::move(directions))
+    {}
+
+    std::vector<TJoinColumn> Ordering;
+    std::vector<TOrdering::TItem::EDirection> Directions;
+=======
+>>>>>>> 31161e33148 (revert)
 };
 
 struct TSorting {
@@ -228,12 +258,30 @@ public: // deprecated section, use the section below instead of this
 
 public:
     std::size_t FindSorting(
+<<<<<<< HEAD
+<<<<<<< HEAD
         const TSorting& sorting,
+=======
+        const std::vector<TJoinColumn>& interestingOrdering,
+        const std::vector<TOrdering::TItem::EDirection>& directions,
+>>>>>>> e0b2d57f2d4 ([] ...)
+=======
+        const TSorting& sorting,
+>>>>>>> 1b3d9ced0e0 ([] ...)
         TTableAliasMap* tableAliases = nullptr
     );
 
     std::size_t AddSorting(
+<<<<<<< HEAD
+<<<<<<< HEAD
         const TSorting& sortings,
+=======
+        const std::vector<TJoinColumn>& interestingOrdering,
+        std::vector<TOrdering::TItem::EDirection> directions,
+>>>>>>> e0b2d57f2d4 ([] ...)
+=======
+        const TSorting& sortings,
+>>>>>>> 1b3d9ced0e0 ([] ...)
         TTableAliasMap* tableAliases = nullptr
     );
 
@@ -355,6 +403,8 @@ public:
     private:
         TDFSM* Dfsm_ = nullptr;
         /* we can have different args in hash shuffle function, so shuffles can be incompitable in this case */
+<<<<<<< HEAD
+<<<<<<< HEAD
         i64 ShuffleHashFuncArgsCount_ = -1;
 
         i64 State_ = -1;
@@ -362,6 +412,23 @@ public:
         /* Index of the state which was set in SetOrdering */
         i64 InitOrderingIdx_ = -1;
         TFDSet AppliedFDs_{};
+=======
+        i64 ShuffleHashFuncArgsCount = -1;
+=======
+        i64 ShuffleHashFuncArgsCount_ = -1;
+>>>>>>> 31161e33148 (revert)
+
+        i64 State_ = -1;
+
+        /* Index of the state which was set in SetOrdering */
+<<<<<<< HEAD
+        i64 InitOrderingIdx = -1;
+        TFDSet AppliedFDs{};
+>>>>>>> 1b3d9ced0e0 ([] ...)
+=======
+        i64 InitOrderingIdx_ = -1;
+        TFDSet AppliedFDs_{};
+>>>>>>> 31161e33148 (revert)
     };
 
     TLogicalOrderings CreateState();
@@ -534,6 +601,7 @@ private:
         const std::vector<TFunctionalDependency>& fds,
         const std::vector<TOrdering>& interestingOrderings
     );
+<<<<<<< HEAD
 
 private:
     TNFSM Nfsm_;
@@ -542,6 +610,22 @@ private:
     std::vector<i64> FdMapping_; // We to remap FD idxes after the pruning
     std::vector<TItemInfo> ItemInfo_;
     bool Built_ = false;
+=======
+
+private:
+    TNFSM Nfsm_;
+    TSimpleSharedPtr<TDFSM> Dfsm_; // it is important to have sharedptr here, otherwise all logicalorderings will invalidate after copying of FSM
+
+<<<<<<< HEAD
+    std::vector<i64> FdMapping; // We to remap FD idxes after the pruning
+    std::vector<TItemInfo> ItemInfo;
+    bool Built = false;
+>>>>>>> e0b2d57f2d4 ([] ...)
+=======
+    std::vector<i64> FdMapping_; // We to remap FD idxes after the pruning
+    std::vector<TItemInfo> ItemInfo_;
+    bool Built_ = false;
+>>>>>>> 31161e33148 (revert)
 };
 
 }

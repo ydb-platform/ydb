@@ -54,7 +54,9 @@ struct TJoinColumn {
 
     static TJoinColumn FromString(const TString& column) {
         if (column.find('.') != TString::npos) {
-            return TJoinColumn(column.substr(0, column.find('.')), column.substr(column.find('.') + 1));
+            TString relName = column.substr(0, column.find('.'));
+            TString attrName = column.substr(column.find('.') + 1);
+            return TJoinColumn(std::move(relName), std::move(attrName));
         }
 
         return TJoinColumn("", column);

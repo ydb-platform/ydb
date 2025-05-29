@@ -30,18 +30,19 @@ target_link_libraries(yql-providers-generic-provider-ut-pushdown PUBLIC
   providers-generic-provider
   contrib-libs-fmt
   library-cpp-random_provider
+  yql-dq-expr_nodes
+  providers-common-db_id_async_resolver
+  providers-generic-expr_nodes
   yql-essentials-ast
   yql-essentials-core
   essentials-core-services
-  yql-dq-expr_nodes
   yql-essentials-minikql
-  providers-common-db_id_async_resolver
-  providers-generic-expr_nodes
+  minikql-invoke_builtins-llvm16
   providers-result-provider
   udf-service-stub
   yql-essentials-sql
-  minikql-invoke_builtins-llvm16
   essentials-sql-pg_dummy
+  re2_udf
 )
 
 target_allocator(yql-providers-generic-provider-ut-pushdown

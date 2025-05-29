@@ -12,7 +12,7 @@
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 
-namespace NKikimr::NOlap::NReader::NSimple {
+namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering {
 
 class TSpecialReadContext;
 class IDataSource;

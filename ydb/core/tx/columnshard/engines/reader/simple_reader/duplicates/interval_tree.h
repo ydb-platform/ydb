@@ -5,7 +5,7 @@
 #include <map>
 #include <tuple>
 
-namespace NKikimr::NOlap::NReader::NSimple {
+namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering  {
 
 template <typename TKey>
 class TInterval {

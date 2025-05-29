@@ -9,7 +9,7 @@
 
 #include <library/cpp/cache/cache.h>
 
-namespace NKikimr::NOlap::NReader::NSimple {
+namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering  {
 
 class IDataSource;
 

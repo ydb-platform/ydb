@@ -2,7 +2,7 @@
 
 #include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/source.h>
 
-namespace NKikimr::NOlap::NReader::NSimple {
+namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering  {
 
 void TColumnFetchingContext::StartAllocation(const std::shared_ptr<TColumnFetchingContext>& context) {
     std::shared_ptr<TPortionDataSource> source = std::dynamic_pointer_cast<TPortionDataSource>(context->GetSource());

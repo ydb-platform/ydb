@@ -12,21 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(color)
-add_subdirectory(ut)
-
-add_library(commands-interactive-highlight)
-
-
-target_link_libraries(commands-interactive-highlight PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  restricted-patched-replxx
-  sql-v1-highlight
-  interactive-highlight-color
-)
-
-target_sources(commands-interactive-highlight PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/interactive/highlight/yql_highlighter.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

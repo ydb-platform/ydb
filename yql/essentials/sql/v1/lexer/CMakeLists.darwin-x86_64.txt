@@ -16,10 +16,10 @@ add_subdirectory(antlr4)
 add_subdirectory(antlr4_ansi)
 add_subdirectory(antlr3)
 add_subdirectory(antlr3_ansi)
+add_subdirectory(regex)
 add_subdirectory(antlr4_pure)
 add_subdirectory(antlr4_pure_ansi)
 add_subdirectory(check)
-add_subdirectory(regex)
 
 add_library(sql-v1-lexer)
 

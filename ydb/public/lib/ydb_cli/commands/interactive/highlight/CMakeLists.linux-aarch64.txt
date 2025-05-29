@@ -23,15 +23,11 @@ target_link_libraries(commands-interactive-highlight PUBLIC
   contrib-libs-cxxsupp
   yutil
   restricted-patched-replxx
-  sql-v1-lexer
-  v1-lexer-antlr4
-  v1-lexer-antlr4_ansi
-  essentials-sql-settings
+  sql-v1-highlight
   interactive-highlight-color
 )
 
 target_sources(commands-interactive-highlight PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/interactive/highlight/yql_highlighter.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/interactive/highlight/yql_position.cpp
 )
 

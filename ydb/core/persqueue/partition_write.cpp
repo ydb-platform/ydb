@@ -1075,6 +1075,18 @@ ui32 TPartition::RenameTmpCmdWrites(TEvKeyValue::TEvRequest* request)
     return curWrites;
 }
 
+void TPartition::TryCorrectStartOffset(TMaybe<ui64> offset)
+{
+    auto tryCorrectStartOffset = [](TPartitionBlobEncoder& encoder, TMaybe<ui64> offset) {
+        if (!encoder.Head.GetCount() && !encoder.NewHead.GetCount() && encoder.IsEmpty() && offset) {
+            encoder.StartOffset = *offset;
+        }
+    };
+
+    tryCorrectStartOffset(CompactionBlobEncoder, offset);
+    tryCorrectStartOffset(BlobEncoder, offset);
+}
+
 bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKeyValue::TEvRequest* request) {
     if (!CanWrite()) {
         ScheduleReplyError(p.Cookie, InactivePartitionErrorCode,
@@ -1252,9 +1264,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
     }
 
     // Empty partition may will be filling from offset great than zero from mirror actor if source partition old and was clean by retantion time
-    if (!BlobEncoder.Head.GetCount() && !BlobEncoder.NewHead.GetCount() && BlobEncoder.DataKeysBody.empty() && BlobEncoder.HeadKeys.empty() && p.Offset) {
-        BlobEncoder.StartOffset = *p.Offset;
-    }
+    TryCorrectStartOffset(p.Offset);
 
     TMaybe<TPartData> partData;
     if (p.Msg.TotalParts > 1) { //this is multi-part message

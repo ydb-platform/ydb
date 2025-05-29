@@ -6,13 +6,21 @@
     "tables": [
         {
             "name": "/local/base_json_insert_literal_sql_plan/ResultLiteralJD",
+            "reads": [
+                {
+                    "lookup_by": [
+                        "Key"
+                    ],
+                    "type": "Lookup"
+                }
+            ],
             "writes": [
                 {
                     "columns": [
                         "Key",
                         "Value"
                     ],
-                    "type": "MultiInsert"
+                    "type": "MultiUpsert"
                 }
             ]
         }

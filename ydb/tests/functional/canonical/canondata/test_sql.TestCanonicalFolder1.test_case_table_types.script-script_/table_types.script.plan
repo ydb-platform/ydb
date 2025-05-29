@@ -135,23 +135,27 @@
                 "PlanNodeType": "Query",
                 "Plans": [
                     {
-                        "Node Type": "Sink",
+                        "Node Type": "Effect",
                         "PlanNodeId": 2,
                         "Plans": [
                             {
-                                "Node Type": "ConstantExpr-Sink",
+                                "CTE Name": "precompute_0_0",
+                                "Node Type": "Upsert-ConstantExpr",
                                 "Operators": [
                                     {
-                                        "Inputs": [],
-                                        "Iterator": "[{Key: \"Key\",Value01: \"true\",Value02: 1,Value03: -1,Value04: 2,Value05: -2,Value06: 3,Value07: \"4.5\",Value08: Minus,Value09: \"3.14\",Value10: DyNumber,Value21: \"\\u041F\\u0440\\u0438\\u0432\\u0435\\u0442\",Value22: \"{\\\"name\\\": \\\"George\\\", \\\"age\\\": 23}\",Value23: JsonDocument,Value24: \"{a=1; b=2}\",Value31: Apply,Value32: Apply,Value33: Apply,Value34: Apply}]",
-                                        "Name": "Iterator"
+                                        "Inputs": [
+                                            {
+                                                "InternalOperatorId": 1
+                                            }
+                                        ],
+                                        "Name": "Upsert",
+                                        "Path": "/local/base_table_types_script_script/TableTypes",
+                                        "Table": "base_table_types_script_script/TableTypes"
                                     },
                                     {
                                         "Inputs": [],
-                                        "Name": "Replace",
-                                        "Path": "/local/base_table_types_script_script/TableTypes",
-                                        "SinkType": "KqpTableSink",
-                                        "Table": "base_table_types_script_script/TableTypes"
+                                        "Iterator": "precompute_0_0",
+                                        "Name": "Iterator"
                                     }
                                 ],
                                 "PlanNodeId": 1,
@@ -192,7 +196,7 @@
                                 "Value33",
                                 "Value34"
                             ],
-                            "type": "MultiReplace"
+                            "type": "MultiUpsert"
                         }
                     ]
                 }

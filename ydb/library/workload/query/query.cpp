@@ -42,38 +42,37 @@ TString TQueryWorkloadParams::GetDescription(ECommandType commandType, int /*wor
         return "";
 
     case ECommandType::Init:
-        return R"(Initialization of tables, their configuration, etc.
-All files with the "sql" and "yql" extensions will be used from subdirectory "init" in suite dir, including those in nested directories. It is assumed that they contain DDL queries. It is also possible to specify such queries directly from the command line, using the "--query" parameter of the "init" command.
+        return R"(Initialization of tables and their configurations.
+Typically involving DDL queries from files with "sql" and "yql" extensions. These queries can also be directly specified from the command line using the "--query" parameter.
 
 Next aliases can be used in queries:
   * {db} - absolute path in database to workload root. It is combination of --database and --path option values.)";
 
     case ECommandType::Import:
-        return R"(Filling tables with data.
-Upload data from subdirectory "import" in suite dir.
-This folder is expected to contain subfolders whose names correspond to the names of the tables. They already contain files with data. The following formats are supported: csv (coma separated values), tsv (tab separated values), csv.gz (compressed csv) and tsv.gz (compressed tsv).)";
+        return R"(Populating tables with data.
+The "import" directory should contain subfolders named after each table, with files in supported data formats such as csv, tsv, csv.gz, or tsv.gz)";
 
     case ECommandType::Run:
         return R"(Run load testing.
-All files with the extensions "sql" and "yql" will be used from subdirectory "run" in suite dir, including those in nested directories. It is also possible to specify queries directly from the command line, using the "--query" parameter of the "run" command.)";
+Executing load testing using queries from files in the "run" directory or directly from the command line via the "--query" parameter.)";
 
     case ECommandType::Root:
-        return R"(Workload defined by the user.
-The load testing cycle consists of stages.
-The user creates a directory with subdirectories corresponding to each stage. Let's call this directory suite. The path to the suite is passed through the "--suite-path" parameter of each command.
+        return R"(Executes a user-defined workload consisting of multiple stages.
+The user provides a directory path, referred to as a suite, which contains subdirectories for each stage. This path is specified using the "--suite-path" parameter in each command.
 
-There can be four stages in total:
+The suite can contain up to four stages:
 1. init
-Initialization of tables, their configuration, etc. All files with the "sql" and "yql" extensions will be used in this directory, including those in nested directories. It is assumed that they contain DDL queries. It is also possible to specify such queries directly from the command line, using the "--query" parameter of the "init" command.
+Initialization of tables and their configurations, typically involving DDL queries from files with "sql" and "yql" extensions. These queries can also be directly specified from the command line using the "--query" parameter of the "init" command.
 
 2. import
-Filling tables with data. This folder is expected to contain subfolders whose names correspond to the names of the tables. They already contain files with data. The following formats are supported: csv (coma separated values), tsv (tab separated values), csv.gz (compressed csv) and tsv.gz (compressed tsv).
+Populating tables with data. The "import" directory should contain subfolders named after each table, with files in supported data formats such as csv, tsv, csv.gz, or tsv.gz.
 
 3. run
-Run load testing. In this directory, all files with the extensions "sql" and "yql" will be used, including those in nested directories. It is also possible to specify queries directly from the command line, using the "--query" parameter of the "run" command.
+Executing load testing using queries from files in the "run" directory or directly from the command line via the "--query" parameter.
 
 4. clean
-Cleaning, deleting tables used for load testing. This step does not require any data from the user, only the path to the database.
+Cleaning up by removing tables used for load testing.
+This step only requires the database path.
 
 Details can be found in the description of the commands, using the "--help" option.)";
     }

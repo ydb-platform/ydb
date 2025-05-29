@@ -3,6 +3,7 @@ import pytest
 import os
 import stat
 import tempfile
+import yatest
 import logging
 from .conftest import LoadSuiteBase
 from ydb.tests.olap.lib.ydb_cli import YdbCliHelper
@@ -15,9 +16,10 @@ from library.python import resource
 
 LOGGER = logging.getLogger(__name__)
 
-STRESS_BINARIES_DEPLOY_PATH = '/tmp/stress_binaries/'
-WORKLOAD_BINARY_NAME = 'simple_queue'  # Имя бинарного файла
-YDB_CLI_BINARY_NAME = 'ydb_cli'
+BINARIES_DEPLOY_PATH = '/tmp/stress_binaries/'
+WORKLOAD_BINARY_NAME = 'simple_queue'
+YDB_CLI_BINARY_NAME = 'ydb'
+YDB_CLI_PATH = yatest.common.binary_path(os.getenv('YDB_CLI_BINARY'))
 
 
 class TableType(str, Enum):
@@ -27,23 +29,6 @@ class TableType(str, Enum):
 
 
 class SimpleQueueBase(LoadSuiteBase):
-    working_dir = os.path.join(tempfile.gettempdir(), "ydb_stability")
-    os.makedirs(working_dir, exist_ok=True)
-
-    def _unpack_resource(self, name):
-        """Распаковывает ресурс из пакета"""
-        res = resource.find(name)
-        path_to_unpack = os.path.join(self.working_dir, name)
-        with open(path_to_unpack, "wb") as f:
-            f.write(res)
-
-        st = os.stat(path_to_unpack)
-        os.chmod(path_to_unpack, st.st_mode | stat.S_IEXEC)
-        return path_to_unpack
-
-    def _unpack_workload_binary(self, workload_binary_name: str):
-        """Распаковывает бинарный файл из ресурсов и возвращает путь к нему"""
-        return self._unpack_resource(workload_binary_name)
 
     @classmethod
     def do_teardown_class(cls):
@@ -55,29 +40,27 @@ class SimpleQueueBase(LoadSuiteBase):
 
         # Останавливаем процессы simple_queue на всех нодах
         cls.kill_workload_processes(
-            process_names=[STRESS_BINARIES_DEPLOY_PATH + WORKLOAD_BINARY_NAME],
-            target_dir=STRESS_BINARIES_DEPLOY_PATH
+            process_names=[BINARIES_DEPLOY_PATH + WORKLOAD_BINARY_NAME],
+            target_dir=BINARIES_DEPLOY_PATH
         )
 
     @pytest.mark.parametrize('table_type', [t.value for t in TableType])
     def test_workload_simple_queue(self, table_type: str):
         # self.save_nodes_state()
         # Распаковываем бинарные файлы из ресурсов
-        workload_binary_path = self._unpack_workload_binary(WORKLOAD_BINARY_NAME)
-        cli_binary_path = self._unpack_workload_binary(YDB_CLI_BINARY_NAME)
-        binary_files = [workload_binary_path, cli_binary_path]
+        binary_files = [
+            yatest.common.binary_path(os.getenv("SIMPLE_QUEUE_BINARY"))
+        ]
 
         # Получаем хосты нод кластера
         nodes = YdbCluster.get_cluster_nodes()
-        hosts = list(set(node.host for node in nodes))
-
-        # Разворачиваем бинарные файлы на всех хостах кластера используя новую утилитную функцию
-        deploy_results = deploy_binaries_to_hosts(
-            binary_files, hosts, STRESS_BINARIES_DEPLOY_PATH)
 
         # Выбираем первую ноду для выполнения workload
         node = nodes[0]
         node_host = node.host
+        # Деблоим бинарнь
+        deploy_results = deploy_binaries_to_hosts(
+            binary_files, [node_host], BINARIES_DEPLOY_PATH)
 
         # Проверяем, успешно ли был развернут бинарный файл
         binary_result = deploy_results.get(node_host, {}).get(WORKLOAD_BINARY_NAME, {})
@@ -132,10 +115,9 @@ class SimpleQueueBase(LoadSuiteBase):
                     raise Exception(f"Workload get errors in run: {command_error}")
 
         with allure.step('Checking scheme state'):
-            cli_path = deploy_results.get(node_host, {}).get(YDB_CLI_BINARY_NAME, {})['path']
             stdout, stderr = execute_command(
                 node.host,
-                [cli_path, '--endpoint', f'{YdbCluster.ydb_endpoint}',
+                [YDB_CLI_PATH, '--endpoint', f'{YdbCluster.ydb_endpoint}',
                  '--database', f'/{YdbCluster.ydb_database}',
                  "scheme", "ls", "-lR"],
                 raise_on_error=False)

@@ -20,22 +20,4 @@ PY3_LIBRARY()
         ydb/public/sdk/python
     )
 
-    BUNDLE(
-        ydb/tests/stress/simple_queue NAME simple_queue
-        ydb/tests/stress/olap_workload NAME olap_workload
-        ydb/tests/stress/oltp_workload NAME oltp_workload 
-        ydb/tests/stress/statistics_workload NAME statistics_workload
-        ydb/tests/tools/nemesis/driver NAME nemesis
-        ydb/apps/ydb NAME ydb_cli
-    )
-
-    RESOURCE(
-        ydb_cli ydb_cli
-        simple_queue simple_queue
-        olap_workload olap_workload
-        oltp_workload oltp_workload
-        statistics_workload statistics_workload
-        nemesis nemesis
-    )
-
 END()

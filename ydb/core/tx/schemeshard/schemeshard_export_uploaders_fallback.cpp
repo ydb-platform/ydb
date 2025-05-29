@@ -53,9 +53,9 @@ private:
 
 IActor* CreateSchemeUploader(TActorId schemeShard, ui64 exportId, ui32 itemIdx, TPathId sourcePathId,
     const Ydb::Export::ExportToS3Settings& settings, const TString& databaseRoot, const TString& metadata,
-    bool enablePermissions
+    bool enablePermissions, TMaybe<NBackup::TEncryptionIV> iv
 ) {
-    Y_UNUSED(sourcePathId, settings, databaseRoot, metadata, enablePermissions);
+    Y_UNUSED(sourcePathId, settings, databaseRoot, metadata, enablePermissions, iv);
     return new TSchemeUploaderFallback(schemeShard, exportId, itemIdx);
 }
 

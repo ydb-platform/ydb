@@ -452,15 +452,10 @@ public:
         return UseFilter ? nullptr : Filter;
     }
 
-    TColumnFilter FullToDataFilter(TColumnFilter filter) const {
-        if (!UseFilter || Filter->IsTotalAllowFilter()) {
-            return filter;
-        } else {
-            return filter.ApplyFilter(*Filter);
-        }
-    }
-
     void AddFilter(const TColumnFilter& filter) {
+        if (filter.IsTotalAllowFilter()) {
+            return;
+        }
         if (!UseFilter) {
             *Filter = Filter->And(filter);
         } else {

@@ -95,6 +95,8 @@ class TestDigest(MixedClusterFixture):
             query = self.generate_insert()
             session_pool.execute_with_retries(query)
 
-            query = self.q_digest()
-            result = session_pool.execute_with_retries(query)
-            assert len(result[0].rows) > 0
+        query = self.q_digest()
+        for _ in range(10):
+            with ydb.QuerySessionPool(self.driver) as session_pool:
+                result = session_pool.execute_with_retries(query)
+                assert len(result[0].rows) > 0

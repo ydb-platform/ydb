@@ -230,20 +230,22 @@ class TestDatetime2(MixedClusterFixture):
             query = self.generate_insert()
             session_pool.execute_with_retries(query)
 
-            # ---------------- SELECT ------------------
-            queries = [
-                self.q_split(),
-                self.q_make(),
-                self.q_get(),
-                self.q_update(),
-                self.q_to_from(),
-                self.q_interval(),
-                self.q_start_end(),
-                self.q_shift(),
-                self.q_format(),
-                self.q_parse()
-            ]
+        # ---------------- SELECT ------------------
+        queries = [
+            self.q_split(),
+            self.q_make(),
+            self.q_get(),
+            self.q_update(),
+            self.q_to_from(),
+            self.q_interval(),
+            self.q_start_end(),
+            self.q_shift(),
+            self.q_format(),
+            self.q_parse()
+        ]
 
-            for query in queries:
-                result = session_pool.execute_with_retries(query)
-                assert len(result[0].rows) > 0
+        for _ in range(10):
+            with ydb.QuerySessionPool(self.driver) as session_pool:
+                for query in queries:
+                    result = session_pool.execute_with_retries(query)
+                    assert len(result[0].rows) > 0

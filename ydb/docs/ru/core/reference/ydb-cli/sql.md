@@ -110,8 +110,6 @@ ydb -e <endpoint> -d <database> sql -s "SELECT * FROM users WHERE email = 'alice
         ...
 ```
 
-Для сбора диагностической информации относительно плана для запроса,
-
 ### Работа с параметризованными запросами {#parameterized-query}
 
 Подробное описание работы с параметрами с примерами смотрите в статье [{#T}](parameterized-query-execution.md).

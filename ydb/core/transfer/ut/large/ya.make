@@ -17,8 +17,9 @@ SRCS(
 
 INCLUDE(${ARCADIA_ROOT}/ydb/public/tools/ydb_recipe/recipe.inc)
 
-SIZE(LARGE)
-TAG(ya:fat)
+SIZE(MEDIUM)
+#SIZE(LARGE)
+#TAG(ya:fat)
 
 IF (SANITIZER_TYPE)
     REQUIREMENTS(ram:24 cpu:4)

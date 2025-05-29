@@ -656,13 +656,20 @@ void TDescribeTopicActorImpl::RequestPartitionStatus(const TTabletInfo& tablet, 
 void TDescribeTopicActorImpl::RequestPartitionsLocation(const TActorContext& ctx) {
     LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, "DescribeTopicImpl " << ctx.SelfID.ToString() << ": Request location");
 
+    if (Settings.Partitions.size() != TotalPartitions) {
+        return RaiseError(
+            TStringBuilder() << "No partition " << Settings.Partitions[0] << " in topic",
+            Ydb::PersQueue::ErrorCode::OVERLOAD, Ydb::StatusIds::OVERLOADED, ctx
+        );
+    }
+
     THashSet<ui64> partIds;
     TVector<ui64> partsVector;
     for (auto p : Settings.Partitions) {
         if (p >= TotalPartitions) {
             return RaiseError(
                 TStringBuilder() << "No partition " << Settings.Partitions[0] << " in topic",
-                Ydb::PersQueue::ErrorCode::BAD_REQUEST, Ydb::StatusIds::BAD_REQUEST, ctx
+                Ydb::PersQueue::ErrorCode::OVERLOAD, Ydb::StatusIds::OVERLOADED, ctx
             );
         }
         auto res = partIds.insert(p);
@@ -900,14 +907,12 @@ bool TDescribeTopicActor::ApplyResponse(
         TEvPersQueue::TEvGetPartitionsLocationResponse::TPtr& ev, const TActorContext&
 ) {
     const auto& record = ev->Get()->Record;
-    Y_ABORT_UNLESS(record.LocationsSize() == TotalPartitions);
     Y_ABORT_UNLESS(Settings.RequireLocation);
 
-    for (auto i = 0u; i < TotalPartitions; ++i) {
+    for (auto i = 0u; i < record.LocationsSize(); ++i) {
         const auto& location = record.GetLocations(i);
         auto* locationResult = Result.mutable_partitions(i)->mutable_partition_location();
         SetPartitionLocation(location, locationResult);
-
     }
     return true;
 }
@@ -1017,9 +1022,8 @@ bool TDescribeConsumerActor::ApplyResponse(
         TEvPersQueue::TEvGetPartitionsLocationResponse::TPtr& ev, const TActorContext&
 ) {
     const auto& record = ev->Get()->Record;
-    Y_ABORT_UNLESS(record.LocationsSize() == TotalPartitions);
     Y_ABORT_UNLESS(Settings.RequireLocation);
-    for (auto i = 0u; i < TotalPartitions; ++i) {
+    for (auto i = 0u; i < record.LocationsSize(); ++i) {
         const auto& location = record.GetLocations(i);
         auto* locationResult = Result.mutable_partitions(i)->mutable_partition_location();
         SetPartitionLocation(location, locationResult);

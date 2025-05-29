@@ -168,7 +168,7 @@ struct MainTestCase {
         if (user) {
             config.SetAuthToken(TStringBuilder() << user.value() << "@builtin");
         }
-        // config.SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_INFO).Release()))
+        config.SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG).Release()));
         return config;
     }
 
@@ -282,13 +282,41 @@ struct MainTestCase {
         )", SourceTableName.data(), ChangefeedName.data()));
     }
 
+    struct CreatTopicSettings {
+        size_t MinPartitionCount = 1;
+        size_t MaxPartitionCount = 100;
+        bool AutoPartitioningEnabled = false;
+    };
+
     void CreateTopic(size_t partitionCount = 10) {
-        ExecuteDDL(Sprintf(R"(
-            CREATE TOPIC `%s`
-            WITH (
-                min_active_partitions = %d
-            );
-        )", TopicName.data(), partitionCount));
+        CreateTopic({
+            .MinPartitionCount = partitionCount
+        });
+    }
+
+    void CreateTopic(const CreatTopicSettings& settings) {
+        if (settings.AutoPartitioningEnabled) {
+            ExecuteDDL(Sprintf(R"(
+                CREATE TOPIC `%s`
+                WITH (
+                    MIN_ACTIVE_PARTITIONS = %d,
+                    MAX_ACTIVE_PARTITIONS = %d,
+                    AUTO_PARTITIONING_STRATEGY = 'UP',
+                    auto_partitioning_down_utilization_percent = 1,
+                    auto_partitioning_up_utilization_percent=2,
+                    auto_partitioning_stabilization_window = Interval('PT1S'),
+                    partition_write_speed_bytes_per_second = 3
+                );
+            )", TopicName.data(), settings.MinPartitionCount, settings.MaxPartitionCount));
+        } else {
+            ExecuteDDL(Sprintf(R"(
+                CREATE TOPIC `%s`
+                WITH (
+                    MIN_ACTIVE_PARTITIONS = %d
+
+                );
+            )", TopicName.data(), settings.MinPartitionCount));
+        }
     }
 
     void DropTopic() {
@@ -474,7 +502,7 @@ struct MainTestCase {
         settings.IncludeStats(true);
 
         auto c = TopicClient.DescribeConsumer(TopicName, consumerName, settings).GetValueSync();
-        UNIT_ASSERT(c.IsSuccess());
+        UNIT_ASSERT_C(c.IsSuccess(), c.GetIssues().ToOneLineString());
         return c;
     }
 
@@ -554,7 +582,9 @@ struct MainTestCase {
         settings.IncludeLocation(true);
         settings.IncludeStats(true);
 
-        return TopicClient.DescribeTopic(TopicName, settings).ExtractValueSync();
+        auto result = TopicClient.DescribeTopic(TopicName, settings).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToOneLineString());
+        return result;
     }
 
     void CreateUser(const std::string& username) {

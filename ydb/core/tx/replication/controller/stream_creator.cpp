@@ -134,7 +134,7 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
     }
 
     void Handle(TEvYdbProxy::TEvAlterTopicResponse::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        LOG_E("Handle " << ev->Get()->ToString());
         auto& result = ev->Get()->Result;
 
         if (result.GetStatus() == NYdb::EStatus::ALREADY_EXISTS) {

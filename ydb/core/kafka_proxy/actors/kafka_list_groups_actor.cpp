@@ -84,7 +84,7 @@ TMaybe<TString> TKafkaListGroupsActor::GetErrorFromYdbResponse(NKqp::TEvKqp::TEv
     TStringBuilder builder = TStringBuilder() << "Recieved error on request to KQP. Last sent request: " << "SELECT" << ". Reason: ";
     if (ev->Cookie != KqpCookie) {
         return builder << "Unexpected cookie in TEvQueryResponse. Expected KQP Cookie: " << KqpCookie << ", Actual: " << ev->Cookie << ".";
-    } else if (ev->Get()->Record.GetYdbStatus() == Ydb::StatusIds::NOT_FOUND) {
+    } else if (ev->Get()->Record.GetYdbStatus() == Ydb::StatusIds::SCHEME_ERROR) {
         Kqp->SendInitTableRequest(ctx, NKikimr::NGRpcProxy::V1::TKafkaConsumerGroupsMetaInitManager::GetInstant());
         return builder << "Unexpected YDB status in TEvQueryResponse. Expected YDB SUCCESS status, Actual: " <<
             ev->Get()->Record.GetYdbStatus() << ". Created ConsumerGroupsMeta table.";

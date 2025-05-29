@@ -1,7 +1,7 @@
 LIBRARY()
 
 SRCS(
-    yql_yt_yt_service.cpp
+    yql_yt_coordinator_service_interface.cpp
 )
 
 PEERDIR(

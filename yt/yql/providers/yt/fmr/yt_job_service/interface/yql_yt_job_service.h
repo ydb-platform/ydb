@@ -7,22 +7,23 @@
 namespace NYql::NFmr {
 
 struct TYtReaderSettings {
-    bool WithAttributes = false; // Enable RowIndex and RangeIndex
+    bool WithAttributes = false; // Enable RowIndex and RangeIndex, for now only mode = false is supported.
 };
 
 struct TYtWriterSettings {
     TMaybe<ui64> MaxRowWeight = Nothing();
 };
 
-class IYtService: public TThrRefBase {
+class IYtJobService: public TThrRefBase {
 public:
-    virtual ~IYtService() = default;
+    virtual ~IYtJobService() = default;
 
-    using TPtr = TIntrusivePtr<IYtService>;
+    using TPtr = TIntrusivePtr<IYtJobService>;
 
+    // Either RichPath to actual Yt table or filepath is passed depending on type of underlying gateway.
     virtual NYT::TRawTableReaderPtr MakeReader(
-        const TYtTableRef& ytTable,
-        const TClusterConnection& clusterConnection,
+        const std::variant<NYT::TRichYPath, TString>& inputTableRef,
+        const TClusterConnection& clusterConnection = TClusterConnection(),
         const TYtReaderSettings& settings = TYtReaderSettings()
     ) = 0;
 

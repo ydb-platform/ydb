@@ -14,7 +14,7 @@
   * Added the `--replace` option to the `{{ ydb-cli }} tools restore` [command](./reference/ydb-cli/export-import/tools-restore.md#schema-objects) to remove existing objects that match those in the backup before restoration.
   * Improved the `{{ ydb-cli }} tools dump` [command](./reference/ydb-cli/export-import/tools-dump.md#schema-objects) by not saving [replica tables](./concepts/async-replication.md) with ASYNC REPLICATION and their [changefeeds](./concepts/glossary.md#changefeed) to local backups. It prevents duplication of changefeeds and reduces the amount of space the backup takes on disk.
 * Enhanced CLI usability:
-  * Improved help messages with better distinction between detailed (`-hh`) and brief (`-h`) help.
+  * Detailed help message (`-hh`) now shows the whole subcommand tree.
   * Added automatic pair insertion for brackets in `{{ ydb-cli }}` interactive mode.
   * Added support for files with BOM (Byte Order Mark) in the `{{ ydb-cli }} import file` [commands](./reference/ydb-cli/export-import/import-file.md).
 * **_(Requires server v25.1+)_** **_(Experimental)_** Improved the `{{ ydb-cli }} debug latency` command:
@@ -24,15 +24,14 @@
 
 ### Bug fixes
 
-* Fixed the `{{ ydb-cli }} operation get` [command](./reference/ydb-cli/operation-get.md) to properly handle running operations.
-* Fixed the `{{ ydb-cli }} scheme rmdir` [command](./reference/ydb-cli/commands/dir.md#rmdir):
-  * Corrected subdomain deletion behavior.
-  * Improved ordering for external table and data source deletion.
+* The `{{ ydb-cli }} operation get` [command](./reference/ydb-cli/operation-get.md) now properly handles running operations.
+* Fixed errors in the `{{ ydb-cli }} scheme rmdir` [command](./reference/ydb-cli/commands/dir.md#rmdir):
+  * Fixed an issue where the command was trying to delete subdomains.
+  * Fixed deletion order: external tables are now deleted before external data sources due to possible dependencies between them.
   * Added support for coordination nodes in recursive removal.
 * Fixed return code of the `{{ ydb-cli }} workload * run --check-canonical` command when results differ from canonical ones.
 * Fixed an issue where CLI was attempting to read parameters from stdin even without available data.
-* **_(Requires server v25.1+)_** **_(Experimental)_** Fixed scheme error in the `{{ ydb-cli }} admin cluster dump` [command](./reference/ydb-cli/export-import/tools-dump.md#cluster) when specifying a domain database.
-* **_(Requires server v25.1+)_** **_(Experimental)_** Fixed unauthorized error in the `{{ ydb-cli }} admin database restore` command when handling multiple database administrators in dump.
+* **_(Requires server v25.1+)_** **_(Experimental)_** Fixed an authorization error in the `{{ ydb-cli }} admin database restore` [command](./reference/ydb-cli/export-import/tools-restore.md#db) when restoring from a backup containing multiple database administrator accounts.
 
 ## Version 2.20.0 {#2-20-0}
 

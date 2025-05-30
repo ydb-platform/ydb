@@ -1071,10 +1071,9 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvSessionError::TPtr& ev) {
         auto sessionIt = TopicSessions.find(topicKey);
         if (sessionIt != TopicSessions.end()) {
             TTopicSessionInfo& topicSessionInfo = sessionIt->second;
-            if (topicSessionInfo.Sessions.contains(ev->Sender)) {
+            if (topicSessionInfo.Sessions.erase(ev->Sender)) {
                 LOG_ROW_DISPATCHER_WARN("Fatal session error, remove session " << ev->Sender);
                 Send(ev->Sender, new NActors::TEvents::TEvPoisonPill());
-                topicSessionInfo.Sessions.erase(ev->Sender);
                 if (topicSessionInfo.Sessions.empty()) {
                     TopicSessions.erase(sessionIt);
                 }

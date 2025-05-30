@@ -334,7 +334,6 @@ public:
         YQL_ENSURE(ShardedWriteController);
         CA_LOG_D("Write: token=" << token);
         ShardedWriteController->Write(token, std::move(data));
-        UpdateShards();
     }
 
     void Close(TWriteToken token) {
@@ -343,7 +342,6 @@ public:
         CA_LOG_D("Close: token=" << token);
 
         ShardedWriteController->Close(token);
-        UpdateShards();
     }
 
     void Close() {
@@ -356,18 +354,6 @@ public:
 
     void SetParentTraceId(NWilson::TTraceId traceId) {
         ParentTraceId = std::move(traceId);
-    }
-
-    void UpdateShards() {
-        // TODO: Maybe there are better ways to initialize new shards...
-        for (const auto& shardInfo : ShardedWriteController->GetPendingShards()) {
-            TxManager->AddShard(shardInfo.ShardId, IsOlap, TablePath);
-            IKqpTransactionManager::TActionFlags flags = IKqpTransactionManager::EAction::WRITE;
-            if (shardInfo.HasRead) {
-                flags |= IKqpTransactionManager::EAction::READ;
-            }
-            TxManager->AddAction(shardInfo.ShardId, flags);
-        }
     }
 
     bool IsClosed() const {
@@ -880,16 +866,24 @@ public:
 
     void FlushBuffers() {
         ShardedWriteController->FlushBuffers();
-        UpdateShards();
+        ShardedWriteController->ForEachPendingShard([&](const auto& shardInfo) {
+            TxManager->AddShard(shardInfo.ShardId, IsOlap, TablePath);
+            IKqpTransactionManager::TActionFlags flags = IKqpTransactionManager::EAction::WRITE;
+            if (shardInfo.HasRead) {
+                flags |= IKqpTransactionManager::EAction::READ;
+            }
+            TxManager->AddAction(shardInfo.ShardId, flags);
+        });
     }
 
-    bool Flush() {
-        for (const auto& shardInfo : ShardedWriteController->GetPendingShards()) {
-            if (!SendDataToShard(shardInfo.ShardId)) {
-                return false;
+    bool FlushToShards() {
+        bool ok = true;
+        ShardedWriteController->ForEachPendingShard([&](const auto& shardInfo) {
+            if (ok && !SendDataToShard(shardInfo.ShardId)) {
+                ok = false;
             }
-        }
-        return true;
+        });
+        return ok;
     }
 
     bool SendDataToShard(const ui64 shardId) {
@@ -1516,7 +1510,8 @@ private:
             }
 
             if (Closed || outOfMemory) {
-                if (!WriteTableActor->Flush()) {
+                WriteTableActor->FlushBuffers();
+                if (!WriteTableActor->FlushToShards()) {
                     return;
                 }
             }
@@ -1929,11 +1924,19 @@ public:
             return false;
         }
 
+        if (outOfMemory) {
+            for (auto& [_, info] : WriteInfos) {
+                if (info.WriteTableActor->IsReady()) {
+                    info.WriteTableActor->FlushBuffers();
+                }
+            }
+        }
+
         if (needToFlush) {
             CA_LOG_D("Flush data");
             for (auto& [_, info] : WriteInfos) {
                 if (info.WriteTableActor->IsReady()) {
-                    if (!info.WriteTableActor->Flush()) {
+                    if (!info.WriteTableActor->FlushToShards()) {
                         return false;
                     }
                 }

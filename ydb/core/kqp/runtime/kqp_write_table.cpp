@@ -1187,17 +1187,15 @@ public:
         return insertIt->second;
     }
 
-    TVector<IShardedWriteController::TPendingShardInfo> GetPendingShards() const {
-        TVector<IShardedWriteController::TPendingShardInfo> result;
+    void ForEachPendingShard(std::function<void(const IShardedWriteController::TPendingShardInfo&)>&& callback) const {
         for (const auto& [id, shard] : ShardsInfo) {
             if (!shard.IsEmpty() && shard.GetSendAttempts() == 0) {
-                result.push_back(IShardedWriteController::TPendingShardInfo{
+                callback(IShardedWriteController::TPendingShardInfo{
                     .ShardId = id,
                     .HasRead = shard.HasRead(),
                 });
             }
         }
-        return result;
     }
 
     bool Has(ui64 shardId) const {
@@ -1420,8 +1418,8 @@ public:
         }
     }
 
-    TVector<TPendingShardInfo> GetPendingShards() const override {
-        return ShardsInfo.GetPendingShards();
+    void ForEachPendingShard(std::function<void(const TPendingShardInfo&)>&& callback) const override {
+        ShardsInfo.ForEachPendingShard(std::move(callback));
     }
 
     TVector<ui64> GetShardsIds() const override {
@@ -1615,6 +1613,7 @@ private:
                 shard.MakeNextBatches(1);
             } else {
                 shard.MakeNextBatches(std::nullopt);
+                AFL_ENSURE(shard.GetBatchesInFlight() == shard.Size());
             }
         }
     }

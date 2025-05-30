@@ -79,7 +79,7 @@ public:
         ui64 ShardId;
         bool HasRead;
     };
-    virtual TVector<TPendingShardInfo> GetPendingShards() const = 0;
+    virtual void ForEachPendingShard(std::function<void(const TPendingShardInfo&)>&& callback) const = 0;
     virtual ui64 GetShardsCount() const = 0;
     virtual TVector<ui64> GetShardsIds() const = 0;
 

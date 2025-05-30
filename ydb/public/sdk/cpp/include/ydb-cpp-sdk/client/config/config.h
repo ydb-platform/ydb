@@ -67,6 +67,8 @@ struct TFetchConfigResult : public TStatus {
         , Configs_(std::move(configs))
     {}
 
+    TFetchConfigResult() : TStatus(EStatus::GENERIC_ERROR, NYdb::NIssue::TIssues()) {}
+
     const std::vector<TConfig>& GetConfigs() const {
         return Configs_;
     }

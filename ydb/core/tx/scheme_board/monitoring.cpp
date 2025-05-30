@@ -1162,7 +1162,7 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
             auto& replicas = json["replicas"];
             replicas.SetType(JSON_ARRAY);
 
-            for (const auto& replica : ev->Get()->Replicas) {
+            for (const auto& replica : ev->Get()->GetPlainReplicas()) {
                 replicas.AppendValue(ToString(replica));
             }
 

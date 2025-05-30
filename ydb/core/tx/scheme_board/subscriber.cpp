@@ -24,6 +24,7 @@
 #include <util/generic/string.h>
 #include <util/generic/utility.h>
 #include <util/string/cast.h>
+#include <util/generic/xrange.h>
 
 namespace NKikimr {
 
@@ -744,13 +745,22 @@ class TSubscriber: public TMonitorableActor<TDerived> {
         return notify;
     }
 
+    bool IsWriteOnly(TActorId id) const {
+        Y_ABORT_UNLESS(ProxyToGroupMap.contains(id));
+        return ProxyGroups[ProxyToGroupMap.at(id)].WriteOnly;
+    }
     TMap<TActorId, TState>::const_iterator SelectStateImpl() const {
         Y_ABORT_UNLESS(!States.empty());
 
         auto it = States.begin();
+        while (IsWriteOnly(it->first) && it != States.end())
+            it++;
         auto newest = it;
 
         while (++it != States.end()) {
+            if(IsWriteOnly(it->first)) {
+                continue;
+            }
             if (newest->second.LessThan(it->second)) {
                 newest = it;
             }
@@ -778,7 +788,19 @@ class TSubscriber: public TMonitorableActor<TDerived> {
     }
 
     bool IsMajorityReached() const {
-        return InitialResponses.size() > (Proxies.size() / 2);
+        TVector<ui32> cnt(ProxyGroups.size());
+        for(auto &[p, _] : InitialResponses) {
+            Y_ABORT_UNLESS(ProxyToGroupMap.contains(p));
+            cnt[ProxyToGroupMap.at(p)]++;
+        }
+        for (ui32 groupIdx : xrange(ProxyGroups.size())) {
+            if (ProxyGroups[groupIdx].WriteOnly)
+                continue;
+
+            if (cnt[groupIdx] <= ProxyGroups[groupIdx].Proxies.size() / 2)
+                return false;
+        }
+        return true;
     }
 
     void EnqueueSyncRequest(NInternalEvents::TEvSyncRequest::TPtr& ev) {
@@ -794,10 +816,11 @@ class TSubscriber: public TMonitorableActor<TDerived> {
         DelayedSyncRequest = 0;
 
         Y_ABORT_UNLESS(PendingSync.empty());
-        for (const auto& [proxy, replica] : Proxies) {
-            this->Send(proxy, new NInternalEvents::TEvSyncVersionRequest(Path), 0, CurrentSyncRequest);
-            PendingSync.emplace(proxy);
-        }
+        for(auto &proxyGroup : ProxyGroups)
+            for (const auto& proxy : proxyGroup.Proxies) {
+                this->Send(proxy.Proxy, new NInternalEvents::TEvSyncVersionRequest(Path), 0, CurrentSyncRequest);
+                PendingSync.emplace(proxy.Proxy);
+            }
 
         return true;
     }
@@ -909,43 +932,50 @@ class TSubscriber: public TMonitorableActor<TDerived> {
 
         PendingSync.erase(it);
         Y_ABORT_UNLESS(!ReceivedSync.contains(ev->Sender));
+        Y_ABORT_UNLESS(ProxyToGroupMap.contains(ev->Sender));
+        
         ReceivedSync[ev->Sender] = ev->Get()->Record.GetPartial();
 
-        ui32 successes = 0;
-        ui32 failures = 0;
-        for (const auto& [_, partial] : ReceivedSync) {
-            if (!partial) {
-                ++successes;
+        TVector<ui32> successes(ProxyGroups.size());
+        TVector<ui32> failures(ProxyGroups.size());
+        for (const auto& [p, received] : ReceivedSync) {
+            Y_ABORT_UNLESS(ProxyToGroupMap.contains(p));
+            if (!received) {
+                ++successes[ProxyToGroupMap.at(p)];
             } else {
-                ++failures;
+                ++failures[ProxyToGroupMap.at(p)];
             }
         }
-
-        const ui32 size = Proxies.size();
-        const ui32 half = size / 2;
-        if (successes <= half && failures <= half && (successes + failures) < size) {
-            SBS_LOG_D("Sync is in progress"
+        bool partial = true;
+        for (ui32 groupIdx : xrange(ProxyGroups.size())) {
+            if (ProxyGroups[groupIdx].WriteOnly)
+                continue;
+            const ui32 size = ProxyGroups[groupIdx].Proxies.size();
+            const ui32 half = size / 2;
+            if (successes[groupIdx] <= half && failures[groupIdx] <= half && (successes[groupIdx] + failures[groupIdx]) < size) {
+                SBS_LOG_D("Sync is in progress"
+                    << ": cookie# " << ev->Cookie
+                    << ", RingGroup# " << groupIdx
+                    << ", size# " << size
+                    << ", half# " << half
+                    << ", successes# " << successes[groupIdx]
+                    << ", faulires# " << failures[groupIdx]);
+                return;
+            }
+            partial &= !(successes[groupIdx] > half);
+            const TString done = TStringBuilder() << "Sync is done"
                 << ": cookie# " << ev->Cookie
+                << ", RingGroup# " << groupIdx
                 << ", size# " << size
                 << ", half# " << half
-                << ", successes# " << successes
-                << ", faulires# " << failures);
-            return;
-        }
-
-        const bool partial = !(successes > half);
-        const TString done = TStringBuilder() << "Sync is done"
-            << ": cookie# " << ev->Cookie
-            << ", size# " << size
-            << ", half# " << half
-            << ", successes# " << successes
-            << ", faulires# " << failures
-            << ", partial# " << partial;
-
-        if (!partial) {
-            SBS_LOG_D(done);
-        } else {
-            SBS_LOG_W(done);
+                << ", successes# " << successes[groupIdx]
+                << ", failures# " << failures[groupIdx]
+                << ", partial# " << partial;
+            if (!partial) {
+                SBS_LOG_D(done);
+            } else {
+                SBS_LOG_W(done);
+            }
         }
 
         this->Send(Owner, new NInternalEvents::TEvSyncResponse(Path, partial), 0, ev->Cookie);
@@ -959,28 +989,55 @@ class TSubscriber: public TMonitorableActor<TDerived> {
     void Handle(TEvStateStorage::TEvResolveReplicasList::TPtr& ev) {
         SBS_LOG_D("Handle " << ev->Get()->ToString());
 
-        const auto& replicas = ev->Get()->Replicas;
+        const auto& replicaGroups = ev->Get()->ReplicaGroups;
 
-        if (replicas.empty()) {
-            Y_ABORT_UNLESS(Proxies.empty());
+        if (replicaGroups.empty()) {
+            Y_ABORT_UNLESS(ProxyGroups.empty());
             SBS_LOG_E("Subscribe on unconfigured SchemeBoard");
             this->Become(&TDerived::StateCalm);
             return;
         }
 
-        Y_ABORT_UNLESS(Proxies.empty() || Proxies.size() == replicas.size());
-
-        if (Proxies.empty()) {
-            for (size_t i = 0; i < replicas.size(); ++i) {
-                Proxies.emplace_back(this->RegisterWithSameMailbox(new TProxyDerived(this->SelfId(), i, replicas.size(),
-                    replicas[i], Path, DomainOwnerId)), replicas[i]);
+        THashMap<TActorId, TActorId> oldProxies;
+        THashSet<TActorId> newReplicas;
+        for(auto &group : ProxyGroups) {
+            for(auto & proxy : group.Proxies) {
+                oldProxies[proxy.Replica] = proxy.Proxy;
             }
-        } else {
-            for (size_t i = 0; i < replicas.size(); ++i) {
-                if (auto& [proxy, replica] = Proxies[i]; replica != replicas[i]) {
-                    TActivationContext::Send(new IEventHandle(TEvPrivate::EvSwitchReplica, 0, proxy, replicas[i], nullptr, 0));
-                    replica = replicas[i];
+        }
+
+        for(auto &group : replicaGroups) {
+            for(auto & replica : group.Replicas) {
+                newReplicas.insert(replica);
+            }
+        }
+        ProxyToGroupMap.clear();
+        ProxyGroups.clear();
+        ProxyGroups.resize(replicaGroups.size());
+        for (size_t groupIdx = 0; groupIdx < replicaGroups.size(); ++groupIdx) {
+            auto &msgGroup = replicaGroups[groupIdx];
+            auto &proxyGroup = ProxyGroups[groupIdx];
+            proxyGroup.WriteOnly = msgGroup.WriteOnly;
+            proxyGroup.Proxies.resize(msgGroup.Replicas.size());
+
+            for (size_t i = 0; i < msgGroup.Replicas.size(); ++i) {
+                auto &proxy = proxyGroup.Proxies[i];
+                if(auto it = oldProxies.find(msgGroup.Replicas[i]); it != oldProxies.end()) {
+                    proxy.Proxy = it->second;
+                    proxy.Replica = it->first;
+                } else {
+                    proxy.Replica = msgGroup.Replicas[i];
+                    proxy.Proxy = this->RegisterWithSameMailbox(new TProxyDerived(this->SelfId(), i, msgGroup.Replicas.size(),
+                                                                msgGroup.Replicas[i], Path, DomainOwnerId));
                 }
+                ProxyToGroupMap[proxy.Proxy] = groupIdx;
+            }
+        }
+        for(auto &[r, p] : oldProxies) {
+            if(!newReplicas.contains(r)) {
+                TActivationContext::Send(new IEventHandle(TEvPrivate::EvSwitchReplica, 0, p, r, nullptr, 0));
+                States.erase(p);
+                InitialResponses.erase(p);
             }
         }
 
@@ -1040,10 +1097,11 @@ class TSubscriber: public TMonitorableActor<TDerived> {
     }
 
     void PassAway() override {
-        for (const auto& [proxy, replica] : Proxies) {
-            this->Send(proxy, new TEvents::TEvPoisonPill());
+        for (const auto& group : ProxyGroups) {
+            for (const auto& p : group.Proxies) {
+                this->Send(p.Proxy, new TEvents::TEvPoisonPill());
+            }
         }
-
         TActivationContext::Send(new IEventHandle(TEvents::TSystem::Unsubscribe, 0, MakeStateStorageProxyID(),
             this->SelfId(), nullptr, 0));
 
@@ -1128,7 +1186,18 @@ private:
     const TPath Path;
     const ui64 DomainOwnerId;
 
-    std::vector<std::tuple<TActorId, TActorId>> Proxies;
+    struct TProxyInfo {
+        TActorId Proxy;
+        TActorId Replica;
+    };
+
+    struct TProxyGroup {
+        std::vector<TProxyInfo> Proxies;
+        bool WriteOnly;
+    };
+
+    THashMap<TActorId, ui32> ProxyToGroupMap;
+    std::vector<TProxyGroup> ProxyGroups;
     TMap<TActorId, TState> States;
     TMap<TActorId, TNotifyResponse> InitialResponses;
     TMaybe<TState> State;

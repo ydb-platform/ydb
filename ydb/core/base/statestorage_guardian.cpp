@@ -388,7 +388,7 @@ class TTabletGuardian : public TActorBootstrapped<TTabletGuardian> {
     }
 
     void Handle(TEvStateStorage::TEvResolveReplicasList::TPtr &ev) {
-        const TVector<TActorId> &replicasList = ev->Get()->Replicas;
+        const TVector<TActorId> &replicasList = ev->Get()->GetPlainReplicas();
         Y_ABORT_UNLESS(!replicasList.empty(), "must not happens, guardian must be created over active tablet");
 
         const ui32 replicaSz = replicasList.size();

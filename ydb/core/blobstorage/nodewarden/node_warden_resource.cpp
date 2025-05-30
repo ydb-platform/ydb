@@ -196,6 +196,7 @@ void TNodeWarden::ApplyStateStorageConfig(const NKikimrBlobStorage::TStorageConf
             };
             return g1.Rings.size() == g2.Rings.size()
                 && g1.NToSelect == g2.NToSelect
+                && g1.WriteOnly == g2.WriteOnly
                 && std::equal(g1.Rings.begin(), g1.Rings.end(), g2.Rings.begin(), equalRing);
         };
         return prev.RingGroups.size() != cur.RingGroups.size()

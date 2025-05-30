@@ -152,13 +152,13 @@ class TBoardPublishActor : public TActorBootstrapped<TBoardPublishActor> {
     void Handle(TEvStateStorage::TEvResolveReplicasList::TPtr &ev) {
         auto *msg = ev->Get();
 
-        if (msg->Replicas.empty()) {
+        if (msg->ReplicaGroups.empty() || msg->ReplicaGroups[0].Replicas.empty()) {
             Y_ABORT_UNLESS(ReplicaPublishActors.empty());
             BLOG_ERROR("publish on unconfigured statestorage board service");
         } else {
             auto now = TlsActivationContext->Monotonic();
 
-            for (auto &replicaId : msg->Replicas) {
+            for (auto &replicaId : msg->GetPlainReplicas()) {
                 auto& publishActorState = ReplicaPublishActors[replicaId];
                 if (publishActorState.RetryState.LastRetryAt == TMonotonic::Zero()) {
                     publishActorState.PublishActor =
@@ -166,7 +166,9 @@ class TBoardPublishActor : public TActorBootstrapped<TBoardPublishActor> {
                     publishActorState.RetryState.LastRetryAt = now;
                 }
             }
-            THashSet<TActorId> usedReplicas(msg->Replicas.begin(), msg->Replicas.end());
+            THashSet<TActorId> usedReplicas;
+            for (auto &rg : msg->ReplicaGroups)
+                usedReplicas.insert(rg.Replicas.begin(), rg.Replicas.end());
             for (auto it = ReplicaPublishActors.begin(); it != ReplicaPublishActors.end(); ) {
                 if (usedReplicas.contains(it->first)) {
                     ++it;

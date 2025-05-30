@@ -25,17 +25,27 @@ class TestReconfigStateStorageWorkload(object):
             },
             additional_log_configs={
                 'BS_NODE': LogLevels.DEBUG,
-                'STATESTORAGE': LogLevels.DEBUG,
+                'BOARD_LOOKUP': LogLevels.DEBUG,
+                'DISCOVERY': LogLevels.DEBUG,
+                # 'STATESTORAGE': LogLevels.DEBUG,
             }
         ))
         cls.cluster.start()
+        cls.client = YdbClient(f'grpc://localhost:{cls.cluster.nodes[1].grpc_port}', '/Root', True)
+        cls.client.wait_connection()
 
     @classmethod
     def teardown_class(cls):
         cls.cluster.stop()
 
-    def test(self):
-        client = YdbClient(f'grpc://localhost:{self.cluster.nodes[1].grpc_port}', '/Root', True)
-        client.wait_connection()
-        with WorkloadRunner(client, self.cluster, 'reconfig_state_storage_workload', 120, True) as runner:
+    def test_state_storage(self):
+        with WorkloadRunner(self.client, self.cluster, 'reconfig_state_storage_workload', 120, True, "StateStorage") as runner:
             runner.run()
+
+    def test_state_storage_board(self):
+        with WorkloadRunner(self.client, self.cluster, 'reconfig_state_storage_workload', 120, True, "StateStorageBoard") as runner:
+            runner.run()
+
+    # def test_scheme_board(self):
+    #     with WorkloadRunner(self.client, self.cluster, 'reconfig_state_storage_workload', 120, True, "SchemeBoard") as runner:
+    #         runner.run()

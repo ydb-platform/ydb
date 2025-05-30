@@ -60,11 +60,12 @@ class DistConfKiKiMRTest(object):
         if cls.nodes_count == 0:
             cls.nodes_count = 8 if cls.erasure == Erasure.BLOCK_4_2 else 9
         log_configs = {
-            'BS_NODE': LogLevels.DEBUG,
-            'GRPC_SERVER': LogLevels.DEBUG,
-            'GRPC_PROXY': LogLevels.DEBUG,
-            'TX_PROXY': LogLevels.DEBUG,
-            'TICKET_PARSER': LogLevels.DEBUG,
+            'BOARD_LOOKUP': LogLevels.DEBUG,
+            # 'BS_NODE': LogLevels.DEBUG,
+            # 'GRPC_SERVER': LogLevels.DEBUG,
+            # 'GRPC_PROXY': LogLevels.DEBUG,
+            # 'TX_PROXY': LogLevels.DEBUG,
+            # 'TICKET_PARSER': LogLevels.DEBUG,
         }
         cls.configurator = KikimrConfigGenerator(
             cls.erasure,
@@ -311,6 +312,15 @@ class KiKiMRDistConfReassignStateStorageTest(DistConfKiKiMRTest):
                     "RingGroups": defaultRingGroup + newRingGroup}}}))
         time.sleep(1)
         assert_eq(self.do_request_config()[f"{configName}Config"], {"RingGroups": defaultRingGroup + newRingGroup})
+
+        time.sleep(1)
+        for i in range(len(defaultRingGroup)):
+            defaultRingGroup[i]["WriteOnly"] = True
+        logger.info(self.do_load_and_test({"ReconfigStateStorage": {f"{configName}Config": {
+                    "RingGroups": newRingGroup + defaultRingGroup}}}))
+        time.sleep(1)
+        assert_eq(self.do_request_config()[f"{configName}Config"], {"RingGroups": newRingGroup + defaultRingGroup})
+
         time.sleep(1)
         logger.info(self.do_load_and_test({"ReconfigStateStorage": {f"{configName}Config": {
                     "RingGroups": newRingGroup}}}))
@@ -323,7 +333,7 @@ class KiKiMRDistConfReassignStateStorageTest(DistConfKiKiMRTest):
 class KiKiMRDistConfReassignStateStorageBaseTest(KiKiMRDistConfReassignStateStorageTest):
     def test_cluster_change_state_storage(self):
         self.do_test("StateStorage")
-        # self.do_test("StateStorageBoard")
+        self.do_test("StateStorageBoard")
         # self.do_test("SchemeBoard")
 
 

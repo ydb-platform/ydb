@@ -67,7 +67,7 @@ class TBoardSubscriberTest: public NUnitTest::TTestBase {
         Context->Send(proxy, edge, new TEvStateStorage::TEvResolveBoard("path"));
         auto ev = Context->GrabEdgeEvent<TEvStateStorage::TEvResolveReplicasList>(edge);
 
-        auto allReplicas = ev->Get()->Replicas;
+        auto allReplicas = ev->Get()->GetPlainReplicas();
         return TVector<TActorId>(allReplicas.begin(), allReplicas.end());
     }
 

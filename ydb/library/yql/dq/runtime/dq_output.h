@@ -69,7 +69,7 @@ struct TDqFillAggregator {
         if (Counts[static_cast<ui32>(NoLimit)].load()) {
             return NoLimit;
         }
-        return SoftLimit;
+        return Counts[static_cast<ui32>(SoftLimit)].load() ? SoftLimit : NoLimit;
     }
 };
 

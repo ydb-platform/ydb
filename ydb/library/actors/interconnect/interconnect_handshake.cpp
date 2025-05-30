@@ -1,7 +1,10 @@
 #include "interconnect_handshake.h"
 #include "handshake_broker.h"
 #include "interconnect_tcp_proxy.h"
-#include "rdma/rdma_ctx.h"
+#include "rdma/link_manager.h"
+#include "rdma/ctx.h"
+#include "rdma/rdma.h"
+#include "rdma/mem_pool.h"
 
 #include <ydb/library/actors/core/actor_coroutine.h>
 #include <ydb/library/actors/core/log.h>
@@ -243,7 +246,9 @@ namespace NActors {
         std::optional<TBrokerLeaseHolder> BrokerLeaseHolder;
         std::optional<TString> HandshakeId; // for XDC
         bool SubscribedForConnection = false;
-        NInterconnect::NRdma::TRdmaCtx* RdmaCtx;
+        NInterconnect::NRdma::TRdmaCtx* RdmaCtx = nullptr;
+        std::optional<NInterconnect::NRdma::TQueuePair> RdmaQp;
+        ibv_gid RdmaGid;
 
     public:
         THandshakeActor(TInterconnectProxyCommon::TPtr common, const TActorId& self, const TActorId& peer,
@@ -270,13 +275,12 @@ namespace NActors {
             EntropyPool().Read(HandshakeId->Detach(), HandshakeId->size());
         }
 
-        THandshakeActor(TInterconnectProxyCommon::TPtr common, TSocketPtr socket, NInterconnect::NRdma::TRdmaCtx* rdmaCtx)
+        THandshakeActor(TInterconnectProxyCommon::TPtr common, TSocketPtr socket)
             : TActorCoroImpl(StackSize, true)
             , Common(std::move(common))
             , MainChannel(this, std::move(socket))
             , ExternalDataChannel(this, nullptr)
             , HandshakeKind("incoming handshake")
-            , RdmaCtx(rdmaCtx)
         {
             Y_ABORT_UNLESS(MainChannel);
             PeerAddr = TString::Uninitialized(1024);
@@ -285,7 +289,8 @@ namespace NActors {
             } else {
                 PeerAddr.clear();
             }
-            Y_UNUSED(RdmaCtx);
+
+            CreateRdmaQp();
         }
 
         void UpdatePrefix() {
@@ -465,6 +470,27 @@ namespace NActors {
                     proto.AddAcceptedVersionTags(accepted);
                 }
             }
+        }
+
+        void TryRdmaQpExchange(const NActorsInterconnect::TRdmaHandshake& proto, NActorsInterconnect::THandshakeSuccess& success) {
+            ibv_gid gid;
+            gid.global.interface_id = proto.GetInterfaceId();
+            gid.global.subnet_prefix = proto.GetSubnetPrefix();
+            int err = RdmaQp->ToRtsState(RdmaCtx, proto.GetQpNum(), gid, IBV_MTU_1024);
+            if (err) {
+                char str[INET6_ADDRSTRLEN];
+                inet_ntop(AF_INET6, &(gid), str, INET6_ADDRSTRLEN);
+                success.SetRdmaErr("Unable to promote QP to RTS on the incomming side");
+                LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NLog::PRI_ERROR,
+                    "Unable to promote QP to RTS, err: %d (%s), gid: %s", err, strerror(err), str);
+                return;
+            }
+            auto mtuIndex = std::min((ui32)proto.GetMtuIndex(), (ui32)RdmaCtx->GetPortAttr().active_mtu);
+            auto rdmaHsResp = success.MutableQpPrepared();
+            rdmaHsResp->SetQpNum(RdmaQp->GetQpNum());
+            rdmaHsResp->SetSubnetPrefix(RdmaGid.global.subnet_prefix);
+            rdmaHsResp->SetInterfaceId(RdmaGid.global.interface_id);
+            rdmaHsResp->SetMtuIndex((ibv_mtu)mtuIndex);
         }
 
         template<typename T>
@@ -685,6 +711,8 @@ namespace NActors {
             auto logPriority = std::exchange(LastLogNotice, std::nullopt) ? NActors::NLog::PRI_NOTICE : NActors::NLog::PRI_DEBUG;
             LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICH05", logPriority, "connected to peer");
 
+            CreateRdmaQp();
+
             // send initial request packet
             if (Params.UseExternalDataChannel && PeerVirtualId) { // special case for XDC continuation
                 TInitialPacket packet(SelfVirtualId, PeerVirtualId, NextPacketToPeer, INTERCONNECT_XDC_CONTINUATION_VERSION);
@@ -765,6 +793,14 @@ namespace NActors {
                 request.SetRequestXdcShuffle(true);
                 request.SetHandshakeId(*HandshakeId);
 
+                if (RdmaQp) {
+                    auto rdmaHs = request.MutableRdmaHandshake();
+                    rdmaHs->SetQpNum(RdmaQp->GetQpNum());
+                    rdmaHs->SetSubnetPrefix(RdmaGid.global.subnet_prefix);
+                    rdmaHs->SetInterfaceId(RdmaGid.global.interface_id);
+                    rdmaHs->SetMtuIndex(RdmaCtx->GetPortAttr().active_mtu);
+                }
+
                 SendExBlock(MainChannel, request, "ExRequest");
 
                 NActorsInterconnect::THandshakeReply reply;
@@ -804,6 +840,23 @@ namespace NActors {
                 Params.UseXdcShuffle = success.GetUseXdcShuffle();
                 if (success.HasServerScopeId()) {
                     ParsePeerScopeId(success.GetServerScopeId());
+                }
+
+                if (RdmaQp && success.HasQpPrepared()) {
+                    const auto& remoteQpPrepared = success.GetQpPrepared(); 
+                    LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NLog::PRI_ERROR,
+                        "peer has prepared qp: %d", remoteQpPrepared.GetQpNum());
+                    ibv_gid gid;
+                    gid.global.interface_id = remoteQpPrepared.GetInterfaceId();
+                    gid.global.subnet_prefix = remoteQpPrepared.GetSubnetPrefix();
+                    int err = RdmaQp->ToRtsState(RdmaCtx,remoteQpPrepared.GetQpNum(), gid, (ibv_mtu)remoteQpPrepared.GetMtuIndex());
+                    if (err) {
+                        char str[INET6_ADDRSTRLEN];
+                        inet_ntop(AF_INET6, &(gid), str, INET6_ADDRSTRLEN);
+                        LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NLog::PRI_ERROR,
+                                "Unable to promote QP to RTS, err: %d (%s), gid: %s", err, strerror(err), str);
+                        RdmaQp.reset();
+                    }
                 }
 
                 // recover peer process info from peer's reply
@@ -1072,6 +1125,11 @@ namespace NActors {
                 // remember program info (assuming successful handshake)
                 ProgramInfo = GetProgramInfo(request);
 
+                std::optional<NActorsInterconnect::TRdmaHandshake> rdmaIncommingHandshake;
+                if (RdmaQp && request.HasRdmaHandshake()) {
+                    rdmaIncommingHandshake = request.GetRdmaHandshake();
+                }
+
                 // send to proxy
                 auto reply = AskProxy<TEvHandshakeReplyOK, TEvHandshakeReplyError>(std::move(ev), "TEvHandshakeRequest");
 
@@ -1088,6 +1146,13 @@ namespace NActors {
                     if (Common->LocalScopeId != TScopeId()) {
                         FillInScopeId(*success.MutableServerScopeId());
                     }
+
+                    if (rdmaIncommingHandshake) {
+                        TryRdmaQpExchange(rdmaIncommingHandshake.value(), success);
+                    } else {
+                        success.SetRdmaErr("Rdma is not ready on the incomming side");
+                    }
+
                     success.SetUseModernFrame(true);
                     success.SetAuthOnly(Params.AuthOnly);
                     success.SetUseExtendedTraceFmt(true);
@@ -1143,6 +1208,43 @@ namespace NActors {
         }
 
     private:
+        void CreateRdmaQp() {
+            // Impossoble to use rdma without configured memory pool
+            if (!Common->RdmaMemPool) {
+                return;
+            }
+
+            auto sockname = MainChannel.GetSocketRef()->GetSockName();
+            switch (sockname.index()) {
+                case 0: {
+                    auto addr = std::get<0>(sockname).GetV6CompatAddr(); 
+                    RdmaCtx = NInterconnect::NRdma::NLinkMgr::GetCtx(addr);
+                    if (RdmaCtx) {
+                        LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NLog::PRI_ERROR,
+                            "Found verbs fontext for address %s", std::get<0>(sockname).ToString().data());
+                        RdmaGid = *(reinterpret_cast<const ibv_gid*>(&addr)); // Hide in the link manager
+                    } else {
+                        LOG_ERROR_IC("ICRDMA", "Unable to find verbs context using address %s",
+                            std::get<0>(sockname).ToString().data());
+                    }
+                    break;
+                }
+                case 1:
+                    LOG_ERROR_IC("ICRDMA", "Unable to get local address for socket: %d. Rdma will not be used",
+                        (int)(*MainChannel.GetSocketRef()));
+                    break; 
+            }
+
+            if (RdmaCtx) {
+                RdmaQp.emplace();
+                int err = RdmaQp->Init(RdmaCtx);
+                if (err) {
+                    LOG_ERROR_IC("ICRDMA", "Unable to initialize QP, no more attempt to use RDMA on this session");
+                    RdmaCtx = nullptr;
+                }
+            }
+        }
+
         void SendToProxy(THolder<IEventBase> ev) {
             Y_ABORT_UNLESS(PeerNodeId);
             Send(GetActorSystem()->InterconnectProxy(PeerNodeId), ev.Release());
@@ -1234,8 +1336,8 @@ namespace NActors {
             std::move(peerHostName), std::move(params)), IActor::EActivityType::INTERCONNECT_HANDSHAKE);
     }
 
-    IActor* CreateIncomingHandshakeActor(TInterconnectProxyCommon::TPtr common, TSocketPtr socket, NInterconnect::NRdma::TRdmaCtx* rdmaCtx) {
-        return new TActorCoro(MakeHolder<THandshakeActor>(std::move(common), std::move(socket), rdmaCtx),
+    IActor* CreateIncomingHandshakeActor(TInterconnectProxyCommon::TPtr common, TSocketPtr socket) {
+        return new TActorCoro(MakeHolder<THandshakeActor>(std::move(common), std::move(socket)),
             IActor::EActivityType::INTERCONNECT_HANDSHAKE);
     }
 

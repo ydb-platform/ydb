@@ -43,6 +43,13 @@ message TScopeId {
     optional fixed64 X2 = 2;
 }
 
+message TRdmaHandshake {
+    required uint32 QpNum = 1;
+    required fixed64 SubnetPrefix = 3;
+    required fixed64 InterfaceId = 4;
+    required uint32 MtuIndex = 5;
+}
+
 message THandshakeRequest {
     required uint64 Protocol = 1;
 
@@ -79,6 +86,8 @@ message THandshakeRequest {
     optional bytes CompatibilityInfo = 22;
 
     optional bytes HandshakeId = 23;
+
+    optional TRdmaHandshake RdmaHandshake = 26; // Set and contains OP of outgoing handshaker
 }
 
 message THandshakeSuccess {
@@ -106,6 +115,10 @@ message THandshakeSuccess {
     optional bool UseXdcShuffle = 17;
 
     optional bytes CompatibilityInfo = 15;
+    oneof RdmaHandshake {
+        TRdmaHandshake QpPrepared = 18; // Set and containts QP of incomming handshaker
+        string RdmaErr = 19;
+    }
 }
 
 message THandshakeReply {

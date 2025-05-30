@@ -1025,6 +1025,7 @@ message TCdcStreamDescription {
     // Set to '0' to disable resolved timestamps
     optional uint64 ResolvedTimestampsIntervalMs = 10;
     optional TCdcStreamScanProgress ScanProgress = 11;
+    optional bool SchemaChanges = 12;
 }
 
 message TCreateCdcStream {

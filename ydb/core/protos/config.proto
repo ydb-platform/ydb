@@ -717,6 +717,23 @@ message TGRpcConfig {
     repeated string RatelimiterServicesEnabled = 25;
     repeated string RatelimiterServicesDisabled = 26;
 
+    enum YdbGrpcCompressionAlgorithm {
+        YDB_GRPC_COMPRESS_NONE = 0;
+        YDB_GRPC_COMPRESS_DEFLATE = 1;
+        YDB_GRPC_COMPRESS_GZIP = 2;
+    };
+
+    optional YdbGrpcCompressionAlgorithm DefaultCompressionAlgorithm = 30 [default = YDB_GRPC_COMPRESS_NONE];
+
+    enum YdbGrpcCompressionLevel {
+        YDB_GRPC_COMPRESS_LEVEL_NONE = 0;
+        YDB_GRPC_COMPRESS_LEVEL_LOW = 1;
+        YDB_GRPC_COMPRESS_LEVEL_MED = 2;
+        YDB_GRPC_COMPRESS_LEVEL_HIGH = 3;
+    }
+
+    optional YdbGrpcCompressionLevel DefaultCompressionLevel = 31 [default = YDB_GRPC_COMPRESS_LEVEL_NONE];
+
     // server socket options
     optional bool   KeepAliveEnable = 100 [default = true]; // SO_KEEPALIVE
     optional uint32 KeepAliveIdleTimeoutTriggerSec = 101 [default = 90]; // TCP_KEEPIDLE
@@ -1520,7 +1537,7 @@ message TImmediateControlsConfig {
             Description: "Maximum number of slow disks, which DSProxy can skip with Accelerations, option for HDD",
             MinValue: 1,
             MaxValue: 2,
-            DefaultValue: 2 }];
+            DefaultValue: 1 }];
 
         optional uint64 SlowDiskThresholdSSD = 9 [(ControlOptions) = {
             Description: "The minimum ratio of slowest and second slowest disks, required to accelerate, promille, option for SSD",
@@ -1581,6 +1598,18 @@ message TImmediateControlsConfig {
             DefaultValue: 0 }];
     }
 
+    message TGRpcControls {
+        message TRequestConfig {
+            optional uint64 MaxInFlight = 1 [(ControlOptions) = {
+                Description: "Max in flight requests",
+                MinValue: 0,
+                MaxValue: 1000000,
+                DefaultValue: 0
+            }];
+        }
+        map<string, TRequestConfig> RequestConfigs = 1;
+    }
+
     optional TDataShardControls DataShardControls = 1;
     optional TTxLimitControls TxLimitControls = 2;
     optional TCoordinatorControls CoordinatorControls = 3;
@@ -1593,6 +1622,7 @@ message TImmediateControlsConfig {
     optional TPDiskControls PDiskControls = 10;
     optional TBlobStorageControllerControls BlobStorageControllerControls = 11;
     optional TTableServiceControls TableServiceControls = 12;
+    optional TGRpcControls GRpcControls = 14;
 };
 
 message TMeteringConfig {
@@ -1775,6 +1805,18 @@ message THiveConfig {
     optional double TargetTrackingCPUMargin = 83 [default = 0.1]; // percent
     optional double DryRunTargetTrackingCPU = 84; // percent
     optional uint64 NodeRestartsForPenalty = 85 [default = 3];
+}
+
+message THealthCheckConfig {
+    message TThresholds {
+        optional uint32 NodeRestartsYellow = 1 [default = 10]; // per period, see HiveConfig.NodeRestartWatchPeriod
+        optional uint32 NodeRestartsOrange = 2 [default = 30]; // per period, see HiveConfig.NodeRestartWatchPeriod
+        optional uint64 NodesTimeDifferenceYellow = 3 [default = 5000]; // microseconds
+        optional uint64 NodesTimeDifferenceOrange = 4 [default = 25000]; // microseconds
+        optional uint32 TabletsRestartsOrange = 5 [default = 30]; // per period, see HiveConfig.TabletRestartWatchPeriod
+    }
+    optional TThresholds Thresholds = 1;
+    optional uint32 Timeout = 2 [default = 20000]; // milliseconds
 }
 
 message TBlobCacheConfig {
@@ -2274,6 +2316,7 @@ message TAppConfig {
     optional TSelfManagementConfig SelfManagementConfig = 86;
     optional NKikimrProto.TDataIntegrityTrailsConfig DataIntegrityTrailsConfig = 87;
     optional TDataErasureConfig DataErasureConfig = 88;
+    optional THealthCheckConfig HealthCheckConfig = 89;
 
     repeated TNamedConfig NamedConfigs = 100;
     optional string ClusterYamlConfig = 101;
@@ -2291,6 +2334,7 @@ message TYdbVersion {
     optional uint32 Year = 1;
     optional uint32 Major = 2;
     optional uint32 Minor = 3;
+    optional uint32 Patch = 5;
     optional uint32 Hotfix = 4;
 }
 

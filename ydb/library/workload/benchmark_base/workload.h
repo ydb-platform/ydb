@@ -32,6 +32,7 @@ public:
     YDB_READONLY(TString, StringType, "Utf8");
     YDB_READONLY(TString, DateType, "Date32");
     YDB_READONLY(TString, TimestampType, "Timestamp64");
+    YDB_READONLY(ui64, PartitionSizeMb, 2000);
 };
 
 class TWorkloadGeneratorBase : public IWorkloadQueryGenerator {

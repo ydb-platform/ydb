@@ -2058,6 +2058,9 @@ void TPDisk::KillOwner(TOwner owner, TOwnerRound killOwnerRound, TCompletionEven
         for (ui32 i = 0; i < ChunkState.size(); ++i) {
             TChunkState &state = ChunkState[i];
             if (state.OwnerId == owner) {
+                if (TPDisk::IS_SHRED_ENABLED) {
+                    state.IsDirty = true;
+                }
                 if (state.CommitState == TChunkState::DATA_RESERVED
                         || state.CommitState == TChunkState::DATA_DECOMMITTED
                         || state.CommitState == TChunkState::DATA_RESERVED_DECOMMIT_IN_PROGRESS
@@ -4213,7 +4216,39 @@ void TPDisk::ProgressShredState() {
                 return;
             }
         }
+        // Looks good, but there still can be chunks that need to be shredded still int transition between states.
+        // For example, log chunks are removed from the log chunk list on log cut but added to free chunk list on log cut 
+        // write operation completion. So, walk through the whole chunk list and check.
+        for (ui32 chunkIdx = Format.SystemChunkCount; chunkIdx < ChunkState.size(); ++chunkIdx) {
+            TChunkState &state = ChunkState[chunkIdx];
+            if (state.IsDirty && state.ShredGeneration < ShredGeneration) {
+                if (ContinueShredsInFlight) {
+                    // There are continue shreds in flight, so we don't need to schedule a new one.
+                    // Just wait for it to arrive.
+                    LOG_DEBUG_S(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED,
+                        "PDisk# " << PCtx->PDiskId
+                        << " found a dirtyInTransition chunkIdx# " << chunkIdx
+                        << " state# " << state.ToString()
+                        << ", there are already ContinueShredsInFlight# " << ContinueShredsInFlight.load()
+                        << " so just wait for it to arrive. "
+                        << " ShredGeneration# " << ShredGeneration);
+                    return; 
+                } else {
+                    LOG_DEBUG_S(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED,
+                        "PDisk# " << PCtx->PDiskId
+                        << " found a dirtyInTransition chunkIdx# " << chunkIdx
+                        << " state# " << state.ToString()
+                        << ", scheduling ContinueShred. "
+                        << " ShredGeneration# " << ShredGeneration);
+                    ContinueShredsInFlight++;
+                    PCtx->ActorSystem->Schedule(TDuration::MilliSeconds(50),
+                            new IEventHandle(PCtx->PDiskActor, PCtx->PDiskActor, new TEvContinueShred(), 0, 0));
+                    return;
+                }
+            }
+        }
         ShredIsWaitingForCutLog = 0;
+
 
         LOG_DEBUG_S(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED,
             "PDisk# " << PCtx->PDiskId

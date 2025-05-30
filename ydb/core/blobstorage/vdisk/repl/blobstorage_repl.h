@@ -161,6 +161,7 @@ namespace NKikimr {
             TDuration CommitDuration;
             TDuration OtherDuration;
             TDuration PhantomDuration;
+            TDuration OutOfSpaceDelayDuration;
 
             std::unique_ptr<NRepl::TProxyStat> ProxyStat;
 
@@ -247,6 +248,15 @@ namespace NKikimr {
     };
 
     struct TEvReplCheckProgress : TEventLocal<TEvReplCheckProgress, TEvBlobStorage::EvReplCheckProgress> {};
+
+    struct TDonorQueueActors {
+        TActorId AsyncReadQueueActorId;
+        TActorId FastReadQueueActorId;
+
+        bool operator==(const TDonorQueueActors &other) const {
+            return AsyncReadQueueActorId == other.AsyncReadQueueActorId && FastReadQueueActorId == other.FastReadQueueActorId;
+        }
+    };
 
     ////////////////////////////////////////////////////////////////////////////
     // REPL ACTOR CREATOR

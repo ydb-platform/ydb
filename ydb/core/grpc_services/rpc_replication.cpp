@@ -232,6 +232,9 @@ private:
         case NKikimrReplication::TReplicationState::kDone:
             to.mutable_done();
             break;
+        case NKikimrReplication::TReplicationState::kPaused:
+            to.mutable_paused();
+            break;
         default:
             break;
         }
@@ -244,6 +247,13 @@ private:
 
 void DoDescribeReplication(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
     f.RegisterActor(new TDescribeReplicationRPC(p.release()));
+}
+
+using TEvDescribeReplicationRequest = TGrpcRequestOperationCall<Ydb::Replication::DescribeReplicationRequest, Ydb::Replication::DescribeReplicationResponse>;
+
+template<>
+IActor* TEvDescribeReplicationRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {
+    return new TDescribeReplicationRPC(msg);
 }
 
 }

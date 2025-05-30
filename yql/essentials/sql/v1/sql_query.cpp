@@ -163,6 +163,8 @@ static bool TransferSettingsEntry(std::map<TString, TNodePtr>& out,
         "user",
         "password",
         "password_secret_name",
+        "flush_interval",
+        "batch_size_bytes",
     };
 
     TSet<TString> stateSettings = {
@@ -170,8 +172,12 @@ static bool TransferSettingsEntry(std::map<TString, TNodePtr>& out,
         "failover_mode",
     };
 
+    TSet<TString> crateOnlySettings = {
+        "consumer",
+    };
+
     const auto keyName = to_lower(key.Name);
-    if (!configSettings.count(keyName) && !stateSettings.contains(keyName)) {
+    if (!configSettings.count(keyName) && !stateSettings.contains(keyName) && !crateOnlySettings.contains(keyName)) {
         ctx.Context().Error() << "Unknown transfer setting: " << key.Name;
         return false;
     }
@@ -181,6 +187,11 @@ static bool TransferSettingsEntry(std::map<TString, TNodePtr>& out,
         return false;
     }
 
+    if (!create && crateOnlySettings.contains(keyName)) {
+        ctx.Context().Error() << key.Name << " is not supported in ALTER";
+        return false;
+    }
+    
     if (!out.emplace(keyName, value).second) {
         ctx.Context().Error() << "Duplicate transfer setting: " << key.Name;
     }
@@ -3495,12 +3506,18 @@ TNodePtr TSqlQuery::Build(const TRule_delete_stmt& stmt) {
     TSourcePtr source = BuildTableSource(Ctx.Pos(), table);
 
     TNodePtr options = nullptr;
+    const bool isBatch = stmt.HasBlock1();
+
     if (stmt.HasBlock6()) {
+        if (isBatch) {
+            Ctx.Error(GetPos(stmt.GetToken2()))
+                << "BATCH DELETE is unsupported with RETURNING";
+            return nullptr;
+        }
+
         options = ReturningList(stmt.GetBlock6().GetRule_returning_columns_list1());
         options = options->Y(options);
     }
-
-    const bool isBatch = stmt.HasBlock1();
 
     if (stmt.HasBlock5()) {
         switch (stmt.GetBlock5().Alt_case()) {
@@ -3558,13 +3575,19 @@ TNodePtr TSqlQuery::Build(const TRule_update_stmt& stmt) {
         return nullptr;
     }
 
+    const bool isBatch = stmt.HasBlock1();
     TNodePtr options = nullptr;
+
     if (stmt.HasBlock5()) {
+        if (isBatch) {
+            Ctx.Error(GetPos(stmt.GetToken2()))
+                << "BATCH UPDATE is unsupported with RETURNING";
+            return nullptr;
+        }
+
         options = ReturningList(stmt.GetBlock5().GetRule_returning_columns_list1());
         options = options->Y(options);
     }
-
-    const bool isBatch = stmt.HasBlock1();
 
     switch (stmt.GetBlock4().Alt_case()) {
         case TRule_update_stmt_TBlock4::kAlt1: {

@@ -289,6 +289,8 @@ PEERDIR(
     ydb/core/external_sources
     ydb/core/filestore/core
     ydb/core/kesus/tablet
+    ydb/core/keyvalue
+    ydb/core/keyvalue/protos
     ydb/core/metering
     ydb/core/persqueue
     ydb/core/persqueue/config

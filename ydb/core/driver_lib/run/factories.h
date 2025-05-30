@@ -2,6 +2,7 @@
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_util_devicemode.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/tx/datashard/export_iface.h>
+#include <ydb/core/tx/replication/service/transfer_writer_factory.h>
 #include <ydb/core/tx/schemeshard/schemeshard_operation_factory.h>
 #include <ydb/core/persqueue/actor_persqueue_client_iface.h>
 #include <ydb/core/protos/auth.pb.h>
@@ -53,6 +54,7 @@ struct TModuleFactories {
     TGrpcServiceFactory GrpcServiceFactory;
 
     std::shared_ptr<NPQ::IPersQueueMirrorReaderFactory> PersQueueMirrorReaderFactory;
+    std::shared_ptr<NReplication::NService::ITransferWriterFactory> TransferWriterFactory;
     /// Factory for pdisk's aio engines
     std::shared_ptr<NPDisk::IIoContextFactory> IoContextFactory;
 

@@ -51,7 +51,8 @@ struct TEvYdbProxy {
         EvTopicReaderGone,
         EV_REQUEST_RESPONSE(ReadTopic),
         EV_REQUEST_RESPONSE(CommitOffset),
-        EvTopicEndPartition,
+        EvEndTopicPartition,
+        EvStartTopicReadingSession,
 
         EvEnd,
     };
@@ -157,6 +158,14 @@ struct TEvYdbProxy {
         #undef PROXY_METHOD
     };
 
+    struct TReadTopicSettings {
+        using TSelf = TReadTopicSettings;
+
+        // This option allows you to postpone the auto-commit of read messages. All previously 
+        // read messages will be commited upon subsequent receipt of TEvPoll with SkipCommit set to false.
+        FLUENT_SETTING_DEFAULT(bool, SkipCommit, false);
+    };
+
     struct TReadTopicResult {
         class TMessage {
             using TDataEvent = NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent;
@@ -167,6 +176,9 @@ struct TEvYdbProxy {
                 , Data(msg.GetData())
                 , CreateTime(msg.GetCreateTime())
                 , Codec(codec)
+                , MessageGroupId(msg.GetMessageGroupId())
+                , ProducerId(msg.GetProducerId())
+                , SeqNo(msg.GetSeqNo())
             {
             }
 
@@ -186,6 +198,9 @@ struct TEvYdbProxy {
             TString& GetData() { return Data; }
             TInstant GetCreateTime() const { return CreateTime; }
             ECodec GetCodec() const { return Codec; }
+            TString& GetMessageGroupId() { return MessageGroupId; }
+            TString& GetProducerId() { return ProducerId; }
+            ui64 GetSeqNo() { return SeqNo; }
             void Out(IOutputStream& out) const;
 
         private:
@@ -193,6 +208,9 @@ struct TEvYdbProxy {
             TString Data;
             TInstant CreateTime;
             ECodec Codec;
+            TString MessageGroupId;
+            TString ProducerId;
+            ui64 SeqNo;
         };
 
         explicit TReadTopicResult(const NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent& event) {
@@ -229,7 +247,22 @@ struct TEvYdbProxy {
         TVector<ui64> ChildPartitionsIds;
     };
 
-    struct TEvTopicEndPartition: public TGenericResponse<TEvTopicEndPartition, EvTopicEndPartition, TEndTopicPartitionResult> {
+    struct TEvEndTopicPartition: public TGenericResponse<TEvEndTopicPartition, EvEndTopicPartition, TEndTopicPartitionResult> {
+        using TBase::TBase;
+    };
+
+    struct TStartTopicReadingSessionResult {
+        explicit TStartTopicReadingSessionResult(const NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent& event)
+            : ReadSessionId(event.GetPartitionSession()->GetReadSessionId())
+        {
+        }
+
+        void Out(IOutputStream& out) const;
+
+        TString ReadSessionId;
+    };
+
+    struct TEvStartTopicReadingSession: public TGenericResponse<TEvStartTopicReadingSession, EvStartTopicReadingSession, TStartTopicReadingSessionResult> {
         using TBase::TBase;
     };
 
@@ -269,8 +302,8 @@ struct TEvYdbProxy {
     DEFINE_GENERIC_REQUEST_RESPONSE(DescribeTopic, NYdb::NTopic::TDescribeTopicResult, TString, NYdb::NTopic::TDescribeTopicSettings);
     DEFINE_GENERIC_REQUEST_RESPONSE(DescribeConsumer, NYdb::NTopic::TDescribeConsumerResult, TString, TString, NYdb::NTopic::TDescribeConsumerSettings);
     DEFINE_GENERIC_REQUEST_RESPONSE(CreateTopicReader, TActorId, TTopicReaderSettings);
-    DEFINE_GENERIC_REQUEST_RESPONSE(ReadTopic, TReadTopicResult, void);
-    DEFINE_GENERIC_REQUEST_RESPONSE(CommitOffset, NYdb::TStatus, TString, ui64, TString, ui64, NYdb::NTopic::TCommitOffsetSettings);
+    DEFINE_GENERIC_REQUEST_RESPONSE(ReadTopic, TReadTopicResult, TReadTopicSettings);
+    DEFINE_GENERIC_REQUEST_RESPONSE(CommitOffset, NYdb::TStatus, std::string, ui64, std::string, ui64, NYdb::NTopic::TCommitOffsetSettings);
 
     #undef DEFINE_GENERIC_REQUEST_RESPONSE
     #undef DEFINE_GENERIC_RESPONSE

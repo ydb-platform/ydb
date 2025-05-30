@@ -56,11 +56,16 @@ public:
             config.EnableSsl = endpoint.EnableSsl.GetRef();
         }
         ParseCaCerts(config);
+        ParseClientCert(config);
 
         CommandConfig.ClientConfig = NYdbGrpc::TGRpcClientConfig(endpoint.Address);
         if (config.EnableSsl) {
             CommandConfig.ClientConfig.EnableSsl = config.EnableSsl;
             CommandConfig.ClientConfig.SslCredentials.pem_root_certs = config.CaCerts;
+            if (config.ClientCert) {
+                CommandConfig.ClientConfig.SslCredentials.pem_cert_chain = config.ClientCert;
+                CommandConfig.ClientConfig.SslCredentials.pem_private_key = config.ClientCertPrivateKey;
+            }
         }
     }
 };

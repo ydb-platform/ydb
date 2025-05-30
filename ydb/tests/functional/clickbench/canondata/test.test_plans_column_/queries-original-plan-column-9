@@ -11,7 +11,7 @@
                 "Plans": [
                     {
                         "Node Type": "ResultSet",
-                        "PlanNodeId": 11,
+                        "PlanNodeId": 12,
                         "PlanNodeType": "ResultSet",
                         "Plans": [
                             {
@@ -20,18 +20,18 @@
                                     {
                                         "Inputs": [
                                             {
-                                                "ExternalPlanNodeId": 9
+                                                "ExternalPlanNodeId": 10
                                             }
                                         ],
                                         "Limit": "10",
                                         "Name": "Limit"
                                     }
                                 ],
-                                "PlanNodeId": 10,
+                                "PlanNodeId": 11,
                                 "Plans": [
                                     {
                                         "Node Type": "Merge",
-                                        "PlanNodeId": 9,
+                                        "PlanNodeId": 10,
                                         "PlanNodeType": "Connection",
                                         "Plans": [
                                             {
@@ -50,21 +50,21 @@
                                                     {
                                                         "Inputs": [
                                                             {
-                                                                "ExternalPlanNodeId": 7
+                                                                "ExternalPlanNodeId": 8
                                                             }
                                                         ],
                                                         "Name": "Aggregate",
                                                         "Phase": "Final"
                                                     }
                                                 ],
-                                                "PlanNodeId": 8,
+                                                "PlanNodeId": 9,
                                                 "Plans": [
                                                     {
                                                         "KeyColumns": [
                                                             "RegionID"
                                                         ],
                                                         "Node Type": "HashShuffle",
-                                                        "PlanNodeId": 7,
+                                                        "PlanNodeId": 8,
                                                         "PlanNodeType": "Connection",
                                                         "Plans": [
                                                             {
@@ -73,25 +73,36 @@
                                                                     {
                                                                         "Inputs": [
                                                                             {
-                                                                                "ExternalPlanNodeId": 5
+                                                                                "ExternalPlanNodeId": 6
                                                                             },
                                                                             {
-                                                                                "ExternalPlanNodeId": 3
+                                                                                "ExternalPlanNodeId": 4
                                                                             }
                                                                         ],
                                                                         "Name": "Union"
                                                                     }
                                                                 ],
-                                                                "PlanNodeId": 6,
+                                                                "PlanNodeId": 7,
                                                                 "Plans": [
                                                                     {
                                                                         "Node Type": "UnionAll",
-                                                                        "PlanNodeId": 5,
+                                                                        "PlanNodeId": 6,
                                                                         "PlanNodeType": "Connection",
                                                                         "Plans": [
                                                                             {
-                                                                                "Node Type": "TableFullScan",
+                                                                                "Node Type": "Aggregate-TableFullScan",
                                                                                 "Operators": [
+                                                                                    {
+                                                                                        "Aggregation": "{[SUM(item.ResolutionWidth),Inc()],SUM(1),SUM(item.AdvEngineID)}",
+                                                                                        "GroupBy": "item.RegionID",
+                                                                                        "Inputs": [
+                                                                                            {
+                                                                                                "InternalOperatorId": 1
+                                                                                            }
+                                                                                        ],
+                                                                                        "Name": "Aggregate",
+                                                                                        "Phase": "Intermediate"
+                                                                                    },
                                                                                     {
                                                                                         "Inputs": [],
                                                                                         "Name": "TableFullScan",
@@ -136,9 +147,7 @@
                                                                                         "Table": "clickbench/plans/column/hits"
                                                                                     }
                                                                                 ],
-                                                                                "Parent Relationship": "InitPlan",
-                                                                                "PlanNodeId": 4,
-                                                                                "Subplan Name": "CTE TableFullScan_9",
+                                                                                "PlanNodeId": 5,
                                                                                 "Tables": [
                                                                                     "clickbench/plans/column/hits"
                                                                                 ]
@@ -147,7 +156,7 @@
                                                                     },
                                                                     {
                                                                         "Node Type": "UnionAll",
-                                                                        "PlanNodeId": 3,
+                                                                        "PlanNodeId": 4,
                                                                         "PlanNodeType": "Connection",
                                                                         "Plans": [
                                                                             {
@@ -167,24 +176,88 @@
                                                                                     {
                                                                                         "Inputs": [
                                                                                             {
-                                                                                                "ExternalPlanNodeId": 1
+                                                                                                "ExternalPlanNodeId": 2
                                                                                             }
                                                                                         ],
                                                                                         "Name": "Aggregate",
                                                                                         "Phase": "Final"
                                                                                     }
                                                                                 ],
-                                                                                "PlanNodeId": 2,
+                                                                                "PlanNodeId": 3,
                                                                                 "Plans": [
                                                                                     {
-                                                                                        "CTE Name": "TableFullScan_9",
                                                                                         "KeyColumns": [
                                                                                             "RegionID",
                                                                                             "UserID"
                                                                                         ],
                                                                                         "Node Type": "HashShuffle",
-                                                                                        "PlanNodeId": 1,
-                                                                                        "PlanNodeType": "Connection"
+                                                                                        "PlanNodeId": 2,
+                                                                                        "PlanNodeType": "Connection",
+                                                                                        "Plans": [
+                                                                                            {
+                                                                                                "Node Type": "Aggregate-TableFullScan",
+                                                                                                "Operators": [
+                                                                                                    {
+                                                                                                        "Aggregation": "state",
+                                                                                                        "GroupBy": "[item.RegionID,item.UserID]",
+                                                                                                        "Inputs": [
+                                                                                                            {
+                                                                                                                "InternalOperatorId": 1
+                                                                                                            }
+                                                                                                        ],
+                                                                                                        "Name": "Aggregate",
+                                                                                                        "Phase": "Intermediate"
+                                                                                                    },
+                                                                                                    {
+                                                                                                        "Inputs": [],
+                                                                                                        "Name": "TableFullScan",
+                                                                                                        "Path": "/local/clickbench/plans/column/hits",
+                                                                                                        "ReadColumns": [
+                                                                                                            "AdvEngineID",
+                                                                                                            "RegionID",
+                                                                                                            "ResolutionWidth",
+                                                                                                            "UserID"
+                                                                                                        ],
+                                                                                                        "ReadRanges": [
+                                                                                                            "CounterID (-\u221e, +\u221e)",
+                                                                                                            "EventDate (-\u221e, +\u221e)",
+                                                                                                            "UserID (-\u221e, +\u221e)",
+                                                                                                            "EventTime (-\u221e, +\u221e)",
+                                                                                                            "WatchID (-\u221e, +\u221e)"
+                                                                                                        ],
+                                                                                                        "Scan": "Parallel",
+                                                                                                        "SsaProgram": {
+                                                                                                            "Command": [
+                                                                                                                {
+                                                                                                                    "Projection": {
+                                                                                                                        "Columns": [
+                                                                                                                            {
+                                                                                                                                "Id": 41
+                                                                                                                            },
+                                                                                                                            {
+                                                                                                                                "Id": 9
+                                                                                                                            },
+                                                                                                                            {
+                                                                                                                                "Id": 21
+                                                                                                                            },
+                                                                                                                            {
+                                                                                                                                "Id": 10
+                                                                                                                            }
+                                                                                                                        ]
+                                                                                                                    }
+                                                                                                                }
+                                                                                                            ],
+                                                                                                            "Version": 5
+                                                                                                        },
+                                                                                                        "Table": "clickbench/plans/column/hits"
+                                                                                                    }
+                                                                                                ],
+                                                                                                "PlanNodeId": 1,
+                                                                                                "Tables": [
+                                                                                                    "clickbench/plans/column/hits"
+                                                                                                ]
+                                                                                            }
+                                                                                        ]
                                                                                     }
                                                                                 ]
                                                                             }
@@ -214,6 +287,22 @@
                 {
                     "name": "/local/clickbench/plans/column/hits",
                     "reads": [
+                        {
+                            "columns": [
+                                "AdvEngineID",
+                                "RegionID",
+                                "ResolutionWidth",
+                                "UserID"
+                            ],
+                            "scan_by": [
+                                "CounterID (-\u221e, +\u221e)",
+                                "EventDate (-\u221e, +\u221e)",
+                                "UserID (-\u221e, +\u221e)",
+                                "EventTime (-\u221e, +\u221e)",
+                                "WatchID (-\u221e, +\u221e)"
+                            ],
+                            "type": "FullScan"
+                        },
                         {
                             "columns": [
                                 "AdvEngineID",

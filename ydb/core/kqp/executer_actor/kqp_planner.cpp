@@ -88,6 +88,7 @@ TKqpPlanner::TKqpPlanner(TKqpPlanner::TArgs&& args)
     , UserToken(args.UserToken)
     , Deadline(args.Deadline)
     , StatsMode(args.StatsMode)
+    , WithProgressStats(args.WithProgressStats)
     , RlPath(args.RlPath)
     , ResourcesSnapshot(std::move(args.ResourcesSnapshot))
     , ExecuterSpan(args.ExecuterSpan)
@@ -223,6 +224,7 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
     }
 
     request.MutableRuntimeSettings()->SetStatsMode(GetDqStatsMode(StatsMode));
+    request.MutableRuntimeSettings()->SetWithProgressStats(WithProgressStats);
     request.SetStartAllOrFail(true);
     request.MutableRuntimeSettings()->SetExecType(NYql::NDqProto::TComputeRuntimeSettings::DATA);
     request.MutableRuntimeSettings()->SetUseSpilling(TasksGraph.GetMeta().AllowWithSpilling);
@@ -498,6 +500,7 @@ TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) 
         .MemoryPool = NRm::EKqpMemoryPool::DataQuery,
         .WithSpilling = TasksGraph.GetMeta().AllowWithSpilling,
         .StatsMode = GetDqStatsMode(StatsMode),
+        .WithProgressStats = WithProgressStats,
         .Deadline = Deadline,
         .ShareMailbox = (computeTasksSize <= 1),
         .RlPath = Nothing(),

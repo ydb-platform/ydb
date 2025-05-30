@@ -309,7 +309,7 @@ message TTableServiceConfig {
 
     optional uint64 QueryReplayCacheUploadTTLSec = 62 [default = 36000];
 
-    optional bool EnableQueryServiceSpilling = 63 [ default = true ];
+    optional bool EnableQueryServiceSpilling = 63 [ default = false ];
 
     optional uint32 DefaultCostBasedOptimizationLevel = 64 [default = 2];
 
@@ -334,7 +334,7 @@ message TTableServiceConfig {
 
     message TWriteActorSettings {
         optional uint64 InFlightMemoryLimitPerActorBytes = 1 [ default = 67108864 ];
-        optional uint64 MemoryLimitPerMessageBytes = 2 [ default = 67108864 ];
+        reserved 2; // MemoryLimitPerMessageBytes
 
         optional uint64 StartRetryDelayMs = 4 [ default = 1000 ];
         optional uint64 MaxRetryDelayMs = 5 [ default = 10000 ];
@@ -367,13 +367,17 @@ message TTableServiceConfig {
     optional bool EnableStreamWrite = 77 [default = false];
     optional bool EnableBatchUpdates = 78 [default = false];
 
-    optional bool AllowMultiBroadcasts = 79 [default = true];
+    optional bool AllowMultiBroadcasts = 79 [default = false];
 
-    optional bool DefaultEnableShuffleElimination = 80 [default = false];
+    optional bool DefaultEnableShuffleElimination = 80 [default = true];
 
-    optional bool EnableFoldUdfs = 82 [ default = true ];
+    message TBatchOperationSettings {
+        optional uint64 MaxBatchSize = 1 [ default = 10000 ];
+        optional uint64 MinBatchSize = 2 [ default = 1 ];
+        optional uint64 StartRetryDelayMs = 3 [ default = 50 ];
+        optional uint64 MaxRetryDelayMs = 4 [ default = 30000 ];
+        optional uint64 PartitionExecutionLimit = 5 [ default = 10 ];
+    }
 
-    optional bool FilterPushdownOverJoinOptionalSide = 83 [ default = true ];
-
-    optional bool EnableSpillingInHashJoinShuffleConnections = 85 [default = true];
+    optional TBatchOperationSettings BatchOperationSettings = 81;
 };

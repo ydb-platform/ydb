@@ -21,6 +21,8 @@ items:
   href: system-views.md
 - name: Maintenance without downtime
   href: maintenance-without-downtime.md
+- name: Node authentication and authorization
+  href: node-authorization.md
 - name: Federated queries
   href: federated-queries/index.md
   include:

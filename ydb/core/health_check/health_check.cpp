@@ -16,6 +16,7 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/statestorage.h>
 #include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/mon/mon.h>
 #include <ydb/core/base/nameservice.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
@@ -28,6 +29,7 @@
 #include <ydb/core/util/tuples.h>
 
 #include <ydb/core/protos/blobstorage_distributed_config.pb.h>
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/sys_view/common/events.h>
 
 #include <ydb/public/api/grpc/ydb_monitoring_v1.grpc.pb.h>
@@ -121,11 +123,12 @@ public:
     ui64 Cookie;
     NWilson::TSpan Span;
 
-    TSelfCheckRequest(const TActorId& sender, THolder<TEvSelfCheckRequest> request, ui64 cookie, NWilson::TTraceId&& traceId)
+    TSelfCheckRequest(const TActorId& sender, THolder<TEvSelfCheckRequest> request, ui64 cookie, NWilson::TTraceId&& traceId, const NKikimrConfig::THealthCheckConfig& config)
         : Sender(sender)
         , Request(std::move(request))
         , Cookie(cookie)
         , Span(TComponentTracingLevels::TTablet::Basic, std::move(traceId), "health_check", NWilson::EFlags::AUTO_END)
+        , HealthCheckConfig(config)
     {}
 
     using TGroupId = ui32;
@@ -163,7 +166,7 @@ public:
     struct TNodeTabletState {
         struct TTabletStateSettings {
             TInstant AliveBarrier;
-            ui32 MaxRestartsPerPeriod = 30; // per hour
+            ui32 MaxRestartsPerPeriod; // per hour
             ui32 MaxTabletIdsStored = 10;
             bool ReportGoodTabletsIds = false;
         };
@@ -266,6 +269,7 @@ public:
         TString ErasureSpecies;
         std::vector<const NKikimrSysView::TVSlotEntry*> VSlots;
         ui32 Generation;
+        bool LayoutCorrect = true;
     };
 
     struct TSelfCheckResult {
@@ -647,6 +651,8 @@ public:
     std::optional<TRequestResponse<TEvStateStorage::TEvBoardInfo>> DatabaseBoardInfo;
     THashSet<TNodeId> UnknownStaticGroups;
 
+    const NKikimrConfig::THealthCheckConfig& HealthCheckConfig;
+
     std::vector<TNodeId> SubscribedNodeIds;
     THashSet<TNodeId> StorageNodeIds;
     THashSet<TNodeId> ComputeNodeIds;
@@ -742,7 +748,7 @@ public:
 
     TTabletRequestsState TabletRequests;
 
-    TDuration Timeout = TDuration::MilliSeconds(20000);
+    TDuration Timeout = TDuration::MilliSeconds(HealthCheckConfig.GetTimeout());
     static constexpr TStringBuf STATIC_STORAGE_POOL_NAME = "static";
 
     bool IsSpecificDatabaseFilter() const {
@@ -1102,20 +1108,28 @@ public:
         auto nodeId = ev->Get()->NodeId;
         switch (eventId) {
             case TEvWhiteboard::EvSystemStateRequest:
-                NodeSystemState.erase(nodeId);
-                NodeSystemState[nodeId] = RequestNodeWhiteboard<TEvWhiteboard::TEvSystemStateRequest>(nodeId);
+                if (!NodeSystemState[nodeId].IsDone()) {
+                    NodeSystemState.erase(nodeId);
+                    NodeSystemState[nodeId] = RequestNodeWhiteboard<TEvWhiteboard::TEvSystemStateRequest>(nodeId, {-1});
+                }
                 break;
             case TEvWhiteboard::EvVDiskStateRequest:
-                NodeVDiskState.erase(nodeId);
-                NodeVDiskState[nodeId] = RequestNodeWhiteboard<TEvWhiteboard::TEvVDiskStateRequest>(nodeId);
+                if (!NodeVDiskState[nodeId].IsDone()) {
+                    NodeVDiskState.erase(nodeId);
+                    NodeVDiskState[nodeId] = RequestNodeWhiteboard<TEvWhiteboard::TEvVDiskStateRequest>(nodeId);
+                }
                 break;
             case TEvWhiteboard::EvPDiskStateRequest:
-                NodePDiskState.erase(nodeId);
-                NodePDiskState[nodeId] = RequestNodeWhiteboard<TEvWhiteboard::TEvPDiskStateRequest>(nodeId);
+                if (!NodePDiskState[nodeId].IsDone()) {
+                    NodePDiskState.erase(nodeId);
+                    NodePDiskState[nodeId] = RequestNodeWhiteboard<TEvWhiteboard::TEvPDiskStateRequest>(nodeId);
+                }
                 break;
             case TEvWhiteboard::EvBSGroupStateRequest:
-                NodeBSGroupState.erase(nodeId);
-                NodeBSGroupState[nodeId] = RequestNodeWhiteboard<TEvWhiteboard::TEvBSGroupStateRequest>(nodeId);
+                if (!NodeBSGroupState[nodeId].IsDone()) {
+                    NodeBSGroupState.erase(nodeId);
+                    NodeBSGroupState[nodeId] = RequestNodeWhiteboard<TEvWhiteboard::TEvBSGroupStateRequest>(nodeId);
+                }
                 break;
             default:
                 RequestDone("unsupported event scheduled");
@@ -1403,10 +1417,13 @@ public:
             FilterDomainKey[TSubDomainKey(domainInfo->DomainKey.OwnerId, domainInfo->DomainKey.LocalPathId)] = path;
 
             TTabletId hiveId = domainInfo->Params.GetHive();
-            if (hiveId && NeedToAskHive(hiveId)) {
+            if (hiveId) {
                 DatabaseState[path].HiveId = hiveId;
-                AskHive(path, hiveId);
+                if (NeedToAskHive(hiveId)) {
+                    AskHive(path, hiveId);
+                }
             } else if (RootHiveId && NeedToAskHive(RootHiveId)) {
+                DatabaseState[DomainPath].HiveId = RootHiveId;
                 AskHive(DomainPath, RootHiveId);
             }
 
@@ -1501,22 +1518,31 @@ public:
 
     void AggregateHiveInfo() {
         TNodeTabletState::TTabletStateSettings settings;
-        for (const auto& [hiveId, hiveResponse] : HiveInfo) {
+        for (auto& [dbPath, dbState] : DatabaseState) {
+            const auto& hiveResponse = HiveInfo[dbState.HiveId];
             if (hiveResponse.IsOk()) {
                 settings.AliveBarrier = TInstant::MilliSeconds(hiveResponse->Record.GetResponseTimestamp()) - TDuration::Minutes(5);
+                settings.MaxRestartsPerPeriod = HealthCheckConfig.GetThresholds().GetTabletsRestartsOrange();
                 for (const NKikimrHive::TTabletInfo& hiveTablet : hiveResponse->Record.GetTablets()) {
                     TSubDomainKey tenantId = TSubDomainKey(hiveTablet.GetObjectDomain());
                     auto itDomain = FilterDomainKey.find(tenantId);
+                    TDatabaseState* database = nullptr;
                     if (itDomain == FilterDomainKey.end()) {
-                        continue;
+                        if (!FilterDatabase || FilterDatabase == dbPath) {
+                            database = &dbState;
+                        } else {
+                            continue;
+                        }
+                    } else {
+                        auto itDatabase = DatabaseState.find(itDomain->second);
+                        if (itDatabase != DatabaseState.end()) {
+                            database = &itDatabase->second;
+                        } else {
+                            continue;
+                        }
                     }
-                    auto itDatabase = DatabaseState.find(itDomain->second);
-                    if (itDatabase == DatabaseState.end()) {
-                        continue;
-                    }
-                    TDatabaseState& database = itDatabase->second;
                     auto tabletId = std::make_pair(hiveTablet.GetTabletID(), hiveTablet.GetFollowerID());
-                    database.MergedTabletState.emplace(tabletId, &hiveTablet);
+                    database->MergedTabletState.emplace(tabletId, &hiveTablet);
                     TNodeId nodeId = hiveTablet.GetNodeID();
                     switch (hiveTablet.GetVolatileState()) {
                         case NKikimrHive::ETabletVolatileState::TABLET_VOLATILE_STATE_STARTING:
@@ -1526,7 +1552,7 @@ public:
                             nodeId = 0;
                             break;
                     }
-                    database.MergedNodeTabletState[nodeId].AddTablet(hiveTablet, settings);
+                    database->MergedNodeTabletState[nodeId].AddTablet(hiveTablet, settings);
                 }
             }
         }
@@ -1569,6 +1595,7 @@ public:
             auto& groupState = GroupState[groupId];
             groupState.ErasureSpecies = group.GetInfo().GetErasureSpeciesV2();
             groupState.Generation = group.GetInfo().GetGeneration();
+            groupState.LayoutCorrect = group.GetInfo().GetLayoutCorrect();
             StoragePoolState[poolId].Groups.emplace(groupId);
         }
         for (const auto& vSlot : VSlots->Get()->Record.GetEntries()) {
@@ -1729,9 +1756,9 @@ public:
         FillNodeInfo(nodeId, context.Location.mutable_compute()->mutable_node());
 
         TSelfCheckContext rrContext(&context, "NODE_UPTIME");
-        if (databaseState.NodeRestartsPerPeriod[nodeId] >= 30) {
+        if (databaseState.NodeRestartsPerPeriod[nodeId] >= HealthCheckConfig.GetThresholds().GetNodeRestartsOrange()) {
             rrContext.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, "Node is restarting too often", ETags::Uptime);
-        } else if (databaseState.NodeRestartsPerPeriod[nodeId] >= 10) {
+        } else if (databaseState.NodeRestartsPerPeriod[nodeId] >= HealthCheckConfig.GetThresholds().GetNodeRestartsYellow()) {
             rrContext.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "The number of node restarts has increased", ETags::Uptime);
         } else {
             rrContext.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
@@ -1769,9 +1796,9 @@ public:
                 long timeDifferenceUs = nodeSystemState.GetMaxClockSkewWithPeerUs();
                 TDuration timeDifferenceDuration = TDuration::MicroSeconds(abs(timeDifferenceUs));
                 Ydb::Monitoring::StatusFlag::Status status;
-                if (timeDifferenceDuration > MAX_CLOCKSKEW_ORANGE_ISSUE_TIME) {
+                if (timeDifferenceDuration > TDuration::MicroSeconds(HealthCheckConfig.GetThresholds().GetNodesTimeDifferenceOrange())) {
                     status = Ydb::Monitoring::StatusFlag::ORANGE;
-                } else if (timeDifferenceDuration > MAX_CLOCKSKEW_YELLOW_ISSUE_TIME) {
+                } else if (timeDifferenceDuration > TDuration::MicroSeconds(HealthCheckConfig.GetThresholds().GetNodesTimeDifferenceYellow())) {
                     status = Ydb::Monitoring::StatusFlag::YELLOW;
                 } else {
                     status = Ydb::Monitoring::StatusFlag::GREEN;
@@ -2343,6 +2370,7 @@ public:
 
     class TGroupChecker {
         TString ErasureSpecies;
+        bool LayoutCorrect;
         int FailedDisks = 0;
         std::array<int, Ydb::Monitoring::StatusFlag::Status_ARRAYSIZE> DisksColors = {};
         TStackVec<std::pair<ui32, int>> FailedRealms;
@@ -2359,7 +2387,10 @@ public:
         }
 
     public:
-        TGroupChecker(const TString& erasure) : ErasureSpecies(erasure) {}
+        TGroupChecker(const TString& erasure, const bool layoutCorrect = true)
+            : ErasureSpecies(erasure)
+            , LayoutCorrect(layoutCorrect)
+        {}
 
         void AddVDiskStatus(Ydb::Monitoring::StatusFlag::Status status, ui32 realm) {
             ++DisksColors[status];
@@ -2378,6 +2409,9 @@ public:
 
         void ReportStatus(TSelfCheckContext& context) const {
             context.OverallStatus = Ydb::Monitoring::StatusFlag::GREEN;
+            if (!LayoutCorrect) {
+                context.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, "Group layout is incorrect", ETags::GroupState);
+            }
             if (ErasureSpecies == NONE) {
                 if (FailedDisks > 0) {
                     context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Group failed", ETags::GroupState, {ETags::VDiskState});
@@ -2727,7 +2761,7 @@ public:
             return;
         }
 
-        TGroupChecker checker(itGroup->second.ErasureSpecies);
+        TGroupChecker checker(itGroup->second.ErasureSpecies, itGroup->second.LayoutCorrect);
         const auto& slots = itGroup->second.VSlots;
         for (const auto* slot : slots) {
             const auto& slotInfo = slot->GetInfo();
@@ -2920,9 +2954,6 @@ public:
             context.HasDegraded = true;
         }
     }
-
-    const TDuration MAX_CLOCKSKEW_ORANGE_ISSUE_TIME = TDuration::MicroSeconds(25000);
-    const TDuration MAX_CLOCKSKEW_YELLOW_ISSUE_TIME = TDuration::MicroSeconds(5000);
 
     void FillResult(TOverallStateContext context) {
         if (IsSpecificDatabaseFilter()) {
@@ -3252,12 +3283,16 @@ void TNodeCheckRequest<NMon::TEvHttpInfo>::Bootstrap() {
 class THealthCheckService : public TActorBootstrapped<THealthCheckService> {
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() { return NKikimrServices::TActivity::MONITORING_SERVICE; }
+    NKikimrConfig::THealthCheckConfig HealthCheckConfig;
 
     THealthCheckService()
     {
     }
 
     void Bootstrap() {
+        HealthCheckConfig.CopyFrom(AppData()->HealthCheckConfig);
+        Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
+             new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest({NKikimrConsole::TConfigItem::HealthCheckConfigItem}));
         TMon* mon = AppData()->Mon;
         if (mon) {
             mon->RegisterActorPage({
@@ -3270,8 +3305,16 @@ public:
         Become(&THealthCheckService::StateWork);
     }
 
+    void Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
+        const auto& record = ev->Get()->Record;
+        if (record.GetConfig().HasHealthCheckConfig()) {
+            HealthCheckConfig.CopyFrom(record.GetConfig().GetHealthCheckConfig());
+        }
+        Send(ev->Sender, new NConsole::TEvConsole::TEvConfigNotificationResponse(record), 0, ev->Cookie);
+    }
+
     void Handle(TEvSelfCheckRequest::TPtr& ev) {
-        Register(new TSelfCheckRequest(ev->Sender, ev.Get()->Release(), ev->Cookie, std::move(ev->TraceId)));
+        Register(new TSelfCheckRequest(ev->Sender, ev.Get()->Release(), ev->Cookie, std::move(ev->TraceId), HealthCheckConfig));
     }
 
     std::shared_ptr<NYdbGrpc::TGRpcClientLow> GRpcClientLow;
@@ -3299,6 +3342,7 @@ public:
             hFunc(TEvSelfCheckRequest, Handle);
             hFunc(TEvNodeCheckRequest, Handle);
             hFunc(NMon::TEvHttpInfo, Handle);
+            hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle);
             cFunc(TEvents::TSystem::PoisonPill, PassAway);
         }
     }

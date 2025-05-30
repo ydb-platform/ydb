@@ -111,7 +111,7 @@ private:
 
     void FreePage(void* addr) {
         auto res = T::Munmap(addr, PageSize);
-        Y_DEBUG_ABORT_UNLESS(0 == res, "Munmap failed: %s", LastSystemErrorText());
+        Y_DEBUG_ABORT_UNLESS(0 == res, "Madvise failed: %s", LastSystemErrorText());
     }
 
 private:
@@ -251,7 +251,46 @@ inline int TSystemMmap::Munmap(void* addr, size_t size)
 {
     Y_DEBUG_ABORT_UNLESS(AlignUp(addr, SYS_PAGE_SIZE) == addr, "Got unaligned address");
     Y_DEBUG_ABORT_UNLESS(AlignUp(size, SYS_PAGE_SIZE) == size, "Got unaligned size");
-    return ::munmap(addr, size);
+
+    if (size > MaxMidSize) {
+        return ::munmap(addr, size);
+    }
+
+    // Unlock memory in case somewhere was called `mlockall(MCL_FUTURE)`.
+    if (::munlock(addr, size) == -1) {
+        switch(LastSystemError()) {
+            case EAGAIN: [[fallthrough]];
+                // The memory region was probably not locked - skip,
+                // also since we can't distinguish from other kernel problems that may cause EAGAIN (not enough memory for structures?)
+                // we rely on the failure of the following `madvise()` call.
+
+            case EPERM: [[fallthrough]];
+                // The most common case we get this error if we have no privileges, but also ignored error when called `mlockall()`
+                // somewhere earlier. So ignore this.
+
+            case EINVAL:
+                // Something wrong with `addr` and `size` - we'll see the same error from the following `madvise()` call.
+                break;
+
+            case ENOMEM:
+                // Locking or unlocking a region would result in the total number of mappings with distinct attributes
+                // (e.g., locked versus unlocked) exceeding the allowed maximum.
+                // NOTE: `madvise(MADV_DONTNEED)` can't return ENOMEM.
+                return -1;
+        }
+    }
+
+    /**
+        There is at least a couple of drawbacks of using madvise instead of munmap:
+        - more potential for use-after-free and memory corruption since we still may access unneeded regions by mistake,
+        - actual RSS memory may be freed later after kernel gets some memory-pressure, and it may confuse system monitoring tools.
+
+        But also there is a huge advantage: the number of memory maps used by process doesn't increase because of the "holes".
+
+        The main source of the growth of number of memory regions is a clean-up of freed pages from page pools.
+        Now we can safely invoke `TAlignedPagePool::DoCleanupGlobalFreeList()` whenever we want it.
+     */
+    return ::madvise(addr, size, MADV_DONTNEED);
 }
 #endif
 

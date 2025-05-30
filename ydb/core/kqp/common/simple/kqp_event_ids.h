@@ -65,7 +65,8 @@ struct TKqpExecuterEvents {
         EvProgress,
         EvStreamDataAck,
         EvTableResolveStatus,
-        EvShardsResolveStatus
+        EvShardsResolveStatus,
+        EvDelayedExecution
     };
 };
 

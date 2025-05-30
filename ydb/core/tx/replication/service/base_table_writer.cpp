@@ -433,7 +433,10 @@ class TLocalTableWriter
         TVector<NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TRecordInfo> records(::Reserve(ev->Get()->Records.size()));
         TSet<TRowVersion> versionsWithoutTxId;
 
-        for (auto& [offset, data, _] : ev->Get()->Records) {
+        for (auto& r : ev->Get()->Records) {
+            auto offset = r.Offset;
+            auto& data = r.Data;
+
             auto record = Parser->Parse(ev->Get()->Source, offset, std::move(data));
 
             if (Mode == EWriteMode::Consistent) {

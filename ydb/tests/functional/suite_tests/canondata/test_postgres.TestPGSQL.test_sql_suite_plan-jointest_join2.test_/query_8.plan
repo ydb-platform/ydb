@@ -30,7 +30,7 @@
                                 "Plans": [
                                     {
                                         "CTE Name": "precompute_0_0",
-                                        "Node Type": "TopSort-InnerJoin (MapJoin)-ConstantExpr-Filter",
+                                        "Node Type": "TopSort-Filter-LeftJoin (MapJoin)-ConstantExpr",
                                         "Operators": [
                                             {
                                                 "Inputs": [
@@ -49,7 +49,7 @@
                                                         "InternalOperatorId": 3
                                                     },
                                                     {
-                                                        "InternalOperatorId": 2
+                                                        "ExternalPlanNodeId": 12
                                                     }
                                                 ],
                                                 "Name": "InnerJoin (MapJoin)"
@@ -58,15 +58,6 @@
                                                 "Inputs": [],
                                                 "Name": "ToFlow",
                                                 "ToFlow": "precompute_0_0"
-                                            },
-                                            {
-                                                "Inputs": [
-                                                    {
-                                                        "ExternalPlanNodeId": 8
-                                                    }
-                                                ],
-                                                "Name": "Filter",
-                                                "Predicate": "Exist(item.y1) AND Exist(item.y2)"
                                             }
                                         ],
                                         "PlanNodeId": 9,

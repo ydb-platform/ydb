@@ -39,7 +39,6 @@ NKikimrConfig::TAppConfig AppCfgLowComputeLimits(double reasonableTreshold, bool
     auto* ts = appCfg.MutableTableServiceConfig();
 
     ts->SetEnableQueryServiceSpilling(enableSpilling);
-    ts->SetEnableSpillingInHashJoinShuffleConnections(false);
 
     auto* rm = ts->MutableResourceManager();
     rm->SetMkqlLightProgramMemoryLimit(100);

@@ -1,6 +1,32 @@
-
-
 # Список изменений {{ ydb-short-name }} CLI
+
+## Версия 2.20.0 {#2-20-0}
+
+Дата выхода 5 марта 2024. Для обновления до версии **2.20.0** перейдите в раздел [Загрузки](downloads/index.md#ydb-cli).
+
+### Функциональность
+
+* Добавлена поддержка [топиков](./concepts/topic.md) при выполнении [команд](./reference/ydb-cli/export-import/tools-dump.md) `{{ ydb-cli }} tools dump` и `{{ ydb-cli }} tools restore`.
+* Добавлена поддержка [узлов координации](./concepts/datamodel/coordination-node.md) при выполнении [команд](./reference/ydb-cli/export-import/tools-dump.md) `{{ ydb-cli }} tools dump` и `{{ ydb-cli }} tools restore`.
+* Добавлена новая команда `{{ ydb-cli }} workload log import generator`.
+* Добавлены новые глобальные опции для пользовательских сертификатов при соединении через SSL/TLS:
+  * `--client-cert-file`: файл, содержащий пользовательский сертификат для SSL/TLS соединения, закодированный в PEM или PKCS#12.
+  * `--client-cert-key-file`: файл, содержащий приватный ключ к пользовательскому сертификату, закодированный в PEM.
+  * `--client-cert-key-password-file`: файл, содержащий пароль для приватного ключа пользовательского сертификата.
+* Запросы при выполнении команды `{{ ydb-cli }} workload run` теперь отправляются на сервер в произвольном порядке.
+* **_(Требуется сервер v25.1+)_** Добавлена поддержка [внешних источников данных](./concepts/datamodel/external_data_source.md) и [внешних таблиц](./concepts/datamodel/external_table.md) при выполнении [команд](./reference/ydb-cli/export-import/tools-dump.md) `{{ ydb-cli }} tools dump` и `{{ ydb-cli }} tools restore`.
+* **_(Экспериментально)_** Добавлена команда `{{ ydb-cli }} admin node config init` для инициализации директории с конфигурационными файлами узла.
+* **_(Требуется сервер v25.1+)_** **_(Экспериментально)_** Добавлена [команда](./reference/ydb-cli/commands/configuration/cluster/generate.md) `{{ ydb-cli }} admin cluster config generate` для генерации файла [конфигурации V2](./devops/configuration-management/configuration-v2/index.md) из [файла конфигурации V1](./devops/configuration-management/configuration-v2/index.md).
+* **_(Требуется сервер v25.1+)_** **_(Экспериментально)_** Добавлены [команда](./reference/ydb-cli/export-import/tools-dump#cluster) `{{ ydb-cli }} admin cluster dump` и [команда](./reference/ydb-cli/export-import/tools-restore#cluster) `{{ ydb-cli }} admin cluster restore` для создания дампа кластера. Дамп кластера содержит список баз данных с метаданными, пользователей и группы, но не содержит схемные объекты.
+* **_(Требуется сервер v25.1+)_** **_(Экспериментально)_** Добавлены команды `{{ ydb-cli }} admin database dump` и `{{ ydb-cli }} admin database restore` для создания дампа базы данных. Такой дамп содержит метаданные базы данных, схемные объекты, данные в них, пользователей и группы.
+* **_(Требуется сервер v25.1+)_** **_(Экспериментально)_** Для команды `ydb admin cluster config fetch` добавлены новые опции `--dedicated-storage-section` и `--dedicated-cluster-section`, позволяющие получать части конфигурации для кластера и хранилища отдельно.
+
+### Исправления ошибок
+
+* Исправлена ошибка, из-за которой дважды отправлялся запрос аутентификации в команде `{{ ydb-cli }} auth get-token` при получении списка эндпойнтов (Discovery запрос) и при фактическом выполнении запроса на получение токена.
+* Исправлена ошибка в команде `{{ ydb-cli }} import file csv`, при которой прогресс импорта сохранялся даже если отправка пакета данных завершилась ошибкой.
+* Исправлена ошибка, из-за которой при выполнении команды `{{ ydb-cli }} tools restore` некоторые ошибки игнорировались.
+* Исправлена утечка памяти при генерации данных для `{{ ydb-cli }} workload tpcds`.
 
 ## Версия 2.19.0 {#2-19-0}
 

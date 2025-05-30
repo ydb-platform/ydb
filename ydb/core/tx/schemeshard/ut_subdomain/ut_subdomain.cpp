@@ -213,19 +213,6 @@ void CheckQuotaExceedance(TTestActorRuntime& runtime,
     });
 }
 
-TVector<ui64> GetTableShards(TTestActorRuntime& runtime,
-                             ui64 schemeShard,
-                             const TString& path
-) {
-    TVector<ui64> shards;
-    const auto tableDescription = DescribePath(runtime, schemeShard, path, true);
-    for (const auto& part : tableDescription.GetPathDescription().GetTablePartitions()) {
-        shards.emplace_back(part.GetDatashardId());
-    }
-
-    return shards;
-}
-
 TTableId ResolveTableId(TTestActorRuntime& runtime, const TString& path) {
     const auto response = Navigate(runtime, path);
     return response->ResultSet.at(0).TableId;

@@ -770,21 +770,6 @@ public:
         ClientAddress = clientAddress;
     }
 
-    bool GetDomainLoginOnly() override {
-        TAppData* appData = AppData(ActorSystem);
-        return appData && appData->AuthConfig.GetDomainLoginOnly();
-    }
-
-    TMaybe<TString> GetDomainName() override {
-        TAppData* appData = AppData(ActorSystem);
-        if (GetDomainLoginOnly()) {
-            if (appData->DomainsInfo && appData->DomainsInfo->Domain) {
-                return appData->DomainsInfo->GetDomain()->Name;
-            }
-        }
-        return {};
-    }
-
     TVector<NKikimrKqp::TKqpTableMetadataProto> GetCollectedSchemeData() override {
         return MetadataLoader->GetCollectedSchemeData();
     }
@@ -1400,8 +1385,8 @@ public:
                 return InvalidCluster<TGenericResult>(cluster);
             }
 
-            TString database;
-            if (!GetDatabaseForLoginOperation(database)) {
+            TString database = NSchemeHelpers::SelectDatabaseForAlterLoginOperations(AppData(ActorSystem), Database);
+            if (database.empty()) {
                 return MakeFuture(ResultFromError<TGenericResult>("Couldn't get domain name"));
             }
 
@@ -1446,8 +1431,8 @@ public:
                 return InvalidCluster<TGenericResult>(cluster);
             }
 
-            TString database;
-            if (!GetDatabaseForLoginOperation(database)) {
+            TString database = NSchemeHelpers::SelectDatabaseForAlterLoginOperations(AppData(ActorSystem), Database);
+            if (database.empty()) {
                 return MakeFuture(ResultFromError<TGenericResult>("Couldn't get domain name"));
             }
 
@@ -1495,8 +1480,8 @@ public:
                 return InvalidCluster<TGenericResult>(cluster);
             }
 
-            TString database;
-            if (!GetDatabaseForLoginOperation(database)) {
+            TString database = NSchemeHelpers::SelectDatabaseForAlterLoginOperations(AppData(ActorSystem), Database);
+            if (database.empty()) {
                 return MakeFuture(ResultFromError<TGenericResult>("Couldn't get domain name"));
             }
 
@@ -1571,8 +1556,8 @@ public:
                 if (!Owner.CheckCluster(cluster)) {
                     return InvalidCluster<TGenericResult>(cluster);
                 }
-                TString database;
-                if (!Owner.GetDatabaseForLoginOperation(database)) {
+                const auto appData = AppData(Owner.ActorSystem);
+                if (!(appData && appData->DomainsInfo && appData->DomainsInfo->Domain)) {
                     return MakeFuture(ResultFromError<TGenericResult>("Couldn't get domain name"));
                 }
                 NMetadata::IClassBehaviour::TPtr cBehaviour(NMetadata::IClassBehaviour::TFactory::Construct(settings.GetTypeId()));
@@ -1690,8 +1675,8 @@ public:
                 return InvalidCluster<TGenericResult>(cluster);
             }
 
-            TString database;
-            if (!GetDatabaseForLoginOperation(database)) {
+            TString database = NSchemeHelpers::SelectDatabaseForAlterLoginOperations(AppData(ActorSystem), Database);
+            if (database.empty()) {
                 return MakeFuture(ResultFromError<TGenericResult>("Couldn't get domain name"));
             }
 
@@ -1730,8 +1715,8 @@ public:
                 return InvalidCluster<TGenericResult>(cluster);
             }
 
-            TString database;
-            if (!GetDatabaseForLoginOperation(database)) {
+            TString database = NSchemeHelpers::SelectDatabaseForAlterLoginOperations(AppData(ActorSystem), Database);
+            if (database.empty()) {
                 return MakeFuture(ResultFromError<TGenericResult>("Couldn't get domain name"));
             }
 
@@ -1822,8 +1807,8 @@ public:
                 return InvalidCluster<TGenericResult>(cluster);
             }
 
-            TString database;
-            if (!GetDatabaseForLoginOperation(database)) {
+            TString database = NSchemeHelpers::SelectDatabaseForAlterLoginOperations(AppData(ActorSystem), Database);
+            if (database.empty()) {
                 return MakeFuture(ResultFromError<TGenericResult>("Couldn't get domain name"));
             }
 
@@ -1863,8 +1848,8 @@ public:
                 return InvalidCluster<TGenericResult>(cluster);
             }
 
-            TString database;
-            if (!GetDatabaseForLoginOperation(database)) {
+            TString database = NSchemeHelpers::SelectDatabaseForAlterLoginOperations(AppData(ActorSystem), Database);
+            if (database.empty()) {
                 return MakeFuture(ResultFromError<TGenericResult>("Couldn't get domain name"));
             }
 
@@ -2368,10 +2353,6 @@ private:
 
     bool CheckCluster(const TString& cluster) {
         return cluster == Cluster;
-    }
-
-    bool GetDatabaseForLoginOperation(TString& database) {
-        return NSchemeHelpers::SetDatabaseForLoginOperation(database, GetDomainLoginOnly(), GetDomainName(), GetDatabase());
     }
 
     bool GetPathPair(const TString& tableName, std::pair<TString, TString>& pathPair,

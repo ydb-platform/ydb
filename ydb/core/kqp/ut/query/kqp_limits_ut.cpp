@@ -101,42 +101,45 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         auto app = NKikimrConfig::TAppConfig();
         app.MutableTableServiceConfig()->SetEnableOltpSink(true);
         app.MutableTableServiceConfig()->SetEnableStreamWrite(Allowed);
-        app.MutableTableServiceConfig()->MutableWriteActorSettings()->SetInFlightMemoryLimitPerActorBytes(64);
 
         auto settings = TKikimrSettings()
             .SetAppConfig(app)
             .SetWithSampleTables(false);
 
         TKikimrRunner kikimr(settings);
+        CreateLargeTable(kikimr, 1000, 1_KB, 64_KB);
 
         auto db = kikimr.GetQueryClient();
         
         {
             auto result = db.ExecuteQuery(R"(
                 CREATE TABLE `/Root/DataShard` (
-                    Col1 Uint64 NOT NULL,
-                    Col2 String NOT NULL,
-                    Col3 Int32 NOT NULL,
-                    PRIMARY KEY (Col1)
+                    Key Uint64,
+                    KeyText String,
+                    Data Int64,
+                    DataText String,
+                    PRIMARY KEY (Key)
                 )
-                WITH (UNIFORM_PARTITIONS = 2, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2);)",
+                WITH (
+                    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 8,
+                    PARTITION_AT_KEYS = (1000000, 2000000, 3000000, 4000000, 5000000, 6000000, 7000000)
+                );)",
                 NQuery::TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
         {
             auto result = db.ExecuteQuery(R"(
-                UPSERT INTO `/Root/DataShard` (Col1, Col2, Col3) VALUES
-                    (10u, "test1", 10), (20u, "test2", 11), (30u, "test3", 12), (40u, "test", 13);
+                UPSERT INTO `/Root/DataShard` SELECT * FROM `/Root/LargeTable`;
             )", NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             result.GetIssues().PrintTo(Cerr);
             if (!Allowed) {
-                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
                 UNIT_ASSERT_C(
-                    result.GetIssues().ToString().contains("Stream write queries aren't allowed."),
+                    result.GetIssues().ToString().contains("Out of buffer memory."),
                     result.GetIssues().ToString());
             } else {
-                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             }
         }
     }
@@ -696,38 +699,38 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
     Y_UNIT_TEST(AffectedShardsLimit) {
         NKikimrConfig::TAppConfig appConfig;
         auto& queryLimits = *appConfig.MutableTableServiceConfig()->MutableQueryLimits();
-        queryLimits.MutablePhaseLimits()->SetAffectedShardsLimit(20);
+        queryLimits.MutablePhaseLimits()->SetAffectedShardsLimit(23);
 
         TKikimrRunner kikimr(appConfig);
 
         kikimr.GetTestClient().CreateTable("/Root", R"(
-            Name: "ManyShard20"
+            Name: "ManyShard23"
             Columns { Name: "Key", Type: "Uint32" }
             Columns { Name: "Value1", Type: "String" }
             Columns { Name: "Value2", Type: "Int32" }
             KeyColumnNames: ["Key"]
-            UniformPartitionsCount: 20
+            UniformPartitionsCount: 23
         )");
 
         kikimr.GetTestClient().CreateTable("/Root", R"(
-            Name: "ManyShard21"
+            Name: "ManyShard24"
             Columns { Name: "Key", Type: "Uint32" }
             Columns { Name: "Value1", Type: "String" }
             Columns { Name: "Value2", Type: "Int32" }
             KeyColumnNames: ["Key"]
-            UniformPartitionsCount: 21
+            UniformPartitionsCount: 24
         )");
 
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto result = session.ExecuteDataQuery(Q_(R"(
-            SELECT COUNT(*) FROM `/Root/ManyShard20`
+            SELECT COUNT(*) FROM `/Root/ManyShard23`
         )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         result = session.ExecuteDataQuery(Q_(R"(
-            SELECT COUNT(*) FROM `/Root/ManyShard21`
+            SELECT COUNT(*) FROM `/Root/ManyShard24`
         )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         result.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
@@ -1495,7 +1498,7 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
         UNIT_ASSERT(!to_lower(TString{result.GetIssues().ToString()}).Contains("query result"));
         if (useSink) {
-            UNIT_ASSERT(result.GetIssues().ToString().contains("Stream write queries aren't allowed"));
+            UNIT_ASSERT(result.GetIssues().ToString().contains("Out of buffer memory"));
         }
     }
 }

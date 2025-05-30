@@ -1,5 +1,6 @@
 #include "impl.h"
 #include "config.h"
+#include "group_geometry_info.h"
 
 namespace NKikimr::NBsController {
 
@@ -89,6 +90,7 @@ namespace NKikimr::NBsController {
 
         GroupFailureModelChanged.insert(group->ID);
         group->CalculateGroupStatus();
+        group->CalculateLayoutStatus(&Self, group->Topology.get(), {});
 
         NKikimrBlobDepot::TBlobDepotConfig config;
         config.SetVirtualGroupId(group->ID.GetRawId());
@@ -255,6 +257,14 @@ namespace NKikimr::NBsController {
                     State->DeleteExistingGroup(group->ID);
                 }
                 group->CalculateGroupStatus();
+                group->CalculateLayoutStatus(Self, group->Topology.get(), [&] {
+                    const auto& pools = State->StoragePools.Get();
+                    if (const auto it = pools.find(group->StoragePoolId); it != pools.end()) {
+                        return TGroupGeometryInfo(group->Topology->GType, it->second.GetGroupGeometry());
+                    }
+                    Y_DEBUG_ABORT();
+                    return TGroupGeometryInfo();
+                });
                 TString error;
                 if (State->Changed() && !Self->CommitConfigUpdates(*State, true, true, true, txc, &error)) {
                     STLOG(PRI_ERROR, BS_CONTROLLER, BSCVG08, "failed to commit update", (VirtualGroupId, GroupId), (Error, error));

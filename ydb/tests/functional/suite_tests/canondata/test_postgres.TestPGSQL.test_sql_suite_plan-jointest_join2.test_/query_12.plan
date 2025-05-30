@@ -29,16 +29,65 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "Limit",
+                                        "Node Type": "TopSort-LeftJoin (MapJoin)",
                                         "Operators": [
                                             {
                                                 "Inputs": [
                                                     {
-                                                        "ExternalPlanNodeId": 46
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
                                                     }
                                                 ],
                                                 "Limit": "1001",
-                                                "Name": "Limit"
+                                                "Name": "TopSort",
+                                                "TopSortBy": "row.x1"
+                                            },
+                                            {
+                                                "Condition": "x_1.x1 = xx.x1",
+                                                "Inputs": [
+                                                    {
+                                                        "ExternalPlanNodeId": 19
+                                                    },
+                                                    {
+                                                        "ExternalPlanNodeId": 11
+                                                    }
+                                                ],
+                                                "Name": "LeftJoin (MapJoin)"
                                             }
                                         ],
                                         "PlanNodeId": 47,
@@ -49,27 +98,24 @@
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "Node Type": "Sort-Union",
+                                                        "CTE Name": "precompute_0_1",
+                                                        "Node Type": "LeftJoin (MapJoin)-ConstantExpr",
                                                         "Operators": [
                                                             {
                                                                 "Inputs": [
                                                                     {
                                                                         "InternalOperatorId": 1
-                                                                    }
-                                                                ],
-                                                                "Name": "Sort",
-                                                                "SortBy": "row.x1"
-                                                            },
-                                                            {
-                                                                "Inputs": [
-                                                                    {
-                                                                        "ExternalPlanNodeId": 44
                                                                     },
                                                                     {
-                                                                        "ExternalPlanNodeId": 30
+                                                                        "ExternalPlanNodeId": 17
                                                                     }
                                                                 ],
-                                                                "Name": "Union"
+                                                                "Name": "LeftJoin (MapJoin)"
+                                                            },
+                                                            {
+                                                                "Inputs": [],
+                                                                "Name": "ToFlow",
+                                                                "ToFlow": "precompute_0_1"
                                                             }
                                                         ],
                                                         "PlanNodeId": 45,
@@ -603,70 +649,23 @@
             {
                 "Node Type": "Precompute_0_1",
                 "Parent Relationship": "InitPlan",
-                "PlanNodeId": 10,
+                "PlanNodeId": 3,
                 "PlanNodeType": "Materialize",
                 "Plans": [
                     {
                         "Node Type": "Collect",
-                        "PlanNodeId": 9,
+                        "PlanNodeId": 2,
                         "Plans": [
                             {
-                                "CTE Name": "Union_5",
+                                "CTE Name": "Stage_5",
                                 "Node Type": "UnionAll",
-                                "PlanNodeId": 8,
+                                "PlanNodeId": 1,
                                 "PlanNodeType": "Connection"
                             }
                         ]
                     }
                 ],
                 "Subplan Name": "CTE precompute_0_1"
-            },
-            {
-                "Node Type": "Precompute_0_2",
-                "Parent Relationship": "InitPlan",
-                "PlanNodeId": 7,
-                "PlanNodeType": "Materialize",
-                "Plans": [
-                    {
-                        "Node Type": "Collect",
-                        "PlanNodeId": 6,
-                        "Plans": [
-                            {
-                                "CTE Name": "Union_5",
-                                "Node Type": "UnionAll",
-                                "PlanNodeId": 5,
-                                "PlanNodeType": "Connection"
-                            }
-                        ]
-                    }
-                ],
-                "Subplan Name": "CTE precompute_0_2"
-            },
-            {
-                "Node Type": "Precompute_0_3",
-                "Parent Relationship": "InitPlan",
-                "PlanNodeId": 4,
-                "PlanNodeType": "Materialize",
-                "Plans": [
-                    {
-                        "Node Type": "Stage",
-                        "PlanNodeId": 3
-                    }
-                ],
-                "Subplan Name": "CTE precompute_0_3"
-            },
-            {
-                "Node Type": "Precompute_0_4",
-                "Parent Relationship": "InitPlan",
-                "PlanNodeId": 2,
-                "PlanNodeType": "Materialize",
-                "Plans": [
-                    {
-                        "Node Type": "Stage",
-                        "PlanNodeId": 1
-                    }
-                ],
-                "Subplan Name": "CTE precompute_0_4"
             }
         ],
         "Stats": {

@@ -223,7 +223,7 @@ void THive::ExecuteProcessBootQueue(NIceDb::TNiceDb&, TSideEffects& sideEffects)
     THPTimer bootQueueProcessingTimer;
     if (ProcessWaitQueueScheduled) {
         BLOG_D("Handle ProcessWaitQueue (size: " << BootQueue.WaitQueue.size() << ")");
-        BootQueue.MoveFromWaitQueueToBootQueue();
+        BootQueue.IncludeWaitQueue();
         ProcessWaitQueueScheduled = false;
     }
     ProcessBootQueueScheduled = false;
@@ -231,7 +231,9 @@ void THive::ExecuteProcessBootQueue(NIceDb::TNiceDb&, TSideEffects& sideEffects)
     ui64 tabletsStarted = 0;
     TInstant postponedStart;
     TStackVec<TBootQueue::TBootQueueRecord> delayedTablets;
-    while (!BootQueue.BootQueue.empty() && processedItems < GetMaxBootBatchSize()) {
+    std::vector<TBootQueue::TBootQueueRecord> waitingTablets;
+    waitingTablets.reserve(std::min<size_t>(BootQueue.Size(), GetMaxBootBatchSize()));
+    while (!BootQueue.Empty() && processedItems < GetMaxBootBatchSize()) {
         TBootQueue::TBootQueueRecord record = BootQueue.PopFromBootQueue();
         BLOG_TRACE("Tablet " << record.TabletId << "." << record.FollowerId << " has priority " << record.Priority);
         ++processedItems;
@@ -260,7 +262,7 @@ void THive::ExecuteProcessBootQueue(NIceDb::TNiceDb&, TSideEffects& sideEffects)
                         sideEffects.Send(actorToNotify, new TEvPrivate::TEvRestartComplete(tablet->GetFullTabletId(), "boot delay"));
                     }
                     tablet->ActorsToNotifyOnRestart.clear();
-                    BootQueue.AddToWaitQueue(record); // waiting for new node
+                    waitingTablets.push_back(record); // waiting for new node
                     tablet->InWaitQueue = true;
                     continue;
                 }
@@ -280,9 +282,15 @@ void THive::ExecuteProcessBootQueue(NIceDb::TNiceDb&, TSideEffects& sideEffects)
             delayedTablets.push_back(record);
         }
     }
+    if (waitingTablets.size() == processedItems || BootQueue.WaitQueue.empty()) {
+        BootQueue.ExcludeWaitQueue();
+    }
     for (TBootQueue::TBootQueueRecord record : delayedTablets) {
         record.Priority -= 1;
         BootQueue.AddToBootQueue(record);
+    }
+    for (auto& record : waitingTablets) {
+        BootQueue.AddToWaitQueue(record);
     }
     if (TabletCounters != nullptr) {
         UpdateCounterBootQueueSize(BootQueue.BootQueue.size());
@@ -301,7 +309,7 @@ void THive::ExecuteProcessBootQueue(NIceDb::TNiceDb&, TSideEffects& sideEffects)
             BLOG_D("ProcessBootQueue - BootQueue throttling (size: " << BootQueue.BootQueue.size() << ")");
             return;
         }
-        if (processedItems == GetMaxBootBatchSize()) {
+        if (processedItems == GetMaxBootBatchSize() && !BootQueue.Empty()) {
             BLOG_D("ProcessBootQueue - rescheduling");
             ProcessBootQueue();
         } else if (postponedStart > now) {
@@ -316,8 +324,11 @@ void THive::HandleInit(TEvPrivate::TEvProcessBootQueue::TPtr&) {
     Schedule(TDuration::Seconds(1), new TEvPrivate::TEvProcessBootQueue());
 }
 
-void THive::Handle(TEvPrivate::TEvProcessBootQueue::TPtr&) {
+void THive::Handle(TEvPrivate::TEvProcessBootQueue::TPtr& ev) {
     BLOG_TRACE("ProcessBootQueue - executing");
+    if (ev->Get()->ProcessWaitQueue) {
+        ProcessWaitQueue();
+    }
     Execute(CreateProcessBootQueue());
 }
 
@@ -581,6 +592,10 @@ void THive::Handle(TEvPrivate::TEvBootTablets::TPtr&) {
 
 void THive::Handle(TEvHive::TEvInitMigration::TPtr& ev) {
     BLOG_D("Handle InitMigration " << ev->Get()->Record);
+    if (AreWeRootHive()) {
+        Send(ev->Sender, new TEvHive::TEvInitMigrationReply(NKikimrProto::ERROR));
+        return;
+    }
     if (MigrationState == NKikimrHive::EMigrationState::MIGRATION_READY || MigrationState == NKikimrHive::EMigrationState::MIGRATION_COMPLETE) {
         if (ev->Get()->Record.GetMigrationFilter().GetFilterDomain().GetSchemeShard() == 0 && GetMySubDomainKey().GetSchemeShard() == 0) {
             BLOG_ERROR("Migration ignored - unknown domain");
@@ -1708,6 +1723,22 @@ void THive::UpdateCounterTabletChannelHistorySize() {
     }
 }
 
+void THive::UpdateCounterNodesDown(i64 nodesDownDiff) {
+    if (TabletCounters != nullptr) {
+        auto& counter = TabletCounters->Simple()[NHive::COUNTER_NODES_DOWN];
+        auto newValue = counter.Get() + nodesDownDiff;
+        counter.Set(newValue);
+    }
+}
+
+void THive::UpdateCounterNodesFrozen(i64 nodesFrozenDiff) {
+    if (TabletCounters != nullptr) {
+        auto& counter = TabletCounters->Simple()[NHive::COUNTER_NODES_FROZEN];
+        auto newValue = counter.Get() + nodesFrozenDiff;
+        counter.Set(newValue);
+    }
+}
+
 void THive::RecordTabletMove(const TTabletMoveInfo& moveInfo) {
     TabletMoveHistory.PushBack(moveInfo);
     TabletCounters->Cumulative()[NHive::COUNTER_TABLETS_MOVED].Increment(1);
@@ -2240,14 +2271,14 @@ TResourceRawValues THive::GetDefaultResourceInitialMaximumValues() {
 }
 
 void THive::ProcessTabletBalancer() {
-    if (!ProcessTabletBalancerScheduled && !ProcessTabletBalancerPostponed && BootQueue.BootQueue.empty()) {
+    if (!ProcessTabletBalancerScheduled && !ProcessTabletBalancerPostponed && BootQueue.Empty()) {
         Schedule(GetBalancerCooldown(LastBalancerTrigger), new TEvPrivate::TEvProcessTabletBalancer());
         ProcessTabletBalancerScheduled = true;
     }
 }
 
 void THive::ProcessStorageBalancer() {
-    if (!ProcessStorageBalancerScheduled && BootQueue.BootQueue.empty()) {
+    if (!ProcessStorageBalancerScheduled && BootQueue.Empty()) {
         Schedule(GetBalancerCooldown(EBalancerType::Storage), new TEvPrivate::TEvProcessStorageBalancer());
         ProcessStorageBalancerScheduled = true;
     }
@@ -2484,10 +2515,7 @@ void THive::UpdateTotalResourceValues(
     TInstant now = TInstant::Now();
 
     if (LastResourceChangeReaction + GetResourceChangeReactionPeriod() < now) {
-        // in case we had overloaded nodes
-        if (!BootQueue.WaitQueue.empty()) {
-            ProcessWaitQueue();
-        } else if (!BootQueue.BootQueue.empty()) {
+        if (!BootQueue.Empty()) {
             ProcessBootQueue();
         }
         ProcessTabletBalancer();
@@ -3085,6 +3113,7 @@ STFUNC(THive::StateInit) {
         hFunc(TEvInterconnect::TEvNodesInfo, Handle);
         hFunc(TEvPrivate::TEvProcessBootQueue, HandleInit);
         hFunc(TEvPrivate::TEvProcessTabletBalancer, HandleInit);
+        hFunc(TEvPrivate::TEvUpdateDataCenterFollowers, HandleInit);
         // We subscribe to config updates before hive is fully loaded
         hFunc(TEvPrivate::TEvProcessIncomingEvent, Handle);
         fFunc(NConsole::TEvConsole::TEvConfigNotificationRequest::EventType, EnqueueIncomingEvent);
@@ -3511,6 +3540,11 @@ void THive::Handle(TEvPrivate::TEvUpdateDataCenterFollowers::TPtr& ev) {
         Send(SelfId(), new TEvPrivate::TEvUpdateFollowers);
         ProcessFollowerUpdatesScheduled = true;
     }
+}
+
+void THive::HandleInit(TEvPrivate::TEvUpdateDataCenterFollowers::TPtr& ev) {
+    BLOG_W("Received TEvUpdateDataCenterFollowers while in StateInit");
+    Schedule(TDuration::Seconds(1), ev->Release().Release());
 }
 
 void THive::Handle(TEvPrivate::TEvUpdateFollowers::TPtr&) {

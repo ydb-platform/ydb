@@ -1766,7 +1766,7 @@ public:
 
             for (auto& [inputIndex, sourceInfo] : SourcesMap) {
                 if (auto* source = sourceInfo.AsyncInput) {
-                    source->FillExtraStats(protoTask, last, GetMeteringStats());
+                    source->FillExtraStats(protoTask, RuntimeSettings.WithProgressStats || last, GetMeteringStats());
                 }
             }
 
@@ -1890,7 +1890,7 @@ public:
                 }
 
                 if (auto* source = sinkInfo.AsyncOutput) {
-                    source->FillExtraStats(protoTask, last, GetMeteringStats());
+                    source->FillExtraStats(protoTask, RuntimeSettings.WithProgressStats || last, GetMeteringStats());
                 }
             }
 
@@ -1915,7 +1915,7 @@ public:
                 }
 
                 if (auto* transform = transformInfo.AsyncInput) {
-                    transform->FillExtraStats(protoTask, last, GetMeteringStats());
+                    transform->FillExtraStats(protoTask, RuntimeSettings.WithProgressStats || last, GetMeteringStats());
                 }
             }
 
@@ -1978,7 +1978,7 @@ public:
             // TODO: what should happen in this case?
         }
 
-        static_cast<TDerived*>(this)->FillExtraStats(dst, last);
+        static_cast<TDerived*>(this)->FillExtraStats(dst, RuntimeSettings.WithProgressStats || last);
 
         if (last && MemoryQuota) {
             MemoryQuota->ResetProfileStats();

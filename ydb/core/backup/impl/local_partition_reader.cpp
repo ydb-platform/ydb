@@ -135,11 +135,11 @@ private:
 
         for (auto& result : readResult.GetResult()) {
             gotOffset = std::max(gotOffset, result.GetOffset());
-            records.emplace_back(result.GetOffset(), GetDeserializedData(result.GetData()).GetData());
+            records.emplace_back(result.GetOffset(), GetDeserializedData(result.GetData()).GetData(), TInstant::MilliSeconds(result.GetCreateTimestampMS()), result.GetSourceId(), result.GetSourceId(), result.GetSeqNo());
         }
         SentOffset = gotOffset + 1;
 
-        Send(Worker, new TEvWorker::TEvData(ToString(Partition), std::move(records)));
+        Send(Worker, new TEvWorker::TEvData(Partition, ToString(Partition), std::move(records)));
     }
 
     void Leave(TEvWorker::TEvGone::EStatus status) {

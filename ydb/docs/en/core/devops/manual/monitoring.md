@@ -38,10 +38,48 @@ To visualize data, use any system that supports Prometheus, such as [Zabbix](htt
 
 To set up monitoring for a local single-node {{ ydb-short-name }} cluster using [Prometheus](https://prometheus.io/) and [Grafana](https://grafana.com/):
 
-1. [Install and run](https://prometheus.io/docs/prometheus/latest/getting_started/#downloading-and-running-prometheus) Prometheus via a [configuration file](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/grafana_dashboards/local_ydb_prometheus.yml).
-1. [Install and start](https://grafana.com/docs/grafana/latest/getting-started/getting-started/) the Grafana.
-1. [Create](https://prometheus.io/docs/visualization/grafana/#creating-a-prometheus-data-source) a data source of the `prometheus` type in Grafana and attach it to a running Prometheus instance.
-1. Upload [{{ ydb-short-name }} dashboards](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/grafana_dashboards/) to Grafana.
+1. [Install](https://prometheus.io/docs/prometheus/latest/getting_started) Prometheus.
+
+1. Edit the Prometheus [configuration file](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/grafana_dashboards/local_ydb_prometheus.yml):
+
+    1. In the `targets` section specify addresses of all servers of the {{ ydb-short-name }} cluster and ports for each storage and database node that runs on the server.
+
+        For example, for the {{ ydb-short-name }} cluster that contains three servers, each server running one storage node on port 8765 and two database nodes on ports 8766 and 8767, specify nine addresses for all metrics subgroups except for the disk subgroups (for disk metrics subgroups, specify only storage node addresses):
+
+        ```json
+        static_configs:
+        - targets:
+          - ydb-s1.example.com:8765
+          - ydb-s1.example.com:8766
+          - ydb-s1.example.com:8767
+          - ydb-s2.example.com:8765
+          - ydb-s2.example.com:8766
+          - ydb-s2.example.com:8767
+          - ydb-s3.example.com:8765
+          - ydb-s3.example.com:8766
+          - ydb-s3.example.com:8767
+        ```
+
+        For a local single-node {{ ydb-short-name }} cluster, specify one address in the `targets` section:
+
+        ```json
+        - targets: ["localhost:8765"]
+        ```
+
+    2. If necessary, in the `tls_config` section, specify the [CA-issued certificate](../manual/initial-deployment.md#tls-certificates) used to sign the other TLS certificates of the {{ ydb-short-name }} cluster:
+
+       ```json
+       tls_config:
+           ca_file: '<ydb-ca-file>'
+       ```
+
+2. [Run](https://prometheus.io/docs/prometheus/latest/getting_started/#starting-prometheus) Prometheus using the edited configuration file.
+
+3. [Install and start](https://grafana.com/docs/grafana/latest/getting-started/getting-started/) Grafana.
+
+4. [Create](https://prometheus.io/docs/visualization/grafana/#creating-a-prometheus-data-source) a data source of the `prometheus` type in Grafana, and attach it to the running Prometheus instance.
+
+5. Upload [{{ ydb-short-name }} dashboards](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/helm/ydb-prometheus/dashboards) to Grafana.
 
 To upload dashboards, use the Grafana UI [Import](https://grafana.com/docs/grafana/latest/dashboards/export-import/#import-dashboard) tool or run a [script](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/grafana_dashboards/local_upload_dashboards.sh). Please note that the script uses [basic authentication](https://grafana.com/docs/grafana/latest/http_api/create-api-tokens-for-org/#authentication) in Grafana. For other cases, modify the script.
 

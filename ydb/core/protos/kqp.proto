@@ -69,9 +69,37 @@ enum EIsolationLevel {
 
 message TTopicOperationsRequest {
     optional string Consumer = 1;
-    repeated Ydb.Topic.UpdateOffsetsInTransactionRequest.TopicOffsets Topics = 2;
+    repeated TopicOffsets Topics = 2;
     optional uint32 SupportivePartition = 3;
+
+    message TopicOffsets {
+        // Topic path.
+        optional string path = 1;
+
+        // Ranges of offsets by partitions.
+        repeated PartitionOffsets partitions = 2;
+
+        message PartitionOffsets {
+            // Partition identifier.
+            optional int64 partition_id = 1;
+
+            // List of offset ranges.
+            repeated OffsetsRange partition_offsets = 2;
+
+            optional bool force_commit = 3;
+            optional bool kill_read_session = 4;
+            optional bool only_check_commited_to_finish = 5;
+            optional string read_session_id = 6;
+
+            message OffsetsRange {
+                optional int64 start = 1;
+                optional int64 end = 2;
+            }
+        }
+    }
 }
+
+
 
 message TTopicOperationsResponse {
     message TWriteId {
@@ -738,6 +766,7 @@ message TKqpTableSinkSettings {
         MODE_INSERT = 2;
         MODE_DELETE = 3;
         MODE_UPDATE = 4;
+        MODE_FILL = 5;
     }
 
     optional NKqpProto.TKqpPhyTableId Table = 3;
@@ -755,6 +784,7 @@ message TKqpTableSinkSettings {
     optional NKikimrDataEvents.ELockMode LockMode = 15;
     optional bool EnableStreamWrite = 16;
     optional bool IsBatch = 17;
+    repeated string InputColumns = 18; // Only for MODE_FILL
 }
 
 message TKqpStreamLookupSettings {

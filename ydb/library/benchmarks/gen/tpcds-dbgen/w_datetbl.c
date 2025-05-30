@@ -100,7 +100,7 @@ mk_w_date (void * row, ds_key_t index)
     mk_bkey(&r->d_date_id[0], nTemp, D_DATE_ID);
     jtodt (&temp_date, nTemp);
     r->d_year = temp_date.year;
-    r->d_dow = set_dow (&temp_date);
+    r->d_dow = set_dow (&temp_date) % 7;
     r->d_moy = temp_date.month;
     r->d_dom = temp_date.day;
     /* set the sequence counts; assumes that the date table starts on a year boundary */
@@ -113,10 +113,6 @@ mk_w_date (void * row, ds_key_t index)
     r->d_fy_year = r->d_year;
     r->d_fy_quarter_seq = r->d_quarter_seq;
     r->d_fy_week_seq = r->d_week_seq;
-    if (r->d_dow >= MAXINT) {
-      INTERNAL("Int overflow for d_dow");
-      exit(EXIT_FAILURE);
-   }
     r->d_day_name = weekday_names[r->d_dow + 1];
     dist_member (&r->d_holiday, "calendar", day_index, 8);
     if ((r->d_dow == 5) || (r->d_dow == 6))
@@ -281,7 +277,7 @@ vld_w_date(int nTable, ds_key_t kRow, int *Permutation)
     mk_bkey(&r->d_date_id[0], nTemp, D_DATE_ID);
     jtodt (&temp_date, nTemp);
     r->d_year = temp_date.year;
-    r->d_dow = set_dow (&temp_date);
+    r->d_dow = set_dow (&temp_date) % 7;
     r->d_moy = temp_date.month;
     r->d_dom = temp_date.day;
     /* set the sequence counts; assumes that the date table starts on a year boundary */
@@ -294,10 +290,6 @@ vld_w_date(int nTable, ds_key_t kRow, int *Permutation)
     r->d_fy_year = r->d_year;
     r->d_fy_quarter_seq = r->d_quarter_seq;
     r->d_fy_week_seq = r->d_week_seq;
-    if (r->d_dow >= MAXINT) {
-      INTERNAL("Int overflow for d_dow");
-      exit(EXIT_FAILURE);
-   }
     r->d_day_name = weekday_names[r->d_dow + 1];
     dist_member (&r->d_holiday, "calendar", day_index, 8);
     if ((r->d_dow == 5) || (r->d_dow == 6))

@@ -110,6 +110,18 @@ public:
         TString Database;
         TString CaCerts;
         TString CaCertsFile;
+        TString ClientCert;
+        TString ClientCertPrivateKey;
+        TString ClientCertPrivateKeyPassword;
+        TString ClientCertFile;
+        TString ClientCertPrivateKeyFile;
+        TString ClientCertPrivateKeyPasswordFile;
+
+        // Client cert initialization.
+        // Parses certificate from dirrefent formats.
+        // Can ask for password if private key is protected with password and it is not set in options.
+        void InitClientCert();
+
         TMap<TString, TVector<TConnectionParam>> ConnectionParams;
         bool EnableSsl = false;
         bool IsNetworkIntensive = false;
@@ -153,6 +165,8 @@ public:
 
         TCredentialsGetter CredentialsGetter;
         std::shared_ptr<ICredentialsProviderFactory> SingletonCredentialsProviderFactory = nullptr;
+
+        bool ThrowOnOptsParseError = false;
 
         TConfig(int argc, char** argv)
             : ArgC(argc)
@@ -314,7 +328,30 @@ public:
         }
     };
 
-    class TOptsParseOneLevelResult : public NLastGetopt::TOptsParseResult {
+    class TCommandOptsParseResult: public NLastGetopt::TOptsParseResult {
+    public:
+        TCommandOptsParseResult(const NLastGetopt::TOpts* options, int argc, char* argv[], bool throwOnParseError)
+            : ThrowOnParseError(throwOnParseError) {
+            Init(options, argc, const_cast<const char**>(argv));
+        }
+        virtual ~TCommandOptsParseResult() = default;
+
+        void HandleError() const override {
+            if (ThrowOnParseError) {
+                throw;
+            }
+            NLastGetopt::TOptsParseResult::HandleError();
+        }
+
+    protected:
+        TCommandOptsParseResult(bool throwOnParseError)
+            : ThrowOnParseError(throwOnParseError) {}
+
+    private:
+        bool ThrowOnParseError = false;
+    };
+
+    class TOptsParseOneLevelResult : public TCommandOptsParseResult {
     public:
         TOptsParseOneLevelResult(TConfig& config);
     };

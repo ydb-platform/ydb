@@ -2,6 +2,7 @@ LIBRARY(common)
 
 SRCS(
     aws.cpp
+    cert_format_converter.cpp
     command.cpp
     command_utils.cpp
     common.cpp
@@ -36,6 +37,7 @@ SRCS(
 
 PEERDIR(
     contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3
+    contrib/libs/openssl
     library/cpp/config
     library/cpp/getopt
     library/cpp/json/writer

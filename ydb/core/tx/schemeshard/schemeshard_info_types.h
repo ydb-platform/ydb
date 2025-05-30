@@ -272,6 +272,10 @@ struct TPartitionStats {
     ui64 MemDataSize = 0;
     ui32 ShardState = NKikimrTxDataShard::Unknown;
 
+    ui64 LocksAcquired = 0;
+    ui64 LocksWholeShard = 0;
+    ui64 LocksBroken = 0;
+
     // True when PartOwners has parts from other tablets
     bool HasBorrowedData = false;
 
@@ -393,7 +397,7 @@ struct TTableInfo : public TSimpleRefCount<TTableInfo> {
 
         ui32 NextColumnId = 1;
         ui64 AlterVersion = 0;
-        THashMap<ui32, TColumn> Columns;
+        TMap<ui32, TColumn> Columns;
         TVector<ui32> KeyColumnIds;
         bool IsBackup = false;
         bool IsRestore = false;
@@ -437,7 +441,7 @@ struct TTableInfo : public TSimpleRefCount<TTableInfo> {
     ui32 NextColumnId = 1;          // Next unallocated column id
     ui64 AlterVersion = 0;
     ui64 PartitioningVersion = 0;
-    THashMap<ui32, TColumn> Columns;
+    TMap<ui32, TColumn> Columns;
     TVector<ui32> KeyColumnIds;
     bool IsBackup = false;
     bool IsRestore = false;
@@ -2668,6 +2672,7 @@ struct TExportInfo: public TSimpleRefCount<TExportInfo> {
         Done = 240,
         Dropping = 241,
         Dropped = 242,
+        AutoDropping = 243,
         Cancellation = 250,
         Cancelled = 251,
     };
@@ -2782,12 +2787,16 @@ struct TExportInfo: public TSimpleRefCount<TExportInfo> {
         return State == EState::Dropping;
     }
 
+    bool IsAutoDropping() const {
+        return State == EState::AutoDropping;
+    }
+
     bool IsCancelling() const {
         return State == EState::Cancellation;
     }
 
     bool IsInProgress() const {
-        return IsPreparing() || IsWorking() || IsDropping() || IsCancelling();
+        return IsPreparing() || IsWorking() || IsDropping() || IsAutoDropping() || IsCancelling();
     }
 
     bool IsDone() const {
@@ -3805,8 +3814,8 @@ struct TBackupCollectionInfo : TSimpleRefCount<TBackupCollectionInfo> {
 };
 
 bool ValidateTtlSettings(const NKikimrSchemeOp::TTTLSettings& ttl,
-    const THashMap<ui32, TTableInfo::TColumn>& sourceColumns,
-    const THashMap<ui32, TTableInfo::TColumn>& alterColumns,
+    const TMap<ui32, TTableInfo::TColumn>& sourceColumns,
+    const TMap<ui32, TTableInfo::TColumn>& alterColumns,
     const THashMap<TString, ui32>& colName2Id,
     const TSubDomainInfo& subDomain, TString& errStr);
 

@@ -13,28 +13,58 @@
 
 namespace NKikimr::NReplication::NService {
 
-TEvWorker::TEvData::TRecord::TRecord(ui64 offset, const TString& data, TInstant createTime)
+TEvWorker::TEvData::TRecord::TRecord(ui64 offset, const TString& data, TInstant createTime, const TString& messageGroupId, const TString& producerId, ui64 seqNo)
     : Offset(offset)
     , Data(data)
     , CreateTime(createTime)
+    , MessageGroupId(messageGroupId)
+    , ProducerId(producerId)
+    , SeqNo(seqNo)
 {
 }
 
-TEvWorker::TEvData::TRecord::TRecord(ui64 offset, TString&& data, TInstant createTime)
+TEvWorker::TEvData::TRecord::TRecord(ui64 offset, TString&& data, TInstant createTime, TString&& messageGroupId, TString&& producerId, ui64 seqNo)
     : Offset(offset)
     , Data(std::move(data))
     , CreateTime(createTime)
+    , MessageGroupId(std::move(messageGroupId))
+    , ProducerId(std::move(producerId))
+    , SeqNo(seqNo)
 {
 }
 
-TEvWorker::TEvData::TEvData(const TString& source, const TVector<TRecord>& records)
-    : Source(source)
+TEvWorker::TEvPoll::TEvPoll(bool skipCommit)
+    : SkipCommit(skipCommit)
+{
+}
+
+TString TEvWorker::TEvPoll::ToString() const {
+    return TStringBuilder() << ToStringHeader() << " {"
+        << " SkipCommit: " << SkipCommit
+    << " }";
+}
+
+TEvWorker::TEvCommit::TEvCommit(size_t offset)
+    : Offset(offset)
+{
+}
+
+TString TEvWorker::TEvCommit::ToString() const {
+    return TStringBuilder() << ToStringHeader() << " {"
+        << " Offset: " << Offset
+    << " }";
+}
+
+TEvWorker::TEvData::TEvData(ui32 partitionId, const TString& source, const TVector<TRecord>& records)
+    : PartitionId(partitionId)
+    , Source(source)
     , Records(records)
 {
 }
 
-TEvWorker::TEvData::TEvData(const TString& source, TVector<TRecord>&& records)
-    : Source(source)
+TEvWorker::TEvData::TEvData(ui32 partitionId, const TString& source, TVector<TRecord>&& records)
+    : PartitionId(partitionId)
+    , Source(source)
     , Records(std::move(records))
 {
 }
@@ -160,7 +190,7 @@ class TWorker: public TActorBootstrapped<TWorker> {
 
             Writer.Registered();
             if (InFlightData) {
-                Send(Writer, new TEvWorker::TEvData(InFlightData->Source, InFlightData->Records));
+                Send(Writer, new TEvWorker::TEvData(InFlightData->PartitionId, InFlightData->Source, InFlightData->Records));
             }
         } else {
             LOG_W("Handshake from unknown actor"
@@ -195,6 +225,20 @@ class TWorker: public TActorBootstrapped<TWorker> {
         }
     }
 
+    void Handle(TEvWorker::TEvCommit::TPtr& ev) {
+        LOG_D("Handle " << ev->Get()->ToString());
+
+        if (ev->Sender != Writer) {
+            LOG_W("Commit from unknown actor"
+                << ": sender# " << ev->Sender);
+            return;
+        }
+
+        if (Reader) {
+            Send(ev->Forward(Reader));
+        }
+    }
+
     void Handle(TEvWorker::TEvData::TPtr& ev) {
         LOG_D("Handle " << ev->Get()->ToString());
 
@@ -205,7 +249,7 @@ class TWorker: public TActorBootstrapped<TWorker> {
         }
 
         Y_ABORT_UNLESS(!InFlightData);
-        InFlightData = MakeHolder<TEvWorker::TEvData>(ev->Get()->Source, ev->Get()->Records);
+        InFlightData = MakeHolder<TEvWorker::TEvData>(ev->Get()->PartitionId, ev->Get()->Source, ev->Get()->Records);
 
         if (Writer) {
             Send(ev->Forward(Writer));
@@ -316,6 +360,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvWorker::TEvHandshake, Handle);
             hFunc(TEvWorker::TEvPoll, Handle);
+            hFunc(TEvWorker::TEvCommit, Handle);
             hFunc(TEvWorker::TEvData, Handle);
             hFunc(TEvWorker::TEvDataEnd, Forward);
             hFunc(TEvWorker::TEvGone, Handle);

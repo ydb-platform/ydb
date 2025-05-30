@@ -16,6 +16,7 @@ private:
 
     TSideEffects SideEffects;
     TActorId PreviousOwner;
+    bool Success = true;
 
 public:
     TTxLockTabletExecution(const NKikimrHive::TEvLockTabletExecution& rec, const TActorId& sender, const ui64 cookie, THive* hive)
@@ -43,6 +44,7 @@ public:
                     NKikimrProto::ERROR,
                     TStringBuilder() << "Trying to lock tablet " << TabletId << " to an invalid owner actor"
                 ), 0, Cookie);
+            Success = false;
             return true;
         }
 
@@ -53,6 +55,7 @@ public:
                     NKikimrProto::ERROR,
                     TStringBuilder() << "Trying to lock tablet " << TabletId << ", which doesn't exist"
                 ), 0, Cookie);
+            Success = false;
             return true;
         }
 
@@ -62,6 +65,7 @@ public:
                     NKikimrProto::ERROR,
                     TStringBuilder() << "Trying to lock tablet " << TabletId << " to " << OwnerActor << ", which is on a different node"
                 ), 0, Cookie);
+            Success = false;
             return true;
         }
 
@@ -71,6 +75,7 @@ public:
                     NKikimrProto::ERROR,
                     TStringBuilder() << "Trying to restore lock to tablet " << TabletId << ", which has expired"
                 ), 0, Cookie);
+            Success = false;
             return true;
         }
 
@@ -107,7 +112,11 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        BLOG_D("THive::TTxLockTabletExecution::Complete TabletId: " << TabletId << " SideEffects: " << SideEffects);
+        if (Success) {
+            BLOG_D("THive::TTxLockTabletExecution::Complete TabletId: " << TabletId << " SideEffects: " << SideEffects);
+        } else {
+            BLOG_NOTICE("THive::TTxLockTabletExecution::Complete TabletId: " << TabletId << " SideEffects: " << SideEffects);
+        }
         SideEffects.Complete(ctx);
     }
 

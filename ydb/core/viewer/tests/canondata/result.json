@@ -506,6 +506,218 @@
         ],
         "TotalGroups": 5
     },
+    "test.test_topic_data": {
+        "response_compressed": {
+            "EndOffset": 21,
+            "Messages": [
+                {
+                    "Codec": 1,
+                    "Message": "Y29tcHJlc3NlZC1tZXNzYWdlLTA=",
+                    "Offset": 11,
+                    "OriginalSize": 20,
+                    "SeqNo": 12,
+                    "StorageSize": 38
+                },
+                {
+                    "Codec": 1,
+                    "Message": "Y29tcHJlc3NlZC1tZXNzYWdlLTE=",
+                    "Offset": 12,
+                    "OriginalSize": 20,
+                    "SeqNo": 13,
+                    "StorageSize": 38
+                },
+                {
+                    "Codec": 1,
+                    "Message": "Y29tcHJlc3NlZC1tZXNzYWdlLTI=",
+                    "Offset": 13,
+                    "OriginalSize": 20,
+                    "SeqNo": 14,
+                    "StorageSize": 38
+                },
+                {
+                    "Codec": 1,
+                    "Message": "Y29tcHJlc3NlZC1tZXNzYWdlLTM=",
+                    "Offset": 14,
+                    "OriginalSize": 20,
+                    "SeqNo": 15,
+                    "StorageSize": 38
+                },
+                {
+                    "Codec": 1,
+                    "Message": "Y29tcHJlc3NlZC1tZXNzYWdlLTQ=",
+                    "Offset": 15,
+                    "OriginalSize": 20,
+                    "SeqNo": 16,
+                    "StorageSize": 38
+                }
+            ],
+            "StartOffset": 0,
+            "Truncated": true
+        },
+        "response_metadata": {
+            "EndOffset": 21,
+            "Messages": [
+                {
+                    "Codec": 1,
+                    "Message": "bWVzc2FnZV93aXRoX21ldGE=",
+                    "MessageMetadata": [
+                        {
+                            "Key": "key1",
+                            "Value": "value1"
+                        },
+                        {
+                            "Key": "key2",
+                            "Value": "value2"
+                        }
+                    ],
+                    "Offset": 10,
+                    "OriginalSize": 17,
+                    "SeqNo": 11,
+                    "StorageSize": 37
+                }
+            ],
+            "StartOffset": 0,
+            "Truncated": true
+        },
+        "response_not_truncated": {
+            "EndOffset": 21,
+            "Messages": [
+                {
+                    "Codec": 1,
+                    "Message": "Y29tcHJlc3NlZC1tZXNzYWdlLTk=",
+                    "Offset": 20,
+                    "OriginalSize": 20,
+                    "SeqNo": 21,
+                    "StorageSize": 38
+                }
+            ],
+            "StartOffset": 0,
+            "Truncated": false
+        },
+        "response_read": {
+            "EndOffset": 21,
+            "Messages": [
+                {
+                    "Codec": 0,
+                    "Message": "bWVzc2FnZS0w",
+                    "Offset": 0,
+                    "OriginalSize": 9,
+                    "SeqNo": 1,
+                    "StorageSize": 9
+                },
+                {
+                    "Codec": 0,
+                    "Message": "bWVzc2FnZS0x",
+                    "Offset": 1,
+                    "OriginalSize": 9,
+                    "SeqNo": 2,
+                    "StorageSize": 9
+                },
+                {
+                    "Codec": 0,
+                    "Message": "bWVzc2FnZS0y",
+                    "Offset": 2,
+                    "OriginalSize": 9,
+                    "SeqNo": 3,
+                    "StorageSize": 9
+                },
+                {
+                    "Codec": 0,
+                    "Message": "bWVzc2FnZS0z",
+                    "Offset": 3,
+                    "OriginalSize": 9,
+                    "SeqNo": 4,
+                    "StorageSize": 9
+                },
+                {
+                    "Codec": 0,
+                    "Message": "bWVzc2FnZS00",
+                    "Offset": 4,
+                    "OriginalSize": 9,
+                    "SeqNo": 5,
+                    "StorageSize": 9
+                }
+            ],
+            "StartOffset": 0,
+            "Truncated": true
+        }
+    },
+
+    "test.test_transfer_describe": {
+        "connection_params": {
+            "connection_string": "text",
+            "database": "/Root/dedicated_db",
+            "endpoint": "text",
+            "oauth": {}
+        },
+        "error": {
+            "issues": [
+                {
+                    "message": "Discovery error: /Root/dedicated_db/TableNotExists: SCHEME_ERROR ({ <main>: Error: Path not found })",
+                    "severity": 1
+                }
+            ]
+        },
+        "row_consistency": {},
+        "self": {
+            "created_at": {
+                "plan_step": "not-zero-number-text",
+                "tx_id": "not-zero-number-text"
+            },
+            "effective_permissions": [
+                {
+                    "permission_names": [
+                        "ydb.database.connect"
+                    ],
+                    "subject": "USERS"
+                },
+                {
+                    "permission_names": [
+                        "ydb.generic.list"
+                    ],
+                    "subject": "METADATA-READERS"
+                },
+                {
+                    "permission_names": [
+                        "ydb.granular.select_row"
+                    ],
+                    "subject": "DATA-READERS"
+                },
+                {
+                    "permission_names": [
+                        "ydb.tables.modify"
+                    ],
+                    "subject": "DATA-WRITERS"
+                },
+                {
+                    "permission_names": [
+                        "ydb.granular.create_directory",
+                        "ydb.granular.write_attributes",
+                        "ydb.granular.create_table",
+                        "ydb.granular.remove_schema",
+                        "ydb.granular.create_queue",
+                        "ydb.granular.alter_schema"
+                    ],
+                    "subject": "DDL-ADMINS"
+                },
+                {
+                    "permission_names": [
+                        "ydb.access.grant"
+                    ],
+                    "subject": "ACCESS-ADMINS"
+                },
+                {
+                    "permission_names": [
+                        "ydb.generic.manage"
+                    ],
+                    "subject": "DATABASE-ADMINS"
+                }
+            ],
+            "name": "TestAsyncReplication",
+            "owner": "root@builtin",
+            "type": "REPLICATION"
+        }
+    },
     "test.test_viewer_acl": {
         "/Root": {
             "Common": {
@@ -3014,7 +3226,7 @@
                     ]
                 }
             ],
-            "version": 7
+            "version": 8
         },
         "/Root/dedicated_db": {
             "result": [
@@ -3032,7 +3244,7 @@
                     ]
                 }
             ],
-            "version": 7
+            "version": 8
         },
         "/Root/serverless_db": {
             "result": [
@@ -3050,7 +3262,7 @@
                     ]
                 }
             ],
-            "version": 7
+            "version": 8
         },
         "/Root/shared_db": {
             "result": [
@@ -3068,7 +3280,7 @@
                     ]
                 }
             ],
-            "version": 7
+            "version": 8
         }
     },
     "test.test_viewer_query_issue_13757": {
@@ -3091,7 +3303,7 @@
                     ]
                 }
             ],
-            "version": 7
+            "version": 8
         },
         "/Root/dedicated_db": {
             "result": [
@@ -3112,7 +3324,7 @@
                     ]
                 }
             ],
-            "version": 7
+            "version": 8
         },
         "/Root/serverless_db": {
             "result": [
@@ -3133,7 +3345,7 @@
                     ]
                 }
             ],
-            "version": 7
+            "version": 8
         },
         "/Root/shared_db": {
             "result": [
@@ -3154,7 +3366,7 @@
                     ]
                 }
             ],
-            "version": 7
+            "version": 8
         }
     },
     "test.test_viewer_query_issue_13945": {
@@ -3174,7 +3386,7 @@
                     ]
                 }
             ],
-            "version": 7
+            "version": 8
         },
         "/Root/dedicated_db": {
             "result": [
@@ -3192,7 +3404,7 @@
                     ]
                 }
             ],
-            "version": 7
+            "version": 8
         },
         "/Root/serverless_db": {
             "result": [
@@ -3210,7 +3422,7 @@
                     ]
                 }
             ],
-            "version": 7
+            "version": 8
         },
         "/Root/shared_db": {
             "result": [
@@ -3228,7 +3440,7 @@
                     ]
                 }
             ],
-            "version": 7
+            "version": 8
         }
     },
     "test.test_viewer_sysinfo": {
@@ -4713,5 +4925,133 @@
     },
     "test.test_wait_for_cluster_ready": {
         "wait_good": true
+    },
+    "test.test_topic_data": {
+        "response_read": {
+            "Messages": [
+                {
+                    "Codec": 0, "StorageSize": 9, "SeqNo": 1, "Message": "bWVzc2FnZS0w", "OriginalSize": 9, "Offset": 0,
+                    "CreateTimestamp": "not-zero-number", "WriteTimestamp": "not-zero-number", "TimestampDiff": "not-zero-number", "ProducerId": "not-zero-number-text"
+                },
+                {
+                    "Codec": 0, "StorageSize": 9, "SeqNo": 2, "Message": "bWVzc2FnZS0x", "OriginalSize": 9, "Offset": 1,
+                    "CreateTimestamp": "not-zero-number", "WriteTimestamp": "not-zero-number", "TimestampDiff": "not-zero-number", "ProducerId": "not-zero-number-text"
+                },
+                {
+                    "Codec": 0, "StorageSize": 9, "SeqNo": 3, "Message": "bWVzc2FnZS0y", "OriginalSize": 9, "Offset": 2,
+                    "CreateTimestamp": "not-zero-number", "WriteTimestamp": "not-zero-number", "TimestampDiff": "not-zero-number", "ProducerId": "not-zero-number-text"
+                },
+                {
+                    "Codec": 0, "StorageSize": 9, "SeqNo": 4, "Message": "bWVzc2FnZS0z", "OriginalSize": 9, "Offset": 3,
+                    "CreateTimestamp": "not-zero-number", "WriteTimestamp": "not-zero-number", "TimestampDiff": "not-zero-number", "ProducerId": "not-zero-number-text"
+                },
+                {
+                    "Codec": 0, "StorageSize": 9, "SeqNo": 5, "Message": "bWVzc2FnZS00", "OriginalSize": 9, "Offset": 4,
+                    "CreateTimestamp": "not-zero-number", "WriteTimestamp": "not-zero-number", "TimestampDiff": "not-zero-number", "ProducerId": "not-zero-number-text"
+                }
+            ],
+            "StartOffset": 0,
+            "EndOffset": 21,
+            "Truncated": false
+        },
+        "response_truncated": {
+            "EndOffset": 21,
+            "Messages": [
+                {
+                    "Codec": 1,
+                    "CreateTimestamp": "not-zero-number",
+                    "Message": "Y29tcHI=",
+                    "Offset": 20,
+                    "OriginalSize": 20,
+                    "ProducerId": "not-zero-number-text",
+                    "SeqNo": 21,
+                    "StorageSize": 38,
+                    "TimestampDiff": "not-zero-number",
+                    "WriteTimestamp": "not-zero-number"
+                }
+            ],
+            "StartOffset": 0,
+            "Truncated": true
+        },
+        "response_last_offset": {
+            "Messages": [
+                {
+                    "Codec": 0, "StorageSize": 9, "SeqNo": 1, "Message": "bWVzc2FnZS0w", "OriginalSize": 9, "Offset": 0,
+                    "CreateTimestamp": "not-zero-number", "WriteTimestamp": "not-zero-number", "TimestampDiff": "not-zero-number", "ProducerId": "not-zero-number-text"
+                },
+                {
+                    "Codec": 0, "StorageSize": 9, "SeqNo": 2, "Message": "bWVzc2FnZS0x", "OriginalSize": 9, "Offset": 1,
+                    "CreateTimestamp": "not-zero-number", "WriteTimestamp": "not-zero-number", "TimestampDiff": "not-zero-number", "ProducerId": "not-zero-number-text"
+                },
+                {
+                    "Codec": 0, "StorageSize": 9, "SeqNo": 3, "Message": "bWVzc2FnZS0y", "OriginalSize": 9, "Offset": 2,
+                    "CreateTimestamp": "not-zero-number", "WriteTimestamp": "not-zero-number", "TimestampDiff": "not-zero-number", "ProducerId": "not-zero-number-text"
+                }
+            ],
+            "StartOffset": 0,
+            "EndOffset": 21,
+            "Truncated": false
+        },
+        "response_metadata": {
+            "Messages": [
+                {
+                    "Codec": 1, "StorageSize": 37, "SeqNo": 11,
+                    "MessageMetadata": [
+                        {"Value": "value1", "Key": "key1"},
+                        {"Value": "value2", "Key": "key2"}],
+                    "Message": "bWVzc2FnZV93aXRoX21ldGE=", "OriginalSize": 17, "Offset": 10,
+                    "CreateTimestamp": "not-zero-number", "WriteTimestamp": "not-zero-number", "TimestampDiff": "not-zero-number", "ProducerId": "not-zero-number-text"
+                }
+            ],
+            "StartOffset": 0,
+            "EndOffset": 21,
+            "Truncated": false
+        },
+        "response_compressed": {
+            "Messages": [
+                {
+                    "Codec": 1, "StorageSize": 38, "SeqNo": 12, "Message": "Y29tcHJlc3NlZC1tZXNzYWdlLTA=", "OriginalSize": 20, "Offset": 11,
+                    "CreateTimestamp": "not-zero-number", "WriteTimestamp": "not-zero-number", "TimestampDiff": "not-zero-number", "ProducerId": "not-zero-number-text"
+                },
+                {
+                    "Codec": 1, "StorageSize": 38, "SeqNo": 13, "Message": "Y29tcHJlc3NlZC1tZXNzYWdlLTE=", "OriginalSize": 20, "Offset": 12,
+                    "CreateTimestamp": "not-zero-number", "WriteTimestamp": "not-zero-number", "TimestampDiff": "not-zero-number", "ProducerId": "not-zero-number-text"
+                },
+                {
+                    "Codec": 1, "StorageSize": 38, "SeqNo": 14, "Message": "Y29tcHJlc3NlZC1tZXNzYWdlLTI=", "OriginalSize": 20, "Offset": 13,
+                    "CreateTimestamp": "not-zero-number", "WriteTimestamp": "not-zero-number", "TimestampDiff": "not-zero-number", "ProducerId": "not-zero-number-text"
+                },
+                {
+                    "Codec": 1, "StorageSize": 38, "SeqNo": 15, "Message": "Y29tcHJlc3NlZC1tZXNzYWdlLTM=", "OriginalSize": 20, "Offset": 14,
+                    "CreateTimestamp": "not-zero-number", "WriteTimestamp": "not-zero-number", "TimestampDiff": "not-zero-number", "ProducerId": "not-zero-number-text"
+                },
+                {
+                    "Codec": 1, "StorageSize": 38, "SeqNo": 16, "Message": "Y29tcHJlc3NlZC1tZXNzYWdlLTQ=", "OriginalSize": 20, "Offset": 15,
+                    "CreateTimestamp": "not-zero-number", "WriteTimestamp": "not-zero-number", "TimestampDiff": "not-zero-number", "ProducerId": "not-zero-number-text"
+                }
+            ],
+            "StartOffset": 0,
+            "EndOffset": 21,
+            "Truncated": false
+        },
+        "response_not_truncated": {
+            "Messages": [
+                {
+                    "Codec": 1, "StorageSize": 38, "SeqNo": 21, "Message": "Y29tcHJlc3NlZC1tZXNzYWdlLTk=",  "OriginalSize": 20, "Offset": 20,
+                    "CreateTimestamp": "not-zero-number", "WriteTimestamp": "not-zero-number", "TimestampDiff": "not-zero-number", "ProducerId": "not-zero-number-text"
+                }
+            ],
+            "StartOffset": 0,
+            "EndOffset": 21,
+            "Truncated": false
+        },
+        "no_partition": {
+            "status_code": 400,
+            "text": "Parameter 'partition' is necessary"
+        },
+        "both_offset_and_ts": {
+            "status_code": 400,
+            "text": "Only read_timestamp or offset parameter may be specified, not both"
+        }
     }
 }

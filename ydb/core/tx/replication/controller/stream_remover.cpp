@@ -37,10 +37,7 @@ class TStreamRemover: public TActorBootstrapped<TStreamRemover> {
                 .AppendDropChangefeeds(StreamName)));
             break;
         case TReplication::ETargetKind::Transfer:
-            // TODO drop consumer
-            Send(Parent, new TEvPrivate::TEvDropStreamResult(ReplicationId, TargetId, NYdb::TStatus{NYdb::EStatus::SUCCESS, NYdb::NIssue::TIssues{}}));
-            PassAway();
-            return;
+            Y_ABORT("Unreachable");
         }
 
         Become(&TThis::StateWork);
@@ -102,7 +99,13 @@ public:
     }
 
     void Bootstrap() {
-        RequestPermission();
+        switch (Kind) {
+        case TReplication::ETargetKind::Table:
+        case TReplication::ETargetKind::IndexTable:
+            return RequestPermission();
+        case TReplication::ETargetKind::Transfer:
+            Y_ABORT("Unreachable");
+        }
     }
 
     STATEFN(StateBase) {

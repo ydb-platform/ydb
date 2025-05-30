@@ -1,0 +1,13 @@
+items:
+  - name: Обзор
+    href: index.md
+  - name: Команды кластера
+    href: cluster/index.md
+    include:
+      mode: link
+      path: cluster/toc_p.yaml
+  - name: Команды узла
+    href: node/index.md
+    include:
+      mode: link
+      path: node/toc_p.yaml

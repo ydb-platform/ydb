@@ -2021,7 +2021,7 @@ public:
                 options = L(options, Q(Y(Q("password"), password)));
             } else if (Params->Hash) {
                 options = L(options, Q(Y(Q("hash"), hash)));
-            } else {
+            } else if (Params->IsPasswordNull) {
                 options = L(options, Q(Y(Q("nullPassword"))));
             }
 

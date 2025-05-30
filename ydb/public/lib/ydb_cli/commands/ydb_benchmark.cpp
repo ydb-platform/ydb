@@ -12,7 +12,7 @@ namespace NYdb::NConsoleClient {
     TWorkloadCommandBenchmark::TWorkloadCommandBenchmark(NYdbWorkload::TWorkloadParams& params, const NYdbWorkload::IWorkloadQueryGenerator::TWorkloadType& workload)
         : TWorkloadCommandBase(workload.CommandName, params, NYdbWorkload::TWorkloadParams::ECommandType::Run, workload.Description, workload.Type)
     {
-
+        RetrySettings.MaxRetries(0);
     }
 
 
@@ -43,6 +43,7 @@ void TWorkloadCommandBenchmark::Config(TConfig& config) {
     config.Opts->AddLongOption("query-prefix", "Query prefix.\nEvery prefix is a line that will be added to the beginning of each query. For multiple prefixes lines use this option several times.")
         .AppendTo(&QuerySettings);
     config.Opts->MutuallyExclusive("query-prefix", "query-settings");
+    config.Opts->AddLongOption("retries", "Max retry count for every request.").StoreResult(&RetrySettings.MaxRetries_).DefaultValue(RetrySettings.MaxRetries_);
     auto fillTestCases = [](TStringBuf line, std::function<void(ui32)>&& op) {
         for (const auto& token : StringSplitter(line).Split(',').SkipEmpty()) {
             TStringBuf part = token.Token();
@@ -352,7 +353,7 @@ int TWorkloadCommandBenchmark::RunBench(TClient* client, NYdbWorkload::IWorkload
             TQueryBenchmarkResult res = TQueryBenchmarkResult::Error("undefined", "undefined", "undefined");
             try {
                 if (client) {
-                    res = Explain(query, *client, GetDeadline());
+                    res = Explain(query, *client, GetBenchmarkSettings(false));
                 } else {
                     res = TQueryBenchmarkResult::Result(TQueryBenchmarkResult::TRawResults(), TDuration::Zero(), "", "");
                 }
@@ -369,18 +370,13 @@ int TWorkloadCommandBenchmark::RunBench(TClient* client, NYdbWorkload::IWorkload
                 break;
             }
             TQueryBenchmarkResult res = TQueryBenchmarkResult::Error("undefined", "undefined", "undefined");
-
-            TQueryBenchmarkSettings settings;
-            settings.Deadline = GetDeadline();
-            settings.WithProgress = true;
-
-            if (PlanFileName) {
-                settings.PlanFileName = TStringBuilder() << PlanFileName << "." << queryN << "." << ToString(i) << ".in_progress";
-            }
-
             try {
                 if (client) {
-                    res = Execute(query, *client, settings);
+                    auto settings = GetBenchmarkSettings(true);
+                    if (PlanFileName) {
+                        settings.PlanFileName = TStringBuilder() << PlanFileName << "." << queryN << "." << ToString(i) << ".in_progress";
+                    }
+                            res = Execute(query, *client, settings);
                 } else {
                     res = TQueryBenchmarkResult::Result(TQueryBenchmarkResult::TRawResults(), TDuration::Zero(), "", "");
                 }
@@ -540,16 +536,18 @@ void TWorkloadCommandBenchmark::SavePlans(const BenchmarkUtils::TQueryBenchmarkR
     }
 }
 
-BenchmarkUtils::TQueryBenchmarkDeadline TWorkloadCommandBenchmark::GetDeadline() const {
-    BenchmarkUtils::TQueryBenchmarkDeadline result;
+BenchmarkUtils::TQueryBenchmarkSettings TWorkloadCommandBenchmark::GetBenchmarkSettings(bool withProgress) const {
+    BenchmarkUtils::TQueryBenchmarkSettings result;
+    result.WithProgress = withProgress;
+    result.RetrySettings = RetrySettings;
     if (GlobalDeadline != TInstant::Max()) {
-        result.Deadline = GlobalDeadline;
-        result.Name = "Global ";
+        result.Deadline.Deadline = GlobalDeadline;
+        result.Deadline.Name = "Global ";
     }
     TInstant requestDeadline = (RequestTimeout == TDuration::Zero()) ? TInstant::Max() : (Now() + RequestTimeout);
-    if (requestDeadline < result.Deadline) {
-        result.Deadline = requestDeadline;
-        result.Name = "Request";
+    if (requestDeadline < result.Deadline.Deadline) {
+        result.Deadline.Deadline = requestDeadline;
+        result.Deadline.Name = "Request";
     }
     return result;
 }

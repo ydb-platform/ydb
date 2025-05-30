@@ -143,6 +143,7 @@ message TConfigItem {
         GroupedMemoryLimiterConfig = 82;
         ReplicationConfigItem = 83;
         CompPrioritiesConfig = 85;
+        HealthCheckConfigItem = 89;
 
         NamedConfigsItem = 100;
         ClusterYamlConfigItem = 101;

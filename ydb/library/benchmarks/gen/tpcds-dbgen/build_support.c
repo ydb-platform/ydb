@@ -368,8 +368,15 @@ embed_string(char *szDest, char *szDist, int nValue, int nWeight, int nStream)
     char *szWord = NULL;
 
     pick_distribution(&szWord, szDist, nValue, nWeight, nStream);
-    nPosition = genrand_integer(NULL, DIST_UNIFORM, 0, strlen(szDest) - strlen(szWord) - 1, 0, nStream);
+    int destLen = strlen(szDest);
+    int wordLen = strlen(szWord);
+    nPosition = genrand_integer(NULL, DIST_UNIFORM, 0, destLen - wordLen - 1, 0, nStream);
     strncpy(&szDest[nPosition], szWord, strlen(szWord));
+
+    // strncpy can technically make szDest not null-terminated
+    // Even though it doesn't, due to nPosition + wordLen is less than destLen
+    // Prevent passing unterminated string. Fixing coverity issue STRING_NULL
+    szDest[destLen] = '\0';
 
     return(0);
 }

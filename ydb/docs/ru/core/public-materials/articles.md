@@ -8,6 +8,10 @@
 
 {% list tabs %}
 
+- 2025
+
+  {% include [Habr](./_includes/publications/2025/Habr.md) %}
+
 - 2024
 
   {% include [Habr](./_includes/publications/2024/Habr.md) %}

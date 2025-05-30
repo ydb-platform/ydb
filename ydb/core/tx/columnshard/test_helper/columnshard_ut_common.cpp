@@ -29,6 +29,8 @@ void TTester::Setup(TTestActorRuntime& runtime) {
 
     NOlap::TSchemaCachesManager::DropCaches();
 
+    NOlap::TSchemaCachesManager::DropCaches();
+
     ui32 domainId = 0;
     ui32 planResolution = 500;
 
@@ -495,8 +497,7 @@ namespace NKikimr::NColumnShard {
         return NOlap::TIndexInfo::BuildDefault(NOlap::TTestStoragesManager::GetInstance(), columns, pkIds);
     }
 
-    NTxUT::TPlanStep SetupSchema(TTestBasicRuntime& runtime, TActorId& sender, const TString& txBody, const ui64 txId) {
-
+    void SetupSchema(TTestBasicRuntime& runtime, TActorId& sender, const TString& txBody, const NOlap::TSnapshot& snapshot, bool succeed) {
         auto controller = NYDBTest::TControllers::GetControllerAs<NYDBTest::NColumnShard::TController>();
         while (controller && !controller->IsActiveTablet(TTestTxConfig::TxTablet0)) {
             runtime.SimulateSleep(TDuration::Seconds(1));
@@ -508,8 +509,7 @@ namespace NKikimr::NColumnShard {
         return planStep;
     }
 
-    NTxUT::TPlanStep SetupSchema(
-        TTestBasicRuntime& runtime, TActorId& sender, ui64 pathId, const TestTableDescription& table, TString codec, const ui64 txId) {
+    void SetupSchema(TTestBasicRuntime& runtime, TActorId& sender, ui64 pathId, const TestTableDescription& table, TString codec) {
         using namespace NTxUT;
         TString txBody;
         auto specials = TTestSchema::TTableSpecials().WithCodec(codec);
@@ -521,7 +521,7 @@ namespace NKikimr::NColumnShard {
         return SetupSchema(runtime, sender, txBody, txId);
     }
 
-    NTxUT::TPlanStep PrepareTablet(TTestBasicRuntime& runtime, const ui64 tableId, const std::vector<NArrow::NTest::TTestColumn>& schema, const ui32 keySize) {
+    void PrepareTablet(TTestBasicRuntime& runtime, const ui64 tableId, const std::vector<NArrow::NTest::TTestColumn>& schema, const ui32 keySize) {
         using namespace NTxUT;
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
 

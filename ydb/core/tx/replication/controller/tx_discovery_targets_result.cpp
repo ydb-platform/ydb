@@ -1,6 +1,5 @@
 #include "controller_impl.h"
-#include "target_table.h"
-#include "util.h"
+#include "target_transfer.h"
 
 #include <util/string/join.h>
 
@@ -47,15 +46,18 @@ public:
                 const auto tid = Replication->AddTarget(target.Kind, target.Config);
                 
                 TString transformLambda;
-                if (auto p = std::dynamic_pointer_cast<TTargetTransfer::TTransferConfig>(target.Config)) {
+                TString runAsUser;
+                if (auto p = std::dynamic_pointer_cast<const TTargetTransfer::TTransferConfig>(target.Config)) {
                     transformLambda = p->GetTransformLambda();
+                    runAsUser = p->GetRunAsUser();
                 }
 
                 db.Table<Schema::Targets>().Key(rid, tid).Update(
                     NIceDb::TUpdate<Schema::Targets::Kind>(target.Kind),
                     NIceDb::TUpdate<Schema::Targets::SrcPath>(target.Config->GetSrcPath()),
                     NIceDb::TUpdate<Schema::Targets::DstPath>(target.Config->GetDstPath()),
-                    NIceDb::TUpdate<Schema::Targets::TransformLambda>(transformLambda)
+                    NIceDb::TUpdate<Schema::Targets::TransformLambda>(transformLambda),
+                    NIceDb::TUpdate<Schema::Targets::RunAsUser>(runAsUser)
                 );
 
                 CLOG_N(ctx, "Add target"

@@ -10,6 +10,7 @@ SRCS(
     fake_scheme_shard.h
     minikql_compile.h
     mock_pq_metacache.h
+    storage_helpers.cpp
     tablet_flat_dummy.cpp
     tablet_helpers.cpp
     tablet_helpers.h

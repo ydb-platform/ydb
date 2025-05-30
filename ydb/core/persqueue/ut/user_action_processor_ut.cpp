@@ -653,8 +653,8 @@ void TUserActionProcessorFixture::SendProposeTransactionRequest(ui32 partition,
     auto* body = event->Record.MutableTxBody();
     auto* operation = body->MutableOperations()->Add();
     operation->SetPartitionId(partition);
-    operation->SetBegin(begin);
-    operation->SetEnd(end);
+    operation->SetCommitOffsetsBegin(begin);
+    operation->SetCommitOffsetsEnd(end);
     operation->SetConsumer(client);
     operation->SetPath(topic);
     body->SetImmediate(immediate);
@@ -679,8 +679,8 @@ void TUserActionProcessorFixture::SendProposeTransactionRequest(const TProposeTr
     for (auto& txOp : params.TxOps) {
         auto* operation = body->MutableOperations()->Add();
         operation->SetPartitionId(txOp.Partition);
-        operation->SetBegin(txOp.Begin);
-        operation->SetEnd(txOp.End);
+        operation->SetCommitOffsetsBegin(txOp.Begin);
+        operation->SetCommitOffsetsEnd(txOp.End);
         operation->SetConsumer(txOp.Consumer);
         operation->SetPath(txOp.Path);
     }

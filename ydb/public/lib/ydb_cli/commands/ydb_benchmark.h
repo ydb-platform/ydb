@@ -6,7 +6,7 @@ namespace NYdb::NConsoleClient {
 
 namespace BenchmarkUtils {
     class TQueryBenchmarkResult;
-    struct TQueryBenchmarkDeadline;
+    struct TQueryBenchmarkSettings;
 }
 
 class TWorkloadCommandBenchmark final: public TWorkloadCommandBase {
@@ -30,7 +30,7 @@ private:
     int RunBench(TClient* client, NYdbWorkload::IWorkloadQueryGenerator& workloadGen);
     void SavePlans(const BenchmarkUtils::TQueryBenchmarkResult& res, ui32 queryNum, const TStringBuf name) const;
     void PrintResult(const BenchmarkUtils::TQueryBenchmarkResult& res, IOutputStream& out, const std::string& expected) const;
-    BenchmarkUtils::TQueryBenchmarkDeadline GetDeadline() const;
+    BenchmarkUtils::TQueryBenchmarkSettings GetBenchmarkSettings(bool withProgress) const;
 
 private:
     EQueryExecutor QueryExecuterType = EQueryExecutor::Generic;
@@ -47,6 +47,7 @@ private:
     TDuration GlobalTimeout = TDuration::Zero();
     TDuration RequestTimeout = TDuration::Zero();
     TInstant GlobalDeadline = TInstant::Max();
+    NYdb::NRetry::TRetryOperationSettings RetrySettings;
 };
 
 }

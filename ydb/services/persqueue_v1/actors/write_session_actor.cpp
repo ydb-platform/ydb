@@ -1189,8 +1189,6 @@ void TWriteSessionActor<UseMigrationProtocol>::PrepareRequest(THolder<TEvWrite>&
             w->SetSourceId(NPQ::NSourceIdEncoding::EncodeSimple(SourceId));
         }
         w->SetSeqNo(writeRequest.sequence_numbers(messageIndex));
-        if (!UseDeduplication)
-            SeqNoInflight.push_back(w->GetSeqNo());
 
         w->SetCreateTimeMS(writeRequest.created_at_ms(messageIndex));
         w->SetUncompressedSize(writeRequest.blocks_uncompressed_sizes(messageIndex));
@@ -1211,7 +1209,6 @@ void TWriteSessionActor<UseMigrationProtocol>::PrepareRequest(THolder<TEvWrite>&
             w->SetDisableDeduplication(true);
         }
         w->SetSeqNo(msg.seq_no());
-        SeqNoInflight.push_back(w->GetSeqNo());
         w->SetCreateTimeMS(::google::protobuf::util::TimeUtil::TimestampToMilliseconds(msg.created_at()));
         w->SetUncompressedSize(msg.uncompressed_size());
         w->SetClientDC(ClientDC);

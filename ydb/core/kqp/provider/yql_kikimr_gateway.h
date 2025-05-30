@@ -842,6 +842,8 @@ struct TReplicationSettingsBase {
     TMaybe<TOAuthToken> OAuthToken;
     TMaybe<TStaticCredentials> StaticCredentials;
     TMaybe<TStateDone> StateDone;
+    bool StatePaused = false;
+    bool StateStandBy = false;
 
     using EFailoverMode = TStateDone::EFailoverMode;
     TStateDone& EnsureStateDone(EFailoverMode mode = EFailoverMode::Consistent) {
@@ -918,11 +920,27 @@ struct TDropReplicationSettings {
 };
 
 struct TTransferSettings : public TReplicationSettingsBase {
+
+    struct TBatching {
+        TDuration FlushInterval;
+        std::optional<ui64> BatchSizeBytes;
+    };
+
+    TMaybe<TString> ConsumerName;
+    TMaybe<TBatching> Batching;
+
+    TBatching& EnsureBatching() {
+        if (!Batching) {
+            Batching = TBatching();
+        }
+
+        return *Batching;
+    }
 };
 
 struct TCreateTransferSettings {
     TString Name;
-    TVector<std::tuple<TString, TString, TString>> Targets;
+    std::tuple<TString, TString, TString> Target;
     TTransferSettings Settings;
 };
 

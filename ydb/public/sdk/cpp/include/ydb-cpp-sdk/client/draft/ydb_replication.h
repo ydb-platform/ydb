@@ -100,6 +100,8 @@ private:
 
 struct TDoneState {};
 
+struct TPausedState {};
+
 class TErrorState {
     class TImpl;
 
@@ -131,6 +133,7 @@ public:
         Running,
         Error,
         Done,
+        Paused,
     };
 
     explicit TReplicationDescription(const Ydb::Replication::DescribeReplicationResult& desc);
@@ -145,6 +148,7 @@ public:
     const TRunningState& GetRunningState() const;
     const TErrorState& GetErrorState() const;
     const TDoneState& GetDoneState() const;
+    const TPausedState& GetPausedState() const;
 
 private:
     TConnectionParams ConnectionParams_;
@@ -158,7 +162,8 @@ private:
     std::variant<
         TRunningState,
         TErrorState,
-        TDoneState
+        TDoneState,
+        TPausedState
     > State_;
 };
 

@@ -41,7 +41,7 @@ namespace NKikimr::NPDisk {
                 // obtain the header and decrypt its encrypted part, then validate the hash
                 TMetadataHeader *header = reinterpret_cast<TMetadataHeader*>(GetBuffer());
                 header->Encrypt(cypher);
-                if (header->CheckHash()) {
+                if (header->CheckHash((ui64*)(void*)&PDisk->Format.ChunkKey)) {
                     // check we have read it all
                     const ui32 total = sizeof(TMetadataHeader) + header->Length;
                     if (total <= Buffer.size()) {
@@ -167,7 +167,7 @@ namespace NKikimr::NPDisk {
 
                     auto *header = reinterpret_cast<TMetadataHeader*>(Buffer.GetDataMut());
                     header->Encrypt(cypher);
-                    if (!header->CheckHash()) {
+                    if (!header->CheckHash((ui64*)(void*)&Format.DataKey)) {
                         req->ErrorReason = "header has is not valid";
                     } else if (header->TotalRecords != 1 || header->RecordIndex != 0 || header->SequenceNumber != 0) {
                         req->ErrorReason = "header fields are filled incorrectly";
@@ -593,7 +593,7 @@ namespace NKikimr::NPDisk {
 
                     const size_t payloadSize = Min<size_t>(slotSize, metadataSize - offset);
                     TRcBuf payload = CreateMetadataPayload(write.Metadata, offset, payloadSize, Format.SectorSize,
-                        Cfg->EnableSectorEncryption, Format.ChunkKey, Meta.NextSequenceNumber, i, numSlotsRequired);
+                        Cfg->EnableSectorEncryption, Format.ChunkKey, Meta.NextSequenceNumber, i, numSlotsRequired, (ui64*)(void*)&Format.ChunkKey);
 
                     completion->AddQuery(key, std::move(payload));
                     completion->CostNs += DriveModel.TimeForSizeNs(payload.size(), key.ChunkIdx, TDriveModel::OP_TYPE_WRITE);
@@ -617,15 +617,19 @@ namespace NKikimr::NPDisk {
                 }
 
                 TRcBuf payload = CreateMetadataPayload(write.Metadata, 0, write.Metadata.size(), DefaultSectorSize,
-                    true, fmt.DataKey, 0, 0, 1);
+                    true, fmt.DataKey, 0, 0, 1, (ui64*)(void*)&fmt.DataKey);
                 const size_t bytesToWrite = payload.size();
 
                 ui64 rawDeviceSize = 0;
-                try {
-                    bool isBlockDevice = false;
-                    DetectFileParameters(Cfg->Path, rawDeviceSize, isBlockDevice);
-                } catch (const std::exception&) {
-                    rawDeviceSize = 0;
+                if (Cfg->SectorMap) {
+                    rawDeviceSize = Cfg->SectorMap->GetDeviceSize();
+                } else {
+                    try {
+                        bool isBlockDevice = false;
+                        DetectFileParameters(Cfg->Path, rawDeviceSize, isBlockDevice);
+                    } catch (const std::exception&) {
+                        rawDeviceSize = 0;
+                    }
                 }
 
                 const ui64 deviceSizeInBytes = rawDeviceSize & ~ui64(DefaultSectorSize - 1);
@@ -714,7 +718,7 @@ namespace NKikimr::NPDisk {
     }
 
     TRcBuf TPDisk::CreateMetadataPayload(TRcBuf& metadata, size_t offset, size_t payloadSize, ui32 sectorSize,
-            bool encryption, const TKey& key, ui64 sequenceNumber, ui32 recordIndex, ui32 totalRecords) {
+        bool encryption, const TKey& key, ui64 sequenceNumber, ui32 recordIndex, ui32 totalRecords, const ui64 *magic) {
         Y_ABORT_UNLESS(offset + payloadSize <= metadata.size());
 
         Y_DEBUG_ABORT_UNLESS(IsPowerOf2(sectorSize));
@@ -745,7 +749,7 @@ namespace NKikimr::NPDisk {
             .DataHash = dataHasher.GetHashResult(),
         };
 
-        header->SetHash();
+        header->SetHash(magic);
         header->EncryptData(cypher);
         header->Encrypt(cypher);
 
@@ -787,7 +791,7 @@ namespace NKikimr::NPDisk {
             const NMeta::TSlotKey key = freeSlotKeys[i];
             const size_t payloadSize = Min<size_t>(slotSize, metadataSize - offset);
             TRcBuf payload = CreateMetadataPayload(metadata, offset, payloadSize, format.SectorSize,
-                Cfg->EnableSectorEncryption, format.ChunkKey, 1, i, numSlotsRequired);
+                Cfg->EnableSectorEncryption, format.ChunkKey, 1, i, numSlotsRequired, (ui64*)(void*)&format.ChunkKey);
             BlockDevice->PwriteSync(payload.data(), payload.size(), format.Offset(key.ChunkIdx, key.OffsetInSectors), {}, nullptr);
         }
 

@@ -273,6 +273,16 @@ class KikimrConfigGenerator(object):
             self.yaml_config["local_pg_wire_config"] = {}
             self.yaml_config["local_pg_wire_config"]["listening_port"] = os.getenv('PGWIRE_LISTENING_PORT')
 
+        # dirty hack for internal ydbd flavour
+        if "cert" in self.get_binary_path(0):
+            # Hardcoded feature flags. Should be hardcoded in binary itself
+            self.yaml_config["feature_flags"]["enable_strict_acl_check"] = True
+            self.yaml_config["feature_flags"]["enable_strict_user_management"] = True
+            self.yaml_config["feature_flags"]["enable_database_admin"] = True
+            self.yaml_config["feature_flags"]["database_yaml_config_allowed"] = True
+            self.yaml_config["feature_flags"]["enable_resource_pools"] = False
+            self.yaml_config["feature_flags"]["check_database_access_permission"] = True
+
         self.yaml_config["feature_flags"]["enable_public_api_external_blobs"] = enable_public_api_external_blobs
 
         # for faster shutdown: there is no reason to wait while tablets are drained before whole cluster is stopping
@@ -353,6 +363,11 @@ class KikimrConfigGenerator(object):
 
         if auth_config_path:
             self.yaml_config["auth_config"] = _load_yaml_config(auth_config_path)
+
+        if domain_login_only is not None:
+            if "auth_config" not in self.yaml_config:
+                self.yaml_config["auth_config"] = dict()
+            self.yaml_config["auth_config"]["domain_login_only"] = domain_login_only
 
         if fq_config_path:
             self.yaml_config["federated_query_config"] = _load_yaml_config(fq_config_path)

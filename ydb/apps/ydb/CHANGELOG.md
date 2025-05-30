@@ -1,3 +1,5 @@
+* Added `--retries` to `ydb workload <clickbenh|tpch|tpcds> run` command.
+* Added `--partition-size` param to `ydb workload <clickbench/tpcds/tpch> init`.
 * Fixed return code of command `ydb workload * run --check-canonical` for the case when benchmark query results differ from canonical ones.
 * Added support for dual configuration mode in the `ydb admin cluster config fetch` command, allowing it to handle separate cluster and storage config sections.
 * Add options for client certificates in SSL/TLS connections.
@@ -14,6 +16,8 @@
 * Include topics in local backups (`ydb tools dump` and `ydb tools restore`). In this release, only the settings of the topics are retained; messages are not included in the backup.
 * Added `ydb admin cluster dump` and `ydb admin cluster restore` commands for dumping all cluster-level data
 * Added `ydb admin database dump` and `ydb admin database restore` commands for dumping all database-level data
+* Fixed scheme error in `ydb admin cluster dump` when specifying a domain database.
+* Fixed unauthorized error in `ydb admin database restore` when multiple database admins are in dump.
 
 ## 2.19.0 ##
 

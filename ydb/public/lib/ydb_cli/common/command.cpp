@@ -120,7 +120,8 @@ std::shared_ptr<ICredentialsProviderFactory> TClientCommand::TConfig::GetSinglet
     return SingletonCredentialsProviderFactory;
 }
 
-TClientCommand::TOptsParseOneLevelResult::TOptsParseOneLevelResult(TConfig& config) {
+TClientCommand::TOptsParseOneLevelResult::TOptsParseOneLevelResult(TConfig& config)
+    : TCommandOptsParseResult(config.ThrowOnOptsParseError) {
     int _argc = 1;
     int levels = 1;
 
@@ -132,12 +133,23 @@ TClientCommand::TOptsParseOneLevelResult::TOptsParseOneLevelResult(TConfig& conf
             optName = optName.substr(0, eqPos);
             if (optName.StartsWith("--")) {
                 opt = config.Opts->FindLongOption(optName.substr(2));
-            } else {
-                opt = config.Opts->FindCharOption(optName[1]);
-            }
-            if (opt != nullptr && opt->GetHasArg() != NLastGetopt::NO_ARGUMENT) {
-                if (eqPos == TStringBuf::npos) {
+                if (opt != nullptr && opt->GetHasArg() != NLastGetopt::NO_ARGUMENT && eqPos == TStringBuf::npos) {
                     ++_argc;
+                }
+            } else {
+                if (optName.length() > 2) {
+                    // Char option list
+                    if (eqPos != TStringBuf::npos) {
+                        throw yexception() << "Char option list " << optName << " can not be followed by \"=\" sign";
+                    }
+                } else if (optName.length() == 2) {
+                    // Single char option
+                    opt = config.Opts->FindCharOption(optName[1]);
+                    if (opt != nullptr && opt->GetHasArg() != NLastGetopt::NO_ARGUMENT && eqPos == TStringBuf::npos) {
+                        ++_argc;
+                    }
+                } else {
+                    throw yexception() << "Wrong CLI argument \"" << optName << "\"";
                 }
             }
         } else {
@@ -159,7 +171,17 @@ void TClientCommand::CheckForExecutableOptions(TConfig& config) {
         if (optName.StartsWith("--")) {
             opt = config.Opts->FindLongOption(optName.substr(2));
         } else {
-            opt = config.Opts->FindCharOption(optName[1]);
+            if (optName.length() > 2) {
+                // Char option list
+                if (eqPos != TStringBuf::npos) {
+                    throw yexception() << "Char option list " << optName << " can not be followed by \"=\" sign";
+                }
+            } else if (optName.length() == 2) {
+                // Single char option
+                opt = config.Opts->FindCharOption(optName[1]);
+            } else {
+                throw yexception() << "Wrong CLI argument \"" << optName << "\"";
+            }
         }
         if (config.ExecutableOptions.find(optName) != config.ExecutableOptions.end()) {
             config.HasExecutableOptions = true;
@@ -204,7 +226,7 @@ int TClientCommand::Process(TConfig& config) {
 }
 
 void TClientCommand::SaveParseResult(TConfig& config) {
-    ParseResult = std::make_shared<NLastGetopt::TOptsParseResult>(config.Opts, config.ArgC, config.ArgV);
+    ParseResult = std::make_shared<TCommandOptsParseResult>(config.Opts, config.ArgC, config.ArgV, config.ThrowOnOptsParseError);
 }
 
 void TClientCommand::Prepare(TConfig& config) {

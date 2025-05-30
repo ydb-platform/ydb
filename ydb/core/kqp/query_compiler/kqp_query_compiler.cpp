@@ -104,7 +104,6 @@ NKqpProto::EStreamLookupStrategy GetStreamLookupStrategy(EStreamLookupStrategyTy
 
 void FillTableId(const TKqpTable& table, NKqpProto::TKqpPhyTableId& tableProto) {
     auto pathId = TKikimrPathId::Parse(table.PathId());
-
     tableProto.SetPath(TString(table.Path()));
     tableProto.SetOwnerId(pathId.OwnerId());
     tableProto.SetTableId(pathId.TableId());
@@ -1173,48 +1172,67 @@ private:
                 columns.emplace_back(item->GetName());
             }
 
-            FillTablesMap(settings.Table().Cast(), columns, tablesMap);
-            FillTableId(settings.Table().Cast(), *settingsProto.MutableTable());
+            if (settings.Mode().Cast().StringValue() != "fill_table") {
+                AFL_ENSURE(settings.Table().Cast().PathId() != "");
+                FillTableId(settings.Table().Cast(), *settingsProto.MutableTable());
+                FillTablesMap(settings.Table().Cast(), columns, tablesMap);
 
-            const auto tableMeta = TablesData->ExistingTable(Cluster, settings.Table().Cast().Path()).Metadata;
+                const auto tableMeta = TablesData->ExistingTable(Cluster, settings.Table().Cast().Path()).Metadata;
 
-            auto fillColumnProto = [] (TStringBuf columnName, const NYql::TKikimrColumnMetadata* column, NKikimrKqp::TKqpColumnMetadataProto* columnProto ) {
-                columnProto->SetId(column->Id);
-                columnProto->SetName(TString(columnName));
-                columnProto->SetTypeId(column->TypeInfo.GetTypeId());
+                auto fillColumnProto = [] (TStringBuf columnName, const NYql::TKikimrColumnMetadata* column, NKikimrKqp::TKqpColumnMetadataProto* columnProto ) {
+                    columnProto->SetId(column->Id);
+                    columnProto->SetName(TString(columnName));
+                    columnProto->SetTypeId(column->TypeInfo.GetTypeId());
 
-                if(NScheme::NTypeIds::IsParametrizedType(column->TypeInfo.GetTypeId())) {
-                    ProtoFromTypeInfo(column->TypeInfo, column->TypeMod, *columnProto->MutableTypeInfo());
+                    if(NScheme::NTypeIds::IsParametrizedType(column->TypeInfo.GetTypeId())) {
+                        ProtoFromTypeInfo(column->TypeInfo, column->TypeMod, *columnProto->MutableTypeInfo());
+                    }
+                };
+
+                for (const auto& columnName : tableMeta->KeyColumnNames) {
+                    const auto columnMeta = tableMeta->Columns.FindPtr(columnName);
+                    YQL_ENSURE(columnMeta != nullptr, "Unknown column in sink: \"" + TString(columnName) + "\"");
+
+                    auto keyColumnProto = settingsProto.AddKeyColumns();
+                    fillColumnProto(columnName, columnMeta, keyColumnProto);
                 }
-            };
 
-            for (const auto& columnName : tableMeta->KeyColumnNames) {
-                const auto columnMeta = tableMeta->Columns.FindPtr(columnName);
-                YQL_ENSURE(columnMeta != nullptr, "Unknown column in sink: \"" + TString(columnName) + "\"");
+                for (const auto& columnName : columns) {
+                    const auto columnMeta = tableMeta->Columns.FindPtr(columnName);
+                    YQL_ENSURE(columnMeta != nullptr, "Unknown column in sink: \"" + TString(columnName) + "\"");
 
-                auto keyColumnProto = settingsProto.AddKeyColumns();
-                fillColumnProto(columnName, columnMeta, keyColumnProto);
-            }
+                    auto columnProto = settingsProto.AddColumns();
+                    fillColumnProto(columnName, columnMeta, columnProto);
+                }
 
-            for (const auto& columnName : columns) {
-                const auto columnMeta = tableMeta->Columns.FindPtr(columnName);
-                YQL_ENSURE(columnMeta != nullptr, "Unknown column in sink: \"" + TString(columnName) + "\"");
+                AFL_ENSURE(tableMeta->Kind == EKikimrTableKind::Datashard || tableMeta->Kind == EKikimrTableKind::Olap);
+                const auto columnToOrder = CreateColumnToOrder(
+                    columns,
+                    tableMeta,
+                    tableMeta->Kind == EKikimrTableKind::Datashard);
+                for (const auto& columnName : columns) {
+                    settingsProto.AddWriteIndexes(columnToOrder.at(columnName));
+                }
 
-                auto columnProto = settingsProto.AddColumns();
-                fillColumnProto(columnName, columnMeta, columnProto);
-            }
+                settingsProto.SetIsOlap(tableMeta->Kind == EKikimrTableKind::Olap);
 
-            const auto columnToOrder = CreateColumnToOrder(
-                columns,
-                tableMeta,
-                settings.TableType().Cast().StringValue() == "oltp");
-            for (const auto& columnName : columns) {
-                settingsProto.AddWriteIndexes(columnToOrder.at(columnName));
-            }
+                AFL_ENSURE(settings.InconsistentWrite().Cast().StringValue() == "false");
+                settingsProto.SetInconsistentTx(false);
+            } else {
+                // Table info will be filled during execution after resolving table by name.
+                settingsProto.MutableTable()->SetPath(TString(settings.Table().Cast().Path()));
+                for (const auto& column : columns) {
+                    settingsProto.AddInputColumns(TString(column));
+                }
 
-            if (const auto inconsistentWrite = settings.InconsistentWrite().Cast(); inconsistentWrite.StringValue() == "true") {
+                AFL_ENSURE(settings.InconsistentWrite().Cast().StringValue() == "true");
                 settingsProto.SetInconsistentTx(true);
+
+                AFL_ENSURE(settings.Priority().Cast().StringValue() == "0");
+                AFL_ENSURE(settings.StreamWrite().Cast().StringValue() == "true");
             }
+
+            settingsProto.SetPriority(FromString<i64>(settings.Priority().Cast().StringValue()));
 
             if (const auto streamWrite = settings.StreamWrite().Cast(); streamWrite.StringValue() == "true") {
                 settingsProto.SetEnableStreamWrite(true);
@@ -1223,9 +1241,6 @@ private:
             if (const auto isBatch = settings.IsBatch().Cast(); isBatch.StringValue() == "true") {
                 settingsProto.SetIsBatch(true);
             }
-
-            settingsProto.SetIsOlap(settings.TableType().Cast().StringValue() == "olap");
-            settingsProto.SetPriority(FromString<i64>(settings.Priority().Cast().StringValue()));
 
             if (settings.Mode().Cast().StringValue() == "replace") {
                 settingsProto.SetType(NKikimrKqp::TKqpTableSinkSettings::MODE_REPLACE);
@@ -1237,6 +1252,8 @@ private:
                 settingsProto.SetType(NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE);
             } else if (settings.Mode().Cast().StringValue() == "update") {
                 settingsProto.SetType(NKikimrKqp::TKqpTableSinkSettings::MODE_UPDATE);
+            } else if (settings.Mode().Cast().StringValue() == "fill_table") {
+                settingsProto.SetType(NKikimrKqp::TKqpTableSinkSettings::MODE_FILL);
             } else {
                 YQL_ENSURE(false, "Unsupported sink mode");
             }

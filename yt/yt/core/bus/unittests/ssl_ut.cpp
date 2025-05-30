@@ -450,7 +450,9 @@ TEST_F(TSslTest, RequiredAndDisabledEncryptionMode)
     auto client = CreateBusClient(clientConfig);
 
     auto bus = client->CreateBus(New<TEmptyBusHandler>());
-    EXPECT_FALSE(bus->GetReadyFuture().Get().IsOK());
+    auto error = bus->GetReadyFuture().Get();
+    EXPECT_FALSE(error.IsOK());
+    EXPECT_EQ(error.GetCode(), EErrorCode::SslError);
 
     server->Stop()
         .Get()
@@ -469,7 +471,9 @@ TEST_F(TSslTest, DisabledAndRequiredEncryptionMode)
     auto client = CreateBusClient(clientConfig);
 
     auto bus = client->CreateBus(New<TEmptyBusHandler>());
-    EXPECT_FALSE(bus->GetReadyFuture().Get().IsOK());
+    auto error = bus->GetReadyFuture().Get();
+    EXPECT_FALSE(error.IsOK());
+    EXPECT_EQ(error.GetCode(), EErrorCode::SslError);
 
     server->Stop()
         .Get()
@@ -545,7 +549,9 @@ TEST_F(TSslTest, CAVerificationModeFailure)
     auto client = CreateBusClient(clientConfig);
 
     auto bus = client->CreateBus(New<TEmptyBusHandler>());
-    EXPECT_FALSE(bus->GetReadyFuture().Get().IsOK());
+    auto error = bus->GetReadyFuture().Get();
+    EXPECT_FALSE(error.IsOK());
+    EXPECT_EQ(error.GetCode(), EErrorCode::SslError);
 
     server->Stop()
         .Get()
@@ -771,7 +777,9 @@ TEST_F(TSslTest, DifferentCipherLists)
     auto client = CreateBusClient(clientConfig);
 
     auto bus = client->CreateBus(New<TEmptyBusHandler>());
-    EXPECT_FALSE(bus->GetReadyFuture().Get().IsOK());
+    auto error = bus->GetReadyFuture().Get();
+    EXPECT_FALSE(error.IsOK());
+    EXPECT_EQ(error.GetCode(), EErrorCode::SslError);
 
     server->Stop()
         .Get()

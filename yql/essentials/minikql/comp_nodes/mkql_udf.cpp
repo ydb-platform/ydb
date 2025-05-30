@@ -37,12 +37,14 @@ public:
             TString&& typeConfig,
             NUdf::TSourcePosition pos,
             const TCallableType* callableType,
+            const TCallableType* functionType,
             TType* userType)
         : TBaseComputation(mutables, EValueRepresentation::Boxed)
         , FunctionName(std::move(functionName))
         , TypeConfig(std::move(typeConfig))
         , Pos(pos)
         , CallableType(callableType)
+        , FunctionType(functionType)
         , UserType(userType)
     {
         this->Stateless = false;
@@ -65,16 +67,55 @@ public:
         }
 
         NUdf::TUnboxedValue udf(NUdf::TUnboxedValuePod(funcInfo.Implementation.Release()));
-        TValidate<TValidatePolicy,TValidateMode>::WrapCallable(CallableType, udf, TStringBuilder() << "FunctionWithConfig<" << FunctionName << ">");
+        TValidate<TValidatePolicy,TValidateMode>::WrapCallable(FunctionType, udf, TStringBuilder() << "FunctionWithConfig<" << FunctionName << ">");
+        ExtendArgs(udf, CallableType, funcInfo.FunctionType);
         return udf.Release();
     }
 private:
+    // xXX: This class implements the wrapper to properly handle
+    // the case when the signature of the emitted callable (i.e.
+    // callable type) requires less arguments than the actual
+    // function (i.e. function type). It wraps the unboxed value
+    // with the resolved UDF to introduce the bridge in the
+    // Run chain, preparing the valid argument vector for the
+    // chosen UDF implementation.
+    class TExtendedArgsWrapper: public NUdf::TBoxedValue {
+    public:
+        TExtendedArgsWrapper(NUdf::TUnboxedValue&& callable, size_t usedArgs, size_t requiredArgs)
+            : Callable_(callable)
+            , UsedArgs_(usedArgs)
+            , RequiredArgs_(requiredArgs)
+        {};
+
+    private:
+        NUdf::TUnboxedValue Run(const NUdf::IValueBuilder* valueBuilder, const NUdf::TUnboxedValuePod* args) const final {
+            NStackArray::TStackArray<NUdf::TUnboxedValue> values(ALLOC_ON_STACK(NUdf::TUnboxedValue, RequiredArgs_));
+            for (size_t i = 0; i < UsedArgs_; i++) {
+                values[i] = args[i];
+            }
+            return Callable_.Run(valueBuilder, values.data());
+        }
+
+        const NUdf::TUnboxedValue Callable_;
+        const size_t UsedArgs_;
+        const size_t RequiredArgs_;
+    };
+
+    void ExtendArgs(NUdf::TUnboxedValue& callable, const TCallableType* callableType, const TCallableType* functionType) const {
+        const auto callableArgc = callableType->GetArgumentsCount();
+        const auto functionArgc = functionType->GetArgumentsCount();
+        if (callableArgc < functionArgc) {
+            callable = NUdf::TUnboxedValuePod(new TExtendedArgsWrapper(std::move(callable), callableArgc, functionArgc));
+        }
+    }
+
     void RegisterDependencies() const final {}
 
     const TString FunctionName;
     const TString TypeConfig;
     const NUdf::TSourcePosition Pos;
     const TCallableType *const CallableType;
+    const TCallableType *const FunctionType;
     TType *const UserType;
 };
 
@@ -90,12 +131,13 @@ public:
             TString&& typeConfig,
             NUdf::TSourcePosition pos,
             const TCallableType* callableType,
+            const TCallableType* functionType,
             TType* userType,
             TString&& moduleIRUniqID,
             TString&& moduleIR,
             TString&& fuctioNameIR,
             NUdf::TUniquePtr<NUdf::IBoxedValue>&& impl)
-        : TSimpleUdfWrapper(mutables, std::move(functionName), std::move(typeConfig), pos, callableType, userType)
+        : TSimpleUdfWrapper(mutables, std::move(functionName), std::move(typeConfig), pos, callableType, functionType, userType)
         , ModuleIRUniqID(std::move(moduleIRUniqID))
         , ModuleIR(std::move(moduleIR))
         , IRFunctionName(std::move(fuctioNameIR))
@@ -138,7 +180,7 @@ public:
             NUdf::TSourcePosition pos,
             IComputationNode* runConfigNode,
             ui32 runConfigArgs,
-            const TCallableType* callableType,
+            const TCallableType* functionType,
             TType* userType)
         : TBaseComputation(mutables, EValueRepresentation::Boxed)
         , FunctionName(std::move(functionName))
@@ -146,7 +188,7 @@ public:
         , Pos(pos)
         , RunConfigNode(runConfigNode)
         , RunConfigArgs(runConfigArgs)
-        , CallableType(callableType)
+        , FunctionType(functionType)
         , UserType(userType)
         , UdfIndex(mutables.CurValueIndex++)
     {
@@ -238,7 +280,7 @@ private:
     }
 
     void Wrap(NUdf::TUnboxedValue& callable) const {
-        TValidate<TValidatePolicy,TValidateMode>::WrapCallable(CallableType, callable, TStringBuilder() << "FunctionWithConfig<" << FunctionName << ">");
+        TValidate<TValidatePolicy,TValidateMode>::WrapCallable(FunctionType, callable, TStringBuilder() << "FunctionWithConfig<" << FunctionName << ">");
     }
 
     void RegisterDependencies() const final {
@@ -250,7 +292,7 @@ private:
     const NUdf::TSourcePosition Pos;
     IComputationNode* const RunConfigNode;
     const ui32 RunConfigArgs;
-    const TCallableType* CallableType;
+    const TCallableType* FunctionType;
     TType* const UserType;
     const ui32 UdfIndex;
 };
@@ -317,6 +359,8 @@ IComputationNode* WrapUdf(TCallable& callable, const TComputationNodeFactoryCont
             << status.GetError()).c_str());
     }
 
+    const auto callableFuncType = AS_TYPE(TCallableType, funcInfo.FunctionType);
+    const auto callableNodeType = AS_TYPE(TCallableType, callable.GetType()->GetReturnType());
     const auto runConfigFuncType = funcInfo.RunConfigType;
     const auto runConfigNodeType = runCfgNode.GetStaticType();
 
@@ -324,7 +368,8 @@ IComputationNode* WrapUdf(TCallable& callable, const TComputationNodeFactoryCont
         // It's only legal, when the compiled UDF declares its
         // signature using run config at compilation phase, but then
         // omits it in favor to function currying at execution phase.
-        if (!runConfigFuncType->IsVoid()) {
+        // And vice versa for the forward compatibility.
+        if (!runConfigNodeType->IsVoid() && !runConfigFuncType->IsVoid()) {
             TString diff = TStringBuilder()
                 << "run config type mismatch, expected: "
                 << PrintNode((runConfigNodeType), true)
@@ -337,17 +382,31 @@ IComputationNode* WrapUdf(TCallable& callable, const TComputationNodeFactoryCont
                                            << TruncateTypeDiff(diff)).c_str());
         }
 
+        const auto callableType = runConfigNodeType->IsVoid()
+                                ? callableNodeType : callableFuncType;
+        const auto runConfigType = runConfigNodeType->IsVoid()
+                                 ? runConfigFuncType : runConfigNodeType;
+
         // If so, check the following invariants:
         // * The first argument of the head function in the sequence
         //   of the curried functions has to be the same as the
         //   run config type.
+        // * All other arguments of the head function in the sequence
+        //   of the curried function have to be optional.
         // * The type of the resulting callable has to be the same
         //   as the function type.
-        const auto firstArgType = funcInfo.FunctionType->GetArgumentType(0);
-        if (!runConfigNodeType->IsSameType(*firstArgType)) {
+        if (callableType->GetArgumentsCount() - callableType->GetOptionalArgumentsCount() != 1U) {
+            UdfTerminate((TStringBuilder() << pos
+                                           << " Udf Function '"
+                                           << funcName
+                                           << "' wrapper has more than one required argument: "
+                                           << PrintNode(callableType)).c_str());
+        }
+        const auto firstArgType = callableType->GetArgumentType(0);
+        if (!runConfigType->IsSameType(*firstArgType)) {
             TString diff = TStringBuilder()
                 << "type mismatch, expected run config type: "
-                << PrintNode(runConfigNodeType, true)
+                << PrintNode(runConfigType, true)
                 << ", actual: "
                 << PrintNode(firstArgType, true);
             UdfTerminate((TStringBuilder() << pos
@@ -356,14 +415,18 @@ IComputationNode* WrapUdf(TCallable& callable, const TComputationNodeFactoryCont
                                            << "' "
                                            << TruncateTypeDiff(diff)).c_str());
         }
-        const auto callableFuncType = funcInfo.FunctionType->GetReturnType();
-        const auto callableNodeType = callable.GetType()->GetReturnType();
-        if (!callableNodeType->IsSameType(*callableFuncType)) {
+        const auto closureFuncType = runConfigNodeType->IsVoid()
+                                   ? callableFuncType
+                                   : AS_TYPE(TCallableType, callableFuncType)->GetReturnType();
+        const auto closureNodeType = runConfigNodeType->IsVoid()
+                                   ? AS_TYPE(TCallableType, callableNodeType)->GetReturnType()
+                                   : callableNodeType;
+        if (!closureNodeType->IsSameType(*closureFuncType)) {
             TString diff = TStringBuilder()
                 << "type mismatch, expected return type: "
-                << PrintNode(callableNodeType, true)
+                << PrintNode(closureNodeType, true)
                 << ", actual: "
-                << PrintNode(callableFuncType, true);
+                << PrintNode(closureFuncType, true);
             UdfTerminate((TStringBuilder() << pos
                                            << " Udf Function '"
                                            << funcName
@@ -373,12 +436,14 @@ IComputationNode* WrapUdf(TCallable& callable, const TComputationNodeFactoryCont
 
         const auto runConfigCompNode = LocateNode(ctx.NodeLocator, *runCfgNode.GetNode());
         const auto runConfigArgs = funcInfo.FunctionType->GetArgumentsCount();
-        return CreateUdfWrapper<false>(ctx, std::move(funcName), std::move(typeConfig), pos, runConfigCompNode, runConfigArgs, funcInfo.FunctionType, userType);
+        return runConfigNodeType->IsVoid()
+            ? CreateUdfWrapper<true>(ctx, std::move(funcName), std::move(typeConfig), pos, callableNodeType, callableFuncType, userType)
+            : CreateUdfWrapper<false>(ctx, std::move(funcName), std::move(typeConfig), pos, runConfigCompNode, runConfigArgs, callableFuncType, userType);
     }
 
-    if (!funcInfo.FunctionType->IsConvertableTo(*callable.GetType()->GetReturnType(), true)) {
-        TString diff = TStringBuilder() << "type mismatch, expected return type: " << PrintNode(callable.GetType()->GetReturnType(), true) <<
-                ", actual:" << PrintNode(funcInfo.FunctionType, true);
+    if (!callableFuncType->IsConvertableTo(*callableNodeType, true)) {
+        TString diff = TStringBuilder() << "type mismatch, expected return type: " << PrintNode(callableNodeType, true) <<
+                ", actual:" << PrintNode(callableFuncType, true);
         UdfTerminate((TStringBuilder() << pos << " UDF Function '" << funcName << "' " << TruncateTypeDiff(diff)).c_str());
     }
 
@@ -389,15 +454,15 @@ IComputationNode* WrapUdf(TCallable& callable, const TComputationNodeFactoryCont
     if (runConfigFuncType->IsVoid()) {
         if (ctx.ValidateMode == NUdf::EValidateMode::None && funcInfo.ModuleIR && funcInfo.IRFunctionName) {
             return new TUdfRunCodegeneratorNode(
-                ctx.Mutables, std::move(funcName), std::move(typeConfig), pos, funcInfo.FunctionType, userType,
+                ctx.Mutables, std::move(funcName), std::move(typeConfig), pos, callableNodeType, callableFuncType, userType,
                 std::move(funcInfo.ModuleIRUniqID), std::move(funcInfo.ModuleIR), std::move(funcInfo.IRFunctionName), std::move(funcInfo.Implementation)
             );
         }
-        return CreateUdfWrapper<true>(ctx, std::move(funcName), std::move(typeConfig), pos, funcInfo.FunctionType, userType);
+        return CreateUdfWrapper<true>(ctx, std::move(funcName), std::move(typeConfig), pos, callableNodeType, callableFuncType, userType);
     }
 
     const auto runCfgCompNode = LocateNode(ctx.NodeLocator, *runCfgNode.GetNode());
-    return CreateUdfWrapper<false>(ctx, std::move(funcName), std::move(typeConfig), pos, runCfgCompNode, 1U, funcInfo.FunctionType, userType);
+    return CreateUdfWrapper<false>(ctx, std::move(funcName), std::move(typeConfig), pos, runCfgCompNode, 1U, callableFuncType, userType);
 }
 
 IComputationNode* WrapScriptUdf(TCallable& callable, const TComputationNodeFactoryContext& ctx) {

@@ -3391,7 +3391,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             for (const TString& query : modificationQueries) {
                 Cerr << "Running query:\n" << query << Endl;
                 auto result = queryClient.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-                if (result.GetStatus() != EStatus::GENERIC_ERROR
+                if (result.GetStatus() != EStatus::BAD_REQUEST
                     || result.GetIssues().ToString().find("Table `/Root/TestTable` modification is disabled: Unique index uniq_value_idx is under construction") == TString::npos)
                 {
                     Cerr << "Execute query issues. Query: " << query << Endl;
@@ -3412,7 +3412,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
                 auto bulkUpsertResult = db.BulkUpsert("/Root/TestTable", rows.Build()).GetValueSync();
                 if (bulkUpsertResult.IsSuccess()
-                    || bulkUpsertResult.GetIssues().ToString().find("Only async-indexed tables are supported by BulkUpsert") == TString::npos)
+                    || (bulkUpsertResult.GetStatus() == EStatus::BAD_REQUEST && bulkUpsertResult.GetIssues().ToString().find("Only async-indexed tables are supported by BulkUpsert") == TString::npos))
                 {
                     ythrow yexception() << "Unexpected status of bulk upsert: " << bulkUpsertResult.GetStatus() << ": " << bulkUpsertResult.GetIssues().ToString();
                 }

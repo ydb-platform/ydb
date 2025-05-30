@@ -36,6 +36,7 @@
 
 #include <ydb/core/cms/cms.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
+#include <ydb/core/cms/console/configs_dispatcher_proxy.h>
 #include <ydb/core/cms/console/configs_cache.h>
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/cms/console/feature_flags_configurator.h>
@@ -2516,6 +2517,11 @@ void TConfigsDispatcherInitializer::InitializeServices(NActors::TActorSystemSetu
     setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(
             NConsole::MakeConfigsDispatcherID(NodeId),
             TActorSetupCmd(actor, TMailboxType::HTSwap, appData->UserPoolId)));
+
+    IActor* proxyActor = NConsole::CreateConfigsDispatcherProxy();
+    setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(
+            NConsole::MakeConfigsDispatcherProxyID(NodeId),
+            TActorSetupCmd(proxyActor, TMailboxType::HTSwap, appData->UserPoolId)));
 
     setup->LocalServices.emplace_back(
         MakeFeatureFlagsServiceID(),

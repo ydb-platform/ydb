@@ -67,7 +67,8 @@ class TestDatetime2(MixedClusterFixture):
 
                 PRIMARY KEY(id)
             ) WITH (
-                PARTITION_AT_KEYS = ({", ".join(str(i) for i in range(1, self.rows))})
+                PARTITION_AT_KEYS = ({", ".join(str(i) for i in range(1, self.rows))}),
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = {self.rows}
             );
         """
 
@@ -176,17 +177,18 @@ class TestDatetime2(MixedClusterFixture):
         return f"""
         SELECT
             DateTime::MakeDate(DateTime::StartOfYear(DateTime::Split(d))),
-            DateTime::MakeDate(DateTime::EndOfYear(DateTime::Split(d))),
             DateTime::MakeDate(DateTime::StartOfQuarter(DateTime::Split(d))),
-            DateTime::MakeDate(DateTime::EndOfQuarter(DateTime::Split(d))),
             DateTime::MakeDate(DateTime::StartOfMonth(DateTime::Split(d))),
-            DateTime::MakeDate(DateTime::EndOfMonth(DateTime::Split(d))),
             DateTime::MakeDate(DateTime::StartOfWeek(DateTime::Split(d))),
-            DateTime::MakeDate(DateTime::EndOfWeek(DateTime::Split(d))),
             DateTime::MakeDate(DateTime::StartOfDay(DateTime::Split(d))),
-            DateTime::MakeDate(DateTime::EndOfDay(DateTime::Split(d))),
             DateTime::MakeDate(DateTime::StartOf(DateTime::Split(d), DateTime::IntervalFromDays(val))),
-            DateTime::MakeDate(DateTime::EndOf(DateTime::Split(d), DateTime::IntervalFromDays(val)))
+            -- not supported in 24-4: https://st.yandex-team.ru/YQL-19644
+            -- DateTime::MakeDate(DateTime::EndOfQuarter(DateTime::Split(d))),
+            -- DateTime::MakeDate(DateTime::EndOfMonth(DateTime::Split(d))),
+            -- DateTime::MakeDate(DateTime::EndOfDay(DateTime::Split(d))),
+            -- DateTime::MakeDate(DateTime::EndOfWeek(DateTime::Split(d))),
+            -- DateTime::MakeDate(DateTime::EndOfYear(DateTime::Split(d))),
+            -- DateTime::MakeDate(DateTime::EndOf(DateTime::Split(d), DateTime::IntervalFromDays(val)))
         FROM {self.table_name};
         """
 
@@ -228,20 +230,30 @@ class TestDatetime2(MixedClusterFixture):
             query = self.generate_insert()
             session_pool.execute_with_retries(query)
 
-            # ---------------- SELECT ------------------
-            queries = [
-                self.q_split(),
-                self.q_make(),
-                self.q_get(),
-                self.q_update(),
-                self.q_to_from(),
-                self.q_interval(),
-                self.q_start_end(),
-                self.q_shift(),
-                self.q_format(),
-                self.q_parse()
-            ]
+        # ---------------- SELECT ------------------
+        queries = [
+            self.q_split(),
+            self.q_make(),
+            self.q_get(),
+            self.q_update(),
+            self.q_to_from(),
+            self.q_interval(),
+            self.q_start_end(),
+            self.q_shift(),
+            self.q_format(),
+            self.q_parse()
+        ]
 
-            for query in queries:
-                result = session_pool.execute_with_retries(query)
-                assert len(result[0].rows) > 0
+        """
+        UDFs are compiled once on the node that initially receives the request.
+        The compiled UDF is then propagated to all other nodes. Executing the query a single time only verifies
+        compatibility in one direction—either from old to new or from new to old. Performing multiple retries
+        increases the likelihood that the UDF will be compiled on both the old and new versions, thereby improving coverage of compatibility testing.
+
+        Additionally, a session pool always sends requests to the same node. To ensure distribution across nodes, the session pool is recreated for each SELECT request.
+        """
+        for _ in range(10):
+            with ydb.QuerySessionPool(self.driver) as session_pool:
+                for query in queries:
+                    result = session_pool.execute_with_retries(query)
+                    assert len(result[0].rows) > 0

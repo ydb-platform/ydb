@@ -658,5 +658,10 @@ namespace NSchemeShardUT_Private {
     NKikimrMiniKQL::TResult ReadTable(TTestActorRuntime& runtime, ui64 tabletId,
         const TString& table, const TVector<TString>& pk, const TVector<TString>& columns, const TString& rangeFlags = "");
 
+    ui32 CountRows(TTestActorRuntime& runtime, ui64 schemeshardId, const TString& table);
+    ui32 CountRows(TTestActorRuntime& runtime, const TString& table);
+
+    void WriteVectorTableRows(TTestActorRuntime& runtime, ui64 schemeShardId, ui64 txId, const TString & tablePath,
+        bool withValue, ui32 shard, ui32 min, ui32 max);
 
 } //NSchemeShardUT_Private

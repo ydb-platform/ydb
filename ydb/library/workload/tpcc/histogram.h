@@ -15,6 +15,7 @@ public:
 
     void RecordValue(uint64_t value);
     void Add(const THistogram& other);
+    void Sub(const THistogram& other);
     uint64_t GetValueAtPercentile(double percentile) const;
     void Reset();
 

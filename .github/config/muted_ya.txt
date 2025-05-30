@@ -19,12 +19,10 @@ ydb/core/keyvalue/ut_trace TKeyValueTracingTest.WriteSmall
 ydb/core/kqp/ut/batch_operations [*/*] chunk chunk
 ydb/core/kqp/ut/cost KqpCost.OlapWriteRow
 ydb/core/kqp/ut/federated_query/s3 sole chunk chunk
-ydb/core/kqp/ut/olap KqpOlapDelete.DeleteWithDiffrentTypesPKColumns-isStream
 ydb/core/kqp/ut/olap KqpOlapDictionary.DifferentPages
 ydb/core/kqp/ut/olap KqpOlapJson.CompactionVariants
 ydb/core/kqp/ut/olap KqpOlapJson.DuplicationCompactionVariants
 ydb/core/kqp/ut/olap KqpOlapJson.SwitchAccessorCompactionVariants
-ydb/core/kqp/ut/olap KqpOlapLocks.DeleteAbsentMultipleShards+Reboot
 ydb/core/kqp/ut/olap KqpOlapWrite.TierDraftsGCWithRestart
 ydb/core/kqp/ut/olap [*/*] chunk chunk
 ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable+ColumnStore
@@ -44,6 +42,7 @@ ydb/core/kqp/ut/yql KqpScripting.StreamExecuteYqlScriptScanOperationTmeoutBruteF
 ydb/core/quoter/ut QuoterWithKesusTest.PrefetchCoefficient
 ydb/core/statistics/aggregator/ut AnalyzeColumnshard.AnalyzeRebootColumnShard
 ydb/core/tx/datashard/ut_incremental_backup IncrementalBackup.ComplexRestoreBackupCollection+WithIncremental
+ydb/core/tx/schemeshard/ut_background_cleaning TSchemeshardBackgroundCleaningTest.SchemeshardBackgroundCleaningTestCreateCleanManyTables
 ydb/core/tx/schemeshard/ut_login_large TSchemeShardLoginLargeTest.RemoveLogin_Many
 ydb/core/tx/schemeshard/ut_move_reboots TSchemeShardMoveRebootsTest.WithData
 ydb/core/tx/schemeshard/ut_move_reboots TSchemeShardMoveRebootsTest.WithDataAndPersistentPartitionStats
@@ -62,6 +61,12 @@ ydb/public/sdk/cpp/src/client/topic/ut TxUsage.Sinks_Oltp_WriteToTopicAndTable_6
 ydb/public/sdk/cpp/src/client/topic/ut TxUsage.Sinks_Oltp_WriteToTopic_3_Query
 ydb/public/sdk/cpp/src/client/topic/ut TxUsage.WriteToTopic_Demo_25_Query
 ydb/public/sdk/cpp/src/client/topic/ut TxUsage.WriteToTopic_Demo_26_Query
+ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut TxUsage.Sinks_Oltp_WriteToTopicAndTable_6_Query
+ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut TxUsage.Sinks_Oltp_WriteToTopicAndTable_6_Table
+ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut TxUsage.Sinks_Oltp_WriteToTopic_3_Query
+ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut TxUsage.WriteToTopic_Demo_25_Query
+ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut TxUsage.WriteToTopic_Demo_26_Query
+ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut [*/*] chunk chunk
 ydb/public/sdk/cpp/tests/integration/sessions_pool YdbSdkSessionsPool.StressTestSync/0
 ydb/public/sdk/cpp/tests/integration/sessions_pool YdbSdkSessionsPool.StressTestSync/1
 ydb/services/ydb/sdk_sessions_ut [*/*] chunk chunk
@@ -144,6 +149,7 @@ ydb/tests/fq/yds test_recovery.py.TestRecovery.test_ic_disconnection
 ydb/tests/fq/yds test_select_limit_db_id.py.TestSelectLimitWithDbId.test_select_same_with_id[v1-mvp_external_ydb_endpoint0]
 ydb/tests/fq/yds test_yds_bindings.py.TestBindings.test_yds_insert[v1]
 ydb/tests/functional/config [test_distconf.py */*] chunk chunk
+ydb/tests/functional/config test_config_migration.py.TestConfigMigrationToV2.test_migration_to_v2
 ydb/tests/functional/config test_distconf.py.TestKiKiMRDistConfBasic.test_cluster_expand_with_distconf
 ydb/tests/functional/hive test_drain.py.TestHive.test_drain_on_stop
 ydb/tests/functional/rename [test_rename.py */*] chunk chunk
@@ -168,20 +174,11 @@ ydb/tests/olap [*/*] chunk chunk
 ydb/tests/olap sole chunk chunk
 ydb/tests/olap test_log_scenario.py.TestLogScenario.test_log_deviation[1051200]
 ydb/tests/olap test_log_scenario.py.TestLogScenario.test_log_deviation[180]
-ydb/tests/olap/data_quotas [*/*] chunk chunk
-ydb/tests/olap/data_quotas test_quota_exhaustion.py.TestYdbWorkload.test
-ydb/tests/olap/data_quotas test_quota_exhaustion.py.TestYdbWorkload.test_duplicates
 ydb/tests/olap/scenario sole chunk chunk
 ydb/tests/olap/scenario test_alter_compression.py.TestAlterCompression.test[alter_compression]
 ydb/tests/olap/scenario test_alter_tiering.py.TestAlterTiering.test[many_tables]
 ydb/tests/olap/scenario test_insert.py.TestInsert.test[read_data_during_bulk_upsert]
 ydb/tests/olap/scenario test_insert.py.TestInsert.test_multi[read_data_during_bulk_upsert]
-ydb/tests/olap/scenario test_read_update_write_load.py.TestReadUpdateWriteLoad.test[read_update_write_load]
-ydb/tests/olap/ttl_tiering [*/*] chunk chunk
-ydb/tests/olap/ttl_tiering [data_migration_when_alter_ttl.py] chunk chunk
-ydb/tests/olap/ttl_tiering [ttl_delete_s3.py] chunk chunk
-ydb/tests/olap/ttl_tiering data_migration_when_alter_ttl.py.TestDataMigrationWhenAlterTtl.test
-ydb/tests/olap/ttl_tiering sole chunk chunk
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[Test64BitErrorChecking]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestAppendEncodedText]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestAppendEscapedTextExistingBuffer]

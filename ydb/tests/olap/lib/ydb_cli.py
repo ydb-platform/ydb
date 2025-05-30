@@ -136,7 +136,7 @@ class YdbCliHelper:
         def __init__(self,
                      workload_type: WorkloadType,
                      db_path: str,
-                     query_names: set[str],
+                     query_names: list[str],
                      iterations: int,
                      timeout: float,
                      check_canonical: CheckCanonicalPolicy,
@@ -160,10 +160,10 @@ class YdbCliHelper:
             self.returncode = None
             self.stderr = None
             self.stdout = None
-            prefix = md5(','.join(query_names).encode()).hexdigest() if len(query_names) != 1 else [q for q in query_names][0]
-            self.__plan_path = f'{prefix}.plan'
-            self.__query_output_path = f'{prefix}.result'
-            self.json_path = f'{prefix}.stats.json'
+            self.__prefix = md5(','.join(query_names).encode()).hexdigest() if len(query_names) != 1 else query_names[0]
+            self.__plan_path = f'{self.__prefix}.plan'
+            self.__query_output_path = f'{self.__prefix}.result'
+            self.json_path = f'{self.__prefix}.stats.json'
 
         def get_plan_path(self, query_name: str, plan_name: Any) -> str:
             return f'{self.__plan_path}.{query_name}.{plan_name}'
@@ -196,7 +196,7 @@ class YdbCliHelper:
                 cmd += ['--syntax', self.query_syntax]
             if self.scale is not None and self.scale > 0:
                 cmd += ['--scale', str(self.scale)]
-            if self.threads > 1:
+            if self.threads > 0:
                 cmd += ['--threads', str(self.threads)]
             return cmd
 
@@ -204,11 +204,11 @@ class YdbCliHelper:
             try:
                 if not self.result.add_error(YdbCluster.wait_ydb_alive(int(os.getenv('WAIT_CLUSTER_ALIVE_TIMEOUT', 20 * 60)), self.db_path)):
                     if os.getenv('SECRET_REQUESTS', '') == '1':
-                        with open(f'{self.query_name}.stdout', "wt") as sout, open(f'{self.query_name}.stderr', "wt") as serr:
+                        with open(f'{self.__prefix}.stdout', "wt") as sout, open(f'{self.__prefix}.stderr', "wt") as serr:
                             cmd = self.__get_cmd()
                             logging.info(f'Run ydb cli: {cmd}')
                             process = subprocess.run(cmd, check=False, text=True, stdout=sout, stderr=serr)
-                        with open(f'{self.query_name}.stdout', "rt") as sout, open(f'{self.query_name}.stderr', "rt") as serr:
+                        with open(f'{self.__prefix}.stdout', "rt") as sout, open(f'{self.__prefix}.stderr', "rt") as serr:
                             self.stderr = serr.read()
                             self.stdout = sout.read()
                     else:
@@ -335,9 +335,9 @@ class YdbCliHelper:
             self.__process_returncode()
 
     @staticmethod
-    def workload_run(workload_type: WorkloadType, path: str, query_names: str, iterations: int = 5,
+    def workload_run(workload_type: WorkloadType, path: str, query_names: list[str], iterations: int = 5,
                      timeout: float = 100., check_canonical: CheckCanonicalPolicy = CheckCanonicalPolicy.NO, query_syntax: str = '',
-                     scale: Optional[int] = None, query_prefix=None, external_path='', threads: int = 1) -> dict[str, YdbCliHelper.WorkloadRunResult]:
+                     scale: Optional[int] = None, query_prefix=None, external_path='', threads: int = 0) -> dict[str, YdbCliHelper.WorkloadRunResult]:
         runner = YdbCliHelper.WorkloadRunner(
             workload_type,
             path,
@@ -351,6 +351,7 @@ class YdbCliHelper:
             external_path=external_path,
             threads=threads
         )
+        extended_query_names = query_names + ["Sum", "Avg", "GAvg"]
         if runner.run():
-            return {q: YdbCliHelper.WorkloadResultParser(runner, q).result for q in query_names}
-        return {q: runner.result for q in query_names}
+            return {q: YdbCliHelper.WorkloadResultParser(runner, q).result for q in extended_query_names}
+        return {q: runner.result for q in extended_query_names}

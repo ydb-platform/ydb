@@ -51,7 +51,7 @@ using namespace NKMeans;
  *     - Prefix: records the (prefix key, parent cluster ID) mapping
  */
 
-class TPrefixKMeansScanBase: public TActor<TPrefixKMeansScanBase>, public NTable::IScan {
+class TPrefixKMeansScanBase: public TActor<TPrefixKMeansScanBase>, public IActorExceptionHandler, public NTable::IScan {
 protected:
     using EState = NKikimrTxDataShard::EKMeansState;
 
@@ -179,13 +179,19 @@ public:
         return {EScan::Feed, {}};
     }
 
-    TAutoPtr<IDestructable> Finish(EAbort abort) final
+    TAutoPtr<IDestructable> Finish(const std::exception& exc) final
+    {
+        Uploader.AddIssue(exc);
+        return Finish(EStatus::Exception);
+    }
+
+    TAutoPtr<IDestructable> Finish(EStatus status) final
     {
         auto& record = Response->Record;
         record.SetReadRows(ReadRows);
         record.SetReadBytes(ReadBytes);
         
-        Uploader.Finish(record, abort);
+        Uploader.Finish(record, status);
 
         if (Response->Record.GetStatus() == NKikimrIndexBuilder::DONE) {
             LOG_N("Done " << Debug() << " " << Response->Record.ShortDebugString());
@@ -197,6 +203,15 @@ public:
         Driver = nullptr;
         this->PassAway();
         return nullptr;
+    }
+
+    bool OnUnhandledException(const std::exception& exc) final
+    {
+        if (!Driver) {
+            return false;
+        }
+        Driver->Throw(exc);
+        return true;
     }
 
     void Describe(IOutputStream& out) const final
@@ -419,7 +434,7 @@ private:
             return true;
         }
 
-        Y_ASSERT(false);
+        Y_ENSURE(false);
         return true;
     }
 
@@ -439,7 +454,7 @@ private:
                 FeedBuildToPosting(key, row);
                 break;
             default:
-                Y_ASSERT(false);
+                Y_ENSURE(false);
         }
     }
 

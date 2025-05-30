@@ -13,11 +13,13 @@ void TQueryWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const EComman
             break;
         case TWorkloadParams::ECommandType::Root:
             TWorkloadBaseParams::ConfigureOpts(opts, commandType, workloadType);
-            opts.AddLongOption('d', "data-path", "Path to workload data.")
-                .RequiredArgument("PATH").StoreResult(&DataPath);
             break;
         case TWorkloadParams::ECommandType::Run:
+        case TWorkloadParams::ECommandType::Init:
             opts.AddLongOption('q', "query", "Query to execute. Can be used multiple times.").AppendTo(&CustomQueries);
+            TWorkloadBaseParams::ConfigureOpts(opts, commandType, workloadType);
+            opts.AddLongOption("suite-path", "Path to suite directory. See \"ydb workload query\" command description for more information.")
+                .RequiredArgument("PATH").StoreResult(&SuitePath);
             break;
     }
 }
@@ -32,6 +34,56 @@ TWorkloadDataInitializer::TList TQueryWorkloadParams::CreateDataInitializers() c
 
 TString TQueryWorkloadParams::GetWorkloadName() const {
     return "Query";
+}
+
+TString TQueryWorkloadParams::GetDescription(ECommandType commandType, int /*workloadType*/) const {
+    switch (commandType) {
+    default:
+        return "";
+
+    case ECommandType::Init:
+        return R"(Initialization of tables and their configurations.
+Typically involving DDL queries from files with "sql" and "yql" extensions. These queries can also be directly specified from the command line using the "--query" parameter.
+
+Next aliases can be used in queries:
+  * {db} - absolute path in database to workload root. It is combination of --database and --path option values.
+
+There is example of init directory: https://github.com/ydb-platform/ydb/tree/main/ydb/tests/functional/tpc/data/e1/init.)";
+
+    case ECommandType::Import:
+        return R"(Populating tables with data.
+The "import" directory should contain subfolders named after each table, with files in supported data formats such as csv, tsv, csv.gz, or tsv.gz
+
+There is example of import directory: https://github.com/ydb-platform/ydb/tree/main/ydb/tests/functional/tpc/data/e1/import.)";
+
+    case ECommandType::Run:
+        return R"(Run load testing.
+Executing load testing using queries from files in the "run" directory or directly from the command line via the "--query" parameter.
+
+There is example of run directory: https://github.com/ydb-platform/ydb/tree/main/ydb/tests/functional/tpc/data/e1/run.)";
+
+    case ECommandType::Root:
+        return R"(Executes a user-defined workload consisting of multiple stages.
+The user provides a directory path, referred to as a suite, which contains subdirectories for each stage. This path is specified using the "--suite-path" parameter in each command.
+
+There is example of suite directory: https://github.com/ydb-platform/ydb/tree/main/ydb/tests/functional/tpc/data/e1.
+
+The suite can contain up to four stages:
+1. init
+Initialization of tables and their configurations, typically involving DDL queries from files with "sql" and "yql" extensions. These queries can also be directly specified from the command line using the "--query" parameter of the "init" command.
+
+2. import
+Populating tables with data. The "import" directory should contain subfolders named after each table, with files in supported data formats such as csv, tsv, csv.gz, or tsv.gz.
+
+3. run
+Executing load testing using queries from files in the "run" directory or directly from the command line via the "--query" parameter.
+
+4. clean
+Cleaning up by removing tables used for load testing.
+This step only requires the database path.
+
+Details can be found in the description of the commands, using the "--help" option.)";
+    }
 }
 
 TQueryInfo TQueryGenerator::MakeQuery(const TString& queryText, const TString& queryName) const {
@@ -77,15 +129,17 @@ std::string TQueryGenerator::GetDDLQueriesFromDir(const TFsPath& dir) const {
         }
         result << "PRAGMA TablePathPrefix = \"" << Params.GetFullTableName(nullptr) << "\";" << std::endl;
         TFileInput fInput(i.GetPath());
-        result << fInput.ReadAll() << std::endl;
+        auto query = fInput.ReadAll();
+        SubstGlobal(query, "{db}", Params.GetFullTableName(nullptr));
+        result << query << std::endl;
     }
     return result.str();
 }
 
 TQueryInfoList TQueryGenerator::GetWorkload(int /*type*/) {
     TQueryInfoList result;
-    const auto runPath = Params.GetDataPath() / "run";
-    if (Params.GetDataPath().IsDefined() && runPath.IsDirectory()) {
+    const auto runPath = Params.GetSuitePath() / "run";
+    if (Params.GetSuitePath().IsDefined() && runPath.IsDirectory()) {
         result.splice(result.end(), GetWorkloadFromDir(runPath, ""));
     }
 
@@ -98,13 +152,17 @@ TQueryInfoList TQueryGenerator::GetWorkload(int /*type*/) {
 
 TVector<IWorkloadQueryGenerator::TWorkloadType> TQueryGenerator::GetSupportedWorkloadTypes() const {
     return {
-        IWorkloadQueryGenerator::TWorkloadType(0, "olap", "Hard analitics queries from external source. One thread, more stats for every query.", IWorkloadQueryGenerator::TWorkloadType::EKind::Benchmark),
-        IWorkloadQueryGenerator::TWorkloadType(0, "oltp", "Many light queries from external source, witch be lanch by some threads many times.", IWorkloadQueryGenerator::TWorkloadType::EKind::Workload)
+        IWorkloadQueryGenerator::TWorkloadType(0, "olap", "Perform load testing.", IWorkloadQueryGenerator::TWorkloadType::EKind::Benchmark),
     };
 }
 
 std::string TQueryGenerator::GetDDLQueries() const {
-    return  GetDDLQueriesFromDir(Params.GetDataPath() / "create");
+    std::stringstream result;
+    for (const auto& cq: Params.GetCustomQueries()) {
+        result << cq.c_str() << ";" << std::endl;
+    }
+    result << GetDDLQueriesFromDir(Params.GetSuitePath() / "init");
+    return result.str();
 }
 
 TQueryInfoList TQueryGenerator::GetInitialData() {

@@ -952,7 +952,6 @@ namespace {
                         TStringBuilder() << "Backup folder must not contain duplicate paths to the same folder: "
                             << fsPath.GetPath().Quote()
                     );
-                    break;
                 }
 
                 if (fsPath.Child(NFiles::Incomplete().FileName).Exists()) {

@@ -46,19 +46,27 @@ TString TQueryWorkloadParams::GetDescription(ECommandType commandType, int /*wor
 Typically involving DDL queries from files with "sql" and "yql" extensions. These queries can also be directly specified from the command line using the "--query" parameter.
 
 Next aliases can be used in queries:
-  * {db} - absolute path in database to workload root. It is combination of --database and --path option values.)";
+  * {db} - absolute path in database to workload root. It is combination of --database and --path option values.
+
+There is example of init directory: https://github.com/ydb-platform/ydb/tree/main/ydb/tests/functional/tpc/data/e1/init.)";
 
     case ECommandType::Import:
         return R"(Populating tables with data.
-The "import" directory should contain subfolders named after each table, with files in supported data formats such as csv, tsv, csv.gz, or tsv.gz)";
+The "import" directory should contain subfolders named after each table, with files in supported data formats such as csv, tsv, csv.gz, or tsv.gz
+
+There is example of import directory: https://github.com/ydb-platform/ydb/tree/main/ydb/tests/functional/tpc/data/e1/import.)";
 
     case ECommandType::Run:
         return R"(Run load testing.
-Executing load testing using queries from files in the "run" directory or directly from the command line via the "--query" parameter.)";
+Executing load testing using queries from files in the "run" directory or directly from the command line via the "--query" parameter.
+
+There is example of run directory: https://github.com/ydb-platform/ydb/tree/main/ydb/tests/functional/tpc/data/e1/run.)";
 
     case ECommandType::Root:
         return R"(Executes a user-defined workload consisting of multiple stages.
 The user provides a directory path, referred to as a suite, which contains subdirectories for each stage. This path is specified using the "--suite-path" parameter in each command.
+
+There is example of suite directory: https://github.com/ydb-platform/ydb/tree/main/ydb/tests/functional/tpc/data/e1.
 
 The suite can contain up to four stages:
 1. init

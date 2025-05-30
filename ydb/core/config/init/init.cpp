@@ -246,10 +246,8 @@ class TDefaultNodeBrokerClient
                 if (result.IsSuccess()) {
                     logger.Out() << "Success. Registered as " << result.GetNodeId() << Endl;
                     if (result.HasNodeName()) {
-                        logger.Out() << "Node name: ";
-                        logger.Out() << result.GetNodeName();
+                        logger.Out() << "Node name: " << result.GetNodeName() << Endl;
                     }
-                    logger.Out() << Endl;
                     break;
                 }
                 logger.Err() << "Registration error: " << static_cast<NYdb::TStatus>(result) << Endl;

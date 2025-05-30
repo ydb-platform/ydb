@@ -187,7 +187,7 @@ class TestLargeS3Import:
     def setup_datasink(self, output_path):
         logger.info(f"setupping detasink to `{output_path}`...")
 
-        # Used to avoid secret name clashing than test runs from different used SIDS
+        # Used to avoid secret name clashing than test runs from different user SIDS
         secret_prefix = os.getenv("S3_ACCESS_SECRET_PREFIX", "")
 
         access_key_id_name = f"{secret_prefix}test_olap_s3_import_aws_access_key_id"

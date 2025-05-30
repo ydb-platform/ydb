@@ -127,7 +127,20 @@ class TestVectorIndex(RestartToAnotherVersionFixture):
         "vector_type, distance, distance_func",
         [
             ("Uint8", "similarity", "inner_product"),
-
+            ("Int8", "similarity", "inner_product"),
+            ("Float", "similarity", "inner_product"),
+            ("Uint8", "similarity", "cosine"),
+            ("Int8", "similarity", "cosine"),
+            ("Float", "similarity", "cosine"),
+            ("Uint8", "distance", "cosine"),
+            ("Int8", "distance", "cosine"),
+            ("Float", "distance", "cosine"),
+            ("Uint8", "distance", "manhattan"),
+            ("Int8", "distance", "manhattan"),
+            ("Float", "distance", "manhattan"),
+            ("Uint8", "distance", "euclidean"),
+            ("Int8", "distance", "euclidean"),
+            ("Float", "distance", "euclidean"),
         ],
     )
     def test_vector_index(self, vector_type, distance, distance_func):

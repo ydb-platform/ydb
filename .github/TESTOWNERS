@@ -58,7 +58,9 @@
 /ydb/tests/postgres_integrations @ydb-platform/postgres-compatibility
 
 #YDB Engineering Team @maximyurchuk TEAM:@ydb-platform/engineering
-ydb/tests/functional/tpc @ydb-platform/engineering
+/ydb/tests/functional/tpc @ydb-platform/engineering
+/ydb/tests/compatibility @ydb-platform/engineering
+/ydb/tests/stress @ydb-platform/engineering
 
 #Orphan components @spuchin @maximyurchuk @kirrysin @ydb-platform/duty
 /ydb/services/ydb @ydb-platform/duty
@@ -75,6 +77,7 @@ ydb/tests/functional/tpc @ydb-platform/engineering
 /ydb/core/test_tablet @ydb-platform/storage
 /ydb/core/blob_depot @ydb-platform/storage
 /ydb/core/erasure @ydb-platform/storage
+/ydb/tests/functional/config @ydb-platform/storage
 
 #Core Functionality Team @CyberROFL TEAM:@ydb-platform/core
 /ydb/core/config/ut @ydb-platform/core

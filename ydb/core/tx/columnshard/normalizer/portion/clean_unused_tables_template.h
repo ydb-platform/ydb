@@ -12,7 +12,6 @@ using NIceDb::TNiceDb;
 
 template <typename TTable, typename TKey>
 inline void Delete(TNiceDb& db, const TKey& key) {
-    std::cout << "la-la-la";
     std::apply([&](auto... parts) { db.template Table<TTable>().Key(parts...).Delete(); }, key);
 }
 

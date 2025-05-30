@@ -26,12 +26,16 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTestReboots) {
                     KeyColumnNames: ["key"]
                     SplitBoundary { KeyPrefix { Tuple { Optional { Uint32: 50 } } } }
                     SplitBoundary { KeyPrefix { Tuple { Optional { Uint32: 150 } } } }
+                    SplitBoundary { KeyPrefix { Tuple { Optional { Uint32: 250 } } } }
+                    SplitBoundary { KeyPrefix { Tuple { Optional { Uint32: 350 } } } }
                 )");
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
                 WriteVectorTableRows(runtime, TTestTxConfig::SchemeShard, ++t.TxId, "/MyRoot/dir/Table", true, 0, 0, 50);
                 WriteVectorTableRows(runtime, TTestTxConfig::SchemeShard, ++t.TxId, "/MyRoot/dir/Table", true, 1, 50, 150);
-                WriteVectorTableRows(runtime, TTestTxConfig::SchemeShard, ++t.TxId, "/MyRoot/dir/Table", true, 2, 150, 200);
+                WriteVectorTableRows(runtime, TTestTxConfig::SchemeShard, ++t.TxId, "/MyRoot/dir/Table", true, 2, 150, 250);
+                WriteVectorTableRows(runtime, TTestTxConfig::SchemeShard, ++t.TxId, "/MyRoot/dir/Table", true, 3, 250, 350);
+                WriteVectorTableRows(runtime, TTestTxConfig::SchemeShard, ++t.TxId, "/MyRoot/dir/Table", true, 4, 350, 400);
             }
 
             AsyncBuildVectorIndex(runtime,  ++t.TxId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/dir/Table", "index1", "embedding", {"value"});
@@ -68,6 +72,14 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTestReboots) {
                                    {NLs::PathNotExist});
                 TestDescribeResult(DescribePath(runtime, indexPath + "/" + PostingTable + BuildSuffix1, true, true, true),
                                    {NLs::PathNotExist});
+
+                // Check row count in the posting table
+                {
+                    auto rows = CountRows(runtime, TTestTxConfig::SchemeShard, "/MyRoot/dir/Table/index1/indexImplPostingTable");
+                    Cerr << "... posting table contains " << rows << " rows" << Endl;
+                    UNIT_ASSERT_VALUES_EQUAL(rows, 400);
+                }
+
             }
         });
     }

@@ -18,6 +18,10 @@ namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+/*!
+ *  \note
+ *  Thread affinity: delayed executor's thread
+ */
 template <class TKey, class TValue>
 class TAsyncExpiringCache
     : public virtual TRefCounted

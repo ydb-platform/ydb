@@ -1,7 +1,7 @@
 #include "sql_complete.h"
 
+#include <yql/essentials/sql/v1/complete/syntax/grammar.h>
 #include <yql/essentials/sql/v1/complete/name/cluster/static/discovery.h>
-#include <yql/essentials/sql/v1/complete/name/object/dispatch/schema.h>
 #include <yql/essentials/sql/v1/complete/name/object/simple/schema.h>
 #include <yql/essentials/sql/v1/complete/name/object/simple/static/schema.h>
 #include <yql/essentials/sql/v1/complete/name/service/ranking/frequency.h>
@@ -16,6 +16,8 @@
 #include <yql/essentials/sql/v1/lexer/antlr4_pure_ansi/lexer.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/iterator/iterate_keys.h>
+#include <library/cpp/iterator/functools.h>
 
 #include <util/charset/utf8.h>
 
@@ -78,7 +80,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
             },
         };
 
-        THashMap<TString, THashMap<TString, TVector<TFolderEntry>>> fss = {
+        THashMap<TString, THashMap<TString, TVector<TFolderEntry>>> fs = {
             {"", {{"/", {{"Folder", "local"},
                          {"Folder", "test"},
                          {"Folder", "prod"},
@@ -94,40 +96,29 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
              {{"/", {{"Table", "people"},
                      {"Folder", "yql"}}},
               {"/yql/", {{"Table", "tutorial"}}}}},
-            {"yt:saurus",
+            {"saurus",
              {{"/", {{"Table", "maxim"}}}}},
         };
 
-        TVector<TString> clusters;
-        for (const auto& [cluster, _] : fss) {
-            clusters.emplace_back(cluster);
-        }
-        EraseIf(clusters, [](const auto& s) { return s.empty(); });
+        auto clustersIt = NFuncTools::Filter(
+            [](const auto& x) { return !x.empty(); }, IterateKeys(fs));
+        TVector<TString> clusters(begin(clustersIt), end(clustersIt));
 
         TFrequencyData frequency;
 
-        IRanking::TPtr ranking = MakeDefaultRanking(frequency);
-
-        THashMap<TString, ISchema::TPtr> schemasByCluster;
-        for (auto& [cluster, fs] : fss) {
-            schemasByCluster[std::move(cluster)] =
-                MakeSimpleSchema(
-                    MakeStaticSimpleSchema(std::move(fs)));
-        }
-
         TVector<INameService::TPtr> children = {
             MakeStaticNameService(std::move(names), frequency),
-            MakeSchemaNameService(MakeDispatchSchema(std::move(schemasByCluster))),
+            MakeSchemaNameService(MakeSimpleSchema(MakeStaticSimpleSchema(std::move(fs)))),
             MakeClusterNameService(MakeStaticClusterDiscovery(std::move(clusters))),
         };
-
-        INameService::TPtr service = MakeUnionNameService(std::move(children), ranking);
+        INameService::TPtr service = MakeUnionNameService(
+            std::move(children), MakeDefaultRanking(frequency));
 
         return MakeSqlCompletionEngine(std::move(lexer), std::move(service));
     }
 
-    TVector<TCandidate> Complete(ISqlCompletionEngine::TPtr& engine, TString sharped) {
-        return engine->CompleteAsync(SharpedInput(sharped)).GetValueSync().Candidates;
+    TVector<TCandidate> Complete(ISqlCompletionEngine::TPtr& engine, TString sharped, TEnvironment env = {}) {
+        return engine->CompleteAsync(SharpedInput(sharped), std::move(env)).GetValueSync().Candidates;
     }
 
     TVector<TCandidate> CompleteTop(size_t limit, ISqlCompletionEngine::TPtr& engine, TString sharped) {
@@ -189,10 +180,45 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
     Y_UNIT_TEST(Use) {
         TVector<TCandidate> expected = {
             {ClusterName, "example"},
-            {ClusterName, "yt:saurus"},
+            {ClusterName, "saurus"},
         };
         auto engine = MakeSqlCompletionEngineUT();
         UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "USE "), expected);
+    }
+
+    Y_UNIT_TEST(UseClusterResultion) {
+        auto engine = MakeSqlCompletionEngineUT();
+        {
+            TVector<TCandidate> expected = {
+                {TableName, "`maxim"},
+                {ClusterName, "example"},
+                {ClusterName, "saurus"},
+                {Keyword, "ANY"},
+            };
+            UNIT_ASSERT_VALUES_EQUAL(
+                Complete(
+                    engine,
+                    "USE yt:$cluster_name; SELECT * FROM ",
+                    {.Parameters = {{"cluster_name", "saurus"}}}),
+                expected);
+        }
+        {
+            TVector<TCandidate> expected = {
+                {FolderName, "`.sys/"},
+                {FolderName, "`local/"},
+                {FolderName, "`prod/"},
+                {FolderName, "`test/"},
+                {ClusterName, "example"},
+                {ClusterName, "saurus"},
+                {Keyword, "ANY"},
+            };
+            UNIT_ASSERT_VALUES_EQUAL(
+                Complete(
+                    engine,
+                    "USE yt:$cluster_name; SELECT * FROM ",
+                    {.Parameters = {}}),
+                expected);
+        }
     }
 
     Y_UNIT_TEST(Alter) {
@@ -243,12 +269,12 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         auto engine = MakeSqlCompletionEngineUT();
         {
             TVector<TCandidate> expected = {
-                {FolderName, "`.sys/`"},
-                {FolderName, "`local/`"},
-                {FolderName, "`prod/`"},
-                {FolderName, "`test/`"},
+                {FolderName, "`.sys/"},
+                {FolderName, "`local/"},
+                {FolderName, "`prod/"},
+                {FolderName, "`test/"},
                 {ClusterName, "example"},
-                {ClusterName, "yt:saurus"},
+                {ClusterName, "saurus"},
                 {Keyword, "IF NOT EXISTS"},
             };
             UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "CREATE TABLE #"), expected);
@@ -292,12 +318,12 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
 
     Y_UNIT_TEST(DropObject) {
         TVector<TCandidate> expected = {
-            {FolderName, "`.sys/`"},
-            {FolderName, "`local/`"},
-            {FolderName, "`prod/`"},
-            {FolderName, "`test/`"},
+            {FolderName, "`.sys/"},
+            {FolderName, "`local/"},
+            {FolderName, "`prod/"},
+            {FolderName, "`test/"},
             {ClusterName, "example"},
-            {ClusterName, "yt:saurus"},
+            {ClusterName, "saurus"},
             {Keyword, "IF EXISTS"},
         };
         auto engine = MakeSqlCompletionEngineUT();
@@ -488,12 +514,12 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         auto engine = MakeSqlCompletionEngineUT();
         {
             TVector<TCandidate> expected = {
-                {FolderName, "`.sys/`"},
-                {FolderName, "`local/`"},
-                {FolderName, "`prod/`"},
-                {FolderName, "`test/`"},
+                {FolderName, "`.sys/"},
+                {FolderName, "`local/"},
+                {FolderName, "`prod/"},
+                {FolderName, "`test/"},
                 {ClusterName, "example"},
-                {ClusterName, "yt:saurus"},
+                {ClusterName, "saurus"},
                 {Keyword, "ANY"},
             };
             UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "SELECT * FROM "), expected);
@@ -501,7 +527,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         {
             TString input = "SELECT * FROM pr";
             TVector<TCandidate> expected = {
-                {FolderName, "`prod/`"},
+                {FolderName, "`prod/"},
             };
             TCompletion actual = engine->Complete(SharpedInput(input));
             UNIT_ASSERT_VALUES_EQUAL(actual.Candidates, expected);
@@ -593,12 +619,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         auto engine = MakeSqlCompletionEngineUT();
         {
             TVector<TCandidate> expected = {
-                {ClusterName, "yt:saurus"},
-            };
-            UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "SELECT * FROM yt#"), expected);
-        }
-        {
-            TVector<TCandidate> expected = {
+                {ClusterName, "example"},
                 {ClusterName, "saurus"},
             };
             UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "SELECT * FROM yt:"), expected);
@@ -611,13 +632,13 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         }
         {
             TVector<TCandidate> expected = {
-                {TableName, "`maxim`"},
+                {TableName, "`maxim"},
             };
             UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "SELECT * FROM yt:saurus."), expected);
         }
         {
             TVector<TCandidate> expected = {
-                {TableName, "`people`"},
+                {TableName, "`people"},
             };
             UNIT_ASSERT_VALUES_EQUAL(CompleteTop(1, engine, "SELECT * FROM example."), expected);
         }
@@ -633,34 +654,34 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         auto engine = MakeSqlCompletionEngineUT();
         {
             TVector<TCandidate> expected = {
-                {TableName, "`maxim`"},
+                {TableName, "`maxim"},
                 {ClusterName, "example"},
-                {ClusterName, "yt:saurus"},
+                {ClusterName, "saurus"},
                 {Keyword, "ANY"},
             };
             UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "USE yt:saurus; SELECT * FROM "), expected);
         }
         {
             TVector<TCandidate> expected = {
-                {TableName, "`people`"},
-                {FolderName, "`yql/`"},
+                {TableName, "`people"},
+                {FolderName, "`yql/"},
             };
             UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "USE yt:saurus; SELECT * FROM example."), expected);
         }
         {
             TVector<TCandidate> expected = {
-                {TableName, "`maxim`"},
+                {TableName, "`maxim"},
                 {ClusterName, "example"},
-                {ClusterName, "yt:saurus"},
+                {ClusterName, "saurus"},
                 {Keyword, "ANY"},
             };
             UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "USE example; USE yt:saurus; SELECT * FROM "), expected);
         }
         {
             TVector<TCandidate> expected = {
-                {TableName, "`maxim`"},
+                {TableName, "`maxim"},
                 {ClusterName, "example"},
-                {ClusterName, "yt:saurus"},
+                {ClusterName, "saurus"},
                 {Keyword, "ANY"},
             };
             UNIT_ASSERT_VALUES_EQUAL(Complete(engine, R"(
@@ -673,10 +694,10 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         }
         {
             TVector<TCandidate> expected = {
-                {TableName, "`people`"},
-                {FolderName, "`yql/`"},
+                {TableName, "`people"},
+                {FolderName, "`yql/"},
                 {ClusterName, "example"},
-                {ClusterName, "yt:saurus"},
+                {ClusterName, "saurus"},
                 {Keyword, "ANY"},
             };
             UNIT_ASSERT_VALUES_EQUAL(Complete(engine, R"(
@@ -745,12 +766,12 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         auto engine = MakeSqlCompletionEngineUT();
         {
             TVector<TCandidate> expected = {
-                {FolderName, "`.sys/`"},
-                {FolderName, "`local/`"},
-                {FolderName, "`prod/`"},
-                {FolderName, "`test/`"},
+                {FolderName, "`.sys/"},
+                {FolderName, "`local/"},
+                {FolderName, "`prod/"},
+                {FolderName, "`test/"},
                 {ClusterName, "example"},
-                {ClusterName, "yt:saurus"},
+                {ClusterName, "saurus"},
             };
             UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "UPSERT INTO "), expected);
         }
@@ -980,12 +1001,17 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
     }
 
     Y_UNIT_TEST(Tabbing) {
-        TString query =
-            "SELECT \n"
-            "  123467, \"Hello, {name}! 编码\"}, \n"
-            "  (1 + (5 * 1 / 0)), MIN(identifier), \n"
-            "  Bool(field), Math::Sin(var) \n"
-            "FROM `local/test/space/table` JOIN test;";
+        TString query = R"(
+USE example;
+
+SELECT
+    123467, \"Hello, {name}! 编码\"},
+    (1 + (5 * 1 / 0)), MIN(identifier),
+    Bool(field), Math::Sin(var)
+FROM `local/test/space/table` 
+JOIN yt:$cluster_name.test;
+)";
+
         query += query + ";";
         query += query + ";";
 
@@ -1174,6 +1200,32 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
             };
             UNIT_ASSERT_VALUES_EQUAL(CompleteTop(expected.size(), engine, "SELECT * FROM a WITH "), expected);
         }
+    }
+
+    Y_UNIT_TEST(IgnoredRules) {
+        auto lexer = MakePureLexerSupplier();
+
+        TNameSet names;
+        TFrequencyData frequency;
+        auto service = MakeStaticNameService(names, MakeDefaultRanking(frequency));
+
+        {
+            auto engine = MakeSqlCompletionEngine(lexer, service);
+            UNIT_ASSERT_UNEQUAL(Complete(engine, {"UPDA"}).size(), 0);
+            UNIT_ASSERT_UNEQUAL(Complete(engine, {"DELE"}).size(), 0);
+            UNIT_ASSERT_UNEQUAL(Complete(engine, {"ROLL"}).size(), 0);
+            UNIT_ASSERT_UNEQUAL(Complete(engine, {"INSE"}).size(), 0);
+            UNIT_ASSERT_UNEQUAL(Complete(engine, {"SELE"}).size(), 0);
+        }
+
+        auto config = MakeYQLConfiguration();
+        auto engine = MakeSqlCompletionEngine(lexer, std::move(service), config);
+
+        UNIT_ASSERT_EQUAL(Complete(engine, {"UPDA"}).size(), 0);
+        UNIT_ASSERT_EQUAL(Complete(engine, {"DELE"}).size(), 0);
+        UNIT_ASSERT_EQUAL(Complete(engine, {"ROLL"}).size(), 0);
+        UNIT_ASSERT_UNEQUAL(Complete(engine, {"INSE"}).size(), 0);
+        UNIT_ASSERT_UNEQUAL(Complete(engine, {"SELE"}).size(), 0);
     }
 
 } // Y_UNIT_TEST_SUITE(SqlCompleteTests)

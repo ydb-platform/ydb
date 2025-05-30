@@ -32,6 +32,8 @@ namespace {
 
 using namespace NNodes;
 
+constexpr size_t WideLimit = 101;
+
 using TPeepHoleOptimizerPtr = TExprNode::TPtr (*const)(const TExprNode::TPtr&, TExprContext&);
 using TPeepHoleOptimizerMap = std::unordered_map<std::string_view, TPeepHoleOptimizerPtr>;
 
@@ -2533,7 +2535,7 @@ TExprNode::TPtr ExpandFlatMap(const TExprNode::TPtr& node, TExprContext& ctx) {
     }
 
     if (const auto kind = node->Head().GetTypeAnn()->GetKind(); (kind == ETypeAnnotationKind::Flow || kind == ETypeAnnotationKind::List) &&
-        body.IsCallable("AsList") && body.ChildrenSize() > 1U) {
+        body.IsCallable("AsList") && body.ChildrenSize() > 1U && body.ChildrenSize() <= WideLimit) {
         constexpr auto multimap = Ordered ? "OrderedMultiMap" : "MultiMap";
         YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << node->Content() << " as " << multimap << " of size " << body.ChildrenSize();
         return ctx.NewCallable(node->Pos(), multimap, {node->HeadPtr(), ctx.DeepCopyLambda(lambda, body.ChildrenList())});
@@ -3495,13 +3497,16 @@ TExprNode::TPtr OptimizeMap(const TExprNode::TPtr& node, TExprContext& ctx) {
 }
 
 TExprNode::TPtr MakeWideTableSource(const TExprNode& tableSource, TExprContext& ctx, TVector<TString>* narrowMapColumns = nullptr) {
-    // TODO check wide limit
     if (tableSource.GetTypeAnn()->GetKind() != ETypeAnnotationKind::List) {
         return nullptr;
     }
 
-    YQL_CLOG(DEBUG, CorePeepHole) << "Generate WideTableSource";
     auto structType = tableSource.GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+    if (structType->GetSize() > WideLimit) {
+        return nullptr;
+    }
+
+    YQL_CLOG(DEBUG, CorePeepHole) << "Generate WideTableSource";
     TVector<TString> columns;
     for (const auto& item : structType->GetItems()) {
         columns.push_back(TString(item->GetName()));
@@ -5660,6 +5665,10 @@ TExprNode::TPtr OptimizeWideCombiner(const TExprNode::TPtr& node, TExprContext& 
 
     if (needKeyFlatten.front()) {
         const auto flattenSize = *needKeyFlatten.front();
+        if (flattenSize > WideLimit) {
+            return node;
+        }
+
         YQL_CLOG(DEBUG, CorePeepHole) << "Flatten key by tuple for " << node->Content() << " from " << originalKeySize << " to " << flattenSize;
         auto children = node->ChildrenList();
 
@@ -5673,6 +5682,10 @@ TExprNode::TPtr OptimizeWideCombiner(const TExprNode::TPtr& node, TExprContext& 
 
     if (needKeyFlatten.back()) {
         const auto flattenSize = *needKeyFlatten.back();
+        if (flattenSize > WideLimit) {
+            return node;
+        }
+
         YQL_CLOG(DEBUG, CorePeepHole) << "Flatten key by struct for " << node->Content() << " from " << originalKeySize << " to " << flattenSize;
         auto children = node->ChildrenList();
 
@@ -5694,6 +5707,10 @@ TExprNode::TPtr OptimizeWideCombiner(const TExprNode::TPtr& node, TExprContext& 
 
     if (needStateFlatten.front()) {
         const auto flattenSize = *needStateFlatten.front();
+        if (flattenSize > WideLimit) {
+            return node;
+        }
+
         YQL_CLOG(DEBUG, CorePeepHole) << "Flatten state by tuple for " << node->Content() << " from " << originalStateSize << " to " << flattenSize;
         auto children = node->ChildrenList();
 
@@ -5707,6 +5724,10 @@ TExprNode::TPtr OptimizeWideCombiner(const TExprNode::TPtr& node, TExprContext& 
 
     if (needStateFlatten.back()) {
         const auto flattenSize = *needStateFlatten.back();
+        if (flattenSize > WideLimit) {
+            return node;
+        }
+
         YQL_CLOG(DEBUG, CorePeepHole) << "Flatten state by struct for " << node->Content() << " from " << originalStateSize << " to " << flattenSize;
         auto children = node->ChildrenList();
 
@@ -6144,7 +6165,7 @@ bool CollectBlockRewrites(const TMultiExprType* multiInputType, bool keepInputCo
 
         TExprNode::TListType funcArgs;
         std::string_view arrowFunctionName;
-        const bool rewriteAsIs = node->IsCallable({"AssumeStrict", "AssumeNonStrict", "Likely"});
+        const bool rewriteAsIs = node->IsCallable({"AssumeStrict", "AssumeNonStrict", "NoPush", "Likely"});
         if (node->IsList() || rewriteAsIs ||
             node->IsCallable({"DecimalMul", "DecimalDiv", "DecimalMod", "And", "Or", "Xor", "Not", "Coalesce", "Exists", "If", "Just", "AsStruct", "Member", "Nth", "ToPg", "FromPg", "PgResolvedCall", "PgResolvedOp"}))
         {

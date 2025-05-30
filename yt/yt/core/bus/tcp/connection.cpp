@@ -1310,6 +1310,11 @@ bool TTcpConnection::OnHandshakePacketReceived()
 
     if (EncryptionMode_ == EEncryptionMode::Required || otherEncryptionMode == EEncryptionMode::Required) {
         if (EncryptionMode_ == EEncryptionMode::Disabled || otherEncryptionMode == EEncryptionMode::Disabled) {
+            if (ConnectionType_ == EConnectionType::Server) {
+                // Send handshake response before abort to let client deduce reason.
+                ProcessQueuedMessages();
+                OnSocketWrite();
+            }
             Abort(TError(NBus::EErrorCode::SslError, "TLS/SSL client/server encryption mode compatibility error")
                 << TErrorAttribute("mode", EncryptionMode_)
                 << TErrorAttribute("other_mode", otherEncryptionMode));

@@ -1,8 +1,11 @@
+#include <yql/essentials/public/langver/yql_langver.h>
 #include <yql/essentials/public/udf/udf_helpers.h>
+#include <yql/essentials/public/udf/udf_type_ops.h>
 #include <yql/essentials/public/udf/udf_value_builder.h>
 
 #include <contrib/libs/re2/re2/re2.h>
 
+#include <util/system/env.h>
 #include <util/charset/utf8.h>
 #include <util/string/cast.h>
 
@@ -36,7 +39,40 @@ namespace {
                                                 xx(WordBoundary, 11, bool, false, set_word_boundary, Id) \
                                                     xx(OneLine, 12, bool, false, set_one_line, Id)
 
-    enum EOptionsField : ui32 {
+    ui64 GetFailProbability() {
+        auto envResult = TryGetEnv("YQL_RE2_REGEXP_PROBABILITY_FAIL");
+        if (!envResult) {
+            return 0;
+        }
+        ui64 result;
+        bool isValid = TryIntFromString<10, ui64>(envResult->data(), envResult->size(), result);
+        Y_ENSURE(isValid, TStringBuilder() << "Error while parsing YQL_RE2_REGEXP_PROBABILITY_FAIL. Actual value is: " << *envResult);
+        return result;
+    }
+
+    bool ShouldFailOnInvalidRegexp(const std::string_view regexp, NYql::TLangVersion currentLangVersion) {
+        if (currentLangVersion >= NYql::MakeLangVersion(2025, 3)) {
+            return true;
+        }
+        THashType hash = GetStringHash(regexp) % 100;
+        ui64 failProbability = GetFailProbability();
+        return hash < failProbability;
+    }
+
+    RE2::Options CreateDefaultOptions(){
+        RE2::Options options;
+#define FIELD_HANDLE(name, index, type, defVal, setter, conv) options.setter(conv(defVal));
+        OPTIONS_MAP(FIELD_HANDLE)
+#undef FIELD_HANDLE
+        options.set_log_errors(false);
+        return options;
+    }
+
+    TString FormatRegexpError(const RE2& Regexp) {
+        return TStringBuilder() << "Regexp compilation failed. Regexp: \"" << Regexp.pattern() << "\". Original error is: \"" << Regexp.error() << "\"";
+    }
+
+    enum EOptionsField: ui32 {
         OPTIONS_MAP(ENUM_VALUE_GEN)
             Count
     };
@@ -69,11 +105,13 @@ namespace {
                 EMode mode,
                 const TOptionsSchema& optionsSchema,
                 TSourcePosition pos,
+                NYql::TLangVersion currentlangVersion,
                 const TRegexpGroups& regexpGroups = TRegexpGroups())
                 : Mode(mode)
                 , OptionsSchema(optionsSchema)
                 , Pos_(pos)
                 , RegexpGroups(regexpGroups)
+                , CurrentLangVersion(currentlangVersion)
             {
             }
 
@@ -89,13 +127,15 @@ namespace {
                         Mode,
                         posix,
                         OptionsSchema,
-                        Pos_));
+                        Pos_,
+                        CurrentLangVersion));
             }
 
             EMode Mode;
             const TOptionsSchema OptionsSchema;
             TSourcePosition Pos_;
             const TRegexpGroups RegexpGroups;
+            NYql::TLangVersion CurrentLangVersion;
         };
 
         static const TStringRef& Name(EMode mode) {
@@ -130,18 +170,19 @@ namespace {
             EMode mode,
             bool posix,
             const TOptionsSchema& optionsSchema,
-            TSourcePosition pos)
+            TSourcePosition pos,
+            NYql::TLangVersion currentLangVersion)
             : RegexpGroups(regexpGroups)
             , Mode(mode)
             , Captured()
             , OptionsSchema(optionsSchema)
             , Pos_(pos)
-        {
+            , CurrentLangVersion(currentLangVersion) {
             try {
                 auto patternValue = runConfig.GetElement(0);
                 auto optionsValue = runConfig.GetElement(1);
                 const std::string_view pattern(patternValue.AsStringRef());
-                RE2::Options options;
+                RE2::Options options = CreateDefaultOptions();
 
                 options.set_posix_syntax(posix);
                 bool needUtf8 = (UTF8Detect(pattern) == UTF8);
@@ -154,9 +195,14 @@ namespace {
 #define FIELD_HANDLE(name, index, type, defVal, setter, conv) options.setter(conv(optionsValue.GetElement(OptionsSchema.Indices[index]).Get<type>()));
                     OPTIONS_MAP(FIELD_HANDLE)
 #undef FIELD_HANDLE
+                    options.set_log_errors(false);
                 }
 
                 Regexp = std::make_unique<RE2>(StringPiece(pattern.data(), pattern.size()), options);
+
+                if (!Regexp->ok() && ShouldFailOnInvalidRegexp(pattern, CurrentLangVersion)) {
+                    throw yexception() << FormatRegexpError(*Regexp);
+                }
 
                 if (mode == EMode::CAPTURE) {
                     Captured = std::make_unique<StringPiece[]>(Regexp->NumberOfCapturingGroups() + 1);
@@ -252,6 +298,7 @@ namespace {
         std::unique_ptr<StringPiece[]> Captured;
         const TOptionsSchema OptionsSchema;
         TSourcePosition Pos_;
+        NYql::TLangVersion CurrentLangVersion;
 
         TUnboxedValue BuildEmptyStruct(const IValueBuilder* valueBuilder) const {
             TUnboxedValue* items = nullptr;
@@ -451,13 +498,18 @@ namespace {
 
                 if (!typesOnly) {
                     const auto mode = isMatch ? TRe2Udf::EMode::MATCH : TRe2Udf::EMode::GREP;
-                    builder.Implementation(new TRe2Udf::TFactory<posix>(mode, optionsSchema, builder.GetSourcePosition()));
+                    builder.Implementation(new TRe2Udf::TFactory<posix>(mode, optionsSchema, builder.GetSourcePosition(), builder.GetCurrentLangVer()));
                 }
             } else if (isCapture) {
                 TRegexpGroups groups;
                 auto optionalStringType = builder.Optional()->Item<char*>().Build();
                 auto structBuilder = builder.Struct();
-                RE2 regexp(StringPiece(typeConfig.Data(), typeConfig.Size()));
+                RE2::Options options = CreateDefaultOptions();
+                RE2 regexp(StringPiece(typeConfig.Data(), typeConfig.Size()), options);
+                if (!regexp.ok()) {
+                    builder.SetError(FormatRegexpError(regexp));
+                    return;
+                }
                 const auto& groupNames = regexp.CapturingGroupNames();
                 int groupCount = regexp.NumberOfCapturingGroups();
                 if (groupCount >= 0) {
@@ -487,35 +539,32 @@ namespace {
 
                     if (!typesOnly) {
                         builder.Implementation(
-                            new TRe2Udf::TFactory<posix>(TRe2Udf::EMode::CAPTURE, optionsSchema, builder.GetSourcePosition(), groups));
+                            new TRe2Udf::TFactory<posix>(TRe2Udf::EMode::CAPTURE, optionsSchema, builder.GetSourcePosition(), builder.GetCurrentLangVer(), groups));
                     }
 
                 } else {
-                    if (regexp.ok()) {
-                        builder.SetError("Regexp contains no capturing groups");
-                    } else {
-                        builder.SetError(regexp.error());
-                    }
+                    Y_ENSURE(regexp.ok());
+                    builder.SetError("Regexp contains no capturing groups");
                 }
             } else if (isReplace) {
                 builder.SimpleSignature<TOptional<char*>(TOptional<char*>, char*)>()
                     .RunConfig(MakeRunConfigType(builder, optOptionsStructType));
 
                 if (!typesOnly) {
-                    builder.Implementation(new TRe2Udf::TFactory<posix>(TRe2Udf::EMode::REPLACE, optionsSchema, builder.GetSourcePosition()));
+                    builder.Implementation(new TRe2Udf::TFactory<posix>(TRe2Udf::EMode::REPLACE, optionsSchema, builder.GetSourcePosition(), builder.GetCurrentLangVer()));
                 }
             } else if (isCount) {
                 builder.SimpleSignature<ui32(TOptional<char*>)>()
                     .RunConfig(MakeRunConfigType(builder, optOptionsStructType));
 
                 if (!typesOnly) {
-                    builder.Implementation(new TRe2Udf::TFactory<posix>(TRe2Udf::EMode::COUNT, optionsSchema, builder.GetSourcePosition()));
+                    builder.Implementation(new TRe2Udf::TFactory<posix>(TRe2Udf::EMode::COUNT, optionsSchema, builder.GetSourcePosition(), builder.GetCurrentLangVer()));
                 }
             } else if (isFindAndConsume) {
                 builder.SimpleSignature<TListType<char*>(TOptional<char*>)>()
                     .RunConfig(MakeRunConfigType(builder, optOptionsStructType));
                 if (!typesOnly) {
-                    builder.Implementation(new TRe2Udf::TFactory<posix>(TRe2Udf::EMode::FIND_AND_CONSUME, optionsSchema, builder.GetSourcePosition()));
+                    builder.Implementation(new TRe2Udf::TFactory<posix>(TRe2Udf::EMode::FIND_AND_CONSUME, optionsSchema, builder.GetSourcePosition(), builder.GetCurrentLangVer()));
                 }
             } else if (!(
                             TEscape::DeclareSignature(name, userType, builder, typesOnly) ||

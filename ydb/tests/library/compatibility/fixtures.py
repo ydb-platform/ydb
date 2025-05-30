@@ -33,13 +33,13 @@ all_binary_combinations_restart = [
     [[last_stable_binary_path], [last_stable_binary_path]],
 ]
 all_binary_combinations_ids_restart = [
-    last_stable_name + "_to_" + current_name,
-    current_name + "_to_" + last_stable_name,
-    current_name + "_to_" + current_name,
+    "restart_{}_to_{}".format(last_stable_name, current_name),
+    "restart_{}_to_{}".format(current_name, last_stable_name),
+    "restart_{}_to_{}".format(current_name, current_name),
 
-    prelast_stable_name + "_to_" + last_stable_name,
-    last_stable_name + "_to_" + prelast_stable_name,
-    last_stable_name + "_to_" + last_stable_name,
+    "restart_{}_to_{}".format(prelast_stable_name, last_stable_name),
+    "restart_{}_to_{}".format(last_stable_name, prelast_stable_name),
+    "restart_{}_to_{}".format(last_stable_name, last_stable_name),
 ]
 
 
@@ -100,10 +100,10 @@ all_binary_combinations_mixed = [
     [last_stable_binary_path, prelast_stable_binary_path],
 ]
 all_binary_combinations_ids_mixed = [
-    current_name,
-    last_stable_name,
-    current_name + "_and_" + last_stable_name,
-    last_stable_name + "_and_" + prelast_stable_name,
+    "mixed_{}".format(current_name),
+    "mixed_{}".format(last_stable_name),
+    "mixed_{}".format(current_name + "_and_" + last_stable_name),
+    "mixed_{}".format(last_stable_name + "_and_" + prelast_stable_name),
 ]
 
 
@@ -139,8 +139,8 @@ all_binary_combinations_rolling = [
     [prelast_stable_binary_path, last_stable_binary_path],
 ]
 all_binary_combinations_ids_rolling = [
-    last_stable_name + "_to_" + current_name,
-    prelast_stable_name + "_to_" + last_stable_name,
+    "rolling_{}_to_{}".format(last_stable_name, current_name),
+    "rolling_{}_to_{}".format(prelast_stable_name, last_stable_name),
 ]
 
 

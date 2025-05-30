@@ -902,7 +902,7 @@ bool TDescribeTopicActor::ApplyResponse(
     const auto& record = ev->Get()->Record;
     Y_ABORT_UNLESS(Settings.RequireLocation);
 
-    for (auto i = 0u; i < record.LocationsSize(); ++i) {
+    for (auto i = 0u; i < std::min<ui64>(record.LocationsSize(), TotalPartitions); ++i) {
         const auto& location = record.GetLocations(i);
         auto* locationResult = Result.mutable_partitions(i)->mutable_partition_location();
         SetPartitionLocation(location, locationResult);
@@ -1016,7 +1016,7 @@ bool TDescribeConsumerActor::ApplyResponse(
 ) {
     const auto& record = ev->Get()->Record;
     Y_ABORT_UNLESS(Settings.RequireLocation);
-    for (auto i = 0u; i < record.LocationsSize(); ++i) {
+    for (auto i = 0u; i < std::min<ui64>(record.LocationsSize(), TotalPartitions); ++i) {
         const auto& location = record.GetLocations(i);
         auto* locationResult = Result.mutable_partitions(i)->mutable_partition_location();
         SetPartitionLocation(location, locationResult);

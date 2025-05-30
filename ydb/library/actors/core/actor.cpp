@@ -296,7 +296,8 @@ namespace NActors {
         } catch (const std::exception&) {
             Cerr << "OnUnhandledException throws unhandled exception " 
                 << TypeName(exc) << ": " << exc.what() << Endl
-                << TBackTrace::FromCurrentException().PrintToString();
+                << TBackTrace::FromCurrentException().PrintToString()
+                << Endl;
             return false;
         }
     }

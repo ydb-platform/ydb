@@ -5,6 +5,7 @@ PY_SRCS(
 )
 
 PEERDIR(
+    ydb/public/sdk/python
     ydb/tests/stress/common
     ydb/tests/stress/reconfig_state_storage_workload/workload
 )

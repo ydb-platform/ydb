@@ -86,7 +86,12 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
             nullptr,
             nullptr,
             NYql::NDq::CreateReadActorFactoryConfig(appConfig->GetQueryServiceConfig().GetS3()),
-            nullptr);
+            nullptr,
+            appConfig->GetQueryServiceConfig().GetPq(),
+            NKqp::MakePqGateway(appConfig->GetQueryServiceConfig().GetPq()),
+            nullptr,
+            std::make_shared<NYdb::TDriver>(NYdb::TDriverConfig())
+        );
 
         settings
             .SetFeatureFlags(featureFlags)

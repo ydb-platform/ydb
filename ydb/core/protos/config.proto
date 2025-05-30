@@ -1153,6 +1153,7 @@ message TQueryServiceConfig {
     optional bool EnableMatchRecognize = 20 [default = false];
     repeated string AvailableExternalDataSources = 22;                  // Ignored if AllExternalDataSourcesAreAvailable is true
     optional bool AllExternalDataSourcesAreAvailable = 23 [default = true];
+    optional NYql.TPqGatewayConfig Pq = 24;
 }
 
 // Config describes immediate controls and allows

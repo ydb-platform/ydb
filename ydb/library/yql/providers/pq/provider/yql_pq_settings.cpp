@@ -30,6 +30,26 @@ void TPqConfiguration::Init(
     Dispatch(config.GetDefaultSettings());
 
     for (auto& cluster: config.GetClusterMapping()) {
+        AddCluster(cluster, databaseIds, typeCtx->Credentials, dbResolver);
+    }
+    FreezeDefaults();
+}
+
+TString TPqConfiguration::GetDatabaseForTopic(const TString& cluster) const {
+    if (TMaybe<TString> explicitDb = Database.Get()) {
+        return *explicitDb;
+    }
+    const auto clusterSetting = ClustersConfigurationSettings.FindPtr(cluster);
+    YQL_ENSURE(clusterSetting, "Unknown cluster " << cluster);
+    return clusterSetting->Database;
+}
+
+void TPqConfiguration::AddCluster(
+    const NYql::TPqClusterConfig& cluster,
+    THashMap<std::pair<TString, NYql::EDatabaseType>, NYql::TDatabaseAuth>& databaseIds,
+    const TCredentials::TPtr& credentials,
+    const std::shared_ptr<NYql::IDatabaseAsyncResolver>& dbResolver) {
+        Cerr << "AddCluster 2 " << Endl; 
         Dispatch(cluster.GetName(), cluster.GetSettings());
         TPqClusterConfigurationSettings& clusterSettings = ClustersConfigurationSettings[cluster.GetName()];
 
@@ -44,8 +64,9 @@ void TPqConfiguration::Init(
         clusterSettings.AddBearerToToken = cluster.GetAddBearerToToken();
         clusterSettings.SharedReading = cluster.GetSharedReading();
         clusterSettings.ReadGroup = cluster.GetReadGroup();
+        clusterSettings.ReadGroup = cluster.GetReadGroup();
 
-        const TString authToken = typeCtx->Credentials->FindCredentialContent("cluster:default_" + clusterSettings.ClusterName, "default_pq", cluster.GetToken());
+        const TString authToken = credentials->FindCredentialContent("cluster:default_" + clusterSettings.ClusterName, "default_pq", cluster.GetToken());
         clusterSettings.AuthToken = authToken;
         const auto structuredTokenJson = ComposeStructuredTokenJsonForServiceAccount(cluster.GetServiceAccountId(), cluster.GetServiceAccountIdSignature(), authToken);
         Tokens[clusterSettings.ClusterName] = structuredTokenJson;
@@ -60,17 +81,25 @@ void TPqConfiguration::Init(
                 YQL_CLOG(DEBUG, ProviderPq) << "Add dbId: " << cluster.GetDatabaseId() << " to DbId2Clusters";
             }
         }
-    }
-    FreezeDefaults();
+
+        Cerr << "AddCluster end " << Endl;
 }
 
-TString TPqConfiguration::GetDatabaseForTopic(const TString& cluster) const {
-    if (TMaybe<TString> explicitDb = Database.Get()) {
-        return *explicitDb;
-    }
-    const auto clusterSetting = ClustersConfigurationSettings.FindPtr(cluster);
-    YQL_ENSURE(clusterSetting, "Unknown cluster " << cluster);
-    return clusterSetting->Database;
-}
+// void TPqConfiguration::AddCluster(const NYql::TPqClusterConfig& cluster) {
+//     TPqClusterConfigurationSettings& clusterSettings = ClustersConfigurationSettings[clusterName];
+
+//     clusterSettings.ClusterName = clusterName;
+//     clusterSettings.ClusterType = NYql::TPqClusterConfig::CT_DATA_STREAMS;
+//     // clusterSettings.Endpoint = ;
+//     // clusterSettings.ConfigManagerEndpoint = cluster.GetConfigManagerEndpoint();
+//     // clusterSettings.Database = cluster.GetDatabase();
+//     // clusterSettings.DatabaseId = cluster.GetDatabaseId();
+//     // clusterSettings.TvmId = cluster.GetTvmId();
+//     // clusterSettings.UseSsl = cluster.GetUseSsl();
+//     // clusterSettings.AddBearerToToken = cluster.GetAddBearerToToken();
+//     // clusterSettings.SharedReading = cluster.GetSharedReading();
+//     // clusterSettings.ReadGroup = cluster.GetReadGroup();
+
+// }
 
 } // NYql

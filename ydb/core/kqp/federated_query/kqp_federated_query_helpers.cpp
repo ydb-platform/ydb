@@ -2,6 +2,7 @@
 
 #include <ydb/library/actors/http/http_proxy.h>
 #include <ydb/library/yql/providers/common/db_id_async_resolver/database_type.h>
+#include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway.h>
 
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/feature_flags.h>
@@ -13,7 +14,6 @@
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/http_proxy.h>
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/mdb_endpoint_generator.h>
 #include <ydb/library/actors/http/http_proxy.h>
-
 #include <yql/essentials/public/issue/yql_issue_utils.h>
 
 #include <yt/yql/providers/yt/comp_nodes/dq/dq_yt_factory.h>
@@ -71,6 +71,18 @@ namespace NKikimr::NKqp {
         return NYql::IHTTPGateway::Make(&httpGatewayConfig, httpGatewayGroup);
     }
 
+    NYql::IPqGateway::TPtr MakePqGateway(const NYql::TPqGatewayConfig& pqGatewayConfig) {
+        NYdb::TDriverConfig config;
+        NYdb::TDriver driver(config);
+        NYql::TPqGatewayServices pqServices(
+            driver,
+            nullptr,
+            nullptr,
+            std::make_shared<NYql::TPqGatewayConfig>(pqGatewayConfig),
+            nullptr);
+        return CreatePqNativeGateway(pqServices);
+    }
+
     NYql::THttpGatewayConfig DefaultHttpGatewayConfig() {
         NYql::THttpGatewayConfig config;
         config.SetMaxInFlightCount(2000);
@@ -118,6 +130,14 @@ namespace NKikimr::NKqp {
         YtGatewayConfig = queryServiceConfig.GetYt();
         YtGateway = MakeYtGateway(appData->FunctionRegistry, queryServiceConfig);
         DqTaskTransformFactory = NYql::CreateYtDqTaskTransformFactory(true);
+
+        PqGatewayConfig = queryServiceConfig.GetPq();
+        PqGateway = MakePqGateway(PqGatewayConfig);
+
+        ActorSystemPtr = std::make_shared<NKikimr::TDeferredActorLogBackend::TAtomicActorSystemPtr>(nullptr);
+        NYdb::TDriverConfig cfg;
+        cfg.SetLog(std::make_unique<NKikimr::TDeferredActorLogBackend>(ActorSystemPtr, NKikimrServices::EServiceKikimr::YDB_SDK));
+        Driver = std::make_shared<NYdb::TDriver>(cfg);
 
         // Initialize Token Accessor
         if (appConfig.GetAuthConfig().HasTokenAccessorConfig()) {
@@ -175,7 +195,11 @@ namespace NKikimr::NKqp {
             SolomonGateway,
             nullptr,
             S3ReadActorFactoryConfig,
-            DqTaskTransformFactory};
+            DqTaskTransformFactory,
+            PqGatewayConfig,
+            PqGateway,
+            ActorSystemPtr,
+            Driver};
 
         // Init DatabaseAsyncResolver only if all requirements are met
         if (DatabaseResolverActorId && MdbEndpointGenerator &&

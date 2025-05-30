@@ -40,6 +40,60 @@ Y_UNIT_TEST_SUITE(KqpParallelRange) {
             UNIT_ASSERT(NJson::ReadJsonTree(*result.GetStats()->GetPlan(), &plan));
             UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Stats"]["Tasks"].GetIntegerSafe(), 4);
         }
+        {
+            auto query = Q_(R"(
+                SELECT Id, Value FROM TestSharded
+                WHERE Id >= 123;
+            )");
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx(),
+                                               TExecuteQuerySettings{}.StatsMode(EStatsMode::Full))
+                              .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+            NJson::TJsonValue plan;
+            UNIT_ASSERT(NJson::ReadJsonTree(*result.GetStats()->GetPlan(), &plan));
+            UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Stats"]["Tasks"].GetIntegerSafe(), 4);
+        }
+        {
+            auto query = Q_(R"(
+                SELECT Id, Value FROM TestSharded;
+            )");
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx(),
+                                               TExecuteQuerySettings{}.StatsMode(EStatsMode::Full))
+                              .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+            NJson::TJsonValue plan;
+            UNIT_ASSERT(NJson::ReadJsonTree(*result.GetStats()->GetPlan(), &plan));
+            UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Stats"]["Tasks"].GetIntegerSafe(), 4);
+        }
+        {
+            auto query = Q_(R"(
+                SELECT Id, Value FROM TestSharded
+                WHERE Id IN (0, 1, 268435455);
+            )");
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx(),
+                                               TExecuteQuerySettings{}.StatsMode(EStatsMode::Full))
+                              .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+            NJson::TJsonValue plan;
+            UNIT_ASSERT(NJson::ReadJsonTree(*result.GetStats()->GetPlan(), &plan));
+            UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Stats"]["Tasks"].GetIntegerSafe(), 2);
+        }
+        {
+            auto query = Q_(R"(
+                SELECT Id, Value FROM TestSharded
+                WHERE Id IN (0, 268435455, 536870911, 805306367, 1073741823, 1342177279);
+            )");
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx(),
+                TExecuteQuerySettings{}.StatsMode(EStatsMode::Full)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+            NJson::TJsonValue plan;
+            UNIT_ASSERT(NJson::ReadJsonTree(*result.GetStats()->GetPlan(), &plan));
+            UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Stats"]["Tasks"].GetIntegerSafe(), 4);
+        }
     }
 
     Y_UNIT_TEST(SequentialPointRead) {

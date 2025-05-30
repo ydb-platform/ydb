@@ -30,7 +30,7 @@
 # =======================
 
 KEEP     Apache-2.0           0e8699c5f5ea602534a6558430df2b8d
-BELONGS absl/base/ya.make absl/debugging/ya.make absl/hash/ya.make absl/log/ya.make absl/numeric/ya.make absl/profiling/ya.make absl/random/ya.make absl/strings/ya.make absl/synchronization/ya.make absl/utility/ya.make ya.make
+BELONGS absl/base/ya.make absl/crc/ya.make absl/debugging/ya.make absl/hash/ya.make absl/log/ya.make absl/numeric/ya.make absl/profiling/ya.make absl/random/ya.make absl/strings/ya.make absl/synchronization/ya.make absl/utility/ya.make ya.make
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: Apache-2.0
@@ -41,6 +41,8 @@ BELONGS absl/base/ya.make absl/debugging/ya.make absl/hash/ya.make absl/log/ya.m
         absl/base/internal/cycleclock_config.h [3:13]
         absl/base/internal/poison.cc [3:13]
         absl/base/internal/poison.h [3:13]
+        absl/base/internal/tracing.cc [3:13]
+        absl/base/internal/tracing.h [3:13]
         absl/base/internal/unscaledcycleclock_config.h [3:13]
         absl/base/prefetch.h [3:13]
         absl/container/hash_container_defaults.h [3:13]
@@ -114,6 +116,7 @@ BELONGS absl/base/ya.make absl/debugging/ya.make absl/hash/ya.make absl/log/ya.m
         absl/synchronization/internal/kernel_timeout.cc [3:13]
         absl/utility/internal/if_constexpr.h [3:13]
     Belongs difference:
+        + ya.make
         - absl/container/ya.make absl/status/ya.make
 
 KEEP     Apache-2.0           0f66a26c8211d9f8c21369fcb6702370
@@ -173,7 +176,7 @@ BELONGS absl/time/ya.make
         absl/time/internal/cctz/src/tzfile.h [8:8]
 
 KEEP     Apache-2.0           3ea5060c4f08f5769674fbf0c0fb3992
-BELONGS absl/algorithm/ya.make absl/base/ya.make absl/container/ya.make absl/debugging/ya.make absl/flags/ya.make absl/functional/ya.make absl/hash/ya.make absl/log/ya.make absl/memory/ya.make absl/meta/ya.make absl/numeric/ya.make absl/profiling/ya.make absl/random/ya.make absl/status/ya.make absl/strings/ya.make absl/synchronization/ya.make absl/time/ya.make absl/types/ya.make absl/utility/ya.make ya.make
+BELONGS absl/algorithm/ya.make absl/base/ya.make absl/cleanup/ya.make absl/container/ya.make absl/crc/ya.make absl/debugging/ya.make absl/flags/ya.make absl/functional/ya.make absl/hash/ya.make absl/log/ya.make absl/memory/ya.make absl/meta/ya.make absl/numeric/ya.make absl/profiling/ya.make absl/random/ya.make absl/status/ya.make absl/strings/ya.make absl/synchronization/ya.make absl/time/ya.make absl/types/ya.make absl/utility/ya.make ya.make
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: Apache-2.0
@@ -402,6 +405,8 @@ BELONGS absl/algorithm/ya.make absl/base/ya.make absl/container/ya.make absl/deb
         absl/log/internal/proto.h [3:13]
         absl/log/internal/strip.h [3:13]
         absl/log/internal/structured.h [3:13]
+        absl/log/internal/structured_proto.cc [4:14]
+        absl/log/internal/structured_proto.h [3:13]
         absl/log/internal/test_actions.h [3:13]
         absl/log/internal/test_helpers.h [3:13]
         absl/log/internal/test_matchers.h [3:13]
@@ -612,6 +617,8 @@ BELONGS absl/algorithm/ya.make absl/base/ya.make absl/container/ya.make absl/deb
         absl/types/span.h [4:14]
         absl/types/variant.h [3:13]
         absl/utility/utility.h [3:13]
+    Belongs difference:
+        + ya.make
 
 SKIP     LicenseRef-scancode-warranty-disclaimer 5ba761db85e57267704f71a6bcf20c2a
 BELONGS absl/container/ya.make absl/profiling/ya.make

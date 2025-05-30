@@ -7,6 +7,7 @@
 
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/auth.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/statestorage.h>
 #include <ydb/core/base/statestorage_impl.h>
@@ -538,16 +539,8 @@ bool TCms::CheckAccess(const TString &token,
                        TString &error,
                        const TActorContext &ctx)
 {
-    auto *appData = AppData(ctx);
-
-    if (appData->AdministrationAllowedSIDs.empty())
+    if (IsAdministrator(AppData(ctx), token)) {
         return true;
-
-    if (token) {
-        NACLib::TUserToken userToken(token);
-        for (auto &sid : appData->AdministrationAllowedSIDs)
-            if (userToken.IsExist(sid))
-                return true;
     }
 
     code = TStatus::UNAUTHORIZED;
@@ -721,7 +714,8 @@ bool TCms::TryToLockStateStorageReplica(const TAction& action,
         return true;
     }
 
-    const ui32 nToSelect = ClusterInfo->StateStorageInfo->NToSelect;
+    Y_ABORT_UNLESS(ClusterInfo->StateStorageInfo->RingGroups.size() > 0);
+    const ui32 nToSelect = ClusterInfo->StateStorageInfo->RingGroups[0].NToSelect;
     const ui32 currentRing = ClusterInfo->GetRingId(node.NodeId);
     ui8 currentRingState = TStateStorageRingInfo::Unknown;
     ui32 restartRings = 0;

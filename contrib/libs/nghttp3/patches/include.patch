@@ -1,0 +1,5 @@
+--- contrib/libs/nghttp3/lib/includes/nghttp3/nghttp3.h	(index)
++++ contrib/libs/nghttp3/lib/includes/nghttp3/nghttp3.h	(working tree)
+@@ -50,1 +50,1 @@ extern "C" {
+-#include <nghttp3/version.h>
++#include "version.h"

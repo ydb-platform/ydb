@@ -36,7 +36,7 @@
 --- contrib/python/click/py3/tests/test_utils.py	(index)
 +++ contrib/python/click/py3/tests/test_utils.py	(working tree)
 @@ -460,2 +460,2 @@ def test_expand_args(monkeypatch):
--    assert "setup.cfg" in click.utils._expand_args(["*.cfg"])
+-    assert "pyproject.toml" in click.utils._expand_args(["*.toml"])
 -    assert os.path.join("docs", "conf.py") in click.utils._expand_args(["**/conf.py"])
-+    #assert "setup.cfg" in click.utils._expand_args(["*.cfg"])
++    #assert "pyproject.toml" in click.utils._expand_args(["*.toml"])
 +    #assert os.path.join("docs", "conf.py") in click.utils._expand_args(["**/conf.py"])

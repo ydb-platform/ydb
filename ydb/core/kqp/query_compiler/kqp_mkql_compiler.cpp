@@ -197,7 +197,7 @@ TKqpKeyRange MakeKeyRange(const TKqlReadTableBase& readTable, const TKqlCompileC
     if (settings.ItemsLimit) {
         keyRange.ItemsLimit = MkqlBuildExpr(*settings.ItemsLimit, buildCtx);
     }
-    keyRange.Reverse = settings.Reverse;
+    keyRange.Reverse = settings.IsReverse();
 
     return keyRange;
 }
@@ -210,7 +210,7 @@ TKqpKeyRanges MakeComputedKeyRanges(const TKqlReadTableRangesBase& readTable, co
     TKqpKeyRanges ranges = {
         .Ranges = MkqlBuildExpr(readTable.Ranges().Ref(), buildCtx),
         .ItemsLimit = settings.ItemsLimit ? MkqlBuildExpr(*settings.ItemsLimit, buildCtx) : ctx.PgmBuilder().NewNull(),
-        .Reverse = settings.Reverse,
+        .Reverse = settings.IsReverse(),
     };
 
     return ranges;
@@ -329,23 +329,6 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
                 GetKqpColumns(tableMeta, readTable.Columns(), true),
                 returnType
             );
-
-            return result;
-        });
-
-    compiler->AddCallable(TKqpLookupTable::CallableName(),
-        [&ctx](const TExprNode& node, TMkqlBuildContext& buildCtx) {
-            TKqpLookupTable lookupTable(&node);
-            const auto& tableMeta = ctx.GetTableMeta(lookupTable.Table());
-            auto lookupKeys = MkqlBuildExpr(lookupTable.LookupKeys().Ref(), buildCtx);
-
-            auto keysType = lookupTable.LookupKeys().Ref().GetTypeAnn()->Cast<TStreamExprType>();
-            ValidateColumnsType(keysType, tableMeta);
-
-            TVector<TStringBuf> keyColumns(tableMeta.KeyColumnNames.begin(), tableMeta.KeyColumnNames.end());
-            auto result = ctx.PgmBuilder().KqpLookupTable(MakeTableId(lookupTable.Table()), lookupKeys,
-                GetKqpColumns(tableMeta, keyColumns, false),
-                GetKqpColumns(tableMeta, lookupTable.Columns(), true));
 
             return result;
         });

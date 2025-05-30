@@ -436,7 +436,7 @@ public:
         const auto main = BasicBlock::Create(context, "main", ctx.Func);
         const auto more = BasicBlock::Create(context, "more", ctx.Func);
 
-        annotate(BranchInst::Create(make, main, IsInvalid(statePtr, block), block));
+        annotate(BranchInst::Create(make, main, IsInvalid(statePtr, block, context), block));
         block = make;
 
         const auto count = GetNodeValue(Count, ctx, block);
@@ -453,7 +453,7 @@ public:
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
         const auto self = annotate(CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block));
-        const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TWideTopWrapper::MakeState));
+        const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TWideTopWrapper::MakeState>());
         const auto makeType = FunctionType::get(Type::getVoidTy(context), {self->getType(), ctx.Ctx->getType(), statePtr->getType(), trunc->getType(), dirs->getType()}, false);
         const auto makeFuncPtr = annotate(CastInst::Create(Instruction::IntToPtr, makeFunc, PointerType::getUnqual(makeType), "function", block));
         annotate(CallInst::Create(makeType, makeFuncPtr, {self, ctx.Ctx, statePtr, trunc, dirs}, "", block));
@@ -496,7 +496,7 @@ public:
             block = rest;
 
             annotate(new StoreInst(ConstantInt::get(last->getType(), static_cast<i32>(EFetchResult::Finish)), statusPtr, block));
-            const auto sealFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState<Sort>::Seal));
+            const auto sealFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState<Sort>::Seal>());
             const auto sealType = FunctionType::get(Type::getVoidTy(context), {stateArg->getType()}, false);
             const auto sealPtr = annotate(CastInst::Create(Instruction::IntToPtr, sealFunc, PointerType::getUnqual(sealType), "seal", block));
             annotate(CallInst::Create(sealType, sealPtr, {stateArg}, "", block));
@@ -518,7 +518,7 @@ public:
                 annotate(new StoreInst(item, placeholders[i], block));
             }
 
-            const auto pushFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState<Sort>::Put));
+            const auto pushFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState<Sort>::Put>());
             const auto pushType = FunctionType::get(Type::getInt1Ty(context), {stateArg->getType()}, false);
             const auto pushPtr = annotate(CastInst::Create(Instruction::IntToPtr, pushFunc, PointerType::getUnqual(pushType), "function", block));
             const auto accepted = annotate(CallInst::Create(pushType, pushPtr, {stateArg}, "accepted", block));
@@ -557,7 +557,7 @@ public:
 
             const auto good = BasicBlock::Create(context, "good", ctx.Func);
 
-            const auto extractFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState<Sort>::Extract));
+            const auto extractFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState<Sort>::Extract>());
             const auto extractType = FunctionType::get(outputPtrType, {stateArg->getType()}, false);
             const auto extractPtr = annotate(CastInst::Create(Instruction::IntToPtr, extractFunc, PointerType::getUnqual(extractType), "extract", block));
             const auto out = annotate(CallInst::Create(extractType, extractPtr, {stateArg}, "out", block));
@@ -651,7 +651,7 @@ private:
 
 public:
     TSpillingSupportState(TMemoryUsageInfo* memInfo, const bool* directons, size_t keyWidth, const TCompareFunc& compare,
-        const std::vector<ui32>& indexes, TMultiType* tupleMultiType, const TComputationContext& ctx)
+        const std::vector<ui32>& indexes, TMultiType* tupleMultiType, const TComputationContext& ctx, NUdf::TLoggerPtr logger, NUdf::TLogComponentId logComponent)
         : TBase(memInfo)
         , Indexes(indexes)
         , Directions(directons, directons + keyWidth)
@@ -659,6 +659,8 @@ public:
         , Fields(Indexes.size(), nullptr)
         , TupleMultiType(tupleMultiType)
         , Ctx(ctx)
+        , Logger(logger)
+        , LogComponent(logComponent)
     {
         if (Ctx.SpillerFactory) {
             Spiller = Ctx.SpillerFactory->CreateSpiller();
@@ -678,7 +680,8 @@ public:
                 ResetFields();
                 auto nextMode = (IsReadFromChannelFinished() ? EOperatingMode::ProcessSpilled : EOperatingMode::InMemory);
 
-                YQL_LOG(INFO) << (nextMode == EOperatingMode::ProcessSpilled ? "Switching to ProcessSpilled" : "Switching to Memory mode");
+                UDF_LOG(Logger, LogComponent, NUdf::ELogLevel::Info, TStringBuilder() <<
+                        (nextMode == EOperatingMode::ProcessSpilled ? "Switching to ProcessSpilled" : "Switching to Memory mode"));
 
                 SwitchMode(nextMode);
                 return IsReadyToContinue();
@@ -712,8 +715,8 @@ public:
             const auto used = TlsAllocState->GetUsed();
             const auto limit = TlsAllocState->GetLimit();
 
-            YQL_LOG(INFO) << "Yellow zone reached " << (used*100/limit) << "%=" << used << "/" << limit;
-            YQL_LOG(INFO) << "Switching Memory mode to Spilling";
+            UDF_LOG(Logger, LogComponent, NUdf::ELogLevel::Info, TStringBuilder() << "Yellow zone reached " << (used*100/limit) << "%=" << used << "/" << limit);
+            UDF_LOG(Logger, LogComponent, NUdf::ELogLevel::Info, "Switching Memory mode to Spilling");
 
             SwitchMode(EOperatingMode::Spilling);
         }
@@ -860,6 +863,8 @@ private:
     std::vector<TSpilledUnboxedValuesIterator> SpilledUnboxedValuesIterators;
     ISpiller::TPtr Spiller = nullptr;
     bool IsHeapBuilt = false;
+    const NYql::NUdf::TLoggerPtr Logger;
+    const NYql::NUdf::TLogComponentId LogComponent;
 };
 
 class TWideSortWrapper: public TStatefulWideFlowCodegeneratorNode<TWideSortWrapper>
@@ -959,7 +964,7 @@ public:
         const auto main = BasicBlock::Create(context, "main", ctx.Func);
         const auto more = BasicBlock::Create(context, "more", ctx.Func);
 
-        annotate(BranchInst::Create(make, main, IsInvalid(statePtr, block), block));
+        annotate(BranchInst::Create(make, main, IsInvalid(statePtr, block, context), block));
         block = make;
 
         const auto arrayType = ArrayType::get(Type::getInt1Ty(context), Directions.size());
@@ -973,7 +978,7 @@ public:
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
         const auto self = annotate(CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block));
-        const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TWideSortWrapper::MakeState));
+        const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TWideSortWrapper::MakeState>());
         const auto makeType = FunctionType::get(Type::getVoidTy(context), {self->getType(), ctx.Ctx->getType(), statePtr->getType(), dirs->getType()}, false);
         const auto makeFuncPtr = annotate(CastInst::Create(Instruction::IntToPtr, makeFunc, PointerType::getUnqual(makeType), "function", block));
         annotate(CallInst::Create(makeType, makeFuncPtr, {self, ctx.Ctx, statePtr, dirs}, "", block));
@@ -1007,7 +1012,7 @@ public:
 
             block = loop;
 
-            const auto readyFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TSpillingSupportState::IsReadyToContinue));
+            const auto readyFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TSpillingSupportState::IsReadyToContinue>());
             const auto readyPtr = annotate(CastInst::Create(Instruction::IntToPtr, readyFunc, PointerType::getUnqual(boolFuncType), "ready", block));
             const auto process = annotate(CallInst::Create(boolFuncType, readyPtr, {stateArg}, "process", block));
 
@@ -1028,7 +1033,7 @@ public:
             block = rest;
 
             annotate(new StoreInst(ConstantInt::get(last->getType(), static_cast<i32>(EFetchResult::Finish)), statusPtr, block));
-            const auto sealFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TSpillingSupportState::Seal));
+            const auto sealFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TSpillingSupportState::Seal>());
             const auto sealPtr = annotate(CastInst::Create(Instruction::IntToPtr, sealFunc, PointerType::getUnqual(boolFuncType), "seal", block));
             const auto stop = annotate(CallInst::Create(boolFuncType, sealPtr, {stateArg}, "stop", block));
 
@@ -1052,7 +1057,7 @@ public:
                 annotate(new StoreInst(item, placeholders[i], block));
             }
 
-            const auto pushFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TSpillingSupportState::Put));
+            const auto pushFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TSpillingSupportState::Put>());
             const auto pushType = FunctionType::get(Type::getVoidTy(context), {stateArg->getType()}, false);
             const auto pushPtr = annotate(CastInst::Create(Instruction::IntToPtr, pushFunc, PointerType::getUnqual(pushType), "function", block));
             annotate(CallInst::Create(pushType, pushPtr, {stateArg}, "", block));
@@ -1066,7 +1071,7 @@ public:
             const auto good = BasicBlock::Create(context, "good", ctx.Func);
             const auto last = BasicBlock::Create(context, "last", ctx.Func);
 
-            const auto extractFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TSpillingSupportState::Extract));
+            const auto extractFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TSpillingSupportState::Extract>());
             const auto extractType = FunctionType::get(outputPtrType, {stateArg->getType()}, false);
             const auto extractPtr = annotate(CastInst::Create(Instruction::IntToPtr, extractFunc, PointerType::getUnqual(extractType), "extract", block));
             const auto out = annotate(CallInst::Create(extractType, extractPtr, {stateArg}, "out", block));
@@ -1083,7 +1088,7 @@ public:
 
             block = last;
 
-            const auto finishedFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TSpillingSupportState::IsFinished));
+            const auto finishedFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TSpillingSupportState::IsFinished>());
             const auto finishedPtr = annotate(CastInst::Create(Instruction::IntToPtr, finishedFunc, PointerType::getUnqual(boolFuncType), "finished_ptr", block));
             const auto finished = annotate(CallInst::Create(boolFuncType, finishedPtr, {stateArg}, "finished", block));
             const auto output = SelectInst::Create(finished,
@@ -1101,10 +1106,13 @@ public:
 #endif
 private:
     void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state, const bool* directions) const {
+        NYql::NUdf::TLoggerPtr logger = ctx.MakeLogger();
+        NYql::NUdf::TLogComponentId logComponent = logger->RegisterComponent("WideSort");
+        UDF_LOG(logger, logComponent, NUdf::ELogLevel::Debug, TStringBuilder() << "State initialized");
 #ifdef MKQL_DISABLE_CODEGEN
-        state = ctx.HolderFactory.Create<TSpillingSupportState>(directions, Directions.size(), TMyValueCompare(Keys), Indexes, TupleMultiType, ctx);
+        state = ctx.HolderFactory.Create<TSpillingSupportState>(directions, Directions.size(), TMyValueCompare(Keys), Indexes, TupleMultiType, ctx, logger, logComponent);
 #else
-        state = ctx.HolderFactory.Create<TSpillingSupportState>(directions, Directions.size(), ctx.ExecuteLLVM && Compare ? TCompareFunc(Compare) : TCompareFunc(TMyValueCompare(Keys)), Indexes, TupleMultiType, ctx);
+        state = ctx.HolderFactory.Create<TSpillingSupportState>(directions, Directions.size(), ctx.ExecuteLLVM && Compare ? TCompareFunc(Compare) : TCompareFunc(TMyValueCompare(Keys)), Indexes, TupleMultiType, ctx, logger, logComponent);
 #endif
     }
 

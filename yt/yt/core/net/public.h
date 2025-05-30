@@ -8,6 +8,10 @@
 
 #include <library/cpp/yt/misc/guid.h>
 
+#ifdef _linux_
+    #include <sys/signalfd.h>
+#endif
+
 namespace NYT::NNet {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -17,6 +21,18 @@ class TIP6Address;
 class TIP6Network;
 
 using TConnectionId = TGuid;
+
+enum class EDeliveryFencedMode
+{
+    None,
+    // COMPAT(pogorelov)
+    Old,
+    New,
+};
+
+#ifdef _linux_
+static inline const auto DeliveryFencedWriteSignal = SIGRTMIN;
+#endif // _linux
 
 DECLARE_REFCOUNTED_STRUCT(IConnection)
 DECLARE_REFCOUNTED_STRUCT(IPacketConnection)
@@ -28,8 +44,8 @@ DECLARE_REFCOUNTED_STRUCT(IDialer)
 DECLARE_REFCOUNTED_STRUCT(IAsyncDialer)
 DECLARE_REFCOUNTED_STRUCT(IAsyncDialerSession)
 
-DECLARE_REFCOUNTED_CLASS(TDialerConfig)
-DECLARE_REFCOUNTED_CLASS(TAddressResolverConfig)
+DECLARE_REFCOUNTED_STRUCT(TDialerConfig)
+DECLARE_REFCOUNTED_STRUCT(TAddressResolverConfig)
 
 YT_DEFINE_ERROR_ENUM(
     ((Aborted)         (1500))

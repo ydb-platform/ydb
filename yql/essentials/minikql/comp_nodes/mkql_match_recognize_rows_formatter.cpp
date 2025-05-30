@@ -24,10 +24,10 @@ public:
     }
 
     NUdf::TUnboxedValue GetOtherMatchRow(
-        TComputationContext& ctx,
-        const TSparseList& rows,
-        const NUdf::TUnboxedValue& partitionKey,
-        const TNfaTransitionGraph& graph) override {
+        TComputationContext& /* ctx */,
+        const TSparseList& /* rows */,
+        const NUdf::TUnboxedValue& /* partitionKey */,
+        const TNfaTransitionGraph& /* graph */) override {
         return NUdf::TUnboxedValue{};
     }
 
@@ -63,6 +63,9 @@ public:
         const TSparseList& rows,
         const NUdf::TUnboxedValue& partitionKey,
         const TNfaTransitionGraph& graph) override {
+        if (Max<size_t>() == CurrentRowIndex_) {
+            return NUdf::TUnboxedValue{};
+        }
         return GetMatchRow(ctx, rows, partitionKey, graph);
     }
 
@@ -93,6 +96,8 @@ private:
             if (auto iter = ToIndexToMatchRangeLookup_.lower_bound(CurrentRowIndex_);
                 iter == ToIndexToMatchRangeLookup_.end()) {
                 MKQL_ENSURE(false, "Internal logic error");
+            } else if (CurrentRowIndex_ < iter->second.From()) {
+                ++CurrentRowIndex_;
             } else if (auto transition = std::get_if<TMatchedVarTransition>(&graph.Transitions.at(iter->second.NfaIndex()));
                 !transition) {
                 MKQL_ENSURE(false, "Internal logic error");
@@ -106,9 +111,10 @@ private:
             return NUdf::TUnboxedValue{};
         }
         const auto result = DoGetMatchRow(ctx, rows, partitionKey, graph);
-        ++CurrentRowIndex_;
         if (CurrentRowIndex_ == Match_.EndIndex) {
             Clear();
+        } else {
+            ++CurrentRowIndex_;
         }
         return result;
     }
@@ -140,7 +146,7 @@ TOutputColumnOrder IRowsFormatter::GetOutputColumnOrder(
     return result;
 }
 
-NUdf::TUnboxedValue IRowsFormatter::DoGetMatchRow(TComputationContext& ctx, const TSparseList& rows, const NUdf::TUnboxedValue& partitionKey, const TNfaTransitionGraph& graph) {
+NUdf::TUnboxedValue IRowsFormatter::DoGetMatchRow(TComputationContext& ctx, const TSparseList& rows, const NUdf::TUnboxedValue& partitionKey, const TNfaTransitionGraph& /* graph */) {
     NUdf::TUnboxedValue *itemsPtr = nullptr;
     const auto result = State_.Cache->NewArray(ctx, State_.OutputColumnOrder.size(), itemsPtr);
     for (const auto& columnEntry: State_.OutputColumnOrder) {

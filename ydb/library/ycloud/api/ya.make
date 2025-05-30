@@ -14,7 +14,7 @@ PEERDIR(
     ydb/public/api/client/yc_private/accessservice
     ydb/public/api/client/yc_private/resourcemanager
     ydb/library/actors/core
-    ydb/library/grpc/client
+    ydb/public/sdk/cpp/src/library/grpc/client
     ydb/core/base
     ydb/core/grpc_caching
 )

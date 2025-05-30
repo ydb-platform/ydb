@@ -7,7 +7,7 @@ LWTRACE_USING(TABLET_FLAT_PROVIDER)
 namespace NKikimr {
 namespace NTabletFlatExecutor {
 
-    void TCommitManager::TrackCommitTxs(TLogCommit &commit) noexcept {
+    void TCommitManager::TrackCommitTxs(TLogCommit &commit) {
         while (TSeat *seat = commit.PopTx()) {
             LWTRACK(TransactionReadWriteCommit, seat->Self->Orbit, seat->UniqID, commit.Step);
         }

@@ -15,9 +15,9 @@ PEERDIR(
     library/cpp/json
     yql/essentials/types/binary_json
     yql/essentials/minikql
-    yql/essentials/minikql/computation/llvm14
+    yql/essentials/minikql/computation/llvm16
     yql/essentials/minikql/dom
-    yql/essentials/minikql/invoke_builtins/llvm14
+    yql/essentials/minikql/invoke_builtins/llvm16
     yql/essentials/public/udf/service/exception_policy
     yql/essentials/core/issue/protos
     yql/essentials/sql/pg_dummy

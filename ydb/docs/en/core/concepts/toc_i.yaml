@@ -3,9 +3,7 @@ items:
   href: glossary.md
 - name: Connecting to a database
   href: connect.md
-- name: Authentication
-  href: auth.md
-- name: Data model and schema
+- name: Cluster structure
   href: datamodel/index.md
   include:
     path: datamodel/toc_p.yaml
@@ -16,10 +14,12 @@ items:
   href: transactions.md
 - name: Secondary indexes
   href: secondary_indexes.md
+- name: Vector search
+  href: vector_search.md
 - name: Change Data Capture (CDC)
   href: cdc.md
   when: feature_changefeed
-- name: Time to Live (TTL)
+- name: Time to live and eviction
   href: ttl.md
 - name: Scan queries
   href: scan_query.md

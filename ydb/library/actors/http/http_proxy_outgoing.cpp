@@ -4,16 +4,16 @@
 namespace NHttp {
 
 template <typename TSocketImpl>
-class TOutgoingConnectionActor : public NActors::TActor<TOutgoingConnectionActor<TSocketImpl>>, public TSocketImpl, virtual public THttpConfig {
+class TOutgoingConnectionActor : public NActors::TActorBootstrapped<TOutgoingConnectionActor<TSocketImpl>>, public TSocketImpl, virtual public THttpConfig {
 public:
-    using TBase = NActors::TActor<TOutgoingConnectionActor<TSocketImpl>>;
+    using TBase = NActors::TActorBootstrapped<TOutgoingConnectionActor<TSocketImpl>>;
     using TSelf = TOutgoingConnectionActor<TSocketImpl>;
+    using TBase::Become;
     using TBase::Send;
     using TBase::Schedule;
     using TBase::SelfId;
 
     const TActorId Owner;
-    const TActorId Poller;
     SocketAddressType Address;
     TString Destination;
     TActorId RequestOwner;
@@ -24,14 +24,24 @@ public:
     bool AllowConnectionReuse = false;
     NActors::TPollerToken::TPtr PollerToken;
 
-    TOutgoingConnectionActor(const TActorId& owner, const TActorId& poller)
-        : TBase(&TSelf::StateWaiting)
-        , Owner(owner)
-        , Poller(poller)
+    enum class EStreamState {
+        Unknown,
+        Declined,
+        Approved,
+    } StreamState = EStreamState::Unknown;
+    std::vector<TString> StreamContentTypes;
+
+    TOutgoingConnectionActor(const TActorId& owner, TEvHttpProxy::TEvHttpOutgoingRequest::TPtr& event)
+        : Owner(owner)
     {
+        InitiateRequest(event);
     }
 
     static constexpr char ActorName[] = "OUT_CONNECTION_ACTOR";
+
+    void Bootstrap() {
+        PerformRequest();
+    }
 
     void PassAway() override {
         Send(Owner, new TEvHttpProxy::TEvHttpOutgoingConnectionClosed(SelfId(), Destination));
@@ -51,30 +61,77 @@ public:
         return builder;
     }
 
+    TString GetRequestDebugText() {
+        TStringBuilder text;
+        if (Request) {
+            text << Request->Method << " " << Request->URL;
+            if (Request->Body) {
+                text << ", " << Request->Body.Size() << " bytes";
+            }
+        }
+        return text;
+    }
+
+    TString GetResponseDebugText() {
+        TStringBuilder text;
+        if (Response) {
+            text << Response->Status << " " << Response->Message;
+            if (Response->Body) {
+                text << ", " << Response->Body.Size() << " bytes";
+            }
+        }
+        return text;
+    }
+
     void ReplyAndPassAway() {
-        ALOG_DEBUG(HttpLog, GetSocketName() << "-> (" << Response->Status << " " << Response->Message << ")");
-        Send(RequestOwner, new TEvHttpProxy::TEvHttpIncomingResponse(Request, Response));
-        RequestOwner = TActorId();
-        THolder<TEvHttpProxy::TEvReportSensors> sensors(BuildOutgoingRequestSensors(Request, Response));
-        Send(Owner, sensors.Release());
+        if (RequestOwner) {
+            if (StreamState == EStreamState::Approved) {
+                ALOG_DEBUG(HttpLog, GetSocketName() << "-> (end of stream)");
+                auto dataChunk = std::make_unique<TEvHttpProxy::TEvHttpIncomingDataChunk>(Response);
+                dataChunk->SetEndOfData();
+                Send(RequestOwner, dataChunk.release());
+            } else {
+                ALOG_DEBUG(HttpLog, GetSocketName() << "-> (" << GetResponseDebugText() << ")");
+                Send(RequestOwner, new TEvHttpProxy::TEvHttpIncomingResponse(Request, Response));
+                RequestOwner = TActorId();
+            }
+            THolder<TEvHttpProxy::TEvReportSensors> sensors(BuildOutgoingRequestSensors(Request, Response));
+            Send(Owner, sensors.Release());
+        }
         if (!AllowConnectionReuse || Response->IsConnectionClose()) {
             ALOG_DEBUG(HttpLog, GetSocketName() << "connection closed");
             PassAway();
         } else {
             ALOG_DEBUG(HttpLog, GetSocketName() << "connection available for reuse");
+            CheckClose();
             Send(Owner, new TEvHttpProxy::TEvHttpOutgoingConnectionAvailable(SelfId(), Destination));
         }
     }
 
     void ReplyErrorAndPassAway(const TString& error) {
-        ALOG_ERROR(HttpLog, GetSocketName() << "connection closed with error: " << error);
+        if (error) {
+            ALOG_ERROR(HttpLog, GetSocketName() << "connection closed with error: " << error);
+        } else {
+            ALOG_DEBUG(HttpLog, GetSocketName() << "connection closed");
+        }
+        // TODO(xenoxeno): reply with error on data chunk
         if (RequestOwner) {
-            Send(RequestOwner, new TEvHttpProxy::TEvHttpIncomingResponse(Request, Response, error));
+            if (StreamState == EStreamState::Approved) {
+                auto dataChunk = std::make_unique<TEvHttpProxy::TEvHttpIncomingDataChunk>(Response);
+                dataChunk->Error = error ? error : "ConnectionClosed";
+                Send(RequestOwner, dataChunk.release());
+            } else {
+                if (!error && Response && !Response->IsReady()) {
+                    Send(RequestOwner, new TEvHttpProxy::TEvHttpIncomingResponse(Request, Response, "ConnectionClosed")); // connection closed prematurely
+                } else {
+                    Send(RequestOwner, new TEvHttpProxy::TEvHttpIncomingResponse(Request, Response, error));
+                }
+            }
             RequestOwner = TActorId();
             THolder<TEvHttpProxy::TEvReportSensors> sensors(BuildOutgoingRequestSensors(Request, Response));
             Send(Owner, sensors.Release());
-            PassAway();
         }
+        PassAway();
     }
 
 protected:
@@ -86,7 +143,7 @@ protected:
     }
 
     void Connect() {
-        ALOG_DEBUG(HttpLog, GetSocketName() << "connecting");
+        ALOG_DEBUG(HttpLog, GetSocketName() << "connecting to " << Address->ToString());
         TSocketImpl::Create(Address->SockAddr()->sa_family);
         TSocketImpl::SetNonBlock();
         TSocketImpl::SetTimeout(ConnectionTimeout);
@@ -101,6 +158,29 @@ protected:
         default:
             return ReplyErrorAndPassAway(strerror(-res));
         }
+    }
+
+    void InitiateRequest(TEvHttpProxy::TEvHttpOutgoingRequest::TPtr& event) {
+        Request = std::move(event->Get()->Request);
+        Destination = Request->GetDestination();
+        Response = nullptr;
+        RequestOwner = event->Sender;
+        if (event->Get()->Timeout) {
+            ConnectionTimeout = event->Get()->Timeout;
+        }
+        AllowConnectionReuse = event->Get()->AllowConnectionReuse;
+        StreamContentTypes = event->Get()->StreamContentTypes;
+        StreamState = EStreamState::Unknown;
+    }
+
+    void PerformRequest() {
+        TSocketImpl::SetHost(TString(Request->Host));
+        Request->Timer.Reset();
+        ALOG_DEBUG(HttpLog, GetSocketName() << "resolving " << TSocketImpl::Host);
+        Send(Owner, new TEvHttpProxy::TEvResolveHostRequest(TSocketImpl::Host));
+        Schedule(ConnectionTimeout, new NActors::TEvents::TEvWakeup());
+        LastActivity = NActors::TActivationContext::Now();
+        TBase::Become(&TOutgoingConnectionActor::StateResolving);
     }
 
     void FlushOutput() {
@@ -125,9 +205,34 @@ protected:
                     }
                     break;
                 } else {
-                    ReplyErrorAndPassAway(res == 0 ? "ConnectionClosed" : strerror(-res));
+                    ReplyErrorAndPassAway(res == 0 ? "" : strerror(-res));
                     break;
                 }
+            }
+        }
+    }
+
+    void CheckClose() {
+        char buf[8];
+        for (;;) {
+            bool read = false, write = false;
+            ssize_t res = TSocketImpl::Recv(&buf, 0, read, write);
+            if (res > 0) {
+                return ReplyErrorAndPassAway("Unexpected data received");
+            } else if (-res == EINTR) {
+                continue;
+            } else if (-res == EAGAIN || -res == EWOULDBLOCK) {
+                if (PollerToken) {
+                    if (!read && !write) {
+                        read = true;
+                    }
+                    if (PollerToken->RequestNotificationAfterWouldBlock(read, write)) {
+                        continue;
+                    }
+                }
+                return;
+            } else {
+                return ReplyErrorAndPassAway(res == 0 ? "" : strerror(-res));
             }
         }
     }
@@ -144,8 +249,32 @@ protected:
             ssize_t res = TSocketImpl::Recv(Response->Pos(), Response->Avail(), read, write);
             if (res > 0) {
                 LastActivity = NActors::TActivationContext::Now();
-                Response->Advance(res);
-                if (Response->IsDone() && Response->IsReady()) {
+                do {
+                    res -= Response->AdvancePartial(res);
+                    if (StreamState == EStreamState::Unknown && Response->HasCompletedHeaders()) {
+                        auto contentType = Response->ContentType.Before(';');
+                        if (Response->IsChunkedEncoding() && std::ranges::find(StreamContentTypes, contentType) != std::ranges::end(StreamContentTypes)) {
+                            ALOG_DEBUG(HttpLog, GetSocketName() << "-> (" << GetResponseDebugText() << ") (incomplete)");
+                            Send(RequestOwner, new TEvHttpProxy::TEvHttpIncompleteIncomingResponse(Request, Response));
+                            StreamState = EStreamState::Approved;
+                        } else {
+                            StreamState = EStreamState::Declined;
+                        }
+                    }
+
+                    if (Response->HasNewDataChunk() && StreamState == EStreamState::Approved) {
+                        ALOG_DEBUG(HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") -> (data chunk " << Response->ChunkLength << " bytes)");
+                        auto dataChunk = std::make_unique<TEvHttpProxy::TEvHttpIncomingDataChunk>(Response);
+                        dataChunk->SetData(std::move(Response->Content));
+                        Send(RequestOwner, dataChunk.release());
+                        Response->Content.clear();
+                        if (res == 0) {
+                            // when we finish reading at the end of a chunk we could remove processed chunks to save memory and allocations very easily
+                            Response->TruncateToHeaders();
+                        }
+                    }
+                } while (res > 0);
+                if (Response->IsDone()) {
                     return ReplyAndPassAway();
                 }
             } else if (-res == EINTR) {
@@ -167,13 +296,13 @@ protected:
                 if (Response->IsDone() && Response->IsReady()) {
                     return ReplyAndPassAway();
                 }
-                return ReplyErrorAndPassAway(res == 0 ? "ConnectionClosed" : strerror(-res));
+                return ReplyErrorAndPassAway(res == 0 ? "" : strerror(-res));
             }
         }
     }
 
     void RegisterPoller() {
-        Send(Poller, new NActors::TEvPollerRegister(TSocketImpl::Socket, SelfId(), SelfId()));
+        Send(NActors::MakePollerActorId(), new NActors::TEvPollerRegister(TSocketImpl::Socket, SelfId(), SelfId()));
     }
 
     void OnConnect() {
@@ -190,7 +319,7 @@ protected:
         }
         ALOG_DEBUG(HttpLog, GetSocketName() << "outgoing connection opened");
         TBase::Become(&TOutgoingConnectionActor::StateConnected);
-        ALOG_DEBUG(HttpLog, GetSocketName() << "<- (" << Request->Method << " " << Request->URL << ")");
+        ALOG_DEBUG(HttpLog, GetSocketName() << "<- (" << GetRequestDebugText() << ")");
         Send(SelfId(), new NActors::TEvPollerReady(nullptr, true, true));
     }
 
@@ -249,34 +378,15 @@ protected:
     }
 
     void HandleWaiting(TEvHttpProxy::TEvHttpOutgoingRequest::TPtr& event) {
-        Request = std::move(event->Get()->Request);
-        Destination = Request->GetDestination();
-        TSocketImpl::SetHost(TString(Request->Host));
-        ALOG_DEBUG(HttpLog, GetSocketName() << "resolving " << TSocketImpl::Host);
-        Request->Timer.Reset();
-        RequestOwner = event->Sender;
-        Send(Owner, new TEvHttpProxy::TEvResolveHostRequest(TSocketImpl::Host));
-        if (event->Get()->Timeout) {
-            ConnectionTimeout = event->Get()->Timeout;
-        }
-        AllowConnectionReuse = event->Get()->AllowConnectionReuse;
-        Schedule(ConnectionTimeout, new NActors::TEvents::TEvWakeup());
-        LastActivity = NActors::TActivationContext::Now();
-        TBase::Become(&TOutgoingConnectionActor::StateResolving);
+        InitiateRequest(event);
+        PerformRequest();
     }
 
     void HandleConnected(TEvHttpProxy::TEvHttpOutgoingRequest::TPtr& event) {
-        Request = std::move(event->Get()->Request);
-        Request->Timer.Reset();
-        Response = nullptr;
-        RequestOwner = event->Sender;
-        if (event->Get()->Timeout) {
-            ConnectionTimeout = event->Get()->Timeout;
-        }
-        AllowConnectionReuse = event->Get()->AllowConnectionReuse;
+        InitiateRequest(event);
         Schedule(ConnectionTimeout, new NActors::TEvents::TEvWakeup());
         LastActivity = NActors::TActivationContext::Now();
-        ALOG_DEBUG(HttpLog, GetSocketName() << "<- (" << Request->Method << " " << Request->URL << ")");
+        ALOG_DEBUG(HttpLog, GetSocketName() << "<- (" << GetRequestDebugText() << ")");
         FlushOutput();
         PullInput();
     }
@@ -286,8 +396,12 @@ protected:
         if (event->Get()->Write && RequestOwner) {
             FlushOutput();
         }
-        if (event->Get()->Read && RequestOwner) {
-            PullInput();
+        if (event->Get()->Read) {
+            if (RequestOwner) {
+                PullInput();
+            } else {
+                CheckClose();
+            }
         }
     }
 
@@ -313,13 +427,6 @@ protected:
         }
     }
 
-    STATEFN(StateWaiting) {
-        switch (ev->GetTypeRewrite()) {
-            hFunc(TEvHttpProxy::TEvHttpOutgoingRequest, HandleWaiting);
-            cFunc(NActors::TEvents::TEvWakeup::EventType, HandleTimeout);
-        }
-    }
-
     STATEFN(StateResolving) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvHttpProxy::TEvResolveHostResponse, HandleResolving);
@@ -341,6 +448,7 @@ protected:
             cFunc(NActors::TEvents::TEvWakeup::EventType, HandleTimeout);
             hFunc(NActors::TEvPollerRegisterResult, HandleConnected);
             hFunc(TEvHttpProxy::TEvHttpOutgoingRequest, HandleConnected);
+            cFunc(NActors::TEvents::TEvPoison::EventType, PassAway);
         }
     }
 
@@ -351,11 +459,11 @@ protected:
     }
 };
 
-NActors::IActor* CreateOutgoingConnectionActor(const TActorId& owner, bool secure, const TActorId& poller) {
-    if (secure) {
-        return new TOutgoingConnectionActor<TSecureSocketImpl>(owner, poller);
+NActors::IActor* CreateOutgoingConnectionActor(const TActorId& owner, TEvHttpProxy::TEvHttpOutgoingRequest::TPtr& event) {
+    if (event->Get()->Request->Secure) {
+        return new TOutgoingConnectionActor<TSecureSocketImpl>(owner, event);
     } else {
-        return new TOutgoingConnectionActor<TPlainSocketImpl>(owner, poller);
+        return new TOutgoingConnectionActor<TPlainSocketImpl>(owner, event);
     }
 }
 

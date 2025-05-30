@@ -17,10 +17,16 @@ PEERDIR(
     yql/essentials/providers/common/provider
     yql/essentials/providers/result/provider
     yql/essentials/core/cbo/simple
-    yql/essentials/minikql/comp_nodes/llvm14
-    yql/essentials/minikql/invoke_builtins/llvm14
+    yql/essentials/minikql/comp_nodes/llvm16
+    yql/essentials/minikql/invoke_builtins/llvm16
     yql/essentials/sql/pg
     yql/essentials/parser/pg_wrapper
+    yql/essentials/sql
+    yql/essentials/sql/v1
+    yql/essentials/sql/v1/lexer/antlr4
+    yql/essentials/sql/v1/lexer/antlr4_ansi
+    yql/essentials/sql/v1/proto_parser/antlr4
+    yql/essentials/sql/v1/proto_parser/antlr4_ansi
 )
 
 YQL_LAST_ABI_VERSION()

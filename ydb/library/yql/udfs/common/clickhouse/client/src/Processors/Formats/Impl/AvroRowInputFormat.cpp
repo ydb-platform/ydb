@@ -50,7 +50,6 @@
 #include <avro/Specific.hh>
 #include <avro/Types.hh>
 #include <avro/ValidSchema.hh>
-#include <avro/Writer.hh>
 
 #include <Poco/BinaryReader.h>
 #include <Poco/Buffer.h>

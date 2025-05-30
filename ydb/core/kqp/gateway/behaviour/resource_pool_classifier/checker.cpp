@@ -114,12 +114,12 @@ public:
         if (!RanksToCheck.empty()) {
             NYdb::TResultSetParser result(ResultSets[resultSetId++]);
             while (result.TryNextRow()) {
-                TMaybe<i64> rank = result.ColumnParser("rank").GetOptionalInt64();
+                std::optional<i64> rank = result.ColumnParser("rank").GetOptionalInt64();
                 if (!rank) {
                     continue;
                 }
 
-                TMaybe<TString> name = result.ColumnParser("name").GetOptionalUtf8();
+                std::optional<TString> name = result.ColumnParser("name").GetOptionalUtf8();
                 if (!name) {
                     continue;
                 }
@@ -138,7 +138,7 @@ public:
                 return;
             }
 
-            MaxRank = result.ColumnParser("MaxRank").GetOptionalInt64().GetOrElse(0);
+            MaxRank = result.ColumnParser("MaxRank").GetOptionalInt64().value_or(0);
             NumberClassifiers = result.ColumnParser("NumberClassifiers").GetUint64();
         }
 

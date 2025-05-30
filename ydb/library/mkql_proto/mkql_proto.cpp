@@ -70,7 +70,7 @@ Y_FORCE_INLINE void HandleKindDataExport(const TType* type, const NUdf::TUnboxed
             }
         case NUdf::TDataType<NUdf::TTzDate>::Id:
         case NUdf::TDataType<NUdf::TTzDatetime>::Id:
-        case NUdf::TDataType<NUdf::TTzTimestamp>::Id: 
+        case NUdf::TDataType<NUdf::TTzTimestamp>::Id:
         case NUdf::TDataType<NUdf::TTzDate32>::Id:
         case NUdf::TDataType<NUdf::TTzDatetime64>::Id:
         case NUdf::TDataType<NUdf::TTzTimestamp64>::Id: {
@@ -1515,7 +1515,7 @@ Y_FORCE_INLINE NUdf::TUnboxedValue KindDataImport(const TType* type, const Ydb::
         case NUdf::TDataType<NUdf::TTzTimestamp64>::Id: {
             CheckTypeId(value.value_case(), Ydb::Value::kTextValue, "TzTimestamp64");
             return NUdf::TUnboxedValuePod(ValueFromString(NUdf::GetDataSlot(dataType->GetSchemeType()), value.text_value()));
-        }        
+        }
         case NUdf::TDataType<NUdf::TJson>::Id: {
             CheckTypeId(value.value_case(), Ydb::Value::kTextValue, "Json");
             const auto& stringRef = value.text_value();
@@ -1561,7 +1561,7 @@ Y_FORCE_INLINE NUdf::TUnboxedValue KindDataImport(const TType* type, const Ydb::
             return NUdf::TUnboxedValuePod(value.int64_value());
         }
         case NUdf::TDataType<NUdf::TDate32>::Id: {
-            CheckTypeId(value.value_case(), Ydb::Value::kUint32Value, "Date32");
+            CheckTypeId(value.value_case(), Ydb::Value::kInt32Value, "Date32");
             if (value.int32_value() < NUdf::MIN_DATE32 || value.int32_value() > NUdf::MAX_DATE32) {
                 throw yexception() << "Invalid Date value";
             }

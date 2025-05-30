@@ -73,6 +73,7 @@
   - exception
   - expected
   - filesystem
+  - format
   - forward_list
   - fstream
   - functional
@@ -89,6 +90,7 @@
   - locale
   - map
   - memory
+  - memory_resource
   - mutex
   - new
   - numbers

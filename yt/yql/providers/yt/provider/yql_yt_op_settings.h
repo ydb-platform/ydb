@@ -1,6 +1,7 @@
 #pragma once
 
 #include <yql/essentials/ast/yql_expr.h>
+#include <library/cpp/json/writer/json.h>
 
 #include <util/generic/flags.h>
 #include <util/generic/strbuf.h>
@@ -64,12 +65,12 @@ enum class EYtSettingType: ui64 {
     WarnNonExisting          /* "warn_non_existing" "warnnonexisting" */,
     XLock                    /* "xlock" */,
     Unordered                /* "unordered" */,
-    NonUnique                /* "nonUnique" */,
+    NonUnique                /* "non_unique" "nonUnique" */,
     UserSchema               /* "userschema" */,
     UserColumns              /* "usercolumns" */,
     StatColumns              /* "statcolumns" */,
     SysColumns               /* "syscolumns" */,
-    IgnoreTypeV3             /* "ignoretypev3" "ignore_type_v3" */,
+    IgnoreTypeV3             /* "ignore_type_v3" "ignoretypev3" */,
     // Table content
     MemUsage                 /* "memUsage" */,
     ItemsCount               /* "itemsCount" */,
@@ -101,6 +102,7 @@ enum class EYtSettingType: ui64 {
     BlockInputApplied        /* "blockInputApplied" */,        // hybrid supported
     BlockOutputReady         /* "blockOutputReady" */,         // hybrid supported
     BlockOutputApplied       /* "blockOutputApplied" */,       // hybrid supported
+    QLFilter                 /* "qlFilter" */,
     // Out tables
     UniqueBy                 /* "uniqueBy" */,
     OpHash                   /* "opHash" */,
@@ -189,6 +191,7 @@ TExprNode::TPtr ToAtomList(const TContainer& columns, TPositionHandle pos, TExpr
 
 bool ValidateColumnGroups(const TExprNode& setting, const TStructExprType& rowType, TExprContext& ctx);
 TString NormalizeColumnGroupSpec(const TStringBuf spec);
+bool ExpandDefaultColumnGroup(const TStringBuf colGroupSpec, const TStructExprType& rowType, TString& expandedSpec);
 const TString& GetSingleColumnGroupSpec();
 
 TExprNode::TPtr ToColumnPairList(const TVector<std::pair<TString, bool>>& columns, TPositionHandle pos, TExprContext& ctx);
@@ -226,6 +229,7 @@ TMaybe<ui64> GetMaxJobSizeForFirstAsPrimary(const TExprNode& settings);
 bool UseJoinReduceForSecondAsPrimary(const TExprNode& settings);
 
 ui32 GetMinChildrenForIndexedKeyFilter(EYtSettingType type);
+void YtWriteStmtContext(std::string_view ctxName, NJsonWriter::TBuf& json);
 
 } // NYql
 

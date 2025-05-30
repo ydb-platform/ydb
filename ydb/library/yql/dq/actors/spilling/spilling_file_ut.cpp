@@ -53,7 +53,7 @@ public:
     }
 
     TActorId StartSpillingService(ui64 maxTotalSize = 1000, ui64 maxFileSize = 500,
-        ui64 maxFilePartSize = 100, const TFsPath& root = TFsPath::Cwd() / GetSpillingPrefix())
+        ui64 maxFilePartSize = 100, ui32 ioThreadPoolQueueSize = 1000, const TFsPath& root = TFsPath::Cwd() / GetSpillingPrefix())
     {
         SpillingRoot_ = root;
         SpillingSessionId_ = CreateGuidAsString();
@@ -63,7 +63,8 @@ public:
             .SpillingSessionId = SpillingSessionId_,
             .MaxTotalSize = maxTotalSize,
             .MaxFileSize = maxFileSize,
-            .MaxFilePartSize = maxFilePartSize
+            .MaxFilePartSize = maxFilePartSize,
+            .IoThreadPoolQueueSize = ioThreadPoolQueueSize
         };
 
         auto counters = Counters();
@@ -382,6 +383,89 @@ Y_UNIT_TEST_SUITE(DqSpillingFileTests) {
         }
     }
 
+    template<bool MultiPart>
+    void DoFdCounterTest()
+    {
+        TTestActorRuntime runtime;
+        runtime.Initialize();
+
+        auto spillingService = runtime.StartSpillingService(1000, 100, 25);
+        auto tester = runtime.AllocateEdgeActor();
+        auto spillingActor = runtime.StartSpillingActor(tester, MultiPart);
+
+        runtime.WaitBootstrap();
+
+        const TString filePrefix = TStringBuilder() << runtime.GetSpillingRoot().GetPath() << "/node_" << runtime.GetNodeId() << "_" << runtime.GetSpillingSessionId() << "/1_test_";
+
+        constexpr const size_t numBlobs = 5;
+        constexpr const size_t numFiles = MultiPart ? numBlobs : 1;
+
+        auto assertFdCounter = [&](const size_t expected) {
+            THttpRequest httpReq(HTTP_METHOD_GET);
+            NMonitoring::TMonService2HttpRequest monReq(nullptr, &httpReq, nullptr, nullptr, "", nullptr);
+
+            runtime.Send(new IEventHandle(spillingService, tester, new NMon::TEvHttpInfo(monReq)));
+            auto resp = runtime.GrabEdgeEvent<NMon::TEvHttpInfoRes>(tester, TDuration::Seconds(1));
+            UNIT_ASSERT(((NMon::TEvHttpInfoRes*) resp->Get())->Answer.Contains(TStringBuilder() << "Used file descriptors: " << expected));
+        };
+
+        // write some blobs; one file per blob is created when MultiPart is true, a file per client otherwise
+        for (ui32 i = 0; i < numBlobs; ++i) {
+            auto ev = new TEvDqSpilling::TEvWrite(i, CreateRope(20, 'a' + i));
+            runtime.Send(new IEventHandle(spillingActor, tester, ev));
+
+            auto resp = runtime.GrabEdgeEvent<TEvDqSpilling::TEvWriteResult>(tester);
+        }
+
+        assertFdCounter(numFiles);
+
+        // read back a single blob
+        {
+            const size_t blobIdx = 0;
+            auto ev = new TEvDqSpilling::TEvRead(blobIdx);
+            runtime.Send(new IEventHandle(spillingActor, tester, ev));
+            auto resp = runtime.GrabEdgeEvent<TEvDqSpilling::TEvReadResult>(tester);
+        }
+
+        if (MultiPart) {
+            assertFdCounter(numFiles - 1);
+        } else {
+            assertFdCounter(numFiles);
+        }
+
+        // close everything
+        {
+            runtime.Send(new IEventHandle(spillingActor, tester, new TEvents::TEvPoison));
+
+            std::atomic<bool> done = false;
+            runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
+                if (event->GetRecipientRewrite() == spillingService) {
+                    if (event->GetTypeRewrite() == 2146435074 /* EvCloseFileResponse */) {
+                        done = true;
+                    }
+                }
+                return TTestActorRuntimeBase::EEventAction::PROCESS;
+            });
+
+            TDispatchOptions options;
+            options.CustomFinalCondition = [&]() {
+                return (bool) done;
+            };
+
+            runtime.DispatchEvents(options, TDuration::Seconds(1));
+        }
+
+        assertFdCounter(0);
+    }
+
+    Y_UNIT_TEST(FdCounterSingleFile) {
+        DoFdCounterTest<false>();
+    }
+
+    Y_UNIT_TEST(FdCounterMultiFile) {
+        DoFdCounterTest<true>();
+    }
+
     Y_UNIT_TEST(ReadError) {
         TTestActorRuntime runtime;
         runtime.Initialize();
@@ -414,11 +498,54 @@ Y_UNIT_TEST_SUITE(DqSpillingFileTests) {
         }
     }
 
+    Y_UNIT_TEST(ThreadPoolQueueOverflow) {
+        TTestActorRuntime runtime;
+        runtime.Initialize();
+
+        auto spillingService = runtime.StartSpillingService(1000, 500, 10, 1);
+        ui32 iters = 100;
+        TActorId tester;
+        std::vector<TActorId> spillingActors;
+        for (ui32 i = 0; i < iters; ++i) {
+            spillingActors.emplace_back(runtime.StartSpillingActor(tester));
+        }
+
+        runtime.WaitBootstrap();
+
+        std::atomic_uint writeResultEventsCount = 0;
+        std::atomic_uint errorEventsCount = 0;
+
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
+            if (event->GetTypeRewrite() == TEvDqSpilling::TEvError::EventType && event->Sender == spillingService) {
+                auto error = event.Get()->Get<TEvDqSpilling::TEvError>();
+                Cerr << error->Message << Endl;
+                UNIT_ASSERT_EQUAL("[Write] Can not run operation", error->Message);
+                ++writeResultEventsCount;
+            }
+            if (event->GetTypeRewrite() == TEvDqSpilling::TEvWriteResult::EventType && event->Sender == spillingService) {
+                ++errorEventsCount;
+            }
+            return TTestActorRuntimeBase::EEventAction::PROCESS;
+        });
+
+        TDispatchOptions options;
+        options.CustomFinalCondition = [&]() {
+            return errorEventsCount.load() + writeResultEventsCount.load() == iters;
+        };
+
+        for (ui32 i = 0; i < iters; ++i) {
+            auto ev = new TEvDqSpilling::TEvWrite(i, CreateRope(10, 'a'));
+            runtime.Send(new IEventHandle(spillingActors[i], tester, ev));
+        }
+
+        runtime.DispatchEvents(options);
+    }
+
     Y_UNIT_TEST(StartError) {
         TTestActorRuntime runtime;
         runtime.Initialize();
 
-        auto spillingService = runtime.StartSpillingService(100, 500, 100, TFsPath("/nonexistent") / runtime.GetSpillingPrefix());
+        auto spillingService = runtime.StartSpillingService(100, 500, 100, 1000, TFsPath("/nonexistent") / runtime.GetSpillingPrefix());
         auto tester = runtime.AllocateEdgeActor();
         auto spillingActor = runtime.StartSpillingActor(tester);
 

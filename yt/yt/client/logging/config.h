@@ -20,10 +20,9 @@ namespace NYT::NLogging {
 //!   - System events are disabled by default for format = yson logs. If you are enabling them for family = plain_text
 //!     logs, do not forget to set system_message_family = plain_text.
 //!   - If multiple hosts are writing to the same table, consider setting enable_host_field = true.
-class TDynamicTableLogWriterConfig
+struct TDynamicTableLogWriterConfig
     : public TLogWriterConfig
 {
-public:
     static constexpr const TStringBuf WriterType = "dynamic_table";
 
     //! Log destination.

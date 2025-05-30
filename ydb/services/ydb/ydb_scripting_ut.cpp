@@ -1,8 +1,8 @@
 #include "ydb_common_ut.h"
 
 #include <ydb/public/api/grpc/ydb_scripting_v1.grpc.pb.h>
-#include <ydb/public/sdk/cpp/client/ydb_result/result.h>
-#include <ydb/public/sdk/cpp/client/draft/ydb_scripting.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_scripting.h>
 
 #include <yql/essentials/public/issue/yql_issue.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>
@@ -43,7 +43,7 @@ Y_UNIT_TEST_SUITE(YdbScripting) {
         result.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT(result.IsSuccess());
 
-        TVector<TResultSet> resultSets = result.GetResultSets();
+        auto resultSets = result.GetResultSets();
         UNIT_ASSERT_EQUAL(resultSets.size(), 1);
 
         TResultSetParser rsParser(resultSets[0]);
@@ -101,7 +101,7 @@ Y_UNIT_TEST_SUITE(YdbScripting) {
         result.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT(result.IsSuccess());
 
-        TVector<TResultSet> resultSets = result.GetResultSets();
+        auto resultSets = result.GetResultSets();
         UNIT_ASSERT_EQUAL(resultSets.size(), 3);
 
         UNIT_ASSERT_EQUAL(resultSets[0].RowsCount(), 2);

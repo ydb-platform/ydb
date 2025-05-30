@@ -8,6 +8,9 @@ from library.python.monlib.metric cimport (
 
 
 cdef extern from "library/cpp/monlib/metrics/metric_registry.h" namespace "NMonitoring" nogil:
+    cdef struct TMetricOpts:
+        bint MemOnly
+
     cdef cppclass TMetricRegistry:
         TMetricRegistry() except +
         TMetricRegistry(const TLabels&) except +
@@ -18,6 +21,23 @@ cdef extern from "library/cpp/monlib/metrics/metric_registry.h" namespace "NMoni
         TRate* Rate(const TLabels&) except +
         THistogram* HistogramCounter(const TLabels&, IHistogramCollectorPtr collector) except +
         THistogram* HistogramRate(const TLabels&, IHistogramCollectorPtr collector) except +
+
+        TGauge* GaugeWithOpts(const TLabels&, TMetricOpts) except +
+        TIntGauge* IntGaugeWithOpts(const TLabels&, TMetricOpts) except +
+        TCounter* CounterWithOpts(const TLabels&, TMetricOpts) except +
+        TRate* RateWithOpts(const TLabels&, TMetricOpts) except +
+        
+        THistogram* HistogramCounterWithOpts(
+            const TLabels&, 
+            IHistogramCollectorPtr collector,
+            TMetricOpts opts
+        ) except +
+        
+        THistogram* HistogramRateWithOpts(
+            const TLabels&, 
+            IHistogramCollectorPtr collector,
+            TMetricOpts opts
+        ) except +
 
         void Reset() except +
         void Clear() except +

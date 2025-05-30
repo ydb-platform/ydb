@@ -42,6 +42,10 @@ static void FillTableStats(NKikimrTableStats::TTableStats* stats, const TPartiti
     stats->SetRangeReads(tableStats.RangeReads);
     stats->SetRangeReadRows(tableStats.RangeReadRows);
 
+    stats->SetLocksAcquired(tableStats.LocksAcquired);
+    stats->SetLocksWholeShard(tableStats.LocksWholeShard);
+    stats->SetLocksBroken(tableStats.LocksBroken);
+
     stats->SetPartCount(tableStats.PartCount);
     stats->SetHasSchemaChanges(tableStats.HasSchemaChanges);
 
@@ -174,6 +178,11 @@ void TPathDescriber::FillChildDescr(NKikimrSchemeOp::TDirEntry* descr, TPathElem
     descr->SetCreateTxId(ui64(pathEl->CreateTxId));
     if (createFinished) {
         descr->SetCreateStep(ui64(pathEl->StepCreated));
+    }
+
+    if (pathEl->PathType != NKikimrSchemeOp::EPathTypeSubDomain
+        && pathEl->PathType != NKikimrSchemeOp::EPathTypeExtSubDomain) {
+        descr->SetChildrenExist(pathEl->GetAliveChildren() > 0);
     }
 
     if (pathEl->PathType == NKikimrSchemeOp::EPathTypePersQueueGroup) {
@@ -808,6 +817,15 @@ void TPathDescriber::DescribeSolomonVolume(TPathId pathId, TPathElement::TPtr pa
         }
     }
 
+    if (solomonVolumeInfo->Partitions.size() > 0) {
+        auto shardId = solomonVolumeInfo->Partitions.begin()->first;
+        auto shardInfo = Self->ShardInfos.FindPtr(shardId);
+        Y_ABORT_UNLESS(shardInfo);
+        for (const auto& channel : shardInfo->BindedChannels) {
+            entry->AddBoundChannels()->CopyFrom(channel);
+        }
+    }
+
     Sort(entry->MutablePartitions()->begin(),
          entry->MutablePartitions()->end(),
          [] (auto& part1, auto& part2) {
@@ -1099,6 +1117,16 @@ void TPathDescriber::DescribeBackupCollection(TPathId pathId, TPathElement::TPtr
     entry->CopyFrom(backupCollectionInfo->Description);
 }
 
+void TPathDescriber::DescribeSysView(const TActorContext&, TPathId pathId, TPathElement::TPtr pathEl) {
+    auto it = Self->SysViews.FindPtr(pathId);
+    Y_ABORT_UNLESS(it, "SysView is not found");
+    TSysViewInfo::TPtr sysViewInfo = *it;
+
+    auto entry = Result->Record.MutablePathDescription()->MutableSysViewDescription();
+    entry->SetName(pathEl->Name);
+    entry->SetType(sysViewInfo->Type);
+}
+
 static bool ConsiderAsDropped(const TPath& path) {
     Y_ABORT_UNLESS(path.IsResolved());
 
@@ -1260,6 +1288,9 @@ THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> TPathDescriber::Describe
             DescribeDir(path);
             DescribeBackupCollection(base->PathId, base);
             break;
+        case NKikimrSchemeOp::EPathTypeSysView:
+            DescribeSysView(ctx, base->PathId, base);
+            break;
         case NKikimrSchemeOp::EPathTypeInvalid:
             Y_UNREACHABLE();
         }
@@ -1297,6 +1328,29 @@ THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> DescribePath(
     return DescribePath(self, ctx, pathId, options);
 }
 
+THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> DescribePath(
+    TSchemeShard* self,
+    const TActorContext& ctx,
+    const TString& path,
+    const NKikimrSchemeOp::TDescribeOptions& opts
+) {
+    NKikimrSchemeOp::TDescribePath params;
+    params.SetPath(path);
+    params.MutableOptions()->CopyFrom(opts);
+
+    return TPathDescriber(self, std::move(params)).Describe(ctx);
+}
+
+THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> DescribePath(
+    TSchemeShard* self,
+    const TActorContext& ctx,
+    const TString& path
+) {
+    NKikimrSchemeOp::TDescribeOptions options;
+    options.SetShowPrivateTable(true);
+    return DescribePath(self, ctx, path, options);
+}
+
 void TSchemeShard::DescribeTable(
         const TTableInfo& tableInfo,
         const NScheme::TTypeRegistry* typeRegistry,
@@ -1327,6 +1381,7 @@ void TSchemeShard::DescribeTable(
     }
 
     entry->SetIsBackup(tableInfo.IsBackup);
+    entry->SetIsRestore(tableInfo.IsRestore);
 }
 
 void TSchemeShard::DescribeTableIndex(const TPathId& pathId, const TString& name,
@@ -1363,12 +1418,6 @@ void TSchemeShard::DescribeTableIndex(const TPathId& pathId, const TString& name
     const auto* indexPathPtr = PathsById.FindPtr(pathId);
     Y_ABORT_UNLESS(indexPathPtr);
     const auto& indexPath = *indexPathPtr->Get();
-    if (const auto size = indexPath.GetChildren().size(); indexInfo->Type == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
-        // For vector index we have 2 impl tables and 2 build impl tables
-        Y_VERIFY_S(2 <= size && size <= 4, size);
-    } else {
-        Y_VERIFY_S(size == 1, size);
-    }
 
     ui64 dataSize = 0;
     for (const auto& indexImplTablePathId : indexPath.GetChildren()) {
@@ -1422,20 +1471,8 @@ void TSchemeShard::DescribeCdcStream(const TPathId& pathId, const TString& name,
         << ", name# " << name);
 
     desc.SetName(name);
-    desc.SetMode(info->Mode);
-    desc.SetFormat(info->Format);
-    desc.SetVirtualTimestamps(info->VirtualTimestamps);
-    desc.SetResolvedTimestampsIntervalMs(info->ResolvedTimestamps.MilliSeconds());
-    desc.SetAwsRegion(info->AwsRegion);
     pathId.ToProto(desc.MutablePathId());
-    desc.SetState(info->State);
-    desc.SetSchemaVersion(info->AlterVersion);
-
-    if (info->ScanShards) {
-        auto& scanProgress = *desc.MutableScanProgress();
-        scanProgress.SetShardsTotal(info->ScanShards.size());
-        scanProgress.SetShardsCompleted(info->DoneShards.size());
-    }
+    info->Serialize(desc);
 
     Y_ABORT_UNLESS(PathsById.contains(pathId));
     auto path = PathsById.at(pathId);

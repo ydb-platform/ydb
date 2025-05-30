@@ -5,9 +5,9 @@
 
 #include <ydb/public/lib/ydb_cli/common/interruptible.h>
 #include <ydb/public/lib/ydb_cli/topic/topic_read.h>
-#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_public/persqueue.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/persqueue.h>
 
 namespace NYdb::NConsoleClient {
     TString PrepareAllowedCodecsDescription(const TString& descriptionPrefix, const TVector<NTopic::ECodec>& codecs);

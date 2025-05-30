@@ -1,3 +1,34 @@
+# Python-RSA has been archived
+
+Hi folks,
+
+I'm Sybren, one of the original authors and the maintainer of this project.
+Unfortunately I don't have the time and brain space left to properly maintain
+Python-RSA. As you can see from the lack of activity on the open issues, and the
+lack of commits, that has been the case for a while now.
+
+As Python-RSA is included as a dependency in quite a few high-profile projects,
+I don't feel comfortable handing over the project to someone else. It's just too
+big of a risk.
+
+Thanks for having used this little library for so long, and in so many projects.
+I truely didn't expect that when I started working on it. Also big thanks to all
+the people helping out and improving the project.
+
+There are improvements that haven't made it into a new release. As I said, I
+don't have the time and the brain space to really investigate and oversee the
+security impact of all those changes. It's not a decision I've made lightly.
+
+So that's it. If you want to keep the project alive, please fork it. Give it the
+love it deserves, investigate those yet-unreleased improvements, and have a
+project that's then already better than how I left this one.
+
+Cheers,
+Sybren
+
+
+---------------------------------------------
+
 # Pure Python RSA implementation
 
 [![PyPI](https://img.shields.io/pypi/v/rsa.svg)](https://pypi.org/project/rsa/)
@@ -67,8 +98,8 @@ index-servers =
 pip install twine
 
 poetry build
-twine check dist/rsa-4.9.tar.gz dist/rsa-4.9-*.whl
-twine upload -r rsa dist/rsa-4.9.tar.gz dist/rsa-4.9-*.whl
+twine check dist/rsa-4.9.1.tar.gz dist/rsa-4.9.1-*.whl
+twine upload -r rsa dist/rsa-4.9.1.tar.gz dist/rsa-4.9.1-*.whl
 ```
 
 The `pip install twine` is necessary as Python-RSA requires Python >= 3.6, and

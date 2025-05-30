@@ -86,7 +86,13 @@ TBoundaryChooser<THasher>::TBoundaryChooser(const NKikimrSchemeOp::TPersQueueGro
     }
 
     std::sort(Partitions.begin(), Partitions.end(),
-        [](const TPartitionInfo& a, const TPartitionInfo& b) { return !b.ToBound || (a.ToBound && a.ToBound < b.ToBound); });
+        [](const TPartitionInfo& a, const TPartitionInfo& b) {
+            if (!a.ToBound.has_value() || !b.ToBound.has_value()) {
+                return a.ToBound.has_value() > b.ToBound.has_value();
+            }
+            return a.ToBound < b.ToBound;
+        }
+    );
 }
 
 template<class THasher>

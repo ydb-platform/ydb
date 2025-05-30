@@ -4,14 +4,9 @@
 #include "client_method_options.h"
 #include "operation.h"
 
+#include <yt/cpp/mapreduce/http/context.h>
+
 namespace NYT {
-
-////////////////////////////////////////////////////////////////////////////////
-
-namespace NHttpClient {
-    class IHttpResponse;
-    using IHttpResponsePtr = std::unique_ptr<IHttpResponse>;
-}
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -195,11 +190,6 @@ public:
         const TJobId& jobId,
         const TGetJobFailContextOptions& options = {}) = 0;
 
-    virtual TString GetJobStderrWithRetries(
-        const TOperationId& operationId,
-        const TJobId& jobId,
-        const TGetJobStderrOptions& options = {}) = 0;
-
     virtual IFileReaderPtr GetJobStderr(
         const TOperationId& operationId,
         const TJobId& jobId,
@@ -209,13 +199,8 @@ public:
         const TOperationId& operationId,
         const TGetJobTraceOptions& options = {}) = 0;
 
-    // SkyShare
-
-    virtual NHttpClient::IHttpResponsePtr SkyShareTable(
-        const std::vector<TYPath>& tablePaths,
-        const TSkyShareTableOptions& options = {}) = 0;
-
     // Files
+
     virtual std::unique_ptr<IInputStream> ReadFile(
         const TTransactionId& transactionId,
         const TRichYPath& path,
@@ -297,6 +282,11 @@ public:
         const TMaybe<TFormat>& format,
         const TTableReaderOptions& options = {}) = 0;
 
+    virtual std::unique_ptr<IInputStream> ReadTablePartition(
+        const TString& cookie,
+        const TMaybe<TFormat>& format,
+        const TTablePartitionReaderOptions& options = {}) = 0;
+
     virtual std::unique_ptr<IInputStream> ReadBlobTable(
         const TTransactionId& transactionId,
         const TRichYPath& path,
@@ -346,7 +336,15 @@ public:
 
     virtual ui64 GenerateTimestamp() = 0;
 
-    virtual TAuthorizationInfo WhoAmI() = 0;
+    // Batch
+
+    virtual IRawBatchRequestPtr CreateRawBatchRequest() = 0;
+
+    // Other
+
+    virtual IRawClientPtr Clone() = 0;
+
+    virtual IRawClientPtr Clone(const TClientContext& context) = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

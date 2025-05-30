@@ -899,7 +899,15 @@ namespace NActors {
         stats.LastSessionDieTime = LastSessionDieTime;
         stats.TotalOutputQueueSize = Session ? Session->TotalOutputQueueSize : 0;
         stats.Connected = Session ? (bool)Session->Socket : false;
-        stats.ExternalDataChannel = Session && Session->XdcSocket;
+        if (Session) {
+            if (const auto xdcFlags = Session->GetXDCFlags()) {
+                stats.ExternalDataChannel = true;
+                stats.XDCFlags = *xdcFlags;
+            } else {
+                stats.ExternalDataChannel = false;
+                stats.XDCFlags = 0;
+            }
+        }
         stats.Host = TechnicalPeerHostName;
         stats.Port = 0;
         ui32 rep = 0;
@@ -973,6 +981,13 @@ namespace NActors {
             }
         }
         FirstDisconnectWindowMinutes = currentMinutes;
+    }
+
+    TActorId TInterconnectProxyTCP::GenerateSessionVirtualId() {
+        ICPROXY_PROFILED;
+
+        const ui64 localId = TActivationContext::ActorSystem()->AllocateIDSpace(1);
+        return NActors::TActorId(SelfId().NodeId(), 0, localId, 0);
     }
 
 }

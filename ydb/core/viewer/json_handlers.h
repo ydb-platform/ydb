@@ -17,6 +17,14 @@ public:
         return nullptr;
     }
 
+    virtual bool IsMonEvent() const {
+        return false;
+    }
+
+    virtual bool IsHttpEvent() const {
+        return false;
+    }
+
     virtual YAML::Node GetRequestSwagger() = 0;
 };
 
@@ -30,11 +38,19 @@ public:
     {}
 
     IActor* CreateRequestActor(IViewer* viewer, NMon::TEvHttpInfo::TPtr& event) override {
-        return new ActorRequestType(viewer, event);
+        if constexpr (!std::is_same_v<ActorRequestType, void>) {
+            return new ActorRequestType(viewer, event);
+        } else {
+            return nullptr;
+        }
     }
 
     YAML::Node GetRequestSwagger() override {
         return Swagger;
+    }
+
+    bool IsMonEvent() const override {
+        return true;
     }
 };
 
@@ -53,6 +69,10 @@ public:
 
     YAML::Node GetRequestSwagger() override {
         return Swagger;
+    }
+
+    bool IsHttpEvent() const override {
+        return true;
     }
 };
 

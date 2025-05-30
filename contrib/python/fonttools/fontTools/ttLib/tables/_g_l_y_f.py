@@ -134,6 +134,8 @@ class table__g_l_y_f(DefaultTable.DefaultTable):
             glyph.expand(self)
 
     def compile(self, ttFont):
+        optimizeSpeed = ttFont.cfg[ttLib.OPTIMIZE_FONT_SPEED]
+
         self.axisTags = (
             [axis.axisTag for axis in ttFont["fvar"].axes] if "fvar" in ttFont else []
         )
@@ -148,7 +150,12 @@ class table__g_l_y_f(DefaultTable.DefaultTable):
         boundsDone = set()
         for glyphName in self.glyphOrder:
             glyph = self.glyphs[glyphName]
-            glyphData = glyph.compile(self, recalcBBoxes, boundsDone=boundsDone)
+            glyphData = glyph.compile(
+                self,
+                recalcBBoxes,
+                boundsDone=boundsDone,
+                optimizeSize=not optimizeSpeed,
+            )
             if padding > 1:
                 glyphData = pad(glyphData, size=padding)
             locations.append(currentLocation)
@@ -714,7 +721,7 @@ class Glyph(object):
             self.decompileCoordinates(data)
 
     def compile(
-        self, glyfTable, recalcBBoxes=True, *, boundsDone=None, optimizeSize=None
+        self, glyfTable, recalcBBoxes=True, *, boundsDone=None, optimizeSize=True
     ):
         if hasattr(self, "data"):
             if recalcBBoxes:
@@ -732,8 +739,6 @@ class Glyph(object):
         if self.isComposite():
             data = data + self.compileComponents(glyfTable)
         else:
-            if optimizeSize is None:
-                optimizeSize = getattr(glyfTable, "optimizeSize", True)
             data = data + self.compileCoordinates(optimizeSize=optimizeSize)
         return data
 
@@ -1187,7 +1192,7 @@ class Glyph(object):
         ):
             return
         try:
-            coords, endPts, flags = self.getCoordinates(glyfTable)
+            coords, endPts, flags = self.getCoordinates(glyfTable, round=otRound)
             self.xMin, self.yMin, self.xMax, self.yMax = coords.calcIntBounds()
         except NotImplementedError:
             pass
@@ -1206,9 +1211,7 @@ class Glyph(object):
         Return True if bounds were calculated, False otherwise.
         """
         for compo in self.components:
-            if hasattr(compo, "firstPt") or hasattr(compo, "transform"):
-                return False
-            if not float(compo.x).is_integer() or not float(compo.y).is_integer():
+            if not compo._hasOnlyIntegerTranslate():
                 return False
 
         # All components are untransformed and have an integer x/y translate
@@ -1241,7 +1244,7 @@ class Glyph(object):
         else:
             return self.numberOfContours == -1
 
-    def getCoordinates(self, glyfTable):
+    def getCoordinates(self, glyfTable, *, round=noRound):
         """Return the coordinates, end points and flags
 
         This method returns three values: A :py:class:`GlyphCoordinates` object,
@@ -1267,13 +1270,27 @@ class Glyph(object):
             for compo in self.components:
                 g = glyfTable[compo.glyphName]
                 try:
-                    coordinates, endPts, flags = g.getCoordinates(glyfTable)
+                    coordinates, endPts, flags = g.getCoordinates(
+                        glyfTable, round=round
+                    )
                 except RecursionError:
                     raise ttLib.TTLibError(
                         "glyph '%s' contains a recursive component reference"
                         % compo.glyphName
                     )
                 coordinates = GlyphCoordinates(coordinates)
+                # if asked to round e.g. while computing bboxes, it's important we
+                # do it immediately before a component transform is applied to a
+                # simple glyph's coordinates in case these might still contain floats;
+                # however, if the referenced component glyph is another composite, we
+                # must not round here but only at the end, after all the nested
+                # transforms have been applied, or else rounding errors will compound.
+                if (
+                    round is not noRound
+                    and g.numberOfContours > 0
+                    and not compo._hasOnlyIntegerTranslate()
+                ):
+                    coordinates.toInt(round=round)
                 if hasattr(compo, "firstPt"):
                     # component uses two reference points: we apply the transform _before_
                     # computing the offset between the points
@@ -1929,6 +1946,18 @@ class GlyphComponent(object):
     def __ne__(self, other):
         result = self.__eq__(other)
         return result if result is NotImplemented else not result
+
+    def _hasOnlyIntegerTranslate(self):
+        """Return True if it's a 'simple' component.
+
+        That is, it has no anchor points and no transform other than integer translate.
+        """
+        return (
+            not hasattr(self, "firstPt")
+            and not hasattr(self, "transform")
+            and float(self.x).is_integer()
+            and float(self.y).is_integer()
+        )
 
 
 class GlyphCoordinates(object):

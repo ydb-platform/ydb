@@ -8,7 +8,6 @@ class TestYdbCrudOperations(TestBase):
         """
         Test basic CRUD operations: Create, Read, Update, Delete
         """
-
         table_name = f"{self.table_path}"
 
         table_definition = f"""

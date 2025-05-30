@@ -4,11 +4,15 @@
 #include "schema.h"
 
 #include <yt/yt/core/yson/pull_parser.h>
+
 #include <yt/yt/core/ytree/yson_struct.h>
 
 namespace NYT::NTableClient {
 
-struct TMaybeDeletedColumnSchema : public TColumnSchema
+////////////////////////////////////////////////////////////////////////////////
+
+struct TMaybeDeletedColumnSchema
+    : public TColumnSchema
 {
     DEFINE_BYREF_RO_PROPERTY(std::optional<bool>, Deleted);
 

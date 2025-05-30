@@ -1,10 +1,10 @@
 import collections.abc
 import dataclasses
 import inspect
-import warnings
 from typing import Any
 from typing import Callable
 from typing import Collection
+from typing import final
 from typing import Iterable
 from typing import Iterator
 from typing import List
@@ -20,16 +20,18 @@ from typing import Type
 from typing import TYPE_CHECKING
 from typing import TypeVar
 from typing import Union
+import warnings
 
 from .._code import getfslineno
 from ..compat import ascii_escaped
-from ..compat import final
 from ..compat import NOTSET
 from ..compat import NotSetType
 from _pytest.config import Config
 from _pytest.deprecated import check_ispytest
+from _pytest.deprecated import MARKED_FIXTURE
 from _pytest.outcomes import fail
 from _pytest.warning_types import PytestUnknownMarkWarning
+
 
 if TYPE_CHECKING:
     from ..nodes import Node
@@ -110,7 +112,6 @@ class ParameterSet(NamedTuple):
             Enforce tuple wrapping so single argument tuple values
             don't get decomposed and break tests.
         """
-
         if isinstance(parameterset, cls):
             return parameterset
         if force_tuple:
@@ -270,8 +271,8 @@ class MarkDecorator:
 
     ``MarkDecorators`` are created with ``pytest.mark``::
 
-        mark1 = pytest.mark.NAME              # Simple MarkDecorator
-        mark2 = pytest.mark.NAME(name1=value) # Parametrized MarkDecorator
+        mark1 = pytest.mark.NAME  # Simple MarkDecorator
+        mark2 = pytest.mark.NAME(name1=value)  # Parametrized MarkDecorator
 
     and can then be applied as decorators to test functions::
 
@@ -392,7 +393,7 @@ def get_unpacked_marks(
 
 
 def normalize_mark_list(
-    mark_list: Iterable[Union[Mark, MarkDecorator]]
+    mark_list: Iterable[Union[Mark, MarkDecorator]],
 ) -> Iterable[Mark]:
     """
     Normalize an iterable of Mark or MarkDecorator objects into a list of marks
@@ -414,6 +415,12 @@ def store_mark(obj, mark: Mark) -> None:
     This is used to implement the Mark declarations/decorators correctly.
     """
     assert isinstance(mark, Mark), mark
+
+    from ..fixtures import getfixturemarker
+
+    if getfixturemarker(obj) is not None:
+        warnings.warn(MARKED_FIXTURE, stacklevel=2)
+
     # Always reassign name to avoid updating pytestmark in a reference that
     # was only borrowed.
     obj.pytestmark = [*get_unpacked_marks(obj, consider_mro=False), mark]
@@ -450,11 +457,13 @@ if TYPE_CHECKING:
         @overload
         def __call__(
             self,
-            condition: Union[str, bool] = ...,
+            condition: Union[str, bool] = False,
             *conditions: Union[str, bool],
             reason: str = ...,
             run: bool = ...,
-            raises: Union[Type[BaseException], Tuple[Type[BaseException], ...]] = ...,
+            raises: Union[
+                None, Type[BaseException], Tuple[Type[BaseException], ...]
+            ] = ...,
             strict: bool = ...,
         ) -> MarkDecorator:
             ...
@@ -494,9 +503,10 @@ class MarkGenerator:
 
          import pytest
 
+
          @pytest.mark.slowtest
          def test_function():
-            pass
+             pass
 
     applies a 'slowtest' :class:`Mark` on ``test_function``.
     """

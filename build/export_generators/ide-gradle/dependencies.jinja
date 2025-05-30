@@ -1,71 +1,108 @@
-{#- empty string #}
-dependencies {
-{%- for library in target.consumer if library.classpath -%}
-{%-     if has_errorprone -%}
-{%-         if library.prebuilt and (library.type != "contrib" or build_contribs) and ("contrib/java/com/google/errorprone/error_prone_annotations" in library.jar) -%}
-{%-             set errorprone_version = library.jar|replace("contrib/java/com/google/errorprone/error_prone_annotations/", "") -%}
-{%-             set errorprone_parts = split(errorprone_version, '/', 2) %}
-    errorprone("com.google.errorprone:error_prone_core:{{ errorprone_parts[0] }}")
-{%-         endif -%}
+{%- macro AnnotationProcessors(funcName, annotation_processors) -%}
+{%-     if annotation_processors|length -%}
+{%-         for annotation_processor in annotation_processors %}
+    {{ funcName }}(files("$arcadia_root/{{ annotation_processor }}"))
+{%-         endfor -%}
 {%-     endif -%}
+{%- endmacro -%}
 
-{%-     if library.prebuilt and library.jar and (library.type != "contrib" or build_contribs) %}
-    implementation(files("$project_root/{{ library.jar }}"))
-{%-     else -%}
+{%- macro Kapts(funcName, kapts) -%}
+{%-     if kapts|length -%}
+{%-         for kapt in kapts %}
+    {{ funcName }}(files("$arcadia_root/{{ kapt }}"))
+{%-         endfor -%}
+{%-     endif -%}
+{%- endmacro -%}
+
+{%- macro AddFileJars(file_jars) -%}
+{%-     for file_jar in file_jars %}
+        "$arcadia_root/{{ file_jar }}"{%- if not loop.last -%},{%- endif -%}
+{%-     endfor -%}
+{%- endmacro -%}
+
+{%- macro AddNonFileDeps(current_target, file_classpaths, implementationFunc, apiFunc) -%}
+{%-     for library in current_target.consumer if library.classpath -%}
 {%-         set classpath = library.classpath -%}
-{%-         if classpath|replace('"','') == classpath -%}
-{%-             set classpath = '"' + classpath + '"' -%}
-{%-         endif -%}
-{%-         if library.type != "contrib" %}
-{%-             if library.testdep %}
-    implementation(project(path = ":{{ library.testdep | replace("/", ":") }}", configuration = "testArtifacts"))
-{%-             else %}
-    implementation({{ classpath }})
-{%-             endif -%}
-{%-         else %}
-    api({{ classpath }})
-{%-         endif -%}
-{%-         if library.excludes.consumer is defined %} {
-{%              for exclude in library.excludes.consumer if exclude.classpath -%}
-{%-                 set classpath = exclude.classpath|replace('"','') -%}
-{%-                 set classpath_parts = split(classpath, ':') -%}
-        exclude(group = "{{ classpath_parts[0] }}", module = "{{ classpath_parts[1] }}")
-{%              endfor -%}
-    }
-{%-         endif -%}
-{%-     endif -%}
-{%- endfor -%}
-
-{%- for annotation_processor in target.use_annotation_processor %}
-    annotationProcessor(files("$project_root/{{ annotation_processor}}"))
-{%- endfor -%}
-
-{%- for extra_target in extra_targets -%}
-{%-     for library in extra_target.consumer if library.classpath -%}
-{%-         if library.prebuilt and library.jar and (library.type != "contrib" or build_contribs) %}
-    testImplementation(files("$project_root/{{ library.jar }}"))
-{%-         else -%}
-{%-             set classpath = library.classpath -%}
+{%-         if file_classpaths|select('eq', classpath)|length == 0 -%}
 {%-             if classpath|replace('"','') == classpath -%}
 {%-                 set classpath = '"' + classpath + '"' -%}
-{%-             endif %}
-{%-             if library.type != "contrib" and library.testdep %}
-    testImplementation(project(path = ":{{ library.testdep | replace("/", ":") }}", configuration = "testArtifacts"))
-{%-             else %}
-    testImplementation({{ classpath }})
 {%-             endif -%}
-{%-             if library.excludes.consumer is defined %} {
-{%                  for exclude in library.excludes.consumer if exclude.classpath -%}
+{%-             include "[generator]/patch_classpath.jinja" -%}
+{%-             if library.type != "contrib" -%}
+{%-                 if library.testdep -%}
+{%-                     set classpath = '":' + library.testdep | replace("/", ":") + '"' -%}
+{%-                     include "[generator]/patch_classpath.jinja" %}
+    {{ implementationFunc }}(project(path = {{ classpath }}, configuration = "testArtifacts"))
+{%-                 else %}
+    {{ implementationFunc }}({{ classpath }})
+{%-                 endif -%}
+{%-             else %}
+    {{ apiFunc }}({{ classpath }})
+{%-             endif -%}
+{%-             if library.excludes.consumer|length and not build_contribs -%} {
+{%-                 for exclude in library.excludes.consumer if exclude.classpath -%}
 {%-                     set classpath = exclude.classpath|replace('"','') -%}
 {%-                     set classpath_parts = split(classpath, ':') -%}
+{%-                     if (classpath_parts[0] != "") and (classpath_parts[1] != "") %}
         exclude(group = "{{ classpath_parts[0] }}", module = "{{ classpath_parts[1] }}")
-{%                  endfor -%}
+{%-                     endif -%}
+{%-                 endfor %}
     }
 {%-             endif -%}
 {%-         endif -%}
 {%-     endfor -%}
-{%-     for annotation_processor in extra_target.use_annotation_processor %}
-    testAnnotationProcessor(files("$project_root/{{ annotation_processor}}"))
+{%- endmacro -%}
+
+{%- set file_deps = target.consumer|selectattr('classpath')|selectattr('jar')|selectattr('prebuilt', 'eq', true) -%}
+{%- if not build_contribs -%}
+{%-     set file_deps = file_deps|selectattr('type', 'ne', 'contrib') -%}
+{%- endif -%}
+{%- set file_classpaths = file_deps|map(attribute='classpath')|unique|sort -%}
+{%- set file_jars = file_deps|map(attribute='jar')|unique|sort -%}
+
+{%- set test_file_deps = extra_targets|selectattr('consumer')|map(attribute='consumer')|sum|selectattr('classpath')|selectattr('jar')|selectattr('prebuilt', 'eq', true) -%}
+{%- if not build_contribs -%}
+{%-     set test_file_deps = test_file_deps|selectattr('type', 'ne', 'contrib') -%}
+{%- endif -%}
+{%- set test_file_classpaths = test_file_deps|map(attribute='classpath')|unique|sort -%}
+{%- set test_file_jars = test_file_deps|map(attribute='jar')|reject("in", file_jars)|unique|sort -%}
+
+dependencies {
+{%- if errorprones|length -%}
+{%-     for errorprone in errorprones -%}
+{%-         set errorprone_version = errorprone.jar|replace("contrib/java/com/google/errorprone/error_prone_annotations/", "") -%}
+{%-         set errorprone_parts = split(errorprone_version, '/', 2) %}
+    errorprone("com.google.errorprone:error_prone_core:{{ errorprone_parts[0] }}")
 {%-     endfor -%}
-{%- endfor %}
+{%- endif -%}
+{#- glue -#}
+{{ AnnotationProcessors("annotationProcessor", target.use_annotation_processor) }}
+{%- for extra_target in extra_targets -%}
+{{ AnnotationProcessors("testAnnotationProcessor", extra_target.use_annotation_processor) }}
+{%- endfor -%}
+{%- if with_kapt -%}
+{{ Kapts("kapt", target.kapt.classpaths) }}
+{%- endif -%}
+{%- if with_test_kapt -%}
+{%-     for extra_target in extra_targets -%}
+{{ Kapts("testKapt", extra_target.kapt.classpaths) }}
+{%-     endfor -%}
+{%- endif -%}
+{#- glue -#}
+{{ AddNonFileDeps(target, file_classpaths, "implementation", "api") }}
+{%- for extra_target in extra_targets -%}
+{{ AddNonFileDeps(extra_target, test_file_classpaths, "testImplementation", "testImplementation") }}
+{%- endfor -%}
+
+{%- if file_jars|length %}
+    implementation(files(listOf({#- glue -#}
+{{ AddFileJars(file_jars) }}
+    )))
+{%- endif -%}
+
+{%- if test_file_jars|length %}
+    testImplementation(files(listOf({#- glue -#}
+{{ AddFileJars(test_file_jars) }}
+    )))
+{%- endif %}
 }

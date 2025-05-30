@@ -2,7 +2,9 @@
 
 #include "defs.h"
 #include "actorid.h"
+#ifdef USE_ACTOR_CALLSTACK
 #include "callstack.h"
+#endif
 #include "event_load.h"
 
 #include <ydb/library/actors/wilson/wilson_trace.h>
@@ -16,17 +18,11 @@ namespace NActors {
 
     class IEventBase
         : TNonCopyable {
-    protected:
-        // for compatibility with virtual actors
-        virtual bool DoExecute(IActor* actor, std::unique_ptr<IEventHandle> eventPtr);
-
     public:
         // actual typing is performed by IEventHandle
 
         virtual ~IEventBase() {
         }
-
-        bool Execute(IActor* actor, std::unique_ptr<IEventHandle> eventPtr);
 
         virtual TString ToStringHeader() const = 0;
         virtual TString ToString() const {
@@ -47,6 +43,11 @@ namespace NActors {
     template <typename TEventType>
     class TEventHandle;
 
+    template <typename TEvent>
+    concept TEventWithLoadSupport = requires {
+        TEvent::Load;
+    };
+
     // fat handle
     class IEventHandle : TNonCopyable {
         struct TOnNondelivery {
@@ -57,6 +58,8 @@ namespace NActors {
             {
             }
         };
+
+        static const TEventSerializedData EmptyBuffer;
 
     public:
         typedef TAutoPtr<IEventHandle> TPtr;
@@ -92,19 +95,27 @@ namespace NActors {
 
         template <typename TEventType>
         TEventType* Get() {
-            if (Type != TEventType::EventType)
-                Y_ABORT("Event type %" PRIu32 " doesn't match the expected type %" PRIu32, Type, TEventType::EventType);
+            Y_ENSURE(Type == TEventType::EventType,
+                "Event type " << Type << " doesn't match the expected type " << TEventType::EventType
+                << " class " << TypeName<TEventType>());
 
             if (!Event) {
-                static TEventSerializedData empty;
-                Event.Reset(TEventType::Load(Buffer ? Buffer.Get() : &empty));
+                if constexpr (TEventWithLoadSupport<TEventType>) {
+                    // Note: we require Load to return the correct derived type
+                    // This makes sure static_cast below is always type-safe
+                    TEventType* loaded = TEventType::Load(Buffer ? Buffer.Get() : &EmptyBuffer);
+                    Event.Reset(loaded);
+                    Buffer.Reset();
+                } else {
+                    Y_ENSURE(false, "Event type " << Type << " cannot be loaded by class " << TypeName<TEventType>());
+                }
             }
 
             if (Event) {
                 return static_cast<TEventType*>(Event.Get());
             }
 
-            Y_ABORT("Failed to Load() event type %" PRIu32 " class %s", Type, TypeName<TEventType>().data());
+            Y_ENSURE(false, "Failed to Load() event type " << Type << " class " << TypeName<TEventType>());
         }
 
         template <typename T>
@@ -158,8 +169,8 @@ namespace NActors {
         }
 
         static ui32 MakeFlags(ui32 channel, TEventFlags flags) {
-            Y_ABORT_UNLESS(channel < (1 << ChannelBits));
-            Y_ABORT_UNLESS(flags < (1 << ChannelShift));
+            Y_ENSURE(channel < (1 << ChannelBits));
+            Y_ENSURE(flags < (1 << ChannelShift));
             return (flags | (channel << ChannelShift));
         }
 
@@ -408,9 +419,6 @@ namespace NActors {
     bool SerializeToArcadiaStream(NActors::TChunkSerializer*) const override { \
         Y_ABORT("Local event " #eventType " is not serializable");       \
     }                                                                   \
-    static IEventBase* Load(NActors::TEventSerializedData*) {           \
-        Y_ABORT("Local event " #eventType " has no load method");        \
-    }                                                                   \
     bool IsSerializable() const override {                              \
         return false;                                                   \
     }
@@ -422,7 +430,7 @@ namespace NActors {
     bool SerializeToArcadiaStream(NActors::TChunkSerializer*) const override { \
         return true;                                                    \
     }                                                                   \
-    static IEventBase* Load(NActors::TEventSerializedData*) {           \
+    static eventType* Load(const NActors::TEventSerializedData*) {      \
         return new eventType();                                         \
     }                                                                   \
     bool IsSerializable() const override {                              \

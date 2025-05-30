@@ -1,0 +1,10 @@
+(
+#comment
+(let config (DataSource 'config))
+(let res_sink (DataSink 'result))
+(let data (ToIntegral (Double '"1.2") (DataType 'Int32)))
+(let world (Write! world res_sink (Key) data '('('type))))
+(let world (Commit! world res_sink))
+(return world)
+)
+

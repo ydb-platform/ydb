@@ -35,7 +35,6 @@
 
 using namespace std::string_view_literals;
 
-
 namespace NYT {
 namespace {
 
@@ -3157,7 +3156,7 @@ TEST_P(TProtobufFormatSeveralTables, Parse)
     for (const auto& schema : schemas) {
         rowCollectors.emplace_back(schema);
     }
-    for (int tableIndex = 0; tableIndex < static_cast<int>(schemas.size()); ++tableIndex) {
+    for (int tableIndex = 0; tableIndex < std::ssize(schemas); ++tableIndex) {
         parsers.push_back(CreateParserForProtobuf(
             &rowCollectors[tableIndex],
             config,
@@ -3200,7 +3199,7 @@ TEST_P(TProtobufFormatSeveralTables, Parse)
 
     {
         const auto& rowCollector = rowCollectors[0];
-        ASSERT_EQ(static_cast<int>(rowCollector.Size()), 1);
+        ASSERT_EQ(rowCollector.Size(), 1);
 
         auto embeddedNode = GetComposite(rowCollector.GetRowValue(0, "embedded"));
         ASSERT_EQ(ConvertToTextYson(embeddedNode), "[\"Two\";44;]");
@@ -3214,7 +3213,7 @@ TEST_P(TProtobufFormatSeveralTables, Parse)
 
     {
         const auto& rowCollector = rowCollectors[1];
-        ASSERT_EQ(static_cast<int>(rowCollector.Size()), 1);
+        ASSERT_EQ(rowCollector.Size(), 1);
 
         EXPECT_EQ(GetString(rowCollector.GetRowValue(0, "enum_field")), "Two");
         EXPECT_EQ(GetInt64(rowCollector.GetRowValue(0, "int64_field")), 44);
@@ -3222,7 +3221,7 @@ TEST_P(TProtobufFormatSeveralTables, Parse)
 
     {
         const auto& rowCollector = rowCollectors[2];
-        ASSERT_EQ(static_cast<int>(rowCollector.Size()), 1);
+        ASSERT_EQ(rowCollector.Size(), 1);
 
         EXPECT_EQ(GetString(rowCollector.GetRowValue(0, "string_field")), "blah");
     }

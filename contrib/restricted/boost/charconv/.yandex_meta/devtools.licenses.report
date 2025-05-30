@@ -1,0 +1,216 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     Apache-2.0           2c3bc3726a0ef68dea2a008702f96131
+BELONGS ya.make
+    License text:
+        //    (See accompanying file LICENSE-Apache or copy at
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 90.00
+        Match type      : TAG
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        include/boost/charconv/detail/dragonbox/dragonbox.hpp [6:6]
+        include/boost/charconv/detail/dragonbox/dragonbox_common.hpp [6:6]
+        include/boost/charconv/detail/dragonbox/floff.hpp [6:6]
+
+KEEP     BSL-1.0              2c7a3fa82e66676005cd4ee2608fd7d2
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        LICENSE [1:23]
+
+KEEP     BSL-1.0              67d785c23d7b32d9a77d1123e74d8da2
+BELONGS ya.make
+    License text:
+        // the Boost Software License, Version 1.0.
+        //    (See accompanying file LICENSE-Boost or copy at
+        //     https://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 72.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/charconv/detail/dragonbox/dragonbox.hpp [10:12]
+        include/boost/charconv/detail/dragonbox/dragonbox_common.hpp [10:12]
+        include/boost/charconv/detail/dragonbox/floff.hpp [10:12]
+
+SKIP     LicenseRef-scancode-warranty-disclaimer 92f6bc64e50f9371e66428f437beef7d
+BELONGS ya.make
+    # Not a license, but a warranty disclaimer
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-warranty-disclaimer
+        Score           : 61.70
+        Match type      : TEXT
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/warranty-disclaimer.LICENSE
+    Files with this license:
+        include/boost/charconv/detail/dragonbox/dragonbox.hpp [14:20]
+
+KEEP     Apache-2.0 WITH LLVM-exception c6d514740e772226c6397fc13f9c7395
+BELONGS ya.make
+    License text:
+        // the Apache License v2.0 with LLVM Exceptions.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        include/boost/charconv/detail/dragonbox/dragonbox.hpp [4:4]
+        include/boost/charconv/detail/dragonbox/dragonbox_common.hpp [4:4]
+        include/boost/charconv/detail/dragonbox/floff.hpp [4:4]
+    Scancode info:
+        Original SPDX id: LLVM-exception
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://llvm.org/foundation/relicensing/LICENSE.txt, https://spdx.org/licenses/LLVM-exception
+    Files with this license:
+        include/boost/charconv/detail/dragonbox/dragonbox.hpp [4:4]
+        include/boost/charconv/detail/dragonbox/dragonbox_common.hpp [4:4]
+        include/boost/charconv/detail/dragonbox/floff.hpp [4:4]
+
+KEEP     BSL-1.0              c9e6118e07afed16d6f26c06b5f29fe8
+BELONGS ya.make
+    License text:
+        // https://www.boost.org/LICENSE_1_0.txt
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/charconv/detail/apply_sign.hpp [3:3]
+        include/boost/charconv/detail/bit_layouts.hpp [3:3]
+        include/boost/charconv/detail/compute_float64.hpp [4:4]
+        include/boost/charconv/detail/config.hpp [3:3]
+        include/boost/charconv/detail/dragonbox/dragonbox.hpp [20:20]
+        include/boost/charconv/detail/dragonbox/dragonbox_common.hpp [22:22]
+        include/boost/charconv/detail/dragonbox/floff.hpp [22:22]
+        include/boost/charconv/detail/fallback_routines.hpp [3:3]
+        include/boost/charconv/detail/from_chars_result.hpp [3:3]
+        include/boost/charconv/detail/ryu/generic_128.hpp [4:4]
+        include/boost/charconv/detail/ryu/ryu_generic_128.hpp [4:4]
+        include/boost/charconv/detail/to_chars_result.hpp [3:3]
+        include/boost/charconv/from_chars.hpp [4:4]
+        include/boost/charconv/to_chars.hpp [5:5]
+
+SKIP     LicenseRef-scancode-warranty-disclaimer d89f6d713ddca845d1eef6a38b0cf573
+BELONGS ya.make
+    # Not a license, but a warranty disclaimer
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-warranty-disclaimer
+        Score           : 61.70
+        Match type      : TEXT
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/warranty-disclaimer.LICENSE
+    Files with this license:
+        include/boost/charconv/detail/dragonbox/dragonbox_common.hpp [14:22]
+        include/boost/charconv/detail/dragonbox/floff.hpp [14:22]
+
+KEEP     BSL-1.0              e03c043ca7052925e34194f3fe2631e4
+BELONGS ya.make
+    License text:
+        // Distributed under the Boost Software License, Version 1.0.
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/charconv/detail/apply_sign.hpp [2:2]
+        include/boost/charconv/detail/bit_layouts.hpp [2:2]
+        include/boost/charconv/detail/compute_float64.hpp [3:3]
+        include/boost/charconv/detail/config.hpp [2:2]
+        include/boost/charconv/detail/dragonbox/dragonbox.hpp [19:19]
+        include/boost/charconv/detail/dragonbox/dragonbox_common.hpp [21:21]
+        include/boost/charconv/detail/dragonbox/floff.hpp [21:21]
+        include/boost/charconv/detail/fallback_routines.hpp [2:2]
+        include/boost/charconv/detail/from_chars_result.hpp [2:2]
+        include/boost/charconv/detail/ryu/generic_128.hpp [3:3]
+        include/boost/charconv/detail/ryu/ryu_generic_128.hpp [3:3]
+        include/boost/charconv/detail/to_chars_result.hpp [2:2]
+        include/boost/charconv/from_chars.hpp [3:3]
+        include/boost/charconv/to_chars.hpp [4:4]
+
+KEEP     BSL-1.0 AND BSL-1.0  e9df2954141aa96551bf39192c39d2fe
+BELONGS ya.make
+    License text:
+        // Distributed under the Boost Software License, Version 1.0.
+        // https://www.boost.org/LICENSE_1_0.txt
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 94.44
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/charconv.hpp [5:6]
+        include/boost/charconv/chars_format.hpp [2:3]
+        include/boost/charconv/detail/buffer_sizing.hpp [2:3]
+        include/boost/charconv/detail/compute_float32.hpp [2:3]
+        include/boost/charconv/detail/compute_float80.hpp [2:3]
+        include/boost/charconv/detail/emulated128.hpp [3:4]
+        include/boost/charconv/detail/fast_float/ascii_number.hpp [3:4]
+        include/boost/charconv/detail/fast_float/bigint.hpp [3:4]
+        include/boost/charconv/detail/fast_float/constexpr_feature_detect.hpp [3:4]
+        include/boost/charconv/detail/fast_float/decimal_to_binary.hpp [3:4]
+        include/boost/charconv/detail/fast_float/digit_comparison.hpp [3:4]
+        include/boost/charconv/detail/fast_float/fast_float.hpp [3:4]
+        include/boost/charconv/detail/fast_float/fast_table.hpp [3:4]
+        include/boost/charconv/detail/fast_float/float_common.hpp [3:4]
+        include/boost/charconv/detail/fast_float/parse_number.hpp [3:4]
+        include/boost/charconv/detail/from_chars_integer_impl.hpp [2:3]
+        include/boost/charconv/detail/integer_search_trees.hpp [2:3]
+        include/boost/charconv/detail/issignaling.hpp [2:3]
+        include/boost/charconv/detail/memcpy.hpp [2:3]
+        include/boost/charconv/detail/parser.hpp [2:3]
+        include/boost/charconv/detail/significand_tables.hpp [3:4]
+        include/boost/charconv/detail/to_chars_integer_impl.hpp [4:5]
+        include/boost/charconv/detail/type_traits.hpp [2:3]
+        include/boost/charconv/limits.hpp [2:3]
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 88.89
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/charconv/config.hpp [6:7]

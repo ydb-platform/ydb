@@ -1,13 +1,20 @@
 #include "predicate_collector.h"
 
-#include <ydb/core/formats/arrow/ssa_runtime_version.h>
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/utils/log/log.h>
 
 namespace NKikimr::NKqp::NOpt {
 
 using namespace NYql;
 using namespace NYql::NNodes;
+
+THashMap<TString, TString> IgnoreCaseSubstringMatchFunctions = {
+    {"EqualsIgnoreCase", "String.AsciiEqualsIgnoreCase"},
+    {"StartsWithIgnoreCase", "String.AsciiStartsWithIgnoreCase"},
+    {"EndsWithIgnoreCase", "String.AsciiEndsWithIgnoreCase"},
+    {"StringContainsIgnoreCase", "String.AsciiContainsIgnoreCase"}
+};
 
 namespace {
 
@@ -15,7 +22,7 @@ bool IsSupportedPredicate(const TCoCompare& predicate) {
     return !predicate.Ref().Content().starts_with("Aggr");
 }
 
-bool IsSupportedDataType(const TCoDataCtor& node) {
+bool IsSupportedDataType(const TCoDataCtor& node, bool allowOlapApply) {
     if (node.Maybe<TCoBool>() ||
         node.Maybe<TCoFloat>() ||
         node.Maybe<TCoDouble>() ||
@@ -28,18 +35,20 @@ bool IsSupportedDataType(const TCoDataCtor& node) {
         node.Maybe<TCoUint32>() ||
         node.Maybe<TCoUint64>() ||
         node.Maybe<TCoUtf8>() ||
-        node.Maybe<TCoString>()) {
+        node.Maybe<TCoString>()
+    ) {
         return true;
     }
 
-    if constexpr (NKikimr::NSsa::RuntimeVersion >= 4U) {
-        if (node.Maybe<TCoTimestamp>()) {
-            return true;
-        }
-    }
-
-    if constexpr (NKikimr::NSsa::RuntimeVersion >= 5U) {
-        if (node.Maybe<TCoDate32>() ||  node.Maybe<TCoDatetime64>() || node.Maybe<TCoTimestamp64>() || node.Maybe<TCoInterval64>()) {
+    if (allowOlapApply) {
+        if (node.Maybe<TCoDate>() || 
+          node.Maybe<TCoDate32>() ||
+          node.Maybe<TCoDatetime>() ||
+          node.Maybe<TCoDatetime64>() || 
+          node.Maybe<TCoTimestamp>() || 
+          node.Maybe<TCoTimestamp64>() || 
+          node.Maybe<TCoInterval>() || 
+          node.Maybe<TCoInterval64>()) {
             return true;
         }
     }
@@ -47,7 +56,7 @@ bool IsSupportedDataType(const TCoDataCtor& node) {
     return false;
 }
 
-bool IsSupportedCast(const TCoSafeCast& cast) {
+bool IsSupportedCast(const TCoSafeCast& cast, bool allowOlapApply) {
     auto maybeDataType = cast.Type().Maybe<TCoDataType>();
     if (!maybeDataType) {
         if (const auto maybeOptionalType = cast.Type().Maybe<TCoOptionalType>()) {
@@ -55,6 +64,10 @@ bool IsSupportedCast(const TCoSafeCast& cast) {
         }
     }
     YQL_ENSURE(maybeDataType.IsValid());
+
+    if (allowOlapApply) {
+        return true;
+    }
 
     const auto dataType = maybeDataType.Cast();
     if (dataType.Type().Value() == "Int32") { // TODO: Support any numeric casts.
@@ -88,22 +101,47 @@ bool IsMemberColumn(const TExprBase& node, const TExprNode* lambdaArg) {
     return false;
 }
 
-bool IsGoodTypeForArithmeticPushdown(const TTypeAnnotationNode& type) {
-    const auto fatures = NUdf::GetDataTypeInfo(RemoveOptionality(type).Cast<TDataExprType>()->GetSlot()).Features;
-    return NUdf::EDataTypeFeatures::NumericType & fatures
-        || (NKikimr::NSsa::RuntimeVersion >= 5U && (NUdf::EDataTypeFeatures::BigDateType & fatures) && !(NUdf::EDataTypeFeatures::TzDateType & fatures));
+bool IsGoodTypeForArithmeticPushdown(const TTypeAnnotationNode& type, bool allowOlapApply) {
+    const auto features = NUdf::GetDataTypeInfo(RemoveOptionality(type).Cast<TDataExprType>()->GetSlot()).Features;
+    return NUdf::EDataTypeFeatures::NumericType & features
+        || (allowOlapApply && ((NUdf::EDataTypeFeatures::ExtDateType |
+            NUdf::EDataTypeFeatures::DateType |
+            NUdf::EDataTypeFeatures::TimeIntervalType) & features) && !(NUdf::EDataTypeFeatures::TzDateType & features));
 }
 
-bool IsGoodTypeForComparsionPushdown(const TTypeAnnotationNode& type) {
-    const auto fatures = NUdf::GetDataTypeInfo(RemoveOptionality(type).Cast<TDataExprType>()->GetSlot()).Features;
-    return (NUdf::EDataTypeFeatures::CanCompare  & fatures)
-        && (((NUdf::EDataTypeFeatures::NumericType | NUdf::EDataTypeFeatures::StringType) & fatures) ||
-            (NKikimr::NSsa::RuntimeVersion >= 5U && (NUdf::EDataTypeFeatures::BigDateType & fatures) && !(NUdf::EDataTypeFeatures::TzDateType & fatures)));
+bool IsGoodTypeForComparsionPushdown(const TTypeAnnotationNode& type, bool allowOlapApply) {
+    const auto features = NUdf::GetDataTypeInfo(RemoveOptionality(type).Cast<TDataExprType>()->GetSlot()).Features;
+    if (features & NUdf::EDataTypeFeatures::DecimalType) {
+        return false;
+    }
+    return (NUdf::EDataTypeFeatures::CanCompare  & features)
+        && (((NUdf::EDataTypeFeatures::NumericType | NUdf::EDataTypeFeatures::StringType) & features) ||
+            (allowOlapApply && ((NUdf::EDataTypeFeatures::ExtDateType |
+                                NUdf::EDataTypeFeatures::DateType |
+                                NUdf::EDataTypeFeatures::TimeIntervalType) & features) && !(NUdf::EDataTypeFeatures::TzDateType & features)));
+}
+
+bool CanPushdownStringUdf(const TExprNode& udf, bool pushdownSubstring) {
+    if (!pushdownSubstring) {
+        return false;
+    }
+    const auto& name = udf.Head().Content();
+    static const THashSet<TString> substringMatchUdfs = {
+        "String.AsciiEqualsIgnoreCase",
+
+        "String.Contains",
+        "String.AsciiContainsIgnoreCase",
+        "String.StartsWith",
+        "String.AsciiStartsWithIgnoreCase",
+        "String.EndsWith",
+        "String.AsciiEndsWithIgnoreCase"
+    };
+    return substringMatchUdfs.contains(name);
 }
 
 [[maybe_unused]]
-bool AbstractTreeCanBePushed(const TExprBase& expr, const TExprNode* ) {
-    if (!expr.Ref().IsCallable({"Apply", "NamedApply", "IfPresent", "Visit"})) {
+bool AbstractTreeCanBePushed(const TExprBase& expr, const TExprNode*, bool pushdownSubstring) {
+    if (!expr.Ref().IsCallable({"Apply", "Coalesce", "NamedApply", "IfPresent", "Visit"})) {
         return false;
     }
 
@@ -122,7 +160,7 @@ bool AbstractTreeCanBePushed(const TExprBase& expr, const TExprNode* ) {
     for (const auto& apply : applies) {
         const auto& udf = SkipCallables(apply->Head(), {"AssumeStrict"});
         const auto& udfName = udf.Head();
-        if (!(udfName.Content().starts_with("Json2.") || udfName.Content().starts_with("Re2."))) {
+        if (!(udfName.Content().starts_with("Json2.") || udfName.Content().starts_with("Re2.") || CanPushdownStringUdf(udf, pushdownSubstring))) {
             return false;
         }
 
@@ -141,8 +179,16 @@ bool AbstractTreeCanBePushed(const TExprBase& expr, const TExprNode* ) {
     return true;
 }
 
-bool CheckExpressionNodeForPushdown(const TExprBase& node, const TExprNode* lambdaArg) {
-    if constexpr (NKikimr::NSsa::RuntimeVersion >= 5U) {
+bool IfPresentCanBePushed(const TCoIfPresent& ifPresent, const TExprNode* lambdaArg, bool allowOlapApply) {
+
+    Y_UNUSED(ifPresent);
+    Y_UNUSED(lambdaArg);
+
+    return allowOlapApply;
+}
+
+bool CheckExpressionNodeForPushdown(const TExprBase& node, const TExprNode* lambdaArg, const TPushdownOptions& options) {
+    if (options.AllowOlapApply) {
         if (node.Maybe<TCoJust>() || node.Maybe<TCoCoalesce>()) {
             return true;
         }
@@ -156,9 +202,9 @@ bool CheckExpressionNodeForPushdown(const TExprBase& node, const TExprNode* lamb
     }
 
     if (const auto maybeSafeCast = node.Maybe<TCoSafeCast>()) {
-        return IsSupportedCast(maybeSafeCast.Cast());
+        return IsSupportedCast(maybeSafeCast.Cast(), options.AllowOlapApply);
     } else if (const auto maybeData = node.Maybe<TCoDataCtor>()) {
-        return IsSupportedDataType(maybeData.Cast());
+        return IsSupportedDataType(maybeData.Cast(), options.AllowOlapApply);
     } else if (const auto maybeMember = node.Maybe<TCoMember>()) {
         return IsMemberColumn(maybeMember.Cast(), lambdaArg);
     } else if (const auto maybeJsonValue = node.Maybe<TCoJsonValue>()) {
@@ -168,27 +214,28 @@ bool CheckExpressionNodeForPushdown(const TExprBase& node, const TExprNode* lamb
         return true;
     }
 
-    if constexpr (NKikimr::NSsa::RuntimeVersion >= 4U) {
-        if (const auto op = node.Maybe<TCoUnaryArithmetic>()) {
-            return CheckExpressionNodeForPushdown(op.Cast().Arg(), lambdaArg) && IsGoodTypeForArithmeticPushdown(*op.Cast().Ref().GetTypeAnn());
-        } else if (const auto op = node.Maybe<TCoBinaryArithmetic>()) {
-            return CheckExpressionNodeForPushdown(op.Cast().Left(), lambdaArg) && CheckExpressionNodeForPushdown(op.Cast().Right(), lambdaArg)
-                && IsGoodTypeForArithmeticPushdown(*op.Cast().Ref().GetTypeAnn()) && !op.Cast().Maybe<TCoAggrAdd>();
-        }
+    if (const auto op = node.Maybe<TCoUnaryArithmetic>()) {
+        return CheckExpressionNodeForPushdown(op.Cast().Arg(), lambdaArg, options) && IsGoodTypeForArithmeticPushdown(*op.Cast().Ref().GetTypeAnn(), options.AllowOlapApply);
+    } else if (const auto op = node.Maybe<TCoBinaryArithmetic>()) {
+        return CheckExpressionNodeForPushdown(op.Cast().Left(), lambdaArg, options) && CheckExpressionNodeForPushdown(op.Cast().Right(), lambdaArg, options)
+            && IsGoodTypeForArithmeticPushdown(*op.Cast().Ref().GetTypeAnn(), options.AllowOlapApply) && !op.Cast().Maybe<TCoAggrAdd>();
     }
 
-    if constexpr (NKikimr::NSsa::RuntimeVersion >= 5U) {
-        return AbstractTreeCanBePushed(node, lambdaArg);
+    if (options.AllowOlapApply) {
+        if (const auto maybeIfPresent = node.Maybe<TCoIfPresent>()) {
+            return IfPresentCanBePushed(maybeIfPresent.Cast(), lambdaArg, options.AllowOlapApply);
+        }
+        return AbstractTreeCanBePushed(node, lambdaArg, options.PushdownSubstring);
     }
 
     return false;
 }
 
-bool IsGoodTypesForPushdownCompare(const TTypeAnnotationNode& typeOne, const TTypeAnnotationNode& typeTwo) {
+bool IsGoodTypesForPushdownCompare(const TTypeAnnotationNode& typeOne, const TTypeAnnotationNode& typeTwo, const TPushdownOptions& options) {
     const auto& rawOne = RemoveOptionality(typeOne);
     const auto& rawTwo = RemoveOptionality(typeTwo);
     if (IsSameAnnotation(rawOne, rawTwo))
-        return true;
+        return IsGoodTypeForComparsionPushdown(rawOne, options.AllowOlapApply);
 
     const auto kindOne = rawOne.GetKind();
     const auto kindTwo = rawTwo.GetKind();
@@ -206,21 +253,22 @@ bool IsGoodTypesForPushdownCompare(const TTypeAnnotationNode& typeOne, const TTy
             if (size != itemsTwo.size())
                 return false;
             for (auto i = 0U; i < size; ++i) {
-                if (!IsGoodTypesForPushdownCompare(*itemsOne[i], *itemsTwo[i])) {
+                if (!IsGoodTypesForPushdownCompare(*itemsOne[i], *itemsTwo[i], options)) {
                     return false;
                 }
             }
             return true;
         }
-        case ETypeAnnotationKind::Data:
-            return IsGoodTypeForComparsionPushdown(typeOne) && IsGoodTypeForComparsionPushdown(typeTwo);
+        case ETypeAnnotationKind::Data: {
+            return IsGoodTypeForComparsionPushdown(typeOne, options.AllowOlapApply) && IsGoodTypeForComparsionPushdown(typeTwo, options.AllowOlapApply);
+        }
         default:
             break;
     }
     return false;
 }
 
-bool CheckComparisonParametersForPushdown(const TCoCompare& compare, const TExprNode* lambdaArg, const TExprBase& input) {
+bool CheckComparisonParametersForPushdown(const TCoCompare& compare, const TExprNode* lambdaArg, const TExprBase& input, const TPushdownOptions& options) {
     const auto* inputType = input.Ref().GetTypeAnn();
     switch (inputType->GetKind()) {
         case ETypeAnnotationKind::Flow:
@@ -243,7 +291,7 @@ bool CheckComparisonParametersForPushdown(const TCoCompare& compare, const TExpr
         return false;
     }
 
-    if (!IsGoodTypesForPushdownCompare(*compare.Left().Ref().GetTypeAnn(), *compare.Right().Ref().GetTypeAnn())) {
+    if (!IsGoodTypesForPushdownCompare(*compare.Left().Ref().GetTypeAnn(), *compare.Right().Ref().GetTypeAnn(), options)) {
         return false;
     }
 
@@ -252,19 +300,31 @@ bool CheckComparisonParametersForPushdown(const TCoCompare& compare, const TExpr
     YQL_ENSURE(leftList.size() == rightList.size(), "Different sizes of lists in comparison!");
 
     for (size_t i = 0; i < leftList.size(); ++i) {
-        if (!CheckExpressionNodeForPushdown(leftList[i], lambdaArg) || !CheckExpressionNodeForPushdown(rightList[i], lambdaArg)) {
+        if (!CheckExpressionNodeForPushdown(leftList[i], lambdaArg, options) || !CheckExpressionNodeForPushdown(rightList[i], lambdaArg, options)) {
             return false;
+        }
+    }
+
+    if (options.PushdownSubstring) { //EnableSimpleIlikePushdown FF
+        if (IgnoreCaseSubstringMatchFunctions.contains(compare.CallableName())) {
+            const auto& right = compare.Right().Ref();
+            YQL_ENSURE(right.IsCallable("String") || right.IsCallable("Utf8"));
+            const auto pattern = right.Child(0);
+            YQL_ENSURE(pattern->IsAtom());
+            if (UTF8Detect(pattern->Content()) != ASCII) {
+                return false;
+            }
         }
     }
 
     return true;
 }
 
-bool CompareCanBePushed(const TCoCompare& compare, const TExprNode* lambdaArg, const TExprBase& lambdaBody) {
-    return IsSupportedPredicate(compare) && CheckComparisonParametersForPushdown(compare, lambdaArg, lambdaBody);
+bool CompareCanBePushed(const TCoCompare& compare, const TExprNode* lambdaArg, const TExprBase& lambdaBody, const TPushdownOptions& options) {
+    return IsSupportedPredicate(compare) && CheckComparisonParametersForPushdown(compare, lambdaArg, lambdaBody, options);
 }
 
-bool SafeCastCanBePushed(const TCoFlatMap& flatmap, const TExprNode* lambdaArg) {
+bool SafeCastCanBePushed(const TCoFlatMap& flatmap, const TExprNode* lambdaArg, const TPushdownOptions& options) {
     /*
      * There are three ways of comparison in following format:
      *
@@ -285,7 +345,7 @@ bool SafeCastCanBePushed(const TCoFlatMap& flatmap, const TExprNode* lambdaArg) 
     YQL_ENSURE(leftList.size() == rightList.size(), "Different sizes of lists in comparison!");
 
     for (size_t i = 0; i < leftList.size(); ++i) {
-        if (!CheckExpressionNodeForPushdown(leftList[i], lambdaArg) || !CheckExpressionNodeForPushdown(rightList[i], lambdaArg)) {
+        if (!CheckExpressionNodeForPushdown(leftList[i], lambdaArg, options) || !CheckExpressionNodeForPushdown(rightList[i], lambdaArg, options)) {
             return false;
         }
     }
@@ -319,18 +379,20 @@ bool JsonExistsCanBePushed(const TCoJsonExists& jsonExists, const TExprNode* lam
     return true;
 }
 
-bool CoalesceCanBePushed(const TCoCoalesce& coalesce, const TExprNode* lambdaArg, const TExprBase& lambdaBody) {
+bool CoalesceCanBePushed(const TCoCoalesce& coalesce, const TExprNode* lambdaArg, const TExprBase& lambdaBody, const TPushdownOptions& options) {
     if (!coalesce.Value().Maybe<TCoBool>()) {
         return false;
     }
 
     const auto predicate = coalesce.Predicate();
     if (const auto maybeCompare = predicate.Maybe<TCoCompare>()) {
-        return CompareCanBePushed(maybeCompare.Cast(), lambdaArg, lambdaBody);
+        return CompareCanBePushed(maybeCompare.Cast(), lambdaArg, lambdaBody, options);
     } else if (const auto maybeFlatmap = predicate.Maybe<TCoFlatMap>()) {
-        return SafeCastCanBePushed(maybeFlatmap.Cast(), lambdaArg);
+        return SafeCastCanBePushed(maybeFlatmap.Cast(), lambdaArg, options);
     } else if (const auto maybeJsonExists = predicate.Maybe<TCoJsonExists>()) {
         return JsonExistsCanBePushed(maybeJsonExists.Cast(), lambdaArg);
+    } else if (const auto maybeIfPresent = predicate.Maybe<TCoIfPresent>()) {
+        return IfPresentCanBePushed(maybeIfPresent.Cast(), lambdaArg, options.AllowOlapApply);
     }
 
     return false;
@@ -340,47 +402,53 @@ bool ExistsCanBePushed(const TCoExists& exists, const TExprNode* lambdaArg) {
     return IsMemberColumn(exists.Optional(), lambdaArg);
 }
 
-void CollectChildrenPredicates(const TExprNode& opNode, TOLAPPredicateNode& predicateTree, const TExprNode* lambdaArg, const TExprBase& lambdaBody) {
+void CollectChildrenPredicates(const TExprNode& opNode, TOLAPPredicateNode& predicateTree, const TExprNode* lambdaArg, const TExprBase& lambdaBody, const TPushdownOptions& options) {
     predicateTree.Children.reserve(opNode.ChildrenSize());
     predicateTree.CanBePushed = true;
+    predicateTree.CanBePushedApply = true;
+
     for (const auto& childNodePtr: opNode.Children()) {
         TOLAPPredicateNode child;
         child.ExprNode = childNodePtr;
-        if (const auto maybeCtor = TMaybeNode<TCoDataCtor>(child.ExprNode))
-            child.CanBePushed = IsSupportedDataType(maybeCtor.Cast());
-        else
-            CollectPredicates(TExprBase(child.ExprNode), child, lambdaArg, lambdaBody);
+        if (const auto maybeCtor = TMaybeNode<TCoDataCtor>(child.ExprNode)) {
+            child.CanBePushed = IsSupportedDataType(maybeCtor.Cast(), false);
+            child.CanBePushedApply = IsSupportedDataType(maybeCtor.Cast(), true);
+        }
+        else {
+            CollectPredicates(TExprBase(child.ExprNode), child, lambdaArg, lambdaBody, options);
+        }
         predicateTree.Children.emplace_back(child);
         predicateTree.CanBePushed &= child.CanBePushed;
+        predicateTree.CanBePushedApply &= child.CanBePushedApply;
     }
 }
 
-}
+} // namespace
 
-void CollectPredicates(const TExprBase& predicate, TOLAPPredicateNode& predicateTree, const TExprNode* lambdaArg, const TExprBase& lambdaBody) {
-    if constexpr (NKikimr::NSsa::RuntimeVersion >= 5U) {
-        if (predicate.Maybe<TCoIf>() || predicate.Maybe<TCoJust>() || predicate.Maybe<TCoCoalesce>()) {
-            return CollectChildrenPredicates(predicate.Ref(), predicateTree, lambdaArg, lambdaBody);
-        }
-    }
-
+void CollectPredicates(const TExprBase& predicate, TOLAPPredicateNode& predicateTree, const TExprNode* lambdaArg, const TExprBase& lambdaBody, const TPushdownOptions& options) {
     if (predicate.Maybe<TCoNot>() || predicate.Maybe<TCoAnd>() || predicate.Maybe<TCoOr>() || predicate.Maybe<TCoXor>()) {
-        return CollectChildrenPredicates(predicate.Ref(), predicateTree, lambdaArg, lambdaBody);
+        CollectChildrenPredicates(predicate.Ref(), predicateTree, lambdaArg, lambdaBody, options);
     } else if (const auto maybeCoalesce = predicate.Maybe<TCoCoalesce>()) {
-        predicateTree.CanBePushed = CoalesceCanBePushed(maybeCoalesce.Cast(), lambdaArg, lambdaBody);
+        predicateTree.CanBePushed = CoalesceCanBePushed(maybeCoalesce.Cast(), lambdaArg, lambdaBody, {false, options.PushdownSubstring});
+        predicateTree.CanBePushedApply = CoalesceCanBePushed(maybeCoalesce.Cast(), lambdaArg, lambdaBody, {true, options.PushdownSubstring});
     } else if (const auto maybeCompare = predicate.Maybe<TCoCompare>()) {
-        predicateTree.CanBePushed = CompareCanBePushed(maybeCompare.Cast(), lambdaArg, lambdaBody);
+        predicateTree.CanBePushed = CompareCanBePushed(maybeCompare.Cast(), lambdaArg, lambdaBody, {false, options.PushdownSubstring});
+        predicateTree.CanBePushedApply = CompareCanBePushed(maybeCompare.Cast(), lambdaArg, lambdaBody, {true, options.PushdownSubstring});
     } else if (const auto maybeExists = predicate.Maybe<TCoExists>()) {
         predicateTree.CanBePushed = ExistsCanBePushed(maybeExists.Cast(), lambdaArg);
+        predicateTree.CanBePushedApply = predicateTree.CanBePushed;
     } else if (const auto maybeJsonExists = predicate.Maybe<TCoJsonExists>()) {
         predicateTree.CanBePushed = JsonExistsCanBePushed(maybeJsonExists.Cast(), lambdaArg);
-    } else {
-        if constexpr (NKikimr::NSsa::RuntimeVersion >= 5U) {
-            predicateTree.CanBePushed = AbstractTreeCanBePushed(predicate, lambdaArg);
-        } else {
-            predicateTree.CanBePushed = false;
+        predicateTree.CanBePushedApply = predicateTree.CanBePushed;
+    }
+
+    if (options.AllowOlapApply && !predicateTree.CanBePushedApply){
+        if (predicate.Maybe<TCoIf>() || predicate.Maybe<TCoJust>() || predicate.Maybe<TCoCoalesce>()) {
+            CollectChildrenPredicates(predicate.Ref(), predicateTree, lambdaArg, lambdaBody, {true, options.PushdownSubstring});    
+        }
+        if (!predicateTree.CanBePushedApply) {
+            predicateTree.CanBePushedApply =  AbstractTreeCanBePushed(predicate, lambdaArg, options.PushdownSubstring);
         }
     }
 }
-
-}
+} //namespace NKikimr::NKqp::NOpt

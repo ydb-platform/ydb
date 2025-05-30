@@ -5,16 +5,13 @@
 
 #include <yt/cpp/mapreduce/common/retry_lib.h>
 
-#include <yt/cpp/mapreduce/http/http.h>
-#include <yt/cpp/mapreduce/http/retry_request.h>
+#include <yt/cpp/mapreduce/common/retry_request.h>
 
 #include <yt/cpp/mapreduce/interface/common.h>
 #include <yt/cpp/mapreduce/interface/io.h>
 #include <yt/cpp/mapreduce/interface/raw_client.h>
 
 #include <yt/cpp/mapreduce/io/helpers.h>
-
-#include <yt/cpp/mapreduce/raw_client/raw_requests.h>
 
 #include <library/cpp/threading/blocking_queue/blocking_queue.h>
 
@@ -39,7 +36,6 @@ public:
         ITransactionPingerPtr transactionPinger,
         const TClientContext& context,
         const TTransactionId& parentId,
-        const TString& command,
         const TMaybe<TFormat>& format,
         const TRichYPath& path,
         const TWriterOptions& options)
@@ -48,9 +44,10 @@ public:
         , TransactionPinger_(std::move(transactionPinger))
         , Context_(context)
         , AutoFinish_(options.AutoFinish_)
-        , Command_(command)
+        , Options_(options)
         , Format_(format)
         , BufferSize_(GetBufferSize(options.WriterOptions_))
+        , Path_(path)
         , ParentTransactionId_(parentId)
         , WriteTransaction_()
         , FilledBuffers_(2)
@@ -58,15 +55,12 @@ public:
         , Buffer_(BufferSize_ * 2)
         , Thread_(TThread::TParams{SendThread, this}.SetName("retryful_writer"))
     {
-        Parameters_ = FormIORequestParameters(path, options);
-
-        auto secondaryPath = path;
-        secondaryPath.Append_ = true;
-        secondaryPath.Schema_.Clear();
-        secondaryPath.CompressionCodec_.Clear();
-        secondaryPath.ErasureCodec_.Clear();
-        secondaryPath.OptimizeFor_.Clear();
-        SecondaryParameters_ = FormIORequestParameters(secondaryPath, options);
+        SecondaryPath_ = path;
+        SecondaryPath_.Append_ = true;
+        SecondaryPath_.Schema_.Clear();
+        SecondaryPath_.CompressionCodec_.Clear();
+        SecondaryPath_.ErasureCodec_.Clear();
+        SecondaryPath_.OptimizeFor_.Clear();
 
         if (options.CreateTransaction_) {
             WriteTransaction_.ConstructInPlace(rawClient, ClientRetryPolicy_, context, parentId, TransactionPinger_->GetChildTxPinger(), TStartTransactionOptions());
@@ -106,14 +100,14 @@ private:
     const ITransactionPingerPtr TransactionPinger_;
     const TClientContext Context_;
     const bool AutoFinish_;
+    std::variant<TTableWriterOptions, TFileWriterOptions> Options_;
 
-    TString Command_;
     TMaybe<TFormat> Format_;
 
     const size_t BufferSize_;
 
-    TNode Parameters_;
-    TNode SecondaryParameters_;
+    TRichYPath Path_;
+    TRichYPath SecondaryPath_;
 
     TTransactionId ParentTransactionId_;
     TMaybe<TPingableTransaction> WriteTransaction_;

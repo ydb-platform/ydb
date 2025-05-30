@@ -17,17 +17,11 @@
 
 namespace NKikimr::Tests::NCS {
 
-void THelperSchemaless::CreateTestOlapStore(TActorId sender, TString scheme) {
-    NKikimrSchemeOp::TColumnStoreDescription store;
-    UNIT_ASSERT(::google::protobuf::TextFormat::ParseFromString(scheme, &store));
-
+void THelperSchemaless::ExecuteModifyScheme(NKikimrSchemeOp::TModifyScheme& modifyScheme) {
     auto request = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
     request->Record.SetExecTimeoutPeriod(Max<ui64>());
-    auto* op = request->Record.MutableTransaction()->MutableModifyScheme();
-    op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnStore);
-    op->SetWorkingDir(ROOT_PATH);
-    op->MutableCreateColumnStore()->CopyFrom(store);
-
+    *request->Record.MutableTransaction()->MutableModifyScheme() = modifyScheme;
+    TActorId sender = Server.GetRuntime()->AllocateEdgeActor();
     Server.GetRuntime()->Send(new IEventHandle(MakeTxProxyID(), sender, request.release()));
     auto ev = Server.GetRuntime()->GrabEdgeEventRethrow<TEvTxUserProxy::TEvProposeTransactionStatus>(sender);
     Cerr << ev->Get()->Record.DebugString() << Endl;
@@ -37,29 +31,29 @@ void THelperSchemaless::CreateTestOlapStore(TActorId sender, TString scheme) {
     WaitForSchemeOperation(sender, txId);
 }
 
-void THelperSchemaless::CreateTestOlapTable(TActorId sender, TString storeOrDirName, TString scheme) {
+void THelperSchemaless::CreateTestOlapStore(TString scheme) {
+    NKikimrSchemeOp::TColumnStoreDescription store;
+    UNIT_ASSERT(::google::protobuf::TextFormat::ParseFromString(scheme, &store));
+    NKikimrSchemeOp::TModifyScheme op;
+    op.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnStore);
+    op.SetWorkingDir(ROOT_PATH);
+    op.MutableCreateColumnStore()->CopyFrom(store);
+    ExecuteModifyScheme(op);
+}
+
+void THelperSchemaless::CreateTestOlapTable(TString storeOrDirName, TString scheme) {
     NKikimrSchemeOp::TColumnTableDescription table;
     UNIT_ASSERT(::google::protobuf::TextFormat::ParseFromString(scheme, &table));
-    auto request = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
-    request->Record.SetExecTimeoutPeriod(Max<ui64>());
-
     TString workingDir = ROOT_PATH;
     if (!storeOrDirName.empty()) {
         workingDir += "/" + storeOrDirName;
     }
 
-    auto* op = request->Record.MutableTransaction()->MutableModifyScheme();
-    op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnTable);
-    op->SetWorkingDir(workingDir);
-    op->MutableCreateColumnTable()->CopyFrom(table);
-
-    Server.GetRuntime()->Send(new IEventHandle(MakeTxProxyID(), sender, request.release()));
-    auto ev = Server.GetRuntime()->GrabEdgeEventRethrow<TEvTxUserProxy::TEvProposeTransactionStatus>(sender);
-    ui64 txId = ev->Get()->Record.GetTxId();
-    auto status = ev->Get()->Record.GetStatus();
-    Cerr << ev->Get()->Record.DebugString() << Endl;
-    UNIT_ASSERT(status != TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecError);
-    WaitForSchemeOperation(sender, txId);
+    NKikimrSchemeOp::TModifyScheme op;
+    op.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnTable);
+    op.SetWorkingDir(workingDir);
+    op.MutableCreateColumnTable()->CopyFrom(table);
+    ExecuteModifyScheme(op);
 }
 
 void THelperSchemaless::SendDataViaActorSystem(TString testTable, std::shared_ptr<arrow::RecordBatch> batch, const Ydb::StatusIds_StatusCode& expectedStatus) const {
@@ -121,7 +115,7 @@ std::shared_ptr<arrow::Schema> THelper::GetArrowSchema() const {
     return std::make_shared<arrow::Schema>(std::move(fields));
 }
 
-std::shared_ptr<arrow::RecordBatch> THelper::TestArrowBatch(ui64 pathIdBegin, ui64 tsBegin, size_t rowCount, const ui32 tsStepUs) const {
+std::shared_ptr<arrow::RecordBatch> THelper::TestArrowBatch(ui64 pathIdBegin, ui64 tsBegin, size_t rowCount, const ui64 tsStepUs) const {
     std::shared_ptr<arrow::Schema> schema = GetArrowSchema();
 
     arrow::TimestampBuilder b1(arrow::timestamp(arrow::TimeUnit::TimeUnit::MICRO), arrow::default_memory_pool());
@@ -200,8 +194,7 @@ TString THelper::GetTestTableSchema() const {
 }
 
 void THelper::CreateSchemaOlapTablesWithStore(const TString tableSchema, TVector<TString> tableNames /*= "olapTable"*/, TString storeName /*= "olapStore"*/, ui32 storeShardsCount /*= 4*/, ui32 tableShardsCount /*= 3*/) {
-    TActorId sender = Server.GetRuntime()->AllocateEdgeActor();
-    CreateTestOlapStore(sender, Sprintf(R"(
+    CreateTestOlapStore(Sprintf(R"(
             Name: "%s"
             ColumnShardCount: %d
             SchemaPresets {
@@ -215,7 +208,7 @@ void THelper::CreateSchemaOlapTablesWithStore(const TString tableSchema, TVector
     const TString shardingColumns = "[\"" + JoinSeq("\",\"", GetShardingColumns()) + "\"]";
 
     for (const TString& tableName : tableNames) {
-        TBase::CreateTestOlapTable(sender, storeName, Sprintf(R"(
+        TBase::CreateTestOlapTable(storeName, Sprintf(R"(
             Name: "%s"
             ColumnShardCount: %d
             Sharding {
@@ -232,12 +225,10 @@ void THelper::CreateOlapTablesWithStore(TVector<TString> tableNames /*= {"olapTa
 }
 
 void THelper::CreateSchemaOlapTables(const TString tableSchema, TVector<TString> tableNames, ui32 tableShardsCount) {
-    TActorId sender = Server.GetRuntime()->AllocateEdgeActor();
-
     const TString shardingColumns = "[\"" + JoinSeq("\",\"", GetShardingColumns()) + "\"]";
 
     for (const TString& tableName : tableNames) {
-        TBase::CreateTestOlapTable(sender, "", Sprintf(R"(
+        TBase::CreateTestOlapTable("", Sprintf(R"(
             Name: "%s"
             ColumnShardCount: %d
             Sharding {
@@ -370,7 +361,7 @@ std::shared_ptr<arrow::Schema> TCickBenchHelper::GetArrowSchema() const {
     });
 }
 
-std::shared_ptr<arrow::RecordBatch> TCickBenchHelper::TestArrowBatch(ui64, ui64 begin, size_t rowCount, const ui32 tsStepUs) const {
+std::shared_ptr<arrow::RecordBatch> TCickBenchHelper::TestArrowBatch(ui64, ui64 begin, size_t rowCount, const ui64 tsStepUs) const {
     std::shared_ptr<arrow::Schema> schema = GetArrowSchema();
     UNIT_ASSERT(schema);
     UNIT_ASSERT(schema->num_fields());
@@ -443,14 +434,14 @@ std::shared_ptr<arrow::RecordBatch> TTableWithNullsHelper::TestArrowBatch() cons
     return TestArrowBatch(0, 0, 10, 1);
 }
 
-std::shared_ptr<arrow::RecordBatch> TTableWithNullsHelper::TestArrowBatch(ui64, ui64, size_t rowCount, const ui32 /*tsStepUs*/) const {
+std::shared_ptr<arrow::RecordBatch> TTableWithNullsHelper::TestArrowBatch(ui64, ui64, size_t rowCount, const ui64 /*tsStepUs*/) const {
     rowCount = 10;
     std::shared_ptr<arrow::Schema> schema = GetArrowSchema();
 
     arrow::Int32Builder bId;
     arrow::StringBuilder bResourceId;
     arrow::Int32Builder bLevel;
-    arrow::StringBuilder bBinaryStr;
+    arrow::BinaryBuilder bBinaryStr;
     arrow::StringBuilder bJsonVal;
     arrow::BinaryBuilder bJsonDoc;
 
@@ -476,7 +467,7 @@ std::shared_ptr<arrow::RecordBatch> TTableWithNullsHelper::TestArrowBatch(ui64, 
     std::shared_ptr<arrow::Int32Array> aId;
     std::shared_ptr<arrow::StringArray> aResourceId;
     std::shared_ptr<arrow::Int32Array> aLevel;
-    std::shared_ptr<arrow::StringArray> aBinaryStr;
+    std::shared_ptr<arrow::BinaryArray> aBinaryStr;
     std::shared_ptr<arrow::StringArray> aJsonVal;
     std::shared_ptr<arrow::BinaryArray> aJsonDoc;
 

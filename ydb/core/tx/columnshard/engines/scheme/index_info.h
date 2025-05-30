@@ -9,6 +9,7 @@
 #include "indexes/abstract/meta.h"
 
 #include <ydb/core/formats/arrow/dictionary/object.h>
+#include <ydb/core/formats/arrow/program/execution.h>
 #include <ydb/core/formats/arrow/serializer/abstract.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/sys_view/common/schema.h>
@@ -30,6 +31,10 @@ class Schema;
 
 namespace NKikimr::NOlap {
 class TPortionInfo;
+class TCompactedPortionInfo;
+namespace NIndexes {
+class TSkipIndex;
+}
 namespace NIndexes::NMax {
 class TIndexMeta;
 }
@@ -52,6 +57,7 @@ struct TIndexInfo: public IIndexInfo {
 private:
     using TColumns = THashMap<ui32, NTable::TColumn>;
     friend class TPortionInfo;
+    friend class TCompactedPortionInfo;
     friend class TPortionDataAccessor;
 
     std::vector<ui32> ColumnIdxSortedByName;
@@ -165,10 +171,14 @@ public:
 
     TConclusion<std::shared_ptr<arrow::Array>> BuildDefaultColumn(const ui32 fieldIndex, const ui32 rowsCount, const bool force) const;
 
-
     bool IsNullableVerifiedByIndex(const ui32 colIndex) const {
         AFL_VERIFY(colIndex < ColumnFeatures.size());
         return ColumnFeatures[colIndex]->GetIsNullable();
+    }
+
+    const TColumnFeatures& GetColumnFeaturesVerifiedByIndex(const ui32 colIndex) const {
+        AFL_VERIFY(colIndex < ColumnFeatures.size());
+        return *ColumnFeatures[colIndex];
     }
 
     bool IsNullableVerified(const ui32 colId) const {
@@ -229,6 +239,7 @@ public:
         result.PKColumnIds = pkIds;
         result.SetAllKeys(operators, columns);
         result.Validate();
+        result.Version = 1;
         return result;
     }
 
@@ -264,11 +275,7 @@ public:
     }
 
     std::optional<ui32> GetColumnIndexOptional(const ui32 id) const;
-    ui32 GetColumnIndexVerified(const ui32 id) const {
-        auto result = GetColumnIndexOptional(id);
-        AFL_VERIFY(result);
-        return *result;
-    }
+    ui32 GetColumnIndexVerified(const ui32 id) const;
     std::shared_ptr<arrow::Field> GetColumnFieldOptional(const ui32 columnId) const;
     std::shared_ptr<arrow::Field> GetColumnFieldVerified(const ui32 columnId) const;
     std::shared_ptr<arrow::Schema> GetColumnSchema(const ui32 columnId) const;
@@ -330,6 +337,8 @@ public:
         return result;
     }
 
+    std::vector<std::shared_ptr<NIndexes::TSkipIndex>> FindSkipIndexes(
+        const NIndexes::NRequest::TOriginalDataAddress& originalDataAddress, const NArrow::NSSA::TIndexCheckOperation& op) const;
     std::shared_ptr<NIndexes::NMax::TIndexMeta> GetIndexMetaMax(const ui32 columnId) const;
     std::shared_ptr<NIndexes::NCountMinSketch::TIndexMeta> GetIndexMetaCountMinSketch(const std::set<ui32>& columnIds) const;
 
@@ -376,6 +385,16 @@ public:
         return PKColumnIds[0];
     }
 
+    std::shared_ptr<arrow::Schema> GetReplaceKeyPrefix(const ui32 size) const {
+        AFL_VERIFY(size);
+        AFL_VERIFY(size <= (ui32)PrimaryKey->num_fields());
+        if (size == (ui32)PrimaryKey->num_fields()) {
+            return PrimaryKey;
+        } else {
+            std::vector<std::shared_ptr<arrow::Field>> fields(PrimaryKey->fields().begin(), PrimaryKey->fields().begin() + size);
+            return std::make_shared<arrow::Schema>(std::move(fields));
+        }
+    }
     const std::shared_ptr<arrow::Schema>& GetReplaceKey() const {
         return PrimaryKey;
     }
@@ -402,7 +421,7 @@ public:
         return Version;
     }
 
-    bool CheckCompatible(const TIndexInfo& other) const;
+    TConclusionStatus CheckCompatible(const TIndexInfo& other) const;
     NArrow::NSerialization::TSerializerContainer GetDefaultSerializer() const {
         return DefaultSerializer;
     }

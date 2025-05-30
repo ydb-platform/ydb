@@ -106,44 +106,20 @@
                 "PlanNodeType": "Query",
                 "Plans": [
                     {
-                        "Node Type": "Effect",
-                        "PlanNodeId": 10,
-                        "Plans": [
+                        "Node Type": "Sink",
+                        "Operators": [
                             {
-                                "CTE Name": "precompute_0_0",
-                                "Node Type": "Upsert-ConstantExpr",
-                                "Operators": [
-                                    {
-                                        "Inputs": [
-                                            {
-                                                "InternalOperatorId": 1
-                                            }
-                                        ],
-                                        "Name": "Upsert",
-                                        "Path": "/local/base_write_write_group_by_script_script/Temp",
-                                        "Table": "base_write_write_group_by_script_script/Temp"
-                                    },
-                                    {
-                                        "Inputs": [],
-                                        "Iterator": "precompute_0_0",
-                                        "Name": "Iterator"
-                                    }
-                                ],
-                                "PlanNodeId": 9,
-                                "Tables": [
-                                    "base_write_write_group_by_script_script/Temp"
-                                ]
+                                "Inputs": [],
+                                "Name": "Upsert",
+                                "Path": "/local/base_write_write_group_by_script_script/Temp",
+                                "SinkType": "KqpTableSink",
+                                "Table": "base_write_write_group_by_script_script/Temp"
                             }
-                        ]
-                    },
-                    {
-                        "Node Type": "Precompute_0",
-                        "Parent Relationship": "InitPlan",
+                        ],
                         "PlanNodeId": 7,
-                        "PlanNodeType": "Materialize",
                         "Plans": [
                             {
-                                "Node Type": "Collect",
+                                "Node Type": "Stage",
                                 "PlanNodeId": 6,
                                 "Plans": [
                                     {
@@ -227,7 +203,9 @@
                                 ]
                             }
                         ],
-                        "Subplan Name": "CTE precompute_0_0"
+                        "Tables": [
+                            "base_write_write_group_by_script_script/Temp"
+                        ]
                     }
                 ],
                 "Stats": {

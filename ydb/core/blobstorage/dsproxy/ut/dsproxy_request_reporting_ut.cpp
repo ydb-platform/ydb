@@ -34,23 +34,23 @@ Y_UNIT_TEST(CheckDefaultBehaviour) {
     runtime.EnableScheduleForActor(reportingThrottler);
     SimulateSleep(runtime, TDuration::MilliSeconds(10));
 
-    UNIT_ASSERT(AllowToReport(NKikimrBlobStorage::EPutHandleClass::TabletLog));
-    UNIT_ASSERT(!AllowToReport(NKikimrBlobStorage::EPutHandleClass::TabletLog));
-    UNIT_ASSERT(AllowToReport(NKikimrBlobStorage::EPutHandleClass::AsyncBlob));
+    UNIT_ASSERT(PopAllowToken(NKikimrBlobStorage::EPutHandleClass::TabletLog));
+    UNIT_ASSERT(!PopAllowToken(NKikimrBlobStorage::EPutHandleClass::TabletLog));
+    UNIT_ASSERT(PopAllowToken(NKikimrBlobStorage::EPutHandleClass::AsyncBlob));
 
     // 10 seconds after last update
     SimulateSleep(runtime, TDuration::Seconds(10));
-    UNIT_ASSERT(!AllowToReport(NKikimrBlobStorage::EPutHandleClass::TabletLog));
-    UNIT_ASSERT(!AllowToReport(NKikimrBlobStorage::EPutHandleClass::AsyncBlob));
+    UNIT_ASSERT(!PopAllowToken(NKikimrBlobStorage::EPutHandleClass::TabletLog));
+    UNIT_ASSERT(!PopAllowToken(NKikimrBlobStorage::EPutHandleClass::AsyncBlob));
 
     // 50 seconds after last update
     SimulateSleep(runtime, TDuration::Seconds(40));
-    UNIT_ASSERT(!AllowToReport(NKikimrBlobStorage::EPutHandleClass::TabletLog));
+    UNIT_ASSERT(!PopAllowToken(NKikimrBlobStorage::EPutHandleClass::TabletLog));
 
     // 61 seconds after last update
     SimulateSleep(runtime, TDuration::Seconds(21));
-    UNIT_ASSERT(AllowToReport(NKikimrBlobStorage::EPutHandleClass::TabletLog));
-    UNIT_ASSERT(AllowToReport(NKikimrBlobStorage::EPutHandleClass::AsyncBlob));
+    UNIT_ASSERT(PopAllowToken(NKikimrBlobStorage::EPutHandleClass::TabletLog));
+    UNIT_ASSERT(PopAllowToken(NKikimrBlobStorage::EPutHandleClass::AsyncBlob));
 
     // Check more than 1 request allowed for duration < 60000
 
@@ -59,14 +59,14 @@ Y_UNIT_TEST(CheckDefaultBehaviour) {
 
     // 1 seconds before update
     SimulateSleep(runtime, TDuration::Seconds(59));
-    UNIT_ASSERT(AllowToReport(NKikimrBlobStorage::EPutHandleClass::TabletLog));
+    UNIT_ASSERT(PopAllowToken(NKikimrBlobStorage::EPutHandleClass::TabletLog));
 
     // update
     SimulateSleep(runtime, TDuration::Seconds(1));
 
     // 1 seconds after update
     SimulateSleep(runtime, TDuration::Seconds(1));
-    UNIT_ASSERT(AllowToReport(NKikimrBlobStorage::EPutHandleClass::TabletLog));
+    UNIT_ASSERT(PopAllowToken(NKikimrBlobStorage::EPutHandleClass::TabletLog));
 }
 
 Y_UNIT_TEST(CheckLeakyBucketBehaviour) {
@@ -81,28 +81,28 @@ Y_UNIT_TEST(CheckLeakyBucketBehaviour) {
     runtime.EnableScheduleForActor(reportingThrottler);
     SimulateSleep(runtime, TDuration::MilliSeconds(10));
 
-    UNIT_ASSERT(AllowToReport(NKikimrBlobStorage::EPutHandleClass::TabletLog));
-    UNIT_ASSERT(AllowToReport(NKikimrBlobStorage::EPutHandleClass::TabletLog));
-    UNIT_ASSERT(AllowToReport(NKikimrBlobStorage::EPutHandleClass::TabletLog));
-    UNIT_ASSERT(!AllowToReport(NKikimrBlobStorage::EPutHandleClass::TabletLog));
+    UNIT_ASSERT(PopAllowToken(NKikimrBlobStorage::EPutHandleClass::TabletLog));
+    UNIT_ASSERT(PopAllowToken(NKikimrBlobStorage::EPutHandleClass::TabletLog));
+    UNIT_ASSERT(PopAllowToken(NKikimrBlobStorage::EPutHandleClass::TabletLog));
+    UNIT_ASSERT(!PopAllowToken(NKikimrBlobStorage::EPutHandleClass::TabletLog));
 
     // 61 seconds after last update
     SimulateSleep(runtime, TDuration::Seconds(61));
-    UNIT_ASSERT(AllowToReport(NKikimrBlobStorage::EPutHandleClass::TabletLog));
-    UNIT_ASSERT(!AllowToReport(NKikimrBlobStorage::EPutHandleClass::TabletLog));
+    UNIT_ASSERT(PopAllowToken(NKikimrBlobStorage::EPutHandleClass::TabletLog));
+    UNIT_ASSERT(!PopAllowToken(NKikimrBlobStorage::EPutHandleClass::TabletLog));
 
     // 121 seconds after last update
     SimulateSleep(runtime, TDuration::Seconds(121));
-    UNIT_ASSERT(AllowToReport(NKikimrBlobStorage::EPutHandleClass::TabletLog));
-    UNIT_ASSERT(AllowToReport(NKikimrBlobStorage::EPutHandleClass::TabletLog));
-    UNIT_ASSERT(!AllowToReport(NKikimrBlobStorage::EPutHandleClass::TabletLog));
+    UNIT_ASSERT(PopAllowToken(NKikimrBlobStorage::EPutHandleClass::TabletLog));
+    UNIT_ASSERT(PopAllowToken(NKikimrBlobStorage::EPutHandleClass::TabletLog));
+    UNIT_ASSERT(!PopAllowToken(NKikimrBlobStorage::EPutHandleClass::TabletLog));
 
     // 181 seconds after last update
     SimulateSleep(runtime, TDuration::Seconds(181));
-    UNIT_ASSERT(AllowToReport(NKikimrBlobStorage::EPutHandleClass::TabletLog));
-    UNIT_ASSERT(AllowToReport(NKikimrBlobStorage::EPutHandleClass::TabletLog));
-    UNIT_ASSERT(AllowToReport(NKikimrBlobStorage::EPutHandleClass::TabletLog));
-    UNIT_ASSERT(!AllowToReport(NKikimrBlobStorage::EPutHandleClass::TabletLog));
+    UNIT_ASSERT(PopAllowToken(NKikimrBlobStorage::EPutHandleClass::TabletLog));
+    UNIT_ASSERT(PopAllowToken(NKikimrBlobStorage::EPutHandleClass::TabletLog));
+    UNIT_ASSERT(PopAllowToken(NKikimrBlobStorage::EPutHandleClass::TabletLog));
+    UNIT_ASSERT(!PopAllowToken(NKikimrBlobStorage::EPutHandleClass::TabletLog));
 
     // Check no more than 3 request allowed for duration < 60000
 
@@ -111,17 +111,17 @@ Y_UNIT_TEST(CheckLeakyBucketBehaviour) {
 
     // 1 seconds before update
     SimulateSleep(runtime, TDuration::Seconds(59));
-    UNIT_ASSERT(AllowToReport(NKikimrBlobStorage::EPutHandleClass::TabletLog));
-    UNIT_ASSERT(AllowToReport(NKikimrBlobStorage::EPutHandleClass::TabletLog));
-    UNIT_ASSERT(AllowToReport(NKikimrBlobStorage::EPutHandleClass::TabletLog));
+    UNIT_ASSERT(PopAllowToken(NKikimrBlobStorage::EPutHandleClass::TabletLog));
+    UNIT_ASSERT(PopAllowToken(NKikimrBlobStorage::EPutHandleClass::TabletLog));
+    UNIT_ASSERT(PopAllowToken(NKikimrBlobStorage::EPutHandleClass::TabletLog));
 
     // update
     SimulateSleep(runtime, TDuration::Seconds(1));
 
     // 1 seconds after update
     SimulateSleep(runtime, TDuration::Seconds(1));
-    UNIT_ASSERT(AllowToReport(NKikimrBlobStorage::EPutHandleClass::TabletLog));
-    UNIT_ASSERT(!AllowToReport(NKikimrBlobStorage::EPutHandleClass::TabletLog));
+    UNIT_ASSERT(PopAllowToken(NKikimrBlobStorage::EPutHandleClass::TabletLog));
+    UNIT_ASSERT(!PopAllowToken(NKikimrBlobStorage::EPutHandleClass::TabletLog));
 }
 
 } // Y_UNIT_TEST_SUITE TDSProxyRequestReportningTest

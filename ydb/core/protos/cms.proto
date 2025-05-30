@@ -452,6 +452,14 @@ message TCmsConfig {
         optional uint32 DataCenterRatio = 10 [default = 50];
         optional uint32 RoomRatio = 11 [default = 70];
         optional uint32 RackRatio = 12 [default = 90];
+        // Similar to *Ratio settings, but specified in absolute numbers and applied per storage node.
+        // This limit helps prevent cascading overreaction when many disks go offline on a single host
+        // (due to disk shelf disconnection).
+        // If the number of FAULTY PDisks on a node — including those already FAULTY or about to be marked FAULTY —
+        // exceeds this threshold, no additional disks on the same node will be marked as FAULTY,
+        // except for those explicitly marked as FAULTY by the user via the replace devices command.
+        // If set to 0, this check is disabled.
+        optional uint32 FaultyPDisksThresholdPerNode = 17 [default = 0];
 
         optional bool DryRun = 13;
         repeated TStateLimit StateLimits = 14;
@@ -646,6 +654,7 @@ message TPDiskInfo {
         RATIO_BY_DATACENTER = 3;
         RATIO_BY_ROOM = 4;
         RATIO_BY_RACK = 5;
+        TOO_MANY_FAULTY_PER_NODE = 6;
     }
 
     optional uint32 State = 1; // EPDiskState

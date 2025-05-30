@@ -1,18 +1,21 @@
 #pragma once
+
+#include <ydb/public/sdk/cpp/client/ydb_types/fwd.h>
+
 #include "credentials.h"
 #include <ydb/public/sdk/cpp/client/ydb_types/fluent_settings_helpers.h>
 
 #include <util/datetime/base.h>
 #include <util/generic/vector.h>
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 
 constexpr TDuration DEFAULT_JWT_TOKEN_TTL = TDuration::Hours(1);
 
 struct TJwtTokenSourceParams {
     using TSelf = TJwtTokenSourceParams;
 
-    FLUENT_SETTING(TString, KeyId);
+    FLUENT_SETTING_DEPRECATED(TString, KeyId);
 
     template <class TAlg, class... T>
     TSelf& SigningAlgorithm(T&&... args) {
@@ -21,12 +24,12 @@ struct TJwtTokenSourceParams {
     }
 
     // JWT Claims
-    FLUENT_SETTING(TString, Issuer);
-    FLUENT_SETTING(TString, Subject);
-    FLUENT_SETTING(TString, Id);
-    FLUENT_SETTING_VECTOR_OR_SINGLE(TString, Audience);
+    FLUENT_SETTING_DEPRECATED(TString, Issuer);
+    FLUENT_SETTING_DEPRECATED(TString, Subject);
+    FLUENT_SETTING_DEPRECATED(TString, Id);
+    FLUENT_SETTING_VECTOR_OR_SINGLE_DEPRECATED(TString, Audience);
 
-    FLUENT_SETTING_DEFAULT(TDuration, TokenTtl, DEFAULT_JWT_TOKEN_TTL);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(TDuration, TokenTtl, DEFAULT_JWT_TOKEN_TTL);
 
 
     // Helpers

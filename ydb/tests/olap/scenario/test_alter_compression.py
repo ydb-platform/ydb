@@ -14,7 +14,7 @@ from ydb.tests.olap.scenario.helpers import (
     AlterColumn,
     AlterFamily,
 )
-from helpers.thread_helper import TestThread
+from ydb.tests.olap.common.thread_helper import TestThread, TestThreads
 from typing import List, Dict, Any
 from ydb import PrimitiveType
 from ydb.tests.olap.lib.utils import get_external_param
@@ -131,7 +131,7 @@ class TestAlterCompression(BaseTestSet):
         column_families: list[str],
     ):
         sth = ScenarioTestHelper(ctx)
-        threads = []
+        threads: TestThreads = TestThreads()
         if not is_standalone_tables:
             threads.append(
                 TestThread(
@@ -156,10 +156,7 @@ class TestAlterCompression(BaseTestSet):
                 )
             )
 
-        for thread in threads:
-            thread.start()
-        for thread in threads:
-            thread.join()
+        threads.start_and_wait_all()
 
     def _get_volumes_column(
         self, ctx: TestContext, table_name: str, column_name: str

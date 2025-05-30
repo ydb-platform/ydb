@@ -37,7 +37,7 @@ TMutableUnversionedRow TSchemalessRowReorderer::ReorderRow(TUnversionedRow row)
     ::memcpy(result.Begin(), EmptyKey_.data(), KeyColumns_.size() * sizeof(TUnversionedValue));
 
     int nextValueIndex = KeyColumns_.size();
-    int idMappingSize = static_cast<int>(IdMapping_.size());
+    int idMappingSize = std::ssize(IdMapping_);
     for (auto value : row) {
         if (CaptureValues_) {
             RowBuffer_->CaptureValue(&value);
@@ -65,7 +65,7 @@ TMutableUnversionedRow TSchemalessRowReorderer::ReorderKey(TUnversionedRow row)
     // Initialize with empty key.
     ::memcpy(result.Begin(), EmptyKey_.data(), KeyColumns_.size() * sizeof(TUnversionedValue));
 
-    int idMappingSize = static_cast<int>(IdMapping_.size());
+    int idMappingSize = std::ssize(IdMapping_);
     for (auto value : row) {
         if (CaptureValues_) {
             RowBuffer_->CaptureValue(&value);

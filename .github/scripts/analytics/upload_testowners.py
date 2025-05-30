@@ -1,11 +1,8 @@
 #!/usr/bin/env python3
 
-import argparse
 import configparser
-import datetime
 import os
 import posixpath
-import traceback
 import time
 import ydb
 from collections import Counter
@@ -90,10 +87,16 @@ def main():
             FROM 
             `test_results/test_runs_column` 
         WHERE 
-            run_timestamp >= CurrentUtcDate()- Interval("P10D") 
-            AND branch = 'main' 
+            run_timestamp >= CurrentUtcDate()- Interval("P1D") 
+            and ( branch = 'main' or branch like 'stable-%')
             and job_name in (
-                'Nightly-run', 'Postcommit_relwithdebinfo', 
+                'Nightly-run',
+                'Regression-run',
+                'Regression-run_Large',
+                'Regression-run_Small_and_Medium',
+                'Regression-run_compatibility',
+                'Regression-whitelist-run',
+                'Postcommit_relwithdebinfo', 
                 'Postcommit_asan'
             ) 
             WINDOW w AS (

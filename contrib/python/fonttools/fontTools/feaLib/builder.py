@@ -341,6 +341,7 @@ class Builder(object):
             table = self.font["head"] = newTable("head")
             table.decompile(b"\0" * 54, self.font)
             table.tableVersion = 1.0
+            table.magicNumber = 0x5F0F3CF5
             table.created = table.modified = 3406620153  # 2011-12-13 11:22:33
         table.fontRevision = self.fontRevision_
 
@@ -727,10 +728,16 @@ class Builder(object):
         result.table = base
         return result
 
+    def buildBASECoord(self, c):
+        coord = otTables.BaseCoord()
+        coord.Format = 1
+        coord.Coordinate = c
+        return coord
+
     def buildBASEAxis(self, axis):
         if not axis:
             return
-        bases, scripts = axis
+        bases, scripts, minmax = axis
         axis = otTables.Axis()
         axis.BaseTagList = otTables.BaseTagList()
         axis.BaseTagList.BaselineTag = bases
@@ -739,19 +746,35 @@ class Builder(object):
         axis.BaseScriptList.BaseScriptRecord = []
         axis.BaseScriptList.BaseScriptCount = len(scripts)
         for script in sorted(scripts):
+            minmax_for_script = [
+                record[1:] for record in minmax if record[0] == script[0]
+            ]
             record = otTables.BaseScriptRecord()
             record.BaseScriptTag = script[0]
             record.BaseScript = otTables.BaseScript()
-            record.BaseScript.BaseLangSysCount = 0
             record.BaseScript.BaseValues = otTables.BaseValues()
             record.BaseScript.BaseValues.DefaultIndex = bases.index(script[1])
             record.BaseScript.BaseValues.BaseCoord = []
             record.BaseScript.BaseValues.BaseCoordCount = len(script[2])
+            record.BaseScript.BaseLangSysRecord = []
+
             for c in script[2]:
-                coord = otTables.BaseCoord()
-                coord.Format = 1
-                coord.Coordinate = c
-                record.BaseScript.BaseValues.BaseCoord.append(coord)
+                record.BaseScript.BaseValues.BaseCoord.append(self.buildBASECoord(c))
+            for language, min_coord, max_coord in minmax_for_script:
+                minmax_record = otTables.MinMax()
+                minmax_record.MinCoord = self.buildBASECoord(min_coord)
+                minmax_record.MaxCoord = self.buildBASECoord(max_coord)
+                minmax_record.FeatMinMaxCount = 0
+                if language == "dflt":
+                    record.BaseScript.DefaultMinMax = minmax_record
+                else:
+                    lang_record = otTables.BaseLangSysRecord()
+                    lang_record.BaseLangSysTag = language
+                    lang_record.MinMax = minmax_record
+                    record.BaseScript.BaseLangSysRecord.append(lang_record)
+            record.BaseScript.BaseLangSysCount = len(
+                record.BaseScript.BaseLangSysRecord
+            )
             axis.BaseScriptList.BaseScriptRecord.append(record)
         return axis
 
@@ -1106,7 +1129,13 @@ class Builder(object):
         if (language == "dflt" or include_default) and lookups:
             self.features_[key] = lookups[:]
         else:
-            self.features_[key] = []
+            # if we aren't including default we need to manually remove the
+            # default lookups, which were added to all declared langsystems
+            # as they were encountered (we don't remove all lookups because
+            # we want to allow duplicate script/lang statements;
+            # see https://github.com/fonttools/fonttools/issues/3748
+            cur_lookups = self.features_.get(key, [])
+            self.features_[key] = [x for x in cur_lookups if x not in lookups]
         self.language_systems = frozenset([(self.script_, language)])
 
         if required:
@@ -1229,11 +1258,11 @@ class Builder(object):
     def add_cv_character(self, character, tag):
         self.cv_characters_[tag].append(character)
 
-    def set_base_axis(self, bases, scripts, vertical):
+    def set_base_axis(self, bases, scripts, vertical, minmax=[]):
         if vertical:
-            self.base_vert_axis_ = (bases, scripts)
+            self.base_vert_axis_ = (bases, scripts, minmax)
         else:
-            self.base_horiz_axis_ = (bases, scripts)
+            self.base_horiz_axis_ = (bases, scripts, minmax)
 
     def set_size_parameters(
         self, location, DesignSize, SubfamilyID, RangeStart, RangeEnd

@@ -14,7 +14,8 @@
 #include <yt/yt/library/formats/format.h>
 
 #include <yt/yt/core/misc/error.h>
-#include <yt/yt/core/misc/range.h>
+
+#include <library/cpp/yt/memory/range.h>
 
 #include <util/system/align.h>
 
@@ -25,7 +26,7 @@ using namespace NTableClient;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static constexpr auto& Logger = ArrowLogger;
+constinit const auto Logger = ArrowLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -1,16 +1,16 @@
 diff --git a/include/__locale b/include/__locale
-index 3ba7ac1..47ae41b 100644
+index 4b38276..8784b24 100644
 --- a/include/__locale
 +++ b/include/__locale
-@@ -16,6 +16,7 @@
- #include <__mutex/once_flag.h>
+@@ -17,6 +17,7 @@
  #include <__type_traits/make_unsigned.h>
  #include <__utility/no_destroy.h>
+ #include <__utility/private_constructor_tag.h>
 +#include <atomic>
  #include <cctype>
  #include <clocale>
  #include <cstdint>
-@@ -146,8 +147,7 @@ private:
+@@ -128,8 +129,7 @@ private:
  };
  
  class _LIBCPP_EXPORTED_FROM_ABI locale::id {

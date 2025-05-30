@@ -5,12 +5,14 @@
 #include <yt/yql/providers/yt/common/yql_names.h>
 #include <yt/yql/providers/yt/common/yql_configuration.h>
 #include <yt/yql/providers/yt/lib/row_spec/yql_row_spec.h>
-#include <yql/essentials/providers/common/provider/yql_provider.h>
+#include <yt/yql/providers/yt/lib/schema/schema.h>
 
+#include <yql/essentials/providers/common/provider/yql_provider.h>
 #include <yql/essentials/core/yql_graph_transformer.h>
 #include <yql/essentials/core/yql_type_annotation.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/utils/log/log.h>
 
 #include <library/cpp/threading/future/async.h>
 #include <library/cpp/yson/node/node_io.h>
@@ -197,6 +199,27 @@ public:
                             return TStatus::Error;
                         }
                     }
+                    if (State_->Configuration->UseColumnGroupsFromInputTables.Get().GetOrElse(DEFAULT_USE_COLUMN_GROUPS_FROM_INPUT_TABLE)) {
+                        if (auto pSchema = tableDesc.Meta->Attrs.FindPtr(SCHEMA_ATTR_NAME)) {
+                            TString colGroupSpec;
+                            try {
+                                colGroupSpec = GetColumnGroupSpecFromSchema(NYT::NodeFromYsonString(*pSchema));
+                            } catch (...) {
+                                YQL_CLOG(ERROR, ProviderYt) << "Error parsing column groups for " << tableName << ", schema: " << *pSchema;
+                                auto issue = TIssue(TStringBuilder() << "Error parsing column groups from schema: " << CurrentExceptionMessage());
+                                issue.SetCode(UNEXPECTED_ERROR, ESeverity::TSeverityIds_ESeverityId_S_FATAL);
+                                ctx.AddError(issue);
+                                return TStatus::Error;
+                            }
+                            if (colGroupSpec) {
+                                YQL_CLOG(TRACE, ProviderYt) << "Loaded column group from schema for " << tableName << " (epoch=" << LoadCtx->Epoch << "): " << colGroupSpec;
+                                if (LoadCtx->Epoch == 0) {
+                                    tableDesc.ColumnGroupSpec = colGroupSpec;
+                                    tableDesc.ColumnGroupSpecAlts.insert(colGroupSpec);
+                                }
+                            }
+                        }
+                    }
                     // Some sanity checks
                     if (tableDesc.RowSpec && tableDesc.RowSpec->IsSorted()) {
                         YQL_ENSURE(rowSpec->IsSorted(), "Bad predicted sort for the table '"
@@ -245,7 +268,7 @@ public:
                 tableDesc.Stat = stat;
                 if (HasReadIntents(tableDesc.Intents)) {
                     const auto& securityTagsSet = tableDesc.Stat->SecurityTags;
-                    const TString tmpFolder = GetTablesTmpFolder(*State_->Configuration);
+                    const TString tmpFolder = GetTablesTmpFolder(*State_->Configuration, cluster);
                     if (!securityTagsSet.empty() && tmpFolder.empty()) {
                         TStringBuilder msg;
                         msg << "Table " << cluster << "." << tableName

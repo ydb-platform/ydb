@@ -9,6 +9,8 @@ SRCS(
     configs_config.h
     configs_dispatcher.cpp
     configs_dispatcher.h
+    configs_dispatcher_proxy.h
+    configs_dispatcher_proxy.cpp
     console.cpp
     console.h
     console_audit.cpp
@@ -20,6 +22,8 @@ SRCS(
     console_configs_provider.h
     console_configs_subscriber.cpp
     console_configs_subscriber.h
+    console_configuration_info_collector.cpp
+    console_configuration_info_collector.h
     console_impl.h
     console_tenants_manager.cpp
     console_tenants_manager.h
@@ -86,7 +90,7 @@ PEERDIR(
     ydb/core/blobstorage/groupinfo
     ydb/core/cms/console/validators
     ydb/core/config/init
-    ydb/core/control
+    ydb/core/control/lib
     ydb/core/engine/minikql
     ydb/core/mind
     ydb/core/node_whiteboard
@@ -97,7 +101,8 @@ PEERDIR(
     ydb/library/aclib
     ydb/library/yaml_config
     ydb/public/api/protos
-    ydb/public/lib/operation_id
+    ydb/public/sdk/cpp/src/library/operation_id
+    ydb/public/sdk/cpp/src/library/operation_id/protos
 )
 
 YQL_LAST_ABI_VERSION()

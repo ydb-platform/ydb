@@ -22,7 +22,7 @@ private:
 public:
     using TValuePtr = TIntrusivePtr<T>;
 
-    explicit TConcurrentCache(size_t maxElementCount, IMemoryUsageTrackerPtr tracker = nullptr);
+    TConcurrentCache(size_t maxElementCount, IMemoryUsageTrackerPtr tracker);
 
     ~TConcurrentCache();
 
@@ -95,10 +95,10 @@ public:
     bool IsHead(const TIntrusivePtr<TLookupTable>& head) const;
 
 private:
+    const IMemoryUsageTrackerPtr MemoryUsageTracker_;
+
     std::atomic<size_t> Capacity_;
     TAtomicPtr<TLookupTable> Head_;
-    IMemoryUsageTrackerPtr MemoryUsageTracker_;
-
 };
 
 ////////////////////////////////////////////////////////////////////////////////

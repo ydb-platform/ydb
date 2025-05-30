@@ -8,7 +8,7 @@
 
 #include <mutex>
 
-namespace NYT::NPhoenix2 {
+namespace NYT::NPhoenix {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -111,7 +111,7 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NPhoenix2
+} // namespace NYT::NPhoenix
 
 #define DESCRIPTORS_INL_H_
 #include "descriptors-inl.h"

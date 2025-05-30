@@ -29,8 +29,12 @@ namespace NKikimr::NBlobDepot {
                     (Sender, entry->Result.GetSender()), (Cookie, entry->Result.GetCookie()), (Key, key));
 
                 // obtain list of blobs belonging to this key only once and here
-                EnumerateBlobsForValueChain(value->ValueChain, Self->TabletID(), [&](TLogoBlobID id, ui32, ui32) {
-                    keyContext.BlobState.emplace(id, std::make_tuple(EKeyBlobState::INITIAL, TString()));
+                EnumerateBlobsForValueChain(value->ValueChain, Self->TabletID(), TOverloaded{
+                    [&](TLogoBlobID id, ui32, ui32) {
+                        keyContext.BlobState.emplace(id, std::make_tuple(EKeyBlobState::INITIAL, TString()));
+                    },
+                    [&](TS3Locator) {
+                    }
                 });
 
                 // try to process the blobs

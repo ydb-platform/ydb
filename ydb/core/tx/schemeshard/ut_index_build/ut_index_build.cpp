@@ -10,7 +10,7 @@
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/metering/metering.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
 using namespace NKikimr;
 using namespace NSchemeShard;
@@ -497,10 +497,10 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
         {
             NKikimrIndexBuilder::TIndexBuildSettings settings;
             settings.set_source_path("/MyRoot/Table");
-            settings.set_max_batch_rows(1);
-            settings.set_max_batch_bytes(1<<10);
+            settings.MutableScanSettings()->SetMaxBatchRows(0); // row by row
+            settings.MutableScanSettings()->SetMaxBatchBytes(1<<10);
+            settings.MutableScanSettings()->SetMaxBatchRetries(0);
             settings.set_max_shards_in_flight(1);
-            settings.set_max_retries_upload_batch(0);
 
             Ydb::Table::TableIndex& index = *settings.mutable_index();
             index.set_name("index1");
@@ -584,6 +584,8 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
 
         auto descr = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildId);
         UNIT_ASSERT_VALUES_EQUAL(descr.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE);
+        UNIT_ASSERT(descr.GetIndexBuild().HasStartTime());
+        UNIT_ASSERT(descr.GetIndexBuild().HasEndTime());
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/WithFollowers"),
                            {NLs::PathExist,
@@ -1206,6 +1208,8 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
 
         auto descr = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexId);
         UNIT_ASSERT_VALUES_EQUAL(descr.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_CANCELLED);
+        UNIT_ASSERT(descr.GetIndexBuild().HasStartTime());
+        UNIT_ASSERT(descr.GetIndexBuild().HasEndTime());
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
                            {NLs::PathExist,
@@ -1263,7 +1267,11 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
         {
             auto descr = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexId);
             UNIT_ASSERT_VALUES_EQUAL(descr.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_PREPARING);
+            UNIT_ASSERT(descr.GetIndexBuild().HasStartTime());
+            UNIT_ASSERT(!descr.GetIndexBuild().HasEndTime());
         }
+
+        runtime.AdvanceCurrentTime(TDuration::Seconds(30)); // building index
 
         //
         TestCancelBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexId + 1, TVector<Ydb::StatusIds::StatusCode>{Ydb::StatusIds::NOT_FOUND});
@@ -1276,6 +1284,9 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
         {
             auto descr = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexId);
             UNIT_ASSERT_VALUES_EQUAL(descr.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE);
+            UNIT_ASSERT(descr.GetIndexBuild().HasStartTime());
+            UNIT_ASSERT(descr.GetIndexBuild().HasEndTime());
+            UNIT_ASSERT_LT(descr.GetIndexBuild().GetStartTime().seconds(), descr.GetIndexBuild().GetEndTime().seconds());
         }
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),

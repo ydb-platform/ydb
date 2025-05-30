@@ -47,7 +47,7 @@ struct TEvPingResponse : public NActors::TEventLocal<TEvPingResponse, NActors::T
 
 private:
     static TPingTaskResult MakeResultFromErrorMessage(const TString& errorMessage) {
-        NYql::TIssues issues;
+        NYdb::NIssue::TIssues issues;
         issues.AddIssue(errorMessage);
         return TPingTaskResult(NYdb::TStatus(NYdb::EStatus::INTERNAL_ERROR, std::move(issues)), nullptr);
     }

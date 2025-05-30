@@ -26,5 +26,8 @@ void DoYmqSendMessageBatchRequest(std::unique_ptr<IRequestOpCtx> p, const IFacil
 void DoYmqDeleteMessageBatchRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f);
 void DoYmqChangeMessageVisibilityBatchRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f);
 void DoYmqListDeadLetterSourceQueuesRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f);
+void DoYmqListQueueTagsRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f);
+void DoYmqTagQueueRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f);
+void DoYmqUntagQueueRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f);
 }
 }

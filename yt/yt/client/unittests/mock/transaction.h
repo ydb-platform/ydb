@@ -43,11 +43,11 @@ public:
         const TMultiLookupOptions& options), (override));
 
     MOCK_METHOD(TFuture<TSelectRowsResult>, SelectRows, (
-        const TString& query,
+        const std::string& query,
         const TSelectRowsOptions& options), (override));
 
     MOCK_METHOD(TFuture<NYson::TYsonString>, ExplainQuery, (
-        const TString& query,
+        const std::string& query,
         const TExplainQueryOptions& options), (override));
 
     MOCK_METHOD(TFuture<TPullRowsResult>, PullRows, (
@@ -197,7 +197,7 @@ public:
         return Timeout;
     }
 
-    MOCK_METHOD(TFuture<void>, Ping, (const NApi::TTransactionPingOptions& options), (override));
+    MOCK_METHOD(TFuture<void>, Ping, (const NApi::TPrerequisitePingOptions& options), (override));
     MOCK_METHOD(TFuture<TTransactionCommitResult>, Commit, (const TTransactionCommitOptions& options), (override));
     MOCK_METHOD(TFuture<void>, Abort, (const TTransactionAbortOptions& options), (override));
     MOCK_METHOD(void, Detach, (), (override));

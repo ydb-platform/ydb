@@ -4,11 +4,22 @@ from ydb.apps.dstool.lib.arg_parser import ArgumentParser
 import ydb.apps.dstool.lib.common as common
 import ydb.apps.dstool.lib.commands as commands
 
+from __res import find
+
 import sys
 
 
+def get_version():
+    try:
+        return find('version.txt').decode('utf-8').strip()
+    except FileNotFoundError:
+        return "unknown"
+    except UnicodeDecodeError:
+        return "unknown"
+
+
 def main():
-    parser = ArgumentParser(description='YDB Distributed Storage Administration Tool')
+    parser = ArgumentParser(description='YDB Distributed Storage Administration Tool', version=get_version())
 
     # common options
     common.add_host_access_options(parser)

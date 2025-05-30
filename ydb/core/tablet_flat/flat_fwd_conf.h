@@ -10,7 +10,7 @@ namespace NTable {
 namespace NFwd {
 
     struct TConf {
-        void Describe(IOutputStream &out) const noexcept
+        void Describe(IOutputStream &out) const
         {
             out
                 << "TConf{"

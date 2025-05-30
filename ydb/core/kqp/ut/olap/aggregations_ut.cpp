@@ -1,4 +1,3 @@
-#include <ydb/core/formats/arrow/ssa_runtime_version.h>
 
 #include "helpers/aggregation.h"
 
@@ -109,9 +108,9 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
         TLocalHelper(kikimr).CreateTestOlapTable();
         auto tableClient = kikimr.GetTableClient();
-        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
 
         {
             WriteTestData(kikimr, "/Root/olapStore/olapTable", 10000, 3000000, 1000);
@@ -145,11 +144,7 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
             CompareYson(result, R"([[23000u;]])");
 
             // Check plan
-#if SSA_RUNTIME_VERSION >= 2U
             CheckPlanForAggregatePushdown(query, tableClient, { "TKqpOlapAgg" }, "TableFullScan");
-#else
-            CheckPlanForAggregatePushdown(query, tableClient, { "CombineCore" }, "");
-#endif
         }
     }
 
@@ -189,12 +184,8 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
             CompareYson(result, R"([[[0];4600u];[[1];4600u];[[2];4600u];[[3];4600u];[[4];4600u]])");
 
             // Check plan
-#if SSA_RUNTIME_VERSION >= 2U
             CheckPlanForAggregatePushdown(query, tableClient, { "WideCombiner" }, "TableFullScan");
 //            CheckPlanForAggregatePushdown(query, tableClient, { "TKqpOlapAgg" }, "TableFullScan");
-#else
-            CheckPlanForAggregatePushdown(query, tableClient, { "CombineCore" }, "");
-#endif
         }
     }
 
@@ -236,9 +227,51 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
 
             auto plan = CollectStreamResult(res);
 
-            bool hasWideCombiner = plan.QueryStats->Getquery_ast().Contains("WideCombiner");
-            UNIT_ASSERT_C(hasWideCombiner == AllowSpilling, plan.QueryStats->Getquery_ast());
+            const auto expectedAggregateNodeName = AllowSpilling ? "WideCombiner" : "BlockMergeFinalizeHashed";
+
+            bool hasExpectedAggregateNode = plan.QueryStats->Getquery_ast().Contains(expectedAggregateNodeName);
+            UNIT_ASSERT_C(hasExpectedAggregateNode, plan.QueryStats->Getquery_ast());
         }
+    }
+
+    Y_UNIT_TEST(BlockAggregationIsChosenByDefaultForSimpleQueries) {
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableSpillingNodes("None");
+        TKikimrRunner kikimr(settings);
+
+        TLocalHelper(kikimr).CreateTestOlapTable();
+        auto client = kikimr.GetQueryClient();
+
+        {
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 10000, 3000000, 1000);
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 11000, 3001000, 1000);
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 12000, 3002000, 1000);
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 13000, 3003000, 1000);
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 14000, 3004000, 1000);
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 20000, 2000000, 7000);
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 30000, 1000000, 11000);
+        }
+
+        const auto aggregators = {"COUNT", "SUM", "SOME", "MIN", "MAX"};
+
+        for (const auto& aggregator : aggregators) {
+            TString query = TStringBuilder()
+                << "SELECT " << aggregator << "(level)"
+                << R"(
+                FROM `/Root/olapStore/olapTable`
+                GROUP BY level
+                )";
+
+            auto res = StreamExplainQuery(query, client);
+            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+
+            auto plan = CollectStreamResult(res);
+
+            UNIT_ASSERT_C(plan.QueryStats->Getquery_ast().Contains("BlockMergeFinalizeHashed"), plan.QueryStats->Getquery_ast());
+            UNIT_ASSERT_C(!plan.QueryStats->Getquery_ast().Contains("WideCombiner"), plan.QueryStats->Getquery_ast());
+        }
+
     }
 
     Y_UNIT_TEST_TWIN(CountAllPushdown, UseLlvm) {
@@ -276,11 +309,7 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
             CompareYson(result, R"([[23000u;]])");
 
             // Check plan
-#if SSA_RUNTIME_VERSION >= 2U
             CheckPlanForAggregatePushdown(query, tableClient, { "TKqpOlapAgg" }, "TableFullScan");
-#else
-            CheckPlanForAggregatePushdown(query, tableClient, { "Condense" }, "");
-#endif
         }
     }
 
@@ -319,11 +348,7 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
             CompareYson(result, R"([[23000u;]])");
 
             // Check plan
-#if SSA_RUNTIME_VERSION >= 2U
             CheckPlanForAggregatePushdown(query, tableClient, { "TKqpOlapAgg" }, "TableFullScan");
-#else
-            CheckPlanForAggregatePushdown(query, tableClient, { "Condense" }, "");
-#endif
         }
     }
 
@@ -399,12 +424,8 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
                 )")
             .SetExpectedReply("[[4600u;]]")
             .AddExpectedPlanOptions("KqpOlapFilter")
-#if SSA_RUNTIME_VERSION >= 2U
             .AddExpectedPlanOptions("TKqpOlapAgg")
             .MutableLimitChecker().SetExpectedResultCount(2)
-#else
-            .AddExpectedPlanOptions("Condense")
-#endif
             ;
 
         TestAggregations({ testCase });
@@ -420,13 +441,9 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
             )")
             .SetExpectedReply("[[4600u;]]")
             .AddExpectedPlanOptions("KqpOlapFilter")
-#if SSA_RUNTIME_VERSION >= 2U
             .AddExpectedPlanOptions("TKqpOlapAgg")
             // See https://github.com/ydb-platform/ydb/issues/7299 for explanation, why resultCount = 3
             .MutableLimitChecker().SetExpectedResultCount(3)
-#else
-            .AddExpectedPlanOptions("CombineCore")
-#endif
             ;
 
         TestAggregations({ testCase });
@@ -442,13 +459,8 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
             )")
             .SetExpectedReply("[[4600u;]]")
             .AddExpectedPlanOptions("KqpOlapFilter")
-#if SSA_RUNTIME_VERSION >= 2U
             .AddExpectedPlanOptions("TKqpOlapAgg")
             .MutableLimitChecker().SetExpectedResultCount(2)
-#else
-            .AddExpectedPlanOptions("CombineCore")
-            .AddExpectedPlanOptions("KqpOlapFilter")
-#endif
             ;
 
         TestAggregations({ testCase });
@@ -555,11 +567,7 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
                 WHERE id > 5;
             )")
             .SetExpectedReply("[[0u]]")
-#if SSA_RUNTIME_VERSION >= 2U
             .AddExpectedPlanOptions("TKqpOlapAgg");
-#else
-            .AddExpectedPlanOptions("CombineCore");
-#endif
 
         TestTableWithNulls({ testCase });
     }
@@ -572,11 +580,7 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
                 FROM `/Root/tableWithNulls`;
             )")
             .SetExpectedReply("[[5u]]")
-#if SSA_RUNTIME_VERSION >= 2U
             .AddExpectedPlanOptions("TKqpOlapAgg");
-#else
-            .AddExpectedPlanOptions("CombineCore");
-#endif
 
         TestTableWithNulls({ testCase });
     }
@@ -688,11 +692,7 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
                 WHERE level = 2
             )")
             .SetExpectedReply("[[4600u;]]")
-#if SSA_RUNTIME_VERSION >= 2U
             .AddExpectedPlanOptions("TKqpOlapAgg")
-#else
-            .AddExpectedPlanOptions("CombineCore")
-#endif
             .AddExpectedPlanOptions("KqpOlapFilter");
 
         TestAggregations({ testCase });
@@ -706,11 +706,7 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
                 FROM `/Root/olapStore/olapTable`
             )")
             .SetExpectedReply("[[[2.];[0]]]")
-#if SSA_RUNTIME_VERSION >= 2U
             .AddExpectedPlanOptions("TKqpOlapAgg");
-#else
-            .AddExpectedPlanOptions("CombineCore");
-#endif
 
         TestAggregations({ testCase });
     }
@@ -724,11 +720,7 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
                 WHERE id > 5;
             )")
             .SetExpectedReply("[[#]]")
-#if SSA_RUNTIME_VERSION >= 2U
             .AddExpectedPlanOptions("TKqpOlapAgg");
-#else
-            .AddExpectedPlanOptions("CombineCore");
-#endif
 
         TestTableWithNulls({ testCase });
     }
@@ -741,11 +733,7 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
                 FROM `/Root/tableWithNulls`;
             )")
             .SetExpectedReply("[[[3.]]]")
-#if SSA_RUNTIME_VERSION >= 2U
             .AddExpectedPlanOptions("TKqpOlapAgg");
-#else
-            .AddExpectedPlanOptions("CombineCore");
-#endif
 
         TestTableWithNulls({ testCase });
     }
@@ -838,11 +826,7 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
                 FROM `/Root/olapStore/olapTable`
             )")
             .SetExpectedReply("[[[46000;]]]")
-#if SSA_RUNTIME_VERSION >= 2U
             .AddExpectedPlanOptions("TKqpOlapAgg");
-#else
-            .AddExpectedPlanOptions("CombineCore");
-#endif
 
         TestAggregations({ testCase });
     }
@@ -856,11 +840,21 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
                 WHERE id > 5;
             )")
             .SetExpectedReply("[[#]]")
-#if SSA_RUNTIME_VERSION >= 2U
             .AddExpectedPlanOptions("TKqpOlapAgg");
-#else
-            .AddExpectedPlanOptions("CombineCore");
-#endif
+
+        TestTableWithNulls({ testCase });
+    }
+
+    Y_UNIT_TEST(Aggregation_Sum_Null_Count) {
+        TAggregationTestCase testCase;
+        testCase
+            .SetQuery(R"(
+                SELECT
+                    SUM(level), COUNT(*), AVG(level)
+                FROM `/Root/tableWithNulls`
+            )")
+            .SetExpectedReply("[[[15];10u;[3.]]]")
+            .AddExpectedPlanOptions("TKqpOlapAgg");
 
         TestTableWithNulls({ testCase });
     }
@@ -873,11 +867,7 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
                 FROM `/Root/tableWithNulls`;
             )")
             .SetExpectedReply("[[[15]]]")
-#if SSA_RUNTIME_VERSION >= 2U
             .AddExpectedPlanOptions("TKqpOlapAgg");
-#else
-            .AddExpectedPlanOptions("CombineCore");
-#endif
 
         TestTableWithNulls({ testCase });
     }
@@ -985,11 +975,7 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
                 FROM `/Root/olapStore/olapTable`
             )")
             .SetExpectedReply("[[[0]]]")
-#if SSA_RUNTIME_VERSION >= 2U
             .AddExpectedPlanOptions("TKqpOlapAgg");
-#else
-            .AddExpectedPlanOptions("CombineCore");
-#endif
 
         TestAggregations({ testCase });
     }
@@ -1002,11 +988,7 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
                 FROM `/Root/olapStore/olapTable`
             )")
             .SetExpectedReply("[[[4]]]")
-#if SSA_RUNTIME_VERSION >= 2U
             .AddExpectedPlanOptions("TKqpOlapAgg");
-#else
-            .AddExpectedPlanOptions("CombineCore");
-#endif
 
         TestAggregations({ testCase });
     }
@@ -1062,11 +1044,7 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
                 SELECT SOME(level) FROM `/Root/tableWithNulls` WHERE id=1
             )")
             .SetExpectedReply("[[[1]]]")
-#if SSA_RUNTIME_VERSION >= 2U
             .AddExpectedPlanOptions("TKqpOlapAgg");
-#else
-            .AddExpectedPlanOptions("CombineCore");
-#endif
         TestTableWithNulls({ testCase });
     }
 
@@ -1076,11 +1054,7 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
                 SELECT SOME(level) FROM `/Root/tableWithNulls` WHERE id > 5
             )")
             .SetExpectedReply("[[#]]")
-#if SSA_RUNTIME_VERSION >= 2U
             .AddExpectedPlanOptions("TKqpOlapAgg");
-#else
-            .AddExpectedPlanOptions("CombineCore");
-#endif
         TestTableWithNulls({ testCase });
     }
 
@@ -1214,17 +1188,11 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
                 SELECT id, JSON_VALUE(jsonval, "$.col1"), JSON_VALUE(jsondoc, "$.col1") FROM `/Root/tableWithNulls`
                 WHERE JSON_VALUE(jsonval, "$.col1") = "val1" AND id = 1;
             )")
-#if SSA_RUNTIME_VERSION >= 5U
-            .AddExpectedPlanOptions("KqpOlapApply")
-#elif SSA_RUNTIME_VERSION >= 3U
             .AddExpectedPlanOptions("KqpOlapJsonValue")
-#else
-            .AddExpectedPlanOptions("Udf")
-#endif
             .SetExpectedReply(R"([[1;["val1"];#]])");
-
         TestTableWithNulls({testCase});
     }
+
 
     Y_UNIT_TEST(Json_GetValue_Minus) {
         TAggregationTestCase testCase;
@@ -1232,13 +1200,7 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
                 SELECT id, JSON_VALUE(jsonval, "$.'col-abc'"), JSON_VALUE(jsondoc, "$.'col-abc'") FROM `/Root/tableWithNulls`
                 WHERE JSON_VALUE(jsonval, "$.'col-abc'") = "val-abc" AND id = 1;
             )")
-#if SSA_RUNTIME_VERSION >= 5U
-            .AddExpectedPlanOptions("KqpOlapApply")
-#elif SSA_RUNTIME_VERSION >= 3U
             .AddExpectedPlanOptions("KqpOlapJsonValue")
-#else
-            .AddExpectedPlanOptions("Udf")
-#endif
             .SetExpectedReply(R"([[1;["val-abc"];#]])");
 
         TestTableWithNulls({testCase});
@@ -1250,13 +1212,7 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
                 SELECT id, JSON_VALUE(jsonval, "$.col1" RETURNING String), JSON_VALUE(jsondoc, "$.col1") FROM `/Root/tableWithNulls`
                 WHERE JSON_VALUE(jsonval, "$.col1" RETURNING String) = "val1" AND id = 1;
             )")
-#if SSA_RUNTIME_VERSION >= 5U
-            .AddExpectedPlanOptions("KqpOlapApply")
-#elif SSA_RUNTIME_VERSION >= 3U
             .AddExpectedPlanOptions("KqpOlapJsonValue")
-#else
-            .AddExpectedPlanOptions("Udf")
-#endif
             .SetExpectedReply(R"([[1;["val1"];#]])");
 
         TestTableWithNulls({ testCase });
@@ -1268,13 +1224,7 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
                 SELECT id, JSON_VALUE(jsonval, "$.obj.obj_col2_int" RETURNING Int), JSON_VALUE(jsondoc, "$.obj.obj_col2_int" RETURNING Int) FROM `/Root/tableWithNulls`
                 WHERE JSON_VALUE(jsonval, "$.obj.obj_col2_int" RETURNING Int) = 16 AND id = 1;
             )")
-#if SSA_RUNTIME_VERSION >= 5U
-            .AddExpectedPlanOptions("KqpOlapApply")
-#elif SSA_RUNTIME_VERSION >= 3U
             .AddExpectedPlanOptions("KqpOlapJsonValue")
-#else
-            .AddExpectedPlanOptions("Udf")
-#endif
             .SetExpectedReply(R"([[1;[16];#]])");
 
         TestTableWithNulls({ testCase });
@@ -1286,13 +1236,7 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
                 SELECT id, JSON_VALUE(jsonval, "$.col1"), JSON_VALUE(jsondoc, "$.col1") FROM `/Root/tableWithNulls`
                 WHERE JSON_VALUE(jsondoc, "$.col1") = "val1" AND id = 6;
             )")
-#if SSA_RUNTIME_VERSION >= 5U
-            .AddExpectedPlanOptions("KqpOlapApply")
-#elif SSA_RUNTIME_VERSION >= 3U
             .AddExpectedPlanOptions("KqpOlapJsonValue")
-#else
-            .AddExpectedPlanOptions("Udf")
-#endif
             .SetExpectedReply(R"([[6;#;["val1"]]])");
 
         TestTableWithNulls({ testCase });
@@ -1304,13 +1248,7 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
                 SELECT id, JSON_VALUE(jsonval, "$.col1"), JSON_VALUE(jsondoc, "$.col1" RETURNING String) FROM `/Root/tableWithNulls`
                 WHERE JSON_VALUE(jsondoc, "$.col1" RETURNING String) = "val1" AND id = 6;
             )")
-#if SSA_RUNTIME_VERSION >= 5U
-            .AddExpectedPlanOptions("KqpOlapApply")
-#elif SSA_RUNTIME_VERSION >= 3U
             .AddExpectedPlanOptions("KqpOlapJsonValue")
-#else
-            .AddExpectedPlanOptions("Udf")
-#endif
             .SetExpectedReply(R"([[6;#;["val1"]]])");
 
         TestTableWithNulls({ testCase });
@@ -1322,13 +1260,7 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
                 SELECT id, JSON_VALUE(jsonval, "$.obj.obj_col2_int"), JSON_VALUE(jsondoc, "$.obj.obj_col2_int" RETURNING Int) FROM `/Root/tableWithNulls`
                 WHERE JSON_VALUE(jsondoc, "$.obj.obj_col2_int" RETURNING Int) = 16 AND id = 6;
             )")
-#if SSA_RUNTIME_VERSION >= 5U
-            .AddExpectedPlanOptions("KqpOlapApply")
-#elif SSA_RUNTIME_VERSION >= 3U
             .AddExpectedPlanOptions("KqpOlapJsonValue")
-#else
-            .AddExpectedPlanOptions("Udf")
-#endif
             .SetExpectedReply(R"([[6;#;[16]]])");
 
         TestTableWithNulls({ testCase });
@@ -1341,13 +1273,7 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
                 WHERE
                     JSON_EXISTS(jsonval, "$.col1") AND level = 1;
             )")
-#if SSA_RUNTIME_VERSION >= 5U
-            .AddExpectedPlanOptions("KqpOlapApply")
-#elif SSA_RUNTIME_VERSION >= 3U
             .AddExpectedPlanOptions("KqpOlapJsonExists")
-#else
-            .AddExpectedPlanOptions("Udf")
-#endif
             .SetExpectedReply(R"([[1;[%true];#]])");
 
         TestTableWithNulls({ testCase });
@@ -1360,13 +1286,7 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
                 WHERE
                     JSON_EXISTS(jsondoc, "$.col1") AND id = 6;
             )")
-#if SSA_RUNTIME_VERSION >= 5U
-            .AddExpectedPlanOptions("KqpOlapApply")
-#elif SSA_RUNTIME_VERSION >= 3U
             .AddExpectedPlanOptions("KqpOlapJsonExists")
-#else
-            .AddExpectedPlanOptions("Udf")
-#endif
             .SetExpectedReply(R"([[6;#;[%true]]])");
 
         TestTableWithNulls({ testCase });
@@ -1385,6 +1305,26 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
             .SetExpectedReply(R"([[1;["[\"val1\"]"];#]])");
 
         TestTableWithNulls({ testCase });
+    }
+
+    Y_UNIT_TEST(MixedJsonAndOlapApply) {
+        TAggregationTestCase testCase;
+        //(R"({"col1": "val1", "col-abc": "val-abc", "obj": {"obj_col2_int": 16}})"
+        testCase.SetQuery(R"(
+                SELECT id, JSON_VALUE(jsonval, "$.\"col-abc\"") FROM `/Root/tableWithNulls`
+                WHERE id = 1
+                    AND  JSON_VALUE(jsonval, "$.col1") = "val1"
+                    AND  JSON_VALUE(jsonval, "$.\"col-abc\"") ilike "%A%b%"
+                    AND JSON_EXISTS(jsonval, "$.obj.obj_col2_int")
+
+            )")
+            .AddExpectedPlanOptions("KqpOlapJsonValue")
+            .AddExpectedPlanOptions("KqpOlapJsonExists")
+            .AddExpectedPlanOptions("KqpOlapApply")
+            .SetExpectedReply(R"([[1;["val-abc"]]])")
+        ;
+
+        TestTableWithNulls({testCase});
     }
 
     Y_UNIT_TEST(BlockGenericWithDistinct) {

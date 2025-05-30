@@ -1,0 +1,11 @@
+--- contrib/restricted/thrift/thrift/transport/TFDTransport.cpp	(b92e22f2baa7a4b746902dd4641a3025ca1f424f)
++++ contrib/restricted/thrift/thrift/transport/TFDTransport.cpp	(working tree)
+@@ -46,7 +46,7 @@ void TFDTransport::close() {
+   int errno_copy = THRIFT_ERRNO;
+   fd_ = -1;
+   // Have to check uncaught_exception because this is called in the destructor.
+-  if (rv < 0 && !std::uncaught_exception()) {
++  if (rv < 0 && !std::uncaught_exceptions()) {
+     throw TTransportException(TTransportException::UNKNOWN, "TFDTransport::close()", errno_copy);
+   }
+ }

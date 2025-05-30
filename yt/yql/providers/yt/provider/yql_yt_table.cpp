@@ -9,12 +9,12 @@
 #include <yt/yql/providers/yt/common/yql_names.h>
 #include <yt/yql/providers/yt/gateway/lib/yt_helpers.h>
 #include <yql/essentials/utils/log/log.h>
-#include <yql/essentials/public/udf/tz/udf_tz.h>
 #include <yql/essentials/public/decimal/yql_decimal.h>
 #include <yql/essentials/public/decimal/yql_decimal_serialize.h>
 #include <yql/essentials/minikql/mkql_type_ops.h>
 #include <yql/essentials/utils/utf8.h>
 
+#include <library/cpp/type_info/tz/tz.h>
 #include <library/cpp/yson/node/node_io.h>
 #include <yt/cpp/mapreduce/common/helpers.h>
 #include <yt/cpp/mapreduce/interface/serialize.h>
@@ -827,6 +827,11 @@ bool TYtTableInfo::Validate(const TExprNode& node, EYtSettingTypes accepted, TEx
         return false;
     }
 
+    if (node.Child(TYtTable::idx_Cluster)->Content() == YtUnspecifiedCluster) {
+        ctx.AddError(TIssue(ctx.GetPosition(node.Child(TYtTable::idx_Cluster)->Pos()), TStringBuilder() << "Unspecified cluster is not expected"));
+        return false;
+    }
+
     return true;
 }
 
@@ -918,12 +923,33 @@ bool TYtOutTableInfo::Validate(const TExprNode& node, TExprContext& ctx) {
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected " << TYtOutTable::CallableName()));
         return false;
     }
-    if (!EnsureArgsCount(node, 5, ctx)) {
+    if (!EnsureMinArgsCount(node, 5, ctx)) {
+        return false;
+    }
+    if (!EnsureMaxArgsCount(node, 6, ctx)) {
         return false;
     }
 
     if (!EnsureAtom(*node.Child(TYtOutTable::idx_Name), ctx)) {
         return false;
+    }
+
+    if (node.ChildrenSize() == 6) {
+        const ui32 idx = TYtOutTable::idx_Cluster;
+        if (!EnsureAtom(*node.Child(idx), ctx)) {
+            return false;
+        }
+        TStringBuf cluster = node.Child(idx)->Content();
+        if (cluster.empty()) {
+            ctx.AddError(TIssue(ctx.GetPosition(node.Child(idx)->Pos()), TStringBuilder()
+                << "Empty cluster for node " << node.Content() << " is not allowed"));
+            return false;
+        }
+        if (cluster == YtUnspecifiedCluster) {
+            ctx.AddError(TIssue(ctx.GetPosition(node.Child(idx)->Pos()), TStringBuilder()
+                << "Invalid cluster '" << cluster << "' for node " << node.Content()));
+            return false;
+        }
     }
 
 #define VALIDATE_OPT_FIELD(idx, TFunc)                                                   \
@@ -957,7 +983,7 @@ bool TYtOutTableInfo::Validate(const TExprNode& node, TExprContext& ctx) {
     }
 
     if (auto setting = NYql::GetSetting(*node.Child(TYtOutTable::idx_Settings), EYtSettingType::ColumnGroups)) {
-        if (!ValidateColumnGroups(*setting, *node.Child(TYtOutTable::idx_RowSpec)->GetTypeAnn()->Cast<TStructExprType>(), ctx)) {
+        if (!ValidateColumnGroups(*setting, *TYqlRowSpecInfo(TExprBase(node.ChildPtr(TYtOutTable::idx_RowSpec))).GetExtendedType(ctx), ctx)) {
             return false;
         }
     }
@@ -976,6 +1002,9 @@ void TYtOutTableInfo::Parse(TExprBase node) {
         Stat = MakeIntrusive<TYtTableStatInfo>(table.Stat());
     }
     Settings = table.Settings();
+    if (table.Cluster()) {
+        Cluster = table.Cluster().Cast().StringValue();
+    }
 }
 
 TExprBase TYtOutTableInfo::ToExprNode(TExprContext& ctx, const TPositionHandle& pos) const {
@@ -994,6 +1023,9 @@ TExprBase TYtOutTableInfo::ToExprNode(TExprContext& ctx, const TPositionHandle& 
         tableBuilder.Settings(Settings.Cast<TCoNameValueTupleList>());
     } else {
         tableBuilder.Settings().Build();
+    }
+    if (Cluster) {
+        tableBuilder.Cluster().Value(Cluster).Build();
     }
     return tableBuilder.Done();
 }
@@ -2294,7 +2326,7 @@ TExprBase RoundTz(const TExprBase& node, bool down, TExprContext& ctx) {
         TStringBuf value;
         GetNext(tzName, ',', value);
 
-        const auto& names = NUdf::GetTimezones();
+        const auto& names = NTi::GetTimezones();
         YQL_ENSURE(!names.empty());
 
         TStringBuf targetName;

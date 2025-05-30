@@ -1,8 +1,8 @@
 diff --git a/include/locale b/include/locale
-index 70d22ff..2806396 100644
+index 573910a..4a3df88 100644
 --- a/include/locale
 +++ b/include/locale
-@@ -2168,7 +2168,11 @@ public:
+@@ -2197,7 +2197,11 @@ public:
        : time_put<_CharT, _OutputIterator>(__nm, __refs) {}
  
  protected:

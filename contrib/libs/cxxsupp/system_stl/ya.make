@@ -9,7 +9,6 @@ LICENSE(Service-Sourceless-Library)
 SUBSCRIBER(
     g:contrib
     g:cpp-contrib
-    somov
 )
 
 NO_PLATFORM()

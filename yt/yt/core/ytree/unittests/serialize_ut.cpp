@@ -51,7 +51,7 @@ DEFINE_BIT_ENUM(ETestBitEnum,
     ((Green)  (0x0004))
 );
 
-enum class EPlainTestEnum
+enum class EVanillaTestEnum
 {
     First,
     Second,
@@ -429,9 +429,9 @@ TEST(TSerializationTest, SerializableArcadiaEnum)
 
 TEST(TSerializationTest, PlainEnum)
 {
-    TestSerializationDeserialization(EPlainTestEnum::First);
+    TestSerializationDeserialization(EVanillaTestEnum::First);
 
-    TestSerializationDeserialization(static_cast<EPlainTestEnum>(42));
+    TestSerializationDeserialization(static_cast<EVanillaTestEnum>(42));
 }
 
 TEST(TYTreeSerializationTest, Protobuf)
@@ -455,6 +455,30 @@ TEST(TYTreeSerializationTest, ProtobufKeepUnknown)
         auto deserializedYson = ConvertToYsonString(node, NYson::EYsonFormat::Text);
         EXPECT_EQ(RemoveSpaces(canonicalYson.ToString()), deserializedYson.ToString());
     }
+}
+
+TEST(TSerializationTest, ProtobufRepeatedField)
+{
+    google::protobuf::RepeatedField<i64> original;
+    original.Add(1);
+    original.Add(2);
+    original.Add(3);
+
+    auto node = ConvertToNode(original);
+    auto deserialized = ConvertTo<google::protobuf::RepeatedField<i64>>(node);
+    EXPECT_TRUE(std::ranges::equal(original, deserialized));
+}
+
+TEST(TSerializationTest, ProtobufRepeatedPtrField)
+{
+    google::protobuf::RepeatedPtrField<TString> original;
+    original.Add("one");
+    original.Add("two");
+    original.Add("three");
+
+    auto node = ConvertToNode(original);
+    auto deserialized = ConvertTo<google::protobuf::RepeatedPtrField<TString>>(node);
+    EXPECT_TRUE(std::ranges::equal(original, deserialized));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -557,6 +581,58 @@ TEST(TDeserializeTest, Enums)
             Deserialize(deserialized, BuildYsonNodeFluently().BeginList().Item().Value(1.42).EndList()),
             std::exception);
     }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TYsonConceptsTest
+    : public ::testing::Test
+{
+    struct TEmptyStruct
+    { };
+
+    struct TStructWithSerialize
+    { };
+
+    struct TStructWithDeserialize
+    { };
+
+    struct TStructWithBoth
+        : TStructWithSerialize
+        , TStructWithDeserialize
+    { };
+};
+
+[[maybe_unused]] void Serialize(const TYsonConceptsTest::TStructWithSerialize& /*value*/, NYson::IYsonConsumer* /*consumer*/)
+{ }
+
+[[maybe_unused]] void Deserialize(TYsonConceptsTest::TStructWithDeserialize& /*value*/, NYTree::INodePtr /*node*/)
+{ }
+
+TEST_F(TYsonConceptsTest, EmptyStruct)
+{
+    static_assert(!CYsonSerializable<TEmptyStruct>);
+    static_assert(!CYsonDeserializable<TEmptyStruct>);
+    static_assert(!CYsonSerializableDeserializable<TEmptyStruct>);
+}
+
+TEST_F(TYsonConceptsTest, StructWithSerialize)
+{
+    static_assert(CYsonSerializable<TStructWithSerialize>);
+    static_assert(!CYsonDeserializable<TStructWithSerialize>);
+    static_assert(!CYsonSerializableDeserializable<TStructWithSerialize>);
+}
+
+TEST_F(TYsonConceptsTest, StructWithDeserialize)
+{
+    static_assert(!CYsonSerializable<TStructWithDeserialize>);
+    static_assert(CYsonDeserializable<TStructWithDeserialize>);
+    static_assert(!CYsonSerializableDeserializable<TStructWithDeserialize>);
+}
+
+TEST_F(TYsonConceptsTest, StructWithBoth)
+{
+    static_assert(CYsonSerializableDeserializable<TStructWithBoth>);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

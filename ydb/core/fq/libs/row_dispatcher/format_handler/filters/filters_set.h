@@ -15,7 +15,7 @@ public:
 public:
     virtual NActors::TActorId GetFilterId() const = 0;
     virtual const TVector<ui64>& GetColumnIds() const = 0;
-    virtual TMaybe<ui64> GetNextMessageOffset() const = 0;
+    virtual std::optional<ui64> GetNextMessageOffset() const = 0;
 
     virtual void OnFilteredBatch(ui64 firstRow, ui64 lastRow) = 0;  // inclusive interval [firstRow, lastRow]
 

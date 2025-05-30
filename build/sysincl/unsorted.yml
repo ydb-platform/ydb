@@ -103,7 +103,6 @@
   - opcdef.h
   - paper.h
   - pire/config.h
-  - pngusr.h
   - pth.h
   - rtl.h
   - shlib-compat.h
@@ -147,7 +146,6 @@
   - cpuid.h
   - nan.h
   - omp.h
-  - cygwin/version.h
   - zircon/syscalls.h
   - zircon/types.h
   - zircon/process.h
@@ -220,7 +218,6 @@
   - sys/bsdskt.h
   - sys/bsdtty.h
   - sys/builtin.h
-  - sys/cygwin.h
   - sys/dcmd_blk.h
   - sys/devpoll.h
   - sys/fmutex.h
@@ -307,10 +304,6 @@
   - sub_proc.h
   - w32err.h
   - procinfo.h
-  #if defined(__HAIKU__)
-  - FindDirectory.h
-  - StorageDefs.h
-  #endif
   - fpxcp.h
   - fptrap.h
   - fortran.h
@@ -421,6 +414,7 @@
   - sys/mode.h
   - win32thread.h
   - GL/glx.h
+  - GL/glcorearb.h
   - CL/va_ext.h
   - sys/sysconf.h
   - ivx.hpp

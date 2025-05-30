@@ -297,7 +297,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
 
     if (source) {
         for (const auto& col : source->Columns) {
-            Y_ABORT_UNLESS(col.first == col.second.Id);
+            Y_ENSURE(col.first == col.second.Id);
             // There could be columns with same name. Only one of them can be active.
             if (col.second.IsDropped())
                 continue;
@@ -596,7 +596,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
 
         const auto& ttl = op.GetTTLSettings();
 
-        if (!ValidateTtlSettings(ttl, source ? source->Columns : THashMap<ui32, TColumn>(), alterData->Columns, colName2Id, subDomain, errStr)) {
+        if (!ValidateTtlSettings(ttl, source ? source->Columns : TMap<ui32, TColumn>(), alterData->Columns, colName2Id, subDomain, errStr)) {
             return nullptr;
         }
 
@@ -648,6 +648,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
     }
 
     alterData->IsBackup = op.GetIsBackup();
+    alterData->IsRestore = op.GetIsRestore();
 
     if (source && op.KeyColumnNamesSize() == 0)
         return alterData;
@@ -716,7 +717,7 @@ void TTableInfo::ResetDescriptionCache() {
 }
 
 TVector<ui32> TTableInfo::FillDescriptionCache(TPathElement::TPtr pathInfo) {
-    Y_ABORT_UNLESS(pathInfo && pathInfo->IsTable());
+    Y_ENSURE(pathInfo && pathInfo->IsTable());
 
     TVector<ui32> keyColumnIds;
     for (auto& col : Columns) {
@@ -764,7 +765,7 @@ inline THashMap<ui32, size_t> DeduplicateRepeatedById(
     const TGetId& getId,
     const TPreferred& preferred)
 {
-    Y_ABORT_UNLESS(items, "Unexpected nullptr items");
+    Y_ENSURE(items, "Unexpected nullptr items");
 
     int size = items->size();
     THashMap<ui32, size_t> posById;
@@ -1380,7 +1381,7 @@ bool TPartitionConfigMerger::VerifyAlterParams(
     }
 
     if (wasStorageConfig) {
-        Y_ABORT_UNLESS(isStorageConfig); // by inherit logic
+        Y_ENSURE(isStorageConfig); // by inherit logic
 
         auto& srcStorage = *wasStorageConfig;
         auto& cfgStorage = *isStorageConfig;
@@ -1429,7 +1430,7 @@ bool TPartitionConfigMerger::VerifyAlterParams(
         const auto* srcFamily = srcFamilies.Value(family.GetId(), nullptr);
 
         if (srcFamily && srcFamily->HasStorageConfig()) {
-            Y_ABORT_UNLESS(family.HasStorageConfig()); // by inherit logic
+            Y_ENSURE(family.HasStorageConfig()); // by inherit logic
 
             const auto& srcStorage = srcFamily->GetStorageConfig();
             const auto& dstStorage = family.GetStorageConfig();
@@ -1503,7 +1504,7 @@ bool TPartitionConfigMerger::VerifyCommandOnFrozenTable(const NKikimrSchemeOp::T
 }
 
 void TTableInfo::FinishAlter() {
-    Y_ABORT_UNLESS(AlterData, "No alter data at Alter complete");
+    Y_ENSURE(AlterData, "No alter data at Alter complete");
     AlterVersion = AlterData->AlterVersion;
     NextColumnId = AlterData->NextColumnId;
     for (const auto& col : AlterData->Columns) {
@@ -1613,20 +1614,20 @@ void TTableInfo::FinishAlter() {
 
 #if 1 // legacy
 TString TTableInfo::SerializeAlterExtraData() const {
-    Y_ABORT_UNLESS(AlterData);
+    Y_ENSURE(AlterData);
     NKikimrSchemeOp::TAlterExtraData alterExtraData;
     alterExtraData.MutablePartitionConfig()->CopyFrom(AlterData->PartitionConfigDiff());
     TString str;
     bool serializeRes = alterExtraData.SerializeToString(&str);
-    Y_ABORT_UNLESS(serializeRes);
+    Y_ENSURE(serializeRes);
     return str;
 }
 
 void TTableInfo::DeserializeAlterExtraData(const TString& str) {
-    Y_ABORT_UNLESS(AlterData);
+    Y_ENSURE(AlterData);
     NKikimrSchemeOp::TAlterExtraData alterExtraData;
     bool deserializeRes = ParseFromStringNoSizeLimit(alterExtraData, str);
-    Y_ABORT_UNLESS(deserializeRes);
+    Y_ENSURE(deserializeRes);
     AlterData->PartitionConfigDiff().Swap(alterExtraData.MutablePartitionConfig());
 }
 #endif
@@ -1680,12 +1681,16 @@ void TTableInfo::SetPartitioning(TVector<TTableShardInfo>&& newPartitioning) {
     newAggregatedStats.RangeReads = Stats.Aggregated.RangeReads;
     newAggregatedStats.RangeReadRows = Stats.Aggregated.RangeReadRows;
 
+    newAggregatedStats.LocksAcquired = Stats.Aggregated.LocksAcquired;
+    newAggregatedStats.LocksWholeShard = Stats.Aggregated.LocksWholeShard;
+    newAggregatedStats.LocksBroken = Stats.Aggregated.LocksBroken;
+
     if (SplitOpsInFlight.empty()) {
         ExpectedPartitionCount = newPartitioning.size();
     }
 
     if (Partitions.empty()) {
-        Y_ABORT_UNLESS(SplitOpsInFlight.empty());
+        Y_ENSURE(SplitOpsInFlight.empty());
     }
 
     Stats.PartitionStats.swap(newPartitionStats);
@@ -1784,6 +1789,10 @@ void TTableAggregatedStats::UpdateShardStats(TShardIdx datashardIdx, const TPart
     Aggregated.ReadIops += (newStats.ReadIops - oldStats.ReadIops);
     Aggregated.WriteIops += (newStats.WriteIops - oldStats.WriteIops);
 
+    Aggregated.LocksAcquired += (newStats.LocksAcquired - oldStats.LocksAcquired);
+    Aggregated.LocksWholeShard += (newStats.LocksWholeShard - oldStats.LocksWholeShard);
+    Aggregated.LocksBroken += (newStats.LocksBroken - oldStats.LocksBroken);
+
     auto topUsage = oldStats.TopUsage.Update(newStats.TopUsage);
     oldStats = newStats;
     oldStats.TopUsage = std::move(topUsage);
@@ -1808,11 +1817,11 @@ void TAggregatedStats::UpdateTableStats(TShardIdx shardIdx, const TPathId& pathI
 }
 
 void TTableInfo::RegisterSplitMergeOp(TOperationId opId, const TTxState& txState) {
-    Y_ABORT_UNLESS(txState.TxType == TTxState::TxSplitTablePartition || txState.TxType == TTxState::TxMergeTablePartition);
-    Y_ABORT_UNLESS(txState.SplitDescription);
+    Y_ENSURE(txState.TxType == TTxState::TxSplitTablePartition || txState.TxType == TTxState::TxMergeTablePartition);
+    Y_ENSURE(txState.SplitDescription);
 
     if (SplitOpsInFlight.empty()) {
-        Y_VERIFY_S(Partitions.size() == ExpectedPartitionCount,
+        Y_ENSURE(Partitions.size() == ExpectedPartitionCount,
                    "info "
                        << "ExpectedPartitionCount: " << ExpectedPartitionCount
                        << " Partitions.size(): " << Partitions.size());
@@ -1825,7 +1834,7 @@ void TTableInfo::RegisterSplitMergeOp(TOperationId opId, const TTxState& txState
         ExpectedPartitionCount -= srcCount;
     }
 
-    Y_ABORT_UNLESS(!SplitOpsInFlight.contains(opId));
+    Y_ENSURE(!SplitOpsInFlight.contains(opId));
     SplitOpsInFlight.emplace(opId);
     ShardsInSplitMergeByOpId.emplace(opId, TVector<TShardIdx>());
 
@@ -1838,8 +1847,8 @@ void TTableInfo::RegisterSplitMergeOp(TOperationId opId, const TTxState& txState
 bool TTableInfo::IsShardInSplitMergeOp(TShardIdx idx) const {
     if (ShardsInSplitMergeByShards.contains(idx)) {
         TOperationId opId = ShardsInSplitMergeByShards.at(idx);
-        Y_ABORT_UNLESS(ShardsInSplitMergeByOpId.contains(opId));
-        Y_ABORT_UNLESS(SplitOpsInFlight.contains(opId));
+        Y_ENSURE(ShardsInSplitMergeByOpId.contains(opId));
+        Y_ENSURE(SplitOpsInFlight.contains(opId));
     }
 
     return ShardsInSplitMergeByShards.contains(idx);
@@ -1847,7 +1856,7 @@ bool TTableInfo::IsShardInSplitMergeOp(TShardIdx idx) const {
 
 
 void TTableInfo::AbortSplitMergeOp(TOperationId opId) {
-    Y_ABORT_UNLESS(SplitOpsInFlight.contains(opId));
+    Y_ENSURE(SplitOpsInFlight.contains(opId));
     for (const auto& shardIdx: ShardsInSplitMergeByOpId.at(opId)) {
         ShardsInSplitMergeByShards.erase(shardIdx);
     }
@@ -1859,7 +1868,7 @@ void TTableInfo::FinishSplitMergeOp(TOperationId opId) {
     AbortSplitMergeOp(opId);
 
     if (SplitOpsInFlight.empty()) {
-        Y_VERIFY_S(Partitions.size() == ExpectedPartitionCount,
+        Y_ENSURE(Partitions.size() == ExpectedPartitionCount,
                    "info "
                        << "ExpectedPartitionCount: " << ExpectedPartitionCount
                        << " Partitions.size(): " << Partitions.size());
@@ -1872,7 +1881,8 @@ bool TTableInfo::TryAddShardToMerge(const TSplitSettings& splitSettings,
                                     const TForceShardSplitSettings& forceShardSplitSettings,
                                     TShardIdx shardIdx, TVector<TShardIdx>& shardsToMerge,
                                     THashSet<TTabletId>& partOwners, ui64& totalSize, float& totalLoad,
-                                    const TTableInfo* mainTableForIndex) const
+                                    float cpuUsageThreshold, const TTableInfo* mainTableForIndex, 
+                                    TString& reason) const
 {
     if (ExpectedPartitionCount + 1 - shardsToMerge.size() <= GetMinPartitionsCount()) {
         return false;
@@ -1903,7 +1913,10 @@ bool TTableInfo::TryAddShardToMerge(const TSplitSettings& splitSettings,
     bool canMerge = false;
 
     // Check if we can try merging by size
-    if (IsMergeBySizeEnabled(forceShardSplitSettings) && stats->DataSize + totalSize <= GetSizeToMerge(forceShardSplitSettings)) {
+    const auto sizeToMerge = GetSizeToMerge(forceShardSplitSettings);
+    if (IsMergeBySizeEnabled(forceShardSplitSettings) && stats->DataSize + totalSize <= sizeToMerge) {
+        reason = TStringBuilder() << "merge by size ("
+            << "shardSize: " << stats->DataSize << ")";
         canMerge = true;
     }
 
@@ -1911,6 +1924,7 @@ bool TTableInfo::TryAddShardToMerge(const TSplitSettings& splitSettings,
     TInstant now = AppData()->TimeProvider->Now();
     TDuration minUptime = TDuration::Seconds(splitSettings.MergeByLoadMinUptimeSec);
     if (!canMerge && IsMergeByLoadEnabled(mainTableForIndex) && stats->StartTime && stats->StartTime + minUptime < now) {
+        reason = "merge by load";
         canMerge = true;
     }
 
@@ -1925,16 +1939,15 @@ bool TTableInfo::TryAddShardToMerge(const TSplitSettings& splitSettings,
     // Check that total load doesn't exceed the limits
     float shardLoad = stats->GetCurrentRawCpuUsage() * 0.000001;
     if (IsMergeByLoadEnabled(mainTableForIndex)) {
-        const auto settings = GetEffectiveSplitByLoadSettings(mainTableForIndex);
-        i64 cpuPercentage = settings.GetCpuPercentageThreshold();
-        float cpuUsageThreshold = 0.01 * (cpuPercentage ? cpuPercentage : (i64)splitSettings.FastSplitCpuPercentageThreshold);
-
         // Calculate shard load based on historical data
         TDuration loadDuration = TDuration::Seconds(splitSettings.MergeByLoadMinLowLoadDurationSec);
         shardLoad = 0.01 * stats->GetLatestMaxCpuUsagePercent(now - loadDuration);
 
-        if (shardLoad + totalLoad > cpuUsageThreshold *0.7)
+        if (shardLoad + totalLoad > cpuUsageThreshold)
             return false;
+
+        reason = TStringBuilder() << "merge by load ("
+            << "shardLoad: " << shardLoad << ")";
     }
 
     // Merged shards must not have borrowed parts from the same original tablet
@@ -1954,11 +1967,17 @@ bool TTableInfo::TryAddShardToMerge(const TSplitSettings& splitSettings,
 
 bool TTableInfo::CheckCanMergePartitions(const TSplitSettings& splitSettings,
                                          const TForceShardSplitSettings& forceShardSplitSettings,
-                                         TShardIdx shardIdx, TVector<TShardIdx>& shardsToMerge,
-                                         const TTableInfo* mainTableForIndex) const
+                                         TShardIdx shardIdx, const TTabletId& tabletId,
+                                         TVector<TShardIdx>& shardsToMerge, const TTableInfo* mainTableForIndex,
+                                         TString& reason) const
 {
     // Don't split/merge backup tables
     if (IsBackup) {
+        return false;
+    }
+
+    // Don't split/merge restore tables
+    if (IsRestore) {
         return false;
     }
 
@@ -1980,15 +1999,24 @@ bool TTableInfo::CheckCanMergePartitions(const TSplitSettings& splitSettings,
     shardsToMerge.clear();
     ui64 totalSize = 0;
     float totalLoad = 0;
+    const auto settings = GetEffectiveSplitByLoadSettings(mainTableForIndex);
+    const i64 cpuPercentageThreshold = settings.GetCpuPercentageThreshold();
+    const float cpuUsageThreshold = 0.01 * (cpuPercentageThreshold ? cpuPercentageThreshold : (i64)splitSettings.FastSplitCpuPercentageThreshold);
+    const float cpuMergeThreshold = 0.7 * cpuUsageThreshold;
+
     THashSet<TTabletId> partOwners;
+    TString shardMergeReason;
 
     // Make sure we can actually merge current shard first
-    if (!TryAddShardToMerge(splitSettings, forceShardSplitSettings, shardIdx, shardsToMerge, partOwners, totalSize, totalLoad, mainTableForIndex)) {
+    if (!TryAddShardToMerge(splitSettings, forceShardSplitSettings, shardIdx, shardsToMerge, partOwners, totalSize, totalLoad, cpuMergeThreshold, mainTableForIndex, shardMergeReason)) {
         return false;
     }
 
+    reason = TStringBuilder() << "shard with tabletId: " << tabletId
+        << " " << shardMergeReason;
+
     for (i64 pi = partitionIdx - 1; pi >= 0; --pi) {
-        if (!TryAddShardToMerge(splitSettings, forceShardSplitSettings, GetPartitions()[pi].ShardIdx, shardsToMerge, partOwners, totalSize, totalLoad, mainTableForIndex)) {
+        if (!TryAddShardToMerge(splitSettings, forceShardSplitSettings, GetPartitions()[pi].ShardIdx, shardsToMerge, partOwners, totalSize, totalLoad, cpuMergeThreshold, mainTableForIndex, shardMergeReason)) {
             break;
         }
     }
@@ -1996,10 +2024,17 @@ bool TTableInfo::CheckCanMergePartitions(const TSplitSettings& splitSettings,
     Reverse(shardsToMerge.begin(), shardsToMerge.end());
 
     for (ui64 pi = partitionIdx + 1; pi < GetPartitions().size(); ++pi) {
-        if (!TryAddShardToMerge(splitSettings, forceShardSplitSettings, GetPartitions()[pi].ShardIdx, shardsToMerge, partOwners, totalSize, totalLoad, mainTableForIndex)) {
+        if (!TryAddShardToMerge(splitSettings, forceShardSplitSettings, GetPartitions()[pi].ShardIdx, shardsToMerge, partOwners, totalSize, totalLoad, cpuMergeThreshold, mainTableForIndex, shardMergeReason)) {
             break;
         }
     }
+
+    reason += TStringBuilder()
+        << ", shardToMergeCount: " << shardsToMerge.size()
+        << ", totalSize: " << totalSize
+        << ", sizeToMerge: " << GetSizeToMerge(forceShardSplitSettings)
+        << ", totalLoad: " << totalLoad
+        << ", loadThreshold: " << cpuMergeThreshold;
 
     return shardsToMerge.size() > 1;
 }
@@ -2007,10 +2042,14 @@ bool TTableInfo::CheckCanMergePartitions(const TSplitSettings& splitSettings,
 bool TTableInfo::CheckSplitByLoad(
         const TSplitSettings& splitSettings, TShardIdx shardIdx,
         ui64 dataSize, ui64 rowCount,
-        const TTableInfo* mainTableForIndex) const
+        const TTableInfo* mainTableForIndex, TString& reason) const
 {
     // Don't split/merge backup tables
     if (IsBackup)
+        return false;
+
+    // Don't split/merge restore tables
+    if (IsRestore)
         return false;
 
     if (!splitSettings.SplitByLoadEnabled)
@@ -2057,6 +2096,16 @@ bool TTableInfo::CheckSplitByLoad(
         return false;
     }
 
+    reason = TStringBuilder() << "split by load ("
+        << "rowCount: " << rowCount << ", "
+        << "minRowCount: " << MIN_ROWS_FOR_SPLIT_BY_LOAD << ", "
+        << "shardSize: " << dataSize << ", "
+        << "minShardSize: " << MIN_SIZE_FOR_SPLIT_BY_LOAD << ", "
+        << "shardCount: " << Stats.PartitionStats.size() << ", "
+        << "maxShardCount: " << maxShards << ", "
+        << "cpuUsage: " << stats.GetCurrentRawCpuUsage() << ", "
+        << "cpuUsageThreshold: " << cpuUsageThreshold * 1000000 << ")";
+
     return true;
 }
 
@@ -2091,6 +2140,7 @@ TString TExportInfo::TItem::ToString(ui32 idx) const {
         << " Idx: " << idx
         << " SourcePathName: '" << SourcePathName << "'"
         << " SourcePathId: " << SourcePathId
+        << " SourcePathType: " << SourcePathType
         << " State: " << State
         << " SubState: " << SubState
         << " WaitTxId: " << WaitTxId
@@ -2111,7 +2161,7 @@ bool TExportInfo::AllItemsAreDropped() const {
 }
 
 void TExportInfo::AddNotifySubscriber(const TActorId &actorId) {
-    Y_ABORT_UNLESS(!IsFinished());
+    Y_ENSURE(!IsFinished());
     Subscribers.insert(actorId);
 }
 
@@ -2149,17 +2199,18 @@ bool TImportInfo::IsFinished() const {
 }
 
 void TImportInfo::AddNotifySubscriber(const TActorId &actorId) {
-    Y_ABORT_UNLESS(!IsFinished());
+    Y_ENSURE(!IsFinished());
     Subscribers.insert(actorId);
 }
 
-TIndexBuildInfo::TShardStatus::TShardStatus(TSerializedTableRange range, TString lastKeyAck)
+TIndexBuildInfo::TShardStatus::TShardStatus(TSerializedTableRange range, TString lastKeyAck, size_t shardsCount)
     : Range(std::move(range))
     , LastKeyAck(std::move(lastKeyAck))
+    , Index(shardsCount)
 {}
 
 void TIndexBuildInfo::SerializeToProto(TSchemeShard* ss, NKikimrSchemeOp::TIndexBuildConfig* result) const {
-    Y_ABORT_UNLESS(IsBuildIndex());
+    Y_ENSURE(IsBuildIndex());
     result->SetTable(TPath::Init(TablePathId, ss).PathString());
 
     auto& index = *result->MutableIndex();
@@ -2187,7 +2238,7 @@ void TIndexBuildInfo::SerializeToProto(TSchemeShard* ss, NKikimrSchemeOp::TIndex
 }
 
 void TIndexBuildInfo::SerializeToProto([[maybe_unused]] TSchemeShard* ss, NKikimrIndexBuilder::TColumnBuildSettings* result) const {
-    Y_ABORT_UNLESS(IsBuildColumns());
+    Y_ENSURE(IsBuildColumns());
     Y_ASSERT(!TargetName.empty());
     result->SetTable(TargetName);
     for(const auto& column : BuildColumns) {
@@ -2202,14 +2253,7 @@ void TIndexBuildInfo::AddParent(const TSerializedTableRange& range, TShardIdx sh
         // 2. It doesn't fit entirely in the single shard => global kmeans for all shards
         return;
     }
-    const auto to = range.To.GetCells();
-    const auto from = range.From.GetCells();
-    Y_ASSERT(!from.empty());
-    const auto parentTo = to.empty() ? std::numeric_limits<ui32>::max() : to[0].AsValue<ui32>() - (to.size() == 1);
-    Y_ASSERT(parentTo >= 1);
-    const auto parentFrom = from[0].IsNull() ? 1 : from[0].AsValue<ui32>();
-    Y_ASSERT(parentFrom >= 1);
-    Y_ASSERT(parentFrom <= parentTo);
+    const auto [parentFrom, parentTo] = KMeans.RangeToBorders(range);
     // TODO(mbkkt) We can make it more granular
 
     // if new range is not intersect with other ranges, it's local
@@ -2431,10 +2475,10 @@ TBillingStats::TBillingStats(ui64 readRows, ui64 readBytes, ui64 uploadRows, ui6
 }
 
 TBillingStats TBillingStats::operator -(const TBillingStats &other) const {
-    Y_ABORT_UNLESS(UploadRows >= other.UploadRows);
-    Y_ABORT_UNLESS(UploadBytes >= other.UploadBytes);
-    Y_ABORT_UNLESS(ReadRows >= other.ReadRows);
-    Y_ABORT_UNLESS(ReadBytes >= other.ReadBytes);
+    Y_ENSURE(UploadRows >= other.UploadRows);
+    Y_ENSURE(UploadBytes >= other.UploadBytes);
+    Y_ENSURE(ReadRows >= other.ReadRows);
+    Y_ENSURE(ReadBytes >= other.ReadBytes);
 
     return {UploadRows - other.UploadRows, UploadBytes - other.UploadBytes,
             ReadRows - other.ReadRows, ReadBytes - other.ReadBytes};
@@ -2573,6 +2617,13 @@ std::optional<std::pair<i64, i64>> ValidateSequenceType(const TString& sequenceN
     }
 
     return {{dataTypeMinValue, dataTypeMaxValue}};
+}
+
+NProtoBuf::Timestamp SecondsToProtoTimeStamp(ui64 sec) {
+    NProtoBuf::Timestamp timestamp;
+    timestamp.set_seconds((i64)(sec));
+    timestamp.set_nanos(0);
+    return timestamp;
 }
 
 } // namespace NSchemeShard

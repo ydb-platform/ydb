@@ -17,6 +17,10 @@ namespace {
 class TTopicFormatHandler : public NActors::TActor<TTopicFormatHandler>, public ITopicFormatHandler, public TTypeParser {
     using TBase = NActors::TActor<TTopicFormatHandler>;
 
+public:
+    static constexpr char ActorName[] = "FQ_ROW_DISPATCHER_FORMAT_HANDLER";
+
+private:
     struct TCounters {
         TCountersDesc Desc;
 
@@ -186,7 +190,7 @@ class TTopicFormatHandler : public NActors::TActor<TTopicFormatHandler>, public 
             return ColumnsIds;
         }
 
-        TMaybe<ui64> GetNextMessageOffset() const override {
+        std::optional<ui64> GetNextMessageOffset() const override {
             return Client->GetNextMessageOffset();
         }
 
@@ -348,10 +352,10 @@ public:
     }
 
 public:
-    void ParseMessages(const TVector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>& messages) override {
+    void ParseMessages(const std::vector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>& messages) override {
         LOG_ROW_DISPATCHER_TRACE("Send " << messages.size() << " messages to parser");
 
-        if (messages) {
+        if (!messages.empty()) {
             CurrentOffset = messages.back().GetOffset();
         }
 
@@ -453,6 +457,12 @@ public:
             statistics.FilterStats = Filters->GetStatistics();
         }
         return statistics;
+    }
+
+    void ForceRefresh() override {
+        if (Parser) {
+            Parser->Refresh(true);
+        }
     }
 
 protected:

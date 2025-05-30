@@ -9,8 +9,6 @@
 
 #include <yt/cpp/mapreduce/interface/io.h>
 
-#include <yt/cpp/mapreduce/raw_client/raw_client.h>
-
 namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -31,7 +29,6 @@ TClientWriter::TClientWriter(
         RawWriter_.Reset(new TRetrylessWriter(
             context,
             transactionId,
-            GetWriteTableCommand(context.Config->ApiVersion),
             format,
             path,
             BufferSize_,
@@ -39,7 +36,7 @@ TClientWriter::TClientWriter(
     } else {
         bool useV2Writer = context.Config->TableWriterVersion == ETableWriterVersion::V2;
         if (useV2Writer) {
-            auto serializedWriterOptions = FormIORequestParameters(options);
+            auto serializedWriterOptions = FormIORequestParameters(path, options);
 
             RawWriter_ = MakeIntrusive<NPrivate::TRetryfulWriterV2>(
                     rawClient,
@@ -60,7 +57,6 @@ TClientWriter::TClientWriter(
                 std::move(transactionPinger),
                 context,
                 transactionId,
-                GetWriteTableCommand(context.Config->ApiVersion),
                 format,
                 path,
                 options));

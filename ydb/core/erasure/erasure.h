@@ -8,7 +8,7 @@
 
 #include <util/stream/str.h>
 #include <util/generic/string.h>
-#include <util/generic/bt_exception.h>
+#include <util/generic/yexception.h>
 #include <util/string/builder.h>
 
 #include <util/generic/list.h>

@@ -116,7 +116,7 @@ public:
 
         TScopedAlloc alloc(__LOCATION__, TAlignedPagePoolCounters(), State_->FunctionRegistry->SupportsSizedAllocators());
         TTypeEnvironment env(alloc);
-        TProgramBuilder pgmBuilder(env, *State_->FunctionRegistry);
+        TProgramBuilder pgmBuilder(env, *State_->FunctionRegistry, false, State_->Types->LangVer);
         NCommon::TMkqlCommonCallableCompiler compiler;
 
         NCommon::TMkqlBuildContext mkqlCtx(compiler, pgmBuilder, ctx);
@@ -125,20 +125,27 @@ public:
         root = TransformProgram(root, files, env);
 
         TExploringNodeVisitor explorer;
-        explorer.Walk(root.GetNode(), env);
+        explorer.Walk(root.GetNode(), env.GetNodeStack());
         auto compFactory = GetCompositeWithBuiltinFactory({
             GetYqlFactory(),
             GetPgFactory()
         });
 
+        NUdf::TUniquePtr<NUdf::ILogProvider> logProvider = NUdf::MakeLogProvider(
+            [](const NUdf::TStringRef& component, NUdf::ELogLevel level, const NUdf::TStringRef& message) {
+                Cerr << Now() << " " << component << " [" << level << "] " << message << "\n";
+            },
+            State_->Types->RuntimeLogLevel
+        );
+
         TComputationPatternOpts patternOpts(alloc.Ref(), env, compFactory, State_->FunctionRegistry,
             State_->Types->ValidateMode, NUdf::EValidatePolicy::Exception, State_->Types->OptLLVM.GetOrElse(TString()),
-            EGraphPerProcess::Multi);
+            EGraphPerProcess::Multi, nullptr, nullptr, nullptr, logProvider.Get());
 
         auto pattern = MakeComputationPattern(explorer, root, {}, patternOpts);
         const TComputationOptsFull computeOpts(nullptr, alloc.Ref(), env,
             *State_->Types->RandomProvider, *State_->Types->TimeProvider,
-            NUdf::EValidatePolicy::Exception, nullptr, nullptr);
+            NUdf::EValidatePolicy::Exception, nullptr, nullptr, logProvider.Get(), State_->Types->LangVer);
         auto graph = pattern->Clone(computeOpts);
         const TBindTerminator bind(graph->GetTerminator());
         graph->Prepare();
@@ -199,7 +206,7 @@ public:
 private:
     TRuntimeNode TransformProgram(TRuntimeNode root, const TUserDataTable& files, TTypeEnvironment& env) {
         TExploringNodeVisitor explorer;
-        explorer.Walk(root.GetNode(), env);
+        explorer.Walk(root.GetNode(), env.GetNodeStack());
         bool wereChanges = false;
         TRuntimeNode program = SinglePassVisitCallables(root, explorer,
             TSimpleFileTransformProvider(State_->FunctionRegistry, files), env, true, wereChanges);

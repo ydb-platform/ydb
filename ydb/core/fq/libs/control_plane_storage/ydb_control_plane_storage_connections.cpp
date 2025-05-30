@@ -8,6 +8,8 @@
 #include <ydb/core/fq/libs/config/protos/issue_id.pb.h>
 #include <ydb/core/fq/libs/db_schema/db_schema.h>
 
+#include <ydb/library/protobuf_printer/security_printer.h>
+
 namespace NFq {
 
 namespace {
@@ -18,16 +20,79 @@ void PrepareSensitiveFields(::FederatedQuery::Connection& connection, bool extra
     }
 
     auto& setting = *connection.mutable_content()->mutable_setting();
-    if (setting.has_clickhouse_cluster()) {
-        auto& ch = *setting.mutable_clickhouse_cluster();
-        ch.set_password("");
+    switch (setting.connection_case()) {
+    case FederatedQuery::ConnectionSetting::kObjectStorage:
+        break;
+    case FederatedQuery::ConnectionSetting::kYdbDatabase:
+        break;
+    case FederatedQuery::ConnectionSetting::kClickhouseCluster:
+        setting.mutable_clickhouse_cluster()->clear_password();
+        break;
+    case FederatedQuery::ConnectionSetting::kDataStreams:
+        break;
+    case FederatedQuery::ConnectionSetting::kMonitoring:
+        break;
+    case FederatedQuery::ConnectionSetting::kPostgresqlCluster:
+        setting.mutable_postgresql_cluster()->clear_password();
+        break;
+    case FederatedQuery::ConnectionSetting::kGreenplumCluster:
+        setting.mutable_greenplum_cluster()->clear_password();
+        break;
+    case FederatedQuery::ConnectionSetting::kMysqlCluster:
+        setting.mutable_mysql_cluster()->clear_password();
+        break;
+    case FederatedQuery::ConnectionSetting::kLogging:
+        break;
+    case FederatedQuery::ConnectionSetting::kIceberg:
+        break;
+    case FederatedQuery::ConnectionSetting::CONNECTION_NOT_SET:
+        break;
     }
-    if (setting.has_postgresql_cluster()) {
-        auto& pg = *setting.mutable_postgresql_cluster();
-        pg.set_password("");
+    if (auto auth = GetMutableAuth(setting); auth && auth->has_token()) {
+        auth->mutable_token()->clear_token();
     }
 }
 
+}
+
+NYql::TIssues TControlPlaneStorageBase::ValidateRequest(TEvControlPlaneStorage::TEvCreateConnectionRequest::TPtr& ev) const
+{
+    NYql::TIssues issues = ValidateConnection(ev);
+
+    const auto& event = *ev->Get();
+    const auto& permissions = GetCreateConnectionPerimssions(event);
+    if (event.Request.content().acl().visibility() == FederatedQuery::Acl::SCOPE && !permissions.Check(TPermissions::MANAGE_PUBLIC)) {
+        issues.AddIssue(MakeErrorIssue(TIssuesIds::ACCESS_DENIED, "Permission denied to create a connection with these parameters. Please receive a permission yq.resources.managePublic"));
+    }
+
+    return issues;
+}
+
+TPermissions TControlPlaneStorageBase::GetCreateConnectionPerimssions(const TEvControlPlaneStorage::TEvCreateConnectionRequest& event) const
+{
+    TPermissions permissions = Config->Proto.GetEnablePermissions()
+                            ? event.Permissions
+                            : TPermissions{TPermissions::MANAGE_PUBLIC};
+    if (IsSuperUser(event.User)) {
+        permissions.SetAll();
+    }
+    return permissions;
+}
+
+std::pair<FederatedQuery::Connection, FederatedQuery::Internal::ConnectionInternal> TControlPlaneStorageBase::GetCreateConnectionProtos(
+    const FederatedQuery::CreateConnectionRequest& request, const TString& cloudId, const TString& user, TInstant startTime) const
+{
+    const TString& connectionId = GetEntityIdAsString(Config->IdsPrefix, EEntityType::CONNECTION);
+
+    FederatedQuery::Connection connection;
+    FederatedQuery::ConnectionContent& content = *connection.mutable_content();
+    content = request.content();
+    *connection.mutable_meta() = CreateCommonMeta(connectionId, user, startTime, InitialRevision);
+
+    FederatedQuery::Internal::ConnectionInternal connectionInternal;
+    connectionInternal.set_cloud_id(cloudId);
+
+    return {connection, connectionInternal};
 }
 
 void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateConnectionRequest::TPtr& ev)
@@ -43,43 +108,28 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateConne
     const TString user = event.User;
     const TString token = event.Token;
     const int byteSize = request.ByteSize();
-    TPermissions permissions = Config->Proto.GetEnablePermissions()
-                            ? event.Permissions
-                            : TPermissions{TPermissions::MANAGE_PUBLIC};
-    if (IsSuperUser(user)) {
-        permissions.SetAll();
-    }
     const TString idempotencyKey = request.idempotency_key();
-    const TString connectionId = GetEntityIdAsString(Config->IdsPrefix, EEntityType::CONNECTION);
+
+    const auto [connection, connectionInternal] = GetCreateConnectionProtos(request, cloudId, user, startTime);
+    const auto& content = connection.content();
+    const TString& connectionId = connection.meta().id();
 
     CPS_LOG_T(MakeLogPrefix(scope, user, connectionId)
         << "CreateConnectionRequest: "
         << NKikimr::MaskTicket(token) << " "
-        << request.DebugString());
+        << SecureDebugString(request));
 
-    NYql::TIssues issues = ValidateConnection(ev);
-    if (request.content().acl().visibility() == FederatedQuery::Acl::SCOPE && !permissions.Check(TPermissions::MANAGE_PUBLIC)) {
-        issues.AddIssue(MakeErrorIssue(TIssuesIds::ACCESS_DENIED, "Permission denied to create a connection with these parameters. Please receive a permission yq.resources.managePublic"));
-    }
-    if (issues) {
+    if (const auto& issues = ValidateRequest(ev)) {
         CPS_LOG_D(MakeLogPrefix(scope, user, connectionId)
             << "CreateConnectionRequest, validation failed: "
             << NKikimr::MaskTicket(token) << " "
-            << request.DebugString()
+            << SecureDebugString(request)
             << " error: " << issues.ToString());
         const TDuration delta = TInstant::Now() - startTime;
         SendResponseIssues<TEvControlPlaneStorage::TEvCreateConnectionResponse>(ev->Sender, issues, ev->Cookie, delta, requestCounters);
         LWPROBE(CreateConnectionRequest, scope, user, delta, byteSize, false);
         return;
     }
-
-    FederatedQuery::Connection connection;
-    FederatedQuery::ConnectionContent& content = *connection.mutable_content();
-    content = request.content();
-    *connection.mutable_meta() = CreateCommonMeta(connectionId, user, startTime, InitialRevision);
-
-    FederatedQuery::Internal::ConnectionInternal connectionInternal;
-    connectionInternal.set_cloud_id(cloudId);
 
     std::shared_ptr<std::pair<FederatedQuery::CreateConnectionResult, TAuditDetails<FederatedQuery::Connection>>> response = std::make_shared<std::pair<FederatedQuery::CreateConnectionResult, TAuditDetails<FederatedQuery::Connection>>>();
     response->first.set_connection_id(connectionId);
@@ -141,7 +191,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateConne
         auto overridBindingValidator = CreateConnectionOverrideBindingValidator(
             scope,
             content.name(),
-            permissions,
+            GetCreateConnectionPerimssions(event),
             user,
             YdbConnection->TablePathPrefix);
         validators.push_back(overridBindingValidator);
@@ -157,7 +207,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateConne
         NActors::TActivationContext::ActorSystem(),
         result,
         SelfId(),
-        ev,
+        std::move(ev),
         startTime,
         requestCounters,
         prepare,
@@ -167,6 +217,10 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateConne
             TDuration delta = TInstant::Now() - startTime;
             LWPROBE(CreateConnectionRequest, scope, user, delta, byteSize, future.GetValue());
         });
+}
+
+NYql::TIssues TControlPlaneStorageBase::ValidateRequest(TEvControlPlaneStorage::TEvListConnectionsRequest::TPtr& ev) const {
+    return ValidateEvent(ev);
 }
 
 void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListConnectionsRequest::TPtr& ev)
@@ -197,8 +251,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListConnect
         << NKikimr::MaskTicket(token) << " "
         << request.DebugString());
 
-    NYql::TIssues issues = ValidateEvent(ev);
-    if (issues) {
+    if (const auto& issues = ValidateRequest(ev)) {
         CPS_LOG_D(MakeLogPrefix(scope, user)
             << "ListConnectionsRequest, validation failed: "
             << NKikimr::MaskTicket(token) << " "
@@ -292,7 +345,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListConnect
         NActors::TActivationContext::ActorSystem(),
         result,
         SelfId(),
-        ev,
+        std::move(ev),
         startTime,
         requestCounters,
         prepare,
@@ -302,6 +355,10 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListConnect
             TDuration delta = TInstant::Now() - startTime;
             LWPROBE(ListConnectionsRequest, scope, user, delta, byteSize, future.GetValue());
         });
+}
+
+NYql::TIssues TControlPlaneStorageBase::ValidateRequest(TEvControlPlaneStorage::TEvDescribeConnectionRequest::TPtr& ev) const {
+    return ValidateEvent(ev);
 }
 
 void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeConnectionRequest::TPtr& ev)
@@ -331,8 +388,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeCon
         << NKikimr::MaskTicket(token) << " "
         << request.DebugString());
 
-    NYql::TIssues issues = ValidateEvent(ev);
-    if (issues) {
+    if (const auto& issues = ValidateRequest(ev)) {
         CPS_LOG_D(MakeLogPrefix(scope, user, connectionId)
             << "DescribeConnectionRequest, validation failed: "
             << NKikimr::MaskTicket(token)<< " "
@@ -386,7 +442,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeCon
         NActors::TActivationContext::ActorSystem(),
         result,
         SelfId(),
-        ev,
+        std::move(ev),
         startTime,
         requestCounters,
         prepare,
@@ -423,14 +479,14 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyConne
     CPS_LOG_T(MakeLogPrefix(scope, user, connectionId)
         << "ModifyConnectionRequest: "
         << NKikimr::MaskTicket(token)
-        << " " << request.DebugString());
+        << " " << SecureDebugString(request));
 
     NYql::TIssues issues = ValidateConnection(ev, false);
     if (issues) {
         CPS_LOG_D(MakeLogPrefix(scope, user, connectionId)
             << "ModifyConnectionRequest, validation failed: "
             << NKikimr::MaskTicket(token) << " "
-            << request.DebugString()
+            << SecureDebugString(request)
             << " error: " << issues.ToString());
         const TDuration delta = TInstant::Now() - startTime;
         SendResponseIssues<TEvControlPlaneStorage::TEvModifyConnectionResponse>(ev->Sender, issues, ev->Cookie, delta, requestCounters);
@@ -447,7 +503,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyConne
     );
 
     std::shared_ptr<std::pair<FederatedQuery::ModifyConnectionResult, TAuditDetails<FederatedQuery::Connection>>> response = std::make_shared<std::pair<FederatedQuery::ModifyConnectionResult, TAuditDetails<FederatedQuery::Connection>>>();
-    auto prepareParams = [=, config=Config, commonCounters=requestCounters.Common](const TVector<TResultSet>& resultSets) {
+    auto prepareParams = [=, this, config=Config, commonCounters=requestCounters.Common](const std::vector<TResultSet>& resultSets) {
         if (resultSets.size() != 1) {
             ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets.size() << ". Please contact internal support";
         }
@@ -582,7 +638,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyConne
         NActors::TActivationContext::ActorSystem(),
         result,
         SelfId(),
-        ev,
+        std::move(ev),
         startTime,
         requestCounters,
         prepare,
@@ -702,7 +758,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDeleteConne
         NActors::TActivationContext::ActorSystem(),
         result,
         SelfId(),
-        ev,
+        std::move(ev),
         startTime,
         requestCounters,
         prepare,

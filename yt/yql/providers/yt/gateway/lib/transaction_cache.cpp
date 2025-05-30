@@ -18,7 +18,7 @@ using namespace NYT;
 
 void TTransactionCache::TEntry::DeleteAtFinalizeUnlocked(const TString& table, bool isInternal)
 {
-    auto inserted = TablesToDeleteAtFinalize.insert(table);
+    auto inserted = TablesToDeleteAtFinalize.emplace(table, false);
     if (!isInternal && inserted.second) {
         if (++ExternalTempTablesCount > InflightTempTablesLimit) {
             YQL_LOG_CTX_THROW yexception() << "Too many temporary tables registered - limit is " << InflightTempTablesLimit;
@@ -28,14 +28,28 @@ void TTransactionCache::TEntry::DeleteAtFinalizeUnlocked(const TString& table, b
 
 bool TTransactionCache::TEntry::CancelDeleteAtFinalizeUnlocked(const TString& table, bool isInternal)
 {
-    auto erased = TablesToDeleteAtFinalize.erase(table);
-    if (!isInternal) {
-        YQL_ENSURE(erased <= ExternalTempTablesCount);
-        ExternalTempTablesCount -= erased;
+    auto it = TablesToDeleteAtFinalize.find(table);
+    bool present = it != TablesToDeleteAtFinalize.end();
+    if (present) {
+        if (!isInternal && !it->second) {
+            YQL_ENSURE(ExternalTempTablesCount > 0);
+            ExternalTempTablesCount--;
+        }
+        TablesToDeleteAtFinalize.erase(it);
     }
-    return erased != 0;
+    return present;
 }
 
+bool TTransactionCache::TEntry::AssumeAsDeletedAtFinalizeUnlocked(const TString& table) {
+    auto it = TablesToDeleteAtFinalize.find(table);
+    bool present = it != TablesToDeleteAtFinalize.end();
+    if (present && !it->second) {
+        YQL_ENSURE(ExternalTempTablesCount > 0);
+        ExternalTempTablesCount--;
+        it->second = true;
+    }
+    return present;
+}
 
 void TTransactionCache::TEntry::RemoveInternal(const TString& table) {
     bool existed;
@@ -57,7 +71,7 @@ void TTransactionCache::TEntry::DoRemove(const TString& table) {
 void TTransactionCache::TEntry::Finalize(const TString& clusterName) {
     NYT::ITransactionPtr binarySnapshotTx;
     decltype(SnapshotTxs) snapshotTxs;
-    THashSet<TString> toDelete;
+    THashMap<TString, bool> toDelete;
     decltype(CheckpointTxs) checkpointTxs;
     decltype(WriteTxs) writeTxs;
     with_lock(Lock_) {
@@ -86,7 +100,7 @@ void TTransactionCache::TEntry::Finalize(const TString& clusterName) {
         item.second->Abort();
     }
 
-    for (auto i : toDelete) {
+    for (auto& [i, _] : toDelete) {
         DoRemove(i);
     }
 
@@ -419,20 +433,19 @@ TTransactionCache::TEntry::TPtr TTransactionCache::TryGetEntry(const TString& se
     return {};
 }
 
-TTransactionCache::TEntry::TPtr TTransactionCache::GetOrCreateEntry(const TString& server, const TString& token,
+TTransactionCache::TEntry::TPtr TTransactionCache::GetOrCreateEntry(const TString& cluster, const TString& server, const TString& token,
     const TMaybe<TString>& impersonationUser, const TSpecProvider& specProvider, const TYtSettings::TConstPtr& config, IMetricsRegistryPtr metrics)
 {
     TEntry::TPtr createdEntry = nullptr;
-    NYT::TTransactionId externalTx = config->ExternalTx.Get().GetOrElse(TGUID());
+    NYT::TTransactionId externalTx = config->ExternalTx.Get(cluster).GetOrElse(TGUID());
     with_lock(Lock_) {
         auto it = TxMap_.find(server);
         if (it != TxMap_.end()) {
             return it->second;
         }
 
-        TString tmpFolder = GetTablesTmpFolder(*config);
-
         createdEntry = MakeIntrusive<TEntry>();
+        createdEntry->Cluster = cluster;
         createdEntry->Server = server;
         auto createClientOptions = TCreateClientOptions().Token(token);
         if (impersonationUser) {
@@ -441,13 +454,19 @@ TTransactionCache::TEntry::TPtr TTransactionCache::GetOrCreateEntry(const TStrin
         createdEntry->Client = CreateClient(server, createClientOptions);
         createdEntry->TransactionSpec = specProvider();
         if (externalTx) {
-            createdEntry->ExternalTx = createdEntry->Client->AttachTransaction(externalTx);
+            try {
+                createdEntry->ExternalTx = createdEntry->Client->AttachTransaction(externalTx);
+            } catch (const yexception& e) {
+                throw TErrorException(0) << e.what();
+            }
+
             createdEntry->Tx = createdEntry->ExternalTx->StartTransaction(TStartTransactionOptions().Attributes(createdEntry->TransactionSpec));
         } else {
             createdEntry->Tx = createdEntry->Client->StartTransaction(TStartTransactionOptions().Attributes(createdEntry->TransactionSpec));
         }
         createdEntry->CacheTx = createdEntry->Client;
         createdEntry->CacheTtl = config->QueryCacheTtl.Get().GetOrElse(TDuration::Days(7));
+        const TString tmpFolder = GetTablesTmpFolder(*config, cluster);
         if (!tmpFolder.empty()) {
             auto fullTmpFolder = AddPathPrefix(tmpFolder, NYT::TConfig::Get()->Prefix);
             bool existsGlobally = createdEntry->Client->Exists(fullTmpFolder);
@@ -466,9 +485,9 @@ TTransactionCache::TEntry::TPtr TTransactionCache::GetOrCreateEntry(const TStrin
         TxMap_.emplace(server, createdEntry);
     }
     if (externalTx) {
-        YQL_CLOG(INFO, ProviderYt) << "Attached to external tx " << GetGuidAsString(externalTx);
+        YQL_CLOG(INFO, ProviderYt) << "Attached to external tx " << GetGuidAsString(externalTx) << " on cluster " << cluster;
     }
-    YQL_CLOG(INFO, ProviderYt) << "Created tx " << GetGuidAsString(createdEntry->Tx->GetId()) << " on " << server;
+    YQL_CLOG(INFO, ProviderYt) << "Created tx " << GetGuidAsString(createdEntry->Tx->GetId()) << " on " << server << " cluster " << cluster;
     return createdEntry;
 }
 

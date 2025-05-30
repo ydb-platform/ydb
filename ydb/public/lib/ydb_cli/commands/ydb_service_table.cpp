@@ -6,11 +6,14 @@
 #include <ydb/public/lib/ydb_cli/common/query_stats.h>
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
 #include <ydb/public/lib/stat_visualization/flame_graph_builder.h>
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
 #include <library/cpp/json/json_prettifier.h>
+#include <library/cpp/json/json_writer.h>
+
 #include <google/protobuf/util/json_util.h>
 
+#include <util/string/escape.h>
 #include <util/string/split.h>
 #include <util/folder/path.h>
 #include <util/folder/dirut.h>
@@ -81,7 +84,7 @@ void TTableCommand::Config(TConfig& config) {
 NTable::TSession TTableCommand::GetSession(TConfig& config) {
     NTable::TTableClient client(CreateDriver(config));
     NTable::TCreateSessionResult result = client.GetSession(NTable::TCreateSessionSettings()).GetValueSync();
-    ThrowOnError(result);
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
     return result.GetSession();
 }
 
@@ -184,9 +187,13 @@ void TCommandCreateTable::Config(TConfig& config) {
         .StoreTrue(&AllowPromotion);
 }
 
-void TCommandCreateTable::Parse(TConfig& config) {
-    TClientCommand::Parse(config);
+void TCommandCreateTable::ExtractParams(TConfig& config) {
+    TClientCommand::ExtractParams(config);
     ParsePath(config, 0);
+}
+
+void TCommandCreateTable::Validate(TConfig& config) {
+    TClientCommand::Validate(config);
     if (!Columns.size()) {
         throw TMisuseException() << "At least one column should be provided";
     }
@@ -232,9 +239,9 @@ int TCommandCreateTable::Run(TConfig& config) {
             throw TMisuseException() << "Can't parse index \"" << index
                 << "\". Need exactly one colon. Expected format: \"<name>:<column1>[,<column2>,...]\"";
         }
-        TVector<TString> columns = StringSplitter(parts[1]).Split(',');
-        for (TString& column : columns) {
-            if (!column) {
+        std::vector<std::string> columns = StringSplitter(parts[1]).Split(',');
+        for (std::string& column : columns) {
+            if (column.empty()) {
                 throw TMisuseException() << "Can't parse index \"" << index
                     << "\". Empty column names found. Expected format: \"<name>:<column1>[,<column2>,...]\"";
             }
@@ -291,7 +298,7 @@ int TCommandCreateTable::Run(TConfig& config) {
         replicationPolicy.AllowPromotion(AllowPromotion);
     }
 
-    ThrowOnError(
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(
         GetSession(config).CreateTable(
             Path,
             builder.Build(),
@@ -312,13 +319,13 @@ void TCommandDropTable::Config(TConfig& config) {
     SetFreeArgTitle(0, "<table path>", "table to drop path");
 }
 
-void TCommandDropTable::Parse(TConfig& config) {
-    TClientCommand::Parse(config);
+void TCommandDropTable::ExtractParams(TConfig& config) {
+    TClientCommand::ExtractParams(config);
     ParsePath(config, 0);
 }
 
 int TCommandDropTable::Run(TConfig& config) {
-    ThrowOnError(
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(
         GetSession(config).DropTable(
             Path,
             FillSettings(NTable::TDropTableSettings())
@@ -365,6 +372,8 @@ void TCommandExecuteQuery::Config(TConfig& config) {
     config.Opts->AddLongOption('q', "query", "Text of query to execute").RequiredArgument("[String]").StoreResult(&Query);
     config.Opts->AddLongOption('f', "file", "Path to file with query text to execute")
         .RequiredArgument("PATH").StoreResult(&QueryFile);
+    config.Opts->AddLongOption("diagnostics-file", "Path to file where the diagnostics will be saved.")
+        .RequiredArgument("[String]").StoreResult(&DiagnosticsFile);
 
     AddOutputFormats(config, {
         EDataFormat::Pretty,
@@ -452,7 +461,7 @@ int TCommandExecuteQuery::ExecuteDataQuery(TConfig& config) {
 
     if (!Parameters.empty() || InputParamStream) {
         THolder<TParamsBuilder> paramBuilder;
-        while (GetNextParams(driver, Query, paramBuilder)) {
+        while (GetNextParams(driver, Query, paramBuilder, config.IsVerbose())) {
             TParams params = paramBuilder->Build();
             auto operation = [this, &txSettings, &params, &settings, &asyncResult](NTable::TSession session) {
                 auto promise = NThreading::NewPromise<NTable::TDataQueryResult>();
@@ -469,7 +478,7 @@ int TCommandExecuteQuery::ExecuteDataQuery(TConfig& config) {
                 });
             };
             auto status = client.RetryOperation(std::move(operation)).GetValueSync();
-            ThrowOnError(status);
+            NStatusHelpers::ThrowOnErrorOrPrintIssues(status);
             auto result = asyncResult.GetValueSync();
             PrintDataQueryResponse(result);
         }
@@ -488,7 +497,7 @@ int TCommandExecuteQuery::ExecuteDataQuery(TConfig& config) {
             });
         };
         auto status = client.RetryOperation(std::move(operation)).GetValueSync();
-        ThrowOnError(status);
+        NStatusHelpers::ThrowOnErrorOrPrintIssues(status);
         auto result = asyncResult.GetValueSync();
         PrintDataQueryResponse(result);
     }
@@ -498,7 +507,7 @@ int TCommandExecuteQuery::ExecuteDataQuery(TConfig& config) {
 void TCommandExecuteQuery::PrintDataQueryResponse(NTable::TDataQueryResult& result) {
     {
         TResultSetPrinter printer(OutputFormat);
-        const TVector<TResultSet>& resultSets = result.GetResultSets();
+        const std::vector<TResultSet>& resultSets = result.GetResultSets();
         for (auto resultSetIt = resultSets.begin(); resultSetIt != resultSets.end(); ++resultSetIt) {
             if (resultSetIt != resultSets.begin()) {
                 printer.Reset();
@@ -507,19 +516,57 @@ void TCommandExecuteQuery::PrintDataQueryResponse(NTable::TDataQueryResult& resu
         }
     } // TResultSetPrinter destructor should be called before printing stats
 
-    const TMaybe<NTable::TQueryStats>& stats = result.GetStats();
-    if (stats.Defined()) {
-        Cout << Endl << "Statistics:" << Endl << stats->ToString();
-        PrintFlameGraph(stats->GetPlan());
+    std::optional<std::string> statsStr;
+    std::optional<std::string> plan;
+    std::optional<std::string> ast;
+    std::optional<std::string> meta;
+
+    const std::optional<NTable::TQueryStats>& stats = result.GetStats();
+    if (stats.has_value()) {
+        if (stats->GetMeta()) {
+            meta = stats->GetMeta();
+        }
+        if (stats->GetPlan()) {
+            plan = stats->GetPlan();
+        }
+        ast = stats->GetAst();
+        statsStr = stats->ToString();
+        Cout << Endl << "Statistics:" << Endl << statsStr;
+        PrintFlameGraph(plan);
     }
-    if (FlameGraphPath && !stats.Defined())
-    {
+
+    if (!DiagnosticsFile.empty()) {
+        TFileOutput file(DiagnosticsFile);
+
+        NJson::TJsonValue diagnosticsJson(NJson::JSON_MAP);
+
+        if (statsStr) {
+            diagnosticsJson.InsertValue("stats", *statsStr);
+        }
+        if (ast) {
+            diagnosticsJson.InsertValue("ast", *ast);
+        }
+        if (plan) {
+            NJson::TJsonValue planJson;
+            NJson::ReadJsonTree(*plan, &planJson, true);
+            diagnosticsJson.InsertValue("plan", planJson);
+        }
+        if (meta) {
+            NJson::TJsonValue metaJson;
+            NJson::ReadJsonTree(*meta, &metaJson, true);
+            metaJson.InsertValue("query_text", EscapeC(Query));
+            diagnosticsJson.InsertValue("meta", metaJson);
+        }
+        file << NJson::PrettifyJson(NJson::WriteJson(diagnosticsJson, true), false);
+    }
+
+    if (FlameGraphPath && !stats.has_value()) {
         Cout << Endl << "Flame graph is available for full or profile stats only" << Endl;
     }
 }
 
 int TCommandExecuteQuery::ExecuteSchemeQuery(TConfig& config) {
-    ThrowOnError(
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(
         GetSession(config).ExecuteSchemeQuery(
             Query,
             FillSettings(NTable::TExecSchemeQuerySettings())
@@ -631,11 +678,11 @@ namespace {
         if constexpr (std::is_same_v<TQueryPart, NTable::TScanQueryPart>) {
             return part.HasQueryStats();
         } else if constexpr (std::is_same_v<TQueryPart, NQuery::TExecuteQueryPart>) {
-            return !part.GetStats().Empty();
+            return part.GetStats().has_value();
         }
         Y_UNREACHABLE();
     }
-    
+
     template <typename TQueryPart>
     const NQuery::TExecStats& GetStats(const TQueryPart& part) {
         if constexpr (std::is_same_v<TQueryPart, NTable::TScanQueryPart>) {
@@ -680,7 +727,7 @@ int TCommandExecuteQuery::ExecuteQueryImpl(TConfig& config) {
     SetInterruptHandlers();
     if (!Parameters.empty() || InputParamStream) {
         THolder<TParamsBuilder> paramBuilder;
-        while (GetNextParams(driver, Query, paramBuilder)) {
+        while (GetNextParams(driver, Query, paramBuilder, config.IsVerbose())) {
             auto operation = [this, &paramBuilder, &settings, &asyncResult](TClient client) {
                 auto promise = NThreading::NewPromise<TPartIterator<TClient>>();
                 asyncResult = promise.GetFuture();
@@ -697,7 +744,7 @@ int TCommandExecuteQuery::ExecuteQueryImpl(TConfig& config) {
                 });
             };
             auto status = RunOperation(client, operation).GetValueSync();
-            ThrowOnError(status);
+            NStatusHelpers::ThrowOnErrorOrPrintIssues(status);
             auto result = asyncResult.GetValueSync();
             if (!PrintQueryResponse(result)) {
                 return EXIT_FAILURE;
@@ -719,7 +766,7 @@ int TCommandExecuteQuery::ExecuteQueryImpl(TConfig& config) {
             });
         };
         auto status = RunOperation(client, operation).GetValueSync();
-        ThrowOnError(status);
+        NStatusHelpers::ThrowOnErrorOrPrintIssues(status);
         auto result = asyncResult.GetValueSync();
         if (!PrintQueryResponse(result)) {
             return EXIT_FAILURE;
@@ -730,8 +777,10 @@ int TCommandExecuteQuery::ExecuteQueryImpl(TConfig& config) {
 
 template <typename TIterator>
 bool TCommandExecuteQuery::PrintQueryResponse(TIterator& result) {
-    TMaybe<TString> stats;
-    TMaybe<TString> fullStats;
+    std::optional<std::string> stats;
+    std::optional<std::string> fullStats;
+    std::optional<std::string> meta;
+    std::optional<std::string> ast;
     {
         TResultSetPrinter printer(OutputFormat, &IsInterrupted);
 
@@ -748,9 +797,13 @@ bool TCommandExecuteQuery::PrintQueryResponse(TIterator& result) {
             if (HasStats(streamPart)) {
                 const auto& queryStats = GetStats(streamPart);
                 stats = queryStats.ToString();
+                ast = queryStats.GetAst();
 
                 if (queryStats.GetPlan()) {
                     fullStats = queryStats.GetPlan();
+                }
+                if (queryStats.GetMeta()) {
+                    meta = queryStats.GetMeta();
                 }
             }
         }
@@ -764,7 +817,32 @@ bool TCommandExecuteQuery::PrintQueryResponse(TIterator& result) {
         Cout << Endl << "Full statistics:" << Endl;
 
         TQueryPlanPrinter queryPlanPrinter(OutputFormat, /* analyzeMode */ true);
-        queryPlanPrinter.Print(*fullStats);
+        queryPlanPrinter.Print(TString{*fullStats});
+    }
+
+    if (!DiagnosticsFile.empty()) {
+        TFileOutput file(DiagnosticsFile);
+
+        NJson::TJsonValue diagnosticsJson(NJson::JSON_MAP);
+
+        if (stats) {
+            diagnosticsJson.InsertValue("stats", *stats);
+        }
+        if (ast) {
+            diagnosticsJson.InsertValue("ast", *ast);
+        }
+        if (fullStats) {
+            NJson::TJsonValue planJson;
+            NJson::ReadJsonTree(*fullStats, &planJson, true);
+            diagnosticsJson.InsertValue("plan", planJson);
+        }
+        if (meta) {
+            NJson::TJsonValue metaJson;
+            NJson::ReadJsonTree(*meta, &metaJson, true);
+            metaJson.InsertValue("query_text", EscapeC(Query));
+            diagnosticsJson.InsertValue("meta", metaJson);
+        }
+        file << NJson::PrettifyJson(NJson::WriteJson(diagnosticsJson, true), false);
     }
 
     PrintFlameGraph(fullStats);
@@ -776,7 +854,7 @@ bool TCommandExecuteQuery::PrintQueryResponse(TIterator& result) {
     return true;
 }
 
-void TCommandExecuteQuery::PrintFlameGraph(const TMaybe<TString>& plan)
+void TCommandExecuteQuery::PrintFlameGraph(const std::optional<std::string>& plan)
 {
     if (!FlameGraphPath) {
         return;
@@ -790,7 +868,7 @@ void TCommandExecuteQuery::PrintFlameGraph(const TMaybe<TString>& plan)
         return;
     }
     try {
-        NKikimr::NVisual::GenerateFlameGraphSvg(FlameGraphPath.GetRef(), *plan);
+        NKikimr::NVisual::GenerateFlameGraphSvg(FlameGraphPath.GetRef(), TString{*plan});
         Cout << Endl << "Resource usage flame graph is successfully saved to " << FlameGraphPath << Endl;
     }
     catch (const yexception &ex) {
@@ -823,7 +901,7 @@ void TCommandExplain::Config(TConfig& config) {
     config.Opts->AddLongOption('t', "type", "Query type [data, scan, generic]")
         .RequiredArgument("[String]").DefaultValue("data").StoreResult(&QueryType);
     config.Opts->AddLongOption("analyze", "Run query and collect execution statistics")
-        .NoArgument().SetFlag(&Analyze);
+        .StoreTrue(&Analyze);
     config.Opts->AddLongOption("flame-graph", "Builds resource usage flame graph, based on analyze info")
             .RequiredArgument("PATH").StoreResult(&FlameGraphPath);
     config.Opts->AddLongOption("collect-diagnostics", "Collects diagnostics and saves it to file")
@@ -840,7 +918,7 @@ void TCommandExplain::Config(TConfig& config) {
     config.SetFreeArgsNum(0);
 }
 
-void TCommandExplain::SaveDiagnosticsToFile(const TString& diagnostics) {
+void TCommandExplain::SaveDiagnosticsToFile(const std::string& diagnostics) {
     TFileOutput file(TStringBuilder() << "diagnostics_" << TGUID::Create().AsGuidString() << ".txt");
     file << diagnostics;
 }
@@ -877,7 +955,7 @@ int TCommandExplain::Run(TConfig& config) {
         }
 
         auto result = client.StreamExecuteScanQuery(Query, settings).GetValueSync();
-        ThrowOnError(result);
+        NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
 
         TString diagnostics;
 
@@ -919,7 +997,7 @@ int TCommandExplain::Run(TConfig& config) {
             Query,
             NQuery::TTxControl::BeginTx().CommitTx(),
             settings).GetValueSync();
-        ThrowOnError(result);
+        NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
 
         SetInterruptHandlers();
         while (!IsInterrupted()) {
@@ -946,7 +1024,7 @@ int TCommandExplain::Run(TConfig& config) {
             NTable::TTxControl::BeginTx(NTable::TTxSettings::SerializableRW()).CommitTx(),
             FillSettings(settings)
         ).ExtractValueSync();
-        ThrowOnError(result);
+        NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
         planJson = result.GetQueryPlan();
         if (auto stats = result.GetStats()) {
             auto proto = NYdb::TProtoAccessor::GetProto(*stats);
@@ -962,7 +1040,7 @@ int TCommandExplain::Run(TConfig& config) {
             Query,
             settings
         ).GetValueSync();
-        ThrowOnError(result);
+        NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
         planJson = result.GetPlan();
         ast = result.GetAst();
 
@@ -1006,13 +1084,13 @@ void TCommandReadTable::Config(TConfig& config) {
     TYdbCommand::Config(config);
 
     config.Opts->AddLongOption("ordered", "Result should be ordered by primary key")
-        .NoArgument().SetFlag(&Ordered);
+        .StoreTrue(&Ordered);
     config.Opts->AddLongOption("limit", "Limit result rows count")
         .RequiredArgument("NUM").StoreResult(&RowLimit);
     config.Opts->AddLongOption("columns", "Comma separated list of columns to read")
         .RequiredArgument("CSV").StoreResult(&Columns);
     config.Opts->AddLongOption("count-only", "Print only rows count")
-        .NoArgument().SetFlag(&CountOnly);
+        .StoreTrue(&CountOnly);
     config.Opts->AddLongOption("from", "Key prefix value to start read from.\n"
             "  Format should be a json-string containing array of elements representing a tuple - key prefix.\n"
             "  Option \"--input-format\" defines how to parse binary strings.\n"
@@ -1026,10 +1104,10 @@ void TCommandReadTable::Config(TConfig& config) {
             "  Same format as for \"--from\" option.")
         .RequiredArgument("JSON").StoreResult(&To);
     config.Opts->AddLongOption("from-exclusive", "Don't include the left border element into response")
-        .NoArgument().SetFlag(&FromExclusive);
+        .StoreTrue(&FromExclusive);
     config.Opts->AddLongOption("to-exclusive", "Don't include the right border element into response")
-        .NoArgument().SetFlag(&ToExclusive);
-    
+        .StoreTrue(&ToExclusive);
+
     AddLegacyJsonInputFormats(config);
 
     AddOutputFormats(config, {
@@ -1051,6 +1129,10 @@ void TCommandReadTable::Parse(TConfig& config) {
     TClientCommand::Parse(config);
     ParseInputFormats();
     ParseOutputFormats();
+}
+
+void TCommandReadTable::ExtractParams(TConfig& config) {
+    TClientCommand::ExtractParams(config);
     ParsePath(config, 0);
 }
 
@@ -1099,12 +1181,12 @@ int TCommandReadTable::Run(TConfig& config) {
         readTableSettings.Ordered(Ordered);
     }
     if (Columns) {
-        readTableSettings.Columns_ = StringSplitter(Columns).Split(',').ToList<TString>();
+        readTableSettings.Columns_ = StringSplitter(Columns).Split(',').ToList<std::string>();
     }
 
     if (From || To) {
         NTable::TCreateSessionResult sessionResult = client.GetSession(NTable::TCreateSessionSettings()).GetValueSync();
-        ThrowOnError(sessionResult);
+        NStatusHelpers::ThrowOnErrorOrPrintIssues(sessionResult);
         NTable::TDescribeTableResult tableResult = sessionResult.GetSession().DescribeTable(Path).GetValueSync();
         NTable::TTableDescription tableDescription = tableResult.GetTableDescription();
 
@@ -1125,7 +1207,7 @@ int TCommandReadTable::Run(TConfig& config) {
 
     TMaybe<NTable::TTablePartIterator> tableIterator;
 
-    ThrowOnError(client.RetryOperationSync([this, &readTableSettings, &tableIterator](NTable::TSession session) {
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(client.RetryOperationSync([this, &readTableSettings, &tableIterator](NTable::TSession session) {
         NTable::TTablePartIterator result = session.ReadTable(Path, readTableSettings).GetValueSync();
 
         if (result.IsSuccess()) {
@@ -1193,21 +1275,25 @@ void TCommandIndexAddGlobal::Config(TConfig& config) {
 void TCommandIndexAddGlobal::Parse(TConfig& config) {
     TClientCommand::Parse(config);
     ParseOutputFormats();
+}
+
+void TCommandIndexAddGlobal::ExtractParams(TConfig& config) {
+    TClientCommand::ExtractParams(config);
     ParsePath(config, 0);
 }
 
 int TCommandIndexAddGlobal::Run(TConfig& config) {
     NTable::TTableClient client(CreateDriver(config));
-    auto columns = StringSplitter(Columns).Split(',').ToList<TString>();
-    TVector<TString> dataColumns;
+    auto columns = StringSplitter(Columns).Split(',').ToList<std::string>();
+    std::vector<std::string> dataColumns;
     if (DataColumns) {
-        dataColumns = StringSplitter(DataColumns).Split(',').ToList<TString>();
+        dataColumns = StringSplitter(DataColumns).Split(',').ToList<std::string>();
     }
 
     auto settings = NTable::TAlterTableSettings()
         .AppendAddIndexes({NTable::TIndexDescription(IndexName, IndexType, columns, dataColumns)});
     auto session = client.GetSession().GetValueSync();
-    ThrowOnError(session);
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(session);
     auto opResult = session.GetSession().AlterTableLong(Path, settings).GetValueSync();
     ThrowOnError(opResult);
     PrintOperation(opResult, OutputFormat);
@@ -1237,8 +1323,8 @@ void TCommandIndexDrop::Config(TConfig& config) {
     SetFreeArgTitle(0, "<table path>", "Path to a table");
 }
 
-void TCommandIndexDrop::Parse(TConfig& config) {
-    TClientCommand::Parse(config);
+void TCommandIndexDrop::ExtractParams(TConfig& config) {
+    TClientCommand::ExtractParams(config);
     ParsePath(config, 0);
 }
 
@@ -1248,9 +1334,9 @@ int TCommandIndexDrop::Run(TConfig& config) {
     auto settings = NTable::TAlterTableSettings()
         .AppendDropIndexes({IndexName});
     auto session = client.GetSession().GetValueSync();
-    ThrowOnError(session);
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(session);
     auto result = session.GetSession().AlterTable(Path, settings).GetValueSync();
-    ThrowOnError(result);
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
 
     return EXIT_SUCCESS;
 }
@@ -1275,8 +1361,8 @@ void TCommandIndexRename::Config(TConfig& config) {
     SetFreeArgTitle(0, "<table path>", "Path to a table");
 }
 
-void TCommandIndexRename::Parse(TConfig& config) {
-    TClientCommand::Parse(config);
+void TCommandIndexRename::ExtractParams(TConfig& config) {
+    TClientCommand::ExtractParams(config);
     ParsePath(config, 0);
 }
 
@@ -1286,9 +1372,9 @@ int TCommandIndexRename::Run(TConfig& config) {
     auto settings = NTable::TAlterTableSettings()
         .AppendRenameIndexes({IndexName, NewIndexName, Replace});
     auto session = client.GetSession().GetValueSync();
-    ThrowOnError(session);
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(session);
     auto result = session.GetSession().AlterTable(Path, settings).GetValueSync();
-    ThrowOnError(result);
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
 
     return EXIT_SUCCESS;
 }
@@ -1302,7 +1388,7 @@ void TCommandAttributeAdd::Config(TConfig& config) {
     TYdbCommand::Config(config);
 
     config.Opts->AddLongOption("attribute", "[At least one] key=value pair(s) to add.")
-        .RequiredArgument("KEY=VALUE").KVHandler([&](TString key, TString value) {
+        .RequiredArgument("KEY=VALUE").GetOpt().KVHandler([&](TString key, TString value) {
             Attributes[key] = value;
         });
 
@@ -1310,8 +1396,8 @@ void TCommandAttributeAdd::Config(TConfig& config) {
     SetFreeArgTitle(0, "<table path>", "Path to a table");
 }
 
-void TCommandAttributeAdd::Parse(TConfig& config) {
-    TClientCommand::Parse(config);
+void TCommandAttributeAdd::ExtractParams(TConfig& config) {
+    TClientCommand::ExtractParams(config);
     ParsePath(config, 0);
 }
 
@@ -1322,9 +1408,9 @@ int TCommandAttributeAdd::Run(TConfig& config) {
         .AlterAttributes(Attributes);
 
     auto session = client.GetSession().GetValueSync();
-    ThrowOnError(session);
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(session);
     auto result = session.GetSession().AlterTable(Path, settings).GetValueSync();
-    ThrowOnError(result);
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
 
     return EXIT_SUCCESS;
 }
@@ -1337,14 +1423,14 @@ void TCommandAttributeDrop::Config(TConfig& config) {
     TYdbCommand::Config(config);
 
     config.Opts->AddLongOption("attributes", "Attribute keys to drop.")
-        .RequiredArgument("KEY,[KEY...]").SplitHandler(&AttributeKeys, ',');
+        .RequiredArgument("KEY,[KEY...]").GetOpt().SplitHandler(&AttributeKeys, ',');
 
     config.SetFreeArgsNum(1);
     SetFreeArgTitle(0, "<table path>", "Path to a table");
 }
 
-void TCommandAttributeDrop::Parse(TConfig& config) {
-    TClientCommand::Parse(config);
+void TCommandAttributeDrop::ExtractParams(TConfig& config) {
+    TClientCommand::ExtractParams(config);
     ParsePath(config, 0);
 }
 
@@ -1359,9 +1445,9 @@ int TCommandAttributeDrop::Run(TConfig& config) {
     alterAttrs.EndAlterAttributes();
 
     auto session = client.GetSession().GetValueSync();
-    ThrowOnError(session);
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(session);
     auto result = session.GetSession().AlterTable(Path, settings).GetValueSync();
-    ThrowOnError(result);
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
 
     return EXIT_SUCCESS;
 }
@@ -1376,7 +1462,7 @@ void TCommandTtlSet::Config(TConfig& config) {
     config.Opts->AddLongOption("column", "Name of date- or integral-type column to be used to calculate expiration threshold.")
         .RequiredArgument("NAME").StoreResult(&ColumnName);
     config.Opts->AddLongOption("expire-after", "Additional time that must pass since expiration threshold.")
-        .RequiredArgument("SECONDS").DefaultValue(0).Handler1T<TDuration::TValue>(0, [this](const TDuration::TValue& arg) {
+        .RequiredArgument("SECONDS").DefaultValue(0).GetOpt().Handler1T<TDuration::TValue>(0, [this](const TDuration::TValue& arg) {
             ExpireAfter = TDuration::Seconds(arg);
         });
 
@@ -1385,7 +1471,7 @@ void TCommandTtlSet::Config(TConfig& config) {
         << "Interpretation of the value stored in integral-type column." << Endl
         << "Allowed units: " << allowedUnits;
     config.Opts->AddLongOption("unit", unitHelp)
-        .RequiredArgument("STRING").Handler1T<TString>("", [this, allowedUnits](const TString& arg) {
+        .RequiredArgument("STRING").GetOpt().Handler1T<TString>("", [this, allowedUnits](const TString& arg) {
             if (!arg) {
                 return;
             }
@@ -1399,7 +1485,7 @@ void TCommandTtlSet::Config(TConfig& config) {
         });
 
     config.Opts->AddLongOption("run-interval", "[Advanced] How often to run cleanup operation on the same partition.")
-        .RequiredArgument("SECONDS").Handler1T<TDuration::TValue>([this](const TDuration::TValue& arg) {
+        .RequiredArgument("SECONDS").GetOpt().Handler1T<TDuration::TValue>([this](const TDuration::TValue& arg) {
             RunInterval = TDuration::Seconds(arg);
         });
 
@@ -1407,8 +1493,8 @@ void TCommandTtlSet::Config(TConfig& config) {
     SetFreeArgTitle(0, "<table path>", "Path to a table");
 }
 
-void TCommandTtlSet::Parse(TConfig& config) {
-    TClientCommand::Parse(config);
+void TCommandTtlSet::ExtractParams(TConfig& config) {
+    TClientCommand::ExtractParams(config);
     ParsePath(config, 0);
 }
 
@@ -1431,9 +1517,9 @@ int TCommandTtlSet::Run(TConfig& config) {
         .EndAlterTtlSettings();
 
     auto session = client.GetSession().GetValueSync();
-    ThrowOnError(session);
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(session);
     auto result = session.GetSession().AlterTable(Path, settings).GetValueSync();
-    ThrowOnError(result);
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
 
     return EXIT_SUCCESS;
 }
@@ -1448,8 +1534,8 @@ void TCommandTtlReset::Config(TConfig& config) {
     SetFreeArgTitle(0, "<table path>", "Path to a table");
 }
 
-void TCommandTtlReset::Parse(TConfig& config) {
-    TClientCommand::Parse(config);
+void TCommandTtlReset::ExtractParams(TConfig& config) {
+    TClientCommand::ExtractParams(config);
     ParsePath(config, 0);
 }
 
@@ -1462,9 +1548,9 @@ int TCommandTtlReset::Run(TConfig& config) {
         .EndAlterTtlSettings();
 
     auto session = client.GetSession().GetValueSync();
-    ThrowOnError(session);
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(session);
     auto result = session.GetSession().AlterTable(Path, settings).GetValueSync();
-    ThrowOnError(result);
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
 
     return EXIT_SUCCESS;
 }

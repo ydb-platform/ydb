@@ -1,5 +1,6 @@
 #pragma once
 #include "defs.h"
+#include "util_fmt_abort.h"
 #include <ydb/core/util/cache_cache_iface.h>
 #include <library/cpp/monlib/counters/counters.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
@@ -21,7 +22,7 @@ class TSwitchableCache : public ICacheCache<TPage> {
             , Cache(std::move(cache))
             , SizeCounter(sizeCounter)
         {
-            Y_ABORT_UNLESS(GetSize() == 0);
+            Y_ENSURE(GetSize() == 0);
         }
 
         TIntrusiveList<TPage> EvictNext() {
@@ -34,7 +35,7 @@ class TSwitchableCache : public ICacheCache<TPage> {
                 TPageTraits::SetCacheId(page, Id);
                 SizeCounter->Add(TPageTraits::GetSize(page));
             } else {
-                Y_ABORT_UNLESS(cacheId == Id);
+                Y_ENSURE(cacheId == Id);
             }
 
             return ProcessEvictedList(Cache->Touch(page));
@@ -43,7 +44,7 @@ class TSwitchableCache : public ICacheCache<TPage> {
         void Erase(TPage* page) {            
             ui32 cacheId = TPageTraits::GetCacheId(page);
             if (cacheId != 0) {
-                Y_ABORT_UNLESS(cacheId == Id);
+                Y_ENSURE(cacheId == Id);
                 SizeCounter->Sub(TPageTraits::GetSize(page));
                 TPageTraits::SetCacheId(page, 0);
             }
@@ -69,7 +70,7 @@ class TSwitchableCache : public ICacheCache<TPage> {
 
             for (auto& page_ : evictedList) {
                 TPage* page = &page_;
-                Y_ABORT_UNLESS(TPageTraits::GetCacheId(page) == Id);
+                Y_ENSURE(TPageTraits::GetCacheId(page) == Id);
                 TPageTraits::SetCacheId(page, 0);
                 evictedSize += TPageTraits::GetSize(page);
             }
@@ -115,7 +116,7 @@ public:
         while (Y_UNLIKELY(Caches.size() > 1)) {
             auto result = Caches.front().EvictNext();
             if (!result) {
-                Y_ABORT_UNLESS(Caches.front().GetSize() == 0);
+                Y_ENSURE(Caches.front().GetSize() == 0);
                 Caches.pop_front();
             } else {
                 return result;
@@ -198,7 +199,7 @@ private:
                     return cache;
                 }
             }
-            Y_ABORT("Failed to locate page cache");
+            Y_TABLET_ERROR("Failed to locate page cache");
         }
     }
 
@@ -207,7 +208,7 @@ private:
         while (Caches.size() > 1 && rotatedPagesCount < RotatePagesPerCallCount) {
             auto rotatedList = Caches.front().EvictNext();
             if (!rotatedList) {
-                Y_ABORT_UNLESS(Caches.front().GetSize() == 0);
+                Y_ENSURE(Caches.front().GetSize() == 0);
                 Caches.pop_front();
                 continue;
             }

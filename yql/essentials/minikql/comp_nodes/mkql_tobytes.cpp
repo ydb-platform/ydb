@@ -27,13 +27,14 @@ public:
     }
 #ifndef MKQL_DISABLE_CODEGEN
     Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* value, BasicBlock*& block) const {
+        auto& context = ctx.Codegen.GetContext();
         const uint64_t one[] = {0ULL, sizeof(Type) << 48ULL};
         const auto size = ConstantInt::get(value->getType(), APInt(128, 2, one));
         const uint64_t two[] = {0xFFFFFFFFFFFFFFFFULL, 0xFF00FFFFFFFFFFFFULL};
         const auto mask = ConstantInt::get(value->getType(), APInt(128, 2, two));
         const auto result = BinaryOperator::CreateOr(BinaryOperator::CreateAnd(value, mask, "and", block), size, "or", block);
         if constexpr (IsOptional)
-            return SelectInst::Create(IsExists(value, block), result, GetEmpty(ctx.Codegen.GetContext()), "select", block);
+            return SelectInst::Create(IsExists(value, block, context), result, GetEmpty(context), "select", block);
         return result;
     }
 #endif

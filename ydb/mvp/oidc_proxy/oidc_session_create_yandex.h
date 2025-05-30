@@ -17,14 +17,14 @@ public:
                                 const TOpenIdConnectSettings& settings);
 
     void RequestSessionToken(const TString& code) override;
-    void ProcessSessionToken(const TString& sessionToken, const NActors::TActorContext& ctx) override;
+    void ProcessSessionToken(const NJson::TJsonValue& jsonValue) override;
     void HandleCreateSession(TEvPrivate::TEvCreateSessionResponse::TPtr event);
     void HandleError(TEvPrivate::TEvErrorResponse::TPtr event);
 
 private:
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(NHttp::TEvHttpProxy::TEvHttpIncomingResponse, Handle);
+            hFunc(NHttp::TEvHttpProxy::TEvHttpIncomingResponse, Handle);
             hFunc(TEvPrivate::TEvCreateSessionResponse, HandleCreateSession);
             hFunc(TEvPrivate::TEvErrorResponse, HandleError);
         }

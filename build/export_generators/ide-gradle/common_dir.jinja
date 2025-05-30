@@ -1,0 +1,5 @@
+{%- if common_dir -%}
+{%-     set common_dir_classpath = '":' + common_dir|replace("/", ":") -%}
+{%- else -%}
+{%-     set common_dir_classpath = false -%}
+{%- endif -%}

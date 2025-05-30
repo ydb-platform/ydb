@@ -10,6 +10,7 @@
 #include <yql/essentials/public/udf/udf_registrator.h>
 
 #include <yql/essentials/public/issue/yql_issue.h>
+#include <yql/essentials/public/langver/yql_langver.h>
 #include <library/cpp/yson/node/node.h>
 
 #include <library/cpp/logger/priority.h>
@@ -268,10 +269,23 @@ namespace NYql {
             /// Reuse allocated workers
             bool UseWorkerPool;
 
+            /// Use Antlr4 parser (for migration)
+            bool UseAntlr4;
+
+            /// Language version
+            TLangVersion LangVer;
+
         public:
             TProgramFactoryOptions();
 
         public:
+            /**
+             * Set language version for queries
+             *
+             * @return reference to self, to allow method chaining.
+             */
+            TProgramFactoryOptions& SetLanguageVersion(TLangVersion langver);
+
             /**
              * Set a new path to a directory with UDFs.
              *

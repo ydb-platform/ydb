@@ -3,6 +3,7 @@
 #include "flat_page_label.h"
 #include "flat_bloom_hash.h"
 #include "util_deref.h"
+#include "util_fmt_abort.h"
 
 namespace NKikimr {
 namespace NTable {
@@ -29,12 +30,13 @@ namespace NPage {
         {
             const auto got = NPage::TLabelWrapper().Read(Raw, EPage::Bloom);
 
-            Y_ABORT_UNLESS(got == ECodec::Plain && got.Version == 0);
+            Y_ENSURE(got == ECodec::Plain && got.Version == 0);
 
             auto *header = TDeref<THeader>::At(got.Page.data(), 0);
 
-            if (sizeof(THeader) > got.Page.size())
-                Y_ABORT("NPage::TBloom header is out of its blob");
+            if (sizeof(THeader) > got.Page.size()) {
+                Y_TABLET_ERROR("NPage::TBloom header is out of its blob");
+            }
 
             auto *ptr = TDeref<ui64>::At(got.Page.data(), sizeof(THeader));
 
@@ -43,13 +45,13 @@ namespace NPage {
             Array = { ptr, (got.Page.size() - sizeof(THeader)) / sizeof(ui64) };
 
             if (Items == 0) {
-                Y_ABORT("NPage::TBloom page has zero items in index");
+                Y_TABLET_ERROR("NPage::TBloom page has zero items in index");
             } else if (Hashes == 0) {
-                Y_ABORT("NPage::TBloom page has zero hash count");
+                Y_TABLET_ERROR("NPage::TBloom page has zero hash count");
             } else if (ui64(Array.size()) << 6 != header->Items) {
-                Y_ABORT("Items in TBloom header isn't match with array");
+                Y_TABLET_ERROR("Items in TBloom header isn't match with array");
             } else if (header->Type != 0) {
-                Y_ABORT("NPage::TBloom page made with unknown hash type");
+                Y_TABLET_ERROR("NPage::TBloom page made with unknown hash type");
             }
         }
 
@@ -58,7 +60,7 @@ namespace NPage {
             return { Items, Hashes };
         }
 
-        bool MightHave(TArrayRef<const char> raw) const noexcept
+        bool MightHave(TArrayRef<const char> raw) const
         {
             NBloom::THash hash(raw);
 

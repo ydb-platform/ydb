@@ -1,17 +1,3 @@
---- contrib/python/psutil/py3/psutil/_pslinux.py	(index)
-+++ contrib/python/psutil/py3/psutil/_pslinux.py	(working tree)
-@@ -322,7 +322,10 @@ try:
- except ImportError:
-     import ctypes
- 
--    libc = ctypes.CDLL(None, use_errno=True)
-+    try:
-+        libc = ctypes.CDLL(None, use_errno=True)
-+    except:
-+        libc = None
- 
-     if hasattr(libc, "prlimit"):
- 
 --- contrib/python/psutil/py3/psutil/arch/windows/disk.c	(index)
 +++ contrib/python/psutil/py3/psutil/arch/windows/disk.c	(working tree)
 @@ -7,6 +7,7 @@

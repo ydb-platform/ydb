@@ -83,11 +83,13 @@ public:
                 continue; // ignore incorrect report
             }
 
-            TPDiskId pdiskId(record.GetNodeId(), report.GetPDiskId());
+            const TPDiskId pdiskId(record.GetNodeId(), report.GetPDiskId());
 
             TPDiskInfo *pdisk = State->PDisks.FindForUpdate(pdiskId);
             if (!pdisk) {
                 continue;
+            } else if (report.HasPDiskGuid() && pdisk->Guid != report.GetPDiskGuid()) {
+                continue; // race with reused PDisk id
             }
 
             switch (report.GetPhase()) {
@@ -97,6 +99,21 @@ public:
                 case NKikimrBlobStorage::TEvControllerNodeReport::PD_RESTARTED:
                     if (pdisk->Mood == TPDiskMood::Restarting) {
                         pdisk->Mood = TPDiskMood::Normal;
+                    }
+                    break;
+
+                case NKikimrBlobStorage::TEvControllerNodeReport::PD_SHRED:
+                    switch (report.GetShredStateCase()) {
+                        case NKikimrBlobStorage::TEvControllerNodeReport::TPDiskReport::kShredGenerationFinished:
+                            Self->ShredState.OnShredFinished(pdiskId, *pdisk, report.GetShredGenerationFinished(), txc);
+                            break;
+
+                        case NKikimrBlobStorage::TEvControllerNodeReport::TPDiskReport::kShredAborted:
+                        case NKikimrBlobStorage::TEvControllerNodeReport::TPDiskReport::SHREDSTATE_NOT_SET:
+                            STLOG(PRI_ERROR, BS_CONTROLLER, BSCTXNR00, "shred aborted due to error", (PDiskId, pdiskId),
+                                (ErrorReason, report.GetShredAborted()));
+                            Self->ShredState.OnShredAborted(pdiskId, *pdisk);
+                            break;
                     }
                     break;
             }
@@ -117,6 +134,7 @@ public:
             State->ApplyConfigUpdates();
             State.reset();
         }
+        Self->ShredState.OnNodeReportTxComplete();
     }
 };
 

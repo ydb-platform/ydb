@@ -16,8 +16,8 @@
 
 Для аутентификации в S3 необходимы два параметра:
 
-- Идентификатор ключа доступа (access_key_id).
-- Секретный ключ доступа (secret_access_key).
+- Идентификатор ключа доступа (`--access-key`).
+- Секретный ключ доступа (`--secret-key`).
 
 {{ ydb-short-name }} CLI определяет значения этих параметров из следующих источников (в порядке убывания приоритета):
 
@@ -51,7 +51,7 @@
 
 1. [Установите и сконфигурируйте](https://cloud.yandex.ru/docs/cli/quickstart) {{ yandex-cloud }} CLI.
 
-2. Получите ID вашего каталога в облаке следующей командой, его понадобится указывать в командах ниже:
+2. Получите ID вашего каталога (`folder-id`) в облаке следующей командой, его понадобится указывать в командах ниже:
 
    ```bash
    yc config list
@@ -70,7 +70,13 @@
    yc iam service-account create --name s3account
    ```
 
-   Вы можете указать любое имя аккаунта кроме `s3account` или использовать существующий, тогда вам понадобится его также заменять при копировании команд ниже через буфер обмена.
+  Здесь и ниже используется имя аккаунта `s3account`, но вы можете использовать любое другое. При создании аккаунта будет выведен его id, он потребуется далее.
+  
+  Вы также можете использовать уже существующий сервисный аккаунт. Чтобы получить id существующего аккаунта по имени, используйте команду:
+
+   ```bash
+   yc iam service-account get --name <account-name>
+   ```
 
 4. [Назначьте сервисному аккаунту](https://cloud.yandex.ru/docs/iam/operations/sa/assign-role-for-sa) роли в соответствии с необходимым уровнем доступа к S3, выполнив команду:
 
@@ -80,19 +86,19 @@
 
      ```bash
      yc resource-manager folder add-access-binding <folder-id> \
-       --role storage.viewer --subject serviceAccount:s3account
+       --role storage.viewer --subject serviceAccount:<s3-account-id>
      ```
 
    - Запись (для выгрузки из базы данных {{ ydb-short-name }})
 
      ```bash
      yc resource-manager folder add-access-binding <folder-id> \
-       --role storage.editor --subject serviceAccount:s3account
+       --role storage.editor --subject serviceAccount:<s3-account-id>
      ```
 
    {% endlist %}
 
-   , где `<folder-id>` - это идентификатор каталога в облаке, полученный на шаге 2.
+   , где `<folder-id>` - это идентификатор каталога в облаке, полученный на шаге 2, а `<s3-account-id>` - идентификатор аккаунта, созданного на шаге 3.
 
    Вы можете также ознакомиться с [полным перечнем](https://cloud.yandex.ru/docs/iam/concepts/access-control/roles#object-storage) ролей {{ yandex-cloud }}.
 
@@ -114,7 +120,7 @@
    ```
 
    В данном выводе:
-   - `access_key.key_id` - это идентификатор ключа доступа
-   - `secret` - это секретный ключ доступа
+   - `access_key.key_id` - это идентификатор ключа доступа (`--access-key`).
+   - `secret` - это секретный ключ доступа (`--secret-key`).
 
 {% include [s3_conn_procure_overlay.md](s3_conn_procure_overlay.md) %}

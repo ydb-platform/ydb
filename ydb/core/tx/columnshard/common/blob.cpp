@@ -151,6 +151,11 @@ TBlobRange::TBlobRange(const TUnifiedBlobId& blobId /*= TUnifiedBlobId()*/, ui32
     }
 }
 
+TBlobRange TBlobRange::BuildSubset(const ui32 offset, const ui32 size) const {
+    AFL_VERIFY(offset + size <= Size)("offset", offset)("req_size", size)("own_size", Size);
+    return TBlobRange(BlobId, Offset + offset, size);
+}
+
 NKikimr::TConclusionStatus TBlobRangeLink16::DeserializeFromProto(const NKikimrColumnShardProto::TBlobRangeLink16& proto) {
     BlobIdx = proto.GetBlobIdx();
     Offset = proto.GetOffset();
@@ -187,6 +192,12 @@ TBlobRange TBlobRangeLink16::RestoreRange(const TUnifiedBlobId& blobId) const {
 
 bool TBlobRangeLink16::CheckBlob(const TUnifiedBlobId& blobId) const {
     return Offset + Size <= blobId.BlobSize();
+}
+
+TString TBlobRangeLink16::GetBlobData(const TString& blob) const {
+    AFL_VERIFY(Offset < blob.size());
+    AFL_VERIFY(Offset + Size <= blob.size());
+    return blob.substr(Offset, Size);
 }
 
 }   // namespace NKikimr::NOlap

@@ -192,17 +192,9 @@ struct TRuntimeTypeLoader {
         return Builder.GetTypeEnvironment().GetTypeOfTypeLazy();
     }
     TMaybe<TType> LoadEmptyListType(ui32 /*level*/) {
-        if (NKikimr::NMiniKQL::RuntimeVersion < 11) {
-            return Builder.NewListType(Builder.NewVoid().GetStaticType());
-        }
-
         return Builder.GetTypeEnvironment().GetTypeOfEmptyListLazy();
     }
     TMaybe<TType> LoadEmptyDictType(ui32 /*level*/) {
-        if (NKikimr::NMiniKQL::RuntimeVersion < 11) {
-            return Builder.NewDictType(Builder.NewVoid().GetStaticType(), Builder.NewVoid().GetStaticType(), false);
-        }
-
         return Builder.GetTypeEnvironment().GetTypeOfEmptyDictLazy();
     }
     TMaybe<TType> LoadDataType(const TString& dataType, ui32 /*level*/) {

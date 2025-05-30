@@ -549,6 +549,11 @@ void LoadFromProto(TDqAsyncStats& stats, const NYql::NDqProto::TDqAsyncBufferSta
     stats.LastMessageTs = TInstant::MilliSeconds(f.GetLastMessageMs());
     stats.WaitTime = TDuration::MicroSeconds(f.GetWaitTimeUs());
     stats.WaitPeriods = f.GetWaitPeriods();
+
+    stats.FilteredBytes = f.GetFilteredBytes();
+    stats.FilteredRows = f.GetFilteredRows();
+    stats.QueuedBytes = f.GetQueuedBytes();
+    stats.QueuedRows = f.GetQueuedRows();
 }
 
 /*______________________________________________________________________________________________*/
@@ -580,7 +585,7 @@ public:
         if (protocolVersion <= 1) {
             return std::numeric_limits<i64>::max();
         }
-        
+
         if (protocolVersion < 6) {
             NDqProto::TCommandHeader header;
             header.SetVersion(2);
@@ -609,7 +614,7 @@ public:
         header.SetChannelId(ChannelId);
         header.Save(&Output);
 
-        i64 written = 0; 
+        i64 written = 0;
         TCountingOutput countingOutput(&Output);
         data.Proto.Save(&countingOutput);
         if (data.IsOOB()) {
@@ -1128,6 +1133,10 @@ public:
         }
     }
 
+    void UpdateSettings(const TDqOutputChannelSettings::TMutable& settings) override {
+        Y_UNUSED(settings);
+    }
+
     template<typename T>
     void FromProto(const T& f)
     {
@@ -1166,7 +1175,7 @@ public:
     const TDqOutputStats& GetPushStats() const override {
         return PushStats;
     }
-    
+
     const TDqAsyncOutputBufferStats& GetPopStats() const override {
         return PopStats;
     }
@@ -1377,15 +1386,17 @@ public:
 
         auto state = TFailureInjector::GetCurrentState();
         for (auto& [k, v]: state) {
-            NDqProto::TCommandHeader header;
-            header.SetVersion(1);
-            header.SetCommand(NDqProto::TCommandHeader::CONFIGURE_FAILURE_INJECTOR);
-            header.Save(&Output);
-            NYql::NDqProto::TConfigureFailureInjectorRequest request;
-            request.SetName(k);
-            request.SetSkip(v.Skip);
-            request.SetFail(v.CountOfFails);
-            request.Save(&Output);
+            if (v.CountOfFails) {
+                NDqProto::TCommandHeader header;
+                header.SetVersion(1);
+                header.SetCommand(NDqProto::TCommandHeader::CONFIGURE_FAILURE_INJECTOR);
+                header.Save(&Output);
+                NYql::NDqProto::TConfigureFailureInjectorRequest request;
+                request.SetName(k);
+                request.SetSkip(v.Skip);
+                request.SetFail(v.CountOfFails);
+                request.Save(&Output);
+            }
         }
 
         return ret;
@@ -1533,7 +1544,7 @@ private:
 
         {
             auto guard = BindAllocator({});
-            ProgramNode = DeserializeRuntimeNode(Task.GetProgram().GetRaw(), GetTypeEnv()); 
+            ProgramNode = DeserializeRuntimeNode(Task.GetProgram().GetRaw(), GetTypeEnv());
         }
 
         auto& programStruct = static_cast<TStructLiteral&>(*ProgramNode.GetNode());
@@ -1971,7 +1982,7 @@ private:
     void ProcessJobs(const TString& exePath, const TPortoSettings& portoSettings) {
         NThreading::TPromise<void> promise = NThreading::NewPromise();
 
-        promise.GetFuture().Apply([=](const NThreading::TFuture<void>&) mutable {
+        promise.GetFuture().Apply([=, this](const NThreading::TFuture<void>&) mutable {
             Start(exePath, portoSettings);
         });
 

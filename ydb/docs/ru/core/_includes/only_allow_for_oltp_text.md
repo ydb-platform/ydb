@@ -1,0 +1,1 @@
+Поддерживается только для [строковых](../concepts/datamodel/table.md#row-oriented-tables) таблиц.

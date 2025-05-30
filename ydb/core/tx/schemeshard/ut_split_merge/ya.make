@@ -7,7 +7,7 @@ IF (NOT WITH_VALGRIND)
 
     IF (SANITIZER_TYPE OR WITH_VALGRIND)
         SIZE(LARGE)
-        TAG(ya:fat)
+        INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
     ELSE()
         SIZE(MEDIUM)
     ENDIF()
@@ -26,6 +26,7 @@ IF (NOT WITH_VALGRIND)
 
     SRCS(
         ut_split_merge.cpp
+        ut_find_split_key.cpp
     )
 
     END()

@@ -8,6 +8,10 @@
 #include <aws/common/ref_count.h>
 #include <aws/io/io.h>
 
+AWS_PUSH_SANE_WARNING_LEVEL
+
+#define AWS_TLS_NEGOTIATED_PROTOCOL_MESSAGE 0x01
+
 struct aws_channel_slot;
 struct aws_channel_handler;
 struct aws_pkcs11_session;
@@ -253,8 +257,6 @@ struct aws_tls_ctx_options {
 struct aws_tls_negotiated_protocol_message {
     struct aws_byte_buf protocol;
 };
-
-static const int AWS_TLS_NEGOTIATED_PROTOCOL_MESSAGE = 0x01;
 
 typedef struct aws_channel_handler *(
     *aws_tls_on_protocol_negotiated)(struct aws_channel_slot *new_slot, struct aws_byte_buf *protocol, void *user_data);
@@ -802,18 +804,6 @@ AWS_IO_API struct aws_tls_ctx *aws_tls_ctx_acquire(struct aws_tls_ctx *ctx);
 AWS_IO_API void aws_tls_ctx_release(struct aws_tls_ctx *ctx);
 
 /**
- * Not necessary if you are installing more handlers into the channel, but if you just want to have TLS for arbitrary
- * data and use the channel handler directly, this function allows you to write data to the channel and have it
- * encrypted.
- */
-AWS_IO_API int aws_tls_handler_write(
-    struct aws_channel_handler *handler,
-    struct aws_channel_slot *slot,
-    struct aws_byte_buf *buf,
-    aws_channel_on_message_write_completed_fn *on_write_completed,
-    void *completion_user_data);
-
-/**
  * Returns a byte buffer by copy of the negotiated protocols. If there is no agreed upon protocol, len will be 0 and
  * buffer will be NULL.
  */
@@ -914,5 +904,6 @@ AWS_IO_API
 const char *aws_tls_key_operation_type_str(enum aws_tls_key_operation_type operation_type);
 
 AWS_EXTERN_C_END
+AWS_POP_SANE_WARNING_LEVEL
 
 #endif /* AWS_IO_TLS_CHANNEL_HANDLER_H */

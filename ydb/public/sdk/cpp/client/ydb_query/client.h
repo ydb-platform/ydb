@@ -1,5 +1,7 @@
 #pragma once
 
+#include "fwd.h"
+
 #include "query.h"
 #include "tx.h"
 
@@ -11,7 +13,7 @@
 #include <util/generic/maybe.h>
 #include <util/generic/ptr.h>
 
-namespace NYdb {
+namespace NYdb::inline V2 {
     class TProtoAccessor;
 
     namespace NRetry::Async {
@@ -24,7 +26,7 @@ namespace NYdb {
     } // namespace NRetry::Sync
 }
 
-namespace NYdb::NQuery {
+namespace NYdb::inline V2::NQuery {
 
 struct TCreateSessionSettings : public TSimpleRequestSettings<TCreateSessionSettings> {
     TCreateSessionSettings();
@@ -38,20 +40,20 @@ struct TSessionPoolSettings {
     using TSelf = TSessionPoolSettings;
 
     // Max number of sessions client can get from session pool
-    FLUENT_SETTING_DEFAULT(ui32, MaxActiveSessions, 50);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(ui32, MaxActiveSessions, 50);
 
     // Max time session to be in idle state before closing
-    FLUENT_SETTING_DEFAULT(TDuration, CloseIdleThreshold, TDuration::Minutes(1));
+    FLUENT_SETTING_DEFAULT_DEPRECATED(TDuration, CloseIdleThreshold, TDuration::Minutes(1));
 
     // Min number of session in session pool.
     // Sessions will not be closed by CloseIdleThreshold if the number of sessions less then this limit.
-    FLUENT_SETTING_DEFAULT(ui32, MinPoolSize, 10);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(ui32, MinPoolSize, 10);
 };
 
 struct TClientSettings : public TCommonClientSettingsBase<TClientSettings> {
     using TSessionPoolSettings = TSessionPoolSettings;
     using TSelf = TClientSettings;
-    FLUENT_SETTING(TSessionPoolSettings, SessionPoolSettings);
+    FLUENT_SETTING_DEPRECATED(TSessionPoolSettings, SessionPoolSettings);
 };
 
 // ! WARNING: Experimental API
@@ -155,6 +157,7 @@ public:
     class TImpl;
 private:
     TSession();
+    TSession(std::shared_ptr<TQueryClient::TImpl> client); // Create broken session
     TSession(std::shared_ptr<TQueryClient::TImpl> client, TSession::TImpl* sessionImpl);
 
     std::shared_ptr<TQueryClient::TImpl> Client_;

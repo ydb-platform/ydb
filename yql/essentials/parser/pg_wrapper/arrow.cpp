@@ -436,7 +436,6 @@ NUdf::TBlockItem BlockItemFromDatum(Datum datum, const NPg::TTypeDesc& desc, std
 }
 
 NUdf::TBlockItem PgBlockItemFromNativeBinary(const TStringBuf binary, ui32 pgTypeId, std::vector<char>& tmp) {
-    NKikimr::NMiniKQL::TPAllocScope call;
     StringInfoData stringInfo;
     stringInfo.data = (char*)binary.Data();
     stringInfo.len = binary.Size();

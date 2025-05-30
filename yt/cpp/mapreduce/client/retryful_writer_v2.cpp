@@ -7,10 +7,13 @@
 #include <yt/cpp/mapreduce/common/fwd.h>
 #include <yt/cpp/mapreduce/common/helpers.h>
 #include <yt/cpp/mapreduce/common/retry_lib.h>
+#include <yt/cpp/mapreduce/common/retry_request.h>
 #include <yt/cpp/mapreduce/common/wait_proxy.h>
 #include <yt/cpp/mapreduce/http/context.h>
 #include <yt/cpp/mapreduce/http/helpers.h>
 #include <yt/cpp/mapreduce/http/http.h>
+
+#include <yt/cpp/mapreduce/interface/raw_client.h>
 
 #include <util/system/condvar.h>
 
@@ -386,6 +389,9 @@ void TRetryfulWriterV2::DoStartBatch()
 
 void TRetryfulWriterV2::DoWrite(const void* buf, size_t len)
 {
+    if (!Sender_) {
+        throw TApiUsageError() << "Cannot use table writer that is finished";
+    }
     Current_->Buffer.Append(buf, len);
     auto currentSize = Current_->Buffer.Size();
     if (currentSize >= NextSizeToSend_) {

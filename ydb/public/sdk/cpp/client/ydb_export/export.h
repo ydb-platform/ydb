@@ -5,7 +5,7 @@
 
 #include <ydb/public/sdk/cpp/client/ydb_types/s3_settings.h>
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 namespace NExport {
 
 /// Common
@@ -34,13 +34,13 @@ struct TExportToYtSettings : public TOperationRequestSettings<TExportToYtSetting
         TString Dst;
     };
 
-    FLUENT_SETTING(TString, Host);
-    FLUENT_SETTING_OPTIONAL(ui16, Port);
-    FLUENT_SETTING(TString, Token);
-    FLUENT_SETTING_VECTOR(TItem, Item);
-    FLUENT_SETTING_OPTIONAL(TString, Description);
-    FLUENT_SETTING_OPTIONAL(ui32, NumberOfRetries);
-    FLUENT_SETTING_DEFAULT(bool, UseTypeV3, false);
+    FLUENT_SETTING_DEPRECATED(TString, Host);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(ui16, Port);
+    FLUENT_SETTING_DEPRECATED(TString, Token);
+    FLUENT_SETTING_VECTOR_DEPRECATED(TItem, Item);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(TString, Description);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(ui32, NumberOfRetries);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(bool, UseTypeV3, false);
 };
 
 class TExportToYtResponse : public TOperation {
@@ -85,11 +85,11 @@ struct TExportToS3Settings : public TOperationRequestSettings<TExportToS3Setting
         TString Dst;
     };
 
-    FLUENT_SETTING_DEFAULT(EStorageClass, StorageClass, EStorageClass::NOT_SET);
-    FLUENT_SETTING_VECTOR(TItem, Item);
-    FLUENT_SETTING_OPTIONAL(TString, Description);
-    FLUENT_SETTING_OPTIONAL(ui32, NumberOfRetries);
-    FLUENT_SETTING_OPTIONAL(TString, Compression);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(EStorageClass, StorageClass, EStorageClass::NOT_SET);
+    FLUENT_SETTING_VECTOR_DEPRECATED(TItem, Item);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(TString, Description);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(ui32, NumberOfRetries);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(TString, Compression);
 };
 
 class TExportToS3Response : public TOperation {

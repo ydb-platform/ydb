@@ -21,14 +21,14 @@ namespace NPage {
         /**
          * Resets this instance back to the beginning
          */
-        virtual void Reset() noexcept = 0;
+        virtual void Reset() = 0;
 
         /**
          * Returns true if the specified key intersects with the key space
          *
          * NOTE: consecutive calls to HasKey must be in an increasing key order
          */
-        virtual bool HasKey(TCellsRef key) noexcept = 0;
+        virtual bool HasKey(TCellsRef key) = 0;
     };
 
     /**
@@ -41,14 +41,14 @@ namespace NPage {
         /**
          * Resets this instance back to the beginning
          */
-        virtual void Reset() noexcept = 0;
+        virtual void Reset() = 0;
 
         /**
          * Returns true if key crosses a split boundary
          *
          * NOTE: consecutive calls to ShouldSplit must be in an increasing key order
          */
-        virtual bool ShouldSplit(TCellsRef key) noexcept = 0;
+        virtual bool ShouldSplit(TCellsRef key) = 0;
     };
 
     /**

@@ -14,9 +14,9 @@ All commands support the common option `--path`, which specifies the path to the
 
 ### Available options { #common_options }
 
-Name | Description | Default value
----|---|---
-`--path` or `-p` | Path to the directory with tables. | `/`
+| Name              | Description                         | Default value |
+|-------------------|-------------------------------------|---------------|
+| `--path` or `-p` | Path to the directory with tables.   | `/`           |
 
 ## Initializing the load test {#init}
 
@@ -50,14 +50,14 @@ See the command description:
 
 ### Available options {#load_files_options}
 
-| Name                                  | Description                                                                                                                                                    | Default value |
-|---------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------|---------------|
-| `--scale <value>`                     | Data scale. Typically, powers of ten are used.                                                                                                                  |               |
-| `--tables <value>`                    | Comma-separated list of tables to generate. Available tables: `customer`, `nation`, `order_line`, `part_psupp`, `region`, `supplier`.                           | All tables    |
-| `--process-count <value>` or `-C <value>` | Specifies the number of processes for parallel data generation.                                                                                                  | `1`           |
-| `--process-index <value>` or `-i <value>` | Specifies the process number when data generation is split into multiple processes.                                                                              | `0`           |
-| `--state <path>`                      | Path to the state file for resuming generation. If the generation is interrupted, it will resume from the same point when restarted.                                |               |
-| `--clear-state`                       | Relevant if the `--state` parameter is specified. Clears the state file and restarts the download from the beginning.                                             |               |
+| Name                                  | Description                                                                                                                                       | Default value |
+|---------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------|---------------|
+| `--scale <value>`                     | Data scale. Typically, powers of ten are used.                                                                                                    |               |
+| `--tables <value>`                    | Comma-separated list of tables to generate. Available tables: `customer`, `nation`, `order_line`, `part_psupp`, `region`, `supplier`.             | All tables    |
+| `--process-count <value>` or `-C <value>` | Specifies the number of processes for parallel data generation.                                                                               | `1`           |
+| `--process-index <value>` or `-i <value>` | Specifies the process number when data generation is split into multiple processes.                                                           | `0`           |
+| `--state <path>`                      | Path to the state file for resuming generation. If the generation is interrupted, it will resume from the same point when restarted.              |               |
+| `--clear-state`                       | Relevant if the `--state` parameter is specified. Clears the state file and restarts the download from the beginning.                             |               |
 
 {% include [load_options](./_includes/workload/load_options.md) %}
 
@@ -81,9 +81,9 @@ See the command description:
 
 ### TPC-DS-specific options { #run_tpcds_options }
 
-Name | Description | Default value
----|---|---
-`--ext-query-dir <name>` | Directory with external queries for load execution. Queries should be in files named `q[1-99].sql`. |
+| Name                       | Description                                                                                         | Default value |
+|----------------------------|-----------------------------------------------------------------------------------------------------|---------------|
+| `--ext-query-dir <name>`   | Directory with external queries for load execution. Queries should be in files named `q[1-99].sql`. |               |
 
 ## Test data cleanup { #cleanup }
 

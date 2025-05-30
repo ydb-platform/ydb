@@ -23,7 +23,7 @@ namespace NKikiSched {
 
     class ILogged {
     public:
-        virtual void LogLn(ELnLev, const TString&) const noexcept = 0;
+        virtual void LogLn(ELnLev, const TString&) const = 0;
     };
 
     class TLogLn : public TStringStream {
@@ -65,6 +65,6 @@ namespace NKikiSched {
 
         }
 
-        virtual TLogLn Log(ELnLev) const noexcept = 0;
+        virtual TLogLn Log(ELnLev) const = 0;
     };
 }

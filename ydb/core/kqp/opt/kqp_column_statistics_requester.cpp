@@ -193,6 +193,22 @@ bool TKqpColumnStatisticsRequester::BeforeLambdasUnmatched(const TExprNode::TPtr
     return true;
 }
 
+TMaybe<std::pair<TString, TString>> TKqpColumnStatisticsRequester::GetTableAndColumnNames(const TCoMember& member) {
+    auto exprNode = TExprBase(member).Ptr(); 
+    if (!KqpTableByExprNode.contains(exprNode) || KqpTableByExprNode[exprNode] == nullptr) {
+        return {};
+    }
+
+    auto table = TExprBase(KqpTableByExprNode[exprNode]).Cast<TKqpTable>().Path().StringValue();
+    auto column = member.Name().StringValue();
+    size_t pointPos = column.find('.'); // table.column
+    if (pointPos != TString::npos) {
+        column = column.substr(pointPos + 1);
+    }
+
+    return std::pair{std::move(table), std::move(column)};
+}
+
 bool TKqpColumnStatisticsRequester::AfterLambdas(const TExprNode::TPtr& input) {
     bool matched = true;
 
@@ -213,19 +229,26 @@ bool TKqpColumnStatisticsRequester::AfterLambdas(const TExprNode::TPtr& input) {
 
         auto columnStatsUsedMembers = computer.GetColumnStatsUsedMembers();
         for (const auto& item: columnStatsUsedMembers.Data) {
-            auto exprNode = TExprBase(item.Member).Ptr();
-            if (!KqpTableByExprNode.contains(exprNode) || KqpTableByExprNode[exprNode] == nullptr) {
+            if (auto maybeTableAndColumn = GetTableAndColumnNames(item.Member)) {
+                const auto& [table, column] = *maybeTableAndColumn;
+                ColumnsByTableName[table].insert(std::move(column));
+            }
+        }
+
+        auto memberEqualities = computer.GetMemberEqualities();
+        for (const auto& [lhs, rhs]: memberEqualities.Data) {
+            auto maybeLhsTableAndColumn = GetTableAndColumnNames(lhs);
+            if (!maybeLhsTableAndColumn) {
                 continue;
             }
 
-            auto table = TExprBase(KqpTableByExprNode[exprNode]).Cast<TKqpTable>().Path().StringValue();
-            auto column = item.Member.Name().StringValue();
-            size_t pointPos = column.find('.'); // table.column
-            if (pointPos != TString::npos) {
-                column = column.substr(pointPos + 1);
+            auto maybeRhsTableAndColumn = GetTableAndColumnNames(rhs);
+            if (!maybeRhsTableAndColumn) {
+                continue;
             }
 
-            ColumnsByTableName[table].insert(std::move(column));
+            // const auto& [lhsTable, lhsColumn] = *maybeLhsTableAndColumn;
+            // const auto& [rhsTable, rhsColumn] = *maybeRhsTableAndColumn;
         }
     } else {
         matched = false;

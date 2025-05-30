@@ -1,8 +1,8 @@
-# External tables
+# External Tables
 
 Some [external data sources](external_data_source.md), such as database management systems, store data in a structured format, while others, like S3 ({{objstorage-full-name}}), store data as individual files. To work with file-based data sources, you need to understand both the file placement rules and the formats of the stored data.
 
-A special entity, `EXTERNAL TABLE,` describes the stored data in such sources. External tables allow you to define the schema of the stored files and the schema of file placement within the source.
+A special entity, `EXTERNAL TABLE`, describes the stored data in such sources. External tables allow you to define the schema of the stored files and the schema of file placement within the source.
 
 A record in YQL might look like this:
 

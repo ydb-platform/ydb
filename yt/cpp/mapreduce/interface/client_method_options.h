@@ -264,6 +264,12 @@ struct TConcatenateOptions
 
     /// Whether we should append to destination or rewrite it.
     FLUENT_FIELD_OPTION(bool, Append);
+
+    // Maximum number of items to process in single concat request.
+    //
+    // If number of items provided is greater then this parameter
+    // client might split concatenate to several requests.
+    FLUENT_FIELD_DEFAULT(int, MaxBatchSize, 20);
 };
 
 ///
@@ -382,6 +388,11 @@ struct TSuspendOperationOptions
     ///
     /// By default running jobs are not aborted.
     FLUENT_FIELD_OPTION(bool, AbortRunningJobs);
+
+    ///
+    /// @brief Something to show in the alert.
+    ///
+    FLUENT_FIELD_OPTION(std::optional<TString>, Reason);
 };
 
 ///
@@ -664,7 +675,7 @@ struct TTableReaderOptions
     FLUENT_FIELD_DEFAULT(size_t, SizeLimit, 4 << 20);
 
     ///
-    /// @brief Allows to fine tune format that is used for reading tables.
+    /// @brief Allows fine-tuning of the format used for reading tables.
     ///
     /// Has no effect when used with raw-reader.
     FLUENT_FIELD_OPTION(TFormatHints, FormatHints);
@@ -673,6 +684,20 @@ struct TTableReaderOptions
     /// @brief Allows to tune which attributes are added to rows while reading tables.
     ///
     FLUENT_FIELD_DEFAULT(TControlAttributes, ControlAttributes, TControlAttributes());
+};
+
+/// Options for @ref NYT::IClient::CreatePartitionTableReader
+struct TTablePartitionReaderOptions
+{
+    /// @cond Doxygen_Suppress
+    using TSelf = TTablePartitionReaderOptions;
+    /// @endcond
+
+    ///
+    /// @brief Allows fine-tuning of the format used for reading tables.
+    ///
+    /// Has no effect when used with raw-reader.
+    FLUENT_FIELD_OPTION(TFormatHints, FormatHints);
 };
 
 /// Options for @ref NYT::IClient::CreateTableWriter
@@ -994,7 +1019,7 @@ struct TLookupRowsOptions
     FLUENT_FIELD_DEFAULT(bool, KeepMissingRows, false);
 
     /// If set to true returned values will have "timestamp" attribute.
-    FLUENT_FIELD_OPTION(bool, Versioned);
+    FLUENT_FIELD_DEFAULT(bool, Versioned, false);
 };
 
 ///
@@ -1107,6 +1132,10 @@ struct TCreateClientOptions
 
     /// @brief Proxy Address to be used for connection
     FLUENT_FIELD_OPTION(TString, ProxyAddress);
+
+    /// @brief Use unix domain socket for connection.
+    /// Typically you will need this option when the RPC proxy is enabled within the job proxy.
+    FLUENT_FIELD_DEFAULT(bool, UseProxyUnixDomainSocket, false);
 };
 
 ///
@@ -1456,6 +1485,12 @@ struct TGetTablePartitionsOptions
     ///
     /// |True| by default.
     FLUENT_FIELD_DEFAULT(bool, AdjustDataWeightPerPartition, true);
+
+    ///
+    /// @brief Enable partition cookies in response.
+    ///
+    /// Partition cookies allow to efficiently read partitions using @ref NYT::IClientBase::CreateTablePartitionReader method.
+    FLUENT_FIELD_DEFAULT(bool, EnableCookies, false);
 };
 
 ///

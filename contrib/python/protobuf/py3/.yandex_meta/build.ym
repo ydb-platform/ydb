@@ -48,14 +48,14 @@ cd ${SRC}/python/google
 (
 echo 'PY_SRCS('
 echo '    TOP_LEVEL'
-find . -type f -name '*.py' | sort | sed -En 's|\.\/|    google\/|p'
+find . -type f -name '*.py' | sed -En 's|\.\/|    google\/|p' | env LANG=C sort
 echo ')'
 ) > ya.make.inc
 
 cd ${SRC}/python/google
 (
 echo 'SRCS('
-find . -type f -name '*.cc' |  sort | sed -En 's|\.\/|    google\/|p'
+find . -type f -name '*.cc' | sed -En 's|\.\/|    google\/|p' | env LANG=C sort
 echo ')'
 ) >> ya.make.inc
 

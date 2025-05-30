@@ -1,13 +1,21 @@
 UNITTEST_FOR(ydb/core/kqp)
 
 FORK_SUBTESTS()
-SPLIT_FACTOR(50)
+SPLIT_FACTOR(200)
 
 IF (WITH_VALGRIND)
     SIZE(LARGE)
     TAG(ya:fat)
 ELSE()
     SIZE(MEDIUM)
+ENDIF()
+
+IF(SANITIZER_TYPE == "memory")
+    # Increase MSan memory limit due to YQL-19940.
+    # Just double default memory requirements since we run MSan without origin tracking by default.
+    REQUIREMENTS(
+        ram:16
+    )
 ENDIF()
 
 SRCS(
@@ -27,6 +35,8 @@ PEERDIR(
 
 DATA (
     arcadia/ydb/core/kqp/ut/join
+    arcadia/ydb/library/benchmarks/queries
+    arcadia/ydb/library/benchmarks/gen_queries/consts.yql
 )
 
 YQL_LAST_ABI_VERSION()

@@ -1,15 +1,17 @@
 #include "console_tenants_manager.h"
 #include "console_impl.h"
+#include "console_audit.h"
 #include "http.h"
 #include "util.h"
 
+#include <ydb/core/base/auth.h>
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/protos/msgbus.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/util/pb.h>
-#include <ydb/public/lib/operation_id/operation_id.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/operation_id/operation_id.h>
 
 #if defined BLOG_D || defined BLOG_I || defined BLOG_ERROR || defined BLOG_NOTICE
 #error log macro definition clash
@@ -75,7 +77,7 @@ public:
         pipeConfig.RetryPolicy = FastConnectRetryPolicy();
         auto tid = MakeBSControllerID();
         auto pipe = NTabletPipe::CreateClient(ctx.SelfID, tid, pipeConfig);
-        BSControllerPipe = ctx.ExecutorThread.RegisterActor(pipe);
+        BSControllerPipe = ctx.Register(pipe);
     }
 
     void OnPipeDestroyed(const TActorContext &ctx)
@@ -617,6 +619,13 @@ public:
         BLOG_TRACE("TSubdomainManip(" << Tenant->Path << ") send subdomain creation cmd: "
                     << request->ToString());
 
+        AuditLogBeginConfigureDatabase(
+            Tenant->PeerName,
+            Tenant->UserToken.GetUserSID(),
+            Tenant->UserToken.GetSanitizedToken(),
+            Tenant->Path
+        );
+
         ctx.Send(MakeTxProxyID(), request.Release());
     }
 
@@ -641,6 +650,13 @@ public:
         BLOG_TRACE("TSubdomainManip(" << Tenant->Path << ") send subdomain drop cmd: "
                     << request->ToString());
 
+        AuditLogBeginRemoveDatabase(
+            Tenant->PeerName,
+            Tenant->UserToken.GetUserSID(),
+            Tenant->UserToken.GetSanitizedToken(),
+            Tenant->Path
+        );
+            
         ctx.Send(MakeTxProxyID(), request.Release());
     }
 
@@ -692,6 +708,32 @@ public:
                      const TActorContext &ctx)
     {
         BLOG_D("TSubdomainManip(" << Tenant->Path << ") reply with " << resp->ToString());
+
+        using TAuditFunc = decltype(AuditLogEndConfigureDatabase);
+        auto audit = [&](TAuditFunc auditFunc) {
+            bool isSuccess = (typeid(*resp) != typeid(TTenantsManager::TEvPrivate::TEvSubdomainFailed));
+
+            TString issue = "";
+            if (!isSuccess) {
+                issue = dynamic_cast<TTenantsManager::TEvPrivate::TEvSubdomainFailed*>(resp)->Issue;
+            }
+
+            auditFunc(
+                Tenant->PeerName,
+                Tenant->UserToken.GetUserSID(),
+                Tenant->UserToken.GetSanitizedToken(),
+                Tenant->Path,
+                issue,
+                isSuccess
+            );
+        };
+
+        if (Action == CONFIGURE) {
+            audit(AuditLogEndConfigureDatabase);
+        } else if (Action == REMOVE) {
+            audit(AuditLogEndRemoveDatabase);
+        }
+
         ctx.Send(OwnerId, resp);
         Die(ctx);
     }
@@ -712,7 +754,7 @@ public:
         NTabletPipe::TClientConfig pipeConfig;
         pipeConfig.RetryPolicy = FastConnectRetryPolicy();
         auto pipe = NTabletPipe::CreateClient(ctx.SelfID, TabletId, pipeConfig);
-        Pipe = ctx.ExecutorThread.RegisterActor(pipe);
+        Pipe = ctx.Register(pipe);
     }
 
     void SendNotifyRequest(const TActorContext &ctx)
@@ -873,6 +915,7 @@ public:
                         << Tenant->Path << " has invalid path type "
                         << NKikimrSchemeOp::EPathType_Name(pathType)
                         << " but expected " << NKikimrSchemeOp::EPathType_Name(expectedPathType));
+
             ReplyAndDie(new TTenantsManager::TEvPrivate::TEvSubdomainFailed(Tenant, "bad path type"), ctx);
             return;
         }
@@ -1133,7 +1176,7 @@ public:
         NTabletPipe::TClientConfig pipeConfig;
         pipeConfig.RetryPolicy = FastConnectRetryPolicy();
         auto pipe = NTabletPipe::CreateClient(ctx.SelfID, HiveId, pipeConfig);
-        HivePipe = ctx.ExecutorThread.RegisterActor(pipe);
+        HivePipe = ctx.Register(pipe);
     }
 
     void Finish() {
@@ -1415,7 +1458,9 @@ void TTenantsManager::TTenantsConfig::ParseComputationalUnits(const TUnitsCount 
 
 TTenantsManager::TTenant::TTenant(const TString &path,
                                   EState state,
-                                  const TString &token)
+                                  const TString &token,
+                                  const TString &peerName
+                                )
     : Path(path)
     , State(state)
     , Coordinators(3)
@@ -1428,6 +1473,7 @@ TTenantsManager::TTenant::TTenant(const TString &path,
     , ErrorCode(Ydb::StatusIds::STATUS_CODE_UNSPECIFIED)
     , TxId(0)
     , UserToken(token)
+    , PeerName(peerName)
     , SubdomainVersion(1)
     , ConfirmedSubdomain(0)
     , Generation(0)
@@ -1626,7 +1672,7 @@ TTenantsManager::TTenant::TPtr TTenantsManager::FindComputationalUnitKindUsage(c
     return nullptr;
 }
 
-TTenantsManager::TTenant::TPtr TTenantsManager::GetTenant(const TString &name)
+TTenantsManager::TTenant::TPtr TTenantsManager::GetTenant(const TString &name) const
 {
     auto it = Tenants.find(name);
     if (it != Tenants.end())
@@ -1634,7 +1680,7 @@ TTenantsManager::TTenant::TPtr TTenantsManager::GetTenant(const TString &name)
     return nullptr;
 }
 
-TTenantsManager::TTenant::TPtr TTenantsManager::GetTenant(const TDomainId &domainId)
+TTenantsManager::TTenant::TPtr TTenantsManager::GetTenant(const TDomainId &domainId) const
 {
     auto it = TenantIdToName.find(domainId);
     if (it != TenantIdToName.end())
@@ -1927,15 +1973,8 @@ bool TTenantsManager::CheckAccess(const TString &token,
                                   TString &error,
                                   const TActorContext &ctx)
 {
-    auto *appData = AppData(ctx);
-    if (appData->AdministrationAllowedSIDs.empty())
+    if (IsAdministrator(AppData(ctx), token)) {
         return true;
-
-    if (token) {
-        NACLib::TUserToken userToken(token);
-        for (auto &sid : appData->AdministrationAllowedSIDs)
-            if (userToken.IsExist(sid))
-                return true;
     }
 
     code = Ydb::StatusIds::UNAUTHORIZED;
@@ -1985,7 +2024,7 @@ void TTenantsManager::OpenTenantSlotBrokerPipe(const TActorContext &ctx)
     pipeConfig.RetryPolicy = FastConnectRetryPolicy();
     auto aid = MakeTenantSlotBrokerID();
     auto pipe = NTabletPipe::CreateClient(ctx.SelfID, aid, pipeConfig);
-    TenantSlotBrokerPipe = ctx.ExecutorThread.RegisterActor(pipe);
+    TenantSlotBrokerPipe = ctx.Register(pipe);
 }
 
 void TTenantsManager::OnTenantSlotBrokerPipeDestroyed(const TActorContext &ctx)
@@ -2547,6 +2586,7 @@ void TTenantsManager::DbAddTenant(TTenant::TPtr tenant,
                 NIceDb::TUpdate<Schema::Tenants::Issue>(tenant->Issue),
                 NIceDb::TUpdate<Schema::Tenants::TxId>(tenant->TxId),
                 NIceDb::TUpdate<Schema::Tenants::UserToken>(tenant->UserToken.SerializeAsString()),
+                NIceDb::TUpdate<Schema::Tenants::PeerName>(tenant->PeerName),
                 NIceDb::TUpdate<Schema::Tenants::SubdomainVersion>(tenant->SubdomainVersion),
                 NIceDb::TUpdate<Schema::Tenants::ConfirmedSubdomain>(tenant->ConfirmedSubdomain),
                 NIceDb::TUpdate<Schema::Tenants::Attributes>(tenant->Attributes),
@@ -2655,6 +2695,7 @@ bool TTenantsManager::DbLoadState(TTransactionContext &txc, const TActorContext 
         ui32 timeCastBucketsPerMediator = tenantRowset.GetValue<Schema::Tenants::TimeCastBucketsPerMediator>();
         ui64 txId = tenantRowset.GetValue<Schema::Tenants::TxId>();
         TString userToken = tenantRowset.GetValue<Schema::Tenants::UserToken>();
+        TString peerName = tenantRowset.GetValue<Schema::Tenants::PeerName>();
         ui64 subdomainVersion = tenantRowset.GetValueOrDefault<Schema::Tenants::SubdomainVersion>(1);
         ui64 confirmedSubdomain = tenantRowset.GetValueOrDefault<Schema::Tenants::ConfirmedSubdomain>(0);
         NKikimrSchemeOp::TAlterUserAttributes attrs = tenantRowset.GetValueOrDefault<Schema::Tenants::Attributes>({});
@@ -2670,7 +2711,7 @@ bool TTenantsManager::DbLoadState(TTransactionContext &txc, const TActorContext 
         bool isExternalStatisticsAggregator = tenantRowset.GetValueOrDefault<Schema::Tenants::IsExternalStatisticsAggregator>(false);
         const bool areResourcesShared = tenantRowset.GetValueOrDefault<Schema::Tenants::AreResourcesShared>(false);
 
-        TTenant::TPtr tenant = new TTenant(path, state, userToken);
+        TTenant::TPtr tenant = new TTenant(path, state, userToken, peerName);
         tenant->Coordinators = coordinators;
         tenant->Mediators = mediators;
         tenant->PlanResolution = planResolution;
@@ -3140,6 +3181,19 @@ void TTenantsManager::DbUpdateTenantUserToken(TTenant::TPtr tenant,
     NIceDb::TNiceDb db(txc.DB);
     db.Table<Schema::Tenants>().Key(tenant->Path)
         .Update(NIceDb::TUpdate<Schema::Tenants::UserToken>(userToken));
+}
+
+void TTenantsManager::DbUpdateTenantPeerName(TTenant::TPtr tenant,
+                                             const TString &peerName,
+                                             TTransactionContext &txc,
+                                             const TActorContext &ctx)
+{
+    LOG_TRACE_S(ctx, NKikimrServices::CMS_TENANTS,
+    "Update peerName in database for " << tenant->Path);
+
+    NIceDb::TNiceDb db(txc.DB);
+    db.Table<Schema::Tenants>().Key(tenant->Path)
+        .Update(NIceDb::TUpdate<Schema::Tenants::PeerName>(peerName));
 }
 
 void TTenantsManager::DbUpdateSubdomainVersion(TTenant::TPtr tenant,

@@ -117,8 +117,12 @@ public:
                 checks
                     .IsValidLeafName()
                     .PathsLimit(2) // index and impl-table
-                    .DirChildrenLimit()
-                    .ShardsLimit(1); // impl-table
+                    .DirChildrenLimit();
+
+                if (!request.GetInternal()) {
+                    checks
+                        .ShardsLimit(1); // impl-table
+                }
 
                 if (!checks) {
                     return Reply(checks.GetStatus(), checks.GetError());
@@ -173,13 +177,15 @@ public:
             return makeReply("missing index or column to build");
         }
 
-        buildInfo->Limits.MaxBatchRows = settings.max_batch_rows();
-        buildInfo->Limits.MaxBatchBytes = settings.max_batch_bytes();
-        buildInfo->Limits.MaxShards = settings.max_shards_in_flight();
-        buildInfo->Limits.MaxRetries = settings.max_retries_upload_batch();
+        buildInfo->ScanSettings.CopyFrom(settings.GetScanSettings());
+        buildInfo->MaxInProgressShards = settings.max_shards_in_flight();
 
         buildInfo->CreateSender = Request->Sender;
         buildInfo->SenderCookie = Request->Cookie;
+        buildInfo->StartTime = TAppData::TimeProvider->Now();
+        if (request.HasUserSID()) {
+            buildInfo->UserSID = request.GetUserSID();
+        }
 
         Self->PersistCreateBuildIndex(db, *buildInfo);
 
@@ -221,16 +227,24 @@ private:
             buildInfo.IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobalAsync;
             break;
         case Ydb::Table::TableIndex::TypeCase::kGlobalUniqueIndex:
-            explain = "unsupported index type to build";
-            return false;
+            if (AppData()->FeatureFlags.GetEnableAddUniqueIndex()) {
+                buildInfo.BuildKind = TIndexBuildInfo::EBuildKind::BuildSecondaryIndex;
+                buildInfo.IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobalUnique;
+                break;
+            } else {
+                explain = "unsupported index type to build";
+                return false;
+            }
         case Ydb::Table::TableIndex::TypeCase::kGlobalVectorKmeansTreeIndex: {
-            buildInfo.BuildKind = TIndexBuildInfo::EBuildKind::BuildVectorIndex;
+            buildInfo.BuildKind = index.index_columns().size() == 1
+                ? TIndexBuildInfo::EBuildKind::BuildVectorIndex
+                : TIndexBuildInfo::EBuildKind::BuildPrefixedVectorIndex;
             buildInfo.IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree;
             NKikimrSchemeOp::TVectorIndexKmeansTreeDescription vectorIndexKmeansTreeDescription;
             *vectorIndexKmeansTreeDescription.MutableSettings() = index.global_vector_kmeans_tree_index().vector_settings();
             buildInfo.SpecializedIndexDescription = vectorIndexKmeansTreeDescription;
             buildInfo.KMeans.K = std::max<ui32>(2, vectorIndexKmeansTreeDescription.GetSettings().clusters());
-            buildInfo.KMeans.Levels = std::max<ui32>(1, vectorIndexKmeansTreeDescription.GetSettings().levels());
+            buildInfo.KMeans.Levels = buildInfo.IsBuildPrefixedVectorIndex() + std::max<ui32>(1, vectorIndexKmeansTreeDescription.GetSettings().levels());
             break;
         }
         case Ydb::Table::TableIndex::TypeCase::TYPE_NOT_SET:

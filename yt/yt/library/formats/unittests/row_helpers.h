@@ -79,18 +79,20 @@ public:
         return *row;
     }
 
-    size_t Size() const
+    int Size() const
     {
-        return RowList_.size();
+        return std::ssize(RowList_);
     }
 
-    const std::vector<NTableClient::TUnversionedOwningRow>& GetRowList() const {
+    const std::vector<NTableClient::TUnversionedOwningRow>& GetRowList() const
+    {
         return RowList_;
     }
 
 private:
     const NTableClient::TTableSchemaPtr Schema_;
     const NTableClient::TNameTablePtr NameTable_ = New<NTableClient::TNameTable>();
+
     NTableClient::TUnversionedOwningRowBuilder Builder_;
     std::vector<NTableClient::TUnversionedOwningRow> RowList_;
 };

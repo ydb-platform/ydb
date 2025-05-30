@@ -8,10 +8,9 @@ namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TTDigestConfig
+struct TTDigestConfig
     : public NYTree::TYsonStruct
 {
-public:
     double Delta;
     double CompressionFrequency;
 

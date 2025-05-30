@@ -8,7 +8,7 @@
 
 #include <util/generic/size_literals.h>
 
-namespace NYdb::NPersQueue {
+namespace NYdb::inline V2::NPersQueue {
 
 enum class EClusterDiscoveryMode {
     Auto = 0, // enables cluster discovery only for hostname "logbroker.yandex.net" and "logbroker-prestable.yandex.net"
@@ -32,38 +32,38 @@ struct TWriteSessionSettings : public TRequestSettings<TWriteSessionSettings> {
     TWriteSessionSettings& operator=(TWriteSessionSettings&&) = default;
 
     //! Path of topic to write.
-    FLUENT_SETTING(TString, Path);
+    FLUENT_SETTING_DEPRECATED(TString, Path);
 
     //! MessageGroupId (aka SourceId) to use.
-    FLUENT_SETTING(TString, MessageGroupId);
+    FLUENT_SETTING_DEPRECATED(TString, MessageGroupId);
 
     //! Write to an exact partition group. Generally server assigns partition group automatically.
     //! Using this option is not recommended unless you know for sure why you need it.
-    FLUENT_SETTING_OPTIONAL(ui32, PartitionGroupId);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(ui32, PartitionGroupId);
 
     //! Preferred LB cluster. Used for multi-cluster installation.
     //! If specified cluster is unavailable, session will write to other cluster.
-    FLUENT_SETTING_OPTIONAL(TString, PreferredCluster);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(TString, PreferredCluster);
 
     //! Write to other clusters if there are problems with connection
     //! to the first one.
-    FLUENT_SETTING_DEFAULT(bool, AllowFallbackToOtherClusters, true);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(bool, AllowFallbackToOtherClusters, true);
 
     //! codec and level to use for data compression prior to write.
-    FLUENT_SETTING_DEFAULT(ECodec, Codec, ECodec::GZIP);
-    FLUENT_SETTING_DEFAULT(i32, CompressionLevel, 4);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(ECodec, Codec, ECodec::GZIP);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(i32, CompressionLevel, 4);
 
     //! Writer will not accept new messages if memory usage exceeds this limit.
     //! Memory usage consists of raw data pending compression and compressed messages being sent.
-    FLUENT_SETTING_DEFAULT(ui64, MaxMemoryUsage, 20_MB);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(ui64, MaxMemoryUsage, 20_MB);
 
     //! Maximum messages accepted by writer but not written (with confirmation from server).
     //! Writer will not accept new messages after reaching the limit.
-    FLUENT_SETTING_DEFAULT(ui32, MaxInflightCount, 100000);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(ui32, MaxInflightCount, 100000);
 
     //! Retry policy enables automatic retries for non-fatal errors.
     //! IRetryPolicy::GetDefaultPolicy() if null (not set).
-    FLUENT_SETTING(IRetryPolicy::TPtr, RetryPolicy);
+    FLUENT_SETTING_DEPRECATED(IRetryPolicy::TPtr, RetryPolicy);
 
     //! User metadata that may be attached to write session.
     TWriteSessionSettings& AppendSessionMeta(const TString& key, const TString& value) {
@@ -79,16 +79,16 @@ struct TWriteSessionSettings : public TRequestSettings<TWriteSessionSettings> {
     //! Greatly increases performance for small messages.
     //! Setting either value to zero means immediate write with no batching. (Unrecommended, especially for clients
     //! sending small messages at high rate).
-    FLUENT_SETTING_OPTIONAL(TDuration, BatchFlushInterval);
-    FLUENT_SETTING_OPTIONAL(ui64, BatchFlushSizeBytes);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(TDuration, BatchFlushInterval);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(ui64, BatchFlushSizeBytes);
 
-    FLUENT_SETTING_DEFAULT(TDuration, ConnectTimeout, TDuration::Seconds(30));
+    FLUENT_SETTING_DEFAULT_DEPRECATED(TDuration, ConnectTimeout, TDuration::Seconds(30));
 
-    FLUENT_SETTING_OPTIONAL(TWriterCounters::TPtr, Counters);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(TWriterCounters::TPtr, Counters);
 
     //! Executor for compression tasks.
     //! If not set, default executor will be used.
-    FLUENT_SETTING(IExecutor::TPtr, CompressionExecutor);
+    FLUENT_SETTING_DEPRECATED(IExecutor::TPtr, CompressionExecutor);
 
     struct TEventHandlers {
         using TSelf = TEventHandlers;
@@ -98,27 +98,27 @@ struct TWriteSessionSettings : public TRequestSettings<TWriteSessionSettings> {
         //! Function to handle Acks events.
         //! If this handler is set, write ack events will be handled by handler,
         //! otherwise sent to TWriteSession::GetEvent().
-        FLUENT_SETTING(TWriteAckHandler, AcksHandler);
+        FLUENT_SETTING_DEPRECATED(TWriteAckHandler, AcksHandler);
 
         //! Function to handle ReadyToAccept event.
         //! If this handler is set, write these events will be handled by handler,
         //! otherwise sent to TWriteSession::GetEvent().
-        FLUENT_SETTING(TReadyToAcceptHandler, ReadyToAcceptHandler);
+        FLUENT_SETTING_DEPRECATED(TReadyToAcceptHandler, ReadyToAcceptHandler);
 
         //! Function to handle close session events.
         //! If this handler is set, close session events will be handled by handler
         //! and then sent to TWriteSession::GetEvent().
-        FLUENT_SETTING(TSessionClosedHandler, SessionClosedHandler);
+        FLUENT_SETTING_DEPRECATED(TSessionClosedHandler, SessionClosedHandler);
 
         //! Function to handle all event types.
         //! If event with current type has no handler for this type of event,
         //! this handler (if specified) will be used.
         //! If this handler is not specified, event can be received with TWriteSession::GetEvent() method.
-        FLUENT_SETTING(std::function<void(TWriteSessionEvent::TEvent&)>, CommonHandler);
+        FLUENT_SETTING_DEPRECATED(std::function<void(TWriteSessionEvent::TEvent&)>, CommonHandler);
 
         //! Executor for handlers.
         //! If not set, default single threaded executor will be used.
-        FLUENT_SETTING(IExecutor::TPtr, HandlersExecutor);
+        FLUENT_SETTING_DEPRECATED(IExecutor::TPtr, HandlersExecutor);
 
         [[deprecated("Typo in name. Use ReadyToAcceptHandler instead.")]]
         TSelf& ReadyToAcceptHander(const TReadyToAcceptHandler& value) {
@@ -127,13 +127,13 @@ struct TWriteSessionSettings : public TRequestSettings<TWriteSessionSettings> {
     };
 
     //! Event handlers.
-    FLUENT_SETTING(TEventHandlers, EventHandlers);
+    FLUENT_SETTING_DEPRECATED(TEventHandlers, EventHandlers);
 
     //! Enables validation of SeqNo. If enabled, then writer will check writing with seqNo and without it and throws exception.
-    FLUENT_SETTING_DEFAULT(bool, ValidateSeqNo, true);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(bool, ValidateSeqNo, true);
 
     //! Manages cluster discovery mode.
-    FLUENT_SETTING_DEFAULT(EClusterDiscoveryMode, ClusterDiscoveryMode, EClusterDiscoveryMode::Auto);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(EClusterDiscoveryMode, ClusterDiscoveryMode, EClusterDiscoveryMode::Auto);
 };
 
 //! Simple write session. Does not need event handlers. Does not provide Events, ContinuationTokens, write Acks.

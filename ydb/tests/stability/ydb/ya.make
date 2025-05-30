@@ -12,9 +12,9 @@ DATA(
 )
 
 DEPENDS(
-    ydb/tests/workloads/simple_queue
-    ydb/tests/workloads/olap_workload
-    ydb/tests/workloads/statistics_workload
+    ydb/tests/stress/simple_queue
+    ydb/tests/stress/olap_workload
+    ydb/tests/stress/statistics_workload
     ydb/tools/cfg/bin
     ydb/tests/tools/nemesis/driver
 )

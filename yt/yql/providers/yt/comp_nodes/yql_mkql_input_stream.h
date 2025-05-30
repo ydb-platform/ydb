@@ -14,6 +14,7 @@ struct IInputState {
     virtual bool IsValid() const = 0;
     virtual NUdf::TUnboxedValue GetCurrent() = 0;
     virtual void Next() = 0;
+    virtual TString DebugInfo() const = 0;
 };
 
 class TInputStreamValue

@@ -63,10 +63,6 @@ public:
     {
     }
 
-    static inline bool IsUtf8Intermediate(char c) {
-        return (c & 0xC0) == 0x80;
-    }
-
     template<typename T>
     TTextWalker& Advance(const T& buf) {
         for (char c : buf) {
@@ -315,7 +311,8 @@ public:
     void PrintWithProgramTo(
             IOutputStream& out,
             const TString& programFilename,
-            const TString& programText) const;
+            const TString& programText,
+            bool colorize = true) const;
 
     inline TString ToString(bool oneLine = false) const {
         TStringStream out;

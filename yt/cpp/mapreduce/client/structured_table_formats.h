@@ -22,12 +22,14 @@ TMaybe<TNode> GetCommonTableFormat(
 TMaybe<TNode> GetTableFormat(
     const IClientRetryPolicyPtr& clientRetryPolicy,
     const IRawClientPtr& rawClient,
+    const TClientContext& context,
     const TTransactionId& transactionId,
     const TRichYPath& path);
 
 TMaybe<TNode> GetTableFormats(
     const IClientRetryPolicyPtr& clientRetryPolicy,
     const IRawClientPtr& rawClient,
+    const TClientContext& context,
     const TTransactionId& transactionId,
     const TVector<TRichYPath>& paths);
 
@@ -69,7 +71,7 @@ using TStructuredJobTableList = TVector<TStructuredJobTable>;
 TString JobTablePathString(const TStructuredJobTable& jobTable);
 TStructuredJobTableList ToStructuredJobTableList(const TVector<TStructuredTablePath>& tableList);
 
-TStructuredJobTableList CanonizeStructuredTableList(const TClientContext& context, const TVector<TStructuredTablePath>& tableList);
+TStructuredJobTableList CanonizeStructuredTableList(const IRawClientPtr& rawClient, const TVector<TStructuredTablePath>& tableList);
 TVector<TRichYPath> GetPathList(
     const TStructuredJobTableList& tableList,
     const TMaybe<TVector<TTableSchema>>& schemaInferenceResult,

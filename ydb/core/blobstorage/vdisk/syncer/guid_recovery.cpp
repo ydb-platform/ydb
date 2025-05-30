@@ -309,10 +309,12 @@ namespace NKikimr {
             using ELocalState = NKikimrBlobStorage::TLocalGuidInfo::EState;
             using TLocalVal = NKikimrBlobStorage::TLocalGuidInfo;
 
-            TDecisionMaker(const TVDiskIdShort &self,
+            TDecisionMaker(const TString& logPrefix,
+                           const TVDiskIdShort &self,
                            std::shared_ptr<TBlobStorageGroupInfo::TTopology> top,
                            const TLocalSyncerState &locallyRecoveredState)
-                : Self(self)
+                : VDiskLogPrefix(logPrefix)
+                , Self(self)
                 , Top(top)
                 , LocallyRecoveredState(locallyRecoveredState)
                 , Neighbors(self, Top)
@@ -321,7 +323,7 @@ namespace NKikimr {
             {}
 
             void SetResponse(const TVDiskID &vdisk, TVDiskEternalGuid guid, ESyncState state) {
-                Y_ABORT_UNLESS(Neighbors[vdisk].VDiskIdShort == vdisk);
+                Y_VERIFY_S(Neighbors[vdisk].VDiskIdShort == vdisk, VDiskLogPrefix);
 
                 Sublog.Log() << "RESPONSE: vdisk# " << vdisk.ToString()
                     << " state# " << state << " guid# " << guid << "\n";
@@ -366,7 +368,7 @@ namespace NKikimr {
 
             // calculates final decision
             TDecision ReachAVerdict() const {
-                Y_ABORT_UNLESS(QuorumTracker.HasQuorum());
+                Y_VERIFY_S(QuorumTracker.HasQuorum(), VDiskLogPrefix);
 
                 TVDiskQuorumDecision quorumDecision = VDiskQuorumDecision();
                 if (quorumDecision.IsInconsistent) {
@@ -383,6 +385,7 @@ namespace NKikimr {
             }
 
         private:
+            const TString VDiskLogPrefix;
             const TVDiskIdShort Self;
             const std::shared_ptr<TBlobStorageGroupInfo::TTopology> Top;
             const TLocalSyncerState LocallyRecoveredState;
@@ -429,7 +432,7 @@ namespace NKikimr {
                         }
                         return TVDiskQuorumDecision::Inconsistent(str.Str());
                     }
-                    Y_ABORT_UNLESS(size == 1);
+                    Y_VERIFY_S(size == 1, VDiskLogPrefix);
                     const TVDiskEternalGuid guid = finalGuidMap.begin()->first;
                     if (finalQuorum.HasQuorum()) {
                         return TVDiskQuorumDecision::Final(guid);
@@ -665,9 +668,10 @@ namespace NKikimr {
                 GInfo = ev->Get()->NewInfo;
 
                 // reconfigure every proxy that hasn't returned a value yet
-                auto reconfigureProxy = [&ctx] (std::unique_ptr<TEvVGenerationChange> &&msg,
-                                                TVDiskInfo<TNeighborVDiskState>& x) {
-                    Y_ABORT_UNLESS(!x.Get().Obtained);
+                const TString& logPrefix = VCtx->VDiskLogPrefix;
+                auto reconfigureProxy = [&ctx, &logPrefix] (std::unique_ptr<TEvVGenerationChange> &&msg,
+                                                            TVDiskInfo<TNeighborVDiskState>& x) {
+                    Y_VERIFY_S(!x.Get().Obtained, logPrefix);
                     ctx.Send(x.Get().ProxyId, msg.release());
                 };
 
@@ -897,7 +901,8 @@ namespace NKikimr {
                 , GInfo(std::move(info))
                 , CommitterId(committerId)
                 , NotifyId(notifyId)
-                , DecisionMaker(VCtx->ShortSelfVDisk,
+                , DecisionMaker(VCtx->VDiskLogPrefix,
+                                VCtx->ShortSelfVDisk,
                                 GInfo->PickTopology(),
                                 locallyRecoveredState)
                 , Decision()
@@ -934,6 +939,3 @@ Y_DECLARE_OUT_SPEC(, NKikimr::NSyncer::TVDiskQuorumDecision, stream, value) {
 Y_DECLARE_OUT_SPEC(, NKikimr::NSyncer::EDecision, stream, value) {
     stream << NKikimr::NSyncer::EDecisionToStr(value);
 }
-
-
-

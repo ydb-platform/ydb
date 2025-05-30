@@ -35,7 +35,7 @@ const NLogging::TLogger Logger{"ViablePeerRegistryUnitTest"};
 
 TEST(TIndexedHashMapTest, Simple)
 {
-    TIndexedHashMap<TString, int> test;
+    TIndexedHashMap<std::string, int> test;
 
     EXPECT_EQ(test.Size(), 0);
 
@@ -54,7 +54,7 @@ TEST(TIndexedHashMapTest, Simple)
     EXPECT_TRUE(test.Set("c", 42));
     EXPECT_EQ(test.Size(), 3);
 
-    TIndexedHashMap<TString, int>::TUnderlyingStorage data;
+    TIndexedHashMap<std::string, int>::TUnderlyingStorage data;
     for (int i = 0; i < test.Size(); ++i) {
         data.push_back(test[i]);
     }
@@ -190,7 +190,7 @@ IViablePeerRegistryPtr CreateTestRegistry(
 std::vector<std::string> AddressesFromChannels(const std::vector<IChannelPtr>& channels)
 {
     std::vector<std::string> result;
-    for (const auto& channel: channels) {
+    for (const auto& channel : channels) {
         result.push_back(channel->GetEndpointDescription());
     }
     return result;
@@ -336,7 +336,7 @@ TEST_P(TParametrizedViablePeerRegistryTest, GetChannelBasic)
     EXPECT_TRUE(viablePeerRegistry->RegisterPeer("d"));
     EXPECT_TRUE(viablePeerRegistry->RegisterPeer("e"));
 
-    TString retrievedPeer;
+    std::string retrievedPeer;
     {
         auto channel = viablePeerRegistry->PickRandomChannel(CreateRequest(), /*hedgingOptions*/ {});
         retrievedPeer = channel->GetEndpointDescription();
@@ -351,7 +351,7 @@ TEST_P(TParametrizedViablePeerRegistryTest, GetChannelBasic)
         Not(Contains(retrievedPeer))));
 
     {
-        auto channel = viablePeerRegistry->PickRandomChannel(CreateRequest(), /*hedgingOptions*/ {});;
+        auto channel = viablePeerRegistry->PickRandomChannel(CreateRequest(), /*hedgingOptions*/ {});
         EXPECT_NE(channel->GetEndpointDescription(), retrievedPeer);
         EXPECT_THAT(channelFactory->GetChannelRegistry(), Contains(channel->GetEndpointDescription()));
     }
@@ -399,7 +399,7 @@ TEST_P(TParametrizedViablePeerRegistryTest, GetStickyChannel)
 
     EXPECT_EQ(retrievedAddresses.size(), 1u);
 
-    THashMap<IClientRequestPtr, TString> requestToPeer;
+    THashMap<IClientRequestPtr, std::string> requestToPeer;
     for (int iter = 0; iter < 1000; ++iter) {
         auto request = CreateRequest(/*enableStickiness*/ true);
         auto channel = viablePeerRegistry->PickStickyChannel(request);
@@ -503,9 +503,9 @@ TEST(TPreferLocalViablePeerRegistryTest, Simple)
     auto viablePeerRegistry = CreateTestRegistry(EPeerPriorityStrategy::PreferLocal, channelFactory, 3);
 
     auto finally = Finally([oldLocalHostName = NNet::GetLocalHostName()] {
-        NNet::WriteLocalHostName(oldLocalHostName);
+        NNet::SetLocalHostName(oldLocalHostName);
     });
-    NNet::WriteLocalHostName("home.man.yp-c.yandex.net");
+    NNet::SetLocalHostName("home.man.yp-c.yandex.net");
 
     EXPECT_TRUE(viablePeerRegistry->RegisterPeer("b.sas.yp-c.yandex.net"));
     EXPECT_TRUE(viablePeerRegistry->RegisterPeer("c.sas.yp-c.yandex.net"));
@@ -534,9 +534,9 @@ TEST(TPreferLocalViablePeerRegistryTest, MinPeerCountForPriorityAwareness)
         /*minPeerCountForPriorityAwareness*/ 2);
 
     auto finally = Finally([oldLocalHostName = NNet::GetLocalHostName()] {
-        NNet::WriteLocalHostName(oldLocalHostName);
+        NNet::SetLocalHostName(oldLocalHostName);
     });
-    NNet::WriteLocalHostName("home.man.yp-c.yandex.net");
+    NNet::SetLocalHostName("home.man.yp-c.yandex.net");
 
     EXPECT_TRUE(viablePeerRegistry->RegisterPeer("local.man.yp-c.yandex.net"));
 
@@ -563,9 +563,9 @@ TEST(TPreferLocalViablePeerRegistryTest, RegistrationEvictsLesserPeers)
     auto viablePeerRegistry = CreateTestRegistry(EPeerPriorityStrategy::PreferLocal, channelFactory, 3);
 
     auto finally = Finally([oldLocalHostName = NNet::GetLocalHostName()] {
-        NNet::WriteLocalHostName(oldLocalHostName);
+        NNet::SetLocalHostName(oldLocalHostName);
     });
-    NNet::WriteLocalHostName("home.man.yp-c.yandex.net");
+    NNet::SetLocalHostName("home.man.yp-c.yandex.net");
 
     EXPECT_TRUE(viablePeerRegistry->RegisterPeer("b.sas.yp-c.yandex.net"));
     EXPECT_TRUE(viablePeerRegistry->RegisterPeer("c.sas.yp-c.yandex.net"));
@@ -591,9 +591,9 @@ TEST(TPreferLocalViablePeerRegistryTest, PeerRotationRespectsPriority)
     auto viablePeerRegistry = CreateTestRegistry(EPeerPriorityStrategy::PreferLocal, channelFactory, 3);
 
     auto finally = Finally([oldLocalHostName = NNet::GetLocalHostName()] {
-        NNet::WriteLocalHostName(oldLocalHostName);
+        NNet::SetLocalHostName(oldLocalHostName);
     });
-    NNet::WriteLocalHostName("home.man.yp-c.yandex.net");
+    NNet::SetLocalHostName("home.man.yp-c.yandex.net");
 
     EXPECT_TRUE(viablePeerRegistry->RegisterPeer("b.sas.yp-c.yandex.net"));
     EXPECT_TRUE(viablePeerRegistry->RegisterPeer("c.sas.yp-c.yandex.net"));
@@ -615,9 +615,9 @@ TEST(TPreferLocalViablePeerRegistryTest, FillFromBacklogRespectsPriority)
     auto viablePeerRegistry = CreateTestRegistry(EPeerPriorityStrategy::PreferLocal, channelFactory, 3);
 
     auto finally = Finally([oldLocalHostName = NNet::GetLocalHostName()] {
-        NNet::WriteLocalHostName(oldLocalHostName);
+        NNet::SetLocalHostName(oldLocalHostName);
     });
-    NNet::WriteLocalHostName("home.man.yp-c.yandex.net");
+    NNet::SetLocalHostName("home.man.yp-c.yandex.net");
 
     EXPECT_TRUE(viablePeerRegistry->RegisterPeer("b.sas.yp-c.yandex.net"));
     EXPECT_TRUE(viablePeerRegistry->RegisterPeer("c.sas.yp-c.yandex.net"));
@@ -650,9 +650,9 @@ TEST(TPreferLocalViablePeerRegistryTest, DoNotCrashIfNoLocalPeers)
     auto viablePeerRegistry = CreateTestRegistry(EPeerPriorityStrategy::PreferLocal, channelFactory, 3);
 
     auto finally = Finally([oldLocalHostName = NNet::GetLocalHostName()] {
-        NNet::WriteLocalHostName(oldLocalHostName);
+        NNet::SetLocalHostName(oldLocalHostName);
     });
-    NNet::WriteLocalHostName("home.man.yp-c.yandex.net");
+    NNet::SetLocalHostName("home.man.yp-c.yandex.net");
 
     EXPECT_TRUE(viablePeerRegistry->RegisterPeer("b.sas.yp-c.yandex.net"));
     EXPECT_TRUE(viablePeerRegistry->RegisterPeer("a.man.yp-c.yandex.net"));

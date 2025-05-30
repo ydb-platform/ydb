@@ -45,7 +45,7 @@ ICodegeneratorInlineWideNode::TGenerateResult TSimpleStatefulWideFlowCodegenerat
     auto block = genToBlock; // >>> start of main code chunk
 
     const auto stateVal = new LoadInst(valueType, statePtrVal, "state", block);
-    BranchInst::Create(init, loop, IsInvalid(stateVal, block), block);
+    BranchInst::Create(init, loop, IsInvalid(stateVal, block, context), block);
 
     block = init; // state initialization block:
 

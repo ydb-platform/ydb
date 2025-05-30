@@ -84,8 +84,8 @@ protected:
     }
 
 private:
-    const std::optional<TString> User_;
-    const std::optional<TString> UserTag_;
+    const std::optional<std::string> User_;
+    const std::optional<std::string> UserTag_;
 };
 
 IChannelPtr CreateUserInjectingChannel(
@@ -241,7 +241,7 @@ NRpc::IChannelPtr CreateUserTicketInjectingChannel(
     const TAuthenticationOptions& options)
 {
     YT_VERIFY(underlyingChannel);
-    YT_VERIFY(options.UserTicket && *options.UserTicket);
+    YT_VERIFY(!options.UserTicket->empty() && !options.UserTicket->empty());
     return New<TUserTicketInjectingChannel>(
         std::move(underlyingChannel),
         options);
@@ -268,12 +268,12 @@ public:
         }
         return CreateServiceTicketInjectingChannel(
             std::move(channel),
-            TAuthenticationOptions::FromServiceTicketAuth(ServiceTicketAuth_));
+            {.ServiceTicketAuth = ServiceTicketAuth_});
     }
 
 private:
-    IChannelFactoryPtr UnderlyingFactory_;
-    IServiceTicketAuthPtr ServiceTicketAuth_;
+    const IChannelFactoryPtr UnderlyingFactory_;
+    const IServiceTicketAuthPtr ServiceTicketAuth_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

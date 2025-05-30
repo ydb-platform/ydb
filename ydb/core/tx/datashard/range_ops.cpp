@@ -133,7 +133,7 @@ NKikimr::TTableRange NKikimr::Intersect(TConstArrayRef<NScheme::TTypeInfo> types
                 return TTableRange(second.From, second.InclusiveFrom,
                                    first.To, first.InclusiveTo);
             } else { // if (cmpTF < 0)
-                Y_ABORT("unreachable");
+                Y_ENSURE(false, "unreachable");
             }
         } else if (cmpTT == 0) {
             //=================
@@ -184,7 +184,7 @@ NKikimr::TTableRange NKikimr::Intersect(TConstArrayRef<NScheme::TTypeInfo> types
                                    second.To, second.InclusiveTo);
             } else {
                 // cmpTT < 0
-                Y_ABORT("unreachable");
+                Y_ENSURE(false, "unreachable");
             }
         } else { // if (cmpFT > 0)
             //=================
@@ -224,7 +224,7 @@ TString NKikimr::DebugPrintRanges(TConstArrayRef<NScheme::TTypeInfo> types,
 }
 
 TString NKikimr::DebugPrintPoint(TConstArrayRef<NScheme::TTypeInfo> types, const TConstArrayRef<TCell> &point, const NScheme::TTypeRegistry& typeRegistry) {
-    Y_ABORT_UNLESS(types.size() >= point.size());
+    Y_ENSURE(types.size() >= point.size());
     TDbTupleRef pointRef(types.data(), point.data(), point.size());
 
     return DbgPrintTuple(pointRef, typeRegistry);

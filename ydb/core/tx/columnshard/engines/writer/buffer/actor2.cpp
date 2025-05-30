@@ -32,7 +32,7 @@ void TActor::Flush() {
 }
 
 void TActor::Handle(TEvFlushBuffer::TPtr& /*ev*/) {
-    if (AppDataVerified().ColumnShardConfig.HasWritingBufferDurationMs()) {
+    if (AppDataVerified().ColumnShardConfig.HasWritingBufferDurationMs() && AppDataVerified().ColumnShardConfig.GetWritingBufferDurationMs()) {
         FlushDuration = TDuration::MilliSeconds(AppDataVerified().ColumnShardConfig.GetWritingBufferDurationMs());
     } else {
         FlushDuration = std::nullopt;
@@ -48,7 +48,7 @@ void TActor::Handle(TEvAddInsertedDataToBuffer::TPtr& ev) {
     AFL_VERIFY(evBase->GetWriteData()->GetBlobsAction()->GetStorageId() == NOlap::IStoragesManager::DefaultStorageId);
 
     SumSize += evBase->GetWriteData()->GetSize();
-    const ui64 pathId = evBase->GetWriteData()->GetWriteMeta().GetTableId();
+    const TInternalPathId pathId = evBase->GetWriteData()->GetWriteMeta().GetTableId();
     const ui64 schemaVersion = evBase->GetContext()->GetActualSchema()->GetVersion();
     TAggregationId aggrId(pathId, schemaVersion, evBase->GetWriteData()->GetWriteMeta().GetModificationType());
     auto it = Aggregations.find(aggrId);
@@ -61,17 +61,20 @@ void TActor::Handle(TEvAddInsertedDataToBuffer::TPtr& ev) {
     }
     it->second.AddUnit(TWriteUnit(evBase->GetWriteData(), evBase->GetRecordBatch()));
     if (it->second.GetSumSize() > (ui64)AppDataVerified().ColumnShardConfig.GetWritingBufferVolumeMb() * 1024 * 1024 || !FlushDuration) {
+        SumSize -= it->second.GetSumSize();
         it->second.Flush(TabletId);
     }
 }
 
 void TWriteAggregation::Flush(const ui64 tabletId) {
     if (Units.size()) {
+        Context.GetWritingCounters()->OnAggregationWrite(Units.size(), SumSize);
         std::shared_ptr<NConveyor::ITask> task =
             std::make_shared<TBuildPackSlicesTask>(std::move(Units), Context, PathId, tabletId, ModificationType);
-        NConveyor::TInsertServiceOperator::AsyncTaskToExecute(task);
+        NConveyor::TInsertServiceOperator::SendTaskToExecute(task);
         Units.clear();
+        SumSize = 0;
     }
 }
 
-}   // namespace NKikimr::NColumnShard::NWritingPortions
+}   // namespace NKikimr::NOlap::NWritingPortions

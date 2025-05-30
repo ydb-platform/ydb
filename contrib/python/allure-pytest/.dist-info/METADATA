@@ -1,6 +1,6 @@
-Metadata-Version: 2.1
+Metadata-Version: 2.4
 Name: allure-pytest
-Version: 2.13.5
+Version: 2.14.2
 Summary: Allure pytest integration
 Home-page: https://allurereport.org/
 Author: Qameta Software Inc., Stanislav Seliverstov
@@ -17,15 +17,26 @@ Classifier: Topic :: Software Development :: Quality Assurance
 Classifier: Topic :: Software Development :: Testing
 Classifier: Programming Language :: Python :: 3
 Classifier: Programming Language :: Python :: 3 :: Only
-Classifier: Programming Language :: Python :: 3.7
 Classifier: Programming Language :: Python :: 3.8
 Classifier: Programming Language :: Python :: 3.9
 Classifier: Programming Language :: Python :: 3.10
 Classifier: Programming Language :: Python :: 3.11
 Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
 Description-Content-Type: text/markdown
-Requires-Dist: pytest >=4.5.0
-Requires-Dist: allure-python-commons ==2.13.5
+Requires-Dist: pytest>=4.5.0
+Requires-Dist: allure-python-commons==2.14.2
+Dynamic: author
+Dynamic: author-email
+Dynamic: classifier
+Dynamic: description
+Dynamic: description-content-type
+Dynamic: home-page
+Dynamic: keywords
+Dynamic: license
+Dynamic: project-url
+Dynamic: requires-dist
+Dynamic: summary
 
 ## Allure Pytest Plugin
 

@@ -30,23 +30,23 @@ namespace orc {
   }
 
   const std::vector<PredicateLeaf>& SearchArgumentImpl::getLeaves() const {
-    return mLeaves;
+    return leaves_;
   }
 
   const ExpressionTree* SearchArgumentImpl::getExpression() const {
-    return mExpressionTree.get();
+    return expressionTree_.get();
   }
 
   TruthValue SearchArgumentImpl::evaluate(const std::vector<TruthValue>& leaves) const {
-    return mExpressionTree == nullptr ? TruthValue::YES : mExpressionTree->evaluate(leaves);
+    return expressionTree_ == nullptr ? TruthValue::YES : expressionTree_->evaluate(leaves);
   }
 
   std::string SearchArgumentImpl::toString() const {
     std::ostringstream sstream;
-    for (size_t i = 0; i != mLeaves.size(); ++i) {
-      sstream << "leaf-" << i << " = " << mLeaves.at(i).toString() << ", ";
+    for (size_t i = 0; i != leaves_.size(); ++i) {
+      sstream << "leaf-" << i << " = " << leaves_.at(i).toString() << ", ";
     }
-    sstream << "expr = " << mExpressionTree->toString();
+    sstream << "expr = " << expressionTree_->toString();
     return sstream.str();
   }
 
@@ -55,14 +55,14 @@ namespace orc {
   }
 
   SearchArgumentBuilderImpl::SearchArgumentBuilderImpl() {
-    mRoot.reset(new ExpressionTree(ExpressionTree::Operator::AND));
-    mCurrTree.push_back(mRoot);
+    root_.reset(new ExpressionTree(ExpressionTree::Operator::AND));
+    currTree_.push_back(root_);
   }
 
   SearchArgumentBuilder& SearchArgumentBuilderImpl::start(ExpressionTree::Operator op) {
     TreeNode node = std::make_shared<ExpressionTree>(op);
-    mCurrTree.front()->addChild(node);
-    mCurrTree.push_front(node);
+    currTree_.front()->addChild(node);
+    currTree_.push_front(node);
     return *this;
   }
 
@@ -79,9 +79,9 @@ namespace orc {
   }
 
   SearchArgumentBuilder& SearchArgumentBuilderImpl::end() {
-    TreeNode& current = mCurrTree.front();
+    TreeNode& current = currTree_.front();
     if (current->getChildren().empty()) {
-      throw std::invalid_argument("Cannot create expression " + mRoot->toString() +
+      throw std::invalid_argument("Cannot create expression " + root_->toString() +
                                   " with no children.");
     }
     if (current->getOperator() == ExpressionTree::Operator::NOT &&
@@ -89,13 +89,13 @@ namespace orc {
       throw std::invalid_argument("Can't create NOT expression " + current->toString() +
                                   " with more than 1 child.");
     }
-    mCurrTree.pop_front();
+    currTree_.pop_front();
     return *this;
   }
 
   size_t SearchArgumentBuilderImpl::addLeaf(PredicateLeaf leaf) {
-    size_t id = mLeaves.size();
-    const auto& result = mLeaves.insert(std::make_pair(leaf, id));
+    size_t id = leaves_.size();
+    const auto& result = leaves_.insert(std::make_pair(leaf, id));
     return result.first->second;
   }
 
@@ -112,7 +112,7 @@ namespace orc {
                                                                     T column,
                                                                     PredicateDataType type,
                                                                     Literal literal) {
-    TreeNode parent = mCurrTree.front();
+    TreeNode parent = currTree_.front();
     if (isInvalidColumn(column)) {
       parent->addChild(std::make_shared<ExpressionTree>(TruthValue::YES_NO_NULL));
     } else {
@@ -181,7 +181,7 @@ namespace orc {
   template <typename T, typename CONTAINER>
   SearchArgumentBuilder& SearchArgumentBuilderImpl::addChildForIn(T column, PredicateDataType type,
                                                                   const CONTAINER& literals) {
-    TreeNode& parent = mCurrTree.front();
+    TreeNode& parent = currTree_.front();
     if (isInvalidColumn(column)) {
       parent->addChild(std::make_shared<ExpressionTree>((TruthValue::YES_NO_NULL)));
     } else {
@@ -219,7 +219,7 @@ namespace orc {
   template <typename T>
   SearchArgumentBuilder& SearchArgumentBuilderImpl::addChildForIsNull(T column,
                                                                       PredicateDataType type) {
-    TreeNode& parent = mCurrTree.front();
+    TreeNode& parent = currTree_.front();
     if (isInvalidColumn(column)) {
       parent->addChild(std::make_shared<ExpressionTree>(TruthValue::YES_NO_NULL));
     } else {
@@ -244,7 +244,7 @@ namespace orc {
                                                                        PredicateDataType type,
                                                                        Literal lower,
                                                                        Literal upper) {
-    TreeNode& parent = mCurrTree.front();
+    TreeNode& parent = currTree_.front();
     if (isInvalidColumn(column)) {
       parent->addChild(std::make_shared<ExpressionTree>(TruthValue::YES_NO_NULL));
     } else {
@@ -267,7 +267,7 @@ namespace orc {
   }
 
   SearchArgumentBuilder& SearchArgumentBuilderImpl::literal(TruthValue truth) {
-    TreeNode& parent = mCurrTree.front();
+    TreeNode& parent = currTree_.front();
     parent->addChild(std::make_shared<ExpressionTree>(truth));
     return *this;
   }
@@ -555,34 +555,34 @@ namespace orc {
   }
 
   SearchArgumentImpl::SearchArgumentImpl(TreeNode root, const std::vector<PredicateLeaf>& leaves)
-      : mExpressionTree(root), mLeaves(leaves) {
+      : expressionTree_(root), leaves_(leaves) {
     // PASS
   }
 
   std::unique_ptr<SearchArgument> SearchArgumentBuilderImpl::build() {
-    if (mCurrTree.size() != 1) {
-      throw std::invalid_argument("Failed to end " + std::to_string(mCurrTree.size()) +
+    if (currTree_.size() != 1) {
+      throw std::invalid_argument("Failed to end " + std::to_string(currTree_.size()) +
                                   " operations.");
     }
-    mRoot = pushDownNot(mRoot);
-    mRoot = foldMaybe(mRoot);
-    mRoot = flatten(mRoot);
-    mRoot = convertToCNF(mRoot);
-    mRoot = flatten(mRoot);
-    std::vector<size_t> leafReorder(mLeaves.size(), UNUSED_LEAF);
-    size_t newLeafCount = compactLeaves(mRoot, 0, leafReorder.data());
-    mRoot = rewriteLeaves(mRoot, leafReorder.data());
+    root_ = pushDownNot(root_);
+    root_ = foldMaybe(root_);
+    root_ = flatten(root_);
+    root_ = convertToCNF(root_);
+    root_ = flatten(root_);
+    std::vector<size_t> leafReorder(leaves_.size(), UNUSED_LEAF);
+    size_t newLeafCount = compactLeaves(root_, 0, leafReorder.data());
+    root_ = rewriteLeaves(root_, leafReorder.data());
 
     std::vector<PredicateLeaf> leafList(newLeafCount, PredicateLeaf());
 
     // build the new list
-    for (auto& leaf : mLeaves) {
+    for (auto& leaf : leaves_) {
       size_t newLoc = leafReorder[leaf.second];
       if (newLoc != UNUSED_LEAF) {
         leafList[newLoc] = leaf.first;
       }
     }
-    return std::make_unique<SearchArgumentImpl>(mRoot, leafList);
+    return std::make_unique<SearchArgumentImpl>(root_, leafList);
   }
 
   std::unique_ptr<SearchArgumentBuilder> SearchArgumentFactory::newBuilder() {

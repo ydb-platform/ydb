@@ -28,7 +28,7 @@ using namespace NProfiling;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static constexpr auto& Logger = ConcurrencyLogger;
+constinit const auto Logger = ConcurrencyLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -148,7 +148,7 @@ private:
     {
         ShutdownCookie_ = RegisterShutdownCallback(
             "TFiberRegistry",
-            BIND([this] {
+            BIND_NO_PROPAGATE([this] {
                 auto guard = Guard(Lock_);
                 while(GuardedProcessQueues());
             }),
@@ -192,7 +192,7 @@ private:
 
         Fibers_.Append(std::move(toRegister));
 
-        // NB: util intrusive list does not return
+        // NB: Util intrusive list does not return
         // nullptr in case of empty!
         // We have to check ourselves that
         // PopBack return is a valid one.

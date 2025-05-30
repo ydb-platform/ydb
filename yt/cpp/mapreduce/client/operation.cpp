@@ -11,6 +11,7 @@
 
 #include <yt/cpp/mapreduce/common/helpers.h>
 #include <yt/cpp/mapreduce/common/retry_lib.h>
+#include <yt/cpp/mapreduce/common/retry_request.h>
 #include <yt/cpp/mapreduce/common/wait_proxy.h>
 
 #include <yt/cpp/mapreduce/interface/config.h>
@@ -21,10 +22,6 @@
 #include <yt/cpp/mapreduce/interface/protobuf_format.h>
 
 #include <yt/cpp/mapreduce/interface/logging/yt_log.h>
-#include <yt/cpp/mapreduce/interface/logging/yt_log.h>
-
-#include <yt/cpp/mapreduce/http/requests.h>
-#include <yt/cpp/mapreduce/http/retry_request.h>
 
 #include <yt/cpp/mapreduce/io/job_reader.h>
 #include <yt/cpp/mapreduce/io/job_writer.h>
@@ -37,8 +34,7 @@
 #include <yt/cpp/mapreduce/io/proto_helpers.h>
 #include <yt/cpp/mapreduce/io/skiff_table_reader.h>
 
-#include <yt/cpp/mapreduce/raw_client/raw_batch_request.h>
-#include <yt/cpp/mapreduce/raw_client/raw_requests.h>
+#include <yt/cpp/mapreduce/http_client/raw_requests.h>
 
 #include <library/cpp/yson/node/serialize.h>
 
@@ -224,12 +220,24 @@ TStructuredJobTableList ApplyProtobufColumnFilters(
         return tableList;
     }
 
-    auto isDynamic = NRawClient::BatchTransform(
-        CreateDefaultRequestRetryPolicy(preparer.GetContext().Config),
+    TVector<TRichYPath> tableListPaths;
+    for (const auto& table: tableList) {
+        Y_ABORT_UNLESS(table.RichYPath, "Cannot get path to apply column filters");
+        tableListPaths.emplace_back(*table.RichYPath);
+    }
+
+    auto isDynamic = NRawClient::RemoteClustersBatchTransform(
+        preparer.GetClient()->GetRawClient(),
         preparer.GetContext(),
-        tableList,
-        [&] (NRawClient::TRawBatchRequest& batch, const auto& table) {
-            return batch.Get(preparer.GetTransactionId(), table.RichYPath->Path_ + "/@dynamic", TGetOptions());
+        tableListPaths,
+        [&] (IRawBatchRequestPtr batch, const auto& table) {
+            // In case of external cluster, we can't use the current transaction
+            // since it is unknown for the external cluster.
+            // Hence, we should take a global transaction.
+            if (table.Cluster_ && !table.Cluster_->empty()) {
+                return batch->Get(TTransactionId(), table.Path_ + "/@dynamic", TGetOptions());
+            }
+            return batch->Get(preparer.GetTransactionId(), table.Path_ + "/@dynamic", TGetOptions());
         });
 
     auto newTableList = tableList;
@@ -281,8 +289,8 @@ TSimpleOperationIo CreateSimpleOperationIo(
         structuredJob,
         preparer,
         options,
-        CanonizeStructuredTableList(preparer.GetContext(), GetStructuredInputs(spec)),
-        CanonizeStructuredTableList(preparer.GetContext(), GetStructuredOutputs(spec)),
+        CanonizeStructuredTableList(preparer.GetClient()->GetRawClient(), GetStructuredInputs(spec)),
+        CanonizeStructuredTableList(preparer.GetClient()->GetRawClient(), GetStructuredOutputs(spec)),
         hints,
         nodeReaderFormat,
         GetColumnsUsedInOperation(spec));
@@ -304,8 +312,8 @@ TSimpleOperationIo CreateSimpleOperationIo(
         }
     };
 
-    auto inputs = NRawClient::CanonizeYPaths(/* retryPolicy */ nullptr, preparer.GetContext(), spec.GetInputs());
-    auto outputs = NRawClient::CanonizeYPaths(/* retryPolicy */ nullptr, preparer.GetContext(), spec.GetOutputs());
+    auto inputs = NRawClient::CanonizeYPaths(preparer.GetClient()->GetRawClient(), spec.GetInputs());
+    auto outputs = NRawClient::CanonizeYPaths(preparer.GetClient()->GetRawClient(), spec.GetOutputs());
 
     VerifyHasElements(inputs, "input");
     VerifyHasElements(outputs, "output");
@@ -318,7 +326,6 @@ TSimpleOperationIo CreateSimpleOperationIo(
             inputs,
             outputs,
             preparer.GetClient()->GetRawClient(),
-            preparer.GetContext(),
             preparer.GetClientRetryPolicy(),
             preparer.GetTransactionId()),
         &inputs,
@@ -358,7 +365,7 @@ TString GetJobStderrWithRetriesAndIgnoreErrors(
         jobStderr = RequestWithRetry<TString>(
             retryPolicy,
             [&rawClient, &operationId, &jobId, &options] (TMutationId /*mutationId*/) {
-                return rawClient->GetJobStderrWithRetries(operationId, jobId, options);
+                return rawClient->GetJobStderr(operationId, jobId, options)->ReadAll();
             });
     } catch (const TErrorResponse& e) {
         YT_LOG_ERROR("Cannot get job stderr (OperationId: %v, JobId: %v, Error: %v)",
@@ -497,7 +504,6 @@ TSimpleOperationIo CreateSimpleOperationIoHelper(
             structuredInputs,
             structuredOutputs,
             preparer.GetClient()->GetRawClient(),
-            preparer.GetContext(),
             preparer.GetClientRetryPolicy(),
             preparer.GetTransactionId()),
         &structuredInputs,
@@ -644,7 +650,7 @@ TNode BuildAutoMergeSpec(const TAutoMergeSpec& options)
     return result;
 }
 
-TNode BuildJobProfilerSpec(const TJobProfilerSpec& profilerSpec)
+[[maybe_unused]] TNode BuildJobProfilerSpec(const TJobProfilerSpec& profilerSpec)
 {
     TNode result;
     if (profilerSpec.ProfilingBinary_) {
@@ -707,6 +713,9 @@ void BuildUserJobFluently(
         .Item("file_paths").List(preparer.GetFiles())
         .DoIf(!preparer.GetLayers().empty(), [&] (TFluentMap fluentMap) {
             fluentMap.Item("layer_paths").List(preparer.GetLayers());
+        })
+        .DoIf(userJobSpec.DockerImage_.Defined(), [&] (TFluentMap fluentMap) {
+            fluentMap.Item("docker_image").Value(*userJobSpec.DockerImage_);
         })
         .Item("command").Value(preparer.GetCommand())
         .Item("class_name").Value(preparer.GetClassName())
@@ -772,6 +781,8 @@ void BuildUserJobFluently(
                     list.Item().Value(BuildJobProfilerSpec(jobProfiler));
                 })
             .EndList()
+        .Item("start_queue_consumer_registration_manager").Value(false)
+        .Item("enable_rpc_proxy_in_job_proxy").Value(userJobSpec.EnableRpcProxyInJobProxy_)
         .Item("redirect_stdout_to_stderr").Value(preparer.ShouldRedirectStdoutToStderr());
 }
 
@@ -844,6 +855,9 @@ void BuildCommonOperationPart(
         MergeNodes((*specNode)["annotations"], nirvanaContext.Annotations);
     }
 
+    if (baseSpec.Alias_) {
+        (*specNode)["alias"] = *baseSpec.Alias_;
+    }
     TString pool;
     if (baseSpec.Pool_) {
         pool = *baseSpec.Pool_;
@@ -880,14 +894,20 @@ void BuildCommonOperationPart(
     if (baseSpec.Title_.Defined()) {
         (*specNode)["title"] = *baseSpec.Title_;
     }
+    if (baseSpec.MaxFailedJobCount_.Defined()) {
+        (*specNode)["max_failed_job_count"] = *baseSpec.MaxFailedJobCount_;
+    }
+    if (baseSpec.Description_.Defined()) {
+        (*specNode)["description"] = *baseSpec.Description_;
+    }
+    if (baseSpec.Annotations_.Defined()) {
+        (*specNode)["annotations"] = *baseSpec.Annotations_;
+    }
 }
 
 template <typename TSpec>
 void BuildCommonUserOperationPart(const TSpec& baseSpec, TNode* spec)
 {
-    if (baseSpec.MaxFailedJobCount_.Defined()) {
-        (*spec)["max_failed_job_count"] = *baseSpec.MaxFailedJobCount_;
-    }
     if (baseSpec.FailOnJobRestart_.Defined()) {
         (*spec)["fail_on_job_restart"] = *baseSpec.FailOnJobRestart_;
     }
@@ -1046,17 +1066,19 @@ void CheckInputTablesExist(
 {
     Y_ENSURE(!paths.empty(), "Input tables are not set");
     for (auto& path : paths) {
-        auto curTransactionId =  path.TransactionId_.GetOrElse(preparer.GetTransactionId());
-        auto exists = RequestWithRetry<bool>(
-            preparer.GetClientRetryPolicy()->CreatePolicyForGenericRequest(),
-            [&preparer, &curTransactionId, &path] (TMutationId /*mutationId*/) {
-                return preparer.GetClient()->GetRawClient()->Exists(
-                    curTransactionId,
-                    path.Path_);
-            });
-        Y_ENSURE_EX(
-            path.Cluster_.Defined() || exists,
-            TApiUsageError() << "Input table '" << path.Path_ << "' doesn't exist");
+        if (!path.Cluster_.Defined()) {
+            auto curTransactionId =  path.TransactionId_.GetOrElse(preparer.GetTransactionId());
+            auto exists = RequestWithRetry<bool>(
+                preparer.GetClientRetryPolicy()->CreatePolicyForGenericRequest(),
+                [&preparer, &curTransactionId, &path] (TMutationId /*mutationId*/) {
+                    return preparer.GetClient()->GetRawClient()->Exists(
+                        curTransactionId,
+                        path.Path_);
+                });
+            Y_ENSURE_EX(
+                exists,
+                TApiUsageError() << "Input table '" << path.Path_ << "' doesn't exist");
+        }
     }
 }
 
@@ -1635,9 +1657,9 @@ void ExecuteMapReduce(
     TMapReduceOperationSpec spec = spec_;
 
     TMapReduceOperationIo operationIo;
-    auto structuredInputs = CanonizeStructuredTableList(preparer->GetContext(), spec.GetStructuredInputs());
-    auto structuredMapOutputs = CanonizeStructuredTableList(preparer->GetContext(), spec.GetStructuredMapOutputs());
-    auto structuredOutputs = CanonizeStructuredTableList(preparer->GetContext(), spec.GetStructuredOutputs());
+    auto structuredInputs = CanonizeStructuredTableList(preparer->GetClient()->GetRawClient(), spec.GetStructuredInputs());
+    auto structuredMapOutputs = CanonizeStructuredTableList(preparer->GetClient()->GetRawClient(), spec.GetStructuredMapOutputs());
+    auto structuredOutputs = CanonizeStructuredTableList(preparer->GetClient()->GetRawClient(), spec.GetStructuredOutputs());
 
     const bool inferOutputSchema = options.InferOutputSchema_.GetOrElse(preparer->GetContext().Config->InferTableSchema);
 
@@ -1688,7 +1710,6 @@ void ExecuteMapReduce(
                 structuredInputs,
                 mapperOutput,
                 preparer->GetClient()->GetRawClient(),
-                preparer->GetContext(),
                 preparer->GetClientRetryPolicy(),
                 preparer->GetTransactionId()),
             &structuredInputs,
@@ -1758,7 +1779,6 @@ void ExecuteMapReduce(
                     inputs,
                     outputs,
                     preparer->GetClient()->GetRawClient(),
-                    preparer->GetContext(),
                     preparer->GetClientRetryPolicy(),
                     preparer->GetTransactionId()),
                 &inputs,
@@ -1824,7 +1844,6 @@ void ExecuteMapReduce(
                 structuredInputs,
                 structuredOutputs,
                 preparer->GetClient()->GetRawClient(),
-                preparer->GetContext(),
                 preparer->GetClientRetryPolicy(),
                 preparer->GetTransactionId()),
             &structuredInputs,
@@ -1904,9 +1923,9 @@ void ExecuteRawMapReduce(
     YT_LOG_DEBUG("Starting raw map-reduce operation (PreparationId: %v)",
         preparer->GetPreparationId());
     TMapReduceOperationIo operationIo;
-    operationIo.Inputs = NRawClient::CanonizeYPaths(/* retryPolicy */ nullptr, preparer->GetContext(), spec.GetInputs());
-    operationIo.MapOutputs = NRawClient::CanonizeYPaths(/* retryPolicy */ nullptr, preparer->GetContext(), spec.GetMapOutputs());
-    operationIo.Outputs = NRawClient::CanonizeYPaths(/* retryPolicy */ nullptr, preparer->GetContext(), spec.GetOutputs());
+    operationIo.Inputs = NRawClient::CanonizeYPaths(preparer->GetClient()->GetRawClient(), spec.GetInputs());
+    operationIo.MapOutputs = NRawClient::CanonizeYPaths(preparer->GetClient()->GetRawClient(), spec.GetMapOutputs());
+    operationIo.Outputs = NRawClient::CanonizeYPaths(preparer->GetClient()->GetRawClient(), spec.GetOutputs());
 
     VerifyHasElements(operationIo.Inputs, "inputs");
     VerifyHasElements(operationIo.Outputs, "outputs");
@@ -1953,8 +1972,8 @@ void ExecuteSort(
 {
     YT_LOG_DEBUG("Starting sort operation (PreparationId: %v)",
         preparer->GetPreparationId());
-    auto inputs = NRawClient::CanonizeYPaths(/* retryPolicy */ nullptr, preparer->GetContext(), spec.Inputs_);
-    auto output = NRawClient::CanonizeYPath(nullptr, preparer->GetContext(), spec.Output_);
+    auto inputs = NRawClient::CanonizeYPaths(preparer->GetClient()->GetRawClient(), spec.Inputs_);
+    auto output = NRawClient::CanonizeYPath(preparer->GetClient()->GetRawClient(), spec.Output_);
 
     if (options.CreateOutputTables_) {
         CheckInputTablesExist(*preparer, inputs);
@@ -2002,8 +2021,8 @@ void ExecuteMerge(
 {
     YT_LOG_DEBUG("Starting merge operation (PreparationId: %v)",
         preparer->GetPreparationId());
-    auto inputs = NRawClient::CanonizeYPaths(/* retryPolicy */ nullptr, preparer->GetContext(), spec.Inputs_);
-    auto output = NRawClient::CanonizeYPath(nullptr, preparer->GetContext(), spec.Output_);
+    auto inputs = NRawClient::CanonizeYPaths(preparer->GetClient()->GetRawClient(), spec.Inputs_);
+    auto output = NRawClient::CanonizeYPath(preparer->GetClient()->GetRawClient(), spec.Output_);
 
     if (options.CreateOutputTables_) {
         CheckInputTablesExist(*preparer, inputs);
@@ -2052,7 +2071,7 @@ void ExecuteErase(
 {
     YT_LOG_DEBUG("Starting erase operation (PreparationId: %v)",
         preparer->GetPreparationId());
-    auto tablePath = NRawClient::CanonizeYPath(nullptr, preparer->GetContext(), spec.TablePath_);
+    auto tablePath = NRawClient::CanonizeYPath(preparer->GetClient()->GetRawClient(), spec.TablePath_);
 
     TNode specNode = BuildYsonNodeFluently()
     .BeginMap()
@@ -2088,8 +2107,8 @@ void ExecuteRemoteCopy(
 {
     YT_LOG_DEBUG("Starting remote copy operation (PreparationId: %v)",
         preparer->GetPreparationId());
-    auto inputs = NRawClient::CanonizeYPaths(/* retryPolicy */ nullptr, preparer->GetContext(), spec.Inputs_);
-    auto output = NRawClient::CanonizeYPath(nullptr, preparer->GetContext(), spec.Output_);
+    auto inputs = NRawClient::CanonizeYPaths(preparer->GetClient()->GetRawClient(), spec.Inputs_);
+    auto output = NRawClient::CanonizeYPath(preparer->GetClient()->GetRawClient(), spec.Output_);
 
     if (options.CreateOutputTables_) {
         CreateOutputTable(*preparer, output);
@@ -2343,7 +2362,7 @@ public:
         : OperationImpl_(std::move(operationImpl))
     { }
 
-    void PrepareRequest(NRawClient::TRawBatchRequest* batchRequest) override
+    void PrepareRequest(IRawBatchRequest* batchRequest) override
     {
         auto filter = TOperationAttributeFilter()
             .Add(EOperationAttribute::State)
@@ -2414,7 +2433,8 @@ TString TOperation::TOperationImpl::GetWebInterfaceUrl() const
 
 void TOperation::TOperationImpl::OnPrepared()
 {
-    Y_ABORT_UNLESS(!PreparedPromise_.HasException() && !PreparedPromise_.HasValue());
+    Y_ABORT_IF(PreparedPromise_.HasException());
+    Y_ABORT_IF(PreparedPromise_.HasValue());
     PreparedPromise_.SetValue();
 }
 
@@ -2460,7 +2480,8 @@ bool TOperation::TOperationImpl::IsStarted() const {
 
 void TOperation::TOperationImpl::OnPreparationException(std::exception_ptr e)
 {
-    Y_ABORT_UNLESS(!PreparedPromise_.HasValue() && !PreparedPromise_.HasException());
+    Y_ABORT_IF(PreparedPromise_.HasValue());
+    Y_ABORT_IF(PreparedPromise_.HasException());
     PreparedPromise_.SetException(e);
 }
 
@@ -2658,16 +2679,22 @@ void TOperation::TOperationImpl::UpdateAttributesAndCall(
         }
     }
 
+    auto filter = TOperationAttributeFilter()
+        .Add(EOperationAttribute::Result)
+        .Add(EOperationAttribute::State)
+        .Add(EOperationAttribute::BriefProgress);
+    // To avoid overloading Cypress, we only request the progress attribute as needed,
+    // typically when the user asks for job statistics.
+    if (needJobStatistics) {
+        filter.Add(EOperationAttribute::Progress);
+    }
+
     auto attributes = RequestWithRetry<TOperationAttributes>(
         ClientRetryPolicy_->CreatePolicyForGenericRequest(),
-        [this] (TMutationId /*mutationId*/) {
+        [this, &filter] (TMutationId /*mutationId*/) {
             return RawClient_->GetOperation(
                 *Id_,
-                TGetOperationOptions().AttributeFilter(TOperationAttributeFilter()
-                    .Add(EOperationAttribute::Result)
-                    .Add(EOperationAttribute::Progress)
-                    .Add(EOperationAttribute::State)
-                    .Add(EOperationAttribute::BriefProgress)));
+                TGetOperationOptions().AttributeFilter(filter));
         });
 
     func(attributes);
@@ -3028,7 +3055,8 @@ void* SyncPrepareAndStartOperation(void* pArgs)
         try {
             prepare();
             operation->OnPrepared();
-        } catch (...) {
+        } catch (const std::exception& ex) {
+            YT_LOG_INFO("Operation preparation failed: %v", ex.what());
             operation->OnPreparationException(std::current_exception());
         }
         if (mode >= TOperationOptions::EStartOperationMode::AsyncStart) {

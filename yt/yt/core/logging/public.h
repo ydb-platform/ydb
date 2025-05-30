@@ -30,14 +30,14 @@ DEFINE_ENUM(ECompressionMethod,
 
 ////////////////////////////////////////////////////////////////////////////////
 
-DECLARE_REFCOUNTED_CLASS(TLogManagerConfig)
-DECLARE_REFCOUNTED_CLASS(TLogManagerDynamicConfig)
-DECLARE_REFCOUNTED_CLASS(TFormatterConfig)
-DECLARE_REFCOUNTED_CLASS(TLogWriterConfig)
-DECLARE_REFCOUNTED_CLASS(TRuleConfig)
-DECLARE_REFCOUNTED_CLASS(TFileLogWriterConfig)
-DECLARE_REFCOUNTED_CLASS(TRotationPolicyConfig)
-DECLARE_REFCOUNTED_CLASS(TStderrLogWriterConfig)
+DECLARE_REFCOUNTED_STRUCT(TLogManagerConfig)
+DECLARE_REFCOUNTED_STRUCT(TLogManagerDynamicConfig)
+DECLARE_REFCOUNTED_STRUCT(TFormatterConfig)
+DECLARE_REFCOUNTED_STRUCT(TLogWriterConfig)
+DECLARE_REFCOUNTED_STRUCT(TRuleConfig)
+DECLARE_REFCOUNTED_STRUCT(TFileLogWriterConfig)
+DECLARE_REFCOUNTED_STRUCT(TRotationPolicyConfig)
+DECLARE_REFCOUNTED_STRUCT(TStderrLogWriterConfig)
 
 struct ILogFormatter;
 struct ISystemLogEventProvider;

@@ -163,6 +163,16 @@ public:
     }
 
     template <typename... Args>
+    auto CreateColumnTable(Args&&... args) {
+        return Client.CreateColumnTable(std::forward<Args>(args)...);
+    }
+
+    template <typename... Args>
+    auto CreateTopic(Args&&... args) {
+        return Client.CreateTopic(std::forward<Args>(args)...);
+    }
+
+    template <typename... Args>
     auto MkDir(Args&&... args) {
         return Client.MkDir(std::forward<Args>(args)...);
     }

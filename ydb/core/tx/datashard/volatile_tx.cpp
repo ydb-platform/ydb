@@ -11,7 +11,7 @@ namespace NKikimr::NDataShard {
         TVolatileTxPersistence(TVolatileTxInfo* info)
             : TxInfo(info)
         {
-            Y_ABORT_UNLESS(TxInfo && !TxInfo->Persistence);
+            Y_ENSURE(TxInfo && !TxInfo->Persistence);
             TxInfo->Persistence = this;
         }
 
@@ -56,7 +56,7 @@ namespace NKikimr::NDataShard {
 
             NIceDb::TNiceDb db(txc.DB);
 
-            Y_ABORT_UNLESS(info && info->State == EVolatileTxState::Committed);
+            Y_ENSURE(info && info->State == EVolatileTxState::Committed);
 
             for (auto& pr : Self->GetUserTables()) {
                 auto tid = pr.second->LocalTid;
@@ -71,6 +71,9 @@ namespace NKikimr::NDataShard {
                     }
                 }
             }
+
+            Self->VolatileTxManager.RemoveFromTxMap(info);
+            Self->VolatileTxManager.UnstableVolatileTxByVersion.insert(info);
 
             auto getGroup = [&]() -> ui64 {
                 if (!info->ChangeGroup) {
@@ -118,12 +121,10 @@ namespace NKikimr::NDataShard {
 
         void OnCommitted(const TActorContext& ctx) {
             auto* info = TxInfo;
-            Y_ABORT_UNLESS(info && info->State == EVolatileTxState::Committed);
-            Y_ABORT_UNLESS(info->AddCommitted);
+            Y_ENSURE(info && info->State == EVolatileTxState::Committed);
+            Y_ENSURE(info->AddCommitted);
 
             Self->VolatileTxManager.UnblockDependents(info);
-
-            Self->VolatileTxManager.RemoveFromTxMap(info);
 
             Self->VolatileTxManager.RemoveVolatileTx(info);
 
@@ -156,7 +157,7 @@ namespace NKikimr::NDataShard {
                 return true;
             }
 
-            Y_ABORT_UNLESS(info && info->State == EVolatileTxState::Aborting);
+            Y_ENSURE(info && info->State == EVolatileTxState::Aborting);
 
             for (auto& pr : Self->GetUserTables()) {
                 auto tid = pr.second->LocalTid;
@@ -168,13 +169,16 @@ namespace NKikimr::NDataShard {
                 }
             }
 
+            Self->VolatileTxManager.RemoveFromTxMap(info);
+            Self->VolatileTxManager.UnstableVolatileTxByVersion.insert(info);
+
             if (!info->ArbiterReadSets.empty()) {
                 NKikimrTx::TReadSetData data;
                 data.SetDecision(NKikimrTx::TReadSetData::DECISION_ABORT);
 
                 TString bodyStr;
                 bool ok = data.SerializeToString(&bodyStr);
-                Y_ABORT_UNLESS(ok, "Failed to serialize an abort decision readset");
+                Y_ENSURE(ok, "Failed to serialize an abort decision readset");
 
                 NIceDb::TNiceDb db(txc.DB);
                 for (ui64 seqNo : info->ArbiterReadSets) {
@@ -197,8 +201,8 @@ namespace NKikimr::NDataShard {
                 return;
             }
 
-            Y_ABORT_UNLESS(info && info->State == EVolatileTxState::Aborting);
-            Y_ABORT_UNLESS(info->AddCommitted);
+            Y_ENSURE(info && info->State == EVolatileTxState::Aborting);
+            Y_ENSURE(info->AddCommitted);
 
             for (auto& ev : info->DelayedAcks) {
                 TActivationContext::Send(ev.Release());
@@ -217,8 +221,6 @@ namespace NKikimr::NDataShard {
             Self->VolatileTxManager.RunAbortCallbacks(info);
 
             Self->VolatileTxManager.UnblockDependents(info);
-
-            Self->VolatileTxManager.RemoveFromTxMap(info);
 
             Self->VolatileTxManager.RemoveVolatileTx(info);
 
@@ -255,6 +257,7 @@ namespace NKikimr::NDataShard {
     void TVolatileTxManager::Clear() {
         VolatileTxs.clear();
         VolatileTxByVersion.clear();
+        UnstableVolatileTxByVersion.clear();
         VolatileTxByCommitTxId.clear();
         VolatileTxByCommitOrder.Clear();
         TxMap.Reset();
@@ -264,9 +267,10 @@ namespace NKikimr::NDataShard {
     bool TVolatileTxManager::Load(NIceDb::TNiceDb& db) {
         using Schema = TDataShard::Schema;
 
-        Y_ABORT_UNLESS(
+        Y_ENSURE(
             VolatileTxs.empty() &&
             VolatileTxByVersion.empty() &&
+            UnstableVolatileTxByVersion.empty() &&
             VolatileTxByCommitTxId.empty() &&
             VolatileTxByCommitOrder.Empty() &&
             !TxMap,
@@ -306,7 +310,7 @@ namespace NKikimr::NDataShard {
                 case EVolatileTxState::Aborting:
                     RemoveFromCommitOrder(pr.second.get());
                     ScheduleAbortTx(pr.second.get());
-                    Y_ABORT("FIXME: unexpected persistent aborting state");
+                    Y_ENSURE(false, "FIXME: unexpected persistent aborting state");
                     break;
             }
         }
@@ -329,12 +333,12 @@ namespace NKikimr::NDataShard {
             EVolatileTxState state = rowset.GetValue<Schema::TxVolatileDetails::State>();
             auto details = rowset.GetValue<Schema::TxVolatileDetails::Details>();
 
-            Y_VERIFY_S(txId == details.GetTxId(),
+            Y_ENSURE(txId == details.GetTxId(),
                 "Volatile txId# " << txId << " has unexpected details with txId# " << details.GetTxId());
 
             auto res = VolatileTxs.insert(
                 std::make_pair(txId, std::make_unique<TVolatileTxInfo>()));
-            Y_VERIFY_S(res.second, "Unexpected duplicate volatile txId# " << txId);
+            Y_ENSURE(res.second, "Unexpected duplicate volatile txId# " << txId);
 
             auto* info = res.first->second.get();
             info->TxId = txId;
@@ -378,7 +382,7 @@ namespace NKikimr::NDataShard {
                     // Note that aborting transactions are deleted and we should never observe it as a persistent state
                     for (ui64 commitTxId : info->CommitTxIds) {
                         auto res2 = VolatileTxByCommitTxId.emplace(commitTxId, info);
-                        Y_VERIFY_S(res2.second, "Unexpected duplicate commitTxId# " << commitTxId);
+                        Y_ENSURE(res2.second, "Unexpected duplicate commitTxId# " << commitTxId);
                         TxMap->Add(commitTxId, info->Version);
                     }
 
@@ -401,12 +405,12 @@ namespace NKikimr::NDataShard {
                 case EVolatileTxState::Aborting: {
                     // Aborting transactions don't have dependencies
                     info->Dependencies.clear();
-                    Y_ABORT("FIXME: unexpected persistent aborting state");
+                    Y_ENSURE(false, "FIXME: unexpected persistent aborting state");
                     return;
                 }
             }
 
-            Y_VERIFY_S(false, "Unexpected volatile txId# " << info->TxId << " @" << info->Version << " with state# " << ui32(info->State));
+            Y_ENSURE(false, "Unexpected volatile txId# " << info->TxId << " @" << info->Version << " with state# " << ui32(info->State));
         };
 
         for (auto& pr : VolatileTxs) {
@@ -460,10 +464,10 @@ namespace NKikimr::NDataShard {
             ui64 shardId = rowset.GetValue<Schema::TxVolatileParticipants::ShardId>();
 
             auto* info = (lastInfo && lastInfo->TxId == txId) ? lastInfo : FindByTxId(txId);
-            Y_VERIFY_S(info, "Unexpected failure to find volatile txId# " << txId);
+            Y_ENSURE(info, "Unexpected failure to find volatile txId# " << txId);
 
             // Only waiting transactions may have participants
-            Y_VERIFY_S(info->State == EVolatileTxState::Waiting,
+            Y_ENSURE(info->State == EVolatileTxState::Waiting,
                 "Unexpected volatile txId# " << txId << " with participant# " << shardId
                 << " in state# " << ui32(info->State));
 
@@ -479,7 +483,7 @@ namespace NKikimr::NDataShard {
 
             // Sanity check that are are no waiting transactions without participants
             if (info->State == EVolatileTxState::Waiting) {
-                Y_VERIFY_S(!info->Participants.empty(),
+                Y_ENSURE(!info->Participants.empty(),
                     "Unexpected waiting volatile txId# " << info->TxId << " without participants");
             }
         }
@@ -515,12 +519,9 @@ namespace NKikimr::NDataShard {
     {
         using Schema = TDataShard::Schema;
 
-        Y_VERIFY_S(!commitTxIds.empty(),
-            "Unexpected volatile txId# " << txId << " @" << version << " without commits");
-
         auto res = VolatileTxs.insert(
             std::make_pair(txId, std::make_unique<TVolatileTxInfo>()));
-        Y_VERIFY_S(res.second, "Cannot add volatile txId# " << txId << " @" << version
+        Y_ENSURE(res.second, "Cannot add volatile txId# " << txId << " @" << version
             << ": duplicate volatile tx @" << res.first->second->Version << " already exists");
 
         auto* info = res.first->second.get();
@@ -551,14 +552,14 @@ namespace NKikimr::NDataShard {
 
         for (ui64 commitTxId : commitTxIds) {
             auto res2 = VolatileTxByCommitTxId.emplace(commitTxId, info);
-            Y_VERIFY_S(res2.second, "Cannot add volatile txId# " << txId << " @" << version << " with commitTxId# " << commitTxId
+            Y_ENSURE(res2.second, "Cannot add volatile txId# " << txId << " @" << version << " with commitTxId# " << commitTxId
                 << ": already registered for txId# " << res.first->second->TxId << " @" << res.first->second->Version);
             TxMap->Add(commitTxId, version);
         }
 
         for (ui64 dependencyTxId : info->Dependencies) {
             auto* dependency = FindByTxId(dependencyTxId);
-            Y_VERIFY_S(dependency, "Cannot find dependency txId# " << dependencyTxId
+            Y_ENSURE(dependency, "Cannot find dependency txId# " << dependencyTxId
                 << " for volatile txId# " << txId << " @" << version);
             dependency->Dependents.insert(txId);
         }
@@ -608,8 +609,8 @@ namespace NKikimr::NDataShard {
         });
         txc.DB.OnPersistent([this, txId]() {
             auto* info = FindByTxId(txId);
-            Y_VERIFY_S(info, "Unexpected failure to find volatile txId# " << txId);
-            Y_VERIFY_S(!info->AddCommitted, "Unexpected commit of a committed volatile txId# " << txId);
+            Y_ENSURE(info, "Unexpected failure to find volatile txId# " << txId);
+            Y_ENSURE(!info->AddCommitted, "Unexpected commit of a committed volatile txId# " << txId);
             info->AddCommitted = true;
             if (info->State == EVolatileTxState::Committed) {
                 RunCommitCallbacks(info);
@@ -625,7 +626,7 @@ namespace NKikimr::NDataShard {
 
     void TVolatileTxManager::RollbackAddVolatileTx(ui64 txId) {
         auto* info = FindByTxId(txId);
-        Y_VERIFY_S(info, "Rollback cannot find volatile txId# " << txId);
+        Y_ENSURE(info, "Rollback cannot find volatile txId# " << txId);
 
         // Unlink dependencies
         for (ui64 dependencyTxId : info->Dependencies) {
@@ -640,6 +641,7 @@ namespace NKikimr::NDataShard {
             VolatileTxByCommitTxId.erase(commitTxId);
         }
 
+        Y_DEBUG_ABORT_UNLESS(!UnstableVolatileTxByVersion.contains(info));
         VolatileTxByVersion.erase(info);
 
         // FIXME: do we need to handle WaitingSnapshotEvents somehow?
@@ -670,9 +672,9 @@ namespace NKikimr::NDataShard {
         ui64 txId = info->TxId;
         Y_VERIFY_DEBUG_S(FindByTxId(txId) == info, "Unexpected failure to find volatile tx " << txId);
 
-        Y_VERIFY_S(info->Dependencies.empty(), "Unexpected remove of volatile tx " << txId << " with dependencies");
-        Y_VERIFY_S(info->Dependents.empty(), "Unexpected remove of volatile tx " << txId << " with dependents");
-        Y_VERIFY_S(!info->IsInList<TVolatileTxInfoCommitOrderListTag>(),
+        Y_ENSURE(info->Dependencies.empty(), "Unexpected remove of volatile tx " << txId << " with dependencies");
+        Y_ENSURE(info->Dependents.empty(), "Unexpected remove of volatile tx " << txId << " with dependents");
+        Y_ENSURE(!info->IsInList<TVolatileTxInfoCommitOrderListTag>(),
             "Unexpected remove of volatile tx " << txId << " which is in commit order linked list");
 
         UnblockWaitingRemovalOperations(info);
@@ -682,6 +684,7 @@ namespace NKikimr::NDataShard {
         for (ui64 commitTxId : info->CommitTxIds) {
             VolatileTxByCommitTxId.erase(commitTxId);
         }
+        UnstableVolatileTxByVersion.erase(info);
         VolatileTxByVersion.erase(info);
 
         Self->IncCounter(COUNTER_VOLATILE_TX_TOTAL_LATENCY_MS, info->LatencyTimer.Passed() * 1000);
@@ -711,7 +714,7 @@ namespace NKikimr::NDataShard {
     }
 
     bool TVolatileTxManager::AttachVolatileTxCallback(ui64 txId, IVolatileTxCallback::TPtr callback) {
-        Y_ABORT_UNLESS(callback, "Unexpected nullptr callback");
+        Y_ENSURE(callback, "Unexpected nullptr callback");
 
         auto it = VolatileTxs.find(txId);
         if (it == VolatileTxs.end()) {
@@ -771,14 +774,14 @@ namespace NKikimr::NDataShard {
     }
 
     void TVolatileTxManager::AttachWaitingSnapshotEvent(const TRowVersion& snapshot, std::unique_ptr<IEventHandle>&& event) {
-        Y_ABORT_UNLESS(!VolatileTxByVersion.empty() && (*VolatileTxByVersion.begin())->Version <= snapshot);
+        Y_ENSURE(!VolatileTxByVersion.empty() && (*VolatileTxByVersion.begin())->Version <= snapshot);
 
         WaitingSnapshotEvents.emplace_back(snapshot, std::move(event));
         std::push_heap(WaitingSnapshotEvents.begin(), WaitingSnapshotEvents.end());
     }
 
     void TVolatileTxManager::AbortWaitingTransaction(TVolatileTxInfo* info) {
-        Y_ABORT_UNLESS(info && info->State == EVolatileTxState::Waiting);
+        Y_ENSURE(info && info->State == EVolatileTxState::Waiting);
 
         ui64 txId = info->TxId;
 
@@ -788,7 +791,7 @@ namespace NKikimr::NDataShard {
         // Aborted transactions don't have dependencies
         for (ui64 dependencyTxId : info->Dependencies) {
             auto* dependency = FindByTxId(dependencyTxId);
-            Y_ABORT_UNLESS(dependency);
+            Y_ENSURE(dependency);
             dependency->Dependents.erase(txId);
         }
         info->Dependencies.clear();
@@ -816,7 +819,7 @@ namespace NKikimr::NDataShard {
         const ui64 txId = record.GetTxId();
 
         auto* info = FindByTxId(txId);
-        Y_ABORT_UNLESS(info, "ProcessReadSet called for an unknown volatile tx");
+        Y_ENSURE(info, "ProcessReadSet called for an unknown volatile tx");
 
         switch (info->State) {
             case EVolatileTxState::Waiting:
@@ -827,10 +830,9 @@ namespace NKikimr::NDataShard {
                 return true;
 
             case EVolatileTxState::Aborting:
-                // Aborting state will not change as long as we're still leader
-                return true;
-                // Ack readset normally as long as we're still a leader
-                return true;
+                // We need to wait until volatile tx abort is committed to send rs acks
+                info->DelayedAcks.push_back(std::move(ack));
+                return false;
         }
 
         ui64 srcTabletId = record.GetTabletSource();
@@ -854,7 +856,7 @@ namespace NKikimr::NDataShard {
 
         bool committed = [&]() {
             if (record.GetFlags() & NKikimrTx::TEvReadSet::FLAG_NO_DATA) {
-                Y_ABORT_UNLESS(!(record.GetFlags() & NKikimrTx::TEvReadSet::FLAG_EXPECT_READSET),
+                Y_ENSURE(!(record.GetFlags() & NKikimrTx::TEvReadSet::FLAG_EXPECT_READSET),
                     "Unexpected FLAG_EXPECT_READSET + FLAG_NO_DATA in ProcessReadSet");
                 LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
                     "Processed readset without data from " << srcTabletId << " to " << dstTabletId
@@ -864,7 +866,7 @@ namespace NKikimr::NDataShard {
 
             NKikimrTx::TReadSetData data;
             bool ok = data.ParseFromString(record.GetReadSet());
-            Y_ABORT_UNLESS(ok, "Failed to parse readset from %" PRIu64 " to %" PRIu64, srcTabletId, dstTabletId);
+            Y_ENSURE(ok, "Failed to parse readset from " << srcTabletId << " to " << dstTabletId);
 
             if (data.GetDecision() != NKikimrTx::TReadSetData::DECISION_COMMIT) {
                 LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
@@ -885,8 +887,10 @@ namespace NKikimr::NDataShard {
         }();
 
         if (!committed) {
+            // We need to wait until volatile tx abort is committed to send rs acks
+            info->DelayedAcks.push_back(std::move(ack));
             AbortWaitingTransaction(info);
-            return true;
+            return false;
         }
 
         NIceDb::TNiceDb db(txc.DB);
@@ -984,7 +988,7 @@ namespace NKikimr::NDataShard {
         bool maybeUnblocked = false;
         for (ui64 dependentTxId : info->Dependents) {
             auto* dependent = FindByTxId(dependentTxId);
-            Y_VERIFY_S(dependent, "Unexpected failure to find dependent tx "
+            Y_ENSURE(dependent, "Unexpected failure to find dependent tx "
                 << dependentTxId << " that depended on " << info->TxId);
             dependent->Dependencies.erase(info->TxId);
             if (dependent->Dependencies.empty()) {
@@ -998,7 +1002,7 @@ namespace NKikimr::NDataShard {
                         }
                         break;
                     case EVolatileTxState::Aborting:
-                        Y_ABORT("FIXME: unexpected dependency removed from aborting tx");
+                        Y_ENSURE(false, "FIXME: unexpected dependency removed from aborting tx");
                         break;
                 }
             }
@@ -1052,18 +1056,18 @@ namespace NKikimr::NDataShard {
 
     void TVolatileTxManager::ScheduleCommitTx(TVolatileTxInfo* info) {
         Y_DEBUG_ABORT_UNLESS(info && info->State == EVolatileTxState::Committed);
-        Self->EnqueueExecute(new TDataShard::TTxVolatileTxCommit(Self, info));
+        Self->Enqueue(new TDataShard::TTxVolatileTxCommit(Self, info));
     }
 
     void TVolatileTxManager::ScheduleAbortTx(TVolatileTxInfo* info) {
         Y_DEBUG_ABORT_UNLESS(info && info->State == EVolatileTxState::Aborting);
-        Self->EnqueueExecute(new TDataShard::TTxVolatileTxAbort(Self, info));
+        Self->Enqueue(new TDataShard::TTxVolatileTxAbort(Self, info));
     }
 
     bool TVolatileTxManager::RemoveFromCommitOrder(TVolatileTxInfo* info) {
-        Y_ABORT_UNLESS(info->IsInList<TVolatileTxInfoCommitOrderListTag>(),
+        Y_ENSURE(info->IsInList<TVolatileTxInfoCommitOrderListTag>(),
             "Volatile transaction is not in a commit order linked list");
-        Y_ABORT_UNLESS(!VolatileTxByCommitOrder.Empty(), "Commit order linked list is unexpectedly empty");
+        Y_ENSURE(!VolatileTxByCommitOrder.Empty(), "Commit order linked list is unexpectedly empty");
         const bool wasFirst = VolatileTxByCommitOrder.Front() == info;
         VolatileTxByCommitOrder.Remove(info);
         return wasFirst;

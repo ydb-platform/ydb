@@ -62,8 +62,8 @@ dependencies {{
 android {{
     {keystore}
 
-    compileSdkVersion 33
-    buildToolsVersion "33.0.0"
+    compileSdkVersion 34
+    buildToolsVersion "34.0.0"
 
     compileOptions {{
         sourceCompatibility 1.8
@@ -72,7 +72,7 @@ android {{
 
     defaultConfig {{
         minSdkVersion 26
-        targetSdkVersion 33
+        targetSdkVersion 34
         applicationId "{app_id}"
     }}
 

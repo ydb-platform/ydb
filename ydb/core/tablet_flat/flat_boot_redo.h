@@ -6,6 +6,7 @@
 #include "flat_bio_events.h"
 #include "flat_dbase_naked.h"
 #include "flat_executor_txloglogic.h"
+#include "util_fmt_abort.h"
 #include "util_fmt_flat.h"
 
 #include <util/generic/xrange.h>
@@ -29,7 +30,7 @@ namespace NBoot {
         }
 
     private: /* IStep, boot logic DSL actor interface   */
-        void Start() noexcept override
+        void Start() override
         {
             if (auto logl = Env->Logger()->Log(ELnLev::Info)) {
                 const auto last = Queue ? Queue.back().Stamp + 1 : 0;
@@ -46,12 +47,13 @@ namespace NBoot {
             Flush();
         }
 
-        void HandleStep(TIntrusivePtr<IStep> step) noexcept override
+        void HandleStep(TIntrusivePtr<IStep> step) override
         {
             auto *load = step->ConsumeAs<TLoadBlobs>(Pending);
 
-            if (load->Cookie < Skip || load->Cookie - Skip >= Queue.size())
-                Y_ABORT("Got TLoadBlobs result cookie out of queue range");
+            if (load->Cookie < Skip || load->Cookie - Skip >= Queue.size()) {
+                Y_TABLET_ERROR("Got TLoadBlobs result cookie out of queue range");
+            }
 
             Queue.at(load->Cookie - Skip).Body = load->Plain();
 
@@ -59,7 +61,7 @@ namespace NBoot {
         }
 
     private:
-        void Flush() noexcept
+        void Flush()
         {
             for (TLogEntry *head = nullptr; Queue && *(head = &Queue[0]); ) {
                 auto index = TCookie(head->LargeGlobId.Lead.Cookie()).Index();
@@ -73,14 +75,14 @@ namespace NBoot {
                 ++Skip, Queue.pop_front();
             }
 
-            Y_ABORT_UNLESS(Queue || !Pending, "TRedo boot actor has lost entries");
+            Y_ENSURE(Queue || !Pending, "TRedo boot actor has lost entries");
 
             if (!Queue) {
                 Env->Finish(this);
             }
         }
 
-        void Apply(ui64 stamp, const TLogEntry &entry, TString redo) noexcept
+        void Apply(ui64 stamp, const TLogEntry &entry, TString redo)
         {
             const auto begin_ = Back->DatabaseImpl->Serial();
 

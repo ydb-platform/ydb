@@ -1,8 +1,8 @@
 #pragma once
 
-#include <ydb/public/sdk/cpp/client/ydb_result/result.h>
-#include <ydb/public/sdk/cpp/client/ydb_value/value.h>
-#include <ydb/public/sdk/cpp/client/ydb_types/fatal_error_handlers/handlers.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/fatal_error_handlers/handlers.h>
 
 #include <library/cpp/json/writer/json.h>
 
@@ -25,10 +25,10 @@ void FormatValueJson(const TValue& value, NJsonWriter::TBuf& writer, EBinaryStri
 
 TString FormatValueJson(const TValue& value, EBinaryStringEncoding encoding);
 
-void FormatResultRowJson(TResultSetParser& parser, const TVector<TColumn>& columns, NJsonWriter::TBuf& writer,
+void FormatResultRowJson(TResultSetParser& parser, const std::vector<TColumn>& columns, NJsonWriter::TBuf& writer,
     EBinaryStringEncoding encoding);
 
-TString FormatResultRowJson(TResultSetParser& parser, const TVector<TColumn>& columns,
+TString FormatResultRowJson(TResultSetParser& parser, const std::vector<TColumn>& columns,
     EBinaryStringEncoding encoding);
 
 void FormatResultSetJson(const TResultSet& result, IOutputStream* out, EBinaryStringEncoding encoding);

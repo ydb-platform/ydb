@@ -19,7 +19,7 @@
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/core/protos/index_builder.pb.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 
 #include <ydb/library/yql/dq/tasks/dq_task_program.h>
@@ -100,18 +100,46 @@ namespace {
         return permissionsSettings;
     }
 
+    TAlterDatabaseSettings ParseAlterDatabaseSettings(TKiAlterDatabase alterDatabase) {
+        TAlterDatabaseSettings alterDatabaseSettings;
+        YQL_ENSURE(alterDatabase.DatabasePath().Value().size() > 0);
+        alterDatabaseSettings.DatabasePath = alterDatabase.DatabasePath().Value();
+
+        for (auto setting : alterDatabase.Settings()) {
+            const auto& name = setting.Name().Value();
+
+            if (name == "owner") {
+                alterDatabaseSettings.Owner = setting.Value().Cast<TCoAtom>().StringValue();
+            } else {
+                YQL_ENSURE(false);
+            }
+        }
+
+        return alterDatabaseSettings;
+    }
+
     TCreateUserSettings ParseCreateUserSettings(TKiCreateUser createUser) {
         TCreateUserSettings createUserSettings;
         createUserSettings.UserName = TString(createUser.UserName());
+        createUserSettings.CanLogin = true;
 
         for (auto setting : createUser.Settings()) {
-            auto name = setting.Name().Value();
+            const auto& name = setting.Name().Value();
             if (name == "password") {
                 createUserSettings.Password = setting.Value().Cast<TCoAtom>().StringValue();
             } else if (name == "nullPassword") {
                 // Default value
             } else if (name == "passwordEncrypted") {
-                createUserSettings.PasswordEncrypted = true;
+                // PasswordEncrypted is never used
+            } else if (name == "hash") {
+                createUserSettings.IsHashedPassword = true;
+                createUserSettings.Password = setting.Value().Cast<TCoAtom>().StringValue();
+            } else if (name == "login") {
+                createUserSettings.CanLogin = true;
+            } else if (name == "noLogin") {
+                createUserSettings.CanLogin = false;
+            } else {
+                YQL_ENSURE(false);
             }
         }
         return createUserSettings;
@@ -122,13 +150,22 @@ namespace {
         alterUserSettings.UserName = TString(alterUser.UserName());
 
         for (auto setting : alterUser.Settings()) {
-            auto name = setting.Name().Value();
+            const auto& name = setting.Name().Value();
             if (name == "password") {
                 alterUserSettings.Password = setting.Value().Cast<TCoAtom>().StringValue();
             } else if (name == "nullPassword") {
-                // Default value
+                alterUserSettings.Password = TString();
             } else if (name == "passwordEncrypted") {
-                alterUserSettings.PasswordEncrypted = true;
+                // PasswordEncrypted is never used
+            } else if (name == "hash") {
+                alterUserSettings.IsHashedPassword = true;
+                alterUserSettings.Password = setting.Value().Cast<TCoAtom>().StringValue();
+            } else if (name == "login") {
+                alterUserSettings.CanLogin = true;
+            } else if (name == "noLogin") {
+                alterUserSettings.CanLogin = false;
+            } else {
+                YQL_ENSURE(false);
             }
         }
         return alterUserSettings;
@@ -516,7 +553,7 @@ namespace {
                         FromString<ui32>(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value())
                 );
             } else if (name == "setMaxPartitions") {
-                request->mutable_alter_partitioning_settings()->set_set_partition_count_limit(
+                request->mutable_alter_partitioning_settings()->set_set_max_active_partitions(
                         FromString<ui32>(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value())
                 );
             } else if (name == "setRetentionPeriod") {
@@ -662,8 +699,31 @@ namespace {
         return true;
     }
 
-    bool ParseAsyncReplicationSettings(
-        TReplicationSettings& dstSettings, const TCoNameValueTupleList& srcSettings, TExprContext& ctx, TPositionHandle pos
+    [[nodiscard]] bool ParseReadReplicasSettings(
+        Ydb::Table::ReadReplicasSettings& readReplicasSettings,
+        const TCoNameValueTuple& setting,
+        TExprContext& ctx
+    ) {
+        const auto replicasSettings = TString(
+            setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
+        );
+
+        Ydb::StatusIds::StatusCode code;
+        TString errText;
+        if (!ConvertReadReplicasSettingsToProto(replicasSettings, readReplicasSettings, code, errText)) {
+
+            ctx.AddError(YqlIssue(ctx.GetPosition(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Pos()),
+                                  NYql::YqlStatusFromYdbStatus(code),
+                                  errText));
+            return false;
+        }
+
+        return true;
+    }
+
+    bool ParseAsyncReplicationSettingsBase(
+        TReplicationSettingsBase& dstSettings, const TCoNameValueTupleList& srcSettings, TExprContext& ctx, TPositionHandle pos,
+        const TString& objectName = "replication"
     ) {
         for (auto setting : srcSettings) {
             auto name = setting.Name().Value();
@@ -688,37 +748,17 @@ namespace {
             } else if (name == "password_secret_name") {
                 dstSettings.EnsureStaticCredentials().PasswordSecretName =
                     setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
-            } else if (name == "consistency_level") {
-                auto value = ToString(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
-                if (to_lower(value) == "global") {
-                    dstSettings.EnsureGlobalConsistency();
-                } else if (to_lower(value) == "row") {
-                    dstSettings.EnsureRowConsistency();
-                } else {
-                    ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
-                        TStringBuilder() << "Unknown consistency level: " << value));
-                    return false;
-                }
-            } else if (name == "commit_interval") {
-                YQL_ENSURE(setting.Value().Maybe<TCoInterval>());
-                const auto value = FromString<i64>(
-                    setting.Value().Cast<TCoInterval>().Literal().Value()
-                );
-
-                if (value <= 0) {
-                    ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
-                        TStringBuilder() << name << " must be positive"));
-                    return false;
-                }
-
-                dstSettings.EnsureGlobalConsistency().CommitInterval = TDuration::FromValue(value);
             } else if (name == "state") {
                 auto value = ToString(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
                 if (to_lower(value) == "done") {
                     dstSettings.EnsureStateDone();
+                } else if (to_lower(value) == "paused") {
+                    dstSettings.StatePaused = true;
+                } else if (to_lower(value) == "standby") {
+                    dstSettings.StateStandBy = true;
                 } else {
                     ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
-                        TStringBuilder() << "Unknown replication state: " << value));
+                        TStringBuilder() << "Unknown " << objectName << " state: " << value));
                     return false;
                 }
             } else if (name == "failover_mode") {
@@ -759,9 +799,100 @@ namespace {
             return false;
         }
 
+        return true;
+    }
+
+    bool ParseAsyncReplicationSettings(
+        TReplicationSettings& dstSettings, const TCoNameValueTupleList& srcSettings, TExprContext& ctx, TPositionHandle pos
+    ) {
+
+        if (!ParseAsyncReplicationSettingsBase(dstSettings, srcSettings, ctx, pos)) {
+            return false;
+        }
+
+        for (auto setting : srcSettings) {
+            auto name = setting.Name().Value();
+            if (name == "consistency_level") {
+                auto value = ToString(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
+                if (to_lower(value) == "global") {
+                    dstSettings.EnsureGlobalConsistency();
+                } else if (to_lower(value) == "row") {
+                    dstSettings.EnsureRowConsistency();
+                } else {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                        TStringBuilder() << "Unknown consistency level: " << value));
+                    return false;
+                }
+            } else if (name == "commit_interval") {
+                YQL_ENSURE(setting.Value().Maybe<TCoInterval>());
+                const auto value = FromString<i64>(
+                    setting.Value().Cast<TCoInterval>().Literal().Value()
+                );
+
+                if (value <= 0) {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                        TStringBuilder() << name << " must be positive"));
+                    return false;
+                }
+
+                dstSettings.EnsureGlobalConsistency().CommitInterval = TDuration::FromValue(value);
+            }
+        }
+
         if (dstSettings.RowConsistency && dstSettings.GlobalConsistency) {
             ctx.AddError(TIssue(ctx.GetPosition(pos), "Ambiguous consistency level"));
             return false;
+        }
+
+        return true;
+    }
+
+    bool ParseTransferSettings(
+        TTransferSettings& dstSettings, const TCoNameValueTupleList& srcSettings, TExprContext& ctx, TPositionHandle pos
+    ) {
+        if (!ParseAsyncReplicationSettingsBase(dstSettings, srcSettings, ctx, pos, "transfer")) {
+            return false;
+        }
+
+        for (auto setting : srcSettings) {
+            auto name = setting.Name().Value();
+            if (name == "batch_size_bytes") {
+                auto value = ToString(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
+                auto batchSizeBytes = FromString<i64>(value);
+                if (batchSizeBytes <= 0) {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                        TStringBuilder() << name << " must be greater than 0 but " << value));
+                    return false;
+                }
+                dstSettings.EnsureBatching().BatchSizeBytes = batchSizeBytes;
+            } else if (name == "flush_interval") {
+                if (!setting.Value().Maybe<TCoInterval>()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                        TStringBuilder() << name << " must be Interval"));
+                    return false;
+                }
+
+                const auto value = FromString<i64>(
+                    setting.Value().Cast<TCoInterval>().Literal().Value()
+                );
+
+                if (value <= 0) {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                        TStringBuilder() << name << " must be positive"));
+                    return false;
+                }
+
+                dstSettings.EnsureBatching().FlushInterval = TDuration::FromValue(value);
+            } else if (name == "consumer") {
+                auto value = ToString(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
+                if (value.empty()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                        TStringBuilder() << name << " must be not empty"));
+                    return false;
+                }
+
+                dstSettings.ConsumerName = value;
+            }
         }
 
         return true;
@@ -1252,6 +1383,25 @@ public:
             return SyncOk();
         }
 
+        if (auto maybeAlterDatabase = TMaybeNode<TKiAlterDatabase>(input)) {
+            auto requireStatus = RequireChild(*input, TKiExecDataQuery::idx_World);
+            if (requireStatus.Level != TStatus::Ok) {
+                return SyncStatus(requireStatus);
+            }
+
+            auto cluster = TString(maybeAlterDatabase.Cast().DataSink().Cluster());
+            TAlterDatabaseSettings alterDatabaseSettings = ParseAlterDatabaseSettings(maybeAlterDatabase.Cast());
+
+            auto future = Gateway->AlterDatabase(cluster, alterDatabaseSettings);
+
+            return WrapFuture(future,
+                [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {
+                Y_UNUSED(res);
+                auto resultNode = ctx.NewWorld(input->Pos());
+                return resultNode;
+            }, "Executing ALTER DATABASE");
+        }
+
         if (auto maybeCreate = TMaybeNode<TKiCreateTable>(input)) {
             auto requireStatus = RequireChild(*input, 0);
             if (requireStatus.Level != TStatus::Ok) {
@@ -1375,10 +1525,6 @@ public:
                     auto resultNode = ctx.NewWorld(input->Pos());
                     return resultNode;
                 }, GetDropTableDebugString(tableTypeItem));
-
-            input->SetState(TExprNode::EState::ExecutionComplete);
-            input->SetResult(ctx.NewWorld(input->Pos()));
-            return SyncOk();
         }
 
         if (auto maybeAlter = TMaybeNode<TKiAlterTable>(input)) {
@@ -1659,17 +1805,7 @@ public:
                             }
 
                         } else if (name == "readReplicasSettings") {
-                            const auto replicasSettings = TString(
-                                setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
-                            );
-                            Ydb::StatusIds::StatusCode code;
-                            TString errText;
-                            if (!ConvertReadReplicasSettingsToProto(replicasSettings,
-                                 *alterTableRequest.mutable_set_read_replicas_settings(), code, errText)) {
-
-                                ctx.AddError(YqlIssue(ctx.GetPosition(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Pos()),
-                                                      NYql::YqlStatusFromYdbStatus(code),
-                                                      errText));
+                            if (!ParseReadReplicasSettings(*alterTableRequest.mutable_set_read_replicas_settings(), setting, ctx)) {
                                 return SyncError();
                             }
                         } else if (name == "setTtlSettings") {
@@ -1706,6 +1842,8 @@ public:
                             const auto type = TString(columnTuple.Item(1).Cast<TCoAtom>().Value());
                             if (type == "syncGlobal") {
                                 add_index->mutable_global_index();
+                            } else if (type == "syncGlobalUnique") {
+                                add_index->mutable_global_unique_index();
                             } else if (type == "asyncGlobal") {
                                 add_index->mutable_global_async_index();
                             } else if (type == "globalVectorKmeansTree") {
@@ -1809,7 +1947,7 @@ public:
                                         TStringBuilder() << "Unknown index name: " << indexName));
                                 return SyncError();
                             }
-                            auto indexTablePaths = NKikimr::NKqp::NSchemeHelpers::CreateIndexTablePath(table.Metadata->Name, indexIter->Type, indexName);
+                            auto indexTablePaths = NKikimr::NKqp::NSchemeHelpers::CreateIndexTablePath(table.Metadata->Name, *indexIter);
                             if (indexTablePaths.size() != 1) {
                                 ctx.AddError(
                                     TIssue(ctx.GetPosition(indexSetting.Name().Pos()),
@@ -1820,10 +1958,15 @@ public:
                         } else if (settingName == "tableSettings") {
                             auto tableSettings = indexSetting.Value().Cast<TCoNameValueTupleList>();
                             for (const auto& tableSetting : tableSettings) {
-                                if (IsPartitioningSetting(tableSetting.Name().Value())) {
+                                const auto name = tableSetting.Name().Value();
+                                if (IsPartitioningSetting(name)) {
                                     if (!ParsePartitioningSettings(
                                         *alterTableRequest.mutable_alter_partitioning_settings(), tableSetting, ctx
                                     )) {
+                                        return SyncError();
+                                    }
+                                } else if (name == "readReplicasSettings") {
+                                    if (!ParseReadReplicasSettings(*alterTableRequest.mutable_set_read_replicas_settings(), tableSetting, ctx)) {
                                         return SyncError();
                                     }
                                 } else {
@@ -2310,6 +2453,106 @@ public:
             }, "Executing DROP ASYNC REPLICATION");
         }
 
+        if (auto maybeCreateTransfer = TMaybeNode<TKiCreateTransfer>(input)) {
+            auto requireStatus = RequireChild(*input, 0);
+            if (requireStatus.Level != TStatus::Ok) {
+                return SyncStatus(requireStatus);
+            }
+
+            auto createTransfer = maybeCreateTransfer.Cast();
+
+            TCreateTransferSettings settings;
+            settings.Name = TString(createTransfer.Transfer());
+
+            settings.Target = std::tuple<TString, TString, TString>{
+                createTransfer.Source(),
+                createTransfer.Target(),
+                createTransfer.TransformLambda()
+            };
+
+            if (!ParseTransferSettings(settings.Settings, createTransfer.TransferSettings(), ctx, createTransfer.Pos())) {
+                return SyncError();
+            }
+
+            if (!settings.Settings.ConnectionString && (!settings.Settings.Endpoint || !settings.Settings.Database)) {
+                ctx.AddError(TIssue(ctx.GetPosition(createTransfer.Pos()),
+                    "Neither CONNECTION_STRING nor ENDPOINT/DATABASE are provided"));
+                return SyncError();
+            }
+
+            if (const auto& x = settings.Settings.StaticCredentials; x && !x->UserName) {
+                ctx.AddError(TIssue(ctx.GetPosition(createTransfer.Pos()),
+                    "USER is not provided"));
+                return SyncError();
+            }
+
+            if (const auto& x = settings.Settings.StaticCredentials; x && (!x->Password || !x->PasswordSecretName)) {
+                ctx.AddError(TIssue(ctx.GetPosition(createTransfer.Pos()),
+                    "PASSWORD or PASSWORD_SECRET_NAME are not provided"));
+                return SyncError();
+            }
+
+            auto cluster = TString(createTransfer.DataSink().Cluster());
+            auto future = Gateway->CreateTransfer(cluster, settings);
+
+            return WrapFuture(future,
+                [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {
+                Y_UNUSED(res);
+                auto resultNode = ctx.NewWorld(input->Pos());
+                return resultNode;
+            }, "Executing CREATE TRANSFER");
+        }
+
+        if (auto maybeAlterTransfer = TMaybeNode<TKiAlterTransfer>(input)) {
+            auto requireStatus = RequireChild(*input, 0);
+            if (requireStatus.Level != TStatus::Ok) {
+                return SyncStatus(requireStatus);
+            }
+
+            auto alterTransfer = maybeAlterTransfer.Cast();
+
+            TAlterTransferSettings settings;
+            settings.Name = TString(alterTransfer.Transfer());
+            settings.TranformLambda = alterTransfer.TransformLambda();
+
+            if (!ParseTransferSettings(settings.Settings, alterTransfer.TransferSettings(), ctx, alterTransfer.Pos())) {
+                return SyncError();
+            }
+
+            auto cluster = TString(alterTransfer.DataSink().Cluster());
+            auto future = Gateway->AlterTransfer(cluster, settings);
+
+            return WrapFuture(future,
+                [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {
+                Y_UNUSED(res);
+                auto resultNode = ctx.NewWorld(input->Pos());
+                return resultNode;
+            }, "Executing ALTER TRANSFER");
+        }
+
+        if (auto maybeDropTransfer = TMaybeNode<TKiDropTransfer>(input)) {
+            auto requireStatus = RequireChild(*input, 0);
+            if (requireStatus.Level != TStatus::Ok) {
+                return SyncStatus(requireStatus);
+            }
+
+            auto dropTransfer = maybeDropTransfer.Cast();
+
+            TDropTransferSettings settings;
+            settings.Name = TString(dropTransfer.Transfer());
+            settings.Cascade = (dropTransfer.Cascade().Value() == "1");
+
+            auto cluster = TString(dropTransfer.DataSink().Cluster());
+            auto future = Gateway->DropTransfer(cluster, settings);
+
+            return WrapFuture(future,
+                [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {
+                Y_UNUSED(res);
+                auto resultNode = ctx.NewWorld(input->Pos());
+                return resultNode;
+            }, "Executing DROP TRANSFER");
+        }
+
         if (auto maybeGrantPermissions = TMaybeNode<TKiModifyPermissions>(input)) {
             auto requireStatus = RequireChild(*input, 0);
             if (requireStatus.Level != TStatus::Ok) {
@@ -2504,7 +2747,7 @@ public:
         if (auto maybeAnalyze = TMaybeNode<TKiAnalyzeTable>(input)) {
             if (!SessionCtx->Config().FeatureFlags.GetEnableColumnStatistics()) {
                 ctx.AddError(TIssue("ANALYZE command is not supported because `EnableColumnStatistics` feature flag is off"));
-                return SyncError();            
+                return SyncError();
             }
 
             auto cluster = TString(maybeAnalyze.Cast().DataSink().Cluster());

@@ -23,7 +23,7 @@ public:
                              const TOpenIdConnectSettings& settings);
     void Bootstrap();
     void RequestImpersonatedToken(TString&, TString&);
-    void ProcessImpersonatedToken(const TString& impersonatedToken);
+    void ProcessImpersonatedToken(const NJson::TJsonValue& jsonValue);
     void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event);
     void ReplyAndPassAway(NHttp::THttpOutgoingResponsePtr httpResponse);
     void ReplyBadRequestAndPassAway(const TString& errorMessage);

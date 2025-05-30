@@ -17,7 +17,7 @@
 
 #include <yql/essentials/public/issue/yql_issue_message.h>
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 
 constexpr TDuration GRPC_KEEP_ALIVE_TIMEOUT_FOR_DISCOVERY = TDuration::Seconds(10);
 constexpr TDuration INITIAL_DEFERRED_CALL_DELAY = TDuration::MilliSeconds(10); // The delay before first deferred service call
@@ -209,7 +209,7 @@ public:
                     SetDatabaseHeader(meta, dbState->Database);
                 }
 
-                static const TStringType clientPid = GetClientPIDHeaderValue();
+                static const std::string clientPid = GetClientPIDHeaderValue();
 
                 meta.Aux.push_back({YDB_SDK_BUILD_INFO_HEADER, CreateSDKBuildInfo()});
                 meta.Aux.push_back({YDB_CLIENT_PID, clientPid});
@@ -539,7 +539,7 @@ public:
                     SetDatabaseHeader(meta, dbState->Database);
                 }
 
-                static const TStringType clientPid = GetClientPIDHeaderValue();
+                static const std::string clientPid = GetClientPIDHeaderValue();
 
                 meta.Aux.push_back({YDB_SDK_BUILD_INFO_HEADER, CreateSDKBuildInfo()});
                 meta.Aux.push_back({YDB_CLIENT_PID, clientPid});

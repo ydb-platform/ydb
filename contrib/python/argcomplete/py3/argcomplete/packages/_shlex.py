@@ -36,7 +36,7 @@ class shlex:
         else:
             self.eof = ''
         self.commenters = '#'
-        self.wordchars = 'abcdfeghijklmnopqrstuvwxyz' 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_'
+        self.wordchars = 'abcdfeghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_'
         # Modified by argcomplete: 2/3 compatibility
         # if self.posix:
         #     self.wordchars += ('ßàáâãäåæçèéêëìíîïðñòóôõöøùúûüýþÿ'
@@ -177,6 +177,9 @@ class shlex:
                 elif self.whitespace_split:
                     self.token = nextchar
                     self.state = 'a'
+                    # Modified by argcomplete: Record last wordbreak position
+                    if nextchar in self.wordbreaks:
+                        self.last_wordbreak_pos = len(self.token) - 1
                 else:
                     self.token = nextchar
                     if self.token or (self.posix and quoted):

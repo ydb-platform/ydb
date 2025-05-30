@@ -54,8 +54,11 @@ using TLiveFetcher = std::function<EFetchResult(TComputationContext&, NUdf::TUnb
 
 class TSpillList {
 public:
-    TSpillList(TValuePacker& itemPacker, bool singleShot, size_t width = 0ULL)
-        : Width(width)
+    TSpillList(NUdf::TLoggerPtr logger, NUdf::TLogComponentId logComponent,
+        TValuePacker& itemPacker, bool singleShot, size_t width = 0ULL)
+        : Logger(logger)
+        , LogComponent(logComponent)
+        , Width(width)
         , ItemPacker(itemPacker)
         , Count(0)
 #ifndef NDEBUG
@@ -144,9 +147,9 @@ public:
 #endif
         if (FileState) {
             FileState->Output->Finish();
-            Cerr << "Spill finished at " << Count << " items" << Endl;
+            Logger->Log(LogComponent, NUdf::ELogLevel::Info, TStringBuilder() << "Spill finished at " << Count << " items");
             FileState->Output.reset();
-            Cerr << "File size: " << GetFileLength(FileState->File.GetName()) << ", expected: " << FileState->TotalSize << Endl;
+            Logger->Log(LogComponent, NUdf::ELogLevel::Info, TStringBuilder() << "File size: " << GetFileLength(FileState->File.GetName()) << ", expected: " << FileState->TotalSize);
 
             MKQL_INC_STAT(ctx.Stats, Join_Spill_Count);
             MKQL_SET_MAX_STAT(ctx.Stats, Join_Spill_MaxFileSize, static_cast<i64>(FileState->TotalSize));
@@ -269,7 +272,7 @@ private:
     }
 
     void OpenWrite() {
-        Cerr << "Spill started at " << Count << " items to " << FileState->File.GetName() << Endl;
+        Logger->Log(LogComponent, NUdf::ELogLevel::Info, TStringBuilder() << "Spill started at " << Count << " items to " << FileState->File.GetName());
         FileState->Output.reset(new TFixedBufferFileOutput(FileState->File.GetName()));
         FileState->Output->SetFlushPropagateMode(false);
         FileState->Output->SetFinishPropagateMode(false);
@@ -301,6 +304,8 @@ private:
     }
 
 private:
+    const NUdf::TLoggerPtr Logger;
+    const NUdf::TLogComponentId LogComponent;
     const size_t Width;
     TValuePacker& ItemPacker;
     ui64 Count;
@@ -346,8 +351,10 @@ public:
         TValue(TMemoryUsageInfo* memInfo, TComputationContext& ctx, const TSelf* self)
             : TBase(memInfo)
             , Self(self)
-            , List1(Self->Packer.RefMutableObject(ctx, false, Self->InputStructType), IsAnyJoinLeft(Self->AnyJoinSettings))
-            , List2(Self->Packer.RefMutableObject(ctx, false, Self->InputStructType), IsAnyJoinRight(Self->AnyJoinSettings))
+            , Logger(ctx.MakeLogger())
+            , LogComponent(Logger->RegisterComponent("CommonJoinCore"))
+            , List1(Logger, LogComponent, Self->Packer.RefMutableObject(ctx, false, Self->InputStructType), IsAnyJoinLeft(Self->AnyJoinSettings))
+            , List2(Logger, LogComponent, Self->Packer.RefMutableObject(ctx, false, Self->InputStructType), IsAnyJoinRight(Self->AnyJoinSettings))
         {
             Init();
         }
@@ -667,6 +674,8 @@ public:
 
     private:
         const TSelf* const Self;
+        const NUdf::TLoggerPtr Logger;
+        const NUdf::TLogComponentId LogComponent;
         bool EatInput;
         bool KeyHasNulls;
         std::optional<ui64> InitialUsage;
@@ -756,12 +765,14 @@ public:
         TValue(TMemoryUsageInfo* memInfo, TComputationContext& ctx, const TSelf* self, TFetcher&& fetcher)
             : TBase(memInfo)
             , Self(self)
+            , Logger(ctx.MakeLogger())
+            , LogComponent(Logger->RegisterComponent("WideCommonJoinCore"))
             , Fetcher(std::move(fetcher))
             , Values(Self->InputRepresentations.size(), NUdf::TUnboxedValuePod())
             , CrossValues1(std::max(Self->LeftInputColumns.size(), Self->RightInputColumns.size()), NUdf::TUnboxedValuePod())
             , CrossValues2(std::max(Self->LeftInputColumns.size(), Self->RightInputColumns.size()), NUdf::TUnboxedValuePod())
-            , List1(Self->PackerLeft.RefMutableObject(ctx, false, Self->InputLeftType), IsAnyJoinLeft(Self->AnyJoinSettings), Self->InputLeftType->GetElementsCount())
-            , List2(Self->PackerRight.RefMutableObject(ctx, false, Self->InputRightType), IsAnyJoinRight(Self->AnyJoinSettings), Self->InputRightType->GetElementsCount())
+            , List1(Logger, LogComponent, Self->PackerLeft.RefMutableObject(ctx, false, Self->InputLeftType), IsAnyJoinLeft(Self->AnyJoinSettings), Self->InputLeftType->GetElementsCount())
+            , List2(Logger, LogComponent, Self->PackerRight.RefMutableObject(ctx, false, Self->InputRightType), IsAnyJoinRight(Self->AnyJoinSettings), Self->InputRightType->GetElementsCount())
             , Fields(GetPointers(Values))
             , Stubs(Values.size(), nullptr)
         {
@@ -1110,6 +1121,8 @@ public:
 
 
         const TSelf* const Self;
+        const NUdf::TLoggerPtr Logger;
+        const NUdf::TLogComponentId LogComponent;
         TFetcher Fetcher;
         bool EatInput;
         bool KeyHasNulls;
@@ -1201,13 +1214,13 @@ public:
         const auto make = BasicBlock::Create(context, "make", ctx.Func);
         const auto main = BasicBlock::Create(context, "main", ctx.Func);
 
-        BranchInst::Create(make, main, IsInvalid(statePtr, block), block);
+        BranchInst::Create(make, main, IsInvalid(statePtr, block, context), block);
 
         block = make;
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
         const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
-        const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TWideCommonJoinCoreWrapper::MakeState));
+        const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TWideCommonJoinCoreWrapper::MakeState>());
         const auto makeType = FunctionType::get(Type::getVoidTy(context), {self->getType(), ctx.Ctx->getType(), statePtr->getType()}, false);
         const auto makeFuncPtr = CastInst::Create(Instruction::IntToPtr, makeFunc, PointerType::getUnqual(makeType), "function", block);
         CallInst::Create(makeType, makeFuncPtr, {self, ctx.Ctx, statePtr}, "", block);
@@ -1225,7 +1238,7 @@ public:
         const auto half = CastInst::Create(Instruction::Trunc, state, Type::getInt64Ty(context), "half", block);
         const auto stateArg = CastInst::Create(Instruction::IntToPtr, half, statePtrType, "state_arg", block);
 
-        const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TValue::FetchValues));
+        const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TValue::FetchValues>());
         const auto funcType = FunctionType::get(Type::getInt32Ty(context), { statePtrType, ctx.Ctx->getType(), fields->getType() }, false);
         const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funcType), "fetch_func", block);
         const auto result = CallInst::Create(funcType, funcPtr, { stateArg, ctx.Ctx, fields }, "fetch", block);
@@ -1311,7 +1324,6 @@ private:
         ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
 
         DISubprogramAnnotator annotator(ctx, ctx.Func);
-        
 
         auto args = ctx.Func->arg_begin();
 
@@ -1368,8 +1380,10 @@ namespace NStream {
 
 class TSpillList {
 public:
-    TSpillList(TValuePacker& itemPacker, bool singleShot)
-        : ItemPacker(itemPacker)
+    TSpillList(NUdf::TLoggerPtr logger, NUdf::TLogComponentId logComponent, TValuePacker& itemPacker, bool singleShot)
+        : Logger(logger)
+        , LogComponent(logComponent)
+        , ItemPacker(itemPacker)
         , Ctx(nullptr)
         , Count(0)
 #ifndef NDEBUG
@@ -1456,9 +1470,9 @@ public:
 #endif
         if (FileState) {
             FileState->Output->Finish();
-            Cerr << "Spill finished at " << Count << " items" << Endl;
+            Logger->Log(LogComponent, NUdf::ELogLevel::Info, TStringBuilder() << "Spill finished at " << Count << " items");
             FileState->Output.reset();
-            Cerr << "File size: " << GetFileLength(FileState->File.GetName()) << ", expected: " << FileState->TotalSize << Endl;
+            Logger->Log(LogComponent, NUdf::ELogLevel::Info, TStringBuilder() << "File size: " << GetFileLength(FileState->File.GetName()) << ", expected: " << FileState->TotalSize);
 
             MKQL_INC_STAT(Ctx->Stats, Join_Spill_Count);
             MKQL_SET_MAX_STAT(Ctx->Stats, Join_Spill_MaxFileSize, static_cast<i64>(FileState->TotalSize));
@@ -1542,7 +1556,7 @@ private:
     }
 
     void OpenWrite() {
-        Cerr << "Spill started at " << Count << " items to " << FileState->File.GetName() << Endl;
+        Logger->Log(LogComponent, NUdf::ELogLevel::Info, TStringBuilder() << "Spill started at " << Count << " items to " << FileState->File.GetName());
         FileState->Output.reset(new TFixedBufferFileOutput(FileState->File.GetName()));
         FileState->Output->SetFlushPropagateMode(false);
         FileState->Output->SetFinishPropagateMode(false);
@@ -1574,6 +1588,8 @@ private:
     }
 
 private:
+    const NUdf::TLoggerPtr Logger;
+    const NUdf::TLogComponentId LogComponent;
     TValuePacker& ItemPacker;
     TComputationContext* Ctx;
     ui64 Count;
@@ -1618,8 +1634,10 @@ public:
             , Stream(std::move(stream))
             , Ctx(ctx)
             , Self(self)
-            , List1(Self->Packer.RefMutableObject(ctx, false, Self->InputStructType), IsAnyJoinLeft(Self->AnyJoinSettings))
-            , List2(Self->Packer.RefMutableObject(ctx, false, Self->InputStructType), IsAnyJoinRight(Self->AnyJoinSettings))
+            , Logger(ctx.MakeLogger())
+            , LogComponent(Logger->RegisterComponent("CommonJoinCore"))
+            , List1(Logger, LogComponent, Self->Packer.RefMutableObject(ctx, false, Self->InputStructType), IsAnyJoinLeft(Self->AnyJoinSettings))
+            , List2(Logger, LogComponent, Self->Packer.RefMutableObject(ctx, false, Self->InputStructType), IsAnyJoinRight(Self->AnyJoinSettings))
         {
             Init();
         }
@@ -1964,6 +1982,8 @@ public:
         NUdf::TUnboxedValue Stream;
         TComputationContext& Ctx;
         const TSelf* const Self;
+        const NUdf::TLoggerPtr Logger;
+        const NUdf::TLogComponentId LogComponent;
         bool EatInput;
         bool KeyHasNulls;
         std::optional<ui64> InitialUsage;

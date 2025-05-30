@@ -14,6 +14,7 @@ SRCS(
     api/delegating_client.cpp
     api/delegating_transaction.cpp
     api/distributed_table_session.cpp
+    api/distributed_table_client.cpp
     api/etc_client.cpp
     api/journal_client.cpp
     api/operation_client.cpp
@@ -32,6 +33,8 @@ SRCS(
     api/sticky_transaction_pool.cpp
     api/options.cpp
     api/shuffle_client.cpp
+    api/table_partition_reader.cpp
+    api/private.cpp
 
     api/rpc_proxy/address_helpers.cpp
     api/rpc_proxy/public.cpp
@@ -48,6 +51,7 @@ SRCS(
     api/rpc_proxy/table_mount_cache.cpp
     api/rpc_proxy/table_reader.cpp
     api/rpc_proxy/table_writer.cpp
+    api/rpc_proxy/target_cluster_injecting_channel.cpp
     api/rpc_proxy/timestamp_provider.cpp
     api/rpc_proxy/transaction.cpp
     api/rpc_proxy/transaction_impl.cpp
@@ -95,6 +99,7 @@ SRCS(
 
     scheduler/operation_id_or_alias.cpp
     scheduler/operation_cache.cpp
+    scheduler/spec_patch.cpp
 
     security_client/acl.cpp
     security_client/access_control.cpp
@@ -108,6 +113,7 @@ SRCS(
     table_client/public.cpp
     table_client/adapters.cpp
     table_client/table_output.cpp
+    table_client/timestamped_schema_helpers.cpp
     table_client/blob_reader.cpp
     table_client/check_schema_compatibility.cpp
     table_client/chunk_stripe_statistics.cpp
@@ -128,7 +134,6 @@ SRCS(
     table_client/row_buffer.cpp
     table_client/schema.cpp
     table_client/schema_serialization_helpers.cpp
-    table_client/schemaless_buffered_dynamic_table_writer.cpp
     table_client/schemaless_dynamic_table_writer.cpp
     table_client/serialize.cpp
     table_client/table_upload_options.cpp
@@ -193,10 +198,6 @@ SRCS(
     complex_types/uuid_text.cpp
     complex_types/yson_format_conversion.cpp
 
-    zookeeper/packet.cpp
-    zookeeper/protocol.cpp
-    zookeeper/requests.cpp
-
     kafka/packet.cpp
     kafka/protocol.cpp
     kafka/requests.cpp
@@ -218,11 +219,13 @@ PEERDIR(
     yt/yt/core/https
     yt/yt/library/auth
     yt/yt/library/decimal
-    yt/yt/library/re2
     yt/yt/library/erasure
     yt/yt/library/numeric
     yt/yt/library/quantile_digest
+    yt/yt/library/re2
+    yt/yt/library/tz_types
     yt/yt_proto/yt/client
+    library/cpp/digest/crc32c
     library/cpp/json
     library/cpp/string_utils/base64
     contrib/libs/pfr
@@ -241,6 +244,7 @@ RECURSE(
 
 RECURSE_FOR_TESTS(
     api/unittests
+    query_client/unittests
     signature/unittests
     table_client/unittests
     unittests

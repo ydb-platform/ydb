@@ -43,6 +43,7 @@ public:
         AddHandler({TYtDqProcessWrite ::CallableName()}, Hndl(&TYtDataSinkConstraintTransformer::HandleDqProcessWrite));
         AddHandler({TYtTryFirst ::CallableName()}, Hndl(&TYtDataSinkConstraintTransformer::HandleTryFirst));
         AddHandler({TYtMaterialize ::CallableName()}, Hndl(&TYtDataSinkConstraintTransformer::HandleMaterialize));
+        AddHandler({TYtQLFilter::CallableName()}, Hndl(&TYtDataSinkConstraintTransformer::HandleDefault));
     }
 private:
     static void CopyExcept(TExprNode* dst, const TExprNode& from, const TStringBuf& except) {

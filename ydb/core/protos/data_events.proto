@@ -1,4 +1,5 @@
 import "ydb/library/actors/protos/actors.proto";
+import "ydb/core/protos/base.proto";
 import "ydb/core/protos/query_stats.proto";
 import "ydb/public/api/protos/ydb_issue_message.proto";
 
@@ -138,6 +139,8 @@ message TEvWriteResult {
         STATUS_LOCKS_BROKEN = 9;
         STATUS_DISK_SPACE_EXHAUSTED = 10;
         STATUS_WRONG_SHARD_STATE = 11;
+        STATUS_CONSTRAINT_VIOLATION = 12;
+        STATUS_OUT_OF_SPACE = 13;
     }
 
     // Status
@@ -160,4 +163,7 @@ message TEvWriteResult {
 
     // Statistics
     optional NKikimrQueryStats.TTxStats TxStats = 13;
+
+    // Commit version when available
+    optional NKikimrProto.TRowVersion CommitVersion = 14;
 }

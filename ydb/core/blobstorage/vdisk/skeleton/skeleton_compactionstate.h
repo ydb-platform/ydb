@@ -17,29 +17,33 @@ namespace NKikimr {
             TEvCompactVDisk::EMode Mode;
             TActorId ClientId;
             ui64 ClientCookie = 0;
-            std::unique_ptr<TEvCompactVDiskResult> Reply;
+            std::unique_ptr<IEventBase> Reply;
+            THashSet<ui64> TablesToCompact;
 
             bool AllDone() const { return !(CompactLogoBlobs || CompactBlocks || CompactBarriers); }
         };
 
-        TVDiskCompactionState(TActorId logoBlobsActorId, TActorId blocksActorId, TActorId barriersActorId);
+        TVDiskCompactionState(const TString& logPrefix,
+            TActorId logoBlobsActorId, TActorId blocksActorId, TActorId barriersActorId);
         // setup input compaction request
         void Setup(const TActorContext &ctx, std::optional<ui64> lsn, TCompactionReq cState);
         // when hull db reports compaction finish we change state by calling this function
         void Compacted(const TActorContext &ctx, i64 reqId, EHullDbType dbType, const TIntrusivePtr<TVDiskContext>& vCtx);
         // when data is flushed to recovery log run compaction
         void Logged(const TActorContext &ctx, ui64 lsn) {
-            if (Triggered && lsn >= LsnToCommit) {
-                Triggered = false;
-                for (auto &req : WaitQueue) {
+            for (; !WaitQueue.empty(); WaitQueue.pop_front()) {
+                auto& [waitingLsn, req] = WaitQueue.front();
+                if (waitingLsn <= lsn) {
                     SendLocalCompactCmd(ctx, std::move(req));
+                } else {
+                    break;
                 }
-                WaitQueue.clear();
             }
         }
         void RenderHtml(IOutputStream &str, TDbMon::ESubRequestID subId) const;
 
     private:
+        const TString VDiskLogPrefix;
         // Actor ids for Hull Dbs
         TActorId LogoBlobsActorId;
         TActorId BlocksActorId;
@@ -47,11 +51,8 @@ namespace NKikimr {
         // requests sent to execution (id to compaction request mapping)
         std::unordered_map<ui64, TCompactionReq> Requests;
         // requests waiting until commit to recovery log
-        std::deque<TCompactionReq> WaitQueue;
-        // true if we are waiting for all prev records to commit
-        bool Triggered = false;
+        std::deque<std::tuple<ui64, TCompactionReq>> WaitQueue;
         // wait for lsn to commit
-        ui64 LsnToCommit = 0;
         ui64 RequestIdCounter = 0;
 
         void SendLocalCompactCmd(const TActorContext &ctx, TCompactionReq cState);

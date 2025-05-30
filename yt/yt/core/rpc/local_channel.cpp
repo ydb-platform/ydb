@@ -30,7 +30,7 @@ using NYT::ToProto;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static constexpr auto& Logger = RpcClientLogger;
+constinit const auto Logger = RpcClientLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -182,7 +182,7 @@ private:
 
         const std::string& GetEndpointAddress() const override
         {
-            static const TString EmptyAddress;
+            static const std::string EmptyAddress;
             return EmptyAddress;
         }
 
@@ -208,7 +208,7 @@ private:
 
         TFuture<void> Send(TSharedRefArray message, const NBus::TSendOptions& /*options*/) override
         {
-            VERIFY_THREAD_AFFINITY_ANY();
+            YT_ASSERT_THREAD_AFFINITY_ANY();
 
             auto messageType = GetMessageType(message);
             switch (messageType) {

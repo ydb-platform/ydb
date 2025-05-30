@@ -1,5 +1,6 @@
 #include "serialize.h"
 
+#include "size.h"
 #include "tree_visitor.h"
 
 #include <yt/yt/core/misc/blob.h>
@@ -172,6 +173,13 @@ void Serialize(IInputStream& input, IYsonConsumer* consumer)
 {
     Serialize(TYsonInput(&input), consumer);
 }
+
+// TSize
+void Serialize(const TSize& value, NYson::IYsonConsumer* consumer)
+{
+    Serialize(value.Underlying(), consumer);
+}
+
 
 // TStatisticPath.
 void Serialize(const NStatisticPath::TStatisticPath& path, IYsonConsumer* consumer)
@@ -358,6 +366,21 @@ void Deserialize(TInstant& value, INodePtr node)
 void Deserialize(TGuid& value, INodePtr node)
 {
     value = TGuid::FromString(node->AsString()->GetValue());
+}
+
+// TSize
+void Deserialize(TSize& value, INodePtr node)
+{
+    if (node->GetType() == ENodeType::Int64) {
+        value = TSize(node->AsInt64()->GetValue());
+    } else if (node->GetType() == ENodeType::Uint64) {
+        value = TSize(CheckedIntegralCast<i64>(node->AsUint64()->GetValue()));
+    } else if (node->GetType() == ENodeType::String) {
+        value = TSize::FromString(node->AsString()->GetValue());
+    } else {
+        THROW_ERROR_EXCEPTION("Cannot parse TSize value from %Qlv",
+            node->GetType());
+    }
 }
 
 // TStatisticPath.

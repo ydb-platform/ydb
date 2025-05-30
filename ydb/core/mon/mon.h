@@ -13,7 +13,7 @@
 #include <ydb/library/actors/core/mon.h>
 #include <ydb/library/actors/http/http.h>
 #include <yql/essentials/public/issue/yql_issue.h>
-#include <ydb/public/sdk/cpp/client/ydb_types/status/status.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status/status.h>
 
 #include "mon.h"
 
@@ -40,6 +40,7 @@ public:
         TString Certificate;
         ui32 MaxRequestsPerSecond = 0;
         TDuration InactivityTimeout = TDuration::Minutes(2);
+        TString AllowOrigin;
     };
 
     TMon(TConfig config);
@@ -86,6 +87,10 @@ public:
         });
     }
 
+    const TConfig& GetConfig() const {
+        return Config;
+    }
+
 protected:
     TConfig Config;
     TIntrusivePtr<NMonitoring::TIndexMonPage> IndexMonPage;
@@ -103,6 +108,7 @@ protected:
     TMutex Mutex;
     std::vector<TActorMonPageInfo> ActorMonPages;
     THashMap<TString, TActorId> ActorServices;
+    std::shared_ptr<NMonitoring::IMetricFactory> Metrics;
 
     void RegisterActorMonPage(const TActorMonPageInfo& pageInfo);
 };

@@ -2,10 +2,11 @@
 
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
+#include <ydb/core/formats/arrow/program/functions.h>
 
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/formats/arrow/arrow_helpers.h>
-#include <ydb/library/formats/arrow/switch_type.h>
+#include <ydb/library/formats/arrow/switch/switch_type.h>
 
 namespace NKikimr::NOlap {
 
@@ -173,7 +174,7 @@ bool TPredicate::IsEqualTo(const TPredicate& item) const {
 }
 
 IOutputStream& operator<<(IOutputStream& out, const TPredicate& pred) {
-    out << NSsa::GetFunctionName(pred.Operation);
+    out << NArrow::NSSA::TSimpleFunction::GetFunctionName(pred.Operation);
 
     for (i32 i = 0; i < pred.Batch->num_columns(); ++i) {
         auto array = pred.Batch->column(i);

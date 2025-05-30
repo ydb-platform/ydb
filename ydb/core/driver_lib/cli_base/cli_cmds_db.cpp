@@ -7,13 +7,13 @@
 
 #include <ydb/library/aclib/aclib.h>
 
-#include <ydb/public/sdk/cpp/client/resources/ydb_resources.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/resources/ydb_resources.h>
 
 
-#include <ydb/library/grpc/client/grpc_client_low.h>
+#include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
 
 #include <ydb/public/api/grpc/ydb_table_v1.grpc.pb.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
 #include <util/generic/hash.h>
 #include <util/string/split.h>
@@ -131,7 +131,7 @@ public:
     virtual void Config(TConfig& config) override {
         TClientCommand::Config(config);
         ReturnTxId = false;
-        config.Opts->AddLongOption('t', "txid", "Print TxId").NoArgument().SetFlag(&ReturnTxId);
+        config.Opts->AddLongOption('t', "txid", "Print TxId").StoreTrue(&ReturnTxId);
         config.SetFreeArgsNum(1);
         SetFreeArgTitle(0, "<SCHEMA-PROTO>", "Schema protobuf or file with schema protobuf");
     }
@@ -205,14 +205,14 @@ public:
         Boundaries = false;
         config.SetFreeArgsNum(1);
         SetFreeArgTitle(0, "<PATH>", "Schema path or pathId (e.g. 72075186232623600/1225)");
-        config.Opts->AddLongOption('t', "tree", "Show schema path tree").NoArgument().SetFlag(&Tree);
-        config.Opts->AddLongOption('d', "details", "Show detailed information (like columns in a table)").NoArgument().SetFlag(&Details);
-        config.Opts->AddLongOption('a', "acl", "Show owner and acl information").NoArgument().SetFlag(&AccessRights);
-        config.Opts->AddLongOption('e', "effacl", "Show effective acl information").NoArgument().SetFlag(&AccessRightsEffective);
-        config.Opts->AddLongOption('b', "backup", "Show backup information").NoArgument().SetFlag(&BackupInfo);
-        config.Opts->AddLongOption('P', "protobuf", "Debug print all info as is").NoArgument().SetFlag(&Protobuf);
-        config.Opts->AddLongOption('s', "stats", "Return partition stats").NoArgument().SetFlag(&PartitionStats);
-        config.Opts->AddLongOption("boundaries", "Return boundaries").NoArgument().SetFlag(&Boundaries);
+        config.Opts->AddLongOption('t', "tree", "Show schema path tree").StoreTrue(&Tree);
+        config.Opts->AddLongOption('d', "details", "Show detailed information (like columns in a table)").StoreTrue(&Details);
+        config.Opts->AddLongOption('a', "acl", "Show owner and acl information").StoreTrue(&AccessRights);
+        config.Opts->AddLongOption('e', "effacl", "Show effective acl information").StoreTrue(&AccessRightsEffective);
+        config.Opts->AddLongOption('b', "backup", "Show backup information").StoreTrue(&BackupInfo);
+        config.Opts->AddLongOption('P', "protobuf", "Debug print all info as is").StoreTrue(&Protobuf);
+        config.Opts->AddLongOption('s', "stats", "Return partition stats").StoreTrue(&PartitionStats);
+        config.Opts->AddLongOption("boundaries", "Return boundaries").StoreTrue(&Boundaries);
     }
 
     virtual void Parse(TConfig& config) override {
@@ -581,8 +581,8 @@ public:
         SetFreeArgTitle(0, "<USER>", "User");
         SetFreeArgTitle(1, "<PATH>", "Full pathname of an object (e.g. /ru/home/user/mydb/test1/test2).\n"
             "          Or short pathname if profile path is set (e.g. test1/test2).");
-        config.Opts->AddLongOption('R', "recursive", "Change owner on schema objects recursively").NoArgument().SetFlag(&Recursive);
-        config.Opts->AddLongOption('v', "verbose", "Verbose output").NoArgument().SetFlag(&Verbose);
+        config.Opts->AddLongOption('R', "recursive", "Change owner on schema objects recursively").StoreTrue(&Recursive);
+        config.Opts->AddLongOption('v', "verbose", "Verbose output").StoreTrue(&Verbose);
     }
 
     TString Owner;
@@ -883,6 +883,8 @@ public:
         ClientConfig.MaxInFlight = CommandConfig.ClientConfig.MaxInFlight;
         ClientConfig.EnableSsl = CommandConfig.ClientConfig.EnableSsl;
         ClientConfig.SslCredentials.pem_root_certs = CommandConfig.ClientConfig.SslCredentials.pem_root_certs;
+        ClientConfig.SslCredentials.pem_cert_chain = CommandConfig.ClientConfig.SslCredentials.pem_cert_chain;
+        ClientConfig.SslCredentials.pem_private_key = CommandConfig.ClientConfig.SslCredentials.pem_private_key;
     }
 
     template<typename T>
@@ -902,13 +904,13 @@ public:
     virtual int Run(TConfig& config) override {
         int res = 0;
 
-        if (!ClientConfig.Locator) {
+        if (ClientConfig.Locator.empty()) {
             Cerr << "GRPC call error: GRPC server is not specified (MBus protocol is not supported for this command)." << Endl;
             return -2;
         }
 
         NYdbGrpc::TCallMeta meta;
-        if (config.SecurityToken) {
+        if (config.SecurityToken.empty()) {
             meta.Aux.push_back({NYdb::YDB_AUTH_TICKET_HEADER, config.SecurityToken});
         }
 
@@ -1002,7 +1004,7 @@ public:
     }
 
     virtual int Run(TConfig& config) override {
-        if (!ClientConfig.Locator) {
+        if (ClientConfig.Locator.empty()) {
             Cerr << "GRPC call error: GRPC server is not specified (MBus protocol is not supported for this command)." << Endl;
             return -2;
         }
@@ -1316,7 +1318,7 @@ public:
         config.SetFreeArgsNum(1, 2);
         SetFreeArgTitle(0, "<MINIKQL>", "Text MiniKQL");
         SetFreeArgTitle(1, "<PARAMS>", "Text MiniKQL parameters");
-        config.Opts->AddLongOption('p', "proto", "MiniKQL parameters are in protobuf format").NoArgument().SetFlag(&Proto);
+        config.Opts->AddLongOption('p', "proto", "MiniKQL parameters are in protobuf format").StoreTrue(&Proto);
     }
 
     virtual void Parse(TConfig& config) override {

@@ -3,29 +3,44 @@ langs: ['en','ru']
 apply-presets: true
 allowCustomResources: true
 included: true
+singlePage: true
+strict: true
+
 resources:
   style:
-    - _assets/tags.css   
+    - _assets/tags.css
+    - _assets/badge.css
+  csp:
+    - "img-src":
+        - "https://github.ydb.tech"
+    - "frame-src":
+        - "https://vk.com"
+        - "https://login.vk.com"
+        - "https://runtime.strm.yandex.ru"
+        - "https://www.youtube.com"
 
 docs-viewer:
   project-name: ydb
   # no-index: true # Remove this after the public release
   langs: ['en','ru']
   themes: ['light', 'dark']
-  favicon-src: https://storage.yandexcloud.net/ydb-www-prod-site-assets/favicon-202305/favicon.ico
+  favicon-src: https://storage.yandexcloud.net/ydb-site-assets/favicon-202305/favicon.ico
   gtm: 
     id: GTM-W7ZBL4X
   github-url-prefix: https://github.com/ydb-platform/ydb/tree/main/ydb/docs
   unrestrict-revision-access: true
+  need_pdf: true
+  pdf: true
+
   
   logo-options:
     url:
       en: https://ydb.tech/
       default: https://ydb.tech/{lang}
-    src: https://storage.yandexcloud.net/ydb-www-prod-site-assets/logo-full-site-header.svg
-    src-mobile: https://storage.yandexcloud.net/ydb-www-prod-site-assets/logo-full-site-header.svg
-    src-dark: https://storage.yandexcloud.net/ydb-www-prod-site-assets/logo-full-site-header-dark.svg
-    src-mobile-dark: https://storage.yandexcloud.net/ydb-www-prod-site-assets/logo-full-site-header-dark.svg
+    src: https://storage.yandexcloud.net/ydb-site-assets/logo-full-site-header.svg
+    src-mobile: https://storage.yandexcloud.net/ydb-site-assets/logo-full-site-header.svg
+    src-dark: https://storage.yandexcloud.net/ydb-site-assets/logo-full-site-header-dark.svg
+    src-mobile-dark: https://storage.yandexcloud.net/ydb-site-assets/logo-full-site-header-dark.svg
     img-has:
       width: 80px
       offset: true

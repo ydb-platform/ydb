@@ -407,7 +407,7 @@ public:
         NActors::TMon* mon = AppData(ctx)->Mon;
 
         if (mon) {
-            mon->RegisterActorPage(nullptr, "nodetabmon", "Node Tablet Monitor", false, ctx.ExecutorThread.ActorSystem, ctx.SelfID);
+            mon->RegisterActorPage(nullptr, "nodetabmon", "Node Tablet Monitor", false, ctx.ActorSystem(), ctx.SelfID);
         }
     }
 
@@ -424,7 +424,7 @@ private:
         if (cgi.Has("action")) {
             const TString &actionParam = cgi.Get("action");
             if (actionParam == "browse_nodes") {
-                ctx.ExecutorThread.RegisterActor(new TNodeList(ev->Sender));
+                ctx.Register(new TNodeList(ev->Sender));
                 return;
             } else if (actionParam == "kill_tablet") {
                 if (cgi.Has("tablet_id")) {
@@ -440,14 +440,14 @@ private:
                 ui32 filterNodeId = 0;
                 if (cgi.Has("node_id"))
                     filterNodeId = FromStringWithDefault<ui32>(cgi.Get("node_id"));
-                ctx.ExecutorThread.RegisterActor(new TTabletList(ev->Sender, filterNodeId, StateClassifier, TableRenderer));
+                ctx.Register(new TTabletList(ev->Sender, filterNodeId, StateClassifier, TableRenderer));
                 return;
             } else if (actionParam == "browse_ss") {
-                ctx.ExecutorThread.RegisterActor(new TStateStorageTabletList(ev->Sender));
+                ctx.Register(new TStateStorageTabletList(ev->Sender));
                 return;
             }
         }
-        ctx.ExecutorThread.RegisterActor(new TNodeList(ev->Sender));
+        ctx.Register(new TNodeList(ev->Sender));
     }
 };
 

@@ -1,4 +1,5 @@
 #include "object.h"
+#include "s3_uri.h"
 
 #include <library/cpp/json/writer/json_value.h>
 #include <library/cpp/protobuf/json/proto2json.h>
@@ -37,50 +38,20 @@ TConclusionStatus TTierConfig::DeserializeFromProto(const NKikimrSchemeOp::TExte
         return TConclusionStatus::Fail("AWS auth is not defined for storage tier");
     }
 
-    ProtoConfig.SetAccessKey(NMetadata::NSecret::TSecretName(proto.GetAuth().GetAws().GetAwsAccessKeyIdSecretName()).SerializeToString());
-    ProtoConfig.SetSecretKey(
-        NMetadata::NSecret::TSecretName(proto.GetAuth().GetAws().GetAwsSecretAccessKeySecretName()).SerializeToString());
-
-    NUri::TUri url;
-    if (url.Parse(proto.GetLocation(), NUri::TFeature::FeaturesAll) != NUri::TState::EParsed::ParsedOK) {
-        return TConclusionStatus::Fail("Cannot parse url: " + proto.GetLocation());
-    }
-
-    switch (url.GetScheme()) {
-        case NUri::TScheme::SchemeEmpty:
-            break;
-        case NUri::TScheme::SchemeHTTP:
-            ProtoConfig.SetScheme(::NKikimrSchemeOp::TS3Settings_EScheme_HTTP);
-            break;
-        case NUri::TScheme::SchemeHTTPS:
-            ProtoConfig.SetScheme(::NKikimrSchemeOp::TS3Settings_EScheme_HTTPS);
-            break;
-        default:
-            return TConclusionStatus::Fail("Unknown schema in url");
-    }
-
     {
-        TStringBuf endpoint;
-        TStringBuf bucket;
-
-        TStringBuf host = url.GetHost();
-        TStringBuf path = url.GetField(NUri::TField::FieldPath);
-        if (!path.Empty()) {
-            endpoint = host;
-            bucket = path;
-            bucket.SkipPrefix("/");
-            if (bucket.Contains("/")) {
-                return TConclusionStatus::Fail(TStringBuilder() << "Not a bucket (contains directories): " << bucket);
-            }
-        } else {
-            if (!path.TrySplit('.', endpoint, bucket)) {
-                return TConclusionStatus::Fail(TStringBuilder() << "Bucket is not specified in URL: " << path);
-            }
+        const auto aws = proto.GetAuth().GetAws();
+        ProtoConfig.SetAccessKey(NMetadata::NSecret::TSecretName(aws.GetAwsAccessKeyIdSecretName()).SerializeToString());
+        ProtoConfig.SetSecretKey(NMetadata::NSecret::TSecretName(aws.GetAwsSecretAccessKeySecretName()).SerializeToString());
+        if (aws.HasAwsRegion()) {
+            ProtoConfig.SetRegion(aws.GetAwsRegion());
         }
-
-        ProtoConfig.SetEndpoint(TString(endpoint));
-        ProtoConfig.SetBucket(TString(bucket));
     }
+
+    auto parsedUri = TS3Uri::ParseUri(proto.GetLocation());
+    if (parsedUri.IsFail()) {
+        return parsedUri;
+    }
+    parsedUri->FillSettings(ProtoConfig);
 
     return TConclusionStatus::Success();
 }

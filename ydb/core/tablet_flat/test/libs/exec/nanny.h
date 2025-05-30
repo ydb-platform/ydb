@@ -3,8 +3,9 @@
 #include "world.h"
 #include "events.h"
 #include "helper.h"
-#include <ydb/core/tablet_flat/util_fmt_logger.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
+#include <ydb/core/tablet_flat/util_fmt_abort.h>
+#include <ydb/core/tablet_flat/util_fmt_logger.h>
 #include <ydb/core/tablet_flat/ut/flat_test_db.h>
 #include <ydb/core/tablet_flat/ut/flat_test_db_helpers.h>
 #include <ydb/library/actors/core/actor.h>
@@ -26,15 +27,10 @@ namespace NFake {
 
         }
 
-        ~TFuncTx()
-        {
-            Y_ABORT_UNLESS(Completed, "Destroying incomplted transaction");
-        }
-
     private:
         bool Execute(TTransactionContext &txc, const TActorContext&) override
         {
-            Y_ABORT_UNLESS(!Completed, "TFuncTx is already completed");
+            Y_ENSURE(!Completed, "TFuncTx is already completed");
 
             Local.SetDb(&txc.DB);
 
@@ -50,7 +46,7 @@ namespace NFake {
 
         void Complete(const TActorContext &ctx) override
         {
-            Y_ABORT_UNLESS(Completed, "Finalizing incomplteted transaction");
+            Y_ENSURE(Completed, "Complete called for unfinished transaction");
 
             ctx.Send(Owner, new NFake::TEvResult);
             Local.SetDb(nullptr);
@@ -97,7 +93,7 @@ namespace NFake {
         }
 
     protected:
-        void QueueTx(TFuncTx::TCall func) noexcept
+        void QueueTx(TFuncTx::TCall func)
         {
             TxInFlight++;
 
@@ -134,43 +130,43 @@ namespace NFake {
             } else if (eh->CastAsLocal<TEvents::TEvPoison>()) {
                 DoSuicide();
             } else {
-                Y_Fail("Unexpected event " << eh->GetTypeName());
+                Y_TABLET_ERROR("Unexpected event " << eh->GetTypeName());
             }
         }
 
-        void Handle(NFake::TEvReady &ev) noexcept
+        void Handle(NFake::TEvReady &ev)
         {
             if (std::exchange(State, EDo::More) != EDo::Born) {
-                Y_ABORT("Got an unexpected TEvReady{ } event");
+                Y_TABLET_ERROR("Got an unexpected TEvReady{ } event");
             } else if (std::exchange(Tablet, ev.ActorId)) {
-                Y_ABORT("Child tablet actor is still alive");
+                Y_TABLET_ERROR("Child tablet actor is still alive");
             } else if (TxInFlight > 0) {
-                Y_ABORT("Just bron(rebooted) tablet has pending tx");
+                Y_TABLET_ERROR("Just bron(rebooted) tablet has pending tx");
             }
 
             QueueTx(CompareDbs);
         }
 
-        void Handle(NFake::TEvResult&) noexcept
+        void Handle(NFake::TEvResult&)
         {
-            Y_ABORT_UNLESS(TxInFlight-- > 0, "Tx counter is underflowed");
+            Y_ENSURE(TxInFlight-- > 0, "Tx counter is underflowed");
 
             if (State == EDo::More) State = Run();
 
             if (TxInFlight > 0) {
                 /* Should wait for pending tx completion before tablet kill */
             } else if (State == EDo::Born) {
-                Y_ABORT_UNLESS(Tablet, "Tabled has been already restarted");
+                Y_ENSURE(Tablet, "Tabled has been already restarted");
 
                 Send(std::exchange(Tablet, { }), new TEvents::TEvPoison);
             } else if (State == EDo::Stop) {
                 Send(std::exchange(Tablet, { }), new TEvents::TEvPoison);
             } else {
-                Y_ABORT("TNanny actor cannot progress: no tx, no EDo");
+                Y_TABLET_ERROR("TNanny actor cannot progress: no tx, no EDo");
             }
         }
 
-        void StartTablet() noexcept
+        void StartTablet()
         {
             if (auto logl = Logger->Log(NUtil::ELnLev::Info)) {
                 logl << "TNanny initiates TDummy tablet " << MyId << " birth";
@@ -180,13 +176,13 @@ namespace NFake {
                 return new NFake::TDummy(tablet, info, SelfId());
             };
 
-            auto *actor = TStarter().Do(SelfId(), 1, MyId, std::move(make));
+            auto *actor = TStarter().Do(SelfId(), 1, MyId, std::move(make), 4);
             auto *event = new TEvFire{ 7, { }, { actor, EMail::Simple, 0 } };
 
             Send(TWorld::Where(EPath::Root), event);
         }
 
-        void DoSuicide() noexcept
+        void DoSuicide()
         {
             Send(std::exchange(Owner, { }), new TEvents::TEvGone);
             State = EDo::Gone;

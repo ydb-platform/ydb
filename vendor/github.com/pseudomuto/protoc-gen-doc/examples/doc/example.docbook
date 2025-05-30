@@ -1,0 +1,925 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<article>
+  <title>Protocol Documentation</title>
+  
+  <section>
+    <title>Booking.proto</title>
+    <para>Booking related messages.</para><para>This file is really just an example. The data model is completely</para><para>fictional.</para>
+    
+    <section id="com.example.Booking">
+      <title>Booking</title>
+      <para>Represents the booking of a vehicle.</para><para>Vehicles are some cool shit. But drive carefully!</para>
+      
+      <table frame="all">
+        <title><classname>Booking</classname> Fields</title>
+        <tgroup cols="4">
+          <colspec colwidth="*"/>
+          <colspec colwidth="*"/>
+          <colspec colwidth="0.5*"/>
+          <colspec colwidth="3*"/>
+          <thead>
+            <row>
+              <entry>Field</entry>
+              <entry>Type</entry>
+              <entry>Label</entry>
+              <entry>Description</entry>
+            </row>
+          </thead>
+          <tbody>
+            
+            <row>
+              <entry>vehicle_id</entry>
+              <entry><link linkend="int32">int32</link></entry>
+              <entry></entry>
+              <entry><para>ID of booked vehicle.</para></entry>
+            </row>
+            
+            <row>
+              <entry>customer_id</entry>
+              <entry><link linkend="int32">int32</link></entry>
+              <entry></entry>
+              <entry><para>Customer that booked the vehicle.</para></entry>
+            </row>
+            
+            <row>
+              <entry>status</entry>
+              <entry><link linkend="com.example.BookingStatus">BookingStatus</link></entry>
+              <entry></entry>
+              <entry><para>Status of the booking.</para></entry>
+            </row>
+            
+            <row>
+              <entry>confirmation_sent</entry>
+              <entry><link linkend="bool">bool</link></entry>
+              <entry></entry>
+              <entry><para>Has booking confirmation been sent?</para></entry>
+            </row>
+            
+            <row>
+              <entry>payment_received</entry>
+              <entry><link linkend="bool">bool</link></entry>
+              <entry></entry>
+              <entry><para>Has payment been received?</para></entry>
+            </row>
+            
+            <row>
+              <entry>color_preference</entry>
+              <entry><link linkend="string">string</link></entry>
+              <entry></entry>
+              <entry><emphasis>Deprecated.</emphasis><para>Color preference of the customer.</para></entry>
+            </row>
+            
+          </tbody>
+        </tgroup>
+      </table>
+      
+      
+    </section>
+    
+    <section id="com.example.BookingStatus">
+      <title>BookingStatus</title>
+      <para>Represents the status of a vehicle booking.</para>
+      
+      <table frame="all">
+        <title><classname>BookingStatus</classname> Fields</title>
+        <tgroup cols="4">
+          <colspec colwidth="*"/>
+          <colspec colwidth="*"/>
+          <colspec colwidth="0.5*"/>
+          <colspec colwidth="3*"/>
+          <thead>
+            <row>
+              <entry>Field</entry>
+              <entry>Type</entry>
+              <entry>Label</entry>
+              <entry>Description</entry>
+            </row>
+          </thead>
+          <tbody>
+            
+            <row>
+              <entry>id</entry>
+              <entry><link linkend="int32">int32</link></entry>
+              <entry></entry>
+              <entry><para>Unique booking status ID.</para></entry>
+            </row>
+            
+            <row>
+              <entry>description</entry>
+              <entry><link linkend="string">string</link></entry>
+              <entry></entry>
+              <entry><para>Booking status description. E.g. "Active".</para></entry>
+            </row>
+            
+          </tbody>
+        </tgroup>
+      </table>
+      
+      
+    </section>
+    
+    <section id="com.example.BookingStatusID">
+      <title>BookingStatusID</title>
+      <para>Represents the booking status ID.</para>
+      
+      <table frame="all">
+        <title><classname>BookingStatusID</classname> Fields</title>
+        <tgroup cols="4">
+          <colspec colwidth="*"/>
+          <colspec colwidth="*"/>
+          <colspec colwidth="0.5*"/>
+          <colspec colwidth="3*"/>
+          <thead>
+            <row>
+              <entry>Field</entry>
+              <entry>Type</entry>
+              <entry>Label</entry>
+              <entry>Description</entry>
+            </row>
+          </thead>
+          <tbody>
+            
+            <row>
+              <entry>id</entry>
+              <entry><link linkend="int32">int32</link></entry>
+              <entry></entry>
+              <entry><para>Unique booking status ID.</para></entry>
+            </row>
+            
+          </tbody>
+        </tgroup>
+      </table>
+      
+      
+    </section>
+    
+    <section id="com.example.EmptyBookingMessage">
+      <title>EmptyBookingMessage</title>
+      <para>An empty message for testing</para>
+      
+      
+    </section>
+    
+    
+
+    
+
+    
+    <section id="com.example.BookingService">
+      <title>BookingService</title>
+      <para>Service for handling vehicle bookings.</para>
+      <table frame="all">
+        <title><classname>BookingService</classname> Methods</title>
+        <tgroup cols="4">
+          <colspec colwidth="*"/>
+          <colspec colwidth="*"/>
+          <colspec colwidth="*"/>
+          <colspec colwidth="3*"/>
+          <thead>
+            <row>
+              <entry>Method Name</entry>
+              <entry>Request Type</entry>
+              <entry>Response Type</entry>
+              <entry>Description</entry>
+            </row>
+          </thead>
+          <tbody>
+            
+            <row>
+              <entry>BookVehicle</entry>
+              <entry><link linkend="com.example.Booking">Booking</link></entry>
+              <entry><link linkend="com.example.BookingStatus">BookingStatus</link></entry>
+              <entry><para>Used to book a vehicle. Pass in a Booking and a BookingStatus will be returned.</para></entry>
+            </row>
+            
+            <row>
+              <entry>BookingUpdates</entry>
+              <entry><link linkend="com.example.BookingStatusID">BookingStatusID</link></entry>
+              <entry><link linkend="com.example.BookingStatus">BookingStatus</link> stream</entry>
+              <entry><para>Used to subscribe to updates of the BookingStatus.</para></entry>
+            </row>
+            
+          </tbody>
+        </tgroup>
+      </table>
+    </section>
+    
+  </section>
+  
+  <section>
+    <title>Customer.proto</title>
+    <para>This file has messages for describing a customer.</para>
+    
+    <section id="com.example.Address">
+      <title>Address</title>
+      <para>Represents a mail address.</para>
+      
+      <table frame="all">
+        <title><classname>Address</classname> Fields</title>
+        <tgroup cols="4">
+          <colspec colwidth="*"/>
+          <colspec colwidth="*"/>
+          <colspec colwidth="0.5*"/>
+          <colspec colwidth="3*"/>
+          <thead>
+            <row>
+              <entry>Field</entry>
+              <entry>Type</entry>
+              <entry>Label</entry>
+              <entry>Description</entry>
+            </row>
+          </thead>
+          <tbody>
+            
+            <row>
+              <entry>address_line_1</entry>
+              <entry><link linkend="string">string</link></entry>
+              <entry>required</entry>
+              <entry><para>First address line.</para></entry>
+            </row>
+            
+            <row>
+              <entry>address_line_2</entry>
+              <entry><link linkend="string">string</link></entry>
+              <entry>optional</entry>
+              <entry><para>Second address line.</para></entry>
+            </row>
+            
+            <row>
+              <entry>address_line_3</entry>
+              <entry><link linkend="string">string</link></entry>
+              <entry>optional</entry>
+              <entry><para>Second address line.</para></entry>
+            </row>
+            
+            <row>
+              <entry>town</entry>
+              <entry><link linkend="string">string</link></entry>
+              <entry>required</entry>
+              <entry><para>Address town.</para></entry>
+            </row>
+            
+            <row>
+              <entry>county</entry>
+              <entry><link linkend="string">string</link></entry>
+              <entry>optional</entry>
+              <entry><para>Address county, if applicable.</para></entry>
+            </row>
+            
+            <row>
+              <entry>country</entry>
+              <entry><link linkend="string">string</link></entry>
+              <entry>required</entry>
+              <entry><para>Address country.</para></entry>
+            </row>
+            
+          </tbody>
+        </tgroup>
+      </table>
+      
+      
+    </section>
+    
+    <section id="com.example.Customer">
+      <title>Customer</title>
+      <para>Represents a customer.</para>
+      
+      <table frame="all">
+        <title><classname>Customer</classname> Fields</title>
+        <tgroup cols="4">
+          <colspec colwidth="*"/>
+          <colspec colwidth="*"/>
+          <colspec colwidth="0.5*"/>
+          <colspec colwidth="3*"/>
+          <thead>
+            <row>
+              <entry>Field</entry>
+              <entry>Type</entry>
+              <entry>Label</entry>
+              <entry>Description</entry>
+            </row>
+          </thead>
+          <tbody>
+            
+            <row>
+              <entry>id</entry>
+              <entry><link linkend="int32">int32</link></entry>
+              <entry>required</entry>
+              <entry><para>Unique customer ID.</para></entry>
+            </row>
+            
+            <row>
+              <entry>first_name</entry>
+              <entry><link linkend="string">string</link></entry>
+              <entry>required</entry>
+              <entry><para>Customer first name.</para></entry>
+            </row>
+            
+            <row>
+              <entry>last_name</entry>
+              <entry><link linkend="string">string</link></entry>
+              <entry>required</entry>
+              <entry><para>Customer last name.</para></entry>
+            </row>
+            
+            <row>
+              <entry>details</entry>
+              <entry><link linkend="string">string</link></entry>
+              <entry>optional</entry>
+              <entry><para>Customer details.</para></entry>
+            </row>
+            
+            <row>
+              <entry>email_address</entry>
+              <entry><link linkend="string">string</link></entry>
+              <entry>optional</entry>
+              <entry><para>Customer e-mail address.</para></entry>
+            </row>
+            
+            <row>
+              <entry>phone_number</entry>
+              <entry><link linkend="string">string</link></entry>
+              <entry>repeated</entry>
+              <entry><para>Customer phone numbers, primary first.</para></entry>
+            </row>
+            
+            <row>
+              <entry>mail_addresses</entry>
+              <entry><link linkend="com.example.Address">Address</link></entry>
+              <entry>repeated</entry>
+              <entry><para>Customer mail addresses, primary first.</para></entry>
+            </row>
+            
+          </tbody>
+        </tgroup>
+      </table>
+      
+      
+    </section>
+    
+    
+
+    
+
+    
+  </section>
+  
+  <section>
+    <title>Vehicle.proto</title>
+    <para>Messages describing manufacturers / vehicles.</para>
+    
+    <section id="com.example.Manufacturer">
+      <title>Manufacturer</title>
+      <para>Represents a manufacturer of cars.</para>
+      
+      <table frame="all">
+        <title><classname>Manufacturer</classname> Fields</title>
+        <tgroup cols="4">
+          <colspec colwidth="*"/>
+          <colspec colwidth="*"/>
+          <colspec colwidth="0.5*"/>
+          <colspec colwidth="3*"/>
+          <thead>
+            <row>
+              <entry>Field</entry>
+              <entry>Type</entry>
+              <entry>Label</entry>
+              <entry>Description</entry>
+            </row>
+          </thead>
+          <tbody>
+            
+            <row>
+              <entry>id</entry>
+              <entry><link linkend="int32">int32</link></entry>
+              <entry>required</entry>
+              <entry><para>The unique manufacturer ID.</para></entry>
+            </row>
+            
+            <row>
+              <entry>code</entry>
+              <entry><link linkend="string">string</link></entry>
+              <entry>required</entry>
+              <entry><para>A manufacturer code, e.g. "DKL4P".</para></entry>
+            </row>
+            
+            <row>
+              <entry>details</entry>
+              <entry><link linkend="string">string</link></entry>
+              <entry>optional</entry>
+              <entry><para>Manufacturer details (minimum orders et.c.).</para></entry>
+            </row>
+            
+            <row>
+              <entry>category</entry>
+              <entry><link linkend="com.example.Manufacturer.Category">Manufacturer.Category</link></entry>
+              <entry>optional</entry>
+              <entry><para>Manufacturer category.</para><para>Default: CATEGORY_EXTERNAL</para></entry>
+            </row>
+            
+          </tbody>
+        </tgroup>
+      </table>
+      
+      
+    </section>
+    
+    <section id="com.example.Model">
+      <title>Model</title>
+      <para>Represents a vehicle model.</para>
+      
+      <table frame="all">
+        <title><classname>Model</classname> Fields</title>
+        <tgroup cols="4">
+          <colspec colwidth="*"/>
+          <colspec colwidth="*"/>
+          <colspec colwidth="0.5*"/>
+          <colspec colwidth="3*"/>
+          <thead>
+            <row>
+              <entry>Field</entry>
+              <entry>Type</entry>
+              <entry>Label</entry>
+              <entry>Description</entry>
+            </row>
+          </thead>
+          <tbody>
+            
+            <row>
+              <entry>id</entry>
+              <entry><link linkend="string">string</link></entry>
+              <entry>required</entry>
+              <entry><para>The unique model ID.</para></entry>
+            </row>
+            
+            <row>
+              <entry>model_code</entry>
+              <entry><link linkend="string">string</link></entry>
+              <entry>required</entry>
+              <entry><para>The car model code, e.g. "PZ003".</para></entry>
+            </row>
+            
+            <row>
+              <entry>model_name</entry>
+              <entry><link linkend="string">string</link></entry>
+              <entry>required</entry>
+              <entry><para>The car model name, e.g. "Z3".</para></entry>
+            </row>
+            
+            <row>
+              <entry>daily_hire_rate_dollars</entry>
+              <entry><link linkend="sint32">sint32</link></entry>
+              <entry>required</entry>
+              <entry><para>Dollars per day.</para></entry>
+            </row>
+            
+            <row>
+              <entry>daily_hire_rate_cents</entry>
+              <entry><link linkend="sint32">sint32</link></entry>
+              <entry>required</entry>
+              <entry><para>Cents per day.</para></entry>
+            </row>
+            
+          </tbody>
+        </tgroup>
+      </table>
+      
+      
+    </section>
+    
+    <section id="com.example.Vehicle">
+      <title>Vehicle</title>
+      <para>Represents a vehicle that can be hired.</para>
+      
+      <table frame="all">
+        <title><classname>Vehicle</classname> Fields</title>
+        <tgroup cols="4">
+          <colspec colwidth="*"/>
+          <colspec colwidth="*"/>
+          <colspec colwidth="0.5*"/>
+          <colspec colwidth="3*"/>
+          <thead>
+            <row>
+              <entry>Field</entry>
+              <entry>Type</entry>
+              <entry>Label</entry>
+              <entry>Description</entry>
+            </row>
+          </thead>
+          <tbody>
+            
+            <row>
+              <entry>id</entry>
+              <entry><link linkend="int32">int32</link></entry>
+              <entry>required</entry>
+              <entry><para>Unique vehicle ID.</para></entry>
+            </row>
+            
+            <row>
+              <entry>model</entry>
+              <entry><link linkend="com.example.Model">Model</link></entry>
+              <entry>required</entry>
+              <entry><para>Vehicle model.</para></entry>
+            </row>
+            
+            <row>
+              <entry>reg_number</entry>
+              <entry><link linkend="string">string</link></entry>
+              <entry>required</entry>
+              <entry><para>Vehicle registration number.</para></entry>
+            </row>
+            
+            <row>
+              <entry>mileage</entry>
+              <entry><link linkend="sint32">sint32</link></entry>
+              <entry>optional</entry>
+              <entry><para>Current vehicle mileage, if known.</para></entry>
+            </row>
+            
+            <row>
+              <entry>category</entry>
+              <entry><link linkend="com.example.Vehicle.Category">Vehicle.Category</link></entry>
+              <entry>optional</entry>
+              <entry><para>Vehicle category.</para></entry>
+            </row>
+            
+            <row>
+              <entry>daily_hire_rate_dollars</entry>
+              <entry><link linkend="sint32">sint32</link></entry>
+              <entry>optional</entry>
+              <entry><para>Dollars per day.</para><para>Default: 50</para></entry>
+            </row>
+            
+            <row>
+              <entry>daily_hire_rate_cents</entry>
+              <entry><link linkend="sint32">sint32</link></entry>
+              <entry>optional</entry>
+              <entry><para>Cents per day.</para></entry>
+            </row>
+            
+          </tbody>
+        </tgroup>
+      </table>
+      
+      
+      <table frame="all">
+        <title><classname>Vehicle</classname> Nested Extensions</title>
+        <tgroup cols="5">
+          <colspec colwidth="*"/>
+          <colspec colwidth="*"/>
+          <colspec colwidth="*"/>
+          <colspec colwidth="0.5*"/>
+          <colspec colwidth="3*"/>
+          <thead>
+            <row>
+              <entry>Extension</entry>
+              <entry>Type</entry>
+              <entry>Base</entry>
+              <entry>Number</entry>
+              <entry>Description</entry>
+            </row>
+          </thead>
+          <tbody>
+            
+            <row>
+              <entry>series</entry>
+              <entry><link linkend="string">string</link></entry>
+              <entry><link linkend="com.example.Model">Model</link></entry>
+              <entry>100</entry>
+              <entry><para>Vehicle model series.</para></entry>
+            </row>
+            
+          </tbody>
+        </tgroup>
+      </table>
+      
+    </section>
+    
+    <section id="com.example.Vehicle.Category">
+      <title>Vehicle.Category</title>
+      <para>Represents a vehicle category. E.g. "Sedan" or "Truck".</para>
+      
+      <table frame="all">
+        <title><classname>Vehicle.Category</classname> Fields</title>
+        <tgroup cols="4">
+          <colspec colwidth="*"/>
+          <colspec colwidth="*"/>
+          <colspec colwidth="0.5*"/>
+          <colspec colwidth="3*"/>
+          <thead>
+            <row>
+              <entry>Field</entry>
+              <entry>Type</entry>
+              <entry>Label</entry>
+              <entry>Description</entry>
+            </row>
+          </thead>
+          <tbody>
+            
+            <row>
+              <entry>code</entry>
+              <entry><link linkend="string">string</link></entry>
+              <entry>required</entry>
+              <entry><para>Category code. E.g. "S".</para></entry>
+            </row>
+            
+            <row>
+              <entry>description</entry>
+              <entry><link linkend="string">string</link></entry>
+              <entry>required</entry>
+              <entry><para>Category name. E.g. "Sedan".</para></entry>
+            </row>
+            
+          </tbody>
+        </tgroup>
+      </table>
+      
+      
+    </section>
+    
+    
+    <section id="com.example.Manufacturer.Category">
+      <title>Manufacturer.Category</title>
+      <para>Manufacturer category. A manufacturer may be either inhouse or external.</para>
+      <table frame="all">
+        <title><classname>Manufacturer.Category</classname> Values</title>
+        <tgroup cols="3">
+          <colspec colwidth="*"/>
+          <colspec colwidth="*"/>
+          <colspec colwidth="3*"/>
+          <thead>
+            <row>
+              <entry>Name</entry>
+              <entry>Number</entry>
+              <entry>Description</entry>
+            </row>
+          </thead>
+          <tbody>
+            
+            <row>
+              <entry>CATEGORY_INHOUSE</entry>
+              <entry>0</entry>
+              <entry><para>The manufacturer is inhouse.</para></entry>
+            </row>
+            
+            <row>
+              <entry>CATEGORY_EXTERNAL</entry>
+              <entry>1</entry>
+              <entry><para>The manufacturer is external.</para></entry>
+            </row>
+            
+          </tbody>
+        </tgroup>
+      </table>
+    </section>
+    
+
+    
+    <section>
+      <title>File-level Extensions</title>
+      <informaltable frame="all">
+        <tgroup cols="5">
+          <colspec colwidth="*"/>
+          <colspec colwidth="*"/>
+          <colspec colwidth="*"/>
+          <colspec colwidth="0.5*"/>
+          <colspec colwidth="3*"/>
+          <thead>
+            <row>
+              <entry>Extension</entry>
+              <entry>Type</entry>
+              <entry>Base</entry>
+              <entry>Number</entry>
+              <entry>Description</entry>
+            </row>
+          </thead>
+          <tbody>
+            
+            <row>
+              <entry>country</entry>
+              <entry><link linkend="string">string</link></entry>
+              <entry><link linkend="com.example.Manufacturer">Manufacturer</link></entry>
+              <entry>100</entry>
+              <entry><para>Manufacturer country.</para><para>Default: China</para></entry>
+            </row>
+            
+          </tbody>
+        </tgroup>
+      </informaltable>
+    </section>
+    
+
+    
+  </section>
+  
+
+  <section>
+    <title>Scalar Value Types</title>
+    <informaltable frame="all">
+      <tgroup cols="5">
+        <colspec colwidth="*"/>
+        <colspec colwidth="5*"/>
+        <colspec colwidth="*"/>
+        <colspec colwidth="*"/>
+        <colspec colwidth="*"/>
+        <thead>
+          <row>
+            <entry>.proto Type</entry>
+            <entry>Notes</entry>
+            <entry>C++</entry>
+            <entry>Java</entry>
+            <entry>Python</entry>
+            <entry>Go</entry>
+            <entry>C#</entry>
+            <entry>PHP</entry>
+            <entry>Ruby</entry>
+          </row>
+        </thead>
+        <tbody>
+          
+          <row>
+            <entry id="double">double</entry>
+            <entry></entry>
+            <entry>double</entry>
+            <entry>double</entry>
+            <entry>float</entry>
+            <entry>float64</entry>
+            <entry>double</entry>
+            <entry>float</entry>
+            <entry>Float</entry>
+          </row>
+          
+          <row>
+            <entry id="float">float</entry>
+            <entry></entry>
+            <entry>float</entry>
+            <entry>float</entry>
+            <entry>float</entry>
+            <entry>float32</entry>
+            <entry>float</entry>
+            <entry>float</entry>
+            <entry>Float</entry>
+          </row>
+          
+          <row>
+            <entry id="int32">int32</entry>
+            <entry>Uses variable-length encoding. Inefficient for encoding negative numbers – if your field is likely to have negative values, use sint32 instead.</entry>
+            <entry>int32</entry>
+            <entry>int</entry>
+            <entry>int</entry>
+            <entry>int32</entry>
+            <entry>int</entry>
+            <entry>integer</entry>
+            <entry>Bignum or Fixnum (as required)</entry>
+          </row>
+          
+          <row>
+            <entry id="int64">int64</entry>
+            <entry>Uses variable-length encoding. Inefficient for encoding negative numbers – if your field is likely to have negative values, use sint64 instead.</entry>
+            <entry>int64</entry>
+            <entry>long</entry>
+            <entry>int/long</entry>
+            <entry>int64</entry>
+            <entry>long</entry>
+            <entry>integer/string</entry>
+            <entry>Bignum</entry>
+          </row>
+          
+          <row>
+            <entry id="uint32">uint32</entry>
+            <entry>Uses variable-length encoding.</entry>
+            <entry>uint32</entry>
+            <entry>int</entry>
+            <entry>int/long</entry>
+            <entry>uint32</entry>
+            <entry>uint</entry>
+            <entry>integer</entry>
+            <entry>Bignum or Fixnum (as required)</entry>
+          </row>
+          
+          <row>
+            <entry id="uint64">uint64</entry>
+            <entry>Uses variable-length encoding.</entry>
+            <entry>uint64</entry>
+            <entry>long</entry>
+            <entry>int/long</entry>
+            <entry>uint64</entry>
+            <entry>ulong</entry>
+            <entry>integer/string</entry>
+            <entry>Bignum or Fixnum (as required)</entry>
+          </row>
+          
+          <row>
+            <entry id="sint32">sint32</entry>
+            <entry>Uses variable-length encoding. Signed int value. These more efficiently encode negative numbers than regular int32s.</entry>
+            <entry>int32</entry>
+            <entry>int</entry>
+            <entry>int</entry>
+            <entry>int32</entry>
+            <entry>int</entry>
+            <entry>integer</entry>
+            <entry>Bignum or Fixnum (as required)</entry>
+          </row>
+          
+          <row>
+            <entry id="sint64">sint64</entry>
+            <entry>Uses variable-length encoding. Signed int value. These more efficiently encode negative numbers than regular int64s.</entry>
+            <entry>int64</entry>
+            <entry>long</entry>
+            <entry>int/long</entry>
+            <entry>int64</entry>
+            <entry>long</entry>
+            <entry>integer/string</entry>
+            <entry>Bignum</entry>
+          </row>
+          
+          <row>
+            <entry id="fixed32">fixed32</entry>
+            <entry>Always four bytes. More efficient than uint32 if values are often greater than 2^28.</entry>
+            <entry>uint32</entry>
+            <entry>int</entry>
+            <entry>int</entry>
+            <entry>uint32</entry>
+            <entry>uint</entry>
+            <entry>integer</entry>
+            <entry>Bignum or Fixnum (as required)</entry>
+          </row>
+          
+          <row>
+            <entry id="fixed64">fixed64</entry>
+            <entry>Always eight bytes. More efficient than uint64 if values are often greater than 2^56.</entry>
+            <entry>uint64</entry>
+            <entry>long</entry>
+            <entry>int/long</entry>
+            <entry>uint64</entry>
+            <entry>ulong</entry>
+            <entry>integer/string</entry>
+            <entry>Bignum</entry>
+          </row>
+          
+          <row>
+            <entry id="sfixed32">sfixed32</entry>
+            <entry>Always four bytes.</entry>
+            <entry>int32</entry>
+            <entry>int</entry>
+            <entry>int</entry>
+            <entry>int32</entry>
+            <entry>int</entry>
+            <entry>integer</entry>
+            <entry>Bignum or Fixnum (as required)</entry>
+          </row>
+          
+          <row>
+            <entry id="sfixed64">sfixed64</entry>
+            <entry>Always eight bytes.</entry>
+            <entry>int64</entry>
+            <entry>long</entry>
+            <entry>int/long</entry>
+            <entry>int64</entry>
+            <entry>long</entry>
+            <entry>integer/string</entry>
+            <entry>Bignum</entry>
+          </row>
+          
+          <row>
+            <entry id="bool">bool</entry>
+            <entry></entry>
+            <entry>bool</entry>
+            <entry>boolean</entry>
+            <entry>boolean</entry>
+            <entry>bool</entry>
+            <entry>bool</entry>
+            <entry>boolean</entry>
+            <entry>TrueClass/FalseClass</entry>
+          </row>
+          
+          <row>
+            <entry id="string">string</entry>
+            <entry>A string must always contain UTF-8 encoded or 7-bit ASCII text.</entry>
+            <entry>string</entry>
+            <entry>String</entry>
+            <entry>str/unicode</entry>
+            <entry>string</entry>
+            <entry>string</entry>
+            <entry>string</entry>
+            <entry>String (UTF-8)</entry>
+          </row>
+          
+          <row>
+            <entry id="bytes">bytes</entry>
+            <entry>May contain any arbitrary sequence of bytes.</entry>
+            <entry>string</entry>
+            <entry>ByteString</entry>
+            <entry>str</entry>
+            <entry>[]byte</entry>
+            <entry>ByteString</entry>
+            <entry>string</entry>
+            <entry>String (ASCII-8BIT)</entry>
+          </row>
+          
+        </tbody>
+      </tgroup>
+    </informaltable>
+  </section>
+
+</article>

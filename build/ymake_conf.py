@@ -15,8 +15,6 @@ import subprocess
 import sys
 import tempfile
 
-import six
-
 from functools import total_ordering
 
 logger = logging.getLogger(__name__ if __name__ != '__main__' else 'ymake_conf.py')
@@ -102,18 +100,22 @@ class Platform(object):
         self.is_x86_64 = self.arch in ('x86_64', 'amd64')
         self.is_intel = self.is_x86 or self.is_x86_64
 
+        self.is_armv6 = self.arch in ('armv6hf',)
         self.is_armv7 = self.arch in ('armv7', 'armv7a', 'armv7ahf', 'armv7a_neon', 'arm', 'armv7a_cortex_a9', 'armv7ahf_cortex_a35', 'armv7ahf_cortex_a53')
         self.is_armv8 = self.arch in ('armv8', 'armv8a', 'arm64', 'aarch64', 'armv8a_cortex_a35', 'armv8a_cortex_a53')
         self.is_armv8m = self.arch in ('armv8m_cortex_m33', 'armv8m_cortex_m23')
         self.is_armv7em = self.arch in ('armv7em_cortex_m4', 'armv7em_cortex_m7')
         self.is_arm64 = self.arch in ('arm64',)
-        self.is_arm = self.is_armv7 or self.is_armv8 or self.is_armv8m or self.is_armv7em
+        self.is_arm = self.is_armv6 or self.is_armv7 or self.is_armv8 or self.is_armv8m or self.is_armv7em
         self.is_armv7_neon = self.arch in ('armv7a_neon', 'armv7ahf', 'armv7a_cortex_a9', 'armv7ahf_cortex_a35', 'armv7ahf_cortex_a53')
+        self.is_armv6hf = self.arch in ('armv6hf',)
         self.is_armv7hf = self.arch in ('armv7ahf', 'armv7ahf_cortex_a35', 'armv7ahf_cortex_a53')
-        self.is_armv5te = self.arch in ('armv5te_arm968e_s')
+        self.is_armv5te = self.arch in ('armv5te_arm968e_s',)
 
-        self.is_rv32imc = self.arch in ('riscv32_esp',)
-        self.is_riscv32 = self.is_rv32imc
+        self.is_rv32imc = self.arch in ('riscv32_imc', 'riscv32_esp')
+        self.is_rv32imc_zicsr = self.arch in ('riscv32_imc_zicsr',)
+
+        self.is_riscv32 = self.is_rv32imc or self.is_rv32imc_zicsr
 
         self.is_nds32 = self.arch in ('nds32le_elf_mculib_v5f',)
         self.is_tc32 = self.arch in ('tc32_elf',)
@@ -121,6 +123,8 @@ class Platform(object):
         self.is_xtensa_hifi4 = self.arch == 'xtensa_hifi4'
         self.is_xtensa_hifi5 = self.arch == 'xtensa_hifi5'
         self.is_xtensa = self.is_xtensa_hifi4 or self.is_xtensa_hifi5
+
+        self.armv6_float_abi = 'hard'
 
         self.armv7_float_abi = None
         if self.is_armv7:
@@ -146,7 +150,11 @@ class Platform(object):
         self.is_wasm64 = self.arch == 'wasm64'
         self.is_wasm = self.is_wasm32 or self.is_wasm64
 
-        self.is_32_bit = self.is_x86 or self.is_armv5te or self.is_armv7 or self.is_armv8m or self.is_riscv32 or self.is_nds32 or self.is_armv7em or self.is_xtensa or self.is_tc32 or self.is_wasm32
+        self.is_32_bit = (
+            self.is_x86 or
+            self.is_armv5te or self.is_armv6 or self.is_armv7 or self.is_armv7em or self.is_armv8m or
+            self.is_riscv32 or self.is_nds32 or self.is_xtensa or self.is_tc32 or self.is_wasm32
+        )
         self.is_64_bit = self.is_x86_64 or self.is_armv8 or self.is_powerpc or self.is_wasm64
 
         assert self.is_32_bit or self.is_64_bit
@@ -174,13 +182,12 @@ class Platform(object):
         if self.is_android:
             self.android_api = int(preset('ANDROID_API', ANDROID_API_DEFAULT))
 
-        self.is_cygwin = self.os == 'cygwin'
         self.is_yocto = self.os == 'yocto'
         self.is_emscripten = self.os == 'emscripten'
 
         self.is_none = self.os == 'none'
 
-        self.is_posix = self.is_linux or self.is_apple or self.is_android or self.is_cygwin or self.is_yocto
+        self.is_posix = self.is_linux or self.is_apple or self.is_android or self.is_yocto
 
     @staticmethod
     def from_json(data):
@@ -214,6 +221,7 @@ class Platform(object):
             (self.is_i386 or self.is_i686, 'ARCH_I386'),
             (self.is_i686, 'ARCH_I686'),
             (self.is_x86_64, 'ARCH_X86_64'),
+            (self.is_armv6, 'ARCH_ARM6'),
             (self.is_armv7, 'ARCH_ARM7'),
             (self.is_armv7_neon, 'ARCH_ARM7_NEON'),
             (self.is_armv8, 'ARCH_ARM64'),
@@ -244,7 +252,7 @@ class Platform(object):
     def find_in_dict(self, dict_, default=None):
         if dict_ is None:
             return default
-        for key in six.iterkeys(dict_):
+        for key in dict_.keys():
             if self._parse_os(key) == self.os:
                 return dict_[key]
         return default
@@ -293,8 +301,6 @@ class Platform(object):
             return 'macos'
         if os in ('win', 'win32', 'win64'):
             return 'windows'
-        if os.startswith('cygwin'):
-            return 'cygwin'
 
         return os
 
@@ -331,9 +337,9 @@ def get_stdout(command):
 def get_stdout_and_code(command):
     # noinspection PyBroadException
     try:
-        process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         stdout, _ = process.communicate()
-        return six.ensure_str(stdout), process.returncode
+        return stdout, process.returncode
     except Exception as e:
         logger.info("While run: `%s`", e)
         return None, None
@@ -400,7 +406,7 @@ class Variables(dict):
                 emit(k, self[k])
 
     def update_from_presets(self):
-        for k in six.iterkeys(self):
+        for k in self.keys():
             v = preset(k)
             if v is not None:
                 self[k] = v
@@ -410,8 +416,8 @@ class Variables(dict):
             def value_check(v_):
                 return v_ is None
 
-        if any(map(value_check, six.itervalues(self))):
-            for k in six.iterkeys(self):
+        if any(map(value_check, self.values())):
+            for k in self.keys():
                 self[k] = reset_value
 
 
@@ -422,7 +428,7 @@ def format_env(env, list_separator=':'):
     def format(kv):
         return '${env:"%s=%s"}' % (kv[0], format_value(kv[1]))
 
-    return ' '.join(map(format, sorted(six.iteritems(env))))
+    return ' '.join(map(format, sorted(env.items())))
 
 
 # TODO(somov): Проверить, используется ли это. Может быть, выпилить.
@@ -454,7 +460,7 @@ def is_negative_str(s):
 
 
 def to_bool(s, default=None):
-    if isinstance(s, six.string_types):
+    if isinstance(s, str):
         if is_positive_str(s):
             return True
         if is_negative_str(s):
@@ -584,8 +590,6 @@ class Build(object):
 
         if self.pic:
             emit('PIC', 'yes')
-
-        emit('COMPILER_ID', self.tc.type.upper())
 
         if self.is_valgrind:
             emit('WITH_VALGRIND', 'yes')
@@ -726,7 +730,7 @@ class Build(object):
         swiftc.configure()
         swiftc.print_compiler()
 
-        if host.is_linux or host.is_macos or host.is_cygwin:
+        if host.is_linux or host.is_macos:
             if is_negative('USE_ARCADIA_PYTHON'):
                 python = Python(self.tc)
                 python.configure_posix()
@@ -746,17 +750,7 @@ class Build(object):
         """
         :rtype: dict[str, Any]
         """
-
-        def un_unicode(o):
-            if isinstance(o, six.text_type):
-                return six.ensure_str(o)
-            if isinstance(o, list):
-                return [un_unicode(oo) for oo in o]
-            if isinstance(o, dict):
-                return {un_unicode(k): un_unicode(v) for k, v in six.iteritems(o)}
-            return o
-
-        return un_unicode(json.loads(base64.b64decode(base64str)))
+        return json.loads(base64.b64decode(base64str))
 
 
 class YMake(object):
@@ -827,6 +821,9 @@ class System(object):
         for variable in self.platform.os_variables:
             emit(variable, 'yes')
 
+        if self.platform.is_armv6:
+            emit('ARM6_FLOAT_ABI', self.platform.armv6_float_abi)
+
         if self.platform.is_armv7:
             emit('ARM7_FLOAT_ABI', self.platform.armv7_float_abi)
 
@@ -888,7 +885,7 @@ class CompilerDetector(object):
             return None
 
         vars_ = {}
-        for line in six.ensure_str(stdout).split('\n'):
+        for line in stdout.split('\n'):
             parts = line.split('=', 1)
             if len(parts) == 2 and parts[0].startswith(prefix):
                 name, value = parts[0][len(prefix):], parts[1]
@@ -980,7 +977,7 @@ class ToolchainOptions(object):
             self.c_compiler = detector.c_compiler
             self.cxx_compiler = detector.cxx_compiler
             self.compiler_version_list = detector.version_list
-            self.compiler_version = '.'.join(map(lambda part: six.ensure_str(str(part)), self.compiler_version_list))
+            self.compiler_version = '.'.join(map(lambda part: str(part), self.compiler_version_list))
 
         else:
             self.type = self.params['type']
@@ -1046,7 +1043,7 @@ class ToolchainOptions(object):
     def get_env(self, convert_list=None):
         convert_list = convert_list or (lambda x: x)
         r = {}
-        for k, v in six.iteritems(self._env):
+        for k, v in self._env.items():
             if isinstance(v, str):
                 r[k] = v
             elif isinstance(v, list):
@@ -1067,13 +1064,9 @@ class GnuToolchainOptions(ToolchainOptions):
         self.objcopy = self.params.get('objcopy')
         self.objdump = self.params.get('objdump')
         self.isystem = self.params.get('isystem')
+        self.nm = self.params.get('nm')
 
         self.dwarf_tool = self.target.find_in_dict(self.params.get('dwarf_tool'))
-
-        # TODO(somov): Унифицировать формат sys_lib
-        self.sys_lib = self.params.get('sys_lib', {})
-        if isinstance(self.sys_lib, dict):
-            self.sys_lib = self.target.find_in_dict(self.sys_lib, [])
 
         self.os_sdk = preset('OS_SDK') or self._default_os_sdk()
 
@@ -1118,12 +1111,13 @@ class Compiler(object):
         self.tc = tc
 
     def print_compiler(self):
-        # CLANG and CLANG_VER variables
+        # CLANG and CLANG{VER} variables
         emit(self.compiler_variable, 'yes')
         cv = self.tc.compiler_version
         if '.' in cv:
             cv = cv[:cv.index('.')]
-        emit('{}_VER'.format(self.compiler_variable), cv)
+        emit('COMPILER_ID', self.tc.type.upper())
+        emit('COMPILER_VERSION', cv)
         if self.tc.is_xcode:
             emit('XCODE', 'yes')
 
@@ -1198,6 +1192,7 @@ class GnuToolchain(Toolchain):
                 target_triple = select(default=None, selectors=[
                     (target.is_linux and target.is_x86_64, 'x86_64-linux-gnu'),
                     (target.is_linux and target.is_armv8, 'aarch64-linux-gnu'),
+                    (target.is_linux and target.is_armv6 and target.armv6_float_abi == 'hard', 'armv6-linux-gnueabihf'),
                     (target.is_linux and target.is_armv7 and target.armv7_float_abi == 'hard', 'armv7-linux-gnueabihf'),
                     (target.is_linux and target.is_armv7 and target.armv7_float_abi == 'softfp', 'armv7-linux-gnueabi'),
                     (target.is_linux and target.is_powerpc, 'powerpc64le-linux-gnu'),
@@ -1261,13 +1256,16 @@ class GnuToolchain(Toolchain):
         elif target.is_cortex_m33:
             self.c_flags_platform.append('-mcpu=cortex-m33 -mfpu=fpv5-sp-d16')
 
+        elif target.is_armv6hf:
+            self.c_flags_platform.append('-march=armv6 -mfpu=vfp')
+
         elif target.is_armv7_neon:
             self.c_flags_platform.append('-mfpu=neon')
 
         elif target.is_arm968e_s:
             self.c_flags_platform.append('-march=armv5te -mcpu=arm968e-s -mthumb-interwork -mlittle-endian')
 
-        if (target.is_armv7 or target.is_armv8m or target.is_armv7em or target.is_armv5te) and build.is_size_optimized:
+        if (target.is_armv6 or target.is_armv7 or target.is_armv8m or target.is_armv7em or target.is_armv5te) and build.is_size_optimized:
             # Enable ARM Thumb2 variable-length instruction encoding
             # to reduce code size
             self.c_flags_platform.append('-mthumb')
@@ -1279,6 +1277,9 @@ class GnuToolchain(Toolchain):
 
         if target.is_rv32imc:
             self.c_flags_platform.append('-march=rv32imc')
+
+        if target.is_rv32imc_zicsr:
+            self.c_flags_platform.append('-march=rv32imc_zicsr')
 
         if self.tc.is_clang or self.tc.is_gcc and self.tc.version_at_least(8, 2):
             target_flags = select(default=[], selectors=[
@@ -1335,7 +1336,7 @@ class GnuToolchain(Toolchain):
 
     def setup_apple_local_sdk(self, target):
         def get_output(*args):
-            return six.ensure_str(subprocess.check_output(tuple(args))).strip()
+            return subprocess.check_output(tuple(args), text=True).strip()
 
         def get_sdk_root(sdk):
             root = self.env.get('SDKROOT')
@@ -1477,7 +1478,7 @@ class GnuCompiler(Compiler):
             # Arcadia have API 16 for 32-bit Androids.
             self.c_defines.append('-D_FILE_OFFSET_BITS=64')
 
-        if self.target.is_linux or self.target.is_android or self.target.is_cygwin or self.target.is_none:
+        if self.target.is_linux or self.target.is_android or self.target.is_none:
             self.c_defines.append('-D_GNU_SOURCE')
 
         if self.tc.is_clang and self.target.is_linux and self.target.is_x86_64:
@@ -1670,6 +1671,7 @@ class LD(Linker):
         self.strip = self.tc.strip
         self.objcopy = self.tc.objcopy
         self.objdump = self.tc.objdump
+        self.nm = self.tc.nm
 
         self.musl = Setting('MUSL', convert=to_bool)
 
@@ -1718,8 +1720,6 @@ class LD(Linker):
         if self.ld_sdk:
             self.ld_flags.append(self.ld_sdk)
 
-        self.sys_lib = self.tc.sys_lib
-
         if target.is_android:
             # Use toolchain defaults to link with libunwind/clang_rt.builtins
             self.use_stdlib = '-nostdlib++'
@@ -1735,9 +1735,9 @@ class LD(Linker):
         emit('STRIP_TOOL_VENDOR', self.strip)
         emit('OBJCOPY_TOOL_VENDOR', self.objcopy)
         emit('OBJDUMP_TOOL_VENDOR', self.objdump)
+        emit('NM_TOOL_VENDOR', self.nm)
 
         emit('_LD_FLAGS', self.ld_flags)
-        emit('_LD_SYS_LIB', self.sys_lib)
         emit('LD_SDK_VERSION', self.ld_sdk)
 
         dwarf_tool = self.tc.dwarf_tool
@@ -2021,10 +2021,6 @@ class MSVCCompiler(MSVC, Compiler):
                 # for msvc compatibility
                 # https://clang.llvm.org/docs/UsersManual.html#microsoft-extensions
                 # '-fdelayed-template-parsing',
-                '-Wno-deprecated-this-capture',
-                '-Wno-c++11-narrowing-const-reference',
-                '-Wno-vla-cxx-extension',  # https://github.com/llvm/llvm-project/issues/62836
-                '-Wno-invalid-offsetof',
             ]
             if target.is_x86:
                 flags.append('-m32')
@@ -2049,8 +2045,11 @@ class MSVCCompiler(MSVC, Compiler):
                 '-Wno-deprecated-anon-enum-enum-conversion',
                 '-Wno-deprecated-enum-enum-conversion',
                 '-Wno-deprecated-enum-float-conversion',
+                '-Wno-deprecated-this-capture',
                 '-Wno-deprecated-volatile',
+                '-Wno-invalid-offsetof',
                 '-Wno-undefined-var-template',
+                '-Wno-vla-cxx-extension',  # https://github.com/llvm/llvm-project/issues/62836
             ]
 
         defines.append('/D_WIN32_WINNT={0}'.format(WINDOWS_VERSION_MIN))
@@ -2395,7 +2394,7 @@ class Cuda(object):
             if not self.cuda_version.from_user:
                 return False
 
-        if self.cuda_version.value in ('11.4', '11.8', '12.1', '12.2', '12.6'):
+        if self.cuda_version.value in ('11.4', '11.8', '12.1', '12.2', '12.6', '12.8'):
             return True
         elif self.cuda_version.value in ('10.2', '11.4.19') and target.is_linux_armv8:
             return True
@@ -2527,10 +2526,10 @@ class CuDNN(object):
         self.cudnn_version = Setting('CUDNN_VERSION', auto=self.auto_cudnn_version)
 
     def have_cudnn(self):
-        return self.cudnn_version.value in ('7.6.5', '8.0.5')
+        return self.cudnn_version.value in ('7.6.5', '8.0.5', '8.6.0', '8.9.7', '9.0.0')
 
     def auto_cudnn_version(self):
-        return '8.0.5'
+        return '9.0.0'
 
     def print_(self):
         if self.cuda.have_cuda.value and self.have_cudnn():

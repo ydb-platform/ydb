@@ -47,12 +47,20 @@ message TPartitionStats {
 
     optional uint64 ByKeyFilterSize = 21;
     optional uint32 FollowerId = 22;
+
+    optional uint64 LocksAcquired = 23;
+    optional uint64 LocksWholeShard = 24;
+    optional uint64 LocksBroken = 25;
 }
 
 message TPartitionStatsResult {
     optional TPartitionStatsKey Key = 1;
     repeated TPartitionStats Stats = 2;
     optional string Path = 3;
+}
+
+message TPartitionStatsFilter {
+    optional TPartitionStats NotLess = 1;
 }
 
 message TEvGetPartitionStats {
@@ -66,6 +74,8 @@ message TEvGetPartitionStats {
     optional bool ToInclusive = 6;
 
     optional bool IncludePathColumn = 7;
+
+    optional TPartitionStatsFilter Filter = 8;
 }
 
 message TEvGetPartitionStatsResult {
@@ -127,8 +137,10 @@ enum EStatsType {
     METRICS_ONE_HOUR = 8;
     TOP_REQUEST_UNITS_ONE_MINUTE = 9;
     TOP_REQUEST_UNITS_ONE_HOUR = 10;
-    TOP_PARTITIONS_ONE_MINUTE = 11;
-    TOP_PARTITIONS_ONE_HOUR = 12;
+    TOP_PARTITIONS_BY_CPU_ONE_MINUTE = 11;
+    TOP_PARTITIONS_BY_CPU_ONE_HOUR = 12;
+    TOP_PARTITIONS_BY_TLI_ONE_MINUTE = 13;
+    TOP_PARTITIONS_BY_TLI_ONE_HOUR = 14;
 }
 
 message TEvGetQueryStats {
@@ -219,7 +231,8 @@ message TVSlotInfo {
     optional string DiskSpace = 15;
     optional bool Replicated = 16;
     optional string State = 17;
-    // metrics ?
+    optional bool IsThrottling = 18;
+    optional uint32 ThrottlingRate = 19;
 }
 
 message TVSlotEntry {
@@ -264,6 +277,9 @@ message TGroupInfo {
     // desired disk categories ?
     // down/persisted down ?
     // metrics ?
+    optional bool LayoutCorrect = 16 [default = true];  // is the group layout correct?
+    optional string OperatingStatus = 17;
+    optional string ExpectedStatus = 18;
 }
 
 message TGroupEntry {
@@ -600,6 +616,9 @@ message TTopPartitionsInfo {
     optional uint64 IndexSize = 8;
     optional uint32 InFlightTxCount = 9;
     optional uint32 FollowerId = 10;
+    optional uint64 LocksAcquired = 11;
+    optional uint64 LocksWholeShard = 12;
+    optional uint64 LocksBroken = 13;
 }
 
 message TTopPartitionsEntry {
@@ -626,8 +645,7 @@ message TEvGetTopPartitionsResponse {
 
 // partitions stats collector -> SVP
 message TEvSendTopPartitions {
-    repeated TTopPartitionsInfo Partitions = 1;
+    repeated TTopPartitionsInfo PartitionsByCpu = 1;
+    repeated TTopPartitionsInfo PartitionsByTli = 3;
     optional uint64 TimeUs = 2;
 }
-
-

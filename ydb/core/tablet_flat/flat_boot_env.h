@@ -19,6 +19,7 @@ namespace NBoot {
 
         ~TRoot()
         {
+            // FIXME: we shouldn't rely on TIntrusivePtr refcount
             Y_ABORT_UNLESS(RefCount() == 1, "Boot env shouldn't be deleted by TIntrusivePtr");
         }
 
@@ -27,7 +28,7 @@ namespace NBoot {
             return Logger_.Get();
         }
 
-        void Describe(IOutputStream &out) const noexcept override
+        void Describe(IOutputStream &out) const override
         {
             out
                 << "Boot{ " << Queue.size() << " que"
@@ -45,7 +46,7 @@ namespace NBoot {
             Start(new TStep(this, std::forward<TArgs>(args)...));
         }
 
-        void Execute() noexcept
+        void Execute()
         {
             for (; Queue; Queue.pop_front()) {
                 auto order = std::move(Queue.front());
@@ -69,20 +70,20 @@ namespace NBoot {
         }
 
     protected:
-        void Start() noexcept override { }
+        void Start() override { }
 
-        void Start(TIntrusivePtr<IStep> step) noexcept override
+        void Start(TIntrusivePtr<IStep> step) override
         {
-            Y_ABORT_UNLESS(step->Env == nullptr, "IStep is already fired");
-            Y_ABORT_UNLESS(step->Owner, "Start called on step without an owner");
+            Y_ENSURE(step->Env == nullptr, "IStep is already fired");
+            Y_ENSURE(step->Owner, "Start called on step without an owner");
 
             Queue.emplace_back(EOp::Start, std::move(step));
         }
 
-        void Finish(TIntrusivePtr<IStep> step) noexcept override
+        void Finish(TIntrusivePtr<IStep> step) override
         {
-            Y_ABORT_UNLESS(step, "Finish called without a step");
-            Y_ABORT_UNLESS(step->Owner, "Finish called on step without an owner");
+            Y_ENSURE(step, "Finish called without a step");
+            Y_ENSURE(step->Owner, "Finish called on step without an owner");
 
             Queue.emplace_back(EOp::Finish, std::move(step));
         }

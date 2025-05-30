@@ -11,7 +11,7 @@
 #include <ydb/library/yql/dq/runtime/dq_transport.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/utils/resetable_setting.h>
-#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 #include <ydb/services/metadata/abstract/kqp_common.h>
 #include <ydb/services/metadata/manager/abstract.h>
 #include <ydb/services/persqueue_v1/actors/events.h>
@@ -19,6 +19,7 @@
 #include <ydb/core/external_sources/external_source_factory.h>
 #include <ydb/core/kqp/query_data/kqp_query_data.h>
 #include <ydb/core/kqp/query_data/kqp_prepared_query.h>
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/protos/kqp_stats.pb.h>
@@ -202,8 +203,12 @@ struct TIndexDescription {
             case EType::GlobalAsync:
                 return false;
             case EType::GlobalSyncVectorKMeansTree:
-                return true;
+                return false;
         }
+    }
+
+    std::span<const std::string_view> GetImplTables() const {
+        return NKikimr::NTableIndex::GetImplTables(NYql::TIndexDescription::ConvertIndexType(Type), KeyColumns);
     }
 };
 
@@ -482,6 +487,12 @@ struct TKikimrTableMetadata : public TThrRefBase {
     EKikimrTableKind Kind = EKikimrTableKind::Unspecified;
     ETableType TableType = ETableType::Table;
     EStoreType StoreType = EStoreType::Row;
+    TMaybe<NKikimrSysView::ESysViewType> SysViewType;
+    bool IsIndexImplTable = false;
+
+    // If writes are disabled, query that writes to table must finish with error.
+    bool WritesToTableAreDisabled = false;
+    TString DisableWritesReason;
 
     ui64 RecordsCount = 0;
     ui64 DataSize = 0;
@@ -505,6 +516,8 @@ struct TKikimrTableMetadata : public TThrRefBase {
 
     TExternalSource ExternalSource;
     TViewPersistedData ViewPersistedData;
+
+    TVector<TString> PartitionedByColumns;
 
     TKikimrTableMetadata(const TString& cluster, const TString& table)
         : Cluster(cluster)
@@ -547,11 +560,15 @@ struct TKikimrTableMetadata : public TThrRefBase {
         auto it = message->GetSecondaryGlobalIndexMetadata().begin();
         ImplTables.reserve(indexesCount);
         for(int i = 0; i < indexesCount; ++i) {
-            YQL_ENSURE(it != message->GetSecondaryGlobalIndexMetadata().end());
-            auto& implTable = ImplTables.emplace_back(MakeIntrusive<TKikimrTableMetadata>(&*it++));
-            if (Indexes[i].Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
+            decltype(ImplTables)::value_type* implTable = nullptr;
+            for (const auto& _ : Indexes[i].GetImplTables()) {
                 YQL_ENSURE(it != message->GetSecondaryGlobalIndexMetadata().end());
-                implTable->Next = MakeIntrusive<TKikimrTableMetadata>(&*it++);
+                if (implTable) {
+                    (*implTable)->Next = MakeIntrusive<TKikimrTableMetadata>(&*it++);
+                    implTable = &(*implTable)->Next;
+                } else {
+                    implTable = &ImplTables.emplace_back(MakeIntrusive<TKikimrTableMetadata>(&*it++));
+                }
             }
         }
         YQL_ENSURE(it == message->GetSecondaryGlobalIndexMetadata().end());
@@ -658,10 +675,16 @@ struct TKikimrTableMetadata : public TThrRefBase {
     }
 };
 
+struct TAlterDatabaseSettings {
+    TString DatabasePath;
+    std::optional<TString> Owner;
+};
+
 struct TCreateUserSettings {
     TString UserName;
     TString Password;
-    bool PasswordEncrypted = false;
+    bool IsHashedPassword = false;
+    bool CanLogin;
 };
 
 struct TModifyPermissionsSettings {
@@ -679,8 +702,9 @@ struct TModifyPermissionsSettings {
 
 struct TAlterUserSettings {
     TString UserName;
-    TString Password;
-    bool PasswordEncrypted = false;
+    std::optional<TString> Password;
+    bool IsHashedPassword = false;
+    std::optional<bool> CanLogin;
 };
 
 struct TDropUserSettings {
@@ -793,16 +817,7 @@ struct TDropExternalTableSettings {
     TString ExternalTable;
 };
 
-struct TReplicationSettings {
-    struct TStateDone {
-        enum class EFailoverMode: ui32 {
-            Consistent = 1,
-            Force = 2,
-        };
-
-        EFailoverMode FailoverMode;
-    };
-
+struct TReplicationSettingsBase {
     struct TOAuthToken {
         TString Token;
         TString TokenSecretName;
@@ -818,12 +833,13 @@ struct TReplicationSettings {
         void Serialize(NKikimrReplication::TStaticCredentials& proto) const;
     };
 
-    struct TRowConsistency {};
+    struct TStateDone {
+        enum class EFailoverMode: ui32 {
+            Consistent = 1,
+            Force = 2,
+        };
 
-    struct TGlobalConsistency {
-        TDuration CommitInterval;
-
-        void Serialize(NKikimrReplication::TConsistencySettings_TGlobalConsistency& proto) const;
+        EFailoverMode FailoverMode;
     };
 
     TMaybe<TString> ConnectionString;
@@ -831,9 +847,20 @@ struct TReplicationSettings {
     TMaybe<TString> Database;
     TMaybe<TOAuthToken> OAuthToken;
     TMaybe<TStaticCredentials> StaticCredentials;
-    TMaybe<TRowConsistency> RowConsistency;
-    TMaybe<TGlobalConsistency> GlobalConsistency;
     TMaybe<TStateDone> StateDone;
+    bool StatePaused = false;
+    bool StateStandBy = false;
+
+    using EFailoverMode = TStateDone::EFailoverMode;
+    TStateDone& EnsureStateDone(EFailoverMode mode = EFailoverMode::Consistent) {
+        if (!StateDone) {
+            StateDone = TStateDone{
+                .FailoverMode = mode,
+            };
+        }
+
+        return *StateDone;
+    }
 
     TOAuthToken& EnsureOAuthToken() {
         if (!OAuthToken) {
@@ -850,6 +877,20 @@ struct TReplicationSettings {
 
         return *StaticCredentials;
     }
+};
+
+struct TReplicationSettings : public TReplicationSettingsBase {
+
+    struct TRowConsistency {};
+
+    struct TGlobalConsistency {
+        TDuration CommitInterval;
+
+        void Serialize(NKikimrReplication::TConsistencySettings_TGlobalConsistency& proto) const;
+    };
+
+    TMaybe<TRowConsistency> RowConsistency;
+    TMaybe<TGlobalConsistency> GlobalConsistency;
 
     TRowConsistency& EnsureRowConsistency() {
         if (!RowConsistency) {
@@ -866,17 +907,6 @@ struct TReplicationSettings {
 
         return *GlobalConsistency;
     }
-
-    using EFailoverMode = TStateDone::EFailoverMode;
-    TStateDone& EnsureStateDone(EFailoverMode mode = EFailoverMode::Consistent) {
-        if (!StateDone) {
-            StateDone = TStateDone{
-                .FailoverMode = mode,
-            };
-        }
-
-        return *StateDone;
-    }
 };
 
 struct TCreateReplicationSettings {
@@ -891,6 +921,42 @@ struct TAlterReplicationSettings {
 };
 
 struct TDropReplicationSettings {
+    TString Name;
+    bool Cascade = false;
+};
+
+struct TTransferSettings : public TReplicationSettingsBase {
+
+    struct TBatching {
+        TDuration FlushInterval;
+        std::optional<ui64> BatchSizeBytes;
+    };
+
+    TMaybe<TString> ConsumerName;
+    TMaybe<TBatching> Batching;
+
+    TBatching& EnsureBatching() {
+        if (!Batching) {
+            Batching = TBatching();
+        }
+
+        return *Batching;
+    }
+};
+
+struct TCreateTransferSettings {
+    TString Name;
+    std::tuple<TString, TString, TString> Target;
+    TTransferSettings Settings;
+};
+
+struct TAlterTransferSettings {
+    TString Name;
+    TString TranformLambda;
+    TTransferSettings Settings;
+};
+
+struct TDropTransferSettings {
     TString Name;
     bool Cascade = false;
 };
@@ -1055,12 +1121,18 @@ public:
             return *this;
         }
 
+        TLoadTableMetadataSettings& WithSysViewRewritten(bool enable) {
+            SysViewRewritten_ = enable;
+            return *this;
+        }
+
         NKikimr::NExternalSource::IExternalSourceFactory::TPtr ExternalSourceFactory;
         THashMap<TString, TString> ReadAttributes;
         bool RequestStats_ = false;
         bool WithPrivateTables_ = false;
         bool WithExternalDatasources_ = false;
         bool RequestAuthInfo_ = true;
+        bool SysViewRewritten_ = false;
     };
 
     class IKqpTableMetadataLoader : public std::enable_shared_from_this<IKqpTableMetadataLoader> {
@@ -1088,6 +1160,8 @@ public:
     virtual NThreading::TFuture<TTableMetadataResult> LoadTableMetadata(
         const TString& cluster, const TString& table, TLoadTableMetadataSettings settings) = 0;
 
+    virtual NThreading::TFuture<TGenericResult> AlterDatabase(const TString& cluster, const TAlterDatabaseSettings& settings) = 0;
+
     virtual NThreading::TFuture<TGenericResult> CreateTable(TKikimrTableMetadataPtr metadata, bool createDir, bool existingOk = false, bool replaceIfExists = false) = 0;
 
     virtual NThreading::TFuture<TGenericResult> SendSchemeExecuterRequest(const TString& cluster,
@@ -1114,6 +1188,12 @@ public:
     virtual NThreading::TFuture<TGenericResult> AlterReplication(const TString& cluster, const TAlterReplicationSettings& settings) = 0;
 
     virtual NThreading::TFuture<TGenericResult> DropReplication(const TString& cluster, const TDropReplicationSettings& settings) = 0;
+
+    virtual NThreading::TFuture<TGenericResult> CreateTransfer(const TString& cluster, const TCreateTransferSettings& settings) = 0;
+
+    virtual NThreading::TFuture<TGenericResult> AlterTransfer(const TString& cluster, const TAlterTransferSettings& settings) = 0;
+
+    virtual NThreading::TFuture<TGenericResult> DropTransfer(const TString& cluster, const TDropTransferSettings& settings) = 0;
 
     virtual NThreading::TFuture<TGenericResult> ModifyPermissions(const TString& cluster, const TModifyPermissionsSettings& settings) = 0;
 

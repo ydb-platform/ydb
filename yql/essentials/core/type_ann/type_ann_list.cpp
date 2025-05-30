@@ -2400,11 +2400,13 @@ namespace {
                 case EDataSlot::Date:
                 case EDataSlot::TzDate:
                 case EDataSlot::Date32:
+                case EDataSlot::TzDate32:
                     value = ctx.Expr.NewAtom(input->Pos(), "86400000000", TNodeFlags::Default);
                     break;
                 case EDataSlot::Datetime:
                 case EDataSlot::TzDatetime:
                 case EDataSlot::Datetime64:
+                case EDataSlot::TzDatetime64:
                     value = ctx.Expr.NewAtom(input->Pos(), "1000000", TNodeFlags::Default);
                     break;
                 default:
@@ -2758,6 +2760,7 @@ namespace {
     }
 
     IGraphTransformer::TStatus UnionAllWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        const bool checkHashes = input->IsCallable("Union");
         switch (input->ChildrenSize()) {
             case 0U:
                 output = ctx.Expr.NewCallable(input->Pos(), "EmptyList", {});
@@ -2790,14 +2793,16 @@ namespace {
             const auto structType = itemType->Cast<TStructExprType>();
             for (const auto& item: structType->GetItems()) {
                 if (const auto res = members.insert({ item->GetName(), { item->GetItemType(), 1U } }); !res.second) {
-                    if (item->GetItemType()->GetKind() == ETypeAnnotationKind::Error) {
-                        continue;
-                    }
-
                     auto& p = res.first->second;
                     if (p.first->GetKind() == ETypeAnnotationKind::Error) {
                         continue;
                     }
+
+                    if (item->GetItemType()->GetKind() == ETypeAnnotationKind::Error) {
+                        p.first = item->GetItemType();
+                        continue;
+                    }
+
 
                     if (const auto commonType = CommonType<false, true>(input.Pos(), p.first, item->GetItemType(), ctx.Expr)) {
                         p.first = commonType;
@@ -2853,6 +2858,16 @@ namespace {
 
         for (auto structType : structTypes) {
             addResultItems(structType);
+        }
+
+        if (checkHashes) {
+            for (const auto& r : resultItems) {
+                if (!r->GetItemType()->IsHashable() || !r->GetItemType()->IsEquatable()) {
+                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() << "Expected hashable and equatable type for column: " <<
+                        r->GetName() << ", but got: " << *r->GetItemType()));
+                    return IGraphTransformer::TStatus::Error;
+                }
+            }
         }
 
         auto structType = ctx.Expr.MakeType<TStructExprType>(resultItems);
@@ -3077,6 +3092,53 @@ namespace {
 
     IGraphTransformer::TStatus ListZipAllWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
         return ListAutomapArgs(input, output, ctx, "ZipAll");
+    }
+
+    IGraphTransformer::TStatus PruneKeysWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (IsNull(input->Head())) {
+            output = input->HeadPtr();
+            return IGraphTransformer::TStatus::Repeat;
+        }
+
+        if (IsEmptyList(input->Head())) {
+            output = input->HeadPtr();
+            return IGraphTransformer::TStatus::Repeat;
+        }
+
+        const TTypeAnnotationNode* itemType = nullptr;
+        if (!EnsureNewSeqType<false, true, true>(input->Head(), ctx.Expr, &itemType)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        auto& keyExtractorLambda = input->ChildRef(1);
+        const auto status = ConvertToLambda(keyExtractorLambda, ctx.Expr, 1);
+        if (status.Level != IGraphTransformer::TStatus::Ok) {
+            return status;
+        }
+
+        if (!UpdateLambdaAllArgumentsTypes(keyExtractorLambda, {itemType}, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!keyExtractorLambda->GetTypeAnn()) {
+            return IGraphTransformer::TStatus::Repeat;
+        }
+
+        if (input->IsCallable("PruneKeys") &&
+            !EnsureHashableKey(keyExtractorLambda->Pos(), keyExtractorLambda->GetTypeAnn(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureEquatableKey(keyExtractorLambda->Pos(), keyExtractorLambda->GetTypeAnn(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        input->SetTypeAnn(input->Head().GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
     }
 
     bool ValidateSortDirections(TExprNode& direction, TExprContext& ctx, bool& isTuple) {

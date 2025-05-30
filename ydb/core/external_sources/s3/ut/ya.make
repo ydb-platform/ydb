@@ -4,6 +4,7 @@ NO_CHECK_IMPORTS()
 
 DATA(arcadia/ydb/core/external_sources/s3/ut/docker-compose.yml)
 ENV(COMPOSE_PROJECT_NAME=s3)
+ENV(TZ="UTC+13")
 
 IF (AUTOCHECK) 
     # Temporarily disable these tests due to infrastructure incompatibility
@@ -61,7 +62,7 @@ PEERDIR(
     ydb/core/kqp/ut/common
     ydb/core/kqp/ut/federated_query/common
     yql/essentials/sql/pg_dummy
-    ydb/public/sdk/cpp/client/ydb_types/operation
+    ydb/public/sdk/cpp/src/client/types/operation
     ydb/library/actors/core
 )
 

@@ -2,6 +2,9 @@ syntax="proto3";
 
 import "google/protobuf/descriptor.proto";
 
+option go_package = "a.yandex-team.ru/library/cpp/protobuf/json/proto;enum_options";
+option java_package = "ru.yandex.library.cpp.protobuf.json.proto";
+
 /**
 Allows custom strings for Enum proto values when converting to/from json
 

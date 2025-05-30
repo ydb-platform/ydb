@@ -14,9 +14,9 @@ All commands support the common `--path` option, which specifies the path to the
 
 ### Available options {#common_options}
 
-Name | Description | Default value
----|---|---
-`--path` or `-p` | Path to the directory with tables. | `/`
+| Name             | Description                        | Default value |
+|------------------|------------------------------------|---------------|
+| `--path` or `-p` | Path to the directory with tables. | `/`           |
 
 ## Initializing a load test { #init }
 
@@ -50,14 +50,14 @@ See the command description:
 
 ### Available options { #load_files_options }
 
-Name | Description | Default value
----|---|---
-`--scale <value>` | Data scale. Powers of ten are usually used. |
-`--tables <value>` | Comma-separated list of tables to generate. Available tables: `customer`, `nation`, `order_line`, `part_psupp`, `region`, `supplier`. | All tables
-`--proccess-count <value>` or `-C <value>` | Data generation can be split into several processes, this parameter specifies the number of processes. | 1
-`--proccess-index <value>` or `-i <value>` | Data generation can be split into several processes, this parameter specifies the process number. | 0
-`--state <path>` | Path to the generation state file. If the generation was interrupted for some reason, the download will be continued from the same place when it is started again. |
-`--clear-state` | Relevant if the `--state` parameter is specified. Clear the state file and start the download from the beginning. |
+| Name                                        | Description                                                                                                                                                        | Default value |
+|---------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------------|
+| `--scale <value>`                           | Data scale. Powers of ten are usually used.                                                                                                                        |               |
+| `--tables <value>`                          | Comma-separated list of tables to generate. Available tables: `customer`, `nation`, `order_line`, `part_psupp`, `region`, `supplier`.                              | All tables    |
+| `--proccess-count <value>` or `-C <value>`  | Data generation can be split into several processes, this parameter specifies the number of processes.                                                             | 1             |  
+| `--proccess-index <value>` or `-i <value>`  | Data generation can be split into several processes, this parameter specifies the process number.                                                                  | 0             |
+| `--state <path>`                            | Path to the generation state file. If the generation was interrupted for some reason, the download will be continued from the same place when it is started again. |               |
+| `--clear-state`                             | Relevant if the `--state` parameter is specified. Clear the state file and start the download from the beginning.                                                  |               |
 
 {% include [load_options](./_includes/workload/load_options.md) %}
 
@@ -82,9 +82,9 @@ See the command description:
 
 ### TPC-H-specific options { #run_tpch_options }
 
-Name | Description | Default value
----|---|---
-`--ext-query-dir <name>` | Directory with external queries for load execution. Queries should be in files named `q[1-23].sql`. |
+| Name                       | Description                                                                                         | Default value |
+|----------------------------|-----------------------------------------------------------------------------------------------------|---------------|
+| `--ext-query-dir <name>`   | Directory with external queries for load execution. Queries should be in files named `q[1-23].sql`. |               |
 
 ## Test data cleaning { #cleanup }
 

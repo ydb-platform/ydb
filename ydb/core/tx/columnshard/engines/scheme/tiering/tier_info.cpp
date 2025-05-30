@@ -25,17 +25,18 @@ TTiering::TTieringContext TTiering::GetTierToMove(const std::shared_ptr<arrow::S
     std::optional<TDuration> nextTierDuration;
     for (auto& tierRef : GetOrderedTiers()) {
         auto& tierInfo = tierRef.Get();
-        if (skipEviction && tierInfo.GetName() != NTiering::NCommon::DeleteTierName) {
+        if (skipEviction && tierInfo.GetExternalStorageId()) {
             continue;
         }
+        const TString tierName = tierInfo.GetExternalStorageId() ? tierInfo.GetExternalStorageId()->GetConfigPath() : NTiering::NCommon::DeleteTierName;
         auto mpiOpt = tierInfo.ScalarToInstant(max);
         Y_ABORT_UNLESS(mpiOpt);
         const TInstant maxTieringPortionInstant = *mpiOpt;
         const TDuration dWaitLocal = maxTieringPortionInstant - tierInfo.GetEvictInstant(now);
         if (!dWaitLocal) {
-            return TTieringContext(tierInfo.GetName(), tierInfo.GetEvictInstant(now) - maxTieringPortionInstant, nextTierName, nextTierDuration);
+            return TTieringContext(tierName, tierInfo.GetEvictInstant(now) - maxTieringPortionInstant, nextTierName, nextTierDuration);
         } else {
-            nextTierName = tierInfo.GetName();
+            nextTierName = tierName;
             nextTierDuration = dWaitLocal;
         }
     }

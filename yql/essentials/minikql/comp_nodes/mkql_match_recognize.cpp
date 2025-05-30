@@ -48,8 +48,8 @@ public:
     {}
 
     bool ProcessInputRow(NUdf::TUnboxedValue&& row, TComputationContext& ctx) {
-        Parameters.InputDataArg->SetValue(ctx, ctx.HolderFactory.Create<TListValue<TSparseList>>(Rows));
-        Parameters.CurrentRowIndexArg->SetValue(ctx, NUdf::TUnboxedValuePod(Rows.Size()));
+        Parameters.InputDataArg->SetValue(ctx, ctx.HolderFactory.Create<TListValue>(Rows));
+        Parameters.CurrentRowIndexArg->SetValue(ctx, NUdf::TUnboxedValuePod(Rows.LastRowIndex()));
         Nfa.ProcessRow(Rows.Append(std::move(row)), ctx);
         return HasMatched();
     }
@@ -68,7 +68,7 @@ public:
         }
         Parameters.MatchedVarsArg->SetValue(ctx, ctx.HolderFactory.Create<TMatchedVarsValue<TSparseList::TRange>>(ctx.HolderFactory, match->Vars));
         Parameters.MeasureInputDataArg->SetValue(ctx, ctx.HolderFactory.Create<TMeasureInputDataValue>(
-            ctx.HolderFactory.Create<TListValue<TSparseList>>(Rows),
+            ctx.HolderFactory.Create<TListValue>(Rows),
             Parameters.MeasureInputColumnOrder,
             Parameters.MatchedVarsArg->GetValue(ctx),
             Parameters.VarNames,

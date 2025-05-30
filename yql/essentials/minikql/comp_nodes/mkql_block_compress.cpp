@@ -51,15 +51,12 @@ public:
         auto& context = ctx.Codegen.GetContext();
 
         const auto valueType = Type::getInt128Ty(context);
-        const auto ptrValueType = PointerType::getUnqual(valueType);
         const auto statusType = Type::getInt32Ty(context);
         const auto bitmapType = Type::getInt8Ty(context);
 
         const auto name = "GetBitmapScalarValue";
         ctx.Codegen.AddGlobalMapping(name, reinterpret_cast<const void*>(&GetBitmapScalarValue));
-        const auto getBitmapType = NYql::NCodegen::ETarget::Windows != ctx.Codegen.GetEffectiveTarget() ?
-            FunctionType::get(bitmapType, { valueType }, false):
-            FunctionType::get(bitmapType, { ptrValueType }, false);
+        const auto getBitmapType = FunctionType::get(bitmapType, { valueType }, false);
         const auto getBitmap = ctx.Codegen.GetModule().getOrInsertFunction(name, getBitmapType);
 
         const auto work = BasicBlock::Create(context, "work", ctx.Func);
@@ -69,7 +66,7 @@ public:
         const auto result = PHINode::Create(statusType, 3U, "result", over);
         result->addIncoming(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Finish)), block);
 
-        BranchInst::Create(over, work, IsFinish(statePtr, block), block);
+        BranchInst::Create(over, work, IsFinish(statePtr, block, context), block);
 
         block = work;
 
@@ -83,7 +80,7 @@ public:
         block = test;
 
         const auto bitmapValue = getres.second[BitmapIndex_](ctx, block);
-        const auto bitmap = CallInst::Create(getBitmap, { WrapArgumentForWindows(bitmapValue, ctx, block) }, "bitmap", block);
+        const auto bitmap = CallInst::Create(getBitmap, { bitmapValue }, "bitmap", block);
 
         ValueCleanup(EValueRepresentation::Any, bitmapValue, ctx, block);
 
@@ -156,7 +153,6 @@ public:
         auto& context = ctx.Codegen.GetContext();
 
         const auto valueType = Type::getInt128Ty(context);
-        const auto ptrValueType = PointerType::getUnqual(valueType);
         const auto statusType = Type::getInt32Ty(context);
         const auto sizeType = Type::getInt64Ty(context);
 
@@ -167,9 +163,7 @@ public:
 
         const auto name = "GetBitmapPopCountCount";
         ctx.Codegen.AddGlobalMapping(name, reinterpret_cast<const void*>(&GetBitmapPopCountCount));
-        const auto getPopCountType = NYql::NCodegen::ETarget::Windows != ctx.Codegen.GetEffectiveTarget() ?
-            FunctionType::get(sizeType, { valueType }, false):
-            FunctionType::get(sizeType, { ptrValueType }, false);
+        const auto getPopCountType = FunctionType::get(sizeType, { valueType }, false);
         const auto getPopCount = ctx.Codegen.GetModule().getOrInsertFunction(name, getPopCountType);
 
         const auto loop = BasicBlock::Create(context, "loop", ctx.Func);
@@ -191,7 +185,7 @@ public:
         block = work;
 
         const auto bitmapValue = getres.second[BitmapIndex_](ctx, block);
-        const auto pops = CallInst::Create(getPopCount, { WrapArgumentForWindows(bitmapValue, ctx, block) }, "pops", block);
+        const auto pops = CallInst::Create(getPopCount, { bitmapValue }, "pops", block);
 
         ValueCleanup(EValueRepresentation::Any, bitmapValue, ctx, block);
 
@@ -201,7 +195,7 @@ public:
 
         block = fill;
 
-        const auto makeCountFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&MakeBlockCount));
+        const auto makeCountFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&MakeBlockCount>());
         const auto makeCountType = FunctionType::get(valueType, {ctx.GetFactory()->getType(), pops->getType()}, false);
         const auto makeCountPtr = CastInst::Create(Instruction::IntToPtr, makeCountFunc, PointerType::getUnqual(makeCountType), "make_count_func", block);
         const auto slice = CallInst::Create(makeCountType, makeCountPtr, {ctx.GetFactory(), pops}, "slice", block);
@@ -326,7 +320,7 @@ public:
 
         const auto atTop = &ctx.Func->getEntryBlock().back();
 
-        const auto getFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::Get));
+        const auto getFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::Get>());
         const auto getType = FunctionType::get(valueType, {statePtrType, indexType, ctx.GetFactory()->getType(), indexType}, false);
         const auto getPtr = CastInst::Create(Instruction::IntToPtr, getFunc, PointerType::getUnqual(getType), "get", atTop);
 
@@ -350,12 +344,12 @@ public:
         const auto fill = BasicBlock::Create(context, "fill", ctx.Func);
         const auto over = BasicBlock::Create(context, "over", ctx.Func);
 
-        BranchInst::Create(make, main, IsInvalid(statePtr, block), block);
+        BranchInst::Create(make, main, IsInvalid(statePtr, block, context), block);
         block = make;
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
         const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
-        const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TCompressBlocks::MakeState));
+        const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TCompressBlocks::MakeState>());
         const auto makeType = FunctionType::get(Type::getVoidTy(context), {self->getType(), ctx.Ctx->getType(), statePtr->getType()}, false);
         const auto makeFuncPtr = CastInst::Create(Instruction::IntToPtr, makeFunc, PointerType::getUnqual(makeType), "function", block);
         CallInst::Create(makeType, makeFuncPtr, {self, ctx.Ctx, statePtr}, "", block);
@@ -389,7 +383,7 @@ public:
 
         block = read;
 
-        const auto clearFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::ClearValues));
+        const auto clearFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::ClearValues>());
         const auto clearType = FunctionType::get(Type::getVoidTy(context), {statePtrType}, false);
         const auto clearPtr = CastInst::Create(Instruction::IntToPtr, clearFunc, PointerType::getUnqual(clearType), "clear", block);
         CallInst::Create(clearType, clearPtr, {stateArg}, "", block);
@@ -413,10 +407,10 @@ public:
         block = good;
 
         const auto bitmap = getres.second[BitmapIndex_](ctx, block);
-        const auto bitmapArg = WrapArgumentForWindows(bitmap, ctx, block);
+        const auto bitmapArg = bitmap;
 
         const auto stepType = Type::getInt8Ty(context);
-        const auto checkFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::Check));
+        const auto checkFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::Check>());
         const auto checkType = FunctionType::get(stepType, {statePtrType, bitmapArg->getType()}, false);
         const auto checkPtr = CastInst::Create(Instruction::IntToPtr, checkFunc, PointerType::getUnqual(checkType), "check_func", block);
         const auto check = CallInst::Create(checkType, checkPtr, {stateArg, bitmapArg}, "check", block);
@@ -444,7 +438,7 @@ public:
 
         block = work;
 
-        const auto sparseFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::Sparse));
+        const auto sparseFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::Sparse>());
         const auto sparseType = FunctionType::get(Type::getInt1Ty(context), {statePtrType}, false);
         const auto sparsePtr = CastInst::Create(Instruction::IntToPtr, sparseFunc, PointerType::getUnqual(sparseType), "sparse_func", block);
         const auto sparse = CallInst::Create(sparseType, sparsePtr, {stateArg}, "sparse", block);
@@ -463,7 +457,7 @@ public:
 
         block = done;
 
-        const auto flushFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::FlushBuffers));
+        const auto flushFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::FlushBuffers>());
         const auto flushType = FunctionType::get(Type::getVoidTy(context), {statePtrType, ctx.GetFactory()->getType()}, false);
         const auto flushPtr = CastInst::Create(Instruction::IntToPtr, flushFunc, PointerType::getUnqual(flushType), "flush_func", block);
         CallInst::Create(flushType, flushPtr, {stateArg, ctx.GetFactory()}, "", block);
@@ -472,7 +466,7 @@ public:
 
         block = fill;
 
-        const auto sliceFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::Slice));
+        const auto sliceFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::Slice>());
         const auto sliceType = FunctionType::get(indexType, {statePtrType}, false);
         const auto slicePtr = CastInst::Create(Instruction::IntToPtr, sliceFunc, PointerType::getUnqual(sliceType), "slice_func", block);
         const auto slice = CallInst::Create(sliceType, slicePtr, {stateArg}, "slice", block);

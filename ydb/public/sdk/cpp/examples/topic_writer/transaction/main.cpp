@@ -1,44 +1,36 @@
-#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 
-void ThrowOnError(const NYdb::TStatus& status)
-{
-    if (status.IsSuccess()) {
-        return;
-    }
-
-    ythrow yexception() << status;
-}
-
-int main()
-{
-    const TString ENDPOINT = "HOST:PORT";
-    const TString DATABASE = "DATABASE";
-    const TString TOPIC = "PATH/TO/TOPIC";
+int main() {
+    const std::string ENDPOINT = "HOST:PORT";
+    const std::string DATABASE = "DATABASE";
+    const std::string TOPIC = "PATH/TO/TOPIC";
 
     NYdb::TDriverConfig config;
     config.SetEndpoint(ENDPOINT);
     config.SetDatabase(DATABASE);
     NYdb::TDriver driver(config);
 
-    NYdb::NTable::TTableClient tableClient(driver);
-    auto getTableSessionResult = tableClient.GetSession().GetValueSync();
-    ThrowOnError(getTableSessionResult);
-    auto tableSession = getTableSessionResult.GetSession();
+    NYdb::NQuery::TQueryClient queryClient(driver);
+    auto getSessionResult = queryClient.GetSession().GetValueSync();
+    NYdb::NStatusHelpers::ThrowOnError(getSessionResult);
+    auto session = getSessionResult.GetSession();
 
     NYdb::NTopic::TTopicClient topicClient(driver);
-    auto topicSessionSettings = NYdb::NTopic::TWriteSessionSettings()
-        .Path(TOPIC)
-        .DeduplicationEnabled(true);
-    auto topicSession = topicClient.CreateSimpleBlockingWriteSession(topicSessionSettings);
 
-    auto beginTransactionResult = tableSession.BeginTransaction().GetValueSync();
-    ThrowOnError(beginTransactionResult);
-    auto transaction = beginTransactionResult.GetTransaction();
+    auto topicSession = topicClient.CreateSimpleBlockingWriteSession(
+        NYdb::NTopic::TWriteSessionSettings()
+            .Path(TOPIC)
+            .DeduplicationEnabled(true)
+    );
+
+    auto beginTxResult = session.BeginTransaction(NYdb::NQuery::TTxSettings()).GetValueSync();
+    NYdb::NStatusHelpers::ThrowOnError(beginTxResult);
+    auto tx = beginTxResult.GetTransaction();
 
     NYdb::NTopic::TWriteMessage writeMessage("message");
 
-    topicSession->Write(std::move(writeMessage), &transaction);
+    topicSession->Write(std::move(writeMessage), &tx);
 
-    transaction.Commit().GetValueSync();
+    tx.Commit().GetValueSync();
 }

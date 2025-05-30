@@ -82,6 +82,7 @@ TExprBase KqpBuildDeleteIndexStages(TExprBase node, TExprContext& ctx, const TKq
         .Table(del.Table())
         .Input(lookupKeys)
         .ReturningColumns(del.ReturningColumns())
+        .IsBatch(ctx.NewAtom(del.Pos(), "false"))
         .Done();
 
     TVector<TExprBase> effects;
@@ -108,6 +109,7 @@ TExprBase KqpBuildDeleteIndexStages(TExprBase node, TExprContext& ctx, const TKq
             .Table(tableNode)
             .Input(deleteIndexKeys)
             .ReturningColumns<TCoAtomList>().Build()
+            .IsBatch(ctx.NewAtom(del.Pos(), "false"))
             .Done();
 
         effects.emplace_back(std::move(indexDelete));

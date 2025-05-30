@@ -67,7 +67,7 @@ public:
         const auto init = BasicBlock::Create(context, "init", ctx.Func);
         const auto next = BasicBlock::Create(context, "next", ctx.Func);
 
-        const auto flag = IsInvalid(statePtr, block);
+        const auto flag = IsInvalid(statePtr, block, context);
         new StoreInst(flag, flagPtr, block);
         BranchInst::Create(init, next, flag, block);
 

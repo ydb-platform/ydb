@@ -36,6 +36,7 @@
 [import file tsv](../export-import/import-file.md) | Импорт данных из TSV-файла
 [import s3](../export-import/import-s3.md) | Импорт данных из хранилища S3
 [init](../profile/create.md) | Инициализация CLI, создание [профиля](../profile/index.md)
+[monitoring healthcheck](../commands/monitoring-healthcheck.md) | Проверка состояния базы
 [operation cancel](../operation-cancel.md) | Прерывание исполнения фоновой операции
 [operation forget](../operation-forget.md) | Удаление фоновой операции из списка
 [operation get](../operation-get.md) | Статус фоновой операции
@@ -43,25 +44,25 @@
 [scheme describe](../commands/scheme-describe.md) | Описание объекта схемы данных
 [scheme ls](../commands/scheme-ls.md) | Список объектов схемы данных
 [scheme mkdir](../commands/dir.md#mkdir) | Создание директории
-scheme permissions add | Предоставление разрешения
-scheme permissions chown | Изменение владельца объекта
-scheme permissions clear | Очистка разрешений
-scheme permissions grant | Предоставление разрешения
-scheme permissions remove | Удаление разрешения
-scheme permissions revoke | Удаление разрешения
-scheme permissions set | Установка разрешений
-scheme permissions clear-inheritance | Запрет наследования разрешений
-scheme permissions set-inheritance | Установка наследования разрешений
+[scheme permissions chown](../commands/scheme-permissions.md#chown) | Изменение владельца объекта
+[scheme permissions clear](../commands/scheme-permissions.md#clear) | Очистка разрешений
+[scheme permissions grant](../commands/scheme-permissions.md#grant-revoke) | Предоставление разрешения
+[scheme permissions revoke](../commands/scheme-permissions.md#grant-revoke) | Удаление разрешения
+[scheme permissions set](../commands/scheme-permissions.md#set) | Установка разрешений
+[scheme permissions list](../commands/scheme-permissions.md#list) | Просмотр разрешений
+[scheme permissions clear-inheritance](../commands/scheme-permissions.md#clear-inheritance) | Запрет наследования разрешений
+[scheme permissions set-inheritance](../commands/scheme-permissions.md#set-inheritance) | Установка наследования разрешений
 [scheme rmdir](../commands/dir.md#rmdir) | Удаление директории
-[scripting yql](../scripting-yql.md) | Выполнение YQL-скрипта
+[scripting yql](../scripting-yql.md) | Выполнение YQL-скрипта (команда устарела, используйте [`ydb sql`](../sql.md))
+[sql](../sql.md) | Выполнение любого запроса
 table attribute add | Добавление атрибута для строкой или колоночной таблицы
 table attribute drop | Удаление атрибута у строковой или колоночной таблицы
 [table drop](../table-drop.md) | Удаление строковой или колоночной таблицы
 [table index add global-async](../commands/secondary_index.md#add) | Добавление асинхронного индекса для строковых таблиц
 [table index add global-sync](../commands/secondary_index.md#add) | Добавление синхронного индекса для строковых таблиц
 [table index drop](../commands/secondary_index.md#drop) | Удаление индекса у строковых таблиц
-[table query execute](../table-query-execute.md) | Исполнение YQL-запроса
-[table query explain](../commands/explain-plan.md) | План исполнения YQL-запроса
+[table query execute](../table-query-execute.md) | Исполнение YQL-запроса (команда устарела, используйте [`ydb sql`](../sql.md))
+[table query explain](../commands/explain-plan.md) | Получение плана исполнения YQL-запроса (команда устарела, используйте [`ydb sql --explain`](../sql.md))
 [table read](../commands/readtable.md) | Потоковое чтение строковой таблицы
 [table ttl set](../table-ttl-set.md) | Установка параметров TTL для строковых и колоночных таблиц
 [table ttl reset](../table-ttl-reset.md) | Сброс параметров TTL для строковых и колоночных таблиц
@@ -85,4 +86,4 @@ table attribute drop | Удаление атрибута у строковой �
 [version](../commands/service.md) | Вывод информации о версии {{ ydb-short-name }} CLI
 {% endif %}
 [workload](../commands/workload/index.md) | Генерация нагрузки
-[yql](../yql.md) | Выполнение YQL-скрипта (с поддержкой стриминга)
+[yql](../yql.md) | Выполнение YQL-скрипта с поддержкой стриминга (команда устарела, используйте [`ydb sql`](../sql.md))

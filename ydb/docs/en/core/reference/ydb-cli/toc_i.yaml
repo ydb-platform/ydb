@@ -21,6 +21,8 @@ items:
       href: commands/scheme-ls.md
     - name: Information about the object
       href: commands/scheme-describe.md
+    - name: Permissions
+      href: commands/scheme-permissions.md
     - name: Directories
       href: commands/dir.md
     - name: Secondary indexes
@@ -67,20 +69,29 @@ items:
       href: topic-write.md
     - name: Message pipeline processing
       href: topic-pipeline.md
-  - name: YQL execution
+  - name: SQL query execution
     items:
     - name: Overview
       href: yql-query-overview.md
-    - name: Running a script (with streaming support)
-      href: yql.md
-    - name: Running a script
-      href: scripting-yql.md
-    - name: Running a query
-      href: table-query-execute.md
-    - name: Running parameterized queries
-      href: parameterized-queries-cli.md
+    - name: Query execution
+      href: sql.md
+    - name: Parameterized query execution
+      href: parameterized-query-execution.md
     - name: Interactive query execution mode
       href: interactive-cli.md
+# Deprecated commands:
+    - name: Running a script (with streaming support)
+      href: yql.md
+      hidden: true
+    - name: Running a script
+      href: scripting-yql.md
+      hidden: true
+    - name: Running a query
+      href: table-query-execute.md
+      hidden: true
+    - name: Running parameterized queries
+      href: parameterized-queries-cli.md
+      hidden: true
 #  - name: Utilities
 #    items:
     # - name: Backup
@@ -109,6 +120,8 @@ items:
       href: commands/config-info.md
     - name: Getting the YDB CLI version
       href: version.md
+    - name: Health check
+      href: commands/monitoring-healthcheck.md 
   - name: Load testing
     items:
     - name: Overview
@@ -127,5 +140,8 @@ items:
       href: workload-tpch.md
     - name: TPC-DS load
       href: workload-tpcds.md
-  - name: Configuration
+  - name: Managing configuration
     href: configs.md
+    include:
+      mode: link
+      path: commands/configuration/toc_p.yaml

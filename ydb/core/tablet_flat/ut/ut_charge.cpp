@@ -108,7 +108,7 @@ namespace {
             UNIT_ASSERT(NTest::IndexTools::CountMainPages(*Eggs.Lone()) == 9);
         }
 
-        NTest::TPartEggs MakeEggs(bool groups, bool history) noexcept
+        NTest::TPartEggs MakeEggs(bool groups, bool history)
         {
             NPage::TConf conf{ true, 8192 };
 
@@ -185,7 +185,7 @@ namespace {
 
         void CheckPrechargeByKeys(ui32 lower, ui32 upper, ui64 items, TPageIdFlags flags, const TMap<TGroupId, TArr>& shouldPrecharge, bool reverse, TSet<std::pair<TGroupId, TPageId>> sticky) const
         {
-            Y_ABORT_UNLESS(lower < Mass.Saved.Size() && upper < Mass.Saved.Size());
+            Y_ENSURE(lower < Mass.Saved.Size() && upper < Mass.Saved.Size());
 
             bool fail(flags & TPageIdFlags::IfFail);
             TTouchEnv env(fail, sticky);
@@ -244,7 +244,7 @@ namespace {
 
         void CheckIterByKeys(ui32 lower, ui32 upper, ui64 items, const TMap<TGroupId, TArr>& precharged) const
         {
-            Y_ABORT_UNLESS(lower < Mass.Saved.Size() && upper < Mass.Saved.Size());
+            Y_ENSURE(lower < Mass.Saved.Size() && upper < Mass.Saved.Size());
 
             auto sticky = GetIndexPages();
             NTest::TCheckIter wrap(Eggs, { new TTouchEnv(false, sticky) });
@@ -280,7 +280,7 @@ namespace {
 
         void CheckIterByKeysReverse(ui32 lower, ui32 upper, ui64 items, const TMap<TGroupId, TArr>& precharged) const
         {
-            Y_ABORT_UNLESS(lower < Mass.Saved.Size() && upper < Mass.Saved.Size());
+            Y_ENSURE(lower < Mass.Saved.Size() && upper < Mass.Saved.Size());
 
             auto sticky = GetIndexPages();
             NTest::TCheckReverseIter wrap(Eggs, { new TTouchEnv(false, sticky) });
@@ -355,7 +355,7 @@ namespace {
                 for (size_t i = 0; ; i++) {
                     auto ready = i == 0 ? groupIndex->Seek(0) : groupIndex->Next();
                     if (ready != EReady::Data) {
-                        Y_ABORT_UNLESS(ready != EReady::Page);
+                        Y_ENSURE(ready != EReady::Page);
                         break;
                     }
                     absoluteId[absoluteId.size()] = groupIndex->GetPageId();

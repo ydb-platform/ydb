@@ -18,10 +18,10 @@
 
 #include <yt/yt/core/yson/protobuf_interop.h>
 
+#include <yt/yt/core/misc/memory_usage_tracker.h>
 #include <yt/yt/core/misc/object_pool.h>
 #include <yt/yt/core/misc/protobuf_helpers.h>
 #include <yt/yt/core/misc/ring_queue.h>
-#include <yt/yt/core/misc/memory_usage_tracker.h>
 
 #include <yt/yt/core/profiling/timing.h>
 
@@ -437,7 +437,7 @@ protected:
             return ::NYT::NRpc::TServiceBase::TLiteHandler(); \
         } \
         return \
-            BIND([this, typedContext = std::move(typedContext)] ( \
+            BIND_NO_PROPAGATE([this, typedContext = std::move(typedContext)] ( \
                 const ::NYT::NRpc::IServiceContextPtr&, \
                 const ::NYT::NRpc::THandlerInvocationOptions&) \
             { \
@@ -569,7 +569,7 @@ protected:
     {
         // Defaults.
         TMethodDescriptor(
-            TString method,
+            std::string method,
             TLiteHandler liteHandler,
             THeavyHandler heavyHandler);
 
@@ -588,7 +588,7 @@ protected:
         TInvokerProvider InvokerProvider;
 
         //! Service method name.
-        TString Method;
+        std::string Method;
 
         //! A handler that will serve lite requests.
         TLiteHandler LiteHandler;
@@ -618,6 +618,8 @@ protected:
 
         //! Log level for events emitted via |Set(Request|Response)Info|-like functions.
         NLogging::ELogLevel LogLevel = NLogging::ELogLevel::Debug;
+        //! Log level for events emitted when method fails, by default |LogLevel| is used.
+        std::optional<NLogging::ELogLevel> ErrorLogLevel;
 
         //! Logging suppression timeout for this method requests.
         TDuration LoggingSuppressionTimeout = TDuration::Zero();
@@ -653,6 +655,7 @@ protected:
         TMethodDescriptor SetConcurrencyByteLimit(i64 value) const;
         TMethodDescriptor SetSystem(bool value) const;
         TMethodDescriptor SetLogLevel(NLogging::ELogLevel value) const;
+        TMethodDescriptor SetErrorLogLevel(NLogging::ELogLevel value) const;
         TMethodDescriptor SetLoggingSuppressionTimeout(TDuration value) const;
         TMethodDescriptor SetCancelable(bool value) const;
         TMethodDescriptor SetGenerateAttachmentChecksums(bool value) const;
@@ -763,10 +766,11 @@ protected:
         NProfiling::TCounter UnauthenticatedRequestCounter;
 
         std::atomic<NLogging::ELogLevel> LogLevel = {};
+        std::atomic<NLogging::ELogLevel> ErrorLogLevel = {};
         std::atomic<TDuration> LoggingSuppressionTimeout = {};
 
         using TNonowningPerformanceCountersKey = std::tuple<TStringBuf, TRequestQueue*>;
-        using TOwningPerformanceCountersKey = std::tuple<TString, TRequestQueue*>;
+        using TOwningPerformanceCountersKey = std::tuple<std::string, TRequestQueue*>;
         using TPerformanceCountersKeyHash = THash<TNonowningPerformanceCountersKey>;
 
         struct TPerformanceCountersKeyEquals
@@ -813,7 +817,7 @@ protected:
         const NProfiling::TProfiler Profiler_;
 
         //! Number of requests per user agent.
-        NConcurrency::TSyncMap<TString, NProfiling::TCounter> RequestsPerUserAgent_;
+        NConcurrency::TSyncMap<std::string, NProfiling::TCounter, THash<TStringBuf>, TEqualTo<TStringBuf>> RequestsPerUserAgent_;
     };
 
     using TPerformanceCountersPtr = TIntrusivePtr<TPerformanceCounters>;
@@ -888,7 +892,7 @@ protected:
      *  \note
      *  Thread affinity: any
      */
-    virtual std::vector<TString> SuggestAddresses();
+    virtual std::vector<std::string> SuggestAddresses();
 
     //! Part of #DoConfigure
     //! #DoConfigure configures already registered methods.
@@ -906,8 +910,8 @@ protected:
 
 protected:
     virtual void OnMethodError(
-        const TError& error,
-        const TString& method);
+        TError* error,
+        const std::string& method);
 
 private:
     friend class TRequestQueue;
@@ -930,7 +934,7 @@ private:
 
     std::atomic<bool> Active_ = false;
 
-    THashMap<TString, TRuntimeMethodInfoPtr> MethodMap_;
+    THashMap<std::string, TRuntimeMethodInfoPtr, THash<std::string>, TEqualTo<>> MethodMap_;
 
     THashSet<int> SupportedServerFeatureIds_;
 
@@ -987,10 +991,11 @@ private:
 
     std::atomic<bool> EnableErrorCodeCounter_ = false;
 
-    const NConcurrency::TPeriodicExecutorPtr ServiceLivenessChecker_;
+    std::atomic<bool> ServiceLivenessCheckerStarted_ = false;
+    TAtomicIntrusivePtr<NConcurrency::TPeriodicExecutor> ServiceLivenessChecker_;
 
     using TDiscoverRequestSet = TConcurrentHashMap<TCtxDiscoverPtr, int>;
-    THashMap<TString, TDiscoverRequestSet> DiscoverRequestsByPayload_;
+    THashMap<std::string, TDiscoverRequestSet> DiscoverRequestsByPayload_;
     YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, DiscoverRequestsByPayloadLock_);
 
     const TPerformanceCountersPtr PerformanceCounters_;
@@ -1075,12 +1080,13 @@ private:
     void IncrementActiveRequestCount();
     void DecrementActiveRequestCount();
 
+    void StartServiceLivenessChecker();
     void RegisterDiscoverRequest(const TCtxDiscoverPtr& context);
     void ReplyDiscoverRequest(const TCtxDiscoverPtr& context, bool isUp);
 
     void OnDiscoverRequestReplyDelayReached(TCtxDiscoverPtr context);
 
-    static TString GetDiscoverRequestPayload(const TCtxDiscoverPtr& context);
+    static std::string GetDiscoverRequestPayload(const TCtxDiscoverPtr& context);
 
     void OnServiceLivenessCheck();
 };

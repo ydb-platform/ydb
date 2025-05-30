@@ -15,15 +15,7 @@ private:
     static inline auto Registrator =
         TFactory::TRegistrator<TEvWriteCommitSecondaryTransactionOperator>(NKikimrTxColumnShard::TX_KIND_COMMIT_WRITE_SECONDARY);
 
-private:
-    ui64 ArbiterTabletId;
-    bool NeedReceiveBroken = false;
-    bool ReceiveAck = false;
-    bool SelfBroken = false;
-    std::optional<bool> TxBroken;
-
-    virtual NKikimrTxColumnShard::TCommitWriteTxBody SerializeToProto() const override {
-        NKikimrTxColumnShard::TCommitWriteTxBody result;
+    virtual void DoSerializeToProto(NKikimrTxColumnShard::TCommitWriteTxBody& result) const override {
         auto& data = *result.MutableSecondaryTabletData();
         if (TxBroken) {
             data.SetTxBroken(*TxBroken);
@@ -32,8 +24,14 @@ private:
         data.SetNeedReceiveBroken(NeedReceiveBroken);
         data.SetReceiveAck(ReceiveAck);
         data.SetArbiterTabletId(ArbiterTabletId);
-        return result;
     }
+
+private:
+    ui64 ArbiterTabletId;
+    bool NeedReceiveBroken = false;
+    bool ReceiveAck = false;
+    bool SelfBroken = false;
+    std::optional<bool> TxBroken;
 
     virtual bool DoParseImpl(TColumnShard& /*owner*/, const NKikimrTxColumnShard::TCommitWriteTxBody& commitTxBody) override {
         if (!commitTxBody.HasSecondaryTabletData()) {
@@ -119,6 +117,10 @@ private:
             return true;
         }
         virtual void DoComplete(const NActors::TActorContext& ctx) override {
+            if (NYDBTest::TControllers::GetColumnShardController()->GetInterruptionOnLockedTransactions()) {
+                AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "skip_continue");
+                return;
+            }
             auto op = Self->GetProgressTxController().GetTxOperatorVerifiedAs<TEvWriteCommitSecondaryTransactionOperator>(TxId, true);
             if (!op) {
                 AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "duplication_tablet_broken_flag")("txId", TxId);
@@ -153,6 +155,10 @@ private:
     }
 
     void SendResult(TColumnShard& owner) {
+        if (NYDBTest::TControllers::GetColumnShardController()->GetInterruptionOnLockedTransactions()) {
+            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "skip_continue");
+            return;
+        }
         NKikimrTx::TReadSetData readSetData;
         readSetData.SetDecision(SelfBroken ? NKikimrTx::TReadSetData::DECISION_ABORT : NKikimrTx::TReadSetData::DECISION_COMMIT);
         owner.Send(MakePipePerNodeCacheID(EPipePerNodeCache::Persistent),
@@ -162,12 +168,7 @@ private:
             IEventHandle::FlagTrackDelivery, GetTxId());
     }
 
-    virtual void DoOnTabletInit(TColumnShard& owner) override {
-        if (TxBroken || (ReceiveAck && !NeedReceiveBroken)) {
-            owner.EnqueueProgressTx(NActors::TActivationContext::AsActorContext(), GetTxId());
-        } else if (!ReceiveAck) {
-            SendResult(owner);
-        }
+    virtual void DoOnTabletInit(TColumnShard& /*owner*/) override {
     }
 
     class TTxStartPreparation: public TExtendedTransactionBase {
@@ -178,16 +179,14 @@ private:
         virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const NActors::TActorContext& /*ctx*/) override {
             auto& lock = Self->GetOperationsManager().GetLockVerified(Self->GetOperationsManager().GetLockForTxVerified(TxId));
             auto op = Self->GetProgressTxController().GetTxOperatorVerifiedAs<TEvWriteCommitSecondaryTransactionOperator>(TxId);
-            auto copy = *op;
-            copy.SelfBroken = lock.IsBroken();
-            Self->GetProgressTxController().WriteTxOperatorInfo(txc, TxId, copy.SerializeToProto().SerializeAsString());
+            op->SelfBroken = lock.IsBroken();
+            Self->GetProgressTxController().WriteTxOperatorInfo(txc, TxId, op->SerializeToProto().SerializeAsString());
             return true;
         }
         virtual void DoComplete(const NActors::TActorContext& /*ctx*/) override {
-            auto& lock = Self->GetOperationsManager().GetLockVerified(Self->GetOperationsManager().GetLockForTxVerified(TxId));
-            auto op = Self->GetProgressTxController().GetTxOperatorVerifiedAs<TEvWriteCommitSecondaryTransactionOperator>(TxId);
-            op->SelfBroken = lock.IsBroken();
-            op->SendResult(*Self);
+            if (auto op = Self->GetProgressTxController().GetTxOperatorVerifiedAs<TEvWriteCommitSecondaryTransactionOperator>(TxId, true)) {
+                op->SendResult(*Self);
+            }
         }
 
     public:

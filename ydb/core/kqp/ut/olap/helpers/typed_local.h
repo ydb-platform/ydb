@@ -5,7 +5,7 @@
 #include <ydb/library/formats/arrow/simple_builder/batch.h>
 #include <ydb/library/formats/arrow/simple_builder/filler.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_types/status_codes.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status_codes.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_binary.h>
 
@@ -117,7 +117,7 @@ public:
 
     TDistribution GetDistribution(const bool verbose = false);
 
-    void GetVolumes(ui64& rawBytes, ui64& bytes, const bool verbose = false, const std::vector<TString> columnNames = {});
+    void GetVolumes(ui64& rawBytes, ui64& bytes, ui64& portionsCount, const bool verbose = false, const std::vector<TString> columnNames = {});
 
     void GetStats(std::vector<NJson::TJsonValue>& stats, const bool verbose = false);
 

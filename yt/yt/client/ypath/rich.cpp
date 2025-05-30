@@ -325,7 +325,7 @@ NChunkClient::TReadRange RangeNodeToReadRange(
             THROW_ERROR_EXCEPTION("Cannot use key or key bound in read limit for an unsorted object");
         }
 
-        // NB: for the sake of compatibility, we support specifying both key and key bound in read limit.
+        // NB: For the sake of compatibility, we support specifying both key and key bound in read limit.
         // In this case we consider only key bound and completely ignore key.
 
         if (keyNode && !keyBoundNode) {
@@ -336,7 +336,7 @@ NChunkClient::TReadRange RangeNodeToReadRange(
             // Perform type conversion, if required.
             if (!conversionTypeHints.empty()) {
                 TUnversionedOwningRowBuilder newOwningKey;
-                const int typedKeyCount = std::min(owningKey.GetCount(), static_cast<int>(conversionTypeHints.size()));
+                int typedKeyCount = std::min<int>(owningKey.GetCount(), std::ssize(conversionTypeHints));
                 for (int i = 0; i < typedKeyCount; ++i) {
                     newOwningKey.AddValue(TryConvertValue(owningKey[i], conversionTypeHints[i]));
                 }
@@ -376,7 +376,7 @@ NChunkClient::TReadRange RangeNodeToReadRange(
                 // than interpreting it as a key bound using interop method.
 
                 if (isExact && (owningKey.GetCount() > comparator.GetLength() || containsSentinels)) {
-                    // NB: there are two tricky cases when read limit is exact:
+                    // NB: There are two tricky cases when read limit is exact:
                     // - (1) if specified key is longer than comparator. Recall that (in old terms)
                     // there may be no keys between (foo, bar) and (foo, bar, <max>) in a table with single
                     // key column.
@@ -662,16 +662,15 @@ std::optional<std::string> TRichYPath::GetCluster() const
 
 void TRichYPath::SetCluster(const std::string& value)
 {
-    // TODO(babenko): switch to std::string
-    Attributes().Set("cluster", TString(value));
+    Attributes().Set("cluster", value);
 }
 
-std::optional<std::vector<TString>> TRichYPath::GetClusters() const
+std::optional<std::vector<std::string>> TRichYPath::GetClusters() const
 {
-    return FindAttribute<std::vector<TString>>(*this, "clusters");
+    return FindAttribute<std::vector<std::string>>(*this, "clusters");
 }
 
-void TRichYPath::SetClusters(const std::vector<TString>& value)
+void TRichYPath::SetClusters(const std::vector<std::string>& value)
 {
     Attributes().Set("clusters", value);
 }
@@ -691,6 +690,11 @@ TVersionedWriteOptions TRichYPath::GetVersionedWriteOptions() const
     return GetAttribute(*this, "versioned_write_options", TVersionedWriteOptions());
 }
 
+std::optional<TString> TRichYPath::GetAccessMethod() const
+{
+    return FindAttribute<TString>(*this, "access_method");
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 TString ConvertToString(const TRichYPath& path, EYsonFormat ysonFormat)
@@ -703,7 +707,7 @@ TString ConvertToString(const TRichYPath& path, EYsonFormat ysonFormat)
 
 void FormatValue(TStringBuilderBase* builder, const TRichYPath& path, TStringBuf spec)
 {
-    // NB: we intentionally use Text format since string-representation of rich ypath should be readable.
+    // NB: We intentionally use Text format since string-representation of rich ypath should be readable.
     FormatValue(builder, ConvertToString(path, EYsonFormat::Text), spec);
 }
 

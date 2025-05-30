@@ -47,7 +47,7 @@ namespace NKikimr {
             VDiskInternals = TComponentTracingLevels::TDistributedStorage::Detailed,
             PDiskTopLevel = TComponentTracingLevels::TDistributedStorage::Basic,
             PDiskBasic = TComponentTracingLevels::TDistributedStorage::Detailed,
-            PDiskDetailed = TComponentTracingLevels::TDistributedStorage::Detailed,
+            PDiskDetailed = TComponentTracingLevels::TDistributedStorage::Diagnostic,
         };
     };
 
@@ -82,14 +82,11 @@ namespace NKikimr {
                 LookupActor = TComponentTracingLevels::TQueryProcessor::Basic,
                     LookupActorShardsResolve = TComponentTracingLevels::TQueryProcessor::Detailed,
 
-                TableWriteActor = TComponentTracingLevels::TQueryProcessor::Basic,
-                    TableWriteActorTableNavigate = TComponentTracingLevels::TQueryProcessor::Detailed,
-
-                DirectWriteActor = TComponentTracingLevels::TQueryProcessor::Basic,
                 ForwardWriteActor = TComponentTracingLevels::TQueryProcessor::Basic,
-
+                DirectWriteActor = TComponentTracingLevels::TQueryProcessor::Basic,
                 BufferWriteActor = TComponentTracingLevels::TQueryProcessor::Basic,
-                    BufferWriteActorState = TComponentTracingLevels::TQueryProcessor::Basic,
+                    BufferWriteActorState = TComponentTracingLevels::TQueryProcessor::Detailed,
+                    TableWriteActor = TComponentTracingLevels::TQueryProcessor::Detailed,
 
             BulkUpsertActor = TComponentTracingLevels::TQueryProcessor::TopLevel,
         };

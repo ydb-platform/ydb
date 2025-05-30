@@ -21,6 +21,7 @@ namespace NYql::NDq {
             EvReadSplitsPart,
             EvReadSplitsFinished,
             EvError,
+            EvRetry,
             EvEnd
         };
 

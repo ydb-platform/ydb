@@ -331,7 +331,7 @@ private:
 ///
 /// @see @ref NYT::TTableReaderIterator
 template <class T>
-TTableReaderIterator<T> begin(TTableReader<T>& reader)
+TTableReaderIterator<T> begin(TTableReader<T>& reader) // NOLINT
 {
     return TTableReaderIterator<T>(&reader);
 }
@@ -340,7 +340,7 @@ TTableReaderIterator<T> begin(TTableReader<T>& reader)
 ///
 /// @see @ref NYT::TTableReaderIterator
 template <class T>
-TTableReaderIterator<T> end(TTableReader<T>&)
+TTableReaderIterator<T> end(TTableReader<T>&) // NOLINT
 {
     return TTableReaderIterator<T>(nullptr);
 }
@@ -460,6 +460,30 @@ public:
         const TTableWriterOptions& options = TTableWriterOptions()) = 0;
 
     ///
+    /// @brief Create raw reader of table partition
+    ///
+    /// Reader returns unparsed data in specified format.
+    ///
+    /// @param cookie Partition cookie received from @ref NYT::IClientBase::GetTablesPartitions.
+    /// @param format Format description.
+    /// @param options Additional options.
+    virtual TRawTableReaderPtr CreateRawTablePartitionReader(
+        const TString& cookie,
+        const TFormat& format,
+        const TTablePartitionReaderOptions& options = {}) = 0;
+
+    ///
+    /// @brief Create reader of table partition
+    ///
+    /// @param cookie Partition cookie received from @ref NYT::IClientBase::GetTablesPartitions.
+    /// @param format Format description.
+    /// @param options Additional options.
+    template <class T>
+    TTableReaderPtr<T> CreateTablePartitionReader(
+        const TString& cookie,
+        const TTablePartitionReaderOptions& options = {});
+
+    ///
     /// @brief Create a reader for [blob table](https://docs.yandex-team.ru/docs/yt/description/storage/blobtables) at `path`.
     ///
     /// @param path Blob table path.
@@ -494,6 +518,20 @@ private:
     virtual ::TIntrusivePtr<ISkiffRowReaderImpl> CreateSkiffRowReader(
         const TRichYPath& path,
         const TTableReaderOptions& options,
+        const ISkiffRowSkipperPtr& skipper,
+        const NSkiff::TSkiffSchemaPtr& schema) = 0;
+
+    virtual ::TIntrusivePtr<INodeReaderImpl> CreateNodeTablePartitionReader(
+        const TString& cookie, const TTablePartitionReaderOptions& options) = 0;
+
+    virtual ::TIntrusivePtr<IProtoReaderImpl> CreateProtoTablePartitionReader(
+        const TString& cookie,
+        const TTablePartitionReaderOptions& options,
+        const ::google::protobuf::Message* prototype) = 0;
+
+    virtual ::TIntrusivePtr<ISkiffRowReaderImpl> CreateSkiffRowTablePartitionReader(
+        const TString& cookie,
+        const TTablePartitionReaderOptions& options,
         const ISkiffRowSkipperPtr& skipper,
         const NSkiff::TSkiffSchemaPtr& schema) = 0;
 

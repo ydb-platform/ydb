@@ -186,9 +186,16 @@ namespace NKikimr::NStorage {
         TIntrusivePtr<TVDiskConfig> vdiskConfig = Cfg->AllVDiskKinds->MakeVDiskConfig(baseInfo);
         vdiskConfig->EnableVDiskCooldownTimeout = Cfg->EnableVDiskCooldownTimeout;
         vdiskConfig->ReplPausedAtStart = Cfg->VDiskReplPausedAtStart;
+        if (Cfg->ReplMaxQuantumBytes) {
+            vdiskConfig->ReplMaxQuantumBytes = *Cfg->ReplMaxQuantumBytes;
+        }
+        if (Cfg->ReplMaxDonorNotReadyCount) {
+            vdiskConfig->ReplMaxDonorNotReadyCount = *Cfg->ReplMaxDonorNotReadyCount;
+        }
         vdiskConfig->EnableVPatch = EnableVPatch;
         vdiskConfig->DefaultHugeGarbagePerMille = DefaultHugeGarbagePerMille;
         vdiskConfig->HugeDefragFreeSpaceBorderPerMille = HugeDefragFreeSpaceBorderPerMille;
+        vdiskConfig->MaxChunksToDefragInflight = MaxChunksToDefragInflight;
 
         vdiskConfig->EnableLocalSyncLogDataCutting = EnableLocalSyncLogDataCutting;
         if (deviceType == NPDisk::EDeviceType::DEVICE_TYPE_ROT) {
@@ -199,20 +206,26 @@ namespace NKikimr::NStorage {
             vdiskConfig->MaxSyncLogChunksInFlight = MaxSyncLogChunksInFlightSSD;
         }
 
-        vdiskConfig->ThrottlingDeviceSpeed = ThrottlingDeviceSpeed;
-        vdiskConfig->ThrottlingMinSstCount = ThrottlingMinSstCount;
-        vdiskConfig->ThrottlingMaxSstCount = ThrottlingMaxSstCount;
-        vdiskConfig->ThrottlingMinInplacedSize = ThrottlingMinInplacedSize;
-        vdiskConfig->ThrottlingMaxInplacedSize = ThrottlingMaxInplacedSize;
+        vdiskConfig->ThrottlingDryRun = ThrottlingDryRun;
+        vdiskConfig->ThrottlingMinLevel0SstCount = ThrottlingMinLevel0SstCount;
+        vdiskConfig->ThrottlingMaxLevel0SstCount = ThrottlingMaxLevel0SstCount;
+        vdiskConfig->ThrottlingMinInplacedSizeHDD = ThrottlingMinInplacedSizeHDD;
+        vdiskConfig->ThrottlingMaxInplacedSizeHDD = ThrottlingMaxInplacedSizeHDD;
+        vdiskConfig->ThrottlingMinInplacedSizeSSD = ThrottlingMinInplacedSizeSSD;
+        vdiskConfig->ThrottlingMaxInplacedSizeSSD = ThrottlingMaxInplacedSizeSSD;
         vdiskConfig->ThrottlingMinOccupancyPerMille = ThrottlingMinOccupancyPerMille;
         vdiskConfig->ThrottlingMaxOccupancyPerMille = ThrottlingMaxOccupancyPerMille;
+        vdiskConfig->ThrottlingMinLogChunkCount = ThrottlingMinLogChunkCount;
+        vdiskConfig->ThrottlingMaxLogChunkCount = ThrottlingMaxLogChunkCount;
+
+        vdiskConfig->MaxInProgressSyncCount = MaxInProgressSyncCount;
 
         vdiskConfig->CostMetricsParametersByMedia = CostMetricsParametersByMedia;
 
         vdiskConfig->FeatureFlags = Cfg->FeatureFlags;
 
-        if (StorageConfig.HasBlobStorageConfig() && StorageConfig.GetBlobStorageConfig().HasVDiskPerformanceSettings()) {
-            for (auto &type : StorageConfig.GetBlobStorageConfig().GetVDiskPerformanceSettings().GetVDiskTypes()) {
+        if (StorageConfig->HasBlobStorageConfig() && StorageConfig->GetBlobStorageConfig().HasVDiskPerformanceSettings()) {
+            for (auto &type : StorageConfig->GetBlobStorageConfig().GetVDiskPerformanceSettings().GetVDiskTypes()) {
                 if (type.HasPDiskType() && deviceType == PDiskTypeToPDiskType(type.GetPDiskType())) {
                     if (type.HasMinHugeBlobSizeInBytes()) {
                         vdiskConfig->MinHugeBlobInBytes = type.GetMinHugeBlobSizeInBytes();
@@ -327,6 +340,7 @@ namespace NKikimr::NStorage {
         if (!inserted) {
             // -- check that configuration did not change
         }
+
         record.Config.CopyFrom(vdisk);
 
         if (vdisk.GetDoDestroy() || vdisk.GetEntityStatus() == NKikimrBlobStorage::EEntityStatus::DESTROY) {

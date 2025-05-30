@@ -66,9 +66,9 @@ TEST(TFederatedConnectionTest, CreateClient)
         .WillOnce(ReturnRefOfCopy(TString("vla")));
 
     auto finally = Finally([oldLocalHostName = NNet::GetLocalHostName()] {
-        NNet::WriteLocalHostName(oldLocalHostName);
+        NNet::SetLocalHostName(oldLocalHostName);
     });
-    NNet::WriteLocalHostName("a-rpc-proxy.sas.yp-c.yandex.net");
+    NNet::SetLocalHostName("a-rpc-proxy.sas.yp-c.yandex.net");
 
     auto connection = CreateConnection({mockConnectionSas, mockConnectionVla}, config);
     EXPECT_THAT(connection->GetLoggingTag(), testing::HasSubstr("Clusters: (sas; vla)"));
@@ -131,9 +131,9 @@ TEST(TFederatedConnectionTest, CreateClientWhenOneClusterUnavailable)
         .WillOnce(ReturnRefOfCopy(TString("vla")));
 
     auto finally = Finally([oldLocalHostName = NNet::GetLocalHostName()] {
-        NNet::WriteLocalHostName(oldLocalHostName);
+        NNet::SetLocalHostName(oldLocalHostName);
     });
-    NNet::WriteLocalHostName("a-rpc-proxy.sas.yp-c.yandex.net");
+    NNet::SetLocalHostName("a-rpc-proxy.sas.yp-c.yandex.net");
 
     auto connection = CreateConnection({mockConnectionSas, mockConnectionVla}, config);
     EXPECT_THAT(connection->GetLoggingTag(), testing::HasSubstr("Clusters: (sas; vla)"));

@@ -39,6 +39,24 @@ const TString& GetPersistentExecPathMd5()
     return md5;
 }
 
+void MergeAnnotations(
+    const NYT::TNode::TMapType& attrs,
+    const TString& attribute,
+    NYT::TNode& annotations)
+{
+    if (auto attrAnnotations = attrs.FindPtr(attribute)) {
+        if (!attrAnnotations->IsMap()) {
+            throw yexception() << "Operation attribute " << attribute.Quote() << " should be a map";
+        }
+        for (const auto& [k, v] : attrAnnotations->AsMap()) {
+            auto it = annotations.AsMap().find(k);
+            if (it == annotations.AsMap().end()) {
+                annotations[k] = v;
+            }
+        }
+    }
+}
+
 }
 
 TMaybe<TString> GetPool(
@@ -50,7 +68,7 @@ TMaybe<TString> GetPool(
     if (auto val = settings->Pool.Get(execCtx.Cluster_)) {
         pool = *val;
     }
-    else if (auto val = settings->StaticPool.Get()) {
+    else if (auto val = settings->StaticPool.Get(execCtx.Cluster_)) {
         pool = *val;
     }
     else if (settings->Auth.Get().GetOrElse(TString()).empty()) {
@@ -197,18 +215,9 @@ void FillSpec(NYT::TNode& spec,
 
     // merge annotations from attributes
     if (auto attrs = execCtx.Session_->OperationOptions_.AttrsYson.GetOrElse(TString())) {
-        NYT::TNode node = NYT::NodeFromYsonString(attrs);
-        if (auto attrAnnotations = node.AsMap().FindPtr("yt_annotations")) {
-            if (!attrAnnotations->IsMap()) {
-                throw yexception() << "Operation attribute \"yt_annotations\" should be a map";
-            }
-            for (const auto& [k, v] : attrAnnotations->AsMap()) {
-                auto it = annotations.AsMap().find(k);
-                if (it == annotations.AsMap().end()) {
-                    annotations[k] = v;
-                }
-            }
-        }
+        NYT::TNode attributes = NYT::NodeFromYsonString(attrs);
+        MergeAnnotations(attributes.AsMap(), "yt_annotations", annotations);
+        MergeAnnotations(attributes.AsMap(), "nirvana_yt_annotations", annotations);
     }
 
     if (!annotations.Empty()) {
@@ -328,7 +337,7 @@ void FillSpec(NYT::TNode& spec,
         if (auto val = settings->IntermediateAccount.Get(cluster)) {
             spec["intermediate_data_account"] = *val;
         }
-        else if (auto tmpFolder = GetTablesTmpFolder(*settings)) {
+        else if (auto tmpFolder = GetTablesTmpFolder(*settings, cluster)) {
             auto attrs = entry->Tx->Get(tmpFolder + "/@", NYT::TGetOptions().AttributeFilter(NYT::TAttributeFilter().AddAttribute(TString("account"))));
             if (attrs.HasKey("account")) {
                 spec["intermediate_data_account"] = attrs["account"];
@@ -523,6 +532,33 @@ void FillSpec(NYT::TNode& spec,
     }
 }
 
+void CheckSpecForSecretsImpl(
+    const NYT::TNode& spec,
+    const ISecretMasker::TPtr& secretMasker,
+    const TYtSettings::TConstPtr& settings
+) {
+    if (!settings->_ForbidSensitiveDataInOperationSpec.Get().GetOrElse(DEFAULT_FORBID_SENSITIVE_DATA_IN_OPERATION_SPEC)) {
+        return;
+    }
+
+    YQL_ENSURE(secretMasker);
+
+    auto maskedSpecStr = NYT::NodeToYsonString(spec);
+    auto secrets = secretMasker->Mask(maskedSpecStr);
+    if (!secrets.empty()) {
+        auto maskedSpecStrBuf = TStringBuf(maskedSpecStr);
+
+        TVector<TString> maskedSecrets;
+        for (auto& secret : secrets) {
+            maskedSecrets.push_back(TStringBuilder() << "\"" << maskedSpecStrBuf.substr(secret.From, secret.Len) << "\"");
+        }
+
+        YQL_LOG_CTX_THROW TErrorException(TIssuesIds::YT_OP_SPEC_CONTAINS_SECRETS)
+            << "YT operation spec contains sensitive data (masked): "
+            << JoinSeq(", ", maskedSecrets);
+    }
+}
+
 void FillSecureVault(NYT::TNode& spec, const IYtGateway::TSecureParams& secureParams) {
     if (secureParams.empty()) {
         return;
@@ -598,7 +634,7 @@ void FillUserJobSpecImpl(NYT::TUserJobSpec& spec,
         }
     }
 
-    const TString binTmpFolder = settings->BinaryTmpFolder.Get().GetOrElse(TString());
+    const TString binTmpFolder = settings->BinaryTmpFolder.Get(cluster).GetOrElse(TString());
     const TString binCacheFolder = settings->_BinaryCacheFolder.Get(cluster).GetOrElse(TString());
     if (!localRun && (binTmpFolder || binCacheFolder)) {
         TString bin = mrJobBin.empty() ? GetPersistentExecPath() : mrJobBin;
@@ -691,7 +727,7 @@ void FillOperationOptionsImpl(NYT::TOperationOptions& opOpts,
 {
     opOpts.UseTableFormats(true);
     opOpts.CreateOutputTables(false);
-    if (TString tmpFolder = settings->TmpFolder.Get().GetOrElse(TString())) {
+    if (TString tmpFolder = settings->TmpFolder.Get(entry->Cluster).GetOrElse(TString())) {
         opOpts.FileStorage(tmpFolder);
 
         if (!entry->CacheTxId.IsEmpty()) {

@@ -122,20 +122,6 @@ BELONGS ya.make
     Files with this license:
         LICENSE.md [86:87]
 
-KEEP     Public-Domain        3845d6ef049b415f8f54f4d7e362f22e
-BELONGS ya.make
-    License text:
-         * The algorithm is due to Ron Rivest.  This code was
-         * written by Colin Plumb in 1993, no copyright is claimed.
-         * This code is in the public domain; do with it what you wish.
-    Scancode info:
-        Original SPDX id: LicenseRef-scancode-public-domain
-        Score           : 100.00
-        Match type      : TEXT
-        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
-    Files with this license:
-        md5/md5.c [3:5]
-
 KEEP     BSD-3-Clause AND BSD-3-Clause 4694a148911c95fc84a45824e7b3c243
 BELONGS ya.make
     Note: matched license text is too long. Read it in the source files.
@@ -145,20 +131,9 @@ BELONGS ya.make
         Match type      : TEXT
         Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
     Files with this license:
-        md5/md5.h [5:27]
-        md5/md5hl.c [11:33]
-        tjunittest.c [5:27]
-        tjutil.c [4:26]
         tjutil.h [4:26]
         turbojpeg.c [5:27]
         turbojpeg.h [5:27]
-    Scancode info:
-        Original SPDX id: BSD-3-Clause
-        Score           : 98.60
-        Match type      : TEXT
-        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
-    Files with this license:
-        md5/md5.c [20:42]
 
 KEEP     Zlib                 49b2005eb74289158192a07e3d97f167
 BELONGS ya.make
@@ -606,17 +581,6 @@ BELONGS ya.make
         simd/arm/jidctred-neon.c [7:21]
         simd/arm/jquanti-neon.c [6:20]
         simd/arm/neon-compat.h [5:19]
-
-KEEP     Beerware             e3d7d35bd114ad8c198d3b24c4a2fc3a
-BELONGS ya.make
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: Beerware
-        Score           : 100.00
-        Match type      : TEXT
-        Links           : http://people.freebsd.org/~phk/, https://spdx.org/licenses/Beerware
-    Files with this license:
-        md5/md5hl.c [3:6]
 
 KEEP     Libpbm               e450a16e6dcc10f1721ab5ee51897340
 BELONGS ya.make

@@ -1,3 +1,4 @@
+#include <ydb/core/tx/columnshard/common/path_id.h>
 #include "builder.h"
 
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
@@ -34,6 +35,7 @@ std::optional<std::vector<NArrow::TSerializedBatch>> TBuildSlicesTask::BuildSlic
 }
 
 void TBuildSlicesTask::ReplyError(const TString& message, const NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass errorClass) {
+    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "error_on_TBuildSlicesTask")("message", message)("class", (ui32)errorClass);
     auto writeDataPtr = std::make_shared<NEvWrite::TWriteData>(std::move(WriteData));
     TWritingBuffer buffer(writeDataPtr->GetBlobsAction(), { std::make_shared<TWriteAggregation>(*writeDataPtr) });
     auto result =
@@ -98,22 +100,23 @@ public:
     }
 };
 
-TConclusionStatus TBuildSlicesTask::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) {
-    const NActors::TLogContextGuard g = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_WRITE)("tablet_id", TabletId)("parent_id",
-        Context.GetTabletActorId())("write_id", WriteData.GetWriteMeta().GetWriteId())("table_id", WriteData.GetWriteMeta().GetTableId());
+void TBuildSlicesTask::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) {
+    const NActors::TLogContextGuard g = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_WRITE)("tablet_id", TabletId)(
+        "parent_id", Context.GetTabletActorId())("write_id", WriteData.GetWriteMeta().GetWriteId())(
+        "table_id", WriteData.GetWriteMeta().GetTableId());
     if (!Context.IsActive()) {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "abort_execution");
         ReplyError("execution aborted", NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass::Internal);
-        return TConclusionStatus::Fail("execution aborted");
+        return;
     }
     if (!OriginalBatch) {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "ev_write_bad_data");
         ReplyError("no data in batch", NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass::Internal);
-        return TConclusionStatus::Fail("no data in batch");
+        return;
     }
     if (WriteData.GetWritePortions()) {
         if (OriginalBatch->num_rows() == 0) {
-            NColumnShard::TWriteResult wResult(WriteData.GetWriteMeta(), WriteData.GetSize(), nullptr, true, 0);
+            NColumnShard::TWriteResult wResult(WriteData.GetWriteMetaPtr(), WriteData.GetSize(), nullptr, true, 0);
             NColumnShard::TInsertedPortions pack({ wResult }, {});
             auto result = std::make_unique<NColumnShard::NPrivateEvents::NWrite::TEvWritePortionResult>(
                 NKikimrProto::EReplyStatus::OK, nullptr, std::move(pack));
@@ -123,7 +126,7 @@ TConclusionStatus TBuildSlicesTask::DoExecute(const std::shared_ptr<ITask>& /*ta
                 NArrow::TColumnOperator().Extract(OriginalBatch, Context.GetActualSchema()->GetIndexInfo().GetPrimaryKey()->fields());
             auto batches = NArrow::NMerger::TRWSortableBatchPosition::SplitByBordersInIntervalPositions(OriginalBatch,
                 Context.GetActualSchema()->GetIndexInfo().GetPrimaryKey()->field_names(), WriteData.GetData()->GetSeparationPoints());
-            NColumnShard::TWriteResult wResult(WriteData.GetWriteMeta(), WriteData.GetSize(), pkBatch, false, OriginalBatch->num_rows());
+            NColumnShard::TWriteResult wResult(WriteData.GetWriteMetaPtr(), WriteData.GetSize(), pkBatch, false, OriginalBatch->num_rows());
             std::vector<TPortionWriteController::TInsertPortion> portions;
             for (auto&& batch : batches) {
                 if (!batch) {
@@ -134,7 +137,7 @@ TConclusionStatus TBuildSlicesTask::DoExecute(const std::shared_ptr<ITask>& /*ta
                         WriteData.GetWriteMeta().GetModificationType(), Context.GetStoragesManager(), Context.GetSplitterCounters());
                 if (portionConclusion.IsFail()) {
                     ReplyError(portionConclusion.GetErrorMessage(), NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass::Request);
-                    return portionConclusion;
+                    return;
                 }
                 portions.emplace_back(portionConclusion.DetachResult());
             }
@@ -155,7 +158,7 @@ TConclusionStatus TBuildSlicesTask::DoExecute(const std::shared_ptr<ITask>& /*ta
                 "problem", subsetConclusion.GetErrorMessage());
             ReplyError("unadaptable schema: " + subsetConclusion.GetErrorMessage(),
                 NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass::Internal);
-            return TConclusionStatus::Fail("cannot reorder schema: " + subsetConclusion.GetErrorMessage());
+            return;
         }
         NArrow::TSchemaSubset subset = subsetConclusion.DetachResult();
 
@@ -171,12 +174,10 @@ TConclusionStatus TBuildSlicesTask::DoExecute(const std::shared_ptr<ITask>& /*ta
                     Context.GetActualSchema()
                         ->NormalizeBatch(*Context.GetActualSchema(), std::make_shared<NArrow::TGeneralContainer>(OriginalBatch), columnIdsSet)
                         .DetachResult();
-                OriginalBatch = NArrow::ToBatch(normalized->BuildTableVerified(), true);
+                OriginalBatch = NArrow::ToBatch(normalized->BuildTableVerified());
             }
         }
-        WriteData.MutableWriteMeta().SetWriteMiddle2StartInstant(TMonotonic::Now());
         auto batches = BuildSlices();
-        WriteData.MutableWriteMeta().SetWriteMiddle3StartInstant(TMonotonic::Now());
         if (batches) {
             auto writeDataPtr = std::make_shared<NEvWrite::TWriteData>(std::move(WriteData));
             writeDataPtr->SetSchemaSubset(std::move(subset));
@@ -186,9 +187,8 @@ TConclusionStatus TBuildSlicesTask::DoExecute(const std::shared_ptr<ITask>& /*ta
             TActorContext::AsActorContext().Send(Context.GetBufferizationInsertionActorId(), result.release());
         } else {
             ReplyError("Cannot slice input to batches", NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass::Internal);
-            return TConclusionStatus::Fail("Cannot slice input to batches");
+            return;
         }
     }
-    return TConclusionStatus::Success();
 }
 }   // namespace NKikimr::NOlap

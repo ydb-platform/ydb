@@ -12,6 +12,7 @@ ENDIF()
 SRCDIR(yql/essentials/minikql/computation)
 
 SRCS(
+    mkql_block_trimmer_ut.cpp
     mkql_computation_node_holders_ut.cpp
     mkql_computation_node_pack_ut.cpp
     mkql_computation_node_list_ut.cpp
@@ -23,6 +24,7 @@ SRCS(
     mkql_value_builder_ut.cpp
     presort_ut.cpp
     mkql_vector_spiller_adapter_ut.cpp
+    mkql_method_address_helper_ut.cpp
 )
 
 PEERDIR(

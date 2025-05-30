@@ -4,6 +4,7 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/auth.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/base/ticket_parser.h>
@@ -59,6 +60,10 @@ public:
 
         SendRequest(ctx);
         TBase::Become(&TConsoleRequestActor::MainState);
+
+        if (const auto timeout = TDuration::MilliSeconds(Request.GetTimeoutMs())) {
+            ctx.Schedule(timeout, new TEvents::TEvWakeup());
+        }
     }
 
     void SendRequest(const TActorContext &ctx)
@@ -77,6 +82,7 @@ public:
             auto request = MakeHolder<TEvConsole::TEvCreateTenantRequest>();
             request->Record.CopyFrom(Request.GetCreateTenantRequest());
             request->Record.SetUserToken(TBase::GetSerializedToken());
+            request->Record.SetPeerName(TBase::GetPeerName());
             NTabletPipe::SendData(ctx, ConsolePipe, request.Release());
         } else if (Request.HasGetConfigRequest()) {
             auto request = MakeHolder<TEvConsole::TEvGetConfigRequest>();
@@ -326,6 +332,10 @@ public:
         SendReplyAndDie(ctx);
     }
 
+    void HandleTimeout(const TActorContext &ctx) {
+        ReplyWithErrorAndDie(Ydb::StatusIds::TIMEOUT, "Console request timed out", ctx);
+    }
+
     STFUNC(MainState) {
         switch (ev->GetTypeRewrite()) {
             CFunc(TEvents::TEvUndelivered::EventType, Undelivered);
@@ -345,6 +355,7 @@ public:
             HFunc(TEvConsole::TEvToggleConfigValidatorResponse, Handle);
             CFunc(TEvTabletPipe::EvClientDestroyed, Undelivered);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
+            SFunc(TEvents::TEvWakeup, HandleTimeout);
         default:
             Y_ABORT("TConsoleRequestActor::MainState unexpected event type: %" PRIx32 " event: %s",
                    ev->GetTypeRewrite(),
@@ -353,17 +364,10 @@ public:
     }
 
     bool CheckAccessGetNodeConfig() const {
-        const auto serializedToken = TBase::GetSerializedToken();
-        // Empty serializedToken means token is not required. Checked in secure_request.h
-        if (!serializedToken.empty() && !AppData()->RegisterDynamicNodeAllowedSIDs.empty()) {
-            NACLib::TUserToken token(serializedToken);
-            for (const auto& sid : AppData()->RegisterDynamicNodeAllowedSIDs) {
-                if (token.IsExist(sid)) {
-                    return true;
-                }
-            }
-            return false;
+        if (TBase::IsTokenRequired()) {
+            return IsTokenAllowed(TBase::GetParsedToken().Get(), AppData()->RegisterDynamicNodeAllowedSIDs);
         }
+        // if token is not required access is granted
         return true;
     }
 

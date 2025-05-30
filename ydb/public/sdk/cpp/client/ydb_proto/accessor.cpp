@@ -2,7 +2,7 @@
 
 #include <ydb/public/sdk/cpp/client/ydb_value/value.h>
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 
 const Ydb::Type& TProtoAccessor::GetProto(const TType& type) {
     return type.GetProto();

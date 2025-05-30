@@ -86,7 +86,7 @@ namespace NKikimr {
             : BlockedGeneration(blockGen)
         {}
 
-        void Merge(const TMemRecBlock& rec, const TKeyBlock& /*key*/) {
+        void Merge(const TMemRecBlock& rec, const TKeyBlock& /*key*/, bool /*clearLocal*/, TBlobStorageGroupType /*gtype*/) {
             BlockedGeneration = Max(BlockedGeneration, rec.BlockedGeneration);
         }
 

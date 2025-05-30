@@ -10,6 +10,7 @@
 #include <yt/cpp/mapreduce/interface/operation.h>
 
 #include <yt/cpp/mapreduce/interface/logging/logger.h>
+#include <yt/cpp/mapreduce/interface/logging/structured.h>
 #include <yt/cpp/mapreduce/interface/logging/yt_log.h>
 
 #include <yt/cpp/mapreduce/io/job_reader.h>
@@ -41,7 +42,7 @@ namespace {
 
 void WriteVersionToLog()
 {
-    YT_LOG_INFO("Wrapper version: %v",
+    YT_LOG_DEBUG("Wrapper version: %v",
         TProcessState::Get()->ClientVersion);
 }
 
@@ -180,15 +181,37 @@ void CommonInitialize(TGuard<TMutex>& g)
     auto logPath = TConfig::Get()->LogPath;
     if (logPath.empty()) {
         if (TConfig::Get()->LogUseCore) {
-            auto coreLoggingConfig = NLogging::TLogManagerConfig::CreateStderrLogger(ToCoreLogLevel(logLevel));
-            NLogging::TLogManager::Get()->Configure(coreLoggingConfig);
             SetUseCoreLog();
+            if (!NLogging::TLogManager::Get()->IsDefaultConfigured()) {
+                return;
+            }
+
+            auto coreLoggingConfig = NLogging::TLogManagerConfig::CreateStderrLogger(ToCoreLogLevel(logLevel));
+            for (const auto& rule : coreLoggingConfig->Rules) {
+                rule->ExcludeCategories = TConfig::Get()->LogExcludeCategories;
+            }
+
+            if (auto structuredLogPath = TConfig::Get()->StructuredLog) {
+                InitializeStructuredLogging(coreLoggingConfig, structuredLogPath);
+                RegisterStructuredLogWriterFactory();
+            }
+
+            NLogging::TLogManager::Get()->Configure(coreLoggingConfig);
         } else {
             auto logger = CreateStdErrLogger(logLevel);
             SetLogger(logger);
         }
     } else {
         auto coreLoggingConfig = NLogging::TLogManagerConfig::CreateLogFile(logPath, ToCoreLogLevel(logLevel));
+        for (const auto& rule : coreLoggingConfig->Rules) {
+            rule->ExcludeCategories = TConfig::Get()->LogExcludeCategories;
+        }
+
+        if (auto structuredLogPath = TConfig::Get()->StructuredLog) {
+            InitializeStructuredLogging(coreLoggingConfig, structuredLogPath);
+            RegisterStructuredLogWriterFactory();
+        }
+
         NLogging::TLogManager::Get()->Configure(coreLoggingConfig);
         SetUseCoreLog();
     }

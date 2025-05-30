@@ -20,10 +20,11 @@ public:
 
 #ifndef MKQL_DISABLE_CODEGEN
     Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* value, BasicBlock*& block) const {
-        const auto check = IsExists(value, block);
+        auto& context = ctx.Codegen.GetContext();
+        const auto check = IsExists(value, block, context);
         if (Node->IsTemporaryValue())
             ValueCleanup(Node->GetRepresentation(), value, ctx, block);
-        return MakeBoolean(check, ctx.Codegen.GetContext(), block);
+        return MakeBoolean(check, context, block);
     }
 #endif
 };

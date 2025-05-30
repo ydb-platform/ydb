@@ -114,7 +114,7 @@ THandlerInvocationOptions THandlerInvocationOptions::SetResponseCodec(NCompressi
 ////////////////////////////////////////////////////////////////////////////////
 
 TServiceBase::TMethodDescriptor::TMethodDescriptor(
-    TString method,
+    std::string method,
     TLiteHandler liteHandler,
     THeavyHandler heavyHandler)
     : Method(std::move(method))
@@ -196,6 +196,13 @@ auto TServiceBase::TMethodDescriptor::SetLogLevel(NLogging::ELogLevel value) con
 {
     auto result = *this;
     result.LogLevel = value;
+    return result;
+}
+
+auto TServiceBase::TMethodDescriptor::SetErrorLogLevel(NLogging::ELogLevel value) const -> TMethodDescriptor
+{
+    auto result = *this;
+    result.ErrorLogLevel = value;
     return result;
 }
 
@@ -324,7 +331,9 @@ TServiceBase::TPerformanceCounters::TPerformanceCounters(const NProfiling::TProf
 NProfiling::TCounter* TServiceBase::TPerformanceCounters::GetRequestsPerUserAgentCounter(TStringBuf userAgent)
 {
     return RequestsPerUserAgent_.FindOrInsert(userAgent, [&] {
-        return Profiler_.WithRequiredTag("user_agent", TString(userAgent)).Counter("/user_agent");
+        return Profiler_
+            .WithRequiredTag("user_agent", std::string(userAgent))
+            .Counter("/user_agent");
     }).first;
 }
 
@@ -344,7 +353,8 @@ public:
             std::move(incomingRequest.MemoryGuard),
             std::move(incomingRequest.MemoryUsageTracker),
             std::move(logger),
-            incomingRequest.RuntimeInfo->LogLevel.load(std::memory_order::relaxed))
+            incomingRequest.RuntimeInfo->LogLevel.load(std::memory_order::relaxed),
+            incomingRequest.RuntimeInfo->ErrorLogLevel.load(std::memory_order::relaxed))
         , Service_(std::move(service))
         , ReplyBus_(std::move(incomingRequest.ReplyBus))
         , RuntimeInfo_(incomingRequest.RuntimeInfo)
@@ -527,11 +537,13 @@ public:
             RequestId_,
             stage);
 
+        auto error = TError(NYT::EErrorCode::Timeout, "Request timed out");
+
         if (RuntimeInfo_->Descriptor.StreamingEnabled) {
-            AbortStreamsUnlessClosed(TError(NYT::EErrorCode::Timeout, "Request timed out"));
+            AbortStreamsUnlessClosed(error);
         }
 
-        CanceledList_.Fire(GetCanceledError());
+        CanceledList_.Fire(error << GetCanceledError());
 
         MethodPerformanceCounters_->TimedOutRequestCounter.Increment();
 
@@ -801,6 +813,11 @@ private:
             delimitedBuilder->AppendFormat("TosLevel: %x", RequestHeader_->tos_level());
         }
 
+        if (RequestHeader_->HasExtension(NProto::TMultiproxyTargetExt::multiproxy_target_ext)) {
+            const auto& multiproxyTargetExt = RequestHeader_->GetExtension(NProto::TMultiproxyTargetExt::multiproxy_target_ext);
+            delimitedBuilder->AppendFormat("MultiproxyTargetCluster: %v", multiproxyTargetExt.cluster());
+        }
+
         delimitedBuilder->AppendFormat("Endpoint: %v", ReplyBus_->GetEndpointDescription());
 
         delimitedBuilder->AppendFormat("BodySize: %v, AttachmentsSize: %v/%v",
@@ -875,13 +892,10 @@ private:
         try {
             TCurrentTraceContextGuard guard(TraceContext_);
             DoGuardedRun(handler);
+        } catch (const TErrorException& ex) {
+            HandleError(ex.Error());
         } catch (const std::exception& ex) {
-            const auto& descriptor = RuntimeInfo_->Descriptor;
-            if (descriptor.HandleMethodError) {
-                Service_->OnMethodError(ex, descriptor.Method);
-            }
-
-            Reply(ex);
+            HandleError(ex);
         }
     }
 
@@ -952,6 +966,15 @@ private:
             TCurrentAuthenticationIdentityGuard identityGuard(&authenticationIdentity);
             handler(this, descriptor.Options);
         }
+    }
+
+    void HandleError(TError error)
+    {
+        const auto& descriptor = RuntimeInfo_->Descriptor;
+        if (descriptor.HandleMethodError) {
+            Service_->OnMethodError(&error, descriptor.Method);
+        }
+        Reply(error);
     }
 
     std::optional<TDuration> GetTraceContextTime() const override
@@ -1157,9 +1180,9 @@ private:
         if (TraceContext_ && TraceContext_->IsRecorded()) {
             TraceContext_->AddTag(ResponseInfoAnnotation, logMessage);
         }
-        YT_LOG_EVENT_WITH_DYNAMIC_ANCHOR(Logger, LogLevel_, RuntimeInfo_->ResponseLoggingAnchor, logMessage);
+        auto logLevel = Error_.IsOK() ? LogLevel_ : ErrorLogLevel_;
+        YT_LOG_EVENT_WITH_DYNAMIC_ANCHOR(Logger, logLevel, RuntimeInfo_->ResponseLoggingAnchor, logMessage);
     }
-
 
     void CreateRequestAttachmentsStream()
     {
@@ -1652,8 +1675,6 @@ TServiceBase::TServiceBase(
     Profiler_.AddFuncGauge("/authentication_queue_size", MakeStrong(this), [this] {
         return AuthenticationQueueSize_.load(std::memory_order::relaxed);
     });
-
-    ServiceLivenessChecker_->Start();
 }
 
 const TServiceId& TServiceBase::GetServiceId() const
@@ -1813,18 +1834,26 @@ void TServiceBase::ReplyError(TError error, TIncomingRequest&& incomingRequest)
         << TErrorAttribute("method", incomingRequest.Method)
         << TErrorAttribute("endpoint", incomingRequest.ReplyBus->GetEndpointDescription());
 
+    NLogging::ELogLevel logLevel = NLogging::ELogLevel::Debug;
+    if (incomingRequest.RuntimeInfo) {
+        logLevel = incomingRequest.RuntimeInfo->ErrorLogLevel;
+        const auto& descriptor = incomingRequest.RuntimeInfo->Descriptor;
+        if (descriptor.HandleMethodError) {
+            OnMethodError(&richError, descriptor.Method);
+        }
+    }
     auto code = richError.GetCode();
-    auto logLevel =
-        code == NRpc::EErrorCode::NoSuchMethod || code == NRpc::EErrorCode::ProtocolError
-        ? NLogging::ELogLevel::Warning
-        : NLogging::ELogLevel::Debug;
+    if (code == NRpc::EErrorCode::NoSuchMethod || code == NRpc::EErrorCode::ProtocolError) {
+        logLevel = NLogging::ELogLevel::Warning;
+    }
+
     YT_LOG_EVENT(Logger, logLevel, richError);
 
     auto errorMessage = CreateErrorResponseMessage(incomingRequest.RequestId, richError);
     YT_UNUSED_FUTURE(incomingRequest.ReplyBus->Send(errorMessage));
 }
 
-void TServiceBase::OnMethodError(const TError& /*error*/, const TString& /*method*/)
+void TServiceBase::OnMethodError(TError* /*error*/, const std::string& /*method*/)
 { }
 
 void TServiceBase::OnRequestAuthenticated(
@@ -2318,7 +2347,6 @@ TServiceBase::TMethodPerformanceCountersPtr TServiceBase::CreateMethodPerformanc
 
     auto profiler = runtimeInfo->Profiler.WithSparse();
     if (userTag) {
-        // TODO(babenko): migrate to std::string
         profiler = profiler.WithTag("user", std::string(userTag));
     }
     if (runtimeInfo->Descriptor.RequestQueueProvider) {
@@ -2429,6 +2457,25 @@ void TServiceBase::DecrementActiveRequestCount()
 void TServiceBase::InitContext(IServiceContext* /*context*/)
 { }
 
+void TServiceBase::StartServiceLivenessChecker()
+{
+    // Fast path.
+    if (ServiceLivenessCheckerStarted_.load(std::memory_order::relaxed)) {
+        return;
+    }
+    if (ServiceLivenessCheckerStarted_.exchange(true)) {
+        return;
+    }
+
+    if (auto checker = ServiceLivenessChecker_.Acquire()) {
+        checker->Start();
+        // There may be concurrent ServiceLivenessChecker_.Exchange() call in Stop().
+        if (!ServiceLivenessChecker_.Acquire()) {
+            YT_UNUSED_FUTURE(checker->Stop());
+        }
+    }
+}
+
 void TServiceBase::RegisterDiscoverRequest(const TCtxDiscoverPtr& context)
 {
     auto payload = GetDiscoverRequestPayload(context);
@@ -2438,6 +2485,7 @@ void TServiceBase::RegisterDiscoverRequest(const TCtxDiscoverPtr& context)
     auto it = DiscoverRequestsByPayload_.find(payload);
     if (it == DiscoverRequestsByPayload_.end()) {
         readerGuard.Release();
+        StartServiceLivenessChecker();
         auto writerGuard = WriterGuard(DiscoverRequestsByPayloadLock_);
         DiscoverRequestsByPayload_[payload].Insert(context, 0);
     } else {
@@ -2483,7 +2531,7 @@ void TServiceBase::OnDiscoverRequestReplyDelayReached(TCtxDiscoverPtr context)
     }
 }
 
-TString TServiceBase::GetDiscoverRequestPayload(const TCtxDiscoverPtr& context)
+std::string TServiceBase::GetDiscoverRequestPayload(const TCtxDiscoverPtr& context)
 {
     auto request = context->Request();
     request.set_reply_delay(0);
@@ -2497,7 +2545,7 @@ void TServiceBase::OnServiceLivenessCheck()
     {
         auto writerGuard = WriterGuard(DiscoverRequestsByPayloadLock_);
 
-        std::vector<TString> payloadsToReply;
+        std::vector<std::string> payloadsToReply;
         for (const auto& [payload, requests] : DiscoverRequestsByPayload_) {
             auto empty = true;
             auto isUp = false;
@@ -2554,6 +2602,7 @@ TServiceBase::TRuntimeMethodInfoPtr TServiceBase::RegisterMethod(const TMethodDe
     runtimeInfo->ConcurrencyLimit.Reconfigure(descriptor.ConcurrencyLimit);
     runtimeInfo->ConcurrencyByteLimit.Reconfigure(descriptor.ConcurrencyByteLimit);
     runtimeInfo->LogLevel.store(descriptor.LogLevel);
+    runtimeInfo->ErrorLogLevel.store(descriptor.ErrorLogLevel.value_or(descriptor.LogLevel));
     runtimeInfo->LoggingSuppressionTimeout.store(descriptor.LoggingSuppressionTimeout);
 
     // Failure here means that such method is already registered.
@@ -2642,9 +2691,12 @@ void TServiceBase::DoConfigure(
             runtimeInfo->QueueByteSizeLimit.store(methodConfig->QueueByteSizeLimit.value_or(descriptor.QueueByteSizeLimit));
             runtimeInfo->ConcurrencyLimit.Reconfigure(methodConfig->ConcurrencyLimit.value_or(descriptor.ConcurrencyLimit));
             runtimeInfo->ConcurrencyByteLimit.Reconfigure(methodConfig->ConcurrencyByteLimit.value_or(descriptor.ConcurrencyByteLimit));
-            runtimeInfo->LogLevel.store(methodConfig->LogLevel.value_or(descriptor.LogLevel));
             runtimeInfo->LoggingSuppressionTimeout.store(methodConfig->LoggingSuppressionTimeout.value_or(descriptor.LoggingSuppressionTimeout));
             runtimeInfo->Pooled.store(methodConfig->Pooled.value_or(config->Pooled.value_or(descriptor.Pooled)));
+            auto logLevel = methodConfig->LogLevel.value_or(descriptor.LogLevel);
+            auto errorLogLevel = methodConfig->ErrorLogLevel.value_or(descriptor.ErrorLogLevel.value_or(logLevel));
+            runtimeInfo->LogLevel.store(logLevel);
+            runtimeInfo->ErrorLogLevel.store(errorLogLevel);
 
             {
                 auto guard = Guard(runtimeInfo->RequestQueuesLock);
@@ -2704,8 +2756,9 @@ TFuture<void> TServiceBase::Stop()
         }
     }
 
-    YT_UNUSED_FUTURE(ServiceLivenessChecker_->Stop());
-
+    if (auto checker = ServiceLivenessChecker_.Exchange(nullptr)) {
+        YT_UNUSED_FUTURE(checker->Stop());
+    }
     return StopResult_.ToFuture();
 }
 
@@ -2735,7 +2788,7 @@ void TServiceBase::BeforeInvoke(NRpc::IServiceContext* /*context*/)
 
 bool TServiceBase::IsUp(const TCtxDiscoverPtr& /*context*/)
 {
-    VERIFY_THREAD_AFFINITY_ANY();
+    YT_ASSERT_THREAD_AFFINITY_ANY();
 
     return true;
 }
@@ -2743,11 +2796,11 @@ bool TServiceBase::IsUp(const TCtxDiscoverPtr& /*context*/)
 void TServiceBase::EnrichDiscoverResponse(TRspDiscover* /*response*/)
 { }
 
-std::vector<TString> TServiceBase::SuggestAddresses()
+std::vector<std::string> TServiceBase::SuggestAddresses()
 {
-    VERIFY_THREAD_AFFINITY_ANY();
+    YT_ASSERT_THREAD_AFFINITY_ANY();
 
-    return std::vector<TString>();
+    return std::vector<std::string>();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

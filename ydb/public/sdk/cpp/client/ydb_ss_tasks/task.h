@@ -5,7 +5,7 @@
 
 #include <ydb/public/sdk/cpp/client/ydb_types/s3_settings.h>
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 namespace NSchemeShard {
 
 class TBackgroundProcessesResponse: public TOperation {

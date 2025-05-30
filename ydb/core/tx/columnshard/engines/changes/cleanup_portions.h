@@ -1,6 +1,7 @@
 #pragma once
 #include "abstract/abstract.h"
 #include "abstract/remove_portions.h"
+#include <ydb/core/tx/columnshard/common/path_id.h>
 
 namespace NKikimr::NOlap {
 
@@ -11,7 +12,7 @@ private:
     THashMap<TString, std::vector<std::shared_ptr<TPortionInfo>>> StoragePortions;
     std::vector<TPortionInfo::TConstPtr> PortionsToDrop;
     TRemovePortionsChange PortionsToRemove;
-    THashSet<ui64> TablesToDrop;
+    THashSet<TInternalPathId> TablesToDrop;
 
 protected:
     virtual void OnDataAccessorsInitialized(const TDataAccessorsInitializationContext& /*context*/) override {
@@ -53,7 +54,7 @@ public:
         : TBase(storagesManager, NBlobOperations::EConsumer::CLEANUP_PORTIONS) {
     }
 
-    void AddTableToDrop(const ui64 pathId) {
+    void AddTableToDrop(const TInternalPathId pathId) {
         TablesToDrop.emplace(pathId);
     }
 
@@ -68,6 +69,7 @@ public:
 
     void AddPortionToRemove(const TPortionInfo::TConstPtr& portion) {
         PortionsToRemove.AddPortion(portion);
+        PortionsToAccess->AddPortion(portion);
     }
 
     virtual ui32 GetWritePortionsCount() const override {

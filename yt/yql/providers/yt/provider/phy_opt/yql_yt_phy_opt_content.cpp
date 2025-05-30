@@ -2,6 +2,7 @@
 
 #include <yt/yql/providers/yt/provider/yql_yt_helpers.h>
 #include <yt/yql/providers/yt/provider/yql_yt_optimize.h>
+#include <yt/yql/providers/yt/provider/phy_opt/yql_yt_phy_opt_helper.h>
 
 namespace NYql {
 
@@ -9,6 +10,11 @@ using namespace NNodes;
 
 TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::TableContentWithSettings(TExprBase node, TExprContext& ctx) const {
     auto op = node.Cast<TYtOutputOpBase>();
+    const TYtDSink& opDataSink = op.DataSink();
+    if (opDataSink.Cluster().Value() == YtUnspecifiedCluster) {
+        return node;
+    }
+
 
     TExprNode::TPtr res = op.Ptr();
 
@@ -22,12 +28,12 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::TableContentWithSetting
 
         if (auto read = TMaybeNode<TYtLength>(input).Input().Maybe<TYtReadTable>()) {
             nodesToOptimize.insert(read.Cast().Raw());
-            return false;
+            return true;
         }
 
         if (auto read = TMaybeNode<TYtTableContent>(input).Input().Maybe<TYtReadTable>()) {
             nodesToOptimize.insert(read.Cast().Raw());
-            return false;
+            return true;
         }
         if (TYtOutput::Match(input.Get())) {
             processedNodes.insert(input->UniqueId());
@@ -78,20 +84,24 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::TableContentWithSetting
 
 TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::NonOptimalTableContent(TExprBase node, TExprContext& ctx) const {
     auto op = node.Cast<TYtOutputOpBase>();
+    const TYtDSink& opDataSink = op.DataSink();
+    if (opDataSink.Cluster().Value() == YtUnspecifiedCluster) {
+        return node;
+    }
 
     TExprNode::TPtr res = op.Ptr();
 
     TNodeSet nodesToOptimize;
     TProcessedNodesSet processedNodes;
     processedNodes.insert(res->Head().UniqueId());
-    VisitExpr(res, [&nodesToOptimize, &processedNodes](const TExprNode::TPtr& input) {
+    VisitExpr(res, [&](const TExprNode::TPtr& input) {
         if (processedNodes.contains(input->UniqueId())) {
             return false;
         }
 
         if (TYtTableContent::Match(input.Get())) {
             nodesToOptimize.insert(input.Get());
-            return false;
+            return true;
         }
         if (TYtOutput::Match(input.Get())) {
             processedNodes.insert(input->UniqueId());
@@ -112,7 +122,9 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::NonOptimalTableContent(
     auto world = res->ChildPtr(TYtOutputOpBase::idx_World);
     TOptimizeExprSettings settings(State_->Types);
     settings.ProcessedNodes = &processedNodes; // Prevent optimizer to go deeper than current operation
-    auto status = OptimizeExpr(res, res, [&syncList, &nodesToOptimize, maxTables, minChunkSize, maxChunks, state, world](const TExprNode::TPtr& input, TExprContext& ctx) -> TExprNode::TPtr {
+    auto status = OptimizeExpr(res, res, [&syncList, &nodesToOptimize, maxTables, minChunkSize, maxChunks, state, world, &opDataSink]
+        (const TExprNode::TPtr& input, TExprContext& ctx) -> TExprNode::TPtr
+    {
         if (nodesToOptimize.find(input.Get()) != nodesToOptimize.end()) {
             if (auto read = TYtTableContent(input).Input().Maybe<TYtReadTable>()) {
                 bool materialize = false;
@@ -123,6 +135,9 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::NonOptimalTableContent(
                         materialize = true;
                     }
                     else if (section.Paths().Size() > maxTables) {
+                        materialize = true;
+                    }
+                    else if (GetClusterFromSection(section) != opDataSink.Cluster().Value()) {
                         materialize = true;
                     }
                     else {
@@ -154,9 +169,12 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::NonOptimalTableContent(
                         }
                     }
                     if (materialize) {
+                        if (!NPrivate::EnsurePersistableYsonTypes(section.Pos(), *section.Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType(), ctx, state)) {
+                            return {};
+                        }
                         auto path = CopyOrTrivialMap(section.Pos(),
                             TExprBase(world),
-                            TYtDSink(ctx.RenameNode(read.DataSource().Ref(), "DataSink")),
+                            TYtDSink(opDataSink),
                             *section.Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType(),
                             Build<TYtSection>(ctx, section.Pos())
                                 .Paths(section.Paths())
@@ -201,54 +219,62 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::NonOptimalTableContent(
             }
             else if (auto out = TYtTableContent(input).Input().Maybe<TYtOutput>()) {
                 auto oldOp = GetOutputOp(out.Cast());
-                if (!oldOp.Maybe<TYtMerge>() || !NYql::HasSetting(oldOp.Cast<TYtMerge>().Settings().Ref(), EYtSettingType::CombineChunks)) {
+                const bool sameCluster = opDataSink.Cluster().Value() == oldOp.DataSink().Cluster().Value();
+                if (!sameCluster || !oldOp.Maybe<TYtMerge>() || !NYql::HasSetting(oldOp.Cast<TYtMerge>().Settings().Ref(), EYtSettingType::CombineChunks)) {
                     auto outTable = GetOutTable(out.Cast());
                     TYtOutTableInfo tableInfo(outTable);
-                    if (auto tableStat = tableInfo.Stat) {
-                        if (tableStat->ChunkCount > maxChunks || (tableStat->ChunkCount > 1 && tableStat->DataSize / tableStat->ChunkCount < minChunkSize)) {
-                            auto newOp = Build<TYtMerge>(ctx, input->Pos())
-                                .World(world)
-                                .DataSink(oldOp.DataSink())
-                                .Output()
-                                    .Add()
-                                        .InitFrom(outTable.Cast<TYtOutTable>())
-                                        .Name().Value("").Build()
-                                        .Stat<TCoVoid>().Build()
-                                    .Build()
+
+                    bool needMerge = false;
+                    if (!sameCluster) {
+                        needMerge = true;
+                    } else if (tableInfo.Stat) {
+                        auto tableStat = tableInfo.Stat;
+                        needMerge = tableStat->ChunkCount > maxChunks || (tableStat->ChunkCount > 1 && tableStat->DataSize / tableStat->ChunkCount < minChunkSize);
+                    }
+
+                    if (needMerge) {
+                        auto newOp = Build<TYtMerge>(ctx, input->Pos())
+                            .World(world)
+                            .DataSink(opDataSink)
+                            .Output()
+                                .Add()
+                                    .InitFrom(outTable.Cast<TYtOutTable>())
+                                    .Name().Value("").Build()
+                                    .Stat<TCoVoid>().Build()
                                 .Build()
-                                .Input()
-                                    .Add()
-                                        .Paths()
-                                            .Add()
-                                                .Table(out.Cast())
-                                                .Columns<TCoVoid>().Build()
-                                                .Ranges<TCoVoid>().Build()
-                                                .Stat<TCoVoid>().Build()
-                                            .Build()
+                            .Build()
+                            .Input()
+                                .Add()
+                                    .Paths()
+                                        .Add()
+                                            .Table(out.Cast())
+                                            .Columns<TCoVoid>().Build()
+                                            .Ranges<TCoVoid>().Build()
+                                            .Stat<TCoVoid>().Build()
                                         .Build()
-                                        .Settings<TCoNameValueTupleList>()
-                                        .Build()
+                                    .Build()
+                                    .Settings<TCoNameValueTupleList>()
                                     .Build()
                                 .Build()
-                                .Settings()
-                                    .Add()
-                                        .Name().Value(ToString(EYtSettingType::CombineChunks)).Build()
-                                    .Build()
-                                    .Add()
-                                        .Name().Value(ToString(EYtSettingType::ForceTransform)).Build()
-                                    .Build()
+                            .Build()
+                            .Settings()
+                                .Add()
+                                    .Name().Value(ToString(EYtSettingType::CombineChunks)).Build()
                                 .Build()
-                                .Done();
+                                .Add()
+                                    .Name().Value(ToString(EYtSettingType::ForceTransform)).Build()
+                                .Build()
+                            .Build()
+                            .Done();
 
-                            syncList[newOp.Ptr()] = syncList.size();
+                        syncList[newOp.Ptr()] = syncList.size();
 
-                            auto newOutput = Build<TYtOutput>(ctx, input->Pos())
-                                .Operation(newOp)
-                                .OutIndex().Value(0U).Build()
-                                .Done().Ptr();
+                        auto newOutput = Build<TYtOutput>(ctx, input->Pos())
+                            .Operation(newOp)
+                            .OutIndex().Value(0U).Build()
+                            .Done().Ptr();
 
-                            return ctx.ChangeChild(*input, TYtTableContent::idx_Input, std::move(newOutput));
-                        }
+                        return ctx.ChangeChild(*input, TYtTableContent::idx_Input, std::move(newOutput));
                     }
                 }
             }

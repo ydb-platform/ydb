@@ -9,9 +9,11 @@
 #include <yql/essentials/minikql/arrow/arrow_util.h>
 #include <yql/essentials/minikql/mkql_type_builder.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
+#include <yql/essentials/minikql/computation/mkql_custom_list.h>
 #include <yql/essentials/minikql/mkql_node_builder.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 
+#include <yql/essentials/core/sql_types/block.h>
 #include <yql/essentials/parser/pg_wrapper/interface/arrow.h>
 
 #include <arrow/scalar.h>
@@ -58,10 +60,48 @@ private:
     TType* ItemType_;
 };
 
-class TWideToBlocksWrapper : public TStatefulWideFlowCodegeneratorNode<TWideToBlocksWrapper> {
-using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TWideToBlocksWrapper>;
+struct TWideToBlocksState : public TBlockState {
+    size_t Rows_ = 0;
+    bool IsFinished_ = false;
+    size_t BuilderAllocatedSize_ = 0;
+    size_t MaxBuilderAllocatedSize_ = 0;
+    std::vector<std::unique_ptr<IArrayBuilder>> Builders_;
+    static const size_t MaxAllocatedFactor_ = 4;
+
+    TWideToBlocksState(TMemoryUsageInfo* memInfo, TComputationContext& ctx, const TVector<TType*>& types, size_t maxLength)
+        : TBlockState(memInfo, types.size() + 1U)
+        , Builders_(types.size())
+    {
+        for (size_t i = 0; i < types.size(); ++i) {
+            Builders_[i] = MakeArrayBuilder(TTypeInfoHelper(), types[i], ctx.ArrowMemoryPool, maxLength, &ctx.Builder->GetPgBuilder(), &BuilderAllocatedSize_);
+        }
+        MaxBuilderAllocatedSize_ = MaxAllocatedFactor_ * BuilderAllocatedSize_;
+    }
+
+    void Add(const NUdf::TUnboxedValuePod value, size_t idx) {
+        Builders_[idx]->Add(value);
+    }
+
+    void MakeBlocks(const THolderFactory& holderFactory) {
+        Values.back() = holderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(Rows_)));
+        Rows_ = 0;
+        BuilderAllocatedSize_ = 0;
+
+        for (size_t i = 0; i < Builders_.size(); ++i) {
+            if (const auto builder = Builders_[i].get()) {
+                Values[i] = holderFactory.CreateArrowBlock(builder->Build(IsFinished_));
+            }
+        }
+
+        FillArrays();
+    }
+};
+
+class TWideToBlocksFlowWrapper : public TStatefulWideFlowCodegeneratorNode<TWideToBlocksFlowWrapper> {
+using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TWideToBlocksFlowWrapper>;
+using TState = TWideToBlocksState;
 public:
-    TWideToBlocksWrapper(TComputationMutables& mutables,
+    TWideToBlocksFlowWrapper(TComputationMutables& mutables,
         IComputationWideFlowNode* flow,
         TVector<TType*>&& types)
         : TBaseComputation(mutables, flow, EValueRepresentation::Boxed)
@@ -123,11 +163,11 @@ public:
 
         const auto atTop = &ctx.Func->getEntryBlock().back();
 
-        const auto addFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::Add));
+        const auto addFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::Add>());
         const auto addType = FunctionType::get(Type::getVoidTy(context), {statePtrType, valueType, indexType}, false);
         const auto addPtr = CastInst::Create(Instruction::IntToPtr, addFunc, PointerType::getUnqual(addType), "add", atTop);
 
-        const auto getFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::Get));
+        const auto getFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::Get>());
         const auto getType = FunctionType::get(valueType, {statePtrType, indexType, ctx.GetFactory()->getType(), indexType}, false);
         const auto getPtr = CastInst::Create(Instruction::IntToPtr, getFunc, PointerType::getUnqual(getType), "get", atTop);
 
@@ -149,12 +189,12 @@ public:
         const auto over = BasicBlock::Create(context, "over", ctx.Func);
         const auto second_cond = BasicBlock::Create(context, "second_cond", ctx.Func);
 
-        BranchInst::Create(make, main, IsInvalid(statePtr, block), block);
+        BranchInst::Create(make, main, IsInvalid(statePtr, block, context), block);
         block = make;
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
         const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
-        const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TWideToBlocksWrapper::MakeState));
+        const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TWideToBlocksFlowWrapper::MakeState>());
         const auto makeType = FunctionType::get(Type::getVoidTy(context), {self->getType(), ctx.Ctx->getType(), statePtr->getType()}, false);
         const auto makeFuncPtr = CastInst::Create(Instruction::IntToPtr, makeFunc, PointerType::getUnqual(makeType), "function", block);
         CallInst::Create(makeType, makeFuncPtr, {self, ctx.Ctx, statePtr}, "", block);
@@ -208,7 +248,7 @@ public:
         BranchInst::Create(second_cond, work, next, block);
 
         block = second_cond;
-        
+
         const auto read_allocated_size = new LoadInst(indexType, allocatedSizePtr, "read_allocated_size", block);
         const auto read_max_allocated_size = new LoadInst(indexType, maxAllocatedSizePtr, "read_max_allocated_size", block);
         const auto next2 = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_ULE, read_allocated_size, read_max_allocated_size, "next2", block);
@@ -230,7 +270,7 @@ public:
 
         block = work;
 
-        const auto makeBlockFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::MakeBlocks));
+        const auto makeBlockFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::MakeBlocks>());
         const auto makeBlockType = FunctionType::get(indexType, {statePtrType, ctx.GetFactory()->getType()}, false);
         const auto makeBlockPtr = CastInst::Create(Instruction::IntToPtr, makeBlockFunc, PointerType::getUnqual(makeBlockType), "make_blocks_func", block);
         CallInst::Create(makeBlockType, makeBlockPtr, {stateArg, ctx.GetFactory()}, "", block);
@@ -239,7 +279,7 @@ public:
 
         block = fill;
 
-        const auto sliceFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::Slice));
+        const auto sliceFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::Slice>());
         const auto sliceType = FunctionType::get(indexType, {statePtrType}, false);
         const auto slicePtr = CastInst::Create(Instruction::IntToPtr, sliceFunc, PointerType::getUnqual(sliceType), "slice_func", block);
         const auto slice = CallInst::Create(sliceType, slicePtr, {stateArg}, "slice", block);
@@ -264,43 +304,6 @@ public:
     }
 #endif
 private:
-    struct TState : public TBlockState {
-        size_t Rows_ = 0;
-        bool IsFinished_ = false;
-        size_t BuilderAllocatedSize_ = 0;
-        size_t MaxBuilderAllocatedSize_ = 0;
-        std::vector<std::unique_ptr<IArrayBuilder>> Builders_;
-        static const size_t MaxAllocatedFactor_ = 4;
-
-        TState(TMemoryUsageInfo* memInfo, TComputationContext& ctx, const TVector<TType*>& types, size_t maxLength, NUdf::TUnboxedValue**const fields)
-            : TBlockState(memInfo, types.size() + 1U)
-            , Builders_(types.size())
-        {
-            for (size_t i = 0; i < types.size(); ++i) {
-                fields[i] = &Values[i];
-                Builders_[i] = MakeArrayBuilder(TTypeInfoHelper(), types[i], ctx.ArrowMemoryPool, maxLength, &ctx.Builder->GetPgBuilder(), &BuilderAllocatedSize_);
-            }
-            MaxBuilderAllocatedSize_ = MaxAllocatedFactor_ * BuilderAllocatedSize_;
-        }
-
-        void Add(const NUdf::TUnboxedValuePod value, size_t idx) {
-            Builders_[idx]->Add(value);
-        }
-
-        void MakeBlocks(const THolderFactory& holderFactory) {
-            Values.back() = holderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(Rows_)));
-            Rows_ = 0;
-            BuilderAllocatedSize_ = 0;
-
-            for (size_t i = 0; i < Builders_.size(); ++i) {
-                if (const auto builder = Builders_[i].get()) {
-                    Values[i] = holderFactory.CreateArrowBlock(builder->Build(IsFinished_));
-                }
-            }
-
-            FillArrays();
-        }
-    };
 #ifndef MKQL_DISABLE_CODEGEN
     class TLLVMFieldsStructureState: public TLLVMFieldsStructureBlockState {
     private:
@@ -351,12 +354,18 @@ private:
     }
 
     void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state) const {
-        state = ctx.HolderFactory.Create<TState>(ctx, Types_, MaxLength_, ctx.WideFields.data() + WideFieldsIndex_);
+        state = ctx.HolderFactory.Create<TState>(ctx, Types_, MaxLength_);
     }
 
     TState& GetState(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
-        if (state.IsInvalid())
+        if (state.IsInvalid()) {
             MakeState(ctx, state);
+            auto& s = *static_cast<TState*>(state.AsBoxed().Get());
+            const auto fields = ctx.WideFields.data() + WideFieldsIndex_;
+            for (size_t i = 0; i < Width_; ++i)
+                fields[i] = &s.Values[i];
+            return s;
+        }
         return *static_cast<TState*>(state.AsBoxed().Get());
     }
 
@@ -366,6 +375,309 @@ private:
     const size_t MaxLength_;
     const size_t Width_;
     const size_t WideFieldsIndex_;
+};
+
+class TWideToBlocksStreamWrapper : public TMutableComputationNode<TWideToBlocksStreamWrapper>
+{
+using TBaseComputation = TMutableComputationNode<TWideToBlocksStreamWrapper>;
+using TState = TWideToBlocksState;
+public:
+    TWideToBlocksStreamWrapper(TComputationMutables& mutables,
+        IComputationNode* stream,
+        TVector<TType*>&& types)
+        : TBaseComputation(mutables, EValueRepresentation::Boxed)
+        , Stream_(stream)
+        , Types_(std::move(types))
+        , MaxLength_(CalcBlockLen(std::accumulate(Types_.cbegin(), Types_.cend(), 0ULL, [](size_t max, const TType* type){ return std::max(max, CalcMaxBlockItemSize(type)); })))
+    {}
+
+    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const
+    {
+        const auto state = ctx.HolderFactory.Create<TState>(ctx, Types_, MaxLength_);
+        return ctx.HolderFactory.Create<TStreamValue>(ctx.HolderFactory,
+                                                      std::move(state),
+                                                      std::move(Stream_->GetValue(ctx)),
+                                                      MaxLength_);
+    }
+
+private:
+    class TStreamValue : public TComputationValue<TStreamValue> {
+    using TBase = TComputationValue<TStreamValue>;
+    public:
+        TStreamValue(TMemoryUsageInfo* memInfo, const THolderFactory& holderFactory,
+                     NUdf::TUnboxedValue&& blockState, NUdf::TUnboxedValue&& stream,
+                     const size_t maxLength)
+            : TBase(memInfo)
+            , BlockState_(blockState)
+            , Stream_(stream)
+            , MaxLength_(maxLength)
+            , HolderFactory_(holderFactory)
+        {}
+
+    private:
+        NUdf::EFetchStatus WideFetch(NUdf::TUnboxedValue* output, ui32 width) {
+            auto& blockState = *static_cast<TState*>(BlockState_.AsBoxed().Get());
+            auto* inputFields = blockState.Pointer_;
+            const size_t inputWidth = blockState.Values.size() - 1;
+
+            if (!blockState.Count) {
+                if (!blockState.IsFinished_) do {
+                    switch (Stream_.WideFetch(inputFields, inputWidth)) {
+                        case NUdf::EFetchStatus::Ok:
+                            for (size_t i = 0; i < inputWidth; i++)
+                                blockState.Add(blockState.Values[i], i);
+                            continue;
+                        case NUdf::EFetchStatus::Yield:
+                            return NUdf::EFetchStatus::Yield;
+                        case NUdf::EFetchStatus::Finish:
+                            blockState.IsFinished_ = true;
+                            break;
+                    }
+                    break;
+                } while (++blockState.Rows_ < MaxLength_ && blockState.BuilderAllocatedSize_ <= blockState.MaxBuilderAllocatedSize_);
+            if (blockState.Rows_)
+                blockState.MakeBlocks(HolderFactory_);
+            else
+                return NUdf::EFetchStatus::Finish;
+            }
+
+            const auto sliceSize = blockState.Slice();
+            for (size_t i = 0; i < width; i++) {
+                output[i] = blockState.Get(sliceSize, HolderFactory_, i);
+            }
+            return NUdf::EFetchStatus::Ok;
+        }
+
+        NUdf::TUnboxedValue BlockState_;
+        NUdf::TUnboxedValue Stream_;
+        const size_t MaxLength_;
+        const THolderFactory& HolderFactory_;
+    };
+
+    void RegisterDependencies() const final {
+        this->DependsOn(Stream_);
+    }
+
+    IComputationNode* const Stream_;
+    const TVector<TType*> Types_;
+    const size_t MaxLength_;
+};
+
+class TListToBlocksState : public TBlockState {
+public:
+    TListToBlocksState(TMemoryUsageInfo* memInfo, TComputationContext& ctx, const TVector<TType*>& types, size_t blockLengthIndex, size_t maxLength)
+        : TBlockState(memInfo, types.size(), blockLengthIndex)
+        , Builders_(types.size())
+        , BlockLengthIndex_(blockLengthIndex)
+        , MaxLength_(maxLength)
+    {
+        for (size_t i = 0; i < types.size(); ++i) {
+            if (i == blockLengthIndex) {
+                continue;
+            }
+            Builders_[i] = MakeArrayBuilder(TTypeInfoHelper(), types[i], ctx.ArrowMemoryPool, maxLength, &ctx.Builder->GetPgBuilder(), &BuilderAllocatedSize_);
+        }
+        MaxBuilderAllocatedSize_ = MaxAllocatedFactor_ * BuilderAllocatedSize_;
+    }
+
+    void AddRow(const NUdf::TUnboxedValuePod& row) {
+        auto items = row.GetElements();
+        size_t inputStructIdx = 0;
+        for (size_t i = 0; i < Builders_.size(); i++) {
+            if (i == BlockLengthIndex_) {
+                continue;
+            }
+            Builders_[i]->Add(items[inputStructIdx++]);
+        }
+        Rows_++;
+    }
+
+    void MakeBlocks(const THolderFactory& holderFactory) {
+        Values[BlockLengthIndex_] = holderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(Rows_)));
+        Rows_ = 0;
+        BuilderAllocatedSize_ = 0;
+
+        for (size_t i = 0; i < Builders_.size(); ++i) {
+            if (i == BlockLengthIndex_) {
+                continue;
+            }
+            Values[i] = holderFactory.CreateArrowBlock(Builders_[i]->Build(IsFinished_));
+        }
+        FillArrays();
+    }
+
+    void Finish() {
+        IsFinished_ = true;
+    }
+
+    bool IsNotFull() const {
+        return Rows_ < MaxLength_ && BuilderAllocatedSize_ <= MaxBuilderAllocatedSize_;
+    }
+
+    bool IsFinished() const {
+        return IsFinished_;
+    }
+
+    bool HasBlocks() const {
+        return Count > 0;
+    }
+
+    bool IsEmpty() const {
+        return Rows_ == 0;
+    }
+
+private:
+    size_t Rows_ = 0;
+    bool IsFinished_ = false;
+
+    size_t BuilderAllocatedSize_ = 0;
+    size_t MaxBuilderAllocatedSize_ = 0;
+
+    std::vector<std::unique_ptr<IArrayBuilder>> Builders_;
+
+    const size_t BlockLengthIndex_;
+    const size_t MaxLength_;
+    static const size_t MaxAllocatedFactor_ = 4;
+};
+
+class TListToBlocksWrapper : public TMutableComputationNode<TListToBlocksWrapper>
+{
+    using TBaseComputation = TMutableComputationNode<TListToBlocksWrapper>;
+
+public:
+    TListToBlocksWrapper(TComputationMutables& mutables,
+        IComputationNode* list,
+        TStructType* structType
+    )
+        : TBaseComputation(mutables, EValueRepresentation::Boxed)
+        , List_(list)
+    {
+        for (size_t i = 0; i < structType->GetMembersCount(); i++) {
+            if (structType->GetMemberName(i) == NYql::BlockLengthColumnName) {
+                BlockLengthIndex_ = i;
+                Types_.push_back(nullptr);
+                continue;
+            }
+            Types_.push_back(AS_TYPE(TBlockType, structType->GetMemberType(i))->GetItemType());
+        }
+
+        MaxLength_ = CalcBlockLen(std::accumulate(Types_.cbegin(), Types_.cend(), 0ULL, [](size_t max, const TType* type){
+            if (!type) {
+                return max;
+            }
+            return std::max(max, CalcMaxBlockItemSize(type));
+        }));
+    }
+
+    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const
+    {
+        return ctx.HolderFactory.Create<TListToBlocksValue>(
+            ctx,
+            Types_,
+            BlockLengthIndex_,
+            List_->GetValue(ctx),
+            MaxLength_
+        );
+    }
+
+private:
+    class TListToBlocksValue : public TCustomListValue {
+        using TState = TListToBlocksState;
+
+    public:
+        class TIterator : public TComputationValue<TIterator> {
+        public:
+            TIterator(TMemoryUsageInfo* memInfo, const THolderFactory& holderFactory, NUdf::TUnboxedValue&& blockState, NUdf::TUnboxedValue&& iter)
+                : TComputationValue<TIterator>(memInfo)
+                , HolderFactory_(holderFactory)
+                , BlockState_(std::move(blockState))
+                , Iter_(std::move(iter))
+            {}
+
+        private:
+            bool Next(NUdf::TUnboxedValue& value) final {
+                auto& blockState = *static_cast<TState*>(BlockState_.AsBoxed().Get());
+                const size_t structSize = blockState.Values.size();
+
+                if (!blockState.HasBlocks()) {
+                    while (!blockState.IsFinished() && blockState.IsNotFull()) {
+                        if (Iter_.Next(Row_)) {
+                            blockState.AddRow(Row_);
+                        } else {
+                            blockState.Finish();
+                        }
+                    }
+                    if (blockState.IsEmpty()) {
+                        return false;
+                    }
+                    blockState.MakeBlocks(HolderFactory_);
+                }
+
+                NUdf::TUnboxedValue* items = nullptr;
+                value = HolderFactory_.CreateDirectArrayHolder(structSize, items);
+
+                const auto sliceSize = blockState.Slice();
+                for (size_t i = 0; i < structSize; i++) {
+                    items[i] = blockState.Get(sliceSize, HolderFactory_, i);
+                }
+
+                return true;
+            }
+
+        private:
+            const THolderFactory& HolderFactory_;
+
+            const NUdf::TUnboxedValue BlockState_;
+            const NUdf::TUnboxedValue Iter_;
+
+            NUdf::TUnboxedValue Row_;
+        };
+
+        TListToBlocksValue(TMemoryUsageInfo* memInfo, TComputationContext& ctx,
+            const TVector<TType*>& types, ui32 blockLengthIndex, NUdf::TUnboxedValue&& list, size_t maxLength
+        )
+            : TCustomListValue(memInfo)
+            , CompCtx_(ctx)
+            , Types_(types)
+            , BlockLengthIndex_(blockLengthIndex)
+            , List_(std::move(list))
+            , MaxLength_(maxLength)
+        {}
+
+    private:
+        NUdf::TUnboxedValue GetListIterator() const final {
+            auto state = CompCtx_.HolderFactory.Create<TState>(CompCtx_, Types_, BlockLengthIndex_, MaxLength_);
+            return CompCtx_.HolderFactory.Create<TIterator>(CompCtx_.HolderFactory, std::move(state), List_.GetListIterator());
+        }
+
+        bool HasListItems() const final {
+            if (!HasItems.has_value()) {
+                HasItems = List_.HasListItems();
+            }
+            return *HasItems;
+        }
+
+    private:
+        TComputationContext& CompCtx_;
+
+        const TVector<TType*>& Types_;
+        size_t BlockLengthIndex_ = 0;
+
+        NUdf::TUnboxedValue List_;
+        const size_t MaxLength_;
+    };
+
+    void RegisterDependencies() const final {
+        this->DependsOn(List_);
+    }
+
+private:
+    TVector<TType*> Types_;
+    size_t BlockLengthIndex_ = 0;
+
+    IComputationNode* const List_;
+
+    size_t MaxLength_ = 0;
 };
 
 class TFromBlocksWrapper : public TStatefulFlowCodegeneratorNode<TFromBlocksWrapper> {
@@ -402,12 +714,12 @@ public:
         const auto init = BasicBlock::Create(context, "init", ctx.Func);
         const auto done = BasicBlock::Create(context, "done", ctx.Func);
 
-        BranchInst::Create(make, work, IsInvalid(statePtr, block), block);
+        BranchInst::Create(make, work, IsInvalid(statePtr, block, context), block);
         block = make;
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
         const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
-        const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TFromBlocksWrapper::MakeState));
+        const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TFromBlocksWrapper::MakeState>());
         const auto makeType = FunctionType::get(Type::getVoidTy(context), {self->getType(), ctx.Ctx->getType(), statePtr->getType()}, false);
         const auto makeFuncPtr = CastInst::Create(Instruction::IntToPtr, makeFunc, PointerType::getUnqual(makeType), "function", block);
         CallInst::Create(makeType, makeFuncPtr, {self, ctx.Ctx, statePtr}, "", block);
@@ -419,7 +731,7 @@ public:
         const auto half = CastInst::Create(Instruction::Trunc, state, Type::getInt64Ty(context), "half", block);
         const auto stateArg = CastInst::Create(Instruction::IntToPtr, half, statePtrType, "state_arg", block);
 
-        const auto getFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::GetValue));
+        const auto getFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::GetValue>());
         const auto getType = FunctionType::get(valueType, {statePtrType, ctx.GetFactory()->getType()}, false);
         const auto getPtr = CastInst::Create(Instruction::IntToPtr, getFunc, PointerType::getUnqual(getType), "get", block);
         const auto value = CallInst::Create(getType, getPtr, {stateArg, ctx.GetFactory() }, "value", block);
@@ -427,18 +739,18 @@ public:
         const auto result = PHINode::Create(valueType, 2U, "result", done);
         result->addIncoming(value, block);
 
-        BranchInst::Create(read, done, IsInvalid(value, block), block);
+        BranchInst::Create(read, done, IsInvalid(value, block, context), block);
 
         block = read;
 
         const auto input = GetNodeValue(Flow_, ctx, block);
         result->addIncoming(input, block);
 
-        BranchInst::Create(done, init, IsSpecial(input, block), block);
+        BranchInst::Create(done, init, IsSpecial(input, block, context), block);
 
         block = init;
 
-        const auto setFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::Reset));
+        const auto setFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::Reset>());
         const auto setType = FunctionType::get(valueType, {statePtrType, valueType}, false);
         const auto setPtr = CastInst::Create(Instruction::IntToPtr, setFunc, PointerType::getUnqual(setType), "set", block);
         CallInst::Create(setType, setPtr, {stateArg, input }, "", block);
@@ -517,10 +829,54 @@ private:
     TType* ItemType_;
 };
 
-class TWideFromBlocksWrapper : public TStatefulWideFlowCodegeneratorNode<TWideFromBlocksWrapper> {
-using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TWideFromBlocksWrapper>;
+struct TWideFromBlocksState : public TComputationValue<TWideFromBlocksState> {
+    size_t Count_ = 0;
+    size_t Index_ = 0;
+    size_t Current_ = 0;
+    NUdf::TUnboxedValue* Pointer_ = nullptr;
+    TUnboxedValueVector Values_;
+    std::vector<std::unique_ptr<IBlockReader>> Readers_;
+    std::vector<std::unique_ptr<IBlockItemConverter>> Converters_;
+    const std::vector<arrow::ValueDescr> ValuesDescr_;
+
+    TWideFromBlocksState(TMemoryUsageInfo* memInfo, TComputationContext& ctx, const TVector<TType*>& types)
+        : TComputationValue(memInfo)
+        , Values_(types.size() + 1)
+        , ValuesDescr_(ToValueDescr(types))
+    {
+        Pointer_ = Values_.data();
+
+        const auto& pgBuilder = ctx.Builder->GetPgBuilder();
+        for (size_t i = 0; i < types.size(); ++i) {
+            const TType* blockItemType = AS_TYPE(TBlockType, types[i])->GetItemType();
+            Readers_.push_back(MakeBlockReader(TTypeInfoHelper(), blockItemType));
+            Converters_.push_back(MakeBlockItemConverter(TTypeInfoHelper(), blockItemType, pgBuilder));
+        }
+    }
+
+    void ClearValues() {
+        Values_.assign(Values_.size(), NUdf::TUnboxedValuePod());
+    }
+
+    NUdf::TUnboxedValuePod Get(const THolderFactory& holderFactory, size_t idx) const {
+        TBlockItem item;
+        const auto& datum = TArrowBlock::From(Values_[idx]).GetDatum();
+        ARROW_DEBUG_CHECK_DATUM_TYPES(ValuesDescr_[idx], datum.descr());
+        if (datum.is_scalar()) {
+            item = Readers_[idx]->GetScalarItem(*datum.scalar());
+        } else {
+            MKQL_ENSURE(datum.is_array(), "Expecting array");
+            item = Readers_[idx]->GetItem(*datum.array(), Current_);
+        }
+        return Converters_[idx]->MakeValue(item, holderFactory);
+    }
+};
+
+class TWideFromBlocksFlowWrapper : public TStatefulWideFlowCodegeneratorNode<TWideFromBlocksFlowWrapper> {
+using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TWideFromBlocksFlowWrapper>;
+using TState = TWideFromBlocksState;
 public:
-    TWideFromBlocksWrapper(TComputationMutables& mutables,
+    TWideFromBlocksFlowWrapper(TComputationMutables& mutables,
         IComputationWideFlowNode* flow,
         TVector<TType*>&& types)
         : TBaseComputation(mutables, flow, EValueRepresentation::Boxed)
@@ -557,7 +913,6 @@ public:
 
         const auto width = Types_.size();
         const auto valueType = Type::getInt128Ty(context);
-        const auto ptrValueType = PointerType::getUnqual(valueType);
         const auto statusType = Type::getInt32Ty(context);
         const auto indexType = Type::getInt64Ty(context);
         const auto arrayType = ArrayType::get(valueType, width);
@@ -567,7 +922,7 @@ public:
         const auto stateType = StructType::get(context, stateFields.GetFieldsArray());
         const auto statePtrType = PointerType::getUnqual(stateType);
 
-        const auto getFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::Get));
+        const auto getFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::Get>());
         const auto getType = FunctionType::get(valueType, {statePtrType, ctx.GetFactory()->getType(), indexType}, false);
         const auto getPtr = CastInst::Create(Instruction::IntToPtr, getFunc, PointerType::getUnqual(getType), "get", &ctx.Func->getEntryBlock().back());
         const auto stateOnStack = new AllocaInst(statePtrType, 0U, "state_on_stack", &ctx.Func->getEntryBlock().back());
@@ -575,9 +930,7 @@ public:
 
         const auto name = "GetBlockCount";
         ctx.Codegen.AddGlobalMapping(name, reinterpret_cast<const void*>(&GetBlockCount));
-        const auto getCountType = NYql::NCodegen::ETarget::Windows != ctx.Codegen.GetEffectiveTarget() ?
-            FunctionType::get(indexType, { valueType }, false):
-            FunctionType::get(indexType, { ptrValueType }, false);
+        const auto getCountType = FunctionType::get(indexType, { valueType }, false);
         const auto getCount = ctx.Codegen.GetModule().getOrInsertFunction(name, getCountType);
 
         const auto make = BasicBlock::Create(context, "make", ctx.Func);
@@ -587,12 +940,12 @@ public:
         const auto work = BasicBlock::Create(context, "work", ctx.Func);
         const auto over = BasicBlock::Create(context, "over", ctx.Func);
 
-        BranchInst::Create(make, main, IsInvalid(statePtr, block), block);
+        BranchInst::Create(make, main, IsInvalid(statePtr, block, context), block);
         block = make;
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
         const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
-        const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TWideFromBlocksWrapper::MakeState));
+        const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TWideFromBlocksFlowWrapper::MakeState>());
         const auto makeType = FunctionType::get(Type::getVoidTy(context), {self->getType(), ctx.Ctx->getType(), statePtr->getType()}, false);
         const auto makeFuncPtr = CastInst::Create(Instruction::IntToPtr, makeFunc, PointerType::getUnqual(makeType), "function", block);
         CallInst::Create(makeType, makeFuncPtr, {self, ctx.Ctx, statePtr}, "", block);
@@ -616,7 +969,7 @@ public:
 
         block = more;
 
-        const auto clearFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::ClearValues));
+        const auto clearFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::ClearValues>());
         const auto clearType = FunctionType::get(Type::getVoidTy(context), {statePtrType}, false);
         const auto clearPtr = CastInst::Create(Instruction::IntToPtr, clearFunc, PointerType::getUnqual(clearType), "clear", block);
         CallInst::Create(clearType, clearPtr, {stateArg}, "", block);
@@ -633,7 +986,7 @@ public:
         block = good;
 
         const auto countValue = getres.second.back()(ctx, block);
-        const auto height = CallInst::Create(getCount, { WrapArgumentForWindows(countValue, ctx, block) }, "height", block);
+        const auto height = CallInst::Create(getCount, { countValue }, "height", block);
 
         ValueCleanup(EValueRepresentation::Any, countValue, ctx, block);
 
@@ -674,7 +1027,7 @@ public:
                 const auto index = ConstantInt::get(indexType, idx);
                 const auto pointer = GetElementPtrInst::CreateInBounds(arrayType, values, {  ConstantInt::get(indexType, 0), index }, "pointer", block);
 
-                BranchInst::Create(call, init, HasValue(pointer, block), block);
+                BranchInst::Create(call, init, HasValue(pointer, block, context), block);
 
                 block = init;
 
@@ -693,48 +1046,6 @@ public:
     }
 #endif
 private:
-    struct TState : public TComputationValue<TState> {
-        size_t Count_ = 0;
-        size_t Index_ = 0;
-        size_t Current_ = 0;
-        NUdf::TUnboxedValue* Pointer_ = nullptr;
-        TUnboxedValueVector Values_;
-        std::vector<std::unique_ptr<IBlockReader>> Readers_;
-        std::vector<std::unique_ptr<IBlockItemConverter>> Converters_;
-        const std::vector<arrow::ValueDescr> ValuesDescr_;
-
-        TState(TMemoryUsageInfo* memInfo, TComputationContext& ctx, const TVector<TType*>& types)
-            : TComputationValue(memInfo)
-            , Values_(types.size() + 1)
-            , ValuesDescr_(ToValueDescr(types))
-        {
-            Pointer_ = Values_.data();
-
-            const auto& pgBuilder = ctx.Builder->GetPgBuilder();
-            for (size_t i = 0; i < types.size(); ++i) {
-                const TType* blockItemType = AS_TYPE(TBlockType, types[i])->GetItemType();
-                Readers_.push_back(MakeBlockReader(TTypeInfoHelper(), blockItemType));
-                Converters_.push_back(MakeBlockItemConverter(TTypeInfoHelper(), blockItemType, pgBuilder));
-            }
-        }
-
-        void ClearValues() {
-            Values_.assign(Values_.size(), NUdf::TUnboxedValuePod());
-        }
-
-        NUdf::TUnboxedValuePod Get(const THolderFactory& holderFactory, size_t idx) const {
-            TBlockItem item;
-            const auto& datum = TArrowBlock::From(Values_[idx]).GetDatum();
-            ARROW_DEBUG_CHECK_DATUM_TYPES(ValuesDescr_[idx], datum.descr());
-            if (datum.is_scalar()) {
-                item = Readers_[idx]->GetScalarItem(*datum.scalar());
-            } else {
-                MKQL_ENSURE(datum.is_array(), "Expecting array");
-                item = Readers_[idx]->GetItem(*datum.array(), Current_);
-            }
-            return Converters_[idx]->MakeValue(item, holderFactory);
-        }
-    };
 #ifndef MKQL_DISABLE_CODEGEN
     class TLLVMFieldsStructureState: public TLLVMFieldsStructure<TComputationValue<TState>> {
     private:
@@ -807,6 +1118,276 @@ private:
     const size_t WideFieldsIndex_;
 };
 
+class TWideFromBlocksStreamWrapper : public TMutableComputationNode<TWideFromBlocksStreamWrapper>
+{
+using TBaseComputation = TMutableComputationNode<TWideFromBlocksStreamWrapper>;
+using TState = TWideFromBlocksState;
+public:
+    TWideFromBlocksStreamWrapper(TComputationMutables& mutables,
+        IComputationNode* stream,
+        TVector<TType*>&& types)
+        : TBaseComputation(mutables, EValueRepresentation::Boxed)
+        , Stream_(stream)
+        , Types_(std::move(types))
+    {}
+
+    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const
+    {
+        const auto state = ctx.HolderFactory.Create<TState>(ctx, Types_);
+        return ctx.HolderFactory.Create<TStreamValue>(ctx.HolderFactory,
+                                                      std::move(state),
+                                                      std::move(Stream_->GetValue(ctx)));
+    }
+
+private:
+    class TStreamValue : public TComputationValue<TStreamValue> {
+    using TBase = TComputationValue<TStreamValue>;
+    public:
+        TStreamValue(TMemoryUsageInfo* memInfo, const THolderFactory& holderFactory,
+                     NUdf::TUnboxedValue&& blockState, NUdf::TUnboxedValue&& stream)
+            : TBase(memInfo)
+            , BlockState_(blockState)
+            , Stream_(stream)
+            , HolderFactory_(holderFactory)
+        {}
+
+    private:
+        NUdf::EFetchStatus WideFetch(NUdf::TUnboxedValue* output, ui32 width) {
+            auto& blockState = *static_cast<TState*>(BlockState_.AsBoxed().Get());
+            auto* inputFields = blockState.Pointer_;
+            const size_t inputWidth = blockState.Values_.size();
+
+            if (blockState.Index_ == blockState.Count_) do {
+                if (const auto result = Stream_.WideFetch(inputFields, inputWidth); result != NUdf::EFetchStatus::Ok)
+                    return result;
+
+                blockState.Index_ = 0;
+                blockState.Count_ = GetBlockCount(blockState.Values_.back());
+            } while (!blockState.Count_);
+
+            blockState.Current_ = blockState.Index_++;
+            for (size_t i = 0; i < width; i++) {
+                output[i] = blockState.Get(HolderFactory_, i);
+            }
+
+            return NUdf::EFetchStatus::Ok;
+        }
+
+        NUdf::TUnboxedValue BlockState_;
+        NUdf::TUnboxedValue Stream_;
+        const THolderFactory& HolderFactory_;
+    };
+
+    void RegisterDependencies() const final {
+        this->DependsOn(Stream_);
+    }
+
+    IComputationNode* const Stream_;
+    const TVector<TType*> Types_;
+};
+
+struct TListFromBlocksState : public TComputationValue<TListFromBlocksState> {
+public:
+    TListFromBlocksState(TMemoryUsageInfo* memInfo, TComputationContext& ctx, const TVector<TType*>& types, size_t blockLengthIndex)
+        : TComputationValue(memInfo)
+        , HolderFactory_(ctx.HolderFactory)
+        , BlockLengthIndex_(blockLengthIndex)
+        , Readers_(types.size())
+        , Converters_(types.size())
+        , ValuesDescr_(ToValueDescr(types))
+    {
+        const auto& pgBuilder = ctx.Builder->GetPgBuilder();
+        for (size_t i = 0; i < types.size(); ++i) {
+            if (i == blockLengthIndex) {
+                continue;
+            }
+            const TType* blockItemType = AS_TYPE(TBlockType, types[i])->GetItemType();
+            Readers_[i] = MakeBlockReader(TTypeInfoHelper(), blockItemType);
+            Converters_[i] = MakeBlockItemConverter(TTypeInfoHelper(), blockItemType, pgBuilder);
+        }
+    }
+
+    NUdf::TUnboxedValue GetRow() {
+        MKQL_ENSURE(CurrentRow_ < RowCount_, "Rows out of range");
+
+        NUdf::TUnboxedValue* outItems = nullptr;
+        auto row = HolderFactory_.CreateDirectArrayHolder(Readers_.size() - 1, outItems);
+
+        size_t outputStructIdx = 0;
+        for (size_t i = 0; i < Readers_.size(); i++) {
+            if (i == BlockLengthIndex_) {
+                continue;
+            }
+
+            const auto& datum = TArrowBlock::From(BlockItems_[i]).GetDatum();
+            ARROW_DEBUG_CHECK_DATUM_TYPES(ValuesDescr_[i], datum.descr());
+
+            TBlockItem item;
+            if (datum.is_scalar()) {
+                item = Readers_[i]->GetScalarItem(*datum.scalar());
+            } else {
+                MKQL_ENSURE(datum.is_array(), "Expecting array");
+                item = Readers_[i]->GetItem(*datum.array(), CurrentRow_);
+            }
+
+            outItems[outputStructIdx++] = Converters_[i]->MakeValue(item, HolderFactory_);
+        }
+
+        CurrentRow_++;
+        return row;
+    }
+
+    void SetBlock(NUdf::TUnboxedValue block) {
+        BlockItems_ = block.GetElements();
+        Block_ = std::move(block);
+
+        CurrentRow_ = 0;
+        RowCount_ = GetBlockCount(BlockItems_[BlockLengthIndex_]);
+    }
+
+    bool HasRows() const {
+        return CurrentRow_ < RowCount_;
+    }
+
+private:
+    const THolderFactory& HolderFactory_;
+
+    size_t CurrentRow_ = 0;
+    size_t RowCount_ = 0;
+
+    size_t BlockLengthIndex_ = 0;
+
+    NUdf::TUnboxedValue Block_;
+    const NUdf::TUnboxedValue* BlockItems_ = nullptr;
+
+    std::vector<std::unique_ptr<IBlockReader>> Readers_;
+    std::vector<std::unique_ptr<IBlockItemConverter>> Converters_;
+    const std::vector<arrow::ValueDescr> ValuesDescr_;
+};
+
+class TListFromBlocksWrapper : public TMutableComputationNode<TListFromBlocksWrapper>
+{
+    using TBaseComputation = TMutableComputationNode<TListFromBlocksWrapper>;
+
+public:
+    TListFromBlocksWrapper(TComputationMutables& mutables,
+        IComputationNode* list,
+        TStructType* structType
+    )
+        : TBaseComputation(mutables, EValueRepresentation::Boxed)
+        , List_(list)
+    {
+        for (size_t i = 0; i < structType->GetMembersCount(); i++) {
+            if (structType->GetMemberName(i) == NYql::BlockLengthColumnName) {
+                BlockLengthIndex_ = i;
+                Types_.push_back(nullptr);
+                continue;
+            }
+            Types_.push_back(structType->GetMemberType(i));
+        }
+    }
+
+    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const
+    {
+        return ctx.HolderFactory.Create<TListFromBlocksValue>(
+            ctx,
+            Types_,
+            BlockLengthIndex_,
+            List_->GetValue(ctx)
+        );
+    }
+
+private:
+    class TListFromBlocksValue : public TCustomListValue {
+        using TState = TListFromBlocksState;
+
+    public:
+        class TIterator : public TComputationValue<TIterator> {
+        public:
+            TIterator(TMemoryUsageInfo* memInfo, NUdf::TUnboxedValue&& blockState, NUdf::TUnboxedValue&& iter)
+                : TComputationValue<TIterator>(memInfo)
+                , BlockState_(std::move(blockState))
+                , Iter_(std::move(iter))
+            {}
+
+        private:
+            bool Next(NUdf::TUnboxedValue& value) final {
+                auto& blockState = *static_cast<TState*>(BlockState_.AsBoxed().Get());
+                if (!blockState.HasRows()) {
+                    NUdf::TUnboxedValue block;
+                    if (!Iter_.Next(block)) {
+                        return false;
+                    }
+                    blockState.SetBlock(std::move(block));
+                }
+
+                value = blockState.GetRow();
+                return true;
+            }
+
+        private:
+            const NUdf::TUnboxedValue BlockState_;
+            const NUdf::TUnboxedValue Iter_;
+        };
+
+        TListFromBlocksValue(TMemoryUsageInfo* memInfo, TComputationContext& ctx,
+            const TVector<TType*>& types, ui32 blockLengthIndex, NUdf::TUnboxedValue&& list
+        )
+            : TCustomListValue(memInfo)
+            , CompCtx_(ctx)
+            , Types_(types)
+            , BlockLengthIndex_(blockLengthIndex)
+            , List_(std::move(list))
+        {}
+
+    private:
+        NUdf::TUnboxedValue GetListIterator() const final {
+            auto state = CompCtx_.HolderFactory.Create<TState>(CompCtx_, Types_, BlockLengthIndex_);
+            return CompCtx_.HolderFactory.Create<TIterator>(std::move(state), List_.GetListIterator());
+        }
+
+        bool HasListItems() const final {
+            if (!HasItems.has_value()) {
+                HasItems = List_.HasListItems();
+            }
+            return *HasItems;
+        }
+
+        ui64 GetListLength() const final {
+            if (!Length.has_value()) {
+                auto iter = List_.GetListIterator();
+
+                Length = 0;
+                NUdf::TUnboxedValue block;
+                while (iter.Next(block)) {
+                    auto blockLengthValue = block.GetElement(BlockLengthIndex_);
+                    *Length += GetBlockCount(blockLengthValue);
+                }
+            }
+
+            return *Length;
+        }
+
+    private:
+        TComputationContext& CompCtx_;
+
+        const TVector<TType*>& Types_;
+        size_t BlockLengthIndex_ = 0;
+
+        NUdf::TUnboxedValue List_;
+    };
+
+    void RegisterDependencies() const final {
+        this->DependsOn(List_);
+    }
+
+private:
+    TVector<TType*> Types_;
+    size_t BlockLengthIndex_ = 0;
+
+    IComputationNode* const List_;
+};
+
 class TPrecomputedArrowNode : public IArrowKernelComputationNode {
 public:
     TPrecomputedArrowNode(const arrow::Datum& datum, TStringBuf kernelName)
@@ -865,20 +1446,11 @@ public:
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
         const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
-        const auto asScalarFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TAsScalarWrapper::AsScalar));
+        const auto asScalarFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TAsScalarWrapper::AsScalar>());
 
-        if (NYql::NCodegen::ETarget::Windows != ctx.Codegen.GetEffectiveTarget()) {
-            const auto asScalarType = FunctionType::get(Type::getInt128Ty(context), {self->getType(), value->getType(), ctx.Ctx->getType()}, false);
-            const auto asScalarFuncPtr = CastInst::Create(Instruction::IntToPtr, asScalarFunc, PointerType::getUnqual(asScalarType), "function", block);
-            return CallInst::Create(asScalarType, asScalarFuncPtr, {self, value, ctx.Ctx}, "scalar", block);
-        } else {
-            const auto valuePtr = new AllocaInst(value->getType(), 0U, "value", block);
-            new StoreInst(value, valuePtr, block);
-            const auto asScalarType = FunctionType::get(Type::getVoidTy(context), {self->getType(), valuePtr->getType(), valuePtr->getType(), ctx.Ctx->getType()}, false);
-            const auto asScalarFuncPtr = CastInst::Create(Instruction::IntToPtr, asScalarFunc, PointerType::getUnqual(asScalarType), "function", block);
-            CallInst::Create(asScalarType, asScalarFuncPtr, {self, valuePtr, valuePtr, ctx.Ctx}, "", block);
-            return new LoadInst(value->getType(), valuePtr, "result", block);
-        }
+        const auto asScalarType = FunctionType::get(Type::getInt128Ty(context), {self->getType(), value->getType(), ctx.Ctx->getType()}, false);
+        const auto asScalarFuncPtr = CastInst::Create(Instruction::IntToPtr, asScalarFunc, PointerType::getUnqual(asScalarType), "function", block);
+        return CallInst::Create(asScalarType, asScalarFuncPtr, {self, value, ctx.Ctx}, "scalar", block);
     }
 #endif
 private:
@@ -930,22 +1502,11 @@ public:
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
         const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
-        const auto replicateFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TReplicateScalarWrapper::Replicate));
+        const auto replicateFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TReplicateScalarWrapper::Replicate>());
 
-        if (NYql::NCodegen::ETarget::Windows != ctx.Codegen.GetEffectiveTarget()) {
-            const auto replicateType = FunctionType::get(Type::getInt128Ty(context), {self->getType(), value->getType(), count->getType(), ctx.Ctx->getType()}, false);
-            const auto replicateFuncPtr = CastInst::Create(Instruction::IntToPtr, replicateFunc, PointerType::getUnqual(replicateType), "function", block);
-            return CallInst::Create(replicateType, replicateFuncPtr, {self, value, count, ctx.Ctx}, "replicate", block);
-        } else {
-            const auto valuePtr = new AllocaInst(value->getType(), 0U, "value", block);
-            const auto countPtr = new AllocaInst(count->getType(), 0U, "count", block);
-            new StoreInst(value, valuePtr, block);
-            new StoreInst(count, countPtr, block);
-            const auto replicateType = FunctionType::get(Type::getVoidTy(context), {self->getType(), valuePtr->getType(), valuePtr->getType(), countPtr->getType(), ctx.Ctx->getType()}, false);
-            const auto replicateFuncPtr = CastInst::Create(Instruction::IntToPtr, replicateFunc, PointerType::getUnqual(replicateType), "function", block);
-            CallInst::Create(replicateType, replicateFuncPtr, {self, valuePtr, valuePtr, countPtr, ctx.Ctx}, "", block);
-            return new LoadInst(value->getType(), valuePtr, "result", block);
-        }
+        const auto replicateType = FunctionType::get(Type::getInt128Ty(context), {self->getType(), value->getType(), count->getType(), ctx.Ctx->getType()}, false);
+        const auto replicateFuncPtr = CastInst::Create(Instruction::IntToPtr, replicateFunc, PointerType::getUnqual(replicateType), "function", block);
+        return CallInst::Create(replicateType, replicateFuncPtr, {self, value, count, ctx.Ctx}, "replicate", block);
     }
 #endif
 private:
@@ -1026,7 +1587,7 @@ public:
 
         const auto atTop = &ctx.Func->getEntryBlock().back();
 
-        const auto getFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TBlockState::Get));
+        const auto getFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TBlockState::Get>());
         const auto getType = FunctionType::get(valueType, {statePtrType, indexType, ctx.GetFactory()->getType(), indexType}, false);
         const auto getPtr = CastInst::Create(Instruction::IntToPtr, getFunc, PointerType::getUnqual(getType), "get", atTop);
 
@@ -1043,12 +1604,12 @@ public:
         const auto fill = BasicBlock::Create(context, "fill", ctx.Func);
         const auto over = BasicBlock::Create(context, "over", ctx.Func);
 
-        BranchInst::Create(make, main, IsInvalid(statePtr, block), block);
+        BranchInst::Create(make, main, IsInvalid(statePtr, block, context), block);
         block = make;
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
         const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
-        const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TBlockExpandChunkedWrapper::MakeState));
+        const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TBlockExpandChunkedWrapper::MakeState>());
         const auto makeType = FunctionType::get(Type::getVoidTy(context), {self->getType(), ctx.Ctx->getType(), statePtr->getType()}, false);
         const auto makeFuncPtr = CastInst::Create(Instruction::IntToPtr, makeFunc, PointerType::getUnqual(makeType), "function", block);
         CallInst::Create(makeType, makeFuncPtr, {self, ctx.Ctx, statePtr}, "", block);
@@ -1069,7 +1630,7 @@ public:
 
         block = read;
 
-        const auto clearFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TBlockState::ClearValues));
+        const auto clearFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TBlockState::ClearValues>());
         const auto clearType = FunctionType::get(Type::getVoidTy(context), {statePtrType}, false);
         const auto clearPtr = CastInst::Create(Instruction::IntToPtr, clearFunc, PointerType::getUnqual(clearType), "clear", block);
         CallInst::Create(clearType, clearPtr, {stateArg}, "", block);
@@ -1095,7 +1656,7 @@ public:
         }
         new StoreInst(array, values, block);
 
-        const auto fillArraysFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TBlockState::FillArrays));
+        const auto fillArraysFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TBlockState::FillArrays>());
         const auto fillArraysType = FunctionType::get(Type::getVoidTy(context), {statePtrType}, false);
         const auto fillArraysPtr = CastInst::Create(Instruction::IntToPtr, fillArraysFunc, PointerType::getUnqual(fillArraysType), "fill_arrays_func", block);
         CallInst::Create(fillArraysType, fillArraysPtr, {stateArg}, "", block);
@@ -1104,7 +1665,7 @@ public:
 
         block = fill;
 
-        const auto sliceFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TBlockState::Slice));
+        const auto sliceFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TBlockState::Slice>());
         const auto sliceType = FunctionType::get(indexType, {statePtrType}, false);
         const auto slicePtr = CastInst::Create(Instruction::IntToPtr, sliceFunc, PointerType::getUnqual(sliceType), "slice_func", block);
         const auto slice = CallInst::Create(sliceType, slicePtr, {stateArg}, "slice", block);
@@ -1173,7 +1734,7 @@ public:
             }
             s.FillArrays();
         }
-        
+
         const auto sliceSize = s.Slice();
         for (size_t i = 0; i < width; ++i) {
             output[i] = s.Get(sliceSize, HolderFactory_, i);
@@ -1212,13 +1773,42 @@ IComputationNode* WrapToBlocks(TCallable& callable, const TComputationNodeFactor
 IComputationNode* WrapWideToBlocks(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 1, "Expected 1 args, got " << callable.GetInputsCount());
 
-    const auto flowType = AS_TYPE(TFlowType, callable.GetInput(0).GetStaticType());
-    const auto wideComponents = GetWideComponents(flowType);
+    const auto inputType = callable.GetInput(0).GetStaticType();
+    MKQL_ENSURE(inputType->IsStream() || inputType->IsFlow(),
+               "Expected either WideStream or WideFlow as an input");
+    const auto yieldsStream = callable.GetType()->GetReturnType()->IsStream();
+    MKQL_ENSURE(yieldsStream == inputType->IsStream(),
+                "Expected both input and output have to be either WideStream or WideFlow");
+
+    const auto wideComponents = GetWideComponents(inputType);
     TVector<TType*> items(wideComponents.begin(), wideComponents.end());
-    const auto wideFlow = dynamic_cast<IComputationWideFlowNode*>(LocateNode(ctx.NodeLocator, callable, 0));
+    const auto wideFlowOrStream = LocateNode(ctx.NodeLocator, callable, 0);
+    if (yieldsStream) {
+        const auto wideStream = wideFlowOrStream;
+        return new TWideToBlocksStreamWrapper(ctx.Mutables, wideStream, std::move(items));
+    }
+    // FIXME: Drop the branch below, when the time comes.
+    const auto wideFlow = dynamic_cast<IComputationWideFlowNode*>(wideFlowOrStream);
     MKQL_ENSURE(wideFlow != nullptr, "Expected wide flow node");
 
-    return new TWideToBlocksWrapper(ctx.Mutables, wideFlow, std::move(items));
+    return new TWideToBlocksFlowWrapper(ctx.Mutables, wideFlow, std::move(items));
+}
+
+IComputationNode* WrapListToBlocks(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
+    MKQL_ENSURE(callable.GetInputsCount() == 1, "Expected 1 args, got " << callable.GetInputsCount());
+
+    const auto inputType = callable.GetInput(0).GetStaticType();
+    MKQL_ENSURE(inputType->IsList(), "Expected List as an input");
+    const auto outputType = callable.GetType()->GetReturnType();
+    MKQL_ENSURE(outputType->IsList(), "Expected List as an output");
+
+    const auto inputItemType = AS_TYPE(TListType, inputType)->GetItemType();
+    MKQL_ENSURE(inputItemType->IsStruct(), "Expected List of Struct as an input");
+    const auto outputItemType = AS_TYPE(TListType, outputType)->GetItemType();
+    MKQL_ENSURE(outputItemType->IsStruct(), "Expected List of Struct as an output");
+
+    const auto list = LocateNode(ctx.NodeLocator, callable, 0);
+    return new TListToBlocksWrapper(ctx.Mutables, list, AS_TYPE(TStructType, outputItemType));
 }
 
 IComputationNode* WrapFromBlocks(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
@@ -1232,17 +1822,46 @@ IComputationNode* WrapFromBlocks(TCallable& callable, const TComputationNodeFact
 IComputationNode* WrapWideFromBlocks(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 1, "Expected 1 args, got " << callable.GetInputsCount());
 
-    const auto flowType = AS_TYPE(TFlowType, callable.GetInput(0).GetStaticType());
-    const auto wideComponents = GetWideComponents(flowType);
+    const auto inputType = callable.GetInput(0).GetStaticType();
+    MKQL_ENSURE(inputType->IsStream() || inputType->IsFlow(),
+                "Expected either WideStream or WideFlow as an input");
+    const auto yieldsStream = callable.GetType()->GetReturnType()->IsStream();
+    MKQL_ENSURE(yieldsStream == inputType->IsStream(),
+                "Expected both input and output have to be either WideStream or WideFlow");
+
+    const auto wideComponents = GetWideComponents(inputType);
     MKQL_ENSURE(wideComponents.size() > 0, "Expected at least one column");
     TVector<TType*> items;
     for (ui32 i = 0; i < wideComponents.size() - 1; ++i) {
         items.push_back(AS_TYPE(TBlockType, wideComponents[i]));
     }
 
-    const auto wideFlow = dynamic_cast<IComputationWideFlowNode*>(LocateNode(ctx.NodeLocator, callable, 0));
+    const auto wideFlowOrStream = LocateNode(ctx.NodeLocator, callable, 0);
+    if (yieldsStream) {
+        const auto wideStream = wideFlowOrStream;
+        return new TWideFromBlocksStreamWrapper(ctx.Mutables, wideStream, std::move(items));
+    }
+    // FIXME: Drop the branch below, when the time comes.
+    const auto wideFlow = dynamic_cast<IComputationWideFlowNode*>(wideFlowOrStream);
     MKQL_ENSURE(wideFlow != nullptr, "Expected wide flow node");
-    return new TWideFromBlocksWrapper(ctx.Mutables, wideFlow, std::move(items));
+    return new TWideFromBlocksFlowWrapper(ctx.Mutables, wideFlow, std::move(items));
+}
+
+IComputationNode* WrapListFromBlocks(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
+    MKQL_ENSURE(callable.GetInputsCount() == 1, "Expected 1 args, got " << callable.GetInputsCount());
+
+    const auto inputType = callable.GetInput(0).GetStaticType();
+    MKQL_ENSURE(inputType->IsList(), "Expected List as an input");
+    const auto outputType = callable.GetType()->GetReturnType();
+    MKQL_ENSURE(outputType->IsList(), "Expected List as an output");
+
+    const auto inputItemType = AS_TYPE(TListType, inputType)->GetItemType();
+    MKQL_ENSURE(inputItemType->IsStruct(), "Expected List of Struct as an input");
+    const auto outputItemType = AS_TYPE(TListType, outputType)->GetItemType();
+    MKQL_ENSURE(outputItemType->IsStruct(), "Expected List of Struct as an output");
+
+    const auto list = LocateNode(ctx.NodeLocator, callable, 0);
+    return new TListFromBlocksWrapper(ctx.Mutables, list, AS_TYPE(TStructType, inputItemType));
 }
 
 IComputationNode* WrapAsScalar(TCallable& callable, const TComputationNodeFactoryContext& ctx) {

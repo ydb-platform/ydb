@@ -170,6 +170,21 @@ public:
     ui32 StatementResultSize = 0;
 
     TMaybe<TString> CommandTagName;
+    THashSet<ui32> ParticipantNodes;
+
+    bool IsLocalExecution(ui32 nodeId) const {
+        if (RequestEv->GetRequestCtx() == nullptr) {
+            return false;
+        }
+        if (IsSingleNodeExecution()) {
+            return *ParticipantNodes.begin() == nodeId;
+        }
+        return false;
+    }
+
+    bool IsSingleNodeExecution() const {
+        return ParticipantNodes.size() == 1;
+    }
 
     NKikimrKqp::EQueryAction GetAction() const {
         return QueryAction;
@@ -317,7 +332,7 @@ public:
         return RequestEv->GetQuery();
     }
 
-    const ::NKikimrKqp::TTopicOperationsRequest& GetTopicOperations() const {
+    const ::NKikimrKqp::TTopicOperationsRequest& GetTopicOperationsFromRequest() const {
         return RequestEv->GetTopicOperations();
     }
 
@@ -417,14 +432,14 @@ public:
         return true;
     }
 
-    TKqpPhyTxHolder::TConstPtr GetCurrentPhyTx() {
+    TKqpPhyTxHolder::TConstPtr GetCurrentPhyTx(bool isBatchQuery, NMiniKQL::TTypeEnvironment& txTypeEnv) {
         const auto& phyQuery = PreparedQuery->GetPhysicalQuery();
         auto tx = PreparedQuery->GetPhyTxOrEmpty(CurrentTx);
 
-        if (TxCtx->CanDeferEffects()) {
+        if (TxCtx->CanDeferEffects() && !isBatchQuery) {
             // Olap sinks require separate tnx with commit.
             while (tx && tx->GetHasEffects() && !TxCtx->HasOlapTable) {
-                QueryData->CreateKqpValueMap(tx);
+                QueryData->PrepareParameters(tx, PreparedQuery, txTypeEnv);
                 bool success = TxCtx->AddDeferredEffect(tx, QueryData);
                 YQL_ENSURE(success);
                 if (CurrentTx + 1 < phyQuery.TransactionsSize()) {

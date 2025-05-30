@@ -11,7 +11,7 @@
 
 #include <algorithm>
 
-namespace NYdb::NFederatedTopic {
+namespace NYdb::inline V2::NFederatedTopic {
 
 constexpr TDuration UPDATE_FEDERATION_STATE_DELAY = TDuration::Seconds(10);
 

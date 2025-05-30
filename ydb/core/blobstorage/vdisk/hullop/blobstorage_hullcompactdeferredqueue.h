@@ -30,6 +30,10 @@ namespace NKikimr {
             {}
         };
 
+    public:
+        const TString VDiskLogPrefix;
+
+    private:
         TQueue<TItem> ItemQueue;
         bool Started = false;
         TRopeArena& Arena;
@@ -37,33 +41,34 @@ namespace NKikimr {
         const bool AddHeader;
 
     public:
-        TDeferredItemQueueBase(TRopeArena& arena, TBlobStorageGroupType gtype, bool addHeader)
-            : Arena(arena)
+        TDeferredItemQueueBase(const TString& prefix, TRopeArena& arena, TBlobStorageGroupType gtype, bool addHeader)
+            : VDiskLogPrefix(prefix)
+            , Arena(arena)
             , GType(gtype)
             , AddHeader(addHeader)
         {}
 
         template<typename... TArgs>
         void Put(TArgs&&... args) {
-            Y_ABORT_UNLESS(!Started);
+            Y_VERIFY_S(!Started, VDiskLogPrefix);
             ItemQueue.emplace(std::forward<TArgs>(args)...);
         }
 
         template<typename... TArgs>
         void Start(TArgs&&... args) {
-            Y_ABORT_UNLESS(!Started);
+            Y_VERIFY_S(!Started, VDiskLogPrefix);
             Started = true;
             static_cast<TDerived&>(*this).StartImpl(std::forward<TArgs>(args)...);
             ProcessItemQueue();
         }
 
         void AddReadDiskBlob(ui64 id, TRope&& buffer, ui8 partIdx) {
-            Y_ABORT_UNLESS(Started);
-            Y_ABORT_UNLESS(ItemQueue);
+            Y_VERIFY_S(Started, VDiskLogPrefix);
+            Y_VERIFY_S(ItemQueue, VDiskLogPrefix);
             TItem& item = ItemQueue.front();
-            Y_ABORT_UNLESS(item.Id == id);
+            Y_VERIFY_S(item.Id == id, VDiskLogPrefix);
             item.Merger.AddPart(std::move(buffer), GType, TLogoBlobID(item.BlobId, partIdx + 1));
-            Y_ABORT_UNLESS(item.NumReads > 0);
+            Y_VERIFY_S(item.NumReads > 0, VDiskLogPrefix);
             if (!--item.NumReads) {
                 ProcessItemQueue();
             }
@@ -74,8 +79,8 @@ namespace NKikimr {
         }
 
         void Finish() {
-            Y_ABORT_UNLESS(Started);
-            Y_ABORT_UNLESS(ItemQueue.empty());
+            Y_VERIFY_S(Started, VDiskLogPrefix);
+            Y_VERIFY_S(ItemQueue.empty(), VDiskLogPrefix);
             Started = false;
             static_cast<TDerived&>(*this).FinishImpl();
         }

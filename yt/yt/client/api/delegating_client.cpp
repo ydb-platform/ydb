@@ -11,7 +11,7 @@ TDelegatingClient::TDelegatingClient(IClientPtr underlying)
 ////////////////////////////////////////////////////////////////////////////////
 
 // Ensure that delegating client contains implementations for all
-// methods of IClient. Tthis reduces the number of PR iterations you need to
+// methods of IClient. This reduces the number of PR iterations you need to
 // find that some out-of-yt/yt implementation of IClient does not compile.
 void InstantiateDelegatingClient()
 {

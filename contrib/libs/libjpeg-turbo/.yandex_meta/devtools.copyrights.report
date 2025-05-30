@@ -160,17 +160,6 @@ FILE_INCLUDE README.ijg found in files: cderror.h at line 9, cdjpeg.h at line 9,
         jdcoefct.h [5:10]
         jerror.h [5:10]
 
-KEEP     COPYRIGHT_SERVICE_LABEL 0b0ac4cd285016cb09b8319e3f765270
-BELONGS ya.make
-    License text:
-         * Copyright (C)2011, 2019 D. R. Commander.  All Rights Reserved.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        tjutil.c [2:2]
-
 KEEP     COPYRIGHT_SERVICE_LABEL 0d16e03bc8aea0727b77e84f46679705
 BELONGS ya.make
 FILE_INCLUDE README.ijg found in files: jdmaster.h at line 6
@@ -594,17 +583,6 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         turbojpeg.h [2:3]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 39c71721bea6dbebf0fe12a4104a16ba
-BELONGS ya.make
-    License text:
-         * Copyright (C)2016, 2018-2019, 2022 D. R. Commander.  All Rights Reserved.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        md5/md5hl.c [9:9]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 3d8a221d5e85eceaf22464a0b1bc72cd
 BELONGS ya.make
@@ -1483,17 +1461,6 @@ FILE_INCLUDE README.ijg found in files: jccolext.c at line 8, jccolor.c at line 
         jccolext.c [5:9]
         jccolor.c [5:11]
 
-KEEP     COPYRIGHT_SERVICE_LABEL a2cad7c40e9595118b83ad65dafbcb1a
-BELONGS ya.make
-    License text:
-         * Copyright (C)2018 D. R. Commander.  All Rights Reserved.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        md5/md5.h [3:3]
-
 KEEP     COPYRIGHT_SERVICE_LABEL a445cd203767825e67800b0e187c4dcc
 BELONGS ya.make
     License text:
@@ -1753,18 +1720,6 @@ BELONGS ya.make
         simd/x86_64/jidctred-sse2.asm [4:6]
         simd/x86_64/jquantf-sse2.asm [4:6]
         simd/x86_64/jquanti-sse2.asm [4:6]
-
-KEEP     COPYRIGHT_SERVICE_LABEL c7de5e9b8afc872ee77656f5bafcf523
-BELONGS ya.make
-    License text:
-         * Copyright (C)2009-2014, 2017-2019, 2022 D. R. Commander.
-         *                                         All Rights Reserved.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        tjunittest.c [2:3]
 
 KEEP     COPYRIGHT_SERVICE_LABEL c9e55c94ede47423b60bd1b0381f63a3
 BELONGS ya.make
@@ -2316,11 +2271,11 @@ FILE_INCLUDE README.ijg found in files: jcphuff.c at line 11, jpegint.h at line 
 KEEP     COPYRIGHT_SERVICE_LABEL ff4f68c38d54f4ee28ddb06f4c22e5e5
 BELONGS ya.make
     License text:
-         * Copyright (C)2018, D. R. Commander.  All Rights Reserved.
+        ; Copyright 2009 Pierre Ossman <ossman@cendio.se> for Cendio AB
+        ; Copyright (C) 2018, D. R. Commander.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        md5/md5.c [18:18]
         simd/nasm/jdct.inc [4:5]

@@ -164,6 +164,12 @@ void TSettingDispatcher::Restore() {
     }
 }
 
+void TSettingDispatcher::Enumerate(std::function<void(std::string_view)> callback) {
+    for (const auto& name : Names) {
+        callback(name);
+    }
+}
+
 TSettingDispatcher::TErrorCallback TSettingDispatcher::GetDefaultErrorCallback() {
     return [] (const TString& msg, bool isError) -> bool {
         if (isError) {

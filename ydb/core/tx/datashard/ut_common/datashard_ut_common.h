@@ -598,6 +598,10 @@ void ApplyChanges(
             NKikimrTxDataShard::TEvApplyReplicationChangesResult::STATUS_OK);
 
 TRowVersion CommitWrites(
+        TTestActorRuntime& runtime,
+        const TVector<TString>& tables,
+        ui64 writeTxId);
+TRowVersion CommitWrites(
         Tests::TServer::TPtr server,
         const TVector<TString>& tables,
         ui64 writeTxId);
@@ -725,6 +729,12 @@ struct TReadShardedTableState {
 };
 
 TReadShardedTableState StartReadShardedTable(
+        TTestActorRuntime& runtime,
+        const TString& path,
+        TRowVersion snapshot = TRowVersion::Max(),
+        bool pause = true,
+        bool ordered = true);
+TReadShardedTableState StartReadShardedTable(
         Tests::TServer::TPtr server,
         const TString& path,
         TRowVersion snapshot = TRowVersion::Max(),
@@ -735,6 +745,10 @@ void ResumeReadShardedTable(
         Tests::TServer::TPtr server,
         TReadShardedTableState& state);
 
+TString ReadShardedTable(
+        TTestActorRuntime& runtime,
+        const TString& path,
+        TRowVersion snapshot = TRowVersion::Max());
 TString ReadShardedTable(
         Tests::TServer::TPtr server,
         const TString& path,
@@ -775,6 +789,7 @@ void ExecSQL(Tests::TServer::TPtr server,
 TRowVersion AcquireReadSnapshot(TTestActorRuntime& runtime, const TString& databaseName, ui32 nodeIndex = 0);
 
 std::unique_ptr<NEvents::TDataEvents::TEvWrite> MakeWriteRequest(std::optional<ui64> txId, NKikimrDataEvents::TEvWrite::ETxMode txMode, NKikimrDataEvents::TEvWrite_TOperation::EOperationType operationType, const TTableId& tableId, const TVector<TShardedTableOptions::TColumn>& columns, ui32 rowCount, ui64 seed = 0);
+std::unique_ptr<NEvents::TDataEvents::TEvWrite> MakeWriteRequest(std::optional<ui64> txId, NKikimrDataEvents::TEvWrite::ETxMode txMode, NKikimrDataEvents::TEvWrite_TOperation::EOperationType operationType, const TTableId& tableId, const std::vector<ui32>& columnIds, const std::vector<TCell>& cells);
 std::unique_ptr<NEvents::TDataEvents::TEvWrite> MakeWriteRequestOneKeyValue(std::optional<ui64> txId, NKikimrDataEvents::TEvWrite::ETxMode txMode, NKikimrDataEvents::TEvWrite_TOperation::EOperationType operationType, const TTableId& tableId, const TVector<TShardedTableOptions::TColumn>& columns, ui64 key, ui64 value);
 
 NKikimrDataEvents::TEvWriteResult Write(TTestActorRuntime& runtime, TActorId sender, ui64 shardId, std::unique_ptr<NEvents::TDataEvents::TEvWrite>&& request, NKikimrDataEvents::TEvWriteResult::EStatus expectedStatus = NKikimrDataEvents::TEvWriteResult::STATUS_UNSPECIFIED);
@@ -813,15 +828,13 @@ class TEvWriteRows : public std::vector<TEvWriteRow> {
     const TEvWriteRow& ProcessRow(const TTableId& tableId, ui64 txId) {
         bool allTablesEmpty = std::all_of(begin(), end(), [](const auto& row) { return !bool(row.TableId); });
         auto row = std::find_if(begin(), end(), [tableId, allTablesEmpty](const auto& row) { return !row.IsUsed && (allTablesEmpty || row.TableId == tableId); });
-        Y_VERIFY_S(row != end(), "There should be at least one EvWrite row to process.");
+        Y_ENSURE(row != end(), "There should be at least one EvWrite row to process.");
 
         row->IsUsed = true;
         Cerr << "Processing EvWrite row " << txId << Endl;
         return *row;
     }
 };
-
-TTestActorRuntimeBase::TEventObserverHolderPair ReplaceEvProposeTransactionWithEvWrite(TTestActorRuntime& runtime, TEvWriteRows& rows);
 
 void UploadRows(TTestActorRuntime& runtime, const TString& tablePath, const TVector<std::pair<TString, Ydb::Type_PrimitiveTypeId>>& types, const TVector<TCell>& keys, const TVector<TCell>& values);
 
@@ -845,6 +858,11 @@ struct IsTxResultComplete {
         if (ev.GetTypeRewrite() == TEvDataShard::EvProposeTransactionResult) {
             auto status = ev.Get<TEvDataShard::TEvProposeTransactionResult>()->GetStatus();
             if (status == NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE)
+                return true;
+        }
+        if (ev.GetTypeRewrite() == NKikimr::NEvents::TDataEvents::EvWriteResult) {
+            auto status = ev.Get<NKikimr::NEvents::TDataEvents::TEvWriteResult>()->GetStatus();
+            if (status == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED)
                 return true;
         }
         return false;

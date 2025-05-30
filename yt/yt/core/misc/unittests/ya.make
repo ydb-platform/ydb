@@ -18,6 +18,7 @@ SRCS(
     callback_ut.cpp
     checksum_ut.cpp
     codicil_ut.cpp
+    collection_helpers_ut.cpp
     concurrent_cache_ut.cpp
     consistent_hashing_ut.cpp
     default_map_ut.cpp
@@ -26,6 +27,7 @@ SRCS(
     enum_ut.cpp
     error_ut.cpp
     fair_scheduler_ut.cpp
+    fair_share_hierarchical_queue_ut.cpp
     fenwick_tree_ut.cpp
     finally_ut.cpp
     format_ut.cpp
@@ -49,11 +51,10 @@ SRCS(
     mpl_ut.cpp
     pattern_formatter_ut.cpp
     persistent_queue_ut.cpp
-    phoenix_ut.cpp
-    phoenix_compatibility_ut.cpp
     pool_allocator_ut.cpp
     proc_ut.cpp
     random_ut.cpp
+    range_helpers_ut.cpp
     ref_counted_tracker_ut.cpp
     ring_queue_ut.cpp
     skip_list_ut.cpp
@@ -97,7 +98,12 @@ SIZE(MEDIUM)
 
 IF (OS_DARWIN)
     SIZE(LARGE)
-    TAG(ya:fat ya:force_sandbox ya:exotic_platform)
+    TAG(
+        ya:fat
+        ya:force_sandbox
+        ya:exotic_platform
+        ya:large_tests_on_single_slots
+    )
 ENDIF()
 
 END()

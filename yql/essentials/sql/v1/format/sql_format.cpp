@@ -3,9 +3,6 @@
 #include <yql/essentials/parser/lexer_common/lexer.h>
 #include <yql/essentials/core/sql_types/simple_types.h>
 
-#include <yql/essentials/sql/v1/lexer/lexer.h>
-#include <yql/essentials/sql/v1/proto_parser/proto_parser.h>
-
 #include <yql/essentials/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.main.h>
 
 #include <library/cpp/protobuf/util/simple_reflection.h>
@@ -163,144 +160,6 @@ bool Validate(const TParsedTokenList& query, const TParsedTokenList& formattedQu
     SkipForValidate(in, out, query, formattedQuery, parenthesesBalance);
 
     return in == inEnd && out == outEnd && parenthesesBalance == 0;
-}
-
-enum EParenType {
-    Open,
-    Close,
-    None
-};
-
-using TAdvanceCallback = std::function<EParenType(TTokenIterator& curr, TTokenIterator end)>;
-
-TTokenIterator SkipToNextBalanced(TTokenIterator begin, TTokenIterator end, const TAdvanceCallback& advance) {
-    i64 level = 0;
-    TTokenIterator curr = begin;
-    while (curr != end) {
-        switch (advance(curr, end)) {
-            case EParenType::Open: {
-                ++level;
-                break;
-            }
-            case EParenType::Close: {
-                --level;
-                if (level < 0) {
-                    return end;
-                } else if (level == 0) {
-                    return curr;
-                }
-                break;
-            }
-            case EParenType::None:
-                break;
-        }
-    }
-    return curr;
-}
-
-TTokenIterator GetNextStatementBegin(TTokenIterator begin, TTokenIterator end) {
-    TAdvanceCallback advanceLambdaBody = [](TTokenIterator& curr, TTokenIterator end) -> EParenType {
-        Y_UNUSED(end);
-        if (curr->Name == "LBRACE_CURLY") {
-            ++curr;
-            return EParenType::Open;
-        } else if (curr->Name == "RBRACE_CURLY") {
-            ++curr;
-            return EParenType::Close;
-        } else {
-            ++curr;
-            return EParenType::None;
-        }
-    };
-
-    TAdvanceCallback advanceAction = [](TTokenIterator& curr, TTokenIterator end) -> EParenType {
-        auto tmp = curr;
-        if (curr->Name == "DEFINE") {
-            ++curr;
-            curr = SkipWSOrComment(curr, end);
-            if (curr != end && (curr->Name == "ACTION" || curr->Name == "SUBQUERY")) {
-                ++curr;
-                return EParenType::Open;
-            }
-        } else if (curr->Name == "END") {
-            ++curr;
-            curr = SkipWSOrComment(curr, end);
-            if (curr != end && curr->Name == "DEFINE") {
-                ++curr;
-                return EParenType::Close;
-            }
-        }
-
-        curr = tmp;
-        ++curr;
-        return EParenType::None;
-    };
-
-    TAdvanceCallback advanceInlineAction = [](TTokenIterator& curr, TTokenIterator end) -> EParenType {
-        auto tmp = curr;
-        if (curr->Name == "DO") {
-            ++curr;
-            curr = SkipWSOrComment(curr, end);
-            if (curr != end && curr->Name == "BEGIN") {
-                ++curr;
-                return EParenType::Open;
-            }
-        } else if (curr->Name == "END") {
-            ++curr;
-            curr = SkipWSOrComment(curr, end);
-            if (curr != end && curr->Name == "DO") {
-                ++curr;
-                return EParenType::Close;
-            }
-        }
-
-        curr = tmp;
-        ++curr;
-        return EParenType::None;
-    };
-
-    TTokenIterator curr = begin;
-    while (curr != end) {
-        bool matched = false;
-        for (auto cb : {advanceLambdaBody, advanceAction, advanceInlineAction}) {
-            TTokenIterator tmp = curr;
-            if (cb(tmp, end) == EParenType::Open) {
-                curr = SkipToNextBalanced(curr, end, cb);
-                matched = true;
-                if (curr == end) {
-                    return curr;
-                }
-            }
-        }
-        if (matched) {
-            continue;
-        }
-        if (curr->Name == "SEMICOLON") {
-            auto next = SkipWS(curr + 1, end);
-            while (next != end && next->Name == "COMMENT" && curr->Line == next->Line) {
-                curr = next;
-                next = SkipWS(next + 1, end);
-            }
-            ++curr;
-            break;
-        }
-        ++curr;
-    }
-
-    return curr;
-}
-
-void SplitByStatements(TTokenIterator begin, TTokenIterator end, TVector<TTokenIterator>& output) {
-    output.clear();
-    if (begin == end) {
-        return;
-    }
-    output.push_back(begin);
-    auto curr = begin;
-    while (curr != end) {
-        curr = GetNextStatementBegin(curr, end);
-        output.push_back(curr);
-    }
 }
 
 enum class EScope {
@@ -634,6 +493,10 @@ private:
             ++CommentLines;
         }
 
+        if (!text.StartsWith("--")) {
+            CommentLines += CountIf(text, [](auto c) { return c == '\n'; });
+        }
+
         Out(text);
 
         if (text.StartsWith("--") && !text.EndsWith("\n")) {
@@ -712,7 +575,7 @@ private:
             ForceExpandedLine = token.GetLine();
         }
 
-        const bool expr = (descr == TRule_expr::GetDescriptor() || descr == TRule_in_expr::GetDescriptor());
+        const bool expr = (descr == TRule_expr::GetDescriptor() || descr == TRule_in_expr::GetDescriptor() || descr == TRule_type_name_composite::GetDescriptor());
         if (expr) {
             ++InsideExpr;
         }
@@ -833,6 +696,7 @@ private:
             case TRule_sql_stmt_core::kAltSqlStmtCore14: // export
             case TRule_sql_stmt_core::kAltSqlStmtCore32: // drop external data source
             case TRule_sql_stmt_core::kAltSqlStmtCore34: // drop replication
+            case TRule_sql_stmt_core::kAltSqlStmtCore60: // drop transfer
                 return true;
             case TRule_sql_stmt_core::kAltSqlStmtCore3: { // named nodes
                 const auto& stmt = msg.GetAlt_sql_stmt_core3().GetRule_named_nodes_stmt1();
@@ -877,6 +741,54 @@ private:
         }
         if (printOne) {
             Out(';');
+        }
+    }
+
+    void VisitValueConstructor(const TRule_value_constructor& msg) {
+        switch (msg.Alt_case()) {
+            case TRule_value_constructor::kAltValueConstructor1: {
+                auto& ctor = msg.GetAlt_value_constructor1();
+                Scopes.push_back(EScope::TypeName);
+                Visit(ctor.GetToken1());
+                Scopes.pop_back();
+                AfterInvokeExpr = true;
+                Visit(ctor.GetToken2());
+                Visit(ctor.GetRule_expr3());
+                Visit(ctor.GetToken4());
+                Visit(ctor.GetRule_expr5());
+                Visit(ctor.GetToken6());
+                Visit(ctor.GetRule_expr7());
+                Visit(ctor.GetToken8());
+                break;
+            }
+            case TRule_value_constructor::kAltValueConstructor2: {
+                auto& ctor = msg.GetAlt_value_constructor2();
+                Scopes.push_back(EScope::TypeName);
+                Visit(ctor.GetToken1());
+                Scopes.pop_back();
+                AfterInvokeExpr = true;
+                Visit(ctor.GetToken2());
+                Visit(ctor.GetRule_expr3());
+                Visit(ctor.GetToken4());
+                Visit(ctor.GetRule_expr5());
+                Visit(ctor.GetToken6());
+                break;
+            }
+            case TRule_value_constructor::kAltValueConstructor3: {
+                auto& ctor = msg.GetAlt_value_constructor3();
+                Scopes.push_back(EScope::TypeName);
+                Visit(ctor.GetToken1());
+                Scopes.pop_back();
+                AfterInvokeExpr = true;
+                Visit(ctor.GetToken2());
+                Visit(ctor.GetRule_expr3());
+                Visit(ctor.GetToken4());
+                Visit(ctor.GetRule_expr5());
+                Visit(ctor.GetToken6());
+                break;
+            }
+            case TRule_value_constructor::ALT_NOT_SET:
+                Y_ABORT("You should change implementation according to grammar changes");
         }
     }
 
@@ -996,6 +908,11 @@ private:
         ExprLineIndent = 0;
     }
 
+    void VisitAlterDatabase(const TRule_alter_database_stmt& msg) {
+        NewLine();
+        VisitAllFields(TRule_alter_database_stmt::GetDescriptor(), msg);
+    }
+
     void VisitCreateTable(const TRule_create_table_stmt& msg) {
         NewLine();
         Visit(msg.GetToken1());
@@ -1072,6 +989,11 @@ private:
         VisitAllFields(TRule_alter_sequence_stmt::GetDescriptor(), msg);
     }
 
+    void VisitShowCreateTable(const TRule_show_create_table_stmt& msg) {
+        NewLine();
+        VisitAllFields(TRule_show_create_table_stmt::GetDescriptor(), msg);
+    }
+
     void VisitIntoTable(const TRule_into_table_stmt& msg) {
         NewLine();
         VisitAllFields(TRule_into_table_stmt::GetDescriptor(), msg);
@@ -1084,11 +1006,11 @@ private:
 
     void VisitUpdate(const TRule_update_stmt& msg) {
         NewLine();
-        Visit(msg.GetToken1());
-        Visit(msg.GetRule_simple_table_ref2());
-        switch (msg.GetBlock3().Alt_case()) {
-        case TRule_update_stmt_TBlock3::kAlt1: {
-            const auto& alt = msg.GetBlock3().GetAlt1();
+        Visit(msg.GetToken2());
+        Visit(msg.GetRule_simple_table_ref3());
+        switch (msg.GetBlock4().Alt_case()) {
+        case TRule_update_stmt_TBlock4::kAlt1: {
+            const auto& alt = msg.GetBlock4().GetAlt1();
             NewLine();
             Visit(alt.GetToken1());
             const auto& choice = alt.GetRule_set_clause_choice2();
@@ -1175,8 +1097,8 @@ private:
             PopCurrentIndent();
             break;
         }
-        case TRule_update_stmt_TBlock3::kAlt2: {
-            const auto& alt = msg.GetBlock3().GetAlt2();
+        case TRule_update_stmt_TBlock4::kAlt2: {
+            const auto& alt = msg.GetBlock4().GetAlt2();
             NewLine();
             Visit(alt.GetToken1());
             Visit(alt.GetRule_into_values_source2());
@@ -1189,19 +1111,19 @@ private:
 
     void VisitDelete(const TRule_delete_stmt& msg) {
         NewLine();
-        Visit(msg.GetToken1());
         Visit(msg.GetToken2());
-        Visit(msg.GetRule_simple_table_ref3());
-        if (msg.HasBlock4()) {
-            switch (msg.GetBlock4().Alt_case()) {
-            case TRule_delete_stmt_TBlock4::kAlt1: {
-                const auto& alt = msg.GetBlock4().GetAlt1();
+        Visit(msg.GetToken3());
+        Visit(msg.GetRule_simple_table_ref4());
+        if (msg.HasBlock5()) {
+            switch (msg.GetBlock5().Alt_case()) {
+            case TRule_delete_stmt_TBlock5::kAlt1: {
+                const auto& alt = msg.GetBlock5().GetAlt1();
                 NewLine();
                 Visit(alt);
                 break;
             }
-            case TRule_delete_stmt_TBlock4::kAlt2: {
-                const auto& alt = msg.GetBlock4().GetAlt2();
+            case TRule_delete_stmt_TBlock5::kAlt2: {
+                const auto& alt = msg.GetBlock5().GetAlt2();
                 NewLine();
                 Visit(alt);
                 break;
@@ -1539,6 +1461,21 @@ private:
     void VisitDropAsyncReplication(const TRule_drop_replication_stmt& msg) {
         NewLine();
         VisitAllFields(TRule_drop_replication_stmt::GetDescriptor(), msg);
+    }
+
+    void VisitCreateTransfer(const TRule_create_transfer_stmt& msg) {
+        NewLine();
+        VisitAllFields(TRule_create_transfer_stmt::GetDescriptor(), msg);
+    }
+
+    void VisitAlterTransfer(const TRule_alter_transfer_stmt& msg) {
+        NewLine();
+        VisitAllFields(TRule_alter_transfer_stmt::GetDescriptor(), msg);
+    }
+
+    void VisitDropTransfer(const TRule_drop_transfer_stmt& msg) {
+        NewLine();
+        VisitAllFields(TRule_drop_transfer_stmt::GetDescriptor(), msg);
     }
 
     void VisitCreateResourcePool(const TRule_create_resource_pool_stmt& msg) {
@@ -2789,10 +2726,11 @@ private:
     }
 
     void VisitNeqSubexpr(const TRule_neq_subexpr& msg) {
-        VisitNeqSubexprImpl(msg, false);
+        bool pushedIndent = false;
+        VisitNeqSubexprImpl(msg, pushedIndent, true);
     }
 
-    void VisitNeqSubexprImpl(const TRule_neq_subexpr& msg, bool pushedIndent) {
+    void VisitNeqSubexprImpl(const TRule_neq_subexpr& msg, bool& pushedIndent, bool top) {
         auto getExpr = [](const TRule_neq_subexpr::TBlock2& b) -> const TRule_bit_subexpr& { return b.GetRule_bit_subexpr2(); };
         auto getOp = [](const TRule_neq_subexpr::TBlock2& b) -> const TRule_neq_subexpr::TBlock2::TBlock1& { return b.GetBlock1(); };
         VisitBinaryOp(msg.GetRule_bit_subexpr1(), getOp, getExpr, msg.GetBlock2().begin(), msg.GetBlock2().end());
@@ -2824,9 +2762,10 @@ private:
                     }
                 }
 
-                VisitNeqSubexprImpl(alt.GetRule_neq_subexpr2(), pushedIndent);
-                if (pushedIndent) {
+                VisitNeqSubexprImpl(alt.GetRule_neq_subexpr2(), pushedIndent, false);
+                if (pushedIndent && top) {
                     PopCurrentIndent();
+                    pushedIndent = false;
                 }
 
                 break;
@@ -3019,6 +2958,7 @@ TStaticData::TStaticData()
         })
     , PrettyVisitDispatch({
         {TToken::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitToken)},
+        {TRule_value_constructor::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitValueConstructor)},
         {TRule_into_values_source::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitIntoValuesSource)},
         {TRule_select_kind::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitSelectKind)},
         {TRule_process_core::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitProcessCore)},
@@ -3107,6 +3047,9 @@ TStaticData::TStaticData()
         {TRule_create_replication_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCreateAsyncReplication)},
         {TRule_alter_replication_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterAsyncReplication)},
         {TRule_drop_replication_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDropAsyncReplication)},
+        {TRule_create_transfer_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCreateTransfer)},
+        {TRule_alter_transfer_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterTransfer)},
+        {TRule_drop_transfer_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDropTransfer)},
         {TRule_create_topic_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCreateTopic)},
         {TRule_alter_topic_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterTopic)},
         {TRule_drop_topic_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDropTopic)},
@@ -3128,6 +3071,8 @@ TStaticData::TStaticData()
         {TRule_backup_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitBackup)},
         {TRule_restore_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitRestore)},
         {TRule_alter_sequence_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterSequence)},
+        {TRule_alter_database_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterDatabase)},
+        {TRule_show_create_table_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitShowCreateTable)},
         })
     , ObfuscatingVisitDispatch({
         {TToken::GetDescriptor(), MakeObfuscatingFunctor(&TObfuscatingVisitor::VisitToken)},
@@ -3162,8 +3107,12 @@ TStaticData::TStaticData()
 
 class TSqlFormatter : public NSQLFormat::ISqlFormatter {
 public:
-    TSqlFormatter(const NSQLTranslation::TTranslationSettings& settings)
-        : Settings(settings)
+    TSqlFormatter(const NSQLTranslationV1::TLexers& lexers,
+        const NSQLTranslationV1::TParsers& parsers,
+        const NSQLTranslation::TTranslationSettings& settings)
+        : Lexers(lexers)
+        , Parsers(parsers)
+        , Settings(settings)
     {}
 
     bool Format(const TString& query, TString& formattedQuery, NYql::TIssues& issues, EFormatMode mode) override {
@@ -3178,7 +3127,7 @@ public:
         }
 
         if (mode == EFormatMode::Obfuscate) {
-            auto message = NSQLTranslationV1::SqlAST(query, "Query", issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS, parsedSettings.AnsiLexer, parsedSettings.Antlr4Parser, parsedSettings.TestAntlr4, parsedSettings.Arena);
+            auto message = NSQLTranslationV1::SqlAST(Parsers, query, parsedSettings.File, issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS, parsedSettings.AnsiLexer, parsedSettings.Antlr4Parser, parsedSettings.Arena);
             if (!message) {
                 return false;
             }
@@ -3187,43 +3136,16 @@ public:
             return Format(visitor.Process(*message), formattedQuery, issues, EFormatMode::Pretty);
         }
 
-        auto lexer = NSQLTranslationV1::MakeLexer(parsedSettings.AnsiLexer, parsedSettings.Antlr4Parser);
-        TParsedTokenList allTokens;
-        auto onNextToken = [&](NSQLTranslation::TParsedToken&& token) {
-            if (token.Name != "EOF") {
-                allTokens.push_back(token);
-            }
-        };
-
-        if (!lexer->Tokenize(query, "Query", onNextToken, issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS)) {
+        auto lexer = NSQLTranslationV1::MakeLexer(Lexers, parsedSettings.AnsiLexer, parsedSettings.Antlr4Parser);
+        TVector<TString> statements;
+        if (!NSQLTranslationV1::SplitQueryToStatements(query, lexer, statements, issues, parsedSettings.File)) {
             return false;
         }
 
-        TVector<TTokenIterator> statements;
-        SplitByStatements(allTokens.begin(), allTokens.end(), statements);
         TStringBuilder finalFormattedQuery;
         bool prevAddLine = false;
         TMaybe<ui32> prevStmtCoreAltCase;
-        for (size_t i = 1; i < statements.size(); ++i) {
-            TStringBuilder currentQueryBuilder;
-            for (auto it = statements[i - 1]; it != statements[i]; ++it) {
-                currentQueryBuilder << it->Content;
-            }
-
-            TString currentQuery = currentQueryBuilder;
-            currentQuery = StripStringLeft(currentQuery);
-            bool isBlank = true;
-            for (auto c : currentQuery) {
-                if (c != ';') {
-                    isBlank = false;
-                    break;
-                }
-            };
-
-            if (isBlank) {
-                continue;
-            }
-
+        for (const TString& currentQuery : statements) {
             TVector<NSQLTranslation::TParsedToken> comments;
             TParsedTokenList parsedTokens, stmtTokens;
             auto onNextRawToken = [&](NSQLTranslation::TParsedToken&& token) {
@@ -3235,12 +3157,12 @@ public:
                 }
             };
 
-            if (!lexer->Tokenize(currentQuery, "Query", onNextRawToken, issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS)) {
+            if (!lexer->Tokenize(currentQuery, parsedSettings.File, onNextRawToken, issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS)) {
                 return false;
             }
 
             NYql::TIssues parserIssues;
-            auto message = NSQLTranslationV1::SqlAST(currentQuery, "Query", parserIssues, NSQLTranslation::SQL_MAX_PARSER_ERRORS, parsedSettings.AnsiLexer, parsedSettings.Antlr4Parser, parsedSettings.TestAntlr4, parsedSettings.Arena);
+            auto message = NSQLTranslationV1::SqlAST(Parsers, currentQuery, parsedSettings.File, parserIssues, NSQLTranslation::SQL_MAX_PARSER_ERRORS, parsedSettings.AnsiLexer, parsedSettings.Antlr4Parser, parsedSettings.Arena);
             if (!message) {
                 finalFormattedQuery << currentQuery;
                 if (!currentQuery.EndsWith("\n")) {
@@ -3261,7 +3183,7 @@ public:
                 stmtFormattedTokens.push_back(token);
             };
 
-            if (!lexer->Tokenize(currentFormattedQuery, "Query", onNextFormattedToken, issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS)) {
+            if (!lexer->Tokenize(currentFormattedQuery, parsedSettings.File, onNextFormattedToken, issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS)) {
                 return false;
             }
 
@@ -3288,23 +3210,28 @@ public:
     }
 
 private:
+    const NSQLTranslationV1::TLexers Lexers;
+    const NSQLTranslationV1::TParsers Parsers;
     const NSQLTranslation::TTranslationSettings Settings;
 };
 
 }
 
-ISqlFormatter::TPtr MakeSqlFormatter(const NSQLTranslation::TTranslationSettings& settings) {
-    return ISqlFormatter::TPtr(new TSqlFormatter(settings));
+ISqlFormatter::TPtr MakeSqlFormatter(const NSQLTranslationV1::TLexers& lexers,
+    const NSQLTranslationV1::TParsers& parsers,
+    const NSQLTranslation::TTranslationSettings& settings) {
+    return ISqlFormatter::TPtr(new TSqlFormatter(lexers, parsers, settings));
 }
 
-TString MutateQuery(const TString& query, const NSQLTranslation::TTranslationSettings& settings) {
+TString MutateQuery(const NSQLTranslationV1::TLexers& lexers,
+    const TString& query, const NSQLTranslation::TTranslationSettings& settings) {
     auto parsedSettings = settings;
     NYql::TIssues issues;
     if (!NSQLTranslation::ParseTranslationSettings(query, parsedSettings, issues)) {
         throw yexception() << issues.ToString();
     }
 
-    auto lexer = NSQLTranslationV1::MakeLexer(parsedSettings.AnsiLexer, parsedSettings.Antlr4Parser);
+    auto lexer = NSQLTranslationV1::MakeLexer(lexers, parsedSettings.AnsiLexer, parsedSettings.Antlr4Parser);
     TVector<NSQLTranslation::TParsedToken> allTokens;
     auto onNextToken = [&](NSQLTranslation::TParsedToken&& token) {
         if (token.Name != "EOF") {
@@ -3312,7 +3239,7 @@ TString MutateQuery(const TString& query, const NSQLTranslation::TTranslationSet
         }
     };
 
-    if (!lexer->Tokenize(query, "Query", onNextToken, issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS)) {
+    if (!lexer->Tokenize(query, parsedSettings.File, onNextToken, issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS)) {
         throw yexception() << issues.ToString();
     }
 
@@ -3327,13 +3254,15 @@ TString MutateQuery(const TString& query, const NSQLTranslation::TTranslationSet
     return newQueryBuilder;
 }
 
-bool SqlFormatSimple(const TString& query, TString& formattedQuery, TString& error) {
+bool SqlFormatSimple(const NSQLTranslationV1::TLexers& lexers,
+    const NSQLTranslationV1::TParsers& parsers,
+    const TString& query, TString& formattedQuery, TString& error) {
     try {
         google::protobuf::Arena arena;
         NSQLTranslation::TTranslationSettings settings;
         settings.Arena = &arena;
 
-        auto formatter = MakeSqlFormatter(settings);
+        auto formatter = MakeSqlFormatter(lexers, parsers, settings);
         NYql::TIssues issues;
         const bool result = formatter->Format(query, formattedQuery, issues);
         if (!result) {

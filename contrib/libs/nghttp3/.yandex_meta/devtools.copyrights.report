@@ -57,7 +57,7 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        lib/sfparse/sfparse.c [792:792]
+        lib/sfparse/sfparse.c [1060:1060]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 1c2050c8044ca0184cd622399091074c
 BELONGS ya.make
@@ -84,7 +84,7 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        lib/sfparse/sfparse.c [789:790]
+        lib/sfparse/sfparse.c [1057:1058]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 3782c9399af9718cb85783105b7784ae
 BELONGS ya.make

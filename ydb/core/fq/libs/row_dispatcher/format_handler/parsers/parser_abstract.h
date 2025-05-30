@@ -3,7 +3,7 @@
 #include <ydb/core/fq/libs/row_dispatcher/events/topic_session_stats.h>
 #include <ydb/core/fq/libs/row_dispatcher/format_handler/common/common.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_topic/include/read_events.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/read_events.h>
 
 #include <yql/essentials/public/udf/udf_value.h>
 
@@ -25,7 +25,7 @@ public:
     using TPtr = TIntrusivePtr<ITopicParser>;
 
 public:
-    virtual void ParseMessages(const TVector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>& messages) = 0;
+    virtual void ParseMessages(const std::vector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>& messages) = 0;
     virtual void Refresh(bool force = false) = 0;
 
     virtual const TVector<ui64>& GetOffsets() const = 0;

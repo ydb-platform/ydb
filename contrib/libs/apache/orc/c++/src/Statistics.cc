@@ -52,18 +52,18 @@ namespace orc {
   StatisticsImpl::StatisticsImpl(const proto::StripeStatistics& stripeStats,
                                  const StatContext& statContext) {
     for (int i = 0; i < stripeStats.col_stats_size(); i++) {
-      colStats.push_back(convertColumnStatistics(stripeStats.col_stats(i), statContext));
+      colStats_.push_back(convertColumnStatistics(stripeStats.col_stats(i), statContext));
     }
   }
 
   StatisticsImpl::StatisticsImpl(const proto::Footer& footer, const StatContext& statContext) {
     for (int i = 0; i < footer.statistics_size(); i++) {
-      colStats.push_back(convertColumnStatistics(footer.statistics(i), statContext));
+      colStats_.push_back(convertColumnStatistics(footer.statistics(i), statContext));
     }
   }
 
   StatisticsImpl::~StatisticsImpl() {
-    for (std::vector<ColumnStatistics*>::iterator ptr = colStats.begin(); ptr != colStats.end();
+    for (std::vector<ColumnStatistics*>::iterator ptr = colStats_.begin(); ptr != colStats_.end();
          ++ptr) {
       delete *ptr;
     }
@@ -85,11 +85,11 @@ namespace orc {
       const proto::StripeStatistics& stripeStats,
       std::vector<std::vector<proto::ColumnStatistics> >& indexStats,
       const StatContext& statContext) {
-    columnStats = std::make_unique<StatisticsImpl>(stripeStats, statContext);
-    rowIndexStats.resize(indexStats.size());
-    for (size_t i = 0; i < rowIndexStats.size(); i++) {
+    columnStats_ = std::make_unique<StatisticsImpl>(stripeStats, statContext);
+    rowIndexStats_.resize(indexStats.size());
+    for (size_t i = 0; i < rowIndexStats_.size(); i++) {
       for (size_t j = 0; j < indexStats[i].size(); j++) {
-        rowIndexStats[i].push_back(std::shared_ptr<const ColumnStatistics>(
+        rowIndexStats_[i].push_back(std::shared_ptr<const ColumnStatistics>(
             convertColumnStatistics(indexStats[i][j], statContext)));
       }
     }
@@ -180,205 +180,205 @@ namespace orc {
   }
 
   ColumnStatisticsImpl::ColumnStatisticsImpl(const proto::ColumnStatistics& pb) {
-    _stats.setNumberOfValues(pb.number_of_values());
-    _stats.setHasNull(pb.has_null());
+    stats_.setNumberOfValues(pb.number_of_values());
+    stats_.setHasNull(pb.has_has_null() ? pb.has_null() : true);
   }
 
   BinaryColumnStatisticsImpl::BinaryColumnStatisticsImpl(const proto::ColumnStatistics& pb,
                                                          const StatContext& statContext) {
-    _stats.setNumberOfValues(pb.number_of_values());
-    _stats.setHasNull(pb.has_null());
+    stats_.setNumberOfValues(pb.number_of_values());
+    stats_.setHasNull(pb.has_has_null() ? pb.has_null() : true);
     if (pb.has_binary_statistics() && statContext.correctStats) {
-      _stats.setHasTotalLength(pb.binary_statistics().has_sum());
-      _stats.setTotalLength(static_cast<uint64_t>(pb.binary_statistics().sum()));
+      stats_.setHasTotalLength(pb.binary_statistics().has_sum());
+      stats_.setTotalLength(static_cast<uint64_t>(pb.binary_statistics().sum()));
     }
   }
 
   BooleanColumnStatisticsImpl::BooleanColumnStatisticsImpl(const proto::ColumnStatistics& pb,
                                                            const StatContext& statContext) {
-    _stats.setNumberOfValues(pb.number_of_values());
-    _stats.setHasNull(pb.has_null());
+    stats_.setNumberOfValues(pb.number_of_values());
+    stats_.setHasNull(pb.has_has_null() ? pb.has_null() : true);
     if (pb.has_bucket_statistics() && statContext.correctStats) {
-      _hasCount = true;
-      _trueCount = pb.bucket_statistics().count(0);
+      hasCount_ = true;
+      trueCount_ = pb.bucket_statistics().count(0);
     } else {
-      _hasCount = false;
-      _trueCount = 0;
+      hasCount_ = false;
+      trueCount_ = 0;
     }
   }
 
   DateColumnStatisticsImpl::DateColumnStatisticsImpl(const proto::ColumnStatistics& pb,
                                                      const StatContext& statContext) {
-    _stats.setNumberOfValues(pb.number_of_values());
-    _stats.setHasNull(pb.has_null());
+    stats_.setNumberOfValues(pb.number_of_values());
+    stats_.setHasNull(pb.has_has_null() ? pb.has_null() : true);
     if (!pb.has_date_statistics() || !statContext.correctStats) {
       // hasMinimum_ is false by default;
       // hasMaximum_ is false by default;
-      _stats.setMinimum(0);
-      _stats.setMaximum(0);
+      stats_.setMinimum(0);
+      stats_.setMaximum(0);
     } else {
-      _stats.setHasMinimum(pb.date_statistics().has_minimum());
-      _stats.setHasMaximum(pb.date_statistics().has_maximum());
-      _stats.setMinimum(pb.date_statistics().minimum());
-      _stats.setMaximum(pb.date_statistics().maximum());
+      stats_.setHasMinimum(pb.date_statistics().has_minimum());
+      stats_.setHasMaximum(pb.date_statistics().has_maximum());
+      stats_.setMinimum(pb.date_statistics().minimum());
+      stats_.setMaximum(pb.date_statistics().maximum());
     }
   }
 
   DecimalColumnStatisticsImpl::DecimalColumnStatisticsImpl(const proto::ColumnStatistics& pb,
                                                            const StatContext& statContext) {
-    _stats.setNumberOfValues(pb.number_of_values());
-    _stats.setHasNull(pb.has_null());
+    stats_.setNumberOfValues(pb.number_of_values());
+    stats_.setHasNull(pb.has_has_null() ? pb.has_null() : true);
     if (pb.has_decimal_statistics() && statContext.correctStats) {
       const proto::DecimalStatistics& stats = pb.decimal_statistics();
-      _stats.setHasMinimum(stats.has_minimum());
-      _stats.setHasMaximum(stats.has_maximum());
-      _stats.setHasSum(stats.has_sum());
+      stats_.setHasMinimum(stats.has_minimum());
+      stats_.setHasMaximum(stats.has_maximum());
+      stats_.setHasSum(stats.has_sum());
 
-      _stats.setMinimum(Decimal(stats.minimum()));
-      _stats.setMaximum(Decimal(stats.maximum()));
-      _stats.setSum(Decimal(stats.sum()));
+      stats_.setMinimum(Decimal(stats.minimum()));
+      stats_.setMaximum(Decimal(stats.maximum()));
+      stats_.setSum(Decimal(stats.sum()));
     }
   }
 
   DoubleColumnStatisticsImpl::DoubleColumnStatisticsImpl(const proto::ColumnStatistics& pb) {
-    _stats.setNumberOfValues(pb.number_of_values());
-    _stats.setHasNull(pb.has_null());
+    stats_.setNumberOfValues(pb.number_of_values());
+    stats_.setHasNull(pb.has_has_null() ? pb.has_null() : true);
     if (!pb.has_double_statistics()) {
-      _stats.setMinimum(0);
-      _stats.setMaximum(0);
-      _stats.setSum(0);
+      stats_.setMinimum(0);
+      stats_.setMaximum(0);
+      stats_.setSum(0);
     } else {
       const proto::DoubleStatistics& stats = pb.double_statistics();
-      _stats.setHasMinimum(stats.has_minimum());
-      _stats.setHasMaximum(stats.has_maximum());
-      _stats.setHasSum(stats.has_sum());
+      stats_.setHasMinimum(stats.has_minimum());
+      stats_.setHasMaximum(stats.has_maximum());
+      stats_.setHasSum(stats.has_sum());
 
-      _stats.setMinimum(stats.minimum());
-      _stats.setMaximum(stats.maximum());
-      _stats.setSum(stats.sum());
+      stats_.setMinimum(stats.minimum());
+      stats_.setMaximum(stats.maximum());
+      stats_.setSum(stats.sum());
     }
   }
 
   IntegerColumnStatisticsImpl::IntegerColumnStatisticsImpl(const proto::ColumnStatistics& pb) {
-    _stats.setNumberOfValues(pb.number_of_values());
-    _stats.setHasNull(pb.has_null());
+    stats_.setNumberOfValues(pb.number_of_values());
+    stats_.setHasNull(pb.has_has_null() ? pb.has_null() : true);
     if (!pb.has_int_statistics()) {
-      _stats.setMinimum(0);
-      _stats.setMaximum(0);
-      _stats.setSum(0);
+      stats_.setMinimum(0);
+      stats_.setMaximum(0);
+      stats_.setSum(0);
     } else {
       const proto::IntegerStatistics& stats = pb.int_statistics();
-      _stats.setHasMinimum(stats.has_minimum());
-      _stats.setHasMaximum(stats.has_maximum());
-      _stats.setHasSum(stats.has_sum());
+      stats_.setHasMinimum(stats.has_minimum());
+      stats_.setHasMaximum(stats.has_maximum());
+      stats_.setHasSum(stats.has_sum());
 
-      _stats.setMinimum(stats.minimum());
-      _stats.setMaximum(stats.maximum());
-      _stats.setSum(stats.sum());
+      stats_.setMinimum(stats.minimum());
+      stats_.setMaximum(stats.maximum());
+      stats_.setSum(stats.sum());
     }
   }
 
   StringColumnStatisticsImpl::StringColumnStatisticsImpl(const proto::ColumnStatistics& pb,
                                                          const StatContext& statContext) {
-    _stats.setNumberOfValues(pb.number_of_values());
-    _stats.setHasNull(pb.has_null());
+    stats_.setNumberOfValues(pb.number_of_values());
+    stats_.setHasNull(pb.has_has_null() ? pb.has_null() : true);
     if (!pb.has_string_statistics() || !statContext.correctStats) {
-      _stats.setTotalLength(0);
+      stats_.setTotalLength(0);
     } else {
       const proto::StringStatistics& stats = pb.string_statistics();
-      _stats.setHasMinimum(stats.has_minimum());
-      _stats.setHasMaximum(stats.has_maximum());
-      _stats.setHasTotalLength(stats.has_sum());
+      stats_.setHasMinimum(stats.has_minimum());
+      stats_.setHasMaximum(stats.has_maximum());
+      stats_.setHasTotalLength(stats.has_sum());
 
-      _stats.setMinimum(stats.minimum());
-      _stats.setMaximum(stats.maximum());
-      _stats.setTotalLength(static_cast<uint64_t>(stats.sum()));
+      stats_.setMinimum(stats.minimum());
+      stats_.setMaximum(stats.maximum());
+      stats_.setTotalLength(static_cast<uint64_t>(stats.sum()));
     }
   }
 
   TimestampColumnStatisticsImpl::TimestampColumnStatisticsImpl(const proto::ColumnStatistics& pb,
                                                                const StatContext& statContext) {
-    _stats.setNumberOfValues(pb.number_of_values());
-    _stats.setHasNull(pb.has_null());
+    stats_.setNumberOfValues(pb.number_of_values());
+    stats_.setHasNull(pb.has_has_null() ? pb.has_null() : true);
     if (!pb.has_timestamp_statistics() || !statContext.correctStats) {
-      _stats.setMinimum(0);
-      _stats.setMaximum(0);
-      _lowerBound = 0;
-      _upperBound = 0;
-      _minimumNanos = DEFAULT_MIN_NANOS;
-      _maximumNanos = DEFAULT_MAX_NANOS;
+      stats_.setMinimum(0);
+      stats_.setMaximum(0);
+      lowerBound_ = 0;
+      upperBound_ = 0;
+      minimumNanos_ = DEFAULT_MIN_NANOS;
+      maximumNanos_ = DEFAULT_MAX_NANOS;
     } else {
       const proto::TimestampStatistics& stats = pb.timestamp_statistics();
-      _stats.setHasMinimum(stats.has_minimum_utc() ||
+      stats_.setHasMinimum(stats.has_minimum_utc() ||
                            (stats.has_minimum() && (statContext.writerTimezone != nullptr)));
-      _stats.setHasMaximum(stats.has_maximum_utc() ||
+      stats_.setHasMaximum(stats.has_maximum_utc() ||
                            (stats.has_maximum() && (statContext.writerTimezone != nullptr)));
-      _hasLowerBound = stats.has_minimum_utc() || stats.has_minimum();
-      _hasUpperBound = stats.has_maximum_utc() || stats.has_maximum();
+      hasLowerBound_ = stats.has_minimum_utc() || stats.has_minimum();
+      hasUpperBound_ = stats.has_maximum_utc() || stats.has_maximum();
       // to be consistent with java side, non-default minimum_nanos and maximum_nanos
       // are added by one in their serialized form.
-      _minimumNanos = stats.has_minimum_nanos() ? stats.minimum_nanos() - 1 : DEFAULT_MIN_NANOS;
-      _maximumNanos = stats.has_maximum_nanos() ? stats.maximum_nanos() - 1 : DEFAULT_MAX_NANOS;
+      minimumNanos_ = stats.has_minimum_nanos() ? stats.minimum_nanos() - 1 : DEFAULT_MIN_NANOS;
+      maximumNanos_ = stats.has_maximum_nanos() ? stats.maximum_nanos() - 1 : DEFAULT_MAX_NANOS;
 
       // Timestamp stats are stored in milliseconds
       if (stats.has_minimum_utc()) {
         int64_t minimum = stats.minimum_utc();
-        _stats.setMinimum(minimum);
-        _lowerBound = minimum;
+        stats_.setMinimum(minimum);
+        lowerBound_ = minimum;
       } else if (statContext.writerTimezone) {
         int64_t writerTimeSec = stats.minimum() / 1000;
         // multiply the offset by 1000 to convert to millisecond
         int64_t minimum = stats.minimum() +
                           (statContext.writerTimezone->getVariant(writerTimeSec).gmtOffset) * 1000;
-        _stats.setMinimum(minimum);
-        _lowerBound = minimum;
+        stats_.setMinimum(minimum);
+        lowerBound_ = minimum;
       } else {
-        _stats.setMinimum(0);
+        stats_.setMinimum(0);
         // subtract 1 day 1 hour (25 hours) in milliseconds to handle unknown
         // TZ and daylight savings
-        _lowerBound = stats.minimum() - (25 * SECONDS_PER_HOUR * 1000);
+        lowerBound_ = stats.minimum() - (25 * SECONDS_PER_HOUR * 1000);
       }
 
       // Timestamp stats are stored in milliseconds
       if (stats.has_maximum_utc()) {
         int64_t maximum = stats.maximum_utc();
-        _stats.setMaximum(maximum);
-        _upperBound = maximum;
+        stats_.setMaximum(maximum);
+        upperBound_ = maximum;
       } else if (statContext.writerTimezone) {
         int64_t writerTimeSec = stats.maximum() / 1000;
         // multiply the offset by 1000 to convert to millisecond
         int64_t maximum = stats.maximum() +
                           (statContext.writerTimezone->getVariant(writerTimeSec).gmtOffset) * 1000;
-        _stats.setMaximum(maximum);
-        _upperBound = maximum;
+        stats_.setMaximum(maximum);
+        upperBound_ = maximum;
       } else {
-        _stats.setMaximum(0);
+        stats_.setMaximum(0);
         // add 1 day 1 hour (25 hours) in milliseconds to handle unknown
         // TZ and daylight savings
-        _upperBound = stats.maximum() + (25 * SECONDS_PER_HOUR * 1000);
+        upperBound_ = stats.maximum() + (25 * SECONDS_PER_HOUR * 1000);
       }
       // Add 1 millisecond to account for microsecond precision of values
-      _upperBound += 1;
+      upperBound_ += 1;
     }
   }
 
   CollectionColumnStatisticsImpl::CollectionColumnStatisticsImpl(
       const proto::ColumnStatistics& pb) {
-    _stats.setNumberOfValues(pb.number_of_values());
-    _stats.setHasNull(pb.has_null());
+    stats_.setNumberOfValues(pb.number_of_values());
+    stats_.setHasNull(pb.has_has_null() ? pb.has_null() : true);
     if (!pb.has_collection_statistics()) {
-      _stats.setMinimum(0);
-      _stats.setMaximum(0);
-      _stats.setSum(0);
+      stats_.setMinimum(0);
+      stats_.setMaximum(0);
+      stats_.setSum(0);
     } else {
       const proto::CollectionStatistics& stats = pb.collection_statistics();
-      _stats.setHasMinimum(stats.has_min_children());
-      _stats.setHasMaximum(stats.has_max_children());
-      _stats.setHasSum(stats.has_total_children());
+      stats_.setHasMinimum(stats.has_min_children());
+      stats_.setHasMaximum(stats.has_max_children());
+      stats_.setHasSum(stats.has_total_children());
 
-      _stats.setMinimum(stats.min_children());
-      _stats.setMaximum(stats.max_children());
-      _stats.setSum(stats.total_children());
+      stats_.setMinimum(stats.min_children());
+      stats_.setMaximum(stats.max_children());
+      stats_.setSum(stats.total_children());
     }
   }
 

@@ -49,6 +49,12 @@ void FillSpec(NYT::TNode& spec,
     EYtOpProps opProps = 0,
     const TSet<TString>& addSecTags = {});
 
+void CheckSpecForSecretsImpl(
+    const NYT::TNode& spec,
+    const ISecretMasker::TPtr& secretMasker,
+    const TYtSettings::TConstPtr& settings
+);
+
 void FillSecureVault(NYT::TNode& spec, const IYtGateway::TSecureParams& secureParams);
 
 void FillUserJobSpecImpl(NYT::TUserJobSpec& spec,
@@ -90,11 +96,16 @@ inline void FillSpec(NYT::TNode& spec,
 }
 
 template <class TDerived, class TExecParamsPtr>
-inline void FillOperationSpec(NYT::TUserOperationSpecBase<TDerived>& spec, const TExecParamsPtr& execCtx) {
+inline void FillOperationSpec(NYT::TOperationSpecBase<TDerived>& spec, const TExecParamsPtr& execCtx) {
     if (auto val = execCtx->Options_.Config()->DefaultMaxJobFails.Get()) {
         spec.MaxFailedJobCount(*val);
     }
-    if (auto val = execCtx->Options_.Config()->CoreDumpPath.Get()) {
+}
+
+template <class TDerived, class TExecParamsPtr>
+inline void FillUserOperationSpec(NYT::TUserOperationSpecBase<TDerived>& spec, const TExecParamsPtr& execCtx) {
+    FillOperationSpec(spec, execCtx);
+    if (auto val = execCtx->Options_.Config()->CoreDumpPath.Get(execCtx->Cluster_)) {
         spec.CoreTablePath(*val);
     }
 }
@@ -117,6 +128,11 @@ inline void FillOperationOptions(NYT::TOperationOptions& opOpts,
     const TTransactionCache::TEntry::TPtr& entry)
 {
     FillOperationOptionsImpl(opOpts, execCtx->Options_.Config(), entry);
+}
+
+template <class TExecParamsPtr>
+inline void CheckSpecForSecrets(const NYT::TNode& spec, const TExecParamsPtr& execCtx) {
+    CheckSpecForSecretsImpl(spec, execCtx->SecretMasker, execCtx->Options_.Config());
 }
 
 } // NNative

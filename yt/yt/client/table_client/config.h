@@ -17,10 +17,9 @@ namespace NYT::NTableClient {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TRetentionConfig
+struct TRetentionConfig
     : public virtual NYTree::TYsonStruct
 {
-public:
     int MinDataVersions;
     int MaxDataVersions;
     TDuration MinDataTtl;
@@ -43,10 +42,9 @@ DEFINE_ENUM(ESamplingMode,
     ((Block)             (2))
 );
 
-class TChunkReaderConfig
+struct TChunkReaderConfig
     : public virtual NChunkClient::TBlockFetcherConfig
 {
-public:
     std::optional<ESamplingMode> SamplingMode;
     std::optional<double> SamplingRate;
     std::optional<ui64> SamplingSeed;
@@ -62,10 +60,9 @@ DEFINE_REFCOUNTED_TYPE(TChunkReaderConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TChunkWriterTestingOptions
+struct TChunkWriterTestingOptions
     : public NYTree::TYsonStruct
 {
-public:
     //! If true, unsupported chunk feature is added to chunk meta.
     bool AddUnsupportedFeature;
 
@@ -78,10 +75,9 @@ DEFINE_REFCOUNTED_TYPE(TChunkWriterTestingOptions)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class THashTableChunkIndexWriterConfig
+struct THashTableChunkIndexWriterConfig
     : public NYTree::TYsonStruct
 {
-public:
     //! Hash table load factor.
     double LoadFactor;
 
@@ -104,10 +100,9 @@ DEFINE_REFCOUNTED_TYPE(THashTableChunkIndexWriterConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TChunkIndexesWriterConfig
+struct TChunkIndexesWriterConfig
     : public NYTree::TYsonStruct
 {
-public:
     THashTableChunkIndexWriterConfigPtr HashTable;
 
     REGISTER_YSON_STRUCT(TChunkIndexesWriterConfig);
@@ -119,10 +114,9 @@ DEFINE_REFCOUNTED_TYPE(TChunkIndexesWriterConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TSlimVersionedWriterConfig
+struct TSlimVersionedWriterConfig
     : public NYTree::TYsonStruct
 {
-public:
     double TopValueQuantile;
     bool EnablePerValueDictionaryEncoding;
 
@@ -135,10 +129,9 @@ DEFINE_REFCOUNTED_TYPE(TSlimVersionedWriterConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TChunkWriterConfig
+struct TChunkWriterConfig
     : public NChunkClient::TEncodingWriterConfig
 {
-public:
     i64 BlockSize;
 
     i64 MaxSegmentValueCount;
@@ -154,6 +147,7 @@ public:
     i64 MaxDataWeightBetweenBlocks;
 
     double SampleRate;
+    bool UseOriginalDataWeightInSamples;
 
     bool EnableLargeColumnarStatistics;
 
@@ -177,10 +171,9 @@ DEFINE_REFCOUNTED_TYPE(TChunkWriterConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TKeyFilterWriterConfig
+struct TKeyFilterWriterConfig
     : public virtual NYTree::TYsonStruct
 {
-public:
     bool Enable;
 
     i64 BlockSize;
@@ -200,10 +193,9 @@ public:
 
 DEFINE_REFCOUNTED_TYPE(TKeyFilterWriterConfig)
 
-class TKeyPrefixFilterWriterConfig
+struct TKeyPrefixFilterWriterConfig
     : public TKeyFilterWriterConfig
 {
-public:
     //! Will produce filters for key prefix of specified lengths.
     THashSet<int> PrefixLengths;
 
@@ -216,10 +208,9 @@ DEFINE_REFCOUNTED_TYPE(TKeyPrefixFilterWriterConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TDictionaryCompressionConfig
+struct TDictionaryCompressionConfig
     : public virtual NYTree::TYsonStruct
 {
-public:
     bool Enable;
 
     //! Idle period after last successful or unsuccessful building iteration.
@@ -260,6 +251,9 @@ public:
     //! Upper limit on acceptable compression ratio. No chunk compression is performed if this limit is exceeded.
     double MaxAcceptableCompressionRatio;
 
+    //! For testing purposes only.
+    bool ElectRandomPolicy;
+
     REGISTER_YSON_STRUCT(TDictionaryCompressionConfig);
 
     static void Register(TRegistrar registrar);
@@ -269,10 +263,9 @@ DEFINE_REFCOUNTED_TYPE(TDictionaryCompressionConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TDictionaryCompressionSessionConfig
+struct TDictionaryCompressionSessionConfig
     : public virtual NYTree::TYsonStruct
 {
-public:
     // Compression session options.
 
     //! Level of compression algorithm.
@@ -293,10 +286,9 @@ DEFINE_REFCOUNTED_TYPE(TDictionaryCompressionSessionConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TBatchHunkReaderConfig
+struct TBatchHunkReaderConfig
     : public virtual NYTree::TYsonStruct
 {
-public:
     int MaxHunkCountPerRead;
     i64 MaxTotalHunkLengthPerRead;
 
@@ -309,14 +301,13 @@ DEFINE_REFCOUNTED_TYPE(TBatchHunkReaderConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TTableReaderConfig
+struct TTableReaderConfig
     : public virtual NChunkClient::TMultiChunkReaderConfig
     , public virtual TChunkReaderConfig
     , public TBatchHunkReaderConfig
     , public NChunkClient::TChunkFragmentReaderConfig
     , public TDictionaryCompressionSessionConfig
 {
-public:
     bool SuppressAccessTracking;
     bool SuppressExpirationTimeoutRenewal;
     EUnavailableChunkStrategy UnavailableChunkStrategy;
@@ -334,7 +325,7 @@ DEFINE_REFCOUNTED_TYPE(TTableReaderConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TTableWriterConfig
+struct TTableWriterConfig
     : public TChunkWriterConfig
     , public NChunkClient::TMultiChunkWriterConfig
 {
@@ -348,10 +339,9 @@ DEFINE_REFCOUNTED_TYPE(TTableWriterConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TTypeConversionConfig
+struct TTypeConversionConfig
     : public NYTree::TYsonStruct
 {
-public:
     bool EnableTypeConversion;
     bool EnableStringToAllConversion;
     bool EnableAllToStringConversion;
@@ -367,10 +357,9 @@ DEFINE_REFCOUNTED_TYPE(TTypeConversionConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TInsertRowsFormatConfig
+struct TInsertRowsFormatConfig
     : public virtual NYTree::TYsonStruct
 {
-public:
     bool EnableNullToYsonEntityConversion;
 
     REGISTER_YSON_STRUCT(TInsertRowsFormatConfig);
@@ -382,16 +371,16 @@ DEFINE_REFCOUNTED_TYPE(TInsertRowsFormatConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TChunkReaderOptions
+struct TChunkReaderOptions
     : public virtual NYTree::TYsonStruct
 {
-public:
     bool EnableTableIndex;
     bool EnableRangeIndex;
     bool EnableRowIndex;
     bool DynamicTable;
     bool EnableTabletIndex;
     bool EnableKeyWidening;
+    bool EnableAnyUnpacking;
 
     static TChunkReaderOptionsPtr GetDefault();
 
@@ -404,10 +393,9 @@ DEFINE_REFCOUNTED_TYPE(TChunkReaderOptions)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TChunkWriterOptions
+struct TChunkWriterOptions
     : public virtual NChunkClient::TEncodingWriterOptions
 {
-public:
     bool ValidateSorted;
     bool ValidateRowWeight;
     bool ValidateKeyWeight;
@@ -440,6 +428,9 @@ public:
     //! Maximum number of heavy columns in approximate statistics.
     int MaxHeavyColumns;
 
+    std::optional<i64> BlockSize;
+    std::optional<i64> BufferSize;
+
     void EnableValidationOptions(bool validateAnyIsValidYson = false);
 
     REGISTER_YSON_STRUCT(TChunkWriterOptions);
@@ -451,10 +442,9 @@ DEFINE_REFCOUNTED_TYPE(TChunkWriterOptions)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TVersionedRowDigestConfig
+struct TVersionedRowDigestConfig
     : public NYTree::TYsonStruct
 {
-public:
     bool Enable;
     TTDigestConfigPtr TDigest;
 
@@ -484,10 +474,9 @@ struct TRowBatchReadOptions
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TSchemalessBufferedDynamicTableWriterConfig
+struct TSchemalessBufferedDynamicTableWriterConfig
     : public TTableWriterConfig
 {
-public:
     i64 MaxBatchSize;
     TDuration FlushPeriod;
     TExponentialBackoffOptions RetryBackoff;

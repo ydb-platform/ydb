@@ -1,4 +1,4 @@
-# Working with PostgreSQL databases
+# Working with PostgreSQL Databases
 
 This section provides basic information on working with external [PostgreSQL](http://postgresql.org) databases.
 
@@ -29,7 +29,7 @@ To work with an external PostgreSQL database, you need to follow these steps:
 3. {% include [!](_includes/connector_deployment.md) %}
 4. [Execute a query](#query) to the database.
 
-## Query syntax {#query}
+## Query Syntax {#query}
 
 The following SQL query format is used to work with PostgreSQL:
 
@@ -60,7 +60,7 @@ When working with PostgreSQL clusters, there are a number of limitations:
     |`Float`|
     |`Double`|
 
-## Supported data types
+## Supported Data Types
 
 In the PostgreSQL database, the optionality of column values (whether a column can contain `NULL` values) is not part of the data type system. The `NOT NULL` constraint for each column is implemented as the `attnotnull` attribute in the system catalog [pg_attribute](https://www.postgresql.org/docs/current/catalog-pg-attribute.html), i.e., at the metadata level of the table. Therefore, all basic PostgreSQL types can contain `NULL` values by default, and in the {{ ydb-full-name }} type system, they should be mapped to [optional](../../yql/reference/types/optional.md) types.
 

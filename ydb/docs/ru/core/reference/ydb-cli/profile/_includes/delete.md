@@ -46,5 +46,5 @@ Profile "mydb1" was removed.
 Хотя специальной команды удаления всех профилей нет в {{ ydb-short-name }} CLI, в Linux-совместимых операционных системах вы можете воспользоваться следующим рецептом для удаления всех существующих профилей:
 
 ``` bash
-{{ ydb-cli }} config profile list | while read l;do {{ ydb-cli }} config profile delete $l;done;
+{{ ydb-cli }} config profile list | while read l; do {{ ydb-cli }} config profile delete $l; done;
 ```

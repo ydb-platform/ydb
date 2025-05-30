@@ -6,6 +6,7 @@
 #include "flat_scan_spent.h"
 #include "flat_bio_events.h"
 #include "flat_fwd_env.h"
+#include "util_fmt_abort.h"
 #include "util_fmt_logger.h"
 #include "util_fmt_desc.h"
 #include "shared_sausagecache.h"
@@ -25,6 +26,7 @@ namespace NOps {
 
     class TDriver final
             : public ::NActors::TActor<TDriver>
+            , public IActorExceptionHandler
             , private NTable::TFeed
             , private NTable::IDriver
             , private ILoadBlob
@@ -39,7 +41,7 @@ namespace NOps {
         using TSpent = NTable::TSpent;
         using IScan = NTable::IScan;
         using EScan = NTable::EScan;
-        using EAbort = NTable::EAbort;
+        using EStatus = NTable::EStatus;
         using ELnLev = NUtil::ELnLev;
 
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -70,7 +72,7 @@ namespace NOps {
                 delete DetachScan();
         }
 
-        void Describe(IOutputStream &out) const noexcept override
+        void Describe(IOutputStream &out) const override
         {
             out
                 << "Scan{" << Serial << " on " << Snapshot->Table
@@ -82,7 +84,6 @@ namespace NOps {
             enum EEv {
                 EvLoadBlob = EventSpaceBegin(TKikimrEvents::ES_PRIVATE),
                 EvBlobLoaded,
-                EvLoadPages,
                 EvPartLoaded,
                 EvPartFailed,
             };
@@ -107,14 +108,6 @@ namespace NOps {
                 { }
             };
 
-            struct TEvLoadPages : public TEventLocal<TEvLoadPages, EvLoadPages> {
-                TAutoPtr<NPageCollection::TFetch> Request;
-
-                TEvLoadPages(TAutoPtr<NPageCollection::TFetch> request)
-                    : Request(std::move(request))
-                { }
-            };
-
             struct TEvPartLoaded : public TEventLocal<TEvPartLoaded, EvPartLoaded> {
                 TPartView Part;
 
@@ -135,9 +128,10 @@ namespace NOps {
     private:
         class TColdPartLoader : public ::NActors::TActorBootstrapped<TColdPartLoader> {
         public:
-            TColdPartLoader(TActorId owner, TIntrusiveConstPtr<TColdPartStore> part)
+            TColdPartLoader(TActorId owner, TIntrusiveConstPtr<TColdPartStore> part, EPriority readPriority)
                 : Owner(owner)
                 , Part(std::move(part))
+                , ReadPriority(readPriority)
             { }
 
             void Bootstrap() {
@@ -163,15 +157,15 @@ namespace NOps {
             void Handle(TEvPrivate::TEvBlobLoaded::TPtr& ev) {
                 auto* msg = ev->Get();
                 ui64 slot = ev->Cookie;
-                Y_ABORT_UNLESS(slot < PageCollections.size());
-                Y_ABORT_UNLESS(slot < PageCollectionLoaders.size());
-                Y_ABORT_UNLESS(!PageCollections[slot]);
+                Y_ENSURE(slot < PageCollections.size());
+                Y_ENSURE(slot < PageCollectionLoaders.size());
+                Y_ENSURE(!PageCollections[slot]);
                 auto& loader = PageCollectionLoaders[slot];
                 if (loader.Apply(msg->BlobId, std::move(msg->Body))) {
                     TIntrusiveConstPtr<NPageCollection::IPageCollection> pack =
                         new NPageCollection::TPageCollection(Part->LargeGlobIds[slot], loader.ExtractSharedData());
                     PageCollections[slot] = new TPrivatePageCache::TInfo(std::move(pack));
-                    Y_ABORT_UNLESS(PageCollectionsLeft > 0);
+                    Y_ENSURE(PageCollectionsLeft > 0);
                     if (0 == --PageCollectionsLeft) {
                         PageCollectionLoaders.clear();
                         StartLoader();
@@ -181,7 +175,7 @@ namespace NOps {
 
         private:
             void StartLoader() {
-                Y_ABORT_UNLESS(!Loader);
+                Y_ENSURE(!Loader);
                 Loader.emplace(
                     std::move(PageCollections),
                     Part->Legacy,
@@ -194,8 +188,8 @@ namespace NOps {
             }
 
             void RunLoader() {
-                for (auto req : Loader->Run(false)) {
-                    Send(Owner, new TEvPrivate::TEvLoadPages(std::move(req)));
+                for (auto req : Loader->Run({.PreloadIndex = false, .PreloadData = false})) {
+                    Send(MakeSharedPageCacheId(), new NSharedCache::TEvRequest(ReadPriority, req));
                     ++ReadsLeft;
                 }
 
@@ -209,6 +203,7 @@ namespace NOps {
             STRICT_STFUNC(StateLoadPart, {
                 sFunc(TEvents::TEvPoison, PassAway);
                 hFunc(NSharedCache::TEvResult, Handle);
+                hFunc(NBlockIO::TEvStat, Handle);
             });
 
             void Handle(NSharedCache::TEvResult::TPtr& ev) {
@@ -218,20 +213,31 @@ namespace NOps {
                     return PassAway();
                 }
 
-                Y_ABORT_UNLESS(ReadsLeft > 0);
+                Y_ENSURE(ReadsLeft > 0);
                 --ReadsLeft;
 
-                Y_ABORT_UNLESS(Loader);
-                Loader->Save(msg->Cookie, msg->Loaded);
+                Y_ENSURE(Loader);
+                Loader->Save(msg->Cookie, msg->Pages);
 
                 if (ReadsLeft == 0) {
                     RunLoader();
                 }
             }
 
+            void Handle(NBlockIO::TEvStat::TPtr& ev) {
+                ev->Rewrite(ev->GetTypeRewrite(), Owner);
+                TActivationContext::Send(ev.Release());
+            }
+
+            void PassAway() override {
+                Send(MakeSharedPageCacheId(), new NSharedCache::TEvUnregister);
+                TActorBootstrapped::PassAway();
+            }
+
         private:
             TActorId Owner;
             TIntrusiveConstPtr<TColdPartStore> Part;
+            EPriority ReadPriority;
             TVector<TIntrusivePtr<TPrivatePageCache::TInfo>> PageCollections;
             TVector<NPageCollection::TLargeGlobIdRestoreState> PageCollectionLoaders;
             size_t PageCollectionsLeft = 0;
@@ -240,7 +246,7 @@ namespace NOps {
         };
 
     private:
-        void MakeCache() noexcept
+        void MakeCache()
         {
             NTable::NFwd::TConf conf;
 
@@ -280,7 +286,7 @@ namespace NOps {
             }
         }
 
-        NTable::IPages* MakeEnv() noexcept override
+        NTable::IPages* MakeEnv() override
         {
             if (Resets++ != 0) {
                 Cache->Reset();
@@ -292,7 +298,7 @@ namespace NOps {
             return Cache.Get();
         }
 
-        TPartView LoadPart(const TIntrusiveConstPtr<TColdPart>& part) noexcept override
+        TPartView LoadPart(const TIntrusiveConstPtr<TColdPart>& part) override
         {
             const auto label = part->Label;
             auto itLoaded = ColdPartLoaded.find(label);
@@ -305,21 +311,21 @@ namespace NOps {
             if (itLoader == ColdPartLoaders.end()) {
                 // Create a loader for this new part
                 TIntrusiveConstPtr<TColdPartStore> partStore = dynamic_cast<TColdPartStore*>(const_cast<TColdPart*>(part.Get()));
-                Y_VERIFY_S(partStore, "Cannot load unsupported part " << NFmt::Do(*part));
-                ColdPartLoaders[label] = RegisterWithSameMailbox(new TColdPartLoader(SelfId(), std::move(partStore)));
+                Y_ENSURE(partStore, "Cannot load unsupported part " << NFmt::Do(*part));
+                ColdPartLoaders[label] = RegisterWithSameMailbox(new TColdPartLoader(SelfId(), std::move(partStore), Args.ReadPrio));
             }
 
             // Return empty TPartView to signal loader is still in progress
             return { };
         }
 
-        bool MayProgress() noexcept {
+        bool MayProgress() {
             return !IsPaused() && Cache->MayProgress() && ColdPartLoaders.empty();
         }
 
-        void Touch(EScan scan) noexcept override
+        void Touch(EScan scan) override
         {
-            Y_ABORT_UNLESS(Depth == 0, "Touch(..) is used from invalid context");
+            Y_ENSURE(Depth == 0, "Touch(..) is used from invalid context");
 
             switch (scan) {
                 case EScan::Feed:
@@ -333,7 +339,7 @@ namespace NOps {
                     return Spent->Alter(/* resources not available */ false);
 
                 case EScan::Final:
-                    return Terminate(EAbort::None);
+                    return Terminate(EStatus::Done);
 
                 case EScan::Sleep:
                     Pause();
@@ -341,7 +347,7 @@ namespace NOps {
                     return Spent->Alter(/* resources not available */ false);
             }
 
-            Y_ABORT("Scan actor got an unexpected EScan value");
+            Y_TABLET_ERROR("Scan actor got an unexpected EScan value");
         }
 
         void Registered(TActorSystem *sys, const TActorId &owner) override
@@ -359,7 +365,6 @@ namespace NOps {
             hFunc(TEvContinue, Handle);
             hFunc(TEvPrivate::TEvLoadBlob, Handle);
             hFunc(TEvBlobStorage::TEvGetResult, Handle);
-            hFunc(TEvPrivate::TEvLoadPages, Handle);
             hFunc(NBlockIO::TEvStat, Handle);
             hFunc(TEvPrivate::TEvPartLoaded, Handle);
             hFunc(TEvPrivate::TEvPartFailed, Handle);
@@ -369,9 +374,9 @@ namespace NOps {
             cFunc(TEvents::TEvPoison::EventType, HandlePoison);
         });
 
-        void Bootstrap() noexcept
+        void Bootstrap()
         {
-            Y_ABORT_UNLESS(!Spent, "Talble scan actor bootstrapped twice");
+            Y_ENSURE(!Spent, "Talble scan actor bootstrapped twice");
 
             Spent = new TSpent(TAppData::TimeProvider.Get());
 
@@ -442,12 +447,12 @@ namespace NOps {
             SendToOwner(new TEvScanStat(elapsedUs, stat.Seen, stat.Skipped));
         }
 
-        void React() noexcept
+        void React()
         {
             TGuard<ui64, NUtil::TIncDecOps<ui64>> guard(Depth);
 
             Y_DEBUG_ABORT_UNLESS(MayProgress(), "React called with non-ready cache");
-            Y_ABORT_UNLESS(Scan, "Table scan op has been finalized");
+            Y_ENSURE(Scan, "Table scan op has been finalized");
 
             TStatState stat(Seen, Skipped);
             ui64 processed = 0;
@@ -474,7 +479,7 @@ namespace NOps {
                 processed += stat.UpdateRows(Seen, Skipped);
 
                 if (ready == NTable::EReady::Gone) {
-                    Terminate(EAbort::None);
+                    Terminate(EStatus::Done);
                     stat.UpdateCycles();
                     SendStat(stat);
                     return;
@@ -482,9 +487,9 @@ namespace NOps {
 
                 while (auto req = Cache->GrabFetches()) {
                     if (auto logl = Logger->Log(ELnLev::Debug))
-                        logl << NFmt::Do(*this) << " " << NFmt::Do(*req);
+                        logl << NFmt::Do(*this) << " Fetches " << req->DebugString();
 
-                    Send(MakeSharedPageCacheId(), new NSharedCache::TEvRequest(Args.ReadPrio, req, SelfId()));
+                    Send(MakeSharedPageCacheId(), new NSharedCache::TEvRequest(Args.ReadPrio, req));
                 }
 
                 if (ready == NTable::EReady::Page)
@@ -493,7 +498,7 @@ namespace NOps {
                 if (!MayProgress()) {
                     // We must honor EReady::Gone from an implicit callback
                     if (ImplicitPageFault() == NTable::EReady::Gone) {
-                        Terminate(EAbort::None);
+                        Terminate(EStatus::Done);
                         stat.UpdateCycles();
                         SendStat(stat);
                         return;
@@ -511,9 +516,9 @@ namespace NOps {
             SendStat(stat);
         }
 
-        void Handle(TEvContinue::TPtr&) noexcept
+        void Handle(TEvContinue::TPtr&)
         {
-            Y_ABORT_UNLESS(ContinueInFly);
+            Y_ENSURE(ContinueInFly);
 
             ContinueInFly = false;
 
@@ -522,9 +527,9 @@ namespace NOps {
             }
         }
 
-        void Handle(TEvPrivate::TEvLoadBlob::TPtr& ev) noexcept
+        void Handle(TEvPrivate::TEvLoadBlob::TPtr& ev)
         {
-            Y_ABORT_UNLESS(ev->Sender);
+            Y_ENSURE(ev->Sender);
             auto* msg = ev->Get();
 
             auto& req = BlobQueueRequests.emplace_back();
@@ -536,22 +541,22 @@ namespace NOps {
             BlobQueue.SendRequests(SelfId());
         }
 
-        void Handle(TEvBlobStorage::TEvGetResult::TPtr& ev) noexcept
+        void Handle(TEvBlobStorage::TEvGetResult::TPtr& ev)
         {
             if (!BlobQueue.ProcessResult(ev->Get())) {
-                return Terminate(EAbort::Host);
+                return Terminate(EStatus::StorageError);
             }
 
             BlobQueue.SendRequests(SelfId());
         }
 
-        void OnBlobLoaded(const TLogoBlobID& id, TString body, uintptr_t cookie) noexcept override
+        void OnBlobLoaded(const TLogoBlobID& id, TString body, uintptr_t cookie) override
         {
-            Y_ABORT_UNLESS(cookie >= BlobQueueRequestsOffset);
+            Y_ENSURE(cookie >= BlobQueueRequestsOffset);
             size_t idx = cookie - BlobQueueRequestsOffset;
-            Y_ABORT_UNLESS(idx < BlobQueueRequests.size());
+            Y_ENSURE(idx < BlobQueueRequests.size());
             auto& req = BlobQueueRequests[idx];
-            Y_ABORT_UNLESS(req.Sender);
+            Y_ENSURE(req.Sender);
             Send(req.Sender, new TEvPrivate::TEvBlobLoaded(id, std::move(body)), 0, req.Cookie);
             req.Sender = {};
             while (!BlobQueueRequests.empty() && !BlobQueueRequests.front().Sender) {
@@ -560,23 +565,13 @@ namespace NOps {
             }
         }
 
-        void Handle(TEvPrivate::TEvLoadPages::TPtr& ev) noexcept
-        {
-            auto* msg = ev->Get();
-
-            TActorIdentity(ev->Sender).Send(
-                MakeSharedPageCacheId(),
-                new NSharedCache::TEvRequest(Args.ReadPrio, std::move(msg->Request), SelfId()),
-                ev->Flags, ev->Cookie);
-        }
-
-        void Handle(NBlockIO::TEvStat::TPtr& ev) noexcept
+        void Handle(NBlockIO::TEvStat::TPtr& ev)
         {
             ev->Rewrite(ev->GetTypeRewrite(), Owner);
             TActivationContext::Send(ev.Release());
         }
 
-        void Handle(TEvPrivate::TEvPartLoaded::TPtr& ev) noexcept
+        void Handle(TEvPrivate::TEvPartLoaded::TPtr& ev)
         {
             auto* msg = ev->Get();
 
@@ -587,7 +582,7 @@ namespace NOps {
             partView = std::move(msg->Part);
 
             auto* partStore = partView.As<TPartStore>();
-            Y_ABORT_UNLESS(partStore);
+            Y_ENSURE(partStore);
 
             Cache->AddCold(partView);
 
@@ -597,17 +592,17 @@ namespace NOps {
             }
         }
 
-        void Handle(TEvPrivate::TEvPartFailed::TPtr& ev) noexcept
+        void Handle(TEvPrivate::TEvPartFailed::TPtr& ev)
         {
             auto* msg = ev->Get();
 
             const auto label = msg->Label;
             ColdPartLoaders.erase(label);
 
-            Terminate(EAbort::Host);
+            Terminate(EStatus::StorageError);
         }
 
-        void Handle(NSharedCache::TEvResult::TPtr& ev) noexcept
+        void Handle(NSharedCache::TEvResult::TPtr& ev)
         {
             auto& msg = *ev->Get();
 
@@ -621,10 +616,10 @@ namespace NOps {
                     GetServiceCounters(AppData()->Counters, "tablets")->GetCounter("alerts_scan_nodata", true)->Inc();
                 }
 
-                return Terminate(EAbort::Host);
+                return Terminate(EStatus::StorageError);
             }
 
-            Cache->DoSave(std::move(msg.Origin), msg.Cookie, std::move(msg.Loaded));
+            Cache->DoSave(std::move(msg.PageCollection), msg.Cookie, std::move(msg.Pages));
 
             if (MayProgress()) {
                 Spent->Alter(true /* resource available again */);
@@ -632,23 +627,23 @@ namespace NOps {
             }
         }
 
-        void HandleUndelivered() noexcept
+        void HandleUndelivered()
         {
-            Terminate(EAbort::Lost);
+            Terminate(EStatus::Lost);
         }
 
-        void HandlePoison() noexcept
+        void HandlePoison()
         {
-            Terminate(EAbort::Term);
+            Terminate(EStatus::Term);
         }
 
-        void Terminate(EAbort abort) noexcept
+        void Terminate(EStatus status, const std::exception* exc = nullptr)
         {
             auto trace = Args.Trace ? Cache->GrabTraces() : nullptr;
 
             if (auto logl = Logger->Log(ELnLev::Info)) {
                 logl
-                    << NFmt::Do(*this) << " end=" << ui32(abort)
+                    << NFmt::Do(*this) << " end=" << status
                     << ", " << Seen << "r seen, " << NFmt::Do(Cache->Stats())
                     << ", bio " << NFmt::If(Spent.Get());
 
@@ -660,15 +655,17 @@ namespace NOps {
 
             /* Each Flatten should have its trace on the same position */
 
-            Y_ABORT_UNLESS(!trace || trace->Sieve.size() == Subset.Flatten.size() + 1);
+            Y_ENSURE(!trace || trace->Sieve.size() == Subset.Flatten.size() + 1);
 
             /* After invocation of Finish(...) scan object is left on its
                 own and it has to handle self deletion if required. */
+            IScan* scan = DetachScan();
+            auto prod = exc
+                ? scan->Finish(*exc)
+                : scan->Finish(status);
 
-            auto prod = DetachScan()->Finish(abort);
-
-            if (abort != EAbort::Lost) {
-                auto ev = new TEvResult(Serial, abort, std::move(Snapshot), prod);
+            if (status != EStatus::Lost) {
+                auto ev = new TEvResult(Serial, status, std::move(Snapshot), prod);
 
                 ev->Trace = std::move(trace);
 
@@ -683,12 +680,33 @@ namespace NOps {
             PassAway();
         }
 
-        void SendToSelf(THolder<IEventBase> event) noexcept
+        bool OnUnhandledException(const std::exception& exc) override
+        {
+            if (auto logl = Logger->Log(ELnLev::Error)) {
+                logl
+                    << NFmt::Do(*this)
+                    << " unhandled exception " << TypeName(exc) << ": " << exc.what() << Endl
+                    << TBackTrace::FromCurrentException().PrintToString();
+            }
+
+            GetServiceCounters(AppData()->Counters, "tablets")->GetCounter("alerts_scan_broken", true)->Inc();
+
+            Terminate(NTable::EStatus::Exception, &exc);
+
+            return true;
+        }
+
+        void Throw(const std::exception& exc) override
+        {
+            OnUnhandledException(exc);
+        }
+
+        void SendToSelf(THolder<IEventBase> event)
         {
             Send(SelfId(), event.Release());
         }
 
-        void SendToOwner(TAutoPtr<IEventBase> event, bool nack = false) noexcept
+        void SendToOwner(TAutoPtr<IEventBase> event, bool nack = false)
         {
             ui32 flags = nack ? NActors::IEventHandle::FlagTrackDelivery : 0;
 

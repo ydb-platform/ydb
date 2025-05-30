@@ -162,7 +162,7 @@ private:
 
         for (const auto& [tag, column] : entry.Columns) {
             auto it = AsDerived()->MainColumnToTag.find(column.Name);
-            Y_ABORT_UNLESS(it != AsDerived()->MainColumnToTag.end());
+            Y_ENSURE(it != AsDerived()->MainColumnToTag.end());
 
             Y_DEBUG_ABORT_UNLESS(!AsDerived()->TagMap.contains(it->second));
             AsDerived()->TagMap.emplace(it->second, tag);

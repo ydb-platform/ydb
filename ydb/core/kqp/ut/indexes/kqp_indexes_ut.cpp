@@ -6,8 +6,8 @@
 #include <ydb/core/kqp/gateway/kqp_metadata_loader.h>
 #include <ydb/core/kqp/host/kqp_host_impl.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
 #include <yql/essentials/core/services/mounts/yql_mounts.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
@@ -55,7 +55,7 @@ TIntrusivePtr<IKqpHost> CreateKikimrQueryProcessor(TIntrusivePtr<IKqpGateway> ga
     UNIT_ASSERT(TryParseFromTextFormat(defaultSettingsStream, defaultSettings));
     kikimrConfig->Init(defaultSettings.GetDefaultSettings(), cluster, settings, true);
 
-    auto federatedQuerySetup = std::make_optional<TKqpFederatedQuerySetup>({NYql::IHTTPGateway::Make(), nullptr, nullptr, nullptr, {}, {}, {}, nullptr, nullptr, {}});
+    auto federatedQuerySetup = std::make_optional<TKqpFederatedQuerySetup>({NYql::IHTTPGateway::Make(), nullptr, nullptr, nullptr, {}, {}, {}, nullptr, {}, nullptr, nullptr, {}, nullptr});
     return NKqp::CreateKqpHost(gateway, cluster, "/Root", kikimrConfig, moduleResolver,
                                federatedQuerySetup, nullptr, nullptr, NKikimrConfig::TQueryServiceConfig(), {}, funcRegistry, funcRegistry, keepConfigChanges, nullptr, actorSystem, nullptr);
 }
@@ -118,6 +118,9 @@ Y_UNIT_TEST_SUITE(KqpIndexMetadata) {
         auto serverSettings = TKikimrSettings()
             .SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        
 
         auto& server = kikimr.GetTestServer();
         auto gateway = GetIcGateway(server);
@@ -238,8 +241,8 @@ Y_UNIT_TEST_SUITE(KqpIndexMetadata) {
             UNIT_ASSERT_C(explainResult.IsSuccess(), explainResult.GetIssues().ToString());
 
             Cerr << explainResult.GetAst() << Endl;
-            UNIT_ASSERT_C(explainResult.GetAst().Contains("'('\"Reverse\")"), explainResult.GetAst());
-            UNIT_ASSERT_C(explainResult.GetAst().Contains("'('\"Sorted\")"), explainResult.GetAst());
+            UNIT_ASSERT_C(explainResult.GetAst().contains("'('\"Reverse\")"), explainResult.GetAst());
+            UNIT_ASSERT_C(explainResult.GetAst().contains("'('\"Sorted\")"), explainResult.GetAst());
 
             NJson::TJsonValue plan;
             NJson::ReadJsonTree(explainResult.GetPlan(), &plan, true);
@@ -273,6 +276,9 @@ Y_UNIT_TEST_SUITE(KqpIndexMetadata) {
         auto serverSettings = TKikimrSettings()
             .SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        
 
         auto& server = kikimr.GetTestServer();
         auto gateway = GetIcGateway(server);
@@ -386,16 +392,19 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         auto serverSettings = TKikimrSettings()
             .SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         {
-            const TString keyColumnName = "key";
+            const std::string keyColumnName = "key";
             auto builder = TTableBuilder()
                .AddNullableColumn(keyColumnName, EPrimitiveType::Uint64);
 
             builder.AddNullableColumn("index_0", EPrimitiveType::Utf8);
-            builder.AddSecondaryIndex("index_0_name", TVector<TString>{"index_0", keyColumnName});
+            builder.AddSecondaryIndex("index_0_name", std::vector<std::string>{"index_0", keyColumnName});
             builder.AddNullableColumn("value", EPrimitiveType::Uint32);
             builder.SetPrimaryKeyColumns({keyColumnName});
 
@@ -443,6 +452,9 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         auto serverSettings = TKikimrSettings()
             .SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -452,8 +464,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                 .AddNullableColumn("Key", EPrimitiveType::String)
                 .AddNullableColumn("Index2", EPrimitiveType::String)
                 .AddNullableColumn("Value", EPrimitiveType::String);
-            tableBuilder.SetPrimaryKeyColumns(TVector<TString>{"Key"});
-            tableBuilder.AddSecondaryIndex("Index", TVector<TString>{"Index2"});
+            tableBuilder.SetPrimaryKeyColumns(std::vector<std::string>{"Key"});
+            tableBuilder.AddSecondaryIndex("Index", std::vector<std::string>{"Index2"});
             auto result = session.CreateTable("/Root/TestTable", tableBuilder.Build()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
@@ -511,7 +523,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         // Continue tx1, select from index table only
         auto result2 = session.ExecuteDataQuery(
                                  query2,
-                                 TTxControl::Tx(result1.GetTransaction().GetRef()).CommitTx())
+                                 TTxControl::Tx(result1.GetTransaction().value()).CommitTx())
                           .ExtractValueSync();
         // read only tx should succeed in MVCC case
         UNIT_ASSERT_VALUES_EQUAL_C(result2.GetStatus(), NYdb::EStatus::SUCCESS, result2.GetIssues().ToString());
@@ -522,6 +534,9 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         auto serverSettings = TKikimrSettings()
             .SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -531,8 +546,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                 .AddNullableColumn("Key", EPrimitiveType::String)
                 .AddNullableColumn("Index2", EPrimitiveType::String)
                 .AddNullableColumn("Value", EPrimitiveType::String);
-            tableBuilder.SetPrimaryKeyColumns(TVector<TString>{"Key"});
-            tableBuilder.AddSecondaryIndex("Index", TVector<TString>{"Index2"});
+            tableBuilder.SetPrimaryKeyColumns(std::vector<std::string>{"Key"});
+            tableBuilder.AddSecondaryIndex("Index", std::vector<std::string>{"Index2"});
             auto result = session.CreateTable("/Root/TestTable", tableBuilder.Build()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
@@ -591,7 +606,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         // Continue tx1, write to table should fail in both MVCC and non-MVCC scenarios
         auto result2 = session.ExecuteDataQuery(
                                  query2,
-                                 TTxControl::Tx(result1.GetTransaction().GetRef()).CommitTx())
+                                 TTxControl::Tx(result1.GetTransaction().value()).CommitTx())
                           .ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result2.GetStatus(), NYdb::EStatus::ABORTED, result2.GetIssues().ToString().c_str());
     }
@@ -601,6 +616,9 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         auto serverSettings = TKikimrSettings()
             .SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -613,8 +631,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                 .AddNullableColumn("fk2", EPrimitiveType::Int32)
                 .AddNullableColumn("fk3", EPrimitiveType::Uint64)
                 .AddNullableColumn("Value", EPrimitiveType::String);
-            tableBuilder.SetPrimaryKeyColumns(TVector<TString>{"k1", "k2"});
-            tableBuilder.AddUniqueSecondaryIndex("Index", TVector<TString>{"fk1", "fk2", "fk3", "k2"});
+            tableBuilder.SetPrimaryKeyColumns(std::vector<std::string>{"k1", "k2"});
+            tableBuilder.AddUniqueSecondaryIndex("Index", std::vector<std::string>{"fk1", "fk2", "fk3", "k2"});
             auto result = session.CreateTable("/Root/TestTable", tableBuilder.Build()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
         }
@@ -785,6 +803,9 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         auto serverSettings = TKikimrSettings()
             .SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -796,9 +817,9 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                 .AddNullableColumn("fk2", EPrimitiveType::Int32)
                 .AddNullableColumn("fk3", EPrimitiveType::Uint64)
                 .AddNullableColumn("Value", EPrimitiveType::String);
-            tableBuilder.SetPrimaryKeyColumns(TVector<TString>{"k1"});
-            tableBuilder.AddUniqueSecondaryIndex("Index12", TVector<TString>{"fk1", "fk2"}, TVector<TString>{"Value"});
-            tableBuilder.AddUniqueSecondaryIndex("Index3", TVector<TString>{"fk3"});
+            tableBuilder.SetPrimaryKeyColumns(std::vector<std::string>{"k1"});
+            tableBuilder.AddUniqueSecondaryIndex("Index12", std::vector<std::string>{"fk1", "fk2"}, std::vector<std::string>{"Value"});
+            tableBuilder.AddUniqueSecondaryIndex("Index3", std::vector<std::string>{"fk3"});
             auto result = session.CreateTable("/Root/TestTable", tableBuilder.Build()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
         }
@@ -899,11 +920,17 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         }
     }
 
-    void DoUpsertWithoutIndexUpdate(bool uniq) {
+    void DoUpsertWithoutIndexUpdate(bool uniq, bool useSink) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
-            .SetKqpSettings({setting});
+            .SetKqpSettings({setting})
+            .SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -915,11 +942,11 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                 .AddNullableColumn("fk2", EPrimitiveType::Int32)
                 .AddNullableColumn("fk3", EPrimitiveType::Uint64)
                 .AddNullableColumn("Value", EPrimitiveType::String);
-            tableBuilder.SetPrimaryKeyColumns(TVector<TString>{"Key"});
+            tableBuilder.SetPrimaryKeyColumns(std::vector<std::string>{"Key"});
             if (uniq) {
-                tableBuilder.AddUniqueSecondaryIndex("Index", TVector<TString>{"fk1", "fk2", "fk3"});
+                tableBuilder.AddUniqueSecondaryIndex("Index", std::vector<std::string>{"fk1", "fk2", "fk3"});
             } else {
-                tableBuilder.AddSecondaryIndex("Index", TVector<TString>{"fk1", "fk2", "fk3"});
+                tableBuilder.AddSecondaryIndex("Index", std::vector<std::string>{"fk1", "fk2", "fk3"});
             }
             auto result = session.CreateTable("/Root/TestTable", tableBuilder.Build()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
@@ -945,7 +972,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
             Cerr << stats.DebugString() << Endl;
 
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(),  uniqExtraStages + 5);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(),  uniqExtraStages + (useSink ? 4 : 5));
 
             // One read from main table
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniq + 1).table_access().size(), 1);
@@ -953,18 +980,23 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniq + 1).table_access(0).reads().rows(), 0);
 
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + 2).table_access().size(), 0);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + 3).table_access().size(), 0);
 
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + 4).table_access().size(), 2);
+            if (!useSink) {
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + 3).table_access().size(), 0);
+            }
+
+            const auto finalStage = useSink ? 3 : 4;
+
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + finalStage).table_access().size(), 2);
 
             // One update of main table
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + 4).table_access(0).name(), "/Root/TestTable");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + 4).table_access(0).updates().rows(), 1);
-            UNIT_ASSERT(            !stats.query_phases(uniqExtraStages + 4).table_access(0).has_deletes());
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + finalStage).table_access(0).name(), "/Root/TestTable");
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + finalStage).table_access(0).updates().rows(), 1);
+            UNIT_ASSERT(            !stats.query_phases(uniqExtraStages + finalStage).table_access(0).has_deletes());
 
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + 4).table_access(1).name(), "/Root/TestTable/Index/indexImplTable");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + 4).table_access(1).updates().rows(), 1);
-            UNIT_ASSERT(            !stats.query_phases(uniqExtraStages + 4).table_access(1).has_deletes());
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + finalStage).table_access(1).name(), "/Root/TestTable/Index/indexImplTable");
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + finalStage).table_access(1).updates().rows(), 1);
+            UNIT_ASSERT(            !stats.query_phases(uniqExtraStages + finalStage).table_access(1).has_deletes());
 
             {
                 const auto& yson = ReadTablePartToYson(session, "/Root/TestTable/Index/indexImplTable");
@@ -989,7 +1021,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                           .ExtractValueSync();
             UNIT_ASSERT(result.IsSuccess());
             auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), uniqExtraStages + 5);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), uniqExtraStages + (useSink ? 4 : 5));
 
             // One read from main table
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniq + 1).table_access().size(), 1);
@@ -997,13 +1029,18 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniq + 1).table_access(0).reads().rows(), 1);
 
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + 2).table_access().size(), 0);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + 3).table_access().size(), 0);
+
+            if (!useSink) {
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + 3).table_access().size(), 0);
+            }
+
+            const auto finalStage = useSink ? 3 : 4;
 
             // One update of main table
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + 4).table_access().size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + 4).table_access(0).name(), "/Root/TestTable");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + 4).table_access(0).updates().rows(), 1);
-            UNIT_ASSERT(            !stats.query_phases(uniqExtraStages + 4).table_access(0).has_deletes());
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + finalStage).table_access().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + finalStage).table_access(0).name(), "/Root/TestTable");
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + finalStage).table_access(0).updates().rows(), 1);
+            UNIT_ASSERT(            !stats.query_phases(uniqExtraStages + finalStage).table_access(0).has_deletes());
 
             {
                 const auto& yson = ReadTablePartToYson(session, "/Root/TestTable/Index/indexImplTable");
@@ -1013,15 +1050,21 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(DoUpsertWithoutIndexUpdate, UniqIndex) {
-        DoUpsertWithoutIndexUpdate(UniqIndex);
+    Y_UNIT_TEST_QUAD(DoUpsertWithoutIndexUpdate, UniqIndex, UseSink) {
+        DoUpsertWithoutIndexUpdate(UniqIndex, UseSink);
     }
 
-    Y_UNIT_TEST(UpsertWithoutExtraNullDelete) {
+    Y_UNIT_TEST_TWIN(UpsertWithoutExtraNullDelete, UseSink) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
-            .SetKqpSettings({setting});
+            .SetKqpSettings({setting})
+            .SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -1031,8 +1074,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                 .AddNullableColumn("Key", EPrimitiveType::String)
                 .AddNullableColumn("Index2", EPrimitiveType::String)
                 .AddNullableColumn("Value", EPrimitiveType::String);
-            tableBuilder.SetPrimaryKeyColumns(TVector<TString>{"Key"});
-            tableBuilder.AddSecondaryIndex("Index", TVector<TString>{"Index2"});
+            tableBuilder.SetPrimaryKeyColumns(std::vector<std::string>{"Key"});
+            tableBuilder.AddSecondaryIndex("Index", std::vector<std::string>{"Index2"});
             auto result = session.CreateTable("/Root/TestTable", tableBuilder.Build()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
@@ -1061,22 +1104,27 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
             auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
 
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 5);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), UseSink ? 4 : 5);
 
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).name(), "/Root/TestTable");
 
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(2).table_access().size(), 0);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(3).table_access().size(), 0);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(4).table_access().size(), 2);
 
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(4).table_access(0).name(), "/Root/TestTable");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(4).table_access(0).updates().rows(), 1);
-            UNIT_ASSERT(            !stats.query_phases(4).table_access(0).has_deletes());
+            if (!UseSink) {
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(3).table_access().size(), 0);
+            }
 
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(4).table_access(1).name(), "/Root/TestTable/Index/indexImplTable");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(4).table_access(1).updates().rows(), 1);
-            UNIT_ASSERT(            !stats.query_phases(4).table_access(1).has_deletes());
+            const auto finalStage = UseSink ? 3 : 4;
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(finalStage).table_access().size(), 2);
+
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(finalStage).table_access(0).name(), "/Root/TestTable");
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(finalStage).table_access(0).updates().rows(), 1);
+            UNIT_ASSERT(            !stats.query_phases(finalStage).table_access(0).has_deletes());
+
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(finalStage).table_access(1).name(), "/Root/TestTable/Index/indexImplTable");
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(finalStage).table_access(1).updates().rows(), 1);
+            UNIT_ASSERT(            !stats.query_phases(finalStage).table_access(1).has_deletes());
         }
 
         {
@@ -1095,25 +1143,30 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
             UNIT_ASSERT(result.IsSuccess());
             auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
 
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 5);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), UseSink ? 4 : 5);
 
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).name(), "/Root/TestTable");
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).reads().rows(), 1);
 
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(2).table_access().size(), 0);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(3).table_access().size(), 0);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(4).table_access().size(), 2);
+            if (!UseSink) {
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(3).table_access().size(), 0);
+            }
 
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(4).table_access(0).name(), "/Root/TestTable");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(4).table_access(0).updates().rows(), 1);
-            UNIT_ASSERT(            !stats.query_phases(4).table_access(0).has_deletes());
+            const auto finalStage = UseSink ? 3 : 4;
+
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(finalStage).table_access().size(), 2);
+
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(finalStage).table_access(0).name(), "/Root/TestTable");
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(finalStage).table_access(0).updates().rows(), 1);
+            UNIT_ASSERT(            !stats.query_phases(finalStage).table_access(0).has_deletes());
 
 
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(4).table_access(1).name(), "/Root/TestTable/Index/indexImplTable");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(4).table_access(1).updates().rows(), 1);
-            UNIT_ASSERT(             stats.query_phases(4).table_access(1).has_deletes());
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(4).table_access(1).deletes().rows(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(finalStage).table_access(1).name(), "/Root/TestTable/Index/indexImplTable");
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(finalStage).table_access(1).updates().rows(), 1);
+            UNIT_ASSERT(             stats.query_phases(finalStage).table_access(1).has_deletes());
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(finalStage).table_access(1).deletes().rows(), 1);
         }
 
         {
@@ -1132,7 +1185,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                           .ExtractValueSync();
             UNIT_ASSERT(result.IsSuccess());
             auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 5);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), UseSink ? 4 : 5);
 
             // One read from main table
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access().size(), 1);
@@ -1140,13 +1193,17 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).reads().rows(), 1);
 
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(2).table_access().size(), 0);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(3).table_access().size(), 0);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(4).table_access().size(), 1);
+
+            const auto finalStage = UseSink ? 3 : 4;
+            if (!UseSink) {
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(3).table_access().size(), 0);
+            }
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(finalStage).table_access().size(), 1);
 
             // One update of main table
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(4).table_access(0).name(), "/Root/TestTable");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(4).table_access(0).updates().rows(), 1);
-            UNIT_ASSERT(            !stats.query_phases(4).table_access(0).has_deletes());
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(finalStage).table_access(0).name(), "/Root/TestTable");
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(finalStage).table_access(0).updates().rows(), 1);
+            UNIT_ASSERT(            !stats.query_phases(finalStage).table_access(0).has_deletes());
 
             {
                 const auto& yson = ReadTablePartToYson(session, "/Root/TestTable/Index/indexImplTable");
@@ -1171,20 +1228,21 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                           .ExtractValueSync();
             UNIT_ASSERT(result.IsSuccess());
             auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 4);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), UseSink ? 1 : 4);
 
-            int idx = 1;
+            int idx = UseSink ? 0 : 1;
 
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access().size(), 1);
             // One read of main table
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access(0).name(), "/Root/TestTable");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access(0).reads().rows(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access(0).reads().rows(), UseSink ? 0 : 1);
 
+            
             // One update of index table
-            idx += 2;
+            idx += UseSink ? 0 : 2;
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access(0).name(), "/Root/TestTable");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access(0).updates().rows(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access(0).updates().rows(), 1);    
 
             // Thats it, no phase for index table - we remove it on compile time
             {
@@ -1210,17 +1268,24 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                           .ExtractValueSync();
             UNIT_ASSERT(result.IsSuccess());
             auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), UseSink ? 1 : 2);
 
-            // One read of main table
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/TestTable");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 1);
+            if (!UseSink) {
+                // One read of main table
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/TestTable");
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 1);
 
-            // One update of main table
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access().size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).name(), "/Root/TestTable");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).updates().rows(), 1);
+                // One update of main table
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access().size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).name(), "/Root/TestTable");
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).updates().rows(), 1);
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/TestTable");
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().rows(), 1);
+            }
 
             {
                 const auto& yson = ReadTablePartToYson(session, "/Root/TestTable/Index/indexImplTable");
@@ -1235,6 +1300,9 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         auto serverSettings = TKikimrSettings()
             .SetKqpSettings({ setting });
         TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -1244,7 +1312,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                 .AddNullableColumn("Key", EPrimitiveType::String)
                 .AddNullableColumn("IndexColumn", EPrimitiveType::String)
                 .AddNullableColumn("Value", EPrimitiveType::String);
-            tableBuilder.SetPrimaryKeyColumns(TVector<TString>{"Key"});
+            tableBuilder.SetPrimaryKeyColumns(std::vector<std::string>{"Key"});
             auto result = session.CreateTable("/Root/TestTable", tableBuilder.Build()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
@@ -1329,6 +1397,9 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         auto serverSettings = TKikimrSettings()
             .SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -1340,8 +1411,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                 .AddNullableColumn("IndexColumn1", EPrimitiveType::String)
                 .AddNullableColumn("IndexColumn2", EPrimitiveType::String)
                 .AddNullableColumn("Value", EPrimitiveType::String);
-            tableBuilder.SetPrimaryKeyColumns(TVector<TString>{"Key", "IndexColumn1", "IndexColumn2"});
-            tableBuilder.AddSecondaryIndex("IndexName1", TVector<TString>{"IndexColumn1"});
+            tableBuilder.SetPrimaryKeyColumns(std::vector<std::string>{"Key", "IndexColumn1", "IndexColumn2"});
+            tableBuilder.AddSecondaryIndex("IndexName1", std::vector<std::string>{"IndexColumn1"});
             auto result = session.CreateTable("/Root/TestTable", tableBuilder.Build()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
@@ -1465,6 +1536,9 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         auto serverSettings = TKikimrSettings()
             .SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -1474,8 +1548,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                 .AddNullableColumn("Key", EPrimitiveType::String)
                 .AddNullableColumn("Index2", EPrimitiveType::String)
                 .AddNullableColumn("Value", EPrimitiveType::String);
-            tableBuilder.SetPrimaryKeyColumns(TVector<TString>{"Key"});
-            tableBuilder.AddSecondaryIndex("Index", TVector<TString>{"Index2"});
+            tableBuilder.SetPrimaryKeyColumns(std::vector<std::string>{"Key"});
+            tableBuilder.AddSecondaryIndex("Index", std::vector<std::string>{"Index2"});
             auto result = session.CreateTable("/Root/TestTable", tableBuilder.Build()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
@@ -1657,6 +1731,9 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         auto serverSettings = TKikimrSettings()
             .SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -1666,8 +1743,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                 .AddNullableColumn("Key", EPrimitiveType::String)
                 .AddNullableColumn("Index2", EPrimitiveType::String)
                 .AddNullableColumn("Index2A", EPrimitiveType::String);
-            tableBuilder.SetPrimaryKeyColumns(TVector<TString>{"Key"});
-            tableBuilder.AddSecondaryIndex("Index", TVector<TString>{"Index2", "Index2A"});
+            tableBuilder.SetPrimaryKeyColumns(std::vector<std::string>{"Key"});
+            tableBuilder.AddSecondaryIndex("Index", std::vector<std::string>{"Index2", "Index2A"});
             auto result = session.CreateTable("/Root/TestTable", tableBuilder.Build()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
@@ -1746,6 +1823,9 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         auto serverSettings = TKikimrSettings()
             .SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -1755,7 +1835,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                 .AddNullableColumn("Key", EPrimitiveType::String)
                 .AddNullableColumn("Index2", EPrimitiveType::String)
                 .AddNullableColumn("Value", EPrimitiveType::String);
-            tableBuilder.SetPrimaryKeyColumns(TVector<TString>{"Key"});
+            tableBuilder.SetPrimaryKeyColumns(std::vector<std::string>{"Key"});
             tableBuilder.AddSecondaryIndex("Index", "Index2");
             auto result = session.CreateTable("/Root/TestTable", tableBuilder.Build()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
@@ -1811,6 +1891,9 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         auto serverSettings = TKikimrSettings()
             .SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        
         auto db = kikimr.GetTableClient();
         TScriptingClient client(kikimr.GetDriver());
         {
@@ -1851,6 +1934,9 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
             .SetKqpSettings({setting});
 
         TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -1860,8 +1946,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                 .AddNullableColumn("Key", EPrimitiveType::Int64)
                 .AddNullableColumn("Index2", EPrimitiveType::Int64)
                 .AddNullableColumn("Value", EPrimitiveType::String);
-            tableBuilder.SetPrimaryKeyColumns(TVector<TString>{"Key"});
-            tableBuilder.AddSecondaryIndex("Index", TVector<TString>{"Index2"});
+            tableBuilder.SetPrimaryKeyColumns(std::vector<std::string>{"Key"});
+            tableBuilder.AddSecondaryIndex("Index", std::vector<std::string>{"Index2"});
             auto result = session.CreateTable("/Root/TestTable", tableBuilder.Build()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
@@ -1894,7 +1980,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString().c_str());
 
-                UNIT_ASSERT_C(result.GetAst().Contains("'('\"Reverse\")"), result.GetAst());
+                UNIT_ASSERT_C(result.GetAst().contains("'('\"Reverse\")"), result.GetAst());
             }
 
             {
@@ -1920,8 +2006,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
                 UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
-                UNIT_ASSERT_C(result.GetAst().Contains("('\"ItemsLimit\""), result.GetAst());
-                UNIT_ASSERT_C(result.GetAst().Contains("'('\"Reverse\")"), result.GetAst());
+                UNIT_ASSERT_C(result.GetAst().contains("('\"ItemsLimit\""), result.GetAst());
+                UNIT_ASSERT_C(result.GetAst().contains("'('\"Reverse\")"), result.GetAst());
             }
 
             {
@@ -1946,8 +2032,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
                 UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
-                UNIT_ASSERT_C(result.GetAst().Contains("('\"ItemsLimit\""), result.GetAst());
-                UNIT_ASSERT_C(result.GetAst().Contains("'('\"Reverse\")"), result.GetAst());
+                UNIT_ASSERT_C(result.GetAst().contains("('\"ItemsLimit\""), result.GetAst());
+                UNIT_ASSERT_C(result.GetAst().contains("'('\"Reverse\")"), result.GetAst());
             }
 
             {
@@ -1972,7 +2058,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
                 UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
-                UNIT_ASSERT_C(result.GetAst().Contains("'('\"Reverse\")"), result.GetAst());
+                UNIT_ASSERT_C(result.GetAst().contains("'('\"Reverse\")"), result.GetAst());
             }
 
             {
@@ -1997,7 +2083,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                     .ExtractValueSync();
 
                 UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-                UNIT_ASSERT_C(!result.GetAst().Contains("'('\"Reverse\")"), result.GetAst());
+                UNIT_ASSERT_C(!result.GetAst().contains("'('\"Reverse\")"), result.GetAst());
             }
 
             {
@@ -2021,8 +2107,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                     .ExtractValueSync();
 
                 UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-                UNIT_ASSERT_C(!result.GetAst().Contains("'('\"Reverse\")"), result.GetAst());
-                UNIT_ASSERT_C(result.GetAst().Contains("('\"ItemsLimit\""), result.GetAst());
+                UNIT_ASSERT_C(!result.GetAst().contains("'('\"Reverse\")"), result.GetAst());
+                UNIT_ASSERT_C(result.GetAst().contains("('\"ItemsLimit\""), result.GetAst());
             }
 
             {
@@ -2047,8 +2133,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                     query)
                     .ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-                UNIT_ASSERT_C(result.GetAst().Contains("('\"ItemsLimit\""), result.GetAst());
-                UNIT_ASSERT_C(!result.GetAst().Contains("'('\"Reverse\")"), result.GetAst());
+                UNIT_ASSERT_C(result.GetAst().contains("('\"ItemsLimit\""), result.GetAst());
+                UNIT_ASSERT_C(!result.GetAst().contains("'('\"Reverse\")"), result.GetAst());
             }
 
             {
@@ -2073,8 +2159,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                     query)
                     .ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-                UNIT_ASSERT_C(result.GetAst().Contains("('\"ItemsLimit\""), result.GetAst());
-                UNIT_ASSERT_C(!result.GetAst().Contains("'('\"Reverse\")"), result.GetAst());
+                UNIT_ASSERT_C(result.GetAst().contains("('\"ItemsLimit\""), result.GetAst());
+                UNIT_ASSERT_C(!result.GetAst().contains("'('\"Reverse\")"), result.GetAst());
             }
 
             {
@@ -2100,8 +2186,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                     query)
                     .ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-                UNIT_ASSERT_C(result.GetAst().Contains("('\"ItemsLimit\""), result.GetAst());
-                UNIT_ASSERT_C(!result.GetAst().Contains("'('\"Reverse\")"), result.GetAst());
+                UNIT_ASSERT_C(result.GetAst().contains("('\"ItemsLimit\""), result.GetAst());
+                UNIT_ASSERT_C(!result.GetAst().contains("'('\"Reverse\")"), result.GetAst());
             }
 
             {
@@ -2127,8 +2213,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                     query)
                     .ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-                UNIT_ASSERT_C(!result.GetAst().Contains("('\"ItemsLimit\""), result.GetAst());
-                UNIT_ASSERT_C(!result.GetAst().Contains("'('\"Reverse\")"), result.GetAst());
+                UNIT_ASSERT_C(!result.GetAst().contains("('\"ItemsLimit\""), result.GetAst());
+                UNIT_ASSERT_C(!result.GetAst().contains("'('\"Reverse\")"), result.GetAst());
             }
 
             {
@@ -2142,261 +2228,15 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         }
     }
 
-    void DoPositiveQueriesVectorIndex(TSession& session, const TString& query) {
-        {
-            auto result = session.ExplainDataQuery(query).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(),
-                "Failed to explain: `" << query << "` with " << result.GetIssues().ToString());
-        }
-        {
-            auto result = session.ExecuteDataQuery(query,
-                TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()
-            ).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(),
-                "Failed to execute: `" << query << "` with " << result.GetIssues().ToString());
-        }
-    }
-
-    void DoPositiveQueriesVectorIndex(TSession& session, const TString& mainQuery, const TString& indexQuery) {
-        DoPositiveQueriesVectorIndex(session, mainQuery);
-        DoPositiveQueriesVectorIndex(session, indexQuery);
-    }
-
-    void DoPositiveQueriesVectorIndexOrderBy(
-        TSession& session,
-        std::string_view function,
-        std::string_view direction,
-        std::string_view left,
-        std::string_view right) {
-        constexpr std::string_view target = "$target = \"\x67\x73\x03\";";
-        std::string metric = std::format("Knn::{}({}, {})", function, left, right);
-        // no metric in result
-        {
-            const TString plainQuery(Q1_(std::format(R"({}
-                SELECT * FROM `/Root/TestTable`
-                ORDER BY {} {}
-                LIMIT 3;
-            )", target, metric, direction)));
-            const TString indexQuery(Q1_(std::format(R"({}
-                SELECT * FROM `/Root/TestTable` VIEW index
-                ORDER BY {} {}
-                LIMIT 3;
-            )", target, metric, direction)));
-            DoPositiveQueriesVectorIndex(session, plainQuery, indexQuery);
-        }
-        // metric in result
-        {
-            const TString plainQuery(Q1_(std::format(R"({}
-                SELECT {}, `/Root/TestTable`.* FROM `/Root/TestTable`
-                ORDER BY {} {}
-                LIMIT 3;
-            )", target, metric, metric, direction)));
-            const TString indexQuery(Q1_(std::format(R"({}
-                SELECT {}, `/Root/TestTable`.* FROM `/Root/TestTable` VIEW index
-                ORDER BY {} {}
-                LIMIT 3;
-            )", target, metric, metric, direction)));
-            DoPositiveQueriesVectorIndex(session, plainQuery, indexQuery);
-        }
-        // metric as result
-        {
-            const TString plainQuery(Q1_(std::format(R"({}
-                SELECT {} AS m, `/Root/TestTable`.* FROM `/Root/TestTable`
-                ORDER BY m {}
-                LIMIT 3;
-            )", target, metric, direction)));
-            const TString indexQuery(Q1_(std::format(R"({}
-                SELECT {} AS m, `/Root/TestTable`.* FROM `/Root/TestTable` VIEW index
-                ORDER BY m {}
-                LIMIT 3;
-            )", target, metric, direction)));
-            DoPositiveQueriesVectorIndex(session, plainQuery, indexQuery);
-        }
-    }
-
-    void DoPositiveQueriesVectorIndexOrderBy(
-        TSession& session,
-        std::string_view function,
-        std::string_view direction) {
-        // target is left, member is right
-        DoPositiveQueriesVectorIndexOrderBy(session, function, direction, "$target", "emb");
-        // target is right, member is left
-        DoPositiveQueriesVectorIndexOrderBy(session, function, direction, "emb", "$target");
-    }
-
-    void DoPositiveQueriesVectorIndexOrderByCosine(TSession& session) {
-        // distance, default direction
-        DoPositiveQueriesVectorIndexOrderBy(session, "CosineDistance", "");
-        // distance, asc direction
-        DoPositiveQueriesVectorIndexOrderBy(session, "CosineDistance", "ASC");
-        // similarity, desc direction
-        DoPositiveQueriesVectorIndexOrderBy(session, "CosineSimilarity", "DESC");
-    }
-
-    TSession DoCreateTableForVectorIndex(TTableClient& db, bool nullable) {
-        auto session = db.CreateSession().GetValueSync().GetSession();
-
-        {
-            auto tableBuilder = db.GetTableBuilder();
-            if (nullable) {
-                tableBuilder
-                    .AddNullableColumn("pk", EPrimitiveType::Int64)
-                    .AddNullableColumn("emb", EPrimitiveType::String)
-                    .AddNullableColumn("data", EPrimitiveType::String);
-            } else {
-                tableBuilder
-                    .AddNonNullableColumn("pk", EPrimitiveType::Int64)
-                    .AddNonNullableColumn("emb", EPrimitiveType::String)
-                    .AddNonNullableColumn("data", EPrimitiveType::String);
-            }
-            tableBuilder.SetPrimaryKeyColumns(TVector<TString>{"pk"});
-            auto result = session.CreateTable("/Root/TestTable", tableBuilder.Build()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-
-        {
-            const TString query1(Q_(R"(
-                UPSERT INTO `/Root/TestTable` (pk, emb, data) VALUES)"
-                "(0, \"\x03\x30\x03\", \"0\"),"
-                "(1, \"\x13\x31\x03\", \"1\"),"
-                "(2, \"\x23\x32\x03\", \"2\"),"
-                "(3, \"\x33\x33\x03\", \"3\"),"
-                "(4, \"\x43\x34\x03\", \"4\"),"
-                "(5, \"\x60\x60\x03\", \"5\"),"
-                "(6, \"\x61\x61\x03\", \"6\"),"
-                "(7, \"\x62\x62\x03\", \"7\"),"
-                "(8, \"\x75\x76\x03\", \"8\"),"
-                "(9, \"\x76\x76\x03\", \"9\");"
-            ));
-
-            auto result = session.ExecuteDataQuery(
-                                 query1,
-                                 TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
-                          .ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
-        return session;
-    }
-
-    Y_UNIT_TEST(VectorIndexOrderByCosineDistance) {
-        NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableVectorIndex(true);
-        auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
-            .SetFeatureFlags(featureFlags)
-            .SetKqpSettings({setting});
-
-        TKikimrRunner kikimr(serverSettings);
-        auto db = kikimr.GetTableClient();
-        auto session = DoCreateTableForVectorIndex(db, false);
-        {
-            const TString createIndex(Q_(R"(
-                ALTER TABLE `/Root/TestTable`
-                    ADD INDEX index
-                    GLOBAL USING vector_kmeans_tree
-                    ON (emb)
-                    WITH (distance=cosine, vector_type="uint8", vector_dimension=2, levels=1, clusters=2);
-            )"));
-
-            auto result = session.ExecuteSchemeQuery(createIndex)
-                          .ExtractValueSync();
-
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
-        DoPositiveQueriesVectorIndexOrderByCosine(session);
-    }
-
-    Y_UNIT_TEST(VectorIndexOrderByCosineSimilarity) {
-        NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableVectorIndex(true);
-        auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
-            .SetFeatureFlags(featureFlags)
-            .SetKqpSettings({setting});
-
-        TKikimrRunner kikimr(serverSettings);
-        auto db = kikimr.GetTableClient();
-        auto session = DoCreateTableForVectorIndex(db, false);
-        {
-            const TString createIndex(Q_(R"(
-                ALTER TABLE `/Root/TestTable`
-                    ADD INDEX index
-                    GLOBAL USING vector_kmeans_tree
-                    ON (emb)
-                    WITH (similarity=cosine, vector_type="uint8", vector_dimension=2, levels=1, clusters=2);
-            )"));
-
-            auto result = session.ExecuteSchemeQuery(createIndex)
-                          .ExtractValueSync();
-
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
-        DoPositiveQueriesVectorIndexOrderByCosine(session);
-    }
-
-    Y_UNIT_TEST(VectorIndexOrderByCosineDistanceNullable) {
-        NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableVectorIndex(true);
-        auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
-            .SetFeatureFlags(featureFlags)
-            .SetKqpSettings({setting});
-
-        TKikimrRunner kikimr(serverSettings);
-        auto db = kikimr.GetTableClient();
-        auto session = DoCreateTableForVectorIndex(db, true);
-        {
-            const TString createIndex(Q_(R"(
-                ALTER TABLE `/Root/TestTable`
-                    ADD INDEX index
-                    GLOBAL USING vector_kmeans_tree
-                    ON (emb)
-                    WITH (distance=cosine, vector_type="uint8", vector_dimension=2, levels=1, clusters=2);
-            )"));
-
-            auto result = session.ExecuteSchemeQuery(createIndex)
-                          .ExtractValueSync();
-
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
-        DoPositiveQueriesVectorIndexOrderByCosine(session);
-    }
-
-    Y_UNIT_TEST(VectorIndexOrderByCosineSimilarityNullable) {
-        NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableVectorIndex(true);
-        auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
-            .SetFeatureFlags(featureFlags)
-            .SetKqpSettings({setting});
-
-        TKikimrRunner kikimr(serverSettings);
-        auto db = kikimr.GetTableClient();
-        auto session = DoCreateTableForVectorIndex(db, true);
-        {
-            const TString createIndex(Q_(R"(
-                ALTER TABLE `/Root/TestTable`
-                    ADD INDEX index
-                    GLOBAL USING vector_kmeans_tree
-                    ON (emb)
-                    WITH (similarity=cosine, vector_type="uint8", vector_dimension=2, levels=1, clusters=2);
-            )"));
-
-            auto result = session.ExecuteSchemeQuery(createIndex)
-                          .ExtractValueSync();
-
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
-        DoPositiveQueriesVectorIndexOrderByCosine(session);
-    }
-
     Y_UNIT_TEST(ExplainCollectFullDiagnostics) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetKqpSettings({setting});
 
         TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -2406,8 +2246,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                 .AddNullableColumn("Key", EPrimitiveType::Int64)
                 .AddNullableColumn("Index2", EPrimitiveType::Int64)
                 .AddNullableColumn("Value", EPrimitiveType::String);
-            tableBuilder.SetPrimaryKeyColumns(TVector<TString>{"Key"});
-            tableBuilder.AddSecondaryIndex("Index", TVector<TString>{"Index2"});
+            tableBuilder.SetPrimaryKeyColumns(std::vector<std::string>{"Key"});
+            tableBuilder.AddSecondaryIndex("Index", std::vector<std::string>{"Index2"});
             auto result = session.CreateTable("/Root/TestTable", tableBuilder.Build()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
@@ -2428,7 +2268,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString().c_str());
 
-                UNIT_ASSERT_C(result.GetAst().Contains("'('\"Reverse\")"), result.GetAst());
+                UNIT_ASSERT_C(result.GetAst().contains("'('\"Reverse\")"), result.GetAst());
 
                 UNIT_ASSERT_C(!result.GetDiagnostics().empty(), "Query result diagnostics is empty");
 
@@ -2440,7 +2280,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                 UNIT_ASSERT_C(value.IsMap(), "Incorrect Diagnostics");
                 UNIT_ASSERT_C(value.Has("query_id"), "Incorrect Diagnostics");
                 UNIT_ASSERT_C(value.Has("version"), "Incorrect Diagnostics");
-                UNIT_ASSERT_C(value.Has("query_text"), "Incorrect Diagnostics");
+                UNIT_ASSERT_C(!value.Has("query_text"), "Incorrect Diagnostics");
                 UNIT_ASSERT_C(value.Has("query_parameter_types"), "Incorrect Diagnostics");
                 UNIT_ASSERT_C(value.Has("table_metadata"), "Incorrect Diagnostics");
                 UNIT_ASSERT_C(value["table_metadata"].IsArray(), "Incorrect Diagnostics: table_metadata type should be an array");
@@ -2448,7 +2288,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                 UNIT_ASSERT_C(value.Has("query_syntax"), "Incorrect Diagnostics");
                 UNIT_ASSERT_C(value.Has("query_database"), "Incorrect Diagnostics");
                 UNIT_ASSERT_C(value.Has("query_cluster"), "Incorrect Diagnostics");
-                UNIT_ASSERT_C(value.Has("query_plan"), "Incorrect Diagnostics");
+                UNIT_ASSERT_C(!value.Has("query_plan"), "Incorrect Diagnostics");
                 UNIT_ASSERT_C(value.Has("query_type"), "Incorrect Diagnostics");
             }
 
@@ -2461,7 +2301,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString().c_str());
 
-                UNIT_ASSERT_C(result.GetAst().Contains("'('\"Reverse\")"), result.GetAst());
+                UNIT_ASSERT_C(result.GetAst().contains("'('\"Reverse\")"), result.GetAst());
 
                 UNIT_ASSERT_C(result.GetDiagnostics().empty(), "Query result diagnostics should be empty, but it's not");
             }
@@ -2473,6 +2313,9 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         auto serverSettings = TKikimrSettings()
             .SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -2483,10 +2326,10 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                 .AddNullableColumn("customer", EPrimitiveType::Utf8)
                 .AddNullableColumn("created", EPrimitiveType::Datetime)
                 .AddNullableColumn("processed", EPrimitiveType::String);
-            tableBuilder.SetPrimaryKeyColumns(TVector<TString>{"id"});
-            tableBuilder.AddSecondaryIndex("ix_cust", TVector<TString>{"customer"});
-            tableBuilder.AddSecondaryIndex("ix_cust2", TVector<TString>{"customer", "created"});
-            tableBuilder.AddSecondaryIndex("ix_cust3", TVector<TString>{"customer", "created"}, TVector<TString>{"processed"});
+            tableBuilder.SetPrimaryKeyColumns(std::vector<std::string>{"id"});
+            tableBuilder.AddSecondaryIndex("ix_cust", std::vector<std::string>{"customer"});
+            tableBuilder.AddSecondaryIndex("ix_cust2", std::vector<std::string>{"customer", "created"});
+            tableBuilder.AddSecondaryIndex("ix_cust3", std::vector<std::string>{"customer", "created"}, std::vector<std::string>{"processed"});
             auto result = session.CreateTable("/Root/TestTable", tableBuilder.Build()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
@@ -2524,7 +2367,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                     .ExtractValueSync();
 
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString().c_str());
-                UNIT_ASSERT_C(result.GetAst().Contains("'('\"Reverse\")"), result.GetAst());
+                UNIT_ASSERT_C(result.GetAst().contains("'('\"Reverse\")"), result.GetAst());
             }
 
             {
@@ -2538,24 +2381,11 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
                 auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
 
-                if (serverSettings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup()) {
-                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 2);
-                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/TestTable");
-                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 3);
-                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(1).name(), "/Root/TestTable/ix_cust/indexImplTable");
-                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(1).reads().rows(), 3);
-                } else {
-                    int indexPhaseId = 0;
-                    int tablePhaseId = 1;
-
-                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(tablePhaseId).table_access().size(), 1);
-                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(tablePhaseId).table_access(0).name(), "/Root/TestTable");
-                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(tablePhaseId).table_access(0).reads().rows(), 3);
-
-                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(indexPhaseId).table_access().size(), 1);
-                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(indexPhaseId).table_access(0).name(), "/Root/TestTable/ix_cust/indexImplTable");
-                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(indexPhaseId).table_access(0).reads().rows(), 3);
-                }
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 2);
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/TestTable");
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 3);
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(1).name(), "/Root/TestTable/ix_cust/indexImplTable");
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(1).reads().rows(), 3);
             }
         }
 
@@ -2571,8 +2401,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString().c_str());
 
-                UNIT_ASSERT_C(result.GetAst().Contains("'('\"ItemsLimit"), result.GetAst());
-                UNIT_ASSERT_C(result.GetAst().Contains("'('\"Reverse\")"), result.GetAst());
+                UNIT_ASSERT_C(result.GetAst().contains("'('\"ItemsLimit"), result.GetAst());
+                UNIT_ASSERT_C(result.GetAst().contains("'('\"Reverse\")"), result.GetAst());
             }
 
             {
@@ -2586,24 +2416,11 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
                 auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
 
-                if (serverSettings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup()) {
-                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 2);
-                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/TestTable");
-                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 2);
-                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(1).name(), "/Root/TestTable/ix_cust2/indexImplTable");
-                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(1).reads().rows(), 2);
-                } else {
-                    int indexPhaseId = 0;
-                    int tablePhaseId = 1;
-
-                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(tablePhaseId).table_access().size(), 1);
-                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(tablePhaseId).table_access(0).name(), "/Root/TestTable");
-                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(tablePhaseId).table_access(0).reads().rows(), 2);
-
-                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(indexPhaseId).table_access().size(), 1);
-                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(indexPhaseId).table_access(0).name(), "/Root/TestTable/ix_cust2/indexImplTable");
-                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(indexPhaseId).table_access(0).reads().rows(), 2);
-                }
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 2);
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/TestTable");
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 2);
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(1).name(), "/Root/TestTable/ix_cust2/indexImplTable");
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(1).reads().rows(), 2);
             }
         }
 
@@ -2618,8 +2435,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                     .ExtractValueSync();
 
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString().c_str());
-                UNIT_ASSERT_C(result.GetAst().Contains("'('\"ItemsLimit"), result.GetAst());
-                UNIT_ASSERT_C(result.GetAst().Contains("'('\"Reverse\")"), result.GetAst());
+                UNIT_ASSERT_C(result.GetAst().contains("'('\"ItemsLimit"), result.GetAst());
+                UNIT_ASSERT_C(result.GetAst().contains("'('\"Reverse\")"), result.GetAst());
             }
 
             {
@@ -2641,11 +2458,17 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         }
     }
 
-    Y_UNIT_TEST(SecondaryIndexReplace) {
+    Y_UNIT_TEST_TWIN(SecondaryIndexReplace, UseSink) {
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
-            .SetKqpSettings({setting});
+            .SetKqpSettings({setting})
+            .SetAppConfig(app);
         TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -2657,8 +2480,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                 .AddNullableColumn("Index2", EPrimitiveType::String)
                 .AddNullableColumn("Index2A", EPrimitiveType::Uint8)
                 .AddNullableColumn("Value", EPrimitiveType::Utf8);
-            tableBuilder.SetPrimaryKeyColumns(TVector<TString>{"Key", "KeyA"});
-            tableBuilder.AddSecondaryIndex("Index", TVector<TString>{"Index2", "Index2A"});
+            tableBuilder.SetPrimaryKeyColumns(std::vector<std::string>{"Key", "KeyA"});
+            tableBuilder.AddSecondaryIndex("Index", std::vector<std::string>{"Index2", "Index2A"});
             auto result = session.CreateTable("/Root/TestTable", tableBuilder.Build()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
@@ -2723,6 +2546,9 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         auto serverSettings = TKikimrSettings()
             .SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -2732,8 +2558,8 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
                 .AddNullableColumn("Key", EPrimitiveType::String)
                 .AddNullableColumn("Index2", EPrimitiveType::String)
                 .AddNullableColumn("Value", EPrimitiveType::String);
-            tableBuilder.SetPrimaryKeyColumns(TVector<TString>{"Key"});
-            tableBuilder.AddSecondaryIndex("Index", TVector<TString>{"Index2"});
+            tableBuilder.SetPrimaryKeyColumns(std::vector<std::string>{"Key"});
+            tableBuilder.AddSecondaryIndex("Index", std::vector<std::string>{"Index2"});
             auto result = session.CreateTable("/Root/TestTable", tableBuilder.Build()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
@@ -2762,11 +2588,17 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         }
     }
 
-    Y_UNIT_TEST(MultipleSecondaryIndex) {
+    Y_UNIT_TEST_TWIN(MultipleSecondaryIndex, UseSink) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
-            .SetKqpSettings({setting});
+            .SetKqpSettings({setting})
+            .SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -2776,7 +2608,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
                 .AddNullableColumn("Key", EPrimitiveType::String)
                 .AddNullableColumn("Value1", EPrimitiveType::String)
                 .AddNullableColumn("Value2", EPrimitiveType::String);
-            tableBuilder.SetPrimaryKeyColumns(TVector<TString>{"Key"});
+            tableBuilder.SetPrimaryKeyColumns(std::vector<std::string>{"Key"});
             tableBuilder.AddSecondaryIndex("Index1", "Value1");
             tableBuilder.AddSecondaryIndex("Index2", "Value2");
             auto result = session.CreateTable("/Root/TestTable", tableBuilder.Build()).ExtractValueSync();
@@ -2830,6 +2662,9 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         auto serverSettings = TKikimrSettings()
             .SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -2839,7 +2674,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
                 .AddNullableColumn("Key", EPrimitiveType::String)
                 .AddNullableColumn("Value1", EPrimitiveType::String)
                 .AddNullableColumn("Value2", EPrimitiveType::String);
-            tableBuilder.SetPrimaryKeyColumns(TVector<TString>{"Key"});
+            tableBuilder.SetPrimaryKeyColumns(std::vector<std::string>{"Key"});
             tableBuilder.AddUniqueSecondaryIndex("Index1Uniq", {"Value1"});
             tableBuilder.AddSecondaryIndex("Index2NotUniq", "Value2");
             auto result = session.CreateTable("/Root/TestTable", tableBuilder.Build()).ExtractValueSync();
@@ -3020,6 +2855,9 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         auto serverSettings = TKikimrSettings()
             .SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -3029,7 +2867,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
                 .AddNullableColumn("Key", EPrimitiveType::String)
                 .AddNullableColumn("Value1", EPrimitiveType::String)
                 .AddNullableColumn("Value2", EPrimitiveType::String);
-            tableBuilder.SetPrimaryKeyColumns(TVector<TString>{"Key"});
+            tableBuilder.SetPrimaryKeyColumns(std::vector<std::string>{"Key"});
             tableBuilder.AddUniqueSecondaryIndex("Index1Uniq", {"Value1"}, {"Value2"});
             tableBuilder.AddSecondaryIndex("Index2NotUniq", {"Value2"}, {"Value1"});
             auto result = session.CreateTable("/Root/TestTable", tableBuilder.Build()).ExtractValueSync();
@@ -3138,11 +2976,17 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
     }
 
 
-    Y_UNIT_TEST(MultipleSecondaryIndexWithSameComulns) {
+    Y_UNIT_TEST_TWIN(MultipleSecondaryIndexWithSameComulns, UseSink) {
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
-            .SetKqpSettings({setting});
+            .SetKqpSettings({setting})
+            .SetAppConfig(app);
         TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -3153,9 +2997,9 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
                 .AddNullableColumn("Value1", EPrimitiveType::String)
                 .AddNullableColumn("Value2", EPrimitiveType::String)
                 .AddNullableColumn("Value3", EPrimitiveType::Int64);
-            tableBuilder.SetPrimaryKeyColumns(TVector<TString>{"Key"});
-            tableBuilder.AddSecondaryIndex("Index1", TVector<TString>{"Value1", "Value3"});
-            tableBuilder.AddSecondaryIndex("Index2", TVector<TString>{"Value2", "Value3"});
+            tableBuilder.SetPrimaryKeyColumns(std::vector<std::string>{"Key"});
+            tableBuilder.AddSecondaryIndex("Index1", std::vector<std::string>{"Value1", "Value3"});
+            tableBuilder.AddSecondaryIndex("Index2", std::vector<std::string>{"Value2", "Value3"});
             auto result = session.CreateTable("/Root/TestTable", tableBuilder.Build()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
@@ -3474,11 +3318,17 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         }
     }
 
-    Y_UNIT_TEST(SecondaryIndexWithPrimaryKeySameComulns) {
+    Y_UNIT_TEST_TWIN(SecondaryIndexWithPrimaryKeySameComulns, UseSink) {
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
-            .SetKqpSettings({setting});
+            .SetKqpSettings({setting})
+            .SetAppConfig(app);
         TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -3489,9 +3339,9 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
                 .AddNullableColumn("KeyA", EPrimitiveType::Int64)
                 .AddNullableColumn("Value1", EPrimitiveType::String)
                 .AddNullableColumn("Payload", EPrimitiveType::Utf8);
-            tableBuilder.SetPrimaryKeyColumns(TVector<TString>{"Key", "KeyA"});
-            tableBuilder.AddSecondaryIndex("Index1", TVector<TString>{"Value1", "KeyA"});
-            tableBuilder.AddSecondaryIndex("Index2", TVector<TString>{"Key", "Value1"});
+            tableBuilder.SetPrimaryKeyColumns(std::vector<std::string>{"Key", "KeyA"});
+            tableBuilder.AddSecondaryIndex("Index1", std::vector<std::string>{"Value1", "KeyA"});
+            tableBuilder.AddSecondaryIndex("Index2", std::vector<std::string>{"Key", "Value1"});
             auto result = session.CreateTable("/Root/TestTable", tableBuilder.Build()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
@@ -3754,6 +3604,9 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
             .SetKqpSettings({setting})
             .SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -3762,7 +3615,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
             tableBuilder
                 .AddNullableColumn("Key", EPrimitiveType::String)
                 .AddNullableColumn("Value", EPrimitiveType::Int64);
-            tableBuilder.SetPrimaryKeyColumns(TVector<TString>{"Key"});
+            tableBuilder.SetPrimaryKeyColumns(std::vector<std::string>{"Key"});
             tableBuilder.AddSecondaryIndex("Index1", "Value");
             auto result = session.CreateTable("/Root/TestTable1", tableBuilder.Build()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
@@ -3773,7 +3626,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
             tableBuilder
                 .AddNullableColumn("Key", EPrimitiveType::String)
                 .AddNullableColumn("Value", EPrimitiveType::Int64);
-            tableBuilder.SetPrimaryKeyColumns(TVector<TString>{"Key"});
+            tableBuilder.SetPrimaryKeyColumns(std::vector<std::string>{"Key"});
             tableBuilder.AddSecondaryIndex("Index1", "Value");
             auto result = session.CreateTable("/Root/TestTable2", tableBuilder.Build()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
@@ -3991,6 +3844,9 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
             .SetKqpSettings({setting})
             .SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -4003,7 +3859,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
             tableBuilder
                 .AddNullableColumn("Key", EPrimitiveType::String)
                 .AddNullableColumn("Value", EPrimitiveType::Int64);
-            tableBuilder.SetPrimaryKeyColumns(TVector<TString>{"Key"});
+            tableBuilder.SetPrimaryKeyColumns(std::vector<std::string>{"Key"});
             tableBuilder.AddSecondaryIndex("Index1", "Value");
             auto result = session.CreateTable("/Root/TestTable1", tableBuilder.Build()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
@@ -4015,7 +3871,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
                 .AddNullableColumn("Key", EPrimitiveType::String)
                 .AddNullableColumn("Value", EPrimitiveType::Int64)
                 .AddNullableColumn("Value2", EPrimitiveType::String);
-            tableBuilder.SetPrimaryKeyColumns(TVector<TString>{"Key"});
+            tableBuilder.SetPrimaryKeyColumns(std::vector<std::string>{"Key"});
             tableBuilder.AddSecondaryIndex("Index1", "Value");
             auto result = session.CreateTable("/Root/TestTable2", tableBuilder.Build()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
@@ -4152,6 +4008,9 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         auto serverSettings = TKikimrSettings()
             .SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -4161,8 +4020,8 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
                 .AddNullableColumn("Key", EPrimitiveType::String)
                 .AddNullableColumn("Index2", EPrimitiveType::String)
                 .AddNullableColumn("Value", EPrimitiveType::String);
-            tableBuilder.SetPrimaryKeyColumns(TVector<TString>{"Key"});
-            tableBuilder.AddSecondaryIndex("Index", TVector<TString>{"Index2"});
+            tableBuilder.SetPrimaryKeyColumns(std::vector<std::string>{"Key"});
+            tableBuilder.AddSecondaryIndex("Index", std::vector<std::string>{"Index2"});
             auto result = session.CreateTable("/Root/TestTable", tableBuilder.Build()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
@@ -4188,8 +4047,8 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
                                  query,
                                  TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
                           .ExtractValueSync();
-            UNIT_ASSERT(result.GetIssues().ToString().Contains("Unexpected token"));
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::GENERIC_ERROR);
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "mismatched input", result.GetIssues().ToString());
         }
 
         {
@@ -4201,8 +4060,8 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
                                  query,
                                  TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
                           .ExtractValueSync();
-            UNIT_ASSERT(result.GetIssues().ToString().Contains("Unexpected token"));
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::GENERIC_ERROR);
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "mismatched input", result.GetIssues().ToString());
         }
 
         {
@@ -4214,8 +4073,8 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
                                      query,
                                      TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
                               .ExtractValueSync();
-            UNIT_ASSERT(result.GetIssues().ToString().Contains("Unexpected token"));
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::GENERIC_ERROR);
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "mismatched input", result.GetIssues().ToString());
         }
 
         {
@@ -4227,8 +4086,8 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
                                      query,
                                      TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
                               .ExtractValueSync();
-            UNIT_ASSERT(result.GetIssues().ToString().Contains("Unexpected token"));
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::GENERIC_ERROR);
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "mismatched input", result.GetIssues().ToString());
         }
 
     }
@@ -4238,6 +4097,9 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         auto serverSettings = TKikimrSettings()
             .SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        
         auto db = kikimr.GetTableClient();
         auto scheme = kikimr.GetSchemeClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -4247,7 +4109,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
             tableBuilder
                 .AddNullableColumn("Key", EPrimitiveType::String)
                 .AddNullableColumn("Value", EPrimitiveType::String);
-            tableBuilder.SetPrimaryKeyColumns(TVector<TString>{"Key"});
+            tableBuilder.SetPrimaryKeyColumns(std::vector<std::string>{"Key"});
             auto result = session.CreateTable("/Root/TestTable", tableBuilder.Build()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
@@ -4258,7 +4120,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
             tableBuilder
                 .AddNullableColumn("Value", EPrimitiveType::String)
                 .AddNullableColumn("Key", EPrimitiveType::String);
-            tableBuilder.SetPrimaryKeyColumns(TVector<TString>{"Value"});
+            tableBuilder.SetPrimaryKeyColumns(std::vector<std::string>{"Value"});
             auto result = session.CreateTable("/Root/TestTable/Index", tableBuilder.Build()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
@@ -4275,7 +4137,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
             tableBuilder
                 .AddNullableColumn("Value", EPrimitiveType::String)
                 .AddNullableColumn("Key", EPrimitiveType::String);
-            tableBuilder.SetPrimaryKeyColumns(TVector<TString>{"Value"});
+            tableBuilder.SetPrimaryKeyColumns(std::vector<std::string>{"Value"});
             auto result = session.CreateTable("/Root/TestTable/Index/indexImplTable", tableBuilder.Build()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
@@ -4287,6 +4149,9 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         auto serverSettings = TKikimrSettings()
             .SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -4295,8 +4160,8 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
             .AddNullableColumn("Key", EPrimitiveType::String)
             .AddNullableColumn("Index2", EPrimitiveType::String)
             .AddNullableColumn("Value", EPrimitiveType::String);
-        tableBuilder.SetPrimaryKeyColumns(TVector<TString>{"Key"});
-        tableBuilder.AddSecondaryIndex("Index", TVector<TString>{"Index2"});
+        tableBuilder.SetPrimaryKeyColumns(std::vector<std::string>{"Key"});
+        tableBuilder.AddSecondaryIndex("Index", std::vector<std::string>{"Index2"});
         auto result = session.CreateTable("/Root/TestTable", tableBuilder.Build()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
@@ -4318,11 +4183,17 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         }
     }
 
-    Y_UNIT_TEST(DuplicateUpsertInterleaveParams) {
+    Y_UNIT_TEST_TWIN(DuplicateUpsertInterleaveParams, UseSink) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
-            .SetKqpSettings({setting});
+            .SetKqpSettings({setting})
+            .SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -4331,8 +4202,8 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
             .AddNullableColumn("Key", EPrimitiveType::String)
             .AddNullableColumn("Index2", EPrimitiveType::String)
             .AddNullableColumn("Value", EPrimitiveType::String);
-        tableBuilder.SetPrimaryKeyColumns(TVector<TString>{"Key"});
-        tableBuilder.AddSecondaryIndex("Index", TVector<TString>{"Index2"});
+        tableBuilder.SetPrimaryKeyColumns(std::vector<std::string>{"Key"});
+        tableBuilder.AddSecondaryIndex("Index", std::vector<std::string>{"Index2"});
         auto result = session.CreateTable("/Root/TestTable", tableBuilder.Build()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
@@ -4409,6 +4280,9 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         auto serverSettings = TKikimrSettings()
             .SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -4417,8 +4291,8 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
             .AddNullableColumn("Key", EPrimitiveType::String)
             .AddNullableColumn("Index2", EPrimitiveType::String)
             .AddNullableColumn("Value", EPrimitiveType::String);
-        tableBuilder.SetPrimaryKeyColumns(TVector<TString>{"Key"});
-        tableBuilder.AddSecondaryIndex("Index", TVector<TString>{"Index2"});
+        tableBuilder.SetPrimaryKeyColumns(std::vector<std::string>{"Key"});
+        tableBuilder.AddSecondaryIndex("Index", std::vector<std::string>{"Index2"});
         auto result = session.CreateTable("/Root/TestTable", tableBuilder.Build()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
@@ -4597,7 +4471,6 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
             .SetKqpSettings({setting});
 
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(true);
         appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(true);
         // setting channel buffer size so small to make sure that we will be able to transfer at least
         // one row in stream lookup.
@@ -4607,6 +4480,9 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
 
         serverSettings.SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
         CreateSampleTablesWithIndex(session);
@@ -4682,6 +4558,9 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         auto serverSettings = TKikimrSettings()
             .SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
         CreateSampleTablesWithIndex(session);
@@ -4708,7 +4587,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
             .ExtractValueSync();
             UNIT_ASSERT(result.IsSuccess());
 
-            UNIT_ASSERT_C(!result.GetAst().Contains("EquiJoin"), result.GetAst());
+            UNIT_ASSERT_C(!result.GetAst().contains("EquiJoin"), result.GetAst());
 
             auto params = TParamsBuilder()
                 .AddParam("$targets")
@@ -4740,30 +4619,13 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
 
             auto& stats = NYdb::TProtoAccessor::GetProto(*result2.GetStats());
 
-            int readPhase = 0;
-            if (serverSettings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup()) {
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
 
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(readPhase).table_access().size(), 2);
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(readPhase).table_access(0).name(), "/Root/SecondaryComplexKeys");
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(readPhase).table_access(0).reads().rows(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(readPhase).table_access(1).name(), "/Root/SecondaryComplexKeys/Index/indexImplTable");
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(readPhase).table_access(1).reads().rows(), 1);
-            } else {
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 3);
-
-                readPhase++;
-
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(readPhase).table_access().size(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(readPhase).table_access(0).name(), "/Root/SecondaryComplexKeys/Index/indexImplTable");
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(readPhase).table_access(0).reads().rows(), 1);
-
-                readPhase++;
-
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(readPhase).table_access().size(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(readPhase).table_access(0).name(), "/Root/SecondaryComplexKeys");
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(readPhase).table_access(0).reads().rows(), 1);
-            }
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/SecondaryComplexKeys");
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(1).name(), "/Root/SecondaryComplexKeys/Index/indexImplTable");
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(1).reads().rows(), 1);
         }
     }
 
@@ -4775,6 +4637,9 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         auto serverSettings = TKikimrSettings()
             .SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -4964,6 +4829,9 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         auto serverSettings = TKikimrSettings()
             .SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        
 
         TScriptingClient client(kikimr.GetDriver());
         auto scriptResult = client.ExecuteYqlScript(R"(
@@ -5048,11 +4916,17 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         ])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
-    Y_UNIT_TEST(UpdateDeletePlan) {
+    Y_UNIT_TEST_TWIN(UpdateDeletePlan, UseSink) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
-            .SetKqpSettings({setting});
+            .SetKqpSettings({setting})
+            .SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        
 
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -5069,7 +4943,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         )").GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(schemeResult.GetStatus(), EStatus::SUCCESS, schemeResult.GetIssues().ToString());
 
-        auto checkPlan = [](const TString& planJson, ui32 tableReads, ui32 tableWrites, TMaybe<ui32> indexWrites) {
+        auto checkPlan = [](const std::string& planJson, ui32 tableReads, ui32 tableWrites, TMaybe<ui32> indexWrites) {
             NJson::TJsonValue plan;
             NJson::ReadJsonTree(planJson, &plan, true);
             const auto& tables = plan["tables"];
@@ -5109,6 +4983,9 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         auto serverSettings = TKikimrSettings()
             .SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        
 
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -5159,6 +5036,9 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         auto serverSettings = TKikimrSettings()
             .SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        
 
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -5197,7 +5077,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         AssertTableStats(result, "/Root/TestTable", {
-            .ExpectedReads = 1,
+            .ExpectedReads = 0,
             .ExpectedUpdates = 1
         });
 
@@ -5551,10 +5431,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
             NJson::ReadJsonTree(result.GetPlan(), &plan, true);
             auto table = plan["tables"][0];
             UNIT_ASSERT_VALUES_EQUAL(table["name"], "/Root/SecondaryKeys");
-            auto reads = table["reads"].GetArraySafe();
-            UNIT_ASSERT_VALUES_EQUAL(reads.size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(reads[0]["type"], "Lookup");
-            UNIT_ASSERT_VALUES_EQUAL(reads[0]["columns"].GetArraySafe().size(), 1);
+            UNIT_ASSERT(!table.Has("reads"));
         }
         {
             // Check that keys from involved index are in read columns
@@ -5631,10 +5508,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
             NJson::ReadJsonTree(result.GetPlan(), &plan, true);
             auto table = plan["tables"][0];
             UNIT_ASSERT_VALUES_EQUAL(table["name"], "/Root/SecondaryWithDataColumns");
-            auto reads = table["reads"].GetArraySafe();
-            UNIT_ASSERT_VALUES_EQUAL(reads.size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(reads[0]["type"], "Lookup");
-            UNIT_ASSERT_VALUES_EQUAL(reads[0]["columns"].GetArraySafe().size(), 1);
+            UNIT_ASSERT(!table.Has("reads"));
         }
     }
 
@@ -5704,6 +5578,9 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
             .SetKqpSettings({setting})
             .SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -5888,6 +5765,227 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
             ])", FormatResultSetYson(result.GetResultSet(0)));
         }
     }
+
+    Y_UNIT_TEST(DirectAccessToIndexImplTable) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableAccessToIndexImplTables(true);
+        auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+        TKikimrRunner kikimr(settings);        
+        auto db = kikimr.GetTableClient();
+        kikimr.GetTestClient().GrantConnect("user@builtin");
+        kikimr.GetTestServer().GetRuntime()->GetAppData().AdministrationAllowedSIDs.emplace_back("root@builtin");
+
+        auto adminSession = kikimr.GetTableClient(NYdb::NTable::TClientSettings()
+            .AuthToken("root@builtin")).CreateSession().GetValueSync().GetSession();
+
+        CreateSampleTablesWithIndex(adminSession);
+        const char *tablePath = "/Root/SecondaryKeys";
+        const char *implTablePath = "/Root/SecondaryKeys/Index/indexImplTable";
+
+        // a user which does not have any implicit permissions
+        auto userClient = kikimr.GetTableClient(NYdb::NTable::TClientSettings()
+            .AuthToken("user@builtin"));
+        auto userSession = userClient.CreateSession().GetValueSync().GetSession();
+
+        auto selectTableQuery = [&]() {
+            return userSession.ExecuteDataQuery(Sprintf(R"(
+                SELECT * FROM `%s`;
+            )", tablePath), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+        };
+        auto selectImplTableQuery = [&]() {
+            return userSession.ExecuteDataQuery(Sprintf(R"(
+                SELECT * FROM `%s`;
+            )", implTablePath), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+        };
+        auto upsertTableQuery = [&]() {
+            return userSession.ExecuteDataQuery(Sprintf(R"(
+                UPSERT INTO `%s` (Key, Fk, Value) VALUES
+                    (9,    9,    "Payload9");
+            )", tablePath), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+        };        
+        auto upsertImplTableQuery = [&]() {
+            return userSession.ExecuteDataQuery(Sprintf(R"(
+                UPSERT INTO `%s` (Fk, Key) VALUES
+                    (99, 99u);
+            )", implTablePath), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+        };
+        auto updateImplTableQuery = [&]() {
+            return userSession.ExecuteDataQuery(Sprintf(R"(
+                UPDATE `%s` ON (Fk, Key) VALUES (99, 99u);
+            )", implTablePath), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+        };
+        auto deleteImplTableQuery = [&]() {
+            return userSession.ExecuteDataQuery(Sprintf(R"(
+                DELETE FROM `%s` WHERE Fk = 99;
+            )", implTablePath), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+        };
+        auto bulkUpsertImplTable = [&]() {
+            TValueBuilder builder;
+            builder.BeginList();
+            builder.AddListItem().BeginStruct()
+                .AddMember("Key").Int32(99)
+                .AddMember("Fk").Int32(99)
+            .EndStruct();
+            builder.EndList();
+            return userClient.BulkUpsert(implTablePath, builder.Build()).ExtractValueSync();
+        };
+
+        // try accessing tables without permissions
+        {
+            auto result = selectTableQuery();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
+                "it does not exist or you do not have access permissions",
+                result.GetIssues().ToString()
+            );
+        }
+        {
+            auto result = selectImplTableQuery();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
+                "it does not exist or you do not have access permissions",
+                result.GetIssues().ToString()
+            );
+        }
+        {
+            auto result = upsertTableQuery();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
+                "it does not exist or you do not have access permissions",
+                result.GetIssues().ToString()
+            );
+        }
+        {
+            auto result = upsertImplTableQuery();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
+                "it does not exist or you do not have access permissions",
+                result.GetIssues().ToString()
+            );
+        }
+        {
+            auto result = updateImplTableQuery();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
+                "it does not exist or you do not have access permissions",
+                result.GetIssues().ToString()
+            );
+        }
+        {
+            auto result = deleteImplTableQuery();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
+                "it does not exist or you do not have access permissions",
+                result.GetIssues().ToString()
+            );
+        }
+        {
+            auto result = bulkUpsertImplTable();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::UNAUTHORIZED, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
+                "Access denied for user@builtin with access UpdateRow to table",
+                result.GetIssues().ToString()
+            );
+        }
+
+        // grant necessary permission
+        Grant(adminSession, "USE", tablePath, "user@builtin");
+
+        // try accessing tables with permissions
+        {
+            auto result = selectTableQuery();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            auto result = selectImplTableQuery();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            auto result = upsertTableQuery();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            auto result = upsertImplTableQuery();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
+                "Writing to index implementation tables is not allowed",
+                result.GetIssues().ToString()
+            );
+        }
+        {
+            auto result = updateImplTableQuery();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
+                "Writing to index implementation tables is not allowed",
+                result.GetIssues().ToString()
+            );
+        }
+        {
+            auto result = deleteImplTableQuery();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
+                "Writing to index implementation tables is not allowed",
+                result.GetIssues().ToString()
+            );
+        }
+        {
+            auto result = bulkUpsertImplTable();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
+                "Writing to index implementation tables is not allowed",
+                result.GetIssues().ToString()
+            );
+        }
+
+        // become superuser
+        kikimr.GetTestServer().GetRuntime()->GetAppData().AdministrationAllowedSIDs.emplace_back("user@builtin");
+        
+        // accessing tables as superuser
+        {
+            auto result = selectTableQuery();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            auto result = selectImplTableQuery();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            auto result = upsertTableQuery();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            auto result = upsertImplTableQuery();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
+                "Writing to index implementation tables is not allowed",
+                result.GetIssues().ToString()
+            );
+        }
+        {
+            auto result = updateImplTableQuery();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
+                "Writing to index implementation tables is not allowed",
+                result.GetIssues().ToString()
+            );
+        }
+        {
+            auto result = deleteImplTableQuery();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
+                "Writing to index implementation tables is not allowed",
+                result.GetIssues().ToString()
+            );
+        }
+        {
+            auto result = bulkUpsertImplTable();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
+                "Writing to index implementation tables is not allowed",
+                result.GetIssues().ToString()
+            );
+        }
+    }    
 }
 
 }

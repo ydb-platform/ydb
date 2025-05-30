@@ -104,7 +104,8 @@ namespace NYql::NDqs {
             const TString& program,
             NActors::TActorId executerID,
             NActors::TActorId resultID,
-            const TTypeAnnotationNode* typeAnn);
+            const TTypeAnnotationNode* typeAnn,
+            TLangVersion langver);
 
         TVector<NDqProto::TDqTask>& GetTasks() override;
         TVector<NDqProto::TDqTask> GetTasks(const TVector<NActors::TActorId>& workers) override;
@@ -119,6 +120,7 @@ namespace NYql::NDqs {
         TMaybe<NActors::TActorId> SourceID = {};
         TVector<NDqProto::TDqTask> Tasks;
         const TTypeAnnotationNode* TypeAnn;
+        const TLangVersion LangVer;
     };
 
     // Execution planner for Graph

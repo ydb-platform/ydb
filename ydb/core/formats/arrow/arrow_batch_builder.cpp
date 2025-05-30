@@ -183,9 +183,13 @@ bool TRecordBatchReader::DeserializeFromStrings(const TString& schemaString, con
     return true;
 }
 
-TArrowBatchBuilder::TArrowBatchBuilder(arrow::Compression::type codec, const std::set<std::string>& notNullColumns)
+TArrowBatchBuilder::TArrowBatchBuilder(
+        arrow::Compression::type codec,
+        const std::set<std::string>& notNullColumns,
+        arrow::MemoryPool* memoryPool)
     : WriteOptions(arrow::ipc::IpcWriteOptions::Defaults())
     , NotNullColumns(notNullColumns)
+    , MemoryPool(memoryPool)
 {
     Y_ABORT_UNLESS(arrow::util::Codec::IsAvailable(codec));
     auto resCodec = arrow::util::Codec::Create(codec);
@@ -201,7 +205,7 @@ arrow::Status TArrowBatchBuilder::Start(const std::vector<std::pair<TString, NSc
     if (!schema.ok()) {
         return arrow::Status::FromArgs(schema.status().code(), "Cannot make arrow schema: ", schema.status().ToString());
     }
-    auto status = arrow::RecordBatchBuilder::Make(*schema, arrow::default_memory_pool(), RowsToReserve, &BatchBuilder);
+    auto status = arrow::RecordBatchBuilder::Make(*schema, MemoryPool, RowsToReserve, &BatchBuilder);
     NumRows = NumBytes = 0;
     if (!status.ok()) {
         return arrow::Status::FromArgs(schema.status().code(), "Cannot make arrow builder: ", status.ToString());

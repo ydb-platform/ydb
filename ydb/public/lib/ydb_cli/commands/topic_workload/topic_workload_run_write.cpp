@@ -55,17 +55,17 @@ void TCommandWorkloadTopicRunWrite::Config(TConfig& config)
         .StoreTrue(&Scenario.UseCpuTimestamp);
     config.Opts->AddLongOption('m', "message-size", "Message size.")
         .DefaultValue(10_KB)
-        .StoreMappedResultT<TString>(&Scenario.MessageSizeBytes, &TCommandWorkloadTopicParams::StrToBytes);
+        .StoreMappedResult(&Scenario.MessageSizeBytes, &TCommandWorkloadTopicParams::StrToBytes);
     config.Opts->AddLongOption("message-rate", "Total message rate for all producer threads (messages per second). Exclusive with --byte-rate.")
         .DefaultValue(0)
         .StoreResult(&Scenario.MessagesPerSec);
     config.Opts->AddLongOption("byte-rate", "Total message rate for all producer threads (bytes per second). Exclusive with --message-rate.")
         .DefaultValue(0)
-        .StoreMappedResultT<TString>(&Scenario.BytesPerSec, &TCommandWorkloadTopicParams::StrToBytes);
+        .StoreMappedResult(&Scenario.BytesPerSec, &TCommandWorkloadTopicParams::StrToBytes);
     config.Opts->AddLongOption("codec", PrepareAllowedCodecsDescription("Client-side compression algorithm. When read, data will be uncompressed transparently with a codec used on write", InitAllowedCodecs()))
         .Optional()
         .DefaultValue((TStringBuilder() << NTopic::ECodec::RAW))
-        .StoreMappedResultT<TString>(&Scenario.Codec, &TCommandWorkloadTopicParams::StrToCodec);
+        .StoreMappedResult(&Scenario.Codec, &TCommandWorkloadTopicParams::StrToCodec);
     config.Opts->AddLongOption("direct", "Direct write to a partition node.")
         .Hidden()
         .StoreTrue(&Scenario.Direct);
@@ -91,7 +91,7 @@ void TCommandWorkloadTopicRunWrite::Config(TConfig& config)
         .DefaultValue(1'000'000)
         .Hidden()
         .StoreResult(&Scenario.CommitMessages);
-    config.Opts->AddLongOption("tx-commit-messages", "Number of messages to commit transaction. " 
+    config.Opts->AddLongOption("tx-commit-messages", "Number of messages to commit transaction. "
                                                             " Both tx-commit-messages and tx-commit-interval can trigger transaction commit.")
         .DefaultValue(1'000'000)
         .StoreResult(&Scenario.CommitMessages);
@@ -99,7 +99,7 @@ void TCommandWorkloadTopicRunWrite::Config(TConfig& config)
     config.IsNetworkIntensive = true;
 }
 
-void TCommandWorkloadTopicRunWrite::Parse(TConfig& config) 
+void TCommandWorkloadTopicRunWrite::Parse(TConfig& config)
 {
     TClientCommand::Parse(config);
 

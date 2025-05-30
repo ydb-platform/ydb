@@ -15,6 +15,10 @@ using namespace NSchemeShard;
 using namespace Tests;
 
 Y_UNIT_TEST_SUITE(DataShardWrite) {
+
+    constexpr i32 operator""_i32(unsigned long long val) { return static_cast<i32>(val); }
+    constexpr ui32 operator""_ui32(unsigned long long val) { return static_cast<ui32>(val); }
+
     const TString expectedTableState = "key = 0, value = 1\nkey = 2, value = 3\nkey = 4, value = 5\n";
 
     std::tuple<TTestActorRuntime&, Tests::TServer::TPtr, TActorId> TestCreateServer(std::optional<TServerSettings> serverSettings = {}) {
@@ -36,13 +40,19 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
     }
 
     Y_UNIT_TEST_TWIN(ExecSQLUpsertImmediate, EvWrite) {
-        auto [runtime, server, sender] = TestCreateServer();
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableOltpSink(EvWrite);
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings
+            .SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetAppConfig(app);
+
+        auto [runtime, server, sender] = TestCreateServer(serverSettings);
 
         TShardedTableOptions opts;
         auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
-
-        auto rows = EvWrite ? TEvWriteRows{{{0, 1}}, {{2, 3}}, {{4, 5}}} : TEvWriteRows{};
-        auto evWriteObservers = ReplaceEvProposeTransactionWithEvWrite(runtime, rows);
 
         Cout << "========= Send immediate write =========\n";
         {
@@ -59,16 +69,22 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
     }
 
     Y_UNIT_TEST_QUAD(ExecSQLUpsertPrepared, EvWrite, Volatile) {
-        auto [runtime, server, sender] = TestCreateServer();
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableOltpSink(EvWrite);
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings
+            .SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetAppConfig(app);
+
+        auto [runtime, server, sender] = TestCreateServer(serverSettings);
 
         runtime.GetAppData().FeatureFlags.SetEnableDataShardVolatileTransactions(Volatile);
 
         TShardedTableOptions opts;
         auto [shards1, tableId1] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
         auto [shards2, tableId2] = CreateShardedTable(server, sender, "/Root", "table-2", opts);
-
-        auto rows = EvWrite ? TEvWriteRows{{tableId1, {0, 1}}, {tableId2, {2, 3}}} : TEvWriteRows{};
-        auto evWriteObservers = ReplaceEvProposeTransactionWithEvWrite(runtime, rows);
 
         Cout << "========= Send distributed write =========\n";
         {
@@ -392,7 +408,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         Cout << "========= Send immediate insert with duplicate, keys -2, 0, 2 =========\n";
         {
             auto request = MakeWriteRequest(++txId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE, NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT, tableId, opts.Columns_, rowCount, -2);
-            const auto writeResult = Write(runtime, sender, shard, std::move(request), NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
+            const auto writeResult = Write(runtime, sender, shard, std::move(request), NKikimrDataEvents::TEvWriteResult::STATUS_CONSTRAINT_VIOLATION);
         }
 
         Cout << "========= Read table =========\n";
@@ -1687,5 +1703,324 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         }
     }
 
-} // Y_UNIT_TEST_SUITE
+    Y_UNIT_TEST(DelayedVolatileTxAndEvWrite) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetEnableDataShardVolatileTransactions(true);
+
+        auto [runtime, server, sender] = TestCreateServer(serverSettings);
+
+        TDisableDataShardLogBatching disableDataShardLogBatching;
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSchemeExec(runtime, R"(
+                CREATE TABLE `/Root/table` (key int, a int, b int, c int, PRIMARY KEY (key))
+                WITH (PARTITION_AT_KEYS = (10));
+            )"),
+            "SUCCESS");
+
+        const auto shards = GetTableShards(server, sender, "/Root/table");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 2u);
+        const auto tableId = ResolveTableId(server, sender, "/Root/table");
+
+        auto [tablesMap, ownerId_] = GetTablesByPathId(server, shards.at(0));
+
+        // Start blocking readsets
+        TBlockEvents<TEvTxProcessing::TEvReadSet> blockedReadSets(runtime);
+
+        // Prepare a distributed upsert
+        Cerr << "... starting a distributed upsert" << Endl;
+        auto upsertFuture = KqpSimpleSend(runtime, R"(
+            UPSERT INTO `/Root/table` (key, a, b, c) VALUES (1, 2, 2, 2), (11, 12, 12, 12);
+        )");
+        runtime.WaitFor("blocked readsets", [&]{ return blockedReadSets.size() >= 4; });
+
+        // 1. Make an upsert to (key, b)
+        {
+            Cerr << "... making a write to " << shards.at(0) << Endl;
+            auto req = MakeWriteRequest(
+                std::nullopt,
+                NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE,
+                NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
+                tableId,
+                { 1_ui32, 3_ui32 },
+                { TCell::Make(1_i32), TCell::Make(3_i32) });
+            Write(runtime, sender, shards.at(0), std::move(req));
+        }
+
+        // 1. Make an upsert to (key, c)
+        {
+            Cerr << "... making a write to " << shards.at(0) << Endl;
+            auto req = MakeWriteRequest(
+                std::nullopt,
+                NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE,
+                NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
+                tableId,
+                { 1_ui32, 4_ui32 },
+                { TCell::Make(1_i32), TCell::Make(4_i32) });
+            Write(runtime, sender, shards.at(0), std::move(req));
+        }
+
+        // Unblock readsets
+        blockedReadSets.Stop().Unblock();
+
+        runtime.SimulateSleep(TDuration::MilliSeconds(1));
+
+        // Make a validating read, the volatile tx changes must not be lost
+        Cerr << "... validating table" << Endl;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, R"(
+                SELECT key, a, b, c FROM `/Root/table` ORDER BY key;
+            )"),
+            "{ items { int32_value: 1 } items { int32_value: 2 } items { int32_value: 3 } items { int32_value: 4 } }, "
+            "{ items { int32_value: 11 } items { int32_value: 12 } items { int32_value: 12 } items { int32_value: 12 } }");
+    }
+
+    Y_UNIT_TEST(DoubleWriteUncommittedThenDoubleReadWithCommit) {
+        TPortManager pm;
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableOltpSink(true);
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetNodeCount(2)
+            .SetUseRealThreads(false)
+            .SetAppConfig(app);
+
+        auto [runtime, server, sender] = TestCreateServer(serverSettings);
+
+        TDisableDataShardLogBatching disableDataShardLogBatching;
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSchemeExec(runtime, R"(
+                CREATE TABLE `/Root/table` (key Int64, index Int64, value Int64, ballast String, PRIMARY KEY (key, index));
+            )"),
+            "SUCCESS");
+
+        ExecSQL(server, sender, R"(
+            UPSERT INTO `/Root/table` (key, index, value) VALUES
+                (251, 0, 1000),
+                (251, 1, 1001),
+                (251, 2, 1002),
+                (251, 3, 1003),
+                (251, 4, 1004),
+                (251, 5, 1005),
+                (252, 0, 2000),
+                (252, 1, 2001),
+                (252, 2, 2002),
+                (252, 3, 2003),
+                (252, 4, 2004),
+                (252, 5, 2005);
+        )");
+
+        TString sqlWrite = R"(
+            DECLARE $write0 AS List<Struct<key:Int64, index:Int64, value:Int64>>;
+            DECLARE $ballast AS Bytes;
+            $write0_keys = (SELECT DISTINCT(key) FROM AS_TABLE($write0));
+            $write0_last_index = (
+                SELECT w.key AS key, MAX(t.index) AS index
+                FROM $write0_keys AS w
+                INNER JOIN `/Root/table` AS t ON t.key = w.key
+                GROUP BY w.key
+            );
+            UPSERT INTO `/Root/table` (
+                SELECT w.key AS key,
+                    COALESCE(li.index + 1, 0) + w.index AS index,
+                    w.value AS value,
+                    $ballast AS ballast
+                FROM AS_TABLE($write0) AS w
+                LEFT JOIN $write0_last_index AS li ON li.key = w.key
+            );
+        )";
+
+        TString sqlRead = R"(
+            DECLARE $read0 AS Int64;
+            DECLARE $read1 AS Int64;
+            SELECT index, value FROM `/Root/table` WHERE key = $read0 ORDER BY index;
+            SELECT index, value FROM `/Root/table` WHERE key = $read1 ORDER BY index;
+        )";
+
+        TString sessionId = CreateSessionRPC(runtime, "/Root");
+
+        // auto chunkReads = runtime.AddObserver<TEvDataShard::TEvRead>(
+        //     [&](TEvDataShard::TEvRead::TPtr& ev) {
+        //         ev->Get()->Record.SetMaxRowsInResult(1);
+        //     });
+
+        Cerr << "... sending write request" << Endl;
+        Ydb::Table::ExecuteDataQueryRequest writeRequest;
+        writeRequest.set_session_id(sessionId);
+        writeRequest.mutable_tx_control()->set_commit_tx(false);
+        writeRequest.mutable_tx_control()->mutable_begin_tx()->mutable_serializable_read_write();
+        writeRequest.mutable_query()->set_yql_text(sqlWrite);
+        auto& writeParams = *writeRequest.mutable_parameters();
+        if (auto* p = &writeParams["$write0"]) {
+            auto* t = p->mutable_type()->mutable_list_type()->mutable_item()->mutable_struct_type();
+            if (auto* m = t->add_members()) {
+                m->set_name("key");
+                m->mutable_type()->set_type_id(Ydb::Type::INT64);
+            }
+            if (auto* m = t->add_members()) {
+                m->set_name("index");
+                m->mutable_type()->set_type_id(Ydb::Type::INT64);
+            }
+            if (auto* m = t->add_members()) {
+                m->set_name("value");
+                m->mutable_type()->set_type_id(Ydb::Type::INT64);
+            }
+            if (auto* row = p->mutable_value()->add_items()) {
+                row->add_items()->set_int64_value(251);
+                row->add_items()->set_int64_value(0);
+                row->add_items()->set_int64_value(5001);
+            }
+            if (auto* row = p->mutable_value()->add_items()) {
+                row->add_items()->set_int64_value(252);
+                row->add_items()->set_int64_value(0);
+                row->add_items()->set_int64_value(5002);
+            }
+        }
+        if (auto* p = &writeParams["$ballast"]) {
+            p->mutable_type()->set_type_id(Ydb::Type::STRING);
+            p->mutable_value()->set_bytes_value("xxx");
+        }
+        auto writeResponse = AwaitResponse(runtime, SendRequest(runtime, std::move(writeRequest), "/Root"));
+        UNIT_ASSERT_C(writeResponse.operation().status() == Ydb::StatusIds::SUCCESS, "ERROR: " << writeResponse.operation().status());
+        Ydb::Table::ExecuteQueryResult writeResult;
+        writeResponse.operation().result().UnpackTo(&writeResult);
+        TString txId = writeResult.tx_meta().id();
+
+        Cerr << "... sending read request" << Endl;
+        Ydb::Table::ExecuteDataQueryRequest readRequest;
+        readRequest.set_session_id(sessionId);
+        readRequest.mutable_tx_control()->set_commit_tx(true);
+        readRequest.mutable_tx_control()->set_tx_id(txId);
+        readRequest.mutable_query()->set_yql_text(sqlRead);
+        auto& readParams = *readRequest.mutable_parameters();
+        if (auto* p = &readParams["$read0"]) {
+            p->mutable_type()->set_type_id(Ydb::Type::INT64);
+            p->mutable_value()->set_int64_value(251);
+        }
+        if (auto* p = &readParams["$read1"]) {
+            p->mutable_type()->set_type_id(Ydb::Type::INT64);
+            p->mutable_value()->set_int64_value(252);
+        }
+        auto readResponse = AwaitResponse(runtime, SendRequest(runtime, std::move(readRequest), "/Root"));
+        UNIT_ASSERT_C(readResponse.operation().status() == Ydb::StatusIds::SUCCESS, "ERROR: " << readResponse.operation().status());
+        Ydb::Table::ExecuteQueryResult readResult;
+        readResponse.operation().result().UnpackTo(&readResult);
+        UNIT_ASSERT_VALUES_EQUAL(FormatResult(readResult),
+            "{ items { int64_value: 0 } items { int64_value: 1000 } }, "
+            "{ items { int64_value: 1 } items { int64_value: 1001 } }, "
+            "{ items { int64_value: 2 } items { int64_value: 1002 } }, "
+            "{ items { int64_value: 3 } items { int64_value: 1003 } }, "
+            "{ items { int64_value: 4 } items { int64_value: 1004 } }, "
+            "{ items { int64_value: 5 } items { int64_value: 1005 } }, "
+            "{ items { int64_value: 6 } items { int64_value: 5001 } }\n"
+            "{ items { int64_value: 0 } items { int64_value: 2000 } }, "
+            "{ items { int64_value: 1 } items { int64_value: 2001 } }, "
+            "{ items { int64_value: 2 } items { int64_value: 2002 } }, "
+            "{ items { int64_value: 3 } items { int64_value: 2003 } }, "
+            "{ items { int64_value: 4 } items { int64_value: 2004 } }, "
+            "{ items { int64_value: 5 } items { int64_value: 2005 } }, "
+            "{ items { int64_value: 6 } items { int64_value: 5002 } }");
+        Cerr << readResult.DebugString();
+    }
+
+    Y_UNIT_TEST(WriteCommitVersion) {
+        TPortManager pm;
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableOltpSink(true);
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetAppConfig(app);
+
+        auto [runtime, server, sender] = TestCreateServer(serverSettings);
+
+        TDisableDataShardLogBatching disableDataShardLogBatching;
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSchemeExec(runtime, R"(
+                CREATE TABLE `/Root/table` (key int, value int, PRIMARY KEY (key))
+                WITH (PARTITION_AT_KEYS = (10, 20));;
+            )"),
+            "SUCCESS"
+        );
+
+        ExecSQL(server, sender, R"(
+            UPSERT INTO `/Root/table` (key, value) VALUES
+                (1, 1001),
+                (11, 1002),
+                (21, 1003);
+        )");
+
+        std::deque<std::optional<TRowVersion>> commitVersions;
+        auto commitVersionObserver = runtime.AddObserver<NKikimr::NEvents::TDataEvents::TEvWriteResult>([&](auto& ev) {
+            auto* msg = ev->Get();
+            if (msg->Record.GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED) {
+                if (msg->Record.HasCommitVersion()) {
+                    commitVersions.emplace_back(TRowVersion::FromProto(msg->Record.GetCommitVersion()));
+                } else {
+                    commitVersions.emplace_back();
+                }
+            }
+        });
+
+        TString sessionId, txId;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleBegin(runtime, sessionId, txId, R"(
+                UPSERT INTO `/Root/table` (key, value) VALUES (2, 2001);
+                SELECT key, value FROM `/Root/table` WHERE key < 10 ORDER BY key;
+            )"),
+            "{ items { int32_value: 1 } items { int32_value: 1001 } }, "
+            "{ items { int32_value: 2 } items { int32_value: 2001 } }"
+        );
+        UNIT_ASSERT_VALUES_EQUAL(commitVersions.size(), 1u);
+        UNIT_ASSERT_C(!commitVersions.front(), "Unexpected commit version: " << commitVersions.front().value());
+        commitVersions.clear();
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleCommit(runtime, sessionId, txId, R"(SELECT 1)"),
+            "{ items { int32_value: 1 } }"
+        );
+        UNIT_ASSERT_VALUES_EQUAL(commitVersions.size(), 1u);
+        UNIT_ASSERT_C(commitVersions.front(), "Missing commit version");
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, R"(
+                SELECT key, value FROM `/Root/table` WHERE key < 20 ORDER BY key;
+            )"),
+            "{ items { int32_value: 1 } items { int32_value: 1001 } }, "
+            "{ items { int32_value: 2 } items { int32_value: 2001 } }, "
+            "{ items { int32_value: 11 } items { int32_value: 1002 } }"
+        );
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, R"(
+                UPSERT INTO `/Root/table` (key, value) VALUES (12, 3001);
+            )"),
+            "<empty>"
+        );
+        UNIT_ASSERT_VALUES_EQUAL(commitVersions.size(), 2u);
+        UNIT_ASSERT_C(commitVersions[0] < commitVersions[1],
+            "Unexpected commit version: " << commitVersions[0].value() << " then " << commitVersions[1].value()
+        );
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, R"(
+                UPSERT INTO `/Root/table` (key, value) VALUES
+                    (13, 4001),
+                    (22, 4002);
+            )"),
+            "<empty>"
+        );
+        UNIT_ASSERT_VALUES_EQUAL(commitVersions.size(), 4u);
+        UNIT_ASSERT_C(commitVersions[1] < commitVersions[2] && commitVersions[2] == commitVersions[3],
+            "Unexpected commit version: " << commitVersions[1].value() << " then "
+            << commitVersions[2].value() << " and " << commitVersions[3].value()
+        );
+    }
+
+} // Y_UNIT_TEST_SUITE(DataShardWrite)
 } // namespace NKikimr

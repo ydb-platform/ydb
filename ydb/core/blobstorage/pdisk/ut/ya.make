@@ -21,6 +21,12 @@ PEERDIR(
     ydb/core/testlib/actors
 )
 
+IF (YDB_ENABLE_PDISK_SHRED) 
+    CFLAGS(
+        -DENABLE_PDISK_SHRED
+    )
+ENDIF()
+
 SRCS(
     blobstorage_pdisk_blockdevice_ut.cpp
     blobstorage_pdisk_crypto_ut.cpp
@@ -36,6 +42,7 @@ SRCS(
     blobstorage_pdisk_ut_run.cpp
     blobstorage_pdisk_ut_sectormap.cpp
     blobstorage_pdisk_util_ut.cpp
+    blobstorage_pdisk_ut_chunk_tracker.cpp
     mock/pdisk_mock.cpp
 )
 

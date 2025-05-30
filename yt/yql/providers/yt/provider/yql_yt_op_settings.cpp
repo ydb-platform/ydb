@@ -4,6 +4,7 @@
 #include <yt/yql/providers/yt/common/yql_yt_settings.h>
 #include <yt/yql/providers/yt/provider/yql_yt_block_io_utils.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/core/yql_opt_utils.h>
 
@@ -11,6 +12,7 @@
 #include <util/generic/hash_set.h>
 
 #include <library/cpp/yson/node/node_io.h>
+#include <library/cpp/json/json_reader.h>
 
 
 namespace NYql {
@@ -423,7 +425,6 @@ bool ValidateSettings(const TExprNode& settingsNode, EYtSettingTypes accepted, T
         case EYtSettingType::IgnoreNonExisting:
         case EYtSettingType::WarnNonExisting:
         case EYtSettingType::ForceTransform:
-        case EYtSettingType::SoftTransform:
         case EYtSettingType::CombineChunks:
         case EYtSettingType::WithQB:
         case EYtSettingType::Inline:
@@ -852,9 +853,9 @@ bool ValidateSettings(const TExprNode& settingsNode, EYtSettingTypes accepted, T
                         << "Expected list value, group: "
                         << it->first.Quote()));
                     return false;
-                } else if (it->second.AsList().size() < 2) {
+                } else if (it->second.AsList().empty()) {
                     ctx.AddError(TIssue(ctx.GetPosition(setting->Tail().Pos()), TStringBuilder()
-                        << "Expected list with at least two columns, group: "
+                        << "Expected non empty column list, group: "
                         << it->first.Quote()));
                     return false;
                 } else {
@@ -902,7 +903,24 @@ bool ValidateSettings(const TExprNode& settingsNode, EYtSettingTypes accepted, T
                     return false;
                 }
             }
-            return true;
+            break;
+        }
+        case EYtSettingType::SoftTransform: {
+            if (!EnsureTupleSize(*setting, 2, ctx)) {
+                return false;
+            }
+            TVector<TString> values;
+            if (!ValidateColumnSettings(setting->Tail(), ctx, values, false)) {
+                return false;
+            }
+            for (const auto& value: values) {
+                if (value != "column_groups" && value != "storage") {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting->Tail().Pos()), TStringBuilder()
+                        << "Unsupported value " << value));
+                    return false;
+                }
+            }
+            break;
         }
         case EYtSettingType::BlockOutputReady: {
             if (!EnsureTupleSize(*setting, 2, ctx)) {
@@ -915,7 +933,18 @@ bool ValidateSettings(const TExprNode& settingsNode, EYtSettingTypes accepted, T
                     << "Unsupported block output mode value " << TString{setting->Child(1)->Content()}.Quote()));
                 return false;
             }
-            return true;
+            break;
+        }
+        case EYtSettingType::QLFilter: {
+            if (!EnsureTupleSize(*setting, 2, ctx)) {
+                return false;
+            }
+            const auto qlFilter = setting->Child(1);
+            if (!qlFilter->IsCallable("YtQLFilter")) {
+                ctx.AddError(TIssue(ctx.GetPosition(qlFilter->Pos()), TStringBuilder()
+                    << "Expected YtQLFilter node, got: " << qlFilter->Content()));
+            }
+            break;
         }
         case EYtSettingType::LAST: {
             YQL_ENSURE(false, "Unexpected EYtSettingType");
@@ -991,9 +1020,38 @@ bool ValidateColumnGroups(const TExprNode& setting, const TStructExprType& rowTy
     return true;
 }
 
+bool ExpandDefaultColumnGroup(const TStringBuf colGroupSpec, const TStructExprType& rowType, TString& expandedSpec) {
+    auto columnGroups = NYT::NodeFromYsonString(colGroupSpec);
+    TString defGroup;
+    THashSet<TString> usedColumns;
+    if (!AnyOf(columnGroups.AsMap(), [](const auto& grp) { return grp.second.IsEntity(); })) {
+        return false;
+    }
+    for (const auto& grp: columnGroups.AsMap()) {
+        if (!grp.second.IsEntity()) {
+            std::for_each(grp.second.AsList().cbegin(), grp.second.AsList().cend(), [&usedColumns](const auto& col) { usedColumns.insert(col.AsString()); });
+        } else {
+            defGroup = grp.first;
+        }
+    }
+    YQL_ENSURE(defGroup);
+    auto otherColumns = NYT::TNode::CreateList();
+    for (auto item: rowType.GetItems()) {
+        if (!usedColumns.contains(item->GetName())) {
+            otherColumns.Add(item->GetName());
+        }
+    }
+    columnGroups[defGroup] = std::move(otherColumns);
+    expandedSpec = NYT::NodeToCanonicalYsonString(columnGroups);
+    return true;
+}
+
 TString NormalizeColumnGroupSpec(const TStringBuf spec) {
     try {
         auto columnGroups = NYT::NodeFromYsonString(spec);
+        if (columnGroups.AsMap().empty()) {
+            return {};
+        }
         for (auto& grp: columnGroups.AsMap()) {
             if (!grp.second.IsEntity()) {
                 std::stable_sort(grp.second.AsList().begin(), grp.second.AsList().end(), [](const auto& l, const auto& r) { return l.AsString() < r.AsString(); });
@@ -1280,6 +1338,79 @@ EYtSettingTypes operator&(EYtSettingTypes left, const EYtSettingTypes& right) {
 
 EYtSettingTypes operator|(EYtSettingType left, EYtSettingType right) {
     return EYtSettingTypes(left) | EYtSettingTypes(right);
+}
+
+void YtWriteHint(std::string_view name, NJsonWriter::TBuf& json) {
+    json.BeginObject();
+    json.WriteKey("name");
+    json.WriteString(name);
+    json.EndObject();
+}
+
+void YtWriteHints(EYtSettingTypes flags, NJsonWriter::TBuf& json) {
+    auto res = NResource::Find("/yql_yt_op_settings.json");
+    NJson::TJsonValue enumJson;
+    ReadJsonTree(res, &enumJson, true);
+    for (const auto& x : enumJson.GetArraySafe()) {
+        if (x["cpp_name"].GetStringSafe() != "EYtSettingType") {
+            continue;
+        }
+
+        for (const auto& y : x["items"].GetArraySafe()) {
+            if (!y["str_value"].IsDefined()) {
+                continue;
+            }
+
+            if (flags.HasFlags(FromString<EYtSettingType>(y["str_value"].GetStringSafe()))) {
+                for (const auto& a : y["aliases"].GetArraySafe()) {
+                    YtWriteHint(a.GetStringSafe(), json);
+                }
+            }
+        }
+    }
+}
+
+void YtWriteStmtContext(std::string_view ctxName, NJsonWriter::TBuf& json) {
+    if (ctxName == "read") {
+        json.WriteKey(YtProviderName);
+        json.BeginObject();
+        json.WriteKey("hints");
+        json.BeginList();
+        YtWriteHints(
+            EYtSettingType::InferScheme |
+            EYtSettingType::ForceInferScheme |
+            EYtSettingType::Inline |
+            EYtSettingType::XLock |
+            EYtSettingType::Unordered |
+            EYtSettingType::NonUnique |
+            EYtSettingType::IgnoreTypeV3,
+            json
+        );
+        json.EndList();
+        json.EndObject();
+    } else if (ctxName == "insert") {
+        json.WriteKey(YtProviderName);
+        json.BeginObject();
+        json.WriteKey("hints");
+        json.BeginList();
+        YtWriteHint("truncate", json);
+        YtWriteHints(
+            EYtSettingType::CompressionCodec |
+            EYtSettingType::ErasureCodec |
+            EYtSettingType::Expiration |
+            EYtSettingType::ReplicationFactor |
+            EYtSettingType::UserAttrs |
+            EYtSettingType::Media |
+            EYtSettingType::PrimaryMedium |
+            EYtSettingType::KeepMeta |
+            EYtSettingType::MonotonicKeys |
+            EYtSettingType::ColumnGroups |
+            EYtSettingType::SecurityTags,
+            json
+        );
+        json.EndList();
+        json.EndObject();
+    }
 }
 
 } // NYql

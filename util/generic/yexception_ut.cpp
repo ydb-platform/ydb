@@ -18,7 +18,6 @@ static inline void Throw2DontMove() {
 #include <util/string/split.h>
 
 #include "yexception_ut.h"
-#include "bt_exception.h"
 
 #if defined(_MSC_VER)
     #pragma warning(disable : 4702) /*unreachable code*/
@@ -387,7 +386,8 @@ private:
         try {
             throw int(1);
         } catch (...) {
-#if defined(LIBCXX_BUILDING_LIBCXXRT) || defined(LIBCXX_BUILDING_LIBGCC)
+#if defined(_linux_) || defined(_darwin_)
+            // On Linux and macOS we use libcxxrt which handles throw integers properly
             UNIT_ASSERT_VALUES_EQUAL(CurrentExceptionTypeName(), "int");
 #else
             UNIT_ASSERT_VALUES_EQUAL(CurrentExceptionTypeName(), "unknown type");
@@ -422,7 +422,7 @@ private:
             try {
                 std::rethrow_exception(std::current_exception());
             } catch (...) {
-#if defined(LIBCXX_BUILDING_LIBGCC)
+#ifdef __GLIBCXX__
                 UNIT_ASSERT_VALUES_EQUAL(CurrentExceptionTypeName(), "int");
 #else
                 UNIT_ASSERT_VALUES_EQUAL(CurrentExceptionTypeName(), "unknown type");
@@ -436,7 +436,7 @@ private:
             try {
                 throw;
             } catch (...) {
-#if defined(LIBCXX_BUILDING_LIBCXXRT) || defined(LIBCXX_BUILDING_LIBGCC)
+#if defined(_linux_) || defined(_darwin_)
                 UNIT_ASSERT_VALUES_EQUAL(CurrentExceptionTypeName(), "int");
 #else
                 UNIT_ASSERT_VALUES_EQUAL(CurrentExceptionTypeName(), "unknown type");

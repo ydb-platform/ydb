@@ -35,6 +35,8 @@ void TGRpcDynamicConfigService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logge
     ADD_REQUEST(GetNodeLabels, DoGetNodeLabelsRequest)
     ADD_REQUEST(ResolveConfig, DoResolveConfigRequest)
     ADD_REQUEST(ResolveAllConfig, DoResolveAllConfigRequest)
+    ADD_REQUEST(FetchStartupConfig, DoFetchStartupConfigRequest)
+    ADD_REQUEST(GetConfigurationVersion, DoGetConfigurationVersionRequest);
 
 #undef ADD_REQUEST
 }

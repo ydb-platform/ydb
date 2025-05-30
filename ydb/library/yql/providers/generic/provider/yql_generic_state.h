@@ -5,7 +5,7 @@
 #include <yql/essentials/core/yql_data_provider.h>
 #include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/client.h>
-#include <ydb/public/sdk/cpp/client/ydb_types/credentials/credentials.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
 
 namespace NKikimr::NMiniKQL {
     class IFunctionRegistry;
@@ -15,16 +15,36 @@ namespace NYql {
     struct TGenericState: public TThrRefBase {
         using TPtr = TIntrusivePtr<TGenericState>;
 
-        using TTableAddress = std::pair<TString, TString>; // std::pair<clusterName, tableName>
+        struct TTableAddress {
+            TString ClusterName;
+            TString TableName;
+
+            TString ToString() const {
+                return TStringBuilder() << "`" << ClusterName << "`.`" << TableName << "`";
+            }
+
+            bool operator==(const TTableAddress& other) const {
+                return ClusterName == other.ClusterName && TableName == other.TableName;
+            }
+
+            explicit operator size_t() const {
+                return CombineHashes(std::hash<TString>()(ClusterName), std::hash<TString>()(TableName));
+            }
+        };
 
         struct TTableMeta {
             const TStructExprType* ItemType = nullptr;
+            // TODO: check why is it important
             TVector<TString> ColumnOrder;
-            NYql::NConnector::NApi::TSchema Schema;
+            // External datasource description
             NYql::TGenericDataSourceInstance DataSourceInstance;
+            // External table schema
+            NYql::NConnector::NApi::TSchema Schema;
+            // Contains some binary description of table splits (partitions) produced by Connector
+            std::vector<NYql::NConnector::NApi::TSplit> Splits;
         };
 
-        using TGetTableResult = std::pair<std::optional<const TTableMeta*>, std::optional<TIssue>>;
+        using TGetTableResult = std::pair<const TTableMeta*, TIssues>;
 
         TGenericState() = delete;
 
@@ -45,9 +65,8 @@ namespace NYql {
             Configuration->Init(gatewayConfig, databaseResolver, DatabaseAuth, types->Credentials);
         }
 
-        void AddTable(const TStringBuf& clusterName, const TStringBuf& tableName, TTableMeta&& tableMeta);
-        TGetTableResult GetTable(const TStringBuf& clusterName, const TStringBuf& tableName) const;
-        TGetTableResult GetTable(const TStringBuf& clusterName, const TStringBuf& tableName, const TPosition& position) const;
+        void AddTable(const TTableAddress& tableAddress, TTableMeta&& tableMeta);
+        TGetTableResult GetTable(const TTableAddress& tableAddress) const;
 
         TTypeAnnotationContext* Types;
         TGenericConfiguration::TPtr Configuration = MakeIntrusive<TGenericConfiguration>();

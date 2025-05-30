@@ -32,6 +32,10 @@ public:
         NTransactionClient::TTransactionId transactionId,
         const NApi::TTransactionAttachOptions& options) override;
 
+    NApi::IPrerequisitePtr AttachPrerequisite(
+        NPrerequisiteClient::TPrerequisiteId prerequisiteId,
+        const NApi::TPrerequisiteAttachOptions& options) override;
+
     // Tables.
     TFuture<void> MountTable(
         const NYPath::TYPath& path,
@@ -52,6 +56,10 @@ public:
     TFuture<void> UnfreezeTable(
         const NYPath::TYPath& path,
         const NApi::TUnfreezeTableOptions& options) override;
+
+    TFuture<void> CancelTabletTransition(
+        NTabletClient::TTabletId tabletId,
+        const NApi::TCancelTabletTransitionOptions& options) override;
 
     TFuture<void> ReshardTable(
         const NYPath::TYPath& path,
@@ -113,7 +121,7 @@ public:
         const NApi::TGetTabletErrorsOptions& options) override;
 
     TFuture<std::vector<NTabletClient::TTabletActionId>> BalanceTabletCells(
-        const TString& tabletCellBundle,
+        const std::string& tabletCellBundle,
         const std::vector<NYPath::TYPath>& movableTables,
         const NApi::TBalanceTabletCellsOptions& options) override;
 
@@ -189,6 +197,9 @@ public:
         const NApi::TPutFileToCacheOptions& options) override;
 
     // Security.
+    TFuture<TGetCurrentUserResultPtr> GetCurrentUser(
+        const TGetCurrentUserOptions& options) override;
+
     TFuture<void> AddMember(
         const TString& group,
         const TString& member,
@@ -212,8 +223,8 @@ public:
         const NApi::TCheckPermissionByAclOptions& options) override;
 
     TFuture<void> TransferAccountResources(
-        const TString& srcAccount,
-        const TString& dstAccount,
+        const std::string& srcAccount,
+        const std::string& dstAccount,
         NYTree::INodePtr resourceDelta,
         const TTransferAccountResourcesOptions& options) override;
 
@@ -251,6 +262,11 @@ public:
         const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
         const NYson::TYsonString& parameters,
         const NApi::TUpdateOperationParametersOptions& options) override;
+
+    TFuture<void> PatchOperationSpec(
+        const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
+        const NScheduler::TSpecPatchList& patches,
+        const NApi::TPatchOperationSpecOptions& options) override;
 
     TFuture<TOperation> GetOperation(
         const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
@@ -337,6 +353,10 @@ public:
     TFuture<TMultiTablePartitions> PartitionTables(
         const std::vector<NYPath::TRichYPath>& paths,
         const NApi::TPartitionTablesOptions& options) override;
+
+    TFuture<ITablePartitionReaderPtr> CreateTablePartitionReader(
+        const TTablePartitionCookiePtr& tablePartitionDescriptor,
+        const TReadTablePartitionOptions& options) override;
 
     TFuture<void> TruncateJournal(
         const NYPath::TYPath& path,
@@ -457,6 +477,10 @@ public:
         const std::string& nodeAddress,
         const TRequestRestartOptions& options) override;
 
+    TFuture<TCollectCoverageResult> CollectCoverage(
+        const std::string& address,
+        const NApi::TCollectCoverageOptions& options) override;
+
     // Query tracker
 
     TFuture<NQueryTrackerClient::TQueryId> StartQuery(
@@ -519,11 +543,11 @@ public:
     // Bundle Controller
 
     TFuture<NBundleControllerClient::TBundleConfigDescriptorPtr> GetBundleConfig(
-        const TString& bundleName,
+        const std::string& bundleName,
         const NBundleControllerClient::TGetBundleConfigOptions& options = {}) override;
 
     TFuture<void> SetBundleConfig(
-        const TString& bundleName,
+        const std::string& bundleName,
         const NBundleControllerClient::TBundleTargetConfigPtr& bundleConfig,
         const NBundleControllerClient::TSetBundleConfigOptions& options = {}) override;
 
@@ -568,28 +592,36 @@ public:
         const NYPath::TYPath& viewPath,
         const TGetFlowViewOptions& options) override;
 
+    TFuture<TFlowExecuteResult> FlowExecute(
+        const NYPath::TYPath& pipelinePath,
+        const TString& command,
+        const NYson::TYsonString& argument,
+        const TFlowExecuteOptions& options = {}) override;
+
     // Shuffle service client
-    TFuture<TShuffleHandlePtr> StartShuffle(
+    TFuture<TSignedShuffleHandlePtr> StartShuffle(
         const std::string& account,
         int partitionCount,
         NObjectClient::TTransactionId parentTransactionId,
         const TStartShuffleOptions& options) override;
 
     TFuture<IRowBatchReaderPtr> CreateShuffleReader(
-        const TShuffleHandlePtr& shuffleHandle,
+        const TSignedShuffleHandlePtr& shuffleHandle,
         int partitionIndex,
-        const NTableClient::TTableReaderConfigPtr& config) override;
+        std::optional<std::pair<int, int>> writerIndexRange,
+        const TShuffleReaderOptions& options) override;
 
     TFuture<IRowBatchWriterPtr> CreateShuffleWriter(
-        const TShuffleHandlePtr& shuffleHandle,
+        const TSignedShuffleHandlePtr& shuffleHandle,
         const std::string& partitionColumn,
-        const NTableClient::TTableWriterConfigPtr& config) override;
+        std::optional<int> writerIndex,
+        const TShuffleWriterOptions& options) override;
 
 private:
     const TConnectionPtr Connection_;
+    const TClientOptions ClientOptions_;
     const NRpc::TDynamicChannelPoolPtr ChannelPool_;
     const NRpc::IChannelPtr RetryingChannel_;
-    const TClientOptions ClientOptions_;
 
     TLazyIntrusivePtr<NTabletClient::ITableMountCache> TableMountCache_;
 
@@ -608,6 +640,7 @@ private:
     NRpc::IChannelPtr GetRetryingChannel() const override;
     NRpc::IChannelPtr CreateNonRetryingStickyChannel() const override;
     NRpc::IChannelPtr WrapStickyChannelIntoRetrying(NRpc::IChannelPtr underlying) const override;
+    NRpc::IChannelPtr WrapNonRetryingChannel(NRpc::IChannelPtr underyling) const;
 };
 
 DEFINE_REFCOUNTED_TYPE(TClient)

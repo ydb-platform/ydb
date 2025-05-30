@@ -6,8 +6,6 @@
 
 #include <yt/cpp/mapreduce/io/helpers.h>
 
-#include <yt/cpp/mapreduce/raw_client/raw_client.h>
-
 namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -27,7 +25,6 @@ TFileWriter::TFileWriter(
         std::move(transactionPinger),
         context,
         transactionId,
-        GetWriteFileCommand(context.Config->ApiVersion),
         TMaybe<TFormat>(),
         path,
         options)

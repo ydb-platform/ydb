@@ -1,0 +1,23 @@
+items:
+- { name: Overview,                     href: index.md }
+- { name: Lexical structure,            href: lexer.md }
+- { name: Expressions,                  href: expressions.md }
+- { name: ACTION,                       href: action.md }
+- { name: COMMIT,                       href: commit.md }
+- { name: DECLARE,                      href: declare.md }
+- { name: DISCARD,                      href: discard.md }
+- { name: GROUP BY,                     href: group_by.md }
+- { name: EXPORT and IMPORT,            href: export_import.md }
+- { name: FLATTEN,                      href: flatten.md }
+- { name: INSERT,                       href: insert_into.md }
+- { name: INTO RESULT,                  href: into_result.md }
+- { name: JOIN,                         href: join.md }
+- { name: PRAGMA,                       href: pragma.md }
+- { name: PROCESS,                      href: process.md }
+- { name: REDUCE,                       href: reduce.md }
+- { name: SELECT,                       include: { mode: link, path: select/toc_p.yaml }  }
+- { name: SUBQUERY,                     href: subquery.md }
+- { name: USE,                          href: use.md }
+- { name: VALUES,                       href: values.md }
+- { name: WINDOW,                       href: window.md }
+- { name: Unsupported statements,       href: not_yet_supported.md }

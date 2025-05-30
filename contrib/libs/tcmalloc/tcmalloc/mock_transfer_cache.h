@@ -1,3 +1,4 @@
+#pragma clang system_header
 // Copyright 2020 The TCMalloc Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,13 +20,17 @@
 
 #include <algorithm>
 #include <memory>
+#include <new>
 #include <random>
+#include <vector>
 
 #include "gmock/gmock.h"
+#include "gtest/gtest.h"
 #include "absl/random/distributions.h"
 #include "absl/random/random.h"
 #include "tcmalloc/common.h"
 #include "tcmalloc/mock_central_freelist.h"
+#include "tcmalloc/transfer_cache.h"
 #include "tcmalloc/transfer_cache_internals.h"
 
 namespace tcmalloc {
@@ -33,65 +38,90 @@ namespace tcmalloc_internal {
 
 inline constexpr size_t kClassSize = 8;
 inline constexpr size_t kNumToMove = 32;
-inline constexpr int kSizeClass = 0;
+inline constexpr int kSizeClass = 1;
 
-class FakeTransferCacheManagerBase {
+// TransferCacheManager with basic stubs for everything.
+//
+// Useful for benchmarks where you want to unrelated expensive operations.
+class FakeTransferCacheManager {
  public:
   constexpr static size_t class_to_size(int size_class) { return kClassSize; }
   constexpr static size_t num_objects_to_move(int size_class) {
     // TODO(b/170732338): test with multiple different num_objects_to_move
     return kNumToMove;
   }
-  void* Alloc(size_t size) {
-    memory_.emplace_back(::operator new(size));
-    return memory_.back().get();
+  void* Alloc(size_t size, std::align_val_t alignment = kAlignment) {
+    memory_.push_back(std::make_unique<AlignedPtr>(
+        ::operator new(size, alignment), alignment));
+    return memory_.back()->ptr;
   }
-  struct Free {
-    void operator()(void* b) { ::operator delete(b); }
-  };
 
  private:
-  std::vector<std::unique_ptr<void, Free>> memory_;
+  struct AlignedPtr {
+    AlignedPtr(void* ptr, std::align_val_t alignment)
+        : ptr(ptr), alignment(alignment) {}
+    ~AlignedPtr() { ::operator delete(ptr, alignment); }
+    void* ptr;
+    std::align_val_t alignment;
+  };
+  std::vector<std::unique_ptr<AlignedPtr>> memory_;
 };
 
-// TransferCacheManager with basic stubs for everything.
+// A transfer cache manager which wraps malloc.
 //
-// Useful for benchmarks where you want to unrelated expensive operations.
-class FakeTransferCacheManager : public FakeTransferCacheManagerBase {
+// TODO(b/175334169): Remove this once the locks are no longer used.
+class ArenaBasedFakeTransferCacheManager {
  public:
-  int DetermineSizeClassToEvict();
-  bool ShrinkCache(int);
-};
+  ArenaBasedFakeTransferCacheManager() = default;
+  constexpr static size_t class_to_size(int size_class) {
+    // Chosen >= min size for the sharded transfer cache to kick in.
+    if (size_class == kSizeClass) return 4096;
+    return 0;
+  }
+  constexpr static size_t num_objects_to_move(int size_class) {
+    if (size_class == kSizeClass) return kNumToMove;
+    return 0;
+  }
+  void* Alloc(size_t size, std::align_val_t alignment = kAlignment) {
+    {
+      // Bounce pageheap_lock to verify we can take it.
+      //
+      // TODO(b/175334169): Remove this.
+      PageHeapSpinLockHolder l;
+    }
+    used_ += size;
+    return ::operator new(size, alignment);
+  }
+  size_t used() const { return used_; }
 
-// TransferCacheManager which allows intercepting intersting methods.
-//
-// Useful for intrusive unit tests that want to verify internal behavior.
-class RawMockTransferCacheManager : public FakeTransferCacheManagerBase {
- public:
-  RawMockTransferCacheManager() : FakeTransferCacheManagerBase() {
-    // We want single threaded tests to be deterministic, so we use a
-    // deterministic generator.  Because we don't know about the threading for
-    // our tests we cannot keep the generator in a local variable.
-    ON_CALL(*this, ShrinkCache).WillByDefault([]() {
-      thread_local std::mt19937 gen{0};
-      return absl::Bernoulli(gen, 0.8);
-    });
-    ON_CALL(*this, GrowCache).WillByDefault([]() {
-      thread_local std::mt19937 gen{0};
-      return absl::Bernoulli(gen, 0.8);
-    });
-    ON_CALL(*this, DetermineSizeClassToEvict).WillByDefault([]() {
-      thread_local std::mt19937 gen{0};
-      return absl::Uniform<size_t>(gen, 1, kNumClasses);
-    });
+  static void SetPartialLegacyTransferCache(bool value) {
+    partial_legacy_transfer_cache_ = value;
   }
 
-  MOCK_METHOD(int, DetermineSizeClassToEvict, ());
-  MOCK_METHOD(bool, ShrinkCache, (int size_class));
-  MOCK_METHOD(bool, GrowCache, (int size_class));
+ private:
+  size_t used_ = 0;
+  static bool partial_legacy_transfer_cache_;
 };
 
-using MockTransferCacheManager = testing::NiceMock<RawMockTransferCacheManager>;
+// A manager that may provide different configurations of sharded transfer
+// cache.
+class FakeShardedTransferCacheManager
+    : public ArenaBasedFakeTransferCacheManager {
+ public:
+  static void Init() {}
+  static bool UseGenericCache() { return enable_generic_cache_; }
+  static void SetGenericCache(bool value) { enable_generic_cache_ = value; }
+  static bool EnableCacheForLargeClassesOnly() {
+    return enable_cache_for_large_classes_only_;
+  }
+  static void SetCacheForLargeClassesOnly(bool value) {
+    enable_cache_for_large_classes_only_ = value;
+  }
+
+ private:
+  static bool enable_generic_cache_;
+  static bool enable_cache_for_large_classes_only_;
+};
 
 // Wires up a largely functional TransferCache + TransferCacheManager +
 // MockCentralFreeList.
@@ -114,30 +144,30 @@ class FakeTransferCacheEnvironment {
       ::tcmalloc::tcmalloc_internal::kMaxObjectsToMove;
   static constexpr int kBatchSize = Manager::num_objects_to_move(1);
 
-  FakeTransferCacheEnvironment() : manager_(), cache_(&manager_, 1) {}
+  FakeTransferCacheEnvironment() : manager_(), cache_(&manager_, 1) { Init(); }
 
   ~FakeTransferCacheEnvironment() { Drain(); }
 
-  void Shrink() { cache_.ShrinkCache(kSizeClass); }
-  void Grow() { cache_.GrowCache(kSizeClass); }
+  bool Shrink() { return cache_.ShrinkCache(kSizeClass); }
+  bool Grow() { return cache_.IncreaseCacheCapacity(kSizeClass); }
 
-  void Insert(int n) {
+  void Insert(int n, int batch = kBatchSize) {
     std::vector<void*> bufs;
     while (n > 0) {
-      int b = std::min(n, kBatchSize);
+      int b = std::min(n, batch);
       bufs.resize(b);
-      central_freelist().AllocateBatch(&bufs[0], b);
+      central_freelist().AllocateBatch(absl::MakeSpan(bufs));
       cache_.InsertRange(kSizeClass, absl::MakeSpan(bufs));
       n -= b;
     }
   }
 
-  void Remove(int n) {
+  void Remove(int n, int batch = kBatchSize) {
     std::vector<void*> bufs;
     while (n > 0) {
-      int b = std::min(n, kBatchSize);
+      int b = std::min(n, batch);
       bufs.resize(b);
-      int removed = cache_.RemoveRange(kSizeClass, &bufs[0], b);
+      int removed = cache_.RemoveRange(kSizeClass, absl::MakeSpan(bufs));
       // Ensure we make progress.
       ASSERT_GT(removed, 0);
       ASSERT_LE(removed, b);
@@ -145,6 +175,8 @@ class FakeTransferCacheEnvironment {
       n -= removed;
     }
   }
+
+  void TryPlunder() { cache_.TryPlunder(kSizeClass); }
 
   void Drain() { Remove(cache_.tc_length()); }
 
@@ -160,20 +192,26 @@ class FakeTransferCacheEnvironment {
       Grow();
     } else if (choice < 0.3) {
       cache_.HasSpareCapacity(kSizeClass);
-    } else if (choice < 0.65) {
+    } else if (choice < 0.4) {
       Insert(absl::Uniform(gen, 1, kBatchSize));
-    } else {
+    } else if (choice < 0.5) {
       Remove(absl::Uniform(gen, 1, kBatchSize));
+    } else if (choice < 0.7) {
+      Insert(kBatchSize);
+    } else if (choice < 0.9) {
+      Remove(kBatchSize);
+    } else {
+      TryPlunder();
     }
   }
 
   TransferCache& transfer_cache() { return cache_; }
 
-  Manager& transfer_cache_manager() { return manager_; }
-
   FreeList& central_freelist() { return cache_.freelist(); }
 
  private:
+  void Init() {};
+
   Manager manager_;
   TransferCache cache_;
 };
@@ -183,23 +221,22 @@ class FakeTransferCacheEnvironment {
 // inside the cache manager, like in production code.
 template <typename FreeListT,
           template <typename FreeList, typename Manager> class TransferCacheT>
-class TwoSizeClassManager : public FakeTransferCacheManagerBase {
+class TwoSizeClassManager : public FakeTransferCacheManager {
  public:
   using FreeList = FreeListT;
   using TransferCache = TransferCacheT<FreeList, TwoSizeClassManager>;
 
-  // This is 3 instead of 2 because we hard code cl == 0 to be invalid in many
-  // places. We only use cl 1 and 2 here.
-  static constexpr int kSizeClasses = 3;
+  // This is 3 instead of 2 because we hard code size_class == 0 to be invalid
+  // in many places. We only use size_class 1 and 2 here.
   static constexpr size_t kClassSize1 = 8;
-  static constexpr size_t kClassSize2 = 16;
+  static constexpr size_t kClassSize2 = 16 << 10;
   static constexpr size_t kNumToMove1 = 32;
-  static constexpr size_t kNumToMove2 = 16;
+  static constexpr size_t kNumToMove2 = 2;
 
   TwoSizeClassManager() {
-    caches_.push_back(absl::make_unique<TransferCache>(this, 0));
-    caches_.push_back(absl::make_unique<TransferCache>(this, 1));
-    caches_.push_back(absl::make_unique<TransferCache>(this, 2));
+    caches_.push_back(std::make_unique<TransferCache>(this, 0));
+    caches_.push_back(std::make_unique<TransferCache>(this, 1));
+    caches_.push_back(std::make_unique<TransferCache>(this, 2));
   }
 
   constexpr static size_t class_to_size(int size_class) {
@@ -223,85 +260,185 @@ class TwoSizeClassManager : public FakeTransferCacheManagerBase {
     }
   }
 
-  int DetermineSizeClassToEvict() { return evicting_from_; }
-
-  bool ShrinkCache(int size_class) {
-    return caches_[size_class]->ShrinkCache(size_class);
+  void InsertRange(int size_class, absl::Span<void*> batch) {
+    caches_[size_class]->InsertRange(size_class, batch);
   }
 
-  FreeList& central_freelist(int cl) { return caches_[cl]->freelist(); }
-
-  void InsertRange(int cl, absl::Span<void*> batch) {
-    caches_[cl]->InsertRange(cl, batch);
+  int RemoveRange(int size_class, absl::Span<void*> batch) {
+    return caches_[size_class]->RemoveRange(size_class, batch);
   }
 
-  int RemoveRange(int cl, void** batch, int N) {
-    return caches_[cl]->RemoveRange(cl, batch, N);
+  size_t tc_length(int size_class) { return caches_[size_class]->tc_length(); }
+  TransferCacheStats GetStats(int size_class) {
+    return caches_[size_class]->GetStats();
   }
-
-  bool HasSpareCapacity(int cl) { return caches_[cl]->HasSpareCapacity(cl); }
-
-  size_t tc_length(int cl) { return caches_[cl]->tc_length(); }
 
   std::vector<std::unique_ptr<TransferCache>> caches_;
-
-  // From which size class to evict.
-  int evicting_from_ = 1;
 };
 
-template <template <typename FreeList, typename Manager> class TransferCacheT>
-class TwoSizeClassEnv {
+class FakeCpuLayout {
  public:
-  using FreeList = MockCentralFreeList;
-  using Manager = TwoSizeClassManager<FreeList, TransferCacheT>;
-  using TransferCache = typename Manager::TransferCache;
+  static constexpr int kNumCpus = 6;
+  static constexpr int kCpusPerShard = 2;
 
-  static constexpr int kMaxObjectsToMove =
-      ::tcmalloc::tcmalloc_internal::kMaxObjectsToMove;
+  void Init(int shards) {
+    TC_ASSERT_GT(shards, 0);
+    TC_ASSERT_LE(shards * kCpusPerShard, kNumCpus);
+    num_shards_ = shards;
+  }
 
-  explicit TwoSizeClassEnv() = default;
+  void SetCurrentCpu(int cpu) {
+    TC_ASSERT_GE(cpu, 0);
+    TC_ASSERT_LT(cpu, kNumCpus);
+    current_cpu_ = cpu;
+  }
 
-  ~TwoSizeClassEnv() { Drain(); }
+  unsigned NumShards() { return num_shards_; }
+  int CurrentCpu() { return current_cpu_; }
+  unsigned CpuShard(int cpu) {
+    return std::min(cpu / kCpusPerShard, num_shards_ - 1);
+  }
 
-  void Insert(int cl, int n) {
-    const size_t batch_size = Manager::num_objects_to_move(cl);
+ private:
+  int current_cpu_ = 0;
+  int num_shards_ = 0;
+};
+
+// Defines transfer cache manager for testing legacy transfer cache.
+class FakeMultiClassTransferCacheManager : public TransferCacheManager {
+ public:
+  void Init() { InitCaches(); }
+};
+
+// Wires up a largely functional TransferCache + TransferCacheManager +
+// CentralFreeList.
+//
+// Unlike FakeTransferCacheEnvironment, this may be used to perform allocations
+// and deallocations out of transfer cache for multiple size classes. It can
+// also be wired with the real transfer cache manager and be used to test
+// implementations in a real transfer cache, unlike TwoSizeClassEnv.
+template <typename TransferCacheT>
+class MultiSizeClassTransferCacheEnvironment {
+ public:
+  static constexpr int kSizeClasses = 4;
+  using TransferCache = TransferCacheT;
+  using Manager = typename TransferCache::Manager;
+  using FreeList = typename TransferCache::FreeList;
+  MultiSizeClassTransferCacheEnvironment() { manager_.Init(); }
+
+  ~MultiSizeClassTransferCacheEnvironment() { Drain(); }
+
+  void Insert(int size_class, int n) {
+    const size_t batch_size = Manager::num_objects_to_move(size_class);
     std::vector<void*> bufs;
     while (n > 0) {
       int b = std::min<int>(n, batch_size);
       bufs.resize(b);
-      central_freelist(cl).AllocateBatch(&bufs[0], b);
-      manager_.InsertRange(cl, absl::MakeSpan(bufs));
+      int removed =
+          central_freelist(size_class).RemoveRange(absl::MakeSpan(bufs));
+      ASSERT_GT(removed, 0);
+      ASSERT_LE(removed, b);
+      manager_.InsertRange(size_class, absl::MakeSpan(bufs));
       n -= b;
     }
   }
 
-  void Remove(int cl, int n) {
-    const size_t batch_size = Manager::num_objects_to_move(cl);
+  void Remove(int size_class, int n) {
+    const size_t batch_size = manager_.num_objects_to_move(size_class);
     std::vector<void*> bufs;
     while (n > 0) {
       const int b = std::min<int>(n, batch_size);
       bufs.resize(b);
-      const int removed = manager_.RemoveRange(cl, &bufs[0], b);
+      const int removed =
+          manager_.RemoveRange(size_class, absl::MakeSpan(bufs));
       // Ensure we make progress.
       ASSERT_GT(removed, 0);
       ASSERT_LE(removed, b);
-      central_freelist(cl).FreeBatch({&bufs[0], static_cast<size_t>(removed)});
+      central_freelist(size_class)
+          .InsertRange({&bufs[0], static_cast<size_t>(removed)});
       n -= removed;
     }
   }
 
   void Drain() {
-    for (int i = 0; i < Manager::kSizeClasses; ++i) {
+    for (int i = 0; i < kNumClasses; ++i) {
       Remove(i, manager_.tc_length(i));
+    }
+  }
+
+  void RandomlyPoke() {
+    absl::BitGen gen;
+    // Insert or remove from the transfer cache with equal probability.
+    const double choice = absl::Uniform(gen, 0.0, 1.0);
+    const size_t size_class = absl::Uniform<size_t>(gen, 1, kSizeClasses);
+    const size_t batch_size = manager_.num_objects_to_move(size_class);
+    if (choice < 0.5) {
+      Insert(size_class, batch_size);
+    } else {
+      Remove(size_class, batch_size);
     }
   }
 
   Manager& transfer_cache_manager() { return manager_; }
 
-  FreeList& central_freelist(int cl) { return manager_.central_freelist(cl); }
+  FreeList& central_freelist(int size_class) {
+    return manager_.central_freelist(size_class);
+  }
 
  private:
   Manager manager_;
+};
+
+class FakeShardedTransferCacheEnvironment {
+ public:
+  using Manager = FakeShardedTransferCacheManager;
+  using ShardedManager =
+      ShardedTransferCacheManagerBase<Manager, FakeCpuLayout,
+                                      MinimalFakeCentralFreeList>;
+
+  explicit FakeShardedTransferCacheEnvironment(int num_shards,
+                                               bool use_generic_cache)
+      : sharded_manager_(&owner_, &cpu_layout_) {
+    if (use_generic_cache) {
+      owner_.SetGenericCache(true);
+    } else {
+      owner_.SetCacheForLargeClassesOnly(true);
+    }
+
+    cpu_layout_.Init(num_shards);
+    sharded_manager_.Init();
+  }
+
+  ~FakeShardedTransferCacheEnvironment() { Drain(); }
+
+  void Remove(int cpu, int n) {
+    cpu_layout_.SetCurrentCpu(cpu);
+    std::vector<void*> bufs;
+    for (int i = 0; i < n; ++i) {
+      void* ptr = sharded_manager_.Pop(kSizeClass);
+      // Ensure we make progress.
+      ASSERT_NE(ptr, nullptr);
+      central_freelist().FreeBatch({&ptr, 1});
+    }
+  }
+
+  void Drain() {
+    for (int cpu = 0; cpu < FakeCpuLayout::kNumCpus; ++cpu) {
+      Remove(cpu, sharded_manager_.tc_length(cpu, kSizeClass));
+    }
+  }
+
+  ShardedManager& sharded_manager() { return sharded_manager_; }
+  Manager& transfer_cache_manager() { return owner_; }
+  MinimalFakeCentralFreeList& central_freelist() { return freelist_; }
+  void SetCurrentCpu(int cpu) { cpu_layout_.SetCurrentCpu(cpu); }
+  size_t MetadataAllocated() const { return owner_.used(); }
+
+ private:
+  MinimalFakeCentralFreeList freelist_;
+  FakeShardedTransferCacheManager owner_;
+  FakeCpuLayout cpu_layout_;
+  ShardedManager sharded_manager_;
 };
 
 }  // namespace tcmalloc_internal

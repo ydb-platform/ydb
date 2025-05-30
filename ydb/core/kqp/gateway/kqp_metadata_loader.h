@@ -2,9 +2,11 @@
 
 #include <ydb/core/kqp/common/simple/temp_tables.h>
 #include <ydb/core/kqp/provider/yql_kikimr_gateway.h>
-#include <ydb/core/scheme/scheme_tabledefs.h>
-#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>
+#include <ydb/core/scheme/scheme_tabledefs.h>
+#include <ydb/core/sys_view/common/schema.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
+
 #include <library/cpp/threading/future/core/future.h>
 
 #include <util/system/mutex.h>
@@ -29,6 +31,7 @@ public:
         , ActorSystem(actorSystem)
         , Config(config)
         , TempTablesState(std::move(tempTablesState))
+        , SystemViewRewrittenResolver(NSysView::CreateSystemViewRewrittenResolver())
     {}
 
     NThreading::TFuture<NYql::IKikimrGateway::TTableMetadataResult> LoadTableMetadata(
@@ -61,6 +64,10 @@ private:
 
     void OnLoadedTableMetadata(NYql::IKikimrGateway::TTableMetadataResult& loadTableMetadataResult);
 
+    NThreading::TFuture<NYql::IKikimrGateway::TTableMetadataResult> LoadSysViewRewrittenMetadata(
+        const NSysView::ISystemViewResolver::TSystemViewPath& sysViewPath, const TString& cluster, const TString& table
+    );
+
     const TString Cluster;
     TVector<NKikimrKqp::TKqpTableMetadataProto> CollectedSchemeData;
     TMutex Lock;
@@ -68,6 +75,7 @@ private:
     TActorSystem* ActorSystem;
     NYql::TKikimrConfiguration::TPtr Config;
     TKqpTempTablesState::TConstPtr TempTablesState;
+    THolder<NSysView::ISystemViewResolver> SystemViewRewrittenResolver;
 };
 
 } // namespace NKikimr::NKqp

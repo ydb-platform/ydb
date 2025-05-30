@@ -12,5 +12,5 @@ struct TMVPAppData {
 };
 
 inline TMVPAppData* MVPAppData() {
-    return NActors::TlsActivationContext->ExecutorThread.ActorSystem->template AppData<TMVPAppData>();
+    return NActors::TActivationContext::ActorSystem()->template AppData<TMVPAppData>();
 }

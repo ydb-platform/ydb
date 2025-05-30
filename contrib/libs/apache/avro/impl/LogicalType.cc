@@ -28,22 +28,22 @@ LogicalType::Type LogicalType::type() const {
     return type_;
 }
 
-void LogicalType::setPrecision(int precision) {
+void LogicalType::setPrecision(int32_t precision) {
     if (type_ != DECIMAL) {
         throw Exception("Only logical type DECIMAL can have precision");
     }
     if (precision <= 0) {
-        throw Exception(boost::format("Precision cannot be: %1%") % precision);
+        throw Exception("Precision cannot be: {}", precision);
     }
     precision_ = precision;
 }
 
-void LogicalType::setScale(int scale) {
+void LogicalType::setScale(int32_t scale) {
     if (type_ != DECIMAL) {
         throw Exception("Only logical type DECIMAL can have scale");
     }
     if (scale < 0) {
-        throw Exception(boost::format("Scale cannot be: %1%") % scale);
+        throw Exception("Scale cannot be: {}", scale);
     }
     scale_ = scale;
 }

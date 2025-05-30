@@ -8,10 +8,15 @@
 #include <ydb/core/tx/columnshard/counters/splitter.h>
 #include <ydb/core/tx/columnshard/engines/scheme/abstract/column_ids.h>
 #include <ydb/core/tx/data_events/common/modification_type.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 
 #include <string>
 
 namespace NKikimr::NOlap {
+
+namespace NIndexes {
+class TIndexMetaContainer;
+}
 
 struct TIndexInfo;
 class TSaverContext;
@@ -29,6 +34,8 @@ public:
     std::shared_ptr<NArrow::NAccessor::TColumnLoader> GetColumnLoaderVerified(const ui32 columnId) const;
     std::shared_ptr<NArrow::NAccessor::TColumnLoader> GetColumnLoaderOptional(const std::string& columnName) const;
     std::shared_ptr<NArrow::NAccessor::TColumnLoader> GetColumnLoaderVerified(const std::string& columnName) const;
+    NIndexes::TIndexMetaContainer GetIndexVerified(const ui32 indexId) const;
+    NIndexes::TIndexMetaContainer GetIndexOptional(const ui32 indexId) const;
 
     bool IsSpecialColumnId(const ui32 columnId) const;
     virtual TColumnIdsView GetColumnIds() const = 0;
@@ -84,7 +91,7 @@ public:
         const std::shared_ptr<NArrow::TGeneralContainer>& batch, const std::set<ui32>& restoreColumnIds) const;
     [[nodiscard]] TConclusion<NArrow::TContainerWithIndexes<arrow::RecordBatch>> PrepareForModification(
         const std::shared_ptr<arrow::RecordBatch>& incomingBatch, const NEvWrite::EModificationType mType) const;
-    [[nodiscard]] TConclusion<TWritePortionInfoWithBlobsResult> PrepareForWrite(const ISnapshotSchema::TPtr& selfPtr, const ui64 pathId,
+    [[nodiscard]] TConclusion<TWritePortionInfoWithBlobsResult> PrepareForWrite(const ISnapshotSchema::TPtr& selfPtr, const TInternalPathId pathId,
         const std::shared_ptr<arrow::RecordBatch>& incomingBatch, const NEvWrite::EModificationType mType,
         const std::shared_ptr<IStoragesManager>& storagesManager,
         const std::shared_ptr<NColumnShard::TSplitterCounters>& splitterCounters) const;

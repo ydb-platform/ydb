@@ -10,7 +10,7 @@
 
 #include <yt/yt/core/misc/property.h>
 
-#include <library/cpp/yt/small_containers/compact_flat_map.h>
+#include <library/cpp/yt/compact_containers/compact_flat_map.h>
 
 #include <library/cpp/yt/string/format.h>
 

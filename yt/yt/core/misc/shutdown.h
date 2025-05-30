@@ -21,7 +21,7 @@ using TShutdownCookie = TIntrusivePtr<TRefCounted>;
  */
 [[nodiscard]]
 TShutdownCookie RegisterShutdownCallback(
-    TString name,
+    std::string name,
     TClosure callback,
     int priority = 0);
 
@@ -32,12 +32,12 @@ struct TShutdownOptions
     TDuration GraceTimeout = TDuration::Seconds(60);
 
     //! Controls shutdown behavior when #GraceTimeout expires but some background
-    //! threads are still runnining.
+    //! threads are still running.
     //! If true then aborts the program (typically producing a core dump).
     //! If false then |_exit|s the program with #HungExitCode.
     bool AbortOnHang = true;
 
-    //! Exit code to use in case on nongraceful exit.
+    //! Exit code to use in case on ungraceful exit.
     int HungExitCode = 0;
 };
 
@@ -67,7 +67,7 @@ void SetAutoShutdownEnabled(bool enabled);
 void EnableShutdownLoggingToStderr();
 
 //! Enables logging shutdown messages to the given file.
-void EnableShutdownLoggingToFile(const TString& fileName);
+void EnableShutdownLoggingToFile(const std::string& fileName);
 
 //! Returns the pointer to the log file if shutdown logging has been enabled or nullptr otherwise.
 FILE* TryGetShutdownLogFile();

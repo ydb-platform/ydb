@@ -1,22 +1,62 @@
 # Работа с бакетами S3 ({{objstorage-full-name}})
 
+Перед началом работы с S3 необходимо настроить подключение к хранилищу данных. Для этого существует DDL для настройки таких подключений. Далее рассмотрим SQL синтаксис и управление этими настройками.
+
+Бакеты в S3 бывают двух видов: публичные и приватные. Для подключения к публичному бакету необходимо использовать `AUTH_METHOD="NONE"`, а для подключения к приватному — `AUTH_METHOD="AWS"`. Подробное описание `AWS` можно найти [здесь](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_sigv-authentication-methods.html). `AUTH_METHOD="NONE"` означает, что аутентификация не требуется. В случае `AUTH_METHOD="AWS"` необходимо указать несколько дополнительных параметров:
+
+- `AWS_ACCESS_KEY_ID_SECRET_NAME` — ссылка на имя [секрета](../../datamodel/secrets.md), в котором хранится `AWS_ACCESS_KEY_ID`.
+- `AWS_SECRET_ACCESS_KEY_SECRET_NAME` — ссылка на имя [секрета](../../datamodel/secrets.md), в котором хранится `AWS_SECRET_ACCESS_KEY`.
+- `AWS_REGION` — регион, из которого будет происходить чтение, например `ru-central-1`.
+
+Для настройки соединения с публичным бакетом достаточно выполнить следующий SQL-запрос. Запрос создаст внешнее подключение с именем `object_storage`, которое будет указывать на конкретный S3-бакет с именем `bucket`.
+
+```yql
+CREATE EXTERNAL DATA SOURCE object_storage WITH (
+  SOURCE_TYPE="ObjectStorage",
+  LOCATION="https://object_storage_domain/bucket/",
+  AUTH_METHOD="NONE"
+);
+```
+
+Для настройки соединения с приватным бакетом необходимо выполнить несколько SQL-запросов. Сначала нужно создать [секреты](../../datamodel/secrets.md), содержащие `AWS_ACCESS_KEY_ID` и `AWS_SECRET_ACCESS_KEY`.
+
+```yql
+    CREATE OBJECT aws_access_id (TYPE SECRET) WITH (value=`<id>`);
+    CREATE OBJECT aws_access_key (TYPE SECRET) WITH (value=`<key>`);
+```
+
+Следующим шагом создаётся внешнее подключение с именем `object_storage`, которое будет указывать на конкретный S3-бакет с именем `bucket`, а также использовать `AUTH_METHOD="AWS"`, для которого заполняются параметры `AWS_ACCESS_KEY_ID_SECRET_NAME`, `AWS_SECRET_ACCESS_KEY_SECRET_NAME`, `AWS_REGION`. Значения этих параметров описаны выше.
+
+```yql
+CREATE EXTERNAL DATA SOURCE object_storage WITH (
+  SOURCE_TYPE="ObjectStorage",
+  LOCATION="https://object_storage_domain/bucket/",
+  AUTH_METHOD="AWS",
+  AWS_ACCESS_KEY_ID_SECRET_NAME="aws_access_id",
+  AWS_SECRET_ACCESS_KEY_SECRET_NAME="aws_access_key",
+  AWS_REGION="ru-central-1"
+);
+```
+
+## Использование внешнего подключения к S3-бакету {#external-data-source-settings}
+
 При работе с {{ objstorage-full-name }} с помощью [внешних источников данных](../../datamodel/external_data_source.md) удобно выполнять прототипирование, первоначальную настройку подключений к данным.
 
 Пример запроса для чтения данных:
 
 ```yql
 SELECT
-    *
+  *
 FROM
-    object_storage.`*.tsv`
+  object_storage.`*.tsv`
 WITH
 (
-    FORMAT = "tsv_with_names",
-    SCHEMA =
-    (
-        ts Uint32,
-        action Utf8
-    )
+  FORMAT = "tsv_with_names",
+  SCHEMA =
+  (
+    ts Uint32,
+    action Utf8
+  )
 );
 ```
 
@@ -33,8 +73,9 @@ FROM
   <object_storage_connection_name>.`<file_path>`
 WITH(
   FORMAT = "<file_format>",
+  COMPRESSION = "<compression>",
   SCHEMA = (<schema_definition>),
-  COMPRESSION = "<compression>")
+  <format_settings>)
 WHERE
   <filter>;
 ```
@@ -44,8 +85,9 @@ WHERE
 * `object_storage_connection_name` — название внешнего источника данных, ведущего на бакет с S3 ({{ objstorage-full-name }}).
 * `file_path` — путь к файлу или файлам внутри бакета. Поддерживаются wildcards `*`, подробнее [в разделе](#path_format).
 * `file_format` — [формат данных](formats.md#formats) в файлах.
-* `schema_definition` — [описание схемы хранимых данных](#schema) в файлах.
 * `compression` — [формат сжатия](formats.md#compression_formats) файлов.
+* `schema_definition` — [описание схемы хранимых данных](#schema) в файлах.
+* `format_settings` — опциональные [параметры форматирования](#format_settings)
 
 ### Описание схемы данных {#schema}
 
@@ -61,13 +103,57 @@ WHERE
 Year Int32 NOT NULL
 ```
 
-Если поле данных помечено, как обязательное, `NOT NULL`, но это поле отсутствует в обрабатываемом файле, то работа с таким файлом будет завершена с ошибкой. Если поле помечено как необязательное, `NULL`, то при отсутствии поля в обрабатываемом файле не будет возникать ошибки, но поле при этом примет значение `NULL`.
+Если поле данных помечено как обязательное, `NOT NULL`, но это поле отсутствует в обрабатываемом файле, то работа с таким файлом будет завершена с ошибкой. Если поле помечено как необязательное, `NULL`, то при отсутствии поля в обрабатываемом файле ошибки не возникнет, но поле примет значение `NULL`. Ключевое слово `NULL` в необязательных полях является опциональным.
 
-### Форматы путей к данным {#path_format}
+### Автоматический вывод схемы данных {#inference}
+
+{{ ydb-short-name }} может автоматически определять схему данных в файлах бакета, чтобы вам не пришлось указывать все поля схемы вручную.
+
+{% note info %}
+
+Автоматический вывод схемы доступен для всех [форматов данных](formats.md#formats), кроме `raw` и `json_as_string`. Для этих форматов придётся [описывать схему данных вручную](#schema).
+
+{% endnote %}
+
+Чтобы включить автоматический вывод схемы, используйте параметр `WITH_INFER`:
+
+```yql
+SELECT
+  <expression>
+FROM
+  <object_storage_connection_name>.`<file_path>`
+WITH(
+  FORMAT = "<file_format>",
+  COMPRESSION = "<compression>",
+  WITH_INFER = "true")
+WHERE
+  <filter>;
+```
+
+Где:
+
+* `object_storage_connection_name` — название внешнего источника данных, ведущего на S3 бакет ({{ objstorage-full-name }}).
+* `file_path` — путь к файлу или файлам внутри бакета. Поддерживаются wildcards `*`, подробнее [ниже](#path_format).
+* `file_format` — [формат данных](formats.md#formats) в файлах. Поддерживаются все форматы, кроме `raw` и `json_as_string`.
+* `compression` — [формат сжатия](formats.md#compression_formats) файлов.
+
+В результате выполнения такого запроса будут автоматически выведены названия и типы полей.
+
+### Форматы путей к данным задаваемых в параметре `file_path` {#path_format}
 
 В {{ ydb-full-name }} поддерживаются следующие пути к данным:
 
 {% include [!](_includes/path_format.md) %}
+
+### Параметры форматирования {#format_settings}
+
+В {{ ydb-full-name }} поддерживаются следующие параметры форматирования:
+
+{% include [!](_includes/format_settings.md) %}
+
+Параметр `file_pattern` можно использовать только в том случае, если `file_path` – путь к каталогу. В строках форматирования можно использовать любые шаблонные переменные, поддерживаемые функцией [`strftime`(C99)](https://en.cppreference.com/w/c/chrono/strftime). В {{ ydb-full-name }} поддерживаются следующие форматы типов `Datetime` и `Timestamp`:
+
+{% include [!](_includes/date_formats.md) %}
 
 ## Пример {#read_example}
 
@@ -75,23 +161,30 @@ Year Int32 NOT NULL
 
 ```yql
 SELECT
-    *
+  *
 FROM
-    connection.`folder/filename.csv`
+  connection.`folder/`
 WITH(
-    FORMAT = "csv_with_names",
-    SCHEMA =
-    (
-        Year Int32,
-        Manufacturer Utf8,
-        Model Utf8,
-        Price Double
-    )
+  FORMAT = "csv_with_names",
+  COMPRESSION="gzip"
+  SCHEMA =
+  (
+    Id Int32 NOT NULL,
+    UserId Int32 NOT NULL,
+    TripDate Date NOT NULL,
+    TripDistance Double NOT NULL,
+    UserComment Utf8
+  ),
+  FILE_PATTERN="*.csv.gz",
+  `DATA.DATE.FORMAT`="%Y-%m-%d",
+  CSV_DELIMITER='/'
 );
 ```
 
 Где:
 
 * `connection` — название внешнего источника данных, ведущего на бакет S3 ({{ objstorage-full-name }}).
-* `folder/filename.csv` — путь к файлу в бакете S3 ({{ objstorage-full-name }}).
+* `folder/` — путь к папке с данными в бакете S3 ({{ objstorage-full-name }}).
 * `SCHEMA` — описание схемы данных в файле.
+* `*.csv.gz` — шаблон имени файлов с данными.
+* `%Y-%m-%d` — формат записи данных типа `Date` в S3.

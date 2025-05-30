@@ -14,6 +14,10 @@
 #include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
 #include <yql/essentials/parser/pg_wrapper/interface/comp_factory.h>
 #include <yql/essentials/sql/v1/format/sql_format.h>
+#include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
+#include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>
+#include <yql/essentials/sql/v1/proto_parser/antlr4/proto_parser.h>
+#include <yql/essentials/sql/v1/proto_parser/antlr4_ansi/proto_parser.h>
 
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/utils/log/tls_backend.h>
@@ -294,7 +298,13 @@ YQL_ACTION(Format)
         google::protobuf::Arena arena;
         NSQLTranslation::TTranslationSettings settings;
         settings.Arena = &arena;
-        auto formatter = NSQLFormat::MakeSqlFormatter(settings);
+        NSQLTranslationV1::TLexers lexers;
+        lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
+        lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
+        NSQLTranslationV1::TParsers parsers;
+        parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory();
+        parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory();
+        auto formatter = NSQLFormat::MakeSqlFormatter(lexers, parsers, settings);
         TString frm_query;
         TString error;
         NYql::TIssues issues;

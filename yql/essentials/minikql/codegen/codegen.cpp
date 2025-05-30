@@ -189,18 +189,13 @@ namespace NCodegen {
 
 namespace {
 
-    void FatalErrorHandler(void* user_data,
-#if LLVM_VERSION_MAJOR == 12
-    const std::string& reason
-#else
-    const char* reason
-#endif
-    , bool gen_crash_diag) {
+    void FatalErrorHandler(void* user_data, const char* reason, bool gen_crash_diag) {
         Y_UNUSED(user_data);
         Y_UNUSED(gen_crash_diag);
         ythrow yexception() << "LLVM fatal error: " << reason;
     }
 
+#if LLVM_VERSION_MAJOR < 16
     void AddAddressSanitizerPasses(const llvm::PassManagerBuilder& builder, llvm::legacy::PassManagerBase& pm) {
         Y_UNUSED(builder);
         pm.add(llvm::createAddressSanitizerFunctionPass());
@@ -216,6 +211,7 @@ namespace {
         Y_UNUSED(builder);
         pm.add(llvm::createThreadSanitizerLegacyPassPass());
     }
+#endif
 
     struct TCodegenInit {
         TCodegenInit() {
@@ -293,11 +289,6 @@ public:
 
         llvm::TargetOptions targetOptions;
         targetOptions.EnableFastISel = true;
-        // init manually, this field was lost in llvm::TargetOptions ctor :/
-        // make coverity happy
-#if LLVM_VERSION_MAJOR == 12
-        targetOptions.StackProtectorGuardOffset = 0;
-#endif
 
         std::string what;
         auto&& engineBuilder = llvm::EngineBuilder(std::move(module));
@@ -398,7 +389,6 @@ public:
         ReverseGlobalMapping_[(const void*)&__emutls_get_address] = "__emutls_get_address";
 #endif
 #if defined(_win_)
-
         AddGlobalMapping("__security_check_cookie", (const void*)&__security_check_cookie);
         AddGlobalMapping("__security_cookie", (const void*)&__security_cookie);
 #endif
@@ -424,10 +414,10 @@ public:
             llvm::TimePassesIsEnabled = true;
         }
 
-        std::unique_ptr<llvm::legacy::PassManager> modulePassManager;
-        std::unique_ptr<llvm::legacy::FunctionPassManager> functionPassManager;
-
         if (ExportedSymbols) {
+            std::unique_ptr<llvm::legacy::PassManager> modulePassManager;
+            std::unique_ptr<llvm::legacy::FunctionPassManager> functionPassManager;
+
             modulePassManager = std::make_unique<llvm::legacy::PassManager>();
             modulePassManager->add(llvm::createInternalizePass([&](const llvm::GlobalValue& gv) -> bool {
                 auto name = TString(gv.getName().str());
@@ -438,6 +428,7 @@ public:
             modulePassManager->run(*Module_);
         }
 
+#if LLVM_VERSION_MAJOR < 16
         llvm::PassManagerBuilder passManagerBuilder;
         passManagerBuilder.OptLevel = disableOpt ? 0 : 2;
         passManagerBuilder.SizeLevel = 0;
@@ -464,8 +455,8 @@ public:
                            AddThreadSanitizerPass);
         }
 
-        functionPassManager = std::make_unique<llvm::legacy::FunctionPassManager>(Module_);
-        modulePassManager = std::make_unique<llvm::legacy::PassManager>();
+        auto functionPassManager = std::make_unique<llvm::legacy::FunctionPassManager>(Module_);
+        auto modulePassManager = std::make_unique<llvm::legacy::PassManager>();
 
         passManagerBuilder.populateModulePassManager(*modulePassManager);
         passManagerBuilder.populateFunctionPassManager(*functionPassManager);
@@ -485,9 +476,64 @@ public:
 
         auto modulePassStart = Now();
         modulePassManager->run(*Module_);
+
         if (compileStats) {
             compileStats->ModulePassTime = (Now() - modulePassStart).MilliSeconds();
         }
+#else
+        llvm::PassBuilder passBuilder;
+
+        llvm::LoopAnalysisManager lam;
+        llvm::FunctionAnalysisManager fam;
+        llvm::CGSCCAnalysisManager cgam;
+        llvm::ModuleAnalysisManager mam;
+
+        // Register the target library analysis directly and give it a customized
+        // preset TLI.
+        std::unique_ptr<llvm::TargetLibraryInfoImpl> tlii(new llvm::TargetLibraryInfoImpl(llvm::Triple(Triple_)));
+        fam.registerPass([&] { return llvm::TargetLibraryAnalysis(*tlii); });
+
+        // Register all the basic analyses with the managers.
+        passBuilder.registerModuleAnalyses(mam);
+        passBuilder.registerCGSCCAnalyses(cgam);
+        passBuilder.registerFunctionAnalyses(fam);
+        passBuilder.registerLoopAnalyses(lam);
+        passBuilder.crossRegisterProxies(lam, fam, cgam, mam);
+
+        auto sanitizersCallback = [&](llvm::ModulePassManager& mpm, llvm::OptimizationLevel level) {
+            Y_UNUSED(level);
+            if (EffectiveSanitize_ == ESanitize::Asan) {
+                llvm::AddressSanitizerOptions options;
+                mpm.addPass(llvm::AddressSanitizerPass(options));
+            }
+
+            if (EffectiveSanitize_ == ESanitize::Msan) {
+                llvm::MemorySanitizerOptions options;
+                mpm.addPass(llvm::MemorySanitizerPass(options));
+            }
+
+            if (EffectiveSanitize_ == ESanitize::Tsan) {
+                mpm.addPass(llvm::ModuleThreadSanitizerPass());
+                mpm.addPass(llvm::createModuleToFunctionPassAdaptor(llvm::ThreadSanitizerPass()));
+            }
+        };
+
+        passBuilder.registerOptimizerLastEPCallback(sanitizersCallback);
+
+        llvm::ModulePassManager modulePassManager;
+        if (disableOpt) {
+            modulePassManager = passBuilder.buildO0DefaultPipeline(llvm::OptimizationLevel::O0, false);
+        } else {
+            modulePassManager = passBuilder.buildPerModuleDefaultPipeline(llvm::OptimizationLevel::O2);
+        }
+
+        auto modulePassStart = Now();
+        modulePassManager.run(*Module_, mam);
+
+        if (compileStats) {
+            compileStats->ModulePassTime = (Now() - modulePassStart).MilliSeconds();
+        }
+#endif
 
         AllocateTls();
 
@@ -685,7 +731,7 @@ private:
                 if (!align) {
                     // When LLVM IL declares a variable without alignment, use
                     // the ABI default alignment for the type.
-                    align = dataLayout.getABITypeAlignment(type);
+                    align = dataLayout.getABITypeAlign(type).value();
                 }
 
                 TStringBuf name(nameRef.data(), nameRef.size());

@@ -22,6 +22,11 @@ namespace NKikimr {
         NKikimrConfig::TStaticNameserviceConfig NameserviceConfig;
         std::optional<NKikimrConfig::TDomainsConfig> DomainsConfig;
         std::optional<NKikimrConfig::TSelfManagementConfig> SelfManagementConfig;
+        std::optional<NKikimrConfig::TBridgeConfig> BridgeConfig;
+        TString ConfigDirPath;
+        std::optional<NKikimrBlobStorage::TYamlConfig> YamlConfig;
+        TString StartupConfigYaml;
+        std::optional<TString> StartupStorageYaml;
         TIntrusivePtr<IPDiskServiceFactory> PDiskServiceFactory;
         TIntrusivePtr<TAllVDiskKinds> AllVDiskKinds;
         TIntrusivePtr<NPDisk::TDriveModelDb> AllDriveModels;
@@ -42,6 +47,8 @@ namespace NKikimr {
         // debugging options
         bool VDiskReplPausedAtStart = false;
         bool UseActorSystemTimeInBSQueue = false;
+        std::optional<ui32> ReplMaxQuantumBytes = std::nullopt;
+        std::optional<ui32> ReplMaxDonorNotReadyCount = std::nullopt;
 
         TNodeWardenConfig(const TIntrusivePtr<IPDiskServiceFactory> &pDiskServiceFactory)
             : PDiskServiceFactory(pDiskServiceFactory)

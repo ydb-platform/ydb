@@ -112,57 +112,199 @@ void TStreamSaveContext::Finish()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TLoadContextStream::TLoadContextStream(IInputStream* input)
-    : Input_(input)
+TLoadContextStream::TLoadContextStream(
+    TStreamLoadContext* context,
+    IInputStream* input)
+    : Context_(context)
+    , Input_(input)
 { }
 
-TLoadContextStream::TLoadContextStream(IZeroCopyInput* input)
-    : ZeroCopyInput_(input)
+TLoadContextStream::TLoadContextStream(
+    TStreamLoadContext* context,
+    IZeroCopyInput* input)
+    : Context_(context)
+    , Input_(input)
 { }
 
-void TLoadContextStream::ClearBuffer()
+void TLoadContextStream::SkipToCheckpoint()
 {
-    if (BufferRemaining_ > 0) {
-        BufferPtr_ = nullptr;
-        BufferRemaining_ = 0;
+    if (BufferRemaining_ == 0) {
+        return;
+    }
+
+    if (!ScopeStack_.empty()) {
+        THROW_ERROR_EXCEPTION("Cannot skip to checkpoint when scope stack is not empty");
+    }
+
+    BufferPtr_ = nullptr;
+    BufferRemaining_ = 0;
+}
+
+void TLoadContextStream::UpdateTopmostScopeChecksum(void* buf, size_t len)
+{
+    auto& scope = ScopeStack_.back();
+    scope.CurrentChecksum = GetChecksum(TRef(buf, len), scope.CurrentChecksum);
+}
+
+void TLoadContextStream::UpdateScopesChecksum()
+{
+    if (Context_->Dumper().IsChecksumDumpActive() && !ScopeStack_.empty()) {
+        auto& topmostScope = ScopeStack_.back();
+        UpdateTopmostScopeChecksum(
+            topmostScope.CurrentChecksumPtr,
+            BufferPtr_ - topmostScope.CurrentChecksumPtr);
+        UpdateScopesCurrentChecksumPtr();
     }
 }
 
-size_t TLoadContextStream::LoadSlow(void* buf, size_t len)
+void TLoadContextStream::UpdateScopesCurrentChecksumPtr()
 {
+    if (Context_->Dumper().IsChecksumDumpActive() && !ScopeStack_.empty()) {
+        for (auto& scope : ScopeStack_) {
+            scope.CurrentChecksumPtr = BufferPtr_;
+        }
+    }
+}
+
+size_t TLoadContextStream::LoadSlow(void* buf_, size_t len)
+{
+    size_t bytesRead = 0;
     if (ZeroCopyInput_) {
-        auto bufPtr = static_cast<char*>(buf);
-        auto toRead = len;
-        while (toRead > 0) {
+        auto buf = static_cast<char*>(buf_);
+        auto bytesToRead = len;
+        while (bytesToRead > 0) {
             if (BufferRemaining_ == 0) {
+                UpdateScopesChecksum();
+
                 BufferRemaining_ = ZeroCopyInput_->Next(&BufferPtr_);
                 if (BufferRemaining_ == 0) {
                     break;
                 }
+
+                UpdateScopesCurrentChecksumPtr();
             }
-            YT_ASSERT(BufferRemaining_ > 0);
-            auto toCopy = std::min(toRead, BufferRemaining_);
-            ::memcpy(bufPtr, BufferPtr_, toCopy);
-            BufferPtr_ += toCopy;
-            BufferRemaining_ -= toCopy;
-            bufPtr += toCopy;
-            toRead -= toCopy;
+
+            auto bytesToCopy = std::min(bytesToRead, BufferRemaining_);
+            ::memcpy(buf, BufferPtr_, bytesToCopy);
+
+            BufferPtr_ += bytesToCopy;
+            BufferRemaining_ -= bytesToCopy;
+            buf += bytesToCopy;
+            bytesToRead -= bytesToCopy;
+            bytesRead += bytesToCopy;
         }
-        return len - toRead;
+        return len - bytesToRead;
     } else {
-        return Input_->Load(buf, len);
+        bytesRead = Input_->Load(buf_, len);
+        if (Context_->Dumper().IsChecksumDumpActive() && !ScopeStack_.empty()) {
+            UpdateTopmostScopeChecksum(buf_, bytesRead);
+        }
     }
+    return bytesRead;
+}
+
+void TLoadContextStream::ConfigureScopeFilter(TSerializationDumpScopeFilter scopeFilter)
+{
+    ScopeFilter_ = std::move(scopeFilter);
+
+    if (!ScopeFilter_) {
+        Context_->Dumper().DisableScopeFiltering();
+    }
+}
+
+void TLoadContextStream::BeginScope(TStringBuf name)
+{
+    UpdateScopesChecksum();
+
+    CurrentScopePath_ += "/";
+    CurrentScopePath_ += name;
+
+    auto filterMatch = ScopeFilter_ && ScopeFilter_->contains(CurrentScopePath_);
+    if (filterMatch) {
+        Context_->Dumper().BeginScopeFilterMatchBlock(CurrentScopePath_);
+    }
+
+    ScopeStack_.push_back({
+        .NameLength = name.size(),
+        .FilterMatch = filterMatch,
+    });
+
+    if (Context_->Dumper().IsChecksumDumpActive()) {
+        ScopeStack_.back().CurrentChecksumPtr = BufferPtr_;
+    }
+}
+
+void TLoadContextStream::EndScope()
+{
+    UpdateScopesChecksum();
+
+    YT_VERIFY(!ScopeStack_.empty());
+    auto& topmostScope = ScopeStack_.back();
+
+    if (Context_->Dumper().IsChecksumDumpActive()) {
+        for (int index = 0; index < std::ssize(ScopeStack_) - 1; ++index) {
+            auto& scope = ScopeStack_[index];
+            scope.CurrentChecksum = GetChecksum(TRef::FromPod(topmostScope.CurrentChecksum), scope.CurrentChecksum);
+        }
+
+        Context_->Dumper().WriteChecksum(CurrentScopePath_, topmostScope.CurrentChecksum);
+    }
+
+    if (topmostScope.FilterMatch) {
+        Context_->Dumper().EndScopeFilterMatchBlock(CurrentScopePath_);
+    }
+
+    CurrentScopePath_.resize(CurrentScopePath_.size() - topmostScope.NameLength - 1);
+
+    ScopeStack_.pop_back();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
 TStreamLoadContext::TStreamLoadContext(IInputStream* input)
-    : Input_(input)
+    : Input_(this, input)
 { }
 
 TStreamLoadContext::TStreamLoadContext(IZeroCopyInput* input)
-    : Input_(input)
+    : Input_(this, input)
 { }
+
+void TStreamLoadContext::ConfigureDump(
+    ESerializationDumpMode mode,
+    TSerializationDumpScopeFilter scopeFilter)
+{
+    // Dump may only be configured once.
+    YT_VERIFY(!std::exchange(DumpConfigured_, true));
+
+    Dumper_.ConfigureMode(mode);
+    Input_.ConfigureScopeFilter(std::move(scopeFilter));
+}
+
+void TStreamLoadContext::BeginScope(TStringBuf name)
+{
+    Input_.BeginScope(name);
+}
+
+void TStreamLoadContext::EndScope()
+{
+    Input_.EndScope();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TStreamLoadContextScopeGuard::TStreamLoadContextScopeGuard(
+    TStreamLoadContext& context,
+    TStringBuf name)
+    : Context_(context)
+{
+    YT_VERIFY(!name.empty());
+    context.BeginScope(name);
+}
+
+TStreamLoadContextScopeGuard::~TStreamLoadContextScopeGuard()
+{
+    Context_.EndScope();
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -189,4 +331,3 @@ TEntityStreamLoadContext::TEntityStreamLoadContext(
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT
-

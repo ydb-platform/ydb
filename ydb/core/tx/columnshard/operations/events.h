@@ -1,6 +1,7 @@
 #pragma once
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/columnshard/common/blob.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/engines/portions/write_with_blobs.h>
 #include <util/generic/hash.h>
 
@@ -25,13 +26,39 @@ public:
 
 class TWriteResult {
 private:
-    NEvWrite::TWriteMeta WriteMeta;
+    std::shared_ptr<NEvWrite::TWriteMeta> WriteMeta;
     YDB_READONLY(ui64, DataSize, 0);
     YDB_READONLY(bool, NoDataToWrite, false);
+    TString ErrorMessage;
+    std::optional<bool> IsInternalErrorFlag;
     std::shared_ptr<arrow::RecordBatch> PKBatch;
     ui32 RecordsCount;
 
 public:
+    TWriteResult& SetErrorMessage(const TString& value, const bool isInternal) {
+        AFL_VERIFY(!ErrorMessage);
+        IsInternalErrorFlag = isInternal;
+        ErrorMessage = value;
+        return *this;
+    }
+
+    bool IsInternalError() const {
+        AFL_VERIFY_DEBUG(!!IsInternalErrorFlag);
+        if (!IsInternalErrorFlag) {
+            return true;
+        }
+        return *IsInternalErrorFlag;
+    }
+
+    const TString& GetErrorMessage() const {
+        static TString undefinedMessage = "UNKNOWN_WRITE_RESULT_MESSAGE";
+        AFL_VERIFY_DEBUG(!!ErrorMessage);
+        if (!ErrorMessage) {
+            return undefinedMessage;
+        }
+        return ErrorMessage;
+    }
+
     const std::shared_ptr<arrow::RecordBatch>& GetPKBatchVerified() const {
         AFL_VERIFY(PKBatch);
         return PKBatch;
@@ -42,33 +69,35 @@ public:
     }
 
     const NEvWrite::TWriteMeta& GetWriteMeta() const {
+        return *WriteMeta;
+    }
+
+    NEvWrite::TWriteMeta& MutableWriteMeta() const {
+        return *WriteMeta;
+    }
+
+    const std::shared_ptr<NEvWrite::TWriteMeta>& GetWriteMetaPtr() const {
         return WriteMeta;
     }
 
-    TWriteResult(const NEvWrite::TWriteMeta& writeMeta, const ui64 dataSize, const std::shared_ptr<arrow::RecordBatch>& pkBatch,
-        const bool noDataToWrite, const ui32 recordsCount)
-        : WriteMeta(writeMeta)
-        , DataSize(dataSize)
-        , NoDataToWrite(noDataToWrite)
-        , PKBatch(pkBatch)
-        , RecordsCount(recordsCount)
-    {
-    }
+    TWriteResult(const std::shared_ptr<NEvWrite::TWriteMeta>& writeMeta, const ui64 dataSize, const std::shared_ptr<arrow::RecordBatch>& pkBatch,
+        const bool noDataToWrite, const ui32 recordsCount);
 };
 
 class TInsertedPortions {
 private:
     YDB_ACCESSOR_DEF(std::vector<TWriteResult>, WriteResults);
     YDB_ACCESSOR_DEF(std::vector<TInsertedPortion>, Portions);
-    YDB_READONLY(ui64, PathId, 0);
+    YDB_READONLY_DEF(TInternalPathId, PathId);
 
 public:
     TInsertedPortions(std::vector<TWriteResult>&& writeResults, std::vector<TInsertedPortion>&& portions)
         : WriteResults(std::move(writeResults))
         , Portions(std::move(portions)) {
         AFL_VERIFY(WriteResults.size());
-        std::optional<ui64> pathId;
+        std::optional<TInternalPathId> pathId;
         for (auto&& i : WriteResults) {
+            i.GetWriteMeta().OnStage(NEvWrite::EWriteStage::Finished);
             AFL_VERIFY(!i.GetWriteMeta().HasLongTxId());
             if (!pathId) {
                 pathId = i.GetWriteMeta().GetTableId();
@@ -88,11 +117,16 @@ namespace NKikimr::NColumnShard::NPrivateEvents::NWrite {
 class TEvWritePortionResult: public TEventLocal<TEvWritePortionResult, TEvPrivate::EvWritePortionResult> {
 private:
     YDB_READONLY_DEF(NKikimrProto::EReplyStatus, WriteStatus);
-    YDB_READONLY_DEF(std::shared_ptr<NOlap::IBlobsWritingAction>, WriteAction);
+    std::optional<std::shared_ptr<NOlap::IBlobsWritingAction>> WriteAction;
     bool Detached = false;
     TInsertedPortions InsertedData;
 
 public:
+    const std::shared_ptr<NOlap::IBlobsWritingAction>& GetWriteAction() const {
+        AFL_VERIFY(!!WriteAction);
+        return *WriteAction;
+    }
+
     const TInsertedPortions& DetachInsertedData() {
         AFL_VERIFY(!Detached);
         Detached = true;
@@ -100,11 +134,7 @@ public:
     }
 
     TEvWritePortionResult(const NKikimrProto::EReplyStatus writeStatus, const std::shared_ptr<NOlap::IBlobsWritingAction>& writeAction,
-        TInsertedPortions&& insertedData)
-        : WriteStatus(writeStatus)
-        , WriteAction(writeAction)
-        , InsertedData(std::move(insertedData)) {
-    }
+        TInsertedPortions&& insertedData);
 };
 
 }   // namespace NKikimr::NColumnShard::NPrivateEvents::NWrite

@@ -82,7 +82,7 @@ TEST_P(TConcurrentCacheTest, Stress)
 
     THazardPtrReclaimOnContextSwitchGuard flushGuard;
     TSlabAllocator allocator;
-    TConcurrentCache<TElement> concurrentCache(tableSize);
+    TConcurrentCache<TElement> concurrentCache(tableSize, /*memoryUsageTracker*/ nullptr);
 
     auto threadPool = CreateThreadPool(threadCount, "Workers");
     std::vector<TFuture<size_t>> asyncResults;

@@ -10,6 +10,7 @@
 #include <yql/essentials/minikql/dom/json.h>
 #include <yql/essentials/minikql/dom/yson.h>
 #include <yql/essentials/minikql/jsonpath/parser/parser.h>
+#include <yql/essentials/core/sql_types/block.h>
 #include <yql/essentials/core/sql_types/simple_types.h>
 #include "yql/essentials/parser/pg_catalog/catalog.h"
 #include <yql/essentials/parser/pg_wrapper/interface/utils.h>
@@ -86,6 +87,75 @@ TExprNode::TPtr RebuildVariant(const TExprNode::TPtr& node,
         .Build();
 
     return ret;
+}
+
+bool IsDatetimeToDatetimeCastAllowed(EDataSlot from, EDataSlot to) {
+    if (from == EDataSlot::Date && (to == EDataSlot::TzDate ||
+                                    to == EDataSlot::Date32 ||
+                                    to == EDataSlot::TzDate32 ||
+                                    to == EDataSlot::Datetime ||
+                                    to == EDataSlot::TzDatetime ||
+                                    to == EDataSlot::Datetime64 ||
+                                    to == EDataSlot::TzDatetime64 ||
+                                    to == EDataSlot::Timestamp ||
+                                    to == EDataSlot::TzTimestamp ||
+                                    to == EDataSlot::Timestamp64 ||
+                                    to == EDataSlot::TzTimestamp64)
+    ) {
+        return true;
+    } else if (from == EDataSlot::TzDate && (to == EDataSlot::TzDate32 ||
+                                             to == EDataSlot::TzDatetime ||
+                                             to == EDataSlot::TzDatetime64 ||
+                                             to == EDataSlot::TzTimestamp ||
+                                             to == EDataSlot::TzTimestamp64)
+    ) {
+        return true;
+    } else if (from == EDataSlot::Date32 && (to == EDataSlot::TzDate32 ||
+                                             to == EDataSlot::Datetime64 ||
+                                             to == EDataSlot::TzDatetime64 ||
+                                             to == EDataSlot::Timestamp64 ||
+                                             to == EDataSlot::TzTimestamp64)
+    ) {
+        return true;
+    } else if (from == EDataSlot::TzDate32 && (to == EDataSlot::TzDatetime64 ||
+                                               to == EDataSlot::TzTimestamp64)
+    ) {
+        return true;
+    } else if (from == EDataSlot::Datetime && (to == EDataSlot::TzDatetime ||
+                                               to == EDataSlot::Datetime64 ||
+                                               to == EDataSlot::TzDatetime64 ||
+                                               to == EDataSlot::Timestamp ||
+                                               to == EDataSlot::TzTimestamp ||
+                                               to == EDataSlot::Timestamp64 ||
+                                               to == EDataSlot::TzTimestamp64)
+    ) {
+        return true;
+    } else if (from == EDataSlot::TzDatetime && (to == EDataSlot::TzDatetime64 ||
+                                                 to == EDataSlot::TzTimestamp ||
+                                                 to == EDataSlot::TzTimestamp64)
+    ) {
+        return true;
+    } else if (from == EDataSlot::Datetime64 && (to == EDataSlot::TzDatetime64 ||
+                                                 to == EDataSlot::Timestamp64 ||
+                                                 to == EDataSlot::TzTimestamp64)
+    ) {
+        return true;
+    } else if (from == EDataSlot::TzDatetime64 && to == EDataSlot::TzTimestamp64) {
+        return true;
+    } else if (from == EDataSlot::Timestamp && (to == EDataSlot::TzTimestamp ||
+                                                to == EDataSlot::Timestamp64 ||
+                                                to == EDataSlot::TzTimestamp64)
+    ) {
+        return true;
+    } else if (from == EDataSlot::TzTimestamp && to == EDataSlot::TzTimestamp64) {
+        return true;
+    } else if (from == EDataSlot::Timestamp64 && to == EDataSlot::TzTimestamp64) {
+        return true;
+    } else if (from == EDataSlot::Interval && (to == EDataSlot::Interval64)) {
+        return true;
+    } else {
+        return false;
+    }
 }
 
 IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& node,
@@ -332,43 +402,10 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
         if (IsDataTypeNumeric(from) && IsDataTypeNumeric(to)) {
             allow = GetNumericDataTypeLevel(to) >= GetNumericDataTypeLevel(from);
             isSafe = false;
-        } else if (from == EDataSlot::Date && (
-                    to == EDataSlot::Date32 ||
-                    to == EDataSlot::TzDate ||
-                    to == EDataSlot::Datetime ||
-                    to == EDataSlot::Timestamp ||
-                    to == EDataSlot::TzDatetime ||
-                    to == EDataSlot::TzTimestamp ||
-                    to == EDataSlot::Datetime64 ||
-                    to == EDataSlot::Timestamp64))
+        } else if (IsDataTypeDateOrTzDateOrInterval(from) &&
+                   IsDataTypeDateOrTzDateOrInterval(to) &&
+                   IsDatetimeToDatetimeCastAllowed(from, to))
         {
-            allow = true;
-            useCast = true;
-        } else if (from == EDataSlot::Datetime && (
-                    to == EDataSlot::Datetime64 ||
-                    to == EDataSlot::TzDatetime ||
-                    to == EDataSlot::Timestamp ||
-                    to == EDataSlot::TzTimestamp ||
-                    to == EDataSlot::Timestamp64))
-        {
-            allow = true;
-            useCast = true;
-        } else if (from == EDataSlot::TzDate && (to == EDataSlot::TzDatetime || to == EDataSlot::TzTimestamp)) {
-            allow = true;
-            useCast = true;
-        } else if (from == EDataSlot::TzDatetime && to == EDataSlot::TzTimestamp) {
-            allow = true;
-            useCast = true;
-        } else if (from == EDataSlot::Timestamp && (to == EDataSlot::TzTimestamp || to == EDataSlot::Timestamp64)) {
-            allow = true;
-            useCast = true;
-        } else if (from == EDataSlot::Date32 && (to == EDataSlot::Datetime64 || to == EDataSlot::Timestamp64)) {
-            allow = true;
-            useCast = true;
-        } else if (from == EDataSlot::Datetime64 && (to == EDataSlot::Timestamp64)) {
-            allow = true;
-            useCast = true;
-        } else if (from == EDataSlot::Interval && (to == EDataSlot::Interval64)) {
             allow = true;
             useCast = true;
         } else if (from == EDataSlot::Json && to == EDataSlot::Utf8) {
@@ -393,6 +430,25 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
                 .Build();
 
             return IGraphTransformer::TStatus::Repeat;
+        } else if (IsDataTypeDecimal(from) && IsDataTypeDecimal(to)) {
+            auto* sourceDecimal = sourceType.Cast<TDataExprParamsType>();
+            auto* expectedDecimal = expectedType.Cast<TDataExprParamsType>();
+            ui8 p1 = FromString(sourceDecimal->GetParamOne()), s1 = FromString(sourceDecimal->GetParamTwo());
+            ui8 p2 = FromString(expectedDecimal->GetParamOne()), s2 = FromString(expectedDecimal->GetParamTwo());
+            if (s1 > s2) {
+                TString message = TStringBuilder() << "Implicit decimal cast would lose precision";
+                auto issue = TIssue(node->Pos(ctx), message);
+                ctx.AddError(issue);
+                return IGraphTransformer::TStatus::Error;
+            }
+            if (p1 - s1 > p2 - s2) {
+                TString message = TStringBuilder() << "Implicit decimal cast would narrow the range";
+                auto issue = TIssue(node->Pos(ctx), message);
+                ctx.AddError(issue);
+                return IGraphTransformer::TStatus::Error;
+            }
+            allow = true;
+            useCast = true;
         }
 
         if (!allow || !isSafe) {
@@ -3214,6 +3270,52 @@ bool EnsureWideBlockType(TPositionHandle position, const TTypeAnnotationNode& ty
     return true;
 }
 
+bool EnsureBlockStructType(TPositionHandle position, const TTypeAnnotationNode& type, TVector<const TItemExprType*>& structItems, TExprContext& ctx) {
+    if (HasError(&type, ctx)) {
+        return false;
+    }
+
+    if (type.GetKind() != ETypeAnnotationKind::Struct) {
+        ctx.AddError(TIssue(ctx.GetPosition(position), TStringBuilder() << "Expected struct, but got: " << type));
+        return false;
+    }
+
+    auto& items = type.Cast<TStructExprType>()->GetItems();
+    if (items.empty()) {
+        ctx.AddError(TIssue(ctx.GetPosition(position), "Expected at least one column"));
+        return false;
+    }
+
+    bool hasBlockLengthColumn = false;
+    for (auto item : items) {
+        auto blockType = item->GetItemType();
+        if (!EnsureBlockOrScalarType(position, *blockType, ctx)) {
+            return false;
+        }
+
+        bool isScalar = false;
+        auto itemType = GetBlockItemType(*blockType, isScalar);
+
+        if (item->GetName() == BlockLengthColumnName) {
+            if (!isScalar) {
+                ctx.AddError(TIssue(ctx.GetPosition(position), "Block length column should be a scalar"));
+                return false;
+            }
+            if (!EnsureSpecificDataType(position, *itemType, EDataSlot::Uint64, ctx)) {
+                return false;
+            }
+            hasBlockLengthColumn = true;
+        } else {
+            structItems.push_back(ctx.MakeType<TItemExprType>(item->GetName(), itemType));
+        }
+    }
+    if (!hasBlockLengthColumn) {
+        ctx.AddError(TIssue(ctx.GetPosition(position), "Block struct must contain block length column"));
+        return false;
+    }
+    return true;
+}
+
 bool EnsureWideFlowBlockType(const TExprNode& node, TTypeAnnotationNode::TListType& blockItemTypes, TExprContext& ctx, bool allowScalar) {
     if (!EnsureWideFlowType(node, ctx)) {
         return false;
@@ -3228,6 +3330,14 @@ bool EnsureWideStreamBlockType(const TExprNode& node, TTypeAnnotationNode::TList
     }
 
     return EnsureWideBlockType(node.Pos(), *node.GetTypeAnn()->Cast<TStreamExprType>()->GetItemType(), blockItemTypes, ctx, allowScalar);
+}
+
+bool EnsureBlockListType(const TExprNode& node, TVector<const TItemExprType*>& structItems, TExprContext& ctx) {
+    if (!EnsureListType(node, ctx)) {
+        return false;
+    }
+
+    return EnsureBlockStructType(node.Pos(), *node.GetTypeAnn()->Cast<TListExprType>()->GetItemType(), structItems, ctx);
 }
 
 bool EnsureOptionalType(const TExprNode& node, TExprContext& ctx) {
@@ -4258,7 +4368,7 @@ bool IsDataTypeTzDate(EDataSlot dataSlot) {
 }
 
 bool IsDataTypeBigDate(EDataSlot dataSlot) {
-    return (NUdf::GetDataTypeInfo(dataSlot).Features & NUdf::BigDateType);
+    return (NUdf::GetDataTypeInfo(dataSlot).Features & NUdf::ExtDateType);
 }
 
 EDataSlot WithTzDate(EDataSlot dataSlot) {
@@ -6013,6 +6123,13 @@ std::optional<ui32> GetFieldPosition(const TTupleExprType& tupleType, const TStr
 std::optional<ui32> GetFieldPosition(const TStructExprType& structType, const TStringBuf& field) {
     if (const auto find = structType.FindItem(field))
         return {*find};
+    return std::nullopt;
+}
+
+std::optional<ui32> GetWideBlockFieldPosition(const TMultiExprType& multiType, const TStringBuf& field) {
+    YQL_ENSURE(multiType.GetSize() >= 1);
+    if (ui32 pos; TryFromString(field, pos) && pos < multiType.GetSize() - 1)
+        return {pos};
     return std::nullopt;
 }
 

@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(2.1.0)
+VERSION(2.2.0)
 
 LICENSE(MIT)
 
@@ -13,6 +13,7 @@ PY_SRCS(
     executing/__init__.py
     executing/_exceptions.py
     executing/_position_node_finder.py
+    executing/_pytest_utils.py
     executing/executing.py
     executing/version.py
 )

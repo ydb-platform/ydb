@@ -2,12 +2,14 @@
 #include "service.h"
 #include "table_writer.h"
 #include "topic_reader.h"
+#include "transfer_writer_factory.h"
 #include "worker.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/domain.h>
 #include <ydb/core/base/statestorage.h>
+#include <ydb/core/fq/libs/row_dispatcher/purecalc_compilation/compile_service.h>
 #include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -375,7 +377,7 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
         return it->second;
     }
 
-    std::function<IActor*(void)> ReaderFn(const NKikimrReplication::TRemoteTopicReaderSettings& settings) {
+    std::function<IActor*(void)> ReaderFn(const NKikimrReplication::TRemoteTopicReaderSettings& settings, bool autoCommit) {
         TActorId ydbProxy;
         const auto& params = settings.GetConnectionParams();
         switch (params.GetCredentialsCase()) {
@@ -392,6 +394,7 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
         auto topicReaderSettings = TEvYdbProxy::TTopicReaderSettings()
             .MaxMemoryUsageBytes(1_MB)
             .ConsumerName(settings.GetConsumerName())
+            .AutoCommit(autoCommit)
             .AppendTopics(NYdb::NTopic::TTopicReadSettings()
                 .Path(settings.GetTopicPath())
                 .AppendPartitionIds(settings.GetTopicPartitionId())
@@ -411,6 +414,28 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
             : EWriteMode::Simple;
         return [tablePathId = TPathId::FromProto(writerSettings.GetPathId()), mode]() {
             return CreateLocalTableWriter(tablePathId, mode);
+        };
+    }
+
+    std::function<IActor*(void)> TransferWriterFn(
+            const NKikimrReplication::TTransferWriterSettings& writerSettings,
+            const ITransferWriterFactory* transferWriterFactory)
+    {
+        if (!CompilationService) {
+            CompilationService = Register(
+                NFq::NRowDispatcher::CreatePurecalcCompileService({}, MakeIntrusive<NMonitoring::TDynamicCounters>())
+            );
+        }
+
+        return [
+            tablePathId = TPathId::FromProto(writerSettings.GetPathId()),
+            transformLambda = writerSettings.GetTransformLambda(),
+            compilationService = *CompilationService,
+            batchingSettings = writerSettings.GetBatching(),
+            transferWriterFactory = transferWriterFactory,
+            runAsUser = writerSettings.GetRunAsUser()
+        ]() {
+            return transferWriterFactory->Create({transformLambda, tablePathId, compilationService, batchingSettings, runAsUser});
         };
     }
 
@@ -450,10 +475,26 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
         const auto& cmd = record.GetCommand();
         // TODO: validate settings
         const auto& readerSettings = cmd.GetRemoteTopicReader();
-        const auto& writerSettings = cmd.GetLocalTableWriter();
-        const auto& consistencySettings = cmd.GetConsistencySettings();
+        bool autoCommit = true;
+        std::function<IActor*(void)> writerFn;
+        if (cmd.HasLocalTableWriter()) {
+            const auto& writerSettings = cmd.GetLocalTableWriter();
+            const auto& consistencySettings = cmd.GetConsistencySettings();
+            writerFn = WriterFn(writerSettings, consistencySettings);
+        } else if (cmd.HasTransferWriter()) {
+            const auto& writerSettings = cmd.GetTransferWriter();
+            const auto* transferWriterFactory = AppData()->TransferWriterFactory.get();
+            if (!transferWriterFactory) {
+                LOG_C("Run transfer but TransferWriterFactory does not exists.");
+                return;
+            }
+            autoCommit = false;
+            writerFn = TransferWriterFn(writerSettings, transferWriterFactory);
+        } else {
+            Y_ABORT("Unsupported");
+        }
         const auto actorId = session.RegisterWorker(this, id,
-            CreateWorker(SelfId(), ReaderFn(readerSettings), WriterFn(writerSettings, consistencySettings)));
+            CreateWorker(SelfId(), ReaderFn(readerSettings, autoCommit), std::move(writerFn)));
         WorkerActorIdToSession[actorId] = controller.GetTabletId();
     }
 
@@ -646,6 +687,10 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
             Send(actorId, new TEvents::TEvPoison());
         }
 
+        if (CompilationService) {
+            Send(*CompilationService, new TEvents::TEvPoison());
+        }
+
         TActorBootstrapped<TReplicationService>::PassAway();
     }
 
@@ -680,6 +725,7 @@ private:
     THashMap<ui64, TSessionInfo> Sessions;
     THashMap<TConnectionParams, TActorId> YdbProxies;
     THashMap<TActorId, ui64> WorkerActorIdToSession;
+    mutable TMaybe<TActorId> CompilationService;
 
 }; // TReplicationService
 

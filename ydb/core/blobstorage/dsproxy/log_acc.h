@@ -46,7 +46,7 @@ namespace NKikimr {
         }
 
         void UnleashUponLogger() {
-            NLog::TSettings * const loggerSettings = TlsActivationContext->ExecutorThread.ActorSystem->LoggerSettings();
+            NLog::TSettings * const loggerSettings = TActivationContext::ActorSystem()->LoggerSettings();
             if (!loggerSettings) {
                 return;
             }

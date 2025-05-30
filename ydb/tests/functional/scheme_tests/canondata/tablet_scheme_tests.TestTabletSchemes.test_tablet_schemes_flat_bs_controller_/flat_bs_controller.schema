@@ -7,6 +7,11 @@
         ],
         "ColumnsAdded": [
             {
+                "ColumnId": 29,
+                "ColumnName": "EnableConfigV2",
+                "ColumnType": "Bool"
+            },
+            {
                 "ColumnId": 1,
                 "ColumnName": "FixedKey",
                 "ColumnType": "Bool"
@@ -122,15 +127,26 @@
                 "ColumnType": "String"
             },
             {
-                "ColumnId": 25,
-                "ColumnName": "ConfigVersion",
-                "ColumnType": "Uint32"
+                "ColumnId": 26,
+                "ColumnName": "ShredState",
+                "ColumnType": "String"
+            },
+            {
+                "ColumnId": 27,
+                "ColumnName": "StorageYamlConfig",
+                "ColumnType": "String"
+            },
+            {
+                "ColumnId": 28,
+                "ColumnName": "ExpectedStorageYamlConfigVersion",
+                "ColumnType": "Uint64"
             }
         ],
         "ColumnsDropped": [],
         "ColumnFamilies": {
             "0": {
                 "Columns": [
+                    29,
                     1,
                     2,
                     4,
@@ -154,7 +170,9 @@
                     22,
                     23,
                     24,
-                    25
+                    26,
+                    27,
+                    28
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -240,16 +258,6 @@
         ],
         "ColumnsAdded": [
             {
-                "ColumnId": 17,
-                "ColumnName": "DecommitStatus",
-                "ColumnType": "Uint32"
-            },
-            {
-                "ColumnId": 18,
-                "ColumnName": "Mood",
-                "ColumnType": "Byte"
-            },
-            {
                 "ColumnId": 1,
                 "ColumnName": "NodeID",
                 "ColumnType": "Uint32"
@@ -318,14 +326,32 @@
                 "ColumnId": 16,
                 "ColumnName": "LastSeenPath",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 17,
+                "ColumnName": "DecommitStatus",
+                "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 18,
+                "ColumnName": "Mood",
+                "ColumnType": "Byte"
+            },
+            {
+                "ColumnId": 19,
+                "ColumnName": "ShredComplete",
+                "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 20,
+                "ColumnName": "MaintenanceStatus",
+                "ColumnType": "Byte"
             }
         ],
         "ColumnsDropped": [],
         "ColumnFamilies": {
             "0": {
                 "Columns": [
-                    17,
-                    18,
                     1,
                     2,
                     3,
@@ -339,7 +365,11 @@
                     13,
                     14,
                     15,
-                    16
+                    16,
+                    17,
+                    18,
+                    19,
+                    20
                 ],
                 "RoomID": 0,
                 "Codec": 0,

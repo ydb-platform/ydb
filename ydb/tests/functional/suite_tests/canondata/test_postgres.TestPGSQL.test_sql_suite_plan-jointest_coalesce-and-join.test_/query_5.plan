@@ -5,7 +5,7 @@
         "Plans": [
             {
                 "Node Type": "ResultSet",
-                "PlanNodeId": 12,
+                "PlanNodeId": 8,
                 "PlanNodeType": "ResultSet",
                 "Plans": [
                     {
@@ -14,18 +14,18 @@
                             {
                                 "Inputs": [
                                     {
-                                        "ExternalPlanNodeId": 10
+                                        "ExternalPlanNodeId": 6
                                     }
                                 ],
                                 "Limit": "1001",
                                 "Name": "Limit"
                             }
                         ],
-                        "PlanNodeId": 11,
+                        "PlanNodeId": 7,
                         "Plans": [
                             {
                                 "Node Type": "Merge",
-                                "PlanNodeId": 10,
+                                "PlanNodeId": 6,
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
@@ -45,75 +45,48 @@
                                                 "Condition": "xx.pkxx = Q._equijoin_column_0",
                                                 "Inputs": [
                                                     {
-                                                        "ExternalPlanNodeId": 8
+                                                        "ExternalPlanNodeId": 4
                                                     },
                                                     {
-                                                        "ExternalPlanNodeId": 5
+                                                        "ExternalPlanNodeId": 3
                                                     }
                                                 ],
                                                 "Name": "LeftJoin (MapJoin)"
                                             }
                                         ],
-                                        "PlanNodeId": 9,
+                                        "PlanNodeId": 5,
                                         "Plans": [
                                             {
-                                                "Node Type": "Broadcast",
-                                                "PlanNodeId": 5,
-                                                "PlanNodeType": "Connection",
-                                                "Plans": [
+                                                "Node Type": "TableFullScan",
+                                                "Operators": [
                                                     {
-                                                        "Node Type": "Stage",
-                                                        "PlanNodeId": 4,
-                                                        "Plans": [
-                                                            {
-                                                                "Node Type": "UnionAll",
-                                                                "PlanNodeId": 3,
-                                                                "PlanNodeType": "Connection",
-                                                                "Plans": [
-                                                                    {
-                                                                        "Node Type": "Stage",
-                                                                        "PlanNodeId": 2,
-                                                                        "Plans": [
-                                                                            {
-                                                                                "Node Type": "TableFullScan",
-                                                                                "Operators": [
-                                                                                    {
-                                                                                        "Inputs": [],
-                                                                                        "Name": "TableFullScan",
-                                                                                        "Path": "/Root/postgres_jointest/coalesce-and-join.test_plan/yy",
-                                                                                        "ReadColumns": [
-                                                                                            "pkxx"
-                                                                                        ],
-                                                                                        "ReadRanges": [
-                                                                                            "pkxx (-\u221e, +\u221e)",
-                                                                                            "pkyy (-\u221e, +\u221e)"
-                                                                                        ],
-                                                                                        "ReadRangesPointPrefixLen": "0",
-                                                                                        "Scan": "Parallel",
-                                                                                        "Table": "postgres_jointest/coalesce-and-join.test_plan/yy"
-                                                                                    }
-                                                                                ],
-                                                                                "PlanNodeId": 1,
-                                                                                "Tables": [
-                                                                                    "postgres_jointest/coalesce-and-join.test_plan/yy"
-                                                                                ]
-                                                                            }
-                                                                        ]
-                                                                    }
-                                                                ]
-                                                            }
-                                                        ]
+                                                        "Inputs": [],
+                                                        "Name": "TableFullScan",
+                                                        "Path": "/Root/postgres_jointest/coalesce-and-join.test_plan/xx",
+                                                        "ReadColumns": [
+                                                            "pkxx"
+                                                        ],
+                                                        "ReadRanges": [
+                                                            "pkxx (-\u221e, +\u221e)"
+                                                        ],
+                                                        "ReadRangesPointPrefixLen": "0",
+                                                        "Scan": "Parallel",
+                                                        "Table": "postgres_jointest/coalesce-and-join.test_plan/xx"
                                                     }
+                                                ],
+                                                "PlanNodeId": 4,
+                                                "Tables": [
+                                                    "postgres_jointest/coalesce-and-join.test_plan/xx"
                                                 ]
                                             },
                                             {
-                                                "Node Type": "Map",
-                                                "PlanNodeId": 8,
+                                                "Node Type": "Broadcast",
+                                                "PlanNodeId": 3,
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
                                                         "Node Type": "Stage",
-                                                        "PlanNodeId": 7,
+                                                        "PlanNodeId": 2,
                                                         "Plans": [
                                                             {
                                                                 "Node Type": "TableFullScan",
@@ -121,21 +94,22 @@
                                                                     {
                                                                         "Inputs": [],
                                                                         "Name": "TableFullScan",
-                                                                        "Path": "/Root/postgres_jointest/coalesce-and-join.test_plan/xx",
+                                                                        "Path": "/Root/postgres_jointest/coalesce-and-join.test_plan/yy",
                                                                         "ReadColumns": [
                                                                             "pkxx"
                                                                         ],
                                                                         "ReadRanges": [
-                                                                            "pkxx (-\u221e, +\u221e)"
+                                                                            "pkxx (-\u221e, +\u221e)",
+                                                                            "pkyy (-\u221e, +\u221e)"
                                                                         ],
                                                                         "ReadRangesPointPrefixLen": "0",
                                                                         "Scan": "Parallel",
-                                                                        "Table": "postgres_jointest/coalesce-and-join.test_plan/xx"
+                                                                        "Table": "postgres_jointest/coalesce-and-join.test_plan/yy"
                                                                     }
                                                                 ],
-                                                                "PlanNodeId": 6,
+                                                                "PlanNodeId": 1,
                                                                 "Tables": [
-                                                                    "postgres_jointest/coalesce-and-join.test_plan/xx"
+                                                                    "postgres_jointest/coalesce-and-join.test_plan/yy"
                                                                 ]
                                                             }
                                                         ]

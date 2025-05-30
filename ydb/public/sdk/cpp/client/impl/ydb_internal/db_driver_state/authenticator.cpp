@@ -3,7 +3,7 @@
 
 #include <ydb/public/sdk/cpp/client/resources/ydb_resources.h>
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 
 TYdbAuthenticator::TYdbAuthenticator(std::shared_ptr<ICredentialsProvider> credentialsProvider)
     : CredentialsProvider_(std::move(credentialsProvider))

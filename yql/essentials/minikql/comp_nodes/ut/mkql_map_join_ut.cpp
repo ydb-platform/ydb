@@ -585,7 +585,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLMapJoinCoreTest) {
         }
     }
 }
-#if !defined(MKQL_RUNTIME_VERSION) || MKQL_RUNTIME_VERSION >= 18u
+
 Y_UNIT_TEST_SUITE(TMiniKQLWideMapJoinCoreTest) {
     Y_UNIT_TEST_LLVM(TestInner) {
         for (ui32 pass = 0; pass < 1; ++pass) {
@@ -1144,7 +1144,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideMapJoinCoreTest) {
         }
     }
 }
-#endif
+
 }
 }
 

@@ -6,7 +6,7 @@
 #include <util/string/cast.h>
 
 #include <ydb/library/mkql_proto/protos/minikql.pb.h>
-#include <ydb/public/sdk/cpp/client/ydb_result/result.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 
 namespace NKikimr {
 
@@ -86,27 +86,27 @@ T ExtractValue(NYdb::TResultSetParser& parser, const TString& column) {
 
 template<>
 ui32 ExtractValue(NYdb::TResultSetParser& parser, const TString& column) {
-    return parser.ColumnParser(column).GetOptionalUint32().GetOrElse(0);
+    return parser.ColumnParser(column).GetOptionalUint32().value_or(0);
 }
 
 template<>
 ui64 ExtractValue(NYdb::TResultSetParser& parser, const TString& column) {
-    return parser.ColumnParser(column).GetOptionalUint64().GetOrElse(0);
+    return parser.ColumnParser(column).GetOptionalUint64().value_or(0);
 }
 
 template<>
 double ExtractValue(NYdb::TResultSetParser& parser, const TString& column) {
-    return parser.ColumnParser(column).GetOptionalDouble().GetOrElse(static_cast<double>(0));
+    return parser.ColumnParser(column).GetOptionalDouble().value_or(static_cast<double>(0));
 }
 
 template<>
 TString ExtractValue(NYdb::TResultSetParser& parser, const TString& column) {
-    return parser.ColumnParser(column).GetOptionalString().GetOrElse("");
+    return parser.ColumnParser(column).GetOptionalString().value_or("");
 }
 
 template<>
 TInstant ExtractValue(NYdb::TResultSetParser& parser, const TString& column) {
-    return TInstant::Seconds(parser.ColumnParser(column).GetOptionalUint32().GetOrElse(0));
+    return TInstant::Seconds(parser.ColumnParser(column).GetOptionalUint32().value_or(0));
 }
 
 bool GetStatName(TStringBuf columnName, TStringBuf& statName, TStringBuf& suffix) {
@@ -148,7 +148,7 @@ TAggregatedResult GetResultFromValueListItem(NYdb::TResultSetParser& parser, con
     TStringBuf suffix;
     TStringBuf levelSb;
     for (const auto& columnMeta : rs.GetColumnsMeta()) {
-        TString column = columnMeta.Name;
+        auto column = TString{columnMeta.Name};
 
         if (column == "id") {
             result.Uuid = ExtractValue<TString>(parser, column);

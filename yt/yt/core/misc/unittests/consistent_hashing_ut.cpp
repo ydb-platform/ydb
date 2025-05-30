@@ -6,6 +6,8 @@
 
 #include <library/cpp/yt/string/raw_formatter.h>
 
+#include <util/digest/multi.h>
+
 #include <algorithm>
 #include <random>
 #include <string>
@@ -27,8 +29,7 @@ struct TStringHasher
 {
     ui64 operator()(const TString& node, ui64 index) const
     {
-        auto hashNode = ::THash<TStringBuf>()(node);
-        return (hashNode ^ (index << 3)) + hashNode << (index & 7);
+        return MultiHash(node, index);
     }
 };
 
@@ -313,7 +314,7 @@ double GetPercentageInconsistentFiles(
 
     auto countDisplaced = [&] (const std::vector<std::pair<EQueryType, std::pair<TString, int>>>& queries) {
         std::map<TCrpItemWithToken, TCompactVector<TString, 1>> serversBefore;
-        for (const auto& file: files) {
+        for (const auto& file : files) {
             auto candidates = ring.GetServersForFile(file.first, file.second);
             candidates.resize(std::min(static_cast<size_t>(file.second), candidateCount));
             serversBefore[file] = candidates;
@@ -339,7 +340,7 @@ double GetPercentageInconsistentFiles(
         }
 
         int result = 0;
-        for (const auto& elem: files) {
+        for (const auto& elem : files) {
             auto candidates = ring.GetServersForFile(elem.first, elem.second);
             candidates.resize(std::min(static_cast<size_t>(elem.second), candidateCount));
             result += (serversBefore[elem] != candidates);

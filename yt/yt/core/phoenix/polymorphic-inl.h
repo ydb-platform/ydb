@@ -6,7 +6,7 @@
 
 #include <concepts>
 
-namespace NYT::NPhoenix2::NDetail {
+namespace NYT::NPhoenix::NDetail {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -27,4 +27,4 @@ struct TPolymorphicTraits<T>
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NPhoenix2::NDetail
+} // namespace NYT::NPhoenix::NDetail

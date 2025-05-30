@@ -11,10 +11,12 @@ SRCS(
     heartbeat.cpp
     key.cpp
     metering_sink.cpp
+    list_all_topics_actor.cpp
     mirrorer.cpp
     mirrorer.h
     ownerinfo.cpp
     offload_actor.cpp
+    partition_blob_encoder.cpp
     partition_init.cpp
     partition_monitoring.cpp
     partition_read.cpp
@@ -74,7 +76,7 @@ PEERDIR(
     ydb/library/persqueue/topic_parser
     ydb/library/protobuf_printer
     ydb/public/lib/base
-    ydb/public/sdk/cpp/client/ydb_persqueue_public
+    ydb/public/sdk/cpp/src/client/persqueue_public
 )
 
 END()
@@ -84,6 +86,7 @@ RECURSE(
     config
     events
     partition_key_range
+    purecalc
     writer
 )
 

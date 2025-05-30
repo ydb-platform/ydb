@@ -8,6 +8,8 @@
 
 #include <util/system/file.h>
 
+#include <yt/yt/core/misc/fs.h>
+
 namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -23,6 +25,30 @@ bool IsSystemError(const TError& error);
 #else
     using TFileDescriptor = int;
 #endif
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TFileDescriptorGuard
+{
+public:
+    TFileDescriptorGuard(TFileDescriptor fd = -1) noexcept;
+
+    ~TFileDescriptorGuard();
+
+    TFileDescriptorGuard(const TFileDescriptorGuard&) = delete;
+    TFileDescriptorGuard& operator = (const TFileDescriptorGuard&) = delete;
+
+    TFileDescriptorGuard(TFileDescriptorGuard&& other) noexcept;
+    TFileDescriptorGuard& operator = (TFileDescriptorGuard&& other) noexcept;
+
+    TFileDescriptor Get() const noexcept;
+
+    TFileDescriptor Release() noexcept;
+    void Reset() noexcept;
+
+private:
+    TFileDescriptor FD_ = -1;
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -280,7 +306,7 @@ struct TMemoryMapping
 
     ui64 Offset = 0;
 
-    std::optional<int> DeviceId;
+    std::optional<NFS::TDeviceId> DeviceId;
 
     std::optional<ui64> INode;
 
@@ -299,36 +325,6 @@ std::vector<TMemoryMapping> ParseMemoryMappings(const TString& rawSMaps);
 std::vector<TMemoryMapping> GetProcessMemoryMappings(int pid);
 
 ////////////////////////////////////////////////////////////////////////////////
-
-// See https://www.kernel.org/doc/Documentation/ABI/testing/procfs-diskstats
-// for fields info.
-struct TDiskStat
-{
-    i32 MajorNumber = 0;
-    i32 MinorNumber = 0;
-    TString DeviceName;
-
-    i64 ReadsCompleted = 0;
-    i64 ReadsMerged = 0;
-    i64 SectorsRead = 0;
-    TDuration TimeSpentReading;
-
-    i64 WritesCompleted = 0;
-    i64 WritesMerged = 0;
-    i64 SectorsWritten = 0;
-    TDuration TimeSpentWriting;
-
-    i64 IOCurrentlyInProgress = 0;
-    TDuration TimeSpentDoingIO;
-    TDuration WeightedTimeSpentDoingIO;
-
-    i64 DiscardsCompleted = 0;
-    i64 DiscardsMerged = 0;
-    i64 SectorsDiscarded = 0;
-    TDuration TimeSpentDiscarding;
-};
-
-TDiskStat ParseDiskStat(const TString& statLine);
 
 // See https://docs.kernel.org/block/stat.html for more info.
 struct TBlockDeviceStat
@@ -358,9 +354,11 @@ struct TBlockDeviceStat
 
 TBlockDeviceStat ParseBlockDeviceStat(const TString& statLine);
 
-//! DeviceName to stat info
-THashMap<TString, TDiskStat> GetDiskStats();
 std::optional<TBlockDeviceStat> GetBlockDeviceStat(const TString& deviceName);
+std::optional<TBlockDeviceStat> GetBlockDeviceStat(NFS::TDeviceId deviceId);
+
+NFS::TDeviceId GetBlockDeviceId(const TString& deviceName);
+TString GetBlockDeviceName(NFS::TDeviceId deviceId);
 std::vector<TString> ListDisks();
 
 ////////////////////////////////////////////////////////////////////////////////

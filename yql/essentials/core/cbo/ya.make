@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     cbo_optimizer_new.cpp
+    cbo_interesting_orderings.cpp
     cbo_hints.cpp
 )
 

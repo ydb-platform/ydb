@@ -10,6 +10,14 @@
 #include <yql/essentials/core/type_ann/type_ann_expr.h>
 #include <yql/essentials/core/services/yql_plan.h>
 #include <yql/essentials/core/services/yql_eval_params.h>
+#include <yql/essentials/core/langver/yql_core_langver.h>
+#include <yql/essentials/sql/sql.h>
+#include <yql/essentials/sql/v1/sql.h>
+#include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
+#include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>
+#include <yql/essentials/sql/v1/proto_parser/antlr4/proto_parser.h>
+#include <yql/essentials/sql/v1/proto_parser/antlr4_ansi/proto_parser.h>
+#include <yql/essentials/parser/pg_wrapper/interface/parser.h>
 #include <yql/essentials/utils/log/context.h>
 #include <yql/essentials/utils/log/profile.h>
 #include <yql/essentials/utils/limiting_allocator.h>
@@ -17,9 +25,11 @@
 #include <yql/essentials/core/extract_predicate/extract_predicate_dbg.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
+#include <yql/essentials/providers/common/gateways_utils/gateways_utils.h>
 #include <yql/essentials/providers/common/udf_resolve/yql_simple_udf_resolver.h>
 #include <yql/essentials/providers/common/udf_resolve/yql_outproc_udf_resolver.h>
 #include <yql/essentials/providers/common/udf_resolve/yql_udf_resolver_with_index.h>
+#include <yql/essentials/providers/common/udf_resolve/yql_udf_resolver_logger.h>
 #include <yql/essentials/providers/common/arrow_resolve/yql_simple_arrow_resolver.h>
 #include <yql/essentials/providers/common/config/yql_setting.h>
 #include <yql/essentials/core/qplayer/udf_resolver/yql_qplayer_udf_resolver.h>
@@ -31,6 +41,7 @@
 
 #include <util/stream/file.h>
 #include <util/stream/null.h>
+#include <util/string/cast.h>
 #include <util/string/join.h>
 #include <util/string/split.h>
 #include <util/generic/guid.h>
@@ -48,6 +59,7 @@ const size_t DEFAULT_AST_BUF_SIZE = 1024;
 const size_t DEFAULT_PLAN_BUF_SIZE = 1024;
 const TString FacadeComponent = "Facade";
 const TString SourceCodeLabel = "SourceCode";
+const TString LangVerLabel = "LangVer";
 const TString GatewaysLabel = "Gateways";
 const TString ParametersLabel = "Parameters";
 const TString TranslationLabel = "Translation";
@@ -158,6 +170,14 @@ void TProgramFactory::EnableRangeComputeFor() {
     EnableRangeComputeFor_ = true;
 }
 
+void TProgramFactory::SetLanguageVersion(TLangVersion version) {
+    LangVer_ = version;
+}
+
+void TProgramFactory::SetMaxLanguageVersion(TLangVersion version) {
+    MaxLangVer_ = version;
+}
+
 void TProgramFactory::AddUserDataTable(const TUserDataTable& userDataTable) {
     for (const auto& p : userDataTable) {
         if (!UserDataTable_.emplace(p).second) {
@@ -199,6 +219,10 @@ void TProgramFactory::SetArrowResolver(IArrowResolver::TPtr arrowResolver) {
     ArrowResolver_ = arrowResolver;
 }
 
+void TProgramFactory::SetUdfResolverLogfile(const TString& path) {
+    UdfResolverLogfile_ = path;
+}
+
 void TProgramFactory::SetUrlListerManager(IUrlListerManagerPtr urlListerManager) {
     UrlListerManager_ = std::move(urlListerManager);
 }
@@ -206,10 +230,11 @@ void TProgramFactory::SetUrlListerManager(IUrlListerManagerPtr urlListerManager)
 TProgramPtr TProgramFactory::Create(
         const TFile& file,
         const TString& sessionId,
-        const TQContext& qContext)
+        const TQContext& qContext,
+        TMaybe<TString> gatewaysForMerge)
 {
     TString sourceCode = TFileInput(file).ReadAll();
-    return Create(file.GetName(), sourceCode, sessionId, EHiddenMode::Disable, qContext);
+    return Create(file.GetName(), sourceCode, sessionId, EHiddenMode::Disable, qContext, gatewaysForMerge);
 }
 
 TProgramPtr TProgramFactory::Create(
@@ -217,7 +242,8 @@ TProgramPtr TProgramFactory::Create(
         const TString& sourceCode,
         const TString& sessionId,
         EHiddenMode hiddenMode,
-        const TQContext& qContext)
+        const TQContext& qContext,
+        TMaybe<TString> gatewaysForMerge)
 {
     auto randomProvider = UseRepeatableRandomAndTimeProviders_ && !UseUnrepeatableRandom && hiddenMode == EHiddenMode::Disable ?
         CreateDeterministicRandomProvider(1) : CreateDefaultRandomProvider();
@@ -228,14 +254,23 @@ TProgramPtr TProgramFactory::Create(
     TUdfIndexPackageSet::TPtr udfIndexPackageSet = (UdfIndexPackageSet_ && hiddenMode == EHiddenMode::Disable) ? UdfIndexPackageSet_->Clone() : nullptr;
     IModuleResolver::TPtr moduleResolver = Modules_ ? Modules_->CreateMutableChild() : nullptr;
     IUrlListerManagerPtr urlListerManager = UrlListerManager_ ? UrlListerManager_->Clone() : nullptr;
-    auto udfResolver = udfIndex ? NCommon::CreateUdfResolverWithIndex(udfIndex, UdfResolver_, FileStorage_) : UdfResolver_;
+
+    auto udfResolver = UdfResolver_;
+
+    if (UdfResolverLogfile_) {
+        udfResolver = NCommon::CreateUdfResolverDecoratorWithLogger(udfResolver, *UdfResolverLogfile_, sessionId);
+    }
+
+    if (udfIndex) {
+        udfResolver = NCommon::CreateUdfResolverWithIndex(udfIndex, udfResolver, FileStorage_);
+    }
 
     // make UserDataTable_ copy here
     return new TProgram(FunctionRegistry_, randomProvider, timeProvider, NextUniqueId_, DataProvidersInit_,
-        UserDataTable_, Credentials_, moduleResolver, urlListerManager,
+        LangVer_, MaxLangVer_, UserDataTable_, Credentials_, moduleResolver, urlListerManager,
         udfResolver, udfIndex, udfIndexPackageSet, FileStorage_, UrlPreprocessing_,
         GatewaysConfig_, filename, sourceCode, sessionId, Runner_, EnableRangeComputeFor_, ArrowResolver_, hiddenMode,
-        qContext);
+        qContext, gatewaysForMerge);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -247,6 +282,8 @@ TProgram::TProgram(
         const TIntrusivePtr<ITimeProvider> timeProvider,
         ui64 nextUniqueId,
         const TVector<TDataProviderInitializer>& dataProvidersInit,
+        TLangVersion langVer,
+        TLangVersion maxLangVer,
         const TUserDataTable& userDataTable,
         const TCredentials::TPtr& credentials,
         const IModuleResolver::TPtr& modules,
@@ -264,7 +301,8 @@ TProgram::TProgram(
         bool enableRangeComputeFor,
         const IArrowResolver::TPtr& arrowResolver,
         EHiddenMode hiddenMode,
-        const TQContext& qContext
+        const TQContext& qContext,
+        TMaybe<TString> gatewaysForMerge
     )
     : FunctionRegistry_(functionRegistry)
     , RandomProvider_(randomProvider)
@@ -273,6 +311,8 @@ TProgram::TProgram(
     , AstRoot_(nullptr)
     , Modules_(modules)
     , DataProvidersInit_(dataProvidersInit)
+    , LangVer_(langVer)
+    , MaxLangVer_(maxLangVer)
     , Credentials_(MakeIntrusive<NYql::TCredentials>(*credentials))
     , UrlListerManager_(urlListerManager)
     , UdfResolver_(udfResolver)
@@ -294,6 +334,7 @@ TProgram::TProgram(
     , ArrowResolver_(arrowResolver)
     , HiddenMode_(hiddenMode)
     , QContext_(qContext)
+    , GatewaysForMerge_(gatewaysForMerge)
 {
     if (SessionId_.empty()) {
         SessionId_ = CreateGuidAsString();
@@ -376,6 +417,17 @@ TProgram::TProgram(
             auto item = QContext_.GetReader()->Get({FacadeComponent, GatewaysLabel}).GetValueSync();
             if (item) {
                 YQL_ENSURE(LoadedGatewaysConfig_.ParseFromString(item->Value));
+                if (GatewaysForMerge_) {
+                    YQL_ENSURE(NProtoBuf::TextFormat::MergeFromString(*GatewaysForMerge_, &LoadedGatewaysConfig_));
+                }
+                THashMap<TString, TString> clusterMapping;
+                GetClusterMappingFromGateways(LoadedGatewaysConfig_, clusterMapping);
+                auto sqlFlags = ExtractSqlFlags(LoadedGatewaysConfig_);
+                if (auto modules = dynamic_cast<TModuleResolver*>(Modules_.get())) {
+                    modules->SetClusterMapping(clusterMapping);
+                    modules->SetSqlFlags(sqlFlags);
+                }
+
                 GatewaysConfig_ = &LoadedGatewaysConfig_;
             }
         } else if (QContext_.CanWrite() && GatewaysConfig_) {
@@ -472,12 +524,34 @@ IPlanBuilder& TProgram::GetPlanBuilder() {
 
 void TProgram::SetParametersYson(const TString& parameters) {
     Y_ENSURE(!TypeCtx_, "TypeCtx_ already created");
-    auto node = NYT::NodeFromYsonString(parameters);
-    YQL_ENSURE(node.IsMap());
-    for (const auto& x : node.AsMap()) {
-        YQL_ENSURE(x.second.IsMap());
-        YQL_ENSURE(x.second.HasKey("Data"));
-        YQL_ENSURE(x.second.Size() == 1);
+    NYT::TNode node;
+    try {
+        try {
+            node = NYT::NodeFromYsonString(parameters);
+        } catch (const std::exception& e) {
+            throw TErrorException(0) << "Invalid parameters: " << e.what();
+        }
+
+        if (!node.IsMap()) {
+            throw TErrorException(0) << "Invalid parameters: expected Map at first level";
+        }
+
+        for (const auto& x : node.AsMap()) {
+            if (!x.second.IsMap()) {
+                throw TErrorException(0) << "Invalid parameters: expected Map at second level";
+            }
+
+            if (!x.second.HasKey("Data")) {
+                throw TErrorException(0) << "Invalid parameters: expected Data key";
+            }
+
+            if (x.second.Size() != 1) {
+                throw TErrorException(0) << "Invalid parameters: expected Map with single element";
+            }
+        }
+    } catch (const std::exception& e) {
+        ParametersIssue_ = ExceptionToIssue(e);
+        return;
     }
 
     OperationOptions_.ParametersYson = node;
@@ -540,6 +614,14 @@ TString TProgram::GetSessionId() const {
     with_lock(SessionIdLock_) {
         return SessionId_;
     }
+}
+
+void TProgram::SetLanguageVersion(TLangVersion version) {
+    LangVer_ = version;
+}
+
+void TProgram::SetMaxLanguageVersion(TLangVersion version) {
+    MaxLangVer_ = version;
 }
 
 void TProgram::AddCredentials(const TVector<std::pair<TString, TCredential>>& credentials) {
@@ -637,7 +719,7 @@ void UpdateSqlFlagsFromQContext(const TQContext& qContext, THashSet<TString>& fl
 }
 
 void TProgram::HandleTranslationSettings(NSQLTranslation::TTranslationSettings& loadedSettings,
-    const NSQLTranslation::TTranslationSettings*& currentSettings)
+    NSQLTranslation::TTranslationSettings*& currentSettings)
 {
     if (QContext_.CanWrite()) {
         auto clusterMappingsNode = NYT::TNode::CreateMap();
@@ -677,12 +759,63 @@ void TProgram::HandleTranslationSettings(NSQLTranslation::TTranslationSettings& 
         loadedSettings.V0WarnAsError = NSQLTranslation::ISqlFeaturePolicy::Make(dataNode["V0WarnAsError"].AsBool());
         loadedSettings.DqDefaultAuto = NSQLTranslation::ISqlFeaturePolicy::Make(dataNode["DqDefaultAuto"].AsBool());
         loadedSettings.BlockDefaultAuto = NSQLTranslation::ISqlFeaturePolicy::Make(dataNode["BlockDefaultAuto"].AsBool());
+        loadedSettings.IsReplay = true;
         currentSettings = &loadedSettings;
     }
 }
 
+bool TProgram::CheckParameters() {
+    if (ParametersIssue_) {
+        if (!ExprCtx_) {
+            ExprCtx_.Reset(new TExprContext(NextUniqueId_));
+        }
+
+        ExprCtx_->AddError(*ParametersIssue_);
+        return false;
+    }
+
+    return true;
+}
+
+bool TProgram::ValidateLangVersion() {
+    if (QContext_.CanRead()) {
+        auto loaded = QContext_.GetReader()->Get({FacadeComponent, LangVerLabel}).GetValueSync();
+        if (loaded.Defined()) {
+            LangVer_ = FromString<TLangVersion>(loaded->Value);
+        } else {
+            LangVer_ = UnknownLangVersion;
+        }
+
+        return true;
+    }
+
+    if (QContext_.CanWrite()) {
+        QContext_.GetWriter()->Put({FacadeComponent, LangVerLabel}, ToString(LangVer_)).GetValueSync();
+    }
+
+    TMaybe<TIssue> issue;
+    auto ret = CheckLangVersion(LangVer_, MaxLangVer_, issue);
+    if (issue) {
+        if (!ExprCtx_) {
+            ExprCtx_.Reset(new TExprContext(NextUniqueId_));
+        }
+
+        ExprCtx_->AddError(*issue);
+    }
+
+    return ret;
+}
+
 bool TProgram::ParseYql() {
     YQL_PROFILE_FUNC(TRACE);
+    if (!ValidateLangVersion()) {
+        return false;
+    }
+
+    if (!CheckParameters()) {
+        return false;
+    }
+
     YQL_ENSURE(SourceSyntax_ == ESourceSyntax::Unknown);
     SourceSyntax_ = ESourceSyntax::Yql;
     SyntaxVersion_ = 1;
@@ -706,20 +839,45 @@ bool TProgram::ParseSql() {
 bool TProgram::ParseSql(const NSQLTranslation::TTranslationSettings& settings)
 {
     YQL_PROFILE_FUNC(TRACE);
+    if (!ValidateLangVersion()) {
+        return false;
+    }
+
+    if (!CheckParameters()) {
+        return false;
+    }
+
     YQL_ENSURE(SourceSyntax_ == ESourceSyntax::Unknown);
     SourceSyntax_ = ESourceSyntax::Sql;
     SyntaxVersion_ = settings.SyntaxVersion;
     NYql::TWarningRules warningRules;
     auto sourceCode = SourceCode_;
     HandleSourceCode(sourceCode);
-    const NSQLTranslation::TTranslationSettings* currentSettings = &settings;
+    NSQLTranslation::TTranslationSettings outerSettings = settings;
+    NSQLTranslation::TTranslationSettings* currentSettings = &outerSettings;
     NSQLTranslation::TTranslationSettings loadedSettings;
     loadedSettings.PgParser = settings.PgParser;
     if (QContext_) {
         HandleTranslationSettings(loadedSettings, currentSettings);
     }
 
-    return FillParseResult(SqlToYql(sourceCode, *currentSettings, &warningRules), &warningRules);
+    currentSettings->EmitReadsForExists = true;
+    currentSettings->LangVer = LangVer_;
+
+    NSQLTranslationV1::TLexers lexers;
+    lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
+    lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
+    NSQLTranslationV1::TParsers parsers;
+    parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory();
+    parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory();
+
+    NSQLTranslation::TTranslators translators(
+        nullptr,
+        NSQLTranslationV1::MakeTranslator(lexers, parsers),
+        NSQLTranslationPG::MakeTranslator()
+    );
+
+    return FillParseResult(SqlToYql(translators, sourceCode, *currentSettings, &warningRules), &warningRules);
 }
 
 bool TProgram::Compile(const TString& username, bool skipLibraries) {
@@ -877,7 +1035,6 @@ TProgram::TFutureStatus TProgram::LineageAsync(const TString& username, IOutputS
         .AddTypeAnnotation(TIssuesIds::CORE_TYPE_ANN, true)
         .AddPostTypeAnnotation()
         .Add(TExprOutputTransformer::Sync(ExprRoot_, traceOut), "ExprOutput")
-        .AddCheckExecution(false)
         .AddLineageOptimization(LineageStr_)
         .Add(TExprOutputTransformer::Sync(ExprRoot_, exprOut, withTypes), "AstOutput")
         .Build();
@@ -1059,7 +1216,7 @@ TProgram::TFutureStatus TProgram::OptimizeAsyncWithConfig(
         dataProviders = DataProviders_;
     }
 
-    for (const auto& dp : DataProviders_) {
+    for (const auto& dp : dataProviders) {
         if (!dp.RemoteClusterProvider || !dp.RemoteOptimize) {
             continue;
         }
@@ -1143,7 +1300,6 @@ TProgram::TFutureStatus TProgram::LineageAsyncWithConfig(
     pipeline.AddPostTypeAnnotation();
     pipelineConf.AfterTypeAnnotation(&pipeline);
 
-    pipeline.AddCheckExecution(false);
     pipeline.AddLineageOptimization(LineageStr_);
 
     Transformer_ = pipeline.Build();
@@ -1196,7 +1352,7 @@ TProgram::TFutureStatus TProgram::RunAsync(
         dataProviders = DataProviders_;
     }
 
-    for (const auto& dp : DataProviders_) {
+    for (const auto& dp : dataProviders) {
         if (!dp.RemoteClusterProvider || !dp.RemoteRun) {
             continue;
         }
@@ -1275,7 +1431,7 @@ TProgram::TFutureStatus TProgram::RunAsyncWithConfig(
         dataProviders = DataProviders_;
     }
 
-    for (const auto& dp : DataProviders_) {
+    for (const auto& dp : dataProviders) {
         if (!dp.RemoteClusterProvider || !dp.RemoteRun) {
             continue;
         }
@@ -1832,6 +1988,7 @@ TString TProgram::ResultsAsString() const {
 TTypeAnnotationContextPtr TProgram::BuildTypeAnnotationContext(const TString& username) {
     auto typeAnnotationContext = MakeIntrusive<TTypeAnnotationContext>();
 
+    typeAnnotationContext->LangVer = LangVer_;
     typeAnnotationContext->UserDataStorage = UserDataStorage_;
     typeAnnotationContext->Credentials = Credentials_;
     typeAnnotationContext->Modules = Modules_;

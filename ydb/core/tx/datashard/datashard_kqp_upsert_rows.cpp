@@ -88,8 +88,8 @@ public:
 
                 commands.emplace_back(std::move(command));
             }
-            Y_ABORT_UNLESS(dsApplyCtx.ShardTableStats);
-            Y_ABORT_UNLESS(dsApplyCtx.TaskTableStats);
+            Y_ENSURE(dsApplyCtx.ShardTableStats);
+            Y_ENSURE(dsApplyCtx.TaskTableStats);
 
             ui64 nUpdateRow = dsApplyCtx.ShardTableStats->NUpdateRow;
             ui64 updateRowBytes = dsApplyCtx.ShardTableStats->UpdateRowBytes;

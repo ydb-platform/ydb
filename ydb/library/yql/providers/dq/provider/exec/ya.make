@@ -11,7 +11,7 @@ PEERDIR(
     library/cpp/digest/md5
     library/cpp/threading/future
     ydb/public/lib/yson_value
-    ydb/public/sdk/cpp/client/ydb_driver
+    ydb/public/sdk/cpp/src/client/driver
     yql/essentials/core
     yql/essentials/core/dq_integration
     ydb/library/yql/dq/runtime

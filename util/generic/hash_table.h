@@ -1,7 +1,6 @@
 #pragma once
 
 #include "fwd.h"
-#include "mapfindptr.h"
 
 #include <util/memory/alloc.h>
 #include <util/system/compiler.h>
@@ -9,16 +8,11 @@
 #include <util/system/yassert.h>
 #include <util/str_stl.h>
 #include "yexception.h"
-#include "typetraits.h"
 #include "utility.h"
 
 #include <algorithm>
-#include <initializer_list>
 #include <memory>
 #include <tuple>
-#include <utility>
-
-#include <cstdlib>
 
 #include "hash_primes.h"
 
@@ -32,7 +26,7 @@ struct TSelect1st {
 template <class Value>
 struct __yhashtable_node {
     /** If the first bit is not set, then this is a pointer to the next node in
-     * the list of nodes for the current bucket. Otherwise this is a pointer of
+     * the list of nodes for the current bucket. Otherwise, this is a pointer of
      * type __yhashtable_node**, pointing back into the buckets array.
      *
      * This trick makes it possible to use only one node pointer in a hash table
@@ -348,7 +342,7 @@ private:
  * Note that there are no specializations for the case when only one or two
  * of the functors are empty as this is a case that's just way too rare.
  */
-template <class HashFcn, class ExtractKey, class EqualKey, class Alloc, bool IsEmpty = std::is_empty<HashFcn>::value&& std::is_empty<ExtractKey>::value&& std::is_empty<EqualKey>::value>
+template <class HashFcn, class ExtractKey, class EqualKey, class Alloc, bool IsEmpty = std::is_empty<HashFcn>::value && std::is_empty<ExtractKey>::value && std::is_empty<EqualKey>::value>
 class _yhashtable_base: public _allocator_base<Alloc> {
     using base_type = _allocator_base<Alloc>;
 

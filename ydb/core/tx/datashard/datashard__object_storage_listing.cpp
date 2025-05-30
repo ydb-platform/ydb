@@ -201,7 +201,7 @@ public:
             TDbTupleRef currentKey = iter->GetKey();
 
             // Check all columns that prefix columns are in the current key are equal to the specified values
-            Y_VERIFY(currentKey.Cells().size() > prefixColumns.GetCells().size());
+            Y_ENSURE(currentKey.Cells().size() > prefixColumns.GetCells().size());
             Y_VERIFY_DEBUG(
                 0 == CompareTypedCellVectors(
                         prefixColumns.GetCells().data(),
@@ -210,7 +210,7 @@ public:
                         prefixColumns.GetCells().size()),
                 "Unexpected out of range key returned from iterator");
 
-            Y_VERIFY(currentKey.Types[pathColPos].GetTypeId() == NScheme::NTypeIds::Utf8);
+            Y_ENSURE(currentKey.Types[pathColPos].GetTypeId() == NScheme::NTypeIds::Utf8);
             const TCell& pathCell = currentKey.Cells()[pathColPos];
             TString path = TString((const char*)pathCell.Data(), pathCell.Size());
 
@@ -240,8 +240,8 @@ public:
                 "\"" << path << "\"" << (isLeafPath ? " -> " + DbgPrintTuple(value, *AppData(ctx)->TypeRegistry) : TString()));
 
             if (isLeafPath) {
-                Y_VERIFY(value.Cells()[0].Size() >= 1);
-                Y_VERIFY(path == TStringBuf((const char*)value.Cells()[0].Data(), value.Cells()[0].Size()),
+                Y_ENSURE(value.Cells()[0].Size() >= 1);
+                Y_ENSURE(path == TStringBuf((const char*)value.Cells()[0].Data(), value.Cells()[0].Size()),
                     "Path column must be requested at pos 0");
 
                 TString newContentsRow = TSerializedCellVec::Serialize(value.Cells());
@@ -255,7 +255,7 @@ public:
                         for (size_t i = 0; i < filterColumnIds.size(); i++) {
                             auto &columnId = filterColumnIds[i];
 
-                            Y_VERIFY(columnId < value.Cells().size());
+                            Y_ENSURE(columnId < value.Cells().size());
 
                             NKikimrTxDataShard::TObjectStorageListingFilter_EMatchType matchType = matchTypes[i];
 
@@ -299,7 +299,7 @@ public:
                     for (size_t i = 0; i < filterColumnIds.size(); i++) {
                         auto &columnId = filterColumnIds[i];
 
-                        Y_VERIFY(columnId < value.Cells().size());
+                        Y_ENSURE(columnId < value.Cells().size());
 
                         NKikimrTxDataShard::TObjectStorageListingFilter_EMatchType matchType;
                         

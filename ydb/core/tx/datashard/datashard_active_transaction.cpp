@@ -45,7 +45,7 @@ TValidatedDataTx::TValidatedDataTx(TDataShard *self,
     ComputeTxSize();
     NActors::NMemory::TLabel<MemoryLabelValidatedDataTx>::Add(TxSize);
 
-    Y_ABORT_UNLESS(Tx.HasMiniKQL() || Tx.HasReadTableTransaction() || Tx.HasKqpTransaction(),
+    Y_ENSURE(Tx.HasMiniKQL() || Tx.HasReadTableTransaction() || Tx.HasKqpTransaction(),
              "One of the fields should be set: MiniKQL, ReadTableTransaction, KqpTransaction");
 
     if (Tx.GetLockTxId())
@@ -61,7 +61,7 @@ TValidatedDataTx::TValidatedDataTx(TDataShard *self,
         auto &tx = Tx.GetReadTableTransaction();
         if (self->TableInfos.contains(tx.GetTableId().GetTableId())) {
             auto* info = self->TableInfos[tx.GetTableId().GetTableId()].Get();
-            Y_ABORT_UNLESS(info, "Unexpected missing table info");
+            Y_ENSURE(info, "Unexpected missing table info");
             TSerializedTableRange range(tx.GetRange());
             EngineBay.GetKeyValidator().AddReadRange(TTableId(tx.GetTableId().GetOwnerId(),
                                             tx.GetTableId().GetTableId()),
@@ -179,7 +179,7 @@ TValidatedDataTx::TValidatedDataTx(TDataShard *self,
             return;
         }
     } else {
-        Y_ABORT_UNLESS(Tx.HasMiniKQL());
+        Y_ENSURE(Tx.HasMiniKQL());
         if (Tx.GetLlvmRuntime()) {
             LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
                         "Using LLVM runtime to execute transaction: " << StepTxId_.TxId);
@@ -224,7 +224,7 @@ ui32 TValidatedDataTx::ExtractKeys(bool allowErrors)
             return 0;
         }
     } else {
-        Y_ABORT_UNLESS(result == EResult::Ok, "Engine errors: %s", EngineBay.GetEngine()->GetErrors().data());
+        Y_ENSURE(result == EResult::Ok, "Engine errors: " << EngineBay.GetEngine()->GetErrors());
     }
     return KeysCount();
 }
@@ -283,7 +283,7 @@ bool TValidatedDataTx::CheckCancelled(ui64 tabletId) {
     Cancelled = Cancelled || gCancelTxFailPoint.Check(tabletId, GetTxId());
 
     if (Cancelled) {
-        LOG_NOTICE_S(*TlsActivationContext->ExecutorThread.ActorSystem, NKikimrServices::TX_DATASHARD, "CANCELLED TxId " << GetTxId() << " at " << tabletId);
+        LOG_NOTICE_S(*TActivationContext::ActorSystem(), NKikimrServices::TX_DATASHARD, "CANCELLED TxId " << GetTxId() << " at " << tabletId);
     }
     return Cancelled;
 }
@@ -328,8 +328,8 @@ TActiveTransaction::~TActiveTransaction()
 
 void TActiveTransaction::FillTxData(TValidatedDataTx::TPtr dataTx)
 {
-    Y_ABORT_UNLESS(!DataTx);
-    Y_ABORT_UNLESS(TxBody.empty() || HasVolatilePrepareFlag());
+    Y_ENSURE(!DataTx);
+    Y_ENSURE(TxBody.empty() || HasVolatilePrepareFlag());
 
     Target = dataTx->GetSource();
     DataTx = dataTx;
@@ -348,8 +348,8 @@ void TActiveTransaction::FillTxData(TDataShard *self,
 {
     UntrackMemory();
 
-    Y_ABORT_UNLESS(!DataTx);
-    Y_ABORT_UNLESS(TxBody.empty());
+    Y_ENSURE(!DataTx);
+    Y_ENSURE(TxBody.empty());
 
     Target = target;
     TxBody = txBody;
@@ -359,9 +359,9 @@ void TActiveTransaction::FillTxData(TDataShard *self,
     }
     ArtifactFlags = artifactFlags;
     if (IsDataTx() || IsReadTable()) {
-        Y_ABORT_UNLESS(!DataTx);
+        Y_ENSURE(!DataTx);
         BuildDataTx(self, txc, ctx);
-        Y_ABORT_UNLESS(DataTx->Ready());
+        Y_ENSURE(DataTx->Ready());
 
         if (DataTx->HasStreamResponse())
             SetStreamSink(DataTx->GetSink());
@@ -384,19 +384,19 @@ void TActiveTransaction::FillVolatileTxData(TDataShard *self,
 {
     UntrackMemory();
 
-    Y_ABORT_UNLESS(!DataTx);
-    Y_ABORT_UNLESS(!TxBody.empty());
+    Y_ENSURE(!DataTx);
+    Y_ENSURE(!TxBody.empty());
 
     if (IsDataTx() || IsReadTable()) {
         BuildDataTx(self, txc, ctx);
-        Y_ABORT_UNLESS(DataTx->Ready());
+        Y_ENSURE(DataTx->Ready());
 
         if (DataTx->HasStreamResponse())
             SetStreamSink(DataTx->GetSink());
     } else if (IsSnapshotTx()) {
         BuildSnapshotTx();
     } else {
-        Y_ABORT("Unexpected FillVolatileTxData call");
+        Y_ENSURE(false, "Unexpected FillVolatileTxData call");
     }
 
     TrackMemory();
@@ -406,9 +406,9 @@ TValidatedDataTx::TPtr TActiveTransaction::BuildDataTx(TDataShard *self,
                                                        TTransactionContext &txc,
                                                        const TActorContext &ctx)
 {
-    Y_ABORT_UNLESS(IsDataTx() || IsReadTable());
+    Y_ENSURE(IsDataTx() || IsReadTable());
     if (!DataTx) {
-        Y_ABORT_UNLESS(TxBody);
+        Y_ENSURE(TxBody);
         DataTx = std::make_shared<TValidatedDataTx>(self, txc, ctx, GetStepOrder(),
                                                     GetReceivedAt(), TxBody, IsMvccSnapshotRead());
         if (DataTx->HasStreamResponse())
@@ -419,7 +419,7 @@ TValidatedDataTx::TPtr TActiveTransaction::BuildDataTx(TDataShard *self,
 
 bool TActiveTransaction::BuildSchemeTx()
 {
-    Y_ABORT_UNLESS(TxBody);
+    Y_ENSURE(TxBody);
     SchemeTx.Reset(new NKikimrTxDataShard::TFlatSchemeTransaction);
     bool res = SchemeTx->ParseFromArray(TxBody.data(), TxBody.size());
     if (!res)
@@ -491,7 +491,7 @@ bool TActiveTransaction::BuildSchemeTx()
 
 bool TActiveTransaction::BuildSnapshotTx()
 {
-    Y_ABORT_UNLESS(TxBody);
+    Y_ENSURE(TxBody);
     SnapshotTx.Reset(new NKikimrTxDataShard::TSnapshotTransaction);
     if (!SnapshotTx->ParseFromArray(TxBody.data(), TxBody.size())) {
         return false;
@@ -516,7 +516,7 @@ bool TDistributedEraseTx::TryParse(const TString& serialized) {
 }
 
 bool TActiveTransaction::BuildDistributedEraseTx() {
-    Y_ABORT_UNLESS(TxBody);
+    Y_ENSURE(TxBody);
     DistributedEraseTx.Reset(new TDistributedEraseTx);
     return DistributedEraseTx->TryParse(TxBody);
 }
@@ -532,7 +532,7 @@ bool TCommitWritesTx::TryParse(const TString& serialized) {
 }
 
 bool TActiveTransaction::BuildCommitWritesTx() {
-    Y_ABORT_UNLESS(TxBody);
+    Y_ENSURE(TxBody);
     CommitWritesTx.Reset(new TCommitWritesTx);
     return CommitWritesTx->TryParse(TxBody);
 }
@@ -636,7 +636,7 @@ ERestoreDataStatus TActiveTransaction::RestoreTxData(
             return ERestoreDataStatus::Restart;
         }
     } else {
-        Y_ABORT_UNLESS(TxBody);
+        Y_ENSURE(TxBody);
     }
 
     TrackMemory();
@@ -665,9 +665,9 @@ ERestoreDataStatus TActiveTransaction::RestoreTxData(
 
 void TActiveTransaction::FinalizeDataTxPlan()
 {
-    Y_ABORT_UNLESS(IsDataTx());
-    Y_ABORT_UNLESS(!IsImmediate());
-    Y_ABORT_UNLESS(!IsKqpScanTransaction());
+    Y_ENSURE(IsDataTx());
+    Y_ENSURE(!IsImmediate());
+    Y_ENSURE(!IsKqpScanTransaction());
 
     TVector<EExecutionUnitKind> plan;
 
@@ -694,13 +694,13 @@ void TActiveTransaction::FinalizeDataTxPlan()
 
 void TActiveTransaction::BuildExecutionPlan(bool loaded)
 {
-    Y_ABORT_UNLESS(GetExecutionPlan().empty());
-    Y_ABORT_UNLESS(!IsKqpScanTransaction());
+    Y_ENSURE(GetExecutionPlan().empty());
+    Y_ENSURE(!IsKqpScanTransaction());
 
     TVector<EExecutionUnitKind> plan;
     if (IsDataTx()) {
         if (IsImmediate()) {
-            Y_ABORT_UNLESS(!loaded);
+            Y_ENSURE(!loaded);
             plan.push_back(EExecutionUnitKind::CheckDataTx);
             plan.push_back(EExecutionUnitKind::BuildAndWaitDependencies);
             if (IsKqpDataTransaction()) {
@@ -711,16 +711,16 @@ void TActiveTransaction::BuildExecutionPlan(bool loaded)
             plan.push_back(EExecutionUnitKind::FinishPropose);
             plan.push_back(EExecutionUnitKind::CompletedOperations);
         } else if (HasVolatilePrepareFlag()) {
-            Y_ABORT_UNLESS(!loaded);
+            Y_ENSURE(!loaded);
             plan.push_back(EExecutionUnitKind::CheckDataTx);
             plan.push_back(EExecutionUnitKind::StoreDataTx); // note: stores in memory
             plan.push_back(EExecutionUnitKind::FinishPropose);
-            Y_ABORT_UNLESS(!GetStep());
+            Y_ENSURE(!GetStep());
             plan.push_back(EExecutionUnitKind::WaitForPlan);
             plan.push_back(EExecutionUnitKind::PlanQueue);
             plan.push_back(EExecutionUnitKind::LoadTxDetails); // note: reloads from memory
             plan.push_back(EExecutionUnitKind::BuildAndWaitDependencies);
-            Y_ABORT_UNLESS(IsKqpDataTransaction());
+            Y_ENSURE(IsKqpDataTransaction());
             // Note: execute will also prepare and send readsets
             plan.push_back(EExecutionUnitKind::ExecuteKqpDataTx);
             // Note: it is important that plan here is the same as regular
@@ -809,7 +809,7 @@ void TActiveTransaction::BuildExecutionPlan(bool loaded)
         plan.push_back(EExecutionUnitKind::CompletedOperations);
     } else if (IsCommitWritesTx()) {
         if (IsImmediate()) {
-            Y_ABORT_UNLESS(!loaded);
+            Y_ENSURE(!loaded);
             plan.push_back(EExecutionUnitKind::CheckCommitWritesTx);
             plan.push_back(EExecutionUnitKind::BuildAndWaitDependencies);
             plan.push_back(EExecutionUnitKind::ExecuteCommitWritesTx);
@@ -869,7 +869,7 @@ void TActiveTransaction::BuildExecutionPlan(bool loaded)
         plan.push_back(EExecutionUnitKind::CompleteOperation);
         plan.push_back(EExecutionUnitKind::CompletedOperations);
     } else {
-        Y_FAIL_S("unknown operation kind " << GetKind());
+        Y_ENSURE(false, "unknown operation kind " << GetKind());
     }
 
     RewriteExecutionPlan(plan);

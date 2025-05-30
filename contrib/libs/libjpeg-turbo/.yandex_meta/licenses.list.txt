@@ -97,13 +97,6 @@ libjpeg-turbo is covered by three compatible BSD-style open source licenses:
  * POSSIBILITY OF SUCH DAMAGE.
 
 
-====================Beerware====================
- * "THE BEER-WARE LICENSE" (Revision 42):
- * <phk@FreeBSD.org> wrote this file.  As long as you retain this notice you
- * can do whatever you want with this stuff. If we meet some day, and you think
- * this stuff is worth it, you can buy me a beer in return.   Poul-Henning Kamp
-
-
 ====================COPYRIGHT====================
    * "How to Optimize for the Pentium Processors", Copyright (c) 1996, 1997 by
    * Agner Fog.  This code assumes we are on a two's complement machine.
@@ -767,33 +760,12 @@ libjpeg-turbo is covered by three compatible BSD-style open source licenses:
 
 
 ====================COPYRIGHT====================
- * Copyright (C)2009-2014, 2017-2019, 2022 D. R. Commander.
- *                                         All Rights Reserved.
-
-
-====================COPYRIGHT====================
  * Copyright (C)2009-2015, 2017, 2020-2021 D. R. Commander.
  *                                         All Rights Reserved.
 
 
 ====================COPYRIGHT====================
- * Copyright (C)2011, 2019 D. R. Commander.  All Rights Reserved.
-
-
-====================COPYRIGHT====================
  * Copyright (C)2011, 2022 D. R. Commander.  All Rights Reserved.
-
-
-====================COPYRIGHT====================
- * Copyright (C)2016, 2018-2019, 2022 D. R. Commander.  All Rights Reserved.
-
-
-====================COPYRIGHT====================
- * Copyright (C)2018 D. R. Commander.  All Rights Reserved.
-
-
-====================COPYRIGHT====================
- * Copyright (C)2018, D. R. Commander.  All Rights Reserved.
 
 
 ====================COPYRIGHT====================
@@ -974,6 +946,11 @@ libjpeg-turbo is covered by three compatible BSD-style open source licenses:
 ====================COPYRIGHT====================
 ; Copyright 2009 Pierre Ossman <ossman@cendio.se> for Cendio AB
 ; Copyright (C) 2016, 2020, D. R. Commander.
+
+
+====================COPYRIGHT====================
+; Copyright 2009 Pierre Ossman <ossman@cendio.se> for Cendio AB
+; Copyright (C) 2018, D. R. Commander.
 
 
 ====================COPYRIGHT====================
@@ -1358,12 +1335,6 @@ In plain English:
 ** copyright notice and this permission notice appear in supporting
 ** documentation.  This software is provided "as is" without express or
 ** implied warranty.
-
-
-====================Public-Domain====================
- * The algorithm is due to Ron Rivest.  This code was
- * written by Colin Plumb in 1993, no copyright is claimed.
- * This code is in the public domain; do with it what you wish.
 
 
 ====================Zlib====================

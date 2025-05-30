@@ -3,6 +3,7 @@
 #include "propose_tx.h"
 
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 
 namespace NKikimr::NColumnShard {
 
@@ -57,7 +58,7 @@ namespace NKikimr::NColumnShard {
             TBlobGroupSelector dsGroupSelector(owner.Info());
             NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);
 
-            auto pathExists = [&](ui64 pathId) {
+            auto pathExists = [&](TInternalPathId pathId) {
                 return owner.TablesManager.HasTable(pathId);
             };
 

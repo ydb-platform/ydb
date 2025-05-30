@@ -35,9 +35,6 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
             TStepEntry* const StepRef;
             // The current list of transactions
             TVector<TTx> Transactions;
-            // An updated list of transactions (after last sent to tablet)
-            // We may need to send acks to the updated AckTo actor
-            TVector<TTx> OutOfOrder;
 
             TStep(TStepEntry* stepRef)
                 : StepRef(stepRef)
@@ -60,8 +57,7 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
             return State == EState::Init && Queue.empty() && Watchers.empty();
         }
 
-        void MergeOutOfOrder(TStep* sx);
-        void MergeToOutOfOrder(TStep* sx, TVector<TTx>&& update);
+        void MergeOutOfOrder(TStep* sx, TVector<TTx>&& update);
     };
 
     struct TStepEntry {
@@ -116,7 +112,7 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
             x->SetTxId(tx.TxId);
             if (tx.Moderator)
                 x->SetModerator(tx.Moderator);
-            ActorIdToProto(tx.AckTo, x->MutableAckTo());
+            ActorIdToProto(TActorId(), x->MutableAckTo());
             LOG_DEBUG(ctx, NKikimrServices::TX_MEDIATOR_PRIVATE, "Send from %" PRIu64 " to tablet %" PRIu64 ", step# %"
                 PRIu64 ", txid# %" PRIu64 ", marker M5" PRIu64, Mediator, tabletId, tabletStep->StepRef->Step, tx.TxId);
         }
@@ -173,7 +169,7 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
             for (const TActorId& x : TimecastWatches) {
                 LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TABLETQUEUE, "Actor# " << ctx.SelfID.ToString()
                     << " Mediator# " << Mediator << " SEND to# " << x.ToString() << " " << evx.ToString());
-                ctx.ExecutorThread.Send(new IEventHandle(TEvMediatorTimecast::TEvUpdate::EventType, sendFlags, x, ctx.SelfID, data, 0));
+                ctx.Send(new IEventHandle(TEvMediatorTimecast::TEvUpdate::EventType, sendFlags, x, ctx.SelfID, data, 0));
             }
         }
     }
@@ -230,19 +226,19 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
         TTabletEntry* tabletEntry = Tablets.FindPtr(tabletId);
         if (tabletEntry == nullptr) {
             // We don't have a tablet entry, which means no steps inflight
-            AckOoO(tabletId, step, msg->Transactions, ctx);
+            AckTransactions(tabletId, step, msg->Transactions, ctx);
             return;
         }
 
         auto it = tabletEntry->Queue.find(step);
         if (it == tabletEntry->Queue.end()) {
             // This step is already confirmed, reply immediately
-            AckOoO(tabletId, step, msg->Transactions, ctx);
+            AckTransactions(tabletId, step, msg->Transactions, ctx);
             return;
         }
 
         // Save possibly updated AckTo for later
-        tabletEntry->MergeToOutOfOrder(&it->second, std::move(msg->Transactions));
+        tabletEntry->MergeOutOfOrder(&it->second, std::move(msg->Transactions));
     }
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx) {
@@ -264,8 +260,7 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
                     auto it = tabletEntry->Queue.begin();
                     while (it != tabletEntry->Queue.end()) {
                         TTabletEntry::TStep* sx = &it->second;
-                        tabletEntry->MergeOutOfOrder(sx);
-                        AckOoO(tabletId, sx->StepRef->Step, sx->Transactions, ctx);
+                        AckTransactions(tabletId, sx->StepRef->Step, sx->Transactions, ctx);
                         // Note: will also auto-remove itself from sx->StepRef->TabletSteps
                         it = tabletEntry->Queue.erase(it);
                     }
@@ -288,7 +283,6 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
         tabletEntry->State = TTabletEntry::EState::Connected;
         for (auto& pr : tabletEntry->Queue) {
             TTabletEntry::TStep* sx = &pr.second;
-            tabletEntry->MergeOutOfOrder(sx);
             SendToTablet(sx, tabletId, ctx);
         }
     }
@@ -364,10 +358,14 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
         }
 
         TTabletEntry::TStep* sx = &it->second;
-        if (!sx->OutOfOrder.empty()) {
-            // Confirm out-of-order requests
-            AckOoO(tabletId, step, sx->OutOfOrder, ctx);
-        }
+        // Note: in the past we didn't ack all transactions (except out-of-order
+        // requests when coordinator reconnected), since they are acknowledged
+        // by tablets. However, events from tablets to coordinator may be lost,
+        // and those transactions will never be acknowledged until the network
+        // between coordinator and mediator also flaps. In the future we might
+        // want to avoid acking transactions by tablets directly, so it doesn't
+        // introduce unnecessary interconnect chatter to single nodes.
+        AckTransactions(tabletId, step, sx->Transactions, ctx);
         // Note: will also auto-remove itself from sx->StepRef->TabletSteps
         tabletEntry->Queue.erase(it);
 
@@ -392,7 +390,7 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
         LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TABLETQUEUE, "Actor# " << ctx.SelfID.ToString()
             << " Mediator# " << Mediator << " SEND to# " << source.ToString() << " " << evx.ToString());
         const ui32 sendFlags = IEventHandle::FlagTrackDelivery;
-        ctx.ExecutorThread.Send(new IEventHandle(TEvMediatorTimecast::TEvUpdate::EventType, sendFlags, source, ctx.SelfID, data, 0));
+        ctx.Send(new IEventHandle(TEvMediatorTimecast::TEvUpdate::EventType, sendFlags, source, ctx.SelfID, data, 0));
     }
 
     void Handle(TEvents::TEvUndelivered::TPtr& ev, const TActorContext& ctx) {
@@ -402,7 +400,7 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
         TimecastWatches.erase(ev->Sender);
     }
 
-    void AckOoO(TTabletId tablet, TStepId step, const TVector<TTx>& transactions, const TActorContext& ctx) {
+    void AckTransactions(TTabletId tablet, TStepId step, const TVector<TTx>& transactions, const TActorContext& ctx) {
         TMap<TActorId, std::unique_ptr<TEvTxProcessing::TEvPlanStepAck>> acks;
         for (const TTx &tx : transactions) {
             auto& ack = acks[tx.AckTo];
@@ -487,7 +485,7 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
             ev->Rewrite(TEvInterconnect::EvForward, watcher->SessionId);
         }
 
-        ctx.ExecutorThread.Send(ev.release());
+        ctx.Send(ev.release());
     }
 
     void SendGranularLatestStepUpdate(const TActorContext& ctx) {
@@ -758,26 +756,6 @@ private:
     THashMap<TActorId, TGranularServer> GranularServers;
 };
 
-/**
- * Returns true when all transactions of x are present in superset
- */
-static bool IsSubsetOf(const TVector<TTx>& x, const TVector<TTx>& superset) {
-    auto it = x.begin();
-    auto itSuperset = superset.begin();
-    while (it != x.end()) {
-        // Position superset to the lowerbound of the current TxId
-        while (itSuperset != superset.end() && itSuperset->TxId < it->TxId) {
-            ++itSuperset;
-        }
-        if (itSuperset == superset.end() || it->TxId != itSuperset->TxId) {
-            return false;
-        }
-        ++it;
-        ++itSuperset;
-    }
-    return true;
-}
-
 static TString DumpTxIds(const TVector<TTx>& v) {
     TStringBuilder stream;
     stream << '{';
@@ -791,31 +769,38 @@ static TString DumpTxIds(const TVector<TTx>& v) {
     return std::move(stream);
 }
 
-void TTxMediatorTabletQueue::TTabletEntry::MergeOutOfOrder(TStep* sx) {
-    if (!sx->OutOfOrder.empty()) {
-        // Since OutOfOrder is an update it might be missing some lost or
-        // already acknowledged transactions that we don't have to resend.
-        // We have previously validated that OutOfOrder ⊂ Transactions
-        sx->Transactions = std::move(sx->OutOfOrder);
+void TTxMediatorTabletQueue::TTabletEntry::MergeOutOfOrder(TStep* sx, TVector<TTx>&& update) {
+    // Step transactions are a union from multiple coordinators, and the update
+    // is currently unacknowledged transactions from a single coordinator.
+    // The update must be a subset of the full transaction list and cannot
+    // introduce new transactions out of thin air.
+    auto dst = sx->Transactions.begin();
+    auto src = update.begin();
+    bool subset = true;
+    while (dst != sx->Transactions.end() && src != update.end()) {
+        if (dst->TxId < src->TxId) {
+            ++dst;
+            continue;
+        }
+        if (Y_UNLIKELY(dst->TxId != src->TxId)) {
+            subset = false;
+            ++src;
+            continue;
+        }
+        dst->AckTo = src->AckTo;
+        ++dst;
+        ++src;
     }
-}
-
-void TTxMediatorTabletQueue::TTabletEntry::MergeToOutOfOrder(TStep* sx, TVector<TTx>&& update) {
-    // Update might be missing some lost or already acknowledged transactions
-    // that we don't have to resend later. We validate that update is a subset
-    // of a previously received step.
-    const TVector<TTx>& prev = sx->OutOfOrder.empty() ? sx->Transactions : sx->OutOfOrder;
-    if (Y_UNLIKELY(!IsSubsetOf(update, prev))) {
-        // Coordinator shouldn't add new transaction to existing steps, so we
-        // complain. However, even if that happens, it's ok for us to send
-        // those transactions later, or never.
+    if (Y_UNLIKELY(!subset) || Y_UNLIKELY(src != update.end())) {
+        // Coordinators shouldn't add new transactions to existing steps, so we
+        // complain. Even if that happens, however, it's ok for us to send
+        // those transactions later, or never. Currently we don't.
         LOG_CRIT_S(*TlsActivationContext, NKikimrServices::TX_MEDIATOR_TABLETQUEUE,
             "Received out-of-order step " << sx->StepRef->Step
             << " for tablet " << TabletId
             << " with transactions " << DumpTxIds(update)
-            << " which are not a subset of previously received " << DumpTxIds(prev));
+            << " which are not a subset of previously received " << DumpTxIds(sx->Transactions));
     }
-    sx->OutOfOrder = std::move(update);
 }
 
 }

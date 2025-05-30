@@ -194,6 +194,7 @@ public:
 
     TBlobRange RestoreRange(const TUnifiedBlobId& blobId) const;
     bool CheckBlob(const TUnifiedBlobId& blobId) const;
+    TString GetBlobData(const TString& blob) const;
 };
 
 struct TBlobRange {
@@ -210,6 +211,12 @@ struct TBlobRange {
     }
 
     TString GetData(const TString& blobData) const;
+
+    TBlobRange ExtendRange(const ui32 size) const {
+        return TBlobRange(BlobId, Offset, size);
+    }
+
+    TBlobRange BuildSubset(const ui32 offset, const ui32 size) const;
 
     bool operator<(const TBlobRange& br) const {
         if (BlobId != br.BlobId) {

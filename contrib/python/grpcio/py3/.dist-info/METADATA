@@ -22,7 +22,7 @@ Requires-Python: >=3.7
 Description-Content-Type: text/x-rst
 License-File: LICENSE
 Provides-Extra: protobuf
-Requires-Dist: grpcio-tools (>=1.54.3) ; extra == 'protobuf'
+Requires-Dist: grpcio-tools >=1.54.3 ; extra == 'protobuf'
 
 gRPC Python
 ===========

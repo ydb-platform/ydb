@@ -8,8 +8,9 @@
 #include <ydb/public/lib/ydb_cli/common/csv_parser.h>
 #include <ydb/public/lib/ydb_cli/common/format.h>
 #include <ydb/public/lib/ydb_cli/common/parameter_stream.h>
-#include <ydb/public/sdk/cpp/client/ydb_params/params.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/params/params.h>
 #include <ydb/public/lib/json_value/ydb_json_value.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/query.h>
 
 namespace NYdb {
 namespace NConsoleClient {
@@ -31,7 +32,7 @@ protected:
     void AddLegacyBatchParametersOptions(TClientCommand::TConfig& config);
     void AddDefaultParamFormats(TClientCommand::TConfig& config);
     void AddLegacyStdinFormats(TClientCommand::TConfig& config);
-    bool GetNextParams(const TDriver& driver, const TString& queryText, THolder<TParamsBuilder>& paramBuilder);
+    bool GetNextParams(const TDriver& driver, const TString& queryText, THolder<TParamsBuilder>& paramBuilder, bool verbose);
     
     THashMap<EDataFormat, TString>& GetInputFormatDescriptions() override;
 
@@ -40,13 +41,13 @@ private:
     static void ParseJson(TString&& str, std::map<TString, TString>& result);
     void ApplyJsonParams(const std::map<TString, TString>& params, TParamsBuilder& paramBuilder);
     void SetParamsInput(IInputStream* input);
-    void SetParamsInputFromFile(TString& file);
-    void SetParamsInputFromStdin();
-    void GetParamTypes(const TDriver& driver, const TString& queryText);
+    void SetParamsInputFromFile(TString& file, bool verbose);
+    void SetParamsInputFromStdin(bool verbose);
+    void InitParamTypes(const TDriver& driver, const TString& queryText, bool verbose);
 
     TMaybe<TString> ReadData();
 
-    std::map<TString, TType> ParamTypes;
+    std::map<std::string, TType> ParamTypes;
     TVector<TString> Header;
     TString Columns;
     THolder<TFileInput> InputFileHolder;
@@ -69,6 +70,7 @@ protected:
     TDuration BatchMaxDelay;
     THolder<NScripting::TExplainYqlResult> ValidateResult;
     bool ReadingSomethingFromStdin = false;
+    NQuery::ESyntax SyntaxType = NQuery::ESyntax::YqlV1;
 };
 
 }

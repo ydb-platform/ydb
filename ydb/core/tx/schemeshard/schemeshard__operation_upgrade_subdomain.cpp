@@ -309,6 +309,7 @@ public:
             case NKikimrSchemeOp::EPathType::EPathTypeExternalDataSource:
             case NKikimrSchemeOp::EPathType::EPathTypeView:
             case NKikimrSchemeOp::EPathType::EPathTypeResourcePool:
+            case NKikimrSchemeOp::EPathType::EPathTypeSysView:
                 Y_ABORT_UNLESS(!path.Base()->IsRoot());
                 //no shards
                 break;
@@ -1255,7 +1256,7 @@ public:
             context.OnComplete.Dependence(otherTxId, OperationId.GetTxId());
         }
 
-        path.DomainInfo()->AddInternalShards(txState);
+        path.DomainInfo()->AddInternalShards(txState, context.SS);
         path.Base()->IncShardsInside();
 
         context.OnComplete.ActivateTx(OperationId);

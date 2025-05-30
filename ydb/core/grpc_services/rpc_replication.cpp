@@ -67,10 +67,15 @@ private:
 
         switch (record.GetStatus()) {
             case NKikimrScheme::StatusSuccess:
-                if (desc.GetSelf().GetPathType() != NKikimrSchemeOp::EPathTypeReplication) {
-                    auto issue = NYql::TIssue("Is not a replication");
-                    Request_->RaiseIssue(issue);
-                    return Reply(Ydb::StatusIds::SCHEME_ERROR, ctx);
+                switch (desc.GetSelf().GetPathType()) {
+                    case NKikimrSchemeOp::EPathTypeReplication:
+                    case NKikimrSchemeOp::EPathTypeTransfer:
+                        break;
+                    default: {
+                        auto issue = NYql::TIssue("Is not a replication");
+                        Request_->RaiseIssue(issue);
+                        return Reply(Ydb::StatusIds::SCHEME_ERROR, ctx);
+                    }
                 }
 
                 ConvertDirectoryEntry(desc.GetSelf(), Result.mutable_self(), true);
@@ -131,6 +136,7 @@ private:
         }
 
         ConvertConnectionParams(record.GetConnectionParams(), *Result.mutable_connection_params());
+        ConvertConsistencySettings(record.GetConsistencySettings(), Result);
         ConvertState(*record.MutableState(), Result);
 
         for (const auto& target : record.GetTargets()) {
@@ -172,6 +178,26 @@ private:
         to.set_token_secret_name(from.GetTokenSecretName());
     }
 
+    static void ConvertConsistencySettings(const NKikimrReplication::TConsistencySettings& from, Ydb::Replication::DescribeReplicationResult& to) {
+        switch (from.GetLevelCase()) {
+        case NKikimrReplication::TConsistencySettings::kRow:
+            return ConvertRowConsistencySettings(from.GetRow(), *to.mutable_row_consistency());
+        case NKikimrReplication::TConsistencySettings::kGlobal:
+            return ConvertGlobalConsistencySettings(from.GetGlobal(), *to.mutable_global_consistency());
+        default:
+            break;
+        }
+    }
+
+    static void ConvertRowConsistencySettings(const NKikimrReplication::TConsistencySettings::TRowConsistency&, Ydb::Replication::ConsistencyLevelRow&) {
+        // nop
+    }
+
+    static void ConvertGlobalConsistencySettings(const NKikimrReplication::TConsistencySettings::TGlobalConsistency& from, Ydb::Replication::ConsistencyLevelGlobal& to) {
+        *to.mutable_commit_interval() = google::protobuf::util::TimeUtil::MillisecondsToDuration(
+            from.GetCommitIntervalMilliSeconds());
+    }
+
     static void ConvertItem(const NKikimrReplication::TReplicationConfig::TTargetSpecific::TTarget& from, Ydb::Replication::DescribeReplicationResult::Item& to) {
         to.set_id(from.GetId());
         to.set_source_path(from.GetSrcPath());
@@ -206,6 +232,9 @@ private:
         case NKikimrReplication::TReplicationState::kDone:
             to.mutable_done();
             break;
+        case NKikimrReplication::TReplicationState::kPaused:
+            to.mutable_paused();
+            break;
         default:
             break;
         }
@@ -218,6 +247,13 @@ private:
 
 void DoDescribeReplication(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
     f.RegisterActor(new TDescribeReplicationRPC(p.release()));
+}
+
+using TEvDescribeReplicationRequest = TGrpcRequestOperationCall<Ydb::Replication::DescribeReplicationRequest, Ydb::Replication::DescribeReplicationResponse>;
+
+template<>
+IActor* TEvDescribeReplicationRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {
+    return new TDescribeReplicationRPC(msg);
 }
 
 }

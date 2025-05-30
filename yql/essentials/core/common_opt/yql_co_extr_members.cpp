@@ -176,42 +176,55 @@ TExprNode::TPtr ApplyExtractMembersToFilterNullMembers(const TExprNode::TPtr& no
         .Done().Ptr();
 }
 
-TExprNode::TPtr ApplyExtractMembersToSort(const TExprNode::TPtr& node, const TExprNode::TPtr& members, const TParentsMap& parentsMap, TExprContext& ctx, TStringBuf logSuffix) {
-    TCoSortBase sort(node);
+TExprNode::TPtr ApplyExtractMembersToSortOrPruneKeys(const TExprNode::TPtr& node, const TExprNode::TPtr& members, const TParentsMap& parentsMap, TExprContext& ctx, TStringBuf logSuffix) {
+    auto nodeIsPruneKeys = node->IsCallable("PruneKeys") || node->IsCallable("PruneAdjacentKeys");
+    auto nodeIsSort = !nodeIsPruneKeys;
+    auto keyExtractorLambdaIndex = nodeIsSort ? 2 : 1;
+
+    TCoLambda keyExtractorLambda(node->ChildPtr(keyExtractorLambdaIndex));
+
     TSet<TStringBuf> extractFields;
     for (const auto& x : members->ChildrenList()) {
         extractFields.emplace(x->Content());
     }
-    TSet<TStringBuf> sortKeys;
-    bool fieldSubset = HaveFieldsSubset(sort.KeySelectorLambda().Body().Ptr(), sort.KeySelectorLambda().Args().Arg(0).Ref(), sortKeys, parentsMap);
+    TSet<TStringBuf> usedKeys;
+    bool fieldSubset = HaveFieldsSubset(keyExtractorLambda.Body().Ptr(), keyExtractorLambda.Args().Arg(0).Ref(), usedKeys, parentsMap);
     bool allExist = true;
-    if (!sortKeys.empty()) {
-        for (const auto& key : sortKeys) {
+    if (!usedKeys.empty()) {
+        for (const auto& key : usedKeys) {
             auto ret = extractFields.emplace(key);
             if (ret.second) {
                 allExist = false;
             }
         }
     }
-    if (allExist && sortKeys.size() == extractFields.size()) {
+    if (allExist && usedKeys.size() == extractFields.size()) {
         YQL_CLOG(DEBUG, Core) << "Force `fieldSubset` for ExtractMembers over " << node->Content();
         fieldSubset = true;
     }
     if (fieldSubset && allExist) {
         YQL_CLOG(DEBUG, Core) << "Move ExtractMembers over " << node->Content() << logSuffix;
-        return ctx.Builder(sort.Pos())
+        auto result = ctx.Builder(node->Pos())
             .Callable(node->Content())
-                .Callable(0, TCoExtractMembers::CallableName())
-                    .Add(0, sort.Input().Ptr())
-                    .Add(1, members)
-                .Seal()
-                .Add(1, sort.SortDirections().Ptr())
-                .Add(2, ctx.DeepCopyLambda(sort.KeySelectorLambda().Ref()))
             .Seal()
             .Build();
+
+        TExprNode::TListType children;
+        children.push_back(ctx.Builder(node->Pos())
+            .Callable(TCoExtractMembers::CallableName())
+                .Add(0, node->HeadPtr())
+                .Add(1, members)
+            .Seal()
+            .Build());
+        if (nodeIsSort) {
+            children.push_back(node->ChildPtr(1));
+        }
+        children.push_back(ctx.DeepCopyLambda(keyExtractorLambda.Ref()));
+
+        return ctx.ChangeChildren(*result, std::move(children));
     }
     else if (fieldSubset) {
-        const auto structType = GetSeqItemType(*sort.Ref().GetTypeAnn()).Cast<TStructExprType>();
+        const auto structType = GetSeqItemType(node->GetTypeAnn())->Cast<TStructExprType>();
         if (structType->GetSize() <= extractFields.size()) {
             return {};
         }
@@ -221,16 +234,26 @@ TExprNode::TPtr ApplyExtractMembersToSort(const TExprNode::TPtr& node, const TEx
             totalExtracted.emplace_back(ctx.NewAtom(members->Pos(), field));
         }
 
-        return ctx.Builder(sort.Pos())
+        TExprNode::TListType children;
+        children.push_back(ctx.Builder(node->Pos())
             .Callable(TCoExtractMembers::CallableName())
-                .Callable(0, node->Content())
-                    .Callable(0, TCoExtractMembers::CallableName())
-                        .Add(0, sort.Input().Ptr())
-                        .Add(1, ctx.NewList(members->Pos(), std::move(totalExtracted)))
-                    .Seal()
-                    .Add(1, sort.SortDirections().Ptr())
-                    .Add(2, ctx.DeepCopyLambda(sort.KeySelectorLambda().Ref()))
-                .Seal()
+                .Add(0, node->HeadPtr())
+                .Add(1, ctx.NewList(members->Pos(), std::move(totalExtracted)))
+            .Seal()
+            .Build());
+        if (nodeIsSort) {
+            children.push_back(node->ChildPtr(1));
+        }
+        children.push_back(ctx.DeepCopyLambda(keyExtractorLambda.Ref()));
+
+        auto internalPartOfExtractMembers = ctx.Builder(node->Pos())
+            .Callable(node->Content())
+            .Seal()
+            .Build();
+
+        return ctx.Builder(node->Pos())
+            .Callable(TCoExtractMembers::CallableName())
+                .Add(0, ctx.ChangeChildren(*internalPartOfExtractMembers, std::move(children)))
                 .Add(1, members)
             .Seal()
             .Build();

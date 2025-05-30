@@ -71,9 +71,12 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Sort(TExprBase node, TE
     }
 
     auto keySelectorLambda = sort.KeySelectorLambda();
-    auto cluster = TString{GetClusterName(sort.Input())};
+    const ERuntimeClusterSelectionMode selectionMode =
+        State_->Configuration->RuntimeClusterSelection.Get().GetOrElse(DEFAULT_RUNTIME_CLUSTER_SELECTION);
+    auto cluster = DeriveClusterFromInput(sort.Input(), selectionMode);
+
     TSyncMap syncList;
-    if (!IsYtCompleteIsolatedLambda(keySelectorLambda.Ref(), syncList, cluster, false)) {
+    if (!cluster || !IsYtCompleteIsolatedLambda(keySelectorLambda.Ref(), syncList, *cluster, false, selectionMode)) {
         return node;
     }
 
@@ -133,7 +136,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Sort(TExprBase node, TE
         sortInput = Build<TYtOutput>(ctx, node.Pos())
             .Operation<TYtMap>()
                 .World(world)
-                .DataSink(NPrivate::GetDataSink(sort.Input(), ctx))
+                .DataSink(MakeDataSink(node.Pos(), *cluster, ctx))
                 .Input(NPrivate::ConvertInputTable(sort.Input(), ctx, NPrivate::TConvertInputOpts().MakeUnordered(unordered)))
                 .Output()
                     .Add(mapOut.ToExprNode(ctx, node.Pos()).Cast<TYtOutTable>())
@@ -165,7 +168,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Sort(TExprBase node, TE
         sortInput = Build<TYtOutput>(ctx, node.Pos())
             .Operation<TYtMerge>()
                 .World(world)
-                .DataSink(NPrivate::GetDataSink(sort.Input(), ctx))
+                .DataSink(MakeDataSink(node.Pos(), *cluster, ctx))
                 .Input(NPrivate::ConvertInputTable(sort.Input(), ctx, opts.MakeUnordered(unordered)))
                 .Output()
                     .Add(mergeOut.ToExprNode(ctx, node.Pos()).Cast<TYtOutTable>())
@@ -216,7 +219,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Sort(TExprBase node, TE
     auto res = canUseMerge ?
         TExprBase(Build<TYtMerge>(ctx, node.Pos())
             .World(world)
-            .DataSink(NPrivate::GetDataSink(sortInput, ctx))
+            .DataSink(MakeDataSink(node.Pos(), *cluster, ctx))
             .Input(NPrivate::ConvertInputTable(sortInput, ctx, opts.ClearUnordered()))
             .Output()
                 .Add(sortOut.ToExprNode(ctx, node.Pos()).Cast<TYtOutTable>())
@@ -231,7 +234,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Sort(TExprBase node, TE
         .Done()):
         TExprBase(Build<TYtSort>(ctx, node.Pos())
             .World(world)
-            .DataSink(NPrivate::GetDataSink(sortInput, ctx))
+            .DataSink(MakeDataSink(node.Pos(), *cluster, ctx))
             .Input(NPrivate::ConvertInputTable(sortInput, ctx, opts.MakeUnordered(unordered)))
             .Output()
                 .Add(sortOut.ToExprNode(ctx, node.Pos()).Cast<TYtOutTable>())
@@ -472,6 +475,10 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::AssumeConstraints(TExpr
         return assume;
     }
 
+    const ERuntimeClusterSelectionMode selectionMode =
+        State_->Configuration->RuntimeClusterSelection.Get().GetOrElse(DEFAULT_RUNTIME_CLUSTER_SELECTION);
+    auto cluster = DeriveClusterFromInput(input, selectionMode);
+
     auto sorted = assume.Ref().GetConstraint<TSortedConstraintNode>();
 
     auto maybeOp = input.Maybe<TYtOutput>().Operation();
@@ -556,7 +563,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::AssumeConstraints(TExpr
             return Build<TYtOutput>(ctx, assume.Pos())
                 .Operation<TYtMerge>()
                     .World(GetWorld(input, {}, ctx))
-                    .DataSink(GetDataSink(input, ctx))
+                    .DataSink(MakeDataSink(assume.Pos(), *cluster, ctx))
                     .Input(ConvertInputTable(input, ctx, opts))
                     .Output()
                         .Add(outTable.ToExprNode(ctx, assume.Pos()).Cast<TYtOutTable>())
@@ -617,7 +624,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::AssumeConstraints(TExpr
             return Build<TYtOutput>(ctx, assume.Pos())
                 .Operation<TYtMap>()
                     .World(GetWorld(input, {}, ctx))
-                    .DataSink(GetDataSink(input, ctx))
+                    .DataSink(MakeDataSink(assume.Pos(), *cluster, ctx))
                     .Input(ConvertInputTable(input, ctx))
                     .Output()
                         .Add(outTable.ToExprNode(ctx, assume.Pos()).Cast<TYtOutTable>())
@@ -667,10 +674,59 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::AssumeConstraints(TExpr
         const size_t index = FromString(input.Cast<TYtOutput>().OutIndex().Value());
         TYtOutTableInfo outTable(op.Output().Item(index));
         if (builder) {
+            YQL_ENSURE(!builder->NeedMap() || op.Maybe<TYtDqProcessWrite>());
             builder->FillRowSpecSort(*outTable.RowSpec);
         }
         outTable.RowSpec->SetConstraints(assume.Ref().GetConstraintSet());
         outTable.SetUnique(assume.Ref().GetConstraint<TDistinctConstraintNode>(), assume.Pos(), ctx);
+
+        if (op.Maybe<TYtMap>() || op.Maybe<TYtReduce>()) {
+            TExprNode::TPtr lambda;
+            size_t childToReplace = 0;
+            if (auto map = op.Maybe<TYtMap>()) {
+                lambda = map.Cast().Mapper().Ptr();
+                childToReplace = TYtMap::idx_Mapper;
+            } else if (auto reduce = op.Maybe<TYtReduce>()) {
+                lambda = reduce.Cast().Reducer().Ptr();
+                childToReplace = TYtReduce::idx_Reducer;
+            } else {
+                YQL_ENSURE(false, "unexpected operation");
+            }
+
+            auto actualLambdaOutputType = TCoLambda(lambda).Body().Ref().GetTypeAnn();
+            auto expectedLambdaOutputType = outTable.RowSpec->GetExtendedType(ctx);
+            if (!IsSameAnnotation(*actualLambdaOutputType, *expectedLambdaOutputType)) {
+                // Drop aux columns that are not expected after row spec rebuild
+
+                auto excludeLambda = Build<TCoLambda>(ctx, lambda->Pos())
+                    .Args({"stream"})
+                    .Body<TCoOrderedMap>()
+                        .Input("stream")
+                        .Lambda<TCoLambda>()
+                            .Args({"struct"})
+                            .Body<TCoCastStruct>()
+                                .Struct("struct")
+                                .Type(ExpandType(lambda->Pos(), *expectedLambdaOutputType, ctx))
+                            .Build()
+                        .Build()
+                    .Build()
+                    .Done();
+
+                lambda = Build<TCoLambda>(ctx, lambda->Pos())
+                    .Args({"stream"})
+                    .Body<TExprApplier>()
+                        .Apply(excludeLambda)
+                        .With<TExprApplier>(0)
+                            .Apply(TCoLambda(lambda))
+                            .With(0, "stream")
+                        .Build()
+                    .Build()
+                    .Done()
+                    .Ptr();
+
+                newOp = ctx.ChangeChild(*newOp, childToReplace, std::move(lambda));
+            }
+        }
 
         TVector<TYtOutTable> outputs;
         for (size_t i = 0; i < op.Output().Size(); ++i) {

@@ -4,7 +4,7 @@
 
 #include <yt/yt/core/ytree/yson_struct.h>
 
-namespace NYT::NPhoenix2 {
+namespace NYT::NPhoenix {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -52,4 +52,4 @@ DEFINE_REFCOUNTED_TYPE(TUniverseSchema);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NPhoenix2
+} // namespace NYT::NPhoenix

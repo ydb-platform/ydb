@@ -152,7 +152,7 @@ public:
                 }
             }
         }
-        Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKTEXT(Event->Get()) + text.Str(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+        Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKTEXT(Event->Get(), text.Str()), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
         PassAway();
     }
 

@@ -214,7 +214,7 @@ public:
         *this = other;
     }
 
-    TChunkList(TChunkList&& other) {
+    TChunkList(TChunkList&& other) noexcept {
         *this = std::move(other);
     }
 
@@ -228,7 +228,7 @@ public:
         return *this;
     }
 
-    TChunkList& operator=(TChunkList&& other) {
+    TChunkList& operator=(TChunkList&& other) noexcept {
         if (this != &other) {
             Erase(begin(), end());
             Y_DEBUG_ABORT_UNLESS(!*this);

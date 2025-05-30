@@ -2,18 +2,60 @@
 
 #include "signature.h"
 
+#include <yt/yt/core/ytree/convert.h>
+
 namespace NYT::NSignature {
+
+using namespace NYson;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-NYson::TYsonString& ISignatureGenerator::GetHeader(const TSignaturePtr& signature)
+TSignaturePtr ISignatureGenerator::Sign(std::string payload) const
 {
-    return signature->Header_;
+    auto signature = New<TSignature>();
+    signature->Payload_ = std::move(payload);
+    DoSign(signature);
+    return signature;
 }
 
-std::vector<std::byte>& ISignatureGenerator::GetSignature(const TSignaturePtr& signature)
+////////////////////////////////////////////////////////////////////////////////
+
+namespace {
+
+struct TDummySignatureGenerator
+    : public ISignatureGenerator
 {
-    return signature->Signature_;
+    void DoSign(const TSignaturePtr& /*signature*/) const final
+    { }
+};
+
+struct TAlwaysThrowingSignatureGenerator
+    : public ISignatureGenerator
+{
+    void DoSign(const TSignaturePtr& /*signature*/) const final
+    {
+        THROW_ERROR_EXCEPTION("Signature generation is unsupported");
+    }
+};
+
+} // namespace
+
+////////////////////////////////////////////////////////////////////////////////
+
+ISignatureGeneratorPtr CreateDummySignatureGenerator()
+{
+    return New<TDummySignatureGenerator>();
+}
+
+const ISignatureGeneratorPtr& GetDummySignatureGenerator()
+{
+    static ISignatureGeneratorPtr signatureGenerator = CreateDummySignatureGenerator();
+    return signatureGenerator;
+}
+
+ISignatureGeneratorPtr CreateAlwaysThrowingSignatureGenerator()
+{
+    return New<TAlwaysThrowingSignatureGenerator>();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -5,7 +5,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_topic/impl/common.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/impl/read_session_impl.ipp>
 
-namespace NYdb::NPersQueue {
+namespace NYdb::inline V2::NPersQueue {
 
 // codecs
 using NTopic::ICodec;

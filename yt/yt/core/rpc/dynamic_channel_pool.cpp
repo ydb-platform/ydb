@@ -17,7 +17,7 @@
 
 #include <library/cpp/yt/misc/variant.h>
 
-#include <library/cpp/yt/small_containers/compact_set.h>
+#include <library/cpp/yt/compact_containers/compact_set.h>
 
 #include <library/cpp/yt/threading/rw_spin_lock.h>
 
@@ -533,7 +533,7 @@ private:
             auto now = TInstant::Now();
             if (LastRequestStart_ + lastPeerPollingPeriod > now) {
                 auto delay = LastRequestStart_ + lastPeerPollingPeriod - now;
-                YT_LOG_DEBUG("Sleeping before peer polling (Delay: %v)",
+                YT_LOG_TRACE("Sleeping before peer polling (Delay: %v)",
                     delay);
                 TDelayedExecutor::WaitForDuration(delay);
             }
@@ -549,41 +549,41 @@ private:
                 requestTimeout,
                 /*replyDelay*/ peerPollingPeriod,
                 owner->ServiceName_);
-            YT_LOG_DEBUG("Polling peer (PollingPeriod: %v, RequestTimeout: %v)",
+            YT_LOG_TRACE("Polling peer (PollingPeriod: %v, RequestTimeout: %v)",
                 peerPollingPeriod,
                 requestTimeout);
 
             owner.Reset();
 
             req.Subscribe(BIND([=, this, this_ = MakeStrong(this)] (const TErrorOr<TPeerDiscoveryResponse>& rspOrError) {
-                    auto owner = Owner_.Lock();
-                    if (!owner) {
-                        return;
-                    }
+                auto owner = Owner_.Lock();
+                if (!owner) {
+                    return;
+                }
 
-                    if (rspOrError.IsOK()) {
-                        auto isUp = rspOrError.Value().IsUp;
-                        if (isUp) {
-                            YT_LOG_DEBUG("Peer is up");
-                            owner->UnbanPeer(PeerAddress_);
-                            auto discoverySessionOrError = owner->RunDiscoverySession();
-                            if (discoverySessionOrError.IsOK()) {
-                                discoverySessionOrError.Value()->OnPeerDiscovered(PeerAddress_);
-                            } else {
-                                YT_LOG_DEBUG(discoverySessionOrError, "Failed to get discovery session");
-                            }
+                if (rspOrError.IsOK()) {
+                    auto isUp = rspOrError.Value().IsUp;
+                    if (isUp) {
+                        YT_LOG_DEBUG("Peer is up");
+                        owner->UnbanPeer(PeerAddress_);
+                        auto discoverySessionOrError = owner->RunDiscoverySession();
+                        if (discoverySessionOrError.IsOK()) {
+                            discoverySessionOrError.Value()->OnPeerDiscovered(PeerAddress_);
                         } else {
-                            YT_LOG_DEBUG("Peer is down");
+                            YT_LOG_DEBUG(discoverySessionOrError, "Failed to get discovery session");
                         }
                     } else {
-                        if (rspOrError.GetCode() == NRpc::EErrorCode::GlobalDiscoveryError) {
-                            owner->SetLastGlobalDiscoveryError(rspOrError);
-                        }
-                        YT_LOG_DEBUG(rspOrError, "Failed to poll peer");
+                        YT_LOG_DEBUG("Peer is down");
                     }
+                } else {
+                    if (rspOrError.GetCode() == NRpc::EErrorCode::GlobalDiscoveryError) {
+                        owner->SetLastGlobalDiscoveryError(rspOrError);
+                    }
+                    YT_LOG_DEBUG(rspOrError, "Failed to poll peer");
+                }
 
-                    DoPollPeer(peerPollingPeriod);
-                }).Via(TDispatcher::Get()->GetLightInvoker()));
+                DoPollPeer(peerPollingPeriod);
+            }).Via(TDispatcher::Get()->GetLightInvoker()));
         }
     };
 
@@ -706,7 +706,7 @@ private:
 
     void DoAddPeers(const std::vector<std::string>& addresses)
     {
-        VERIFY_WRITER_SPINLOCK_AFFINITY(SpinLock_);
+        YT_ASSERT_WRITER_SPINLOCK_AFFINITY(SpinLock_);
 
         PeerDiscoveryError_ = {};
 
@@ -729,7 +729,7 @@ private:
 
     void AddPeer(const std::string& address)
     {
-        VERIFY_WRITER_SPINLOCK_AFFINITY(SpinLock_);
+        YT_ASSERT_WRITER_SPINLOCK_AFFINITY(SpinLock_);
 
         YT_VERIFY(ActiveAddresses_.insert(address).second);
 
@@ -744,7 +744,7 @@ private:
 
     void RemovePeer(const std::string& address)
     {
-        VERIFY_WRITER_SPINLOCK_AFFINITY(SpinLock_);
+        YT_ASSERT_WRITER_SPINLOCK_AFFINITY(SpinLock_);
 
         if (ActiveAddresses_.erase(address) == 0 && BannedAddresses_.erase(address) == 0) {
             return;

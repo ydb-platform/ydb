@@ -2152,6 +2152,53 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         }
     }
 
+    Y_UNIT_TEST(TestQuoterAccountLabels) {
+        TTestContext ctx;
+        ctx.Setup();
+
+        TString billRecord;
+        ctx.Runtime->SetObserverFunc([&billRecord](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == NMetering::TEvMetering::EvWriteMeteringJson) {
+                billRecord = ev->Get<NMetering::TEvMetering::TEvWriteMeteringJson>()->MeteringJson;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        NKikimrKesus::TStreamingQuoterResource cfg;
+        cfg.SetResourcePath("/Root");
+        cfg.MutableHierarchicalDRRResourceConfig()->SetMaxUnitsPerSecond(100.0);
+        cfg.MutableHierarchicalDRRResourceConfig()->SetPrefetchCoefficient(300.0);
+        cfg.MutableAccountingConfig()->SetEnabled(true);
+        cfg.MutableAccountingConfig()->SetReportPeriodMs(1000);
+        cfg.MutableAccountingConfig()->SetAccountPeriodMs(1000);
+        cfg.MutableAccountingConfig()->SetCollectPeriodSec(2);
+        cfg.MutableAccountingConfig()->MutableOnDemand()->SetEnabled(true);
+        cfg.MutableAccountingConfig()->MutableOnDemand()->SetBillingPeriodSec(2);
+        cfg.MutableAccountingConfig()->MutableOnDemand()->MutableLabels()->insert({"k1", "v1"});
+        cfg.MutableAccountingConfig()->MutableOnDemand()->MutableLabels()->insert({"k2", "v2"});
+        ctx.AddQuoterResource(cfg);
+
+        auto edge = ctx.Runtime->AllocateEdgeActor();
+        auto client = ctx.Runtime->AllocateEdgeActor();
+        const NKikimrKesus::TEvSubscribeOnResourcesResult subscribeResult = ctx.SubscribeOnResource(client, edge, "/Root", false, 0);
+
+        TInstant start = ctx.Runtime->GetCurrentTime();
+        TDuration interval = TConsumptionHistory::Interval();
+        ctx.AccountResources(client, edge, subscribeResult.GetResults(0).GetResourceId(), start, interval, {50.0});
+
+        if (billRecord.empty()) {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&billRecord](IEventHandle&) -> bool {
+                return !billRecord.empty();
+            });
+            ctx.Runtime->DispatchEvents(opts);
+        }
+
+        const TString expectedBillRecord = R"({"usage":{"start":0,"quantity":50,"finish":1,"unit":"request_unit","type":"delta"},"tags":{},"id":"Root-ondemand-0-1","cloud_id":"","source_wt":5,"source_id":"","resource_id":"","schema":"","labels":{"k2":"v2","k1":"v1"},"folder_id":"","version":""})";
+
+        UNIT_ASSERT_NO_DIFF(billRecord, expectedBillRecord + "\n");
+    }
+
     Y_UNIT_TEST(TestPassesUpdatedPropsToSession) {
         TTestContext ctx;
         ctx.Setup();

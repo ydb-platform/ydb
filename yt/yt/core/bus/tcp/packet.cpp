@@ -6,8 +6,6 @@
 
 #include <library/cpp/yt/string/guid.h>
 
-#include <library/cpp/yt/misc/unaligned.h>
-
 namespace NYT::NBus {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -152,23 +150,23 @@ protected:
 
     ui32 GetPartSize(int index) const
     {
-        return UnalignedLoad(PartSizes_ + index);
+        return ReadUnaligned<ui32>(PartSizes_ + index);
     }
 
     void SetPartSize(int index, ui32 size)
     {
-        UnalignedStore(PartSizes_ + index, size);
+        WriteUnaligned<ui32>(PartSizes_ + index, size);
     }
 
 
     ui64 GetPartChecksum(int index) const
     {
-        return UnalignedLoad(PartChecksums_ + index);
+        return ReadUnaligned<ui64>(PartChecksums_ + index);
     }
 
     void SetPartChecksum(int index, ui64 checksum)
     {
-        UnalignedStore(PartChecksums_ + index, checksum);
+        WriteUnaligned<ui64>(PartChecksums_ + index, checksum);
     }
 
 private:
@@ -436,7 +434,7 @@ public:
         if (IsVariablePacket()) {
             AllocateVariableHeader();
 
-            for (int index = 0; index < static_cast<int>(Message_.Size()); ++index) {
+            for (int index = 0; index < std::ssize(Message_); ++index) {
                 if (const auto& part = Message_[index]) {
                     SetPartSize(index, part.Size());
                     SetPartChecksum(
@@ -451,7 +449,7 @@ public:
             SetPartChecksum(Message_.Size(),  generateChecksums ? GetVariableChecksum() : NullChecksum);
         }
 
-        BeginPhase(EPacketPhase::FixedHeader, &FixedHeader_, sizeof (TPacketHeader));
+        BeginPhase(EPacketPhase::FixedHeader, &FixedHeader_, sizeof(TPacketHeader));
         return true;
     }
 

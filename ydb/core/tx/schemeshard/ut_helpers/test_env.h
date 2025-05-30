@@ -14,7 +14,7 @@
 #include <ydb/core/protos/follower_group.pb.h>
 #include <ydb/core/protos/msgbus_kv.pb.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 
 #include <functional>
 
@@ -71,6 +71,13 @@ namespace NSchemeShardUT_Private {
         OPTION(std::optional<bool>, EnableTopicAutopartitioningForCDC, std::nullopt);
         OPTION(std::optional<bool>, EnableBackupService, std::nullopt);
         OPTION(std::optional<bool>, EnableTopicTransfer, std::nullopt);
+        OPTION(bool, SetupKqpProxy, false);
+        OPTION(bool, EnableStrictAclCheck, false);
+        OPTION(std::optional<bool>, EnableStrictUserManagement, std::nullopt);
+        OPTION(std::optional<bool>, EnableDatabaseAdmin, std::nullopt);
+        OPTION(std::optional<bool>, EnablePermissionsExport, std::nullopt);
+        OPTION(std::optional<bool>, EnableChecksumsExport, std::nullopt);
+        OPTION(TVector<TIntrusivePtr<NFake::TProxyDS>>, DSProxies, {});
 
         #undef OPTION
     };
@@ -94,7 +101,7 @@ namespace NSchemeShardUT_Private {
         static bool ENABLE_SCHEMESHARD_LOG;
 
         TTestEnv(TTestActorRuntime& runtime, ui32 nchannels = 4, bool enablePipeRetries = true,
-            TSchemeShardFactory ssFactory = &CreateFlatTxSchemeShard, bool enableSystemViews = false);
+            TSchemeShardFactory ssFactory = &CreateFlatTxSchemeShard);
         TTestEnv(TTestActorRuntime& runtime, const TTestEnvOptions& opts,
             TSchemeShardFactory ssFactory = &CreateFlatTxSchemeShard, std::shared_ptr<NKikimr::NDataShard::IExportFactory> dsExportFactory = {});
 
@@ -143,10 +150,15 @@ namespace NSchemeShardUT_Private {
 
         void BootSchemeShard(TTestActorRuntime& runtime, ui64 schemeRoot);
         void BootTxAllocator(TTestActorRuntime& runtime, ui64 tabletId);
+        NKikimrConfig::TAppConfig GetAppConfig() const;
     };
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // A wrapper to run test scenarios with reboots of schemeshard, hive and coordinator
+    // The idea is to run the same test scenario multiple times and on each run restart a tablet **once**
+    // on receiving a non-filtered event. A given tablet is restarted when it receives an event for which
+    // PassUserRequests() doesn't return true. On the first run, it is restarted on the first such event,
+    // on the second run - on the second event and so on.
     class TTestWithReboots {
     protected:
         struct TDatashardLogBatchingSwitch {

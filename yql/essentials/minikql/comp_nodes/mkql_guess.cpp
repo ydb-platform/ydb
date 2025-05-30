@@ -50,7 +50,7 @@ public:
         if constexpr (IsOptional) {
             const auto good = BasicBlock::Create(context, "good", ctx.Func);
 
-            BranchInst::Create(none, good, IsEmpty(var, block), block);
+            BranchInst::Create(none, good, IsEmpty(var, block, context), block);
 
             block = good;
         }

@@ -123,13 +123,8 @@ private:
     const TStructExprType* LoadTopicMeta(const TString& cluster, const TString& topic, TExprContext& ctx, TPqState::TTopicMeta& meta) {
         // todo: return TFuture
         try {
-            auto future = State_->Gateway->DescribePath(State_->SessionId, cluster, State_->Configuration->GetDatabaseForTopic(cluster), topic, State_->Configuration->Tokens.at(cluster));
-            NPq::NConfigurationManager::TDescribePathResult description = future.GetValueSync();
-            if (!description.IsTopic()) {
-                ctx.IssueManager.RaiseIssue(TIssue{TStringBuilder() << "Path '" << topic << "' is not a topic"});
-                return {};
-            }
-            meta.Description = description.GetTopicDescription();
+            auto future = State_->Gateway->DescribeFederatedTopic(State_->SessionId, cluster, State_->Configuration->GetDatabaseForTopic(cluster), topic, State_->Configuration->Tokens.at(cluster));
+            meta.FederatedTopic = future.GetValueSync();
             return CreateDefaultItemType(ctx);
         } catch (const std::exception& ex) {
             TIssues issues;

@@ -180,6 +180,19 @@ BELONGS ya.make
         include/boost/random/detail/polynomial.hpp [3:5]
         include/boost/random/laplace_distribution.hpp [3:5]
 
+KEEP     COPYRIGHT_SERVICE_LABEL 576551ad75666d61be2adb050e443450
+BELONGS ya.make
+    License text:
+         * Copyright Matt Borland 2025.
+         * Distributed under the Boost Software License, Version 1.0. (See
+                * accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/random/detail/size.hpp [2:4]
+
 KEEP     COPYRIGHT_SERVICE_LABEL 5cd4a0c580c53e0ce656cd3fe8597d92
 BELONGS ya.make
     License text:
@@ -194,6 +207,20 @@ BELONGS ya.make
         include/boost/nondet_random.hpp [3:5]
         include/boost/random/random_device.hpp [3:6]
         src/random_device.cpp [3:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 732ea899cda1e07611b1f107d54f89df
+BELONGS ya.make
+    License text:
+         * Copyright Young Geun Kim 2025
+         * Distributed under the Boost Software License, Version 1.0. (See
+         * accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/random/generalized_inverse_gaussian_distribution.hpp [3:5]
+        include/boost/random/inverse_gaussian_distribution.hpp [3:5]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 8894fc789975c842d2c95727c8460378
 BELONGS ya.make
@@ -258,6 +285,20 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         include/boost/random/exponential_distribution.hpp [3:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c7f3ac9edc94bbcc78ce78d9b4e33554
+BELONGS ya.make
+    License text:
+         * Copyright Matt Borland 2022 - 2025.
+         * Distributed under the Boost Software License, Version 1.0. (See
+                * accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/random/detail/xoshiro_base.hpp [2:4]
+        include/boost/random/xoshiro.hpp [2:4]
 
 KEEP     COPYRIGHT_SERVICE_LABEL cefbb022b3ae5f3ac530ca0a8d9e20c1
 BELONGS ya.make

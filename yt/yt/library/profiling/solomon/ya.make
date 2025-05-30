@@ -10,7 +10,7 @@ SRCS(
     percpu.cpp
     producer.cpp
     proxy.cpp
-    registry.cpp
+    GLOBAL registry.cpp
     remote.cpp
     sensor.cpp
     sensor_service.cpp

@@ -1,0 +1,26 @@
+diff --git a/exception.cc b/exception.cc
+index 15f93ae..2f1947f 100644
+--- a/exception.cc
++++ b/exception.cc
+@@ -806,6 +806,9 @@ extern "C" __cxa_exception *__cxa_init_primary_exception(
+ 	return ex;
+ }
+ 
++typedef void (*cxa_throw_hook_t)(void*, std::type_info*, void(*)(void*)) noexcept;
++
++__attribute__((weak)) cxa_throw_hook_t cxa_throw_hook = nullptr;
+ 
+ /**
+  * ABI function for throwing an exception.  Takes the object to be thrown (the
+@@ -816,6 +819,11 @@ extern "C" void __cxa_throw(void *thrown_exception,
+                             std::type_info *tinfo,
+                             void(*dest)(void*))
+ {
++	if (cxa_throw_hook)
++	{
++		cxa_throw_hook(thrown_exception, tinfo, dest);
++	}
++
+ 	__cxa_exception *ex = __cxa_init_primary_exception(thrown_exception, tinfo, dest);
+ 	ex->referenceCount = 1;
+ 

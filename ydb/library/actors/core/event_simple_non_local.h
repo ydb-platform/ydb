@@ -21,7 +21,7 @@ namespace NActors {
             return true;
         }
 
-        static IEventBase* Load(TEventSerializedData*) {
+        static TEv* Load(const TEventSerializedData*) {
             return new TEv();
         }
     };

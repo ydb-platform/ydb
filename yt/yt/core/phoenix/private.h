@@ -6,7 +6,7 @@
 
 #include <library/cpp/yt/misc/global.h>
 
-namespace NYT::NPhoenix2 {
+namespace NYT::NPhoenix {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -20,5 +20,5 @@ constexpr auto NullObjectId = TObjectId(0x00000000);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NPhoenix2
+} // namespace NYT::NPhoenix
 

@@ -148,7 +148,7 @@ void TKafkaFetchActor::FillRecordsBatch(const NKikimrClient::TPersQueueFetchResp
         }
 
         lastOffset = result.GetOffset();
-        lastTimestamp = result.GetWriteTimestampMS();
+        lastTimestamp = result.GetCreateTimestampMS();
         auto& record = recordsBatch.Records[recordIndex];
 
         record.DataChunk = NKikimr::GetDeserializedData(result.GetData());

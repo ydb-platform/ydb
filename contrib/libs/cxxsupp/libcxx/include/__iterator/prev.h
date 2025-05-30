@@ -27,8 +27,10 @@ _LIBCPP_BEGIN_NAMESPACE_STD
 template <class _InputIter, __enable_if_t<__has_input_iterator_category<_InputIter>::value, int> = 0>
 inline _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX17 _InputIter
 prev(_InputIter __x, typename iterator_traits<_InputIter>::difference_type __n = 1) {
-  _LIBCPP_ASSERT_UNCATEGORIZED(__n <= 0 || __has_bidirectional_iterator_category<_InputIter>::value,
-                               "Attempt to prev(it, n) with a positive n on a non-bidirectional iterator");
+  // Calling `advance` with a negative value on a non-bidirectional iterator is a no-op in the current implementation.
+  // Note that this check duplicates the similar check in `std::advance`.
+  _LIBCPP_ASSERT_PEDANTIC(__n <= 0 || __has_bidirectional_iterator_category<_InputIter>::value,
+                          "Attempt to prev(it, n) with a positive n on a non-bidirectional iterator");
   std::advance(__x, -__n);
   return __x;
 }
@@ -38,9 +40,7 @@ prev(_InputIter __x, typename iterator_traits<_InputIter>::difference_type __n =
 // [range.iter.op.prev]
 
 namespace ranges {
-namespace __prev {
-
-struct __fn {
+struct __prev {
   template <bidirectional_iterator _Ip>
   _LIBCPP_HIDE_FROM_ABI constexpr _Ip operator()(_Ip __x) const {
     --__x;
@@ -60,10 +60,8 @@ struct __fn {
   }
 };
 
-} // namespace __prev
-
 inline namespace __cpo {
-inline constexpr auto prev = __prev::__fn{};
+inline constexpr auto prev = __prev{};
 } // namespace __cpo
 } // namespace ranges
 

@@ -106,6 +106,7 @@
   - shadow.h
   - signal.h
   - spawn.h
+  - stab.h
   - stdalign.h
   - stdarg.h
   - stdatomic.h
@@ -125,6 +126,7 @@
   - sys/errno.h
   - sys/eventfd.h
   - sysexits.h
+  - sys/fanotify.h
   - sys/fcntl.h
   - sys/file.h
   - sys/fsuid.h

@@ -18,6 +18,7 @@ DynamicSlot = namedtuple(
         'grpc',
         'mon',
         'ic',
+        'kafka_port',
     ]
 )
 
@@ -27,7 +28,7 @@ class ClusterDetails(ClusterDetailsProvider):
     SLOTS_PORTS_START = 31000
     PORTS_SHIFT = 10
 
-    def __init__(self, cluster_description_path, walle_provider):
+    def __init__(self, cluster_description_path, walle_provider, validator=None):
         self.__template = None
         self.__details = None
         self.__databases = None
@@ -35,7 +36,7 @@ class ClusterDetails(ClusterDetailsProvider):
         self._cluster_description_file = cluster_description_path
         self._walle_provider = walle_provider
 
-        super(ClusterDetails, self).__init__(self.template, self._walle_provider, use_new_style_cfg=True)
+        super(ClusterDetails, self).__init__(self.template, self._walle_provider, validator=validator, use_new_style_cfg=True)
 
     @property
     def template(self):
@@ -73,6 +74,7 @@ class ClusterDetails(ClusterDetailsProvider):
                 grpc_port = self.SLOTS_PORTS_START + 1
                 mon_port = self.SLOTS_PORTS_START + 2
                 ic_port = self.SLOTS_PORTS_START + 3
+                kafka_port = self.SLOTS_PORTS_START + 5
                 full_name = str(ic_port)
 
                 self.__dynamic_slots[full_name] = DynamicSlot(
@@ -82,6 +84,7 @@ class ClusterDetails(ClusterDetailsProvider):
                     grpc=grpc_port,
                     mon=mon_port,
                     ic=ic_port,
+                    kafka_port=kafka_port,
                 )
                 self.SLOTS_PORTS_START += self.PORTS_SHIFT
         return self.__dynamic_slots
@@ -132,6 +135,10 @@ class Configurator(object):
     def detail(self):
         return self.__cluster_details
 
+    @property
+    def hosts_names(self):
+        return self.detail.hosts_names
+
     @staticmethod
     def _generate_fake_keys():
         content = 'Keys {\n'
@@ -140,6 +147,7 @@ class Configurator(object):
         content += '  Id: "fake-secret"\n'
         content += '  Version: 1\n'
         content += '}\n'
+
         return content
 
     @staticmethod

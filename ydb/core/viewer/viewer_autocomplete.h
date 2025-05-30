@@ -217,6 +217,7 @@ public:
             case TNavigate::KindSequence:
                 return NKikimrViewer::sequence;
             case TNavigate::KindReplication:
+            case TNavigate::KindTransfer:
                 return NKikimrViewer::replication;
             case TNavigate::KindBlobDepot:
                 return NKikimrViewer::blob_depot;
@@ -230,6 +231,8 @@ public:
                 return NKikimrViewer::file_store;
             case TNavigate::KindView:
                 return NKikimrViewer::view;
+            case TNavigate::KindSysView:
+                return NKikimrViewer::sys_view;
             default:
                 return NKikimrViewer::dir;
         }

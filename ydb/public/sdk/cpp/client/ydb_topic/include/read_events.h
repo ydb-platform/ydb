@@ -6,7 +6,7 @@
 #include <util/datetime/base.h>
 #include <util/generic/maybe.h>
 
-namespace NYdb::NTopic {
+namespace NYdb::inline V2::NTopic {
 
 //! Partition session.
 struct TPartitionSession: public TThrRefBase, public TPrintable<TPartitionSession> {

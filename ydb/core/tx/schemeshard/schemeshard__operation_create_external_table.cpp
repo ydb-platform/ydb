@@ -285,12 +285,6 @@ private:
         context.SS->PersistTxState(db, OperationId);
     }
 
-    static void UpdatePathSizeCounts(const TPath& parentPath,
-                                     const TPath& dstPath) {
-        dstPath.DomainInfo()->IncPathsInside();
-        parentPath.Base()->IncAliveChildren();
-    }
-
 public:
     using TSubOperation::TSubOperation;
 
@@ -376,7 +370,8 @@ public:
                                                           context.SS,
                                                           context.OnComplete);
 
-        UpdatePathSizeCounts(parentPath, dstPath);
+        dstPath.DomainInfo()->IncPathsInside(context.SS);
+        IncAliveChildrenDirect(OperationId, parentPath, context); // for correct discard of ChildrenExist prop
 
         SetState(NextState());
         return result;

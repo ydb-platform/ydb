@@ -59,7 +59,10 @@ std::optional<double> TEmaCounter<T, WindowCount>::GetRate(int windowIndex, TIns
         return {};
     }
 
-    return WindowRates[windowIndex];
+    YT_ASSERT(LastTimestamp.has_value());
+    auto timeDelta = (currentTimestamp - *LastTimestamp).SecondsFloat();
+    auto exp = std::exp(-timeDelta / (WindowDurations[windowIndex].SecondsFloat() / 2.0));
+    return WindowRates[windowIndex] * exp;
 }
 
 template <typename T, int WindowCount>

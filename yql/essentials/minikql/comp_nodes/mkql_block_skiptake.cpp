@@ -51,22 +51,19 @@ public:
 
         const auto indexType = Type::getInt64Ty(context);
         const auto valueType = Type::getInt128Ty(context);
-        const auto ptrValueType = PointerType::getUnqual(valueType);
 
         const auto atTop = &ctx.Func->getEntryBlock().back();
 
         const auto offsetPtr = new AllocaInst(indexType, 0U, "offset_ptr", atTop);
         const auto sizePtr = new AllocaInst(indexType, 0U, "size_ptr", atTop);
 
-        const auto sliceFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TWideSkipBlocksWrapper::SliceBlock));
+        const auto sliceFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TWideSkipBlocksWrapper::SliceBlock>());
         const auto sliceType = FunctionType::get(valueType, {ctx.GetFactory()->getType(), valueType, indexType}, false);
         const auto slicePtr = CastInst::Create(Instruction::IntToPtr, sliceFunc, PointerType::getUnqual(sliceType), "slice", atTop);
 
         const auto name = "GetBlockCount";
         ctx.Codegen.AddGlobalMapping(name, reinterpret_cast<const void*>(&GetBlockCount));
-        const auto getCountType = NYql::NCodegen::ETarget::Windows != ctx.Codegen.GetEffectiveTarget() ?
-            FunctionType::get(indexType, { valueType }, false):
-            FunctionType::get(indexType, { ptrValueType }, false);
+        const auto getCountType = FunctionType::get(indexType, { valueType }, false);
         const auto getCount = ctx.Codegen.GetModule().getOrInsertFunction(name, getCountType);
 
         const auto init = BasicBlock::Create(context, "init", ctx.Func);
@@ -75,7 +72,7 @@ public:
         const auto load = new LoadInst(valueType, statePtr, "load", block);
         const auto state = PHINode::Create(valueType, 2U, "state", main);
         state->addIncoming(load, block);
-        BranchInst::Create(init, main, IsInvalid(load, block), block);
+        BranchInst::Create(init, main, IsInvalid(load, block, context), block);
 
         block = init;
 
@@ -119,7 +116,7 @@ public:
         block = test;
 
         const auto countValue = getres.second.back()(ctx, block);
-        const auto height = CallInst::Create(getCount, { WrapArgumentForWindows(countValue, ctx, block) }, "height", block);
+        const auto height = CallInst::Create(getCount, { countValue }, "height", block);
 
         ValueCleanup(EValueRepresentation::Any, countValue, ctx, block);
 
@@ -168,7 +165,7 @@ public:
 
             block = calc;
 
-            const auto makeCountFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&MakeBlockCount));
+            const auto makeCountFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&MakeBlockCount>());
             const auto makeCountType = FunctionType::get(valueType, {ctx.GetFactory()->getType(), indexType}, false);
             const auto makeCountPtr = CastInst::Create(Instruction::IntToPtr, makeCountFunc, PointerType::getUnqual(makeCountType), "make_count_func", block);
             const auto slice = CallInst::Create(makeCountType, makeCountPtr, {ctx.GetFactory(), count}, "slice", block);
@@ -272,22 +269,19 @@ public:
 
         const auto indexType = Type::getInt64Ty(context);
         const auto valueType = Type::getInt128Ty(context);
-        const auto ptrValueType = PointerType::getUnqual(valueType);
 
         const auto atTop = &ctx.Func->getEntryBlock().back();
 
         const auto sizePtr = new AllocaInst(indexType, 0U, "size_ptr", atTop);
         new StoreInst(ConstantInt::get(indexType, 0), sizePtr, atTop);
 
-        const auto sliceFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TWideTakeBlocksWrapper::SliceBlock));
+        const auto sliceFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TWideTakeBlocksWrapper::SliceBlock>());
         const auto sliceType = FunctionType::get(valueType, {ctx.GetFactory()->getType(), valueType, indexType}, false);
         const auto slicePtr = CastInst::Create(Instruction::IntToPtr, sliceFunc, PointerType::getUnqual(sliceType), "slice", atTop);
 
         const auto name = "GetBlockCount";
         ctx.Codegen.AddGlobalMapping(name, reinterpret_cast<const void*>(&GetBlockCount));
-        const auto getCountType = NYql::NCodegen::ETarget::Windows != ctx.Codegen.GetEffectiveTarget() ?
-            FunctionType::get(indexType, { valueType }, false):
-            FunctionType::get(indexType, { ptrValueType }, false);
+        const auto getCountType = FunctionType::get(indexType, { valueType }, false);
         const auto getCount = ctx.Codegen.GetModule().getOrInsertFunction(name, getCountType);
 
         const auto init = BasicBlock::Create(context, "init", ctx.Func);
@@ -296,7 +290,7 @@ public:
         const auto load = new LoadInst(valueType, statePtr, "load", block);
         const auto state = PHINode::Create(valueType, 2U, "state", main);
         state->addIncoming(load, block);
-        BranchInst::Create(init, main, IsInvalid(load, block), block);
+        BranchInst::Create(init, main, IsInvalid(load, block, context), block);
 
         block = init;
 
@@ -332,7 +326,7 @@ public:
         block = good;
 
         const auto countValue = getres.second.back()(ctx, block);
-        const auto height = CallInst::Create(getCount, { WrapArgumentForWindows(countValue, ctx, block) }, "height", block);
+        const auto height = CallInst::Create(getCount, { countValue }, "height", block);
 
         ValueCleanup(EValueRepresentation::Any, countValue, ctx, block);
 
@@ -367,7 +361,7 @@ public:
 
             block = calc;
 
-            const auto makeCountFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&MakeBlockCount));
+            const auto makeCountFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&MakeBlockCount>());
             const auto makeCountType = FunctionType::get(valueType, {ctx.GetFactory()->getType(), indexType}, false);
             const auto makeCountPtr = CastInst::Create(Instruction::IntToPtr, makeCountFunc, PointerType::getUnqual(makeCountType), "make_count_func", block);
             const auto slice = CallInst::Create(makeCountType, makeCountPtr, {ctx.GetFactory(), count}, "slice", block);

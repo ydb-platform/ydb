@@ -84,7 +84,7 @@ std::optional<TOriginAttributes::TErasedExtensionData> GetExtensionData()
     return std::nullopt;
 }
 
-TString FormatOrigin(const TOriginAttributes& attributes)
+std::string FormatOrigin(const TOriginAttributes& attributes)
 {
     using TFunctor = TString(*)(const TOriginAttributes&);
 
@@ -142,7 +142,7 @@ TOriginAttributes ExtractFromDictionaryDefault(TErrorAttributes* attributes)
     result.Tid = attributes->GetAndRemove(TidKey, NThreading::InvalidThreadId);
 
     static const std::string ThreadNameKey("thread");
-    result.ThreadName = TString(attributes->GetAndRemove(ThreadNameKey, std::string()));
+    result.ThreadName = {attributes->GetAndRemove(ThreadNameKey, std::string())};
 
     return result;
 }

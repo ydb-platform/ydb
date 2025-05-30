@@ -9,6 +9,7 @@
 #include "yql_pos_handle.h"
 
 #include <yql/essentials/core/url_lister/interface/url_lister_manager.h>
+#include <yql/essentials/core/sql_types/normalize_name.h>
 #include <yql/essentials/utils/yql_panic.h>
 #include <yql/essentials/public/issue/yql_issue_manager.h>
 #include <yql/essentials/public/udf/udf_data_type.h>
@@ -29,7 +30,7 @@
 #include <util/generic/hash.h>
 #include <util/generic/maybe.h>
 #include <util/generic/set.h>
-#include <util/generic/bt_exception.h>
+#include <util/generic/yexception.h>
 #include <util/generic/algorithm.h>
 #include <util/digest/murmur.h>
 
@@ -121,6 +122,47 @@ struct TTypeAnnotationVisitor {
     virtual void Visit(const TScalarExprType& type) = 0;
 };
 
+struct TDefaultTypeAnnotationVisitor : public TTypeAnnotationVisitor {
+    void Visit(const TUnitExprType& type) override;
+    void Visit(const TMultiExprType& type) override;
+    void Visit(const TTupleExprType& type) override;
+    void Visit(const TStructExprType& type) override;
+    void Visit(const TItemExprType& type) override;
+    void Visit(const TListExprType& type) override;
+    void Visit(const TStreamExprType& type) override;
+    void Visit(const TFlowExprType& type) override;
+    void Visit(const TDataExprType& type) override;
+    void Visit(const TPgExprType& type) override;
+    void Visit(const TWorldExprType& type) override;
+    void Visit(const TOptionalExprType& type) override;
+    void Visit(const TCallableExprType& type) override;
+    void Visit(const TResourceExprType& type) override;
+    void Visit(const TTypeExprType& type) override;
+    void Visit(const TDictExprType& type) override;
+    void Visit(const TVoidExprType& type) override;
+    void Visit(const TNullExprType& type) override;
+    void Visit(const TGenericExprType& type) override;
+    void Visit(const TTaggedExprType& type) override;
+    void Visit(const TErrorExprType& type) override;
+    void Visit(const TVariantExprType& type) override;
+    void Visit(const TEmptyListExprType& type) override;
+    void Visit(const TEmptyDictExprType& type) override;
+    void Visit(const TBlockExprType& type) override;
+    void Visit(const TScalarExprType& type) override;
+};
+
+class TErrorTypeVisitor : public TDefaultTypeAnnotationVisitor
+{
+public:
+    TErrorTypeVisitor(TExprContext& ctx);
+    void Visit(const TErrorExprType& type) override;
+    bool HasErrors() const;
+
+private:
+    TExprContext& Ctx_;
+    bool HasErrors_ = false;
+};
+
 enum ETypeAnnotationFlags : ui32 {
     TypeNonComposable = 0x01,
     TypeNonPersistable = 0x02,
@@ -137,6 +179,7 @@ enum ETypeAnnotationFlags : ui32 {
     TypeNonPresortable = 0x1000,
     TypeHasDynamicSize = 0x2000,
     TypeNonComparableInternal = 0x4000,
+    TypeHasError = 0x8000,
 };
 
 const ui64 TypeHashMagic = 0x10000;
@@ -190,6 +233,8 @@ public:
     ETypeAnnotationKind GetKind() const {
         return Kind;
     }
+
+    bool ReturnsWorld() const;
 
     bool IsComposable() const {
         return (GetFlags() & TypeNonComposable) == 0;
@@ -270,6 +315,10 @@ public:
 
     bool IsPresortSupported() const {
         return (GetFlags() & TypeNonPresortable) == 0;
+    }
+
+    bool HasErrors() const {
+        return (GetFlags() & TypeHasError) != 0;
     }
 
     ui32 GetFlags() const {
@@ -997,7 +1046,7 @@ public:
     static constexpr ETypeAnnotationKind KindValue = ETypeAnnotationKind::Type;
 
     TTypeExprType(ui64 hash, const TTypeAnnotationNode* type)
-        : TTypeAnnotationNode(KindValue, TypeNonPersistable | TypeNonComputable, hash, 0)
+        : TTypeAnnotationNode(KindValue, TypeNonPersistable | TypeNonComputable | (type->GetFlags() & TypeHasError), hash, 0)
         , Type(type)
     {
     }
@@ -1116,7 +1165,7 @@ public:
 
     TCallableExprType(ui64 hash, const TTypeAnnotationNode* returnType, const TVector<TArgumentInfo>& arguments
         , size_t optionalArgumentsCount, const TStringBuf& payload)
-        : TTypeAnnotationNode(KindValue, MakeFlags(returnType), hash, returnType->GetUsedPgExtensions())
+        : TTypeAnnotationNode(KindValue, MakeFlags(arguments, returnType), hash, returnType->GetUsedPgExtensions())
         , ReturnType(returnType)
         , Arguments(arguments)
         , OptionalArgumentsCount(optionalArgumentsCount)
@@ -1203,9 +1252,13 @@ public:
     }
 
 private:
-    static ui32 MakeFlags(const TTypeAnnotationNode* returnType) {
+    static ui32 MakeFlags(const TVector<TArgumentInfo>& arguments, const TTypeAnnotationNode* returnType) {
         ui32 flags = TypeNonPersistable;
         flags |= returnType->GetFlags();
+        for (const auto& arg : arguments) {
+            flags |= (arg.Type->GetFlags() & TypeHasError);
+        }
+
         return flags;
     }
 
@@ -1305,7 +1358,7 @@ public:
     static constexpr ETypeAnnotationKind KindValue = ETypeAnnotationKind::Error;
 
     TErrorExprType(ui64 hash, const TIssue& error)
-        : TTypeAnnotationNode(KindValue, 0, hash, 0)
+        : TTypeAnnotationNode(KindValue, TypeHasError, hash, 0)
         , Error(error)
     {}
 
@@ -1362,6 +1415,21 @@ public:
         return true;
     }
 };
+
+inline bool TTypeAnnotationNode::ReturnsWorld() const {
+    if (Kind == ETypeAnnotationKind::World) {
+        return true;
+    }
+
+    if (Kind == ETypeAnnotationKind::Tuple) {
+        auto tuple = static_cast<const TTupleExprType*>(this);
+        if (tuple->GetSize() == 2 && tuple->GetItems()[0]->GetKind() == ETypeAnnotationKind::World) {
+            return true;
+        }
+    }
+
+    return false;
+}
 
 inline bool TTypeAnnotationNode::Equals(const TTypeAnnotationNode& node) const {
     if (this == &node) {
@@ -1597,13 +1665,31 @@ public:
 
     bool HasResult() const {
         ENSURE_NOT_DELETED
-        return Type() != Callable || bool(Result);
+        return bool(Result);
     }
 
     void SetResult(TPtr&& result) {
         ENSURE_NOT_DELETED
         ENSURE_NOT_FROZEN
         Result = std::move(result);
+    }
+
+    const std::shared_ptr<TListType>& GetWorldLinks() const {
+        ENSURE_NOT_DELETED
+        ENSURE_NOT_FROZEN
+        return WorldLinks;
+    }
+
+    std::shared_ptr<TListType>& GetWorldLinks() {
+        ENSURE_NOT_DELETED
+        ENSURE_NOT_FROZEN
+        return WorldLinks;
+    }
+
+    void SetWorldLinks(std::shared_ptr<TListType>&& links) {
+        ENSURE_NOT_DELETED
+        ENSURE_NOT_FROZEN
+        WorldLinks = std::move(links);
     }
 
     bool IsCallable(const std::string_view& name) const {
@@ -1715,7 +1801,8 @@ public:
         return State == EState::ExecutionComplete
             || State == EState::ExecutionInProgress
             || State == EState::ExecutionRequired
-            || State == EState::ExecutionPending;
+            || State == EState::ExecutionPending
+            || HasResult();
     }
 
     bool IsComplete() const {
@@ -1745,6 +1832,7 @@ public:
         ENSURE_NOT_FROZEN
         if (!--RefCount_) {
             Result.Reset();
+            WorldLinks.reset();
             Children_.clear();
             Constraints_.Clear();
             MarkDead();
@@ -1920,7 +2008,7 @@ public:
         ENSURE_NOT_DELETED
         ENSURE_NOT_FROZEN
         Y_ENSURE(static_cast<EState>(State) >= EState::TypeComplete);
-        Y_ENSURE(!StartsExecution());
+        Y_ENSURE(static_cast<EState>(State) < EState::ExecutionRequired);
         Constraints_.AddConstraint(node);
         State = EState::ConstrComplete;
     }
@@ -2187,6 +2275,8 @@ private:
     const TExprNode* InnerLambda = nullptr;
 
     TPtr Result;
+
+    std::shared_ptr<TListType> WorldLinks;
 
     ui64 HashAbove = 0ULL;
     ui64 HashBelow = 0ULL;
@@ -2865,9 +2955,6 @@ const TTypeAnnotationNode* GetSeqItemType(const TTypeAnnotationNode* seq);
 const TTypeAnnotationNode& GetSeqItemType(const TTypeAnnotationNode& seq);
 
 const TTypeAnnotationNode& RemoveOptionality(const TTypeAnnotationNode& type);
-
-TMaybe<TIssue> NormalizeName(TPosition position, TString& name);
-TString NormalizeName(const TStringBuf& name);
 
 } // namespace NYql
 

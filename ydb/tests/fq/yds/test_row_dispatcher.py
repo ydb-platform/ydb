@@ -5,6 +5,7 @@ import os
 import pytest
 import logging
 import time
+import json
 
 from ydb.tests.tools.fq_runner.kikimr_utils import yq_v1
 from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
@@ -21,12 +22,13 @@ from ydb.tests.tools.fq_runner.fq_client import StreamingDisposition
 import ydb.public.api.protos.draft.fq_pb2 as fq
 
 YDS_CONNECTION = "yds"
+COMPUTE_NODE_COUNT = 3
 
 
 @pytest.fixture
 def kikimr(request):
     kikimr_conf = StreamingOverKikimrConfig(
-        cloud_mode=True, node_count={"/cp": TenantConfig(1), "/compute": TenantConfig(3)}
+        cloud_mode=True, node_count={"/cp": TenantConfig(1), "/compute": TenantConfig(COMPUTE_NODE_COUNT)}
     )
     kikimr = StreamingOverKikimr(kikimr_conf)
     kikimr.compute_plane.fq_config['row_dispatcher']['enabled'] = True
@@ -74,6 +76,23 @@ def wait_row_dispatcher_sensor_value(kikimr, sensor, expected_count, exact_match
         if count == expected_count:
             break
         if not exact_match and count > expected_count:
+            break
+        assert time.time() < deadline, f"Waiting sensor {sensor} value failed, current count {count}"
+        time.sleep(1)
+    pass
+
+
+def wait_public_sensor_value(kikimr, query_id, sensor, expected_value):
+    deadline = time.time() + 60
+    cloud_id = "mock_cloud"
+    folder_id = "my_folder"
+    while True:
+        count = 0
+        for node_index in kikimr.compute_plane.kikimr_cluster.nodes:
+            value = kikimr.compute_plane.get_sensors(node_index, "yq_public").find_sensor(
+                {"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id, "name": sensor})
+            count += value if value is not None else 0
+        if count >= expected_value:
             break
         assert time.time() < deadline, f"Waiting sensor {sensor} value failed, current count {count}"
         time.sleep(1)
@@ -191,7 +210,12 @@ class TestPqRowDispatcher(TestYdsBase):
         query_id = start_yds_query(kikimr, client, sql)
         wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 1)
 
-        self.write_stream(['{"time": 100}', '{"time": 120}'])
+        data = [
+            '{"time": 100}',
+            '{"time": 109}',
+            '{"time": 118}',
+        ]
+        self.write_stream(data)
         assert len(self.read_stream(1, topic_path=self.output_topic)) == 1
         stop_yds_query(client, query_id)
 
@@ -334,6 +358,7 @@ class TestPqRowDispatcher(TestYdsBase):
         self.init_topics("test_filters_non_optional_field")
 
         sql = Rf'''
+            PRAGMA AnsiLike;
             INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
             SELECT Cast(time as String) FROM {YDS_CONNECTION}.`{self.input_topic}`
                 WITH (format=json_each_row, SCHEMA (time UInt64 NOT NULL, data String NOT NULL, event String NOT NULL, nested Json NOT NULL)) WHERE '''
@@ -363,6 +388,12 @@ class TestPqRowDispatcher(TestYdsBase):
         self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE (CAST(`nested` AS String) REGEXP \\".*abc.*\\")')
         filter = ' CAST(nested AS String) REGEXP ".*abc.*"'
         self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE (CAST(`nested` AS String) REGEXP \\".*abc.*\\")')
+        filter = 'event LIKE "event2%"'
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE StartsWith(`event`, \\"event2\\")')
+        filter = 'event LIKE "%event2"'
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE EndsWith(`event`, \\"event2\\")')
+        filter = 'event LIKE "%event2%"'
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE String::Contains(`event`, \\"event2\\")')
 
     @yq_v1
     def test_filters_optional_field(self, kikimr, client):
@@ -372,6 +403,7 @@ class TestPqRowDispatcher(TestYdsBase):
         self.init_topics("test_filters_optional_field")
 
         sql = Rf'''
+            PRAGMA AnsiLike;
             INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
             SELECT Cast(time as String) FROM {YDS_CONNECTION}.`{self.input_topic}`
                 WITH (format=json_each_row, SCHEMA (time UInt64 NOT NULL, data String, event String, flag Bool, field1 UInt8, field2 Int64, nested Json)) WHERE '''
@@ -417,6 +449,12 @@ class TestPqRowDispatcher(TestYdsBase):
         self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE (IF((`nested` IS NOT NULL), CAST(`nested` AS String), NULL) REGEXP \\".*abc.*\\")')
         filter = ' CAST(nested AS String) REGEXP ".*abc.*"'
         self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE (CAST(`nested` AS String?) REGEXP \\".*abc.*\\")')
+        filter = 'event LIKE "event2%"'
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE StartsWith(`event`, \\"event2\\")')
+        filter = 'event LIKE "%event2"'
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE EndsWith(`event`, \\"event2\\")')
+        filter = 'event LIKE "%event2%"'
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE String::Contains(`event`, \\"event2\\")')
 
     @yq_v1
     def test_filter_missing_fields(self, kikimr, client):
@@ -957,12 +995,155 @@ class TestPqRowDispatcher(TestYdsBase):
 
         wait_actor_count(kikimr, "DQ_PQ_READ_ACTOR", 1)
         wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 1)
+        wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_COMPILE_SERVICE", COMPUTE_NODE_COUNT)
+        wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_FORMAT_HANDLER", 1)
         wait_row_dispatcher_sensor_value(kikimr, "ClientsCount", 1)
         wait_row_dispatcher_sensor_value(kikimr, "RowsSent", 1, exact_match=False)
         wait_row_dispatcher_sensor_value(kikimr, "IncomingRequests", 1, exact_match=False)
 
+        wait_public_sensor_value(kikimr, query_id, "query.input_filtered_bytes", 1)
+        wait_public_sensor_value(kikimr, query_id, "query.source_input_filtered_records", 1)
+        wait_public_sensor_value(kikimr, query_id, "query.input_queued_bytes", 0)
+        wait_public_sensor_value(kikimr, query_id, "query.source_input_queued_records", 0)
         stop_yds_query(client, query_id)
 
         wait_actor_count(kikimr, "DQ_PQ_READ_ACTOR", 0)
         wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 0)
         wait_row_dispatcher_sensor_value(kikimr, "ClientsCount", 0)
+
+        stat = json.loads(client.describe_query(query_id).result.query.statistics.json)
+        filtered_bytes = stat['Graph=0']['IngressFilteredBytes']['sum']
+        filtered_rows = stat['Graph=0']['IngressFilteredRows']['sum']
+        assert filtered_bytes > 1 and filtered_rows > 0
+
+    @yq_v1
+    @pytest.mark.skip(reason="Is not implemented")
+    def test_group_by_hop_restart_query(self, kikimr, client):
+        client.create_yds_connection(
+            YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), shared_reading=True
+        )
+        self.init_topics("test_group_by_hop_restart")
+
+        sql1 = Rf'''
+            $data = SELECT * FROM {YDS_CONNECTION}.`{self.input_topic}`
+                WITH (format=json_each_row, SCHEMA (time String NOT NULL, project String NOT NULL));
+            $hop_data = SELECT
+                    CAST(HOP_END() as String) as time,
+                    COUNT(*) as count
+                FROM $data
+                GROUP BY
+                    HOP(CAST(time as TimeStamp), "PT10S", "PT10S", "PT0S");
+            INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
+            SELECT ToBytes(Unwrap(Json::SerializeJson(Yson::From(TableRow())))) FROM $hop_data;'''
+
+        query_id = start_yds_query(kikimr, client, sql1)
+        wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 1)
+
+        data = [
+            '{"time": "2025-04-23T09:00:00.000000Z", "project": "project1"}',
+            '{"time": "2025-04-23T09:00:01.000000Z", "project": "project1"}',
+            '{"time": "2025-04-23T09:00:02.000000Z", "project": "project1"}',
+            '{"time": "2025-04-23T09:00:03.000000Z", "project": "project1"}',
+            '{"time": "2025-04-23T09:00:04.000000Z", "project": "project1"}',
+            '{"time": "2025-04-23T09:00:15.000000Z", "project": "project1"}',
+            '{"time": "2025-04-23T09:00:16.000000Z", "project": "project1"}',
+            ]
+        self.write_stream(data)
+        expected = ['{"count":5,"time":"2025-04-23T09:00:10Z"}']
+        assert self.read_stream(len(expected), topic_path=self.output_topic) == expected
+
+        kikimr.compute_plane.wait_completed_checkpoints(
+            query_id, kikimr.compute_plane.get_completed_checkpoints(query_id) + 2
+        )
+        stop_yds_query(client, query_id)
+        wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 0)
+
+        data = [
+            '{"time": "2025-04-23T09:00:17.000000Z", "project": "project1"}',
+            '{"time": "2025-04-23T09:00:18.000000Z", "project": "project1"}',
+            '{"time": "2025-04-23T09:00:21.000000Z", "project": "project1"}',
+            '{"time": "2025-04-23T09:00:25.000000Z", "project": "project1"}',
+            '{"time": "2025-04-23T09:00:31.000000Z", "project": "project1"}',
+            ]
+        self.write_stream(data)
+
+        client.modify_query(
+            query_id,
+            "continue",
+            sql1,
+            type=fq.QueryContent.QueryType.STREAMING,
+            state_load_mode=fq.StateLoadMode.FROM_LAST_CHECKPOINT,
+            streaming_disposition=StreamingDisposition.from_last_checkpoint(),
+        )
+        client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
+
+        expected = [
+            '{"count":4,"time":"2025-04-23T09:00:20Z"}',
+            '{"count":2,"time":"2025-04-23T09:00:30Z"}']
+        assert self.read_stream(len(expected), topic_path=self.output_topic) == expected
+
+        stop_yds_query(client, query_id)
+        wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 0)
+
+    @yq_v1
+    def test_group_by_hop_restart_node(self, kikimr, client):
+        client.create_yds_connection(
+            YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), shared_reading=True
+        )
+        self.init_topics("test_group_by_hop_restart")
+
+        sql1 = Rf'''
+            $data = SELECT * FROM {YDS_CONNECTION}.`{self.input_topic}`
+                WITH (format=json_each_row, SCHEMA (time String NOT NULL, project String NOT NULL));
+            $hop_data = SELECT
+                    project,
+                    CAST(HOP_END() as String) as time,
+                    COUNT(*) as count
+                FROM $data
+                GROUP BY
+                    HOP(CAST(time as TimeStamp), "PT10S", "PT10S", "PT0S"), project;
+            INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
+            SELECT ToBytes(Unwrap(Json::SerializeJson(Yson::From(TableRow())))) FROM $hop_data;'''
+
+        query_id = start_yds_query(kikimr, client, sql1)
+        wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 1)
+
+        data = [
+            '{"time": "2025-04-23T09:00:00.000000Z", "project": "project1"}',
+            '{"time": "2025-04-23T09:00:04.000000Z", "project": "project1"}',
+            '{"time": "2025-04-23T09:00:05.000000Z", "project": "project2"}',
+            '{"time": "2025-04-23T09:00:15.000000Z", "project": "project1"}',
+            '{"time": "2025-04-23T09:00:16.000000Z", "project": "project2"}',
+            ]
+        self.write_stream(data)
+        expected = [
+            '{"count":2,"project":"project1","time":"2025-04-23T09:00:10Z"}',
+            '{"count":1,"project":"project2","time":"2025-04-23T09:00:10Z"}']
+        assert self.read_stream(len(expected), topic_path=self.output_topic) == expected
+
+        kikimr.compute_plane.wait_completed_checkpoints(
+            query_id, kikimr.compute_plane.get_completed_checkpoints(query_id) + 2
+        )
+
+        node_index = 1
+        logging.debug("Restart compute node {}".format(node_index))
+        kikimr.compute_plane.kikimr_cluster.nodes[node_index].stop()
+
+        data = [
+            '{"time": "2025-04-23T09:00:17.000000Z", "project": "project1"}',
+            '{"time": "2025-04-23T09:00:18.000000Z", "project": "project2"}',
+            '{"time": "2025-04-23T09:00:21.000000Z", "project": "project1"}',
+            '{"time": "2025-04-23T09:00:25.000000Z", "project": "project2"}'
+            ]
+        self.write_stream(data)
+
+        kikimr.compute_plane.kikimr_cluster.nodes[node_index].start()
+        kikimr.compute_plane.wait_bootstrap(node_index)
+
+        expected = [
+            '{"count":2,"project":"project1","time":"2025-04-23T09:00:20Z"}',
+            '{"count":2,"project":"project2","time":"2025-04-23T09:00:20Z"}']
+        assert self.read_stream(len(expected), topic_path=self.output_topic) == expected
+
+        stop_yds_query(client, query_id)
+        wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 0)

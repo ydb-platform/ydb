@@ -1,10 +1,10 @@
 self: super: with self; rec {
-  version = "2.9.0";
+  version = "2.10.0";
 
   src = fetchFromGitHub {
     owner = "JuliaStrings";
     repo = "utf8proc";
     rev = "v${version}";
-    hash = "sha256-Sgh8vTbclUV+lFZdR29PtNUy8F+9L/OAXk647B+l2mg=";
+    hash = "sha256-wmtMo6eBK/xxxkIeJfh5Yb293po9cKK+7WjqNPoxM9g=";
   };
 }

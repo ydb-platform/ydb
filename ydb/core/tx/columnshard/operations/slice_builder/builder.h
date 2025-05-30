@@ -18,7 +18,7 @@ private:
     void ReplyError(const TString& message, const NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass errorClass);
 
 protected:
-    virtual TConclusionStatus DoExecute(const std::shared_ptr<ITask>& taskPtr) override;
+    virtual void DoExecute(const std::shared_ptr<ITask>& taskPtr) override;
 
 public:
     virtual TString GetTaskClassIdentifier() const override {
@@ -28,9 +28,10 @@ public:
     TBuildSlicesTask(NEvWrite::TWriteData&& writeData, const std::shared_ptr<arrow::RecordBatch>& batch,
         const TWritingContext& context)
         : WriteData(std::move(writeData))
-        , TabletId(WriteData.GetWriteMeta().GetTableId())
+        , TabletId(context.GetTabletId())
         , OriginalBatch(batch)
         , Context(context) {
+        WriteData.MutableWriteMeta().OnStage(NEvWrite::EWriteStage::BuildSlices);
     }
 };
 }   // namespace NKikimr::NOlap

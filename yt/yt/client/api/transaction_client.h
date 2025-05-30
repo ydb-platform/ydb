@@ -1,6 +1,7 @@
 #pragma once
 
 #include "client_common.h"
+#include "prerequisite_client.h"
 
 #include <yt/yt/core/ytree/public.h>
 
@@ -63,12 +64,8 @@ struct TTransactionStartOptions
 };
 
 struct TTransactionAttachOptions
+    : public TPrerequisiteAttachOptions
 {
-    bool AutoAbort = false;
-    std::optional<TDuration> PingPeriod;
-    bool Ping = true;
-    bool PingAncestors = false;
-
     //! If non-empty, assumes that the transaction is sticky and specifies address of the transaction manager.
     //! Throws if the transaction is not sticky actually.
     //! Only supported by RPC proxy client for now. Ignored by other clients.

@@ -178,6 +178,10 @@ class SessionPoolEmpty(Error, queue.Empty):
     status = StatusCode.SESSION_POOL_EMPTY
 
 
+class ClientInternalError(Error):
+    status = StatusCode.CLIENT_INTERNAL_ERROR
+
+
 class UnexpectedGrpcMessage(Error):
     def __init__(self, message: str):
         super().__init__(message)

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <yql/essentials/sql/settings/translation_settings.h>
 #include <yql/essentials/core/file_storage/defs/downloader.h>
 #include <yql/essentials/core/file_storage/file_storage.h>
 #include <yql/essentials/core/credentials/yql_credentials.h>
@@ -8,6 +9,7 @@
 #include <yql/essentials/core/yql_user_data.h>
 #include <yql/essentials/core/facade/yql_facade.h>
 #include <yql/essentials/core/qplayer/storage/interface/yql_qstorage.h>
+#include <yql/essentials/public/langver/yql_langver.h>
 
 #include <library/cpp/getopt/last_getopt.h>
 #include <library/cpp/yson/public.h>
@@ -68,6 +70,8 @@ public:
     ~TFacadeRunOptions();
 
     EProgramType ProgramType = EProgramType::SExpr;
+    TLangVersion LangVer = UnknownLangVersion;
+    TLangVersion MaxLangVer = GetMaxLangVersion();
     NYson::EYsonFormat ResultsFormat = NYson::EYsonFormat::Text;
     ERunMode Mode = ERunMode::Run;
     TString ProgramFile;
@@ -84,6 +88,9 @@ public:
     bool AnsiLexer = false;
     bool TestAntlr4 = false;
     bool AssumeYdbOnClusterWithSlash = false;
+    bool TestSqlFormat = false;
+    bool TestLexers = false;
+    THashMap<TString, NSQLTranslation::TTableBindingSettings> Bindings;
 
     bool PrintAst = false;
     bool FullExpr = false;
@@ -92,6 +99,7 @@ public:
     int Verbosity = TLOG_ERR;
     bool ShowLog = false;
     bool WithFinalIssues = false;
+    bool ValidateResultFormat = false;
 
     IOutputStream* TraceOptStream = nullptr;
 
@@ -104,6 +112,7 @@ public:
     NYql::TUserDataTable DataTable;
     TVector<TString> UdfsPaths;
     TString Params;
+    TString YsonAttrs;
     NUdf::EValidateMode ValidateMode = NUdf::EValidateMode::Greedy;
     TCredentials::TPtr Credentials = MakeIntrusive<TCredentials>();
 
@@ -115,6 +124,7 @@ public:
     THolder<TGatewaysConfig> GatewaysConfig;
     THolder<TFileStorageConfig> FsConfig;
     THolder<NProto::TPgExtensions> PgExtConfig;
+    TMaybe<TString> GatewaysPatch;
 
     // No command line options for these settings. Should be configured in the inherited class
     bool NoDebug = false;
@@ -122,12 +132,11 @@ public:
     bool FailureInjectionSupport = false;
     bool UseRepeatableRandomAndTimeProviders = false;
     bool UseMetaFromGrpah = false;
-    bool TestSqlFormat = false;
-    bool ValidateResultFormat = false;
     bool EnableResultPosition = false;
     bool EnableCredentials = false;
     bool EnableQPlayer = false;
     bool OptimizeLibs = true;
+    bool CustomTests = false;
 
     void Parse(int argc, const char *argv[]);
 
@@ -144,6 +153,15 @@ public:
     void InitLogger();
 
     void PrintInfo(const TString& msg);
+
+    static void ParseProtoConfig(const TString& cfgFile, google::protobuf::Message* config);
+
+    template <typename TMessage>
+    static THolder<TMessage> ParseProtoConfig(const TString& cfgFile) {
+        auto config = MakeHolder<TMessage>();
+        ParseProtoConfig(cfgFile, config.Get());
+        return config;
+    }
 
 private:
     std::vector<std::function<void(NLastGetopt::TOpts&)>> OptExtenders_;

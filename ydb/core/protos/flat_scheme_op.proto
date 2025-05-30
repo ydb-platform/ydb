@@ -8,8 +8,10 @@ import "ydb/core/protos/follower_group.proto";
 import "ydb/core/protos/index_builder.proto";
 import "ydb/core/protos/pqconfig.proto";
 import "ydb/core/protos/replication.proto";
+import "ydb/core/protos/s3_settings.proto";
 import "ydb/core/protos/schemeshard/operations.proto";
 import "ydb/core/protos/subdomains.proto";
+import "ydb/core/protos/sys_view_types.proto";
 import "ydb/core/protos/table_stats.proto";
 import "ydb/core/protos/tablet.proto";
 import "ydb/core/protos/yql_translation_settings.proto";
@@ -23,6 +25,7 @@ import "ydb/library/mkql_proto/protos/minikql.proto";
 import "ydb/public/api/protos/ydb_coordination.proto";
 import "ydb/public/api/protos/ydb_export.proto";
 import "ydb/public/api/protos/ydb_table.proto";
+import "ydb/public/api/protos/ydb_topic.proto";
 import "ydb/public/api/protos/ydb_value.proto";
 
 import "google/protobuf/empty.proto";
@@ -317,6 +320,7 @@ message TTableDescription {
 
     optional bool OmitFollowers = 36 [default = false]; // used with CopyFromTable
     optional bool IsBackup = 37 [default = false];
+    optional bool IsRestore = 45 [default = false];
 
     repeated TCdcStreamDescription CdcStreams = 38;
     repeated TSequenceDescription Sequences = 39;
@@ -386,9 +390,38 @@ message TOlapColumnDescription {
     optional string ColumnFamilyName = 15;
 }
 
+message TIndexDataExtractor {
+    optional string ClassName = 1;
+    message TDefault {
+    }
+
+    message TSubColumn {
+        optional string SubColumnName = 1;
+    }
+
+    oneof Implementation {
+        TDefault Default = 20;
+        TSubColumn SubColumn = 21;
+    }
+}
+
+message TSkipIndexBitSetStorage {
+    optional string ClassName = 1;
+    message TFixString {
+    }
+    message TBitSet {
+    }
+    oneof Implementation {
+        TFixString FixString = 20;
+        TBitSet BitSet = 21;
+    }
+}
+
 message TRequestedBloomFilter {
     optional double FalsePositiveProbability = 1 [default = 0.1];
     repeated string ColumnNames = 3;
+    optional TIndexDataExtractor DataExtractor = 4;
+    optional TSkipIndexBitSetStorage BitsStorage = 5;
 }
 
 message TRequestedBloomNGrammFilter {
@@ -397,6 +430,9 @@ message TRequestedBloomNGrammFilter {
     optional uint32 HashesCount = 3;
     optional string ColumnName = 4;
     optional uint32 RecordsCount = 5;
+    optional TIndexDataExtractor DataExtractor = 6;
+    optional TSkipIndexBitSetStorage BitsStorage = 7;
+    optional bool CaseSensitive = 8 [default = true];
 }
 
 message TRequestedMaxIndex {
@@ -426,6 +462,8 @@ message TBloomFilter {
     optional double FalsePositiveProbability = 1 [default = 0.1];
     optional uint64 MaxBytesCount = 2 [default = 8196];
     repeated uint32 ColumnIds = 3;
+    optional TIndexDataExtractor DataExtractor = 4;
+    optional TSkipIndexBitSetStorage BitsStorage = 5;
 }
 
 message TBloomNGrammFilter {
@@ -434,6 +472,9 @@ message TBloomNGrammFilter {
     optional uint32 HashesCount = 3;
     optional uint32 ColumnId = 4;
     optional uint32 RecordsCount = 5;
+    optional TIndexDataExtractor DataExtractor = 6;
+    optional TSkipIndexBitSetStorage BitsStorage = 7;
+    optional bool CaseSensitive = 8 [default = true];
 }
 
 message TMaxIndex {
@@ -474,21 +515,58 @@ enum EOlapProgramType {
 
 message TStorageTierConfig {
     optional string Name = 1;
-    optional TS3Settings ObjectStorage = 2;
+    optional NKikimrSchemeOp.TS3Settings ObjectStorage = 2;
     optional TCompressionOptions Compression = 3;
 }
 
 message TCompactionLevelConstructorContainer {
     optional string ClassName = 1;
+    optional string DefaultSelectorName = 2;
 
     message TZeroLevel {
         optional uint32 PortionsLiveDurationSeconds = 1;
         optional uint64 ExpectedBlobsSize = 2;
         optional uint64 PortionsCountAvailable = 3;
+        optional uint64 PortionsCountLimit = 4;
+        optional uint64 PortionsSizeLimit = 5;
+    }
+
+    message TOneLayer {
+        optional uint32 ExpectedPortionSize = 1;
+        optional float BytesLimitFraction = 2;
+        optional uint64 SizeLimitGuarantee = 3;
     }
 
     oneof Implementation {
         TZeroLevel ZeroLevel = 10;
+        TOneLayer OneLayer = 11;
+    }
+
+}
+
+message TCompactionSelectorConstructorContainer {
+    optional string ClassName = 1;
+    optional string Name = 2;
+
+    message TTransparentSelector {
+    }
+
+    message TEmptySelector {
+    }
+
+    message TDataSnapshotInterval {
+        optional uint32 StartSecondsUTC = 1;
+        optional uint32 FinishSecondsUTC = 2;
+    }
+
+    message TSnapshotSelector {
+        optional TDataSnapshotInterval Interval = 1;
+    }
+
+    oneof Implementation {
+        TEmptySelector Empty = 10;
+        TTransparentSelector Transparent = 11;
+        TSnapshotSelector Snapshot = 12;
     }
 
 }
@@ -507,6 +585,7 @@ message TCompactionPlannerConstructorContainer {
 
     message TLCOptimizer {
         repeated TCompactionLevelConstructorContainer Levels = 1;
+        repeated TCompactionSelectorConstructorContainer Selectors = 2;
     }
 
     oneof Implementation {
@@ -545,6 +624,7 @@ message TColumnTableSchema {
     repeated TOlapColumnDescription Columns = 1;
     repeated string KeyColumnNames = 2;
 
+    optional EColumnTableEngine Engine = 3;
     // Internal fields
     optional uint32 NextColumnId = 4;
 
@@ -848,11 +928,15 @@ message TReshardColumnTable {
 message TLoginCreateUser {
     optional string User = 1;
     optional string Password = 2;
+    optional bool CanLogin = 3 [default = true];
+    optional bool IsHashedPassword = 4 [default = false];
 }
 
 message TLoginModifyUser {
     optional string User = 1;
     optional string Password = 2;
+    optional bool CanLogin = 3;
+    optional bool IsHashedPassword = 4 [default = false];
 }
 
 message TLoginRemoveUser {
@@ -1156,62 +1240,9 @@ message TYTSettings {
     optional bool UseTypeV3 = 8;
 };
 
-message TSecretId {
-    optional string Id = 1;
-    optional string OwnerId = 2;
-}
-
-message TSecretValue {
-    optional string Data = 1;
-}
-
-message TSecretableVariable {
-    oneof Data {
-        TSecretId SecretId = 1;
-        TSecretValue Value = 2;
-    }
-}
-
-message TS3Settings {
-    enum EScheme {
-        HTTP = 0;
-        HTTPS = 1;
-    }
-
-    optional string Endpoint = 1;
-    optional EScheme Scheme = 2 [default = HTTPS];
-    optional string Bucket = 3;
-    optional string ObjectKeyPattern = 4; // dst for backup, src for restore
-    optional string AccessKey = 5;
-    optional string SecretKey = 6;
-    optional Ydb.Export.ExportToS3Settings.StorageClass StorageClass = 7 [default = STANDARD];
-    optional bool VerifySSL = 8;
-    optional string ProxyHost = 9;
-    optional uint32 ProxyPort = 10;
-    optional EScheme ProxyScheme = 11;
-    optional string Region = 12;
-    optional TSecretableVariable SecretableAccessKey = 13;
-    optional TSecretableVariable SecretableSecretKey = 14;
-    optional bool UseVirtualAddressing = 15 [default = true];
-
-    message TLimits {
-        optional uint32 ReadBatchSize = 1 [default = 8388608]; // 8 MB
-        optional uint32 MinWriteBatchSize = 2 [default = 5242880]; // 5 MB
-        reserved 3; // ReadBufferSizeLimit
-    };
-
-    optional TLimits Limits = 100;
-    optional uint32 RequestTimeoutMs = 101;
-    optional uint32 HttpRequestTimeoutMs = 102;
-    optional uint32 ConnectionTimeoutMs = 103;
-
-    optional uint32 ExecutorThreadsCount = 104 [default = 32];
-    optional uint32 MaxConnectionsCount = 105 [default = 32];
-};
-
 message TTaskCleaner {
     optional uint64 PathId = 1;
-    optional TS3Settings StorageSettings = 2;
+    optional NKikimrSchemeOp.TS3Settings StorageSettings = 2;
     optional string TieringId = 3;
 }
 
@@ -1227,10 +1258,11 @@ message TBackupTask {
 
     oneof Settings {
         TYTSettings YTSettings = 4;
-        TS3Settings S3Settings = 9;
+        NKikimrSchemeOp.TS3Settings S3Settings = 9;
     }
 
     optional TPathDescription Table = 10; // for further restore
+    repeated TPathDescription ChangefeedUnderlyingTopics = 17; // for further restore
 
     message TScanSettings {
         optional uint64 RowsBatchSize = 1 [default = 0]; // no limit
@@ -1245,11 +1277,24 @@ message TBackupTask {
         optional int32 Level = 2;
     }
 
-    optional TCompressionOptions Compression = 13; // currently available for s3
-
     optional uint64 SnapshotStep = 14;
     optional uint64 SnapshotTxId = 15;
-    optional bool EnableChecksums = 16; // currently available for s3
+
+    // currently available only for s3:
+    optional TCompressionOptions Compression = 13;
+    optional bool EnableChecksums = 16;
+    optional bool EnablePermissions = 18;
+
+    // Encryption (currently available only for s3):
+    message TEncryptionSettings {
+        optional string EncryptionAlgorithm = 1;
+        optional bytes IV = 2;
+        oneof Key {
+            Ydb.Export.EncryptionSettings.SymmetricKey SymmetricKey = 3;
+        }
+    }
+
+    optional TEncryptionSettings EncryptionSettings = 19;
 }
 
 message TRestoreTask {
@@ -1260,8 +1305,19 @@ message TRestoreTask {
     optional uint32 NumberOfRetries = 5;
 
     oneof Settings {
-        TS3Settings S3Settings = 6;
+        NKikimrSchemeOp.TS3Settings S3Settings = 6;
     }
+
+    optional bool ValidateChecksums = 7; // currently available for s3
+
+    message TEncryptionSettings {
+        optional bytes IV = 1;
+        oneof Key {
+            Ydb.Export.EncryptionSettings.SymmetricKey SymmetricKey = 2;
+        }
+    }
+
+    optional TEncryptionSettings EncryptionSettings = 8;
 }
 
 message TPersQueueGroupAllocate {
@@ -1404,6 +1460,7 @@ message TSolomonVolumeDescription {
     optional uint64 PathId = 2;
     optional uint64 PartitionCount = 3;
     repeated TPartition Partitions = 4;
+    repeated NKikimrStoragePool.TChannelBind BoundChannels = 5;
 }
 
 message TCreateSolomonVolume {
@@ -1458,6 +1515,7 @@ message TSplitMergeTablePartitions {
     repeated TSplitBoundary SplitBoundary = 5;  // Points of split (there will be N+1 parts)
     optional uint64 SchemeshardId = 6;          // Only needed if TableId is used instead of path
     optional uint64 TableOwnerId = 7;
+    optional bool AllowOneToOneSplitMerge = 8;  // Allow a special 1-to-1 split/merge for emergencies
 }
 
 message TUserAttribute {
@@ -1515,6 +1573,14 @@ message TReplicationDescription {
     optional uint64 Version = 4;
     optional uint64 ControllerId = 5; // replication controller's tablet id
     optional NKikimrReplication.TReplicationState State = 6;
+
+    message TAlterTransfer {
+        optional string TransformLambda = 1;
+        optional uint64 FlushIntervalMilliSeconds = 2 [default = 60000];
+        optional uint64 BatchSizeBytes = 3 [default = 8388608];
+    }
+
+    optional TAlterTransfer AlterTransfer = 10;
 }
 
 message TBlobDepotDescription {
@@ -1530,6 +1596,7 @@ message TApplyIf {
     optional uint64 PathVersion = 2;
     optional uint64 LockedTxId = 3;
     optional bool CheckEntityVersion = 4 [default = false];
+    repeated EPathType PathTypes = 5;
 }
 
 message TUpgradeSubDomain {
@@ -1558,6 +1625,7 @@ message TIndexBuildControl {
 
 message TLockConfig {
     optional string Name = 1;
+    optional uint64 LockTxId = 2; // if missing, current tx id is used
 }
 
 message TLockGuard {
@@ -1716,6 +1784,8 @@ message TModifyScheme {
 
     optional TMove MoveSequence = 77;
 
+    optional TSysViewDescription CreateSysView = 81;
+
     // Some entries are grouped by semantics, so are out of order
 }
 
@@ -1784,6 +1854,7 @@ enum EPathType {
     EPathTypeResourcePool = 21;
     EPathTypeBackupCollection = 22;
     EPathTypeTransfer = 23;
+    EPathTypeSysView = 24;
 }
 
 enum EPathSubType {
@@ -1841,6 +1912,7 @@ message TPathVersion {
     optional uint64 ViewVersion = 29;
     optional uint64 ResourcePoolVersion = 30;
     optional uint64 BackupCollectionVersion = 31;
+    optional uint64 SysViewVersion = 32;
 }
 
 // Describes single path
@@ -1860,6 +1932,7 @@ message TDirEntry {
     optional uint64 PathVersion = 13;
     optional EPathSubType PathSubType = 14;
     optional TPathVersion Version = 15;
+    optional bool ChildrenExist = 16;
 
     optional uint64 BalancerTabletID = 999; //temporary optimization for old PQ read/write protocol. Must be removed later
 }
@@ -1931,6 +2004,7 @@ message TPathDescription {
     optional TViewDescription ViewDescription = 29;
     optional TResourcePoolDescription ResourcePoolDescription = 30;
     optional TBackupCollectionDescription BackupCollectionDescription = 31;
+    optional TSysViewDescription SysViewDescription = 32;
 }
 
 // For persisting AlterTable Tx description in Schemeshard internal DB
@@ -2051,6 +2125,7 @@ message TExternalDataSourceDescription {
     optional TAuth Auth = 7;
     optional TExternalDataSourceProperties Properties = 8;
     optional bool ReplaceIfExists = 9;
+    optional TExternalTableReferences References = 10;
 }
 
 message TViewDescription {
@@ -2113,4 +2188,37 @@ message TBackupBackupCollection {
     optional string Name = 1;
     optional NKikimrProto.TPathID PathId = 2;
     optional string TargetDir = 3; // must be set on Rewrite
+}
+
+message TImportTableChangefeeds {
+    message TImportChangefeedTopic {
+        optional Ydb.Table.ChangefeedDescription Changefeed = 1;
+        optional Ydb.Topic.DescribeTopicResult Topic = 2;
+    }
+    repeated TImportChangefeedTopic Changefeeds = 1;
+}
+
+message TChangefeedUnderlyingTopics {
+    repeated TPathDescription ChangefeedUnderlyingTopics = 1;
+}
+
+message TExportMetadata {
+    message TSchemaMappingItem {
+        optional string SourcePath = 1;
+        optional string DestinationPrefix = 2;
+
+        // encryption details
+        optional bytes IV = 3;
+    }
+
+    repeated TSchemaMappingItem SchemaMapping = 1;
+
+    optional string CompressionAlgorithm = 2;
+    optional string EncryptionAlgorithm = 3;
+    optional bytes IV = 4;
+}
+
+message TSysViewDescription {
+    optional string Name = 1;
+    optional NKikimrSysView.ESysViewType Type = 2;
 }

@@ -36,6 +36,8 @@ enum class EComponent {
     ProviderGeneric,
     ProviderPg,
     ProviderPure,
+    FastMapReduce,
+    ProviderYtflow,
     // <--- put other log components here
     MaxValue
 };
@@ -81,6 +83,8 @@ struct EComponentHelpers {
         case EComponent::ProviderGeneric: return TStringBuf("generic");
         case EComponent::ProviderPg: return TStringBuf("PG");
         case EComponent::ProviderPure: return TStringBuf("pure");
+        case EComponent::FastMapReduce: return TStringBuf("FMR");
+        case EComponent::ProviderYtflow: return TStringBuf("YTFLOW");
         default:
             ythrow yexception() << "invalid log component value: "
                                 << ToInt(component);
@@ -115,6 +119,8 @@ struct EComponentHelpers {
         if (str == TStringBuf("generic")) return EComponent::ProviderGeneric;
         if (str == TStringBuf("PG")) return EComponent::ProviderPg;
         if (str == TStringBuf("pure")) return EComponent::ProviderPure;
+        if (str == TStringBuf("FMR")) return EComponent::FastMapReduce;
+        if (str == TStringBuf("YTFLOW")) return EComponent::ProviderYtflow;
         ythrow yexception() << "unknown log component: '" << str << '\'';
     }
 

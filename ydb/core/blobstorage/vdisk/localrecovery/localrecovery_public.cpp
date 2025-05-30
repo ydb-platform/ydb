@@ -124,7 +124,7 @@ namespace NKikimr {
         void SignalSuccessAndDie(const TActorContext &ctx) {
             // recover Lsn and ConfirmedLsn:
             // Db->Lsn now contains last seen lsn
-            Y_DEBUG_ABORT_UNLESS(LocRecCtx->HullDbRecovery->GetHullDs());
+            Y_VERIFY_DEBUG_S(LocRecCtx->HullDbRecovery->GetHullDs(), LocRecCtx->VCtx->VDiskLogPrefix);
 
             LocRecCtx->RecovInfo->SuccessfulRecovery = true;
             LocRecCtx->RecovInfo->CheckConsistency();
@@ -162,7 +162,8 @@ namespace NKikimr {
             for (iter.SeekToFirst(); iter.Valid(); iter.Next()) {
                 TLogoBlobsSstPtr segment = iter.Get().SstPtr;
                 if (segment->Info.IsCreatedByRepl()) {
-                    Y_ABORT_UNLESS(segment->Info.FirstLsn == 0 && segment->Info.LastLsn == 0);
+                    Y_VERIFY_S(segment->Info.FirstLsn == 0 && segment->Info.LastLsn == 0,
+                        LocRecCtx->VCtx->VDiskLogPrefix);
                     const auto& item = logoBlobs->CurSlice->BulkFormedSegments.FindIntactBulkFormedSst(segment->GetEntryPoint());
                     segment->Info.FirstLsn = item.FirstBlobLsn;
                     segment->Info.LastLsn = item.LastBlobLsn;
@@ -201,7 +202,7 @@ namespace NKikimr {
                         TThis* const Self;
 
                         void AddFromSegment(const TMemRecLogoBlob& memRec, const TDiskPart *outbound,
-                                const TKeyLogoBlob& /*key*/, ui64 /*circaLsn*/) {
+                                const TKeyLogoBlob& /*key*/, ui64 /*circaLsn*/, const void* /*sst*/) {
                             if (memRec.GetType() == TBlobType::HugeBlob || memRec.GetType() == TBlobType::ManyHugeBlobs) {
                                 TDiskDataExtractor extr;
                                 memRec.GetDiskData(&extr, outbound);
@@ -379,7 +380,7 @@ namespace NKikimr {
                                   "Db PDiskGuid is not equal to PDiskGuid stored in SyncLog entry point");
                 return false;
             }
-            LocRecCtx->SyncLogRecovery = new NSyncLog::TSyncLogRecovery(std::move(repaired));
+            LocRecCtx->SyncLogRecovery = new NSyncLog::TSyncLogRecovery(LocRecCtx->VCtx->VDiskLogPrefix, std::move(repaired));
             SyncLogInitialized = true;
             VDiskIncarnationGuid = LocRecCtx->SyncLogRecovery->GetSyncLogHeader().VDiskIncarnationGuid;
             return true;
@@ -423,7 +424,8 @@ namespace NKikimr {
         bool InitHugeBlobKeeper(const TStartingPoints &startingPoints, const TActorContext &ctx) {
             Y_UNUSED(ctx);
             const ui32 blocksInChunk = LocRecCtx->PDiskCtx->Dsk->ChunkSize / LocRecCtx->PDiskCtx->Dsk->AppendBlockSize;
-            Y_ABORT_UNLESS(LocRecCtx->PDiskCtx->Dsk->AppendBlockSize * blocksInChunk == LocRecCtx->PDiskCtx->Dsk->ChunkSize);
+            Y_VERIFY_S(LocRecCtx->PDiskCtx->Dsk->AppendBlockSize * blocksInChunk == LocRecCtx->PDiskCtx->Dsk->ChunkSize,
+                LocRecCtx->VCtx->VDiskLogPrefix);
 
             auto logFunc = [&] (const TString &msg) {
                 LOG_DEBUG(ctx, BS_HULLHUGE, msg);
@@ -466,6 +468,7 @@ namespace NKikimr {
                             lsn, entryPoint, logFunc);
             }
             HugeBlobCtx = std::make_shared<THugeBlobCtx>(
+                    LocRecCtx->VCtx->VDiskLogPrefix,
                     LocRecCtx->RepairedHuge->Heap->BuildHugeSlotsMap(),
                     Config->AddHeader);
             HugeKeeperInitialized = true;
@@ -500,7 +503,7 @@ namespace NKikimr {
                     "INIT: TEvYardInit OK PDiskId# %s", LocRecCtx->PDiskCtx->PDiskIdString.data()));
 
                 // create context for HullDs
-                Y_ABORT_UNLESS(LocRecCtx->VCtx && LocRecCtx->VCtx->Top);
+                Y_VERIFY_S(LocRecCtx->VCtx && LocRecCtx->VCtx->Top, LocRecCtx->VCtx->VDiskLogPrefix);
                 auto hullCtx = MakeIntrusive<THullCtx>(
                         LocRecCtx->VCtx,
                         ui32(LocRecCtx->PDiskCtx->Dsk->ChunkSize),
@@ -725,4 +728,3 @@ namespace NKikimr {
     }
 
 } // NKikimr
-

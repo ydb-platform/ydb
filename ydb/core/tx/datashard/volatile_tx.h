@@ -211,6 +211,10 @@ namespace NKikimr::NDataShard {
             return !VolatileTxByVersion.empty() && (*VolatileTxByVersion.begin())->Version <= snapshot;
         }
 
+        bool HasUnstableVolatileTxsAtSnapshot(const TRowVersion& snapshot) const {
+            return !UnstableVolatileTxByVersion.empty() && (*UnstableVolatileTxByVersion.begin())->Version <= snapshot;
+        }
+
         TRowVersion GetMinUncertainVersion() const {
             if (!VolatileTxByVersion.empty()) {
                 return (*VolatileTxByVersion.begin())->Version;
@@ -291,6 +295,7 @@ namespace NKikimr::NDataShard {
         absl::flat_hash_map<ui64, std::unique_ptr<TVolatileTxInfo>> VolatileTxs; // TxId -> Info
         absl::flat_hash_map<ui64, TVolatileTxInfo*> VolatileTxByCommitTxId; // CommitTxId -> Info
         TVolatileTxByVersion VolatileTxByVersion;
+        TVolatileTxByVersion UnstableVolatileTxByVersion;
         TIntrusiveList<TVolatileTxInfo, TVolatileTxInfoCommitOrderListTag> VolatileTxByCommitOrder;
         std::vector<TWaitingSnapshotEvent> WaitingSnapshotEvents;
         TIntrusivePtr<TTxMap> TxMap;

@@ -32,10 +32,8 @@ $data = <|
     "tag": AsTagged(1,'foo'),
     "dict0": DictCreate(int32, string),
     "dict1": {1:"foo"},
-    "dict2": {1:"foo",2:"bar"},
     "set0": SetCreate(int32),
     "set1": {1},
-    "set2": {1,2},
 |>;
 
 evaluate for $name in StructMembers($data) do begin 

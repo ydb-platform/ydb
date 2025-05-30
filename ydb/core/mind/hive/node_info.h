@@ -58,6 +58,12 @@ public:
         }
     };
 
+    struct TLastScheduledTablet {
+        TFullTabletId TabletId;
+        NMetrics::TFastRiseAverageValue<double, 20> UsageSince;
+        double UsageBefore;
+    };
+
     THive& Hive;
     TNodeId Id;
     TActorId Local;
@@ -91,6 +97,8 @@ public:
     NKikimrHive::TNodeStatistics Statistics;
     bool DeletionScheduled = false;
     TString Name;
+    ui64 DrainSeqNo = 0;
+    std::optional<TLastScheduledTablet> LastScheduledTablet; // remembered for a limited time
 
     TNodeInfo(TNodeId nodeId, THive& hive);
     TNodeInfo(const TNodeInfo&) = delete;
@@ -159,7 +167,7 @@ public:
     bool IsAllowedToRunTablet(TTabletDebugState* debugState = nullptr) const;
     bool IsAllowedToRunTablet(const TTabletInfo& tablet, TTabletDebugState* debugState = nullptr) const;
     bool IsAbleToRunTablet(const TTabletInfo& tablet, TTabletDebugState* debugState = nullptr) const;
-    i32 GetPriorityForTablet(const TTabletInfo& tablet) const;
+    i32 GetPriorityForTablet(const TTabletInfo& tablet, TDataCenterPriority& dcPriority) const;
     ui64 GetMaxTabletsScheduled() const;
     ui64 GetMaxCountForTabletType(TTabletTypes::EType tabletType) const;
 
@@ -247,7 +255,7 @@ public:
         return ResourceMaximumValues;
     }
 
-    double GetNodeUsageForTablet(const TTabletInfo& tablet) const;
+    double GetNodeUsageForTablet(const TTabletInfo& tablet, bool neighbourPenalty = true) const;
     double GetNodeUsage(EResourceToBalance resource = EResourceToBalance::ComputeResources) const;
     double GetNodeUsage(const TResourceNormalizedValues& normValues,
                         EResourceToBalance resource = EResourceToBalance::ComputeResources) const;
@@ -269,9 +277,9 @@ public:
         return ServicedDomains.empty() ? TSubDomainKey() : ServicedDomains.front();
     }
 
-    void UpdateResourceTotalUsage(const NKikimrHive::TEvTabletMetrics& metrics);
+    void UpdateResourceTotalUsage(const NKikimrHive::TEvTabletMetrics& metrics, NIceDb::TNiceDb& db);
     void ActualizeNodeStatistics(TInstant now);
-    ui64 GetRestartsPerPeriod(TInstant barrier) const;
+    ui64 GetRestartsPerPeriod(TInstant barrier = {}) const;
 
     TDataCenterId GetDataCenter() const {
         return Location.GetDataCenterId();

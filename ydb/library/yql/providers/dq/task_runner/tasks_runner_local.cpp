@@ -267,7 +267,7 @@ public:
                 YQL_CLOG(DEBUG, ProviderDq) << message;
             };
         }
-        ctx.FuncProvider = TaskTransformFactory(settings.TaskParams, ctx.FuncRegistry);
+        ctx.FuncProvider = TaskTransformFactory({settings.TaskParams, settings.ReadRanges}, ctx.FuncRegistry);
         return MakeDqTaskRunner(alloc, ctx, settings, logger);
     }
 

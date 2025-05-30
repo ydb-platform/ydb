@@ -349,6 +349,9 @@ namespace TEvDataShard {
         EvForceDataCleanup,
         EvForceDataCleanupResult,
 
+        EvPrefixKMeansRequest,
+        EvPrefixKMeansResponse,
+
         EvEnd
     };
 
@@ -486,7 +489,7 @@ namespace TEvDataShard {
             const TStringBuf& txBody, const NKikimrSubDomains::TProcessingParams &processingParams, ui32 flags = NDataShard::TTxFlags::Default)
             : TEvProposeTransaction(txKind, source, txId, txBody, flags)
         {
-            Y_ABORT_UNLESS(txKind == NKikimrTxDataShard::TX_KIND_SCHEME);
+            Y_ENSURE(txKind == NKikimrTxDataShard::TX_KIND_SCHEME);
             Record.SetSchemeShardId(ssId);
             Record.MutableProcessingParams()->CopyFrom(processingParams);
         }
@@ -616,6 +619,10 @@ namespace TEvDataShard {
         void SetStepOrderId(const std::pair<ui64, ui64>& stepOrderId) {
             Record.SetStep(stepOrderId.first);
             Record.SetOrderId(stepOrderId.second);
+            // Note: this method is used by schema operations where stepOrderId == commitVersion
+            auto* commitVersion = Record.MutableCommitVersion();
+            commitVersion->SetStep(stepOrderId.first);
+            commitVersion->SetTxId(stepOrderId.second);
         }
 
         void AddTxLock(ui64 lockId, ui64 shard, ui32 generation, ui64 counter, ui64 ssId, ui64 pathId, bool hasWrites) {
@@ -952,7 +959,7 @@ namespace TEvDataShard {
             return TBase::SerializeToArcadiaStream(chunker);
         }
 
-        static NActors::IEventBase* Load(TEventSerializedData* data);
+        static TEvRead* Load(const TEventSerializedData* data);
 
     private:
         void FillRecord();
@@ -998,7 +1005,7 @@ namespace TEvDataShard {
             return TBase::SerializeToArcadiaStream(chunker);
         }
 
-        static NActors::IEventBase* Load(TEventSerializedData* data);
+        static TEvReadResult* Load(const TEventSerializedData* data);
 
         size_t GetRowsCount() const {
             return Record.GetRowCount();
@@ -1340,7 +1347,7 @@ namespace TEvDataShard {
             : TxId(txId)
             , Info(info)
         {
-            Y_ABORT_UNLESS(Info.DataETag);
+            Y_ENSURE(Info.DataETag);
         }
 
         TString ToString() const override {
@@ -1387,7 +1394,7 @@ namespace TEvDataShard {
             , Record(*RecordHolder)
             , Info(info)
         {
-            Y_ABORT_UNLESS(Info.DataETag);
+            Y_ENSURE(Info.DataETag);
         }
 
         TString ToString() const override {
@@ -1514,6 +1521,18 @@ namespace TEvDataShard {
                           TEvDataShard::EvLocalKMeansResponse> {
     };
 
+    struct TEvPrefixKMeansRequest
+        : public TEventPB<TEvPrefixKMeansRequest,
+                          NKikimrTxDataShard::TEvPrefixKMeansRequest,
+                          TEvDataShard::EvPrefixKMeansRequest> {
+    };
+
+    struct TEvPrefixKMeansResponse
+        : public TEventPB<TEvPrefixKMeansResponse,
+                          NKikimrTxDataShard::TEvPrefixKMeansResponse,
+                          TEvDataShard::EvPrefixKMeansResponse> {
+    };
+
     struct TEvKqpScan
         : public TEventPB<TEvKqpScan,
                           NKikimrTxDataShard::TEvKqpScan,
@@ -1578,8 +1597,10 @@ namespace TEvDataShard {
                                                 TEvDataShard::EvForceDataCleanupResult> {
         TEvForceDataCleanupResult() = default;
 
-        TEvForceDataCleanupResult(ui64 dataCleanupGeneration) {
+        TEvForceDataCleanupResult(ui64 dataCleanupGeneration, ui64 tabletId, NKikimrTxDataShard::TEvForceDataCleanupResult::EStatus status) {
             Record.SetDataCleanupGeneration(dataCleanupGeneration);
+            Record.SetTabletId(tabletId);
+            Record.SetStatus(status);
         }
     };
 

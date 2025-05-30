@@ -74,6 +74,7 @@
                                                             "unique2 (-\u221e, +\u221e)"
                                                         ],
                                                         "ReadRangesPointPrefixLen": "0",
+                                                        "Reverse": false,
                                                         "Scan": "Sequential",
                                                         "Table": "postgres_select.test_plan/onek2"
                                                     }

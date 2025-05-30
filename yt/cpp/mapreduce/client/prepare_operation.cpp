@@ -1,14 +1,10 @@
 #include "prepare_operation.h"
 
-#include <yt/cpp/mapreduce/common/retry_lib.h>
+#include <yt/cpp/mapreduce/common/retry_request.h>
 
-#include <yt/cpp/mapreduce/http/retry_request.h>
-
+#include <yt/cpp/mapreduce/interface/raw_batch_request.h>
 #include <yt/cpp/mapreduce/interface/raw_client.h>
 #include <yt/cpp/mapreduce/interface/serialize.h>
-
-#include <yt/cpp/mapreduce/raw_client/raw_requests.h>
-#include <yt/cpp/mapreduce/raw_client/raw_batch_request.h>
 
 #include <library/cpp/iterator/functools.h>
 
@@ -20,11 +16,9 @@ TOperationPreparationContext::TOperationPreparationContext(
     const TStructuredJobTableList& structuredInputs,
     const TStructuredJobTableList& structuredOutputs,
     const IRawClientPtr& rawClient,
-    const TClientContext& context,
     const IClientRetryPolicyPtr& retryPolicy,
     TTransactionId transactionId)
     : RawClient_(rawClient)
-    , Context_(context)
     , RetryPolicy_(retryPolicy)
     , TransactionId_(transactionId)
     , InputSchemas_(structuredInputs.size())
@@ -44,11 +38,9 @@ TOperationPreparationContext::TOperationPreparationContext(
     TVector<TRichYPath> inputs,
     TVector<TRichYPath> outputs,
     const IRawClientPtr& rawClient,
-    const TClientContext& context,
     const IClientRetryPolicyPtr& retryPolicy,
     TTransactionId transactionId)
     : RawClient_(rawClient)
-    , Context_(context)
     , RetryPolicy_(retryPolicy)
     , TransactionId_(transactionId)
     , InputSchemas_(inputs.size())
@@ -77,20 +69,17 @@ int TOperationPreparationContext::GetOutputCount() const
 const TVector<TTableSchema>& TOperationPreparationContext::GetInputSchemas() const
 {
     TVector<::NThreading::TFuture<TNode>> schemaFutures;
-    NRawClient::TRawBatchRequest batch(Context_.Config);
+    auto batch = RawClient_->CreateRawBatchRequest();
     for (int tableIndex = 0; tableIndex < static_cast<int>(InputSchemas_.size()); ++tableIndex) {
         if (InputSchemasLoaded_[tableIndex]) {
             schemaFutures.emplace_back();
             continue;
         }
         Y_ABORT_UNLESS(Inputs_[tableIndex]);
-        schemaFutures.push_back(batch.Get(TransactionId_, Inputs_[tableIndex]->Path_ + "/@schema", TGetOptions{}));
+        schemaFutures.push_back(batch->Get(TransactionId_, Inputs_[tableIndex]->Path_ + "/@schema", TGetOptions{}));
     }
 
-    NRawClient::ExecuteBatch(
-        RetryPolicy_->CreatePolicyForGenericRequest(),
-        Context_,
-        batch);
+    batch->ExecuteBatch();
 
     for (int tableIndex = 0; tableIndex < static_cast<int>(InputSchemas_.size()); ++tableIndex) {
         if (schemaFutures[tableIndex].Initialized()) {

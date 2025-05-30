@@ -274,7 +274,7 @@ TEST_F(TFairThrottlerTest, Release)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct TFairThrottlerIPCTest
+struct TFairThrottlerIpcTest
     : public ::testing::Test
 {
     TFairThrottlerConfigPtr Config = New<TFairThrottlerConfig>();
@@ -282,11 +282,11 @@ struct TFairThrottlerIPCTest
 
     TFairThrottlerPtr DatNode, ExeNode;
 
-    TFairThrottlerIPCTest()
+    TFairThrottlerIpcTest()
     {
-        TString testName = ::testing::UnitTest::GetInstance()->current_test_info()->name();
+        std::string testName = ::testing::UnitTest::GetInstance()->current_test_info()->name();
 
-        Config->IPCPath = GetOutputPath() / (testName + ".throttler");
+        Config->IpcPath = GetOutputPath() / (testName + ".throttler");
         Config->TotalLimit = 100;
 
         auto logger = Logger().WithTag("Test: %v", testName);
@@ -296,7 +296,7 @@ struct TFairThrottlerIPCTest
     }
 };
 
-TEST_F(TFairThrottlerIPCTest, TwoBucket)
+TEST_F(TFairThrottlerIpcTest, TwoBucket)
 {
     auto first = DatNode->CreateBucketThrottler("first", BucketConfig);
     auto second = ExeNode->CreateBucketThrottler("second", BucketConfig);
@@ -322,12 +322,12 @@ TEST_F(TFairThrottlerIPCTest, TwoBucket)
 ////////////////////////////////////////////////////////////////////////////////
 
 #ifndef _win_
-TEST(TFileIPC, Test)
+TEST(TFileIpcTest, Test)
 {
     auto path = GetOutputPath() / "test_ipc";
 
-    auto a = CreateFileThrottlerIPC(path);
-    auto b = CreateFileThrottlerIPC(path);
+    auto a = CreateFileThrottlerIpc(path);
+    auto b = CreateFileThrottlerIpc(path);
 
     ASSERT_TRUE(a->TryLock());
     ASSERT_FALSE(b->TryLock());

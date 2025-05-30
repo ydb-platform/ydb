@@ -13,25 +13,25 @@
 
 #ifdef _win_
 #  ifdef BUILD_UDF
-#    define UDF_API __declspec(dllexport)
+#    define YQL_UDF_API __declspec(dllexport)
 #  else
-#    define UDF_API __declspec(dllimport)
+#    define YQL_UDF_API __declspec(dllimport)
 #  endif
 #else
-#  define UDF_API __attribute__ ((visibility("default")))
+#  define YQL_UDF_API __attribute__ ((visibility("default")))
 #endif
 
 #ifdef BUILD_UDF
 #define REGISTER_MODULES(...) \
-    extern "C" UDF_API void Register( \
+    extern "C" YQL_UDF_API void Register( \
             ::NYql::NUdf::IRegistrator& registrator, ui32 flags) { \
         Y_UNUSED(flags); \
         ::NYql::NUdf::RegisterHelper<__VA_ARGS__>(registrator); \
     } \
-    extern "C" UDF_API ui32 AbiVersion() { \
+    extern "C" YQL_UDF_API ui32 AbiVersion() { \
         return ::NYql::NUdf::CurrentAbiVersion(); \
     }\
-    extern "C" UDF_API void SetBackTraceCallback(::NYql::NUdf::TBackTraceCallback callback) { \
+    extern "C" YQL_UDF_API void SetBackTraceCallback(::NYql::NUdf::TBackTraceCallback callback) { \
         ::NYql::NUdf::SetBackTraceCallbackImpl(callback); \
     }
 #else
@@ -204,12 +204,12 @@ static inline void AddToStaticUdfRegistry() {
 } // namspace NUdf
 } // namspace NYql
 
-extern "C" UDF_API void Register(NYql::NUdf::IRegistrator& registrator, ui32 flags);
-extern "C" UDF_API ui32 AbiVersion();
+extern "C" YQL_UDF_API void Register(NYql::NUdf::IRegistrator& registrator, ui32 flags);
+extern "C" YQL_UDF_API ui32 AbiVersion();
 #if defined(_win_) || defined(_darwin_)
-extern "C" UDF_API void BindSymbols(const NYql::NUdf::TStaticSymbols& symbols);
+extern "C" YQL_UDF_API void BindSymbols(const NYql::NUdf::TStaticSymbols& symbols);
 #endif
-extern "C" UDF_API void SetBackTraceCallback(NYql::NUdf::TBackTraceCallback callback);
+extern "C" YQL_UDF_API void SetBackTraceCallback(NYql::NUdf::TBackTraceCallback callback);
 
 namespace NYql {
 namespace NUdf {

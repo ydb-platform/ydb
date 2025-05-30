@@ -1,6 +1,7 @@
 #include "distconf.h"
 #include "node_warden_impl.h"
 #include <ydb/core/mind/dynamic_nameserver.h>
+#include <ydb/core/protos/bridge.pb.h>
 #include <ydb/library/yaml_config/yaml_config_helpers.h>
 #include <ydb/library/yaml_config/yaml_config.h>
 #include <library/cpp/streams/zstd/zstd.h>
@@ -8,15 +9,12 @@
 namespace NKikimr::NStorage {
 
     TDistributedConfigKeeper::TDistributedConfigKeeper(TIntrusivePtr<TNodeWardenConfig> cfg,
-            const NKikimrBlobStorage::TStorageConfig& baseConfig, bool isSelfStatic)
+            std::shared_ptr<const NKikimrBlobStorage::TStorageConfig> baseConfig, bool isSelfStatic)
         : IsSelfStatic(isSelfStatic)
         , Cfg(std::move(cfg))
         , BaseConfig(baseConfig)
-        , InitialConfig(baseConfig)
-    {
-        UpdateFingerprint(&BaseConfig);
-        InitialConfig.SetFingerprint(BaseConfig.GetFingerprint());
-    }
+        , InitialConfig(std::move(baseConfig))
+    {}
 
     void TDistributedConfigKeeper::Bootstrap() {
         STLOG(PRI_DEBUG, BS_NODE, NWDC00, "Bootstrap");
@@ -34,10 +32,13 @@ namespace NKikimr::NStorage {
 
         // generate initial drive set and query stored configuration
         if (IsSelfStatic) {
-            EnumerateConfigDrives(InitialConfig, SelfId().NodeId(), [&](const auto& /*node*/, const auto& drive) {
-                DrivesToRead.push_back(drive.GetPath());
-            });
-            std::sort(DrivesToRead.begin(), DrivesToRead.end());
+            if (BaseConfig->GetSelfManagementConfig().GetEnabled()) {
+                // read this only if it is possibly enabled
+                EnumerateConfigDrives(*InitialConfig, SelfId().NodeId(), [&](const auto& /*node*/, const auto& drive) {
+                    DrivesToRead.push_back(drive.GetPath());
+                });
+                std::sort(DrivesToRead.begin(), DrivesToRead.end());
+            }
             ReadConfig();
         } else {
             StorageConfigLoaded = true;
@@ -63,48 +64,101 @@ namespace NKikimr::NStorage {
     }
 
     bool TDistributedConfigKeeper::ApplyStorageConfig(const NKikimrBlobStorage::TStorageConfig& config) {
-        if (!StorageConfig || StorageConfig->GetGeneration() < config.GetGeneration()) {
-            StorageConfigYaml = StorageConfigFetchYaml = {};
-            StorageConfigFetchYamlHash = 0;
-            StorageConfigYamlVersion.reset();
+        if (!StorageConfig || StorageConfig->GetGeneration() < config.GetGeneration() ||
+                (!IsSelfStatic && !config.GetGeneration() && !config.GetSelfManagementConfig().GetEnabled())) {
+            // extract the main config from newly applied section
+            MainConfigYaml = MainConfigFetchYaml = {};
+            MainConfigYamlVersion.reset();
+            MainConfigFetchYamlHash = 0;
 
             if (config.HasConfigComposite()) {
+                // parse the composite stream
+                auto error = DecomposeConfig(config.GetConfigComposite(), &MainConfigYaml,
+                    &MainConfigYamlVersion.emplace(), &MainConfigFetchYaml);
+                if (error) {
+                    Y_ABORT("ConfigComposite format incorrect: %s", error->data());
+                }
+
+                // and _fetched_ config hash
+                MainConfigFetchYamlHash = NYaml::GetConfigHash(MainConfigFetchYaml);
+            }
+
+            // now extract the additional storage section
+            StorageConfigYaml.reset();
+            if (config.HasCompressedStorageYaml()) {
                 try {
-                    // parse the composite stream
-                    TStringInput ss(config.GetConfigComposite());
+                    TStringInput ss(config.GetCompressedStorageYaml());
                     TZstdDecompress zstd(&ss);
-                    StorageConfigYaml = TString::Uninitialized(LoadSize(&zstd));
-                    zstd.LoadOrFail(StorageConfigYaml.Detach(), StorageConfigYaml.size());
-                    StorageConfigFetchYaml = TString::Uninitialized(LoadSize(&zstd));
-                    zstd.LoadOrFail(StorageConfigFetchYaml.Detach(), StorageConfigFetchYaml.size());
-
-                    // extract _current_ config version
-                    auto metadata = NYamlConfig::GetMetadata(StorageConfigYaml);
-                    Y_DEBUG_ABORT_UNLESS(metadata.Version.has_value());
-                    StorageConfigYamlVersion = metadata.Version.value_or(0);
-
-                    // and _fetched_ config hash
-                    StorageConfigFetchYamlHash = NYaml::GetConfigHash(StorageConfigFetchYaml);
+                    StorageConfigYaml.emplace(zstd.ReadAll());
                 } catch (const std::exception& ex) {
-                    Y_ABORT("ConfigComposite format incorrect: %s", ex.what());
+                    Y_ABORT("CompressedStorageYaml format incorrect: %s", ex.what());
                 }
             }
 
-            StorageConfig.emplace(config);
+            SelfManagementEnabled = (!IsSelfStatic || BaseConfig->GetSelfManagementConfig().GetEnabled()) &&
+                config.GetSelfManagementConfig().GetEnabled() &&
+                config.GetGeneration();
+
+            if (config.HasClusterState() && Cfg->BridgeConfig) {
+                const auto& state = config.GetClusterState();
+
+                // prepare empty structure
+                auto bridgeInfo = std::make_shared<TBridgeInfo>();
+                bridgeInfo->Piles.resize(Cfg->BridgeConfig->PilesSize());
+
+                for (const auto& node : config.GetAllNodes()) {
+                    if (node.HasBridgePileId()) {
+                        const ui32 nodeId = node.GetNodeId();
+                        const ui32 pileId = node.GetBridgePileId();
+                        Y_ABORT_UNLESS(pileId < bridgeInfo->Piles.size());
+                        auto& pile = bridgeInfo->Piles[pileId];
+                        pile.StaticNodeIds.push_back(node.GetNodeId());
+                        bridgeInfo->StaticNodeIdToPile[nodeId] = &pile;
+                        if (nodeId == SelfNode.NodeId()) {
+                            bridgeInfo->SelfNodePile = &pile;
+                        }
+                    }
+                }
+
+                Y_ABORT_UNLESS(state.PerPileStateSize() == Cfg->BridgeConfig->PilesSize());
+                for (size_t i = 0; i < state.PerPileStateSize(); ++i) {
+                    auto& pile = bridgeInfo->Piles[i];
+                    pile.BridgePileId = TBridgePileId::FromValue(i);
+                    pile.State = state.GetPerPileState(i);
+                    std::ranges::sort(pile.StaticNodeIds);
+                }
+
+                const ui32 primary = state.GetPrimaryPile();
+                Y_ABORT_UNLESS(primary < Cfg->BridgeConfig->PilesSize());
+                bridgeInfo->Piles[primary].IsPrimary = true;
+                bridgeInfo->PrimaryPile = &bridgeInfo->Piles[primary];
+
+                if (const ui32 promoted = state.GetPromotedPile(); promoted != primary) {
+                    Y_ABORT_UNLESS(promoted < Cfg->BridgeConfig->PilesSize());
+                    auto& pile = bridgeInfo->Piles[promoted];
+                    Y_ABORT_UNLESS(pile.State == NKikimrBridge::TClusterState::SYNCHRONIZED);
+                    pile.IsBeingPromoted = true;
+                    bridgeInfo->BeingPromotedPile = &pile;
+                }
+
+                BridgeInfo = std::move(bridgeInfo);
+            } else {
+                Y_ABORT_UNLESS(!BridgeInfo);
+            }
+
+            StorageConfig = std::make_shared<NKikimrBlobStorage::TStorageConfig>(config);
             if (ProposedStorageConfig && ProposedStorageConfig->GetGeneration() <= StorageConfig->GetGeneration()) {
                 ProposedStorageConfig.reset();
             }
 
-            Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvNodeWardenStorageConfig(*StorageConfig,
-                ProposedStorageConfig ? &ProposedStorageConfig.value() : nullptr));
+            ReportStorageConfigToNodeWarden(0);
 
             if (IsSelfStatic) {
                 PersistConfig({});
                 ApplyConfigUpdateToDynamicNodes(false);
+                ConnectToConsole();
+                SendConfigProposeRequest();
             }
-
-            ConnectToConsole();
-            SendConfigProposeRequest();
 
             return true;
         } else if (StorageConfig->GetGeneration() && StorageConfig->GetGeneration() == config.GetGeneration() &&
@@ -223,8 +277,8 @@ namespace NKikimr::NStorage {
 
         Y_ABORT_UNLESS(!StorageConfig || CheckFingerprint(*StorageConfig));
         Y_ABORT_UNLESS(!ProposedStorageConfig || CheckFingerprint(*ProposedStorageConfig));
-        Y_ABORT_UNLESS(CheckFingerprint(BaseConfig));
-        Y_ABORT_UNLESS(!InitialConfig.GetFingerprint() || CheckFingerprint(InitialConfig));
+        Y_ABORT_UNLESS(CheckFingerprint(*BaseConfig));
+        Y_ABORT_UNLESS(!InitialConfig->GetFingerprint() || CheckFingerprint(*InitialConfig));
 
         if (Scepter) {
             Y_ABORT_UNLESS(HasQuorum());
@@ -290,6 +344,18 @@ namespace NKikimr::NStorage {
         }
     }
 
+    void TDistributedConfigKeeper::ReportStorageConfigToNodeWarden(ui64 cookie) {
+        Y_ABORT_UNLESS(StorageConfig);
+        const TActorId wardenId = MakeBlobStorageNodeWardenID(SelfId().NodeId());
+        const auto& config = SelfManagementEnabled ? StorageConfig : BaseConfig;
+        auto proposedConfig = ProposedStorageConfig && SelfManagementEnabled
+            ? std::make_shared<NKikimrBlobStorage::TStorageConfig>(*ProposedStorageConfig)
+            : nullptr;
+        auto ev = std::make_unique<TEvNodeWardenStorageConfig>(config, std::move(proposedConfig), SelfManagementEnabled,
+            BridgeInfo);
+        Send(wardenId, ev.release(), 0, cookie);
+    }
+
     STFUNC(TDistributedConfigKeeper::StateFunc) {
         STLOG(PRI_DEBUG, BS_NODE, NWDC15, "StateFunc", (Type, ev->GetTypeRewrite()), (Sender, ev->Sender),
             (SessionId, ev->InterconnectSession), (Cookie, ev->Cookie));
@@ -346,6 +412,102 @@ namespace NKikimr::NStorage {
     void TNodeWarden::ForwardToDistributedConfigKeeper(STATEFN_SIG) {
         ev->Rewrite(ev->GetTypeRewrite(), DistributedConfigKeeperId);
         TActivationContext::Send(ev.Release());
+    }
+
+
+    std::optional<TString> DecomposeConfig(const TString& configComposite, TString *mainConfigYaml,
+            ui64 *mainConfigVersion, TString *mainConfigFetchYaml) {
+        try {
+            TStringInput ss(configComposite);
+            TZstdDecompress zstd(&ss);
+
+            TString yaml = TString::Uninitialized(LoadSize(&zstd));
+            zstd.LoadOrFail(yaml.Detach(), yaml.size());
+            if (mainConfigVersion) {
+                auto metadata = NYamlConfig::GetMainMetadata(yaml);
+                Y_DEBUG_ABORT_UNLESS(metadata.Version.has_value());
+                *mainConfigVersion = metadata.Version.value_or(0);
+            }
+            if (mainConfigYaml) {
+                *mainConfigYaml = std::move(yaml);
+            }
+
+            if (mainConfigFetchYaml) {
+                *mainConfigFetchYaml = TString::Uninitialized(LoadSize(&zstd));
+                zstd.LoadOrFail(mainConfigFetchYaml->Detach(), mainConfigFetchYaml->size());
+            }
+        } catch (const std::exception& ex) {
+            return ex.what();
+        }
+        return std::nullopt;
+    }
+
+    std::optional<TString> UpdateClusterState(NKikimrBlobStorage::TStorageConfig *config) {
+        // copy bridge info into state storage configs for easier access in replica processors/proxies
+        if (config->HasClusterState()) {
+            auto fillInBridge = [&](auto *pb) -> std::optional<TString> {
+                auto& clusterState = config->GetClusterState();
+                if (!pb->RingGroupsSize() || pb->HasRing()) {
+                    return "configuration has Ring field set or no RingGroups";
+                }
+                auto *groups = pb->MutableRingGroups();
+                for (int i = 0, count = groups->size(); i < count; ++i) {
+                    auto *group = groups->Mutable(i);
+                    if (!group->HasBridgePileId()) {
+                        return "bridge pile id is not set for a ring group";
+                    } else if (ui32 pileId = group->GetBridgePileId(); pileId < clusterState.PerPileStateSize()) {
+                        using T = NKikimrConfig::TDomainsConfig::TStateStorage;
+                        std::optional<T::EPileState> state;
+                        if (pileId == clusterState.GetPrimaryPile()) {
+                            state = pileId == clusterState.GetPromotedPile()
+                                ? T::PRIMARY
+                                : T::DEMOTED;
+                        } else if (pileId == clusterState.GetPromotedPile()) {
+                            state = T::PROMOTED;
+                        } else {
+                            switch (clusterState.GetPerPileState(pileId)) {
+                                case NKikimrBridge::TClusterState::DISCONNECTED:
+                                    state = T::DISCONNECTED;
+                                    break;
+
+                                case NKikimrBridge::TClusterState::NOT_SYNCHRONIZED:
+                                    state = T::NOT_SYNCHRONIZED;
+                                    break;
+
+                                case NKikimrBridge::TClusterState::SYNCHRONIZED:
+                                    state = T::SYNCHRONIZED;
+                                    break;
+
+                                case NKikimrBridge::TClusterState_EPileState_TClusterState_EPileState_INT_MIN_SENTINEL_DO_NOT_USE_:
+                                case NKikimrBridge::TClusterState_EPileState_TClusterState_EPileState_INT_MAX_SENTINEL_DO_NOT_USE_:
+                                    Y_DEBUG_ABORT("unexpected value");
+                            }
+                        }
+                        if (!state) {
+                            return "can't determine correct pile state for ring group";
+                        }
+                        group->SetPileState(*state);
+                    } else {
+                        return "bridge pile id is out of bounds";
+                    }
+                }
+                return std::nullopt;
+            };
+
+            std::optional<TString> error;
+            if (!error && config->HasStateStorageConfig()) {
+                error = fillInBridge(config->MutableStateStorageConfig());
+            }
+            if (!error && config->HasStateStorageBoardConfig()) {
+                error = fillInBridge(config->MutableStateStorageBoardConfig());
+            }
+            if (!error && config->HasSchemeBoardConfig()) {
+                error = fillInBridge(config->MutableSchemeBoardConfig());
+            }
+            return error;
+        }
+
+        return std::nullopt;
     }
 
 } // NKikimr::NStorage

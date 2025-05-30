@@ -16,7 +16,7 @@ A {{ ydb-short-name }} **cluster** is a set of interconnected {{ ydb-short-name 
 
 Like in most database management systems, a **database** in {{ ydb-short-name }} is a logical container for other entities like [tables](#table). However, in {{ ydb-short-name }}, the namespace inside databases is hierarchical like in [virtual file systems](https://en.wikipedia.org/wiki/Virtual_file_system), and thus [folders](#folder) allow for further organization of entities.
 
-Another essential characteristic of {{ ydb-short-name }} databases is that they typically have dedicated compute resources allocated to them. Hence, creating an additional database is usually done externally by [DevOps engineers](../devops/index.md) or automation rather than via a SQL query.
+Another essential characteristic of {{ ydb-short-name }} databases is that they typically have dedicated compute resources allocated to them. Hence, creating a database requires additional operations from [DevOps engineers](../devops/index.md).
 
 ### Node {#node}
 
@@ -90,16 +90,17 @@ Technically, tablets are [actors](#actor) with a persistent state reliably saved
 
 [Tablet implementation details](#tablet-implementation) and related terms, as well as [main tablet types](#tablet-types), are covered below in the advanced section.
 
-### Distributed transactions {#distributed-transaction}
+### Transactions {#transactions}
 
 {{ ydb-short-name }} implements **transactions** on two main levels:
 
 * [Local database](#local-database) and the rest of [tablet infrastructure](#tablet-implementation) allow [tablets](#tablet) to manipulate their state using **local transactions** with [serializable isolation level](https://en.wikipedia.org/wiki/Isolation_%28database_systems%29#Serializable). Technically, they aren't really local to a single node as such a state persists remotely in [Distributed Storage](#distributed-storage).
 * In the context of {{ ydb-short-name }}, the term **distributed transactions** usually refers to transactions involving multiple tablets. For example, cross-table or even cross-row transactions are often distributed.
+* **Single-shard** transactions span a single tablet and are faster to complete. For example, transactions between rows in the same table partition are often single-shard.
 
 Together, these mechanisms allow {{ ydb-short-name }} to provide [strict consistency](https://en.wikipedia.org/wiki/Consistency_model#Strict_consistency).
 
-The implementation of distributed transactions is covered in a separate article [{#T}](../contributor/datashard-distributed-txs.md), while below there's a list of several [related terms](#distributed-transaction-implementation).
+The implementation of distributed transactions is covered in a separate article [{#T}](../contributor/datashard-distributed-txs.md), while below there's a list of several [related terms](#deterministic-transactions).
 
 ### Interactive transactions {#interactive-transaction}
 
@@ -156,6 +157,15 @@ A **primary index** or **primary key index** is the main data structure used to 
 #### Secondary index {#secondary-index}
 
 A **secondary index** is an additional data structure used to locate rows in a table, typically when it can't be done efficiently using the [primary index](#primary-index). Unlike the primary index, secondary indexes are managed independently from the main table data. Thus, a table might have multiple secondary indexes for different use cases. {{ ydb-short-name }}'s capabilities in terms of secondary indexes are covered in a separate article [{#T}](secondary_indexes.md). Secondary indexes can be either unique or non-unique.
+
+A special type of **secondary index** is singled out separately - [vector index] (#vector-index).
+
+#### Vector Index {#vector-index}
+
+**Vector index** is an additional data structure used to speed up the [vector search](vector_search.md) when there is a large amount of data, and the [exact vector search without an index](../yql/reference/udf/list/knn.md) does not perform satisfactorily. The capabilities of {{ ydb-short-name }} regarding vector indexes are described in a separate article [{#T}](../dev/vector-indexes.md).
+
+**Vector index** is distinct from a [secondary index](#secondary-index) as it solves other tasks.
+
 
 #### Column family {#column-family}
 
@@ -233,7 +243,7 @@ A **semaphore** is an object within a [coordination node](#coordination-node) th
 
 ### YQL {#yql}
 
-**YQL ({{ ydb-short-name }} Query Language)** is a high-level language for working with the system. It is a dialect of [ANSI SQL](https://en.wikipedia.org/wiki/SQL). There's a lot of content covering YQL, including a [tutorial](../dev/yql-tutorial/index.md), [reference](../yql/reference/syntax/index.md), and [recipes](../recipes/yql/index.md).
+**YQL ({{ ydb-short-name }} Query Language)** is a high-level language for working with the system. It is a dialect of [ANSI SQL](https://en.wikipedia.org/wiki/SQL). There's a lot of content covering YQL, including a [tutorial](../dev/yql-tutorial/index.md), [reference](../yql/reference/syntax/index.md), and [recipes](../yql/reference/recipes/index.md).
 
 ### Federated queries {#federated-queries}
 
@@ -253,9 +263,117 @@ An **external table** is a piece of metadata that describes a particular dataset
 
 A **secret** is a sensitive piece of metadata that requires special handling. For example, secrets can be used in [external data source](#external-data-source) definitions and represent things like passwords and tokens.
 
+### Authentication token {#auth-token}
+
+An **authentication token** or **auth token** is a token that {{ ydb-short-name }} uses for [authentication](../security/authentication.md).
+
+{{ ydb-short-name }} supports various [authentication modes](../security/authentication.md) and token types.
+
+### Cluster scheme {#scheme}
+
+A **{{ ydb-short-name }} cluster scheme** is a hierarchical namespace of a {{ ydb-short-name }} cluster. The top-level element of the namespace is the [cluster scheme root](#scheme-root) that contains [databases](#database) as its children. Scheme objects inside databases can use nested directories to form a hierarchy.
+
+### Database scheme {#scheme-database}
+
+A **database scheme** is a subset of the hierarchical namespace of a {{ ydb-short-name }} cluster that belongs to a database.
+
+### Database root {#scheme-database-root}
+
+A **database root** is a path to a database in a {{ ydb-short-name }} cluster scheme.
+
+### Scheme root {#scheme-root}
+
+A **scheme root** is a root element of a [{{ ydb-short-name }} cluster scheme](datamodel/index.md#cluster-scheme). Children elements of the cluster scheme root can be [databases](#database) or other [scheme objects](#scheme-object).
+
+### Scheme object {#scheme-object}
+
+A database schema consists of **scheme objects**, which can be databases, [tables](#table) (including [external tables](#external-table)), [topics](#topic), [folders](#folder), and so on.
+
+For organizational convenience, scheme objects form a hierarchy using [folders](#folder).
+
 ### Folder {#folder}
 
-Like in filesystems, a **folder** or **directory** is a container for other entities. In the case of {{ ydb-short-name }}, these entities can be [tables](#table) (including [external tables](#external-table)), [topics](#topic), other folders, etc.
+As in file systems, a **folder** or **directory** is a container for [scheme objects](#scheme-object).
+
+Folders can contain subfolders, and this nesting can have arbitrary depth.
+
+### Access object {#access-object}
+
+An **access object** in the context of [authorization](../security/authorization.md) is an entity for which access rights and restrictions are configured. In {{ ydb-short-name }}, access objects are [scheme objects](#scheme-object).
+Each access object has an [owner](#access-owner) and an [access control list](#access-control-list).
+
+### Access subject {#access-subject}
+
+An **access subject** is an entity that can interact with [access objects](#access-object) or perform specific actions within the system. Access to these interactions and actions depends on configured [access control lists](#access-control-list).
+
+An access subject can be a [user](#access-user) or a [group](#access-group).
+
+### Access right {#access-right}
+
+An **[access right](../security/authorization.md#right)** is an entity that represents permission for an [access subject](#access-subject) to perform a specific set of operations in a cluster or database on a specific [access object](#access-object).
+
+### Access right inheritance {#access-right-inheritance}
+
+**Access right inheritance** refers to the mechanism by which [access rights](#access-right) are automatically passed down from parent [access objects](#access-object) to child access objects within a database structure. This ensures that permissions granted at a higher level in the hierarchy are applied to all sub-levels beneath it, unless [explicitly overridden](../reference/ydb-cli/commands/scheme-permissions.md#clear-inheritance).
+
+### Access control list {#access-control-list}
+
+An **access control list** or **ACL** is a list of all [rights](#access-right) granted to [access subjects](#access-subject) (users and groups) for a specific [access object](#access-object).
+
+### Access level {#access-level}
+
+An **access level** determines additional privileges of an [access subject](#access-subject) for [scheme objects](#scheme-object) as well as privileges that are not related to [scheme objects](#scheme-object).
+
+{{ ydb-short-name }} uses three access levels:
+
+- viewer
+- operator
+- administrator
+
+An access level is granted by adding an access subject to an [access level list](#access-level-list).
+
+### Access level list {#access-level-list}
+
+An **access level list** is a list of [SIDs](#access-sid) that grants a certain [access level](#access-level) to the associated [access subjects](#access-subject).
+
+{{ ydb-short-name }} provides several [access level lists](../reference/configuration/security_config.md#security-access-levels) that collectively determine [access levels](#access-level) in the system.
+
+### Owner {#access-owner}
+
+An **[owner](../security/authorization.md#owner)** is an [access subject](#access-subject) ([user](#access-user) or [group](#access-group)) having full rights over a specific [access object](#access-object).
+
+### User {#access-user}
+
+A **[user](../security/authorization.md#user)** is an individual utilizing {{ ydb-short-name }} to perform a specific function.
+
+{{ ydb-short-name }} has the following types of users depending on their source:
+
+- local users in {{ ydb-short-name }} databases
+- external users from third-party directory services
+
+{{ ydb-short-name }} users are identified by their [SIDs](#access-sid).
+
+#### Local user {#local-user}
+
+A **local user** is an individual whose {{ ydb-short-name }} account is created directly in {{ ydb-short-name }} using the `CREATE USER` command or during the [initial security configuration](../security/builtin-security.md).
+
+#### External user {#external-user}
+
+An **external user** is an individual whose {{ ydb-short-name }} account is created in a third-party directory service, for example, in LDAP or IAM.
+
+### Group {#access-group}
+
+A **[group](../security/authorization.md#group)** or **access group** is a named collection of [users](#access-user) with identical [access rights](#access-right) to certain [access objects](#access-object).
+
+### Role {#access-role}
+
+A **role** is a named collection of [access rights](#access-right) that can be granted to [users](#access-user) or [groups](#access-group).
+
+Roles in {{ ydb-short-name }} are implemented as [groups](#access-group) that are created during the initial cluster deployment and granted a set of [access rights](#access-right) on the root of the cluster scheme.
+
+### SID {#access-sid}
+
+**SID** (**Security Identifier**) is a string in the format `<login>[@<subsystem>]`, identifying an [access subject](../concepts/glossary.md#access-subject) in [access control lists](#access-control-list).
 
 ### Query optimizer {#optimizer}
 
@@ -416,11 +534,15 @@ The **Mediator** is a system tablet that distributes the transactions planned by
 
 #### Hive {#hive}
 
-A **Hive** is a system tablet responsible for launching and managing other tablets. Its responsibilities include moving tablets between nodes in case of [node](#node) failure or overload.
+A **Hive** is a system tablet responsible for launching and managing other tablets. It also moves tablets between nodes in case of [node](#node) failures or overload. You can learn more about Hive in a [dedicated article](../contributor/hive.md).
 
 #### Cluster management system {#cms}
 
 The **cluster management system** or **CMS** is a system tablet responsible for managing the information about the current [{{ ydb-short-name }} cluster](#cluster) state. This information is used to perform cluster rolling restarts without affecting user workloads, maintenance, cluster re-configuration, etc.
+
+#### Node Broker {#node-broker}
+
+The **Node Broker** is a system tablet that registers [dynamic nodes](#dynamic-node) in the cluster.
 
 ### Slot {#slot}
 
@@ -540,7 +662,7 @@ A **channel** is a logical connection between a [tablet](#tablet) and [Distribut
 
 ### Distributed transactions implementation {#distributed-transaction-implementation}
 
-Terms related to the implementation of [distributed transactions](#distributed-transaction) are explained below. The implementation itself is described in a separate article [{#T}](../contributor/datashard-distributed-txs.md).
+Terms related to the implementation of [distributed transactions](#transactions) are explained below. The implementation itself is described in a separate article [{#T}](../contributor/datashard-distributed-txs.md).
 
 #### Deterministic transactions {#deterministic-transactions}
 
@@ -566,7 +688,7 @@ In the case of read-only transactions, similar to "read uncommitted" in other da
 
 #### Read-write set {#rw-set}
 
-The **read-write set** or **RW set** is a set of data that will participate in executing a [distributed transaction](#distributed-transaction). It combines the read set, the data that will be read, and the write set, the data modifications to be carried out.
+The **read-write set** or **RW set** is a set of data that will participate in executing a [distributed transaction](#transactions). It combines the read set, the data that will be read, and the write set, the data modifications to be carried out.
 
 #### Read set {#read-set}
 
@@ -574,7 +696,7 @@ The **read set** or **ReadSet data** is what participating shards forward during
 
 #### Transaction proxy {#transaction-proxy}
 
-The **transaction proxy** or `TX_PROXY` is a service that orchestrates the execution of many [distributed transactions](#distributed-transaction): sequential phases, phase execution, planning, and aggregation of results. In the case of direct orchestration by other actors (for example, KQP data transactions), it is used for caching and allocation of unique [TxIDs](#txid).
+The **transaction proxy** or `TX_PROXY` is a service that orchestrates the execution of many [distributed transactions](#transactions): sequential phases, phase execution, planning, and aggregation of results. In the case of direct orchestration by other actors (for example, KQP data transactions), it is used for caching and allocation of unique [TxIDs](#txid).
 
 #### Transaction flags {#txflags}
 

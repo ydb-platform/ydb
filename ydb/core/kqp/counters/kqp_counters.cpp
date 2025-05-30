@@ -325,27 +325,27 @@ void TKqpCountersBase::ReportQueryWithFullScan() {
 }
 
 void TKqpCountersBase::ReportQueryAffectedShards(ui64 shardsCount) {
-    QueryAffectedShardsCount->Collect(shardsCount > Max<i64>() ? Max<i64>() : static_cast<i64>(shardsCount));
+    QueryAffectedShardsCount->Collect(shardsCount);
 }
 
 void TKqpCountersBase::ReportQueryReadSets(ui64 readSetsCount) {
-    QueryReadSetsCount->Collect(readSetsCount > Max<i64>() ? Max<i64>() : static_cast<i64>(readSetsCount));
+    QueryReadSetsCount->Collect(readSetsCount);
 }
 
 void TKqpCountersBase::ReportQueryReadBytes(ui64 bytesCount) {
-    QueryReadBytes->Collect(bytesCount > Max<i64>() ? Max<i64>() : static_cast<i64>(bytesCount));
+    QueryReadBytes->Collect(bytesCount);
 }
 
 void TKqpCountersBase::ReportQueryReadRows(ui64 rowsCount) {
-    QueryReadRows->Collect(rowsCount > Max<i64>() ? Max<i64>() : static_cast<i64>(rowsCount));
+    QueryReadRows->Collect(rowsCount);
 }
 
 void TKqpCountersBase::ReportQueryMaxShardReplySize(ui64 replySize) {
-    QueryMaxShardReplySize->Collect(replySize > Max<i64>() ? Max<i64>() : static_cast<i64>(replySize));
+    QueryMaxShardReplySize->Collect(replySize);
 }
 
 void TKqpCountersBase::ReportQueryMaxShardProgramSize(ui64 programSize) {
-    QueryMaxShardProgramSize->Collect(programSize > Max<i64>() ? Max<i64>() : static_cast<i64>(programSize));
+    QueryMaxShardProgramSize->Collect(programSize);
 }
 
 void TKqpCountersBase::ReportResponseStatus(ui64 responseSize, Ydb::StatusIds::StatusCode ydbStatus) {
@@ -824,6 +824,9 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
     WriteActorImmediateWritesRetries = KqpGroup->GetCounter("SinkWrites/WriteActorImmediateWritesRetries", true);
     WriteActorPrepareWrites = KqpGroup->GetCounter("SinkWrites/WriteActorPrepareWrites", true);
 
+    WriteActorWriteOnlyOperations = KqpGroup->GetCounter("SinkWrites/WriteActorWriteOnlyOperations", true);
+    WriteActorReadWriteOperations = KqpGroup->GetCounter("SinkWrites/WriteActorReadWriteOperations", true);
+
     BufferActorFlushes = KqpGroup->GetCounter("SinkWrites/BufferActorFlushes", true);
     BufferActorImmediateCommits = KqpGroup->GetCounter("SinkWrites/BufferActorImmediateCommits", true);
     BufferActorDistributedCommits = KqpGroup->GetCounter("SinkWrites/BufferActorDistributedCommits", true);
@@ -834,12 +837,19 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
     WriteActorWritesOperationsHistogram =
         KqpGroup->GetHistogram("SinkWrites/WriteActorWritesOperations", NMonitoring::ExponentialHistogram(20, 2, 1));
     WriteActorWritesLatencyHistogram =
-        KqpGroup->GetHistogram("SinkWrites/WriteActorWritesLatencyMs", NMonitoring::ExponentialHistogram(20, 2, 1));
-    
+        KqpGroup->GetHistogram("SinkWrites/WriteActorWritesLatencyUs", NMonitoring::ExponentialHistogram(28, 2, 1));
+
+    BufferActorPrepareLatencyHistogram =
+        KqpGroup->GetHistogram("SinkWrites/BufferActorPrepareLatencyUs", NMonitoring::ExponentialHistogram(28, 2, 1));
+    BufferActorCommitLatencyHistogram =
+        KqpGroup->GetHistogram("SinkWrites/BufferActorCommitLatencyUs", NMonitoring::ExponentialHistogram(28, 2, 1));
+    BufferActorFlushLatencyHistogram =
+        KqpGroup->GetHistogram("SinkWrites/BufferActorFlushLatencyUs", NMonitoring::ExponentialHistogram(28, 2, 1));
+
     ForwardActorWritesSizeHistogram =
         KqpGroup->GetHistogram("SinkWrites/ForwardActorWritesSize", NMonitoring::ExponentialHistogram(28, 2, 1));
     ForwardActorWritesLatencyHistogram =
-        KqpGroup->GetHistogram("SinkWrites/ForwardActorWritesLatencyMs", NMonitoring::ExponentialHistogram(20, 2, 1));
+        KqpGroup->GetHistogram("SinkWrites/ForwardActorWritesLatencyUs", NMonitoring::ExponentialHistogram(28, 2, 1));
 
     /* sequencers */
 
@@ -866,6 +876,29 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
     SchedulerDelays = KqpGroup->GetHistogram("NodeScheduler/Delay", NMonitoring::ExponentialHistogram(20, 2, 1));
 
     RowsDuplicationsFound = KqpGroup->GetCounter("RowsDuplicationFound", true);
+
+    TotalSingleNodeReqCount = KqpGroup->GetCounter("TotalSingleNodeReqCount", true);
+    NonLocalSingleNodeReqCount = KqpGroup->GetCounter("NonLocalSingleNodeReqCount", true);
+
+    /* Statistics performance */
+    QueryStatCpuCollectUs = KqpGroup->GetCounter("Query/Stat/CpuCollectUs", true);
+    QueryStatCpuFinishUs = KqpGroup->GetCounter("Query/Stat/CpuFinishUs", true);
+    QueryStatCpuConvertUs = KqpGroup->GetCounter("Query/Stat/CpuConvertUs", true);
+
+    QueryStatMemCollectInflightBytes = KqpGroup->GetCounter("Query/Stat/MemCollectInflightBytes", false);
+    QueryStatMemFinishInflightBytes = KqpGroup->GetCounter("Query/Stat/MemFinishInflightBytes", false);
+
+    QueryStatMemFinishBytes = KqpGroup->GetCounter("Query/Stat/MemFinishBytes", true);
+    QueryStatMemConvertBytes = KqpGroup->GetCounter("Query/Stat/MemConvertBytes", true);
+
+    /* Statistics batch operations */
+    BatchOperationUpdateRows = KqpGroup->GetCounter("BatchOperation/Update/Rows", true);
+    BatchOperationUpdateBytes = KqpGroup->GetCounter("BatchOperation/Update/Bytes", true);
+
+    BatchOperationDeleteRows = KqpGroup->GetCounter("BatchOperation/Delete/Rows", true);
+    BatchOperationDeleteBytes = KqpGroup->GetCounter("BatchOperation/Delete/Bytes", true);
+
+    BatchOperationRetries = KqpGroup->GetCounter("BatchOperation/Retries", true);
 }
 
 ::NMonitoring::TDynamicCounterPtr TKqpCounters::GetKqpCounters() const {

@@ -20,15 +20,21 @@ using namespace NYql::NNodes;
 class TDqsPhysicalOptProposalTransformer : public TOptimizeTransformerBase {
 public:
     TDqsPhysicalOptProposalTransformer(TTypeAnnotationContext* typeCtx, const TDqConfiguration::TPtr& config)
-        : TOptimizeTransformerBase(typeCtx, NLog::EComponent::ProviderDq, {})
+        : TOptimizeTransformerBase(/* TODO: typeCtx*/nullptr, NLog::EComponent::ProviderDq, {})
         , Config(config)
     {
         const bool enablePrecompute = Config->_EnablePrecompute.Get().GetOrElse(false);
+        const bool enableDqReplicate = Config->IsDqReplicateEnabled(*typeCtx);
 
 #define HNDL(name) "DqsPhy-"#name, Hndl(&TDqsPhysicalOptProposalTransformer::name)
+        if (!enableDqReplicate) {
+            AddHandler(0, &TDqReplicate::Match, HNDL(FailOnDqReplicate));
+        }
         AddHandler(0, &TDqSourceWrap::Match, HNDL(BuildStageWithSourceWrap));
         AddHandler(0, &TDqReadWrap::Match, HNDL(BuildStageWithReadWrap));
         AddHandler(0, &TCoSkipNullMembers::Match, HNDL(PushSkipNullMembersToStage<false>));
+        AddHandler(0, &TCoPruneKeys::Match, HNDL(PushPruneKeysToStage<false>));
+        AddHandler(0, &TCoPruneAdjacentKeys::Match, HNDL(PushPruneAdjacentKeysToStage<false>));
         AddHandler(0, &TCoExtractMembers::Match, HNDL(PushExtractMembersToStage<false>));
         AddHandler(0, &TCoAssumeUnique::Match, HNDL(PushAssumeUniqueToStage<false>));
         AddHandler(0, &TCoAssumeDistinct::Match, HNDL(PushAssumeDistinctToStage<false>));
@@ -69,6 +75,8 @@ public:
         }
 
         AddHandler(1, &TCoSkipNullMembers::Match, HNDL(PushSkipNullMembersToStage<true>));
+        AddHandler(1, &TCoPruneKeys::Match, HNDL(PushPruneKeysToStage<true>));
+        AddHandler(1, &TCoPruneAdjacentKeys::Match, HNDL(PushPruneAdjacentKeysToStage<true>));
         AddHandler(1, &TCoExtractMembers::Match, HNDL(PushExtractMembersToStage<true>));
         AddHandler(1, &TCoAssumeUnique::Match, HNDL(PushAssumeUniqueToStage<true>));
         AddHandler(1, &TCoAssumeDistinct::Match, HNDL(PushAssumeDistinctToStage<true>));
@@ -104,6 +112,11 @@ public:
     }
 
 protected:
+    TMaybeNode<TExprBase> FailOnDqReplicate(TExprBase node, TExprContext& ctx) {
+        ctx.AddError(YqlIssue(ctx.GetPosition(node.Pos()), TIssuesIds::DQ_OPTIMIZE_ERROR, "Reading multiple times from the same source is not supported"));
+        return {};
+    }
+
     TMaybeNode<TExprBase> BuildStageWithSourceWrap(TExprBase node, TExprContext& ctx) {
         return DqBuildStageWithSourceWrap(node, ctx);
     }
@@ -115,6 +128,16 @@ protected:
     template <bool IsGlobal>
     TMaybeNode<TExprBase> PushSkipNullMembersToStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) {
         return DqPushSkipNullMembersToStage(node, ctx, optCtx, *getParents(), IsGlobal);
+    }
+
+    template <bool IsGlobal>
+    TMaybeNode<TExprBase> PushPruneKeysToStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) {
+        return DqPushPruneKeysToStage(node, ctx, optCtx, *getParents(), IsGlobal);
+    }
+
+    template <bool IsGlobal>
+    TMaybeNode<TExprBase> PushPruneAdjacentKeysToStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) {
+        return DqPushPruneAdjacentKeysToStage(node, ctx, optCtx, *getParents(), IsGlobal);
     }
 
     template <bool IsGlobal>
@@ -290,6 +313,7 @@ protected:
         TExprNode::TPtr ttl;
         TExprNode::TPtr maxCachedRows;
         TExprNode::TPtr maxDelayedRows;
+        TExprNode::TPtr isMultiget;
         if (const auto maybeOptions = join.JoinAlgoOptions()) {
             for (auto&& option: maybeOptions.Cast()) {
                 auto&& name = option.Name().Value();
@@ -299,6 +323,8 @@ protected:
                     maxCachedRows = option.Value().Cast().Ptr();
                 } else if (name == "MaxDelayedRows"sv) {
                     maxDelayedRows = option.Value().Cast().Ptr();
+                } else if (name == "MultiGet"sv) {
+                    isMultiget = option.Value().Cast().Ptr();
                 }
             }
         }
@@ -312,10 +338,16 @@ protected:
         if (!maxDelayedRows) {
             maxDelayedRows = ctx.NewAtom(pos, 1'000'000);
         }
+        auto rightInput = join.RightInput().Ptr();
+        if (auto maybe = TExprBase(rightInput).Maybe<TCoExtractMembers>()) {
+            rightInput = maybe.Cast().Input().Ptr();
+        }
+        auto leftLabel = join.LeftLabel().Maybe<NNodes::TCoAtom>() ? join.LeftLabel().Cast<NNodes::TCoAtom>().Ptr() : ctx.NewAtom(pos, "");
+        Y_ENSURE(join.RightLabel().Maybe<NNodes::TCoAtom>());
         auto cn = Build<TDqCnStreamLookup>(ctx, pos)
             .Output(left.Output().Cast())
-            .LeftLabel(join.LeftLabel().Cast<NNodes::TCoAtom>())
-            .RightInput(join.RightInput())
+            .LeftLabel(leftLabel)
+            .RightInput(rightInput)
             .RightLabel(join.RightLabel().Cast<NNodes::TCoAtom>())
             .JoinKeys(join.JoinKeys())
             .JoinType(join.JoinType())
@@ -323,8 +355,11 @@ protected:
             .RightJoinKeyNames(join.RightJoinKeyNames())
             .TTL(ttl)
             .MaxCachedRows(maxCachedRows)
-            .MaxDelayedRows(maxDelayedRows)
-        .Done();
+            .MaxDelayedRows(maxDelayedRows);
+
+        if (isMultiget) {
+            cn.IsMultiget(isMultiget);
+        }
 
         auto lambda = Build<TCoLambda>(ctx, pos)
             .Args({"stream"})
@@ -332,7 +367,7 @@ protected:
             .Done();
         const auto stage = Build<TDqStage>(ctx, pos)
             .Inputs()
-                .Add(cn)
+                .Add(cn.Done())
                 .Build()
             .Program(lambda)
             .Settings(TDqStageSettings().BuildNode(ctx, pos))

@@ -412,6 +412,355 @@ TESTCASES = [
             ]
         ),
     ),
+    # 8
+    (
+        R'''
+            $input = SELECT * FROM myyds.`{input_topic}`
+                    WITH (
+                        FORMAT=json_each_row,
+                        SCHEMA (
+                            za Int32,
+                            yb STRING,
+                            yc Int32,
+                            zd Int32,
+                        )
+                    )            ;
+
+            $enriched1 = select a, b, c, d, e, f, za, yb, yc, zd
+                from
+                    $input as e
+                left join {streamlookup} any ydb_conn_{table_name}.db as u
+                on(e.za = u.a AND e.yb = u.b)
+            ;
+
+            $enriched2 = SELECT e.a AS a, e.b AS b, e.c AS c, e.d AS d, e.e AS e, e.f AS f, za, yb, yc, zd, u.c AS c2, u.d AS d2
+                from
+                    $enriched1 as e
+                left join {streamlookup} any ydb_conn_{table_name}.db as u
+                on(e.za = u.a AND e.yb = u.b)
+            ;
+
+            $enriched = select a, b, c, d, e, f, za, yb, yc, zd, (c2 IS NOT DISTINCT FROM c) as eq1, (d2 IS NOT DISTINCT FROM d) as eq2
+                from
+                    $enriched2 as e
+            ;
+
+            insert into myyds.`{output_topic}`
+            select Unwrap(Yson::SerializeJson(Yson::From(TableRow()))) from $enriched;
+            ''',
+        ResequenceId(
+            [
+                (
+                    '{"id":1,"za":1,"yb":"2","yc":100,"zd":101}',
+                    '{"a":1,"b":"2","c":3,"d":4,"e":5,"f":6,"za":1,"yb":"2","yc":100,"zd":101,"eq1":true,"eq2":true}',
+                ),
+                (
+                    '{"id":2,"za":7,"yb":"8","yc":106,"zd":107}',
+                    '{"a":7,"b":"8","c":9,"d":10,"e":11,"f":12,"za":7,"yb":"8","yc":106,"zd":107,"eq1":true,"eq2":true}',
+                ),
+                (
+                    '{"id":3,"za":2,"yb":"1","yc":114,"zd":115}',
+                    '{"a":null,"b":null,"c":null,"d":null,"e":null,"f":null,"za":2,"yb":"1","yc":114,"zd":115,"eq1":true,"eq2":true}',
+                ),
+                (
+                    '{"id":3,"za":null,"yb":"1","yc":114,"zd":115}',
+                    '{"a":null,"b":null,"c":null,"d":null,"e":null,"f":null,"za":null,"yb":"1","yc":114,"zd":115,"eq1":true,"eq2":true}',
+                ),
+            ]
+        ),
+    ),
+    # 9
+    (
+        R'''
+            $input = SELECT * FROM myyds.`{input_topic}`
+                    WITH (
+                        FORMAT=json_each_row,
+                        SCHEMA (
+                            a Int32,
+                            b STRING,
+                            c Int32,
+                            d Int32,
+                        )
+                    )            ;
+
+            $enriched12 = select u.a as a, u.b as b, u.c as c, u.d as d, u.e as e, u.f as f, e.a as za, e.b as yb, e.c as yc, e.d as zd, u2.c as c2, u2.d as d2
+                from
+                    $input as e
+                left join {streamlookup} any ydb_conn_{table_name}.db as u
+                on(e.a = u.a AND e.b = u.b)
+                left join {streamlookup} any ydb_conn_{table_name}.db as u2
+                on(e.b = u2.b AND e.a = u2.a)
+            ;
+
+            $enriched = select a, b, c, d, e, f, za, yb, yc, zd, (c2 IS NOT DISTINCT FROM c) as eq1, (d2 IS NOT DISTINCT FROM d) as eq2
+                from
+                    $enriched12 as e
+            ;
+
+            insert into myyds.`{output_topic}`
+            select Unwrap(Yson::SerializeJson(Yson::From(TableRow()))) from $enriched;
+            ''',
+        ResequenceId(
+            [
+                (
+                    '{"id":1,"a":1,"b":"2","c":100,"d":101}',
+                    '{"a":1,"b":"2","c":3,"d":4,"e":5,"f":6,"za":1,"yb":"2","yc":100,"zd":101,"eq1":true,"eq2":true}',
+                ),
+                (
+                    '{"id":2,"a":7,"b":"8","c":106,"d":107}',
+                    '{"a":7,"b":"8","c":9,"d":10,"e":11,"f":12,"za":7,"yb":"8","yc":106,"zd":107,"eq1":true,"eq2":true}',
+                ),
+                (
+                    '{"id":3,"a":2,"b":"1","c":114,"d":115}',
+                    '{"a":null,"b":null,"c":null,"d":null,"e":null,"f":null,"za":2,"yb":"1","yc":114,"zd":115,"eq1":true,"eq2":true}',
+                ),
+                (
+                    '{"id":3,"a":null,"b":"1","c":114,"d":115}',
+                    '{"a":null,"b":null,"c":null,"d":null,"e":null,"f":null,"za":null,"yb":"1","yc":114,"zd":115,"eq1":true,"eq2":true}',
+                ),
+            ]
+        ),
+    ),
+    # 10
+    (
+        R'''
+            $input = SELECT * FROM myyds.`{input_topic}`;
+
+            $enriched = select
+                            e.Data as data, u.id as lookup
+                from
+                    $input as e
+                left join {streamlookup} ydb_conn_{table_name}.{table_name} as u
+                on(AsList(e.Data) = u.data)
+                -- MultiGet true
+            ;
+
+            insert into myyds.`{output_topic}`
+            select Unwrap(Yson::SerializeJson(Yson::From(TableRow()))) from $enriched;
+            ''',
+        [
+            ('ydb10', '{"data":"ydb10","lookup":[1]}'),
+            ('ydb20', '{"data":"ydb20","lookup":[2]}'),
+            ('ydb30', '{"data":"ydb30","lookup":[3]}'),
+            ('ydb40', '{"data":"ydb40","lookup":[null]}'),
+            ('ydb50', '{"data":"ydb50","lookup":[null]}'),
+            ('ydb10', '{"data":"ydb10","lookup":[1]}'),
+            ('ydb20', '{"data":"ydb20","lookup":[2]}'),
+            ('ydb30', '{"data":"ydb30","lookup":[3]}'),
+            ('ydb40', '{"data":"ydb40","lookup":[null]}'),
+            ('ydb50', '{"data":"ydb50","lookup":[null]}'),
+        ]
+        * 10,
+        'MultiGet',
+        'true',
+    ),
+    # 11
+    (
+        R'''
+            $input = SELECT * FROM myyds.`{input_topic}`
+                    WITH (
+                        FORMAT=json_each_row,
+                        SCHEMA (
+                            id Int32,
+                            user List<Int32?>?,
+                            user_is_null Bool?
+                        )
+                    )            ;
+            $input = SELECT id, case when user_is_null then NULL else user end as user from $input;
+
+            $enriched = select e.id as id,
+                            e.user as user_id,
+                            u.data as lookup
+                from
+                    $input as e
+                left join {streamlookup} ydb_conn_{table_name}.{table_name} as u
+                on(e.user = u.id)
+                -- MultiGet true
+            ;
+
+            insert into myyds.`{output_topic}`
+            select Unwrap(Yson::SerializeJson(Yson::From(TableRow()))) from $enriched;
+            ''',
+        ResequenceId(
+            [
+                ('{"id":3,"user":[5]}', '{"id":3,"user_id":[5],"lookup":[null]}'),
+                ('{"id":9,"user":[3]}', '{"id":9,"user_id":[3],"lookup":["ydb30"]}'),
+                ('{"id":2,"user":[2]}', '{"id":2,"user_id":[2],"lookup":["ydb20"]}'),
+                ('{"id":1,"user":[1]}', '{"id":1,"user_id":[1],"lookup":["ydb10"]}'),
+                (
+                    '{"id":3,"user":[5,3,2,1,0]}',
+                    '{"id":3,"user_id":[5,3,2,1,0],"lookup":[null,"ydb30","ydb20","ydb10",null]}',
+                ),
+                ('{"id":9,"user":[3]}', '{"id":9,"user_id":[3],"lookup":["ydb30"]}'),
+                ('{"id":2,"user":[2]}', '{"id":2,"user_id":[2],"lookup":["ydb20"]}'),
+                ('{"id":1,"user":[1]}', '{"id":1,"user_id":[1],"lookup":["ydb10"]}'),
+                ('{"id":10,"user":[null]}', '{"id":10,"user_id":[null],"lookup":[null]}'),
+                ('{"id":4,"user":[3]}', '{"id":4,"user_id":[3],"lookup":["ydb30"]}'),
+                ('{"id":5,"user":[3]}', '{"id":5,"user_id":[3],"lookup":["ydb30"]}'),
+                ('{"id":6,"user":[1]}', '{"id":6,"user_id":[1],"lookup":["ydb10"]}'),
+                ('{"id":7,"user":[2]}', '{"id":7,"user_id":[2],"lookup":["ydb20"]}'),
+                ('{"id":10,"user":[]}', '{"id":10,"user_id":[],"lookup":[]}'),
+                # ('{"id":10}', '{"id":10,"user_id":null,"lookup":null}'), -- does not work as expected, "user" is parsed as [] instead of NULL
+                # ('{"id":10,"user":null}', '{"id":10,"user_id":null,"lookup":null}'), -- does not work as expected either, "user" is parsed as [] instead of NULL
+                ('{"id":10,"user_is_null":true}', '{"id":10,"user_id":null,"lookup":null}'),
+            ]
+            * 20
+        ),
+        "MultiGet",
+        "true",
+        "TTL",
+        "10",
+        "MaxCachedRows",
+        "7",
+        "MaxDelayedRows",
+        "100",
+    ),
+    # 12
+    (
+        R'''
+            $input = SELECT * FROM myyds.`{input_topic}`
+                    WITH (
+                        FORMAT=json_each_row,
+                        SCHEMA (
+                            id Int32,
+                            user List<Int32>
+                        )
+                    )            ;
+
+            $enriched = select e.id as id,
+                            e.user as user_id,
+                            u.data as lookup
+                from
+                    $input as e
+                left join {streamlookup} ydb_conn_{table_name}.{table_name} as u
+                on(e.user = u.id)
+                -- MultiGet true
+            ;
+
+            insert into myyds.`{output_topic}`
+            select Unwrap(Yson::SerializeJson(Yson::From(TableRow()))) from $enriched;
+            ''',
+        ResequenceId(
+            [
+                ('{"id":3,"user":[5]}', '{"id":3,"user_id":[5],"lookup":[null]}'),
+                ('{"id":9,"user":[3]}', '{"id":9,"user_id":[3],"lookup":["ydb30"]}'),
+                ('{"id":2,"user":[2]}', '{"id":2,"user_id":[2],"lookup":["ydb20"]}'),
+                ('{"id":1,"user":[1]}', '{"id":1,"user_id":[1],"lookup":["ydb10"]}'),
+                (
+                    '{"id":3,"user":[5,3,2,1,0]}',
+                    '{"id":3,"user_id":[5,3,2,1,0],"lookup":[null,"ydb30","ydb20","ydb10",null]}',
+                ),
+                ('{"id":9,"user":[3]}', '{"id":9,"user_id":[3],"lookup":["ydb30"]}'),
+                ('{"id":2,"user":[2]}', '{"id":2,"user_id":[2],"lookup":["ydb20"]}'),
+                ('{"id":1,"user":[1]}', '{"id":1,"user_id":[1],"lookup":["ydb10"]}'),
+                ('{"id":4,"user":[3]}', '{"id":4,"user_id":[3],"lookup":["ydb30"]}'),
+                ('{"id":5,"user":[3]}', '{"id":5,"user_id":[3],"lookup":["ydb30"]}'),
+                ('{"id":6,"user":[1]}', '{"id":6,"user_id":[1],"lookup":["ydb10"]}'),
+                ('{"id":7,"user":[2]}', '{"id":7,"user_id":[2],"lookup":["ydb20"]}'),
+                ('{"id":10,"user":[]}', '{"id":10,"user_id":[],"lookup":[]}'),
+            ]
+            * 20
+        ),
+        "MultiGet",
+        "true",
+        "TTL",
+        "10",
+        "MaxCachedRows",
+        "7",
+        "MaxDelayedRows",
+        "100",
+    ),
+    # 13
+    (
+        R'''
+            $input = SELECT * FROM myyds.`{input_topic}`
+                    WITH (
+                        FORMAT=json_each_row,
+                        SCHEMA (
+                            za List<Int32?>,
+                            yb List<STRING>,
+                            yc Int32,
+                            zd Int32,
+                        )
+                    )            ;
+
+            $listified = SELECT * FROM ydb_conn_{table_name}.db;
+
+            $enriched = select a, b, c, d, e, f, za, yb, yc, zd
+                from
+                    $input as e
+                left join {streamlookup} $listified as u
+                on(e.za = u.a AND e.yb = u.b)
+                -- MultiGet true
+            ;
+
+            insert into myyds.`{output_topic}`
+            select Unwrap(Yson::SerializeJson(Yson::From(TableRow()))) from $enriched;
+            ''',
+        ResequenceId(
+            [
+                (
+                    '{"id":1,"za":[1,7],"yb":["2","8"],"yc":100,"zd":101}',
+                    '{"a":[1,7],"b":["2","8"],"c":[3,9],"d":[4,10],"e":[5,11],"f":[6,12],"za":[1,7],"yb":["2","8"],"yc":100,"zd":101}',
+                ),
+                (
+                    '{"id":2,"za":[7,13],"yb":["8"],"yc":106,"zd":107}',
+                    '{"a":[7],"b":["8"],"c":[9],"d":[10],"e":[11],"f":[12],"za":[7,13],"yb":["8"],"yc":106,"zd":107}',
+                ),
+                (
+                    '{"id":3,"za":[2,null],"yb":["1","1"],"yc":114,"zd":115}',
+                    '{"a":[null,null],"b":[null,null],"c":[null,null],"d":[null,null],"e":[null,null],"f":[null,null],"za":[2,null],"yb":["1","1"],"yc":114,"zd":115}',
+                ),
+            ]
+        ),
+        "MultiGet",
+        "true",
+    ),
+    # 14
+    (
+        R'''
+            $input = SELECT * FROM myyds.`{input_topic}`
+                    WITH (
+                        FORMAT=json_each_row,
+                        SCHEMA (
+                            lza List<Int32?>,
+                            lyb List<STRING>,
+                            sza Int32?,
+                            syb STRING,
+                            yc Int32,
+                        )
+                    )            ;
+
+            $listified = SELECT * FROM ydb_conn_{table_name}.db;
+
+            $enriched = select u.a as la, u.b as lb, u.c as lc, u2.a as sa, u2.b as sb, u2.c as sc, lza, lyb, sza, syb, yc
+                from
+                    $input as e
+                left join {streamlookup} $listified as u
+                on(e.lza = u.a AND e.lyb = u.b)
+                left join /*+streamlookup()*/ $listified as u2
+                on(e.sza = u2.a AND e.syb = u2.b)
+                -- MultiGet true
+            ;
+
+            insert into myyds.`{output_topic}`
+            select Unwrap(Yson::SerializeJson(Yson::From(TableRow()))) from $enriched;
+            ''',
+        ResequenceId(
+            [
+                (
+                    '{"id":1,"lza":[1,7],"lyb":["2","8"],"sza":7,"syb":"8","yc":100}',
+                    '{"la":[1,7],"lb":["2","8"],"lc":[3,9],"lza":[1,7],"lyb":["2","8"],"sa":7,"sb":"8","sc":9,"sza":7,"syb":"8","yc":100}',
+                ),
+                (
+                    '{"id":3,"lza":[2,null],"lyb":["1","1"],"sza":2,"syb":"1","yc":114}',
+                    '{"la":[null,null],"lb":[null,null],"lc":[null,null],"lza":[2,null],"lyb":["1","1"],"yc":114,"sza":2,"syb":"1","sa":null,"sb":null,"sc":null}',
+                ),
+            ]
+        ),
+        "MultiGet",
+        "true",
+    ),
 ]
 
 
@@ -520,6 +869,15 @@ class TestJoinStreaming(TestYdsBase):
         query_id = fq_client.create_query(
             f"streamlookup_{partitions_count}{streamlookup}{testcase}", sql, type=fq.QueryContent.QueryType.STREAMING
         ).result.query_id
+
+        if not streamlookup and "MultiGet true" in sql:
+            fq_client.wait_query_status(query_id, fq.QueryMeta.FAILED)
+            describe_result = fq_client.describe_query(query_id).result
+            describe_string = "{}".format(describe_result)
+            print("Describe result: {}".format(describe_string), file=sys.stderr)
+            assert "Cannot compare key columns" in describe_string
+            return
+
         fq_client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
         kikimr.compute_plane.wait_zero_checkpoint(query_id)
 

@@ -19,7 +19,7 @@ namespace NKikimr {
 namespace NTable {
 
 namespace {
-    static NPage::TConf Conf(ui32 page = NPage::TConf().Groups.at(0).PageSize) noexcept
+    static NPage::TConf Conf(ui32 page = NPage::TConf().Groups.at(0).PageSize)
     {
         NPage::TConf conf;
 
@@ -167,7 +167,7 @@ Y_UNIT_TEST_SUITE(TIterator) {
             : AutoLoad(autoLoad)
         {}
 
-        TResult Locate(const TPart *part, ui64 ref, ELargeObj lob) noexcept override {
+        TResult Locate(const TPart *part, ui64 ref, ELargeObj lob) override {
             if (lob == ELargeObj::Extern) {
                 if (AutoLoad) {
                     if (LoadedExtern.insert(ref).second) {

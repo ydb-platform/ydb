@@ -81,7 +81,10 @@ TTransaction::TTransaction(
         PingPeriod_,
         /*sticky*/ stickyParameters.has_value(),
         StickyProxyAddress_);
+}
 
+void TTransaction::Initialize()
+{
     // TODO(babenko): don't run periodic pings if client explicitly disables them in options
     RunPeriodicPings();
 }
@@ -162,7 +165,7 @@ void TTransaction::RegisterAlienTransaction(const ITransactionPtr& transaction)
         transaction->GetConnection()->GetLoggingTag());
 }
 
-TFuture<void> TTransaction::Ping(const NApi::TTransactionPingOptions& /*options*/)
+TFuture<void> TTransaction::Ping(const NApi::TPrerequisitePingOptions& /*options*/)
 {
     return SendPing();
 }
@@ -486,7 +489,7 @@ void TTransaction::ModifyRows(
             .Subscribe(BIND([=, this, this_ = MakeStrong(this)] (const TError& error) {
                 if (!error.IsOK()) {
                     YT_LOG_DEBUG(error, "Error sending row modifications");
-                    YT_UNUSED_FUTURE(Abort());
+                    YT_UNUSED_FUTURE(ITransaction::Abort());
                 }
             }));
 
@@ -552,6 +555,7 @@ TFuture<TPushQueueProducerResult> TTransaction::PushQueueProducer(
     if (options.SequenceNumber) {
         req->set_sequence_number(options.SequenceNumber->Underlying());
     }
+    req->set_require_sync_replica(options.RequireSyncReplica);
 
     if (NTracing::IsCurrentTraceContextRecorded()) {
         req->TracingTags().emplace_back("yt.producer_path", ToString(producerPath));
@@ -656,7 +660,7 @@ TFuture<std::vector<TUnversionedLookupRowsResult>> TTransaction::MultiLookupRows
 }
 
 TFuture<TSelectRowsResult> TTransaction::SelectRows(
-    const TString& query,
+    const std::string& query,
     const TSelectRowsOptions& options)
 {
     ValidateActive();
@@ -666,7 +670,7 @@ TFuture<TSelectRowsResult> TTransaction::SelectRows(
 }
 
 TFuture<NYson::TYsonString> TTransaction::ExplainQuery(
-    const TString& query,
+    const std::string& query,
     const TExplainQueryOptions& options)
 {
     ValidateActive();
@@ -945,7 +949,7 @@ TFuture<void> TTransaction::DoAbort(
     TGuard<NThreading::TSpinLock>* guard,
     const TTransactionAbortOptions& /*options*/)
 {
-    VERIFY_SPINLOCK_AFFINITY(SpinLock_);
+    YT_ASSERT_SPINLOCK_AFFINITY(SpinLock_);
 
     if (AbortPromise_) {
         return AbortPromise_.ToFuture();
@@ -1110,7 +1114,7 @@ void TTransaction::ValidateActive()
 
 void TTransaction::DoValidateActive()
 {
-    VERIFY_SPINLOCK_AFFINITY(SpinLock_);
+    YT_ASSERT_SPINLOCK_AFFINITY(SpinLock_);
     if (State_ != ETransactionState::Active) {
         THROW_ERROR_EXCEPTION(
             NTransactionClient::EErrorCode::InvalidTransactionState,
@@ -1128,7 +1132,7 @@ TApiServiceProxy::TReqBatchModifyRowsPtr TTransaction::CreateBatchModifyRowsRequ
 
 TFuture<void> TTransaction::InvokeBatchModifyRowsRequest()
 {
-    VERIFY_SPINLOCK_AFFINITY(SpinLock_);
+    YT_ASSERT_SPINLOCK_AFFINITY(SpinLock_);
     YT_VERIFY(BatchModifyRowsRequest_);
 
     TApiServiceProxy::TReqBatchModifyRowsPtr batchRequest;
@@ -1145,7 +1149,7 @@ TFuture<void> TTransaction::InvokeBatchModifyRowsRequest()
 
 std::vector<TFuture<void>> TTransaction::FlushModifyRowsRequests()
 {
-    VERIFY_SPINLOCK_AFFINITY(SpinLock_);
+    YT_ASSERT_SPINLOCK_AFFINITY(SpinLock_);
 
     auto futures = std::move(BatchModifyRowsFutures_);
     if (BatchModifyRowsRequest_) {

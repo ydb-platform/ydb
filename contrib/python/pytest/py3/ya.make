@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(7.4.4)
+VERSION(8.0.2)
 
 LICENSE(MIT)
 
@@ -26,6 +26,7 @@ PY_SRCS(
     _pytest/_code/code.py
     _pytest/_code/source.py
     _pytest/_io/__init__.py
+    _pytest/_io/pprint.py
     _pytest/_io/saferepr.py
     _pytest/_io/terminalwriter.py
     _pytest/_io/wcwidth.py

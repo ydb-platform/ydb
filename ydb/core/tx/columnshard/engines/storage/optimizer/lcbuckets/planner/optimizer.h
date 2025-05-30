@@ -1,28 +1,47 @@
 #pragma once
-#include "abstract.h"
-#include "counters.h"
+#include "level/abstract.h"
+
+#include <ydb/core/tx/columnshard/common/path_id.h>
+#include <ydb/core/tx/columnshard/engines/storage/optimizer/abstract/optimizer.h>
 
 namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets {
 
 class TLevelConstructorContainer;
+class TSelectorConstructorContainer;
 
 class TOptimizerPlanner: public IOptimizerPlanner {
 private:
     using TBase = IOptimizerPlanner;
     std::shared_ptr<TCounters> Counters;
     std::shared_ptr<TSimplePortionsGroupInfo> PortionsInfo = std::make_shared<TSimplePortionsGroupInfo>();
-    TInstant LastActualization = TInstant::Now();
 
+    std::vector<std::shared_ptr<IPortionsSelector>> Selectors;
     std::vector<std::shared_ptr<IPortionsLevel>> Levels;
-    class TReverseSorting {
-    public:
-        bool operator()(const ui64 l, const ui64 r) const {
-            return r < l;
-        }
-    };
-    std::map<ui64, std::shared_ptr<IPortionsLevel>, TReverseSorting> LevelsByWeight;
+    std::map<ui64, std::shared_ptr<IPortionsLevel>, std::greater<ui64>> LevelsByWeight;
     const std::shared_ptr<IStoragesManager> StoragesManager;
     const std::shared_ptr<arrow::Schema> PrimaryKeysSchema;
+
+    virtual ui32 GetAppropriateLevel(const ui32 baseLevel, const TPortionAccessorConstructor& info) const override {
+        ui32 result = baseLevel;
+        for (ui32 i = baseLevel; i + 1 < Levels.size(); ++i) {
+            if (Levels[i]->IsAppropriatePortionToMove(info) && Levels[i + 1]->IsAppropriatePortionToStore(info)) {
+                result = i + 1;
+            } else {
+                break;
+            }
+        }
+        return result;
+    }
+
+    virtual bool DoIsOverloaded() const override {
+        for (auto&& i : Levels) {
+            if (i->IsOverloaded()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     virtual std::vector<TTaskDescription> DoGetTasksDescription() const override {
         std::vector<TTaskDescription> result;
         for (auto&& i : Levels) {
@@ -48,8 +67,7 @@ protected:
         return false;
     }
 
-    virtual void DoModifyPortions(
-        const THashMap<ui64, TPortionInfo::TPtr>& add, const THashMap<ui64, TPortionInfo::TPtr>& remove) override {
+    virtual void DoModifyPortions(const THashMap<ui64, TPortionInfo::TPtr>& add, const THashMap<ui64, TPortionInfo::TPtr>& remove) override {
         std::vector<std::vector<TPortionInfo::TPtr>> removePortionsByLevel;
         removePortionsByLevel.resize(Levels.size());
         for (auto&& [_, i] : remove) {
@@ -88,7 +106,7 @@ protected:
             if (i->GetTotalBlobBytes() > 512 * 1024 && i->GetMeta().GetProduced() != NPortion::EProduced::INSERTED) {
                 for (i32 levelIdx = Levels.size() - 1; levelIdx >= 0; --levelIdx) {
                     if (Levels[levelIdx]->CanTakePortion(i)) {
-                        Levels[levelIdx]->ModifyPortions({i}, {});
+                        Levels[levelIdx]->ModifyPortions({ i }, {});
                         i->MutableMeta().ResetCompactionLevel(levelIdx);
                         break;
                     }
@@ -103,12 +121,11 @@ protected:
         std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& locksManager) const override;
 
     virtual void DoActualize(const TInstant currentInstant) override {
-        if (currentInstant - LastActualization > TDuration::Seconds(180)) {
-            LastActualization = currentInstant;
-        } else {
-            return;
+        for (const auto& level : Levels) {
+            if (currentInstant >= level->GetWeightExpirationInstant()) {
+                return RefreshWeights();
+            }
         }
-        RefreshWeights();
     }
 
     virtual TOptimizationPriority DoGetUsefulMetric() const override {
@@ -146,8 +163,9 @@ public:
         return result;
     }
 
-    TOptimizerPlanner(const ui64 pathId, const std::shared_ptr<IStoragesManager>& storagesManager,
-        const std::shared_ptr<arrow::Schema>& primaryKeysSchema, const std::vector<TLevelConstructorContainer>& levelConstructors);
+    TOptimizerPlanner(const TInternalPathId pathId, const std::shared_ptr<IStoragesManager>& storagesManager,
+        const std::shared_ptr<arrow::Schema>& primaryKeysSchema, const std::vector<TLevelConstructorContainer>& levelConstructors,
+        const std::vector<TSelectorConstructorContainer>& selectors);
 };
 
 }   // namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets

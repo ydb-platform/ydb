@@ -20,6 +20,75 @@ const static TString TOPIC_NAME = "rt3.dc1--topic";
 
 Y_UNIT_TEST_SUITE(TPQTest) {
 
+Y_UNIT_TEST(TestCmdReadWithLastOffset) {
+    TTestContext tc;
+    tc.EnableDetailedPQLog = true;
+    RunTestWithReboots(tc.TabletIds, [&]() {
+        return tc.InitialEventsFilter.Prepare();
+    }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
+        activeZone = false;
+        TFinalizer finalizer(tc);
+        tc.Prepare(dispatchName, setup, activeZone);
+        activeZone = false;
+        tc.Runtime->SetScheduledLimit(1000);
+        tc.Runtime->RegisterService(MakePQDReadCacheServiceActorId(), tc.Runtime->Register(
+                CreatePQDReadCacheService(new NMonitoring::TDynamicCounters()))
+        );
+
+        PQTabletPrepare({.partitions = 1, .writeSpeed = 100_KB}, {{"user1", true}}, tc);
+        TVector<std::pair<ui64, TString>> data;
+        i64 messageCount = 100;
+        for (i64 i = 1; i <= messageCount; ++i) {
+            data.push_back({i, TString(100_KB, 'a')});
+        }
+        CmdWrite(0, "sourceid0", data, tc, false, {}, false, "", -1, 0, false, false, true);
+        TString sessionId = "session1";
+        TString user = "user1";
+        TPQCmdSettings sessionSettings{0, user, sessionId};
+        sessionSettings.PartitionSessionId = 1;
+        sessionSettings.KeepPipe = true;
+        TPQCmdReadSettings readSettings{
+            /*session=*/ sessionId,
+            /*partition=*/ 0,
+            /*offset=*/ 0,
+            /*count=*/ static_cast<ui32>(messageCount),
+            /*size=*/ 16_MB,
+            /*resCount=*/ 0,
+        };
+        readSettings.PartitionSessionId = 1;
+        readSettings.User = user;
+
+        activeZone = false;
+        Cerr << "Create session\n";
+        auto pipe = CmdCreateSession(sessionSettings, tc);
+        readSettings.Pipe = pipe;
+
+        for (i64 offset = 0; offset < messageCount; offset += 10) {
+            for (i64 lastOffset = 0; lastOffset <= messageCount; lastOffset += 10) {
+                readSettings.Offset = offset;
+                readSettings.LastOffset = lastOffset;
+                readSettings.ResCount = lastOffset < offset ? 0 : static_cast<ui32>(lastOffset - offset);
+                BeginCmdRead(readSettings, tc);
+
+                TAutoPtr<IEventHandle> handle;
+                auto* result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>(handle);
+
+                UNIT_ASSERT_C(result->Record.GetPartitionResponse().HasCmdReadResult(), result->Record.GetPartitionResponse().DebugString());
+                auto res = result->Record.GetPartitionResponse().GetCmdReadResult();
+
+                if (lastOffset) {
+                    UNIT_ASSERT_VALUES_EQUAL(readSettings.ResCount, res.ResultSize());
+                }
+
+                for (size_t i = 0; i < res.ResultSize(); ++i) {
+                    UNIT_ASSERT_EQUAL(res.GetResult(i).GetOffset(), offset + i);
+                    UNIT_ASSERT_EQUAL(res.GetResult(i).GetData(), data[offset + i].second);
+                }
+            }
+        }
+    });
+}
+
 Y_UNIT_TEST(TestDirectReadHappyWay) {
     TTestContext tc;
     tc.EnableDetailedPQLog = true;
@@ -1501,7 +1570,37 @@ Y_UNIT_TEST(TestTimeRetention) {
     });
 }
 
+Y_UNIT_TEST(TestComactifiedWithRetention) {
+    TTestContext tc;
+    RunTestWithReboots(tc.TabletIds, [&]() {
+        return tc.InitialEventsFilter.Prepare();
+    }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
+        TFinalizer finalizer(tc);
+        activeZone = false;
+        tc.Prepare(dispatchName, setup, activeZone);
 
+        tc.Runtime->SetScheduledLimit(100);
+
+        TVector<std::pair<ui64, TString>> data;
+        activeZone = PlainOrSoSlow(true, false);
+
+        TString s{32, 'c'};
+        ui32 pp = 8 + 4 + 2 + 9;
+        for (ui32 i = 0; i < 10; ++i) {
+            data.push_back({i + 1, s.substr(pp)});
+        }
+        PQTabletPrepare({.maxCountInPartition=1000, .deleteTime=0, .lowWatermark=100, .enableCompactificationByKey = true}, {}, tc);
+        CmdWrite(0, "sourceid0", data, tc, false, {}, true);
+        CmdWrite(0, "sourceid1", data, tc, false);
+        CmdWrite(0, "sourceid2", data, tc, false);
+        PQGetPartInfo(0, 30, tc);
+        PQTabletPrepare({.maxCountInPartition=1000, .deleteTime=0, .lowWatermark=100, .enableCompactificationByKey = false}, {}, tc);
+        CmdWrite(0, "sourceid3", data, tc, false);
+        CmdWrite(0, "sourceid4", data, tc, false);
+        CmdWrite(0, "sourceid5", data, tc, false);
+        PQGetPartInfo(50, 60, tc);
+    });
+}
 
 Y_UNIT_TEST(TestStorageRetention) {
     TTestContext tc;
@@ -2036,12 +2135,12 @@ Y_UNIT_TEST(TestPQCacheSizeManagement) {
 
 Y_UNIT_TEST(TestOffsetEstimation) {
     std::deque<NPQ::TDataKey> container = {
-        {NPQ::TKey(NPQ::TKeyPrefix::EType::TypeNone, TPartitionId(0), 1, 0, 0, 0), 0, TInstant::Seconds(1), 10},
-        {NPQ::TKey(NPQ::TKeyPrefix::EType::TypeNone, TPartitionId(0), 2, 0, 0, 0), 0, TInstant::Seconds(1), 10},
-        {NPQ::TKey(NPQ::TKeyPrefix::EType::TypeNone, TPartitionId(0), 3, 0, 0, 0), 0, TInstant::Seconds(2), 10},
-        {NPQ::TKey(NPQ::TKeyPrefix::EType::TypeNone, TPartitionId(0), 4, 0, 0, 0), 0, TInstant::Seconds(2), 10},
-        {NPQ::TKey(NPQ::TKeyPrefix::EType::TypeNone, TPartitionId(0), 5, 0, 0, 0), 0, TInstant::Seconds(3), 10},
-        {NPQ::TKey(NPQ::TKeyPrefix::EType::TypeNone, TPartitionId(0), 6, 0, 0, 0), 0, TInstant::Seconds(3), 10},
+        {NPQ::TKey::ForBody(NPQ::TKeyPrefix::EType::TypeNone, TPartitionId(0), 1, 0, 0, 0), 0, TInstant::Seconds(1), 10},
+        {NPQ::TKey::ForBody(NPQ::TKeyPrefix::EType::TypeNone, TPartitionId(0), 2, 0, 0, 0), 0, TInstant::Seconds(1), 10},
+        {NPQ::TKey::ForBody(NPQ::TKeyPrefix::EType::TypeNone, TPartitionId(0), 3, 0, 0, 0), 0, TInstant::Seconds(2), 10},
+        {NPQ::TKey::ForBody(NPQ::TKeyPrefix::EType::TypeNone, TPartitionId(0), 4, 0, 0, 0), 0, TInstant::Seconds(2), 10},
+        {NPQ::TKey::ForBody(NPQ::TKeyPrefix::EType::TypeNone, TPartitionId(0), 5, 0, 0, 0), 0, TInstant::Seconds(3), 10},
+        {NPQ::TKey::ForBody(NPQ::TKeyPrefix::EType::TypeNone, TPartitionId(0), 6, 0, 0, 0), 0, TInstant::Seconds(3), 10},
     };
     UNIT_ASSERT_EQUAL(NPQ::GetOffsetEstimate({}, TInstant::MilliSeconds(0), 9999), 9999);
     UNIT_ASSERT_EQUAL(NPQ::GetOffsetEstimate(container, TInstant::MilliSeconds(0), 9999), 1);
@@ -2352,7 +2451,9 @@ Y_UNIT_TEST(TestReadAndDeleteConsumer) {
             data.emplace_back(i, msg);
         }
 
-        PQTabletPrepare({.maxCountInPartition=100, .deleteTime=TDuration::Days(2).Seconds(), .partitions=1},
+        static ui32 pqConfigVersion = 1'000;
+
+        PQTabletPrepare({.maxCountInPartition=100, .deleteTime=TDuration::Days(2).Seconds(), .partitions=1, .specVersion=pqConfigVersion++},
                         {{"user1", true}, {"user2", true}}, tc);
         CmdWrite(0, "sourceid1", data, tc, false, {}, true);
 
@@ -2383,7 +2484,7 @@ Y_UNIT_TEST(TestReadAndDeleteConsumer) {
             consumerDeleteRequest.Reset(new TEvPersQueue::TEvUpdateConfig());
             consumerDeleteRequest->MutableRecord()->SetTxId(42);
             auto& cfg = *consumerDeleteRequest->MutableRecord()->MutableTabletConfig();
-            cfg.SetVersion(42);
+            cfg.SetVersion(pqConfigVersion++);
             cfg.AddPartitionIds(0);
             cfg.AddPartitions()->SetPartitionId(0);
             cfg.SetLocalDC(true);
@@ -2429,6 +2530,174 @@ Y_UNIT_TEST(TestReadAndDeleteConsumer) {
     });
 }
 
+Y_UNIT_TEST(PQ_Tablet_Removes_Blobs_Asynchronously)
+{
+    const TString firstMessageKey = "d0000000000_00000000000000000000_00000_0000000001_00000|";
+
+    TTestContext tc;
+    TFinalizer finalizer(tc);
+    tc.EnableDetailedPQLog = true;
+    tc.Prepare();
+
+    bool needDropCmdDeleteFirstMessage = true;
+    bool foundCmdDeleteFirstMessage = false;
+
+    PQTabletPrepare({.partitions = 1}, {}, tc);
+
+    auto observe = [&](TAutoPtr<IEventHandle>& ev) {
+        if (auto* event = ev->CastAsLocal<TEvKeyValue::TEvRequest>()) {
+            foundCmdDeleteFirstMessage = false;
+            const auto& record = event->Record;
+            for (size_t i = 0; i < record.CmdDeleteRangeSize(); ++i) {
+                const auto& cmd = record.GetCmdDeleteRange(i);
+                const auto& range = cmd.GetRange();
+                if (range.GetFrom() == firstMessageKey) {
+                    foundCmdDeleteFirstMessage = true;
+                    return needDropCmdDeleteFirstMessage ?
+                        TTestActorRuntimeBase::EEventAction::DROP : TTestActorRuntimeBase::EEventAction::PROCESS;
+                }
+            }
+        }
+        return TTestActorRuntimeBase::EEventAction::PROCESS;
+    };
+    tc.Runtime->SetObserverFunc(observe);
+
+    Cerr << ">>> write #1" << Endl;
+
+    TVector<std::pair<ui64, TString>> data;
+    data.resize(1);
+
+    data[0].first = 1;
+    data[0].second = TString(1_KB, 'x');
+    CmdWrite(0, "sourceid1", data, tc, false, {}, true, "", -1, 0);
+
+    Cerr << ">>> write #2" << Endl;
+
+    ++data[0].first;
+    data[0].second = TString(1_MB, 'x');
+    CmdWrite(0, "sourceid1", data, tc, false, {}, true, "", -1, 1);
+
+    Cerr << ">>> wait for CmdDeleteRange" << Endl;
+
+    TDispatchOptions options;
+    options.CustomFinalCondition = [&] { return foundCmdDeleteFirstMessage; };
+    tc.Runtime->DispatchEvents(options);
+
+    auto keys = GetTabletKeys(tc);
+    UNIT_ASSERT_C(keys.contains(firstMessageKey),
+                  "not found key '" << firstMessageKey << "'");
+
+    needDropCmdDeleteFirstMessage = false;
+
+    Cerr << ">>> restart" << Endl;
+
+    PQTabletRestart(tc);
+
+    Cerr << ">>> write #3" << Endl;
+
+    ++data[0].first;
+    data[0].second = TString(1_KB, 'x');
+    CmdWrite(0, "sourceid1", data, tc, false, {}, true, "", -1, 2);
+
+    Cerr << ">>> write #1" << Endl;
+
+    keys = GetTabletKeys(tc);
+    UNIT_ASSERT_C(!keys.contains(firstMessageKey),
+                  "the PQ tablet did not delete the '" << firstMessageKey << "' key during startup");
+}
+
+Y_UNIT_TEST(PQ_Tablet_Does_Not_Remove_The_Blob_Until_The_Reading_Is_Complete)
+{
+    // The test verifies that the block is not deleted until the reading is finished. We write
+    // down several large messages in the topic. We start reading and hold it. While we are reading
+    // the message, we add a few more messages to the topic. The retention is triggered. We make
+    // sure that the blobs are deleted only when the reading is finished
+
+    auto writeMsgs = [](const TString& sourceId, size_t begin, size_t end, size_t size, TTestContext& tc) {
+        for (size_t i = begin; i < end; ++i) {
+            TVector<std::pair<ui64, TString>> data;
+            data.emplace_back(i + 1, TString(size, 'x'));
+            CmdWrite(0, sourceId, data, tc, false, {}, true, "", -1, i);
+        }
+    };
+
+    TTestContext tc;
+    TFinalizer finalizer(tc);
+    tc.EnableDetailedPQLog = true;
+    tc.Prepare();
+
+    const TString sessionId = "session1";
+    const TString user = "user1";
+
+    // Creating a topic with the retention settings
+    PQTabletPrepare({.partitions = 1, .storageLimitBytes = 50_MB}, {{user, false}}, tc);
+
+    // We record several messages. If you record another one, the first one will be deleted
+    writeMsgs("sourceid1", 0, 7, 7_MB, tc);
+
+    // Making sure that the blobs have not been deleted yet
+    auto keys = GetTabletKeys(tc);
+
+    UNIT_ASSERT(keys.contains("d0000000000_00000000000000000001_00000_0000000001_00014"));
+    UNIT_ASSERT(keys.contains("d0000000000_00000000000000000002_00000_0000000001_00014"));
+    UNIT_ASSERT(keys.contains("d0000000000_00000000000000000003_00000_0000000001_00014"));
+    UNIT_ASSERT(keys.contains("d0000000000_00000000000000000004_00000_0000000001_00014"));
+
+    // We are reading from topic 2 messages from offset 2
+    TPQCmdSettings sessionSettings{0, user, sessionId};
+    sessionSettings.PartitionSessionId = 1;
+    sessionSettings.KeepPipe = true;
+
+    TPQCmdReadSettings readSettings{sessionId, 0, 2, 2, 16_MB, 2, false, {2, 3}, 0, 0, user};
+    readSettings.PartitionSessionId = 1;
+    readSettings.User = user;
+    readSettings.Pipe = CmdCreateSession(sessionSettings, tc);
+
+    // The messages are large and will be cached. We intercept the response from the
+    // cache and hold it. The reading will not end until the response from the cache arrives
+    TAutoPtr<IEventHandle> blobResponseEvent;
+    auto observe = [&](TAutoPtr<IEventHandle>& ev) {
+        if (auto* event = ev->CastAsLocal<TEvPQ::TEvBlobResponse>()) {
+            blobResponseEvent = ev;
+            return TTestActorRuntimeBase::EEventAction::DROP;
+        }
+        return TTestActorRuntimeBase::EEventAction::PROCESS;
+    };
+    tc.Runtime->SetObserverFunc(observe);
+
+    BeginCmdRead(readSettings, tc);
+
+    // Waiting for a response from the cache
+    TDispatchOptions options;
+    options.CustomFinalCondition = [&] { return !!blobResponseEvent; };
+    tc.Runtime->DispatchEvents(options);
+
+    // We're recording a few more big messages. The retention will be triggered and the first messages
+    // will have to be deleted
+    writeMsgs("sourceid1", 7, 14, 7_MB, tc);
+
+    keys = GetTabletKeys(tc);
+
+    // We make sure that the blobs with messages on offsets 2 and 3 have not been deleted
+    UNIT_ASSERT(!keys.contains("d0000000000_00000000000000000001_00000_0000000001_00014"));
+    UNIT_ASSERT(keys.contains("d0000000000_00000000000000000002_00000_0000000001_00014"));
+    UNIT_ASSERT(keys.contains("d0000000000_00000000000000000003_00000_0000000001_00014"));
+    UNIT_ASSERT(!keys.contains("d0000000000_00000000000000000004_00000_0000000001_00014"));
+
+    tc.Runtime->Send(blobResponseEvent);
+
+    // The reading ended without error
+    UNIT_ASSERT_C(EndCmdRead(readSettings, tc), "CmdRead failed with an error");
+
+    // We are writing a short message to launch the planned blob removals
+    writeMsgs("sourceid1", 14, 15, 100_KB, tc);
+
+    keys = GetTabletKeys(tc);
+
+    // Making sure that the blobs for messages with offsets 2 and 3 are removed
+    UNIT_ASSERT(!keys.contains("d0000000000_00000000000000000002_00000_0000000001_00014"));
+    UNIT_ASSERT(!keys.contains("d0000000000_00000000000000000003_00000_0000000001_00014"));
+}
 
 } // Y_UNIT_TEST_SUITE(TPQTest)
 } // namespace NKikimr::NPQ

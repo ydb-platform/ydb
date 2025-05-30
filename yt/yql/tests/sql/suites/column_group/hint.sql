@@ -4,6 +4,7 @@ $i1 = select * from Input where a > "a"; -- several publish consumers with same 
 $i2 = select * from Input where a > "a1"; -- several publish consumers with different groups
 $i3 = select * from Input where a < "a2"; -- several consumers including publish
 $i4 = select * from Input where a != "a"; -- several publish consumers with and without groups
+$i5 = select * from Input where a != "b"; -- single publish consumer with with no groups (special case)
 
 -- test column group spec normalization
 insert into Output1 with column_groups="{g1=[a;b;c];def=#}" select * from $i1;
@@ -16,5 +17,7 @@ insert into Output3 with column_groups="{g1=[a;b;c];def=#}" select * from $i1;
 insert into Output3 with column_groups="{g1=[a;b;c];def=#}" select * from $i4;
 
 insert into Output4 select * from $i4;
+
+insert into Output5 with column_groups="{}" select * from $i5;
 
 select a,b,c,d from $i3;

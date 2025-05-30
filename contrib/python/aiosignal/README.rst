@@ -57,7 +57,7 @@ Installation
 
    $ pip install aiosignal
 
-The library requires Python 3.6 or newer.
+The library requires Python 3.8 or newer.
 
 
 Documentation
@@ -73,7 +73,7 @@ Communication channels
 Requirements
 ============
 
-- Python >= 3.6
+- Python >= 3.8
 - frozenlist >= 1.0.0
 
 License

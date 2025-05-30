@@ -405,7 +405,7 @@ public:
             mon->RegisterActorPage(TMon::TRegisterActorPageFields{
                 .Title = name,
                 .RelPath = path,
-                .ActorSystem = TlsActivationContext->ExecutorThread.ActorSystem,
+                .ActorSystem = TActivationContext::ActorSystem(),
                 .Index = proxiesMonPage, 
                 .PreTag = false, 
                 .ActorId = SelfId(),

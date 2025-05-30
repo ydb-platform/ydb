@@ -4,8 +4,7 @@
 namespace NKikimr::NOlap::NBlobOperations {
 
 TRemoveGCCounters::TRemoveGCCounters(const TConsumerCounters& owner)
-    : TBase(owner, "RemoveGC")
-{
+    : TBase(owner, "RemoveGC") {
     RequestsCount = TBase::GetDeriviative("Requests/Count");
     RequestBytes = TBase::GetDeriviative("Requests/Bytes");
 
@@ -20,4 +19,4 @@ TRemoveGCCounters::TRemoveGCCounters(const TConsumerCounters& owner)
     FailBytes = TBase::GetDeriviative("Fails/Bytes");
 }
 
-}
+}   // namespace NKikimr::NOlap::NBlobOperations

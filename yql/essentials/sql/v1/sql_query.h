@@ -20,7 +20,7 @@ public:
     TNodePtr Build(const TSQLv1ParserAST& ast);
     TNodePtr Build(const std::vector<::NSQLv1Generated::TRule_sql_stmt_core>& ast);
 
-    bool Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& core);
+    bool Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& core, size_t statementNumber);
 private:
     bool DeclareStatement(const TRule_declare_stmt& stmt);
     bool ExportStatement(const TRule_export_stmt& stmt);
@@ -83,5 +83,8 @@ private:
 
     const bool TopLevel;
 };
+
+void EnumeratePragmas(std::function<void(std::string_view)> callback);
+void EnumerateStmtContexts(std::function<void(std::string_view)> callback);
 
 } // namespace NSQLTranslationV1

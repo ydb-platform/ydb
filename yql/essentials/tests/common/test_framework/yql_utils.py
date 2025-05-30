@@ -52,7 +52,7 @@ def do_custom_query_check(res, sql_query):
 
 def do_custom_error_check(res, sql_query):
     err_string = None
-    custom_error = re.search(r"/\* custom error:(.*)\*/", sql_query)
+    custom_error = re.search(r"/\* custom error:(.*?)\*/", sql_query, re.DOTALL)
     if custom_error:
         err_string = custom_error.group(1).strip()
     assert err_string, 'Expected custom error check in test.\nTest error: %s' % res.std_err
@@ -151,13 +151,15 @@ Table = namedtuple('Table', (
     'yqlrun_file',
     'attr',
     'format',
-    'exists'
+    'exists',
+    'cluster'
 ))
 
 
 def new_table(full_name, file_path=None, yqlrun_file=None, content=None, res_dir=None,
               attr=None, format_name='yson', def_attr=None, should_exist=False, src_file_alternative=None):
     assert '.' in full_name, 'expected name like cedar.Input'
+    cluster = full_name.split('.')[0]
     name = '.'.join(full_name.split('.')[1:])
 
     if res_dir is None:
@@ -231,7 +233,8 @@ def new_table(full_name, file_path=None, yqlrun_file=None, content=None, res_dir
         new_yqlrun_file,
         attr,
         format_name,
-        exists
+        exists,
+        cluster
     )
 
 
@@ -377,9 +380,10 @@ def get_program_cfg(suite, case, data_path):
         config = os.path.join(data_path, suite if suite else '', 'default.cfg')
 
     if os.path.exists(config):
-        for line in open(config, 'r'):
-            if line.strip():
-                ret.append(tuple(line.split()))
+        with open(config, 'r') as f:
+            for line in f:
+                if line.strip():
+                    ret.append(tuple(line.split()))
     else:
         in_filename = case + '.in'
         in_path = os.path.join(data_path, in_filename)
@@ -462,6 +466,14 @@ def get_tables(suite, cfg, data_path, def_attr=None):
     return in_tables, out_tables
 
 
+def get_table_clusters(suite, cfg, data_path):
+    in_tables, out_tables = get_tables(suite, cfg, data_path)
+    clusters = set()
+    for t in in_tables + out_tables:
+        clusters.add(t.cluster)
+    return clusters
+
+
 def get_supported_providers(cfg):
     providers = 'yt', 'kikimr', 'dq', 'hybrid'
     for item in cfg:
@@ -482,6 +494,13 @@ def is_xfail(cfg):
         if item[0] == 'xfail':
             return True
     return False
+
+
+def get_langver(cfg):
+    for item in cfg:
+        if item[0] == 'langver':
+            return item[1]
+    return None
 
 
 def is_skip_forceblocks(cfg):
@@ -553,6 +572,7 @@ def execute(
         output_tables=None,
         pretty_plan=True,
         parameters={},
+        langver=None
 ):
     '''
     Executes YQL/SQL
@@ -591,7 +611,8 @@ def execute(
         check_error=check_error,
         tables=(output_tables + input_tables),
         pretty_plan=pretty_plan,
-        parameters=parameters
+        parameters=parameters,
+        langver=langver
     )
 
     try:
@@ -879,9 +900,9 @@ def normalize_table_yson(y):
 
 
 def dump_table_yson(res_yson, sort=True):
-    rows = normalize_table_yson(cyson.loads('[' + res_yson + ']'))
+    rows = normalize_table_yson(cyson.loads(b'[' + res_yson + b']'))
     if sort:
-        rows = sorted(rows)
+        rows = sorted(rows, key=cyson.dumps)
     return cyson.dumps(rows, format="pretty")
 
 
@@ -973,6 +994,27 @@ def normalize_result(res, sort):
             if is_list and b'Data' in data and len(data[b'Data']) == 0:
                 del data[b'Data']
     return res
+
+
+def is_sorted_table(table):
+    assert table.attr is not None
+    for column in cyson.loads(table.attr)[b'schema']:
+        if b'sort_order' in column:
+            return True
+    return False
+
+
+def is_unordered_result(res):
+    path = res.results_file
+    assert os.path.exists(path)
+    with open(path, 'rb') as f:
+        res = f.read()
+    res = cyson.loads(res)
+    for r in res:
+        for data in r[b'Write']:
+            if b'Unordered' in data:
+                return True
+    return False
 
 
 def stable_write(writer, node):

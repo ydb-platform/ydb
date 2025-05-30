@@ -7,6 +7,8 @@
 
 namespace NYdb::NConsoleClient {
 
+const char* VersionResourceName = "version.txt";
+
 TCommandVersion::TCommandVersion()
     : TClientCommand("version", {}, "Print YDB CLI version")
 {}
@@ -20,6 +22,11 @@ void TCommandVersion::Config(TConfig& config) {
 
     config.Opts->AddLongOption("semantic", "Print semantic version only")
         .StoreTrue(&Semantic);
+    
+    if (!config.StorageUrl.has_value()) {
+        return;
+    }
+
     config.Opts->AddLongOption("check", "Force to check latest version available")
         .StoreTrue(&config.ForceVersionCheck);
     config.Opts->AddLongOption("disable-checks", "Disable version checks. CLI will not check whether there is a newer version available")
@@ -44,18 +51,21 @@ void TCommandVersion::Parse(TConfig& config) {
 int TCommandVersion::Run(TConfig& config) {
     Y_UNUSED(config);
 
-    if (EnableChecks) {
-        TYdbUpdater updater;
-        updater.SetCheckVersion(true);
-        Cout << "Latest version checks enabled" << Endl;
-        return EXIT_SUCCESS;
+    if (config.StorageUrl.has_value()) {
+        if (EnableChecks) {
+            TYdbUpdater updater(config.StorageUrl.value());
+            updater.SetCheckVersion(true);
+            Cout << "Latest version checks enabled" << Endl;
+            return EXIT_SUCCESS;
+        }
+        if (DisableChecks) {
+            TYdbUpdater updater(config.StorageUrl.value());
+            updater.SetCheckVersion(false);
+            Cout << "Latest version checks disabled" << Endl;
+            return EXIT_SUCCESS;
+        }
     }
-    if (DisableChecks) {
-        TYdbUpdater updater;
-        updater.SetCheckVersion(false);
-        Cout << "Latest version checks disabled" << Endl;
-        return EXIT_SUCCESS;
-    }
+
     if (!Semantic) {
         Cout << "YDB CLI ";
     }

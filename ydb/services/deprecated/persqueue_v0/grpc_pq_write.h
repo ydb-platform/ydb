@@ -69,6 +69,9 @@ public:
 
     void StopService() {
         AtomicSet(ShuttingDown_, 1);
+        if (ClustersUpdaterStatus) {
+            ClustersUpdaterStatus->Stop();
+        }
     }
 
     bool IsShuttingDown() const {
@@ -116,6 +119,7 @@ private:
     TAtomic ShuttingDown_ = 0;
 
     bool NeedDiscoverClusters; // Legacy mode OR account-mode in multi-cluster setup;
+    TClustersUpdater::TStatus::TPtr ClustersUpdaterStatus;
 
     NAddressClassifier::TLabeledAddressClassifier::TConstPtr DatacenterClassifier; // Detects client's datacenter by IP. May be null
 };

@@ -18,6 +18,7 @@ PY_SRCS(
     common/path_types.py
     common/types.py
     common/wait_for.py
+    common/workload_manager.py
     kv/__init__.py
     kv/helpers.py
     harness/__init__.py
@@ -31,7 +32,6 @@ PY_SRCS(
     harness/param_constants.py
     harness/util.py
     harness/tls_tools.py
-    harness/ydb_fixtures.py
     matchers/__init__.py
     matchers/collection.py
     matchers/datashard_matchers.py
@@ -107,7 +107,9 @@ END()
 RECURSE(
     compatibility
     clients
+    flavours
     serializability
+    test_meta
     wardens
     sqs
 )

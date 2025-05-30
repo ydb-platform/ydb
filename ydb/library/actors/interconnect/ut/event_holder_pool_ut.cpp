@@ -9,6 +9,7 @@
 #include <contrib/libs/tcmalloc/tcmalloc/malloc_extension.h>
 
 #include <atomic>
+#include <iostream>
 
 using namespace NActors;
 
@@ -113,10 +114,18 @@ Y_UNIT_TEST_SUITE(EventHolderPool) {
     }
 
     Y_UNIT_TEST(MemConsumptionSmall) {
+#ifdef _san_enabled_
+        std::cout << "Skipping, because TCMalloc is unavailable\n";
+        return;
+#endif
         MemComsumption(100'000, 4);
     }
 
     Y_UNIT_TEST(MemConsumptionLarge) {
+#ifdef _san_enabled_
+        std::cout << "Skipping, because TCMalloc is unavailable\n";
+        return;
+#endif
         MemComsumption(10'000, 1024*1024);
     }
 }

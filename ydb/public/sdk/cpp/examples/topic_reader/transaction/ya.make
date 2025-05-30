@@ -7,7 +7,8 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/public/sdk/cpp/client/ydb_topic
+    ydb/public/sdk/cpp/src/client/topic
+    ydb/public/sdk/cpp/src/client/query
     library/cpp/getopt
 )
 

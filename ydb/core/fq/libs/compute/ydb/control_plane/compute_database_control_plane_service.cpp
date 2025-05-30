@@ -11,8 +11,8 @@
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
 
 #include <ydb/public/lib/fq/scope.h>
-#include <ydb/public/sdk/cpp/client/ydb_query/client.h>
-#include <ydb/public/sdk/cpp/client/ydb_operation/operation.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -89,7 +89,7 @@ public:
                 LOG_T("Scope: " << Scope << " Single control plane mode has been chosen");
                 const auto& singleConfig = Config.GetYdb().GetControlPlane().GetSingle();
                 *Result.mutable_connection() = singleConfig.GetConnection();
-                Send(SynchronizationServiceActorId, new TEvYdbCompute::TEvSynchronizeRequest{Request.Get()->Get()->CloudId, Request.Get()->Get()->Scope, singleConfig.GetConnection(), singleConfig.GetWorkloadManagerConfig()});
+                Send(SynchronizationServiceActorId, new TEvYdbCompute::TEvSynchronizeRequest{Request.Get()->Get()->CloudId, Request.Get()->Get()->Scope, singleConfig.GetConnection(), GetWorkloadManagerConfig(singleConfig)});
             }
             break;
             case NConfig::TYdbComputeControlPlane::kCms:
@@ -163,7 +163,7 @@ public:
         }
 
         if (response.IsExists) {
-            Send(SynchronizationServiceActorId, new TEvYdbCompute::TEvSynchronizeRequest{Request.Get()->Get()->CloudId, Request.Get()->Get()->Scope, Result.connection(), client->Config.GetWorkloadManagerConfig()});
+            Send(SynchronizationServiceActorId, new TEvYdbCompute::TEvSynchronizeRequest{Request.Get()->Get()->CloudId, Request.Get()->Get()->Scope, Result.connection(), GetWorkloadManagerConfig(client->Config)});
         } else {
             auto invalidateSynchronizationEvent = std::make_unique<TEvControlPlaneStorage::TEvModifyDatabaseRequest>(Request->Get()->CloudId, Scope);
             invalidateSynchronizationEvent->Synchronized = false;
@@ -199,7 +199,7 @@ public:
         }
 
         if (ev->Cookie == OnlyDatabaseCreateCookie) {
-            Send(SynchronizationServiceActorId, new TEvYdbCompute::TEvSynchronizeRequest{Request.Get()->Get()->CloudId, Request.Get()->Get()->Scope, Result.connection(), client->Config.GetWorkloadManagerConfig()});
+            Send(SynchronizationServiceActorId, new TEvYdbCompute::TEvSynchronizeRequest{Request.Get()->Get()->CloudId, Request.Get()->Get()->Scope, Result.connection(), GetWorkloadManagerConfig(client->Config)});
             return;
         }
         Send(ControlPlaneStorageServiceActorId(), new TEvControlPlaneStorage::TEvCreateDatabaseRequest{Request->Get()->CloudId, Scope, Result});
@@ -266,7 +266,7 @@ public:
             return;
         }
 
-        Send(SynchronizationServiceActorId, new TEvYdbCompute::TEvSynchronizeRequest{Request.Get()->Get()->CloudId, Request.Get()->Get()->Scope, Result.connection(), client->Config.GetWorkloadManagerConfig()});
+        Send(SynchronizationServiceActorId, new TEvYdbCompute::TEvSynchronizeRequest{Request.Get()->Get()->CloudId, Request.Get()->Get()->Scope, Result.connection(), GetWorkloadManagerConfig(client->Config)});
     }
 
     void Handle(TEvYdbCompute::TEvSynchronizeResponse::TPtr& ev) {
@@ -289,15 +289,29 @@ public:
     void FillRequest(TEvYdbCompute::TEvCreateDatabaseRequest::TPtr& ev, const NConfig::TComputeDatabaseConfig& config) {
         NYdb::NFq::TScope scope(ev.Get()->Get()->Scope);
         ev.Get()->Get()->BasePath = config.GetControlPlaneConnection().GetDatabase();
-        const TString databaseName = TStringBuilder{} << Config.GetYdb().GetControlPlane().GetDatabasePrefix() << (config.GetId() ? config.GetId() + "_"  : TString{}) << scope.ParseFolder();
-        ev.Get()->Get()->Path = config.GetTenant() ? config.GetTenant() + "/" + databaseName: databaseName;
+
+        const auto& tenant = config.GetTenant();
+        if (const auto& previousPath = Result.connection().database(); previousPath && (!tenant || previousPath.StartsWith(tenant + "/"))) {
+            ev.Get()->Get()->Path = previousPath;
+        } else {
+            ev.Get()->Get()->Path = TStringBuilder() << (tenant ? tenant + "/" : TString{}) << Config.GetYdb().GetControlPlane().GetDatabasePrefix() << (config.GetId() ? config.GetId() + "_" : TString{}) << scope.ParseFolder();
+        }
+    }
+
+private:
+    template <typename TComputeConfig>
+    NConfig::TWorkloadManagerConfig GetWorkloadManagerConfig(const TComputeConfig& config) const {
+        if (config.HasWorkloadManagerConfig()) {
+            return config.GetWorkloadManagerConfig();
+        }
+        return Config.GetYdb().GetControlPlane().GetDefaultWorkloadManagerConfig();
     }
 
 private:
     TString Scope;
     std::shared_ptr<TDatabaseClients> Clients;
     TActorId SynchronizationServiceActorId;
-    NFq::NConfig::TComputeConfig Config;
+    NConfig::TComputeConfig Config;
     TEvYdbCompute::TEvCreateDatabaseRequest::TPtr Request;
     FederatedQuery::Internal::ComputeDatabaseInternal Result;
 

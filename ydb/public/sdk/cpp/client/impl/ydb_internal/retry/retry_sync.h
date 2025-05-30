@@ -6,7 +6,7 @@
 
 #include <util/generic/maybe.h>
 
-namespace NYdb::NRetry::Sync {
+namespace NYdb::inline V2::NRetry::Sync {
 
 template <typename TClient, typename TStatusType>
 class TRetryContext : public TRetryContextBase {

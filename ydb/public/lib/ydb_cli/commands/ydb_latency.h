@@ -7,7 +7,15 @@
 #include <ydb/public/lib/ydb_cli/common/format.h>
 #include <ydb/public/lib/ydb_cli/common/interruptible.h>
 
-namespace NYdb::NConsoleClient {
+#include <memory>
+
+namespace NYdb {
+
+namespace NDebug {
+    struct TActorChainPingSettings;
+}
+
+namespace NConsoleClient {
 
 class TCommandLatency
     : public TYdbCommand
@@ -22,6 +30,7 @@ public:
 
 public:
     TCommandLatency();
+    ~TCommandLatency();
 
     virtual void Config(TConfig& config) override;
     virtual void Parse(TConfig& config) override;
@@ -29,10 +38,14 @@ public:
 
 private:
     int IntervalSeconds;
+    int MinInflight;
     int MaxInflight;
     EFormat Format;
     TCommandPing::EPingKind RunKind;
-    double Percentile;
+    std::vector<double> Percentiles;
+
+    std::unique_ptr<NDebug::TActorChainPingSettings> ChainConfig;
 };
 
-} // NYdb::NConsoleClient
+} // namespace NConsoleClient
+} // namespace NYdb

@@ -49,7 +49,7 @@ private:
 
     void Restored() {
         auto* owner = Owner;
-        Y_ABORT_UNLESS(owner);
+        Y_ENSURE(owner);
 
         if (Locks) {
             owner->SysLocks.RestoreInMemoryLocks(std::move(Locks));
@@ -123,7 +123,7 @@ private:
         }
 
         for (size_t chunkSize : Checkpoints) {
-            Y_ABORT_UNLESS(chunkSize <= Buffer.size(), "Unexpected end of buffer");
+            Y_ENSURE(chunkSize <= Buffer.size(), "Unexpected end of buffer");
 
             NKikimrTxDataShard::TInMemoryState* state = google::protobuf::Arena::CreateMessage<NKikimrTxDataShard::TInMemoryState>(&Arena);
             {
@@ -300,8 +300,8 @@ public:
     }
 
     void PreserveState() {
-        Y_ABORT_UNLESS(Owner, "Unexpected call from a detached tablet");
-        Y_ABORT_UNLESS(Owner->InMemoryStateActor == this, "Unexpected call while state actor is not attached");
+        Y_ENSURE(Owner, "Unexpected call from a detached tablet");
+        Y_ENSURE(Owner->InMemoryStateActor == this, "Unexpected call while state actor is not attached");
 
         auto state = Owner->PreserveInMemoryState();
 
@@ -367,7 +367,7 @@ public:
         if (msg->Record.HasContinuationToken()) {
             NKikimrTxDataShard::TInMemoryStateContinuationToken token;
             bool ok = token.ParseFromString(msg->Record.GetContinuationToken());
-            Y_ABORT_UNLESS(ok, "Cannot parse continuation token");
+            Y_ENSURE(ok, "Cannot parse continuation token");
             nextIndex = token.GetNextIndex();
         }
 
@@ -384,7 +384,7 @@ public:
                 NKikimrTxDataShard::TInMemoryStateContinuationToken token;
                 token.SetNextIndex(nextIndex);
                 bool ok = token.SerializeToString(res->Record.MutableContinuationToken());
-                Y_ABORT_UNLESS(ok, "Cannot serialize continuation token");
+                Y_ENSURE(ok, "Cannot serialize continuation token");
             }
         }
 
@@ -466,17 +466,17 @@ public:
         }
 
         // We should have at least 1 byte available
-        Y_ABORT_UNLESS(WriteIndex < Buffers.size());
+        Y_ENSURE(WriteIndex < Buffers.size());
         if (Buffers[WriteIndex].size() == Buffers[WriteIndex].capacity()) {
             ++WriteIndex;
-            Y_ABORT_UNLESS(WriteIndex < Buffers.size());
+            Y_ENSURE(WriteIndex < Buffers.size());
         }
         TString& buffer = Buffers[WriteIndex];
-        Y_ABORT_UNLESS(buffer.size() < buffer.capacity());
+        Y_ENSURE(buffer.size() < buffer.capacity());
         size_t oldSize = buffer.size();
         size_t newSize = buffer.capacity();
         buffer.resize(newSize);
-        Y_ABORT_UNLESS(buffer.capacity() == newSize);
+        Y_ENSURE(buffer.capacity() == newSize);
         Written += newSize - oldSize;
         Reserved -= newSize - oldSize;
         *data = buffer.Detach() + oldSize;
@@ -485,13 +485,13 @@ public:
     }
 
     void BackUp(int count) override {
-        Y_ABORT_UNLESS(count >= 0);
-        Y_ABORT_UNLESS(WriteIndex < Buffers.size());
+        Y_ENSURE(count >= 0);
+        Y_ENSURE(WriteIndex < Buffers.size());
         TString& buffer = Buffers[WriteIndex];
-        Y_ABORT_UNLESS(buffer.size() >= (size_t)count);
+        Y_ENSURE(buffer.size() >= (size_t)count);
         size_t oldCapacity = buffer.capacity();
         buffer.resize(buffer.size() - (size_t)count);
-        Y_ABORT_UNLESS(buffer.capacity() == oldCapacity);
+        Y_ENSURE(buffer.capacity() == oldCapacity);
         Reserved += count;
         Written -= count;
     }
@@ -530,7 +530,7 @@ TDataShard::TPreservedInMemoryState TDataShard::PreserveInMemoryState() {
     auto flushState = [&]() {
         stream.Reserve(state->ByteSizeLong());
         bool ok = state->SerializeToZeroCopyStream(&stream);
-        Y_ABORT_UNLESS(ok, "Unexpected failure to serialize in-memory state");
+        Y_ENSURE(ok, "Unexpected failure to serialize in-memory state");
     };
 
     auto resetState = [&]() {
@@ -560,7 +560,7 @@ TDataShard::TPreservedInMemoryState TDataShard::PreserveInMemoryState() {
     };
 
     // Serialize important in-memory vars
-    {
+    if (InMemoryVarsRestored) {
         auto* vars = state->MutableVars();
         SnapshotManager.GetImmediateWriteEdge().ToProto(vars->MutableImmediateWriteEdge());
         SnapshotManager.GetImmediateWriteEdgeReplied().ToProto(vars->MutableImmediateWriteEdgeReplied());

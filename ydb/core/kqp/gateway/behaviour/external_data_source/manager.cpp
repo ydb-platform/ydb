@@ -8,6 +8,7 @@
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 
 #include <ydb/library/conclusion/generic/result.h>
+#include <ydb/core/external_sources/iceberg_fields.h>
 
 namespace NKikimr::NKqp {
 
@@ -85,11 +86,26 @@ TString GetOrEmpty(const NYql::TCreateObjectSettings& container, const TString& 
         "use_tls",
         "schema", // managed PG, GP
         "service_name", // oracle
-        "folder_id" // logging
+        "folder_id", // logging
+        "use_ssl", // solomon
+        "reading_mode", // mongodb
+        "unexpected_type_display_mode", // mongodb
+        "unsupported_type_display_mode", // mongodb
+        "grpc_location", // solomon
+        "project", // solomon
+        "cluster" // solomon
     };
 
     auto& featuresExtractor = settings.GetFeaturesExtractor();
-    for (const auto& property: properties) {
+
+    for (const auto& property : properties) {
+        if (const auto value = featuresExtractor.Extract(property)) {
+            externaDataSourceDesc.MutableProperties()->MutableProperties()->insert({property, *value});
+        }
+    }
+
+    // Iceberg properties for connector
+    for (const auto& property : NKikimr::NExternalSource::NIceberg::FieldsToConnector) {
         if (const auto value = featuresExtractor.Extract(property)) {
             externaDataSourceDesc.MutableProperties()->MutableProperties()->insert({property, *value});
         }

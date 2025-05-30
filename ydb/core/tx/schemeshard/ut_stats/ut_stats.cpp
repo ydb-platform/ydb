@@ -141,18 +141,6 @@ void SetStatsObserver(TTestActorRuntime& runtime, const std::function<TTestActor
     });
 }
 
-TVector<ui64> GetTableShards(TTestActorRuntime& runtime,
-                             const TString& path
-) {
-    TVector<ui64> shards;
-    auto tableDescription = DescribePath(runtime, path, true);
-    for (const auto& part : tableDescription.GetPathDescription().GetTablePartitions()) {
-        shards.emplace_back(part.GetDatashardId());
-    }
-
-    return shards;
-}
-
 TTableId ResolveTableId(TTestActorRuntime& runtime, const TString& path) {
     auto response = Navigate(runtime, path);
     return response->ResultSet.at(0).TableId;
@@ -646,7 +634,7 @@ Y_UNIT_TEST_SUITE(TStoragePoolsStatsPersistence) {
         );
         env.TestWaitNotification(runtime, txId);
 
-        auto shards = GetTableShards(runtime, "/MyRoot/SomeTable");
+        auto shards = GetTableShards(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeTable");
         UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1);
         auto& datashard = shards[0];
         constexpr ui32 rowsCount = 100u;

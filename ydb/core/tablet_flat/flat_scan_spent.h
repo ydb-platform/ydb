@@ -21,7 +21,7 @@ namespace NTable {
 
         }
 
-        void Describe(IOutputStream &out) const noexcept
+        void Describe(IOutputStream &out) const
         {
             const auto now = Time->Now();
 
@@ -31,7 +31,7 @@ namespace NTable {
                 << ",interrupts=" << Interrupts << "}";
         }
 
-        void Alter(bool available) noexcept
+        void Alter(bool available)
         {
             if (bool(available) == bool(Since == TInstant::Max())) {
                 /* State isn't changed since last Alter(...) */

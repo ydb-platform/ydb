@@ -1,8 +1,10 @@
 UNITTEST()
 
+REQUIREMENTS(ram:32)
+
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
-    TAG(ya:fat)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
     SIZE(MEDIUM)
 ENDIF()
@@ -15,17 +17,20 @@ ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
 ENV(YDB_FEATURE_FLAGS="enable_topic_service_tx")
 
 SRCS(
-    workload-topic.cpp
-    workload-transfer-topic-to-table.cpp
+    parse_command_line.cpp
     run_ydb.cpp
     supported_codecs.cpp
     supported_codecs_fixture.cpp
+    workload-topic.cpp
+    workload-transfer-topic-to-table.cpp
     ydb-dump.cpp
 )
 
 PEERDIR(
-    ydb/public/sdk/cpp/client/ydb_topic
-    ydb/public/sdk/cpp/client/ydb_table
+    contrib/libs/grpc
+    contrib/libs/fmt
+    ydb/public/sdk/cpp/src/client/topic
+    ydb/public/sdk/cpp/src/client/table
     ydb/public/lib/ydb_cli/commands/topic_workload
 )
 

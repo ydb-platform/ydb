@@ -93,7 +93,8 @@ namespace NKikimr::NBsController {
                 const ui32 nodeId = fullPDiskId.NodeId;
                 const ui32 pdiskId = fullPDiskId.PDiskId;
 
-                NKikimrBlobStorage::TNodeWardenServiceSet &service = *Services[nodeId].MutableServiceSet();
+                auto& query = Services[nodeId];
+                NKikimrBlobStorage::TNodeWardenServiceSet &service = *query.MutableServiceSet();
                 NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk *pdisk = service.AddPDisks();
                 pdisk->SetNodeID(nodeId);
                 pdisk->SetPDiskID(pdiskId);
@@ -123,6 +124,14 @@ namespace NKikimr::NBsController {
                     case NBsController::TPDiskMood::EValue::Stop:
                         pdisk->SetStop(true);
                         break;
+                }
+
+                if (auto& shred = Self->ShredState; shred.ShouldShred(fullPDiskId, pdiskInfo)) {
+                    const auto& generation = shred.GetCurrentGeneration();
+                    Y_ABORT_UNLESS(generation);
+                    auto *m = query.MutableShredRequest();
+                    m->SetShredGeneration(*generation);
+                    m->AddPDiskIds(fullPDiskId.PDiskId);
                 }
 
                 return pdisk;
@@ -505,6 +514,7 @@ namespace NKikimr::NBsController {
             CommitStoragePoolStatUpdates(state);
             CommitSysViewUpdates(state);
             CommitVirtualGroupUpdates(state);
+            CommitShredUpdates(state);
 
             // add updated and remove deleted vslots from VSlotReadyTimestampQ
             const TMonotonic now = TActivationContext::Monotonic();
@@ -994,6 +1004,7 @@ namespace NKikimr::NBsController {
             pb->SetExpectedSerial(pdisk.ExpectedSerial);
             pb->SetLastSeenSerial(pdisk.LastSeenSerial);
             pb->SetReadOnly(pdisk.Mood == TPDiskMood::ReadOnly);
+            pb->SetMaintenanceStatus(pdisk.MaintenanceStatus);
         }
 
         void TBlobStorageController::Serialize(NKikimrBlobStorage::TVSlotId *pb, TVSlotId id) {
@@ -1179,20 +1190,25 @@ namespace NKikimr::NBsController {
         }
 
         void TBlobStorageController::SerializeSettings(NKikimrBlobStorage::TUpdateSettings *settings) {
-            settings->AddDefaultMaxSlots(DefaultMaxSlots);
-            settings->AddEnableSelfHeal(SelfHealEnable);
-            settings->AddEnableDonorMode(DonorMode);
-            settings->AddScrubPeriodicitySeconds(ScrubPeriodicity.Seconds());
-            settings->AddPDiskSpaceMarginPromille(PDiskSpaceMarginPromille);
-            settings->AddGroupReserveMin(GroupReserveMin);
-            settings->AddGroupReservePartPPM(GroupReservePart);
-            settings->AddMaxScrubbedDisksAtOnce(MaxScrubbedDisksAtOnce);
-            settings->AddPDiskSpaceColorBorder(PDiskSpaceColorBorder);
-            settings->AddEnableGroupLayoutSanitizer(GroupLayoutSanitizerEnabled);
-            // TODO: settings->AddSerialManagementStage(SerialManagementStage);
-            settings->AddAllowMultipleRealmsOccupation(AllowMultipleRealmsOccupation);
-            settings->AddUseSelfHealLocalPolicy(UseSelfHealLocalPolicy);
-            settings->AddTryToRelocateBrokenDisksLocallyFirst(TryToRelocateBrokenDisksLocallyFirst);
+            settings->SetDefaultMaxSlots(DefaultMaxSlots);
+            settings->SetEnableSelfHeal(SelfHealEnable);
+            settings->SetEnableDonorMode(DonorMode);
+            settings->SetScrubPeriodicitySeconds(ScrubPeriodicity.Seconds());
+            settings->SetPDiskSpaceMarginPromille(PDiskSpaceMarginPromille);
+            settings->SetGroupReserveMin(GroupReserveMin);
+            settings->SetGroupReservePartPPM(GroupReservePart);
+            settings->SetMaxScrubbedDisksAtOnce(MaxScrubbedDisksAtOnce);
+            settings->SetPDiskSpaceColorBorder(PDiskSpaceColorBorder);
+            settings->SetEnableGroupLayoutSanitizer(GroupLayoutSanitizerEnabled);
+            // TODO: settings->SetSerialManagementStage(SerialManagementStage);
+            settings->SetAllowMultipleRealmsOccupation(AllowMultipleRealmsOccupation);
+            settings->SetUseSelfHealLocalPolicy(UseSelfHealLocalPolicy);
+            settings->SetTryToRelocateBrokenDisksLocallyFirst(TryToRelocateBrokenDisksLocallyFirst);
+        }
+
+        void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TGetInterfaceVersion& /*cmd*/,
+                TStatus& status) {
+            status.SetInterfaceVersion(BSC_INTERFACE_VERSION);
         }
 
 } // NKikimr::NBsController

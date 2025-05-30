@@ -37,6 +37,7 @@ SRCS(
     ut_comp_gen.cpp
     ut_compaction.cpp
     ut_compaction_multi.cpp
+    ut_data_cleanup.cpp
     ut_datetime.cpp
     ut_decimal.cpp    
     ut_charge.cpp
@@ -51,6 +52,7 @@ SRCS(
     ut_screen.cpp
     ut_bloom.cpp
     ut_shared_sausagecache.cpp
+    ut_shared_sausagecache_actor.cpp
     ut_slice.cpp
     ut_slice_loader.cpp
     ut_versions.cpp

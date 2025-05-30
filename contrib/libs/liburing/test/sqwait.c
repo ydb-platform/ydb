@@ -61,6 +61,12 @@ int main(int argc, char *argv[])
 	}
 
 	fret = T_EXIT_SKIP;
+	for (i = 0; i < INFLIGHT; i++) {
+		if (posix_memalign(&iovs[i].iov_base, 4096, 4096))
+			goto err;
+		iovs[i].iov_len = 4096;
+	}
+
 	ret = io_uring_queue_init(8, &ring, IORING_SETUP_SQPOLL);
 	if (ret < 0) {
 		if (errno == EINVAL || errno == EPERM)
@@ -77,12 +83,6 @@ int main(int argc, char *argv[])
 		perror("open");
 		fret = T_EXIT_FAIL;
 		goto err;
-	}
-
-	for (i = 0; i < INFLIGHT; i++) {
-		if (posix_memalign(&iovs[i].iov_base, 4096, 4096))
-			goto err;
-		iovs[i].iov_len = 4096;
 	}
 
 	iov_off = off = 0;
@@ -122,16 +122,14 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	if (fd != -1)
-		close(fd);
-	if (fname != argv[1])
-		unlink(fname);
 	io_uring_queue_exit(&ring);
-	return T_EXIT_PASS;
+	fret = T_EXIT_PASS;
 err:
 	if (fd != -1)
 		close(fd);
 	if (fname != argv[1])
 		unlink(fname);
+	for (i = 0; i < INFLIGHT; i++)
+		free(iovs[i].iov_base);
 	return fret;
 }

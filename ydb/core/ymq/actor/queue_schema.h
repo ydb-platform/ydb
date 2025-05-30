@@ -25,7 +25,8 @@ public:
                                const bool isCloudMode,
                                const bool enableQueueAttributesValidation,
                                TIntrusivePtr<TUserCounters> userCounters,
-                               TIntrusivePtr<TSqsEvents::TQuoterResourcesForActions> quoterResources);
+                               TIntrusivePtr<TSqsEvents::TQuoterResourcesForActions> quoterResources,
+                               const TString& tagsJson);
 
     ~TCreateQueueSchemaActorV2();
 
@@ -129,6 +130,7 @@ private:
     TVector<TTable> RequiredTables_;
     ui64 CreatedTablesCount_ = 0;
     TQueueAttributes ValidatedAttributes_;
+    TString TagsJson_;
 
     ui64 LeaderTabletId_ = 0;
     TActorId CreateTableWithLeaderTabletActorId_;

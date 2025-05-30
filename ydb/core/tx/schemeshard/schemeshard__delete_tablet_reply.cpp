@@ -2,6 +2,7 @@
 
 #include <ydb/core/tablet/tablet_exception.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
+#include <ydb/core/tx/schemeshard/schemeshard__data_erasure_manager.h>
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -135,7 +136,7 @@ struct TSchemeShard::TTxDeleteTabletReply : public TSchemeShard::TRwTxBase {
             path->DecShardsInside();
 
             auto domain = Self->ResolveDomainInfo(path);
-            domain->RemoveInternalShard(ShardIdx);
+            domain->RemoveInternalShard(ShardIdx, Self);
             switch (tabletType) {
             case ETabletType::SequenceShard:
                 domain->RemoveSequenceShard(ShardIdx);
@@ -178,6 +179,9 @@ struct TSchemeShard::TTxDeleteTabletReply : public TSchemeShard::TRwTxBase {
                 LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                             "Close pipe to deleted shardIdx " << ShardIdx << " tabletId " << TabletId);
                 Self->PipeClientCache->ForceClose(ctx, ui64(TabletId));
+            }
+            if (Self->EnableDataErasure && Self->DataErasureManager->GetStatus() == EDataErasureStatus::IN_PROGRESS) {
+                Self->Execute(Self->CreateTxCancelDataErasureShards({ShardIdx}));
             }
         }
     }

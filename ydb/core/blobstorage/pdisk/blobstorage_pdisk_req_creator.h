@@ -156,6 +156,8 @@ private:
         CASE_COUNT_REQUEST(ChunkReserve);
         CASE_COUNT_REQUEST(YardControl);
         CASE_COUNT_REQUEST(LogRead);
+        CASE_COUNT_REQUEST(ShredPDisk);
+        CASE_COUNT_REQUEST(ShredVDiskResult);
         default: break;
         }
     }
@@ -168,7 +170,7 @@ private:
 
     template<typename TEv>
     static TString ToString(const TAutoPtr<NActors::TEventHandle<TEv>> &ev) {
-        Y_ABORT_UNLESS(ev && ev->Get());
+        Y_VERIFY(ev && ev->Get());
         return ev->Get()->ToString();
     }
 
@@ -216,14 +218,9 @@ public:
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // TODO: Make all functions in style
-    [[nodiscard]] TChunkTrim* CreateChunkTrim(ui32 chunkIdx, ui32 offset, ui64 size, const NWilson::TSpan& parent) {
-        NWilson::TSpan span = parent.CreateChild(TWilson::PDiskTopLevel, "PDisk.ChunkTrim");
-        span.Attribute("chunk_idx", chunkIdx)
-            .Attribute("offset", offset)
-            .Attribute("size", static_cast<i64>(size))
-            .Attribute("pdisk_id", PCtx->PDiskId);
+    [[nodiscard]] TChunkTrim* CreateChunkTrim(ui32 chunkIdx, ui32 offset, ui64 size) {
         Mon->Trim.CountRequest(size);
-        return CreateFromArgs<TChunkTrim>(chunkIdx, offset, size, std::move(span));
+        return CreateFromArgs<TChunkTrim>(chunkIdx, offset, size);
     }
 
     [[nodiscard]] TLogWrite* CreateLogWrite(NPDisk::TEvLog &ev, const TActorId &sender, double& burstMs, NWilson::TTraceId traceId) {

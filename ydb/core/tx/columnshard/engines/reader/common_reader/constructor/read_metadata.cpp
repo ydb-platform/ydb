@@ -21,11 +21,13 @@ TConclusionStatus TReadMetadata::Init(
     SelectInfo = dataAccessor.Select(readDescription, !!LockId);
     if (LockId) {
         for (auto&& i : SelectInfo->Portions) {
-            if (i->HasInsertWriteId() && !i->HasCommitSnapshot()) {
-                if (owner->HasLongTxWrites(i->GetInsertWriteIdVerified())) {
+            if (!i->IsCommitted()) {
+                AFL_VERIFY(i->GetPortionType() == EPortionType::Written);
+                auto* written = static_cast<const TWrittenPortionInfo*>(i.get());
+                if (owner->HasLongTxWrites(written->GetInsertWriteId())) {
                 } else {
-                    auto op = owner->GetOperationsManager().GetOperationByInsertWriteIdVerified(i->GetInsertWriteIdVerified());
-                    AddWriteIdToCheck(i->GetInsertWriteIdVerified(), op->GetLockId());
+                    auto op = owner->GetOperationsManager().GetOperationByInsertWriteIdVerified(written->GetInsertWriteId());
+                    AddWriteIdToCheck(written->GetInsertWriteId(), op->GetLockId());
                 }
             }
         }
@@ -39,18 +41,24 @@ TConclusionStatus TReadMetadata::Init(
     }
 
     StatsMode = readDescription.StatsMode;
+    DeduplicationPolicy = readDescription.DeduplicationPolicy;
     return TConclusionStatus::Success();
+}
+
+TReadMetadata::TReadMetadata(const std::shared_ptr<TVersionedIndex>& schemaIndex, const TReadDescription& read)
+    : TBase(schemaIndex, read.GetSorting(), read.GetProgram(), schemaIndex->GetSchemaVerified(read.GetSnapshot()), read.GetSnapshot(),
+          read.GetScanCursorOptional(), read.GetTabletId())
+    , PathId(read.PathId)
+    , ReadStats(std::make_shared<TReadStats>()) {
 }
 
 std::set<ui32> TReadMetadata::GetEarlyFilterColumnIds() const {
     auto& indexInfo = ResultIndexSchema->GetIndexInfo();
-    std::set<ui32> result;
+    const auto& ids = GetProgram().GetEarlyFilterColumns();
+    std::set<ui32> result(ids.begin(), ids.end());
+    AFL_VERIFY(result.size() == ids.size());
     for (auto&& i : GetProgram().GetEarlyFilterColumns()) {
-        auto id = indexInfo.GetColumnIdOptional(i);
-        if (id) {
-            result.emplace(*id);
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("early_filter_column", i);
-        }
+        AFL_VERIFY(indexInfo.HasColumnId(i));
     }
     return result;
 }
@@ -64,8 +72,8 @@ std::set<ui32> TReadMetadata::GetPKColumnIds() const {
     return result;
 }
 
-NArrow::NMerger::TSortableBatchPosition TReadMetadata::BuildSortedPosition(const NArrow::TReplaceKey& key) const {
-    return NArrow::NMerger::TSortableBatchPosition(key.ToBatch(GetReplaceKey()), 0, GetReplaceKey()->field_names(), {}, IsDescSorted());
+NArrow::NMerger::TSortableBatchPosition TReadMetadata::BuildSortedPosition(const NArrow::TSimpleRow& key) const {
+    return NArrow::NMerger::TSortableBatchPosition(key.ToBatch(), 0, GetReplaceKey()->field_names(), {}, IsDescSorted());
 }
 
 void TReadMetadata::DoOnReadFinished(NColumnShard::TColumnShard& owner) const {
@@ -101,7 +109,7 @@ void TReadMetadata::DoOnReplyConstruction(const ui64 tabletId, NKqp::NInternalIm
         lockInfo.SetGeneration(LockSharingInfo->GetGeneration());
         lockInfo.SetDataShard(tabletId);
         lockInfo.SetCounter(LockSharingInfo->GetCounter());
-        lockInfo.SetPathId(PathId);
+        lockInfo.SetPathId(PathId.GetRawValue());
         lockInfo.SetHasWrites(LockSharingInfo->HasWrites());
         if (LockSharingInfo->IsBroken()) {
             scanData.LocksInfo.BrokenLocks.emplace_back(std::move(lockInfo));

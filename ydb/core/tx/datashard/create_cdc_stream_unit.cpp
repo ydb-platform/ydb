@@ -20,10 +20,10 @@ public:
     }
 
     EExecutionStatus Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) override {
-        Y_ABORT_UNLESS(op->IsSchemeTx());
+        Y_ENSURE(op->IsSchemeTx());
 
         TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
-        Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
+        Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
 
         auto& schemeTx = tx->GetSchemeTx();
         if (!schemeTx.HasCreateCdcStreamNotice() && !schemeTx.HasCreateIncrementalBackupSrc()) {
@@ -38,10 +38,10 @@ public:
         const auto streamPathId = TPathId::FromProto(streamDesc.GetPathId());
 
         const auto pathId = TPathId::FromProto(params.GetPathId());
-        Y_ABORT_UNLESS(pathId.OwnerId == DataShard.GetPathOwnerId());
+        Y_ENSURE(pathId.OwnerId == DataShard.GetPathOwnerId());
 
         const auto version = params.GetTableSchemaVersion();
-        Y_ABORT_UNLESS(version);
+        Y_ENSURE(version);
 
         auto tableInfo = DataShard.AlterTableAddCdcStream(ctx, txc, pathId, version, streamDesc);
         TDataShardLocksDb locksDb(DataShard, txc);
@@ -52,8 +52,8 @@ public:
         }
 
         if (params.HasSnapshotName()) {
-            Y_ABORT_UNLESS(streamDesc.GetState() == NKikimrSchemeOp::ECdcStreamStateScan);
-            Y_ABORT_UNLESS(tx->GetStep() != 0);
+            Y_ENSURE(streamDesc.GetState() == NKikimrSchemeOp::ECdcStreamStateScan);
+            Y_ENSURE(tx->GetStep() != 0);
 
             DataShard.GetSnapshotManager().AddSnapshot(txc.DB,
                 TSnapshotKey(pathId, tx->GetStep(), tx->GetTxId()),

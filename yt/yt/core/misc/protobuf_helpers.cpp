@@ -89,7 +89,7 @@ bool TryDeserializeProto(google::protobuf::MessageLite* message, TRef data)
     // to find out more about protobuf message size limits.
     CodedInputStream codedInputStream(
         reinterpret_cast<const ui8*>(data.Begin()),
-        static_cast<int>(data.Size()));
+        std::ssize(data));
     codedInputStream.SetTotalBytesLimit(data.Size() + 1);
 
     // Raise recursion limit.
@@ -125,17 +125,17 @@ TSharedRef SerializeProtoToRefWithEnvelope(
     fixedHeader.MessageSize = static_cast<ui32>(compressedMessage.Size());
 
     size_t totalSize =
-        sizeof (TEnvelopeFixedHeader) +
+        sizeof(TEnvelopeFixedHeader) +
         fixedHeader.EnvelopeSize +
         fixedHeader.MessageSize;
 
     auto data = TSharedMutableRef::Allocate<TSerializedMessageTag>(totalSize, {.InitializeStorage = false});
 
     char* targetFixedHeader = data.Begin();
-    char* targetHeader = targetFixedHeader + sizeof (TEnvelopeFixedHeader);
+    char* targetHeader = targetFixedHeader + sizeof(TEnvelopeFixedHeader);
     char* targetMessage = targetHeader + fixedHeader.EnvelopeSize;
 
-    memcpy(targetFixedHeader, &fixedHeader, sizeof (fixedHeader));
+    memcpy(targetFixedHeader, &fixedHeader, sizeof(fixedHeader));
     YT_VERIFY(envelope.SerializeToArray(targetHeader, fixedHeader.EnvelopeSize));
     memcpy(targetMessage, compressedMessage.Begin(), fixedHeader.MessageSize);
 
@@ -159,14 +159,14 @@ TString SerializeProtoToStringWithEnvelope(
     fixedHeader.MessageSize = CheckedCastToI32(message.ByteSizeLong());
 
     auto totalSize =
-        sizeof (fixedHeader) +
+        sizeof(fixedHeader) +
         fixedHeader.EnvelopeSize +
         fixedHeader.MessageSize;
 
     auto data = TString::Uninitialized(totalSize);
     char* ptr = data.begin();
-    ::memcpy(ptr, &fixedHeader, sizeof (fixedHeader));
-    ptr += sizeof (fixedHeader);
+    ::memcpy(ptr, &fixedHeader, sizeof(fixedHeader));
+    ptr += sizeof(fixedHeader);
     ptr = reinterpret_cast<char*>(envelope.SerializeWithCachedSizesToArray(reinterpret_cast<ui8*>(ptr)));
     ptr = reinterpret_cast<char*>(message.SerializeWithCachedSizesToArray(reinterpret_cast<ui8*>(ptr)));
     YT_ASSERT(ptr == data.end());
@@ -178,13 +178,13 @@ bool TryDeserializeProtoWithEnvelope(
     google::protobuf::MessageLite* message,
     TRef data)
 {
-    if (data.Size() < sizeof (TEnvelopeFixedHeader)) {
+    if (data.Size() < sizeof(TEnvelopeFixedHeader)) {
         return false;
     }
 
     const auto* fixedHeader = reinterpret_cast<const TEnvelopeFixedHeader*>(data.Begin());
-    const char* sourceHeader = data.Begin() + sizeof (TEnvelopeFixedHeader);
-    if (fixedHeader->EnvelopeSize + sizeof (*fixedHeader) > data.Size()) {
+    const char* sourceHeader = data.Begin() + sizeof(TEnvelopeFixedHeader);
+    if (fixedHeader->EnvelopeSize + sizeof(*fixedHeader) > data.Size()) {
         return false;
     }
 
@@ -200,7 +200,7 @@ bool TryDeserializeProtoWithEnvelope(
         return false;
     }
 
-    if (fixedHeader->MessageSize + fixedHeader->EnvelopeSize + sizeof (*fixedHeader) > data.Size()) {
+    if (fixedHeader->MessageSize + fixedHeader->EnvelopeSize + sizeof(*fixedHeader) > data.Size()) {
         return false;
     }
 
@@ -293,7 +293,7 @@ TSharedRef PushEnvelope(const TSharedRef& data, NCompression::ECodec codec)
     header.MessageSize = static_cast<ui32>(data.Size());
 
     auto headerRef = TSharedMutableRef::Allocate(
-        sizeof (header) +
+        sizeof(header) +
         header.EnvelopeSize);
 
     memcpy(headerRef.Begin(), &header, sizeof(header));

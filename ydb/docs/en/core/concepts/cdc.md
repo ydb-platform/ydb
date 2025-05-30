@@ -11,7 +11,7 @@ When adding, updating, or deleting a table row, CDC generates a change record by
 * Change records are sharded across topic partitions by primary key.
 * Each change is only delivered once (exactly-once delivery).
 * Changes by the same primary key are delivered to the same topic partition in the order they took place in the table.
-* Change record is delivered to the topic partition only after the corresponding transaction in the table has been committed.
+* Change records are delivered to the topic partition only after the corresponding transaction in the table has been committed.
 
 ## Limitations {#restrictions}
 
@@ -23,14 +23,14 @@ When adding, updating, or deleting a table row, CDC generates a change record by
 
 Adding rows is a special update case, and a record of adding a row in a changefeed will look similar to an update record.
 
-## Virtual timestamps {#virtual-timestamps}
+## Virtual Timestamps {#virtual-timestamps}
 
 All changes in {{ ydb-short-name }} tables are arranged according to the order in which transactions are performed. Each change is marked with a virtual timestamp which consists of two elements:
 
 1. Global coordinator time.
-1. Unique transaction ID.
+2. Unique transaction ID.
 
-Using these stamps, you can arrange records from different partitions of the topic relative to each other or use them for filtering (for example, to exclude old change records).
+Using these timestamps, you can arrange records from different partitions of the topic relative to each other or use them for filtering (for example, to exclude old change records).
 
 {% note info %}
 
@@ -38,13 +38,13 @@ By default, virtual timestamps are not uploaded to the changefeed. To enable the
 
 {% endnote %}
 
-## Initial table scan {#initial-scan}
+## Initial Table Scan {#initial-scan}
 
 By default, a changefeed only includes records about those table rows that changed after the changefeed was created. Initial table scan enables you to export, to the changefeed, the values of all the rows that existed at the time of changefeed creation.
 
 The scan runs in the background mode on top of the table snapshot. The following situations are possible:
 
-* A non-scanned row changes in the table. The changefeed will receive, one after another: a record with the source value and a record about the update.  When the same record is changed again, only the update record is exported.
+* A non-scanned row changes in the table. The changefeed will receive, one after another: a record with the source value and a record about the update. When the same record is changed again, only the update record is exported.
 * A changed row is found during scanning. Nothing is exported to the changefeed because the source value has already been exported at the time of change (see the previous paragraph).
 * A scanned row changes in the table. Only an update record exports to the changefeed.
 
@@ -64,11 +64,11 @@ During the scanning process, depending on the table update frequency, you might 
 
 {% endnote %}
 
-## Record structure {#record-structure}
+## Record Structure {#record-structure}
 
 Depending on the [changefeed parameters](../yql/reference/syntax/alter_table/changefeed.md), the structure of a record may differ.
 
-### JSON format {#json-record-structure}
+### JSON Format {#json-record-structure}
 
 A [JSON](https://en.wikipedia.org/wiki/JSON) record has the following structure:
 
@@ -154,7 +154,7 @@ Record with virtual timestamps:
 
 {% if audience == "tech" %}
 
-### Amazon DynamoDB-compatible JSON format {#dynamodb-streams-json-record-structure}
+### Amazon DynamoDB-Compatible JSON Format {#dynamodb-streams-json-record-structure}
 
 For [Amazon DynamoDB](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Introduction.html)-compatible document tables, {{ ydb-short-name }} can generate change records in the [Amazon DynamoDB Streams](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Streams.html)-compatible format.
 
@@ -169,7 +169,7 @@ The record structure is the same as for [Amazon DynamoDB Streams](https://docs.a
 
 {% endif %}
 
-### Debezium-compatible JSON format {#debezium-json-record-structure}
+### Debezium-Compatible JSON Format {#debezium-json-record-structure}
 
 A [Debezium](https://debezium.io)-compatible JSON record structure has the following format:
 
@@ -219,7 +219,7 @@ When reading using Kafka API, the Debezium-compatible primary key of the modifie
 
 * `payload`: Key of a row that was changed. Contains names and values of the columns that are components of the primary key.
 
-## Record retention period {#retention-period}
+## Record Retention Period {#retention-period}
 
 By default, records are stored in the changefeed for 24 hours from the time they are sent. Depending on usage scenarios, the retention period can be reduced or increased up to 30 days.
 
@@ -233,9 +233,9 @@ Deleting records before they are processed by the client will cause [offset](top
 
 To set up the record retention period, specify the [RETENTION_PERIOD](../yql/reference/syntax/alter_table/changefeed.md) parameter when creating a changefeed.
 
-## Topic partitions {#topic-partitions}
+## Topic Partitions {#topic-partitions}
 
-By default, the number of [topic partitions](topic.md#partitioning) is equal to the number of table partitions. The number of topic partitions can be redefined by specifying [TOPIC_MIN_ACTIVE_PARTITIONS](../yql/reference/syntax/alter_table/changefeed.md) parameter when creating a changefeed.
+By default, the initial number of [topic partitions](topic.md#partitioning) is equal to the number of table partitions. You can redefine the initial number of topic partitions by specifying the [TOPIC_MIN_ACTIVE_PARTITIONS](../yql/reference/syntax/alter_table/changefeed.md) parameter when creating a changefeed. To create a changefeed with a dynamically changing number of partitions, set the [TOPIC_AUTO_PARTITIONING](../yql/reference/syntax/alter_table/changefeed.md) parameter when creating the changefeed.
 
 {% note info %}
 
@@ -243,10 +243,33 @@ Currently, the ability to explicitly specify the number of topic partitions is a
 
 {% endnote %}
 
-## Creating and deleting a changefeed {#ddl}
+## Creating and Deleting a Changefeed {#ddl}
 
 You can add a changefeed to an existing table or erase it using the [ADD CHANGEFEED and DROP CHANGEFEED](../yql/reference/syntax/alter_table/changefeed.md) directives of the YQL `ALTER TABLE` statement. When erasing a table, the changefeed added to it is also deleted.
 
-## CDC purpose and use {#best_practices}
+## Getting and Updating Topic Settings {#topic-settings}
+
+You can get the settings using an [SDK](../reference/ydb-sdk/topic.md#describe-topic) or the [{{ ydb-short-name }} CLI](../reference/ydb-cli/commands/scheme-describe.md) by passing the path to the changefeed in the arguments, which has the following format:
+
+```txt
+path/to/table/changefeed_name
+```
+
+For example, if a table named `table` contains a changefeed named `updates_feed` in the `my` directory, its path looks as follows:
+
+```text
+my/table/updates_feed
+```
+
+The topic settings can be updated using the expression [ALTER TOPIC](../yql/reference/syntax/alter-topic.md). Supported actions:
+
+* [updating settings](../yql/reference/syntax/alter-topic.md#updating-topic-settings):
+
+  * `retention_period`;
+  * `retention_storage_mb`;
+
+* [updating consumers](../yql/reference/syntax/alter-topic.md#updating-a-set-of-consumers).
+
+## CDC Purpose and Use {#best_practices}
 
 For information about using CDC when developing apps, see [best practices](../dev/cdc.md).

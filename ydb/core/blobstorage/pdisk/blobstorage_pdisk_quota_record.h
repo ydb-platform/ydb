@@ -15,8 +15,8 @@ namespace NPDisk {
     XX(Black) \
     XX(Red) \
     XX(Orange) \
-    XX(LightOrange) \
     XX(PreOrange) \
+    XX(LightOrange) \
     XX(Yellow) \
     XX(LightYellow) \
     XX(Cyan) \
@@ -103,7 +103,7 @@ public:
 
     // Called only from the main thread
     bool TryAllocate(i64 count, TString &outErrorReason) {
-        Y_ABORT_UNLESS(count > 0);
+        Y_VERIFY(count > 0);
         if (AtomicSub(Free, count) > AtomicGet(Black)) {
             return true;
         }
@@ -118,7 +118,7 @@ public:
     }
 
     bool InitialAllocate(i64 count) {
-        Y_ABORT_UNLESS(count >= 0);
+        Y_VERIFY(count >= 0);
         if (AtomicSub(Free, count) >= 0) {
             return true;
         } else {
@@ -128,7 +128,7 @@ public:
     }
 
     void Release(i64 count) {
-        Y_ABORT_UNLESS(count > 0);
+        Y_VERIFY(count > 0);
         TAtomicBase newFree = AtomicAdd(Free, count);
         Y_VERIFY_S(newFree <= AtomicGet(HardLimit), Print());
     }

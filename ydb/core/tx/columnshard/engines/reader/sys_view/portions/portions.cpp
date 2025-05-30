@@ -1,4 +1,5 @@
 #include "portions.h"
+
 #include <ydb/core/formats/arrow/switch/switch_type.h>
 #include <ydb/core/tx/columnshard/blobs_action/common/const.h>
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_context.h>
@@ -6,10 +7,10 @@
 namespace NKikimr::NOlap::NReader::NSysView::NPortions {
 
 void TStatsIterator::AppendStats(const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders, const TPortionInfo& portion) const {
-    NArrow::Append<arrow::UInt64Type>(*builders[0], portion.GetPathId());
+    NArrow::Append<arrow::UInt64Type>(*builders[0], portion.GetPathId().GetRawValue());
     const std::string prod = ::ToString(portion.GetMeta().Produced);
     NArrow::Append<arrow::StringType>(*builders[1], prod);
-    NArrow::Append<arrow::UInt64Type>(*builders[2], ReadMetadata->TabletId);
+    NArrow::Append<arrow::UInt64Type>(*builders[2], ReadMetadata->GetTabletId());
     NArrow::Append<arrow::UInt64Type>(*builders[3], portion.GetRecordsCount());
     NArrow::Append<arrow::UInt64Type>(*builders[4], portion.GetColumnRawBytes());
     NArrow::Append<arrow::UInt64Type>(*builders[5], portion.GetIndexRawBytes());
@@ -60,11 +61,11 @@ std::vector<std::pair<TString, NKikimr::NScheme::TTypeInfo>> TReadStatsMetadata:
     return GetColumns(TStatsIterator::StatsSchema, TStatsIterator::StatsSchema.KeyColumns);
 }
 
-std::shared_ptr<NAbstract::TReadStatsMetadata> TConstructor::BuildMetadata(const NColumnShard::TColumnShard* self, const TReadDescription& read) const {
+std::shared_ptr<NAbstract::TReadStatsMetadata> TConstructor::BuildMetadata(
+    const NColumnShard::TColumnShard* self, const TReadDescription& read) const {
     auto* index = self->GetIndexOptional();
-    return std::make_shared<TReadStatsMetadata>(index ? index->CopyVersionedIndexPtr() : nullptr, self->TabletID(),
-        IsReverse ? TReadMetadataBase::ESorting::DESC : TReadMetadataBase::ESorting::ASC,
-        read.GetProgram(), index ? index->GetVersionedIndex().GetLastSchema() : nullptr, read.GetSnapshot());
+    return std::make_shared<TReadStatsMetadata>(index ? index->CopyVersionedIndexPtr() : nullptr, self->TabletID(), Sorting, read.GetProgram(),
+        index ? index->GetVersionedIndex().GetLastSchema() : nullptr, read.GetSnapshot());
 }
 
-}
+}   // namespace NKikimr::NOlap::NReader::NSysView::NPortions

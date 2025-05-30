@@ -4,8 +4,7 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/test_with_reboots.h>
 #include <ydb/core/testlib/tablet_helpers.h>
-#include <ydb/public/lib/deprecated/kicli/kicli.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
 using namespace NKikimr;
 using namespace NSchemeShard;
@@ -119,28 +118,6 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
         return mainTabletIds;
     }
 
-    NKikimrMiniKQL::TResult ReadTable(TTestActorRuntime& runtime, ui64 tabletId,
-            const TString& table, const TVector<TString>& pk, const TVector<TString>& columns)
-    {
-        TStringBuilder keyFmt;
-        for (const auto& k : pk) {
-            keyFmt << "'('" << k << " (Null) (Void)) ";
-        }
-        const auto columnsFmt = "'" + JoinSeq(" '", columns);
-
-        NKikimrMiniKQL::TResult result;
-        TString error;
-        NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, Sprintf(R"((
-            (let range '(%s))
-            (let columns '(%s))
-            (let result (SelectRange '__user__%s range columns '()))
-            (return (AsList (SetResult 'Result result) ))
-        ))", keyFmt.data(), columnsFmt.data(), table.data()), result, error);
-        UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::EReplyStatus::OK, error);
-
-        return result;
-    }
-
     struct TTableTraits {
         TString Path;
         TVector<TString> Key;
@@ -148,37 +125,15 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
         ui32 ExpectedRecords;
     };
 
-    template <typename C>
-    ui32 CountRows(TTestActorRuntime& runtime, const TTableTraits& table, const C& partitions) {
-        ui32 rows = 0;
-
-        for (const auto& x : partitions) {
-            auto result = ReadTable(runtime, x.GetDatashardId(), SplitPath(table.Path).back(), table.Key, table.Columns);
-            auto value = NClient::TValue::Create(result);
-            rows += value["Result"]["List"].Size();
-        }
-
-        return rows;
-    }
-
     bool CheckWrittenToIndex(TTestActorRuntime& runtime, const TTableTraits& mainTable, const TTableTraits& indexTable) {
-        bool writtenToMainTable = false;
-        {
-            auto tableDesc = DescribePath(runtime, mainTable.Path, true, true);
-            const auto& tablePartitions = tableDesc.GetPathDescription().GetTablePartitions();
-            UNIT_ASSERT(!tablePartitions.empty());
-            writtenToMainTable = mainTable.ExpectedRecords == CountRows(runtime, mainTable, tablePartitions);
-        }
+        auto mainTableRows = CountRows(runtime, mainTable.Path);
+        bool writtenToMainTable = (mainTable.ExpectedRecords == mainTableRows);
 
         if (writtenToMainTable) {
-            auto tableDesc = DescribePrivatePath(runtime, indexTable.Path, true, true);
-            const auto& tablePartitions = tableDesc.GetPathDescription().GetTablePartitions();
-            UNIT_ASSERT(!tablePartitions.empty());
-
             int i = 0;
             while (++i < 10) {
                 runtime.SimulateSleep(TDuration::Seconds(1));
-                if (indexTable.ExpectedRecords == CountRows(runtime, indexTable, tablePartitions)) {
+                if (indexTable.ExpectedRecords == CountRows(runtime, indexTable.Path)) {
                     break;
                 }
             }

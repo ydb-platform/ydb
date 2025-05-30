@@ -6,11 +6,8 @@
 #include "datashard_pipeline.h"
 #include "execution_unit.h"
 
-#include <ydb/core/base/row_version.h>
-
 #include <util/generic/ptr.h>
 #include <util/generic/string.h>
-#include <util/generic/vector.h>
 
 namespace NKikimr {
 namespace NDataShard {
@@ -34,7 +31,7 @@ protected:
 
     void Abort(TOperation::TPtr op, const TActorContext& ctx, const TString& error) {
         TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
-        Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
+        Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
 
         LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, error);
 
@@ -60,7 +57,7 @@ private:
 
     void PersistResult(TOperation::TPtr op, TTransactionContext& txc) {
         auto* schemeOp = DataShard.FindSchemaTx(op->GetTxId());
-        Y_ABORT_UNLESS(schemeOp);
+        Y_ENSURE(schemeOp);
 
         NIceDb::TNiceDb db(txc.DB);
         DataShard.PersistSchemeTxResult(db, *schemeOp);
@@ -90,7 +87,7 @@ public:
 
     EExecutionStatus Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) override final {
         TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
-        Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
+        Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
 
         if (!IsRelevant(tx)) {
             return EExecutionStatus::Executed;
@@ -138,55 +135,6 @@ public:
     }
 
 }; // TBackupRestoreUnitBase
-
-namespace NBackupRestore {
-
-using TVirtualTimestamp = TRowVersion;
-
-enum class EStorageType {
-    YT,
-    S3,
-};
-
-struct TLogMetadata : TSimpleRefCount<TLogMetadata> {
-    using TPtr = TIntrusivePtr<TLogMetadata>;
-
-    const TVirtualTimestamp StartVts;
-    TString ConsistencyKey;
-    EStorageType StorageType;
-    TString StoragePath;
-};
-
-struct TFullBackupMetadata : TSimpleRefCount<TFullBackupMetadata> {
-    using TPtr = TIntrusivePtr<TFullBackupMetadata>;
-
-    const TVirtualTimestamp SnapshotVts;
-    TString ConsistencyKey;
-    TLogMetadata::TPtr FollowingLog;
-    EStorageType StorageType;
-    TString StoragePath;
-};
-
-class TMetadata {
-public:
-    TMetadata() = default;
-    TMetadata(TVector<TFullBackupMetadata::TPtr>&& fullBackups, TVector<TLogMetadata::TPtr>&& logs);
-
-    void AddFullBackup(TFullBackupMetadata::TPtr fullBackup);
-    void AddLog(TLogMetadata::TPtr log);
-    void SetConsistencyKey(const TString& key);
-    void SetVersion(ui64 version);
-
-    TString Serialize() const;
-    static TMetadata Deserialize(const TString& metadata);
-private:
-    TString ConsistencyKey;
-    TMap<TVirtualTimestamp, TFullBackupMetadata::TPtr> FullBackups;
-    TMap<TVirtualTimestamp, TLogMetadata::TPtr> Logs;
-    ui64 Version = 0;
-};
-
-} // NBackupRestore
 
 } // NDataShard
 } // NKikimr

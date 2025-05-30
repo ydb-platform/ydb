@@ -53,6 +53,14 @@ void TLogDigestConfig::Register(TRegistrar registrar)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void TFairShareHierarchicalSchedulerDynamicConfig::Register(TRegistrar registrar)
+{
+    registrar.Parameter("window_size", &TThis::WindowSize)
+        .Default(TDuration::Minutes(5));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 void THistogramDigestConfig::Register(TRegistrar registrar)
 {
     registrar.Parameter("absolute_precision", &TThis::AbsolutePrecision)
@@ -145,6 +153,12 @@ void TExponentialBackoffOptionsSerializer::Register(TRegistrar registrar)
 
     registrar.ExternalClassParameter("backoff_jitter", &TThat::BackoffJitter)
         .Default(TThat::DefaultBackoffJitter);
+
+    registrar.ExternalPostprocessor([] (TThat* config) {
+        if(config->MinBackoff > config->MaxBackoff) {
+            THROW_ERROR_EXCEPTION("\"min_backoff\" must be less or equal than \"max_backoff\"");
+        }
+    });
 }
 
 ////////////////////////////////////////////////////////////////////////////////

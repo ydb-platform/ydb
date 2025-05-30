@@ -1,6 +1,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <yql/essentials/public/udf/arrow/block_builder.h>
+#include <yql/essentials/public/udf/arrow/block_reader.h>
 #include <yql/essentials/public/udf/arrow/memory_pool.h>
 #include <yql/essentials/minikql/mkql_type_builder.h>
 #include <yql/essentials/minikql/mkql_function_registry.h>
@@ -32,7 +33,7 @@ struct TArrayBuilderTestData {
 };
 
 std::unique_ptr<IArrayBuilder> MakeResourceArrayBuilder(TType* resourceType, TArrayBuilderTestData& data) {
-    auto arrayBuilder = MakeArrayBuilder(NMiniKQL::TTypeInfoHelper(), resourceType, 
+    auto arrayBuilder = MakeArrayBuilder(NMiniKQL::TTypeInfoHelper(), resourceType,
         *data.ArrowPool, MAX_BLOCK_SIZE, /* pgBuilder */nullptr);
     UNIT_ASSERT_C(arrayBuilder, "Failed to make resource arrow array builder");
     return arrayBuilder;
@@ -51,8 +52,59 @@ Y_UNIT_TEST_SUITE(TArrayBuilderTest) {
 
         auto value = datum.array()->GetValues<TUnboxedValue>(1)[0];
         UNIT_ASSERT(value.IsEmbedded());
-        UNIT_ASSERT_VALUES_EQUAL_C(TStringRef(value.AsStringRef()), TStringRef(resource.AsStringRef()), 
+        UNIT_ASSERT_VALUES_EQUAL_C(TStringRef(value.AsStringRef()), TStringRef(resource.AsStringRef()),
             "Expected equal values after building array");
+    }
+
+    Y_UNIT_TEST(TestTaggedTypeBuilder) {
+        TArrayBuilderTestData data;
+        const auto intType = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int32, false);
+        const auto taggedType = data.PgmBuilder.NewTaggedType(intType, "tag");
+
+        const auto arrayBuilder = MakeArrayBuilder(NMiniKQL::TTypeInfoHelper(), taggedType, *data.ArrowPool, MAX_BLOCK_SIZE, /*pgBuilder=*/nullptr);
+
+        TUnboxedValue testData = TUnboxedValuePod(123);
+
+        arrayBuilder->Add(testData);
+
+        auto datum = arrayBuilder->Build(true);
+
+        UNIT_ASSERT(datum.is_array());
+        UNIT_ASSERT_VALUES_EQUAL(datum.length(), 1);
+
+        auto value = datum.array()->buffers[1];
+
+        UNIT_ASSERT_VALUES_EQUAL(*reinterpret_cast<int32_t*>(value->address()), 123);
+    }
+
+    Y_UNIT_TEST(TestTaggedTypeReader) {
+        TArrayBuilderTestData data;
+        const auto intType = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int32, false);
+        const auto taggedType = data.PgmBuilder.NewTaggedType(intType, "tag");
+
+        const auto arrayBuilder = MakeArrayBuilder(NMiniKQL::TTypeInfoHelper(), taggedType, *data.ArrowPool, MAX_BLOCK_SIZE, /*pgBuilder=*/nullptr);
+
+        TUnboxedValue first = TUnboxedValuePod(123);
+        TUnboxedValue second = TUnboxedValuePod(456);
+
+        arrayBuilder->Add(first);
+        arrayBuilder->Add(second);
+
+        auto datum = arrayBuilder->Build(true);
+
+        UNIT_ASSERT(datum.is_array());
+        UNIT_ASSERT_VALUES_EQUAL(datum.length(), 2);
+
+        const auto blockReader = MakeBlockReader(NMiniKQL::TTypeInfoHelper(), taggedType);
+
+        const auto item1AfterRead = blockReader->GetItem(*datum.array(), 0);
+        const auto item2AfterRead = blockReader->GetItem(*datum.array(), 1);
+
+        UNIT_ASSERT_C(item1AfterRead.HasValue(), "Expected not null");
+        UNIT_ASSERT_C(item2AfterRead.HasValue(), "Expected not null");
+
+        UNIT_ASSERT_VALUES_EQUAL(item1AfterRead.Get<int>(), 123);
+        UNIT_ASSERT_VALUES_EQUAL(item2AfterRead.Get<int>(), 456);
     }
 
     extern const char ResourceName[] = "Resource.Name";
@@ -66,7 +118,7 @@ Y_UNIT_TEST_SUITE(TArrayBuilderTest) {
         struct TWithDtor {
             int Payload;
             std::shared_ptr<int> DestructorCallsCnt;
-            TWithDtor(int payload, std::shared_ptr<int> destructorCallsCnt): 
+            TWithDtor(int payload, std::shared_ptr<int> destructorCallsCnt):
                 Payload(payload), DestructorCallsCnt(std::move(destructorCallsCnt)) {
             }
             ~TWithDtor() {
@@ -86,7 +138,7 @@ Y_UNIT_TEST_SUITE(TArrayBuilderTest) {
             UNIT_ASSERT_VALUES_EQUAL(datum.length(), 1);
 
             const auto value = datum.array()->GetValues<TUnboxedValuePod>(1)[0];
-            auto boxed = value.AsBoxed().Get(); 
+            auto boxed = value.AsBoxed().Get();
             const auto resource = reinterpret_cast<TTestResource*>(boxed);
             UNIT_ASSERT_VALUES_EQUAL(resource->Get()->get()->Payload, payload);
         }
@@ -110,7 +162,7 @@ Y_UNIT_TEST_SUITE(TArrayBuilderTest) {
             } else {
                 arrayBuilder->Add(TUnboxedValuePod{});
             }
-        } 
+        }
         auto datum = arrayBuilder->Build(true);
         const auto blockReader = MakeBlockReader(NMiniKQL::TTypeInfoHelper(), resourceType);
         for (int i = 0; i < 4; i++) {
@@ -125,7 +177,7 @@ Y_UNIT_TEST_SUITE(TArrayBuilderTest) {
             }
         }
     }
-    
+
     Y_UNIT_TEST(TestBuilderWithReader) {
         TArrayBuilderTestData data;
         const auto resourceType = data.PgmBuilder.NewResourceType("Test.Resource");
@@ -147,7 +199,7 @@ Y_UNIT_TEST_SUITE(TArrayBuilderTest) {
         UNIT_ASSERT_C(std::memcmp(item1.GetRawPtr(), item1AfterRead.GetRawPtr(), sizeof(TBlockItem)) == 0, "Expected UnboxedValue to equal to BlockItem");
         UNIT_ASSERT_C(std::memcmp(item2.GetRawPtr(), item2AfterRead.GetRawPtr(), sizeof(TBlockItem)) == 0, "Expected UnboxedValue to equal to BlockItem");
     }
-    
+
     Y_UNIT_TEST(TestBoxedResourceReader) {
         TArrayBuilderTestData data;
         const auto resourceType = data.PgmBuilder.NewResourceType(ResourceName);
@@ -179,7 +231,8 @@ Y_UNIT_TEST_SUITE(TArrayBuilderTest) {
     Y_UNIT_TEST(TestTzDateBuilder_Layout) {
         TArrayBuilderTestData data;
         const auto tzDateType = data.PgmBuilder.NewDataType(EDataSlot::TzDate);
-        const auto arrayBuilder = MakeArrayBuilder(NMiniKQL::TTypeInfoHelper(), tzDateType, 
+        const NMiniKQL::TTypeInfoHelper typeInfoHelper;
+        const auto arrayBuilder = MakeArrayBuilder(typeInfoHelper, tzDateType,
             *data.ArrowPool, MAX_BLOCK_SIZE, /* pgBuilder */ nullptr);
 
         auto makeTzDate = [] (ui16 val, ui16 tz) {
@@ -192,12 +245,17 @@ Y_UNIT_TEST_SUITE(TArrayBuilderTest) {
         for (auto date: dates) {
             arrayBuilder->Add(date);
         }
-        
+
         const auto datum = arrayBuilder->Build(true);
         UNIT_ASSERT(datum.is_array());
+        const auto array = datum.array();
+        const auto expectedType = GetArrowType(typeInfoHelper, tzDateType);
+        UNIT_ASSERT(array->type->Equals(expectedType));
         UNIT_ASSERT_VALUES_EQUAL(datum.length(), dates.size());
-        const auto childData = datum.array()->child_data;
+        const auto childData = array->child_data;
         UNIT_ASSERT_VALUES_EQUAL_C(childData.size(), 2, "Expected date and timezone children");
+        UNIT_ASSERT(childData[0]->type->Equals(expectedType->field(0)->type()));
+        UNIT_ASSERT(childData[1]->type->Equals(expectedType->field(1)->type()));
     }
 
     Y_UNIT_TEST(TestResourceStringValueBuilderReader) {
@@ -217,6 +275,46 @@ Y_UNIT_TEST_SUITE(TArrayBuilderTest) {
 
         UNIT_ASSERT_VALUES_EQUAL(item1AfterRead.GetStringRefFromValue(), "test");
         UNIT_ASSERT_VALUES_EQUAL(item2AfterRead.GetStringRefFromValue(), "234");
+    }
+
+    Y_UNIT_TEST(TestSingularTypeValueBuilderReader) {
+        TArrayBuilderTestData data;
+        const auto nullType = data.PgmBuilder.NewNullType();
+
+        std::shared_ptr<arrow::ArrayData> arrayData = arrow::NullArray{42}.data();
+        IArrayBuilder::TArrayDataItem arrayDataItem = {.Data = arrayData.get(), .StartOffset = 0};
+        {
+            const auto arrayBuilder = MakeArrayBuilder(NMiniKQL::TTypeInfoHelper(), nullType, *data.ArrowPool, MAX_BLOCK_SIZE, /*pgBuilder=*/nullptr);
+            // Check builder.
+            arrayBuilder->Add(TUnboxedValuePod::Zero());
+            arrayBuilder->Add(TBlockItem::Zero());
+            arrayBuilder->Add(TBlockItem::Zero(), 4);
+            TInputBuffer inputBuffer("Just arbitrary string");
+            arrayBuilder->Add(inputBuffer);
+            arrayBuilder->AddMany(*arrayData, /*popCount=*/3u, /*sparseBitmat=*/nullptr, /*bitmapSize=*/arrayData->length);
+            arrayBuilder->AddMany(&arrayDataItem, /*arrayCount=*/1, /*beginIndex=*/1, /*count=*/3u);
+            std::vector<ui64> indexes = {1, 5, 7, 10};
+            arrayBuilder->AddMany(&arrayDataItem, /*arrayCount=*/1, /*beginIndex=*/indexes.data(), /*count=*/4u);
+            UNIT_ASSERT_VALUES_EQUAL(arrayBuilder->Build(true).array()->length, 1 + 1 + 4 + 1 + 3 + 3 + 4);
+        }
+
+        {
+            // Check reader.
+            const auto blockReader = MakeBlockReader(NMiniKQL::TTypeInfoHelper(), nullType);
+
+            UNIT_ASSERT(blockReader->GetItem(*arrayData, 0));
+            UNIT_ASSERT(blockReader->GetScalarItem(arrow::Scalar(arrow::null())));
+            UNIT_ASSERT_EQUAL(blockReader->GetDataWeight(*arrayData), 0);
+            UNIT_ASSERT_EQUAL(blockReader->GetDataWeight(TBlockItem::Zero()), 0);
+            UNIT_ASSERT_EQUAL(blockReader->GetDefaultValueWeight(), 0);
+            UNIT_ASSERT_EQUAL(blockReader->GetDefaultValueWeight(), 0);
+
+            TOutputBuffer outputBuffer;
+            blockReader->SaveItem(*arrayData, 1, outputBuffer);
+            UNIT_ASSERT(outputBuffer.Finish().empty());
+            blockReader->SaveScalarItem(arrow::Scalar(arrow::null()), outputBuffer);
+            UNIT_ASSERT(outputBuffer.Finish().empty());
+        }
     }
 
     Y_UNIT_TEST(TestBuilderAllocatedSize) {
@@ -250,7 +348,7 @@ Y_UNIT_TEST_SUITE(TArrayBuilderTest) {
 
         const TBlockItem hugeItem = sItem2.MakeOptional();
 
-        const size_t stringAllocStep = 
+        const size_t stringAllocStep =
             arrow::BitUtil::RoundUpToMultipleOf64(blockLen + 1) +        // String NullMask
             arrow::BitUtil::RoundUpToMultipleOf64((blockLen + 1) * 4) +  // String Offsets
             NMiniKQL::MaxBlockSizeInBytes;                               // String Data

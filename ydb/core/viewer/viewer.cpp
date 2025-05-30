@@ -11,6 +11,7 @@
 #include <util/stream/file.h>
 #include <util/system/fstat.h>
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/auth.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/statestorage.h>
 #include <ydb/core/base/tablet_types.h>
@@ -70,91 +71,89 @@ public:
             }
             mon->RegisterActorPage({
                 .RelPath = "viewer",
-                .ActorSystem = ctx.ExecutorThread.ActorSystem,
+                .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
                 .UseAuth = true,
                 .AllowedSIDs = viewerAllowedSIDs,
             });
             mon->RegisterActorPage({
+                .RelPath = "viewer/capabilities",
+                .ActorSystem = ctx.ActorSystem(),
+                .ActorId = ctx.SelfID,
+                .UseAuth = false,
+            });
+            mon->RegisterActorPage({
                 .Title = "Viewer",
                 .RelPath = "viewer/v2",
-                .ActorSystem = ctx.ExecutorThread.ActorSystem,
+                .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
             });
             mon->RegisterActorPage({
                 .Title = "Monitoring",
                 .RelPath = "monitoring",
-                .ActorSystem = ctx.ExecutorThread.ActorSystem,
+                .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
                 .UseAuth = false,
             });
             mon->RegisterActorPage({
                 .RelPath = "counters/hosts",
-                .ActorSystem = ctx.ExecutorThread.ActorSystem,
+                .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
                 .UseAuth = false,
             });
             mon->RegisterActorPage({
                 .RelPath = "healthcheck",
-                .ActorSystem = ctx.ExecutorThread.ActorSystem,
+                .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
                 .UseAuth = false,
             });
             mon->RegisterActorPage({
                 .RelPath = "vdisk",
-                .ActorSystem = ctx.ExecutorThread.ActorSystem,
+                .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
                 .UseAuth = true,
                 .AllowedSIDs = monitoringAllowedSIDs,
             });
             mon->RegisterActorPage({
                 .RelPath = "pdisk",
-                .ActorSystem = ctx.ExecutorThread.ActorSystem,
+                .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
                 .UseAuth = true,
                 .AllowedSIDs = monitoringAllowedSIDs,
             });
             mon->RegisterActorPage({
                 .RelPath = "operation",
-                .ActorSystem = ctx.ExecutorThread.ActorSystem,
+                .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
                 .UseAuth = true,
                 .AllowedSIDs = monitoringAllowedSIDs,
             });
             mon->RegisterActorPage({
                 .RelPath = "query",
-                .ActorSystem = ctx.ExecutorThread.ActorSystem,
+                .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
                 .UseAuth = true,
                 .AllowedSIDs = monitoringAllowedSIDs,
             });
             mon->RegisterActorPage({
                 .RelPath = "scheme",
-                .ActorSystem = ctx.ExecutorThread.ActorSystem,
+                .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
                 .UseAuth = true,
                 .AllowedSIDs = viewerAllowedSIDs,
             });
             mon->RegisterActorPage({
                 .RelPath = "storage",
-                .ActorSystem = ctx.ExecutorThread.ActorSystem,
+                .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
                 .UseAuth = true,
                 .AllowedSIDs = viewerAllowedSIDs,
             });
-            mon->RegisterActorHandler({
-                .Path = "/viewer/simple_counter",
-                .Handler = ctx.SelfID,
-                .UseAuth = true,
-            });
-            mon->RegisterActorHandler({
-                .Path = "/viewer/multipart_counter",
-                .Handler = ctx.SelfID,
-                .UseAuth = true,
-            });
-            auto whiteboardServiceId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(ctx.SelfID.NodeId());
-            ctx.Send(whiteboardServiceId, new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateAddEndpoint(
-                "http-mon", Sprintf(":%d", KikimrRunConfig.AppConfig.GetMonitoringConfig().GetMonitoringPort())));
+            if (!KikimrRunConfig.AppConfig.GetMonitoringConfig().GetHideHttpEndpoint()) {
+                auto whiteboardServiceId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(ctx.SelfID.NodeId());
+                ctx.Send(whiteboardServiceId, new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateAddEndpoint(
+                    "http-mon", Sprintf(":%d", KikimrRunConfig.AppConfig.GetMonitoringConfig().GetMonitoringPort())));
+            }
 
             AllowOrigin = KikimrRunConfig.AppConfig.GetMonitoringConfig().GetAllowOrigin();
 
@@ -183,7 +182,20 @@ public:
             JsonHandlers.JsonHandlersIndex["/viewer/v2/json/nodelist"] = JsonHandlers.JsonHandlersIndex["/viewer/nodelist"];
             JsonHandlers.JsonHandlersIndex["/viewer/v2/json/tabletinfo"] = JsonHandlers.JsonHandlersIndex["/viewer/tabletinfo"];
             JsonHandlers.JsonHandlersIndex["/viewer/v2/json/nodeinfo"] = JsonHandlers.JsonHandlersIndex["/viewer/nodeinfo"];
+
+            for (const auto& [name, handler] : JsonHandlers.JsonHandlersIndex) {
+                // temporary handling of new handlers
+                if (handler->IsHttpEvent()) {
+                    mon->RegisterActorHandler({
+                        .Path = name,
+                        .Handler = ctx.SelfID,
+                        .UseAuth = true,
+                        .AllowedSIDs = viewerAllowedSIDs,
+                    });
+                }
+            }
         }
+        Schedule(TDuration::Seconds(10), new TEvents::TEvWakeup());
     }
 
     const TKikimrRunConfig& GetKikimrRunConfig() const override {
@@ -208,16 +220,7 @@ public:
                 return true;
             }
         }
-        if (userTokenObject.empty()) {
-            return false;
-        }
-        auto token = std::make_unique<NACLib::TUserToken>(userTokenObject);
-        for (const auto& allowedSID : KikimrRunConfig.AppConfig.GetDomainsConfig().GetSecurityConfig().GetAdministrationAllowedSIDs()) {
-            if (token->IsExist(allowedSID)) {
-                return true;
-            }
-        }
-        return false;
+        return IsTokenAllowed(userTokenObject, AppData()->DomainsConfig.GetSecurityConfig().GetAdministrationAllowedSIDs());
     }
 
     static bool IsStaticGroup(ui32 groupId) {
@@ -281,6 +284,8 @@ public:
                 forceRetryPossible = true;
             } else if (lastStatus.GetFailReason() == NKikimrBlobStorage::TConfigResponse::TStatus::kMayLoseData) {
                 bscError = TStringBuilder() << "Calling this operation may result in data loss for " << GetGroupList(groups);
+            } else if (lastStatus.GetErrorDescription().find("failed to allocate group: no group options") != TString::npos) {
+                bscError = "Failed to allocate group";
             }
         }
         if (bscError.empty()) {
@@ -384,11 +389,68 @@ private:
     ui32 CurrentMonitoringPort;
     TString CurrentWorkerName;
 
+    void Handle(TEvents::TEvWakeup::TPtr&) {
+        DeleteOldSharedCacheData();
+        Schedule(TDuration::Seconds(10), new TEvents::TEvWakeup());
+    }
+
+    std::unordered_map<TTabletId, TActorId> TabletPipes;
+
+    static NTabletPipe::TClientConfig GetPipeClientConfig() {
+        return {
+            .RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries()
+        };
+    }
+
+    void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
+        if (ev->Get()->Status != NKikimrProto::OK) {
+            TabletPipes.erase(ev->Get()->TabletId);
+        }
+    }
+
+    void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev) {
+        TabletPipes.erase(ev->Get()->TabletId);
+    }
+
+    void Handle(TEvViewer::TEvUpdateSharedCacheTabletRequest::TPtr& ev) {
+        auto itPipe = TabletPipes.find(ev->Get()->TabletId);
+        if (itPipe == TabletPipes.end()) {
+            auto pipe = NTabletPipe::CreateClient(SelfId(), ev->Get()->TabletId, GetPipeClientConfig());
+            itPipe = TabletPipes.emplace(ev->Get()->TabletId, RegisterWithSameMailbox(pipe)).first;
+        }
+        NTabletPipe::SendData(SelfId(), itPipe->second, ev->Get()->Request.release());
+    }
+
+    void Handle(TEvViewer::TEvUpdateSharedCacheTabletResponse::TPtr& ev) {
+        UpdateSharedCacheData(std::unique_ptr<TEvViewer::TEvUpdateSharedCacheTabletResponse>(ev->Release().Release()));
+    }
+
+    template<typename TEvent>
+    void HandleForUpdateSharedCacheData(TAutoPtr<TEventHandle<TEvent>>& ev) {
+        UpdateSharedCacheData(std::make_unique<TEvViewer::TEvUpdateSharedCacheTabletResponse>(std::shared_ptr<TEvent>(ev->Release().Release())));
+    }
+
+    void PassAway() override {
+        for (const auto& [tabletId, pipe] : TabletPipes) {
+            NTabletPipe::CloseClient(SelfId(), pipe);
+        }
+    }
+
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
             HFunc(NMon::TEvHttpInfo, Handle);
             hFunc(NHttp::TEvHttpProxy::TEvHttpIncomingRequest, Handle);
             hFunc(TEvViewer::TEvViewerRequest, Handle);
+            hFunc(TEvViewer::TEvUpdateSharedCacheTabletRequest, Handle);
+            hFunc(TEvViewer::TEvUpdateSharedCacheTabletResponse, Handle);
+            hFunc(TEvTabletPipe::TEvClientConnected, Handle);
+            hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
+            hFunc(NSysView::TEvSysView::TEvGetStoragePoolsResponse, HandleForUpdateSharedCacheData);
+            hFunc(NSysView::TEvSysView::TEvGetGroupsResponse, HandleForUpdateSharedCacheData);
+            hFunc(NSysView::TEvSysView::TEvGetVSlotsResponse, HandleForUpdateSharedCacheData);
+            hFunc(NSysView::TEvSysView::TEvGetPDisksResponse, HandleForUpdateSharedCacheData);
+            hFunc(NSysView::TEvSysView::TEvGetStorageStatsResponse, HandleForUpdateSharedCacheData);
+            hFunc(TEvents::TEvWakeup, Handle);
         }
     }
 
@@ -669,11 +731,16 @@ IActor* CreateViewer(const TKikimrRunConfig& kikimrRunConfig) {
 }
 
 void TViewer::FillCORS(TStringBuilder& stream, const TRequestState& request) {
+    TString requestOrigin = request && request.HasHeader("Origin") ? request.GetHeader("Origin") : TString();
     TString origin;
     if (AllowOrigin) {
-        origin = AllowOrigin;
-    } else if (request && request.HasHeader("Origin")) {
-        origin = request.GetHeader("Origin");
+        if (IsMatchesWildcards(requestOrigin, AllowOrigin)) {
+            origin = requestOrigin;
+        } else {
+            return; // no CORS headers - no access
+        }
+    } else if (requestOrigin) {
+        origin = requestOrigin;
     }
     if (origin.empty()) {
         origin = "*";

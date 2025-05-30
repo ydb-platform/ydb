@@ -2,7 +2,7 @@
 #include "yql_opt_utils.h"
 #include "yql_expr_type_annotation.h"
 
-#include <yql/essentials/public/udf/tz/udf_tz.h>
+#include <library/cpp/type_info/tz/tz.h>
 
 namespace NYql {
 namespace {
@@ -77,7 +77,7 @@ TExprNode::TPtr MakeNaNBoundary(TPositionHandle pos, const TTypeAnnotationNode* 
 
 TExprNode::TPtr TzRound(const TExprNode::TPtr& key, const TTypeAnnotationNode* keyType, bool down, TExprContext& ctx) {
     TPositionHandle pos = key->Pos();
-    const auto& timeZones = NUdf::GetTimezones();
+    const auto& timeZones = NTi::GetTimezones();
     const size_t tzSize = timeZones.size();
     YQL_ENSURE(tzSize > 0);
     size_t targetTzId = 0;

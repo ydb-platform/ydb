@@ -79,6 +79,9 @@ public:
 
     void StopService() {
         AtomicSet(ShuttingDown_, 1);
+        if (ClustersUpdaterStatus) {
+            ClustersUpdaterStatus->Stop();
+        }
     }
 
     bool IsShuttingDown() const {
@@ -139,6 +142,8 @@ private:
     NAddressClassifier::TLabeledAddressClassifier::TConstPtr DatacenterClassifier; // Detects client's datacenter by IP. May be null
 
     bool NeedDiscoverClusters;
+    TClustersUpdater::TStatus::TPtr ClustersUpdaterStatus;
+
     NPersQueue::TConverterFactoryPtr TopicConverterFactory;
     std::unique_ptr<NPersQueue::TTopicsListController> TopicsHandler;
 };

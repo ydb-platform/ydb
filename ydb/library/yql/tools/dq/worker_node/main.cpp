@@ -134,7 +134,7 @@ NDq::IDqAsyncIoFactory::TPtr CreateAsyncIoFactory(const NYdb::TDriver& driver, I
 
 int main(int argc, char** argv) {
 
-    const auto driverConfig = NYdb::TDriverConfig().SetLog(CreateLogBackend("cerr"));
+    const auto driverConfig = NYdb::TDriverConfig().SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr").Release()));
     NYdb::TDriver driver(driverConfig);
 
     Y_DEFER {

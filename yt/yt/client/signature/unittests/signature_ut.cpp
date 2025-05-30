@@ -16,14 +16,6 @@ using namespace NYTree;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST(TSignatureTest, PayloadConstruct)
-{
-    TSignature signature(TYsonString("payload"_sb));
-    EXPECT_EQ(signature.Payload().ToString(), "payload");
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
 TEST(TSignatureTest, DeserializeSerialize)
 {
     // SignatureSize bytes.
@@ -31,7 +23,7 @@ TEST(TSignatureTest, DeserializeSerialize)
 
     TSignaturePtr signature;
     EXPECT_NO_THROW(signature = ConvertTo<TSignaturePtr>(ysonOK));
-    EXPECT_EQ(signature->Payload().ToString(), "payload");
+    EXPECT_EQ(signature->Payload(), "payload");
 
     EXPECT_EQ(ConvertToYsonString(signature, EYsonFormat::Text).ToString(), ysonOK.ToString());
 }

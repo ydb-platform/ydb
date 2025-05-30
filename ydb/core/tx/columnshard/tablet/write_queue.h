@@ -1,6 +1,7 @@
 #pragma once
 #include <ydb/core/tx/columnshard/engines/scheme/versions/abstract_scheme.h>
 #include <ydb/core/tx/columnshard/operations/write.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/data_events/common/modification_type.h>
 
 namespace NKikimr::NColumnShard {
@@ -12,7 +13,7 @@ private:
     NOlap::ISnapshotSchema::TPtr Schema;
     const NActors::TActorId SourceId;
     const std::optional<ui32> GranuleShardingVersionId;
-    const ui64 PathId;
+    const TInternalPathId PathId;
     const ui64 Cookie;
     const ui64 LockId;
     const NEvWrite::EModificationType ModificationType;
@@ -21,7 +22,7 @@ private:
 
 public:
     TWriteTask(const std::shared_ptr<TArrowData>& arrowData, const NOlap::ISnapshotSchema::TPtr& schema, const NActors::TActorId sourceId,
-        const std::optional<ui32>& granuleShardingVersionId, const ui64 pathId, const ui64 cookie, const ui64 lockId,
+        const std::optional<ui32>& granuleShardingVersionId, const TInternalPathId pathId, const ui64 cookie, const ui64 lockId,
         const NEvWrite::EModificationType modificationType, const EOperationBehaviour behaviour)
         : ArrowData(arrowData)
         , Schema(schema)
@@ -34,6 +35,10 @@ public:
         , Behaviour(behaviour) {
     }
 
+    const TInternalPathId& GetPathId() const {
+        return PathId;
+    }
+
     const TMonotonic& GetCreatedMonotonic() const {
         return Created;
     }
@@ -44,7 +49,7 @@ public:
 class TWriteTasksQueue {
 private:
     bool WriteTasksOverloadCheckerScheduled = false;
-    std::deque<TWriteTask> WriteTasks;
+    THashMap<TInternalPathId, std::deque<TWriteTask>> WriteTasks;
     i64 PredWriteTasksSize = 0;
     TColumnShard* Owner;
 

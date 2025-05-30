@@ -1,6 +1,7 @@
 #pragma once
 
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/core/yql_execution.h>
 #include <yql/essentials/core/yql_graph_transformer.h>
 #include <yql/essentials/core/yql_opt_window.h>
 #include <yql/essentials/core/yql_type_annotation.h>
@@ -119,7 +120,7 @@ TExprNode::TPtr BuildKeySelector(TPositionHandle pos, const TStructExprType& row
 
 template <bool Cannonize, bool EnableNewOptimizers = true>
 TExprNode::TPtr OptimizeIfPresent(const TExprNode::TPtr& node, TExprContext& ctx);
-TExprNode::TPtr OptimizeExists(const TExprNode::TPtr& node, TExprContext& ctx);
+TExprNode::TPtr OptimizeExists(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& typeCtx);
 
 bool WarnUnroderedSubquery(const TExprNode& unourderedSubquery, TExprContext& ctx);
 
@@ -151,6 +152,8 @@ bool HasDependsOn(const TExprNode::TPtr& node, const TExprNode::TPtr& arg);
 TExprNode::TPtr KeepSortedConstraint(TExprNode::TPtr node, const TSortedConstraintNode* sorted, const TTypeAnnotationNode* rowType, TExprContext& ctx);
 TExprNode::TPtr MakeSortByConstraint(TExprNode::TPtr node, const TSortedConstraintNode* sorted, const TTypeAnnotationNode* rowType, TExprContext& ctx);
 TExprNode::TPtr KeepConstraints(TExprNode::TPtr node, const TExprNode& src, TExprContext& ctx);
+bool HasMissingWorlds(const TExprNode::TPtr& node, const TExprNode& src, const TTypeAnnotationContext& types);
+TExprNode::TPtr KeepWorld(TExprNode::TPtr node, const TExprNode& src, TExprContext& ctx, const TTypeAnnotationContext& types);
 
 void OptimizeSubsetFieldsForNodeWithMultiUsage(const TExprNode::TPtr& node, const TParentsMap& parentsMap,
     TNodeOnNodeOwnedMap& toOptimize, TExprContext& ctx,
@@ -175,5 +178,21 @@ bool CheckSupportedTypes(
     std::function<void(const TString&)> unsupportedTypeHandler,
     bool allowNestedOptionals = true
 );
+
+template<const char* OptName>
+bool IsOptimizerEnabled(const TTypeAnnotationContext& types) {
+    static const TString NormallizedName = to_lower(TString(OptName));
+    return types.OptimizerFlags.contains(NormallizedName);
+}
+
+template<const char* OptName>
+bool IsOptimizerDisabled(const TTypeAnnotationContext& types) {
+    static const TString NormallizedName = to_lower("Disable" + TString(OptName));
+    return types.OptimizerFlags.contains(NormallizedName);
+}
+
+extern const char KeepWorldOptName[];
+
+TOperationProgress::EOpBlockStatus DetermineProgramBlockStatus(const TExprNode& root);
 
 }

@@ -31,6 +31,8 @@ public:
     void Rewind() override {
     }
 private:
+    virtual TStatus HandleAlterDatabase(NNodes::TKiAlterDatabase node, TExprContext& ctx) = 0;
+
     virtual TStatus HandleWriteTable(NNodes::TKiWriteTable node, TExprContext& ctx) = 0;
     virtual TStatus HandleUpdateTable(NNodes::TKiUpdateTable node, TExprContext& ctx) = 0;
     virtual TStatus HandleDeleteTable(NNodes::TKiDeleteTable node, TExprContext& ctx) = 0;
@@ -45,6 +47,10 @@ private:
     virtual TStatus HandleCreateReplication(NNodes::TKiCreateReplication node, TExprContext& ctx) = 0;
     virtual TStatus HandleAlterReplication(NNodes::TKiAlterReplication node, TExprContext& ctx) = 0;
     virtual TStatus HandleDropReplication(NNodes::TKiDropReplication node, TExprContext& ctx) = 0;
+
+    virtual TStatus HandleCreateTransfer(NNodes::TKiCreateTransfer node, TExprContext& ctx) = 0;
+    virtual TStatus HandleAlterTransfer(NNodes::TKiAlterTransfer node, TExprContext& ctx) = 0;
+    virtual TStatus HandleDropTransfer(NNodes::TKiDropTransfer node, TExprContext& ctx) = 0;
 
     virtual TStatus HandleCreateUser(NNodes::TKiCreateUser node, TExprContext& ctx) = 0;
     virtual TStatus HandleAlterUser(NNodes::TKiAlterUser node, TExprContext& ctx) = 0;
@@ -87,6 +93,7 @@ private:
 class TKikimrKey {
 public:
     enum class Type {
+        Database,
         Table,
         TableList,
         TableScheme,
@@ -98,6 +105,7 @@ public:
         Replication,
         BackupCollection,
         Sequence,
+        Transfer,
     };
 
     struct TViewDescription {
@@ -125,6 +133,12 @@ public:
         return Target;
     }
 
+    TString GetDatabasePath() const {
+        Y_DEBUG_ABORT_UNLESS(KeyType.Defined());
+        Y_DEBUG_ABORT_UNLESS(KeyType == Type::Database);
+        return Target;
+    }
+
     TString GetTopicPath() const {
         Y_DEBUG_ABORT_UNLESS(KeyType.Defined());
         Y_DEBUG_ABORT_UNLESS(KeyType == Type::Topic);
@@ -140,6 +154,12 @@ public:
     TString GetReplicationPath() const {
         Y_DEBUG_ABORT_UNLESS(KeyType.Defined());
         Y_DEBUG_ABORT_UNLESS(KeyType == Type::Replication);
+        return Target;
+    }
+
+    TString GetTransferPath() const {
+        Y_DEBUG_ABORT_UNLESS(KeyType.Defined());
+        Y_DEBUG_ABORT_UNLESS(KeyType == Type::Transfer);
         return Target;
     }
 
@@ -287,7 +307,7 @@ void TableDescriptionToTableInfo(const TKikimrTableDescription& desc, TYdbOperat
 
 Ydb::Table::VectorIndexSettings_Metric VectorIndexSettingsParseDistance(std::string_view distance);
 Ydb::Table::VectorIndexSettings_Metric VectorIndexSettingsParseSimilarity(std::string_view similarity);
-Ydb::Table::VectorIndexSettings_VectorType VectorIndexSettingsParseVectorType(std::string_view vectorType);  
+Ydb::Table::VectorIndexSettings_VectorType VectorIndexSettingsParseVectorType(std::string_view vectorType);
 
 bool IsPgNullExprNode(const NNodes::TExprBase& maybeLiteral);
 std::optional<TString> FillLiteralProto(NNodes::TExprBase maybeLiteral, const TTypeAnnotationNode* valueType, Ydb::TypedValue& proto);

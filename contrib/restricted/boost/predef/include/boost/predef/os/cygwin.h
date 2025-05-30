@@ -31,7 +31,7 @@ http://en.wikipedia.org/wiki/Cygwin[Cygwin] evironment.
 #if !defined(BOOST_PREDEF_DETAIL_OS_DETECTED) && ( \
     defined(__CYGWIN__) \
     )
-#   include <cygwin/version.h>
+#   error #include <cygwin/version.h>
 #   undef BOOST_OS_CYGWIN
 #   define BOOST_OS_CYGWIN \
         BOOST_VERSION_NUMBER(CYGWIN_VERSION_API_MAJOR,\

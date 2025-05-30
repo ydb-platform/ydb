@@ -179,7 +179,7 @@ static inline bool decode(const unsigned char *in, unsigned char *out) {
      * so we'll just copy right out of the vector as a fallback
      */
 
-#ifdef HAVE_MM256_EXTRACT_EPI64
+#ifdef AWS_HAVE_MM256_EXTRACT_EPI64
     uint64_t hi = _mm256_extract_epi64(vec, 2);
     const uint64_t *p_hi = &hi;
 #else
@@ -194,13 +194,13 @@ static inline bool decode(const unsigned char *in, unsigned char *out) {
 
 size_t aws_common_private_base64_decode_sse41(const unsigned char *in, unsigned char *out, size_t len) {
     if (len % 4) {
-        return (size_t)-1;
+        return SIZE_MAX;
     }
 
     size_t outlen = 0;
     while (len > 32) {
         if (!decode(in, out)) {
-            return (size_t)-1;
+            return SIZE_MAX;
         }
         len -= 32;
         in += 32;
@@ -230,13 +230,13 @@ size_t aws_common_private_base64_decode_sse41(const unsigned char *in, unsigned 
         }
 
         if (!decode(tmp_in, tmp_out)) {
-            return (size_t)-1;
+            return SIZE_MAX;
         }
 
         /* Check that there are no trailing ones bits */
         for (size_t i = final_out; i < sizeof(tmp_out); i++) {
             if (tmp_out[i]) {
-                return (size_t)-1;
+                return SIZE_MAX;
             }
         }
 

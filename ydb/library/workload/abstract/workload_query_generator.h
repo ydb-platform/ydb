@@ -1,9 +1,9 @@
 #pragma once
 
-#include <ydb/public/sdk/cpp/client/ydb_params/params.h>
-#include <ydb/public/sdk/cpp/client/ydb_query/client.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
-#include <ydb/public/sdk/cpp/client/ydb_value/value.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/params/params.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
 #include <ydb/library/accessor/accessor.h>
 #include <library/cpp/getopt/last_getopt.h>
 
@@ -29,12 +29,14 @@ struct TQueryInfo {
 
     std::string Query;
     std::string ExpectedResult;
+    std::string QueryName;
     NYdb::TParams Params;
     bool UseReadRows = false;
     bool UseStaleRO = false;
     TString TablePath;
     std::optional<NYdb::TValue> KeyToRead;
     std::optional<NYdb::NTable::TAlterTableSettings> AlterTable;
+    std::function<NYdb::TStatus(NYdb::NTable::TTableClient& tableClient)> TableOperation;
 
     std::optional<std::function<void(NYdb::NTable::TReadRowsResult)>> ReadRowsResultCallback;
     std::optional<std::function<void(NYdb::NTable::TDataQueryResult)>> DataQueryResultCallback;
@@ -177,6 +179,7 @@ public:
     }
     virtual TString GetWorkloadName() const = 0;
 
+    virtual void Validate(const ECommandType /*commandType*/, int /*workloadType*/) {};
 public:
     ui64 BulkSize = 10000;
     std::string DbPath;

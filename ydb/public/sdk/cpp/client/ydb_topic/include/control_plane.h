@@ -12,7 +12,7 @@
 
 #include <limits>
 
-namespace NYdb {
+namespace NYdb::inline V2 {
     class TProtoAccessor;
 
     namespace NScheme {
@@ -20,7 +20,7 @@ namespace NYdb {
     }
 }
 
-namespace NYdb::NTopic {
+namespace NYdb::inline V2::NTopic {
 
 enum class EMeteringMode : ui32 {
     Unspecified = 0,
@@ -203,10 +203,10 @@ struct TAlterAutoPartitioningSettings {
     public:
         TAlterAutoPartitioningSettings(TAlterPartitioningSettings& parent): Parent_(parent) {}
 
-    FLUENT_SETTING_OPTIONAL(EAutoPartitioningStrategy, Strategy);
-    FLUENT_SETTING_OPTIONAL(TDuration, StabilizationWindow);
-    FLUENT_SETTING_OPTIONAL(ui64, DownUtilizationPercent);
-    FLUENT_SETTING_OPTIONAL(ui64, UpUtilizationPercent);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(EAutoPartitioningStrategy, Strategy);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(TDuration, StabilizationWindow);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(ui64, DownUtilizationPercent);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(ui64, UpUtilizationPercent);
 
     TAlterPartitioningSettings& EndAlterAutoPartitioningSettings() { return Parent_; };
 
@@ -246,8 +246,8 @@ struct TAlterPartitioningSettings {
 public:
     TAlterPartitioningSettings(TAlterTopicSettings& parent): Parent_(parent) {}
 
-    FLUENT_SETTING_OPTIONAL(ui64, MinActivePartitions);
-    FLUENT_SETTING_OPTIONAL(ui64, MaxActivePartitions);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(ui64, MinActivePartitions);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(ui64, MaxActivePartitions);
 
     TAlterTopicSettings& EndAlterTopicPartitioningSettings() { return Parent_; };
 
@@ -440,13 +440,13 @@ struct TConsumerSettings {
     TConsumerSettings(TSettings& parent): Parent_(parent) {}
     TConsumerSettings(TSettings& parent, const TString& name) : ConsumerName_(name), Parent_(parent) {}
 
-    FLUENT_SETTING(TString, ConsumerName);
-    FLUENT_SETTING_DEFAULT(bool, Important, false);
-    FLUENT_SETTING_DEFAULT(TInstant, ReadFrom, TInstant::Zero());
+    FLUENT_SETTING_DEPRECATED(TString, ConsumerName);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(bool, Important, false);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(TInstant, ReadFrom, TInstant::Zero());
 
-    FLUENT_SETTING_VECTOR(ECodec, SupportedCodecs);
+    FLUENT_SETTING_VECTOR_DEPRECATED(ECodec, SupportedCodecs);
 
-    FLUENT_SETTING(TAttributes, Attributes);
+    FLUENT_SETTING_DEPRECATED(TAttributes, Attributes);
 
     TConsumerSettings& AddAttribute(const TString& key, const TString& value) {
         Attributes_[key] = value;
@@ -492,13 +492,13 @@ struct TAlterConsumerSettings {
     TAlterConsumerSettings(TAlterTopicSettings& parent): Parent_(parent) {}
     TAlterConsumerSettings(TAlterTopicSettings& parent, const TString& name) : ConsumerName_(name), Parent_(parent) {}
 
-    FLUENT_SETTING(TString, ConsumerName);
-    FLUENT_SETTING_OPTIONAL(bool, SetImportant);
-    FLUENT_SETTING_OPTIONAL(TInstant, SetReadFrom);
+    FLUENT_SETTING_DEPRECATED(TString, ConsumerName);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(bool, SetImportant);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(TInstant, SetReadFrom);
 
-    FLUENT_SETTING_OPTIONAL_VECTOR(ECodec, SetSupportedCodecs);
+    FLUENT_SETTING_OPTIONAL_VECTOR_DEPRECATED(ECodec, SetSupportedCodecs);
 
-    FLUENT_SETTING(TAlterAttributes, AlterAttributes);
+    FLUENT_SETTING_DEPRECATED(TAlterAttributes, AlterAttributes);
 
     TAlterConsumerAttributesBuilder BeginAlterAttributes() {
         return TAlterConsumerAttributesBuilder(*this);
@@ -526,21 +526,21 @@ struct TCreateTopicSettings : public TOperationRequestSettings<TCreateTopicSetti
     using TSelf = TCreateTopicSettings;
     using TAttributes = TMap<TString, TString>;
 
-    FLUENT_SETTING(TPartitioningSettings, PartitioningSettings);
+    FLUENT_SETTING_DEPRECATED(TPartitioningSettings, PartitioningSettings);
 
-    FLUENT_SETTING_DEFAULT(TDuration, RetentionPeriod, TDuration::Hours(24));
+    FLUENT_SETTING_DEFAULT_DEPRECATED(TDuration, RetentionPeriod, TDuration::Hours(24));
 
-    FLUENT_SETTING_VECTOR(ECodec, SupportedCodecs);
+    FLUENT_SETTING_VECTOR_DEPRECATED(ECodec, SupportedCodecs);
 
-    FLUENT_SETTING_DEFAULT(ui64, RetentionStorageMb, 0);
-    FLUENT_SETTING_DEFAULT(EMeteringMode, MeteringMode, EMeteringMode::Unspecified);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(ui64, RetentionStorageMb, 0);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(EMeteringMode, MeteringMode, EMeteringMode::Unspecified);
 
-    FLUENT_SETTING_DEFAULT(ui64, PartitionWriteSpeedBytesPerSecond, 0);
-    FLUENT_SETTING_DEFAULT(ui64, PartitionWriteBurstBytes, 0);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(ui64, PartitionWriteSpeedBytesPerSecond, 0);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(ui64, PartitionWriteBurstBytes, 0);
 
-    FLUENT_SETTING_VECTOR(TConsumerSettings<TCreateTopicSettings>, Consumers);
+    FLUENT_SETTING_VECTOR_DEPRECATED(TConsumerSettings<TCreateTopicSettings>, Consumers);
 
-    FLUENT_SETTING(TAttributes, Attributes);
+    FLUENT_SETTING_DEPRECATED(TAttributes, Attributes);
 
     TCreateTopicSettings& SetSupportedCodecs(TVector<ECodec>&& codecs) {
         SupportedCodecs_ = std::move(codecs);
@@ -651,22 +651,22 @@ struct TAlterTopicSettings : public TOperationRequestSettings<TAlterTopicSetting
     using TSelf = TAlterTopicSettings;
     using TAlterAttributes = TMap<TString, TString>;
 
-    FLUENT_SETTING_OPTIONAL(TDuration, SetRetentionPeriod);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(TDuration, SetRetentionPeriod);
 
-    FLUENT_SETTING_OPTIONAL_VECTOR(ECodec, SetSupportedCodecs);
+    FLUENT_SETTING_OPTIONAL_VECTOR_DEPRECATED(ECodec, SetSupportedCodecs);
 
-    FLUENT_SETTING_OPTIONAL(ui64, SetRetentionStorageMb);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(ui64, SetRetentionStorageMb);
 
-    FLUENT_SETTING_OPTIONAL(ui64, SetPartitionWriteSpeedBytesPerSecond);
-    FLUENT_SETTING_OPTIONAL(ui64, SetPartitionWriteBurstBytes);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(ui64, SetPartitionWriteSpeedBytesPerSecond);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(ui64, SetPartitionWriteBurstBytes);
 
-    FLUENT_SETTING_OPTIONAL(EMeteringMode, SetMeteringMode);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(EMeteringMode, SetMeteringMode);
 
-    FLUENT_SETTING_VECTOR(TConsumerSettings<TAlterTopicSettings>, AddConsumers);
-    FLUENT_SETTING_VECTOR(TString, DropConsumers);
-    FLUENT_SETTING_VECTOR(TAlterConsumerSettings, AlterConsumers);
+    FLUENT_SETTING_VECTOR_DEPRECATED(TConsumerSettings<TAlterTopicSettings>, AddConsumers);
+    FLUENT_SETTING_VECTOR_DEPRECATED(TString, DropConsumers);
+    FLUENT_SETTING_VECTOR_DEPRECATED(TAlterConsumerSettings, AlterConsumers);
 
-    FLUENT_SETTING(TAlterAttributes, AlterAttributes);
+    FLUENT_SETTING_DEPRECATED(TAlterAttributes, AlterAttributes);
 
     TAlterTopicAttributesBuilder BeginAlterAttributes() {
         return TAlterTopicAttributesBuilder(*this);
@@ -731,27 +731,27 @@ struct TDropTopicSettings : public TOperationRequestSettings<TDropTopicSettings>
 struct TDescribeTopicSettings : public TOperationRequestSettings<TDescribeTopicSettings> {
     using TSelf = TDescribeTopicSettings;
 
-    FLUENT_SETTING_DEFAULT(bool, IncludeStats, false);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(bool, IncludeStats, false);
 
-    FLUENT_SETTING_DEFAULT(bool, IncludeLocation, false);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(bool, IncludeLocation, false);
 };
 
 // Settings for describe consumer request.
 struct TDescribeConsumerSettings : public TOperationRequestSettings<TDescribeConsumerSettings> {
     using TSelf = TDescribeConsumerSettings;
 
-    FLUENT_SETTING_DEFAULT(bool, IncludeStats, false);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(bool, IncludeStats, false);
 
-    FLUENT_SETTING_DEFAULT(bool, IncludeLocation, false);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(bool, IncludeLocation, false);
 };
 
 // Settings for describe partition request.
 struct TDescribePartitionSettings: public TOperationRequestSettings<TDescribePartitionSettings> {
     using TSelf = TDescribePartitionSettings;
 
-    FLUENT_SETTING_DEFAULT(bool, IncludeStats, false);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(bool, IncludeStats, false);
 
-    FLUENT_SETTING_DEFAULT(bool, IncludeLocation, false);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(bool, IncludeLocation, false);
 };
 
 // Settings for commit offset request.

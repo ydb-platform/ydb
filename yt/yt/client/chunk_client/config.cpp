@@ -177,6 +177,8 @@ void TReplicationReaderConfig::Register(TRegistrar registrar)
         .Default(false);
     registrar.Parameter("use_read_blocks_batcher", &TThis::UseReadBlocksBatcher)
         .Default(false);
+    registrar.Parameter("block_set_subrequest_threshold", &TThis::BlockSetSubrequestThreshold)
+        .Default();
 
     registrar.Postprocessor([] (TThis* config) {
         // Seems unreasonable to make backoff greater than half of total session timeout.
@@ -229,7 +231,7 @@ void TErasureReaderConfig::Register(TRegistrar registrar)
     registrar.Parameter("slow_reader_expiration_timeout", &TThis::SlowReaderExpirationTimeout)
         .Default(TDuration::Minutes(2));
     registrar.Parameter("replication_reader_timeout", &TThis::ReplicationReaderTimeout)
-        .Default(TDuration::Seconds(60));
+        .Default(TDuration::Seconds(300));
     registrar.Parameter("replication_reader_failure_timeout", &TThis::ReplicationReaderFailureTimeout)
         .Default(TDuration::Minutes(10));
 }
@@ -268,6 +270,8 @@ void TReplicationWriterConfig::Register(TRegistrar registrar)
         .DefaultNew();
     registrar.Parameter("node_rpc_timeout", &TThis::NodeRpcTimeout)
         .Default(TDuration::Seconds(300));
+    registrar.Parameter("probe_put_blocks_timeout", &TThis::ProbePutBlocksTimeout)
+        .Default(TDuration::Seconds(60));
     registrar.Parameter("upload_replication_factor", &TThis::UploadReplicationFactor)
         .GreaterThanOrEqual(1)
         .Default(2);
@@ -280,7 +284,7 @@ void TReplicationWriterConfig::Register(TRegistrar registrar)
         .Default();
     registrar.Parameter("prefer_local_host", &TThis::PreferLocalHost)
         .Default(true);
-    registrar.Parameter("node_ping_interval", &TThis::NodePingPeriod)
+    registrar.Parameter("node_ping_period", &TThis::NodePingPeriod)
         .Default(TDuration::Seconds(10));
     registrar.Parameter("populate_cache", &TThis::PopulateCache)
         .Default(false);
@@ -299,6 +303,9 @@ void TReplicationWriterConfig::Register(TRegistrar registrar)
         .Default();
 
     registrar.Parameter("enable_local_throttling", &TThis::EnableLocalThrottling)
+        .Default(false);
+
+    registrar.Parameter("use_probe_put_blocks", &TThis::UseProbePutBlocks)
         .Default(false);
 
     registrar.Preprocessor([] (TThis* config) {

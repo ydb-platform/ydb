@@ -95,6 +95,19 @@ namespace TEvSchemeShard {
 
         EvOwnerActorAck,
 
+        EvListUsers,
+        EvListUsersResult,
+
+        EvTenantDataErasureRequest,
+        EvTenantDataErasureResponse,
+        EvWakeupToRunDataErasure,
+        EvMeasureDataErasureBSC,
+        EvWakeupToRunDataErasureBSC,
+        EvCompleteDataErasure,
+        EvDataErasureInfoRequest,
+        EvDataErasureInfoResponse,
+        EvDataErasureManualStartupRequest,
+
         EvEnd
     };
 
@@ -397,6 +410,12 @@ namespace TEvSchemeShard {
     struct TEvWakeupToMeasureSelfResponseTime : public TEventLocal<TEvWakeupToMeasureSelfResponseTime, EvWakeupToMeasureSelfResponseTime> {
     };
 
+    struct TEvWakeupToRunDataErasure : public TEventLocal<TEvWakeupToRunDataErasure, EvWakeupToRunDataErasure> {
+    };
+
+    struct TEvWakeupToRunDataErasureBSC : public TEventLocal<TEvWakeupToRunDataErasureBSC, EvWakeupToRunDataErasureBSC> {
+    };
+
     struct TEvInitTenantSchemeShard: public TEventPB<TEvInitTenantSchemeShard,
                                                             NKikimrScheme::TEvInitTenantSchemeShard,
                                                             EvInitTenantSchemeShard> {
@@ -661,6 +680,50 @@ namespace TEvSchemeShard {
     struct TEvOwnerActorAck : TEventPB<TEvOwnerActorAck, NKikimrScheme::TEvOwnerActorAck, EvOwnerActorAck> {
         TEvOwnerActorAck() = default;
     };
+
+    struct TEvListUsers : TEventPB<TEvListUsers, NKikimrScheme::TEvListUsers, EvListUsers> {
+        TEvListUsers() = default;
+    };
+
+    struct TEvListUsersResult : TEventPB<TEvListUsersResult, NKikimrScheme::TEvListUsersResult, EvListUsersResult> {
+        TEvListUsersResult() = default;
+    };
+
+    struct TEvTenantDataErasureRequest : TEventPB<TEvTenantDataErasureRequest, NKikimrScheme::TEvTenantDataErasureRequest, EvTenantDataErasureRequest> {
+        TEvTenantDataErasureRequest() = default;
+
+        TEvTenantDataErasureRequest(ui64 generation) {
+            Record.SetGeneration(generation);
+        }
+    };
+
+    struct TEvTenantDataErasureResponse : TEventPB<TEvTenantDataErasureResponse, NKikimrScheme::TEvTenantDataErasureResponse, EvTenantDataErasureResponse> {
+
+        TEvTenantDataErasureResponse() = default;
+        TEvTenantDataErasureResponse(const TPathId& pathId, ui64 generation, const NKikimrScheme::TEvTenantDataErasureResponse::EStatus& status) {
+            Record.MutablePathId()->SetOwnerId(pathId.OwnerId);
+            Record.MutablePathId()->SetLocalId(pathId.LocalPathId);
+            Record.SetGeneration(generation);
+            Record.SetStatus(status);
+        }
+
+        TEvTenantDataErasureResponse(ui64 ownerId, ui64 localPathId, ui64 generation, const NKikimrScheme::TEvTenantDataErasureResponse::EStatus& status)
+            : TEvTenantDataErasureResponse(TPathId(ownerId, localPathId), generation, status)
+        {}
+    };
+
+    struct TEvDataErasureInfoRequest : TEventPB<TEvDataErasureInfoRequest, NKikimrScheme::TEvDataErasureInfoRequest, EvDataErasureInfoRequest> {};
+
+    struct TEvDataErasureInfoResponse : TEventPB<TEvDataErasureInfoResponse, NKikimrScheme::TEvDataErasureInfoResponse, EvDataErasureInfoResponse> {
+
+        TEvDataErasureInfoResponse() = default;
+        TEvDataErasureInfoResponse(ui64 generation, const NKikimrScheme::TEvDataErasureInfoResponse::EStatus& status) {
+            Record.SetGeneration(generation);
+            Record.SetStatus(status);
+        }
+    };
+
+    struct TEvDataErasureManualStartupRequest : TEventPB<TEvDataErasureManualStartupRequest, NKikimrScheme::TEvDataErasureManualStartupRequest, EvDataErasureManualStartupRequest> {};
 };
 
 }

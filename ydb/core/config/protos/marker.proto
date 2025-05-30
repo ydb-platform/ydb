@@ -50,5 +50,8 @@ extend google.protobuf.FieldOptions {
     repeated string CopyTo = 82001;
     repeated string AsMap = 82002;
     repeated TAdvancedCopyTo AdvancedCopyTo = 82003;
+
+    // **Top-level** options marked with that label are allowed to be used in the database configuration.
+    optional bool AllowInDatabaseConfig = 82004;
 }
 

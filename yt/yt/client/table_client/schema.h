@@ -4,11 +4,12 @@
 
 #include <yt/yt/core/misc/error.h>
 #include <yt/yt/core/misc/property.h>
-#include <yt/yt/core/misc/range.h>
 
 #include <yt/yt/core/yson/public.h>
 
 #include <yt/yt/core/ytree/public.h>
+
+#include <library/cpp/yt/memory/range.h>
 
 #include <util/digest/multi.h>
 
@@ -156,7 +157,7 @@ public:
     TColumnSchema& SetSimpleLogicalType(ESimpleLogicalValueType type);
     TColumnSchema& SetSortOrder(std::optional<ESortOrder> value);
     TColumnSchema& SetLock(const std::optional<std::string>& value);
-    TColumnSchema& SetExpression(const std::optional<TString>& value);
+    TColumnSchema& SetExpression(const std::optional<std::string>& value);
     TColumnSchema& SetMaterialized(std::optional<bool> value);
     TColumnSchema& SetAggregate(const std::optional<std::string>& value);
     TColumnSchema& SetGroup(const std::optional<std::string>& value);
@@ -166,7 +167,7 @@ public:
     EValueType GetWireType() const;
 
     i64 GetMemoryUsage() const;
-    i64 GetMemoryUsage(i64 limit) const;
+    i64 GetMemoryUsage(i64 threshold) const;
 
     // Check if column has plain old v1 type.
     bool IsOfV1Type() const;
@@ -187,10 +188,21 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void FormatValue(TStringBuilderBase* builder, const TColumnSchema& schema, TStringBuf spec);
+
+void Serialize(const TColumnSchema& schema, NYson::IYsonConsumer* consumer);
+
+void ToProto(NProto::TColumnSchema* protoSchema, const TColumnSchema& schema);
+void FromProto(TColumnSchema* schema, const NProto::TColumnSchema& protoSchema);
+
+void PrintTo(const TColumnSchema& columnSchema, std::ostream* os);
+
+////////////////////////////////////////////////////////////////////////////////
+
 class TDeletedColumn
 {
 public:
-    TDeletedColumn();
+    TDeletedColumn() = default;
     explicit TDeletedColumn(TColumnStableName stableName);
 
     DEFINE_BYREF_RO_PROPERTY(TColumnStableName, StableName);
@@ -199,17 +211,8 @@ public:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void FormatValue(TStringBuilderBase* builder, const TColumnSchema& schema, TStringBuf spec);
-
-void Serialize(const TColumnSchema& schema, NYson::IYsonConsumer* consumer);
-
-void ToProto(NProto::TColumnSchema* protoSchema, const TColumnSchema& schema);
-void FromProto(TColumnSchema* schema, const NProto::TColumnSchema& protoSchema);
-
 void ToProto(NProto::TDeletedColumn* protoSchema, const TDeletedColumn& schema);
 void FromProto(TDeletedColumn* schema, const NProto::TDeletedColumn& protoSchema);
-
-void PrintTo(const TColumnSchema& columnSchema, std::ostream* os);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -229,13 +232,20 @@ public:
         const TTableSchema& Schema_;
     };
 
+    struct TSystemColumnOptions
+    {
+        bool EnableTableIndex;
+        bool EnableRowIndex;
+        bool EnableRangeIndex;
+    };
+
 public:
     const std::vector<TColumnSchema>& Columns() const;
     const std::vector<TDeletedColumn>& DeletedColumns() const;
 
     //! Strict schema forbids columns not specified in the schema.
-    DEFINE_BYVAL_RO_PROPERTY(bool, Strict, false);
-    DEFINE_BYVAL_RO_PROPERTY(bool, UniqueKeys, false);
+    DEFINE_BYVAL_RO_BOOLEAN_PROPERTY(Strict, false);
+    DEFINE_BYVAL_RO_BOOLEAN_PROPERTY(UniqueKeys, false);
     DEFINE_BYVAL_RO_PROPERTY(ETableSchemaModification, SchemaModification, ETableSchemaModification::None);
 
     //! Constructs an empty non-strict schema.
@@ -288,7 +298,6 @@ public:
     bool HasTimestampColumn() const;
     bool HasTtlColumn() const;
     bool IsSorted() const;
-    bool IsUniqueKeys() const;
     bool HasRenamedColumns() const;
     bool IsEmpty() const;
     bool IsCGComparatorApplicable() const;
@@ -327,6 +336,9 @@ public:
     //! For ordered tables, prepends the current schema with |(tablet_index, row_index)| key columns.
     TTableSchemaPtr ToQuery() const;
 
+    //! Appends |$table_index|, |$row_index| and/or |$range_index|, based on the options.
+    TTableSchemaPtr WithSystemColumns(const TSystemColumnOptions& options) const;
+
     //! For sorted tables, return the current schema without computed columns.
     //! For ordered tables, prepends the current schema with |(tablet_index)| key column
     //! but without |$timestamp| column, if any.
@@ -339,6 +351,9 @@ public:
     //! For sorted tables, return the current schema.
     //! For ordered tables, prepends the current schema with |(tablet_index)| key column.
     TTableSchemaPtr WithTabletIndex() const;
+
+    //! Prepends the current schema without |(tablet_index, row_index)| columns.
+    TTableSchemaPtr ToCreate() const;
 
     //! Returns the current schema as-is.
     //! For ordered tables, prepends the current schema with |(tablet_index)| key column.
@@ -398,8 +413,7 @@ public:
     void Load(TStreamLoadContext& context);
 
     i64 GetMemoryUsage() const;
-
-    i64 GetMemoryUsage(i64 limit) const;
+    i64 GetMemoryUsage(i64 threshold) const;
 
 private:
     struct TColumnInfo
@@ -407,8 +421,7 @@ private:
         TColumnInfo(std::vector<TColumnSchema> columns, std::vector<TDeletedColumn> deletedColumns)
             : Columns(std::move(columns))
             , DeletedColumns(std::move(deletedColumns))
-        {
-        }
+        { }
 
         std::vector<TColumnSchema> Columns;
         std::vector<TDeletedColumn> DeletedColumns;
@@ -435,6 +448,7 @@ void FormatValue(TStringBuilderBase* builder, const TTableSchema& schema, TStrin
 void FormatValue(TStringBuilderBase* builder, const TTableSchemaPtr& schema, TStringBuf spec);
 
 //! Returns serialized NTableClient.NProto.TTableSchemaExt.
+std::string SerializeToWireProto(const TTableSchema& schema);
 std::string SerializeToWireProto(const TTableSchemaPtr& schema);
 
 void DeserializeFromWireProto(TTableSchemaPtr* schema, const std::string& serializedProto);
@@ -469,18 +483,18 @@ class TTableSchemaTruncatedFormatter
 {
 public:
     // NB: #schema is allowed to be |nullptr|.
-    TTableSchemaTruncatedFormatter(const TTableSchemaPtr& schema, i64 memoryLimit);
+    TTableSchemaTruncatedFormatter(const TTableSchemaPtr& schema, i64 memoryThreshold);
 
     void operator()(TStringBuilderBase* builder) const;
 
 private:
     const TTableSchema* const Schema_ = nullptr;
-    const i64 Limit_ = 0;
+    const i64 Threshold_ = 0;
 };
 
 TFormatterWrapper<TTableSchemaTruncatedFormatter> MakeTableSchemaTruncatedFormatter(
     const TTableSchemaPtr& schema,
-    i64 memoryLimit);
+    i64 memoryThreshold);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -521,20 +535,32 @@ void ValidateDynamicTableKeyColumnCount(int count);
 
 void ValidateColumnName(const std::string& name);
 
+////////////////////////////////////////////////////////////////////////////////
+
+struct TSchemaValidationOptions
+{
+    bool AllowUnversionedUpdateColumns = false;
+    bool AllowTimestampColumns = false;
+    bool AllowOperationColumns = false;
+};
+
 void ValidateColumnSchema(
     const TColumnSchema& columnSchema,
     bool isTableSorted = false,
     bool isTableDynamic = false,
-    bool allowUnversionedUpdateColumns = false,
-    bool allowTimestampColumns = false);
+    const TSchemaValidationOptions& options = {});
 
 void ValidateTableSchema(
     const TTableSchema& schema,
     bool isTableDynamic = false,
-    bool allowUnversionedUpdateColumns = false,
-    bool allowTimestampColumns = false);
+    const TSchemaValidationOptions& options = {});
+
+////////////////////////////////////////////////////////////////////////////////
 
 void ValidateNoDescendingSortOrder(const TTableSchema& schema);
+void ValidateNoDescendingSortOrder(
+    const std::vector<ESortOrder>& sortOrders,
+    const TKeyColumns& keyColumns);
 
 void ValidateNoRenamedColumns(const TTableSchema& schema);
 

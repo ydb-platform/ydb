@@ -21,7 +21,7 @@
    Copyright (c) 2000-2005 Fred L. Drake, Jr. <fdrake@users.sourceforge.net>
    Copyright (c) 2001-2002 Greg Stein <gstein@users.sourceforge.net>
    Copyright (c) 2002-2016 Karl Waclawek <karl@waclawek.net>
-   Copyright (c) 2016-2024 Sebastian Pipping <sebastian@pipping.org>
+   Copyright (c) 2016-2025 Sebastian Pipping <sebastian@pipping.org>
    Copyright (c) 2016      Cristian Rodríguez <crrodriguez@opensuse.org>
    Copyright (c) 2016      Thomas Beutlich <tc@tbeu.de>
    Copyright (c) 2017      Rhodri James <rhodri@wildebeest.org.uk>
@@ -40,7 +40,7 @@
    Copyright (c) 2002-2016 Karl Waclawek <karl@waclawek.net>
    Copyright (c) 2005-2009 Steven Solie <steven@solie.ca>
    Copyright (c) 2016      Eric Rahm <erahm@mozilla.com>
-   Copyright (c) 2016-2024 Sebastian Pipping <sebastian@pipping.org>
+   Copyright (c) 2016-2025 Sebastian Pipping <sebastian@pipping.org>
    Copyright (c) 2016      Gaurav <g.gupta@samsung.com>
    Copyright (c) 2016      Thomas Beutlich <tc@tbeu.de>
    Copyright (c) 2016      Gustavo Grieco <gustavo.grieco@imag.fr>
@@ -66,7 +66,7 @@
    Copyright (c) 2022      Sean McBride <sean@rogue-research.com>
    Copyright (c) 2023      Owain Davies <owaind@bath.edu>
    Copyright (c) 2023-2024 Sony Corporation / Snild Dolkow <snild@sony.com>
-   Copyright (c) 2024      Berkay Eren Ürün <berkay.ueruen@siemens.com>
+   Copyright (c) 2024-2025 Berkay Eren Ürün <berkay.ueruen@siemens.com>
    Copyright (c) 2024      Hanno Böck <hanno@gentoo.org>
    Licensed under the MIT license:
 
@@ -180,7 +180,7 @@
    Copyright (c) 2002-2003 Fred L. Drake, Jr. <fdrake@users.sourceforge.net>
    Copyright (c) 2002-2006 Karl Waclawek <karl@waclawek.net>
    Copyright (c) 2003      Greg Stein <gstein@users.sourceforge.net>
-   Copyright (c) 2016-2024 Sebastian Pipping <sebastian@pipping.org>
+   Copyright (c) 2016-2025 Sebastian Pipping <sebastian@pipping.org>
    Copyright (c) 2018      Yury Gribov <tetra2005@gmail.com>
    Copyright (c) 2019      David Loffredo <loffredo@steptools.com>
    Copyright (c) 2023-2024 Sony Corporation / Snild Dolkow <snild@sony.com>
@@ -190,7 +190,7 @@
 
 ====================COPYRIGHT====================
 Copyright (c) 1998-2000 Thai Open Source Software Center Ltd and Clark Cooper
-Copyright (c) 2001-2022 Expat maintainers
+Copyright (c) 2001-2025 Expat maintainers
 
 
 ====================File: AUTHORS====================

@@ -4,9 +4,13 @@
 
 #include "protobuf_interop_options.h"
 
+#include <yt/yt/core/misc/mpl.h>
+
 #include <yt/yt/core/ypath/public.h>
 
 #include <yt/yt/core/ytree/public.h>
+
+#include <library/cpp/yt/misc/variant.h>
 
 #include <variant>
 
@@ -59,6 +63,15 @@ using TProtobufElement = std::variant<
     std::unique_ptr<TProtobufAnyElement>
 >;
 
+template <class T>
+concept CProtobufElement = NMpl::COneOf<T,
+    TProtobufMessageElement,
+    TProtobufScalarElement,
+    TProtobufAttributeDictionaryElement,
+    TProtobufRepeatedElement,
+    TProtobufMapElement,
+    TProtobufAnyElement>;
+
 struct TProtobufMessageElement
 {
     const TProtobufMessageType* Type;
@@ -66,11 +79,12 @@ struct TProtobufMessageElement
 
 struct TProtobufScalarElement
 {
-    YT_DEFINE_STRONG_TYPEDEF(TType, int);
-    TType Type;
+    TProtobufElementType Type;
 
     // Meaningful only when TYPE == TYPE_ENUM.
     EEnumYsonStorageType EnumStorageType;
+    const TProtobufEnumType* EnumType;
+    bool StrictEnumChecks;
 };
 
 struct TProtobufAttributeDictionaryElement
@@ -109,6 +123,24 @@ TProtobufElementResolveResult ResolveProtobufElementByYPath(
     const TProtobufMessageType* rootType,
     const NYPath::TYPathBuf path,
     const TResolveProtobufElementByYPathOptions& options = {});
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <CProtobufElement TElementType>
+consteval std::string_view GetProtobufElementTypeName();
+
+std::string_view GetProtobufElementTypeName(const TProtobufElement& element);
+
+// Version of `NYT::Visit` for `TProtobufElement` which skips `std::unique_ptr` wrappers.
+template <class... U>
+auto VisitProtobufElement(const TProtobufElement& element, U&&... visitorOverloads);
+
+TProtobufElementType GetProtobufElementType(const TProtobufElement& protobufElement);
+
+NYTree::ENodeType GetNodeTypeByProtobufScalarElement(const TProtobufScalarElement& scalarElement);
+
+template <CProtobufElement TElementType>
+const TElementType& GetProtobufElementOrThrow(const TProtobufElement& element);
 
 ////////////////////////////////////////////////////////////////////////////////
 

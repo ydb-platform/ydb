@@ -8,15 +8,14 @@
 namespace NKikimr::NOlap {
 
 std::unique_ptr<TEvColumnShard::TEvInternalScan> TModificationRestoreTask::DoBuildRequestInitiator() const {
-    auto request = std::make_unique<TEvColumnShard::TEvInternalScan>(LocalPathId, WriteData.GetWriteMeta().GetLockIdOptional());
+    auto request = std::make_unique<TEvColumnShard::TEvInternalScan>(LocalPathId, Snapshot, WriteData.GetWriteMeta().GetLockIdOptional());
     request->TaskIdentifier = GetTaskId();
-    request->ReadToSnapshot = Snapshot;
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_RESTORE)("event", "restore_start")("count", IncomingData.HasContainer() ? IncomingData->num_rows() : 0)(
         "task_id", WriteData.GetWriteMeta().GetId());
     auto pkData = NArrow::TColumnOperator().VerifyIfAbsent().Extract(IncomingData.GetContainer(), Context.GetActualSchema()->GetPKColumnNames());
-    request->RangesFilter = TPKRangesFilter::BuildFromRecordBatchLines(pkData, false);
+    request->RangesFilter = TPKRangesFilter::BuildFromRecordBatchLines(pkData);
     for (auto&& i : Context.GetActualSchema()->GetIndexInfo().GetColumnIds(false)) {
-        request->AddColumn(i, Context.GetActualSchema()->GetIndexInfo().GetColumnName(i));
+        request->AddColumn(i);
     }
     return request;
 }
@@ -26,9 +25,10 @@ TConclusionStatus TModificationRestoreTask::DoOnDataChunk(const std::shared_ptr<
     if (result.IsFail()) {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD_RESTORE)("event", "merge_data_problems")("write_id", WriteData.GetWriteMeta().GetWriteId())(
             "tablet_id", GetTabletId())("message", result.GetErrorMessage());
-        SendErrorMessage(result.GetErrorMessage(), NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass::Request);
+        SendErrorMessage(result.GetErrorMessage(), result.GetStatus() == Ydb::StatusIds::PRECONDITION_FAILED ? NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass::ConstraintViolation :  NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass::Request);
+        return TConclusionStatus::Fail(result.GetErrorMessage());
     }
-    return result;
+    return TConclusionStatus::Success();
 }
 
 void TModificationRestoreTask::DoOnError(const TString& errorMessage) {
@@ -38,19 +38,17 @@ void TModificationRestoreTask::DoOnError(const TString& errorMessage) {
 }
 
 NKikimr::TConclusionStatus TModificationRestoreTask::DoOnFinished() {
-    {
-        auto result = Merger->Finish();
-        if (result.IsFail()) {
-            OnError("cannot finish merger: " + result.GetErrorMessage());
-            return result;
-        }
+    auto result = Merger->Finish();
+    if (result.IsFail()) {
+        OnError("cannot finish merger: " + result.GetErrorMessage());
+        return TConclusionStatus::Fail(result.GetErrorMessage());
     }
 
     auto batchResult = Merger->BuildResultBatch();
     if (!WriteData.GetWritePortions() || !Context.GetNoTxWrite()) {
         std::shared_ptr<NConveyor::ITask> task =
             std::make_shared<NOlap::TBuildSlicesTask>(std::move(WriteData), batchResult.GetContainer(), Context);
-        NConveyor::TInsertServiceOperator::AsyncTaskToExecute(task);
+        NConveyor::TInsertServiceOperator::SendTaskToExecute(task);
     } else {
         NActors::TActivationContext::ActorSystem()->Send(
             Context.GetBufferizationPortionsActorId(), new NWritingPortions::TEvAddInsertedDataToBuffer(
@@ -70,6 +68,7 @@ TModificationRestoreTask::TModificationRestoreTask(NEvWrite::TWriteData&& writeD
     , Snapshot(actualSnapshot)
     , IncomingData(incomingData)
     , Context(context) {
+        AFL_VERIFY(actualSnapshot.Valid());
 }
 
 void TModificationRestoreTask::SendErrorMessage(

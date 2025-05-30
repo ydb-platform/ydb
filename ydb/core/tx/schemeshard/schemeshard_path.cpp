@@ -16,6 +16,8 @@ TPath::TChecker::TChecker(const TPath& path, const NCompat::TSourceLocation loca
 {
 }
 
+bool isSysDirCreateAllowed = false;  // TODO(n00bcracker): remove after giving permissions only for metadata@system
+
 TPath::TChecker::operator bool() const {
     return !Failed;
 }
@@ -578,6 +580,32 @@ const TPath::TChecker& TPath::TChecker::IsDirectory(EStatus status) const {
         << " (" << BasicPathInfo(Path.Base()) << ")");
 }
 
+const TPath::TChecker& TPath::TChecker::IsSysViewDirectory(EStatus status) const {
+    if (Failed) {
+        return *this;
+    }
+
+    if (Path.Base()->IsDirectory() && Path.Base()->Name == NSysView::SysPathName) {
+        return *this;
+    }
+
+    return Fail(status, TStringBuilder() << "path is not a .sys directory"
+        << " (" << BasicPathInfo(Path.Base()) << ")");
+}
+
+const TPath::TChecker& TPath::TChecker::IsRtmrVolume(EStatus status) const {
+    if (Failed) {
+        return *this;
+    }
+
+    if (Path.Base()->IsRtmrVolume()) {
+        return *this;
+    }
+
+    return Fail(status, TStringBuilder() << "path is not a run time map-reduce volume"
+        << " (" << BasicPathInfo(Path.Base()) << ")");
+}
+
 const TPath::TChecker& TPath::TChecker::IsTheSameDomain(const TPath& another, EStatus status) const {
     if (Failed) {
         return *this;
@@ -922,6 +950,27 @@ const TPath::TChecker& TPath::TChecker::IsBackupCollection(EStatus status) const
         << " (" << BasicPathInfo(Path.Base()) << ")");
 }
 
+const TPath::TChecker& TPath::TChecker::IsSupportedInExports(EStatus status) const {
+    if (Failed) {
+        return *this;
+    }
+
+    // Warning: scheme objects using YQL backups should only be allowed to be exported
+    // when we can be certain that the database will never be downgraded to a version
+    // which does not support the YQL export process. Otherwise, they will be considered as tables,
+    // and we might cause the process to be aborted.
+    if (Path.Base()->IsTable()
+        || (Path.Base()->IsView() && AppData()->FeatureFlags.GetEnableViewExport())
+        || Path.Base()->IsPQGroup()
+    )  {
+        return *this;
+    }
+
+    return Fail(status, TStringBuilder() << "path type is not supported in exports"
+        << " (" << BasicPathInfo(Path.Base()) << ")"
+    );
+}
+
 const TPath::TChecker& TPath::TChecker::PathShardsLimit(ui64 delta, EStatus status) const {
     if (Failed) {
         return *this;
@@ -1104,6 +1153,20 @@ const TPath::TChecker& TPath::TChecker::IsNameUniqGrandParentLevel(EStatus statu
     }
 
     return *this;
+}
+
+const TPath::TChecker& TPath::TChecker::IsSysView(EStatus status) const {
+    if (Failed) {
+        return *this;
+    }
+
+    if (Path.Base()->IsSysView()) {
+        return *this;
+    }
+
+    return Fail(status, TStringBuilder() << "path is not a system view"
+        << " (" << BasicPathInfo(Path.Base()) << ")"
+    );
 }
 
 TString TPath::TChecker::BasicPathInfo(TPathElement::TPtr element) const {
@@ -1770,7 +1833,8 @@ bool TPath::IsValidLeafName(TString& explain) const {
         return false;
     }
 
-    if (AppData()->FeatureFlags.GetEnableSystemViews() && leaf == NSysView::SysPathName) {
+    if (AppData()->FeatureFlags.GetEnableSystemViews() && !isSysDirCreateAllowed &&
+        leaf == NSysView::SysPathName) {
         explain += TStringBuilder()
             << "path part '" << NSysView::SysPathName << "' is reserved by the system";
         return false;
@@ -1840,6 +1904,10 @@ ui64 TPath::GetEffectiveACLVersion() const {
     }
 
     return version;
+}
+
+bool TPath::IsLocked() const {
+    return SS->LockedPaths.contains(Base()->PathId);
 }
 
 TTxId TPath::LockedBy() const {

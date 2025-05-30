@@ -44,17 +44,17 @@ namespace NPage {
         {
             const auto got = NPage::TLabelWrapper().Read(Raw, EPage::GarbageStats);
 
-            Y_ABORT_UNLESS(got == ECodec::Plain && got.Version == 0);
+            Y_ENSURE(got == ECodec::Plain && got.Version == 0);
 
-            Y_ABORT_UNLESS(sizeof(THeader) <= got.Page.size(),
+            Y_ENSURE(sizeof(THeader) <= got.Page.size(),
                     "NPage::TGarbageStats header is out of blob bounds");
 
             auto* header = TDeref<THeader>::At(got.Page.data(), 0);
 
-            Y_ABORT_UNLESS(header->Type == 0,
+            Y_ENSURE(header->Type == 0,
                     "NPage::TGarbageStats header has an unsupported type");
 
-            Y_ABORT_UNLESS(sizeof(THeader) + header->Items * sizeof(TItem) <= got.Page.size(),
+            Y_ENSURE(sizeof(THeader) + header->Items * sizeof(TItem) <= got.Page.size(),
                     "NPage::TGarbageStats items are out of blob bounds");
 
             auto* ptr = TDeref<TItem>::At(got.Page.data(), sizeof(THeader));
@@ -228,7 +228,7 @@ namespace NPage {
                 item->Bytes_ = totalGarbage;
             }
 
-            Y_ABORT_UNLESS(*out == buf.mutable_end());
+            Y_ENSURE(*out == buf.mutable_end());
             NSan::CheckMemIsInitialized(buf.data(), buf.size());
 
             return buf;
@@ -270,7 +270,7 @@ namespace NPage {
         TGarbageStatsAgg& operator=(TGarbageStatsAgg&&) noexcept = default;
 
     private:
-        TGarbageStatsAgg(TVector<TItem>&& items)
+        TGarbageStatsAgg(TVector<TItem>&& items) noexcept
             : Items(std::move(items))
         { }
 

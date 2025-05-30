@@ -8,6 +8,8 @@
 
 #include <aws/http/http.h>
 
+AWS_PUSH_SANE_WARNING_LEVEL
+
 struct aws_http2_stream_manager;
 struct aws_client_bootstrap;
 struct aws_http_connection;
@@ -66,7 +68,7 @@ struct aws_http2_stream_manager_options {
     bool http2_prior_knowledge;
 
     struct aws_byte_cursor host;
-    uint16_t port;
+    uint32_t port;
 
     /**
      * Optional.
@@ -212,4 +214,6 @@ void aws_http2_stream_manager_fetch_metrics(
     struct aws_http_manager_metrics *out_metrics);
 
 AWS_EXTERN_C_END
+AWS_POP_SANE_WARNING_LEVEL
+
 #endif /* AWS_HTTP2_STREAM_MANAGER_H */

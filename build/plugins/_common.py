@@ -1,5 +1,3 @@
-import six
-import sys
 import hashlib
 import base64
 
@@ -37,7 +35,7 @@ def cache_by_second_arg(func):
 
 
 def pathid(path):
-    return six.ensure_str(base64.b32encode(hashlib.md5(six.ensure_binary(path)).digest()).lower().strip(b'='))
+    return base64.b32encode(hashlib.md5(path.encode('utf-8')).digest()).lower().strip(b'=').decode('utf-8')
 
 
 def listid(items):
@@ -59,15 +57,6 @@ def tobuilddir(fname):
         return fname.replace('$S', '$B', 1)
     else:
         return fname
-
-
-def before(s, ss):
-    p = s.find(ss)
-
-    if p == -1:
-        return s
-
-    return s[:p]
 
 
 def sort_by_keywords(keywords, args):
@@ -115,28 +104,8 @@ def resolve_common_const(path):
     return path
 
 
-def resolve_to_abs_path(path, source_root, build_root):
-    if path.startswith('$S') and source_root is not None:
-        return path.replace('$S', source_root, 1)
-    if path.startswith('$B') and build_root is not None:
-        return path.replace('$B', build_root, 1)
-    return path
-
-
-def resolve_to_ymake_path(path):
-    return resolve_to_abs_path(path, '${ARCADIA_ROOT}', '${ARCADIA_BUILD_ROOT}')
-
-
 def get(fun, num):
     return fun()[num][0]
-
-
-def make_tuples(arg_list):
-    def tpl():
-        for x in arg_list:
-            yield (x, [])
-
-    return list(tpl())
 
 
 def resolve_includes(unit, src, paths):
@@ -167,13 +136,6 @@ def skip_build_root(x):
         return x[len('${ARCADIA_BUILD_ROOT}') :].lstrip('/')
 
     return x
-
-
-def get_interpreter_path():
-    interpreter_path = [sys.executable]
-    if 'ymake' in interpreter_path[0]:
-        interpreter_path.append('--python')
-    return interpreter_path
 
 
 def filter_out_by_keyword(test_data, keyword):

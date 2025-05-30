@@ -455,6 +455,14 @@ TUnversionedValueToSkiffConverter CreateSimpleValueConverter(
             } else {
                 return CreatePrimitiveValueConverter(wireType, required);
             }
+        case ESimpleLogicalValueType::TzDate:
+        case ESimpleLogicalValueType::TzDatetime:
+        case ESimpleLogicalValueType::TzTimestamp:
+        case ESimpleLogicalValueType::TzDate32:
+        case ESimpleLogicalValueType::TzDatetime64:
+        case ESimpleLogicalValueType::TzTimestamp64:
+            // TODO(nadya02): YT-15805: Support tz types.
+            THROW_ERROR_EXCEPTION("Tz types are not supported now");
     }
 }
 
@@ -678,7 +686,7 @@ public:
             auto createComplexValueConverter = [&] (const TFieldDescription& skiffField, bool isSparse) -> TUnversionedValueToSkiffConverter {
                 auto columnSchema = indexedSchemas.GetColumnSchema(tableIndex, skiffField.Name());
 
-                // NB: we don't create complex value converter for simple types
+                // NB: We don't create complex value converter for simple types
                 // (column is missing in schema or has simple type).
                 //   1. Complex value converter expects unversioned values of type ANY
                 //      and simple types have other types.

@@ -14,6 +14,11 @@
 
 namespace NKikimr::NKqp {
 
+namespace {
+    // Avoid too many compute actors starting at the same time.
+    constexpr size_t kMaxDeferredEffects = 100;
+}
+
 class TKqpTxLock {
 public:
     using TKey = std::tuple<ui64, ui64, ui64, ui64>;
@@ -160,7 +165,7 @@ private:
 };
 using TShardIdToTableInfoPtr = std::shared_ptr<TShardIdToTableInfo>;
 
-bool HasUncommittedChangesRead(THashSet<NKikimr::TTableId>& modifiedTables, const NKqpProto::TKqpPhyQuery& physicalQuery);
+bool HasUncommittedChangesRead(THashSet<NKikimr::TTableId>& modifiedTables, const NKqpProto::TKqpPhyQuery& physicalQuery, const bool commit);
 
 class TKqpTransactionContext : public NYql::TKikimrTransactionContextBase  {
 public:
@@ -316,8 +321,9 @@ public:
         return true;
     }
 
-    void ApplyPhysicalQuery(const NKqpProto::TKqpPhyQuery& phyQuery) {
-        NeedUncommittedChangesFlush = HasUncommittedChangesRead(ModifiedTablesSinceLastFlush, phyQuery);
+    void ApplyPhysicalQuery(const NKqpProto::TKqpPhyQuery& phyQuery, const bool commit) {
+        NeedUncommittedChangesFlush = (DeferredEffects.Size() > kMaxDeferredEffects)
+            || HasUncommittedChangesRead(ModifiedTablesSinceLastFlush, phyQuery, commit);
         if (NeedUncommittedChangesFlush) {
             ModifiedTablesSinceLastFlush.clear();   
         }

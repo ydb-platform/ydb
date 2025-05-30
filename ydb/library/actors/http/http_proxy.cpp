@@ -9,15 +9,15 @@ public:
     using TBase = NActors::TActorBootstrapped<THttpProxy>;
 
     IActor* AddListeningPort(TEvHttpProxy::TEvAddListeningPort::TPtr& event) {
-        IActor* listeningSocket = CreateHttpAcceptorActor(SelfId(), Poller);
+        IActor* listeningSocket = CreateHttpAcceptorActor(SelfId());
         TActorId acceptorId = Register(listeningSocket);
         Send(event->Forward(acceptorId));
         Acceptors.emplace_back(acceptorId);
         return listeningSocket;
     }
 
-    IActor* AddOutgoingConnection(bool secure) {
-        IActor* connectionSocket = CreateOutgoingConnectionActor(SelfId(), secure, Poller);
+    IActor* AddOutgoingConnection(TEvHttpProxy::TEvHttpOutgoingRequest::TPtr& event) {
+        IActor* connectionSocket = CreateOutgoingConnectionActor(SelfId(), event);
         TActorId connectionId = Register(connectionSocket);
         ALOG_DEBUG(HttpLog, "Connection created " << connectionId);
         Connections.emplace(connectionId);
@@ -25,11 +25,10 @@ public:
     }
 
     void Bootstrap() {
-        Poller = Register(NActors::CreatePollerActor());
         Become(&THttpProxy::StateWork);
     }
 
-    THttpProxy(std::weak_ptr<NMonitoring::TMetricRegistry> registry)
+    THttpProxy(std::weak_ptr<NMonitoring::IMetricFactory> registry)
         : Registry(std::move(registry))
     {}
 
@@ -54,7 +53,6 @@ protected:
     }
 
     void PassAway() override {
-        Send(Poller, new NActors::TEvents::TEvPoisonPill());
         for (const NActors::TActorId& connection : Connections) {
             Send(connection, new NActors::TEvents::TEvPoisonPill());
         }
@@ -98,6 +96,12 @@ protected:
         ALOG_ERROR(HttpLog, "Event TEvHttpOutgoingResponse shouldn't be in proxy, it should go to the http connection directly");
     }
 
+    template<typename TEventType>
+    TAutoPtr<NActors::IEventHandle> Forward(const TActorId& dest, TAutoPtr<NActors::TEventHandle<TEventType>>&& event) {
+        auto self(SelfId());
+        return new IEventHandle(dest, event->Sender, event->Release().Release(), event->Flags, event->Cookie, &self, std::move(event->TraceId));
+    }
+
     void Handle(TEvHttpProxy::TEvHttpOutgoingRequest::TPtr& event) {
         if (event->Get()->AllowConnectionReuse) {
             auto destination = event->Get()->Request->GetDestination();
@@ -106,15 +110,13 @@ protected:
                 TActorId availableConnection = itAvailableConnection->second;
                 ALOG_DEBUG(HttpLog, "Reusing connection " << availableConnection << " for destination " << destination);
                 AvailableConnections.erase(itAvailableConnection);
-                Send(event->Forward(availableConnection));
+                Send(Forward(availableConnection, std::move(event)));
                 return;
             } else {
                 ALOG_DEBUG(HttpLog, "Creating a new connection for destination " << destination);
             }
         }
-        bool secure(event->Get()->Request->Secure);
-        NActors::IActor* actor = AddOutgoingConnection(secure);
-        Send(event->Forward(actor->SelfId()));
+        AddOutgoingConnection(event);
     }
 
     void Handle(TEvHttpProxy::TEvAddListeningPort::TPtr& event) {
@@ -131,8 +133,13 @@ protected:
     }
 
     void Handle(TEvHttpProxy::TEvHttpOutgoingConnectionAvailable::TPtr& event) {
-        ALOG_DEBUG(HttpLog, "Connection " << event->Get()->ConnectionID << " available for destination " << event->Get()->Destination);
-        AvailableConnections.emplace(event->Get()->Destination, event->Get()->ConnectionID);
+        if (AvailableConnections.size() < MAX_REUSABLE_CONNECTIONS) {
+            ALOG_DEBUG(HttpLog, "Connection " << event->Get()->ConnectionID << " available for destination " << event->Get()->Destination);
+            AvailableConnections.emplace(event->Get()->Destination, event->Get()->ConnectionID);
+        } else {
+            ALOG_DEBUG(HttpLog, "Connection " << event->Get()->ConnectionID << " not added to available connections, limit reached");
+            Send(event->Get()->ConnectionID, new NActors::TEvents::TEvPoisonPill());
+        }
     }
 
     void Handle(TEvHttpProxy::TEvHttpOutgoingConnectionClosed::TPtr& event) {
@@ -232,33 +239,33 @@ protected:
         const static TString urlNotFound = "not-found";
         const TString& url = (sensors.Status == "404" ? urlNotFound : sensors.Url);
 
-        std::shared_ptr<NMonitoring::TMetricRegistry> registry = Registry.lock();
+        std::shared_ptr<NMonitoring::IMetricFactory> registry = Registry.lock();
         if (registry) {
-            registry->Rate(
+            registry->Rate(NMonitoring::MakeLabels(
                 {
                     {"sensor", "count"},
                     {"direction", sensors.Direction},
                     {"peer", sensors.Host},
                     {"url", url},
                     {"status", sensors.Status}
-                })->Inc();
-            registry->HistogramRate(
+                }))->Inc();
+            registry->HistogramRate(NMonitoring::MakeLabels(
                 {
                     {"sensor", "time_us"},
                     {"direction", sensors.Direction},
                     {"peer", sensors.Host},
                     {"url", url},
                     {"status", sensors.Status}
-                },
+                }),
                 NMonitoring::ExplicitHistogram({1, 5, 10, 50, 100, 500, 1000, 5000, 10000, 30000, 60000}))->Record(sensors.Time.MicroSeconds());
-            registry->HistogramRate(
+            registry->HistogramRate(NMonitoring::MakeLabels(
                 {
                     {"sensor", "time_ms"},
                     {"direction", sensors.Direction},
                     {"peer", sensors.Host},
                     {"url", url},
                     {"status", sensors.Status}
-                },
+                }),
                 NMonitoring::ExplicitHistogram({1, 5, 10, 50, 100, 500, 1000, 5000, 10000, 30000, 60000}))->Record(sensors.Time.MilliSeconds());
         }
     }
@@ -273,7 +280,6 @@ protected:
         PassAway();
     }
 
-    NActors::TActorId Poller;
     TVector<TActorId> Acceptors;
 
     struct THostEntry {
@@ -287,7 +293,7 @@ protected:
     THashMap<TString, TActorId> Handlers;
     THashSet<TActorId> Connections; // outgoing
     std::unordered_multimap<TString, TActorId> AvailableConnections;
-    std::weak_ptr<NMonitoring::TMetricRegistry> Registry;
+    std::weak_ptr<NMonitoring::IMetricFactory> Registry;
 };
 
 TEvHttpProxy::TEvReportSensors* BuildOutgoingRequestSensors(const THttpOutgoingRequestPtr& request, const THttpIncomingResponsePtr& response) {
@@ -314,7 +320,7 @@ TEvHttpProxy::TEvReportSensors* BuildIncomingRequestSensors(const THttpIncomingR
     );
 }
 
-NActors::IActor* CreateHttpProxy(std::weak_ptr<NMonitoring::TMetricRegistry> registry) {
+NActors::IActor* CreateHttpProxy(std::weak_ptr<NMonitoring::IMetricFactory> registry) {
     return new THttpProxy(std::move(registry));
 }
 

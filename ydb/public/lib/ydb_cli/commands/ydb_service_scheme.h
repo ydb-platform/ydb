@@ -6,13 +6,13 @@
 #include <ydb/public/lib/ydb_cli/common/format.h>
 #include <ydb/public/lib/ydb_cli/common/print_utils.h>
 #include <ydb/public/lib/ydb_cli/common/recursive_remove.h>
-#include <ydb/public/sdk/cpp/client/draft/ydb_replication.h>
-#include <ydb/public/sdk/cpp/client/draft/ydb_view.h>
-#include <ydb/public/sdk/cpp/client/ydb_coordination/coordination.h>
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
-#include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
-#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_replication.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_view.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/coordination/coordination.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 
 namespace NYdb {
 
@@ -30,7 +30,7 @@ class TCommandMakeDirectory : public TYdbOperationCommand, public TCommandWithPa
 public:
     TCommandMakeDirectory();
     virtual void Config(TConfig& config) override;
-    virtual void Parse(TConfig& config) override;
+    virtual void ExtractParams(TConfig& config) override;
     virtual int Run(TConfig& config) override;
 };
 
@@ -38,7 +38,7 @@ class TCommandRemoveDirectory : public TYdbOperationCommand, public TCommandWith
 public:
     TCommandRemoveDirectory();
     virtual void Config(TConfig& config) override;
-    virtual void Parse(TConfig& config) override;
+    virtual void ExtractParams(TConfig& config) override;
     virtual int Run(TConfig& config) override;
 
 private:
@@ -47,9 +47,9 @@ private:
 };
 
 void PrintAllPermissions(
-    const TString& owner,
-    const TVector<NScheme::TPermissions>& permissions,
-    const TVector<NScheme::TPermissions>& effectivePermissions
+    const std::string& owner,
+    const std::vector<NScheme::TPermissions>& permissions,
+    const std::vector<NScheme::TPermissions>& effectivePermissions
 );
 
 // Pretty print consumer info ('scheme describe' and 'topic consumer describe' commands)
@@ -82,6 +82,7 @@ public:
     TCommandDescribe();
     virtual void Config(TConfig& config) override;
     virtual void Parse(TConfig& config) override;
+    virtual void ExtractParams(TConfig& config) override;
     virtual int Run(TConfig& config) override;
 
 private:
@@ -103,6 +104,12 @@ private:
 
     int DescribeView(const TDriver& driver);
     int PrintViewResponsePretty(const NYdb::NView::TDescribeViewResult& result) const;
+
+    int DescribeExternalDataSource(const TDriver& driver);
+    int PrintExternalDataSourceResponsePretty(const NYdb::NTable::TExternalDataSourceDescription& result) const;
+
+    int DescribeExternalTable(const TDriver& driver);
+    int PrintExternalTableResponsePretty(const NYdb::NTable::TExternalTableDescription& result) const;
 
     int TryTopicConsumerDescribeOrFail(NYdb::TDriver& driver, const NScheme::TDescribePathResult& result);
     std::pair<TString, TString> ParseTopicConsumer() const;
@@ -134,6 +141,7 @@ public:
     TCommandList();
     virtual void Config(TConfig& config) override;
     virtual void Parse(TConfig& config) override;
+    virtual void ExtractParams(TConfig& config) override;
     virtual int Run(TConfig& config) override;
 
 private:
@@ -153,11 +161,12 @@ public:
     TCommandPermissionGrant();
     virtual void Config(TConfig& config) override;
     virtual void Parse(TConfig& config) override;
+    virtual void ExtractParams(TConfig& config) override;
     virtual int Run(TConfig& config) override;
 
 private:
-    TString Subject;
-    TVector<TString> PermissionsToGrant;
+    std::string Subject;
+    std::vector<std::string> PermissionsToGrant;
 };
 
 class TCommandPermissionRevoke : public TYdbOperationCommand, public TCommandWithPath {
@@ -165,11 +174,12 @@ public:
     TCommandPermissionRevoke();
     virtual void Config(TConfig& config) override;
     virtual void Parse(TConfig& config) override;
+    virtual void ExtractParams(TConfig& config) override;
     virtual int Run(TConfig& config) override;
 
 private:
-    TString Subject;
-    TVector<TString> PermissionsToRevoke;
+    std::string Subject;
+    std::vector<std::string> PermissionsToRevoke;
 };
 
 class TCommandPermissionSet : public TYdbOperationCommand, public TCommandWithPath {
@@ -177,11 +187,12 @@ public:
     TCommandPermissionSet();
     virtual void Config(TConfig& config) override;
     virtual void Parse(TConfig& config) override;
+    virtual void ExtractParams(TConfig& config) override;
     virtual int Run(TConfig& config) override;
 
 private:
-    TString Subject;
-    TVector<TString> PermissionsToSet;
+    std::string Subject;
+    std::vector<std::string> PermissionsToSet;
 };
 
 class TCommandChangeOwner : public TYdbOperationCommand, public TCommandWithPath {
@@ -189,6 +200,7 @@ public:
     TCommandChangeOwner();
     virtual void Config(TConfig& config) override;
     virtual void Parse(TConfig& config) override;
+    virtual void ExtractParams(TConfig& config) override;
     virtual int Run(TConfig& config) override;
 
 private:
@@ -199,7 +211,7 @@ class TCommandPermissionClear : public TYdbOperationCommand, public TCommandWith
 public:
     TCommandPermissionClear();
     virtual void Config(TConfig& config) override;
-    virtual void Parse(TConfig& config) override;
+    virtual void ExtractParams(TConfig& config) override;
     virtual int Run(TConfig& config) override;
 };
 
@@ -207,7 +219,7 @@ class TCommandPermissionSetInheritance : public TYdbOperationCommand, public TCo
 public:
     TCommandPermissionSetInheritance();
     virtual void Config(TConfig& config) override;
-    virtual void Parse(TConfig& config) override;
+    virtual void ExtractParams(TConfig& config) override;
     virtual int Run(TConfig& config) override;
 };
 
@@ -215,7 +227,7 @@ class TCommandPermissionClearInheritance : public TYdbOperationCommand, public T
 public:
     TCommandPermissionClearInheritance();
     virtual void Config(TConfig& config) override;
-    virtual void Parse(TConfig& config) override;
+    virtual void ExtractParams(TConfig& config) override;
     virtual int Run(TConfig& config) override;
 };
 
@@ -223,7 +235,7 @@ class TCommandPermissionList : public TYdbOperationCommand, public TCommandWithP
 public:
     TCommandPermissionList();
     virtual void Config(TConfig& config) override;
-    virtual void Parse(TConfig& config) override;
+    virtual void ExtractParams(TConfig& config) override;
     virtual int Run(TConfig& config) override;
 };
 

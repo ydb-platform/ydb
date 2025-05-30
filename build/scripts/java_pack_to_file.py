@@ -23,7 +23,7 @@ def get_package_name(filename):
         else:
             match = JAVA_PACKAGE_REGEX.search(content)
             if match:
-                return match.group(1).replace('\n\t ', '').replace('.', '/')
+                return re.sub(r'[\s]+', '', match.group(1)).replace('.', '/')
     return ''
 
 

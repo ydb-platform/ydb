@@ -197,13 +197,81 @@ void WriteSchema(const TProtobufEnumType* enumType, IYsonConsumer* consumer);
 
 ////////////////////////////////////////////////////////////////////////////////
 
+NYson::TProtobufElementType GetProtobufElementType(const TProtobufElement& protobufElement)
+{
+    return VisitProtobufElement(protobufElement,
+        [] (const TProtobufMessageElement& /*element*/) {
+            return TProtobufElementType{FieldDescriptor::TYPE_MESSAGE};
+        },
+        [] (const TProtobufScalarElement& element) {
+            return element.Type;
+        },
+        [] (const TProtobufAttributeDictionaryElement& /*element*/) {
+            return TProtobufElementType{FieldDescriptor::TYPE_MESSAGE};
+        },
+        [] (const TProtobufRepeatedElement& element) {
+            return GetProtobufElementType(element.Element);
+        },
+        [] (const TProtobufMapElement& /*element*/) {
+            // NB! Map is interpreted directly as repeated message field.
+            return TProtobufElementType{FieldDescriptor::TYPE_MESSAGE};
+        },
+        [] (const TProtobufAnyElement& /*element*/) {
+            return TProtobufElementType{FieldDescriptor::TYPE_STRING};
+        }
+    );
+}
+
+NYTree::ENodeType GetNodeTypeByProtobufScalarElement(const TProtobufScalarElement& scalarElement)
+{
+    switch (scalarElement.Type.Underlying()) {
+        case FieldDescriptor::TYPE_INT64:
+        case FieldDescriptor::TYPE_INT32:
+        case FieldDescriptor::TYPE_SINT32:
+        case FieldDescriptor::TYPE_SINT64:
+        case FieldDescriptor::TYPE_SFIXED32:
+        case FieldDescriptor::TYPE_SFIXED64:
+            return NYTree::ENodeType::Int64;
+        case FieldDescriptor::TYPE_UINT64:
+        case FieldDescriptor::TYPE_FIXED64:
+        case FieldDescriptor::TYPE_UINT32:
+        case FieldDescriptor::TYPE_FIXED32:
+            return NYTree::ENodeType::Uint64;
+        case FieldDescriptor::TYPE_BOOL:
+            return NYTree::ENodeType::Boolean;
+        case FieldDescriptor::TYPE_STRING:
+        case FieldDescriptor::TYPE_BYTES:
+            return NYTree::ENodeType::String;
+        case FieldDescriptor::TYPE_ENUM:
+            switch (scalarElement.EnumStorageType) {
+                case EEnumYsonStorageType::String:
+                    return NYTree::ENodeType::String;
+                case EEnumYsonStorageType::Int:
+                    return NYTree::ENodeType::Int64;
+            }
+            YT_ABORT();
+        case FieldDescriptor::TYPE_DOUBLE:
+        case FieldDescriptor::TYPE_FLOAT:
+            return NYTree::ENodeType::Double;
+        case FieldDescriptor::TYPE_GROUP:
+        case FieldDescriptor::TYPE_MESSAGE:
+            // NB! Scalar element cannot be of type message.
+            break;
+    }
+
+    THROW_ERROR_EXCEPTION("Encountered non-scalar field type for scalar protobuf element")
+        << TErrorAttribute("fieldType", scalarElement.Type.Underlying());
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 class TProtobufTypeRegistry
 {
 public:
     //! This method is called while reflecting types.
     TStringBuf GetYsonName(const FieldDescriptor* descriptor)
     {
-        VERIFY_SPINLOCK_AFFINITY(Lock_);
+        YT_ASSERT_SPINLOCK_AFFINITY(Lock_);
 
         return GetYsonNameFromDescriptor(
             descriptor,
@@ -213,7 +281,7 @@ public:
     //! This method is called while reflecting types.
     std::vector<TStringBuf> GetYsonNameAliases(const FieldDescriptor* descriptor)
     {
-        VERIFY_SPINLOCK_AFFINITY(Lock_);
+        YT_ASSERT_SPINLOCK_AFFINITY(Lock_);
 
         std::vector<TStringBuf> aliases;
         const auto& extensions = descriptor->options().GetRepeatedExtension(NYT::NYson::NProto::field_name_alias);
@@ -226,7 +294,7 @@ public:
     //! This method is called while reflecting types.
     TStringBuf GetYsonLiteral(const EnumValueDescriptor* descriptor)
     {
-        VERIFY_SPINLOCK_AFFINITY(Lock_);
+        YT_ASSERT_SPINLOCK_AFFINITY(Lock_);
 
         return GetYsonNameFromDescriptor(
             descriptor,
@@ -295,7 +363,7 @@ public:
         const Descriptor* descriptor) const
     {
         // No need to call Initialize: it has been already called within Reflect*Type higher up the stack.
-        VERIFY_SPINLOCK_AFFINITY(Lock_);
+        YT_ASSERT_SPINLOCK_AFFINITY(Lock_);
 
         auto it = MessageTypeConverterMap_.find(descriptor);
         if (it == MessageTypeConverterMap_.end()) {
@@ -311,7 +379,7 @@ public:
         int fieldIndex) const
     {
         // No need to call Initialize: it has been already called within Reflect*Type higher up the stack.
-        VERIFY_SPINLOCK_AFFINITY(Lock_);
+        YT_ASSERT_SPINLOCK_AFFINITY(Lock_);
 
         auto fieldNumber = descriptor->field(fieldIndex)->number();
         auto it = MessageFieldConverterMap_.find(std::pair(descriptor, fieldNumber));
@@ -352,7 +420,7 @@ private:
 
     TStringBuf InternString(const TString& str)
     {
-        VERIFY_SPINLOCK_AFFINITY(Lock_);
+        YT_ASSERT_SPINLOCK_AFFINITY(Lock_);
 
         return *InternedStrings_.emplace(str).first;
     }
@@ -808,8 +876,10 @@ TProtobufElement TProtobufField::GetElement(bool insideRepeated) const
         });
     } else {
         return std::make_unique<TProtobufScalarElement>(TProtobufScalarElement{
-            static_cast<TProtobufScalarElement::TType>(GetType()),
-            GetEnumYsonStorageType()
+            static_cast<TProtobufElementType>(GetType()),
+            GetEnumYsonStorageType(),
+            GetEnumType(),
+            IsEnumValueCheckStrict(),
         });
     }
 }
@@ -886,7 +956,7 @@ private:
 
 const TProtobufMessageType* TProtobufTypeRegistry::ReflectMessageTypeInternal(const Descriptor* descriptor)
 {
-    VERIFY_SPINLOCK_AFFINITY(Lock_);
+    YT_ASSERT_SPINLOCK_AFFINITY(Lock_);
 
     TProtobufMessageType* type;
     auto it = MessageTypeMap_.find(descriptor);
@@ -906,7 +976,7 @@ const TProtobufMessageType* TProtobufTypeRegistry::ReflectMessageTypeInternal(co
 
 const TProtobufEnumType* TProtobufTypeRegistry::ReflectEnumTypeInternal(const EnumDescriptor* descriptor)
 {
-    VERIFY_SPINLOCK_AFFINITY(Lock_);
+    YT_ASSERT_SPINLOCK_AFFINITY(Lock_);
 
     TProtobufEnumType* type;
     auto it = EnumTypeMap_.find(descriptor);
@@ -1559,7 +1629,7 @@ private:
 
     void BeginNestedMessage()
     {
-        auto index =  static_cast<int>(NestedMessages_.size());
+        auto index =  std::ssize(NestedMessages_);
         NestedMessages_.emplace_back(BodyCodedStream_.ByteCount(), -1);
         NestedIndexStack_.push_back(index);
     }
@@ -3015,7 +3085,19 @@ TProtobufElementResolveResult GetProtobufElementFromField(
     };
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace
+
+////////////////////////////////////////////////////////////////////////////////
+
+std::string_view GetProtobufElementTypeName(const NYson::TProtobufElement& element)
+{
+    return Visit(element,
+        [&] <CProtobufElement T> (const std::unique_ptr<T>&) {
+            return GetProtobufElementTypeName<T>();
+        });
+}
 
 TProtobufElementResolveResult ResolveProtobufElementByYPath(
     const TProtobufMessageType* rootType,
@@ -3050,6 +3132,11 @@ TProtobufElementResolveResult ResolveProtobufElementByYPath(
         }
 
         tokenizer.Advance();
+        if (options.AllowAsterisks && tokenizer.GetType() == NYPath::ETokenType::Asterisk) {
+            tokenizer.Advance();
+            tokenizer.Expect(NYPath::ETokenType::Slash);
+            tokenizer.Advance();
+        }
         tokenizer.Expect(NYPath::ETokenType::Literal);
 
         const auto& fieldName = tokenizer.GetLiteralValue();
@@ -3114,7 +3201,9 @@ TProtobufElementResolveResult ResolveProtobufElementByYPath(
 
             tokenizer.Expect(NYPath::ETokenType::Slash);
             tokenizer.Advance();
-            tokenizer.ExpectListIndex();
+            if (!options.AllowAsterisks || tokenizer.GetType() != NYPath::ETokenType::Asterisk) {
+                tokenizer.ExpectListIndex();
+            }
 
             if (!field->IsMessage()) {
                 return GetProtobufElementFromField(

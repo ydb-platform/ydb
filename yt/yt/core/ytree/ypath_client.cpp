@@ -107,7 +107,7 @@ void TYPathRequest::SetUserTag(const std::string& /*tag*/)
     YT_ABORT();
 }
 
-void TYPathRequest::SetUserAgent(const TString& /*userAgent*/)
+void TYPathRequest::SetUserAgent(const std::string& /*userAgent*/)
 {
     YT_ABORT();
 }
@@ -264,6 +264,12 @@ TYPathMaybeRef GetOriginalRequestTargetYPath(const NRpc::NProto::TRequestHeader&
     return ypathExt.has_original_target_path()
         ? TYPathMaybeRef(ypathExt.original_target_path())
         : TYPathMaybeRef(ypathExt.target_path());
+}
+
+const google::protobuf::RepeatedPtrField<TProtobufString>& GetRequestAdditionalPaths(const NRpc::NProto::TRequestHeader& header)
+{
+    const auto& ypathExt = header.GetExtension(NProto::TYPathHeaderExt::ypath_header_ext);
+    return ypathExt.additional_paths();
 }
 
 const google::protobuf::RepeatedPtrField<TProtobufString>& GetOriginalRequestAdditionalPaths(const NRpc::NProto::TRequestHeader& header)

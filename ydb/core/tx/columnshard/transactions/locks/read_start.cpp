@@ -17,7 +17,7 @@ bool TEvReadStart::DoDeserializeFromProto(const NKikimrColumnShardTxProto::TEven
         AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "cannot_parse_TEvReadStart")("reason", "cannot_parse_schema");
         return false;
     }
-    Filter = TPKRangesFilter::BuildFromString(proto.GetRead().GetFilter(), Schema, false);
+    Filter = TPKRangesFilter::BuildFromString(proto.GetRead().GetFilter(), Schema);
     if (!Filter) {
         AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "cannot_parse_TEvReadStart")("reason", "cannot_parse_filter");
         return false;

@@ -5,7 +5,7 @@
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Printable specializations
 
-namespace NYdb::NTopic {
+namespace NYdb::inline V2::NTopic {
 
 using namespace NFederatedTopic;
 
@@ -136,7 +136,7 @@ void TPrintable<TDataReceivedEvent>::DebugString(TStringBuilder& ret, bool print
 
 }
 
-namespace NYdb::NFederatedTopic {
+namespace NYdb::inline V2::NFederatedTopic {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // NFederatedTopic::TReadSessionEvent::TDataReceivedEvent

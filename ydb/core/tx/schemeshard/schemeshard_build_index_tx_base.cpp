@@ -23,6 +23,11 @@ void TSchemeShard::TIndexBuilder::TTxBase::ApplyState(NTabletFlatExecutor::TTran
         Y_VERIFY_S(buildInfoPtr, "IndexBuilds has no " << buildId);
         auto& buildInfo = *buildInfoPtr->Get();
         LOG_I("Change state from " << buildInfo.State << " to " << state);
+        if (state == TIndexBuildInfo::EState::Rejected ||
+            state == TIndexBuildInfo::EState::Cancelled ||
+            state == TIndexBuildInfo::EState::Done) {
+            buildInfo.EndTime = TAppData::TimeProvider->Now();
+        }
         buildInfo.State = state;
 
         NIceDb::TNiceDb db(txc.DB);
@@ -177,6 +182,11 @@ void TSchemeShard::TIndexBuilder::TTxBase::Send(TActorId dst, THolder<IEventBase
     SideEffects.Send(dst, message.Release(), cookie, flags);
 }
 
+void TSchemeShard::TIndexBuilder::TTxBase::AllocateTxId(TIndexBuildId buildId) {
+    LOG_D("AllocateTxId " << buildId);
+    Send(Self->TxAllocatorClient, MakeHolder<TEvTxAllocatorClient::TEvAllocate>(), 0, ui64(buildId));
+}
+
 void TSchemeShard::TIndexBuilder::TTxBase::ChangeState(TIndexBuildId id, TIndexBuildInfo::EState state) {
     StateChanges.push_back(TChangeStateRec(id, state));
 }
@@ -189,6 +199,15 @@ void TSchemeShard::TIndexBuilder::TTxBase::Fill(NKikimrIndexBuilder::TIndexBuild
     index.SetId(ui64(indexInfo.Id));
     if (indexInfo.Issue) {
         AddIssue(index.MutableIssues(), indexInfo.Issue);
+    }
+    if (indexInfo.StartTime != TInstant::Zero()) {
+        *index.MutableStartTime() = SecondsToProtoTimeStamp(indexInfo.StartTime.Seconds());
+    }
+    if (indexInfo.EndTime != TInstant::Zero()) {
+        *index.MutableEndTime() = SecondsToProtoTimeStamp(indexInfo.EndTime.Seconds());
+    }
+    if (indexInfo.UserSID) {
+        index.SetUserSID(*indexInfo.UserSID);
     }
 
     for (const auto& item: indexInfo.Shards) {
@@ -215,6 +234,7 @@ void TSchemeShard::TIndexBuilder::TTxBase::Fill(NKikimrIndexBuilder::TIndexBuild
     case TIndexBuildInfo::EState::Filling:
     case TIndexBuildInfo::EState::DropBuild:
     case TIndexBuildInfo::EState::CreateBuild:
+    case TIndexBuildInfo::EState::LockBuild:
         index.SetState(Ydb::Table::IndexBuildState::STATE_TRANSFERING_DATA);
         index.SetProgress(indexInfo.CalcProgressPercent());
         break;
@@ -296,10 +316,8 @@ void TSchemeShard::TIndexBuilder::TTxBase::Fill(NKikimrIndexBuilder::TIndexBuild
         }
     }
 
-    settings.set_max_batch_bytes(info.Limits.MaxBatchBytes);
-    settings.set_max_batch_rows(info.Limits.MaxBatchRows);
-    settings.set_max_shards_in_flight(info.Limits.MaxShards);
-    settings.set_max_retries_upload_batch(info.Limits.MaxRetries);
+    settings.MutableScanSettings()->CopyFrom(info.ScanSettings);
+    settings.set_max_shards_in_flight(info.MaxInProgressShards);
 }
 
 void TSchemeShard::TIndexBuilder::TTxBase::AddIssue(::google::protobuf::RepeatedPtrField<::Ydb::Issue::IssueMessage>* issues,

@@ -2,6 +2,8 @@
     Copyright (c) 2001-2011 Joel de Guzman
     Copyright (c) 2001-2011 Hartmut Kaiser
     Copyright (c) 2014 Thomas Bernard
+    Copyright (c) 2017 wanghan02
+    Copyright (c) 2024 Nana Sakisaka
 
     Distributed under the Boost Software License, Version 1.0. (See accompanying
     file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -11,6 +13,7 @@
 
 #include <boost/spirit/home/x3/core/parser.hpp>
 #include <boost/spirit/home/x3/operator/kleene.hpp>
+#include <boost/spirit/home/x3/support/expectation.hpp>
 
 namespace boost { namespace spirit { namespace x3 { namespace detail
 {
@@ -83,7 +86,8 @@ namespace boost { namespace spirit { namespace x3
                       this->subject, first, last, context, rcontext, attr))
                     break;
             }
-            return true;
+
+            return !has_expectation_failure(context);
         }
 
         RepeatCountLimit repeat_limit;

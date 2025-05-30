@@ -58,7 +58,7 @@ PEERDIR(
     ydb/library/yql/providers/generic/connector/libcpp
     yql/essentials/providers/result/expr_nodes
     ydb/library/yql/utils/plan
-    ydb/public/sdk/cpp/client/ydb_types/credentials
+    ydb/public/sdk/cpp/src/client/types/credentials
 )
 
 END()

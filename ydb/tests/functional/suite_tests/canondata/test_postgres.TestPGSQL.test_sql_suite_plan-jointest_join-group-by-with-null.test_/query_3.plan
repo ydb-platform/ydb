@@ -4,8 +4,8 @@
         "PlanNodeType": "Query",
         "Plans": [
             {
-                "Node Type": "ResultSet",
-                "PlanNodeId": 11,
+                "Node Type": "ResultSet_1",
+                "PlanNodeId": 16,
                 "PlanNodeType": "ResultSet",
                 "Plans": [
                     {
@@ -14,18 +14,18 @@
                             {
                                 "Inputs": [
                                     {
-                                        "ExternalPlanNodeId": 9
+                                        "ExternalPlanNodeId": 14
                                     }
                                 ],
                                 "Limit": "1001",
                                 "Name": "Limit"
                             }
                         ],
-                        "PlanNodeId": 10,
+                        "PlanNodeId": 15,
                         "Plans": [
                             {
                                 "Node Type": "Merge",
-                                "PlanNodeId": 9,
+                                "PlanNodeId": 14,
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
@@ -44,94 +44,113 @@
                                             {
                                                 "Inputs": [
                                                     {
-                                                        "ExternalPlanNodeId": 7
+                                                        "ExternalPlanNodeId": 12
                                                     }
                                                 ],
                                                 "Name": "Aggregate",
                                                 "Phase": "Final"
                                             }
                                         ],
-                                        "PlanNodeId": 8,
+                                        "PlanNodeId": 13,
                                         "Plans": [
                                             {
                                                 "KeyColumns": [
                                                     "t1.q2"
                                                 ],
                                                 "Node Type": "HashShuffle",
-                                                "PlanNodeId": 7,
+                                                "PlanNodeId": 12,
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "Node Type": "Aggregate",
+                                                        "CTE Name": "precompute",
+                                                        "Node Type": "Aggregate-LeftJoin (MapJoin)-ConstantExpr",
                                                         "Operators": [
                                                             {
                                                                 "Aggregation": "{COUNT(item.t2.q1)}",
                                                                 "GroupBy": "item.t1.q2",
                                                                 "Inputs": [
                                                                     {
-                                                                        "ExternalPlanNodeId": 5
+                                                                        "InternalOperatorId": 1
                                                                     }
                                                                 ],
                                                                 "Name": "Aggregate",
                                                                 "Phase": "Intermediate"
+                                                            },
+                                                            {
+                                                                "Condition": "t1.q2 = t2.q1",
+                                                                "Inputs": [
+                                                                    {
+                                                                        "InternalOperatorId": 2
+                                                                    },
+                                                                    {
+                                                                        "ExternalPlanNodeId": 10
+                                                                    }
+                                                                ],
+                                                                "Name": "LeftJoin (MapJoin)"
+                                                            },
+                                                            {
+                                                                "Inputs": [],
+                                                                "Name": "ToFlow",
+                                                                "ToFlow": "precompute"
                                                             }
                                                         ],
-                                                        "PlanNodeId": 6,
+                                                        "PlanNodeId": 11,
                                                         "Plans": [
                                                             {
-                                                                "Node Type": "UnionAll",
-                                                                "PlanNodeId": 5,
+                                                                "Node Type": "Broadcast",
+                                                                "PlanNodeId": 10,
                                                                 "PlanNodeType": "Connection",
                                                                 "Plans": [
                                                                     {
-                                                                        "Node Type": "Stage",
-                                                                        "PlanNodeId": 4,
+                                                                        "Node Type": "Filter",
+                                                                        "Operators": [
+                                                                            {
+                                                                                "Inputs": [
+                                                                                    {
+                                                                                        "ExternalPlanNodeId": 8
+                                                                                    }
+                                                                                ],
+                                                                                "Name": "Filter",
+                                                                                "Predicate": "Exist(item.q1)"
+                                                                            }
+                                                                        ],
+                                                                        "PlanNodeId": 9,
                                                                         "Plans": [
                                                                             {
                                                                                 "Columns": [
-                                                                                    "q1",
-                                                                                    "q2"
+                                                                                    "q1"
                                                                                 ],
-                                                                                "E-Cost": "0",
-                                                                                "E-Rows": "0",
-                                                                                "E-Size": "0",
+                                                                                "E-Cost": "No estimate",
+                                                                                "E-Rows": "No estimate",
+                                                                                "E-Size": "No estimate",
                                                                                 "LookupKeyColumns": [
                                                                                     "q1"
                                                                                 ],
-                                                                                "Node Type": "TableLookupJoin",
+                                                                                "Node Type": "TableLookup",
                                                                                 "Path": "/Root/postgres_jointest/join-group-by-with-null.test_plan/int8_tbl",
-                                                                                "PlanNodeId": 3,
+                                                                                "PlanNodeId": 8,
                                                                                 "PlanNodeType": "Connection",
                                                                                 "Plans": [
                                                                                     {
-                                                                                        "Node Type": "Stage",
-                                                                                        "PlanNodeId": 2,
-                                                                                        "Plans": [
+                                                                                        "CTE Name": "precompute",
+                                                                                        "Node Type": "ConstantExpr-Aggregate",
+                                                                                        "Operators": [
                                                                                             {
-                                                                                                "Node Type": "TableFullScan",
-                                                                                                "Operators": [
+                                                                                                "Inputs": [
                                                                                                     {
-                                                                                                        "Inputs": [],
-                                                                                                        "Name": "TableFullScan",
-                                                                                                        "Path": "/Root/postgres_jointest/join-group-by-with-null.test_plan/int8_tbl",
-                                                                                                        "ReadColumns": [
-                                                                                                            "q2"
-                                                                                                        ],
-                                                                                                        "ReadRanges": [
-                                                                                                            "q1 (-\u221e, +\u221e)",
-                                                                                                            "q2 (-\u221e, +\u221e)"
-                                                                                                        ],
-                                                                                                        "ReadRangesPointPrefixLen": "0",
-                                                                                                        "Scan": "Parallel",
-                                                                                                        "Table": "postgres_jointest/join-group-by-with-null.test_plan/int8_tbl"
+                                                                                                        "InternalOperatorId": 1
                                                                                                     }
                                                                                                 ],
-                                                                                                "PlanNodeId": 1,
-                                                                                                "Tables": [
-                                                                                                    "postgres_jointest/join-group-by-with-null.test_plan/int8_tbl"
-                                                                                                ]
+                                                                                                "Iterator": "PartitionByKey",
+                                                                                                "Name": "Iterator"
+                                                                                            },
+                                                                                            {
+                                                                                                "Input": "precompute",
+                                                                                                "Inputs": [],
+                                                                                                "Name": "PartitionByKey"
                                                                                             }
-                                                                                        ]
+                                                                                        ],
+                                                                                        "PlanNodeId": 7
                                                                                     }
                                                                                 ],
                                                                                 "Table": "postgres_jointest/join-group-by-with-null.test_plan/int8_tbl"
@@ -154,6 +173,58 @@
                         ]
                     }
                 ]
+            },
+            {
+                "Node Type": "Precompute_0",
+                "Parent Relationship": "InitPlan",
+                "PlanNodeId": 5,
+                "PlanNodeType": "Materialize",
+                "Plans": [
+                    {
+                        "Node Type": "Collect",
+                        "PlanNodeId": 4,
+                        "Plans": [
+                            {
+                                "Node Type": "UnionAll",
+                                "PlanNodeId": 3,
+                                "PlanNodeType": "Connection",
+                                "Plans": [
+                                    {
+                                        "Node Type": "Collect",
+                                        "PlanNodeId": 2,
+                                        "Plans": [
+                                            {
+                                                "Node Type": "TableFullScan",
+                                                "Operators": [
+                                                    {
+                                                        "Inputs": [],
+                                                        "Name": "TableFullScan",
+                                                        "Path": "/Root/postgres_jointest/join-group-by-with-null.test_plan/int8_tbl",
+                                                        "ReadColumns": [
+                                                            "q2"
+                                                        ],
+                                                        "ReadRanges": [
+                                                            "q1 (-\u221e, +\u221e)",
+                                                            "q2 (-\u221e, +\u221e)"
+                                                        ],
+                                                        "ReadRangesPointPrefixLen": "0",
+                                                        "Scan": "Parallel",
+                                                        "Table": "postgres_jointest/join-group-by-with-null.test_plan/int8_tbl"
+                                                    }
+                                                ],
+                                                "PlanNodeId": 1,
+                                                "Tables": [
+                                                    "postgres_jointest/join-group-by-with-null.test_plan/int8_tbl"
+                                                ]
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ],
+                "Subplan Name": "CTE precompute"
             }
         ],
         "Stats": {
@@ -180,8 +251,7 @@
                 },
                 {
                     "columns": [
-                        "q1",
-                        "q2"
+                        "q1"
                     ],
                     "lookup_by": [
                         "q1"

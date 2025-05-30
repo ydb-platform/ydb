@@ -58,15 +58,15 @@ PEERDIR(
     library/cpp/lfalloc/alloc_profiler
     ydb/core/viewer/json
     ydb/core/protos
-    ydb/public/sdk/cpp/client/draft
-    ydb/public/sdk/cpp/client/ydb_datastreams
-    ydb/public/sdk/cpp/client/ydb_topic
-    ydb/public/sdk/cpp/client/ydb_scheme
-    ydb/public/sdk/cpp/client/ydb_table
-    ydb/public/sdk/cpp/client/ydb_persqueue_core
+    ydb/public/sdk/cpp/src/client/draft
+    ydb/public/sdk/cpp/src/client/datastreams
+    ydb/public/sdk/cpp/src/client/topic
+    ydb/public/sdk/cpp/src/client/scheme
+    ydb/public/sdk/cpp/src/client/table
+    ydb/public/sdk/cpp/src/client/persqueue_public
+    ydb/public/sdk/cpp/src/library/operation_id
     ydb/public/api/protos
     ydb/public/api/grpc
-    ydb/public/lib/operation_id
 )
 
 END()

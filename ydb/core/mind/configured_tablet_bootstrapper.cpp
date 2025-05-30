@@ -61,7 +61,7 @@ class TConfiguredTabletBootstrapper : public TActorBootstrapped<TConfiguredTable
 
         if (BootstrapperInstance) {
             Send(BootstrapperInstance, new TEvents::TEvPoisonPill());
-            TlsActivationContext->ExecutorThread.ActorSystem->RegisterLocalService(MakeBootstrapperID(TabletId, SelfId().NodeId()), TActorId());
+            TActivationContext::ActorSystem()->RegisterLocalService(MakeBootstrapperID(TabletId, SelfId().NodeId()), TActorId());
             BootstrapperInstance = TActorId();
         }
 
@@ -92,7 +92,7 @@ class TConfiguredTabletBootstrapper : public TActorBootstrapped<TConfiguredTable
 
             BootstrapperInstance = Register(CreateBootstrapper(storageInfo.Get(), bi.Get(), false), TMailboxType::HTSwap, appData->SystemPoolId);
 
-            TlsActivationContext->ExecutorThread.ActorSystem->RegisterLocalService(MakeBootstrapperID(TabletId, SelfId().NodeId()), BootstrapperInstance);
+            TActivationContext::ActorSystem()->RegisterLocalService(MakeBootstrapperID(TabletId, SelfId().NodeId()), BootstrapperInstance);
         }
     }
 

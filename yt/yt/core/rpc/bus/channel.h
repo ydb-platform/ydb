@@ -3,6 +3,7 @@
 #include "public.h"
 
 #include <yt/yt/core/bus/tcp/public.h>
+
 #include <yt/yt/core/misc/memory_usage_tracker.h>
 
 namespace NYT::NRpc::NBus {

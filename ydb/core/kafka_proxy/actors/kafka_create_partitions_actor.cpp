@@ -19,7 +19,7 @@ public:
             TIntrusiveConstPtr<NACLib::TUserToken> userToken,
             TString topicPath,
             TString databaseName,
-            const std::function<void(EKafkaErrors, const TString&)> sendResultCallback)
+            const std::function<void(EKafkaErrors, const std::string&)> sendResultCallback)
         : UserToken(userToken)
         , TopicPath(topicPath)
         , DatabaseName(databaseName)
@@ -199,7 +199,7 @@ private:
     const NKikimr::NGRpcService::TAuditLogParts DummyAuditLogParts;
     const TString TopicPath;
     const TString DatabaseName;
-    const std::function<void(const EKafkaErrors status, const TString& message)> SendResultCallback;
+    const std::function<void(const EKafkaErrors status, const std::string& message)> SendResultCallback;
     NYql::TIssue Issue;
 
     void ProcessYdbStatusCode(Ydb::StatusIds::StatusCode& status) {
@@ -207,7 +207,7 @@ private:
     }
 };
 
-class TCreatePartitionsActor : public TAlterTopicActor<TCreatePartitionsActor, TKafkaTopicModificationRequest> {
+class TCreatePartitionsActor : public TAlterTopicActor<TCreatePartitionsActor, TKafkaTopicRequestCtx> {
 public:
 
     TCreatePartitionsActor(
@@ -216,7 +216,7 @@ public:
             TString topicPath,
             TString databaseName,
             ui32 partitionsNumber)
-        : TAlterTopicActor<TCreatePartitionsActor, TKafkaTopicModificationRequest>(
+        : TAlterTopicActor<TCreatePartitionsActor, TKafkaTopicRequestCtx>(
             requester,
             userToken,
             topicPath,

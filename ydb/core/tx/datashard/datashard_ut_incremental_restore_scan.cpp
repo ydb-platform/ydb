@@ -21,8 +21,12 @@ class TDriverMock
 public:
     std::optional<NTable::EScan> LastScan;
 
-    void Touch(NTable::EScan scan) noexcept {
+    void Touch(NTable::EScan scan) override {
         LastScan = scan;
+    }
+
+    void Throw(const std::exception& exc) override {
+        Y_ENSURE(false, exc.what());
     }
 };
 
@@ -75,7 +79,7 @@ public:
     STATEFN(Serve) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvExec, Handle);
-            default: Y_ABORT("unexpected");
+            default: Y_ENSURE(false, "unexpected");
         }
     }
 };
@@ -197,7 +201,7 @@ Y_UNIT_TEST_SUITE(IncrementalRestoreScan) {
 
         actorExec.Execute([&]() {
             UNIT_ASSERT(driver.LastScan && *driver.LastScan == NTable::EScan::Final);
-            scan->Finish(NTable::EAbort::None);
+            scan->Finish(NTable::EStatus::Done);
         });
 
         runtime.GrabEdgeEventRethrow<TEvIncrementalRestoreScan::TEvFinished>(sender);

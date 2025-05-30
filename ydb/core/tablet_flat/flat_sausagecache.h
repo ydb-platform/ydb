@@ -81,10 +81,17 @@ public:
             return Info->IsSticky(Id);
         }
 
-        void Fill(TSharedPageRef shared) {
-            SharedBody = std::move(shared);
+        void Fill(TSharedPageRef sharedBody) {
+            SharedBody = std::move(sharedBody);
             LoadState = LoadStateLoaded;
             PinnedBody = TPinnedPageRef(SharedBody).GetData();
+        }
+
+        void ProvideSharedBody(TSharedPageRef sharedBody) {
+            SharedBody = std::move(sharedBody);
+            SharedBody.UnUse();
+            LoadState = LoadStateNo;
+            PinnedBody = { };
         }
 
         const TSharedData* GetPinnedBody() const noexcept {
@@ -109,7 +116,7 @@ public:
             return PageCollection->Page(pageId).Size;
         }
 
-        TPage* EnsurePage(TPageId pageId) noexcept {
+        TPage* EnsurePage(TPageId pageId) {
             auto* page = GetPage(pageId);
             if (!page) {
                 PageMap.emplace(pageId, THolder<TPage>(page = new TPage(PageCollection->Page(pageId).Size, pageId, this)));
@@ -118,15 +125,15 @@ public:
         }
 
         // Note: this method is only called during a page collection creation
-        void Fill(TPageId pageId, TSharedPageRef page, bool sticky) noexcept {
+        void Fill(TPageId pageId, TSharedPageRef sharedBody, bool sticky) {
             if (sticky) {
-                AddSticky(pageId, page);
+                AddSticky(pageId, sharedBody);
             }
-            EnsurePage(pageId)->Fill(std::move(page));
+            EnsurePage(pageId)->ProvideSharedBody(std::move(sharedBody));
         }
 
-        void AddSticky(TPageId pageId, TSharedPageRef page) noexcept {
-            Y_ABORT_UNLESS(page.IsUsed());
+        void AddSticky(TPageId pageId, TSharedPageRef page) {
+            Y_ENSURE(page.IsUsed());
             if (StickyPages.emplace(pageId, page).second) {
                 StickyPagesSize += TPinnedPageRef(page)->size();
             }
@@ -143,7 +150,6 @@ public:
         const TLogoBlobID Id;
         const TIntrusiveConstPtr<NPageCollection::IPageCollection> PageCollection;
         TPageMap<THolder<TPage>> PageMap;
-        ui64 Users;
 
         explicit TInfo(TIntrusiveConstPtr<NPageCollection::IPageCollection> pack);
         TInfo(const TInfo &info);
@@ -158,10 +164,6 @@ public:
     TIntrusivePtr<TInfo> GetPageCollection(TLogoBlobID id) const;
     void RegisterPageCollection(TIntrusivePtr<TInfo> info);
     TPage::TWaitQueuePtr ForgetPageCollection(TIntrusivePtr<TInfo> info);
-
-    void LockPageCollection(TLogoBlobID id);
-    // Return true for page collections removed after unlock.
-    bool UnlockPageCollection(TLogoBlobID id);
 
     TInfo* Info(TLogoBlobID id);
 

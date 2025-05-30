@@ -985,7 +985,7 @@ public:
 
     NUdf::TUnboxedValuePod DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
         if (state.IsFinish()) {
-            return state.Release();
+            return state;
         } else if (state.IsInvalid()) {
             MakeState(ctx, state);
         }
@@ -1021,12 +1021,12 @@ public:
         const auto make = BasicBlock::Create(context, "make", ctx.Func);
         const auto main = BasicBlock::Create(context, "main", ctx.Func);
 
-        BranchInst::Create(make, main, IsInvalid(statePtr, block), block);
+        BranchInst::Create(make, main, IsInvalid(statePtr, block, context), block);
         block = make;
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
         const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
-        const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TSqueezeSetFlowWrapper::MakeState));
+        const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TSqueezeSetFlowWrapper::MakeState>());
         const auto makeType = FunctionType::get(Type::getVoidTy(context), {self->getType(), ctx.Ctx->getType(), statePtr->getType()}, false);
         const auto makeFuncPtr = CastInst::Create(Instruction::IntToPtr, makeFunc, PointerType::getUnqual(makeType), "function", block);
         CallInst::Create(makeType, makeFuncPtr, {self, ctx.Ctx, statePtr}, "", block);
@@ -1047,7 +1047,7 @@ public:
 
         result->addIncoming(GetFinish(context), block);
 
-        BranchInst::Create(over, more, IsFinish(state, block), block);
+        BranchInst::Create(over, more, IsFinish(state, block, context), block);
 
         block = more;
 
@@ -1063,9 +1063,9 @@ public:
         codegenItemArg->CreateSetValue(ctx, block, item);
         const auto key = GetNodeValue(Key, ctx, block);
 
-        const auto insert = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::Insert));
+        const auto insert = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::Insert>());
 
-        const auto keyArg = WrapArgumentForWindows(key, ctx, block);
+        const auto keyArg = key;
 
         const auto insType = FunctionType::get(Type::getVoidTy(context), {stateArg->getType(), keyArg->getType()}, false);
         const auto insPtr = CastInst::Create(Instruction::IntToPtr, insert, PointerType::getUnqual(insType), "insert", block);
@@ -1075,23 +1075,13 @@ public:
 
         block = done;
 
-        const auto build = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::Build));
+        const auto build = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::Build>());
 
-        if (NYql::NCodegen::ETarget::Windows != ctx.Codegen.GetEffectiveTarget()) {
-            const auto funType = FunctionType::get(valueType, {stateArg->getType()}, false);
-            const auto funcPtr = CastInst::Create(Instruction::IntToPtr, build, PointerType::getUnqual(funType), "build", block);
-            const auto dict = CallInst::Create(funType, funcPtr, {stateArg}, "dict", block);
-            UnRefBoxed(state, ctx, block);
-            result->addIncoming(dict, block);
-        } else {
-            const auto ptr = new AllocaInst(valueType, 0U, "ptr", block);
-            const auto funType = FunctionType::get(Type::getVoidTy(context), {stateArg->getType(), ptr->getType()}, false);
-            const auto funcPtr = CastInst::Create(Instruction::IntToPtr, build, PointerType::getUnqual(funType), "build", block);
-            CallInst::Create(funType, funcPtr, {stateArg, ptr}, "", block);
-            const auto dict = new LoadInst(valueType, ptr, "dict", block);
-            UnRefBoxed(state, ctx, block);
-            result->addIncoming(dict, block);
-        }
+        const auto funType = FunctionType::get(valueType, {stateArg->getType()}, false);
+        const auto funcPtr = CastInst::Create(Instruction::IntToPtr, build, PointerType::getUnqual(funType), "build", block);
+        const auto dict = CallInst::Create(funType, funcPtr, {stateArg}, "dict", block);
+        UnRefBoxed(state, ctx, block);
+        result->addIncoming(dict, block);
 
         new StoreInst(item, statePtr, block);
         BranchInst::Create(over, block);
@@ -1172,7 +1162,7 @@ public:
 
     NUdf::TUnboxedValuePod DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
         if (state.IsFinish()) {
-            return state.Release();
+            return state;
         } else if (state.IsInvalid()) {
             MakeState(ctx, state);
         }
@@ -1212,12 +1202,12 @@ public:
         const auto make = BasicBlock::Create(context, "make", ctx.Func);
         const auto main = BasicBlock::Create(context, "main", ctx.Func);
 
-        BranchInst::Create(make, main, IsInvalid(statePtr, block), block);
+        BranchInst::Create(make, main, IsInvalid(statePtr, block, context), block);
         block = make;
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
         const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
-        const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TSqueezeSetWideWrapper::MakeState));
+        const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TSqueezeSetWideWrapper::MakeState>());
         const auto makeType = FunctionType::get(Type::getVoidTy(context), {self->getType(), ctx.Ctx->getType(), statePtr->getType()}, false);
         const auto makeFuncPtr = CastInst::Create(Instruction::IntToPtr, makeFunc, PointerType::getUnqual(makeType), "function", block);
         CallInst::Create(makeType, makeFuncPtr, {self, ctx.Ctx, statePtr}, "", block);
@@ -1238,7 +1228,7 @@ public:
 
         result->addIncoming(GetFinish(context), block);
 
-        BranchInst::Create(over, more, IsFinish(state, block), block);
+        BranchInst::Create(over, more, IsFinish(state, block, context), block);
 
         block = more;
 
@@ -1260,9 +1250,9 @@ public:
 
         const auto key = PasstroughKey ? getres.second[*PasstroughKey](ctx, block) : GetNodeValue(Key, ctx, block);
 
-        const auto insert = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::Insert));
+        const auto insert = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::Insert>());
 
-        const auto keyArg = WrapArgumentForWindows(key, ctx, block);
+        const auto keyArg = key;
 
         const auto insType = FunctionType::get(Type::getVoidTy(context), {stateArg->getType(), keyArg->getType()}, false);
         const auto insPtr = CastInst::Create(Instruction::IntToPtr, insert, PointerType::getUnqual(insType), "insert", block);
@@ -1272,23 +1262,13 @@ public:
 
         block = done;
 
-        const auto build = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::Build));
+        const auto build = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::Build>());
 
-        if (NYql::NCodegen::ETarget::Windows != ctx.Codegen.GetEffectiveTarget()) {
-            const auto funType = FunctionType::get(valueType, {stateArg->getType()}, false);
-            const auto funcPtr = CastInst::Create(Instruction::IntToPtr, build, PointerType::getUnqual(funType), "build", block);
-            const auto dict = CallInst::Create(funType, funcPtr, {stateArg}, "dict", block);
-            UnRefBoxed(state, ctx, block);
-            result->addIncoming(dict, block);
-        } else {
-            const auto ptr = new AllocaInst(valueType, 0U, "ptr", block);
-            const auto funType = FunctionType::get(Type::getVoidTy(context), {stateArg->getType(), ptr->getType()}, false);
-            const auto funcPtr = CastInst::Create(Instruction::IntToPtr, build, PointerType::getUnqual(funType), "build", block);
-            CallInst::Create(funType, funcPtr, {stateArg, ptr}, "", block);
-            const auto dict = new LoadInst(valueType, ptr, "dict", block);
-            UnRefBoxed(state, ctx, block);
-            result->addIncoming(dict, block);
-        }
+        const auto funType = FunctionType::get(valueType, {stateArg->getType()}, false);
+        const auto funcPtr = CastInst::Create(Instruction::IntToPtr, build, PointerType::getUnqual(funType), "build", block);
+        const auto dict = CallInst::Create(funType, funcPtr, {stateArg}, "dict", block);
+        UnRefBoxed(state, ctx, block);
+        result->addIncoming(dict, block);
 
         new StoreInst(GetFinish(context), statePtr, block);
         BranchInst::Create(over, block);
@@ -1535,12 +1515,12 @@ public:
         const auto make = BasicBlock::Create(context, "make", ctx.Func);
         const auto main = BasicBlock::Create(context, "main", ctx.Func);
 
-        BranchInst::Create(make, main, IsInvalid(statePtr, block), block);
+        BranchInst::Create(make, main, IsInvalid(statePtr, block, context), block);
         block = make;
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
         const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
-        const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TSqueezeMapFlowWrapper::MakeState));
+        const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TSqueezeMapFlowWrapper::MakeState>());
         const auto makeType = FunctionType::get(Type::getVoidTy(context), {self->getType(), ctx.Ctx->getType(), statePtr->getType()}, false);
         const auto makeFuncPtr = CastInst::Create(Instruction::IntToPtr, makeFunc, PointerType::getUnqual(makeType), "function", block);
         CallInst::Create(makeType, makeFuncPtr, {self, ctx.Ctx, statePtr}, "", block);
@@ -1561,7 +1541,7 @@ public:
 
         result->addIncoming(GetFinish(context), block);
 
-        BranchInst::Create(over, more, IsFinish(state, block), block);
+        BranchInst::Create(over, more, IsFinish(state, block, context), block);
 
         block = more;
 
@@ -1578,10 +1558,10 @@ public:
         const auto key = GetNodeValue(Key, ctx, block);
         const auto payload = GetNodeValue(Payload, ctx, block);
 
-        const auto insert = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::Insert));
+        const auto insert = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::Insert>());
 
-        const auto keyArg = WrapArgumentForWindows(key, ctx, block);
-        const auto payloadArg = WrapArgumentForWindows(payload, ctx, block);
+        const auto keyArg = key;
+        const auto payloadArg = payload;
 
         const auto insType = FunctionType::get(Type::getVoidTy(context), {stateArg->getType(), keyArg->getType(), payloadArg->getType()}, false);
         const auto insPtr = CastInst::Create(Instruction::IntToPtr, insert, PointerType::getUnqual(insType), "insert", block);
@@ -1591,23 +1571,13 @@ public:
 
         block = done;
 
-        const auto build = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::Build));
+        const auto build = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::Build>());
 
-        if (NYql::NCodegen::ETarget::Windows != ctx.Codegen.GetEffectiveTarget()) {
-            const auto funType = FunctionType::get(valueType, {stateArg->getType()}, false);
-            const auto funcPtr = CastInst::Create(Instruction::IntToPtr, build, PointerType::getUnqual(funType), "build", block);
-            const auto dict = CallInst::Create(funType, funcPtr, {stateArg}, "dict", block);
-            UnRefBoxed(state, ctx, block);
-            result->addIncoming(dict, block);
-        } else {
-            const auto ptr = new AllocaInst(valueType, 0U, "ptr", block);
-            const auto funType = FunctionType::get(Type::getVoidTy(context), {stateArg->getType(), ptr->getType()}, false);
-            const auto funcPtr = CastInst::Create(Instruction::IntToPtr, build, PointerType::getUnqual(funType), "build", block);
-            CallInst::Create(funType, funcPtr, {stateArg, ptr}, "", block);
-            const auto dict = new LoadInst(valueType, ptr, "dict", block);
-            UnRefBoxed(state, ctx, block);
-            result->addIncoming(dict, block);
-        }
+        const auto funType = FunctionType::get(valueType, {stateArg->getType()}, false);
+        const auto funcPtr = CastInst::Create(Instruction::IntToPtr, build, PointerType::getUnqual(funType), "build", block);
+        const auto dict = CallInst::Create(funType, funcPtr, {stateArg}, "dict", block);
+        UnRefBoxed(state, ctx, block);
+        result->addIncoming(dict, block);
 
         new StoreInst(item, statePtr, block);
         BranchInst::Create(over, block);
@@ -1734,12 +1704,12 @@ public:
         const auto make = BasicBlock::Create(context, "make", ctx.Func);
         const auto main = BasicBlock::Create(context, "main", ctx.Func);
 
-        BranchInst::Create(make, main, IsInvalid(statePtr, block), block);
+        BranchInst::Create(make, main, IsInvalid(statePtr, block, context), block);
         block = make;
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
         const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
-        const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TSqueezeMapWideWrapper::MakeState));
+        const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TSqueezeMapWideWrapper::MakeState>());
         const auto makeType = FunctionType::get(Type::getVoidTy(context), {self->getType(), ctx.Ctx->getType(), statePtr->getType()}, false);
         const auto makeFuncPtr = CastInst::Create(Instruction::IntToPtr, makeFunc, PointerType::getUnqual(makeType), "function", block);
         CallInst::Create(makeType, makeFuncPtr, {self, ctx.Ctx, statePtr}, "", block);
@@ -1760,7 +1730,7 @@ public:
 
         result->addIncoming(GetFinish(context), block);
 
-        BranchInst::Create(over, more, IsFinish(state, block), block);
+        BranchInst::Create(over, more, IsFinish(state, block, context), block);
 
         block = more;
 
@@ -1783,10 +1753,10 @@ public:
         const auto key = PasstroughKey ? getres.second[*PasstroughKey](ctx, block) : GetNodeValue(Key, ctx, block);
         const auto payload = PasstroughPayload ? getres.second[*PasstroughPayload](ctx, block) : GetNodeValue(Payload, ctx, block);
 
-        const auto insert = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::Insert));
+        const auto insert = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::Insert>());
 
-        const auto keyArg = WrapArgumentForWindows(key, ctx, block);
-        const auto payloadArg = WrapArgumentForWindows(payload, ctx, block);
+        const auto keyArg = key;
+        const auto payloadArg = payload;
 
         const auto insType = FunctionType::get(Type::getVoidTy(context), {stateArg->getType(), keyArg->getType(), payloadArg->getType()}, false);
         const auto insPtr = CastInst::Create(Instruction::IntToPtr, insert, PointerType::getUnqual(insType), "insert", block);
@@ -1796,23 +1766,13 @@ public:
 
         block = done;
 
-        const auto build = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::Build));
+        const auto build = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::Build>());
 
-        if (NYql::NCodegen::ETarget::Windows != ctx.Codegen.GetEffectiveTarget()) {
-            const auto funType = FunctionType::get(valueType, {stateArg->getType()}, false);
-            const auto funcPtr = CastInst::Create(Instruction::IntToPtr, build, PointerType::getUnqual(funType), "build", block);
-            const auto dict = CallInst::Create(funType, funcPtr, {stateArg}, "dict", block);
-            UnRefBoxed(state, ctx, block);
-            result->addIncoming(dict, block);
-        } else {
-            const auto ptr = new AllocaInst(valueType, 0U, "ptr", block);
-            const auto funType = FunctionType::get(Type::getVoidTy(context), {stateArg->getType(), ptr->getType()}, false);
-            const auto funcPtr = CastInst::Create(Instruction::IntToPtr, build, PointerType::getUnqual(funType), "build", block);
-            CallInst::Create(funType, funcPtr, {stateArg, ptr}, "", block);
-            const auto dict = new LoadInst(valueType, ptr, "dict", block);
-            UnRefBoxed(state, ctx, block);
-            result->addIncoming(dict, block);
-        }
+        const auto funType = FunctionType::get(valueType, {stateArg->getType()}, false);
+        const auto funcPtr = CastInst::Create(Instruction::IntToPtr, build, PointerType::getUnqual(funType), "build", block);
+        const auto dict = CallInst::Create(funType, funcPtr, {stateArg}, "dict", block);
+        UnRefBoxed(state, ctx, block);
+        result->addIncoming(dict, block);
 
         new StoreInst(GetFinish(context), statePtr, block);
         BranchInst::Create(over, block);

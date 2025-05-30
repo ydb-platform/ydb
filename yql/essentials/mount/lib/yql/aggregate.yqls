@@ -34,6 +34,8 @@
 (let bit_and_traits_factory_raw (lambda '(list_type) (Apply simple_traits_factory list_type (lambda '(one two) (BitAnd one two)))))
 (let bit_or_traits_factory_raw (lambda '(list_type) (Apply simple_traits_factory list_type (lambda '(one two) (BitOr one two)))))
 (let bit_xor_traits_factory_raw (lambda '(list_type) (Apply simple_traits_factory list_type (lambda '(one two) (BitXor one two)))))
+(let first_traits_factory_raw (lambda '(list_type) (Apply simple_traits_factory list_type (lambda '(lhs rhs) (Coalesce rhs lhs)))))
+(let last_traits_factory_raw (lambda '(list_type) (Apply simple_traits_factory list_type (lambda '(lhs rhs) (Coalesce lhs rhs)))))
 
 # list_type:type
 # support optional values
@@ -380,8 +382,8 @@
 # list_type:type
 # doesn't support optional values
 (let hyperloglog_traits_factory_raw (lambda '(list_type precision) (block '(
-    (let init (lambda '(value parent) (NamedApply (Udf 'HyperLogLog.Create) '((Apply (Udf 'Digest.MurMurHash) (Pickle value)) precision) (AsStruct) (DependsOn parent))))
-    (let update (lambda '(value state parent) (NamedApply (Udf 'HyperLogLog.AddValue) '(state (Apply (Udf 'Digest.MurMurHash) (Pickle value))) (AsStruct) (DependsOn parent))))
+    (let init (lambda '(value parent) (NamedApply (Udf 'HyperLogLog.Create) '((Apply (Udf 'Digest.MurMurHash) (StablePickle value)) precision) (AsStruct) (DependsOn parent))))
+    (let update (lambda '(value state parent) (NamedApply (Udf 'HyperLogLog.AddValue) '(state (Apply (Udf 'Digest.MurMurHash) (StablePickle value))) (AsStruct) (DependsOn parent))))
     (let save (lambda '(state) (Apply (Udf 'HyperLogLog.Serialize) state)))
     (let load (lambda '(state) (Apply (Udf 'HyperLogLog.Deserialize) state)))
     (let merge (lambda '(one two) (Apply (Udf 'HyperLogLog.Merge) one two)))
@@ -592,7 +594,7 @@
 (let max_traits_factory_opt (lambda '(list_type) (Apply simple_traits_factory list_type (lambda '(one two) (AggrMax one two)))))
 (let sum_traits_factory_opt (lambda '(list_type) (block '(
     (let item_type (Apply remove_optional_type (ListItemType list_type)))
-    (return (Apply simple_traits_factory_map list_type 
+    (return (Apply simple_traits_factory_map list_type
         (lambda '(one two) (AggrAdd one two))
         (lambda '(value) (MatchType item_type 'Interval (lambda '() (Apply convert_interval_to_decimal value)) (lambda '() (WidenIntegral value))))
         (lambda '(value) (MatchType item_type 'Interval (lambda '() (Apply convert_decimal_to_interval value)) (lambda '() value)))
@@ -601,6 +603,8 @@
 (let bit_and_traits_factory_opt (lambda '(list_type) (Apply optional_traits_factory list_type bit_and_traits_factory_raw)))
 (let bit_or_traits_factory_opt (lambda '(list_type) (Apply optional_traits_factory list_type bit_or_traits_factory_raw)))
 (let bit_xor_traits_factory_opt (lambda '(list_type) (Apply optional_traits_factory list_type bit_xor_traits_factory_raw)))
+(let first_traits_factory_opt (lambda '(list_type) (Apply optional_traits_factory list_type first_traits_factory_raw)))
+(let last_traits_factory_opt (lambda '(list_type) (Apply optional_traits_factory list_type last_traits_factory_raw)))
 (let avg_traits_factory_opt (lambda '(list_type) (Apply optional_traits_factory list_type avg_traits_factory_raw)))
 (let variance_0_0_traits_factory_opt (lambda '(list_type) (Apply optional_traits_factory list_type variance_0_0_traits_factory_raw)))
 (let variance_1_0_traits_factory_opt (lambda '(list_type) (Apply optional_traits_factory list_type variance_1_0_traits_factory_raw)))
@@ -674,6 +678,8 @@
 (let bit_and_traits_factory (lambda '(list_type extractor) (Apply extractor_traits_factory list_type extractor bit_and_traits_factory_opt)))
 (let bit_or_traits_factory (lambda '(list_type extractor) (Apply extractor_traits_factory list_type extractor bit_or_traits_factory_opt)))
 (let bit_xor_traits_factory (lambda '(list_type extractor) (Apply extractor_traits_factory list_type extractor bit_xor_traits_factory_opt)))
+(let first_traits_factory (lambda '(list_type extractor) (Apply extractor_traits_factory list_type extractor first_traits_factory_raw)))
+(let last_traits_factory (lambda '(list_type extractor) (Apply extractor_traits_factory list_type extractor last_traits_factory_raw)))
 (let and_traits_factory (lambda '(list_type extractor) (Apply extractor_traits_factory list_type (lambda '(v) (SafeCast (Apply extractor v) (DataType 'Bool))) bool_and_traits_factory_opt)))
 (let or_traits_factory (lambda '(list_type extractor) (Apply extractor_traits_factory list_type (lambda '(v) (SafeCast (Apply extractor v) (DataType 'Bool))) bool_or_traits_factory_opt)))
 (let xor_traits_factory (lambda '(list_type extractor) (Apply extractor_traits_factory list_type (lambda '(v) (SafeCast (Apply extractor v) (DataType 'Bool))) bool_xor_traits_factory_opt)))
@@ -963,6 +969,8 @@
 (export bit_and_traits_factory)
 (export bit_or_traits_factory)
 (export bit_xor_traits_factory)
+(export first_traits_factory)
+(export last_traits_factory)
 (export and_traits_factory)
 (export or_traits_factory)
 (export xor_traits_factory)

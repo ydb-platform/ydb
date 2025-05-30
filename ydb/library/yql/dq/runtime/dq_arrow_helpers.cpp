@@ -1,11 +1,13 @@
 #include "dq_arrow_helpers.h"
 
 #include <cstddef>
-#include <yql/essentials/public/udf/udf_value.h>
-#include <yql/essentials/minikql/defs.h>
+#include <yql/essentials/minikql/arrow/arrow_util.h>
+#include <yql/essentials/minikql/computation/mkql_block_reader.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/minikql/defs.h>
 #include <yql/essentials/minikql/mkql_node.h>
-
+#include <yql/essentials/public/udf/udf_value.h>
+#include <yql/essentials/utils/yql_panic.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
@@ -942,6 +944,203 @@ std::shared_ptr<arrow::Array> DeserializeArray(const std::string& blob, std::sha
     return (*batch)->column(0);
 }
 
+// Block splitter
+
+namespace {
+
+class TBlockSplitter : public IBlockSplitter {
+    class TItem {
+    public:
+        TItem(TBlockSplitter& self, const std::vector<arrow::Datum>& data)
+            : Self(self)
+            , Data(data)
+        {
+            ArraysIdx.reserve(Self.Width);
+            for (ui64 i = 0; i < Self.Width; ++i) {
+                if (Data[i].is_scalar()) {
+                    ScalarsSize += Self.GetDatumMemorySize(i, Data[i]);
+                } else {
+                    ArraysIdx.emplace_back(i);
+                }
+            }
+
+            Length = Data.back().scalar_as<arrow::UInt64Scalar>().value;
+            UpdateArraysSize();
+        }
+
+        ui64 GetLength() const {
+            return Length;
+        }
+
+        ui64 GetSize() const {
+            return ScalarsSize + ArraysSize;
+        }
+
+        std::vector<arrow::Datum> GetData() const {
+            std::vector<arrow::Datum> result(Data);
+            for (ui64 i : ArraysIdx) {
+                result[i] = DeepSlice(result[i].array(), Offset, Length);
+            }
+            result.back() = arrow::Datum(std::make_shared<arrow::UInt64Scalar>(Length));
+            return result;
+        }
+
+        TItem PopBack(ui64 numberRows) {
+            YQL_ENSURE(numberRows <= Length, "Can not pop more than number of rows");
+            Length -= numberRows;
+            UpdateArraysSize();
+
+            return TItem(*this, Offset + Length, numberRows);
+        }
+
+    private:
+        TItem(const TItem& other, ui64 offset, ui64 length)
+            : Self(other.Self)
+            , Data(other.Data)
+            , ArraysIdx(other.ArraysIdx)
+            , Offset(offset)
+            , Length(length)
+            , ScalarsSize(other.ScalarsSize)
+        {
+            UpdateArraysSize();
+        }
+
+        void UpdateArraysSize() {
+            ArraysSize = 0;
+            for (ui64 i : ArraysIdx) {
+                const auto& array = *Data[i].array();
+                ArraysSize += Self.GetColumnReader(i).GetSliceDataWeight(array, array.offset + Offset, Length);
+            }
+        }
+
+    private:
+        TBlockSplitter& Self;
+        const std::vector<arrow::Datum>& Data;
+        std::vector<ui64> ArraysIdx;
+        ui64 Offset = 0;
+        ui64 Length = 0;
+        ui64 ScalarsSize = 0;
+        ui64 ArraysSize = 0;
+    };
+
+public:
+    TBlockSplitter(const TVector<const TBlockType*>& items, ui64 chunkSizeLimit)
+        : Items(items)
+        , Width(items.size())
+        , ChunkSizeLimit(chunkSizeLimit)
+        , ScalarSizes(Width)
+        , BlockReaders(Width)
+    {}
+
+    bool ShouldSplitItem(const NUdf::TUnboxedValuePod* values, ui32 count) override {
+        const auto& datums = ExtractDatums(values, count);
+
+        ui64 itemSize = 0;
+        for (size_t i = 0; i < Width; ++i) {
+            itemSize += GetDatumMemorySize(i, datums[i]);
+        }
+        return itemSize > ChunkSizeLimit;
+    }
+
+    std::vector<std::vector<arrow::Datum>> SplitItem(const NUdf::TUnboxedValuePod* values, ui32 count) override {
+        const auto& datums = ExtractDatums(values, count);
+
+        SplitStack.clear();
+        SplitStack.emplace_back(*this, datums);
+        std::vector<std::vector<arrow::Datum>> result;
+
+        const auto estimatedSize = SplitStack.back().GetSize() / std::max(ChunkSizeLimit, ui64(1));
+        result.reserve(estimatedSize);
+        while (!SplitStack.empty()) {
+            auto item = std::move(SplitStack.back());
+            SplitStack.pop_back();
+
+            while (item.GetSize() > ChunkSizeLimit) {
+                if (item.GetLength() <= 1) {
+                    throw yexception() << "Row size in block is " << item.GetSize() << ", that is larger than allowed limit " << ChunkSizeLimit;
+                }
+                SplitStack.emplace_back(item.PopBack(item.GetLength() / 2));
+            }
+            result.emplace_back(item.GetData());
+        }
+        return result;
+    }
+
+private:
+    std::vector<arrow::Datum> ExtractDatums(const NUdf::TUnboxedValuePod* values, ui32 count) const {
+        YQL_ENSURE(count == Width, "Invalid width");
+
+        std::vector<arrow::Datum> result;
+        result.reserve(Width);
+        for (size_t i = 0; i < Width; ++i) {
+            const auto& datum = result.emplace_back(TArrowBlock::From(values[i]).GetDatum());
+            YQL_ENSURE(datum.is_array() || datum.is_scalar(), "Expecting array or scalar");
+        }
+        return result;
+    }
+
+    ui64 GetDatumMemorySize(ui64 index, const arrow::Datum& datum) {
+        YQL_ENSURE(index < Width, "Invalid index");
+        if (datum.is_array()) {
+            return GetColumnReader(index).GetDataWeight(*datum.array());
+        }
+
+        if (!ScalarSizes[index]) {
+            const auto& array = ARROW_RESULT(arrow::MakeArrayFromScalar(*datum.scalar(), 1));
+            ScalarSizes[index] = NUdf::GetSizeOfArrayDataInBytes(*array->data());
+        }
+        return *ScalarSizes[index];
+    }
+
+    IBlockReader& GetColumnReader(ui64 index) {
+        YQL_ENSURE(index < Width, "Invalid index");
+        if (!BlockReaders[index]) {
+            BlockReaders[index] = MakeBlockReader(TTypeInfoHelper(), Items[index]->GetItemType());
+        }
+        return *BlockReaders[index];
+    }
+
+private:
+    const TVector<const TBlockType*> Items;
+    const ui64 Width;
+    const ui64 ChunkSizeLimit;
+
+    std::vector<std::optional<ui64>> ScalarSizes;
+    std::vector<std::unique_ptr<IBlockReader>> BlockReaders;
+    std::vector<TItem> SplitStack;
+};
+
+} // namespace
+
+IBlockSplitter::TPtr CreateBlockSplitter(const TType* type, ui64 chunkSizeLimit) {
+    if (!type->IsMulti()) {
+        // Not supported for legacy blocks
+        return nullptr;
+    }
+
+    const TMultiType* multiType = static_cast<const TMultiType*>(type);
+    const ui32 width = multiType->GetElementsCount();
+    YQL_ENSURE(width > 0);
+
+    TVector<const TBlockType*> items;
+    items.reserve(width);
+    for (ui32 i = 0; i < width - 1; i++) {
+        const auto elementType = multiType->GetElementType(i);
+        YQL_ENSURE(elementType->IsBlock());
+        items.push_back(static_cast<const TBlockType*>(elementType));
+    }
+
+    const auto lengthType = multiType->GetElementType(width - 1);
+    YQL_ENSURE(lengthType->IsBlock());
+
+    const TBlockType* lengthBlockType = static_cast<const TBlockType*>(lengthType);
+    YQL_ENSURE(lengthBlockType->GetShape() == TBlockType::EShape::Scalar);
+    YQL_ENSURE(lengthBlockType->GetItemType()->IsData());
+    YQL_ENSURE(static_cast<const TDataType*>(lengthBlockType->GetItemType())->GetDataSlot() == NUdf::EDataSlot::Uint64);
+    items.push_back(lengthBlockType);
+
+    return MakeIntrusive<TBlockSplitter>(items, chunkSizeLimit);
+}
+
 } // namespace NArrow
 } // namespace NYql
-

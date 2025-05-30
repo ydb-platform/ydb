@@ -1,0 +1,598 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 015d12d9cc3be7f5250630571bbf5c61
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2013 Ted Unangst <tedu@openbsd.org>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/bcrypt_pbkdf.c [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0791aca4f502feb2ec8cb5d85dc00043
+BELONGS ya.make
+    License text:
+        /* Copyright (c) 2004-2008, 2010, Sara Golemon <sarag@libssh2.org>
+         * Copyright (c) 2009-2014 by Daniel Stenberg
+         * Copyright (c) 2010 Simon Josefsson
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/libssh2_priv.h [3:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0aebfd5d2b2f75ffc4dfa8984f32c326
+BELONGS ya.make
+    License text:
+        /* Copyright (c) 2004-2009, Sara Golemon <sarag@libssh2.org>
+         * Copyright (c) 2009-2015 Daniel Stenberg
+         * Copyright (c) 2010 Simon Josefsson <simon@josefsson.org>
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/libssh2.h [1:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1b17c2000039be6f8fcd83cc884a4549
+BELONGS ya.make
+    License text:
+        /* Copyright (c) 2004-2007, 2019, Sara Golemon <sarag@libssh2.org>
+         * Copyright (c) 2010-2014, Daniel Stenberg <daniel@haxx.se>
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/comp.c [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1ff8a6702987040c6081f4e4e8558391
+BELONGS ya.make
+    License text:
+        /* Copyright (c) 2004-2006, Sara Golemon <sarag@libssh2.org>
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/libssh2_publickey.h [1:2]
+        src/hostkey.c [1:3]
+        src/openssl.c [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 2782dea07928e2678379c8eba4944e24
+BELONGS ya.make
+    License text:
+         * Author: Tatu Ylonen <ylo@cs.hut.fi>
+         * Copyright (c) 1995 Tatu Ylonen <ylo@cs.hut.fi>, Espoo, Finland
+         *                    All rights reserved
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/agent_win.c [76:78]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 2ade0e629bfc4f486bf5801f26adb7c3
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [1:9]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 2b5522be025433ba7204bd1e65ea5fa8
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [1:9]
+        src/channel.c [1:3]
+        src/misc.c [1:4]
+        src/session.c [1:4]
+        src/session.h [3:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3825f76297de35a09482d248a3b0c1aa
+BELONGS ya.make
+    License text:
+        /* Copyright (c) 2004-2009, Sara Golemon <sarag@libssh2.org>
+         * Copyright (c) 2009-2015 Daniel Stenberg
+         * Copyright (c) 2010 Simon Josefsson <simon@josefsson.org>
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/libssh2.h [1:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 39576df1509c67e327ee115665da4bfb
+BELONGS ya.make
+    License text:
+        /* Copyright (C) 2009 Daniel Stenberg.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/version.c [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4f54ec65a31ab5c144a5ee5cee3c17a3
+BELONGS ya.make
+    License text:
+         * Copyright 1997 Niels Provos <provos@physnet.uni-hamburg.de>
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/blf.h [7:8]
+        src/blowfish.c [4:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 534bce1367f3f2acaae4cf8670d7e6d0
+BELONGS ya.make
+    License text:
+        /* Copyright (c) 2009, 2010 Simon Josefsson <simon@josefsson.org>
+         * Copyright (c) 2004-2007, Sara Golemon <sarag@libssh2.org>
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/crypt.c [1:3]
+        src/kex.c [1:3]
+        src/mac.c [1:2]
+        src/packet.c [1:5]
+        src/publickey.c [1:3]
+        src/userauth.c [1:4]
+        src/userauth.h [1:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 53af105614b25c184f47a58fd92c0435
+BELONGS ya.make
+    License text:
+        /* Copyright (c) 2004-2007, 2019, Sara Golemon <sarag@libssh2.org>
+         * Copyright (c) 2010-2014, Daniel Stenberg <daniel@haxx.se>
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/comp.c [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 570818102d3a5a946d11da9acdfb84e0
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/packet.c [1:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 67274ac0cfaf39698d11d0207c8a2660
+BELONGS ya.make
+    License text:
+        /* Copyright (C) 2010  Simon Josefsson
+         * Author: Simon Josefsson
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/keepalive.c [1:2]
+        src/libssh2_priv.h [3:6]
+        src/misc.c [1:4]
+        src/packet.c [1:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 68da3c6c43eb8ef6fe3fa5270e05b850
+BELONGS ya.make
+    License text:
+        /* Copyright (c) 2004-2008, Sara Golemon <sarag@libssh2.org>
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/libssh2_sftp.h [1:2]
+        src/scp.c [1:3]
+        src/sftp.c [1:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6b5b6a00f477cb1530e5de380ba6b359
+BELONGS ya.make
+    License text:
+        /* Copyright (c) 2008-2010 by Daniel Stenberg
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/channel.h [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7c13f54b59cfefb04f94fd6aa1e900a0
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [1:9]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7d8d1c90a8273aadac253241e910797d
+BELONGS ya.make
+    License text:
+        /* Copyright (C) 2009-2010 by Daniel Stenberg
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/comp.h [3:3]
+        src/mac.h [3:3]
+        src/session.h [3:6]
+        src/transport.c [2:3]
+        src/transport.h [4:5]
+        src/userauth.h [1:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 888befd99d5ca6da328d9c983fc1cb7c
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [1:9]
+        src/agent_win.c [88:88]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8fa99d1b29fb78f938d8af286b6d96c4
+BELONGS ya.make
+    License text:
+        /* Copyright (c) 2004-2007, Sara Golemon <sarag@libssh2.org>
+         * Copyright (c) 2010-2019, Daniel Stenberg <daniel@haxx.se>
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/kex.c [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 90ef3e9de99612bfad27590b6622d6e3
+BELONGS ya.make
+    License text:
+        /* Copyright (C) 2007 The Written Word, Inc.
+         * Copyright (C) 2008, Simon Josefsson
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/pem.c [1:3]
+        src/transport.c [1:1]
+        src/transport.h [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9278850fedf6a1549b2039d9ccb1f470
+BELONGS ya.make
+    License text:
+        /* Copyright (c) 2004-2009, Sara Golemon <sarag@libssh2.org>
+         * Copyright (c) 2009-2015 Daniel Stenberg
+         * Copyright (c) 2010 Simon Josefsson <simon@josefsson.org>
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/libssh2.h [1:4]
+        src/global.c [1:3]
+        src/session.c [1:4]
+        src/session.h [3:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 95f18264ff7d4ef84cbaec7f0e785add
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [1:9]
+        src/agent_win.c [110:111]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9830cdd2d921037187902695f551e5e7
+BELONGS ya.make
+    License text:
+         * Portions copyright Robert de Bath, Joris van Rantwijk, Delian
+         * Delchev, Andreas Schultz, Jeroen Massar, Wez Furlong, Nicolas
+         * Barry, Justin Bradford, Ben Harris, Malcolm Smith, Ahmad Khalifa,
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/agent.c [251:253]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 98cde6f2d77262ad2eddd2d51b615c19
+BELONGS ya.make
+    License text:
+        /* Copyright (c) 2009, 2010 Simon Josefsson <simon@josefsson.org>
+         * Copyright (c) 2004-2007, Sara Golemon <sarag@libssh2.org>
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/crypt.c [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9abb58cc6ca9f18aae79f6a8944a210f
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2009 by Daiki Ueno
+         * Copyright (C) 2010-2014 by Daniel Stenberg
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/agent.c [2:4]
+        src/agent.h [4:6]
+        src/agent_win.c [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a1e749aa38227b99cf0e42ba0edd4cf7
+BELONGS ya.make
+    License text:
+        /* Copyright (C) 2009, 2010 Simon Josefsson
+         * Copyright (C) 2006, 2007 The Written Word, Inc.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/crypto.h [3:4]
+        src/openssl.c [1:2]
+        src/openssl.h [3:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ac2e14fea75920336911373f5c2f7d93
+BELONGS ya.make
+    License text:
+        /* Copyright (C) 2007 The Written Word, Inc.
+         * Copyright (C) 2008, Simon Josefsson
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/pem.c [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b17db50f423993a0f25d880e12ed61b4
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [1:9]
+
+KEEP     COPYRIGHT_SERVICE_LABEL bd2f5cd421eb708d744187d4898c050e
+BELONGS ya.make
+    License text:
+        /* Copyright (c) 2004-2006, Sara Golemon <sarag@libssh2.org>
+         * Copyright (c) 2009-2019 by Daniel Stenberg
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/hostkey.c [1:3]
+        src/knownhost.c [2:3]
+        src/misc.c [1:4]
+        src/misc.h [3:3]
+        src/scp.c [1:3]
+        src/sftp.c [1:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL bdec04ddf7d3f11986eb3dd2bc72d61f
+BELONGS ya.make
+    License text:
+        /* Copyright (C) 2009, 2010 Simon Josefsson
+         * Copyright (C) 2006, 2007 The Written Word, Inc.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/crypto.h [3:4]
+        src/openssl.c [1:2]
+        src/openssl.h [3:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c529acc42438072dcbc25f3bb5c936a0
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2009 by Daiki Ueno
+         * Copyright (C) 2010-2014 by Daniel Stenberg
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/agent.c [2:4]
+        src/agent.h [4:6]
+        src/agent_win.c [2:4]
+        src/publickey.c [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL cbd08bae5220f723f7ff1413c909cd89
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2010 - 2012 by Daniel Stenberg
+         * Author: Daniel Stenberg <daniel@haxx.se>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/sftp.h [4:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL cd4240f57f313d2b48fbe8dd8e9cc486
+BELONGS ya.make
+    License text:
+        /* Copyright (c) 2010 Lars Nordin <Lars.Nordin@SDlabs.se>
+         * Copyright (C) 2010 Simon Josefsson <simon@josefsson.org>
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/global.c [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d6aa2ea81dacc9a837445f996ea86240
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2010-2019 Daniel Stenberg
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/crypto.h [5:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d729aff57c84e6942776376b627cff8b
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2010 by Daniel Stenberg
+         * Author: Daniel Stenberg <daniel@haxx.se>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/packet.h [4:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL db8fbd71e3c10b3ec949b0d2dbc858f5
+BELONGS ya.make
+    License text:
+        /* Copyright (c) 2004-2007 Sara Golemon <sarag@libssh2.org>
+         * Copyright (c) 2005 Mikhail Gusarov <dottedmag@dottedmag.net>
+         * Copyright (c) 2008-2019 by Daniel Stenberg
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/channel.c [1:3]
+        src/userauth.c [1:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e91491377afbb09044ac5f2b9e31fe37
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [1:9]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e9479e7f8a61b8dc82bdbf0b417cd28f
+BELONGS ya.make
+    License text:
+        /* Copyright (c) 2004-2007 Sara Golemon <sarag@libssh2.org>
+         * Copyright (c) 2009-2015 by Daniel Stenberg
+         * Copyright (c) 2010 Simon Josefsson <simon@josefsson.org>
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/session.c [1:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f3db0b5440342624c0de1daf83ccb20d
+BELONGS ya.make
+    License text:
+        /* Copyright (c) 2004-2008, 2010, Sara Golemon <sarag@libssh2.org>
+         * Copyright (c) 2009-2014 by Daniel Stenberg
+         * Copyright (c) 2010 Simon Josefsson
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/libssh2_priv.h [3:6]
+        src/packet.c [1:5]
+        src/userauth.c [1:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f5a9f97f868be216b9e00bcfb2716cd9
+BELONGS ya.make
+    License text:
+        /* Copyright (c) 2004-2007 Sara Golemon <sarag@libssh2.org>
+         * Copyright (c) 2005 Mikhail Gusarov <dottedmag@dottedmag.net>
+         * Copyright (c) 2008-2019 by Daniel Stenberg
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/channel.c [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f92367c54df53d3f20d06f4870225e8e
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [1:9]
+        src/sftp.c [1:4]

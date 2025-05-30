@@ -6,6 +6,8 @@
 
 #include <yt/yt/client/transaction_client/public.h>
 
+#include <yt/yt/client/prerequisite_client/public.h>
+
 #include <yt/yt/client/bundle_controller_client/public.h>
 
 #include <yt/yt/library/auth/authentication_options.h>
@@ -15,7 +17,7 @@
 #include <yt/yt/core/rpc/public.h>
 
 #include <library/cpp/yt/containers/enum_indexed_array.h>
-#include <library/cpp/yt/small_containers/compact_flat_map.h>
+#include <library/cpp/yt/compact_containers/compact_flat_map.h>
 
 namespace NYT::NApi {
 
@@ -84,7 +86,7 @@ DEFINE_ENUM(ETransactionCoordinatorPrepareMode,
     ((Late)             (1))
 );
 
-DEFINE_ENUM(EProxyType,
+DEFINE_ENUM(EProxyKind,
     ((Http) (1))
     ((Rpc)  (2))
     ((Grpc) (3))
@@ -117,7 +119,7 @@ DECLARE_REFCOUNTED_STRUCT(IJournalWritesObserver)
 
 struct TConnectionOptions;
 
-using TClientOptions = NAuth::TAuthenticationOptions;
+struct TClientOptions;
 
 struct TTransactionParticipantOptions;
 
@@ -133,11 +135,14 @@ struct TTabletRangeOptions;
 struct TGetFileFromCacheResult;
 struct TPutFileToCacheResult;
 
+struct TGetCurrentUserOptions;
+
 DECLARE_REFCOUNTED_STRUCT(IConnection)
 DECLARE_REFCOUNTED_STRUCT(IClientBase)
 DECLARE_REFCOUNTED_STRUCT(IClient)
 DECLARE_REFCOUNTED_STRUCT(IInternalClient)
 DECLARE_REFCOUNTED_STRUCT(ITransaction)
+DECLARE_REFCOUNTED_STRUCT(IPrerequisite)
 DECLARE_REFCOUNTED_STRUCT(IStickyTransactionPool)
 
 DECLARE_REFCOUNTED_STRUCT(IRowBatchReader)
@@ -145,6 +150,8 @@ DECLARE_REFCOUNTED_STRUCT(IRowBatchWriter)
 
 DECLARE_REFCOUNTED_STRUCT(ITableReader)
 DECLARE_REFCOUNTED_STRUCT(ITableWriter)
+
+DECLARE_REFCOUNTED_CLASS(ITablePartitionReader)
 
 DECLARE_REFCOUNTED_STRUCT(ITableFragmentWriter);
 
@@ -156,19 +163,19 @@ DECLARE_REFCOUNTED_STRUCT(IJournalWriter)
 
 DECLARE_REFCOUNTED_CLASS(TPersistentQueuePoller)
 
-DECLARE_REFCOUNTED_CLASS(TTableMountCacheConfig)
-DECLARE_REFCOUNTED_CLASS(TConnectionConfig)
-DECLARE_REFCOUNTED_CLASS(TConnectionDynamicConfig)
-DECLARE_REFCOUNTED_CLASS(TPersistentQueuePollerConfig)
+DECLARE_REFCOUNTED_STRUCT(TTableMountCacheConfig)
+DECLARE_REFCOUNTED_STRUCT(TConnectionConfig)
+DECLARE_REFCOUNTED_STRUCT(TConnectionDynamicConfig)
+DECLARE_REFCOUNTED_STRUCT(TPersistentQueuePollerConfig)
 
-DECLARE_REFCOUNTED_CLASS(TFileReaderConfig)
-DECLARE_REFCOUNTED_CLASS(TFileWriterConfig)
-DECLARE_REFCOUNTED_CLASS(TJournalReaderConfig)
+DECLARE_REFCOUNTED_STRUCT(TFileReaderConfig)
+DECLARE_REFCOUNTED_STRUCT(TFileWriterConfig)
+DECLARE_REFCOUNTED_STRUCT(TJournalReaderConfig)
 
-DECLARE_REFCOUNTED_CLASS(TJournalChunkWriterConfig)
-DECLARE_REFCOUNTED_CLASS(TJournalWriterConfig)
+DECLARE_REFCOUNTED_STRUCT(TJournalChunkWriterConfig)
+DECLARE_REFCOUNTED_STRUCT(TJournalWriterConfig)
 
-DECLARE_REFCOUNTED_CLASS(TJournalChunkWriterOptions)
+DECLARE_REFCOUNTED_STRUCT(TJournalChunkWriterOptions)
 
 DECLARE_REFCOUNTED_STRUCT(TSerializableMasterReadOptions)
 
@@ -177,6 +184,8 @@ DECLARE_REFCOUNTED_STRUCT(TPrerequisiteRevisionConfig)
 DECLARE_REFCOUNTED_STRUCT(TDetailedProfilingInfo)
 
 DECLARE_REFCOUNTED_STRUCT(TQueryFile)
+
+DECLARE_REFCOUNTED_STRUCT(TQuerySecret)
 
 DECLARE_REFCOUNTED_STRUCT(TSchedulingOptions)
 
@@ -191,12 +200,14 @@ DECLARE_REFCOUNTED_STRUCT(TListOperationsAccessFilter)
 
 DECLARE_REFCOUNTED_STRUCT(TShuffleHandle)
 
+DECLARE_REFCOUNTED_STRUCT(TGetCurrentUserResult);
+
 ////////////////////////////////////////////////////////////////////////////////
 
-inline const TString ClusterNamePath("//sys/@cluster_name");
-inline const TString HttpProxiesPath("//sys/http_proxies");
-inline const TString RpcProxiesPath("//sys/rpc_proxies");
-inline const TString GrpcProxiesPath("//sys/grpc_proxies");
+inline const NYPath::TYPath ClusterNamePath("//sys/@cluster_name");
+inline const NYPath::TYPath HttpProxiesPath("//sys/http_proxies");
+inline const NYPath::TYPath RpcProxiesPath("//sys/rpc_proxies");
+inline const NYPath::TYPath GrpcProxiesPath("//sys/grpc_proxies");
 inline const TString AliveNodeName("alive");
 inline const TString BannedAttributeName("banned");
 inline const TString RoleAttributeName("role");

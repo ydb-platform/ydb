@@ -7,12 +7,6 @@
 namespace NKikimr::NColumnShard {
 
 bool TWriteTask::Execute(TColumnShard* owner, const TActorContext& /* ctx */) {
-    auto overloadStatus = owner->CheckOverloadedWait(PathId);
-    if (overloadStatus != TColumnShard::EOverloadStatus::None) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "wait_overload")("status", overloadStatus);
-        return false;
-    }
-
     owner->Counters.GetCSCounters().WritingCounters->OnWritingTaskDequeue(TMonotonic::Now() - Created);
     owner->OperationsManager->RegisterLock(LockId, owner->Generation());
     auto writeOperation = owner->OperationsManager->RegisterOperation(
@@ -37,21 +31,40 @@ bool TWriteTasksQueue::Drain(const bool onWakeup, const TActorContext& ctx) {
     if (onWakeup) {
         WriteTasksOverloadCheckerScheduled = false;
     }
-    while (WriteTasks.size() && WriteTasks.front().Execute(Owner, ctx)) {
-        WriteTasks.pop_front();
+    std::vector<TInternalPathId> toRemove;
+    ui32 countTasks = 0;
+    for (auto&& i : WriteTasks) {
+        auto overloadStatus = Owner->CheckOverloadedWait(i.first);
+        if (overloadStatus != TColumnShard::EOverloadStatus::None) {
+            Owner->Counters.GetCSCounters().OnWaitingOverload(overloadStatus);
+            countTasks += i.second.size();
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "wait_overload")("status", overloadStatus)("path_id", i.first)(
+                "size", i.second.size());
+            continue;
+        }
+        for (auto&& t : i.second) {
+            t.Execute(Owner, ctx);
+        }
+        toRemove.emplace_back(i.first);
     }
-    if (WriteTasks.size() && !WriteTasksOverloadCheckerScheduled) {
+
+    for (auto&& i : toRemove) {
+        AFL_VERIFY(WriteTasks.erase(i));
+    }
+
+    if (countTasks && !WriteTasksOverloadCheckerScheduled) {
         Owner->Schedule(TDuration::MilliSeconds(300), new NActors::TEvents::TEvWakeup(1));
         WriteTasksOverloadCheckerScheduled = true;
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "queue_on_write")("size", WriteTasks.size());
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "queue_on_write")("size", countTasks);
     }
-    Owner->Counters.GetCSCounters().WritingCounters->QueueWaitSize->Add((i64)WriteTasks.size() - PredWriteTasksSize);
-    PredWriteTasksSize = (i64)WriteTasks.size();
-    return !WriteTasks.size();
+    Owner->Counters.GetCSCounters().WritingCounters->QueueWaitSize->Add((i64)countTasks - PredWriteTasksSize);
+    PredWriteTasksSize = (i64)countTasks;
+    return !countTasks;
 }
 
 void TWriteTasksQueue::Enqueue(TWriteTask&& task) {
-    WriteTasks.emplace_back(std::move(task));
+    const TInternalPathId pathId = task.GetPathId();
+    WriteTasks[pathId].emplace_back(std::move(task));
 }
 
 TWriteTasksQueue::~TWriteTasksQueue() {

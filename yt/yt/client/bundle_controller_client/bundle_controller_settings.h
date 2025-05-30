@@ -57,7 +57,10 @@ struct TInstanceResources
 {
     i64 Memory;
     // Bits per second.
-    std::optional<i64> Net;
+    // TODO(grachevkirill): Remove this field.
+    std::optional<i64> NetBits;
+    // Bytes per second.
+    std::optional<i64> NetBytes;
 
     TString Type;
     int Vcpu;
@@ -65,6 +68,9 @@ struct TInstanceResources
     bool operator==(const TInstanceResources& resources) const;
 
     void Clear();
+
+    void CanonizeNet();
+    void ResetNet();
 
     REGISTER_YSON_STRUCT(TInstanceResources);
 
@@ -146,7 +152,9 @@ struct TBundleResourceQuota
 {
     int Vcpu;
     i64 Memory;
-    i64 Network;
+    // TODO(grachevkirill): Remove it later.
+    i64 NetworkBits;
+    i64 NetworkBytes;
 
     REGISTER_YSON_STRUCT(TBundleResourceQuota);
 

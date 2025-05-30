@@ -205,7 +205,7 @@ ui32 TValidatedWriteTx::ExtractKeys(const NTable::TScheme& scheme, bool allowErr
             return 0;
         }
     } else {
-        Y_ABORT_UNLESS(isValid, "Validation errors: %s", ErrStr.data());
+        Y_ENSURE(isValid, "Validation errors: " << ErrStr);
     }
     
     return KeysCount();
@@ -263,9 +263,9 @@ void TValidatedWriteTx::ComputeTxSize() {
 
 TWriteOperation* TWriteOperation::CastWriteOperation(TOperation::TPtr op)
 {
-    Y_ABORT_UNLESS(op->IsWriteTx());
+    Y_ENSURE(op->IsWriteTx());
     TWriteOperation* writeOp = dynamic_cast<TWriteOperation*>(op.Get());
-    Y_ABORT_UNLESS(writeOp);
+    Y_ENSURE(writeOp);
     return writeOp;
 }
 
@@ -275,7 +275,7 @@ TWriteOperation* TWriteOperation::TryCastWriteOperation(TOperation::TPtr op)
         return nullptr;
     
     TWriteOperation* writeOp = dynamic_cast<TWriteOperation*>(op.Get());
-    Y_ABORT_UNLESS(writeOp);
+    Y_ENSURE(writeOp);
     return writeOp;
 }
 
@@ -316,8 +316,8 @@ TWriteOperation::~TWriteOperation()
 
 void TWriteOperation::FillTxData(TValidatedWriteTx::TPtr writeTx)
 {
-    Y_ABORT_UNLESS(!WriteTx);
-    Y_ABORT_UNLESS(!WriteRequest || HasVolatilePrepareFlag());
+    Y_ENSURE(!WriteTx);
+    Y_ENSURE(!WriteRequest || HasVolatilePrepareFlag());
 
     Target = writeTx->GetSource();
     WriteTx = writeTx;
@@ -327,8 +327,8 @@ void TWriteOperation::FillTxData(TDataShard* self, const TActorId& target, const
 {
     UntrackMemory();
 
-    Y_ABORT_UNLESS(!WriteTx);
-    Y_ABORT_UNLESS(!WriteRequest);
+    Y_ENSURE(!WriteTx);
+    Y_ENSURE(!WriteRequest);
 
     Target = target;
     SetTxBody(txBody);
@@ -338,9 +338,9 @@ void TWriteOperation::FillTxData(TDataShard* self, const TActorId& target, const
             LocksCache().Locks[lock.LockId] = lock;
     }
     ArtifactFlags = artifactFlags;
-    Y_ABORT_UNLESS(!WriteTx);
+    Y_ENSURE(!WriteTx);
     BuildWriteTx(self);
-    Y_ABORT_UNLESS(WriteTx->Ready());
+    Y_ENSURE(WriteTx->Ready());
 
     TrackMemory();
 }
@@ -349,22 +349,22 @@ void TWriteOperation::FillVolatileTxData(TDataShard* self)
 {
     UntrackMemory();
 
-    Y_ABORT_UNLESS(!WriteTx);
-    Y_ABORT_UNLESS(WriteRequest);
+    Y_ENSURE(!WriteTx);
+    Y_ENSURE(WriteRequest);
 
     BuildWriteTx(self);
-    Y_ABORT_UNLESS(WriteTx->Ready());
+    Y_ENSURE(WriteTx->Ready());
 
 
     TrackMemory();
 }
 
 TString TWriteOperation::GetTxBody() const {
-    Y_ABORT_UNLESS(WriteRequest);
+    Y_ENSURE(WriteRequest);
 
     TAllocChunkSerializer serializer;
     bool success = WriteRequest->SerializeToArcadiaStream(&serializer);
-    Y_ABORT_UNLESS(success);
+    Y_ENSURE(success);
     TEventSerializationInfo serializationInfo = WriteRequest->CreateSerializationInfo();
 
     NKikimrTxDataShard::TSerializedEvent proto;
@@ -373,23 +373,23 @@ TString TWriteOperation::GetTxBody() const {
 
     TString str;
     success = proto.SerializeToString(&str);
-    Y_ABORT_UNLESS(success);
+    Y_ENSURE(success);
     return str;
 }
 
 void TWriteOperation::SetTxBody(const TString& txBody) {
-    Y_ABORT_UNLESS(!WriteRequest);
+    Y_ENSURE(!WriteRequest);
 
     NKikimrTxDataShard::TSerializedEvent proto;
     const bool success = proto.ParseFromString(txBody);
-    Y_ABORT_UNLESS(success);
+    Y_ENSURE(success);
 
     TEventSerializationInfo serializationInfo;
     serializationInfo.IsExtendedFormat = proto.GetIsExtendedFormat();
 
     TEventSerializedData buffer(proto.GetEventData(), std::move(serializationInfo));
     NKikimr::NEvents::TDataEvents::TEvWrite* writeRequest = static_cast<NKikimr::NEvents::TDataEvents::TEvWrite*>(NKikimr::NEvents::TDataEvents::TEvWrite::Load(&buffer));
-    Y_ABORT_UNLESS(writeRequest);
+    Y_ENSURE(writeRequest);
 
     WriteRequest.reset(writeRequest);
 }
@@ -403,7 +403,7 @@ void TWriteOperation::ClearTxBody() {
 TValidatedWriteTx::TPtr TWriteOperation::BuildWriteTx(TDataShard* self)
 {
     if (!WriteTx) {
-        Y_ABORT_UNLESS(WriteRequest);
+        Y_ENSURE(WriteRequest);
         WriteTx = std::make_shared<TValidatedWriteTx>(self, GetGlobalTxId(), GetReceivedAt(), *WriteRequest, IsMvccSnapshotRead());
     }
     return WriteTx;
@@ -500,7 +500,7 @@ ERestoreDataStatus TWriteOperation::RestoreTxData(TDataShard* self, NTable::TDat
 
         SetTxBody(txBody);
     } else {
-        Y_ABORT_UNLESS(WriteRequest);
+        Y_ENSURE(WriteRequest);
     }
 
     TrackMemory();
@@ -528,24 +528,24 @@ ERestoreDataStatus TWriteOperation::RestoreTxData(TDataShard* self, NTable::TDat
 
 void TWriteOperation::BuildExecutionPlan(bool loaded)
 {
-    Y_ABORT_UNLESS(GetExecutionPlan().empty());
+    Y_ENSURE(GetExecutionPlan().empty());
 
     TVector<EExecutionUnitKind> plan;
 
     if (IsImmediate()) 
     {
-        Y_ABORT_UNLESS(!loaded);
+        Y_ENSURE(!loaded);
         plan.push_back(EExecutionUnitKind::CheckWrite);
         plan.push_back(EExecutionUnitKind::BuildAndWaitDependencies);
         plan.push_back(EExecutionUnitKind::ExecuteWrite);
         plan.push_back(EExecutionUnitKind::FinishProposeWrite);
         plan.push_back(EExecutionUnitKind::CompletedOperations);
     } else if (HasVolatilePrepareFlag()) {
-        Y_ABORT_UNLESS(!loaded);
+        Y_ENSURE(!loaded);
         plan.push_back(EExecutionUnitKind::CheckWrite);
         plan.push_back(EExecutionUnitKind::StoreWrite);  // note: stores in memory
         plan.push_back(EExecutionUnitKind::FinishProposeWrite);
-        Y_ABORT_UNLESS(!GetStep());
+        Y_ENSURE(!GetStep());
         plan.push_back(EExecutionUnitKind::WaitForPlan);
         plan.push_back(EExecutionUnitKind::PlanQueue);
         plan.push_back(EExecutionUnitKind::LoadWriteDetails);  // note: reloads from memory

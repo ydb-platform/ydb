@@ -11,9 +11,9 @@ PEERDIR(
     ydb/core/grpc_services/local_rpc
     yql/essentials/public/issue
     ydb/public/api/protos
-    ydb/public/sdk/cpp/client/ydb_params
-    ydb/public/sdk/cpp/client/ydb_result
-    ydb/public/sdk/cpp/client/ydb_proto
+    ydb/public/sdk/cpp/src/client/params
+    ydb/public/sdk/cpp/src/client/result
+    ydb/public/sdk/cpp/src/client/proto
 )
 
 END()

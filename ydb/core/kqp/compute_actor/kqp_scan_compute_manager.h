@@ -32,6 +32,10 @@ private:
     const ui64 FreeSpace = (ui64)8 << 20;
     bool NeedAck = true;
     bool Finished = false;
+    bool AllowPings = false;
+    TDuration WaitOutputTime;
+    TInstant StartWaitOutputTime;
+    ui64 PendingMessageCount = 0;
 
     void DoAck() {
         if (Finished) {
@@ -105,10 +109,17 @@ public:
         return !ActorId.has_value();
     }
 
-    void Start(const TActorId& actorId) {
+    void PingIfNeeded() {
+        if (AllowPings && !!ActorId) {
+            NActors::TActivationContext::AsActorContext().Send(*ActorId, new TEvKqpCompute::TEvScanPing());
+        }
+    }
+
+    void Start(const TActorId& actorId, bool allowPings) {
         AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "start_scanner")("actor_id", actorId);
         AFL_ENSURE(!ActorId);
         ActorId = actorId;
+        AllowPings = allowPings;
         DoAck();
     }
 
@@ -121,11 +132,29 @@ public:
             DoAck();
         }
     }
+
+    void IncPending() {
+        if (PendingMessageCount++ == 0) {
+            StartWaitOutputTime = TInstant::Now();
+        }
+    }
+
+    void DecPending() {
+        AFL_ENSURE(PendingMessageCount > 0);
+        auto now = TInstant::Now();
+        WaitOutputTime += (now - StartWaitOutputTime);
+        StartWaitOutputTime = --PendingMessageCount ? now : TInstant::Zero();
+    }
+
+    ui64 GetPendingTimeUs() const {
+        return WaitOutputTime.MicroSeconds();
+    }
 };
 
 class TComputeTaskData {
-private:
+public:
     std::shared_ptr<TShardScannerInfo> Info;
+private:
     std::unique_ptr<TEvScanExchange::TEvSendData> Event;
     bool Finished = false;
     const std::optional<ui32> ComputeShardId;
@@ -136,6 +165,7 @@ public:
     }
 
     std::unique_ptr<TEvScanExchange::TEvSendData> ExtractEvent() {
+        Event->SetWaitOutputTimeUs(Info->GetPendingTimeUs());
         return std::move(Event);
     }
 
@@ -243,6 +273,7 @@ public:
         }
         it->second->OnAckReceived(freeSpace);
         if (it->second->IsFree() && UndefinedShardTaskData.size()) {
+            UndefinedShardTaskData.front()->Info->DecPending();
             it->second->AddDataToSend(std::move(UndefinedShardTaskData.front()));
             UndefinedShardTaskData.pop_front();
         }
@@ -258,6 +289,7 @@ public:
                     return;
                 }
             }
+            sendTask->Info->IncPending();
             UndefinedShardTaskData.emplace_back(std::move(sendTask));
         } else {
             AFL_ENSURE(*computeShardId < ComputeActors.size())("compute_shard_id", *computeShardId);
@@ -284,6 +316,12 @@ public:
         }
     }
 
+    void PingAllScanners() {
+        for (auto&& itTablet : ShardScanners) {
+            itTablet.second->PingIfNeeded();
+        }
+    }
+
     std::shared_ptr<TShardState> GetShardStateByActorId(const NActors::TActorId& actorId) const {
         auto it = ShardsByActorId.find(actorId);
         if (it == ShardsByActorId.end()) {
@@ -307,7 +345,7 @@ public:
         }
     }
 
-    void RegisterScannerActor(const ui64 tabletId, const ui64 generation, const TActorId& scanActorId) {
+    void RegisterScannerActor(const ui64 tabletId, const ui64 generation, const TActorId& scanActorId, bool allowPings) {
         auto state = GetShardState(tabletId);
         if (!state || generation != state->Generation) {
             AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "register_scanner_actor_dropped")
@@ -326,7 +364,7 @@ public:
         state->ResetRetry();
         AFL_ENSURE(ShardsByActorId.emplace(scanActorId, state).second);
 
-        GetShardScannerVerified(tabletId)->Start(scanActorId);
+        GetShardScannerVerified(tabletId)->Start(scanActorId, allowPings);
     }
 
     void StartScanner(TShardState& state) {

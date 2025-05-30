@@ -2,9 +2,9 @@
 
 #include "channel.h"
 
-#include <yt/yt/core/ytree/helpers.h>
-
 #include <yt/yt/core/misc/memory_usage_tracker.h>
+
+#include <yt/yt/core/ytree/helpers.h>
 
 #include <library/cpp/yt/memory/leaky_ref_counted_singleton.h>
 
@@ -56,7 +56,7 @@ public:
     }
 
 private:
-    const TString Address_;
+    const std::string Address_;
     const IMemoryUsageTrackerPtr MemoryUsageTracker_ = GetNullMemoryUsageTracker();
 };
 

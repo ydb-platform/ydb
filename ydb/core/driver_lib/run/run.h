@@ -63,6 +63,8 @@ protected:
 
     TIntrusivePtr<NMemory::IProcessMemoryInfoProvider> ProcessMemoryInfoProvider;
 
+    TVector<NYdb::NGlobalPlugins::IPlugin::TPtr> Plugins;
+
     TKikimrRunner(std::shared_ptr<TModuleFactories> factories = {});
 
     virtual ~TKikimrRunner();
@@ -88,6 +90,8 @@ protected:
     void InitializeGracefulShutdown(const TKikimrRunConfig& runConfig);
 
     void InitializeAppData(const TKikimrRunConfig& runConfig);
+
+    void InitializePlugins(const TKikimrRunConfig& runConfig);
 
     void InitializeActorSystem(
         const TKikimrRunConfig& runConfig,

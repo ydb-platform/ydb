@@ -2,7 +2,7 @@
 
 #include <stdlib.h>
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 
 TStringType GetStrFromEnv(const char* envVarName, const TStringType& defaultValue) {
     auto envVarPointer = getenv(envVarName);

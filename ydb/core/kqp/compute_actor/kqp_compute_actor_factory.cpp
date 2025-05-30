@@ -59,8 +59,7 @@ struct TMemoryQuotaManager : public NYql::NDq::TGuaranteeQuotaManager {
     }
 
     TString MemoryConsumptionDetails() const override {
-        // NOTE: don't forget to disable verbosity in stable branches.
-        return Tx->ToString(true);
+        return Tx->ToString();
     }
 
     void TerminateHandler(bool success, const NYql::TIssues& issues) {
@@ -87,8 +86,9 @@ class TKqpCaFactory : public IKqpNodeComputeActorFactory {
     std::atomic<ui64> MkqlLightProgramMemoryLimit = 0;
     std::atomic<ui64> MkqlHeavyProgramMemoryLimit = 0;
     std::atomic<ui64> MinChannelBufferSize = 0;
-    std::atomic<ui64> MinMemAllocSize = 8_MB;
+    std::atomic<ui64> MinMemAllocSize = 1_MB;
     std::atomic<ui64> MinMemFreeSize = 32_MB;
+    std::atomic<ui64> ChannelChunkSizeLimit = 48_MB;
 
 public:
     TKqpCaFactory(const NKikimrConfig::TTableServiceConfig::TResourceManager& config,
@@ -107,6 +107,7 @@ public:
         MkqlLightProgramMemoryLimit.store(config.GetMkqlLightProgramMemoryLimit());
         MkqlHeavyProgramMemoryLimit.store(config.GetMkqlHeavyProgramMemoryLimit());
         MinChannelBufferSize.store(config.GetMinChannelBufferSize());
+        ChannelChunkSizeLimit.store(config.GetChannelChunkSizeLimit());
         MinMemAllocSize.store(config.GetMinMemAllocSize());
         MinMemFreeSize.store(config.GetMinMemFreeSize());
     }
@@ -143,6 +144,7 @@ public:
 
             memoryLimits.ChannelBufferSize = std::max<ui32>(estimation.ChannelBufferMemoryLimit / std::max<ui32>(1, inputChannelsCount), MinChannelBufferSize.load());
             memoryLimits.OutputChunkMaxSize = args.OutputChunkMaxSize;
+            memoryLimits.ChunkSizeLimit = ChannelChunkSizeLimit.load();
             AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "channel_info")
                 ("ch_size", estimation.ChannelBufferMemoryLimit)
                 ("ch_count", estimation.ChannelBuffersCount)
@@ -168,6 +170,7 @@ public:
         runtimeSettings.ExtraMemoryAllocationPool = args.MemoryPool;
         runtimeSettings.UseSpilling = args.WithSpilling;
         runtimeSettings.StatsMode = args.StatsMode;
+        runtimeSettings.WithProgressStats = args.WithProgressStats;
 
         if (runtimeSettings.UseSpilling) {
             args.Task->SetEnableSpilling(runtimeSettings.UseSpilling);
@@ -227,7 +230,7 @@ public:
             }
             IActor* computeActor = ::NKikimr::NKqp::CreateKqpComputeActor(args.ExecuterId, args.TxId, args.Task, AsyncIoFactory,
                 runtimeSettings, memoryLimits, std::move(args.TraceId), std::move(args.Arena), FederatedQuerySetup, GUCSettings,
-                std::move(args.SchedulingOptions), args.BlockTrackingMode);
+                std::move(args.SchedulingOptions), args.BlockTrackingMode, std::move(args.UserToken), args.Database);
             return args.ShareMailbox ? TlsActivationContext->AsActorContext().RegisterWithSameMailbox(computeActor) :
                 TlsActivationContext->AsActorContext().Register(computeActor);
         }

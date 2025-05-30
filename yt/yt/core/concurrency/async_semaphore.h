@@ -54,6 +54,7 @@ class TAsyncSemaphore
 {
 public:
     explicit TAsyncSemaphore(i64 totalSlots);
+    TAsyncSemaphore(i64 totalSlots, bool enableOverdraft);
 
     //! Updates the total number of slots.
     void SetTotal(i64 totalSlots);
@@ -95,6 +96,7 @@ private:
     i64 TotalSlots_;
     i64 FreeSlots_;
 
+    bool EnableOverdraft_ = false;
     bool Releasing_ = false;
 
     TPromise<void> ReadyEvent_;

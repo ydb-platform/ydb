@@ -101,11 +101,17 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
                 Y_PROTOBUF_SUPPRESS_NODISCARD partition->ParseFromString(data);
 
                 switch ((NKikimrSysView::EStatsType)type) {
-                    case NKikimrSysView::TOP_PARTITIONS_ONE_MINUTE:
-                        Self->PartitionTopMinute.emplace_back(std::move(partition));
+                    case NKikimrSysView::TOP_PARTITIONS_BY_CPU_ONE_MINUTE:
+                        Self->PartitionTopByCpuMinute.emplace_back(std::move(partition));
                         break;
-                    case NKikimrSysView::TOP_PARTITIONS_ONE_HOUR:
-                        Self->PartitionTopHour.emplace_back(std::move(partition));
+                    case NKikimrSysView::TOP_PARTITIONS_BY_CPU_ONE_HOUR:
+                        Self->PartitionTopByCpuHour.emplace_back(std::move(partition));
+                        break;
+                    case NKikimrSysView::TOP_PARTITIONS_BY_TLI_ONE_MINUTE:
+                        Self->PartitionTopByTliMinute.emplace_back(std::move(partition));
+                        break;
+                    case NKikimrSysView::TOP_PARTITIONS_BY_TLI_ONE_HOUR:
+                        Self->PartitionTopByTliHour.emplace_back(std::move(partition));
                         break;
                     default:
                         SVLOG_CRIT("[" << Self->TabletID() << "] ignoring unexpected partition stats type: " << type);
@@ -428,29 +434,46 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
 
         // IntervalPartitionTops
         {
-            Self->PartitionTopMinute.clear();
-            Self->PartitionTopMinute.reserve(TOP_PARTITIONS_COUNT);
-            Self->PartitionTopHour.clear();
-            Self->PartitionTopHour.reserve(TOP_PARTITIONS_COUNT);
+            Self->PartitionTopByCpuMinute.clear();
+            Self->PartitionTopByCpuMinute.reserve(TOP_PARTITIONS_COUNT);
+            Self->PartitionTopByCpuHour.clear();
+            Self->PartitionTopByCpuHour.reserve(TOP_PARTITIONS_COUNT);
+
+            Self->PartitionTopByTliMinute.clear();
+            Self->PartitionTopByTliMinute.reserve(TOP_PARTITIONS_COUNT);
+            Self->PartitionTopByTliHour.clear();
+            Self->PartitionTopByTliHour.reserve(TOP_PARTITIONS_COUNT);
 
             if (!LoadIntervalPartitionTops<Schema::IntervalPartitionTops>(db))
                 return false;
             if (!LoadIntervalPartitionTops<Schema::IntervalPartitionFollowerTops>(db))
                 return false;
 
-            auto compare = [] (const auto& l, const auto& r) {
+            auto compareByCpu = [] (const auto& l, const auto& r) {
                 return l->GetCPUCores() == r->GetCPUCores() ?
                     l->GetTabletId() < r->GetTabletId() : l->GetCPUCores() > r->GetCPUCores();
             };
 
-            std::sort(Self->PartitionTopMinute.begin(), Self->PartitionTopMinute.end(), compare);
-            std::sort(Self->PartitionTopHour.begin(), Self->PartitionTopHour.end(), compare);
+            std::sort(Self->PartitionTopByCpuMinute.begin(), Self->PartitionTopByCpuMinute.end(), compareByCpu);
+            std::sort(Self->PartitionTopByCpuHour.begin(), Self->PartitionTopByCpuHour.end(), compareByCpu);
+
+            auto compareByTli = [] (const auto& l, const auto& r) {
+                return l->GetLocksBroken() == r->GetLocksBroken() ?
+                    l->GetTabletId() < r->GetTabletId() : l->GetLocksBroken() > r->GetLocksBroken();
+            };
+
+            std::sort(Self->PartitionTopByTliMinute.begin(), Self->PartitionTopByTliMinute.end(), compareByTli);
+            std::sort(Self->PartitionTopByTliHour.begin(), Self->PartitionTopByTliHour.end(), compareByTli);
         }
 
         // TopPartitions...
-        if (!LoadPartitionResults<Schema::TopPartitionsOneMinute>(db, Self->TopPartitionsOneMinute))
+        if (!LoadPartitionResults<Schema::TopPartitionsOneMinute>(db, Self->TopPartitionsByCpuOneMinute))
             return false;
-        if (!LoadPartitionResults<Schema::TopPartitionsOneHour>(db, Self->TopPartitionsOneHour))
+        if (!LoadPartitionResults<Schema::TopPartitionsOneHour>(db, Self->TopPartitionsByCpuOneHour))
+            return false;
+        if (!LoadPartitionResults<Schema::TopPartitionsByTliOneMinute>(db, Self->TopPartitionsByTliOneMinute))
+            return false;
+        if (!LoadPartitionResults<Schema::TopPartitionsByTliOneHour>(db, Self->TopPartitionsByTliOneHour))
             return false;
 
         auto deadline = Self->IntervalEnd + Self->TotalInterval;

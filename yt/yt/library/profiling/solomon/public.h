@@ -22,6 +22,8 @@ DECLARE_REFCOUNTED_STRUCT(IEndpointProvider)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+static constexpr int MaxSolomonLabelSize = 200;
+
 DEFINE_ENUM(ELabelSanitizationPolicy,
     ((None)   (0))
     ((Weak)   (1)) // Escape only zero symbol and trim label to 200 symbols

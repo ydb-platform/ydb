@@ -7,6 +7,7 @@ PEERDIR(
 SRCS(
     tokens.cpp
     lexer.h
+    lexer.cpp
     hints.cpp
     hints.h
     parse_hints_impl.cpp

@@ -1,125 +1,64 @@
 #pragma once
+
 #include "node.h"
+
 #include <yql/essentials/core/sql_types/match_recognize.h>
 #include <util/generic/ptr.h>
 
 namespace NSQLTranslationV1 {
 
 struct TNamedFunction {
-    TNodePtr callable; //Callable with some free args
-    TString name;
+    TNodePtr Callable;
+    TString Name;
 };
 
 class TMatchRecognizeBuilder: public TSimpleRefCount<TMatchRecognizeBuilder> {
 public:
     TMatchRecognizeBuilder(
-            TPosition clausePos,
-            std::pair<TPosition, TVector<TNamedFunction>>&& partitioners,
-            std::pair<TPosition, TVector<TSortSpecificationPtr>>&& sortSpecs,
-            std::pair<TPosition, TVector<TNamedFunction>>&& measures,
-            std::pair<TPosition, NYql::NMatchRecognize::ERowsPerMatch>&& rowsPerMatch,
-            std::pair<TPosition, NYql::NMatchRecognize::TAfterMatchSkipTo>&& skipTo,
-            std::pair<TPosition, NYql::NMatchRecognize::TRowPattern>&& pattern,
-            std::pair<TPosition, TNodePtr>&& subset,
-            std::pair<TPosition, TVector<TNamedFunction>>&& definitions
-            )
-            : Pos(clausePos)
-            , Partitioners(std::move(partitioners))
-            , SortSpecs(std::move(sortSpecs))
-            , Measures(std::move(measures))
-            , RowsPerMatch(std::move(rowsPerMatch))
-            , SkipTo(std::move(skipTo))
-            , Pattern(std::move(pattern))
-            , Subset(std::move(subset))
-            , Definitions(definitions)
-
+        TPosition pos,
+        TNodePtr partitionKeySelector,
+        TNodePtr partitionColumns,
+        TVector<TSortSpecificationPtr> sortSpecs,
+        TVector<TNamedFunction> measures,
+        TNodePtr rowsPerMatch,
+        TNodePtr skipTo,
+        TNodePtr pattern,
+        TNodePtr patternVars,
+        TNodePtr subset,
+        TVector<TNamedFunction> definitions)
+    : Pos(pos)
+    , PartitionKeySelector(std::move(partitionKeySelector))
+    , PartitionColumns(std::move(partitionColumns))
+    , SortSpecs(std::move(sortSpecs))
+    , Measures(std::move(measures))
+    , RowsPerMatch(std::move(rowsPerMatch))
+    , SkipTo(std::move(skipTo))
+    , Pattern(std::move(pattern))
+    , PatternVars(std::move(patternVars))
+    , Subset(std::move(subset))
+    , Definitions(std::move(definitions))
     {}
-    TNodePtr Build(TContext& ctx, TString&& inputTable, ISource* source);
+
+    TNodePtr Build(TContext& ctx, TString label, ISource* source);
+
 private:
     TPosition Pos;
-    std::pair<TPosition, TVector<TNamedFunction>> Partitioners;
-    std::pair<TPosition, TVector<TSortSpecificationPtr>> SortSpecs;
-    std::pair<TPosition, TVector<TNamedFunction>> Measures;
-    std::pair<TPosition, NYql::NMatchRecognize::ERowsPerMatch> RowsPerMatch;
-    std::pair<TPosition, NYql::NMatchRecognize::TAfterMatchSkipTo> SkipTo;
-    std::pair<TPosition, NYql::NMatchRecognize::TRowPattern> Pattern;
-    std::pair<TPosition, TNodePtr> Subset;
-    std::pair<TPosition, TVector<TNamedFunction>> Definitions;
+    TNodePtr PartitionKeySelector;
+    TNodePtr PartitionColumns;
+    TVector<TSortSpecificationPtr> SortSpecs;
+    TVector<TNamedFunction> Measures;
+    TNodePtr RowsPerMatch;
+    TNodePtr SkipTo;
+    TNodePtr Pattern;
+    TNodePtr PatternVars;
+    TNodePtr Subset;
+    TVector<TNamedFunction> Definitions;
 };
 
-using TMatchRecognizeBuilderPtr=TIntrusivePtr<TMatchRecognizeBuilder> ;
+using TMatchRecognizeBuilderPtr = TIntrusivePtr<TMatchRecognizeBuilder>;
 
-class TMatchRecognizeVarAccessNode: public INode {
-public:
-    TMatchRecognizeVarAccessNode(TPosition pos, const TString& var, const TString& column, bool theSameVar)
-        : INode(pos)
-        , Var(var)
-        , TheSameVar(theSameVar)
-        , Column(column)
-    {
-    }
-
-    TString GetVar() const {
-        return Var;
-    }
-
-    bool IsTheSameVar() const {
-        return TheSameVar;
-    }
-
-    TString GetColumn() const {
-        return Column;
-    }
-
-    bool DoInit(TContext& ctx, ISource* src) override;
-
-    TAstNode* Translate(TContext& ctx) const override {
-        return Node->Translate(ctx);
-    }
-
-    TPtr DoClone() const override {
-        YQL_ENSURE(!Node, "TMatchRecognizeVarAccessNode::Clone: Node must not be initialized");
-        auto copy = new TMatchRecognizeVarAccessNode(Pos, Var, Column, TheSameVar);
-        return copy;
-    }
-
-protected:
-    void DoUpdateState() const override {
-        YQL_ENSURE(Node);
-    }
-
-    void DoVisitChildren(const TVisitFunc& func, TVisitNodeSet& visited) const final {
-        Y_DEBUG_ABORT_UNLESS(Node);
-        Node->VisitTree(func, visited);
-    }
-
-private:
-    TNodePtr Node;
-    const TString Var;
-    const bool TheSameVar; //reference the same var as being defined by this expression;
-    const TString Column;
-};
-
-class TMatchRecognizeNavigate: public TAstListNode {
-public:
-    TMatchRecognizeNavigate(TPosition pos, const TString& name, const TVector<TNodePtr>& args)
-        : TAstListNode(pos)
-        , Name(name)
-        , Args(args)
-    {
-    }
-
-private:
-    TNodePtr DoClone() const override {
-        return new TMatchRecognizeNavigate(GetPos(), Name, CloneContainer(Args));
-    }
-
-    bool DoInit(TContext& ctx, ISource* src) override;
-
-private:
-    const TString Name;
-    const TVector<TNodePtr> Args;
-};
+TNodePtr BuildMatchRecognizeColumnAccess(TPosition pos, TString var, TString column);
+TNodePtr BuildMatchRecognizeDefineAggregate(TPosition pos, TString name, TVector<TNodePtr> args);
+TNodePtr BuildMatchRecognizeVarAccess(TPosition pos, TNodePtr extractor);
 
 } // namespace NSQLTranslationV1
-

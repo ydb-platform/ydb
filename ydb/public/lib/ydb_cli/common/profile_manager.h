@@ -4,8 +4,6 @@
 namespace NYdb {
 namespace NConsoleClient {
 
-extern const char* VersionResourceName;
-
 class IProfile {
 public:
     virtual ~IProfile() = default;

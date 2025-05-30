@@ -13,41 +13,36 @@ TExprNode::TPtr NYql::NPureCalc::NodeFromBlocks(
 ) {
     const auto items = structType->GetItems();
     Y_ENSURE(items.size() > 0);
-
-    // Static assert to ensure backward compatible change: if the
-    // constant below is true, both input and output types of
-    // WideFromBlocks callable have to be WideStream; otherwise,
-    // both input and output types have to be WideFlow.
-    // FIXME: When all spots using WideFromBlocks are adjusted
-    // to work with WideStream, drop the assertion below.
-    static_assert(!NYql::NBlockStreamIO::WideFromBlocks);
-
     return ctx.Builder(pos)
         .Lambda()
             .Param("stream")
             .Callable(0, "FromFlow")
                 .Callable(0, "NarrowMap")
-                    .Callable(0, "WideFromBlocks")
-                        .Callable(0, "ExpandMap")
-                            .Callable(0, "ToFlow")
-                                .Arg(0, "stream")
-                            .Seal()
-                            .Lambda(1)
-                                .Param("item")
-                                .Do([&](TExprNodeBuilder& lambda) -> TExprNodeBuilder& {
-                                    ui32 i = 0;
-                                    for (const auto& item : items) {
-                                        lambda.Callable(i++, "Member")
-                                            .Arg(0, "item")
-                                            .Atom(1, item->GetName())
-                                        .Seal();
-                                    }
-                                    lambda.Callable(i, "Member")
-                                        .Arg(0, "item")
-                                        .Atom(1, PurecalcBlockColumnLength)
-                                    .Seal();
-                                    return lambda;
-                                })
+                    .Callable(0, "ToFlow")
+                        .Callable(0, "WideFromBlocks")
+                            .Callable(0, "FromFlow")
+                                .Callable(0, "ExpandMap")
+                                    .Callable(0, "ToFlow")
+                                        .Arg(0, "stream")
+                                    .Seal()
+                                    .Lambda(1)
+                                        .Param("item")
+                                        .Do([&](TExprNodeBuilder& lambda) -> TExprNodeBuilder& {
+                                            ui32 i = 0;
+                                            for (const auto& item : items) {
+                                                lambda.Callable(i++, "Member")
+                                                    .Arg(0, "item")
+                                                    .Atom(1, item->GetName())
+                                                .Seal();
+                                            }
+                                            lambda.Callable(i, "Member")
+                                                .Arg(0, "item")
+                                                .Atom(1, PurecalcBlockColumnLength)
+                                            .Seal();
+                                            return lambda;
+                                        })
+                                    .Seal()
+                                .Seal()
                             .Seal()
                         .Seal()
                     .Seal()
@@ -84,23 +79,27 @@ TExprNode::TPtr NYql::NPureCalc::NodeToBlocks(
             .Param("stream")
             .Callable("FromFlow")
                 .Callable(0, "NarrowMap")
-                    .Callable(0, "WideToBlocks")
-                        .Callable(0, "ExpandMap")
-                            .Callable(0, "ToFlow")
-                                .Arg(0, "stream")
-                            .Seal()
-                            .Lambda(1)
-                                .Param("item")
-                                .Do([&](TExprNodeBuilder& lambda) -> TExprNodeBuilder& {
-                                    ui32 i = 0;
-                                    for (const auto& item : items) {
-                                        lambda.Callable(i++, "Member")
-                                            .Arg(0, "item")
-                                            .Atom(1, item->GetName())
-                                        .Seal();
-                                    }
-                                    return lambda;
-                                })
+                    .Callable(0, "ToFlow")
+                        .Callable(0, "WideToBlocks")
+                            .Callable(0, "FromFlow")
+                                .Callable(0, "ExpandMap")
+                                    .Callable(0, "ToFlow")
+                                        .Arg(0, "stream")
+                                    .Seal()
+                                    .Lambda(1)
+                                        .Param("item")
+                                        .Do([&](TExprNodeBuilder& lambda) -> TExprNodeBuilder& {
+                                            ui32 i = 0;
+                                            for (const auto& item : items) {
+                                                lambda.Callable(i++, "Member")
+                                                    .Arg(0, "item")
+                                                    .Atom(1, item->GetName())
+                                                .Seal();
+                                            }
+                                            return lambda;
+                                        })
+                                    .Seal()
+                                .Seal()
                             .Seal()
                         .Seal()
                     .Seal()

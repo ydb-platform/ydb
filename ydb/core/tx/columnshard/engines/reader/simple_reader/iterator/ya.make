@@ -14,6 +14,9 @@ PEERDIR(
     ydb/core/formats/arrow
     ydb/core/tx/columnshard/blobs_action
     ydb/core/tx/columnshard/engines/reader/common_reader/iterator
+    ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/collections
+    ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/sync_points
+    ydb/core/tx/columnshard/engines/reader/simple_reader/duplicates
     ydb/core/tx/conveyor/usage
     ydb/core/tx/limiter/grouped_memory/usage
 )

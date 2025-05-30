@@ -9,7 +9,7 @@
 #include <ydb/core/kqp/tests/tpch/lib/tpch_runner.h>
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
 
-#include <ydb/library/grpc/client/grpc_client_low.h>
+#include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/datetime/base.h>

@@ -6,13 +6,13 @@
 
 #include <library/cpp/iterator/zip.h>
 
-namespace NYT::NPhoenix2 {
+namespace NYT::NPhoenix {
 
 using namespace NYson;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static constexpr auto& Logger = PhoenixLogger;
+constinit const auto Logger = PhoenixLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -153,4 +153,4 @@ TLoadSessionGuard::~TLoadSessionGuard()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NPhoenix2
+} // namespace NYT::NPhoenix

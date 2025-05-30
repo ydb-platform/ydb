@@ -111,11 +111,6 @@ class TCreateBackupCollection : public TSubOperation {
         return backupCollection;
     }
 
-    static void UpdatePathSizeCounts(const TPath& parentPath, const TPath& dstPath) {
-        dstPath.DomainInfo()->IncPathsInside();
-        parentPath.Base()->IncAliveChildren();
-    }
-
 public:
     using TSubOperation::TSubOperation;
 
@@ -177,8 +172,8 @@ public:
         AddPathInSchemeShard(result, dstPath, owner);
         auto pathEl = CreateBackupCollectionPathElement(dstPath);
 
-        rootPath->IncAliveChildren();
-        rootPath.DomainInfo()->IncPathsInside();
+        IncAliveChildrenDirect(OperationId, rootPath, context); // for correct discard of ChildrenExist prop
+        rootPath.DomainInfo()->IncPathsInside(context.SS);
 
         auto backupCollection = TBackupCollectionInfo::Create(desc);
         context.SS->BackupCollections[dstPath->PathId] = backupCollection;
@@ -219,8 +214,6 @@ public:
                                                           dstPath,
                                                           context.SS,
                                                           context.OnComplete);
-
-        UpdatePathSizeCounts(rootPath, dstPath);
 
         SetState(NextState());
         return result;

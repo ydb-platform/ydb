@@ -106,6 +106,53 @@ bool IsSystemError(const TError& error)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TFileDescriptorGuard::TFileDescriptorGuard(TFileDescriptor fd) noexcept
+    : FD_(fd)
+{}
+
+TFileDescriptorGuard::~TFileDescriptorGuard()
+{
+    Reset();
+}
+
+TFileDescriptorGuard::TFileDescriptorGuard(TFileDescriptorGuard&& other) noexcept
+    : FD_(other.FD_)
+{
+    other.FD_ = -1;
+}
+
+TFileDescriptorGuard& TFileDescriptorGuard::operator = (TFileDescriptorGuard&& other) noexcept
+{
+    if (this != &other) {
+        Reset();
+        FD_ = other.FD_;
+        other.FD_ = -1;
+    }
+    return *this;
+}
+
+TFileDescriptor TFileDescriptorGuard::Get() const noexcept
+{
+    return FD_;
+}
+
+TFileDescriptor TFileDescriptorGuard::Release() noexcept
+{
+    TFileDescriptor fd = FD_;
+    FD_ = -1;
+    return fd;
+}
+
+void TFileDescriptorGuard::Reset() noexcept
+{
+    if (FD_ != -1) {
+        YT_VERIFY(TryClose(FD_, false));
+        FD_ = -1;
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 std::optional<int> GetParentPid(int pid)
 {
     TFileInput in(Format("/proc/%v/status", pid));
@@ -1235,7 +1282,7 @@ TNetworkInterfaceStatisticsMap GetNetworkInterfaceStatistics()
         XX(Tx.Carrier);
         XX(Tx.Compressed);
 #undef XX
-        // NB: data is racy; duplicates are possible; just deal with it.
+        // NB: Data is racy; duplicates are possible; just deal with it.
         interfaceToStatistics.emplace(interfaceName, statistics);
     }
     return interfaceToStatistics;
@@ -1475,13 +1522,15 @@ std::vector<TMemoryMapping> ParseMemoryMappings(const TString& rawSMaps)
                 TStringBuf majorStr;
                 TStringBuf minorStr;
                 verify(device.TrySplit(':', majorStr, minorStr));
-                ui16 major;
-                ui16 minor;
+                ui32 major;
+                ui32 minor;
                 verify(TryIntFromString<16>(majorStr, major));
                 verify(TryIntFromString<16>(minorStr, minor));
+                // NB: 0:0 - anonymous, 0:m - virtual fs (tmpfs, overlayfs, etc)
+                // TODO(khlebnikov): Remove std::optional
                 if (major != 0 || minor != 0) {
 #ifdef _linux_
-                    memoryMapping.DeviceId = makedev(major, minor);
+                    memoryMapping.DeviceId = {major, minor};
 #endif
                 }
             }
@@ -1532,55 +1581,6 @@ static bool TryParseField(const TVector<TString>& fields, int index, TDuration& 
     return false;
 }
 
-TDiskStat ParseDiskStat(const TString& statLine)
-{
-    auto buffer = SplitString(statLine, " ");
-    TDiskStat result;
-    TryParseField(buffer, 0, result.MajorNumber);
-    TryParseField(buffer, 1, result.MinorNumber);
-    TryParseField(buffer, 2, result.DeviceName);
-    TryParseField(buffer, 3, result.ReadsCompleted);
-    TryParseField(buffer, 4, result.ReadsMerged);
-    TryParseField(buffer, 5, result.SectorsRead);
-    TryParseField(buffer, 6, result.TimeSpentReading);
-    TryParseField(buffer, 7, result.WritesCompleted);
-    TryParseField(buffer, 8, result.WritesMerged);
-    TryParseField(buffer, 9, result.SectorsWritten);
-    TryParseField(buffer, 10, result.TimeSpentWriting);
-    TryParseField(buffer, 11, result.IOCurrentlyInProgress);
-    TryParseField(buffer, 12, result.TimeSpentDoingIO);
-    TryParseField(buffer, 13, result.WeightedTimeSpentDoingIO);
-    TryParseField(buffer, 14, result.DiscardsCompleted);
-    TryParseField(buffer, 15, result.DiscardsMerged);
-    TryParseField(buffer, 16, result.SectorsDiscarded);
-    TryParseField(buffer, 17, result.TimeSpentDiscarding);
-    return result;
-}
-
-THashMap<TString, TDiskStat> GetDiskStats()
-{
-#ifdef _linux_
-    THashMap<TString, TDiskStat> result;
-    static const TString path("/proc/diskstats");
-    TFileInput diskStatsFile(path);
-    auto data = diskStatsFile.ReadAll();
-    auto lines = SplitString(data, "\n");
-
-    for (const auto& line : lines) {
-        auto strippedLine = Strip(line);
-        if (strippedLine.empty()) {
-            continue;
-        }
-        auto parsed = ParseDiskStat(line);
-        result[parsed.DeviceName] = parsed;
-    }
-
-    return result;
-#else
-    return {};
-#endif
-}
-
 TBlockDeviceStat ParseBlockDeviceStat(const TString& statLine)
 {
     auto buffer = SplitString(statLine, " ");
@@ -1616,6 +1616,53 @@ std::optional<TBlockDeviceStat> GetBlockDeviceStat(const TString& deviceName)
     Y_UNUSED(deviceName);
     return std::nullopt;
 #endif
+}
+
+std::optional<TBlockDeviceStat> GetBlockDeviceStat(NFS::TDeviceId deviceId)
+{
+#ifdef _linux_
+    if (deviceId.first != NFS::UnnamedDeviceMajor) {
+        const TString path = Format("/sys/dev/block/%v:%v/stat", deviceId.first, deviceId.second);
+        TFileInput diskStatsFile(path);
+        auto data = diskStatsFile.ReadAll();
+        return ParseBlockDeviceStat(Strip(data));
+    }
+#else
+    Y_UNUSED(deviceId);
+#endif
+    return std::nullopt;
+}
+
+NFS::TDeviceId GetBlockDeviceId(const TString& deviceName)
+{
+#ifdef _linux_
+    const TString path = Format("/sys/block/%v/dev", deviceName);
+    TFileInput blockDevFile(path);
+    auto majorMinor = SplitString(Strip(blockDevFile.ReadAll()), ":", 2);
+    ui32 major, minor;
+    if (majorMinor.size() == 2 &&
+        TryFromString(majorMinor[0], major) &&
+        TryFromString(majorMinor[1], minor))
+    {
+        return {major, minor};
+    }
+#else
+    Y_UNUSED(deviceName);
+#endif
+    return {0, 0};
+}
+
+TString GetBlockDeviceName(NFS::TDeviceId deviceId)
+{
+#ifdef _linux_
+    if (deviceId.first != NFS::UnnamedDeviceMajor) {
+        auto link = NFs::ReadLink(Format("/sys/dev/block/%v:%v", deviceId.first, deviceId.second));
+        return NFS::GetFileName(link);
+    }
+#else
+    Y_UNUSED(deviceId);
+#endif
+    return "";
 }
 
 std::vector<TString> ListDisks()

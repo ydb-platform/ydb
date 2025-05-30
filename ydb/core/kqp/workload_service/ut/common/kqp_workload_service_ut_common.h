@@ -8,8 +8,10 @@
 
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_query/client.h>
-#include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
+
+#include <ydb/core/protos/workload_manager_config.pb.h>
 
 
 namespace NKikimr::NKqp::NWorkload {
@@ -73,6 +75,8 @@ struct TYdbSetupSettings {
     FLUENT_SETTING_DEFAULT(bool, EnableResourcePoolsOnServerless, false);
     FLUENT_SETTING_DEFAULT(bool, EnableMetadataObjectsOnServerless, true);
     FLUENT_SETTING_DEFAULT(bool, EnableExternalDataSourcesOnServerless, true);
+    FLUENT_SETTING(NKikimrConfig::TWorkloadManagerConfig, WorkloadManagerConfig);
+    
 
     // Default pool settings
     FLUENT_SETTING_DEFAULT(TString, PoolId, "sample_pool_id");

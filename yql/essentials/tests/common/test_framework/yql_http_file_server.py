@@ -94,6 +94,7 @@ class YqlHttpFileServer(socketserver.TCPServer, object):
         self.serve_thread.join()
         release_yql_port(self.http_server_port)
         self.http_server_port = None
+        self.server_close()
 
     def forget_files(self):
         self.register_files({}, {})

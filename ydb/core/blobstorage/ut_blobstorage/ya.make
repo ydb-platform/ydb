@@ -8,7 +8,7 @@ ENDIF()
 
 IF (SANITIZER_TYPE OR WITH_VALGRIND)
     SIZE(LARGE)
-    TAG(ya:fat)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
     SIZE(MEDIUM)
 ENDIF()
@@ -16,6 +16,7 @@ ENDIF()
 SRCS(
     acceleration.cpp
     assimilation.cpp
+    backpressure.cpp
     block_race.cpp
     counting_events.cpp
     deadlines.cpp
@@ -41,10 +42,14 @@ SRCS(
     recovery.cpp
     sanitize_groups.cpp
     scrub_fast.cpp
+    self_heal.cpp
+    shred.cpp
     snapshots.cpp
     space_check.cpp
     sync.cpp
     ut_helpers.cpp
+    validation.cpp
+    vdisk_malfunction.cpp
 )
 
 PEERDIR(
@@ -62,6 +67,7 @@ RECURSE_FOR_TESTS(
     ut_balancing
     ut_blob_depot
     ut_blob_depot_fat
+    ut_check_integrity
     ut_donor
     ut_group_reconfiguration
     ut_huge

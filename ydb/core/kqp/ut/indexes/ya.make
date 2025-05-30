@@ -13,6 +13,8 @@ ENDIF()
 SRCS(
     kqp_indexes_ut.cpp
     kqp_indexes_multishard_ut.cpp
+    kqp_indexes_prefixed_vector_ut.cpp
+    kqp_indexes_vector_ut.cpp
 )
 
 PEERDIR(
@@ -22,6 +24,7 @@ PEERDIR(
     ydb/library/yql/providers/common/http_gateway
     ydb/library/yql/udfs/common/knn
     yql/essentials/sql/pg_dummy
+    ydb/public/sdk/cpp/adapters/issue
 )
 
 YQL_LAST_ABI_VERSION()

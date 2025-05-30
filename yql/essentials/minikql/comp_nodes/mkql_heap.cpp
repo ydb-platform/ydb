@@ -58,7 +58,7 @@ public:
 
         const auto fact = ctx.GetFactory();
 
-        const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&THolderFactory::CloneArray));// TODO: Generate code instead of call CloneArray.
+        const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&THolderFactory::CloneArray>());// TODO: Generate code instead of call CloneArray.
 
         const auto list = GetNodeValue(List, ctx, block);
 
@@ -84,23 +84,14 @@ public:
         const auto idxType = Type::getInt32Ty(context);
 
         Value* array = nullptr;
-        if (NYql::NCodegen::ETarget::Windows != ctx.Codegen.GetEffectiveTarget()) {
-            const auto funType = FunctionType::get(valueType, {fact->getType(), list->getType(), itemsPtr->getType()}, false);
-            const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funType), "function", block);
-            array = CallInst::Create(funType, funcPtr, {fact, list, itemsPtr}, "array", block);
-        } else {
-            const auto arrayPtr = new AllocaInst(valueType, 0U, "array_ptr", block);
-            new StoreInst(list, arrayPtr, block);
-            const auto funType = FunctionType::get(Type::getVoidTy(context), {fact->getType(), arrayPtr->getType(), arrayPtr->getType(), itemsPtr->getType()}, false);
-            const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funType), "function", block);
-            CallInst::Create(funType, funcPtr, {fact, arrayPtr, arrayPtr, itemsPtr}, "", block);
-            array = new LoadInst(valueType, arrayPtr, "array", block);
-        }
+        const auto funType = FunctionType::get(valueType, {fact->getType(), list->getType(), itemsPtr->getType()}, false);
+        const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funType), "function", block);
+        array = CallInst::Create(funType, funcPtr, {fact, list, itemsPtr}, "array", block);
 
         result->addIncoming(array, block);
 
-        const auto algo = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&THeapWrapper::Do));
-        const auto self = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(this));
+        const auto algo = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&THeapWrapper::Do>());
+        const auto self = ConstantInt::get(Type::getInt64Ty(context), (uintptr_t)(this));
 
         const auto items = new LoadInst(itemsType, itemsPtr, "items", block);
         const auto zero = ConstantInt::get(idxType, 0);
@@ -235,7 +226,7 @@ public:
 
         const auto fact = ctx.GetFactory();
 
-        const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&THolderFactory::CloneArray));// TODO: Generate code instead of call CloneArray.
+        const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&THolderFactory::CloneArray>());// TODO: Generate code instead of call CloneArray.
 
         const auto list = GetNodeValue(List, ctx, block);
         const auto midv = GetNodeValue(Middle, ctx, block);
@@ -269,23 +260,14 @@ public:
         const auto idxType = Type::getInt32Ty(context);
 
         Value* array = nullptr;
-        if (NYql::NCodegen::ETarget::Windows != ctx.Codegen.GetEffectiveTarget()) {
-            const auto funType = FunctionType::get(valueType, {fact->getType(), list->getType(), itemsPtr->getType()}, false);
-            const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funType), "function", block);
-            array = CallInst::Create(funType, funcPtr, {fact, list, itemsPtr}, "array", block);
-        } else {
-            const auto arrayPtr = new AllocaInst(valueType, 0U, "array_ptr", block);
-            new StoreInst(list, arrayPtr, block);
-            const auto funType = FunctionType::get(Type::getVoidTy(context), {fact->getType(), arrayPtr->getType(), arrayPtr->getType(), itemsPtr->getType()}, false);
-            const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funType), "function", block);
-            CallInst::Create(funType, funcPtr, {fact, arrayPtr, arrayPtr, itemsPtr}, "", block);
-            array = new LoadInst(valueType, arrayPtr, "array", block);
-        }
+        const auto funType = FunctionType::get(valueType, {fact->getType(), list->getType(), itemsPtr->getType()}, false);
+        const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funType), "function", block);
+        array = CallInst::Create(funType, funcPtr, {fact, list, itemsPtr}, "array", block);
 
         result->addIncoming(array, block);
 
-        const auto algo = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TNthWrapper::Do));
-        const auto self = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(this));
+        const auto algo = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TNthWrapper::Do>());
+        const auto self = ConstantInt::get(Type::getInt64Ty(context), (uintptr_t)(this));
 
         const auto items = new LoadInst(itemsType, itemsPtr, "items", block);
         const auto zero = ConstantInt::get(idxType, 0);

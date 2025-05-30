@@ -1,6 +1,7 @@
 #pragma once
 
 #include "command.h"
+#include "client_command_options.h"
 
 #include <library/cpp/colorizer/colors.h>
 
@@ -17,20 +18,16 @@ namespace NConsoleClient {
 
 template <typename T>
 class TParseableStruct {
-    using TOpt = NLastGetopt::TOpt;
-    using TOptParseResult = NLastGetopt::TOptParseResult;
-    using TOptsParseResult = NLastGetopt::TOptsParseResult;
-
-    static const TOptParseResult* FindOptParseResult(const TOptsParseResult* parseResult, const TOpt* opt) {
-        return parseResult->FindOptParseResult(opt);
+    static const TOptionParseResult* FindOptParseResult(const TOptionsParseResult* parseResult, const TClientCommandOption* opt) {
+        return parseResult->FindResult(opt);
     }
 
-    static const TOptParseResult* FindOptParseResult(const TOptsParseResult* parseResult, const TString& name) {
-        return parseResult->FindLongOptParseResult(name);
+    static const TOptionParseResult* FindOptParseResult(const TOptionsParseResult* parseResult, const TString& name) {
+        return parseResult->FindResult(name);
     }
 
-    static const TOptParseResult* FindOptParseResult(const TOptsParseResult* parseResult, char c) {
-        return parseResult->FindCharOptParseResult(c);
+    static const TOptionParseResult* FindOptParseResult(const TOptionsParseResult* parseResult, char c) {
+        return parseResult->FindResult(c);
     }
 
     static T FromString(const char* data) {
@@ -82,8 +79,8 @@ public:
 
         TVector<T> result(Reserve(parseResult->Count()));
 
-        for (const char* value : parseResult->Values()) {
-            result.push_back(FromString(value));
+        for (const TString& value : parseResult->Values()) {
+            result.push_back(FromString(value.c_str()));
         }
 
         return result;

@@ -20,15 +20,9 @@ protected:
     ui64 RawBytes = 0;
 public:
     TSimpleSerializationStat() = default;
-    TSimpleSerializationStat(const ui64 bytes, const ui64 recordsCount, const ui64 rawBytes)
-        : SerializedBytes(bytes)
-        , RecordsCount(recordsCount)
-        , RawBytes(rawBytes)
-    {
-        Y_ABORT_UNLESS(SerializedBytes);
-        Y_ABORT_UNLESS(RecordsCount);
-        Y_ABORT_UNLESS(RawBytes);
-    }
+    TSimpleSerializationStat(const ui64 bytes, const ui64 recordsCount, const ui64 rawBytes);
+
+    std::vector<i64> SplitRecords(const ui32 recordsCount, const ui32 expectedRecordsCount, const ui32 expectedColumnPageSize, const ui32 maxBlobSize);
 
     TString DebugString() const {
         return TStringBuilder() << "{"
@@ -98,6 +92,8 @@ public:
         SerializedBytesPerRecord += item.GetSerializedBytesPerRecord();
         RawBytesPerRecord += item.GetRawBytesPerRecord();
     }
+
+    std::vector<i64> SplitRecordsForBlobSize(const i64 recordsCount, const ui64 blobSize) const;
 
     std::optional<ui64> PredictOptimalPackRecordsCount(const ui64 recordsCount, const ui64 blobSize) const {
         if (!SerializedBytesPerRecord) {
@@ -210,6 +206,25 @@ public:
 
     std::optional<TBatchSerializationStat> GetStatsForRecordBatch(const std::shared_ptr<arrow::RecordBatch>& rb) const;
     std::optional<TBatchSerializationStat> GetStatsForRecordBatch(const std::shared_ptr<arrow::Schema>& schema) const;
+
+    template <class TContainer>
+    std::optional<TBatchSerializationStat> GetStatsForColumns(const TContainer& ids, const bool fieldsRequired) const {
+        std::optional<TBatchSerializationStat> result;
+        for (auto&& i : ids) {
+            auto columnInfo = GetColumnInfo(i);
+            if (!columnInfo || columnInfo->GetRecordsCount() == 0) {
+                if (fieldsRequired) {
+                    return {};
+                } else {
+                    continue;
+                }
+            } else if (!result) {
+                result = TBatchSerializationStat();
+            }
+            result->Merge(*columnInfo);
+        }
+        return result;
+    }
 };
 
 }

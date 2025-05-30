@@ -1,0 +1,20 @@
+items:
+- name: Обзор
+  href: index.md
+- name: Простые
+  href: primitive.md
+- name: Опциональные
+  href: optional.md
+- name: Контейнеры
+  href: containers.md
+- name: Специальные
+  href: special.md
+- name: Преобразования типов
+  href: cast.md
+- name: Текстовое представление типов данных
+  href: type_string.md
+- name: Передача параметров в формате JSON
+  href: json.md
+- name: YSON
+  hidden: true
+  href: yson.md

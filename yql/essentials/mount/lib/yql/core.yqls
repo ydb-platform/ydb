@@ -13,7 +13,9 @@
 (let MaskBit (lambda '(value index) (ShiftLeft (Data (Apply RemoveOptionalType (TypeOf value)) '1) index)))
 
 (let TestBitInt (lambda '(value index) (Convert (BitAnd value (Apply MaskBit value index)) 'Bool)))
-(let TestBitStr (lambda '(value index) (Apply TestBitInt (ByteAt value (Convert (ShiftRight (Convert index 'Uint64) (Uint8 '8)) 'Uint32)) (BitAnd (Convert index 'Uint8) (Uint8 '7)))))
+# XXX: Coalesce drops the Optional type returned by ByteAt, so to
+# respect the current signature, the result is wrapped with Just.
+(let TestBitStr (lambda '(value index) (Just (Coalesce (Apply TestBitInt (ByteAt value (Convert (ShiftRight (Convert index 'Uint64) (Uint8 '3)) 'Uint32)) (BitAnd (Convert index 'Uint8) (Uint8 '7))) (Bool 'false)))))
 (let TestBit (lambda '(value index) (block '(
     (let x (InstanceOf (Apply RemoveOptionalType (TypeOf value))))
     (return (IfType x (DataType 'String)
@@ -407,28 +409,21 @@ def signature(script, name):
     (let list (If force list (ListMap list check)))
     (let type (Apply RemoveOptionalType (TypeOf list)))
     (let itemType (TupleElementType (ListItemType type) '1))
-    (let optType (OptionalType (Apply RemoveOptionalType itemType)))
-    (let empty (MatchType type 'EmptyList (lambda '() (Null)) (lambda '() 
-        (MatchType type 'Null (lambda '() (Null)) (lambda '() (Nothing optType)))))
-    )
-    (return (Apply (EvaluateCode (LambdaCode (lambda '(listCode) (block '(
+    (let dict (ToDict (Reverse list) (lambda '(x) (Nth x '0)) (lambda '(x) (Nth x '1)) '('Auto 'One)))
+    (return (Apply (EvaluateCode (LambdaCode (lambda '(dictCode) (block '(
         (let items (ListMap fields (lambda '(f) (block '(
             (let atom (AtomCode f))
-            (let foldLambda (LambdaCode (lambda '(itemCode stateCode)
-                (FuncCode (String 'If)
-                    (FuncCode (String '==)
-                        (ReprCode f)
-                        (FuncCode (String 'Nth) itemCode (AtomCode (String '0)))
-                    )
-                    (FuncCode (String 'Nth) itemCode (AtomCode (String '1)))
-                    stateCode
-                )
-            )))
-            (let fold (FuncCode (String 'Fold) listCode (ReprCode empty) foldLambda))
-            (return (ListCode atom fold))
+            (let lookupCode (FuncCode (String 'Lookup) dictCode (ReprCode f)))
+            (let flatten (FuncCode (String 'FlatMap) lookupCode (LambdaCode (lambda '(x) x))))
+            (let value (MatchType itemType 'Pg (lambda '() flatten) (lambda '() (MatchType itemType 'Null (lambda '() flatten)
+                 (lambda '() (MatchType itemType 'Optional (lambda '() flatten) (lambda '() lookupCode)))))))
+            (let nullRep (ReprCode (Null)))
+            (let value (MatchType type 'EmptyList (lambda '() nullRep) (lambda '() 
+                (MatchType type 'Null (lambda '() nullRep) (lambda '() value)))))
+            (return (ListCode atom value))
         )))))
         (return (FuncCode (String 'AsStruct) items))
-    ))))) list))
+    ))))) dict))
 ))))
 
 (let SpreadMembers (lambda '(list fields) 
@@ -529,6 +524,13 @@ def signature(script, name):
     )))
 ))))
 
+(let Opaque (lambda '(x) (block '(
+    (let t (TypeOf x))
+    (let ct (CallableType '('0) '(t)))
+    (let c (Callable ct (lambda '() x)))
+    (return (Apply c))
+))))
+
 (export Equals)
 (export Unequals)
 (export FindIndex)
@@ -569,4 +571,5 @@ def signature(script, name):
 (export ListSampleImpl)
 (export ListSampleNImpl)
 (export ListShuffleImpl)
+(export Opaque)
 )

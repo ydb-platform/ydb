@@ -519,6 +519,8 @@ const char* const InternalGetQueueAttributesQuery = R"__(
     (
         (let queueIdNumber      (Parameter 'QUEUE_ID_NUMBER (DataType 'Uint64)))
         (let queueIdNumberHash  (Parameter 'QUEUE_ID_NUMBER_HASH (DataType 'Uint64)))
+        (let name     (Parameter 'NAME (DataType 'Utf8)))
+        (let userName (Parameter 'USER_NAME (DataType 'Utf8)))
 
         (let attrsTable ')__" QUEUE_TABLES_FOLDER_PARAM R"__(/Attributes)
 
@@ -539,9 +541,61 @@ const char* const InternalGetQueueAttributesQuery = R"__(
 
         (let attrsRead (SelectRow attrsTable attrsRow attrsSelect))
 
+        (let tags
+            (If (Not (Exists attrsRead))
+                (Utf8 '"{}")
+                (block '(
+                    (let queuesTable ')__" ROOT_PARAM R"__(/.Queues)
+
+                    (let queuesRow '(
+                        '('Account userName)
+                        '('QueueName (Utf8String '")__" QUEUE_NAME_PARAM R"__("))))
+
+                    (let queuesRowSelect '('QueueName 'Tags))
+                    (let queuesRowRead (SelectRow queuesTable queuesRow queuesRowSelect))
+
+                    (let str (Coalesce (Member queuesRowRead 'Tags) (Utf8 '"{}")))
+                    (return (If (Equal (Utf8 '"") str)
+                                (Utf8 '"{}")
+                                str))))))
+
         (return (AsList
             (SetResult 'queueExists (Exists attrsRead))
-            (SetResult 'attrs attrsRead)))
+            (SetResult 'attrs attrsRead)
+            (SetResult 'tags tags)))
+    )
+)__";
+
+const char* const TagQueueQuery = R"__(
+    (
+        (let name     (Parameter 'NAME (DataType 'Utf8)))
+        (let userName (Parameter 'USER_NAME (DataType 'Utf8)))
+        (let tags     (Parameter 'TAGS (DataType 'Utf8)))
+        (let oldTags  (Parameter 'OLD_TAGS (DataType 'Utf8)))
+
+        (let queuesTable ')__" ROOT_PARAM R"__(/.Queues)
+
+        (let queuesRow '(
+            '('Account userName)
+            '('QueueName (Utf8 '")__" QUEUE_NAME_PARAM R"__("))))
+
+        (let queuesRead (SelectRow queuesTable queuesRow '('Tags)))
+
+        (let curTags
+            (block '(
+                (let str (Coalesce (Member queuesRead 'Tags) (Utf8 '"{}")))
+                (return (If (Equal (Utf8 '"") str)
+                            (Utf8 '"{}")
+                            str)))))
+
+        (let queuesRowUpdate '(
+            '('Tags tags)))
+
+        (return
+            (If (Equal oldTags curTags)
+                (AsList (UpdateRow queuesTable queuesRow queuesRowUpdate)
+                        (SetResult 'updated (Bool 'true)))
+                (AsList (SetResult 'updated (Bool 'false)))))
     )
 )__";
 
@@ -1571,6 +1625,8 @@ const char* GetFifoQueryById(size_t id) {
         return ReadOrRedriveMessageQuery;
     case GET_STATE_ID:
         return GetStateQuery;
+    case TAG_QUEUE_ID:
+        return TagQueueQuery;
     }
 
     return nullptr;

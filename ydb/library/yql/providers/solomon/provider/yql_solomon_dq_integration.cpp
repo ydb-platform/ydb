@@ -367,6 +367,7 @@ public:
             
             NDq::TDqSolomonReadParams readParams{ .Source = source };
 
+            YQL_ENSURE(NActors::TlsActivationContext);
             auto metricsQueueActor = NActors::TActivationContext::ActorSystem()->Register(
                 NDq::CreateSolomonMetricsQueueActor(
                     std::min<ui64>(maxTasksPerStage, totalMetricsCount),

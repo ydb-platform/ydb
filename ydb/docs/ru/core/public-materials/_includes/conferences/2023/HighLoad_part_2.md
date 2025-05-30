@@ -63,6 +63,17 @@
 
 Этот доклад будет особенно полезен архитекторам, техническим руководителям, разработчикам высоконагруженных и транзакционных систем, а также специалистам, ищущим практические примеры построения крупных гибких платформ на современных инженерных принципах.
 
-@[YouTube](https://www.youtube.com/watch?v=Z7gie1Kqmvc)
+{% list tabs %}
+
+- RuTube
+
+    @[rutube](6c513d83ad9d22bf310915d5a61416c6)
+
+- YouTube
+
+    @[youtube](Z7gie1Kqmvc)
+
+{% endlist %}
+
 
 [Слайды](https://presentations.ydb.tech/2023/ru/highload/yandex_payment_system/presentation.pdf)

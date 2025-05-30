@@ -1481,5 +1481,18 @@ TCheckFunc IncrementalBackup(bool flag) {
     };
 }
 
+TCheckFunc CheckPathState(NKikimrSchemeOp::EPathState pathState) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        UNIT_ASSERT(record.HasPathDescription());
+        NKikimrSchemeOp::TPathDescription descr = record.GetPathDescription();
+
+        UNIT_ASSERT(descr.HasSelf());
+        auto self = descr.GetSelf();
+        UNIT_ASSERT(self.HasCreateFinished());
+        ui32 curPathState = self.GetPathState();
+        UNIT_ASSERT_VALUES_EQUAL(curPathState, (ui32)pathState);
+    };
+}
+
 } // NLs
 } // NSchemeShardUT_Private

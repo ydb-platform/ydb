@@ -115,6 +115,7 @@ public:
 class TDone: public TSubOperationState {
 protected:
     const TOperationId OperationId;
+    const TMaybe<TPathElement::EPathState> TargetState;
 
     TString DebugHint() const override {
         return TStringBuilder() << "TDone"
@@ -125,6 +126,8 @@ protected:
 
 public:
     explicit TDone(const TOperationId& id);
+
+    TDone(const TOperationId& id, TPathElement::EPathState targetState);
 
     bool ProgressState(TOperationContext& context) override;
 };

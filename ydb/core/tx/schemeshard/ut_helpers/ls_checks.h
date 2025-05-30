@@ -158,6 +158,7 @@ namespace NLs {
                               NKikimrSchemeOp::EPathState pathState = NKikimrSchemeOp::EPathState::EPathStateNoChanges);
     TCheckFunc CheckPQAlterVersion (const TString& name, ui64 alterVersion);
     TCheckFunc IndexesCount(ui32 count);
+    TCheckFunc CheckPathState(NKikimrSchemeOp::EPathState pathState = NKikimrSchemeOp::EPathState::EPathStateNoChanges);
 
     TCheckFunc IndexType(NKikimrSchemeOp::EIndexType type);
     TCheckFunc IndexState(NKikimrSchemeOp::EIndexState state);

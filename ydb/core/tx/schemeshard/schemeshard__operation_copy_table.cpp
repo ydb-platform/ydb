@@ -313,6 +313,7 @@ public:
 class TCopyTable: public TSubOperation {
 
     THashSet<TString> LocalSequences;
+    TMaybe<TPathElement::EPathState> TargetState;
 
     static TTxState::ETxState NextState() {
         return TTxState::CreateParts;
@@ -350,18 +351,28 @@ class TCopyTable: public TSubOperation {
         case TTxState::CopyTableBarrier:
             return MakeHolder<TCopyTableBarrier>(OperationId);
         case TTxState::Done:
-            return MakeHolder<TDone>(OperationId);
+            if (!TargetState) { 
+                return MakeHolder<TDone>(OperationId);
+            } else {
+                return MakeHolder<TDone>(OperationId, *TargetState);
+            }
         default:
             return nullptr;
         }
     }
 
 public:
-    using TSubOperation::TSubOperation;
+    explicit TCopyTable(const TOperationId& id, TTxState::ETxState txState, TTxState* state)
+        : TSubOperation(id, txState)
+    {
+        Y_ENSURE(state);
+        TargetState = state->TargetPathTargetState;
+    }
 
-    explicit TCopyTable(const TOperationId& id, const TTxTransaction& tx, const THashSet<TString>& localSequences)
+    explicit TCopyTable(const TOperationId& id, const TTxTransaction& tx, const THashSet<TString>& localSequences, TMaybe<TPathElement::EPathState> targetState)
         : TSubOperation(id, tx)
         , LocalSequences(localSequences)
+        , TargetState(targetState)
     {
     }
 
@@ -666,6 +677,9 @@ public:
         if (Transaction.HasCreateCdcStream()) {
             txState.CdcPathId = srcPath.Base()->PathId;
         }
+        if (Transaction.GetCreateTable().HasPathState()) {
+            txState.TargetPathTargetState = Transaction.GetCreateTable().GetPathState();
+        }
 
         TShardInfo datashardInfo = TShardInfo::DataShardInfo(OperationId.GetTxId(), newTable->PathId);
         datashardInfo.BindedChannels = channelsBinding;
@@ -768,14 +782,14 @@ public:
 
 namespace NKikimr::NSchemeShard {
 
-ISubOperation::TPtr CreateCopyTable(TOperationId id, const TTxTransaction& tx, const THashSet<TString>& localSequences)
+ISubOperation::TPtr CreateCopyTable(TOperationId id, const TTxTransaction& tx, const THashSet<TString>& localSequences, TMaybe<TPathElement::EPathState> targetState)
 {
-    return MakeSubOperation<TCopyTable>(id, tx, localSequences);
+    return MakeSubOperation<TCopyTable>(id, tx, localSequences, targetState);
 }
 
-ISubOperation::TPtr CreateCopyTable(TOperationId id, TTxState::ETxState state) {
-    Y_ABORT_UNLESS(state != TTxState::Invalid);
-    return MakeSubOperation<TCopyTable>(id, state);
+ISubOperation::TPtr CreateCopyTable(TOperationId id, TTxState::ETxState txState, TTxState* state) {
+    Y_ABORT_UNLESS(txState != TTxState::Invalid);
+    return MakeSubOperation<TCopyTable>(id, txState, state);
 }
 
 TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context) {

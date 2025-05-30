@@ -25,6 +25,9 @@ static NKikimrSchemeOp::TModifyScheme CopyTableTask(NKikimr::NSchemeShard::TPath
         auto* coOp = scheme.MutableCreateCdcStream();
         coOp->CopyFrom(descr.GetCreateSrcCdcStream());
     }
+    if (descr.HasTargetPathTargetState()) {
+        operation->SetPathState(descr.GetTargetPathTargetState());
+    }
 
     return scheme;
 }
@@ -155,10 +158,18 @@ bool CreateConsistentCopyTables(
             sequences.emplace(sequenceName);
         }
 
-        result.push_back(CreateCopyTable(
-                             NextPartId(nextId, result),
-                             CopyTableTask(srcPath, dstPath, descr),
-                             sequences));
+        if (descr.HasTargetPathTargetState()) {
+            result.push_back(CreateCopyTable(
+                                NextPartId(nextId, result),
+                                CopyTableTask(srcPath, dstPath, descr),
+                                sequences,
+                                descr.GetTargetPathTargetState()));
+        } else {
+            result.push_back(CreateCopyTable(
+                                NextPartId(nextId, result),
+                                CopyTableTask(srcPath, dstPath, descr),
+                                sequences));
+        }
 
         TVector<NKikimrSchemeOp::TSequenceDescription> sequenceDescriptions;
         for (const auto& child: srcPath.Base()->GetChildren()) {

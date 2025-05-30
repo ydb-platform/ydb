@@ -110,7 +110,7 @@ class WorkloadRunner:
 
         for w in workloads:
             w.start()
-        started_at = started_at = time.time()
+        started_at = time.time()
         while time.time() - started_at < self.duration:
             print(f"Elapsed {(int)(time.time() - started_at)} seconds, stat:")
             for w in workloads:

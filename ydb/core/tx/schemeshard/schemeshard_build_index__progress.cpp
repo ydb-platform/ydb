@@ -766,7 +766,6 @@ private:
             buildInfo.Sample.Rows, buildInfo.KMeans.Parent, buildInfo.KMeans.Child);
 
         TActivationContext::AsActorContext().MakeFor(Self->SelfId()).Register(actor);
-        buildInfo.Sample.State = TIndexBuildInfo::TSample::EState::Upload;
 
         LOG_N("TTxBuildProgress: TUploadSampleK: " << buildInfo);
     }
@@ -854,10 +853,6 @@ private:
         if (!buildInfo.DoneShards.empty() || !buildInfo.InProgressShards.empty() || !buildInfo.ToUploadShards.empty()) {
             return false;
         }
-        if (buildInfo.KMeans.State == TIndexBuildInfo::TKMeans::MultiLocal) {
-            InitMultiKMeans(buildInfo);
-            return false;
-        }
         if (buildInfo.KMeans.Parent == 0) {
             AddAllShards(buildInfo);
         } else {
@@ -869,9 +864,6 @@ private:
                     AddShard(buildInfo, idx, status);
                 }
             }
-        }
-        if (buildInfo.DoneShards.size() + buildInfo.ToUploadShards.size() <= 1) {
-            buildInfo.KMeans.State = TIndexBuildInfo::TKMeans::Local;
         }
         return true;
     }
@@ -910,22 +902,6 @@ private:
 
     bool SendKMeansLocal(TIndexBuildInfo& buildInfo) {
         return SendToShards(buildInfo, [&](TShardIdx shardIdx) { SendKMeansLocalRequest(shardIdx, buildInfo); });
-    }
-
-    bool SendVectorIndex(TIndexBuildInfo& buildInfo) {
-        switch (buildInfo.KMeans.State) {
-            case TIndexBuildInfo::TKMeans::Sample:
-                return SendKMeansSample(buildInfo);
-            // TODO(mbkkt)
-            // case TIndexBuildInfo::TKMeans::Recompute:
-            //     return SendKMeansRecompute(buildInfo);
-            case TIndexBuildInfo::TKMeans::Reshuffle:
-                return SendKMeansReshuffle(buildInfo);
-            case TIndexBuildInfo::TKMeans::Local:
-            case TIndexBuildInfo::TKMeans::MultiLocal:
-                return SendKMeansLocal(buildInfo);
-        }
-        return true;
     }
 
     void ClearDoneShards(TTransactionContext& txc, TIndexBuildInfo& buildInfo) {
@@ -968,6 +944,7 @@ private:
             // it's approximate but upper bound, so it's ok
             buildInfo.KMeans.TableSize = std::max<ui64>(1, buildInfo.Processed.GetUploadRows());
             buildInfo.KMeans.PrefixIndexDone(doneShards);
+            buildInfo.KMeans.State = TIndexBuildInfo::TKMeans::MultiLocal;
             LOG_D("FillPrefixedVectorIndex PrefixIndexDone " << buildInfo.DebugString());
 
             PersistKMeansState(txc, buildInfo);
@@ -1008,46 +985,75 @@ private:
     }
 
     bool FillVectorIndex(TTransactionContext& txc, TIndexBuildInfo& buildInfo) {
-        // FIXME: Very non-intuitive state machine, rework it by adding an explicit vector index fill state
         LOG_D("FillVectorIndex Start " << buildInfo.DebugString());
 
-        if (buildInfo.Sample.State == TIndexBuildInfo::TSample::EState::Upload) {
-            return false;
-        }
-        if (InitSingleKMeans(buildInfo)) {
-            LOG_D("FillVectorIndex SingleKMeans " << buildInfo.DebugString());
-        }
-        if (!SendVectorIndex(buildInfo)) {
-            return false;
-        }
-
-        if (buildInfo.KMeans.State == TIndexBuildInfo::TKMeans::Sample &&
-            !buildInfo.Sample.Rows.empty()) {
-            if (buildInfo.Sample.State == TIndexBuildInfo::TSample::EState::Collect) {
-                LOG_D("FillVectorIndex SendUploadSampleKRequest " << buildInfo.DebugString());
-                SendUploadSampleKRequest(buildInfo);
+        // (Sample -> Reshuffle)* -> MultiLocal -> NextLevel
+        if (buildInfo.KMeans.State == TIndexBuildInfo::TKMeans::Sample) {
+            return FillVectorIndexSamples(txc, buildInfo);
+        } else if (buildInfo.KMeans.State == TIndexBuildInfo::TKMeans::Reshuffle) {
+            if (InitSingleKMeans(buildInfo)) {
+                LOG_D("FillVectorIndex Reshuffle " << buildInfo.DebugString());
+            }
+            if (!SendKMeansReshuffle(buildInfo)) {
                 return false;
             }
-        }
-
-        LOG_D("FillVectorIndex DoneLevel " << buildInfo.DebugString());
-        ClearDoneShards(txc, buildInfo);
-
-        if (!buildInfo.Sample.Rows.empty()) {
-            if (buildInfo.KMeans.State == TIndexBuildInfo::TKMeans::Sample) {
-                buildInfo.KMeans.State = TIndexBuildInfo::TKMeans::Reshuffle;
-                LOG_D("FillVectorIndex NextState " << buildInfo.DebugString());
-                PersistKMeansState(txc, buildInfo);
-                Progress(BuildId);
-                return false;
-            }
+            ClearDoneShards(txc, buildInfo);
             buildInfo.Sample.Clear();
             NIceDb::TNiceDb db{txc.DB};
             Self->PersistBuildIndexSampleForget(db, buildInfo);
-            LOG_D("FillVectorIndex DoneState " << buildInfo.DebugString());
+            return FillVectorIndexNextParent(txc, buildInfo);
+        } else if (buildInfo.KMeans.State == TIndexBuildInfo::TKMeans::MultiLocal) {
+            if (!SendKMeansLocal(buildInfo)) {
+                return false;
+            }
+            ClearDoneShards(txc, buildInfo);
+            return FillVectorIndexNextParent(txc, buildInfo);
         }
+        Y_ENSURE(false);
+    }
 
+    bool FillVectorIndexSamples(TTransactionContext& txc, TIndexBuildInfo& buildInfo) {
+        if (buildInfo.Sample.State == TIndexBuildInfo::TSample::EState::Collect) {
+            if (InitSingleKMeans(buildInfo)) {
+                if (!buildInfo.DoneShards.size() && !buildInfo.ToUploadShards.size()) {
+                    LOG_D("FillVectorIndex SingleKMeans " << buildInfo.DebugString());
+                    // InitSingleKMeans didn't add ToUploadShards - parent only has 1 shard,
+                    // it will be handled during the MultiLocal phase
+                    return FillVectorIndexNextParent(txc, buildInfo);
+                }
+                // Otherwise, we collect samples
+                LOG_D("FillVectorIndex Samples " << buildInfo.DebugString());
+            } else {
+                // false means that shards are already added to ToUploadShards
+            }
+            if (!SendKMeansSample(buildInfo)) {
+                return false;
+            }
+            ClearDoneShards(txc, buildInfo);
+            if (buildInfo.Sample.Rows.empty()) {
+                // No samples => no data for this cluster
+                return FillVectorIndexNextParent(txc, buildInfo);
+            }
+            LOG_D("FillVectorIndex SendUploadSampleKRequest " << buildInfo.DebugString());
+            SendUploadSampleKRequest(buildInfo);
+            buildInfo.Sample.State = TIndexBuildInfo::TSample::EState::Upload;
+            return false;
+        } else if (buildInfo.Sample.State == TIndexBuildInfo::TSample::EState::Upload) {
+            // Just wait until samples are uploaded (saved)
+            return false;
+        } else if (buildInfo.Sample.State == TIndexBuildInfo::TSample::EState::Done) {
+            buildInfo.KMeans.State = TIndexBuildInfo::TKMeans::Reshuffle;
+            LOG_D("FillVectorIndex NextState " << buildInfo.DebugString());
+            PersistKMeansState(txc, buildInfo);
+            Progress(BuildId);
+            return false;
+        }
+        Y_ENSURE(false);
+    }
+
+    bool FillVectorIndexNextParent(TTransactionContext& txc, TIndexBuildInfo& buildInfo) {
         if (buildInfo.KMeans.NextParent()) {
+            buildInfo.KMeans.State = TIndexBuildInfo::TKMeans::Sample;
             LOG_D("FillVectorIndex NextParent " << buildInfo.DebugString());
             PersistKMeansState(txc, buildInfo);
             Progress(BuildId);
@@ -1062,6 +1068,7 @@ private:
         }
 
         if (buildInfo.KMeans.NextLevel()) {
+            buildInfo.KMeans.State = TIndexBuildInfo::TKMeans::Sample;
             LOG_D("FillVectorIndex NextLevel " << buildInfo.DebugString());
             PersistKMeansState(txc, buildInfo);
             NIceDb::TNiceDb db{txc.DB};
@@ -1072,6 +1079,7 @@ private:
             Progress(BuildId);
             return false;
         }
+
         LOG_D("FillVectorIndex Done " << buildInfo.DebugString());
         return true;
     }

@@ -794,6 +794,7 @@ public:
         , OutputWidth(outputWidth)
         , Tmp(outputWidth.Defined() ? *outputWidth : 0u)
     {
+        Y_ABORT_UNLESS(!Outputs.empty());
     }
 
     bool IsFull() const override {

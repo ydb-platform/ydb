@@ -238,18 +238,15 @@ public:
     }
 
     void AddCluster(const TString& clusterName, const THashMap<TString, TString>& properties) override {
-
         NYql::TPqClusterConfig cluster;
         cluster.SetName(clusterName);
-
         cluster.SetClusterType(NYql::TPqClusterConfig::CT_DATA_STREAMS);
         const TString& location = properties.Value("location", "");
         cluster.SetEndpoint(location);
-        const TString& token = properties.Value("token", "");
-        cluster.SetToken(token);
+        cluster.SetToken(properties.Value("token", ""));
         cluster.SetDatabase(properties.Value("database_name", ""));
+        cluster.SetUseSsl(properties.Value("use_ssl", "true") == "true"sv);
 
-        Cerr << "Add cluster" << Endl;
         for (auto [k, v] : properties) {
             Cerr << k << ": " <<v << Endl;
         }

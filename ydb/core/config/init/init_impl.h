@@ -1351,6 +1351,7 @@ public:
     };
 
     void InitStaticNode() {
+        CommonAppOptions.ValidateStaticNodeConfig();
         Labels["node_kind"] = "static";
 
         if (!AppConfig.HasStartupConfigYaml()) {

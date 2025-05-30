@@ -157,23 +157,6 @@ struct TKeyTraits<Schema::BackgroundSessions> {
   }
 };
 
-template<>
-struct TKeyTraits<Schema::InsertTable> {
-  using TTable = Schema::InsertTable;
-  using TKey = std::tuple<std::byte, ui64, ui64, ui64, TString>;
-
-  template<typename Row>
-  static TKey Extract(Row& rs) {
-    return {
-      rs.template GetValue<typename TTable::Committed>(),
-      rs.template GetValue<typename TTable::PlanStep>(),
-      rs.template GetValue<typename TTable::WriteTxId>(),
-      rs.template GetValue<typename TTable::PathId>(),
-      rs.template GetValue<typename TTable::DedupId>()
-    };
-  }
-};
-
 template <typename TTable, typename TKey>
 inline void Delete(TNiceDb& db, const TKey& key) {
   std::apply([&](auto... parts) {
@@ -212,11 +195,27 @@ public:
 
 private:
   template<typename TTable>
+  static bool TableExists(TNiceDb& db) {
+    return db.HaveTable<TTable>();
+  }
+
+  template<typename TTable, typename TKeyVec>
+  INormalizerTask::TPtr MakeTask(TKeyVec&& vec) {
+    return std::make_shared<TTrivialNormalizerTask>(
+      std::make_shared<TChanges<TTable>>(std::forward<TKeyVec>(vec)));
+  }
+
+  template<typename TTable>
   void ProcessTable(TNiceDb& db, std::vector<INormalizerTask::TPtr>& tasks) {
     using TT = TKeyTraits<TTable>;
     using TKey = typename TT::TKey;
 
+    if (!TableExists<TTable>(db)) {
+      return;
+    }
+
     std::vector<TKey> keys;
+    keys.reserve(BATCH);
     auto rs = db.Table<TTable>().Select();
     if (!rs.IsReady()) {
       return;
@@ -224,14 +223,21 @@ private:
 
     while (!rs.EndOfSet()) {
       keys.emplace_back(TT::Extract(rs));
+
+      if (keys.size() == BATCH) {
+        tasks.emplace_back(MakeTask<TTable>(std::move(keys)));
+
+        keys.clear();
+        keys.reserve(BATCH);
+      }
+
       if (!rs.Next()) {
         break;
       }
     }
 
-    for (size_t i = 0; i < keys.size(); i += BATCH) {
-      auto sub = std::vector<TKey>(keys.begin() + i, keys.begin() + std::min(i + BATCH, keys.size()));
-      tasks.emplace_back(std::make_shared<TTrivialNormalizerTask>(std::make_shared<TChanges<TTable>>(std::move(sub))));
+    if (!keys.empty()) {
+      tasks.emplace_back(MakeTask<TTable>(std::move(keys)));
     }
   }
 
@@ -247,7 +253,6 @@ private:
     bool ApplyOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController&) const override {
       TNiceDb db(txc.DB);
       for (const auto& k : keys) {
-        std::cout << "la-la-la\n";
         Delete<TTable>(db, k);
       }
 

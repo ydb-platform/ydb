@@ -15,7 +15,6 @@ template class TCleanUnusedTablesNormalizerTemplate<
     Schema::LockConflicts,
     Schema::LockVolatileDependencies,
     Schema::BackgroundSessions
-    // Schema::InsertTable uncomment after enabling EnableWritePortionsOnInsert
 >;
 
 } // namespace NKikimr::NOlap::NCleanUnusedTables

@@ -17,7 +17,6 @@ using TUnusedTables = TCleanUnusedTablesNormalizerTemplate<
     Schema::LockConflicts,
     Schema::LockVolatileDependencies,
     Schema::BackgroundSessions
-    // Schema::InsertTable uncomment after enabling EnableWritePortionsOnInsert
 >;
 
 class TCleanUnusedTablesNormalizer final

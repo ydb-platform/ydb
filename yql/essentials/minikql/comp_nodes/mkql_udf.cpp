@@ -405,7 +405,7 @@ IComputationNode* WrapUdf(TCallable& callable, const TComputationNodeFactoryCont
         const auto closureNodeType = runConfigNodeType->IsVoid()
                                    ? AS_TYPE(TCallableType, callableNodeType)->GetReturnType()
                                    : callableNodeType;
-        if (!closureNodeType->IsSameType(*closureFuncType)) {
+        if (!closureNodeType->IsConvertableTo(*closureFuncType)) {
             TString diff = TStringBuilder()
                 << "type mismatch, expected return type: "
                 << PrintNode(closureNodeType, true)

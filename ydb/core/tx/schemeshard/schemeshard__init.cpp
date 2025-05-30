@@ -3049,6 +3049,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     .WithFormat(rowset.GetValue<Schema::CdcStream::Format>())
                     .WithVirtualTimestamps(rowset.GetValueOrDefault<Schema::CdcStream::VirtualTimestamps>(false))
                     .WithResolvedTimestamps(TDuration::MilliSeconds(rowset.GetValueOrDefault<Schema::CdcStream::ResolvedTimestampsIntervalMs>(0)))
+                    .WithSchemaChanges(rowset.GetValueOrDefault<Schema::CdcStream::SchemaChanges>(false))
                     .WithAwsRegion(rowset.GetValue<Schema::CdcStream::AwsRegion>())
                     .WithState(rowset.GetValue<Schema::CdcStream::State>());
 
@@ -3094,6 +3095,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     .WithFormat(rowset.GetValue<Schema::CdcStreamAlterData::Format>())
                     .WithVirtualTimestamps(rowset.GetValueOrDefault<Schema::CdcStreamAlterData::VirtualTimestamps>(false))
                     .WithResolvedTimestamps(TDuration::MilliSeconds(rowset.GetValueOrDefault<Schema::CdcStreamAlterData::ResolvedTimestampsIntervalMs>(0)))
+                    .WithSchemaChanges(rowset.GetValueOrDefault<Schema::CdcStreamAlterData::SchemaChanges>(false))
                     .WithAwsRegion(rowset.GetValue<Schema::CdcStreamAlterData::AwsRegion>())
                     .WithState(rowset.GetValue<Schema::CdcStreamAlterData::State>());
 

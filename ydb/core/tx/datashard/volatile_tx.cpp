@@ -519,9 +519,6 @@ namespace NKikimr::NDataShard {
     {
         using Schema = TDataShard::Schema;
 
-        Y_ENSURE(!commitTxIds.empty(),
-            "Unexpected volatile txId# " << txId << " @" << version << " without commits");
-
         auto res = VolatileTxs.insert(
             std::make_pair(txId, std::make_unique<TVolatileTxInfo>()));
         Y_ENSURE(res.second, "Cannot add volatile txId# " << txId << " @" << version

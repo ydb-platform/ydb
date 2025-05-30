@@ -10,8 +10,6 @@ private:
     YDB_READONLY_DEF(ui64, Offset);
     YDB_READONLY_DEF(ui64, RowsCount);
     ui64 SourceId;
-    // NArrow::TSimpleRow LeftBorder;
-    // NArrow::TSimpleRow RightBorder;
 
 public:
     TDuplicateMapInfo(const TSnapshot& maxVersion, const ui64 offset, const ui64 rowsCount, const ui64 sourceId)

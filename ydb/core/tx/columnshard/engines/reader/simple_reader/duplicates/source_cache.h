@@ -59,6 +59,11 @@ private:
         return NextRequestId++;
     }
 
+    virtual TAutoPtr<IEventHandle> AfterRegister(const TActorId& self, const TActorId& /*parentId*/) override {
+        FetchingContext->SetOwner(self);
+        return TAutoPtr<IEventHandle>();
+    }
+
 public:
     void GetSourcesData(const std::vector<std::shared_ptr<TPortionInfo>>& sources, const TEvRequestFilter::TPtr& originalRequest);
     void OnFetchingResult(const NPrivate::TEvDuplicateFilterDataFetched::TPtr&);

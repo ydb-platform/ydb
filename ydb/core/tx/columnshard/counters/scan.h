@@ -234,10 +234,6 @@ public:
     NMonitoring::TDynamicCounters::TCounterPtr ProcessedSourceEmptyCount;
     NMonitoring::THistogramPtr HistogramFilteredResultCount;
 
-    NMonitoring::TDynamicCounters::TCounterPtr MergeRowsAccepted;
-    NMonitoring::TDynamicCounters::TCounterPtr MergeRowsRejected;
-    NMonitoring::TDynamicCounters::TCounterPtr MergeRowsBulkAccepted;
-
     TScanCounters(const TString& module = "Scan");
 
     void OnSourceFinished(const ui32 recordsCount, const ui64 rawBytes, const ui32 filteredRecordsCount) const {

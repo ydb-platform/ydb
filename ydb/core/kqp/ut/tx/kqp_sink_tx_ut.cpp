@@ -145,9 +145,7 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
                 UPDATE `/Root/KV` SET Value = "third" WHERE Key = 4;
             )"), TTxControl::Tx(tx->GetId())).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-
             auto commitResult = tx->Commit().ExtractValueSync();
-
             UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::ABORTED, commitResult.GetIssues().ToString());
         }
     };

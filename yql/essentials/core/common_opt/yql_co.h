@@ -10,6 +10,7 @@ namespace NYql {
 struct TOptimizeContext {
     TTypeAnnotationContext* Types = nullptr;
     TParentsMap* ParentsMap = nullptr;
+    bool ForPeephole = false;
 
     const TExprNode* GetParentIfSingle(const TExprNode& node) const {
         YQL_ENSURE(ParentsMap);

@@ -653,6 +653,8 @@ private:
             Reads.erase(failedRead);
             return ResolveTableShards();
         }
+        auto& shardState = ReadsPerShard[failedRead.ShardId];
+        ++shardState.RetryAttempts;
 
         auto delay = Reads.CalcDelayForShard(failedRead, allowInstantRetry);
         if (delay == TDuration::Zero()) {

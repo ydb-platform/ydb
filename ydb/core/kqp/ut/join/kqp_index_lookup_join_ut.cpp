@@ -1,7 +1,6 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
 #include <ydb-cpp-sdk/client/proto/accessor.h>
-
 #include <fmt/format.h>
 
 namespace NKikimr {
@@ -101,7 +100,7 @@ void PrepareTables(TSession session) {
 
 Y_UNIT_TEST_SUITE(KqpIndexLookupJoin) {
 
-void Test(const TString& query, const TString& answer, size_t rightTableReads, bool useStreamLookup = false) {
+void Test(const TString& query, const TString& answer, size_t rightTableReads, bool useStreamLookup = false, size_t leftTableReads = 7) {
     NKikimrConfig::TAppConfig appConfig;
     appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(useStreamLookup);
 
@@ -125,9 +124,10 @@ void Test(const TString& query, const TString& answer, size_t rightTableReads, b
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
 
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 2);
+
         for (const auto& tableStat : stats.query_phases(0).table_access()) {
             if (tableStat.name() == "/Root/Left") {
-                UNIT_ASSERT_VALUES_EQUAL(tableStat.reads().rows(), 7);
+                UNIT_ASSERT_VALUES_EQUAL(tableStat.reads().rows(), leftTableReads);
             } else {
                 UNIT_ASSERT_VALUES_EQUAL(tableStat.name(), "/Root/Right");
                 UNIT_ASSERT_VALUES_EQUAL(tableStat.reads().rows(), rightTableReads);
@@ -519,7 +519,7 @@ Y_UNIT_TEST_TWIN(LeftJoinRightNullFilter, StreamLookup) {
             [["Value3"];#];
             [["Value6"];#];
             [["Value7"];#]
-        ])", 4, StreamLookup);
+        ])", 8, StreamLookup, 14);
 }
 
 Y_UNIT_TEST_TWIN(LeftJoinSkipNullFilter, StreamLookup) {

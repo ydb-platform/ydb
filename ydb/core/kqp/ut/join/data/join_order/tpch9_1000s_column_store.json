@@ -19,20 +19,6 @@
               "args":
                 [
                   {
-                    "op_name":"InnerJoin (Grace)",
-                    "args":
-                      [
-                        {
-                          "op_name":"TableFullScan",
-                          "table":"partsupp"
-                        },
-                        {
-                          "op_name":"TableFullScan",
-                          "table":"part"
-                        }
-                      ]
-                  },
-                  {
                     "op_name":"InnerJoin (MapJoin)",
                     "args":
                       [
@@ -43,6 +29,20 @@
                         {
                           "op_name":"TableFullScan",
                           "table":"nation"
+                        }
+                      ]
+                  },
+                  {
+                    "op_name":"InnerJoin (Grace)",
+                    "args":
+                      [
+                        {
+                          "op_name":"TableFullScan",
+                          "table":"partsupp"
+                        },
+                        {
+                          "op_name":"TableFullScan",
+                          "table":"part"
                         }
                       ]
                   }

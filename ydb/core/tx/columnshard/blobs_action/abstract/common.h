@@ -12,7 +12,6 @@ namespace NKikimr::NOlap {
 class ICommonBlobsAction {
 private:
     YDB_READONLY_DEF(TString, StorageId);
-    YDB_READONLY(TString, ActionGuid, TGUID::CreateTimebased().AsGuidString());
     const i64 ActionId = 0;
 public:
     i64 GetActionId() const {

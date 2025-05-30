@@ -14,6 +14,7 @@ ENDIF()
 
 SIZE(MEDIUM)
 
+ENV(YDB_ENABLE_COLUMN_TABLES="true")
 ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
 DEPENDS(
     ydb/apps/ydbd

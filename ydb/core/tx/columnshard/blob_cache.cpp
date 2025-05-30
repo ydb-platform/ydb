@@ -237,7 +237,7 @@ private:
         if (it != Cache.End()) {
             Hits->Inc();
             HitsBytes->Add(blobRange.Size);
-            SendResult(sender, blobRange, NKikimrProto::OK, it.Value(), ctx, true);
+            SendResult(sender, blobRange, NKikimrProto::OK, it.Value(),  {}, ctx, true);
             return true;
         }
 
@@ -423,10 +423,10 @@ private:
     }
 
     void SendResult(const TActorId& to, const TBlobRange& blobRange, NKikimrProto::EReplyStatus status,
-                    const TString& data, const TActorContext& ctx, const bool fromCache = false) {
+                    const TString& data, const TString& detailedError, const TActorContext& ctx, const bool fromCache = false) {
         LOG_S_DEBUG("Send result: " << blobRange << " to: " << to << " status: " << status);
 
-        ctx.Send(to, new TEvBlobCache::TEvReadBlobRangeResult(blobRange, status, data, fromCache));
+        ctx.Send(to, new TEvBlobCache::TEvReadBlobRangeResult(blobRange, status, data, detailedError, fromCache));
     }
 
     void Handle(TEvBlobStorage::TEvGetResult::TPtr& ev, const TActorContext& ctx) {
@@ -436,7 +436,9 @@ private:
             Y_ABORT("Unexpected reply from blobstorage");
         }
 
+        TString detailedError;
         if (ev->Get()->Status != NKikimrProto::EReplyStatus::OK) {
+            detailedError = ev->Get()->ToString();
             AFL_WARN(NKikimrServices::BLOB_CACHE)("fail", ev->Get()->ToString());
             ReadSimpleFailedBytes->Add(ev->Get()->ResponseSz);
             ReadSimpleFailedCount->Add(1);
@@ -458,14 +460,14 @@ private:
 
         for (size_t i = 0; i < ev->Get()->ResponseSz; ++i) {
             const auto& res = ev->Get()->Responses[i];
-            ProcessSingleRangeResult(blobRanges[i], readCookie, res.Status, res.Buffer.ConvertToString(), ctx);
+            ProcessSingleRangeResult(blobRanges[i], readCookie, res.Status, res.Buffer.ConvertToString(), detailedError, ctx);
         }
 
         MakeReadRequests(ctx);
     }
 
     void ProcessSingleRangeResult(const TBlobRange& blobRange, const ui64 readCookie,
-        ui32 status, const TString& data, const TActorContext& ctx) noexcept
+        ui32 status, const TString& data, const TString& detailedError, const TActorContext& ctx) noexcept
     {
         AFL_DEBUG(NKikimrServices::BLOB_CACHE)("ProcessSingleRangeResult", blobRange);
         auto readIt = OutstandingReads.find(blobRange);
@@ -500,7 +502,7 @@ private:
         AFL_DEBUG(NKikimrServices::BLOB_CACHE)("ProcessSingleRangeResult", blobRange)("send_replies", readIt->second.Waiting.size());
         // Send results to all waiters
         for (const auto& to : readIt->second.Waiting) {
-            SendResult(to, blobRange, (NKikimrProto::EReplyStatus)status, data, ctx);
+            SendResult(to, blobRange, (NKikimrProto::EReplyStatus)status, data, detailedError, ctx);
         }
 
         OutstandingReads.erase(readIt);
@@ -525,7 +527,7 @@ private:
 
             for (size_t i = 0; i < blobRanges.size(); ++i) {
                 Y_ABORT_UNLESS(blobRanges[i].BlobId.GetTabletId() == tabletId);
-                ProcessSingleRangeResult(blobRanges[i], readCookie, NKikimrProto::EReplyStatus::NOTREADY, {}, ctx);
+                ProcessSingleRangeResult(blobRanges[i], readCookie, NKikimrProto::EReplyStatus::NOTREADY, {}, {}, ctx);
             }
         }
 

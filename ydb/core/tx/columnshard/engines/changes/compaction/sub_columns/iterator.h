@@ -24,12 +24,10 @@ private:
     TRemapColumns& Remapper;
     const ui32 SourceIdx;
 
-    void InitArray(const ui32 position) {
+    void InitArraysImpl(const ui32 position) {
         if (OriginalArray) {
             CurrentChunk = OriginalArray->GetArray(CurrentChunk, position, OriginalArray);
             CurrentChunkStartPosition = CurrentChunk->GetAddress().GetGlobalStartPosition();
-//            AFL_VERIFY(CurrentChunk->GetAddress().GetLocalIndex(position) == 0)("pos", position)(
-//                "local", CurrentChunk->GetAddress().GetLocalIndex(position));
             if (CurrentChunk->GetArray()->GetType() == IChunkedArray::EType::SubColumnsArray) {
                 CurrentSubColumnsArray = std::static_pointer_cast<TSubColumnsArray>(CurrentChunk->GetArray());
             } else {
@@ -37,6 +35,14 @@ private:
                     Loader->GetAccessorConstructor()
                         ->Construct(CurrentChunk->GetArray(), Loader->BuildAccessorContext(CurrentChunk->GetArray()->GetRecordsCount()))
                         .DetachResult());
+            }
+        }
+    }
+
+    void InitArray(const ui32 position) {
+        if (OriginalArray) {
+            if (position) {
+                InitArraysImpl(position);
             }
             Remapper.StartSourceChunk(
                 SourceIdx, CurrentSubColumnsArray->GetColumnsData().GetStats(), CurrentSubColumnsArray->GetOthersData().GetStats());
@@ -51,6 +57,7 @@ public:
         , Loader(loader)
         , Remapper(remapper)
         , SourceIdx(sourceIdx) {
+        InitArraysImpl(0);
     }
 
     void Start() {

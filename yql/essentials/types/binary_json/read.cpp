@@ -330,18 +330,22 @@ TString SerializeToJson(const TBinaryJson& binaryJson) {
     return SerializeToJson(TStringBuf(binaryJson.Data(), binaryJson.Size()));
 }
 
-TString SerializeToJson(TStringBuf binaryJson) {
-    auto reader = TBinaryJsonReader::Make(binaryJson);
-
+TString SerializeToJson(const TContainerCursor& cursor) {
     TJsonWriterConfig config;
     config.DoubleNDigits = 16;
     config.FloatNDigits = 8;
+    config.WriteNanAsString = true;
 
     TStringStream output;
     TJsonWriter writer(&output, config);
-    ReadContainerToJson(reader->GetRootCursor(), writer);
+    ReadContainerToJson(cursor, writer);
     writer.Flush();
     return output.Str();
+}
+
+TString SerializeToJson(TStringBuf binaryJson) {
+    auto reader = TBinaryJsonReader::Make(binaryJson);
+    return SerializeToJson(reader->GetRootCursor());
 }
 
 namespace {

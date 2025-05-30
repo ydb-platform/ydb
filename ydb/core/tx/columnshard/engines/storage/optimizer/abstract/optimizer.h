@@ -7,12 +7,14 @@
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
 #include <library/cpp/object_factory/object_factory.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 
 namespace NKikimr::NOlap {
 class TColumnEngineChanges;
 class IStoragesManager;
 class TGranuleMeta;
 class TPortionInfo;
+class TPortionAccessorConstructor;
 namespace NDataLocks {
 class TManager;
 }
@@ -80,9 +82,12 @@ public:
 
 class IOptimizerPlanner {
 private:
-    const ui64 PathId;
+    const TInternalPathId PathId;
     YDB_READONLY(TInstant, ActualizationInstant, TInstant::Zero());
 
+    virtual bool DoIsOverloaded() const {
+        return false;
+    }
 protected:
     virtual void DoModifyPortions(const THashMap<ui64, std::shared_ptr<TPortionInfo>>& add,
         const THashMap<ui64, std::shared_ptr<TPortionInfo>>& remove) = 0;
@@ -103,10 +108,16 @@ protected:
     }
 
 public:
-    IOptimizerPlanner(const ui64 pathId)
-        : PathId(pathId) {
+    virtual ui32 GetAppropriateLevel(const ui32 baseLevel, const TPortionAccessorConstructor& /*info*/) const {
+        return baseLevel;
     }
 
+    IOptimizerPlanner(const TInternalPathId pathId)
+        : PathId(pathId) {
+    }
+    bool IsOverloaded() const {
+        return DoIsOverloaded();
+    }
     TConclusionStatus CheckWriteData() const {
         return DoCheckWriteData();
     }
@@ -169,12 +180,12 @@ class IOptimizerPlannerConstructor {
 public:
     class TBuildContext {
     private:
-        YDB_READONLY(ui64, PathId, 0);
+        YDB_READONLY_DEF(TInternalPathId, PathId);
         YDB_READONLY_DEF(std::shared_ptr<IStoragesManager>, Storages);
         YDB_READONLY_DEF(std::shared_ptr<arrow::Schema>, PKSchema);
 
     public:
-        TBuildContext(const ui64 pathId, const std::shared_ptr<IStoragesManager>& storages, const std::shared_ptr<arrow::Schema>& pkSchema)
+        TBuildContext(const TInternalPathId pathId, const std::shared_ptr<IStoragesManager>& storages, const std::shared_ptr<arrow::Schema>& pkSchema)
             : PathId(pathId)
             , Storages(storages)
             , PKSchema(pkSchema) {
@@ -188,7 +199,6 @@ private:
     virtual TConclusion<std::shared_ptr<IOptimizerPlanner>> DoBuildPlanner(const TBuildContext& context) const = 0;
     virtual void DoSerializeToProto(TProto& proto) const = 0;
     virtual bool DoDeserializeFromProto(const TProto& proto) = 0;
-    virtual bool DoIsEqualTo(const IOptimizerPlannerConstructor& item) const = 0;
     virtual TConclusionStatus DoDeserializeFromJson(const NJson::TJsonValue& jsonInfo) = 0;
     virtual bool DoApplyToCurrentObject(IOptimizerPlanner& current) const = 0;
 
@@ -223,10 +233,11 @@ public:
 
     bool IsEqualTo(const std::shared_ptr<IOptimizerPlannerConstructor>& item) const {
         AFL_VERIFY(!!item);
-        if (GetClassName() != item->GetClassName()) {
-            return false;
-        }
-        return DoIsEqualTo(*item);
+        TProto selfProto;
+        TProto itemProto;
+        SerializeToProto(selfProto);
+        item->SerializeToProto(itemProto);
+        return selfProto.SerializeAsString() == itemProto.SerializeAsString();
     }
 
     bool DeserializeFromProto(const TProto& proto) {

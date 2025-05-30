@@ -19,9 +19,10 @@ namespace {
 
 class TCommonOptTransformer final : public TSyncTransformerBase {
 public:
-    TCommonOptTransformer(TTypeAnnotationContext* typeCtx, bool final)
+    TCommonOptTransformer(TTypeAnnotationContext* typeCtx, bool final, bool forPeephole)
         : TypeCtx(typeCtx)
         , Final(final)
+        , ForPeephole(forPeephole)
     {}
 
     IGraphTransformer::TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final;
@@ -44,16 +45,17 @@ private:
     THashSet<TIssue> AddedErrors;
     TTypeAnnotationContext* TypeCtx;
     const bool Final;
+    const bool ForPeephole;
 };
 
 }
 
-TAutoPtr<IGraphTransformer> CreateCommonOptTransformer(TTypeAnnotationContext* typeCtx) {
-    return new TCommonOptTransformer(typeCtx, false);
+TAutoPtr<IGraphTransformer> CreateCommonOptTransformer(bool forPeephole, TTypeAnnotationContext* typeCtx) {
+    return new TCommonOptTransformer(typeCtx, false, forPeephole);
 }
 
 TAutoPtr<IGraphTransformer> CreateCommonOptFinalTransformer(TTypeAnnotationContext* typeCtx) {
-    return new TCommonOptTransformer(typeCtx, true);
+    return new TCommonOptTransformer(typeCtx, true, false);
 }
 
 IGraphTransformer::TStatus TCommonOptTransformer::DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) {
@@ -139,6 +141,7 @@ IGraphTransformer::TStatus TCommonOptTransformer::DoTransform(
     TParentsMap parentsMap;
     TOptimizeContext optCtx;
     optCtx.Types = TypeCtx;
+    optCtx.ForPeephole = ForPeephole;
     if (withParents) {
         GatherParents(*input, parentsMap);
         optCtx.ParentsMap = &parentsMap;

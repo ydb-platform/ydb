@@ -1,46 +1,27 @@
 #include "accessor.h"
 
+#include <ydb/core/formats/arrow/accessor/sparsed/constructor.h>
+
+#include <ydb/library/actors/core/log.h>
+#include <ydb/library/actors/prof/tag.h>
+
 namespace NKikimr::NArrow::NAccessor {
 
-namespace {
-class TSerializedChunkAccessor {
-private:
-    const std::vector<TDeserializeChunkedArray::TChunk>& Chunks;
-    const std::shared_ptr<TColumnLoader>& Loader;
-    std::optional<IChunkedArray::TLocalChunkedArrayAddress>& Result;
-
-public:
-    TSerializedChunkAccessor(const std::vector<TDeserializeChunkedArray::TChunk>& chunks, const std::shared_ptr<TColumnLoader>& loader,
-        std::optional<IChunkedArray::TLocalChunkedArrayAddress>& result)
-        : Chunks(chunks)
-        , Loader(loader)
-        , Result(result) {
-    }
-    ui64 GetChunksCount() const {
-        return Chunks.size();
-    }
-    ui64 GetChunkLength(const ui32 idx) const {
-        return Chunks[idx].GetRecordsCount();
-    }
-    void OnArray(const ui32 chunkIdx, const ui32 startPosition) const {
-        Result = IChunkedArray::TLocalChunkedArrayAddress(Chunks[chunkIdx].GetArrayVerified(Loader), startPosition, chunkIdx);
-    }
-};
-}   // namespace
-
-IChunkedArray::TLocalDataAddress TDeserializeChunkedArray::DoGetLocalData(
-    const std::optional<TCommonChunkAddress>& /*chunkCurrent*/, const ui64 /*position*/) const {
-    AFL_VERIFY(false);
-    return IChunkedArray::TLocalDataAddress(nullptr, 0, 0);
-}
-
 IChunkedArray::TLocalChunkedArrayAddress TDeserializeChunkedArray::DoGetLocalChunkedArray(
-    const std::optional<TCommonChunkAddress>& chunkCurrent, const ui64 position) const {
-    std::optional<IChunkedArray::TLocalChunkedArrayAddress> result;
-    TSerializedChunkAccessor accessor(Chunks, Loader, result);
-    SelectChunk(chunkCurrent, position, accessor);
-    AFL_VERIFY(result);
-    return *result;
+    const std::optional<TCommonChunkAddress>& /*chunkCurrent*/, const ui64 /*position*/) const {
+    if (PredefinedArray) {
+        return TLocalChunkedArrayAddress(PredefinedArray, 0, 0);
+    }
+    if (Counter.Inc() > 1) {
+        AFL_WARN(NKikimrServices::ARROW_HELPER)("event", "many_deserializations")("counter", Counter.Val())("size", Data.size())(
+            "buffer", DataBuffer.size());
+    }
+    if (!!Data) {
+        return TLocalChunkedArrayAddress(Loader->ApplyVerified(Data, GetRecordsCount()), 0, 0);
+    } else {
+        AFL_VERIFY(!!DataBuffer);
+        return TLocalChunkedArrayAddress(Loader->ApplyVerified(TString(DataBuffer.data(), DataBuffer.size()), GetRecordsCount()), 0, 0);
+    }
 }
 
 }   // namespace NKikimr::NArrow::NAccessor

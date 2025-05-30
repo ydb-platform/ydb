@@ -84,10 +84,13 @@ TConclusionStatus TGeneralCompactColumnEngineChanges::DoConstructBlobs(TConstruc
                 if (NYDBTest::TControllers::GetColumnShardController()->CheckPortionsToMergeOnCompaction(
                         sumMemory + i->GetColumnMaxChunkMemory(), subsetsCount) &&
                     subsetsCount > 1) {
-                    appendedToMerge.emplace_back(std::make_shared<TWritePortionsToMerge>(
-                        BuildAppendedPortionsByChunks(context, std::move(toMerge), resultFiltered, stats)));
+                    auto merged = BuildAppendedPortionsByChunks(context, std::move(toMerge), resultFiltered, stats);
+                    if (merged.size()) {
+                        appendedToMerge.emplace_back(std::make_shared<TWritePortionsToMerge>(std::move(merged)));
+                    }
                     toMerge.clear();
                     sumMemory = 0;
+                    subsetsCount = 0;
                 }
                 sumMemory += i->GetColumnMaxChunkMemory();
                 totalSumMemory += i->GetColumnMaxChunkMemory();
@@ -95,19 +98,20 @@ TConclusionStatus TGeneralCompactColumnEngineChanges::DoConstructBlobs(TConstruc
                 toMerge.insert(toMerge.end(), mergePortions.begin(), mergePortions.end());
                 ++subsetsCount;
             }
-            if (toMerge.size() > 1) {
+            if (toMerge.size()) {
                 auto merged = BuildAppendedPortionsByChunks(context, std::move(toMerge), resultFiltered, stats);
                 if (appendedToMerge.size()) {
-                    appendedToMerge.emplace_back(std::make_shared<TWritePortionsToMerge>(std::move(merged)));
+                    if (merged.size()) {
+                        appendedToMerge.emplace_back(std::make_shared<TWritePortionsToMerge>(std::move(merged)));
+                    }
                 } else {
                     context.Counters.OnCompactionCorrectMemory(totalSumMemory);
                     AppendedPortions = std::move(merged);
                     break;
                 }
-            } else {
-                AFL_VERIFY(appendedToMerge.size());
-                AFL_VERIFY(currentToMerge.size());
-                appendedToMerge.emplace_back(currentToMerge.back());
+            }
+            if (!appendedToMerge.size()) {
+                break;
             }
             context.Counters.OnCompactionHugeMemory(totalSumMemory, appendedToMerge.size());
             currentToMerge = std::move(appendedToMerge);

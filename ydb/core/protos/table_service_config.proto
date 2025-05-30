@@ -298,7 +298,7 @@ message TTableServiceConfig {
     optional uint64 IdxLookupJoinPointsLimit = 58 [default = 3];
     reserved 59; //optional bool OldLookupJoinBehaviour = 59 [default = false];
 
-    optional bool EnableOltpSink = 60 [default = false];
+    optional bool EnableOltpSink = 60 [default = true];
 
     enum EBlockChannelsMode {
         BLOCK_CHANNELS_SCALAR = 0;
@@ -317,7 +317,7 @@ message TTableServiceConfig {
 
     optional bool EnableImplicitQueryParameterTypes = 66 [ default = false ];
 
-    optional string EnableSpillingNodes = 67 [ default = "None" ];
+    optional string EnableSpillingNodes = 67 [ default = "All" ];
 
     message TComputeSchedulerSettings {
         optional uint64 AdvanceTimeIntervalUsec = 1 [default = 500000];

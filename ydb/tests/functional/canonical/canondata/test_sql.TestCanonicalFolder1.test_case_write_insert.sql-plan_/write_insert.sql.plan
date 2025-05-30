@@ -6,15 +6,6 @@
     "tables": [
         {
             "name": "/local/base_write_insert_sql_plan/Input",
-            "reads": [
-                {
-                    "lookup_by": [
-                        "key",
-                        "subkey"
-                    ],
-                    "type": "Lookup"
-                }
-            ],
             "writes": [
                 {
                     "columns": [
@@ -22,7 +13,7 @@
                         "subkey",
                         "value"
                     ],
-                    "type": "MultiUpsert"
+                    "type": "MultiInsert"
                 }
             ]
         },
@@ -41,13 +32,6 @@
                         "Name (-\u221e, +\u221e)"
                     ],
                     "type": "Scan"
-                },
-                {
-                    "lookup_by": [
-                        "Group",
-                        "Name"
-                    ],
-                    "type": "Lookup"
                 }
             ],
             "writes": [
@@ -57,7 +41,7 @@
                         "Group",
                         "Name"
                     ],
-                    "type": "MultiUpsert"
+                    "type": "MultiInsert"
                 }
             ]
         }

@@ -10,6 +10,7 @@ PEERDIR(
 )
 
 SRCS(
+    common.cpp
     constructor.cpp
     request.cpp
     accessor.cpp

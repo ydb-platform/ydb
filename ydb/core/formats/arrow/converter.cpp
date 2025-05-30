@@ -17,7 +17,7 @@
 
 namespace NKikimr::NArrow {
 
-static bool ConvertData(TCell& cell, const NScheme::TTypeInfo& colType, TMemoryPool& memPool, TString& errorMessage) {
+static bool ConvertData(TCell& cell, const NScheme::TTypeInfo& colType, TMemoryPool& memPool, TString& errorMessage, const bool allowInfDouble) {
     if (!cell.AsBuf()) {
         cell = TCell();
         return true;
@@ -34,7 +34,7 @@ static bool ConvertData(TCell& cell, const NScheme::TTypeInfo& colType, TMemoryP
             break;
         }
         case NScheme::NTypeIds::JsonDocument: {
-            const auto binaryJson = NBinaryJson::SerializeToBinaryJson(cell.AsBuf());
+            const auto binaryJson = NBinaryJson::SerializeToBinaryJson(cell.AsBuf(), allowInfDouble);
             if (std::holds_alternative<TString>(binaryJson)) {
                 errorMessage = "Invalid JSON for JsonDocument provided: " + std::get<TString>(binaryJson);
                 return false;
@@ -50,7 +50,8 @@ static bool ConvertData(TCell& cell, const NScheme::TTypeInfo& colType, TMemoryP
     return true;
 }
 
-static arrow::Status ConvertColumn(const NScheme::TTypeInfo colType, std::shared_ptr<arrow::Array>& column, std::shared_ptr<arrow::Field>& field) {
+static arrow::Status ConvertColumn(
+    const NScheme::TTypeInfo colType, std::shared_ptr<arrow::Array>& column, std::shared_ptr<arrow::Field>& field, const bool allowInfDouble) {
     switch (colType.GetTypeId()) {
     case NScheme::NTypeIds::Decimal:
         return arrow::Status::OK();
@@ -102,7 +103,7 @@ static arrow::Status ConvertColumn(const NScheme::TTypeInfo colType, std::shared
                         return appendResult;
                     }
                 } else {
-                    const auto maybeBinaryJson = NBinaryJson::SerializeToBinaryJson(valueBuf);
+                    const auto maybeBinaryJson = NBinaryJson::SerializeToBinaryJson(valueBuf, allowInfDouble);
                     if (std::holds_alternative<TString>(maybeBinaryJson)) {
                         return arrow::Status::SerializationError("Cannot serialize json (", std::get<TString>(maybeBinaryJson),
                             "): ", valueBuf.SubStr(0, Min(valueBuf.Size(), size_t{1024})));
@@ -134,9 +135,8 @@ static arrow::Status ConvertColumn(const NScheme::TTypeInfo colType, std::shared
     return arrow::Status::OK();
 }
 
-arrow::Result<std::shared_ptr<arrow::RecordBatch>> ConvertColumns(const std::shared_ptr<arrow::RecordBatch>& batch,
-                                                   const THashMap<TString, NScheme::TTypeInfo>& columnsToConvert)
-{
+arrow::Result<std::shared_ptr<arrow::RecordBatch>> ConvertColumns(
+    const std::shared_ptr<arrow::RecordBatch>& batch, const THashMap<TString, NScheme::TTypeInfo>& columnsToConvert, const bool allowInfDouble) {
     std::vector<std::shared_ptr<arrow::Array>> columns = batch->columns();
     std::vector<std::shared_ptr<arrow::Field>> fields = batch->schema()->fields();
     Y_ABORT_UNLESS(columns.size() == fields.size());
@@ -144,7 +144,7 @@ arrow::Result<std::shared_ptr<arrow::RecordBatch>> ConvertColumns(const std::sha
         auto& colName = batch->column_name(i);
         auto it = columnsToConvert.find(TString(colName.data(), colName.size()));
         if (it != columnsToConvert.end()) {
-            auto convertResult = ConvertColumn(it->second, columns[i], fields[i]);
+            auto convertResult = ConvertColumn(it->second, columns[i], fields[i], allowInfDouble);
             if (!convertResult.ok()) {
                 return arrow::Status::FromArgs(convertResult.code(), "column ", colName, ": ", convertResult.ToString());
             }
@@ -326,7 +326,7 @@ bool TArrowToYdbConverter::Process(const arrow::RecordBatch& batch, TString& err
 
             if (NeedDataConversion(colType)) {
                 for (i32 i = 0; i < unroll; ++i) {
-                    if (!ConvertData(cells[i][col], colType, memPool, errorMessage)) {
+                    if (!ConvertData(cells[i][col], colType, memPool, errorMessage, AllowInfDouble_)) {
                         return false;
                     }
                 }
@@ -371,7 +371,7 @@ bool TArrowToYdbConverter::Process(const arrow::RecordBatch& batch, TString& err
                 return false;
             }
 
-            if (!ConvertData(curCell, colType, memPool, errorMessage)) {
+            if (!ConvertData(curCell, colType, memPool, errorMessage, AllowInfDouble_)) {
                 return false;
             }
             ++col;

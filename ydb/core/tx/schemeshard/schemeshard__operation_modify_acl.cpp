@@ -54,7 +54,7 @@ public:
         }
 
         TString errStr;
-        if (!context.SS->CheckApplyIf(Transaction, errStr)) {
+        if (!context.SS->CheckApplyIf(Transaction, errStr, path->PathType)) {
             result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
             return result;
         }

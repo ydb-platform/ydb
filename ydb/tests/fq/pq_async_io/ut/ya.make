@@ -12,8 +12,8 @@ SRCS(
 
 PEERDIR(
     ydb/core/testlib/basics/default
-    yql/essentials/minikql/comp_nodes/llvm14
-    yql/essentials/minikql/computation/llvm14
+    yql/essentials/minikql/comp_nodes/llvm16
+    yql/essentials/minikql/computation/llvm16
     yql/essentials/providers/common/comp_nodes
     ydb/library/yql/providers/common/ut_helpers
     ydb/library/yql/providers/pq/gateway/native

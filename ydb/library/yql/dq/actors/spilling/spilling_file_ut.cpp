@@ -53,7 +53,7 @@ public:
     }
 
     TActorId StartSpillingService(ui64 maxTotalSize = 1000, ui64 maxFileSize = 500,
-        ui64 maxFilePartSize = 100, const TFsPath& root = TFsPath::Cwd() / GetSpillingPrefix())
+        ui64 maxFilePartSize = 100, ui32 ioThreadPoolQueueSize = 1000, const TFsPath& root = TFsPath::Cwd() / GetSpillingPrefix())
     {
         SpillingRoot_ = root;
         SpillingSessionId_ = CreateGuidAsString();
@@ -63,7 +63,8 @@ public:
             .SpillingSessionId = SpillingSessionId_,
             .MaxTotalSize = maxTotalSize,
             .MaxFileSize = maxFileSize,
-            .MaxFilePartSize = maxFilePartSize
+            .MaxFilePartSize = maxFilePartSize,
+            .IoThreadPoolQueueSize = ioThreadPoolQueueSize
         };
 
         auto counters = Counters();
@@ -497,11 +498,36 @@ Y_UNIT_TEST_SUITE(DqSpillingFileTests) {
         }
     }
 
+    Y_UNIT_TEST(ThreadPoolQueueOverflow) {
+        TTestActorRuntime runtime;
+        runtime.Initialize();
+
+        runtime.StartSpillingService(1000, 500, 10, 1);
+        ui32 iters = 100;
+        std::vector<TActorId> testers;
+        std::vector<TActorId> spillingActors;
+        for (ui32 i = 0; i < iters; ++i) {
+            testers.emplace_back(runtime.AllocateEdgeActor());
+            spillingActors.emplace_back(runtime.StartSpillingActor(testers.back()));
+        }
+
+        runtime.WaitBootstrap();
+
+        for (ui32 i = 0; i < iters; ++i) {
+            auto ev = new TEvDqSpilling::TEvWrite(i, CreateRope(10, 'a'));
+            runtime.Send(new IEventHandle(spillingActors[i], testers[i], ev));
+        }
+
+        auto resp = runtime.GrabEdgeEvent<TEvDqSpilling::TEvError>(TDuration::Seconds(1));
+        Cerr << resp->Message << Endl;
+        UNIT_ASSERT_EQUAL("[Write] Can not run operation", resp->Message);
+    }
+
     Y_UNIT_TEST(StartError) {
         TTestActorRuntime runtime;
         runtime.Initialize();
 
-        auto spillingService = runtime.StartSpillingService(100, 500, 100, TFsPath("/nonexistent") / runtime.GetSpillingPrefix());
+        auto spillingService = runtime.StartSpillingService(100, 500, 100, 1000, TFsPath("/nonexistent") / runtime.GetSpillingPrefix());
         auto tester = runtime.AllocateEdgeActor();
         auto spillingActor = runtime.StartSpillingActor(tester);
 

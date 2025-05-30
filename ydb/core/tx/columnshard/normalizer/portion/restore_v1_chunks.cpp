@@ -72,11 +72,11 @@ public:
                 AFL_VERIFY(i.GetBlobIds()[idx++].GetLogoBlobId() == logo);
             }
             db.Table<IndexPortions>()
-                .Key(i.GetPortionInfo().GetPathId(), i.GetPortionInfo().GetPortionId())
+                .Key(i.GetPortionInfo().GetPathId().GetRawValue(), i.GetPortionInfo().GetPortionId())
                 .Update(NIceDb::TUpdate<IndexPortions::Metadata>(metaProto.SerializeAsString()));
             for (auto&& [_, c] : i.GetChunksInfo()) {
                 db.Table<IndexColumnsV1>()
-                    .Key(c.GetPathId(), c.GetPortionId(), c.GetAddress().GetColumnId(), c.GetAddress().GetChunkIdx())
+                    .Key(c.GetPathId().GetRawValue(), c.GetPortionId(), c.GetAddress().GetColumnId(), c.GetAddress().GetChunkIdx())
                     .Update(NIceDb::TUpdate<IndexColumnsV1::Metadata>(c.GetMetaProto().SerializeAsString()),
                         NIceDb::TUpdate<IndexColumnsV1::BlobIdx>(i.GetIndexByBlob(c.GetBlobRange().GetBlobId())),
                         NIceDb::TUpdate<IndexColumnsV1::Offset>(c.GetBlobRange().GetOffset()),
@@ -120,7 +120,7 @@ public:
         using IndexColumnsV1 = NColumnShard::Schema::IndexColumnsV1;
         for (auto&& i : Patches) {
             db.Table<IndexColumnsV1>()
-                .Key(i.GetChunkInfo().GetPathId(), i.GetChunkInfo().GetPortionId(), i.GetChunkInfo().GetAddress().GetEntityId(),
+                .Key(i.GetChunkInfo().GetPathId().GetRawValue(), i.GetChunkInfo().GetPortionId(), i.GetChunkInfo().GetAddress().GetEntityId(),
                     i.GetChunkInfo().GetAddress().GetChunkIdx())
                 .Delete();
         }
@@ -210,8 +210,10 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TNormalizer::DoInit(
     if (columns1Remove.empty() && portions0.empty()) {
         return tasks;
     }
+    if (!AppDataVerified().ColumnShardConfig.GetColumnChunksV0Usage()) {
+        return tasks;
+    }
 
-    AFL_VERIFY(AppDataVerified().ColumnShardConfig.GetColumnChunksV0Usage());
     AFL_VERIFY(AppDataVerified().ColumnShardConfig.GetColumnChunksV1Usage());
     {
         std::vector<TPatchItemRemoveV1> package;

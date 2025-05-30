@@ -177,6 +177,8 @@ NUdf::TUnboxedValue ReadToJsonDom(TStringBuf binaryJson, const NUdf::IValueBuild
 /**
  * @brief Serializes whole BinaryJson into textual JSON
  */
+TString SerializeToJson(const TContainerCursor& cursor);
+
 TString SerializeToJson(const TBinaryJson& binaryJson);
 
 TString SerializeToJson(TStringBuf binaryJson);

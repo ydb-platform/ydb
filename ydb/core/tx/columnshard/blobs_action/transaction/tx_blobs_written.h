@@ -55,7 +55,6 @@ public:
 class TTxBlobsWritingFailed: public TExtendedTransactionBase {
 private:
     using TBase = TExtendedTransactionBase;
-    const NKikimrProto::EReplyStatus PutBlobResult;
     TInsertedPortions Pack;
 
     class TReplyInfo {
@@ -79,9 +78,8 @@ private:
     std::vector<TReplyInfo> Results;
 
 public:
-    TTxBlobsWritingFailed(TColumnShard* self, const NKikimrProto::EReplyStatus writeStatus, TInsertedPortions&& pack)
+    TTxBlobsWritingFailed(TColumnShard* self, TInsertedPortions&& pack)
         : TBase(self)
-        , PutBlobResult(writeStatus)
         , Pack(std::move(pack)) {
     }
 

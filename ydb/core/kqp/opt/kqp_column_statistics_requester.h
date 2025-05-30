@@ -57,6 +57,9 @@ private:
     bool AfterLambdasUnmatched(const TExprNode::TPtr& input);
     
 private:
+    TMaybe<std::pair<TString, TString>> GetTableAndColumnNames(const TCoMember& member);
+
+private:
     THashMap<TExprNode::TPtr, TExprNode::TPtr> KqpTableByExprNode;
     THashMap<TString, THashSet<TString>> ColumnsByTableName;
 

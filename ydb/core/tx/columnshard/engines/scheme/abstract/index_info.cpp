@@ -8,7 +8,7 @@
 
 namespace NKikimr::NOlap {
 
-const std::shared_ptr<NKikimr::NOlap::TColumnLoader>& IIndexInfo::GetColumnLoaderVerified(const ui32 columnId) const {
+const std::shared_ptr<TColumnLoader>& IIndexInfo::GetColumnLoaderVerified(const ui32 columnId) const {
     const auto& result = GetColumnLoaderOptional(columnId);
     AFL_VERIFY(result);
     return result;

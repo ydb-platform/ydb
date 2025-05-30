@@ -2326,7 +2326,7 @@ private:
             sysLocks.BreakSetLocks();
         }
 
-        auto locks = sysLocks.ApplyLocks();
+        auto [locks, _] = sysLocks.ApplyLocks();
 
         for (auto& lock : locks) {
             NKikimrDataEvents::TLock* addLock;
@@ -2958,7 +2958,7 @@ public:
                 state.Lock = nullptr;
             } else {
                 // Lock valid, apply conflict changes
-                auto locks = sysLocks.ApplyLocks();
+                auto [locks, _] = sysLocks.ApplyLocks();
                 Y_ABORT_UNLESS(locks.empty(), "ApplyLocks acquired unexpected locks");
             }
         }

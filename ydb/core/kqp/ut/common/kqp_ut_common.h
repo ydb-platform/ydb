@@ -126,6 +126,10 @@ struct TKikimrSettings: public TTestFeatureFlagsHolder<TKikimrSettings> {
             AppConfig.MutableColumnShardConfig()->SetAlterObjectEnabled(enable);
             return *this;
     }
+    TKikimrSettings& SetColumnShardDoubleOutOfRangeHandling(const NKikimrConfig::TColumnShardConfig_EJsonDoubleOutOfRangeHandlingPolicy value) {
+        AppConfig.MutableColumnShardConfig()->SetDoubleOutOfRangeHandling(value);
+        return *this;
+    }
 };
 
 class TKikimrRunner {
@@ -391,6 +395,7 @@ struct TGetPlanParams {
     bool IncludeFilters = false;
     bool IncludeOptimizerEstimation = false;
     bool IncludeTables = true;
+    bool IncludeShuffles = false;
 };
 
 /* Gets join order with details as: join algo, join type and scan type. */
@@ -400,6 +405,40 @@ NJson::TJsonValue GetDetailedJoinOrder(const TString& deserializedPlan, const TG
 NJson::TJsonValue GetJoinOrder(const TString& deserializedPlan);
 
 NJson::TJsonValue GetJoinOrderFromDetailedJoinOrder(const TString& deserializedDetailedJoinOrder);
+
+class TTestExtEnv {
+public:
+    struct TEnvSettings {
+        size_t StaticNodeCount = 1;
+        size_t DynamicNodeCount = 1;
+        TString PoolName = "hdd1";
+        bool UseRealThreads = true;
+        NKikimrConfig::TFeatureFlags FeatureFlags;
+    };
+
+    TTestExtEnv(TEnvSettings envSettings);
+    ~TTestExtEnv();
+
+    NYdb::TDriver& GetDriver() const {
+        return *Driver;
+    }
+
+    void CreateDatabase(const TString& databaseName);
+
+private:
+    TPortManager PortManager;
+
+    Tests::TServerSettings::TPtr Settings;
+    Tests::TServer::TPtr Server;
+    THolder<Tests::TClient> Client;
+    THolder<Tests::TTenants> Tenants;
+
+    TString Endpoint;
+    NYdb::TDriverConfig DriverConfig;
+    THolder<NYdb::TDriver> Driver;
+
+    TEnvSettings EnvSettings;
+};
 
 } // namespace NKqp
 } // namespace NKikimr

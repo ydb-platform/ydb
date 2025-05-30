@@ -52,7 +52,7 @@ PEERDIR(
     ydb/library/yql/providers/s3/actors
     ydb/library/yql/providers/s3/proto
     ydb/library/yql/providers/s3/provider
-    ydb/library/yql/providers/solomon/async_io
+    ydb/library/yql/providers/solomon/actors
     ydb/library/yql/providers/solomon/gateway
     ydb/library/yql/providers/solomon/proto
     ydb/library/yql/providers/solomon/provider

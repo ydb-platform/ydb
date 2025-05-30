@@ -10,7 +10,7 @@ void TPortionIndexChunk::DoAddIntoPortionBeforeBlob(const TBlobRangeLink16& bRan
 }
 
 std::shared_ptr<IPortionDataChunk> TPortionIndexChunk::DoCopyWithAnotherBlob(
-    TString&& data, const TSimpleColumnInfo& /*columnInfo*/) const {
+    TString&& data, const ui32 /*rawBytes*/, const TSimpleColumnInfo& /*columnInfo*/) const {
     return std::make_shared<TPortionIndexChunk>(GetChunkAddressVerified(), RecordsCount, RawBytes, std::move(data));
 }
 

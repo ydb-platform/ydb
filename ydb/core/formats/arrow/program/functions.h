@@ -26,6 +26,8 @@ protected:
     bool NeedConcatenation = false;
 
 public:
+    virtual bool IsAggregation() const = 0;
+
     arrow::compute::ExecContext* GetContext() const {
         return GetCustomExecContext();
     }
@@ -68,6 +70,10 @@ private:
     const EOperation OperationId;
     virtual std::vector<std::string> GetRegistryFunctionNames() const override {
         return { GetFunctionName(OperationId) };
+    }
+
+    virtual bool IsAggregation() const override {
+        return false;
     }
 
 public:
@@ -318,11 +324,15 @@ public:
 class TKernelFunction: public IStepFunction {
 private:
     using TBase = IStepFunction;
-    const std::shared_ptr<arrow::compute::ScalarFunction> Function;
+    const std::shared_ptr<const arrow::compute::ScalarFunction> Function;
     std::shared_ptr<arrow::compute::FunctionOptions> FunctionOptions;
 
+    virtual bool IsAggregation() const override {
+        return false;
+    }
+
 public:
-    TKernelFunction(const std::shared_ptr<arrow::compute::ScalarFunction> kernelsFunction,
+    TKernelFunction(const std::shared_ptr<const arrow::compute::ScalarFunction> kernelsFunction,
         const std::shared_ptr<arrow::compute::FunctionOptions>& functionOptions = nullptr, const bool needConcatenation = false)
         : TBase(needConcatenation)
         , Function(kernelsFunction)
@@ -335,6 +345,15 @@ public:
         TAccessorsCollection::TChunksMerger merger;
         while (auto args = argumentsReader.ReadNext()) {
             try {
+                for (auto& arg: *args) {
+                    if (arg.kind() == arrow::Datum::ARRAY && arg.descr().type->id() == arrow::Type::TIMESTAMP) {
+                        auto timestamp_type = std::static_pointer_cast<arrow::TimestampType>(arg.descr().type);
+                        arrow::TimeUnit::type unit = timestamp_type->unit();
+                        if (unit == arrow::TimeUnit::MICRO) {
+                            arrow::util::get<std::shared_ptr<arrow::ArrayData>>(arg.value)->type = arrow::uint64();
+                        }
+                    }
+                }
                 auto result = Function->Execute(*args, FunctionOptions.get(), GetContext());
                 if (result.ok()) {
                     merger.AddChunk(*result);

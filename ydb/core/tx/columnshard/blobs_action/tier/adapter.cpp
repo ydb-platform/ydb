@@ -16,11 +16,11 @@ std::unique_ptr<NActors::IEventBase> TRepliesAdapter::RebuildReplyEvent(std::uni
     }
     if (ev->IsSuccess()) {
         AFL_VERIFY(!!ev->Body)("key", ev->Key)("interval_from", ev->GetReadInterval().first)("interval_to", ev->GetReadInterval().second);
-        return std::make_unique<NBlobCache::TEvBlobCache::TEvReadBlobRangeResult>(bRange, NKikimrProto::EReplyStatus::OK, ev->Body, false, StorageId);
+        return std::make_unique<NBlobCache::TEvBlobCache::TEvReadBlobRangeResult>(bRange, NKikimrProto::EReplyStatus::OK, ev->Body, TString{}, false, StorageId);
     } else {
         AFL_DEBUG(NKikimrServices::TX_TIERING)("event", "s3_request_failed")("request_type", "get_object")(
             "exception", ev->GetError().GetExceptionName())("message", ev->GetError().GetMessage())("storage_id", StorageId)("blob", logoBlobId);
-        return std::make_unique<NBlobCache::TEvBlobCache::TEvReadBlobRangeResult>(bRange, NKikimrProto::EReplyStatus::ERROR, TStringBuilder() << ev->Result, false, StorageId);
+        return std::make_unique<NBlobCache::TEvBlobCache::TEvReadBlobRangeResult>(bRange, NKikimrProto::EReplyStatus::ERROR, TStringBuilder() << ev->Result, TStringBuilder{} << ev->GetError().GetExceptionName() << ", " << ev->GetError().GetMessage(), false, StorageId);
     }
 }
 

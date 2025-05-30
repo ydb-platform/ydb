@@ -2172,9 +2172,10 @@ void TImportInfo::AddNotifySubscriber(const TActorId &actorId) {
     Subscribers.insert(actorId);
 }
 
-TIndexBuildInfo::TShardStatus::TShardStatus(TSerializedTableRange range, TString lastKeyAck)
+TIndexBuildInfo::TShardStatus::TShardStatus(TSerializedTableRange range, TString lastKeyAck, size_t shardsCount)
     : Range(std::move(range))
     , LastKeyAck(std::move(lastKeyAck))
+    , Index(shardsCount)
 {}
 
 void TIndexBuildInfo::SerializeToProto(TSchemeShard* ss, NKikimrSchemeOp::TIndexBuildConfig* result) const {
@@ -2216,7 +2217,6 @@ void TIndexBuildInfo::SerializeToProto([[maybe_unused]] TSchemeShard* ss, NKikim
 
 void TIndexBuildInfo::AddParent(const TSerializedTableRange& range, TShardIdx shard) {
     if (KMeans.Parent == 0) {
-        Y_ASSERT(KMeans.ParentEnd == 0);
         // For Parent == 0 only single kmeans needed, so there is only two options:
         // 1. It fits entirely in the single shard => local kmeans for single shard
         // 2. It doesn't fit entirely in the single shard => global kmeans for all shards

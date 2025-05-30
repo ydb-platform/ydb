@@ -1,9 +1,11 @@
 #include "write_with_blobs.h"
+
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
 
 namespace NKikimr::NOlap {
 
-void TWritePortionInfoWithBlobsConstructor::TBlobInfo::AddChunk(TWritePortionInfoWithBlobsConstructor& owner, const std::shared_ptr<IPortionDataChunk>& chunk) {
+void TWritePortionInfoWithBlobsConstructor::TBlobInfo::AddChunk(
+    TWritePortionInfoWithBlobsConstructor& owner, const std::shared_ptr<IPortionDataChunk>& chunk) {
     AFL_VERIFY(chunk);
     Y_ABORT_UNLESS(!Finished);
     const TString& data = chunk->GetData();
@@ -27,11 +29,16 @@ void TWritePortionInfoWithBlobsResult::TBlobInfo::RegisterBlobId(TWritePortionIn
 }
 
 TWritePortionInfoWithBlobsConstructor TWritePortionInfoWithBlobsConstructor::BuildByBlobs(std::vector<TSplittedBlob>&& chunks,
-    const THashMap<ui32, std::shared_ptr<IPortionDataChunk>>& inplaceChunks,
-    const ui64 granule, const ui64 schemaVersion, const TSnapshot& snapshot, const std::shared_ptr<IStoragesManager>& operators)
-{
-    TPortionAccessorConstructor constructor(granule);
-    constructor.MutablePortionConstructor().SetMinSnapshotDeprecated(snapshot);
+    const THashMap<ui32, std::shared_ptr<IPortionDataChunk>>& inplaceChunks, const TInternalPathId granule, const ui64 schemaVersion,
+    const TSnapshot& /*snapshot*/, const std::shared_ptr<IStoragesManager>& operators, const EPortionType type) {
+    TPortionAccessorConstructor constructor = [&]() {
+        switch (type) {
+            case EPortionType::Written:
+                return TPortionAccessorConstructor(std::make_unique<TWrittenPortionInfoConstructor>(granule));
+            case EPortionType::Compacted:
+                return TPortionAccessorConstructor(std::make_unique<TCompactedPortionInfoConstructor>(granule));
+        }
+    }();
     constructor.MutablePortionConstructor().SetSchemaVersion(schemaVersion);
     return BuildByBlobs(std::move(chunks), inplaceChunks, std::move(constructor), operators);
 }
@@ -91,4 +98,4 @@ TString TWritePortionInfoWithBlobsResult::GetBlobByRangeVerified(const ui32 enti
     return "";
 }
 
-}
+}   // namespace NKikimr::NOlap

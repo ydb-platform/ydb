@@ -521,6 +521,8 @@ private:
 
     THashSet<ui32> ParticipantNodes;
 
+    THashSet<ui32> ParticipantNodes;
+
     THashMap<TTableId, std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>>> TablePartitioning;
 
     bool AllowVolatile = false;

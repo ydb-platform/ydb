@@ -1,5 +1,5 @@
 #pragma once
-#include "common/owner.h"
+#include <ydb/library/signals/owner.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>
 
 namespace NKikimr::NColumnShard {

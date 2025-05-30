@@ -539,6 +539,14 @@ public:
             db.Table<Schema::VDiskMetrics>().Key(key).Delete();
         }
 
+        // primitive garbage collection for obsolete metrics
+        for (const auto& key : pdiskMetricsToDelete) {
+            db.Table<Schema::PDiskMetrics>().Key(key).Delete();
+        }
+        for (const auto& key : vdiskMetricsToDelete) {
+            db.Table<Schema::VDiskMetrics>().Key(key).Delete();
+        }
+
         return true;
     }
 

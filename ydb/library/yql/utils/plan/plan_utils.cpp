@@ -285,6 +285,13 @@ TString PrettyExprStr(const TExprBase& expr) {
 
         return TStringBuilder() << "[" << JoinStrings(std::move(items), ",") << "]";
     } else {
+        if (auto arg = expr.Maybe<TCoArgument>()) {
+            TStringBuf yqlOlapApplyMember = "members_";
+            TString argumentName = TString(arg.Cast().Name());
+            if (argumentName.StartsWith(yqlOlapApplyMember)) {
+                return argumentName.substr(yqlOlapApplyMember.length(), argumentName.length() - yqlOlapApplyMember.length());
+            }
+        }
         auto raw = TString(expr.Ref().Content());
         // return raw.StartsWith("_yql_agg_") ? "" : raw;
         return raw;

@@ -212,6 +212,12 @@ struct TBlobRange {
 
     TString GetData(const TString& blobData) const;
 
+    TBlobRange ExtendRange(const ui32 size) const {
+        return TBlobRange(BlobId, Offset, size);
+    }
+
+    TBlobRange BuildSubset(const ui32 offset, const ui32 size) const;
+
     bool operator<(const TBlobRange& br) const {
         if (BlobId != br.BlobId) {
             return BlobId.GetLogoBlobId().Compare(br.BlobId.GetLogoBlobId()) < 0;

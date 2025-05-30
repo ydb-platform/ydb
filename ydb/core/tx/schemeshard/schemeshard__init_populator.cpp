@@ -1,7 +1,6 @@
 #include "schemeshard_impl.h"
 #include "schemeshard_path_describer.h"
 
-#include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/tx/scheme_board/populator.h>
 

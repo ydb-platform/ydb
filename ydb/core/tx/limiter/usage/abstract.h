@@ -1,6 +1,6 @@
 #pragma once
 #include <memory>
-#include <ydb/core/tx/columnshard/counters/common/owner.h>
+#include <ydb/library/signals/owner.h>
 
 namespace NKikimr::NLimiter {
 class IResourceRequest {

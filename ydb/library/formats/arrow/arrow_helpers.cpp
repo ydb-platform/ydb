@@ -233,13 +233,7 @@ std::shared_ptr<arrow::Array> FinishBuilder(std::unique_ptr<arrow::ArrayBuilder>
 }
 
 std::vector<std::shared_ptr<arrow::Array>> Finish(std::vector<std::unique_ptr<arrow::ArrayBuilder>>&& builders) {
-    std::vector<std::shared_ptr<arrow::Array>> out;
-    for (auto& builder : builders) {
-        std::shared_ptr<arrow::Array> array;
-        TStatusValidator::Validate(builder->Finish(&array));
-        out.emplace_back(array);
-    }
-    return out;
+    return FinishBuilders(std::move(builders));
 }
 
 std::vector<TString> ColumnNames(const std::shared_ptr<arrow::Schema>& schema) {
@@ -748,7 +742,7 @@ std::vector<std::shared_ptr<arrow::RecordBatch>> SliceToRecordBatches(const std:
                 positions.emplace_back(pos);
                 pos += arr->length();
             }
-            AFL_VERIFY(pos == t->num_rows());
+            AFL_VERIFY(pos == t->num_rows())("pos", pos)("length", t->num_rows());
         }
         positions.emplace_back(t->num_rows());
     }
@@ -833,6 +827,67 @@ std::shared_ptr<arrow::Table> DeepCopy(const std::shared_ptr<arrow::Table>& tabl
     }
 
     return arrow::Table::Make(table->schema(), arrays);
+}
+
+TConclusion<bool> ScalarIsTrue(const arrow::Scalar& x) {
+    std::optional<bool> result;
+    if (!SwitchTypeImpl<bool, false>(x.type->id(), [&](const auto& type) {
+            using TWrap = std::decay_t<decltype(type)>;
+            using TScalar = typename arrow::TypeTraits<typename TWrap::T>::ScalarType;
+            using TValue = std::decay_t<decltype(static_cast<const TScalar&>(x).value)>;
+
+            if constexpr (std::is_arithmetic_v<TValue>) {
+                result = ((int)static_cast<const TScalar&>(x).value == 1);
+                return true;
+            }
+            return false;
+        })) {
+        return TConclusionStatus::Fail("not appropriate scalar type for bool interpretation");
+    }
+    Y_ABORT_UNLESS(result);
+    return *result;
+}
+
+TConclusion<bool> ScalarIsFalse(const arrow::Scalar& x) {
+    std::optional<bool> result;
+    if (!SwitchTypeImpl<bool, false>(x.type->id(), [&](const auto& type) {
+            using TWrap = std::decay_t<decltype(type)>;
+            using TScalar = typename arrow::TypeTraits<typename TWrap::T>::ScalarType;
+            using TValue = std::decay_t<decltype(static_cast<const TScalar&>(x).value)>;
+
+            if constexpr (std::is_arithmetic_v<TValue>) {
+                result = ((int)static_cast<const TScalar&>(x).value == 0);
+                return true;
+            }
+            return false;
+        })) {
+        return TConclusionStatus::Fail("not appropriate scalar type for bool interpretation");
+    }
+    Y_ABORT_UNLESS(result);
+    return *result;
+}
+
+TConclusion<bool> ScalarIsFalse(const std::shared_ptr<arrow::Scalar>& x) {
+    if (!x) {
+        return true;
+    }
+    return ScalarIsFalse(*x);
+}
+TConclusion<bool> ScalarIsTrue(const std::shared_ptr<arrow::Scalar>& x) {
+    if (!x) {
+        return false;
+    }
+    return ScalarIsTrue(*x);
+}
+
+std::vector<std::shared_ptr<arrow::Array>> FinishBuilders(std::vector<std::unique_ptr<arrow::ArrayBuilder>>&& builders) {
+    std::vector<std::shared_ptr<arrow::Array>> out;
+    for (auto& builder : builders) {
+        std::shared_ptr<arrow::Array> array;
+        TStatusValidator::Validate(builder->Finish(&array));
+        out.emplace_back(array);
+    }
+    return out;
 }
 
 }   // namespace NKikimr::NArrow

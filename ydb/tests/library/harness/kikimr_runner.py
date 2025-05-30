@@ -436,6 +436,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             self.__run_node(node_id)
 
         if self.__configurator.use_self_management:
+            time.sleep(2)
             self.config_client.bootstrap_cluster(self_assembly_uuid="test-cluster")
 
         bs_needed = ('blob_storage_config' in self.__configurator.yaml_config) or self.__configurator.use_self_management

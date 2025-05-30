@@ -972,7 +972,7 @@ void TRowDispatcher::DeleteConsumer(NActors::TActorId readActorId) {
                 topicSessionInfo.Sessions.erase(partition.TopicSessionId);
                 Send(partition.TopicSessionId, new NActors::TEvents::TEvPoisonPill());
                 if (topicSessionInfo.Sessions.empty()) {
-                    TopicSessions.erase(topicKey);
+                    TopicSessions.erase(sessionIt);
                 }
             }
         }

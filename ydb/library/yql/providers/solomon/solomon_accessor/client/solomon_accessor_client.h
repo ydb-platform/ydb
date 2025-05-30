@@ -19,10 +19,10 @@ public:
         std::shared_ptr<NYdb::ICredentialsProvider> credentialsProvider);
     
 public:
-    virtual NThreading::TFuture<TGetLabelsResponse> GetLabelNames(const TString& selectors) const = 0;
-    virtual NThreading::TFuture<TListMetricsResponse> ListMetrics(const TString& selectors, int pageSize, int page) const = 0;
-    virtual NThreading::TFuture<TGetPointsCountResponse> GetPointsCount(const std::vector<TMetric>& metrics) const = 0;
-    virtual NThreading::TFuture<TGetDataResponse> GetData(TMetric metric, TInstant from, TInstant to) const = 0;
+    virtual NThreading::TFuture<TGetLabelsResponse> GetLabelNames(const std::map<TString, TString>& selectors) const = 0;
+    virtual NThreading::TFuture<TListMetricsResponse> ListMetrics(const std::map<TString, TString>& selectors, int pageSize, int page) const = 0;
+    virtual NThreading::TFuture<TGetPointsCountResponse> GetPointsCount(const std::map<TString, TString>& selectors) const = 0;
+    virtual NThreading::TFuture<TGetDataResponse> GetData(const std::map<TString, TString>& selectors, TInstant from, TInstant to) const = 0;
     virtual NThreading::TFuture<TGetDataResponse> GetData(TString selectors, TInstant from, TInstant to) const = 0;
 };
 

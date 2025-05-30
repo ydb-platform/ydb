@@ -71,10 +71,10 @@ struct TEvSolomonProvider {
     };
 
     struct TEvPointsCountBatch : public NActors::TEventLocal<TEvPointsCountBatch, EvPointsCountBatch> {
-        std::vector<NSo::TMetric> Metrics;
+        NSo::TMetric Metric;
         NSo::TGetPointsCountResponse Response;
-        TEvPointsCountBatch(std::vector<NSo::TMetric>&& metrics, const NSo::TGetPointsCountResponse& response)
-            : Metrics(std::move(metrics))
+        TEvPointsCountBatch(NSo::TMetric&& metric, const NSo::TGetPointsCountResponse& response)
+            : Metric(std::move(metric))
             , Response(response)
         {}
     };

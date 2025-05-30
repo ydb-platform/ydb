@@ -48,9 +48,6 @@ def compose_gateways_config(solomon_endpoint):
     solomon_cluster.Name = "local_solomon"
     solomon_cluster.Cluster = solomon_endpoint
     solomon_cluster.UseSsl = False
-    grpcPortSetting = solomon_cluster.Settings.add()
-    grpcPortSetting.Name = "grpcPort"
-    grpcPortSetting.Value = os.environ.get("SOLOMON_PORT")
 
     return text_format.MessageToString(config_message)
 

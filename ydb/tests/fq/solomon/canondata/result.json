@@ -24,6 +24,11 @@
             "uri": "file://test.test_solomon-Basic-default.txt_/results.txt"
         }
     ],
+    "test.test[solomon-BasicExtractMembers-default.txt]": [
+        {
+            "uri": "file://test.test_solomon-BasicExtractMembers-default.txt_/results.txt"
+        }
+    ],
     "test.test[solomon-Downsampling-default.txt]": [
         {
             "uri": "file://test.test_solomon-Downsampling-default.txt_/results.txt"

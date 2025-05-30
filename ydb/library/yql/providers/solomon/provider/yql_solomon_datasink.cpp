@@ -20,6 +20,7 @@ public:
         , TypeAnnotationTransformer_(CreateSolomonDataSinkTypeAnnotationTransformer(State_))
         , ExecutionTransformer_(CreateSolomonDataSinkExecTransformer(State_))
         , PhysicalOptProposalTransformer_(CreateSoPhysicalOptProposalTransformer(State_))
+        , LogicalOptProposalTransformer_(CreateSolomonLogicalOptProposalTransformer(State_))
     {
     }
 
@@ -54,6 +55,10 @@ public:
 
     IGraphTransformer& GetPhysicalOptProposalTransformer() override {
         return *PhysicalOptProposalTransformer_;
+    }
+
+    IGraphTransformer& GetLogicalOptProposalTransformer() override {
+        return *LogicalOptProposalTransformer_;
     }
 
     bool CanParse(const TExprNode& node) override {
@@ -172,6 +177,7 @@ private:
     THolder<TVisitorTransformerBase> TypeAnnotationTransformer_;
     THolder<TExecTransformerBase> ExecutionTransformer_;
     THolder<IGraphTransformer> PhysicalOptProposalTransformer_;
+    THolder<IGraphTransformer> LogicalOptProposalTransformer_;
 };
 
 

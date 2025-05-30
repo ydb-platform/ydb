@@ -954,6 +954,12 @@ TCheckFunc StreamResolvedTimestamps(const TDuration& value) {
     };
 }
 
+TCheckFunc StreamSchemaChanges(bool value) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetCdcStreamDescription().GetSchemaChanges(), value);
+    };
+}
+
 TCheckFunc StreamAwsRegion(const TString& value) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetCdcStreamDescription().GetAwsRegion(), value);

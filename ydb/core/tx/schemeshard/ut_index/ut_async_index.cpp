@@ -4,7 +4,6 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/test_with_reboots.h>
 #include <ydb/core/testlib/tablet_helpers.h>
-#include <ydb/public/lib/deprecated/kicli/kicli.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
 using namespace NKikimr;
@@ -32,11 +31,12 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/UserDefinedIndex"),
-            {NLs::PathExist,
-             NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalAsync),
-             NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
-             NLs::IndexKeys({"indexed"})});
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/UserDefinedIndex"),{
+            NLs::PathExist,
+            NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalAsync),
+            NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+            NLs::IndexKeys({"indexed"}),
+        });
     }
 
     Y_UNIT_TEST(OnlineBuild) {
@@ -126,37 +126,15 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
         ui32 ExpectedRecords;
     };
 
-    template <typename C>
-    ui32 CountRows(TTestActorRuntime& runtime, const TTableTraits& table, const C& partitions) {
-        ui32 rows = 0;
-
-        for (const auto& x : partitions) {
-            auto result = ReadTable(runtime, x.GetDatashardId(), SplitPath(table.Path).back(), table.Key, table.Columns);
-            auto value = NClient::TValue::Create(result);
-            rows += value["Result"]["List"].Size();
-        }
-
-        return rows;
-    }
-
     bool CheckWrittenToIndex(TTestActorRuntime& runtime, const TTableTraits& mainTable, const TTableTraits& indexTable) {
-        bool writtenToMainTable = false;
-        {
-            auto tableDesc = DescribePath(runtime, mainTable.Path, true, true);
-            const auto& tablePartitions = tableDesc.GetPathDescription().GetTablePartitions();
-            UNIT_ASSERT(!tablePartitions.empty());
-            writtenToMainTable = mainTable.ExpectedRecords == CountRows(runtime, mainTable, tablePartitions);
-        }
+        auto mainTableRows = CountRows(runtime, mainTable.Path);
+        bool writtenToMainTable = (mainTable.ExpectedRecords == mainTableRows);
 
         if (writtenToMainTable) {
-            auto tableDesc = DescribePrivatePath(runtime, indexTable.Path, true, true);
-            const auto& tablePartitions = tableDesc.GetPathDescription().GetTablePartitions();
-            UNIT_ASSERT(!tablePartitions.empty());
-
             int i = 0;
             while (++i < 10) {
                 runtime.SimulateSleep(TDuration::Seconds(1));
-                if (indexTable.ExpectedRecords == CountRows(runtime, indexTable, tablePartitions)) {
+                if (indexTable.ExpectedRecords == CountRows(runtime, indexTable.Path)) {
                     break;
                 }
             }
@@ -548,10 +526,10 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
         env.TestWaitNotification(runtime, txId);
 
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/UserDefinedIndex"), {
-      NLs::PathExist,
-      NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalAsync),
-      NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
-      NLs::IndexKeys({"indexed"}),
+            NLs::PathExist,
+            NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalAsync),
+            NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+            NLs::IndexKeys({"indexed"}),
         });
     }
 }

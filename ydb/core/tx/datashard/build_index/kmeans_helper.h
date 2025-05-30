@@ -351,7 +351,7 @@ public:
             K = 1;
             Clusters.resize(K);
         }
-        Y_ASSERT(Clusters.size() == K);
+        Y_ENSURE(Clusters.size() == K);
         ClusterSizes.resize(K, 0);
         AggregatedClusters.resize(K);
         for (auto& aggregate : AggregatedClusters) {
@@ -363,7 +363,7 @@ public:
 
     bool RecomputeClusters()
     {
-        Y_ASSERT(K >= 1);
+        Y_ENSURE(K >= 1);
         ui64 vectorCount = 0;
         ui64 reassignedCount = 0;
         for (size_t i = 0; auto& aggregate : AggregatedClusters) {
@@ -375,12 +375,12 @@ public:
 
             if (aggregate.Size != 0) {
                 this->Fill(Clusters[i], aggregate.Cluster.data(), aggregate.Size);
-                Y_ASSERT(aggregate.Size == 0);
+                Y_ENSURE(aggregate.Size == 0);
             }
             ++i;
         }
-        Y_ASSERT(vectorCount >= K);
-        Y_ASSERT(reassignedCount <= vectorCount);
+        Y_ENSURE(vectorCount >= K);
+        Y_ENSURE(reassignedCount <= vectorCount);
         if (K == 1) {
             return true;
         }
@@ -410,7 +410,7 @@ public:
 
     std::optional<ui32> FindCluster(TArrayRef<const TCell> row, NTable::TPos embeddingPos)
     {
-        Y_ASSERT(embeddingPos < row.size());
+        Y_ENSURE(embeddingPos < row.size());
         const auto embedding = row.at(embeddingPos).AsRef();
         if (!IsExpectedSize<TCoord>(embedding, Dimensions)) {
             return {};
@@ -452,7 +452,7 @@ private:
 
     void Fill(TString& d, TSum* embedding, ui64& c)
     {
-        Y_ASSERT(c > 0);
+        Y_ENSURE(c > 0);
         const auto count = static_cast<TSum>(std::exchange(c, 0));
         auto data = GetData(d.MutRef().data());
         for (auto& coord : data) {

@@ -480,6 +480,27 @@ def get_viewer_db_normalized(url, params=None):
 
 def test_viewer_nodes():
     result = get_viewer_db_normalized("/viewer/nodes", {
+    })
+    return result
+
+
+def test_viewer_nodes_all():
+    result = get_viewer_db_normalized("/viewer/nodes", {
+        'fields_required': 'all'
+    })
+    return result
+
+
+def test_viewer_storage_nodes():
+    result = get_viewer_db_normalized("/viewer/nodes", {
+        'type': 'storage',
+    })
+    return result
+
+
+def test_viewer_storage_nodes_all():
+    result = get_viewer_db_normalized("/viewer/nodes", {
+        'type': 'storage',
         'fields_required': 'all'
     })
     return result

@@ -91,6 +91,11 @@ public:
         }
         bool hasSelectors = !selectors.Content().empty();
 
+        if (hasSelectors && !State_->Configuration->_EnableRuntimeListing.Get().GetOrElse(false)) {
+            ctx.AddError(TIssue(ctx.GetPosition(selectors.Pos()), "runtime listing is disabled, use `program` parameter"));
+            return TStatus::Error;
+        }
+
         auto& program = *input->Child(TSoSourceSettings::idx_Program);
         if (!EnsureAtom(program, ctx)) {
             return TStatus::Error;

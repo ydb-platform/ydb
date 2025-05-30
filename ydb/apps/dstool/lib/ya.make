@@ -24,6 +24,7 @@ PY_SRCS(
     dstool_cmd_vdisk_set_read_only.py
     dstool_cmd_vdisk_remove_donor.py
     dstool_cmd_vdisk_wipe.py
+    dstool_cmd_vdisk_compact.py
 
     dstool_cmd_group_add.py
     dstool_cmd_group_check.py

@@ -113,18 +113,22 @@ private:
     std::shared_ptr<NOlap::NDataAccessorControl::IDataAccessorsManager> DataAccessors;
     std::shared_ptr<TResultAccumulator> Result;
     const std::shared_ptr<NOlap::TVersionedIndex> VersionedIndex;
+    const NOlap::TTabletId TabletId;
 
 public:
     TColumnPortionsAccumulator(const std::shared_ptr<NOlap::IStoragesManager>& storagesManager,
         const std::shared_ptr<TResultAccumulator>& result, const ui32 portionsCountLimit, const std::set<ui32>& originalColumnTags,
         const std::shared_ptr<NOlap::TVersionedIndex>& vIndex,
-        const std::shared_ptr<NOlap::NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager)
+        const std::shared_ptr<NOlap::NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
+        const NOlap::TTabletId tabletId)
         : StoragesManager(storagesManager)
         , ColumnTagsRequested(originalColumnTags)
         , PortionsCountLimit(portionsCountLimit)
         , DataAccessors(dataAccessorsManager)
         , Result(result)
-        , VersionedIndex(vIndex) {
+        , VersionedIndex(vIndex)
+        , TabletId(tabletId)
+    {
     }
 
     class TIndexReadTask: public NOlap::NBlobOperations::NRead::ITask {
@@ -259,7 +263,7 @@ public:
         }
         request->RegisterSubscriber(std::make_shared<TMetadataSubscriber>(StoragesManager, Result, VersionedIndex, ColumnTagsRequested));
         Portions.clear();
-        DataAccessors->AskData(request);
+        DataAccessors->AskData(TabletId, request);
     }
 
     void AddTask(const NOlap::TPortionInfo::TConstPtr& portion) {
@@ -306,7 +310,7 @@ void TColumnShard::Handle(NStat::TEvStatistics::TEvStatisticsRequest::TPtr& ev, 
         std::make_shared<TResultAccumulator>(columnTagsRequested, ev->Sender, ev->Cookie, std::move(response));
     auto versionedIndex = std::make_shared<NOlap::TVersionedIndex>(index.GetVersionedIndex());
     TColumnPortionsAccumulator portionsPack(
-        StoragesManager, resultAccumulator, 1000, columnTagsRequested, versionedIndex, DataAccessorsManager.GetObjectPtrVerified());
+        StoragesManager, resultAccumulator, 1000, columnTagsRequested, versionedIndex, DataAccessorsManager.GetObjectPtrVerified(), (NOlap::TTabletId)TabletID());
 
     for (const auto& [_, portionInfo] : spg->GetPortions()) {
         if (!portionInfo->IsVisible(GetMaxReadVersion())) {

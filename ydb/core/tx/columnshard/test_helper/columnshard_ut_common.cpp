@@ -12,6 +12,7 @@
 #include <ydb/core/tx/data_events/payload_helper.h>
 #include <ydb/core/tx/tiering/manager.h>
 #include <ydb/core/tx/tiering/tier/object.h>
+#include <ydb/core/tx/columnshard/data_accessor/node_actor.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -46,6 +47,13 @@ void TTester::Setup(TTestActorRuntime& runtime) {
     runtime.SetTxAllocatorTabletIds(ids);
 
     app.AddDomain(domain.Release());
+
+    for (ui32 nodeIndex = 0; nodeIndex < runtime.GetNodeCount(); ++nodeIndex) {
+        runtime.AddLocalService(NKikimr::NOlap::NDataAccessorControl::TNodeActor::MakeActorId(runtime.GetNodeId(nodeIndex)),
+        TActorSetupCmd(NKikimr::NOlap::NDataAccessorControl::TNodeActor::CreateActor(), TMailboxType::HTSwap, 0),
+        nodeIndex);
+    }
+
     SetupTabletServices(runtime, &app);
 
     runtime.UpdateCurrentTime(TInstant::Now());

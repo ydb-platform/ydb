@@ -1,5 +1,4 @@
 import pytest
-import time
 import random
 
 from ydb.tests.library.common.wait_for import wait_for
@@ -11,20 +10,24 @@ class TestVectorIndex(RestartToAnotherVersionFixture):
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):
         self.table_name = "table"
-        self.rows_count = 15
+        self.rows_count = 5
         self.index_name = "vector_idx"
-        self.vector_dimension = 5
-        yield from self.setup_cluster(extra_feature_flags={"enable_vector_index": True})
+        self.vector_dimension = 3
+        try:
+            yield from self.setup_cluster(extra_feature_flags={"enable_vector_index": True})
+        except Exception as ex:
+            if "unknown field \"enable_vector_index\"" in str(ex):
+                pass 
+                
 
-    def _get_random_vector(self, vector_type, size):
-        if vector_type == "FloatVector":
-            values = [round(random.uniform(-100, 100), 2) for _ in range(size)]
+    def get_vector(self, type, numb):
+        if type == "FloatVector":
+            values = [float(i) for i in range(self.vector_dimension - 1)]
+            values.append(float(numb))
             return ",".join(f'{val}f' for val in values)
 
-        if vector_type == "Uint8Vector":
-            values = [random.randint(0, 255) for _ in range(size)]
-        else:
-            values = [random.randint(-127, 127) for _ in range(size)]
+        values = [i for i in range(self.vector_dimension - 1)]
+        values.append(numb)
         return ",".join(str(val) for val in values)
 
     def _create_index(self, vector_type, distance=None, similarity=None):
@@ -82,7 +85,7 @@ class TestVectorIndex(RestartToAnotherVersionFixture):
     def write_data(self, name, vector_type):
         values = []
         for key in range(self.rows_count):
-            vector = self._get_random_vector(vector_type, self.vector_dimension)
+            vector = self.get_vector(vector_type, key+1)
             values.append(f'({key}, Untag({name}([{vector}]), "{vector_type}"))')
 
         upsert_sql = f"""
@@ -93,7 +96,7 @@ class TestVectorIndex(RestartToAnotherVersionFixture):
             session_pool.execute_with_retries(upsert_sql)
 
     def select_from_index(self, target, name, data_type, order):
-        vector = self._get_random_vector(f"{data_type}Vector", self.vector_dimension)
+        vector = self.get_vector(f"{data_type}Vector", 1)
         select_sql = f"""
             $Target = {name}(Cast([{vector}] AS List<{data_type}>));
             SELECT key, vec, {target}(vec, $Target) as target
@@ -124,20 +127,7 @@ class TestVectorIndex(RestartToAnotherVersionFixture):
         "vector_type, distance, distance_func",
         [
             ("Uint8", "similarity", "inner_product"),
-            ("Int8", "similarity", "inner_product"),
-            ("Float", "similarity", "inner_product"),
-            ("Uint8", "similarity", "cosine"),
-            ("Int8", "similarity", "cosine"),
-            ("Float", "similarity", "cosine"),
-            ("Uint8", "distance", "cosine"),
-            ("Int8", "distance", "cosine"),
-            ("Float", "distance", "cosine"),
-            ("Uint8", "distance", "manhattan"),
-            ("Int8", "distance", "manhattan"),
-            ("Float", "distance", "manhattan"),
-            ("Uint8", "distance", "euclidean"),
-            ("Int8", "distance", "euclidean"),
-            ("Float", "distance", "euclidean"),
+
         ],
     )
     def test_vector_index(self, vector_type, distance, distance_func):

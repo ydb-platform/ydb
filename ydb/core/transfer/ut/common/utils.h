@@ -582,7 +582,7 @@ struct MainTestCase {
 
     TDescribeTopicResult DescribeTopic() {
         TDescribeTopicSettings settings;
-        //settings.IncludeLocation(true);
+        settings.IncludeLocation(true);
         settings.IncludeStats(true);
 
         auto result = TopicClient.DescribeTopic(TopicName, settings).ExtractValueSync();

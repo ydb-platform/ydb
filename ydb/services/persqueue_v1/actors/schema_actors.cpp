@@ -659,7 +659,7 @@ void TDescribeTopicActorImpl::RequestPartitionsLocation(const TActorContext& ctx
     THashSet<ui64> partIds;
     TVector<ui64> partsVector;
     for (auto p : Settings.Partitions) {
-         if (p >= TotalPartitions) {
+        if (p >= TotalPartitions) {
             return RaiseError(
                 TStringBuilder() << "No partition " << p << " in topic",
                 Ydb::PersQueue::ErrorCode::BAD_REQUEST, Ydb::StatusIds::BAD_REQUEST, ctx

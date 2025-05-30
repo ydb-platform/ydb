@@ -1,4 +1,4 @@
-#include "utils.h"
+#include <ydb/core/transfer/ut/common/utils.h>
 
 using namespace NReplicationTest;
 

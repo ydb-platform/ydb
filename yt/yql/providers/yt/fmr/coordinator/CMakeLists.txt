@@ -15,3 +15,4 @@
 add_subdirectory(interface)
 add_subdirectory(client)
 add_subdirectory(impl)
+add_subdirectory(yt_coordinator_service)

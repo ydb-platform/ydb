@@ -12,8 +12,9 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(minikql-codegen-llvm16)
+add_library(minikql-codegen-llvm16 STATIC)
 
+set_property(TARGET minikql-codegen-llvm16 PROPERTY LINKER_LANGUAGE CXX)
 
 target_include_directories(minikql-codegen-llvm16 PRIVATE
   ${PROJECT_BINARY_DIR}/yql/essentials/minikql/codegen/llvm16
@@ -39,17 +40,15 @@ target_link_libraries(minikql-codegen-llvm16 PUBLIC
 )
 
 target_sources(minikql-codegen-llvm16 PRIVATE
-  ${PROJECT_BINARY_DIR}/yql/essentials/minikql/codegen/llvm16/codegen.cpp
   ${PROJECT_BINARY_DIR}/yql/essentials/minikql/codegen/llvm16/codegen_llvm_deps.h
+  ${PROJECT_BINARY_DIR}/yql/essentials/minikql/codegen/llvm16/codegen.cpp
 )
 
 
 copy_file(
   ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/codegen/codegen_llvm_deps.h.txt
   ${PROJECT_BINARY_DIR}/yql/essentials/minikql/codegen/llvm16/codegen_llvm_deps.h
-)
-
-copy_file(
   ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/codegen/codegen.cpp
   ${PROJECT_BINARY_DIR}/yql/essentials/minikql/codegen/llvm16/codegen.cpp
+  )
 )

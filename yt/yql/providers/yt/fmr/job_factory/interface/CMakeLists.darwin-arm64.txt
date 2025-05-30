@@ -24,6 +24,7 @@ target_link_libraries(fmr-job_factory-interface PUBLIC
   yutil
   cpp-threading-future
   yql-essentials-utils
+  yt-fmr-request_options
 )
 
 target_sources(fmr-job_factory-interface PRIVATE

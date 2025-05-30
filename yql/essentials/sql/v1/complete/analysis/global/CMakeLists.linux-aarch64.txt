@@ -25,6 +25,7 @@ target_link_libraries(complete-analysis-global PUBLIC
 )
 
 target_sources(complete-analysis-global PRIVATE
+  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/analysis/global/evaluate.cpp
   ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/analysis/global/global.cpp
   ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/analysis/global/use.cpp
 )

@@ -36,12 +36,15 @@ target_link_libraries(fmr-coordinator-impl PUBLIC
   cpp-yson-node
   cpp-mapreduce-common
   fmr-coordinator-interface
-  essentials-utils-log
+  coordinator-yt_coordinator_service-interface
+  coordinator-yt_coordinator_service-impl
   yql-essentials-utils
+  essentials-utils-log
 )
 
 target_sources(fmr-coordinator-impl PRIVATE
   ${PROJECT_SOURCE_DIR}/yt/yql/providers/yt/fmr/coordinator/impl/yql_yt_coordinator_impl.cpp
+  ${PROJECT_SOURCE_DIR}/yt/yql/providers/yt/fmr/coordinator/impl/yql_yt_partitioner.cpp
 )
 
 
@@ -63,8 +66,10 @@ target_link_libraries(fmr-coordinator-impl.global PUBLIC
   cpp-yson-node
   cpp-mapreduce-common
   fmr-coordinator-interface
-  essentials-utils-log
+  coordinator-yt_coordinator_service-interface
+  coordinator-yt_coordinator_service-impl
   yql-essentials-utils
+  essentials-utils-log
 )
 
 target_sources(fmr-coordinator-impl.global PRIVATE

@@ -26,12 +26,14 @@ target_link_libraries(yt-fmr-fmr_tool_lib PUBLIC
   yt-gateway-fmr
   fmr-coordinator-client
   fmr-coordinator-impl
+  coordinator-yt_coordinator_service-file
+  coordinator-yt_coordinator_service-impl
   fmr-job-impl
   fmr-job_factory-impl
   fmr-table_data_service-local
   fmr-worker-impl
-  fmr-yt_service-file
-  fmr-yt_service-impl
+  fmr-yt_job_service-file
+  fmr-yt_job_service-impl
 )
 
 target_sources(yt-fmr-fmr_tool_lib PRIVATE

@@ -23,6 +23,7 @@ target_link_libraries(fmr-request_options-proto_helpers PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
+  cpp-mapreduce-common
   yt-fmr-proto
 )
 

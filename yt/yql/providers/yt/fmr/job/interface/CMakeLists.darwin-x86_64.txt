@@ -22,6 +22,7 @@ target_compile_options(fmr-job-interface PRIVATE
 target_link_libraries(fmr-job-interface PUBLIC
   contrib-libs-cxxsupp
   yutil
+  yt-fmr-request_options
 )
 
 target_sources(fmr-job-interface PRIVATE

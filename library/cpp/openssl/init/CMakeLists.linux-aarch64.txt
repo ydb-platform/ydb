@@ -12,17 +12,29 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(cpp-openssl-init)
+add_library(cpp-openssl-init INTERFACE)
 
 
-target_link_libraries(cpp-openssl-init PUBLIC
+target_link_libraries(cpp-openssl-init INTERFACE
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
   contrib-libs-openssl
 )
 
-target_sources(cpp-openssl-init PRIVATE
+
+add_global_library_for(cpp-openssl-init.global
+  cpp-openssl-init)
+
+
+target_link_libraries(cpp-openssl-init.global PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  contrib-libs-openssl
+)
+
+target_sources(cpp-openssl-init.global PRIVATE
   ${PROJECT_SOURCE_DIR}/library/cpp/openssl/init/init.cpp
 )
 

@@ -34,6 +34,7 @@ target_link_libraries(essentials-core-file_storage PUBLIC
   core-file_storage-defs
   core-file_storage-download
   core-file_storage-http_download
+  essentials-public-issue
   yql-essentials-utils
   essentials-utils-log
   essentials-utils-fetch

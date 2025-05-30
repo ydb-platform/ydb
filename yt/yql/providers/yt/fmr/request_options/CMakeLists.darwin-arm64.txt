@@ -33,6 +33,8 @@ target_link_libraries(yt-fmr-request_options PUBLIC
   yutil
   cpp-yson-node
   cpp-threading-future
+  cpp-mapreduce-common
+  cpp-mapreduce-interface
   essentials-public-issue
   tools-enum_parser-enum_serialization_runtime
 )

@@ -19,9 +19,11 @@ target_link_libraries(v1-complete-core PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
+  cpp-yson-node
 )
 
 target_sources(v1-complete-core PRIVATE
+  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/core/environment.cpp
   ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/core/input.cpp
 )
 

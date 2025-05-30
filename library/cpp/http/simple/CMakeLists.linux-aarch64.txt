@@ -19,6 +19,7 @@ target_link_libraries(cpp-http-simple PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
+  library-cpp-cache
   cpp-http-io
   cpp-openssl-io
   cpp-string_utils-url

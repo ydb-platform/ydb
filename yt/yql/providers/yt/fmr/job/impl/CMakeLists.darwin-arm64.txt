@@ -26,10 +26,10 @@ target_link_libraries(fmr-job-impl PUBLIC
   cpp-yson-node
   cpp-mapreduce-interface
   fmr-job-interface
-  yt-fmr-request_options
   yt-fmr-utils
   fmr-table_data_service-interface
   yql-essentials-utils
+  essentials-utils-log
 )
 
 target_sources(fmr-job-impl PRIVATE

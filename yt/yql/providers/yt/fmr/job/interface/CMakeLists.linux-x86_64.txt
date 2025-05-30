@@ -23,6 +23,7 @@ target_link_libraries(fmr-job-interface PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
+  yt-fmr-request_options
 )
 
 target_sources(fmr-job-interface PRIVATE

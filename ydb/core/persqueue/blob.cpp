@@ -972,6 +972,7 @@ auto TPartitionedBlob::Add(const TKey& oldKey, ui32 size) -> std::optional<TForm
     }
 
     auto newKey = TKey::FromKey(oldKey, TKeyPrefix::TypeData, Partition, StartOffset);
+    newKey.SetFastWrite();
 
     FormedBlobs.emplace_back(oldKey, newKey, size);
 

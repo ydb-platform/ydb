@@ -69,6 +69,8 @@ public:
     virtual void Write(TWriteToken token, IDataBatchPtr&& data) = 0;
     virtual void Close(TWriteToken token) = 0;
 
+    virtual void CleanupClosedTokens() = 0;
+
     virtual void FlushBuffers() = 0;
 
     virtual void Close() = 0;

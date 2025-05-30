@@ -354,6 +354,11 @@ public:
         ShardedWriteController->Close();
     }
 
+    void CleanupClosedTokens() {
+        YQL_ENSURE(ShardedWriteController);
+        ShardedWriteController->CleanupClosedTokens();
+    }
+
     void SetParentTraceId(NWilson::TTraceId traceId) {
         ParentTraceId = std::move(traceId);
     }
@@ -2807,6 +2812,7 @@ public:
         Y_ABORT_UNLESS(GetTotalMemory() == 0);
 
         for (auto& [_, info] : WriteInfos) {
+            info.WriteTableActor->CleanupClosedTokens();
             info.WriteTableActor->Unlink();
         }
     }

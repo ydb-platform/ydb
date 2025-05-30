@@ -25,7 +25,7 @@ namespace NSchemeShard {
 // return count, parts, step
 static std::tuple<NTableIndex::TClusterId, NTableIndex::TClusterId, NTableIndex::TClusterId> ComputeKMeansBoundaries(const NSchemeShard::TTableInfo& tableInfo, const TIndexBuildInfo& buildInfo) {
     const auto& kmeans = buildInfo.KMeans;
-    Y_ASSERT(kmeans.K != 0);
+    Y_ENSURE(kmeans.K != 0);
     const auto count = kmeans.ChildCount();
     NTableIndex::TClusterId step = 1;
     auto parts = count;
@@ -86,9 +86,9 @@ public:
         LogPrefix = TStringBuilder()
             << "TUploadSampleK: BuildIndexId: " << BuildIndexId
             << " ResponseActorId: " << ResponseActorId;
-        Y_ASSERT(!Init.empty());
-        Y_ASSERT(Parent < Child);
-        Y_ASSERT(Child != 0);
+        Y_ENSURE(!Init.empty());
+        Y_ENSURE(Parent < Child);
+        Y_ENSURE(Child != 0);
     }
 
     static constexpr auto ActorActivityType() {
@@ -169,7 +169,7 @@ private:
         if (!Uploader) {
             return;
         }
-        Y_VERIFY_S(Uploader == ev->Sender,
+        Y_ENSURE(Uploader == ev->Sender,
                    LogPrefix << "Mismatch"
                              << " Uploader: " << Uploader.ToString()
                              << " ev->Sender: " << ev->Sender.ToString()
@@ -271,7 +271,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateIndexPropose(
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> DropBuildPropose(
     TSchemeShard* ss, const TIndexBuildInfo& buildInfo)
 {
-    Y_ASSERT(buildInfo.IsBuildVectorIndex());
+    Y_ENSURE(buildInfo.IsBuildVectorIndex());
 
     auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.ApplyTxId), ss->TabletID());
     propose->Record.SetFailOnExist(true);
@@ -299,7 +299,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> DropBuildPropose(
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildPropose(
     TSchemeShard* ss, const TIndexBuildInfo& buildInfo)
 {
-    Y_ASSERT(buildInfo.IsBuildVectorIndex());
+    Y_ENSURE(buildInfo.IsBuildVectorIndex());
 
     auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.ApplyTxId), ss->TabletID());
     propose->Record.SetFailOnExist(true);
@@ -316,11 +316,11 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildPropose(
         const auto& baseTableColumns = NTableIndex::ExtractInfo(tableInfo);
         auto indexKeys = NTableIndex::ExtractInfo(indexDesc);
         if (buildInfo.IsBuildPrefixedVectorIndex() && buildInfo.KMeans.Level != 1) {
-            Y_ASSERT(indexKeys.KeyColumns.size() >= 2);
+            Y_ENSURE(indexKeys.KeyColumns.size() >= 2);
             indexKeys.KeyColumns.erase(indexKeys.KeyColumns.begin(), indexKeys.KeyColumns.end() - 1);
         }
         implTableColumns = CalcTableImplDescription(buildInfo.IndexType, baseTableColumns, indexKeys);
-        Y_ABORT_UNLESS(indexKeys.KeyColumns.size() >= 1);
+        Y_ENSURE(indexKeys.KeyColumns.size() >= 1);
         implTableColumns.Columns.emplace(indexKeys.KeyColumns.back());
         modifyScheme.ClearInitiateIndexBuild();
         indexDataColumns = THashSet<TString>(buildInfo.DataColumns.begin(), buildInfo.DataColumns.end());
@@ -386,7 +386,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildPropose(
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> AlterMainTablePropose(
     TSchemeShard* ss, const TIndexBuildInfo& buildInfo)
 {
-    Y_ABORT_UNLESS(buildInfo.IsBuildColumns(), "Unknown operation kind while building AlterMainTablePropose");
+    Y_ENSURE(buildInfo.IsBuildColumns(), "Unknown operation kind while building AlterMainTablePropose");
 
     auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.AlterMainTableTxId), ss->TabletID());
     propose->Record.SetFailOnExist(true);
@@ -520,7 +520,7 @@ private:
         record.SetTabletId(ui64(shardId));
         if constexpr (WithSnapshot) {
             if (buildInfo.SnapshotTxId) {
-                Y_ASSERT(buildInfo.SnapshotStep);
+                Y_ENSURE(buildInfo.SnapshotStep);
                 record.SetSnapshotTxId(ui64(buildInfo.SnapshotTxId));
                 record.SetSnapshotStep(ui64(buildInfo.SnapshotStep));
             }
@@ -542,7 +542,7 @@ private:
     }
 
     void SendSampleKRequest(TShardIdx shardIdx, TIndexBuildInfo& buildInfo) {
-        Y_ASSERT(buildInfo.IsBuildVectorIndex());
+        Y_ENSURE(buildInfo.IsBuildVectorIndex());
         auto ev = MakeHolder<TEvDataShard::TEvSampleKRequest>();
         ev->Record.SetId(ui64(BuildId));
 
@@ -572,7 +572,7 @@ private:
     }
 
     void SendKMeansReshuffleRequest(TShardIdx shardIdx, TIndexBuildInfo& buildInfo) {
-        Y_ASSERT(buildInfo.IsBuildVectorIndex());
+        Y_ENSURE(buildInfo.IsBuildVectorIndex());
         auto ev = MakeHolder<TEvDataShard::TEvReshuffleKMeansRequest>();
         ev->Record.SetId(ui64(BuildId));
 
@@ -617,7 +617,7 @@ private:
     }
 
     void SendKMeansLocalRequest(TShardIdx shardIdx, TIndexBuildInfo& buildInfo) {
-        Y_ASSERT(buildInfo.IsBuildVectorIndex());
+        Y_ENSURE(buildInfo.IsBuildVectorIndex());
         auto ev = MakeHolder<TEvDataShard::TEvLocalKMeansRequest>();
         ev->Record.SetId(ui64(BuildId));
 
@@ -666,9 +666,9 @@ private:
     }
 
     void SendPrefixKMeansRequest(TShardIdx shardIdx, TIndexBuildInfo& buildInfo) {
-        Y_ASSERT(buildInfo.IsBuildPrefixedVectorIndex());
-        Y_ASSERT(buildInfo.KMeans.Parent == buildInfo.KMeans.ParentEnd());
-        Y_ASSERT(buildInfo.KMeans.Level == 2);
+        Y_ENSURE(buildInfo.IsBuildPrefixedVectorIndex());
+        Y_ENSURE(buildInfo.KMeans.Parent == buildInfo.KMeans.ParentEnd());
+        Y_ENSURE(buildInfo.KMeans.Level == 2);
 
         auto ev = MakeHolder<TEvDataShard::TEvPrefixKMeansRequest>();
         ev->Record.SetId(ui64(BuildId));
@@ -760,7 +760,7 @@ private:
     void SendUploadSampleKRequest(TIndexBuildInfo& buildInfo) {
         buildInfo.Sample.MakeStrictTop(buildInfo.KMeans.K);
         auto path = GetBuildPath(Self, buildInfo, NTableIndex::NTableVectorKmeansTreeIndex::LevelTable);
-        Y_ASSERT(buildInfo.Sample.Rows.size() <= buildInfo.KMeans.K);
+        Y_ENSURE(buildInfo.Sample.Rows.size() <= buildInfo.KMeans.K);
         auto actor = new TUploadSampleK(path.PathString(), !buildInfo.KMeans.NeedsAnotherLevel(),
             buildInfo.ScanSettings, Self->SelfId(), ui64(BuildId),
             buildInfo.Sample.Rows, buildInfo.KMeans.Parent, buildInfo.KMeans.Child);
@@ -862,7 +862,7 @@ private:
             AddAllShards(buildInfo);
         } else {
             auto it = buildInfo.Cluster2Shards.lower_bound(buildInfo.KMeans.Parent);
-            Y_ASSERT(it != buildInfo.Cluster2Shards.end());
+            Y_ENSURE(it != buildInfo.Cluster2Shards.end());
             if (it->second.Local == InvalidShardIdx) {
                 for (const auto& idx : it->second.Global) {
                     const auto& status = buildInfo.Shards.at(idx);
@@ -880,7 +880,7 @@ private:
         if (buildInfo.Cluster2Shards.empty()) {
             return false;
         }
-        Y_ASSERT(buildInfo.KMeans.Parent != 0);
+        Y_ENSURE(buildInfo.KMeans.Parent != 0);
         for (const auto& [to, state] : buildInfo.Cluster2Shards) {
             if (const auto& [from, local, global] = state; local != InvalidShardIdx) {
                 if (const auto* status = buildInfo.Shards.FindPtr(local)) {
@@ -890,7 +890,7 @@ private:
         }
         buildInfo.KMeans.State = TIndexBuildInfo::TKMeans::MultiLocal;
         buildInfo.Cluster2Shards.clear();
-        Y_ASSERT(buildInfo.InProgressShards.empty());
+        Y_ENSURE(buildInfo.InProgressShards.empty());
         return !buildInfo.ToUploadShards.empty();
     }
 
@@ -986,7 +986,7 @@ private:
             LOG_D("FillPrefixedVectorIndex DoneLevel " << buildInfo.DebugString());
 
             ClearDoneShards(txc, buildInfo);
-            Y_ASSERT(buildInfo.KMeans.State == TIndexBuildInfo::TKMeans::MultiLocal);
+            Y_ENSURE(buildInfo.KMeans.State == TIndexBuildInfo::TKMeans::MultiLocal);
             const bool needsAnotherLevel = buildInfo.KMeans.NextLevel();
             buildInfo.KMeans.State = TIndexBuildInfo::TKMeans::MultiLocal;
             if (buildInfo.KMeans.Level == 2) {
@@ -1078,14 +1078,14 @@ private:
         // About Level == 1, for now build index impl tables don't need snapshot,
         // because they're used only by build index
         if (buildInfo.KMeans.Level == 1 && !buildInfo.SnapshotTxId) {
-            Y_ABORT_UNLESS(!buildInfo.SnapshotStep);
-            Y_ABORT_UNLESS(Self->TablesWithSnapshots.contains(buildInfo.TablePathId));
-            Y_ABORT_UNLESS(Self->TablesWithSnapshots.at(buildInfo.TablePathId) == buildInfo.InitiateTxId);
+            Y_ENSURE(!buildInfo.SnapshotStep);
+            Y_ENSURE(Self->TablesWithSnapshots.contains(buildInfo.TablePathId));
+            Y_ENSURE(Self->TablesWithSnapshots.at(buildInfo.TablePathId) == buildInfo.InitiateTxId);
 
             buildInfo.SnapshotTxId = buildInfo.InitiateTxId;
-            Y_ABORT_UNLESS(buildInfo.SnapshotTxId);
+            Y_ENSURE(buildInfo.SnapshotTxId);
             buildInfo.SnapshotStep = Self->SnapshotsStepIds.at(buildInfo.SnapshotTxId);
-            Y_ABORT_UNLESS(buildInfo.SnapshotStep);
+            Y_ENSURE(buildInfo.SnapshotStep);
         }
         if (buildInfo.Shards.empty()) {
             NIceDb::TNiceDb db(txc.DB);
@@ -1102,7 +1102,7 @@ private:
             case TIndexBuildInfo::EBuildKind::BuildPrefixedVectorIndex:
                 return FillPrefixedVectorIndex(txc, buildInfo);
             default:
-                Y_ASSERT(false);
+                Y_ENSURE(false);
                 return true;
         }
     }
@@ -1115,7 +1115,7 @@ public:
 
     bool DoExecute(TTransactionContext& txc, const TActorContext& ctx) override {
         const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(BuildId);
-        Y_ABORT_UNLESS(buildInfoPtr);
+        Y_ENSURE(buildInfoPtr);
         auto& buildInfo = *buildInfoPtr->Get();
 
         LOG_N("TTxBuildProgress: Execute: " << BuildId << " " << buildInfo.State);
@@ -1188,8 +1188,8 @@ public:
             break;
         }
         case TIndexBuildInfo::EState::DropBuild:
-            Y_ASSERT(buildInfo.IsBuildVectorIndex());
-            Y_ASSERT(buildInfo.KMeans.Level > 2);
+            Y_ENSURE(buildInfo.IsBuildVectorIndex());
+            Y_ENSURE(buildInfo.KMeans.Level > 2);
             if (buildInfo.ApplyTxId == InvalidTxId) {
                 AllocateTxId(BuildId);
             } else if (buildInfo.ApplyTxStatus == NKikimrScheme::StatusSuccess) {
@@ -1211,7 +1211,7 @@ public:
             }
             break;
         case TIndexBuildInfo::EState::CreateBuild:
-            Y_ASSERT(buildInfo.IsBuildVectorIndex());
+            Y_ENSURE(buildInfo.IsBuildVectorIndex());
             if (buildInfo.ApplyTxId == InvalidTxId) {
                 AllocateTxId(BuildId);
             } else if (buildInfo.ApplyTxStatus == NKikimrScheme::StatusSuccess) {
@@ -1236,7 +1236,7 @@ public:
             }
             break;
         case TIndexBuildInfo::EState::LockBuild:
-            Y_ASSERT(buildInfo.IsBuildVectorIndex());
+            Y_ENSURE(buildInfo.IsBuildVectorIndex());
             if (buildInfo.ApplyTxId == InvalidTxId) {
                 AllocateTxId(BuildId);
             } else if (buildInfo.ApplyTxStatus == NKikimrScheme::StatusSuccess) {
@@ -1364,10 +1364,10 @@ public:
     bool InitiateShards(NIceDb::TNiceDb& db, TIndexBuildInfo& buildInfo) {
         LOG_D("InitiateShards " << buildInfo.DebugString());
 
-        Y_ASSERT(buildInfo.Shards.empty());
-        Y_ASSERT(buildInfo.ToUploadShards.empty());
-        Y_ASSERT(buildInfo.InProgressShards.empty());
-        Y_ASSERT(buildInfo.DoneShards.empty());
+        Y_ENSURE(buildInfo.Shards.empty());
+        Y_ENSURE(buildInfo.ToUploadShards.empty());
+        Y_ENSURE(buildInfo.InProgressShards.empty());
+        Y_ENSURE(buildInfo.DoneShards.empty());
 
         TTableInfo::TPtr table;
         if (buildInfo.KMeans.Level == 1) {
@@ -1381,7 +1381,7 @@ public:
                 Progress(buildInfo.Id);
                 return false;
             }
-            Y_ASSERT(path.LockedBy() == buildInfo.LockTxId);
+            Y_ENSURE(path.LockedBy() == buildInfo.LockTxId);
         }
         auto tableColumns = NTableIndex::ExtractInfo(table); // skip dropped columns
         TSerializedTableRange shardRange = InfiniteRange(tableColumns.Keys.size());
@@ -1389,7 +1389,7 @@ public:
 
         buildInfo.Cluster2Shards.clear();
         for (const auto& x: table->GetPartitions()) {
-            Y_ABORT_UNLESS(Self->ShardInfos.contains(x.ShardIdx));
+            Y_ENSURE(Self->ShardInfos.contains(x.ShardIdx));
             TSerializedCellVec bound{x.EndOfRange};
             shardRange.To = bound;
             if (buildInfo.BuildKind == TIndexBuildInfo::EBuildKind::BuildVectorIndex) {
@@ -1397,7 +1397,7 @@ public:
                 buildInfo.AddParent(shardRange, x.ShardIdx);
             }
             auto [it, emplaced] = buildInfo.Shards.emplace(x.ShardIdx, TIndexBuildInfo::TShardStatus{std::move(shardRange), "", buildInfo.Shards.size()});
-            Y_ASSERT(emplaced);
+            Y_ENSURE(emplaced);
             shardRange.From = std::move(bound);
 
             Self->PersistBuildIndexUploadInitiate(db, BuildId, x.ShardIdx, it->second);
@@ -1525,7 +1525,7 @@ public:
         case TIndexBuildInfo::EState::Applying:
         case TIndexBuildInfo::EState::Unlocking:
         case TIndexBuildInfo::EState::Done:
-            Y_FAIL_S("Unreachable " << state);
+            Y_ENSURE(false, "Unreachable " << state);
         case TIndexBuildInfo::EState::Cancellation_Applying:
         case TIndexBuildInfo::EState::Cancellation_Unlocking:
         case TIndexBuildInfo::EState::Cancelled:
@@ -1598,16 +1598,16 @@ public:
                       << ", TIndexBuildInfo: " << buildInfo
                       << ", actual seqNo for the shard " << shardId << " (" << shardIdx << ") is: "  << Self->Generation() << ":" <<  shardStatus.SeqNoRound
                       << ", record: " << record.ShortDebugString());
-                Y_ABORT_UNLESS(actualSeqNo > recordSeqNo);
+                Y_ENSURE(actualSeqNo > recordSeqNo);
                 return true;
             }
 
             NIceDb::TNiceDb db(txc.DB);
             if (record.ProbabilitiesSize()) {
-                Y_ASSERT(record.RowsSize());
+                Y_ENSURE(record.RowsSize());
                 auto& probabilities = record.GetProbabilities();
                 auto& rows = *record.MutableRows();
-                Y_ASSERT(probabilities.size() == rows.size());
+                Y_ENSURE(probabilities.size() == rows.size());
                 auto& sample = buildInfo.Sample.Rows;
                 auto from = sample.size();
                 for (int i = 0; i != probabilities.size(); ++i) {
@@ -1680,7 +1680,7 @@ public:
         case TIndexBuildInfo::EState::Applying:
         case TIndexBuildInfo::EState::Unlocking:
         case TIndexBuildInfo::EState::Done:
-            Y_FAIL_S("Unreachable " << state);
+            Y_ENSURE(false, "Unreachable " << state);
         case TIndexBuildInfo::EState::Cancellation_Applying:
         case TIndexBuildInfo::EState::Cancellation_Unlocking:
         case TIndexBuildInfo::EState::Cancelled:
@@ -1746,7 +1746,7 @@ public:
                       << ", TIndexBuildInfo: " << buildInfo
                       << ", actual seqNo for the shard " << shardId << " (" << shardIdx << ") is: "  << Self->Generation() << ":" <<  shardStatus.SeqNoRound
                       << ", record: " << record.ShortDebugString());
-                Y_ABORT_UNLESS(actualSeqNo > recordSeqNo);
+                Y_ENSURE(actualSeqNo > recordSeqNo);
                 return true;
             }
 
@@ -1806,7 +1806,7 @@ public:
         case TIndexBuildInfo::EState::Applying:
         case TIndexBuildInfo::EState::Unlocking:
         case TIndexBuildInfo::EState::Done:
-            Y_FAIL_S("Unreachable " << state);
+            Y_ENSURE(false, "Unreachable " << state);
         case TIndexBuildInfo::EState::Cancellation_Applying:
         case TIndexBuildInfo::EState::Cancellation_Unlocking:
         case TIndexBuildInfo::EState::Cancelled:
@@ -1872,7 +1872,7 @@ public:
                       << ", TIndexBuildInfo: " << buildInfo
                       << ", actual seqNo for the shard " << shardId << " (" << shardIdx << ") is: "  << Self->Generation() << ":" <<  shardStatus.SeqNoRound
                       << ", record: " << record.ShortDebugString());
-                Y_ABORT_UNLESS(actualSeqNo > recordSeqNo);
+                Y_ENSURE(actualSeqNo > recordSeqNo);
                 return true;
             }
 
@@ -1931,7 +1931,7 @@ public:
         case TIndexBuildInfo::EState::Applying:
         case TIndexBuildInfo::EState::Unlocking:
         case TIndexBuildInfo::EState::Done:
-            Y_FAIL_S("Unreachable " << state);
+            Y_ENSURE(false, "Unreachable " << state);
         case TIndexBuildInfo::EState::Cancellation_Applying:
         case TIndexBuildInfo::EState::Cancellation_Unlocking:
         case TIndexBuildInfo::EState::Cancelled:
@@ -1997,7 +1997,7 @@ public:
                       << ", TIndexBuildInfo: " << buildInfo
                       << ", actual seqNo for the shard " << shardId << " (" << shardIdx << ") is: "  << Self->Generation() << ":" <<  shardStatus.SeqNoRound
                       << ", record: " << record.ShortDebugString());
-                Y_ABORT_UNLESS(actualSeqNo > recordSeqNo);
+                Y_ENSURE(actualSeqNo > recordSeqNo);
                 return true;
             }
 
@@ -2057,7 +2057,7 @@ public:
         case TIndexBuildInfo::EState::Applying:
         case TIndexBuildInfo::EState::Unlocking:
         case TIndexBuildInfo::EState::Done:
-            Y_FAIL_S("Unreachable " << state);
+            Y_ENSURE(false, "Unreachable " << state);
         case TIndexBuildInfo::EState::Cancellation_Applying:
         case TIndexBuildInfo::EState::Cancellation_Unlocking:
         case TIndexBuildInfo::EState::Cancelled:
@@ -2098,12 +2098,12 @@ public:
         LOG_D("TTxReply : TEvUploadSampleKResponse"
               << ", TIndexBuildInfo: " << buildInfo
               << ", record: " << record.ShortDebugString());
-        Y_ASSERT(buildInfo.IsBuildVectorIndex());
+        Y_ENSURE(buildInfo.IsBuildVectorIndex());
 
         switch (const auto state = buildInfo.State; state) {
         case TIndexBuildInfo::EState::Filling:
         {
-            Y_ABORT_UNLESS(buildInfo.Sample.State == TIndexBuildInfo::TSample::EState::Upload);
+            Y_ENSURE(buildInfo.Sample.State == TIndexBuildInfo::TSample::EState::Upload);
             NIceDb::TNiceDb db(txc.DB);
 
             TBillingStats stats{record.GetUploadRows(), record.GetUploadBytes(), 0, 0};
@@ -2140,7 +2140,7 @@ public:
         case TIndexBuildInfo::EState::Applying:
         case TIndexBuildInfo::EState::Unlocking:
         case TIndexBuildInfo::EState::Done:
-            Y_FAIL_S("Unreachable " << state);
+            Y_ENSURE(false, "Unreachable " << state);
         case TIndexBuildInfo::EState::Cancellation_Applying:
         case TIndexBuildInfo::EState::Cancellation_Unlocking:
         case TIndexBuildInfo::EState::Cancelled:
@@ -2204,7 +2204,7 @@ public:
                       << ", TIndexBuildInfo: " << buildInfo
                       << ", actual seqNo for the shard " << shardId << " (" << shardIdx << ") is: "  << Self->Generation() << ":" <<  shardStatus.SeqNoRound
                       << ", record: " << record.ShortDebugString());
-                Y_ABORT_UNLESS(actualSeqNo > recordSeqNo);
+                Y_ENSURE(actualSeqNo > recordSeqNo);
                 return true;
             }
 
@@ -2226,7 +2226,7 @@ public:
                                                          true,
                                                          true,
                                                          keyTypes);
-                    Y_VERIFY_S(cmp < 0,
+                    Y_ENSURE(cmp < 0,
                                "check that all LastKeyAcks are monotonously increase"
                                    << ", next: " << DebugPrintPoint(keyTypes, next.GetCells(), *AppData()->TypeRegistry)
                                    << ", prev: " << DebugPrintPoint(keyTypes, prev.GetCells(), *AppData()->TypeRegistry));
@@ -2294,7 +2294,7 @@ public:
         case TIndexBuildInfo::EState::Applying:
         case TIndexBuildInfo::EState::Unlocking:
         case TIndexBuildInfo::EState::Done:
-            Y_FAIL_S("Unreachable " << state);
+            Y_ENSURE(false, "Unreachable " << state);
         case TIndexBuildInfo::EState::Cancellation_Applying:
         case TIndexBuildInfo::EState::Cancellation_Unlocking:
         case TIndexBuildInfo::EState::Cancelled:
@@ -2331,7 +2331,7 @@ public:
 
         const auto buildId = *buildIdPtr;
         const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(buildId);
-        Y_ABORT_UNLESS(buildInfoPtr);
+        Y_ENSURE(buildInfoPtr);
         auto& buildInfo = *buildInfoPtr->Get();
         LOG_I("TTxReply : TEvNotifyTxCompletionResult"
               << ", txId# " << txId
@@ -2346,7 +2346,7 @@ public:
         switch (state) {
         case TIndexBuildInfo::EState::AlterMainTable:
         {
-            Y_ABORT_UNLESS(txId == buildInfo.AlterMainTableTxId);
+            Y_ENSURE(txId == buildInfo.AlterMainTableTxId);
 
             buildInfo.AlterMainTableTxDone = true;
             Self->PersistBuildIndexAlterMainTableTxDone(db, buildInfo);
@@ -2354,7 +2354,7 @@ public:
         }
         case TIndexBuildInfo::EState::Locking:
         {
-            Y_ABORT_UNLESS(txId == buildInfo.LockTxId);
+            Y_ENSURE(txId == buildInfo.LockTxId);
 
             buildInfo.LockTxDone = true;
             Self->PersistBuildIndexLockTxDone(db, buildInfo);
@@ -2362,7 +2362,7 @@ public:
         }
         case TIndexBuildInfo::EState::Initiating:
         {
-            Y_ABORT_UNLESS(txId == buildInfo.InitiateTxId);
+            Y_ENSURE(txId == buildInfo.InitiateTxId);
 
             buildInfo.InitiateTxDone = true;
             Self->PersistBuildIndexInitiateTxDone(db, buildInfo);
@@ -2375,7 +2375,7 @@ public:
         case TIndexBuildInfo::EState::Cancellation_Applying:
         case TIndexBuildInfo::EState::Rejection_Applying:
         {
-            Y_VERIFY_S(txId == buildInfo.ApplyTxId, state);
+            Y_ENSURE(txId == buildInfo.ApplyTxId, state);
 
             buildInfo.ApplyTxDone = true;
             Self->PersistBuildIndexApplyTxDone(db, buildInfo);
@@ -2385,7 +2385,7 @@ public:
         case TIndexBuildInfo::EState::Cancellation_Unlocking:
         case TIndexBuildInfo::EState::Rejection_Unlocking:
         {
-            Y_VERIFY_S(txId == buildInfo.UnlockTxId, state);
+            Y_ENSURE(txId == buildInfo.UnlockTxId, state);
 
             buildInfo.UnlockTxDone = true;
             Self->PersistBuildIndexUnlockTxDone(db, buildInfo);
@@ -2397,7 +2397,7 @@ public:
         case TIndexBuildInfo::EState::Done:
         case TIndexBuildInfo::EState::Cancelled:
         case TIndexBuildInfo::EState::Rejected:
-            Y_FAIL_S("Unreachable " << state);
+            Y_ENSURE(false, "Unreachable " << state);
         }
 
         Progress(buildId);
@@ -2455,7 +2455,7 @@ public:
 
         const auto buildId = *buildIdPtr;
         const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(buildId);
-        Y_ABORT_UNLESS(buildInfoPtr);
+        Y_ENSURE(buildInfoPtr);
         // We need this because we use buildInfo after EraseBuildInfo
         auto buildInfoPin = *buildInfoPtr;
         auto& buildInfo = *buildInfoPin;
@@ -2508,7 +2508,7 @@ public:
         switch (state) {
         case TIndexBuildInfo::EState::AlterMainTable:
         {
-            Y_ABORT_UNLESS(txId == buildInfo.AlterMainTableTxId);
+            Y_ENSURE(txId == buildInfo.AlterMainTableTxId);
 
             buildInfo.AlterMainTableTxStatus = record.GetStatus();
             Self->PersistBuildIndexAlterMainTableTxStatus(db, buildInfo);
@@ -2518,7 +2518,7 @@ public:
         }
         case TIndexBuildInfo::EState::Locking:
         {
-            Y_ABORT_UNLESS(txId == buildInfo.LockTxId);
+            Y_ENSURE(txId == buildInfo.LockTxId);
 
             buildInfo.LockTxStatus = record.GetStatus();
             Self->PersistBuildIndexLockTxStatus(db, buildInfo);
@@ -2528,7 +2528,7 @@ public:
         }
         case TIndexBuildInfo::EState::Initiating:
         {
-            Y_ABORT_UNLESS(txId == buildInfo.InitiateTxId);
+            Y_ENSURE(txId == buildInfo.InitiateTxId);
 
             buildInfo.InitiateTxStatus = record.GetStatus();
             Self->PersistBuildIndexInitiateTxStatus(db, buildInfo);
@@ -2542,7 +2542,7 @@ public:
         case TIndexBuildInfo::EState::Applying:
         case TIndexBuildInfo::EState::Rejection_Applying:
         {
-            Y_ABORT_UNLESS(txId == buildInfo.ApplyTxId);
+            Y_ENSURE(txId == buildInfo.ApplyTxId);
 
             buildInfo.ApplyTxStatus = record.GetStatus();
             Self->PersistBuildIndexApplyTxStatus(db, buildInfo);
@@ -2552,7 +2552,7 @@ public:
         }
         case TIndexBuildInfo::EState::Unlocking:
         {
-            Y_ABORT_UNLESS(txId == buildInfo.UnlockTxId);
+            Y_ENSURE(txId == buildInfo.UnlockTxId);
 
             buildInfo.UnlockTxStatus = record.GetStatus();
             Self->PersistBuildIndexUnlockTxStatus(db, buildInfo);
@@ -2562,7 +2562,7 @@ public:
         }
         case TIndexBuildInfo::EState::Cancellation_Applying:
         {
-            Y_ABORT_UNLESS(txId == buildInfo.ApplyTxId);
+            Y_ENSURE(txId == buildInfo.ApplyTxId);
 
             buildInfo.ApplyTxStatus = record.GetStatus();
             Self->PersistBuildIndexApplyTxStatus(db, buildInfo);
@@ -2572,7 +2572,7 @@ public:
         }
         case TIndexBuildInfo::EState::Cancellation_Unlocking:
         {
-            Y_ABORT_UNLESS(txId == buildInfo.UnlockTxId);
+            Y_ENSURE(txId == buildInfo.UnlockTxId);
 
             buildInfo.UnlockTxStatus = record.GetStatus();
             Self->PersistBuildIndexUnlockTxStatus(db, buildInfo);
@@ -2582,7 +2582,7 @@ public:
         }
         case TIndexBuildInfo::EState::Rejection_Unlocking:
         {
-            Y_ABORT_UNLESS(txId == buildInfo.UnlockTxId);
+            Y_ENSURE(txId == buildInfo.UnlockTxId);
 
             buildInfo.UnlockTxStatus = record.GetStatus();
             Self->PersistBuildIndexUnlockTxStatus(db, buildInfo);
@@ -2596,7 +2596,7 @@ public:
         case TIndexBuildInfo::EState::Done:
         case TIndexBuildInfo::EState::Cancelled:
         case TIndexBuildInfo::EState::Rejected:
-            Y_FAIL_S("Unreachable " << state);
+            Y_ENSURE(false, "Unreachable " << state);
         }
 
         Progress(buildId);
@@ -2623,7 +2623,7 @@ public:
               << ", txId# " << txId);
 
         const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(buildId);
-        Y_ABORT_UNLESS(buildInfoPtr);
+        Y_ENSURE(buildInfoPtr);
         auto& buildInfo = *buildInfoPtr->Get();
 
         LOG_D("TTxReply : TEvAllocateResult"
@@ -2676,7 +2676,7 @@ public:
         case TIndexBuildInfo::EState::Done:
         case TIndexBuildInfo::EState::Cancelled:
         case TIndexBuildInfo::EState::Rejected:
-            Y_FAIL_S("Unreachable " << state);
+            Y_ENSURE(false, "Unreachable " << state);
         }
 
         Progress(buildId);

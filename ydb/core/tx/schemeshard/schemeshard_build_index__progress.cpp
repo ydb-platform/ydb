@@ -1021,7 +1021,8 @@ private:
             return false;
         }
 
-        if (!buildInfo.Sample.Rows.empty()) {
+        if (buildInfo.KMeans.State == TIndexBuildInfo::TKMeans::Sample &&
+            !buildInfo.Sample.Rows.empty()) {
             if (buildInfo.Sample.State == TIndexBuildInfo::TSample::EState::Collect) {
                 LOG_D("FillVectorIndex SendUploadSampleKRequest " << buildInfo.DebugString());
                 SendUploadSampleKRequest(buildInfo);
@@ -1033,7 +1034,8 @@ private:
         ClearDoneShards(txc, buildInfo);
 
         if (!buildInfo.Sample.Rows.empty()) {
-            if (buildInfo.KMeans.NextState()) {
+            if (buildInfo.KMeans.State == TIndexBuildInfo::TKMeans::Sample) {
+                buildInfo.KMeans.State = TIndexBuildInfo::TKMeans::Reshuffle;
                 LOG_D("FillVectorIndex NextState " << buildInfo.DebugString());
                 PersistKMeansState(txc, buildInfo);
                 Progress(BuildId);
@@ -1603,29 +1605,6 @@ public:
             }
 
             NIceDb::TNiceDb db(txc.DB);
-            if (record.ProbabilitiesSize()) {
-                Y_ENSURE(record.RowsSize());
-                auto& probabilities = record.GetProbabilities();
-                auto& rows = *record.MutableRows();
-                Y_ENSURE(probabilities.size() == rows.size());
-                auto& sample = buildInfo.Sample.Rows;
-                auto from = sample.size();
-                for (int i = 0; i != probabilities.size(); ++i) {
-                    if (probabilities[i] >= buildInfo.Sample.MaxProbability) {
-                        break;
-                    }
-                    sample.emplace_back(probabilities[i], std::move(rows[i]));
-                }
-                if (buildInfo.Sample.MakeWeakTop(buildInfo.KMeans.K)) {
-                    from = 0;
-                }
-                for (; from < sample.size(); ++from) {
-                    db.Table<Schema::KMeansTreeSample>().Key(buildInfo.Id, from).Update(
-                        NIceDb::TUpdate<Schema::KMeansTreeSample::Probability>(sample[from].P),
-                        NIceDb::TUpdate<Schema::KMeansTreeSample::Data>(sample[from].Row)
-                    );
-                }
-            }
 
             TBillingStats stats{0, 0, record.GetReadRows(), record.GetReadBytes()};
             shardStatus.Processed += stats;
@@ -1639,6 +1618,32 @@ public:
             switch (shardStatus.Status) {
             case  NKikimrIndexBuilder::EBuildStatus::DONE:
                 if (buildInfo.InProgressShards.erase(shardIdx)) {
+                    if (record.ProbabilitiesSize()) {
+                        Y_ENSURE(record.RowsSize());
+                        auto& probabilities = record.GetProbabilities();
+                        auto& rows = *record.MutableRows();
+                        Y_ENSURE(probabilities.size() == rows.size());
+                        auto& sample = buildInfo.Sample.Rows;
+                        auto from = sample.size();
+                        for (int i = 0; i != probabilities.size(); ++i) {
+                            if (probabilities[i] >= buildInfo.Sample.MaxProbability) {
+                                break;
+                            }
+                            sample.emplace_back(probabilities[i], std::move(rows[i]));
+                        }
+                        if (buildInfo.Sample.MakeWeakTop(buildInfo.KMeans.K)) {
+                            from = 0;
+                        }
+                        for (; from < sample.size(); ++from) {
+                            db.Table<Schema::KMeansTreeSample>().Key(buildInfo.Id, from).Update(
+                                NIceDb::TUpdate<Schema::KMeansTreeSample::Probability>(sample[from].P),
+                                NIceDb::TUpdate<Schema::KMeansTreeSample::Data>(sample[from].Row)
+                            );
+                        }
+                        for (; from < 2*buildInfo.KMeans.K; ++from) {
+                            db.Table<Schema::KMeansTreeSample>().Key(buildInfo.Id, from).Delete();
+                        }
+                    }
                     buildInfo.DoneShards.emplace_back(shardIdx);
                 }
                 break;

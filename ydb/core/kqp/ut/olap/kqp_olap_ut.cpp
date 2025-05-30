@@ -1582,20 +1582,35 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         };
 
         std::vector<TString> testDataBlocks = {
-            // Columns
-            R"(dtm >= dt)",
-            //R"(dt >= dt)", Failed in runtime
-
-            // Constants 
+            // 1. Compare
+            // 1.1 Column and Constant expr
             R"(dt <= Date('2001-01-01'))",
             R"(dt32 <= Date32('2001-01-01'))",
             R"(dtm >= DateTime('1998-12-01T15:30:00Z'))",
             R"(dtm64 >= DateTime64('1998-12-01T15:30:00Z'))",
             R"(ts64 >= Timestamp64("1970-01-01T00:00:03.000001Z"))",
-            //R"(inter64 >= Interval64("P100D"))",
+            R"(ts >= Timestamp("1970-01-01T00:00:03.000001Z"))",
+            R"(inter64 >= Interval64("P100D"))",
 
-            // Math
-            //R"(dt <= (Date('2001-01-01') - Interval("P100D")))",
+            // Right side simplified and `just` added.
+            R"(dt <= (Date('2001-01-01') - Interval("P100D")))",
+            R"(dt32 <= (Date32('2001-01-01') - Interval("P100D")))",
+            R"(dtm <= (DateTime('1998-12-01T15:30:00Z') - Interval("P100D")))",
+            R"(dtm64 <= (DateTime64('1998-12-01T15:30:00Z') - Interval("P100D")))",
+            R"(ts64 >= (Timestamp64("1970-01-01T00:00:03.000001Z") - Interval("P100D")))",
+            // R"(ts >= (Timestamp("1970-01-01T00:00:03.000001Z") - Interval("P100D")))", Olap apply?
+            R"(inter64 >= (Interval("P100D") - Interval("P20D")))",
+
+            // 1.2 Column and Column
+            R"(dtm >= dt)",
+            R"(dtm >= dt32)",
+            R"(dtm64 >= dtm)",
+            R"(dt >= ts)",
+            R"(dt >= ts64)",
+            //R"(dt >= dt)", Failed in runtime
+
+            // 2. Arithmetic
+            // R"(dt <= dt - inter64)", KqpOlapCompiler cannot deduce result type
         };
 
         auto queryPrefix = R"(

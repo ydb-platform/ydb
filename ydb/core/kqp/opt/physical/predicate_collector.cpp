@@ -23,14 +23,15 @@ bool IsSupportedPredicate(const TCoCompare& predicate) {
 }
 
 bool IsSupportedDataType(const TCoDataCtor& node, bool allowOlapApply) {
+    Y_UNUSED(allowOlapApply);
     if (node.Maybe<TCoBool>() || node.Maybe<TCoFloat>() || node.Maybe<TCoDouble>() || node.Maybe<TCoInt8>() || node.Maybe<TCoInt16>() ||
         node.Maybe<TCoInt32>() || node.Maybe<TCoInt64>() || node.Maybe<TCoUint8>() || node.Maybe<TCoUint16>() || node.Maybe<TCoUint32>() ||
         node.Maybe<TCoUint64>() || node.Maybe<TCoUtf8>() || node.Maybe<TCoString>() || node.Maybe<TCoDate>() || node.Maybe<TCoDate32>() ||
-        node.Maybe<TCoDatetime>() || node.Maybe<TCoDatetime64>() || node.Maybe<TCoTimestamp64>() || node.Maybe<TCoInterval64>() || node.Maybe<TCoInterval>()) {
+        node.Maybe<TCoDatetime>() || node.Maybe<TCoDatetime64>() || node.Maybe<TCoTimestamp64>() || node.Maybe<TCoInterval64>() || node.Maybe<TCoInterval>() ||
+        node.Maybe<TCoTimestamp>()) {
         return true;
     }
-
-    return (allowOlapApply && node.Maybe<TCoTimestamp>());
+    return false;
 }
 
 bool IsSupportedCast(const TCoSafeCast& cast, bool allowOlapApply) {
@@ -80,7 +81,7 @@ bool IsMemberColumn(const TExprBase& node, const TExprNode* lambdaArg) {
 
 bool IsGoodTypeForArithmeticPushdown(const TTypeAnnotationNode& type, bool allowOlapApply) {
     const auto features = NUdf::GetDataTypeInfo(RemoveOptionality(type).Cast<TDataExprType>()->GetSlot()).Features;
-    return ((NUdf::EDataTypeFeatures::NumericType /*| NUdf::EDataTypeFeatures::DateType*/) & features)
+    return ((NUdf::EDataTypeFeatures::NumericType) & features)
         || (allowOlapApply && ((NUdf::EDataTypeFeatures::ExtDateType |
             NUdf::EDataTypeFeatures::DateType |
             NUdf::EDataTypeFeatures::TimeIntervalType) & features) && !(NUdf::EDataTypeFeatures::TzDateType & features));
@@ -92,8 +93,8 @@ bool IsGoodTypeForComparsionPushdown(const TTypeAnnotationNode& type, bool allow
         return false;
     }
     return (NUdf::EDataTypeFeatures::CanCompare & features) &&
-           (((NUdf::EDataTypeFeatures::NumericType | NUdf::EDataTypeFeatures::StringType | NUdf::EDataTypeFeatures::DateType /*|
-              NUdf::EDataTypeFeatures::TimeIntervalType*/) & features) ||
+           (((NUdf::EDataTypeFeatures::NumericType | NUdf::EDataTypeFeatures::StringType | NUdf::EDataTypeFeatures::DateType |
+              NUdf::EDataTypeFeatures::TimeIntervalType) & features) ||
             (allowOlapApply &&
              ((NUdf::EDataTypeFeatures::ExtDateType | NUdf::EDataTypeFeatures::DateType | NUdf::EDataTypeFeatures::TimeIntervalType) & features) &&
              !(NUdf::EDataTypeFeatures::TzDateType & features)));

@@ -6,6 +6,7 @@
 
 namespace NKikimr::NOlap::NCleanUnusedTables {
 using namespace NColumnShard;
+
 using TUnusedTables = TCleanUnusedTablesNormalizerTemplate<
     Schema::IndexColumns,
     Schema::TtlSettingsPresetInfo,
@@ -19,24 +20,22 @@ using TUnusedTables = TCleanUnusedTablesNormalizerTemplate<
     Schema::BackgroundSessions
 >;
 
-class TCleanUnusedTablesNormalizer final
-    : public TUnusedTables {
-  using TBase = TUnusedTables;
+class TCleanUnusedTablesNormalizer final : public TUnusedTables {
+    using TBase = TUnusedTables;
 
-  static TString ClassName() { return "CleanUnusedTables"; }
-  static inline auto Registrator = INormalizerComponent::TFactory::TRegistrator<
-      TCleanUnusedTablesNormalizer>(ClassName());
+    static TString ClassName() { return "CleanUnusedTables"; }
+
+    static inline auto Registrator =
+        INormalizerComponent::TFactory::TRegistrator<TCleanUnusedTablesNormalizer>(ClassName());
 
 public:
-  explicit TCleanUnusedTablesNormalizer(
-      const TNormalizationController::TInitContext &ctx)
-      : TBase(ctx) {}
+    explicit TCleanUnusedTablesNormalizer(const TNormalizationController::TInitContext& ctx)
+        : TBase(ctx) {}
 
-  TString GetClassName() const override { return ClassName(); }
-  std::optional<ENormalizerSequentialId>
-  DoGetEnumSequentialId() const override {
-    return std::nullopt;
-  }
+    TString GetClassName() const override { return ClassName(); }
+    std::optional<ENormalizerSequentialId> DoGetEnumSequentialId() const override {
+        return std::nullopt;
+    }
 };
 
-} // namespace NKikimr::NOlap::NCleanUnusedTables
+}  // namespace NKikimr::NOlap::NCleanUnusedTables

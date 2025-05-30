@@ -112,6 +112,8 @@ void TTenantDataErasureManager::ClearWaitingDataErasureRequests() {
 }
 
 void TTenantDataErasureManager::Run(NIceDb::TNiceDb& db) {
+    CounterDataErasureOk = 0;
+    CounterDataErasureTimeout = 0;
     Status = EDataErasureStatus::IN_PROGRESS;
     for (const auto& [shardIdx, shardInfo] : SchemeShard->ShardInfos) {
         switch (shardInfo.TabletType) {
@@ -200,8 +202,8 @@ NOperationQueue::EStartStatus TTenantDataErasureManager::StartDataErasure(const 
 }
 
 void TTenantDataErasureManager::OnTimeout(const TShardIdx& shardIdx) {
+    CounterDataErasureTimeout++;
     UpdateMetrics();
-    SchemeShard->TabletCounters->Cumulative()[COUNTER_TENANT_DATA_ERASURE_TIMEOUT].Increment(1);
 
     ActivePipes.erase(shardIdx);
 
@@ -316,7 +318,7 @@ void TTenantDataErasureManager::OnDone(const TTabletId& tabletId, NIceDb::TNiceD
         }
     }
 
-    SchemeShard->TabletCounters->Cumulative()[COUNTER_TENANT_DATA_ERASURE_OK].Increment(1);
+    CounterDataErasureOk++;
     UpdateMetrics();
 
     if (WaitingDataErasureShards.empty()) {
@@ -446,6 +448,8 @@ void TTenantDataErasureManager::HandleNewPartitioning(const std::vector<TShardId
 void TTenantDataErasureManager::UpdateMetrics() {
     SchemeShard->TabletCounters->Simple()[COUNTER_TENANT_DATA_ERASURE_QUEUE_SIZE].Set(Queue->Size());
     SchemeShard->TabletCounters->Simple()[COUNTER_TENANT_DATA_ERASURE_QUEUE_RUNNING].Set(Queue->RunningSize());
+    SchemeShard->TabletCounters->Simple()[COUNTER_TENANT_DATA_ERASURE_OK].Set(CounterDataErasureOk);
+    SchemeShard->TabletCounters->Simple()[COUNTER_TENANT_DATA_ERASURE_TIMEOUT].Set(CounterDataErasureTimeout);
 }
 
 void TTenantDataErasureManager::SendResponseToRootSchemeShard() {

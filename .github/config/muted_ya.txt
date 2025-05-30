@@ -37,7 +37,6 @@ ydb/core/kqp/ut/runtime KqpScanSpilling.SpillingInRuntimeNodes-EnabledSpilling
 ydb/core/kqp/ut/scheme KqpOlapScheme.TenThousandColumns
 ydb/core/kqp/ut/scheme [*/*] chunk chunk
 ydb/core/kqp/ut/service [*/*] chunk chunk
-ydb/core/kqp/ut/tx KqpSinkTx.OlapInvalidateOnError
 ydb/core/kqp/ut/yql KqpScripting.StreamExecuteYqlScriptScanOperationTmeoutBruteForce
 ydb/core/quoter/ut QuoterWithKesusTest.PrefetchCoefficient
 ydb/core/statistics/aggregator/ut AnalyzeColumnshard.AnalyzeRebootColumnShard

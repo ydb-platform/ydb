@@ -408,6 +408,7 @@ namespace NKikimr {
                 if (memoryUsage) {
                     LogMemoryStatsIfNeeded(ctx, memoryUsage.value());
                 }
+
                 ctx.Schedule(Interval, new TEvents::TEvWakeup());
             }
 

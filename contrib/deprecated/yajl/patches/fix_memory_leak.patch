@@ -1,5 +1,5 @@
---- contrib/libs/yajl/yajl_tree.c	(3b4a018b6b389390da3ee13f6b4ce0880cb71807)
-+++ contrib/libs/yajl/yajl_tree.c	(5fe0776c5f96630ddffb63e4ff0292037e12039e)
+--- contrib/deprecated/yajl/yajl_tree.c	(3b4a018b6b389390da3ee13f6b4ce0880cb71807)
++++ contrib/deprecated/yajl/yajl_tree.c	(5fe0776c5f96630ddffb63e4ff0292037e12039e)
 @@ -143,7 +143,7 @@ static yajl_val context_pop(context_t *ctx)
      ctx->stack = stack->next;
  

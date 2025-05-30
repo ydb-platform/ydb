@@ -2,6 +2,45 @@
 
 ## Версия 24.4 {#24-4}
 
+### Версия 24.4.4.12 {#24-4-4-12}
+
+Дата выхода:  мая 2025.
+
+
+#### NO CL ENTRY
+
+* NO CL ENTRY:  'Fix build index retry GetTimeoutBackouff'. [#18260](https://github.com/ydb-platform/ydb/pull/18260) ([kungurtsev](https://github.com/kunga)).
+* NO CL ENTRY:  'Check iter index access slice bounds ([#18213](https://github.com/ydb-platform/ydb/issues/18213))'. [#18266](https://github.com/ydb-platform/ydb/pull/18266) ([kungurtsev](https://github.com/kunga)).
+
+#### NOT FOR CHANGELOG / INSIGNIFICANT
+
+* 24-4-4-hotfix: Fix readrows RPC [#17427](https://github.com/ydb-platform/ydb/pull/17427) ([Aleksei Borzenkov](https://github.com/snaury)).
+* 24-4-4-hotfix: Support an emergency one-to-one split/merge in SchemeShard [#17656](https://github.com/ydb-platform/ydb/pull/17656) ([Aleksei Borzenkov](https://github.com/snaury)).
+* 24-4-4-hotfix: Fix method check in schemeshard actions [#17739](https://github.com/ydb-platform/ydb/pull/17739) ([Aleksei Borzenkov](https://github.com/snaury)).
+* Discard unknown metrics in BSC [#18562](https://github.com/ydb-platform/ydb/pull/18562) ([Sergey Belyakov](https://github.com/serbel324)).
+
+#### Функциональность
+
+#### YDB UI
+
+#### Производительность
+
+* Limit internal inflight config updates. [#17755](https://github.com/ydb-platform/ydb/pull/17755) ([Ilnaz Nizametdinov](https://github.com/CyberROFL)).
+
+#### Исправления ошибок
+
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/17123) редкая ошибка зависания клиентских приложений во время выполнения коммита.
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/17312) ошибка при копировании таблиц с типом Decimal, которая приводила к сбою при откате на предыдущую версию.
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/17519) [ошибка](https://github.com/ydb-platform/ydb/issues/17499), при которой вызов Commit без ожидания подтверждения записи сообщений в топик приводил к блокировке обработки текущей и последующих транзакций с топиками.
+* [Исправлена](https://github.com/ydb-platform/ydb/issues/17842) редкая [ошибка](https://github.com/ydb-platform/ydb/issues/17843), из-за которой транзакция между топиком и таблицей зависала при перезагрузке таблетки.
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/17913) [ошибка](https://github.com/ydb-platform/ydb/issues/17915), из-за которой транзакция между топиком и таблицей зависала из-за удаления таблетки.
+* Changes from [#18072](https://github.com/ydb-platform/ydb/issues/18072). [#18075](https://github.com/ydb-platform/ydb/pull/18075) ([Alek5andr-Kotov](https://github.com/Alek5andr-Kotov)).
+* [Исправлены](https://github.com/ydb-platform/ydb/pull/18114) [проблемы](https://github.com/ydb-platform/ydb/issues/18071) с чтением больших сообщений через [Kafka API](./reference/kafka-api).
+* [Оптимизировано](https://github.com/ydb-platform/ydb/issues/18289) потребление памяти PQ-таблетками.
+* Fix memory leak in write session. [#18319](https://github.com/ydb-platform/ydb/pull/18319) ([FloatingCrowbar](https://github.com/FloatingCrowbar)).
+* Fixed a bug in YDB UUID column handling in ReadTable RPC method [#15697](https://github.com/ydb-platform/ydb/issues/15697) - Fixed a bug in optional columns handling in ReadRows RPC method [#15701](https://github.com/ydb-platform/ydb/issues/15701). [#18506](https://github.com/ydb-platform/ydb/pull/18506) ([Ivan Nikolaev](https://github.com/lex007in)).
+* Avoid expensive table merge checks when operation inflight limits have already been exceeded. Fixes [#18473](https://github.com/ydb-platform/ydb/issues/18473). [#18554](https://github.com/ydb-platform/ydb/pull/18554) ([Aleksei Borzenkov](https://github.com/snaury)).
+
 ### Версия 24.4.4.2 {#24-4-4-2}
 
 Дата выхода: 15 апреля 2025.

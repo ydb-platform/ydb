@@ -656,20 +656,13 @@ void TDescribeTopicActorImpl::RequestPartitionStatus(const TTabletInfo& tablet, 
 void TDescribeTopicActorImpl::RequestPartitionsLocation(const TActorContext& ctx) {
     LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, "DescribeTopicImpl " << ctx.SelfID.ToString() << ": Request location");
 
-    if (Settings.Partitions.size() != TotalPartitions) {
-        return RaiseError(
-            TStringBuilder() << "No partition " << Settings.Partitions[0] << " in topic",
-            Ydb::PersQueue::ErrorCode::OVERLOAD, Ydb::StatusIds::OVERLOADED, ctx
-        );
-    }
-
     THashSet<ui64> partIds;
     TVector<ui64> partsVector;
     for (auto p : Settings.Partitions) {
-        if (p >= TotalPartitions) {
+         if (p >= TotalPartitions) {
             return RaiseError(
-                TStringBuilder() << "No partition " << Settings.Partitions[0] << " in topic",
-                Ydb::PersQueue::ErrorCode::OVERLOAD, Ydb::StatusIds::OVERLOADED, ctx
+                TStringBuilder() << "No partition " << p << " in topic",
+                Ydb::PersQueue::ErrorCode::BAD_REQUEST, Ydb::StatusIds::BAD_REQUEST, ctx
             );
         }
         auto res = partIds.insert(p);

@@ -184,7 +184,6 @@ struct MainTestCase {
         , TransferName(TStringBuilder() << "Transfer_" << Id)
         , Driver(CreateDriverConfig(ConnectionString, user))
         , TableClient(Driver)
-        , Session(TableClient.GetSession().GetValueSync().GetSession())
         , TopicClient(Driver)
     {
     }
@@ -193,9 +192,13 @@ struct MainTestCase {
         Driver.Stop(true);
     }
 
+    auto Session() {
+        return TableClient.GetSession().GetValueSync().GetSession();
+    }
+
     void ExecuteDDL(const std::string& ddl, bool checkResult = true, const std::optional<std::string> expectedMessage = std::nullopt) {
         Cerr << "DDL: " << ddl << Endl << Flush;
-        auto res = Session.ExecuteQuery(ddl, TTxControl::NoTx()).GetValueSync();
+        auto res = Session().ExecuteQuery(ddl, TTxControl::NoTx()).GetValueSync();
         if (checkResult) {
             if (expectedMessage) {
                 UNIT_ASSERT(!res.IsSuccess());
@@ -211,7 +214,7 @@ struct MainTestCase {
     auto ExecuteQuery(const std::string& query, bool retry = true) {
         for (size_t i = 10; i--;) {
             Cerr << ">>>>> Query: " << query << Endl << Flush;
-            auto res = Session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            auto res = Session().ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
             if (!res.IsSuccess()) {
                 Cerr << ">>>>> Query error: " << res.GetIssues().ToString() << Endl << Flush;
             }
@@ -455,7 +458,7 @@ struct MainTestCase {
             setOptions = TStringBuilder() << "SET (" << sb << " )";
         }
 
-        auto res = Session.ExecuteQuery(Sprintf(R"(
+        auto res = Session().ExecuteQuery(Sprintf(R"(
             %s;
 
             ALTER TRANSFER `%s`
@@ -579,7 +582,7 @@ struct MainTestCase {
 
     TDescribeTopicResult DescribeTopic() {
         TDescribeTopicSettings settings;
-        settings.IncludeLocation(true);
+        //settings.IncludeLocation(true);
         settings.IncludeStats(true);
 
         auto result = TopicClient.DescribeTopic(TopicName, settings).ExtractValueSync();
@@ -734,7 +737,6 @@ struct MainTestCase {
 
     TDriver Driver;
     TQueryClient TableClient;
-    TSession Session;
     TTopicClient TopicClient;
 };
 

@@ -8,7 +8,7 @@ using namespace NReplicationTest;
 Y_UNIT_TEST_SUITE(TransferLarge)
 {
 
-    auto CreateWriter(MainTestCase& setup, const size_t writerId, bool directWrite) {
+    auto CreateWriter(MainTestCase& setup, const size_t writerId) {
         Cerr << "CREATE PARTITION WRITER " << writerId << Endl << Flush;
 
         TString producerId = TStringBuilder() << "writer-" << writerId << "-" << CreateGuidAsString();
@@ -18,14 +18,13 @@ Y_UNIT_TEST_SUITE(TransferLarge)
         writeSettings.DeduplicationEnabled(true);
         writeSettings.ProducerId(producerId);
         writeSettings.MessageGroupId(producerId);
-        writeSettings.DirectWriteToPartition(directWrite);
 
         TTopicClient client(setup.Driver);
         return client.CreateSimpleBlockingWriteSession(writeSettings);
     }
 
-    void Write(MainTestCase& setup, const size_t writerId, const size_t messageCount, const size_t messageSize, bool directWrite) {
-        auto writer = CreateWriter(setup, writerId, directWrite);
+    void Write(MainTestCase& setup, const size_t writerId, const size_t messageCount, const size_t messageSize) {
+        auto writer = CreateWriter(setup, writerId);
 
         Cerr << "PARTITION " << writerId << " START WRITE " << messageCount << " MESSAGES" << Endl << Flush;
 
@@ -118,7 +117,7 @@ Y_UNIT_TEST_SUITE(TransferLarge)
         }
     }
 
-    void BigTransfer(const std::string tableType, const size_t threadsCount, const size_t messageCount, const size_t messageSize, bool autopartitioning, bool directWrite) {
+    void BigTransfer(const std::string tableType, const size_t threadsCount, const size_t messageCount, const size_t messageSize, bool autopartitioning) {
         MainTestCase testCase(std::nullopt, tableType);
         testCase.CreateTable(R"(
                 CREATE TABLE `%s` (
@@ -152,13 +151,11 @@ Y_UNIT_TEST_SUITE(TransferLarge)
                 };
             )", MainTestCase::CreateTransferSettings::WithBatching(TDuration::Seconds(1), 8_MB));
 
-        Sleep(TDuration::Seconds(20));
-
         std::vector<std::thread> writerThreads;
         writerThreads.reserve(threadsCount);
         for (size_t i = 0; i < threadsCount; ++i) {
             writerThreads.emplace_back([&, i = i]() {
-                Write(testCase, i, messageCount, messageSize, directWrite);
+                Write(testCase, i, messageCount, messageSize);
             });
             Sleep(TDuration::MilliSeconds(25));
         }
@@ -170,9 +167,10 @@ Y_UNIT_TEST_SUITE(TransferLarge)
 
         Cerr << "WAIT REPLICATION FINISHED" << Endl << Flush;
 
-        Sleep(TDuration::Seconds(10));
+        Sleep(TDuration::Seconds(3));
 
         testCase.CheckReplicationState(TReplicationDescription::EState::Running);
+        Cerr << "WaitAllMessagesHaveBeenCommitted" << Endl << Flush;
         WaitAllMessagesHaveBeenCommitted(testCase, messageCount * threadsCount);
 
         CheckSourceTableIsValid(testCase);
@@ -183,105 +181,71 @@ Y_UNIT_TEST_SUITE(TransferLarge)
     }
 
     //
-    // Topic autopartitioning is disabled. Topic direct write is enabled.
+    // Topic autopartitioning is disabled
     //
 
     Y_UNIT_TEST(Transfer1KM_1P_ColumnTable)
     {
-        BigTransfer("COLUMN", 1, 1000, 64, false, true);
+        BigTransfer("COLUMN", 1, 1000, 64, false);
     }
 
     Y_UNIT_TEST(Transfer1KM_1KP_ColumnTable)
     {
-        BigTransfer("COLUMN", 1000, 1000, 64, false, true);
+        BigTransfer("COLUMN", 1000, 1000, 64, false);
     }
 
     Y_UNIT_TEST(Transfer100KM_10P_ColumnTable)
     {
-        BigTransfer("COLUMN", 10, 100000, 64, false, true);
+        BigTransfer("COLUMN", 10, 100000, 64, false);
     }
 
     Y_UNIT_TEST(Transfer1KM_1P_RowTable)
     {
-        BigTransfer("ROW", 1, 1000, 64, false, true);
+        BigTransfer("ROW", 1, 1000, 64, false);
     }
 
     Y_UNIT_TEST(Transfer1KM_1KP_RowTable)
     {
-        BigTransfer("ROW", 1000, 1000, 64, false, true);
+        BigTransfer("ROW", 1000, 1000, 64, false);
     }
 
     Y_UNIT_TEST(Transfer100KM_10P_RowTable)
     {
-        BigTransfer("ROW", 10, 100000, 64, false, true);
+        BigTransfer("ROW", 10, 100000, 64, false);
     }
 
     //
-    // Topic autopartitioning is enabled. Topic direct write is disabled.
+    // Topic autopartitioning is enabled
     //
 
     Y_UNIT_TEST(Transfer1KM_1P_ColumnTable_TopicAutoPartitioning)
     {
-        BigTransfer("COLUMN", 1, 1000, 64, true, false);
+        BigTransfer("COLUMN", 1, 1000, 64, true);
     }
 
     Y_UNIT_TEST(Transfer1KM_1KP_ColumnTable_TopicAutoPartitioning)
     {
-        BigTransfer("COLUMN", 1000, 1000, 64, true, false);
+        BigTransfer("COLUMN", 1000, 1000, 64, true);
     }
 
     Y_UNIT_TEST(Transfer100KM_10P_ColumnTable_TopicAutoPartitioning)
     {
-        BigTransfer("COLUMN", 10, 100000, 64, true, false);
+        BigTransfer("COLUMN", 10, 100000, 64, true);
     }
 
     Y_UNIT_TEST(Transfer1KM_1P_RowTable_TopicAutoPartitioning)
     {
-        BigTransfer("ROW", 1, 1000, 64, true, false);
+        BigTransfer("ROW", 1, 1000, 64, true);
     }
 
     Y_UNIT_TEST(Transfer1KM_1KP_RowTable_TopicAutoPartitioning)
     {
-        BigTransfer("ROW", 1000, 1000, 64, true, false);
+        BigTransfer("ROW", 1000, 1000, 64, true);
     }
 
     Y_UNIT_TEST(Transfer100KM_10P_RowTable_TopicAutoPartitioning)
     {
-        BigTransfer("ROW", 10, 100000, 64, true, false);
-    }
-
-    //
-    // Topic autopartitioning is enabled. Topic direct write is enabled.
-    //
-
-    Y_UNIT_TEST(Transfer1KM_1P_ColumnTable_TopicAutoPartitioning_DirectWrite)
-    {
-        BigTransfer("COLUMN", 1, 1000, 64, true, true);
-    }
-
-    Y_UNIT_TEST(Transfer1KM_1KP_ColumnTable_TopicAutoPartitioning_DirectWrite)
-    {
-        BigTransfer("COLUMN", 1000, 1000, 64, true, true);
-    }
-
-    Y_UNIT_TEST(Transfer100KM_10P_ColumnTable_TopicAutoPartitioning_DirectWrite)
-    {
-        BigTransfer("COLUMN", 10, 100000, 64, true, true);
-    }
-
-    Y_UNIT_TEST(Transfer1KM_1P_RowTable_TopicAutoPartitioning_DirectWrite)
-    {
-        BigTransfer("ROW", 1, 1000, 64, true, true);
-    }
-
-    Y_UNIT_TEST(Transfer1KM_1KP_RowTable_TopicAutoPartitioning_DirectWrite)
-    {
-        BigTransfer("ROW", 1000, 1000, 64, true, true);
-    }
-
-    Y_UNIT_TEST(Transfer100KM_10P_RowTable_TopicAutoPartitioning_DirectWrite)
-    {
-        BigTransfer("ROW", 10, 100000, 64, true, true);
+        BigTransfer("ROW", 10, 100000, 64, true);
     }
 
 }

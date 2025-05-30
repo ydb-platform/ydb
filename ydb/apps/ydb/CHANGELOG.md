@@ -1,4 +1,5 @@
 * `ydb workload query` deep reworked. Now it can be used for user defined full cicle load testing.
+* Switched highlighting engine
 * Added `ydb admin cluster config verion` command to show configuration version (V1/V2) on nodes.
 * Removed `--executor` option from `ydb workload run` commands. Use always `generic`.
 * Added object names completion in interactive mode

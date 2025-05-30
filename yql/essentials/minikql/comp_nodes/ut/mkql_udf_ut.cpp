@@ -1,9 +1,54 @@
 #include "mkql_computation_node_ut.h"
 #include <yql/essentials/public/udf/udf_helpers.h>
 #include <yql/essentials/minikql/mkql_node_serialization.h>
+#include <yql/essentials/minikql/mkql_node_cast.h>
 
 namespace NKikimr {
 namespace NMiniKQL {
+
+// XXX: Emulate type transformations similar to the one made by
+// type annotation and compilation phases. As a result, the name
+// (i.e. "UDF") of callable type is lost. Hence, the type resolved
+// at the type annotation phase (and, ergo, used for bytecode
+// compilation) differs from the type, resolved for the underline
+// function at runtime.
+template<typename TUdf>
+static TType* TweakUdfType(const NYql::NUdf::TStringRef& name, TType* userType,
+                           const TTypeEnvironment& env)
+{
+    TFunctionTypeInfoBuilder typeInfoBuilder(NYql::UnknownLangVersion, env,
+                                             new TTypeInfoHelper(),
+                                             "", nullptr, {});
+
+    // Obtain the callable type of the particular UDF.
+    TFunctionTypeInfo funcInfo;
+    UNIT_ASSERT(TUdf::DeclareSignature(name, userType, typeInfoBuilder, true));
+    typeInfoBuilder.Build(&funcInfo);
+
+    // Create the new MiniKQL type to emulate two conversions:
+    // * Convert the given MiniKQL type to the expression type.
+    //   See <NYql::NCommon::ConvertMiniKQLType>.
+    // * Convert the expression type back to the MiniKQL one.
+    //   See <NYql::NCommon::TMkqlBuildContext::BuildType>.
+    // The aforementioned conversions are made by the pipeline in
+    // scope of type annotation and compilation phases.
+    // As a result of the first conversion, the name of the
+    // callable type is lost, so the new MiniKQL type has to be
+    // the same as the resolved one, but the name is omitted.
+    const auto funcType = AS_TYPE(TCallableType, funcInfo.FunctionType);
+    TVector<TType*> argsTypes;
+    for (size_t i = 0; i < funcType->GetArgumentsCount(); i++) {
+        argsTypes.push_back(funcType->GetArgumentType(i));
+    }
+    const auto nodeType = TCallableType::Create("", /* Name has to be empty. */
+                                                funcType->GetReturnType(),
+                                                funcType->GetArgumentsCount(),
+                                                argsTypes.data(),
+                                                funcType->GetPayload(),
+                                                env);
+    nodeType->SetOptionalArgumentsCount(funcType->GetOptionalArgumentsCount());
+    return nodeType;
+};
 
 class TImpl : public NYql::NUdf::TBoxedValue {
 public:
@@ -219,7 +264,9 @@ Y_UNIT_TEST_SUITE(TMiniKQLUdfTest) {
             pb.NewTupleType({strType}),
             pb.NewEmptyStructType(),
             pb.NewEmptyTupleType()});
-        const auto udf = pb.Udf("TestModule.Test", upvalue, userType);
+
+        const auto udfType = TweakUdfType<TRunConfig>("Test", userType, *compileSetup.Env);
+        const auto udf = pb.TypedUdf("TestModule.Test", udfType, upvalue, userType);
 
         const auto list = pb.NewList(strType, {value});
         const auto pgmReturn = pb.Map(list, [&pb, udf](const TRuntimeNode item) {
@@ -268,7 +315,9 @@ Y_UNIT_TEST_SUITE(TMiniKQLUdfTest) {
             pb.NewTupleType({strType}),
             pb.NewEmptyStructType(),
             pb.NewEmptyTupleType()});
-        const auto udf = pb.Udf("TestModule.Test", pb.NewVoid(), userType);
+
+        const auto udfType = TweakUdfType<TCurrying>("Test", userType, *compileSetup.Env);
+        const auto udf = pb.TypedUdf("TestModule.Test", udfType, pb.NewVoid(), userType);
         const auto closure = pb.Apply(udf, {upvalue, optional});
 
         const auto list = pb.NewList(strType, {value});

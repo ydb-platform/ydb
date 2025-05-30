@@ -38,9 +38,13 @@ jobs:
         if [[ "${{ github.event.inputs.action }}" == "close" ]]; then
           echo "Closing gate for postcommits - removing postcommit labels"
           query='.runners[] | select(.labels[].name=="ghrun") | select( any([.labels[].name][]; .=="postcommit")) | .id'
+          OPERATION="Closing"
+          LABEL_ACTION="Removing"
         else
           echo "Opening gate for postcommits - adding postcommit labels"
           query='.runners[] | select(.labels[].name=="ghrun") | select( all([.labels[].name][]; .!="postcommit")) | .id'
+          OPERATION="Opening"
+          LABEL_ACTION="Adding"
         fi
         
         # Function to fetch a page of runners
@@ -65,7 +69,7 @@ jobs:
         # Get all runners with pagination
         echo "Collecting all runners (paginated)..."
         page=1
-        all_runner_ids=""
+        all_runner_ids=()
         more_pages=true
         
         while $more_pages; do
@@ -76,14 +80,14 @@ jobs:
           fi
           
           # Extract runner IDs for this page
-          page_runner_ids=$(echo "$runners_data" | jq "$query")
+          readarray -t page_ids < <(echo "$runners_data" | jq -r "$query" | grep -v "^$")
           
           # Check if we have runners on this page
-          count_on_page=$(echo "$page_runner_ids" | grep -v "^$" | wc -l)
+          count_on_page=${#page_ids[@]}
           echo "Found $count_on_page eligible runners on page $page"
           
-          # Append to our list
-          all_runner_ids="$all_runner_ids$page_runner_ids"
+          # Append to our array
+          all_runner_ids+=("${page_ids[@]}")
           
           # Check if we have more pages
           runners_count=$(echo "$runners_data" | jq '.runners | length')
@@ -95,25 +99,25 @@ jobs:
         done
         
         # Count total eligible runners
-        total_runners=$(echo "$all_runner_ids" | grep -v "^$" | wc -l)
+        total_runners=${#all_runner_ids[@]}
         echo "Total eligible runners found across all pages: $total_runners"
         
         # Limit if needed
         if [[ "$LIMIT_OPTION" == "true" && $total_runners -gt $LIMIT_COUNT ]]; then
-          all_runner_ids=$(echo "$all_runner_ids" | head -n $LIMIT_COUNT)
+          all_runner_ids=("${all_runner_ids[@]:0:$LIMIT_COUNT}")
           echo "Limited to first $LIMIT_COUNT runners"
         fi
         
+        # Files to store results and details
+        success_file=$(mktemp)
+        failed_file=$(mktemp)
+        details_file=$(mktemp)
+        
         # Process runners
         changed_count=0
-        success_count=0
-        failed_count=0
-        
-        while read -r runner_id; do
-          if [[ -z "$runner_id" ]]; then continue; fi
-          
+        for runner_id in "${all_runner_ids[@]}"; do
           changed_count=$((changed_count + 1))
-          echo "Processing runner $changed_count/$total_runners: ID $runner_id"
+          echo "Processing runner $changed_count/${#all_runner_ids[@]}: ID $runner_id"
           
           if [[ "${{ github.event.inputs.action }}" == "close" ]]; then
             echo "Removing postcommit label from runner $runner_id"
@@ -134,18 +138,67 @@ jobs:
           http_code=$(echo "$response" | tail -n1)
           body=$(echo "$response" | sed '$d')
           
+          # Get runner name for better reporting
+          runner_name=$(curl -s -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${{secrets.GH_PERSONAL_ACCESS_TOKEN}}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${{github.repository}}/actions/runners/$runner_id" | \
+            jq -r '.name // "Unknown"')
+          
           # Check success (HTTP 2xx)
           if [[ $http_code -ge 200 && $http_code -lt 300 ]]; then
-            success_count=$((success_count + 1))
-            echo "✅ Success: Label ${{ github.event.inputs.action == 'close' && 'removed' || 'added' }} (HTTP $http_code)"
+            echo "1" >> "$success_file"
+            status_icon="✅"
+            status_text="Success"
+            echo "$status_icon Success: Label ${{ github.event.inputs.action == 'close' && 'removed' || 'added' }} for runner $runner_name (ID: $runner_id)"
           else
-            failed_count=$((failed_count + 1))
-            echo "❌ Failed: HTTP $http_code"
+            echo "1" >> "$failed_file"
+            status_icon="❌"
+            status_text="Failed"
+            echo "$status_icon Failed: HTTP $http_code for runner $runner_name (ID: $runner_id)"
             echo "Error response: $body"
           fi
-        done <<< "$all_runner_ids"
+          
+          # Add to details for summary
+          echo "| $runner_name | $runner_id | $status_text | $http_code |" >> "$details_file"
+        done
         
-        # Summary
+        # Calculate success/failure counts
+        success_count=$(wc -l < "$success_file")
+        failed_count=$(wc -l < "$failed_file")
+        
+        # Create summary for GitHub Actions
+        echo "## Gate Control Operation Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Action:** $OPERATION gate ($LABEL_ACTION 'postcommit' label)" >> $GITHUB_STEP_SUMMARY
+        echo "**Repository:** \`${{github.repository}}\`" >> $GITHUB_STEP_SUMMARY
+        echo "**Timestamp:** $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        echo "### Results" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "| Metric | Count |" >> $GITHUB_STEP_SUMMARY
+        echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+        echo "| Total eligible runners | $total_runners |" >> $GITHUB_STEP_SUMMARY
+        if [[ "$LIMIT_OPTION" == "true" ]]; then
+          echo "| Limit applied | $LIMIT_COUNT |" >> $GITHUB_STEP_SUMMARY
+        fi
+        echo "| Runners processed | $changed_count |" >> $GITHUB_STEP_SUMMARY
+        echo "| ✅ Successful operations | $success_count |" >> $GITHUB_STEP_SUMMARY
+        echo "| ❌ Failed operations | $failed_count |" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        if [[ $changed_count -gt 0 ]]; then
+          echo "### Operation Details" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Runner Name | ID | Status | HTTP Code |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------------|----|---------|----|" >> $GITHUB_STEP_SUMMARY
+          cat "$details_file" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "### No runners were processed" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        # Console summary
         echo ""
         echo "=== OPERATION SUMMARY ==="
         echo "Action: ${{ github.event.inputs.action }} gate"
@@ -158,9 +211,13 @@ jobs:
         echo "Failed operations: $failed_count"
         echo "========================="
         
+        # Cleanup temp files
+        rm -f "$success_file" "$failed_file" "$details_file"
+        
         # Set exit code based on success
         if [[ $failed_count -gt 0 ]]; then
           echo "Warning: Some operations failed"
+          echo "::warning::$failed_count operations failed. See summary for details."
           exit 1
         fi
         

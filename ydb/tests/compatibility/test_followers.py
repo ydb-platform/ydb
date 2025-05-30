@@ -14,6 +14,8 @@ logger = logging.getLogger(__name__)
 
 TABLE_NAME = "table"
 INDEX_NAME = "idx"
+ATTEMPT_COUNT = 10
+ATTEMPT_INTERVAL = 5
 
 
 class TestFollowersCompatibility(MixedClusterFixture):
@@ -195,32 +197,32 @@ class TestSecondaryIndexFollowers(RestartToAnotherVersionFixture):
             f"""
                 SELECT *
                 FROM `/Root/.sys/partition_stats`
-                WHERE FollowerId != 0 AND (RowReads != 0 OR RangeReads != 0) AND Path = '/Root/{TABLE_NAME}/{INDEX_NAME}/indexImplTable'
+                WHERE
+                    FollowerId {"!=" if enable_followers else "=="} 0
+                    AND (RowReads != 0 OR RangeReads != 0)
+                    AND Path = '/Root/{TABLE_NAME}/{INDEX_NAME}/indexImplTable'
             """
         ]
 
         with ydb.QuerySessionPool(self.driver) as session_pool:
-            for query in queries:
-                result_sets = session_pool.execute_with_retries(query)
-
-                result_row_count = len(result_sets[0].rows)
-                if enable_followers:
-                    assert result_row_count > 0
-                else:
-                    assert result_row_count == 0
+            for _ in range(ATTEMPT_COUNT):
+                for query in queries:
+                    result_sets = session_pool.execute_with_retries(query)
+                    result_row_count = len(result_sets[0].rows)
+                    if result_row_count > 0:
+                        return
+                time.sleep(ATTEMPT_INTERVAL)
+            assert False, f"Expected reads but there is timeout waiting for read stats from '/Root/{TABLE_NAME}/{INDEX_NAME}/indexImplTable'"
 
     @pytest.mark.parametrize("enable_followers", [True, False])
     def test_secondary_index_followers(self, enable_followers):
         self.create_table(enable_followers)
 
         self.write_data()
-        time.sleep(10)
         self.read_data()
-        time.sleep(10)
         self.check_statistics(enable_followers)
 
         self.change_cluster_version()
-        time.sleep(10)
+
         self.read_data()
-        time.sleep(10)
         self.check_statistics(enable_followers)

@@ -5,8 +5,6 @@
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/actorlib_impl/long_timer.h>
 
-#include <ydb-cpp-sdk/client/proto/accessor.h>
-
 namespace NKikimr {
 namespace NGRpcService {
 

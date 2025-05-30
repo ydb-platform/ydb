@@ -17,13 +17,11 @@ namespace NKikimr {
          ui64 userDataBytes = current.IndexBytesTotal + current.InplacedDataTotal + current.HugeDataTotal;
          ui64 userDataBytesAfterCompaction = current.IndexBytesKeep + current.InplacedDataKeep + current.HugeDataKeep;
 
-         ui64 recoveryLogSize = RecoveryLogSizeBytes;
-
          auto hugeStat = VCtx->GetHugeHeapFragmentation().Get();
          ui64 defragSavingsBytes = static_cast<ui64>(hugeStat.CanBeFreedChunks) * ChunkSize;
 
-         UserBlobSpaceGroup.UserBlobBytesStored()          = userDataBytes + recoveryLogSize;
-         UserBlobSpaceGroup.UserBlobBytesAfterCompaction() = userDataBytesAfterCompaction + recoveryLogSize;
+         UserBlobSpaceGroup.UserBlobBytesStored()          = userDataBytes + RecoveryLogSizeBytes;
+         UserBlobSpaceGroup.UserBlobBytesAfterCompaction() = userDataBytesAfterCompaction + RecoveryLogSizeBytes;
          UserBlobSpaceGroup.UserBlobBytesCanBeFreed()      = userDataBytes - userDataBytesAfterCompaction + defragSavingsBytes;
     }
 

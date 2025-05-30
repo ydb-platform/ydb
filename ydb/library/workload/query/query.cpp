@@ -18,7 +18,7 @@ void TQueryWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const EComman
         case TWorkloadParams::ECommandType::Init:
             opts.AddLongOption('q', "query", "Query to execute. Can be used multiple times.").AppendTo(&CustomQueries);
             TWorkloadBaseParams::ConfigureOpts(opts, commandType, workloadType);
-            opts.AddLongOption("suite-path", "Path to suite directory.")
+            opts.AddLongOption("suite-path", "Path to suite directory. See \"ydb workload query\" command description for more information.")
                 .RequiredArgument("PATH").StoreResult(&SuitePath);
             break;
     }

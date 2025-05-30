@@ -15,7 +15,7 @@ namespace NQuery {
 
     void TQueryWorkloadDataInitializer::ConfigureOpts(NLastGetopt::TOpts& opts) {
         TWorkloadDataInitializerBase::ConfigureOpts(opts);
-        opts.AddLongOption("suite-path", "Path to suite directory.")
+        opts.AddLongOption("suite-path", "Path to suite directory. See \"ydb workload query\" command description for more information.")
             .RequiredArgument("PATH").StoreResult(&SuitePath);
         opts.AddLongOption("tables", "Commaseparated list of tables for generate. Empty means all tables.")
             .Handler1T<TStringBuf>([this](TStringBuf arg) {

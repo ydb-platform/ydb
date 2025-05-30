@@ -148,6 +148,54 @@ public:
     }
 };
 
+class TLogicMatchAsciiEqualsIgnoreCase: public TLogicMatchString {
+private:
+    static TString GetClassNameStatic() {
+        return "String.AsciiEqualsIgnoreCase";
+    }
+public:
+    TLogicMatchAsciiEqualsIgnoreCase() : TLogicMatchString(TIndexCheckOperation::EOperation::Contains, false, false) {
+
+    }
+    static const inline auto Registrator = TFactory::TRegistrator<TLogicMatchAsciiEqualsIgnoreCase>(GetClassNameStatic());
+};
+
+class TLogicMatchAsciiContainsIgnoreCase: public TLogicMatchString {
+private:
+    static TString GetClassNameStatic() {
+        return "String.AsciiContainsIgnoreCase";
+    }
+public:
+    TLogicMatchAsciiContainsIgnoreCase() : TLogicMatchString(TIndexCheckOperation::EOperation::Contains, false, false) {
+
+    }
+    static const inline auto Registrator = TFactory::TRegistrator<TLogicMatchAsciiContainsIgnoreCase>(GetClassNameStatic());
+};
+
+class TLogicMatchAsciiStartsWithIgnoreCase: public TLogicMatchString {
+private:
+    static TString GetClassNameStatic() {
+        return "String.AsciiStartsWithIgnoreCase";
+    }
+public:
+    TLogicMatchAsciiStartsWithIgnoreCase() : TLogicMatchString(TIndexCheckOperation::EOperation::StartsWith, false, false) {
+
+    }
+    static const inline auto Registrator = TFactory::TRegistrator<TLogicMatchAsciiStartsWithIgnoreCase>(GetClassNameStatic());
+};
+
+class TLogicMatchAsciiEndsWithIgnoreCase: public TLogicMatchString {
+private:
+    static TString GetClassNameStatic() {
+        return "String.AsciiEndsWithIgnoreCase";
+    }
+public:
+    TLogicMatchAsciiEndsWithIgnoreCase() : TLogicMatchString(TIndexCheckOperation::EOperation::EndsWith, false, false) {
+
+    }
+    static const inline auto Registrator = TFactory::TRegistrator<TLogicMatchAsciiEndsWithIgnoreCase>(GetClassNameStatic());
+};
+
 class TLogicEquals: public IKernelLogic {
 private:
     using TBase = IKernelLogic;

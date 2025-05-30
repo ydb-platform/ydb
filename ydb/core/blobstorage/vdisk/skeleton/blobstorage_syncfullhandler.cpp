@@ -58,7 +58,7 @@ namespace NKikimr {
                 !SelfVDiskId.SameDisk(TargetVDisk)) {
                 auto result = std::make_unique<TEvBlobStorage::TEvVSyncFullResult>(NKikimrProto::ERROR, SelfVDiskId,
                     Record.GetCookie(), Now, IFaceMonGroup->SyncFullResMsgsPtr(), nullptr, Ev->GetChannel());
-                SendVDiskResponse(ctx, recipient, result.release(), cookie, HullCtx->VCtx);
+                SendVDiskResponse(ctx, recipient, result.release(), cookie, HullCtx->VCtx, {});
                 Die(ctx);
                 return;
             }
@@ -73,7 +73,7 @@ namespace NKikimr {
                 auto result = std::make_unique<TEvBlobStorage::TEvVSyncFullResult>(NKikimrProto::NODATA, SelfVDiskId,
                     TSyncState(Db->GetVDiskIncarnationGuid(), DbBirthLsn), Record.GetCookie(), Now,
                     IFaceMonGroup->SyncFullResMsgsPtr(), nullptr, Ev->GetChannel());
-                SendVDiskResponse(ctx, recipient, result.release(), cookie, HullCtx->VCtx);
+                SendVDiskResponse(ctx, recipient, result.release(), cookie, HullCtx->VCtx, {});
                 Die(ctx);
                 return;
             }

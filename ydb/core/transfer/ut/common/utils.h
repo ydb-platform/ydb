@@ -168,7 +168,7 @@ struct MainTestCase {
         if (user) {
             config.SetAuthToken(TStringBuilder() << user.value() << "@builtin");
         }
-        config.SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG).Release()));
+        // config.SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG).Release()));
         return config;
     }
 

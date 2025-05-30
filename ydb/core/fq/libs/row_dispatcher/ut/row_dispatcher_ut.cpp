@@ -176,7 +176,7 @@ public:
         Runtime.Send(new IEventHandle(RowDispatcher, topicSessionId, event.release(), 0, generation));
     }
 
-    void MockSessionError(TActorId topicSessionId, TActorId readActorId,ui32 partitionId, bool isFatalError = false) {
+    void MockSessionError(TActorId topicSessionId, TActorId readActorId, ui32 partitionId, bool isFatalError = false) {
         auto event = std::make_unique<NFq::TEvRowDispatcher::TEvSessionError>();
         event->ReadActorId = readActorId;
         event->IsFatalError = isFatalError;

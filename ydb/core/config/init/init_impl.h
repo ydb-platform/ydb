@@ -1353,6 +1353,7 @@ public:
     void InitStaticNode() {
         CommonAppOptions.ValidateStaticNodeConfig();
         Labels["node_kind"] = "static";
+        Labels["dynamic"] = "false";
 
         if (!AppConfig.HasStartupConfigYaml()) {
             return;

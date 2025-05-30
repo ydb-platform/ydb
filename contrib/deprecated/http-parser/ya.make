@@ -11,7 +11,7 @@ VERSION(2.9.4)
 ORIGINAL_SOURCE(https://github.com/nodejs/http-parser/archive/v2.9.4.tar.gz)
 
 ADDINCL(
-    contrib/restricted/http-parser
+    contrib/deprecated/http-parser
 )
 
 NO_COMPILER_WARNINGS()

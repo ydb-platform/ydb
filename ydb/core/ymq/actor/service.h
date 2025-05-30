@@ -33,6 +33,8 @@ public:
     using TUserInfoPtr = TIntrusivePtr<TUserInfo>;
     using TUsersMap = std::map<TString, TUserInfoPtr>;
 
+    static constexpr std::string_view CloudEventsTableName = ".CloudEventsYmq";
+
 private:
     struct TQueueInfo;
 
@@ -144,6 +146,7 @@ private:
     void NotifyLocalDeadLetterQueuesLeaders(const std::vector<TSqsEvents::TEvQueuesList::TQueueRecord>& sortedQueues) const;
 
     void MakeAndRegisterYcEventsProcessor();
+    void MakeAndRegisterCloudEventsProcessor();
 
 private:
     TString RootUrl_;
@@ -187,6 +190,14 @@ private:
         TDuration RescanInterval = TDuration::Minutes(1);
     };
     TYcSearchEventsConfig YcSearchEventsConfig;
+
+    struct TCloudEventsConfig {
+        TString Database = "";
+        bool Enabled = false;
+        bool TenantMode = false;
+    };
+    TCloudEventsConfig CloudEventsConfig;
+
     THolder<TLocalLeaderManager> LocalLeaderManager;
 };
 

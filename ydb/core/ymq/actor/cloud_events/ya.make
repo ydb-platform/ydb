@@ -1,0 +1,22 @@
+LIBRARY()
+
+SRCS(
+    cloud_events.h
+    cloud_events.cpp
+)
+
+PEERDIR(
+    ydb/library/actors/core
+    ydb/core/protos
+    ydb/core/util
+    ydb/core/ymq/base
+    ydb/public/api/client/yc_public/events
+)
+
+YQL_LAST_ABI_VERSION()
+
+END()
+
+RECURSE_FOR_TESTS(
+    ut
+)

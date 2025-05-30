@@ -11,6 +11,7 @@
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/utils.h>
+#include <yql/essentials/providers/common/provider/yql_provider.h>
 #include <yql/essentials/utils/log/log.h>
 #include <ydb/library/yql/utils/plan/plan_utils.h>
 
@@ -177,7 +178,7 @@ namespace NYql {
             }
 
             void FillSourceSettings(const TExprNode& node, ::google::protobuf::Any& protoSettings,
-                                    TString& sourceType, size_t, TExprContext&) override {
+                                    TString& sourceType, size_t, TExprContext& ctx) override {
                 const TDqSource source(&node);
                 if (const auto maybeSettings = source.Settings().Maybe<TGenSourceSettings>()) {
                     const auto settings = maybeSettings.Cast();
@@ -218,9 +219,10 @@ namespace NYql {
                         *column->mutable_type() = type;
                     }
 
+                    Cout << "Filter predicate: " << NCommon::ExprToPrettyString(ctx, node) << Endl;
                     if (auto predicate = settings.FilterPredicate(); !IsEmptyFilterPredicate(predicate)) {
                         TStringBuilder err;
-                        if (!SerializeFilterPredicate(predicate, select->mutable_where()->mutable_filter_typed(), err)) {
+                        if (!SerializeFilterPredicate(predicate, select->mutable_where()->mutable_filter_typed(), err, ctx)) {
                             throw yexception() << "Failed to serialize filter predicate for source: " << err;
                         }
                     }

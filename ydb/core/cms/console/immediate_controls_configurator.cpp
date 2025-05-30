@@ -157,13 +157,9 @@ void TImmediateControlsConfigurator::AddControl(TIntrusivePtr<TControlBoard> boa
     // is properly configured. It can currently only happen in configurator
     // tests, where it is created very late after some tablets have already
     // started.
-    bool res = false;
+    bool res = true;
     if (auto controlId = board->GetStaticControlId(name)) {
         res = board->RegisterSharedControl(Controls[name], *controlId);
-    } else {
-        Y_VERIFY_S(res,
-            "Immediate Control " <<  name << " has no static control type."
-            << " Please add it to EStaticControlType");
     }
 
     Y_VERIFY_S(res || allowExisting,

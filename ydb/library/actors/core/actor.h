@@ -636,6 +636,9 @@ namespace NActors {
         TActorContext ActorContext() const {
             return TActivationContext::ActorContextFor(SelfId());
         }
+    
+    private:
+        bool OnUnhandledExceptionSafe(const std::exception& exc);
 
     protected:
         void SetEnoughCpu(bool isEnough);

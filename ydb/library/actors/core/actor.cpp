@@ -278,12 +278,27 @@ namespace NActors {
 
         try {
             (this->*StateFunc_)(ev);
-        } catch(const std::exception& e) {
-            if (auto* handler = dynamic_cast<IActorExceptionHandler*>(this);
-                !handler || !handler->OnUnhandledException(e))
-            {
+        } catch (const std::exception& exc) {
+            if (!OnUnhandledExceptionSafe(exc)) {
                 throw;
             }
+        }
+    }
+
+    bool IActor::OnUnhandledExceptionSafe(const std::exception& exc) {
+        auto* handler = dynamic_cast<IActorExceptionHandler*>(this);
+        if (!handler) {
+            return false;
+        }
+
+        try {
+            return handler->OnUnhandledException(exc);
+        } catch (const std::exception&) {
+            Cerr << "OnUnhandledException throws unhandled exception " 
+                << TypeName(exc) << ": " << exc.what() << Endl
+                << TBackTrace::FromCurrentException().PrintToString()
+                << Endl;
+            return false;
         }
     }
 

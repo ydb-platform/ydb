@@ -24,15 +24,17 @@ public:
 
 class TEvRequestFilter: public NActors::TEventLocal<TEvRequestFilter, NColumnShard::TEvPrivate::EvRequestFilter> {
 private:
-    NArrow::TSimpleRow MinPK;
-    NArrow::TSimpleRow MaxPK;
     YDB_READONLY_DEF(ui64, SourceId);
-    YDB_READONLY_DEF(ui64, RecordsCount);
     TSnapshot MaxVersion;
+    YDB_READONLY_DEF(std::shared_ptr<NGroupedMemoryManager::TGroupGuard>, MemoryGroup);
     YDB_READONLY_DEF(std::shared_ptr<IFilterSubscriber>, Subscriber);
 
 public:
     TEvRequestFilter(const IDataSource& source, const std::shared_ptr<IFilterSubscriber>& subscriber);
+
+    const TSnapshot& GetMaxVersion() const {
+        return MaxVersion;
+    }
 };
 
 class TEvFilterConstructionResult

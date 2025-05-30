@@ -9,8 +9,6 @@
 
 namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering  {
 
-class IDataSource;
-
 class TFetchingStatus {
 private:
     std::atomic_uint64_t FetchingMemoryGroupId = std::numeric_limits<uint64_t>::max();
@@ -40,6 +38,48 @@ public:
     }
 };
 
+class TCommonFetchingContext {
+private:
+    TActorId Owner;
+    YDB_READONLY_DEF(std::shared_ptr<ISnapshotSchema>, ResultSchema);
+    YDB_READONLY_DEF(std::shared_ptr<IStoragesManager>, StoragesManager);
+    YDB_READONLY_DEF(std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>, DataAccessorsManager);
+    std::shared_ptr<NConveyor::TProcessGuard> ConveryorProcessGuard;
+    YDB_READONLY_DEF(TString, ScanIdentifier);
+    TSnapshot DefaultSnapshot;
+    YDB_READONLY_DEF(std::shared_ptr<const TAtomicCounter>, AbortionFlag);
+
+public:
+    TCommonFetchingContext(const std::shared_ptr<TReadContext>& readContext, const std::vector<ui32>& columnIds)
+        : ResultSchema(std::make_shared<TFilteredSnapshotSchema>(readContext->GetReadMetadata()->GetResultSchema(), columnIds))
+        , StoragesManager(readContext->GetStoragesManager())
+        , DataAccessorsManager(readContext->GetDataAccessorsManager())
+        , ConveryorProcessGuard(readContext->GetConveyorProcessGuard())
+        , ScanIdentifier(readContext->GetReadMetadata()->GetScanIdentifier())
+        , DefaultSnapshot(readContext->GetReadMetadata()->GetRequestSnapshot())
+        , AbortionFlag(readContext->GetAbortionFlag()) {
+    }
+
+    ui64 GetConveyorProcessId() const {
+        return ConveryorProcessGuard->GetProcessId();
+    }
+
+    const TSnapshot& GetDefaultSnapshot() const {
+        return DefaultSnapshot;
+    }
+
+    void SetOwner(const TActorId& owner) {
+        AFL_VERIFY(!Owner);
+        Owner = owner;
+        AFL_VERIFY(Owner);
+    }
+
+    const TActorId& GetOwner() const {
+        AFL_VERIFY(Owner);
+        return Owner;
+    }
+};
+
 class TColumnFetchingContext {
 private:
     enum class EState {
@@ -50,11 +90,10 @@ private:
     };
 
 private:
-    YDB_READONLY_DEF(TActorId, Owner);
+    std::shared_ptr<const TCommonFetchingContext> CommonContext;
     YDB_READONLY_DEF(std::shared_ptr<TFetchingStatus>, Status);
-    YDB_READONLY_DEF(std::shared_ptr<ISnapshotSchema>, ResultSchema);
-    YDB_READONLY_DEF(std::shared_ptr<NCommon::IDataSource>, Source);
     YDB_READONLY_DEF(std::shared_ptr<NGroupedMemoryManager::TGroupGuard>, MemoryGroupGuard);
+    YDB_READONLY_DEF(std::shared_ptr<TPortionInfo>, Portion);
 
     EState State = (EState)0;
     std::optional<TPortionDataAccessor> PortionAccessor;
@@ -73,21 +112,17 @@ private:
     }
 
 public:
-    TColumnFetchingContext(const std::shared_ptr<TFetchingStatus>& status, const std::shared_ptr<NCommon::IDataSource>& source,
-        const TActorId& owner, const std::shared_ptr<NGroupedMemoryManager::TGroupGuard>& memoryGroupGuard)
-        : Owner(owner)
+    TColumnFetchingContext(const std::shared_ptr<const TCommonFetchingContext>& commonContext, const std::shared_ptr<TPortionInfo>& portion,
+        const std::shared_ptr<TFetchingStatus>& status, const std::shared_ptr<NGroupedMemoryManager::TGroupGuard>& memoryGroupGuard)
+        : CommonContext(commonContext)
         , Status(status)
-        , Source(source)
-        , MemoryGroupGuard(memoryGroupGuard) {
-        std::set<ui32> columnIds = source->GetContext()->GetReadMetadata()->GetPKColumnIds();
-        for (const ui32 columnId : source->GetContext()->GetReadMetadata()->GetIndexInfo().GetSnapshotColumnIds()) {
-            columnIds.emplace(columnId);
-        }
-        ResultSchema = std::make_shared<TFilteredSnapshotSchema>(source->GetContext()->GetReadMetadata()->GetResultSchema(), columnIds);
+        , MemoryGroupGuard(memoryGroupGuard)
+        , Portion(portion) {
     }
 
     void OnError(const TString& message) {
-        TActorContext::AsActorContext().Send(Owner, new TEvDuplicateFilterDataFetched(Source->GetSourceId(), TConclusionStatus::Fail(message)));
+        TActorContext::AsActorContext().Send(
+            GetCommonContext().GetOwner(), new TEvDuplicateFilterDataFetched(Portion->GetPortionId(), TConclusionStatus::Fail(message)));
         OnDone();
     }
 
@@ -109,16 +144,22 @@ public:
     void BuildResult() {
         AdvanceState(EState::ASSEMBLE_BLOBS);
         AFL_VERIFY(PortionAccessor);
-        TActorContext::AsActorContext().Send(
-            Owner, new TEvDuplicateFilterDataFetched(Source->GetSourceId(),
-                       TColumnsData(PortionAccessor->PrepareForAssemble(*ResultSchema, *ResultSchema, Blobs, Source->GetDataSnapshot())
-                                        .AssembleToGeneralContainer({})
-                                        .DetachResult(),
-                           std::move(AllocatedMemory))));
+        TActorContext::AsActorContext().Send(GetCommonContext().GetOwner(),
+            new TEvDuplicateFilterDataFetched(Portion->GetPortionId(),
+                TColumnsData(PortionAccessor
+                                 ->PrepareForAssemble(*GetCommonContext().GetResultSchema(), *GetCommonContext().GetResultSchema(), Blobs,
+                                     Portion->GetDataSnapshot(GetCommonContext().GetDefaultSnapshot()))
+                                 .AssembleToGeneralContainer({})
+                                 .DetachResult(),
+                    std::move(AllocatedMemory))));
         OnDone();
     }
 
     static void StartAllocation(const std::shared_ptr<TColumnFetchingContext>& context);
+
+    const TCommonFetchingContext& GetCommonContext() const {
+        return *CommonContext;
+    }
 };
 
 class TColumnsAssembleTask: public NConveyor::ITask {
@@ -158,12 +199,12 @@ private:
         auto task = std::make_shared<TColumnsAssembleTask>(Context, resourcesGuard);
         THashMap<TChunkAddress, TString> blobs;
         for (const auto& [chunk, range] : Chunks) {
-            AFL_VERIFY(blobs.emplace(chunk, blobsData.Extract(Context->GetSource()->GetColumnStorageId(chunk.GetColumnId()),
-                                             Context->GetSource()->RestoreBlobRange(range))).second);
+            AFL_VERIFY(blobs.emplace(chunk, blobsData.Extract(Context->GetPortion()->GetColumnStorageId(chunk.GetColumnId(), Context->GetCommonContext().GetResultSchema()->GetIndexInfo()),
+                                             Context->GetPortion()->RestoreBlobRange(range))).second);
         }
         AFL_VERIFY(blobsData.IsEmpty());
         Context->SetBlobs(std::move(blobs));
-        NConveyor::TScanServiceOperator::SendTaskToExecute(task, Context->GetSource()->GetContext()->GetCommonContext()->GetConveyorProcessId());
+        NConveyor::TScanServiceOperator::SendTaskToExecute(task, Context->GetCommonContext().GetConveyorProcessId());
     }
     virtual bool DoOnError(const TString& /*storageId*/, const TBlobRange& range, const IBlobsReadingAction::TErrorStatus& status) override {
         Context->OnError(TStringBuilder() << "Error reading blob range for columns: " << range.ToString() << ", error: "
@@ -174,7 +215,7 @@ private:
 public:
     TColumnsFetcherTask(const TReadActionsCollection& actions, const std::shared_ptr<TColumnFetchingContext>& context,
         THashMap<TChunkAddress, TBlobRangeLink16>&& chunks)
-        : TBase(actions, "DUPLICATES", context->GetSource()->GetContext()->GetReadMetadata()->GetScanIdentifier())
+        : TBase(actions, "DUPLICATES", context->GetCommonContext().GetScanIdentifier())
         , Context(context)
         , Chunks(std::move(chunks)) {
     }
@@ -191,7 +232,7 @@ private:
         const std::shared_ptr<NGroupedMemoryManager::IAllocation>& /*allocation*/) override {
         if (!Context->GetStatus()->SetStartFetching()) {
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("component", "duplicates_manager")("event", "skip_start_fetching")(
-                "reason", "already_started")("manager", Context->GetOwner());
+                "reason", "already_started")("manager", Context->GetCommonContext().GetOwner());
             return false;
         }
         Context->SetResourceGuard(std::move(guard));
@@ -216,7 +257,7 @@ private:
     std::shared_ptr<TColumnFetchingContext> Context;
 
     virtual const std::shared_ptr<const TAtomicCounter>& DoGetAbortionFlag() const override {
-        return Context->GetSource()->GetContext()->GetCommonContext()->GetAbortionFlag();
+        return Context->GetCommonContext().GetAbortionFlag();
     }
 
     virtual void DoOnRequestsFinished(TDataAccessorsResult&& result) override {
@@ -224,7 +265,8 @@ private:
         AFL_VERIFY(result.GetPortions().size() == 1)("count", result.GetPortions().size());
         TPortionDataAccessor portionAccessor = std::move(result.ExtractPortionsVector()[0]);
 
-        const std::set<ui32> columnIds(Context->GetResultSchema()->GetColumnIds().begin(), Context->GetResultSchema()->GetColumnIds().end());
+        const std::set<ui32> columnIds(Context->GetCommonContext().GetResultSchema()->GetColumnIds().begin(),
+            Context->GetCommonContext().GetResultSchema()->GetColumnIds().end());
         THashMap<TChunkAddress, TBlobRangeLink16> chunkRanges;
         TReadActionsCollection readActions;
 
@@ -238,12 +280,12 @@ private:
                 continue;
             }
 
-            auto source = Context->GetSource();
-            TBlobsAction blobsAction(source->GetContext()->GetCommonContext()->GetStoragesManager(), NBlobOperations::EConsumer::SCAN);
-            auto reading = blobsAction.GetReading(source->GetColumnStorageId(columnId));
+            TBlobsAction blobsAction(Context->GetCommonContext().GetStoragesManager(), NBlobOperations::EConsumer::SCAN);
+            auto reading = blobsAction.GetReading(
+                Context->GetPortion()->GetColumnStorageId(columnId, Context->GetCommonContext().GetResultSchema()->GetIndexInfo()));
             for (auto&& c : columnChunks) {
                 reading->SetIsBackgroundProcess(false);
-                reading->AddRange(source->RestoreBlobRange(c.BlobRange));
+                reading->AddRange(Context->GetPortion()->RestoreBlobRange(c.BlobRange));
             }
             for (auto&& i : blobsAction.GetReadingActions()) {
                 readActions.Add(i);
@@ -255,9 +297,9 @@ private:
 
         const ui64 mem = portionAccessor.GetColumnRawBytes(columnIds, false);
         auto allocationTask = std::make_shared<TColumnsMemoryAllocation>(mem, fetchingTask, Context);
-        NGroupedMemoryManager::TScanMemoryLimiterOperator::SendToAllocation(Context->GetSource()->GetContext()->GetProcessMemoryControlId(),
-            Context->GetSource()->GetContext()->GetCommonContext()->GetScanId(), Context->GetMemoryGroupGuard()->GetGroupId(),
-            { allocationTask }, (ui32)NArrow::NSSA::IMemoryCalculationPolicy::EStage::Filter);
+        NGroupedMemoryManager::TScanMemoryLimiterOperator::SendToAllocation(Context->GetMemoryGroupGuard()->GetProcessId(),
+            Context->GetMemoryGroupGuard()->GetExternalScopeId(), Context->GetMemoryGroupGuard()->GetGroupId(), { allocationTask },
+            (ui32)NArrow::NSSA::IMemoryCalculationPolicy::EStage::Filter);
     }
 
 public:

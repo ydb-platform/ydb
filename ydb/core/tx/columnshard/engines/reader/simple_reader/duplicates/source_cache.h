@@ -11,8 +11,6 @@
 
 namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering  {
 
-class IDataSource;
-
 class TSourceCache: public NActors::TActor<TSourceCache> {
     // TODO: add cache hit/miss metrics
 public:
@@ -51,7 +49,7 @@ private:
         }
 
     public:
-        TResponseConstructor(const std::vector<std::shared_ptr<IDataSource>>& sources, std::unique_ptr<ISubscriber>&& callback);
+        TResponseConstructor(const std::vector<std::shared_ptr<TPortionInfo>>& sources, std::unique_ptr<ISubscriber>&& callback);
 
         void AddData(const ui64 sourceId, const TCacheItem& data) {
             NActors::TLogContextGuard g(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_SCAN)("source", sourceId));
@@ -104,6 +102,7 @@ private:
     };
 
 private:
+    std::shared_ptr<TCommonFetchingContext> FetchingContext;
     THashMap<ui64, TFetchingInfo> FetchingSources;
     TLRUCache<ui64, TCacheItem, TNoopDelete, TSizeProvider> SourcesData;
 
@@ -122,12 +121,25 @@ private:
         PassAway();
     }
 
+    virtual TAutoPtr<IEventHandle> AfterRegister(const TActorId& self, const TActorId& /*parentId*/) override {
+        FetchingContext->SetOwner(self);
+        return TAutoPtr<IEventHandle>();
+    }
+
 public:
-    void GetSourcesData(const std::vector<std::shared_ptr<IDataSource>>& sources,
+    void GetSourcesData(const std::vector<std::shared_ptr<TPortionInfo>>& sources,
         const std::shared_ptr<NGroupedMemoryManager::TGroupGuard>& memoryGroup, std::unique_ptr<ISubscriber>&& subscriber);
 
-    TSourceCache()
+    TSourceCache(const std::shared_ptr<TReadContext>& readContext)
         : TActor(&TSourceCache::StateMain)
+        , FetchingContext(std::make_shared<TCommonFetchingContext>(readContext,
+              [&readContext]() {
+                  std::vector<ui32> columnIds = IIndexInfo::GetSnapshotColumnIds();
+                  for (const auto& id : readContext->GetReadMetadata()->GetIndexVersions().GetLastSchema()->GetPkColumnsIds()) {
+                      columnIds.emplace_back(id);
+                  }
+                  return columnIds;
+              }()))
         , SourcesData(NYDBTest::TControllers::GetColumnShardController()->GetDuplicateManagerCacheSize()) {
     }
 

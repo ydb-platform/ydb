@@ -626,10 +626,10 @@ private:
     TLazyIntrusivePtr<NTabletClient::ITableMountCache> TableMountCache_;
 
     TLazyIntrusivePtr<NTransactionClient::ITimestampProvider> TimestampProvider_;
-
     NTransactionClient::ITimestampProviderPtr CreateTimestampProvider() const;
 
-    NRpc::IChannelPtr CreateSequoiaAwareRetryingChannel(NRpc::IChannelPtr channel, bool retryProxyBanned) const;
+    NRpc::IChannelPtr MaybeCreateRetryingChannel(NRpc::IChannelPtr channel, bool retryProxyBanned) const;
+
     // Returns an RPC channel to use for API calls to the particular address (e.g.: AttachTransaction).
     // The channel is non-retrying, so should be wrapped into retrying channel on demand.
     NRpc::IChannelPtr CreateNonRetryingChannelByAddress(const std::string& address) const;

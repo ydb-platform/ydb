@@ -10,14 +10,7 @@ using namespace NColumnShard;
 using TUnusedTables = TCleanUnusedTablesNormalizerTemplate<
     Schema::IndexColumns,
     Schema::TtlSettingsPresetInfo,
-    Schema::TtlSettingsPresetVersionInfo,
-    Schema::OneToOneEvictedBlobs,
-    Schema::TxStates,
-    Schema::TxEvents,
-    Schema::LockRanges,
-    Schema::LockConflicts,
-    Schema::LockVolatileDependencies,
-    Schema::BackgroundSessions
+    Schema::TtlSettingsPresetVersionInfo
 >;
 
 class TCleanUnusedTablesNormalizer final : public TUnusedTables {

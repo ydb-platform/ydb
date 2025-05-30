@@ -239,65 +239,6 @@ public:
                 .Update();
             }
         }
-
-        if (db.HaveTable<Schema::OneToOneEvictedBlobs>()) {
-            for (size_t i = 0; i < 100; ++i) {
-                TString value = "smth" + std::to_string(i);
-                db.Table<Schema::OneToOneEvictedBlobs>()
-                .Key(value)
-                .Update();
-            }
-        }
-
-        if (db.HaveTable<Schema::TxStates>()) {
-            for (size_t i = 0; i < 100; ++i) {
-                db.Table<Schema::TxStates>()
-                .Key(1 + i)
-                .Update();
-            }
-        }
-
-        if (db.HaveTable<Schema::TxEvents>()) {
-            for (size_t i = 0; i < 100; ++i) {
-                db.Table<Schema::TxEvents>()
-                .Key(1 + i, 2 + i, 3 + i)
-                .Update();
-            }
-        }
-
-        if (db.HaveTable<Schema::LockRanges>()) {
-            for (size_t i = 0; i < 100; ++i) {
-                db.Table<Schema::LockRanges>()
-                .Key(1 + i, 2 + i)
-                .Update();
-            }
-        }
-
-        if (db.HaveTable<Schema::LockConflicts>()) {
-            for (size_t i = 0; i < 100; ++i) {
-                db.Table<Schema::LockConflicts>()
-                .Key(1 + i, 2 + i)
-                .Update();
-            }
-        }
-
-        if (db.HaveTable<Schema::LockVolatileDependencies>()) {
-            for (size_t i = 0; i < 100; ++i) {
-                db.Table<Schema::LockVolatileDependencies>()
-                .Key(1 + i, 2 + i)
-                .Update();
-            }
-        }
-
-        if (db.HaveTable<Schema::BackgroundSessions>()) {
-            for (size_t i = 0; i < 100; ++i) {
-                TString key = "smth" + std::to_string(i);
-                TString value = "smth" + std::to_string(i);
-                db.Table<Schema::BackgroundSessions>()
-                .Key(key, value)
-                .Update();
-            }
-        }
     }
 };
 

@@ -1,11 +1,13 @@
 #include "transactions.h"
 
-#include <util/string/printf.h>
-
 #include "common_queries.h"
 #include "constants.h"
 #include "log.h"
 #include "util.h"
+
+#include <library/cpp/time_provider/monotonic.h>
+
+#include <util/string/printf.h>
 
 #include <format>
 #include <string>
@@ -260,9 +262,13 @@ TAsyncExecuteQueryResult InsertHistoryRecord(
 
 //-----------------------------------------------------------------------------
 
-NThreading::TFuture<TStatus> GetPaymentTask(TTransactionContext& context,
+NThreading::TFuture<TStatus> GetPaymentTask(
+    TTransactionContext& context,
+    TDuration& latency,
     TSession session)
 {
+    TMonotonic startTs = TMonotonic::Now();
+
     TTransactionInflightGuard guard;
     co_await TTaskReady(context.TaskQueue, context.TerminalID);
 
@@ -486,7 +492,12 @@ NThreading::TFuture<TStatus> GetPaymentTask(TTransactionContext& context,
         << "customer " << customer.c_id << ", amount " << paymentAmount);
 
     auto commitFuture = tx.Commit();
-    co_return co_await TSuspendWithFuture(commitFuture, context.TaskQueue, context.TerminalID);
+    auto commitResult = co_await TSuspendWithFuture(commitFuture, context.TaskQueue, context.TerminalID);
+
+    TMonotonic endTs = TMonotonic::Now();
+    latency = endTs - startTs;
+
+    co_return commitResult;
 }
 
 } // namespace NYdb::NTPCC

@@ -1,11 +1,13 @@
 #include "transactions.h"
 
-#include <util/generic/singleton.h>
-#include <util/string/printf.h>
-
 #include "constants.h"
 #include "log.h"
 #include "util.h"
+
+#include <library/cpp/time_provider/monotonic.h>
+
+#include <util/generic/singleton.h>
+#include <util/string/printf.h>
 
 #include <format>
 #include <unordered_map>
@@ -530,8 +532,11 @@ TString GetDistInfo(int districtID, const Stock& stock) {
 
 NThreading::TFuture<TStatus> GetNewOrderTask(
     TTransactionContext& context,
+    TDuration& latency,
     TSession session)
 {
+    TMonotonic startTs = TMonotonic::Now();
+
     TTransactionInflightGuard guard;
     co_await TTaskReady(context.TaskQueue, context.TerminalID);
 
@@ -832,7 +837,12 @@ NThreading::TFuture<TStatus> GetNewOrderTask(
     LOG_T("Terminal " << context.TerminalID << " is committing NewOrder transaction");
 
     auto commitFuture = tx.Commit();
-    co_return co_await TSuspendWithFuture(commitFuture, context.TaskQueue, context.TerminalID);
+    auto commitResult = co_await TSuspendWithFuture(commitFuture, context.TaskQueue, context.TerminalID);
+
+    TMonotonic endTs = TMonotonic::Now();
+    latency = endTs - startTs;
+
+    co_return commitResult;
 }
 
 } // namespace NYdb::NTPCC

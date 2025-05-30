@@ -413,9 +413,24 @@ void TWorkloadCommandBase::CleanTables(NYdbWorkload::IWorkloadQueryGenerator& wo
             Cout << "Remove " << fullPath << Endl;
         } else {
             NStatusHelpers::ThrowOnErrorOrPrintIssues(RemovePathRecursive(*Driver.Get(), fullPath, settings));
+            RmParentIfEmpty(path, config);
         }
         Cout << "Remove path " << path << "...Ok"  << Endl;
     }
+}
+
+void TWorkloadCommandBase::RmParentIfEmpty(TStringBuf path, TConfig& config) {
+    path.RNextTok('/');
+    if (!path) {
+        return;
+    }
+    auto fullPath = std::string(config.Database.c_str()) + "/" + std::string(path.cbegin(), path.cend());
+    auto lsResult = SchemeClient->ListDirectory(fullPath).GetValueSync();
+    if (lsResult.IsSuccess() && lsResult.GetChildren().empty() && lsResult.GetEntry().Type == NScheme::ESchemeEntryType::Directory) {
+        Cout << "Folder " << path << " is empty, remove it..." << Endl;
+        NStatusHelpers::ThrowOnErrorOrPrintIssues(SchemeClient->RemoveDirectory(fullPath).GetValueSync());
+    }
+    RmParentIfEmpty(path, config);
 }
 
 std::unique_ptr<TClientCommand> TWorkloadCommandRoot::CreateRunCommand(const NYdbWorkload::IWorkloadQueryGenerator::TWorkloadType& workload) {

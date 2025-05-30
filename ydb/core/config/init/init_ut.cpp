@@ -124,8 +124,16 @@ selector_config:
         use_auto_config: true
         node_type: STORAGE
         cpu_count: 50
+  - description: "Selector by node_kind"
+    selector:
+      node_kind: static
+      test: node_kind
+    config:
+      actor_system_config:
+        use_auto_config: true
+        node_type: STORAGE
+        cpu_count: 42
 )";
-
         TTempFileHandle tempFile = TTempFileHandle::InCurrentDir("test_config", ".yaml");
         TUnbufferedFileOutput fileOutput(tempFile.Name());
         fileOutput.Write(config);
@@ -279,5 +287,18 @@ selector_config:
         UNIT_ASSERT(appConfig.HasActorSystemConfig());
         const auto& actorConfig = appConfig.GetActorSystemConfig();
         UNIT_ASSERT_EQUAL(actorConfig.GetCpuCount(), 50);
+    }
+
+    Y_UNIT_TEST(TestStaticNodeSelectorByNodeKind) {
+        TTempFileHandle configFile = CreateConfigFile();
+        TVector<TString> args;
+        PreFillArgs(args, configFile.Name());
+        args.push_back("--label");
+        args.push_back("test=node_kind");
+        NKikimrConfig::TAppConfig appConfig = TransformConfig(args);
+
+        UNIT_ASSERT(appConfig.HasActorSystemConfig());
+        const auto& actorConfig = appConfig.GetActorSystemConfig();
+        UNIT_ASSERT_EQUAL(actorConfig.GetCpuCount(), 42);
     }
 }

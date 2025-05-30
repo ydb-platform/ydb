@@ -1248,7 +1248,6 @@ public:
         // will be replaced with proper version info
         Labels["branch"] = GetBranch();
         Labels["rev"] = GetProgramCommitId();
-        Labels["dynamic"] = ToString(CommonAppOptions.IsStaticNode() ? "false" : "true");
 
         for (const auto& [name, value] : Labels) {
             auto *label = AppConfig.AddLabels();
@@ -1352,8 +1351,7 @@ public:
     };
 
     void InitStaticNode() {
-        Labels["dynamic"] = "false";
-        Labels["static"] = "true";
+        Labels["node_kind"] = "static";
 
         if (!AppConfig.HasStartupConfigYaml()) {
             return;
@@ -1368,6 +1366,7 @@ public:
 
     void InitDynamicNode() {
         Labels["dynamic"] = "true";
+        Labels["node_kind"] = "dynamic";
         RegisterDynamicNode(CommonAppOptions);
 
         Labels["node_id"] = ToString(NodeId);

@@ -32,9 +32,150 @@ struct TKeyTraits<Schema::IndexColumns> {
   }
 };
 
+template<>
+struct TKeyTraits<Schema::TtlSettingsPresetInfo> {
+  using TTable = Schema::TtlSettingsPresetInfo;
+  using TKey = std::tuple<ui32>;
+
+  template<typename Row>
+  static TKey Extract(Row& rs) {
+    return {
+      rs.template GetValue<typename TTable::Id>()
+    };
+  }
+};
+
+template<>
+struct TKeyTraits<Schema::TtlSettingsPresetVersionInfo> {
+  using TTable = Schema::TtlSettingsPresetVersionInfo;
+  using TKey = std::tuple<ui32, ui64, ui64>;
+
+  template<typename Row>
+  static TKey Extract(Row& rs) {
+    return {
+      rs.template GetValue<typename TTable::Id>(),
+      rs.template GetValue<typename TTable::SinceStep>(),
+      rs.template GetValue<typename TTable::SinceTxId>()
+    };
+  }
+};
+
+template<>
+struct TKeyTraits<Schema::OneToOneEvictedBlobs> {
+  using TTable = Schema::OneToOneEvictedBlobs;
+  using TKey = std::tuple<TString>;
+
+  template<typename Row>
+  static TKey Extract(Row& rs) {
+    return {
+      rs.template GetValue<typename TTable::BlobId>()
+    };
+  }
+};
+
+template<>
+struct TKeyTraits<Schema::TxStates> {
+  using TTable = Schema::TxStates;
+  using TKey = std::tuple<ui64>;
+
+  template<typename Row>
+  static TKey Extract(Row& rs) {
+    return {
+      rs.template GetValue<typename TTable::TxId>()
+    };
+  }
+};
+
+template<>
+struct TKeyTraits<Schema::TxEvents> {
+  using TTable = Schema::TxEvents;
+  using TKey = std::tuple<ui64, ui64, ui64>;
+
+  template<typename Row>
+  static TKey Extract(Row& rs) {
+    return {
+      rs.template GetValue<typename TTable::TxId>(),
+      rs.template GetValue<typename TTable::GenerationId>(),
+      rs.template GetValue<typename TTable::GenerationInternalId>()
+    };
+  }
+};
+
+template<>
+struct TKeyTraits<Schema::LockRanges> {
+  using TTable = Schema::LockRanges;
+  using TKey = std::tuple<ui64, ui64>;
+
+  template<typename Row>
+  static TKey Extract(Row& rs) {
+    return {
+      rs.template GetValue<typename TTable::LockId>(),
+      rs.template GetValue<typename TTable::RangeId>()
+    };
+  }
+};
+
+template<>
+struct TKeyTraits<Schema::LockConflicts> {
+  using TTable = Schema::LockConflicts;
+  using TKey = std::tuple<ui64, ui64>;
+
+  template<typename Row>
+  static TKey Extract(Row& rs) {
+    return {
+      rs.template GetValue<typename TTable::LockId>(),
+      rs.template GetValue<typename TTable::ConflictId>()
+    };
+  }
+};
+
+template<>
+struct TKeyTraits<Schema::LockVolatileDependencies> {
+  using TTable = Schema::LockVolatileDependencies;
+  using TKey = std::tuple<ui64, ui64>;
+
+  template<typename Row>
+  static TKey Extract(Row& rs) {
+    return {
+      rs.template GetValue<typename TTable::LockId>(),
+      rs.template GetValue<typename TTable::TxId>()
+    };
+  }
+};
+
+template<>
+struct TKeyTraits<Schema::BackgroundSessions> {
+  using TTable = Schema::BackgroundSessions;
+  using TKey = std::tuple<TString, TString>;
+
+  template<typename Row>
+  static TKey Extract(Row& rs) {
+    return {
+      rs.template GetValue<typename TTable::ClassName>(),
+      rs.template GetValue<typename TTable::Identifier>()
+    };
+  }
+};
+
+template<>
+struct TKeyTraits<Schema::InsertTable> {
+  using TTable = Schema::InsertTable;
+  using TKey = std::tuple<std::byte, ui64, ui64, ui64, TString>;
+
+  template<typename Row>
+  static TKey Extract(Row& rs) {
+    return {
+      rs.template GetValue<typename TTable::Committed>(),
+      rs.template GetValue<typename TTable::PlanStep>(),
+      rs.template GetValue<typename TTable::WriteTxId>(),
+      rs.template GetValue<typename TTable::PathId>(),
+      rs.template GetValue<typename TTable::DedupId>()
+    };
+  }
+};
+
 template <typename TTable, typename TKey>
 inline void Delete(TNiceDb& db, const TKey& key) {
-  std::cout << "la-la-la1111\n";
   std::apply([&](auto... parts) {
     db.template Table<TTable>().Key(parts...).Delete();
   }, key);

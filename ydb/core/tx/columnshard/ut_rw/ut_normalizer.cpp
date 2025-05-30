@@ -221,6 +221,63 @@ public:
               .Key(1 + i, 2 + i, 3 + i, 4 + i, 5 + i, 6 + i, 7 + i)
               .Update();
         }
+
+        for (size_t i = 0; i < 100; ++i) {
+            db.Table<Schema::TtlSettingsPresetInfo>()
+              .Key(1 + i)
+              .Update();
+        }
+
+        for (size_t i = 0; i < 100; ++i) {
+            db.Table<Schema::TtlSettingsPresetVersionInfo>()
+              .Key(1 + i, 2 + i, 3 + i)
+              .Update();
+        }
+
+        for (size_t i = 0; i < 100; ++i) {
+            TString value = "smth" + std::to_string(i);
+            db.Table<Schema::OneToOneEvictedBlobs>()
+              .Key(value)
+              .Update();
+        }
+
+        for (size_t i = 0; i < 100; ++i) {
+            db.Table<Schema::TxStates>()
+              .Key(1 + i)
+              .Update();
+        }
+
+        for (size_t i = 0; i < 100; ++i) {
+            db.Table<Schema::TxEvents>()
+              .Key(1 + i, 2 + i, 3 + i)
+              .Update();
+        }
+
+        for (size_t i = 0; i < 100; ++i) {
+            db.Table<Schema::LockRanges>()
+              .Key(1 + i, 2 + i)
+              .Update();
+        }
+
+        for (size_t i = 0; i < 100; ++i) {
+            db.Table<Schema::LockConflicts>()
+              .Key(1 + i, 2 + i)
+              .Update();
+        }
+
+        for (size_t i = 0; i < 100; ++i) {
+            db.Table<Schema::LockVolatileDependencies>()
+              .Key(1 + i, 2 + i)
+              .Update();
+        }
+
+        for (size_t i = 0; i < 100; ++i) {
+            TString key = "smth" + std::to_string(i);
+            TString value = "smth" + std::to_string(i);
+            db.Table<Schema::BackgroundSessions>()
+              .Key(key, value)
+              .Update();
+        }
     }
 };
 
@@ -365,5 +422,4 @@ Y_UNIT_TEST_SUITE(Normalizers) {
         TestNormalizerImpl<TTrashUnusedInjector>(checker);
     }
 }
-
 }   // namespace NKikimr

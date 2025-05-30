@@ -1248,6 +1248,8 @@ public:
         // will be replaced with proper version info
         Labels["branch"] = GetBranch();
         Labels["rev"] = GetProgramCommitId();
+        Labels["dynamic"] = ToString(CommonAppOptions.IsStaticNode() ? "false" : "true");
+        Labels["node_kind"] = CommonAppOptions.IsStaticNode() ? "static" : "dynamic";
 
         for (const auto& [name, value] : Labels) {
             auto *label = AppConfig.AddLabels();

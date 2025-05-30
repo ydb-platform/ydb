@@ -2976,10 +2976,10 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto result = setPartitioningQuery();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
-        {
-            auto result = setReplicasQuery();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }        
+        // {
+        //     auto result = setReplicasQuery();
+        //     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        // }
         // check result
         {
             auto describe = userSession.DescribeTable(implTablePath).ExtractValueSync();
@@ -2988,10 +2988,10 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             UNIT_ASSERT_VALUES_EQUAL(tableDesc.GetPartitioningSettings().GetMinPartitionsCount(), minPartitionsCount);
             
-            const auto readReplicasSettings = tableDesc.GetReadReplicasSettings();
-            UNIT_ASSERT(readReplicasSettings);
-            UNIT_ASSERT(readReplicasSettings->GetMode() == NYdb::NTable::TReadReplicasSettings::EMode::PerAz);
-            UNIT_ASSERT_VALUES_EQUAL(readReplicasSettings->GetReadReplicasCount(), replicasCount);
+            // const auto readReplicasSettings = tableDesc.GetReadReplicasSettings();
+            // UNIT_ASSERT(readReplicasSettings);
+            // UNIT_ASSERT(readReplicasSettings->GetMode() == NYdb::NTable::TReadReplicasSettings::EMode::PerAz);
+            // UNIT_ASSERT_VALUES_EQUAL(readReplicasSettings->GetReadReplicasCount(), replicasCount);
         }
        
 

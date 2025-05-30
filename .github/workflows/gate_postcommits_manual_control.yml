@@ -43,53 +43,125 @@ jobs:
           query='.runners[] | select(.labels[].name=="ghrun") | select( all([.labels[].name][]; .!="postcommit")) | .id'
         fi
         
-        echo "Requesting a list of runners to update labels..."
-        j1=$(curl -Ls -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{secrets.GH_PERSONAL_ACCESS_TOKEN}}" \
-          -H "X-GitHub-Api-Version: 2022-11-28" -w "%{http_code}\n" \
-          https://api.github.com/repos/${{github.repository}}/actions/runners?per_page=100\&page=1)
-        http_code=$(echo "$j1" | tail -n 1)
-        echo "Result code: $http_code"
-        if [ "$http_code" != "200" ];then
-          echo "HTTP result code is not 200, exiting"
-          echo "$j1"
-          exit 1
-        fi
+        # Function to fetch a page of runners
+        fetch_runners_page() {
+          local page=$1
+          echo "Fetching runners page $page..."
+          local result=$(curl -Ls -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{secrets.GH_PERSONAL_ACCESS_TOKEN}}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" -w "%{http_code}\n" \
+            "https://api.github.com/repos/${{github.repository}}/actions/runners?per_page=100&page=$page")
+          
+          local http_code=$(echo "$result" | tail -n 1)
+          if [ "$http_code" != "200" ]; then
+            echo "HTTP error fetching page $page: $http_code"
+            echo "$result"
+            return 1
+          fi
+          
+          # Remove status code from the end
+          echo "$result" | sed '$d'
+        }
         
-        # Extract runner IDs
-        runner_ids=$(echo "$j1" | sed '$d' | jq "$query")
+        # Get all runners with pagination
+        echo "Collecting all runners (paginated)..."
+        page=1
+        all_runner_ids=""
+        more_pages=true
+        
+        while $more_pages; do
+          runners_data=$(fetch_runners_page $page)
+          if [ $? -ne 0 ]; then
+            echo "Failed to fetch runners page $page, exiting"
+            exit 1
+          fi
+          
+          # Extract runner IDs for this page
+          page_runner_ids=$(echo "$runners_data" | jq "$query")
+          
+          # Check if we have runners on this page
+          count_on_page=$(echo "$page_runner_ids" | grep -v "^$" | wc -l)
+          echo "Found $count_on_page eligible runners on page $page"
+          
+          # Append to our list
+          all_runner_ids="$all_runner_ids$page_runner_ids"
+          
+          # Check if we have more pages
+          runners_count=$(echo "$runners_data" | jq '.runners | length')
+          if [ $runners_count -lt 100 ]; then
+            more_pages=false
+          else
+            page=$((page + 1))
+          fi
+        done
         
         # Count total eligible runners
-        total_runners=$(echo "$runner_ids" | grep -v "^$" | wc -l)
-        echo "Total eligible runners found: $total_runners"
+        total_runners=$(echo "$all_runner_ids" | grep -v "^$" | wc -l)
+        echo "Total eligible runners found across all pages: $total_runners"
         
         # Limit if needed
-        if [[ "$LIMIT_OPTION" == "true" ]]; then
-          runner_ids=$(echo "$runner_ids" | head -n $LIMIT_COUNT)
+        if [[ "$LIMIT_OPTION" == "true" && $total_runners -gt $LIMIT_COUNT ]]; then
+          all_runner_ids=$(echo "$all_runner_ids" | head -n $LIMIT_COUNT)
           echo "Limited to first $LIMIT_COUNT runners"
         fi
         
         # Process runners
         changed_count=0
-        echo "$runner_ids" | while read x; do
-          if [[ -z "$x" ]]; then continue; fi
+        success_count=0
+        failed_count=0
+        
+        while read -r runner_id; do
+          if [[ -z "$runner_id" ]]; then continue; fi
           
-          echo "Processing runner: $x"
           changed_count=$((changed_count + 1))
+          echo "Processing runner $changed_count/$total_runners: ID $runner_id"
           
           if [[ "${{ github.event.inputs.action }}" == "close" ]]; then
-            echo "Removing postcommit label from runner $x"
-            result=$(curl -Ls -X DELETE -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{secrets.GH_PERSONAL_ACCESS_TOKEN}}" \
+            echo "Removing postcommit label from runner $runner_id"
+            response=$(curl -s -w "\n%{http_code}" -X DELETE -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer ${{secrets.GH_PERSONAL_ACCESS_TOKEN}}" \
               -H "X-GitHub-Api-Version: 2022-11-28" \
-              https://api.github.com/repos/${{github.repository}}/actions/runners/$x/labels/postcommit)
+              "https://api.github.com/repos/${{github.repository}}/actions/runners/$runner_id/labels/postcommit")
           else
-            echo "Adding postcommit label to runner $x"
-            result=$(curl -Ls -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{secrets.GH_PERSONAL_ACCESS_TOKEN}}" \
+            echo "Adding postcommit label to runner $runner_id"
+            response=$(curl -s -w "\n%{http_code}" -X POST -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer ${{secrets.GH_PERSONAL_ACCESS_TOKEN}}" \
               -H "X-GitHub-Api-Version: 2022-11-28" \
-              https://api.github.com/repos/${{github.repository}}/actions/runners/$x/labels \
+              "https://api.github.com/repos/${{github.repository}}/actions/runners/$runner_id/labels" \
               -d '{"labels":["postcommit"]}')
           fi
-          echo "Result: $result"
-        done
+          
+          # Parse response
+          http_code=$(echo "$response" | tail -n1)
+          body=$(echo "$response" | sed '$d')
+          
+          # Check success (HTTP 2xx)
+          if [[ $http_code -ge 200 && $http_code -lt 300 ]]; then
+            success_count=$((success_count + 1))
+            echo "✅ Success: Label ${{ github.event.inputs.action == 'close' && 'removed' || 'added' }} (HTTP $http_code)"
+          else
+            failed_count=$((failed_count + 1))
+            echo "❌ Failed: HTTP $http_code"
+            echo "Error response: $body"
+          fi
+        done <<< "$all_runner_ids"
         
-        echo "Gate ${{ github.event.inputs.action }} operation completed"
-        echo "Summary: changed labels for runners out of $total_runners eligible runners"
+        # Summary
+        echo ""
+        echo "=== OPERATION SUMMARY ==="
+        echo "Action: ${{ github.event.inputs.action }} gate"
+        echo "Total eligible runners: $total_runners"
+        if [[ "$LIMIT_OPTION" == "true" ]]; then
+          echo "Limited to: $LIMIT_COUNT"
+        fi
+        echo "Runners processed: $changed_count"
+        echo "Successful operations: $success_count"
+        echo "Failed operations: $failed_count"
+        echo "========================="
+        
+        # Set exit code based on success
+        if [[ $failed_count -gt 0 ]]; then
+          echo "Warning: Some operations failed"
+          exit 1
+        fi
+        
+        echo "Gate ${{ github.event.inputs.action }} operation completed successfully"

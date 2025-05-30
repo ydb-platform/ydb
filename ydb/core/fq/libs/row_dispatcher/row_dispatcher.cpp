@@ -1076,7 +1076,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvSessionError::TPtr& ev) {
                 Send(ev->Sender, new NActors::TEvents::TEvPoisonPill());
                 topicSessionInfo.Sessions.erase(ev->Sender);
                 if (topicSessionInfo.Sessions.empty()) {
-                    TopicSessions.erase(topicKey);
+                    TopicSessions.erase(sessionIt);
                 }
             }
         }

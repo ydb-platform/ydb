@@ -1913,7 +1913,8 @@ private:
     }
 
     void InitPqProvider() {
-        auto state = MakeIntrusive<TPqState>("sessionId");
+        TString sessionId = CreateGuidAsString();
+        auto state = MakeIntrusive<TPqState>(sessionId);
         state->SupportRtmrMode = false;
         state->Types = TypesCtx.Get();
         state->DbResolver = FederatedQuerySetup->DatabaseAsyncResolver;
@@ -1922,6 +1923,7 @@ private:
         state->Configuration->Init(FederatedQuerySetup->PqGatewayConfig, TypesCtx, state->DbResolver, state->DatabaseIds);
         state->Gateway = FederatedQuerySetup->PqGateway;;
         state->DqIntegration = NYql::CreatePqDqIntegration(state);
+        state->Gateway->OpenSession(sessionId, "username");
 
         TypesCtx->AddDataSource(NYql::PqProviderName, NYql::CreatePqDataSource(state, state->Gateway));
         TypesCtx->AddDataSink(NYql::PqProviderName, NYql::CreatePqDataSink(state, state->Gateway));

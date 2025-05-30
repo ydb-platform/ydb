@@ -238,49 +238,23 @@ public:
     }
 
     void AddCluster(const TString& clusterName, const THashMap<TString, TString>& properties) override {
+
         NYql::TPqClusterConfig cluster;
         cluster.SetName(clusterName);
+
         cluster.SetClusterType(NYql::TPqClusterConfig::CT_DATA_STREAMS);
         const TString& location = properties.Value("location", "");
         cluster.SetEndpoint(location);
         const TString& token = properties.Value("token", "");
         cluster.SetToken(token);
+        cluster.SetDatabase(properties.Value("database_name", ""));
 
         Cerr << "Add cluster" << Endl;
         for (auto [k, v] : properties) {
             Cerr << k << ": " <<v << Endl;
         }
         State_->Configuration->AddCluster(cluster, State_->DatabaseIds, State_->Types->Credentials, State_->DbResolver);
-        
-
-        /*
-        const TString& token = properties.Value("token", "");
-
-        TSolomonClusterConfig cluster;
-        cluster.SetName(name);
-        
-        cluster.SetUseSsl(properties.Value("use_ssl", "true") == "true"sv);
-
-        if (properties.Value("project", "") && properties.Value("cluster", "")) {
-            cluster.SetClusterType(TSolomonClusterConfig::SCT_MONITORING);
-            cluster.MutablePath()->SetProject(properties.Value("project", ""));
-            cluster.MutablePath()->SetCluster(properties.Value("cluster", ""));
-        } else {
-            cluster.SetClusterType(TSolomonClusterConfig::SCT_SOLOMON);
-        }
-
-        if (auto value = properties.Value("grpc_location", "")) {
-            auto grpcPort = cluster.MutableSettings()->Add();
-            *grpcPort->MutableName() = "grpc_location";
-            *grpcPort->MutableValue() = value;
-        }
-
-        State_->Gateway->AddCluster(cluster);
-
-        State_->Configuration->AddValidCluster(name);
-        State_->Configuration->Tokens[name] = ComposeStructuredTokenJsonForTokenAuthWithSecret(properties.Value("tokenReference", ""), token);
-        State_->Configuration->ClusterConfigs[name] = cluster;
-        */
+        Gateway_->AddCluster(cluster);
     }
 
     IDqIntegration* GetDqIntegration() override {

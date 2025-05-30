@@ -371,24 +371,29 @@ void TLeaderTabletInfo::ActualizeTabletStatistics(TInstant now) {
     }
 }
 
-void TLeaderTabletInfo::RestoreDeletedHistory(TTransactionContext& txc) {
+void TLeaderTabletInfo::RestoreDeletedHistory(TTransactionContext& txc, ui32 channel) {
     NIceDb::TNiceDb db(txc.DB);
-    while (!DeletedHistory.empty()) {
-        const auto& entry = DeletedHistory.front();
-        if (entry.Channel >= TabletStorageInfo->Channels.size()) {
-            continue;
-        }
-        TabletStorageInfo->Channels[entry.Channel].History.push_back(entry.Entry);
-        db.Table<Schema::TabletChannelGen>().Key(Id, entry.Channel, entry.Entry.FromGeneration).Update<Schema::TabletChannelGen::DeletedAtGeneration>(0);
-        DeletedHistory.pop();
+    if (channel >= TabletStorageInfo->Channels.size()) {
+        return;
+    }
+    auto& deletedHistory = DeletedHistory[channel];
+    while (!deletedHistory.empty()) {
+        const auto& entry = deletedHistory.front();
+        TabletStorageInfo->Channels[channel].History.push_back(entry.Entry);
+        db.Table<Schema::TabletChannelGen>().Key(Id, channel, entry.Entry.FromGeneration).Update<Schema::TabletChannelGen::DeletedAtGeneration>(0);
+        deletedHistory.pop();
     }
 
-    for (auto& channel : TabletStorageInfo->Channels) {
-        using TEntry = decltype(channel.History)::value_type;
-        std::sort(channel.History.begin(), channel.History.end(), [] (const TEntry& lhs, const TEntry& rhs) {
-            return lhs.FromGeneration < rhs.FromGeneration;
-        });
-    }
+    auto& channelInfo = TabletStorageInfo->Channels[channel];
+    using TEntry = decltype(channelInfo.History)::value_type;
+    std::sort(channelInfo.History.begin(), channelInfo.History.end(), [] (const TEntry& lhs, const TEntry& rhs) {
+        return lhs.FromGeneration < rhs.FromGeneration;
+    });
+}
+
+bool TLeaderTabletInfo::HasDeletedHistory() const {
+    auto isNotEmpty = [](auto&& container) { return !container.empty(); };
+    return std::any_of(DeletedHistory.begin(), DeletedHistory.end(), isNotEmpty);
 }
 
 void TLeaderTabletInfo::SetType(TTabletTypes::EType type) {

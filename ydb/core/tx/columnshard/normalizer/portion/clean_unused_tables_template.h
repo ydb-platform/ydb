@@ -10,153 +10,6 @@ namespace NKikimr::NOlap::NCleanUnusedTables {
 using namespace NColumnShard;
 using NIceDb::TNiceDb;
 
-template<typename TTable>
-struct TKeyTraits;
-
-template<>
-struct TKeyTraits<Schema::IndexColumns> {
-  using TTable = Schema::IndexColumns;
-  using TKey = std::tuple<ui32, ui64, ui32, ui64, ui64, ui64, ui32>;
-
-  template<typename Row>
-  static TKey Extract(Row& rs) {
-    return {
-      rs.template GetValue<typename TTable::Index>(),
-      rs.template GetValue<typename TTable::Granule>(),
-      rs.template GetValue<typename TTable::ColumnIdx>(),
-      rs.template GetValue<typename TTable::PlanStep>(),
-      rs.template GetValue<typename TTable::TxId>(),
-      rs.template GetValue<typename TTable::Portion>(),
-      rs.template GetValue<typename TTable::Chunk>() 
-    };
-  }
-};
-
-template<>
-struct TKeyTraits<Schema::TtlSettingsPresetInfo> {
-  using TTable = Schema::TtlSettingsPresetInfo;
-  using TKey = std::tuple<ui32>;
-
-  template<typename Row>
-  static TKey Extract(Row& rs) {
-    return {
-      rs.template GetValue<typename TTable::Id>()
-    };
-  }
-};
-
-template<>
-struct TKeyTraits<Schema::TtlSettingsPresetVersionInfo> {
-  using TTable = Schema::TtlSettingsPresetVersionInfo;
-  using TKey = std::tuple<ui32, ui64, ui64>;
-
-  template<typename Row>
-  static TKey Extract(Row& rs) {
-    return {
-      rs.template GetValue<typename TTable::Id>(),
-      rs.template GetValue<typename TTable::SinceStep>(),
-      rs.template GetValue<typename TTable::SinceTxId>()
-    };
-  }
-};
-
-template<>
-struct TKeyTraits<Schema::OneToOneEvictedBlobs> {
-  using TTable = Schema::OneToOneEvictedBlobs;
-  using TKey = std::tuple<TString>;
-
-  template<typename Row>
-  static TKey Extract(Row& rs) {
-    return {
-      rs.template GetValue<typename TTable::BlobId>()
-    };
-  }
-};
-
-template<>
-struct TKeyTraits<Schema::TxStates> {
-  using TTable = Schema::TxStates;
-  using TKey = std::tuple<ui64>;
-
-  template<typename Row>
-  static TKey Extract(Row& rs) {
-    return {
-      rs.template GetValue<typename TTable::TxId>()
-    };
-  }
-};
-
-template<>
-struct TKeyTraits<Schema::TxEvents> {
-  using TTable = Schema::TxEvents;
-  using TKey = std::tuple<ui64, ui64, ui64>;
-
-  template<typename Row>
-  static TKey Extract(Row& rs) {
-    return {
-      rs.template GetValue<typename TTable::TxId>(),
-      rs.template GetValue<typename TTable::GenerationId>(),
-      rs.template GetValue<typename TTable::GenerationInternalId>()
-    };
-  }
-};
-
-template<>
-struct TKeyTraits<Schema::LockRanges> {
-  using TTable = Schema::LockRanges;
-  using TKey = std::tuple<ui64, ui64>;
-
-  template<typename Row>
-  static TKey Extract(Row& rs) {
-    return {
-      rs.template GetValue<typename TTable::LockId>(),
-      rs.template GetValue<typename TTable::RangeId>()
-    };
-  }
-};
-
-template<>
-struct TKeyTraits<Schema::LockConflicts> {
-  using TTable = Schema::LockConflicts;
-  using TKey = std::tuple<ui64, ui64>;
-
-  template<typename Row>
-  static TKey Extract(Row& rs) {
-    return {
-      rs.template GetValue<typename TTable::LockId>(),
-      rs.template GetValue<typename TTable::ConflictId>()
-    };
-  }
-};
-
-template<>
-struct TKeyTraits<Schema::LockVolatileDependencies> {
-  using TTable = Schema::LockVolatileDependencies;
-  using TKey = std::tuple<ui64, ui64>;
-
-  template<typename Row>
-  static TKey Extract(Row& rs) {
-    return {
-      rs.template GetValue<typename TTable::LockId>(),
-      rs.template GetValue<typename TTable::TxId>()
-    };
-  }
-};
-
-template<>
-struct TKeyTraits<Schema::BackgroundSessions> {
-  using TTable = Schema::BackgroundSessions;
-  using TKey = std::tuple<TString, TString>;
-
-  template<typename Row>
-  static TKey Extract(Row& rs) {
-    return {
-      rs.template GetValue<typename TTable::ClassName>(),
-      rs.template GetValue<typename TTable::Identifier>()
-    };
-  }
-};
-
 template <typename TTable, typename TKey>
 inline void Delete(TNiceDb& db, const TKey& key) {
   std::apply([&](auto... parts) {
@@ -207,8 +60,7 @@ private:
 
   template<typename TTable>
   void ProcessTable(TNiceDb& db, std::vector<INormalizerTask::TPtr>& tasks) {
-    using TT = TKeyTraits<TTable>;
-    using TKey = typename TT::TKey;
+    using TKey = typename TTable::TKey::TupleType;
 
     if (!TableExists<TTable>(db)) {
       return;
@@ -222,7 +74,7 @@ private:
     }
 
     while (!rs.EndOfSet()) {
-      keys.emplace_back(TT::Extract(rs));
+      keys.emplace_back(rs.GetKey());
 
       if (keys.size() == BATCH) {
         tasks.emplace_back(MakeTask<TTable>(std::move(keys)));
@@ -243,8 +95,7 @@ private:
 
   template<typename TTable>
   class TChanges final : public INormalizerChanges {
-    using TT = TKeyTraits<TTable>;
-    using TKey = typename TT::TKey;
+    using TKey = typename TTable::TKey::TupleType;
     std::vector<TKey> keys;
   
   public:

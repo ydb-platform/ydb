@@ -1427,7 +1427,7 @@ message TEvConditionalEraseRowsResponse {
 }
 
 message TEvBuildIndexCreateRequest {
-    optional uint64 BuildIndexId = 1;          // unique id of build index process
+    optional uint64 Id = 1;          // unique id of build index process
 
     optional uint64 TabletId = 2;
     optional uint64 OwnerId = 3;
@@ -1456,7 +1456,7 @@ message TEvBuildIndexCreateRequest {
 }
 
 message TEvBuildIndexProgressResponse {
-    optional uint64 BuildIndexId = 1;
+    optional uint64 Id = 1;
 
     optional uint64 TabletId = 2;
     optional uint64 OwnerId = 3;

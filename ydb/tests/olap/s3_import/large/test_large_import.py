@@ -91,11 +91,11 @@ class TestLargeS3Import:
 
     @classmethod
     def setup_class(cls):
-        cls.sink_access_key_id = os.getenv("ACCESS_KEY_ID", None)
-        assert cls.sink_access_key_id is not None, "ACCESS_KEY_ID is not set for sink bucket"
+        cls.sink_access_key_id = os.getenv("S3_ACCESS_KEY_ID", None)
+        assert cls.sink_access_key_id is not None, "S3_ACCESS_KEY_ID is not set for sink bucket"
 
-        cls.sink_access_key_secret = os.getenv("ACCESS_KEY_SECRET", None)
-        assert cls.sink_access_key_secret is not None, "ACCESS_KEY_SECRET is not set for sink bucket"
+        cls.sink_access_key_secret = os.getenv("S3_ACCESS_KEY_SECRET", None)
+        assert cls.sink_access_key_secret is not None, "S3_ACCESS_KEY_SECRET is not set for sink bucket"
 
         cls.scale = get_external_param("scale", "1000")
         assert cls.scale in ["1", "10", "100", "1000"], f"Invalid scale: {cls.scale}"
@@ -187,8 +187,9 @@ class TestLargeS3Import:
     def setup_datasink(self, output_path):
         logger.info(f"setupping detasink to `{output_path}`...")
 
-        access_key_id_name = "test_olap_s3_import_aws_access_key_id"
-        access_key_secret_name = "test_olap_s3_import_aws_access_key_secret"
+        secret_prefix = os.getenv("S3_ACCESS_SECRET_PREFIX", "")
+        access_key_id_name = f"{secret_prefix}test_olap_s3_import_aws_access_key_id"
+        access_key_secret_name = f"{secret_prefix}test_olap_s3_import_aws_access_key_secret"
         self.query(f"""
             UPSERT OBJECT {access_key_id_name} (TYPE SECRET) WITH (value = "{self.sink_access_key_id}");
             UPSERT OBJECT {access_key_secret_name} (TYPE SECRET) WITH (value = "{self.sink_access_key_secret}");

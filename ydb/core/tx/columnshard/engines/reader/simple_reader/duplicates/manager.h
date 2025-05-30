@@ -7,17 +7,20 @@
 #include "splitter.h"
 
 #include <ydb/core/tx/columnshard/blobs_reader/actor.h>
+#include <ydb/core/tx/columnshard/counters/duplicate_filtering.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/default_fetching.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 
-namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering {
-
+namespace NKikimr::NOlap::NReader::NSimple {
 class TSpecialReadContext;
 class IDataSource;
 class TPortionDataSource;
 class TColumnFetchingContext;
+}   // namespace NKikimr::NOlap::NReader::NSimple
+
+namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering {
 
 class TInternalFilterConstructor: TMoveOnly {
 private:
@@ -57,7 +60,7 @@ private:
     void Complete() {
         AFL_VERIFY(!IsDone());
         AFL_VERIFY(IsReady());
-        Callback->OnFilterReady(FiltersByRange.begin()->second);
+        Callback->OnFilterReady(std::move(FiltersByRange.begin()->second));
         Callback.reset();
         AFL_VERIFY(IsDone());
     }
@@ -97,7 +100,7 @@ public:
         Callback.reset();
     }
 
-    TInternalFilterConstructor(const std::shared_ptr<IFilterSubscriber>& callback, const std::shared_ptr<IDataSource>& source);
+    TInternalFilterConstructor(const std::shared_ptr<IFilterSubscriber>& callback, const ui64 rowsCount);
 
     ~TInternalFilterConstructor() {
         AFL_VERIFY(IsDone());
@@ -107,17 +110,14 @@ public:
 class TEvConstructFilters: public NActors::TEventLocal<TEvConstructFilters, NColumnShard::TEvPrivate::EvConstructFilters> {
 private:
     using TDataBySource = THashMap<ui64, TSourceCache::TCacheItem>;
-    YDB_READONLY_DEF(std::shared_ptr<IDataSource>, Source);
-    YDB_READONLY_DEF(std::shared_ptr<TInternalFilterConstructor>, Callback);
     YDB_READONLY_DEF(TDataBySource, ColumnData);
+    YDB_READONLY_DEF(TEvRequestFilter::TPtr, OriginalRequest);
     TColumnDataSplitter Splitter;
 
 public:
-    TEvConstructFilters(const std::shared_ptr<IDataSource>& source, const std::shared_ptr<TInternalFilterConstructor>& callback,
-        TDataBySource&& data, TColumnDataSplitter&& splitter)
-        : Source(source)
-        , Callback(callback)
-        , ColumnData(std::move(data))
+    TEvConstructFilters(const TEvRequestFilter::TPtr& originalRequest, TDataBySource&& data, TColumnDataSplitter&& splitter)
+        : ColumnData(std::move(data))
+        , OriginalRequest(originalRequest)
         , Splitter(std::move(splitter)) {
     }
 
@@ -137,28 +137,13 @@ public:
     }
 };
 
-class TDuplicateFilterConstructor: public NActors::TActor<TDuplicateFilterConstructor> {
+class TDuplicateManager: public NActors::TActor<TDuplicateManager> {
 private:
-    class TSourceInfo {
-    private:
-        ui64 SourceIdx;
-        std::shared_ptr<TPortionInfo> PortionInfo;
-
-    public:
-        TSourceInfo(const ui64 sourceIdx, const std::shared_ptr<TPortionInfo>& portionInfo)
-            : SourceIdx(sourceIdx)
-            , PortionInfo(portionInfo) {
-        }
-
-        std::shared_ptr<TPortionDataSource> Construct(const std::shared_ptr<TSpecialReadContext>& context) const;
-    };
-
     class TSourceDataSubscriber: public TSourceCache::ISubscriber {
     private:
         TActorId Owner;
-        std::shared_ptr<IDataSource> Source;
-        std::shared_ptr<TInternalFilterConstructor> Callback;
         TColumnDataSplitter Splitter;
+        TEvRequestFilter::TPtr OriginalRequest;
 
         virtual void OnSourcesReady(TSourceCache::TSourcesData&& result) override;
         virtual void OnFailure(const TString& error) override {
@@ -167,12 +152,10 @@ private:
         }
 
     public:
-        TSourceDataSubscriber(const TActorId& owner, const std::shared_ptr<IDataSource>& source,
-            const std::shared_ptr<TInternalFilterConstructor>& callback, TColumnDataSplitter&& splitter)
+        TSourceDataSubscriber(const TActorId& owner, const TEvRequestFilter::TPtr& originalRequest, TColumnDataSplitter&& splitter)
             : Owner(owner)
-            , Source(source)
-            , Callback(callback)
-            , Splitter(std::move(splitter)) {
+            , Splitter(std::move(splitter))
+            , OriginalRequest(originalRequest) {
         }
     };
 
@@ -195,10 +178,13 @@ private:
     };
 
 private:
+    NColumnShard::TDuplicateFilteringCounters Counters;
     TSourceCache* SourceCache;
-    const TIntervalTree<NArrow::TSimpleRow, TSourceInfo> Intervals;
+    const THashMap<ui64, std::shared_ptr<TPortionInfo>> Portions;
+    const TIntervalTree<NArrow::TSimpleRow, ui64> Intervals;
     TLRUCache<TDuplicateMapInfo, NArrow::TColumnFilter> FiltersCache;
     THashMap<TDuplicateMapInfo, std::vector<std::shared_ptr<TInternalFilterConstructor>>> BuildingFilters;
+    std::shared_ptr<NConveyor::TProcessGuard> ConveyorProcessGuard;
 
 private:
     STATEFN(StateMain) {
@@ -226,8 +212,14 @@ private:
         PassAway();
     }
 
+    const std::shared_ptr<TPortionInfo>& GetPortionVerified(const ui64 portionId) const {
+        const auto* portion = Portions.FindPtr(portionId);
+        AFL_VERIFY(portion);
+        return *portion;
+    }
+
 public:
-    TDuplicateFilterConstructor(const TSpecialReadContext& context);
+    TDuplicateManager(const TSpecialReadContext& context);
 };
 
-}   // namespace NKikimr::NOlap::NReader::NSimple
+}   // namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering

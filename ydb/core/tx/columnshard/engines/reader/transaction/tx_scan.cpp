@@ -75,28 +75,25 @@ void TTxScan::Complete(const TActorContext& ctx) {
         read.ReadNothing = !Self->TablesManager.HasTable(read.PathId);
         read.TableName = table;
 
-        const TString defaultClassName = AppDataVerified().FeatureFlags.GetEnableDuplicateFilterInColumnShard() ? "SIMPLE" : "PLAIN";
-        const std::optional<TString> readerExt = [&]() -> std::optional<TString> {
-            if (request.GetCSScanPolicy()) {
-                return request.GetCSScanPolicy();
-            }
+        const TString defaultReader = [&]() {
+            const TString defGlobal =
+                AppDataVerified().ColumnShardConfig.GetReaderClassName() ? AppDataVerified().ColumnShardConfig.GetReaderClassName() : "SIMPLE";
             if (Self->HasIndex()) {
-                if (const std::optional<TString> reader =
-                        Self->GetIndexAs<TColumnEngineForLogs>().GetVersionedIndex().GetLastSchema()->GetIndexInfo().GetScanReaderPolicyName()) {
-                    return reader;
-                }
+                return Self->GetIndexAs<TColumnEngineForLogs>()
+                    .GetVersionedIndex()
+                    .GetLastSchema()
+                    ->GetIndexInfo()
+                    .GetScanReaderPolicyName()
+                    .value_or(defGlobal);
+            } else {
+                return defGlobal;
             }
-            if (AppDataVerified().ColumnShardConfig.GetReaderClassName()) {
-                return AppDataVerified().ColumnShardConfig.GetReaderClassName();
-            }
-            return std::nullopt;
         }();
-        read.DeduplicationPolicy = (readerExt == "SIMPLE") ? EDeduplicationPolicy::ALLOW_DUPLICATES : EDeduplicationPolicy::NO_DUPLICATES;
-
         std::unique_ptr<IScannerConstructor> scannerConstructor = [&]() {
             auto sysViewPolicy = NSysView::NAbstract::ISysViewPolicy::BuildByPath(read.TableName);
             if (!sysViewPolicy) {
-                auto constructor = NReader::IScannerConstructor::TFactory::MakeHolder(readerExt.value_or(defaultClassName), context);
+                auto constructor = NReader::IScannerConstructor::TFactory::MakeHolder(
+                    request.GetCSScanPolicy() ? request.GetCSScanPolicy() : defaultReader, context);
                 if (!constructor) {
                     return std::unique_ptr<IScannerConstructor>();
                 }
@@ -163,9 +160,8 @@ void TTxScan::Complete(const TActorContext& ctx) {
     AFL_VERIFY(shardingPolicy.DeserializeFromProto(request.GetComputeShardingPolicy()));
 
     auto scanActorId = ctx.Register(new TColumnShardScan(Self->SelfId(), scanComputeActor, Self->GetStoragesManager(),
-        Self->DataAccessorsManager.GetObjectPtrVerified(), shardingPolicy, scanId,
-        txId, scanGen, requestCookie, Self->TabletID(), timeout, readMetadataRange, dataFormat, Self->Counters.GetScanCounters(),
-        cpuLimits));
+        Self->DataAccessorsManager.GetObjectPtrVerified(), shardingPolicy, scanId, txId, scanGen, requestCookie, Self->TabletID(), timeout,
+        readMetadataRange, dataFormat, Self->Counters.GetScanCounters(), Self->Counters.GetDuplicateFilteringCounters(), cpuLimits));
     Self->InFlightReadsTracker.AddScanActorId(requestCookie, scanActorId);
 
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "TTxScan started")("actor_id", scanActorId)("trace_detailed", detailedInfo);

@@ -3,13 +3,12 @@
 #include "events.h"
 
 #include <ydb/core/formats/arrow/reader/merger.h>
-#include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/source.h>
 #include <ydb/core/tx/conveyor/usage/abstract.h>
 
 namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering  {
 
 class TBuildDuplicateFilters: public NConveyor::ITask {
-    class TFiltersBuilder: public NArrow::NMerger::IMergeResultBuilder {
+    class TFiltersBuilder {
     private:
         THashMap<ui64, NArrow::TColumnFilter> Filters;
         YDB_READONLY(ui64, RowsAdded, 0);
@@ -21,25 +20,24 @@ class TBuildDuplicateFilters: public NConveyor::ITask {
             findFilter->Add(value);
         }
 
-    private:
-        virtual void AddRecord(const NArrow::NMerger::TBatchIterator& cursor) override {
+    public:
+        void AddRecord(const NArrow::NMerger::TBatchIterator& cursor) {
             AddImpl(cursor.GetSourceId(), true);
             ++RowsAdded;
         }
 
-        virtual void SkipRecord(const NArrow::NMerger::TBatchIterator& cursor) override {
+        void SkipRecord(const NArrow::NMerger::TBatchIterator& cursor) {
             AddImpl(cursor.GetSourceId(), false);
             ++RowsSkipped;
         }
 
-        virtual void ValidateDataSchema(const std::shared_ptr<arrow::Schema>& /*schema*/) const override {
+        void ValidateDataSchema(const std::shared_ptr<arrow::Schema>& /*schema*/) const {
         }
 
-        virtual bool IsBufferExhausted() const override {
+        bool IsBufferExhausted() const {
             return false;
         }
 
-    public:
         THashMap<ui64, NArrow::TColumnFilter>&& ExtractFilters() && {
             return std::move(Filters);
         }
@@ -75,7 +73,7 @@ private:
     std::shared_ptr<arrow::Schema> PKSchema;
     std::vector<std::string> VersionColumnNames;
     TActorId Owner;
-    NColumnShard::TScanCounters Counters;
+    NColumnShard::TDuplicateFilteringCounters Counters;
     std::optional<NArrow::NMerger::TCursor> MaxVersion;
     NArrow::TSimpleRow Finish;
     bool IncludeFinish;
@@ -90,17 +88,18 @@ private:
     }
 
 public:
-    TBuildDuplicateFilters(const std::shared_ptr<NCommon::TSpecialReadContext>& context,
-        const std::optional<NArrow::NMerger::TCursor>& maxVersion, const NArrow::TSimpleRow& finish, const bool includeFinish,
+    TBuildDuplicateFilters(const std::shared_ptr<arrow::Schema>& sortingSchema,
+        const std::optional<NArrow::NMerger::TCursor>& maxVersion, const NArrow::TSimpleRow& finish, const bool includeFinish, const NColumnShard::TDuplicateFilteringCounters& counters,
         std::unique_ptr<ISubscriber>&& callback)
-        : PKSchema(context->GetReadMetadata()->GetReplaceKey())
+        : PKSchema(sortingSchema)
         , VersionColumnNames(IIndexInfo::GetSnapshotColumnNames())
-        , Counters(context->GetCommonContext()->GetCounters())
+        , Counters(counters)
         , MaxVersion(maxVersion)
         , Finish(finish)
         , IncludeFinish(includeFinish)
         , Callback(std::move(callback)) {
         AFL_VERIFY(Callback);
+        AFL_VERIFY(finish.GetSchema()->Equals(sortingSchema));
     }
 
     void AddSource(const std::shared_ptr<TColumnsData>& batch, const ui64 offset, const ui64 sourceId) {

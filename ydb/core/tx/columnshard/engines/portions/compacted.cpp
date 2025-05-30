@@ -30,6 +30,10 @@ const TSnapshot& TCompactedPortionInfo::RecordSnapshotMax(const std::optional<TS
     return GetMeta().RecordSnapshotMax;
 }
 
+std::optional<TSnapshot> TCompactedPortionInfo::GetDataSnapshot(const std::optional<TSnapshot>& /*snapshotDefault*/) const {
+    return std::nullopt;
+}
+
 std::unique_ptr<TPortionInfoConstructor> TCompactedPortionInfo::BuildConstructor(const bool withMetadata, const bool withMetadataBlobs) const {
     return std::make_unique<TCompactedPortionInfoConstructor>(*this, withMetadata, withMetadataBlobs);
 }

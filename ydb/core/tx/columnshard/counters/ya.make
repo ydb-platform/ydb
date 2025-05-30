@@ -16,6 +16,7 @@ SRCS(
     portions.cpp
     writes_monitor.cpp
     portion_index.cpp
+    duplicate_filtering.cpp
 )
 
 PEERDIR(

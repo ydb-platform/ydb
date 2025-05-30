@@ -15,6 +15,7 @@
 add_subdirectory(abstract)
 add_subdirectory(clickbench)
 add_subdirectory(benchmark_base)
+add_subdirectory(query)
 add_subdirectory(kv)
 add_subdirectory(log)
 add_subdirectory(mixed)
@@ -22,7 +23,6 @@ add_subdirectory(stock)
 add_subdirectory(tpcds)
 add_subdirectory(tpc_base)
 add_subdirectory(tpch)
-add_subdirectory(query)
 add_subdirectory(tpcc)
 
 add_library(ydb-library-workload INTERFACE)
@@ -34,6 +34,7 @@ target_link_libraries(ydb-library-workload INTERFACE
   yutil
   library-workload-abstract
   library-workload-clickbench
+  library-workload-query
   library-workload-kv
   library-workload-log
   library-workload-mixed

@@ -9,6 +9,15 @@
             "writes": [
                 {
                     "columns": [
+                        "Amount",
+                        "Comment",
+                        "Group",
+                        "Name"
+                    ],
+                    "type": "MultiUpsert"
+                },
+                {
+                    "columns": [
                         "Comment",
                         "Group",
                         "Name"
@@ -20,15 +29,6 @@
                 },
                 {
                     "type": "MultiErase"
-                },
-                {
-                    "columns": [
-                        "Amount",
-                        "Comment",
-                        "Group",
-                        "Name"
-                    ],
-                    "type": "MultiReplace"
                 }
             ]
         }

@@ -453,8 +453,12 @@ private:
                     mode == "insert_revert" ||
                     mode == "insert_abort" ||
                     mode == "delete_on" ||
-                    mode == "update_on")
+                    mode == "update_on" ||
+                    mode == "fill_table")
                 {
+                    SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), key.GetTablePath());
+                    return TStatus::Ok;
+                } else if (mode == "fill_table") {
                     SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), key.GetTablePath());
                     return TStatus::Ok;
                 } else if (mode == "insert_ignore") {
@@ -1144,7 +1148,18 @@ public:
             return false;
         }
 
-        if (tableDesc.Metadata->Kind == EKikimrTableKind::Olap && mode != "replace" && mode != "drop" && mode != "drop_if_exists" && mode != "insert_abort" && mode != "update" && mode != "upsert" && mode != "delete" && mode != "update_on" && mode != "delete_on" && mode != "analyze") {
+        if (tableDesc.Metadata->Kind == EKikimrTableKind::Olap
+                && mode != "replace"
+                && mode != "drop"
+                && mode != "drop_if_exists"
+                && mode != "insert_abort"
+                && mode != "update"
+                && mode != "upsert"
+                && mode != "delete"
+                && mode != "update_on"
+                && mode != "delete_on"
+                && mode != "analyze"
+                && mode != "fill_table") {
             ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << "Write mode '" << static_cast<TStringBuf>(mode) << "' is not supported for olap tables."));
             return true;
         }

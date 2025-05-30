@@ -607,8 +607,10 @@ private:
                 } else {
                     // Two table sinks can't be executed in one physical transaction if they write into same table and have same priority.
 
-                    const auto& tableDescription = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, sinkSettings.Cast().Table().Path());
-                    if (tableDescription.Metadata->Kind == EKikimrTableKind::Olap) {
+                    const bool needSingleEffect = sinkSettings.Cast().Mode() == "fill_table"
+                        || (kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, sinkSettings.Cast().Table().Path()).Metadata->Kind == EKikimrTableKind::Olap);
+
+                    if (needSingleEffect) {
                         const TStringBuf tablePathId = sinkSettings.Cast().Table().PathId().Value();
 
                         auto it = std::find_if(

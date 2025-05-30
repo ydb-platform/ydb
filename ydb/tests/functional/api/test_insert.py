@@ -191,7 +191,7 @@ class TestInsertOperations(object):
                         callee,
                         raises(
                             ydb.PreconditionFailed,
-                            "(Duplicate keys have been found.)|(Conflict with existing key.)"
+                            "Conflict with existing key."
                         )
                     )
 

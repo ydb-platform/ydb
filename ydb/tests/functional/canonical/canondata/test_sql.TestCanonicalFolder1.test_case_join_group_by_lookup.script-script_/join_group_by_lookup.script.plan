@@ -294,23 +294,27 @@
                 "PlanNodeType": "Query",
                 "Plans": [
                     {
-                        "Node Type": "Sink",
+                        "Node Type": "Effect",
                         "PlanNodeId": 2,
                         "Plans": [
                             {
-                                "Node Type": "ConstantExpr-Sink",
+                                "CTE Name": "precompute_0_0",
+                                "Node Type": "Upsert-ConstantExpr",
                                 "Operators": [
                                     {
-                                        "Inputs": [],
-                                        "Iterator": "[{Group: 1,Value: \"One\"},{Group: 3,Value: \"Three\"}]",
-                                        "Name": "Iterator"
+                                        "Inputs": [
+                                            {
+                                                "InternalOperatorId": 1
+                                            }
+                                        ],
+                                        "Name": "Upsert",
+                                        "Path": "/local/base_join_group_by_lookup_script_script/Temp",
+                                        "Table": "base_join_group_by_lookup_script_script/Temp"
                                     },
                                     {
                                         "Inputs": [],
-                                        "Name": "Replace",
-                                        "Path": "/local/base_join_group_by_lookup_script_script/Temp",
-                                        "SinkType": "KqpTableSink",
-                                        "Table": "base_join_group_by_lookup_script_script/Temp"
+                                        "Iterator": "precompute_0_0",
+                                        "Name": "Iterator"
                                     }
                                 ],
                                 "PlanNodeId": 1,
@@ -334,7 +338,7 @@
                                 "Group",
                                 "Value"
                             ],
-                            "type": "MultiReplace"
+                            "type": "MultiUpsert"
                         }
                     ]
                 }

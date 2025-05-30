@@ -6,6 +6,19 @@
     "tables": [
         {
             "name": "/local/base_write_update_on_sql_plan/Input",
+            "reads": [
+                {
+                    "columns": [
+                        "key",
+                        "subkey"
+                    ],
+                    "lookup_by": [
+                        "key",
+                        "subkey"
+                    ],
+                    "type": "Lookup"
+                }
+            ],
             "writes": [
                 {
                     "columns": [
@@ -13,7 +26,7 @@
                         "subkey",
                         "value"
                     ],
-                    "type": "MultiUpdate"
+                    "type": "MultiUpsert"
                 }
             ]
         },
@@ -33,6 +46,17 @@
                         "Name (-\u221e, +\u221e)"
                     ],
                     "type": "Scan"
+                },
+                {
+                    "columns": [
+                        "Group",
+                        "Name"
+                    ],
+                    "lookup_by": [
+                        "Group",
+                        "Name"
+                    ],
+                    "type": "Lookup"
                 }
             ],
             "writes": [
@@ -42,7 +66,7 @@
                         "Group",
                         "Name"
                     ],
-                    "type": "MultiUpdate"
+                    "type": "MultiUpsert"
                 }
             ]
         }

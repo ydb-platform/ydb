@@ -519,23 +519,27 @@
                 "PlanNodeType": "Query",
                 "Plans": [
                     {
-                        "Node Type": "Sink",
+                        "Node Type": "Effect",
                         "PlanNodeId": 2,
                         "Plans": [
                             {
-                                "Node Type": "ConstantExpr-Sink",
+                                "CTE Name": "precompute_0_0",
+                                "Node Type": "Upsert-ConstantExpr",
                                 "Operators": [
                                     {
-                                        "Inputs": [],
-                                        "Iterator": "[{Key: 3,Value: \"Three\"},{Key: 4,Value: \"Four\"}]",
-                                        "Name": "Iterator"
+                                        "Inputs": [
+                                            {
+                                                "InternalOperatorId": 1
+                                            }
+                                        ],
+                                        "Name": "Upsert",
+                                        "Path": "/local/base_explain_script_script/ScriptingTest",
+                                        "Table": "base_explain_script_script/ScriptingTest"
                                     },
                                     {
                                         "Inputs": [],
-                                        "Name": "Replace",
-                                        "Path": "/local/base_explain_script_script/ScriptingTest",
-                                        "SinkType": "KqpTableSink",
-                                        "Table": "base_explain_script_script/ScriptingTest"
+                                        "Iterator": "precompute_0_0",
+                                        "Name": "Iterator"
                                     }
                                 ],
                                 "PlanNodeId": 1,
@@ -559,7 +563,7 @@
                                 "Key",
                                 "Value"
                             ],
-                            "type": "MultiReplace"
+                            "type": "MultiUpsert"
                         }
                     ]
                 }
@@ -571,23 +575,27 @@
                 "PlanNodeType": "Query",
                 "Plans": [
                     {
-                        "Node Type": "Sink",
+                        "Node Type": "Effect",
                         "PlanNodeId": 2,
                         "Plans": [
                             {
-                                "Node Type": "ConstantExpr-Sink",
+                                "CTE Name": "precompute_0_0",
+                                "Node Type": "Upsert-ConstantExpr",
                                 "Operators": [
                                     {
-                                        "Inputs": [],
-                                        "Iterator": "[{Key: 1,Value: \"One\"},{Key: 2,Value: \"Two\"}]",
-                                        "Name": "Iterator"
+                                        "Inputs": [
+                                            {
+                                                "InternalOperatorId": 1
+                                            }
+                                        ],
+                                        "Name": "Upsert",
+                                        "Path": "/local/base_explain_script_script/ScriptingTest",
+                                        "Table": "base_explain_script_script/ScriptingTest"
                                     },
                                     {
                                         "Inputs": [],
-                                        "Name": "Replace",
-                                        "Path": "/local/base_explain_script_script/ScriptingTest",
-                                        "SinkType": "KqpTableSink",
-                                        "Table": "base_explain_script_script/ScriptingTest"
+                                        "Iterator": "precompute_0_0",
+                                        "Name": "Iterator"
                                     }
                                 ],
                                 "PlanNodeId": 1,
@@ -611,7 +619,7 @@
                                 "Key",
                                 "Value"
                             ],
-                            "type": "MultiReplace"
+                            "type": "MultiUpsert"
                         }
                     ]
                 }

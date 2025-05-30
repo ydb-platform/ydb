@@ -51,6 +51,7 @@ public:
         if (action & EAction::WRITE) {
             ReadOnly = false;
         }
+        ++ActionsCount;
     }
 
     void AddTopic(ui64 topicId, const TString& path) override {
@@ -310,7 +311,8 @@ public:
     }
 
     bool NeedCommit() const override {
-        const bool dontNeedCommit = IsEmpty() || IsReadOnly() && (IsSingleShard() || HasSnapshot());
+        AFL_ENSURE(ActionsCount != 1 || IsSingleShard()); // ActionsCount == 1 then IsSingleShard()
+        const bool dontNeedCommit = IsEmpty() || IsReadOnly() && ((ActionsCount == 1) || HasSnapshot());
         return !dontNeedCommit;
     }
 
@@ -322,6 +324,7 @@ public:
         AFL_ENSURE(!CollectOnly);
         AFL_ENSURE(State == ETransactionState::COLLECTING);
         AFL_ENSURE(NeedCommit());
+        AFL_ENSURE(!BrokenLocks());
 
         THashSet<ui64> sendingColumnShardsSet;
         THashSet<ui64> receivingColumnShardsSet;
@@ -336,7 +339,7 @@ public:
                     SendingShards.insert(shardId);
                 }
             }
-            if (!shardInfo.Locks.empty()) {
+            if (!shardInfo.Locks.empty() || (shardInfo.Flags & EAction::READ)) {
                 SendingShards.insert(shardId);
                 if (shardInfo.IsOlap) {
                     sendingColumnShardsSet.insert(shardId);
@@ -428,6 +431,7 @@ public:
                 || (State == ETransactionState::COLLECTING
                     && IsSingleShard()));
         AFL_ENSURE(NeedCommit());
+        AFL_ENSURE(!BrokenLocks());
         State = ETransactionState::EXECUTING;
 
         for (auto& [_, shardInfo] : ShardsInfo) {
@@ -513,6 +517,7 @@ private:
     THashSet<ui64> ShardsIds;
     THashMap<ui64, TShardInfo> ShardsInfo;
     std::unordered_set<TString> TablePathes;
+    ui64 ActionsCount = 0;
 
     THashSet<ui32> ParticipantNodes;
 

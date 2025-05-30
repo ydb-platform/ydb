@@ -1422,6 +1422,12 @@ public:
         ShardsInfo.ForEachPendingShard(std::move(callback));
     }
 
+    std::vector<TPendingShardInfo> ExtractShardUpdates() override {
+        std::vector<TPendingShardInfo> shardUpdates;
+        std::swap(shardUpdates, ShardUpdates);
+        return shardUpdates;
+    }
+
     TVector<ui64> GetShardsIds() const override {
         TVector<ui64> result;
         result.reserve(ShardsInfo.GetShards().size());
@@ -1578,11 +1584,16 @@ private:
             for (auto& [shardId, batches] : writeInfo.Serializer->FlushBatchesForce()) {
                 for (auto& batch : batches) {
                     if (batch && !batch->IsEmpty()) {
+                        const bool hasRead = (writeInfo.Metadata.OperationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT
+                                || writeInfo.Metadata.OperationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE);
                         ShardsInfo.GetShard(shardId).PushBatch(TBatchWithMetadata{
                             .Token = token,
                             .Data = std::move(batch),
-                            .HasRead = (writeInfo.Metadata.OperationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT
-                                || writeInfo.Metadata.OperationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE),
+                            .HasRead = hasRead,
+                        });
+                        ShardUpdates.push_back(IShardedWriteController::TPendingShardInfo{
+                            .ShardId = shardId,
+                            .HasRead = hasRead,
                         });
                     }
                 }
@@ -1595,11 +1606,16 @@ private:
                     if (!batch || batch->IsEmpty()) {
                         break;
                     }
+                    const bool hasRead = (writeInfo.Metadata.OperationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT
+                        || writeInfo.Metadata.OperationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE);
                     shard.PushBatch(TBatchWithMetadata{
                         .Token = token,
                         .Data = std::move(batch),
-                        .HasRead = (writeInfo.Metadata.OperationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT
-                                || writeInfo.Metadata.OperationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE),
+                        .HasRead = hasRead,
+                    });
+                    ShardUpdates.push_back(IShardedWriteController::TPendingShardInfo{
+                        .ShardId = shardId,
+                        .HasRead = hasRead,
                     });
                 }
             }
@@ -1645,6 +1661,7 @@ private:
     TWriteToken CurrentWriteToken = 0;
 
     TShardsInfo ShardsInfo;
+    std::vector<IShardedWriteController::TPendingShardInfo> ShardUpdates;
 
     std::optional<NSchemeCache::TSchemeCacheNavigate::TEntry> SchemeEntry;
     std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>> Partitioning;

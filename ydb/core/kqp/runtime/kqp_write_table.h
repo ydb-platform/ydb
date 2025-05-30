@@ -80,6 +80,8 @@ public:
         bool HasRead;
     };
     virtual void ForEachPendingShard(std::function<void(const TPendingShardInfo&)>&& callback) const = 0;
+    virtual std::vector<TPendingShardInfo> ExtractShardUpdates() = 0;
+
     virtual ui64 GetShardsCount() const = 0;
     virtual TVector<ui64> GetShardsIds() const = 0;
 

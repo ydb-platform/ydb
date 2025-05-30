@@ -334,6 +334,7 @@ public:
         YQL_ENSURE(ShardedWriteController);
         CA_LOG_D("Write: token=" << token);
         ShardedWriteController->Write(token, std::move(data));
+        UpdateShards();
     }
 
     void Close(TWriteToken token) {
@@ -342,6 +343,7 @@ public:
         CA_LOG_D("Close: token=" << token);
 
         ShardedWriteController->Close(token);
+        UpdateShards();
     }
 
     void Close() {
@@ -864,16 +866,20 @@ public:
         }
     }
 
-    void FlushBuffers() {
-        ShardedWriteController->FlushBuffers();
-        ShardedWriteController->ForEachPendingShard([&](const auto& shardInfo) {
+    void UpdateShards() {
+        for (const auto& shardInfo : ShardedWriteController->ExtractShardUpdates()) {
             TxManager->AddShard(shardInfo.ShardId, IsOlap, TablePath);
             IKqpTransactionManager::TActionFlags flags = IKqpTransactionManager::EAction::WRITE;
             if (shardInfo.HasRead) {
                 flags |= IKqpTransactionManager::EAction::READ;
             }
             TxManager->AddAction(shardInfo.ShardId, flags);
-        });
+        }
+    }
+
+    void FlushBuffers() {
+        ShardedWriteController->FlushBuffers();
+        UpdateShards();
     }
 
     bool FlushToShards() {
@@ -1510,7 +1516,6 @@ private:
             }
 
             if (Closed || outOfMemory) {
-                WriteTableActor->FlushBuffers();
                 if (!WriteTableActor->FlushToShards()) {
                     return;
                 }
@@ -1922,14 +1927,6 @@ public:
                         << " bytes of " << MessageSettings.InFlightMemoryLimitPerActorBytes << " bytes.",
                 {});
             return false;
-        }
-
-        if (outOfMemory) {
-            for (auto& [_, info] : WriteInfos) {
-                if (info.WriteTableActor->IsReady()) {
-                    info.WriteTableActor->FlushBuffers();
-                }
-            }
         }
 
         if (needToFlush) {

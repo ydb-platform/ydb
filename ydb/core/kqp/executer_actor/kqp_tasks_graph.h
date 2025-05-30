@@ -84,7 +84,7 @@ struct TStageInfoMeta {
 
     THashSet<TKeyDesc::ERowOperation> ShardOperations;
     THolder<TKeyDesc> ShardKey;
-    NSchemeCache::TSchemeCacheRequest::EKind ShardKind = NSchemeCache::TSchemeCacheRequest::EKind::KindUnknown;
+    NSchemeCache::ETableKind ShardKind = NSchemeCache::ETableKind::KindUnknown;
 
     struct TIndexMeta {
         TTableId TableId;

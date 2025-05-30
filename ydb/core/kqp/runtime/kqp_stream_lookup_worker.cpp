@@ -13,16 +13,34 @@
 namespace NKikimr {
 namespace NKqp {
 
+constexpr ui64 MAX_IN_FLIGHT_LIMIT = 500;
+
 namespace {
 std::vector<std::pair<ui64, TOwnedTableRange>> GetRangePartitioning(const TKqpStreamLookupWorker::TPartitionInfo& partitionInfo,
     const std::vector<NScheme::TTypeInfo>& keyColumnTypes, const TOwnedTableRange& range) {
 
     YQL_ENSURE(partitionInfo);
 
+    // Binary search of the index to start with.
+    size_t idxStart = 0;
+    size_t idxFinish = partitionInfo->size();
+    while ((idxFinish - idxStart) > 1) {
+        size_t idxCur = (idxFinish + idxStart) / 2;
+        const auto& partCur = (*partitionInfo)[idxCur].Range->EndKeyPrefix.GetCells();
+        YQL_ENSURE(partCur.size() <= keyColumnTypes.size());
+        int cmp = CompareTypedCellVectors(partCur.data(), range.From.data(), keyColumnTypes.data(),
+                                          std::min(partCur.size(), range.From.size()));
+        if (cmp < 0) {
+            idxStart = idxCur;
+        } else {
+            idxFinish = idxCur;
+        }
+    }
+
     std::vector<TCell> minusInf(keyColumnTypes.size());
 
     std::vector<std::pair<ui64, TOwnedTableRange>> rangePartition;
-    for (size_t idx = 0; idx < partitionInfo->size(); ++idx) {
+    for (size_t idx = idxStart; idx < partitionInfo->size(); ++idx) {
         TTableRange partitionRange{
             idx == 0 ? minusInf : (*partitionInfo)[idx - 1].Range->EndKeyPrefix.GetCells(),
             idx == 0 ? true : !(*partitionInfo)[idx - 1].Range->IsInclusive,
@@ -110,6 +128,12 @@ TKqpStreamLookupWorker::TKqpStreamLookupWorker(NKikimrKqp::TKqpStreamLookupSetti
             column.GetTypeInfo().GetPgTypeMod()
         });
     }
+
+    KeyColumnTypes.resize(KeyColumns.size());
+    for (const auto& [_, columnInfo] : KeyColumns) {
+        YQL_ENSURE(columnInfo.KeyOrder < static_cast<i64>(KeyColumnTypes.size()));
+        KeyColumnTypes[columnInfo.KeyOrder] = columnInfo.PType;
+    }
 }
 
 TKqpStreamLookupWorker::~TKqpStreamLookupWorker() {
@@ -121,16 +145,6 @@ std::string TKqpStreamLookupWorker::GetTablePath() const {
 
 TTableId TKqpStreamLookupWorker::GetTableId() const {
     return TableId;
-}
-
-std::vector<NScheme::TTypeInfo> TKqpStreamLookupWorker::GetKeyColumnTypes() const {
-    std::vector<NScheme::TTypeInfo> keyColumnTypes(KeyColumns.size());
-    for (const auto& [_, columnInfo] : KeyColumns) {
-        YQL_ENSURE(columnInfo.KeyOrder < static_cast<i64>(keyColumnTypes.size()));
-        keyColumnTypes[columnInfo.KeyOrder] = columnInfo.PType;
-    }
-
-    return keyColumnTypes;
 }
 
 class TKqpLookupRows : public TKqpStreamLookupWorker {
@@ -274,12 +288,15 @@ public:
         ReadResults.emplace_back(std::move(result));
     }
 
+    bool IsOverloaded() final {
+        return false;
+    }
+
     TReadResultStats ReplyResult(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, i64 freeSpace) final {
         TReadResultStats resultStats;
-        bool sizeLimitExceeded = false;
         batch.clear();
 
-        while (!ReadResults.empty() && !sizeLimitExceeded) {
+        while (!ReadResults.empty() && !resultStats.SizeLimitExceeded) {
             auto& result = ReadResults.front();
             for (; result.UnprocessedResultRow < result.ReadResult->Get()->GetRowsCount(); ++result.UnprocessedResultRow) {
                 const auto& resultRow = result.ReadResult->Get()->GetCells(result.UnprocessedResultRow);
@@ -305,10 +322,10 @@ public:
                 }
 
                 if (rowSize + (i64)resultStats.ResultBytesCount > freeSpace) {
-                    sizeLimitExceeded = true;
+                    resultStats.SizeLimitExceeded = true;
                 }
 
-                if (resultStats.ResultRowsCount && sizeLimitExceeded) {
+                if (resultStats.ResultRowsCount && resultStats.SizeLimitExceeded) {
                     row.DeleteUnreferenced();
                     break;
                 }
@@ -442,6 +459,10 @@ public:
         }
 
         UnprocessedRows.emplace_back(std::make_pair(TOwnedCellVec(joinKeyCells), std::move(inputRow.GetElement(1))));
+    }
+
+    bool IsOverloaded() final {
+        return UnprocessedRows.size() >= MAX_IN_FLIGHT_LIMIT || PendingLeftRowsByKey.size() >= MAX_IN_FLIGHT_LIMIT || ResultRowsBySeqNo.size() >= MAX_IN_FLIGHT_LIMIT;
     }
 
     std::vector<THolder<TEvDataShard::TEvRead>> RebuildRequest(const ui64& prevReadId, ui32 firstUnprocessedQuery,
@@ -718,7 +739,6 @@ public:
 
     TReadResultStats ReplyResult(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, i64 freeSpace) final {
         TReadResultStats resultStats;
-        bool sizeLimitExceeded = false;
         batch.clear();
 
         // we should process left rows that haven't matches on the right
@@ -747,7 +767,7 @@ public:
             return ResultRowsBySeqNo.find(CurrentResultSeqNo);
         };
 
-        while (!sizeLimitExceeded) {
+        while (!resultStats.SizeLimitExceeded) {
             auto resultIt = getNextResult();
             if (resultIt == ResultRowsBySeqNo.end()) {
                 break;
@@ -758,7 +778,7 @@ public:
                 auto& row = result.Rows[result.FirstUnprocessedRow];
 
                 if (resultStats.ResultRowsCount && resultStats.ResultBytesCount + row.Stats.ResultBytesCount > (ui64)freeSpace) {
-                    sizeLimitExceeded = true;
+                    resultStats.SizeLimitExceeded = true;
                     break;
                 }
 

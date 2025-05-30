@@ -395,6 +395,8 @@ void WaitForZeroSessions(const NKqp::TKqpCounters& counters);
 void WaitForZeroReadIterators(Tests::TServer& server, const TString& path);
 int GetCumulativeCounterValue(Tests::TServer& server, const TString& path, const TString& counterName);
 
+void CheckTableReads(NYdb::NTable::TSession& session, const TString& tableName, bool checkFollower, bool readsExpected);
+
 void WaitForCompaction(Tests::TServer* server, const TString& path, bool compactBorrowed = false);
 
 bool JoinOrderAndAlgosMatch(const TString& optimized, const TString& reference);

@@ -133,7 +133,7 @@ TInteractiveCLI::TInteractiveCLI(TClientCommand::TConfig& config, std::string pr
 void TInteractiveCLI::Run() {
     TFsPath homeDirPath(HomeDir);
     TString historyFilePath(homeDirPath / ".ydb_history");
-    std::unique_ptr<ILineReader> lineReader = CreateLineReader(Prompt, historyFilePath);
+    std::unique_ptr<ILineReader> lineReader = CreateLineReader(Prompt, historyFilePath, Config);
 
     InteractiveCLIState interactiveCLIState;
 

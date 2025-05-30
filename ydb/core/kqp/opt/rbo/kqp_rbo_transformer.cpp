@@ -157,7 +157,7 @@ IGraphTransformer::TStatus TKqpPgRewriteTransformer::DoTransform(TExprNode::TPtr
     auto status = OptimizeExpr(output, output, [this] (const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
         if (TCoPgSelect::Match(node.Get())) {
             return RewritePgSelect(node, ctx, TypeCtx);
-        } if (TCoTake::Match(node.Get())) {
+        } else if (TCoTake::Match(node.Get())) {
             return PushTakeIntoPlan(node, ctx, TypeCtx);
         }
         else {
@@ -193,12 +193,83 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::DoTransform(TExprNode::TPtr in
 void TKqpNewRBOTransformer::Rewind() {
 }
 
+IGraphTransformer::TStatus TKqpRBOCleanupTransformer::DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) {
+    output = input;
+    TOptimizeExprSettings settings(&TypeCtx);
+
+    Y_UNUSED(ctx);
+
+    /*
+    auto status = OptimizeExpr(output, output, [] (const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
+        Y_UNUSED(ctx);
+        YQL_CLOG(TRACE, CoreDq) << "Checking if node " << node->UniqueId() << " is list: " << node->IsList();
+
+        if (node.Get()->IsList() && node.Get()->ChildrenSize()>=1) {
+            auto child_level_1 = node.Get()->Child(0);
+            YQL_CLOG(TRACE, CoreDq) << "Matched level 0";
+
+            if (child_level_1->IsList() && child_level_1->ChildrenSize()>=1) {
+                auto child_level_2 = child_level_1->Child(0);
+                YQL_CLOG(TRACE, CoreDq) << "Matched level 1";
+
+                if (child_level_2->IsList() && child_level_2->ChildrenSize()>=1) {
+                    auto maybeQuery = child_level_2->Child(0);
+                    YQL_CLOG(TRACE, CoreDq) << "Matched level 2";
+
+                    if (TKqpPhysicalQuery::Match(maybeQuery)) {
+                        YQL_CLOG(TRACE, CoreDq) << "Found query node";
+                        return maybeQuery;
+                    }
+                }
+            }
+        }
+        return node;
+    }, ctx, settings);
+
+    */
+
+    YQL_CLOG(TRACE, CoreDq) << "Cleanup input plan: " << output->Dump();
+
+    if (output->IsList() && output->ChildrenSize()>=1) {
+            auto child_level_1 = output->Child(0);
+            YQL_CLOG(TRACE, CoreDq) << "Matched level 0";
+
+            if (child_level_1->IsList() && child_level_1->ChildrenSize()>=1) {
+                auto child_level_2 = child_level_1->Child(0);
+                YQL_CLOG(TRACE, CoreDq) << "Matched level 1";
+
+                if (child_level_2->IsList() && child_level_2->ChildrenSize()>=1) {
+                    auto child_level_3 = child_level_2->Child(0);
+                    YQL_CLOG(TRACE, CoreDq) << "Matched level 2";
+
+                    if (child_level_3->IsList() && child_level_2->ChildrenSize()>=1) {
+                        auto maybeQuery = child_level_3->Child(0);
+
+                        if (TKqpPhysicalQuery::Match(maybeQuery)) {
+                            YQL_CLOG(TRACE, CoreDq) << "Found query node";
+                            output = maybeQuery;
+                        }
+                    }
+                }
+            }
+    }
+
+    return IGraphTransformer::TStatus::Ok;
+}
+
+void TKqpRBOCleanupTransformer::Rewind() {
+}
+
 TAutoPtr<IGraphTransformer> CreateKqpPgRewriteTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, TTypeAnnotationContext& typeCtx) {
     return new TKqpPgRewriteTransformer(kqpCtx, typeCtx);
 }
 
-TAutoPtr<IGraphTransformer> CreateKqpNewRBOTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, TTypeAnnotationContext& typeCtx, const TKikimrConfiguration::TPtr& config) {
-    return new TKqpNewRBOTransformer(kqpCtx, typeCtx, config);
+TAutoPtr<IGraphTransformer> CreateKqpNewRBOTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, TTypeAnnotationContext& typeCtx, const TKikimrConfiguration::TPtr& config, TAutoPtr<IGraphTransformer> typeAnnTransformer, TAutoPtr<IGraphTransformer> peephole) {
+    return new TKqpNewRBOTransformer(kqpCtx, typeCtx, config, typeAnnTransformer, peephole);
+}
+
+TAutoPtr<IGraphTransformer> CreateKqpRBOCleanupTransformer(TTypeAnnotationContext& typeCtx) {
+    return new TKqpRBOCleanupTransformer(typeCtx);
 }
 
 }

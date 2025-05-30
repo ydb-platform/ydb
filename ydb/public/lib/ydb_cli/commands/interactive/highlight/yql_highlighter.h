@@ -15,7 +15,7 @@ namespace NYdb::NConsoleClient {
     public:
         using TPtr = THolder<IYQLHighlighter>;
 
-        virtual void Apply(TStringBuf queryUtf8, TColors& colors) = 0;
+        virtual void Apply(TStringBuf queryUtf8, TColors& colors) const = 0;
         virtual ~IYQLHighlighter() = default;
     };
 

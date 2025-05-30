@@ -44,7 +44,7 @@ Y_PURE_FUNCTION TTriWayDotProduct<TRes> CosineImpl(const ui8* lhs, const ui8* rh
     return {static_cast<TRes>(ll), static_cast<TRes>(lr), static_cast<TRes>(rr)};
 }
 
-TTableRange CreateRangeFrom(const TUserTable& table, NTableIndex::TClusterId parent, TCell& from, TCell& to);
+TTableRange CreateRangeFrom(const TUserTable& table, TClusterId parent, TCell& from, TCell& to);
 
 NTable::TLead CreateLeadFrom(const TTableRange& range);
 
@@ -138,25 +138,23 @@ struct TMaxInnerProductSimilarity : TMetric<TCoord> {
     }
 };
 
-void AddRowMain2Build(TBufferData& buffer, NTableIndex::TClusterId parent, TArrayRef<const TCell> key, TArrayRef<const TCell> row);
+void AddRowToLevel(TBufferData& buffer, TClusterId parent, TClusterId child, const TString& embedding, bool isPostingLevel);
 
-void AddRowMain2Posting(TBufferData& buffer, NTableIndex::TClusterId parent, TArrayRef<const TCell> key, TArrayRef<const TCell> row,
-                        ui32 dataPos);
+void AddRowMainToBuild(TBufferData& buffer, TClusterId parent, TArrayRef<const TCell> key, TArrayRef<const TCell> row);
 
-void AddRowBuild2Build(TBufferData& buffer, NTableIndex::TClusterId parent, TArrayRef<const TCell> key, TArrayRef<const TCell> row,
-                       ui32 prefixColumns = 1);
+void AddRowMainToPosting(TBufferData& buffer, TClusterId parent, TArrayRef<const TCell> key, TArrayRef<const TCell> row, ui32 dataPos);
 
-void AddRowBuild2Posting(TBufferData& buffer, NTableIndex::TClusterId parent, TArrayRef<const TCell> key, TArrayRef<const TCell> row,
-                         ui32 dataPos, ui32 prefixColumns = 1);
+void AddRowBuildToBuild(TBufferData& buffer, TClusterId parent, TArrayRef<const TCell> key, TArrayRef<const TCell> row, ui32 prefixColumns = 1);
 
-TTags MakeUploadTags(const TUserTable& table, const TProtoStringType& embedding,
-                     const google::protobuf::RepeatedPtrField<TProtoStringType>& data, ui32& embeddingPos,
-                     ui32& dataPos, NTable::TTag& embeddingTag);
+void AddRowBuildToPosting(TBufferData& buffer, TClusterId parent, TArrayRef<const TCell> key, TArrayRef<const TCell> row, ui32 dataPos, ui32 prefixColumns = 1);
 
-std::shared_ptr<NTxProxy::TUploadTypes>
-MakeUploadTypes(const TUserTable& table, NKikimrTxDataShard::EKMeansState uploadState,
-                const TProtoStringType& embedding, const google::protobuf::RepeatedPtrField<TProtoStringType>& data,
-                ui32 prefixColumns = 0);
+TTags MakeScanTags(const TUserTable& table, const TProtoStringType& embedding, 
+    const google::protobuf::RepeatedPtrField<TProtoStringType>& data, ui32& embeddingPos,
+    ui32& dataPos, NTable::TTag& embeddingTag);
+
+std::shared_ptr<NTxProxy::TUploadTypes> MakeOutputTypes(const TUserTable& table, NKikimrTxDataShard::EKMeansState uploadState,
+    const TProtoStringType& embedding, const google::protobuf::RepeatedPtrField<TProtoStringType>& data,
+    ui32 prefixColumns = 0);
 
 void MakeScan(auto& record, const auto& createScan, const auto& badRequest)
 {
@@ -353,7 +351,7 @@ public:
             K = 1;
             Clusters.resize(K);
         }
-        Y_ASSERT(Clusters.size() == K);
+        Y_ENSURE(Clusters.size() == K);
         ClusterSizes.resize(K, 0);
         AggregatedClusters.resize(K);
         for (auto& aggregate : AggregatedClusters) {
@@ -365,7 +363,7 @@ public:
 
     bool RecomputeClusters()
     {
-        Y_ASSERT(K >= 1);
+        Y_ENSURE(K >= 1);
         ui64 vectorCount = 0;
         ui64 reassignedCount = 0;
         for (size_t i = 0; auto& aggregate : AggregatedClusters) {
@@ -377,12 +375,12 @@ public:
 
             if (aggregate.Size != 0) {
                 this->Fill(Clusters[i], aggregate.Cluster.data(), aggregate.Size);
-                Y_ASSERT(aggregate.Size == 0);
+                Y_ENSURE(aggregate.Size == 0);
             }
             ++i;
         }
-        Y_ASSERT(vectorCount >= K);
-        Y_ASSERT(reassignedCount <= vectorCount);
+        Y_ENSURE(vectorCount >= K);
+        Y_ENSURE(reassignedCount <= vectorCount);
         if (K == 1) {
             return true;
         }
@@ -410,16 +408,16 @@ public:
         return true;
     }
 
-    ui32 FindCluster(TArrayRef<const TCell> row, NTable::TPos embeddingPos)
+    std::optional<ui32> FindCluster(TArrayRef<const TCell> row, NTable::TPos embeddingPos)
     {
-        Y_ASSERT(embeddingPos < row.size());
+        Y_ENSURE(embeddingPos < row.size());
         const auto embedding = row.at(embeddingPos).AsRef();
         if (!IsExpectedSize<TCoord>(embedding, Dimensions)) {
-            return Max<ui32>();
+            return {};
         }
         
         auto min = TMetric::Init();
-        ui32 closest = Max<ui32>();
+        std::optional<ui32> closest = {};
         for (size_t i = 0; const auto& cluster : Clusters) {
             auto distance = TMetric::Distance(cluster.data(), embedding.data(), Dimensions);
             if (distance < min) {
@@ -454,7 +452,7 @@ private:
 
     void Fill(TString& d, TSum* embedding, ui64& c)
     {
-        Y_ASSERT(c > 0);
+        Y_ENSURE(c > 0);
         const auto count = static_cast<TSum>(std::exchange(c, 0));
         auto data = GetData(d.MutRef().data());
         for (auto& coord : data) {

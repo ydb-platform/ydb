@@ -179,9 +179,9 @@ namespace NKikimr::NStorage {
                         }
                     }
                 };
-                outputConfig("StorageConfig", StorageConfig ? &StorageConfig.value() : nullptr);
-                outputConfig("BaseConfig", &BaseConfig);
-                outputConfig("InitialConfig", &InitialConfig);
+                outputConfig("StorageConfig", StorageConfig.get());
+                outputConfig("BaseConfig", BaseConfig.get());
+                outputConfig("InitialConfig", InitialConfig.get());
                 outputConfig("ProposedStorageConfig", ProposedStorageConfig ? &ProposedStorageConfig.value() : nullptr);
 
                 DIV_CLASS("panel panel-info") {

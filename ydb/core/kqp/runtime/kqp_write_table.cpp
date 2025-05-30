@@ -446,8 +446,6 @@ private:
 
     TVector<TCellInfo> CellsInfo;
     TVector<TCell> Cells;
-
-    TOwnedCellVecBatch Batch;
 };
 
 class TColumnDataBatcher : public IDataBatcher {

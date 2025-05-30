@@ -65,7 +65,7 @@ void TPolymorphicYsonStruct<TMapping>::Load(
     TSource source,
     bool postprocess,
     bool setDefaults,
-    const NYPath::TYPath& path,
+    const std::function<NYPath::TYPath()>& pathGetter,
     std::optional<EUnrecognizedStrategy> recursiveUnrecognizedStrategy)
 {
     using TTraits = NPrivate::TYsonSourceTraits<TSource>;
@@ -101,7 +101,7 @@ void TPolymorphicYsonStruct<TMapping>::Load(
     // "type" must be unrecognized for the original struct
     // therefore we must delete it prior to |Load| call.
     map->RemoveChild("type");
-    Storage_->Load(map, postprocess, setDefaults, path);
+    Storage_->Load(map, postprocess, setDefaults, pathGetter);
 
     // NB(arkady-e1ppa): We must not actually remove contents of the node as a postcondition
     // since it mutates serialized data which might be used for config validation.
@@ -180,7 +180,7 @@ void TPolymorphicYsonStruct<TMapping>::MergeWith(const TPolymorphicYsonStruct& o
         SerializedStorage_,
         /*postprocess*/ true,
         /*setDefaults*/ true,
-        /*path*/ "",
+        /*path*/ {},
         /*recursiveUnrecognizedStrategy*/ std::nullopt);
 }
 

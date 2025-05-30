@@ -256,7 +256,7 @@ class TRandomLogGenerator {
 
     TInstant UniformInstant(ui64 from, ui64 to) const {
         TMersenne<ui64> rnd(Seed());
-        return TInstant::FromValue(rnd.Uniform(from, to));
+        return TInstant::Seconds(rnd.Uniform(from, to));
     }
 
     TInstant RandomInstant() const {

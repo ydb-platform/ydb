@@ -145,6 +145,8 @@ namespace NKikimr {
         NMonGroup::TLsmHullSpaceGroup LsmHullSpaceGroup;
         NMonGroup::TUserBlobSpaceGroup UserBlobSpaceGroup;
 
+        ui64 RecoveryLogSizeBytes = 0;
+
         THullCtx(
                 TVDiskContextPtr vctx,
                 ui32 chunkSize,
@@ -166,6 +168,7 @@ namespace NKikimr {
                 bool addHeader);
 
         void UpdateSpaceCounters(const NHullComp::TSstRatio& prev, const NHullComp::TSstRatio& current);
+        void UpdateRecoveryLogSize(ui32 logChunkCount, ui32 chunkSize);
     };
 
     using THullCtxPtr = TIntrusivePtr<THullCtx>;

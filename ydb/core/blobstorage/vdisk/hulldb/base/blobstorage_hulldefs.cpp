@@ -17,15 +17,19 @@ namespace NKikimr {
          ui64 userDataBytes = current.IndexBytesTotal + current.InplacedDataTotal + current.HugeDataTotal;
          ui64 userDataBytesAfterCompaction = current.IndexBytesKeep + current.InplacedDataKeep + current.HugeDataKeep;
 
-         auto lsmLogBytesWritten = VCtx->VDiskCounters->GetSubgroup("subsystem", "lsmhull")->GetCounter("LsmLogBytesWritten");
-         ui64 recoveryLogBytes = lsmLogBytesWritten ? lsmLogBytesWritten->Val() : 0;
+         ui64 recoveryLogSize = RecoveryLogSizeBytes;
 
          auto hugeStat = VCtx->GetHugeHeapFragmentation().Get();
          ui64 defragSavingsBytes = static_cast<ui64>(hugeStat.CanBeFreedChunks) * ChunkSize;
 
-         UserBlobSpaceGroup.UserBlobBytesStored()          = userDataBytes + recoveryLogBytes;
-         UserBlobSpaceGroup.UserBlobBytesAfterCompaction() = userDataBytesAfterCompaction;
+         UserBlobSpaceGroup.UserBlobBytesStored()          = userDataBytes + recoveryLogSize;
+         UserBlobSpaceGroup.UserBlobBytesAfterCompaction() = userDataBytesAfterCompaction + recoveryLogSize;
          UserBlobSpaceGroup.UserBlobBytesCanBeFreed()      = userDataBytes - userDataBytesAfterCompaction + defragSavingsBytes;
+    }
+
+    void THullCtx::UpdateRecoveryLogSize(ui32 logChunkCount, ui32 chunkSize) {
+        ui64 logSizeBytes = static_cast<ui64>(logChunkCount) * chunkSize;
+        RecoveryLogSizeBytes = logSizeBytes;
     }
 
     ////////////////////////////////////////////////////////////////////////////

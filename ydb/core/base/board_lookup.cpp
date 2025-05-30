@@ -150,10 +150,10 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
         for (auto groupIdx : xrange(ReplicaGroups.size())) {
             if (ReplicaGroups[groupIdx].WriteOnly)
                 continue;
-            if (Stats[groupIdx].HasInfo != ReplicaGroups[groupIdx].WaitForReplicasToSuccess)
-                return false;
+            if (Stats[groupIdx].HasInfo == ReplicaGroups[groupIdx].WaitForReplicasToSuccess)
+                return true;
         }
-        return true;
+        return false;
     }
 
     bool AllStatsHasAndHasNoInfo() {
@@ -233,6 +233,8 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
             auto &replicaGroups = ReplicaGroups[replicaGroupIdx];
             replicaGroups.Replicas.resize(msgReplicaGroups.Replicas.size());
             replicaGroups.WriteOnly = msgReplicaGroups.WriteOnly;
+            if (msgReplicaGroups.WriteOnly)
+                continue;
             for (auto idx : xrange(msgReplicaGroups.Replicas.size())) {
                 const TActorId &msgReplica = msgReplicaGroups.Replicas[idx];
                 Send(msgReplica,
@@ -259,7 +261,7 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
             default:
                 Y_ABORT("unsupported mode");
             }
-            BLOG_D("Handle TEvResolveReplicasList: Mode: " << (ui32)Mode << " groupIdx: " << replicaGroupIdx << " Group: " << replicaGroups.ToString());
+            BLOG_D("Handle TEvResolveReplicasList: Mode: " << (ui32)Mode << " groupIdx: " << replicaGroupIdx << " Group: " << replicaGroups.ToString() << " Path: " << Path);
         }
         Become(&TThis::StateLookup);
     }

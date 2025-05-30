@@ -281,15 +281,15 @@ class WorkloadDiscovery(WorkloadBase):
                 url, self.client.database)
             resolver = ydb.DiscoveryEndpointsResolver(driver_config)
             result = resolver.resolve()
-            if result is not None:
-                if self.endpoints is not None:
+            if result is None:
+                logger.info("Failed discover endpoints")
+                raise Exception("Discovery fails")
+            else:
+                if self.endpoints is None:
+                    self.endpionts = result.endpoints
+                else:
                     # logger.info(result.endpoints)
                     assert_that(self.endpionts, contains_inanyorder(result.endpoints))
-                else:
-                    self.endpionts = result.endpoints
-            else:
-                raise Exception("Discovery empty")
-
             with self.lock:
                 self.cnt += 1
             time.sleep(1)

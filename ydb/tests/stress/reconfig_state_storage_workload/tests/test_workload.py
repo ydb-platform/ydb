@@ -26,6 +26,7 @@ class TestReconfigStateStorageWorkload(object):
             additional_log_configs={
                 'BS_NODE': LogLevels.DEBUG,
                 'BOARD_LOOKUP': LogLevels.DEBUG,
+                'DISCOVERY': LogLevels.DEBUG,
                 # 'STATESTORAGE': LogLevels.DEBUG,
             }
         ))

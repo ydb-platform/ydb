@@ -320,6 +320,7 @@ TFuture<TTransactionCommitResult> TTransaction::Commit(const TTransactionCommitO
                 ToProto(req->mutable_transaction_id(), GetId());
                 ToProto(req->mutable_additional_participant_cell_ids(), AdditionalParticipantCellIds_);
                 ToProto(req->mutable_prerequisite_options(), options);
+                req->set_max_allowed_commit_timestamp(options.MaxAllowedCommitTimestamp);
                 return req->Invoke();
             }))
         .Apply(

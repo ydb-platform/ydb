@@ -3137,17 +3137,6 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         bool NeedsAnotherParent() const noexcept {
             return Parent < ParentEnd();
         }
-        bool NeedsAnotherState() const noexcept {
-            return State == Sample /*|| State == Recompute*/;
-        }
-
-        bool NextState() noexcept {
-            if (!NeedsAnotherState()) {
-                return false;
-            }
-            State = static_cast<EState>(static_cast<ui32>(State) + 1);
-            return true;
-        }
 
         bool NextParent() noexcept {
             if (!NeedsAnotherParent()) {

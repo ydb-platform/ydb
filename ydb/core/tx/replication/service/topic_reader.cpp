@@ -84,8 +84,9 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
     void Handle(TEvWorker::TEvCommit::TPtr& ev) {
         LOG_D("Handle " << ev->Get()->ToString());
 
-        Y_ABORT_UNLESS(YdbProxy);
-        Y_ABORT_UNLESS(ReadSessionId);
+        if (!YdbProxy || !ReadSessionId) {
+            return Leave(TEvWorker::TEvGone::UNAVAILABLE);
+        }
 
         CommittedOffset = ev->Get()->Offset;
         Send(YdbProxy, CreateCommitOffsetRequest().release());

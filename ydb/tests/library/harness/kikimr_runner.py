@@ -436,7 +436,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             self.__run_node(node_id)
 
         if self.__configurator.use_self_management:
-            self.__cluster_bootstrap()
+            self.config_client.bootstrap_cluster(self_assembly_uuid="test-cluster")
 
         bs_needed = ('blob_storage_config' in self.__configurator.yaml_config) or self.__configurator.use_self_management
 
@@ -752,30 +752,6 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             predicate=predicate, timeout_seconds=timeout_seconds, step_seconds=1.0, multiply=1.3
         )
         assert bs_controller_started
-
-    def __cluster_bootstrap(self):
-        timeout = 10
-        sleep = 2
-        retries, success = timeout / sleep, False
-        while retries > 0 and not success:
-            try:
-                self.__call_ydb_cli(
-                    [
-                        "admin",
-                        "cluster",
-                        "bootstrap",
-                        "--uuid", "test-cluster"
-                    ]
-                )
-                success = True
-
-            except Exception as e:
-                logger.error("Failed to execute, %s", str(e))
-                retries -= 1
-                time.sleep(sleep)
-
-                if retries == 0:
-                    raise
 
     def replace_config(self, config):
         timeout = 10

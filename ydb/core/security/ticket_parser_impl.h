@@ -462,7 +462,7 @@ private:
         pathsContainer->mutable_resource_path()->add_path()->set_id(id);
     }
 
-    static void AddNebiusContainerId(nebius::iam::v1::AuthorizeCheck* pathsContainer, const TString& id) {
+    static void SetNebiusContainerId(nebius::iam::v1::AuthorizeCheck* pathsContainer, const TString& id) {
         pathsContainer->set_container_id(id);
     }
 
@@ -477,7 +477,7 @@ private:
         // Use attribute "folder_id" as container id that contains our database
         // IAM can link roles for containers hierarchy
         if (const auto folderId = record.GetAttributeValue(permission, "folder_id"); folderId) {
-            AddNebiusContainerId(pathsContainer, folderId);
+            SetNebiusContainerId(pathsContainer, folderId);
         }
     }
 

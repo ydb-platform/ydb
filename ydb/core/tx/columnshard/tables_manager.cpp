@@ -56,10 +56,11 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
         while (!rowset.EndOfSet()) {
             TTableInfo table = table.InitFromDB(rowset);
             if (table.IsDropped()) {
-                AFL_VERIFY(PathsToDrop[table.GetDropVersionVerified()].emplace(table.GetPathId()).second);
+                AFL_VERIFY(PathsToDrop[table.GetDropVersionVerified()].emplace(table.GetInternalPathId()).second);
             }
 
-            AFL_VERIFY(Tables.emplace(table.GetPathId(), std::move(table)).second);
+            AFL_VERIFY(Tables.emplace(table.GetInternalPathId(), std::move(table)).second);
+            AFL_VERIFY(SchemeShardLocalToInternal.emplace(table.GetSchemeShardLocalPathId(), table.GetInternalPathId()).second);
 
             if (!rowset.Next()) {
                 timer.AddLoadingFail();
@@ -182,6 +183,24 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
     return true;
 }
 
+std::optional<TInternalPathId> TTablesManager::ResolveInternalPathId(const TSchemeShardLocalPathId schemeShardLocalPathId) const {
+    if (const auto* internalPathId = SchemeShardLocalToInternal.FindPtr(schemeShardLocalPathId)) {
+        return {*internalPathId};
+    } else {
+        return std::nullopt;
+    }
+}
+
+THashSet<TInternalPathId> TTablesManager::ResolveInternalPathIds(const TSchemeShardLocalPathId from, const TSchemeShardLocalPathId to) const {
+    THashSet<TInternalPathId> result;
+    for (const auto& [schemeShardLocalPathId, internalPathId]: SchemeShardLocalToInternal) {
+        if (from.GetRawValue() <= schemeShardLocalPathId.GetRawValue() && schemeShardLocalPathId.GetRawValue() <= to.GetRawValue()) {
+            result.emplace(internalPathId);
+        }
+    }
+    return result;
+}
+
 bool TTablesManager::HasTable(const TInternalPathId pathId, const bool withDeleted, const std::optional<NOlap::TSnapshot> minReadSnapshot) const {
     auto it = Tables.find(pathId);
     if (it == Tables.end()) {
@@ -191,6 +210,10 @@ bool TTablesManager::HasTable(const TInternalPathId pathId, const bool withDelet
         return withDeleted;
     }
     return true;
+}
+
+TInternalPathId TTablesManager::CreateInternalPathId(const TSchemeShardLocalPathId schemeShardLocalPathId) {
+    return TInternalPathId::FromRawValue(schemeShardLocalPathId.GetRawValue() + InternalPathIdOffset);
 }
 
 bool TTablesManager::IsReadyForStartWrite(const TInternalPathId pathId, const bool withDeleted) const {
@@ -233,13 +256,15 @@ void TTablesManager::DropPreset(const ui32 presetId, const NOlap::TSnapshot& ver
 }
 
 void TTablesManager::RegisterTable(TTableInfo&& table, NIceDb::TNiceDb& db) {
-    Y_ABORT_UNLESS(!HasTable(table.GetPathId()));
+    Y_ABORT_UNLESS(!HasTable(table.GetInternalPathId()));
     Y_ABORT_UNLESS(table.IsEmpty());
 
-    Schema::SaveTableInfo(db, table.GetPathId());
-    const auto pathId = table.GetPathId();
+    Schema::SaveTableInfo(db, table.GetInternalPathId());
+    const auto pathId = table.GetInternalPathId();
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("method", "RegisterTable")("path_id", pathId);
     AFL_VERIFY(Tables.emplace(pathId, std::move(table)).second)("path_id", pathId)("size", Tables.size());
+    AFL_VERIFY(SchemeShardLocalToInternal.emplace(table.GetSchemeShardLocalPathId(), table.GetInternalPathId()).second);
+    Schema::SaveTableSchemeShardLocalPathId(db, table.GetInternalPathId(), table.GetSchemeShardLocalPathId());
     if (PrimaryIndex) {
         PrimaryIndex->RegisterTable(pathId);
     }
@@ -325,6 +350,18 @@ void TTablesManager::AddTableVersion(const TInternalPathId pathId, const NOlap::
     table.AddVersion(version);
 }
 
+namespace {
+
+ui64 RandomOffsetForTests(ui64 tabletId) {
+    if (true) { //(NYDBTest::TControllers::GetColumnShardController()->UseRandomOffsetForInternalPathIds())
+        return (TAppData::RandomProvider->GenRand64() ^ tabletId) % 1000;
+    } else {
+        return 1000000;
+    }
+}
+
+} //namespace
+
 TTablesManager::TTablesManager(const std::shared_ptr<NOlap::IStoragesManager>& storagesManager,
     const std::shared_ptr<NOlap::NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
     const std::shared_ptr<NOlap::TSchemaObjectsCache>& schemaCache, const std::shared_ptr<TPortionIndexStats>& portionsStats,
@@ -334,7 +371,8 @@ TTablesManager::TTablesManager(const std::shared_ptr<NOlap::IStoragesManager>& s
     , LoadTimeCounters(std::make_unique<TTableLoadTimeCounters>())
     , SchemaObjectsCache(schemaCache)
     , PortionsStats(portionsStats)
-    , TabletId(tabletId) {
+    , TabletId(tabletId)
+    , InternalPathIdOffset(RandomOffsetForTests(tabletId)) {
 }
 
 bool TTablesManager::TryFinalizeDropPathOnExecute(NTable::TDatabase& dbTable, const TInternalPathId pathId) const {

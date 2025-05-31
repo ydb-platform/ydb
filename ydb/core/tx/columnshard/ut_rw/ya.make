@@ -12,6 +12,8 @@ ELSE()
     SIZE(MEDIUM)
 ENDIF()
 
+TIMEOUT(300)
+
 PEERDIR(
     library/cpp/getopt
     library/cpp/regex/pcre

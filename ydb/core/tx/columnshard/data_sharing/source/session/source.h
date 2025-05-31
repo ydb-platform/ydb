@@ -79,7 +79,7 @@ public:
         TBase::SerializeToProto(result);
         result.SetDestinationTabletId((ui64)DestinationTabletId);
         for (auto&& i : PathIds) {
-            result.AddPathIds(i.GetRawValue());
+            i.ToProto(*result.AddPathIds());
         }
         return result;
     }

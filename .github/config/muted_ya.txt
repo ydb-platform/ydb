@@ -123,6 +123,7 @@ ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_
 ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_tpch1[current_to_current-column]
 ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_tpch1[current_to_current-row]
 ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_tpch1[current_to_stable_24_4-column]
+ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_tpch1[current_to_stable_24_4-row]
 ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_tpch1[stable_24_4_to_current-column]
 ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_tpch1[stable_24_4_to_current_mixed-column]
 ydb/tests/functional/compatibility test_stress.py.TestStress.test_log[current-row]

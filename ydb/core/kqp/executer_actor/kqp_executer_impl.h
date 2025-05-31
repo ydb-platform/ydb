@@ -1364,7 +1364,36 @@ protected:
             Counters->Counters->FullScansExecuted->Inc();
         }
 
-        if (partitions.size() > 0 && source.GetSequentialInFlightShards() > 0 && partitions.size() > source.GetSequentialInFlightShards()) {
+        bool isParallelPointRead = true;
+        for (const auto& [_, shardInfo] : partitions) {
+            if (!shardInfo.KeyReadRanges || shardInfo.KeyWriteRanges) {
+                isParallelPointRead = false;
+                break;
+            }
+
+            const auto& ranges = *shardInfo.KeyReadRanges;
+            if (ranges.FullRange) {
+                isParallelPointRead = false;
+                break;
+            }
+
+            for (const auto& range : ranges.Ranges) {
+                if (std::holds_alternative<TSerializedTableRange>(range)) {
+                    const auto& tableRange = std::get<TSerializedTableRange>(range);
+                    if (!tableRange.Point) {
+                        isParallelPointRead = false;
+                        break;
+                    }
+                }
+
+                if (!isParallelPointRead) {
+                    break;
+                }
+            }
+        }
+
+        bool isSequentialInFlight = source.GetSequentialInFlightShards() > 0 && partitions.size() > source.GetSequentialInFlightShards();
+        if (partitions.size() > 0 && (isSequentialInFlight || isParallelPointRead)) {
             auto [startShard, shardInfo] = MakeVirtualTablePartition(source, stageInfo, HolderFactory(), TypeEnv());
 
             YQL_ENSURE(Stats);
@@ -1373,8 +1402,13 @@ protected:
                 Stats->AffectedShards.insert(shardId);
             }
 
+            TMaybe<ui64> inFlightShards = Nothing();
+            if (isSequentialInFlight) {
+                inFlightShards = source.GetSequentialInFlightShards();
+            }
+
             if (shardInfo.KeyReadRanges) {
-                addPartiton(startShard, {}, shardInfo, source.GetSequentialInFlightShards());
+                addPartiton(startShard, {}, shardInfo, inFlightShards);
                 fillRangesForTasks();
                 buildSinks();
                 return Nothing();

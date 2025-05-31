@@ -12,6 +12,8 @@
 #include <yql/essentials/public/issue/yql_issue_id.h>
 #include <yql/essentials/parser/pg_catalog/catalog.h>
 
+#include <yql/essentials/minikql/mkql_runtime_version.h>
+
 #include <library/cpp/charset/ci_string.h>
 #include <library/cpp/yson/node/node_io.h>
 #include <util/string/builder.h>
@@ -3470,6 +3472,12 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
             return BuildUdf(ctx, pos, moduleName, name, newArgs);
         }
     } else if (ns == "datetime2" && (name == "Parse")) {
+        return BuildUdf(ctx, pos, nameSpace, name, args);
+    } else if (MKQL_RUNTIME_VERSION < 51U && ns == "datetime2" && name == "Format") {
+        // FIXME: The condition above is required to untie the
+        // Gordian knot with the upgrade, when two MiniKQL
+        // runtimes with different versions are being used.
+        // See YQL-19967 for more info.
         return BuildUdf(ctx, pos, nameSpace, name, args);
     } else if (ns == "pg" || ns == "pgagg" || ns == "pgproc") {
         bool isAggregateFunc = NYql::NPg::HasAggregation(name, NYql::NPg::EAggKind::Normal);

@@ -54,6 +54,8 @@ public:
         return *this;
     }
 
+    void SetForcedCompaction(const TString& storeName = "olapStore");
+
     static constexpr const char * PROTO_SCHEMA = R"(
         Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
         Columns { Name: "resource_id" Type: "Utf8" DataAccessorConstructor{ ClassName: "SPARSED" }}

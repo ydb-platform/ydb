@@ -185,7 +185,7 @@ void TestTtl(bool reboots, bool internal, bool useFirstPkColumnForTtl, bool writ
     const auto ttlAllDataStale = TDuration::Seconds(now - lastTs) - TDuration::Days(1);
 
 
-    TTestSchema::TTableSpecials spec;
+    auto spec = TTestSchema::TTableSpecials{}.WithForcedCompaction(writePortionsOnInsert);
     spec.TtlColumn = ttlColumnName;
     spec.EvictAfter = ttlAllDataFresh;
     auto planStep = SetupSchema(runtime, sender, TTestSchema::CreateInitShardTxBody(tableId, ydbSchema, ydbPk, spec, "/Root/olapStore"), ++txId);
@@ -652,7 +652,7 @@ public:
         TDuration allowOne = TDuration::Seconds(now.Seconds() - ts[1] + 600);
         TDuration allowNone = TDuration::Seconds(now.Seconds() - ts[1] - 600);
 
-        std::vector<TTestSchema::TTableSpecials> alters = { TTestSchema::TTableSpecials() };
+        std::vector<TTestSchema::TTableSpecials> alters = { TTestSchema::TTableSpecials().WithForcedCompaction(spec.GetUseForcedCompaction()) };
         AddTierAlters(spec, {allowBoth, allowOne, allowNone}, alters);
         return alters;
     }
@@ -747,7 +747,7 @@ std::vector<std::pair<ui32, ui64>> TestTiersAndTtl(const TTestSchema::TTableSpec
     TDuration allowOne = TDuration::Seconds(now.Seconds() - ts[1] + 600);
     TDuration allowNone = TDuration::Seconds(now.Seconds() - ts[1] - 600);
 
-    std::vector<TTestSchema::TTableSpecials> alters = { InitialSpec(init, allowBoth) };
+    std::vector<TTestSchema::TTableSpecials> alters = { InitialSpec(init, allowBoth).WithForcedCompaction(true) };
     size_t initialEviction = alters.size();
 
     TEvictionChanges changes;
@@ -822,7 +822,7 @@ void TestTwoHotTiers(bool reboot, bool changeTtl, const EInitialEviction initial
 }
 
 void TestHotAndColdTiers(bool reboot, const EInitialEviction initial) {
-    TTestSchema::TTableSpecials spec;
+    auto spec = TTestSchema::TTableSpecials{}.WithForcedCompaction(true);
     spec.SetTtlColumn("timestamp");
     spec.Tiers.emplace_back(TTestSchema::TStorageTier("tier0").SetTtlColumn("timestamp"));
     spec.Tiers.emplace_back(TTestSchema::TStorageTier("tier1").SetTtlColumn("timestamp"));
@@ -837,7 +837,7 @@ struct TExportTestOpts {
 };
 
 void TestExport(bool reboot, TExportTestOpts&& opts = TExportTestOpts{}) {
-    TTestSchema::TTableSpecials spec;
+    auto spec = TTestSchema::TTableSpecials{}.WithForcedCompaction(true);
     spec.SetTtlColumn("timestamp");
     spec.Tiers.emplace_back(TTestSchema::TStorageTier("cold").SetTtlColumn("timestamp"));
     spec.Tiers.back().S3 = TTestSchema::TStorageTier::FakeS3();

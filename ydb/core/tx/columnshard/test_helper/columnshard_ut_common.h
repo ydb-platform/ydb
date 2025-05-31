@@ -126,6 +126,7 @@ struct TTestSchema {
     public:
         std::vector<TStorageTier> Tiers;
         bool WaitEmptyAfter = false;
+        bool UseForcedCompaction = false;
 
         TTableSpecials() noexcept = default;
 
@@ -141,9 +142,19 @@ struct TTestSchema {
             return EvictAfter.has_value();
         }
 
+        bool GetUseForcedCompaction() const {
+            return UseForcedCompaction;
+        }
+
         TTableSpecials WithCodec(const TString& codec) const {
             TTableSpecials out = *this;
             out.SetCodec(codec);
+            return out;
+        }
+
+        TTableSpecials WithForcedCompaction(bool forced) const {
+            TTableSpecials out = *this;
+            out.UseForcedCompaction = forced;
             return out;
         }
 

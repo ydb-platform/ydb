@@ -13,6 +13,18 @@ namespace {
     using namespace NKikimr;
     using namespace NKikimr::NKqp; 
 
+    TString GetValidJoinKind(const TString &joinKind) {
+        const auto joinKindLowered = to_lower(joinKind);
+        if (joinKindLowered == "left") {
+            return "Left";
+        } else if (joinKindLowered == "inner") {
+            return "Inner";
+        } else if (joinKindLowered == "cross") {
+            return "Cross";
+        }
+       return joinKind;
+    }
+
     TExprNode::TPtr ReplaceArg(TExprNode::TPtr input, TExprNode::TPtr arg, TExprContext& ctx, bool removeAliases=false) {
         if (input->IsCallable("Member")) {
             auto member = TCoMember(input);
@@ -310,7 +322,7 @@ namespace {
             auto graceJoin = Build<TCoGraceJoinCore>(ctx, pos)
                 .LeftInput(leftInput)
                 .RightInput(rightInput)
-                .JoinKind<TCoAtom>().Value("Inner").Build()
+                .JoinKind<TCoAtom>().Value(GetValidJoinKind(join.JoinKind)).Build()
                 .LeftKeysColumns<TCoAtomList>().Add(leftColumnIdxs).Build()
                 .RightKeysColumns<TCoAtomList>().Add(rightColumnIdxs).Build()
                 .LeftRenames().Add(leftRenames).Build()
@@ -365,10 +377,13 @@ namespace {
 namespace NKikimr {
 namespace NKqp {
 
+
+
 TExprNode::TPtr ConvertToPhysical(TOpRoot & root,  TExprContext& ctx, TTypeAnnotationContext& types, TAutoPtr<IGraphTransformer> typeAnnTransformer, TAutoPtr<IGraphTransformer> peepholeTransformer, TKikimrConfiguration::TPtr config) {
     Y_UNUSED(types);
     Y_UNUSED(peepholeTransformer);
     Y_UNUSED(config);
+
 
     THashMap<int, TExprNode::TPtr> stages;
     THashMap<int, TVector<TExprNode::TPtr>> stageArgs;
@@ -536,15 +551,14 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot & root,  TExprContext& ctx, TTypeAnnot
             stageArgs[opStageId].push_back(leftArg);
             auto [rightArg, rightInput] = graph.GenerateStageInput(stageInputCounter, root.Node, ctx, *join->GetRightInput()->Props.StageId);
             stageArgs[opStageId].push_back(rightArg);
-
             if (join->JoinKind == "Cross") {
                 currentStageBody = BuildCrossJoin(*join, leftInput, rightInput, ctx, root.Node->Pos()); 
-            }
-            else if (join->JoinKind == "Inner") {
+            } else if (const auto joinKind = to_lower(join->JoinKind); (joinKind == "inner" || joinKind == "left")) {
                 currentStageBody = BuildGraceJoinCore(*join, leftInput, rightInput, ctx, root.Node->Pos());
-            }
-            else {
-                Y_ENSURE(false, "Unsupported join kind");
+            } else {
+                TStringBuilder builder;
+                builder << "Unsupported join kind " << join->JoinKind;
+                Y_ENSURE(false, builder.c_str());
             }
 
             stages[opStageId] = currentStageBody;

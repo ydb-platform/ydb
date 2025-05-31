@@ -13,7 +13,7 @@ class TOptimizerPlanner: public IOptimizerPlanner {
 private:
     using TBase = IOptimizerPlanner;
     std::shared_ptr<TCounters> Counters;
-    std::shared_ptr<TSimplePortionsGroupInfo> PortionsInfo = std::make_shared<TSimplePortionsGroupInfo>();
+    std::shared_ptr<TSimplePortionsGroupInfo> PortionsInfo;
 
     std::vector<std::shared_ptr<IPortionsSelector>> Selectors;
     std::vector<std::shared_ptr<IPortionsLevel>> Levels;
@@ -164,8 +164,8 @@ public:
     }
 
     TOptimizerPlanner(const TInternalPathId pathId, const std::shared_ptr<IStoragesManager>& storagesManager,
-        const std::shared_ptr<arrow::Schema>& primaryKeysSchema, const std::vector<TLevelConstructorContainer>& levelConstructors,
-        const std::vector<TSelectorConstructorContainer>& selectors);
+        const std::shared_ptr<arrow::Schema>& primaryKeysSchema, std::shared_ptr<TCounters> counters, std::shared_ptr<TSimplePortionsGroupInfo> portionsGroupInfo,
+        std::vector<std::shared_ptr<IPortionsLevel>>&& levels, std::vector<std::shared_ptr<IPortionsSelector>>&& selectors);
 };
 
 }   // namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets

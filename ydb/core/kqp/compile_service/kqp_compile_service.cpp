@@ -323,6 +323,8 @@ private:
         bool enableOlapScalarApply = TableServiceConfig.GetEnableOlapScalarApply();
         bool enableOlapSubstringPushdown = TableServiceConfig.GetEnableOlapSubstringPushdown();
 
+        bool enableIndexStreamWrite = TableServiceConfig.GetEnableIndexStreamWrite();
+
         TableServiceConfig.Swap(event.MutableConfig()->MutableTableServiceConfig());
         LOG_INFO(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, "Updated config");
 
@@ -359,8 +361,8 @@ private:
             TableServiceConfig.GetEnableNewRBO() != enableNewRBO ||
             TableServiceConfig.GetEnableSpillingInHashJoinShuffleConnections() != enableSpillingInHashJoinShuffleConnections ||
             TableServiceConfig.GetEnableOlapScalarApply() != enableOlapScalarApply ||
-            TableServiceConfig.GetEnableOlapSubstringPushdown() != enableOlapSubstringPushdown
-        )
+            TableServiceConfig.GetEnableOlapSubstringPushdown() != enableOlapSubstringPushdown ||
+            TableServiceConfig.GetEnableIndexStreamWrite() != enableIndexStreamWrite) 
         {
 
             QueryCache->Clear();

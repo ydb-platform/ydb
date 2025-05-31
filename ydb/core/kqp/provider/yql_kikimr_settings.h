@@ -197,6 +197,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool EnableSpillingInHashJoinShuffleConnections = false;
     bool EnableOlapScalarApply = false;
     bool EnableOlapSubstringPushdown = false;
+    bool EnableIndexStreamWrite = false;
 
     void SetDefaultEnabledSpillingNodes(const TString& node);
     ui64 GetEnabledSpillingNodes() const;

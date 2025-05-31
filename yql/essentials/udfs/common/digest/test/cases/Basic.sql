@@ -9,7 +9,6 @@ SELECT
     Digest::MurMurHash2A(key) AS murmur2a,
     Digest::MurMurHash2A32(key) AS murmur2a32,
     Digest::CityHash(key) AS city,
-    Digest::CityHash(key, 111) AS cityWithSeed,
     Digest::CityHash128(key) AS city128,
     Digest::NumericHash(COALESCE(CAST(key AS Uint64), 0)) AS numeric,
     Digest::Md5Hex(key) AS md5hex,

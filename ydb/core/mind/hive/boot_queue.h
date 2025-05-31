@@ -8,38 +8,67 @@ namespace NHive {
 
 struct TBootQueue {
     struct TBootQueueRecord {
+        enum EPriority {
+            BasePriority = 0,
+            ColumnShardPriority = 0,
+            LeaderTabletPriority = 5,
+            BlockStorePartitionPriority = 10,
+            BlockStoreVolumePriority = 11,
+            BlockStoreDiskRegistryPriority = 12,
+            MediatorPriority = 20,
+            BlobDepotPriority = 20,
+            CoordinatorPriority = 20,
+            SchemeShardPriority = 25,
+            HivePriority = 30,
+            MaxPriority = 40,
+            MinPriority = -MaxPriority,
+        };
+
         TTabletId TabletId;
         double Priority;
         TFollowerId FollowerId;
         TNodeId SuggestedNodeId;
 
         static double GetBootPriority(const TTabletInfo& tablet) {
-            double priority = 0;
+            double priority = tablet.RestartsOften() ? MinPriority : BasePriority;
+            priority += tablet.Weight;
+
             switch (tablet.GetTabletType()) {
             case TTabletTypes::Hive:
-                priority = 4;
+                priority += HivePriority;
                 break;
             case TTabletTypes::SchemeShard:
-                priority = 3;
+                priority += SchemeShardPriority;
                 break;
             case TTabletTypes::Mediator:
+                priority += MediatorPriority;
+                break;
             case TTabletTypes::Coordinator:
+                priority += CoordinatorPriority;
+                break;
             case TTabletTypes::BlobDepot:
-                priority = 2;
+                priority += BlobDepotPriority;
                 break;
             case TTabletTypes::ColumnShard:
-                priority = 0;
+                priority += ColumnShardPriority;
+                break;
+            case TTabletTypes::BlockStoreDiskRegistry:
+                priority += BlockStoreDiskRegistryPriority;
+                break;
+            case TTabletTypes::BlockStoreVolume:
+                priority += BlockStoreVolumePriority;
+                break;
+            case TTabletTypes::BlockStorePartition:
+            case TTabletTypes::BlockStorePartition2:
+                priority += BlockStorePartitionPriority;
                 break;
             default:
                 if (tablet.IsLeader()) {
-                    priority = 1;
+                    priority += LeaderTabletPriority;
                 }
                 break;
             }
-            priority += tablet.Weight;
-            if (tablet.RestartsOften()) {
-               priority -= 5;
-            }
+
             return priority;
         }
 
@@ -56,6 +85,7 @@ struct TBootQueue {
 
     TQueue BootQueue;
     TQueue WaitQueue; // tablets from BootQueue waiting for new nodes
+
 private:
     bool ProcessWaitQueue = false;
     bool NextFromWaitQueue = false;

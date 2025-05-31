@@ -118,7 +118,7 @@ struct TSetup {
         Reset();
         Explorer.Walk(pgm.GetNode(), Env->GetNodeStack());
         TComputationPatternOpts opts(Alloc.Ref(), *Env, NodeFactory,
-            FunctionRegistry.Get(), NUdf::EValidateMode::None, NUdf::EValidatePolicy::Exception,
+            FunctionRegistry.Get(), NUdf::EValidateMode::Greedy, NUdf::EValidatePolicy::Exception,
              UseLLVM ? "" : "OFF", graphPerProcess, StatsRegistry.Get(), nullptr, nullptr);
         Pattern = MakeComputationPattern(Explorer, pgm, entryPoints, opts);
         auto graph = Pattern->Clone(opts.ToComputationOptions(*RandomProvider, *TimeProvider));

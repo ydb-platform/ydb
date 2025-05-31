@@ -14,14 +14,14 @@ class TInFlightLimiterRegistry : public TThrRefBase {
 private:
     TIntrusivePtr<NKikimr::TControlBoard> Icb;
     TMutex Lock;
-    THashMap<TString, NYdbGrpc::IGRpcRequestLimiterPtr> PerTypeLimiters;
+    THashMap<EStaticControlType, NYdbGrpc::IGRpcRequestLimiterPtr> PerTypeLimiters;
 
 public:
     explicit TInFlightLimiterRegistry(TIntrusivePtr<NKikimr::TControlBoard> icb)
         : Icb(icb)
     {}
 
-    NYdbGrpc::IGRpcRequestLimiterPtr RegisterRequestType(TString name, i64 limit);
+    NYdbGrpc::IGRpcRequestLimiterPtr RegisterRequestType(EStaticControlType controlType, i64 limit);
 };
 
 class TCreateLimiterCB {
@@ -30,7 +30,7 @@ public:
         : LimiterRegistry(limiterRegistry)
     {}
 
-    NYdbGrpc::IGRpcRequestLimiterPtr operator()(const char* serviceName, const char* requestName, i64 limit) const;
+    NYdbGrpc::IGRpcRequestLimiterPtr operator()(EStaticControlType controlType, i64 limit) const;
 
 private:
     TIntrusivePtr<TInFlightLimiterRegistry> LimiterRegistry;

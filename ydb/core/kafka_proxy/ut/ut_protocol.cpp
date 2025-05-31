@@ -2051,6 +2051,142 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         UNIT_ASSERT_VALUES_EQUAL(metadataResponse->Brokers[0].Port, FAKE_SERVERLESS_KAFKA_PROXY_PORT);
     }
 
+    Y_UNIT_TEST(ListGroupsScenario) {
+        TInsecureTestServer testServer("1", false, true);
+        TString groupId1 = "consumer-0";
+        TString groupId2 = "consumer-1";
+        TString topicName = "/Root/topic-0";
+        ui64 totalPartitions = 24;
+        TString protocolType = "consumer";
+        TString protocolName = "range";
+        {
+            NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
+            auto result = pqClient
+                .CreateTopic(
+                    topicName,
+                    NYdb::NTopic::TCreateTopicSettings()
+                        .PartitioningSettings(totalPartitions, 100)
+                        .BeginAddConsumer(groupId1).EndAddConsumer()
+                        .BeginAddConsumer(groupId2).EndAddConsumer()
+                )
+                .ExtractValueSync();
+            UNIT_ASSERT_C(
+                result.IsSuccess(),
+                "CreateTopic failed, issues: " << result.GetIssues().ToString()
+            );
+        }
+        TKafkaTestClient clientA(testServer.Port, "ClientA");
+        TKafkaTestClient clientB(testServer.Port, "ClientB");
+
+        // check that before adding any consumers response will contain no groups
+
+        TListGroupsRequestData requestGroups;
+        auto responseEmpty = clientA.ListGroups(requestGroups);
+        Cout << "Recieved TListGroupsRequestData with " << responseEmpty->Groups.size() << Endl;
+        UNIT_ASSERT_VALUES_EQUAL(responseEmpty->Groups.size(), 0);
+
+        std::vector<TString> topics = {topicName};
+        i32 heartbeatTimeout = 15000;
+
+        auto joinRespA = clientA.JoinAndSyncGroupAndWaitPartitions(topics, groupId1, totalPartitions, protocolName, totalPartitions, heartbeatTimeout);
+        auto joinRespB = clientB.JoinAndSyncGroupAndWaitPartitions(topics, groupId2, totalPartitions, protocolName, totalPartitions, heartbeatTimeout);
+
+        // check that after two consumers have joined to two groups, they will be returned with correct status
+
+        auto response = clientA.ListGroups(requestGroups);
+
+        Cout << "Recieved TListGroupsRequestData with " << response->Groups.size() << Endl;
+        UNIT_ASSERT_VALUES_EQUAL(response->Groups.size(), 2);
+        ui32 first_group_count = 0;
+        ui32 second_group_count = 0;
+
+        // check that all metadata is correct and groups are in "preparing rebalance" state
+        for (auto group : response->Groups) {
+            UNIT_ASSERT_C(group.GroupId.has_value(),"Error, no groupId recieved");
+            UNIT_ASSERT_C(group.GroupState.has_value(),"Error, no GroupState recieved");
+            UNIT_ASSERT_C(group.ProtocolType.has_value(),"Error, no ProtocolType recieved");
+            UNIT_ASSERT_C(*group.GroupId == groupId1 || *group.GroupId == groupId2,"Error, wrong GroupId name" << group.GroupId);
+
+            if (*group.GroupId == groupId1) {
+                first_group_count += 1;
+            } else if (*group.GroupId == groupId2) {
+                second_group_count += 1;
+            }
+
+            UNIT_ASSERT_VALUES_EQUAL(*group.GroupState, "CompletingRebalance");
+            UNIT_ASSERT_VALUES_EQUAL(*group.ProtocolType, protocolType);
+
+            Cout << "********" << Endl;
+            Cout << "GroupId: " << *group.GroupId << Endl;
+            Cout << "GroupState: " << *group.GroupState << Endl;
+            Cout << "ProtocolType: " << *group.ProtocolType  << Endl;
+
+        }
+        UNIT_ASSERT_VALUES_EQUAL(first_group_count, 1);
+        UNIT_ASSERT_VALUES_EQUAL(second_group_count, 1);
+
+
+        // now we want to check that after calling JoinGroup() Group2 will be in state of "Preparing Rebalance"
+        // because another consumer has joined Group2 recently
+
+        clientA.JoinGroup(topics, groupId2, protocolName, heartbeatTimeout);
+
+        TListGroupsRequestData requestGroups1;
+        auto response1 = clientB.ListGroups(requestGroups1);
+        Cout << "Recieved TListGroupsRequestData with " << response1->Groups.size() << Endl;
+
+        first_group_count = 0;
+        second_group_count = 0;
+        for (auto group : response1->Groups) {
+            UNIT_ASSERT_C(group.GroupId.has_value(),"Error, no groupId recieved");
+            UNIT_ASSERT_C(group.GroupState.has_value(),"Error, no GroupState recieved");
+            UNIT_ASSERT_C(group.ProtocolType.has_value(),"Error, no ProtocolType recieved");
+            UNIT_ASSERT_C(*group.GroupId == groupId1 || *group.GroupId == groupId2, "Error, wrong GroupId name" << group.GroupId);
+
+            if (*group.GroupId == groupId1) {
+                first_group_count += 1;
+                UNIT_ASSERT_VALUES_EQUAL(*group.GroupState, "CompletingRebalance");
+            } else if (*group.GroupId == groupId2) {
+                second_group_count += 1;
+                UNIT_ASSERT_VALUES_EQUAL(*group.GroupState, "PreparingRebalance");
+            }
+            UNIT_ASSERT_VALUES_EQUAL(*group.ProtocolType, protocolType);
+
+            Cout << "********" << Endl;
+            Cout << "GroupId: " <<  *group.GroupId  << Endl;
+            Cout << "GroupState: " <<  *group.GroupState  << Endl;
+            Cout << "ProtocolType: " <<  *group.ProtocolType  << Endl;
+        }
+        UNIT_ASSERT_VALUES_EQUAL(first_group_count, 1);
+        UNIT_ASSERT_VALUES_EQUAL(second_group_count, 1);
+
+
+        // now we want to check that if StatesFilter is filled in TListGroupsRequestData
+        // than only consumers of certain states from StatesFilter are returned
+
+        TListGroupsRequestData requestGroupsStateFilter;
+        requestGroupsStateFilter.StatesFilter.push_back("PreparingRebalance");
+        auto responseStateFilter = clientA.ListGroups(requestGroupsStateFilter);
+
+        first_group_count = 0;
+        second_group_count = 0;
+        UNIT_ASSERT_VALUES_EQUAL(responseStateFilter->Groups.size(), 1);
+        for (auto group : responseStateFilter->Groups) {
+            UNIT_ASSERT_C(group.GroupId.has_value(),"Error, no groupId recieved");
+            UNIT_ASSERT_C(group.GroupState.has_value(),"Error, no GroupState recieved");
+            UNIT_ASSERT_C(group.ProtocolType.has_value(),"Error, no ProtocolType recieved");
+            UNIT_ASSERT_C(*group.GroupId == groupId1 || *group.GroupId == groupId2,"Error, wrong GroupId name" << group.GroupId);
+            UNIT_ASSERT_VALUES_EQUAL(*group.GroupId, groupId2);
+            UNIT_ASSERT_VALUES_EQUAL(*group.GroupState, "PreparingRebalance");
+            UNIT_ASSERT_VALUES_EQUAL(*group.ProtocolType, protocolType);
+
+            Cout << "********" << Endl;
+            Cout << "GroupId: " << *group.GroupId << Endl;
+            Cout << "GroupState: " << *group.GroupState << Endl;
+            Cout << "ProtocolType: " << *group.ProtocolType  << Endl;
+        }
+    }
+
     Y_UNIT_TEST(NativeKafkaBalanceScenario) {
         TInsecureTestServer testServer("1", false, true);
 
@@ -2377,7 +2513,6 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             auto noMasterSyncResponse = clientA.ReadResponse<TSyncGroupResponseData>(syncHeaderNotMaster);
             UNIT_ASSERT_VALUES_EQUAL(noMasterSyncResponse->ErrorCode, (TKafkaInt16)EKafkaErrors::REBALANCE_IN_PROGRESS);
         }
-
     }
 
     Y_UNIT_TEST(InitProducerId_withoutTransactionalIdShouldReturnRandomInt) {

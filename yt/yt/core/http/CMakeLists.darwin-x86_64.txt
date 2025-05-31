@@ -28,7 +28,7 @@ target_link_libraries(yt-core-http PUBLIC
   yutil
   cpp-blockcodecs-core
   yt-yt-core
-  contrib-restricted-http-parser
+  contrib-deprecated-http-parser
 )
 
 target_sources(yt-core-http PRIVATE

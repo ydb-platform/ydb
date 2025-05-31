@@ -37,7 +37,7 @@ target_link_libraries(yt-yt-core PUBLIC
   contrib-libs-libbz2
   contrib-libs-c-ares
   contrib-libs-farmhash
-  contrib-libs-yajl
+  contrib-deprecated-yajl
   contrib-libs-lz4
   contrib-libs-openssl
   cpp-openssl-init
@@ -94,8 +94,6 @@ target_sources(yt-yt-core PRIVATE
   ${PROJECT_SOURCE_DIR}/yt/yt/core/bus/tcp/client.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/bus/tcp/local_bypass.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/bus/tcp/server.cpp
-  ${PROJECT_SOURCE_DIR}/yt/yt/core/bus/tcp/ssl_context.cpp
-  ${PROJECT_SOURCE_DIR}/yt/yt/core/bus/tcp/ssl_helpers.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/compression/brotli.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/compression/bzip2.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/compression/codec.cpp
@@ -367,7 +365,7 @@ target_link_libraries(yt-yt-core.global PUBLIC
   contrib-libs-libbz2
   contrib-libs-c-ares
   contrib-libs-farmhash
-  contrib-libs-yajl
+  contrib-deprecated-yajl
   contrib-libs-lz4
   contrib-libs-openssl
   cpp-openssl-init

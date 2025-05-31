@@ -24,16 +24,16 @@ The functions of connectors include:
 
 Thus, connectors form an abstraction layer that hides the specifics of external data sources from {{ ydb-short-name }}. The concise connector interface makes it easy to expand the list of supported sources with minimal changes to {{ ydb-short-name }}'s code.
 
-Users can deploy [one of the ready-made connectors](../../devops/manual/federated-queries/connector-deployment.md) or write their own implementation in any programming language according to the [gRPC specification](https://github.com/ydb-platform/ydb/tree/main/ydb/library/yql/providers/generic/connector/api).
+Users can deploy [one of the ready-made connectors](../../devops/deployment-options/manual/federated-queries/connector-deployment.md) or write their own implementation in any programming language according to the [gRPC specification](https://github.com/ydb-platform/ydb/tree/main/ydb/library/yql/providers/generic/connector/api/service/protos).
 
 ## List of Supported External Data Sources {#supported-datasources}
 
 | Source | Support |
 |--------|---------|
-| [ClickHouse](https://clickhouse.com/) | Via connector [fq-connector-go](../../devops/manual/federated-queries/connector-deployment.md#fq-connector-go) |
-| [Greenplum](https://www.greenplum.org/) | Via connector [fq-connector-go](../../devops/manual/federated-queries/connector-deployment.md#fq-connector-go) |
-| [Microsoft SQL Server](https://learn.microsoft.com/en-us/sql/?view=sql-server-ver16) | Via connector [fq-connector-go](../../devops/manual/federated-queries/connector-deployment.md#fq-connector-go) |
-| [MySQL](https://www.mysql.com/) | Via connector [fq-connector-go](../../devops/manual/federated-queries/connector-deployment.md#fq-connector-go) |
-| [PostgreSQL](https://www.postgresql.org/) | Via connector [fq-connector-go](../../devops/manual/federated-queries/connector-deployment.md#fq-connector-go) |
+| [ClickHouse](https://clickhouse.com/) | Via connector [fq-connector-go](../../devops/deployment-options/manual/federated-queries/connector-deployment.md#fq-connector-go) |
+| [Greenplum](https://www.greenplum.org/) | Via connector [fq-connector-go](../../devops/deployment-options/manual/federated-queries/connector-deployment.md#fq-connector-go) |
+| [Microsoft SQL Server](https://learn.microsoft.com/en-us/sql/?view=sql-server-ver16) | Via connector [fq-connector-go](../../devops/deployment-options/manual/federated-queries/connector-deployment.md#fq-connector-go) |
+| [MySQL](https://www.mysql.com/) | Via connector [fq-connector-go](../../devops/deployment-options/manual/federated-queries/connector-deployment.md#fq-connector-go) |
+| [PostgreSQL](https://www.postgresql.org/) | Via connector [fq-connector-go](../../devops/deployment-options/manual/federated-queries/connector-deployment.md#fq-connector-go) |
 | [S3](https://aws.amazon.com/s3/) | Built into `ydbd` |
-| [{{ydb-short-name}}](https://ydb.tech/) | Via connector [fq-connector-go](../../devops/manual/federated-queries/connector-deployment.md#fq-connector-go) |
+| [{{ydb-short-name}}](https://ydb.tech/) | Via connector [fq-connector-go](../../devops/deployment-options/manual/federated-queries/connector-deployment.md#fq-connector-go) |

@@ -16,9 +16,9 @@ The data of the audit log stream can be delivered to:
 
 You can use any of the listed destinations or their combinations.
 
-If you forward the stream to a file, access to the audit log is set by file-system rights. Saving the audit log to a file is recommended for production installations.
+If you forward the stream to a file, access to the audit log is set by file-system rights. Saving the audit log to a file is recommended for production installations.
 
-Forwarding the audit log to the standard error stream (`stderr`) is recommended for test installations. Further stream processing is determined by the {{ ydb-short-name }} cluster [logging](../devops/manual/logging.md) settings.
+Forwarding the audit log to the standard error stream (`stderr`) is recommended for test installations. Further stream processing is determined by the {{ ydb-short-name }} cluster [logging](../devops/observability/logging.md) settings.
 
 ## Audit log events {#events}
 
@@ -28,24 +28,24 @@ The information about each operation is saved to the audit log as a separate eve
 || Attribute | Description ||
 || **Common attributes** | > ||
 || `subject` | Event source SID (`<login>@<subsystem>` format). Unless mandatory authentication is enabled, the attribute will be set to `{none}`.<br/>Required. ||
-|| `operation` | Names of operations or actions are similar to the YQL syntax (for example, `ALTER DATABASE`, `CREATE TABLE`).<br/>Required. ||
+|| `operation` | Names of operations or actions are similar to the YQL syntax (for example, `ALTER DATABASE`, `CREATE TABLE`).<br/>Required. ||
 || `status` | Operation completion status.<br/>Acceptable values:<ul><li>`SUCCESS`: The operation completed successfully.</li><li>`ERROR`: The operation failed.</li><li>`IN-PROCESS`: The operation is in progress.</li></ul>Required. ||
 || `reason` | Error message.<br/>Optional. ||
 || `component` | Name of the {{ ydb-short-name }} component that generated the event (for example, `schemeshard`).<br/>Optional. ||
-|| `request_id` | Unique ID of the request that invoked the operation. You can use the `request_id` to differentiate events related to different operations and link the events together to build a single audit-related operation context.<br/>Optional. ||
-|| `remote_address` | The IP of the client that delivered the request.<br/>Optional. ||
+|| `request_id` | Unique ID of the request that invoked the operation. You can use the `request_id` to differentiate events related to different operations and link the events together to build a single audit-related operation context.<br/>Optional. ||
+|| `remote_address` | The IP of the client that delivered the request.<br/>Optional. ||
 || `detailed_status` | The status delivered by a {{ ydb-short-name }} component (for example, `StatusAccepted`, `StatusInvalidParameter`, `StatusNameConflict`).<br/>Optional. ||
 || **Ownership and permission attributes** | > ||
 || `new_owner` | The SID of the new owner of the object when ownership is transferred. <br/>Optional. ||
 || `acl_add` | List of added permissions in [short notation](./short-access-control-notation.md) (for example, `[+R:someuser]`).<br/>Optional. ||
 || `acl_remove` | List of revoked permissions in [short notation](./short-access-control-notation.md) (for example, `[-R:someuser]`).<br/>Optional. ||
 || **Custom attributes** | > ||
-|| `user_attrs_add` | List of custom attributes added when creating objects or updating attributes (for example, `[attr_name1: A, attr_name2: B]`).<br/>Optional. ||
-|| `user_attrs_remove` | List of custom attributes removed when creating objects or updating attributes (for example, `[attr_name1, attr_name2]`).<br/>Optional. ||
+|| `user_attrs_add` | List of custom attributes added when creating objects or updating attributes (for example, `[attr_name1: A, attr_name2: B]`).<br/>Optional. ||
+|| `user_attrs_remove` | List of custom attributes removed when creating objects or updating attributes (for example, `[attr_name1, attr_name2]`).<br/>Optional. ||
 || **Attributes of the SchemeShard component** | > ||
 || `tx_id` | Unique transaction ID. Similarly to `request_id`, this ID can be used to differentiate events related to different operations.<br/>Required. ||
 || `database` | Database path (for example, `/my_dir/db`).<br/>Required. ||
-|| `paths` | List of paths in the database that are changed by the operation (for example, `[/my_dir/db/table-a, /my_dir/db/table-b]`).<br/>Required. ||
+|| `paths` | List of paths in the database that are changed by the operation (for example, `[/my_dir/db/table-a, /my_dir/db/table-b]`).<br/>Required. ||
 |#
 
 ## Enabling audit log {#enabling-audit-log}
@@ -95,7 +95,7 @@ audit_config:
 
 ## Examples {#examples}
 
- Fragment of audit log file in `JSON` format.
+ Fragment of audit log file in `JSON` format.
 
 ```json
 2023-03-13T20:05:19.776132Z: {"paths":"[/my_dir/db1/some_dir]","tx_id":"562949953476313","database":"/my_dir/db1","remote_address":"ipv6:[xxxx:xxx:xxx:xxx:x:xxxx:xxx:xxxx]:xxxxx","status":"SUCCESS","subject":"{none}","detailed_status":"StatusAccepted","operation":"CREATE DIRECTORY","component":"schemeshard"}

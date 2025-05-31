@@ -118,6 +118,7 @@
 #include <ydb/services/persqueue_v1/topic.h>
 #include <ydb/services/rate_limiter/grpc_service.h>
 #include <ydb/services/replication/grpc_service.h>
+#include <ydb/services/ydb/ydb_bscontroller.h>
 #include <ydb/services/ydb/ydb_clickhouse_internal.h>
 #include <ydb/services/ydb/ydb_dummy.h>
 #include <ydb/services/ydb/ydb_export.h>
@@ -631,6 +632,8 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         names["view"] = &hasView;
         TServiceCfg hasConfig = services.empty();
         names["config"] = &hasConfig;
+        TServiceCfg hasBsController = services.empty();
+        names["bs_controller"] = &hasBsController;
 
         std::unordered_set<TString> enabled;
         for (const auto& name : services) {
@@ -926,6 +929,11 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
 
         if (hasConfig) {
             server.AddService(new NGRpcService::TConfigGRpcService(ActorSystem.Get(), Counters, grpcRequestProxies[0]));
+        }
+
+        if (hasBsController) {
+            server.AddService(new NGRpcService::TGRpcYdbBsControllerService(ActorSystem.Get(), Counters,
+                grpcRequestProxies[0], hasBsController.IsRlAllowed()));
         }
 
         if (ModuleFactories) {

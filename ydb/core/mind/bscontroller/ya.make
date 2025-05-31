@@ -18,6 +18,7 @@ SRCS(
     console_interaction.h
     console_interaction.cpp
     defs.h
+    describe_cmd.cpp
     diff.h
     disk_metrics.cpp
     drop_donor.cpp
@@ -29,6 +30,8 @@ SRCS(
     group_layout_checker.h
     group_mapper.cpp
     group_mapper.h
+    group_mapper_helper.h
+    group_mapper_helper.cpp
     group_metrics_exchange.cpp
     impl.h
     indir.h

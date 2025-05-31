@@ -641,6 +641,7 @@ STFUNC(TBlobStorageController::StateWork) {
         fFunc(TEvBlobStorage::EvRequestControllerInfo, EnqueueIncomingEvent);
         fFunc(TEvBlobStorage::EvControllerNodeReport, EnqueueIncomingEvent);
         fFunc(TEvBlobStorage::EvControllerConfigRequest, EnqueueIncomingEvent);
+        fFunc(TEvBlobStorage::EvControllerDescribeRequest, EnqueueIncomingEvent);
         fFunc(TEvBlobStorage::EvControllerProposeGroupKey, EnqueueIncomingEvent);
         fFunc(NSysView::TEvSysView::EvGetPDisksRequest, ForwardToSystemViewsCollector);
         fFunc(NSysView::TEvSysView::EvGetVSlotsRequest, ForwardToSystemViewsCollector);
@@ -846,6 +847,8 @@ ui32 TBlobStorageController::GetEventPriority(IEventHandle *ev) {
             }
             return 5; // no read-write commands were in the query, so lower the priority for observation requests
         }
+
+        case TEvBlobStorage::EvControllerDescribeRequest:               return 10;
     }
 
     Y_ABORT();

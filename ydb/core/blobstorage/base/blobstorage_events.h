@@ -220,6 +220,18 @@ namespace NKikimr {
         }
     };
 
+    struct TEvBlobStorage::TEvControllerDescribeRequest : TEventPB<TEvBlobStorage::TEvControllerDescribeRequest,
+        NKikimrBlobStorage::TEvControllerDescribeRequest, TEvBlobStorage::EvControllerDescribeRequest>
+    {
+        TEvControllerDescribeRequest() = default;
+    };
+
+    struct TEvBlobStorage::TEvControllerDescribeResponse : TEventPB<TEvBlobStorage::TEvControllerDescribeResponse,
+        NKikimrBlobStorage::TEvControllerDescribeResponse, TEvBlobStorage::EvControllerDescribeResponse>
+    {
+        TEvControllerDescribeResponse() = default;
+    };
+
     struct TEvBlobStorage::TEvControllerConfigRequest : TEventPB<TEvBlobStorage::TEvControllerConfigRequest,
         NKikimrBlobStorage::TEvControllerConfigRequest, TEvBlobStorage::EvControllerConfigRequest>
     {

@@ -59,6 +59,15 @@ Ydb::TOperationId ToOperationId(const NKikimrIndexBuilder::TIndexBuild& build) {
 void ToOperation(const NKikimrIndexBuilder::TIndexBuild& build, Ydb::Operations::Operation* operation) {
     operation->set_id(NOperationId::ProtoToString(ToOperationId(build)));
     operation->mutable_issues()->CopyFrom(build.GetIssues());
+    if (build.HasStartTime()) {
+        *operation->mutable_create_time() = build.GetStartTime();
+    }
+    if (build.HasEndTime()) {
+        *operation->mutable_end_time() = build.GetEndTime();
+    }
+    if (build.HasUserSID()) {
+        operation->set_created_by(build.GetUserSID());
+    }
 
     switch (build.GetState()) {
         case Ydb::Table::IndexBuildState::STATE_DONE:

@@ -27,7 +27,11 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 SRCS(
-    datashard_ut_build_index.cpp
+    ut_local_kmeans.cpp
+    ut_prefix_kmeans.cpp
+    ut_reshuffle_kmeans.cpp
+    ut_sample_k.cpp
+    ut_secondary_index.cpp
 )
 
 END()

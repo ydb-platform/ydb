@@ -1686,7 +1686,7 @@ namespace NSchemeShardUT_Private {
     TEvIndexBuilder::TEvCreateRequest* CreateBuildIndexRequest(ui64 id, const TString& dbName, const TString& src, const TBuildIndexConfig& cfg) {
         NKikimrIndexBuilder::TIndexBuildSettings settings;
         settings.set_source_path(src);
-        settings.set_max_batch_rows(2);
+        settings.MutableScanSettings()->SetMaxBatchRows(1);
         settings.set_max_shards_in_flight(2);
 
         Ydb::Table::TableIndex& index = *settings.mutable_index();
@@ -1714,9 +1714,9 @@ namespace NSchemeShardUT_Private {
             if (cfg.KMeansTreeSettings) {
                 cfg.KMeansTreeSettings->SerializeTo(kmeansTreeSettings);
             } else {
-                // some random valid settings
-                kmeansTreeSettings.mutable_settings()->set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT);
-                kmeansTreeSettings.mutable_settings()->set_vector_dimension(42);
+                // valid settings for tests - uint8 vectors of size 4
+                kmeansTreeSettings.mutable_settings()->set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8);
+                kmeansTreeSettings.mutable_settings()->set_vector_dimension(4);
                 kmeansTreeSettings.mutable_settings()->set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE);
                 kmeansTreeSettings.set_clusters(4);
                 // More than 2 is too long for reboot tests
@@ -1727,6 +1727,9 @@ namespace NSchemeShardUT_Private {
                 cfg.GlobalIndexSettings[0].SerializeTo(*settings.mutable_level_table_settings());
                 if (cfg.GlobalIndexSettings.size() > 1) {
                     cfg.GlobalIndexSettings[1].SerializeTo(*settings.mutable_posting_table_settings());
+                }
+                if (cfg.GlobalIndexSettings.size() > 2) {
+                    cfg.GlobalIndexSettings[2].SerializeTo(*settings.mutable_prefix_table_settings());
                 }
             }
         } break;
@@ -1740,7 +1743,7 @@ namespace NSchemeShardUT_Private {
     std::unique_ptr<TEvIndexBuilder::TEvCreateRequest> CreateBuildColumnRequest(ui64 id, const TString& dbName, const TString& src, const TString& columnName, const Ydb::TypedValue& literal) {
         NKikimrIndexBuilder::TIndexBuildSettings settings;
         settings.set_source_path(src);
-        settings.set_max_batch_rows(2);
+        settings.MutableScanSettings()->SetMaxBatchRows(1);
         settings.set_max_shards_in_flight(2);
 
         auto* col = settings.mutable_column_build_operation()->add_column();
@@ -1789,7 +1792,7 @@ namespace NSchemeShardUT_Private {
         TEvIndexBuilder::TEvCreateResponse* event = runtime.GrabEdgeEvent<TEvIndexBuilder::TEvCreateResponse>(handle);
         UNIT_ASSERT(event);
 
-        Cerr << "BUILDINDEX RESPONSE CREATE: " << event->ToString() << Endl;
+        Cerr << "BUILDCOLUMN RESPONSE CREATE: " << event->ToString() << Endl;
         UNIT_ASSERT_EQUAL_C(event->Record.GetStatus(), expectedStatus,
                             "status mismatch"
                                 << " got " << Ydb::StatusIds::StatusCode_Name(event->Record.GetStatus())
@@ -2599,5 +2602,29 @@ namespace NSchemeShardUT_Private {
         auto sender = runtime.AllocateEdgeActor(0);
         SendNextValRequest(runtime, sender, path);
         return WaitNextValResult(runtime, sender, expectedStatus);
+    }
+
+    NKikimrMiniKQL::TResult ReadTable(TTestActorRuntime& runtime, ui64 tabletId,
+            const TString& table, const TVector<TString>& pk, const TVector<TString>& columns,
+            const TString& rangeFlags)
+    {
+        TStringBuilder keyFmt;
+        for (const auto& k : pk) {
+            keyFmt << "'('" << k << " (Null) (Void)) ";
+        }
+        const auto columnsFmt = "'" + JoinSeq(" '", columns);
+
+        NKikimrMiniKQL::TResult result;
+        TString error;
+        NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, Sprintf(R"((
+            (let range '(%s%s))
+            (let columns '(%s))
+            (let result (SelectRange '__user__%s range columns '()))
+            (return (AsList (SetResult 'Result result) ))
+        ))", rangeFlags.data(), keyFmt.data(), columnsFmt.data(), table.data()), result, error);
+        UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::EReplyStatus::OK, error);
+        UNIT_ASSERT_VALUES_EQUAL(error, "");
+
+        return result;
     }
 }

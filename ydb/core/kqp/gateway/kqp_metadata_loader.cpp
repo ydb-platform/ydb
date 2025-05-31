@@ -166,6 +166,8 @@ TTableMetadataResult GetTableMetadataResult(const NSchemeCache::TSchemeCacheNavi
         }
     }
 
+    tableMeta->IsIndexImplTable = (entry.TableKind != NSchemeCache::ETableKind::KindRegularTable);
+
     tableMeta->Attributes = entry.Attributes;
 
     if (queryName) {

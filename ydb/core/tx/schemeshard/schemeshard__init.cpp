@@ -3409,7 +3409,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             }
         }
 
-           // Read KesusAlters
+        // Read KesusAlters
         {
             TKesusAlterRows kesusAlterRows;
             if (!LoadKesusAlters(db, kesusAlterRows)) {
@@ -4561,8 +4561,12 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     auto& buildInfo = *buildInfoPtr->Get();
                     buildInfo.KMeans.Set(
                         rowset.GetValue<Schema::KMeansTreeProgress::Level>(),
+                        rowset.GetValue<Schema::KMeansTreeProgress::ParentBegin>(),
                         rowset.GetValue<Schema::KMeansTreeProgress::Parent>(),
-                        rowset.GetValue<Schema::KMeansTreeProgress::State>()
+                        rowset.GetValue<Schema::KMeansTreeProgress::ChildBegin>(),
+                        rowset.GetValue<Schema::KMeansTreeProgress::Child>(),
+                        rowset.GetValue<Schema::KMeansTreeProgress::State>(),
+                        rowset.GetValue<Schema::KMeansTreeProgress::TableSize>()
                     );
                     buildInfo.Sample.Rows.reserve(buildInfo.KMeans.K * 2);
 
@@ -4580,20 +4584,26 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     return false;
                 }
 
+                size_t sampleCount = 0;
                 while (!rowset.EndOfSet()) {
                     TIndexBuildId id = rowset.GetValue<Schema::KMeansTreeSample::Id>();
                     const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(id);
                     Y_VERIFY_S(buildInfoPtr, "BuildIndex not found: id# " << id);
                     auto& buildInfo = *buildInfoPtr->Get();
-                    buildInfo.Sample.Set(
+                    buildInfo.Sample.Add(
                         rowset.GetValue<Schema::KMeansTreeSample::Probability>(),
                         rowset.GetValue<Schema::KMeansTreeSample::Data>()
                     );
+                    sampleCount++;
 
                     if (!rowset.Next()) {
                         return false;
                     }
                 }
+
+                LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                             "KMeansTreeSample records: " << sampleCount
+                             << ", at schemeshard: " << Self->TabletID());
             }
 
             // read index build columns

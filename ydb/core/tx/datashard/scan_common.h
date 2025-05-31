@@ -1,5 +1,8 @@
 #pragma once
 
+#include "buffer_data.h"
+
+#include <ydb/core/protos/index_builder.pb.h>
 #include <ydb/public/api/protos/ydb_value.pb.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/util/intrusive_heap.h>
@@ -10,6 +13,7 @@
 
 namespace NKikimr::NDataShard {
 
+using TIndexBuildScanSettings = NKikimrIndexBuilder::TIndexBuildScanSettings;
 class TDataShard;
 struct TUserTable;
 
@@ -86,5 +90,15 @@ TColumnsTypes GetAllTypes(const TUserTable& tableInfo);
 // I can detect this but maybe better
 // if IScan will provide for us "how much data did we read"?
 ui64 CountBytes(TArrayRef<const TCell> key, const NTable::TRowState& row);
+
+inline TDuration GetRetryWakeupTimeoutBackoff(ui32 attempt) {
+    const ui32 maxBackoffExponent = 3;
+
+    return TDuration::Seconds(1u << Min(attempt, maxBackoffExponent));
+}
+
+inline bool HasReachedLimits(const TBufferData& buffer, const TIndexBuildScanSettings& scanSettings) {
+    return  buffer.HasReachedLimits(scanSettings.GetMaxBatchRows(), scanSettings.GetMaxBatchBytes());
+}
 
 }

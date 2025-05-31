@@ -21,13 +21,6 @@ namespace {
         }
     }
 
-    NProtoBuf::Timestamp SecondsToProtoTimeStamp(ui64 sec) {
-        NProtoBuf::Timestamp timestamp;
-        timestamp.set_seconds((i64)(sec));
-        timestamp.set_nanos(0);
-        return timestamp;
-    }
-
     TImportInfo::EState GetMinState(TImportInfo::TPtr importInfo) {
         TImportInfo::EState state = TImportInfo::EState::Invalid;
 

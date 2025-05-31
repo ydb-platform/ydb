@@ -249,7 +249,7 @@ namespace {
                 SetError(context, entry, TResolve::EStatus::PathErrorNotExist, TKeyDesc::EStatus::NotExists);
             }
 
-            entry.Kind = TResolve::KindUnknown;
+            entry.Kind = NSchemeCache::ETableKind::KindUnknown;
             entry.DomainInfo.Drop();
             TKeyDesc& keyDesc = *entry.KeyDescription;
             keyDesc.ColumnInfos.clear();
@@ -714,7 +714,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
         void Clear() {
             Status.Clear();
             Kind = TNavigate::KindUnknown;
-            TableKind = TResolve::KindUnknown;
+            TableKind = NSchemeCache::ETableKind::KindUnknown;
             Created = false;
             CreateStep = 0;
 
@@ -873,16 +873,16 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             }
         }
 
-        static TResolve::EKind PathSubTypeToTableKind(NKikimrSchemeOp::EPathSubType subType) {
+        static NSchemeCache::ETableKind PathSubTypeToTableKind(NKikimrSchemeOp::EPathSubType subType) {
             switch (subType) {
             case NKikimrSchemeOp::EPathSubTypeSyncIndexImplTable:
-                return TResolve::KindSyncIndexTable;
+                return NSchemeCache::ETableKind::KindSyncIndexTable;
             case NKikimrSchemeOp::EPathSubTypeAsyncIndexImplTable:
-                return TResolve::KindAsyncIndexTable;
+                return NSchemeCache::ETableKind::KindAsyncIndexTable;
             case NKikimrSchemeOp::EPathSubTypeVectorKmeansTreeIndexImplTable:
-                return TResolve::KindVectorIndexTable;
+                return NSchemeCache::ETableKind::KindVectorIndexTable;
             default:
-                return TResolve::KindRegularTable;
+                return NSchemeCache::ETableKind::KindRegularTable;
             }
         }
 
@@ -893,7 +893,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 case NKikimrSchemeOp::EPathSubTypeSyncIndexImplTable:
                 case NKikimrSchemeOp::EPathSubTypeAsyncIndexImplTable:
                 case NKikimrSchemeOp::EPathSubTypeVectorKmeansTreeIndexImplTable:
-                    return true;
+                    return !AppData()->FeatureFlags.GetEnableAccessToIndexImplTables();
                 default:
                     return false;
                 }
@@ -1103,7 +1103,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             , Subscriber(subscriber)
             , Filled(false)
             , Kind(TNavigate::EKind::KindUnknown)
-            , TableKind(TResolve::EKind::KindUnknown)
+            , TableKind(NSchemeCache::ETableKind::KindUnknown)
             , Created(false)
             , CreateStep(0)
             , IsPrivatePath(false)
@@ -1531,6 +1531,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 break;
             case NKikimrSchemeOp::EPathTypeColumnTable:
                 Kind = TNavigate::KindColumnTable;
+                TableKind = PathSubTypeToTableKind(entryDesc.GetPathSubType());
                 if (Created) {
                     FillTableInfoFromColumnTable(pathDesc);
                 }
@@ -1925,6 +1926,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             entry.ViewInfo = ViewInfo;
             entry.ResourcePoolInfo = ResourcePoolInfo;
             entry.BackupCollectionInfo = BackupCollectionInfo;
+            entry.TableKind = TableKind;
         }
 
         bool CheckColumns(TResolveContext* context, TResolve::TEntry& entry,
@@ -2150,7 +2152,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
         // common
         TMaybe<NKikimrScheme::EStatus> Status;
         TNavigate::EKind Kind;
-        TResolve::EKind TableKind;
+        NSchemeCache::ETableKind TableKind;
         bool Created;
         ui64 CreateStep;
         TPathId PathId;

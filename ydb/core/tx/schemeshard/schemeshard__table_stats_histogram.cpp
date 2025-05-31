@@ -360,6 +360,7 @@ bool TTxPartitionHistogram::Execute(TTransactionContext& txc, const TActorContex
         return true;
 
     TTableInfo::TPtr table = Self->Tables[tableId];
+    auto path = TPath::Init(tableId, Self);
 
     if (!Self->TabletIdToShardIdx.contains(datashardId))
         return true;
@@ -367,6 +368,12 @@ bool TTxPartitionHistogram::Execute(TTransactionContext& txc, const TActorContex
     // Don't split/merge backup tables
     if (table->IsBackup)
         return true;
+
+    if (path.IsLocked()) {
+        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            "TTxPartitionHistogram Skip locked table tablet " << datashardId << " by " << path.LockedBy());
+        return true;
+    }
 
     auto shardIdx = Self->TabletIdToShardIdx[datashardId];
     const auto forceShardSplitSettings = Self->SplitSettings.GetForceShardSplitSettings();

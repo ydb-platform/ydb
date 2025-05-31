@@ -1,3 +1,4 @@
+* Fix `ydb operation get` not working for running operations.
 * Added `--retries` to `ydb workload <clickbenh|tpch|tpcds> run` command.
 * Added `--partition-size` param to `ydb workload <clickbench/tpcds/tpch> init`.
 * Fixed return code of command `ydb workload * run --check-canonical` for the case when benchmark query results differ from canonical ones.

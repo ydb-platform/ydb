@@ -29,4 +29,4 @@ mypy 1.15.0,
 pyright 1.1.400,
 and pytype 2024.10.11.
 It was generated from typeshed commit
-[`4265ee7c72f476e7156949e55784fd82b40e6953`](https://github.com/python/typeshed/commit/4265ee7c72f476e7156949e55784fd82b40e6953).
+[`126768408a69b7a3a09b7d3992970b289f92937e`](https://github.com/python/typeshed/commit/126768408a69b7a3a09b7d3992970b289f92937e).

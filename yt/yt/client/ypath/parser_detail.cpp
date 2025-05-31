@@ -137,7 +137,7 @@ TString ParseCluster(TString str, const IAttributeDictionaryPtr& attributes)
     const auto clusterName = str.substr(0, clusterSeparatorIndex);
     if (clusterName.empty()) {
         THROW_ERROR_EXCEPTION(
-            "Path %Qv does not start with a valid root-designator",
+            "Cluster name in path %Qv cannot be empty",
             str);
     }
 

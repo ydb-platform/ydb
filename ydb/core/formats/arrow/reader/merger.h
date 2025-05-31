@@ -159,7 +159,7 @@ public:
     }
 
     template <class TDataContainer>
-    void AddSource(const std::shared_ptr<TDataContainer>& batch, const std::shared_ptr<NArrow::TColumnFilter>& filter,
+    void AddSource(const std::shared_ptr<TDataContainer>& batch, const ui64 start, const std::shared_ptr<NArrow::TColumnFilter>& filter,
         const std::optional<ui64> sourceIdExt = std::nullopt) {
         const ui64 sourceId = sourceIdExt.value_or(SortHeap.Size());
         if (!batch || !batch->num_rows()) {
@@ -169,8 +169,8 @@ public:
         const bool isDenyFilter = filter && filter->IsTotalDenyFilter();
         auto filterImpl = (!filter || filter->IsTotalAllowFilter()) ? nullptr : filter;
         static const arrow::Schema emptySchema = arrow::Schema(arrow::FieldVector());
-        TBatchIterator iterator(
-            batch, filterImpl, *SortSchema, (!isDenyFilter && DataSchema) ? *DataSchema : emptySchema, Reverse, VersionColumnNames, sourceId);
+        TBatchIterator iterator(batch, start, filterImpl, *SortSchema, (!isDenyFilter && DataSchema) ? *DataSchema : emptySchema, Reverse,
+            VersionColumnNames, sourceId);
         if (MaxVersion) {
             MaxVersion->ValidateSchema(*iterator.GetVersionColumns().GetSorting());
         }

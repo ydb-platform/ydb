@@ -21,15 +21,47 @@ public:
 
 class TEvRequestFilter: public NActors::TEventLocal<TEvRequestFilter, NColumnShard::TEvPrivate::EvRequestFilter> {
 private:
-    NArrow::TSimpleRow MinPK;
-    NArrow::TSimpleRow MaxPK;
     YDB_READONLY_DEF(ui64, SourceId);
-    YDB_READONLY_DEF(ui64, RecordsCount);
     TSnapshot MaxVersion;
+    YDB_READONLY_DEF(std::shared_ptr<NGroupedMemoryManager::TGroupGuard>, MemoryGroup);
     YDB_READONLY_DEF(std::shared_ptr<IFilterSubscriber>, Subscriber);
 
 public:
     TEvRequestFilter(const IDataSource& source, const std::shared_ptr<IFilterSubscriber>& subscriber);
+
+    const TSnapshot& GetMaxVersion() const {
+        return MaxVersion;
+    }
+};
+
+class TColumnsData {
+private:
+    YDB_READONLY_DEF(std::shared_ptr<NArrow::TGeneralContainer>, Data);
+    YDB_READONLY_DEF(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>, MemoryGuard);
+
+public:
+    TColumnsData(const std::shared_ptr<NArrow::TGeneralContainer>& data, const std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>& memory)
+        : Data(data)
+        , MemoryGuard(memory) {
+        AFL_VERIFY(MemoryGuard);
+    }
+
+    ui64 GetRawSize() const {
+        return MemoryGuard->GetMemory();
+    }
+};
+
+class TEvDuplicateFilterDataFetched
+    : public NActors::TEventLocal<TEvDuplicateFilterDataFetched, NColumnShard::TEvPrivate::EvDuplicateFilterDataFetched> {
+private:
+    YDB_READONLY_DEF(ui64, SourceId);
+    YDB_READONLY(TConclusion<TColumnsData>, Result, TConclusionStatus::Success());
+
+public:
+    TEvDuplicateFilterDataFetched(const ui64 sourceId, TConclusion<TColumnsData>&& result)
+        : SourceId(sourceId)
+        , Result(std::move(result)) {
+    }
 };
 
 }   // namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering

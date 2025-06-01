@@ -1813,6 +1813,9 @@ void TCreateTableFormatter::FormatUpsertOptions(const TString& fullPath, const N
                                 if (zeroLevel.HasPortionsCountLimit()) {
                                     jsonLevel["portions_count_limit"] = zeroLevel.GetPortionsCountLimit();
                                 }
+                                if (zeroLevel.HasExpectedPortionSize()) {
+                                    jsonLevel["expected_portion_size"] = zeroLevel.GetExpectedPortionSize();
+                                }
                                 break;
                             }
                             case NKikimrSchemeOp::TCompactionLevelConstructorContainer::kOneLayer: {

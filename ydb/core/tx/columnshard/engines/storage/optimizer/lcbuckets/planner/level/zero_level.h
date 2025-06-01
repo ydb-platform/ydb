@@ -10,6 +10,7 @@ private:
     const TDuration DurationToDrop;
     const ui64 ExpectedBlobsSize;
     const ui64 PortionsCountAvailable;
+    const ui64 ExpectedPortionSize;
 
     std::set<TOrderedPortion> Portions;
 
@@ -71,8 +72,13 @@ private:
     virtual TCompactionTaskData DoGetOptimizationTask() const override;
 
 public:
+    ui64 GetExpectedPortionSize() const {
+        return ExpectedPortionSize;
+    }
+
+public:
     TZeroLevelPortions(const ui32 levelIdx, const std::shared_ptr<IPortionsLevel>& nextLevel, const TLevelCounters& levelCounters,
-        const std::shared_ptr<IOverloadChecker>& overloadChecker, const TDuration durationToDrop, const ui64 expectedBlobsSize,
+        const std::shared_ptr<IOverloadChecker>& overloadChecker, const TDuration durationToDrop, const ui64 expectedBlobsSize, const ui64 expectedPortionSize,
         const ui64 portionsCountAvailable, const std::vector<std::shared_ptr<IPortionsSelector>>& selectors, const TString& defaultSelectorName);
 };
 

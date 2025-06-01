@@ -21,7 +21,6 @@ TOptimizerPlanner::TOptimizerPlanner(const TInternalPathId pathId, const std::sh
     , Levels(std::move(levels))
     , StoragesManager(storagesManager)
     , PrimaryKeysSchema(primaryKeysSchema) {
-
     RefreshWeights();
 }
 
@@ -41,8 +40,9 @@ std::shared_ptr<TColumnEngineChanges> TOptimizerPlanner::DoGetOptimizationTask(
     //        result->AddMovePortions(data.GetMovePortions());
     //    }
     result->SetTargetCompactionLevel(data.GetTargetCompactionLevel());
-    auto levelPortions = std::dynamic_pointer_cast<TOneLayerPortions>(Levels[data.GetTargetCompactionLevel()]);
-    if (levelPortions) {
+    if (auto levelPortions = std::dynamic_pointer_cast<TOneLayerPortions>(Levels[data.GetTargetCompactionLevel()])) {
+        result->SetPortionExpectedSize(levelPortions->GetExpectedPortionSize());
+    } else if (auto levelPortions = std::dynamic_pointer_cast<TZeroLevelPortions>(Levels[level->GetLevelId()])) {
         result->SetPortionExpectedSize(levelPortions->GetExpectedPortionSize());
     }
     auto positions = data.GetCheckPositions(PrimaryKeysSchema, level->GetLevelId() > 1);

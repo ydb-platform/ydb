@@ -47,6 +47,13 @@ TConclusionStatus TZeroLevelConstructor::DoDeserializeFromJson(const NJson::TJso
         }
         PortionsSizeLimit = jsonValue.GetUInteger();
     }
+    if (json.Has("expected_portion_size")) {
+        const auto& jsonValue = json["expected_portion_size"];
+        if (!jsonValue.IsUInteger()) {
+            return TConclusionStatus::Fail("incorrect expected_portion_size value (have to be unsigned int)");
+        }
+        ExpectedPortionSize = jsonValue.GetUInteger();
+    }
     return TConclusionStatus::Success();
 }
 
@@ -70,6 +77,9 @@ bool TZeroLevelConstructor::DoDeserializeFromProto(const NKikimrSchemeOp::TCompa
     if (pLevel.HasPortionsSizeLimit()) {
         PortionsSizeLimit = pLevel.GetPortionsSizeLimit();
     }
+    if (pLevel.HasExpectedPortionSize()) {
+        ExpectedPortionSize = pLevel.GetExpectedPortionSize();
+    }
     return true;
 }
 
@@ -90,6 +100,9 @@ void TZeroLevelConstructor::DoSerializeToProto(NKikimrSchemeOp::TCompactionLevel
     if (PortionsSizeLimit) {
         mLevel.SetPortionsSizeLimit(*PortionsSizeLimit);
     }
+    if (ExpectedPortionSize) {
+        mLevel.SetExpectedPortionSize(*ExpectedPortionSize);
+    }
 }
 
 std::shared_ptr<NKikimr::NOlap::NStorageOptimizer::NLCBuckets::IPortionsLevel> TZeroLevelConstructor::DoBuildLevel(
@@ -97,7 +110,7 @@ std::shared_ptr<NKikimr::NOlap::NStorageOptimizer::NLCBuckets::IPortionsLevel> T
     const TLevelCounters& counters, const std::vector<std::shared_ptr<IPortionsSelector>>& selectors) const {
     return std::make_shared<TZeroLevelPortions>(indexLevel, nextLevel, counters,
         std::make_shared<TLimitsOverloadChecker>(PortionsCountLimit, PortionsSizeLimit), PortionsLiveDuration.value_or(TDuration::Max()),
-        ExpectedBlobsSize.value_or((ui64)1 << 20), PortionsCountAvailable.value_or(10), selectors, GetDefaultSelectorName());
+        ExpectedBlobsSize.value_or((ui64)1 << 20), ExpectedPortionSize.value_or(1.5 * (1 << 20)), PortionsCountAvailable.value_or(10), selectors, GetDefaultSelectorName());
 }
 
 }   // namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets

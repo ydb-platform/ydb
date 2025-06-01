@@ -1,4 +1,3 @@
-#include "fetching.h"
 #include "manager.h"
 
 #include <ydb/core/tx/columnshard/engines/reader/simple_reader/duplicates/merge.h>
@@ -52,10 +51,11 @@ void TDuplicateManager::Handle(const TEvRequestFilter::TPtr& ev) {
     const std::shared_ptr<TPortionInfo>& source = GetPortionVerified(ev->Get()->GetSourceId());
     {
         const auto collector = [this, &sourcesToFetch, &borders](const TInterval<NArrow::TSimpleRow>& /*interval*/, const ui64 portionId) {
-            const std::shared_ptr<TPortionInfo>& source = GetPortionVerified(portionId);
-            sourcesToFetch.emplace_back(source);
-            borders.emplace(source->GetPortionId(),
-                NArrow::TFirstLastSpecialKeys(source->IndexKeyStart(), source->IndexKeyEnd(), source->IndexKeyStart().GetSchema()));
+            const std::shared_ptr<TPortionInfo>& intersectingSource = GetPortionVerified(portionId);
+            sourcesToFetch.emplace_back(intersectingSource);
+            borders.emplace(
+                intersectingSource->GetPortionId(), NArrow::TFirstLastSpecialKeys(intersectingSource->IndexKeyStart(),
+                                                        intersectingSource->IndexKeyEnd(), intersectingSource->IndexKeyStart().GetSchema()));
         };
         Intervals.FindIntersections(source->IndexKeyStart(), source->IndexKeyEnd(), collector);
     }
@@ -118,7 +118,7 @@ void TDuplicateManager::Handle(const TEvConstructFilters::TPtr& ev) {
     std::vector<THashMap<ui64, TDuplicateMapInfo>> intervals(splitter.NumIntervals());
     for (auto&& [source, portionIntervals] : splitted) {
         for (ui64 i = 0; i < portionIntervals.size(); ++i) {
-            if (portionIntervals[i]) {
+            if (portionIntervals[i].GetRowsCount()) {
                 intervals[i].emplace(source, std::move(portionIntervals[i]));
             }
         }
@@ -145,10 +145,10 @@ void TDuplicateManager::Handle(const TEvConstructFilters::TPtr& ev) {
             for (auto&& [source, segment] : segments) {
                 mapInfos.emplace(source, segment);
             }
-            const TColumnDataSplitter::TBorder& border = splitter.GetIntervalFinish(i);
+            const TColumnDataSplitter::TBorder& finish = splitter.GetIntervalFinish(i);
             const std::shared_ptr<TBuildDuplicateFilters> task =
-                std::make_shared<TBuildDuplicateFilters>(border.GetKey().GetSchema(), maxVersionBatch, border.GetKey(), border.GetIsLast(),
-                    Counters, std::make_unique<TFilterResultSubscriber>(SelfId(), std::move(mapInfos)));
+                std::make_shared<TBuildDuplicateFilters>(finish.GetKey().GetSchema(), maxVersionBatch, finish.GetKey(), finish.GetIsLast(),
+                    Counters, std::make_unique<TMergeResultSubscriber>(SelfId(), std::move(mapInfos)));
             for (auto&& [source, segment] : segments) {
                 const auto* columnData = ev->Get()->GetColumnData().FindPtr(source);
                 AFL_VERIFY(columnData)("source", source);
@@ -177,7 +177,7 @@ void TDuplicateManager::TSourceDataSubscriber::OnSourcesReady(TSourceCache::TSou
     TActorContext::AsActorContext().Send(Owner, new TEvConstructFilters(OriginalRequest, std::move(result), std::move(Splitter)));
 }
 
-void TDuplicateManager::TFilterResultSubscriber::OnResult(THashMap<ui64, NArrow::TColumnFilter>&& result) {
+void TDuplicateManager::TMergeResultSubscriber::OnResult(THashMap<ui64, NArrow::TColumnFilter>&& result) {
     THashMap<TDuplicateMapInfo, NArrow::TColumnFilter> filters;
     for (const auto& [source, filter] : result) {
         filters.emplace(*TValidator::CheckNotNull(InfoBySource.FindPtr(source)), filter);

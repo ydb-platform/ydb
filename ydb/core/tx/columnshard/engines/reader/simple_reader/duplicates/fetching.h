@@ -50,7 +50,7 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<const TAtomicCounter>, AbortionFlag);
 
 public:
-    TCommonFetchingContext(const std::shared_ptr<TReadContext>& readContext, const std::vector<ui32>& columnIds)
+    TCommonFetchingContext(const std::shared_ptr<TReadContext>& readContext, const std::set<ui32>& columnIds)
         : ResultSchema(std::make_shared<TFilteredSnapshotSchema>(readContext->GetReadMetadata()->GetResultSchema(), columnIds))
         , StoragesManager(readContext->GetStoragesManager())
         , DataAccessorsManager(readContext->GetDataAccessorsManager())

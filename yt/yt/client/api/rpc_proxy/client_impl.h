@@ -201,13 +201,13 @@ public:
         const TGetCurrentUserOptions& options) override;
 
     TFuture<void> AddMember(
-        const TString& group,
-        const TString& member,
+        const std::string& group,
+        const std::string& member,
         const NApi::TAddMemberOptions& options) override;
 
     TFuture<void> RemoveMember(
-        const TString& group,
-        const TString& member,
+        const std::string& group,
+        const std::string& member,
         const NApi::TRemoveMemberOptions& options) override;
 
     TFuture<TCheckPermissionResponse> CheckPermission(

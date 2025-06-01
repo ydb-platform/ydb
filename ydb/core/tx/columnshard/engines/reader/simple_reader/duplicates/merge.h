@@ -1,9 +1,14 @@
 #pragma once
 
-#include "events.h"
+#include "common.h"
 
 #include <ydb/core/formats/arrow/reader/merger.h>
+#include <ydb/core/formats/arrow/rows/view.h>
+#include <ydb/core/tx/columnshard/counters/duplicate_filtering.h>
+#include <ydb/core/tx/columnshard/engines/scheme/abstract/index_info.h>
 #include <ydb/core/tx/conveyor/usage/abstract.h>
+
+#include <ydb/library/actors/interconnect/types.h>
 
 namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering  {
 

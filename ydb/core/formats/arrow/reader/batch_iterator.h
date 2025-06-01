@@ -16,11 +16,12 @@ private:
     std::shared_ptr<NArrow::TColumnFilter> Filter;
     std::shared_ptr<NArrow::TColumnFilter::TIterator> FilterIterator;
 
-    i32 GetFirstPosition() const {
+    i32 GetPosition(const ui64 position) const {
+        AFL_VERIFY((i64)position <= RecordsCount);
         if (ReverseSortKff > 0) {
-            return 0;
+            return position;
         } else {
-            return RecordsCount - 1;
+            return RecordsCount - position;
         }
     }
 
@@ -51,8 +52,9 @@ public:
     }
 
     template <class TDataContainer>
-    TBatchIterator(std::shared_ptr<TDataContainer> batch, std::shared_ptr<NArrow::TColumnFilter> filter, const arrow::Schema& keySchema,
-        const arrow::Schema& dataSchema, const bool reverseSort, const std::vector<std::string>& versionColumnNames, const ui64 sourceId)
+    TBatchIterator(std::shared_ptr<TDataContainer> batch, const ui64 start, std::shared_ptr<NArrow::TColumnFilter> filter,
+        const arrow::Schema& keySchema, const arrow::Schema& dataSchema, const bool reverseSort,
+        const std::vector<std::string>& versionColumnNames, const ui64 sourceId)
         : ControlPointFlag(false)
         , KeyColumns(batch, 0, keySchema.field_names(), dataSchema.field_names(), reverseSort)
         , VersionColumns(batch, 0, versionColumnNames, {}, false)
@@ -62,10 +64,13 @@ public:
         , Filter(filter) {
         AFL_VERIFY(KeyColumns.IsSameSortingSchema(keySchema))("batch", KeyColumns.DebugJson())("schema", keySchema.ToString());
         AFL_VERIFY(KeyColumns.IsSameDataSchema(dataSchema))("batch", KeyColumns.DebugJson())("schema", dataSchema.ToString());
-        Y_ABORT_UNLESS(KeyColumns.InitPosition(GetFirstPosition()));
-        Y_ABORT_UNLESS(VersionColumns.InitPosition(GetFirstPosition()));
+        Y_ABORT_UNLESS(KeyColumns.InitPosition(GetPosition(start)));
+        Y_ABORT_UNLESS(VersionColumns.InitPosition(GetPosition(start)));
         if (Filter) {
             FilterIterator = std::make_shared<NArrow::TColumnFilter::TIterator>(Filter->GetIterator(reverseSort, RecordsCount));
+            if (start) {
+                FilterIterator->Next(start);
+            }
         }
     }
 

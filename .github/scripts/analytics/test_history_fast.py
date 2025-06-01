@@ -17,41 +17,50 @@ DATABASE_PATH = config["QA_DB"]["DATABASE_PATH"]
 def check_table_exists(session, table_path):
     """Check if table exists"""
     try:
+        print(f"Checking if table exists: '{table_path}'")
         session.describe_table(table_path)
         print(f"Table '{table_path}' already exists.")
         return True
     except ydb.SchemeError as e:
-        print(f"Table '{table_path}' does not exist, error: {e} ")
+        print(f"Table '{table_path}' does not exist, error: {e}")
+        return False
+    except Exception as e:
+        print(f"Unexpected error while checking table '{table_path}': {e}")
         return False
 
 
 def create_test_history_fast_table(session, table_path):
     print(f"> Creating table: '{table_path}'")
-    session.execute_scheme(f"""
-        CREATE TABLE `{table_path}` (
-            `build_type` Utf8 NOT NULL,
-            `job_name` Utf8 NOT NULL,
-            `job_id` Uint64,
-            `commit` Utf8,
-            `branch` Utf8 NOT NULL,
-            `pull` Utf8,
-            `run_timestamp` Timestamp NOT NULL,
-            `test_id` Utf8 NOT NULL,
-            `suite_folder` Utf8,
-            `test_name` Utf8,
-            `full_name` Utf8 NOT NULL,
-            `duration` Double,
-            `status` Utf8,
-            `status_description` Utf8,
-            `owners` Utf8,
-            PRIMARY KEY (`run_timestamp`, `full_name`, `job_name`, `branch`, `build_type`, test_id)
-        )
-        PARTITION BY HASH(run_timestamp)
-        WITH (
-        STORE = COLUMN,
-        TTL = Interval("P7D") ON run_timestamp
-        )
-    """)
+    try:
+        session.execute_scheme(f"""
+            CREATE TABLE `{table_path}` (
+                `build_type` Utf8 NOT NULL,
+                `job_name` Utf8 NOT NULL,
+                `job_id` Uint64,
+                `commit` Utf8,
+                `branch` Utf8 NOT NULL,
+                `pull` Utf8,
+                `run_timestamp` Timestamp NOT NULL,
+                `test_id` Utf8 NOT NULL,
+                `suite_folder` Utf8,
+                `test_name` Utf8,
+                `full_name` Utf8 NOT NULL,
+                `duration` Double,
+                `status` Utf8,
+                `status_description` Utf8,
+                `owners` Utf8,
+                PRIMARY KEY (`run_timestamp`, `full_name`, `job_name`, `branch`, `build_type`, test_id)
+            )
+            PARTITION BY HASH(run_timestamp)
+            WITH (
+            STORE = COLUMN,
+            TTL = Interval("P7D") ON run_timestamp
+            )
+        """)
+        print(f"Table '{table_path}' created successfully with 7-day TTL")
+    except Exception as e:
+        print(f"Error creating table '{table_path}': {e}")
+        raise
 
 
 def bulk_upsert(table_client, table_path, rows):
@@ -77,7 +86,7 @@ def bulk_upsert(table_client, table_path, rows):
     table_client.bulk_upsert(table_path, rows, column_types)
 
 
-def get_missed_data_for_upload(driver):
+def get_missed_data_for_upload(driver, full_table_path):
     results = []
     query = f"""
        SELECT 
@@ -98,7 +107,7 @@ def get_missed_data_for_upload(driver):
         owners
     FROM `test_results/test_runs_column`  as all_data
     LEFT JOIN (
-        select distinct run_timestamp  from `test_results/analytics/test_history_fast`
+        select distinct run_timestamp  from `{full_table_path}`
     ) as fast_data_missed
     ON all_data.run_timestamp = fast_data_missed.run_timestamp
     WHERE
@@ -151,16 +160,27 @@ def main():
         with ydb.SessionPool(driver) as pool:
             # Проверяем существование таблицы и создаем её если нужно
             def check_and_create_table(session):
+                print(f"Starting table check for: {full_table_path}")
                 exists = check_table_exists(session, full_table_path)
                 if not exists:
+                    print("Table does not exist, creating...")
                     create_test_history_fast_table(session, full_table_path)
+                    # Проверяем, что таблица действительно создалась
+                    exists_after_creation = check_table_exists(session, full_table_path)
+                    if exists_after_creation:
+                        print("Table created and verified successfully")
+                    else:
+                        print("ERROR: Table was not created successfully!")
+                        return False
                     return True
+                else:
+                    print("Table already exists, proceeding...")
                 return exists
             
             pool.retry_operation_sync(check_and_create_table)
             
             # Продолжаем с основной логикой скрипта
-            prepared_for_upload_rows = get_missed_data_for_upload(driver)
+            prepared_for_upload_rows = get_missed_data_for_upload(driver, full_table_path)
             print(f'Preparing to upsert: {len(prepared_for_upload_rows)} rows')
             if prepared_for_upload_rows:
                 for start in range(0, len(prepared_for_upload_rows), batch_size):

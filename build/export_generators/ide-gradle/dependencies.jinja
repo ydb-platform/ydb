@@ -1,22 +1,23 @@
 {%- macro AnnotationProcessors(funcName, annotation_processors) -%}
 {%-     if annotation_processors|length -%}
-{%-         for annotation_processor in annotation_processors %}
-    {{ funcName }}(files("$arcadia_root/{{ annotation_processor }}"))
+{%-         for annotation_processor in annotation_processors|unique|sort -%}
+{%-             set parts = rsplit(annotation_processor, "/", 4) %}
+    {{ funcName }}("{{ parts[0]|replace("contrib/java/", "")|replace("/", ".") }}:{{ parts[1] }}:{{ parts[2] }}")
 {%-         endfor -%}
 {%-     endif -%}
 {%- endmacro -%}
 
 {%- macro Kapts(funcName, kapts) -%}
 {%-     if kapts|length -%}
-{%-         for kapt in kapts %}
-    {{ funcName }}(files("$arcadia_root/{{ kapt }}"))
+{%-         for kapt in kapts|unique|sort %}
+    {{ funcName }}(files("$output_root/{{ kapt }}"))
 {%-         endfor -%}
 {%-     endif -%}
 {%- endmacro -%}
 
 {%- macro AddFileJars(file_jars) -%}
 {%-     for file_jar in file_jars %}
-        "$arcadia_root/{{ file_jar }}"{%- if not loop.last -%},{%- endif -%}
+        "$output_root/{{ file_jar }}"{%- if not loop.last -%},{%- endif -%}
 {%-     endfor -%}
 {%- endmacro -%}
 

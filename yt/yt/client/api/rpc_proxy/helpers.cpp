@@ -1841,20 +1841,8 @@ bool IsDynamicTableRetriableError(const TError& error)
         error.FindMatching(NTabletClient::EErrorCode::TabletReplicationEraMismatch);
 }
 
-bool IsRetriableError(const TError& error, bool retryProxyBanned, bool retrySequoiaErrorsOnly)
+bool IsRetriableError(const TError& error, bool retryProxyBanned)
 {
-    // For now transient Sequoia failures are always retriable even if client's
-    // retries are disabled.
-    // TODO(kvk1920): consider to make a separate flag "EnableSequoiaRetries"
-    // for this.
-    if (error.FindMatching(NSequoiaClient::EErrorCode::SequoiaRetriableError)) {
-        return true;
-    }
-
-    if (retrySequoiaErrorsOnly) {
-        return false;
-    }
-
     if (error.FindMatching(NRpcProxy::EErrorCode::ProxyBanned) ||
         error.FindMatching(NRpc::EErrorCode::PeerBanned))
     {

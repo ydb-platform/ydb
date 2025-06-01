@@ -1,3 +1,5 @@
+* `ydb workload query` deep reworked. Now it can be used for user defined full cicle load testing.
+* Fixed an issue where the `ydb workload * clean` commands were deleting all contents from the target directory, instead of just the tables created by the init command.
 * Switched highlighting engine
 * Added `ydb admin cluster config verion` command to show configuration version (V1/V2) on nodes.
 * Removed `--executor` option from `ydb workload run` commands. Use always `generic`.

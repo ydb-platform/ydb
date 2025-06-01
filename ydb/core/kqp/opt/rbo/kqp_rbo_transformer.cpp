@@ -1,4 +1,5 @@
 #include "kqp_rbo_transformer.h"
+#include "kqp_operator.h"
 #include <yql/essentials/utils/log/log.h>
 
 using namespace NYql;
@@ -7,6 +8,59 @@ using namespace NKikimr::NKqp;
 using namespace NYql::NDq;
 
 namespace {
+
+struct TJoinTableAliases {
+    THashSet<TString> LeftSideAliases;
+    THashSet<TString> RightSideAliases;
+};
+
+TJoinTableAliases GatherJoinAliasesLeftSideMultiInputs(const TVector<TInfoUnit> &joinKeys, const THashSet<TString> &processedInputs) {
+    TJoinTableAliases joinAliases;
+    for (const auto &joinKey : joinKeys) {
+        if (processedInputs.count(joinKey.Alias)) {
+            joinAliases.LeftSideAliases.insert(joinKey.Alias);
+        } else {
+            joinAliases.RightSideAliases.insert(joinKey.Alias);
+        }
+    }
+    Y_ENSURE(joinAliases.LeftSideAliases.size(), "Left side of the join inputs are empty");
+    Y_ENSURE(joinAliases.RightSideAliases.size() == 1, "Right side of the join should have only one input");
+    return joinAliases;
+}
+
+TJoinTableAliases GatherJoinAliasesTwoInputs(const TVector<TInfoUnit> &joinKeys) {
+    TJoinTableAliases joinAliases;
+    for (ui32 i = 0; i < joinKeys.size(); i += 2) {
+        joinAliases.LeftSideAliases.insert(joinKeys[i].Alias);
+        joinAliases.RightSideAliases.insert(joinKeys[i + 1].Alias);
+    }
+
+    Y_ENSURE(joinAliases.LeftSideAliases.size() == 1, "Left side of the join should have only one input");
+    Y_ENSURE(joinAliases.RightSideAliases.size() == 1, "Right side of the join should have only one input");
+    return joinAliases;
+}
+
+TExprNode::TPtr BuildJoinKeys(const TVector<TInfoUnit>& joinKeys, const TJoinTableAliases& joinAliases, THashSet<TString>& processedInputs, TExprContext& ctx,
+                              TPositionHandle pos) {
+    Y_ENSURE(joinKeys.size() >= 2 && !(joinKeys.size() & 1), "Invalid join key size");
+    TVector<TDqJoinKeyTuple> keys;
+    for (ui32 i = 0; i < joinKeys.size(); i += 2) {
+        auto leftSideKey = joinKeys[i];
+        auto rightSideKey = joinKeys[i + 1];
+        if (joinAliases.LeftSideAliases.count(rightSideKey.Alias)) {
+            std::swap(leftSideKey, rightSideKey);
+        }
+        keys.push_back(Build<TDqJoinKeyTuple>(ctx, pos)
+                           .LeftLabel().Value(leftSideKey.Alias).Build()
+                           .LeftColumn().Value(leftSideKey.ColumnName).Build()
+                           .RightLabel().Value(rightSideKey.Alias).Build()
+                           .RightColumn().Value(rightSideKey.ColumnName).Build()
+                           .Done());
+        processedInputs.insert(leftSideKey.Alias);
+        processedInputs.insert(rightSideKey.Alias);
+    }
+    return Build<TDqJoinKeyTupleList>(ctx, pos).Add(keys).Done().Ptr();
+}
 
 TExprNode::TPtr RewritePgSelect(const TExprNode::TPtr& node, TExprContext& ctx, const TTypeAnnotationContext& typeCtx) {
     Y_UNUSED(typeCtx);
@@ -18,10 +72,11 @@ TExprNode::TPtr RewritePgSelect(const TExprNode::TPtr& node, TExprContext& ctx, 
     TExprNode::TPtr filterExpr;
     TExprNode::TPtr lastAlias;
 
-
     auto setItem = setItems->Tail().ChildPtr(0);
 
     auto from = GetSetting(setItem->Tail(), "from");
+    THashMap<TString, TExprNode::TPtr> aliasToInputMap;
+    TVector<TExprNode::TPtr> inputsInOrder;
 
     if (from) {
         for (auto fromItem : from->Child(1)->Children()) {
@@ -33,21 +88,91 @@ TExprNode::TPtr RewritePgSelect(const TExprNode::TPtr& node, TExprContext& ctx, 
                 .Alias(alias)
                 .Columns(readExpr.Columns())
                 .Done().Ptr();
+            aliasToInputMap.insert({TString(alias->Content()), opRead});
+            inputsInOrder.push_back(opRead);
+            lastAlias = alias;
+        }
+    }
 
-            if (!joinExpr) {
-                joinExpr = opRead;
-            } 
-            else {
-                auto joinKeys = Build<TDqJoinKeyTupleList>(ctx, node->Pos()).Done();
+    THashSet<TString> processedInputs;
+    auto joinOps = GetSetting(setItem->Tail(), "join_ops");
+    if (joinOps) {
+        for (ui32 i = 0; i < joinOps->Tail().ChildrenSize(); ++i) {
+            ui32 tableInputsCount = 0;
+            auto tuple = joinOps->Tail().Child(i);
+            for (ui32 j = 0; j < tuple->ChildrenSize(); ++j) {
+                auto join = tuple->Child(j);
+                auto joinType = join->Child(0)->Content();
+                if (joinType == "push") {
+                    ++tableInputsCount;
+                    continue;
+                }
+
+                Y_ENSURE(join->ChildrenSize() > 1 && join->Child(1)->ChildrenSize() > 1);
+                auto pgResolvedOps = FindNodes(join->Child(1)->Child(1)->TailPtr(), [](const TExprNode::TPtr& node) {
+                    if (node->IsCallable("PgResolvedOp")) {
+                        return true;
+                    } else {
+                        return false;
+                    }
+                });
+
+                TVector<TInfoUnit> joinKeys;
+                for (const auto& pgResolvedOp : pgResolvedOps) {
+                    TVector<TInfoUnit> keys;
+                    GetAllMembers(pgResolvedOp, keys);
+                    joinKeys.insert(joinKeys.end(), keys.begin(), keys.end());
+                }
+
+                TJoinTableAliases joinAliases;
+                TExprNode::TPtr leftInput;
+                TExprNode::TPtr rightInput;
+
+                if (tableInputsCount == 2) {
+                    joinAliases = GatherJoinAliasesTwoInputs(joinKeys);
+                    const auto leftSideAlias = *joinAliases.LeftSideAliases.begin();
+                    const auto rightSideAlias = *joinAliases.RightSideAliases.begin();
+                    Y_ENSURE(aliasToInputMap.count(leftSideAlias), "Left side alias is not present in input tables");
+                    Y_ENSURE(aliasToInputMap.count(rightSideAlias), "Right sided alias is not present input tables");
+                    leftInput = aliasToInputMap[leftSideAlias];
+                    rightInput = aliasToInputMap[rightSideAlias];
+                } else if (tableInputsCount == 1) {
+                    joinAliases = GatherJoinAliasesLeftSideMultiInputs(joinKeys, processedInputs);
+                    const auto rightSideAlias = *joinAliases.RightSideAliases.begin();
+                    Y_ENSURE(aliasToInputMap.contains(rightSideAlias), "Right side alias is not present in input tables");
+                    leftInput = joinExpr;
+                    rightInput = aliasToInputMap[rightSideAlias];
+                }
 
                 joinExpr = Build<TKqpOpJoin>(ctx, node->Pos())
-                    .LeftInput(joinExpr)
-                    .RightInput(opRead)
-                    .JoinKind().Value("Cross").Build()
-                    .JoinKeys(joinKeys)
-                    .Done().Ptr();
+                               .LeftInput(leftInput)
+                               .RightInput(rightInput)
+                               .JoinKind().Value(joinType).Build()
+                               .JoinKeys(BuildJoinKeys(joinKeys, joinAliases, processedInputs, ctx, node->Pos()))
+                               .Done().Ptr();
+                tableInputsCount = 0;
             }
-            lastAlias = alias;
+        }
+
+        // Build in order
+        if (!joinExpr) {
+            ui32 inputIndex = 0;
+            if (inputsInOrder.size() > 1) {
+                while (inputIndex < inputsInOrder.size()) {
+                    auto leftTableInput = inputIndex == 0 ? inputsInOrder[inputIndex] : joinExpr;
+                    auto rightTableInput = inputIndex == 0 ? inputsInOrder[inputIndex + 1] : inputsInOrder[inputIndex];
+                    auto joinKeys = Build<TDqJoinKeyTupleList>(ctx, node->Pos()).Done();
+                    joinExpr = Build<TKqpOpJoin>(ctx, node->Pos())
+                                   .LeftInput(leftTableInput)
+                                   .RightInput(rightTableInput)
+                                   .JoinKind().Value("Cross").Build()
+                                   .JoinKeys(joinKeys)
+                                   .Done().Ptr();
+                    inputIndex += (inputIndex == 0 ? 2 : 1);
+                }
+            } else {
+                joinExpr = inputsInOrder.front();
+            }
         }
     }
 

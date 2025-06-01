@@ -94,7 +94,7 @@ void TListJobsContinuationTokenSerializer::Register(TRegistrar registrar)
         .DontSerializeDefault();
 }
 
-TString EncodeNewToken(TListJobsOptions&& options, int jobCount)
+std::string EncodeNewToken(TListJobsOptions&& options, int jobCount)
 {
     options.Offset += jobCount;
     options.ContinuationToken.reset();
@@ -106,7 +106,7 @@ TString EncodeNewToken(TListJobsOptions&& options, int jobCount)
     return Base64Encode(optionsYson.ToString());
 }
 
-TListJobsOptions DecodeListJobsOptionsFromToken(const TString& continuationToken)
+TListJobsOptions DecodeListJobsOptionsFromToken(const std::string& continuationToken)
 {
     auto optionsYson = TYsonString(Base64StrictDecode(continuationToken));
     return ConvertTo<TListJobsContinuationToken>(optionsYson);

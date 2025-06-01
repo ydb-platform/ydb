@@ -384,7 +384,7 @@ inline TString GetRandomKey<TGUID>() {
 
 struct TTypeAnnotationContext: public TThrRefBase {
     TSimpleSharedPtr<NDq::TOrderingsStateMachine> OrderingsFSM;
-    TLangVersion LangVer = UnknownLangVersion;
+    TLangVersion LangVer = MinLangVersion;
     THashMap<TString, TIntrusivePtr<TOptimizerStatistics::TColumnStatMap>> ColumnStatisticsByTableName;
     THashMap<ui64, std::shared_ptr<TOptimizerStatistics>> StatisticsMap;
     TIntrusivePtr<ITimeProvider> TimeProvider;

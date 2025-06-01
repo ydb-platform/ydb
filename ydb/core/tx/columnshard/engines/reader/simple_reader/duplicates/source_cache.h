@@ -134,9 +134,9 @@ public:
         : TActor(&TSourceCache::StateMain)
         , FetchingContext(std::make_shared<TCommonFetchingContext>(readContext,
               [&readContext]() {
-                  std::vector<ui32> columnIds = IIndexInfo::GetSnapshotColumnIds();
-                  for (const auto& id : readContext->GetReadMetadata()->GetIndexVersions().GetLastSchema()->GetPkColumnsIds()) {
-                      columnIds.emplace_back(id);
+                  std::set<ui32> columnIds = readContext->GetReadMetadata()->GetIndexVersions().GetLastSchema()->GetPkColumnsIds();
+                  for (const auto& id : IIndexInfo::GetSnapshotColumnIds()) {
+                      columnIds.insert(id);
                   }
                   return columnIds;
               }()))

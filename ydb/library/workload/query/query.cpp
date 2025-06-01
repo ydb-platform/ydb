@@ -52,7 +52,7 @@ There is example of init directory: https://github.com/ydb-platform/ydb/tree/mai
 
     case ECommandType::Import:
         return R"(Populating tables with data.
-The "import" directory should contain subfolders named after each table, with files in supported data formats such as csv, tsv, csv.gz, or tsv.gz
+The "import" directory should contain subfolders named after each table, with files in supported data formats such as csv, tsv, csv.gz, tsv.gz or parquet.
 
 There is example of import directory: https://github.com/ydb-platform/ydb/tree/main/ydb/tests/functional/tpc/data/e1/import.)";
 
@@ -73,7 +73,7 @@ The suite can contain up to four stages:
 Initialization of tables and their configurations, typically involving DDL queries from files with "sql" and "yql" extensions. These queries can also be directly specified from the command line using the "--query" parameter of the "init" command.
 
 2. import
-Populating tables with data. The "import" directory should contain subfolders named after each table, with files in supported data formats such as csv, tsv, csv.gz, or tsv.gz.
+Populating tables with data. The "import" directory should contain subfolders named after each table, with files in supported data formats such as csv, tsv, csv.gz, tsv.gz or parquet.
 
 3. run
 Executing load testing using queries from files in the "run" directory or directly from the command line via the "--query" parameter.

@@ -14,19 +14,14 @@ DATABASE_ENDPOINT = config["QA_DB"]["DATABASE_ENDPOINT"]
 DATABASE_PATH = config["QA_DB"]["DATABASE_PATH"]
 
 
-def drop_table(session, table_path):
-    print(f"> Dropping table if exists: '{table_path}'")
-    session.execute_scheme(f"DROP TABLE IF EXISTS `{table_path}`;")
-
-
 def check_table_exists(session, table_path):
     """Check if table exists"""
     try:
         session.describe_table(table_path)
         print(f"Table '{table_path}' already exists.")
         return True
-    except ydb.SchemeError:
-        print(f"Table '{table_path}' does not exist.")
+    except ydb.SchemeError as e:
+        print(f"Table '{table_path}' does not exist, error: {e} ")
         return False
 
 

@@ -221,7 +221,7 @@ std::vector<TWritePortionInfoWithBlobsResult> TMerger::Execute(const std::shared
                         IColumnMerger::PortionRecordIndexFieldName);
                 batch->AddField(IColumnMerger::PortionRecordIndexField, column->BuildArray(batch->num_rows())).Validate();
             }
-            mergeStream.AddSource(batch, Filters[idx]);
+            mergeStream.AddSource(batch, 0, Filters[idx]);
             ++idx;
         }
         auto batchResults = mergeStream.DrainAllParts(checkPoints, indexFields);

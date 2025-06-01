@@ -18,7 +18,7 @@ public:
         : Finally_(std::forward<T>(finally))
     { }
 
-    TFinallyGuard(TFinallyGuard&& guard)
+    TFinallyGuard(TFinallyGuard&& guard) noexcept
         : Released_(guard.Released_)
         , Finally_(std::move(guard.Finally_))
     {
@@ -27,9 +27,18 @@ public:
 
     TFinallyGuard(const TFinallyGuard&) = delete;
     TFinallyGuard& operator=(const TFinallyGuard&) = delete;
-    TFinallyGuard& operator=(TFinallyGuard&&) = delete;
 
-    void Release()
+    TFinallyGuard& operator=(TFinallyGuard&& other) noexcept
+    {
+        if (this != &other) {
+            Released_ = other.Released_;
+            Finally_ = std::move(other.Finally_);
+            other.Release();
+        }
+        return *this;
+    }
+
+    void Release() noexcept
     {
         Released_ = true;
     }

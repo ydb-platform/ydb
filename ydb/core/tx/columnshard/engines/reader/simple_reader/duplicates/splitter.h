@@ -30,6 +30,11 @@ public:
     bool operator==(const TDuplicateMapInfo& other) const {
         return std::tie(MaxVersion, Offset, RowsCount, SourceId) == std::tie(other.MaxVersion, other.Offset, other.RowsCount, other.SourceId);
     }
+
+    TString DebugString() const {
+        return TStringBuilder() << "MaxVersion=" << MaxVersion.DebugString() << ";Offset=" << Offset << ";RowsCount=" << RowsCount << ";SourceId"
+                                << SourceId;
+    }
 };
 
 class TColumnDataSplitter {
@@ -61,6 +66,10 @@ public:
 
         const NArrow::TSimpleRow& GetKey() const {
             return Key;
+        }
+
+        TString DebugString() const {
+            return TStringBuilder() << (IsLast ? "Last:" : "First:") << Key.DebugString();
         }
     };
 
@@ -112,8 +121,8 @@ public:
                 borderOffsets.emplace_back(offset);
                 continue;
             }
-            const auto findBound =
-                position.FindBound(position, offset, data->GetData()->GetRecordsCount() - 1, borderPosition, border.GetIsLast());
+            const auto findBound = NArrow::NMerger::TSortableBatchPosition::FindBound(
+                position, offset, data->GetData()->GetRecordsCount() - 1, borderPosition, border.GetIsLast());
             offset = findBound ? findBound->GetPosition() : data->GetData()->GetRecordsCount();
             borderOffsets.emplace_back(offset);
         }
@@ -124,6 +133,16 @@ public:
         }
 
         return segments;
+    }
+
+    TString DebugString() const {
+        TStringBuilder sb;
+        sb << "[";
+        for (const auto& border : Borders) {
+            sb << border.DebugString() << ";";
+        }
+        sb << "]";
+        return sb;
     }
 };
 

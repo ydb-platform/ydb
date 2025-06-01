@@ -265,12 +265,10 @@ private:
         AFL_VERIFY(result.GetPortions().size() == 1)("count", result.GetPortions().size());
         TPortionDataAccessor portionAccessor = std::move(result.ExtractPortionsVector()[0]);
 
-        const std::set<ui32> columnIds(Context->GetCommonContext().GetResultSchema()->GetColumnIds().begin(),
-            Context->GetCommonContext().GetResultSchema()->GetColumnIds().end());
         THashMap<TChunkAddress, TBlobRangeLink16> chunkRanges;
         TReadActionsCollection readActions;
 
-        for (const ui32 columnId : columnIds) {
+        for (const ui32 columnId : Context->GetCommonContext().GetResultSchema()->GetColumnIds()) {
             std::vector<TColumnRecord> columnChunks;
             for (const auto* record : portionAccessor.GetColumnChunksPointers(columnId)) {
                 columnChunks.emplace_back(*record);
@@ -295,7 +293,9 @@ private:
         Context->SetPortionAccessor(std::move(portionAccessor));
         auto fetchingTask = std::make_shared<TColumnsFetcherTask>(std::move(readActions), Context, std::move(chunkRanges));
 
-        const ui64 mem = portionAccessor.GetColumnRawBytes(columnIds, false);
+        const ui64 mem = portionAccessor.GetColumnRawBytes({ Context->GetCommonContext().GetResultSchema()->GetColumnIds().begin(),
+                                                               Context->GetCommonContext().GetResultSchema()->GetColumnIds().end() },
+            false);
         auto allocationTask = std::make_shared<TColumnsMemoryAllocation>(mem, fetchingTask, Context);
         NGroupedMemoryManager::TScanMemoryLimiterOperator::SendToAllocation(Context->GetMemoryGroupGuard()->GetProcessId(),
             Context->GetMemoryGroupGuard()->GetExternalScopeId(), Context->GetMemoryGroupGuard()->GetGroupId(), { allocationTask },

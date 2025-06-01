@@ -134,6 +134,11 @@ private:
 public:
     TEvFiltersConstructed(TFilters&& result)
         : Result(std::move(result)) {
+        for (const auto& [info, filter] : Result) {
+            AFL_VERIFY(!!filter.GetRecordsCount() && filter.GetRecordsCountVerified() == info.GetRowsCount())(
+                                                                                         "filter", filter.GetRecordsCount().value_or(0))(
+                                                                                         "info", info.DebugString());
+        }
     }
 };
 
@@ -159,7 +164,7 @@ private:
         }
     };
 
-    class TFilterResultSubscriber: public TBuildDuplicateFilters::ISubscriber {
+    class TMergeResultSubscriber: public TBuildDuplicateFilters::ISubscriber {
     private:
         TActorId Owner;
         THashMap<ui64, TDuplicateMapInfo> InfoBySource;
@@ -171,7 +176,7 @@ private:
         }
 
     public:
-        TFilterResultSubscriber(const TActorId& owner, THashMap<ui64, TDuplicateMapInfo>&& intervals)
+        TMergeResultSubscriber(const TActorId& owner, THashMap<ui64, TDuplicateMapInfo>&& intervals)
             : Owner(owner)
             , InfoBySource(std::move(intervals)) {
         }

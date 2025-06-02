@@ -36,27 +36,20 @@ TString TQueryWorkloadParams::GetWorkloadName() const {
 }
 
 TString TQueryWorkloadParams::GetDescription(ECommandType commandType, int /*workloadType*/) const {
-    switch (commandType) {
-    default:
-        return "";
-
-    case ECommandType::Init:
-        return R"(Initialization of tables and their configurations.
+    constexpr auto INIT_HELP = R"(Initialization of tables and their configurations.
 Typically involving DDL queries from files with "sql" and "yql" extensions. These queries can also be directly specified from the command line using the "--query" parameter.
 
 Next aliases can be used in queries:
   * {db} - absolute path in database to workload root. It is combination of --database and --path option values.
 
-There is example of init directory: https://github.com/ydb-platform/ydb/tree/main/ydb/tests/functional/tpc/data/e1/init.)";
+)";
 
-    case ECommandType::Import:
-        return R"(Populating tables with data.
+    constexpr auto IMPORT_HELP = R"(Populating tables with data.
 The "import" directory should contain subfolders named after each table, with files in supported data formats such as csv, tsv, csv.gz, tsv.gz or parquet.
 
-There is example of import directory: https://github.com/ydb-platform/ydb/tree/main/ydb/tests/functional/tpc/data/e1/import.)";
+)";
 
-    case ECommandType::Run:
-        return R"(Run load testing.
+    constexpr auto RUN_HELP = R"(Run load testing.
 Executing load testing using queries from files in the "run" directory or directly from the command line via the "--query" parameter.
 
 Files with the "sql" and "yql" extensions will be used to generate queries. For each one, a canonical result can be set using a file with the same name and the additional ".result" extension. These are CSV files with headers and some additional syntax:
@@ -66,34 +59,38 @@ Files with the "sql" and "yql" extensions will be used to generate queries. For 
 
 The canonical result will not be used unless the "--check-canonical" flag is set.
 
-There is example of run directory: https://github.com/ydb-platform/ydb/tree/main/ydb/tests/functional/tpc/data/e1/run.)";
+)";
 
+    constexpr auto CLEAN_HELP = R"(Cleaning up by removing tables used for load testing.
+This step only requires the database path.)";
+
+switch (commandType) {
+    default:
+        return "";
+    case ECommandType::Init:
+        return TStringBuilder() << INIT_HELP << "There is example of init directory: https://github.com/ydb-platform/ydb/tree/main/ydb/tests/functional/tpc/data/e1/init.";
+    case ECommandType::Import:
+        return TStringBuilder() << IMPORT_HELP << "There is example of import directory: https://github.com/ydb-platform/ydb/tree/main/ydb/tests/functional/tpc/data/e1/import.";
+    case ECommandType::Run:
+        return TStringBuilder() << RUN_HELP << "There is example of run directory: https://github.com/ydb-platform/ydb/tree/main/ydb/tests/functional/tpc/data/e1/run.";
+    case ECommandType::Clean:
+        return TStringBuilder() << CLEAN_HELP;
     case ECommandType::Root:
-        return R"(Executes a user-defined workload consisting of multiple stages.
+        return TStringBuilder() << R"(Executes a user-defined workload consisting of multiple stages.
 The user provides a directory path, referred to as a suite, which contains subdirectories for each stage. This path is specified using the "--suite-path" parameter in each command.
 
 There is example of suite directory: https://github.com/ydb-platform/ydb/tree/main/ydb/tests/functional/tpc/data/e1.
 
 The suite can contain up to four stages:
 1. init
-Initialization of tables and their configurations, typically involving DDL queries from files with "sql" and "yql" extensions. These queries can also be directly specified from the command line using the "--query" parameter of the "init" command.
-
-2. import
-Populating tables with data. The "import" directory should contain subfolders named after each table, with files in supported data formats such as csv, tsv, csv.gz, tsv.gz or parquet.
-
-3. run
-Executing load testing using queries from files in the "run" directory or directly from the command line via the "--query" parameter.
-
-Files with the "sql" and "yql" extensions will be used to generate queries. For each one, a canonical result can be set using a file with the same name and the additional ".result" extension. These are CSV files with headers and some additional syntax:
-    * If a query has more than one result set, the result file should contain the same number of data sets, separated by empty lines.
-    * The last line may be set to "...", which means the query result can have more rows, but only the first ones will be checked.
-    * By default, floating-point numbers are compared with a relative accuracy of 1e-3 percent, but you can specify any absolute or relative accuracy like: "1.5+-0.01", "2.4e+10+-1%".
-
-The canonical result will not be used unless the "--check-canonical" flag is set.
-
-4. clean
-Cleaning up by removing tables used for load testing.
-This step only requires the database path.
+)" << INIT_HELP
+<< R"(2. import
+)" << IMPORT_HELP
+<< R"(3. run
+)" << RUN_HELP
+<< R"(4. clean
+)" << CLEAN_HELP
+<< R"(
 
 Details can be found in the description of the commands, using the "--help" option.)";
     }

@@ -217,8 +217,8 @@ class TestSecondaryIndexFollowers(RollingUpgradeAndDowngradeFixture):
     @pytest.mark.parametrize("enable_followers", [True, False])
     def test_secondary_index_followers(self, enable_followers):
         self.create_table(enable_followers)
-        self.write_data()
 
         for _ in self.roll():
+            self.write_data()
             self.read_data()
             self.check_statistics(enable_followers)

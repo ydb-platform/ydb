@@ -23,4 +23,14 @@
             "max_row_weight" = 16777216;
         };
     };
+    "partition" = {
+        "yt_table" = {
+            "max_data_weight_per_part" = 104857600;
+            "max_parts" = 100;
+        };
+        "fmr_table" = {
+            "max_data_weight_per_part" = 104857600;
+            "max_parts" = 100;
+        };
+    }
 }

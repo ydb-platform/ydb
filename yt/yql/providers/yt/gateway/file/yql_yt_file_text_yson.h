@@ -1,4 +1,5 @@
 #pragma once
+
 #include <yt/cpp/mapreduce/interface/fwd.h>
 #include <yt/cpp/mapreduce/interface/common.h>
 

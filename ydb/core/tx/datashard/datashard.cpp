@@ -4455,7 +4455,7 @@ void TDataShard::Handle(TEvDataShard::TEvS3UploadRowsRequest::TPtr& ev, const TA
     Execute(new TTxS3UploadRows(this, ev), ctx);
 }
 
-void TDataShard::ScanComplete(NTable::EAbort,
+void TDataShard::ScanComplete(NTable::EStatus,
                                      TAutoPtr<IDestructable> prod,
                                      ui64 cookie,
                                      const TActorContext &ctx)

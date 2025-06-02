@@ -58,7 +58,7 @@ void TClientCommandRootKikimrBase::Config(TConfig& config) {
     NColorizer::TColors colors = NColorizer::AutoColors(Cout);
     stream << " -s <[protocol://]host[:port]> [options] <subcommand>" << Endl << Endl
         << colors.BoldColor() << "Subcommands" << colors.OldColor() << ":" << Endl;
-    RenderCommandDescription(stream, config.HelpCommandVerbosiltyLevel > 1, colors);
+    RenderCommandDescription(stream, config.HelpCommandVerbosiltyLevel > 1, colors, BEGIN, "", true);
     opts.SetCmdLineDescr(stream.Str());
 }
 

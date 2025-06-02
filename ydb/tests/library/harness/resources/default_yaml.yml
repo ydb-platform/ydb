@@ -197,6 +197,7 @@ table_service_config:
     mkql_light_program_memory_limit: 65536
     mkql_heavy_program_memory_limit: 1048576
     channel_buffer_size: 262144
+    verbose_memory_limit_exception: true
 net_classifier_config:
   updater_config:
     retry_interval_seconds: 30

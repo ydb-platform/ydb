@@ -196,7 +196,7 @@ DEFINE_ENUM(EChunkAvailabilityPolicy,
     ((Repairable)                   (2))
 );
 
-// Keep in sync with NChunkServer::ETableChunkFormat.
+// Keep in sync with SerializeChunkFormatAsTableChunkFormat.
 DEFINE_ENUM_WITH_UNDERLYING_TYPE(EChunkFormat, i8,
     // Sentinels.
     ((Unknown)                             (-1))

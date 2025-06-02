@@ -139,7 +139,7 @@ struct TEvStateStorage::TEvResolveReplicasList : public TEventLocal<TEvResolveRe
 
     TVector<TActorId> GetPlainReplicas() {
         TVector<TActorId> result;
-        for(auto& r : ReplicaGroups)
+        for (const auto& r : ReplicaGroups)
             result.insert(result.end(), r.Replicas.begin(), r.Replicas.end());
         return result;
     }

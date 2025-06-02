@@ -105,8 +105,6 @@ private:
             err = ibv_query_device(ctx, &devAttrs);
 
             if (err < 0) {
-                ibv_dealloc_pd(pd);
-                ibv_close_device(ctx); 
                 continue;
             }
         

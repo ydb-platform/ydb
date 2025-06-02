@@ -188,6 +188,7 @@ namespace NKikimr::NBsController {
 
                 if (const TGroupInfo *group = State.Groups.Find(vslotInfo.GroupId); group && mood != TMood::Delete) {
                     item.SetStoragePoolName(State.StoragePools.Get().at(group->StoragePoolId).Name);
+                    item.SetGroupSizeInUnits(group->GroupSizeInUnits);
 
                     const TVSlotFinder vslotFinder{[this](TVSlotId vslotId, auto&& callback) {
                         if (const TVSlotInfo *vslot = State.VSlots.Find(vslotId)) {
@@ -396,7 +397,7 @@ namespace NKikimr::NBsController {
                 if (!degraded.empty()) {
                     msg << "Degraded GroupIds# " << FormatList(degraded) << ' ';
                     if (response) {
-                        for (const auto& id: degraded) {
+                        for (const auto& id: degraded) { 
                             response->MutableGroupsGetDegraded()->Add(id.GetRawId());
                         }
                     }
@@ -755,7 +756,11 @@ namespace NKikimr::NBsController {
             // remove slot info from the PDisk
             TPDiskInfo *pdisk = PDisks.FindForUpdate(vslotId.ComprisingPDiskId());
             Y_ABORT_UNLESS(pdisk);
-            --pdisk->NumActiveSlots;
+            const TGroupInfo *group = Groups.Find(mutableSlot->GroupId);
+            Y_ABORT_UNLESS(group);
+            pdisk->NumActiveSlots -= TPDiskConfig::GetOwnerWeight(
+                group->GroupSizeInUnits,
+                pdisk->SlotSizeInUnits);
 
             if (UncommittedVSlots.erase(vslotId)) {
                 const ui32 erased = pdisk->VSlotsOnPDisk.erase(vslotId.VSlotId);
@@ -785,7 +790,11 @@ namespace NKikimr::NBsController {
                     const TVSlotInfo *vslotInTable = VSlots.Find(TVSlotId(pdiskId, vslotId));
                     Y_ABORT_UNLESS(vslot == vslotInTable);
                     Y_ABORT_UNLESS(vslot->PDisk == &pdisk);
-                    numActiveSlots += !vslot->IsBeingDeleted();
+                    if (!vslot->IsBeingDeleted()) {
+                        const TGroupInfo *group = Groups.Find(vslot->GroupId);
+                        Y_ABORT_UNLESS(group);
+                        numActiveSlots += TPDiskConfig::GetOwnerWeight(group->GroupSizeInUnits, pdisk.SlotSizeInUnits);
+                    }
                 }
                 Y_ABORT_UNLESS(pdisk.NumActiveSlots == numActiveSlots);
             });

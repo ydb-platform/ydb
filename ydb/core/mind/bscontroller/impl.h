@@ -339,7 +339,7 @@ public:
         TBoxId BoxId;
         ui32 ExpectedSlotCount = 0;
         bool HasExpectedSlotCount = false;
-        ui32 NumActiveSlots = 0; // number of active VSlots created over this PDisk
+        ui32 NumActiveSlots = 0; // sum of owners weights allocated on this PDisk
         ui32 SlotSizeInUnits = 0;
         TMap<Schema::VSlot::VSlotID::Type, TIndirectReferable<TVSlotInfo>::TPtr> VSlotsOnPDisk; // vslots over this PDisk
 
@@ -2299,7 +2299,7 @@ public:
         for (auto it = VSlotReadyTimestampQ.begin(); it != VSlotReadyTimestampQ.end() && it->first <= now;
                 it = VSlotReadyTimestampQ.erase(it)) {
             Y_DEBUG_ABORT_UNLESS(!it->second->IsReady);
-            
+
             updates.push_back({
                 .VDiskId = it->second->GetVDiskId(),
                 .IsReady = true,

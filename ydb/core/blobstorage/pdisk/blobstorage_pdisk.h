@@ -249,6 +249,61 @@ struct TEvYardInitResult : TEventLocal<TEvYardInitResult, TEvBlobStorage::EvYard
     }
 };
 
+////////////////////////////////////////////////////////////////////////////
+// CHANGE GroupSizeInUnits
+////////////////////////////////////////////////////////////////////////////
+struct TEvYardResize : TEventLocal<TEvYardResize, TEvBlobStorage::EvYardResize> {
+    TOwner Owner;
+    TOwnerRound OwnerRound;
+    ui32 GroupSizeInUnits;
+
+    TEvYardResize(TOwner owner, TOwnerRound ownerRound, ui32 groupSizeInUnits)
+        : Owner(owner)
+        , OwnerRound(ownerRound)
+        , GroupSizeInUnits(groupSizeInUnits)
+    {}
+
+    TString ToString() const {
+        return ToString(*this);
+    }
+
+    static TString ToString(const TEvYardResize &record) {
+        TStringStream str;
+        str << "{EvYardResize Owner# " << record.Owner;
+        str << " OwnerRound# " << record.OwnerRound;
+        str << " GroupSizeInUnits# " << record.GroupSizeInUnits;
+        str << "}";
+        return str.Str();
+    }
+};
+
+struct TEvYardResizeResult : TEventLocal<TEvYardResizeResult, TEvBlobStorage::EvYardResizeResult> {
+    NKikimrProto::EReplyStatus Status;
+    TStatusFlags StatusFlags;
+    TString ErrorReason;
+
+    TEvYardResizeResult(
+            NKikimrProto::EReplyStatus status,
+            TStatusFlags statusFlags,
+            TString errorReason)
+        : Status(status)
+        , StatusFlags(statusFlags)
+        , ErrorReason(std::move(errorReason))
+    {}
+
+    TString ToString() const {
+        return ToString(*this);
+    }
+
+    static TString ToString(const TEvYardResizeResult &record) {
+        TStringStream str;
+        str << "{TEvYardResizeResult Status# " << NKikimrProto::EReplyStatus_Name(record.Status).data();
+        str << " ErrorReason# \"" << record.ErrorReason << "\"";
+        str << " StatusFlags# " << StatusFlagsToString(record.StatusFlags);
+        str << "}";
+        return str.Str();
+    }
+};
 
 ////////////////////////////////////////////////////////////////////////////
 // LOG

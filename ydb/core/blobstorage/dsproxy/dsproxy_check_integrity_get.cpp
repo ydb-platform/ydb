@@ -149,13 +149,13 @@ class TBlobStorageGroupCheckIntegrityRequest
                     PartLayoutWithNotYet, faultyDisks);
 
                 if (stateNotYet == TBlobStorageGroupInfo::EBS_FULL) {
-                    PendingResult->PlacementStatus = TEvCheckIntegrityResult::PS_NOT_YET;
+                    PendingResult->PlacementStatus = TEvCheckIntegrityResult::PS_REPLICATION_IN_PROGRESS;
                 } else if (state == TBlobStorageGroupInfo::EBS_RECOVERABLE_FRAGMENTARY) {
-                    PendingResult->PlacementStatus = TEvCheckIntegrityResult::PS_RECOVERABLE;
+                    PendingResult->PlacementStatus = TEvCheckIntegrityResult::PS_BLOB_IS_RECOVERABLE;
                 } else if (HasErrorDisks) {
                     PendingResult->PlacementStatus = TEvCheckIntegrityResult::PS_UNKNOWN;
                 } else {
-                    PendingResult->PlacementStatus = TEvCheckIntegrityResult::PS_ERROR;
+                    PendingResult->PlacementStatus = TEvCheckIntegrityResult::PS_BLOB_IS_LOST;
                 }
                 break;
             }

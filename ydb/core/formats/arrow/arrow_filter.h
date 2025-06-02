@@ -190,6 +190,7 @@ public:
         }
 
         bool Next(const ui32 size);
+        bool MoveTo(const ui32 position);
     };
 
     TString DebugString() const;

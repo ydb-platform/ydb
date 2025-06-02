@@ -159,19 +159,20 @@ public:
     }
 
     template <class TDataContainer>
-    void AddSource(const std::shared_ptr<TDataContainer>& batch, const ui64 start, const std::shared_ptr<NArrow::TColumnFilter>& filter,
-        const std::optional<ui64> sourceIdExt = std::nullopt) {
+    void AddSource(const std::shared_ptr<TDataContainer>& batch, const TIterationOrder& order,
+        const std::shared_ptr<NArrow::TColumnFilter>& filter, const std::optional<ui64> sourceIdExt = std::nullopt) {
+        AFL_VERIFY(order.GetIsReversed() == Reverse);
         const ui64 sourceId = sourceIdExt.value_or(SortHeap.Size());
-        if (!batch || (i64)batch->num_rows() == (i64)start) {
+        if (!batch || (i64)batch->num_rows() == (i64)order.GetStart()) {
             return;
         }
-        AFL_VERIFY((i64)start < (i64)batch->num_rows())("start", start)("num_rows", batch->num_rows());
+        AFL_VERIFY((i64)order.GetStart() < (i64)batch->num_rows())("start", order.GetStart())("num_rows", batch->num_rows());
         //        Y_DEBUG_ABORT_UNLESS(NArrow::IsSorted(batch, SortSchema));
         const bool isDenyFilter = filter && filter->IsTotalDenyFilter();
         auto filterImpl = (!filter || filter->IsTotalAllowFilter()) ? nullptr : filter;
         static const arrow::Schema emptySchema = arrow::Schema(arrow::FieldVector());
-        TBatchIterator iterator(batch, start, filterImpl, *SortSchema, (!isDenyFilter && DataSchema) ? *DataSchema : emptySchema, Reverse,
-            VersionColumnNames, sourceId);
+        TBatchIterator iterator(batch, filterImpl, *SortSchema, (!isDenyFilter && DataSchema) ? *DataSchema : emptySchema, VersionColumnNames,
+            sourceId, TIterationOrder(Reverse, order.GetStart()));
         if (MaxVersion) {
             MaxVersion->ValidateSchema(*iterator.GetVersionColumns().GetSorting());
         }

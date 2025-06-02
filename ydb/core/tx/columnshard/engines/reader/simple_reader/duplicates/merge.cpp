@@ -7,7 +7,8 @@ void TBuildDuplicateFilters::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/
     merger.PutControlPoint(Finish.BuildSortablePosition(), false);
     TFiltersBuilder filtersBuilder;
     for (const auto& [id, source] : SourcesById) {
-        merger.AddSource(source.GetBatch()->GetData(), source.GetOffset(), nullptr, id);
+        merger.AddSource(
+            source.GetBatch()->GetData(), NArrow::NMerger::TIterationOrder::Forward(source.GetOffset()), nullptr, id);
         filtersBuilder.AddSource(id);
     }
     merger.DrainToControlPoint(filtersBuilder, IncludeFinish);
@@ -25,4 +26,17 @@ void TBuildDuplicateFilters::DoOnCannotExecute(const TString& reason) {
     Callback.reset();
 }
 
-}   // namespace NKikimr::NOlap::NReader::NSimple
+TBuildDuplicateFilters::TBuildDuplicateFilters(const std::shared_ptr<arrow::Schema>& sortingSchema,
+    const std::optional<NArrow::NMerger::TCursor>& maxVersion, const NArrow::TSimpleRow& finish, const bool includeFinish,
+    const NColumnShard::TDuplicateFilteringCounters& counters, std::unique_ptr<ISubscriber>&& callback)
+    : PKSchema(sortingSchema)
+    , VersionColumnNames(IIndexInfo::GetSnapshotColumnNames())
+    , Counters(counters)
+    , MaxVersion(maxVersion)
+    , Finish(finish)
+    , IncludeFinish(includeFinish)
+    , Callback(std::move(callback)) {
+    AFL_VERIFY(Callback);
+    AFL_VERIFY(finish.GetSchema()->Equals(sortingSchema));
+}
+}   // namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering

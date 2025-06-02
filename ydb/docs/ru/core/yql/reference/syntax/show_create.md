@@ -25,7 +25,7 @@ SHOW CREATE [TABLE|VIEW] <name>;
 - **PathType** — тип объекта: `Table` или `View`.
 - **CreateQuery** — полный набор DDL-выражений, необходимых для воссоздания объекта:
     - Для таблиц: основной оператор [CREATE TABLE](create_table/index.md) (с путем относительно базы), а также дополнительные команды, необходимые для описания текущего состояния и настроек:
-        - [ALTER TABLE ... ALTER INDEX](alter_table/indexes#изменение-параметров-индекса-alter-index)— для задания настроек партицирования вторичных индексов.
+        - [ALTER TABLE ... ALTER INDEX](alter_table/secondary_index#alter-index)— для задания настроек партицирования вторичных индексов.
         - [ALTER TABLE ... ADD CHANGEFEED](alter_table/changefeed.md)— для добавления потока изменений.
         - `ALTER SEQUENCE` — для восстановления состояния `Sequence` у колонок типа [Serial](../../../yql/reference/types/serial.md).
     - Для представлений: определение посредством команды [CREATE VIEW](create-view.md), а также, если необходимо, [PRAGMA TablePathPrefix](pragma#table-path-prefix).

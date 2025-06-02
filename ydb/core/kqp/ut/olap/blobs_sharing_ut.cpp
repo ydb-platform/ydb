@@ -280,7 +280,7 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
         void WaitResharding(const TString& hint = "") {
             const TInstant start = TInstant::Now();
             bool clean = false;
-            while (TInstant::Now() - start < TDuration::Seconds(200)) {
+            while (TInstant::Now() - start < TDuration::Seconds(60)) {
                 NYdb::NOperation::TOperationClient operationClient(Kikimr.GetDriver());
                 auto result = operationClient.List<NYdb::NSchemeShard::TBackgroundProcessesResponse>().GetValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
@@ -412,7 +412,7 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
 
     public:
         TAsyncReshardingTest() {
-            TLocalHelper(Kikimr).CreateTestOlapTable("olapTable", "olapStore", 1024, 32);
+            TLocalHelper(Kikimr).CreateTestOlapTable("olapTable", "olapStore", 1, 1);
         }
 
         void AddBatch(int numRows) {

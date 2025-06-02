@@ -1,13 +1,15 @@
+import "ydb/core/tx/columnshard/common/protos/path_id.proto";
 import "ydb/core/tx/columnshard/export/protos/selector.proto";
 import "ydb/core/tx/columnshard/export/protos/storage.proto";
 import "ydb/core/protos/flat_scheme_op.proto";
 import "ydb/core/protos/tx_columnshard.proto";
 
+
 package NKikimrColumnShardExportProto;
 
 message TIdentifier {
     optional uint64 PathId_Deprecated = 1;
-    optional NKikimrTxColumnShard.TInternalPathId PathId = 2; //TSchemeShardLocalPathId
+    optional NKikimrColumnShardPathIdProto.TInternalPathId PathId = 2; //TSchemeShardLocalPathId
 }
 
 message TExportTask {

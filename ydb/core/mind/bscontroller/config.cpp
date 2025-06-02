@@ -396,7 +396,7 @@ namespace NKikimr::NBsController {
                 if (!degraded.empty()) {
                     msg << "Degraded GroupIds# " << FormatList(degraded) << ' ';
                     if (response) {
-                        for (const auto& id: degraded) { 
+                        for (const auto& id: degraded) {
                             response->MutableGroupsGetDegraded()->Add(id.GetRawId());
                         }
                     }
@@ -956,6 +956,7 @@ namespace NKikimr::NBsController {
             pb->SetKind(pool.Kind);
             pb->SetNumGroups(pool.NumGroups);
             pb->SetRandomizeGroupMapping(pool.RandomizeGroupMapping);
+            pb->SetDefaultGroupSizeInUnits(pool.DefaultGroupSizeInUnits);
 
             for (const auto &userId : pool.UserIds) {
                 pb->AddUserId(std::get<2>(userId));
@@ -1060,6 +1061,7 @@ namespace NKikimr::NBsController {
             pb->SetBoxId(std::get<0>(group.StoragePoolId));
             pb->SetStoragePoolId(std::get<1>(group.StoragePoolId));
             pb->SetSeenOperational(group.SeenOperational);
+            pb->SetGroupSizeInUnits(group.GroupSizeInUnits);
 
             const auto& status = group.Status;
             pb->SetOperatingStatus(status.OperatingStatus);
@@ -1187,6 +1189,8 @@ namespace NKikimr::NBsController {
             if (groupInfo.DecommitStatus != NKikimrBlobStorage::TGroupDecommitStatus::NONE) {
                 group->SetDecommitStatus(groupInfo.DecommitStatus);
             }
+
+            group->SetGroupSizeInUnits(groupInfo.GroupSizeInUnits);
         }
 
         void TBlobStorageController::SerializeSettings(NKikimrBlobStorage::TUpdateSettings *settings) {

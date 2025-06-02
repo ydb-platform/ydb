@@ -128,6 +128,7 @@ message TGroupInfo {
     optional uint64 BlobDepotId = 15; // if filled, then this is virtual group
     optional NKikimrBlobStorage.TGroupDecommitStatus.E DecommitStatus = 16;
     repeated uint32 BridgeGroupIds = 17; // filled in for common group when operating in bridge mode
+    optional uint32 GroupSizeInUnits = 18;
 }
 
 message TEvVPatchStart {

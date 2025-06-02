@@ -188,7 +188,7 @@ namespace Tests {
         TServerSettings& SetSupportsRedirect(bool value) { SupportsRedirect = value; return *this; }
         TServerSettings& SetTracePath(const TString& value) { TracePath = value; return *this; }
         TServerSettings& SetDomain(ui32 value) { Domain = value; return *this; }
-        TServerSettings& SetDomainName(const TString& value);
+        TServerSettings& SetDomainName(const TString& value, ui32 numGroups = 1);
         TServerSettings& SetNodeCount(ui32 value) { NodeCount = value; return *this; }
         TServerSettings& SetDynamicNodeCount(ui32 value) { DynamicNodeCount = value; return *this; }
         TServerSettings& SetDataCenterCount(ui32 value) { DataCenterCount = value; return *this; }

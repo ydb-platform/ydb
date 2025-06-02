@@ -1335,6 +1335,7 @@ NKikimrTxDataShard::TEvCompactTableResult CompactTable(
     auto sender = runtime.AllocateEdgeActor();
     auto request = MakeHolder<TEvDataShard::TEvCompactTable>(tableId.PathId);
     request->Record.SetCompactBorrowed(compactBorrowed);
+    request->Record.SetCompactSinglePartedShards(true);
     runtime.SendToPipe(shardId, sender, request.Release(), 0, GetPipeConfigWithRetries());
 
     auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvCompactTableResult>(sender);

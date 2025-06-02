@@ -11,4 +11,6 @@ namespace NKikimr {
     IActor *CreateBlobStorageGroupProxyMockActor(TIntrusivePtr<NFake::TProxyDS> model);
     IActor *CreateBlobStorageGroupProxyMockActor(TGroupId groupId);
 
+    TIntrusivePtr<NFake::TProxyDS> Model(IActor *actor);
+
 } // NKikimr

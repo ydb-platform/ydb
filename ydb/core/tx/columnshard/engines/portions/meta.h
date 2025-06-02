@@ -115,10 +115,6 @@ public:
         CompactionLevel = level;
     }
 
-    using EProduced = NPortion::EProduced;
-
-    EProduced Produced = EProduced::UNSPECIFIED;
-
     std::optional<TString> GetTierNameOptional() const;
 
     ui64 GetMetadataMemorySize() const {
@@ -134,10 +130,6 @@ public:
     }
 
     NKikimrTxColumnShard::TIndexPortionMeta SerializeToProto() const;
-
-    EProduced GetProduced() const {
-        return Produced;
-    }
 
     TString DebugString() const;
 };

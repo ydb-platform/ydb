@@ -310,7 +310,7 @@ struct Schema : NIceDb::Schema {
         // flag used to minimize correlation between groups and drives
         struct RandomizeGroupMapping : Column<25, NScheme::NTypeIds::Bool> { static constexpr Type Default = false; };
         // this value is only accounted when new groups are added to the pool
-        struct DefaultGroupSizeInUnits : Column<26, NScheme::NTypeIds::Int32> { static constexpr Type Default = 0; };
+        struct DefaultGroupSizeInUnits : Column<26, NScheme::NTypeIds::Uint32> { static constexpr Type Default = 0; };
 
         using TKey = TableKey<BoxId, StoragePoolId>;
 

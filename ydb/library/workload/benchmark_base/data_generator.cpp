@@ -94,17 +94,17 @@ public:
     virtual TDataPortionPtr GetPortion() override final {
         TVector<TString> lines;
         lines.reserve(Owner.Owner.Params.BulkSize);
-        ui64 readedBytes = 0;
+        ui64 readBytes = 0;
         with_lock(Lock) {
             TString line;
             if (Owner.Owner.StateProcessor && Owner.Owner.StateProcessor->GetState().contains(Path)) {
                 auto position = Owner.Owner.StateProcessor->GetState().at(Path).Position;
-                while(position > Readed) {
-                    Readed += Decompressor->Skip(position - Readed);
+                while(position > ReadBytes) {
+                    ReadBytes += Decompressor->Skip(position - ReadBytes);
                 }
             }
-            while (const auto readed = Decompressor->ReadLine(line)) {
-                readedBytes += readed;
+            while (const auto read = Decompressor->ReadLine(line)) {
+                readBytes += read;
                 lines.emplace_back(line);
                 if (lines.size() >= Owner.Owner.Params.BulkSize) {
                     break;
@@ -122,8 +122,8 @@ public:
             data << Header << Endl;
         }
         data << JoinSeq("\n", lines) << Endl;
-        const auto position = Readed;
-        Readed += readedBytes;
+        const auto position = ReadBytes;
+        ReadBytes += readBytes;
         return MakeIntrusive<TDataPortionWithState>(
             Owner.Owner.StateProcessor.Get(),
             Owner.Owner.Params.GetFullTableName(Owner.TablePath.c_str()),
@@ -138,7 +138,7 @@ private:
     THolder<IInputStream> Decompressor;
     TString Header;
     const TString& Foramt;
-    ui64 Readed = 0;
+    ui64 ReadBytes = 0;
 };
 
 class TWorkloadDataInitializerBase::TDataGenerator::TTsvFile final: public TWorkloadDataInitializerBase::TDataGenerator::TCsvFileBase {

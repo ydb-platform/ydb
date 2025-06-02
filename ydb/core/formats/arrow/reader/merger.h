@@ -162,10 +162,10 @@ public:
     void AddSource(const std::shared_ptr<TDataContainer>& batch, const ui64 start, const std::shared_ptr<NArrow::TColumnFilter>& filter,
         const std::optional<ui64> sourceIdExt = std::nullopt) {
         const ui64 sourceId = sourceIdExt.value_or(SortHeap.Size());
-        if (!batch || batch->num_rows() == start) {
+        if (!batch || (i64)batch->num_rows() == (i64)start) {
             return;
         }
-        AFL_VERIFY(start < batch->num_rows())("start", start)("num_rows", batch->num_rows());
+        AFL_VERIFY((i64)start < (i64)batch->num_rows())("start", start)("num_rows", batch->num_rows());
         //        Y_DEBUG_ABORT_UNLESS(NArrow::IsSorted(batch, SortSchema));
         const bool isDenyFilter = filter && filter->IsTotalDenyFilter();
         auto filterImpl = (!filter || filter->IsTotalAllowFilter()) ? nullptr : filter;

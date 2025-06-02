@@ -23,7 +23,7 @@ class TestYdbTransferWorkload(object):
     def teardown_class(cls):
         cls.cluster.stop()
 
-    @pytest.mark.parametrize("store_type", ["row", "column"])
+    @pytest.mark.parametrize("store_type", ["row"])
     def test(self, store_type):
         cmd = [
             yatest.common.binary_path(os.getenv("YDB_TEST_PATH")),

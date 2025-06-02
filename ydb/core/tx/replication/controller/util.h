@@ -43,7 +43,7 @@ inline bool IsRetryableError(const NYdb::TStatus status, const TVector<NYdb::ESt
         return false;
     case NYdb::EStatus::TRANSPORT_UNAVAILABLE:
         for (const auto& issue : status.GetIssues()) {
-            if (issue.GetMessage().contains("Misformatted domain name") || issue.GetMessage().contains("Domain name not found")) {
+            if (issue.GetMessage().contains("Misformatted domain name") || issue.GetMessage().contains("Domain name not found") || issue.GetMessage().contains("DNS resolution failed")) {
                 return false;
             }
         }

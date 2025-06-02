@@ -4,7 +4,6 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <unistd.h>
-#include <string.h>
 
 #include <ydb/library/actors/interconnect/rdma/ibdrv/include/infiniband/verbs.h>
 

@@ -1,8 +1,8 @@
 #include "sock.h"
 #include "rdma.h"
 
-#include <ydb/library/actors/interconnect/rdma/rdma_link_manager.h>
-#include <ydb/library/actors/interconnect/rdma/rdma_ctx.h>
+#include <ydb/library/actors/interconnect/rdma/link_manager.h>
+#include <ydb/library/actors/interconnect/rdma/ctx.h>
 #include <ydb/library/actors/interconnect/rdma/mem_pool.h>
 
 #include <ydb/library/actors/interconnect/rdma/ibdrv/include/infiniband/verbs.h>

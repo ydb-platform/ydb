@@ -1,6 +1,6 @@
 #include "mem_pool.h"
-#include "rdma_link_manager.h"
-#include "rdma_ctx.h"
+#include "link_manager.h"
+#include "ctx.h"
 
 #include <ydb/library/actors/interconnect/rdma/ibdrv/include/infiniband/verbs.h>
 

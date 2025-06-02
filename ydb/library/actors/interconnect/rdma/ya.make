@@ -9,8 +9,8 @@ ENDIF()
 IF (OS_LINUX)
     SRCS(
         mem_pool.cpp
-        rdma_ctx.cpp
-        GLOBAL rdma_link_manager.cpp
+        ctx.cpp
+        GLOBAL link_manager.cpp
     )
 ENDIF()
 

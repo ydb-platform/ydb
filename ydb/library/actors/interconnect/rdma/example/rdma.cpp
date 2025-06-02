@@ -1,8 +1,5 @@
 #include "rdma.h"
 
-#include <ydb/library/actors/interconnect/rdma/rdma_link_manager.h>
-#include <ydb/library/actors/interconnect/rdma/rdma_ctx.h>
-
 
 #include <util/generic/vector.h>
 #include <util/stream/output.h>

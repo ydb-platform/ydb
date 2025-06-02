@@ -1,8 +1,10 @@
 #include "sql_complete.h"
 
 #include <yql/essentials/sql/v1/complete/syntax/grammar.h>
+#include <yql/essentials/sql/v1/complete/name/cache/local/cache.h>
 #include <yql/essentials/sql/v1/complete/name/cluster/static/discovery.h>
 #include <yql/essentials/sql/v1/complete/name/object/simple/schema.h>
+#include <yql/essentials/sql/v1/complete/name/object/simple/cached/schema.h>
 #include <yql/essentials/sql/v1/complete/name/object/simple/static/schema.h>
 #include <yql/essentials/sql/v1/complete/name/service/ranking/frequency.h>
 #include <yql/essentials/sql/v1/complete/name/service/ranking/ranking.h>
@@ -1267,6 +1269,41 @@ JOIN yt:$cluster_name.test;
         UNIT_ASSERT_EQUAL(Complete(engine, {"ROLL"}).size(), 0);
         UNIT_ASSERT_UNEQUAL(Complete(engine, {"INSE"}).size(), 0);
         UNIT_ASSERT_UNEQUAL(Complete(engine, {"SELE"}).size(), 0);
+    }
+
+    Y_UNIT_TEST(CachedSchema) {
+        TLexerSupplier lexer = MakePureLexerSupplier();
+
+        auto cache = MakeLocalCache<
+            TSchemaListCacheKey, TVector<TFolderEntry>>(
+            NMonotonic::CreateDefaultMonotonicTimeProvider(), {});
+
+        auto aliceService = MakeSchemaNameService(
+            MakeSimpleSchema(
+                MakeCachedSimpleSchema(
+                    cache, "alice",
+                    MakeStaticSimpleSchema({{"", {{"/", {{"Table", "alice"}}}}}}))));
+
+        auto petyaService = MakeSchemaNameService(
+            MakeSimpleSchema(
+                MakeCachedSimpleSchema(
+                    cache, "petya",
+                    MakeStaticSimpleSchema({{"", {{"/", {{"Table", "petya"}}}}}}))));
+
+        auto aliceEngine = MakeSqlCompletionEngine(lexer, std::move(aliceService));
+        auto petyaEngine = MakeSqlCompletionEngine(lexer, std::move(petyaService));
+
+        TVector<TCandidate> empty;
+        TVector<TCandidate> aliceExpected = {{TableName, "`alice"}};
+        TVector<TCandidate> petyaExpected = {{TableName, "`petya"}};
+
+        // Cache is empty
+        UNIT_ASSERT_VALUES_EQUAL(Complete(aliceEngine, "SELECT * FROM "), empty);
+        UNIT_ASSERT_VALUES_EQUAL(Complete(petyaEngine, "SELECT * FROM "), empty);
+
+        // Updates in backround
+        UNIT_ASSERT_VALUES_EQUAL(Complete(aliceEngine, "SELECT * FROM "), aliceExpected);
+        UNIT_ASSERT_VALUES_EQUAL(Complete(petyaEngine, "SELECT * FROM "), petyaExpected);
     }
 
 } // Y_UNIT_TEST_SUITE(SqlCompleteTests)

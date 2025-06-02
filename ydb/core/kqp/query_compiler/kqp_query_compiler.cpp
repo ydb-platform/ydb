@@ -139,7 +139,7 @@ void FillTablesMap(const TStringBuf path, THashMap<TStringBuf, THashSet<TStringB
     tablesMap.emplace(path, THashSet<TStringBuf>{});
 }
 
-void FillTablesMap(const TKqpTable table, THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap) {
+void FillTablesMap(const TKqpTable& table, THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap) {
     FillTablesMap(table.Path().Value(), tablesMap);
 }
 

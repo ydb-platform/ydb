@@ -7,15 +7,10 @@ from ydb.tests.library.harness.util import LogLevels
 from ydb.tests.library.clients.kikimr_http_client import SwaggerClient
 from ydb.tests.library.common.types import TabletStates, TabletTypes
 from ydb.tests.oss.ydb_sdk_import import ydb
-from ydb.tests.library.compatibility.fixtures import MixedClusterFixture, RestartToAnotherVersionFixture
+from ydb.tests.library.compatibility.fixtures import MixedClusterFixture, RollingUpgradeAndDowngradeFixture
 
 
 logger = logging.getLogger(__name__)
-
-TABLE_NAME = "table"
-INDEX_NAME = "idx"
-ATTEMPT_COUNT = 10
-ATTEMPT_INTERVAL = 5
 
 
 class TestFollowersCompatibility(MixedClusterFixture):
@@ -137,7 +132,12 @@ class TestFollowersCompatibility(MixedClusterFixture):
                         backoff *= 2
 
 
-class TestSecondaryIndexFollowers(RestartToAnotherVersionFixture):
+class TestSecondaryIndexFollowers(RollingUpgradeAndDowngradeFixture):
+    TABLE_NAME = "table"
+    INDEX_NAME = "idx"
+    ATTEMPT_COUNT = 10
+    ATTEMPT_INTERVAL = 5
+
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):
         yield from self.setup_cluster(
@@ -217,12 +217,8 @@ class TestSecondaryIndexFollowers(RestartToAnotherVersionFixture):
     @pytest.mark.parametrize("enable_followers", [True, False])
     def test_secondary_index_followers(self, enable_followers):
         self.create_table(enable_followers)
-
         self.write_data()
-        self.read_data()
-        self.check_statistics(enable_followers)
 
-        self.change_cluster_version()
-
-        self.read_data()
-        self.check_statistics(enable_followers)
+        for _ in self.roll():
+            self.read_data()
+            self.check_statistics(enable_followers)

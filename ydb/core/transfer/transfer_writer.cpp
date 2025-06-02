@@ -818,6 +818,10 @@ private:
             Send(Worker, new TEvWorker::TEvPoll());
         }
 
+        if (LastWriteTime) {
+            LastWriteTime = TInstant::Now();
+        }
+
         return StartWork();
     }
 

@@ -163,7 +163,7 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    auto [index, entry, rdmaCtx] = GetRdmaCtx(0);
+    auto [index, entry, rdmaCtx] = GetRdmaCtx(1);
     char str[INET6_ADDRSTRLEN];
     inet_ntop(AF_INET6, &(entry.gid), str, INET6_ADDRSTRLEN);
     fprintf(stderr, "%s\n", str);
@@ -171,8 +171,9 @@ int main(int argc, char *argv[]) {
     TContext ctx(entry, index, rdmaCtx, NInterconnect::NRdma::CreateDummyMemPool());
 
     ctx.InitQp();
-    auto [dstGidEntry, dstQpNum, dstLid] = ExchangeRdmaConnectionInfo(sockfd, entry, ctx.Qp->qp_num, ctx.PortAttr.lid);
-    ctx.MoveQpToRTS(dstGidEntry, dstQpNum, dstLid);
+    auto [dstGid, dstQpNum] = ExchangeRdmaConnectionInfo(sockfd, entry.gid, ctx.Qp->qp_num);
+
+    ctx.MoveQpToRTS(dstGid, dstQpNum);
 
     if (isServer) {
         serverLogic(sockfd, ctx);

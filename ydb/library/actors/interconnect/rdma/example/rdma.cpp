@@ -68,7 +68,18 @@ int TContext::InitQp() {
     return 0;
 }
 
-int TContext::MoveQpToRTS(ibv_gid_entry dstGidEntry, ui32 dstQpNum, ui32 dstLid) {
+ibv_qp_state GetQpState(ibv_qp* qp) {
+    ibv_qp_attr qpAttr;
+    ibv_qp_init_attr qpInitAttr;
+    int ret = ibv_query_qp(qp, &qpAttr, IBV_QP_STATE, &qpInitAttr);
+    if (ret) {
+        Cerr << "ibv_query_qp failed: " << strerror(errno) << Endl;
+        return IBV_QPS_ERR;
+    }
+    return qpAttr.qp_state;
+}
+
+int TContext::MoveQpToRTS(ibv_gid dstGidEntry, ui32 dstQpNum) {
     if (!Qp) {
         Cerr << "QP is not initialized" << Endl;
         return 1;
@@ -87,6 +98,12 @@ int TContext::MoveQpToRTS(ibv_gid_entry dstGidEntry, ui32 dstQpNum, ui32 dstLid)
             Cerr << "ibv_modify_qp failed: " << strerror(errno) << Endl;
             return 1;
         }
+
+        auto state = GetQpState(Qp);
+        if (state != IBV_QPS_INIT) {
+            Cerr << "QP state is not INIT after modification: " << (int)state << Endl;
+            return 1;
+        }
     }
 
     Cout << "QP in INIT" << Endl;
@@ -99,11 +116,10 @@ int TContext::MoveQpToRTS(ibv_gid_entry dstGidEntry, ui32 dstQpNum, ui32 dstLid)
             .dest_qp_num = dstQpNum,
             .ah_attr = {
                 .grh = {
-                    .dgid = dstGidEntry.gid,
+                    .dgid = dstGidEntry,
                     .sgid_index = static_cast<ui8>(Entry.gid_index),
                     .hop_limit = 1,
                 },
-                .dlid = static_cast<ui16>(dstLid),
                 .sl = 0,
                 .src_path_bits = 0,
                 .is_global = 1,
@@ -116,6 +132,12 @@ int TContext::MoveQpToRTS(ibv_gid_entry dstGidEntry, ui32 dstQpNum, ui32 dstLid)
         int err = ibv_modify_qp(Qp, &qpAttr, IBV_QP_STATE | IBV_QP_AV | IBV_QP_PATH_MTU | IBV_QP_DEST_QPN | IBV_QP_RQ_PSN | IBV_QP_MAX_DEST_RD_ATOMIC | IBV_QP_MIN_RNR_TIMER);
         if (err) {
             Cerr << "ibv_modify_qp failed: " << strerror(errno) << Endl;
+            return 1;
+        }
+
+        auto state = GetQpState(Qp);
+        if (state != IBV_QPS_RTR) {
+            Cerr << "QP state is not RTR after modification: " << (int)state << Endl;
             return 1;
         }
     }
@@ -131,10 +153,16 @@ int TContext::MoveQpToRTS(ibv_gid_entry dstGidEntry, ui32 dstQpNum, ui32 dstLid)
             .retry_cnt     = 7,
             .rnr_retry     = 7,
         };
-    
+
         int err = ibv_modify_qp(Qp, &qpAttr, IBV_QP_STATE | IBV_QP_TIMEOUT | IBV_QP_RETRY_CNT | IBV_QP_RNR_RETRY | IBV_QP_SQ_PSN | IBV_QP_MAX_QP_RD_ATOMIC);
         if (err) {
             Cerr << "ibv_modify_qp failed: " << strerror(errno) << Endl;
+            return 1;
+        }
+
+        auto state = GetQpState(Qp);
+        if (state != IBV_QPS_RTS) {
+            Cerr << "QP state is not RTS after modification: " << (int)state << Endl;
             return 1;
         }
     }

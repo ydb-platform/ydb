@@ -35,6 +35,6 @@ enum class ECommand: ui8 {
 
     _End = 0xFF,
 };
-std::tuple<ibv_gid_entry, ui32, ui32> ExchangeRdmaConnectionInfo(int sockfd, ibv_gid_entry entry, ui32 qpNum, ui32 lid);
+std::tuple<ibv_gid, ui32> ExchangeRdmaConnectionInfo(int sockfd, ibv_gid gid, ui32 qpNum);
 void SendRkey(int sockfd, int wrId, ui32 rkey, void* addr, ui32 size);
 void RecvRkey(int sockfd, int& wrId, ui32& rkey, void*& addr, ui32& size);

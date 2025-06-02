@@ -6,6 +6,8 @@
 #include <unistd.h>
 #include <string.h>
 
+#include <exception>
+
 #include <util/stream/output.h>
 
 int SockRead(int sockfd, char* buf, int len) {
@@ -13,6 +15,8 @@ int SockRead(int sockfd, char* buf, int len) {
     while (n < len) {
         int r = read(sockfd, buf + n, len - n);
         if (r <= 0) {
+            Cerr << "Socket read error" << Endl;
+            std::terminate();
             return r;
         }
         n += r;
@@ -25,6 +29,8 @@ int SockWrite(int sockfd, char* buf, int len) {
     while (n < len) {
         int r = write(sockfd, buf + n, len - n);
         if (r <= 0) {
+            Cerr << "Socket write error" << Endl;
+            std::terminate();
             return r;
         }
         n += r;
@@ -104,18 +110,15 @@ int SockConnect(char* addr, int port) {
 }
 
 
-std::tuple<ibv_gid_entry, ui32, ui32> ExchangeRdmaConnectionInfo(int sockfd, ibv_gid_entry entry, ui32 qpNum, ui32 lid) {
-    SockWrite(sockfd, entry);
+std::tuple<ibv_gid, ui32> ExchangeRdmaConnectionInfo(int sockfd, ibv_gid gid, ui32 qpNum) {
+    SockWrite(sockfd, gid);
     SockWrite(sockfd, qpNum);
-    SockWrite(sockfd, lid);
 
-    ibv_gid_entry remoteEntry;
+    ibv_gid remoteGid;
     ui32 remoteQpNum;
-    ui32 remoteLid;
-    SockRead(sockfd, remoteEntry);
+    SockRead(sockfd, remoteGid);
     SockRead(sockfd, remoteQpNum);
-    SockRead(sockfd, remoteLid);
-    return {remoteEntry, remoteQpNum, remoteLid};
+    return {remoteGid, remoteQpNum};
 }
 
 void SendRkey(int sockfd, int wrId, ui32 rkey, void* addr, ui32 size) {

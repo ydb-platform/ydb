@@ -415,6 +415,9 @@ void Out<NYdb::NQuery::EExecStatus>(IOutputStream& o, NYdb::NQuery::EExecStatus 
         case EExecStatus::Starting:
             o << TStringBuf("starting");
             return;
+        case EExecStatus::Running:
+            o << TStringBuf("running");
+            return;
         case EExecStatus::Aborted:
             o << TStringBuf("aborted");
             return;

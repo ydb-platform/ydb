@@ -44,6 +44,10 @@
 {%- if interfaces|length %}
 target_link_libraries({{ name }} INTERFACE
 {%-     for interface in interfaces %}
+{#-         OpenSSL recipe under Conan2 uses another target name, patch it manually here, or else build fails -#}
+{%-         if (use_conan2) and (interface == "OpenSSL::OpenSSL") -%}
+{%-            set interface = "openssl::openssl" -%}
+{%-         endif %}
   {{ interface }}
 {%-     endfor %}
 )

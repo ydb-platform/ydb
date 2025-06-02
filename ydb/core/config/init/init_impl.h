@@ -1249,6 +1249,7 @@ public:
         Labels["branch"] = GetBranch();
         Labels["rev"] = GetProgramCommitId();
         Labels["dynamic"] = ToString(CommonAppOptions.IsStaticNode() ? "false" : "true");
+        Labels["node_kind"] = CommonAppOptions.IsStaticNode() ? "static" : "dynamic";
 
         for (const auto& [name, value] : Labels) {
             auto *label = AppConfig.AddLabels();
@@ -1319,14 +1320,57 @@ public:
         }
     }
 
+    class TAppConfigFieldsPreserver {
+    public:
+        TAppConfigFieldsPreserver(NKikimrConfig::TAppConfig& appConfig) 
+            : AppConfig(appConfig)
+            , ConfigDirPath(appConfig.GetConfigDirPath())
+            , StoredConfigYaml(appConfig.GetStoredConfigYaml())
+            , StartupConfigYaml(appConfig.GetStartupConfigYaml())
+            , StartupStorageYaml(appConfig.GetStartupStorageYaml())
+        {}
+
+        ~TAppConfigFieldsPreserver() {
+            if (ConfigDirPath) {
+                AppConfig.SetConfigDirPath(*ConfigDirPath);
+            }
+            if (StoredConfigYaml) {
+                AppConfig.MutableStoredConfigYaml()->CopyFrom(*StoredConfigYaml);
+            }
+            if (StartupConfigYaml) {
+                AppConfig.SetStartupConfigYaml(*StartupConfigYaml);
+            }
+            if (StartupStorageYaml) {
+                AppConfig.SetStartupStorageYaml(*StartupStorageYaml);
+            }
+        }
+    private:
+        NKikimrConfig::TAppConfig& AppConfig;
+        std::optional<TString> ConfigDirPath;
+        std::optional<NKikimrBlobStorage::TYamlConfig> StoredConfigYaml;
+        std::optional<TString> StartupConfigYaml;
+        std::optional<TString> StartupStorageYaml;
+    };
+
     void InitStaticNode() {
         CommonAppOptions.ValidateStaticNodeConfig();
-
+        Labels["node_kind"] = "static";
         Labels["dynamic"] = "false";
+
+        if (!AppConfig.HasStartupConfigYaml()) {
+            return;
+        }
+
+        TAppConfigFieldsPreserver preserver(AppConfig);
+
+        NKikimrConfig::TAppConfig appConfig;
+        NYamlConfig::ResolveAndParseYamlConfig(AppConfig.GetStartupConfigYaml(), {}, Labels, appConfig);
+        ApplyConfigForNode(appConfig);
     }
 
     void InitDynamicNode() {
         Labels["dynamic"] = "true";
+        Labels["node_kind"] = "dynamic";
         RegisterDynamicNode(CommonAppOptions);
 
         Labels["node_id"] = ToString(NodeId);

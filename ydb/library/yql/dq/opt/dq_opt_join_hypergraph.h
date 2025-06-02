@@ -601,15 +601,6 @@ public:
         auto& edges = Graph_.GetEdges();
         auto& fdStorage = fsm.FDStorage;
 
-        auto toVectorStr = [](std::vector<TJoinColumn> joinColumns){
-            TVector<TString> strColumns;
-            strColumns.reserve(joinColumns.size());
-            for (const auto& column: joinColumns) {
-                strColumns.push_back(column.RelName + "." + column.AttributeName);
-            }
-            return strColumns;
-        };
-
         for (auto& e: edges) {
             if (e.JoinKind == EJoinKind::Cross) {
                 continue;
@@ -617,17 +608,9 @@ public:
 
             e.LeftJoinKeysShuffleOrderingIdx =
                 fdStorage.FindInterestingOrderingIdx(e.LeftJoinKeys, TOrdering::EShuffle, TableAliases_);
-            Y_ENSURE(
-                e.LeftJoinKeysShuffleOrderingIdx >= 0,
-                TStringBuilder{} << "Ordering " << JoinSeq(", ", toVectorStr(e.LeftJoinKeys)) << " wasn't set, smthing went wrong during FSM building"
-            );
 
             e.RightJoinKeysShuffleOrderingIdx =
                 fdStorage.FindInterestingOrderingIdx(e.RightJoinKeys, TOrdering::EShuffle, TableAliases_);
-            Y_ENSURE(
-                e.RightJoinKeysShuffleOrderingIdx >= 0,
-                TStringBuilder{} << "Ordering " << JoinSeq(", ", toVectorStr(e.RightJoinKeys)) << " wasn't set, smthing went wrong during FSM building"
-            );
 
             for (const auto& [lhs, rhs]: Zip(e.LeftJoinKeys, e.RightJoinKeys)) {
                 auto fdIdx = fdStorage.FindFDIdx(lhs, rhs, TFunctionalDependency::EEquivalence, TableAliases_);

@@ -12,7 +12,7 @@ const std::vector<TString> TableYsonRows = {
     "{\"key\"=\"150\";\"subkey\"=\"4\";\"value\"=\"qzz\"};"
 };
 
-TTableStats WriteDataToTableDataSerice(
+TTableChunkStats WriteDataToTableDataSerice(
     ITableDataService::TPtr tableDataService,
     const std::vector<TString>& tableYsonRows,
     ui64 chunkSize,
@@ -34,18 +34,28 @@ TTableStats WriteDataToTableDataSerice(
 
 Y_UNIT_TEST_SUITE(FmrWriterTests) {
     Y_UNIT_TEST(WriteYsonRows) {
-        ui64 totalSize = 0;
-        for (auto& row: TableYsonRows) {
+        ui64 totalSize = 0, firstPartSize = 0, secPartSize = 0;
+        for (ui64 i = 0; i < TableYsonRows.size(); ++i) {
+            auto& row = TableYsonRows[i];
             totalSize += row.size();
+            if (i < 2) {
+                firstPartSize += row.size();
+            } else {
+                secPartSize += row.size();
+            }
         }
 
         ui64 chunkSize = totalSize / 2;
         ITableDataService::TPtr tableDataService = MakeLocalTableDataService(TLocalTableDataServiceSettings(1));
+
         auto stats = WriteDataToTableDataSerice(tableDataService, TableYsonRows, chunkSize);
-        auto realChunks = stats.Chunks;
-        auto realDataWeight =stats.DataWeight;
-        UNIT_ASSERT_VALUES_EQUAL(realChunks, 2);
-        UNIT_ASSERT_VALUES_EQUAL(realDataWeight, totalSize);
+        UNIT_ASSERT_VALUES_EQUAL(stats.PartId, "partId");
+        std::vector<TChunkStats> gottenPartIdChunkStats = stats.PartIdChunkStats;
+        std::vector<TChunkStats> expectedChunkStats = {
+            TChunkStats{.Rows = 2, .DataWeight = firstPartSize},
+            TChunkStats{.Rows = 2, .DataWeight = secPartSize}
+        };
+        UNIT_ASSERT(gottenPartIdChunkStats == expectedChunkStats);
 
         TString expectedFirstChunkTableContent = JoinRange(TStringBuf(), TableYsonRows.begin(), TableYsonRows.begin() + 2);
         TString expectedSecondChunkTableContent = JoinRange(TStringBuf(), TableYsonRows.begin() + 2, TableYsonRows.end());

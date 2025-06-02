@@ -140,6 +140,10 @@ TNode SerializeParamsForGetJobTrace(
     const TOperationId& operationId,
     const TGetJobTraceOptions& options);
 
+TNode SerializeParamsForSelectRows(
+    const TString& query,
+    const TSelectRowsOptions& options);
+
 TNode SerializeParametersForInsertRows(
     const TString& pathPrefix,
     const TYPath& path,
@@ -207,6 +211,10 @@ TNode SerializeParamsForGetTablePartitions(
     const TTransactionId& transactionId,
     const TVector<TRichYPath>& paths,
     const TGetTablePartitionsOptions& options);
+
+TNode SerializeParamsForReadFile(
+    const TTransactionId& transactionId,
+    const TFileReaderOptions& options);
 
 TNode SerializeParamsForGetFileFromCache(
     const TTransactionId& transactionId,

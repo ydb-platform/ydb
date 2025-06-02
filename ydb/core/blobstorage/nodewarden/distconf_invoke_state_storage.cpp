@@ -28,7 +28,7 @@ namespace NKikimr::NStorage {
 
         NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
         if (cmd.HasSchemeBoardConfig()) {
-            FinishWithError(TResult::ERROR, TStringBuilder() << "Board and SchemeBoard are not supported");
+            FinishWithError(TResult::ERROR, TStringBuilder() << "SchemeBoard are not supported");
             return;   
         }
         if (!cmd.HasStateStorageConfig() && !cmd.HasStateStorageBoardConfig() && !cmd.HasSchemeBoardConfig()) {

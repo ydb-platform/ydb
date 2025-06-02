@@ -11,6 +11,7 @@
 #include <ydb/library/actors/core/hfunc.h>
 
 #include <util/generic/xrange.h>
+#include <util/string/join.h>
 
 #if defined BLOG_D || defined BLOG_I || defined BLOG_ERROR
 #error log macro definition clash
@@ -73,15 +74,7 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
 
         TString ToString() {
             TStringStream str;
-            str << "{ WriteOnly: " << WriteOnly << ", WaitForReplicasToSuccess: " << WaitForReplicasToSuccess << ", Replicas:[";
-            bool first = true;
-            for (auto& r : Replicas) {
-                if (!first)
-                    str << ", ";
-                str << r.Replica.ToString() << " " << (ui32)r.State;
-                first = false;
-            } 
-            str << "] }";
+            str << "{ WriteOnly: " << WriteOnly << ", WaitForReplicasToSuccess: " << WaitForReplicasToSuccess << " }";
             return str.Str();
         }
     };

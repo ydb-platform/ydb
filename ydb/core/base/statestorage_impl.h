@@ -129,18 +129,22 @@ struct TEvStateStorage::TEvResolveSchemeBoard : public TEventLocal<TEvResolveSch
 };
 
 struct TEvStateStorage::TEvResolveReplicasList : public TEventLocal<TEvResolveReplicasList, EvResolveReplicasList> {
-    struct TReplicasGroup {
+    struct TReplicaGroup {
         TVector<TActorId> Replicas;
         bool WriteOnly;
     };
     
-    TVector<TReplicasGroup> ReplicaGroups;
+    TVector<TReplicaGroup> ReplicaGroups;
     ui32 ConfigContentHash = Max<ui32>();
 
     TVector<TActorId> GetPlainReplicas() {
         TVector<TActorId> result;
-        for (const auto& r : ReplicaGroups)
+        result.reserve(std::accumulate(ReplicaGroups.begin(), ReplicaGroups.end(), 0ULL, [](uint64_t sum, const TReplicaGroup& group) {
+            return sum + group.Replicas.size();
+        }));
+        for (const auto& r : ReplicaGroups) {
             result.insert(result.end(), r.Replicas.begin(), r.Replicas.end());
+        }
         return result;
     }
 };

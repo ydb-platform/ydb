@@ -240,6 +240,9 @@ protected:
     friend class TTxUpdateTabletGroups;
     friend class TTxMonEvent_TabletAvailability;
     friend class TLoggedMonTransaction;
+    friend class TTxUpdateDcFollowers;
+    friend class TTxCommitCutTabletHistory;
+    friend class TTxRevertCutTabletHistory;
     friend class TTxProcessUpdateFollowers;
     friend class TTxMonEvent_StopDomain;
 
@@ -259,6 +262,8 @@ protected:
     ITransaction* CreateDeleteOwnerTablets(TEvHive::TEvDeleteOwnerTablets::TPtr& ev);
     ITransaction* CreateDeleteTabletResult(TEvTabletBase::TEvDeleteTabletResult::TPtr& ev);
     ITransaction* CreateCutTabletHistory(TEvHive::TEvCutTabletHistory::TPtr& ev);
+    ITransaction* CreateCommitCutTabletHistory(TEvHive::TEvCommitCutTabletHistory::TPtr ev);
+    ITransaction* CreateRevertCutTabletHistory(TEvHive::TEvRevertCutTabletHistory::TPtr ev);
     ITransaction* CreateBlockStorageResult(TEvTabletBase::TEvBlockBlobStorageResult::TPtr& ev);
     ITransaction* CreateRestartTablet(TFullTabletId tabletId);
     ITransaction* CreateRestartTablet(TFullTabletId tabletId, TNodeId preferredNodeId);
@@ -597,6 +602,8 @@ protected:
     void Handle(TEvPrivate::TEvGenerateTestData::TPtr& ev);
     void Handle(TEvPrivate::TEvRefreshScaleRecommendation::TPtr& ev);
     void Handle(TEvHive::TEvConfigureScaleRecommender::TPtr& ev);
+    void Handle(TEvHive::TEvCommitCutTabletHistory::TPtr& ev);
+    void Handle(TEvHive::TEvRevertCutTabletHistory::TPtr& ev);
     void Handle(TEvPrivate::TEvUpdateFollowers::TPtr& ev);
 
 protected:

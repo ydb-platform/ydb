@@ -160,6 +160,7 @@ public:
             } else {
                 // increasing number of tablet channels
                 tabletChannels.emplace_back();
+                tablet->DeletedHistory.emplace_back();
                 channel = &tabletChannels.back();
                 channel->Channel = channelId;
             }

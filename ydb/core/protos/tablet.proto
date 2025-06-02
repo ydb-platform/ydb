@@ -201,10 +201,16 @@ message TEvGetCountersResponse {
 }
 
 message TEvCutTabletHistory {
+    enum ECutHistoryMode {
+        CutHistoryModeAuto = 0; // Hive decides when to permanently cut history
+        CutHistoryModeManual = 1; // Hive waits for additional command to permanently cut history
+    }
+
     optional fixed64 TabletID = 1;
     optional uint32 Channel = 2;
     optional uint32 GroupID = 3;
     optional uint32 FromGeneration = 4;
+    optional ECutHistoryMode CutHistoryMode = 5;
 }
 
 message TThroughputRecord {

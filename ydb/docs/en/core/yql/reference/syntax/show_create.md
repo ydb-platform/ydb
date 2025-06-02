@@ -17,13 +17,13 @@ SHOW CREATE [TABLE|VIEW] <name>;
 
 The command always returns **exactly one row** with three columns:
 
-| TablePath       | TableType  | CreateTableQuery                 |
+| TablePath       | TableType  | CreateQuery                      |
 |-----------------|------------|----------------------------------|
 | Absolute path   | Table/View | SQL DDL statements for creation  |
 
 - **TablePath** — The absolute path to the object (e.g., `/Root/MyTable` or `/Root/MyView`).
 - **TableType** — The type of object: `Table` or `View`.
-- **CreateTableQuery** — The complete set of DDL statements needed to recreate the object:
+- **CreateQuery** — The complete set of DDL statements needed to recreate the object:
     - For tables: the main [CREATE TABLE](create_table/index.md) statement (with the path relative to the database), plus any additional statements describing the current configuration, such as:
         - [ALTER TABLE ... ALTER INDEX](alter_table/indexes#altering-an-index-alter-index) — for index partitioning settings.
         - [ALTER TABLE ... ADD CHANGEFEED](alter_table/changefeed.md) — for adding a change feed.

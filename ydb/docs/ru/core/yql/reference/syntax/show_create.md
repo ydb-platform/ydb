@@ -17,13 +17,13 @@ SHOW CREATE [TABLE|VIEW] <name>;
 
 Команда возвращает **ровно одну строку** с тремя колонками:
 
-| TablePath       | TableType | CreateTableQuery            |
+| TablePath       | TableType | CreateQuery                 |
 |-----------------|-----------|-----------------------------|
 | Абсолютный путь | Table/View| SQL-стейтменты для создания |
 
 - **TablePath** — абсолютный путь к объекту (например, `/Root/MyTable` или `/Root/MyView`).
 - **TableType** — тип объекта: `Table` или `View`.
-- **CreateTableQuery** — полный набор DDL-стейтментов, необходимых для воссоздания объекта:
+- **CreateQuery** — полный набор DDL-стейтментов, необходимых для воссоздания объекта:
     - Для таблиц: основной оператор [CREATE TABLE](create_table/index.md) (с путем относительно базы), а также дополнительные команды, необходимые для описания текущего состояния и настроек:
         - [ALTER TABLE ... ALTER INDEX](alter_table/indexes#изменение-параметров-индекса-alter-index)— для задания настроек партицирования вторичных индексов.
         - [ALTER TABLE ... ADD CHANGEFEED](alter_table/changefeed.md)— для добавления потока изменений.

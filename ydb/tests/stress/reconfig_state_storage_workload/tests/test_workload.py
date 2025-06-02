@@ -7,7 +7,7 @@ from ydb.tests.stress.reconfig_state_storage_workload.workload import WorkloadRu
 from ydb.tests.library.harness.util import LogLevels
 
 
-class TestReconfigStateStorageWorkload(object):
+class ReconfigStateStorageWorkloadTest(object):
 
     @classmethod
     def setup_class(cls):
@@ -38,14 +38,20 @@ class TestReconfigStateStorageWorkload(object):
     def teardown_class(cls):
         cls.cluster.stop()
 
+
+class TestReconfigStateStorageWorkload(ReconfigStateStorageWorkloadTest):
     def test_state_storage(self):
         with WorkloadRunner(self.client, self.cluster, 'reconfig_state_storage_workload', 120, True, "StateStorage") as runner:
             runner.run()
 
+
+class TestReconfigStateStorageBoardWorkload(ReconfigStateStorageWorkloadTest):
     def test_state_storage_board(self):
         with WorkloadRunner(self.client, self.cluster, 'reconfig_state_storage_workload', 120, True, "StateStorageBoard") as runner:
             runner.run()
 
-    # def test_scheme_board(self):
-    #     with WorkloadRunner(self.client, self.cluster, 'reconfig_state_storage_workload', 120, True, "SchemeBoard") as runner:
-    #         runner.run()
+
+# class TestReconfigSchemeBoardWorkload(ReconfigStateStorageWorkloadTest):
+#     def test_scheme_board(self):
+#         with WorkloadRunner(self.client, self.cluster, 'reconfig_state_storage_workload', 120, True, "SchemeBoard") as runner:
+#             runner.run()

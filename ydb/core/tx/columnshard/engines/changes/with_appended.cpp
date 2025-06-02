@@ -55,7 +55,7 @@ void TChangesWithAppend::DoWriteIndexOnComplete(NColumnShard::TColumnShard* self
                     self->Counters.GetTabletCounters()->IncCounter(NColumnShard::COUNTER_SPLIT_COMPACTION_PORTIONS_WRITTEN);
                     break;
                 case NOlap::NPortion::EProduced::EVICTED:
-                    Y_ABORT("Unexpected evicted case");
+                    self->Counters.GetTabletCounters()->IncCounter(NColumnShard::COUNTER_EVICTION_PORTIONS_WRITTEN);
                     break;
                 case NOlap::NPortion::EProduced::INACTIVE:
                     Y_ABORT("Unexpected inactive case");

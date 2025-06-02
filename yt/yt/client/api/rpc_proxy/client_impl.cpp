@@ -984,8 +984,8 @@ TFuture<TGetCurrentUserResultPtr> TClient::GetCurrentUser(const TGetCurrentUserO
 }
 
 TFuture<void> TClient::AddMember(
-    const TString& group,
-    const TString& member,
+    const std::string& group,
+    const std::string& member,
     const TAddMemberOptions& options)
 {
     auto proxy = CreateApiServiceProxy();
@@ -1002,8 +1002,8 @@ TFuture<void> TClient::AddMember(
 }
 
 TFuture<void> TClient::RemoveMember(
-    const TString& group,
-    const TString& member,
+    const std::string& group,
+    const std::string& member,
     const TRemoveMemberOptions& options)
 {
     auto proxy = CreateApiServiceProxy();

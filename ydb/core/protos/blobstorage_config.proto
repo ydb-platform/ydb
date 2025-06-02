@@ -324,6 +324,16 @@ message TMoveGroups {
     repeated uint32 ExplicitGroupId = 6; // if no groups are provided, then all groups of origin storage pool are moved
 }
 
+message TChangeGroupSizeInUnits {
+    uint64 BoxId = 1;
+    uint64 StoragePoolId = 2;
+    repeated uint32 GroupId = 4; // if absent, then all groups in the pool are resized
+    uint32 SizeInUnits = 5;
+
+    // item's generation to prevent concurrent modification
+    uint64 ItemConfigGeneration = 100;
+}
+
 message TAddMigrationPlan {
     string Name = 1;
     repeated TMoveCommand MoveCommand = 2;
@@ -421,7 +431,7 @@ message TPDiskLocation {
 message TRestartPDisk {
     oneof PDisk {
         NKikimrBlobStorage.TPDiskId TargetPDiskId = 1;
-        TPDiskLocation TargetPDiskLocation = 2;   
+        TPDiskLocation TargetPDiskLocation = 2;
     }
 }
 
@@ -580,6 +590,7 @@ message TConfigRequest {
             TSetPDiskReadOnly SetPDiskReadOnly = 49;
             TStopPDisk StopPDisk = 50;
             TGetInterfaceVersion GetInterfaceVersion = 51;
+            TChangeGroupSizeInUnits ChangeGroupSizeInUnits = 52;
 
             // commands intended for internal use
             TReassignGroupDisk ReassignGroupDisk = 19;
@@ -661,7 +672,7 @@ message TBaseConfig {
         string ExpectedSerial = 17;
         string LastSeenSerial = 18;
         bool ReadOnly = 19;
-        TMaintenanceStatus.E MaintenanceStatus = 20; 
+        TMaintenanceStatus.E MaintenanceStatus = 20;
     }
     message TVSlot {
         message TDonorDisk {

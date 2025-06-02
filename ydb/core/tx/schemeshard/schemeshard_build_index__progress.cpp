@@ -1523,7 +1523,7 @@ public:
     }
 
     bool DoExecute(TTransactionContext& txc, const TActorContext& ctx) override {
-        const auto& record = SampleK->Get()->Record;
+        auto& record = SampleK->Get()->Record;
         const auto buildId = TIndexBuildId(record.GetId());
         TTabletId shardId = TTabletId(record.GetTabletId());
         TShardIdx shardIdx = Self->GetShardIdx(shardId);
@@ -1583,7 +1583,7 @@ public:
                 if (record.ProbabilitiesSize()) {
                     Y_ENSURE(record.RowsSize());
                     auto& probabilities = record.GetProbabilities();
-                    auto& rows = record.GetRows();
+                    auto& rows = *record.MutableRows();
                     Y_ENSURE(probabilities.size() == rows.size());
                     auto& sample = buildInfo.Sample.Rows;
                     auto from = sample.size();

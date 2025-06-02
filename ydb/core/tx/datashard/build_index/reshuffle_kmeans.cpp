@@ -363,7 +363,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvReshuffleKMeansRequest::TPtr& ev, c
         response->Record.SetRequestSeqNoRound(seqNo.Round);
 
         LOG_N("Starting TReshuffleKMeansScan TabletId: " << TabletID() 
-            << " " << request.ShortDebugString()
+            << " " << ToShortDebugString(request)
             << " row version " << rowVersion);
 
         // Note: it's very unlikely that we have volatile txs before this snapshot
@@ -381,7 +381,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvReshuffleKMeansRequest::TPtr& ev, c
         auto trySendBadRequest = [&] {
             if (response->Record.GetStatus() == NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST) {
                 LOG_E("Rejecting TReshuffleKMeansScan bad request TabletId: " << TabletID()
-                    << " " << request.ShortDebugString()
+                    << " " << ToShortDebugString(request)
                     << " with response " << response->Record.ShortDebugString());
                 ctx.Send(ev->Sender, std::move(response));
                 return true;

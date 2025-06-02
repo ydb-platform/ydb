@@ -26,17 +26,4 @@ void TBuildDuplicateFilters::DoOnCannotExecute(const TString& reason) {
     Callback.reset();
 }
 
-TBuildDuplicateFilters::TBuildDuplicateFilters(const std::shared_ptr<arrow::Schema>& sortingSchema,
-    const std::optional<NArrow::NMerger::TCursor>& maxVersion, const NArrow::TSimpleRow& finish, const bool includeFinish,
-    const NColumnShard::TDuplicateFilteringCounters& counters, std::unique_ptr<ISubscriber>&& callback)
-    : PKSchema(sortingSchema)
-    , VersionColumnNames(IIndexInfo::GetSnapshotColumnNames())
-    , Counters(counters)
-    , MaxVersion(maxVersion)
-    , Finish(finish)
-    , IncludeFinish(includeFinish)
-    , Callback(std::move(callback)) {
-    AFL_VERIFY(Callback);
-    AFL_VERIFY(finish.GetSchema()->Equals(sortingSchema));
-}
 }   // namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering

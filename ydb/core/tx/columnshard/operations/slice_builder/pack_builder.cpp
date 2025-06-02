@@ -160,7 +160,7 @@ public:
             NArrow::NMerger::TMergePartialStream stream(context.GetActualSchema()->GetIndexInfo().GetReplaceKey(), dataSchema, false,
                 { IIndexInfo::GetWriteIdField()->name() }, std::nullopt);
             for (auto&& i : containers) {
-                stream.AddSource(i, NArrow::NMerger::TIterationOrder::Forward(0), nullptr);
+                stream.AddSource(i, nullptr, NArrow::NMerger::TIterationOrder::Forward(0));
             }
             NArrow::NMerger::TRecordBatchBuilder rbBuilder(dataSchema->fields(), recordsCountSum);
             stream.DrainAll(rbBuilder);

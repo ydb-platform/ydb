@@ -159,8 +159,8 @@ public:
     }
 
     template <class TDataContainer>
-    void AddSource(const std::shared_ptr<TDataContainer>& batch, const TIterationOrder& order,
-        const std::shared_ptr<NArrow::TColumnFilter>& filter, const std::optional<ui64> sourceIdExt = std::nullopt) {
+    void AddSource(const std::shared_ptr<TDataContainer>& batch,
+        const std::shared_ptr<NArrow::TColumnFilter>& filter, const TIterationOrder& order, const std::optional<ui64> sourceIdExt = std::nullopt) {
         AFL_VERIFY(order.GetIsReversed() == Reverse);
         const ui64 sourceId = sourceIdExt.value_or(SortHeap.Size());
         if (!batch || (i64)batch->num_rows() == (i64)order.GetStart()) {

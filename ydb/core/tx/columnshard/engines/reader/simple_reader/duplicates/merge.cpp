@@ -7,8 +7,7 @@ void TBuildDuplicateFilters::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/
     merger.PutControlPoint(Finish.BuildSortablePosition(), false);
     TFiltersBuilder filtersBuilder;
     for (const auto& [id, source] : SourcesById) {
-        merger.AddSource(
-            source.GetBatch()->GetData(), NArrow::NMerger::TIterationOrder::Forward(source.GetOffset()), nullptr, id);
+        merger.AddSource(source.GetBatch()->GetData(), nullptr, NArrow::NMerger::TIterationOrder::Forward(source.GetOffset()), id);
         filtersBuilder.AddSource(id);
     }
     merger.DrainToControlPoint(filtersBuilder, IncludeFinish);

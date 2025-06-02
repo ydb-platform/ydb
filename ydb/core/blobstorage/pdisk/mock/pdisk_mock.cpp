@@ -920,7 +920,7 @@ public:
         auto *msg = ev->Get();
         auto res = std::make_unique<NPDisk::TEvCheckSpaceResult>(NKikimrProto::OK, GetStatusFlags(),
             Impl.GetNumFreeChunks(), Impl.TotalChunks, Impl.TotalChunks - Impl.GetNumFreeChunks(),
-            Impl.Owners.size(), TString());
+            Impl.Owners.size(), 0u, TString());
         res->Occupancy = GetOccupancy();
         Impl.FindOwner(msg, res); // to ensure correct owner/round
         Send(ev->Sender, res.release());
@@ -975,7 +975,7 @@ public:
     }
 
     void ErrorHandle(NPDisk::TEvCheckSpace::TPtr &ev) {
-        Send(ev->Sender, new NPDisk::TEvCheckSpaceResult(NKikimrProto::CORRUPTED, 0, 0, 0, 0, 0, State->GetStateErrorReason()));
+        Send(ev->Sender, new NPDisk::TEvCheckSpaceResult(NKikimrProto::CORRUPTED, 0, 0, 0, 0, 0, 0u, State->GetStateErrorReason()));
     }
 
     void ErrorHandle(NPDisk::TEvLog::TPtr &ev) {

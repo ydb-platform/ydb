@@ -439,7 +439,6 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
                 return result
             except Exception as e:
                 last_exception = e
-                error_str = str(e)
                 time.sleep(interval)
         raise last_exception
 

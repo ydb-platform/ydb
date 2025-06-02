@@ -149,20 +149,20 @@ class TestSecondaryIndexFollowers(RollingUpgradeAndDowngradeFixture):
     def create_table(self, enable_followers):
         with ydb.QuerySessionPool(self.driver) as session_pool:
             create_table_query = f"""
-                CREATE TABLE `{TABLE_NAME}` (
+                CREATE TABLE `{self.TABLE_NAME}` (
                     key Int64 NOT NULL,
                     subkey Int64 NOT NULL,
                     value Utf8 NOT NULL,
                     PRIMARY KEY (key)
                 );
 
-                ALTER TABLE `{TABLE_NAME}` ADD INDEX `{INDEX_NAME}` GLOBAL ASYNC ON (`subkey`) COVER (`value`);
+                ALTER TABLE `{self.TABLE_NAME}` ADD INDEX `{self.INDEX_NAME}` GLOBAL ASYNC ON (`subkey`) COVER (`value`);
             """
             session_pool.execute_with_retries(create_table_query)
 
             if enable_followers:
                 alter_index_query = f"""
-                    ALTER TABLE `{TABLE_NAME}` ALTER INDEX `{INDEX_NAME}` SET READ_REPLICAS_SETTINGS "PER_AZ:1";
+                    ALTER TABLE `{self.TABLE_NAME}` ALTER INDEX `{self.INDEX_NAME}` SET READ_REPLICAS_SETTINGS "PER_AZ:1";
                 """
                 session_pool.execute_with_retries(alter_index_query)
 
@@ -171,7 +171,7 @@ class TestSecondaryIndexFollowers(RollingUpgradeAndDowngradeFixture):
             for key in range(100):
                 session.transaction().execute(
                     f"""
-                    UPSERT INTO {TABLE_NAME} (key, subkey, value) VALUES ({key}, {key // 10}, 'Hello, YDB {key}!')
+                    UPSERT INTO {self.TABLE_NAME} (key, subkey, value) VALUES ({key}, {key // 10}, 'Hello, YDB {key}!')
                     """,
                     commit_tx=True
                 )
@@ -184,7 +184,7 @@ class TestSecondaryIndexFollowers(RollingUpgradeAndDowngradeFixture):
             for key in range(100):
                 session.transaction(ydb.QueryStaleReadOnly()).execute(
                     f"""
-                    SELECT * FROM `{TABLE_NAME}` VIEW `{INDEX_NAME}` WHERE subkey == {key // 10};
+                    SELECT * FROM `{self.TABLE_NAME}` VIEW `{self.INDEX_NAME}` WHERE subkey == {key // 10};
                     """,
                     commit_tx=True
                 )
@@ -200,19 +200,19 @@ class TestSecondaryIndexFollowers(RollingUpgradeAndDowngradeFixture):
                 WHERE
                     FollowerId {"!=" if enable_followers else "=="} 0
                     AND (RowReads != 0 OR RangeReads != 0)
-                    AND Path = '/Root/{TABLE_NAME}/{INDEX_NAME}/indexImplTable'
+                    AND Path = '/Root/{self.TABLE_NAME}/{self.INDEX_NAME}/indexImplTable'
             """
         ]
 
         with ydb.QuerySessionPool(self.driver) as session_pool:
-            for _ in range(ATTEMPT_COUNT):
+            for _ in range(self.ATTEMPT_COUNT):
                 for query in queries:
                     result_sets = session_pool.execute_with_retries(query)
                     result_row_count = len(result_sets[0].rows)
                     if result_row_count > 0:
                         return
-                time.sleep(ATTEMPT_INTERVAL)
-            assert False, f"Expected reads but there is timeout waiting for read stats from '/Root/{TABLE_NAME}/{INDEX_NAME}/indexImplTable'"
+                time.sleep(self.ATTEMPT_INTERVAL)
+            assert False, f"Expected reads but there is timeout waiting for read stats from '/Root/{self.TABLE_NAME}/{self.INDEX_NAME}/indexImplTable'"
 
     @pytest.mark.parametrize("enable_followers", [True, False])
     def test_secondary_index_followers(self, enable_followers):

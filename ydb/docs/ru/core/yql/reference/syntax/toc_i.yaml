@@ -55,6 +55,7 @@ items:
 - { name: REVOKE,                       href: revoke.md,                     when: feature_user_and_group }
 - { name: SELECT,                       include: { mode: link, path: select/toc_p.yaml } }
 - { name: SELECT STREAM,                href: select_stream.md,              when: feature_mapreduce and process_command == "PROCESS STREAM" }
+- { name: SHOW CREATE,                  href: show_create.md }
 - { name: SUBQUERY,                     href: subquery.md,                   when: feature_subquery }
 - { name: UPDATE,                       href: update.md,                     when: feature_map_tables }
 - { name: UPSERT,                       href: upsert_into.md,                when: feature_upsert }

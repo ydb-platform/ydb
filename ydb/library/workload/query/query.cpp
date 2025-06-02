@@ -59,12 +59,12 @@ There is example of import directory: https://github.com/ydb-platform/ydb/tree/m
         return R"(Run load testing.
 Executing load testing using queries from files in the "run" directory or directly from the command line via the "--query" parameter.
 
-Files with "sql" and "yql" extensions will be used for generate queries. For each one can be set canonical result using file with same name and addition extension ".result". That is a CSV-with-headers formatted files with some addition syntax: 
-    * If query has more that one result set, result file shoud has the same count of data sets, splited by empty line. 
-    * Last line may be set as "...". That means query result can has more rows, but first ones will be checked. 
-    * By default comparison of float point numbers performs with relative accuracy 1e-3 percents, but you can set any absolute or relative accuracy like this: "1.5+-0.01", "2.4e+10+-1%".
+Files with the "sql" and "yql" extensions will be used to generate queries. For each one, a canonical result can be set using a file with the same name and the additional ".result" extension. These are CSV files with headers and some additional syntax:
+    * If a query has more than one result set, the result file should contain the same number of data sets, separated by empty lines.
+    * The last line may be set to "...", which means the query result can have more rows, but only the first ones will be checked.
+    * By default, floating-point numbers are compared with a relative accuracy of 1e-3 percent, but you can specify any absolute or relative accuracy like: "1.5+-0.01", "2.4e+10+-1%".
 
-Canonical result will not be used until "--check-canonical" flag not set.
+The canonical result will not be used unless the "--check-canonical" flag is set.
 
 There is example of run directory: https://github.com/ydb-platform/ydb/tree/main/ydb/tests/functional/tpc/data/e1/run.)";
 
@@ -84,12 +84,12 @@ Populating tables with data. The "import" directory should contain subfolders na
 3. run
 Executing load testing using queries from files in the "run" directory or directly from the command line via the "--query" parameter.
 
-Files with "sql" and "yql" extensions will be used for generate queries. For each one can be set canonical result using file with same name and addition extension ".result". That is a CSV-with-headers formatted files with some addition syntax: 
-    * If query has more that one result set, result file shoud has the same count of data sets, splited by empty line. 
-    * Last line may be set as "...". That means query result can has more rows, but first ones will be checked. 
-    * By default comparison of float point numbers performs with relative accuracy 1e-3 percents, but you can set any absolute or relative accuracy like this: "1.5+-0.01", "2.4e+10+-1%".
+Files with the "sql" and "yql" extensions will be used to generate queries. For each one, a canonical result can be set using a file with the same name and the additional ".result" extension. These are CSV files with headers and some additional syntax:
+    * If a query has more than one result set, the result file should contain the same number of data sets, separated by empty lines.
+    * The last line may be set to "...", which means the query result can have more rows, but only the first ones will be checked.
+    * By default, floating-point numbers are compared with a relative accuracy of 1e-3 percent, but you can specify any absolute or relative accuracy like: "1.5+-0.01", "2.4e+10+-1%".
 
-Canonical result will not be used until "--check-canonical" flag not set.
+The canonical result will not be used unless the "--check-canonical" flag is set.
 
 4. clean
 Cleaning up by removing tables used for load testing.

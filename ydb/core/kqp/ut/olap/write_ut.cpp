@@ -113,7 +113,9 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
 
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
-        TLocalHelper(kikimr).CreateTestOlapTable();
+        auto helper = TLocalHelper(kikimr);
+        helper.CreateTestOlapTable();
+        helper.SetForcedCompaction();
         Tests::NCommon::TLoggerInit(kikimr)
             .SetComponents({ NKikimrServices::TX_COLUMNSHARD }, "CS")
             .SetPriority(NActors::NLog::PRI_DEBUG)

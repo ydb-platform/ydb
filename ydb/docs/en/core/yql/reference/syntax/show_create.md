@@ -1,6 +1,6 @@
 # SHOW CREATE
 
-`SHOW CREATE` returns a query (possibly consisting of several SQL statements) required to recreate the structure of the specified object: {% if concept_table %}[table]({{ concept_table }}){% else %}table{% endif %} (TABLE) or [view](../../../concepts/datamodel/view.md) (VIEW).
+`SHOW CREATE` returns a query (possibly consisting of several SQL statements) required to recreate the structure of the specified object: [table](../../../concepts/datamodel/table.md) (TABLE) or [view](../../../concepts/datamodel/view.md) (VIEW).
 
 ## Syntax
 

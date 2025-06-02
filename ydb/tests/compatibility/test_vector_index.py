@@ -1,4 +1,5 @@
 import pytest
+import ydb
 
 from ydb.tests.library.common.wait_for import wait_for
 from ydb.tests.library.compatibility.fixtures import RestartToAnotherVersionFixture
@@ -16,7 +17,6 @@ class TestVectorIndex(RestartToAnotherVersionFixture):
         self.vector_dimension = 3
 
         yield from self.setup_cluster(extra_feature_flags={"enable_vector_index": True})
-                
 
     def get_vector(self, type, numb):
         if type == "FloatVector":
@@ -65,11 +65,12 @@ class TestVectorIndex(RestartToAnotherVersionFixture):
                     data_type=vector_type,
                     order=order,
                 )
-            except Exception as ex:
-                if "No global indexes for table" in str(ex):
+            except ydb.issues.SchemeError as ex:
+                if "Required global index not found, index name" in str(ex):
                     return False
                 raise ex
             return True
+
         assert wait_for(predicate, timeout_seconds=100, step_seconds=1), "Error getting index status"
 
     def _drop_index(self):
@@ -83,7 +84,7 @@ class TestVectorIndex(RestartToAnotherVersionFixture):
     def write_data(self, name, vector_type):
         values = []
         for key in range(self.rows_count):
-            vector = self.get_vector(vector_type, key+1)
+            vector = self.get_vector(vector_type, key + 1)
             values.append(f'({key}, Untag({name}([{vector}]), "{vector_type}"))')
 
         upsert_sql = f"""
@@ -121,14 +122,7 @@ class TestVectorIndex(RestartToAnotherVersionFixture):
                 """
             session_pool.execute_with_retries(query)
 
-    @pytest.mark.parametrize(
-        "vector_type, distance, distance_func",
-        [
-            ("Uint8", "similarity", "inner_product"),
-
-        ],
-    )
-    def test_vector_index(self, vector_type, distance, distance_func):
+    def test_vector_index(self):
         vector_types = {
             "Uint8": "Knn::ToBinaryStringUint8",
             "Int8": "Knn::ToBinaryStringInt8",
@@ -143,56 +137,69 @@ class TestVectorIndex(RestartToAnotherVersionFixture):
             },
         }
         self.create_table()
+        for vector_type in vector_types.keys():
+            self.write_data(name=vector_types[vector_type], vector_type=f"{vector_type}Vector")
+            for distance in targets.keys():
+                for distance_func in targets[distance].keys():
+                    if distance == "similarity":
+                        self._create_index(
+                            vector_type=vector_type,
+                            similarity=distance_func,
+                        )
+                    else:
+                        self._create_index(
+                            vector_type=vector_type,
+                            distance=distance_func,
+                        )
+                    order = "ASC" if distance != "similarity" else "DESC"
+                    self.wait_index_ready(
+                        targets=targets,
+                        vector_types=vector_types,
+                        vector_type=vector_type,
+                        distance=distance,
+                        order=order,
+                        distance_func=distance_func,
+                    )
+                    self.select_from_index(
+                        target=targets[distance][distance_func],
+                        name=vector_types[vector_type],
+                        data_type=vector_type,
+                        order=order,
+                    )
+                    self.change_cluster_version()
 
-        self.write_data(name=vector_types[vector_type], vector_type=f"{vector_type}Vector")
-        if distance == "similarity":
-            self._create_index(
-                vector_type=vector_type,
-                similarity=distance_func,
-            )
-        else:
-            self._create_index(
-                vector_type=vector_type,
-                distance=distance_func,
-            )
-        order = "ASC" if distance != "similarity" else "DESC"
-        self.wait_index_ready(
-            targets=targets,
-            vector_types=vector_types,
-            vector_type=vector_type,
-            distance=distance,
-            order=order,
-            distance_func=distance_func,
-        )
-        self.select_from_index(
-            target=targets[distance][distance_func], name=vector_types[vector_type], data_type=vector_type, order=order
-        )
-        self.change_cluster_version()
+                    self.select_from_index(
+                        target=targets[distance][distance_func],
+                        name=vector_types[vector_type],
+                        data_type=vector_type,
+                        order=order,
+                    )
+                    self._drop_index()
 
-        self.select_from_index(
-            target=targets[distance][distance_func], name=vector_types[vector_type], data_type=vector_type, order=order
-        )
-        self._drop_index()
-
-        self.write_data(name=vector_types[vector_type], vector_type=f"{vector_type}Vector")
-        if distance == "similarity":
-            self._create_index(
-                vector_type=vector_type,
-                similarity=distance_func,
-            )
-        else:
-            self._create_index(
-                vector_type=vector_type,
-                distance=distance_func,
-            )
-        self.wait_index_ready(
-            targets=targets,
-            vector_types=vector_types,
-            vector_type=vector_type,
-            distance=distance,
-            order=order,
-            distance_func=distance_func,
-        )
-        self.select_from_index(
-            target=targets[distance][distance_func], name=vector_types[vector_type], data_type=vector_type, order=order
-        )
+                    self.write_data(name=vector_types[vector_type], vector_type=f"{vector_type}Vector")
+                    if distance == "similarity":
+                        self._create_index(
+                            vector_type=vector_type,
+                            similarity=distance_func,
+                        )
+                    else:
+                        self._create_index(
+                            vector_type=vector_type,
+                            distance=distance_func,
+                        )
+                    self.wait_index_ready(
+                        targets=targets,
+                        vector_types=vector_types,
+                        vector_type=vector_type,
+                        distance=distance,
+                        order=order,
+                        distance_func=distance_func,
+                    )
+                    self.select_from_index(
+                        target=targets[distance][distance_func],
+                        name=vector_types[vector_type],
+                        data_type=vector_type,
+                        order=order,
+                    )
+                    self._drop_index()
+                    self.change_cluster_version()

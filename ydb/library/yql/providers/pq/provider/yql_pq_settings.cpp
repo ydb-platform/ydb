@@ -50,7 +50,6 @@ void TPqConfiguration::AddCluster(
     const TCredentials::TPtr& credentials,
     const std::shared_ptr<NYql::IDatabaseAsyncResolver>& dbResolver,
     const THashMap<TString, TString>& properties) {
-        Cerr << "AddCluster 2 " << Endl; 
         Dispatch(cluster.GetName(), cluster.GetSettings());
         TPqClusterConfigurationSettings& clusterSettings = ClustersConfigurationSettings[cluster.GetName()];
 
@@ -90,25 +89,6 @@ void TPqConfiguration::AddCluster(
                 YQL_CLOG(DEBUG, ProviderPq) << "Add dbId: " << cluster.GetDatabaseId() << " to DbId2Clusters";
             }
         }
-
-        Cerr << "AddCluster end " << Endl;
 }
-
-// void TPqConfiguration::AddCluster(const NYql::TPqClusterConfig& cluster) {
-//     TPqClusterConfigurationSettings& clusterSettings = ClustersConfigurationSettings[clusterName];
-
-//     clusterSettings.ClusterName = clusterName;
-//     clusterSettings.ClusterType = NYql::TPqClusterConfig::CT_DATA_STREAMS;
-//     // clusterSettings.Endpoint = ;
-//     // clusterSettings.ConfigManagerEndpoint = cluster.GetConfigManagerEndpoint();
-//     // clusterSettings.Database = cluster.GetDatabase();
-//     // clusterSettings.DatabaseId = cluster.GetDatabaseId();
-//     // clusterSettings.TvmId = cluster.GetTvmId();
-//     // clusterSettings.UseSsl = cluster.GetUseSsl();
-//     // clusterSettings.AddBearerToToken = cluster.GetAddBearerToToken();
-//     // clusterSettings.SharedReading = cluster.GetSharedReading();
-//     // clusterSettings.ReadGroup = cluster.GetReadGroup();
-
-// }
 
 } // NYql

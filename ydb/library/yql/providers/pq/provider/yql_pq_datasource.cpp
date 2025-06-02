@@ -247,10 +247,6 @@ public:
         cluster.SetDatabase(properties.Value("database_name", ""));
         cluster.SetUseSsl(properties.Value("use_ssl", "true") == "true"sv);
 
-
-        for (auto [k, v] : properties) {
-            Cerr << k << ": " <<v << Endl;
-        }
         State_->Configuration->AddCluster(cluster, State_->DatabaseIds, State_->Types->Credentials, State_->DbResolver, properties);
         Gateway_->AddCluster(cluster);
     }

@@ -626,11 +626,15 @@ private:
 
         auto settings = NYdb::NTopic::TReadSessionSettings();
         settings
-            .AppendTopics(topicReadSettings)
-            .ConsumerName(SourceParams.GetConsumerName())
-            .MaxMemoryUsageBytes(BufferSize)
-            .ReadFromTimestamp(StartingMessageTimestamp)
-            .WithoutConsumer(); // TODO
+        .AppendTopics(topicReadSettings)
+        .MaxMemoryUsageBytes(BufferSize)
+        .ReadFromTimestamp(StartingMessageTimestamp);
+        
+        TString consumer(SourceParams.GetConsumerName());
+        if (!consumer.empty())
+            settings.ConsumerName(consumer);
+        else
+            settings.WithoutConsumer();
         return settings;
     }
 

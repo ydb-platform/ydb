@@ -1,12 +1,14 @@
 package NKikimrColumnShardDataSharingProto;
 
+import "ydb/core/tx/columnshard/common/protos/path_id.proto";
 import "ydb/core/tx/columnshard/common/protos/snapshot.proto";
 import "ydb/core/tx/columnshard/data_sharing/protos/initiator.proto";
 import "ydb/core/protos/tx_columnshard.proto";
 
+
 message TDestinationRemapIds {
-    optional NKikimrTxColumnShard.TInternalPathId SourcePathId = 1; //NKikimrTxColumnShard.TSchemeShardLocalPathId
-    optional NKikimrTxColumnShard.TInternalPathId DestPathId = 2; //NKikimrTxColumnShard.TSchemeShardLocalPathId
+    optional NKikimrColumnShardPathIdProto.TInternalPathId SourcePathId = 1; //NKikimrColumnShardPathIdProto.TSchemeShardLocalPathId
+    optional NKikimrColumnShardPathIdProto.TInternalPathId DestPathId = 2; //NKikimrColumnShardPathIdProto.TSchemeShardLocalPathId
 }
 
 message TTransferContext {
@@ -36,14 +38,14 @@ message TDestinationSession {
 
 message TSourceSession {
     optional string SessionId = 1;
-    repeated NKikimrTxColumnShard.TInternalPathId PathIds = 3; ////NKikimrTxColumnShard.TSchemeShardLocalPathId
+    repeated NKikimrColumnShardPathIdProto.TInternalPathId PathIds = 3; ////NKikimrColumnShardPathIdProto.TSchemeShardLocalPathId
     optional uint64 DestinationTabletId = 4;
     optional TTransferContext TransferContext = 5;
 
     message TCursorDynamic {
-        optional NKikimrTxColumnShard.TInternalPathId StartPathId = 1; //NKikimrTxColumnShard.TSchemeShardLocalPathId
+        optional NKikimrColumnShardPathIdProto.TInternalPathId StartPathId = 1; //NKikimrColumnShardPathIdProto.TSchemeShardLocalPathId
         optional uint64 StartPortionId = 2;
-        optional NKikimrTxColumnShard.TInternalPathId NextPathId = 3;  //NKikimrTxColumnShard.TSchemeShardLocalPathId
+        optional NKikimrColumnShardPathIdProto.TInternalPathId NextPathId = 3;  //NKikimrColumnShardPathIdProto.TSchemeShardLocalPathId
         optional uint64 NextPortionId = 4;
         optional uint32 PackIdx = 5;
         optional uint32 AckReceivedForPackIdx = 6[default = 0];
@@ -53,7 +55,7 @@ message TSourceSession {
     }
 
     message TPathPortionsHash {
-        optional NKikimrTxColumnShard.TInternalPathId PathId = 1; //TSchemeShardLocalPathId
+        optional NKikimrColumnShardPathIdProto.TInternalPathId PathId = 1; //TSchemeShardLocalPathId
         optional string Hash = 2;
     }
 

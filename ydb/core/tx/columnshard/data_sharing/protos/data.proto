@@ -1,7 +1,9 @@
 import "ydb/core/tx/columnshard/common/protos/blob_range.proto";
+import "ydb/core/tx/columnshard/common/protos/path_id.proto";
 import "ydb/core/tx/columnshard/common/protos/snapshot.proto";
 import "ydb/core/tx/columnshard/engines/protos/portion_info.proto";
 import "ydb/core/protos/tx_columnshard.proto";
+
 
 package NKikimrColumnShardDataSharingProto;
 
@@ -38,11 +40,11 @@ message TPortionInfo {
     optional uint64 SchemaVersion = 9;
     optional uint64 InsertWriteId = 10;
     optional NKikimrColumnShardProto.TSnapshot CommitSnapshot = 11;
-    optional NKikimrTxColumnShard.TInternalPathId PathId = 12; //NKikimrTxColumnShard.TSchemeShardLocalPathId
+    optional NKikimrColumnShardPathIdProto.TInternalPathId PathId = 12; //NKikimrColumnShardPathIdProto.TSchemeShardLocalPathId
 }
 
 message TPathIdData {
     optional uint64 PathId_Deprecated = 1;
     repeated TPortionInfo Portions = 2;
-    optional NKikimrTxColumnShard.TInternalPathId PathId = 3; //NKikimrTxColumnShard.TSchemeShardLocalPathId
+    optional NKikimrColumnShardPathIdProto.TInternalPathId PathId = 3; //NKikimrColumnShardPathIdProto.TSchemeShardLocalPathId
 }

@@ -3,6 +3,7 @@ import "ydb/core/protos/flat_scheme_op.proto";
 import "ydb/core/protos/long_tx_service.proto";
 import "ydb/core/protos/subdomains.proto";
 import "ydb/core/protos/tx.proto";
+import "ydb/core/tx/columnshard/common/protos/path_id.proto";
 import "ydb/library/formats/arrow/protos/fields.proto";
 
 package NKikimrTxColumnShard;
@@ -27,15 +28,6 @@ enum EResultStatus {
 enum EResultFormat {
     FORMAT_ARROW = 1;
 }
-
-message TSchemeShardLocalPathId {
-    optional uint64 PathId = 1;
-}
-
-message TInternalPathId {
-    optional uint64 PathId = 1;
-}
-
 
 message TReadStats {
     optional uint64 BeginTimestamp = 1;
@@ -88,7 +80,7 @@ message TEvWrite {
         OPERATION_DELETE = 5;
     }
     optional EModificationType ModificationType = 11;
-    optional TSchemeShardLocalPathId PathId = 12;
+    optional NKikimrColumnShardPathIdProto.TSchemeShardLocalPathId PathId = 12;
 }
 
 message TLogicalMetadata {
@@ -108,7 +100,7 @@ message TEvWriteResult {
     optional uint64 WriteId = 4;
     optional uint64 TableId_Deprecated = 5;
     optional string DedupId = 6;
-    optional TSchemeShardLocalPathId PathId = 7;
+    optional NKikimrColumnShardPathIdProto.TSchemeShardLocalPathId PathId = 7;
 }
 
 message TEvRead {
@@ -130,7 +122,7 @@ message TEvRead {
     // Serialized Olap program
     optional bytes OlapProgram = 10;
     optional NKikimrSchemeOp.EOlapProgramType OlapProgramType = 11;
-    optional TSchemeShardLocalPathId PathId = 12;
+    optional NKikimrColumnShardPathIdProto.TSchemeShardLocalPathId PathId = 12;
 }
 
 message TEvReadResult {
@@ -144,7 +136,7 @@ message TEvReadResult {
     optional bool Finished = 8;
     optional bytes Data = 9;
     optional TMetadata Meta = 10;
-    optional TSchemeShardLocalPathId PathId = 11;
+    optional NKikimrColumnShardPathIdProto.TSchemeShardLocalPathId PathId = 11;
 }
 
 enum ETransactionKind {
@@ -268,7 +260,7 @@ message TTableVersionInfo {
     optional uint32 TtlSettingsPresetId = 7;
     optional uint64 SchemaPresetVersionAdj = 8;
     optional uint64 TtlSettingsPresetVersionAdj = 9;
-    optional TInternalPathId PathId = 10;
+    optional NKikimrColumnShardPathIdProto.TInternalPathId PathId = 10;
 }
 
 message TCreateTable {
@@ -277,7 +269,7 @@ message TCreateTable {
     optional NKikimrSchemeOp.TColumnTableSchemaPreset SchemaPreset = 3;
     optional NKikimrSchemeOp.TColumnDataLifeCycle TtlSettings = 4;
     optional uint64 SchemaPresetVersionAdj = 6;
-    optional TSchemeShardLocalPathId PathId = 7;
+    optional NKikimrColumnShardPathIdProto.TSchemeShardLocalPathId PathId = 7;
 }
 
 message TInitShard {
@@ -293,12 +285,12 @@ message TAlterTable {
     optional NKikimrSchemeOp.TColumnTableSchemaPreset SchemaPreset = 4;
     optional NKikimrSchemeOp.TColumnDataLifeCycle TtlSettings = 5;
     optional uint64 SchemaPresetVersionAdj = 7;
-    optional TSchemeShardLocalPathId PathId = 8;
+    optional NKikimrColumnShardPathIdProto.TSchemeShardLocalPathId PathId = 8;
 }
 
 message TDropTable {
     optional uint64 PathId_Deprecated = 1;
-    optional TSchemeShardLocalPathId PathId = 2;
+    optional NKikimrColumnShardPathIdProto.TSchemeShardLocalPathId PathId = 2;
 }
 
 message TEnsureTables {
@@ -364,5 +356,5 @@ message TInternalOperationData {
     optional uint32 ModificationType = 2;
     optional uint64 PathId_Deprecated = 3;
     optional bool WritePortions = 4;
-    optional TInternalPathId PathId = 5; //TSchemeShardLocalPathId
+    optional NKikimrColumnShardPathIdProto.TInternalPathId PathId = 5; //NKikimrColumnShardPathIdProto.TSchemeShardLocalPathId
 }

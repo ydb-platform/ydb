@@ -44,7 +44,7 @@ private:
             auto container = Sharding->GetTabletShardingInfoOptional(tabletId);
             if (!!container) {
                 auto& shardingInfo = *result.MutableGranuleShardingInfo();
-                shardingInfo.SetPathId(TargetInStoreTable->GetPathId().LocalPathId);
+                NColumnShard::TSchemeShardLocalPathId::FromRawValue(TargetInStoreTable->GetPathId().LocalPathId).ToProto(shardingInfo);
                 shardingInfo.SetVersionId(Sharding->GetShardInfoVerified(tabletId).GetShardingVersion());
                 *shardingInfo.MutableContainer() = container.SerializeToProto();
                 AFL_VERIFY(ModifiedShardIds.contains(tabletId));

@@ -42,7 +42,8 @@ namespace NKikimr {
                 TDuration::Minutes(10),     // HistoryWindow
                 10u,                        // HistoryBuckets
                 false,
-                false)
+                false,
+                64u << 10u)
         {}
 
         inline TVDiskContextPtr GetVCtx() {

@@ -45,7 +45,7 @@ TIntrusivePtr<THullCtx> CreateHullCtx(const TBlobStorageGroupInfo& info, ui32 ch
 TIntrusivePtr<THullDs> CreateHullDs(const TBlobStorageGroupInfo& info) {
     auto hullDs = MakeIntrusive<THullDs>(CreateHullCtx(info, 128 << 20, 256 * 1024));
     hullDs->LogoBlobs = MakeIntrusive<TLogoBlobsDs>(TLevelIndexSettings(hullDs->HullCtx, 0, 0, 0, TDuration::Zero(),
-        0, false, false), std::make_shared<TRopeArena>(TRopeArenaBackend::Allocate));
+        0, false, false, 64u << 10u), std::make_shared<TRopeArena>(TRopeArenaBackend::Allocate));
     return hullDs;
 }
 

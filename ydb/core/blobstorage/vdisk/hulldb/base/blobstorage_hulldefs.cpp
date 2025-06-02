@@ -17,17 +17,16 @@ namespace NKikimr {
          ui64 userDataBytes = current.IndexBytesTotal + current.InplacedDataTotal + current.HugeDataTotal;
          ui64 userDataBytesAfterCompaction = current.IndexBytesKeep + current.InplacedDataKeep + current.HugeDataKeep;
 
+         ui64 recoveryLogSizeBytes = FreshDataSpaceGroup.DskSpaceFreshHugeData() +
+                                     FreshDataSpaceGroup.DskSpaceFreshInplacedData() +
+                                     FreshDataSpaceGroup.DskSpaceFreshIndex();
+
          auto hugeStat = VCtx->GetHugeHeapFragmentation().Get();
          ui64 defragSavingsBytes = static_cast<ui64>(hugeStat.CanBeFreedChunks) * ChunkSize;
 
-         UserBlobSpaceGroup.UserBlobBytesStored()          = userDataBytes + RecoveryLogSizeBytes;
-         UserBlobSpaceGroup.UserBlobBytesAfterCompaction() = userDataBytesAfterCompaction + RecoveryLogSizeBytes;
+         UserBlobSpaceGroup.UserBlobBytesStored()          = userDataBytes + recoveryLogSizeBytes;
+         UserBlobSpaceGroup.UserBlobBytesAfterCompaction() = userDataBytesAfterCompaction + recoveryLogSizeBytes;
          UserBlobSpaceGroup.UserBlobBytesCanBeFreed()      = userDataBytes - userDataBytesAfterCompaction + defragSavingsBytes;
-    }
-
-    void THullCtx::UpdateRecoveryLogSize(ui32 logChunkCount, ui32 chunkSize) {
-        ui64 logSizeBytes = static_cast<ui64>(logChunkCount) * chunkSize;
-        RecoveryLogSizeBytes = logSizeBytes;
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -105,7 +104,7 @@ namespace NKikimr {
             ui32 hullSstSizeInChunksLevel, double hullCompFreeSpaceThreshold, ui32 freshCompMaxInFlightWrites,
             ui32 freshCompMaxInFlightReads, ui32 hullCompMaxInFlightWrites, ui32 hullCompMaxInFlightReads,
             double hullCompReadBatchEfficiencyThreshold, TDuration hullCompStorageRatioCalcPeriod,
-            TDuration hullCompStorageRatioMaxCalcDuration, bool addHeader)
+            TDuration hullCompStorageRatioMaxCalcDuration, bool addHeader, ui32 minHugeBlobInBytes)
         : VCtx(std::move(vctx))
         , IngressCache(TIngressCache::Create(VCtx->Top, VCtx->ShortSelfVDisk))
         , ChunkSize(chunkSize)
@@ -125,9 +124,11 @@ namespace NKikimr {
         , HullCompStorageRatioCalcPeriod(hullCompStorageRatioCalcPeriod)
         , HullCompStorageRatioMaxCalcDuration(hullCompStorageRatioMaxCalcDuration)
         , AddHeader(addHeader)
+        , MinHugeBlobInBytes(minHugeBlobInBytes)
         , CompactionStrategyGroup(VCtx->VDiskCounters, "subsystem", "compstrategy")
         , LsmHullGroup(VCtx->VDiskCounters, "subsystem", "lsmhull")
         , LsmHullSpaceGroup(VCtx->VDiskCounters, "subsystem", "outofspace")
+        , FreshDataSpaceGroup(VCtx->VDiskCounters, "subsystem", "freshdata")
         , UserBlobSpaceGroup(VCtx->VDiskCounters, "subsystem", "userblobspace")
     {}
 

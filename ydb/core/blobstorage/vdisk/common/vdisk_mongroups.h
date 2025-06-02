@@ -114,6 +114,23 @@ public:                                                                         
         };
 
         ///////////////////////////////////////////////////////////////////////////////////
+        // TFreshDataSpaceGroup
+        ///////////////////////////////////////////////////////////////////////////////////
+        class TFreshDataSpaceGroup : public TBase {
+        public:
+            GROUP_CONSTRUCTOR(TFreshDataSpaceGroup)
+            {
+                COUNTER_INIT(DskSpaceFreshIndex, false);
+                COUNTER_INIT(DskSpaceFreshInplacedData, false);
+                COUNTER_INIT(DskSpaceFreshHugeData, false);
+            }
+
+            COUNTER_DEF(DskSpaceFreshIndex);
+            COUNTER_DEF(DskSpaceFreshInplacedData);
+            COUNTER_DEF(DskSpaceFreshHugeData);
+        };
+
+        ///////////////////////////////////////////////////////////////////////////////////
         // TSkeletonOverloadGroup
         ///////////////////////////////////////////////////////////////////////////////////
         class TSkeletonOverloadGroup : public TBase {

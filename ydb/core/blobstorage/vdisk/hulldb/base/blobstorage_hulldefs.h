@@ -139,13 +139,13 @@ namespace NKikimr {
         const TDuration HullCompStorageRatioCalcPeriod;
         const TDuration HullCompStorageRatioMaxCalcDuration;
         const bool AddHeader;
+        const ui32 MinHugeBlobInBytes;
 
         NMonGroup::TCompactionStrategyGroup CompactionStrategyGroup;
         NMonGroup::TLsmHullGroup LsmHullGroup;
         NMonGroup::TLsmHullSpaceGroup LsmHullSpaceGroup;
+        NMonGroup::TFreshDataSpaceGroup FreshDataSpaceGroup;
         NMonGroup::TUserBlobSpaceGroup UserBlobSpaceGroup;
-
-        ui64 RecoveryLogSizeBytes = 0;
 
         THullCtx(
                 TVDiskContextPtr vctx,
@@ -165,10 +165,10 @@ namespace NKikimr {
                 double hullCompReadBatchEfficiencyThreshold,
                 TDuration hullCompStorageRatioCalcPeriod,
                 TDuration hullCompStorageRatioMaxCalcDuration,
-                bool addHeader);
+                bool addHeader,
+                ui32 minHugeBlobInBytes);
 
         void UpdateSpaceCounters(const NHullComp::TSstRatio& prev, const NHullComp::TSstRatio& current);
-        void UpdateRecoveryLogSize(ui32 logChunkCount, ui32 chunkSize);
     };
 
     using THullCtxPtr = TIntrusivePtr<THullCtx>;

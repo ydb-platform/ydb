@@ -254,6 +254,10 @@ namespace NKikimr {
         void OutputProto(NKikimrVDisk::FreshSegmentStat *stat) const;
         void GetOwnedChunks(TSet<TChunkIdx>& chunks) const { return IndexAndData->GetOwnedChunks(chunks); }
         void GetHugeBlobs(TSet<TDiskPart> &hugeBlobs) const { return IndexAndData->GetHugeBlobs(hugeBlobs); }
+
+        ui64 MemDataInplacedSize() const { return IndexAndData->GetMemDataSize(); }
+        ui64 MemDataHugeSize() const { return IndexAndData->GetHugeDataSize(); }
+
         // Appendix Compact/ApplyCompactionResult
         TCompactionJob Compact() { return MkCompactJob(AppendixTree.Compact()); }
         TCompactionJob ApplyCompactionResult(std::shared_ptr<ISTreeCompaction> cjob) {

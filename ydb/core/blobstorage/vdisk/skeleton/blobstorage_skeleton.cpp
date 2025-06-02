@@ -1734,7 +1734,6 @@ namespace NKikimr {
             if (ev->Get()->StatusFlags & ui32(NKikimrBlobStorage::StatusIsValid)) {
                 i64 count = ev->Get()->LogChunkCount;
                 OverloadHandler->SetLogChunkCount(count >= 0 ? (ui32)count : 0);
-                HullCtx->UpdateRecoveryLogSize(count, PDiskCtx->Dsk->ChunkSize);
             }
         }
 

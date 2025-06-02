@@ -265,7 +265,8 @@ namespace NKikimr {
                                          Config->FreshHistoryWindow,
                                          Config->FreshHistoryBuckets,
                                          Config->FreshUseDreg,
-                                         Config->Level0UseDreg);
+                                         Config->Level0UseDreg,
+                                         Config->MinHugeBlobInBytes);
 
             it = startingPoints.find(signature);
             if (it == startingPoints.end()) {
@@ -522,7 +523,8 @@ namespace NKikimr {
                         Config->HullCompReadBatchEfficiencyThreshold,
                         Config->HullCompStorageRatioCalcPeriod,
                         Config->HullCompStorageRatioMaxCalcDuration,
-                        Config->AddHeader);
+                        Config->AddHeader,
+                        Config->MinHugeBlobInBytes);
 
                 // create THullDbRecovery, which creates THullDs
                 LocRecCtx->HullDbRecovery = std::make_shared<THullDbRecovery>(hullCtx);

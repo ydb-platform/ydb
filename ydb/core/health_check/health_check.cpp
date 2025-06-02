@@ -2200,27 +2200,6 @@ public:
         return TStringBuilder() << pDiskKey.GetNodeId() << "-" << pDiskKey.GetPDiskId();
     }
 
-    TString OverrideMessageIfZoneDown(const TNodeId nodeId, const TString& defaultMessage) {
-        auto dataCenter = GetDataCenterId(nodeId);
-        auto rack = GetRackId(nodeId);
-
-        if (dataCenter && rack) {
-            auto itDataCenter = DataCenterStats.find(dataCenter);
-            if (itDataCenter != DataCenterStats.end() && itDataCenter->second.Disks > 0
-                && itDataCenter->second.BadStatus > itDataCenter->second.Disks * 95 / 100) {
-                return TStringBuilder() << "95% of Zone " << dataCenter << " is unavailable";
-            }
-
-            rack = dataCenter + "/" + rack;
-            auto itRack = RackStats.find(rack);
-            if (itRack != RackStats.end() && itRack->second.Disks > 0
-                && itRack->second.BadStatus > itRack->second.Disks * 95 / 100) {
-                return TStringBuilder() << "95% of Rack " << rack << " is unavailable";
-            }
-        }
-        return defaultMessage;
-    }
-
     ui32 ParsePDiskStatusOrUnknown(const TString& statusString) {
         static const auto* descriptor = NKikimrBlobStorage::EDriveStatus_descriptor();
         const auto* valueDescriptor = descriptor->FindValueByName(statusString);
@@ -2290,14 +2269,6 @@ public:
             const auto* descriptor = NKikimrBlobStorage::TPDiskState::E_descriptor();
             auto state = descriptor->FindValueByName(stateString);
             auto stateEnum = state ? static_cast<NKikimrBlobStorage::TPDiskState::E>(state->number()) : NKikimrBlobStorage::TPDiskState::Unknown;
-
-
-                context.ReportStatus(Ydb::Monitoring::StatusFlag::RED,
-                                    TStringBuilder() << "PDisk state is " << E::E_Name(stateEnum),
-                                    ETags::PDiskState);
-                context.ReportStatus(Ydb::Monitoring::StatusFlag::RED,
-                                     OverrideMessageIfZoneDown(itPDisk->second->GetKey().GetNodeId(), TStringBuilder() << "PDisk state is " << statusString),
-                                     ETags::PDiskState);
             ReportPDiskState(stateEnum, context);
         } else {
             ui32 statusNumber = ParsePDiskStatusOrUnknown(pDisk.GetStatusV2());

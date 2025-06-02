@@ -7,6 +7,7 @@
 ```yql
 SHOW CREATE [TABLE|VIEW] <name>;
 ```
+
 ### Параметры
 
 * `TABLE|VIEW` - тип объекта: `TABLE` для таблицы или `VIEW` для представления.

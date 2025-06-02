@@ -412,4 +412,72 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
             });
         }
     }
+
+    Y_UNIT_TEST(TTxReply_DoExecute_Throws) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "vectors"
+            Columns { Name: "id" Type: "Uint64" }
+            Columns { Name: "embedding" Type: "String" }
+            KeyColumnNames: [ "id" ]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        NYdb::NTable::TGlobalIndexSettings globalIndexSettings;
+
+        std::unique_ptr<NYdb::NTable::TKMeansTreeSettings> kmeansTreeSettings;
+        {
+            Ydb::Table::KMeansTreeSettings proto;
+            UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(R"(
+                settings {
+                    metric: DISTANCE_COSINE
+                    vector_type: VECTOR_TYPE_FLOAT
+                    vector_dimension: 1024
+                }
+                levels: 5
+                clusters: 4
+            )", &proto));
+            using T = NYdb::NTable::TKMeansTreeSettings;
+            kmeansTreeSettings = std::make_unique<T>(T::FromProto(proto));
+        }
+
+        TBlockEvents<TEvDataShard::TEvLocalKMeansResponse> blocked(runtime, [&](auto& ev) {
+            ev->Get()->Record.SetRequestSeqNoRound(999);
+            return true;
+        });
+
+        const ui64 buildIndexTx = ++txId;
+        const TVector<TString> dataColumns;
+        const TVector<TString> indexColumns{"embedding"};
+        AsyncBuildVectorIndex(runtime, buildIndexTx, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/vectors", "index1", "embedding");
+
+        runtime.WaitFor("block", [&]{ return blocked.size(); });
+        blocked.Stop().Unblock();
+
+        env.TestWaitNotification(runtime, buildIndexTx);
+
+        {
+            auto buildIndexOperation = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexTx);
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                buildIndexOperation.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE,
+                buildIndexOperation.DebugString()
+            );
+        }
+
+        // RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+
+        // {
+        //     auto buildIndexOperation = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexTx);
+        //     UNIT_ASSERT_VALUES_EQUAL_C(
+        //         buildIndexOperation.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE,
+        //         buildIndexOperation.DebugString()
+        //     );
+        // }
+    }
 }

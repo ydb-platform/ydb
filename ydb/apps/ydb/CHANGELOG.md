@@ -1,3 +1,4 @@
+* Added support of check canonical results in `ydb workload query run` command.
 * `ydb workload query` deep reworked. Now it can be used for user defined full cicle load testing.
 * Fixed an issue where the `ydb workload * clean` commands were deleting all contents from the target directory, instead of just the tables created by the init command.
 * Switched highlighting engine

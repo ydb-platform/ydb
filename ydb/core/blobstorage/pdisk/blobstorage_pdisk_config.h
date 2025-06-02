@@ -431,6 +431,15 @@ struct TPDiskConfig : public TThrRefBase {
         }
     }
 
+    ui32 GetOwnerWeight(ui32 groupSizeInUnits) {
+        return TPDiskConfig::GetOwnerWeight(groupSizeInUnits, SlotSizeInUnits);
+    }
+
+    static ui32 GetOwnerWeight(ui32 groupSizeInUnits, ui32 slotSizeInUnits) {
+        ui32 vu = groupSizeInUnits ?: 1;
+        ui32 pu = slotSizeInUnits ?: 1;
+        return int(vu / pu) + !!(vu % pu);
+    }
 };
 
 } // NKikimr

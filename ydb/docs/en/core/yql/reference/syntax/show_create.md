@@ -2,13 +2,13 @@
 
 `SHOW CREATE` returns a query (possibly consisting of several SQL statements) required to recreate the structure of the specified object: {% if concept_table %}[table]({{ concept_table }}){% else %}table{% endif %} (TABLE) or [view](../../../concepts/datamodel/view.md) (VIEW).
 
-### Syntax
+## Syntax
 
 ```yql
 SHOW CREATE [TABLE|VIEW] <name>;
 ```
 
-### Parameters
+## Parameters
 
 * `TABLE|VIEW` — The object type: `TABLE` for a table or `VIEW` for a view.
 * `<name>` — The object name. An absolute path may also be specified.

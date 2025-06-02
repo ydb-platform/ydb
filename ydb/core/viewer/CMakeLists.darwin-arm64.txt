@@ -151,7 +151,6 @@ target_sources(ydb-core-viewer PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/viewer/viewer_pdiskinfo.h
   ${PROJECT_SOURCE_DIR}/ydb/core/viewer/viewer_pqconsumerinfo.h
   ${PROJECT_SOURCE_DIR}/ydb/core/viewer/viewer_query.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/viewer/viewer_query_old.h
   ${PROJECT_SOURCE_DIR}/ydb/core/viewer/viewer_render.h
   ${PROJECT_SOURCE_DIR}/ydb/core/viewer/viewer_request.h
   ${PROJECT_SOURCE_DIR}/ydb/core/viewer/viewer_storage.h

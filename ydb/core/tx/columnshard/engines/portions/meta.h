@@ -129,7 +129,7 @@ public:
         return sizeof(TPortionMeta) + FirstPKRow.GetDataSize() + LastPKRow.GetDataSize() + TBase::GetMetadataDataSize();
     }
 
-    NKikimrTxColumnShard::TIndexPortionMeta SerializeToProto() const;
+    NKikimrTxColumnShard::TIndexPortionMeta SerializeToProto(const NPortion::EProduced produced) const;
 
     TString DebugString() const;
 };

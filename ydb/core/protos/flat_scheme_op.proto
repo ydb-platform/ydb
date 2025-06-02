@@ -337,6 +337,8 @@ message TTableDescription {
     // It won't be present on describes and won't be preserved
     optional bool SystemColumnNamesAllowed = 42;
     optional bool AllowUnderSameOperation = 44 [default = false];
+    // Create only as-well. Used for CopyTable to create table in desired state instead of default
+    optional EPathState PathState = 46;
 }
 
 message TDictionaryEncodingSettings {
@@ -1163,6 +1165,7 @@ message TIndexCreationConfig {
 message TGenericTxInFlyExtraData {
     message TTxCopyTableExtraData {
         optional NKikimrProto.TPathID CdcPathId = 1;
+        optional NKikimrSchemeOp.EPathState TargetPathTargetState = 2;
     }
 
     // we do not use oneof here as far as we want to combine some subops rarely
@@ -1222,6 +1225,8 @@ message TCopyTableConfig { //TTableDescription implemets copying a table in orig
     // additionally creates cdc stream on src table consistently with taking snapshot
     optional TCreateCdcStream CreateSrcCdcStream = 6;
     optional bool AllowUnderSameOperation = 7 [default = false];
+
+    optional NKikimrSchemeOp.EPathState TargetPathTargetState = 8;
 }
 
 message TConsistentTableCopyingConfig {
@@ -1879,6 +1884,8 @@ enum EPathState {
     EPathStateRestore = 10;
     EPathStateMoving = 11;
     EPathStateOutgoingIncrementalRestore = 12;
+    EPathStateAwaitingOutgoingIncrementalRestore = 13;
+    EPathStateIncomingIncrementalRestore = 14;
 }
 
 message TPathVersion {

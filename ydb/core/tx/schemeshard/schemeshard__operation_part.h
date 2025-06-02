@@ -359,8 +359,8 @@ ISubOperation::TPtr CreateNewTable(TOperationId id, const TTxTransaction& tx, co
 ISubOperation::TPtr CreateNewTable(TOperationId id, TTxState::ETxState state);
 
 ISubOperation::TPtr CreateCopyTable(TOperationId id, const TTxTransaction& tx,
-    const THashSet<TString>& localSequences = { });
-ISubOperation::TPtr CreateCopyTable(TOperationId id, TTxState::ETxState state);
+    const THashSet<TString>& localSequences = { }, TMaybe<TPathElement::EPathState> targetState = {});
+ISubOperation::TPtr CreateCopyTable(TOperationId id, TTxState::ETxState txState, TTxState* state);
 TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context);
 
 ISubOperation::TPtr CreateAlterTable(TOperationId id, const TTxTransaction& tx);

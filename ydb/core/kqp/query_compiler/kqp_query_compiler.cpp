@@ -1,12 +1,13 @@
 #include "kqp_query_compiler.h"
 
 #include <ydb/core/kqp/common/kqp_yql.h>
-#include <ydb/core/kqp/query_data/kqp_request_predictor.h>
-#include <ydb/core/kqp/query_data/kqp_predictor.h>
-#include <ydb/core/kqp/query_compiler/kqp_mkql_compiler.h>
-#include <ydb/core/kqp/query_compiler/kqp_olap_compiler.h>
+#include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
 #include <ydb/core/kqp/opt/kqp_opt.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
+#include <ydb/core/kqp/query_compiler/kqp_mkql_compiler.h>
+#include <ydb/core/kqp/query_compiler/kqp_olap_compiler.h>
+#include <ydb/core/kqp/query_data/kqp_predictor.h>
+#include <ydb/core/kqp/query_data/kqp_request_predictor.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 
 #include <ydb/core/scheme/scheme_tabledefs.h>
@@ -134,8 +135,22 @@ NKqpProto::EKqpPhyTableKind GetPhyTableKind(EKikimrTableKind kind) {
     }
 }
 
+void FillTablesMap(const TStringBuf path, THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap) {
+    tablesMap.emplace(path, THashSet<TStringBuf>{});
+}
+
 void FillTablesMap(const TKqpTable& table, THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap) {
-    tablesMap.emplace(table.Path().Value(), THashSet<TStringBuf>{});
+    FillTablesMap(table.Path().Value(), tablesMap);
+}
+
+void FillTablesMap(const TStringBuf& path, const TVector<TStringBuf>& columns,
+    THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap)
+{
+    FillTablesMap(path, tablesMap);
+
+    for (const auto& column : columns) {
+        tablesMap[path].emplace(column);
+    }
 }
 
 void FillTablesMap(const TKqpTable& table, const TCoAtomList& columns,
@@ -1160,6 +1175,22 @@ private:
                 columns.emplace_back(item->GetName());
             }
 
+            if (settings.Mode().Cast().StringValue() == "replace") {
+                settingsProto.SetType(NKikimrKqp::TKqpTableSinkSettings::MODE_REPLACE);
+            } else if (settings.Mode().Cast().StringValue() == "upsert" || settings.Mode().Cast().StringValue().empty() /* for compatibility, will be removed */) {
+                settingsProto.SetType(NKikimrKqp::TKqpTableSinkSettings::MODE_UPSERT);
+            } else if (settings.Mode().Cast().StringValue() == "insert") {
+                settingsProto.SetType(NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT);
+            } else if (settings.Mode().Cast().StringValue() == "delete") {
+                settingsProto.SetType(NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE);
+            } else if (settings.Mode().Cast().StringValue() == "update") {
+                settingsProto.SetType(NKikimrKqp::TKqpTableSinkSettings::MODE_UPDATE);
+            } else if (settings.Mode().Cast().StringValue() == "fill_table") {
+                settingsProto.SetType(NKikimrKqp::TKqpTableSinkSettings::MODE_FILL);
+            } else {
+                YQL_ENSURE(false, "Unsupported sink mode");
+            }
+
             if (settings.Mode().Cast().StringValue() != "fill_table") {
                 AFL_ENSURE(settings.Table().Cast().PathId() != "");
                 FillTableId(settings.Table().Cast(), *settingsProto.MutableTable());
@@ -1206,6 +1237,60 @@ private:
 
                 AFL_ENSURE(settings.InconsistentWrite().Cast().StringValue() == "false");
                 settingsProto.SetInconsistentTx(false);
+
+                const bool canUseStreamIndex = Config->EnableIndexStreamWrite
+                    && std::all_of(tableMeta->Indexes.begin(), tableMeta->Indexes.end(), [](const auto& index) {
+                        return index.Type == TIndexDescription::EType::GlobalSync;
+                    });
+
+                if (canUseStreamIndex && settingsProto.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT) {
+                    AFL_ENSURE(tableMeta->Indexes.size() == tableMeta->ImplTables.size());
+                    for (size_t index = 0; index < tableMeta->Indexes.size(); ++index) {
+                        const auto& indexDescription = tableMeta->Indexes[index];
+                        const auto& implTable = tableMeta->ImplTables[index];
+
+                        AFL_ENSURE(indexDescription.Type == TIndexDescription::EType::GlobalSync);
+                        AFL_ENSURE(implTable->Kind == EKikimrTableKind::Datashard);
+
+                        auto indexSettings = settingsProto.AddIndexes();
+                        FillTableId(*implTable, *indexSettings->MutableTable());
+
+                        indexSettings->SetIsUniq(indexDescription.Type == TIndexDescription::EType::GlobalSyncUnique);
+
+                        for (const auto& columnName : implTable->KeyColumnNames) {
+                            const auto columnMeta = implTable->Columns.FindPtr(columnName);
+                            YQL_ENSURE(columnMeta != nullptr, "Unknown column in sink: \"" + TString(columnName) + "\"");
+
+                            auto keyColumnProto = indexSettings->AddKeyColumns();
+                            fillColumnProto(columnName, columnMeta, keyColumnProto);
+                        }
+
+                        TVector<TStringBuf> indexColumns;
+                        indexColumns.reserve(implTable->Columns.size());
+
+                        for (const auto& columnName : columns) {
+                            const auto columnMeta = implTable->Columns.FindPtr(columnName);
+                            if (columnMeta) {
+                                indexColumns.emplace_back(columnName);
+
+                                auto columnProto = indexSettings->AddColumns();
+                                fillColumnProto(columnName, columnMeta, columnProto);
+                            }
+                        }
+
+                        const auto indexColumnToOrder = CreateColumnToOrder(
+                            indexColumns,
+                            implTable,
+                            true);
+                        for (const auto& columnName: indexColumns) {
+                            indexSettings->AddWriteIndexes(indexColumnToOrder.at(columnName));
+                        }
+                        FillTablesMap(
+                            implTable->Name,
+                            indexColumns,
+                            tablesMap);
+                    }
+                }
             } else {
                 // Table info will be filled during execution after resolving table by name.
                 settingsProto.MutableTable()->SetPath(TString(settings.Table().Cast().Path()));
@@ -1228,22 +1313,6 @@ private:
 
             if (const auto isBatch = settings.IsBatch().Cast(); isBatch.StringValue() == "true") {
                 settingsProto.SetIsBatch(true);
-            }
-
-            if (settings.Mode().Cast().StringValue() == "replace") {
-                settingsProto.SetType(NKikimrKqp::TKqpTableSinkSettings::MODE_REPLACE);
-            } else if (settings.Mode().Cast().StringValue() == "upsert" || settings.Mode().Cast().StringValue().empty() /* for compatibility, will be removed */) {
-                settingsProto.SetType(NKikimrKqp::TKqpTableSinkSettings::MODE_UPSERT);
-            } else if (settings.Mode().Cast().StringValue() == "insert") {
-                settingsProto.SetType(NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT);
-            } else if (settings.Mode().Cast().StringValue() == "delete") {
-                settingsProto.SetType(NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE);
-            } else if (settings.Mode().Cast().StringValue() == "update") {
-                settingsProto.SetType(NKikimrKqp::TKqpTableSinkSettings::MODE_UPDATE);
-            } else if (settings.Mode().Cast().StringValue() == "fill_table") {
-                settingsProto.SetType(NKikimrKqp::TKqpTableSinkSettings::MODE_FILL);
-            } else {
-                YQL_ENSURE(false, "Unsupported sink mode");
             }
 
             internalSinkProto.MutableSettings()->PackFrom(settingsProto);

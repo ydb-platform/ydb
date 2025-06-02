@@ -447,6 +447,55 @@ namespace NKikimr::NBsController {
         }
     }
 
+    void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TChangeGroupSizeInUnits& cmd, TStatus& /*status*/) {
+        auto& storagePools = StoragePools.Unshare();
+
+        const TBoxStoragePoolId poolId(cmd.GetBoxId(), cmd.GetStoragePoolId());
+
+        if (auto it = storagePools.find(poolId); it != storagePools.end()) {
+            const ui64 nextGen = CheckGeneration(cmd, storagePools, poolId);
+            it->second.Generation = nextGen;
+        } else {
+            throw TExError() << "StoragePoolId# " << poolId << " not found";
+        }
+
+        auto& storagePoolGroups = StoragePoolGroups.Unshare();
+
+        // create a list of groups to be resized
+        const auto& m = cmd.GetGroupId();
+        TVector<TGroupId> groups;
+        std::transform(m.begin(), m.end(), std::back_inserter(groups), [](ui32 id) { return TGroupId::FromValue(id); });
+        if (!groups) {
+            for (auto it = storagePoolGroups.lower_bound(poolId); it != storagePoolGroups.end() && it->first == poolId; ++it) {
+                groups.push_back(it->second);
+            }
+        }
+
+        for (TGroupId groupId : groups) {
+            // find the group
+            TGroupInfo *group = Groups.FindForUpdate(groupId);
+            if (!group || group->StoragePoolId != poolId) {
+                throw TExError() << "GroupId# " << groupId << " not found in StoragePoolId# " << poolId;
+            }
+
+            auto oldSizeInUnits = group->GroupSizeInUnits;
+            auto newSizeInUnits = cmd.GetSizeInUnits();
+            for (auto& vdisk: group->VDisksInGroup) {
+                TVSlotId vslotId = vdisk->VSlotId;
+                TPDiskInfo* pdisk = PDisks.FindForUpdate(vslotId.ComprisingPDiskId());
+                Y_ABORT_UNLESS(pdisk);
+
+                pdisk->NumActiveSlots -= TPDiskConfig::GetOwnerWeight(oldSizeInUnits, pdisk->SlotSizeInUnits);
+                pdisk->NumActiveSlots += TPDiskConfig::GetOwnerWeight(newSizeInUnits, pdisk->SlotSizeInUnits);
+            }
+
+            // update the group size
+            group->GroupSizeInUnits = newSizeInUnits;
+            GroupContentChanged.insert(groupId);
+            Fit.PoolsAndGroups.emplace(poolId, groupId);
+        }
+    }
+
     void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TReadSettings& /*cmd*/, TStatus& status) {
         Self.SerializeSettings(status.MutableSettings());
     }

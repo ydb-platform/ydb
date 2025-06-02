@@ -107,5 +107,81 @@ Y_UNIT_TEST_SUITE(GroupSizeInUnits) {
             const auto* vslot1 = vslotsByGroupId.at(groups[1]);
             UNIT_ASSERT_VALUES_EQUAL(vslot1->GetGroupGeneration(), group1->GroupGeneration);
         }
+
+        {
+            // Request ChangeGroupSizeInUnits StoragePoolId# (1, 1) SizeInUnits# 9
+            NKikimrBlobStorage::TConfigRequest changeGroupSizeInUnitsRequest;
+            auto* cmd = changeGroupSizeInUnitsRequest.AddCommand()->MutableChangeGroupSizeInUnits();
+            cmd->SetBoxId(1);
+            cmd->SetStoragePoolId(1);
+            cmd->SetItemConfigGeneration(2);
+            cmd->SetSizeInUnits(9u);
+            NKikimrBlobStorage::TConfigResponse changeGroupSizeInUnitsResponse = env.Invoke(changeGroupSizeInUnitsRequest);
+            UNIT_ASSERT_C(changeGroupSizeInUnitsResponse.GetSuccess(), changeGroupSizeInUnitsResponse.GetErrorDescription());
+            UNIT_ASSERT_C(changeGroupSizeInUnitsResponse.GetStatus(0).GetSuccess(), changeGroupSizeInUnitsResponse.GetStatus(0).GetErrorDescription());
+            env.Sim(TDuration::Minutes(1));
+
+            // Validate NumActiveSlots
+            UNIT_ASSERT_VALUES_EQUAL(pdiskMockState.GetNumActiveSlots(), 18);
+        }
+
+        {
+            // Validate BaseConfig.Group entries
+            auto groups = env.GetGroups();
+            UNIT_ASSERT_VALUES_EQUAL(groups.size(), 2);
+            auto group0 = env.GetGroupInfo(groups[0]); // implies FetchBaseConfig
+            UNIT_ASSERT_VALUES_EQUAL(group0->GroupGeneration, 2);
+            UNIT_ASSERT_VALUES_EQUAL(group0->GroupSizeInUnits, 9u);
+            auto group1 = env.GetGroupInfo(groups[1]);
+            UNIT_ASSERT_VALUES_EQUAL(group1->GroupGeneration, 2);
+            UNIT_ASSERT_VALUES_EQUAL(group1->GroupSizeInUnits, 9u);
+
+            // Validate BaseConfig.VSlot entries
+            TBaseConfig baseConfig_rev3 = env.FetchBaseConfig();
+            UNIT_ASSERT_VALUES_EQUAL(baseConfig_rev3.VSlotSize(), 2);
+
+            THashMap<ui32, const TBaseConfig_TVSlot*> vslotsByGroupId;
+            for (size_t i = 0; i < baseConfig_rev3.VSlotSize(); ++i) {
+                const auto& vslot = baseConfig_rev3.GetVSlot(i);
+                vslotsByGroupId[vslot.GetGroupId()] = &vslot;
+            }
+
+            const auto* vslot0 = vslotsByGroupId.at(groups[0]);
+            UNIT_ASSERT_VALUES_EQUAL(vslot0->GetGroupGeneration(), group0->GroupGeneration);
+            const auto* vslot1 = vslotsByGroupId.at(groups[1]);
+            UNIT_ASSERT_VALUES_EQUAL(vslot1->GetGroupGeneration(), group1->GroupGeneration);
+        }
+
+        {
+            // Validate request error "Generation# does not match expected"
+            NKikimrBlobStorage::TConfigRequest request;
+            NKikimrBlobStorage::TConfigResponse response;
+            auto* cmd = request.AddCommand()->MutableChangeGroupSizeInUnits();
+            cmd->SetBoxId(1);
+            cmd->SetStoragePoolId(1);
+            cmd->SetItemConfigGeneration(0);
+            response = env.Invoke(request);
+            UNIT_ASSERT(!response.GetSuccess());
+            UNIT_ASSERT_STRINGS_EQUAL(
+                response.GetErrorDescription(),
+                "ItemConfigGeneration mismatch ItemConfigGenerationProvided# 0 ItemConfigGenerationExpected# 3"
+            );
+        }
+
+        {
+            // Validate request error "StoragePoolId# not found"
+            NKikimrBlobStorage::TConfigRequest request;
+            NKikimrBlobStorage::TConfigResponse response;
+            auto* cmd = request.AddCommand()->MutableChangeGroupSizeInUnits();
+            cmd->SetBoxId(3);
+            cmd->SetStoragePoolId(14);
+            cmd->SetItemConfigGeneration(0);
+            response = env.Invoke(request);
+            UNIT_ASSERT(!response.GetSuccess());
+            UNIT_ASSERT_STRINGS_EQUAL(
+                response.GetErrorDescription(),
+                "StoragePoolId# (3,14) not found"
+            );
+        }
     }
 }

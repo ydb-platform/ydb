@@ -8,10 +8,8 @@
 #include <util/stream/output.h>
 
 
-TContext::TContext(ibv_gid_entry entry, ui32 deviceIndex, NInterconnect::NRdma::TRdmaCtx* ctx, std::shared_ptr<NInterconnect::NRdma::IMemPool> memPool)
-    : Entry(entry)
-    , DeviceIndex(deviceIndex)
-    , Ctx(ctx)
+TContext::TContext(NInterconnect::NRdma::TRdmaCtx* ctx, std::shared_ptr<NInterconnect::NRdma::IMemPool> memPool)
+    : Ctx(ctx)
     , MemPool(memPool)
     , Cq(nullptr)
     , Qp(nullptr)
@@ -28,7 +26,7 @@ TContext::~TContext() {
 }
 
 int TContext::InitQp() {    
-    int err = ibv_query_port(Ctx->GetContext(), Entry.port_num, &PortAttr);
+    int err = ibv_query_port(Ctx->GetContext(), Ctx->GetPortNum(), &PortAttr);
     if (err) {
         Cerr << "ibv_query_port failed: " << strerror(errno) << Endl;
         return 1;
@@ -90,7 +88,7 @@ int TContext::MoveQpToRTS(ibv_gid dstGidEntry, ui32 dstQpNum) {
             .qp_state = IBV_QPS_INIT,
             .qp_access_flags = IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ | IBV_ACCESS_REMOTE_WRITE,
             .pkey_index = 0,
-            .port_num = static_cast<ui8>(Entry.port_num),
+            .port_num = static_cast<ui8>(Ctx->GetPortNum()),
         };
     
         int err = ibv_modify_qp(Qp, &qpAttr, IBV_QP_STATE | IBV_QP_PKEY_INDEX | IBV_QP_PORT | IBV_QP_ACCESS_FLAGS);
@@ -117,13 +115,13 @@ int TContext::MoveQpToRTS(ibv_gid dstGidEntry, ui32 dstQpNum) {
             .ah_attr = {
                 .grh = {
                     .dgid = dstGidEntry,
-                    .sgid_index = static_cast<ui8>(Entry.gid_index),
+                    .sgid_index = static_cast<ui8>(Ctx->GetGidIndex()),
                     .hop_limit = 1,
                 },
                 .sl = 0,
                 .src_path_bits = 0,
                 .is_global = 1,
-                .port_num = static_cast<ui8>(Entry.port_num),
+                .port_num = static_cast<ui8>(Ctx->GetPortNum()),
             },
             .max_dest_rd_atomic = 1,
             .min_rnr_timer = 12,
@@ -170,18 +168,6 @@ int TContext::MoveQpToRTS(ibv_gid dstGidEntry, ui32 dstQpNum) {
     Cout << "QP in RTS" << Endl;
 
     return 0;
-}
-
-
-std::tuple<ui32, ibv_gid_entry, NInterconnect::NRdma::TRdmaCtx*> GetRdmaCtx(ui32 gidIndex) {
-    auto ctxs = NInterconnect::NRdma::NLinkMgr::GetAllCtxs();
-    for (ui32 i = 0; i < ctxs.size(); ++i) {
-        const auto& [entry, ctx] = ctxs[i];
-        if (entry.gid_index == gidIndex) {
-            return {i, entry, ctx};
-        }
-    }
-    return {};
 }
 
 

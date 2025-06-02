@@ -163,15 +163,19 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    auto [index, entry, rdmaCtx] = GetRdmaCtx(1);
+    NInterconnect::NRdma::TRdmaCtx* rdmaCtx = NInterconnect::NRdma::NLinkMgr::GetCtx(sockfd);
+    if (!rdmaCtx) {
+        Cerr << "Failed to get RDMA context" << Endl;
+        return 1;
+    }
     char str[INET6_ADDRSTRLEN];
-    inet_ntop(AF_INET6, &(entry.gid), str, INET6_ADDRSTRLEN);
+    inet_ntop(AF_INET6, &(rdmaCtx->GetGid()), str, INET6_ADDRSTRLEN);
     fprintf(stderr, "%s\n", str);
 
-    TContext ctx(entry, index, rdmaCtx, NInterconnect::NRdma::CreateDummyMemPool());
+    TContext ctx(rdmaCtx, NInterconnect::NRdma::CreateDummyMemPool());
 
     ctx.InitQp();
-    auto [dstGid, dstQpNum] = ExchangeRdmaConnectionInfo(sockfd, entry.gid, ctx.Qp->qp_num);
+    auto [dstGid, dstQpNum] = ExchangeRdmaConnectionInfo(sockfd, rdmaCtx->GetGid(), ctx.Qp->qp_num);
 
     ctx.MoveQpToRTS(dstGid, dstQpNum);
 

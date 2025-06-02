@@ -1,6 +1,10 @@
 #pragma once
 
+#include <memory>
 #include <util/generic/noncopyable.h>
+#include <util/system/types.h>
+
+#include <ydb/library/actors/interconnect/rdma/ibdrv/include/infiniband/verbs.h>
 
 extern "C" {
 
@@ -11,26 +15,67 @@ struct ibv_pd;
 
 namespace NInterconnect::NRdma {
 
-class TRdmaCtx : public NNonCopyable::TNonCopyable {
-public:
-    TRdmaCtx(ibv_context* ctx, ibv_pd* pd)
+struct TDeviceCtx : public NNonCopyable::TNonCopyable {
+    TDeviceCtx(ibv_context* ctx, ibv_pd* pd)
         : Context(ctx)
         , ProtDomain(pd)
     {}
 
-    ~TRdmaCtx();
+    ~TDeviceCtx();
 
-    ibv_context* GetContext() const {
-        return Context;
-    }
-
-    ibv_pd* GetProtDomain() const {
-        return ProtDomain;
-    }
-private:
     ibv_context* const Context;
     ibv_pd* const ProtDomain;
 };
 
+class TRdmaCtx : public NNonCopyable::TNonCopyable {
+    TRdmaCtx(std::shared_ptr<TDeviceCtx> deviceCtx, ibv_device_attr devAttr, const char* deviceName, ui32 portNum, ibv_port_attr portAttr, int gidIndex, ibv_gid gid)
+        : DeviceCtx(std::move(deviceCtx))
+        , DevAttr(devAttr)
+        , DeviceName(deviceName)
+        , PortNum(portNum)
+        , PortAttr(portAttr)
+        , GidIndex(gidIndex)
+        , Gid(gid)
+    {}
+
+public:
+    static std::shared_ptr<TRdmaCtx> Create(std::shared_ptr<TDeviceCtx> deviceCtx, ui32 portNum, int gidIndex);
+
+    ~TRdmaCtx() = default;
+
+    ibv_context* GetContext() const {
+        return DeviceCtx->Context;
+    }
+    ibv_pd* GetProtDomain() const {
+        return DeviceCtx->ProtDomain;
+    }
+    const ibv_device_attr& GetDevAttr() const {
+        return DevAttr;
+    }
+    const char* GetDeviceName() const {
+        return DeviceName;
+    }
+    ui32 GetPortNum() const {
+        return PortNum;
+    }
+    const ibv_port_attr& GetPortAttr() const {
+        return PortAttr;
+    }
+    int GetGidIndex() const {
+        return GidIndex;
+    }
+    const ibv_gid& GetGid() const {
+        return Gid;
+    }
+
+private:
+    const std::shared_ptr<TDeviceCtx> DeviceCtx;
+    const ibv_device_attr DevAttr;
+    const char* DeviceName;
+    const ui32 PortNum;
+    const ibv_port_attr PortAttr;
+    const int GidIndex;
+    const ibv_gid Gid;
+};
 
 }

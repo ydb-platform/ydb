@@ -550,14 +550,14 @@ public:
         (override));
 
     MOCK_METHOD(TFuture<void>, AddMember, (
-        const TString& group,
-        const TString& member,
+        const std::string& group,
+        const std::string& member,
         const TAddMemberOptions& options),
         (override));
 
     MOCK_METHOD(TFuture<void>, RemoveMember, (
-        const TString& group,
-        const TString& member,
+        const std::string& group,
+        const std::string& member,
         const TRemoveMemberOptions& options),
         (override));
 

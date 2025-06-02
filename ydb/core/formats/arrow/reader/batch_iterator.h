@@ -17,11 +17,11 @@ private:
     std::shared_ptr<NArrow::TColumnFilter::TIterator> FilterIterator;
 
     i32 GetPosition(const ui64 position) const {
-        AFL_VERIFY((i64)position <= RecordsCount);
+        AFL_VERIFY((i64)position < RecordsCount);
         if (ReverseSortKff > 0) {
             return position;
         } else {
-            return RecordsCount - position;
+            return RecordsCount - position - 1;
         }
     }
 

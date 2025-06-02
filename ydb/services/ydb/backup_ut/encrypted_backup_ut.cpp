@@ -1,4 +1,7 @@
 #include "s3_backup_test_base.h"
+#include <ydb/core/backup/common/encryption.h>
+
+#include <util/generic/scope.h>
 
 using namespace NYdb;
 
@@ -619,5 +622,278 @@ Y_UNIT_TEST_SUITE_F(EncryptedExportTest, TBackupEncryptionTestFixture) {
 
         auto viewDescribe = YdbSchemeClient().DescribePath("/Root/Restored/EncryptedExportAndImportView").GetValueSync();
         UNIT_ASSERT_C(viewDescribe.IsSuccess(), viewDescribe.GetIssues().ToString());
+    }
+}
+
+class TBackupEncryptionCommonRequirementsTestFixture : public TS3BackupTestFixture {
+    void SetUp(NUnitTest::TTestContext& /* context */) override {
+        EnableAllExportAndImportInFeatureFlags();
+
+        AppConfig().MutableFeatureFlags()->SetEnableExternalDataSources(true);
+    }
+
+    void TearDown(NUnitTest::TTestContext& /* context */) override {
+    }
+
+    void EnableAllExportAndImportInFeatureFlags() {
+        // Enable all export/import features, even future features
+        using namespace google::protobuf;
+        NKikimrConfig::TFeatureFlags* featureFlags = AppConfig().MutableFeatureFlags();
+        const Reflection* reflection = featureFlags->GetReflection();
+        const Descriptor* descriptor = featureFlags->descriptor();
+        for (int i = 0; i < descriptor->field_count(); ++i) {
+            const FieldDescriptor* fieldDescriptor = descriptor->field(i);
+            if (fieldDescriptor->name().find("Export") == TProtoStringType::npos && fieldDescriptor->name().find("Import") == TProtoStringType::npos) {
+                continue;
+            }
+            if (fieldDescriptor->type() != FieldDescriptor::TYPE_BOOL) {
+                continue;
+            }
+            reflection->SetBool(featureFlags, fieldDescriptor, true);
+        }
+    }
+
+protected:
+    bool NotEncryptedFileName(const TString& key) {
+        return key.EndsWith(".sha256") || key == "/test_bucket/Prefix/metadata.json";
+    }
+
+    TString ReencryptWithDifferentIV(const TString& source, NBackup::TEncryptionKey& encryptionKey, const std::string& algorithm) {
+        auto [content, iv] = NBackup::TEncryptedFileDeserializer::DecryptFullFile(
+            encryptionKey,
+            TBuffer(source.data(), source.size()));
+        auto encrypted = NBackup::TEncryptedFileSerializer::EncryptFullFile(
+            TString(algorithm),
+            encryptionKey,
+            NBackup::TEncryptionIV::Generate(),
+            TStringBuf(content.Data(), content.Size()));
+        return TString(encrypted.Data(), encrypted.Size());
+    }
+};
+
+Y_UNIT_TEST_SUITE_F(CommonEncryptionRequirementsTest, TBackupEncryptionCommonRequirementsTestFixture) {
+    Y_UNIT_TEST(CommonEncryptionRequirements) {
+        // Create different objects with names that are expected to be hidden (anonymized) in encrypted exports
+        // Create two object of each type in order to verify that we don't duplicate IVs
+        {
+            auto res = YdbQueryClient().ExecuteQuery(R"sql(
+                CREATE TABLE `/Root/Anonymized_Dir/Anonymized_Table` (
+                    Key Uint32 NOT NULL,
+                    Value String NOT NULL,
+                    Value2 String NOT NULL,
+                    PRIMARY KEY (Key),
+                    INDEX `Anonymized_Index` GLOBAL ON (`Value`),
+                    INDEX `Anonymized_Index2` GLOBAL ON (`Value2`)
+                )
+                WITH (
+                    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2,
+                    PARTITION_AT_KEYS = (42)
+                );
+
+                CREATE TABLE `/Root/Anonymized_Dir/Anonymized_Table2` (
+                    Key Uint32 NOT NULL,
+                    Value String NOT NULL,
+                    Value2 String NOT NULL,
+                    PRIMARY KEY (Key),
+                    INDEX `Anonymized_Index` GLOBAL ON (`Value`),
+                    INDEX `Anonymized_Index2` GLOBAL ON (`Value2`)
+                );
+
+                ALTER TABLE `/Root/Anonymized_Dir/Anonymized_Table`
+                    ADD CHANGEFEED Anonymized_Changefeed WITH (format="JSON", mode="UPDATES");
+
+                ALTER TABLE `/Root/Anonymized_Dir/Anonymized_Table`
+                    ADD CHANGEFEED Anonymized_Changefeed2 WITH (format="JSON", mode="UPDATES");
+
+                CREATE VIEW `/Root/Anonymized_Dir/Anonymized_View`
+                    WITH (security_invoker = TRUE) AS
+                        SELECT Value FROM `/Root/Anonymized_Dir/Anonymized_Table`
+                            WHERE Key = 42;
+
+                CREATE VIEW `/Root/Anonymized_Dir/Anonymized_View2`
+                    WITH (security_invoker = TRUE) AS
+                        SELECT Value FROM `/Root/Anonymized_Dir/Anonymized_Table`
+                            WHERE Key = 42;
+
+                CREATE TOPIC `/Root/Anonymized_Dir/Anonymized_Topic` (
+                    CONSUMER Anonymized_Consumer,
+                    CONSUMER Anonymized_Consumer2
+                );
+
+                CREATE TOPIC `/Root/Anonymized_Dir/Anonymized_Topic2` (
+                    CONSUMER Anonymized_Consumer,
+                    CONSUMER Anonymized_Consumer2
+                );
+
+                CREATE USER anonymizeduser;
+                CREATE USER anonymizeduser2;
+
+                CREATE GROUP anonymizedgroup WITH USER anonymizeduser, anonymizeduser2;
+                CREATE GROUP anonymizedgroup2 WITH USER anonymizeduser, anonymizeduser2;
+
+                CREATE OBJECT id (TYPE SECRET) WITH (value=`test_id`);
+                CREATE OBJECT key (TYPE SECRET) WITH (value=`test_key`);
+                CREATE EXTERNAL DATA SOURCE `/Root/Anonymized_Dir/Anonymized_DataSource` WITH (
+                    SOURCE_TYPE="ObjectStorage",
+                    LOCATION="localhost:42",
+                    AUTH_METHOD="AWS",
+                    AWS_ACCESS_KEY_ID_SECRET_NAME="id",
+                    AWS_SECRET_ACCESS_KEY_SECRET_NAME="key",
+                    AWS_REGION="test-central-1"
+                );
+
+                CREATE OBJECT id2 (TYPE SECRET) WITH (value=`test_id`);
+                CREATE OBJECT key2 (TYPE SECRET) WITH (value=`test_key`);
+                CREATE EXTERNAL DATA SOURCE `/Root/Anonymized_Dir/Anonymized_DataSource2` WITH (
+                    SOURCE_TYPE="ObjectStorage",
+                    LOCATION="localhost:42",
+                    AUTH_METHOD="AWS",
+                    AWS_ACCESS_KEY_ID_SECRET_NAME="id2",
+                    AWS_SECRET_ACCESS_KEY_SECRET_NAME="key2",
+                    AWS_REGION="test-central-2"
+                );
+
+                CREATE EXTERNAL TABLE `/Root/Anonymized_Dir/Anonymized_ExternalTable` (
+                    Key Uint64,
+                    Value String
+                ) WITH (
+                    DATA_SOURCE="/Root/Anonymized_Dir/Anonymized_DataSource",
+                    LOCATION="/"
+                );
+
+                CREATE EXTERNAL TABLE `/Root/Anonymized_Dir/Anonymized_ExternalTable2` (
+                    Key Uint64,
+                    Value String
+                ) WITH (
+                    DATA_SOURCE="/Root/Anonymized_Dir/Anonymized_DataSource2",
+                    LOCATION="/"
+                );
+            )sql", NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+
+            auto res2 = YdbQueryClient().ExecuteQuery(R"sql(
+                UPSERT INTO `/Root/Anonymized_Dir/Anonymized_Table`
+                (Key, Value, Value2)
+                VALUES
+                    (1, "100", "100"),
+                    (100, "1", "001");
+            )sql", NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(res2.IsSuccess(), res2.GetIssues().ToString());
+
+            auto createRateLimiterResource = [&](const TString& coordinationNodePath, const TString& path) {
+                auto rateLimiterRes = YdbRateLimiterClient().CreateResource(
+                    coordinationNodePath,
+                    path,
+                    NYdb::NRateLimiter::TCreateResourceSettings()
+                        .MaxUnitsPerSecond(42.0)
+                ).GetValueSync();
+                UNIT_ASSERT_C(rateLimiterRes.IsSuccess(), rateLimiterRes.GetIssues().ToString());
+            };
+
+            auto createKesus = [&](const TString& path) {
+                auto nodeRes = YdbCoordinationClient().CreateNode(path).GetValueSync();
+                UNIT_ASSERT_C(nodeRes.IsSuccess(), nodeRes.GetIssues().ToString());
+
+                createRateLimiterResource(path, "Anonymized_Dir");
+                createRateLimiterResource(path, "Anonymized_Dir/Anonymized_Resource");
+                createRateLimiterResource(path, "Anonymized_Dir/Anonymized_Resource2");
+            };
+
+            createKesus("/Root/Anonymized_Dir/Anonymized_Kesus");
+            createKesus("/Root/Anonymized_Dir/Anonymized_Kesus2");
+        }
+
+        // Create recursive export
+        {
+            NExport::TExportToS3Settings settings = MakeExportSettings("", "Prefix");
+            settings
+                .SymmetricEncryption(NExport::TExportToS3Settings::TEncryptionAlgorithm::AES_128_GCM, "Cool random key!");
+
+            auto res = YdbExportClient().ExportToS3(settings).GetValueSync();
+            WaitOpSuccess(res);
+        }
+
+        Cerr << "Export files:\n";
+        for (const auto& [key, _] : S3Mock().GetData()) {
+            Cerr << key << Endl;
+        }
+
+        NBackup::TEncryptionKey encryptionKey("Cool random key!");
+        THashSet<TString> ivs;
+        THashSet<TString> allKeyNames;
+        for (const auto& [key, content] : S3Mock().GetData()) {
+            // Nonencrypted keys
+            if (NotEncryptedFileName(key)) {
+                continue;
+            }
+
+            allKeyNames.insert(key);
+
+            // Check that files are encrypted
+            UNIT_ASSERT_C(key.EndsWith(".enc"), key);
+
+            // Check that we can decrypt content with our key (== it is really encrypted with our key)
+            TBuffer decryptedData;
+            NBackup::TEncryptionIV iv;
+            UNIT_ASSERT_NO_EXCEPTION_C(std::tie(decryptedData, iv) = NBackup::TEncryptedFileDeserializer::DecryptFullFile(
+                encryptionKey,
+                TBuffer(content.data(), content.size())
+            ), key);
+
+            // All ivs are unique
+            UNIT_ASSERT_C(ivs.insert(iv.GetBinaryString()).second, key);
+
+            // Encrypted export must not show objects real names
+            UNIT_ASSERT_C(key.find("Anonymized") == TString::npos, key);
+            UNIT_ASSERT_C(key.find("anonymized") == TString::npos, key); // user/group
+        }
+
+
+        NImport::TImportFromS3Settings importSettings = MakeImportSettings("Prefix", "/Root/Restored");
+        importSettings
+            .SymmetricKey("Cool random key!");
+
+        size_t importIndex = 0;
+        auto copySettings = [&]() {
+            NYdb::NImport::TImportFromS3Settings settings = importSettings;
+            settings.DestinationPath(TStringBuilder() << "/Root/Prefix_" << importIndex++);
+            return settings;
+        };
+
+        // Check that import is initially OK
+        auto res = YdbImportClient().ImportFromS3(copySettings()).GetValueSync();
+        WaitOpSuccess(res);
+        ForgetOp(res);
+
+        auto checkImportFails = [&](const TString& comments) {
+            auto res = YdbImportClient().ImportFromS3(copySettings()).GetValueSync();
+            WaitOpStatus(res, NYdb::EStatus::CANCELLED, comments);
+            ForgetOp(res);
+        };
+
+        // Check that if we remove any key, import will fail,
+        // if we modify the file, import will fail,
+        // if we rewrite the file with another IV, import will fail.
+        for (const TString& key : allKeyNames) {
+            const auto fileIt = S3Mock().GetData().find(key);
+            UNIT_ASSERT_C(fileIt != S3Mock().GetData().end(), "No file: " << key);
+
+            const TString sourceValue = fileIt->second;
+
+            Y_DEFER {
+                S3Mock().GetData()[key] = sourceValue;
+            };
+
+            // Remove one file from export.
+            // In case of encrypted backup it must cause error,
+            // because no one should be able not modify export files,
+            // in particular, remove an export part (==file).
+            S3Mock().GetData().erase(key);
+            checkImportFails(TStringBuilder() << "Remove key " << key);
+
+            // Change IV (reencrypt with different, not expected, IV)
+            S3Mock().GetData()[key] = ReencryptWithDifferentIV(sourceValue, encryptionKey, NExport::TExportToS3Settings::TEncryptionAlgorithm::AES_128_GCM);
+            checkImportFails(TStringBuilder() << "Change IV of " << key);
+        }
     }
 }

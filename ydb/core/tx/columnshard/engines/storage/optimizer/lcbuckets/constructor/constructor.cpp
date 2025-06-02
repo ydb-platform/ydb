@@ -64,14 +64,14 @@ NKikimr::TConclusion<std::shared_ptr<NKikimr::NOlap::NStorageOptimizer::IOptimiz
                 levels.emplace_back(std::make_shared<TZeroLevelPortions>(
                     1, levels.back(), counters->GetLevelCounters(1), 
                     std::make_shared<TLimitsOverloadChecker>(1ull << 20, 16 * (1ull << 30)), 
-                    TDuration::Max(), 2 * (1ull << 20), 1,
+                    TDuration::Max(), 2 * (1ull << 20), 1.5 * (1 << 20), 1,
                     selectors, defaultSelectorName
                 ));
 
                 levels.emplace_back(std::make_shared<TZeroLevelPortions>(
                     0, levels.back(), counters->GetLevelCounters(0), 
                     std::make_shared<TLimitsOverloadChecker>(1ull << 20, 8 * (1ull << 30)), 
-                    TDuration::Max(), 1ull << 20, 1,
+                    1.5 * (1 << 20), TDuration::Max(), 1ull << 20, 1,
                     selectors, defaultSelectorName
                 ));
                break;
@@ -80,13 +80,13 @@ NKikimr::TConclusion<std::shared_ptr<NKikimr::NOlap::NStorageOptimizer::IOptimiz
                 levels.emplace_back(std::make_shared<TZeroLevelPortions>(
                     1, nullptr, counters->GetLevelCounters(1),
                     std::make_shared<TNoOverloadChecker>(),
-                    TDuration::Max(), 8 << 20, 1,
+                    TDuration::Max(), 8 << 20, 1.5 * (1 << 20), 1,
                     selectors, defaultSelectorName
                 ));
                 levels.emplace_back(std::make_shared<TZeroLevelPortions>(
                     0, levels.back(), counters->GetLevelCounters(0),
                     std::make_shared<TLimitsOverloadChecker>(1'000'000, 8 * (1ull << 30)),
-                    TDuration::Max(), 4 << 20, 1, 
+                    TDuration::Max(), 4 << 20, 1.5 * (1 << 20), 1, 
                     selectors, defaultSelectorName
                 ));
                 break;
@@ -95,19 +95,19 @@ NKikimr::TConclusion<std::shared_ptr<NKikimr::NOlap::NStorageOptimizer::IOptimiz
                 levels.emplace_back(std::make_shared<TZeroLevelPortions>(
                     2, nullptr, counters->GetLevelCounters(2),
                     std::make_shared<TNoOverloadChecker>(), 
-                    TDuration::Max(), 8 * (1ull << 20), 1,
+                    TDuration::Max(), 8 * (1ull << 20), 1.5 * (1 << 20), 1,
                     selectors, defaultSelectorName
                 ));
                 levels.emplace_back(std::make_shared<TZeroLevelPortions>(
                     1, levels.back(), counters->GetLevelCounters(1),
                     std::make_shared<TLimitsOverloadChecker>(1'000'000, 8 * (1ull << 30)),
-                    TDuration::Max(), 4 * (1ull << 20), 1,
+                    TDuration::Max(), 4 * (1ull << 20), 1.5 * (1 << 20), 1,
                     selectors, defaultSelectorName
                 ));
                 levels.emplace_back(std::make_shared<TZeroLevelPortions>(
                     0, levels.back(), counters->GetLevelCounters(0),
                     std::make_shared<TLimitsOverloadChecker>(1'000'000, 8 * (1ull << 30)),
-                    TDuration::Seconds(180), 2 * (1ull << 20), 1,
+                    TDuration::Seconds(180), 2 * (1ull << 20), 1.5 * (1 << 20), 1,
                     selectors, defaultSelectorName
                 ));
                 break;

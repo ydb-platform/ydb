@@ -38,6 +38,7 @@ target_sources(library-workload-tpcc PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpcc/transaction_neworder.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpcc/transaction_orderstatus.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpcc/transaction_payment.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpcc/transaction_simulation.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpcc/transaction_stocklevel.cpp
 )
 

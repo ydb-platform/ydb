@@ -3017,7 +3017,7 @@ private:
             TActorId Id;
         };
 
-        THashMap<TTableId, TActorInfo> Actors;
+        THashMap<TPathId, TActorInfo> Actors;
     };
 
     THashMap<TPathId, TWriteInfo> WriteInfos;

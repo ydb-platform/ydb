@@ -131,17 +131,12 @@ namespace NCloudEvents {
 
     template<typename TProtoEvent>
     void TFiller<TProtoEvent>::FillAuthorization() {
-        // authorized = true;
-        // permissions.permission: см. permissions из SearchEvents;
-        // permissions.resource_type = resource_type из SearchEvents;
-        // permissions.resource_id = resource_id из SearchEvents;
-        // permissions.authorized оставляем пустым.
-
         Ev.mutable_authorization()->set_authorized(true);
+
         auto* permission = Ev.mutable_authorization()->add_permissions();
-            permission->set_permission(EventInfo.Permission);
-            permission->set_resource_type(EventInfo.ResourceType);
-            permission->set_resource_id(EventInfo.FolderId);
+        permission->set_permission(EventInfo.Permission);
+        permission->set_resource_type(EventInfo.ResourceType);
+        permission->set_resource_id(EventInfo.FolderId);
 
         if (!EventInfo.UserSanitizedToken.empty()) {
             Ev.mutable_authorization()->mutable_token_info()->set_masked_iam_token(EventInfo.UserSanitizedToken);
@@ -150,13 +145,6 @@ namespace NCloudEvents {
 
     template<typename TProtoEvent>
     void TFiller<TProtoEvent>::FillEventMetadata() {
-        // event_id: судя по всему, какого-либо четкого формата у этого поля нет, главное - чтобы он был глобально уникальным, предлагается event_type + "$" + guid;
-        // event_type = "yandex.cloud.events.ymq.CreateMessageQueue";
-        // created_at = timestamp из SearchEvent;
-        // tracing_context оставляем пустым
-        // cloud_id = cloud_id из SearchEvent;
-        // folder_id = folder_id из SearchEvent.
-
         Ev.mutable_event_metadata()->set_event_id(EventInfo.Id);
         Ev.mutable_event_metadata()->set_event_type(EventInfo.Type);
         Ev.mutable_event_metadata()->mutable_created_at()->set_seconds(EventInfo.CreatedAt);
@@ -166,10 +154,6 @@ namespace NCloudEvents {
 
     template<typename TProtoEvent>
     void TFiller<TProtoEvent>::FillRequestMetadata() {
-        // remote_address - ip-адрес клиента (но это лишь в абстрактном "идеале", в реальности - мы в лучшем случае можем записать туда того, кто дернул YDB'шную grpc-ручку);
-        // request_id - поле обязательно для заполнения, даже если действие не было вызвано обращением к API; в этом случае следует самостоятельно генерировать уникальный request_id, одинаковый для всех событий серии;
-        // idempotency_id - имеется ввиду некий индикатор того, сколько раз было послано одно и то же сообщение с одним и тем же смыслом.
-
         Ev.mutable_request_metadata()->set_remote_address(EventInfo.RemoteAddress);
         Ev.mutable_request_metadata()->set_request_id(EventInfo.RequestId);
         Ev.mutable_request_metadata()->set_idempotency_id(EventInfo.IdempotencyId);
@@ -209,7 +193,10 @@ namespace NCloudEvents {
 
     template<typename TProtoEvent>
     void TAuditSender::Send(const TProtoEvent& ev) {
-        PrintMessageFields(ev);
+        std::cerr << "=============================================================" << std::endl;
+        std::cerr << "ev.type = " << ev.event_metadata().event_type() << std::endl;
+        std::cerr << "=============================================================" << std::endl;
+        // PrintMessageFields(ev);
     }
 
     template void TAuditSender::Send<TCreateQueueEvent>(const TCreateQueueEvent&);
@@ -269,11 +256,13 @@ namespace NCloudEvents {
     {
     }
 
-    void TProcessor::RunQuery(TString query, std::unique_ptr<NYdb::TParams> params, bool readOnly) {
+    void TProcessor::RunQuery(TString query, std::unique_ptr<NYdb::TParams> params) {
+        bool isDeleteQuery = static_cast<bool>(params);
+
         auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
         auto* request = ev->Record.MutableRequest();
 
-        request->SetKeepSession(true); // todo : fix
+        request->SetKeepSession(!isDeleteQuery);
 
         if (!SessionId.empty()) {
             request->SetSessionId(SessionId);
@@ -289,24 +278,19 @@ namespace NCloudEvents {
 
         request->MutableQueryCachePolicy()->set_keep_in_cache(true);
 
-        if (readOnly) {
-            request->MutableTxControl()->mutable_begin_tx()->mutable_online_read_only();
-        } else {
+        if (isDeleteQuery) {
             request->MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
+        } else {
+            request->MutableTxControl()->mutable_begin_tx()->mutable_online_read_only();
         }
 
         request->MutableTxControl()->set_commit_tx(true);
 
-        if (params) {
+        if (isDeleteQuery) {
             request->MutableYdbParameters()->swap(*(NYdb::TProtoAccessor::GetProtoMapPtr(*params)));
         }
 
         Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), ev.Release(), IEventHandle::FlagTrackDelivery);
-    }
-
-    void TProcessor::Bootstrap() {
-        Schedule(RetryTimeout, new TEvents::TEvWakeup);
-        Become(&TProcessor::StateWaitWakeUp);
     }
 
     void TProcessor::StopSession() {
@@ -318,14 +302,18 @@ namespace NCloudEvents {
         }
     }
 
-    void TProcessor::ProcessFailure() {
+    void TProcessor::PutToSleep() {
         StopSession();
         Schedule(RetryTimeout, new TEvents::TEvWakeup);
         Become(&TProcessor::StateWaitWakeUp);
     }
 
+    void TProcessor::Bootstrap() {
+        PutToSleep();
+    }
+
     void TProcessor::HandleUndelivered(const NActors::TEvents::TEvUndelivered::TPtr&) {
-        ProcessFailure();
+        PutToSleep();
     }
 
     void TProcessor::HandleWakeup(const NActors::TEvents::TEvWakeup::TPtr&) {
@@ -350,8 +338,7 @@ namespace NCloudEvents {
         };
 
         while (parser.TryNextRow()) {
-            result.push_back({});
-            auto& cloudEvent = result.back();
+            auto& cloudEvent = result.emplace_back();
 
             cloudEvent.OriginalId = *parser.ColumnParser(0).GetOptionalUint64();
             cloudEvent.QueueName = *parser.ColumnParser(1).GetOptionalUtf8();
@@ -393,7 +380,7 @@ namespace NCloudEvents {
 
             LOG_ERROR_S(TActivationContext::AsActorContext(), NKikimrServices::SQS, error);
 
-            ProcessFailure();
+            PutToSleep();
             return;
         }
 
@@ -404,7 +391,7 @@ namespace NCloudEvents {
 
         if (!eventsList.empty()) {
             for (const auto& cloudEvent : eventsList) {
-                std::string_view typeView(cloudEvent.Type.begin() + DefaultEventTypePrefix.size(), cloudEvent.Type.end());
+                TStringBuf typeView(cloudEvent.Type.begin() + DefaultEventTypePrefix.size(), cloudEvent.Type.end());
 
                 if (typeView == "CreateMessageQueue") {
                     TCreateQueueEvent ev;
@@ -446,30 +433,24 @@ namespace NCloudEvents {
 
             auto params = paramsBuilder.Build();
 
-            RunQuery(DeleteQuery, std::make_unique<decltype(params)>(params), false);
+            RunQuery(DeleteQuery, std::make_unique<decltype(params)>(params));
+            Become(&TProcessor::StateWaitDeleteResponse);
+        } else {
+            PutToSleep();
         }
-
-        Become(&TProcessor::StateWaitDeleteResponse);
     }
 
     void TProcessor::HandleDeleteResponse(const NKqp::TEvKqp::TEvQueryResponse::TPtr& ev) {
-        const auto& record = ev->Get()->Record;
-        if (record.GetYdbStatus() != Ydb::StatusIds::SUCCESS) {
+        if (const auto& record = ev->Get()->Record; record.GetYdbStatus() != Ydb::StatusIds::SUCCESS) {
             TString error = "DeleteResponse: Failed.\n";
             for (const auto& issue : record.GetResponse().GetQueryIssues()) {
                 error += issue.message() + "\n";
             }
 
             LOG_ERROR_S(TActivationContext::AsActorContext(), NKikimrServices::SQS, error);
-
-            ProcessFailure();
-            return;
         }
 
-        UpdateSessionId(ev);
-
-        Schedule(RetryTimeout, new TEvents::TEvWakeup);
-        Become(&TProcessor::StateWaitWakeUp);
+        PutToSleep();
     }
 } // namespace NCloudEvents
 } // namespace NKikimr::NSQS

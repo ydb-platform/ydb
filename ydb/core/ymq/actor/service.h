@@ -33,7 +33,7 @@ public:
     using TUserInfoPtr = TIntrusivePtr<TUserInfo>;
     using TUsersMap = std::map<TString, TUserInfoPtr>;
 
-    static constexpr std::string_view CloudEventsTableName = ".CloudEventsYmq";
+    static constexpr TStringBuf CloudEventsTableName = ".CloudEventsYmq";
 
 private:
     struct TQueueInfo;

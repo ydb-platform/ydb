@@ -24,8 +24,8 @@ namespace NCloudEvents {
         TString UserSanitizedToken;
         TString AuthType;
 
-        static constexpr std::string_view Permission = "ymq.queues.list";
-        static constexpr std::string_view ResourceType = "message-queue";
+        static constexpr TStringBuf Permission = "ymq.queues.list";
+        static constexpr TStringBuf ResourceType = "message-queue";
         // ResourceId = FolderId
 
         uint_fast64_t OriginalId;
@@ -48,8 +48,8 @@ namespace NCloudEvents {
     template<typename TProtoEvent>
     class TFiller {
     protected:
-        const TEventInfo& EventInfo;    // be careful!
-        TProtoEvent& Ev;                // be careful!
+        const TEventInfo& EventInfo;    // Be careful with reference
+        TProtoEvent& Ev;                // Be careful with reference
 
         void FillAuthentication();
         void FillAuthorization();
@@ -74,8 +74,8 @@ namespace NCloudEvents {
 
     class TProcessor : public NActors::TActorBootstrapped<TProcessor> {
     private:
-        static constexpr std::string_view EventTableName = NKikimr::NSQS::TSqsService::CloudEventsTableName;
-        static constexpr std::string_view DefaultEventTypePrefix = "yandex.cloud.events.ymq.";
+        static constexpr TStringBuf EventTableName = NKikimr::NSQS::TSqsService::CloudEventsTableName;
+        static constexpr TStringBuf DefaultEventTypePrefix = "yandex.cloud.events.ymq.";
 
         const TString Root;
         const TString Database;
@@ -92,10 +92,10 @@ namespace NCloudEvents {
 
         TString SessionId = TString();
 
-        void RunQuery(TString query, std::unique_ptr<NYdb::TParams> params = nullptr, bool readOnly = true);
+        void RunQuery(TString query, std::unique_ptr<NYdb::TParams> params = nullptr);
         void UpdateSessionId(const NKqp::TEvKqp::TEvQueryResponse::TPtr& ev);
         void StopSession();
-        void ProcessFailure();
+        void PutToSleep();
 
         static std::vector<TEventInfo> ConvertSelectResponseToEventList(const ::NKikimrKqp::TQueryResponse& response);
 

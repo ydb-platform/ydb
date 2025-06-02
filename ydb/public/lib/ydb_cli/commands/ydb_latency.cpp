@@ -4,6 +4,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 
 #include <library/cpp/histogram/hdr/histogram.h>
+#include <library/cpp/json/json_writer.h>
 
 #include <util/generic/serialized_enum.h>
 #include <util/system/info.h>
@@ -411,6 +412,59 @@ int TCommandLatency::Run(TConfig& config) {
             }
             Cout << Endl;
         }
+    }
+
+    if (Format == EFormat::JSON) {
+        NJson::TJsonWriter jsonWriter(&Cout, false);
+        jsonWriter.OpenMap();
+
+        // RawResults section
+
+        jsonWriter.WriteKey("RawResults");
+        jsonWriter.OpenArray();
+
+        TMap<TCommandPing::EPingKind, std::vector<const TResult*>> resultsByKind;
+        for (const auto& result : results) {
+            resultsByKind[result.Kind].push_back(&result);
+        }
+
+        for (const auto& [kind, kindResults] : resultsByKind) {
+            jsonWriter.OpenMap();
+            jsonWriter.WriteKey(ToString(kind));
+            jsonWriter.OpenArray();
+
+            for (const auto* result : kindResults) {
+                jsonWriter.OpenMap();
+                jsonWriter.Write("Inflight", result->ThreadCount);
+                jsonWriter.Write("Throughput", result->Throughput);
+
+                // Add percentile latencies
+                for (auto percentile : Percentiles) {
+                    jsonWriter.Write(TStringBuilder() << "p" << percentile, result->LatencyHistogramUs.GetValueAtPercentile(percentile));
+                }
+
+                jsonWriter.CloseMap();
+            }
+
+            jsonWriter.CloseArray();
+            jsonWriter.CloseMap();
+        }
+
+        jsonWriter.CloseArray();
+
+        // Max throughputs
+
+        jsonWriter.WriteKey("Throughputs");
+        jsonWriter.OpenMap();
+
+        for (const auto& [kind, vec] : throughputs) {
+            int maxThroughput = *std::max_element(vec.begin(), vec.end());
+            jsonWriter.Write(ToString(kind), maxThroughput);
+        }
+
+        jsonWriter.CloseMap();
+        jsonWriter.CloseMap();
+        jsonWriter.Flush();
     }
 
     return 0;

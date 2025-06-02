@@ -273,6 +273,10 @@ class KikimrConfigGenerator(object):
         if os.getenv('YDB_KQP_ENABLE_IMMEDIATE_EFFECTS', 'false').lower() == 'true':
             self.yaml_config["table_service_config"]["enable_kqp_immediate_effects"] = True
 
+        if os.getenv('YDB_KQP_ENABLE_BATCH_UPDATES', 'false').lower() == 'true':
+            self.yaml_config["table_service_config"]["enable_oltp_sink"] = True
+            self.yaml_config["table_service_config"]["enable_batch_updates"] = True
+
         if os.getenv('PGWIRE_LISTENING_PORT', ''):
             self.yaml_config["local_pg_wire_config"] = {}
             self.yaml_config["local_pg_wire_config"]["listening_port"] = os.getenv('PGWIRE_LISTENING_PORT')

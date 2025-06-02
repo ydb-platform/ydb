@@ -1,17 +1,12 @@
 #include "rdma.h"
 
-#include <ydb/library/actors/interconnect/rdma/rdma_link_manager.h>
-#include <ydb/library/actors/interconnect/rdma/rdma_ctx.h>
-
 
 #include <util/generic/vector.h>
 #include <util/stream/output.h>
 
 
-TContext::TContext(ibv_gid_entry entry, ui32 deviceIndex, NInterconnect::NRdma::TRdmaCtx* ctx, std::shared_ptr<NInterconnect::NRdma::IMemPool> memPool)
-    : Entry(entry)
-    , DeviceIndex(deviceIndex)
-    , Ctx(ctx)
+TContext::TContext(NInterconnect::NRdma::TRdmaCtx* ctx, std::shared_ptr<NInterconnect::NRdma::IMemPool> memPool)
+    : Ctx(ctx)
     , MemPool(memPool)
     , Cq(nullptr)
     , Qp(nullptr)
@@ -28,7 +23,7 @@ TContext::~TContext() {
 }
 
 int TContext::InitQp() {    
-    int err = ibv_query_port(Ctx->GetContext(), Entry.port_num, &PortAttr);
+    int err = ibv_query_port(Ctx->GetContext(), Ctx->GetPortNum(), &PortAttr);
     if (err) {
         Cerr << "ibv_query_port failed: " << strerror(errno) << Endl;
         return 1;
@@ -68,7 +63,18 @@ int TContext::InitQp() {
     return 0;
 }
 
-int TContext::MoveQpToRTS(ibv_gid_entry dstGidEntry, ui32 dstQpNum, ui32 dstLid) {
+ibv_qp_state GetQpState(ibv_qp* qp) {
+    ibv_qp_attr qpAttr;
+    ibv_qp_init_attr qpInitAttr;
+    int ret = ibv_query_qp(qp, &qpAttr, IBV_QP_STATE, &qpInitAttr);
+    if (ret) {
+        Cerr << "ibv_query_qp failed: " << strerror(errno) << Endl;
+        return IBV_QPS_ERR;
+    }
+    return qpAttr.qp_state;
+}
+
+int TContext::MoveQpToRTS(ibv_gid dstGidEntry, ui32 dstQpNum) {
     if (!Qp) {
         Cerr << "QP is not initialized" << Endl;
         return 1;
@@ -79,12 +85,18 @@ int TContext::MoveQpToRTS(ibv_gid_entry dstGidEntry, ui32 dstQpNum, ui32 dstLid)
             .qp_state = IBV_QPS_INIT,
             .qp_access_flags = IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ | IBV_ACCESS_REMOTE_WRITE,
             .pkey_index = 0,
-            .port_num = static_cast<ui8>(Entry.port_num),
+            .port_num = static_cast<ui8>(Ctx->GetPortNum()),
         };
     
         int err = ibv_modify_qp(Qp, &qpAttr, IBV_QP_STATE | IBV_QP_PKEY_INDEX | IBV_QP_PORT | IBV_QP_ACCESS_FLAGS);
         if (err) {
             Cerr << "ibv_modify_qp failed: " << strerror(errno) << Endl;
+            return 1;
+        }
+
+        auto state = GetQpState(Qp);
+        if (state != IBV_QPS_INIT) {
+            Cerr << "QP state is not INIT after modification: " << (int)state << Endl;
             return 1;
         }
     }
@@ -99,15 +111,14 @@ int TContext::MoveQpToRTS(ibv_gid_entry dstGidEntry, ui32 dstQpNum, ui32 dstLid)
             .dest_qp_num = dstQpNum,
             .ah_attr = {
                 .grh = {
-                    .dgid = dstGidEntry.gid,
-                    .sgid_index = static_cast<ui8>(Entry.gid_index),
+                    .dgid = dstGidEntry,
+                    .sgid_index = static_cast<ui8>(Ctx->GetGidIndex()),
                     .hop_limit = 1,
                 },
-                .dlid = static_cast<ui16>(dstLid),
                 .sl = 0,
                 .src_path_bits = 0,
                 .is_global = 1,
-                .port_num = static_cast<ui8>(Entry.port_num),
+                .port_num = static_cast<ui8>(Ctx->GetPortNum()),
             },
             .max_dest_rd_atomic = 1,
             .min_rnr_timer = 12,
@@ -116,6 +127,12 @@ int TContext::MoveQpToRTS(ibv_gid_entry dstGidEntry, ui32 dstQpNum, ui32 dstLid)
         int err = ibv_modify_qp(Qp, &qpAttr, IBV_QP_STATE | IBV_QP_AV | IBV_QP_PATH_MTU | IBV_QP_DEST_QPN | IBV_QP_RQ_PSN | IBV_QP_MAX_DEST_RD_ATOMIC | IBV_QP_MIN_RNR_TIMER);
         if (err) {
             Cerr << "ibv_modify_qp failed: " << strerror(errno) << Endl;
+            return 1;
+        }
+
+        auto state = GetQpState(Qp);
+        if (state != IBV_QPS_RTR) {
+            Cerr << "QP state is not RTR after modification: " << (int)state << Endl;
             return 1;
         }
     }
@@ -131,10 +148,16 @@ int TContext::MoveQpToRTS(ibv_gid_entry dstGidEntry, ui32 dstQpNum, ui32 dstLid)
             .retry_cnt     = 7,
             .rnr_retry     = 7,
         };
-    
+
         int err = ibv_modify_qp(Qp, &qpAttr, IBV_QP_STATE | IBV_QP_TIMEOUT | IBV_QP_RETRY_CNT | IBV_QP_RNR_RETRY | IBV_QP_SQ_PSN | IBV_QP_MAX_QP_RD_ATOMIC);
         if (err) {
             Cerr << "ibv_modify_qp failed: " << strerror(errno) << Endl;
+            return 1;
+        }
+
+        auto state = GetQpState(Qp);
+        if (state != IBV_QPS_RTS) {
+            Cerr << "QP state is not RTS after modification: " << (int)state << Endl;
             return 1;
         }
     }
@@ -142,18 +165,6 @@ int TContext::MoveQpToRTS(ibv_gid_entry dstGidEntry, ui32 dstQpNum, ui32 dstLid)
     Cout << "QP in RTS" << Endl;
 
     return 0;
-}
-
-
-std::tuple<ui32, ibv_gid_entry, NInterconnect::NRdma::TRdmaCtx*> GetRdmaCtx(ui32 gidIndex) {
-    auto ctxs = NInterconnect::NRdma::NLinkMgr::GetAllCtxs();
-    for (ui32 i = 0; i < ctxs.size(); ++i) {
-        const auto& [entry, ctx] = ctxs[i];
-        if (entry.gid_index == gidIndex) {
-            return {i, entry, ctx};
-        }
-    }
-    return {};
 }
 
 

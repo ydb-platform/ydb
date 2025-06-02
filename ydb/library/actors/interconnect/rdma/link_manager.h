@@ -1,9 +1,11 @@
 #pragma once
 
+#include <ydb/library/actors/interconnect/rdma/ibdrv/include/infiniband/verbs.h>
+
 #include <util/generic/fwd.h>
 
-struct in6_addr; 
-struct ibv_gid_entry;
+
+struct in6_addr;
 
 namespace NInterconnect::NRdma {
 class TRdmaCtx;
@@ -14,9 +16,10 @@ class TRdmaCtx;
 // In case of ipv4 address must be propogated to ipv6 
 namespace NInterconnect::NRdma::NLinkMgr {
 
-using TCtxsMap = std::vector<std::pair<ibv_gid_entry, NInterconnect::NRdma::TRdmaCtx*>>;
+using TCtxsMap = std::vector<std::pair<ibv_gid, std::shared_ptr<NInterconnect::NRdma::TRdmaCtx>>>;
 
+TRdmaCtx* GetCtx(int sockfd);
 TRdmaCtx* GetCtx(const in6_addr& );
-TCtxsMap GetAllCtxs();
+const TCtxsMap& GetAllCtxs();
 
 }

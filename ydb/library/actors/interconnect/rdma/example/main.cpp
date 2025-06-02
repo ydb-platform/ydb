@@ -1,8 +1,8 @@
 #include "sock.h"
 #include "rdma.h"
 
-#include <ydb/library/actors/interconnect/rdma/rdma_link_manager.h>
-#include <ydb/library/actors/interconnect/rdma/rdma_ctx.h>
+#include <ydb/library/actors/interconnect/rdma/link_manager.h>
+#include <ydb/library/actors/interconnect/rdma/ctx.h>
 #include <ydb/library/actors/interconnect/rdma/mem_pool.h>
 
 #include <ydb/library/actors/interconnect/rdma/ibdrv/include/infiniband/verbs.h>
@@ -163,16 +163,21 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    auto [index, entry, rdmaCtx] = GetRdmaCtx(0);
+    NInterconnect::NRdma::TRdmaCtx* rdmaCtx = NInterconnect::NRdma::NLinkMgr::GetCtx(sockfd);
+    if (!rdmaCtx) {
+        Cerr << "Failed to get RDMA context" << Endl;
+        return 1;
+    }
     char str[INET6_ADDRSTRLEN];
-    inet_ntop(AF_INET6, &(entry.gid), str, INET6_ADDRSTRLEN);
+    inet_ntop(AF_INET6, &(rdmaCtx->GetGid()), str, INET6_ADDRSTRLEN);
     fprintf(stderr, "%s\n", str);
 
-    TContext ctx(entry, index, rdmaCtx, NInterconnect::NRdma::CreateDummyMemPool());
+    TContext ctx(rdmaCtx, NInterconnect::NRdma::CreateDummyMemPool());
 
     ctx.InitQp();
-    auto [dstGidEntry, dstQpNum, dstLid] = ExchangeRdmaConnectionInfo(sockfd, entry, ctx.Qp->qp_num, ctx.PortAttr.lid);
-    ctx.MoveQpToRTS(dstGidEntry, dstQpNum, dstLid);
+    auto [dstGid, dstQpNum] = ExchangeRdmaConnectionInfo(sockfd, rdmaCtx->GetGid(), ctx.Qp->qp_num);
+
+    ctx.MoveQpToRTS(dstGid, dstQpNum);
 
     if (isServer) {
         serverLogic(sockfd, ctx);

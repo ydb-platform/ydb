@@ -1,6 +1,6 @@
 # SHOW CREATE
 
-`SHOW CREATE` возвращает запрос, возможно состоящий из нескольких SQL-стейтментов, необходимых для воссоздания структуры выбранного объекта: {% if concept_table %}[таблицы]({{ concept_table }}){% else %}таблицы{% endif %} (`TABLE`) или [представления](../../../concepts/datamodel/view.md) (`VIEW`).
+`SHOW CREATE` возвращает запрос, возможно состоящий из нескольких SQL-выражений, необходимых для воссоздания структуры выбранного объекта: {% if concept_table %}[таблицы]({{ concept_table }}){% else %}таблицы{% endif %} (`TABLE`) или [представления](../../../concepts/datamodel/view.md) (`VIEW`).
 
 ## Синтаксис
 
@@ -19,14 +19,14 @@ SHOW CREATE [TABLE|VIEW] <name>;
 
 | Path            | PathType  | CreateQuery                 |
 |-----------------|-----------|-----------------------------|
-| Абсолютный путь | Table/View| SQL-стейтменты для создания |
+| Абсолютный путь | Table/View| SQL-выражения для создания  |
 
 - **Path** — абсолютный путь к объекту (например, `/Root/MyTable` или `/Root/MyView`).
 - **PathType** — тип объекта: `Table` или `View`.
-- **CreateQuery** — полный набор DDL-стейтментов, необходимых для воссоздания объекта:
+- **CreateQuery** — полный набор DDL-выражений, необходимых для воссоздания объекта:
     - Для таблиц: основной оператор [CREATE TABLE](create_table/index.md) (с путем относительно базы), а также дополнительные команды, необходимые для описания текущего состояния и настроек:
         - [ALTER TABLE ... ALTER INDEX](alter_table/indexes#изменение-параметров-индекса-alter-index)— для задания настроек партицирования вторичных индексов.
         - [ALTER TABLE ... ADD CHANGEFEED](alter_table/changefeed.md)— для добавления потока изменений.
         - `ALTER SEQUENCE` — для восстановления состояния `Sequence` у колонок типа [Serial](../../../yql/reference/types/serial.md).
-    - Для представлений: определение посредством команды [CREATE VIEW](create-view.md), а также, если необходимо, вывода [PRAGMA TablePathPrefix](pragma#tablepathprefix-table-path-prefix).
+    - Для представлений: определение посредством команды [CREATE VIEW](create-view.md), а также, если необходимо, [PRAGMA TablePathPrefix](pragma#table-path-prefix).
 

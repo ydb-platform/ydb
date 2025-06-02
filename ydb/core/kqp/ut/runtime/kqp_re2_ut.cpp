@@ -12,9 +12,7 @@ namespace NKqp {
 using namespace NYdb;
 using namespace NYdb::NTable;
 
-
 namespace {
-
 
 void FillTableWithData(NQuery::TQueryClient& db, ui64 numRows=10) {
     for (ui32 i = 0; i < numRows; ++i) {
@@ -28,10 +26,14 @@ void FillTableWithData(NQuery::TQueryClient& db, ui64 numRows=10) {
 
 } // anonymous namespace
 
+
+// Currently re2 udf ignores incorrect regexes.
+// But this behaviour will be changed in this ticket: https://nda.ya.ru/t/kp3S6IYx7F2jgV.
+// There may be queries that use the old behavior, so it is planned to use the feature flag.
+// This test checks that the behavior is not changed by default.
 Y_UNIT_TEST_SUITE(KqpRe2) {
 
 Y_UNIT_TEST(IncorrectRegexNoError) {
-    Cerr << "cwd: " << NFs::CurrentWorkingDirectory() << Endl;
     NKikimrConfig::TAppConfig appCfg;
     TKikimrRunner kikimr(appCfg);
 
@@ -51,7 +53,6 @@ Y_UNIT_TEST(IncorrectRegexNoError) {
 }
 
 Y_UNIT_TEST(IncorrectRegexWithoutExecutionNoError) {
-    Cerr << "cwd: " << NFs::CurrentWorkingDirectory() << Endl;
     NKikimrConfig::TAppConfig appCfg;
     TKikimrRunner kikimr(appCfg);
 

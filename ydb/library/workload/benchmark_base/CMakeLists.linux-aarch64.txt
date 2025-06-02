@@ -28,8 +28,10 @@ target_link_libraries(library-workload-benchmark_base PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
+  libs-apache-arrow
   streams-factory-open_by_signature
   ydb-library-accessor
+  library-formats-arrow-validation
   library-workload-abstract
   ydb-library-yaml_json
   api-protos

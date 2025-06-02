@@ -88,11 +88,11 @@ class TestPortionSizeTtl(TllTieringTestBase):
             for future in insert_futures:
                 future.result()
 
-    def set_compaction(self, table_path, total_level_size, portion_size):
+    def set_compaction(self, table_path, total_level_size):
         self.ydb_client.query(
             f"""
             ALTER OBJECT `{table_path}` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`lc-buckets`, `COMPACTION_PLANNER.FEATURES`=`
-                  {{"levels" : [{{"class_name" : "Zero", "expected_blobs_size" : {total_level_size}, "portion_expected_size": {portion_size}}},
+                  {{"levels" : [{{"class_name" : "Zero", "expected_blobs_size" : {total_level_size}}},
                                 {{"class_name" : "Zero"}}]}}`);
             """
         )
@@ -194,7 +194,7 @@ class TestPortionSizeTtl(TllTieringTestBase):
             raise Exception("Bucket for cold data is not empty")
 
         self.create_table(table_path1)
-        self.set_compaction(table_path1, 12048000, 3000000)
+        self.set_compaction(table_path1, 3000000)
 
         self.set_tiering(table_path1, cold_bucket_1)
 
@@ -209,7 +209,7 @@ class TestPortionSizeTtl(TllTieringTestBase):
             raise Exception("Bucket for cold data is not empty")
 
         self.create_table(table_path2)
-        self.set_compaction(table_path2, 12048000, 1500000)
+        self.set_compaction(table_path2, 1500000)
 
         self.set_tiering(table_path2, cold_bucket_2)
 

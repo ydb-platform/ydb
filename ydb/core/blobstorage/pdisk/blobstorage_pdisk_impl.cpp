@@ -2061,6 +2061,29 @@ void TPDisk::YardInitFinish(TYardInit &evYardInit) {
     }
 }
 
+void TPDisk::YardResize(TYardResize &ev) {
+    TStringStream errorReason;
+    NKikimrProto::EReplyStatus errStatus = CheckOwnerAndRound(&ev, errorReason);
+    if (errStatus != NKikimrProto::OK) {
+        PCtx->ActorSystem->Send(ev.Sender, new NPDisk::TEvYardResizeResult(errStatus, {}, errorReason.Str()));
+        return;
+    }
+
+    {
+        TGuard<TMutex> guard(StateMutex);
+        OwnerData[ev.Owner].GroupSizeInUnits = ev.GroupSizeInUnits;
+        Keeper.SetOwnerWeight(ev.Owner, Cfg->GetOwnerWeight(ev.GroupSizeInUnits));
+    }
+
+    auto result = std::make_unique<NPDisk::TEvYardResizeResult>(NKikimrProto::OK, GetStatusFlags(ev.Owner, ev.OwnerGroupType), TString());
+    if (Cfg->ReadOnly) {
+        PCtx->ActorSystem->Send(ev.Sender, result.release());
+    } else {
+        WriteSysLogRestorePoint(new TCompletionEventSender(this, ev.Sender, result.release()),
+            TReqId(TReqId::YardResize, 0), {});
+    }
+}
+
 // Scheduler weight configuration
 
 void TPDisk::ConfigureCbs(ui32 ownerId, EGate gate, ui64 weight) {
@@ -2711,6 +2734,9 @@ void TPDisk::ProcessFastOperationsQueue() {
             case ERequestType::RequestContinueShred:
                 ProcessContinueShred(static_cast<TContinueShred&>(*req));
                 break;
+            case ERequestType::RequestYardResize:
+                YardResize(static_cast<TYardResize&>(*req));
+                break;
             default:
                 Y_FAIL_S(PCtx->PDiskLogPrefix << "Unexpected request type# " << TypeName(*req));
                 break;
@@ -3339,6 +3365,7 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
         case ERequestType::RequestShredVDiskResult:
         case ERequestType::RequestChunkShredResult:
         case ERequestType::RequestContinueShred:
+        case ERequestType::RequestYardResize:
             break;
         case ERequestType::RequestStopDevice:
             BlockDevice->Stop();
@@ -3968,6 +3995,7 @@ bool TPDisk::HandleReadOnlyIfWrite(TRequestBase *request) {
         case ERequestType::RequestConfigureScheduler:
         case ERequestType::RequestPushUnformattedMetadataSector:
         case ERequestType::RequestContinueReadMetadata:
+        case ERequestType::RequestYardResize:
             return false;
 
         // Can't be processed in read-only mode.

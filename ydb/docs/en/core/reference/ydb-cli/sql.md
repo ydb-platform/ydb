@@ -55,7 +55,7 @@ Diagnostics are collected when statistics gathering is enabled `--stats full`, a
     - **`query_syntax`** — query syntax used;
     - **`query_text`** — SQL query text.
 
-      **Note:** This field may contain sensitive or personal data, including parameter values;
+      **Note:** This field may contain sensitive or personal data, including parameter values.
 
     - **`query_type`** — query type;
     - **`table_metadata`** — schemas, indexes, and statistics of the tables involved in the query (JSON format).

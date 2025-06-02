@@ -96,29 +96,26 @@ def get_missed_data_for_upload(driver, full_table_path):
         commit, 
         branch, 
         pull, 
-        all_data.run_timestamp as run_timestamp, 
+        run_timestamp, 
         test_id, 
         suite_folder, 
         test_name,
-        cast(suite_folder || '/' || test_name as UTF8)  as full_name, 
+        cast(suite_folder || '/' || test_name as UTF8) as full_name, 
         duration,
         status,
         status_description,
         owners
-    FROM `test_results/test_runs_column`  as all_data
-    LEFT JOIN (
-        select distinct run_timestamp  from `{full_table_path}`
-    ) as fast_data_missed
-    ON all_data.run_timestamp = fast_data_missed.run_timestamp
+    FROM `test_results/test_runs_column`
     WHERE
-        all_data.run_timestamp >= CurrentUtcDate() - 6*Interval("P1D")
-        and String::Contains(all_data.test_name, '.flake8')  = FALSE
-        and (CASE 
-            WHEN String::Contains(all_data.test_name, 'chunk chunk') OR String::Contains(all_data.test_name, 'chunk+chunk') THEN TRUE
-            ELSE FALSE
-            END) = FALSE
-        and (all_data.branch = 'main' or all_data.branch like 'stable-%')
-        and fast_data_missed.run_timestamp is NULL
+        run_timestamp >= CurrentUtcDate() - 6*Interval("P1D")
+        and (branch = 'main' or branch like 'stable-%')
+        and test_name NOT LIKE '%.flake8%'
+        and test_name NOT LIKE '%chunk chunk%'
+        and test_name NOT LIKE '%chunk+chunk%'
+        and NOT EXISTS (
+            SELECT 1 FROM `{full_table_path}` 
+            WHERE run_timestamp = `test_results/test_runs_column`.run_timestamp
+        )
     """
 
     scan_query = ydb.ScanQuery(query, {})

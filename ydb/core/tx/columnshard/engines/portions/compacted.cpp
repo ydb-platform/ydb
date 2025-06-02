@@ -7,7 +7,7 @@
 namespace NKikimr::NOlap {
 
 void TCompactedPortionInfo::DoSaveMetaToDatabase(NIceDb::TNiceDb& db) const {
-    auto metaProto = GetMeta().SerializeToProto(GetProduced());
+    auto metaProto = GetMeta().SerializeToProto(NPortion::EProduced::SPLIT_COMPACTED);
     using IndexPortions = NColumnShard::Schema::IndexPortions;
     const auto removeSnapshot = GetRemoveSnapshotOptional();
     db.Table<IndexPortions>()

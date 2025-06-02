@@ -7,7 +7,7 @@
 namespace NKikimr::NOlap {
 
 void TWrittenPortionInfo::DoSaveMetaToDatabase(NIceDb::TNiceDb& db) const {
-    auto metaProto = GetMeta().SerializeToProto(GetProduced());
+    auto metaProto = GetMeta().SerializeToProto(NPortion::EProduced::INSERTED);
     using IndexPortions = NColumnShard::Schema::IndexPortions;
     const auto removeSnapshot = GetRemoveSnapshotOptional();
     AFL_VERIFY(InsertWriteId);

@@ -2,7 +2,7 @@
 #include <util/system/types.h>
 #include <util/generic/hash.h>
 #include <util/stream/output.h>
-#include <ydb/core/protos/tx_columnshard.pb.h>
+#include <ydb/core/tx/columnshard/common/protos/path_id.pb.h>
 
 namespace NKikimr::NColumnShard {
 
@@ -26,7 +26,7 @@ public:
         return TInternalPathId(pathId);
     }
 
-    static TInternalPathId FromProto(const NKikimrTxColumnShard::TInternalPathId& pathId) {
+    static TInternalPathId FromProto(const NKikimrColumnShardPathIdProto::TInternalPathId& pathId) {
         return TInternalPathId(pathId.GetPathId());
     }
 
@@ -43,7 +43,7 @@ public:
         return PathId != 0;
     }
 
-    void ToProto(NKikimrTxColumnShard::TInternalPathId& proto) const {
+    void ToProto(NKikimrColumnShardPathIdProto::TInternalPathId& proto) const {
         proto.SetPathId(PathId);
     }
 
@@ -80,7 +80,7 @@ public:
         return TSchemeShardLocalPathId(pathId);
     }
 
-    static TSchemeShardLocalPathId FromProto(const NKikimrTxColumnShard::TSchemeShardLocalPathId& protoPathId) {
+    static TSchemeShardLocalPathId FromProto(const NKikimrColumnShardPathIdProto::TSchemeShardLocalPathId& protoPathId) {
         return TSchemeShardLocalPathId(protoPathId.GetPathId());
     }
 
@@ -106,7 +106,7 @@ public:
         return PathId;
     }
 
-    void ToProto(NKikimrTxColumnShard::TSchemeShardLocalPathId& proto) const {
+    void ToProto(NKikimrColumnShardPathIdProto::TSchemeShardLocalPathId& proto) const {
         proto.SetPathId(PathId);
     }
 

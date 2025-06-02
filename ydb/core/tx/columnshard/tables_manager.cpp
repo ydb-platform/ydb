@@ -312,8 +312,11 @@ void TTablesManager::AddSchemaVersion(
 }
 
 std::unique_ptr<NTabletFlatExecutor::ITransaction> TTablesManager::CreateAddShardingInfoTx(
-    TColumnShard& owner, const TInternalPathId pathId, const ui64 versionId, const NSharding::TGranuleShardingLogicContainer& tabletShardingLogic) const {
-    return std::make_unique<TTxAddShardingInfo>(owner, tabletShardingLogic, pathId, versionId);
+    TColumnShard& owner, const TSchemeShardLocalPathId schemeShardLocalPathId, const ui64 versionId,
+    const NSharding::TGranuleShardingLogicContainer& tabletShardingLogic) const {
+    const auto& internalPathId = SchemeShardLocalToInternal.FindPtr(schemeShardLocalPathId);
+    AFL_VERIFY(internalPathId)("scheme_shard_local_path_id", schemeShardLocalPathId);
+    return std::make_unique<TTxAddShardingInfo>(owner, tabletShardingLogic, *internalPathId, versionId);
 }
 
 void TTablesManager::AddTableVersion(const TInternalPathId pathId, const NOlap::TSnapshot& version,

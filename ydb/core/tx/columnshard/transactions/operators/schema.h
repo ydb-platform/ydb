@@ -76,7 +76,7 @@ private:
                 return false;
             }
             TxAddSharding = owner.TablesManager.CreateAddShardingInfoTx(
-                owner, TInternalPathId::FromRawValue(SchemaTxBody.GetGranuleShardingInfo().GetPathId()), SchemaTxBody.GetGranuleShardingInfo().GetVersionId(), infoContainer);
+                owner, TSchemeShardLocalPathId::FromProto(SchemaTxBody.GetGranuleShardingInfo().GetPathId()), SchemaTxBody.GetGranuleShardingInfo().GetVersionId(), infoContainer);
         }
         return true;
     }

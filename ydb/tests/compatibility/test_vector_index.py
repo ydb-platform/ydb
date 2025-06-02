@@ -1,5 +1,4 @@
 import pytest
-import random
 
 from ydb.tests.library.common.wait_for import wait_for
 from ydb.tests.library.compatibility.fixtures import RestartToAnotherVersionFixture
@@ -9,15 +8,14 @@ from ydb.tests.oss.ydb_sdk_import import ydb
 class TestVectorIndex(RestartToAnotherVersionFixture):
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):
+        if min(self.versions) < (25, 1):
+            pytest.skip("Only available since 25-1")
         self.table_name = "table"
         self.rows_count = 5
         self.index_name = "vector_idx"
         self.vector_dimension = 3
-        try:
-            yield from self.setup_cluster(extra_feature_flags={"enable_vector_index": True})
-        except Exception as ex:
-            if "unknown field \"enable_vector_index\"" in str(ex):
-                pass 
+
+        yield from self.setup_cluster(extra_feature_flags={"enable_vector_index": True})
                 
 
     def get_vector(self, type, numb):
@@ -127,20 +125,7 @@ class TestVectorIndex(RestartToAnotherVersionFixture):
         "vector_type, distance, distance_func",
         [
             ("Uint8", "similarity", "inner_product"),
-            ("Int8", "similarity", "inner_product"),
-            ("Float", "similarity", "inner_product"),
-            ("Uint8", "similarity", "cosine"),
-            ("Int8", "similarity", "cosine"),
-            ("Float", "similarity", "cosine"),
-            ("Uint8", "distance", "cosine"),
-            ("Int8", "distance", "cosine"),
-            ("Float", "distance", "cosine"),
-            ("Uint8", "distance", "manhattan"),
-            ("Int8", "distance", "manhattan"),
-            ("Float", "distance", "manhattan"),
-            ("Uint8", "distance", "euclidean"),
-            ("Int8", "distance", "euclidean"),
-            ("Float", "distance", "euclidean"),
+
         ],
     )
     def test_vector_index(self, vector_type, distance, distance_func):

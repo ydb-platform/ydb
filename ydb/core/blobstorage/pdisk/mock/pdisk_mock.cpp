@@ -30,6 +30,7 @@ struct TPDiskMockState::TImpl {
         ui64 LogDataSize = 0;
         bool Slain = false;
         ui64 LastLsn = 0;
+        ui32 GroupSizeInUnits = 0;
     };
 
     const ui32 NodeId;
@@ -386,6 +387,17 @@ TString& TPDiskMockState::GetStateErrorReason() {
     return Impl->StateErrorReason;
 }
 
+ui32 TPDiskMockState::GetNumActiveSlots() const {
+    size_t sum = 0;
+    for (auto& [ownerId, owner] : Impl->Owners) {
+        // NOTE: the value is hardcoded intentionally.
+        // It's one of the limitations of pdisk mock
+        const ui32 slotSizeInUnits = 1u;
+        sum += TPDiskConfig::GetOwnerWeight(owner.GroupSizeInUnits, slotSizeInUnits);
+    }
+    return sum;
+}
+
 TPDiskMockState::TPtr TPDiskMockState::Snapshot() {
     auto res = MakeIntrusive<TPDiskMockState>(std::make_unique<TImpl>(*Impl));
     res->Impl->AdjustRefs();
@@ -464,6 +476,7 @@ public:
             owner->OwnerRound = ev->Get()->OwnerRound;
             owner->CutLogId = ev->Get()->CutLogID;
             owner->Slain = false;
+            owner->GroupSizeInUnits = ev->Get()->GroupSizeInUnits;
 
             // drop data from any reserved chunks and return them to free pool
             Impl.ResetOwnerReservedChunks(*owner);

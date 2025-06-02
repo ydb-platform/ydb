@@ -17,7 +17,7 @@ SHOW CREATE [TABLE|VIEW] <name>;
 
 Команда возвращает **ровно одну строку** с тремя колонками:
 
-| Path            | PathType | CreateQuery                 |
+| Path            | PathType  | CreateQuery                 |
 |-----------------|-----------|-----------------------------|
 | Абсолютный путь | Table/View| SQL-стейтменты для создания |
 

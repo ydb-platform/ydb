@@ -1,6 +1,7 @@
 #include "table_index.h"
 
 #include <ydb/core/base/table_vector_index.h>
+#include <ydb/core/protos/tx_datashard.pb.h>
 
 namespace NKikimr::NTableIndex {
 namespace {

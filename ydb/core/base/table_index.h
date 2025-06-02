@@ -3,7 +3,6 @@
 #include <ydb/public/api/protos/ydb_value.pb.h>
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
-#include <ydb/core/protos/tx_datashard.pb.h>
 
 #include <util/generic/hash_set.h>
 #include <util/generic/vector.h>
@@ -12,6 +11,11 @@
 
 #include <span>
 #include <string_view>
+
+namespace NKikimrTxDataShard {
+    class TEvReshuffleKMeansRequest;
+    class TEvSampleKResponse;
+}
 
 namespace NKikimr {
 

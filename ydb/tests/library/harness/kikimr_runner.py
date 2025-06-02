@@ -429,6 +429,20 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         for _ in self.__configurator.all_node_ids():
             self.__register_node()
 
+    def _bootstrap_cluster(self, self_assembly_uuid="test-cluster", timeout=30, interval=2):
+        start_time = time.time()
+        last_exception = None
+        while time.time() - start_time < timeout:
+            try:
+                result = self.config_client.bootstrap_cluster(self_assembly_uuid=self_assembly_uuid)
+                logger.info("Successfully bootstrapped cluster")
+                return result
+            except Exception as e:
+                last_exception = e
+                error_str = str(e)
+                time.sleep(interval)
+        raise last_exception
+
     def __run(self):
         self.prepare()
 
@@ -436,8 +450,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             self.__run_node(node_id)
 
         if self.__configurator.use_self_management:
-            time.sleep(2)
-            self.config_client.bootstrap_cluster(self_assembly_uuid="test-cluster")
+            self._bootstrap_cluster(self_assembly_uuid="test-cluster")
 
         bs_needed = ('blob_storage_config' in self.__configurator.yaml_config) or self.__configurator.use_self_management
 

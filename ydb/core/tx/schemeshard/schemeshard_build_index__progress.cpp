@@ -605,13 +605,7 @@ private:
         };
 
         auto shardId = CommonFillRecord(ev->Record, shardIdx, buildInfo);
-        [[maybe_unused]] auto toDebugStr = [&](const NKikimrTxDataShard::TEvReshuffleKMeansRequest& record) {
-            auto r = record;
-            // clusters are not human readable and can be large like 100Kb+
-            r.ClearClusters();
-            return r.ShortDebugString();
-        };
-        LOG_N("TTxBuildProgress: TEvReshuffleKMeansRequest: " << toDebugStr(ev->Record));
+        LOG_N("TTxBuildProgress: TEvReshuffleKMeansRequest: " << ToShortDebugString(ev->Record));
 
         ToTabletSend.emplace(shardId, std::move(ev));
     }
@@ -1566,15 +1560,9 @@ public:
             return true;
         }
         auto& buildInfo = *buildInfoPtr->Get();
-        [[maybe_unused]] auto toDebugStr = [&](const NKikimrTxDataShard::TEvSampleKResponse& record) {
-            auto r = record;
-            // rows are not human readable and can be large like 100Kb+
-            r.ClearRows();
-            return r.ShortDebugString();
-        };
         LOG_D("TTxReply : TEvSampleKResponse"
               << ", TIndexBuildInfo: " << buildInfo
-              << ", record: " << toDebugStr(record));
+              << ", record: " << ToShortDebugString(record));
 
         TTabletId shardId = TTabletId(record.GetTabletId());
         if (!Self->TabletIdToShardIdx.contains(shardId)) {

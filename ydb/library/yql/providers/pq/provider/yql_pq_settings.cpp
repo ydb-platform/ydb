@@ -30,7 +30,7 @@ void TPqConfiguration::Init(
     Dispatch(config.GetDefaultSettings());
 
     for (auto& cluster: config.GetClusterMapping()) {
-        AddCluster(cluster, databaseIds, typeCtx->Credentials, dbResolver);
+        AddCluster(cluster, databaseIds, typeCtx->Credentials, dbResolver, {});
     }
     FreezeDefaults();
 }
@@ -48,7 +48,8 @@ void TPqConfiguration::AddCluster(
     const NYql::TPqClusterConfig& cluster,
     THashMap<std::pair<TString, NYql::EDatabaseType>, NYql::TDatabaseAuth>& databaseIds,
     const TCredentials::TPtr& credentials,
-    const std::shared_ptr<NYql::IDatabaseAsyncResolver>& dbResolver) {
+    const std::shared_ptr<NYql::IDatabaseAsyncResolver>& dbResolver,
+    const THashMap<TString, TString>& properties) {
         Cerr << "AddCluster 2 " << Endl; 
         Dispatch(cluster.GetName(), cluster.GetSettings());
         TPqClusterConfigurationSettings& clusterSettings = ClustersConfigurationSettings[cluster.GetName()];
@@ -68,7 +69,15 @@ void TPqConfiguration::AddCluster(
 
         const TString authToken = credentials->FindCredentialContent("cluster:default_" + clusterSettings.ClusterName, "default_pq", cluster.GetToken());
         clusterSettings.AuthToken = authToken;
-        const auto structuredTokenJson = ComposeStructuredTokenJsonForServiceAccount(cluster.GetServiceAccountId(), cluster.GetServiceAccountIdSignature(), authToken);
+
+        TString structuredTokenJson;
+        auto authMethod = properties.Value("authMethod", "");
+        if (authMethod == "TOKEN") {
+            const TString& token = properties.Value("token", "");
+            structuredTokenJson = ComposeStructuredTokenJsonForTokenAuthWithSecret(properties.Value("tokenReference", ""), token);
+        } else {
+            structuredTokenJson = ComposeStructuredTokenJsonForServiceAccount(cluster.GetServiceAccountId(), cluster.GetServiceAccountIdSignature(), authToken);
+        }
         Tokens[clusterSettings.ClusterName] = structuredTokenJson;
 
         if (dbResolver) {

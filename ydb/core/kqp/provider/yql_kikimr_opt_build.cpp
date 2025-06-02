@@ -784,7 +784,6 @@ bool ExploreTx(TExprBase root, TExprContext& ctx, const TKiDataSink& dataSink, T
     };
 
     VisitExpr(root.Ptr(), preFunc, postFunc);
-
     return !hasErrors;
 }
 
@@ -1161,6 +1160,9 @@ TExprNode::TPtr KiBuildQuery(TExprBase node, TExprContext& ctx, TStringBuf datab
     TKiExploreTxResults txExplore;
     txExplore.ConcurrentResults = concurrentResults;
     if (!ExploreTx(commit.World(), ctx, kiDataSink, txExplore, tablesData, types) || txExplore.HasErrors) {
+        if (txExplore.HasErrors) {
+            ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "ExploreTx failed"));
+        }
         return txExplore.HasErrors ? nullptr : node.Ptr();
     }
 

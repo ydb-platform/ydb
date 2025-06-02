@@ -58,7 +58,8 @@ struct TPqConfiguration : public TPqSettings, public NCommon::TSettingDispatcher
         const NYql::TPqClusterConfig& cluster,
         THashMap<std::pair<TString, NYql::EDatabaseType>, NYql::TDatabaseAuth>& databaseIds,
         const TCredentials::TPtr& credentials,
-        const std::shared_ptr<NYql::IDatabaseAsyncResolver>& dbResolver);
+        const std::shared_ptr<NYql::IDatabaseAsyncResolver>& dbResolver,
+        const THashMap<TString, TString>& properties);
 
     TPqSettings::TConstPtr Snapshot() const;
     THashMap<TString, TPqClusterConfigurationSettings> ClustersConfigurationSettings;

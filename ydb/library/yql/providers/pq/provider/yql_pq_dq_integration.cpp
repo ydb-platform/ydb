@@ -94,7 +94,6 @@ public:
                     return ctx.NewAtom(pos, item->GetName());
                 });
             auto columnNames = ctx.NewList(pos, std::move(colNames));
-
             return Build<TDqSourceWrap>(ctx, pos)
                 .Input<TDqPqTopicSource>()
                     .World(pqReadTopic.World())
@@ -315,6 +314,17 @@ public:
                 sinkType = "PqSink";
             }
         }
+    }
+
+    bool CanRead(const TExprNode& read, TExprContext&, bool) override {
+        return TPqReadTopic::Match(&read);
+    }
+
+    TMaybe<ui64> EstimateReadSize(ui64 /*dataSizePerJob*/, ui32 /*maxTasksPerStage*/, const TVector<const TExprNode*>& read, TExprContext&) override {
+        if (AllOf(read, [](const auto val) { return TPqReadTopic::Match(val); })) {
+            return 0ul; // TODO: return real size
+        }
+        return Nothing();
     }
 
     NNodes::TCoNameValueTupleList BuildTopicReadSettings(

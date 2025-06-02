@@ -122,10 +122,17 @@ struct TEvPrivate {
 class TDqPqReadActor : public NActors::TActor<TDqPqReadActor>, public NYql::NDq::NInternal::TDqPqReadActorBase  {
     static constexpr bool StaticDiscovery = true;
     struct TMetrics {
-        TMetrics(const TTxId& txId, ui64 taskId, const ::NMonitoring::TDynamicCounterPtr& counters)
+        TMetrics(const TTxId& txId, ui64 taskId, const ::NMonitoring::TDynamicCounterPtr& counters, const ::NMonitoring::TDynamicCounterPtr& taskCounters)
             : TxId(std::visit([](auto arg) { return ToString(arg); }, txId))
-            , Counters(counters) {
-            SubGroup = Counters->GetSubgroup("source", "PqRead");
+            , Counters(counters)
+            , TaskCounters(taskCounters) {
+            if (counters) {
+                SubGroup = Counters->GetSubgroup("source", "PqRead");
+            } else if (taskCounters) {
+                SubGroup = TaskCounters->GetSubgroup("source", "PqRead");
+            } else {
+                return;
+            }
             auto source = SubGroup->GetSubgroup("tx_id", TxId);
             auto task = source->GetSubgroup("task_id", ToString(taskId));
             InFlyAsyncInputData = task->GetCounter("InFlyAsyncInputData");
@@ -137,11 +144,14 @@ class TDqPqReadActor : public NActors::TActor<TDqPqReadActor>, public NYql::NDq:
         }
 
         ~TMetrics() {
-            SubGroup->RemoveSubgroup("tx_id", TxId);
+            if (SubGroup) {
+                SubGroup->RemoveSubgroup("tx_id", TxId);
+            }
         }
 
         TString TxId;
         ::NMonitoring::TDynamicCounterPtr Counters;
+        ::NMonitoring::TDynamicCounterPtr TaskCounters;
         ::NMonitoring::TDynamicCounterPtr SubGroup;
         ::NMonitoring::TDynamicCounters::TCounterPtr InFlyAsyncInputData;
         ::NMonitoring::TDynamicCounters::TCounterPtr InFlySubscribe;
@@ -183,11 +193,12 @@ public:
         std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
         const NActors::TActorId& computeActorId,
         const ::NMonitoring::TDynamicCounterPtr& counters,
+        const ::NMonitoring::TDynamicCounterPtr& taskCounters,
         i64 bufferSize,
         const IPqGateway::TPtr& pqGateway)
         : TActor<TDqPqReadActor>(&TDqPqReadActor::StateFunc)
         , TDqPqReadActorBase(inputIndex, taskId, this->SelfId(), txId, std::move(sourceParams), std::move(readParams), computeActorId)
-        , Metrics(txId, taskId, counters)
+        , Metrics(txId, taskId, counters, taskCounters)
         , BufferSize(bufferSize)
         , HolderFactory(holderFactory)
         , Driver(std::move(driver))
@@ -310,28 +321,38 @@ private:
             auto& clusterState = Clusters[index];
             SRC_LOG_T("SessionId: " << GetSessionId(index) << " Source data ready");
             clusterState.SubscribedOnEvent = false;
-            Metrics.InFlySubscribe->Dec();
+            if (Metrics.InFlySubscribe) {
+                Metrics.InFlySubscribe->Dec();
+            }
             if (clusterState.WaitEventStartedAt) {
                 auto waitEventDurationMs = (TInstant::Now() - *clusterState.WaitEventStartedAt).MilliSeconds();
-                Metrics.WaitEventTimeMs->Collect(waitEventDurationMs);
+                if (Metrics.WaitEventTimeMs) {
+                    Metrics.WaitEventTimeMs->Collect(waitEventDurationMs);
+                }
                 clusterState.WaitEventStartedAt.Clear();
             }
         }
-        Metrics.InFlyAsyncInputData->Set(1);
-        Metrics.AsyncInputDataRate->Inc();
+        if (Metrics.InFlyAsyncInputData) {
+            Metrics.InFlyAsyncInputData->Set(1);
+        }
+        if (Metrics.AsyncInputDataRate) {   
+            Metrics.AsyncInputDataRate->Inc();
+        }
         Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
     }
 
     void Handle(TEvPrivate::TEvReconnectSession::TPtr&) {
         for (auto& clusterState : Clusters) {
-            SRC_LOG_D("SessionId: " << GetSessionId(clusterState.Index) << ", Reconnect epoch: " << Metrics.ReconnectRate->Val());
+            SRC_LOG_D("SessionId: " << GetSessionId(clusterState.Index) << ", Reconnect epoch: " << (Metrics.ReconnectRate ? Metrics.ReconnectRate->Val() : 0));
             if (clusterState.ReadSession) {
                 clusterState.ReadSession->Close(TDuration::Zero());
                 clusterState.ReadSession.reset();
             }
         }
         ReadyBuffer = std::queue<TReadyBatch>{}; // clear read buffer
-        Metrics.ReconnectRate->Inc();
+        if (Metrics.ReconnectRate) {
+            Metrics.ReconnectRate->Inc();
+        }
 
         Schedule(ReconnectPeriod, new TEvPrivate::TEvReconnectSession());
     }
@@ -491,14 +512,18 @@ private:
     }
 
     i64 GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& buffer, TMaybe<TInstant>& watermark, bool&, i64 freeSpace) override {
-        Metrics.InFlyAsyncInputData->Set(0);
+        if (Metrics.InFlyAsyncInputData) {
+            Metrics.InFlyAsyncInputData->Set(0);
+        }
         SRC_LOG_T("SessionId: " << GetSessionId() << " GetAsyncInputData freeSpace = " << freeSpace);
 
         const auto now = TInstant::Now();
         MaybeScheduleNextIdleCheck(now);
 
         if (!InflightReconnect && ReconnectPeriod != TDuration::Zero()) {
-            Metrics.ReconnectRate->Inc();
+            if (Metrics.ReconnectRate) {
+                Metrics.ReconnectRate->Inc();
+            }
             Schedule(ReconnectPeriod, new TEvPrivate::TEvReconnectSession());
             InflightReconnect = true;
         }
@@ -604,7 +629,8 @@ private:
             .AppendTopics(topicReadSettings)
             .ConsumerName(SourceParams.GetConsumerName())
             .MaxMemoryUsageBytes(BufferSize)
-            .ReadFromTimestamp(StartingMessageTimestamp);
+            .ReadFromTimestamp(StartingMessageTimestamp)
+            .WithoutConsumer(); // TODO
         return settings;
     }
 
@@ -620,7 +646,9 @@ private:
     void SubscribeOnNextEvent(TClusterState& clusterState) {
         if (!clusterState.SubscribedOnEvent) {
             clusterState.SubscribedOnEvent = true;
-            Metrics.InFlySubscribe->Inc();
+            if (Metrics.InFlySubscribe) {
+                Metrics.InFlySubscribe->Inc();
+            }
             NActors::TActorSystem* actorSystem = NActors::TActivationContext::ActorSystem();
             clusterState.WaitEventStartedAt = TInstant::Now();
             clusterState.EventFuture = GetReadSession(clusterState).WaitEvent().Subscribe([actorSystem, selfId = SelfId(), index = clusterState.Index](const auto&){
@@ -654,7 +682,9 @@ private:
         std::move(readyBatch.Data.begin(), readyBatch.Data.end(), std::back_inserter(buffer));
         watermark = readyBatch.Watermark;
         usedSpace = readyBatch.UsedSpace;
-        Metrics.DataRate->Add(readyBatch.UsedSpace);
+        if (Metrics.DataRate) {
+            Metrics.DataRate->Add(readyBatch.UsedSpace);
+        }
 
         for (const auto& [partitionSession, clusterRanges] : readyBatch.OffsetRanges) {
             const auto& [cluster, ranges] = clusterRanges;
@@ -840,6 +870,23 @@ private:
     NThreading::TFuture<std::vector<NYdb::NFederatedTopic::TFederatedTopicClient::TClusterInfo>> AsyncInit;
 };
 
+void ExtractPartitionsFromParams(
+        NPq::NProto::TDqReadTaskParams& readTaskParamsMsg,
+        const THashMap<TString, TString>& taskParams, // partitions are here in dq
+        const TVector<TString>& readRanges            // partitions are here in kqp
+    ) {
+        if (!readRanges.empty()) {
+            YQL_ENSURE(readRanges.size() == 1, "Multiple readRanges");
+            for (const auto& readRange : readRanges) {
+                YQL_ENSURE(readTaskParamsMsg.ParseFromString(readRange), "Failed to parse DqPqRead task params");
+            }
+        } else {
+            auto taskParamsIt = taskParams.find("pq");
+            YQL_ENSURE(taskParamsIt != taskParams.end(), "Failed to get pq task params");
+            YQL_ENSURE(readTaskParamsMsg.ParseFromString(taskParamsIt->second), "Failed to parse DqPqRead task params");
+        }
+}
+
 std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqReadActor(
     NPq::NProto::TDqPqTopicSource&& settings,
     ui64 inputIndex,
@@ -848,20 +895,20 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqReadActor(
     ui64 taskId,
     const THashMap<TString, TString>& secureParams,
     const THashMap<TString, TString>& taskParams,
+    const TVector<TString>& readRanges,
     NYdb::TDriver driver,
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     const NActors::TActorId& computeActorId,
     const NKikimr::NMiniKQL::THolderFactory& holderFactory,
     const ::NMonitoring::TDynamicCounterPtr& counters,
+    const ::NMonitoring::TDynamicCounterPtr& taskCounters,
     IPqGateway::TPtr pqGateway,
     i64 bufferSize
     )
 {
-    auto taskParamsIt = taskParams.find("pq");
-    YQL_ENSURE(taskParamsIt != taskParams.end(), "Failed to get pq task params");
 
     NPq::NProto::TDqReadTaskParams readTaskParamsMsg;
-    YQL_ENSURE(readTaskParamsMsg.ParseFromString(taskParamsIt->second), "Failed to parse DqPqRead task params");
+    ExtractPartitionsFromParams(readTaskParamsMsg, taskParams, readRanges);
 
     const TString& tokenName = settings.GetToken().GetName();
     const TString token = secureParams.Value(tokenName, TString());
@@ -879,6 +926,7 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqReadActor(
         CreateCredentialsProviderFactoryForStructuredToken(credentialsFactory, token, addBearerToToken),
         computeActorId,
         counters,
+        taskCounters,
         bufferSize,
         pqGateway
     );
@@ -907,11 +955,13 @@ void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driv
                 args.TaskId,
                 args.SecureParams,
                 args.TaskParams,
+                args.ReadRanges,
                 driver,
                 credentialsFactory,
                 args.ComputeActorId,
                 args.HolderFactory,
                 counters,
+                args.TaskCounters,
                 pqGateway,
                 PQReadDefaultFreeSpace);
         }

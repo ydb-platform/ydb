@@ -18,7 +18,7 @@
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/17312) ошибка в копировании таблиц с типом Decimal, которая приводила к сбою при откате на предыдущую версию.
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/17519) [ошибка](https://github.com/ydb-platform/ydb/issues/17499), при которой коммит без подтверждения записи в топик приводил к блокировке текущей и следующих транзакций с топиками.
 * Исправлены зависания транзакций при работе с топиками при [перезагрузке](https://github.com/ydb-platform/ydb/issues/17843) или [удалении](https://github.com/ydb-platform/ydb/issues/17915) таблетки.
-* [Исправлены](https://github.com/ydb-platform/ydb/pull/18114) [проблемы](https://github.com/ydb-platform/ydb/issues/18071) с чтением больших сообщений через [Kafka API](./reference/kafka-api).
+* [Исправлены](https://github.com/ydb-platform/ydb/pull/18114) [проблемы](https://github.com/ydb-platform/ydb/issues/18071) с чтением сообщений больше 6Mb через [Kafka API](./reference/kafka-api).
 * [Устранена](https://github.com/ydb-platform/ydb/pull/18319) утечка памяти во время записи в [очередь сообщений](./concepts/glossary#topic).
 * Исправлены ошибки обработки [опциональных столбцов](https://github.com/ydb-platform/ydb/issues/15701) и [столбцов с типом UUID]((https://github.com/ydb-platform/ydb/issues/15697)) в строковых таблицах.
 

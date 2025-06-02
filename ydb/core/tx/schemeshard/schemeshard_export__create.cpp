@@ -387,6 +387,7 @@ private:
             // to do: enable view checksum validation
             constexpr bool EnableChecksums = false;
             metadata.SetVersion(EnableChecksums ? 1 : 0);
+            metadata.SetEnablePermissions(exportInfo.EnablePermissions);
 
             TMaybe<NBackup::TEncryptionIV> iv;
             if (exportSettings.has_encryption_settings()) {

@@ -373,7 +373,13 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
             << ", result# " << result);
 
         if (NoObjectFound(result.GetError().GetErrorType())) {
-            StartDownloadingChangefeeds(); // permissions are optional
+            Y_ABORT_UNLESS(ItemIdx < ImportInfo->Items.size());
+            auto& item = ImportInfo->Items.at(ItemIdx);
+            if (!item.Metadata.GetEnablePermissions()) {
+                StartDownloadingChangefeeds(); // permissions are optional if we don't know if they were created during export
+            } else {
+                return Reply(Ydb::StatusIds::BAD_REQUEST, "No permissions file found");
+            }
             return;
         } else if (!CheckResult(result, "HeadObject")) {
             return;
@@ -440,6 +446,9 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
 
         if (item.Metadata.HasVersion() && item.Metadata.GetVersion() == 0) {
             NeedValidateChecksums = false;
+        }
+        if (item.Metadata.GetEnablePermissions() && !*item.Metadata.GetEnablePermissions()) {
+            NeedDownloadPermissions = false;
         }
 
         auto nextStep = [this]() {
@@ -829,8 +838,7 @@ private:
     TVector<TString> ChangefeedsPrefixes;
     ui64 IndexDownloadedChangefeed = 0;
 
-    const bool NeedDownloadPermissions = true;
-
+    bool NeedDownloadPermissions = true;
     bool NeedValidateChecksums = true;
 }; // TSchemeGetter
 

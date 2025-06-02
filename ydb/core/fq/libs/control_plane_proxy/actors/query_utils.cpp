@@ -289,8 +289,8 @@ TString MakeCreateExternalDataSourceQuery(
                     PROJECT="{project}",
                     CLUSTER="{cluster}"
                 )",
-                "http_location"_a = common.GetMonitoringEndpoint(),
-                "grpc_location"_a = common.GetMonitoringGrpcEndpoint(),
+                "http_location"_a = common.GetMonitoringReadHttpEndpoint(),
+                "grpc_location"_a = common.GetMonitoringReadGrpcEndpoint(),
                 "use_tls"_a = connectionContent.setting().monitoring().use_tls() ? "true" : "false",
                 "project"_a = project,
                 "cluster"_a = cluster

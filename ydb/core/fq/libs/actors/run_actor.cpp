@@ -1958,8 +1958,8 @@ private:
 
         THashMap<TString, TString> clusters;
 
-        TString monitoringEndpoint = Params.Config.GetCommon().GetMonitoringEndpoint();
-        TString monitoringGrpcEndpoint = Params.Config.GetCommon().GetMonitoringGrpcEndpoint();
+        TString monitoringEndpoint = Params.Config.GetCommon().GetMonitoringReadHttpEndpoint();
+        TString monitoringGrpcEndpoint = Params.Config.GetCommon().GetMonitoringReadGrpcEndpoint();
 
         //todo: consider cluster name clashes
         AddClustersFromConfig(gatewaysConfig, clusters);

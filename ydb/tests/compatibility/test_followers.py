@@ -140,6 +140,9 @@ class TestSecondaryIndexFollowers(RollingUpgradeAndDowngradeFixture):
 
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):
+        if min(self.versions) < (25, 1):
+            pytest.skip("Only available since 25-1")
+
         yield from self.setup_cluster(
             extra_feature_flags={
                 "enable_follower_stats": True

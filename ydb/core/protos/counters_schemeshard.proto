@@ -251,6 +251,8 @@ enum ESimpleCounters {
     COUNTER_SYS_VIEW_COUNT = 196                    [(CounterOpts) = {Name: "SysViewCount"}];
     COUNTER_IN_FLIGHT_OPS_TxCreateSysView = 197     [(CounterOpts) = {Name: "InFlightOps/CreateSysView"}];
     COUNTER_IN_FLIGHT_OPS_TxDropSysView = 198       [(CounterOpts) = {Name: "InFlightOps/DropSysView"}];
+
+    COUNTER_IN_FLIGHT_OPS_TxCreateLongIncrementalRestoreOp = 199       [(CounterOpts) = {Name: "InFlightOps/TxCreateLongIncrementalRestoreOp"}];
 }
 
 enum ECumulativeCounters {
@@ -404,6 +406,8 @@ enum ECumulativeCounters {
 
     COUNTER_FINISHED_OPS_TxCreateSysView = 119              [(CounterOpts) = {Name: "FinishedOps/CreateSysView"}];
     COUNTER_FINISHED_OPS_TxDropSysView = 120                [(CounterOpts) = {Name: "FinishedOps/DropSysView"}];
+
+    COUNTER_FINISHED_OPS_TxCreateLongIncrementalRestoreOp = 121       [(CounterOpts) = {Name: "FinishedOps/TxCreateLongIncrementalRestoreOp"}];
 }
 
 enum EPercentileCounters {

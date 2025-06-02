@@ -2045,6 +2045,74 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<PathId, AlterVersion, SysViewType>;
     };
 
+    // Header table for the overall incremental restore operation
+    struct IncrementalRestoreOperations : Table<120> {
+        struct Id :                  Column<1, NScheme::NTypeIds::Uint64> { using Type = TTxId; };
+        struct Uid :                 Column<2, NScheme::NTypeIds::Utf8> {};
+        struct DomainOwnerId :       Column<3, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
+        struct DomainLocalId :       Column<4, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
+
+        // NKikimrSchemeOp::TModifyScheme serialized as string
+        struct Operation :           Column<5, NScheme::NTypeIds::String> {};
+        struct RestoreSettings :     Column<6, NScheme::NTypeIds::String> {};
+
+        struct State :               Column<7, NScheme::NTypeIds::Byte> {};
+        struct Issue :               Column<8, NScheme::NTypeIds::Utf8> {};
+        struct UserSID :             Column<9, NScheme::NTypeIds::Utf8> {};
+        struct StartTime :           Column<10, NScheme::NTypeIds::Timestamp> {};
+        struct EndTime :             Column<11, NScheme::NTypeIds::Timestamp> {};
+        struct NumberOfTargets :     Column<12, NScheme::NTypeIds::Uint32> {}; // Total number of tables in this operation
+
+        using TKey = TableKey<Id>;
+        using TColumns = TableColumns<
+            Id,
+            Uid,
+            DomainOwnerId,
+            DomainLocalId,
+            Operation,
+            RestoreSettings,
+            State,
+            Issue,
+            UserSID,
+            StartTime,
+            EndTime,
+            NumberOfTargets
+        >;
+    };
+
+    // Detail table for each target table within an incremental restore operation
+    struct IncrementalRestoreTargets : Table<121> {
+        struct OperationId :         Column<1, NScheme::NTypeIds::Uint64> { using Type = TTxId; }; // Foreign key to IncrementalRestoreOperations::Id
+        struct TargetIndex :         Column<2, NScheme::NTypeIds::Uint32> {}; // To order/identify targets within an operation
+
+        struct TargetOwnerId :       Column<3, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
+        struct TargetLocalId :       Column<4, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
+        struct TargetPathName :      Column<5, NScheme::NTypeIds::Utf8> {}; // Full path string of the target table
+
+        struct State :               Column<6, NScheme::NTypeIds::Byte> {};
+        struct Issue :               Column<7, NScheme::NTypeIds::Utf8> {};
+
+        // Shows amount of incremental tables processed + 1 (0 means we still in a process of consistent copy tables)
+        struct ProgressTables :       Column<8, NScheme::NTypeIds::Uint64> {};
+
+        struct StartTime :           Column<9, NScheme::NTypeIds::Timestamp> {};
+        struct EndTime :             Column<10, NScheme::NTypeIds::Timestamp> {};
+
+        using TKey = TableKey<OperationId, TargetIndex>;
+        using TColumns = TableColumns<
+            OperationId,
+            TargetIndex,
+            TargetOwnerId,
+            TargetLocalId,
+            TargetPathName,
+            State,
+            Issue,
+            ProgressTables,
+            StartTime,
+            EndTime
+        >;
+    };
+
     using TTables = SchemaTables<
         Paths,
         TxInFlight,
@@ -2162,7 +2230,9 @@ struct Schema : NIceDb::Schema {
         WaitingDataErasureTenants,
         TenantDataErasureGenerations,
         WaitingDataErasureShards,
-        SysView
+        SysView,
+        IncrementalRestoreOperations,
+        IncrementalRestoreTargets
     >;
 
     static constexpr ui64 SysParam_NextPathId = 1;

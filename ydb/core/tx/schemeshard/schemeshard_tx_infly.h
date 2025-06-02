@@ -149,6 +149,7 @@ struct TTxState {
         item(TxDropTransferCascade, 102) \
         item(TxCreateSysView, 103) \
         item(TxDropSysView, 104) \
+        item(TxCreateLongIncrementalRestoreOp, 105) \
 
     // TX_STATE_TYPE_ENUM
 
@@ -375,6 +376,7 @@ struct TTxState {
         case TxCreateResourcePool:
         case TxCreateBackupCollection:
         case TxCreateSysView:
+        case TxCreateLongIncrementalRestoreOp:
             return true;
         case TxInitializeBuildIndex: //this is more like alter
         case TxCreateCdcStreamAtTable:
@@ -532,6 +534,7 @@ struct TTxState {
         case TxRestoreIncrementalBackupAtTable:
         case TxCreateBackupCollection:
         case TxCreateSysView:
+        case TxCreateLongIncrementalRestoreOp:
             return false;
         case TxAlterPQGroup:
         case TxAlterTable:
@@ -612,6 +615,7 @@ struct TTxState {
         case TxDropView:
         case TxDropResourcePool:
         case TxDropSysView:
+        case TxCreateLongIncrementalRestoreOp:
             return false;
         case TxMkDir:
         case TxCreateTable:

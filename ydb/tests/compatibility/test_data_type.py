@@ -7,13 +7,11 @@ from ydb.tests.oss.ydb_sdk_import import ydb
 from ydb.tests.datashard.lib.create_table import create_table_sql_request
 from ydb.tests.datashard.lib.types_of_variables import pk_types, non_pk_types, cleanup_type_name, format_sql_value
 
-TABLE_NAME = "table"
-
 
 class TestDataType(RestartToAnotherVersionFixture):
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):
-        self.table_name = TABLE_NAME
+        self.table_name = "table"
         self.count_rows = 30
         self.all_types = {**pk_types, **non_pk_types}
         self.columns = {
@@ -111,3 +109,5 @@ class TestDataType(RestartToAnotherVersionFixture):
         self.check_table()
         self.write_data()
         self.check_table()
+
+        self.change_cluster_version()

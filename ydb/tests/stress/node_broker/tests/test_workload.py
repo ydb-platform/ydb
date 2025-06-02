@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
+import os
+import yatest
+
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.common.types import Erasure
-from ydb.tests.stress.common.common import YdbClient
-from ydb.tests.stress.node_broker.workload import WorkloadRunner
 from ydb.tests.library.harness.util import LogLevels
 
 
@@ -26,7 +27,11 @@ class TestYdbWorkload(object):
         cls.cluster.stop()
 
     def test(self):
-        client = YdbClient(f"grpc://localhost:{self.cluster.nodes[1].grpc_port}", "/Root", True)
-        client.wait_connection()
-        with WorkloadRunner(client, f"http://localhost:{self.cluster.nodes[1].mon_port}", 120) as runner:
-            runner.run()
+        cmd = [
+            yatest.common.binary_path(os.getenv("YDB_TEST_PATH")),
+            "--endpoint", f"grpc://localhost:{self.cluster.nodes[1].grpc_port}",
+            "--mon-endpoint", f"http://localhost:{self.cluster.nodes[1].mon_port}",
+            "--database", "/Root",
+            "--duration", "120",
+        ]
+        yatest.common.execute(cmd, wait=True)

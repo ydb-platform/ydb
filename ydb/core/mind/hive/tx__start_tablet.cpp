@@ -118,7 +118,7 @@ public:
     void Complete(const TActorContext& ctx) override {
         BLOG_D("THive::TTxStartTablet::Complete Tablet " << TabletId << " SideEffects: " << SideEffects);
         SideEffects.Complete(ctx);
-        if (Success) {
+        if (Success && !External) {
             Self->UpdateCounterTabletsStarting(+1);
         }
     }

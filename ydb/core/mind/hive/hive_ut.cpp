@@ -7533,7 +7533,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         MakeSureTabletIsUp(runtime, tablet2, 0);
     }
 
-    Y_UNIT_TEST(TestStartingTabletsCounter) {
+    Y_UNIT_TEST(TestTabletsStartingCounter) {
       TTestBasicRuntime runtime(1, false);
       Setup(runtime, true);
       const ui64 hiveTablet = MakeDefaultHiveID();
@@ -7544,12 +7544,12 @@ Y_UNIT_TEST_SUITE(THiveTest) {
       MakeSureTabletIsUp(runtime, hiveTablet, 0);
       TTabletTypes::EType tabletType = TTabletTypes::Dummy;
 
-      auto getStartingTabletsCounter = [&]() {
+      auto getTabletsStartingCounter = [&]() {
         return GetSimpleCounter(runtime, hiveTablet,
                                 NHive::COUNTER_TABLETS_STARTING);
       };
 
-      UNIT_ASSERT_VALUES_EQUAL(0, getStartingTabletsCounter());
+      UNIT_ASSERT_VALUES_EQUAL(0, getTabletsStartingCounter());
 
       TBlockEvents<TEvLocal::TEvTabletStatus> blockStatus(runtime);
 
@@ -7563,16 +7563,15 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         runtime.DispatchEvents({}, TDuration::MilliSeconds(100));
       }
 
-      UNIT_ASSERT_VALUES_EQUAL(1, getStartingTabletsCounter());
+      UNIT_ASSERT_VALUES_EQUAL(1, getTabletsStartingCounter());
       blockStatus.Stop().Unblock();
 
       MakeSureTabletIsUp(runtime, tabletId, 0);
 
-      UNIT_ASSERT_VALUES_EQUAL(0, getStartingTabletsCounter());
+      UNIT_ASSERT_VALUES_EQUAL(0, getTabletsStartingCounter());
     }
 
-    // Y_UNIT_TEST(TestCreateExternalTablet) {
-    Y_UNIT_TEST(TestStartingTabletsCounterExternalBoot) {
+    Y_UNIT_TEST(TestTabletsStartingCounterExternalBoot) {
       TTestBasicRuntime runtime(1, false);
       Setup(runtime, true);
       const ui64 hiveTablet = MakeDefaultHiveID();
@@ -7583,30 +7582,30 @@ Y_UNIT_TEST_SUITE(THiveTest) {
       MakeSureTabletIsUp(runtime, hiveTablet, 0);
       TTabletTypes::EType tabletType = TTabletTypes::Dummy;
 
-      auto getStartingTabletsCounter = [&]() {
+      auto getTabletsStartingCounter = [&]() {
         return GetSimpleCounter(runtime, hiveTablet,
                                 NHive::COUNTER_TABLETS_STARTING);
       };
 
-      UNIT_ASSERT_VALUES_EQUAL(0, getStartingTabletsCounter());
+      UNIT_ASSERT_VALUES_EQUAL(0, getTabletsStartingCounter());
 
-      TBlockEvents<TEvLocal::TEvTabletStatus> blockStatus(runtime);
-
-      THolder<TEvHive::TEvCreateTablet> ev(new TEvHive::TEvCreateTablet(testerTablet, 0, tabletType, BINDED_CHANNELS));
+      THolder<TEvHive::TEvCreateTablet> ev(new TEvHive::TEvCreateTablet(
+          testerTablet, 0, tabletType, BINDED_CHANNELS));
       ev->Record.SetTabletBootMode(NKikimrHive::TABLET_BOOT_MODE_EXTERNAL);
       ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet,
                                            std::move(ev), 0, false);
-
-      while (blockStatus.empty()) {
-        runtime.DispatchEvents({}, TDuration::MilliSeconds(100));
-      }
-
-      UNIT_ASSERT_VALUES_EQUAL(1, getStartingTabletsCounter());
-      blockStatus.Stop().Unblock();
-
       MakeSureTabletIsDown(runtime, tabletId, 0);
 
-      UNIT_ASSERT_VALUES_EQUAL(0, getStartingTabletsCounter());
+      TActorId owner1 = runtime.AllocateEdgeActor(0);
+      runtime.SendToPipe(hiveTablet, owner1,
+                         new TEvHive::TEvInitiateTabletExternalBoot(tabletId),
+                         0, GetPipeConfigWithRetries());
+
+      TAutoPtr<IEventHandle> handle;
+      auto *result = runtime.GrabEdgeEvent<TEvLocal::TEvBootTablet>(handle);
+      UNIT_ASSERT(result);
+
+      UNIT_ASSERT_VALUES_EQUAL(0, getTabletsStartingCounter());
     }
 }
 

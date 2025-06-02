@@ -110,7 +110,7 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
         return replica.CurrentDelay;
     }
 
-    struct TStats{
+    struct TStats {
         ui32 Replied = 0;
         ui32 NoInfo = 0;
         ui32 HasInfo = 0;

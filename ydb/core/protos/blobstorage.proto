@@ -1037,6 +1037,7 @@ message TNodeWardenServiceSet {
         optional TDonorMode DonorMode = 9; // vdisk runs in read-only limited mode without interaction with other disks of group
         repeated TDonor Donors = 10; // a set of donor disks used to accelerate replication
         optional bool ReadOnly = 11;
+        optional uint32 GroupSizeInUnits = 12;
     }
 
     message TReplBrokerConfig {

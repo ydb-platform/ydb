@@ -439,8 +439,7 @@ namespace NKikimr {
                     i64 requiredSpace, bool addExistingDisks, T&& func) {
                 if (!Mapper) {
                     Mapper.emplace(Geometry, StoragePool.RandomizeGroupMapping);
-                    PopulateGroupMapper(*Mapper, State.Self, State.PDisks, State.Self.HostRecords, State.PDisksToRemove, StoragePoolId, StoragePool, IgnoreVSlotQuotaCheck, PDiskSpaceMarginPromille,
-                        SettleOnlyOnOperationalDisks, IsSelfHealReasonDecommit);
+                    PopulateGroupMapper();
                 }
                 TStackVec<TPDiskId, 32> removeQ;
                 if (addExistingDisks) {
@@ -448,8 +447,7 @@ namespace NKikimr {
                         for (const auto& domain : realm) {
                             for (const TPDiskId id : domain) {
                                 if (id != TPDiskId()) {
-                                    if (auto *info = State.PDisks.Find(id); info && RegisterPDisk(*Mapper, State.Self, State.Self.HostRecords, id, *info, false, IgnoreVSlotQuotaCheck,
-                                        PDiskSpaceMarginPromille, SettleOnlyOnOperationalDisks, IsSelfHealReasonDecommit, "X")) {
+                                    if (auto *info = State.PDisks.Find(id); info && RegisterPDisk(id, *info, false, "X")) {
                                         removeQ.push_back(id);
                                     }
                                 }
@@ -477,6 +475,16 @@ namespace NKikimr {
                     i64 requiredSpace, bool addExistingDisks, T&& func) {
                 TGroupMapper::TGroupConstraintsDefinition emptyConstraints;
                 return AllocateOrSanitizeGroup(groupId, group, emptyConstraints, replacedDisks, forbid, requiredSpace, addExistingDisks, func);
+            }
+
+            void PopulateGroupMapper() {
+                ::NKikimr::NBsController::PopulateGroupMapper(*Mapper, State.Self, State.PDisks, State.Self.HostRecords, State.PDisksToRemove, StoragePoolId, StoragePool, IgnoreVSlotQuotaCheck, PDiskSpaceMarginPromille,
+                    SettleOnlyOnOperationalDisks, IsSelfHealReasonDecommit);
+            }
+
+            bool RegisterPDisk(TPDiskId id, const TPDiskInfo& info, bool usable, TString whyUnusable = {}) {
+                return ::NKikimr::NBsController::RegisterPDisk(*Mapper, State.Self, State.Self.HostRecords, id, info, usable, IgnoreVSlotQuotaCheck,
+                    PDiskSpaceMarginPromille, SettleOnlyOnOperationalDisks, IsSelfHealReasonDecommit, whyUnusable);
             }
 
             std::map<TVDiskIdShort, TVSlotInfo*> CreateVSlotsForGroup(TGroupInfo *groupInfo,

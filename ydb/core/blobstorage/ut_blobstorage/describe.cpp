@@ -80,7 +80,6 @@ Y_UNIT_TEST_SUITE(BSCDescribe) {
         NKikimrBlobStorage::TEvControllerDescribeResponse resp = Describe(env, vdisks[0]);
         
         UNIT_ASSERT_STRING_CONTAINS(ResponseText(resp), "Disk is not ready, but is not eligible for self-heal, because PDisk has Status# ACTIVE");
-
     }
 
     Y_UNIT_TEST(Test2) {

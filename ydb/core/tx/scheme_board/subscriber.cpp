@@ -758,7 +758,7 @@ class TSubscriber: public TMonitorableActor<TDerived> {
         auto newest = it;
 
         while (++it != States.end()) {
-            if(IsWriteOnly(it->first)) {
+            if (IsWriteOnly(it->first)) {
                 continue;
             }
             if (newest->second.LessThan(it->second)) {
@@ -789,7 +789,7 @@ class TSubscriber: public TMonitorableActor<TDerived> {
 
     bool IsMajorityReached() const {
         TVector<ui32> cnt(ProxyGroups.size());
-        for(auto &[p, _] : InitialResponses) {
+        for (auto &[p, _] : InitialResponses) {
             Y_ABORT_UNLESS(ProxyToGroupMap.contains(p));
             cnt[ProxyToGroupMap.at(p)]++;
         }
@@ -816,7 +816,7 @@ class TSubscriber: public TMonitorableActor<TDerived> {
         DelayedSyncRequest = 0;
 
         Y_ABORT_UNLESS(PendingSync.empty());
-        for(auto &proxyGroup : ProxyGroups)
+        for (auto &proxyGroup : ProxyGroups)
             for (const auto& proxy : proxyGroup.Proxies) {
                 this->Send(proxy.Proxy, new NInternalEvents::TEvSyncVersionRequest(Path), 0, CurrentSyncRequest);
                 PendingSync.emplace(proxy.Proxy);
@@ -1000,14 +1000,14 @@ class TSubscriber: public TMonitorableActor<TDerived> {
 
         THashMap<TActorId, TActorId> oldProxies;
         THashSet<TActorId> newReplicas;
-        for(auto &group : ProxyGroups) {
-            for(auto & proxy : group.Proxies) {
+        for (auto &group : ProxyGroups) {
+            for (auto & proxy : group.Proxies) {
                 oldProxies[proxy.Replica] = proxy.Proxy;
             }
         }
 
-        for(auto &group : replicaGroups) {
-            for(auto & replica : group.Replicas) {
+        for (auto &group : replicaGroups) {
+            for (auto & replica : group.Replicas) {
                 newReplicas.insert(replica);
             }
         }
@@ -1022,7 +1022,7 @@ class TSubscriber: public TMonitorableActor<TDerived> {
 
             for (size_t i = 0; i < msgGroup.Replicas.size(); ++i) {
                 auto &proxy = proxyGroup.Proxies[i];
-                if(auto it = oldProxies.find(msgGroup.Replicas[i]); it != oldProxies.end()) {
+                if (auto it = oldProxies.find(msgGroup.Replicas[i]); it != oldProxies.end()) {
                     proxy.Proxy = it->second;
                     proxy.Replica = it->first;
                 } else {
@@ -1033,8 +1033,8 @@ class TSubscriber: public TMonitorableActor<TDerived> {
                 ProxyToGroupMap[proxy.Proxy] = groupIdx;
             }
         }
-        for(auto &[r, p] : oldProxies) {
-            if(!newReplicas.contains(r)) {
+        for (auto &[r, p] : oldProxies) {
+            if (!newReplicas.contains(r)) {
                 TActivationContext::Send(new IEventHandle(TEvPrivate::EvSwitchReplica, 0, p, r, nullptr, 0));
                 States.erase(p);
                 InitialResponses.erase(p);

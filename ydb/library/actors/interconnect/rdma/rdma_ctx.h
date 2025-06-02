@@ -3,6 +3,7 @@
 #include <memory>
 #include <util/generic/noncopyable.h>
 #include <util/system/types.h>
+#include <util/generic/string.h>
 
 #include <ydb/library/actors/interconnect/rdma/ibdrv/include/infiniband/verbs.h>
 
@@ -16,10 +17,7 @@ struct ibv_pd;
 namespace NInterconnect::NRdma {
 
 struct TDeviceCtx : public NNonCopyable::TNonCopyable {
-    TDeviceCtx(ibv_context* ctx, ibv_pd* pd)
-        : Context(ctx)
-        , ProtDomain(pd)
-    {}
+    TDeviceCtx(ibv_context* ctx, ibv_pd* pd);
 
     ~TDeviceCtx();
 
@@ -28,15 +26,10 @@ struct TDeviceCtx : public NNonCopyable::TNonCopyable {
 };
 
 class TRdmaCtx : public NNonCopyable::TNonCopyable {
-    TRdmaCtx(std::shared_ptr<TDeviceCtx> deviceCtx, ibv_device_attr devAttr, const char* deviceName, ui32 portNum, ibv_port_attr portAttr, int gidIndex, ibv_gid gid)
-        : DeviceCtx(std::move(deviceCtx))
-        , DevAttr(devAttr)
-        , DeviceName(deviceName)
-        , PortNum(portNum)
-        , PortAttr(portAttr)
-        , GidIndex(gidIndex)
-        , Gid(gid)
-    {}
+    TRdmaCtx(
+        std::shared_ptr<TDeviceCtx> deviceCtx, ibv_device_attr devAttr, const char* deviceName,
+        ui32 portNum, ibv_port_attr portAttr, int gidIndex, ibv_gid gid
+    );
 
 public:
     static std::shared_ptr<TRdmaCtx> Create(std::shared_ptr<TDeviceCtx> deviceCtx, ui32 portNum, int gidIndex);
@@ -68,6 +61,9 @@ public:
         return Gid;
     }
 
+    void Output(IOutputStream &str) const;
+    TString ToString() const;
+
 private:
     const std::shared_ptr<TDeviceCtx> DeviceCtx;
     const ibv_device_attr DevAttr;
@@ -79,3 +75,6 @@ private:
 };
 
 }
+
+IOutputStream& operator<<(IOutputStream& os, const ibv_gid& gid);
+IOutputStream& operator<<(IOutputStream& os, const NInterconnect::NRdma::TRdmaCtx& rdmaCtx);

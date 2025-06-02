@@ -49,6 +49,7 @@ constexpr ui32 SmallDiskMaximumChunkSize = 32 * (1 << 20); // 32MB
 // #define PDISK_SYS_LOG_RECORD_VERSION_5 5 // It was used in reverted commits, just avoid this version
 #define PDISK_SYS_LOG_RECORD_VERSION_6 6
 #define PDISK_SYS_LOG_RECORD_VERSION_7 7
+#define PDISK_SYS_LOG_RECORD_VERSION_8 8
 #define PDISK_SYS_LOG_RECORD_INCOMPATIBLE_VERSION_1000 1000
 #define FORMAT_TEXT_SIZE 1024
 
@@ -341,7 +342,7 @@ struct TSysLogRecord {
     TVDiskID OwnerVDisks[256];
 
     TSysLogRecord()
-        : Version(PDISK_SYS_LOG_RECORD_VERSION_7)
+        : Version(PDISK_SYS_LOG_RECORD_VERSION_8)
         , LogHeadChunkIdx(0)
         , Reserved1(0)
         , LogHeadChunkPreviousNonce((ui64)-1)

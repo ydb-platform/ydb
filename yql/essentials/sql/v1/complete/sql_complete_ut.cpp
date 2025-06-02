@@ -39,6 +39,7 @@ public:
 };
 
 Y_UNIT_TEST_SUITE(SqlCompleteTests) {
+    using ECandidateKind::BindingName;
     using ECandidateKind::ClusterName;
     using ECandidateKind::FolderName;
     using ECandidateKind::FunctionName;
@@ -679,6 +680,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         }
         {
             TVector<TCandidate> expected = {
+                {BindingName, "$hello"},
                 {TableName, "`maxim"},
                 {ClusterName, "example"},
                 {ClusterName, "saurus"},
@@ -694,6 +696,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         }
         {
             TVector<TCandidate> expected = {
+                {BindingName, "$action"},
                 {TableName, "`people"},
                 {FolderName, "`yql/"},
                 {ClusterName, "example"},
@@ -981,6 +984,44 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         UNIT_ASSERT_GE(Complete(engine, "SELECT (").size(), 29);
         UNIT_ASSERT_GE(Complete(engine, "SELECT (1)").size(), 30);
         UNIT_ASSERT_GE(Complete(engine, "SELECT 1;").size(), 35);
+    }
+
+    Y_UNIT_TEST(Bindings) {
+        auto engine = MakeSqlCompletionEngineUT();
+
+        TString query = R"(
+            $=0;
+            $a=0;
+            $abac=0;
+            SELECT 
+        )";
+
+        {
+            TVector<TCandidate> expected = {
+                {BindingName, "$a"},
+                {BindingName, "$abac"},
+            };
+            UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, query), expected);
+        }
+        {
+            TVector<TCandidate> expected = {
+                {BindingName, "$abac"},
+            };
+            UNIT_ASSERT_VALUES_EQUAL(CompleteTop(1, engine, query + "ab"), expected);
+        }
+        {
+            TVector<TCandidate> expected = {
+                {BindingName, "a"},
+                {BindingName, "abac"},
+            };
+            UNIT_ASSERT_VALUES_EQUAL(Complete(engine, query + "$"), expected);
+        }
+        {
+            TVector<TCandidate> expected = {
+                {BindingName, "abac"},
+            };
+            UNIT_ASSERT_VALUES_EQUAL(Complete(engine, query + "$ab"), expected);
+        }
     }
 
     Y_UNIT_TEST(Typing) {

@@ -101,6 +101,7 @@ namespace NSQLComplete {
             result.Hint = HintMatch(candidates);
             result.Object = ObjectMatch(context, candidates);
             result.Cluster = ClusterMatch(context, candidates);
+            result.Binding = BindingMatch(candidates);
 
             return result;
         }
@@ -290,6 +291,10 @@ namespace NSQLComplete {
                 cluster.Provider = begin->Base->Content;
             }
             return cluster;
+        }
+
+        bool BindingMatch(const TC3Candidates& candidates) const {
+            return AnyOf(candidates.Rules, RuleAdapted(IsLikelyBindingStack));
         }
 
         TEditRange EditRange(const TCursorTokenContext& context) const {

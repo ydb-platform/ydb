@@ -661,7 +661,7 @@ void TDescribeTopicActorImpl::RequestPartitionsLocation(const TActorContext& ctx
     for (auto p : Settings.Partitions) {
         if (p >= TotalPartitions) {
             return RaiseError(
-                TStringBuilder() << "No partition " << Settings.Partitions[0] << " in topic",
+                TStringBuilder() << "No partition " << p << " in topic",
                 Ydb::PersQueue::ErrorCode::BAD_REQUEST, Ydb::StatusIds::BAD_REQUEST, ctx
             );
         }
@@ -898,14 +898,12 @@ bool TDescribeTopicActor::ApplyResponse(
         TEvPersQueue::TEvGetPartitionsLocationResponse::TPtr& ev, const TActorContext&
 ) {
     const auto& record = ev->Get()->Record;
-    Y_ABORT_UNLESS(record.LocationsSize() == TotalPartitions);
     Y_ABORT_UNLESS(Settings.RequireLocation);
 
-    for (auto i = 0u; i < TotalPartitions; ++i) {
+    for (auto i = 0u; i < std::min<ui64>(record.LocationsSize(), TotalPartitions); ++i) {
         const auto& location = record.GetLocations(i);
         auto* locationResult = Result.mutable_partitions(i)->mutable_partition_location();
         SetPartitionLocation(location, locationResult);
-
     }
     return true;
 }
@@ -1012,9 +1010,8 @@ bool TDescribeConsumerActor::ApplyResponse(
         TEvPersQueue::TEvGetPartitionsLocationResponse::TPtr& ev, const TActorContext&
 ) {
     const auto& record = ev->Get()->Record;
-    Y_ABORT_UNLESS(record.LocationsSize() == TotalPartitions);
     Y_ABORT_UNLESS(Settings.RequireLocation);
-    for (auto i = 0u; i < TotalPartitions; ++i) {
+    for (auto i = 0u; i < std::min<ui64>(record.LocationsSize(), TotalPartitions); ++i) {
         const auto& location = record.GetLocations(i);
         auto* locationResult = Result.mutable_partitions(i)->mutable_partition_location();
         SetPartitionLocation(location, locationResult);

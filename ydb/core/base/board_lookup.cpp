@@ -74,7 +74,8 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
 
         TString ToString() {
             TStringStream str;
-            str << "{ WriteOnly: " << WriteOnly << ", WaitForReplicasToSuccess: " << WaitForReplicasToSuccess << " }";
+            str << "{ WriteOnly: " << WriteOnly << ", WaitForReplicasToSuccess: " << WaitForReplicasToSuccess 
+                << " Replicas: [" << JoinSeq(",", Replicas) << "] }";
             return str.Str();
         }
     };
@@ -624,4 +625,8 @@ IActor* CreateBoardLookupActor(
     return new TBoardLookupActor(path, owner, mode, std::move(boardRetrySettings), cookie);
 }
 
+}
+
+Y_DECLARE_OUT_SPEC(, NKikimr::TBoardLookupActor::TReplica, stream, value) {
+    stream << value.Replica.ToString();
 }

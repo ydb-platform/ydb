@@ -8,16 +8,15 @@ namespace NYdbWorkload {
 namespace NQuery {
 
 void TQueryWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandType commandType, int workloadType) {
+    if (commandType != TWorkloadParams::ECommandType::Init) {
+        TWorkloadBaseParams::ConfigureOpts(opts, commandType, workloadType);
+    }
     switch (commandType) {
         default:
-            break;
-        case TWorkloadParams::ECommandType::Root:
-            TWorkloadBaseParams::ConfigureOpts(opts, commandType, workloadType);
             break;
         case TWorkloadParams::ECommandType::Run:
         case TWorkloadParams::ECommandType::Init:
             opts.AddLongOption('q', "query", "Query to execute. Can be used multiple times.").AppendTo(&CustomQueries);
-            TWorkloadBaseParams::ConfigureOpts(opts, commandType, workloadType);
             opts.AddLongOption("suite-path", "Path to suite directory. See \"ydb workload query\" command description for more information.")
                 .RequiredArgument("PATH").StoreResult(&SuitePath);
             break;
@@ -60,6 +59,13 @@ There is example of import directory: https://github.com/ydb-platform/ydb/tree/m
         return R"(Run load testing.
 Executing load testing using queries from files in the "run" directory or directly from the command line via the "--query" parameter.
 
+Files with the "sql" and "yql" extensions will be used to generate queries. For each one, a canonical result can be set using a file with the same name and the additional ".result" extension. These are CSV files with headers and some additional syntax:
+    * If a query has more than one result set, the result file should contain the same number of data sets, separated by empty lines.
+    * The last line may be set to "...", which means the query result can have more rows, but only the first ones will be checked.
+    * By default, floating-point numbers are compared with a relative accuracy of 1e-3 percent, but you can specify any absolute or relative accuracy like: "1.5+-0.01", "2.4e+10+-1%".
+
+The canonical result will not be used unless the "--check-canonical" flag is set.
+
 There is example of run directory: https://github.com/ydb-platform/ydb/tree/main/ydb/tests/functional/tpc/data/e1/run.)";
 
     case ECommandType::Root:
@@ -77,6 +83,13 @@ Populating tables with data. The "import" directory should contain subfolders na
 
 3. run
 Executing load testing using queries from files in the "run" directory or directly from the command line via the "--query" parameter.
+
+Files with the "sql" and "yql" extensions will be used to generate queries. For each one, a canonical result can be set using a file with the same name and the additional ".result" extension. These are CSV files with headers and some additional syntax:
+    * If a query has more than one result set, the result file should contain the same number of data sets, separated by empty lines.
+    * The last line may be set to "...", which means the query result can have more rows, but only the first ones will be checked.
+    * By default, floating-point numbers are compared with a relative accuracy of 1e-3 percent, but you can specify any absolute or relative accuracy like: "1.5+-0.01", "2.4e+10+-1%".
+
+The canonical result will not be used unless the "--check-canonical" flag is set.
 
 4. clean
 Cleaning up by removing tables used for load testing.
@@ -112,6 +125,10 @@ TQueryInfoList TQueryGenerator::GetWorkloadFromDir(const TFsPath& dir, const TSt
         }
         TFileInput fInput(i.GetPath());
         result.emplace_back(MakeQuery(fInput.ReadAll(), name));
+        const TFsPath expectedPath(i.GetPath() + ".result");
+        if (Params.GetCheckCanonical() && expectedPath.Exists()) {
+            result.back().ExpectedResult = TFileInput(expectedPath).ReadAll();
+        } 
     }
     return result;
 }

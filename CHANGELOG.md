@@ -20,13 +20,8 @@
 * 18625:Fixed [an issue](https://github.com/ydb-platform/ydb/issues/18576) that node memory usage was not tracked [#18625](https://github.com/ydb-platform/ydb/pull/18625) ([vporyadke](https://github.com/vporyadke))
 * 18621:[Fixed]((https://github.com/ydb-platform/ydb/pull/18621)) a bug that caused tablet downloads to pause due to tablets that could not allowed to be launched. ([vporyadke](https://github.com/vporyadke))
 * 18614:[Fixed](https://github.com/ydb-platform/ydb/pull/18614) a rare [issue](https://github.com/ydb-platform/ydb/issues/18615) of tablet restart due to the difference between `StartOffset` and the offset of the first blob. ([Alek5andr-Kotov](https://github.com/Alek5andr-Kotov))
-* 18600:Issue: https://github.com/ydb-platform/ydb/issues/18598
-
-Original PR to main: https://github.com/ydb-platform/ydb/pull/18594
-
-Fixes bug with not forwarding auth token in Kafka proxy in absence of old flag. [#18600](https://github.com/ydb-platform/ydb/pull/18600) ([Andrey Serebryanskiy](https://github.com/a-serebryanskiy))
-* 18577:cherry-pick of 21395e193 and c81a8971a. Fix the following issue: https://github.com/ydb-platform/ydb/issues/18487
-... [#18577](https://github.com/ydb-platform/ydb/pull/18577) ([Filitov Mikhail](https://github.com/lll-phill-lll))
+* 18600:[Fixed](https://github.com/ydb-platform/ydb/pull/18600) [bug](https://github.com/ydb-platform/ydb/issues/18598) with not forwarding auth token in Kafka proxy in absence of old flag. ([Andrey Serebryanskiy](https://github.com/a-serebryanskiy))
+* 18577:[Fixed](https://github.com/ydb-platform/ydb/pull/18577) typing [errors](https://github.com/ydb-platform/ydb/issues/18487) in UDF. ([Filitov Mikhail](https://github.com/lll-phill-lll))
 * 18507:[Fixed]((https://github.com/ydb-platform/ydb/pull/18507)) issues with processing [optional columns](https://github.com/ydb-platform/ydb/issues/15701) and [UUID columns](https://github.com/ydb-platform/ydb/issues/15697) in row tables. ([Ivan Nikolaev](https://github.com/lex007in))
-* 18378:fixes for handling per-dc followers created on older YDB versions https://github.com/ydb-platform/ydb/issues/16000 [#18378](https://github.com/ydb-platform/ydb/pull/18378) ([vporyadke](https://github.com/vporyadke))
+* 18378:[Fixed](https://github.com/ydb-platform/ydb/pull/18378) [a bug](https://github.com/ydb-platform/ydb/issues/16000) for handling per-dc followers created on older YDB versions. ([vporyadke](https://github.com/vporyadke))
 

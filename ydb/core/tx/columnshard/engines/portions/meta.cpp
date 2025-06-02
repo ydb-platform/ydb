@@ -37,7 +37,6 @@ NKikimrTxColumnShard::TIndexPortionMeta TPortionMeta::SerializeToProto(const NPo
             portionMeta.SetIsEvicted(true);
             break;
         case NPortion::EProduced::INACTIVE:
-            Y_ABORT("Unexpected inactive case");
             //portionMeta->SetInactive(true);
             break;
     }

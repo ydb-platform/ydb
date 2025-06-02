@@ -434,7 +434,7 @@ class ScenarioTestHelper:
     @classmethod
     @allure.step('Execute scan query')
     def execute_scan_query(
-        cls, yql: str, expected_status: ydb.StatusCode | Set[ydb.StatusCode] = ydb.StatusCode.SUCCESS
+        cls, yql: str, expected_status: ydb.StatusCode | Set[ydb.StatusCode] = ydb.StatusCode.SUCCESS, timeout = 10
     ):
         """Run a scanning query on the tested database.
 
@@ -454,7 +454,7 @@ class ScenarioTestHelper:
 
         allure.attach(yql, 'request', allure.attachment_type.TEXT)
         it = cls._run_with_expected_status(
-            lambda: YdbCluster.get_ydb_driver().table_client.scan_query(yql), expected_status
+            lambda: YdbCluster.get_ydb_driver().table_client.scan_query(yql, settings=ydb.BaseRequestSettings().with_timeout(timeout)), expected_status
         )
         rows = None
         ret = None

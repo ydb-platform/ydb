@@ -1,5 +1,9 @@
 ## Unreleased
 
+### Performance
+
+* 18504:[Optimized]((https://github.com/ydb-platform/ydb/pull/18504)) CPU consumption of the Scheme shard and reduced query latencies by checking the operation count limit before performing tablet split and merge operations.
+
 ### Bug fixes
 
 * 17122:Fixed a rare issue that caused client applications to hang during commit operations. The problem occurred because the `TEvDeletePartition` message could arrive before the `TEvApproveWriteQuota` message. The batch did not send TEvConsumed and this blocked the queue of write quota requests. [#17122](https://github.com/ydb-platform/ydb/pull/17122) ([Alek5andr-Kotov](https://github.com/Alek5andr-Kotov))
@@ -12,12 +16,10 @@
 * 15515:Fixed a topic reading hang that occurred when at least one partition had no incoming data but was being read by multiple consumers. [#15515](https://github.com/ydb-platform/ydb/pull/15515) ([FloatingCrowbar](https://github.com/FloatingCrowbar))
 * 18302:Optimized memory usage in transactions with a large number of participants by changing the storage and resending mechanism for TEvReadSet messages. [#18302](https://github.com/ydb-platform/ydb/pull/18302) ([Alek5andr-Kotov](https://github.com/Alek5andr-Kotov))
 * 18270:Fixed replication bug #10650 [#18270](https://github.com/ydb-platform/ydb/pull/18270) ([Alexander Rutkovsky](https://github.com/alexvru))
-* 18717:The balancing of the read session was broken if storage nodes have the version 24-4 and dynamic node have the version 25-1 [#18717](https://github.com/ydb-platform/ydb/pull/18717) ([Nikolay Shestakov](https://github.com/nshestakov))
-* 18625:fix a bug where node memory usage was not tracked https://github.com/ydb-platform/ydb/issues/18576 [#18625](https://github.com/ydb-platform/ydb/pull/18625) ([vporyadke](https://github.com/vporyadke))
-* 18621:ensure the process of booting tablets does not get stuck in the presence of tablets that are not allowed to be launched https://github.com/ydb-platform/ydb/issues/16462 [#18621](https://github.com/ydb-platform/ydb/pull/18621) ([vporyadke](https://github.com/vporyadke))
-* 18614:Issue #18615
-
-The PQ tablet removes blobs with offsets before `StartOffset` [#18614](https://github.com/ydb-platform/ydb/pull/18614) ([Alek5andr-Kotov](https://github.com/Alek5andr-Kotov))
+* 18717:Fixed an issue in the read session balancing of the pqv0 protocol that occurred when storage nodes of version 24.4 and dynamic nodes of version 25.1. [#18717](https://github.com/ydb-platform/ydb/pull/18717) ([Nikolay Shestakov](https://github.com/nshestakov))
+* 18625:Fixed [an issue](https://github.com/ydb-platform/ydb/issues/18576) that node memory usage was not tracked [#18625](https://github.com/ydb-platform/ydb/pull/18625) ([vporyadke](https://github.com/vporyadke))
+* 18621:[Fixed]((https://github.com/ydb-platform/ydb/pull/18621)) a bug that caused tablet downloads to pause due to tablets that could not allowed to be launched. ([vporyadke](https://github.com/vporyadke))
+* 18614:[Fixed](https://github.com/ydb-platform/ydb/pull/18614) a rare [issue](https://github.com/ydb-platform/ydb/issues/18615) of tablet restart due to the difference between `StartOffset` and the offset of the first blob. ([Alek5andr-Kotov](https://github.com/Alek5andr-Kotov))
 * 18600:Issue: https://github.com/ydb-platform/ydb/issues/18598
 
 Original PR to main: https://github.com/ydb-platform/ydb/pull/18594
@@ -25,8 +27,6 @@ Original PR to main: https://github.com/ydb-platform/ydb/pull/18594
 Fixes bug with not forwarding auth token in Kafka proxy in absence of old flag. [#18600](https://github.com/ydb-platform/ydb/pull/18600) ([Andrey Serebryanskiy](https://github.com/a-serebryanskiy))
 * 18577:cherry-pick of 21395e193 and c81a8971a. Fix the following issue: https://github.com/ydb-platform/ydb/issues/18487
 ... [#18577](https://github.com/ydb-platform/ydb/pull/18577) ([Filitov Mikhail](https://github.com/lll-phill-lll))
-* 18507:- Fixed a bug in YDB UUID column handling in ReadTable RPC method #15697
-- Fixed a bug in optional columns handling in ReadRows RPC method #15701 [#18507](https://github.com/ydb-platform/ydb/pull/18507) ([Ivan Nikolaev](https://github.com/lex007in))
-* 18504:Avoid expensive table merge checks when operation inflight limits have already been exceeded. Fixes #18473. [#18504](https://github.com/ydb-platform/ydb/pull/18504) ([Aleksei Borzenkov](https://github.com/snaury))
+* 18507:[Fixed]((https://github.com/ydb-platform/ydb/pull/18507)) issues with processing [optional columns](https://github.com/ydb-platform/ydb/issues/15701) and [UUID columns](https://github.com/ydb-platform/ydb/issues/15697) in row tables. ([Ivan Nikolaev](https://github.com/lex007in))
 * 18378:fixes for handling per-dc followers created on older YDB versions https://github.com/ydb-platform/ydb/issues/16000 [#18378](https://github.com/ydb-platform/ydb/pull/18378) ([vporyadke](https://github.com/vporyadke))
 

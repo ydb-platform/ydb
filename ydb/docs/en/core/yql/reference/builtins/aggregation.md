@@ -75,13 +75,20 @@ The function *does not* do the implicit type casting to Boolean for strings and 
 ```yql
 SELECT
   COUNT_IF(value % 2 == 1) AS odd_count
+FROM my_table;
 ```
 
 {% if select_statement != "SELECT STREAM" %}
 
 {% note info %}
 
-To count distinct values in rows meeting the condition, unlike other aggregate functions, you can't use the modifier [DISTINCT](../syntax/select/group-by.md#distinct) because arguments contain no values. To get this result, use in the subquery the built-in function [IF](basic.md#if) with two arguments (to get `NULL` in else), and apply an outer aggregation to the result.
+To count distinct values in rows meeting the condition, unlike other aggregate functions, you can't use the modifier [DISTINCT](../syntax/select/group-by.md#distinct) because arguments contain no values. To get such a result, use a query like this:
+
+```yql
+SELECT
+    COUNT(DISTINCT IF(value % 2 == 1, value))
+FROM posts;
+```
 
 {% endnote %}
 

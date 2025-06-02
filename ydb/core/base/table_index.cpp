@@ -201,4 +201,24 @@ TClusterId SetPostingParentFlag(TClusterId parent) {
     return (parent | PostingParentFlag);
 }
 
+TString ToShortDebugString(const NKikimrTxDataShard::TEvReshuffleKMeansRequest& record) {
+    auto copy = record;
+    TStringBuilder result;
+    // clusters are not human readable and can be large like 100Kb+
+    result << " Clusters: " << record.ClustersSize();
+    copy.ClearClusters();
+    result << " " << copy.ShortDebugString();
+    return result;
+}
+
+TString ToShortDebugString(const NKikimrTxDataShard::TEvSampleKResponse& record) {
+    auto copy = record;
+    TStringBuilder result;
+    // rows are not human readable and can be large like 100Kb+
+    result << " Rows: " << record.RowsSize();
+    copy.ClearRows();
+    result << " " << copy.ShortDebugString();
+    return result;
+}
+
 }

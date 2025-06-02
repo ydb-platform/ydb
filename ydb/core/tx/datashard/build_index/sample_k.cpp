@@ -169,9 +169,9 @@ public:
         NYql::IssuesToMessage(Issues, record.MutableIssues());
 
         if (Response->Record.GetStatus() == NKikimrIndexBuilder::DONE) {
-            LOG_N("Done " << Debug() << " " << Response->Record.ShortDebugString());
+            LOG_N("Done " << Debug() << " " << NTableIndex::ToShortDebugString(Response->Record));
         } else {
-            LOG_E("Failed " << Debug() << " " << Response->Record.ShortDebugString());
+            LOG_E("Failed " << Debug() << " " << NTableIndex::ToShortDebugString(Response->Record));
         }
         Send(ResponseActorId, Response.Release());
 
@@ -279,7 +279,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvSampleKRequest::TPtr& ev, const TAc
             if (response->Record.GetStatus() == NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST) {
                 LOG_E("Rejecting TSampleKScan bad request TabletId: " << TabletID()
                     << " " << request.ShortDebugString()
-                    << " with response " << response->Record.ShortDebugString());
+                    << " with response " << NTableIndex::ToShortDebugString(response->Record));
                 ctx.Send(ev->Sender, std::move(response));
                 return true;
             } else {

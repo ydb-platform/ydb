@@ -3,6 +3,7 @@
 #include <ydb/public/api/protos/ydb_value.pb.h>
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/protos/tx_datashard.pb.h>
 
 #include <util/generic/hash_set.h>
 #include <util/generic/vector.h>
@@ -44,6 +45,9 @@ inline constexpr const char* ClusterIdTypeName = "Uint64";
 void EnsureNoPostingParentFlag(TClusterId parent);
 
 TClusterId SetPostingParentFlag(TClusterId parent);
+
+TString ToShortDebugString(const NKikimrTxDataShard::TEvReshuffleKMeansRequest& record);
+TString ToShortDebugString(const NKikimrTxDataShard::TEvSampleKResponse& record);
 
 }
 }

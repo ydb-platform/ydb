@@ -6093,7 +6093,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             auto result2 = session.ExecuteQuery(R"(
                 INSERT INTO `/Root/DataShard` (Col1, Col2) VALUES
                     (10u, "test1"), (20u, "test2"), (4294967280u, "test3"), (4294967286u, "test");
-            )", NYdb::NQuery::TTxControl::Tx(*tx).CommitTx()).ExtractValueSync();
+            )", NYdb::NQuery::TTxControl::Tx(tx->GetId()).CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result2.GetStatus(), EStatus::PRECONDITION_FAILED, result2.GetIssues().ToString());
         }
 

@@ -445,6 +445,12 @@ void TTenantDataErasureManager::HandleNewPartitioning(const std::vector<TShardId
         << ", Status# " << static_cast<ui32>(Status));
 }
 
+void TTenantDataErasureManager::SyncBscGeneration(NIceDb::TNiceDb&, ui64) {
+    auto ctx = SchemeShard->ActorContext();
+    LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+        "[TenantDataErasureManager] [SyncBscGeneration] Cannot execute in tenant schemeshard: " << SchemeShard->TabletID());
+}
+
 void TTenantDataErasureManager::UpdateMetrics() {
     SchemeShard->TabletCounters->Simple()[COUNTER_TENANT_DATA_ERASURE_QUEUE_SIZE].Set(Queue->Size());
     SchemeShard->TabletCounters->Simple()[COUNTER_TENANT_DATA_ERASURE_QUEUE_RUNNING].Set(Queue->RunningSize());

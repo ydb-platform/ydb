@@ -15,6 +15,10 @@ private:
     const bool StrictOneLayer = true;
     std::shared_ptr<TSimplePortionsGroupInfo> SummaryPortionsInfo;
 
+    virtual ui64 GetExpectedPortionSize() const override {
+        return ExpectedPortionSize;
+    }
+
     ui64 GetLevelBlobBytesLimit() const {
         return std::max<ui64>(SizeLimitGuarantee, SummaryPortionsInfo->GetBlobBytes() * BytesLimitFraction);
     }
@@ -59,12 +63,28 @@ private:
         if (!GetNextLevel()) {
             return 0;
         }
-        if ((ui64)GetPortionsInfo().GetBlobBytes() > GetLevelBlobBytesLimit() && GetPortionsInfo().GetCount() >= 2 &&
-            (ui64)GetPortionsInfo().GetBlobBytes() > ExpectedPortionSize * 2) {
-            return ((ui64)GetLevelId() << 48) + GetPortionsInfo().GetBlobBytes() - GetLevelBlobBytesLimit();
-        } else {
+        if ((ui64)GetPortionsInfo().GetBlobBytes() < GetLevelBlobBytesLimit()) {
             return 0;
         }
+        if (GetPortionsInfo().GetCount() < 2) {
+            return 0;
+        }
+        if ((ui64)GetPortionsInfo().GetBlobBytes() < GetNextLevel()->GetExpectedPortionSize()) {
+            return 0;
+        }
+        return ((ui64)GetLevelId() << 48) + GetPortionsInfo().GetBlobBytes() - GetLevelBlobBytesLimit();
+    }
+
+    virtual bool IsAppropriatePortionToStore(const TPortionAccessorConstructor& info) const override {
+        if (info.GetTotalBlobsSize() < GetExpectedPortionSize()) {
+            return false;
+        }
+        return !GetAffectedPortionBytes(info.GetPortionConstructor().GetMeta().GetFirstAndLastPK().GetFirst(),
+            info.GetPortionConstructor().GetMeta().GetFirstAndLastPK().GetLast());
+    }
+
+    virtual bool IsAppropriatePortionToMove(const TPortionAccessorConstructor& /*info*/) const override {
+        return true;
     }
 
     virtual TInstant DoGetWeightExpirationInstant() const override {

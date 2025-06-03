@@ -351,6 +351,8 @@ protected:
     mutable std::optional<TInstant> PredOptimization = TInstant::Now();
 
 public:
+    virtual ui64 GetExpectedPortionSize() const = 0;
+
     virtual bool IsAppropriatePortionToMove(const TPortionAccessorConstructor& /*info*/) const {
         return false;
     }
@@ -411,14 +413,6 @@ public:
             ++idx;
         }
         AFL_VERIFY(DefaultPortionsSelector);
-    }
-
-    bool CanTakePortion(const TPortionInfo::TConstPtr& portion) const {
-        auto chain = GetAffectedPortions(portion->IndexKeyStart(), portion->IndexKeyEnd());
-        if (chain && chain->GetPortions().size()) {
-            return false;
-        }
-        return true;
     }
 
     virtual bool IsLocked(const std::shared_ptr<NDataLocks::TManager>& locksManager) const = 0;

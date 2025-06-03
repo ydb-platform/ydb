@@ -23,11 +23,11 @@ private:
     }
 
     virtual bool IsAppropriatePortionToMove(const TPortionAccessorConstructor& info) const override {
-        return info.GetTotalBlobsSize() > ExpectedBlobsSize;
+        return info.GetTotalBlobsSize() > NextLevel->GetExpectedPortionSize();
     }
 
-    virtual bool IsAppropriatePortionToStore(const TPortionAccessorConstructor& /*info*/) const override {
-        return true;
+    virtual bool IsAppropriatePortionToStore(const TPortionAccessorConstructor& info) const override {
+        return info.GetTotalBlobsSize() > GetExpectedPortionSize();
     }
 
     virtual ui64 DoGetAffectedPortionBytes(const NArrow::TSimpleRow& /*from*/, const NArrow::TSimpleRow& /*to*/) const override {
@@ -69,6 +69,9 @@ private:
     virtual TInstant DoGetWeightExpirationInstant() const override;
 
     virtual TCompactionTaskData DoGetOptimizationTask() const override;
+    virtual ui64 GetExpectedPortionSize() const override {
+        return ExpectedBlobsSize;
+    }
 
 public:
     ui64 GetExpectedPortionSize() const {

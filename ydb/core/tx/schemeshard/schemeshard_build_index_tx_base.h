@@ -32,7 +32,7 @@ private:
     ui64 RequestUnits(const TBillingStats& stats);
     void RoundPeriod(TInstant& start, TInstant& end);
     void ApplyBill(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx);
-    void OnUnhandledExceptionSafe(TTransactionContext& txc, const TActorContext& ctx, const std::exception& exc);
+    bool OnUnhandledExceptionSafe(TTransactionContext& txc, const TActorContext& ctx, const std::exception& exc);
 
 protected:
     void Send(TActorId dst, THolder<IEventBase> message, ui32 flags = 0, ui64 cookie = 0);

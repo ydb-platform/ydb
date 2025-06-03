@@ -433,8 +433,10 @@ bool TSchemeShard::TIndexBuilder::TTxBase::Execute(TTransactionContext& txc, con
     try {
         executeResult = DoExecute(txc, ctx);
     } catch (const std::exception& exc) {
-        OnUnhandledExceptionSafe(txc, ctx, exc);
-        return true;
+        if (OnUnhandledExceptionSafe(txc, ctx, exc)) {
+            return true;
+        }
+        throw; // fail process, a really bad thing has happened
     }
 
     if (!executeResult) {
@@ -445,7 +447,7 @@ bool TSchemeShard::TIndexBuilder::TTxBase::Execute(TTransactionContext& txc, con
     return true;
 }
 
-void TSchemeShard::TIndexBuilder::TTxBase::OnUnhandledExceptionSafe(TTransactionContext& txc, const TActorContext& ctx, const std::exception& originalExc) {
+bool TSchemeShard::TIndexBuilder::TTxBase::OnUnhandledExceptionSafe(TTransactionContext& txc, const TActorContext& ctx, const std::exception& originalExc) {
     try {
         const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(BuildId);
         TIndexBuildInfo* buildInfo = buildInfoPtr
@@ -459,10 +461,13 @@ void TSchemeShard::TIndexBuilder::TTxBase::OnUnhandledExceptionSafe(TTransaction
             << ", TIndexBuildInfo: " << (buildInfo ? TStringBuilder() << (*buildInfo) : TString("<no build info>")));
 
         OnUnhandledException(txc, ctx, buildInfo, originalExc);
+
+        return true;
     } catch (const std::exception& handleExc) {
         LOG_E("OnUnhandledException throws unhandled exception " 
             << TypeName(handleExc) << ": " << handleExc.what() << Endl
             << TBackTrace::FromCurrentException().PrintToString());
+        return false;
     }
 }
 

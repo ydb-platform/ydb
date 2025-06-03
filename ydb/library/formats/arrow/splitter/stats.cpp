@@ -45,7 +45,7 @@ std::vector<i64> TSimpleSerializationStat::SplitRecords(
 }
 
 std::vector<i64> TBatchSerializationStat::SplitRecordsForBlobSize(const i64 recordsCount, const ui64 blobSize) const {
-    if (!SerializedBytes) {
+    if (!SerializedBytes || blobSize < GetSerializedBytesPerRecord()) {
         return { recordsCount };
     }
     const ui32 recordsCountPerBlob = blobSize / GetSerializedBytesPerRecord();

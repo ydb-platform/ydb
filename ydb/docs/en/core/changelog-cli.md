@@ -2,7 +2,7 @@
 
 ## Version 2.22.0
 
-Released on June 3, 2025. To update to version **2.22.0**, select the [Downloads](downloads/index.md#ydb-cli) section.
+Released on June 4, 2025. To update to version **2.22.0**, select the [Downloads](downloads/index.md#ydb-cli) section.
 
 ### Features
 

@@ -252,7 +252,7 @@ namespace NKikimr::NStorage {
 
         // issue initial report to whiteboard before creating actor to avoid races
         Send(WhiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate(vdiskId, groupInfo->GetStoragePoolName(),
-            vslotId.PDiskId, vslotId.VDiskSlotId, pdiskGuid, kind, donorMode, whiteboardInstanceGuid, std::move(donors)));
+            vslotId.PDiskId, vslotId.VDiskSlotId, pdiskGuid, kind, donorMode, whiteboardInstanceGuid, std::move(donors), vdiskConfig->GroupSizeInUnits));
         vdisk.WhiteboardVDiskId.emplace(vdiskId);
         vdisk.WhiteboardInstanceGuid = whiteboardInstanceGuid;
 

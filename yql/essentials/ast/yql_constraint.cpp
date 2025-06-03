@@ -986,6 +986,7 @@ TUniqueConstraintNodeBase<Distinct>::DedupSets(TContentType&& sets) {
                 if (ot->size() < it->size() && std::all_of(ot->cbegin(), ot->cend(), [it](const TConstraintWithFieldsNode::TSetType& set) { return it->contains(set); })) {
                     it = sets.erase(it);
                     found = true;
+                    break;
                 } else
                     ++it;
             }

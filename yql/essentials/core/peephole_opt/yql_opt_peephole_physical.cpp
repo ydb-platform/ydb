@@ -2839,7 +2839,7 @@ TExprNode::TPtr ExpandPruneKeys(const TExprNode::TPtr& input, TExprContext& ctx,
 
     YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << input->Content();
     if (type->GetKind() == ETypeAnnotationKind::List) {
-        return ctx.Builder(input->Pos())
+        return KeepUniqueDistinct(ctx.Builder(input->Pos())
             .Callable("CombineByKey")
                 .Add(0, input->HeadPtr())
                 .Lambda(1) // preMap
@@ -2853,7 +2853,7 @@ TExprNode::TPtr ExpandPruneKeys(const TExprNode::TPtr& input, TExprContext& ctx,
                 .Add(4, updateHandler)
                 .Add(5, finishHandler)
             .Seal()
-            .Build();
+            .Build(), *input, ctx);
     } else {
         // Slight copy of GetDictionaryKeyTypes to check if keyExtractorLambda result type is complicated
         // mkql CombineCore supports only simple types; for others we should add pickling
@@ -2888,7 +2888,7 @@ TExprNode::TPtr ExpandPruneKeys(const TExprNode::TPtr& input, TExprContext& ctx,
             .Build();
         }
 
-        return ctx.Builder(input->Pos())
+        return KeepUniqueDistinct(ctx.Builder(input->Pos())
             .Callable("CombineCore")
                 .Add(0, input->HeadPtr())
                 .Add(1, keyExtractorLambda)
@@ -2897,7 +2897,7 @@ TExprNode::TPtr ExpandPruneKeys(const TExprNode::TPtr& input, TExprContext& ctx,
                 .Add(4, finishHandler)
                 .Atom(5, ToString(typesCtx.PruneKeysMemLimit))
             .Seal()
-            .Build();
+            .Build(), *input, ctx);
     }
 }
 

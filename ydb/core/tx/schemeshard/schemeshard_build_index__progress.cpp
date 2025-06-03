@@ -808,6 +808,10 @@ private:
         }
     }
 
+    bool NoShardsAdded(TIndexBuildInfo& buildInfo) {
+        return buildInfo.DoneShards.empty() && buildInfo.InProgressShards.empty() && buildInfo.ToUploadShards.empty();
+    }
+
     void AddAllShards(TIndexBuildInfo& buildInfo) {
         ToTabletSend.clear();
         Self->IndexBuildPipes.CloseAll(BuildId, Self->ActorContext());
@@ -817,10 +821,37 @@ private:
         }
     }
 
+    void AddGlobalShardsForCurrentParent(TIndexBuildInfo& buildInfo) {
+        Y_ENSURE(NoShardsAdded(buildInfo));
+        if (buildInfo.KMeans.Parent == 0) {
+            AddAllShards(buildInfo);
+            return;
+        }
+        auto it = buildInfo.Cluster2Shards.lower_bound(buildInfo.KMeans.Parent);
+        Y_ENSURE(it != buildInfo.Cluster2Shards.end());
+        if (it->second.Shards.size() > 1) {
+            for (const auto& idx : it->second.Shards) {
+                const auto& status = buildInfo.Shards.at(idx);
+                AddShard(buildInfo, idx, status);
+            }
+        }
+    }
+
+    void AddLocalClusters(TIndexBuildInfo& buildInfo) {
+        Y_ENSURE(NoShardsAdded(buildInfo));
+        for (const auto& [to, state] : buildInfo.Cluster2Shards) {
+            if (state.Shards.size() == 1) {
+                const auto* status = buildInfo.Shards.FindPtr(state.Shards[0]);
+                Y_ENSURE(status);
+                AddShard(buildInfo, state.Shards[0], *status);
+            }
+        }
+    }
+
     bool FillSecondaryIndex(TIndexBuildInfo& buildInfo) {
         LOG_D("FillSecondaryIndex Start");
         
-        if (buildInfo.DoneShards.empty() && buildInfo.ToUploadShards.empty() && buildInfo.InProgressShards.empty()) {
+        if (NoShardsAdded(buildInfo)) {
             AddAllShards(buildInfo);
         }
         auto done = SendToShards(buildInfo, [&](TShardIdx shardIdx) { SendBuildSecondaryIndexRequest(shardIdx, buildInfo); }) &&
@@ -834,7 +865,7 @@ private:
     }
 
     bool FillPrefixKMeans(TIndexBuildInfo& buildInfo) {
-        if (buildInfo.DoneShards.empty() && buildInfo.ToUploadShards.empty() && buildInfo.InProgressShards.empty()) {
+        if (NoShardsAdded(buildInfo)) {
             AddAllShards(buildInfo);
         }
         return SendToShards(buildInfo, [&](TShardIdx shardIdx) { SendPrefixKMeansRequest(shardIdx, buildInfo); }) &&
@@ -842,48 +873,11 @@ private:
     }
 
     bool FillLocalKMeans(TIndexBuildInfo& buildInfo) {
-        if (buildInfo.DoneShards.empty() && buildInfo.ToUploadShards.empty() && buildInfo.InProgressShards.empty()) {
+        if (NoShardsAdded(buildInfo)) {
             AddAllShards(buildInfo);
         }
         return SendToShards(buildInfo, [&](TShardIdx shardIdx) { SendKMeansLocalRequest(shardIdx, buildInfo); }) &&
                buildInfo.DoneShards.size() == buildInfo.Shards.size();
-    }
-
-    bool InitSingleKMeans(TIndexBuildInfo& buildInfo) {
-        if (!buildInfo.DoneShards.empty() || !buildInfo.InProgressShards.empty() || !buildInfo.ToUploadShards.empty()) {
-            return false;
-        }
-        if (buildInfo.KMeans.Parent == 0) {
-            AddAllShards(buildInfo);
-        } else {
-            auto it = buildInfo.Cluster2Shards.lower_bound(buildInfo.KMeans.Parent);
-            Y_ENSURE(it != buildInfo.Cluster2Shards.end());
-            if (it->second.Local == InvalidShardIdx) {
-                for (const auto& idx : it->second.Global) {
-                    const auto& status = buildInfo.Shards.at(idx);
-                    AddShard(buildInfo, idx, status);
-                }
-            }
-        }
-        return true;
-    }
-
-    bool InitMultiKMeans(TIndexBuildInfo& buildInfo) {
-        if (buildInfo.Cluster2Shards.empty()) {
-            return false;
-        }
-        Y_ENSURE(buildInfo.KMeans.Parent != 0);
-        for (const auto& [to, state] : buildInfo.Cluster2Shards) {
-            if (const auto& [from, local, global] = state; local != InvalidShardIdx) {
-                if (const auto* status = buildInfo.Shards.FindPtr(local)) {
-                    AddShard(buildInfo, local, *status);
-                }
-            }
-        }
-        buildInfo.KMeans.State = TIndexBuildInfo::TKMeans::MultiLocal;
-        buildInfo.Cluster2Shards.clear();
-        Y_ENSURE(buildInfo.InProgressShards.empty());
-        return !buildInfo.ToUploadShards.empty();
     }
 
     bool SendKMeansSample(TIndexBuildInfo& buildInfo) {
@@ -991,8 +985,8 @@ private:
         if (buildInfo.KMeans.State == TIndexBuildInfo::TKMeans::Sample) {
             return FillVectorIndexSamples(txc, buildInfo);
         } else if (buildInfo.KMeans.State == TIndexBuildInfo::TKMeans::Reshuffle) {
-            if (InitSingleKMeans(buildInfo)) {
-                LOG_D("FillVectorIndex Reshuffle " << buildInfo.DebugString());
+            if (NoShardsAdded(buildInfo)) {
+                AddGlobalShardsForCurrentParent(buildInfo);
             }
             if (!SendKMeansReshuffle(buildInfo)) {
                 return false;
@@ -1014,17 +1008,15 @@ private:
 
     bool FillVectorIndexSamples(TTransactionContext& txc, TIndexBuildInfo& buildInfo) {
         if (buildInfo.Sample.State == TIndexBuildInfo::TSample::EState::Collect) {
-            if (InitSingleKMeans(buildInfo)) {
+            if (NoShardsAdded(buildInfo)) {
+                AddGlobalShardsForCurrentParent(buildInfo);
                 if (!buildInfo.DoneShards.size() && !buildInfo.ToUploadShards.size()) {
-                    LOG_D("FillVectorIndex SingleKMeans " << buildInfo.DebugString());
-                    // InitSingleKMeans didn't add ToUploadShards - parent only has 1 shard,
+                    // No "global" shards to handle - parent only has 1 shard,
                     // it will be handled during the MultiLocal phase
                     return FillVectorIndexNextParent(txc, buildInfo);
                 }
                 // Otherwise, we collect samples
                 LOG_D("FillVectorIndex Samples " << buildInfo.DebugString());
-            } else {
-                // false means that shards are already added to ToUploadShards
             }
             if (!SendKMeansSample(buildInfo)) {
                 return false;
@@ -1060,11 +1052,16 @@ private:
             return false;
         }
 
-        if (InitMultiKMeans(buildInfo)) {
-            LOG_D("FillVectorIndex MultiKMeans " << buildInfo.DebugString());
-            PersistKMeansState(txc, buildInfo);
-            Progress(BuildId);
-            return false;
+        if (!buildInfo.Cluster2Shards.empty()) {
+            AddLocalClusters(buildInfo);
+            buildInfo.Cluster2Shards.clear();
+            if (!buildInfo.ToUploadShards.empty()) {
+                LOG_D("FillVectorIndex MultiKMeans " << buildInfo.DebugString());
+                buildInfo.KMeans.State = TIndexBuildInfo::TKMeans::MultiLocal;
+                PersistKMeansState(txc, buildInfo);
+                Progress(BuildId);
+                return false;
+            }
         }
 
         if (buildInfo.KMeans.NextLevel()) {

@@ -3509,10 +3509,9 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
 
     struct TClusterShards {
         NTableIndex::TClusterId From = std::numeric_limits<NTableIndex::TClusterId>::max();
-        TShardIdx Local = InvalidShardIdx;
-        std::vector<TShardIdx> Global;
+        std::vector<TShardIdx> Shards;
     };
-    TMap<NTableIndex::TClusterId, TClusterShards> Cluster2Shards;
+    TMap<NTableIndex::TClusterId, TClusterShards> Cluster2Shards; // To => { From, Shards }
 
     void AddParent(const TSerializedTableRange& range, TShardIdx shard);
 

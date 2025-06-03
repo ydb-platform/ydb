@@ -43,9 +43,9 @@ public:
         MaybeSendPartitionEnd(client);
     }
 
-    inline void Clear() {
-        PendingCommittedOffset = 0;
-        CommittedOffset = 0;
+    inline void Clear(ui64 committedOffset) {
+        PendingCommittedOffset = committedOffset;
+        CommittedOffset = committedOffset;
         EndPartitionSessionEvent.Clear();
     }
 

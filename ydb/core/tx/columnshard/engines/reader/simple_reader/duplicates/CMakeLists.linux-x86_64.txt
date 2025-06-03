@@ -25,5 +25,7 @@ target_link_libraries(reader-simple_reader-duplicates PUBLIC
 target_sources(reader-simple_reader-duplicates PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/simple_reader/duplicates/manager.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/simple_reader/duplicates/events.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/simple_reader/duplicates/merge.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/simple_reader/duplicates/common.cpp
 )
 

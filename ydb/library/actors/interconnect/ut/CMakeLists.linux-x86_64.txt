@@ -50,6 +50,7 @@ target_link_options(ydb-library-actors-interconnect-ut PRIVATE
 
 target_sources(ydb-library-actors-interconnect-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/library/actors/interconnect/ut/channel_scheduler_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/interconnect/ut/connection_checker_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/actors/interconnect/ut/event_holder_pool_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/actors/interconnect/ut/interconnect_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/actors/interconnect/ut/large.cpp

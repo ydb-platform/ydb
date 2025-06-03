@@ -1,6 +1,7 @@
 #include "impl.h"
 #include "config.h"
 #include "group_mapper.h"
+#include "group_mapper_helper.h"
 #include "group_geometry_info.h"
 #include "layout_helpers.h"
 
@@ -477,95 +478,13 @@ namespace NKikimr {
             }
 
             void PopulateGroupMapper() {
-                const TBoxId boxId = std::get<0>(StoragePoolId);
-
-                State.PDisks.ForEach([&](const TPDiskId& id, const TPDiskInfo& info) {
-                    if (info.BoxId != boxId) {
-                        return; // ignore disks not from desired box
-                    }
-
-                    if (State.PDisksToRemove.count(id)) {
-                        return; // this PDisk is scheduled for removal
-                    }
-
-                    for (const auto& filter : StoragePool.PDiskFilters) {
-                        if (filter.MatchPDisk(info)) {
-                            const bool inserted = RegisterPDisk(id, info, true);
-                            Y_ABORT_UNLESS(inserted);
-                            break;
-                        }
-                    }
-                });
+                ::NKikimr::NBsController::PopulateGroupMapper(*Mapper, State.Self, State.PDisks, State.Self.HostRecords, State.PDisksToRemove, StoragePoolId, StoragePool, IgnoreVSlotQuotaCheck, PDiskSpaceMarginPromille,
+                    SettleOnlyOnOperationalDisks, IsSelfHealReasonDecommit);
             }
 
             bool RegisterPDisk(TPDiskId id, const TPDiskInfo& info, bool usable, TString whyUnusable = {}) {
-                // calculate number of used slots on this PDisk, also counting the static ones
-                ui32 numSlots = info.NumActiveSlots + info.StaticSlotUsage;
-
-                // create a set of groups residing on this PDisk
-                TStackVec<ui32, 16> groups;
-                for (const auto& [vslotId, vslot] : info.VSlotsOnPDisk) {
-                    if (!vslot->IsBeingDeleted()) {
-                        groups.push_back(vslot->GroupId.GetRawId());
-                    }
-                }
-
-                // calculate vdisk space quota (or amount of available space when no enforcement is enabled)
-                i64 availableSpace = Max<i64>();
-                if (usable && !IgnoreVSlotQuotaCheck) {
-                    if (info.SlotSpaceEnforced(State.Self)) {
-                        availableSpace = info.Metrics.GetEnforcedDynamicSlotSize() * (1000 - PDiskSpaceMarginPromille) / 1000;
-                    } else {
-                        // here we assume that no space enforcement takes place and we have to calculate available space
-                        // for this disk; we take it as available space and keep in mind that PDisk must have at least
-                        // PDiskSpaceMarginPromille space remaining
-                        availableSpace = info.Metrics.GetAvailableSize() - info.Metrics.GetTotalSize() * PDiskSpaceMarginPromille / 1000;
-
-                        // also we have to find replicating VSlots on this PDisk and assume they consume up to
-                        // max(vslotSize for every slot in group), not their actual AllocatedSize
-                        for (const auto& [id, slot] : info.VSlotsOnPDisk) {
-                            if (slot->Group && slot->GetStatus() != NKikimrBlobStorage::EVDiskStatus::READY) {
-                                ui64 maxGroupSlotSize = 0;
-                                for (const TVSlotInfo *peer : slot->Group->VDisksInGroup) {
-                                    maxGroupSlotSize = Max(maxGroupSlotSize, peer->Metrics.GetAllocatedSize());
-                                }
-                                // return actually used space to available pool
-                                availableSpace += slot->Metrics.GetAllocatedSize();
-                                // and consume expected slot size after replication finishes
-                                availableSpace -= maxGroupSlotSize;
-                            }
-                        }
-                    }
-                }
-
-                if (!info.AcceptsNewSlots()) {
-                    usable = false;
-                    whyUnusable.append('S');
-                }
-
-                if (SettleOnlyOnOperationalDisks && !info.Operational) {
-                    usable = false;
-                    whyUnusable.append('O');
-                }
-
-                if (!info.UsableInTermsOfDecommission(IsSelfHealReasonDecommit)) {
-                    usable = false;
-                    whyUnusable.append('D');
-                }
-
-                // register PDisk in the mapper
-                return Mapper->RegisterPDisk({
-                    .PDiskId = id,
-                    .Location = State.HostRecords->GetLocation(id.NodeId),
-                    .Usable = usable,
-                    .NumSlots = numSlots,
-                    .MaxSlots = info.ExpectedSlotCount,
-                    .Groups = std::move(groups),
-                    .SpaceAvailable = availableSpace,
-                    .Operational = info.Operational,
-                    .Decommitted = info.Decommitted(),
-                    .WhyUnusable = std::move(whyUnusable),
-                });
+                return ::NKikimr::NBsController::RegisterPDisk(*Mapper, State.Self, State.Self.HostRecords, id, info, usable, IgnoreVSlotQuotaCheck,
+                    PDiskSpaceMarginPromille, SettleOnlyOnOperationalDisks, IsSelfHealReasonDecommit, whyUnusable);
             }
 
             std::map<TVDiskIdShort, TVSlotInfo*> CreateVSlotsForGroup(TGroupInfo *groupInfo,

@@ -135,11 +135,21 @@ public:
 
     std::vector<TGeneralSerializedSlice> BuildSlices(const std::shared_ptr<NColumnShard::TSplitterCounters>& counters) const {
         std::vector<TGeneralSerializedSlice> result;
+        bool needWarnLog = false;
         for (auto&& i : Portions) {
             result.emplace_back(i.BuildSlice(ResultFiltered, Stats, counters));
-            if (Portions.size() > 1) {
-                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_COMPACTION)("p_size", result.back().GetPackedSize())(
-                    "s_type", SplittingType ? (ui32)*SplittingType : 999999)("settings", Settings.DebugString());
+            if (Portions.size() > 1 && (result.back().GetPackedSize() * 1.5 < Settings.GetMaxPortionSize() ||
+                                           result.back().GetPackedSize() * 0.5 > Settings.GetMaxPortionSize())) {
+                needWarnLog = true;
+            }
+        }
+        if (needWarnLog) {
+            auto batchStats = Stats->GetStatsForColumns(ResultFiltered->GetColumnIds(), false);
+            for (auto&& i : result) {
+                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_COMPACTION)("p_size", i.GetPackedSize())(
+                    "expected_size", batchStats ? batchStats->PredictPackedSize(i.GetRecordsCount()) : 0)(
+                    "s_type", SplittingType ? (ui32)*SplittingType : 999999)("settings", Settings.DebugString())("count", Portions.size())(
+                    "r_count", i.GetRecordsCount())("b_stats", batchStats ? batchStats->DebugString() : TString("NO"));
             }
         }
         return result;

@@ -92,6 +92,10 @@ public:
         RawBytesPerRecord = 1.0 * rawBytes / recordsCount;
     }
 
+    ui64 PredictPackedSize(const ui32 recordsCount) const {
+        return SerializedBytesPerRecord * recordsCount;
+    }
+
     TString DebugString() const {
         return TStringBuilder() << "{sbpr=" << SerializedBytesPerRecord << ";rbpr=" << RawBytesPerRecord << "}";
     }

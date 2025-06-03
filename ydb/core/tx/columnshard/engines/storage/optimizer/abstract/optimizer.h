@@ -80,27 +80,6 @@ public:
     }
 };
 
-class TPortionInfoForCompaction {
-private:
-    YDB_READONLY(ui64, TotalBlobBytes, 0);
-    const TSimpleRow FirstPK;
-    const TSimpleRow LastPK;
-
-public:
-    TPortionInfoForCompaction(const ui64 totalBlobBytes, const TSimpleRow& firstPK, const TSimpleRow& lastPK)
-        : TotalBlobBytes(totalBlobBytes)
-        , FirstPK(firstPK)
-        , LastPK(lastPK) {
-    }
-
-    const TSimpleRow& GetFirstPK() const {
-        return FirstPK;
-    }
-    const TSimpleRow& GetLastPK() const {
-        return LastPK;
-    }
-};
-
 class IOptimizerPlanner {
 private:
     const TInternalPathId PathId;

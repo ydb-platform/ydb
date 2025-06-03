@@ -1578,7 +1578,8 @@ void TPDisk::WhiteboardReport(TWhiteboardReport &whiteboardReport) {
         pdiskState.SetSystemSize(Format.ChunkSize * (Keeper.GetOwnerHardLimit(OwnerSystemLog) + Keeper.GetOwnerHardLimit(OwnerSystemReserve)));
         pdiskState.SetLogUsedSize(Format.ChunkSize * (Keeper.GetOwnerHardLimit(OwnerCommonStaticLog) - Keeper.GetOwnerFree(OwnerCommonStaticLog)));
         pdiskState.SetLogTotalSize(Format.ChunkSize * Keeper.GetOwnerHardLimit(OwnerCommonStaticLog));
-        pdiskState.SetNumActiveSlots(TotalOwners);
+        pdiskState.SetNumActiveSlots(GetNumActiveSlots());
+        pdiskState.SetSlotSizeInUnits(Cfg->SlotSizeInUnits);
         if (ExpectedSlotCount) {
             pdiskState.SetExpectedSlotCount(ExpectedSlotCount);
         }
@@ -1599,6 +1600,7 @@ void TPDisk::WhiteboardReport(TWhiteboardReport &whiteboardReport) {
             auto& vdiskInfo = std::get<1>(reportResult->VDiskStateVect.back());
             vdiskInfo.SetAvailableSize(ownerFree);
             vdiskInfo.SetAllocatedSize(ownerAllocated);
+            vdiskInfo.SetGroupSizeInUnits(data.GroupSizeInUnits);
 
             NKikimrBlobStorage::TVDiskMetrics* vdiskMetrics = reportResult->DiskMetrics->Record.AddVDisksMetrics();
             VDiskIDFromVDiskID(vdiskId, vdiskMetrics->MutableVDiskId());

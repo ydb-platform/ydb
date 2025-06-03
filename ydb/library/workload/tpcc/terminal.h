@@ -144,7 +144,7 @@ public:
         ITaskQueue& taskQueue,
         std::shared_ptr<NQuery::TQueryClient>& client,
         const TString& path,
-        bool noSleep,
+        bool noDelays,
         int simulateTransactionMs,
         int simulateTransactionSelect1Count,
         std::stop_token stopToken,
@@ -172,7 +172,7 @@ private:
 private:
     ITaskQueue& TaskQueue;
     TTransactionContext Context;
-    bool NoSleep;
+    bool NoDelays;
     std::stop_token StopToken;
     std::atomic<bool>& StopWarmup;
     std::shared_ptr<TTerminalStats> Stats;

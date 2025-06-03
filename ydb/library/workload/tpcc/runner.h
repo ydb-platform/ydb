@@ -10,8 +10,8 @@ struct TRunConfig {
     TRunConfig() = default;
 
     int WarehouseCount = 0;
-    int WarmupSeconds = 0;
-    int RunSeconds = 0;
+    int WarmupMinutes = 0;
+    int RunMinutes = 0;
 
     int MaxInflight = 0;
 
@@ -22,7 +22,7 @@ struct TRunConfig {
     int ThreadCount = 0;
     int DriverCount = 0;
     ELogPriority LogPriority = ELogPriority::TLOG_INFO;
-    bool NoSleep = false;
+    bool NoDelays = false;
     bool Developer = false;
 
     // instead of actual transaction just async sleep and return SUCCESS

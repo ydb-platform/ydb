@@ -64,7 +64,7 @@ TTerminal::TTerminal(size_t terminalID,
                      ITaskQueue& taskQueue,
                      std::shared_ptr<NQuery::TQueryClient>& client,
                      const TString& path,
-                     bool noSleep,
+                     bool noDelays,
                      int simulateTransactionMs,
                      int simulateTransactionSelect1Count,
                      std::stop_token stopToken,
@@ -73,7 +73,7 @@ TTerminal::TTerminal(size_t terminalID,
                      std::shared_ptr<TLog>& log)
     : TaskQueue(taskQueue)
     , Context(terminalID, warehouseID, warehouseCount, TaskQueue, simulateTransactionMs, simulateTransactionSelect1Count, client, path, log)
-    , NoSleep(noSleep)
+    , NoDelays(noDelays)
     , StopToken(stopToken)
     , StopWarmup(stopWarmup)
     , Stats(stats)
@@ -103,7 +103,7 @@ TTerminalTask TTerminal::Run() {
         auto& transaction = Transactions[txIndex];
 
         try {
-            if (!NoSleep) {
+            if (!NoDelays) {
                 LOG_T("Terminal " << Context.TerminalID << " keying time for " << transaction.Name << ": "
                     << transaction.KeyingTime.count() << "s");
                 co_await TSuspend(TaskQueue, Context.TerminalID, transaction.KeyingTime);
@@ -157,7 +157,7 @@ TTerminalTask TTerminal::Run() {
                 }
             }
             TaskQueue.DecInflight();
-            if (!NoSleep) {
+            if (!NoDelays) {
                 LOG_T("Terminal " << Context.TerminalID << " is going to sleep for "
                     << transaction.ThinkTime.count() << "s (think time)");
                 co_await TSuspend(TaskQueue, Context.TerminalID, transaction.ThinkTime);

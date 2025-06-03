@@ -36,3 +36,9 @@ PEERDIR(
 )
 
 END()
+
+RECURSE(
+    export_s3
+    stress
+    udf
+)

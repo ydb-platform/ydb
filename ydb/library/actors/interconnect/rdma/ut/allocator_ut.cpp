@@ -90,4 +90,18 @@ Y_UNIT_TEST_SUITE(Allocator) {
         }
         Cerr << "Average time per allocation: " << s / NUM_THREADS << " ms" << Endl;
     }
+
+    Y_UNIT_TEST(MemRegRcBuf) {
+        auto memPool = NInterconnect::NRdma::CreateDummyMemPool();
+        TRcBuf data = memPool->AllocRcBuf(BUF_SIZE);
+        UNIT_ASSERT_C(data.GetData(), "invalid data");
+        UNIT_ASSERT_C(data.GetSize() == BUF_SIZE, "invalid size");
+        data.GetDataMut()[0] = 'a';
+        UNIT_ASSERT_C(data.GetData()[0] == 'a', "data mismatch");
+        TIntrusivePtr<IContiguousChunk> x = data.ExtractUnderlyingContainerOrCopy<IContiguousChunk::TPtr>();
+        UNIT_ASSERT_C(x != nullptr, "unable to extract underlying container");
+        UNIT_ASSERT_C(x->GetData().data() == data.GetData(), "data mismatch");
+        UNIT_ASSERT_C(x->GetData().data()[0] == 'a', "data mismatch");
+        UNIT_ASSERT_C(x->GetInnerType() == IContiguousChunk::EInnerType::RDMA_MEM_REG, "invalid inner type");
+    }
 }

@@ -86,6 +86,19 @@ namespace NInterconnect::NRdma {
         return mr->rkey;
     }
 
+    TContiguousSpan TMemRegion::GetData() const {
+        return TContiguousSpan(static_cast<const char*>(GetAddr()), GetSize());
+    }
+    TMutableContiguousSpan TMemRegion::GetDataMut() {
+        return TMutableContiguousSpan(static_cast<char*>(GetAddr()), GetSize());
+    }
+    size_t TMemRegion::GetOccupiedMemorySize() const {
+        return GetSize();
+    }
+    IContiguousChunk::EInnerType TMemRegion::GetInnerType() const noexcept {
+        return EInnerType::RDMA_MEM_REG;
+    }
+
     void* allocateMemory(size_t size, size_t alignment) {
         if (size % alignment != 0) {
             return nullptr;
@@ -110,6 +123,15 @@ namespace NInterconnect::NRdma {
         return res;
     }
 
+    TMemRegionPtr IMemPool::Alloc(int size) {
+        TMemRegion* region = AllocImpl(size);
+        return TMemRegionPtr(region);
+    }
+
+    TRcBuf IMemPool::AllocRcBuf(int size) {
+        return TRcBuf(IContiguousChunk::TPtr(AllocImpl(size)));
+    }
+
     class TMemPoolBase: public IMemPool, public std::enable_shared_from_this<TMemPoolBase> {
         static constexpr size_t ALIGNMENT = 4096;
     public:
@@ -118,14 +140,14 @@ namespace NInterconnect::NRdma {
         {
         }
     protected:
-        TMemRegionPtr AllocNewPage(int size) {
+        TMemRegion* AllocNewPage(int size) {
             void* ptr = allocateMemory(size, ALIGNMENT);
             if (!ptr) {
                 return nullptr;
             }
             auto mrs = registerMemory(ptr, size, Ctxs);
             TChunkPtr chunk = std::make_shared<TChunk>(std::move(mrs), shared_from_this());
-            return std::make_unique<TMemRegion>(chunk, 0, size);
+            return new TMemRegion(chunk, 0, size);
         }
 
         const NInterconnect::NRdma::NLinkMgr::TCtxsMap Ctxs;
@@ -136,7 +158,7 @@ namespace NInterconnect::NRdma {
     public:
         using TMemPoolBase::TMemPoolBase;
 
-        TMemRegionPtr Alloc(int size) override {
+        TMemRegion* AllocImpl(int size) override {
             return AllocNewPage(size);
         }
 

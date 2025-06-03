@@ -36,6 +36,5 @@ target_link_libraries(yt-library-signals PUBLIC
 
 target_sources(yt-library-signals PRIVATE
   ${PROJECT_SOURCE_DIR}/yt/yt/library/signals/signal_registry.cpp
-  ${PROJECT_SOURCE_DIR}/yt/yt/library/signals/signal_blocking.cpp
 )
 

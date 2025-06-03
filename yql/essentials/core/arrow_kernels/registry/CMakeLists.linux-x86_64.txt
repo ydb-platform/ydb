@@ -25,6 +25,7 @@ target_link_libraries(core-arrow_kernels-registry PUBLIC
   yutil
   libs-apache-arrow
   essentials-minikql-computation
+  essentials-public-langver
 )
 
 target_sources(core-arrow_kernels-registry PRIVATE

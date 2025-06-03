@@ -34,6 +34,7 @@ target_link_libraries(core-arrow_kernels-request PUBLIC
   providers-common-mkql
   yql-essentials-core
   yql-essentials-sql
+  essentials-public-langver
   tools-enum_parser-enum_serialization_runtime
 )
 

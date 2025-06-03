@@ -30,6 +30,7 @@ target_link_libraries(name-service-ranking PUBLIC
 )
 
 target_sources(name-service-ranking PRIVATE
+  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/name/service/ranking/dummy.cpp
   ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/name/service/ranking/frequency.cpp
   ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/name/service/ranking/ranking.cpp
 )

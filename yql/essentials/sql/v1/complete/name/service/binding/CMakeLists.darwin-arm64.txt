@@ -12,24 +12,17 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(complete-analysis-global)
+add_library(name-service-binding)
 
 
-target_link_libraries(complete-analysis-global PUBLIC
+target_link_libraries(name-service-binding PUBLIC
   contrib-libs-cxxsupp
   yutil
-  v1-complete-core
-  v1-complete-syntax
-  antlr_ast-gen-v1_antlr4
-  antlr_ast-gen-v1_ansi_antlr4
+  complete-name-service
+  name-service-static
 )
 
-target_sources(complete-analysis-global PRIVATE
-  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/analysis/global/evaluate.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/analysis/global/global.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/analysis/global/named_node.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/analysis/global/narrowing_visitor.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/analysis/global/parse_tree.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/analysis/global/use.cpp
+target_sources(name-service-binding PRIVATE
+  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/name/service/binding/name_service.cpp
 )
 

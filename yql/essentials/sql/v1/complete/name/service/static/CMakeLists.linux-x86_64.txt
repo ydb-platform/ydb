@@ -34,6 +34,7 @@ target_link_libraries(name-service-static PUBLIC
 )
 
 target_sources(name-service-static PRIVATE
+  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/name/service/static/name_index.cpp
   ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/name/service/static/name_service.cpp
   ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/name/service/static/name_set_json.cpp
   ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/name/service/static/name_set.cpp

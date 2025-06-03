@@ -353,11 +353,11 @@ protected:
 public:
     virtual ui64 GetExpectedPortionSize() const = 0;
 
-    virtual bool IsAppropriatePortionToMove(const TPortionAccessorConstructor& /*info*/) const {
+    virtual bool IsAppropriatePortionToMove(const TPortionInfoForCompaction& /*info*/) const {
         return false;
     }
 
-    virtual bool IsAppropriatePortionToStore(const TPortionAccessorConstructor& /*info*/) const {
+    virtual bool IsAppropriatePortionToStore(const TPortionInfoForCompaction& /*info*/) const {
         return false;
     }
 

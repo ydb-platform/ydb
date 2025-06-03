@@ -1,13 +1,13 @@
 #pragma once
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/formats/arrow/reader/position.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 
 #include <ydb/library/conclusion/result.h>
 #include <ydb/services/bg_tasks/abstract/interface.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
 #include <library/cpp/object_factory/object_factory.h>
-#include <ydb/core/tx/columnshard/common/path_id.h>
 
 namespace NKikimr::NOlap {
 class TColumnEngineChanges;
@@ -80,6 +80,27 @@ public:
     }
 };
 
+class TPortionInfoForCompaction {
+private:
+    YDB_READONLY(ui64, TotalBlobBytes, 0);
+    const TSimpleRow FirstPK;
+    const TSimpleRow LastPK;
+
+public:
+    TPortionInfoForCompaction(const ui64 totalBlobBytes, const TSimpleRow& firstPK, const TSimpleRow& lastPK)
+        : TotalBlobBytes(totalBlobBytes)
+        , FirstPK(firstPK)
+        , LastPK(lastPK) {
+    }
+
+    const TSimpleRow& GetFirstPK() const {
+        return FirstPK;
+    }
+    const TSimpleRow& GetLastPK() const {
+        return LastPK;
+    }
+};
+
 class IOptimizerPlanner {
 private:
     const TInternalPathId PathId;
@@ -88,9 +109,10 @@ private:
     virtual bool DoIsOverloaded() const {
         return false;
     }
+
 protected:
-    virtual void DoModifyPortions(const THashMap<ui64, std::shared_ptr<TPortionInfo>>& add,
-        const THashMap<ui64, std::shared_ptr<TPortionInfo>>& remove) = 0;
+    virtual void DoModifyPortions(
+        const THashMap<ui64, std::shared_ptr<TPortionInfo>>& add, const THashMap<ui64, std::shared_ptr<TPortionInfo>>& remove) = 0;
     virtual std::shared_ptr<TColumnEngineChanges> DoGetOptimizationTask(
         std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const = 0;
     virtual TOptimizationPriority DoGetUsefulMetric() const = 0;
@@ -108,7 +130,7 @@ protected:
     }
 
 public:
-    virtual ui32 GetAppropriateLevel(const ui32 baseLevel, const TPortionAccessorConstructor& /*info*/) const {
+    virtual ui32 GetAppropriateLevel(const ui32 baseLevel, const TPortionInfoForCompaction& /*info*/) const {
         return baseLevel;
     }
 
@@ -159,8 +181,7 @@ public:
         return DoSerializeToJsonVisual();
     }
 
-    void ModifyPortions(const THashMap<ui64, std::shared_ptr<TPortionInfo>>& add,
-        const THashMap<ui64, std::shared_ptr<TPortionInfo>>& remove) {
+    void ModifyPortions(const THashMap<ui64, std::shared_ptr<TPortionInfo>>& add, const THashMap<ui64, std::shared_ptr<TPortionInfo>>& remove) {
         NActors::TLogContextGuard g(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("path_id", PathId));
         DoModifyPortions(add, remove);
     }
@@ -179,8 +200,8 @@ public:
 class IOptimizerPlannerConstructor {
 public:
     enum class EOptimizerStrategy {
-        Default, //use One Layer levels to avoid portion intersections
-        Logs, // use Zero Levels only for performance
+        Default,   //use One Layer levels to avoid portion intersections
+        Logs,   // use Zero Levels only for performance
         LogsInStore
     };
     class TBuildContext {
@@ -188,14 +209,15 @@ public:
         YDB_READONLY_DEF(TInternalPathId, PathId);
         YDB_READONLY_DEF(std::shared_ptr<IStoragesManager>, Storages);
         YDB_READONLY_DEF(std::shared_ptr<arrow::Schema>, PKSchema);
-        YDB_READONLY_DEF(EOptimizerStrategy, DefaultStrategy); 
+        YDB_READONLY_DEF(EOptimizerStrategy, DefaultStrategy);
 
     public:
-        TBuildContext(const TInternalPathId pathId, const std::shared_ptr<IStoragesManager>& storages, const std::shared_ptr<arrow::Schema>& pkSchema)
+        TBuildContext(
+            const TInternalPathId pathId, const std::shared_ptr<IStoragesManager>& storages, const std::shared_ptr<arrow::Schema>& pkSchema)
             : PathId(pathId)
             , Storages(storages)
             , PKSchema(pkSchema)
-            , DefaultStrategy(EOptimizerStrategy::Default) { //TODO configure me via DDL
+            , DefaultStrategy(EOptimizerStrategy::Default) {   //TODO configure me via DDL
         }
     };
 

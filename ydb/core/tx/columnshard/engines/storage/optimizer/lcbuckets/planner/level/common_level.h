@@ -75,15 +75,14 @@ private:
         return ((ui64)GetLevelId() << 48) + GetPortionsInfo().GetBlobBytes() - GetLevelBlobBytesLimit();
     }
 
-    virtual bool IsAppropriatePortionToStore(const TPortionAccessorConstructor& info) const override {
+    virtual bool IsAppropriatePortionToStore(const TPortionInfoForCompaction& info) const override {
         if (info.GetTotalBlobsSize() < GetExpectedPortionSize()) {
             return false;
         }
-        return !GetAffectedPortionBytes(info.GetPortionConstructor().GetMeta().GetFirstAndLastPK().GetFirst(),
-            info.GetPortionConstructor().GetMeta().GetFirstAndLastPK().GetLast());
+        return !GetAffectedPortionBytes(info.GetFirstPK(), info.GetLastPK());
     }
 
-    virtual bool IsAppropriatePortionToMove(const TPortionAccessorConstructor& /*info*/) const override {
+    virtual bool IsAppropriatePortionToMove(const TPortionInfoForCompaction& /*info*/) const override {
         return true;
     }
 
@@ -103,10 +102,6 @@ public:
         , StrictOneLayer(strictOneLayer)
         , SummaryPortionsInfo(summaryPortionsInfo)
     {
-    }
-
-    ui64 GetExpectedPortionSize() const {
-        return ExpectedPortionSize;
     }
 
     virtual bool IsLocked(const std::shared_ptr<NDataLocks::TManager>& locksManager) const override {

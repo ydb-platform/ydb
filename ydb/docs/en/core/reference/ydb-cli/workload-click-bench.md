@@ -45,7 +45,7 @@ See the description of the command to init the data load:
 | `--datetime`                                     | Use `Date`, `Datetime` and `Timestamp` type for time-related fields.      |`Date32`, `Datetime64` and `Timestamp64`|
 | `--partition-size`                               | Maximum partition size in megabytes (AUTO_PARTITIONING_PARTITION_SIZE_MB) for row tables. | 2000 |
 | `--clear`                                        | If the table at the specified path has already been created, it will be deleted. |                      |
-| `--dry-run`                                      | Do not realy perfom DDL queries but only print they |                      |
+| `--dry-run`                                      | Do not actually perform DDL queries but only print them |                      |
 
 ## Loading data into a table { #load }
 
@@ -65,7 +65,7 @@ For source files, you can use CSV and TSV files, as well as directories containi
 | `--input <path>` or `-i <path>` | Path to the source data files. Both unpacked and packed CSV and TSV files, as well as directories containing such files, are supported. Data can be downloaded from the official ClickBench website: [csv.gz](https://datasets.clickhouse.com/hits_compatible/hits.csv.gz), [tsv.gz](https://datasets.clickhouse.com/hits_compatible/hits.tsv.gz). To speed up the process, these files can be split into smaller parts, allowing parallel downloads. | |
 | `--state <path>`                | Path to the download state file. If the download is interrupted, it will resume from the same point when restarted.                                                                                                                                                                                                                                                                                                                                           | |
 | `--clear-state`                 | Relevant if the `--state` parameter is specified. Clears the state file and restarts the download from the beginning.                                                                                                                                                                                                                                                                                                                                          | |
-| `--dry-run`                     | Do not realy perfom import | |
+| `--dry-run`                     | Do not actually perform import | |
 
 {% include [load_options](./_includes/workload/load_options.md) %}
 

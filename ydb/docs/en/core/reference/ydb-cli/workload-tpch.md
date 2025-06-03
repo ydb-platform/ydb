@@ -58,7 +58,7 @@ See the command description:
 | `--proccess-index <value>` or `-i <value>`  | Data generation can be split into several processes, this parameter specifies the process number.                                                                  | 0             |
 | `--state <path>`                            | Path to the generation state file. If the generation was interrupted for some reason, the download will be continued from the same place when it is started again. |               |
 | `--clear-state`                             | Relevant if the `--state` parameter is specified. Clear the state file and start the download from the beginning.                                                  |               |
-| `--dry-run`                                 | Do not realy perfom import                                                                                                                                         |               |
+| `--dry-run`                                 | Do not actually perform import                                                                                                                                         |               |
 
 {% include [load_options](./_includes/workload/load_options.md) %}
 
@@ -87,7 +87,7 @@ See the command description:
 |------------------------|-----------------------------------------------------------------------------------------------------|---------------|
 | `--syntax <value>`     | Which query syntax option should be used, `yql` or `pg`.                                            | `yql`         |
 | `--flaot_mode <value>` | Float mode. Can be `float`, `decimal` or `decimal_ydb`. If set to `float` - float will be used, `decimal` means that decimal will be used with canonical size and `decimal_ydb` means that all floats will be converted to decimal(22,9) because YDB supports only this type. | `float`           |
-| `--scale <value>`      | Scale factor. See sepcivication of TPC-H.                                                           | 1             |
+| `--scale <value>`      | Scale factor. See specification of TPC-H.                                                           | 1             |
 
 ## Test data cleaning { #cleanup }
 

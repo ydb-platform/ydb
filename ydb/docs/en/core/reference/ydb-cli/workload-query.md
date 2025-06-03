@@ -64,7 +64,7 @@ See the description of the command to init the data load:
 | `--suite-path <path>`             | Path to suite direcory. See [description](./workload-query.md)                   |               |
 | `--query <query>` or `-q <query>` | DDL query to execute. Can be used multiple times.                                |               |
 | `--clear`                         | If the table at the specified path has already been created, it will be deleted. |               |
-| `--dry-run`                       | Do not realy perfom DDL queries but only print they                              |               |
+| `--dry-run`                       | Do not actually perform DDL queries but only print them                              |               |
 
 ## Loading data into a table { #load }
 
@@ -83,7 +83,7 @@ For source files, you can use CSV, TSV, PSV and parquet files. They can be eithe
 | `--suite-path <path>`           | Path to suite direcory. See [description](./workload-query.md) |               |
 | `--state <path>`                | Path to the download state file. If the download is interrupted, it will resume from the same point when restarted.                                                                                                                                                                                                                                                                                                                                           | |
 | `--clear-state`                 | Relevant if the `--state` parameter is specified. Clears the state file and restarts the download from the beginning.                                                                                                                                                                                                                                                                                                                                          | |
-| `--dry-run`                     | Do not realy perfom import | |
+| `--dry-run`                     | Do not actually perform import | |
 
 {% include [load_options](./_includes/workload/load_options.md) %}
 

@@ -2,7 +2,7 @@
 
 | Name                              | Description                                                                                                                                                                   | Default value                        |
 |------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|--------------------------------------|
-| `--dry-run`                              | Do not realy perfom queries but only print they                                                                                                                                      |                                     |
+| `--dry-run`                              | Do not actually execute the queries, just print them |                                     |
 | `--check-canonical` or `-c`              | Use special deterministic internal queries and compare the results against canonical ones.                                                                                           |                                     |
 | `--output <value>`                       | The name of the file where the query execution results will be saved.                                                                                                                | `results.out`                        |
 | `--iterations <value>`                   | The number of times each load query will be executed.                                                                                                                                 | `1`                                  |

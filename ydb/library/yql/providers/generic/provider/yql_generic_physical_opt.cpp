@@ -35,7 +35,8 @@ namespace NYql {
                     EFlag::TimestampCtor |
                     EFlag::StringTypes |
                     EFlag::LikeOperator |
-                    EFlag::JustPassthroughOperators // For REGEXP pushdown
+                    EFlag::JustPassthroughOperators | // For REGEXP pushdown
+                    EFlag::FlatMapOverOptionals // For REGEXP pushdown
                 );
                 EnableFunction("Re2.Grep");  // For REGEXP pushdown
             }

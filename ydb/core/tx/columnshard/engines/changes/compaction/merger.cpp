@@ -138,8 +138,8 @@ public:
         bool needWarnLog = false;
         for (auto&& i : Portions) {
             result.emplace_back(i.BuildSlice(ResultFiltered, Stats, counters));
-            if (Portions.size() > 1 && (result.back().GetPackedSize() * 1.5 < Settings.GetMaxPortionSize() ||
-                                           result.back().GetPackedSize() * 0.5 > Settings.GetMaxPortionSize())) {
+            if (Portions.size() > 1 && (result.back().GetPackedSize() < 0.5 * Settings.GetMaxPortionSize() ||
+                                           result.back().GetPackedSize() > 2 * (ui64)Settings.GetMaxPortionSize())) {
                 needWarnLog = true;
             }
         }

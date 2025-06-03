@@ -18,6 +18,7 @@ TEST_SRCS(
     test_data_type.py
     udf/test_datetime2.py
     udf/test_digest.py
+    udf/test_digest_real_life.py
 )
 
 SIZE(LARGE)

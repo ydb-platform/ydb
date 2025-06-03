@@ -20,12 +20,9 @@ class Workload(WorkloadBase):
         self.lock = threading.Lock()
         self.s3_settings = s3_settings
         self.endpoint = endpoint
-        self.limit = 10
+        self.limit = 10 # limit on the number of exports for a database
         self.in_progress = []
         # Statistics
-        self._created_tables = 0
-        self._created_topics = 0
-        self._inserted_rows = 0
         self._export_stats = {
             "PROGRESS_DONE": 0,
             "PROGRESS_CANCELLED": 0,
@@ -35,14 +32,10 @@ class Workload(WorkloadBase):
     def get_stat(self):
         with self.lock:
             export_stats_str = ", ".join(
-                f"{k.lower()}={v}" for k, v in self._export_stats.items()
+                f"exports{ k[8:].lower() }={v}" if k.startswith("PROGRESS_") else f"exports_{k.lower()}={v}"
+                for k, v in self._export_stats.items()
             )
-            return (
-                f"{export_stats_str}, "
-                f"tables_created={self._created_tables}, "
-                f"topics_created={self._created_topics}, "
-                f"rows_inserted={self._inserted_rows}"
-            )
+            return export_stats_str
 
     def create_tables(self, table_names: List[str]):
         """Create several tables with the same schema."""
@@ -58,8 +51,6 @@ class Workload(WorkloadBase):
                 """,
                 True
             )
-            with self.lock:
-                self._created_tables += 1
 
     def create_topics(self, topic_names: List[str], consumers: Optional[Dict[str, List[str]]] = None):
         """Create several topics, optionally with consumers.
@@ -70,8 +61,6 @@ class Workload(WorkloadBase):
                 f"CREATE TOPIC `{name}`;",
                 True
             )
-            with self.lock:
-                self._created_topics += 1
             if consumers and name in consumers:
                 for consumer in consumers[name]:
                     self.client.query(
@@ -88,19 +77,17 @@ class Workload(WorkloadBase):
                 f"INSERT INTO `{table_name}` (id, message) VALUES ({id_val}, '{msg_val}');",
                 True
             )
-            with self.lock:
-                self._inserted_rows += 1
 
     def setup_tables(self):
         tables = [
-            f"{self.prefix}/table{i}" for i in range(1, 3)
+            f"{self.prefix}/table{i}" for i in range(1, 10)
         ]
         self.create_tables(tables)
         self._tables = tables
 
     def setup_topics(self):
         topics = [
-            f"{self.prefix}/topic{i}" for i in range(1, 3)
+            f"{self.prefix}/topic{i}" for i in range(1, 10)
         ]
         consumers = {}
         for i, topic in enumerate(topics, 1):

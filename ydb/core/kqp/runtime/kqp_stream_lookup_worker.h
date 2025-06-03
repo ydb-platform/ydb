@@ -72,14 +72,13 @@ public:
 
     virtual void AddInputRow(NUdf::TUnboxedValue inputRow) = 0;
     virtual void AddInputRow(TConstArrayRef<TCell> inputRow) = 0;
-    virtual std::vector<THolder<TEvDataShard::TEvRead>> RebuildRequest(const ui64& prevReadId, ui32 firstUnprocessedQuery,
-        TMaybe<TOwnedCellVec> lastProcessedKey, ui64& newReadId) = 0;
+    virtual std::vector<THolder<TEvDataShard::TEvRead>> RebuildRequest(const ui64& prevReadId, ui64& newReadId) = 0;
     virtual TReadList BuildRequests(const TPartitionInfo& partitioning, ui64& readId) = 0;
     virtual void AddResult(TShardReadResult result) = 0;
     virtual TReadResultStats ReplyResult(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, i64 freeSpace) = 0;
     virtual TReadResultStats ReadAllResult(std::function<void(TConstArrayRef<TCell>)> reader) = 0;
     virtual bool AllRowsProcessed() = 0;
-    virtual void ResetRowsProcessing(ui64 readId, ui32 firstUnprocessedQuery, TMaybe<TOwnedCellVec> lastProcessedKey) = 0;
+    virtual void ResetRowsProcessing(ui64 readId) = 0;
     virtual bool IsOverloaded() = 0;
 
 protected:

@@ -76,6 +76,13 @@ std::vector<std::pair<ui64, TOwnedTableRange>> GetRangePartitioning(const TKqpSt
     return rangePartition;
 }
 
+struct TReadState {
+    std::vector<TOwnedTableRange> PendingKeys;
+
+    TMaybe<TOwnedCellVec> LastProcessedKey;
+    ui32 FirstUnprocessedQuery = 0;
+    ui64 LastSeqNo = 0;
+};
 
 }  // !namespace
 
@@ -158,18 +165,23 @@ public:
         }
     }
 
-    std::vector<THolder<TEvDataShard::TEvRead>> RebuildRequest(const ui64& prevReadId, ui32 firstUnprocessedQuery,
-        TMaybe<TOwnedCellVec> lastProcessedKey, ui64& newReadId) final {
+    std::vector<THolder<TEvDataShard::TEvRead>> RebuildRequest(const ui64& prevReadId, ui64& newReadId) final {
 
-        auto it = PendingKeysByReadId.find(prevReadId);
-        if (it == PendingKeysByReadId.end()) {
+        auto it = ReadStateByReadId.find(prevReadId);
+        if (it == ReadStateByReadId.end()) {
             return {};
         }
 
         std::vector<TOwnedTableRange> unprocessedRanges;
         std::vector<TOwnedTableRange> unprocessedPoints;
 
-        auto& ranges = it->second;
+        TReadState state = std::move(it->second);
+        auto& ranges = state.PendingKeys;
+
+        ReadStateByReadId.erase(it);
+
+        ui32 firstUnprocessedQuery = state.FirstUnprocessedQuery;
+        const auto& lastProcessedKey = state.LastProcessedKey;
 
         if (lastProcessedKey) {
             YQL_ENSURE(firstUnprocessedQuery < ranges.size());
@@ -189,8 +201,6 @@ public:
             }
         }
 
-        PendingKeysByReadId.erase(it);
-
         std::vector<THolder<TEvDataShard::TEvRead>> requests;
         requests.reserve(unprocessedPoints.size() + unprocessedRanges.size());
 
@@ -198,14 +208,16 @@ public:
             THolder<TEvDataShard::TEvRead> request(new TEvDataShard::TEvRead());
             FillReadRequest(++newReadId, request, unprocessedPoints);
             requests.emplace_back(std::move(request));
-            PendingKeysByReadId.insert({newReadId, std::move(unprocessedPoints)});
+            state.PendingKeys = std::move(unprocessedPoints);
+            ReadStateByReadId.emplace(newReadId, std::move(state));
         }
 
         if (!unprocessedRanges.empty()) {
             THolder<TEvDataShard::TEvRead> request(new TEvDataShard::TEvRead());
             FillReadRequest(++newReadId, request, unprocessedRanges);
             requests.emplace_back(std::move(request));
-            PendingKeysByReadId.insert({newReadId, std::move(unprocessedRanges)});
+            state.PendingKeys = std::move(unprocessedRanges);
+            ReadStateByReadId.emplace(newReadId, std::move(state));
         }
 
         return requests;
@@ -238,14 +250,22 @@ public:
             THolder<TEvDataShard::TEvRead> request(new TEvDataShard::TEvRead());
             FillReadRequest(++readId, request, points);
             readRequests.emplace_back(shardId, std::move(request));
-            PendingKeysByReadId.insert({readId, std::move(points)});
+            ReadStateByReadId.emplace(
+                readId,
+                TReadState{
+                    .PendingKeys = std::move(points),
+                });
         }
 
         for (auto& [shardId, ranges] : rangesPerShard) {
             THolder<TEvDataShard::TEvRead> request(new TEvDataShard::TEvRead());
             FillReadRequest(++readId, request, ranges);
             readRequests.emplace_back(shardId, std::move(request));
-            PendingKeysByReadId.insert({readId, std::move(ranges)});
+            ReadStateByReadId.emplace(
+                readId,
+                TReadState{
+                    .PendingKeys = std::move(ranges),
+                });
         }
 
         return readRequests;
@@ -255,8 +275,23 @@ public:
         const auto& record = result.ReadResult->Get()->Record;
         YQL_ENSURE(record.GetStatus().GetCode() == Ydb::StatusIds::SUCCESS);
 
-        auto it = PendingKeysByReadId.find(record.GetReadId());
-        YQL_ENSURE(it != PendingKeysByReadId.end());
+        auto it = ReadStateByReadId.find(record.GetReadId());
+        YQL_ENSURE(it != ReadStateByReadId.end());
+
+        if (!record.GetFinished()) {
+            YQL_ENSURE(record.HasContinuationToken(), "Successful TEvReadResult should contain continuation token");
+            NKikimrTxDataShard::TReadContinuationToken continuationToken;
+            bool parseResult = continuationToken.ParseFromString(record.GetContinuationToken());
+            YQL_ENSURE(parseResult, "Failed to parse continuation token");
+            it->second.FirstUnprocessedQuery = continuationToken.GetFirstUnprocessedQuery();
+
+            if (continuationToken.HasLastProcessedKey()) {
+                TSerializedCellVec lastKey(continuationToken.GetLastProcessedKey());
+                it->second.LastProcessedKey = TOwnedCellVec(lastKey.GetCells());
+            } else {
+                it->second.LastProcessedKey.Clear();
+            }
+        }
 
         ReadResults.emplace_back(std::move(result));
     }
@@ -315,8 +350,8 @@ public:
             if (result.UnprocessedResultRow == result.ReadResult->Get()->GetRowsCount()) {
                 if (result.ReadResult->Get()->Record.GetFinished()) {
                     // delete finished read
-                    auto it = PendingKeysByReadId.find(result.ReadResult->Get()->Record.GetReadId());
-                    PendingKeysByReadId.erase(it);
+                    auto it = ReadStateByReadId.find(result.ReadResult->Get()->Record.GetReadId());
+                    ReadStateByReadId.erase(it);
                 }
 
                 ReadResults.pop_front();
@@ -348,8 +383,8 @@ public:
             if (result.UnprocessedResultRow == result.ReadResult->Get()->GetRowsCount()) {
                 if (result.ReadResult->Get()->Record.GetFinished()) {
                     // delete finished read
-                    auto it = PendingKeysByReadId.find(result.ReadResult->Get()->Record.GetReadId());
-                    PendingKeysByReadId.erase(it);
+                    auto it = ReadStateByReadId.find(result.ReadResult->Get()->Record.GetReadId());
+                    ReadStateByReadId.erase(it);
                 }
 
                 ReadResults.pop_front();
@@ -361,19 +396,23 @@ public:
 
     bool AllRowsProcessed() final {
         return UnprocessedKeys.empty()
-            && PendingKeysByReadId.empty()
+            && ReadStateByReadId.empty()
             && ReadResults.empty();
     }
 
-    void ResetRowsProcessing(ui64 readId, ui32 firstUnprocessedQuery, TMaybe<TOwnedCellVec> lastProcessedKey) final {
-        auto it = PendingKeysByReadId.find(readId);
-        if (it == PendingKeysByReadId.end()) {
+    void ResetRowsProcessing(ui64 readId) final {
+        auto it = ReadStateByReadId.find(readId);
+        if (it == ReadStateByReadId.end()) {
             return;
         }
+        auto& keys = it->second.PendingKeys;
+
+        ui32 firstUnprocessedQuery = it->second.FirstUnprocessedQuery;
+        const auto& lastProcessedKey = it->second.LastProcessedKey;
 
         if (lastProcessedKey) {
-            YQL_ENSURE(firstUnprocessedQuery < it->second.size());
-            auto unprocessedRange = it->second[firstUnprocessedQuery];
+            YQL_ENSURE(firstUnprocessedQuery < keys.size());
+            auto unprocessedRange = keys[firstUnprocessedQuery];
             YQL_ENSURE(!unprocessedRange.Point);
 
             UnprocessedKeys.emplace_back(*lastProcessedKey, false,
@@ -381,11 +420,11 @@ public:
             ++firstUnprocessedQuery;
         }
 
-        for (ui32 keyIdx = firstUnprocessedQuery; keyIdx < it->second.size(); ++keyIdx) {
-            UnprocessedKeys.emplace_back(std::move(it->second[keyIdx]));
+        for (ui32 keyIdx = firstUnprocessedQuery; keyIdx < keys.size(); ++keyIdx) {
+            UnprocessedKeys.emplace_back(std::move(keys[keyIdx]));
         }
 
-        PendingKeysByReadId.erase(it);
+        ReadStateByReadId.erase(it);
     }
 
 private:
@@ -428,7 +467,7 @@ private:
 
 private:
     std::deque<TOwnedTableRange> UnprocessedKeys;
-    std::unordered_map<ui64, std::vector<TOwnedTableRange>> PendingKeysByReadId;
+    std::unordered_map<ui64, TReadState> ReadStateByReadId;
     std::deque<TShardReadResult> ReadResults;
 };
 
@@ -475,18 +514,23 @@ public:
         return UnprocessedRows.size() >= MAX_IN_FLIGHT_LIMIT || PendingLeftRowsByKey.size() >= MAX_IN_FLIGHT_LIMIT || ResultRowsBySeqNo.size() >= MAX_IN_FLIGHT_LIMIT;
     }
 
-    std::vector<THolder<TEvDataShard::TEvRead>> RebuildRequest(const ui64& prevReadId, ui32 firstUnprocessedQuery,
-        TMaybe<TOwnedCellVec> lastProcessedKey, ui64& newReadId) final {
+    std::vector<THolder<TEvDataShard::TEvRead>> RebuildRequest(const ui64& prevReadId, ui64& newReadId) final {
 
-        auto readIt = PendingKeysByReadId.find(prevReadId);
-        if (readIt == PendingKeysByReadId.end()) {
+        auto readIt = ReadStateByReadId.find(prevReadId);
+        if (readIt == ReadStateByReadId.end()) {
             return {};
         }
 
         std::vector<TOwnedTableRange> unprocessedRanges;
         std::vector<TOwnedTableRange> unprocessedPoints;
 
-        auto& ranges = readIt->second;
+        TReadState state = std::move(readIt->second);
+        auto& ranges = state.PendingKeys;
+
+        ReadStateByReadId.erase(readIt);
+
+        ui32 firstUnprocessedQuery = state.FirstUnprocessedQuery;
+        const auto& lastProcessedKey = state.LastProcessedKey;
 
         if (lastProcessedKey) {
             YQL_ENSURE(firstUnprocessedQuery < ranges.size());
@@ -510,8 +554,6 @@ public:
             }
         }
 
-        PendingKeysByReadId.erase(readIt);
-
         std::vector<THolder<TEvDataShard::TEvRead>> readRequests;
 
         if (!unprocessedPoints.empty()) {
@@ -525,7 +567,8 @@ public:
                 rowIt->second.PendingReads.insert(newReadId);
             }
 
-            PendingKeysByReadId.insert({newReadId, std::move(unprocessedPoints)});
+            state.PendingKeys = std::move(unprocessedPoints);
+            ReadStateByReadId.emplace(newReadId, std::move(state));
         }
 
         if (!unprocessedRanges.empty()) {
@@ -539,7 +582,8 @@ public:
                 rowIt->second.PendingReads.insert(newReadId);
             }
 
-            PendingKeysByReadId.insert({newReadId, std::move(unprocessedRanges)});
+            state.PendingKeys = std::move(unprocessedRanges);
+            ReadStateByReadId.emplace(newReadId, std::move(state));
         }
 
         return readRequests;
@@ -634,7 +678,11 @@ public:
                 rowIt->second.PendingReads.insert(readId);
             }
 
-            PendingKeysByReadId.insert({readId, std::move(points)});
+            ReadStateByReadId.emplace(
+                readId,
+                TReadState{
+                    .PendingKeys = std::move(points),
+                });
         }
 
         for (auto& [shardId, ranges] : rangesPerShard) {
@@ -648,7 +696,11 @@ public:
                 rowIt->second.PendingReads.insert(readId);
             }
 
-            PendingKeysByReadId.insert({readId, std::move(ranges)});
+            ReadStateByReadId.emplace(
+                readId,
+                TReadState{
+                    .PendingKeys = std::move(ranges),
+                });
         }
 
         return requests;
@@ -658,8 +710,8 @@ public:
         const auto& record = result.ReadResult->Get()->Record;
         YQL_ENSURE(record.GetStatus().GetCode() == Ydb::StatusIds::SUCCESS);
 
-        auto pendingKeysIt = PendingKeysByReadId.find(record.GetReadId());
-        YQL_ENSURE(pendingKeysIt != PendingKeysByReadId.end());
+        auto pendingKeysIt = ReadStateByReadId.find(record.GetReadId());
+        YQL_ENSURE(pendingKeysIt != ReadStateByReadId.end());
 
         for (; result.UnprocessedResultRow < result.ReadResult->Get()->GetRowsCount(); ++result.UnprocessedResultRow) {
             const auto& row = result.ReadResult->Get()->GetCells(result.UnprocessedResultRow);
@@ -688,7 +740,7 @@ public:
         }
 
         if (record.GetFinished()) {
-            for (const auto& key : pendingKeysIt->second) {
+            for (const auto& key : pendingKeysIt->second.PendingKeys) {
                 auto leftRowIt = PendingLeftRowsByKey.find(ExtractKeyPrefix(key));
                 if (leftRowIt != PendingLeftRowsByKey.end()) {
                     leftRowIt->second.PendingReads.erase(record.GetReadId());
@@ -705,26 +757,41 @@ public:
                 }
             }
 
-            PendingKeysByReadId.erase(pendingKeysIt);
+            ReadStateByReadId.erase(pendingKeysIt);
+        } else {
+            YQL_ENSURE(record.HasContinuationToken(), "Successful TEvReadResult should contain continuation token");
+            NKikimrTxDataShard::TReadContinuationToken continuationToken;
+            bool parseResult = continuationToken.ParseFromString(record.GetContinuationToken());
+            YQL_ENSURE(parseResult, "Failed to parse continuation token");
+            pendingKeysIt->second.FirstUnprocessedQuery = continuationToken.GetFirstUnprocessedQuery();
+
+            if (continuationToken.HasLastProcessedKey()) {
+                TSerializedCellVec lastKey(continuationToken.GetLastProcessedKey());
+                pendingKeysIt->second.LastProcessedKey = TOwnedCellVec(lastKey.GetCells());
+            } else {
+                pendingKeysIt->second.LastProcessedKey.Clear();
+            }
         }
     }
 
     bool AllRowsProcessed() final {
         return UnprocessedRows.empty()
             && UnprocessedKeys.empty()
-            && PendingKeysByReadId.empty()
+            && ReadStateByReadId.empty()
             && ResultRowsBySeqNo.empty()
             && PendingLeftRowsByKey.empty();
     }
 
-    void ResetRowsProcessing(ui64 readId, ui32 firstUnprocessedQuery, TMaybe<TOwnedCellVec> lastProcessedKey) final {
-        auto readIt = PendingKeysByReadId.find(readId);
-        if (readIt == PendingKeysByReadId.end()) {
+    void ResetRowsProcessing(ui64 readId) final {
+        auto readIt = ReadStateByReadId.find(readId);
+        if (readIt == ReadStateByReadId.end()) {
             return;
         }
 
-        auto& ranges = readIt->second;
+        auto& ranges = readIt->second.PendingKeys;
 
+        ui32 firstUnprocessedQuery = readIt->second.FirstUnprocessedQuery;
+        const auto& lastProcessedKey = readIt->second.LastProcessedKey;
         if (lastProcessedKey) {
             YQL_ENSURE(firstUnprocessedQuery < ranges.size());
             auto unprocessedRange = ranges[firstUnprocessedQuery];
@@ -744,7 +811,7 @@ public:
             UnprocessedKeys.emplace_back(std::move(range));
         }
 
-        PendingKeysByReadId.erase(readIt);
+        ReadStateByReadId.erase(readIt);
     }
 
     TReadResultStats ReplyResult(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, i64 freeSpace) final {
@@ -981,7 +1048,7 @@ private:
     std::map<std::string, TSysTables::TTableColumnInfo> ReadColumns;
     std::deque<std::pair<TOwnedCellVec, NUdf::TUnboxedValue>> UnprocessedRows;
     std::deque<TOwnedTableRange> UnprocessedKeys;
-    std::unordered_map<ui64, std::vector<TOwnedTableRange>> PendingKeysByReadId;
+    std::unordered_map<ui64, TReadState> ReadStateByReadId;
     absl::flat_hash_map<TOwnedCellVec, TLeftRowInfo, NKikimr::TCellVectorsHash, NKikimr::TCellVectorsEquals> PendingLeftRowsByKey;
     std::unordered_map<ui64, TResultBatch> ResultRowsBySeqNo;
     ui64 InputRowSeqNo = 0;

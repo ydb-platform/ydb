@@ -10,8 +10,6 @@ logger = logging.getLogger("TestShowCreateViewWorkload")
 
 
 class TestShowCreateViewWorkload(object):
-    cluster = None
-
     @classmethod
     def setup_class(cls):
         logger.info("Setting up KiKiMR cluster...")
@@ -22,24 +20,14 @@ class TestShowCreateViewWorkload(object):
                 }
             )
         )
-        try:
-            cls.cluster.start()
-            logger.info(f"KiKiMR cluster started successfully. GRPC port: {cls.cluster.nodes[1].grpc_port}")
-        except Exception as e:
-            logger.critical(f"Failed to start KiKiMR cluster: {e}", exc_info=True)
-            raise
+        cls.cluster.start()
+        logger.info(f"KiKiMR cluster started successfully. GRPC port: {cls.cluster.nodes[1].grpc_port}")
 
     @classmethod
     def teardown_class(cls):
         logger.info("Tearing down KiKiMR cluster...")
-        if cls.cluster:
-            try:
-                cls.cluster.stop()
-                logger.info("KiKiMR cluster stopped successfully.")
-            except Exception as e:
-                logger.error(f"Error stopping KiKiMR cluster: {e}", exc_info=True)
-        else:
-            logger.warning("No KiKiMR cluster instance found to tear down.")
+        cls.cluster.stop()
+        logger.info("KiKiMR cluster stopped successfully.")
 
     @pytest.mark.parametrize(
         "duration, path_prefix",

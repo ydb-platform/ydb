@@ -31,16 +31,10 @@ if __name__ == "__main__":
     logger = logging.getLogger("ShowCreateViewWorkload")
     logger.info(f"Starting SHOW CREATE VIEW workload with args: {args}")
 
-    try:
-        with ShowCreateViewWorkload(args.endpoint, args.database, args.duration, args.path_prefix) as workload:
-            workload.loop()
-            if workload.failed_cycles > 0:
-                logger.error("Test completed with failures.")
-                sys.exit(1)
-            else:
-                logger.info("Test completed successfully.")
-    except KeyboardInterrupt:
-        logger.info("Workload interrupted by user.")
-    except Exception as e:
-        logger.critical(f"Workload execution failed with an unhandled error: {e}", exc_info=True)
-        sys.exit(1)
+    with ShowCreateViewWorkload(args.endpoint, args.database, args.duration, args.path_prefix) as workload:
+        workload.loop()
+        if workload.failed_cycles > 0:
+            logger.error("Test completed with failures.")
+            sys.exit(1)
+        else:
+            logger.info("Test completed successfully.")

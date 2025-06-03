@@ -25,12 +25,8 @@ class ShowCreateViewWorkload:
             self.database,
         )
         self.driver = ydb.Driver(self.driver_config)
-        try:
-            self.driver.wait(timeout=10, fail_fast=True)
-            logger.info(f"Driver initialized successfully for endpoint {self.endpoint}, database {self.database}")
-        except TimeoutError as e:
-            logger.error(f"Failed to initialize driver for {self.endpoint}, {self.database} within timeout: {e}")
-            raise
+        self.driver.wait(timeout=10, fail_fast=True)
+        logger.info(f"Driver initialized successfully for endpoint {self.endpoint}, database {self.database}")
 
         self.pool = ydb.QuerySessionPool(self.driver)
 
@@ -84,25 +80,15 @@ class ShowCreateViewWorkload:
             PRIMARY KEY (key)
         );
         """
-        try:
-            self.pool.execute_with_retries(create_table_query)
-            logger.info(f"Table `{self.table_path}` created.")
-        except Exception as e:
-            logger.error(f"Failed to create table `{self.table_path}` during preliminary setup: {e}", exc_info=True)
-            self._mark_overall_workload_error()
-            raise
+        self.pool.execute_with_retries(create_table_query)
+        logger.info(f"Table `{self.table_path}` created.")
 
         upsert_query = f"""
         UPSERT INTO `{self.table_path}` (key, value) VALUES
             (1, "one"), (2, "two"), (3, "three");
         """
-        try:
-            self.pool.execute_with_retries(upsert_query)
-            logger.info(f"Data upserted into `{self.table_path}`.")
-        except Exception as e:
-            logger.error(f"Failed to upsert data into `{self.table_path}` during preliminary setup: {e}", exc_info=True)
-            self._mark_overall_workload_error()
-            raise
+        self.pool.execute_with_retries(upsert_query)
+        logger.info(f"Data upserted into `{self.table_path}`.")
 
         logger.info("Preliminary setup completed.")
 
@@ -130,27 +116,17 @@ class ShowCreateViewWorkload:
         logger.info(f"[{thread_name}] started.")
         while not self._stop_event.is_set():
             # Drop View
-            try:
-                drop_view_query = f"DROP VIEW IF EXISTS `{self.view_path}`;"
-                self.pool.execute_with_retries(drop_view_query)
-                logger.debug(f"[{thread_name}] View `{self.view_path}` dropped.")
-            except Exception as e:
-                logger.error(f"[{thread_name}] DROP VIEW `{self.view_path}` failed: {e}")
-                self._mark_overall_workload_error()
-                raise
+            drop_view_query = f"DROP VIEW IF EXISTS `{self.view_path}`;"
+            self.pool.execute_with_retries(drop_view_query)
+            logger.debug(f"[{thread_name}] View `{self.view_path}` dropped.")
 
             # Create View
-            try:
-                create_view_query = f"""
-                CREATE VIEW `{self.view_path}` WITH security_invoker = TRUE AS
-                    SELECT * FROM `{self.table_path}`;
-                """
-                self.pool.execute_with_retries(create_view_query)
-                logger.debug(f"[{thread_name}] View `{self.view_path}` created.")
-            except Exception as e:
-                logger.error(f"[{thread_name}] CREATE VIEW `{self.view_path}` failed: {e}")
-                self._mark_overall_workload_error()
-                raise
+            create_view_query = f"""
+            CREATE VIEW `{self.view_path}` WITH security_invoker = TRUE AS
+                SELECT * FROM `{self.table_path}`;
+            """
+            self.pool.execute_with_retries(create_view_query)
+            logger.debug(f"[{thread_name}] View `{self.view_path}` created.")
 
             # Let the created view exist for at least some time.
             time.sleep(0.2)

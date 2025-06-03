@@ -86,11 +86,10 @@ protected:
                 continue;
             }
             PortionsInfo->AddPortion(i);
-            if (i->GetCompactionLevel() && (i->GetCompactionLevel() >= Levels.size() ||
-                                               !Levels[i->GetCompactionLevel()]->IsAppropriatePortionToStore(i->GetCompactionInfo()))) {
+            if (i->GetCompactionLevel() && i->GetCompactionLevel() >= Levels.size()) {
                 i->MutableMeta().ResetCompactionLevel(0);
             }
-            if (!i->GetCompactionLevel() && i->GetProduced() != NPortion::EProduced::INSERTED) {
+            if (!i->GetCompactionLevel() && i->GetPortionType() != EPortionType::Written) {
                 i->MutableMeta().ResetCompactionLevel(GetAppropriateLevel(0, i->GetCompactionInfo()));
             }
             AFL_VERIFY(i->GetCompactionLevel() < Levels.size());

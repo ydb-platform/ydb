@@ -87,7 +87,7 @@ To count distinct values in rows meeting the condition, unlike other aggregate f
 ```yql
 SELECT
     COUNT(DISTINCT IF(value % 2 == 1, value))
-FROM posts;
+FROM my_table;
 ```
 
 {% endnote %}

@@ -231,6 +231,14 @@ public:
         return Size() == KeySize() + 1;
     }
 
+    TMaybe<char> GetSuffix() const
+    {
+        if (HasSuffix()) {
+            return Data()[KeySize()];
+        }
+        return Nothing();
+    }
+
     bool IsHead() const;
     bool IsFastWrite() const;
 
@@ -307,14 +315,6 @@ private:
     void ParseInternalPartsCount()
     {
         InternalPartsCount = FromString<ui16>(TStringBuf{PtrInternalPartsCount(), 5});
-    }
-
-    TMaybe<char> GetSuffix() const
-    {
-        if (HasSuffix()) {
-            return Data()[KeySize()];
-        }
-        return Nothing();
     }
 
     void SetSuffix(TMaybe<char> suffix)

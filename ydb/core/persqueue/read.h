@@ -48,8 +48,8 @@ namespace NPQ {
         void SaveInProgress(const TKvRequest& kvRequest)
         {
             for (const TRequestedBlob& reqBlob : kvRequest.Blobs) {
-                TBlobId blob(kvRequest.Partition, reqBlob.Offset, reqBlob.PartNo, reqBlob.Count, reqBlob.InternalPartsCount);
-                ReadsInProgress.insert(blob);
+                auto blobId = MakeBlobId(kvRequest.Partition, reqBlob);
+                ReadsInProgress.insert(blobId);
             }
         }
 
@@ -362,7 +362,7 @@ namespace NPQ {
             Y_ABORT_UNLESS(resp->TabletId == TabletId);
 
             for (const TCacheBlobL2& blob : resp->Removed)
-                Cache.RemoveEvictedBlob(ctx, TBlobId(blob.Partition, blob.Offset, blob.PartNo, blob.Count, blob.InternalPartsCount), blob.Value);
+                Cache.RemoveEvictedBlob(ctx, TBlobId(blob.Partition, blob.Offset, blob.PartNo, blob.Count, blob.InternalPartsCount, blob.Suffix), blob.Value);
 
             if (resp->Overload) {
                 LOG_NOTICE_S(ctx, NKikimrServices::PERSQUEUE,

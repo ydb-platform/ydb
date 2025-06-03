@@ -74,6 +74,7 @@ struct TCacheBlobL2 {
     ui16 PartNo;
     ui32 Count;
     ui16 InternalPartsCount;
+    TMaybe<char> Suffix;
     TCacheValue::TPtr Value;
 };
 

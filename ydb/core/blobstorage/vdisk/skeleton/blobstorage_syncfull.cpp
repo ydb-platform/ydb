@@ -196,38 +196,40 @@ namespace NKikimr {
         }
 
         std::unique_ptr<TEvBlobStorage::TEvVSyncFullResult> RunStages(const TEvBlobStorage::TEvVSyncFull::TPtr& ev) {
-            LogoBlobFilter.BuildBarriersEssence(FullSnap->BarriersSnap);
+            LogoBlobFilter.BuildBarriersEssence(FullSnap.BarriersSnap);
 
+            std::unique_ptr<TEvBlobStorage::TEvVSyncFullResult> result =
+                    std::make_unique<TEvBlobStorage::TEvVSyncFullResult>(
+                            NKikimrProto::OK, SelfVDiskId, SyncState,
+                            ev->Get()->Record.GetCookie(), TActivationContext::Now(),
+                            IFaceMonGroup->SyncFullResMsgsPtr(), nullptr, ev->GetChannel());
+
+            TString* data = result->Record.MutableData();
             ui32 pres = 0;
             switch (Stage) {
                 case NKikimrBlobStorage::LogoBlobs:
                     Stage = NKikimrBlobStorage::LogoBlobs;
-                    pres = Process(FullSnap->LogoBlobsSnap, KeyLogoBlob, LogoBlobFilter);
+                    pres = Process(FullSnap.LogoBlobsSnap, KeyLogoBlob, LogoBlobFilter, data);
                     if (pres & (MsgFullFlag | LongProcessing))
                         break;
                     Y_VERIFY_S(pres & EmptyFlag, HullCtx->VCtx->VDiskLogPrefix);
                     [[fallthrough]];
                 case NKikimrBlobStorage::Blocks:
                     Stage = NKikimrBlobStorage::Blocks;
-                    pres = Process(FullSnap->BlocksSnap, KeyBlock, FakeFilter);
+                    pres = Process(FullSnap.BlocksSnap, KeyBlock, FakeFilter, data);
                     if (pres & (MsgFullFlag | LongProcessing))
                         break;
                     Y_VERIFY_S(pres & EmptyFlag, HullCtx->VCtx->VDiskLogPrefix);
                     [[fallthrough]];
                 case NKikimrBlobStorage::Barriers:
                     Stage = NKikimrBlobStorage::Barriers;
-                    pres = Process(FullSnap->BarriersSnap, KeyBarrier, FakeFilter);
+                    pres = Process(FullSnap.BarriersSnap, KeyBarrier, FakeFilter, data);
                     break;
                 default: Y_ABORT("Unexpected case: stage=%d", Stage);
             }
 
             bool finished = (bool)(pres & EmptyFlag) && Stage == NKikimrBlobStorage::Barriers;
 
-            std::unique_ptr<TEvBlobStorage::TEvVSyncFullResult> result =
-                    std::make_unique<TEvBlobStorage::TEvVSyncFullResult>(
-                            NKikimrProto::OK, SelfVDiskId, SyncState,
-                            ev->Record.GetCookie(), TActivationContext::Now(),
-                            IFaceMonGroup->SyncFullResMsgsPtr(), nullptr, ev->GetChannel());
             // Status, SyncState, Data and VDiskID are already set up; set up other
             result->Record.SetFinished(finished);
             result->Record.SetStage(Stage);
@@ -246,7 +248,7 @@ namespace NKikimr {
                 const TSyncState& syncState,
                 const TVDiskID& selfVDiskId,
                 const std::shared_ptr<NMonGroup::TVDiskIFaceGroup>& ifaceMonGroup,
-                const std::shared_ptr<NMonGroup::TFullSyncGroup>& fullSyncMonGroup,
+                const std::shared_ptr<NMonGroup::TFullSyncGroup>& fullSyncGroup,
                 const TEvBlobStorage::TEvVSyncFull::TPtr& ev,
                 TKeyLogoBlob keyLogoBlob,
                 TKeyBlock keyBlock,
@@ -255,15 +257,14 @@ namespace NKikimr {
             : Config(config)
             , HullCtx(hullCtx)
             , ParentId(parentId)
-            , Recipient(ev->Sender)
             , FullSnap(std::move(fullSnap))
-            , FakeFilter()
-            , LogoBlobFilter(HullCtx, VDiskIDFromVDiskID(ev->Get()->Record.GetSourceVDisk()))
             , SyncState(syncState)
             , SelfVDiskId(selfVDiskId)
             , IFaceMonGroup(ifaceMonGroup)
-            , FullSyncMonGroup(fullSyncMonGroup)
+            , FullSyncGroup(fullSyncGroup)
             , InitialEvent(ev)
+            , FakeFilter()
+            , LogoBlobFilter(HullCtx, VDiskIDFromVDiskID(ev->Get()->Record.GetSourceVDiskID()))
             , KeyLogoBlob(keyLogoBlob)
             , KeyBlock(keyBlock)
             , KeyBarrier(keyBarrier)
@@ -278,7 +279,7 @@ namespace NKikimr {
     class THullSyncFullActorLegacyProtocol : public THullSyncFullBase,
             public TActorBootstrapped<THullSyncFullActorLegacyProtocol> {
 
-    private:
+    public:
         void Bootstrap() {
             std::unique_ptr<TEvBlobStorage::TEvVSyncFullResult> result = RunStages(InitialEvent);
             // send reply
@@ -294,7 +295,6 @@ namespace NKikimr {
         //     HFunc(TEvents::TEvPoisonPill, HandlePoison)
         // )
 
-    public:
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
             return NKikimrServices::TActivity::BS_HULL_SYNC_FULL;
         }
@@ -339,16 +339,9 @@ namespace NKikimr {
             public TActorBootstrapped<THullSyncFullActorUnorderedDataProtocol> {
     public:
         void Bootstrap() {
-            std::unique_ptr<TEvBlobStorage::TEvVSyncFullResult> result = RunStages(InitialEvent);
-            bool finished = result->Record.GetFinished();
-            // send reply
-            SendVDiskResponse(TActivationContext::AsActorContext(), Recipient, result.release(),
-                    0, HullCtx->VCtx, {});
-            // notify parent about death
-            if (finished) {
-                Send(ParentId, new TEvents::TEvGone);
-                PassAway();
-            }
+            ++FullSyncGroup->UnorderedDataProtocolActorsCreated();
+            Become(&TThis::StateFunc);
+            Handle(InitialEvent);
         }
 
     ////////////////////////////////////////////////////////////////////////////

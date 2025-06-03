@@ -85,7 +85,7 @@ See the command description:
 | Name                   | Description                                                                                         | Default value |
 |------------------------|-----------------------------------------------------------------------------------------------------|---------------|
 | `--syntax <value>`     | Which query syntax option should be used, `yql` or `pg`.                                            | `yql`         |
-| `--flaot_mode <value>` | Float mode. Can be `float`, `decimal` or `decimal_ydb`. If set to `float` - float will be used, `decimal` means that decimal will be used with canonical size and `decimal_ydb` means that all floats will be converted to decimal(22,9) because YDB supports only this type. | `float`           |
+| `--float_mode <value>` | Float mode. Can be `float`, `decimal` or `decimal_ydb`. If set to `float` - float will be used, `decimal` means that decimal will be used with canonical size and `decimal_ydb` means that all floats will be converted to decimal(22,9) because YDB supports only this type. | `float`           |
 | `--scale <value>`      | Scale factor. See specification of TPC-DS.                                                           | 1             |
 
 ## Test data cleanup { #cleanup }

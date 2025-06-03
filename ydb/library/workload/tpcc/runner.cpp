@@ -135,7 +135,7 @@ private:
     void UpdateDisplayIfNeeded(Clock::time_point now);
     std::unique_ptr<TAllStatistics> CollectStatistics(Clock::time_point now);
 
-    void UpdateDisplayDeveloperMode();
+    void UpdateDisplayTextMode();
     void DumpFinalStats();
 
 private:
@@ -234,7 +234,7 @@ TPCCRunner::TPCCRunner(const NConsoleClient::TClientCommand::TConfig& connection
             *TaskQueue,
             clients[i % drivers.size()],
             Config.Path,
-            Config.NoSleep,
+            Config.NoDelays,
             Config.SimulateTransactionMs,
             Config.SimulateTransactionSelect1Count,
             TerminalsStopSource.get_token(),
@@ -304,27 +304,26 @@ void TPCCRunner::RunSync() {
 
     TaskQueue->Run();
 
-    // TODO: convert to minutes when needed
-
     // We don't want to start all terminals at the same time, because then there will be
     // a huge queue of ready terminals, which we can't handle
 
     int minWarmupSeconds = Terminals.size() * MinWarmupPerTerminal.count() / 1000 + 1;
-    int warmupSeconds;
-    if (Config.WarmupSeconds < minWarmupSeconds) {
-        LOG_I("Forced minimal warmup time: " << minWarmupSeconds << " seconds");
-        warmupSeconds = minWarmupSeconds;
+    int minWarmupMinutes = (minWarmupSeconds + 59) / 60;
+    int warmupMinutes;
+    if (Config.WarmupMinutes < minWarmupMinutes) {
+        LOG_I("Forced minimal warmup time: " << minWarmupMinutes << " minutes");
+        warmupMinutes = minWarmupMinutes;
     } else {
-        warmupSeconds = Config.WarmupSeconds;
+        warmupMinutes = Config.WarmupMinutes;
     }
 
-    LOG_I("Starting warmup for " << warmupSeconds << " seconds");
+    LOG_I("Starting warmup for " << warmupMinutes << " minutes");
 
     LastStatisticsSnapshot = std::make_unique<TAllStatistics>(StatsVec.size());
     LastStatisticsSnapshot->Ts = Clock::now();
 
     auto warmupStartTs = Clock::now();
-    auto warmupStopDeadline = warmupStartTs + std::chrono::seconds(warmupSeconds);
+    auto warmupStopDeadline = warmupStartTs + std::chrono::minutes(warmupMinutes);
 
     size_t startedTerminalId = 0;
     for (; startedTerminalId < Terminals.size() && !StopByInterrupt.stop_requested(); ++startedTerminalId) {
@@ -347,10 +346,10 @@ void TPCCRunner::RunSync() {
     StopWarmup.store(true, std::memory_order_relaxed);
 
     // TODO: convert to minutes when needed
-    LOG_I("Measuring during " << Config.RunSeconds << " seconds");
+    LOG_I("Measuring during " << Config.RunMinutes << " minutes");
 
     MeasurementsStartTs = Clock::now();
-    auto stopDeadline = MeasurementsStartTs + std::chrono::seconds(Config.RunSeconds);
+    auto stopDeadline = MeasurementsStartTs + std::chrono::minutes(Config.RunMinutes);
     while (!StopByInterrupt.stop_requested()) {
         if (now >= stopDeadline) {
             break;
@@ -372,13 +371,17 @@ void TPCCRunner::UpdateDisplayIfNeeded(Clock::time_point now) {
         std::unique_ptr<TAllStatistics> newStatistics = CollectStatistics(now);
         LastStatisticsSnapshot = std::move(newStatistics);
 
-        if (Config.Developer) {
-           UpdateDisplayDeveloperMode();
+        switch (Config.DisplayMode) {
+        case TRunConfig::EDisplayMode::Text:
+           UpdateDisplayTextMode();
+           break;
+        default:
+            ;
         }
     }
 }
 
-void TPCCRunner::UpdateDisplayDeveloperMode() {
+void TPCCRunner::UpdateDisplayTextMode() {
     std::cout << "\n\n\n";
 
     std::cout << std::left
@@ -454,7 +457,7 @@ void TPCCRunner::DumpFinalStats() {
     size_t totalFailed = 0;
     size_t totalUserAborted = 0;
 
-    size_t tableWidth = Config.Developer ? 95 : 65;
+    size_t tableWidth = Config.ExtendedStats ? 95 : 65;
 
     // Print header
     std::cout << "\nTransaction Statistics:\n";
@@ -465,7 +468,7 @@ void TPCCRunner::DumpFinalStats() {
               << std::setw(15) << "User Aborted"
               << std::setw(10) << "p90 (ms)";
 
-    if (Config.Developer) {
+    if (Config.ExtendedStats) {
         std::cout << std::setw(15) << "terminal p90 (ms)"
             << std::setw(15) << "pure p90 (ms)";
     }
@@ -495,7 +498,7 @@ void TPCCRunner::DumpFinalStats() {
                   << std::setw(15) << txStats.UserAborted
                   << std::setw(10) << txStats.LatencyHistogramFullMs.GetValueAtPercentile(90);
 
-        if (Config.Developer) {
+        if (Config.ExtendedStats) {
             std::cout << std::setw(15) << txStats.LatencyHistogramMs.GetValueAtPercentile(90)
                 << std::setw(15) << txStats.LatencyHistogramPure.GetValueAtPercentile(90);
         }

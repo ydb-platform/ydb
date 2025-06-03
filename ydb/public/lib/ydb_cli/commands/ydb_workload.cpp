@@ -1,5 +1,6 @@
 #include "ydb_workload.h"
 #include "ydb_workload_import.h"
+#include "ydb_workload_tpcc.h"
 
 #include "topic_workload/topic_workload.h"
 #include "transfer_workload/transfer_workload.h"
@@ -46,7 +47,7 @@ TCommandWorkload::TCommandWorkload()
 {
     AddCommand(std::make_unique<TCommandWorkloadTopic>());
     AddCommand(std::make_unique<TCommandWorkloadTransfer>());
-    //AddCommand(std::make_unique<TCommandTPCC>());
+    AddCommand(std::make_unique<TCommandTPCC>());
     for (const auto& key: NYdbWorkload::TWorkloadFactory::GetRegisteredKeys()) {
         AddCommand(std::make_unique<TWorkloadCommandRoot>(key.c_str()));
     }

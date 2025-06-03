@@ -7,6 +7,12 @@
 namespace NYdb::NTPCC {
 
 struct TRunConfig {
+    enum class EDisplayMode {
+        None = 0,
+        Text,
+        Htop,
+    };
+
     TRunConfig() = default;
     void SetFullPath(const NConsoleClient::TClientCommand::TConfig& connectionConfig) {
         if (Path.empty()) {
@@ -22,20 +28,23 @@ struct TRunConfig {
     }
 
     int WarehouseCount = 0;
-    int WarmupSeconds = 0;
-    int RunSeconds = 0;
+    int WarmupMinutes = 0;
+    int RunMinutes = 0;
 
     int MaxInflight = 0;
 
     TString Path;
+
+    TString JsonResultPath;
 
     // advanced settings (normally, used by developer only)
 
     int ThreadCount = 0;
     int DriverCount = 0;
     ELogPriority LogPriority = ELogPriority::TLOG_INFO;
-    bool NoSleep = false;
-    bool Developer = false;
+    bool NoDelays = false;
+    bool ExtendedStats = false;
+    EDisplayMode DisplayMode = EDisplayMode::None;
 
     // instead of actual transaction just async sleep and return SUCCESS
     int SimulateTransactionMs = 0;

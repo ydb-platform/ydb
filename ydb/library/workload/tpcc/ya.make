@@ -26,6 +26,8 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/query
 )
 
+GENERATE_ENUM_SERIALIZATION(runner.h)
+
 END()
 
 RECURSE_FOR_TESTS(

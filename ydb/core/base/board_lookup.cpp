@@ -140,11 +140,11 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
         return PassAway();
     }
 
-    bool AllStatsHasInfo() {
+    bool AnyGroupStatsHasInfo() {
         for (auto groupIdx : xrange(ReplicaGroups.size())) {
             if (ReplicaGroups[groupIdx].WriteOnly)
                 continue;
-            if (Stats[groupIdx].HasInfo == ReplicaGroups[groupIdx].WaitForReplicasToSuccess)
+            if (Stats[groupIdx].HasInfo >= ReplicaGroups[groupIdx].WaitForReplicasToSuccess)
                 return true;
         }
         return false;
@@ -182,7 +182,7 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
 
     void CheckCompletion() {
         if (CurrentStateFunc() != &TThis::StateSubscribe) {
-            if ((!Subscriber && AllStatsHasInfo()) ||
+            if ((!Subscriber && AnyGroupStatsHasInfo()) ||
                     (Subscriber && AllStatsHasAndHasNoInfo())) {
                 auto reply = MakeHolder<TEvStateStorage::TEvBoardInfo>(
                     TEvStateStorage::TEvBoardInfo::EStatus::Ok, Path);

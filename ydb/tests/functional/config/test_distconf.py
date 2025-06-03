@@ -353,7 +353,7 @@ class TestKiKiMRDistConfReassignStateStorageBadCases(KiKiMRDistConfReassignState
         self.check_failed({"ReconfigStateStorage": {f"{storageName}Config": {"RingGroups": [{"NToSelect": 1, "Ring": [{"Ring": [{"Node": [4]}]}]}]}}},
                           f"{storageName} too deep nested ring declaration")
         self.check_failed({"ReconfigStateStorage": {f"{storageName}Config": {"RingGroups": [{"NToSelect": 1, "Ring": [{"Node": [4]}]}]}}},
-                          f"New {storageName} configuration first ring group should be equal to old config")
+                          "New introduced ring group should be WriteOnly")
         self.check_failed({"ReconfigStateStorage": {f"{storageName}Config": {"RingGroups": [{"NToSelect": 2, "Ring": [{"Node": [4]}]}]}}},
                           f"{storageName} invalid ring group selection")
         self.check_failed({"ReconfigStateStorage": {f"{storageName}Config": {"RingGroups": [{"NToSelect": 1, "Node": [4], "Ring": [{"Node": [4]}]}]}}},
@@ -365,6 +365,15 @@ class TestKiKiMRDistConfReassignStateStorageBadCases(KiKiMRDistConfReassignState
         defaultRingGroup = self.do_request_config()[f"{storageName}Config"]["Ring"]
         self.check_failed({"ReconfigStateStorage": {f"{storageName}Config": {"RingGroups": [defaultRingGroup, {"NToSelect": 1, "Node": [defaultRingGroup["Node"][0]]}]}}},
                           f"{storageName} replicas ActorId intersection, specify RingGroupActorIdOffset if you run multiple replicas on one node")
+
+        defaultRingGroup = [self.do_request_config()[f"{storageName}Config"]["Ring"]]
+        newRingGroup = [
+            {"NToSelect": 3, "Ring": [{"Node": [4]}, {"Node": [5]}, {"Node": [6]}]},
+            {"NToSelect": 3, "Ring": [{"Node": [7]}, {"Node": [8]}, {"Node": [1]}]}
+            ]
+        self.do_test_change_state_storage(defaultRingGroup, newRingGroup, storageName)
+        self.check_failed({"ReconfigStateStorage": {f"{storageName}Config": {"RingGroups": [newRingGroup[0]]}}},
+                          "Can not delete not WriteOnly ring group. Make it WriteOnly before deletion")
 
 
 class TestKiKiMRDistConfReassignStateStorageNoChanges(KiKiMRDistConfReassignStateStorageBaseTest):

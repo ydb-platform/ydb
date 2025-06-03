@@ -239,11 +239,19 @@ class WorkloadReconfigStateStorage(WorkloadBase):
                 newRingGroup[i]["WriteOnly"] = True
             logger.info(self.do_request({"ReconfigStateStorage": {f"{self.config_name}Config": {
                         "RingGroups": defaultRingGroup + newRingGroup}}}))
+            self.do_request_config()
             time.sleep(3)
             for i in range(len(newRingGroup)):
                 newRingGroup[i]["WriteOnly"] = False
             logger.info(self.do_request({"ReconfigStateStorage": {f"{self.config_name}Config": {
                         "RingGroups": defaultRingGroup + newRingGroup}}}))
+            self.do_request_config()
+            time.sleep(3)
+            for i in range(len(defaultRingGroup)):
+                defaultRingGroup[i]["WriteOnly"] = True
+            logger.info(self.do_request({"ReconfigStateStorage": {f"{self.config_name}Config": {
+                        "RingGroups": newRingGroup + defaultRingGroup}}}))
+            self.do_request_config()
             time.sleep(3)
             logger.info(self.do_request({"ReconfigStateStorage": {f"{self.config_name}Config": {
                         "RingGroups": newRingGroup}}}))
@@ -251,7 +259,7 @@ class WorkloadReconfigStateStorage(WorkloadBase):
             curConfig = self.do_request_config()[f"{self.config_name}Config"]
             expectedConfig = {"Ring": newRingGroup[0]} if len(newRingGroup) == 1 else {"RingGroups": newRingGroup}
             if curConfig != expectedConfig:
-                raise Exception(f"Incorrect reconfig: expected:{curConfig}, actual:{expectedConfig}")
+                raise Exception(f"Incorrect reconfig: actual:{curConfig}, expected:{expectedConfig}")
             self.ringGroupActorIdOffset += 1
             with self.lock:
                 logger.info(f"Reconfig {self.loop_cnt} finished")

@@ -139,9 +139,11 @@ struct TEvStateStorage::TEvResolveReplicasList : public TEventLocal<TEvResolveRe
 
     TVector<TActorId> GetPlainReplicas() {
         TVector<TActorId> result;
-        result.reserve(std::accumulate(ReplicaGroups.begin(), ReplicaGroups.end(), 0ULL, [](uint64_t sum, const TReplicaGroup& group) {
-            return sum + group.Replicas.size();
-        }));
+        ui32 size = 0;
+        for (const auto& rg : ReplicaGroups) {
+            size += rg.Replicas.size();
+        }
+        result.reserve(size);
         for (const auto& r : ReplicaGroups) {
             result.insert(result.end(), r.Replicas.begin(), r.Replicas.end());
         }

@@ -4,7 +4,6 @@ INCLUDE(${ARCADIA_ROOT}/yt/ya_cpp.make.inc)
 
 SRCS(
     signal_registry.cpp
-    signal_blocking.cpp
 )
 
 PEERDIR(

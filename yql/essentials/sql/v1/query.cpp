@@ -373,6 +373,9 @@ static INode::TPtr CreateChangefeedDesc(const TChangefeedDescription& desc, cons
     if (desc.Settings.BarriersInterval) {
         settings = node.L(settings, node.Q(node.Y(node.Q("barriers_interval"), desc.Settings.BarriersInterval)));
     }
+    if (desc.Settings.SchemaChanges) {
+        settings = node.L(settings, node.Q(node.Y(node.Q("schema_changes"), desc.Settings.SchemaChanges)));
+    }
     if (desc.Settings.RetentionPeriod) {
         settings = node.L(settings, node.Q(node.Y(node.Q("retention_period"), desc.Settings.RetentionPeriod)));
     }

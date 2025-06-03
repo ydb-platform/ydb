@@ -177,8 +177,6 @@ public:
 };
 
 class TCreateRestoreOpControlPlane: public TSubOperation {
-    TPath BcPath; // TODO: FIXME
-
     static TTxState::ETxState NextState() {
         return TTxState::Waiting;
     }
@@ -215,14 +213,21 @@ public:
     using TSubOperation::TSubOperation;
 
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+        const auto& tx = Transaction;
         const TTabletId schemeshardTabletId = context.SS->SelfTabletId();
         LOG_I("TCreateRestoreOpControlPlane Propose"
             << ", opId: " << OperationId
         );
 
+        TString bcPathStr = JoinPath({tx.GetWorkingDir(), tx.GetRestoreBackupCollection().GetName()});
+
+        const TPath& bcPath = TPath::Resolve(bcPathStr, context.SS);
+
+        const auto& bc = context.SS->BackupCollections[bcPath->PathId];
+
         // Create in-flight operation object
         Y_ABORT_UNLESS(!context.SS->FindTx(OperationId));
-        TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxCreateLongIncrementalRestoreOp, BcPath.GetPathIdForDomain()); // Fix PathId to backup collection PathId
+        TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxCreateLongIncrementalRestoreOp, bcPath.GetPathIdForDomain()); // Fix PathId to backup collection PathId
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(schemeshardTabletId));
 
@@ -232,6 +237,42 @@ public:
 
         context.DbChanges.PersistTxState(OperationId);
         context.OnComplete.ActivateTx(OperationId);
+
+        NKikimrSchemeOp::TLongIncrementalRestoreOp op;
+
+        bcPath->PathId.ToProto(op.MutableBackupCollectionPathId());
+
+        for (const auto& item : bc->Description.GetExplicitEntryList().GetEntries()) {
+            if (item.GetType() == ::NKikimrSchemeOp::TBackupCollectionDescription_TBackupEntry_EType_ETypeTable) {
+                op.AddTablePathList(item.GetPath());
+            }
+        }
+
+        TString lastFullBackupName;
+        TVector<TString> incrBackupNames;
+
+        for (auto& [child, _] : bcPath.Base()->GetChildren()) {
+            if (child.EndsWith("_full")) {
+                lastFullBackupName = child;
+                incrBackupNames.clear();
+            } else if (child.EndsWith("_incremental")) {
+                incrBackupNames.push_back(child);
+            }
+        }
+
+        TStringBuf fullBackupName = lastFullBackupName;
+        fullBackupName.ChopSuffix("_full"_sb);
+
+        op.SetFullBackupTrimmedName(TString(fullBackupName));
+
+        for (const auto& backupName : incrBackupNames) {
+            TStringBuf incrBackupName = backupName;
+            incrBackupName.ChopSuffix("_incremental"_sb);
+
+            op.SetFullBackupTrimmedName(TString(incrBackupName));
+        }
+
+        context.DbChanges.PersistLongIncrementalRestoreOp(op);
 
         // Set initial operation state
         SetState(NextState());

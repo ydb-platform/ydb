@@ -10,7 +10,7 @@
 
 * [Ограничено](https://github.com/ydb-platform/ydb/pull/17755) количество одновременно обрабатываемых изменений конфигураций.
 * [Оптимизировано](https://github.com/ydb-platform/ydb/issues/18289) потребление памяти PQ-таблетками.
-* [Оптимизировано](https://github.com/ydb-platform/ydb/issues/18473) потребление CPU Scheme shard и уменьшены задержки в запросах путем проверки лимита на число операции до выполнения операций разделения и слияния таблеток.
+* [Оптимизировано](https://github.com/ydb-platform/ydb/issues/18473) потребление CPU Scheme shard, что привело к уменьшению задержек ответов на запросы. Теперь лимит на число операций Scheme shard  проверяется до выполнения операций разделения и слияния таблеток.
 
 #### Исправления ошибок
 
@@ -19,8 +19,8 @@
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/17519) [ошибка](https://github.com/ydb-platform/ydb/issues/17499), при которой коммит без подтверждения записи в топик приводил к блокировке текущей и следующих транзакций с топиками.
 * Исправлены зависания транзакций при работе с топиками при [перезагрузке](https://github.com/ydb-platform/ydb/issues/17843) или [удалении](https://github.com/ydb-platform/ydb/issues/17915) таблетки.
 * [Исправлены](https://github.com/ydb-platform/ydb/pull/18114) [проблемы](https://github.com/ydb-platform/ydb/issues/18071) с чтением сообщений больше 6Mb через [Kafka API](./reference/kafka-api).
-* [Устранена](https://github.com/ydb-platform/ydb/pull/18319) утечка памяти во время записи в [очередь сообщений](./concepts/glossary#topic).
-* Исправлены ошибки обработки [опциональных столбцов](https://github.com/ydb-platform/ydb/issues/15701) и [столбцов с типом UUID]((https://github.com/ydb-platform/ydb/issues/15697)) в строковых таблицах.
+* [Устранена](https://github.com/ydb-platform/ydb/pull/18319) утечка памяти во время записи в [топик](./concepts/glossary#topic).
+* Исправлены ошибки обработки [nullable столбцов](https://github.com/ydb-platform/ydb/issues/15701) и [столбцов с типом UUID]((https://github.com/ydb-platform/ydb/issues/15697)) в строковых таблицах.
 
 ### Версия 24.4.4.2 {#24-4-4-2}
 

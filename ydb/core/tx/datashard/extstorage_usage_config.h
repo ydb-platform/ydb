@@ -44,19 +44,19 @@ public:
             return GetIV(NBackup::EBackupFileType::Permissions);
         }
 
-        TMaybe<NBackup::TEncryptionIV> GetTopicIV() const {
-            return GetIV(NBackup::EBackupFileType::TableTopic);
+        TMaybe<NBackup::TEncryptionIV> GetChangefeedTopicIV(ui32 changefeedIndex) const {
+            return GetIV(NBackup::EBackupFileType::TableTopic, changefeedIndex);
         }
 
-        TMaybe<NBackup::TEncryptionIV> GetChangefeedIV() const {
-            return GetIV(NBackup::EBackupFileType::TableChangefeed);
+        TMaybe<NBackup::TEncryptionIV> GetChangefeedIV(ui32 changefeedIndex) const {
+            return GetIV(NBackup::EBackupFileType::TableChangefeed, changefeedIndex);
         }
 
     private:
-        TMaybe<NBackup::TEncryptionIV> GetIV(NBackup::EBackupFileType fileType) const {
+        TMaybe<NBackup::TEncryptionIV> GetIV(NBackup::EBackupFileType fileType, ui32 shardNumber = 0) const {
             TMaybe<NBackup::TEncryptionIV> iv;
             if (IV) {
-                iv = NBackup::TEncryptionIV::Combine(*IV, fileType, 0 /* backupItemNumber is already mixed in */, 0);
+                iv = NBackup::TEncryptionIV::Combine(*IV, fileType, 0 /* backupItemNumber is already mixed in */, shardNumber);
             }
             return iv;
         }
@@ -118,12 +118,12 @@ public:
         return ObjectKeyPattern + '/' + NBackupRestoreTraits::PermissionsKeySuffix(EncryptionSettings.EncryptedBackup);
     }
 
-    inline TString GetTopicKey(const TString& changefeedName) const {
-        return TStringBuilder() << ObjectKeyPattern << '/'<< changefeedName << '/' << NBackupRestoreTraits::TopicKeySuffix(EncryptionSettings.EncryptedBackup);
+    inline TString GetTopicKey(const TString& changefeedPrefix) const {
+        return TStringBuilder() << ObjectKeyPattern << '/'<< changefeedPrefix << '/' << NBackupRestoreTraits::TopicKeySuffix(EncryptionSettings.EncryptedBackup);
     }
 
-     inline TString GetChangefeedKey(const TString& changefeedName) const {
-        return TStringBuilder() << ObjectKeyPattern << '/' << changefeedName << '/' << NBackupRestoreTraits::ChangefeedKeySuffix(EncryptionSettings.EncryptedBackup);
+    inline TString GetChangefeedKey(const TString& changefeedPrefix) const {
+        return TStringBuilder() << ObjectKeyPattern << '/' << changefeedPrefix << '/' << NBackupRestoreTraits::ChangefeedKeySuffix(EncryptionSettings.EncryptedBackup);
     }
 
     inline TString GetMetadataKey() const {

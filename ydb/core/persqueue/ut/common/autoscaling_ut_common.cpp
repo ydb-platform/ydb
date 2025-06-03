@@ -244,7 +244,7 @@ std::shared_ptr<TTestReadSession<SdkVersion::Topic>::TSdkReadSession> TTestReadS
 
     readSettings.EventHandlers_.SimpleDataHandlers(
         [impl=Impl, expectedMessagesCount=settings.ExpectedMessagesCount]
-        (TReadSessionEvent::TDataReceivedEvent& ev) mutable {
+        (NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent& ev) mutable {
         auto& messages = ev.GetMessages();
         for (size_t i = 0u; i < messages.size(); ++i) {
             auto& message = messages[i];

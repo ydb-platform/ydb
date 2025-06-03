@@ -3,7 +3,7 @@
 Выполняет пользовательскую нагрузку, состоящую из нескольких этапов.
 Пользователь указывает путь к папке, называемой `suite`, которая содержит подпапки для каждого этапа. Этот путь указывается с помощью параметра `--suite-path` в каждой команде.
 
-Пример каталога `suite` на [GitHub](https://github.com/ydb-platform/ydb/tree/main/ydb/tests/functional/tpc/data/e1).
+Пример папки `suite` на [GitHub](https://github.com/ydb-platform/ydb/tree/main/ydb/tests/functional/tpc/data/e1).
 
 Процесс может содержать до четырех этапов:
 

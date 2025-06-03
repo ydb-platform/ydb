@@ -32,7 +32,6 @@ Y_UNIT_TEST_SUITE(Login) {
 
     Y_UNIT_TEST(TestNameIsNotAllowed1) {
         TLoginProvider provider;
-        //provider.RotateKeys();
         TLoginProvider::TCreateUserRequest request;
         request.User = "_USER_";
         request.Password = "password";
@@ -43,6 +42,18 @@ Y_UNIT_TEST_SUITE(Login) {
 
         request.User = "user";
         UNIT_ASSERT(!provider.CreateUser(request).Error);
+    }
+
+    Y_UNIT_TEST(TestDefaultGroupNamesAreAllowed) {
+        static const TVector<TString> DEFAULT_GROUP_NAMES = {
+            "ADMINS", "DATABASE-ADMINS", "ACCESS-ADMINS", "DDL-ADMINS",
+            "DATA-WRITERS", "DATA-READERS", "METADATA-READERS", "USERS"
+        };
+        TLoginProvider provider;
+        for (const auto& name : DEFAULT_GROUP_NAMES) {
+            const auto response = provider.CreateGroup({.Group = name, .Options = {.StrongCheckName = false}});
+            UNIT_ASSERT(!response.Error);
+        }
     }
 
     Y_UNIT_TEST(TestFailedLogin1) {

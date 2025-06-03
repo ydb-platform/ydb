@@ -69,13 +69,9 @@ enum EReplicaConsistency
 
 enum EMasterReadKind
 {
-    // These options cover the majority of cases.
     MRK_LEADER = 0;
     MRK_FOLLOWER = 1;
     MRK_CACHE = 2;
-
-    // These are advanced options. Typically you don't need these.
-    MRK_MASTER_SIDE_CACHE = 3;
 }
 
 enum ERowsetKind

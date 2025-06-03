@@ -248,7 +248,6 @@ namespace NActors {
         bool SubscribedForConnection = false;
         NInterconnect::NRdma::TRdmaCtx* RdmaCtx = nullptr;
         std::optional<NInterconnect::NRdma::TQueuePair> RdmaQp;
-        ibv_gid RdmaGid;
 
     public:
         THandshakeActor(TInterconnectProxyCommon::TPtr common, const TActorId& self, const TActorId& peer,
@@ -478,18 +477,19 @@ namespace NActors {
             gid.global.subnet_prefix = proto.GetSubnetPrefix();
             int err = RdmaQp->ToRtsState(RdmaCtx, proto.GetQpNum(), gid, IBV_MTU_1024);
             if (err) {
-                char str[INET6_ADDRSTRLEN];
-                inet_ntop(AF_INET6, &(gid), str, INET6_ADDRSTRLEN);
+                TStringBuilder sb;
+                sb << gid;
                 success.SetRdmaErr("Unable to promote QP to RTS on the incomming side");
                 LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NLog::PRI_ERROR,
-                    "Unable to promote QP to RTS, err: %d (%s), gid: %s", err, strerror(err), str);
+                    "Unable to promote QP to RTS, err: %d (%s), gid: %s", err, strerror(err), sb.data());
                 return;
             }
             auto mtuIndex = std::min((ui32)proto.GetMtuIndex(), (ui32)RdmaCtx->GetPortAttr().active_mtu);
             auto rdmaHsResp = success.MutableQpPrepared();
             rdmaHsResp->SetQpNum(RdmaQp->GetQpNum());
-            rdmaHsResp->SetSubnetPrefix(RdmaGid.global.subnet_prefix);
-            rdmaHsResp->SetInterfaceId(RdmaGid.global.interface_id);
+            const auto& localGid = RdmaCtx->GetGid();
+            rdmaHsResp->SetSubnetPrefix(localGid.global.subnet_prefix);
+            rdmaHsResp->SetInterfaceId(localGid.global.interface_id);
             rdmaHsResp->SetMtuIndex((ibv_mtu)mtuIndex);
         }
 
@@ -796,8 +796,9 @@ namespace NActors {
                 if (RdmaQp) {
                     auto rdmaHs = request.MutableRdmaHandshake();
                     rdmaHs->SetQpNum(RdmaQp->GetQpNum());
-                    rdmaHs->SetSubnetPrefix(RdmaGid.global.subnet_prefix);
-                    rdmaHs->SetInterfaceId(RdmaGid.global.interface_id);
+                    const auto& gid = RdmaCtx->GetGid();
+                    rdmaHs->SetSubnetPrefix(gid.global.subnet_prefix);
+                    rdmaHs->SetInterfaceId(gid.global.interface_id);
                     rdmaHs->SetMtuIndex(RdmaCtx->GetPortAttr().active_mtu);
                 }
 
@@ -851,10 +852,10 @@ namespace NActors {
                     gid.global.subnet_prefix = remoteQpPrepared.GetSubnetPrefix();
                     int err = RdmaQp->ToRtsState(RdmaCtx,remoteQpPrepared.GetQpNum(), gid, (ibv_mtu)remoteQpPrepared.GetMtuIndex());
                     if (err) {
-                        char str[INET6_ADDRSTRLEN];
-                        inet_ntop(AF_INET6, &(gid), str, INET6_ADDRSTRLEN);
+                        TStringBuilder sb;
+                        sb << gid;
                         LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NLog::PRI_ERROR,
-                                "Unable to promote QP to RTS, err: %d (%s), gid: %s", err, strerror(err), str);
+                                "Unable to promote QP to RTS, err: %d (%s), gid: %s", err, strerror(err), sb.data());
                         RdmaQp.reset();
                     }
                 }
@@ -1222,7 +1223,6 @@ namespace NActors {
                     if (RdmaCtx) {
                         LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NLog::PRI_ERROR,
                             "Found verbs fontext for address %s", std::get<0>(sockname).ToString().data());
-                        RdmaGid = *(reinterpret_cast<const ibv_gid*>(&addr)); // Hide in the link manager
                     } else {
                         LOG_ERROR_IC("ICRDMA", "Unable to find verbs context using address %s",
                             std::get<0>(sockname).ToString().data());

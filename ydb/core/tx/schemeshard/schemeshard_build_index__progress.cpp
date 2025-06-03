@@ -692,6 +692,10 @@ private:
         *ev->Record.MutableDataColumns() = {
             buildInfo.DataColumns.begin(), buildInfo.DataColumns.end()
         };
+        const auto& tableInfo = *Self->Tables.at(buildInfo.TablePathId);
+        for (ui32 keyPos: tableInfo.KeyColumnIds) {
+            ev->Record.AddSourcePrimaryKeyColumns(tableInfo.Columns.at(keyPos).Name);
+        }
 
         auto shardId = CommonFillRecord<false>(ev->Record, shardIdx, buildInfo);
         ev->Record.SetSeed(ui64(shardId));

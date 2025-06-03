@@ -103,7 +103,7 @@ protected:
             if (i->GetCompactionLevel()) {
                 continue;
             }
-            if (i->GetTotalBlobBytes() > 512 * 1024 && i->GetMeta().GetProduced() != NPortion::EProduced::INSERTED) {
+            if (i->GetTotalBlobBytes() > 512 * 1024 && i->GetPortionType() == EPortionType::Compacted) {
                 for (i32 levelIdx = Levels.size() - 1; levelIdx >= 0; --levelIdx) {
                     if (Levels[levelIdx]->CanTakePortion(i)) {
                         Levels[levelIdx]->ModifyPortions({ i }, {});

@@ -69,60 +69,49 @@ public:
 
 class TBatchSerializationStat {
 protected:
-    ui64 RecordCount = 0;
-    double SerializedBytes = 0;
-    double RawBytes = 0;
-protected:
-    double GetSerializedBytesPerRecord() const {
-        return SerializedBytes / RecordCount;
-    }
-    double GetRawBytesPerRecord() const {
-        return RawBytes / RecordCount;
-    }
+    double SerializedBytesPerRecord = 0;
+    double RawBytesPerRecord = 0;
 public:
     TBatchSerializationStat() = default;
     TBatchSerializationStat(const ui64 bytes, const ui64 recordsCount, const ui64 rawBytes) {
         Y_ABORT_UNLESS(recordsCount);
-        RecordCount = recordsCount;
-        SerializedBytes = bytes;
-        RawBytes = rawBytes;
+        SerializedBytesPerRecord = 1.0 * bytes / recordsCount;
+        RawBytesPerRecord = 1.0 * rawBytes / recordsCount;
     }
 
     TString DebugString() const {
-        return TStringBuilder() << "{sbpr=" << GetSerializedBytesPerRecord() << ";rbpr=" << GetRawBytesPerRecord() << "}";
+        return TStringBuilder() << "{sbpr=" << SerializedBytesPerRecord << ";rbpr=" << RawBytesPerRecord << "}";
     }
 
     TBatchSerializationStat(const TSimpleSerializationStat& simple) {
-        RecordCount = simple.GetRecordsCount();
-        SerializedBytes = simple.GetSerializedBytes();
-        RawBytes = simple.GetRawBytes();
+        SerializedBytesPerRecord = simple.GetSerializedBytesPerRecord();
+        RawBytesPerRecord = simple.GetRawBytesPerRecord();
     }
 
     void Merge(const TSimpleSerializationStat& item) {
-        RecordCount += item.GetRecordsCount();
-        SerializedBytes += item.GetSerializedBytes();
-        RawBytes += item.GetRawBytes();
+        SerializedBytesPerRecord += item.GetSerializedBytesPerRecord();
+        RawBytesPerRecord += item.GetRawBytesPerRecord();
     }
 
     std::vector<i64> SplitRecordsForBlobSize(const i64 recordsCount, const ui64 blobSize) const;
 
-    std::optional<ui64> PredictOptimalPackRecordsCount(const ui64 recordsCount, const ui64 blobSize) const {        
-        if (!SerializedBytes) {
+    std::optional<ui64> PredictOptimalPackRecordsCount(const ui64 recordsCount, const ui64 blobSize) const {
+        if (!SerializedBytesPerRecord) {
             return {};
         }
-        const ui64 fullSize = recordsCount * GetSerializedBytesPerRecord();
+        const ui64 fullSize = 1.0 * recordsCount * SerializedBytesPerRecord;
         if (fullSize < blobSize) {
             return recordsCount;
         } else {
-            return std::floor(blobSize / GetSerializedBytesPerRecord());
+            return std::floor(1.0 * blobSize / SerializedBytesPerRecord);
         }
     }
 
     std::optional<ui64> PredictOptimalSplitFactor(const ui64 recordsCount, const ui64 blobSize) const {
-        if (!SerializedBytes) {
+        if (!SerializedBytesPerRecord) {
             return {};
         }
-        const ui64 fullSize = recordsCount * GetSerializedBytesPerRecord();
+        const ui64 fullSize = 1.0 * recordsCount * SerializedBytesPerRecord;
         if (fullSize < blobSize) {
             return 1;
         } else {

@@ -15,8 +15,6 @@ PEERDIR(
     ydb/core/kqp
     ydb/core/kqp/ut/common
     ydb/core/kqp/ut/federated_query/common
-    ydb/core/kqp/workload_service/ut/common
-    ydb/core/tx/columnshard/hooks/testing
     yql/essentials/sql/pg
     yql/essentials/parser/pg_wrapper
 )

@@ -94,6 +94,7 @@ public:
                     return ctx.NewAtom(pos, item->GetName());
                 });
             auto columnNames = ctx.NewList(pos, std::move(colNames));
+
             return Build<TDqSourceWrap>(ctx, pos)
                 .Input<TDqPqTopicSource>()
                     .World(pqReadTopic.World())

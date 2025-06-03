@@ -56,7 +56,7 @@ public:
         TMaybe<NBackup::TEncryptionIV> GetIV(NBackup::EBackupFileType fileType, ui32 shardNumber = 0) const {
             TMaybe<NBackup::TEncryptionIV> iv;
             if (IV) {
-                iv = NBackup::TEncryptionIV::Combine(*IV, fileType, 0 /* backupItemNumber */, shardNumber);
+                iv = NBackup::TEncryptionIV::Combine(*IV, fileType, 0 /* backupItemNumber is already mixed in */, shardNumber);
             }
             return iv;
         }

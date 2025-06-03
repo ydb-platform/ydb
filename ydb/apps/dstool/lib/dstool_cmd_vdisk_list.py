@@ -67,7 +67,7 @@ def do(args):
         'NodeId:PDiskId',
         'VSlotId',
         'VSlotStatus',
-        'GroupSizeInUnits'
+        'GroupSizeInUnits',
         'IsDonor',
         'ReadOnly',
     ]

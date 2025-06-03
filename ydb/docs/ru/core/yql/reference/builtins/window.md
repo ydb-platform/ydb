@@ -1,124 +1,7 @@
+
 # Список оконных функций в YQL
 
 Синтаксис вызова оконных функций подробно описан в [отдельной статье](../syntax/select/window.md).
-
-{% if feature_window_functions %}
-
-Оконные функции позволяют выполнять вычисления на наборе строк, связанных с текущей строкой. В отличие от агрегатных функций, оконные функции не группируют строки в одну выходную строку: каждая строка входит в результат запроса по отдельности.
-
-В этом случае на каждой строке оказывается результат агрегации, полученный на множестве строк из [рамки окна](../syntax/select/window.md#frame).
-
-{% note info %}
-
-Оконные функции можно использовать только в `SELECT` и `ORDER BY`.
-
-{% endnote %}
-
-## ROW_NUMBER
-
-Номер строки в рамках [раздела](../syntax/select/window.md#partition). Без аргументов.
-
-### Примеры
-
-```yql
-SELECT
-    ROW_NUMBER() OVER w AS row_number,
-    value
-FROM my_table
-WINDOW w AS (ORDER BY key);
-```
-
-## LAG / LEAD {#lag-lead}
-
-Доступ к значению из строки [раздела](../syntax/select/window.md#partition), отстающей (`LAG`) или опережающей (`LEAD`) текущую на фиксированное число. В первом аргументе указывается выражение, к которому необходим доступ, а во втором — отступ в строках. Также можно указать третий аргумент, который будет использован как значение по умолчанию, если целевая строка находится за пределами раздела (иначе используется `NULL`).
-
-### Примеры
-
-```yql
-SELECT
-   int_value,
-   LAG(int_value, 1) OVER w AS int_value_lag_1,
-   LEAD(int_value, 2) OVER w AS int_value_lead_2,
-FROM my_table
-WINDOW w AS (ORDER BY key);
-```
-
-## FIRST_VALUE / LAST_VALUE {#first-last-value}
-
-Доступ к значениям из первой и последней (в порядке `ORDER BY` на окне) строк [рамки окна](../syntax/select/window.md#frame). Единственный аргумент - выражение, к которому необходим доступ.
-
-### Примеры
-
-```yql
-SELECT
-   int_value,
-   FIRST_VALUE(int_value) OVER w AS int_value_first,
-   LAST_VALUE(int_value) OVER w AS int_value_last,
-FROM my_table
-WINDOW w AS (ORDER BY key);
-```
-
-## NTH_VALUE
-
-Доступ к значения из заданной строки (в порядке `ORDER BY` на окне) [рамки окна](../syntax/select/window.md#frame). Аргументы - выражение, к которому необходим доступ и номер строки, начиная с 1.
-
-### Примеры
-
-```yql
-SELECT
-   int_value,
-   NTH_VALUE(int_value, 2) OVER w AS int_value_nth_2,
-FROM my_table
-WINDOW w AS (ORDER BY key);
-```
-
-## RANK / DENSE_RANK / PERCENT_RANK {#rank}
-
-Пронумеровать группы соседних строк [раздела](../syntax/select/window.md#partition) с одинаковым значением выражения в аргументе. `DENSE_RANK` нумерует группы подряд, а `RANK` — пропускает `(N - 1)` значений, где `N` — число строк в предыдущей группе. `PERCENT_RANK` возвращает относительный ранг текущей строки: `(RANK - 1) / (общее количество строк раздела - 1)`. Если раздел содержит только одну строку, `PERCENT_RANK` возвращает 0.
-
-Если аргумент не указан, нумерация основывается на порядке, заданном в `ORDER BY` окна.
-
-### Примеры
-
-```yql
-SELECT
-   int_value,
-   RANK(int_value) OVER w AS int_value_rank,
-   DENSE_RANK() OVER w AS dense_rank,
-   PERCENT_RANK() OVER w AS percent_rank,
-FROM my_table
-WINDOW w AS (ORDER BY key);
-```
-
-## NTILE
-
-Распределяет строки упорядоченного [раздела](../syntax/select/window.md#partition) в заданное количество групп. Группы нумеруются, начиная с единицы. Для каждой строки функция NTILE возвращает номер группы,которой принадлежит строка.
-
-### Примеры
-
-```yql
-SELECT
-   int_value,
-   NTILE(3) OVER w AS int_value_ntile_3,
-FROM my_table
-WINDOW w AS (ORDER BY key);
-```
-
-## CUME_DIST
-
-Возвращает относительную позицию (> 0 и <= 1) строки в рамках [раздела](../syntax/select/window.md#partition). Без аргументов.
-
-### Примеры
-
-```yql
-SELECT
-   int_value,
-   CUME_DIST() OVER w AS int_value_cume_dist,
-FROM my_table
-WINDOW w AS (ORDER BY key);
-```
-
-{% endif %}
 
 
 ## Агрегатные функции {#aggregate-functions}
@@ -139,9 +22,219 @@ WINDOW
 ```
 
 
+## ROW_NUMBER {#row_number}
+
+Номер строки в рамках [раздела](../syntax/select/window.md#partition). Без аргументов.
+
+### Сигнатура
+
+```yql
+ROW_NUMBER()->Uint64
+```
+
+### Примеры
+
+```yql
+SELECT
+    ROW_NUMBER() OVER w AS row_num
+FROM my_table
+WINDOW w AS (ORDER BY key);
+```
+
+
+## LAG / LEAD {#lag-lead}
+
+Доступ к значению из строки [раздела](../syntax/select/window.md#partition), отстающей (`LAG`) или опережающей (`LEAD`) текущую на фиксированное число. В первом аргументе указывается выражение, к которому необходим доступ, а во втором — отступ в строках. Отступ можно не указывать, по умолчанию используется соседняя строка — предыдущая или следующая, соответственно, то есть подразумевается 1. В строках, для которых нет соседей с заданным расстоянием (например `LAG(expr, 3)` в первой и второй строках раздела), возвращается `NULL`.
+
+### Сигнатура
+
+```yql
+LEAD(T[,Int32])->T?
+LAG(T[,Int32])->T?
+```
+
+### Примеры
+
+```yql
+SELECT
+   int_value - LAG(int_value) OVER w AS int_value_diff
+FROM my_table
+WINDOW w AS (ORDER BY key);
+```
+
+```yql
+SELECT item, odd, LAG(item, 1) OVER w as lag1 FROM (
+    SELECT item, item % 2 as odd FROM (
+        SELECT AsList(1, 2, 3, 4, 5, 6, 7) as item
+    )
+    FLATTEN BY item
+)
+WINDOW w As (
+    PARTITION BY odd
+    ORDER BY item
+);
+
+/* Output:
+item  odd  lag1
+--------------------
+2  0  NULL
+4  0  2
+6  0  4
+1  1  NULL
+3  1  1
+5  1  3
+7  1  5
+*/
+```
+
+
+## FIRST_VALUE / LAST_VALUE
+
+Доступ к значениям из первой и последней (в порядке `ORDER BY` на окне) строк [рамки окна](../syntax/select/window.md#frame). Единственный аргумент - выражение, к которому необходим доступ.
+
+Опционально перед `OVER` может указываться дополнительный модификатор `IGNORE NULLS`, который меняет поведение функций на первое или последнее **не пустое** (то есть не `NULL`) значение среди строк рамки окна. Антоним этого модификатора — `RESPECT NULLS` является поведением по умолчанию и может не указываться.
+
+### Сигнатура
+
+```yql
+FIRST_VALUE(T)->T?
+LAST_VALUE(T)->T?
+```
+
+### Примеры
+
+```yql
+SELECT
+   FIRST_VALUE(my_column) OVER w
+FROM my_table
+WINDOW w AS (ORDER BY key);
+```
+
+```yql
+SELECT
+   LAST_VALUE(my_column) IGNORE NULLS OVER w
+FROM my_table
+WINDOW w AS (ORDER BY key);
+```
+
+## NTH_VALUE
+
+Доступ к значения из заданной строки (в порядке `ORDER BY` на окне) [рамки окна](../syntax/select/window.md#frame). Аргументы - выражение, к которому необходим доступ и номер строки, начиная с 1.
+
+Опционально перед `OVER` может указываться дополнительный модификатор `IGNORE NULLS`, который приводит к пропуску строк с NULL в значении первого аргумента. Антоним этого модификатора — `RESPECT NULLS` является поведением по умолчанию и может не указываться.
+
+### Сигнатура
+
+```yql
+NTH_VALUE(T,N)->T?
+```
+
+### Примеры
+
+```yql
+SELECT
+   NTH_VALUE(my_column, 2) OVER w
+FROM my_table
+WINDOW w AS (ORDER BY key);
+```
+
+```yql
+SELECT
+   NTH_VALUE(my_column, 3) IGNORE NULLS OVER w
+FROM my_table
+WINDOW w AS (ORDER BY key);
+```
+
+
+## RANK / DENSE_RANK / PERCENT_RANK {#rank}
+
+Пронумеровать группы соседних строк [раздела](../syntax/select/window.md#partition) с одинаковым значением выражения в аргументе. `DENSE_RANK` нумерует группы подряд, а `RANK` — пропускает `(N - 1)` значений, где `N` — число строк в предыдущей группе. `PERCENT_RANK` выдает относительный ранг текущей строки: `(RANK - 1)/(число строк в разделе - 1)`.
+
+При отсутствии аргумента использует порядок, указанный в секции `ORDER BY` определения окна.
+Если аргумент отсутствует и `ORDER BY` не указан, то все строки считаются равными друг другу.
+
+{% note info %}
+
+Возможность передавать аргумент в `RANK`/`DENSE_RANK`/`PERCENT_RANK` является нестандартным расширением YQL.
+
+{% endnote %}
+
+### Сигнатура
+
+```yql
+RANK([T])->Uint64
+DENSE_RANK([T])->Uint64
+PERCENT_RANK([T])->Double
+```
+
+### Примеры
+
+```yql
+SELECT
+   RANK(my_column) OVER w
+FROM my_table
+WINDOW w AS (ORDER BY key);
+```
+
+```yql
+SELECT
+   DENSE_RANK() OVER w
+FROM my_table
+WINDOW w AS (ORDER BY my_column);
+```
+
+```yql
+SELECT
+   PERCENT_RANK() OVER w
+FROM my_table
+WINDOW w AS (ORDER BY my_column);
+```
+
+
+## NTILE
+
+Распределяет строки упорядоченного [раздела](../syntax/select/window.md#partition) в заданное количество групп. Группы нумеруются, начиная с единицы. Для каждой строки функция NTILE возвращает номер группы,которой принадлежит строка.
+
+### Сигнатура
+
+```yql
+NTILE(Uint64)->Uint64
+```
+
+### Примеры
+
+```yql
+SELECT
+    NTILE(10) OVER w AS group_num
+FROM my_table
+WINDOW w AS (ORDER BY key);
+```
+
+
+## CUME_DIST
+
+Возвращает относительную позицию (> 0 и <= 1) строки в рамках [раздела](../syntax/select/window.md#partition). Без аргументов.
+
+### Сигнатура
+
+```yql
+CUME_DIST()->Double
+```
+
+### Примеры
+
+```yql
+SELECT
+    CUME_DIST() OVER w AS dist
+FROM my_table
+WINDOW w AS (ORDER BY key);
+```
+
+
+
 ## SessionState() {#session-state}
 
-Нестандартная оконная функция `SessionState()` (без аргументов) позволяет получить состояние расчета сессий из [SessionWindow](../syntax/select/group-by.md#session-window) для текущей строки.
+Нестандартная оконная функция `SessionState()` (без аргументов) позволяет получить состояние расчета сессий из [SessionWindow](../syntax/select/group_by.md#session-window) для текущей строки.
 
 Допускается только при наличии `SessionWindow()` в секции `PARTITION BY` определения окна.
 

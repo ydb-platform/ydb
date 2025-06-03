@@ -3,7 +3,6 @@ from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.common.types import Erasure
 from ydb.tests.stress.common.common import YdbClient
-from ydb.tests.stress.reconfig_state_storage_workload.workload import WorkloadRunner
 from ydb.tests.library.harness.util import LogLevels
 
 

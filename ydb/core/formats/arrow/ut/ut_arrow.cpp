@@ -721,7 +721,7 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
             const std::vector<std::string> vColumns = {batch->schema()->field(0)->name()};
             auto merger = std::make_shared<NArrow::NMerger::TMergePartialStream>(batch->schema(), batch->schema(), true, vColumns, std::nullopt);
             for (auto&& i : batches) {
-                merger->AddSource(i, nullptr, NArrow::NMerger::TIterationOrder::Forward(0));
+                merger->AddSource(i, nullptr, NArrow::NMerger::TIterationOrder::Reversed(0));
             }
             merger->DrainAll(builder);
             sorted = builder.Finalize();

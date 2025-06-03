@@ -76,7 +76,7 @@ private:
     }
 
     virtual bool IsAppropriatePortionToStore(const TPortionInfoForCompaction& info) const override {
-        if (info.GetTotalBlobsSize() < GetExpectedPortionSize()) {
+        if (info.GetTotalBlobBytes() < GetExpectedPortionSize()) {
             return false;
         }
         return !GetAffectedPortionBytes(info.GetFirstPK(), info.GetLastPK());

@@ -434,7 +434,7 @@ class ScenarioTestHelper:
     @classmethod
     @allure.step('Execute scan query')
     def execute_scan_query(
-        cls, yql: str, expected_status: ydb.StatusCode | Set[ydb.StatusCode] = ydb.StatusCode.SUCCESS, timeout = 10
+        cls, yql: str, expected_status: ydb.StatusCode | Set[ydb.StatusCode] = ydb.StatusCode.SUCCESS, timeout=10
     ):
         """Run a scanning query on the tested database.
 

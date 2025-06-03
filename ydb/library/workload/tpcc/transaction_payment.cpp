@@ -396,6 +396,7 @@ NThreading::TFuture<TStatus> GetPaymentTask(
                 << warehouseID << ", " << districtID << ", " << customerID << ", session: " << session.GetId());
         }
         customer = ParseCustomerFromResult(customerParser);
+        customer.c_id = customerID;
     }
 
     // Update customer balance

@@ -15,7 +15,9 @@ TEST_SRCS(
     test_stress.py
     test_statistics.py
     test_rolling.py
-    test_datetime2.py
+    test_data_type.py
+    udf/test_datetime2.py
+    udf/test_digest.py
 )
 
 SIZE(LARGE)
@@ -33,6 +35,7 @@ DEPENDS(
 PEERDIR(
     contrib/python/boto3
     ydb/tests/library
+    ydb/tests/datashard/lib
     ydb/tests/stress/simple_queue/workload
     ydb/tests/library/compatibility
 )

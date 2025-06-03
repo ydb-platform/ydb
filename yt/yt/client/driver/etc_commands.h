@@ -19,8 +19,8 @@ class TUpdateMembershipCommand
     : public TTypedCommand<TOptions>
 {
 protected:
-    TString Group;
-    TString Member;
+    std::string Group;
+    std::string Member;
 
     REGISTER_YSON_STRUCT_LITE(TUpdateMembershipCommand);
 

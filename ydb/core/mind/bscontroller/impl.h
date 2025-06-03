@@ -1567,7 +1567,7 @@ private:
     bool TryToRelocateBrokenDisksLocallyFirst = false;
     bool DonorMode = false;
     TDuration ScrubPeriodicity;
-    NKikimrBlobStorage::TStorageConfig StorageConfig;
+    std::shared_ptr<const NKikimrBlobStorage::TStorageConfig> StorageConfig;
     bool SelfManagementEnabled = false;
     std::optional<TYamlConfig> YamlConfig;
     ui64 YamlConfigHash = 0;

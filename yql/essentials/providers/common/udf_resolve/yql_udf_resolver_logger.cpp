@@ -12,7 +12,7 @@ using namespace NYql;
 class TUdfResolverWithLoggerDecorator : public IUdfResolver {
 public:
     TUdfResolverWithLoggerDecorator(IUdfResolver::TPtr underlying, const TString& path, const TString& sessionId)
-        : Underlying_(underlying), Out_(TFile(path, WrOnly | ForAppend)), SessionId_(sessionId) {}
+        : Underlying_(underlying), Out_(TFile(path, WrOnly | ForAppend | OpenAlways)), SessionId_(sessionId) {}
 
     TMaybe<TFilePathWithMd5> GetSystemModulePath(const TStringBuf& moduleName) const override {
         return Underlying_->GetSystemModulePath(moduleName);

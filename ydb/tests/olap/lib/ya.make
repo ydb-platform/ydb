@@ -3,6 +3,7 @@ PY3_LIBRARY()
     PY_SRCS (
         allure_utils.py
         results_processor.py
+        remote_execution.py
         ydb_cluster.py
         utils.py
         ydb_cli.py

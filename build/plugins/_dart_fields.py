@@ -1141,6 +1141,7 @@ class TestFiles:
         'maps/renderer/libs/terrain',
         'maps/renderer/libs/threading',
         'maps/renderer/libs/vec',
+        'maps/renderer/libs/yql',
         'maps/renderer/libs/yt',
         'maps/renderer/tilemill',
         'maps/renderer/tools/fontograph',

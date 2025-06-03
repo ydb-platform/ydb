@@ -436,7 +436,7 @@ public:
             // Note: any transaction (e.g. immediate or non-volatile) may decide to commit as volatile due to dependencies
             // Such transactions would have no participants and become immediately committed
             auto commitTxIds = userDb.GetVolatileCommitTxIds();
-            if (commitTxIds) {
+            if (commitTxIds || isArbiter) {
                 TVector<ui64> participants(awaitingDecisions.begin(), awaitingDecisions.end());
                 DataShard.GetVolatileTxManager().PersistAddVolatileTx(
                     userDb.GetVolatileTxId(),
@@ -449,6 +449,8 @@ public:
                     isArbiter,
                     txc
                 );
+            } else {
+                awaitingDecisions.clear();
             }
 
             if (userDb.GetPerformedUserReads()) {

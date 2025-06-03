@@ -109,7 +109,9 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
         TKikimrRunner kikimr(settings);
 
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
-        TLocalHelper(kikimr).CreateTestOlapTable();
+        auto helper = TLocalHelper(kikimr);
+        helper.CreateTestOlapTable();
+        helper.SetForcedCompaction();
         auto tableClient = kikimr.GetTableClient();
 
         {

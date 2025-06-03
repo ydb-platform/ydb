@@ -13,7 +13,7 @@ public:
     TCircularQueue()
         : FirstEmpty(0)
         , FirstUsed(0)
-        , Size(0)
+        , Size_(0)
     {
     }
 
@@ -22,42 +22,42 @@ public:
     }
 
     bool TryPush(T&& item) {
-        if (Size == Queue.size()) {
+        if (Size_ == Queue.size()) {
             return false;
         }
         Queue[FirstEmpty] = std::move(item);
         FirstEmpty = (FirstEmpty + 1) % Queue.size();
-        ++Size;
+        ++Size_;
         return true;
     }
 
     bool TryPop(T& item) {
-        if (Size == 0) {
+        if (Size_ == 0) {
             return false;
         }
         item = std::move(Queue[FirstUsed]);
         FirstUsed = (FirstUsed + 1) % Queue.size();
-        --Size;
+        --Size_;
         return true;
     }
 
-    size_t GetSize() const {
-        return Size;
+    size_t Size() const {
+        return Size_;
     }
 
-    bool IsEmpty() const {
-        return Size == 0;
+    bool Empty() const {
+        return Size_ == 0;
     }
 
     bool IsFull() const {
-        return Size == Queue.size();
+        return Size_ == Queue.size();
     }
 
 private:
     std::vector<T> Queue;
     size_t FirstEmpty;
     size_t FirstUsed;
-    size_t Size;
+    size_t Size_;
 };
 
 } // namespace NYdb::NTPCC

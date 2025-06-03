@@ -1,124 +1,7 @@
+
 # List of window functions in YQL
 
 The syntax for calling window functions is detailed in a [separate article](../syntax/select/window.md).
-
-{% if feature_window_functions %}
-
-Window functions allow you to perform calculations on a set of rows related to the current row. Unlike aggregate functions, window functions don't group rows into a single output row: each row retains its individual identity.
-
-In this case, each row includes an aggregation result obtained on a set of rows from the [window frame](../syntax/select/window.md#frame).
-
-{% note info %}
-
-Window functions can only be used in `SELECT` and `ORDER BY`.
-
-{% endnote %}
-
-## ROW_NUMBER
-
-Row number within a [partition](../syntax/select/window.md#partition). No arguments.
-
-### Examples
-
-```yql
-SELECT
-    ROW_NUMBER() OVER w AS row_number,
-    value
-FROM my_table
-WINDOW w AS (ORDER BY key);
-```
-
-## LAG / LEAD {#lag-lead}
-
-Accessing a value from a row in the [section](../syntax/select/window.md#partition) that lags behind (`LAG`) or leads (`LEAD`) the current row by a fixed number. The first argument specifies the expression to be accessed, and the second argument specifies the offset in rows. You can also specify the third argument that will be used as the default value if the target row is outside the section (otherwise, `NULL` is used).
-
-### Examples
-
-```yql
-SELECT
-   int_value,
-   LAG(int_value, 1) OVER w AS int_value_lag_1,
-   LEAD(int_value, 2) OVER w AS int_value_lead_2,
-FROM my_table
-WINDOW w AS (ORDER BY key);
-```
-
-## FIRST_VALUE / LAST_VALUE {#first-last-value}
-
-Access values from the first and last rows (using the `ORDER BY` clause for the window) of the [window frame](../syntax/select/window.md#frame). The only argument is the expression that you need to access.
-
-### Examples
-
-```yql
-SELECT
-   int_value,
-   FIRST_VALUE(int_value) OVER w AS int_value_first,
-   LAST_VALUE(int_value) OVER w AS int_value_last,
-FROM my_table
-WINDOW w AS (ORDER BY key);
-```
-
-## NTH_VALUE
-
-Access a value from a row specified by position in the window's `ORDER BY` order within [window frame](../syntax/select/window.md#frame). Arguments - the expression to access and the row number, starting with 1.
-
-### Examples
-
-```yql
-SELECT
-   int_value,
-   NTH_VALUE(int_value, 2) OVER w AS int_value_nth_2,
-FROM my_table
-WINDOW w AS (ORDER BY key);
-```
-
-## RANK / DENSE_RANK / PERCENT_RANK {#rank}
-
-Number the groups of neighboring rows in the [partition](../syntax/select/window.md#partition) with the same expression value in the argument. `DENSE_RANK` numbers the groups one by one, and `RANK` skips `(N - 1)` values, with `N` being the number of rows in the previous group. `PERCENT_RANK` returns the relative rank of the current row: `(RANK - 1) / (total number of partition rows - 1)`. If the partition contains only one row, `PERCENT_RANK` returns 0.
-
-If there's no argument, the numbering is based on the order specified in the window's `ORDER BY` clause.
-
-### Examples
-
-```yql
-SELECT
-   int_value,
-   RANK(int_value) OVER w AS int_value_rank,
-   DENSE_RANK() OVER w AS dense_rank,
-   PERCENT_RANK() OVER w AS percent_rank,
-FROM my_table
-WINDOW w AS (ORDER BY key);
-```
-
-## NTILE
-
-Distributes the rows of an ordered [partition](../syntax/select/window.md#partition) into a specified number of groups. The groups are numbered starting with one. For each row, the `NTILE` function returns the number of the group to which the row belongs.
-
-### Examples
-
-```yql
-SELECT
-   int_value,
-   NTILE(3) OVER w AS int_value_ntile_3,
-FROM my_table
-WINDOW w AS (ORDER BY key);
-```
-
-## CUME_DIST
-
-Returns the relative position (> 0 and <= 1) of a row within a [partition](../syntax/select/window.md#partition). No arguments.
-
-### Examples
-
-```yql
-SELECT
-   int_value,
-   CUME_DIST() OVER w AS int_value_cume_dist,
-FROM my_table
-WINDOW w AS (ORDER BY key);
-```
-
-{% endif %}
 
 
 
@@ -139,6 +22,222 @@ WINDOW
     w2 AS ();
 ```
 
+
+
+## ROW_NUMBER {#row_number}
+
+Row number within a [partition](../syntax/window.md#partition). No arguments.
+
+### Signature
+
+```yql
+ROW_NUMBER()->Uint64
+```
+
+### Examples
+
+```yql
+SELECT
+    ROW_NUMBER() OVER w AS row_num
+FROM my_table
+WINDOW w AS (ORDER BY key);
+```
+
+
+
+## LAG / LEAD {#lag-lead}
+
+Accessing a value from a row in the [section](../syntax/select/window.md#partition) that lags behind (`LAG`) or leads (`LEAD`) the current row by a fixed number. The first argument specifies the expression to be accessed, and the second argument specifies the offset in rows. You may omit the offset. By default, the neighbor row is used: the previous or next, respectively (hence, 1 is assumed by default). For the rows having no neighbors at a given distance (for example, `LAG(expr, 3)` `NULL` is returned in the first and second rows of the section).
+
+### Signature
+
+```yql
+LEAD(T[,Int32])->T?
+LAG(T[,Int32])->T?
+```
+
+### Examples
+
+```yql
+SELECT
+   int_value - LAG(int_value) OVER w AS int_value_diff
+FROM my_table
+WINDOW w AS (ORDER BY key);
+```
+
+```yql
+SELECT item, odd, LAG(item, 1) OVER w as lag1 FROM (
+    SELECT item, item % 2 as odd FROM (
+        SELECT AsList(1, 2, 3, 4, 5, 6, 7) as item
+    )
+    FLATTEN BY item
+)
+WINDOW w As (
+    PARTITION BY odd
+    ORDER BY item
+);
+
+/* Output:
+item  odd  lag1
+--------------------
+2  0  NULL
+4  0  2
+6  0  4
+1  1  NULL
+3  1  1
+5  1  3
+7  1  5
+*/
+```
+
+
+## FIRST_VALUE / LAST_VALUE
+
+Access values from the first and last rows (using the `ORDER BY` clause for the window) of the [window frame](../syntax/select/window.md#frame). The only argument is the expression that you need to access.
+
+Optionally, `OVER` can be preceded by the additional modifier `IGNORE NULLS`. It changes the behavior of functions to the first or last **non-empty** (i.e., non-`NULL`) value among the window frame rows. The antonym of this modifier is `RESPECT NULLS`: it's the default behavior that can be omitted.
+
+### Signature
+
+```yql
+FIRST_VALUE(T)->T?
+LAST_VALUE(T)->T?
+```
+
+### Examples
+
+```yql
+SELECT
+   FIRST_VALUE(my_column) OVER w
+FROM my_table
+WINDOW w AS (ORDER BY key);
+```
+
+```yql
+SELECT
+   LAST_VALUE(my_column) IGNORE NULLS OVER w
+FROM my_table
+WINDOW w AS (ORDER BY key);
+```
+
+
+
+## NTH_VALUE
+
+Access a value from a row specified by position in the window's `ORDER BY` order within [window frame](../syntax/select/window.md#frame). Arguments - the expression to access and the row number, starting with 1.
+
+Optionally, the `IGNORE NULLS` modifier can be specified before `OVER`, which causes rows with `NULL` in the first argument's value to be skipped. The antonym of this modifier is `RESPECT NULLS`, which is the default behavior and may be skipped.
+
+### Signature
+
+```yql
+NTH_VALUE(T,N)->T?
+```
+
+### Examples
+
+```yql
+SELECT
+   NTH_VALUE(my_column, 2) OVER w
+FROM my_table
+WINDOW w AS (ORDER BY key);
+```
+
+```yql
+SELECT
+   NTH_VALUE(my_column, 3) IGNORE NULLS OVER w
+FROM my_table
+WINDOW w AS (ORDER BY key);
+```
+
+
+
+
+## RANK / DENSE_RANK / PERCENT_RANK {#rank}
+
+Number the groups of neighboring rows in the [partition](../syntax/select/window.md#partition) with the same expression value in the argument. `DENSE_RANK` numbers the groups one by one, and `RANK` skips `(N - 1)` values, with `N` being the number of rows in the previous group. `PERCENT_RANK` returns the relative rank of the current row: $(RANK - 1)/(number of rows in the partition - 1)$.
+
+If there is no argument, it uses the order specified in the `ORDER BY` section in the window definition.
+If the argument is omitted and `ORDER BY` is not specified, then all rows are considered equal to each other.
+
+{% note info %}
+
+Passing an argument to `RANK`/`DENSE_RANK`/`PERCENT_RANK` is a non-standard extension in YQL.
+
+{% endnote %}
+
+### Signature
+
+```text
+RANK([T])->Uint64
+DENSE_RANK([T])->Uint64
+PERCENT_RANK([T])->Double
+```
+
+### Examples
+
+```yql
+SELECT
+   RANK(my_column) OVER w
+FROM my_table
+WINDOW w AS (ORDER BY key);
+```
+
+```yql
+SELECT
+   DENSE_RANK() OVER w
+FROM my_table
+WINDOW w AS (ORDER BY my_column);
+```
+
+```yql
+SELECT
+   PERCENT_RANK() OVER w
+FROM my_table
+WINDOW w AS (ORDER BY my_column);
+```
+
+
+
+## NTILE
+
+Distributes the rows of an ordered [partition](../syntax/select/window.md#partition) into a specified number of groups. The groups are numbered starting with one. For each row, the `NTILE` function returns the number of the group to which the row belongs.
+
+### Signature
+
+```yql
+NTILE(Uint64)->Uint64
+```
+
+### Examples
+
+```yql
+SELECT
+    NTILE(10) OVER w AS group_num
+FROM my_table
+WINDOW w AS (ORDER BY key);
+```
+
+
+
+## CUME_DIST
+
+Returns the relative position (> 0 and <= 1) of a row within a [partition](../syntax/select/window.md#partition). No arguments.
+
+### Signature
+
+```yql
+CUME_DIST()->Double
+```
+
+### Examples
+
+```yql
+SELECT
+    CUME_DIST() OVER w AS dist
+FROM my_table
+WINDOW w AS (ORDER BY key);
+```
 
 
 ## SessionState() {#session-state}

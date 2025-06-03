@@ -11,7 +11,6 @@ class TestVectorIndex(RollingUpgradeAndDowngradeFixture):
     def setup(self):
         if min(self.versions) < (25, 1):
             pytest.skip("Only available since 25-1")
-        self.table_name = "table"
         self.rows_count = 5
         self.index_name = "vector_idx"
         self.vector_dimension = 3
@@ -28,10 +27,10 @@ class TestVectorIndex(RollingUpgradeAndDowngradeFixture):
         values.append(numb)
         return ",".join(str(val) for val in values)
 
-    def _create_index(self, vector_type, distance=None, similarity=None):
+    def _create_index(self, vector_type, table_name, distance=None, similarity=None):
         if distance is not None:
             create_index_sql = f"""
-                ALTER TABLE {self.table_name}
+                ALTER TABLE {table_name}
                 ADD INDEX `{self.index_name}` GLOBAL USING vector_kmeans_tree
                 ON (vec)
                 WITH (distance={distance},
@@ -43,7 +42,7 @@ class TestVectorIndex(RollingUpgradeAndDowngradeFixture):
             """
         else:
             create_index_sql = f"""
-                ALTER TABLE {self.table_name}
+                ALTER TABLE {table_name}
                 ADD INDEX `{self.index_name}` GLOBAL USING vector_kmeans_tree
                 ON (vec)
                 WITH (similarity={similarity},
@@ -73,77 +72,64 @@ class TestVectorIndex(RollingUpgradeAndDowngradeFixture):
 
         assert wait_for(predicate, timeout_seconds=100, step_seconds=1), "Error getting index status"
 
-    def _drop_index(self):
-        drop_index_sql = f"""
-            ALTER TABLE {self.table_name}
-            DROP INDEX `{self.index_name}`;
-        """
-        with ydb.QuerySessionPool(self.driver) as session_pool:
-            session_pool.execute_with_retries(drop_index_sql)
-
     def write_data(self, name, vector_type):
-        values = []
-        for key in range(self.rows_count):
-            vector = self.get_vector(vector_type, key + 1)
-            values.append(f'({key}, Untag({name}([{vector}]), "{vector_type}"))')
+        qyerys = []
+        for table_name in self.table_names:
+            values = []
+            for key in range(self.rows_count):
+                vector = self.get_vector(vector_type, key + 1)
+                values.append(f'({key}, Untag({name}([{vector}]), "{vector_type}"))')
 
-        upsert_sql = f"""
-            UPSERT INTO `{self.table_name}` (key, vec)
-            VALUES {",".join(values)};
-        """
+            qyerys.append(
+                f"""
+                UPSERT INTO `{table_name}` (key, vec)
+                VALUES {",".join(values)};
+            """
+            )
         with ydb.QuerySessionPool(self.driver) as session_pool:
-            session_pool.execute_with_retries(upsert_sql)
+            for qyery in qyerys:
+                session_pool.execute_with_retries(qyery)
 
     def select_from_index(self, target, name, data_type, order):
-        vector = self.get_vector(f"{data_type}Vector", 1)
-        select_sql = f"""
-            $Target = {name}(Cast([{vector}] AS List<{data_type}>));
-            SELECT key, vec, {target}(vec, $Target) as target
-            FROM {self.table_name}
-            VIEW `{self.index_name}`
-            ORDER BY {target}(vec, $Target) {order}
-            LIMIT {self.rows_count};
-        """
+        qyerys = []
+        for table_name in self.table_names:
+            vector = self.get_vector(f"{data_type}Vector", 1)
+            qyerys.append(
+                f"""
+                $Target = {name}(Cast([{vector}] AS List<{data_type}>));
+                SELECT key, vec, {target}(vec, $Target) as target
+                FROM {table_name}
+                VIEW `{self.index_name}`
+                ORDER BY {target}(vec, $Target) {order}
+                LIMIT {self.rows_count};
+            """
+            )
         for _ in self.roll():
             with ydb.QuerySessionPool(self.driver) as session_pool:
-                result_sets = session_pool.execute_with_retries(select_sql)
-                assert len(result_sets[0].rows) > 0, "Query returned an empty set"
-                rows = result_sets[0].rows
-                for row in rows:
-                    assert row['target'] is not None, "the distance is None"
+                for qyery in qyerys:
+                    result_sets = session_pool.execute_with_retries(qyery)
+                    assert len(result_sets[0].rows) > 0, "Query returned an empty set"
+                    rows = result_sets[0].rows
+                    for row in rows:
+                        assert row['target'] is not None, "the distance is None"
 
     def create_table(self):
-        with ydb.QuerySessionPool(self.driver) as session_pool:
-            query = f"""
-                CREATE TABLE {self.table_name} (
+        querys = []
+        for table_name in self.table_names:
+            querys.append(
+                f"""
+                CREATE TABLE {table_name} (
                     key Int64 NOT NULL,
                     vec String NOT NULL,
                     PRIMARY KEY (key)
                 )
                 """
-            session_pool.execute_with_retries(query)
+            )
+        with ydb.QuerySessionPool(self.driver) as session_pool:
+            for query in querys:
+                session_pool.execute_with_retries(query)
 
-    @pytest.mark.parametrize(
-        "vector_type, distance, distance_func",
-        [
-            ("Uint8", "similarity", "inner_product"),
-            ("Int8", "similarity", "inner_product"),
-            ("Float", "similarity", "inner_product"),
-            ("Uint8", "similarity", "cosine"),
-            ("Int8", "similarity", "cosine"),
-            ("Float", "similarity", "cosine"),
-            ("Uint8", "distance", "cosine"),
-            ("Int8", "distance", "cosine"),
-            ("Float", "distance", "cosine"),
-            ("Uint8", "distance", "manhattan"),
-            ("Int8", "distance", "manhattan"),
-            ("Float", "distance", "manhattan"),
-            ("Uint8", "distance", "euclidean"),
-            ("Int8", "distance", "euclidean"),
-            ("Float", "distance", "euclidean"),
-        ],
-    )
-    def test_vector_index(self, vector_type, distance, distance_func):
+    def test_vector_index(self):
         vector_types = {
             "Uint8": "Knn::ToBinaryStringUint8",
             "Int8": "Knn::ToBinaryStringInt8",
@@ -157,18 +143,28 @@ class TestVectorIndex(RollingUpgradeAndDowngradeFixture):
                 "euclidean": "Knn::EuclideanDistance",
             },
         }
+        self.table_names = []
+        for vector_type in vector_types.keys():
+            for distance in targets.keys():
+                for distance_func in targets[distance].keys():
+                    self.table_names.append(f"{vector_type}_{distance}_{distance_func}")
         self.create_table()
         self.write_data(name=vector_types[vector_type], vector_type=f"{vector_type}Vector")
-        if distance == "similarity":
-            self._create_index(
-                vector_type=vector_type,
-                similarity=distance_func,
-            )
-        else:
-            self._create_index(
-                vector_type=vector_type,
-                distance=distance_func,
-            )
+        for vector_type in vector_types.keys():
+            for distance in targets.keys():
+                for distance_func in targets[distance].keys():
+                    if distance == "similarity":
+                        self._create_index(
+                            table_name=f"{vector_type}_{distance}_{distance_func}",
+                            vector_type=vector_type,
+                            similarity=distance_func,
+                        )
+                    else:
+                        self._create_index(
+                            table_name=f"{vector_type}_{distance}_{distance_func}",
+                            vector_type=vector_type,
+                            distance=distance_func,
+                        )
         order = "ASC" if distance != "similarity" else "DESC"
         self.wait_index_ready(
             targets=targets,

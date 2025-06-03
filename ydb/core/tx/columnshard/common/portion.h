@@ -30,8 +30,8 @@ public:
 class TPortionInfoForCompaction {
 private:
     YDB_READONLY(ui64, TotalBlobBytes, 0);
-    const TSimpleRow FirstPK;
-    const TSimpleRow LastPK;
+    const NArrow::TSimpleRow FirstPK;
+    const NArrow::TSimpleRow LastPK;
 
 public:
     TPortionInfoForCompaction(const ui64 totalBlobBytes, const NArrow::TSimpleRow& firstPK, const NArrow::TSimpleRow& lastPK)

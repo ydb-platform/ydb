@@ -102,6 +102,24 @@ def create_queues_table(root, session):
     _create_table(root, session, '.Queues', columns, keys_count=2)
 
 
+def create_cloud_events_table(root, session):
+    columns = [
+        ('Id', ydb.PrimitiveType.Uint64),
+        ('QueueName', ydb.PrimitiveType.Utf8),
+        ('Type', ydb.PrimitiveType.Utf8),
+        ('CreatedAt', ydb.PrimitiveType.Uint64),
+        ('CloudId', ydb.PrimitiveType.Utf8),
+        ('FolderId', ydb.PrimitiveType.Utf8),
+        ('UserSID', ydb.PrimitiveType.Utf8),
+        ('UserSanitizedToken', ydb.PrimitiveType.Utf8),
+        ('AuthType', ydb.PrimitiveType.Utf8),
+        ('PeerName', ydb.PrimitiveType.Utf8),
+        ('RequestId', ydb.PrimitiveType.Utf8),
+        ('IdempotencyId', ydb.PrimitiveType.Utf8),
+        ('Labels', ydb.PrimitiveType.Utf8),
+    ]
+    _create_table(root, session, '.CloudEventsYmq', columns, keys_count=2)
+
 def create_events_table(root, session):
     columns = [
         ('Account', ydb.PrimitiveType.Utf8),
@@ -310,10 +328,10 @@ def create_reads_table(root, session, common_table=True):
     _create_table(root, session, 'Reads', columns, len(queue_keys) + 1, common_table, queue_type)
 
 
-def create_all_tables(root, driver, session):
+def create_all_tables(root, session):
     create_atomic_counter(root, session)
     create_queues_table(root, session)
-    create_events_table(root, session)
+    create_events_table(root, session)                                 # TODO: Fix creating this table in all cases: it should be created only when SearchEvents are Enabled
     create_settings_table(root, session)
     create_removed_queues_table(root, session)
 

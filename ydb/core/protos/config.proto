@@ -1051,6 +1051,7 @@ message TSqsConfig {
     message TCloudEventsConfig {
         optional bool EnableCloudEvents = 1 [default = false];
         optional bool TenantMode = 2 [default = false];
+        optional uint64 RetryTimeoutSeconds = 3;
     }
 
     optional TYcSearchEventsConfig YcSearchEventsConfig = 66;

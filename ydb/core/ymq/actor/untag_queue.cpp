@@ -3,6 +3,8 @@
 #include "executor.h"
 #include "log.h"
 
+#include <ydb/core/ymq/actor/cloud_events/cloud_events.h>
+
 #include <ydb/core/ymq/base/constants.h>
 #include <ydb/core/ymq/base/helpers.h>
 #include <ydb/core/ymq/base/limits.h>
@@ -33,6 +35,8 @@ public:
         for (const auto& key : Request().tagkeys()) {
             TagKeys_.push_back(key);
         }
+
+        IsCloudEventsEnabled = Cfg().HasCloudEventsConfig() && Cfg().GetCloudEventsConfig().GetEnableCloudEvents();
     }
 
 private:
@@ -93,6 +97,76 @@ private:
         }
     }
 
+    TString GetFullCloudEventsTablePath() const {
+        if (!Cfg().GetRoot().empty()) {
+            return TStringBuilder() << Cfg().GetRoot() << "/" << NCloudEvents::TProcessor::EventTableName;
+        } else {
+            return TString(NCloudEvents::TProcessor::EventTableName);
+        }
+    }
+
+    void AddCloudEventLog() const {
+        Y_ABORT_UNLESS(IsCloudEventsEnabled);
+        const auto& cloudEvCfg = Cfg().GetCloudEventsConfig();
+        TString database = (cloudEvCfg.HasTenantMode() && cloudEvCfg.GetTenantMode()? Cfg().GetRoot() : "");
+
+        auto evId = NCloudEvents::TEventIdGenerator::Generate();
+        auto createdAt = std::chrono::duration_cast<std::chrono::microseconds>(
+            std::chrono::high_resolution_clock::now().time_since_epoch()
+        ).count();
+
+        TString query = TStringBuilder()
+            << "UPSERT INTO `" << GetFullCloudEventsTablePath() << "`\n"
+            << "("
+                << "Id,"
+                << "QueueName,"
+                << "Type,"
+                << "CreatedAt,"
+                << "CloudId,"
+                << "FolderId,"
+                << "UserSID,"
+                << "UserSanitizedToken,"
+                << "AuthType,"
+                << "PeerName,"
+                << "RequestId,"
+                << "IdempotencyId,"
+                << "Labels"
+            << ")" << "\n"
+            << "VALUES" << "\n"
+            << "("
+                << evId << ","
+                << "\"" << GetQueueName() << "\"" << ","
+                << "\"" << "UpdateMessageQueue" << "\"" << ","
+                << createdAt << ","
+                << "\"" << "DEFAULT_CLOUD_ID" << "\"" << ","
+                << "\"" << "DEFAULT_FOLDER_ID" << "\"" << ","
+                << "\"" << "DEFAULT_UserSID" << "\"" << ","
+                << "\"" << "DEFAULT_UserSanitizedToken" << "\"" << ","
+                << "\"" << "DEFAULT_AuthType" << "\"" << ","
+                << "\"" << "DEFAULT_PeerName" << "\"" << ","
+                << "\"" << "DEFAULT_RequestId" << "\"" << ","
+                << "\"" << "DEFAULT_IdempotencyId" << "\"" << ","
+                << "\"" << TagsToJson(*QueueTags_) << "\""
+            << ");" << "\n";
+
+        auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
+        auto* request = ev->Record.MutableRequest();
+
+        if (!database.empty()) {
+            request->SetDatabase(database);
+        }
+
+        request->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
+        request->SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
+        request->SetQuery(query);
+
+        request->MutableQueryCachePolicy()->set_keep_in_cache(true);
+        request->MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
+        request->MutableTxControl()->set_commit_tx(true);
+
+        Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), ev.Release());
+    }
+
     void HandleExecuted(TSqsEvents::TEvExecuted::TPtr& ev) {
         const auto& record = ev->Get()->Record;
         const ui32 status = record.GetStatus();
@@ -102,6 +176,10 @@ private:
             const TValue val(TValue::Create(record.GetExecutionEngineEvaluatedResponse()));
             bool updated = val["updated"];
             if (updated) {
+                if (IsCloudEventsEnabled) {
+                    AddCloudEventLog();
+                }
+
                 RLOG_SQS_DEBUG("Sending clear attributes cache event for queue [" << UserName_ << "/" << GetQueueName() << "]");
                 Send(QueueLeader_, MakeHolder<TSqsEvents::TEvClearQueueAttributesCache>());
             } else {
@@ -122,6 +200,7 @@ private:
 
 private:
     TVector<TString> TagKeys_;
+    bool IsCloudEventsEnabled;
 };
 
 IActor* CreateUntagQueueActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {

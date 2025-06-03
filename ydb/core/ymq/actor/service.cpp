@@ -436,6 +436,12 @@ void TSqsService::Bootstrap() {
         const auto& cloudEvCfg = Cfg().GetCloudEventsConfig();
         CloudEventsConfig.Enabled = cloudEvCfg.GetEnableCloudEvents();
 
+        if (cloudEvCfg.HasRetryTimeoutSeconds()) {
+            CloudEventsConfig.RetryTimeout = TDuration::Seconds(cloudEvCfg.GetRetryTimeoutSeconds());
+        } else {
+            CloudEventsConfig.RetryTimeout = TDuration::Seconds(10);
+        }
+
         if (cloudEvCfg.HasTenantMode() && cloudEvCfg.GetTenantMode()) {
             CloudEventsConfig.Database = Cfg().GetRoot();
             CloudEventsConfig.TenantMode = true;
@@ -1603,7 +1609,8 @@ void TSqsService::MakeAndRegisterCloudEventsProcessor() {
     auto root = CloudEventsConfig.TenantMode ? TString() : Cfg().GetRoot();
     Register(new NCloudEvents::TProcessor(
         root,
-        CloudEventsConfig.Database
+        CloudEventsConfig.Database,
+        CloudEventsConfig.RetryTimeout
     ));
 }
 

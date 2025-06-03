@@ -58,7 +58,7 @@ private:
             );
             ProcessorId = runtime->Register(Processor);
             runtime->EnableScheduleForActor(ProcessorId, true);
-            FullTablePath = SchemePath + "/" + TString(NKikimr::NSQS::TSqsService::CloudEventsTableName);
+            FullTablePath = SchemePath + "/" + TString(NCloudEvents::TProcessor::EventTableName);
             InitTable();
         }
 
@@ -157,7 +157,7 @@ private:
                 << ")"
                 << "VALUES"
                 << "("
-                    << TCloudEventIdGenerator::Generate() << ","
+                    << NCloudEvents::TEventIdGenerator::Generate() << ","
                     << "'" << queueName << "'" << ","
                     << createdAt << ","
                     << "'" << type << "'" << ","                                                  // DeleteMessageQueue or CreateMessageQueue or UpdateMessageQueue

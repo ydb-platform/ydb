@@ -33,8 +33,6 @@ public:
     using TUserInfoPtr = TIntrusivePtr<TUserInfo>;
     using TUsersMap = std::map<TString, TUserInfoPtr>;
 
-    static constexpr TStringBuf CloudEventsTableName = ".CloudEventsYmq";
-
 private:
     struct TQueueInfo;
 
@@ -193,6 +191,7 @@ private:
 
     struct TCloudEventsConfig {
         TString Database = "";
+        TDuration RetryTimeout = TDuration::Seconds(10);
         bool Enabled = false;
         bool TenantMode = false;
     };

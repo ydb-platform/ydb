@@ -1,5 +1,4 @@
-#include <ydb/core/ymq/actor/events.h>
-#include <ydb/core/ymq/actor/service.h>
+#pragma once
 
 #include <ydb/public/api/client/yc_public/events/ymq.pb.h>
 
@@ -14,6 +13,18 @@
 
 namespace NKikimr::NSQS {
 namespace NCloudEvents {
+    class TEventIdGenerator {
+    private:
+        inline static std::mt19937_64 Randomizer64 = std::mt19937_64(
+            std::chrono::time_point_cast<std::chrono::microseconds>(
+                std::chrono::high_resolution_clock::now()
+            ).time_since_epoch().count()
+        );
+
+    public:
+        static uint64_t Generate();
+    };
+
     using TCreateQueueEvent = yandex::cloud::events::ymq::CreateQueue;
     using TUpdateQueueEvent = yandex::cloud::events::ymq::UpdateQueue;
     using TDeleteQueueEvent = yandex::cloud::events::ymq::DeleteQueue;
@@ -73,8 +84,10 @@ namespace NCloudEvents {
     };
 
     class TProcessor : public NActors::TActorBootstrapped<TProcessor> {
+    public:
+        static constexpr TStringBuf EventTableName = ".CloudEventsYmq";
+
     private:
-        static constexpr TStringBuf EventTableName = NKikimr::NSQS::TSqsService::CloudEventsTableName;
         static constexpr TStringBuf DefaultEventTypePrefix = "yandex.cloud.events.ymq.";
 
         const TString Root;
@@ -103,7 +116,7 @@ namespace NCloudEvents {
         TProcessor(
             const TString& root,
             const TString& database,
-            const TDuration& retryTimeout = TDuration::Seconds(10)
+            const TDuration& retryTimeout
         );
 
         void Bootstrap();
@@ -118,21 +131,21 @@ namespace NCloudEvents {
             StateWaitWakeUp,
             IgnoreFunc(NActors::TEvents::TEvUndelivered);
             hFunc(NActors::TEvents::TEvWakeup, HandleWakeup);
-            cFunc(TEvPoisonPill::EventType, PassAway);
+            cFunc(TKikimrEvents::TEvPoisonPill::EventType, PassAway);
         )
 
         STRICT_STFUNC(
             StateWaitSelectResponse,
             hFunc(NActors::TEvents::TEvUndelivered, HandleUndelivered);
             hFunc(NKqp::TEvKqp::TEvQueryResponse, HandleSelectResponse);
-            cFunc(TEvPoisonPill::EventType, PassAway);
+            cFunc(TKikimrEvents::TEvPoisonPill::EventType, PassAway);
         )
 
         STRICT_STFUNC(
             StateWaitDeleteResponse,                                        // For error's tracking
             hFunc(NActors::TEvents::TEvUndelivered, HandleUndelivered);
             hFunc(NKqp::TEvKqp::TEvQueryResponse, HandleDeleteResponse);
-            cFunc(TEvPoisonPill::EventType, PassAway);
+            cFunc(TKikimrEvents::TEvPoisonPill::EventType, PassAway);
         )
     };
 

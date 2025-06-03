@@ -6,6 +6,19 @@
 
 namespace NKikimr::NSQS {
 namespace NCloudEvents {
+    /*
+        This function returns only one random number
+        intended to identify an event of the CloudEvent type.
+
+        However, it is worth noting that the factor that outputs logs
+        to the unified agent actually generates a more complex form of the event id.
+
+        So, GenerateEventCloudId does not GenerateEventCloudId the 'real' CloudEvent id.
+    */
+    uint64_t TEventIdGenerator::Generate() {
+        return Randomizer64();
+    }
+
     void PrintMessageFields(const google::protobuf::Message& message, int indent = 0) {
         const google::protobuf::Descriptor* descriptor = message.GetDescriptor();
         const google::protobuf::Reflection* reflection = message.GetReflection();

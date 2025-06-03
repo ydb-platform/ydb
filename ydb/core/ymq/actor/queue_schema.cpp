@@ -758,9 +758,11 @@ TString TCreateQueueSchemaActorV2::GenerateCommitQueueParamsQuery() {
                 (let cloudEventsRequestId               (Parameter 'CLOUD_EVENT_REQUEST_ID (DataType 'Utf8String)))
                 (let cloudEventsIdempotencyId           (Parameter 'CLOUD_EVENT_IDEMPOTENCY_ID (DataType 'Utf8String)))
                 (let cloudEventsQueueTags               (Parameter 'TAGS (DataType 'Utf8String)))
-        
-                (let cloudEventsTable '%2$s/.CloudEventsYmq)
+        )__";
 
+        result += TStringBuilder() << "(let cloudEventsTable '%2$s/" << NCloudEvents::TProcessor::EventTableName << ")";
+
+        result += R"__(
                 (let cloudEventsRow '(
                     '('Id cloudEventsId)
                     '('QueueName cloudEventsQueueName)))
@@ -1004,20 +1006,6 @@ TString GetQueueIdAndShardHashesList(ui64 version, ui32 shards) {
     return hashes;
 }
 
-
-/*
-    This function returns only one random number
-    intended to identify an event of the CloudEvent type.
-
-    However, it is worth noting that the factor that outputs logs
-    to the unified agent actually generates a more complex form of the event id.
-
-    So, GenerateEventCloudId does not GenerateEventCloudId the 'real' CloudEvent id.
-*/
-uint64_t TCloudEventIdGenerator::Generate() {
-    return Randomizer64();
-}
-
 void TCreateQueueSchemaActorV2::CommitNewVersion() {
     bool isCloudEventsEnabled = Cfg().HasCloudEventsConfig() && Cfg().GetCloudEventsConfig().GetEnableCloudEvents();
     Become(&TCreateQueueSchemaActorV2::FinalizeAndCommit);
@@ -1069,7 +1057,7 @@ void TCreateQueueSchemaActorV2::CommitNewVersion() {
             .Uint64("DEFAULT_MAX_QUEUES_COUNT", Cfg().GetAccountSettingsDefaults().GetMaxQueuesCount())
             .Utf8("USER_NAME", QueuePath_.UserName)
             .Utf8("TAGS", TagsJson_)
-            .Uint64("CLOUD_EVENT_ID", TCloudEventIdGenerator::Generate())
+            .Uint64("CLOUD_EVENT_ID", NCloudEvents::TEventIdGenerator::Generate())
             .Utf8("CLOUD_EVENT_TYPE", "CreateMessageQueue")
             .Utf8("CLOUD_EVENT_CLOUD_ID", "default_value_of_cloud_id")
             .Utf8("CLOUD_EVENT_FOLDER_ID", FolderId_)
@@ -1355,9 +1343,11 @@ TString TDeleteQueueSchemaActorV2::GenerateEraseQueueRecordQuery() {
                 (let cloudEventsRequestId               (Parameter 'CLOUD_EVENT_REQUEST_ID (DataType 'Utf8String)))
                 (let cloudEventsIdempotencyId           (Parameter 'CLOUD_EVENT_IDEMPOTENCY_ID (DataType 'Utf8String)))
                 (let cloudEventsQueueTags               (Parameter 'CLOUD_EVENT_LABELS (DataType 'Utf8String)))
+        )__";
 
-                (let cloudEventsTable '%2$s/.CloudEventsYmq)
+        result += TStringBuilder() << "(let cloudEventsTable '%2$s/" << NCloudEvents::TProcessor::EventTableName << ")";
 
+        result += R"__(
                 (let cloudEventsRow '(
                     '('Id cloudEventsId)
                     '('QueueName cloudEventsQueueName)))
@@ -1555,7 +1545,7 @@ void TDeleteQueueSchemaActorV2::NextAction() {
                     .Utf8("USER_NAME", QueuePath_.UserName)
                     .Uint64("NOW", nowMs)
                     .Utf8("CLOUD_EVENT_LABELS", "")
-                    .Uint64("CLOUD_EVENT_ID", TCloudEventIdGenerator::Generate())
+                    .Uint64("CLOUD_EVENT_ID", NCloudEvents::TEventIdGenerator::Generate())
                     .Utf8("CLOUD_EVENT_TYPE", "DeleteMessageQueue")
                     .Utf8("CLOUD_EVENT_CLOUD_ID", "default_value_of_cloud_id")
                     .Utf8("CLOUD_EVENT_FOLDER_ID", "default_value_of_folder_id")

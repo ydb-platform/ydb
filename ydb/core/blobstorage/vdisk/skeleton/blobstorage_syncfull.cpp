@@ -3,6 +3,8 @@
 #include <ydb/core/util/frequently_called_hptimer.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_response.h>
 #include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogformat.h>
+#include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclog_private_events.h>
+#include <ydb/core/blobstorage/vdisk/synclog/phantom_flag_storage/phantom_flags.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/hull_ds_all_snap.h>
 
 using namespace NKikimrServices;
@@ -193,6 +195,103 @@ namespace NKikimr {
             return true;
         }
 
+        std::unique_ptr<TEvBlobStorage::TEvVSyncFullResult> RunStages(const TEvBlobStorage::TEvVSyncFull::TPtr& ev) {
+            LogoBlobFilter.BuildBarriersEssence(FullSnap->BarriersSnap);
+
+            ui32 pres = 0;
+            switch (Stage) {
+                case NKikimrBlobStorage::LogoBlobs:
+                    Stage = NKikimrBlobStorage::LogoBlobs;
+                    pres = Process(FullSnap->LogoBlobsSnap, KeyLogoBlob, LogoBlobFilter);
+                    if (pres & (MsgFullFlag | LongProcessing))
+                        break;
+                    Y_VERIFY_S(pres & EmptyFlag, HullCtx->VCtx->VDiskLogPrefix);
+                    [[fallthrough]];
+                case NKikimrBlobStorage::Blocks:
+                    Stage = NKikimrBlobStorage::Blocks;
+                    pres = Process(FullSnap->BlocksSnap, KeyBlock, FakeFilter);
+                    if (pres & (MsgFullFlag | LongProcessing))
+                        break;
+                    Y_VERIFY_S(pres & EmptyFlag, HullCtx->VCtx->VDiskLogPrefix);
+                    [[fallthrough]];
+                case NKikimrBlobStorage::Barriers:
+                    Stage = NKikimrBlobStorage::Barriers;
+                    pres = Process(FullSnap->BarriersSnap, KeyBarrier, FakeFilter);
+                    break;
+                default: Y_ABORT("Unexpected case: stage=%d", Stage);
+            }
+
+            bool finished = (bool)(pres & EmptyFlag) && Stage == NKikimrBlobStorage::Barriers;
+
+            std::unique_ptr<TEvBlobStorage::TEvVSyncFullResult> result =
+                    std::make_unique<TEvBlobStorage::TEvVSyncFullResult>(
+                            NKikimrProto::OK, SelfVDiskId, SyncState,
+                            ev->Record.GetCookie(), TActivationContext::Now(),
+                            IFaceMonGroup->SyncFullResMsgsPtr(), nullptr, ev->GetChannel());
+            // Status, SyncState, Data and VDiskID are already set up; set up other
+            result->Record.SetFinished(finished);
+            result->Record.SetStage(Stage);
+            LogoBlobIDFromLogoBlobID(KeyLogoBlob.LogoBlobID(), result->Record.MutableLogoBlobFrom());
+            result->Record.SetBlockTabletFrom(KeyBlock.TabletId);
+            KeyBarrier.Serialize(*result->Record.MutableBarrierFrom());
+            return result;
+        }
+
+    public:
+        THullSyncFullBase(
+                const TIntrusivePtr<TVDiskConfig> &config,
+                const TIntrusivePtr<THullCtx> &hullCtx,
+                const TActorId &parentId,
+                THullDsSnap &&fullSnap,
+                const TSyncState& syncState,
+                const TVDiskID& selfVDiskId,
+                const std::shared_ptr<NMonGroup::TVDiskIFaceGroup>& ifaceMonGroup,
+                const TEvBlobStorage::TEvVSyncFull::TPtr& ev,
+                TKeyLogoBlob keyLogoBlob,
+                TKeyBlock keyBlock,
+                TKeyBarrier keyBarrier,
+                NKikimrBlobStorage::ESyncFullStage stage)
+            : Config(config)
+            , HullCtx(hullCtx)
+            , ParentId(parentId)
+            , Recipient(ev->Sender)
+            , FullSnap(std::move(fullSnap))
+            , FakeFilter()
+            , LogoBlobFilter(HullCtx, VDiskIDFromVDiskID(ev->Get()->Record.GetSourceVDisk()))
+            , SyncState(syncState)
+            , SelfVDiskId(selfVDiskId)
+            , IFaceMonGroup(ifaceMonGroup)
+            , InitialEvent(ev)
+            , KeyLogoBlob(keyLogoBlob)
+            , KeyBlock(keyBlock)
+            , KeyBarrier(keyBarrier)
+            , Stage(stage)
+        {}
+    };
+
+
+    ////////////////////////////////////////////////////////////////////////////
+    // THullSyncFullActorLegacyProtocol
+    ////////////////////////////////////////////////////////////////////////////
+    class THullSyncFullActorLegacyProtocol : public THullSyncFullBase,
+            public TActorBootstrapped<THullSyncFullActorLegacyProtocol> {
+
+    private:
+        void Bootstrap() {
+            std::unique_ptr<TEvBlobStorage::TEvVSyncFullResult> result = RunStages(InitialEvent);
+            // send reply
+            SendVDiskResponse(TActivationContext::AsActorContext(), InitialEvent->Sender,
+                    result.release(), 0, HullCtx->VCtx, {});
+            // notify parent about death
+            Send(ParentId, new TEvents::TEvGone);
+            PassAway();
+        }
+
+        // We don't need Poison handler since actor dies right after Bootstrap
+        // STRICT_STFUNC(StateFunc,
+        //     HFunc(TEvents::TEvPoisonPill, HandlePoison)
+        // )
+
     public:
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
             return NKikimrServices::TActivity::BS_HULL_SYNC_FULL;
@@ -231,6 +330,24 @@ namespace NKikimr {
         {}
     };
 
+    ////////////////////////////////////////////////////////////////////////////
+    // THullSyncFullActorUnorderedDataProtocol
+    ////////////////////////////////////////////////////////////////////////////
+    class THullSyncFullActorUnorderedDataProtocol : public THullSyncFullBase,
+            public TActorBootstrapped<THullSyncFullActorUnorderedDataProtocol> {
+    public:
+        void Bootstrap() {
+            std::unique_ptr<TEvBlobStorage::TEvVSyncFullResult> result = RunStages(InitialEvent);
+            bool finished = result->Record.GetFinished();
+            // send reply
+            SendVDiskResponse(TActivationContext::AsActorContext(), Recipient, result.release(),
+                    0, HullCtx->VCtx, {});
+            // notify parent about death
+            if (finished) {
+                Send(ParentId, new TEvents::TEvGone);
+                PassAway();
+            }
+        }
 
     ////////////////////////////////////////////////////////////////////////////
     // THullSyncFullActorLegacyProtocol

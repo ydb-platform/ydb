@@ -1435,7 +1435,7 @@ public:
         struct TTxReplyReshuffleKMeans;
         struct TTxReplyLocalKMeans;
         struct TTxReplyPrefixKMeans;
-        struct TTxReplyUpload;
+        struct TTxReplyUploadSample;
 
         struct TTxPipeReset;
         struct TTxBilling;

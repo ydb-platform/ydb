@@ -135,7 +135,8 @@ public:
         std::vector<TGeneralSerializedSlice> result;
         for (auto&& i : Portions) {
             result.emplace_back(i.BuildSlice(ResultFiltered, Stats, counters));
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_COMPACTION)("p_size", i.GetPackedSize())("s_type", (ui32)SplittingType)(
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_COMPACTION)("p_size", result.back().GetPackedSize())(
+                "s_type", SplittingType ? (ui32)*SplittingType : 999999)(
                 "settings", Settings.DebugString());
         }
         return result;

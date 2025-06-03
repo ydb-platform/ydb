@@ -37,6 +37,7 @@ public:
         sb << "min_rc=" << MinRecordsCount << ";";
         sb << "max_ps=" << MaxPortionSize << ";";
         sb << "}";
+        return sb;
     }
 
     ui64 GetExpectedBlobPage() const {

@@ -3,9 +3,8 @@ IF (NOT WITH_VALGRIND)
 PY3TEST()
 ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
 ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
-ENV(YDB_ERASURE=block_4-2)
 ENV(YDB_USE_IN_MEMORY_PDISKS=true)
-ENV(YDB_TEST_PATH="ydb/tests/stress/show_create/view/show_create_view")
+ENV(STRESS_TEST_UTILITY="ydb/tests/stress/show_create/view/show_create_view")
 
 TEST_SRCS(
     test_workload.py

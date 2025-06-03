@@ -36,5 +36,8 @@ if __name__ == "__main__":
         if workload.failed_cycles > 0:
             logger.error("Test completed with failures.")
             sys.exit(1)
+        elif workload.successful_cycles == 0:
+            logger.error("Test was not successful.")
+            sys.exit(1)
         else:
             logger.info("Test completed successfully.")

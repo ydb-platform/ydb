@@ -4,6 +4,7 @@ RECURSE(
     mixedpy
     olap_workload
     oltp_workload
+    s3_workload
     simple_queue
     statistics_workload
     transfer

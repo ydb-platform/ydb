@@ -155,10 +155,12 @@ grpc_config:
   - "monitoring"
   - "auth"
   - "query_service"
+  - "view"
 feature_flags:
   enable_persistent_query_stats: true
   enable_scheme_transactions_at_scheme_shard: true
   enable_mvcc_snapshot_reads: true
+  enable_views: true
 kqpconfig:
   settings:
   - name: "_ResultRowsLimit"

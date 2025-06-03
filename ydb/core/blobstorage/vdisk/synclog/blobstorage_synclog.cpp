@@ -10,6 +10,7 @@
 #include <ydb/core/blobstorage/vdisk/common/blobstorage_status.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_response.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_private_events.h>
+#include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclog_public_events.h>
 
 using namespace NKikimrServices;
 using namespace NKikimr::NSyncLog;
@@ -290,6 +291,10 @@ namespace NKikimr {
                 ctx.Send(ev->Forward(KeeperId));
             }
 
+            void Handle(TEvPhantomFlagStorageGetFlags::TPtr ev) {
+                Send(ev->Forward(KeeperId));
+            }
+
             STRICT_STFUNC(StateFunc,
                 HFunc(TEvSyncLogPut, Handle)
                 HFunc(TEvSyncLogPutSst, Handle)
@@ -304,6 +309,7 @@ namespace NKikimr {
                 HFunc(TEvents::TEvCompleted, HandleActorCompletion)
                 HFunc(TEvents::TEvPoisonPill, HandlePoison)
                 HFunc(TEvListChunks, Handle)
+                hFunc(TEvPhantomFlagStorageGetFlags, Handle)
             )
 
         public:

@@ -6,6 +6,9 @@
 #include "blobstorage_synclogrecovery.h"
 #include "blobstorage_synclogkeeper_committer.h"
 
+#include <ydb/core/blobstorage/vdisk/synclog/phantom_flag_storage/phantom_flags.h>
+#include <ydb/core/blobstorage/vdisk/synclog/phantom_flag_storage/phantom_flag_storage_state.h>
+
 namespace NKikimr {
     namespace NSyncLog {
 
@@ -103,7 +106,7 @@ namespace NKikimr {
         class TSyncLogKeeperState {
         public:
             TSyncLogKeeperState(
-                    TIntrusivePtr<TVDiskContext> vctx,
+                    TIntrusivePtr<TSyncLogCtx> slCtx,
                     std::unique_ptr<TSyncLogRepaired> repaired,
                     ui64 syncLogMaxMemAmount,
                     ui64 syncLogMaxDiskAmount,
@@ -156,9 +159,11 @@ namespace NKikimr {
 
             void ListChunks(const THashSet<TChunkIdx>& chunksOfInterest, THashSet<TChunkIdx>& chunks);
 
+            void AddFlagsToPhantomFlagStorage(TPhantomFlags&& flags);
+
         private:
             // VDisk Context
-            TIntrusivePtr<TVDiskContext> VCtx;
+            TIntrusivePtr<TSyncLogCtx> SlCtx;
             // SyncLog data structres
             TSyncLogPtr SyncLogPtr;
             // chunks we can and must delete for the next commit message
@@ -185,6 +190,8 @@ namespace NKikimr {
             const ui64 SyncLogMaxEntryPointSize;
             // does it need initial commit?
             bool NeedsInitialCommit;
+            // Snapshot that can be used by Commiter and PhantomFlagStorageBuilder actors
+            TSyncLogSnapshotPtr Snapshot;
 
             // Fix Disk overflow, i.e. remove some chunks from SyncLog
             TVector<ui32> FixDiskOverflow(ui32 numChunksToAdd);
@@ -200,6 +207,8 @@ namespace NKikimr {
             // Calculate first lsn to keep in recovery log for _DATA_RECORDS_,
             // i.e. for those records in SyncLog which keep user data
             ui64 CalculateFirstDataInRecovLogLsnToKeep() const;
+
+            TPhantomFlagStorageState PhantomFlagStorageState;
         };
 
     } // NSyncLog

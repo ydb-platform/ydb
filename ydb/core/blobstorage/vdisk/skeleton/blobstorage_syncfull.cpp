@@ -246,6 +246,7 @@ namespace NKikimr {
                 const TSyncState& syncState,
                 const TVDiskID& selfVDiskId,
                 const std::shared_ptr<NMonGroup::TVDiskIFaceGroup>& ifaceMonGroup,
+                const std::shared_ptr<NMonGroup::TFullSyncGroup>& fullSyncMonGroup,
                 const TEvBlobStorage::TEvVSyncFull::TPtr& ev,
                 TKeyLogoBlob keyLogoBlob,
                 TKeyBlock keyBlock,
@@ -261,6 +262,7 @@ namespace NKikimr {
             , SyncState(syncState)
             , SelfVDiskId(selfVDiskId)
             , IFaceMonGroup(ifaceMonGroup)
+            , FullSyncMonGroup(fullSyncMonGroup)
             , InitialEvent(ev)
             , KeyLogoBlob(keyLogoBlob)
             , KeyBlock(keyBlock)

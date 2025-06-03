@@ -1,6 +1,14 @@
+#ifndef SIGNAL_BLOCKING_INL_H_
+#error "Direct inclusion of this file is not allowed, include signal_blocking.h"
+// For the sake of sane code completion.
+#include "signal_blocking.h"
+#endif
+
 #include "signal_blocking.h"
 
 #include <yt/yt/library/procfs/procfs.h>
+
+#include <library/cpp/yt/system/exit.h>
 
 #include <signal.h>
 
@@ -10,44 +18,50 @@ namespace NYT::NSignals {
 
 namespace NDetail {
 
-void TryVerifyThreadIsOnly()
+template <CInvocable<void(bool ok, int threadCount)> TFunc>
+bool ValidateSingleRunningThread(const TFunc& func)
 {
 #ifdef _linux_
     int threadCount = 0;
     try {
         threadCount = NProcFS::GetThreadCount();
     } catch (const std::exception& ex) {
-        Cerr << "Failed to get thread count, ex: " << ex.what() << Endl;
-        ::exit(static_cast<int>(EErrorCode::SetBlockedSignalError));
+        AbortProcessDramatically(
+            EProcessExitCode::GenericError,
+            Format("Failed to get thread count: %v", ex.what()));
     } catch (...) {
-        Cerr << "Failed to get thread count, unknown exception" << Endl;
-        ::exit(static_cast<int>(EErrorCode::SetBlockedSignalError));
+        AbortProcessDramatically(
+            EProcessExitCode::GenericError,
+            "Failed to get thread count: unknown exception");
     }
 
-    if (threadCount != 1) {
-        Cerr << "Thread count is not 1, threadCount: " << threadCount << Endl;
-        ::exit(static_cast<int>(EErrorCode::SetBlockedSignalError));
-    }
+    bool ok = threadCount == 1;
+    func(ok, threadCount);
+    return ok;
 #endif // _linux_
 }
 
-void BlockSignalAtProcessStart(int signal)
+template <CInvocable<void(bool ok, int threadCount)> TFunc>
+void BlockSignalAtProcessStart(int signal, const TFunc& func)
 {
     try {
-        ::NYT::NSignals::NDetail::TryVerifyThreadIsOnly();
-        ::NYT::NSignals::BlockSignal(signal);
+        if (::NYT::NSignals::NDetail::ValidateSingleRunningThread(func)) {
+            ::NYT::NSignals::BlockSignal(signal);
+        }
     } catch (const std::exception& ex) {
-        Cerr << "Failed to block signal " << signal << ": " << ex.what() << Endl;
-        ::exit(static_cast<int>(::NYT::NSignals::EErrorCode::SetBlockedSignalError));
+        AbortProcessDramatically(
+            EProcessExitCode::GenericError,
+            Format("Failed to block signal %v: %v", signal, ex.what()));
     } catch (...) {
-        Cerr << "Failed to block signal " << signal << ": unknown exception" << Endl;
-        ::exit(static_cast<int>(::NYT::NSignals::EErrorCode::SetBlockedSignalError));
+        AbortProcessDramatically(
+            EProcessExitCode::GenericError,
+            Format("Failed to block signal %v: unknown exception", signal));
     }
 }
 
 } // namespace NDetail
 
-void BlockSignal(int signal)
+inline void BlockSignal(int signal)
 {
 #ifndef _unix_
     THROW_ERROR_EXCEPTION("Signal blocking is not supported on this platform");

@@ -166,7 +166,7 @@ namespace NYql {
             }
 
             if (typeAnnotation->GetKind() == ETypeAnnotationKind::Null) {
-                ctx.Err << "ToString cannot be applied to null type";
+                ctx.Err << "ToString cannot be applied to Null kind";
                 return false;
             }
 
@@ -175,7 +175,7 @@ namespace NYql {
             }
 
             if (typeAnnotation->GetKind() != ETypeAnnotationKind::Data) {
-                ctx.Err << "expected data type or optional from data type in ToBytes";
+                ctx.Err << "expected data type or optional from data type in ToString";
                 return false;
             }
 

@@ -693,7 +693,16 @@ private:
 
                 while(parser.TryNextRow()) {
                     auto& col = parser.ColumnParser("data");
-                    query_response->Data = col.GetString();
+                    // may be not optional from versions before fix of bug https://github.com/ydb-platform/ydb/issues/15701
+                    if (col.GetKind() == NYdb::TTypeParser::ETypeKind::Optional) {
+                        if (auto opt = col.GetOptionalString()) {
+                            query_response->Data = opt.GetRef();
+                        } else {
+                            query_response->Data.reset();
+                        }
+                    } else {
+                        query_response->Data = col.GetString();
+                    }
                  }
             } else {
                 SA_LOG_E("[TStatService::ReadRowsResponse] QueryId[ "

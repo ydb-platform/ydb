@@ -607,7 +607,11 @@ public:
         for (const auto& colMeta : RequestedColumnsMeta) {
             const auto type = getTypeFromColMeta(colMeta);
             auto* col = resultSet->Addcolumns();
-            *col->mutable_type() = NYdb::TProtoAccessor::GetProto(type);
+            if (colMeta.IsNotNullColumn || colMeta.Type.GetTypeId() == NScheme::NTypeIds::Pg) { // pg type in nullable itself
+                *col->mutable_type() = NYdb::TProtoAccessor::GetProto(type);
+            } else {
+                *col->mutable_type()->mutable_optional_type()->mutable_item() = NYdb::TProtoAccessor::GetProto(type);
+            }
             *col->mutable_name() = colMeta.Name;
         }
 
@@ -637,18 +641,41 @@ public:
                     }
                     case NScheme::NTypeIds::Decimal: {
                         using namespace NYql::NDecimal;
-    
-                        const auto loHi = cell.AsValue<std::pair<ui64, i64>>();
-                        Ydb::Value valueProto;
-                        valueProto.set_low_128(loHi.first);
-                        valueProto.set_high_128(loHi.second);
-                        const NYdb::TDecimalValue decimal(valueProto, 
-                            {static_cast<ui8>(colMeta.Type.GetDecimalType().GetPrecision()), static_cast<ui8>(colMeta.Type.GetDecimalType().GetScale())});
-                        vb.Decimal(decimal);
+
+                        NYdb::TDecimalType decimalType{
+                            static_cast<ui8>(colMeta.Type.GetDecimalType().GetPrecision()),
+                            static_cast<ui8>(colMeta.Type.GetDecimalType().GetScale())
+                        };
+
+                        if (cell.IsNull()) {
+                            vb.EmptyOptional(NYdb::TTypeBuilder().Decimal(decimalType).Build());
+                        } else {
+                            const auto loHi = cell.AsValue<std::pair<ui64, i64>>();
+                            Ydb::Value valueProto;
+                            valueProto.set_low_128(loHi.first);
+                            valueProto.set_high_128(loHi.second);
+                            if (colMeta.IsNotNullColumn) {
+                                vb.Decimal({valueProto, decimalType});
+                            } else {
+                                vb.BeginOptional();
+                                vb.Decimal({valueProto, decimalType});
+                                vb.EndOptional();
+                            }
+                        }
                         break;
                     }
                     default: {
-                        ProtoValueFromCell(vb, colMeta.Type, cell);
+                        if (cell.IsNull()) {
+                            vb.EmptyOptional((NYdb::EPrimitiveType)colMeta.Type.GetTypeId());
+                        } else {
+                            if (colMeta.IsNotNullColumn) {
+                                ProtoValueFromCell(vb, colMeta.Type, cell);
+                            } else {
+                                vb.BeginOptional();
+                                ProtoValueFromCell(vb, colMeta.Type, cell);
+                                vb.EndOptional();
+                            }
+                        }
                         break;
                     }
                     }
@@ -755,6 +782,7 @@ private:
             , Name(colInfo.Name)
             , Type(colInfo.PType)
             , PTypeMod(colInfo.PTypeMod)
+            , IsNotNullColumn(colInfo.IsNotNullColumn)
         {
         }
 
@@ -762,6 +790,7 @@ private:
         TString Name;
         NScheme::TTypeInfo Type;
         TString PTypeMod;
+        bool IsNotNullColumn;
     };
     TVector<TColumnMeta> RequestedColumnsMeta;
 

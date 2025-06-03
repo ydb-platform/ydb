@@ -43,8 +43,9 @@ See the description of the command to init the data load:
 | `--external-s3-endpoint <value>` or `-e <value>` | Only relevant for external tables. Link to S3 Bucket with data.           |                            |
 | `--string`                                       | Use `String` type for text fields. `Utf8` is used by default.             |                            |
 | `--datetime`                                     | Use `Date`, `Datetime` and `Timestamp` type for time-related fields.      |`Date32`, `Datetime64` and `Timestamp64`|
-|  `--partition-size` | Maximum partition size in megabytes (AUTO_PARTITIONING_PARTITION_SIZE_MB) for row tables. | 2000 |
-| `--clear`                                        | If the table at the specified path has already been created, it will be deleted.|                      |
+| `--partition-size`                               | Maximum partition size in megabytes (AUTO_PARTITIONING_PARTITION_SIZE_MB) for row tables. | 2000 |
+| `--clear`                                        | If the table at the specified path has already been created, it will be deleted. |                      |
+| `--dry-run`                                      | Do not realy perfom DDL queries but only print they |                      |
 
 ## Loading data into a table { #load }
 
@@ -64,6 +65,7 @@ For source files, you can use CSV and TSV files, as well as directories containi
 | `--input <path>` or `-i <path>` | Path to the source data files. Both unpacked and packed CSV and TSV files, as well as directories containing such files, are supported. Data can be downloaded from the official ClickBench website: [csv.gz](https://datasets.clickhouse.com/hits_compatible/hits.csv.gz), [tsv.gz](https://datasets.clickhouse.com/hits_compatible/hits.tsv.gz). To speed up the process, these files can be split into smaller parts, allowing parallel downloads. | |
 | `--state <path>`                | Path to the download state file. If the download is interrupted, it will resume from the same point when restarted.                                                                                                                                                                                                                                                                                                                                           | |
 | `--clear-state`                 | Relevant if the `--state` parameter is specified. Clears the state file and restarts the download from the beginning.                                                                                                                                                                                                                                                                                                                                          | |
+| `--dry-run`                     | Do not realy perfom import | |
 
 {% include [load_options](./_includes/workload/load_options.md) %}
 
@@ -87,13 +89,9 @@ See the command description to run the load:
 
 ### ClickBench-specific options { #run_clickbench_options }
 
-| Name                                        | Description                                                                                                 | Default value |
-|---------------------------------------------|-------------------------------------------------------------------------------------------------------------|---------------|
-| `--ext-queries <queries>` or `-q <queries>` | External queries to execute during the load, separated by semicolons.                                       |               |
-| `--ext-queries-file <name>`                 | Name of the file containing external queries to execute during the load, separated by semicolons.           |               |
-| `--ext-query-dir <name>`                    | Directory containing external queries for the load. Queries should be in files named `q[0-42].sql`.         |               |
-| `--ext-results-dir <name>`                  | Directory containing external query results for comparison. Results should be in files named `q[0-42].sql`. |               |
-| `--check-canonical` or `-c`                 | Use special deterministic internal queries and compare the results against canonical ones.                  |               |
+| Name               | Description                                              | Default value |
+|--------------------|----------------------------------------------------------|---------------|
+| `--syntax <value>` | Which query syntax option should be used, `yql` or `pg`. | `yql`         |
 
 ## Cleanup test data { #cleanup }
 

@@ -8,6 +8,8 @@
 | [TPC-DS](https://tpc.org/tpcds/)     | [tpcds](../../reference/ydb-cli/workload-tpcds.md)|
 | [ClickBench](https://benchmark.clickhouse.com/) | [clickbench](../../reference/ydb-cli/workload-click-bench.md)|
 
+И аналогичный определяемый пользователем бенчмарк `query`, см. [описание](../../reference/ydb-cli/workload-query.md).
+
 Работают сходным образом, детальное описание для каждого см. в соответствующих разделах, ссылки выше.
 Все команды для работы с бенчмарками собраны в соответствующие группы, при этом для всех команд единым образом задается путь в БД:
 
@@ -35,6 +37,7 @@
 {{ ydb-cli }} workload clickbench --path clickbench/hits init --store=row
 {{ ydb-cli }} workload tpch --path tpch/s1 init --store=column
 {{ ydb-cli }} workload tpcds --path tpcds/s1 init --store=external-s3
+{{ ydb-cli }} workload query --path user/suite1 init --suite-path /home/user/user_suite
 ```
 
 На данном этапе можно настроить создаваемые таблицы:
@@ -49,6 +52,7 @@
 * [clickbench init](../../reference/ydb-cli/workload-click-bench.md#init)
 * [tpch init](../../reference/ydb-cli/workload-tpch.md#init)
 * [tpcds init](../../reference/ydb-cli/workload-tpcds.md#init)
+* [query init](../../reference/ydb-cli/workload-query.md#init)
 
 ### Наполнение данными
 
@@ -59,6 +63,7 @@
 * [clickbench import](../../reference/ydb-cli/workload-click-bench.md#load)
 * [tpch import](../../reference/ydb-cli/workload-tpch.md#load)
 * [tpcds import](../../reference/ydb-cli/workload-tpcds.md#load)
+* [query import](../../reference/ydb-cli/workload-query.md#load)
 
 Примеры:
 
@@ -66,6 +71,7 @@
 {{ ydb-cli }} workload clickbench --path clickbench/hits import files --input hits.csv.gz
 {{ ydb-cli }} workload tpch --path tpch/s1 import generator --scale 1
 {{ ydb-cli }} workload tpcds --path tpcds/s1 import generator --scale 1
+{{ ydb-cli }} workload query --path user/suite1 import --suite-path /home/user/user_suite
 ```
 
 ## Тестирование {#testing}
@@ -78,6 +84,7 @@
 {{ ydb-cli }} workload clickbench --path clickbench/hits run --include 1-5,8
 {{ ydb-cli }} workload tpch --path tpch/s1 run --exсlude 3,4 --iterations 3
 {{ ydb-cli }} workload tpcds --path tpcds/s1 run --plan ~/query_plan --include 2 --iterations 5
+{{ ydb-cli }} workload query --path user/suite1 run --plan ~/query_plan --include first_query_set.1.sql,second_query_set.2.sql --iterations 5
 ```
 
 Команда позволяет выбрать запросы для исполнения, сгенерировать несколько видов отчетов, собрать статистику исполнения и тд.
@@ -87,6 +94,7 @@
 * [clickbench run](../../reference/ydb-cli/workload-click-bench.md#run)
 * [tpch run](../../reference/ydb-cli/workload-tpch.md#run)
 * [tpcds run](../../reference/ydb-cli/workload-tpcds.md#run)
+* [query run](../../reference/ydb-cli/workload-query.md#run)
 
 ## Очистка {#cleanup}
 
@@ -97,6 +105,7 @@
 {{ ydb-cli }} workload clickbench --path clickbench/hits clean
 {{ ydb-cli }} workload tpch --path tpch/s1 clean
 {{ ydb-cli }} workload tpcds --path tpcds/s1 clean
+{{ ydb-cli }} workload query --path user/suite1 clean
 ```
 
 Подробное описание см. в соответствующих разделах:
@@ -104,3 +113,4 @@
 * [clickbench clean](../../reference/ydb-cli/workload-click-bench.md#cleanup)
 * [tpch clean](../../reference/ydb-cli/workload-tpch.md#cleanup)
 * [tpcds clean](../../reference/ydb-cli/workload-tpcds.md#cleanup)
+* [query clean](../../reference/ydb-cli/workload-query.md#cleanup)

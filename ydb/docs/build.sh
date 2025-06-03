@@ -23,7 +23,7 @@ start_server() {
   echo
   echo "Press Ctrl+C in this window to stop the HTTP server."
   echo
-  python3 -m http.server 8888 -d $1
+  python3 -m http.server 8888 -d $1 --bind `hostname`
 }
 
 DIR=${1:-"$TMPDIR"docs}

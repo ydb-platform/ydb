@@ -8,6 +8,8 @@
 | [TPC-DS](https://tpc.org/tpcds/)     | [tpcds](../../reference/ydb-cli/workload-tpcds.md) |
 | [ClickBench](https://benchmark.clickhouse.com/) | [clickbench](../../reference/ydb-cli/workload-click-bench.md) |
 
+And simelar user-defined benchmark `query`, see [reference](../../reference/ydb-cli/workload-query.md).
+
 They all function similarly. For a detailed description of each, refer to the relevant reference via the links above. All commands for working with benchmarks are organized into corresponding groups, and the database path is specified in the same way for all commands:
 
 ```bash
@@ -34,6 +36,7 @@ Initialization is performed by the `init` command:
 {{ ydb-cli }} workload clickbench --path clickbench/hits init --store=column
 {{ ydb-cli }} workload tpch --path tpch/s1 init --store=column
 {{ ydb-cli }} workload tpcds --path tpcds/s1 init --store=column
+{{ ydb-cli }} workload query --path user/suite1 init --suite-path /home/user/user_suite
 ```
 
 At this stage, you can configure the tables to be created:
@@ -49,6 +52,7 @@ For more details, see the description of the commands for each benchmark:
 * [clickbench init](../../reference/ydb-cli/workload-click-bench.md#init)
 * [tpch init](../../reference/ydb-cli/workload-tpch.md#init)
 * [tpcds init](../../reference/ydb-cli/workload-tpcds.md#init)
+* [query init](../../reference/ydb-cli/workload-query.md#init)
 
 ### Data filling  
 
@@ -59,6 +63,7 @@ For a detailed description, see the relevant reference sections:
 * [clickbench import](../../reference/ydb-cli/workload-click-bench.md#load)  
 * [tpch import](../../reference/ydb-cli/workload-tpch.md#load)
 * [tpcds import](../../reference/ydb-cli/workload-tpcds.md#load)
+* [query import](../../reference/ydb-cli/workload-query.md#load)
 
 Examples:
 
@@ -66,6 +71,7 @@ Examples:
 {{ ydb-cli }} workload clickbench --path clickbench/hits import files --input hits.csv.gz
 {{ ydb-cli }} workload tpch --path tpch/s1 import generator --scale 1
 {{ ydb-cli }} workload tpcds --path tpcds/s1 import generator --scale 1
+{{ ydb-cli }} workload query --path user/suite1 import --suite-path /home/user/user_suite
 ```
 
 ## Testing {#testing}
@@ -78,6 +84,7 @@ Examples:
 {{ ydb-cli }} workload clickbench --path clickbench/hits run --include 1-5,8
 {{ ydb-cli }} workload tpch --path tpch/s1 run --exсlude 3,4 --iterations 3
 {{ ydb-cli }} workload tpcds --path tpcds/s1 run --plan ~/query_plan --include 2 --iterations 5
+{{ ydb-cli }} workload query --path user/suite1 run --plan ~/query_plan --include first_query_set.1.sql,second_query_set.2.sql --iterations 5
 ```
 
 The command allows you to select queries for execution, generate various types of reports, collect execution statistics, and more.
@@ -87,6 +94,7 @@ For a detailed description, see the relevant reference sections:
 * [clickbench run](../../reference/ydb-cli/workload-click-bench.md#run)
 * [tpch run](../../reference/ydb-cli/workload-tpch.md#run)
 * [tpcds run](../../reference/ydb-cli/workload-tpcds.md#run)
+* [query run](../../reference/ydb-cli/workload-query.md#run)
 
 ## Cleanup {#cleanup}
 
@@ -96,6 +104,7 @@ After all necessary testing has been completed, the benchmark's data can be remo
 {{ ydb-cli }} workload clickbench --path clickbench/hits clean
 {{ ydb-cli }} workload tpch --path tpch/s1 clean
 {{ ydb-cli }} workload tpcds --path tpcds/s1 clean
+{{ ydb-cli }} workload query --path user/suite1 clean
 ```
 
 For a detailed description, see the corresponding sections:
@@ -103,3 +112,4 @@ For a detailed description, see the corresponding sections:
 * [clickbench clean](../../reference/ydb-cli/workload-click-bench.md#cleanup)
 * [tpch clean](../../reference/ydb-cli/workload-tpch.md#cleanup)
 * [tpcds clean](../../reference/ydb-cli/workload-tpcds.md#cleanup)
+* [query clean](../../reference/ydb-cli/workload-query.md#cleanup)

@@ -58,6 +58,7 @@ See the command description:
 | `--process-index <value>` or `-i <value>` | Specifies the process number when data generation is split into multiple processes.                                                           | `0`           |
 | `--state <path>`                      | Path to the state file for resuming generation. If the generation is interrupted, it will resume from the same point when restarted.              |               |
 | `--clear-state`                       | Relevant if the `--state` parameter is specified. Clears the state file and restarts the download from the beginning.                             |               |
+| `--dry-run`                           | Do not realy perfom import                                                                                                                        |               |
 
 {% include [load_options](./_includes/workload/load_options.md) %}
 
@@ -81,9 +82,11 @@ See the command description:
 
 ### TPC-DS-specific options { #run_tpcds_options }
 
-| Name                       | Description                                                                                         | Default value |
-|----------------------------|-----------------------------------------------------------------------------------------------------|---------------|
-| `--ext-query-dir <name>`   | Directory with external queries for load execution. Queries should be in files named `q[1-99].sql`. |               |
+| Name                   | Description                                                                                         | Default value |
+|------------------------|-----------------------------------------------------------------------------------------------------|---------------|
+| `--syntax <value>`     | Which query syntax option should be used, `yql` or `pg`.                                            | `yql`         |
+| `--flaot_mode <value>` | Float mode. Can be `float`, `decimal` or `decimal_ydb`. If set to `float` - float will be used, `decimal` means that decimal will be used with canonical size and `decimal_ydb` means that all floats will be converted to decimal(22,9) because YDB supports only this type. | `float`           |
+| `--scale <value>`      | Scale factor. See sepcivication of TPC-DS.                                                           | 1             |
 
 ## Test data cleanup { #cleanup }
 

@@ -301,12 +301,8 @@ NThreading::TFuture<TStatus> GetPaymentTask(
 
     TResultSetParser warehouseParser(warehouseResult.GetResultSet(0));
     if (!warehouseParser.TryNextRow()) {
-        if (ShouldExit(warehouseResult)) {
-            LOG_E("Terminal " << context.TerminalID << " warehouse not found: " << warehouseID << ", session: " << session.GetId());
-            std::quick_exit(1);
-        }
-        LOG_T("Terminal " << context.TerminalID << " warehouse not found: " << warehouseID << ", session: " << session.GetId());
-        co_return warehouseResult;
+        LOG_E("Terminal " << context.TerminalID << " warehouse not found: " << warehouseID << ", session: " << session.GetId());
+        std::quick_exit(1);
     }
     std::string warehouseName = *warehouseParser.ColumnParser("W_NAME").GetOptionalUtf8();
 
@@ -327,14 +323,9 @@ NThreading::TFuture<TStatus> GetPaymentTask(
 
     TResultSetParser districtParser(districtResult.GetResultSet(0));
     if (!districtParser.TryNextRow()) {
-        if (ShouldExit(districtResult)) {
-            LOG_E("Terminal " << context.TerminalID << " district not found: W_ID=" << warehouseID
-                << ", D_ID=" << districtID << ", session: " << session.GetId());
-            std::quick_exit(1);
-        }
-        LOG_T("Terminal " << context.TerminalID << " district not found: W_ID=" << warehouseID
+        LOG_E("Terminal " << context.TerminalID << " district not found: W_ID=" << warehouseID
             << ", D_ID=" << districtID << ", session: " << session.GetId());
-        co_return districtResult;
+        std::quick_exit(1);
     }
     std::string districtName = *districtParser.ColumnParser("D_NAME").GetOptionalUtf8();
 
@@ -431,11 +422,8 @@ NThreading::TFuture<TStatus> GetPaymentTask(
 
         TResultSetParser cDataParser(cDataResult.GetResultSet(0));
         if (!cDataParser.TryNextRow()) {
-            if (ShouldExit(cDataResult)) {
-                LOG_E("Terminal " << context.TerminalID << " customer data not found: " << customer.c_id << ", session: " << session.GetId());
-                std::quick_exit(1);
-            }
-            LOG_T("Terminal " << context.TerminalID << " customer data not found: " << customer.c_id << ", session: " << session.GetId());
+            LOG_E("Terminal " << context.TerminalID << " customer data not found: " << customer.c_id << ", session: " << session.GetId());
+            std::quick_exit(1);
             co_return cDataResult;
         }
         customer.c_data = cDataParser.ColumnParser("C_DATA").GetOptionalUtf8().value_or("");

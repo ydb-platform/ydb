@@ -153,6 +153,44 @@ namespace NYql {
             return SerializeExpression(toBytexExpr, dstProto->mutable_value(), ctx, depth + 1);
         }
 
+        bool SerializeToStringExpression(const TExprBase& toBytes, TExpression* proto, TSerializationContext& ctx, ui64 depth) {
+            if (toBytes.Ref().ChildrenSize() != 1) {
+                ctx.Err << "invalid ToString expression, expected 1 child but got " << toBytes.Ref().ChildrenSize();
+                return false;
+            }
+
+            const auto toBytexExpr = TExprBase(toBytes.Ref().Child(0));
+            auto typeAnnotation = toBytexExpr.Ref().GetTypeAnn();
+            if (!typeAnnotation) {
+                ctx.Err << "expected non empty type annotation for ToString";
+                return false;
+            }
+
+            if (typeAnnotation->GetKind() == ETypeAnnotationKind::Null) {
+                ctx.Err << "ToString cannot be applied to null type";
+                return false;
+            }
+
+            if (typeAnnotation->GetKind() == ETypeAnnotationKind::Optional) {
+                typeAnnotation = typeAnnotation->Cast<TOptionalExprType>()->GetItemType();
+            }
+
+            if (typeAnnotation->GetKind() != ETypeAnnotationKind::Data) {
+                ctx.Err << "expected data type or optional from data type in ToBytes";
+                return false;
+            }
+
+            const auto dataSlot = typeAnnotation->Cast<TDataExprType>()->GetSlot();
+            if (!IsDataTypeString(dataSlot) && dataSlot != NUdf::EDataSlot::JsonDocument) {
+                ctx.Err << "expected only string like input type for ToString";
+                return false;
+            }
+
+            auto* dstProto = proto->mutable_cast();
+            dstProto->mutable_type()->set_type_id(Ydb::Type::STRING);
+            return SerializeExpression(toBytexExpr, dstProto->mutable_value(), ctx, depth + 1);
+        }
+
         bool SerializeFlatMap(const TCoFlatMap& flatMap, TExpression* proto, TSerializationContext& ctx, ui64 depth) {
             const auto lambda = flatMap.Lambda();
             const auto lambdaArgs = lambda.Args();
@@ -213,6 +251,9 @@ namespace NYql {
             }
             if (expression.Ref().IsCallable("ToBytes")) {
                 return SerializeToBytesExpression(expression, proto, ctx, depth);
+            }
+            if (expression.Ref().IsCallable("ToString")) {
+                return SerializeToStringExpression(expression, proto, ctx, depth);
             }
             if (auto flatMap = expression.Maybe<TCoFlatMap>()) {
                 return SerializeFlatMap(flatMap.Cast(), proto, ctx, depth);

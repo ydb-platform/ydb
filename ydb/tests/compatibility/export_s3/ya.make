@@ -6,6 +6,8 @@ TEST_SRCS(
     test_export_s3.py
 )
 
+REQUIREMENTS(cpu:8)
+REQUIREMENTS(ram:16)
 SIZE(LARGE)
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/s3_recipe/recipe.inc)

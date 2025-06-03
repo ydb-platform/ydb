@@ -7,6 +7,8 @@ TEST_SRCS(
     test_digest.py
 )
 
+REQUIREMENTS(cpu:8)
+REQUIREMENTS(ram:16)
 SIZE(LARGE)
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 

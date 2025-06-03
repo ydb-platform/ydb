@@ -21,10 +21,15 @@ private:
     YDB_READONLY_DEF(std::vector<i64>, ChunkRecordsCount);
     YDB_READONLY_DEF(std::vector<std::shared_ptr<IPortionDataChunk>>, ResultChunks);
     ui32 ChunksReady = 0;
+    const std::optional<NArrow::NSplitter::TSimpleSerializationStat> Stats;
+    const NSplitter::TSplitSettings Settings;
 
 public:
-    TColumnSplitInfo(const ui32 columnId)
-        : ColumnId(columnId) {
+    TColumnSplitInfo(
+        const ui32 columnId, const std::optional<NArrow::NSplitter::TSimpleSerializationStat>& stats, const NSplitter::TSplitSettings& settings)
+        : ColumnId(columnId)
+        , Stats(stats)
+        , Settings(settings) {
     }
 
     void SetChunks(std::vector<i64>&& recordsCount) {
@@ -43,6 +48,8 @@ public:
         ui32 checkRecordsCount = 0;
         for (auto&& i : chunks) {
             checkRecordsCount += i->GetRecordsCountVerified();
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_COMPACTION)("settings", Settings.DebugString())(
+                "stats", Stats ? Stats->DebugString() : TString("no_stats"))("column_id", ColumnId)("packed", i->GetPackedSize());
         }
         AFL_VERIFY(checkRecordsCount == ChunkRecordsCount[ChunksReady])("check", checkRecordsCount)("split", ChunkRecordsCount[ChunksReady]);
         ++ChunksReady;
@@ -92,8 +99,9 @@ public:
         it->second.AddColumnChunks(chunks);
     }
 
-    void AddColumnSplitting(const ui32 columnId, std::vector<i64>&& chunks) {
-        auto it = Columns.emplace(columnId, columnId);
+    void AddColumnSplitting(const ui32 columnId, std::vector<i64>&& chunks,
+        const std::optional<NArrow::NSplitter::TSimpleSerializationStat>& stats, const NSplitter::TSplitSettings& settings) {
+        auto it = Columns.emplace(columnId, TColumnSplitInfo(columnId, stats, settings));
         AFL_VERIFY(it.second);
         it.first->second.SetChunks(std::move(chunks));
         AFL_VERIFY(RecordsCount == it.first->second.GetRecordsCount())("new", it.first->second.GetRecordsCount())("control", RecordsCount);
@@ -102,10 +110,17 @@ public:
 
 class TSplittedBatch {
 private:
+    enum class ESplittingType : ui32 {
+        Stats = 0,
+        RecordsCount
+    };
+
     YDB_READONLY_DEF(std::shared_ptr<arrow::RecordBatch>, Remapper);
     YDB_READONLY_DEF(std::vector<TPortionSplitInfo>, Portions);
     const std::shared_ptr<NArrow::NSplitter::TSerializationStats> Stats;
     const std::shared_ptr<TFilteredSnapshotSchema> ResultFiltered;
+    const NSplitter::TSplitSettings Settings;
+    std::optional<ESplittingType> SplittingType;
 
 public:
     ui32 GetRecordsCount() const {
@@ -120,6 +135,8 @@ public:
         std::vector<TGeneralSerializedSlice> result;
         for (auto&& i : Portions) {
             result.emplace_back(i.BuildSlice(ResultFiltered, Stats, counters));
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_COMPACTION)("p_size", i.GetPackedSize())("s_type", (ui32)SplittingType)(
+                "settings", Settings.DebugString());
         }
         return result;
     }
@@ -128,13 +145,16 @@ public:
         const std::shared_ptr<TFilteredSnapshotSchema>& resultFiltered, const NSplitter::TSplitSettings& settings)
         : Remapper(std::move(remapper))
         , Stats(stats)
-        , ResultFiltered(resultFiltered) {
+        , ResultFiltered(resultFiltered)
+        , Settings(settings) {
         AFL_VERIFY(Remapper);
         const std::vector<i64> recordsCount = [&]() {
             auto batchStatsOpt = stats->GetStatsForColumns(resultFiltered->GetColumnIds(), false);
             if (batchStatsOpt) {
+                SplittingType = ESplittingType::Stats;
                 return batchStatsOpt->SplitRecordsForBlobSize(Remapper->num_rows(), settings.GetExpectedPortionSize());
             } else {
+                SplittingType = ESplittingType::RecordsCount;
                 return NArrow::NSplitter::TSimilarPacker::SplitWithExpected(Remapper->num_rows(), settings.GetExpectedPortionRecordsCount());
             }
         }();
@@ -158,7 +178,7 @@ public:
                     chunks = colStatsOpt->SplitRecords(
                         p, settings.GetExpectedRecordsCountOnPage(), settings.GetExpectedBlobPage(), settings.GetMaxBlobSize() * 0.9);
                 }
-                Portions.back().AddColumnSplitting(c, std::move(chunks));
+                Portions.back().AddColumnSplitting(c, std::move(chunks), colStatsOpt, settings);
             }
         }
         AFL_VERIFY(recordsCountCursor == Remapper->num_rows())("cursor", recordsCountCursor)("length", Remapper->num_rows());

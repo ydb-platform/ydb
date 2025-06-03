@@ -48,8 +48,10 @@ public:
         ui32 checkRecordsCount = 0;
         for (auto&& i : chunks) {
             checkRecordsCount += i->GetRecordsCountVerified();
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_COMPACTION)("settings", Settings.DebugString())(
-                "stats", Stats ? Stats->DebugString() : TString("no_stats"))("column_id", ColumnId)("packed", i->GetPackedSize());
+            if (chunks.size() > 1) {
+                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_COMPACTION)("settings", Settings.DebugString())(
+                    "stats", Stats ? Stats->DebugString() : TString("no_stats"))("column_id", ColumnId)("packed", i->GetPackedSize());
+            }
         }
         AFL_VERIFY(checkRecordsCount == ChunkRecordsCount[ChunksReady])("check", checkRecordsCount)("split", ChunkRecordsCount[ChunksReady]);
         ++ChunksReady;
@@ -135,9 +137,10 @@ public:
         std::vector<TGeneralSerializedSlice> result;
         for (auto&& i : Portions) {
             result.emplace_back(i.BuildSlice(ResultFiltered, Stats, counters));
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_COMPACTION)("p_size", result.back().GetPackedSize())(
-                "s_type", SplittingType ? (ui32)*SplittingType : 999999)(
-                "settings", Settings.DebugString());
+            if (Portions.size() > 1) {
+                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_COMPACTION)("p_size", result.back().GetPackedSize())(
+                    "s_type", SplittingType ? (ui32)*SplittingType : 999999)("settings", Settings.DebugString());
+            }
         }
         return result;
     }

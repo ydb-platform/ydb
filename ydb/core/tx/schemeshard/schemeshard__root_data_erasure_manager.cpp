@@ -131,7 +131,7 @@ void TRootDataErasureManager::Run(NIceDb::TNiceDb& db) {
         Status = EDataErasureStatus::IN_PROGRESS_BSC;
     }
     db.Table<Schema::DataErasureGenerations>().Key(Generation).Update<Schema::DataErasureGenerations::Status,
-                                                                     Schema::DataErasureGenerations::StartTime>(Status, StartTime.MicroSeconds());
+                                                                      Schema::DataErasureGenerations::StartTime>(Status, StartTime.MicroSeconds());
 
     const auto ctx = SchemeShard->ActorContext();
     LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -481,6 +481,13 @@ void TRootDataErasureManager::HandleNewPartitioning(const std::vector<TShardIdx>
     LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[RootDataErasureManager] [HandleNewPartitioning] Cannot execute in root schemeshard: " << SchemeShard->TabletID());
 }
 
+void TRootDataErasureManager::SyncBscGeneration(NIceDb::TNiceDb& db, ui64 currentBscGeneration) {
+    db.Table<Schema::DataErasureGenerations>().Key(GetGeneration()).Delete();
+    SetGeneration(currentBscGeneration + 1);
+    db.Table<Schema::DataErasureGenerations>().Key(GetGeneration()).Update<Schema::DataErasureGenerations::Status,
+                                                                           Schema::DataErasureGenerations::StartTime>(GetStatus(), StartTime.MicroSeconds());
+}
+
 void TRootDataErasureManager::UpdateMetrics() {
     SchemeShard->TabletCounters->Simple()[COUNTER_DATA_ERASURE_QUEUE_SIZE].Set(Queue->Size());
     SchemeShard->TabletCounters->Simple()[COUNTER_DATA_ERASURE_QUEUE_RUNNING].Set(Queue->RunningSize());
@@ -633,13 +640,15 @@ struct TSchemeShard::TTxCompleteDataErasureBSC : public TSchemeShard::TRwTxBase 
 
         const auto& record = Ev->Get()->Record;
         auto& manager = Self->DataErasureManager;
-        if (record.GetCurrentGeneration() != manager->GetGeneration()) {
+        NIceDb::TNiceDb db(txc.DB);
+        if (ui64 currentBscGeneration = record.GetCurrentGeneration(); currentBscGeneration > manager->GetGeneration()) {
             LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                "TTxCompleteDataErasureBSC Unknown generation#" << record.GetCurrentGeneration() << ", Expected gen# " << manager->GetGeneration() << " at schemestard: " << Self->TabletID());
+                "TTxCompleteDataErasureBSC Unknown generation#" << currentBscGeneration << ", Expected gen# " << manager->GetGeneration() << " at schemestard: " << Self->TabletID());
+            manager->SyncBscGeneration(db, currentBscGeneration);
+            manager->SendRequestToBSC();
             return;
         }
 
-        NIceDb::TNiceDb db(txc.DB);
         if (record.GetCompleted()) {
             LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxCompleteDataErasureBSC: Data shred in BSC is completed");
             manager->Complete();

@@ -4243,6 +4243,11 @@ void TSchemeShard::PersistRemovePublishingPath(NIceDb::TNiceDb& db, TTxId txId, 
         .Delete();
 }
 
+void TSchemeShard::PersistLongIncrementalRestoreOp(NIceDb::TNiceDb& db, const NKikimrSchemeOp::TLongIncrementalRestoreOp& op) {
+    Y_UNUSED(db, op);
+    // TODO
+}
+
 TTabletId TSchemeShard::GetGlobalHive(const TActorContext& ctx) const {
     return TTabletId(AppData(ctx)->DomainsInfo->GetHive());
 }

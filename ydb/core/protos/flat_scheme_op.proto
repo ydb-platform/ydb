@@ -2235,3 +2235,11 @@ message TSysViewDescription {
     optional string Name = 1;
     optional NKikimrSysView.ESysViewType Type = 2;
 }
+
+message TLongIncrementalRestoreOp {
+    optional NKikimrProto.TPathID BackupCollectionPathId = 1;
+    optional string Id = 2;
+    repeated string TablePathList = 3;
+    optional string FullBackupTrimmedName = 4;
+    repeated string IncrementalBackupTrimmedNames = 5;
+}

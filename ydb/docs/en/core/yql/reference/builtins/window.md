@@ -26,7 +26,7 @@ WINDOW
 
 ## ROW_NUMBER {#row_number}
 
-Row number within a [partition](../syntax/window.md#partition). No arguments.
+Row number within a [partition](../syntax/select/window.md#partition). No arguments.
 
 ### Signature
 

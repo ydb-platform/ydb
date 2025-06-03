@@ -125,7 +125,7 @@ NThreading::TFuture<TStatus> GetOrderStatusTask(
     const int districtID = RandomNumber(DISTRICT_LOW_ID, DISTRICT_HIGH_ID);
 
     LOG_T("Terminal " << context.TerminalID << " started OrderStatus transaction in "
-        << warehouseID << ", " << districtID);
+        << warehouseID << ", " << districtID << ", session: " << session.GetId());
 
     // Determine lookup method (60% by name, 40% by id)
     bool lookupByName = RandomNumber(1, 100) <= 60;
@@ -144,9 +144,11 @@ NThreading::TFuture<TStatus> GetOrderStatusTask(
         if (!customersResult.IsSuccess()) {
             if (ShouldExit(customersResult)) {
                 LOG_E("Terminal " << context.TerminalID << " customers query failed: "
-                    << customersResult.GetIssues().ToOneLineString());
+                    << customersResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
                 std::quick_exit(1);
             }
+            LOG_T("Terminal " << context.TerminalID << " customers query failed: "
+                << customersResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
             co_return customersResult;
         }
 
@@ -168,9 +170,11 @@ NThreading::TFuture<TStatus> GetOrderStatusTask(
         if (!customerResult.IsSuccess()) {
             if (ShouldExit(customerResult)) {
                 LOG_E("Terminal " << context.TerminalID << " customer query failed: "
-                    << customerResult.GetIssues().ToOneLineString());
+                    << customerResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
                 std::quick_exit(1);
             }
+            LOG_T("Terminal " << context.TerminalID << " customer query failed: "
+                << customerResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
             co_return customerResult;
         }
 
@@ -193,9 +197,11 @@ NThreading::TFuture<TStatus> GetOrderStatusTask(
     if (!orderResult.IsSuccess()) {
         if (ShouldExit(orderResult)) {
             LOG_E("Terminal " << context.TerminalID << " order query failed: "
-                << orderResult.GetIssues().ToOneLineString());
+                << orderResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
             std::quick_exit(1);
         }
+        LOG_T("Terminal " << context.TerminalID << " order query failed: "
+            << orderResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
         co_return orderResult;
     }
 
@@ -213,15 +219,17 @@ NThreading::TFuture<TStatus> GetOrderStatusTask(
     if (!orderLinesResult.IsSuccess()) {
         if (ShouldExit(orderLinesResult)) {
             LOG_E("Terminal " << context.TerminalID << " order lines query failed: "
-                << orderLinesResult.GetIssues().ToOneLineString());
+                << orderLinesResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
             std::quick_exit(1);
         }
+        LOG_T("Terminal " << context.TerminalID << " order lines query failed: "
+            << orderLinesResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
         co_return orderLinesResult;
     }
 
     LOG_T("Terminal " << context.TerminalID << " is committing OrderStatus transaction: "
         << "customer " << customer.c_id << ", order " << orderID
-        << ", lines " << orderLinesResult.GetResultSet(0).RowsCount());
+        << ", lines " << orderLinesResult.GetResultSet(0).RowsCount() << ", session: " << session.GetId());
 
     auto commitFuture = tx->Commit();
     auto commitResult = co_await TSuspendWithFuture(commitFuture, context.TaskQueue, context.TerminalID);

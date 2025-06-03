@@ -117,17 +117,19 @@ NThreading::TFuture<TStatus> GetStockLevelTask(
     const int threshold = RandomNumber(10, 20);
 
     LOG_T("Terminal " << context.TerminalID << " started StockLevel transaction in "
-        << warehouseID << ", " << districtID);
+        << warehouseID << ", " << districtID << ", session: " << session.GetId());
 
     // Get next order ID from district
     auto districtFuture = GetDistrictOrderId(session, context, warehouseID, districtID);
     auto districtResult = co_await TSuspendWithFuture(districtFuture, context.TaskQueue, context.TerminalID);
     if (!districtResult.IsSuccess()) {
-        LOG_E("Terminal " << context.TerminalID << " district query failed: "
-            << districtResult.GetIssues().ToOneLineString());
         if (ShouldExit(districtResult)) {
+            LOG_E("Terminal " << context.TerminalID << " district query (stockleve) failed: "
+                << districtResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
             std::quick_exit(1);
         }
+        LOG_T("Terminal " << context.TerminalID << " district query (stockleve) failed: "
+            << districtResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
         co_return districtResult;
     }
 
@@ -149,13 +151,15 @@ NThreading::TFuture<TStatus> GetStockLevelTask(
     if (!stockCountResult.IsSuccess()) {
         if (ShouldExit(stockCountResult)) {
             LOG_E("Terminal " << context.TerminalID << " stock count query failed: "
-                << stockCountResult.GetIssues().ToOneLineString());
+                << stockCountResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
             std::quick_exit(1);
         }
+        LOG_T("Terminal " << context.TerminalID << " stock count query failed: "
+            << stockCountResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
         co_return stockCountResult;
     }
 
-    LOG_T("Terminal " << context.TerminalID << " is committing StockLevel transaction");
+    LOG_T("Terminal " << context.TerminalID << " is committing StockLevel transaction, session: " << session.GetId());
 
     auto commitFuture = tx.Commit();
     auto commitResult = co_await TSuspendWithFuture(commitFuture, context.TaskQueue, context.TerminalID);

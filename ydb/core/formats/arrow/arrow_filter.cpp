@@ -98,14 +98,6 @@ bool TColumnFilter::TIterator::Next(const ui32 size) {
     return false;
 }
 
-bool TColumnFilter::TIterator::InitPosition(const ui32 position) {
-    AFL_VERIFY(Position == 0 && InternalPosition == 0);
-    if (position) {
-        return Next(position);
-    }
-    return Position != FinishPosition;
-}
-
 TString TColumnFilter::TIterator::DebugString() const {
     TStringBuilder sb;
     if (FilterPointer) {

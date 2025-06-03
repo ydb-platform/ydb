@@ -88,7 +88,9 @@ public:
         Y_ABORT_UNLESS(VersionColumns.InitPosition(GetPosition(order.GetStart())));
         if (Filter) {
             FilterIterator = std::make_shared<NArrow::TColumnFilter::TIterator>(Filter->GetIterator(order.GetIsReversed(), RecordsCount));
-            FilterIterator->InitPosition(order.GetStart());
+            if (order.GetStart()) {
+                FilterIterator->Next(order.GetStart());
+            }
         }
     }
 

@@ -33,7 +33,7 @@ class TestUnavailableS3(TllTieringTestBase):
         """)
 
         table = ColumnTableHelper(self.ydb_client, f"{self.ydb_client.database}/table")
-        table.set_fast_compaction(expected_blobs_size=1572864)
+        table.set_fast_compaction()
 
         self.s3_client.create_bucket(bucket_s3_name)
 

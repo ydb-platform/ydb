@@ -153,6 +153,41 @@ Y_UNIT_TEST_SUITE(GroupSizeInUnits) {
         }
 
         {
+            // Reqest ReadStoragePool again
+            NKikimrBlobStorage::TConfigRequest readStoragePoolRequest;
+            auto* cmd1 = readStoragePoolRequest.AddCommand()->MutableReadStoragePool();
+            cmd1->SetBoxId(1);
+            NKikimrBlobStorage::TConfigResponse readStoragePoolResponse = env.Invoke(readStoragePoolRequest);
+            UNIT_ASSERT_C(readStoragePoolResponse.GetSuccess(), readStoragePoolResponse.GetErrorDescription());
+            UNIT_ASSERT_C(readStoragePoolResponse.GetStatus(0).GetSuccess(), readStoragePoolResponse.GetStatus(0).GetErrorDescription());
+
+            UNIT_ASSERT_VALUES_EQUAL(readStoragePoolResponse.StatusSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(readStoragePoolResponse.GetStatus(0).StoragePoolSize(), 1);
+            const TDefineStoragePool storagePool = readStoragePoolResponse.GetStatus(0).GetStoragePool(0);
+            UNIT_ASSERT_VALUES_EQUAL(storagePool.GetDefaultGroupSizeInUnits(), 2u);
+
+            // Try to allocate more groups than possible (PDisk has 16 slots total)
+            NKikimrBlobStorage::TConfigRequest defineStoragePoolRequest;
+            auto* cmd = defineStoragePoolRequest.AddCommand()->MutableDefineStoragePool();
+            cmd->CopyFrom(storagePool);
+            cmd->SetItemConfigGeneration(3);
+            cmd->SetDefaultGroupSizeInUnits(1u);
+            cmd->SetNumGroups(3);
+
+            NKikimrBlobStorage::TConfigResponse defineStoragePoolResponse = env.Invoke(defineStoragePoolRequest);
+
+            // Verify failure
+            UNIT_ASSERT(!defineStoragePoolResponse.GetSuccess());
+            UNIT_ASSERT_STRINGS_EQUAL(
+                defineStoragePoolResponse.GetErrorDescription(),
+                "Group fit error BoxId# 1 StoragePoolId# 1 Error# failed to allocate group: no group options PDisks# {[(1:1000-s[18/16])]}"
+            );
+
+            // Verify existing groups remain unchanged
+            UNIT_ASSERT_VALUES_EQUAL(pdiskMockState.GetNumActiveSlots(), 18);
+        }
+
+        {
             // Validate request error "Generation# does not match expected"
             NKikimrBlobStorage::TConfigRequest request;
             NKikimrBlobStorage::TConfigResponse response;

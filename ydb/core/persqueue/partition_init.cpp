@@ -596,7 +596,7 @@ void TInitDataRangeStep::FillBlobsMetaData(const NKikimrClient::TKeyValueRespons
         Y_ABORT_UNLESS(pair.GetStatus() == NKikimrProto::OK); //this is readrange without keys, only OK could be here
         auto k = TKey::FromString(pair.GetKey(), PartitionId());
         if (!actualKeys.contains(pair.GetKey())) {
-            Partition()->DeletedKeys.emplace_back(k.ToString());
+            Partition()->DeletedKeys->emplace_back(k.ToString());
             continue;
         }
         if (dataKeysBody.empty()) { //no data - this is first pair of first range

@@ -12,7 +12,7 @@
     - рестарт или старт/стоп таблеток на странице таблетки в [Embedded UI](../reference/embedded-ui/index.md) или Developer UI;
     - [перемещение VDisk'ов](../maintenance/manual/moving_vdisks.md) на другие PDisk'и (evict) на странице VDisk'а в [Embedded UI](../reference/embedded-ui/index.md) или Developer UI;
     - рестарт или [декомиссия](../devops/deployment-options/manual/decommissioning.md) диска на странице PDisk'а в [Embedded UI](../reference/embedded-ui/index.md) или Developer UI;
-    - действия на вкладке с информацией по фоновым операциям ([Embedded UI](../reference/embedded-ui/index.md) > **Diagnostics** > **Operations**);
+    - действия на вкладке с информацией по фоновым операциям — построение индекса, импорт и экспорт ([Embedded UI](../reference/embedded-ui/index.md) > **Diagnostics** > **Operations**);
     - действия на вкладке с информацией по запросам ([Embedded UI](../reference/embedded-ui/index.md) > **Diagnostics** > **Queries**).
 
 - **Администратор** даёт право на выполнение административных действий с базами данных или кластером:
@@ -20,7 +20,9 @@
     - управление кластером:
         - [изменение динамической конфигурации кластера](../devops/configuration-management/configuration-v2/update-config.md);
         - [управление пулами ресурсов](../dev/resource-consumption-management.md);
+
         [//]: # (управление конфигурацией тарификации — metering config;)
+
         - изменение настроек таблетки [Console](../concepts/glossary.md#console);
         - запросы к сервису [maintenance](../devops/deployment-options/manual/maintenance.md) (получение списка узлов кластера, управление maintenance-задачами);
         - выполнение drain/fill узла {{ ydb-short-name }} в CLI (ydbd) и в Developer UI;
@@ -41,7 +43,7 @@
 
 {% note info %}
 
-Существует еще четвёртый уровень, который даёт разрешение на регистрацию узлов баз данных.
+Существует еще четвёртый уровень, который даёт разрешение на регистрацию узлов баз данных в кластере {{ ydb-short-name }}.
 
 {% endnote %}
 

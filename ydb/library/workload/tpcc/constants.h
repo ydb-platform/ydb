@@ -7,6 +7,9 @@ namespace NYdb::NTPCC {
 
 constexpr size_t TERMINALS_PER_WAREHOUSE = 10;
 
+// Partitioning constants
+constexpr size_t DEFAULT_SHARD_SIZE_MB = 2000;
+
 // copy-pasted TPC-C constants from the Benchbase implementation
 
 constexpr int DISTRICT_LOW_ID = 1;

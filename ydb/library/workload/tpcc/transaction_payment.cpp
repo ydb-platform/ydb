@@ -229,7 +229,7 @@ TAsyncExecuteQueryResult InsertHistoryRecord(
         DECLARE $h_data AS Utf8;
         DECLARE $h_c_nano_ts AS Int64;
 
-        INSERT INTO `history`
+        UPSERT INTO `history`
          (H_C_D_ID, H_C_W_ID, H_C_ID, H_D_ID, H_W_ID, H_DATE, H_AMOUNT, H_DATA, H_C_NANO_TS)
          VALUES ($h_c_d_id, $h_c_w_id, $h_c_id, $h_d_id, $h_w_id, $h_date, $h_amount, $h_data, $h_c_nano_ts);
     )", context.Path.c_str());

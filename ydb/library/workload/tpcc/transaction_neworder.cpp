@@ -290,7 +290,7 @@ TAsyncExecuteQueryResult InsertNewOrder(
         DECLARE $no_d_id AS Int32;
         DECLARE $no_w_id AS Int32;
 
-        INSERT INTO `new_order` (NO_O_ID, NO_D_ID, NO_W_ID)
+        UPSERT INTO `new_order` (NO_O_ID, NO_D_ID, NO_W_ID)
         VALUES ($no_o_id, $no_d_id, $no_w_id);
     )", context.Path.c_str());
 
@@ -334,7 +334,7 @@ TAsyncExecuteQueryResult InsertOpenOrder(
         DECLARE $o_ol_cnt AS Int32;
         DECLARE $o_all_local AS Int32;
 
-        INSERT INTO `oorder` (O_ID, O_D_ID, O_W_ID, O_C_ID, O_ENTRY_D, O_OL_CNT, O_ALL_LOCAL)
+        UPSERT INTO `oorder` (O_ID, O_D_ID, O_W_ID, O_C_ID, O_ENTRY_D, O_OL_CNT, O_ALL_LOCAL)
         VALUES ($o_id, $o_d_id, $o_w_id, $o_c_id, $o_entry_d, $o_ol_cnt, $o_all_local);
     )", context.Path.c_str());
 
@@ -479,7 +479,7 @@ TAsyncExecuteQueryResult InsertOrderLines(
             $row.p6 as OL_DELIVERY_D, $row.p7 as OL_AMOUNT, $row.p8 as OL_SUPPLY_W_ID, $row.p9 as OL_QUANTITY,
             $row.p10 as OL_DIST_INFO));
 
-        UPSERT INTO order_line SELECT * FROM AS_TABLE(ListMap($values, $mapper));
+        UPSERT INTO `order_line` SELECT * FROM AS_TABLE(ListMap($values, $mapper));
     )", context.Path.c_str());
 
     auto paramsBuilder = TParamsBuilder();

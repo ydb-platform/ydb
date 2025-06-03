@@ -27,7 +27,7 @@ void TCompactColumnEngineChanges::DoCompile(TFinalizationContext& context) {
         auto& constructor = portionInfo.GetPortionConstructor().MutablePortionConstructor();
         constructor.MutableMeta().SetCompactionLevel(
             GranuleMeta->GetOptimizerPlanner().GetAppropriateLevel(GetPortionsToMove().GetTargetCompactionLevel().value_or(0),
-                portionInfo.GetPortionConstructor().GetPortionConstructor().GetCompactionInfo()));
+                portionInfo.GetPortionConstructor().GetCompactionInfo()));
     }
 }
 

@@ -71,7 +71,7 @@ protected:
         std::vector<std::vector<TPortionInfo::TPtr>> removePortionsByLevel;
         removePortionsByLevel.resize(Levels.size());
         for (auto&& [_, i] : remove) {
-            if (i->GetProduced() != NPortion::EProduced::EVICTED) {
+            if (i->GetProduced() == NPortion::EProduced::EVICTED) {
                 continue;
             }
             PortionsInfo->RemovePortion(i);
@@ -82,7 +82,7 @@ protected:
             Levels[i]->ModifyPortions({}, removePortionsByLevel[i]);
         }
         for (auto&& [_, i] : add) {
-            if (i->GetProduced() != NPortion::EProduced::EVICTED) {
+            if (i->GetProduced() == NPortion::EProduced::EVICTED) {
                 continue;
             }
             PortionsInfo->AddPortion(i);

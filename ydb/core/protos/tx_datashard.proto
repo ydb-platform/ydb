@@ -13,6 +13,7 @@ import "ydb/core/protos/tx.proto";
 import "ydb/core/protos/flat_scheme_op.proto";
 import "ydb/core/protos/table_stats.proto";
 import "ydb/core/protos/subdomains.proto";
+import "ydb/core/protos/sys_view_types.proto";
 import "ydb/core/protos/query_stats.proto";
 import "ydb/public/api/protos/ydb_issue_message.proto";
 import "ydb/public/api/protos/ydb_status_codes.proto";
@@ -152,6 +153,7 @@ message TKqpTransaction {
         // reserved 4
         optional string SysViewInfo = 5;
         optional uint32 TableKind = 6;      // NKikimr::NKqp::ETableKind
+        optional NKikimrSysView.ESysViewType SysViewType = 7;
     }
 
     // Data-query task meta
@@ -1431,7 +1433,7 @@ message TEvConditionalEraseRowsResponse {
 }
 
 message TEvBuildIndexCreateRequest {
-    optional uint64 BuildIndexId = 1;          // unique id of build index process
+    optional uint64 Id = 1;          // unique id of build index process
 
     optional uint64 TabletId = 2;
     optional uint64 OwnerId = 3;
@@ -1460,7 +1462,7 @@ message TEvBuildIndexCreateRequest {
 }
 
 message TEvBuildIndexProgressResponse {
-    optional uint64 BuildIndexId = 1;
+    optional uint64 Id = 1;
 
     optional uint64 TabletId = 2;
     optional uint64 OwnerId = 3;
@@ -1556,14 +1558,12 @@ message TEvLocalKMeansRequest {
     optional uint32 K = 10;
     optional uint32 NeedsRounds = 14;
 
-    // id of parent cluster
     optional uint64 ParentFrom = 15;
     optional uint64 ParentTo = 21;
-    // [Child ... Child + K * (ParentFrom - ParentTo + 1)) ids reserved for this kmeans clusters
     optional uint64 Child = 16;
 
     optional string LevelName = 17;
-    optional string PostingName = 18;
+    optional string OutputName = 18;
 
     optional string EmbeddingColumn = 19;
     repeated string DataColumns = 20;
@@ -1612,7 +1612,7 @@ message TEvReshuffleKMeansRequest {
     // centroids of clusters
     repeated string Clusters = 12;
 
-    optional string PostingName = 13;
+    optional string OutputName = 13;
 
     optional string EmbeddingColumn = 14;
     repeated string DataColumns = 15;
@@ -1660,7 +1660,7 @@ message TEvPrefixKMeansRequest {
     optional uint64 Child = 11;
 
     optional string LevelName = 12;
-    optional string PostingName = 13;
+    optional string OutputName = 13;
     optional string PrefixName = 14;
 
     optional string EmbeddingColumn = 15;

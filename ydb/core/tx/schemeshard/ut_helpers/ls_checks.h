@@ -158,6 +158,7 @@ namespace NLs {
                               NKikimrSchemeOp::EPathState pathState = NKikimrSchemeOp::EPathState::EPathStateNoChanges);
     TCheckFunc CheckPQAlterVersion (const TString& name, ui64 alterVersion);
     TCheckFunc IndexesCount(ui32 count);
+    TCheckFunc CheckPathState(NKikimrSchemeOp::EPathState pathState = NKikimrSchemeOp::EPathState::EPathStateNoChanges);
 
     TCheckFunc IndexType(NKikimrSchemeOp::EIndexType type);
     TCheckFunc IndexState(NKikimrSchemeOp::EIndexState state);
@@ -184,6 +185,7 @@ namespace NLs {
     TCheckFunc StreamState(NKikimrSchemeOp::ECdcStreamState state);
     TCheckFunc StreamVirtualTimestamps(bool value);
     TCheckFunc StreamResolvedTimestamps(const TDuration& value);
+    TCheckFunc StreamSchemaChanges(bool value);
     TCheckFunc StreamAwsRegion(const TString& value);
     TCheckFunc StreamInitialScanProgress(ui32 total, ui32 completed);
     TCheckFunc RetentionPeriod(const TDuration& value);

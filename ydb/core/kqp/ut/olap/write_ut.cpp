@@ -45,7 +45,10 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
 
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
-        TLocalHelper(kikimr).CreateTestOlapTable();
+        auto helper = TLocalHelper(kikimr);
+        helper.CreateTestOlapTable();
+        helper.SetForcedCompaction();
+
         Tests::NCommon::TLoggerInit(kikimr)
             .SetComponents({ NKikimrServices::TX_COLUMNSHARD }, "CS")
             .SetPriority(NActors::NLog::PRI_DEBUG)
@@ -110,7 +113,9 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
 
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
-        TLocalHelper(kikimr).CreateTestOlapTable();
+        auto helper = TLocalHelper(kikimr);
+        helper.CreateTestOlapTable();
+        helper.SetForcedCompaction();
         Tests::NCommon::TLoggerInit(kikimr)
             .SetComponents({ NKikimrServices::TX_COLUMNSHARD }, "CS")
             .SetPriority(NActors::NLog::PRI_DEBUG)
@@ -195,13 +200,15 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
     }
 
     Y_UNIT_TEST(MultiWriteInTime) {
-        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
         settings.AppConfig.MutableColumnShardConfig()->SetWritingBufferDurationMs(15000);
         TKikimrRunner kikimr(settings);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
         auto csController = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NKikimr::NYDBTest::NColumnShard::TReadOnlyController>();
         TTypedLocalHelper helper("Utf8", kikimr);
         helper.CreateTestOlapTable();
+        helper.SetForcedCompaction();
+
         auto writeSession = helper.StartWriting("/Root/olapStore/olapTable");
         writeSession.FillTable("field", NArrow::NConstruction::TStringPoolFiller(1, 1, "aaa", 1), 0, 800000);
         Sleep(TDuration::Seconds(1));
@@ -250,13 +257,14 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
     }
 
     Y_UNIT_TEST(MultiWriteInTimeDiffSchemas) {
-        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
         settings.AppConfig.MutableColumnShardConfig()->SetWritingBufferDurationMs(15000);
         TKikimrRunner kikimr(settings);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
         auto csController = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NKikimr::NYDBTest::NColumnShard::TReadOnlyController>();
         TTypedLocalHelper helper("Utf8", "Utf8", kikimr);
         helper.CreateTestOlapTable();
+        helper.SetForcedCompaction();
         auto writeGuard = helper.StartWriting("/Root/olapStore/olapTable");
         writeGuard.FillTable("field", NArrow::NConstruction::TStringPoolFiller(1, 1, "aaa", 1), 0, 800000);
         Sleep(TDuration::Seconds(1));
@@ -313,9 +321,11 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
 
-        auto settings = TKikimrSettings().SetAppConfig(appConfig).SetWithSampleTables(false);
+        auto settings = TKikimrSettings().SetAppConfig(appConfig).SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
         TKikimrRunner kikimr(settings);
-        TLocalHelper(kikimr).CreateTestOlapTable();
+        auto helper = TLocalHelper(kikimr);
+        helper.CreateTestOlapTable();
+        helper.SetForcedCompaction();
         Tests::NCommon::TLoggerInit(kikimr)
             .SetComponents({ NKikimrServices::TX_COLUMNSHARD, NKikimrServices::TX_COLUMNSHARD_BLOBS }, "CS")
             .SetPriority(NActors::NLog::PRI_DEBUG)

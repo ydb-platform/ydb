@@ -2837,6 +2837,329 @@
     },
     "test.test_viewer_nodes": {
         "/Root": {
+            "FieldsAvailable": "0000000010000110111111100000111",
+            "FieldsRequired": "0000000000000000000000000000101",
+            "FoundNodes": "1",
+            "Nodes": [
+                {
+                    "CpuUsage": "not-zero-number",
+                    "Database": "/Root",
+                    "NodeId": 1,
+                    "SystemState": {
+                        "ChangeTime": "not-zero-number-text",
+                        "CoresTotal": "not-zero-number",
+                        "CoresUsed": "not-zero-number",
+                        "Endpoints": [
+                            {
+                                "Address": "text",
+                                "Name": "grpc"
+                            },
+                            {
+                                "Address": "text",
+                                "Name": "http-mon"
+                            },
+                            {
+                                "Address": "text",
+                                "Name": "ic"
+                            }
+                        ],
+                        "Host": "text",
+                        "LoadAverage": "not-empty-array",
+                        "Location": {
+                            "DataCenter": "1",
+                            "Rack": "1",
+                            "Unit": "1"
+                        },
+                        "MaxDiskUsage": "not-zero-number",
+                        "MemoryLimit": "not-zero-number-text",
+                        "NodeId": 1,
+                        "NumberOfCpus": "not-zero-number",
+                        "PoolStats": [
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "System",
+                                "Threads": 2,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "User",
+                                "Threads": 3,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "Batch",
+                                "Threads": 2,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "IO",
+                                "Threads": 1,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "IC",
+                                "Threads": 1,
+                                "Usage": "number"
+                            }
+                        ],
+                        "RealNumberOfCpus": "not-zero-number",
+                        "Roles": "not-empty-array",
+                        "StartTime": "not-zero-number-text",
+                        "SystemState": "Green",
+                        "TotalSessions": "number"
+                    },
+                    "UptimeSeconds": "number"
+                }
+            ],
+            "TotalNodes": "1"
+        },
+        "/Root/dedicated_db": {
+            "FieldsAvailable": "0000000010000110111111100000111",
+            "FieldsRequired": "0000000000000000000000000000101",
+            "FoundNodes": "1",
+            "Nodes": [
+                {
+                    "CpuUsage": "not-zero-number",
+                    "Database": "/Root/dedicated_db",
+                    "NodeId": 50000,
+                    "SystemState": {
+                        "ChangeTime": "not-zero-number-text",
+                        "CoresTotal": "not-zero-number",
+                        "CoresUsed": "not-zero-number",
+                        "Endpoints": [
+                            {
+                                "Address": "text",
+                                "Name": "grpc"
+                            },
+                            {
+                                "Address": "text",
+                                "Name": "http-mon"
+                            },
+                            {
+                                "Address": "text",
+                                "Name": "ic"
+                            }
+                        ],
+                        "Host": "text",
+                        "LoadAverage": "not-empty-array",
+                        "Location": {},
+                        "MemoryLimit": "not-zero-number-text",
+                        "NodeId": 50000,
+                        "NumberOfCpus": "not-zero-number",
+                        "PoolStats": [
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "System",
+                                "Threads": 2,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "User",
+                                "Threads": 3,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "Batch",
+                                "Threads": 2,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "IO",
+                                "Threads": 1,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "IC",
+                                "Threads": 1,
+                                "Usage": "number"
+                            }
+                        ],
+                        "RealNumberOfCpus": "not-zero-number",
+                        "Roles": "not-empty-array",
+                        "StartTime": "not-zero-number-text",
+                        "SystemState": "Green",
+                        "Tenants": [
+                            "/Root/dedicated_db"
+                        ],
+                        "TotalSessions": "number"
+                    },
+                    "UptimeSeconds": "number"
+                }
+            ],
+            "TotalNodes": "1"
+        },
+        "/Root/serverless_db": {
+            "FieldsAvailable": "0000000010000110111111100000111",
+            "FieldsRequired": "0000000000000000000000000000101",
+            "FoundNodes": "1",
+            "Nodes": [
+                {
+                    "CpuUsage": "not-zero-number",
+                    "Database": "/Root/shared_db",
+                    "NodeId": 50001,
+                    "SystemState": {
+                        "ChangeTime": "not-zero-number-text",
+                        "CoresTotal": "not-zero-number",
+                        "CoresUsed": "not-zero-number",
+                        "Endpoints": [
+                            {
+                                "Address": "text",
+                                "Name": "grpc"
+                            },
+                            {
+                                "Address": "text",
+                                "Name": "http-mon"
+                            },
+                            {
+                                "Address": "text",
+                                "Name": "ic"
+                            }
+                        ],
+                        "Host": "text",
+                        "LoadAverage": "not-empty-array",
+                        "Location": {},
+                        "MemoryLimit": "not-zero-number-text",
+                        "NodeId": 50001,
+                        "NumberOfCpus": "not-zero-number",
+                        "PoolStats": [
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "System",
+                                "Threads": 2,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "User",
+                                "Threads": 3,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "Batch",
+                                "Threads": 2,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "IO",
+                                "Threads": 1,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "IC",
+                                "Threads": 1,
+                                "Usage": "number"
+                            }
+                        ],
+                        "RealNumberOfCpus": "not-zero-number",
+                        "Roles": "not-empty-array",
+                        "StartTime": "not-zero-number-text",
+                        "SystemState": "Green",
+                        "Tenants": [
+                            "/Root/shared_db"
+                        ],
+                        "TotalSessions": "number"
+                    },
+                    "UptimeSeconds": "number"
+                }
+            ],
+            "Problems": [
+                "no-database-board-info"
+            ],
+            "TotalNodes": "1"
+        },
+        "/Root/shared_db": {
+            "FieldsAvailable": "0000000010000110111111100000111",
+            "FieldsRequired": "0000000000000000000000000000101",
+            "FoundNodes": "1",
+            "Nodes": [
+                {
+                    "CpuUsage": "not-zero-number",
+                    "Database": "/Root/shared_db",
+                    "NodeId": 50001,
+                    "SystemState": {
+                        "ChangeTime": "not-zero-number-text",
+                        "CoresTotal": "not-zero-number",
+                        "CoresUsed": "not-zero-number",
+                        "Endpoints": [
+                            {
+                                "Address": "text",
+                                "Name": "grpc"
+                            },
+                            {
+                                "Address": "text",
+                                "Name": "http-mon"
+                            },
+                            {
+                                "Address": "text",
+                                "Name": "ic"
+                            }
+                        ],
+                        "Host": "text",
+                        "LoadAverage": "not-empty-array",
+                        "Location": {},
+                        "MemoryLimit": "not-zero-number-text",
+                        "NodeId": 50001,
+                        "NumberOfCpus": "not-zero-number",
+                        "PoolStats": [
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "System",
+                                "Threads": 2,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "User",
+                                "Threads": 3,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "Batch",
+                                "Threads": 2,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "IO",
+                                "Threads": 1,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "IC",
+                                "Threads": 1,
+                                "Usage": "number"
+                            }
+                        ],
+                        "RealNumberOfCpus": "not-zero-number",
+                        "Roles": "not-empty-array",
+                        "StartTime": "not-zero-number-text",
+                        "SystemState": "Green",
+                        "Tenants": [
+                            "/Root/shared_db"
+                        ],
+                        "TotalSessions": "number"
+                    },
+                    "UptimeSeconds": "number"
+                }
+            ],
+            "TotalNodes": "1"
+        }
+    },
+    "test.test_viewer_nodes_all": {
+        "/Root": {
             "FieldsAvailable": "1111111110111111111111111111111",
             "FieldsRequired": "1111111111111111111111111111111",
             "FoundNodes": "1",
@@ -4296,6 +4619,1815 @@
                 }
             ],
             "version": 8
+        }
+    },
+    "test.test_viewer_storage_nodes": {
+        "/Root": {
+            "FieldsAvailable": "0000000110000110111111100000111",
+            "FieldsRequired": "0000000000000000000000000000111",
+            "FoundNodes": "1",
+            "MaximumSlotsPerDisk": "5",
+            "Nodes": [
+                {
+                    "CpuUsage": "not-zero-number",
+                    "Database": "/Root",
+                    "NodeId": 1,
+                    "SystemState": {
+                        "ChangeTime": "not-zero-number-text",
+                        "CoresTotal": "not-zero-number",
+                        "CoresUsed": "not-zero-number",
+                        "Endpoints": [
+                            {
+                                "Address": "text",
+                                "Name": "grpc"
+                            },
+                            {
+                                "Address": "text",
+                                "Name": "http-mon"
+                            },
+                            {
+                                "Address": "text",
+                                "Name": "ic"
+                            }
+                        ],
+                        "Host": "text",
+                        "LoadAverage": "not-empty-array",
+                        "Location": {
+                            "DataCenter": "1",
+                            "Rack": "1",
+                            "Unit": "1"
+                        },
+                        "MaxDiskUsage": "not-zero-number",
+                        "MemoryLimit": "not-zero-number-text",
+                        "NodeId": 1,
+                        "NumberOfCpus": "not-zero-number",
+                        "PoolStats": [
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "System",
+                                "Threads": 2,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "User",
+                                "Threads": 3,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "Batch",
+                                "Threads": 2,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "IO",
+                                "Threads": 1,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "IC",
+                                "Threads": 1,
+                                "Usage": "number"
+                            }
+                        ],
+                        "RealNumberOfCpus": "not-zero-number",
+                        "Roles": "not-empty-array",
+                        "StartTime": "not-zero-number-text",
+                        "SystemState": "Green",
+                        "TotalSessions": "number"
+                    },
+                    "UptimeSeconds": "number"
+                }
+            ],
+            "TotalNodes": "1"
+        },
+        "/Root/dedicated_db": {
+            "FieldsAvailable": "0000000110000110111111100000111",
+            "FieldsRequired": "0000000000000000000000000000111",
+            "FoundNodes": "1",
+            "MaximumSlotsPerDisk": "5",
+            "Nodes": [
+                {
+                    "CpuUsage": "not-zero-number",
+                    "NodeId": 1,
+                    "SystemState": {
+                        "ChangeTime": "not-zero-number-text",
+                        "CoresTotal": "not-zero-number",
+                        "CoresUsed": "not-zero-number",
+                        "Endpoints": [
+                            {
+                                "Address": "text",
+                                "Name": "grpc"
+                            },
+                            {
+                                "Address": "text",
+                                "Name": "http-mon"
+                            },
+                            {
+                                "Address": "text",
+                                "Name": "ic"
+                            }
+                        ],
+                        "Host": "text",
+                        "LoadAverage": "not-empty-array",
+                        "Location": {
+                            "DataCenter": "1",
+                            "Rack": "1",
+                            "Unit": "1"
+                        },
+                        "MaxDiskUsage": "not-zero-number",
+                        "MemoryLimit": "not-zero-number-text",
+                        "NodeId": 1,
+                        "NumberOfCpus": "not-zero-number",
+                        "PoolStats": [
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "System",
+                                "Threads": 2,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "User",
+                                "Threads": 3,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "Batch",
+                                "Threads": 2,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "IO",
+                                "Threads": 1,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "IC",
+                                "Threads": 1,
+                                "Usage": "number"
+                            }
+                        ],
+                        "RealNumberOfCpus": "not-zero-number",
+                        "Roles": "not-empty-array",
+                        "StartTime": "not-zero-number-text",
+                        "SystemState": "Green",
+                        "TotalSessions": "number"
+                    },
+                    "UptimeSeconds": "number"
+                }
+            ],
+            "TotalNodes": "1"
+        },
+        "/Root/serverless_db": {
+            "FieldsAvailable": "0000000110000110111111100000111",
+            "FieldsRequired": "0000000000000000000000000000111",
+            "FoundNodes": "1",
+            "MaximumSlotsPerDisk": "5",
+            "Nodes": [
+                {
+                    "CpuUsage": "not-zero-number",
+                    "NodeId": 1,
+                    "SystemState": {
+                        "ChangeTime": "not-zero-number-text",
+                        "CoresTotal": "not-zero-number",
+                        "CoresUsed": "not-zero-number",
+                        "Endpoints": [
+                            {
+                                "Address": "text",
+                                "Name": "grpc"
+                            },
+                            {
+                                "Address": "text",
+                                "Name": "http-mon"
+                            },
+                            {
+                                "Address": "text",
+                                "Name": "ic"
+                            }
+                        ],
+                        "Host": "text",
+                        "LoadAverage": "not-empty-array",
+                        "Location": {
+                            "DataCenter": "1",
+                            "Rack": "1",
+                            "Unit": "1"
+                        },
+                        "MaxDiskUsage": "not-zero-number",
+                        "MemoryLimit": "not-zero-number-text",
+                        "NodeId": 1,
+                        "NumberOfCpus": "not-zero-number",
+                        "PoolStats": [
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "System",
+                                "Threads": 2,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "User",
+                                "Threads": 3,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "Batch",
+                                "Threads": 2,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "IO",
+                                "Threads": 1,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "IC",
+                                "Threads": 1,
+                                "Usage": "number"
+                            }
+                        ],
+                        "RealNumberOfCpus": "not-zero-number",
+                        "Roles": "not-empty-array",
+                        "StartTime": "not-zero-number-text",
+                        "SystemState": "Green",
+                        "TotalSessions": "number"
+                    },
+                    "UptimeSeconds": "number"
+                }
+            ],
+            "Problems": [
+                "no-database-board-info"
+            ],
+            "TotalNodes": "1"
+        },
+        "/Root/shared_db": {
+            "FieldsAvailable": "0000000110000110111111100000111",
+            "FieldsRequired": "0000000000000000000000000000111",
+            "FoundNodes": "1",
+            "MaximumSlotsPerDisk": "5",
+            "Nodes": [
+                {
+                    "CpuUsage": "not-zero-number",
+                    "NodeId": 1,
+                    "SystemState": {
+                        "ChangeTime": "not-zero-number-text",
+                        "CoresTotal": "not-zero-number",
+                        "CoresUsed": "not-zero-number",
+                        "Endpoints": [
+                            {
+                                "Address": "text",
+                                "Name": "grpc"
+                            },
+                            {
+                                "Address": "text",
+                                "Name": "http-mon"
+                            },
+                            {
+                                "Address": "text",
+                                "Name": "ic"
+                            }
+                        ],
+                        "Host": "text",
+                        "LoadAverage": "not-empty-array",
+                        "Location": {
+                            "DataCenter": "1",
+                            "Rack": "1",
+                            "Unit": "1"
+                        },
+                        "MaxDiskUsage": "not-zero-number",
+                        "MemoryLimit": "not-zero-number-text",
+                        "NodeId": 1,
+                        "NumberOfCpus": "not-zero-number",
+                        "PoolStats": [
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "System",
+                                "Threads": 2,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "User",
+                                "Threads": 3,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "Batch",
+                                "Threads": 2,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "IO",
+                                "Threads": 1,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "IC",
+                                "Threads": 1,
+                                "Usage": "number"
+                            }
+                        ],
+                        "RealNumberOfCpus": "not-zero-number",
+                        "Roles": "not-empty-array",
+                        "StartTime": "not-zero-number-text",
+                        "SystemState": "Green",
+                        "TotalSessions": "number"
+                    },
+                    "UptimeSeconds": "number"
+                }
+            ],
+            "TotalNodes": "1"
+        }
+    },
+    "test.test_viewer_storage_nodes_all": {
+        "/Root": {
+            "FieldsAvailable": "1111111110111111111111111111111",
+            "FieldsRequired": "1111111111111111111111111111111",
+            "FoundNodes": "1",
+            "MaximumDisksPerNode": "1",
+            "MaximumSlotsPerDisk": "5",
+            "Nodes": [
+                {
+                    "ClockSkewMaxUs": "text",
+                    "ClockSkewMinUs": "text",
+                    "ClockSkewUs": "text",
+                    "ConnectStatus": "Green",
+                    "Connections": "not-zero-number",
+                    "CpuUsage": "not-zero-number",
+                    "Database": "/Root",
+                    "DiskSpaceUsage": "not-zero-number",
+                    "NetworkUtilization": "number",
+                    "NetworkUtilizationMax": "number",
+                    "NetworkUtilizationMin": "number",
+                    "NodeId": 1,
+                    "PDisks": [
+                        {
+                            "AvailableSize": "text",
+                            "Category": "0",
+                            "ChangeTime": "not-zero-number-text",
+                            "Device": "Green",
+                            "EnforcedDynamicSlotSize": "not-zero-number-text",
+                            "Guid": "1",
+                            "LogTotalSize": "not-zero-number-text",
+                            "LogUsedSize": "not-zero-number-text",
+                            "NodeId": 1,
+                            "NumActiveSlots": 5,
+                            "PDiskId": 1,
+                            "Path": "SectorMap:1:64",
+                            "Realtime": "Green",
+                            "SerialNumber": "",
+                            "State": "Normal",
+                            "SystemSize": "not-zero-number-text",
+                            "TotalSize": "not-zero-number-text"
+                        }
+                    ],
+                    "Peers": [
+                        {
+                            "BytesWritten": "text",
+                            "ChangeTime": "not-zero-number-text",
+                            "ClockSkewUs": "text",
+                            "ConnectStatus": "Green",
+                            "ConnectTime": "not-zero-number-text",
+                            "Connected": true,
+                            "NodeId": 1,
+                            "PeerName": "text",
+                            "PeerNodeId": 50000,
+                            "PingTimeUs": "text",
+                            "ScopeId": {
+                                "X1": "72057594046678944",
+                                "X2": "6"
+                            },
+                            "Utilization": "number"
+                        },
+                        {
+                            "BytesWritten": "text",
+                            "ChangeTime": "not-zero-number-text",
+                            "ClockSkewUs": "text",
+                            "ConnectStatus": "Green",
+                            "ConnectTime": "not-zero-number-text",
+                            "Connected": true,
+                            "NodeId": 1,
+                            "PeerName": "text",
+                            "PeerNodeId": 50001,
+                            "PingTimeUs": "text",
+                            "ScopeId": {
+                                "X1": "72057594046678944",
+                                "X2": "7"
+                            },
+                            "Utilization": "number"
+                        }
+                    ],
+                    "PingTimeMaxUs": "text",
+                    "PingTimeMinUs": "text",
+                    "PingTimeUs": "text",
+                    "ReceiveThroughput": "text",
+                    "ReverseClockSkewUs": "text",
+                    "ReversePeers": [
+                        {
+                            "BytesWritten": "text",
+                            "ChangeTime": "not-zero-number-text",
+                            "ClockSkewUs": "text",
+                            "ConnectStatus": "Green",
+                            "ConnectTime": "not-zero-number-text",
+                            "Connected": true,
+                            "NodeId": 50000,
+                            "PeerName": "text",
+                            "PeerNodeId": 1,
+                            "PingTimeUs": "text",
+                            "ScopeId": {
+                                "X1": "0",
+                                "X2": "1"
+                            },
+                            "Utilization": "number"
+                        },
+                        {
+                            "BytesWritten": "text",
+                            "ChangeTime": "not-zero-number-text",
+                            "ClockSkewUs": "text",
+                            "ConnectStatus": "Green",
+                            "ConnectTime": "not-zero-number-text",
+                            "Connected": true,
+                            "NodeId": 50001,
+                            "PeerName": "text",
+                            "PeerNodeId": 1,
+                            "PingTimeUs": "text",
+                            "ScopeId": {
+                                "X1": "0",
+                                "X2": "1"
+                            },
+                            "Utilization": "number"
+                        }
+                    ],
+                    "ReversePingTimeUs": "text",
+                    "SendThroughput": "text",
+                    "SystemState": {
+                        "ChangeTime": "not-zero-number-text",
+                        "CoresTotal": "not-zero-number",
+                        "CoresUsed": "not-zero-number",
+                        "Endpoints": [
+                            {
+                                "Address": "text",
+                                "Name": "grpc"
+                            },
+                            {
+                                "Address": "text",
+                                "Name": "http-mon"
+                            },
+                            {
+                                "Address": "text",
+                                "Name": "ic"
+                            }
+                        ],
+                        "Host": "text",
+                        "LoadAverage": "not-empty-array",
+                        "Location": {
+                            "DataCenter": "1",
+                            "Rack": "1",
+                            "Unit": "1"
+                        },
+                        "MaxDiskUsage": "not-zero-number",
+                        "MemoryLimit": "not-zero-number-text",
+                        "MemoryStats": "not-empty-object",
+                        "NodeId": 1,
+                        "NumberOfCpus": "not-zero-number",
+                        "PoolStats": [
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "System",
+                                "Threads": 2,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "User",
+                                "Threads": 3,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "Batch",
+                                "Threads": 2,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "IO",
+                                "Threads": 1,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "IC",
+                                "Threads": 1,
+                                "Usage": "number"
+                            }
+                        ],
+                        "RealNumberOfCpus": "not-zero-number",
+                        "Roles": "not-empty-array",
+                        "StartTime": "not-zero-number-text",
+                        "SystemState": "Green",
+                        "TotalSessions": "number"
+                    },
+                    "UptimeSeconds": "number",
+                    "VDisks": [
+                        {
+                            "AllocatedSize": "0",
+                            "AvailableSize": "text",
+                            "ChangeTime": "not-zero-number-text",
+                            "DiskSpace": "Green",
+                            "FrontQueues": "Green",
+                            "Guid": "1",
+                            "HasUnreadableBlobs": false,
+                            "IncarnationGuid": "not-zero-number-text",
+                            "InstanceGuid": "not-zero-number-text",
+                            "Kind": "0",
+                            "NodeId": 1,
+                            "PDiskId": 1,
+                            "Replicated": true,
+                            "ReplicationProgress": 1,
+                            "ReplicationSecondsRemaining": 0,
+                            "SatisfactionRank": {
+                                "FreshRank": {
+                                    "Flag": "Green"
+                                },
+                                "LevelRank": {
+                                    "Flag": "Green"
+                                }
+                            },
+                            "StoragePoolName": "static",
+                            "VDiskId": {
+                                "Domain": 0,
+                                "GroupGeneration": 1,
+                                "GroupID": 0,
+                                "Ring": 0,
+                                "VDisk": 0
+                            },
+                            "VDiskSlotId": 0,
+                            "VDiskState": "OK"
+                        },
+                        {
+                            "AllocatedSize": "0",
+                            "AvailableSize": "text",
+                            "ChangeTime": "not-zero-number-text",
+                            "DiskSpace": "Green",
+                            "FrontQueues": "Green",
+                            "Guid": "1",
+                            "HasUnreadableBlobs": false,
+                            "IncarnationGuid": "not-zero-number-text",
+                            "InstanceGuid": "not-zero-number-text",
+                            "Kind": "0",
+                            "NodeId": 1,
+                            "PDiskId": 1,
+                            "Replicated": true,
+                            "ReplicationProgress": 1,
+                            "ReplicationSecondsRemaining": 0,
+                            "SatisfactionRank": {
+                                "FreshRank": {
+                                    "Flag": "Green"
+                                },
+                                "LevelRank": {
+                                    "Flag": "Green"
+                                }
+                            },
+                            "StoragePoolName": "dynamic_storage_pool:1",
+                            "VDiskId": {
+                                "Domain": 0,
+                                "GroupGeneration": 1,
+                                "GroupID": 2181038080,
+                                "Ring": 0,
+                                "VDisk": 0
+                            },
+                            "VDiskSlotId": 1000,
+                            "VDiskState": "OK"
+                        },
+                        {
+                            "AllocatedSize": "0",
+                            "AvailableSize": "text",
+                            "ChangeTime": "not-zero-number-text",
+                            "DiskSpace": "Green",
+                            "FrontQueues": "Green",
+                            "Guid": "1",
+                            "HasUnreadableBlobs": false,
+                            "IncarnationGuid": "not-zero-number-text",
+                            "InstanceGuid": "not-zero-number-text",
+                            "Kind": "0",
+                            "NodeId": 1,
+                            "PDiskId": 1,
+                            "Replicated": true,
+                            "ReplicationProgress": 1,
+                            "ReplicationSecondsRemaining": 0,
+                            "SatisfactionRank": {
+                                "FreshRank": {
+                                    "Flag": "Green"
+                                },
+                                "LevelRank": {
+                                    "Flag": "Green"
+                                }
+                            },
+                            "StoragePoolName": "dynamic_storage_pool:1",
+                            "VDiskId": {
+                                "Domain": 0,
+                                "GroupGeneration": 1,
+                                "GroupID": 2181038081,
+                                "Ring": 0,
+                                "VDisk": 0
+                            },
+                            "VDiskSlotId": 1001,
+                            "VDiskState": "OK"
+                        },
+                        {
+                            "AllocatedSize": "0",
+                            "AvailableSize": "text",
+                            "ChangeTime": "not-zero-number-text",
+                            "DiskSpace": "Green",
+                            "FrontQueues": "Green",
+                            "Guid": "1",
+                            "HasUnreadableBlobs": false,
+                            "IncarnationGuid": "not-zero-number-text",
+                            "InstanceGuid": "not-zero-number-text",
+                            "Kind": "0",
+                            "NodeId": 1,
+                            "PDiskId": 1,
+                            "Replicated": true,
+                            "ReplicationProgress": 1,
+                            "ReplicationSecondsRemaining": 0,
+                            "SatisfactionRank": {
+                                "FreshRank": {
+                                    "Flag": "Green"
+                                },
+                                "LevelRank": {
+                                    "Flag": "Green"
+                                }
+                            },
+                            "StoragePoolName": "/Root/dedicated_db:hdd",
+                            "VDiskId": {
+                                "Domain": 0,
+                                "GroupGeneration": 2,
+                                "GroupID": 2181038082,
+                                "Ring": 0,
+                                "VDisk": 0
+                            },
+                            "VDiskSlotId": 1002,
+                            "VDiskState": "OK"
+                        },
+                        {
+                            "AllocatedSize": "0",
+                            "AvailableSize": "text",
+                            "ChangeTime": "not-zero-number-text",
+                            "DiskSpace": "Green",
+                            "FrontQueues": "Green",
+                            "Guid": "1",
+                            "HasUnreadableBlobs": false,
+                            "IncarnationGuid": "not-zero-number-text",
+                            "InstanceGuid": "not-zero-number-text",
+                            "Kind": "0",
+                            "NodeId": 1,
+                            "PDiskId": 1,
+                            "Replicated": true,
+                            "ReplicationProgress": 1,
+                            "ReplicationSecondsRemaining": 0,
+                            "SatisfactionRank": {
+                                "FreshRank": {
+                                    "Flag": "Green"
+                                },
+                                "LevelRank": {
+                                    "Flag": "Green"
+                                }
+                            },
+                            "StoragePoolName": "/Root/shared_db:hdd",
+                            "VDiskId": {
+                                "Domain": 0,
+                                "GroupGeneration": 2,
+                                "GroupID": 2181038083,
+                                "Ring": 0,
+                                "VDisk": 0
+                            },
+                            "VDiskSlotId": 1003,
+                            "VDiskState": "OK"
+                        }
+                    ]
+                }
+            ],
+            "TotalNodes": "1"
+        },
+        "/Root/dedicated_db": {
+            "FieldsAvailable": "1111111110111111111111111111111",
+            "FieldsRequired": "1111111111111111111111111111111",
+            "FoundNodes": "1",
+            "MaximumDisksPerNode": "1",
+            "MaximumSlotsPerDisk": "5",
+            "Nodes": [
+                {
+                    "ClockSkewMaxUs": "text",
+                    "ClockSkewMinUs": "text",
+                    "ClockSkewUs": "text",
+                    "ConnectStatus": "Green",
+                    "Connections": "not-zero-number",
+                    "CpuUsage": "not-zero-number",
+                    "DiskSpaceUsage": "not-zero-number",
+                    "NetworkUtilization": "number",
+                    "NetworkUtilizationMax": "number",
+                    "NetworkUtilizationMin": "number",
+                    "NodeId": 1,
+                    "PDisks": [
+                        {
+                            "AvailableSize": "text",
+                            "Category": "0",
+                            "ChangeTime": "not-zero-number-text",
+                            "Device": "Green",
+                            "EnforcedDynamicSlotSize": "not-zero-number-text",
+                            "Guid": "1",
+                            "LogTotalSize": "not-zero-number-text",
+                            "LogUsedSize": "not-zero-number-text",
+                            "NodeId": 1,
+                            "NumActiveSlots": 5,
+                            "PDiskId": 1,
+                            "Path": "SectorMap:1:64",
+                            "Realtime": "Green",
+                            "SerialNumber": "",
+                            "State": "Normal",
+                            "SystemSize": "not-zero-number-text",
+                            "TotalSize": "not-zero-number-text"
+                        }
+                    ],
+                    "Peers": [
+                        {
+                            "BytesWritten": "text",
+                            "ChangeTime": "not-zero-number-text",
+                            "ClockSkewUs": "text",
+                            "ConnectStatus": "Green",
+                            "ConnectTime": "not-zero-number-text",
+                            "Connected": true,
+                            "NodeId": 1,
+                            "PeerName": "text",
+                            "PeerNodeId": 50000,
+                            "PingTimeUs": "text",
+                            "ScopeId": {
+                                "X1": "72057594046678944",
+                                "X2": "6"
+                            },
+                            "Utilization": "number"
+                        },
+                        {
+                            "BytesWritten": "text",
+                            "ChangeTime": "not-zero-number-text",
+                            "ClockSkewUs": "text",
+                            "ConnectStatus": "Green",
+                            "ConnectTime": "not-zero-number-text",
+                            "Connected": true,
+                            "NodeId": 1,
+                            "PeerName": "text",
+                            "PeerNodeId": 50001,
+                            "PingTimeUs": "text",
+                            "ScopeId": {
+                                "X1": "72057594046678944",
+                                "X2": "7"
+                            },
+                            "Utilization": "number"
+                        }
+                    ],
+                    "PingTimeMaxUs": "text",
+                    "PingTimeMinUs": "text",
+                    "PingTimeUs": "text",
+                    "ReceiveThroughput": "text",
+                    "ReverseClockSkewUs": "text",
+                    "ReversePeers": [
+                        {
+                            "BytesWritten": "text",
+                            "ChangeTime": "not-zero-number-text",
+                            "ClockSkewUs": "text",
+                            "ConnectStatus": "Green",
+                            "ConnectTime": "not-zero-number-text",
+                            "Connected": true,
+                            "NodeId": 50000,
+                            "PeerName": "text",
+                            "PeerNodeId": 1,
+                            "PingTimeUs": "text",
+                            "ScopeId": {
+                                "X1": "0",
+                                "X2": "1"
+                            },
+                            "Utilization": "number"
+                        },
+                        {
+                            "BytesWritten": "text",
+                            "ChangeTime": "not-zero-number-text",
+                            "ClockSkewUs": "text",
+                            "ConnectStatus": "Green",
+                            "ConnectTime": "not-zero-number-text",
+                            "Connected": true,
+                            "NodeId": 50001,
+                            "PeerName": "text",
+                            "PeerNodeId": 1,
+                            "PingTimeUs": "text",
+                            "ScopeId": {
+                                "X1": "0",
+                                "X2": "1"
+                            },
+                            "Utilization": "number"
+                        }
+                    ],
+                    "ReversePingTimeUs": "text",
+                    "SendThroughput": "text",
+                    "SystemState": {
+                        "ChangeTime": "not-zero-number-text",
+                        "CoresTotal": "not-zero-number",
+                        "CoresUsed": "not-zero-number",
+                        "Endpoints": [
+                            {
+                                "Address": "text",
+                                "Name": "grpc"
+                            },
+                            {
+                                "Address": "text",
+                                "Name": "http-mon"
+                            },
+                            {
+                                "Address": "text",
+                                "Name": "ic"
+                            }
+                        ],
+                        "Host": "text",
+                        "LoadAverage": "not-empty-array",
+                        "Location": {
+                            "DataCenter": "1",
+                            "Rack": "1",
+                            "Unit": "1"
+                        },
+                        "MaxDiskUsage": "not-zero-number",
+                        "MemoryLimit": "not-zero-number-text",
+                        "MemoryStats": "not-empty-object",
+                        "NodeId": 1,
+                        "NumberOfCpus": "not-zero-number",
+                        "PoolStats": [
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "System",
+                                "Threads": 2,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "User",
+                                "Threads": 3,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "Batch",
+                                "Threads": 2,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "IO",
+                                "Threads": 1,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "IC",
+                                "Threads": 1,
+                                "Usage": "number"
+                            }
+                        ],
+                        "RealNumberOfCpus": "not-zero-number",
+                        "Roles": "not-empty-array",
+                        "StartTime": "not-zero-number-text",
+                        "SystemState": "Green",
+                        "TotalSessions": "number"
+                    },
+                    "UptimeSeconds": "number",
+                    "VDisks": [
+                        {
+                            "AllocatedSize": "0",
+                            "AvailableSize": "text",
+                            "ChangeTime": "not-zero-number-text",
+                            "DiskSpace": "Green",
+                            "FrontQueues": "Green",
+                            "Guid": "1",
+                            "HasUnreadableBlobs": false,
+                            "IncarnationGuid": "not-zero-number-text",
+                            "InstanceGuid": "not-zero-number-text",
+                            "Kind": "0",
+                            "NodeId": 1,
+                            "PDiskId": 1,
+                            "Replicated": true,
+                            "ReplicationProgress": 1,
+                            "ReplicationSecondsRemaining": 0,
+                            "SatisfactionRank": {
+                                "FreshRank": {
+                                    "Flag": "Green"
+                                },
+                                "LevelRank": {
+                                    "Flag": "Green"
+                                }
+                            },
+                            "StoragePoolName": "static",
+                            "VDiskId": {
+                                "Domain": 0,
+                                "GroupGeneration": 1,
+                                "GroupID": 0,
+                                "Ring": 0,
+                                "VDisk": 0
+                            },
+                            "VDiskSlotId": 0,
+                            "VDiskState": "OK"
+                        },
+                        {
+                            "AllocatedSize": "0",
+                            "AvailableSize": "text",
+                            "ChangeTime": "not-zero-number-text",
+                            "DiskSpace": "Green",
+                            "FrontQueues": "Green",
+                            "Guid": "1",
+                            "HasUnreadableBlobs": false,
+                            "IncarnationGuid": "not-zero-number-text",
+                            "InstanceGuid": "not-zero-number-text",
+                            "Kind": "0",
+                            "NodeId": 1,
+                            "PDiskId": 1,
+                            "Replicated": true,
+                            "ReplicationProgress": 1,
+                            "ReplicationSecondsRemaining": 0,
+                            "SatisfactionRank": {
+                                "FreshRank": {
+                                    "Flag": "Green"
+                                },
+                                "LevelRank": {
+                                    "Flag": "Green"
+                                }
+                            },
+                            "StoragePoolName": "dynamic_storage_pool:1",
+                            "VDiskId": {
+                                "Domain": 0,
+                                "GroupGeneration": 1,
+                                "GroupID": 2181038080,
+                                "Ring": 0,
+                                "VDisk": 0
+                            },
+                            "VDiskSlotId": 1000,
+                            "VDiskState": "OK"
+                        },
+                        {
+                            "AllocatedSize": "0",
+                            "AvailableSize": "text",
+                            "ChangeTime": "not-zero-number-text",
+                            "DiskSpace": "Green",
+                            "FrontQueues": "Green",
+                            "Guid": "1",
+                            "HasUnreadableBlobs": false,
+                            "IncarnationGuid": "not-zero-number-text",
+                            "InstanceGuid": "not-zero-number-text",
+                            "Kind": "0",
+                            "NodeId": 1,
+                            "PDiskId": 1,
+                            "Replicated": true,
+                            "ReplicationProgress": 1,
+                            "ReplicationSecondsRemaining": 0,
+                            "SatisfactionRank": {
+                                "FreshRank": {
+                                    "Flag": "Green"
+                                },
+                                "LevelRank": {
+                                    "Flag": "Green"
+                                }
+                            },
+                            "StoragePoolName": "dynamic_storage_pool:1",
+                            "VDiskId": {
+                                "Domain": 0,
+                                "GroupGeneration": 1,
+                                "GroupID": 2181038081,
+                                "Ring": 0,
+                                "VDisk": 0
+                            },
+                            "VDiskSlotId": 1001,
+                            "VDiskState": "OK"
+                        },
+                        {
+                            "AllocatedSize": "0",
+                            "AvailableSize": "text",
+                            "ChangeTime": "not-zero-number-text",
+                            "DiskSpace": "Green",
+                            "FrontQueues": "Green",
+                            "Guid": "1",
+                            "HasUnreadableBlobs": false,
+                            "IncarnationGuid": "not-zero-number-text",
+                            "InstanceGuid": "not-zero-number-text",
+                            "Kind": "0",
+                            "NodeId": 1,
+                            "PDiskId": 1,
+                            "Replicated": true,
+                            "ReplicationProgress": 1,
+                            "ReplicationSecondsRemaining": 0,
+                            "SatisfactionRank": {
+                                "FreshRank": {
+                                    "Flag": "Green"
+                                },
+                                "LevelRank": {
+                                    "Flag": "Green"
+                                }
+                            },
+                            "StoragePoolName": "/Root/dedicated_db:hdd",
+                            "VDiskId": {
+                                "Domain": 0,
+                                "GroupGeneration": 2,
+                                "GroupID": 2181038082,
+                                "Ring": 0,
+                                "VDisk": 0
+                            },
+                            "VDiskSlotId": 1002,
+                            "VDiskState": "OK"
+                        },
+                        {
+                            "AllocatedSize": "0",
+                            "AvailableSize": "text",
+                            "ChangeTime": "not-zero-number-text",
+                            "DiskSpace": "Green",
+                            "FrontQueues": "Green",
+                            "Guid": "1",
+                            "HasUnreadableBlobs": false,
+                            "IncarnationGuid": "not-zero-number-text",
+                            "InstanceGuid": "not-zero-number-text",
+                            "Kind": "0",
+                            "NodeId": 1,
+                            "PDiskId": 1,
+                            "Replicated": true,
+                            "ReplicationProgress": 1,
+                            "ReplicationSecondsRemaining": 0,
+                            "SatisfactionRank": {
+                                "FreshRank": {
+                                    "Flag": "Green"
+                                },
+                                "LevelRank": {
+                                    "Flag": "Green"
+                                }
+                            },
+                            "StoragePoolName": "/Root/shared_db:hdd",
+                            "VDiskId": {
+                                "Domain": 0,
+                                "GroupGeneration": 2,
+                                "GroupID": 2181038083,
+                                "Ring": 0,
+                                "VDisk": 0
+                            },
+                            "VDiskSlotId": 1003,
+                            "VDiskState": "OK"
+                        }
+                    ]
+                }
+            ],
+            "TotalNodes": "1"
+        },
+        "/Root/serverless_db": {
+            "FieldsAvailable": "1111111110111111111111111111111",
+            "FieldsRequired": "1111111111111111111111111111111",
+            "FoundNodes": "1",
+            "MaximumDisksPerNode": "1",
+            "MaximumSlotsPerDisk": "5",
+            "Nodes": [
+                {
+                    "ClockSkewMaxUs": "text",
+                    "ClockSkewMinUs": "text",
+                    "ClockSkewUs": "text",
+                    "ConnectStatus": "Green",
+                    "Connections": "not-zero-number",
+                    "CpuUsage": "not-zero-number",
+                    "DiskSpaceUsage": "not-zero-number",
+                    "NetworkUtilization": "number",
+                    "NetworkUtilizationMax": "number",
+                    "NetworkUtilizationMin": "number",
+                    "NodeId": 1,
+                    "PDisks": [
+                        {
+                            "AvailableSize": "text",
+                            "Category": "0",
+                            "ChangeTime": "not-zero-number-text",
+                            "Device": "Green",
+                            "EnforcedDynamicSlotSize": "not-zero-number-text",
+                            "Guid": "1",
+                            "LogTotalSize": "not-zero-number-text",
+                            "LogUsedSize": "not-zero-number-text",
+                            "NodeId": 1,
+                            "NumActiveSlots": 5,
+                            "PDiskId": 1,
+                            "Path": "SectorMap:1:64",
+                            "Realtime": "Green",
+                            "SerialNumber": "",
+                            "State": "Normal",
+                            "SystemSize": "not-zero-number-text",
+                            "TotalSize": "not-zero-number-text"
+                        }
+                    ],
+                    "Peers": [
+                        {
+                            "BytesWritten": "text",
+                            "ChangeTime": "not-zero-number-text",
+                            "ClockSkewUs": "text",
+                            "ConnectStatus": "Green",
+                            "ConnectTime": "not-zero-number-text",
+                            "Connected": true,
+                            "NodeId": 1,
+                            "PeerName": "text",
+                            "PeerNodeId": 50000,
+                            "PingTimeUs": "text",
+                            "ScopeId": {
+                                "X1": "72057594046678944",
+                                "X2": "6"
+                            },
+                            "Utilization": "number"
+                        },
+                        {
+                            "BytesWritten": "text",
+                            "ChangeTime": "not-zero-number-text",
+                            "ClockSkewUs": "text",
+                            "ConnectStatus": "Green",
+                            "ConnectTime": "not-zero-number-text",
+                            "Connected": true,
+                            "NodeId": 1,
+                            "PeerName": "text",
+                            "PeerNodeId": 50001,
+                            "PingTimeUs": "text",
+                            "ScopeId": {
+                                "X1": "72057594046678944",
+                                "X2": "7"
+                            },
+                            "Utilization": "number"
+                        }
+                    ],
+                    "PingTimeMaxUs": "text",
+                    "PingTimeMinUs": "text",
+                    "PingTimeUs": "text",
+                    "ReceiveThroughput": "text",
+                    "ReverseClockSkewUs": "text",
+                    "ReversePeers": [
+                        {
+                            "BytesWritten": "text",
+                            "ChangeTime": "not-zero-number-text",
+                            "ClockSkewUs": "text",
+                            "ConnectStatus": "Green",
+                            "ConnectTime": "not-zero-number-text",
+                            "Connected": true,
+                            "NodeId": 50000,
+                            "PeerName": "text",
+                            "PeerNodeId": 1,
+                            "PingTimeUs": "text",
+                            "ScopeId": {
+                                "X1": "0",
+                                "X2": "1"
+                            },
+                            "Utilization": "number"
+                        },
+                        {
+                            "BytesWritten": "text",
+                            "ChangeTime": "not-zero-number-text",
+                            "ClockSkewUs": "text",
+                            "ConnectStatus": "Green",
+                            "ConnectTime": "not-zero-number-text",
+                            "Connected": true,
+                            "NodeId": 50001,
+                            "PeerName": "text",
+                            "PeerNodeId": 1,
+                            "PingTimeUs": "text",
+                            "ScopeId": {
+                                "X1": "0",
+                                "X2": "1"
+                            },
+                            "Utilization": "number"
+                        }
+                    ],
+                    "ReversePingTimeUs": "text",
+                    "SendThroughput": "text",
+                    "SystemState": {
+                        "ChangeTime": "not-zero-number-text",
+                        "CoresTotal": "not-zero-number",
+                        "CoresUsed": "not-zero-number",
+                        "Endpoints": [
+                            {
+                                "Address": "text",
+                                "Name": "grpc"
+                            },
+                            {
+                                "Address": "text",
+                                "Name": "http-mon"
+                            },
+                            {
+                                "Address": "text",
+                                "Name": "ic"
+                            }
+                        ],
+                        "Host": "text",
+                        "LoadAverage": "not-empty-array",
+                        "Location": {
+                            "DataCenter": "1",
+                            "Rack": "1",
+                            "Unit": "1"
+                        },
+                        "MaxDiskUsage": "not-zero-number",
+                        "MemoryLimit": "not-zero-number-text",
+                        "MemoryStats": "not-empty-object",
+                        "NodeId": 1,
+                        "NumberOfCpus": "not-zero-number",
+                        "PoolStats": [
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "System",
+                                "Threads": 2,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "User",
+                                "Threads": 3,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "Batch",
+                                "Threads": 2,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "IO",
+                                "Threads": 1,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "IC",
+                                "Threads": 1,
+                                "Usage": "number"
+                            }
+                        ],
+                        "RealNumberOfCpus": "not-zero-number",
+                        "Roles": "not-empty-array",
+                        "StartTime": "not-zero-number-text",
+                        "SystemState": "Green",
+                        "TotalSessions": "number"
+                    },
+                    "UptimeSeconds": "number",
+                    "VDisks": [
+                        {
+                            "AllocatedSize": "0",
+                            "AvailableSize": "text",
+                            "ChangeTime": "not-zero-number-text",
+                            "DiskSpace": "Green",
+                            "FrontQueues": "Green",
+                            "Guid": "1",
+                            "HasUnreadableBlobs": false,
+                            "IncarnationGuid": "not-zero-number-text",
+                            "InstanceGuid": "not-zero-number-text",
+                            "Kind": "0",
+                            "NodeId": 1,
+                            "PDiskId": 1,
+                            "Replicated": true,
+                            "ReplicationProgress": 1,
+                            "ReplicationSecondsRemaining": 0,
+                            "SatisfactionRank": {
+                                "FreshRank": {
+                                    "Flag": "Green"
+                                },
+                                "LevelRank": {
+                                    "Flag": "Green"
+                                }
+                            },
+                            "StoragePoolName": "static",
+                            "VDiskId": {
+                                "Domain": 0,
+                                "GroupGeneration": 1,
+                                "GroupID": 0,
+                                "Ring": 0,
+                                "VDisk": 0
+                            },
+                            "VDiskSlotId": 0,
+                            "VDiskState": "OK"
+                        },
+                        {
+                            "AllocatedSize": "0",
+                            "AvailableSize": "text",
+                            "ChangeTime": "not-zero-number-text",
+                            "DiskSpace": "Green",
+                            "FrontQueues": "Green",
+                            "Guid": "1",
+                            "HasUnreadableBlobs": false,
+                            "IncarnationGuid": "not-zero-number-text",
+                            "InstanceGuid": "not-zero-number-text",
+                            "Kind": "0",
+                            "NodeId": 1,
+                            "PDiskId": 1,
+                            "Replicated": true,
+                            "ReplicationProgress": 1,
+                            "ReplicationSecondsRemaining": 0,
+                            "SatisfactionRank": {
+                                "FreshRank": {
+                                    "Flag": "Green"
+                                },
+                                "LevelRank": {
+                                    "Flag": "Green"
+                                }
+                            },
+                            "StoragePoolName": "dynamic_storage_pool:1",
+                            "VDiskId": {
+                                "Domain": 0,
+                                "GroupGeneration": 1,
+                                "GroupID": 2181038080,
+                                "Ring": 0,
+                                "VDisk": 0
+                            },
+                            "VDiskSlotId": 1000,
+                            "VDiskState": "OK"
+                        },
+                        {
+                            "AllocatedSize": "0",
+                            "AvailableSize": "text",
+                            "ChangeTime": "not-zero-number-text",
+                            "DiskSpace": "Green",
+                            "FrontQueues": "Green",
+                            "Guid": "1",
+                            "HasUnreadableBlobs": false,
+                            "IncarnationGuid": "not-zero-number-text",
+                            "InstanceGuid": "not-zero-number-text",
+                            "Kind": "0",
+                            "NodeId": 1,
+                            "PDiskId": 1,
+                            "Replicated": true,
+                            "ReplicationProgress": 1,
+                            "ReplicationSecondsRemaining": 0,
+                            "SatisfactionRank": {
+                                "FreshRank": {
+                                    "Flag": "Green"
+                                },
+                                "LevelRank": {
+                                    "Flag": "Green"
+                                }
+                            },
+                            "StoragePoolName": "dynamic_storage_pool:1",
+                            "VDiskId": {
+                                "Domain": 0,
+                                "GroupGeneration": 1,
+                                "GroupID": 2181038081,
+                                "Ring": 0,
+                                "VDisk": 0
+                            },
+                            "VDiskSlotId": 1001,
+                            "VDiskState": "OK"
+                        },
+                        {
+                            "AllocatedSize": "0",
+                            "AvailableSize": "text",
+                            "ChangeTime": "not-zero-number-text",
+                            "DiskSpace": "Green",
+                            "FrontQueues": "Green",
+                            "Guid": "1",
+                            "HasUnreadableBlobs": false,
+                            "IncarnationGuid": "not-zero-number-text",
+                            "InstanceGuid": "not-zero-number-text",
+                            "Kind": "0",
+                            "NodeId": 1,
+                            "PDiskId": 1,
+                            "Replicated": true,
+                            "ReplicationProgress": 1,
+                            "ReplicationSecondsRemaining": 0,
+                            "SatisfactionRank": {
+                                "FreshRank": {
+                                    "Flag": "Green"
+                                },
+                                "LevelRank": {
+                                    "Flag": "Green"
+                                }
+                            },
+                            "StoragePoolName": "/Root/dedicated_db:hdd",
+                            "VDiskId": {
+                                "Domain": 0,
+                                "GroupGeneration": 2,
+                                "GroupID": 2181038082,
+                                "Ring": 0,
+                                "VDisk": 0
+                            },
+                            "VDiskSlotId": 1002,
+                            "VDiskState": "OK"
+                        },
+                        {
+                            "AllocatedSize": "0",
+                            "AvailableSize": "text",
+                            "ChangeTime": "not-zero-number-text",
+                            "DiskSpace": "Green",
+                            "FrontQueues": "Green",
+                            "Guid": "1",
+                            "HasUnreadableBlobs": false,
+                            "IncarnationGuid": "not-zero-number-text",
+                            "InstanceGuid": "not-zero-number-text",
+                            "Kind": "0",
+                            "NodeId": 1,
+                            "PDiskId": 1,
+                            "Replicated": true,
+                            "ReplicationProgress": 1,
+                            "ReplicationSecondsRemaining": 0,
+                            "SatisfactionRank": {
+                                "FreshRank": {
+                                    "Flag": "Green"
+                                },
+                                "LevelRank": {
+                                    "Flag": "Green"
+                                }
+                            },
+                            "StoragePoolName": "/Root/shared_db:hdd",
+                            "VDiskId": {
+                                "Domain": 0,
+                                "GroupGeneration": 2,
+                                "GroupID": 2181038083,
+                                "Ring": 0,
+                                "VDisk": 0
+                            },
+                            "VDiskSlotId": 1003,
+                            "VDiskState": "OK"
+                        }
+                    ]
+                }
+            ],
+            "TotalNodes": "1"
+        },
+        "/Root/shared_db": {
+            "FieldsAvailable": "1111111110111111111111111111111",
+            "FieldsRequired": "1111111111111111111111111111111",
+            "FoundNodes": "1",
+            "MaximumDisksPerNode": "1",
+            "MaximumSlotsPerDisk": "5",
+            "Nodes": [
+                {
+                    "ClockSkewMaxUs": "text",
+                    "ClockSkewMinUs": "text",
+                    "ClockSkewUs": "text",
+                    "ConnectStatus": "Green",
+                    "Connections": "not-zero-number",
+                    "CpuUsage": "not-zero-number",
+                    "DiskSpaceUsage": "not-zero-number",
+                    "NetworkUtilization": "number",
+                    "NetworkUtilizationMax": "number",
+                    "NetworkUtilizationMin": "number",
+                    "NodeId": 1,
+                    "PDisks": [
+                        {
+                            "AvailableSize": "text",
+                            "Category": "0",
+                            "ChangeTime": "not-zero-number-text",
+                            "Device": "Green",
+                            "EnforcedDynamicSlotSize": "not-zero-number-text",
+                            "Guid": "1",
+                            "LogTotalSize": "not-zero-number-text",
+                            "LogUsedSize": "not-zero-number-text",
+                            "NodeId": 1,
+                            "NumActiveSlots": 5,
+                            "PDiskId": 1,
+                            "Path": "SectorMap:1:64",
+                            "Realtime": "Green",
+                            "SerialNumber": "",
+                            "State": "Normal",
+                            "SystemSize": "not-zero-number-text",
+                            "TotalSize": "not-zero-number-text"
+                        }
+                    ],
+                    "Peers": [
+                        {
+                            "BytesWritten": "text",
+                            "ChangeTime": "not-zero-number-text",
+                            "ClockSkewUs": "text",
+                            "ConnectStatus": "Green",
+                            "ConnectTime": "not-zero-number-text",
+                            "Connected": true,
+                            "NodeId": 1,
+                            "PeerName": "text",
+                            "PeerNodeId": 50000,
+                            "PingTimeUs": "text",
+                            "ScopeId": {
+                                "X1": "72057594046678944",
+                                "X2": "6"
+                            },
+                            "Utilization": "number"
+                        },
+                        {
+                            "BytesWritten": "text",
+                            "ChangeTime": "not-zero-number-text",
+                            "ClockSkewUs": "text",
+                            "ConnectStatus": "Green",
+                            "ConnectTime": "not-zero-number-text",
+                            "Connected": true,
+                            "NodeId": 1,
+                            "PeerName": "text",
+                            "PeerNodeId": 50001,
+                            "PingTimeUs": "text",
+                            "ScopeId": {
+                                "X1": "72057594046678944",
+                                "X2": "7"
+                            },
+                            "Utilization": "number"
+                        }
+                    ],
+                    "PingTimeMaxUs": "text",
+                    "PingTimeMinUs": "text",
+                    "PingTimeUs": "text",
+                    "ReceiveThroughput": "text",
+                    "ReverseClockSkewUs": "text",
+                    "ReversePeers": [
+                        {
+                            "BytesWritten": "text",
+                            "ChangeTime": "not-zero-number-text",
+                            "ClockSkewUs": "text",
+                            "ConnectStatus": "Green",
+                            "ConnectTime": "not-zero-number-text",
+                            "Connected": true,
+                            "NodeId": 50000,
+                            "PeerName": "text",
+                            "PeerNodeId": 1,
+                            "PingTimeUs": "text",
+                            "ScopeId": {
+                                "X1": "0",
+                                "X2": "1"
+                            },
+                            "Utilization": "number"
+                        },
+                        {
+                            "BytesWritten": "text",
+                            "ChangeTime": "not-zero-number-text",
+                            "ClockSkewUs": "text",
+                            "ConnectStatus": "Green",
+                            "ConnectTime": "not-zero-number-text",
+                            "Connected": true,
+                            "NodeId": 50001,
+                            "PeerName": "text",
+                            "PeerNodeId": 1,
+                            "PingTimeUs": "text",
+                            "ScopeId": {
+                                "X1": "0",
+                                "X2": "1"
+                            },
+                            "Utilization": "number"
+                        }
+                    ],
+                    "ReversePingTimeUs": "text",
+                    "SendThroughput": "text",
+                    "SystemState": {
+                        "ChangeTime": "not-zero-number-text",
+                        "CoresTotal": "not-zero-number",
+                        "CoresUsed": "not-zero-number",
+                        "Endpoints": [
+                            {
+                                "Address": "text",
+                                "Name": "grpc"
+                            },
+                            {
+                                "Address": "text",
+                                "Name": "http-mon"
+                            },
+                            {
+                                "Address": "text",
+                                "Name": "ic"
+                            }
+                        ],
+                        "Host": "text",
+                        "LoadAverage": "not-empty-array",
+                        "Location": {
+                            "DataCenter": "1",
+                            "Rack": "1",
+                            "Unit": "1"
+                        },
+                        "MaxDiskUsage": "not-zero-number",
+                        "MemoryLimit": "not-zero-number-text",
+                        "MemoryStats": "not-empty-object",
+                        "NodeId": 1,
+                        "NumberOfCpus": "not-zero-number",
+                        "PoolStats": [
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "System",
+                                "Threads": 2,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "User",
+                                "Threads": 3,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "Batch",
+                                "Threads": 2,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "IO",
+                                "Threads": 1,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "IC",
+                                "Threads": 1,
+                                "Usage": "number"
+                            }
+                        ],
+                        "RealNumberOfCpus": "not-zero-number",
+                        "Roles": "not-empty-array",
+                        "StartTime": "not-zero-number-text",
+                        "SystemState": "Green",
+                        "TotalSessions": "number"
+                    },
+                    "UptimeSeconds": "number",
+                    "VDisks": [
+                        {
+                            "AllocatedSize": "0",
+                            "AvailableSize": "text",
+                            "ChangeTime": "not-zero-number-text",
+                            "DiskSpace": "Green",
+                            "FrontQueues": "Green",
+                            "Guid": "1",
+                            "HasUnreadableBlobs": false,
+                            "IncarnationGuid": "not-zero-number-text",
+                            "InstanceGuid": "not-zero-number-text",
+                            "Kind": "0",
+                            "NodeId": 1,
+                            "PDiskId": 1,
+                            "Replicated": true,
+                            "ReplicationProgress": 1,
+                            "ReplicationSecondsRemaining": 0,
+                            "SatisfactionRank": {
+                                "FreshRank": {
+                                    "Flag": "Green"
+                                },
+                                "LevelRank": {
+                                    "Flag": "Green"
+                                }
+                            },
+                            "StoragePoolName": "static",
+                            "VDiskId": {
+                                "Domain": 0,
+                                "GroupGeneration": 1,
+                                "GroupID": 0,
+                                "Ring": 0,
+                                "VDisk": 0
+                            },
+                            "VDiskSlotId": 0,
+                            "VDiskState": "OK"
+                        },
+                        {
+                            "AllocatedSize": "0",
+                            "AvailableSize": "text",
+                            "ChangeTime": "not-zero-number-text",
+                            "DiskSpace": "Green",
+                            "FrontQueues": "Green",
+                            "Guid": "1",
+                            "HasUnreadableBlobs": false,
+                            "IncarnationGuid": "not-zero-number-text",
+                            "InstanceGuid": "not-zero-number-text",
+                            "Kind": "0",
+                            "NodeId": 1,
+                            "PDiskId": 1,
+                            "Replicated": true,
+                            "ReplicationProgress": 1,
+                            "ReplicationSecondsRemaining": 0,
+                            "SatisfactionRank": {
+                                "FreshRank": {
+                                    "Flag": "Green"
+                                },
+                                "LevelRank": {
+                                    "Flag": "Green"
+                                }
+                            },
+                            "StoragePoolName": "dynamic_storage_pool:1",
+                            "VDiskId": {
+                                "Domain": 0,
+                                "GroupGeneration": 1,
+                                "GroupID": 2181038080,
+                                "Ring": 0,
+                                "VDisk": 0
+                            },
+                            "VDiskSlotId": 1000,
+                            "VDiskState": "OK"
+                        },
+                        {
+                            "AllocatedSize": "0",
+                            "AvailableSize": "text",
+                            "ChangeTime": "not-zero-number-text",
+                            "DiskSpace": "Green",
+                            "FrontQueues": "Green",
+                            "Guid": "1",
+                            "HasUnreadableBlobs": false,
+                            "IncarnationGuid": "not-zero-number-text",
+                            "InstanceGuid": "not-zero-number-text",
+                            "Kind": "0",
+                            "NodeId": 1,
+                            "PDiskId": 1,
+                            "Replicated": true,
+                            "ReplicationProgress": 1,
+                            "ReplicationSecondsRemaining": 0,
+                            "SatisfactionRank": {
+                                "FreshRank": {
+                                    "Flag": "Green"
+                                },
+                                "LevelRank": {
+                                    "Flag": "Green"
+                                }
+                            },
+                            "StoragePoolName": "dynamic_storage_pool:1",
+                            "VDiskId": {
+                                "Domain": 0,
+                                "GroupGeneration": 1,
+                                "GroupID": 2181038081,
+                                "Ring": 0,
+                                "VDisk": 0
+                            },
+                            "VDiskSlotId": 1001,
+                            "VDiskState": "OK"
+                        },
+                        {
+                            "AllocatedSize": "0",
+                            "AvailableSize": "text",
+                            "ChangeTime": "not-zero-number-text",
+                            "DiskSpace": "Green",
+                            "FrontQueues": "Green",
+                            "Guid": "1",
+                            "HasUnreadableBlobs": false,
+                            "IncarnationGuid": "not-zero-number-text",
+                            "InstanceGuid": "not-zero-number-text",
+                            "Kind": "0",
+                            "NodeId": 1,
+                            "PDiskId": 1,
+                            "Replicated": true,
+                            "ReplicationProgress": 1,
+                            "ReplicationSecondsRemaining": 0,
+                            "SatisfactionRank": {
+                                "FreshRank": {
+                                    "Flag": "Green"
+                                },
+                                "LevelRank": {
+                                    "Flag": "Green"
+                                }
+                            },
+                            "StoragePoolName": "/Root/dedicated_db:hdd",
+                            "VDiskId": {
+                                "Domain": 0,
+                                "GroupGeneration": 2,
+                                "GroupID": 2181038082,
+                                "Ring": 0,
+                                "VDisk": 0
+                            },
+                            "VDiskSlotId": 1002,
+                            "VDiskState": "OK"
+                        },
+                        {
+                            "AllocatedSize": "0",
+                            "AvailableSize": "text",
+                            "ChangeTime": "not-zero-number-text",
+                            "DiskSpace": "Green",
+                            "FrontQueues": "Green",
+                            "Guid": "1",
+                            "HasUnreadableBlobs": false,
+                            "IncarnationGuid": "not-zero-number-text",
+                            "InstanceGuid": "not-zero-number-text",
+                            "Kind": "0",
+                            "NodeId": 1,
+                            "PDiskId": 1,
+                            "Replicated": true,
+                            "ReplicationProgress": 1,
+                            "ReplicationSecondsRemaining": 0,
+                            "SatisfactionRank": {
+                                "FreshRank": {
+                                    "Flag": "Green"
+                                },
+                                "LevelRank": {
+                                    "Flag": "Green"
+                                }
+                            },
+                            "StoragePoolName": "/Root/shared_db:hdd",
+                            "VDiskId": {
+                                "Domain": 0,
+                                "GroupGeneration": 2,
+                                "GroupID": 2181038083,
+                                "Ring": 0,
+                                "VDisk": 0
+                            },
+                            "VDiskSlotId": 1003,
+                            "VDiskState": "OK"
+                        }
+                    ]
+                }
+            ],
+            "TotalNodes": "1"
         }
     },
     "test.test_viewer_sysinfo": {

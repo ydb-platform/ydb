@@ -514,6 +514,7 @@ message TEvExecuterStreamData {
     optional uint32 ChannelId = 4;
     optional NActorsProto.TActorId ChannelActorId = 5;
     optional TKqpSnapshot VirtualTimestamp = 6;
+    optional bool Finished = 7;
 };
 
 message TEvExecuterStreamDataAck {
@@ -780,6 +781,13 @@ message TEvKqpOutputActorResultInfo {
     optional bool HasRead = 2;
 }
 
+message TKqpTableSinkIndexSettings {
+    optional NKqpProto.TKqpPhyTableId Table = 1;
+    repeated TKqpColumnMetadataProto KeyColumns = 2;
+    repeated TKqpColumnMetadataProto Columns = 3;
+    optional bool IsUniq = 4;
+    repeated uint32 WriteIndexes = 5;
+}
 
 message TKqpTableSinkSettings {
     enum EType {
@@ -807,6 +815,8 @@ message TKqpTableSinkSettings {
     optional bool EnableStreamWrite = 16;
     optional bool IsBatch = 17;
     repeated string InputColumns = 18; // Only for MODE_FILL
+    repeated TKqpTableSinkIndexSettings Indexes = 19;
+    repeated TKqpColumnMetadataProto LookupColumns = 20;
 }
 
 message TKqpStreamLookupSettings {

@@ -129,7 +129,7 @@ public:
 
     TItem PopFront() {
         if (Size_ == 0) {
-            throw std::runtime_error("popping timer from empty queue");
+            throw std::runtime_error("Cannot pop from empty timer queue");
         }
 
         --Size_;
@@ -139,11 +139,18 @@ public:
 
         Advance();
         auto& current = Buckets[CurrentBucket];
+        if (current.Items.empty()) {
+            throw std::runtime_error("Internal error: Empty bucket after advance");
+        }
         return current.Items[CurrentCursor++];
     }
 
     size_t Size() const {
         return Size_;
+    }
+
+    bool Empty() const {
+        return Size_ == 0;
     }
 
     // just for tests
@@ -173,7 +180,7 @@ public:
         }
 
         // Check bucket border monotonicity
-        for (size_t offset = 0; offset < Buckets.size(); ++offset) {
+        for (size_t offset = 0; offset < Buckets.size() - 1; ++offset) {
             size_t i = (CurrentBucket + offset) % Buckets.size();
             size_t j = (i + 1) % Buckets.size();
             const auto& a = Buckets[i];

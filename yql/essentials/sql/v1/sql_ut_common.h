@@ -1714,6 +1714,15 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Union"]);
     }
 
+    Y_UNIT_TEST(UnionDistinctTest) {
+        NYql::TAstParseResult res = SqlToYql("SELECT key FROM plato.Input UNION DISTINCT select subkey FROM plato.Input;");
+        UNIT_ASSERT(res.Root);
+
+        TWordCountHive elementStat = {{TString("Union"), 0}};
+        VerifyProgram(res, elementStat, {});
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Union"]);
+    }
+
     Y_UNIT_TEST(UnionAggregationTest) {
         NYql::TAstParseResult res = SqlToYql(R"(
             PRAGMA DisableEmitUnionMerge;

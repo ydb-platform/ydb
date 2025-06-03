@@ -2210,9 +2210,14 @@ private:
         if (!TBase::HandleResolve(ev)) return;
 
         if (TxManager) {
-            for (auto& [stageId, stageInfo] : TasksGraph.GetStagesInfo()) {
+            for (const auto& [stageId, stageInfo] : TasksGraph.GetStagesInfo()) {
                 if (stageInfo.Meta.ShardKey) {
                     TxManager->SetPartitioning(stageInfo.Meta.TableId, stageInfo.Meta.ShardKey->Partitioning);
+                }
+                for (const auto& indexMeta : stageInfo.Meta.IndexMetas) {
+                    if (indexMeta.ShardKey) {
+                        TxManager->SetPartitioning(indexMeta.TableId, indexMeta.ShardKey->Partitioning);
+                    }
                 }
             }
         }

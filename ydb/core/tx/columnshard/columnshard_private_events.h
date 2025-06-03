@@ -69,6 +69,8 @@ struct TEvPrivate {
         EvRemovePortionDataAccessor,
         EvMetadataAccessorsInfo,
 
+        EvRequestFilter,
+
         EvEnd
     };
 
@@ -225,7 +227,8 @@ struct TEvPrivate {
     public:
         enum EErrorClass {
             Internal,
-            Request
+            Request,
+            ConstraintViolation
         };
 
     private:
@@ -241,6 +244,8 @@ struct TEvPrivate {
                     return NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR;
                 case EErrorClass::Request:
                     return NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST;
+                case EErrorClass::ConstraintViolation:
+                    return NKikimrDataEvents::TEvWriteResult::STATUS_CONSTRAINT_VIOLATION;
             }
         }
 

@@ -909,7 +909,7 @@ def on_ts_test_for_configure(
 
     test_files = df.TestFiles.ts_test_srcs(unit, (), {})[df.TestFiles.KEY]
     if not test_files:
-        ymake.report_configure_error("No tests found")
+        ymake.report_configure_error(f"No tests found for {test_runner}")
         return
 
     from lib.nots.package_manager import constants

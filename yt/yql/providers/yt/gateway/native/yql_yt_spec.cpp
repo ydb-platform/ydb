@@ -406,6 +406,15 @@ void FillSpec(NYT::TNode& spec,
         }
     }
 
+    auto probabily = TString(std::to_string(settings->_EnforceRegexpProbabilityFail.Get().GetOrElse(0)));
+    if (opProps.HasFlags(EYtOpProp::WithMapper)) {
+        spec["mapper"]["environment"]["YQL_RE2_REGEXP_PROBABILITY_FAIL"] = probabily;
+    }
+
+    if (opProps.HasFlags(EYtOpProp::WithReducer)) {
+        spec["reducer"]["environment"]["YQL_RE2_REGEXP_PROBABILITY_FAIL"] = probabily;
+    }
+
     if (settings->SuspendIfAccountLimitExceeded.Get(cluster).GetOrElse(false)) {
         spec["suspend_operation_if_account_limit_exceeded"] = true;
     }
@@ -700,9 +709,10 @@ void FillUserJobSpecImpl(NYT::TUserJobSpec& spec,
 
     if (defaultMemoryLimit || fileMemUsage || llvmMemUsage || extraUsage.Memory || tmpFsSize) {
         const ui64 memIoBuffers = YQL_JOB_CODEC_MEM * (static_cast<size_t>(!execCtx.InputTables_.empty()) + execCtx.OutTables_.size());
+        const ui64 arrowMemoryPoolReserve = (execCtx.BlockStatus != TOperationProgress::EOpBlockStatus::None ? YQL_ARROW_MEMORY_POOL_RESERVE : 0);
         const ui64 finalMemLimit = Max<ui64>(
             defaultMemoryLimit,
-            128_MB + fileMemUsage + extraUsage.Memory + tmpFsSize + memIoBuffers,
+            128_MB + fileMemUsage + extraUsage.Memory + tmpFsSize + memIoBuffers + arrowMemoryPoolReserve,
             llvmMemUsage + memIoBuffers // LLVM consumes memory only once on job start, but after IO initialization
         );
         YQL_CLOG(DEBUG, ProviderYt) << "Job memory limit: " << finalMemLimit
@@ -712,6 +722,7 @@ void FillUserJobSpecImpl(NYT::TUserJobSpec& spec,
             << ", extra: " << extraUsage.Memory
             << ", extra tmpfs: " << tmpFsSize
             << ", I/O buffers: " << memIoBuffers
+            << ", Arrow pool reserve: " << arrowMemoryPoolReserve
             << ")";
         spec.MemoryLimit(static_cast<i64>(finalMemLimit));
     }

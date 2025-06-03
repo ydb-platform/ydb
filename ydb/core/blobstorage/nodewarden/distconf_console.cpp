@@ -103,7 +103,7 @@ namespace NKikimr::NStorage {
                 if (!StorageConfig || !StorageConfig->HasConfigComposite() || ProposedConfigHashVersion !=
                         std::make_tuple(MainConfigFetchYamlHash, *MainConfigYamlVersion)) {
                     const char *err = "proposed config, but something has gone awfully wrong";
-                    STLOG(PRI_CRIT, BS_NODE, NWDC69, err, (StorageConfig, StorageConfig),
+                    STLOG(PRI_CRIT, BS_NODE, NWDC69, err, (StorageConfig, StorageConfig.get()),
                         (ProposedConfigHashVersion, ProposedConfigHashVersion),
                         (MainConfigFetchYamlHash, MainConfigFetchYamlHash),
                         (MainConfigYamlVersion, MainConfigYamlVersion));

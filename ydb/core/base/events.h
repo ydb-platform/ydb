@@ -185,6 +185,7 @@ struct TKikimrEvents : TEvents {
         ES_FEATURE_FLAGS = 4262,
         ES_PRIORITY_QUEUE = 4263,
         ES_SOLOMON_PROVIDER = 4264,
+        ES_CONVEYOR_COMPOSITE = 4265,
     };
 };
 

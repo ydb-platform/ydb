@@ -1,5 +1,7 @@
 LIBRARY()
 
+ENV(TZ="UTC+23")
+
 SRCS(
     yql_aws_signature.cpp
     yql_http_default_retry_policy.cpp

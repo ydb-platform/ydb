@@ -40,10 +40,10 @@ public:
         , LastPK(lastPK) {
     }
 
-    const TSimpleRow& GetFirstPK() const {
+    const NArrow::TSimpleRow& GetFirstPK() const {
         return FirstPK;
     }
-    const TSimpleRow& GetLastPK() const {
+    const NArrow::TSimpleRow& GetLastPK() const {
         return LastPK;
     }
 };

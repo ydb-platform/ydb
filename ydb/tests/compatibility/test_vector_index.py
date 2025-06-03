@@ -1,12 +1,12 @@
 import pytest
-import ydb
+import ydb as ydbs
 
 from ydb.tests.library.common.wait_for import wait_for
-from ydb.tests.library.compatibility.fixtures import RestartToAnotherVersionFixture
+from ydb.tests.library.compatibility.fixtures import RollingUpgradeAndDowngradeFixture
 from ydb.tests.oss.ydb_sdk_import import ydb
 
 
-class TestVectorIndex(RestartToAnotherVersionFixture):
+class TestVectorIndex(RollingUpgradeAndDowngradeFixture):
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):
         if min(self.versions) < (25, 1):
@@ -65,7 +65,7 @@ class TestVectorIndex(RestartToAnotherVersionFixture):
                     data_type=vector_type,
                     order=order,
                 )
-            except ydb.issues.SchemeError as ex:
+            except ydbs.issues.SchemeError as ex:
                 if "Required global index not found, index name" in str(ex):
                     return False
                 raise ex
@@ -104,12 +104,13 @@ class TestVectorIndex(RestartToAnotherVersionFixture):
             ORDER BY {target}(vec, $Target) {order}
             LIMIT {self.rows_count};
         """
-        with ydb.QuerySessionPool(self.driver) as session_pool:
-            result_sets = session_pool.execute_with_retries(select_sql)
-            assert len(result_sets[0].rows) > 0, "Query returned an empty set"
-            rows = result_sets[0].rows
-            for row in rows:
-                assert row['target'] is not None, "the distance is None"
+        for _ in self.roll():
+            with ydb.QuerySessionPool(self.driver) as session_pool:
+                result_sets = session_pool.execute_with_retries(select_sql)
+                assert len(result_sets[0].rows) > 0, "Query returned an empty set"
+                rows = result_sets[0].rows
+                for row in rows:
+                    assert row['target'] is not None, "the distance is None"
 
     def create_table(self):
         with ydb.QuerySessionPool(self.driver) as session_pool:
@@ -122,7 +123,27 @@ class TestVectorIndex(RestartToAnotherVersionFixture):
                 """
             session_pool.execute_with_retries(query)
 
-    def test_vector_index(self):
+    @pytest.mark.parametrize(
+        "vector_type, distance, distance_func",
+        [
+            ("Uint8", "similarity", "inner_product"),
+            ("Int8", "similarity", "inner_product"),
+            ("Float", "similarity", "inner_product"),
+            ("Uint8", "similarity", "cosine"),
+            ("Int8", "similarity", "cosine"),
+            ("Float", "similarity", "cosine"),
+            ("Uint8", "distance", "cosine"),
+            ("Int8", "distance", "cosine"),
+            ("Float", "distance", "cosine"),
+            ("Uint8", "distance", "manhattan"),
+            ("Int8", "distance", "manhattan"),
+            ("Float", "distance", "manhattan"),
+            ("Uint8", "distance", "euclidean"),
+            ("Int8", "distance", "euclidean"),
+            ("Float", "distance", "euclidean"),
+        ],
+    )
+    def test_vector_index(self, vector_type, distance, distance_func):
         vector_types = {
             "Uint8": "Knn::ToBinaryStringUint8",
             "Int8": "Knn::ToBinaryStringInt8",
@@ -137,69 +158,29 @@ class TestVectorIndex(RestartToAnotherVersionFixture):
             },
         }
         self.create_table()
-        for vector_type in vector_types.keys():
-            self.write_data(name=vector_types[vector_type], vector_type=f"{vector_type}Vector")
-            for distance in targets.keys():
-                for distance_func in targets[distance].keys():
-                    if distance == "similarity":
-                        self._create_index(
-                            vector_type=vector_type,
-                            similarity=distance_func,
-                        )
-                    else:
-                        self._create_index(
-                            vector_type=vector_type,
-                            distance=distance_func,
-                        )
-                    order = "ASC" if distance != "similarity" else "DESC"
-                    self.wait_index_ready(
-                        targets=targets,
-                        vector_types=vector_types,
-                        vector_type=vector_type,
-                        distance=distance,
-                        order=order,
-                        distance_func=distance_func,
-                    )
-                    self.select_from_index(
-                        target=targets[distance][distance_func],
-                        name=vector_types[vector_type],
-                        data_type=vector_type,
-                        order=order,
-                    )
-                    self.change_cluster_version()
-
-                    self.select_from_index(
-                        target=targets[distance][distance_func],
-                        name=vector_types[vector_type],
-                        data_type=vector_type,
-                        order=order,
-                    )
-                    self._drop_index()
-
-                    self.write_data(name=vector_types[vector_type], vector_type=f"{vector_type}Vector")
-                    if distance == "similarity":
-                        self._create_index(
-                            vector_type=vector_type,
-                            similarity=distance_func,
-                        )
-                    else:
-                        self._create_index(
-                            vector_type=vector_type,
-                            distance=distance_func,
-                        )
-                    self.wait_index_ready(
-                        targets=targets,
-                        vector_types=vector_types,
-                        vector_type=vector_type,
-                        distance=distance,
-                        order=order,
-                        distance_func=distance_func,
-                    )
-                    self.select_from_index(
-                        target=targets[distance][distance_func],
-                        name=vector_types[vector_type],
-                        data_type=vector_type,
-                        order=order,
-                    )
-                    self._drop_index()
-                    self.change_cluster_version()
+        self.write_data(name=vector_types[vector_type], vector_type=f"{vector_type}Vector")
+        if distance == "similarity":
+            self._create_index(
+                vector_type=vector_type,
+                similarity=distance_func,
+            )
+        else:
+            self._create_index(
+                vector_type=vector_type,
+                distance=distance_func,
+            )
+        order = "ASC" if distance != "similarity" else "DESC"
+        self.wait_index_ready(
+            targets=targets,
+            vector_types=vector_types,
+            vector_type=vector_type,
+            distance=distance,
+            order=order,
+            distance_func=distance_func,
+        )
+        self.select_from_index(
+            target=targets[distance][distance_func],
+            name=vector_types[vector_type],
+            data_type=vector_type,
+            order=order,
+        )

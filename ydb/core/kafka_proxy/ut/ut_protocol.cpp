@@ -1054,6 +1054,13 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             // Check commit
 
             for (ui64 i = 0; i < minActivePartitions; ++i) {
+                // check that if a partition has a non-zero committed offset (that doesn't exceed endoffset) and committed metadata
+                // or a zero committed offset and metadata
+                // than no error is thrown and metadata is updated
+
+                // check that otherwise, if the committed offset exceeds current endoffset of the partition
+                // than an error is returned and passed committed metadata is not saved
+
                 if (i == 0) {
                     partitionsAndOffsets.emplace_back(i, static_cast<ui64>(recordsCount), commitedMetaData);
                 } else if (i == 1) {
@@ -1074,13 +1081,8 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
                     if (topic.Name.value() == firstTopicName) {
                         // in first topic
                         if (partition.PartitionIndex == 0 || partition.PartitionIndex == 1) {
-                            // check that if a partition has a non-zero committed offset (that doesn't exceed endoffset) and committed metadata
-                            // or a zero committed offset and metadata
-                            // than no error is thrown and metadata is updated
                             UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
                         } else {
-                            // check that otherwise, if the committed offset exceeds current endoffset of the partition
-                            // than an error is returned and passed committed metadata is not saved
                             UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::OFFSET_OUT_OF_RANGE));
                         }
                     } else {

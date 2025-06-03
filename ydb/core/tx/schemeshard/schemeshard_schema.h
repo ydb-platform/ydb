@@ -1986,14 +1986,12 @@ struct Schema : NIceDb::Schema {
         struct Generation : Column<1, NScheme::NTypeIds::Uint64> {};
         struct Status : Column<2, NScheme::NTypeIds::Uint32> { using Type = EDataErasureStatus; };
         struct StartTime : Column<3, NScheme::NTypeIds::Timestamp> {};
-        struct BscGeneration : Column<4, NScheme::NTypeIds::Uint64> {};
 
         using TKey = TableKey<Generation>;
         using TColumns = TableColumns<
             Generation,
             Status,
-            StartTime,
-            BscGeneration
+            StartTime
         >;
     };
 

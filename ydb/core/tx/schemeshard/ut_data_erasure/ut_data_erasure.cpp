@@ -114,7 +114,11 @@ Y_UNIT_TEST_SUITE(TestDataErasure) {
         TAutoPtr<IEventHandle> handle;
         auto response = runtime.GrabEdgeEventRethrow<TEvSchemeShard::TEvDataErasureInfoResponse>(handle);
 
-        UNIT_ASSERT_EQUAL_C(response->Record.GetGeneration(), 1, response->Record.GetGeneration());
+        if (currentBscGeneration > 1) {
+            UNIT_ASSERT_EQUAL_C(response->Record.GetGeneration(), currentBscGeneration + 1, response->Record.GetGeneration());
+        } else {
+            UNIT_ASSERT_EQUAL_C(response->Record.GetGeneration(), 1, response->Record.GetGeneration());
+        }
         UNIT_ASSERT_EQUAL(response->Record.GetStatus(), NKikimrScheme::TEvDataErasureInfoResponse::COMPLETED);
     }
 
@@ -332,13 +336,13 @@ Y_UNIT_TEST_SUITE(TestDataErasure) {
             auto request = MakeHolder<TEvBlobStorage::TEvControllerShredRequest>(50);
             runtime.SendToPipe(MakeBSControllerID(), sender, request.Release(), 0, GetPipeConfigWithRetries());
         }
-        RunDataErasure(2, 4);
+        RunDataErasure(51, 4);
         // Change BSC counter value between data erasure iterations
         {
             auto request = MakeHolder<TEvBlobStorage::TEvControllerShredRequest>(100);
             runtime.SendToPipe(MakeBSControllerID(), sender, request.Release(), 0, GetPipeConfigWithRetries());
         }
-        RunDataErasure(3, 4);
+        RunDataErasure(101, 4);
     }
 
     Y_UNIT_TEST(DataErasureWithCopyTable) {

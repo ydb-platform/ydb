@@ -25,7 +25,6 @@ protected:
     TSchemeShard* const SchemeShard;
     EDataErasureStatus Status = EDataErasureStatus::UNSPECIFIED;
     ui64 Generation = 0;
-    ui64 BscGeneration = 0;
     bool Running = false;
 
     ui64 CounterDataErasureOk = 0;
@@ -55,6 +54,7 @@ public:
     virtual bool Remove(const TPathId& pathId) = 0;
     virtual bool Remove(const TShardIdx& shardIdx) = 0;
     virtual void HandleNewPartitioning(const std::vector<TShardIdx>& dataErasureShards, NIceDb::TNiceDb& db) = 0;
+    virtual void SyncBscGeneration(NIceDb::TNiceDb& db, ui64 currentBscGeneration) = 0;
 
     void Clear();
 
@@ -63,9 +63,7 @@ public:
 
     void IncGeneration();
     void SetGeneration(ui64 generation);
-    void SetBscGeneration(ui64 generation);
     ui64 GetGeneration() const;
-    ui64 GetBscGeneration() const;
 
     bool IsRunning() const;
 };
@@ -131,6 +129,7 @@ public:
     bool Remove(const TPathId& pathId) override;
     bool Remove(const TShardIdx& shardIdx) override;
     void HandleNewPartitioning(const std::vector<TShardIdx>& dataErasureShards, NIceDb::TNiceDb& db) override;
+    void SyncBscGeneration(NIceDb::TNiceDb& db, ui64 currentBscGeneration) override;
 
 private:
     static TQueue::TConfig ConvertConfig(const NKikimrConfig::TDataErasureConfig& config);
@@ -192,6 +191,7 @@ public:
     bool Remove(const TPathId& pathId) override;
     bool Remove(const TShardIdx& shardIdx) override;
     void HandleNewPartitioning(const std::vector<TShardIdx>& dataErasureShards, NIceDb::TNiceDb& db) override;
+    void SyncBscGeneration(NIceDb::TNiceDb& db, ui64 currentBscGeneration) override;
 
 private:
     static TQueue::TConfig ConvertConfig(const NKikimrConfig::TDataErasureConfig& config);

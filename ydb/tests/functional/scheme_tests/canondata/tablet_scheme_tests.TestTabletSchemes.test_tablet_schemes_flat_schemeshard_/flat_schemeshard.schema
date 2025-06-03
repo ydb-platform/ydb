@@ -8289,11 +8289,6 @@
                 "ColumnId": 3,
                 "ColumnName": "StartTime",
                 "ColumnType": "Timestamp"
-            },
-            {
-                "ColumnId": 4,
-                "ColumnName": "BscGeneration",
-                "ColumnType": "Uint64"
             }
         ],
         "ColumnsDropped": [],
@@ -8302,8 +8297,7 @@
                 "Columns": [
                     1,
                     2,
-                    3,
-                    4
+                    3
                 ],
                 "RoomID": 0,
                 "Codec": 0,

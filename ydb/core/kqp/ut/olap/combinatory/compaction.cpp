@@ -18,7 +18,7 @@ TConclusionStatus TOneCompactionCommand::DoExecute(TKikimrRunner& /*kikimr*/) {
     AFL_VERIFY(!controller->IsBackgroundEnable(NKikimr::NYDBTest::ICSController::EBackground::Compaction));
     const i64 before = controller->GetCompactionFinishedCounter().Val();
     controller->EnableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
-    const bool ok = controller->WaitCompactions(TDuration::Seconds(30));
+    const bool ok = controller->WaitCompactions(TDuration::Seconds(5));
     AFL_VERIFY(ok);
     const i64 after = controller->GetCompactionFinishedCounter().Val();
     AFL_VERIFY(before < after);

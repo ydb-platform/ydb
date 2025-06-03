@@ -40,7 +40,7 @@ struct TSqlHelper {
                 ss << Sprintf("DECLARE $item%d AS Int32;\n", j);
             }
 
-            ss << "SELECT I_ID, I_PRICE, I_NAME, I_DATA FROM item WHERE I_ID IN (";
+            ss << "SELECT I_ID, I_PRICE, I_NAME, I_DATA FROM `" << TABLE_ITEM << "` WHERE I_ID IN (";
             for (int j = 1; j <= i; ++j) {
                 if (j == 1) {
                     ss << "$item1";
@@ -70,7 +70,7 @@ struct TSqlHelper {
             ss << "SELECT S_W_ID, S_I_ID, S_QUANTITY, S_DATA, S_YTD, S_ORDER_CNT, S_REMOTE_CNT, " <<
                             "S_DIST_01, S_DIST_02, S_DIST_03, S_DIST_04, S_DIST_05, " <<
                             "S_DIST_06, S_DIST_07, S_DIST_08, S_DIST_09, S_DIST_10 " <<
-                            "FROM stock WHERE (S_W_ID, S_I_ID) IN (";
+                            "FROM `" << TABLE_STOCK << "` WHERE (S_W_ID, S_I_ID) IN (";
 
             for (int j = 1; j <= i; ++j) {
                 if (j == 1) {
@@ -151,11 +151,11 @@ TAsyncExecuteQueryResult GetCustomer(
         DECLARE $c_id AS Int32;
 
         SELECT C_DISCOUNT, C_LAST, C_CREDIT
-          FROM `customer`
+          FROM `{}`
          WHERE C_W_ID = $c_w_id
            AND C_D_ID = $c_d_id
            AND C_ID = $c_id;
-    )", context.Path.c_str());
+    )", context.Path.c_str(), TABLE_CUSTOMER);
 
     auto params = TParamsBuilder()
         .AddParam("$c_w_id").Int32(warehouseID).Build()
@@ -185,9 +185,9 @@ TAsyncExecuteQueryResult GetWarehouseTax(
         DECLARE $w_id AS Int32;
 
         SELECT W_TAX
-          FROM `warehouse`
+          FROM `{}`
          WHERE W_ID = $w_id;
-    )", context.Path.c_str());
+    )", context.Path.c_str(), TABLE_WAREHOUSE);
 
     auto params = TParamsBuilder()
         .AddParam("$w_id").Int32(warehouseID).Build()
@@ -215,10 +215,10 @@ TAsyncExecuteQueryResult GetDistrict(
         DECLARE $d_id AS Int32;
 
         SELECT D_NEXT_O_ID, D_TAX
-          FROM `district`
+          FROM `{}`
          WHERE D_W_ID = $d_w_id
            AND D_ID = $d_id;
-    )", context.Path.c_str());
+    )", context.Path.c_str(), TABLE_DISTRICT);
 
     auto params = TParamsBuilder()
         .AddParam("$d_w_id").Int32(warehouseID).Build()
@@ -253,9 +253,9 @@ TAsyncExecuteQueryResult UpdateDistrict(
         DECLARE $d_id AS Int32;
         DECLARE $d_next_o_id AS Int32;
 
-        UPSERT INTO `district` (D_W_ID, D_ID, D_NEXT_O_ID)
+        UPSERT INTO `{}` (D_W_ID, D_ID, D_NEXT_O_ID)
         VALUES ($d_w_id, $d_id, $d_next_o_id);
-    )", context.Path.c_str());
+    )", context.Path.c_str(), TABLE_DISTRICT);
 
     auto params = TParamsBuilder()
         .AddParam("$d_w_id").Int32(warehouseID).Build()
@@ -290,9 +290,9 @@ TAsyncExecuteQueryResult InsertNewOrder(
         DECLARE $no_d_id AS Int32;
         DECLARE $no_w_id AS Int32;
 
-        UPSERT INTO `new_order` (NO_O_ID, NO_D_ID, NO_W_ID)
+        UPSERT INTO `{}` (NO_O_ID, NO_D_ID, NO_W_ID)
         VALUES ($no_o_id, $no_d_id, $no_w_id);
-    )", context.Path.c_str());
+    )", context.Path.c_str(), TABLE_NEW_ORDER);
 
     auto params = TParamsBuilder()
         .AddParam("$no_o_id").Int32(orderID).Build()
@@ -334,9 +334,9 @@ TAsyncExecuteQueryResult InsertOpenOrder(
         DECLARE $o_ol_cnt AS Int32;
         DECLARE $o_all_local AS Int32;
 
-        UPSERT INTO `oorder` (O_ID, O_D_ID, O_W_ID, O_C_ID, O_ENTRY_D, O_OL_CNT, O_ALL_LOCAL)
+        UPSERT INTO `{}` (O_ID, O_D_ID, O_W_ID, O_C_ID, O_ENTRY_D, O_OL_CNT, O_ALL_LOCAL)
         VALUES ($o_id, $o_d_id, $o_w_id, $o_c_id, $o_entry_d, $o_ol_cnt, $o_all_local);
-    )", context.Path.c_str());
+    )", context.Path.c_str(), TABLE_OORDER);
 
     auto params = TParamsBuilder()
         .AddParam("$o_id").Int32(orderID).Build()
@@ -437,8 +437,8 @@ TAsyncExecuteQueryResult UpdateStocks(
             $row.p4 as S_YTD, $row.p5 as S_ORDER_CNT,
             $row.p6 as S_REMOTE_CNT));
 
-        UPSERT INTO `stock` SELECT * FROM AS_TABLE(ListMap($values, $mapper));
-    )", context.Path.c_str());
+        UPSERT INTO `{}` SELECT * FROM AS_TABLE(ListMap($values, $mapper));
+    )", context.Path.c_str(), TABLE_STOCK);
 
     auto paramsBuilder = TParamsBuilder();
     auto& listBuilder = paramsBuilder.AddParam("$values").BeginList();
@@ -479,8 +479,8 @@ TAsyncExecuteQueryResult InsertOrderLines(
             $row.p6 as OL_DELIVERY_D, $row.p7 as OL_AMOUNT, $row.p8 as OL_SUPPLY_W_ID, $row.p9 as OL_QUANTITY,
             $row.p10 as OL_DIST_INFO));
 
-        UPSERT INTO `order_line` SELECT * FROM AS_TABLE(ListMap($values, $mapper));
-    )", context.Path.c_str());
+        UPSERT INTO `{}` SELECT * FROM AS_TABLE(ListMap($values, $mapper));
+    )", context.Path.c_str(), TABLE_ORDER_LINE);
 
     auto paramsBuilder = TParamsBuilder();
     auto& listBuilder = paramsBuilder.AddParam("$values").BeginList();

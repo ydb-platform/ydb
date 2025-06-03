@@ -46,13 +46,13 @@ TAsyncExecuteQueryResult GetOrderByCustomer(
         DECLARE $o_c_id AS Int32;
 
         SELECT O_W_ID, O_D_ID, O_C_ID, O_ID, O_CARRIER_ID, O_ENTRY_D
-          FROM `oorder` VIEW idx_order AS idx
+          FROM `{}` VIEW `{}` AS idx
          WHERE idx.O_W_ID = $o_w_id
            AND idx.O_D_ID = $o_d_id
            AND idx.O_C_ID = $o_c_id
          ORDER BY idx.O_W_ID DESC, idx.O_D_ID DESC, idx.O_C_ID DESC, idx.O_ID DESC
          LIMIT 1;
-    )", context.Path.c_str());
+    )", context.Path.c_str(), TABLE_OORDER, INDEX_ORDER);
 
     auto params = TParamsBuilder()
         .AddParam("$o_w_id").Int32(warehouseID).Build()
@@ -84,11 +84,11 @@ TAsyncExecuteQueryResult GetOrderLines(
         DECLARE $ol_o_id AS Int32;
 
         SELECT OL_I_ID, OL_SUPPLY_W_ID, OL_QUANTITY, OL_AMOUNT, OL_DELIVERY_D
-          FROM `order_line`
+          FROM `{}`
          WHERE OL_O_ID = $ol_o_id
            AND OL_D_ID = $ol_d_id
            AND OL_W_ID = $ol_w_id;
-    )", context.Path.c_str());
+    )", context.Path.c_str(), TABLE_ORDER_LINE);
 
     auto params = TParamsBuilder()
         .AddParam("$ol_w_id").Int32(warehouseID).Build()

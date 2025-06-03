@@ -32,10 +32,10 @@ TAsyncExecuteQueryResult GetDistrictOrderId(
         DECLARE $d_id AS Int32;
 
         SELECT D_NEXT_O_ID
-          FROM `district`
+          FROM `{}`
          WHERE D_W_ID = $d_w_id
            AND D_ID = $d_id;
-    )", context.Path.c_str());
+    )", context.Path.c_str(), TABLE_DISTRICT);
 
     auto params = TParamsBuilder()
         .AddParam("$d_w_id").Int32(warehouseID).Build()
@@ -69,14 +69,14 @@ TAsyncExecuteQueryResult GetStockCount(
         DECLARE $s_quantity AS Int32;
 
         SELECT COUNT(DISTINCT (s.S_I_ID)) AS STOCK_COUNT
-         FROM `order_line` as ol INNER JOIN `stock` as s ON s.S_I_ID = ol.OL_I_ID
+         FROM `{}` as ol INNER JOIN `{}` as s ON s.S_I_ID = ol.OL_I_ID
          WHERE ol.OL_W_ID = $ol_w_id
          AND ol.OL_D_ID = $ol_d_id
          AND ol.OL_O_ID < $ol_o_id_high
          AND ol.OL_O_ID >= $ol_o_id_low
          AND s.S_W_ID = $s_w_id
          AND s.S_QUANTITY < $s_quantity;
-    )", context.Path.c_str());
+    )", context.Path.c_str(), TABLE_ORDER_LINE, TABLE_STOCK);
 
     auto params = TParamsBuilder()
         .AddParam("$ol_w_id").Int32(warehouseID).Build()

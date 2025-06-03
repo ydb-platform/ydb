@@ -32,11 +32,11 @@ TAsyncExecuteQueryResult UpdateWarehouse(
         DECLARE $w_id AS Int32;
         DECLARE $payment AS Double;
 
-        UPDATE `warehouse`
+        UPDATE `{}`
            SET W_YTD = W_YTD + $payment
          WHERE W_ID = $w_id
         RETURNING W_STREET_1, W_STREET_2, W_CITY, W_STATE, W_ZIP, W_NAME;
-    )", context.Path.c_str());
+    )", context.Path.c_str(), TABLE_WAREHOUSE);
 
     auto params = TParamsBuilder()
         .AddParam("$w_id").Int32(warehouseID).Build()
@@ -66,12 +66,12 @@ TAsyncExecuteQueryResult UpdateDistrict(
         DECLARE $d_id AS Int32;
         DECLARE $payment AS Double;
 
-        UPDATE `district`
+        UPDATE `{}`
            SET D_YTD = D_YTD + $payment
          WHERE D_W_ID = $d_w_id
            AND D_ID = $d_id
         RETURNING D_STREET_1, D_STREET_2, D_CITY, D_STATE, D_ZIP, D_NAME;
-    )", context.Path.c_str());
+    )", context.Path.c_str(), TABLE_DISTRICT);
 
     auto params = TParamsBuilder()
         .AddParam("$d_w_id").Int32(warehouseID).Build()
@@ -103,11 +103,11 @@ TAsyncExecuteQueryResult GetCustomerCData(
         DECLARE $c_id AS Int32;
 
         SELECT C_DATA
-          FROM `customer`
+          FROM `{}`
          WHERE C_W_ID = $c_w_id
            AND C_D_ID = $c_d_id
            AND C_ID = $c_id;
-    )", context.Path.c_str());
+    )", context.Path.c_str(), TABLE_CUSTOMER);
 
     auto params = TParamsBuilder()
         .AddParam("$c_w_id").Int32(warehouseID).Build()
@@ -143,10 +143,10 @@ TAsyncExecuteQueryResult UpdateCustomerWithCData(
         DECLARE $c_payment_cnt AS Int32;
         DECLARE $c_data AS Utf8;
 
-        UPSERT INTO `customer`
+        UPSERT INTO `{}`
          (C_W_ID, C_D_ID, C_ID, C_BALANCE, C_YTD_PAYMENT, C_PAYMENT_CNT, C_DATA)
          VALUES ($c_w_id, $c_d_id, $c_id, $c_balance, $c_ytd_payment, $c_payment_cnt, $c_data);
-    )", context.Path.c_str());
+    )", context.Path.c_str(), TABLE_CUSTOMER);
 
     auto params = TParamsBuilder()
         .AddParam("$c_w_id").Int32(warehouseID).Build()
@@ -185,10 +185,10 @@ TAsyncExecuteQueryResult UpdateCustomer(
         DECLARE $c_ytd_payment AS Double;
         DECLARE $c_payment_cnt AS Int32;
 
-        UPSERT INTO `customer`
+        UPSERT INTO `{}`
          (C_W_ID, C_D_ID, C_ID, C_BALANCE, C_YTD_PAYMENT, C_PAYMENT_CNT)
          VALUES ($c_w_id, $c_d_id, $c_id, $c_balance, $c_ytd_payment, $c_payment_cnt);
-    )", context.Path.c_str());
+    )", context.Path.c_str(), TABLE_CUSTOMER);
 
     auto params = TParamsBuilder()
         .AddParam("$c_w_id").Int32(warehouseID).Build()
@@ -229,10 +229,10 @@ TAsyncExecuteQueryResult InsertHistoryRecord(
         DECLARE $h_data AS Utf8;
         DECLARE $h_c_nano_ts AS Int64;
 
-        UPSERT INTO `history`
+        UPSERT INTO `{}`
          (H_C_D_ID, H_C_W_ID, H_C_ID, H_D_ID, H_W_ID, H_DATE, H_AMOUNT, H_DATA, H_C_NANO_TS)
          VALUES ($h_c_d_id, $h_c_w_id, $h_c_id, $h_d_id, $h_w_id, $h_date, $h_amount, $h_data, $h_c_nano_ts);
-    )", context.Path.c_str());
+    )", context.Path.c_str(), TABLE_HISTORY);
 
     auto now = std::chrono::system_clock::now();
     auto nanoTs = std::chrono::duration_cast<std::chrono::nanoseconds>(now.time_since_epoch()).count();

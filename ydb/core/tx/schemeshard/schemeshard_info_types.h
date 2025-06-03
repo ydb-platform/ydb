@@ -3092,7 +3092,6 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
             Sample = 0,
             // Recompute,
             Reshuffle,
-            Local,
             MultiLocal,
         };
         ui32 Level = 1;
@@ -3142,7 +3141,6 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
             if (!NeedsAnotherParent()) {
                 return false;
             }
-            State = Sample;
             ++Parent;
             Child += K;
             return true;
@@ -3152,14 +3150,12 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
             if (!NeedsAnotherLevel()) {
                 return false;
             }
-            State = Sample;
             NextLevel(ChildCount());
             return true;
         }
 
         void PrefixIndexDone(ui64 shards) {
             Y_ABORT_UNLESS(NeedsAnotherLevel());
-            State = MultiLocal;
             // There's two worst cases, but in both one shard contains TableSize rows
             // 1. all rows have unique prefix (*), in such case we need 1 id for each row (parent, id in prefix table)
             // 2. all unique prefixes have size K, so we have TableSize/K parents + TableSize childs
@@ -3443,10 +3439,9 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
 
     struct TClusterShards {
         NTableIndex::TClusterId From = std::numeric_limits<NTableIndex::TClusterId>::max();
-        TShardIdx Local = InvalidShardIdx;
-        std::vector<TShardIdx> Global;
+        std::vector<TShardIdx> Shards;
     };
-    TMap<NTableIndex::TClusterId, TClusterShards> Cluster2Shards;
+    TMap<NTableIndex::TClusterId, TClusterShards> Cluster2Shards; // To => { From, Shards }
 
     void AddParent(const TSerializedTableRange& range, TShardIdx shard);
 

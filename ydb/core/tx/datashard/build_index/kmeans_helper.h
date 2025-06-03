@@ -140,21 +140,16 @@ struct TMaxInnerProductSimilarity : TMetric<TCoord> {
 
 void AddRowToLevel(TBufferData& buffer, TClusterId parent, TClusterId child, const TString& embedding, bool isPostingLevel);
 
-void AddRowMainToBuild(TBufferData& buffer, TClusterId parent, TArrayRef<const TCell> key, TArrayRef<const TCell> row);
+void AddRowToData(TBufferData& buffer, TClusterId parent, TArrayRef<const TCell> sourcePk,
+    TArrayRef<const TCell> dataColumns, TArrayRef<const TCell> origKey, bool isPostingLevel);
 
-void AddRowMainToPosting(TBufferData& buffer, TClusterId parent, TArrayRef<const TCell> key, TArrayRef<const TCell> row, ui32 dataPos);
-
-void AddRowBuildToBuild(TBufferData& buffer, TClusterId parent, TArrayRef<const TCell> key, TArrayRef<const TCell> row, ui32 prefixColumns = 1);
-
-void AddRowBuildToPosting(TBufferData& buffer, TClusterId parent, TArrayRef<const TCell> key, TArrayRef<const TCell> row, ui32 dataPos, ui32 prefixColumns = 1);
-
-TTags MakeScanTags(const TUserTable& table, const TProtoStringType& embedding, 
+TTags MakeScanTags(const TUserTable& table, const TProtoStringType& embedding,
     const google::protobuf::RepeatedPtrField<TProtoStringType>& data, ui32& embeddingPos,
     ui32& dataPos, NTable::TTag& embeddingTag);
 
 std::shared_ptr<NTxProxy::TUploadTypes> MakeOutputTypes(const TUserTable& table, NKikimrTxDataShard::EKMeansState uploadState,
     const TProtoStringType& embedding, const google::protobuf::RepeatedPtrField<TProtoStringType>& data,
-    ui32 prefixColumns = 0);
+    const google::protobuf::RepeatedPtrField<TProtoStringType>& pkColumns = {});
 
 void MakeScan(auto& record, const auto& createScan, const auto& badRequest)
 {

@@ -29,7 +29,7 @@ using namespace NKMeans;
  *
  * Request:
  * - The client sends TEvPrefixKMeansRequest with:
-*   - Child: base ID from which new cluster IDs are assigned within this request.
+ *   - Child: base ID from which new cluster IDs are assigned within this request.
  *     - Each prefix group processed will be assigned cluster IDs starting at Child + 1.
  *     - For a request with K clusters per prefix, the IDs used for the first prefix group are
  *       (Child + 1) to (Child + K), and the parent ID for these is Child.
@@ -93,6 +93,9 @@ protected:
 
     // FIXME: save PrefixRows as std::vector<std::pair<TSerializedCellVec, TSerializedCellVec>> to avoid parsing
     const ui32 PrefixColumns;
+    // for PrefixKMeans, original table's primary key columns are passed separately,
+    // because the prefix table contains them in a different order if they are both in PK and in the prefix
+    const ui32 DataColumnCount;
     TSerializedCellVec Prefix;
     TBufferData PrefixRows;
     bool IsFirstPrefixFeed = true;
@@ -126,10 +129,14 @@ public:
         , ResponseActorId{responseActorId}
         , Response{std::move(response)}
         , PrefixColumns{request.GetPrefixColumns()}
+        , DataColumnCount{(ui32)request.GetDataColumns().size()}
     {
         const auto& embedding = request.GetEmbeddingColumn();
-        const auto& data = request.GetDataColumns();
-        ScanTags = MakeScanTags(table, embedding, data, EmbeddingPos, DataPos, EmbeddingTag);
+        TVector<TString> data{request.GetDataColumns().begin(), request.GetDataColumns().end()};
+        for (auto & col: request.GetSourcePrimaryKeyColumns()) {
+            data.push_back(col);
+        }
+        ScanTags = MakeScanTags(table, embedding, {data.begin(), data.end()}, EmbeddingPos, DataPos, EmbeddingTag);
         Lead.To(ScanTags, {}, NTable::ESeek::Lower);
         {
             Ydb::Type type;
@@ -141,7 +148,11 @@ public:
             (*levelTypes)[2] = {NTableIndex::NTableVectorKmeansTreeIndex::CentroidColumn, type};
             LevelBuf = Uploader.AddDestination(request.GetLevelName(), std::move(levelTypes));
         }
-        OutputBuf = Uploader.AddDestination(request.GetOutputName(), MakeOutputTypes(table, UploadState, embedding, data, PrefixColumns));
+        {
+            auto outputTypes = MakeOutputTypes(table, UploadState, embedding,
+                {data.begin(), data.begin()+request.GetDataColumns().size()}, request.GetSourcePrimaryKeyColumns());
+            OutputBuf = Uploader.AddDestination(request.GetOutputName(), outputTypes);
+        }
         {
             auto types = GetAllTypes(table);
 
@@ -465,14 +476,14 @@ private:
     void FeedBuildToBuild(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
         if (auto pos = Clusters.FindCluster(row, EmbeddingPos); pos) {
-            AddRowBuildToBuild(*OutputBuf, Child + *pos, key, row, PrefixColumns);
+            AddRowToData(*OutputBuf, Child + *pos, row.Slice(DataPos+DataColumnCount), row.Slice(0, DataPos+DataColumnCount), key, false);
         }
     }
 
     void FeedBuildToPosting(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
         if (auto pos = Clusters.FindCluster(row, EmbeddingPos); pos) {
-            AddRowBuildToPosting(*OutputBuf, Child + *pos, key, row, DataPos, PrefixColumns);
+            AddRowToData(*OutputBuf, Child + *pos, row.Slice(DataPos+DataColumnCount), row.Slice(DataPos, DataColumnCount), key, true);
         }
     }
 
@@ -608,6 +619,14 @@ void TDataShard::HandleSafe(TEvDataShard::TEvPrefixKMeansRequest::TPtr& ev, cons
     if (request.GetPrefixColumns() > userTable.KeyColumnIds.size()) {
         badRequest(TStringBuilder() << "Should not be requested on more than " << userTable.KeyColumnIds.size() << " prefix columns");
     }
+        if (request.GetSourcePrimaryKeyColumns().size() == 0) {
+            badRequest("Request should include source primary key columns");
+        }
+        for (auto pkColumn : request.GetSourcePrimaryKeyColumns()) {
+            if (!tags.contains(pkColumn)) {
+                badRequest(TStringBuilder() << "Unknown source primary key column: " << pkColumn);
+            }
+        }
 
     if (trySendBadRequest()) {
         return;

@@ -1,8 +1,7 @@
 #!/bin/bash
 export GRPC_PORT=${GRPC_PORT:-2136}
-export GRPC_TLS_PORT=${GRPC_TLS_PORT:-2135}
+export YDB_GRPC_TLS_DATA_PATH="/ydb_certs"
 export YDB_KAFKA_PROXY_PORT=${YDB_KAFKA_PROXY_PORT:-9092}
-export YDB_TINY_MODE="true"
 
 export YDB_TINY_MODE=${YDB_TINY_MODE:-true}
 export YDB_WORKING_DIR=${YDB_WORKING_DIR:-/ydb_data}

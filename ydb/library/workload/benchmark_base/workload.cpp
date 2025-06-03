@@ -59,7 +59,7 @@ void TWorkloadGeneratorBase::GenerateDDLForTable(IOutputStream& result, const NJ
     specialTypes["timestamp_type"] = Params.GetTimestampType();
 
     const auto& tableName = table["name"].GetString();
-    const auto path = Params.GetFullTableName(single ? nullptr : tableName.c_str());
+    const auto path = Params.GetFullTableName((single && Params.GetPath())? nullptr : tableName.c_str());
     result << Endl << "CREATE ";
     if (Params.GetStoreType() == TWorkloadBaseParams::EStoreType::ExternalS3) {
         result << "EXTERNAL ";
@@ -153,7 +153,15 @@ NJson::TJsonValue TWorkloadGeneratorBase::GetTablesJson() const {
 }
 
 TVector<std::string> TWorkloadGeneratorBase::GetCleanPaths() const {
-    return { Params.GetPath().c_str() };
+    const auto json = GetTablesJson();
+    TVector<std::string> result;
+    for (const auto& table: json["tables"].GetArray()) {
+        result.emplace_back(Params.GetPath() + "/" + table["name"].GetString());
+    }
+    if (json.Has("table")) {
+        result.emplace_back(Params.GetPath() ? Params.GetPath() : json["table"]["name"].GetString());
+    }
+    return result;
 }
 
 TWorkloadDataInitializerBase::TWorkloadDataInitializerBase(const TString& name, const TString& description, const TWorkloadBaseParams& params)
@@ -202,6 +210,10 @@ void TWorkloadBaseParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommand
             .StoreValue(&DateType, "Date").StoreValue(&TimestampType, "Timestamp").StoreValue(&DatetimeType, "Datetime");
         opts.AddLongOption("partition-size", "Maximum partition size in megabytes (AUTO_PARTITIONING_PARTITION_SIZE_MB) for row tables.")
             .DefaultValue(PartitionSizeMb).StoreResult(&PartitionSizeMb);
+        break;
+    case TWorkloadParams::ECommandType::Run:
+        opts.AddLongOption('c', "check-canonical", "Use deterministic queries and check results with canonical ones.")
+            .NoArgument().StoreTrue(&CheckCanonical);
         break;
     case TWorkloadParams::ECommandType::Root:
         opts.AddLongOption('p', "path", "Path where benchmark tables are located")

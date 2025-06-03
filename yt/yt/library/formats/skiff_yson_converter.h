@@ -3,8 +3,11 @@
 #include <yt/yt/client/table_client/public.h>
 #include <yt/yt/client/table_client/row_base.h>
 
-#include <yt/yt/library/decimal/decimal.h>
 #include <yt/yt/core/yson/public.h>
+
+#include <yt/yt/library/decimal/decimal.h>
+
+#include <yt/yt/library/skiff_ext/schema_match.h>
 
 #include <library/cpp/skiff/skiff.h>
 
@@ -47,6 +50,27 @@ template <NSkiff::EWireType wireType>
 struct TSimpleSkiffParser
 {
     Y_FORCE_INLINE auto operator () (NSkiff::TCheckedInDebugSkiffParser* parser) const;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <NSkiff::EWireType internalWireType>
+class TTzSkiffParser
+{
+public:
+    TTzSkiffParser();
+    Y_FORCE_INLINE TStringBuf operator () (NSkiff::TCheckedInDebugSkiffParser* parser);
+
+private:
+    std::string Buffer_;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <NSkiff::EWireType internalWireType>
+struct TTzSkiffWriter
+{
+    Y_FORCE_INLINE void operator() (TStringBuf value, NSkiff::TCheckedInDebugSkiffWriter* writer) const;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -100,6 +124,7 @@ public:
 
 void CheckSkiffWireTypeForDecimal(int precision, NSkiff::EWireType wireType);
 void CheckWireType(NSkiff::EWireType wireType, const std::initializer_list<NSkiff::EWireType>& expected);
+void CheckTzType(const std::shared_ptr<NSkiff::TSkiffSchema>& skiffSchema, NTableClient::ESimpleLogicalValueType columnType);
 
 template <NSkiff::EWireType wireType, typename TValueType>
 Y_FORCE_INLINE void CheckIntSize(TValueType value);

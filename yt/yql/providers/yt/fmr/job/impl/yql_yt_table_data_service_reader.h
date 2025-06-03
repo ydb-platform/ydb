@@ -13,11 +13,6 @@ struct TFmrReaderSettings {
     ui64 ReadAheadChunks = 1;
 };
 
-struct TPendingFmrChunk {
-    NThreading::TFuture<TMaybe<TString>> Data;
-    TFmrChunkMeta Meta;
-};
-
 class TFmrTableDataServiceReader: public NYT::TRawTableReader {
 public:
     TFmrTableDataServiceReader(
@@ -34,8 +29,23 @@ public:
     bool HasRangeIndices() const override;
 
 private:
+    struct TFmrChunkMeta {
+        TString TableId;
+        TString PartId;
+        ui64 Chunk = 0;
+
+        TString ToString() const;
+    };
+
+    struct TPendingFmrChunk {
+        NThreading::TFuture<TMaybe<TString>> Data;
+        TFmrChunkMeta Meta;
+    };
+
     size_t DoRead(void* buf, size_t len) override;
     void ReadAhead();
+
+    void SetMinChunkInNewRange();
 
     const TString TableId_;
     std::vector<TTableRange> TableRanges_;

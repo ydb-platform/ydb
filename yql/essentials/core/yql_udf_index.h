@@ -20,6 +20,8 @@ struct TFunctionInfo {
     bool IsStrict = false;
     bool SupportsBlocks = false;
     TVector<TString> Messages;
+    TLangVersion MinLangVer = UnknownLangVersion;
+    TLangVersion MaxLangVer = UnknownLangVersion;
 };
 
 // todo: specify whether path is frozen

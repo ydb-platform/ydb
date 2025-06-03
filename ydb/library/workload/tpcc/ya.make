@@ -10,6 +10,7 @@ SRCS(
     transaction_neworder.cpp
     transaction_orderstatus.cpp
     transaction_payment.cpp
+    transaction_simulation.cpp
     transaction_stocklevel.cpp
 )
 

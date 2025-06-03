@@ -355,6 +355,10 @@ bool IsTablePropsDependent(const TExprNode& node) {
     return found;
 }
 
+bool IsNoPush(const TExprNode& node) {
+    return node.IsCallable({"NoPush", "Likely"});
+}
+
 TExprNode::TPtr KeepColumnOrder(const TExprNode::TPtr& node, const TExprNode& src, TExprContext& ctx, const TTypeAnnotationContext& typeCtx) {
     auto columnOrder = typeCtx.LookupColumnOrder(src);
     if (!columnOrder) {

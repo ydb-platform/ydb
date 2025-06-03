@@ -22,7 +22,7 @@ namespace NLogLevel {
     inline constexpr std::string_view Error = "error";
     inline constexpr std::string_view Info = "info";
     inline constexpr std::string_view Debug = "debug";
-};
+} // namespace NLogLevel
 
 ////////////////////////////////////////////////////////////////////////////////
 

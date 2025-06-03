@@ -1659,7 +1659,7 @@ SELECT ListAggregate([1,2,3], $g); -- 12
 
 ## AggregateFlatten {#aggregateflatten}
 
-Адаптирует фабрику для [агрегационных функций](aggregation.md), например, полученную через функцию [AggregationFactory](#aggregationfactory) так, чтобы выполнять агрегацию над входными элементами - списками. Эта операция похожа на [FLATTEN LIST BY](../syntax/select/flatten.md) - производится агрегация каждого элемента списка.
+Адаптирует фабрику для [агрегационных функций](aggregation.md), (например, полученную через функцию [AggregationFactory](#aggregationfactory)) так, чтобы выполнять агрегацию над входными элементами - списками. Эта операция похожа на [FLATTEN LIST BY](../syntax/select/flatten.md) - производится агрегация каждого элемента списка.
 
 Аргументы:
 

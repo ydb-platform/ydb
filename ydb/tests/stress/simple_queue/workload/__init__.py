@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+from concurrent.futures import ThreadPoolExecutor
 import copy
 import os
 import random
@@ -27,6 +28,8 @@ class EventKind(object):
     ALTER_TABLE = 'alter_table'
     DROP_TABLE = 'drop_table'
 
+    READ_TABLE = 'read_table'
+
     WRITE = 'write'
     REMOVE_OUTDATED = 'remove_outdated'
     FIND_OUTDATED = 'find_outdated'
@@ -34,6 +37,7 @@ class EventKind(object):
     @classmethod
     def periodic_tasks(cls):
         return (
+            cls.READ_TABLE,
         )
 
     @classmethod
@@ -48,6 +52,8 @@ class EventKind(object):
         return (
             cls.DROP_TABLE,
             cls.ALTER_TABLE,
+
+            cls.READ_TABLE,
 
             cls.FIND_OUTDATED,
             cls.REMOVE_OUTDATED,
@@ -202,22 +208,22 @@ class YdbQueue(object):
         session = self.pool.acquire()
         table_name = self.table_name_with_timestamp() if table_name is None else table_name
         response = session.execute(get_table_description(table_name, self.mode), settings=self.ops)
-        self.update_stats(session, 'create')
+        self.update_stats('create')
         return response
 
     def switch(self, switch_to):
         self.table_name = switch_to
         self.outdated_keys.clear()
 
-    def update_stats(self, session, event):
-        self.pool.release(session)
+    def update_stats(self, event):
         self.stats.save_event(event)
 
     def send_query(self, query, parameters, event_kind):
         session = self.pool.acquire()
         try:
             response = session.transaction().execute(query, parameters=parameters, commit_tx=True, settings=self.ops)
-            self.update_stats(session, event_kind)
+            self.update_stats(event_kind)
+            self.pool.release(session)
             return next(response)
         except ydb.Error as e:
             self.stats.save_event(event_kind, e.status)
@@ -254,9 +260,23 @@ class YdbQueue(object):
             self.working_dir, response, switch=True,
         )
 
+    def read_table(self):
+        it = self.send_query("SELECT key FROM {}".format(self.table_name), None, EventKind.READ_TABLE)
+
+        try:
+            while it is not None:
+                self.update_stats(EventKind.READ_TABLE)
+                it = next(it)
+        except ydb.Error as e:
+            self.stats.save_event(EventKind.READ_TABLE, e.status)
+        except StopIteration:
+            return
+
     def remove_outdated(self):
         try:
             keys_set = self.outdated_keys.popleft()
+            if len(keys_set) == 0:
+                return
         except IndexError:
             return
 
@@ -320,7 +340,8 @@ class YdbQueue(object):
         )
         try:
             session.execute(query, settings=self.ops)
-            self.update_stats(session, EventKind.ALTER_TABLE)
+            self.update_stats(EventKind.ALTER_TABLE)
+            self.pool.release(session)
         except ydb.Error as e:
             self.stats.save_event(EventKind.ALTER_TABLE, e.status)
 
@@ -335,9 +356,11 @@ class YdbQueue(object):
             session = self.pool.acquire()
             try:
                 session.drop_table(candidate, settings=self.ops)
-                self.update_stats(session, EventKind.DROP_TABLE)
+                self.update_stats(EventKind.DROP_TABLE)
+                self.pool.release(session)
             except ydb.Error as e:
                 self.stats.save_event(EventKind.DROP_TABLE, e.status)
+                self.pool.release(session)
 
 
 class Workload:
@@ -355,16 +378,20 @@ class Workload:
             YdbQueue(idx, database, self.workload_stats, self.driver, self.pool, self.mode)
             for idx in range(2)
         ]
+        self.pool_semaphore = threading.BoundedSemaphore(value=1000)
+        self.worker_exception = []
 
     def random_points(self, size=1):
         return set([random.randint(0, self.round_size) for _ in range(size)])
 
     def wrapper(self, f):
         try:
-            f()
+            if len(self.worker_exception) == 0:
+                f()
         except Exception as e:
-            print(f"FATAL: {e}")
-            os._exit(1)
+            self.worker_exception.append(e)
+        finally:
+            self.pool_semaphore.release()
 
     def loop(self):
         started_at = time.time()
@@ -374,14 +401,14 @@ class Workload:
         while time.time() - started_at < self.duration:
 
             for ydb_queue in self.ydb_queues:
-                yield lambda: self.wrapper(ydb_queue.list_working_dir)
-                yield lambda: self.wrapper(ydb_queue.list_copies_dir)
+                yield ydb_queue.list_working_dir
+                yield ydb_queue.list_copies_dir
                 print("Table name: %s" % ydb_queue.table_name)
 
             round_id = next(round_id_it)
             if round_id % 10 == 0:
                 for ydb_queue in self.ydb_queues:
-                    yield lambda: self.wrapper(ydb_queue.prepare_new_queue)
+                    yield ydb_queue.prepare_new_queue
 
             self.workload_stats.print_stats()
 
@@ -406,9 +433,9 @@ class Workload:
                 if step_id % 100 == 0:
                     print("step_id %d" % step_id)
 
-                yield lambda: self.wrapper(ydb_queue.write)
-                yield lambda: self.wrapper(ydb_queue.find_outdated)
-                yield lambda: self.wrapper(ydb_queue.remove_outdated)
+                yield ydb_queue.write
+                yield ydb_queue.find_outdated
+                yield ydb_queue.remove_outdated
 
                 while len(schedule) > 0:
                     scheduled_at, op = schedule[0]
@@ -416,7 +443,7 @@ class Workload:
                         break
 
                     schedule.popleft()
-                    yield lambda: self.wrapper(getattr(ydb_queue, op))
+                    yield getattr(ydb_queue, op)
 
     def __enter__(self):
         return self
@@ -426,11 +453,10 @@ class Workload:
         self.driver.stop()
 
     def start(self):
-        workers = []
-
+        pool = ThreadPoolExecutor()
         for lambda_call in self.loop():
-            t = threading.Thread(target=lambda_call)
-            workers.append(t)
-            t.start()
-        for t in workers:
-            t.join()
+            if len(self.worker_exception) == 0 and self.pool_semaphore.acquire():
+                pool.submit(self.wrapper, lambda_call)
+            else:
+                assert False, f"Worker exceptions {self.worker_exception}"
+        pool.shutdown(wait=True)

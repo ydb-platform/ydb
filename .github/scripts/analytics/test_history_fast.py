@@ -3,6 +3,7 @@
 import ydb
 import configparser
 import os
+import time
 
 # Load configuration
 dir = os.path.dirname(__file__)
@@ -17,20 +18,19 @@ DATABASE_PATH = config["QA_DB"]["DATABASE_PATH"]
 def check_table_exists(session, table_path):
     """Check if table exists"""
     try:
-        print(f"Checking if table exists: '{table_path}'")
         session.describe_table(table_path)
-        print(f"Table '{table_path}' already exists.")
         return True
     except ydb.SchemeError as e:
-        print(f"Table '{table_path}' does not exist, error: {e}")
+        print(f"Table does not exist, error: {e}")
         return False
     except Exception as e:
-        print(f"Unexpected error while checking table '{table_path}': {e}")
+        print(f"Unexpected error while checking table: {e}")
         return False
 
 
 def create_test_history_fast_table(session, table_path):
     print(f"> Creating table: '{table_path}'")
+    start_time = time.time()
     try:
         session.execute_scheme(f"""
             CREATE TABLE `{table_path}` (
@@ -57,14 +57,17 @@ def create_test_history_fast_table(session, table_path):
             TTL = Interval("P7D") ON run_timestamp
             )
         """)
-        print(f"Table '{table_path}' created successfully with 7-day TTL")
+        elapsed = time.time() - start_time
+        print(f"Table '{table_path}' created successfully with 7-day TTL (took {elapsed:.2f}s)")
     except Exception as e:
-        print(f"Error creating table '{table_path}': {e}")
+        elapsed = time.time() - start_time
+        print(f"Error creating table '{table_path}': {e} (took {elapsed:.2f}s)")
         raise
 
 
 def bulk_upsert(table_client, table_path, rows):
     print(f"> Bulk upsert into: {table_path}")
+    start_time = time.time()
     column_types = (
         ydb.BulkUpsertColumns()
         .add_column("build_type", ydb.OptionalType(ydb.PrimitiveType.Utf8))
@@ -84,53 +87,63 @@ def bulk_upsert(table_client, table_path, rows):
         .add_column("owners", ydb.OptionalType(ydb.PrimitiveType.Utf8))
     )
     table_client.bulk_upsert(table_path, rows, column_types)
+    elapsed = time.time() - start_time
+    print(f"Bulk upsert completed: {len(rows)} rows (took {elapsed:.2f}s)")
 
 
 def get_missed_data_for_upload(driver, full_table_path):
+    print(f'Fetching missed data')
+    start_time = time.time()
     results = []
     query = f"""
-       SELECT 
+    SELECT 
         build_type, 
         job_name, 
         job_id, 
         commit, 
         branch, 
         pull, 
-        run_timestamp, 
+        all_data.run_timestamp as run_timestamp, 
         test_id, 
         suite_folder, 
         test_name,
-        cast(suite_folder || '/' || test_name as UTF8) as full_name, 
+        cast(suite_folder || '/' || test_name as UTF8)  as full_name, 
         duration,
         status,
         status_description,
         owners
-    FROM `test_results/test_runs_column`
+    FROM `test_results/test_runs_column`  as all_data
+    LEFT JOIN (
+        select distinct run_timestamp  from `{full_table_path}`
+    ) as fast_data_missed
+    ON all_data.run_timestamp = fast_data_missed.run_timestamp
     WHERE
-        run_timestamp >= CurrentUtcDate() - 6*Interval("P1D")
-        and (branch = 'main' or branch like 'stable-%')
-        and test_name NOT LIKE '%.flake8%'
-        and test_name NOT LIKE '%chunk chunk%'
-        and test_name NOT LIKE '%chunk+chunk%'
-        and NOT EXISTS (
-            SELECT 1 FROM `{full_table_path}` 
-            WHERE run_timestamp = `test_results/test_runs_column`.run_timestamp
-        )
+        all_data.run_timestamp >= CurrentUtcDate() - 6*Interval("P1D")
+        and String::Contains(all_data.test_name, '.flake8')  = FALSE
+        and (CASE 
+            WHEN String::Contains(all_data.test_name, 'chunk chunk') OR String::Contains(all_data.test_name, 'chunk+chunk') THEN TRUE
+            ELSE FALSE
+            END) = FALSE
+        and (all_data.branch = 'main' or all_data.branch like 'stable-%')
+        and fast_data_missed.run_timestamp is NULL
     """
 
     scan_query = ydb.ScanQuery(query, {})
     it = driver.table_client.scan_query(scan_query)
-    print(f'missed data capturing')
     while True:
         try:
             result = next(it)
             results.extend(result.result_set.rows)
         except StopIteration:
             break
+    elapsed = time.time() - start_time
+    print(f'Total missed data captured: {len(results)} records (took {elapsed:.2f}s)')
     return results
 
 
 def main():
+    print("Starting test_history_fast script")
+    script_start_time = time.time()
 
     if "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS" not in os.environ:
         print(
@@ -157,21 +170,24 @@ def main():
         with ydb.SessionPool(driver) as pool:
             # Проверяем существование таблицы и создаем её если нужно
             def check_and_create_table(session):
-                print(f"Starting table check for: {full_table_path}")
+                print(f"Checking table: {full_table_path}")
+                table_check_start = time.time()
                 exists = check_table_exists(session, full_table_path)
                 if not exists:
-                    print("Table does not exist, creating...")
+                    print("Creating table...")
                     create_test_history_fast_table(session, full_table_path)
                     # Проверяем, что таблица действительно создалась
                     exists_after_creation = check_table_exists(session, full_table_path)
                     if exists_after_creation:
-                        print("Table created and verified successfully")
+                        table_check_elapsed = time.time() - table_check_start
+                        print(f"Table created and verified successfully (took {table_check_elapsed:.2f}s)")
                     else:
                         print("ERROR: Table was not created successfully!")
                         return False
                     return True
                 else:
-                    print("Table already exists, proceeding...")
+                    table_check_elapsed = time.time() - table_check_start
+                    print(f"Table already exists (took {table_check_elapsed:.2f}s)")
                 return exists
             
             pool.retry_operation_sync(check_and_create_table)
@@ -180,13 +196,21 @@ def main():
             prepared_for_upload_rows = get_missed_data_for_upload(driver, full_table_path)
             print(f'Preparing to upsert: {len(prepared_for_upload_rows)} rows')
             if prepared_for_upload_rows:
+                upload_start_time = time.time()
                 for start in range(0, len(prepared_for_upload_rows), batch_size):
+                    batch_start_time = time.time()
                     batch_rows_for_upload = prepared_for_upload_rows[start:start + batch_size]
                     print(f'upserting: {start}-{start + len(batch_rows_for_upload)}/{len(prepared_for_upload_rows)} rows')
                     bulk_upsert(driver.table_client, full_table_path, batch_rows_for_upload)
-                print('Tests uploaded')
+                    batch_elapsed = time.time() - batch_start_time
+                    print(f'Batch completed (took {batch_elapsed:.2f}s)')
+                upload_elapsed = time.time() - upload_start_time
+                print(f'All tests uploaded (total upload time: {upload_elapsed:.2f}s)')
             else:
                 print('Nothing to upload')
+    
+    script_elapsed = time.time() - script_start_time
+    print(f"Script completed successfully (total time: {script_elapsed:.2f}s)")
 
 
 if __name__ == "__main__":

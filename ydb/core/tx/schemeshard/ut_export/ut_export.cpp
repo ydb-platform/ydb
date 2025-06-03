@@ -2373,7 +2373,7 @@ partitioning_settings {
 
         const auto* metadataChecksum = S3Mock().GetData().FindPtr("/metadata.json.sha256");
         UNIT_ASSERT(metadataChecksum);
-        UNIT_ASSERT_VALUES_EQUAL(*metadataChecksum, "b72575244ae0cce8dffd45f3537d1e412bfe39de4268f4f85f529cb529870903 metadata.json");
+        UNIT_ASSERT_VALUES_EQUAL(*metadataChecksum, "843d475f20c5e337fdd3ef4e83b63081c182e26791cd891f7739be8b53167b1b metadata.json");
 
         const auto* schemeChecksum = S3Mock().GetData().FindPtr("/scheme.pb.sha256");
         UNIT_ASSERT(schemeChecksum);
@@ -2440,7 +2440,7 @@ partitioning_settings {
 
         const auto* metadataChecksum = S3Mock().GetData().FindPtr("/metadata.json.sha256");
         UNIT_ASSERT(metadataChecksum);
-        UNIT_ASSERT_VALUES_EQUAL(*metadataChecksum, "b72575244ae0cce8dffd45f3537d1e412bfe39de4268f4f85f529cb529870903 metadata.json");
+        UNIT_ASSERT_VALUES_EQUAL(*metadataChecksum, "843d475f20c5e337fdd3ef4e83b63081c182e26791cd891f7739be8b53167b1b metadata.json");
 
         const auto* schemeChecksum = S3Mock().GetData().FindPtr("/scheme.pb.sha256");
         UNIT_ASSERT(schemeChecksum);

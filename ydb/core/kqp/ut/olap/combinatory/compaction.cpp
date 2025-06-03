@@ -16,19 +16,14 @@ TConclusionStatus TOneCompactionCommand::DoExecute(TKikimrRunner& /*kikimr*/) {
     auto controller = NYDBTest::TControllers::GetControllerAs<NYDBTest::NColumnShard::TController>();
     AFL_VERIFY(controller);
     AFL_VERIFY(!controller->IsBackgroundEnable(NKikimr::NYDBTest::ICSController::EBackground::Compaction));
-    const i64 compactions = controller->GetCompactionFinishedCounter().Val();
+    const i64 before = controller->GetCompactionFinishedCounter().Val();
     controller->EnableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
-    const TInstant start = TInstant::Now();
-    while (TInstant::Now() - start < TDuration::Seconds(5)) {
-        if (compactions < controller->GetCompactionFinishedCounter().Val()) {
-            Cerr << "COMPACTION_HAPPENED: " << compactions << " -> " << controller->GetCompactionFinishedCounter().Val() << Endl;
-            break;
-        }
-        Cerr << "WAIT_COMPACTION: " << controller->GetCompactionFinishedCounter().Val() << Endl;
-        Sleep(TDuration::MilliSeconds(300));
-    }
-    AFL_VERIFY(compactions < controller->GetCompactionFinishedCounter().Val());
+    const bool ok = controller->WaitCompactions(TDuration::Seconds(30));
+    AFL_VERIFY(ok);
+    const i64 after = controller->GetCompactionFinishedCounter().Val();
+    AFL_VERIFY(before < after);
     controller->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
+
     return TConclusionStatus::Success();
 }
 

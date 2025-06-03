@@ -71,11 +71,9 @@ namespace NKikimr::NKqp {
         return NYql::IHTTPGateway::Make(&httpGatewayConfig, httpGatewayGroup);
     }
 
-    NYql::IPqGateway::TPtr MakePqGateway(const NYql::TPqGatewayConfig& pqGatewayConfig) {
-        NYdb::TDriverConfig config;
-        NYdb::TDriver driver(config);
+    NYql::IPqGateway::TPtr MakePqGateway(const std::shared_ptr<NYdb::TDriver>& driver, const NYql::TPqGatewayConfig& pqGatewayConfig) {
         NYql::TPqGatewayServices pqServices(
-            driver,
+            *driver,
             nullptr,
             nullptr,
             std::make_shared<NYql::TPqGatewayConfig>(pqGatewayConfig),
@@ -131,13 +129,13 @@ namespace NKikimr::NKqp {
         YtGateway = MakeYtGateway(appData->FunctionRegistry, queryServiceConfig);
         DqTaskTransformFactory = NYql::CreateYtDqTaskTransformFactory(true);
 
-        PqGatewayConfig = queryServiceConfig.GetPq();
-        PqGateway = MakePqGateway(PqGatewayConfig);
-
         ActorSystemPtr = std::make_shared<NKikimr::TDeferredActorLogBackend::TAtomicActorSystemPtr>(nullptr);
         NYdb::TDriverConfig cfg;
         cfg.SetLog(std::make_unique<NKikimr::TDeferredActorLogBackend>(ActorSystemPtr, NKikimrServices::EServiceKikimr::YDB_SDK));
         Driver = std::make_shared<NYdb::TDriver>(cfg);
+
+        PqGatewayConfig = queryServiceConfig.GetPq();
+        PqGateway = MakePqGateway(Driver, PqGatewayConfig);
 
         // Initialize Token Accessor
         if (appConfig.GetAuthConfig().HasTokenAccessorConfig()) {

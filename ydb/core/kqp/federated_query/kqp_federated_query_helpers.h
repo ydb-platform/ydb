@@ -32,7 +32,7 @@ namespace NKikimr::NKqp {
 
     NYql::IHTTPGateway::TPtr MakeHttpGateway(const NYql::THttpGatewayConfig& httpGatewayConfig, NMonitoring::TDynamicCounterPtr countersRoot);
 
-    NYql::IPqGateway::TPtr MakePqGateway(const NYql::TPqGatewayConfig& pqGatewayConfig);
+    NYql::IPqGateway::TPtr MakePqGateway(const std::shared_ptr<NYdb::TDriver>& driver, const NYql::TPqGatewayConfig& pqGatewayConfig);
 
 
     struct TKqpFederatedQuerySetup {

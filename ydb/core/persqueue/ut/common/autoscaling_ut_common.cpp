@@ -185,7 +185,7 @@ struct TTestReadSession : public ITestReadSession {
         std::optional<std::unordered_map<TString, std::set<size_t>>> ExpectedPartitions;
 
         std::set<size_t> EndedPartitions;
-        std::vector<TReadSessionEvent::TEndPartitionSessionEvent> EndedPartitionEvents;
+        std::vector<NYdb::NTopic::TReadSessionEvent::TEndPartitionSessionEvent> EndedPartitionEvents;
 
         TMutex Lock;
         TSemaphore Semaphore;
@@ -275,7 +275,7 @@ std::shared_ptr<TTestReadSession<SdkVersion::Topic>::TSdkReadSession> TTestReadS
 
     readSettings.EventHandlers_.StartPartitionSessionHandler(
             [impl=Impl]
-            (TReadSessionEvent::TStartPartitionSessionEvent& ev) mutable {
+            (NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent& ev) mutable {
                 Cerr << ">>>>> " << impl->Name << " Received TStartPartitionSessionEvent message " << ev.DebugString() << Endl << Flush;
                 auto partitionId = ev.GetPartitionSession()->GetPartitionId();
                 auto topic = ev.GetPartitionSession()->GetTopicPath();
@@ -292,7 +292,7 @@ std::shared_ptr<TTestReadSession<SdkVersion::Topic>::TSdkReadSession> TTestReadS
 
     readSettings.EventHandlers_.StopPartitionSessionHandler(
             [impl=Impl]
-            (TReadSessionEvent::TStopPartitionSessionEvent& ev) mutable {
+            (NYdb::NTopic::TReadSessionEvent::TStopPartitionSessionEvent& ev) mutable {
                 Cerr << ">>>>> " << impl->Name << " Received TStopPartitionSessionEvent message " << ev.DebugString() << Endl << Flush;
                 auto partitionId = ev.GetPartitionSession()->GetPartitionId();
                 auto topic = ev.GetPartitionSession()->GetTopicPath();
@@ -303,7 +303,7 @@ std::shared_ptr<TTestReadSession<SdkVersion::Topic>::TSdkReadSession> TTestReadS
 
     readSettings.EventHandlers_.PartitionSessionClosedHandler(
             [impl=Impl]
-            (TReadSessionEvent::TPartitionSessionClosedEvent& ev) mutable {
+            (NYdb::NTopic::TReadSessionEvent::TPartitionSessionClosedEvent& ev) mutable {
                 Cerr << ">>>>> " << impl->Name << " Received TPartitionSessionClosedEvent message " << ev.DebugString() << Endl << Flush;
                 auto partitionId = ev.GetPartitionSession()->GetPartitionId();
                 auto topic = ev.GetPartitionSession()->GetTopicPath();
@@ -313,13 +313,13 @@ std::shared_ptr<TTestReadSession<SdkVersion::Topic>::TSdkReadSession> TTestReadS
 
     readSettings.EventHandlers_.SessionClosedHandler(
                     [impl=Impl]
-            (const TSessionClosedEvent& ev) mutable {
+            (const NYdb::NTopic::TSessionClosedEvent& ev) mutable {
                 Cerr << ">>>>> " << impl->Name << " Received TSessionClosedEvent message " << ev.DebugString() << Endl << Flush;
     });
 
     readSettings.EventHandlers_.EndPartitionSessionHandler(
             [impl=Impl]
-            (TReadSessionEvent::TEndPartitionSessionEvent& ev) mutable {
+            (NYdb::NTopic::TReadSessionEvent::TEndPartitionSessionEvent& ev) mutable {
                 Cerr << ">>>>> " << impl->Name << " Received TEndPartitionSessionEvent message " << ev.DebugString() << Endl << Flush;
                 auto partitionId = ev.GetPartitionSession()->GetPartitionId();
                 impl->EndedPartitions.insert(partitionId);

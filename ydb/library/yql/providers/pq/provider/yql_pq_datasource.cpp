@@ -245,7 +245,9 @@ public:
         cluster.SetEndpoint(location);
         cluster.SetToken(properties.Value("token", ""));
         cluster.SetDatabase(properties.Value("database_name", ""));
-        cluster.SetUseSsl(properties.Value("use_ssl", "true") == "true"sv);
+        TString useTls = properties.Value("use_tls", "false");
+        useTls.to_lower();
+        cluster.SetUseSsl(useTls == "true"sv);
 
         State_->Configuration->AddCluster(cluster, State_->DatabaseIds, State_->Types->Credentials, State_->DbResolver, properties);
         Gateway_->AddCluster(cluster);

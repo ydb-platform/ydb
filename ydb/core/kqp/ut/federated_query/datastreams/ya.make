@@ -3,12 +3,8 @@ UNITTEST_FOR(ydb/core/kqp)
 FORK_SUBTESTS()
 SPLIT_FACTOR(50)
 
-IF (SANITIZER_TYPE OR WITH_VALGRIND)
-    SIZE(LARGE)
-    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
-ELSE()
-    SIZE(MEDIUM)
-ENDIF()
+SIZE(MEDIUM)
+TIMEOUT(120)
 
 SRCS(
     datastreams_scheme_ut.cpp

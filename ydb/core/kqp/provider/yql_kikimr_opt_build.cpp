@@ -784,6 +784,7 @@ bool ExploreTx(TExprBase root, TExprContext& ctx, const TKiDataSink& dataSink, T
     };
 
     VisitExpr(root.Ptr(), preFunc, postFunc);
+
     return !hasErrors;
 }
 

@@ -23,11 +23,11 @@ private:
     }
 
     virtual bool IsAppropriatePortionToMove(const TPortionInfoForCompaction& info) const override {
-        return info.GetTotalBlobsSize() > NextLevel->GetExpectedPortionSize();
+        return info.GetTotalBlobBytes() > NextLevel->GetExpectedPortionSize();
     }
 
     virtual bool IsAppropriatePortionToStore(const TPortionInfoForCompaction& info) const override {
-        return info.GetTotalBlobsSize() > GetExpectedPortionSize();
+        return info.GetTotalBlobBytes() > GetExpectedPortionSize();
     }
 
     virtual ui64 DoGetAffectedPortionBytes(const NArrow::TSimpleRow& /*from*/, const NArrow::TSimpleRow& /*to*/) const override {

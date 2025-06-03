@@ -277,7 +277,7 @@ namespace NKikimr::NStorage {
                 const TPDiskId pdiskId(vslotId.GetNodeId(), vslotId.GetPDiskId());
                 if (const auto it = pdisks.find(pdiskId); it != pdisks.end()) {
                     TPDiskInfo& pdiskInfo = it->second;
-                    ++pdiskInfo.UsedSlots;
+                    ++pdiskInfo.UsedSlots; // TODO(ydynnikov): account GroupSizeInUnits
                     if (pdiskInfo.AdjustSpaceAvailable && vslot.GetStatus() != "READY" && vslot.HasVDiskMetrics()) {
                         if (const auto& m = vslot.GetVDiskMetrics(); m.HasAllocatedSize()) {
                             pdiskInfo.SpaceAvailable += m.GetAllocatedSize() - maxGroupSlotSize[vslot.GetGroupId()];
@@ -363,7 +363,7 @@ namespace NKikimr::NStorage {
 
             for (const auto& [pdiskId, incr] : usageIncr) {
                 if (const auto it = pdisks.find(pdiskId); it != pdisks.end()) {
-                    it->second.UsedSlots += incr;
+                    it->second.UsedSlots += incr; // TODO(ydynnikov): account GroupSizeInUnits
                 } else {
                     Y_ABORT("missing PDiskId from group");
                 }
@@ -373,7 +373,7 @@ namespace NKikimr::NStorage {
                 const auto& loc = vdisk.GetVDiskLocation();
                 const TPDiskId pdiskId(loc.GetNodeID(), loc.GetPDiskID());
                 if (const auto it = pdisks.find(pdiskId); it != pdisks.end()) {
-                    ++it->second.UsedSlots;
+                    ++it->second.UsedSlots; // TODO(ydynnikov): account GroupSizeInUnits
                 }
 
                 auto& m = maxVSlotId[pdiskId];
@@ -468,7 +468,8 @@ namespace NKikimr::NStorage {
         };
 
         TString error;
-        if (!mapper.AllocateGroup(groupId.GetRawId(), groupDefinition, replacedDisks, forbid, requiredSpace, false, error)) {
+        // TODO(ydynnikov): account GroupSizeInUnits
+        if (!mapper.AllocateGroup(groupId.GetRawId(), groupDefinition, replacedDisks, forbid, 1u, requiredSpace, false, error)) {
             throw TExConfigError() << "group allocation failed Error# " << error
                 << " groupDefinition# " << dumpGroupDefinition();
         }

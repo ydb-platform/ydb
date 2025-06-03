@@ -1,7 +1,6 @@
 #include "collection.h"
 
 #include <yql/essentials/core/yql_expr_type_annotation.h>
-#include <yql/essentials/providers/common/provider/yql_provider.h>
 #include <yql/essentials/utils/log/log.h>
 
 #include <vector>
@@ -31,8 +30,6 @@ public:
     {}
 
     void MarkupPredicates(TExprContext& ctx, const TExprBase& predicate, TPredicateNode& predicateTree) {
-        Cout << "MarkupPredicates: " << NCommon::ExprToPrettyString(ctx, predicate.Ref()) << Endl;
-
         if (auto coalesce = predicate.Maybe<TCoCoalesce>()) {
             if (Settings.IsEnabled(EFlag::JustPassthroughOperators)) {
                 CollectChildrenPredicates(ctx, predicate, predicateTree);
@@ -318,11 +315,9 @@ private:
             return IsSupportedSafeCast(ctx, maybeSafeCast.Cast());
         }
         if (node.Ref().IsCallable({"ToBytes"})) {
-            Cout << "CheckExpressionNodeForPushdown -> ToBytes" << Endl;
             return IsSupportedToBytes(ctx, node);
         }
         if (node.Ref().IsCallable({"ToString"})) {
-            Cout << "CheckExpressionNodeForPushdown -> ToString" << Endl;
             return IsSupportedToString(ctx, node);
         }
         if (auto maybeData = node.Maybe<TCoDataCtor>()) {

@@ -10,17 +10,17 @@ namespace NYql {
 
     bool IsEmptyFilterPredicate(const NNodes::TCoLambda& lambda);
     bool SerializeFilterPredicate(
+        TExprContext& ctx,
         const NNodes::TExprBase& predicateBody,
         const NNodes::TCoArgument& predicateArgument,
         NConnector::NApi::TPredicate* proto,
-        TStringBuilder& err,
-        TExprContext& ctx
+        TStringBuilder& err
     );
     bool SerializeFilterPredicate(
+        TExprContext& ctx,
         const NNodes::TCoLambda& predicate, 
         NConnector::NApi::TPredicate* proto,
-        TStringBuilder& err,
-        TExprContext& ctx
+        TStringBuilder& err
     );
     TString FormatWhere(const NConnector::NApi::TPredicate& predicate);
 } // namespace NYql

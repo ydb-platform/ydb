@@ -405,7 +405,7 @@ public:
 
                 if (auto predicate = parseSettings.FilterPredicate(); !IsEmptyFilterPredicate(predicate)) {
                     TStringBuilder err;
-                    if (!SerializeFilterPredicate(predicate, srcDesc.mutable_predicate(), err, ctx)) {
+                    if (!SerializeFilterPredicate(ctx, predicate, srcDesc.mutable_predicate(), err)) {
                         ythrow yexception() << "Failed to serialize filter predicate for source: " << err;
                     }
                 }

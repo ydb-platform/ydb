@@ -4,7 +4,6 @@
 #include <ydb/core/fq/libs/common/util.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <util/string/cast.h>
-#include <yql/essentials/providers/common/provider/yql_provider.h>
 
 namespace NYql {
 
@@ -462,7 +461,6 @@ namespace NYql {
         }
 
         bool SerializeRegexp(const TCoUdf& regexp, const TExprNode::TListType& children, TPredicate* proto, TSerializationContext& ctx, ui64 depth) {
-            Cout << "SerializeRegexp" << Endl;
             if (children.size() != 2) {
                 ctx.Err << "expected exactly one argument for UDF function Re2.Grep, but got: " << children.size() - 1;
                 return false;
@@ -502,8 +500,6 @@ namespace NYql {
         }
 
         bool SerializePredicate(const TExprBase& predicate, TPredicate* proto, TSerializationContext& ctx, ui64 depth) {
-            Cout << "SerializePredicate: " << NCommon::ExprToPrettyString(ctx.Ctx, predicate.Ref())   << Endl;
-
             if (auto compare = predicate.Maybe<TCoCompare>()) {
                 return SerializeCompare(compare.Cast(), proto, ctx, depth);
             }
@@ -952,18 +948,23 @@ namespace NYql {
     }
 
     bool SerializeFilterPredicate(
+        TExprContext& ctx,
         const TExprBase& predicateBody,
         const TCoArgument& predicateArgument, 
         NConnector::NApi::TPredicate* proto,
-        TStringBuilder& err,
-        TExprContext& ctx
+        TStringBuilder& err
     ) {
         TSerializationContext serializationContext = {.Arg = predicateArgument, .Err = err, .Ctx = ctx};
         return SerializePredicate(predicateBody, proto, serializationContext, 0);
     }
 
-    bool SerializeFilterPredicate(const TCoLambda& predicate, TPredicate* proto, TStringBuilder& err, TExprContext& ctx) {
-        return SerializeFilterPredicate(predicate.Body(), predicate.Args().Arg(0), proto, err, ctx);
+    bool SerializeFilterPredicate(
+        TExprContext& ctx,
+        const TCoLambda& predicate, 
+        TPredicate* proto, 
+        TStringBuilder& err 
+    ) {
+        return SerializeFilterPredicate(ctx, predicate.Body(), predicate.Args().Arg(0), proto, err);
     }
 
     TString FormatWhere(const TPredicate& predicate) {

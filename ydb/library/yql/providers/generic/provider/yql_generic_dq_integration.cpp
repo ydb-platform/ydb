@@ -2,18 +2,17 @@
 #include "yql_generic_mkql_compiler.h"
 #include "yql_generic_predicate_pushdown.h"
 
-#include <yql/essentials/ast/yql_expr.h>
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
-#include <yql/essentials/providers/common/dq/yql_dq_integration_impl.h>
-#include <ydb/library/yql/providers/generic/expr_nodes/yql_generic_expr_nodes.h>
-#include <ydb/library/yql/providers/generic/proto/source.pb.h>
-#include <ydb/library/yql/providers/generic/proto/partition.pb.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/utils.h>
-#include <yql/essentials/providers/common/provider/yql_provider.h>
-#include <yql/essentials/utils/log/log.h>
+#include <ydb/library/yql/providers/generic/expr_nodes/yql_generic_expr_nodes.h>
+#include <ydb/library/yql/providers/generic/proto/partition.pb.h>
+#include <ydb/library/yql/providers/generic/proto/source.pb.h>
 #include <ydb/library/yql/utils/plan/plan_utils.h>
+#include <yql/essentials/ast/yql_expr.h>
+#include <yql/essentials/providers/common/dq/yql_dq_integration_impl.h>
+#include <yql/essentials/utils/log/log.h>
 
 namespace NYql {
 
@@ -219,10 +218,9 @@ namespace NYql {
                         *column->mutable_type() = type;
                     }
 
-                    Cout << "Filter predicate: " << NCommon::ExprToPrettyString(ctx, node) << Endl;
                     if (auto predicate = settings.FilterPredicate(); !IsEmptyFilterPredicate(predicate)) {
                         TStringBuilder err;
-                        if (!SerializeFilterPredicate(predicate, select->mutable_where()->mutable_filter_typed(), err, ctx)) {
+                        if (!SerializeFilterPredicate(ctx, predicate, select->mutable_where()->mutable_filter_typed(), err)) {
                             throw yexception() << "Failed to serialize filter predicate for source: " << err;
                         }
                     }

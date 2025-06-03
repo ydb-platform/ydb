@@ -18,15 +18,26 @@ current_binary_version = (float("+inf"), )
 last_stable_version = None
 prelast_stable_version = None
 
+
+def string_version_to_tuple(s):
+    result = []
+    for elem in s.split("-"):
+        try:
+            result.append(int(elem))
+        except ValueError:
+            result.append(float("NaN"))
+    return tuple(result)
+
+
 current_name = "current"
 last_stable_name = "last"
 if last_stable_binary_path is not None:  # in import_test yatest.common.binary_path returns None
     last_stable_name = open(yatest.common.binary_path("ydb/tests/library/compatibility/binaries/ydbd-last-stable-name")).read().strip()
-    last_stable_version = tuple(int(val) for val in last_stable_name.split("-"))
+    last_stable_version = string_version_to_tuple(last_stable_name)
 prelast_stable_name = "prelast"
 if prelast_stable_binary_path:  # in import_test yatest.common.binary_path returns None
     prelast_stable_name = open(yatest.common.binary_path("ydb/tests/library/compatibility/binaries/ydbd-prelast-stable-name")).read().strip()
-    prelast_stable_version = tuple(int(val) for val in prelast_stable_name.split("-"))
+    prelast_stable_version = string_version_to_tuple(prelast_stable_name)
 
 path_to_version = {
     current_binary_path: current_binary_version,

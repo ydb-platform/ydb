@@ -65,7 +65,7 @@ TMessagePtr<TSaslAuthenticateResponseData> TKafkaTestClient::SaslAuthenticate(co
     TRequestHeaderData header = Header(NKafka::EApiKey::SASL_AUTHENTICATE, 2);
 
     TSaslAuthenticateRequestData request;
-    request.AuthBytes = TKafkaRawBytes(authBytes.data(), authBytes.size());
+    request.AuthBytes = ToRawBytes(authBytes);
 
     return WriteAndRead<TSaslAuthenticateResponseData>(header, request);
 }
@@ -142,12 +142,12 @@ TMessagePtr<TProduceResponseData> TKafkaTestClient::Produce(const TTopicPartitio
                                                             std::optional<TString> transactionalId) {
     TKafkaRecordBatch batch;
     batch.BaseSequence = baseSequence;
-    batch.Magic = 2; // Current supported
+    batch.Magic = TKafkaRecordBatch::MagicMeta::Default;
     batch.Records.resize(keyValueMessages.size());
     for (ui32 i = 0; i < keyValueMessages.size(); i++) {
         auto& keyValueMessage = keyValueMessages[i];
-        batch.Records[i].Key = TKafkaRawBytes(keyValueMessage.first.data(), keyValueMessage.first.size());
-        batch.Records[i].Value = TKafkaRawBytes(keyValueMessage.second.data(), keyValueMessage.second.size());
+        batch.Records[i].Key = ToRawBytes(keyValueMessage.first);
+        batch.Records[i].Value = ToRawBytes(keyValueMessage.first);
     }
     if (producerInstanceId) {
         batch.ProducerId = producerInstanceId->Id;

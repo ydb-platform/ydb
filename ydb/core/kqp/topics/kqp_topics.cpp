@@ -29,8 +29,7 @@ static void UpdateKafkaProducerInstanceId(TMaybe<NKafka::TProducerInstanceId>& l
     if (lhs) {
         if ((rhs != Nothing()) && (rhs != lhs)) {
             // we set this to make sure PQ Tablet will not find relevant Kafka producer instance and will abort the transaction and log correct error
-            // ToDo: replace magic numbers with common constant
-            lhs = {-1, -1};
+            lhs = NKafka::INVALID_PRODUCER_INSTANCE_ID;
         }
     } else {
         lhs = rhs;

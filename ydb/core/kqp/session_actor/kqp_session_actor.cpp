@@ -2078,7 +2078,7 @@ public:
         }
 
         if (replyTopicOperations) {
-            if (HasTopicWriteId() && !HasKafkaWriteOperations()) {
+            if (HasTopicApiWriteOperations() && !HasKafkaApiWriteOperations()) {
                 auto* w = response->MutableTopicOperations();
                 auto* writeId = w->MutableWriteId();
                 writeId->SetNodeId(SelfId().NodeId());
@@ -2859,7 +2859,7 @@ private:
             ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST) << message;
         }
 
-        if (HasTopicWriteOperations() && !HasTopicWriteId() && !HasKafkaWriteOperations()) {
+        if (HasTopicWriteOperations() && !HasTopicApiWriteOperations() && !HasKafkaApiWriteOperations()) {
             Send(MakeTxProxyID(), new TEvTxUserProxy::TEvAllocateTxId, 0, QueryState->QueryId);
         } else {
             ReplySuccess();
@@ -2881,11 +2881,11 @@ private:
         return QueryState->TxCtx->TopicOperations.HasWriteOperations();
     }
 
-    bool HasKafkaWriteOperations() const {
+    bool HasKafkaApiWriteOperations() const {
         return QueryState->TxCtx->TopicOperations.HasKafkaOperations() && QueryState->TxCtx->TopicOperations.HasWriteOperations();
     }
 
-    bool HasTopicWriteId() const {
+    bool HasTopicApiWriteOperations() const {
         return QueryState->TxCtx->TopicOperations.HasWriteId();
     }
 

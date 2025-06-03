@@ -368,7 +368,7 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, private TR
             hFunc(TEvPersQueue::TEvResponse, HandleOwnership);
             hFunc(TEvPartitionWriter::TEvWriteRequest, HoldPending);
             HFunc(NKqp::TEvKqp::TEvQueryResponse, HandlePartitionIdSaved);
-            SFunc(TEvents::TEvWakeup, SavePartitionId);
+            SFunc(TEvents::TEvWakeup, SavePartitionIdToKqpTxn);
         default:
             return StateBase(ev);
         }
@@ -397,14 +397,15 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, private TR
             SupportivePartitionId = reply.GetSupportivePartition();
         }
 
+        // we do not save partition id to KQP in Kafka transaction, because we do not have KQP transaction during write request in Kafka API
         if (HasWriteId() && !IsKafkaTransactionWriter()) {
-            SavePartitionId(ActorContext());
+            SavePartitionIdToKqpTxn(ActorContext());
         } else {
             GetMaxSeqNo();
         }
     }
 
-    void SavePartitionId(const TActorContext& ctx) {
+    void SavePartitionIdToKqpTxn(const TActorContext& ctx) {
         Y_ABORT_UNLESS(HasWriteId());
         Y_ABORT_UNLESS(HasSupportivePartitionId());
 

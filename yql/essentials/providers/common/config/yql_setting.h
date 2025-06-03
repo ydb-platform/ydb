@@ -41,6 +41,14 @@ public:
 #endif
     }
 
+    bool IsPerCluster() const {
+#ifdef YQL_BETTER_CONF_SETTING_API
+        return SettingType == EConfSettingType::Dynamic || SettingType == EConfSettingType::StaticPerCluster;
+#else
+        return RUNTIME || PERCLUSTER;
+#endif
+    }
+
     TType& operator[](const TString& cluster) {
         if (ALL_CLUSTERS == cluster) {
             PerClusterValue.clear();
@@ -110,6 +118,10 @@ public:
     ~TConfSetting() = default;
 
     bool IsRuntime() const {
+        return false;
+    }
+
+    bool IsPerCluster() const {
         return false;
     }
 

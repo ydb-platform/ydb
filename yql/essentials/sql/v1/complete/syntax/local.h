@@ -55,6 +55,7 @@ namespace NSQLComplete {
         TMaybe<THint> Hint;
         TMaybe<TObject> Object;
         TMaybe<TCluster> Cluster;
+        bool Binding = false;
         TEditRange EditRange;
     };
 
@@ -66,6 +67,7 @@ namespace NSQLComplete {
         virtual ~ILocalSyntaxAnalysis() = default;
     };
 
-    ILocalSyntaxAnalysis::TPtr MakeLocalSyntaxAnalysis(TLexerSupplier lexer);
+    ILocalSyntaxAnalysis::TPtr MakeLocalSyntaxAnalysis(
+        TLexerSupplier lexer, const THashSet<TString>& IgnoredRules);
 
 } // namespace NSQLComplete

@@ -24,6 +24,7 @@ struct TClientContext
     TMaybe<TString> ProxyAddress;
     TMaybe<TString> RpcProxyRole;
     bool UseProxyUnixDomainSocket = false;
+    TMaybe<TString> MultiproxyTargetCluster;
 };
 
 bool operator==(const TClientContext& lhs, const TClientContext& rhs);

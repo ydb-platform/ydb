@@ -9,6 +9,7 @@
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
 #include <yql/essentials/minikql/mkql_node_serialization.h>
+#include <ydb/library/yql/dq/runtime/dq_transport.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -73,11 +74,6 @@ std::vector<std::pair<ui64, TOwnedTableRange>> GetRangePartitioning(const TKqpSt
     }
 
     return rangePartition;
-}
-
-NScheme::TTypeInfo UnpackTypeInfo(NKikimr::NMiniKQL::TType* type) {
-    YQL_ENSURE(type);
-    return NScheme::TypeInfoFromMiniKQLType(type);
 }
 
 
@@ -926,10 +922,7 @@ private:
 
         i64 storageReadBytes = 0;
 
-        for (size_t i = 0; i < leftRowType->GetMembersCount(); ++i) {
-            auto columnTypeInfo = UnpackTypeInfo(leftRowType->GetMemberType(i));
-            leftRowSize += NMiniKQL::GetUnboxedValueSize(leftRowInfo.Row.GetElement(i), columnTypeInfo).AllocatedBytes;
-        }
+        leftRowSize = NYql::NDq::TDqDataSerializer::EstimateSize(leftRowInfo.Row, leftRowType);
 
         if (!rightRow.empty()) {
             leftRowInfo.RightRowExist = true;

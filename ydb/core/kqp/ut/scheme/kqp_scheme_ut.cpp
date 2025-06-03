@@ -3391,7 +3391,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             for (const TString& query : modificationQueries) {
                 Cerr << "Running query:\n" << query << Endl;
                 auto result = queryClient.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-                if (result.GetStatus() != EStatus::GENERIC_ERROR
+                if (result.GetStatus() != EStatus::BAD_REQUEST
                     || result.GetIssues().ToString().find("Table `/Root/TestTable` modification is disabled: Unique index uniq_value_idx is under construction") == TString::npos)
                 {
                     Cerr << "Execute query issues. Query: " << query << Endl;
@@ -3412,7 +3412,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
                 auto bulkUpsertResult = db.BulkUpsert("/Root/TestTable", rows.Build()).GetValueSync();
                 if (bulkUpsertResult.IsSuccess()
-                    || bulkUpsertResult.GetIssues().ToString().find("Only async-indexed tables are supported by BulkUpsert") == TString::npos)
+                    || (bulkUpsertResult.GetStatus() == EStatus::BAD_REQUEST && bulkUpsertResult.GetIssues().ToString().find("Only async-indexed tables are supported by BulkUpsert") == TString::npos))
                 {
                     ythrow yexception() << "Unexpected status of bulk upsert: " << bulkUpsertResult.GetStatus() << ": " << bulkUpsertResult.GetIssues().ToString();
                 }
@@ -11887,7 +11887,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Uint64).SetNullable(false)
         };
 
-        for (ui64 i = 0; i < 10000; ++i) {
+        for (ui64 i = 0; i < 9900; ++i) {
             schema.emplace_back(TTestHelper::TColumnSchema().SetName("column" + ToString(i)).SetType(NScheme::NTypeIds::Int32).SetNullable(true));
         }
 
@@ -11905,12 +11905,13 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
 
         testHelper.ReadData("SELECT COUNT(*) FROM `/Root/ColumnTableTest`", "[[10000u]]");
 
-        for (ui64 i = 10000; i < 10100; ++i) {
+        for (ui64 i = 9900; i < 9999; ++i) {
             auto alterQuery = TStringBuilder() << "ALTER TABLE `" << testTable.GetName() << "` ADD COLUMN column" << i << " Uint64;";
             Cerr << alterQuery << Endl;
             auto alterResult = testHelper.GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SUCCESS, alterResult.GetIssues().ToString());
         }
+
         testHelper.ReadData("SELECT COUNT(*) FROM `/Root/ColumnTableTest`", "[[10000u]]");
     }
 

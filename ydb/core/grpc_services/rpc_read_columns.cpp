@@ -230,9 +230,9 @@ private:
                                   ctx);
         }
 
-        if (ResolveNamesResult->ResultSet.front().TableId.IsSystemView()) {
+        if (entry.TableId.IsSystemView() || entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindSysView) {
             return ScanSystemView(ctx);
-        } if (TryParseLocalDbPath(ResolveNamesResult->ResultSet.front().Path)) {
+        } if (TryParseLocalDbPath(entry.Path)) {
             return ScanLocalDbTable(ctx);
         } else {
             return ResolveShards(ctx);

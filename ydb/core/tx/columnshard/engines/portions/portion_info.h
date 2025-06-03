@@ -310,7 +310,7 @@ public:
         if (GetTierNameDef(NBlobOperations::TGlobal::DefaultStorageId) != NBlobOperations::TGlobal::DefaultStorageId) {
             return NPortion::EVICTED;
         }
-        return GetMeta().GetProduced();
+        return GetPortionType() == EPortionType::Compacted ? NPortion::EProduced::SPLIT_COMPACTED : NPortion::EProduced::INSERTED;
     }
 
     bool ValidSnapshotInfo() const {

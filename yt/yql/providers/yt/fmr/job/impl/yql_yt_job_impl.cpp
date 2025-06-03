@@ -3,12 +3,13 @@
 
 #include <util/stream/file.h>
 
+#include <yt/cpp/mapreduce/common/helpers.h> // Для логов, потом мб убрать
 #include <yt/yql/providers/yt/fmr/job/impl/yql_yt_job_impl.h>
 #include <yt/yql/providers/yt/fmr/job/impl/yql_yt_table_data_service_reader.h>
 #include <yt/yql/providers/yt/fmr/job/impl/yql_yt_table_data_service_writer.h>
 #include <yt/yql/providers/yt/fmr/request_options/yql_yt_request_options.h>
 #include <yt/yql/providers/yt/fmr/utils/yql_yt_parse_records.h>
-#include <yt/yql/providers/yt/fmr/yt_service/impl/yql_yt_yt_service_impl.h>
+#include <yt/yql/providers/yt/fmr/yt_job_service/interface/yql_yt_job_service.h>
 
 #include <yql/essentials/utils/log/log.h>
 
@@ -17,8 +18,8 @@ namespace NYql::NFmr {
 class TFmrJob: public IFmrJob {
 public:
 
-    TFmrJob(ITableDataService::TPtr tableDataService, IYtService::TPtr ytService, const TFmrJobSettings& settings)
-        : TableDataService_(tableDataService), YtService_(ytService), Settings_(settings)
+    TFmrJob(ITableDataService::TPtr tableDataService, IYtJobService::TPtr ytJobService, const TFmrJobSettings& settings)
+        : TableDataService_(tableDataService), YtJobService_(ytJobService), Settings_(settings)
     {
     }
 
@@ -28,25 +29,26 @@ public:
         std::shared_ptr<std::atomic<bool>> cancelFlag
     ) override {
         try {
-            const auto ytTable = params.Input;
-            const auto cluster = params.Input.Cluster;
-            const auto path = params.Input.Path;
+            const auto ytTableTaskRef = params.Input;
             const auto output = params.Output;
             const auto tableId = output.TableId;
             const auto partId = output.PartId;
 
-            YQL_CLOG(DEBUG, FastMapReduce) << "Downloading " << cluster << '.' << path;
             YQL_ENSURE(clusterConnections.size() == 1);
-            auto ytTableReader = YtService_->MakeReader(ytTable, clusterConnections.begin()->second, Settings_.YtReaderSettings);
+
+            std::vector<NYT::TRawTableReaderPtr> ytTableReaders = GetYtTableReaders(ytTableTaskRef, clusterConnections);
             auto tableDataServiceWriter = MakeIntrusive<TFmrTableDataServiceWriter>(tableId, partId, TableDataService_, Settings_.FmrWriterSettings);
 
-            ParseRecords(ytTableReader, tableDataServiceWriter, Settings_.ParseRecordSettings.DonwloadReadBlockCount, Settings_.ParseRecordSettings.DonwloadReadBlockSize, cancelFlag);
+            for (auto& ytTableReader: ytTableReaders) {
+                ParseRecords(ytTableReader, tableDataServiceWriter, Settings_.ParseRecordSettings.DonwloadReadBlockCount, Settings_.ParseRecordSettings.DonwloadReadBlockSize, cancelFlag);
+            }
             tableDataServiceWriter->Flush();
 
-            TTableStats stats = tableDataServiceWriter->GetStats();
+            TTableChunkStats stats = tableDataServiceWriter->GetStats();
             auto statistics = TStatistics({{output, stats}});
             return statistics;
         } catch (...) {
+            YQL_CLOG(ERROR, FastMapReduce) << "Gotten error inside download: " << CurrentExceptionMessage();
             return TError(CurrentExceptionMessage());
         }
     }
@@ -63,16 +65,15 @@ public:
             const auto tableId = params.Input.TableId;
             const auto tableRanges = params.Input.TableRanges;
 
-            YQL_CLOG(DEBUG, FastMapReduce) << "Uploading " << cluster << '.' << path;
-
             auto tableDataServiceReader = MakeIntrusive<TFmrTableDataServiceReader>(tableId, tableRanges, TableDataService_, Settings_.FmrReaderSettings);
             YQL_ENSURE(clusterConnections.size() == 1);
-            auto ytTableWriter = YtService_->MakeWriter(ytTable, clusterConnections.begin()->second, Settings_.YtWriterSettings);
+            auto ytTableWriter = YtJobService_->MakeWriter(ytTable, clusterConnections.begin()->second, Settings_.YtWriterSettings);
             ParseRecords(tableDataServiceReader, ytTableWriter, Settings_.ParseRecordSettings.UploadReadBlockCount, Settings_.ParseRecordSettings.UploadReadBlockSize, cancelFlag);
             ytTableWriter->Flush();
 
             return TStatistics();
         } catch (...) {
+            YQL_CLOG(ERROR, FastMapReduce) << "Gotten error inside upload: " << CurrentExceptionMessage();
             return TError(CurrentExceptionMessage());
         }
     }
@@ -83,19 +84,25 @@ public:
         std::shared_ptr<std::atomic<bool>> cancelFlag
     ) override {
         try {
-            const auto inputs = params.Input;
+            const auto taskTableInputRef = params.Input;
             const auto output = params.Output;
 
-            YQL_CLOG(DEBUG, FastMapReduce) << "Merging " << inputs.size() << " inputs";
             auto& parseRecordSettings = Settings_.ParseRecordSettings;
 
             auto tableDataServiceWriter = MakeIntrusive<TFmrTableDataServiceWriter>(output.TableId, output.PartId, TableDataService_, Settings_.FmrWriterSettings);
             auto threadPool = CreateThreadPool(parseRecordSettings.MergeNumThreads);
             TMaybe<TMutex> mutex = TMutex();
-            for (const auto& inputTableRef : inputs) {
-                auto inputTableReader = GetTableInputStream(inputTableRef, clusterConnections);
-                threadPool->SafeAddFunc([&, inputTableReader] {
-                    ParseRecords(inputTableReader, tableDataServiceWriter, parseRecordSettings.MergeReadBlockCount, parseRecordSettings.MergeReadBlockSize, cancelFlag, mutex);
+            for (const auto& inputTableRef : taskTableInputRef.Inputs) {
+                threadPool->SafeAddFunc([&, tableDataServiceWriter] {
+                    try {
+                        auto inputTableReaders = GetTableInputStreams(inputTableRef, clusterConnections);
+                        for (auto& tableReader: inputTableReaders) {
+                            ParseRecords(tableReader, tableDataServiceWriter, parseRecordSettings.MergeReadBlockCount, parseRecordSettings.MergeReadBlockSize, cancelFlag, mutex);
+                        }
+                    } catch (...) {
+                        YQL_CLOG(ERROR, FastMapReduce) << CurrentExceptionMessage();
+                        throw yexception() << CurrentExceptionMessage();
+                    }
                 });
             }
             threadPool->Stop();
@@ -103,6 +110,7 @@ public:
             tableDataServiceWriter->Flush();
             return TStatistics({{output, tableDataServiceWriter->GetStats()}});
         } catch (...) {
+            YQL_CLOG(ERROR, FastMapReduce) << "Gotten error inside merge: " << CurrentExceptionMessage();
             return TError(CurrentExceptionMessage());
         }
     }
@@ -112,48 +120,68 @@ public:
         const std::unordered_map<TFmrTableId, TClusterConnection>& /* clusterConnections */,
         std::shared_ptr<std::atomic<bool>> /* cancelFlag */
     ) override {
-        Cerr << "MAP NOT IMPLEMENTED" << Endl;
         YQL_CLOG(ERROR, FastMapReduce) << "MAP NOT IMPLEMENTED";
         ythrow yexception() << "Not implemented";
     }
 
 private:
-    NYT::TRawTableReaderPtr GetTableInputStream(const TTaskTableRef& tableRef, const std::unordered_map<TFmrTableId, TClusterConnection>& clusterConnections) const {
-        auto ytTable = std::get_if<TYtTableRef>(&tableRef);
+    std::vector<NYT::TRawTableReaderPtr> GetTableInputStreams(const TTaskTableRef& tableRef, const std::unordered_map<TFmrTableId, TClusterConnection>& clusterConnections) const {
+        auto ytTableTaskRef = std::get_if<TYtTableTaskRef>(&tableRef);
         auto fmrTable = std::get_if<TFmrTableInputRef>(&tableRef);
-        if (ytTable) {
-            TFmrTableId tableId = {ytTable->Cluster, ytTable->Path};
-            auto clusterConnection = clusterConnections.at(tableId);
-            return YtService_->MakeReader(*ytTable, clusterConnection, Settings_.YtReaderSettings);
+        if (ytTableTaskRef) {
+            return GetYtTableReaders(*ytTableTaskRef, clusterConnections);
         } else if (fmrTable) {
-            return MakeIntrusive<TFmrTableDataServiceReader>(fmrTable->TableId, fmrTable->TableRanges, TableDataService_, Settings_.FmrReaderSettings);
+            return {MakeIntrusive<TFmrTableDataServiceReader>(fmrTable->TableId, fmrTable->TableRanges, TableDataService_, Settings_.FmrReaderSettings)};
         } else {
             ythrow yexception() << "Unsupported table type";
         }
     }
 
+    std::vector<NYT::TRawTableReaderPtr> GetYtTableReaders(const TYtTableTaskRef& ytTableTaskRef, const std::unordered_map<TFmrTableId, TClusterConnection>& clusterConnections) const {
+        std::vector<NYT::TRawTableReaderPtr> ytTableReaders;
+        if (!ytTableTaskRef.FilePaths.empty()) {
+            // underlying gateway is file, so create readers from filepaths.
+            for (auto& filePath: ytTableTaskRef.FilePaths) {
+                ytTableReaders.emplace_back(YtJobService_->MakeReader(filePath));
+                YQL_CLOG(DEBUG, FastMapReduce) << "Creating reader for file path " << filePath;
+            }
+        } else {
+            for (auto& richPath: ytTableTaskRef.RichPaths) {
+                YQL_ENSURE(richPath.Cluster_);
+
+                // TODO - вместо этого написать нормальные хелперы из RichPath в структуры и назад
+                TStringBuf choppedPath;
+                YQL_ENSURE(TStringBuf(richPath.Path_).AfterPrefix("//", choppedPath));
+                auto fmrTableId = TFmrTableId(*richPath.Cluster_, TString(choppedPath));
+                auto clusterConnection = clusterConnections.at(fmrTableId);
+                ytTableReaders.emplace_back(YtJobService_->MakeReader(richPath, clusterConnection, Settings_.YtReaderSettings));
+            }
+        }
+        return ytTableReaders;
+    }
+
 private:
     ITableDataService::TPtr TableDataService_;
-    IYtService::TPtr YtService_;
+    IYtJobService::TPtr YtJobService_;
     TFmrJobSettings Settings_;
 };
 
 IFmrJob::TPtr MakeFmrJob(
     ITableDataService::TPtr tableDataService,
-    IYtService::TPtr ytService,
+    IYtJobService::TPtr ytJobService,
     const TFmrJobSettings& settings
 ) {
-    return MakeIntrusive<TFmrJob>(tableDataService, ytService, settings);
+    return MakeIntrusive<TFmrJob>(tableDataService, ytJobService, settings);
 }
 
 TJobResult RunJob(
     TTask::TPtr task,
     ITableDataService::TPtr tableDataService,
-    IYtService::TPtr ytService,
+    IYtJobService::TPtr ytJobService,
     std::shared_ptr<std::atomic<bool>> cancelFlag
 ) {
     TFmrJobSettings jobSettings = GetJobSettingsFromTask(task);
-    IFmrJob::TPtr job = MakeFmrJob(tableDataService, ytService, jobSettings);
+    IFmrJob::TPtr job = MakeFmrJob(tableDataService, ytJobService, jobSettings);
 
     auto processTask = [job, task, cancelFlag] (auto&& taskParams) {
         using T = std::decay_t<decltype(taskParams)>;

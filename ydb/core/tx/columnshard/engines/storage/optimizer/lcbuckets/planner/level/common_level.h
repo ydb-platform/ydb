@@ -59,7 +59,7 @@ private:
         if (!GetNextLevel()) {
             return 0;
         }
-        if ((ui64)GetPortionsInfo().GetBlobBytes() > GetLevelBlobBytesLimit() && GetPortionsInfo().GetCount() > 2 &&
+        if ((ui64)GetPortionsInfo().GetBlobBytes() > GetLevelBlobBytesLimit() && GetPortionsInfo().GetCount() >= 2 &&
             (ui64)GetPortionsInfo().GetBlobBytes() > ExpectedPortionSize * 2) {
             return ((ui64)GetLevelId() << 48) + GetPortionsInfo().GetBlobBytes() - GetLevelBlobBytesLimit();
         } else {

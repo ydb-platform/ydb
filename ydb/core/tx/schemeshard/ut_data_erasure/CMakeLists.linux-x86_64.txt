@@ -96,14 +96,6 @@ set_yunittest_property(
   ENVIRONMENT
 )
 
-set_yunittest_property(
-  TEST
-  ydb-core-tx-schemeshard-ut_data_erasure
-  PROPERTY
-  TIMEOUT
-  20
-)
-
 vcs_info(ydb-core-tx-schemeshard-ut_data_erasure)
 
 set_yunittest_property(

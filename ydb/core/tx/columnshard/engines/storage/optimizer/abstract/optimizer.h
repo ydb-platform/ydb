@@ -80,6 +80,8 @@ public:
     }
 };
 
+using TPortionInfoForCompaction = NPortion::TPortionInfoForCompaction;
+
 class IOptimizerPlanner {
 private:
     const TInternalPathId PathId;

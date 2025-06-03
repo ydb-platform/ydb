@@ -46,8 +46,8 @@ public:
     TPortionInfoConstructor(TPortionInfoConstructor&&) noexcept = default;
     TPortionInfoConstructor& operator=(TPortionInfoConstructor&&) noexcept = default;
 
-    TPortionInfoForCompaction GetCompactionInfo() const {
-        return TPortionInfoForCompaction(
+    NPortion::TPortionInfoForCompaction GetCompactionInfo() const {
+        return NPortion::TPortionInfoForCompaction(
             MetaConstructor.GetTotalBlobBytes(), MetaConstructor.GetFirstAndLastPK().GetFirst(), MetaConstructor.GetFirstAndLastPK().GetLast());
     }
 

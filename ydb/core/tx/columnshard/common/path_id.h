@@ -126,6 +126,11 @@ namespace NKikimr::NOlap {
 
 using TInternalPathId = NColumnShard::TInternalPathId;
 
+struct IPathIdTranslator {
+    virtual std::optional<NColumnShard::TSchemeShardLocalPathId> ResolveSchemeShardLocalPathId(const TInternalPathId internalPathId) const = 0;
+    virtual std::optional<TInternalPathId> ResolveInternalPathId(const NColumnShard::TSchemeShardLocalPathId schemeShardLocalPathId) const = 0;
+};
+
 } //namespace NKikimr::NOlap
 
 template <>

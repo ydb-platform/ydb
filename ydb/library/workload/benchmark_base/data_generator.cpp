@@ -201,7 +201,7 @@ public:
             if (!SetCurrentBatch()) {
                 return {};
             }
-            batchToSend = CurrentBatch->Slice(PositionInBatch, std::min(Owner.Owner.Params.BulkSize, CurrentBatch->num_rows() - PositionInBatch));
+            batchToSend = CurrentBatch->Slice(PositionInBatch, std::min<ui64>(Owner.Owner.Params.BulkSize, CurrentBatch->num_rows() - PositionInBatch));
             PositionInBatch += batchToSend->num_rows();
             position = PositionInFile;
             PositionInFile += batchToSend->num_rows();

@@ -301,9 +301,9 @@ class KikimrSqsTestBase(object):
     def _init_cluster(cls, cluster, config_generator):
         is_cloud_events_enabled = (
             'cloud_events_config' in config_generator.yaml_config['sqs_config']
-                and
+            and
             'enable_cloud_events' in config_generator.yaml_config['sqs_config']['cloud_events_config']
-                and
+            and
             config_generator.yaml_config['sqs_config']['cloud_events_config']['enable_cloud_events']
         )
 

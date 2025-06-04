@@ -10,7 +10,7 @@ PEERDIR(
     ydb/core/protos
     ydb/core/util
     ydb/core/ymq/base
-    ydb/public/api/client/yc_public/events
+    ydb/core/audit
 )
 
 YQL_LAST_ABI_VERSION()

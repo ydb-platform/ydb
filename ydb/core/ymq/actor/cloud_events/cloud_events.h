@@ -1,7 +1,5 @@
 #pragma once
 
-#include <ydb/public/api/client/yc_public/events/ymq.pb.h>
-
 #include <ydb/core/kqp/common/kqp.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
@@ -25,19 +23,10 @@ namespace NCloudEvents {
         static uint64_t Generate();
     };
 
-    using TCreateQueueEvent = yandex::cloud::events::ymq::CreateQueue;
-    using TUpdateQueueEvent = yandex::cloud::events::ymq::UpdateQueue;
-    using TDeleteQueueEvent = yandex::cloud::events::ymq::DeleteQueue;
-    using EStatus = yandex::cloud::events::EventStatus;
-
     struct TEventInfo {
         TString UserSID;
         TString UserSanitizedToken;
         TString AuthType;
-
-        static constexpr TStringBuf Permission = "ymq.queues.list";
-        static constexpr TStringBuf ResourceType = "message-queue";
-        // ResourceId = FolderId
 
         uint_fast64_t OriginalId;
         TString Id;
@@ -53,34 +42,12 @@ namespace NCloudEvents {
         TString Issue = "";
 
         TString QueueName;
-        THashMap<TBasicString<char>, NJson::TJsonValue> Labels;
-    };
-
-    template<typename TProtoEvent>
-    class TFiller {
-    protected:
-        const TEventInfo& EventInfo;    // Be careful with reference
-        TProtoEvent& Ev;                // Be careful with reference
-
-        void FillAuthentication();
-        void FillAuthorization();
-        void FillEventMetadata();
-        void FillRequestMetadata();
-        void FillStatus();
-        void FillDetails();
-    public:
-        void Fill();
-
-        TFiller(const TEventInfo& eventInfo, TProtoEvent& ev)
-        : EventInfo(eventInfo)
-        , Ev(ev)
-        {}
+        TString Labels;
     };
 
     class TAuditSender {
     public:
-        template<typename TProtoEvent>
-        static void Send(const TProtoEvent& ev);
+        static void Send(const TEventInfo& evInfo);
     };
 
     class TProcessor : public NActors::TActorBootstrapped<TProcessor> {
@@ -88,7 +55,6 @@ namespace NCloudEvents {
         static constexpr TStringBuf EventTableName = ".CloudEventsYmq";
 
     private:
-        static constexpr TStringBuf DefaultEventTypePrefix = "yandex.cloud.events.ymq.";
 
         const TString Root;
         const TString Database;

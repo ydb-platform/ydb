@@ -1,8 +1,6 @@
 #include "cloud_events.h"
 
-#include <library/cpp/json/json_value.h>
-#include <library/cpp/json/json_reader.h>
-#include <grpcpp/support/status.h>
+#include <ydb/core/audit/audit_log.h>
 
 namespace NKikimr::NSQS {
 namespace NCloudEvents {
@@ -19,204 +17,34 @@ namespace NCloudEvents {
         return Randomizer64();
     }
 
-    void PrintMessageFields(const google::protobuf::Message& message, int indent = 0) {
-        const google::protobuf::Descriptor* descriptor = message.GetDescriptor();
-        const google::protobuf::Reflection* reflection = message.GetReflection();
+    void TAuditSender::Send(const TEventInfo& evInfo) {
+        static constexpr TStringBuf componentName = "YMQ";
+        static const     TString emptyValue = "{none}";
+        static constexpr TStringBuf permission = "ymq.queues.list";
 
-        std::string indentation(indent, ' ');
-
-        std::cerr << indentation << "Message type: " << descriptor->full_name() << std::endl;
-        std::cerr << indentation << "Fields (" << descriptor->field_count() << "):" << std::endl;
-
-        for (int i = 0; i < descriptor->field_count(); i++) {
-            const google::protobuf::FieldDescriptor* field = descriptor->field(i);
-
-            std::cerr << indentation << "  " << i+1 << ". " << field->name()
-                    << " (type: " << field->type_name() << ", "
-                    << (field->is_repeated() ? "repeated" : "singular") << ")";
-
-            if (field->is_repeated()) {
-                int count = reflection->FieldSize(message, field);
-                std::cerr << " [" << count << " elements]";
-
-                if (field->type() == google::protobuf::FieldDescriptor::TYPE_MESSAGE) {
-                    std::cerr << std::endl;
-
-                    if (count > 0) {
-                        for (int j = 0; j < count; j++) {
-                            std::cerr << indentation << "    Element " << j << ":" << std::endl;
-                            const google::protobuf::Message& nested_message =
-                                reflection->GetRepeatedMessage(message, field, j);
-                            PrintMessageFields(nested_message, indent + 6);
-                        }
-                    } else {
-                        std::cerr << indentation << "    Structure of repeated message element:" << std::endl;
-                        const google::protobuf::Message& prototype =
-                            *reflection->GetMessageFactory()->GetPrototype(field->message_type());
-                        PrintMessageFields(prototype, indent + 6);
-                    }
-                } else {
-                    std::cerr << std::endl;
-                }
-            } else {
-                if (reflection->HasField(message, field)) {
-                    std::cerr << " (has value)";
-
-                    if (field->type() == google::protobuf::FieldDescriptor::TYPE_MESSAGE) {
-                        std::cerr << std::endl;
-                        const google::protobuf::Message& nested_message =
-                            reflection->GetMessage(message, field);
-                        PrintMessageFields(nested_message, indent + 4);
-                    } else {
-                        std::cerr << std::endl;
-                    }
-                } else {
-                    std::cerr << " (not set)";
-
-                    if (field->type() == google::protobuf::FieldDescriptor::TYPE_MESSAGE) {
-                        std::cerr << std::endl;
-                        std::cerr << indentation << "    Structure of nested message:" << std::endl;
-                        PrintMessageFields(*reflection->GetMessageFactory()->GetPrototype(field->message_type()), indent + 6);
-                    } else {
-                        std::cerr << std::endl;
-                    }
-                }
-            }
-
-            if (!field->is_repeated() && field->has_default_value() &&
-                field->type() != google::protobuf::FieldDescriptor::TYPE_MESSAGE) {
-                std::cerr << indentation << "    Default value: ";
-                switch (field->type()) {
-                    case google::protobuf::FieldDescriptor::TYPE_INT32:
-                    case google::protobuf::FieldDescriptor::TYPE_INT64:
-                    case google::protobuf::FieldDescriptor::TYPE_UINT32:
-                    case google::protobuf::FieldDescriptor::TYPE_UINT64:
-                        std::cerr << field->default_value_int64();
-                        break;
-                    case google::protobuf::FieldDescriptor::TYPE_FLOAT:
-                    case google::protobuf::FieldDescriptor::TYPE_DOUBLE:
-                        std::cerr << field->default_value_double();
-                        break;
-                    case google::protobuf::FieldDescriptor::TYPE_BOOL:
-                        std::cerr << (field->default_value_bool() ? "true" : "false");
-                        break;
-                    case google::protobuf::FieldDescriptor::TYPE_STRING:
-                    case google::protobuf::FieldDescriptor::TYPE_BYTES:
-                        std::cerr << "\"" << field->default_value_string() << "\"";
-                        break;
-                    default:
-                        std::cerr << "[complex type]";
-                }
-                std::cerr << std::endl;
-            }
-        }
-
-        for (int i = 0; i < descriptor->enum_type_count(); i++) {
-            const google::protobuf::EnumDescriptor* enum_type = descriptor->enum_type(i);
-            std::cerr << indentation << "  Enum: " << enum_type->name() << std::endl;
-            for (int j = 0; j < enum_type->value_count(); j++) {
-                std::cerr << indentation << "    " << enum_type->value(j)->name()
-                        << " = " << enum_type->value(j)->number() << std::endl;
-            }
-        }
-
-        for (int i = 0; i < descriptor->nested_type_count(); i++) {
-            const google::protobuf::Descriptor* nested_type = descriptor->nested_type(i);
-            std::cerr << indentation << "  Nested message type: " << nested_type->name() << std::endl;
-        }
+        AUDIT_LOG(
+            AUDIT_PART("component", componentName)
+            AUDIT_PART("id", evInfo.Id)
+            AUDIT_PART("operation", evInfo.Type)
+            AUDIT_PART("status", TString(evInfo.Issue.empty() ? "SUCCESS" : "ERROR"))
+            AUDIT_PART("reason", evInfo.Issue, !evInfo.Issue.empty())
+            AUDIT_PART("operation", evInfo.Type)
+            AUDIT_PART("remote_address", evInfo.RemoteAddress)
+            AUDIT_PART("subject", evInfo.UserSID)
+            AUDIT_PART("sanitized_token", (!evInfo.UserSanitizedToken.empty() ? evInfo.UserSanitizedToken : emptyValue))
+            AUDIT_PART("auth_type", (!evInfo.AuthType.empty() ? evInfo.AuthType : emptyValue))
+            AUDIT_PART("permission", permission)
+            AUDIT_PART("created_at", ::ToString(evInfo.CreatedAt))
+            AUDIT_PART("cloud_id", (!evInfo.CloudId.empty() ? evInfo.CloudId : emptyValue))
+            AUDIT_PART("folder_id", (!evInfo.FolderId.empty() ? evInfo.FolderId : emptyValue))
+            AUDIT_PART("request_id", (!evInfo.RequestId.empty() ? evInfo.RequestId : emptyValue))
+            AUDIT_PART("idempotency_id", (!evInfo.IdempotencyId.empty() ? evInfo.IdempotencyId : emptyValue))
+            AUDIT_PART("issue", (!evInfo.Issue.empty() ? evInfo.Issue : emptyValue))
+            AUDIT_PART("queue_name", (!evInfo.QueueName.empty() ? evInfo.QueueName : emptyValue))
+            AUDIT_PART("labels", evInfo.Labels)
+        );
     }
 
-    template<typename TProtoEvent>
-    void TFiller<TProtoEvent>::FillAuthentication() {
-        static constexpr auto extractSubjectType = [](const TString& authType) {
-            using ESubjectType = ::yandex::cloud::events::Authentication;
-            static const TMap<TString, ESubjectType::SubjectType> Types {
-                {"service_account", ESubjectType::SERVICE_ACCOUNT},
-                {"federated_account", ESubjectType::FEDERATED_USER_ACCOUNT},
-                {"user_account", ESubjectType::YANDEX_PASSPORT_USER_ACCOUNT},
-            };
-            return Types.Value(authType, ESubjectType::SUBJECT_TYPE_UNSPECIFIED);
-        };
-        Ev.mutable_authentication()->set_authenticated(true);
-        Ev.mutable_authentication()->set_subject_id(EventInfo.UserSID);
-        Ev.mutable_authentication()->set_subject_type(extractSubjectType(EventInfo.AuthType));
-    }
-
-    template<typename TProtoEvent>
-    void TFiller<TProtoEvent>::FillAuthorization() {
-        Ev.mutable_authorization()->set_authorized(true);
-
-        auto* permission = Ev.mutable_authorization()->add_permissions();
-        permission->set_permission(EventInfo.Permission);
-        permission->set_resource_type(EventInfo.ResourceType);
-        permission->set_resource_id(EventInfo.FolderId);
-
-        if (!EventInfo.UserSanitizedToken.empty()) {
-            Ev.mutable_authorization()->mutable_token_info()->set_masked_iam_token(EventInfo.UserSanitizedToken);
-        }
-    }
-
-    template<typename TProtoEvent>
-    void TFiller<TProtoEvent>::FillEventMetadata() {
-        Ev.mutable_event_metadata()->set_event_id(EventInfo.Id);
-        Ev.mutable_event_metadata()->set_event_type(EventInfo.Type);
-        Ev.mutable_event_metadata()->mutable_created_at()->set_seconds(EventInfo.CreatedAt);
-        Ev.mutable_event_metadata()->set_cloud_id(EventInfo.CloudId);
-        Ev.mutable_event_metadata()->set_folder_id(EventInfo.FolderId);
-    }
-
-    template<typename TProtoEvent>
-    void TFiller<TProtoEvent>::FillRequestMetadata() {
-        Ev.mutable_request_metadata()->set_remote_address(EventInfo.RemoteAddress);
-        Ev.mutable_request_metadata()->set_request_id(EventInfo.RequestId);
-        Ev.mutable_request_metadata()->set_idempotency_id(EventInfo.IdempotencyId);
-    }
-
-    template<typename TProtoEvent>
-    void TFiller<TProtoEvent>::FillStatus() {
-        if (EventInfo.Issue.empty()) {
-            Ev.set_event_status(EStatus::DONE);
-        } else {
-            Ev.set_event_status(EStatus::ERROR);
-            Ev.mutable_error()->set_code(grpc::StatusCode::UNKNOWN);
-            Ev.mutable_error()->set_message(EventInfo.Issue);
-        }
-    }
-
-    template<typename TProtoEvent>
-    void TFiller<TProtoEvent>::FillDetails() {
-        Ev.mutable_details()->set_name(EventInfo.QueueName);
-
-        for (const auto& [k, jsonValue] : EventInfo.Labels) {
-            Ev.mutable_details()->mutable_labels()->insert({TString(k), jsonValue.GetStringRobust()});
-        }
-    }
-
-    template<typename TProtoEvent>
-    void TFiller<TProtoEvent>::Fill() {
-        FillAuthentication();
-        FillAuthorization();
-        FillEventMetadata();
-        FillRequestMetadata();
-        FillStatus();
-        FillDetails();
-    }
-
-// ===============================================================
-
-    template<typename TProtoEvent>
-    void TAuditSender::Send(const TProtoEvent& ev) {
-        std::cerr << "=============================================================" << std::endl;
-        std::cerr << "ev.type = " << ev.event_metadata().event_type() << std::endl;
-        std::cerr << "=============================================================" << std::endl;
-        // PrintMessageFields(ev);
-    }
-
-    template void TAuditSender::Send<TCreateQueueEvent>(const TCreateQueueEvent&);
-    template void TAuditSender::Send<TUpdateQueueEvent>(const TUpdateQueueEvent&);
-    template void TAuditSender::Send<TDeleteQueueEvent>(const TDeleteQueueEvent&);
-
-// ===============================================================
     TString TProcessor::GetFullTablePath() const {
         if (!Root.empty()) {
             return TStringBuilder() << Root << "/" << EventTableName;
@@ -340,12 +168,6 @@ namespace NCloudEvents {
         Y_ABORT_UNLESS(response.YdbResultsSize() == 1);
         NYdb::TResultSetParser parser(response.GetYdbResults(0));
 
-        auto convertLabels = [](const TString& str) -> THashMap<TBasicString<char>, NJson::TJsonValue> {
-            NJson::TJsonValue json;
-            NJson::ReadJsonTree(str, &json);
-            return json.GetMap();
-        };
-
         auto convertId = [](uint_fast64_t id, const TString& type, uint_fast64_t createdAt) -> TString {
             return TStringBuilder() << id << "$" << type << "$" << createdAt;
         };
@@ -356,8 +178,7 @@ namespace NCloudEvents {
             cloudEvent.OriginalId = *parser.ColumnParser(0).GetOptionalUint64();
             cloudEvent.QueueName = *parser.ColumnParser(1).GetOptionalUtf8();
             cloudEvent.CreatedAt = *parser.ColumnParser(2).GetOptionalUint64();
-            TString type = *parser.ColumnParser(3).GetOptionalUtf8();
-            cloudEvent.Type = DefaultEventTypePrefix + type;
+            cloudEvent.Type = *parser.ColumnParser(3).GetOptionalUtf8();
 
             cloudEvent.Id = convertId(cloudEvent.OriginalId, cloudEvent.Type, cloudEvent.CreatedAt);
 
@@ -369,7 +190,7 @@ namespace NCloudEvents {
             cloudEvent.RemoteAddress = *parser.ColumnParser(9).GetOptionalUtf8();
             cloudEvent.RequestId = *parser.ColumnParser(10).GetOptionalUtf8();
             cloudEvent.IdempotencyId = *parser.ColumnParser(11).GetOptionalUtf8();
-            cloudEvent.Labels = convertLabels(*parser.ColumnParser(12).GetOptionalUtf8());
+            cloudEvent.Labels = *parser.ColumnParser(12).GetOptionalUtf8();
         }
 
         return result;
@@ -404,26 +225,7 @@ namespace NCloudEvents {
 
         if (!eventsList.empty()) {
             for (const auto& cloudEvent : eventsList) {
-                TStringBuf typeView(cloudEvent.Type.begin() + DefaultEventTypePrefix.size(), cloudEvent.Type.end());
-
-                if (typeView == "CreateMessageQueue") {
-                    TCreateQueueEvent ev;
-                    TFiller<TCreateQueueEvent> filler(cloudEvent, ev);
-                    filler.Fill();
-                    TAuditSender::Send<TCreateQueueEvent>(ev);
-                } else if (typeView == "UpdateMessageQueue") {
-                    TUpdateQueueEvent ev;
-                    TFiller<TUpdateQueueEvent> filler(cloudEvent, ev);
-                    filler.Fill();
-                    TAuditSender::Send<TUpdateQueueEvent>(ev);
-                } else if (typeView == "DeleteMessageQueue") {
-                    TDeleteQueueEvent ev;
-                    TFiller<TDeleteQueueEvent> filler(cloudEvent, ev);
-                    filler.Fill();
-                    TAuditSender::Send<TDeleteQueueEvent>(ev);
-                } else {
-                    Y_UNREACHABLE();
-                }
+                TAuditSender::Send(cloudEvent);
             }
 
             NYdb::TParamsBuilder paramsBuilder;

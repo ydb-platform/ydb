@@ -120,6 +120,7 @@ def create_cloud_events_table(root, session):
     ]
     _create_table(root, session, '.CloudEventsYmq', columns, keys_count=2)
 
+
 def create_events_table(root, session):
     columns = [
         ('Account', ydb.PrimitiveType.Utf8),

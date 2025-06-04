@@ -296,7 +296,7 @@ class DMLOperations():
     def select_all_type(self, table_name: str, all_types: dict[str, str], pk_types: dict[str, str], index: dict[str, str], ttl: str):
         statements = self.create_statements(pk_types, all_types, index, ttl)
 
-        rows = self.query(f"select {", ".join(statements)} from {table_name}")
+        rows = self.query(f"select {', '.join(statements)} from {table_name}")
         count = 0
         for data_type in all_types.keys():
             if data_type != "Date32" and data_type != "Datetime64" and data_type != "Timestamp64" and data_type != 'Interval64':

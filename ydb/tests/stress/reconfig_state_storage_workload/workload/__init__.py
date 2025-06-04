@@ -8,7 +8,6 @@ import logging
 from enum import Enum
 
 from ydb.tests.stress.common.common import WorkloadBase
-from hamcrest import assert_that, contains_inanyorder
 
 logger = logging.getLogger(__name__)
 

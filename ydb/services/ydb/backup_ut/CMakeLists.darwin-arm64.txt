@@ -39,6 +39,7 @@ target_link_libraries(ydb-services-ydb-backup_ut PUBLIC
   src-client-rate_limiter
   src-client-result
   src-client-table
+  src-client-topic
   src-client-value
   kikimr_backup
 )

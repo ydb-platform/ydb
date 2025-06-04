@@ -60,7 +60,9 @@ def create_vector_index_sql_request(
         ALTER TABLE {table_name}
         ADD INDEX {name_vector_index}
         GLOBAL {sync} USING vector_kmeans_tree
-        ON ({f"{prefix}, " if prefix != "" else ""}{embedding}) {f"COVER ({", ".join(cover)})" if len(cover) != 0 else ""}
+        ON ({f'{prefix}, ' if prefix != '' else ''}{embedding})
+        {'COVER (' + ', '.join(cover) + ')' if cover else ''}
         WITH ({function}={distance}, vector_type="{vector_type}", vector_dimension={vector_dimension}, levels={levels}, clusters={clusters});
     """
+
     return create_vector_index

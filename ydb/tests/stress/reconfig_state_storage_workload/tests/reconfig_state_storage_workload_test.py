@@ -3,11 +3,10 @@ from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.common.types import Erasure
 from ydb.tests.stress.common.common import YdbClient
-from ydb.tests.stress.reconfig_state_storage_workload.workload import WorkloadRunner
 from ydb.tests.library.harness.util import LogLevels
 
 
-class TestReconfigStateStorageWorkload(object):
+class ReconfigStateStorageWorkloadTest(object):
 
     @classmethod
     def setup_class(cls):
@@ -25,17 +24,16 @@ class TestReconfigStateStorageWorkload(object):
             },
             additional_log_configs={
                 'BS_NODE': LogLevels.DEBUG,
-                'STATESTORAGE': LogLevels.DEBUG,
+                'BOARD_LOOKUP': LogLevels.DEBUG,
+                'DISCOVERY': LogLevels.DEBUG,
+                'INTERCONNECT': LogLevels.INFO,
+                # 'STATESTORAGE': LogLevels.DEBUG,
             }
         ))
         cls.cluster.start()
+        cls.client = YdbClient(f'grpc://localhost:{cls.cluster.nodes[1].grpc_port}', '/Root', True)
+        cls.client.wait_connection()
 
     @classmethod
     def teardown_class(cls):
         cls.cluster.stop()
-
-    def test(self):
-        client = YdbClient(f'grpc://localhost:{self.cluster.nodes[1].grpc_port}', '/Root', True)
-        client.wait_connection()
-        with WorkloadRunner(client, self.cluster, 'reconfig_state_storage_workload', 120, True) as runner:
-            runner.run()

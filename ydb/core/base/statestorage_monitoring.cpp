@@ -126,7 +126,7 @@ class TStateStorageMonitoringActor : public TActorBootstrapped<TStateStorageMoni
     }
 
     void Handle(TEvStateStorage::TEvResolveReplicasList::TPtr &ev, const TActorContext &ctx) {
-        const TVector<TActorId> &replicasList = ev->Get()->Replicas;
+        const TVector<TActorId> &replicasList = ev->Get()->GetPlainReplicas();
 
         if (replicasList.empty())
             return Reply("empty replica list", ctx);

@@ -69,7 +69,7 @@ private:
         if (GetPortionsInfo().GetCount() < 2) {
             return 0;
         }
-        if ((ui64)GetPortionsInfo().GetBlobBytes() < GetNextLevel()->GetExpectedPortionSize()) {
+        if ((ui64)GetPortionsInfo().GetBlobBytes() < std::max(GetNextLevel()->GetExpectedPortionSize(), GetExpectedPortionSize())) {
             return 0;
         }
         return ((ui64)GetLevelId() << 48) + GetPortionsInfo().GetBlobBytes() - GetLevelBlobBytesLimit();

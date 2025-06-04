@@ -208,16 +208,22 @@ public:
             THolder<TEvDataShard::TEvRead> request(new TEvDataShard::TEvRead());
             FillReadRequest(++newReadId, request, unprocessedPoints);
             requests.emplace_back(std::move(request));
-            state.PendingKeys = std::move(unprocessedPoints);
-            ReadStateByReadId.emplace(newReadId, std::move(state));
+            ReadStateByReadId.emplace(
+                newReadId,
+                TReadState{
+                    .PendingKeys = std::move(unprocessedPoints),
+                });
         }
 
         if (!unprocessedRanges.empty()) {
             THolder<TEvDataShard::TEvRead> request(new TEvDataShard::TEvRead());
             FillReadRequest(++newReadId, request, unprocessedRanges);
             requests.emplace_back(std::move(request));
-            state.PendingKeys = std::move(unprocessedRanges);
-            ReadStateByReadId.emplace(newReadId, std::move(state));
+            ReadStateByReadId.emplace(
+                newReadId,
+                TReadState{
+                    .PendingKeys = std::move(unprocessedRanges),
+                });
         }
 
         return requests;
@@ -567,8 +573,11 @@ public:
                 rowIt->second.PendingReads.insert(newReadId);
             }
 
-            state.PendingKeys = std::move(unprocessedPoints);
-            ReadStateByReadId.emplace(newReadId, std::move(state));
+            ReadStateByReadId.emplace(
+                newReadId,
+                TReadState{
+                    .PendingKeys = std::move(unprocessedPoints),
+                });
         }
 
         if (!unprocessedRanges.empty()) {
@@ -582,8 +591,11 @@ public:
                 rowIt->second.PendingReads.insert(newReadId);
             }
 
-            state.PendingKeys = std::move(unprocessedRanges);
-            ReadStateByReadId.emplace(newReadId, std::move(state));
+            ReadStateByReadId.emplace(
+                newReadId,
+                TReadState{
+                    .PendingKeys = std::move(unprocessedRanges),
+                });
         }
 
         return readRequests;

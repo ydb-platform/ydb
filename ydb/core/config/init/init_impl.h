@@ -1328,10 +1328,10 @@ public:
     public:
         TAppConfigFieldsPreserver(NKikimrConfig::TAppConfig& appConfig) 
             : AppConfig(appConfig)
-            , ConfigDirPath(appConfig.GetConfigDirPath())
-            , StoredConfigYaml(appConfig.GetStoredConfigYaml())
-            , StartupConfigYaml(appConfig.GetStartupConfigYaml())
-            , StartupStorageYaml(appConfig.GetStartupStorageYaml())
+            , ConfigDirPath(appConfig.HasConfigDirPath() ? std::make_optional(appConfig.GetConfigDirPath()) : std::nullopt)
+            , StoredConfigYaml(appConfig.HasStoredConfigYaml() ? std::make_optional(appConfig.GetStoredConfigYaml()) : std::nullopt)
+            , StartupConfigYaml(appConfig.HasStartupConfigYaml() ? std::make_optional(appConfig.GetStartupConfigYaml()) : std::nullopt)
+            , StartupStorageYaml(appConfig.HasStartupStorageYaml() ? std::make_optional(appConfig.GetStartupStorageYaml()) : std::nullopt)
         {}
 
         ~TAppConfigFieldsPreserver() {
@@ -1348,6 +1348,7 @@ public:
                 AppConfig.SetStartupStorageYaml(*StartupStorageYaml);
             }
         }
+
     private:
         NKikimrConfig::TAppConfig& AppConfig;
         std::optional<TString> ConfigDirPath;

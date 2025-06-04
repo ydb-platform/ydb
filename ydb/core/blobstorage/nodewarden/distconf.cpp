@@ -447,9 +447,14 @@ namespace NKikimr::NStorage {
         if (config->HasClusterState()) {
             auto fillInBridge = [&](auto *pb) -> std::optional<TString> {
                 auto& clusterState = config->GetClusterState();
+
+                // copy cluster state generation
+                pb->SetClusterStateGeneration(clusterState.GetGeneration());
+
                 if (!pb->RingGroupsSize() || pb->HasRing()) {
                     return "configuration has Ring field set or no RingGroups";
                 }
+
                 auto *groups = pb->MutableRingGroups();
                 for (int i = 0, count = groups->size(); i < count; ++i) {
                     auto *group = groups->Mutable(i);

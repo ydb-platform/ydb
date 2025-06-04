@@ -114,13 +114,12 @@ struct TConfig
     ///
     /// For historical reasons mapreduce client uses its own logging system.
     ///
-    /// If this options is set to true library switches to yt/yt/core logging by default.
-    /// But if user calls @ref NYT::SetLogger library switches back to logger provided by user
+    /// Currently library uses yt/yt/core logging by default.
+    /// But if user calls @ref NYT::SetLogger, library switches back to logger provided by user
     /// (except for messages from yt/yt/core).
     ///
-    /// This is temporary option. In future it would be true by default, and then removed.
-    ///
-    /// https://st.yandex-team.ru/YT-23645
+    /// TODO: This is a temporary option for emergency fallback.
+    /// Should be removed after eliminating all NYT::SetLogger references.
     bool LogUseCore = true;
 
     // Compression for data that is sent to YT cluster.

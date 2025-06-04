@@ -28,11 +28,13 @@ def _set_monitoring(test_info: dict[str, str], start_time: float, end_time: floa
 
     if len(YdbCluster.get_monitoring_urls()) > 0:
         test_info['monitoring'] = ', '.join([
-            f"<a target='_blank' href='{monitoring.url.format(
+            f"""
+            <a target="_blank" href="{monitoring.url.format(
                 database=database,
                 start_time=monitoring_start,
                 end_time=monitoring_end
-            )}'>{monitoring.caption}</a>"
+            )}">{monitoring.caption}</a>
+            """
             for monitoring in YdbCluster.get_monitoring_urls()
         ])
 

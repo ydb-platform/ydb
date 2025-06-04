@@ -1,6 +1,27 @@
 # Список изменений {{ ydb-short-name }} CLI
 
+## Версия 2.22.0
+
+Дата выхода 4 июня 2025. Для обновления до версии **2.22.0** перейдите в раздел [Загрузки](downloads/index.md#ydb-cli).
+
+### Функциональность
+
+* Добавлено автодополнение имён схемных объектов в интерактивном режиме.
+* Расширены возможности [команды](./reference/ydb-cli/workload-query.md) `{{ ydb-cli }} workload query`: добавлены команды `{{ ydb-cli }} workload query init`, `{{ ydb-cli }} workload query import` и `{{ ydb-cli }} workload query clean` и изменена команда `{{ ydb-cli }} workload query run`. Пользуясь ими можно инициализировать таблицы, заполнить их данными, провести нагрузочное тестирование и очистить данные за собой.
+* В [команды](./reference/ydb-cli/workload-click-bench.md) `{{ ydb-cli }} workload clickbench run`, `{{ ydb-cli }} workload tpch run`, `{{ ydb-cli }} workload tpcds run` добавлена опция `--threads`, позволяющая указывать количество потоков для отправки запросов.
+* **_(Требуется сервер v25.1+)_** **_(Экспериментально)_** Добавлена [команда](./reference/ydb-cli/commands/configuration/cluster/index.md#list) `{{ ydb-cli }} admin cluster config version` для отображения версии конфигурации (V1/V2) на узлах.
+
+### Изменения с потерей обратной совместимости
+
+* Из команд [`{{ ydb-cli }} workload * run`](./reference/ydb-cli/commands/workload) удалена опция `--executor`. Теперь всегда используется исполнитель `generic`.
+
+### Исправления ошибок
+
+* Исправлена ошибка, из-за которой команды [`{{ ydb-cli }} workload * clean`](./reference/ydb-cli/commands/workload) удаляли все содержимое целевой директории, а не только таблицы, созданные командой init.
+
 ## Версия 2.21.0
+
+Дата выхода 22 мая 2024. Для обновления до версии **2.21.0** перейдите в раздел [Загрузки](downloads/index.md#ydb-cli).
 
 ### Функциональность
 

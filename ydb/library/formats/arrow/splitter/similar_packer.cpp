@@ -66,7 +66,8 @@ std::vector<i64> TSimilarPacker::SplitWithExpected(
     const i64 sumResultCount = partsCount * partResultCount;
     AFL_VERIFY(sumResultCount <= count)("count", count)("expect", sumResultCount)("propose", partResultCount);
     const ui32 delta = count - sumResultCount;
-    AFL_VERIFY(delta < partResultCount);
+    AFL_VERIFY(delta < partsCount)("delta", delta)("part_size", partResultCount)("expectation", expectation)("count", count)(
+        "parts_count", partsCount);
     std::vector<i64> result(partsCount - delta, partResultCount);
     for (ui32 i = 0; i < delta; ++i) {
         result.emplace_back(partResultCount + 1);

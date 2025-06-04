@@ -62,8 +62,11 @@ def do(args):
         else:
             error_count += 1
 
-    if success_count > 0:
+    if success_count > 0 and error_count == 0:
         common.print_status(args, success=True, error_reason=f"Successfully processed {success_count} VDisk(s)")
-    if error_count > 0:
+    elif success_count == 0 and error_count > 0:
         common.print_status(args, success=False, error_reason=f"Failed to process {error_count} VDisk(s)")
+        sys.exit(1)
+    else:
+        common.print_status(args, success=False, error_reason=f"Processed {success_count} VDisk(s) successfully, failed to process {error_count} VDisk(s)")
         sys.exit(1)

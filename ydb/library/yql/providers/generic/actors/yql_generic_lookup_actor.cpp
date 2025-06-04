@@ -93,7 +93,7 @@ namespace NYql::NDq {
             , SelectResultType(MergeStructTypes(typeEnv, keyType, payloadType))
             , HolderFactory(holderFactory)
             , ColumnDestinations(CreateColumnDestination())
-            , MaxKeysInRequest(maxKeysInRequest)
+            , MaxKeysInRequest(std::min(maxKeysInRequest, size_t{100}))
             , RetryPolicy(
                     ILookupRetryPolicy::GetExponentialBackoffPolicy(
                         /* retryClassFunction */

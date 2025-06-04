@@ -233,8 +233,8 @@ class WorkloadVectorIndex(WorkloadBase):
         levels_data = [1, 3]
         clusters_data = [1, 17]
         vector_dimension_data = [5]
+        self._create_table(table_path)
         while not self.is_stop_requested():
-            self._create_table(table_path)
             random_vector_type = random.choice(vector_type_data)
             random_vector_dimension = random.choice(vector_dimension_data)
             self._upsert_values(
@@ -283,7 +283,7 @@ class WorkloadVectorIndex(WorkloadBase):
                 logger.info(f"ERRROR {ex}")
                 raise str(ex)
 
-            self._drop_table(table_path)
+        self._drop_table(table_path)
 
     def get_stat(self):
         return ""

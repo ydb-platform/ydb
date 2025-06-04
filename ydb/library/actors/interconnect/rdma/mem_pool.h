@@ -1,5 +1,7 @@
 #pragma once
 
+#include <ydb/library/actors/util/rc_buf.h>
+
 #include <util/generic/noncopyable.h>
 #include <util/generic/vector.h>
 
@@ -27,7 +29,7 @@ namespace NInterconnect::NRdma {
 
     using TChunkPtr = std::shared_ptr<TChunk>;
 
-    class TMemRegion: public NNonCopyable::TMoveOnly {
+    class TMemRegion: public NNonCopyable::TMoveOnly, public IContiguousChunk {
     public:
         TMemRegion(TChunkPtr chunk, uint32_t size, uint32_t offset) noexcept;
         ~TMemRegion();
@@ -37,6 +39,12 @@ namespace NInterconnect::NRdma {
 
         uint32_t GetLKey(size_t deviceIndex) const;
         uint32_t GetRKey(size_t deviceIndex) const;
+
+    public: // IContiguousChunk
+        TContiguousSpan GetData() const override;
+        TMutableContiguousSpan GetDataMut() override;
+        size_t GetOccupiedMemorySize() const override;
+        EInnerType GetInnerType() const noexcept override;
     protected:
         TChunkPtr Chunk;
         uint32_t Offset;
@@ -50,8 +58,12 @@ namespace NInterconnect::NRdma {
         friend class TChunk;
 
         virtual ~IMemPool() = default;
-        virtual TMemRegionPtr Alloc(int size) = 0;
+
+        TMemRegionPtr Alloc(int size);
+        TRcBuf AllocRcBuf(int size);
+
     protected:
+        virtual TMemRegion* AllocImpl(int size) = 0;
         virtual void Free(TMemRegion&& mr, TChunk& chunk) noexcept = 0;
     };
 

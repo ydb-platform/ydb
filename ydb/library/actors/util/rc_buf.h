@@ -269,6 +269,10 @@ public:
 
 struct IContiguousChunk : TThrRefBase {
     using TPtr = TIntrusivePtr<IContiguousChunk>;
+    enum EInnerType {
+        OTHER=0,
+        RDMA_MEM_REG=1,
+    };
 
     virtual ~IContiguousChunk() = default;
 
@@ -303,6 +307,14 @@ struct IContiguousChunk : TThrRefBase {
     }
 
     virtual size_t GetOccupiedMemorySize() const = 0;
+
+    /**
+     * Returns type of the inner data
+     * Used to distinguish between different types of data and downcast
+     */
+    virtual EInnerType GetInnerType() const noexcept {
+        return OTHER;
+    }
 };
 
 class TRope;
@@ -936,6 +948,17 @@ public:
             std::memcpy(data, GetData(), GetSize());
         }
 
+        return res;
+    }
+
+    template<>
+    IContiguousChunk::TPtr ExtractUnderlyingContainerOrCopy() const {
+        IContiguousChunk::TPtr res = nullptr;
+        Backend.ApplySpecificValue<IContiguousChunk::TPtr>([&](const IContiguousChunk::TPtr *raw) {
+            if (raw && raw->Get() && raw->Get()->GetData().data() == Begin && End == Begin + raw->Get()->GetOccupiedMemorySize()) {
+                res = *raw;
+            }
+        });
         return res;
     }
 

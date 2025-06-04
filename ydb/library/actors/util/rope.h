@@ -303,7 +303,6 @@ private:
             return !(*this == other);
         }
 
-    private:
         friend class TRope;
 
         typename TTraits::TListIterator operator ->() const {
@@ -321,6 +320,7 @@ private:
             CheckValid();
             return *Iter;
         }
+        private:
 
         typename TTraits::TListIterator GetChainBegin() const {
             CheckValid();

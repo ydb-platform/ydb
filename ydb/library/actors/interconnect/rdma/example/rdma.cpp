@@ -106,7 +106,7 @@ int TContext::MoveQpToRTS(ibv_gid dstGidEntry, ui32 dstQpNum) {
     {   // modify QP to RTR
         struct ibv_qp_attr qpAttr = {
             .qp_state = IBV_QPS_RTR,
-            .path_mtu = PortAttr.max_mtu,
+            .path_mtu = PortAttr.active_mtu,
             .rq_psn = 0,
             .dest_qp_num = dstQpNum,
             .ah_attr = {

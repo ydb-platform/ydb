@@ -321,7 +321,7 @@ void THarmonizer::HarmonizeImpl(ui64 ts) {
         ProcessHoggishState();
     }
 
-        for (size_t poolIdx = 0; poolIdx < Pools.size(); ++poolIdx) {
+    for (size_t poolIdx = 0; poolIdx < Pools.size(); ++poolIdx) {
         TPoolInfo& pool = *Pools[poolIdx];
 
         float freeSharedCpu = SharedInfo.FreeCpu;
@@ -334,7 +334,7 @@ void THarmonizer::HarmonizeImpl(ui64 ts) {
             float poolSharedElapsedCpu = SharedInfo.CpuConsumption[poolIdx].Elapsed;
             possibleMaxSharedQuota = std::min<float>(poolSharedElapsedCpu + freeSharedCpu, sharedThreads);
         }
-        float threadCount = pool.GetThreadCount();
+        float threadCount = pool.GetFullThreadCount();
         float elapsedCpu = pool.ElapsedCpu.GetAvgPart();
         float parkedCpu = Max<float>(0.0f, threadCount - elapsedCpu);
         float budgetWithoutSharedAndParkedCpu = std::max<float>(0.0f, budgetWithoutSharedCpu - parkedCpu);
@@ -418,7 +418,7 @@ void THarmonizer::AddPool(IExecutorPool* pool, TSelfPingInfo *pingInfo, bool ign
     poolInfo.BasicPool = dynamic_cast<TBasicExecutorPool*>(pool);
 
     poolInfo.DefaultThreadCount = pool->GetDefaultThreadCount();
-    poolInfo.ThreadQuota = poolInfo.DefaultThreadCount;
+    poolInfo.ThreadQuota = ignoreFullThreadQuota ? 0 : poolInfo.DefaultThreadCount;
     poolInfo.MinThreadCount = pool->GetMinThreadCount();
     poolInfo.MaxThreadCount = pool->GetMaxThreadCount();
     poolInfo.PotentialMaxThreadCount = poolInfo.MaxThreadCount;

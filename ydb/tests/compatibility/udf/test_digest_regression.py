@@ -76,7 +76,7 @@ class TestDigest(MixedClusterFixture):
             LIMIT $limit;
         """
 
-    def test_digest_all(self):
+    def test_digest_regression(self):
         with ydb.QuerySessionPool(self.driver) as session_pool:
             query = self.generate_create_table()
             session_pool.execute_with_retries(query)
@@ -86,7 +86,7 @@ class TestDigest(MixedClusterFixture):
 
         query = self.q_real_life()
 
-        for i in range(10):
+        for i in range(1, 11):
             zfill_width = len(str(self.rows))
             sample_i = i
             suffix = str(sample_i).zfill(zfill_width)
@@ -98,5 +98,4 @@ class TestDigest(MixedClusterFixture):
                 "$limit": (1000, ydb.PrimitiveType.Uint64),
             }
             with ydb.QuerySessionPool(self.driver) as session_pool:
-                result = session_pool.execute_with_retries(query, parameters=query_params)
-                assert len(result[0].rows) >= 0
+                session_pool.execute_with_retries(query, parameters=query_params)

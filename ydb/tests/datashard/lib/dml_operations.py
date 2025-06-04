@@ -337,7 +337,7 @@ class DMLOperations():
     def assert_type(self, key, data_type: str, values: int, values_from_rows):
         if data_type == "String" or data_type == "Yson":
             assert values_from_rows.decode(
-                "utf-8") == key[data_type](values), f"{data_type}, expected {key[data_type](values)}, received {values_from_rows.decode("utf-8")}"
+                "utf-8") == key[data_type](values), f"{data_type}, expected {key[data_type](values)}, received {values_from_rows.decode('utf-8')}"
         elif data_type == "Float" or data_type == "DyNumber":
             assert math.isclose(float(values_from_rows), float(
                 key[data_type](values)), rel_tol=1e-3), f"{data_type}, expected {key[data_type](values)}, received {values_from_rows}"

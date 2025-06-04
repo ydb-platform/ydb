@@ -1,16 +1,10 @@
-import allure
 import pytest
-import os
-import yatest
-import logging
-import time
 from .conftest import WorkloadTestBase
-from ydb.tests.olap.lib.ydb_cli import YdbCliHelper
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
-from ydb.tests.olap.lib.remote_execution import execute_command, deploy_binaries_to_hosts
 from ydb.tests.olap.lib.utils import get_external_param
 from enum import Enum
 
+import logging
 LOGGER = logging.getLogger(__name__)
 
 

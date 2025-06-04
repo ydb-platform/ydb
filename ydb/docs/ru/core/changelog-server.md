@@ -15,15 +15,15 @@
 * [Добавлена](https://github.com/ydb-platform/ydb/pull/8264) возможность [изменить время хранения данных](./concepts/cdc.md#topic-options) в CDC топике с использованием выражения `ALTER TOPIC`.
 * [Поддержан](https://github.com/ydb-platform/ydb/pull/7052) формат `DEBEZIUM_JSON` для потоков изменений (changefeed). Включается установкой флага `enable_changefeed_ debezium_json_format`.
 * В операциях резервного копирования и восстановления расширен состав поддерживаемых объектов. Включается установкой флагов, указанных в скобках:
-  * [поддержка](https://github.com/ydb-platform/ydb/issues/7054) поток изменений (changefeed) (флаги `enable_changefeeds_export` и `enable_changefeeds_import`),
-  * [поддержка](https://github.com/ydb-platform/ydb/issues/12724) представления (VIEW) (флаг `enable_view_export`).
+  * [поддержка](https://github.com/ydb-platform/ydb/issues/7054) потока изменений (changefeed) (флаги `enable_changefeeds_export` и `enable_changefeeds_import`),
+  * [поддержка](https://github.com/ydb-platform/ydb/issues/12724) представлений (VIEW) (флаг `enable_view_export`).
 * [Добавлена](https://github.com/ydb-platform/ydb/pull/12909) автоматическая проверка целостности резервных копий при импорте, которая предотвращает восстановление из поврежденных резервных копий и защищает от потери данных.
 * [Добавлена](https://github.com/ydb-platform/ydb/pull/15570) возможность создания представлений (VIEW), использующих [UDF](./yql/reference/builtins/basic.md#udf) в своих запросах.
 * Добавлены системные представления с информацией о [настройках прав доступа](./dev/system-views#auth) и [партициях строковых таблиц](./dev/system-views.md#partitions).
 * Добавлены новые параметры в операторы [CREATE USER](./yql/reference/syntax/create-user.md) и [ALTER USER](./yql/reference/syntax/alter-user.md):
   * `HASH` - возможность задания пароля в зашифрованном виде,
   * `LOGIN` и `NOLOGIN` - разблокировка и блокировка пользователя.
-* Улучшена безопасность учетных записей:
+* Повышена безопасность учетных записей:
   * [Добавлена](https://github.com/ydb-platform/ydb/pull/11963) проверка сложности пароля пользователя.
   * [Реализована](https://github.com/ydb-platform/ydb/pull/12578) автоматическая блокировка пользователя при исчерпании лимита попыток ввода пароля.
   * [Добавлена](https://github.com/ydb-platform/ydb/pull/12983) возможность пользователю самостоятельно сменить свой пароль.

@@ -155,8 +155,8 @@ public:
 
     TColumnSerializationStat RecalcForRecordsCount(const ui64 recordsCount) const {
         TColumnSerializationStat result(ColumnId, ColumnName);
-        result.Merge(
-            TSimpleSerializationStat(SerializedBytes / RecordsCount * recordsCount, recordsCount, RawBytes / RecordsCount * recordsCount));
+        result.Merge(TSimpleSerializationStat(
+            1.0 * SerializedBytes / RecordsCount * recordsCount, recordsCount, 1.0 * RawBytes / RecordsCount * recordsCount));
         return result;
     }
 

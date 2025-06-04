@@ -168,6 +168,10 @@ public:
         return Clusters;
     }
 
+    const TVector<ui64>& GetClusterSizes() const override {
+        return ClusterSizes;
+    }
+
     void Clear() override {
         K = InitK;
         Clusters.clear();
@@ -177,20 +181,16 @@ public:
     }
 
     bool SetClusters(TVector<TString> && newClusters) override {
-        Clusters = newClusters;
-        if (Clusters.size() == 0) {
+        if (newClusters.size() == 0) {
             return false;
         }
-        if (Clusters.size() < K) {
-            // if this datashard have less than K valid embeddings for this parent
-            // lets make single centroid for it
-            K = 1;
-            Clusters.resize(K);
+        for (const auto& cluster: newClusters) {
+            if (!IsExpectedSize(cluster)) {
+                return false;
+            }
         }
-        if (!K) {
-            K = InitK = newClusters.size();
-        }
-        Y_ENSURE(Clusters.size() == K);
+        Clusters = newClusters;
+        K = newClusters.size();
         return true;
     }
 
@@ -235,7 +235,10 @@ public:
             ++Round;
             return false;
         }
+        return true;
+    }
 
+    void RemoveEmptyClusters() override {
         size_t w = 0;
         for (size_t r = 0; r < ClusterSizes.size(); ++r) {
             if (ClusterSizes[r] != 0) {
@@ -246,7 +249,6 @@ public:
         }
         ClusterSizes.erase(ClusterSizes.begin() + w, ClusterSizes.end());
         Clusters.erase(Clusters.begin() + w, Clusters.end());
-        return true;
     }
 
     std::optional<ui32> FindCluster(TArrayRef<const TCell> row, ui32 embeddingPos) override {

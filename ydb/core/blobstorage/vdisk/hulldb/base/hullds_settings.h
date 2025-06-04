@@ -20,7 +20,6 @@ namespace NKikimr {
         const bool FreshUseDreg;
         const bool Level0UseDreg;
         const ui32 RealLevel0MaxSstsAtOnce;
-        const ui32 MinHugeBlobInBytes;
 
         TLevelIndexSettings(TIntrusivePtr<THullCtx> hullCtx,
                             ui32 level0MaxSstsAtOnce,
@@ -29,8 +28,7 @@ namespace NKikimr {
                             TDuration historyWindow,
                             ui64 historyBuckets,
                             bool freshUseDreg,
-                            bool level0UseDreg,
-                            ui32 minHugeBlobInBytes)
+                            bool level0UseDreg)
             : HullCtx(std::move(hullCtx))
             , Level0MaxSstsAtOnce(level0MaxSstsAtOnce)
             , BufSize(bufSize)
@@ -40,7 +38,6 @@ namespace NKikimr {
             , FreshUseDreg(freshUseDreg)
             , Level0UseDreg(level0UseDreg)
             , RealLevel0MaxSstsAtOnce(level0UseDreg ? (Level0MaxSstsAtOnce * 2) : Level0MaxSstsAtOnce)
-            , MinHugeBlobInBytes(minHugeBlobInBytes)
         {}
 
         ui32 GetMaxSstsAtLevel0AtOnce() const {

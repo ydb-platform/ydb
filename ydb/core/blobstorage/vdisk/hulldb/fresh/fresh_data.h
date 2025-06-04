@@ -32,7 +32,6 @@ namespace NKikimr {
         ui64 OldSegLastKeepLsn = ui64(-1);
         bool WaitForCommit = false;
         const bool UseDreg;
-        const ui32 MinHugeBlobInBytes;
         std::shared_ptr<TRopeArena> Arena;
 
         static constexpr ui64 CalculateBufLowWatermark(ui32 chunkSize, bool useDreg) {
@@ -47,7 +46,6 @@ namespace NKikimr {
             , CompThreshold(s.CompThreshold)
             , Cur(new TFreshSegment(HullCtx, s.CompThreshold, tp->Now(), arena))
             , UseDreg(s.FreshUseDreg)
-            , MinHugeBlobInBytes(s.MinHugeBlobInBytes)
             , Arena(std::move(arena))
         {}
 
@@ -92,7 +90,7 @@ namespace NKikimr {
     void TFreshData<TKey, TMemRec>::Put(ui64 lsn, const TKey &key, const TMemRec &memRec) {
         Cur->Put(lsn, key, memRec);
 
-        HullCtx->FreshDataSpaceGroup.DskSpaceFreshIndex() += sizeof(TKey) + sizeof(TMemRec);
+        HullCtx->FreshDataSpaceGroup.DskSpaceFreshSize() += sizeof(TKey) + sizeof(TMemRec);
 
         SwapWithDregIfRequired();
     }
@@ -109,12 +107,7 @@ namespace NKikimr {
 
         Cur->PutLogoBlobWithData(lsn, key, partId, ingress, std::move(buffer));
 
-        HullCtx->FreshDataSpaceGroup.DskSpaceFreshIndex() += sizeof(TKey) + sizeof(TMemRec);
-        if (dataSize >= MinHugeBlobInBytes) {
-            HullCtx->FreshDataSpaceGroup.DskSpaceFreshHugeData() += dataSize;
-        } else {
-            HullCtx->FreshDataSpaceGroup.DskSpaceFreshInplacedData() += dataSize;
-        }
+        HullCtx->FreshDataSpaceGroup.DskSpaceFreshSize() += sizeof(TKey) + sizeof(TMemRec) + dataSize;
 
         SwapWithDregIfRequired();
     }
@@ -122,6 +115,9 @@ namespace NKikimr {
     template <class TKey, class TMemRec>
     void TFreshData<TKey, TMemRec>::PutAppendix(std::shared_ptr<TFreshAppendix> &&a, ui64 firstLsn, ui64 lastLsn) {
         Y_DEBUG_ABORT_UNLESS(lastLsn >= firstLsn);
+
+        HullCtx->FreshDataSpaceGroup.DskSpaceFreshSize() += a->SizeApproximation();
+
         Cur->PutAppendix(std::move(a), firstLsn, lastLsn);
         SwapWithDregIfRequired();
     }
@@ -161,10 +157,10 @@ namespace NKikimr {
         Y_VERIFY_S(Old && Old.Get() == freshSegment.Get(), HullCtx->VCtx->VDiskLogPrefix);
 
         ui64 indexBytes = Old->ElementsInserted() * (sizeof(TKey) + sizeof(TMemRec));
+        ui64 totalDataSize = Old->MemDataInplacedSize() + Old->MemDataHugeSize();
+        ui64 appendixSize = Old->MemDataAppendixSize();
 
-        HullCtx->FreshDataSpaceGroup.DskSpaceFreshIndex() -= indexBytes;
-        HullCtx->FreshDataSpaceGroup.DskSpaceFreshInplacedData() -= Old->MemDataInplacedSize();
-        HullCtx->FreshDataSpaceGroup.DskSpaceFreshHugeData() -= Old->MemDataHugeSize();
+        HullCtx->FreshDataSpaceGroup.DskSpaceFreshSize() -= indexBytes + totalDataSize + appendixSize;
 
         freshSegment.Drop();
         Old.Drop();

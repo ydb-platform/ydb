@@ -257,6 +257,7 @@ namespace NKikimr {
 
         ui64 MemDataInplacedSize() const { return IndexAndData->GetMemDataSize(); }
         ui64 MemDataHugeSize() const { return IndexAndData->GetHugeDataSize(); }
+        ui64 MemDataAppendixSize() const { return AppendixTree.SizeApproximation(); }
 
         // Appendix Compact/ApplyCompactionResult
         TCompactionJob Compact() { return MkCompactJob(AppendixTree.Compact()); }

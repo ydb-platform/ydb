@@ -33,8 +33,7 @@ namespace NKikimr {
                         0.5,
                         TDuration::Minutes(5),
                         TDuration::Seconds(1),
-                        true,   // AddHeader
-                        64u << 10u))
+                        true))  // AddHeader
             , LevelIndexSettings(
                 HullCtx,
                 8u,                         // Level0MaxSstsAtOnce
@@ -43,8 +42,7 @@ namespace NKikimr {
                 TDuration::Minutes(10),     // HistoryWindow
                 10u,                        // HistoryBuckets
                 false,
-                false,
-                64u << 10u)
+                false)
         {}
 
         inline TVDiskContextPtr GetVCtx() {

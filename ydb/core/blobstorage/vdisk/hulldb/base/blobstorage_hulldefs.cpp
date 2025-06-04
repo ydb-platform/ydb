@@ -17,9 +17,7 @@ namespace NKikimr {
          ui64 userDataBytes = current.IndexBytesTotal + current.InplacedDataTotal + current.HugeDataTotal;
          ui64 userDataBytesAfterCompaction = current.IndexBytesKeep + current.InplacedDataKeep + current.HugeDataKeep;
 
-         ui64 recoveryLogSizeBytes = FreshDataSpaceGroup.DskSpaceFreshHugeData() +
-                                     FreshDataSpaceGroup.DskSpaceFreshInplacedData() +
-                                     FreshDataSpaceGroup.DskSpaceFreshIndex();
+         ui64 recoveryLogSizeBytes = FreshDataSpaceGroup.DskSpaceFreshSize();
 
          auto hugeStat = VCtx->GetHugeHeapFragmentation().Get();
          ui64 defragSavingsBytes = static_cast<ui64>(hugeStat.CanBeFreedChunks) * ChunkSize;
@@ -104,7 +102,7 @@ namespace NKikimr {
             ui32 hullSstSizeInChunksLevel, double hullCompFreeSpaceThreshold, ui32 freshCompMaxInFlightWrites,
             ui32 freshCompMaxInFlightReads, ui32 hullCompMaxInFlightWrites, ui32 hullCompMaxInFlightReads,
             double hullCompReadBatchEfficiencyThreshold, TDuration hullCompStorageRatioCalcPeriod,
-            TDuration hullCompStorageRatioMaxCalcDuration, bool addHeader, ui32 minHugeBlobInBytes)
+            TDuration hullCompStorageRatioMaxCalcDuration, bool addHeader)
         : VCtx(std::move(vctx))
         , IngressCache(TIngressCache::Create(VCtx->Top, VCtx->ShortSelfVDisk))
         , ChunkSize(chunkSize)
@@ -124,7 +122,6 @@ namespace NKikimr {
         , HullCompStorageRatioCalcPeriod(hullCompStorageRatioCalcPeriod)
         , HullCompStorageRatioMaxCalcDuration(hullCompStorageRatioMaxCalcDuration)
         , AddHeader(addHeader)
-        , MinHugeBlobInBytes(minHugeBlobInBytes)
         , CompactionStrategyGroup(VCtx->VDiskCounters, "subsystem", "compstrategy")
         , LsmHullGroup(VCtx->VDiskCounters, "subsystem", "lsmhull")
         , LsmHullSpaceGroup(VCtx->VDiskCounters, "subsystem", "outofspace")

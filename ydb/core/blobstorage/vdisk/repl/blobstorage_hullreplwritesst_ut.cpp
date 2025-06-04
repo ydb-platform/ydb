@@ -39,13 +39,13 @@ TVDiskContextPtr CreateVDiskContext(const TBlobStorageGroupInfo& info) {
 
 TIntrusivePtr<THullCtx> CreateHullCtx(const TBlobStorageGroupInfo& info, ui32 chunkSize, ui32 compWorthReadSize) {
     return MakeIntrusive<THullCtx>(CreateVDiskContext(info), chunkSize, compWorthReadSize, true, true, true, true, 1u,
-        1u, 2.0, 10u, 10u, 10u, 20u, 0.5, TDuration::Minutes(5), TDuration::Seconds(1), true, 64u << 10u);
+        1u, 2.0, 10u, 10u, 10u, 20u, 0.5, TDuration::Minutes(5), TDuration::Seconds(1), true);
 }
 
 TIntrusivePtr<THullDs> CreateHullDs(const TBlobStorageGroupInfo& info) {
     auto hullDs = MakeIntrusive<THullDs>(CreateHullCtx(info, 128 << 20, 256 * 1024));
     hullDs->LogoBlobs = MakeIntrusive<TLogoBlobsDs>(TLevelIndexSettings(hullDs->HullCtx, 0, 0, 0, TDuration::Zero(),
-        0, false, false, 64u << 10u), std::make_shared<TRopeArena>(TRopeArenaBackend::Allocate));
+        0, false, false), std::make_shared<TRopeArena>(TRopeArenaBackend::Allocate));
     return hullDs;
 }
 

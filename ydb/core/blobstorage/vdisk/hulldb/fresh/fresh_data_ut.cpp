@@ -33,7 +33,7 @@ namespace NKikimr {
 
         TLevelIndexSettings GetLevelIndexSetting() {
             static TLevelIndexSettings settings(TestCtx.GetHullCtx(),
-                    Level0MaxSstsAtOnce, BufSize, CompThreshold, HistoryWindow, HistoryBuckets, false, false, 64u << 10u);
+                    Level0MaxSstsAtOnce, BufSize, CompThreshold, HistoryWindow, HistoryBuckets, false, false);
             return settings;
         }
 

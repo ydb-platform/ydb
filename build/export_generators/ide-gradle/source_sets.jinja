@@ -1,10 +1,7 @@
 {#- empty string #}
 sourceSets {
     main {
-        java.srcDir("src/main/java")
-        resources.srcDir("src/main/resources")
-
-{%- set target_jar_source_set = target.jar_source_set|reject('startsWith', 'src/main/java:')|unique -%}
+{%- set target_jar_source_set = target.jar_source_set|unique -%}
 {%- if target_jar_source_set|length -%}
 {%-     for source_set in target_jar_source_set -%}
 {%-         set srcdir_glob = split(source_set, ':') -%}
@@ -13,7 +10,7 @@ sourceSets {
 {%-     endfor -%}
 {%- endif %}
 
-{%- set target_jar_resource_set = target.jar_resource_set|reject('startsWith', 'src/main/resources:')|unique -%}
+{%- set target_jar_resource_set = target.jar_resource_set|unique -%}
 {%- if target_jar_resource_set|length -%}
 {%-     for resource_set in target_jar_resource_set -%}
 {%-         set resdir_glob = split(resource_set, ':') -%}
@@ -31,9 +28,6 @@ sourceSets {
     }
 
     test {
-        java.srcDir("src/test/java")
-        resources.srcDir("src/test/resources")
-
 {%- if proto_template %}
         java.srcDir("$buildDir/generated/source/proto/test/java")
 {%-     if target.proto_grpc %}
@@ -52,10 +46,8 @@ sourceSets {
 {%-                 set srcdir = srcdir_glob[0] -%}
 {%-             else -%}
 {%-                 set srcdir = reldir + srcdir_glob[0] -%}
-{%-             endif -%}
-{%-             if srcdir != "src/test/java" %}
+{%-             endif %}
         java.srcDir({{ PatchRoots(srcdir) }})
-{%-             endif -%}
 {%-         endfor -%}
 {%-         for resource_set in extra_target.jar_resource_set -%}
 {%-             set resdir_glob = split(resource_set, ':', 2) -%}
@@ -64,10 +56,8 @@ sourceSets {
 {%-                 set resdir = resdir_glob[0] -%}
 {%-             else -%}
 {%-                 set resdir = reldir + resdir_glob[0] -%}
-{%-             endif -%}
-{%-             if resdir != "src/test/resources" %}
+{%-             endif %}
         resources.srcDir({{ PatchRoots(resdir) }})
-{%-             endif -%}
 {%-         endfor -%}
 {%-     endfor -%}
 {%- endif %}

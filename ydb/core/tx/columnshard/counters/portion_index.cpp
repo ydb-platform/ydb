@@ -5,13 +5,7 @@
 namespace NKikimr::NColumnShard {
 
 TPortionIndexStats::TPortionClass::TPortionClass(const NOlap::TPortionInfo& portion) {
-    if (portion.HasRemoveSnapshot()) {
-        Produced = NOlap::NPortion::EProduced::INACTIVE;
-    } else if (portion.GetTierNameDef(NOlap::NBlobOperations::TGlobal::DefaultStorageId) != NOlap::NBlobOperations::TGlobal::DefaultStorageId) {
-        Produced = NOlap::NPortion::EProduced::EVICTED;
-    } else {
-        Produced = portion.GetMeta().GetProduced();
-    }
+    Produced = portion.GetProduced();
 }
 
 void TPortionIndexStats::AddPortion(const NOlap::TPortionInfo& portion) {

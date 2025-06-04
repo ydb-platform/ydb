@@ -133,7 +133,8 @@ TConclusionStatus TStartMergeTask::DoExecuteImpl() {
                 if (!i->GetStageResult().IsEmpty()) {
                     isEmpty = false;
                 }
-                Merger->AddSource(rb, i->GetStageResult().GetNotAppliedFilter());
+                Merger->AddSource(rb, i->GetStageResult().GetNotAppliedFilter(),
+                    NArrow::NMerger::TIterationOrder(Context->GetCommonContext()->IsReverse(), 0));
             }
         }
         AFL_VERIFY(Merger->GetSourcesCount() <= Sources.size());

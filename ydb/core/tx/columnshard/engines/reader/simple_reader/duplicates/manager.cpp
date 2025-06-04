@@ -77,7 +77,7 @@ void TDuplicateManager::Handle(const TEvRequestFilter::TPtr& ev) {
         std::move(sourcesToFetch), ev->Get()->GetMemoryGroup(), std::make_unique<TSourceDataSubscriber>(SelfId(), ev, std::move(splitter)));
 }
 
-void TDuplicateManager::Handle(const TEvConstructFilters::TPtr& ev) {
+void TDuplicateManager::Handle(const TEvDuplicateSourceCacheResult::TPtr& ev) {
     const auto& filterRequest = ev->Get()->GetOriginalRequest()->Get();
     const std::shared_ptr<TPortionInfo>& requestedPortion = GetPortionVerified(filterRequest->GetSourceId());
     const TColumnDataSplitter& splitter = ev->Get()->GetSplitter();

@@ -213,6 +213,8 @@ TSourceCache::~TSourceCache() {
     for (auto& [_, info] : FetchingSources) {
         info.Abort("aborted");
     }
+
+    Counters.OnSourceCacheRequest(cacheHits, sources.size() - cacheHits);
 }
 
 }   // namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering

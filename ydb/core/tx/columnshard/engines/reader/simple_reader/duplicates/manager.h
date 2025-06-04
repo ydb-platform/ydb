@@ -106,47 +106,7 @@ public:
     }
 };
 
-class TEvConstructFilters: public NActors::TEventLocal<TEvConstructFilters, NColumnShard::TEvPrivate::EvConstructFilters> {
-private:
-    using TDataBySource = THashMap<ui64, TSourceCache::TCacheItem>;
-    YDB_READONLY_DEF(TDataBySource, ColumnData);
-    YDB_READONLY_DEF(TEvRequestFilter::TPtr, OriginalRequest);
-    TColumnDataSplitter Splitter;
-
-public:
-    TEvConstructFilters(const TEvRequestFilter::TPtr& originalRequest, TDataBySource&& data, TColumnDataSplitter&& splitter)
-        : ColumnData(std::move(data))
-        , OriginalRequest(originalRequest)
-        , Splitter(std::move(splitter)) {
-    }
-
-    const TColumnDataSplitter& GetSplitter() const {
-        return Splitter;
-    }
-};
-
 class TDuplicateManager: public NActors::TActor<TDuplicateManager> {
-private:
-    class TSourceDataSubscriber: public TSourceCache::ISubscriber {
-    private:
-        TActorId Owner;
-        TColumnDataSplitter Splitter;
-        TEvRequestFilter::TPtr OriginalRequest;
-
-        virtual void OnSourcesReady(TSourceCache::TSourcesData&& result) override;
-        virtual void OnFailure(const TString& error) override {
-            Y_UNUSED(error);   // FIXME
-            TActivationContext::AsActorContext().Send(Owner, new NActors::TEvents::TEvPoison);
-        }
-
-    public:
-        TSourceDataSubscriber(const TActorId& owner, const TEvRequestFilter::TPtr& originalRequest, TColumnDataSplitter&& splitter)
-            : Owner(owner)
-            , Splitter(std::move(splitter))
-            , OriginalRequest(originalRequest) {
-        }
-    };
-
 private:
     NColumnShard::TDuplicateFilteringCounters Counters;
     TSourceCache* SourceCache;
@@ -167,7 +127,7 @@ private:
             hFunc(NPrivate::TEvDuplicateFilterDataFetched, Handle);
             hFunc(NPrivate::TEvDuplicateSourceCacheResult, Handle);
             hFunc(NActors::TEvents::TEvPoison, Handle);
-            hFunc(TEvConstructFilters, Handle);
+            hFunc(TEvDuplicateSourceCacheResult, Handle);
             hFunc(TEvFilterConstructionResult, Handle);
             default:
                 AFL_VERIFY(false)("unexpected_event", ev->GetTypeName());

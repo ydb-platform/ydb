@@ -130,7 +130,7 @@ class DropSecret(ScenarioTestHelper.IYqlble):
 
     @override
     def to_yql(self, ctx: TestContext) -> str:
-        return f'DROP OBJECT {self._name}{' IF EXISTS' if self._missing_ok else ''} (TYPE SECRET)'
+        return f'DROP OBJECT {self._name} {"IF EXISTS" if self._missing_ok else ""} (TYPE SECRET)'
 
     @override
     def params(self) -> Dict[str, str]:

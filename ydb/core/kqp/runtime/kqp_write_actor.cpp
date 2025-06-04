@@ -2502,6 +2502,7 @@ public:
             TxManager->StartExecute();
             ImmediateCommit(std::move(ev->TraceId));
         } else {
+            AFL_ENSURE(ev->Get()->TxId);
             TxId = ev->Get()->TxId;
             if (NeedToFlushBeforeCommit) {
                 Flush(std::move(ev->TraceId));
@@ -2888,8 +2889,9 @@ public:
         UpdateTracingState("Write", BufferWriteActorSpan.GetTraceId());
         OnOperationFinished(Counters->BufferActorFlushLatencyHistogram);
         State = EState::WRITING;
-        if (NeedToFlushBeforeCommit) {
-            NeedToFlushBeforeCommit = false;
+        AFL_ENSURE(!TxId || NeedToFlushBeforeCommit); // TxId => NeedToFlushBeforeCommit
+        NeedToFlushBeforeCommit = false;
+        if (TxId) {
             Prepare(std::nullopt);
             return;
         }

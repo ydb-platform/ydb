@@ -112,8 +112,16 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
             return true;
         });
 
-        AsyncBuildVectorIndex(runtime, ++txId, tenantSchemeShard, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", "index1", "embedding");
-        ui64 buildIndexId = txId;
+        // Build vector index with max_shards_in_flight(1) to guarantee deterministic meteringData
+        ui64 buildIndexId = ++txId;
+        {
+            auto sender = runtime.AllocateEdgeActor();
+            auto request = CreateBuildIndexRequest(buildIndexId, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", TBuildIndexConfig{
+                "index1", NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, {"embedding"}, {}
+            });
+            request->Record.MutableSettings()->set_max_shards_in_flight(1);
+            ForwardToTablet(runtime, tenantSchemeShard, sender, request);
+        }
 
         // Wait for the first "reshuffle" request (samples will be already collected on the first level)
         // and reboot the scheme shard to verify that its intermediate state is persisted correctly.
@@ -126,7 +134,6 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
         TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> level1Blocker(runtime, [&](auto& ev) {
             const auto& record = ev->Get()->Record;
             if (record.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpInitiateBuildIndexImplTable) {
-                txId = record.GetTxId();
                 return true;
             }
             return false;
@@ -188,7 +195,7 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
         auto descr = TestGetBuildIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB", buildIndexId);
         UNIT_ASSERT_VALUES_EQUAL(descr.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE);
 
-        const TString meteringData = R"({"usage":{"start":0,"quantity":433,"finish":0,"unit":"request_unit","type":"delta"},"tags":{},"id":"109-72075186233409549-2-0-0-0-0-611-609-11032-11108","cloud_id":"CLOUD_ID_VAL","source_wt":0,"source_id":"sless-docapi-ydb-ss","resource_id":"DATABASE_ID_VAL","schema":"ydb.serverless.requests.v1","folder_id":"FOLDER_ID_VAL","version":"1.0.0"})""\n";
+        const TString meteringData = R"({"usage":{"start":1,"quantity":433,"finish":1,"unit":"request_unit","type":"delta"},"tags":{},"id":"109-72075186233409549-2-0-0-0-0-611-609-11032-11108","cloud_id":"CLOUD_ID_VAL","source_wt":1,"source_id":"sless-docapi-ydb-ss","resource_id":"DATABASE_ID_VAL","schema":"ydb.serverless.requests.v1","folder_id":"FOLDER_ID_VAL","version":"1.0.0"})""\n";
 
         UNIT_ASSERT_NO_DIFF(meteringMessages, meteringData);
 

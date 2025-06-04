@@ -1,7 +1,4 @@
 # -*- coding: utf-8 -*-
-import os
-import yatest
-
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.stress.s3_backups.workload import WorkloadRunner
@@ -12,7 +9,10 @@ class TestYdbWorkload(object):
     @classmethod
     def setup_class(cls):
         config = KikimrConfigGenerator(
-            extra_feature_flags={}
+            extra_feature_flags={
+                "enable_export_auto_dropping": True,
+                "enable_changefeeds_export": True,
+            }
         )
         cls.cluster = KiKiMR(config)
         cls.cluster.start()

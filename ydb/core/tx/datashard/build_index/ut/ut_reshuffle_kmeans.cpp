@@ -59,7 +59,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
         rec.SetParent(0);
         rec.SetChild(1);
 
-        rec.AddClusters("something");
+        rec.AddClusters("abc");
 
         rec.SetEmbeddingColumn("embedding");
 
@@ -243,7 +243,11 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
 
         DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvReshuffleKMeansRequest& request) {
             request.ClearClusters();
-        }, "{ <main>: Error: Should be requested at least single cluster }");
+        }, "{ <main>: Error: Should be requested for at least one cluster }");
+        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvReshuffleKMeansRequest& request) {
+            request.ClearClusters();
+            request.AddClusters("something");
+        }, "{ <main>: Error: Clusters have invalid format }");
 
         DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvReshuffleKMeansRequest& request) {
             request.ClearOutputName();
@@ -260,7 +264,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
         DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvReshuffleKMeansRequest& request) {
             request.ClearClusters();
             request.SetEmbeddingColumn("some");
-        }, "[ { <main>: Error: Should be requested at least single cluster } { <main>: Error: Unknown embedding column: some } ]");
+        }, "[ { <main>: Error: Unknown embedding column: some } { <main>: Error: Should be requested for at least one cluster } ]");
     }
 
     Y_UNIT_TEST(MainToPosting) {

@@ -53,7 +53,7 @@ void TSchemeShard::Handle(TEvPrivate::TEvIndexBuildingMakeABill::TPtr& ev, const
 }
 
 void TSchemeShard::PersistCreateBuildIndex(NIceDb::TNiceDb& db, const TIndexBuildInfo& info) {
-    Y_ABORT_UNLESS(info.BuildKind != TIndexBuildInfo::EBuildKind::BuildKindUnspecified);
+    Y_ENSURE(info.BuildKind != TIndexBuildInfo::EBuildKind::BuildKindUnspecified);
     auto persistedBuildIndex = db.Table<Schema::IndexBuild>().Key(info.Id);
     persistedBuildIndex.Update(
         NIceDb::TUpdate<Schema::IndexBuild::Uid>(info.Uid),
@@ -314,9 +314,12 @@ void TSchemeShard::PersistBuildIndexForget(NIceDb::TNiceDb& db, const TIndexBuil
 
 void TSchemeShard::Resume(const TDeque<TIndexBuildId>& indexIds, const TActorContext& ctx) {
     for (const auto& id : indexIds) {
-        if (IndexBuilds.contains(id)) {
-            Execute(CreateTxProgress(id), ctx);
+        const auto* buildInfoPtr = IndexBuilds.FindPtr(id);
+        if (!buildInfoPtr || buildInfoPtr->Get()->IsBroken) {
+            continue;
         }
+
+        Execute(CreateTxProgress(id), ctx);
     }
 }
 
@@ -331,7 +334,7 @@ void TSchemeShard::SetupRouting(const TDeque<TIndexBuildId>& indexIds, const TAc
         auto handle = [&] (auto txId) {
             if (txId) {
                 auto [it, emplaced] = TxIdToIndexBuilds.try_emplace(txId, buildInfo.Id);
-                Y_ABORT_UNLESS(it->second == buildInfo.Id);
+                Y_ENSURE(it->second == buildInfo.Id);
             }
         };
 

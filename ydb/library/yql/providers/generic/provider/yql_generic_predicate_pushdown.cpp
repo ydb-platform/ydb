@@ -31,6 +31,7 @@ namespace NYql {
             const TCoArgument& Arg;
             TStringBuilder& Err;
             std::unordered_map<const TExprNode*, TExpression> LambdaArgs = {};
+            TExprContext& Ctx;
         };
 
         bool SerializeMember(const TCoMember& member, TExpression* proto, TSerializationContext& ctx) {
@@ -151,6 +152,39 @@ namespace NYql {
             return SerializeExpression(toBytexExpr, dstProto->mutable_value(), ctx, depth + 1);
         }
 
+        bool SerializeToStringExpression(const TExprBase& toString, TExpression* proto, TSerializationContext& ctx, ui64 depth) {
+            if (toString.Ref().ChildrenSize() != 1) {
+                ctx.Err << "invalid ToString expression, expected 1 child but got " << toString.Ref().ChildrenSize();
+                return false;
+            }
+
+            const auto toStringExpr = TExprBase(toString.Ref().Child(0));
+            auto typeAnnotation = toStringExpr.Ref().GetTypeAnn();
+            if (!typeAnnotation) {
+                ctx.Err << "expected non empty type annotation for ToString";
+                return false;
+            }
+
+            if (typeAnnotation->GetKind() == ETypeAnnotationKind::Optional) {
+                typeAnnotation = typeAnnotation->Cast<TOptionalExprType>()->GetItemType();
+            }
+
+            if (typeAnnotation->GetKind() != ETypeAnnotationKind::Data) {
+                ctx.Err << "expected data type or optional from data type in ToString";
+                return false;
+            }
+
+            const auto dataSlot = typeAnnotation->Cast<TDataExprType>()->GetSlot();
+            if (!IsDataTypeString(dataSlot) && dataSlot != NUdf::EDataSlot::JsonDocument) {
+                ctx.Err << "expected only string like input type for ToString";
+                return false;
+            }
+
+            auto* dstProto = proto->mutable_cast();
+            dstProto->mutable_type()->set_type_id(Ydb::Type::STRING);
+            return SerializeExpression(toStringExpr, dstProto->mutable_value(), ctx, depth + 1);
+        }
+
         bool SerializeFlatMap(const TCoFlatMap& flatMap, TExpression* proto, TSerializationContext& ctx, ui64 depth) {
             const auto lambda = flatMap.Lambda();
             const auto lambdaArgs = lambda.Args();
@@ -211,6 +245,9 @@ namespace NYql {
             }
             if (expression.Ref().IsCallable("ToBytes")) {
                 return SerializeToBytesExpression(expression, proto, ctx, depth);
+            }
+            if (expression.Ref().IsCallable("ToString")) {
+                return SerializeToStringExpression(expression, proto, ctx, depth);
             }
             if (auto flatMap = expression.Maybe<TCoFlatMap>()) {
                 return SerializeFlatMap(flatMap.Cast(), proto, ctx, depth);
@@ -905,13 +942,24 @@ namespace NYql {
         return TStringBuf(maybeBool.Cast().Literal()) == "true"sv;
     }
 
-    bool SerializeFilterPredicate(const TExprBase& predicateBody, const TCoArgument& predicateArgument, NConnector::NApi::TPredicate* proto, TStringBuilder& err) {
-        TSerializationContext ctx = {.Arg = predicateArgument, .Err = err};
-        return SerializePredicate(predicateBody, proto, ctx, 0);
+    bool SerializeFilterPredicate(
+        TExprContext& ctx,
+        const TExprBase& predicateBody,
+        const TCoArgument& predicateArgument, 
+        NConnector::NApi::TPredicate* proto,
+        TStringBuilder& err
+    ) {
+        TSerializationContext serializationContext = {.Arg = predicateArgument, .Err = err, .Ctx = ctx};
+        return SerializePredicate(predicateBody, proto, serializationContext, 0);
     }
 
-    bool SerializeFilterPredicate(const TCoLambda& predicate, TPredicate* proto, TStringBuilder& err) {
-        return SerializeFilterPredicate(predicate.Body(), predicate.Args().Arg(0), proto, err);
+    bool SerializeFilterPredicate(
+        TExprContext& ctx,
+        const TCoLambda& predicate, 
+        TPredicate* proto, 
+        TStringBuilder& err 
+    ) {
+        return SerializeFilterPredicate(ctx, predicate.Body(), predicate.Args().Arg(0), proto, err);
     }
 
     TString FormatWhere(const TPredicate& predicate) {

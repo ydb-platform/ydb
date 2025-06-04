@@ -180,7 +180,7 @@ public:
         }
     }
 
-    void FillSourceSettings(const TExprNode& node, ::google::protobuf::Any& protoSettings, TString& sourceType, size_t) override {
+    void FillSourceSettings(const TExprNode& node, ::google::protobuf::Any& protoSettings, TString& sourceType, size_t, TExprContext&) override {
         if (auto maybeDqSource = TMaybeNode<TDqSource>(&node)) {
             auto settings = maybeDqSource.Cast().Settings();
             if (auto maybeTopicSource = TMaybeNode<TDqPqTopicSource>(settings.Raw())) {

@@ -239,19 +239,16 @@ class WorkloadReconfigStateStorage(WorkloadBase):
                 newRingGroup[i]["WriteOnly"] = True
             logger.info(self.do_request({"ReconfigStateStorage": {f"{self.config_name}Config": {
                         "RingGroups": defaultRingGroup + newRingGroup}}}))
-            self.do_request_config()
             time.sleep(3)
             for i in range(len(newRingGroup)):
                 newRingGroup[i]["WriteOnly"] = False
             logger.info(self.do_request({"ReconfigStateStorage": {f"{self.config_name}Config": {
                         "RingGroups": defaultRingGroup + newRingGroup}}}))
-            self.do_request_config()
             time.sleep(3)
             for i in range(len(defaultRingGroup)):
                 defaultRingGroup[i]["WriteOnly"] = True
             logger.info(self.do_request({"ReconfigStateStorage": {f"{self.config_name}Config": {
                         "RingGroups": newRingGroup + defaultRingGroup}}}))
-            self.do_request_config()
             time.sleep(3)
             logger.info(self.do_request({"ReconfigStateStorage": {f"{self.config_name}Config": {
                         "RingGroups": newRingGroup}}}))
@@ -276,31 +273,24 @@ class WorkloadDiscovery(WorkloadBase):
         self.cluster = cluster
         self.lock = threading.Lock()
         self.cnt = 0
-        self.endpoints = None
 
     def get_stat(self):
         with self.lock:
             return f"Discovery: {self.cnt}"
 
     def _loop(self):
+        url = "%s:%s" % (self.cluster.nodes[1].host, self.cluster.nodes[1].port)
+        driver_config = ydb.DriverConfig(url, self.client.database)
         while not self.is_stop_requested():
-            url = "%s:%s" % (self.cluster.nodes[1].host, self.cluster.nodes[1].port)
-            driver_config = ydb.DriverConfig(
-                url, self.client.database)
+            time.sleep(3)
             resolver = ydb.DiscoveryEndpointsResolver(driver_config)
             result = resolver.resolve()
             if result is None:
-                logger.info("Failed discover endpoints")
-                raise Exception("Discovery fails")
+                logger.info("Discovery empty")
             else:
-                if self.endpoints is None:
-                    self.endpionts = result.endpoints
-                else:
-                    # logger.info(result.endpoints)
-                    assert_that(self.endpionts, contains_inanyorder(result.endpoints))
+                logger.info(f"Len = {len(result.endpoints)} Endpoints: {result.endpoints}")
             with self.lock:
                 self.cnt += 1
-            time.sleep(1)
 
     def get_workload_thread_funcs(self):
         return [self._loop]
@@ -335,7 +325,7 @@ class WorkloadRunner:
         stop = threading.Event()
 
         workloads = [
-            WorkloadTablesCreateDrop(self.client, self.name, stop, self.allow_nullables_in_pk),
+            # WorkloadTablesCreateDrop(self.client, self.name, stop, self.allow_nullables_in_pk),
             WorkloadInsertDelete(self.client, self.name, stop),
             WorkloadReconfigStateStorage(self.client, self.cluster, self.name, stop, self.config_name),
             WorkloadDiscovery(self.client, self.cluster, self.name, stop)

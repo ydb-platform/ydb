@@ -78,7 +78,7 @@ SHOW CREATE TABLE my_table;
 
 | Path            | PathType  | CreateQuery                 |
 |-----------------|-----------|-----------------------------|
-| my_table        | Table     | see below                   |
+| my_table        | Table     | See below                   |
 
 ```yql
 CREATE TABLE `my_table` (

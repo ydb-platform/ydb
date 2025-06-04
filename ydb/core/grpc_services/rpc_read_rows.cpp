@@ -338,6 +338,14 @@ public:
         Become(&TThis::MainState);
 
         LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::RPC_REQUEST, "TReadRowsRPC bootstraped ");
+
+        auto selfId = ctx.SelfID;
+        auto* actorSystem = ctx.ActorSystem();
+        auto clientLostCb = [selfId, actorSystem]() {
+            actorSystem->Send(selfId, new TRpcServices::TEvForgetOperation());
+        };
+
+        Request->SetFinishAction(std::move(clientLostCb));
     }
 
     bool ResolveTable() {
@@ -519,8 +527,7 @@ public:
             if (it == ShardIdToReadState.end()) {
                 TStringStream ss;
                 ss << "Got unknown shardId from TEvReadResult# " << shardId << ", status# " << statusCode;
-                ReplyWithError(statusCode, ss.Str(), &issues);
-                return;
+                return ReplyWithError(statusCode, ss.Str(), &issues);
             }
 
             switch (statusCode) {
@@ -541,12 +548,11 @@ public:
                 [[fallthrough]];
             default: {
                 TStringStream ss;
-                ss << "Failed to read from ds# " << shardId << ", status# " << statusCode;
+                ss << "Failed to read from df# " << shardId << ", status# " << statusCode;
                 if (statusCode != Ydb::StatusIds::OVERLOADED) {
                     statusCode = Ydb::StatusIds::ABORTED;
                 }
-                ReplyWithError(statusCode, ss.Str(), &issues);
-                return;
+                return ReplyWithError(statusCode, ss.Str(), &issues);
             }
             }
             if (!msg->Record.HasFinished() || !msg->Record.GetFinished()) {
@@ -720,24 +726,42 @@ public:
         PassAway();
     }
 
+    void CancelReads() {
+        for (const auto& [shardId, v] : ShardIdToReadState) {
+            auto request = std::make_unique<TEvDataShard::TEvReadCancel>();
+            auto& record = request->Record;
+            record.SetReadId(shardId);
+            LOG_ERROR_S(TlsActivationContext->AsActorContext(), NKikimrServices::RPC_REQUEST, "TReadRowsRPC CancelReads shardId: " << shardId);
+            Send(PipeCache, new TEvPipeCache::TEvForward(request.release(), shardId, true), IEventHandle::FlagTrackDelivery, 0, Span.GetTraceId());
+        }
+    }
+
     void HandleTimeout(TEvents::TEvWakeup::TPtr&) {
-        return ReplyWithError(Ydb::StatusIds::TIMEOUT, TStringBuilder() << "ReadRows from table " << GetTable()
+        ReplyWithError(Ydb::StatusIds::TIMEOUT, TStringBuilder() << "ReadRows from table " << GetTable()
             << " timed out, duration: " << (TAppData::TimeProvider->Now() - StartTime).Seconds() << " sec");
+    }
+
+    void HandleForget(TRpcServices::TEvForgetOperation::TPtr &ev) {
+        Y_UNUSED(ev);
+
+        ReplyWithError(Ydb::StatusIds::CANCELLED, TStringBuilder() << "ReadRows from table " << GetTable()
+            << " cancelled, because client disconnected");
     }
 
     void ReplyWithError(const Ydb::StatusIds::StatusCode& status, const TString& errorMsg,
         const ::google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage>* issues = nullptr)
     {
+        CancelReads();
         LOG_ERROR_S(TlsActivationContext->AsActorContext(), NKikimrServices::RPC_REQUEST, "TReadRowsRPC ReplyWithError: " << errorMsg);
         SendResult(status, errorMsg, issues);
     }
 
     void Handle(TEvents::TEvUndelivered::TPtr&) {
-        return ReplyWithError(Ydb::StatusIds::INTERNAL_ERROR, "Internal error: pipe cache is not available, the cluster might not be configured properly");
+        ReplyWithError(Ydb::StatusIds::INTERNAL_ERROR, "Internal error: pipe cache is not available, the cluster might not be configured properly");
     }
 
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr &ev) {
-        return ReplyWithError(Ydb::StatusIds::UNAVAILABLE, TStringBuilder() << "Failed to connect to shard " << ev->Get()->TabletId);
+        ReplyWithError(Ydb::StatusIds::UNAVAILABLE, TStringBuilder() << "Failed to connect to shard " << ev->Get()->TabletId);
     }
 
     void PassAway() override {
@@ -760,6 +784,7 @@ public:
             hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
 
             hFunc(TEvents::TEvWakeup, HandleTimeout);
+            hFunc(TRpcServices::TEvForgetOperation, HandleForget);
         }
     }
 

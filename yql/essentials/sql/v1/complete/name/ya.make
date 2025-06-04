@@ -8,6 +8,7 @@ PEERDIR(
 END()
 
 RECURSE(
+    cache
     cluster
     object
     service

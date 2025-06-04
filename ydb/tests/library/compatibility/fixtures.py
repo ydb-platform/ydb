@@ -14,14 +14,36 @@ current_binary_path = kikimr_driver_path()
 last_stable_binary_path = yatest.common.binary_path("ydb/tests/library/compatibility/binaries/ydbd-last-stable")
 prelast_stable_binary_path = yatest.common.binary_path("ydb/tests/library/compatibility/binaries/ydbd-prelast-stable")
 
+current_binary_version = (float("+inf"), )
+last_stable_version = None
+prelast_stable_version = None
+
+
+def string_version_to_tuple(s):
+    result = []
+    for elem in s.split("-"):
+        try:
+            result.append(int(elem))
+        except ValueError:
+            result.append(float("NaN"))
+    return tuple(result)
+
+
 current_name = "current"
 last_stable_name = "last"
 if last_stable_binary_path is not None:  # in import_test yatest.common.binary_path returns None
     last_stable_name = open(yatest.common.binary_path("ydb/tests/library/compatibility/binaries/ydbd-last-stable-name")).read().strip()
+    last_stable_version = string_version_to_tuple(last_stable_name)
 prelast_stable_name = "prelast"
 if prelast_stable_binary_path:  # in import_test yatest.common.binary_path returns None
     prelast_stable_name = open(yatest.common.binary_path("ydb/tests/library/compatibility/binaries/ydbd-prelast-stable-name")).read().strip()
+    prelast_stable_version = string_version_to_tuple(prelast_stable_name)
 
+path_to_version = {
+    current_binary_path: current_binary_version,
+    last_stable_binary_path: last_stable_version,
+    prelast_stable_binary_path: prelast_stable_version,
+}
 
 all_binary_combinations_restart = [
     [[last_stable_binary_path], [current_binary_path]],
@@ -33,13 +55,13 @@ all_binary_combinations_restart = [
     [[last_stable_binary_path], [last_stable_binary_path]],
 ]
 all_binary_combinations_ids_restart = [
-    last_stable_name + "_to_" + current_name,
-    current_name + "_to_" + last_stable_name,
-    current_name + "_to_" + current_name,
+    "restart_{}_to_{}".format(last_stable_name, current_name),
+    "restart_{}_to_{}".format(current_name, last_stable_name),
+    "restart_{}_to_{}".format(current_name, current_name),
 
-    prelast_stable_name + "_to_" + last_stable_name,
-    last_stable_name + "_to_" + prelast_stable_name,
-    last_stable_name + "_to_" + last_stable_name,
+    "restart_{}_to_{}".format(prelast_stable_name, last_stable_name),
+    "restart_{}_to_{}".format(last_stable_name, prelast_stable_name),
+    "restart_{}_to_{}".format(last_stable_name, last_stable_name),
 ]
 
 
@@ -48,6 +70,7 @@ class RestartToAnotherVersionFixture:
     def base_setup(self, request):
         self.current_binary_paths_index = 0
         self.all_binary_paths = request.param
+        self.versions = list([path_to_version[path] for path_list in self.all_binary_paths for path in path_list])
 
     def setup_cluster(self, **kwargs):
         extra_feature_flags = kwargs.pop("extra_feature_flags", {})
@@ -100,10 +123,10 @@ all_binary_combinations_mixed = [
     [last_stable_binary_path, prelast_stable_binary_path],
 ]
 all_binary_combinations_ids_mixed = [
-    current_name,
-    last_stable_name,
-    current_name + "_and_" + last_stable_name,
-    last_stable_name + "_and_" + prelast_stable_name,
+    "mixed_{}".format(current_name),
+    "mixed_{}".format(last_stable_name),
+    "mixed_{}".format(current_name + "_and_" + last_stable_name),
+    "mixed_{}".format(last_stable_name + "_and_" + prelast_stable_name),
 ]
 
 
@@ -111,6 +134,7 @@ class MixedClusterFixture:
     @pytest.fixture(autouse=True, params=all_binary_combinations_mixed, ids=all_binary_combinations_ids_mixed)
     def base_setup(self, request):
         self.all_binary_paths = request.param
+        self.versions = list([path_to_version[path] for path in self.all_binary_paths])
 
     def setup_cluster(self, **kwargs):
         self.config = KikimrConfigGenerator(
@@ -139,8 +163,8 @@ all_binary_combinations_rolling = [
     [prelast_stable_binary_path, last_stable_binary_path],
 ]
 all_binary_combinations_ids_rolling = [
-    last_stable_name + "_to_" + current_name,
-    prelast_stable_name + "_to_" + last_stable_name,
+    "rolling_{}_to_{}".format(last_stable_name, current_name),
+    "rolling_{}_to_{}".format(prelast_stable_name, last_stable_name),
 ]
 
 
@@ -150,6 +174,7 @@ class RollingUpgradeAndDowngradeFixture:
     @pytest.fixture(autouse=True, params=all_binary_combinations_rolling, ids=all_binary_combinations_ids_rolling)
     def base_setup(self, request):
         self.all_binary_paths = request.param
+        self.versions = list([path_to_version[path] for path in self.all_binary_paths])
 
     def _wait_for_readiness(self):
         if self.recreate_driver:
@@ -196,6 +221,7 @@ class RollingUpgradeAndDowngradeFixture:
             erasure=Erasure.MIRROR_3_DC,
             binary_paths=[self.all_binary_paths[0]],
             use_in_memory_pdisks=False,
+            extra_feature_flags=extra_feature_flags,
             **kwargs,
         )
 

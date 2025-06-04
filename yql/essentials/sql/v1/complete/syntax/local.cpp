@@ -49,10 +49,11 @@ namespace NSQLComplete {
             TDefaultYQLGrammar>;
 
     public:
-        explicit TSpecializedLocalSyntaxAnalysis(TLexerSupplier lexer)
+        explicit TSpecializedLocalSyntaxAnalysis(
+            TLexerSupplier lexer, const THashSet<TString>& IgnoredRules)
             : Grammar_(&GetSqlGrammar())
             , Lexer_(lexer(/* ansi = */ IsAnsiLexer))
-            , C3_(ComputeC3Config())
+            , C3_(ComputeC3Config(IgnoredRules))
         {
         }
 
@@ -100,15 +101,17 @@ namespace NSQLComplete {
             result.Hint = HintMatch(candidates);
             result.Object = ObjectMatch(context, candidates);
             result.Cluster = ClusterMatch(context, candidates);
+            result.Binding = BindingMatch(candidates);
 
             return result;
         }
 
     private:
-        IC3Engine::TConfig ComputeC3Config() const {
+        IC3Engine::TConfig ComputeC3Config(const THashSet<TString>& IgnoredRules) const {
             return {
                 .IgnoredTokens = ComputeIgnoredTokens(),
                 .PreferredRules = ComputePreferredRules(),
+                .IgnoredRules = ComputeIgnoredRules(IgnoredRules),
             };
         }
 
@@ -125,6 +128,15 @@ namespace NSQLComplete {
 
         std::unordered_set<TRuleId> ComputePreferredRules() const {
             return GetC3PreferredRules();
+        }
+
+        std::unordered_set<TRuleId> ComputeIgnoredRules(const THashSet<TString>& IgnoredRules) const {
+            std::unordered_set<TRuleId> ignored;
+            ignored.reserve(IgnoredRules.size());
+            for (const auto& ruleName : IgnoredRules) {
+                ignored.emplace(Grammar_->GetRuleId(ruleName));
+            }
+            return ignored;
         }
 
         TC3Candidates C3Complete(TCompletionInput statement, const TCursorTokenContext& context) {
@@ -281,6 +293,10 @@ namespace NSQLComplete {
             return cluster;
         }
 
+        bool BindingMatch(const TC3Candidates& candidates) const {
+            return AnyOf(candidates.Rules, RuleAdapted(IsLikelyBindingStack));
+        }
+
         TEditRange EditRange(const TCursorTokenContext& context) const {
             if (auto enclosing = context.Enclosing()) {
                 return EditRange(*enclosing, context.Cursor);
@@ -311,9 +327,10 @@ namespace NSQLComplete {
 
     class TLocalSyntaxAnalysis: public ILocalSyntaxAnalysis {
     public:
-        explicit TLocalSyntaxAnalysis(TLexerSupplier lexer)
-            : DefaultEngine_(lexer)
-            , AnsiEngine_(lexer)
+        explicit TLocalSyntaxAnalysis(
+            TLexerSupplier lexer, const THashSet<TString>& IgnoredRules)
+            : DefaultEngine_(lexer, IgnoredRules)
+            , AnsiEngine_(lexer, IgnoredRules)
         {
         }
 
@@ -335,8 +352,9 @@ namespace NSQLComplete {
         TSpecializedLocalSyntaxAnalysis</* IsAnsiLexer = */ true> AnsiEngine_;
     };
 
-    ILocalSyntaxAnalysis::TPtr MakeLocalSyntaxAnalysis(TLexerSupplier lexer) {
-        return MakeHolder<TLocalSyntaxAnalysis>(lexer);
+    ILocalSyntaxAnalysis::TPtr MakeLocalSyntaxAnalysis(
+        TLexerSupplier lexer, const THashSet<TString>& IgnoredRules) {
+        return MakeHolder<TLocalSyntaxAnalysis>(lexer, IgnoredRules);
     }
 
 } // namespace NSQLComplete

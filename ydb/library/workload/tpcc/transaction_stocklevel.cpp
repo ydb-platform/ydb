@@ -1,10 +1,12 @@
 #include "transactions.h"
 
-#include <util/string/printf.h>
-
 #include "constants.h"
 #include "log.h"
 #include "util.h"
+
+#include <library/cpp/time_provider/monotonic.h>
+
+#include <util/string/printf.h>
 
 #include <format>
 #include <string>
@@ -98,17 +100,24 @@ TAsyncExecuteQueryResult GetStockCount(
 
 //-----------------------------------------------------------------------------
 
-NThreading::TFuture<TStatus> GetStockLevelTask(TTransactionContext& context,
+NThreading::TFuture<TStatus> GetStockLevelTask(
+    TTransactionContext& context,
+    TDuration& latency,
     TSession session)
 {
+    TMonotonic startTs = TMonotonic::Now();
+
+    TTransactionInflightGuard guard;
     co_await TTaskReady(context.TaskQueue, context.TerminalID);
 
     auto& Log = context.Log;
-    LOG_T("Terminal " << context.TerminalID << " started StockLevel transaction");
 
     const int warehouseID = context.WarehouseID;
     const int districtID = RandomNumber(DISTRICT_LOW_ID, DISTRICT_HIGH_ID);
     const int threshold = RandomNumber(10, 20);
+
+    LOG_T("Terminal " << context.TerminalID << " started StockLevel transaction in "
+        << warehouseID << ", " << districtID);
 
     // Get next order ID from district
     auto districtFuture = GetDistrictOrderId(session, context, warehouseID, districtID);
@@ -149,7 +158,12 @@ NThreading::TFuture<TStatus> GetStockLevelTask(TTransactionContext& context,
     LOG_T("Terminal " << context.TerminalID << " is committing StockLevel transaction");
 
     auto commitFuture = tx.Commit();
-    co_return co_await TSuspendWithFuture(commitFuture, context.TaskQueue, context.TerminalID);
+    auto commitResult = co_await TSuspendWithFuture(commitFuture, context.TaskQueue, context.TerminalID);
+
+    TMonotonic endTs = TMonotonic::Now();
+    latency = endTs - startTs;
+
+    co_return commitResult;
 }
 
 } // namespace NYdb::NTPCC

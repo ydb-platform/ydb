@@ -24,6 +24,7 @@ TString TColumnEngineChanges::DebugString() const {
 }
 
 TConclusionStatus TColumnEngineChanges::ConstructBlobs(TConstructionContext& context) noexcept {
+    const NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("task_id", GetTaskIdentifier())("task_class", TypeString());
     Y_ABORT_UNLESS(Stage == NChanges::EStage::Started);
 
     context.Counters.CompactionInputSize(Blobs.GetTotalBlobsSize());

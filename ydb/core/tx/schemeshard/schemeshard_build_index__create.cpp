@@ -14,7 +14,7 @@ using namespace NTabletFlatExecutor;
 class TSchemeShard::TIndexBuilder::TTxCreate: public TSchemeShard::TIndexBuilder::TTxSimple<TEvIndexBuilder::TEvCreateRequest, TEvIndexBuilder::TEvCreateResponse> {
 public:
     explicit TTxCreate(TSelf* self, TEvIndexBuilder::TEvCreateRequest::TPtr& ev)
-        : TTxSimple(self, ev, TXTYPE_CREATE_INDEX_BUILD)
+        : TTxSimple(self, TIndexBuildId(ev->Get()->Record.GetTxId()), ev, TXTYPE_CREATE_INDEX_BUILD)
     {}
 
     bool DoExecute(TTransactionContext& txc, const TActorContext& ctx) override {
@@ -24,10 +24,9 @@ public:
 
         Response = MakeHolder<TEvIndexBuilder::TEvCreateResponse>(request.GetTxId());
 
-        const auto id = TIndexBuildId(request.GetTxId());
-        if (Self->IndexBuilds.contains(id)) {
+        if (Self->IndexBuilds.contains(BuildId)) {
             return Reply(Ydb::StatusIds::ALREADY_EXISTS, TStringBuilder()
-                << "Index build with id '" << id << "' already exists");
+                << "Index build with id '" << BuildId << "' already exists");
         }
 
         const TString& uid = GetUid(request.GetOperationParams());
@@ -83,7 +82,7 @@ public:
             }
         }
 
-        TIndexBuildInfo::TPtr buildInfo = new TIndexBuildInfo(id, uid);
+        TIndexBuildInfo::TPtr buildInfo = new TIndexBuildInfo(BuildId, uid);
         buildInfo->DomainPathId = domainPath.Base()->PathId;
         buildInfo->TablePathId = tablePath.Base()->PathId;
 
@@ -198,14 +197,14 @@ public:
 
         Self->PersistBuildIndexState(db, *buildInfo);
 
-        auto [it, emplaced] = Self->IndexBuilds.emplace(id, buildInfo);
+        auto [it, emplaced] = Self->IndexBuilds.emplace(BuildId, buildInfo);
         Y_ASSERT(emplaced);
         if (uid) {
             std::tie(std::ignore, emplaced) = Self->IndexBuildsByUid.emplace(uid, buildInfo);
             Y_ASSERT(emplaced);
         }
 
-        Progress(id);
+        Progress(BuildId);
 
         return true;
     }
@@ -227,8 +226,14 @@ private:
             buildInfo.IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobalAsync;
             break;
         case Ydb::Table::TableIndex::TypeCase::kGlobalUniqueIndex:
-            explain = "unsupported index type to build";
-            return false;
+            if (AppData()->FeatureFlags.GetEnableAddUniqueIndex()) {
+                buildInfo.BuildKind = TIndexBuildInfo::EBuildKind::BuildSecondaryIndex;
+                buildInfo.IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobalUnique;
+                break;
+            } else {
+                explain = "unsupported index type to build";
+                return false;
+            }
         case Ydb::Table::TableIndex::TypeCase::kGlobalVectorKmeansTreeIndex: {
             buildInfo.BuildKind = index.index_columns().size() == 1
                 ? TIndexBuildInfo::EBuildKind::BuildVectorIndex

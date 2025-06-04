@@ -167,6 +167,9 @@ class TDefaultNodeBrokerClient
                         nodeInfo.SetName(TString{result.GetNodeName()});
                         outNodeName = result.GetNodeName();
                     }
+                    if (node.BridgePileId) {
+                        nodeInfo.SetBridgePileId(*node.BridgePileId);
+                    }
                 } else {
                     auto &info = *nsConfig.AddNode();
                     info.SetNodeId(node.NodeId);
@@ -175,6 +178,9 @@ class TDefaultNodeBrokerClient
                     info.SetHost(TString{node.Host});
                     info.SetInterconnectHost(TString{node.ResolveHost});
                     NConfig::CopyNodeLocation(info.MutableLocation(), node.Location);
+                    if (node.BridgePileId && appConfig.HasBridgeConfig()) {
+                        info.SetBridgePileName(appConfig.GetBridgeConfig().GetPiles(*node.BridgePileId).GetName());
+                    }
                 }
             }
         }
@@ -245,11 +251,9 @@ class TDefaultNodeBrokerClient
                                                   env);
                 if (result.IsSuccess()) {
                     logger.Out() << "Success. Registered as " << result.GetNodeId() << Endl;
-                    logger.Out() << "Node name: ";
                     if (result.HasNodeName()) {
-                        logger.Out() << result.GetNodeName();
+                        logger.Out() << "Node name: " << result.GetNodeName() << Endl;
                     }
-                    logger.Out() << Endl;
                     break;
                 }
                 logger.Err() << "Registration error: " << static_cast<NYdb::TStatus>(result) << Endl;
@@ -272,6 +276,9 @@ class TDefaultNodeBrokerClient
         result.FixedNodeId(settings.FixedNodeID);
         if (settings.Path) {
             result.Path(*settings.Path);
+        }
+        if (settings.BridgePileName) {
+            result.BridgePileName(*settings.BridgePileName);
         }
 
         auto loc = settings.Location;

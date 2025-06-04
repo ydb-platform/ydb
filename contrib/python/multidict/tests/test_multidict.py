@@ -1313,6 +1313,7 @@ def test_subclassed_multidict(
     any_multidict_class: type[MultiDict[str]],
 ) -> None:
     """Test that subclassed MultiDicts work as expected."""
+
     class SubclassedMultiDict(any_multidict_class):  # type: ignore[valid-type, misc]
         """Subclassed MultiDict."""
 
@@ -1323,3 +1324,22 @@ def test_subclassed_multidict(
     assert d1 == d3
     assert d1 == SubclassedMultiDict([("key", "value1")])
     assert d1 != SubclassedMultiDict([("key", "value2")])
+
+
+@pytest.mark.c_extension
+def test_view_direct_instantiation_segfault() -> None:
+    """Test that view objects cannot be instantiated directly (issue: segfault).
+
+    This test only applies to the C extension implementation.
+    """
+    # Test that _ItemsView cannot be instantiated directly
+    with pytest.raises(TypeError, match="cannot create '.*_ItemsView' instances directly"):
+        multidict._ItemsView()  # type: ignore[attr-defined]
+
+    # Test that _KeysView cannot be instantiated directly
+    with pytest.raises(TypeError, match="cannot create '.*_KeysView' instances directly"):
+        multidict._KeysView()  # type: ignore[attr-defined]
+
+    # Test that _ValuesView cannot be instantiated directly
+    with pytest.raises(TypeError, match="cannot create '.*_ValuesView' instances directly"):
+        multidict._ValuesView()  # type: ignore[attr-defined]

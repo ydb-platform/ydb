@@ -3044,12 +3044,14 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     TLocalPathId(rowset.GetValue<Schema::CdcStream::LocalPathId>())
                 );
                 auto alterVersion = rowset.GetValue<Schema::CdcStream::AlterVersion>();
-                auto mode = rowset.GetValue<Schema::CdcStream::Mode>();
-                auto format = rowset.GetValue<Schema::CdcStream::Format>();
-                auto vt = rowset.GetValueOrDefault<Schema::CdcStream::VirtualTimestamps>(false);
-                auto rt = TDuration::MilliSeconds(rowset.GetValueOrDefault<Schema::CdcStream::ResolvedTimestampsIntervalMs>(0));
-                auto awsRegion = rowset.GetValue<Schema::CdcStream::AwsRegion>();
-                auto state = rowset.GetValue<Schema::CdcStream::State>();
+                auto settings = TCdcStreamSettings()
+                    .WithMode(rowset.GetValue<Schema::CdcStream::Mode>())
+                    .WithFormat(rowset.GetValue<Schema::CdcStream::Format>())
+                    .WithVirtualTimestamps(rowset.GetValueOrDefault<Schema::CdcStream::VirtualTimestamps>(false))
+                    .WithResolvedTimestamps(TDuration::MilliSeconds(rowset.GetValueOrDefault<Schema::CdcStream::ResolvedTimestampsIntervalMs>(0)))
+                    .WithSchemaChanges(rowset.GetValueOrDefault<Schema::CdcStream::SchemaChanges>(false))
+                    .WithAwsRegion(rowset.GetValue<Schema::CdcStream::AwsRegion>())
+                    .WithState(rowset.GetValue<Schema::CdcStream::State>());
 
                 Y_VERIFY_S(Self->PathsById.contains(pathId), "Path doesn't exist, pathId: " << pathId);
                 auto path = Self->PathsById.at(pathId);
@@ -3059,10 +3061,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     << ", path type: " << NKikimrSchemeOp::EPathType_Name(path->PathType));
 
                 Y_ABORT_UNLESS(!Self->CdcStreams.contains(pathId));
-                Self->CdcStreams[pathId] = new TCdcStreamInfo(alterVersion, mode, format, vt, rt, awsRegion, state);
+                const auto& stream = Self->CdcStreams[pathId] = new TCdcStreamInfo(alterVersion, std::move(settings));
                 Self->IncrementPathDbRefCount(pathId);
 
-                if (state == NKikimrSchemeOp::ECdcStreamStateScan) {
+                if (stream->State == NKikimrSchemeOp::ECdcStreamStateScan) {
                     Y_VERIFY_S(Self->PathsById.contains(path->ParentPathId), "Parent path is not found"
                         << ", cdc stream pathId: " << pathId
                         << ", parent pathId: " << path->ParentPathId);
@@ -3087,14 +3089,15 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     TOwnerId(rowset.GetValue<Schema::CdcStreamAlterData::OwnerPathId>()),
                     TLocalPathId(rowset.GetValue<Schema::CdcStreamAlterData::LocalPathId>())
                 );
-
                 auto alterVersion = rowset.GetValue<Schema::CdcStreamAlterData::AlterVersion>();
-                auto mode = rowset.GetValue<Schema::CdcStreamAlterData::Mode>();
-                auto format = rowset.GetValue<Schema::CdcStreamAlterData::Format>();
-                auto vt = rowset.GetValueOrDefault<Schema::CdcStreamAlterData::VirtualTimestamps>(false);
-                auto rt = TDuration::MilliSeconds(rowset.GetValueOrDefault<Schema::CdcStreamAlterData::ResolvedTimestampsIntervalMs>(0));
-                auto awsRegion = rowset.GetValue<Schema::CdcStreamAlterData::AwsRegion>();
-                auto state = rowset.GetValue<Schema::CdcStreamAlterData::State>();
+                auto settings = TCdcStreamSettings()
+                    .WithMode(rowset.GetValue<Schema::CdcStreamAlterData::Mode>())
+                    .WithFormat(rowset.GetValue<Schema::CdcStreamAlterData::Format>())
+                    .WithVirtualTimestamps(rowset.GetValueOrDefault<Schema::CdcStreamAlterData::VirtualTimestamps>(false))
+                    .WithResolvedTimestamps(TDuration::MilliSeconds(rowset.GetValueOrDefault<Schema::CdcStreamAlterData::ResolvedTimestampsIntervalMs>(0)))
+                    .WithSchemaChanges(rowset.GetValueOrDefault<Schema::CdcStreamAlterData::SchemaChanges>(false))
+                    .WithAwsRegion(rowset.GetValue<Schema::CdcStreamAlterData::AwsRegion>())
+                    .WithState(rowset.GetValue<Schema::CdcStreamAlterData::State>());
 
                 Y_VERIFY_S(Self->PathsById.contains(pathId), "Path doesn't exist, pathId: " << pathId);
                 auto path = Self->PathsById.at(pathId);
@@ -3105,14 +3108,14 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                 if (!Self->CdcStreams.contains(pathId)) {
                     Y_ABORT_UNLESS(alterVersion == 1);
-                    Self->CdcStreams[pathId] = TCdcStreamInfo::New(mode, format, vt, rt, awsRegion);
+                    Self->CdcStreams[pathId] = TCdcStreamInfo::New(settings);
                     Self->IncrementPathDbRefCount(pathId);
                 }
 
                 auto stream = Self->CdcStreams.at(pathId);
                 Y_ABORT_UNLESS(stream->AlterData == nullptr);
                 Y_ABORT_UNLESS(stream->AlterVersion < alterVersion);
-                stream->AlterData = new TCdcStreamInfo(alterVersion, mode, format, vt, rt, awsRegion, state);
+                stream->AlterData = new TCdcStreamInfo(alterVersion, std::move(settings));
 
                 Y_VERIFY_S(Self->PathsById.contains(path->ParentPathId), "Parent path is not found"
                     << ", cdc stream pathId: " << pathId
@@ -3590,6 +3593,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         bool deserializeRes = ParseFromStringNoSizeLimit(proto, extraData);
                         Y_ABORT_UNLESS(deserializeRes);
                         txState.CdcPathId = TPathId::FromProto(proto.GetTxCopyTableExtraData().GetCdcPathId());
+                        if (proto.GetTxCopyTableExtraData().HasTargetPathTargetState()) {
+                            txState.TargetPathTargetState = proto.GetTxCopyTableExtraData().GetTargetPathTargetState();
+                        }
                     }
                 }
 

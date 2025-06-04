@@ -163,7 +163,7 @@ TErrorOr<TMemoryUsageTrackerGuard> TMemoryUsageTrackerGuard::TryAcquire(
     guard.Size_ = size;
     guard.AcquiredSize_ = size;
     guard.Granularity_ = granularity;
-    return std::move(guard);
+    return guard;
 }
 
 void TMemoryUsageTrackerGuard::Release()
@@ -258,7 +258,7 @@ TMemoryUsageTrackerGuard TMemoryUsageTrackerGuard::TransferMemory(i64 size)
     guard.Size_ = size;
     guard.AcquiredSize_ = acquiredDelta;
     guard.Granularity_ = Granularity_;
-    return std::move(guard);
+    return guard;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

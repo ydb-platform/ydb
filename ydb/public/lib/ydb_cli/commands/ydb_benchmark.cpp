@@ -87,17 +87,6 @@ void TWorkloadCommandBenchmark::Config(TConfig& config) {
 
     config.Opts->MutuallyExclusiveOpt(includeOpt, excludeOpt);
 
-    config.Opts->AddLongOption("executer", "Query executer type."
-            " Options: scan, generic\n"
-            "scan - use scan queries;\n"
-            "generic - use generic queries.")
-        .DefaultValue(QueryExecuterType)
-        .GetOpt().Handler1T<TStringBuf>([this](TStringBuf arg) {
-                const auto l = to_lower(TString(arg));
-                if (!TryFromString(arg, QueryExecuterType)) {
-                    throw yexception() << "Ivalid query executer type: " << arg;
-                }
-            });
     config.Opts->AddLongOption('v', "verbose", "Verbose output").NoArgument().StoreValue(&VerboseLevel, 1);
 
     config.Opts->AddLongOption("global-timeout", "Global timeout for all requests")
@@ -153,6 +142,7 @@ TVector<TString> ColumnNames {
     "RttMin",
     "RttMax",
     "RttAvg",
+    "GrossTime",
     "SuccessCount",
     "FailsCount",
     "DiffsCount"
@@ -169,6 +159,8 @@ struct TTestInfoProduct {
     double Median = 1;
     double UnixBench = 1;
     double Std = 0;
+    std::vector<TDuration> ClientTimings;
+
     void operator *=(const BenchmarkUtils::TTestInfo& other) {
         ColdTime *= other.ColdTime.MillisecondsFloat();
         Min *= other.Min.MillisecondsFloat();
@@ -290,6 +282,11 @@ void CollectStats(TPrettyTable& table, IOutputStream* csv, NJson::TJsonValue* js
     CollectField<true>(row, index++, csv, json, name, testInfo.RttMin);
     CollectField<true>(row, index++, csv, json, name, testInfo.RttMax);
     CollectField<true>(row, index++, csv, json, name, testInfo.RttMean);
+    auto grossTime = TDuration::Zero();
+    for (const auto& clientTime: testInfo.ClientTimings) {
+        grossTime += clientTime;
+    }
+    CollectField<true>(row, index++, csv, json, name, grossTime);
     CollectField(row, index++, csv, json, name, sCount);
     CollectField(row, index++, csv, json, name, fCount);
     CollectField(row, index++, csv, json, name, dCount);
@@ -302,21 +299,19 @@ void CollectStats(TPrettyTable& table, IOutputStream* csv, NJson::TJsonValue* js
 
 using namespace BenchmarkUtils;
 
-template <typename TClient>
-class TWorkloadCommandBenchmark::TIterationExecution: public IObjectInQueue, public TAtomicRefCount<TIterationExecution<TClient>> {
+class TWorkloadCommandBenchmark::TIterationExecution: public IObjectInQueue, public TAtomicRefCount<TIterationExecution> {
 public:
-    using TPtr = TIntrusivePtr<TIterationExecution<TClient>>;
-    TIterationExecution(const TWorkloadCommandBenchmark& owner, TClient* client, const TString& query, const TString& queryName, const TString& expected)
+    using TPtr = TIntrusivePtr<TIterationExecution>;
+    TIterationExecution(const TWorkloadCommandBenchmark& owner, const TString& query, const TString& queryName, const TString& expected)
         : QueryName(queryName)
         , Query(query)
         , Expected(expected)
         , Owner(owner)
-        , Client(client)
     {}
 
     void Process(void*) override {
         bool execute = Iteration >= 0; // explain in other case
-        if (Owner.Threads <= 1) {
+        if (Owner.Threads == 0) {
             PrintQueryHeader();
         }
         auto t1 = TInstant::Now();
@@ -325,15 +320,15 @@ public:
             return;
         }
         try {
-            if (Client) {
+            if (Owner.QueryClient) {
                 auto settings = Owner.GetBenchmarkSettings(execute);
                 if (execute) {
                     if (Owner.PlanFileName) {
                         settings.PlanFileName = TStringBuilder() << Owner.PlanFileName << "." << QueryName << "." << ToString(Iteration) << ".in_progress";
                     }
-                    Result = Execute(Query, Expected, *Client, settings);
+                    Result = Execute(Query, Expected, *Owner.QueryClient, settings);
                 } else {
-                    Result = Explain(Query, *Client, settings);
+                    Result = Explain(Query, *Owner.QueryClient, settings);
                 }
             } else {
                 Result = TQueryBenchmarkResult::Result(TQueryBenchmarkResult::TRawResults(), TDuration::Zero(), "", "", "");
@@ -344,7 +339,7 @@ public:
         }
         ClientDuration = TInstant::Now() - t1;
         Owner.SavePlans(Result, QueryName, execute ? ToString(Iteration) : "explain");
-        if (Owner.Threads <= 1) {
+        if (Owner.Threads == 0) {
             PrintResult();
         }
     }
@@ -390,14 +385,12 @@ public:
 
 private:
     const TWorkloadCommandBenchmark& Owner;
-    TClient* Client;
 };
 
 
-template <typename TClient>
-int TWorkloadCommandBenchmark::RunBench(TClient* client, NYdbWorkload::IWorkloadQueryGenerator& workloadGen) {
+int TWorkloadCommandBenchmark::RunBench(NYdbWorkload::IWorkloadQueryGenerator& workloadGen) {
     const auto qtokens = workloadGen.GetWorkload(Type);
-    using TIterations = TVector<typename TIterationExecution<TClient>::TPtr>;
+    using TIterations = TVector<TIterationExecution::TPtr>;
     TIterations iterations;
     auto qIter = qtokens.cbegin();
     for (ui32 queryN = 0; queryN < qtokens.size() && Now() < GlobalDeadline; ++queryN, ++qIter) {
@@ -408,10 +401,10 @@ int TWorkloadCommandBenchmark::RunBench(TClient* client, NYdbWorkload::IWorkload
             continue;
         }
         for (ui32 i = 0; i < IterationsCount + (PlanFileName ? 1 : 0); ++i) {
-            iterations.emplace_back(MakeIntrusive<TIterationExecution<TClient>>(*this, client, query, queryName, qInfo.ExpectedResult.c_str()));
+            iterations.emplace_back(MakeIntrusive<TIterationExecution>(*this, query, queryName, qInfo.ExpectedResult.c_str()));
         }
     }
-    if (Threads > 1) {
+    if (Threads > 0) {
         Shuffle(iterations.begin(), iterations.end());
     }
     TMap<TString, TIterations> queryExecByName;
@@ -423,11 +416,13 @@ int TWorkloadCommandBenchmark::RunBench(TClient* client, NYdbWorkload::IWorkload
 
     GlobalDeadline = (GlobalTimeout != TDuration::Zero()) ? Now() + GlobalTimeout : TInstant::Max();
     TThreadPool pool;
-    pool.Start(Threads > 1 ? Threads : 0);
+    pool.Start(Threads);
+    const auto startTime = Now();
     for (auto iter: iterations) {
         pool.SafeAdd(iter.Get());
     }
     pool.Stop();
+    const auto grossTime = Now() - startTime;
 
     ui32 queriesWithAllSuccess = 0;
     ui32 queriesWithSomeFails = 0;
@@ -463,7 +458,7 @@ int TWorkloadCommandBenchmark::RunBench(TClient* client, NYdbWorkload::IWorkload
         std::optional<TString> prevResult;
         TOFStream outFStream(TStringBuilder() << OutFilePath << "." << queryName << ".out");
         for (const auto& iterExec: queryExec) {
-            if (Threads > 1) {
+            if (Threads > 0) {
                 iterExec->PrintQueryHeader();
                 iterExec->PrintResult();
             }
@@ -521,8 +516,10 @@ int TWorkloadCommandBenchmark::RunBench(TClient* client, NYdbWorkload::IWorkload
     }
 
     if (queriesWithAllSuccess) {
+        sumInfo.ClientTimings.push_back(grossTime);
         CollectStats(statTable, csvReport.Get(), jsonReport.Get(), "Sum", queriesWithAllSuccess, queriesWithSomeFails, queriesWithDiff, sumInfo);
         sumInfo /= queriesWithAllSuccess;
+        sumInfo.ClientTimings.back() = grossTime / queriesWithAllSuccess;
         CollectStats(statTable, csvReport.Get(), jsonReport.Get(), "Avg", queriesWithAllSuccess, queriesWithSomeFails, queriesWithDiff, sumInfo);
         productInfo ^= queriesWithAllSuccess;
         CollectStats(statTable, csvReport.Get(), jsonReport.Get(), "GAvg", queriesWithAllSuccess, queriesWithSomeFails, queriesWithDiff, productInfo);
@@ -614,12 +611,7 @@ BenchmarkUtils::TQueryBenchmarkSettings TWorkloadCommandBenchmark::GetBenchmarkS
 }
 
 int TWorkloadCommandBenchmark::DoRun(NYdbWorkload::IWorkloadQueryGenerator& workloadGen, TConfig& /*config*/) {
-    switch (QueryExecuterType) {
-    case EQueryExecutor::Scan:
-        return RunBench(TableClient.Get(), workloadGen);
-    case EQueryExecutor::Generic:
-        return RunBench(QueryClient.Get(), workloadGen);
-    }
+    return RunBench(workloadGen);
 }
 
 }

@@ -1,11 +1,13 @@
 #include "transactions.h"
 
-#include <util/string/printf.h>
-
 #include "common_queries.h"
 #include "constants.h"
 #include "log.h"
 #include "util.h"
+
+#include <library/cpp/time_provider/monotonic.h>
+
+#include <util/string/printf.h>
 
 #include <format>
 #include <string>
@@ -260,17 +262,24 @@ TAsyncExecuteQueryResult InsertHistoryRecord(
 
 //-----------------------------------------------------------------------------
 
-NThreading::TFuture<TStatus> GetPaymentTask(TTransactionContext& context,
+NThreading::TFuture<TStatus> GetPaymentTask(
+    TTransactionContext& context,
+    TDuration& latency,
     TSession session)
 {
+    TMonotonic startTs = TMonotonic::Now();
+
+    TTransactionInflightGuard guard;
     co_await TTaskReady(context.TaskQueue, context.TerminalID);
 
     auto& Log = context.Log;
-    LOG_T("Terminal " << context.TerminalID << " started Payment transaction");
 
     const int warehouseID = context.WarehouseID;
     const int districtID = RandomNumber(DISTRICT_LOW_ID, DISTRICT_HIGH_ID);
     const double paymentAmount = static_cast<double>(RandomNumber(100, 500000)) / 100.0;
+
+    LOG_T("Terminal " << context.TerminalID << " started Payment transaction in "
+        << warehouseID << ", " << districtID);
 
     // Update warehouse YTD
 
@@ -483,7 +492,12 @@ NThreading::TFuture<TStatus> GetPaymentTask(TTransactionContext& context,
         << "customer " << customer.c_id << ", amount " << paymentAmount);
 
     auto commitFuture = tx.Commit();
-    co_return co_await TSuspendWithFuture(commitFuture, context.TaskQueue, context.TerminalID);
+    auto commitResult = co_await TSuspendWithFuture(commitFuture, context.TaskQueue, context.TerminalID);
+
+    TMonotonic endTs = TMonotonic::Now();
+    latency = endTs - startTs;
+
+    co_return commitResult;
 }
 
 } // namespace NYdb::NTPCC

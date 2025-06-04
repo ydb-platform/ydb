@@ -148,6 +148,7 @@ public:
         virtual void FreezeDefault() = 0;
         virtual void Restore(const TString& cluster) = 0;
         virtual bool IsRuntime() const = 0;
+        virtual bool IsPerCluster() const = 0;
 
     protected:
         TString Name_;
@@ -228,6 +229,10 @@ public:
     public:
         bool IsRuntime() const override {
             return Setting_.IsRuntime();
+        }
+
+        bool IsPerCluster() const override {
+            return Setting_.IsPerCluster();
         }
 
         TSettingHandlerImpl& Lower(TType lower) {

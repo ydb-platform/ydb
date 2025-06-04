@@ -24,6 +24,7 @@ RECURSE_FOR_TESTS(
     ut_extsubdomain
     ut_extsubdomain_reboots
     ut_filestore_reboots
+    ut_incremental_restore
     ut_index
     ut_index_build
     ut_index_build_reboots

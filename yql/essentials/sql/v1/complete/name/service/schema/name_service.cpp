@@ -32,12 +32,7 @@ namespace NSQLComplete {
             }
 
             static TString ClusterName(const TObjectNameConstraints& constraints) {
-                TString name = constraints.Cluster;
-                if (!constraints.Provider.empty()) {
-                    name.prepend(":");
-                    name.prepend(constraints.Provider);
-                }
-                return name;
+                return constraints.Cluster;
             }
 
             static TListFilter ToListFilter(const TNameConstraints& constraints) {

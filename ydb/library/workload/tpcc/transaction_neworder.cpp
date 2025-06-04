@@ -1,16 +1,20 @@
 #include "transactions.h"
 
-#include <util/generic/singleton.h>
-#include <util/string/printf.h>
-
 #include "constants.h"
 #include "log.h"
 #include "util.h"
+
+#include <library/cpp/time_provider/monotonic.h>
+
+#include <util/generic/singleton.h>
+#include <util/string/printf.h>
 
 #include <format>
 #include <unordered_map>
 
 namespace NYdb::NTPCC {
+
+std::atomic<size_t> TransactionsInflight{0};
 
 namespace {
 
@@ -528,16 +532,22 @@ TString GetDistInfo(int districtID, const Stock& stock) {
 
 NThreading::TFuture<TStatus> GetNewOrderTask(
     TTransactionContext& context,
+    TDuration& latency,
     TSession session)
 {
+    TMonotonic startTs = TMonotonic::Now();
+
+    TTransactionInflightGuard guard;
     co_await TTaskReady(context.TaskQueue, context.TerminalID);
 
     auto& Log = context.Log;
-    LOG_T("Terminal " << context.TerminalID << " started NewOrder transaction");
 
     const int warehouseID = context.WarehouseID;
     const int districtID = RandomNumber(DISTRICT_LOW_ID, DISTRICT_HIGH_ID);
     const int customerID = GetRandomCustomerID();
+
+    LOG_T("Terminal " << context.TerminalID << " started NewOrder transaction in "
+        << warehouseID << ", " << districtID << " for " << customerID);
 
     // Generate order line items
 
@@ -685,6 +695,7 @@ NThreading::TFuture<TStatus> GetNewOrderTask(
     }
 
     if (hasInvalidItem) {
+        co_await tx.Rollback();
         throw TUserAbortedException();
     }
 
@@ -826,7 +837,12 @@ NThreading::TFuture<TStatus> GetNewOrderTask(
     LOG_T("Terminal " << context.TerminalID << " is committing NewOrder transaction");
 
     auto commitFuture = tx.Commit();
-    co_return co_await TSuspendWithFuture(commitFuture, context.TaskQueue, context.TerminalID);
+    auto commitResult = co_await TSuspendWithFuture(commitFuture, context.TaskQueue, context.TerminalID);
+
+    TMonotonic endTs = TMonotonic::Now();
+    latency = endTs - startTs;
+
+    co_return commitResult;
 }
 
 } // namespace NYdb::NTPCC

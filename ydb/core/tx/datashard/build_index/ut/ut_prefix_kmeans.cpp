@@ -50,7 +50,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
 
         VectorIndexSettings settings;
         settings.set_vector_dimension(2);
-        settings.set_vector_type(VectorIndexSettings::VECTOR_TYPE_FLOAT);
+        settings.set_vector_type(VectorIndexSettings::VECTOR_TYPE_UINT8);
         settings.set_metric(VectorIndexSettings::DISTANCE_COSINE);
         *rec.MutableSettings() = settings;
 
@@ -65,9 +65,12 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
 
         rec.SetEmbeddingColumn("embedding");
         rec.SetPrefixColumns(1);
+        rec.AddSourcePrimaryKeyColumns("key");
+
+        rec.SetPrefixName(kPrefixTable);
         
         rec.SetLevelName(kLevelTable);
-        rec.SetPostingName(kPostingTable);
+        rec.SetOutputName(kPostingTable);
         rec.SetPrefixName(kPrefixTable);
 
         setupRequest(rec);
@@ -130,10 +133,11 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
                 rec.SetEmbeddingColumn("embedding");
                 rec.AddDataColumns("data");
                 rec.SetPrefixColumns(1);
+                rec.AddSourcePrimaryKeyColumns("key");
 
                 rec.SetPrefixName(kPrefixTable);
                 rec.SetLevelName(kLevelTable);
-                rec.SetPostingName(kPostingTable);
+                rec.SetOutputName(kPostingTable);
 
                 rec.MutableScanSettings()->SetMaxBatchRows(maxBatchRows);
             };
@@ -252,6 +256,10 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
         }, "{ <main>: Error: Unknown table id: 0 }");
 
         DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvPrefixKMeansRequest& request) {
+            request.ClearSourcePrimaryKeyColumns();
+        }, "{ <main>: Error: Request should include source primary key columns }");
+
+        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvPrefixKMeansRequest& request) {
             request.MutableSettings()->set_vector_type(VectorIndexSettings::VECTOR_TYPE_UNSPECIFIED);
         }, "{ <main>: Error: Wrong vector type }");
         DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvPrefixKMeansRequest& request) {
@@ -282,8 +290,8 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
             request.ClearLevelName();
         }, "{ <main>: Error: Empty level table name }");
         DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvPrefixKMeansRequest& request) {
-            request.ClearPostingName();
-        }, "{ <main>: Error: Empty posting table name }");
+            request.ClearOutputName();
+        }, "{ <main>: Error: Empty output table name }");
         DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvPrefixKMeansRequest& request) {
             request.ClearPrefixName();
         }, "{ <main>: Error: Empty prefix table name }");

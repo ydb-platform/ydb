@@ -344,14 +344,14 @@ public:
         const TString& databaseRoot,
         const TString& metadata,
         bool enablePermissions,
-        TMaybe<NBackup::TEncryptionIV> iv
+        const TMaybe<NBackup::TEncryptionIV>& iv
     )
         : TExportFilesUploader<TSchemeUploader>(settings, GetDestinationPrefix(settings, itemIdx))
         , SchemeShard(schemeShard)
         , ExportId(exportId)
         , ItemIdx(itemIdx)
         , SourcePathId(sourcePathId)
-        , IV(std::move(iv))
+        , IV(iv)
         , DatabaseRoot(databaseRoot)
         , EnablePermissions(enablePermissions)
         , Metadata(metadata)
@@ -502,10 +502,10 @@ private:
 
 IActor* CreateSchemeUploader(TActorId schemeShard, ui64 exportId, ui32 itemIdx, TPathId sourcePathId,
     const Ydb::Export::ExportToS3Settings& settings, const TString& databaseRoot, const TString& metadata,
-    bool enablePermissions, TMaybe<NBackup::TEncryptionIV> iv
+    bool enablePermissions, const TMaybe<NBackup::TEncryptionIV>& iv
 ) {
     return new TSchemeUploader(schemeShard, exportId, itemIdx, sourcePathId, settings, databaseRoot,
-        metadata, enablePermissions, std::move(iv));
+        metadata, enablePermissions, iv);
 }
 
 NActors::IActor* CreateExportMetadataUploader(NActors::TActorId schemeShard, ui64 exportId,

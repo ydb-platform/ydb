@@ -4561,28 +4561,28 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
         // Read index build
         {
-            auto fillBuildInfoSafe = [&](TIndexBuildInfo& buildInfo, TString stepName, const auto& fill) {
+            auto fillBuildInfoSafe = [&](TIndexBuildInfo& buildInfo, const TString& stepName, const auto& fill) {
                 try {
                     fill(buildInfo);
                 } catch (const std::exception& exc) {
                     LOG_ERROR_S(ctx, NKikimrServices::BUILD_INDEX, 
-                        "Init build index " << stepName << " unhandled exception, id#" << buildInfo.Id
+                        "Init " << stepName << " unhandled exception, id#" << buildInfo.Id
                         << " " << TypeName(exc) << ": " << exc.what() << Endl
                         << TBackTrace::FromCurrentException().PrintToString()
                         << ", TIndexBuildInfo: " << buildInfo);
         
-                    // in-memory volatile state
+                    // in-memory volatile state:
                     buildInfo.IsBroken = true;
                     buildInfo.AddIssue(TStringBuilder() << "Init " << stepName << " unhandled exception " << exc.what());
                 }
             };
 
-            auto fillBuildInfoByIdSafe = [&](TIndexBuildId id, TString stepName, const auto& fill) {
+            auto fillBuildInfoByIdSafe = [&](TIndexBuildId id, const TString& stepName, const auto& fill) {
                 const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(id);
                 Y_ASSERT(buildInfoPtr);
                 if (!buildInfoPtr) {
                     LOG_ERROR_S(ctx, NKikimrServices::BUILD_INDEX, 
-                        "Init build index " << stepName << " BuildInfo not found: id#" << id);
+                        "Init " << stepName << " BuildInfo not found: id#" << id);
                     return;
                 }
                 auto& buildInfo = *buildInfoPtr->Get();
@@ -4599,21 +4599,21 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 }
 
                 while (!rowset.EndOfSet()) {
-                    TIndexBuildInfo::TPtr indexInfo = new TIndexBuildInfo();
-                    fillBuildInfoSafe(*indexInfo, "IndexBuild", [&rowset](TIndexBuildInfo& buildInfo) {
+                    TIndexBuildInfo::TPtr buildInfo = new TIndexBuildInfo();
+                    fillBuildInfoSafe(*buildInfo, "IndexBuild", [&](TIndexBuildInfo& buildInfo) {
                         TIndexBuildInfo::FillFromRow(rowset, &buildInfo);
                     });
-                    // broken build are also added to IndexBuilds
 
-                    Y_ASSERT(!Self->IndexBuilds.contains(indexInfo->Id));
-                    Self->IndexBuilds[indexInfo->Id] = indexInfo;
+                    // Note: broken build are also added to IndexBuilds
+                    Y_ASSERT(!Self->IndexBuilds.contains(buildInfo->Id));
+                    Self->IndexBuilds[buildInfo->Id] = buildInfo;
 
-                    if (indexInfo->Uid) {
-                        Y_ASSERT(!Self->IndexBuildsByUid.contains(indexInfo->Uid));
-                        Self->IndexBuildsByUid[indexInfo->Uid] = indexInfo;
+                    if (buildInfo->Uid) {
+                        Y_ASSERT(!Self->IndexBuildsByUid.contains(buildInfo->Uid));
+                        Self->IndexBuildsByUid[buildInfo->Uid] = buildInfo;
                     }
 
-                    OnComplete.ToProgress(indexInfo->Id);
+                    OnComplete.ToProgress(buildInfo->Id);
 
                     if (!rowset.Next()) {
                         return false;

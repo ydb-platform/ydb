@@ -22,6 +22,8 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/string/strip.h>
 
+#include <regex>
+
 namespace NKikimr::NKqp {
 
 Y_UNIT_TEST_SUITE(KqpOlapJson) {
@@ -518,7 +520,7 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
         TScriptVariator(script).Execute();
     }
 
-    Y_UNIT_TEST(CompactionVariants) {
+    void CompactionVariants(ui32 shardCount) {
         TString script = R"(
             STOP_COMPACTION
             ------
@@ -559,7 +561,19 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
                                    [11u;["{\"a\":\"1a1\"}"]];[12u;["{\"a\":\"1a2\"}"]];[13u;["{\"b\":\"1b3\"}"]];[14u;["{\"a\":\"a4\",\"b\":\"1b4\"}"]]]
 
         )";
-        TScriptVariator(script).Execute();
+        TScriptVariator(std::regex_replace(script.c_str(), std::regex("\\$\\$1\\|2\\|10\\$\\$"), std::to_string(shardCount))).Execute();
+    }
+
+    Y_UNIT_TEST(CompactionVariantsOneShard) {
+        CompactionVariants(1);
+    }
+
+    Y_UNIT_TEST(CompactionVariantsTwoShards) {
+        CompactionVariants(2);
+    }
+
+    Y_UNIT_TEST(CompactionVariantsTenShards) {
+        CompactionVariants(10);
     }
 
     Y_UNIT_TEST(BloomMixIndexesVariants) {
@@ -836,7 +850,7 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
         TScriptVariator(script).Execute();
     }
 
-    Y_UNIT_TEST(SwitchAccessorCompactionVariants) {
+    void SwitchAccessorCompactionVariants(ui32 shardCount) {
         TString script = R"(
             STOP_COMPACTION
             ------
@@ -877,10 +891,22 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
                                    [11u;["{\"a\":\"1a1\"}"]];[12u;["{\"a\":\"1a2\"}"]];[13u;["{\"b\":\"1b3\"}"]];[14u;["{\"a\":\"a4\",\"b\":\"1b4\"}"]]]
 
         )";
-        TScriptVariator(script).Execute();
+        TScriptVariator(std::regex_replace(script.c_str(), std::regex("\\$\\$1\\|2\\|10\\$\\$"), std::to_string(shardCount))).Execute();
     }
 
-    Y_UNIT_TEST(DuplicationCompactionVariants) {
+    Y_UNIT_TEST(SwitchAccessorCompactionVariantsOneShard) {
+        CompactionVariants(1);
+    }
+
+    Y_UNIT_TEST(SwitchAccessorCompactionVariantsTwoShards) {
+        CompactionVariants(2);
+    }
+
+    Y_UNIT_TEST(SwitchAccessorCompactionVariantsTenShards) {
+        CompactionVariants(10);
+    }
+
+    void DuplicationCompactionVariants(ui32 shardCount) {
         TString script = R"(
             STOP_COMPACTION
             ------
@@ -920,7 +946,19 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
             EXPECTED: [[1u;["{\"a\":\"1a1\"}"]];[2u;#];[3u;["{\"b\":\"1b3\"}"]];[4u;["{\"a\":\"a4\",\"b\":\"b4\"}"]]]
 
         )";
-        TScriptVariator(script).Execute();
+        TScriptVariator(std::regex_replace(script.c_str(), std::regex("\\$\\$1\\|2\\|10\\$\\$"), std::to_string(shardCount))).Execute();
+    }
+
+    Y_UNIT_TEST(DuplicationCompactionVariantsOneShard) {
+        CompactionVariants(1);
+    }
+
+    Y_UNIT_TEST(DuplicationCompactionVariantsTwoShards) {
+        CompactionVariants(2);
+    }
+
+    Y_UNIT_TEST(DuplicationCompactionVariantsTenShards) {
+        CompactionVariants(10);
     }
 }
 

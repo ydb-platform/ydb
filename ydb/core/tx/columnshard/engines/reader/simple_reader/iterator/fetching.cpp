@@ -112,7 +112,6 @@ class TApplySourceResult: public IDataTasksProcessor::ITask {
 private:
     using TBase = IDataTasksProcessor::ITask;
     YDB_READONLY_DEF(std::shared_ptr<IDataSource>, Source);
-    NColumnShard::TCounterGuard Guard;
     TFetchingScriptCursor Step;
 
 public:
@@ -120,11 +119,9 @@ public:
         return "TApplySourceResult";
     }
 
-    TApplySourceResult(
-        const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step)
-        : TBase(NActors::TActorId())
+    TApplySourceResult(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step)
+        : TBase(NActors::TActorId(), source->GetContext()->GetCommonContext()->GetCounters().GetResultsForSourceGuard())
         , Source(source)
-        , Guard(source->GetContext()->GetCommonContext()->GetCounters().GetResultsForSourceGuard())
         , Step(step) {
     }
 
@@ -169,7 +166,7 @@ TConclusion<bool> TBuildResultStep::DoExecuteInplace(const std::shared_ptr<IData
     }
     source->MutableStageResult().SetResultChunk(std::move(resultBatch), StartIndex, RecordsCount);
     NActors::TActivationContext::AsActorContext().Send(context->GetCommonContext()->GetScanActorId(),
-        new NColumnShard::TEvPrivate::TEvTaskProcessedResult(std::make_shared<TApplySourceResult>(source, step)));
+        new NColumnShard::TEvPrivate::TEvTaskProcessedResult(std::make_shared<TApplySourceResult>(source, step), std::nullopt));
     return false;
 }
 

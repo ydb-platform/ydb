@@ -74,17 +74,15 @@ private:
     private:
         using TBase = IDataTasksProcessor::ITask;
         YDB_READONLY_DEF(std::vector<TPortionDataAccessor>, Accessors);
-        NColumnShard::TCounterGuard WaitingCountersGuard;
+
     public:
         TString GetTaskClassIdentifier() const override {
             return "TApplyResult";
         }
 
         TApplyResult(const std::vector<TPortionDataAccessor>& accessors, NColumnShard::TCounterGuard&& waitingCountersGuard)
-            : TBase(NActors::TActorId())
-            , Accessors(accessors)
-            , WaitingCountersGuard(std::move(waitingCountersGuard))
-        {
+            : TBase(NActors::TActorId(), std::move(waitingCountersGuard))
+            , Accessors(accessors) {
         }
 
         virtual TConclusionStatus DoExecuteImpl() override {
@@ -119,12 +117,13 @@ private:
         virtual void DoOnRequestsFinished(TDataAccessorsResult&& result) override {
             if (result.HasErrors()) {
                 NActors::TActivationContext::AsActorContext().Send(
-                    OwnerId, new NColumnShard::TEvPrivate::TEvTaskProcessedResult(TConclusionStatus::Fail("cannot fetch accessors")));
+                    OwnerId, new NColumnShard::TEvPrivate::TEvTaskProcessedResult(
+                                 TConclusionStatus::Fail("cannot fetch accessors"), std::move(WaitingCountersGuard)));
             } else {
                 AFL_VERIFY(result.GetPortions().size() == 1)("count", result.GetPortions().size());
                 NActors::TActivationContext::AsActorContext().Send(
                     OwnerId, new NColumnShard::TEvPrivate::TEvTaskProcessedResult(
-                                 std::make_shared<TApplyResult>(result.ExtractPortionsVector(), std::move(WaitingCountersGuard))));
+                                 std::make_shared<TApplyResult>(result.ExtractPortionsVector(), std::move(WaitingCountersGuard)), std::nullopt));
             }
         }
 

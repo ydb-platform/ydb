@@ -116,21 +116,13 @@ private:
 };
 
 TCommandTPCCRun::TCommandTPCCRun(std::shared_ptr<NTPCC::TRunConfig>& runConfig)
-    : TYdbCommand("run", {}, "Run benchmark (When needed initial TPC-C data is generated)")
+    : TYdbCommand("run", {}, "Run benchmark")
     , RunConfig(runConfig)
 {
 }
 
 void TCommandTPCCRun::Config(TConfig& config) {
     TYdbCommand::Config(config);
-
-    config.Opts->AddLongOption(
-        'p', "path", TStringBuilder() << "Path to TPC-C data")
-            .RequiredArgument("STRING").StoreResult(&RunConfig->Path);
-
-    config.Opts->AddLongOption(
-        'w', "warehouses", TStringBuilder() << "Number of warehouses")
-            .RequiredArgument("INT").StoreResult(&RunConfig->WarehouseCount).DefaultValue(DEFAULT_WAREHOUSE_COUNT);
 
     // TODO: default value should be auto
     config.Opts->AddLongOption(
@@ -142,7 +134,7 @@ void TCommandTPCCRun::Config(TConfig& config) {
 
     // TODO: default value should be auto
     config.Opts->AddLongOption(
-        'm', "max-sessions", TStringBuilder() << "Soft limit on number of DB sessions (max inflight)")
+        'm', "max-sessions", TStringBuilder() << "Soft limit on number of DB sessions")
             .RequiredArgument("INT").StoreResult(&RunConfig->MaxInflight).DefaultValue(DEFAULT_MAX_SESSIONS);
 
     // advanced options mainly for developers (all hidden)
@@ -168,17 +160,6 @@ void TCommandTPCCRun::Config(TConfig& config) {
         "simulate-select1", TStringBuilder() << "Instead of real queries, execute specified number of SELECT 1 queries")
             .OptionalArgument("INT").StoreResult(&RunConfig->SimulateTransactionSelect1Count).DefaultValue(0)
             .Hidden();
-    config.Opts->AddLongOption(
-        "log-level", TStringBuilder() << "Log level from 0 to 8, default is 6 (INFO)")
-            .Optional().StoreMappedResult(&RunConfig->LogPriority, [](const TString& v) {
-                int intValue = FromString<int>(v);
-                return static_cast<ELogPriority>(intValue);
-            }).DefaultValue(DEFAULT_LOG_LEVEL)
-            .Hidden();
-    config.Opts->AddLongOption(
-        "developer", TStringBuilder() << "Developer mode")
-            .Optional().StoreTrue(&RunConfig->Developer)
-            .Hidden();
 }
 
 int TCommandTPCCRun::Run(TConfig& connectionConfig) {
@@ -196,13 +177,34 @@ TCommandTPCC::TCommandTPCC()
 {
     AddCommand(std::make_unique<TCommandTPCCRun>(RunConfig));
     AddCommand(std::make_unique<TCommandTPCCClean>(RunConfig));
-    AddHiddenCommand(std::make_unique<TCommandTPCCInit>(RunConfig));
-    AddHiddenCommand(std::make_unique<TCommandTPCCImport>(RunConfig));
+    AddCommand(std::make_unique<TCommandTPCCInit>(RunConfig));
+    AddCommand(std::make_unique<TCommandTPCCImport>(RunConfig));
 }
 
 void TCommandTPCC::Config(TConfig& config) {
     TClientCommandTree::Config(config);
 
+    config.Opts->AddLongOption(
+        'p', "path", TStringBuilder() << "Database path where benchmark tables are located")
+            .RequiredArgument("STRING").StoreResult(&RunConfig->Path);
+
+    config.Opts->AddLongOption(
+        'w', "warehouses", TStringBuilder() << "Number of warehouses")
+            .RequiredArgument("INT").StoreResult(&RunConfig->WarehouseCount).DefaultValue(DEFAULT_WAREHOUSE_COUNT);
+
+    // advanced options mainly for developers (all hidden)
+
+    config.Opts->AddLongOption(
+        "developer", TStringBuilder() << "Developer mode")
+            .Optional().StoreTrue(&RunConfig->Developer)
+            .Hidden();
+    config.Opts->AddLongOption(
+        "log-level", TStringBuilder() << "Log level from 0 to 8, default is 6 (INFO)")
+            .Optional().StoreMappedResult(&RunConfig->LogPriority, [](const TString& v) {
+                int intValue = FromString<int>(v);
+                return static_cast<ELogPriority>(intValue);
+            }).DefaultValue(DEFAULT_LOG_LEVEL)
+            .Hidden();
 }
 
 } // namespace NYdb::NConsoleClient

@@ -22,7 +22,7 @@ data_erasure_config:
   data_erasure_interval_seconds: 604800
   blob_storage_controller_request_interval_seconds: 600
   tenant_data_erasure_config:
-    max_rate: 0
+    max_rate: 1
     inflight_limit: 10
     timeout_seconds: 15
 ```
@@ -54,7 +54,7 @@ data_erasure_config:
 | Секунды
     ||
 || `tenant_data_erasure_config.max_rate`
-| Скорость, с которой будут запускаться очистки в таблетках одной базы данных. Очистка не запускается сразу во всех таблетках,а происходит с периодичностью `1/tenant_data_erasure_config.max_rate` секунд. Если количество запусков достигнет `tenant_data_erasure_config.inflight_limit`, то очистка в следующей таблетке запустится после завершения очистки в одной из уже запущенных.<br/>Например, если значение `tenant_data_erasure_config.max_rate` равно 50, то это означает, что запуск очистки для таблеток происходит спустя 1/50 долю секунды после запуска предыдущей таблетки.
+| Скорость, с которой будут запускаться очистки в таблетках одной базы данных. Очистка не запускается сразу во всех таблетках,а происходит с периодичностью `1/tenant_data_erasure_config.max_rate` секунд. Если количество запусков достигнет `tenant_data_erasure_config.inflight_limit`, то очистка в следующей таблетке запустится после завершения очистки в одной из уже запущенных.<br/>Например, если значение `tenant_data_erasure_config.max_rate` равно 50, то это означает, что запуск очистки для таблеток происходит спустя 1/50 долю секунды после запуска предыдущей таблетки.<br/>Чтобы убрать ограничение по скорости запуска очистки таблеток, в параметре `tenant_data_erasure_config.max_rate` нужно выставить значение `0`.
 | Количество таблеток в секунду
     ||
 || `tenant_data_erasure_config.inflight_limit`

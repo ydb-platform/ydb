@@ -99,6 +99,45 @@ namespace NInterconnect::NRdma {
         return EInnerType::RDMA_MEM_REG;
     }
 
+    TMemRegionSlice::TMemRegionSlice(TIntrusivePtr<TMemRegion> memRegion, uint32_t offset, uint32_t size) noexcept
+        : MemRegion(std::move(memRegion))
+        , Offset(offset)
+        , Size(size)
+    {
+        Y_ABORT_UNLESS(MemRegion);
+        Y_ABORT_UNLESS(Offset + Size <= MemRegion->GetSize(), "Invalid slice size or offset");
+    }
+
+    void* TMemRegionSlice::GetAddr() const {
+        return static_cast<char*>(MemRegion->GetAddr()) + Offset;
+    }
+    uint32_t TMemRegionSlice::GetSize() const {
+        return Size;
+    }
+
+    uint32_t TMemRegionSlice::GetLKey(size_t deviceIndex) const {
+        return MemRegion->GetLKey(deviceIndex);
+    }
+    uint32_t TMemRegionSlice::GetRKey(size_t deviceIndex) const {
+        return MemRegion->GetRKey(deviceIndex);
+    }
+
+    TMemRegionSlice TryExtractFromRcBuf(const TRcBuf& rcBuf) noexcept {
+        std::optional<IContiguousChunk::TPtr> underlying = rcBuf.ExtractFullUnderlyingContainer<IContiguousChunk::TPtr>();
+        if (!underlying || !*underlying || underlying->Get()->GetInnerType() != IContiguousChunk::EInnerType::RDMA_MEM_REG) {
+            return {};
+        }
+        auto memReg = dynamic_cast<NInterconnect::NRdma::TMemRegion*>(underlying->Get());
+        if (!memReg) {
+            return {};
+        }
+        return TMemRegionSlice(
+            TIntrusivePtr<TMemRegion>(memReg),
+            rcBuf.GetData() - memReg->GetData().data(),
+            rcBuf.GetSize()
+        );
+    }
+
     void* allocateMemory(size_t size, size_t alignment) {
         if (size % alignment != 0) {
             return nullptr;

@@ -51,7 +51,28 @@ namespace NInterconnect::NRdma {
         uint32_t Size;
     };
 
+    class TMemRegionSlice {
+    public:
+        TMemRegionSlice() = default;
+        TMemRegionSlice(TIntrusivePtr<TMemRegion> memRegion, uint32_t offset, uint32_t size) noexcept;
+
+        bool Empty() const {
+            return !MemRegion;
+        }
+        void*    GetAddr() const;
+        uint32_t GetSize() const;
+
+        uint32_t GetLKey(size_t deviceIndex) const;
+        uint32_t GetRKey(size_t deviceIndex) const;
+    private:
+        TIntrusivePtr<TMemRegion> MemRegion;
+        uint32_t Offset;
+        uint32_t Size;
+    };
+
     using TMemRegionPtr = std::unique_ptr<TMemRegion>;
+
+    TMemRegionSlice TryExtractFromRcBuf(const TRcBuf& rcBuf) noexcept;
 
     class IMemPool {
     public:

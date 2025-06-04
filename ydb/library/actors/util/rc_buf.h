@@ -951,11 +951,11 @@ public:
         return res;
     }
 
-    template<>
-    IContiguousChunk::TPtr ExtractUnderlyingContainerOrCopy() const {
-        IContiguousChunk::TPtr res = nullptr;
-        Backend.ApplySpecificValue<IContiguousChunk::TPtr>([&](const IContiguousChunk::TPtr *raw) {
-            if (raw && raw->Get() && raw->Get()->GetData().data() == Begin && End == Begin + raw->Get()->GetOccupiedMemorySize()) {
+    template<class TResult>
+    std::optional<TResult> ExtractFullUnderlyingContainer() const {
+        std::optional<TResult> res = std::nullopt;
+        Backend.ApplySpecificValue<TResult>([&](const TResult *raw) {
+            if (raw) {
                 res = *raw;
             }
         });

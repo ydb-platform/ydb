@@ -312,7 +312,7 @@ void TPCCRunner::RunSync() {
     int warmupMinutes;
     if (Config.WarmupMinutes < minWarmupMinutes) {
         LOG_I("Forced minimal warmup time: " << minWarmupMinutes << " minutes");
-        warmupMinutes = minWarmupSeconds;
+        warmupMinutes = minWarmupMinutes;
     } else {
         warmupMinutes = Config.WarmupMinutes;
     }

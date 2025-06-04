@@ -257,7 +257,7 @@ std::shared_ptr<arrow::Array> TSubColumnsArray::BuildBJsonArray(const TColumnCon
     return NArrow::FinishBuilder(std::move(builder));
 }
 
-std::shared_ptr<arrow::ChunkedArray> TSubColumnsArray::GetChunkedArray(const TColumnConstructionContext& context) const {
+std::shared_ptr<arrow::ChunkedArray> TSubColumnsArray::DoGetChunkedArray(const TColumnConstructionContext& context) const {
     auto chunk = BuildBJsonArray(context);
     if (chunk->length()) {
         return std::make_shared<arrow::ChunkedArray>(chunk);

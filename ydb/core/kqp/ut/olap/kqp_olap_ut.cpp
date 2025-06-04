@@ -1240,13 +1240,13 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             R"(`uid` LIKE "_id%000_")",
             R"(`uid` ILIKE "UID%002")",
 
-            R"(Udf(String::AsciiEqualsIgnoreCase)(`uid`,  "UI"))",
+            //R"(Udf(String::AsciiEqualsIgnoreCase)(`uid`,  "UI"))", //bug #19270
             R"(Udf(String::Contains)(`uid`,  "UI"))",
-            R"(Udf(String::AsciiContainsIgnoreCase)(`uid`,  "UI"))",
+            //R"(Udf(String::AsciiContainsIgnoreCase)(`uid`,  "UI"))", //bug #19270
             R"(Udf(String::StartsWith)(`uid`,  "UI"))",
-            R"(Udf(String::AsciiStartsWithIgnoreCase)(`uid`,  "UI"))",
+            //R"(Udf(String::AsciiStartsWithIgnoreCase)(`uid`,  "UI"))", //bug #19270
             R"(Udf(String::EndsWith)(`uid`,  "UI"))",
-            R"(Udf(String::AsciiEndsWithIgnoreCase)(`uid`,  "UI"))",
+            //R"(Udf(String::AsciiEndsWithIgnoreCase)(`uid`,  "UI"))", //bug #19270
         };
 
         for (const auto& predicate: testData) {

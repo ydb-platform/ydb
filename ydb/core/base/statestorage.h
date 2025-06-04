@@ -494,6 +494,7 @@ struct TStateStorageInfo : public TThrRefBase {
         TVector<TRing> Rings;
 
         TString ToString() const;
+        bool SameConfiguration(const TStateStorageInfo::TRingGroup& rg);
     };
 
     TVector<TRingGroup> RingGroups;

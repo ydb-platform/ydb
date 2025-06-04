@@ -4,6 +4,7 @@
 #include "fetching.h"
 
 #include <ydb/core/formats/arrow/common/container.h>
+#include <ydb/core/tx/columnshard/counters/duplicate_filtering.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/abstract.h>
 
@@ -11,7 +12,8 @@
 
 namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering  {
 
-class TEvDuplicateSourceCacheResult: public NActors::TEventLocal<TEvDuplicateSourceCacheResult, NColumnShard::TEvPrivate::EvDuplicateSourceCacheResult> {
+class TEvDuplicateSourceCacheResult
+    : public NActors::TEventLocal<TEvDuplicateSourceCacheResult, NColumnShard::TEvPrivate::EvDuplicateSourceCacheResult> {
 private:
     using TDataBySource = THashMap<ui64, std::shared_ptr<TColumnsData>>;
     YDB_READONLY_DEF(TDataBySource, ColumnData);

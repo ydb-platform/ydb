@@ -62,10 +62,6 @@ public:
     TFilters&& ExtractResult() {
         return Result.DetachResult();
     }
-
-    ui64 GetRawSize() const {
-        return MemoryGuard->GetMemory();
-    }
 };
 
 class TEvDuplicateFilterDataFetched

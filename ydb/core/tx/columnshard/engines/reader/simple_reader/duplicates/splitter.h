@@ -4,39 +4,6 @@
 
 namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering  {
 
-class TDuplicateMapInfo {
-private:
-    TSnapshot MaxVersion;
-    YDB_READONLY_DEF(ui64, Offset);
-    YDB_READONLY_DEF(ui64, RowsCount);
-    ui64 SourceId;
-
-public:
-    TDuplicateMapInfo(const TSnapshot& maxVersion, const ui64 offset, const ui64 rowsCount, const ui64 sourceId)
-        : MaxVersion(maxVersion)
-        , Offset(offset)
-        , RowsCount(rowsCount)
-        , SourceId(sourceId) {
-    }
-
-    operator size_t() const {
-        ui64 h = 0;
-        h = CombineHashes(h, (size_t)MaxVersion);
-        h = CombineHashes(h, Offset);
-        h = CombineHashes(h, RowsCount);
-        h = CombineHashes(h, SourceId);
-        return h;
-    }
-    bool operator==(const TDuplicateMapInfo& other) const {
-        return std::tie(MaxVersion, Offset, RowsCount, SourceId) == std::tie(other.MaxVersion, other.Offset, other.RowsCount, other.SourceId);
-    }
-
-    TString DebugString() const {
-        return TStringBuilder() << "MaxVersion=" << MaxVersion.DebugString() << ";Offset=" << Offset << ";RowsCount=" << RowsCount << ";SourceId"
-                                << SourceId;
-    }
-};
-
 class TColumnDataSplitter {
 public:
     class TBorder {

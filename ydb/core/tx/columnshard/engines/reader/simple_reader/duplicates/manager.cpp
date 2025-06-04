@@ -139,20 +139,19 @@ void TDuplicateManager::Handle(const TEvConstructFilters::TPtr& ev) {
             NArrow::TColumnFilter filter = NArrow::TColumnFilter::BuildAllowFilter();
             filter.Add(true, mapInfo.GetRowsCount());
             AFL_VERIFY(BuildingFilters.contains(mapInfo));
-            Send(SelfId(), new TEvFiltersConstructed(THashMap<TDuplicateMapInfo, NArrow::TColumnFilter>({ { mapInfo, filter } })));
+            Send(SelfId(), new TEvFilterConstructionResult(THashMap<TDuplicateMapInfo, NArrow::TColumnFilter>({ { mapInfo, filter } })));
         } else {
             THashMap<ui64, TDuplicateMapInfo> mapInfos;
             for (auto&& [source, segment] : segments) {
                 mapInfos.emplace(source, segment);
             }
             const TColumnDataSplitter::TBorder& finish = splitter.GetIntervalFinish(i);
-            const std::shared_ptr<TBuildDuplicateFilters> task =
-                std::make_shared<TBuildDuplicateFilters>(finish.GetKey().GetSchema(), maxVersionBatch, finish.GetKey(), finish.GetIsLast(),
-                    Counters, std::make_unique<TMergeResultSubscriber>(SelfId(), std::move(mapInfos)));
+            const std::shared_ptr<TBuildDuplicateFilters> task = std::make_shared<TBuildDuplicateFilters>(
+                finish.GetKey().GetSchema(), maxVersionBatch, finish.GetKey(), finish.GetIsLast(), Counters, SelfId());
             for (auto&& [source, segment] : segments) {
                 const auto* columnData = ev->Get()->GetColumnData().FindPtr(source);
                 AFL_VERIFY(columnData)("source", source);
-                task->AddSource(*columnData, segment.GetOffset(), source);
+                task->AddSource(*columnData, segment);
                 Y_UNUSED(BuildingFilters.emplace(segment, std::vector<std::shared_ptr<TInternalFilterConstructor>>()).second);
             }
             NConveyor::TScanServiceOperator::SendTaskToExecute(task, ConveyorProcessGuard->GetProcessId());
@@ -160,12 +159,15 @@ void TDuplicateManager::Handle(const TEvConstructFilters::TPtr& ev) {
     }
 }
 
-void TDuplicateManager::Handle(const TEvFiltersConstructed::TPtr& ev) {
-    for (const auto& [key, filter] : ev->Get()->GetResult()) {
+void TDuplicateManager::Handle(const TEvFilterConstructionResult::TPtr& ev) {
+    if (ev->Get()->GetConclusion().IsFail()) {
+        return AbortAndPassAway(ev->Get()->GetConclusion().GetErrorMessage());
+    }
+    for (auto&& [key, filter] : ev->Get()->ExtractResult()) {
         auto findWaiting = BuildingFilters.find(key);
         AFL_VERIFY(findWaiting != BuildingFilters.end());
         for (const auto& callback : findWaiting->second) {
-            callback->AddFilter(key, filter);
+            callback->AddFilter(key, std::move(filter));
         }
         BuildingFilters.erase(findWaiting);
 
@@ -175,14 +177,6 @@ void TDuplicateManager::Handle(const TEvFiltersConstructed::TPtr& ev) {
 
 void TDuplicateManager::TSourceDataSubscriber::OnSourcesReady(TSourceCache::TSourcesData&& result) {
     TActorContext::AsActorContext().Send(Owner, new TEvConstructFilters(OriginalRequest, std::move(result), std::move(Splitter)));
-}
-
-void TDuplicateManager::TMergeResultSubscriber::OnResult(THashMap<ui64, NArrow::TColumnFilter>&& result) {
-    THashMap<TDuplicateMapInfo, NArrow::TColumnFilter> filters;
-    for (const auto& [source, filter] : result) {
-        filters.emplace(*TValidator::CheckNotNull(InfoBySource.FindPtr(source)), filter);
-    }
-    TActorContext::AsActorContext().Send(Owner, new TEvFiltersConstructed(std::move(filters)));
 }
 
 }   // namespace NKikimr::NOlap::NReader::NSimple

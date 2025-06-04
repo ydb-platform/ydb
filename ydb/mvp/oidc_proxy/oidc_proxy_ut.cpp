@@ -1398,4 +1398,102 @@ Y_UNIT_TEST_SUITE(Mvp) {
         TStringBuf location = headers.Get("Location");
         UNIT_ASSERT_STRINGS_EQUAL(location, protectedPage);
     }
+
+    Y_UNIT_TEST(OpenIdConnectStreamingRequestResponse) {
+        // This test verifies the handling of HTTP streaming responses using chunked transfer encoding
+        TPortManager tp;
+        ui16 sessionServicePort = tp.GetPort(8655);
+        TMvpTestRuntime runtime;
+        runtime.Initialize();
+        runtime.SetLogPriority(NActorsServices::HTTP, NActors::NLog::PRI_DEBUG);
+
+        const TString allowedProxyHost = "stream.test.net";
+        const TString iamToken = "streaming_iam_token";
+
+        TOpenIdConnectSettings settings {
+            .ClientId = "client_id",
+            .SessionServiceEndpoint = "localhost:" + ToString(sessionServicePort),
+            .AuthorizationServerAddress = "https://auth.test.net",
+            .ClientSecret = "0123456789abcdef",
+            .AllowedProxyHosts = {allowedProxyHost},
+            .AccessServiceType = NMvp::nebius_v1
+        };
+
+        const NActors::TActorId edge = runtime.AllocateEdgeActor();
+        TSessionServiceMock sessionServiceMock;
+        sessionServiceMock.AllowedAccessTokens.insert(iamToken);
+
+        grpc::ServerBuilder builder;
+        builder.AddListeningPort(settings.SessionServiceEndpoint, grpc::InsecureServerCredentials()).RegisterService(&sessionServiceMock);
+        std::unique_ptr<grpc::Server> sessionServer(builder.BuildAndStart());
+
+        const NActors::TActorId target = runtime.Register(new TProtectedPageHandler(edge, settings));
+
+        NHttp::THttpIncomingRequestPtr incomingRequest = new NHttp::THttpIncomingRequest();
+        EatWholeString(incomingRequest, "GET /" + allowedProxyHost + "/stream-data HTTP/1.1\r\n"
+                                "Host: oidcproxy.net\r\n"
+                                "Authorization: Bearer " + iamToken + "\r\n\r\n");
+        runtime.Send(new IEventHandle(target, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(incomingRequest)));
+        TAutoPtr<IEventHandle> handle;
+
+        // Verify request is forwarded correctly
+        auto outgoingRequestEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest>(handle);
+        UNIT_ASSERT_STRINGS_EQUAL(outgoingRequestEv->Request->Host, allowedProxyHost);
+        UNIT_ASSERT_STRINGS_EQUAL(outgoingRequestEv->Request->URL, "/stream-data");
+        UNIT_ASSERT_STRING_CONTAINS(outgoingRequestEv->Request->Headers, "Authorization: Bearer " + iamToken);
+
+        // Set up a streaming response with multiple chunks using multipart/form-data
+        const TString boundary = "boundary";
+        NHttp::THttpIncomingResponsePtr incomingResponse = new NHttp::THttpIncomingResponse(outgoingRequestEv->Request);
+        EatWholeString(incomingResponse, "HTTP/1.1 200 OK\r\n"
+                                         "Connection: keep-alive\r\n"
+                                         "Transfer-Encoding: chunked\r\n"
+                                         "Content-Type: multipart/form-data; boundary=" + boundary + "\r\n\r\n");
+
+        runtime.Send(new IEventHandle(handle->Sender, edge, new NHttp::TEvHttpProxy::TEvHttpIncompleteIncomingResponse(outgoingRequestEv->Request, incomingResponse)));
+
+        // First chunk with multipart boundary and headers
+        auto chunk1 = new NHttp::TEvHttpProxy::TEvHttpIncomingDataChunk(incomingResponse);
+        chunk1->Data = "--" + boundary + "\r\n"
+                        "Content-Type: application/json\r\n\r\n"
+                        "{\"part\": \"1\"}";
+        runtime.Send(new IEventHandle(handle->Sender, edge, chunk1));
+
+        // Second chunk with multipart boundary and headers
+        auto chunk2 = new NHttp::TEvHttpProxy::TEvHttpIncomingDataChunk(incomingResponse);
+        chunk2->Data = "--" + boundary + "\r\n"
+                        "Content-Type: application/json\r\n\r\n"
+                        "{\"part\": \"2\"}";
+        runtime.Send(new IEventHandle(handle->Sender, edge, chunk2));
+
+        // Third chunk with multipart boundary and headers
+        auto chunk3 = new NHttp::TEvHttpProxy::TEvHttpIncomingDataChunk(incomingResponse);
+        chunk3->Data = "--" + boundary + "--\r\n";
+        runtime.Send(new IEventHandle(handle->Sender, edge, chunk3));
+
+        // End of multipart message and chunked response
+        auto chunk4 = new NHttp::TEvHttpProxy::TEvHttpIncomingDataChunk(incomingResponse);
+        chunk4->EndOfData = true;
+        runtime.Send(new IEventHandle(handle->Sender, edge, chunk4));
+
+        auto outgoingResponseEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+        UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseEv->Response->Status, "200");
+        UNIT_ASSERT_VALUES_EQUAL(outgoingResponseEv->Response->IsDone(), false);
+
+        auto outgoingResponseChunk1 = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingDataChunk>(handle);
+        UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseChunk1->DataChunk->AsString(), "3b\r\n--" + boundary + "\r\n"
+                                                            "Content-Type: application/json\r\n\r\n"
+                                                            "{\"part\": \"1\"}\r\n");
+
+        auto outgoingResponseChunk2 = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingDataChunk>(handle);
+        UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseChunk2->DataChunk->AsString(), "3b\r\n--" + boundary + "\r\n"
+                                                            "Content-Type: application/json\r\n\r\n"
+                                                            "{\"part\": \"2\"}\r\n");
+
+        auto outgoingResponseChunk3 = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingDataChunk>(handle);
+        UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseChunk3->DataChunk->AsString(), "e\r\n--" + boundary + "--\r\n\r\n");
+
+        auto outgoingResponseChunk4 = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingDataChunk>(handle);
+        UNIT_ASSERT_VALUES_EQUAL(outgoingResponseChunk4->DataChunk->EndOfData, true);
+    }
 }

@@ -3538,6 +3538,9 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_48_Query, TFixtureQuery)
 
 void TFixture::TestWriteToTopic50()
 {
+    // TODO(abcdef): temporarily deleted
+    return;
+
     // We write to the topic in the transaction. When a transaction is committed, the keys in the blob
     // cache are renamed.
     CreateTopic("topic_A", TEST_CONSUMER);

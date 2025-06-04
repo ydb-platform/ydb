@@ -333,16 +333,16 @@ class SafeConstructor(BaseConstructor):
                     "failed to decode base64 data: %s" % exc, node.start_mark)
 
     timestamp_regexp = re.compile(
-        '''^(?P<year>[0-9][0-9][0-9][0-9])
-            -(?P<month>[0-9][0-9]?)
-            -(?P<day>[0-9][0-9]?)
-            (?:(?:[Tt]|[ \t]+)
-            (?P<hour>[0-9][0-9]?)
-            :(?P<minute>[0-9][0-9])
-            :(?P<second>[0-9][0-9])
-            (?:\.(?P<fraction>[0-9]*))?
-            (?:[ \t]*(?P<tz>Z|(?P<tz_sign>[-+])(?P<tz_hour>[0-9][0-9]?)
-            (?::(?P<tz_minute>[0-9][0-9]))?))?)?$''', re.X)
+            r'''^(?P<year>[0-9][0-9][0-9][0-9])
+                -(?P<month>[0-9][0-9]?)
+                -(?P<day>[0-9][0-9]?)
+                (?:(?:[Tt]|[ \t]+)
+                (?P<hour>[0-9][0-9]?)
+                :(?P<minute>[0-9][0-9])
+                :(?P<second>[0-9][0-9])
+                (?:\.(?P<fraction>[0-9]*))?
+                (?:[ \t]*(?P<tz>Z|(?P<tz_sign>[-+])(?P<tz_hour>[0-9][0-9]?)
+                (?::(?P<tz_minute>[0-9][0-9]))?))?)?$''', re.X)
 
     def construct_yaml_timestamp(self, node):
         value = self.construct_scalar(node)

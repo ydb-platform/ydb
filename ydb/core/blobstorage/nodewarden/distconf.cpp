@@ -447,9 +447,14 @@ namespace NKikimr::NStorage {
         if (config->HasClusterState()) {
             auto fillInBridge = [&](auto *pb) -> std::optional<TString> {
                 auto& clusterState = config->GetClusterState();
+
+                // copy cluster state generation
+                pb->SetClusterStateGeneration(clusterState.GetGeneration());
+
                 if (!pb->RingGroupsSize() || pb->HasRing()) {
                     return "configuration has Ring field set or no RingGroups";
                 }
+
                 auto *groups = pb->MutableRingGroups();
                 for (int i = 0, count = groups->size(); i < count; ++i) {
                     auto *group = groups->Mutable(i);
@@ -487,6 +492,9 @@ namespace NKikimr::NStorage {
                             return "can't determine correct pile state for ring group";
                         }
                         group->SetPileState(*state);
+                        if (*state != T::PRIMARY) { // TODO(alexvru): HACK!!!
+                            group->SetWriteOnly(true);
+                        }
                     } else {
                         return "bridge pile id is out of bounds";
                     }

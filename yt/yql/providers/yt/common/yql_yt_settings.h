@@ -241,6 +241,7 @@ public:
     NCommon::TConfSetting<bool, Dynamic> _EnableYtPartitioning;
     NCommon::TConfSetting<bool, Dynamic> ForceJobSizeAdjuster;
     NCommon::TConfSetting<bool, Dynamic> EnforceJobUtc;
+    NCommon::TConfSetting<ui64, Static> _EnforceRegexpProbabilityFail;
     NCommon::TConfSetting<bool, Dynamic> UseRPCReaderInDQ;
     NCommon::TConfSetting<size_t, Dynamic> DQRPCReaderInflight;
     NCommon::TConfSetting<TDuration, Dynamic> DQRPCReaderTimeout;

@@ -1240,13 +1240,13 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             R"(`uid` LIKE "_id%000_")",
             R"(`uid` ILIKE "UID%002")",
 
-            R"(Udf(String::AsciiEqualsIgnoreCase)(`uid`,  "UI"))",
+            //R"(Udf(String::AsciiEqualsIgnoreCase)(`uid`,  "UI"))", //bug #19270
             R"(Udf(String::Contains)(`uid`,  "UI"))",
-            R"(Udf(String::AsciiContainsIgnoreCase)(`uid`,  "UI"))",
+            //R"(Udf(String::AsciiContainsIgnoreCase)(`uid`,  "UI"))", //bug #19270
             R"(Udf(String::StartsWith)(`uid`,  "UI"))",
-            R"(Udf(String::AsciiStartsWithIgnoreCase)(`uid`,  "UI"))",
+            //R"(Udf(String::AsciiStartsWithIgnoreCase)(`uid`,  "UI"))", //bug #19270
             R"(Udf(String::EndsWith)(`uid`,  "UI"))",
-            R"(Udf(String::AsciiEndsWithIgnoreCase)(`uid`,  "UI"))",
+            //R"(Udf(String::AsciiEndsWithIgnoreCase)(`uid`,  "UI"))", //bug #19270
         };
 
         for (const auto& predicate: testData) {
@@ -2906,6 +2906,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     Y_UNIT_TEST(BulkUpsertUpdate) {
         TKikimrSettings runnerSettings;
         runnerSettings.WithSampleTables = false;
+        runnerSettings.SetColumnShardAlterObjectEnabled(true);
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
         TTestHelper testHelper(runnerSettings);
 
@@ -2918,14 +2919,14 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({ "id" }).SetSharding({ "id" }).SetSchema(schema);
         testHelper.CreateTable(testTable);
         {
+            auto result = testHelper.GetSession().ExecuteSchemeQuery("ALTER OBJECT `/Root/ColumnTableTest` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`l-buckets`)").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
             TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
             tableInserter.AddRow().Add(1).Add(10);
             testHelper.BulkUpsert(testTable, tableInserter);
         }
-//        while (csController->GetCompactionFinishedCounter().Val() < 1) {
-//            Cout << "Wait compaction..." << Endl;
-//            Sleep(TDuration::Seconds(2));
-//        }
         testHelper.ReadData("SELECT value FROM `/Root/ColumnTableTest` WHERE id = 1", "[[10]]");
         {
             TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));

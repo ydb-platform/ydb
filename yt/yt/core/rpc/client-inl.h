@@ -37,6 +37,14 @@ void IClientRequest::RequireServerFeature(E featureId)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+template <class... TArgs>
+void TClientRequest::SetRequestInfo(TFormatString<TArgs...> format, TArgs&&... args)
+{
+    RequestInfo_ = Format(format, std::forward<TArgs>(args)...);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 template <class TRequestMessage, class TResponse>
 TTypedClientRequest<TRequestMessage, TResponse>::TTypedClientRequest(
     IChannelPtr channel,

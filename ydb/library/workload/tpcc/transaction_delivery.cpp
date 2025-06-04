@@ -1,10 +1,12 @@
 #include "transactions.h"
 
-#include <util/string/printf.h>
-
 #include "constants.h"
 #include "log.h"
 #include "util.h"
+
+#include <library/cpp/time_provider/monotonic.h>
+
+#include <util/string/printf.h>
 
 #include <format>
 #include <string>
@@ -325,9 +327,13 @@ TAsyncExecuteQueryResult UpdateCustomerBalanceAndDeliveryCount(
 
 //-----------------------------------------------------------------------------
 
-NThreading::TFuture<TStatus> GetDeliveryTask(TTransactionContext& context,
+NThreading::TFuture<TStatus> GetDeliveryTask(
+    TTransactionContext& context,
+    TDuration& latency,
     TSession session)
 {
+    TMonotonic startTs = TMonotonic::Now();
+
     TTransactionInflightGuard guard;
     co_await TTaskReady(context.TaskQueue, context.TerminalID);
 
@@ -509,7 +515,12 @@ NThreading::TFuture<TStatus> GetDeliveryTask(TTransactionContext& context,
         << " is committing Delivery transaction, processed " << processedOrderCount << " districts");
 
     auto commitFuture = tx->Commit();
-    co_return co_await TSuspendWithFuture(commitFuture, context.TaskQueue, context.TerminalID);
+    auto commitResult = co_await TSuspendWithFuture(commitFuture, context.TaskQueue, context.TerminalID);
+
+    TMonotonic endTs = TMonotonic::Now();
+    latency = endTs - startTs;
+
+    co_return commitResult;
 }
 
 } // namespace NYdb::NTPCC

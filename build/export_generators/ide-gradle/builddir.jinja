@@ -1,6 +1,16 @@
 {#- empty string #}
 val baseBuildDir = "{{ export_root }}/gradle.build"
-buildDir = file(baseBuildDir + "{%- if common_dir %}/{{ common_dir }}{% endif -%}/" + project.path.replace(":", "/"))
+layout.buildDirectory = file(baseBuildDir + "{%- if common_dir %}/{{ common_dir }}{% endif -%}/" + project.path.replace(":", "/"))
 subprojects {
-    buildDir = file(baseBuildDir + "{%- if common_dir %}/{{ common_dir }}{% endif -%}/" + project.path.replace(":", "/"))
+    layout.buildDirectory = file(baseBuildDir + "{%- if common_dir %}/{{ common_dir }}{% endif -%}/" + project.path.replace(":", "/"))
+}
+
+var mkBuildDir = tasks.register("mkBuildDir") {
+    doFirst {
+        mkdir(layout.buildDirectory.asFile.get())
+    }
+}
+
+tasks.withType<JavaExec>().configureEach {
+    dependsOn(mkBuildDir)
 }

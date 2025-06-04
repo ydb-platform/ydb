@@ -2507,6 +2507,7 @@ struct TCdcStreamSettings {
     OPTION(EFormat, Format);
     OPTION(bool, VirtualTimestamps);
     OPTION(TDuration, ResolvedTimestamps);
+    OPTION(bool, SchemaChanges);
     OPTION(TString, AwsRegion);
     OPTION(EState, State);
 
@@ -2554,6 +2555,7 @@ struct TCdcStreamInfo
             .WithFormat(desc.GetFormat())
             .WithVirtualTimestamps(desc.GetVirtualTimestamps())
             .WithResolvedTimestamps(TDuration::MilliSeconds(desc.GetResolvedTimestampsIntervalMs()))
+            .WithSchemaChanges(desc.GetSchemaChanges())
             .WithAwsRegion(desc.GetAwsRegion()));
         TPtr alterData = result->CreateNextVersion();
         alterData->State = EState::ECdcStreamStateReady;
@@ -2570,6 +2572,7 @@ struct TCdcStreamInfo
         desc.SetFormat(Format);
         desc.SetVirtualTimestamps(VirtualTimestamps);
         desc.SetResolvedTimestampsIntervalMs(ResolvedTimestamps.MilliSeconds());
+        desc.SetSchemaChanges(SchemaChanges);
         desc.SetAwsRegion(AwsRegion);
         desc.SetState(State);
         if (ScanShards) {
@@ -3159,7 +3162,6 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
             Sample = 0,
             // Recompute,
             Reshuffle,
-            Local,
             MultiLocal,
         };
         ui32 Level = 1;
@@ -3204,23 +3206,11 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         bool NeedsAnotherParent() const noexcept {
             return Parent < ParentEnd();
         }
-        bool NeedsAnotherState() const noexcept {
-            return State == Sample /*|| State == Recompute*/;
-        }
-
-        bool NextState() noexcept {
-            if (!NeedsAnotherState()) {
-                return false;
-            }
-            State = static_cast<EState>(static_cast<ui32>(State) + 1);
-            return true;
-        }
 
         bool NextParent() noexcept {
             if (!NeedsAnotherParent()) {
                 return false;
             }
-            State = Sample;
             ++Parent;
             Child += K;
             return true;
@@ -3230,14 +3220,12 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
             if (!NeedsAnotherLevel()) {
                 return false;
             }
-            State = Sample;
             NextLevel(ChildCount());
             return true;
         }
 
         void PrefixIndexDone(ui64 shards) {
             Y_ENSURE(NeedsAnotherLevel());
-            State = MultiLocal;
             // There's two worst cases, but in both one shard contains TableSize rows
             // 1. all rows have unique prefix (*), in such case we need 1 id for each row (parent, id in prefix table)
             // 2. all unique prefixes have size K, so we have TableSize/K parents + TableSize childs
@@ -3521,10 +3509,9 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
 
     struct TClusterShards {
         NTableIndex::TClusterId From = std::numeric_limits<NTableIndex::TClusterId>::max();
-        TShardIdx Local = InvalidShardIdx;
-        std::vector<TShardIdx> Global;
+        std::vector<TShardIdx> Shards;
     };
-    TMap<NTableIndex::TClusterId, TClusterShards> Cluster2Shards;
+    TMap<NTableIndex::TClusterId, TClusterShards> Cluster2Shards; // To => { From, Shards }
 
     void AddParent(const TSerializedTableRange& range, TShardIdx shard);
 

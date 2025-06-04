@@ -31,11 +31,12 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/UserDefinedIndex"),
-            {NLs::PathExist,
-             NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalAsync),
-             NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
-             NLs::IndexKeys({"indexed"})});
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/UserDefinedIndex"),{
+            NLs::PathExist,
+            NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalAsync),
+            NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+            NLs::IndexKeys({"indexed"}),
+        });
     }
 
     Y_UNIT_TEST(OnlineBuild) {
@@ -525,10 +526,10 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
         env.TestWaitNotification(runtime, txId);
 
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/UserDefinedIndex"), {
-      NLs::PathExist,
-      NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalAsync),
-      NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
-      NLs::IndexKeys({"indexed"}),
+            NLs::PathExist,
+            NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalAsync),
+            NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+            NLs::IndexKeys({"indexed"}),
         });
     }
 }

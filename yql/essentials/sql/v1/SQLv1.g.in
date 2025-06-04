@@ -371,7 +371,7 @@ select_unparenthesized_stmt: select_kind_partial (select_op select_kind_parenthe
 
 select_kind_parenthesis: select_kind_partial | LPAREN select_kind_partial RPAREN;
 
-select_op: UNION (ALL)? | INTERSECT | EXCEPT;
+select_op: (UNION | INTERSECT | EXCEPT) (DISTINCT | ALL)?;
 
 select_kind_partial: select_kind
   (LIMIT expr ((OFFSET | COMMA) expr)?)?

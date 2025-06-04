@@ -4,6 +4,9 @@
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
 
+#include <util/string/strip.h>
+#include <util/string/split.h>
+
 namespace NYql {
 
 using namespace NNodes;
@@ -34,7 +37,7 @@ public:
     }
 
     TStatus HandleSoSourceSettings(const TExprNode::TPtr& input, TExprContext& ctx) {
-        if (!EnsureArgsCount(*input, 15, ctx)) {
+        if (!EnsureArgsCount(*input, 16, ctx)) {
             return TStatus::Error;
         }
 
@@ -126,6 +129,11 @@ public:
             return TStatus::Error;
         }
 
+        auto& totalMetricsCount = *input->Child(TSoSourceSettings::idx_TotalMetricsCount);
+        if (!EnsureAtom(totalMetricsCount, ctx)) {
+            return TStatus::Error;
+        }
+
         const auto type = rowType.GetTypeAnn()->Cast<TTypeExprType>()->GetType();
         input->SetTypeAnn(ctx.MakeType<TStreamExprType>(type));
         return TStatus::Ok;
@@ -146,7 +154,7 @@ public:
     }
 
     TStatus HandleRead(const TExprNode::TPtr& input, TExprContext& ctx) {
-        if (!EnsureMinMaxArgsCount(*input, 6U, 7U, ctx)) {
+        if (!EnsureMinMaxArgsCount(*input, 8U, 9U, ctx)) {
             return TStatus::Error;
         }
 
@@ -165,6 +173,16 @@ public:
 
         auto& labelNames = *input->Child(TSoReadObject::idx_LabelNames);
         if (!EnsureTupleOfAtoms(labelNames, ctx)) {
+            return TStatus::Error;
+        }
+
+        auto& requiredLabelNames = *input->Child(TSoReadObject::idx_RequiredLabelNames);
+        if (!EnsureTupleOfAtoms(requiredLabelNames, ctx)) {
+            return TStatus::Error;
+        }
+
+        auto& totalMetricsCount = *input->Child(TSoReadObject::idx_TotalMetricsCount);
+        if (!EnsureAtom(totalMetricsCount, ctx)) {
             return TStatus::Error;
         }
 

@@ -1958,14 +1958,14 @@ private:
 
         THashMap<TString, TString> clusters;
 
-        TString monitoringEndpoint = Params.Config.GetCommon().GetMonitoringReadHttpEndpoint();
+        TString monitoringHttpEndpoint = Params.Config.GetCommon().GetMonitoringReadHttpEndpoint();
         TString monitoringGrpcEndpoint = Params.Config.GetCommon().GetMonitoringReadGrpcEndpoint();
 
         //todo: consider cluster name clashes
         AddClustersFromConfig(gatewaysConfig, clusters);
         AddClustersFromConnections(Params.Config.GetCommon(),
             YqConnections,
-            monitoringEndpoint,
+            monitoringHttpEndpoint,
             monitoringGrpcEndpoint,
             Params.AuthToken,
             Params.AccountIdSignatures,

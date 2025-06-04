@@ -24,9 +24,10 @@ class TPredicateMarkup {
     using EFlag = TSettings::EFeatureFlag;
 
 public:
-    TPredicateMarkup(const TExprBase& lambdaArg, const TSettings& settings)
+    TPredicateMarkup(const TExprBase& lambdaArg, const TSettings& settings, TExprContext& ctx)
         : LambdaArg(lambdaArg)
         , Settings(settings)
+        , Ctx(ctx)
     {}
 
     void MarkupPredicates(const TExprBase& predicate, TPredicateNode& predicateTree) {
@@ -249,6 +250,22 @@ private:
         return CheckExpressionNodeForPushdown(toBytesExpr);
     }
 
+    bool IsSupportedToString(const TExprBase& toString) {
+        if (!Settings.IsEnabled(EFlag::ToStringFromStringExpressions)) {
+            return false;
+        }
+
+        if (toString.Ref().ChildrenSize() != 1) {
+            return false;
+        }
+
+        auto toStringExpr = TExprBase(toString.Ref().Child(0));
+        if (!IsStringExpr(toStringExpr)) {
+            return false;
+        }
+        return CheckExpressionNodeForPushdown(toStringExpr);
+    }
+
     bool IsSupportedLambda(const TCoLambda& lambda, ui64 numberArguments) {
         const auto args = lambda.Args();
         if (args.Size() != numberArguments) {
@@ -298,6 +315,9 @@ private:
         }
         if (node.Ref().IsCallable({"ToBytes"})) {
             return IsSupportedToBytes(node);
+        }
+        if (node.Ref().IsCallable({"ToString"})) {
+            return IsSupportedToString(node);
         }
         if (auto maybeData = node.Maybe<TCoDataCtor>()) {
             return IsSupportedDataType(maybeData.Cast());
@@ -640,14 +660,22 @@ private:
 private:
     const TExprBase& LambdaArg;  // Predicate input item, has struct type
     const TSettings& Settings;
+    [[maybe_unused]] TExprContext& Ctx; // To be used for pretty printing
 
     std::unordered_set<const TExprNode*> LambdaArguments;
 };
 
 } // anonymous namespace end
 
-void CollectPredicates(const TExprBase& predicate, TPredicateNode& predicateTree, const TExprBase& lambdaArg, const TExprBase& /*lambdaBody*/, const TSettings& settings) {
-    TPredicateMarkup markup(lambdaArg, settings);
+void CollectPredicates(
+    TExprContext& ctx,
+    const TExprBase& predicate,
+    TPredicateNode& predicateTree,
+    const TExprBase& lambdaArg,
+    const TExprBase& /*lambdaBody*/,
+    const TSettings& settings
+) {
+    TPredicateMarkup markup(lambdaArg, settings, ctx);
     markup.MarkupPredicates(predicate, predicateTree);
 }
 

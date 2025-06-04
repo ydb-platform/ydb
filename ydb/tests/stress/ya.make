@@ -9,4 +9,5 @@ RECURSE(
     show_create/view
     statistics_workload
     transfer
+    reconfig_state_storage_workload
 )

@@ -25,12 +25,12 @@ ui64 TMetadata::GetVersion() const {
 
 void TMetadata::AddChangefeed(const TChangefeedMetadata& changefeed) {
     if (!Changefeeds) {
-        Changefeeds.ConstructInPlace();
+        Changefeeds.emplace();
     }
     Changefeeds->push_back(changefeed);
 }
 
-const TMaybe<std::vector<TChangefeedMetadata>>& TMetadata::GetChangefeeds() const {
+const std::optional<std::vector<TChangefeedMetadata>>& TMetadata::GetChangefeeds() const {
     return Changefeeds;
 }
 
@@ -78,7 +78,7 @@ TMetadata TMetadata::Deserialize(const TString& metadata) {
 
     if (json.Has("changefeeds")) {
         // Changefeeds can be absent in older versions of metadata
-        result.Changefeeds.ConstructInPlace(); // explicitly say that the listing of changefeeds is throgh metadata
+        result.Changefeeds.emplace(); // explicitly say that the listing of changefeeds is throgh metadata
         const NJson::TJsonValue& changefeeds = json["changefeeds"];
         for (const NJson::TJsonValue& changefeed : changefeeds.GetArray()) {
             result.AddChangefeed({

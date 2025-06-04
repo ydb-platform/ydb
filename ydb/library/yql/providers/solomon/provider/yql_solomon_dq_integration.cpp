@@ -300,7 +300,8 @@ public:
                 labelValues.insert({ "project", source.GetProject() });
             }
 
-            source.MutableSelectors()->insert(labelValues.begin(), labelValues.end());
+            source.SetSelectors(selectors);
+            source.MutableParsedSelectors()->insert(labelValues.begin(), labelValues.end());
         }
 
         auto program = settings.Program().StringValue();

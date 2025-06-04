@@ -274,7 +274,7 @@ private:
 
     void Fetch() {
         NActors::TActorSystem* actorSystem = NActors::TActivationContext::ActorSystem();
-        std::map<TString, TString> selectors(ReadParams.Source.GetSelectors().begin(), ReadParams.Source.GetSelectors().end());
+        std::map<TString, TString> selectors(ReadParams.Source.GetParsedSelectors().begin(), ReadParams.Source.GetParsedSelectors().end());
         ListingFuture = 
             SolomonClient
                 ->ListMetrics(selectors, PageSize, CurrentPage++)

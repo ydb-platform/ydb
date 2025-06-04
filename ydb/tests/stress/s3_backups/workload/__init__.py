@@ -181,7 +181,7 @@ class WorkloadS3Export(WorkloadBase):
             self._cleanup_in_progress()
             while len(self.in_progress) >= self.limit:
                 self._cleanup_in_progress()
-
+                time.sleep(0.1)
             result_export = self._execute_command_and_get_result(export_command)
             export_id = result_export["id"]
             self.in_progress.append(export_id)
@@ -236,7 +236,7 @@ class WorkloadRunner:
 
         for w in workloads:
             w.start()
-        started_at = started_at = time.time()
+        started_at = time.time()
         while time.time() - started_at < self.duration:
             print(f"Elapsed {(int)(time.time() - started_at)} seconds, stat:", file=sys.stderr)
             for w in workloads:

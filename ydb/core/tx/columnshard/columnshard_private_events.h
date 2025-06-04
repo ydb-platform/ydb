@@ -119,7 +119,7 @@ struct TEvPrivate {
     class TEvTaskProcessedResult: public NActors::TEventLocal<TEvTaskProcessedResult, EvTaskProcessedResult> {
     private:
         TConclusion<std::shared_ptr<NOlap::NReader::IApplyAction>> Result;
-        std::optional<TCounterGuard> ScanCounter;
+        TCounterGuard ScanCounter;
 
     public:
         TConclusion<std::shared_ptr<NOlap::NReader::IApplyAction>> ExtractResult() {
@@ -127,12 +127,9 @@ struct TEvPrivate {
         }
 
         TEvTaskProcessedResult(
-            const TConclusion<std::shared_ptr<NOlap::NReader::IApplyAction>>& result, std::optional<TCounterGuard>&& scanCounters)
+            const TConclusion<std::shared_ptr<NOlap::NReader::IApplyAction>>& result, TCounterGuard&& scanCounters)
             : Result(result)
             , ScanCounter(std::move(scanCounters)) {
-            if (Result.IsFail()) {
-                AFL_VERIFY(ScanCounter);
-            }
         }
     };
 

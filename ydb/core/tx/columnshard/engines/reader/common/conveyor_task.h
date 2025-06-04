@@ -18,6 +18,7 @@ public:
     bool Apply(IDataReader& indexedDataRead) const {
         return DoApply(indexedDataRead);
     }
+    virtual ~IApplyAction() = default;
 };
 
 class IDataTasksProcessor {

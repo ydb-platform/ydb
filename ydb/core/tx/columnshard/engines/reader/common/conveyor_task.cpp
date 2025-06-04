@@ -11,7 +11,7 @@ void IDataTasksProcessor::ITask::DoExecute(const std::shared_ptr<NConveyor::ITas
             OwnerId, new NColumnShard::TEvPrivate::TEvTaskProcessedResult(result, std::move(Guard)));
     } else {
         NActors::TActivationContext::AsActorContext().Send(OwnerId,
-            new NColumnShard::TEvPrivate::TEvTaskProcessedResult(static_pointer_cast<IDataTasksProcessor::ITask>(taskPtr), std::nullopt));
+            new NColumnShard::TEvPrivate::TEvTaskProcessedResult(static_pointer_cast<IDataTasksProcessor::ITask>(taskPtr), std::move(Guard)));
     }
 }
 

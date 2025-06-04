@@ -1739,6 +1739,27 @@ ALTER TABLE `test_show_create`
 
         checker.CheckShowCreateTable(R"(
             CREATE TABLE test_show_create (
+                Key String,
+                Value String,
+                PRIMARY KEY (Key)
+            );
+            ALTER TABLE test_show_create
+                ADD CHANGEFEED `feed` WITH (MODE = 'KEYS_ONLY', FORMAT = 'JSON', SCHEMA_CHANGES = TRUE);
+        )", "test_show_create",
+R"(CREATE TABLE `test_show_create` (
+    `Key` String,
+    `Value` String,
+    PRIMARY KEY (`Key`)
+);
+
+ALTER TABLE `test_show_create`
+    ADD CHANGEFEED `feed` WITH (MODE = 'KEYS_ONLY', FORMAT = 'JSON', SCHEMA_CHANGES = TRUE, RETENTION_PERIOD = INTERVAL('P1D'))
+;
+)"
+        );
+
+        checker.CheckShowCreateTable(R"(
+            CREATE TABLE test_show_create (
                 Key Uint64,
                 Value String,
                 PRIMARY KEY (Key)

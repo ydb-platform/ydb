@@ -7,6 +7,7 @@
 #include <ydb/core/tx/columnshard/engines/scheme/schema_version.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/versioned_index.h>
 #include <ydb/core/tx/columnshard/common/path_id.h>
+#include <ydb/core/tx/columnshard/tables_manager.h>
 
 #include <ydb/library/conclusion/result.h>
 
@@ -118,7 +119,7 @@ public:
     ui32 GetSourcesInProgressCount() const;
     void SendCurrentCursorAck(const NColumnShard::TColumnShard& shard, const std::optional<TTabletId> tabletId);
 
-    NKikimrColumnShardDataSharingProto::TDestinationSession SerializeDataToProto() const;
+    NKikimrColumnShardDataSharingProto::TDestinationSession SerializeDataToProto(const IPathIdTranslator& pathIdTranslator) const;
 
     [[nodiscard]] TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>> ReceiveFinished(NColumnShard::TColumnShard* self, const TTabletId sourceTabletId, const std::shared_ptr<TDestinationSession>& selfPtr);
 
@@ -130,7 +131,7 @@ public:
     NKikimrColumnShardDataSharingProto::TDestinationSession::TFullCursor SerializeCursorToProto() const;
     [[nodiscard]] TConclusionStatus DeserializeCursorFromProto(const NKikimrColumnShardDataSharingProto::TDestinationSession::TFullCursor& proto);
 
-    [[nodiscard]] TConclusionStatus DeserializeDataFromProto(const NKikimrColumnShardDataSharingProto::TDestinationSession& proto, const TColumnEngineForLogs& index);
+    [[nodiscard]] TConclusionStatus DeserializeDataFromProto(const NKikimrColumnShardDataSharingProto::TDestinationSession& proto, const NColumnShard::TTablesManager& tablesManager);
 };
 
 } // namespace NKikimr::NOlap::NDataSharing

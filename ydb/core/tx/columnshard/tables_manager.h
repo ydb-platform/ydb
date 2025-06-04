@@ -201,7 +201,7 @@ public:
     }
 };
 
-class TTablesManager {
+class TTablesManager: public NOlap::IPathIdTranslator {
 private:
     THashMap<TInternalPathId, TTableInfo> Tables;
     THashMap<TSchemeShardLocalPathId, TInternalPathId> SchemeShardLocalToInternal;
@@ -218,14 +218,20 @@ private:
     ui64 TabletId = 0;
     ui64 InternalPathIdOffset;
 
-public:
     friend class TTxInit;
 
+public: //IPathIdTranslator
+    virtual std::optional<NColumnShard::TSchemeShardLocalPathId> ResolveSchemeShardLocalPathId(const TInternalPathId internalPathId) const override;
+    virtual std::optional<TInternalPathId> ResolveInternalPathId(const NColumnShard::TSchemeShardLocalPathId schemeShardLocalPathId) const override;
+public:
     TTablesManager(const std::shared_ptr<NOlap::IStoragesManager>& storagesManager,
         const std::shared_ptr<NOlap::NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
         const std::shared_ptr<NOlap::TSchemaObjectsCache>& schemaCache, const std::shared_ptr<TPortionIndexStats>& portionsStats,
         const ui64 tabletId);
 
+    NOlap::TTabletId GetTabletId() const {
+        return NOlap::TTabletId{TabletId};
+    }
 
     const std::unique_ptr<TTableLoadTimeCounters>& GetLoadTimeCounters() const {
         return LoadTimeCounters;
@@ -328,7 +334,6 @@ public:
     const TTableInfo& GetTable(const TInternalPathId pathId) const;
     ui64 GetMemoryUsage() const;
     TInternalPathId CreateInternalPathId(const TSchemeShardLocalPathId schemShardLocalPathId);
-    std::optional<TInternalPathId> ResolveInternalPathId(const TSchemeShardLocalPathId schemShardLocalPathId) const;
     THashSet<TInternalPathId> ResolveInternalPathIds(const TSchemeShardLocalPathId from, const TSchemeShardLocalPathId to) const;
     bool HasTable(const TInternalPathId pathId, const bool withDeleted = false, const std::optional<NOlap::TSnapshot> minReadSnapshot = std::nullopt) const;
     bool IsReadyForStartWrite(const TInternalPathId pathId, const bool withDeleted) const;
@@ -353,6 +358,7 @@ public:
 
     void SetSchemaObjectsCache(const std::shared_ptr<NOlap::TSchemaObjectsCache>& cache) {
         AFL_VERIFY(cache);
+
         AFL_VERIFY(!SchemaObjectsCache);
         SchemaObjectsCache = cache;
     }

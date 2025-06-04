@@ -157,8 +157,22 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
             const TString sessionId = TGUID::CreateTimebased().AsUuidString();
             NOlap::NDataSharing::TTransferContext transferContext((NOlap::TTabletId)destination, sourceTablets, snapshot, move);
             NOlap::NDataSharing::TDestinationSession session(std::make_shared<TTestController>(), pathIdsRemap, sessionId, transferContext);
+            //TODO move me to test controller
+            struct TFakePathIdTranslator: public NOlap::IPathIdTranslator {
+                virtual std::optional<NColumnShard::TSchemeShardLocalPathId> ResolveSchemeShardLocalPathId(const NColumnShard::TInternalPathId internalPathId) const override {
+                    Y_UNUSED(internalPathId);
+                    AFL_VERIFY(false);
+                    return {};
+                }
+                virtual std::optional<NColumnShard::TInternalPathId> ResolveInternalPathId(const NColumnShard::TSchemeShardLocalPathId schemeShardLocalPathId) const override {
+                    Y_UNUSED(schemeShardLocalPathId);
+                    AFL_VERIFY(false);
+                    return {};
+                }
+            };
+            TFakePathIdTranslator pathIdTranslator{};
             Kikimr.GetTestServer().GetRuntime()->Send(MakePipePerNodeCacheID(false), NActors::TActorId(), new TEvPipeCache::TEvForward(
-                new NOlap::NDataSharing::NEvents::TEvProposeFromInitiator(session), destination, false));
+                new NOlap::NDataSharing::NEvents::TEvProposeFromInitiator(session, pathIdTranslator), destination, false));
             {
                 const TInstant start = TInstant::Now();
                 while (!CSTransferStatus->GetProposed() && TInstant::Now() - start < TDuration::Seconds(10)) {
@@ -412,7 +426,7 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
 
     public:
         TAsyncReshardingTest() {
-            TLocalHelper(Kikimr).CreateTestOlapTable("olapTable", "olapStore", 1, 1);
+            TLocalHelper(Kikimr).CreateTestOlapTable("olapTable", "olapStore", 2, 1);
         }
 
         void AddBatch(int numRows) {

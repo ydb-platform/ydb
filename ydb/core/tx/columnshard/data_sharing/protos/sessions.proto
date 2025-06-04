@@ -7,8 +7,8 @@ import "ydb/core/protos/tx_columnshard.proto";
 
 
 message TDestinationRemapIds {
-    optional NKikimrColumnShardPathIdProto.TInternalPathId SourcePathId = 1; //NKikimrColumnShardPathIdProto.TSchemeShardLocalPathId
-    optional NKikimrColumnShardPathIdProto.TInternalPathId DestPathId = 2; //NKikimrColumnShardPathIdProto.TSchemeShardLocalPathId
+    optional NKikimrColumnShardPathIdProto.TSchemeShardLocalPathId SourcePathId = 1;
+    optional NKikimrColumnShardPathIdProto.TSchemeShardLocalPathId DestPathId = 2;
 }
 
 message TTransferContext {

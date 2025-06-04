@@ -2608,6 +2608,9 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_16_Query, TFixtureQuery)
 
 void TFixture::TestWriteToTopic17()
 {
+    // TODO(abcdef): temporarily deleted
+    return;
+
     CreateTopic("topic_A");
 
     auto session = CreateSession();

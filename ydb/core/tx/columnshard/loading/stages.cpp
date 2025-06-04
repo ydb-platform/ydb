@@ -127,7 +127,7 @@ bool TBackgroundSessionsInitializer::DoExecute(NTabletFlatExecutor::TTransaction
 
 bool TSharingSessionsInitializer::DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {
     auto local = std::make_shared<NOlap::NDataSharing::TSessionsManager>();
-    if (!local->Load(txc.DB, Self->TablesManager.GetPrimaryIndexAsOptional<NOlap::TColumnEngineForLogs>())) {
+    if (!local->Load(txc.DB, Self->TablesManager)) {
         return false;
     }
     Self->SharingSessionsManager = local;

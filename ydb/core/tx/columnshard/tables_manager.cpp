@@ -18,6 +18,27 @@ void TSchemaPreset::Deserialize(const NKikimrSchemeOp::TColumnTableSchemaPreset&
     Name = presetProto.GetName();
 }
 
+
+std::optional<NColumnShard::TSchemeShardLocalPathId> TTablesManager::ResolveSchemeShardLocalPathId(const TInternalPathId internalPathId) const {
+    if (!HasTable(internalPathId)) {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("method", "ResolveSchemeShardLocalPathId")("internalPathId", internalPathId)("result", "not_found");
+        return std::nullopt;
+    }
+    const auto result = Tables.at(internalPathId).GetSchemeShardLocalPathId();
+    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("method", "ResolveSchemeShardLocalPathId")("internalPathId", internalPathId)("result", result);
+    return result;
+}
+
+std::optional<TInternalPathId> TTablesManager::ResolveInternalPathId(const NColumnShard::TSchemeShardLocalPathId schemeShardLocalPathId) const {
+    if (const auto* internalPathId = SchemeShardLocalToInternal.FindPtr(schemeShardLocalPathId)) {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("method", "ResolveInternalPathId")("schemeShardLocalPathId", schemeShardLocalPathId)("result", *internalPathId);
+        return {*internalPathId};
+    } else {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("method", "ResolveInternalPathId")("schemeShardLocalPathId", schemeShardLocalPathId)("result", "not_found");
+        return std::nullopt;
+    }
+}
+
 bool TTablesManager::FillMonitoringReport(NTabletFlatExecutor::TTransactionContext& txc, NJson::TJsonValue& json) {
     NIceDb::TNiceDb db(txc.DB);
     {
@@ -183,13 +204,6 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
     return true;
 }
 
-std::optional<TInternalPathId> TTablesManager::ResolveInternalPathId(const TSchemeShardLocalPathId schemeShardLocalPathId) const {
-    if (const auto* internalPathId = SchemeShardLocalToInternal.FindPtr(schemeShardLocalPathId)) {
-        return {*internalPathId};
-    } else {
-        return std::nullopt;
-    }
-}
 
 THashSet<TInternalPathId> TTablesManager::ResolveInternalPathIds(const TSchemeShardLocalPathId from, const TSchemeShardLocalPathId to) const {
     THashSet<TInternalPathId> result;
@@ -213,7 +227,9 @@ bool TTablesManager::HasTable(const TInternalPathId pathId, const bool withDelet
 }
 
 TInternalPathId TTablesManager::CreateInternalPathId(const TSchemeShardLocalPathId schemeShardLocalPathId) {
-    return TInternalPathId::FromRawValue(schemeShardLocalPathId.GetRawValue() + InternalPathIdOffset);
+    const auto result = TInternalPathId::FromRawValue(schemeShardLocalPathId.GetRawValue() + InternalPathIdOffset);
+    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("method", "CreateInternalPathId")("schemeShardLocalPathId", schemeShardLocalPathId)("result", result);
+    return result;
 }
 
 bool TTablesManager::IsReadyForStartWrite(const TInternalPathId pathId, const bool withDeleted) const {

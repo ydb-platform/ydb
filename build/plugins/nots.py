@@ -250,7 +250,7 @@ class PluginLogger(object):
                 parts.append(m if isinstance(m, str) else repr(m))
 
         # cyan color (code 36) for messages
-        return f"{COLORS.green}{self.prefix}{COLORS.reset}\n{COLORS.cyan}{" ".join(parts)}{COLORS.reset}"
+        return f"{COLORS.green}{self.prefix}{COLORS.reset}\n{COLORS.cyan}{' '.join(parts)}{COLORS.reset}"
 
     def info(self, *messages: Any) -> None:
         if self.unit:

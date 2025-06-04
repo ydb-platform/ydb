@@ -3954,6 +3954,7 @@ inline void Out<NKikimr::NSchemeShard::TIndexBuildInfo>
     }
 
     o << ", State: " << info.State;
+    o << ", IsBroken: " << info.IsBroken;
     o << ", IsCancellationRequested: " << info.CancelRequested;
 
     o << ", Issue: " << info.Issue;

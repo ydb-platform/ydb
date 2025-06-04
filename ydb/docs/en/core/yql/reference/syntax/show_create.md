@@ -112,7 +112,7 @@ SHOW CREATE VIEW my_view;
 
 | Path            | PathType  | CreateQuery                 |
 |-----------------|-----------|-----------------------------|
-| my_view         | View      | см. ниже                    |
+| my_view         | View      | See below                   |
 
 ```yql
 PRAGMA TablePathPrefix = '/Root/DirA/DirB/DirC';

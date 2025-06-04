@@ -399,28 +399,58 @@ public:
         std::shared_ptr<IConfigurationResult> res;
         bool success = false;
         TString error;
-
         SetRandomSeed(TInstant::Now().MicroSeconds());
-        int minAttempts = 10;
-        int attempts = 0;
-        while (!success && attempts < minAttempts) {
+
+        const int maxRounds = 10;
+        const TDuration baseRoundDelay = TDuration::MilliSeconds(500);
+        const TDuration maxDelay = TDuration::Minutes(5);
+        const TDuration baseAddressDelay = TDuration::MilliSeconds(250);
+
+        // Lambda for jittered exponential backoff
+        auto sleepWithJitteredExponentialDelay = [&env, maxDelay](TDuration baseDelay, int exponent) {
+            ui64 multiplier = 1ULL << exponent;
+            TDuration delay = baseDelay * multiplier;
+            delay = Min(delay, maxDelay);
+            
+            ui64 maxMs = delay.MilliSeconds();
+            ui64 jitteredMs = RandomNumber<ui64>(maxMs + 1);
+            TDuration jitteredDelay = TDuration::MilliSeconds(jitteredMs);
+            
+            env.Sleep(jitteredDelay);
+        };
+
+        int round = 0;
+        int totalAttempts = 0;
+
+        while (!success && round < maxRounds) {
             for (auto addr : addrs) {
+                // internal timeout is 5 seconds
                 success = TryToLoadConfigForDynamicNodeFromCMS(grpcSettings, addr, settings, env, logger, res, error);
-                ++attempts;
+                ++totalAttempts;
+                
                 if (success) {
                     break;
                 }
+                
+                // Exponential delay between individual addresses (we have only one console, so scale with round in case it is not network issue)
+                if (!success && addrs.size() > 1) {
+                    sleepWithJitteredExponentialDelay(baseAddressDelay, round);
+                }
             }
-            // Randomized backoff
+            
             if (!success) {
-                env.Sleep(TDuration::MilliSeconds(500 + RandomNumber<ui64>(1000)));
-            } else {
-                break;
+                ++round;
+                
+                if (round < maxRounds) {
+                    sleepWithJitteredExponentialDelay(baseRoundDelay, round - 1);
+                }
             }
         }
 
         if (!success) {
-            logger.Err() << "WARNING: couldn't load config from CMS: " << error << Endl;
+            logger.Err() << "WARNING: couldn't load config from CMS after " 
+                        << totalAttempts << " attempts across " << round 
+                        << " rounds: " << error << Endl;
         }
 
         return res;

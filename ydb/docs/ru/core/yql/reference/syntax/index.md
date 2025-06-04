@@ -42,21 +42,6 @@
 
 {% endif %}
 
-* [GROUP BY](group_by.md)
-
-{% if feature_join %}
-
-* [JOIN](join.md)
-
-{% endif %}
-
-{% if feature_window_functions %}
-
-* [WINDOW](window.md)
-
-{% endif %}
-
-* [FLATTEN](flatten.md)
 * [ACTION](action.md)
 
 {% if feature_mapreduce and process_command == "PROCESS" %}

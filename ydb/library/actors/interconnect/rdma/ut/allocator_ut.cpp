@@ -6,6 +6,8 @@
 
 #include <ydb/library/actors/interconnect/rdma/ibdrv/include/infiniband/verbs.h>
 
+#include <ydb/library/actors/util/rope.h>
+
 #include <thread>
 
 const size_t BUF_SIZE = 1 * 1024 * 1024;
@@ -98,10 +100,48 @@ Y_UNIT_TEST_SUITE(Allocator) {
         UNIT_ASSERT_C(data.GetSize() == BUF_SIZE, "invalid size");
         data.GetDataMut()[0] = 'a';
         UNIT_ASSERT_C(data.GetData()[0] == 'a', "data mismatch");
-        TIntrusivePtr<IContiguousChunk> x = data.ExtractUnderlyingContainerOrCopy<IContiguousChunk::TPtr>();
+        IContiguousChunk::TPtr x = data.ExtractUnderlyingContainerOrCopy<IContiguousChunk::TPtr>();
         UNIT_ASSERT_C(x != nullptr, "unable to extract underlying container");
         UNIT_ASSERT_C(x->GetData().data() == data.GetData(), "data mismatch");
         UNIT_ASSERT_C(x->GetData().data()[0] == 'a', "data mismatch");
         UNIT_ASSERT_C(x->GetInnerType() == IContiguousChunk::EInnerType::RDMA_MEM_REG, "invalid inner type");
+
+        auto memReg = dynamic_cast<NInterconnect::NRdma::TMemRegion*>(x.Get());
+        UNIT_ASSERT_C(memReg, "unable to cast to TMemRegion");
+        UNIT_ASSERT_C(memReg->GetSize() == BUF_SIZE, "invalid size");
+        for (ui32 i = 0; i < NInterconnect::NRdma::NLinkMgr::GetAllCtxs().size(); ++i) {
+            UNIT_ASSERT_C(memReg->GetLKey(i) != 0, "invalid lkey");
+            UNIT_ASSERT_C(memReg->GetRKey(i) != 0, "invalid rkey");
+            Cerr << "lkey: " << memReg->GetLKey(i) << " rkey: " << memReg->GetRKey(i) << Endl;
+        }
+    }
+
+    TVector<NInterconnect::NRdma::TMemRegion*> ExtractMemRegions(const TRope& rope) {
+        TVector<NInterconnect::NRdma::TMemRegion*> regions;
+        for (auto it = rope.Begin(); it != rope.End(); ++it) {
+            NInterconnect::NRdma::TMemRegion* memReg = nullptr;
+            const TRcBuf& chunk = it.GetChunk();
+            IContiguousChunk::TPtr underlying = chunk.ExtractUnderlyingContainerOrCopy<IContiguousChunk::TPtr>();
+            if (underlying && underlying->GetInnerType() == IContiguousChunk::EInnerType::RDMA_MEM_REG) {
+                memReg = dynamic_cast<NInterconnect::NRdma::TMemRegion*>(underlying.Get());
+            }
+            regions.push_back(memReg);
+        }
+        return regions;
+    }
+
+    Y_UNIT_TEST(MemRegRope) {
+        auto memPool = NInterconnect::NRdma::CreateDummyMemPool();
+        TRope rope;
+        rope.Insert(rope.End(), TRope(TRcBuf(memPool->AllocRcBuf(BUF_SIZE))));
+        rope.Insert(rope.End(), TRope("AAAAAAABBBBBBBCCCCCC"));
+        rope.Insert(rope.End(), TRope(TRcBuf(memPool->AllocRcBuf(2 * BUF_SIZE))));
+        auto regions = ExtractMemRegions(rope);
+        UNIT_ASSERT_C(regions.size() == 3, "invalid number of regions");
+        UNIT_ASSERT_C(regions[0] != nullptr, "invalid region");
+        UNIT_ASSERT_C(regions[0]->GetSize() == BUF_SIZE, "invalid size");
+        UNIT_ASSERT_C(regions[1] == nullptr, "invalid region");
+        UNIT_ASSERT_C(regions[2] != nullptr, "invalid region");
+        UNIT_ASSERT_C(regions[2]->GetSize() == 2 * BUF_SIZE, "invalid size");
     }
 }

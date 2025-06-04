@@ -432,7 +432,7 @@ public:
                 }
                 
                 // Exponential delay between individual addresses (we have only one console, so scale with round in case it is not network issue)
-                if (!success && addrs.size() > 1) {
+                if (addrs.size() > 1) {
                     sleepWithJitteredExponentialDelay(baseAddressDelay, round);
                 }
             }
@@ -447,7 +447,7 @@ public:
         }
 
         if (!success) {
-            logger.Err() << "WARNING: couldn't load config from CMS after " 
+            logger.Err() << "WARNING: couldn't load config from Console after " 
                         << totalAttempts << " attempts across " << round 
                         << " rounds: " << error << Endl;
         }

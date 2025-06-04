@@ -403,10 +403,11 @@ public:
 
         const int maxRounds = 10;
         const TDuration baseRoundDelay = TDuration::MilliSeconds(500);
+        const TDuration maxIntraAddrDelay = TDuration::Minutes(3);
         const TDuration maxDelay = TDuration::Minutes(5);
         const TDuration baseAddressDelay = TDuration::MilliSeconds(250);
 
-        auto sleepWithJitteredExponentialDelay = [&env, maxDelay](TDuration baseDelay, int exponent) {
+        auto sleepWithJitteredExponentialDelay = [&env](TDuration baseDelay, TDuration maxDelay, int exponent) {
             ui64 multiplier = 1ULL << exponent;
             TDuration delay = baseDelay * multiplier;
             delay = Min(delay, maxDelay);
@@ -422,6 +423,7 @@ public:
         int totalAttempts = 0;
 
         while (!success && round < maxRounds) {
+            int addressIndex = 0;
             for (auto addr : addrs) {
                 // internal timeout is 5 seconds
                 success = TryToLoadConfigForDynamicNodeFromCMS(grpcSettings, addr, settings, env, logger, res, error);
@@ -431,17 +433,19 @@ public:
                     break;
                 }
                 
-                // Exponential delay between individual addresses (we have only one console, so scale with round in case it is not network issue)
+                // Exponential delay between individual addresses - delay grows with each address in the round
                 if (addrs.size() > 1) {
-                    sleepWithJitteredExponentialDelay(baseAddressDelay, round);
+                    sleepWithJitteredExponentialDelay(baseAddressDelay, maxIntraAddrDelay, Max(addressIndex, round));
                 }
+                
+                ++addressIndex;
             }
             
             if (!success) {
                 ++round;
                 
                 if (round < maxRounds) {
-                    sleepWithJitteredExponentialDelay(baseRoundDelay, round - 1);
+                    sleepWithJitteredExponentialDelay(baseRoundDelay, maxDelay, round - 1);
                 }
             }
         }

@@ -19,7 +19,9 @@ from ydb.tests.olap.lib.allure_utils import allure_test_description, NodeErrors
 from ydb.tests.olap.lib.results_processor import ResultsProcessor
 from ydb.tests.olap.lib.utils import get_external_param
 from ydb.tests.olap.scenario.helpers.scenario_tests_helper import ScenarioTestHelper
+from ydb.tests.olap.lib.remote_execution import execute_command, deploy_binaries_to_hosts
 
+LOGGER = logging.getLogger(__name__)
 
 class LoadSuiteBase:
     class QuerySettings:
@@ -612,6 +614,234 @@ class LoadSuiteParallel(LoadSuiteBase):
         self.process_query_result(result=self.__results[query_name], query_name=query_name, upload=True)
 
 
+@pytest.fixture
+def workload_executor():
+    """
+    Фикстура для выполнения workload с общей логикой развертывания и запуска.
+    Возвращает функцию, которая принимает параметры workload и выполняет его.
+    """
+    def execute_workload(
+        binary_env_var: str,
+        binary_name: str,
+        command_args: str,
+        timeout: float,
+        target_dir: str = '/tmp/stress_binaries/',
+        raise_on_error: bool = False
+    ) -> tuple[str, str, bool]:
+        """
+        Выполняет workload на первой ноде кластера.
+        
+        Args:
+            binary_env_var: Переменная окружения с путем к бинарному файлу
+            binary_name: Имя бинарного файла
+            command_args: Аргументы командной строки для workload
+            timeout: Таймаут выполнения
+            target_dir: Директория для развертывания
+            raise_on_error: Бросать исключение при ошибке развертывания
+            
+        Returns:
+            tuple[stdout, stderr, success]: Результат выполнения
+        """
+        import yatest.common
+        import os
+        
+        # Получаем бинарный файл
+        binary_files = [yatest.common.binary_path(os.getenv(binary_env_var))]
+        
+        # Получаем ноды кластера и выбираем первую
+        nodes = YdbCluster.get_cluster_nodes()
+        if not nodes:
+            raise Exception("No cluster nodes found")
+        
+        node = nodes[0]
+        
+        # Развертываем бинарный файл
+        deploy_results = deploy_binaries_to_hosts(
+            binary_files, [node.host], target_dir
+        )
+        
+        # Проверяем результат развертывания
+        binary_result = deploy_results.get(node.host, {}).get(binary_name, {})
+        success = binary_result.get('success', False)
+        
+        if not success:
+            error_msg = f"Binary deployment failed on node {node.host}. Result: {binary_result}"
+            if raise_on_error:
+                raise Exception(error_msg)
+            return "", error_msg, False
+        
+        # Формируем и выполняем команду
+        target_path = binary_result['path']
+        cmd = f"{target_path} {command_args}"
+        
+        try:
+            stdout, stderr = execute_command(
+                node.host, cmd, 
+                raise_on_error=False,
+                timeout=int(timeout * 2), 
+                raise_on_timeout=False
+            )
+            return stdout, stderr, True
+            
+        except Exception as e:
+            error_msg = f"Command execution failed: {str(e)}"
+            if raise_on_error:
+                raise Exception(error_msg)
+            return "", error_msg, False
+    
+    return execute_workload
+
+
 def pytest_generate_tests(metafunc):
     if issubclass(metafunc.cls, LoadSuiteParallel):
         metafunc.parametrize("query_name", metafunc.cls.get_query_list() + ["Sum"])
+
+
+class WorkloadTestBase(LoadSuiteBase):
+    """
+    Базовый класс для workload тестов с общей функциональностью
+    """
+    
+    # Переопределяемые атрибуты в наследниках
+    workload_binary_name: str = None  # Имя бинарного файла workload
+    workload_env_var: str = None      # Переменная окружения с путем к бинарному файлу
+    binaries_deploy_path: str = '/tmp/stress_binaries/'
+    
+    @classmethod 
+    def do_setup_class(cls) -> None:
+        """Сохраняем время начала setup для использования в start_time"""
+        cls._setup_start_time = time.time()
+
+    @classmethod
+    def do_teardown_class(cls):
+        """
+        Общая очистка для workload тестов.
+        Останавливает процессы workload на всех нодах кластера.
+        """
+        if cls.workload_binary_name is None:
+            LOGGER.warning(f"workload_binary_name not set for {cls.__name__}, skipping process cleanup")
+            return
+            
+        LOGGER.info(f"Starting {cls.__name__} teardown: stopping workload processes")
+        
+        try:
+            cls.kill_workload_processes(
+                process_names=[cls.binaries_deploy_path + cls.workload_binary_name],
+                target_dir=cls.binaries_deploy_path
+            )
+        except Exception as e:
+            LOGGER.error(f"Error during teardown: {e}")
+
+    def create_workload_result(self, workload_name: str, stdout: str, stderr: str, 
+                              success: bool, additional_stats: dict = None) -> YdbCliHelper.WorkloadRunResult:
+        """
+        Создает и заполняет WorkloadRunResult с общей логикой
+        
+        Args:
+            workload_name: Имя workload для статистики
+            stdout: Вывод workload
+            stderr: Ошибки workload  
+            success: Успешность выполнения
+            additional_stats: Дополнительная статистика
+            
+        Returns:
+            Заполненный WorkloadRunResult
+        """
+        result = YdbCliHelper.WorkloadRunResult()
+        result.start_time = self.__class__._setup_start_time
+        result.stdout = str(stdout)
+        result.stderr = str(stderr)
+
+        # Анализируем результаты выполнения
+        if not success or "error" in str(stderr).lower():
+            result.add_error(str(stderr))
+        elif ("warning: permanently added" not in str(stderr).lower() and
+              "warning" in str(stderr).lower()):
+            result.add_warning(str(stderr))
+
+        # Добавляем базовую статистику
+        result.add_stat(workload_name, "execution_time", self.timeout)
+        result.add_stat(workload_name, "workload_success", success)
+        
+        # Добавляем дополнительную статистику если есть
+        if additional_stats:
+            for key, value in additional_stats.items():
+                result.add_stat(workload_name, key, value)
+
+        # Добавляем информацию о выполнении в iterations
+        iteration = YdbCliHelper.Iteration()
+        iteration.time = self.timeout
+        if not success:
+            iteration.error_message = stderr
+        elif "error" in str(stdout).lower():
+            iteration.error_message = str(stdout)
+        result.iterations[0] = iteration
+        
+        return result
+
+    def execute_workload_test(self, workload_executor, workload_name: str, command_args: str, 
+                             additional_stats: dict = None):
+        """
+        Выполняет полный цикл workload теста
+        
+        Args:
+            workload_executor: Фикстура для выполнения workload
+            workload_name: Имя workload для отчетов
+            command_args: Аргументы командной строки
+            additional_stats: Дополнительная статистика
+        """
+        # Сохраняем состояние нод для диагностики
+        self.save_nodes_state_for_diagnostics()
+        
+        # Выполняем workload через фикстуру
+        stdout, stderr, success = workload_executor(
+            binary_env_var=self.workload_env_var,
+            binary_name=self.workload_binary_name,
+            command_args=command_args,
+            timeout=self.timeout,
+            target_dir=self.binaries_deploy_path,
+            raise_on_error=True
+        )
+
+        # Проверяем состояние схемы
+        self._check_scheme_state()
+
+        # Создаем и заполняем результат
+        result = self.create_workload_result(
+            workload_name=workload_name,
+            stdout=stdout,
+            stderr=stderr, 
+            success=success,
+            additional_stats=additional_stats
+        )
+
+        # Обрабатываем результаты с диагностикой
+        self.process_workload_result_with_diagnostics(result, workload_name, False)
+
+    def _check_scheme_state(self):
+        """Проверяет состояние схемы базы данных"""
+        with allure.step('Checking scheme state'):
+            try:
+                import yatest.common
+                import os
+                
+                ydb_cli_path = yatest.common.binary_path(os.getenv('YDB_CLI_BINARY'))
+                execution = yatest.common.execute(
+                    [ydb_cli_path, '--endpoint', f'{YdbCluster.ydb_endpoint}',
+                     '--database', f'/{YdbCluster.ydb_database}',
+                     "scheme", "ls", "-lR"],
+                    wait=True,
+                    check_exit_code=False
+                )
+                scheme_stdout = execution.std_out.decode('utf-8') if execution.std_out else ""
+                scheme_stderr = execution.std_err.decode('utf-8') if execution.std_err else ""
+            except Exception as e:
+                scheme_stdout = ""
+                scheme_stderr = str(e)
+                
+            allure.attach(scheme_stdout, 'Scheme state stdout', allure.attachment_type.TEXT)
+            if scheme_stderr:
+                allure.attach(scheme_stderr, 'Scheme state stderr', allure.attachment_type.TEXT)
+            LOGGER.info(f'scheme stdout: {scheme_stdout}')
+            if scheme_stderr:
+                LOGGER.warning(f'scheme stderr: {scheme_stderr}')

@@ -2039,6 +2039,12 @@ TExprNode::TPtr KeepConstraints(TExprNode::TPtr node, const TExprNode& src, TExp
     return res;
 }
 
+TExprNode::TPtr KeepUniqueDistinct(TExprNode::TPtr node, const TExprNode& src, TExprContext& ctx) {
+    auto res = KeepUniqueConstraint<true>(node, src, ctx);
+    res = KeepUniqueConstraint<false>(std::move(res), src, ctx);
+    return res;
+}
+
 bool HasOnlyOneJoinType(const TExprNode& joinTree, TStringBuf joinType) {
     if (joinTree.IsAtom()) {
         return true;

@@ -15,24 +15,31 @@ struct TTestState {
     TGroupMock GroupMock;
     TIntrusivePtr<TBlobStorageGroupInfo> Info;
 
+    const ui32 BlobSize;
+    TString BlobData;
 
     TTestState(TTestActorRuntime &runtime, const TBlobStorageGroupType &type,
-            TIntrusivePtr<TBlobStorageGroupInfo> &info, ui64 nodeIndex = 0)
+            TIntrusivePtr<TBlobStorageGroupInfo> &info, ui64 nodeIndex = 0, ui32 blobSize = 1024)
         : Runtime(runtime)
         , EdgeActor(runtime.AllocateEdgeActor(nodeIndex))
         , Type(type)
         , GroupMock(0, Type.GetErasure(), Type.BlobSubgroupSize(), 1, info)
         , Info(info)
+        , BlobSize(blobSize)
     {
+        FillBlobData();
     }
 
-    TTestState(TTestActorRuntime &runtime, const TBlobStorageGroupType &type, ui64 nodeIndex = 0, ui32 failRealms = 1)
+    TTestState(TTestActorRuntime &runtime, const TBlobStorageGroupType &type, ui64 nodeIndex = 0,
+            ui32 failRealms = 1, ui32 blobSize = 1024)
         : Runtime(runtime)
         , EdgeActor(runtime.AllocateEdgeActor(nodeIndex))
         , Type(type)
         , GroupMock(0, Type.GetErasure(), failRealms, Type.BlobSubgroupSize(), 1)
         , Info(GroupMock.GetInfo())
+        , BlobSize(blobSize)
     {
+        FillBlobData();
     }
 
     TGroupMock& GetGroupMock() {
@@ -66,6 +73,13 @@ struct TTestState {
             result.emplace(vDiskIds[idx], 0);
         }
         return result;
+    }
+
+    void FillBlobData() {
+        BlobData.resize(BlobSize);
+        for (ui32 i = 0; i < BlobSize; ++i) {
+            BlobData[i] = RandomNumber<ui8>();
+        }
     }
 
     ////////////////////////////////////////////////////////////////////////////

@@ -3,7 +3,9 @@ ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
 ENV(YDB_ENABLE_COLUMN_TABLES="true")
 
 TEST_SRCS(
-    test_workload.py
+    reconfig_state_storage_workload_test.py
+    test_board_workload.py
+    test_state_storage_workload.py
 )
 
 REQUIREMENTS(ram:32)

@@ -378,7 +378,7 @@ class TestKiKiMRDistConfReassignStateStorageBadCases(KiKiMRDistConfReassignState
         ]}}}
         self.check_failed(cmd, f"{storageName} replicas ActorId intersection, specify RingGroupActorIdOffset if you run multiple replicas on one node")
 
-        defaultRingGroup = [self.do_request_config()[f"{storageName}Config"]["Ring"]]
+        defaultRingGroup = [get_ring_group(self.do_request_config(), storageName)]
         newRingGroup = [
             {"NToSelect": 3, "Ring": [{"Node": [4]}, {"Node": [5]}, {"Node": [6]}]},
             {"NToSelect": 3, "Ring": [{"Node": [7]}, {"Node": [8]}, {"Node": [1]}]}

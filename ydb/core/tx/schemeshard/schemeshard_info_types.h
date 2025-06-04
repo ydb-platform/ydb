@@ -3337,7 +3337,9 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
     TKMeans KMeans;
 
     EState State = EState::Invalid;
+private:
     TString Issue;
+public:
     TInstant StartTime = TInstant::Zero();
     TInstant EndTime = TInstant::Zero();
     bool IsBroken = false;
@@ -3790,17 +3792,21 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         Subscribers.insert(actorID);
     }
 
-    void AddIssue(TString issue) {
-        if (Issue.Contains(issue)) {
-            // prevent from an infinite grow
-            return;
+    const TString& GetIssue() const {
+        return Issue;
+    }
+
+    bool AddIssue(TString issue) {
+        if (Issue.Contains(issue)) { // deduplication
+            return false;
         }
 
         if (Issue) {
-            // TODO: store issues as list?
+            // TODO: store as list?
             Issue += "; ";
         }
         Issue += issue;
+        return true;
     }
 
     float CalcProgressPercent() const {
@@ -3957,7 +3963,7 @@ inline void Out<NKikimr::NSchemeShard::TIndexBuildInfo>
     o << ", IsBroken: " << info.IsBroken;
     o << ", IsCancellationRequested: " << info.CancelRequested;
 
-    o << ", Issue: " << info.Issue;
+    o << ", Issue: " << info.GetIssue();
     o << ", SubscribersCount: " << info.Subscribers.size();
 
     o << ", CreateSender: " << info.CreateSender.ToString();

@@ -92,7 +92,7 @@ class TestDML(TestBase):
         number_of_columns = self.get_number_of_columns(pk_types, all_types, index, ttl)
 
         for offset in range(number_of_columns):
-            rows = self.query(f"select {", ".join(selected_columns)} from {table_name} limit 1 OFFSET {offset}")
+            rows = self.query(f"select {', '.join(selected_columns)} from {table_name} limit 1 OFFSET {offset}")
             self.assert_type_after_select(offset + 1, rows[0], all_types, pk_types, index, ttl, dml)
 
     def create_types_for_all_select(
@@ -150,7 +150,7 @@ class TestDML(TestBase):
     ):
         selected_columns = self.create_types_for_all_select(all_types, pk_types, index, ttl)
 
-        rows = self.query(f"from {table_name} select {", ".join(selected_columns)}")
+        rows = self.query(f"from {table_name} select {', '.join(selected_columns)}")
         for i, row in enumerate(rows):
             self.assert_type_after_select(i + 1, row, all_types, pk_types, index, ttl, dml)
 
@@ -295,7 +295,7 @@ class TestDML(TestBase):
             self.create_without(table_name, selected_columns_without, f"ttl_{cleanup_type_name(ttl)}")
 
     def create_without(self, table_name, selected_columns_without, without):
-        rows = self.query(f"select * without {", ".join(selected_columns_without)}, {without} from {table_name}")
+        rows = self.query(f"select * without {', '.join(selected_columns_without)}, {without} from {table_name}")
         for col_name in rows[0].keys():
             assert col_name != without, f"a column {without} in the table {table_name} was not excluded"
 
@@ -310,19 +310,19 @@ class TestDML(TestBase):
     ):
         selected_columns = self.create_types_for_all_select(all_types, pk_types, index, ttl)
         for i in range(1, 100):
-            rows = self.query(f"select {", ".join(selected_columns)} from {table_name} TABLESAMPLE SYSTEM({i}.0)")
+            rows = self.query(f"select {', '.join(selected_columns)} from {table_name} TABLESAMPLE SYSTEM({i}.0)")
             for _, row in enumerate(rows):
                 numb = row["pk_Int64"]
                 self.assert_type_after_select(numb, row, all_types, pk_types, index, ttl, dml)
 
             rows = self.query(
-                f"select {", ".join(selected_columns)} from {table_name} TABLESAMPLE BERNOULLI({i}.0) REPEATABLE({i})"
+                f"select {', '.join(selected_columns)} from {table_name} TABLESAMPLE BERNOULLI({i}.0) REPEATABLE({i})"
             )
             for _, row in enumerate(rows):
                 numb = row["pk_Int64"]
                 self.assert_type_after_select(numb, row, all_types, pk_types, index, ttl, dml)
 
-            rows = self.query(f"select {", ".join(selected_columns)} from {table_name} SAMPLE 1.0 / {i}")
+            rows = self.query(f"select {', '.join(selected_columns)} from {table_name} SAMPLE 1.0 / {i}")
             for _, row in enumerate(rows):
                 numb = row["pk_Int64"]
                 self.assert_type_after_select(numb, row, all_types, pk_types, index, ttl, dml)
@@ -344,7 +344,7 @@ class TestDML(TestBase):
         selected_columns = self.create_types_for_all_select(all_types, pk_types, index, ttl)
         for statement in selected_columns:
             if "Json" not in statement and "JsonDocument" not in statement and "Yson" not in statement:
-                rows = self.query(f"select {", ".join(selected_columns)} from {table_name} ORDER BY {statement} ASC")
+                rows = self.query(f"select {', '.join(selected_columns)} from {table_name} ORDER BY {statement} ASC")
                 if "String" not in statement and "Utf8" not in statement:
                     for i, row in enumerate(rows):
                         self.assert_type_after_select(i + 1, row, all_types, pk_types, index, ttl, dml)
@@ -352,7 +352,7 @@ class TestDML(TestBase):
                     for i, row in enumerate(rows):
                         self.assert_type_after_select(string_order[i][1], row, all_types, pk_types, index, ttl, dml)
 
-                rows = self.query(f"select {", ".join(selected_columns)} from {table_name} ORDER BY {statement} DESC")
+                rows = self.query(f"select {', '.join(selected_columns)} from {table_name} ORDER BY {statement} DESC")
                 string_order.reverse()
                 if "Bool" not in statement:
                     if "String" not in statement and "Utf8" not in statement:

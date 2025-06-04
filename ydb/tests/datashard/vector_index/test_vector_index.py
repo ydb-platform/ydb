@@ -97,7 +97,7 @@ class TestVectorIndex(VectorBase):
                     dml.query(sql_create_vector_index)
                     self.select_and_check(
                         table_name,
-                        f"{target}_{distance}_{dimension["levels"]}",
+                        f"{target}_{distance}_{dimension['levels']}",
                         "col_String",
                         vector_type,
                         pk_types,
@@ -291,7 +291,7 @@ class TestVectorIndex(VectorBase):
                 for distance, knn_func in distances.items():
                     sql_create_vector_index = create_vector_index_sql_request(
                         table_name,
-                        f"{target}_{distance}_{dimension["levels"]}",
+                        f"{target}_{distance}_{dimension['levels']}",
                         "col_String",
                         "col_index_String",
                         target,
@@ -306,7 +306,7 @@ class TestVectorIndex(VectorBase):
                     dml.query(sql_create_vector_index)
                     self.select_and_check_for_prefix(
                         table_name,
-                        f"{target}_{distance}_{dimension["levels"]}",
+                        f"{target}_{distance}_{dimension['levels']}",
                         "col_String",
                         vector_type,
                         pk_types,

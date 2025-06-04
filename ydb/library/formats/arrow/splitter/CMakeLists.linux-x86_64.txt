@@ -12,6 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
+get_built_tool_path(
+  TOOL_enum_parser_bin
+  TOOL_enum_parser_dependency
+  tools/enum_parser/enum_parser
+  enum_parser
+)
+
 add_library(library-formats-arrow-splitter)
 
 
@@ -22,6 +29,7 @@ target_link_libraries(library-formats-arrow-splitter PUBLIC
   libs-apache-arrow
   library-actors-core
   ydb-library-conclusion
+  tools-enum_parser-enum_serialization_runtime
 )
 
 target_sources(library-formats-arrow-splitter PRIVATE
@@ -29,3 +37,9 @@ target_sources(library-formats-arrow-splitter PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/library/formats/arrow/splitter/similar_packer.cpp
 )
 
+
+generate_enum_serilization(library-formats-arrow-splitter
+  ${PROJECT_SOURCE_DIR}/ydb/library/formats/arrow/splitter/stats.h
+  INCLUDE_HEADERS
+  ydb/library/formats/arrow/splitter/stats.h
+)

@@ -3033,6 +3033,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         GatheringStatistics = 20,
         Initiating = 30,
         Filling = 40,
+        Validating = 41, // Validating index constraints after filling
         DropBuild = 45,
         CreateBuild = 46,
         LockBuild = 47,
@@ -3155,7 +3156,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
 
         TString DebugString() const {
             return TStringBuilder()
-                << "{ " 
+                << "{ "
                 << "State = " << State
                 << ", Level = " << Level << " / " << Levels
                 << ", K = " << K
@@ -3373,10 +3374,46 @@ public:
         }
     };
 
+    struct TIndexValidationShardStatus {
+        Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
+        TString DebugMessage;
+        ui64 SeqNoRound = 0;
+        NKikimrSchemeOp::TIndexValidationShardResult Result;
+        TBillingStats Processed;
+
+        TIndexValidationShardStatus() = default;
+
+        TString ToString(TShardIdx shardIdx = InvalidShardIdx) const {
+            TStringBuilder result;
+
+            result << "TIndexValidationShardStatus {";
+
+            if (shardIdx) {
+                result << " ShardIdx: " << shardIdx;
+            }
+            result << " Status: " << Ydb::StatusIds::StatusCode_Name(Status);
+            result << " SeqNoRound: " << SeqNoRound;
+            result << " Result: " << Result.ShortDebugString();
+            result << " DebugMessage: " << DebugMessage;
+            result << " SeqNoRound: " << SeqNoRound;
+            result << " Processed: " << Processed.ToString();
+
+            result << " }";
+
+            return result;
+        }
+    };
+
     TMap<TShardIdx, TShardStatus> Shards;
     TDeque<TShardIdx> ToUploadShards;
     THashSet<TShardIdx> InProgressShards;
     std::vector<TShardIdx> DoneShards;
+
+    TMap<TShardIdx, TIndexValidationShardStatus> IndexShards;
+    TDeque<TShardIdx> ToValidateIndexShards;
+    THashSet<TShardIdx> InProgressIndexShards;
+    std::vector<TShardIdx> DoneIndexShards;
+
     ui32 MaxInProgressShards = 32;
 
     TBillingStats Processed;
@@ -3410,7 +3447,7 @@ public:
 
         TString DebugString() const {
             return TStringBuilder()
-                << "{ " 
+                << "{ "
                 << "State = " << State
                 << ", Rows = " << Rows.size()
                 << ", MaxProbability = " << MaxProbability
@@ -3721,6 +3758,39 @@ public:
         Processed += processed;
     }
 
+    template<class TRow>
+    void AddIndexValidationShardStatus(const TRow& row) {
+        TShardIdx shardIdx =
+            TShardIdx(row.template GetValue<
+                          Schema::IndexValidationShardStatus::OwnerShardIdx>(),
+                      row.template GetValue<
+                          Schema::IndexValidationShardStatus::LocalShardIdx>());
+
+        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::BUILD_INDEX,
+            "AddShardStatus id# " << Id << " index shard " << shardIdx);
+        IndexShards.emplace(
+            shardIdx, TIndexBuildInfo::TIndexValidationShardStatus{});
+        TIndexBuildInfo::TIndexValidationShardStatus& shardStatus = IndexShards.at(shardIdx);
+
+        shardStatus.Status =
+            row.template GetValue<Schema::IndexValidationShardStatus::Status>();
+
+        if (row.template HaveValue<Schema::IndexValidationShardStatus::Result>()) {
+            shardStatus.Result = row.template GetValue<Schema::IndexValidationShardStatus::Result>();
+        }
+
+        shardStatus.DebugMessage = row.template GetValueOrDefault<
+            Schema::IndexValidationShardStatus::Message>();
+
+        auto& processed = shardStatus.Processed;
+        processed = {
+            0 /*uploadRows*/,
+            0 /*uploadBytes*/,
+            row.template GetValueOrDefault<Schema::IndexValidationShardStatus::ReadRowsProcessed>(0),
+            row.template GetValueOrDefault<Schema::IndexValidationShardStatus::ReadBytesProcessed>(0),
+        };
+    }
+
     bool IsCancellationRequested() const {
         return CancelRequested;
     }
@@ -3969,6 +4039,13 @@ inline void Out<NKikimr::NSchemeShard::TIndexBuildInfo>
 
     for (const auto& x: info.InProgressShards) {
         o << ", ShardsInProgress: " << x;
+    }
+
+    o << ", ToValidateIndexShards: " << info.ToValidateIndexShards.size();
+    o << ", DoneIndexShards: " << info.DoneIndexShards.size();
+
+    for (const auto& x: info.InProgressIndexShards) {
+        o << ", IndexShardsInProgress: " << x;
     }
 
     o << ", Processed: " << info.Processed;

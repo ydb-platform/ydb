@@ -226,6 +226,7 @@ void TSchemeShard::TIndexBuilder::TTxBase::Fill(NKikimrIndexBuilder::TIndexBuild
         index.SetProgress(0.0);
         break;
     case TIndexBuildInfo::EState::Filling:
+    case TIndexBuildInfo::EState::Validating:
     case TIndexBuildInfo::EState::DropBuild:
     case TIndexBuildInfo::EState::CreateBuild:
     case TIndexBuildInfo::EState::LockBuild:

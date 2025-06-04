@@ -8,6 +8,7 @@
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
 #include <ydb/core/base/table_vector_index.h>
+#include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tx/datashard/range_ops.h>
 #include <ydb/core/tx/datashard/scan_common.h>
@@ -755,6 +756,36 @@ private:
         ToTabletSend.emplace(shardId, std::move(ev));
     }
 
+    void SendValidateUniqueIndexRequest(TShardIdx shardIdx, TIndexBuildInfo& buildInfo) {
+        auto ev = MakeHolder<TEvDataShard::TEvValidateUniqueIndexRequest>();
+        auto& record = ev->Record;
+
+        record.SetId(ui64(BuildId));
+
+        auto& indexShardStatus = buildInfo.IndexShards.at(shardIdx);
+
+        auto path = GetBuildPath(Self, buildInfo, NTableIndex::ImplTable);
+        TTableInfo::TPtr table = Self->Tables.at(path->PathId);
+
+        record.SetOwnerId(path->PathId.OwnerId);
+        record.SetPathId(path->PathId.LocalPathId);
+
+        record.SetSeqNoGeneration(Self->Generation());
+        record.SetSeqNoRound(++indexShardStatus.SeqNoRound);
+
+        *record.MutableIndexColumns() = {
+            buildInfo.IndexColumns.begin(),
+            buildInfo.IndexColumns.end()
+        };
+
+        TTabletId shardId = Self->ShardInfos.at(shardIdx).TabletID;
+        record.SetTabletId(ui64(shardId));
+
+        LOG_N("TTxBuildProgress: TEvValidateUniqueIndexRequest: " << record.ShortDebugString());
+
+        ToTabletSend.emplace(shardId, std::move(ev));
+    }
+
     void SendUploadSampleKRequest(TIndexBuildInfo& buildInfo) {
         buildInfo.Sample.MakeStrictTop(buildInfo.KMeans.K);
         auto path = GetBuildPath(Self, buildInfo, NTableIndex::NTableVectorKmeansTreeIndex::LevelTable);
@@ -777,6 +808,15 @@ private:
         Self->IndexBuildPipes.CloseAll(BuildId, ctx);
     }
 
+    void ClearAfterValidate(const TActorContext& ctx, TIndexBuildInfo& buildInfo) {
+        buildInfo.DoneIndexShards = {};
+        buildInfo.InProgressIndexShards = {};
+        buildInfo.ToValidateIndexShards = {};
+
+        ToTabletSend.clear();
+        Self->IndexBuildPipes.CloseAll(BuildId, ctx);
+    }
+
     template<typename Send>
     bool SendToShards(TIndexBuildInfo& buildInfo, Send&& send) {
         while (!buildInfo.ToUploadShards.empty() && buildInfo.InProgressShards.size() < buildInfo.MaxInProgressShards) {
@@ -787,6 +827,18 @@ private:
         }
 
         return buildInfo.InProgressShards.empty() && buildInfo.ToUploadShards.empty();
+    }
+
+    template<typename Send>
+    bool SendToIndexShards(TIndexBuildInfo& buildInfo, Send&& send) {
+        while (!buildInfo.ToValidateIndexShards.empty() && buildInfo.InProgressIndexShards.size() < buildInfo.MaxInProgressShards) {
+            auto shardIdx = buildInfo.ToValidateIndexShards.front();
+            buildInfo.ToValidateIndexShards.pop_front();
+            buildInfo.InProgressIndexShards.emplace(shardIdx);
+            send(shardIdx);
+        }
+
+        return buildInfo.InProgressIndexShards.empty() && buildInfo.ToValidateIndexShards.empty();
     }
 
     void AddShard(TIndexBuildInfo& buildInfo, const TShardIdx& idx, const TIndexBuildInfo::TShardStatus& status) {
@@ -806,8 +858,22 @@ private:
         }
     }
 
+    void AddIndexShard(TIndexBuildInfo& buildInfo, const TShardIdx& idx, const TIndexBuildInfo::TIndexValidationShardStatus& status) {
+        if (status.Status == Ydb::StatusIds::SUCCESS) {
+            buildInfo.DoneIndexShards.emplace_back(idx);
+        } else if (status.Status == Ydb::StatusIds::ABORTED || status.Status == Ydb::StatusIds::STATUS_CODE_UNSPECIFIED) {
+            buildInfo.ToValidateIndexShards.emplace_back(idx);
+        } else {
+            Y_ENSURE(false, "Unreachable");
+        }
+    }
+
     bool NoShardsAdded(TIndexBuildInfo& buildInfo) {
         return buildInfo.DoneShards.empty() && buildInfo.InProgressShards.empty() && buildInfo.ToUploadShards.empty();
+    }
+
+    bool NoIndexShardsAdded(TIndexBuildInfo& buildInfo) {
+        return buildInfo.DoneIndexShards.empty() && buildInfo.InProgressIndexShards.empty() && buildInfo.ToValidateIndexShards.empty();
     }
 
     void AddAllShards(TIndexBuildInfo& buildInfo) {
@@ -816,6 +882,15 @@ private:
 
         for (const auto& [idx, status] : buildInfo.Shards) {
             AddShard(buildInfo, idx, status);
+        }
+    }
+
+    void AddAllIndexShards(TIndexBuildInfo& buildInfo) {
+        ToTabletSend.clear();
+        Self->IndexBuildPipes.CloseAll(BuildId, Self->ActorContext());
+
+        for (const auto& [idx, status] : buildInfo.IndexShards) {
+            AddIndexShard(buildInfo, idx, status);
         }
     }
 
@@ -857,6 +932,22 @@ private:
 
         if (done) {
             LOG_D("FillSecondaryIndex Done");
+        }
+
+        return done;
+    }
+
+    bool FillUniqueIndexValidation(TIndexBuildInfo& buildInfo) {
+        LOG_D("FillUniqueIndexValidation Start");
+
+        if (NoIndexShardsAdded(buildInfo)) {
+            AddAllIndexShards(buildInfo);
+        }
+        auto done = SendToIndexShards(buildInfo, [&](TShardIdx shardIdx) { SendValidateUniqueIndexRequest(shardIdx, buildInfo); }) &&
+               buildInfo.DoneIndexShards.size() == buildInfo.IndexShards.size();
+
+        if (done) {
+            LOG_D("FillUniqueIndexValidation Done");
         }
 
         return done;
@@ -1116,6 +1207,86 @@ private:
         }
     }
 
+    bool ValidateIndexShards(TTransactionContext& txc, TIndexBuildInfo& buildInfo) {
+        // Only for unique index validation
+        Y_ENSURE(buildInfo.BuildKind == TIndexBuildInfo::EBuildKind::BuildSecondaryIndex);
+        Y_ENSURE(buildInfo.IndexType == NKikimrSchemeOp::EIndexTypeGlobalUnique);
+
+        if (buildInfo.IndexShards.empty()) {
+            NIceDb::TNiceDb db(txc.DB);
+            InitiateIndexShards(db, buildInfo);
+        }
+        return FillUniqueIndexValidation(buildInfo);
+    }
+
+    bool PerformCrossShardIndexValidation(TIndexBuildInfo& buildInfo, TString& errorDesc) const {
+        if (buildInfo.IndexShards.size() == 1) {
+            return true;
+        }
+
+        auto path = GetBuildPath(Self, buildInfo, NTableIndex::ImplTable);
+        TTableInfo::TPtr table = Self->Tables.at(path->PathId);
+
+        // Make index columns type info
+        std::vector<NScheme::TTypeInfoOrder> indexColumnTypeInfos;
+        indexColumnTypeInfos.reserve(buildInfo.IndexColumns.size());
+        for (const TString& columnName : buildInfo.IndexColumns) {
+            bool found = false;
+            for (auto&& [_, columnInfo] : table->Columns) {
+                if (columnInfo.Name == columnName) {
+                    indexColumnTypeInfos.emplace_back(columnInfo.PType);
+                    found = true;
+                    break;
+                }
+            }
+            Y_ENSURE(found);
+        }
+
+        // Arrange shards in ascending order by shard index
+        using TIndexShardsType = TMap<TShardIdx, TIndexBuildInfo::TIndexValidationShardStatus>;
+        std::vector<TIndexShardsType::const_iterator> sortedIndexShards;
+        sortedIndexShards.reserve(buildInfo.IndexShards.size());
+        Y_ENSURE(buildInfo.IndexShards.size() == table->GetPartitions().size());
+        for (const auto& x: table->GetPartitions()) {
+            auto it = buildInfo.IndexShards.find(x.ShardIdx);
+            Y_ENSURE(it != buildInfo.IndexShards.end());
+            sortedIndexShards.emplace_back(it);
+        }
+
+        // Compare index shards edge keys
+        std::optional<TSerializedCellVec> prevLastKey;
+        for (TIndexShardsType::const_iterator it : sortedIndexShards) {
+            const TIndexBuildInfo::TIndexValidationShardStatus& status = it->second;
+            Y_ENSURE(status.Status == Ydb::StatusIds::SUCCESS);
+            if (const TString& firstKey = status.Result.GetFirstIndexKey()) {
+                if (prevLastKey) {
+                    TSerializedCellVec currentFirstKey(firstKey);
+                    Y_ENSURE(currentFirstKey.GetCells().size() == indexColumnTypeInfos.size());
+                    if (CompareTypedCellVectors(currentFirstKey.GetCells().data(), prevLastKey->GetCells().data(), indexColumnTypeInfos.data(), indexColumnTypeInfos.size()) == 0) {
+                        TStringBuilder err;
+                        err << "Duplicate key found: (";
+                        for (size_t i = 0; i < buildInfo.IndexColumns.size(); ++i) {
+                            if (i > 0) {
+                                err << ", ";
+                            }
+                            err << buildInfo.IndexColumns[i] << "=";
+                            DbgPrintValue(err, currentFirstKey.GetCells()[i], indexColumnTypeInfos[i].ToTypeInfo());
+                        }
+                        err << ")";
+                        errorDesc = std::move(err);
+                        LOG_E("Cross shard index validation failed. Found duplicate key. Cancelling unique index build");
+                        return false;
+                    }
+                }
+            }
+            if (const TString& lastKey = status.Result.GetLastIndexKey()) {
+                prevLastKey.emplace(lastKey);
+                Y_ENSURE(prevLastKey->GetCells().size() == indexColumnTypeInfos.size());
+            }
+        }
+        return true;
+    }
+
 public:
     explicit TTxProgress(TSelf* self, TIndexBuildId buildId)
         : TTxBase(self, buildId, TXTYPE_PROGRESS_INDEX_BUILD)
@@ -1186,9 +1357,39 @@ public:
         case TIndexBuildInfo::EState::Filling: {
             if (buildInfo.IsCancellationRequested() || FillIndex(txc, buildInfo)) {
                 ClearAfterFill(ctx, buildInfo);
-                ChangeState(BuildId, buildInfo.IsCancellationRequested()
-                                         ? TIndexBuildInfo::EState::Cancellation_Applying
-                                         : TIndexBuildInfo::EState::Applying);
+                TIndexBuildInfo::EState nextState = TIndexBuildInfo::EState::Applying;
+                if (buildInfo.IsCancellationRequested()) {
+                    nextState = TIndexBuildInfo::EState::Cancellation_Applying;
+                } else if (buildInfo.IndexType == NKikimrSchemeOp::EIndexTypeGlobalUnique) {
+                    nextState = TIndexBuildInfo::EState::Validating;
+                }
+                ChangeState(BuildId, nextState);
+                Progress(BuildId);
+
+                if (nextState != TIndexBuildInfo::EState::Validating) {
+                    // make final bill
+                    Bill(buildInfo);
+                }
+            } else {
+                AskToScheduleBilling(buildInfo);
+            }
+            break;
+        }
+        case TIndexBuildInfo::EState::Validating: {
+            if (buildInfo.IsCancellationRequested() || ValidateIndexShards(txc, buildInfo)) {
+                ClearAfterValidate(ctx, buildInfo);
+
+                TIndexBuildInfo::EState nextState = TIndexBuildInfo::EState::Applying;
+                TString errorDesc;
+                if (buildInfo.IsCancellationRequested()) {
+                    nextState = TIndexBuildInfo::EState::Cancellation_Applying;
+                } else if (!PerformCrossShardIndexValidation(buildInfo, errorDesc)) {
+                    NIceDb::TNiceDb db(txc.DB);
+                    Self->PersistBuildIndexAddIssue(db, buildInfo, errorDesc);
+                    nextState = TIndexBuildInfo::EState::Rejection_Applying;
+                }
+
+                ChangeState(BuildId, nextState);
                 Progress(BuildId);
 
                 // make final bill
@@ -1368,7 +1569,7 @@ public:
         Self->PersistBuildIndexAddIssue(db, *buildInfo,
             TStringBuilder() << "Unhandled exception " << exc.what());
 
-        if (buildInfo->State != TIndexBuildInfo::EState::Filling) {
+        if (buildInfo->State != TIndexBuildInfo::EState::Filling && buildInfo->State != TIndexBuildInfo::EState::Validating) {
             // no idea how to gracefully stop index build otherwise
             // leave everything as is
             LOG_E("TTxBuildProgress: OnUnhandledException: not a Filling state, id# " << buildInfo->Id
@@ -1439,6 +1640,26 @@ public:
         }
 
         return true;
+    }
+
+    void InitiateIndexShards(NIceDb::TNiceDb& db, TIndexBuildInfo& buildInfo) {
+        LOG_D("InitiateIndexShards " << buildInfo.DebugString());
+
+        Y_ENSURE(buildInfo.IndexShards.empty());
+        Y_ENSURE(buildInfo.ToValidateIndexShards.empty());
+        Y_ENSURE(buildInfo.InProgressIndexShards.empty());
+        Y_ENSURE(buildInfo.DoneIndexShards.empty());
+
+        auto path = GetBuildPath(Self, buildInfo, NTableIndex::ImplTable);
+        TTableInfo::TPtr table = Self->Tables.at(path->PathId);
+
+        for (const auto& x: table->GetPartitions()) {
+            Y_ENSURE(Self->ShardInfos.contains(x.ShardIdx));
+            auto [it, emplaced] = buildInfo.IndexShards.emplace(x.ShardIdx, TIndexBuildInfo::TIndexValidationShardStatus{});
+            Y_ENSURE(emplaced);
+
+            Self->PersistBuildIndexValidationInitiate(db, BuildId, x.ShardIdx, it->second);
+        }
     }
 
     void DoComplete(const TActorContext& ctx) override {
@@ -1553,10 +1774,18 @@ public:
             << ", shardId# " << ShardId
             << ", shardIdx# " << shardIdx);
 
-        if (!buildInfo.Shards.contains(shardIdx)) {
-            return true;
+        if (buildInfo.Shards.contains(shardIdx)) {
+            return ProcessShard(buildInfo, shardIdx, ctx);
         }
 
+        if (buildInfo.IndexShards.contains(shardIdx)) {
+            return ProcessIndexShard(buildInfo, shardIdx, ctx);
+        }
+
+        return true;
+    }
+
+    bool ProcessShard(TIndexBuildInfo& buildInfo, const TShardIdx& shardIdx, const TActorContext& ctx) {
         if (buildInfo.State != TIndexBuildInfo::EState::Filling) {
             LOG_I("TTxReply : PipeRetry superfluous event, id# " << BuildId);
             return true;
@@ -1569,6 +1798,24 @@ public:
             Self->IndexBuildPipes.Close(BuildId, ShardId, ctx);
 
             // generate new message with actual LastKeyAck to continue scan
+            Progress(BuildId);
+        }
+
+        return true;
+    }
+
+    bool ProcessIndexShard(TIndexBuildInfo& buildInfo, const TShardIdx& shardIdx, const TActorContext& ctx) {
+        if (buildInfo.State != TIndexBuildInfo::EState::Validating) {
+            LOG_I("TTxReply : PipeRetry superfluous event, id# " << BuildId);
+            return true;
+        }
+
+        // reschedule index shard
+        if (buildInfo.InProgressIndexShards.erase(shardIdx)) {
+            buildInfo.ToValidateIndexShards.emplace_front(shardIdx);
+
+            Self->IndexBuildPipes.Close(BuildId, ShardId, ctx);
+
             Progress(BuildId);
         }
 
@@ -1859,6 +2106,118 @@ public:
     }
 };
 
+struct TSchemeShard::TIndexBuilder::TTxReplyValidateUniqueIndex: public TSchemeShard::TIndexBuilder::TTxReply  {
+private:
+    TEvDataShard::TEvValidateUniqueIndexResponse::TPtr Response;
+
+public:
+    explicit TTxReplyValidateUniqueIndex(TSelf* self, TEvDataShard::TEvValidateUniqueIndexResponse::TPtr& response)
+        : TTxReply(self, TIndexBuildId(response->Get()->Record.GetId()))
+        , Response(response)
+    {
+    }
+
+    void OnIndexShardSuccess(NIceDb::TNiceDb&, TIndexBuildInfo&, TIndexBuildInfo::TIndexValidationShardStatus& shardStatus) {
+        const auto& record = Response->Get()->Record;
+        shardStatus.Result.SetFirstIndexKey(record.GetFirstIndexKey());
+        shardStatus.Result.SetLastIndexKey(record.GetLastIndexKey());
+    }
+
+    void OnIndexShardError(NIceDb::TNiceDb& db, TIndexBuildInfo& buildInfo, TIndexBuildInfo::TIndexValidationShardStatus& shardStatus, TTabletId shardId, TShardIdx shardIdx) {
+        Self->PersistBuildIndexAddIssue(db, buildInfo, TStringBuilder()
+            << "One of the index shards report " << shardStatus.Status << " " << shardStatus.DebugMessage
+            << " at Validating stage, process has to be canceled"
+            << ", shardId: " << shardId
+            << ", shardIdx: " << shardIdx);
+        ChangeState(buildInfo.Id, TIndexBuildInfo::EState::Rejection_Applying);
+    }
+
+    bool DoExecute([[maybe_unused]] TTransactionContext& txc, [[maybe_unused]] const TActorContext& ctx) override {
+        const auto& record = Response->Get()->Record;
+        TTabletId shardId = TTabletId(record.GetTabletId());
+        TShardIdx shardIdx = Self->GetShardIdx(shardId);
+
+        LOG_N("TTxReply : TEvValidateUniqueIndexResponse, id# " << BuildId
+            << ", shardId# " << shardId
+            << ", shardIdx# " << shardIdx);
+
+        const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(BuildId);
+        if (!buildInfoPtr) {
+            return true;
+        }
+
+        auto& buildInfo = *buildInfoPtr->Get();
+        LOG_D("TTxReply : TEvValidateUniqueIndexResponse"
+            << ", TIndexBuildInfo: " << buildInfo
+            << ", record: " << record.ShortDebugString()
+            << ", shardId# " << shardId
+            << ", shardIdx# " << shardIdx);
+
+        if (buildInfo.State != TIndexBuildInfo::EState::Validating) {
+            LOG_I("TTxReply : TEvValidateUniqueIndexResponse superfluous event, id# " << BuildId);
+            return true;
+        }
+
+        if (!buildInfo.InProgressIndexShards.contains(shardIdx)) {
+            LOG_N("TTxReply : TEvValidateUniqueIndexResponse superfluous shard event, id# " << BuildId
+                << ", TIndexBuildInfo: " << buildInfo);
+            return true;
+        }
+
+        TIndexBuildInfo::TIndexValidationShardStatus& shardStatus = buildInfo.IndexShards.at(shardIdx);
+        auto actualSeqNo = std::pair<ui64, ui64>(Self->Generation(), shardStatus.SeqNoRound);
+        auto recordSeqNo = std::pair<ui64, ui64>(record.GetRequestSeqNoGeneration(), record.GetRequestSeqNoRound());
+
+        if (actualSeqNo != recordSeqNo) {
+            LOG_D("TTxReply : TEvValidateUniqueIndexResponse ignore response message by seqNo"
+                << ", TIndexBuildInfo: " << buildInfo
+                << ", actual seqNo for the shard " << shardId << " (" << shardIdx << ") is: "  << Self->Generation() << ":" <<  shardStatus.SeqNoRound
+                << ", record: " << record.ShortDebugString());
+            Y_ENSURE(actualSeqNo > recordSeqNo);
+            return true;
+        }
+
+        NIceDb::TNiceDb db(txc.DB);
+
+        auto billingStats = GetBillingStats();
+        shardStatus.Processed += billingStats;
+        buildInfo.Processed += billingStats;
+        Self->PersistBuildIndexProcessed(db, buildInfo);
+
+        NYql::TIssues issues;
+        NYql::IssuesFromMessage(record.GetIssues(), issues);
+        if (issues) {
+            shardStatus.DebugMessage = issues.ToString();
+        }
+        shardStatus.Status = record.GetStatus();
+
+        Self->IndexBuildPipes.Close(BuildId, shardId, ctx);
+
+        bool erased = buildInfo.InProgressIndexShards.erase(shardIdx);
+        Y_ENSURE(erased);
+
+        if (shardStatus.Status == Ydb::StatusIds::SUCCESS) {
+            buildInfo.DoneIndexShards.emplace_back(shardIdx);
+            OnIndexShardSuccess(db, buildInfo, shardStatus);
+
+        } else if (shardStatus.Status == Ydb::StatusIds::ABORTED) {
+            // datashard gracefully rebooted, reschedule shard
+            buildInfo.ToValidateIndexShards.emplace_front(shardIdx);
+        } else {
+            OnIndexShardError(db, buildInfo, shardStatus, shardId, shardIdx);
+        }
+        Self->PersistShardValidationResult(db, BuildId, shardIdx, shardStatus);
+        Progress(BuildId);
+
+        return true;
+    }
+
+    TBillingStats GetBillingStats() const {
+        auto& record = Response->Get()->Record;
+        return {0 /*uploadRows*/, 0 /*uploadBytes*/, record.GetReadRows(), record.GetReadBytes()};
+    }
+};
+
 struct TSchemeShard::TIndexBuilder::TTxReplyProgress: public TTxShardReply<TEvDataShard::TEvBuildIndexProgressResponse>  {
     explicit TTxReplyProgress(TSelf* self, TEvDataShard::TEvBuildIndexProgressResponse::TPtr& response)
         : TTxShardReply(self, TIndexBuildId(response->Get()->Record.GetId()), response)
@@ -1985,6 +2344,7 @@ public:
         case TIndexBuildInfo::EState::Invalid:
         case TIndexBuildInfo::EState::GatheringStatistics:
         case TIndexBuildInfo::EState::Filling:
+        case TIndexBuildInfo::EState::Validating:
         case TIndexBuildInfo::EState::Done:
         case TIndexBuildInfo::EState::Cancelled:
         case TIndexBuildInfo::EState::Rejected:
@@ -2178,6 +2538,7 @@ public:
         case TIndexBuildInfo::EState::Invalid:
         case TIndexBuildInfo::EState::GatheringStatistics:
         case TIndexBuildInfo::EState::Filling:
+        case TIndexBuildInfo::EState::Validating:
         case TIndexBuildInfo::EState::Done:
         case TIndexBuildInfo::EState::Cancelled:
         case TIndexBuildInfo::EState::Rejected:
@@ -2262,6 +2623,7 @@ public:
         case TIndexBuildInfo::EState::Invalid:
         case TIndexBuildInfo::EState::GatheringStatistics:
         case TIndexBuildInfo::EState::Filling:
+        case TIndexBuildInfo::EState::Validating:
         case TIndexBuildInfo::EState::Done:
         case TIndexBuildInfo::EState::Cancelled:
         case TIndexBuildInfo::EState::Rejected:
@@ -2308,6 +2670,10 @@ ITransaction* TSchemeShard::CreateTxReply(TEvDataShard::TEvPrefixKMeansResponse:
 
 ITransaction* TSchemeShard::CreateTxReply(TEvIndexBuilder::TEvUploadSampleKResponse::TPtr& upload) {
     return new TIndexBuilder::TTxReplyUploadSample(this, upload);
+}
+
+ITransaction* TSchemeShard::CreateTxReply(TEvDataShard::TEvValidateUniqueIndexResponse::TPtr& response) {
+    return new TIndexBuilder::TTxReplyValidateUniqueIndex(this, response);
 }
 
 ITransaction* TSchemeShard::CreatePipeRetry(TIndexBuildId indexBuildId, TTabletId tabletId) {

@@ -223,22 +223,6 @@ public:
                 .Update();
             }
         }
-
-        if (db.HaveTable<Schema::TtlSettingsPresetInfo>()) {
-            for (size_t i = 0; i < 100; ++i) {
-                db.Table<Schema::TtlSettingsPresetInfo>()
-                .Key(1 + i)
-                .Update();
-            }
-        }
-
-        if (db.HaveTable<Schema::TtlSettingsPresetVersionInfo>()) {
-            for (size_t i = 0; i < 100; ++i) {
-                db.Table<Schema::TtlSettingsPresetVersionInfo>()
-                .Key(1 + i, 2 + i, 3 + i)
-                .Update();
-            }
-        }
     }
 };
 

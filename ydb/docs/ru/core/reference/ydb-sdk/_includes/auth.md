@@ -72,7 +72,7 @@
   Metadata | [ydb::MetadataUrlCredentials](https://github.com/ydb-platform/ydb-rs-sdk/blob/master/ydb/examples/auth-ycloud-metadata.rs)
   Service Account Key | [ydb::ServiceAccountCredentials](https://github.com/ydb-platform/ydb-rs-sdk/blob/master/ydb/examples/auth-ycloud-serviceaccount.rs)
   Static Credentials | [ydb::StaticCredentialsAuth](https://github.com/ydb-platform/ydb-rs-sdk/blob/master/ydb/examples/auth-static-credentials.rs)
-  Определяется по переменным окружения | [ydb::ServiceAccountCredentials](https://github.com/ydb-platform/ydb-rs-sdk/blob/master/ydb/examples/auth-ycloud-serviceaccount.rs)
+  Определяется по переменным окружения | [ydb::FromEnvCredentials](https://github.com/ydb-platform/ydb-rs-sdk/blob/master/ydb/examples/auth-ycloud-serviceaccount.rs)
   Выполнение внешней команды | [ydb::CommandLineCredentials](https://github.com/ydb-platform/ydb-rs-sdk/blob/master/ydb/examples/auth-yc-cmdline.rs) (например, для авторизации с помощью [IAM-токена](https://cloud.yandex.ru/docs/iam/concepts/authorization/iam-token) {{ yandex-cloud }} с компьютера разработчика ```ydb::CommandLineCredentials.from_cmd("yc iam create-token")```)
 
 - PHP

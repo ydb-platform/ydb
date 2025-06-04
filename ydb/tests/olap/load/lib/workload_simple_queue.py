@@ -28,11 +28,9 @@ class TableType(str, Enum):
 class SimpleQueueBase(LoadSuiteBase):
 
     @classmethod
-    def setup_class(cls) -> None:
-        """Сохраняем время начала setup_class для использования в start_time"""
+    def do_setup_class(cls) -> None:
+        """Сохраняем время начала setup для использования в start_time"""
         cls._setup_start_time = time.time()
-        # Вызываем родительский setup_class
-        super().setup_class()
 
     @classmethod
     def do_teardown_class(cls):

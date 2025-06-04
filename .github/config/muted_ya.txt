@@ -21,7 +21,6 @@ ydb/core/kqp/ut/cost KqpCost.OlapWriteRow
 ydb/core/kqp/ut/federated_query/large_results KqpScriptExecResults.ExecuteScriptWithLargeFile
 ydb/core/kqp/ut/federated_query/s3 sole chunk chunk
 ydb/core/kqp/ut/indexes KqpMultishardIndex.WriteIntoRenamingSyncIndex
-ydb/core/kqp/ut/olap KqpOlap.PredicatePushdown
 ydb/core/kqp/ut/olap KqpOlapDictionary.DifferentPages
 ydb/core/kqp/ut/olap KqpOlapJson.BloomMixIndexesVariants
 ydb/core/kqp/ut/olap KqpOlapJson.BloomNGrammIndexesVariants

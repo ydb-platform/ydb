@@ -250,19 +250,17 @@ private:
         return CheckExpressionNodeForPushdown(toBytesExpr);
     }
 
-    bool IsSupportedToString(const TExprBase& toBytes) {
-        // TODO: нужно ли добавлять новый флаг?
-        /*
-        if (!Settings.IsEnabled(EFlag::ToBytesFromStringExpressions)) {
-            return false;
-        }
-        */
-        if (toBytes.Ref().ChildrenSize() != 1) {
+    bool IsSupportedToString(const TExprBase& toString) {
+        if (!Settings.IsEnabled(EFlag::ToStringFromStringExpressions)) {
             return false;
         }
 
-        auto toStringExpr = TExprBase(toBytes.Ref().Child(0));
-        if (!IsUtf8Expr(toStringExpr)) {
+        if (toString.Ref().ChildrenSize() != 1) {
+            return false;
+        }
+
+        auto toStringExpr = TExprBase(toString.Ref().Child(0));
+        if (!IsStringExpr(toStringExpr)) {
             return false;
         }
         return CheckExpressionNodeForPushdown(toStringExpr);

@@ -152,21 +152,16 @@ namespace NYql {
             return SerializeExpression(toBytexExpr, dstProto->mutable_value(), ctx, depth + 1);
         }
 
-        bool SerializeToStringExpression(const TExprBase& toBytes, TExpression* proto, TSerializationContext& ctx, ui64 depth) {
-            if (toBytes.Ref().ChildrenSize() != 1) {
-                ctx.Err << "invalid ToString expression, expected 1 child but got " << toBytes.Ref().ChildrenSize();
+        bool SerializeToStringExpression(const TExprBase& toString, TExpression* proto, TSerializationContext& ctx, ui64 depth) {
+            if (toString.Ref().ChildrenSize() != 1) {
+                ctx.Err << "invalid ToString expression, expected 1 child but got " << toString.Ref().ChildrenSize();
                 return false;
             }
 
-            const auto toBytexExpr = TExprBase(toBytes.Ref().Child(0));
-            auto typeAnnotation = toBytexExpr.Ref().GetTypeAnn();
+            const auto toStringExpr = TExprBase(toString.Ref().Child(0));
+            auto typeAnnotation = toStringExpr.Ref().GetTypeAnn();
             if (!typeAnnotation) {
                 ctx.Err << "expected non empty type annotation for ToString";
-                return false;
-            }
-
-            if (typeAnnotation->GetKind() == ETypeAnnotationKind::Null) {
-                ctx.Err << "ToString cannot be applied to Null kind";
                 return false;
             }
 
@@ -187,7 +182,7 @@ namespace NYql {
 
             auto* dstProto = proto->mutable_cast();
             dstProto->mutable_type()->set_type_id(Ydb::Type::STRING);
-            return SerializeExpression(toBytexExpr, dstProto->mutable_value(), ctx, depth + 1);
+            return SerializeExpression(toStringExpr, dstProto->mutable_value(), ctx, depth + 1);
         }
 
         bool SerializeFlatMap(const TCoFlatMap& flatMap, TExpression* proto, TSerializationContext& ctx, ui64 depth) {

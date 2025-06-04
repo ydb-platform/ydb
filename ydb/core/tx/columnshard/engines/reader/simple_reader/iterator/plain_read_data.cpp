@@ -13,7 +13,7 @@ TPlainReadData::TPlainReadData(const std::shared_ptr<TReadContext>& context)
     ui64 compactedPortionsBytes = 0;
     ui64 insertedPortionsBytes = 0;
     for (auto&& i : portions) {
-        if (i->GetMeta().GetProduced() == NPortion::EProduced::COMPACTED || i->GetMeta().GetProduced() == NPortion::EProduced::SPLIT_COMPACTED) {
+        if (i->GetPortionType() == EPortionType::Compacted) {
             compactedPortionsBytes += i->GetTotalBlobBytes();
         } else {
             insertedPortionsBytes += i->GetTotalBlobBytes();

@@ -1245,6 +1245,7 @@ namespace NSQLTranslationV1 {
         TNodePtr InitialScan;
         TNodePtr VirtualTimestamps;
         TNodePtr BarriersInterval;
+        TNodePtr SchemaChanges;
         TNodePtr RetentionPeriod;
         TNodePtr TopicAutoPartitioning;
         TNodePtr TopicPartitions;

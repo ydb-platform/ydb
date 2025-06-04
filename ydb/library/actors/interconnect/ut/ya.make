@@ -9,6 +9,7 @@ ENDIF()
 
 SRCS(
     channel_scheduler_ut.cpp
+    connection_checker_ut.cpp
     event_holder_pool_ut.cpp
     interconnect_ut.cpp
     large.cpp

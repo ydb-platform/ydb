@@ -308,28 +308,28 @@ private:
     void FeedMainToBuild(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
         if (auto pos = Clusters.FindCluster(row, EmbeddingPos); pos) {
-            AddRowMainToBuild(*OutputBuf, Child + *pos, key, row);
+            AddRowToData(*OutputBuf, Child + *pos, key, row, key, false);
         }
     }
 
     void FeedMainToPosting(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
         if (auto pos = Clusters.FindCluster(row, EmbeddingPos); pos) {
-            AddRowMainToPosting(*OutputBuf, Child + *pos, key, row, DataPos);
+            AddRowToData(*OutputBuf, Child + *pos, key, row.Slice(DataPos), key, true);
         }
     }
 
     void FeedBuildToBuild(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
         if (auto pos = Clusters.FindCluster(row, EmbeddingPos); pos) {
-            AddRowBuildToBuild(*OutputBuf, Child + *pos, key, row);
+            AddRowToData(*OutputBuf, Child + *pos, key.Slice(1), row, key, false);
         }
     }
 
     void FeedBuildToPosting(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
         if (auto pos = Clusters.FindCluster(row, EmbeddingPos); pos) {
-            AddRowBuildToPosting(*OutputBuf, Child + *pos, key, row, DataPos);
+            AddRowToData(*OutputBuf, Child + *pos, key.Slice(1), row.Slice(DataPos), key, true);
         }
     }
 };
@@ -378,7 +378,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvReshuffleKMeansRequest::TPtr& ev, c
         response->Record.SetRequestSeqNoRound(seqNo.Round);
 
         LOG_N("Starting TReshuffleKMeansScan TabletId: " << TabletID() 
-            << " " << request.ShortDebugString()
+            << " " << ToShortDebugString(request)
             << " row version " << rowVersion);
 
         // Note: it's very unlikely that we have volatile txs before this snapshot
@@ -396,7 +396,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvReshuffleKMeansRequest::TPtr& ev, c
         auto trySendBadRequest = [&] {
             if (response->Record.GetStatus() == NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST) {
                 LOG_E("Rejecting TReshuffleKMeansScan bad request TabletId: " << TabletID()
-                    << " " << request.ShortDebugString()
+                    << " " << ToShortDebugString(request)
                     << " with response " << response->Record.ShortDebugString());
                 ctx.Send(ev->Sender, std::move(response));
                 return true;

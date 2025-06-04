@@ -45,10 +45,10 @@ std::vector<i64> TSimpleSerializationStat::SplitRecords(
 }
 
 std::vector<i64> TBatchSerializationStat::SplitRecordsForBlobSize(const i64 recordsCount, const ui64 blobSize) const {
-    if (!SerializedBytes) {
+    if (!SerializedBytesPerRecord || blobSize < SerializedBytesPerRecord) {
         return { recordsCount };
     }
-    const ui32 recordsCountPerBlob = blobSize / GetSerializedBytesPerRecord();
+    const ui32 recordsCountPerBlob = blobSize / SerializedBytesPerRecord;
     return TSimilarPacker::SplitWithExpected(recordsCount, recordsCountPerBlob);
 }
 

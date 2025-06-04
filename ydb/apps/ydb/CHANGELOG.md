@@ -1,3 +1,7 @@
+
+## 2.22.0 ##
+
+* Ignore empty directories in dumps when restoring it with `ydb tools restore`. Empty directories are created for unknown scheme objects when dumping with `ydb tools dump`.
 * Added support of check canonical results in `ydb workload query run` command.
 * Added support of parquet format to `ydb workload query import` and `ydb workload clickbench import files` commands.
 * `ydb workload query` deep reworked. Now it can be used for user defined full cycle load testing.

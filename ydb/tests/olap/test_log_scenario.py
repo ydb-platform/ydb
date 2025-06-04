@@ -66,7 +66,7 @@ class YdbWorkloadLog:
                 raise TypeError("missing date_from")
 
     def _call(self, command: list[str], wait=False):
-        logging.info(f'YdbWorkloadLog execute {' '.join(command)} with wait = {wait}')
+        logging.info(f"YdbWorkloadLog execute {' '.join(command)} with wait = {wait}")
         yatest.common.execute(command=command, wait=wait)
 
     def create_table(self, table_name: str):

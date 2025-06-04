@@ -1,4 +1,4 @@
-PY3_PROGRAM(s3_workload)
+PY3_PROGRAM(s3_backups)
 
 PY_SRCS(
     __main__.py
@@ -6,7 +6,7 @@ PY_SRCS(
 
 PEERDIR(
     ydb/tests/stress/common
-    ydb/tests/stress/s3_workload/workload
+    ydb/tests/stress/s3_backups/workload
 )
 
 END()

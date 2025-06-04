@@ -1,22 +1,21 @@
 # -*- coding: utf-8 -*-
-import ydb
 import boto3
-import tempfile
-import time
-import threading
-import uuid
+import json
 import os
 import sys
+import tempfile
+import threading
+import time
+import uuid
 import yatest
-import json
-
-from typing import List, Dict, Any, Optional
+import ydb
+from typing import Any, Dict, List, Optional
 
 from ydb.tests.stress.common.common import WorkloadBase
 
-class Workload(WorkloadBase):
+class WorkloadS3Export(WorkloadBase):
     def __init__(self, client, endpoint, stop, s3_settings):
-        super().__init__(client, "", "s3_workload", stop)
+        super().__init__(client, "", "s3_export", stop)
         self.lock = threading.Lock()
         self.s3_settings = s3_settings
         self.endpoint = endpoint
@@ -37,7 +36,7 @@ class Workload(WorkloadBase):
             )
             return export_stats_str
 
-    def create_tables(self, table_names: List[str]):
+    def _create_tables(self, table_names: List[str]):
         """Create several tables with the same schema."""
         for name in table_names:
             self.client.query(
@@ -52,7 +51,7 @@ class Workload(WorkloadBase):
                 True
             )
 
-    def create_topics(self, topic_names: List[str], consumers: Optional[Dict[str, List[str]]] = None):
+    def _create_topics(self, topic_names: List[str], consumers: Optional[Dict[str, List[str]]] = None):
         """Create several topics, optionally with consumers.
         consumers: {topic_name: [consumer1, consumer2, ...]}
         """
@@ -68,7 +67,7 @@ class Workload(WorkloadBase):
                         True
                     )
 
-    def insert_into_table(self, table_name: str, rows: List[Dict[str, Any]]):
+    def _insert_into_table(self, table_name: str, rows: List[Dict[str, Any]]):
         """Insert data in tables. rows: [{"id": ..., "message": ...}, ...]"""
         for row in rows:
             id_val = row["id"]
@@ -78,14 +77,14 @@ class Workload(WorkloadBase):
                 True
             )
 
-    def setup_tables(self):
+    def _setup_tables(self):
         tables = [
             f"{self.prefix}/table{i}" for i in range(1, 10)
         ]
-        self.create_tables(tables)
+        self._create_tables(tables)
         self._tables = tables
 
-    def setup_topics(self):
+    def _setup_topics(self):
         topics = [
             f"{self.prefix}/topic{i}" for i in range(1, 10)
         ]
@@ -95,18 +94,18 @@ class Workload(WorkloadBase):
                 f"consumerA_{i}",
                 f"consumerB_{i}"
             ]
-        self.create_topics(topics, consumers)
+        self._create_topics(topics, consumers)
         self._topics = topics
         self._consumers = consumers
 
-    def insert_rows(self):
+    def _insert_rows(self):
         # Insert 5 rows into each table
         for idx, table in enumerate(getattr(self, '_tables', []), 1):
             rows = [
                 {"id": row_id, "message": f"Table {idx} ({table}) row {row_id}"}
                 for row_id in range(1, 6)
             ]
-            self.insert_into_table(table, rows)
+            self._insert_into_table(table, rows)
 
     @staticmethod
     def _execute_command_and_get_result(command):
@@ -155,7 +154,7 @@ class Workload(WorkloadBase):
     def _cleanup_in_progress(self):
         self.in_progress = [export_id for export_id in self.in_progress if not self._export_is_completed(export_id)]
 
-    def export_to_s3(self):
+    def _export_to_s3(self):
         s3_endpoint, s3_access_key, s3_secret_key, s3_bucket = self.s3_settings
         export_command = [
             yatest.common.binary_path(os.getenv("YDB_CLI_BINARY")),
@@ -191,10 +190,10 @@ class Workload(WorkloadBase):
         for _ in range(0, 11):
             self.id = f"{uuid.uuid1()}".replace("-", "_")
             self.prefix = f"block_{self.id}"
-            self.setup_tables()
-            self.setup_topics()
-            self.insert_rows()
-            self.export_to_s3()
+            self._setup_tables()
+            self._setup_topics()
+            self._insert_rows()
+            self._export_to_s3()
     
     def get_workload_thread_funcs(self):
         return [self._loop]
@@ -207,7 +206,7 @@ class WorkloadRunner:
         ydb.interceptor.monkey_patch_event_handler()
 
     @staticmethod
-    def setup_s3():
+    def _setup_s3():
         s3_endpoint = os.getenv("S3_ENDPOINT")
         s3_access_key = "minio"
         s3_secret_key = "minio123"
@@ -230,9 +229,9 @@ class WorkloadRunner:
 
     def run(self):
         stop = threading.Event()
-        s3_settings = self.setup_s3()
+        s3_settings = self._setup_s3()
         workloads = [
-            Workload(self.client, self.endpoint, stop, s3_settings)
+            WorkloadS3Export(self.client, self.endpoint, stop, s3_settings)
         ]
 
         for w in workloads:

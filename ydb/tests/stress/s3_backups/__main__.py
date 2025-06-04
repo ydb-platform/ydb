@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 import argparse
 
-from ydb.tests.stress.s3_workload.workload import WorkloadRunner
+from ydb.tests.stress.s3_backups.workload import WorkloadRunner
 from ydb.tests.stress.common.common import YdbClient
 
 

@@ -406,7 +406,6 @@ public:
         const TDuration maxDelay = TDuration::Minutes(5);
         const TDuration baseAddressDelay = TDuration::MilliSeconds(250);
 
-        // Lambda for jittered exponential backoff
         auto sleepWithJitteredExponentialDelay = [&env, maxDelay](TDuration baseDelay, int exponent) {
             ui64 multiplier = 1ULL << exponent;
             TDuration delay = baseDelay * multiplier;

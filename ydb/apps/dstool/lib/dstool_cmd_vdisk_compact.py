@@ -30,39 +30,36 @@ def do(args):
         pdisk_id = vslot.VSlotId.PDiskId
         vslot_id = vslot.VSlotId.VSlotId
 
-        try:
-            params = {}
-            if args.full:
-                dbnames = ['LogoBlobs', 'Blocks', 'Barriers']
-            else:
-                dbnames = []
-                if args.compact_logoblobs:
-                    dbnames.append('LogoBlobs')
-                if args.compact_blocks:
-                    dbnames.append('Blocks')
-                if args.compact_barriers:
-                    dbnames.append('Barriers')
-                if not dbnames:
-                    dbnames = ['LogoBlobs']
+        if args.full:
+            dbnames = ['LogoBlobs', 'Blocks', 'Barriers']
+        else:
+            dbnames = []
+            if args.compact_logoblobs:
+                dbnames.append('LogoBlobs')
+            if args.compact_blocks:
+                dbnames.append('Blocks')
+            if args.compact_barriers:
+                dbnames.append('Barriers')
+            if not dbnames:
+                dbnames = ['LogoBlobs']
 
-            for dbname in dbnames:
-                path = f'node/{node_id}/actors/vdisks/vdisk{pdisk_id:09d}_{vslot_id:09d}'
-                params = {
-                    'type': 'dbmainpage',
-                    'dbname': dbname,
-                    'action': 'compact'
-                }
-                try:
-                    common.fetch(path, params, fmt='raw')
-                except Exception as e:
-                    common.print_if_not_quiet(args, f"Failed to send compaction request to VDisk {vdisk_id} for {dbname}: {e}")
-                    error_count += 1
-                    continue
+        vdisk_success = True
+        for dbname in dbnames:
+            path = f'node/{node_id}/actors/vdisks/vdisk{pdisk_id:09d}_{vslot_id:09d}'
+            params = {
+                'type': 'dbmainpage',
+                'dbname': dbname,
+                'action': 'compact'
+            }
+            try:
+                common.fetch(path, params, fmt='raw')
+            except Exception as e:
+                common.print_if_not_quiet(args, f"Failed to send compaction request to VDisk {vdisk_id} for {dbname}: {e}")
+                vdisk_success = False
 
+        if vdisk_success:
             success_count += 1
-
-        except Exception as e:
-            common.print_if_not_quiet(args, f"Error processing VDisk {vdisk_id}: {e}")
+        else:
             error_count += 1
 
     if success_count > 0:

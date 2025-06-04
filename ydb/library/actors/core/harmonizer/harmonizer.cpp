@@ -28,7 +28,7 @@
 
 namespace NActors {
 
-
+constexpr float kMinFreeCpuThreshold = 0.1;
 
 LWTRACE_USING(ACTORLIB_PROVIDER);
 
@@ -168,7 +168,7 @@ void THarmonizer::ProcessNeedyState() {
         }
         float threadCount = pool.GetFullThreadCount() + SharedInfo.CpuConsumption[needyPoolIdx].CpuQuota;
 
-        if (ProcessingBudget >= 1.0 && threadCount + 1 <= pool.MaxFullThreadCount && SharedInfo.FreeCpu < 0.1) {
+        if (ProcessingBudget >= 1.0 && threadCount + 1 <= pool.MaxFullThreadCount && SharedInfo.FreeCpu < kMinFreeCpuThreshold) {
             pool.IncreasingThreadsByNeedyState.fetch_add(1, std::memory_order_relaxed);
             CpuConsumption.IsNeedyByPool[needyPoolIdx] = false;
             CpuConsumption.AdditionalThreads++;
@@ -424,7 +424,6 @@ void THarmonizer::AddPool(IExecutorPool* pool, TSelfPingInfo *pingInfo, bool ign
     poolInfo.PotentialMaxThreadCount = poolInfo.MaxThreadCount;
 
     poolInfo.DefaultFullThreadCount = pool->GetDefaultFullThreadCount();
-    poolInfo.FullThreadQuota = ignoreFullThreadQuota ? 0 : poolInfo.DefaultFullThreadCount;
     poolInfo.MinFullThreadCount = pool->GetMinFullThreadCount();
     poolInfo.MaxFullThreadCount = pool->GetMaxFullThreadCount();
     poolInfo.ThreadInfo.resize(poolInfo.MaxFullThreadCount);

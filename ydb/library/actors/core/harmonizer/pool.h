@@ -27,7 +27,6 @@ struct TPoolInfo {
     IExecutorPool* Pool = nullptr;
     TBasicExecutorPool* BasicPool = nullptr;
 
-    i16 FullThreadQuota = 0;
     i16 DefaultFullThreadCount = 0;
     i16 MinFullThreadCount = 0;
     i16 MaxFullThreadCount = 0;

@@ -6,7 +6,7 @@
 
 namespace NActors {
 
-void TSharedInfo::Pull(std::vector<std::unique_ptr<TPoolInfo>> &pools, const ISharedPool& shared) {
+void TSharedInfo::Pull(const std::vector<std::unique_ptr<TPoolInfo>> &pools, const ISharedPool& shared) {
     shared.FillForeignThreadsAllowed(ForeignThreadsAllowed);
 
     for (i16 poolId = 0; poolId < PoolCount; ++poolId) {

@@ -36,7 +36,7 @@ struct TSharedInfo {
     float FreeCpu = 0.0;
 
     void Init(i16 poolCount, const ISharedPool *shared);
-    void Pull(std::vector<std::unique_ptr<TPoolInfo>> &pools, const ISharedPool& shared);
+    void Pull(const std::vector<std::unique_ptr<TPoolInfo>>& pools, const ISharedPool& shared);
 
     TString ToString() const;
 }; // struct TSharedInfo

@@ -101,7 +101,7 @@ class Runner:
         self.args = args
         self.enable_spilling = enable_spilling
 
-        self.queries_dir = pathlib.Path(f"queries{"+" if self.enable_spilling else "-"}spilling-{args.datasize}-{args.tasks}")
+        self.queries_dir = pathlib.Path(f"queries{'+' if self.enable_spilling else '-'}spilling-{args.datasize}-{args.tasks}")
         if self.args.clean_old or not self.queries_dir.exists():
             self.prepare_queries_dir([
                 f"dq.MaxTasksPerStage={self.args.tasks}",

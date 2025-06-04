@@ -138,10 +138,12 @@ void TPoolInfo::SetFullThreadCount(i16 threadCount) {
 bool TPoolInfo::IsAvgPingGood() {
     bool res = true;
     if (AvgPingCounter) {
-        res &= *AvgPingCounter > MaxAvgPingUs;
+        LastAvgPingUs = *AvgPingCounter;
+        res &= LastAvgPingUs > MaxAvgPingUs;
     }
     if (AvgPingCounterWithSmallWindow) {
-        res &= *AvgPingCounterWithSmallWindow > MaxAvgPingUs;
+        LastAvgPingUsWithSmallWindow = *AvgPingCounterWithSmallWindow;
+        res &= LastAvgPingUsWithSmallWindow > MaxAvgPingUs;
     }
     return res;
 }

@@ -16,6 +16,7 @@ PEERDIR(
 
 SRCS(
     cpu_count_ut.cpp
+    harmonizer_iteration_ut.cpp
     harmonizer_ut.cpp
     history_ut.cpp
     shared_info_ut.cpp

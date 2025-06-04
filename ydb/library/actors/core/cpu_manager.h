@@ -51,6 +51,10 @@ namespace NActors {
         void GetExecutorPoolState(i16 poolId, TExecutorPoolState &state) const;
         void GetExecutorPoolStates(std::vector<TExecutorPoolState> &states) const;
 
+        IHarmonizer* GetHarmonizer() const {
+            return Harmonizer.get();
+        }
+
         THarmonizerStats GetHarmonizerStats() const {
             if (Harmonizer) {
                 return Harmonizer->GetStats();

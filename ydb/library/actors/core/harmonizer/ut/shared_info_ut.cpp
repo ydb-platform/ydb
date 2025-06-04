@@ -82,7 +82,7 @@ Y_UNIT_TEST_SUITE(SharedInfoTests) {
         UNIT_ASSERT_VALUES_EQUAL(info.ForeignThreadsAllowed.size(), 2);
         UNIT_ASSERT_VALUES_EQUAL(info.OwnedThreads.size(), 2);
         UNIT_ASSERT_VALUES_EQUAL(info.CpuConsumption.size(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(info.CpuConsumptionByPool.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(info.CpuConsumptionPerThread.size(), 2);
         UNIT_ASSERT_VALUES_EQUAL(info.ThreadOwners.size(), 4);
         UNIT_ASSERT_VALUES_EQUAL(info.ThreadStats.size(), 4);
     }

@@ -31,6 +31,8 @@
 #include "mon_impl.h"
 #include "counters_adapter_impl.h"
 
+#include <ydb/core/actorlib_impl/actor_system_mon/actor_system_mon.h>
+
 namespace NActors {
 
 struct TEvMon {
@@ -1343,6 +1345,7 @@ std::future<void> TMon::Start(TActorSystem* actorSystem) {
     Register(new NMonitoring::TBootstrapFontsTtfMonPage);
     Register(new NMonitoring::TBootstrapFontsWoffMonPage);
     NLwTraceMonPage::RegisterPages(IndexMonPage.Get());
+    NActorSystemMon::RegisterPages(IndexMonPage.Get(), ActorSystem);
     NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(ACTORLIB_PROVIDER));
     NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(MONITORING_PROVIDER));
     if (ActorSystem->AppData<NKikimr::TAppData>()) {

@@ -288,7 +288,7 @@ class PnpmLockfile(BaseLockfile):
                 problem_importers.append(importer)
 
         if problem_importers:
-            raise Exception(f"Invalid importers in lockfile: {", ".join(problem_importers)}")
+            raise Exception(f"Invalid importers in lockfile: {', '.join(problem_importers)}")
 
     def merge(self, lf):
         """

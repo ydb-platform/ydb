@@ -125,22 +125,6 @@ public:
     }
 };
 
-class TEvFiltersConstructed: public NActors::TEventLocal<TEvFiltersConstructed, NColumnShard::TEvPrivate::EvFiltersConstructed> {
-private:
-    using TFilters = THashMap<TDuplicateMapInfo, NArrow::TColumnFilter>;
-    YDB_READONLY_DEF(TFilters, Result);
-
-public:
-    TEvFiltersConstructed(TFilters&& result)
-        : Result(std::move(result)) {
-        for (const auto& [info, filter] : Result) {
-            AFL_VERIFY(!!filter.GetRecordsCount() && filter.GetRecordsCountVerified() == info.GetRowsCount())(
-                                                                                         "filter", filter.GetRecordsCount().value_or(0))(
-                                                                                         "info", info.DebugString());
-        }
-    }
-};
-
 class TDuplicateManager: public NActors::TActor<TDuplicateManager> {
 private:
     class TSourceDataSubscriber: public TSourceCache::ISubscriber {
@@ -160,24 +144,6 @@ private:
             : Owner(owner)
             , Splitter(std::move(splitter))
             , OriginalRequest(originalRequest) {
-        }
-    };
-
-    class TMergeResultSubscriber: public TBuildDuplicateFilters::ISubscriber {
-    private:
-        TActorId Owner;
-        THashMap<ui64, TDuplicateMapInfo> InfoBySource;
-
-        virtual void OnResult(THashMap<ui64, NArrow::TColumnFilter>&& result) override;
-        virtual void OnFailure(const TString& error) override {
-            Y_UNUSED(error);   // FIXME
-            TActivationContext::AsActorContext().Send(Owner, new NActors::TEvents::TEvPoison);
-        }
-
-    public:
-        TMergeResultSubscriber(const TActorId& owner, THashMap<ui64, TDuplicateMapInfo>&& intervals)
-            : Owner(owner)
-            , InfoBySource(std::move(intervals)) {
         }
     };
 
@@ -202,7 +168,7 @@ private:
             hFunc(NPrivate::TEvDuplicateSourceCacheResult, Handle);
             hFunc(NActors::TEvents::TEvPoison, Handle);
             hFunc(TEvConstructFilters, Handle);
-            hFunc(TEvFiltersConstructed, Handle);
+            hFunc(TEvFilterConstructionResult, Handle);
             default:
                 AFL_VERIFY(false)("unexpected_event", ev->GetTypeName());
         }
@@ -213,10 +179,14 @@ private:
     void Handle(const NPrivate::TEvDuplicateFilterDataFetched::TPtr&);
     void Handle(const NPrivate::TEvDuplicateSourceCacheResult::TPtr&);
     void Handle(const NActors::TEvents::TEvPoison::TPtr&) {
+        AbortAndPassAway("aborted by actor system");
+    }
+
+    void AbortAndPassAway(const TString& reason) {
         for (auto& [_, constructors] : BuildingFilters) {
             for (auto& constructor : constructors) {
                 if (!constructor->IsDone()) {
-                    constructor->Abort("aborted by actor system");
+                    constructor->Abort(reason);
                 }
             }
         }

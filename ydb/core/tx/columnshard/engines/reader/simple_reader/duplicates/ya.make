@@ -9,6 +9,7 @@ SRCS(
     events.cpp
     merge.cpp
     common.cpp
+    interval_tree.cpp
     source_cache.cpp
     private_events.cpp
 )

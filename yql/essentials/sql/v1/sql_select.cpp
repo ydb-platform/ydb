@@ -1388,18 +1388,28 @@ TSourcePtr TSqlSelect::Build(const TRule& node, TPosition pos, TSelectKindResult
             outermostSettings.Label = next.Settings.Label;
         }
 
-        switch (b.GetRule_select_op1().Alt_case()) {
-            case TRule_select_op::kAltSelectOp1:
-                break;
-            case TRule_select_op::kAltSelectOp2:
-            case TRule_select_op::kAltSelectOp3:
-                Ctx.Error() << "INTERSECT and EXCEPT are not implemented yet";
-                return nullptr;
-            case TRule_select_op::ALT_NOT_SET:
-                Y_ABORT("You should change implementation according to grammar changes");
+        auto selectOp = b.GetRule_select_op1();
+        const TString token = ToLowerUTF8(Token(selectOp.GetToken1()));
+        if (token == "union") {
+            // nothing
+        } else if (token == "intersect" || token == "except") {
+            Ctx.Error() << "INTERSECT and EXCEPT are not implemented yet";
+            return nullptr;
+        } else {
+            Y_ABORT("You should change implementation according to grammar changes. Invalid token: %s", token.c_str());
         }
 
-        const bool quantifier = b.GetRule_select_op1().GetAlt_select_op1().HasBlock2();
+        bool quantifier = false;
+        if (selectOp.HasBlock2()) {
+            const TString token = ToLowerUTF8(Token(selectOp.GetBlock2().GetToken1()));
+            if (token == "all") {
+                quantifier = true;
+            } else if (token == "distinct") {
+                // nothing
+            } else {
+                Y_ABORT("You should change implementation according to grammar changes. Invalid token: %s", token.c_str());
+            }
+        }
 
         if (!second && quantifier != currentQuantifier) {
             auto source = BuildUnion(pos, std::move(sources), currentQuantifier, {});

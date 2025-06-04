@@ -60,9 +60,10 @@ IActor* CreateSchemeUploader(TActorId schemeShard, ui64 exportId, ui32 itemIdx, 
 }
 
 NActors::IActor* CreateExportMetadataUploader(NActors::TActorId schemeShard, ui64 exportId,
-    const Ydb::Export::ExportToS3Settings& settings, const NKikimrSchemeOp::TExportMetadata& exportMetadata
+    const Ydb::Export::ExportToS3Settings& settings, const NKikimrSchemeOp::TExportMetadata& exportMetadata,
+    bool enableChecksums
 ) {
-    Y_UNUSED(settings, exportMetadata);
+    Y_UNUSED(settings, exportMetadata, enableChecksums);
     return new TExportMetadataUploaderFallback(schemeShard, exportId);
 }
 

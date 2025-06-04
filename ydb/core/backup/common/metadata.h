@@ -36,6 +36,11 @@ struct TFullBackupMetadata : TSimpleRefCount<TFullBackupMetadata> {
     TString StoragePath;
 };
 
+struct TChangefeedMetadata {
+    TString ExportPrefix;
+    TString Name;
+};
+
 class TMetadata {
 public:
     TMetadata() = default;
@@ -47,6 +52,8 @@ public:
     void SetVersion(ui64 version);
     bool HasVersion() const;
     ui64 GetVersion() const;
+    void AddChangefeed(const TChangefeedMetadata& changefeed);
+    const TMaybe<std::vector<TChangefeedMetadata>>& GetChangefeeds() const;
 
     TString Serialize() const;
     static TMetadata Deserialize(const TString& metadata);
@@ -54,6 +61,7 @@ private:
     TString ConsistencyKey;
     TMap<TVirtualTimestamp, TFullBackupMetadata::TPtr> FullBackups;
     TMap<TVirtualTimestamp, TLogMetadata::TPtr> Logs;
+    TMaybe<std::vector<TChangefeedMetadata>> Changefeeds;
     TMaybeFail<ui64> Version;
 };
 

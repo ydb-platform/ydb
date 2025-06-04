@@ -185,10 +185,10 @@ protected:
         return true;
     }
 
-    bool MaybeDecrypt(const TString& content, TString& result, NBackup::EBackupFileType fileType) {
+    bool MaybeDecrypt(const TString& content, TString& result, NBackup::EBackupFileType fileType, ui32 shardNumber = 0) {
         if (Key && IV) {
             try {
-                NBackup::TEncryptionIV expectedIV = NBackup::TEncryptionIV::Combine(*IV, fileType, 0 /* already combined */, 0);
+                NBackup::TEncryptionIV expectedIV = NBackup::TEncryptionIV::Combine(*IV, fileType, 0 /* backupItemNumber: already combined */, shardNumber);
                 auto buffer = NBackup::TEncryptedFileDeserializer::DecryptFullFile(*Key, expectedIV, TBuffer(content.data(), content.size()));
                 result.assign(buffer.Data(), buffer.Size());
                 return true;
@@ -203,6 +203,66 @@ protected:
 
     virtual void Reply(Ydb::StatusIds::StatusCode statusCode = Ydb::StatusIds::SUCCESS, const TString& error = TString()) = 0;
 
+    void HandleChecksum(TEvExternalStorage::TEvHeadObjectResponse::TPtr& ev) {
+        const auto& result = ev->Get()->Result;
+
+        LOG_D("HandleChecksum TEvExternalStorage::TEvHeadObjectResponse"
+            << ": self# " << this->SelfId()
+            << ", result# " << result);
+
+        if (!CheckResult(result, "HeadObject")) {
+            return;
+        }
+
+        GetObject(NBackup::ChecksumKey(CurrentObjectKey), result.GetResult().GetContentLength(), false);
+    }
+
+    void HandleChecksum(TEvExternalStorage::TEvGetObjectResponse::TPtr& ev) {
+        const auto& msg = *ev->Get();
+        const auto& result = msg.Result;
+
+        LOG_D("HandleChecksum TEvExternalStorage::TEvGetObjectResponse"
+            << ": self# " << this->SelfId()
+            << ", result# " << result);
+
+        if (!CheckResult(result, "GetObject")) {
+            return;
+        }
+
+        TString expectedChecksum = msg.Body.substr(0, msg.Body.find(' '));
+        if (expectedChecksum != CurrentObjectChecksum) {
+            return Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Checksum mismatch for " << CurrentObjectKey
+                << " expected# " << expectedChecksum
+                << ", got# " << CurrentObjectChecksum);
+        }
+
+        ChecksumValidatedCallback();
+    }
+
+    void DownloadChecksum() {
+        Download(NBackup::ChecksumKey(CurrentObjectKey), false);
+    }
+
+    void StartValidatingChecksum(const TString& key, const TString& object, std::function<void()> checksumValidatedCallback) {
+        CurrentObjectKey = key;
+        CurrentObjectChecksum = NBackup::ComputeChecksum(object);
+        ChecksumValidatedCallback = checksumValidatedCallback;
+
+        ResetRetries();
+        DownloadChecksum();
+        this->Become(&TGetterFromS3<TDerived>::StateDownloadChecksum);
+    }
+
+    STATEFN(StateDownloadChecksum) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvExternalStorage::TEvHeadObjectResponse, HandleChecksum);
+            hFunc(TEvExternalStorage::TEvGetObjectResponse, HandleChecksum);
+
+            sFunc(TEvents::TEvWakeup, DownloadChecksum);
+            sFunc(TEvents::TEvPoisonPill, PassAway);
+        }
+    }
+
 protected:
     NWrappers::IExternalStorageConfig::TPtr ExternalStorageConfig;
     TActorId Client;
@@ -213,6 +273,10 @@ protected:
     ui32 Attempt = 0;
 
     TDuration Delay = TDuration::Minutes(1);
+
+    TString CurrentObjectChecksum;
+    TString CurrentObjectKey;
+    std::function<void()> ChecksumValidatedCallback;
 };
 
 // Downloads scheme-related objects from S3
@@ -232,21 +296,21 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         return TStringBuilder() << importInfo.GetItemSrcPrefix(itemIdx) << "/permissions.pb";
     }
 
-    static TString ChangefeedDescriptionKeyFromSettings(const TImportInfo& importInfo, ui32 itemIdx, const TString& changefeedName) {
+    static TString ChangefeedDescriptionKeyFromSettings(const TImportInfo& importInfo, ui32 itemIdx, const TString& changefeedPrefix) {
         Y_ABORT_UNLESS(itemIdx < importInfo.Items.size());
-        return TStringBuilder() << importInfo.GetItemSrcPrefix(itemIdx) << "/" << changefeedName << "/changefeed_description.pb";
+        return TStringBuilder() << importInfo.GetItemSrcPrefix(itemIdx) << "/" << changefeedPrefix << "/changefeed_description.pb";
     }
 
-    static TString TopicDescriptionKeyFromSettings(const TImportInfo& importInfo, ui32 itemIdx, const TString& changefeedName) {
+    static TString TopicDescriptionKeyFromSettings(const TImportInfo& importInfo, ui32 itemIdx, const TString& changefeedPrefix) {
         Y_ABORT_UNLESS(itemIdx < importInfo.Items.size());
-        return TStringBuilder() << importInfo.GetItemSrcPrefix(itemIdx) << "/" << changefeedName << "/topic_description.pb";
+        return TStringBuilder() << importInfo.GetItemSrcPrefix(itemIdx) << "/" << changefeedPrefix << "/topic_description.pb";
     }
 
     static bool IsView(TStringBuf schemeKey) {
         return schemeKey.EndsWith(NYdb::NDump::NFiles::CreateView().FileName);
     }
 
-    static bool IsTableScheme(TStringBuf schemeKey) {
+    static bool IsTable(TStringBuf schemeKey) {
         return schemeKey.EndsWith(NYdb::NDump::NFiles::TableScheme().FileName);
     }
 
@@ -280,7 +344,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
             << ", result# " << result);
 
         if (NoObjectFound(result.GetError().GetErrorType())) {
-            if (IsTableScheme(SchemeKey)) {
+            if (IsTable(SchemeKey)) {
                 // try search for a view
                 SchemeKey = SchemeKeyFromSettings(*ImportInfo, ItemIdx, NYdb::NDump::NFiles::CreateView().FileName);
                 HeadObject(SchemeKey);
@@ -288,6 +352,8 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
                 // try search for a topic
                 SchemeKey = SchemeKeyFromSettings(*ImportInfo, ItemIdx, NYdb::NDump::NFiles::CreateTopic().FileName);
                 HeadObject(SchemeKey);
+            } else {
+                return Reply(Ydb::StatusIds::BAD_REQUEST, "Unsupported scheme object type");
             }
             return;
         }
@@ -316,20 +382,6 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         GetObject(PermissionsKey, result.GetResult().GetContentLength());
     }
 
-    void HandleChecksum(TEvExternalStorage::TEvHeadObjectResponse::TPtr& ev) {
-        const auto& result = ev->Get()->Result;
-
-        LOG_D("HandleChecksum TEvExternalStorage::TEvHeadObjectResponse"
-            << ": self# " << SelfId()
-            << ", result# " << result);
-
-        if (!CheckResult(result, "HeadObject")) {
-            return;
-        }
-
-        GetObject(NBackup::ChecksumKey(CurrentObjectKey), result.GetResult().GetContentLength(), false);
-    }
-
     void HandleChangefeed(TEvExternalStorage::TEvHeadObjectResponse::TPtr& ev) {
         const auto& result = ev->Get()->Result;
 
@@ -341,8 +393,8 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
             return;
         }
 
-        Y_ABORT_UNLESS(IndexDownloadedChangefeed < ChangefeedsNames.size());
-        GetObject(ChangefeedDescriptionKeyFromSettings(*ImportInfo, ItemIdx, ChangefeedsNames[IndexDownloadedChangefeed]), result.GetResult().GetContentLength());
+        Y_ABORT_UNLESS(IndexDownloadedChangefeed < ChangefeedsPrefixes.size());
+        GetObject(ChangefeedDescriptionKeyFromSettings(*ImportInfo, ItemIdx, ChangefeedsPrefixes[IndexDownloadedChangefeed]), result.GetResult().GetContentLength());
     }
 
     void HandleTopic(TEvExternalStorage::TEvHeadObjectResponse::TPtr& ev) {
@@ -356,8 +408,8 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
             return;
         }
 
-        Y_ABORT_UNLESS(IndexDownloadedChangefeed < ChangefeedsNames.size());
-        GetObject(TopicDescriptionKeyFromSettings(*ImportInfo, ItemIdx, ChangefeedsNames[IndexDownloadedChangefeed]), result.GetResult().GetContentLength());
+        Y_ABORT_UNLESS(IndexDownloadedChangefeed < ChangefeedsPrefixes.size());
+        GetObject(TopicDescriptionKeyFromSettings(*ImportInfo, ItemIdx, ChangefeedsPrefixes[IndexDownloadedChangefeed]), result.GetResult().GetContentLength());
     }
 
     void HandleMetadata(TEvExternalStorage::TEvGetObjectResponse::TPtr& ev) {
@@ -435,8 +487,14 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
                 return Reply(Ydb::StatusIds::BAD_REQUEST, "Cannot parse topic scheme");
             }
             item.Topic = request;
-        } else if (!google::protobuf::TextFormat::ParseFromString(content, &item.Scheme)) {
-            return Reply(Ydb::StatusIds::BAD_REQUEST, "Cannot parse scheme");
+        } else if (IsTable(SchemeKey)) {
+            Ydb::Table::CreateTableRequest request;
+            if (!google::protobuf::TextFormat::ParseFromString(content, &request)) {
+                return Reply(Ydb::StatusIds::BAD_REQUEST, "Cannot parse scheme");
+            }
+            item.Table = request;
+        } else {
+            return Reply(Ydb::StatusIds::BAD_REQUEST, "Unsupported scheme object type");
         }
 
         auto nextStep = [this]() {
@@ -495,28 +553,6 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         }
     }
 
-    void HandleChecksum(TEvExternalStorage::TEvGetObjectResponse::TPtr& ev) {
-        const auto& msg = *ev->Get();
-        const auto& result = msg.Result;
-
-        LOG_D("HandleChecksum TEvExternalStorage::TEvGetObjectResponse"
-            << ": self# " << SelfId()
-            << ", result# " << result);
-
-        if (!CheckResult(result, "GetObject")) {
-            return;
-        }
-
-        TString expectedChecksum = msg.Body.substr(0, msg.Body.find(' '));
-        if (expectedChecksum != CurrentObjectChecksum) {
-            return Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Checksum mismatch for " << CurrentObjectKey
-                << " expected# " << expectedChecksum
-                << ", got# " << CurrentObjectChecksum);
-        }
-
-        ChecksumValidatedCallback();
-    }
-
     void HandleChangefeed(TEvExternalStorage::TEvGetObjectResponse::TPtr& ev) {
         const auto& msg = *ev->Get();
         const auto& result = msg.Result;
@@ -530,7 +566,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         }
 
         TString content;
-        if (!MaybeDecrypt(msg.Body, content, NBackup::EBackupFileType::TableChangefeed)) {
+        if (!MaybeDecrypt(msg.Body, content, NBackup::EBackupFileType::TableChangefeed, IndexDownloadedChangefeed)) {
             return;
         }
 
@@ -550,11 +586,11 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
 
         auto nextStep = [this]() {
             Become(&TThis::StateDownloadTopics);
-            HeadObject(TopicDescriptionKeyFromSettings(*ImportInfo, ItemIdx, ChangefeedsNames[IndexDownloadedChangefeed]));
+            HeadObject(TopicDescriptionKeyFromSettings(*ImportInfo, ItemIdx, ChangefeedsPrefixes[IndexDownloadedChangefeed]));
         };
 
         if (NeedValidateChecksums) {
-            StartValidatingChecksum(ChangefeedDescriptionKeyFromSettings(*ImportInfo, ItemIdx, ChangefeedsNames[IndexDownloadedChangefeed]), content, nextStep);
+            StartValidatingChecksum(ChangefeedDescriptionKeyFromSettings(*ImportInfo, ItemIdx, ChangefeedsPrefixes[IndexDownloadedChangefeed]), content, nextStep);
         } else {
             nextStep();
         }
@@ -573,7 +609,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         }
 
         TString content;
-        if (!MaybeDecrypt(msg.Body, content, NBackup::EBackupFileType::TableTopic)) {
+        if (!MaybeDecrypt(msg.Body, content, NBackup::EBackupFileType::TableTopic, IndexDownloadedChangefeed)) {
             return;
         }
 
@@ -591,16 +627,16 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         *item.Changefeeds.MutableChangefeeds(IndexDownloadedChangefeed)->MutableTopic() = std::move(topic);
 
         auto nextStep = [this]() {
-            if (++IndexDownloadedChangefeed >= ChangefeedsNames.size()) {
+            if (++IndexDownloadedChangefeed >= ChangefeedsPrefixes.size()) {
                 Reply();
             } else {
                 Become(&TThis::StateDownloadChangefeeds);
-                HeadObject(ChangefeedDescriptionKeyFromSettings(*ImportInfo, ItemIdx, ChangefeedsNames[IndexDownloadedChangefeed]));
+                HeadObject(ChangefeedDescriptionKeyFromSettings(*ImportInfo, ItemIdx, ChangefeedsPrefixes[IndexDownloadedChangefeed]));
             }
         };
 
         if (NeedValidateChecksums) {
-            StartValidatingChecksum(TopicDescriptionKeyFromSettings(*ImportInfo, ItemIdx, ChangefeedsNames[IndexDownloadedChangefeed]), content, nextStep);
+            StartValidatingChecksum(TopicDescriptionKeyFromSettings(*ImportInfo, ItemIdx, ChangefeedsPrefixes[IndexDownloadedChangefeed]), content, nextStep);
         } else {
             nextStep();
         }
@@ -622,25 +658,17 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         }
 
         const auto& objects = result.GetResult().GetContents();
-        ChangefeedsNames.clear();
-        ChangefeedsNames.reserve(objects.size());
+        ChangefeedsPrefixes.clear();
+        ChangefeedsPrefixes.reserve(objects.size());
 
         for (const auto& obj : objects) {
             const TFsPath& path = obj.GetKey();
             if (path.GetName() == "changefeed_description.pb") {
-                ChangefeedsNames.push_back(path.Parent().GetName());
+                ChangefeedsPrefixes.push_back(path.Parent().GetName());
             }
         }
 
-        if (!ChangefeedsNames.empty()) {
-            auto& item = ImportInfo->Items.at(ItemIdx);
-            Resize(item.Changefeeds.MutableChangefeeds(), ChangefeedsNames.size());
-
-            Y_ABORT_UNLESS(IndexDownloadedChangefeed < ChangefeedsNames.size());
-            HeadObject(ChangefeedDescriptionKeyFromSettings(*ImportInfo, ItemIdx, ChangefeedsNames[IndexDownloadedChangefeed]));
-        } else {
-            Reply();
-        }
+        DownloadChangefeedsData();
     }
 
     void Reply(Ydb::StatusIds::StatusCode statusCode = Ydb::StatusIds::SUCCESS, const TString& error = TString()) override {
@@ -671,13 +699,36 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         Download(PermissionsKey);
     }
 
-    void DownloadChecksum() {
-        Download(NBackup::ChecksumKey(CurrentObjectKey), false);
-    }
-
     void DownloadChangefeeds() {
         Become(&TThis::StateDownloadChangefeeds);
-        ListChangefeeds();
+        if (const auto& maybeChangefeeds = ImportInfo->Items[ItemIdx].Metadata.GetChangefeeds()) {
+            ChangefeedsPrefixes.clear();
+            ChangefeedsPrefixes.reserve(maybeChangefeeds->size());
+            for (const auto& changefeed : *maybeChangefeeds) {
+                ChangefeedsPrefixes.push_back(changefeed.ExportPrefix);
+            }
+
+            DownloadChangefeedsData();
+        } else {
+            if (!Key) { // not encrypted
+                ListChangefeeds();
+            } else {
+                // We don't rely on S3 listing in case of encryption
+                Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "No changefeeds described in table metadata");
+            }
+        }
+    }
+
+    void DownloadChangefeedsData() {
+        if (!ChangefeedsPrefixes.empty()) {
+            auto& item = ImportInfo->Items.at(ItemIdx);
+            Resize(item.Changefeeds.MutableChangefeeds(), ChangefeedsPrefixes.size());
+
+            Y_ABORT_UNLESS(IndexDownloadedChangefeed < ChangefeedsPrefixes.size());
+            HeadObject(ChangefeedDescriptionKeyFromSettings(*ImportInfo, ItemIdx, ChangefeedsPrefixes[IndexDownloadedChangefeed]));
+        } else {
+            Reply();
+        }
     }
 
     void StartDownloadingScheme() {
@@ -695,16 +746,6 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
     void StartDownloadingChangefeeds() {
         ResetRetries();
         DownloadChangefeeds();
-    }
-
-    void StartValidatingChecksum(const TString& key, const TString& object, std::function<void()> checksumValidatedCallback) {
-        CurrentObjectKey = key;
-        CurrentObjectChecksum = NBackup::ComputeChecksum(object);
-        ChecksumValidatedCallback = checksumValidatedCallback;
-
-        ResetRetries();
-        DownloadChecksum();
-        Become(&TThis::StateDownloadChecksum);
     }
 
 public:
@@ -777,16 +818,6 @@ public:
         }
     }
 
-    STATEFN(StateDownloadChecksum) {
-        switch (ev->GetTypeRewrite()) {
-            hFunc(TEvExternalStorage::TEvHeadObjectResponse, HandleChecksum);
-            hFunc(TEvExternalStorage::TEvGetObjectResponse, HandleChecksum);
-
-            sFunc(TEvents::TEvWakeup, DownloadChecksum);
-            sFunc(TEvents::TEvPoisonPill, PassAway);
-        }
-    }
-
 private:
     TImportInfo::TPtr ImportInfo;
     const TActorId ReplyTo;
@@ -795,19 +826,19 @@ private:
     const TString MetadataKey;
     TString SchemeKey;
     const TString PermissionsKey;
-    TVector<TString> ChangefeedsNames;
+    TVector<TString> ChangefeedsPrefixes;
     ui64 IndexDownloadedChangefeed = 0;
 
     const bool NeedDownloadPermissions = true;
 
     bool NeedValidateChecksums = true;
-
-    TString CurrentObjectChecksum;
-    TString CurrentObjectKey;
-    std::function<void()> ChecksumValidatedCallback;
 }; // TSchemeGetter
 
 class TSchemaMappingGetter : public TGetterFromS3<TSchemaMappingGetter> {
+    static TString MetadataKeyFromSettings(const TImportInfo& importInfo) {
+        return TStringBuilder() << importInfo.Settings.source_prefix() << "/metadata.json";
+    }
+
     static TString SchemaMappingKeyFromSettings(const TImportInfo& importInfo) {
         return TStringBuilder() << importInfo.Settings.source_prefix() << "/SchemaMapping/mapping.json";
     }
@@ -827,7 +858,21 @@ class TSchemaMappingGetter : public TGetterFromS3<TSchemaMappingGetter> {
             return;
         }
 
-        GetObject(MetadataKey, result.GetResult().GetContentLength());
+        GetObject(MetadataKey, result.GetResult().GetContentLength(), false);
+    }
+
+    void HandleSchemaMappingMetadata(TEvExternalStorage::TEvHeadObjectResponse::TPtr& ev) {
+        const auto& result = ev->Get()->Result;
+
+        LOG_D("HandleSchemaMappingMetadata TEvExternalStorage::TEvHeadObjectResponse"
+            << ": self# " << SelfId()
+            << ", result# " << result);
+
+        if (!CheckResult(result, "HeadObject")) {
+            return;
+        }
+
+        GetObject(SchemaMappingMetadataKey, result.GetResult().GetContentLength());
     }
 
     void HandleSchemaMapping(TEvExternalStorage::TEvHeadObjectResponse::TPtr& ev) {
@@ -856,12 +901,7 @@ class TSchemaMappingGetter : public TGetterFromS3<TSchemaMappingGetter> {
             return;
         }
 
-        TString content;
-        if (!MaybeDecryptAndSaveIV(msg.Body, content)) {
-            return;
-        }
-        ImportInfo->ExportIV = IV;
-
+        TString content = msg.Body;
         LOG_T("Trying to parse metadata"
             << ": self# " << SelfId()
             << ", body# " << SubstGlobalCopy(content, "\n", "\\n"));
@@ -871,10 +911,51 @@ class TSchemaMappingGetter : public TGetterFromS3<TSchemaMappingGetter> {
         }
 
         auto nextStep = [this]() {
+            StartDownloadingSchemaMappingMetadata();
+        };
+
+        if (NeedValidateChecksums) {
+            StartValidatingChecksum(MetadataKey, content, nextStep);
+        } else {
+            nextStep();
+        }
+    }
+
+    void HandleSchemaMappingMetadata(TEvExternalStorage::TEvGetObjectResponse::TPtr& ev) {
+        const auto& msg = *ev->Get();
+        const auto& result = msg.Result;
+
+        LOG_D("HandleSchemaMappingMetadata TEvExternalStorage::TEvGetObjectResponse"
+            << ": self# " << SelfId()
+            << ", result# " << result);
+
+        if (!CheckResult(result, "GetObject")) {
+            return;
+        }
+
+        TString content;
+        if (!MaybeDecryptAndSaveIV(msg.Body, content)) {
+            return;
+        }
+        ImportInfo->ExportIV = IV;
+
+        LOG_T("Trying to parse schema mapping metadata"
+            << ": self# " << SelfId()
+            << ", body# " << SubstGlobalCopy(content, "\n", "\\n"));
+
+        if (!ProcessSchemaMappingMetadata(content)) {
+            return;
+        }
+
+        auto nextStep = [this]() {
             StartDownloadingSchemaMapping();
         };
 
-        nextStep();
+        if (NeedValidateChecksums) {
+            StartValidatingChecksum(SchemaMappingMetadataKey, content, nextStep);
+        } else {
+            nextStep();
+        }
     }
 
     void HandleSchemaMapping(TEvExternalStorage::TEvGetObjectResponse::TPtr& ev) {
@@ -906,7 +987,15 @@ class TSchemaMappingGetter : public TGetterFromS3<TSchemaMappingGetter> {
             return;
         }
 
-        Reply();
+        auto nextStep = [this]() {
+            Reply();
+        };
+
+        if (NeedValidateChecksums) {
+            StartValidatingChecksum(SchemaMappingKey, content, nextStep);
+        } else {
+            nextStep();
+        }
     }
 
     void Reply(Ydb::StatusIds::StatusCode statusCode = Ydb::StatusIds::SUCCESS, const TString& error = TString()) override {
@@ -921,11 +1010,21 @@ class TSchemaMappingGetter : public TGetterFromS3<TSchemaMappingGetter> {
     }
 
     void DownloadMetadata() {
-        Download(MetadataKey);
+        Download(MetadataKey, false);
+    }
+
+    void DownloadSchemaMappingMetadata() {
+        Download(SchemaMappingMetadataKey);
     }
 
     void DownloadSchemaMapping() {
         Download(SchemaMappingKey);
+    }
+
+    void StartDownloadingSchemaMappingMetadata() {
+        ResetRetries();
+        DownloadSchemaMappingMetadata();
+        Become(&TThis::StateDownloadSchemaMappingMetadata);
     }
 
     void StartDownloadingSchemaMapping() {
@@ -941,8 +1040,29 @@ class TSchemaMappingGetter : public TGetterFromS3<TSchemaMappingGetter> {
             return false;
         }
         const NJson::TJsonValue& kind = json["kind"];
-        if (kind.GetString() != "SchemaMappingV0") {
+        if (kind.GetString() != "SimpleExportV0") {
             Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Unknown kind of metadata json: " << kind.GetString());
+            return false;
+        }
+        const NJson::TJsonValue& checksum = json["checksum"];
+        if (!checksum.IsDefined()) {
+            NeedValidateChecksums = false; // No checksums in export
+        } else if (checksum.GetString() != "sha256") {
+            Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Unknown checksum type: " << checksum.GetString());
+            return false;
+        }
+        return true;
+    }
+
+    bool ProcessSchemaMappingMetadata(const TString& content) {
+        NJson::TJsonValue json;
+        if (!NJson::ReadJsonTree(content, &json)) {
+            Reply(Ydb::StatusIds::BAD_REQUEST, "Failed to parse schema mapping metadata json");
+            return false;
+        }
+        const NJson::TJsonValue& kind = json["kind"];
+        if (kind.GetString() != "SchemaMappingV0") {
+            Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Unknown kind of schema mapping metadata json: " << kind.GetString());
             return false;
         }
         return true;
@@ -953,7 +1073,8 @@ public:
         : TGetterFromS3<TSchemaMappingGetter>(TGetterSettings::FromImportInfo(importInfo, Nothing()))
         , ImportInfo(std::move(importInfo))
         , ReplyTo(replyTo)
-        , MetadataKey(SchemaMappingMetadataKeyFromSettings(*ImportInfo))
+        , MetadataKey(MetadataKeyFromSettings(*ImportInfo))
+        , SchemaMappingMetadataKey(SchemaMappingMetadataKeyFromSettings(*ImportInfo))
         , SchemaMappingKey(SchemaMappingKeyFromSettings(*ImportInfo))
     {
     }
@@ -973,6 +1094,16 @@ public:
         }
     }
 
+    STATEFN(StateDownloadSchemaMappingMetadata) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvExternalStorage::TEvHeadObjectResponse, HandleSchemaMappingMetadata);
+            hFunc(TEvExternalStorage::TEvGetObjectResponse, HandleSchemaMappingMetadata);
+
+            sFunc(TEvents::TEvWakeup, DownloadSchemaMappingMetadata);
+            sFunc(TEvents::TEvPoisonPill, PassAway);
+        }
+    }
+
     STATEFN(StateDownloadSchemaMapping) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvExternalStorage::TEvHeadObjectResponse, HandleSchemaMapping);
@@ -985,8 +1116,10 @@ public:
 
 private:
     TImportInfo::TPtr ImportInfo;
+    bool NeedValidateChecksums = true;
     const TActorId ReplyTo;
     const TString MetadataKey;
+    const TString SchemaMappingMetadataKey;
     const TString SchemaMappingKey;
 }; // TSchemaMappingGetter
 

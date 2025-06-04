@@ -146,6 +146,8 @@ void FromProto(TLogicalTypePtr* logicalType, const NProto::TLogicalType& protoLo
 
 bool IsComparable(const TLogicalTypePtr& type);
 
+bool IsTzType(const TLogicalTypePtr& logicalType);
+
 ////////////////////////////////////////////////////////////////////////////////
 
 // Special wrapper class that allows to serialize LogicalType in type_v3 format
@@ -438,6 +440,11 @@ TLogicalTypePtr MakeOptionalIfNot(TLogicalTypePtr element);
 // IMPORTANT: Only used for compatibility reasons.
 // In modern code, one should use OptionalLogicalType + SimpleLogicalType instead.
 TLogicalTypePtr MakeLogicalType(ESimpleLogicalValueType type, bool required);
+
+////////////////////////////////////////////////////////////////////////////////
+
+template<ESimpleLogicalValueType type>
+constexpr ESimpleLogicalValueType GetUnderlyingDateType();
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -272,6 +272,17 @@ public:
             }
         }
 
+        if (streamDesc.GetSchemaChanges()) {
+            switch (streamDesc.GetFormat()) {
+            case NKikimrSchemeOp::ECdcStreamFormatJson:
+                break;
+            default:
+                result->SetError(NKikimrScheme::StatusInvalidParameter,
+                    "SCHEMA_CHANGES incompatible with specified stream format");
+                return result;
+            }
+        }
+
         TString errStr;
         if (!context.SS->CheckLocks(tablePath.Base()->PathId, Transaction, errStr)) {
             result->SetError(NKikimrScheme::StatusMultipleModifications, errStr);

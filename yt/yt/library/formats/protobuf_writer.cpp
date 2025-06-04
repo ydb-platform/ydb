@@ -81,9 +81,9 @@ public:
         if (size <= RemainingBytes()) {
             Advance(size);
         } else {
-            char Buffer[MaxGapSize];
+            const std::array<char, MaxGapSize> gap{};
             YT_VERIFY(size <= MaxGapSize);
-            Write(Buffer, size);
+            Write(gap.data(), size);
         }
         return position;
     }

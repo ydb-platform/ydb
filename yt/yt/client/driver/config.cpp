@@ -49,6 +49,9 @@ void TDriverConfig::Register(TRegistrar registrar)
     registrar.Parameter("token", &TThis::Token)
         .Optional();
 
+    registrar.Parameter("multiproxy_target_cluster", &TThis::MultiproxyTargetCluster)
+        .Optional();
+
     registrar.Parameter("proxy_discovery_cache", &TThis::ProxyDiscoveryCache)
         .DefaultNew();
 

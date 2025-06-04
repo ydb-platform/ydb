@@ -355,6 +355,10 @@ bool IsTablePropsDependent(const TExprNode& node) {
     return found;
 }
 
+bool IsNoPush(const TExprNode& node) {
+    return node.IsCallable({"NoPush", "Likely"});
+}
+
 TExprNode::TPtr KeepColumnOrder(const TExprNode::TPtr& node, const TExprNode& src, TExprContext& ctx, const TTypeAnnotationContext& typeCtx) {
     auto columnOrder = typeCtx.LookupColumnOrder(src);
     if (!columnOrder) {
@@ -2031,6 +2035,12 @@ TExprNode::TPtr KeepConstraints(TExprNode::TPtr node, const TExprNode& src, TExp
     auto res = KeepSortedConstraint(node, src.GetConstraint<TSortedConstraintNode>(), GetSeqItemType(src.GetTypeAnn()), ctx);
     res = KeepChoppedConstraint(std::move(res), src, ctx);
     res = KeepUniqueConstraint<true>(std::move(res), src, ctx);
+    res = KeepUniqueConstraint<false>(std::move(res), src, ctx);
+    return res;
+}
+
+TExprNode::TPtr KeepUniqueDistinct(TExprNode::TPtr node, const TExprNode& src, TExprContext& ctx) {
+    auto res = KeepUniqueConstraint<true>(node, src, ctx);
     res = KeepUniqueConstraint<false>(std::move(res), src, ctx);
     return res;
 }

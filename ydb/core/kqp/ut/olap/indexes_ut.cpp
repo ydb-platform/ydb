@@ -52,7 +52,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
     }
 
     Y_UNIT_TEST(IndexesActualization) {
-        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
         TKikimrRunner kikimr(settings);
 
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
@@ -61,7 +61,9 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         csController->SetOverrideMemoryLimitForPortionReading(1e+10);
         csController->SetOverrideBlobSplitSettings(NOlap::NSplitter::TSplitSettings());
 
-        TLocalHelper(kikimr).CreateTestOlapTable();
+        auto helper = TLocalHelper(kikimr);
+        helper.CreateTestOlapTable();
+        helper.SetForcedCompaction();
         auto tableClient = kikimr.GetTableClient();
 
         Tests::NCommon::TLoggerInit(kikimr)

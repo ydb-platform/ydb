@@ -819,7 +819,7 @@ static void __Pyx_WriteUnraisable(const char *name, int clineno,
         Py_XINCREF(old_val);
         Py_XINCREF(old_tb);
         __Pyx_ErrRestore(old_exc, old_val, old_tb);
-        PyErr_PrintEx(1);
+        PyErr_PrintEx(0);
     }
     #if PY_MAJOR_VERSION < 3
     ctx = PyString_FromString(name);
@@ -914,7 +914,7 @@ static void __Pyx_AddTraceback(const char *funcname, int c_line,
 #include "compile.h"
 #include "frameobject.h"
 #include "traceback.h"
-#if PY_VERSION_HEX >= 0x030b00a6 && !CYTHON_COMPILING_IN_LIMITED_API
+#if PY_VERSION_HEX >= 0x030b00a6 && !CYTHON_COMPILING_IN_LIMITED_API && !defined(PYPY_VERSION)
   #ifndef Py_BUILD_CORE
     #define Py_BUILD_CORE 1
   #endif

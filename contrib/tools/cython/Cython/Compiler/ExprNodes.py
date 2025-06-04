@@ -481,7 +481,12 @@ class ExprNode(Node):
 
     constant_result = constant_value_not_set
 
-    child_attrs = property(fget=operator.attrgetter('subexprs'))
+    if getattr(getattr(sys, "implementation", None), "name", "cpython") == "cpython":
+        child_attrs = property(fget=operator.attrgetter('subexprs'))
+    else:
+        @property
+        def child_attrs(self):
+            return self.subexprs
 
     def analyse_annotations(self, env):
         pass
@@ -1047,7 +1052,7 @@ class ExprNode(Node):
                         src = CoerceToPyTypeNode(src, env, type=dst_type)
                 # FIXME: I would expect that CoerceToPyTypeNode(type=dst_type) returns a value of type dst_type
                 #        but it doesn't for ctuples. Thus, we add a PyTypeTestNode which then triggers the
-                #        Python conversion and becomes useless. That sems backwards and inefficient.
+                #        Python conversion and becomes useless. That seems backwards and inefficient.
                 #        We should not need a PyTypeTestNode after a previous conversion above.
                 if not src.type.subtype_of(dst_type):
                     src = PyTypeTestNode(src, dst_type, env)
@@ -6590,7 +6595,7 @@ class PyMethodCallNode(SimpleCallNode):
 
         self_arg = code.funcstate.allocate_temp(py_object_type, manage_ref=True)
         code.putln("%s = NULL;" % self_arg)
-        arg_offset_cname = code.funcstate.allocate_temp(PyrexTypes.c_int_type, manage_ref=False)
+        arg_offset_cname = code.funcstate.allocate_temp(PyrexTypes.c_uint_type, manage_ref=False)
         code.putln("%s = 0;" % arg_offset_cname)
 
         def attribute_is_likely_method(attr):
@@ -9291,6 +9296,9 @@ class DictNode(ExprNode):
                     len(self.key_value_pairs),
                     code.error_goto_if_null(self.result(), self.pos)))
             self.generate_gotref(code)
+            struct_scope = None
+        else:
+            struct_scope = self.type.scope
 
         keys_seen = set()
         key_type = None
@@ -9339,17 +9347,16 @@ class DictNode(ExprNode):
                 if self.exclude_null_values:
                     code.putln('}')
             else:
+                key = str(item.key.value)
+                member = struct_scope.lookup_here(key)
+                assert member is not None, "struct member %s not found, error was not handled during coercion" % key
+                key_cname = member.cname
+                value_cname = item.value.result()
                 if item.value.type.is_array:
                     code.putln("memcpy(%s.%s, %s, sizeof(%s));" % (
-                            self.result(),
-                            item.key.value,
-                            item.value.result(),
-                            item.value.result()))
+                        self.result(), key_cname, value_cname, value_cname))
                 else:
-                    code.putln("%s.%s = %s;" % (
-                            self.result(),
-                            item.key.value,
-                            item.value.result()))
+                    code.putln("%s.%s = %s;" % (self.result(), key_cname, value_cname))
             item.generate_disposal_code(code)
             item.free_temps(code)
 

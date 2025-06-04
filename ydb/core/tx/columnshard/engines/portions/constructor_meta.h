@@ -17,7 +17,6 @@ private:
     std::optional<TString> TierName;
     std::optional<TSnapshot> RecordSnapshotMin;
     std::optional<TSnapshot> RecordSnapshotMax;
-    std::optional<NPortion::EProduced> Produced;
     std::optional<ui64> CompactionLevel;
 
     std::optional<ui32> RecordsCount;
@@ -68,10 +67,6 @@ public:
     void ResetTierName(const TString& tierName) {
         TierName.reset();
         SetTierName(tierName);
-    }
-
-    void UpdateRecordsMeta(const NPortion::EProduced prod) {
-        Produced = prod;
     }
 
     TPortionMeta Build();

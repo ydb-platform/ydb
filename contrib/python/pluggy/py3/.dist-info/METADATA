@@ -1,15 +1,9 @@
-Metadata-Version: 2.1
+Metadata-Version: 2.4
 Name: pluggy
-Version: 1.5.0
+Version: 1.6.0
 Summary: plugin and hook calling mechanisms for python
-Home-page: https://github.com/pytest-dev/pluggy
-Author: Holger Krekel
-Author-email: holger@merlinux.eu
+Author-email: Holger Krekel <holger@merlinux.eu>
 License: MIT
-Platform: unix
-Platform: linux
-Platform: osx
-Platform: win32
 Classifier: Development Status :: 6 - Mature
 Classifier: Intended Audience :: Developers
 Classifier: License :: OSI Approved :: MIT License
@@ -23,19 +17,22 @@ Classifier: Programming Language :: Python :: Implementation :: CPython
 Classifier: Programming Language :: Python :: Implementation :: PyPy
 Classifier: Programming Language :: Python :: 3
 Classifier: Programming Language :: Python :: 3 :: Only
-Classifier: Programming Language :: Python :: 3.8
 Classifier: Programming Language :: Python :: 3.9
 Classifier: Programming Language :: Python :: 3.10
 Classifier: Programming Language :: Python :: 3.11
-Requires-Python: >=3.8
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Requires-Python: >=3.9
 Description-Content-Type: text/x-rst
 License-File: LICENSE
 Provides-Extra: dev
-Requires-Dist: pre-commit ; extra == 'dev'
-Requires-Dist: tox ; extra == 'dev'
+Requires-Dist: pre-commit; extra == "dev"
+Requires-Dist: tox; extra == "dev"
 Provides-Extra: testing
-Requires-Dist: pytest ; extra == 'testing'
-Requires-Dist: pytest-benchmark ; extra == 'testing'
+Requires-Dist: pytest; extra == "testing"
+Requires-Dist: pytest-benchmark; extra == "testing"
+Requires-Dist: coverage; extra == "testing"
+Dynamic: license-file
 
 ====================================================
 pluggy - A minimalist production ready plugin system

@@ -254,6 +254,6 @@ SELECT * FROM FILTER(
 
 * [VIEW secondary_index](secondary_index.md)
 
-{% endif %}
-
 * [VIEW vector_index](vector_index.md)
+
+{% endif %}

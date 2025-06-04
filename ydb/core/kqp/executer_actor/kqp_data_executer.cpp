@@ -2004,7 +2004,7 @@ private:
                 auto& stageInfo = TasksGraph.GetStageInfo(stageId);
                 AFL_ENSURE(stageInfo.Id == stageId);
 
-                if (stageInfo.Meta.ShardKind == NSchemeCache::TSchemeCacheRequest::KindAsyncIndexTable) {
+                if (stageInfo.Meta.ShardKind == NSchemeCache::ETableKind::KindAsyncIndexTable) {
                     TMaybe<TString> error;
 
                     if (stageInfo.Meta.ShardKey->RowOperation != TKeyDesc::ERowOperation::Read) {
@@ -2210,9 +2210,14 @@ private:
         if (!TBase::HandleResolve(ev)) return;
 
         if (TxManager) {
-            for (auto& [stageId, stageInfo] : TasksGraph.GetStagesInfo()) {
+            for (const auto& [stageId, stageInfo] : TasksGraph.GetStagesInfo()) {
                 if (stageInfo.Meta.ShardKey) {
                     TxManager->SetPartitioning(stageInfo.Meta.TableId, stageInfo.Meta.ShardKey->Partitioning);
+                }
+                for (const auto& indexMeta : stageInfo.Meta.IndexMetas) {
+                    if (indexMeta.ShardKey) {
+                        TxManager->SetPartitioning(indexMeta.TableId, indexMeta.ShardKey->Partitioning);
+                    }
                 }
             }
         }

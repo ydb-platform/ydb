@@ -24,7 +24,7 @@ class TCommandTPCCClean
     : public TYdbCommand
 {
 public:
-    TCommandTPCCClean(std::shared_ptr<NTPCC::TRunConfig>& runConfig);
+    TCommandTPCCClean(std::shared_ptr<NTPCC::TRunConfig> runConfig);
     ~TCommandTPCCClean() = default;
 
     virtual int Run(TConfig& config) override;
@@ -33,9 +33,9 @@ private:
     std::shared_ptr<NTPCC::TRunConfig> RunConfig;
 };
 
-TCommandTPCCClean::TCommandTPCCClean(std::shared_ptr<NTPCC::TRunConfig>& runConfig)
+TCommandTPCCClean::TCommandTPCCClean(std::shared_ptr<NTPCC::TRunConfig> runConfig)
     : TYdbCommand("clean", {}, "Drop tables created in init phase")
-    , RunConfig(runConfig)
+    , RunConfig(std::move(runConfig))
 {
 }
 
@@ -51,7 +51,7 @@ class TCommandTPCCInit
     : public TYdbCommand
 {
 public:
-    TCommandTPCCInit(std::shared_ptr<NTPCC::TRunConfig>& runConfig);
+    TCommandTPCCInit(std::shared_ptr<NTPCC::TRunConfig> runConfig);
     ~TCommandTPCCInit() = default;
 
     virtual int Run(TConfig& config) override;
@@ -60,9 +60,9 @@ private:
     std::shared_ptr<NTPCC::TRunConfig> RunConfig;
 };
 
-TCommandTPCCInit::TCommandTPCCInit(std::shared_ptr<NTPCC::TRunConfig>& runConfig)
+TCommandTPCCInit::TCommandTPCCInit(std::shared_ptr<NTPCC::TRunConfig> runConfig)
     : TYdbCommand("init", {}, "Create and initialize tables for workload")
-    , RunConfig(runConfig)
+    , RunConfig(std::move(runConfig))
 {
 }
 
@@ -78,7 +78,7 @@ class TCommandTPCCImport
     : public TYdbCommand
 {
 public:
-    TCommandTPCCImport(std::shared_ptr<NTPCC::TRunConfig>& runConfig);
+    TCommandTPCCImport(std::shared_ptr<NTPCC::TRunConfig> runConfig);
     ~TCommandTPCCImport() = default;
 
     virtual int Run(TConfig& config) override;
@@ -87,9 +87,9 @@ private:
     std::shared_ptr<NTPCC::TRunConfig> RunConfig;
 };
 
-TCommandTPCCImport::TCommandTPCCImport(std::shared_ptr<NTPCC::TRunConfig>& runConfig)
+TCommandTPCCImport::TCommandTPCCImport(std::shared_ptr<NTPCC::TRunConfig> runConfig)
     : TYdbCommand("import", {}, "Fill tables for workload with data")
-    , RunConfig(runConfig)
+    , RunConfig(std::move(runConfig))
 {
 }
 
@@ -105,7 +105,7 @@ class TCommandTPCCRun
     : public TYdbCommand
 {
 public:
-    TCommandTPCCRun(std::shared_ptr<NTPCC::TRunConfig>& runConfig);
+    TCommandTPCCRun(std::shared_ptr<NTPCC::TRunConfig> runConfig);
     ~TCommandTPCCRun() = default;
 
     virtual void Config(TConfig& config) override;
@@ -115,9 +115,9 @@ private:
     std::shared_ptr<NTPCC::TRunConfig> RunConfig;
 };
 
-TCommandTPCCRun::TCommandTPCCRun(std::shared_ptr<NTPCC::TRunConfig>& runConfig)
+TCommandTPCCRun::TCommandTPCCRun(std::shared_ptr<NTPCC::TRunConfig> runConfig)
     : TYdbCommand("run", {}, "Run benchmark")
-    , RunConfig(runConfig)
+    , RunConfig(std::move(runConfig))
 {
 }
 

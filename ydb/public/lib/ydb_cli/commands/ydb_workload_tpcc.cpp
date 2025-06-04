@@ -141,19 +141,19 @@ void TCommandTPCCRun::Config(TConfig& config) {
 
     // TODO: hide this and detect automatically
     config.Opts->AddLongOption(
-        "threads", TStringBuilder() << "TaskQueue threads (default: auto)")
+        "threads", TStringBuilder() << "Number of threads executing queries (default: auto)")
             .RequiredArgument("INT").StoreResult(&RunConfig->ThreadCount).DefaultValue(0)
             .Hidden();
     config.Opts->AddLongOption(
-        "connections", TStringBuilder() << "Number of client connections (default: auto)")
+        "connections", TStringBuilder() << "Number of SDK driver/client instances (default: auto)")
             .RequiredArgument("INT").StoreResult(&RunConfig->DriverCount).DefaultValue(0)
             .Hidden();
     config.Opts->AddLongOption(
-        "no-delays", TStringBuilder() << "Disable keying/thinking delays")
+        "no-delays", TStringBuilder() << "Disable TPC-C keying/thinking delays")
             .Optional().StoreTrue(&RunConfig->NoDelays)
             .Hidden();
     config.Opts->AddLongOption(
-        "simulate", TStringBuilder() << "Simulate transaction execution (delay is latency ms)")
+        "simulate", TStringBuilder() << "Simulate transaction execution (delay is simulated transaction latency ms)")
             .OptionalArgument("INT").StoreResult(&RunConfig->SimulateTransactionMs).DefaultValue(0)
             .Hidden();
     config.Opts->AddLongOption(

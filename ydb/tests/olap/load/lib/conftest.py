@@ -173,6 +173,14 @@ class LoadSuiteBase:
         cls.__nodes_state = {n.slot: n for n in YdbCluster.get_cluster_nodes(db_only=True)}
 
     @classmethod
+    def save_nodes_state_for_diagnostics(cls) -> None:
+        """
+        Сохраняет состояние нод только для диагностики.
+        Не проверяет перезапуски/падения, но собирает coredump'ы и OOM информацию.
+        """
+        cls.__nodes_state = {n.slot: n for n in YdbCluster.get_cluster_nodes(db_only=True)}
+
+    @classmethod
     def __get_core_hashes_by_pod(cls, hosts: set[str], start_time: float, end_time: float) -> dict[str, list[tuple[str, str]]]:
         core_processes = {
             h: cls.__execute_ssh(h, 'sudo flock /tmp/brk_pad /Berkanavt/breakpad/bin/kikimr_breakpad_analizer.sh')
@@ -447,6 +455,128 @@ class LoadSuiteBase:
             external_path=self.get_external_path(),
         )[query_name]
         self.process_query_result(result, query_name, True)
+
+    @classmethod
+    def check_nodes_diagnostics(cls, result: YdbCliHelper.WorkloadRunResult, end_time: float) -> list[NodeErrors]:
+        """
+        Собирает диагностическую информацию о нодах без проверки перезапусков/падений.
+        Проверяет coredump'ы и OOM для всех нод из сохраненного состояния.
+        """
+        if cls.__nodes_state is None:
+            return []
+        
+        # Получаем все хосты из сохраненного состояния
+        all_hosts = {node.host for node in cls.__nodes_state.values()}
+        
+        # Собираем диагностическую информацию для всех хостов
+        core_hashes = cls.__get_core_hashes_by_pod(all_hosts, result.start_time, end_time)
+        ooms = cls.__get_hosts_with_omms(all_hosts, result.start_time, end_time)
+        
+        # Создаем NodeErrors для каждой ноды с диагностической информацией
+        node_errors = []
+        for node in cls.__nodes_state.values():
+            # Создаем NodeErrors только если есть coredump'ы или OOM
+            has_cores = bool(core_hashes.get(node.slot, []))
+            has_oom = node.host in ooms
+            
+            if has_cores or has_oom:
+                node_error = NodeErrors(node, 'diagnostic info collected')
+                node_error.core_hashes = core_hashes.get(node.slot, [])
+                node_error.was_oom = has_oom
+                node_errors.append(node_error)
+                
+                # Добавляем предупреждения в результат (не ошибки)
+                if has_cores:
+                    result.add_warning(f'Node {node.slot} has {len(node_error.core_hashes)} coredump(s)')
+                if has_oom:
+                    result.add_warning(f'Node {node.slot} experienced OOM')
+        
+        cls.__nodes_state = None
+        return node_errors
+
+    @classmethod
+    def process_workload_result_with_diagnostics(cls, result: YdbCliHelper.WorkloadRunResult, workload_name: str, upload: bool):
+        """
+        Обрабатывает результаты workload с диагностической информацией о нодах.
+        Упрощенная версия без query-специфичной функциональности.
+        """
+        def _get_duraton(stats, field):
+            r = stats.get(field)
+            return float(r) / 1e3 if r is not None else None
+
+        def _duration_text(duration: float | int):
+            s = f'{int(duration)}s ' if duration >= 1 else ''
+            return f'{s}{int(duration * 1000) % 1000}ms'
+
+        # Обрабатываем только iterations для workload (без планов запросов)
+        for iter_num in sorted(result.iterations.keys()):
+            iter_res = result.iterations[iter_num]
+            s = allure.step(f'Workload Iteration {iter_num}')
+            if iter_res.time:
+                s.params['duration'] = _duration_text(iter_res.time)
+            try:
+                with s:
+                    if iter_res.error_message:
+                        pytest.fail(iter_res.error_message)
+            except BaseException:
+                pass
+
+        # Прикрепляем stdout/stderr если есть
+        if result.stdout is not None:
+            allure.attach(result.stdout, 'Workload stdout', attachment_type=allure.attachment_type.TEXT)
+
+        if result.stderr is not None:
+            allure.attach(result.stderr, 'Workload stderr', attachment_type=allure.attachment_type.TEXT)
+        
+        end_time = time()
+        
+        # Собираем диагностическую информацию о нодах
+        node_errors = cls.check_nodes_diagnostics(result, end_time)
+        
+        # Добавляем информацию в allure отчет с node_errors
+        allure_test_description(
+            cls.suite(), workload_name,
+            start_time=result.start_time, end_time=end_time, node_errors=node_errors
+        )
+        
+        # Обрабатываем статистику workload
+        stats = result.get_stats(workload_name)
+        for p in ['Mean']:
+            if p in stats:
+                allure.dynamic.parameter(p, _duration_text(stats[p] / 1000.))
+        
+        # Прикрепляем логи только при неуспешном выполнении
+        if os.getenv('NO_KUBER_LOGS') is None and not result.success:
+            cls.__attach_logs(start_time=result.start_time, attach_name='workload', query_text='')
+        
+        # Прикрепляем статистику
+        allure.attach(json.dumps(stats, indent=2), 'Workload Stats', attachment_type=allure.attachment_type.JSON)
+        
+        # Загружаем результаты если нужно
+        if upload:
+            ResultsProcessor.upload_results(
+                kind='Load',
+                suite=cls.suite(),
+                test=workload_name,
+                timestamp=end_time,
+                is_successful=result.success,
+                min_duration=_get_duraton(stats, 'Min'),
+                max_duration=_get_duraton(stats, 'Max'),
+                mean_duration=_get_duraton(stats, 'Mean'),
+                median_duration=_get_duraton(stats, 'Median'),
+                statistics=stats,
+            )
+        
+        # В диагностическом режиме не падаем из-за предупреждений о coredump'ах/OOM
+        if not result.success and result.error_message:
+            exc = pytest.fail.Exception(result.error_message)
+            if result.traceback is not None:
+                exc = exc.with_traceback(result.traceback)
+            raise exc
+        
+        # Логируем предупреждения, но не падаем
+        if result.warning_message:
+            logging.warning(f"Workload completed with warnings: {result.warning_message}")
 
 
 class LoadSuiteParallel(LoadSuiteBase):

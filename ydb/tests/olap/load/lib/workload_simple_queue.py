@@ -3,6 +3,7 @@ import pytest
 import os
 import yatest
 import logging
+import time
 from .conftest import LoadSuiteBase
 from ydb.tests.olap.lib.ydb_cli import YdbCliHelper
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
@@ -27,6 +28,13 @@ class TableType(str, Enum):
 class SimpleQueueBase(LoadSuiteBase):
 
     @classmethod
+    def setup_class(cls) -> None:
+        """Сохраняем время начала setup_class для использования в start_time"""
+        cls._setup_start_time = time.time()
+        # Вызываем родительский setup_class
+        super().setup_class()
+
+    @classmethod
     def do_teardown_class(cls):
         """
         Специфичная очистка для SimpleQueue тестов.
@@ -42,7 +50,9 @@ class SimpleQueueBase(LoadSuiteBase):
 
     @pytest.mark.parametrize('table_type', [t.value for t in TableType])
     def test_workload_simple_queue(self, table_type: str):
-        # self.save_nodes_state()
+        # Сохраняем состояние нод для диагностики (без проверки перезапусков/падений)
+        self.save_nodes_state_for_diagnostics()
+        
         # Распаковываем бинарные файлы из ресурсов
         binary_files = [
             yatest.common.binary_path(os.getenv("SIMPLE_QUEUE_BINARY"))
@@ -111,12 +121,19 @@ class SimpleQueueBase(LoadSuiteBase):
                     raise Exception(f"Workload get errors in run: {command_error}")
 
         with allure.step('Checking scheme state'):
-            stdout, stderr = execute_command(
-                node.host,
-                [YDB_CLI_PATH, '--endpoint', f'{YdbCluster.ydb_endpoint}',
-                 '--database', f'/{YdbCluster.ydb_database}',
-                 "scheme", "ls", "-lR"],
-                raise_on_error=False)
+            try:
+                execution = yatest.common.execute(
+                    [YDB_CLI_PATH, '--endpoint', f'{YdbCluster.ydb_endpoint}',
+                     '--database', f'/{YdbCluster.ydb_database}',
+                     "scheme", "ls", "-lR"],
+                    wait=True,
+                    check_exit_code=False
+                )
+                stdout = execution.std_out.decode('utf-8') if execution.std_out else ""
+                stderr = execution.std_err.decode('utf-8') if execution.std_err else ""
+            except Exception as e:
+                stdout = ""
+                stderr = str(e)
             allure.attach(stdout, 'Scheme state stdout', allure.attachment_type.TEXT)
             if stderr:
                 allure.attach(stderr, 'Scheme state stderr', allure.attachment_type.TEXT)
@@ -126,6 +143,9 @@ class SimpleQueueBase(LoadSuiteBase):
             LOGGER.info(f'path to check:{node.host.split(".")[0]}_0')
 
         result = YdbCliHelper.WorkloadRunResult()
+        
+        result.start_time = self.__class__._setup_start_time
+
 
         # Добавляем результаты выполнения команды
         if command_result is not None:
@@ -155,7 +175,8 @@ class SimpleQueueBase(LoadSuiteBase):
             iteration.error_message = str(command_result)
         result.iterations[0] = iteration
 
-        self.process_query_result(result, f"SimpleQueue_{table_type}", False)
+        # Используем диагностический режим обработки результатов workload с node_errors
+        self.process_workload_result_with_diagnostics(result, f"SimpleQueue_{table_type}", False)
 
 
 class TestSimpleQueue(SimpleQueueBase):

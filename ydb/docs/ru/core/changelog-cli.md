@@ -7,7 +7,7 @@
 ### Функциональность
 
 * Добавлено автодополнение имён схемных объектов в интерактивном режиме.
-* Команда `{{ ydb-cli }} workload query run` полностью переработана. Теперь она используется для полноценных пользовательских нагрузочных тестов полного цикла.
+* Расширены возможности [команды](./reference/ydb-cli/workload-query.md) `{{ ydb-cli }} workload query`: добавлены команды `{{ ydb-cli }} workload query init`, `{{ ydb-cli }} workload query import` и `{{ ydb-cli }} workload query clean` и изменена команда `{{ ydb-cli }} workload query run`. Пользуясь ими можно инициализировать таблицы, заполнить их данными, провести нагрузочное тестирование и очистить данные за собой.
 * В [команды](./reference/ydb-cli/workload-click-bench.md) `{{ ydb-cli }} workload clickbench run`, `{{ ydb-cli }} workload tpch run`, `{{ ydb-cli }} workload tpcds run` добавлена опция `--threads`, позволяющая указывать количество потоков для отправки запросов.
 * **_(Требуется сервер v25.1+)_** **_(Экспериментально)_** Добавлена [команда](./reference/ydb-cli/commands/configuration/cluster/index.md#list) `{{ ydb-cli }} admin cluster config version` для отображения версии конфигурации (V1/V2) на узлах.
 

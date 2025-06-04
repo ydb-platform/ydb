@@ -7,7 +7,7 @@ Released on June 4, 2025. To update to version **2.22.0**, select the [Downloads
 ### Features
 
 * Added scheme object names completion in interactive mode.
-* The `{{ ydb-cli }} workload query run` command was completely reworked. Now it can be used for user-defined full cycle load testing.
+* Enhanced the capabilities of the `{{ ydb-cli }} workload query` [command](./reference/ydb-cli/workload-query.md): added `{{ ydb-cli }} workload query init`, `{{ ydb-cli }} workload query import`, and `{{ ydb-cli }} workload query clean` commands, and modified the `{{ ydb-cli }} workload query run` command. Using these commands, you can initialize tables, populate them with data, perform load testing, and clean up the data afterwards.
 * Added the `--threads` option to the `{{ ydb-cli }} workload clickbench run`, `{{ ydb-cli }} workload tpch run`, and `{{ ydb-cli }} workload tpcds run` [commands](./reference/ydb-cli/workload-click-bench.md). This option allows to specify the number of threads sending the queries.
 * **_(Requires server v25.1+)_** **_(Experimental)_** Added the `{{ ydb-cli }} admin cluster config version` [command](./reference/ydb-cli/commands/configuration/cluster/index.md#list) to show the configuration version (V1/V2) on nodes.
 

@@ -60,15 +60,19 @@ class CreateExternalDataSource(ScenarioTestHelper.IYqlble):
 
     @override
     def to_yql(self, ctx: TestContext) -> str:
-        return f'CREATE EXTERNAL DATA SOURCE{' IF NOT EXISTS' if self._allow_existing else ''}' \
-               f'`{ScenarioTestHelper(ctx).get_full_path(self._path)}` WITH (' \
-                '    SOURCE_TYPE="ObjectStorage",' \
-               f'    LOCATION="{self._config.endpoint}/{self._config.bucket}",' \
-                '    AUTH_METHOD="AWS",' \
-               f'    AWS_ACCESS_KEY_ID_SECRET_NAME="{self._config.access_key_secret}",' \
-               f'    AWS_SECRET_ACCESS_KEY_SECRET_NAME="{self._config.secret_key_secret}",' \
-                '    AWS_REGION="ru-central1"' \
-                ')'
+        sql_query = f"""
+            CREATE EXTERNAL DATA SOURCE {("IF NOT EXISTS" if self._allow_existing else "")}
+            `{ScenarioTestHelper(ctx).get_full_path(self._path)}`
+            WITH (
+                SOURCE_TYPE="ObjectStorage",
+                LOCATION="{self._config.endpoint}/{self._config.bucket}",
+                AUTH_METHOD="AWS",
+                AWS_ACCESS_KEY_ID_SECRET_NAME="{self._config.access_key_secret}",
+                AWS_SECRET_ACCESS_KEY_SECRET_NAME="{self._config.secret_key_secret}",
+                AWS_REGION="ru-central1"
+            )
+        """
+        return sql_query.strip()
 
     @override
     def params(self) -> Dict[str, str]:

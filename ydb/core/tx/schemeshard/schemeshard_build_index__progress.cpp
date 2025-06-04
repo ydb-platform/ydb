@@ -1123,6 +1123,10 @@ public:
         LOG_N("TTxBuildProgress: Execute: " << BuildId << " " << buildInfo.State);
         LOG_D("TTxBuildProgress: Execute: " << BuildId << " " << buildInfo.State << " " << buildInfo);
 
+        if (buildInfo.IsBroken) {
+            return true;
+        }
+
         switch (buildInfo.State) {
         case TIndexBuildInfo::EState::Invalid:
             Y_ENSURE(false, "Unreachable");

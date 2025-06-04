@@ -2892,6 +2892,7 @@ public:
         AFL_ENSURE(!TxId || NeedToFlushBeforeCommit); // TxId => NeedToFlushBeforeCommit
         NeedToFlushBeforeCommit = false;
         if (TxId) {
+            TxManager->StartPrepare();
             Prepare(std::nullopt);
             return;
         }

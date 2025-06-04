@@ -166,11 +166,7 @@ namespace {
     }
 
 #define STRING_ASCII_CMP_IGNORE_CASE_UDF(udfName, function)                    \
-    BEGIN_SIMPLE_STRICT_ARROW_UDF_OPTIONS(T##udfName,                          \
-        bool(TOptional<char*>, char*),                                         \
-        builder.SetMinLangVer(NYql::MakeLangVersion(2025, 2)))                 \
-    {                                                                          \
-        Y_UNUSED(valueBuilder);                                                \
+    TUnboxedValuePod udfName##Impl(const TUnboxedValuePod* args) {             \
         if (args[0]) {                                                         \
             const TString haystack(args[0].AsStringRef());                     \
             const TString needle(args[1].AsStringRef());                       \
@@ -197,9 +193,26 @@ namespace {
         }                                                                      \
     };                                                                         \
                                                                                \
-    END_SIMPLE_ARROW_UDF(T##udfName, T##udfName##KernelExec::Do)
+    BEGIN_SIMPLE_STRICT_ARROW_UDF_OPTIONS(T##udfName,                          \
+        bool(TOptional<char*>, char*),                                         \
+        builder.SetMinLangVer(NYql::MakeLangVersion(2025, 2)))                 \
+    {                                                                          \
+        Y_UNUSED(valueBuilder);                                                \
+        return udfName##Impl(args);                                            \
+    }                                                                          \
+                                                                               \
+    END_SIMPLE_ARROW_UDF(T##udfName, T##udfName##KernelExec::Do)               \
+                                                                               \
+    BEGIN_SIMPLE_STRICT_ARROW_UDF(T_yql_##udfName,                             \
+        bool(TOptional<char*>, char*))                                         \
+    {                                                                          \
+        Y_UNUSED(valueBuilder);                                                \
+        return udfName##Impl(args);                                            \
+    }                                                                          \
+                                                                               \
+    END_SIMPLE_ARROW_UDF(T_yql_##udfName, T##udfName##KernelExec::Do)
 
-#define IS_ASCII_UDF(function)                                                           \
+#define IS_ASCII_UDF(function)                                                          \
     BEGIN_SIMPLE_STRICT_ARROW_UDF(T##function, bool(TOptional<char*>)) {                \
         Y_UNUSED(valueBuilder);                                                         \
         if (args[0]) {                                                                  \
@@ -493,24 +506,6 @@ namespace {
         return AsciiToUpper(a) == AsciiToUpper(b);
     }
 
-    BEGIN_SIMPLE_STRICT_ARROW_UDF_OPTIONS(TAsciiContainsIgnoreCase, bool(TOptional<char*>, char*),
-        builder.SetMinLangVer(NYql::MakeLangVersion(2025, 2)))
-    {
-        Y_UNUSED(valueBuilder);
-        if (!args[0]) {
-            return TUnboxedValuePod(false);
-        }
-
-        const TString haystack(args[0].AsStringRef());
-        const TString needle(args[1].AsStringRef());
-        if (haystack.empty()) {
-            return TUnboxedValuePod(needle.empty());
-        }
-        const auto found = std::search(haystack.cbegin(), haystack.cend(),
-                                       needle.cbegin(), needle.cend(), IgnoreCaseComparator);
-        return TUnboxedValuePod(found != haystack.cend());
-    }
-
     struct TAsciiContainsIgnoreCaseKernelExec
         : public TBinaryKernelExec<TAsciiContainsIgnoreCaseKernelExec>
     {
@@ -531,8 +526,37 @@ namespace {
         }
     };
 
+    TUnboxedValuePod AsciiContainsIgnoreCaseImpl(const TUnboxedValuePod* args) {
+        if (!args[0]) {
+            return TUnboxedValuePod(false);
+        }
+
+        const TString haystack(args[0].AsStringRef());
+        const TString needle(args[1].AsStringRef());
+        if (haystack.empty()) {
+            return TUnboxedValuePod(needle.empty());
+        }
+        const auto found = std::search(haystack.cbegin(), haystack.cend(),
+                                       needle.cbegin(), needle.cend(), IgnoreCaseComparator);
+        return TUnboxedValuePod(found != haystack.cend());
+    }
+
+    BEGIN_SIMPLE_STRICT_ARROW_UDF_OPTIONS(TAsciiContainsIgnoreCase, bool(TOptional<char*>, char*),
+        builder.SetMinLangVer(NYql::MakeLangVersion(2025, 2)))
+    {
+        Y_UNUSED(valueBuilder);
+        return AsciiContainsIgnoreCaseImpl(args);
+    }
+
     END_SIMPLE_ARROW_UDF(TAsciiContainsIgnoreCase, TAsciiContainsIgnoreCaseKernelExec::Do);
 
+    BEGIN_SIMPLE_STRICT_ARROW_UDF(T_yql_AsciiContainsIgnoreCase, bool(TOptional<char*>, char*))
+    {
+        Y_UNUSED(valueBuilder);
+        return AsciiContainsIgnoreCaseImpl(args);
+    }
+
+    END_SIMPLE_ARROW_UDF(T_yql_AsciiContainsIgnoreCase, TAsciiContainsIgnoreCaseKernelExec::Do);
 
     BEGIN_SIMPLE_STRICT_ARROW_UDF(TReplaceAll, char*(TAutoMap<char*>, char*, char*)) {
         if (TString result(args[0].AsStringRef()); SubstGlobal(result, args[1].AsStringRef(), args[2].AsStringRef()))
@@ -958,6 +982,7 @@ namespace {
     }
 
 #define STRING_REGISTER_UDF(udfName, ...) T##udfName,
+#define STRING_OPT_REGISTER_UDF(udfName, ...) T_yql_##udfName,
 
     STRING_UDF_MAP(STRING_UDF)
     STRING_UNSAFE_UDF_MAP(STRING_UNSAFE_UDF)
@@ -984,6 +1009,7 @@ namespace {
         STROKA_FIND_UDF_MAP(STRING_REGISTER_UDF)
         STRING_TWO_ARGS_UDF_MAP_DEPRECATED_2025_02(STRING_REGISTER_UDF)
         STRING_ASCII_CMP_IGNORE_CASE_UDF_MAP(STRING_REGISTER_UDF)
+        STRING_ASCII_CMP_IGNORE_CASE_UDF_MAP(STRING_OPT_REGISTER_UDF)
         IS_ASCII_UDF_MAP(STRING_REGISTER_UDF)
         STRING_STREAM_PAD_FORMATTER_UDF_MAP(STRING_REGISTER_UDF)
         STRING_STREAM_NUM_FORMATTER_UDF_MAP(STRING_REGISTER_UDF)
@@ -998,6 +1024,7 @@ namespace {
         TRemoveLast,
         TContains,
         TAsciiContainsIgnoreCase,
+        T_yql_AsciiContainsIgnoreCase,
         TFind,
         TReverseFind,
         TSubstring,

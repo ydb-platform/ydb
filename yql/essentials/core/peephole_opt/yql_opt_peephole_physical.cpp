@@ -22,6 +22,7 @@
 #include <yql/essentials/utils/yql_paths.h>
 
 #include <util/generic/xrange.h>
+#include <util/string/ascii.h>
 
 #include <library/cpp/svnversion/svnversion.h>
 #include <library/cpp/yson/writer.h>
@@ -8355,6 +8356,101 @@ TExprNode::TPtr ExpandSqlCompare(const TExprNode::TPtr& node, TExprContext& ctx)
     }
 
     return node;
+}
+
+TExprNode::TPtr ExpandContainsIgnoreCase(const TExprNode::TPtr& node, TExprContext& ctx) {
+    YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << node->Content();
+    const auto pos = node->Pos();
+    const TString part{node->Child(1)->Child(0)->Content()};
+    if (node->Child(0)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Null) {
+        return MakeBool<false>(pos, ctx);
+    }
+
+    if (AllOf(part, IsAscii)) {
+        TString func = "String._yql_";
+        if (node->Content() == "EqualsIgnoreCase") {
+            func += "AsciiEqualsIgnoreCase";
+        } else if (node->Content() == "StartsWithIgnoreCase") {
+            func += "AsciiStartsWithIgnoreCase";
+        } else if (node->Content() == "EndsWithIgnoreCase") {
+            func += "AsciiEndsWithIgnoreCase";
+        } else if (node->Content() == "StringContainsIgnoreCase") {
+            func += "AsciiContainsIgnoreCase";
+        } else {
+            YQL_ENSURE(!"Unknown IngoreCase node");
+        }
+
+        return ctx.Builder(pos)
+            .Callable("Apply")
+                .Callable(0, "Udf")
+                    .Atom(0, func)
+                .Seal()
+                .Add(1, node->ChildPtr(0))
+                .Callable(2, "String")
+                    .Atom(0, part)
+                .Seal()
+            .Seal()
+        .Build();
+    }
+
+    TString pattern;
+    if (node->Content() == "EqualsIgnoreCase") {
+        pattern = part;
+    } else if (node->Content() == "StartsWithIgnoreCase") {
+        pattern = part + "%";
+    } else if (node->Content() == "EndsWithIgnoreCase") {
+        pattern = "%" + part;
+    } else if (node->Content() == "StringContainsIgnoreCase") {
+        pattern = "%" + part + "%";
+    } else {
+        YQL_ENSURE(!"Unknown IngoreCase node");
+    }
+    auto patternExpr = ctx.Builder(pos)
+        .Callable("Apply")
+            .Callable(0, "Udf")
+                .Atom(0, "Re2.PatternFromLike")
+            .Seal()
+            .Callable(1, node->Child(1)->Content())
+                .Atom(0, pattern)
+            .Seal()
+        .Seal()
+    .Build();
+
+
+    auto optionsExpr = ctx.Builder(pos)
+        .Callable("NamedApply")
+            .Callable(0, "Udf")
+                .Atom(0, "Re2.Options")
+            .Seal()
+            .List(1)
+            .Seal()
+            .Callable(2, "AsStruct")
+                .List(0)
+                    .Atom(0, "CaseSensitive")
+                    .Callable(1, "Bool")
+                        .Atom(0, "false", TNodeFlags::Default)
+                    .Seal()
+                .Seal()
+            .Seal()
+        .Seal()
+    .Build();
+
+    auto result = ctx.Builder(pos)
+        .Callable("Apply")
+            .Callable(0, "AssumeStrict")
+                .Callable(0, "Udf")
+                    .Atom(0, "Re2.Match")
+                    .List(1)
+                        .Add(0, patternExpr)
+                        .Add(1, optionsExpr)
+                    .Seal()
+                .Seal()
+            .Seal()
+            .Add(1, node->Child(0))
+        .Seal()
+    .Build();
+
+    return result;
 }
 
 template <bool Equals>

@@ -234,7 +234,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> LockPropose(
     modifyScheme.MutableLockConfig()->SetName(path.LeafName());
     modifyScheme.MutableLockConfig()->SetLockTxId(ui64(buildInfo.LockTxId));
 
-    LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, 
+    LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX,
         "LockPropose " << buildInfo.Id << " " << buildInfo.State << " " << propose->Record.ShortDebugString());
 
     return propose;
@@ -261,7 +261,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateIndexPropose(
         Y_ENSURE(false, "Unknown operation kind while building CreateIndexPropose");
     }
 
-    LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, 
+    LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX,
         "CreateIndexPropose " << buildInfo.Id << " " << buildInfo.State << " " << propose->Record.ShortDebugString());
 
     return propose;
@@ -289,7 +289,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> DropBuildPropose(
     modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpDropTable);
     modifyScheme.MutableDrop()->SetName(path->Name);
 
-    LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, 
+    LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX,
         "DropBuildPropose " << buildInfo.Id << " " << buildInfo.State << " " << propose->Record.ShortDebugString());
 
     return propose;
@@ -351,7 +351,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildPropose(
         policy.SetMinPartitionsCount(32768);
         policy.SetMaxPartitionsCount(0);
 
-        LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, 
+        LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX,
             "CreateBuildPropose " << buildInfo.Id << " " << buildInfo.State << " " << propose->Record.ShortDebugString());
 
         return propose;
@@ -376,7 +376,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildPropose(
         policy.SetMaxPartitionsCount(0);
     }
 
-    LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, 
+    LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX,
         "CreateBuildPropose " << buildInfo.Id << " " << buildInfo.State << " " << propose->Record.ShortDebugString());
 
     return propose;
@@ -424,7 +424,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> AlterMainTablePropose(
 
     }
 
-    LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, 
+    LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX,
         "AlterMainTablePropose " << buildInfo.Id << " " << buildInfo.State << " " << propose->Record.ShortDebugString());
 
     return propose;
@@ -452,7 +452,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> ApplyPropose(
     indexBuild.SetSnapshotTxId(ui64(buildInfo.InitiateTxId));
     indexBuild.SetBuildIndexId(ui64(buildInfo.Id));
 
-    LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, 
+    LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX,
         "ApplyPropose " << buildInfo.Id << " " << buildInfo.State << " " << propose->Record.ShortDebugString());
 
     return propose;
@@ -475,7 +475,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> UnlockPropose(
     auto& lockConfig = *modifyScheme.MutableLockConfig();
     lockConfig.SetName(path.LeafName());
 
-    LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, 
+    LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX,
         "UnlockPropose " << buildInfo.Id << " " << buildInfo.State << " " << propose->Record.ShortDebugString());
 
     return propose;
@@ -499,7 +499,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CancelPropose(
     indexBuild.SetSnapshotTxId(ui64(buildInfo.InitiateTxId));
     indexBuild.SetBuildIndexId(ui64(buildInfo.Id));
 
-    LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, 
+    LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX,
         "CancelPropose " << buildInfo.Id << " " << buildInfo.State << " " << propose->Record.ShortDebugString());
 
     return propose;
@@ -772,7 +772,7 @@ private:
         buildInfo.DoneShards = {};
         buildInfo.InProgressShards = {};
         buildInfo.ToUploadShards = {};
-        
+
         ToTabletSend.clear();
         Self->IndexBuildPipes.CloseAll(BuildId, ctx);
     }
@@ -848,13 +848,13 @@ private:
 
     bool FillSecondaryIndex(TIndexBuildInfo& buildInfo) {
         LOG_D("FillSecondaryIndex Start");
-        
+
         if (NoShardsAdded(buildInfo)) {
             AddAllShards(buildInfo);
         }
         auto done = SendToShards(buildInfo, [&](TShardIdx shardIdx) { SendBuildSecondaryIndexRequest(shardIdx, buildInfo); }) &&
                buildInfo.DoneShards.size() == buildInfo.Shards.size();
-        
+
         if (done) {
             LOG_D("FillSecondaryIndex Done");
         }
@@ -926,7 +926,7 @@ private:
         );
     }
 
-    bool FillPrefixedVectorIndex(TTransactionContext& txc, TIndexBuildInfo& buildInfo) {        
+    bool FillPrefixedVectorIndex(TTransactionContext& txc, TIndexBuildInfo& buildInfo) {
         LOG_D("FillPrefixedVectorIndex Start " << buildInfo.DebugString());
 
         if (buildInfo.KMeans.Level == 1) {
@@ -1542,7 +1542,7 @@ public:
         LOG_N("TTxReply : PipeRetry, id# " << BuildId
             << ", shardId# " << ShardId
             << ", shardIdx# " << shardIdx);
-        
+
         const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(BuildId);
         if (!buildInfoPtr) {
             return true;
@@ -1601,7 +1601,7 @@ public:
         if (!buildInfoPtr) {
             return true;
         }
-        
+
         auto& buildInfo = *buildInfoPtr->Get();
         LOG_D("TTxReply : " << TypeName<TEvResponse>()
             << ", TIndexBuildInfo: " << buildInfo

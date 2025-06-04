@@ -84,6 +84,21 @@ struct TReadState {
     ui64 LastSeqNo = 0;
 };
 
+void UpdateContinuationData(const NKikimrTxDataShard::TEvReadResult& record, TReadState& state) {
+    YQL_ENSURE(record.HasContinuationToken(), "Successful TEvReadResult should contain continuation token");
+    NKikimrTxDataShard::TReadContinuationToken continuationToken;
+    bool parseResult = continuationToken.ParseFromString(record.GetContinuationToken());
+    YQL_ENSURE(parseResult, "Failed to parse continuation token");
+    state.FirstUnprocessedQuery = continuationToken.GetFirstUnprocessedQuery();
+
+    if (continuationToken.HasLastProcessedKey()) {
+        TSerializedCellVec lastKey(continuationToken.GetLastProcessedKey());
+        state.LastProcessedKey = TOwnedCellVec(lastKey.GetCells());
+    } else {
+        state.LastProcessedKey.Clear();
+    }
+}
+
 }  // !namespace
 
 TKqpStreamLookupWorker::TKqpStreamLookupWorker(TLookupSettings&& settings,
@@ -285,18 +300,7 @@ public:
         YQL_ENSURE(it != ReadStateByReadId.end());
 
         if (!record.GetFinished()) {
-            YQL_ENSURE(record.HasContinuationToken(), "Successful TEvReadResult should contain continuation token");
-            NKikimrTxDataShard::TReadContinuationToken continuationToken;
-            bool parseResult = continuationToken.ParseFromString(record.GetContinuationToken());
-            YQL_ENSURE(parseResult, "Failed to parse continuation token");
-            it->second.FirstUnprocessedQuery = continuationToken.GetFirstUnprocessedQuery();
-
-            if (continuationToken.HasLastProcessedKey()) {
-                TSerializedCellVec lastKey(continuationToken.GetLastProcessedKey());
-                it->second.LastProcessedKey = TOwnedCellVec(lastKey.GetCells());
-            } else {
-                it->second.LastProcessedKey.Clear();
-            }
+            UpdateContinuationData(record, it->second);
         }
 
         ReadResults.emplace_back(std::move(result));
@@ -771,18 +775,7 @@ public:
 
             ReadStateByReadId.erase(pendingKeysIt);
         } else {
-            YQL_ENSURE(record.HasContinuationToken(), "Successful TEvReadResult should contain continuation token");
-            NKikimrTxDataShard::TReadContinuationToken continuationToken;
-            bool parseResult = continuationToken.ParseFromString(record.GetContinuationToken());
-            YQL_ENSURE(parseResult, "Failed to parse continuation token");
-            pendingKeysIt->second.FirstUnprocessedQuery = continuationToken.GetFirstUnprocessedQuery();
-
-            if (continuationToken.HasLastProcessedKey()) {
-                TSerializedCellVec lastKey(continuationToken.GetLastProcessedKey());
-                pendingKeysIt->second.LastProcessedKey = TOwnedCellVec(lastKey.GetCells());
-            } else {
-                pendingKeysIt->second.LastProcessedKey.Clear();
-            }
+            UpdateContinuationData(record, pendingKeysIt->second);
         }
     }
 

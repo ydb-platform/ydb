@@ -38,7 +38,7 @@ def main():
     args = parser.parse_args()
 
     if args.extract and (args.exclude or args.prefix):
-        raise Exception(f"Illegal usage: {" ".join(args)}\n{_usage()}")
+        raise Exception(f"Illegal usage: {' '.join(args)}\n{_usage()}")
 
     tar = args.archive
     directory = args.directory

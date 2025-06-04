@@ -390,6 +390,9 @@ namespace NKikimr::NStorage {
             hFunc(TEvBlobStorage::TEvControllerValidateConfigResponse, Handle);
             hFunc(TEvBlobStorage::TEvControllerProposeConfigResponse, Handle);
             hFunc(TEvBlobStorage::TEvControllerConsoleCommitResponse, Handle);
+            hFunc(TEvNodeWardenUpdateCache, Handle);
+            hFunc(TEvNodeWardenQueryCache, Handle);
+            hFunc(TEvNodeWardenUnsubscribeFromCache, Handle);
         )
         for (ui32 nodeId : std::exchange(UnsubscribeQueue, {})) {
             UnsubscribeInterconnect(nodeId);

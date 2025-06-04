@@ -10,7 +10,7 @@ SHOW CREATE [TABLE|VIEW] <name>;
 
 ## Parameters
 
-* `TABLE|VIEW` — The object type: `TABLE` for a table or `VIEW` for a view.
+* `TABLE|VIEW` — The object type. Valid values are `TABLE` or `VIEW`.
 * `<name>` — The object name. An absolute path may also be specified.
 
 ## Result

@@ -20,6 +20,7 @@ void TSharedInfo::Pull(std::vector<std::unique_ptr<TPoolInfo>> &pools, const ISh
     for (i16 poolId = 0; poolId < PoolCount; ++poolId) {
         CpuConsumption[poolId].Elapsed = 0;
         CpuConsumption[poolId].Cpu = 0;
+        CpuConsumption[poolId].CpuQuota = 0;
     }
 
     for (i16 threadId = 0; threadId < ThreadCount; ++threadId) {

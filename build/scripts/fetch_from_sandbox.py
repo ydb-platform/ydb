@@ -215,10 +215,7 @@ def fetch(resource_id, custom_fetcher):
             time.sleep(i)
     else:
         if exc_info:
-            if sys.version_info[0] == 2:
-                raise exc_info[0], exc_info[1], exc_info[2]
-            else:
-                raise exc_info[1].with_traceback(exc_info[2])
+            raise exc_info[1].with_traceback(exc_info[2])
         else:
             raise Exception("No available protocol and/or server to fetch resource")
 

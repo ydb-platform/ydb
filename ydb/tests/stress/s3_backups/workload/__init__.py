@@ -13,13 +13,14 @@ from typing import Any, Dict, List, Optional
 
 from ydb.tests.stress.common.common import WorkloadBase
 
+
 class WorkloadS3Export(WorkloadBase):
     def __init__(self, client, endpoint, stop, s3_settings):
         super().__init__(client, "", "s3_export", stop)
         self.lock = threading.Lock()
         self.s3_settings = s3_settings
         self.endpoint = endpoint
-        self.limit = 10 # limit on the number of exports for a database
+        self.limit = 10  # limit on the number of exports for a database
         self.in_progress = []
         # Statistics
         self._export_stats = {
@@ -27,11 +28,11 @@ class WorkloadS3Export(WorkloadBase):
             "PROGRESS_CANCELLED": 0,
             "PROGRESS_UNSPECIFIED": 0,
         }
-    
+
     def get_stat(self):
         with self.lock:
             export_stats_str = ", ".join(
-                f"exports{ k[8:].lower() }={v}" if k.startswith("PROGRESS_") else f"exports_{k.lower()}={v}"
+                f"exports{k[8:].lower()}={v}" if k.startswith("PROGRESS_") else f"exports_{k.lower()}={v}"
                 for k, v in self._export_stats.items()
             )
             return export_stats_str
@@ -129,7 +130,7 @@ class WorkloadS3Export(WorkloadBase):
             "%s" % export_id,
         ]
         yatest.common.execute(operation_forget_command, wait=True, stdout=sys.stdout, stderr=sys.stderr)
-    
+
     def _export_is_completed(self, export_id):
         operation_get_command = [
             yatest.common.binary_path(os.getenv("YDB_CLI_BINARY")),
@@ -194,9 +195,10 @@ class WorkloadS3Export(WorkloadBase):
             self._setup_topics()
             self._insert_rows()
             self._export_to_s3()
-    
+
     def get_workload_thread_funcs(self):
         return [self._loop]
+
 
 class WorkloadRunner:
     def __init__(self, client, endpoint, duration):

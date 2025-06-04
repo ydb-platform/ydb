@@ -40,7 +40,7 @@ class WorkloadVectorIndex(WorkloadBase):
         }
 
     def _get_random_vector(self, type, size):
-        logger.info(type)
+        logger.info(f"random vector type: {type}")
         if type == "float":
             values = [round(random.uniform(-100, 100), 2) for _ in range(size)]
             return ",".join(f'{val}f' for val in values)
@@ -225,7 +225,6 @@ class WorkloadVectorIndex(WorkloadBase):
         logger.info('check was completed successfully')
 
     def _loop(self):
-        print("run")
         table_path = self.get_table_path(self.table_name)
         distance_data = ["cosine", "manhattan", "euclidean"]  # "cosine", "manhattan", "euclidean"
         similarity_data = ["cosine", "inner_product"]  # "inner_product", "cosine"
@@ -245,15 +244,6 @@ class WorkloadVectorIndex(WorkloadBase):
             random_distance = random.choice(distance_data)
             random_similarity = random.choice(similarity_data)
             logger.info(
-                f"""vector_type: {random_vector_type}
-                            vector_dimension: {random_vector_dimension}
-                            levels: {random_levels}
-                            clusters: {random_clusters}
-                            distance: {random_distance}
-                            similarity: {random_similarity}
-                        """
-            )
-            print(
                 f"""vector_type: {random_vector_type}
                             vector_dimension: {random_vector_dimension}
                             levels: {random_levels}

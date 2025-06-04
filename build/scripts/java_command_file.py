@@ -10,7 +10,7 @@ def _java_cmd_file_quote(s):
     if not any(char.isspace() for char in s):
         return s
 
-    return f'"{s.replace('\\', '\\\\')}"'
+    return f'"{s.replace("\\", "\\\\")}"'
 
 
 def call_java_with_command_file(cmd, wrapped_args, **kwargs):

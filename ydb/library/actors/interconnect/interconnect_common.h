@@ -15,6 +15,10 @@
 
 #include <atomic>
 
+namespace NInterconnect::NRdma {
+    class IMemPool;
+}
+
 namespace NActors {
     enum class EEncryptionMode {
         DISABLED, // no encryption is required at all
@@ -104,7 +108,7 @@ namespace NActors {
 
     using TUpdateWhiteboardCallback = std::function<void(const TWhiteboardSessionStatus& data)>;
 
-    struct TInterconnectProxyCommon : TAtomicRefCount<TInterconnectProxyCommon> {
+    struct TInterconnectProxyCommon : TAtomicRefCount<TInterconnectProxyCommon>, TNonCopyable {
         TActorId NameserviceId;
         NMonitoring::TDynamicCounterPtr MonCounters;
         std::shared_ptr<NMonitoring::IMetricRegistry> Metrics;
@@ -139,6 +143,8 @@ namespace NActors {
         std::optional<TString> CompatibilityInfo;
         std::function<bool(const TString&, TString&)> ValidateCompatibilityInfo;
         std::function<bool(const TInterconnectProxyCommon::TVersionInfo&, TString&)> ValidateCompatibilityOldFormat;
+
+        std::shared_ptr<NInterconnect::NRdma::IMemPool> RdmaMemPool;
 
         using TPtr = TIntrusivePtr<TInterconnectProxyCommon>;
     };

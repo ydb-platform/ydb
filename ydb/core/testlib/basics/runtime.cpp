@@ -3,6 +3,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/mind/dynamic_nameserver.h>
 #include <ydb/library/actors/dnsresolver/dnsresolver.h>
+#include <ydb/library/actors/interconnect/rdma/mem_pool.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
 #include <ydb/library/actors/interconnect/interconnect_tcp_server.h>
 #include <util/generic/xrange.h>

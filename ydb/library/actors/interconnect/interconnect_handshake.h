@@ -25,6 +25,6 @@ namespace NActors {
                                          const TActorId& peer, ui32 nodeId, ui64 nextPacket, TString peerHostName,
                                          TSessionParams params);
 
-    IActor* CreateIncomingHandshakeActor(TInterconnectProxyCommon::TPtr common, TSocketPtr socket, NInterconnect::NRdma::TRdmaCtx* rdmaCtx);
+    IActor* CreateIncomingHandshakeActor(TInterconnectProxyCommon::TPtr common, TSocketPtr socket);
 
 }

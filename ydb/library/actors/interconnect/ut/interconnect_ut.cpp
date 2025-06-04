@@ -174,4 +174,15 @@ Y_UNIT_TEST_SUITE(Interconnect) {
         }
     }
 
+    Y_UNIT_TEST(SetupRdmaSession) {
+        TTestICCluster cluster(2);
+        const TActorId recipient = cluster.RegisterActor(new TRecipientActor, 1);
+        cluster.RegisterActor(new TSenderActor(recipient), 2);
+
+        Sleep(TDuration::MilliSeconds(RandomNumber<ui32>(500) + 100));
+
+        //GetRdmaStatus(cluster, 1, 2);
+    }
+
+
 }

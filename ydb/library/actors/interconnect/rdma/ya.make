@@ -10,6 +10,7 @@ IF (OS_LINUX)
     SRCS(
         mem_pool.cpp
         ctx.cpp
+        rdma.cpp
         GLOBAL link_manager.cpp
     )
 ENDIF()

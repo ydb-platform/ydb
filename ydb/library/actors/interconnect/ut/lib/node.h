@@ -11,6 +11,7 @@
 #include <ydb/library/actors/interconnect/interconnect_tcp_server.h>
 #include <ydb/library/actors/interconnect/interconnect_tcp_proxy.h>
 #include <ydb/library/actors/interconnect/interconnect_proxy_wrapper.h>
+#include <ydb/library/actors/interconnect/rdma/mem_pool.h>
 
 using namespace NActors;
 
@@ -49,6 +50,7 @@ public:
         common->Settings.TCPSocketBufferSize = 2048 * 1024;
         common->Settings.SocketSendOptimization = sendOpt;
         common->OutgoingHandshakeInflightLimit = 3;
+        common->RdmaMemPool = NInterconnect::NRdma::CreateDummyMemPool();
 
         setup.Interconnect.ProxyActors.resize(numNodes + 1 - numDynamicNodes);
         setup.Interconnect.ProxyWrapperFactory = CreateProxyWrapperFactory(common, interconnectPoolId);

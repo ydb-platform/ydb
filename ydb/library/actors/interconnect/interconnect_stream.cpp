@@ -93,13 +93,24 @@ namespace NInterconnect {
     }
 
     std::variant<TAddress, int> TSocket::GetSockName() const {
-        struct sockaddr addr;
+        sockaddr_storage addr;
+        Zero(addr);
+
         socklen_t len = sizeof(addr);
-        memset(&addr, 0, len);
-        if (getsockname(Descriptor, &addr, &len) == -1) {
+
+        if (getsockname(Descriptor, (sockaddr*)&addr, &len) == -1) {
             return LastSocketError();
         }
-        return TAddress(addr);
+
+        if (addr.ss_family == AF_INET) {
+            sockaddr_in* addr_in = (sockaddr_in*)&addr;
+            return TAddress(addr_in->sin_addr, addr_in->sin_port);
+        } else if (addr.ss_family == AF_INET6) {
+            sockaddr_in6* addr_in6 = (sockaddr_in6*)&addr;
+            return TAddress(addr_in6->sin6_addr, addr_in6->sin6_port);
+        } else {
+            return EINVAL;
+        }
     }
 
     /////////////////////////////////////////////////////////////////

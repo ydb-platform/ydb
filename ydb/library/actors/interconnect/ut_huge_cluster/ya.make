@@ -7,6 +7,7 @@ IF (SANITIZER_TYPE OR WITH_VALGRIND)
         ram:32
     )
 ELSE()
+    TIMEOUT(300)
     SIZE(MEDIUM)
 ENDIF()
 

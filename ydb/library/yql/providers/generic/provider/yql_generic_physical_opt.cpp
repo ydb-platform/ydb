@@ -35,7 +35,9 @@ namespace NYql {
                     EFlag::TimestampCtor |
                     EFlag::StringTypes |
                     EFlag::LikeOperator |
-                    EFlag::JustPassthroughOperators // For REGEXP pushdown
+                    EFlag::JustPassthroughOperators | // To pushdown REGEXP over String column
+                    EFlag::FlatMapOverOptionals | // To pushdown REGEXP over Utf8 column
+                    EFlag::ToStringFromStringExpressions // To pushdown REGEXP over Utf8 column
                 );
                 EnableFunction("Re2.Grep");  // For REGEXP pushdown
             }

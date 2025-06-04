@@ -53,7 +53,7 @@ public:
     bool HasVersion() const;
     ui64 GetVersion() const;
     void AddChangefeed(const TChangefeedMetadata& changefeed);
-    const TMaybe<std::vector<TChangefeedMetadata>>& GetChangefeeds() const;
+    const std::optional<std::vector<TChangefeedMetadata>>& GetChangefeeds() const;
 
     TString Serialize() const;
     static TMetadata Deserialize(const TString& metadata);
@@ -61,7 +61,7 @@ private:
     TString ConsistencyKey;
     TMap<TVirtualTimestamp, TFullBackupMetadata::TPtr> FullBackups;
     TMap<TVirtualTimestamp, TLogMetadata::TPtr> Logs;
-    TMaybe<std::vector<TChangefeedMetadata>> Changefeeds;
+    std::optional<std::vector<TChangefeedMetadata>> Changefeeds;
     TMaybeFail<ui64> Version;
 };
 

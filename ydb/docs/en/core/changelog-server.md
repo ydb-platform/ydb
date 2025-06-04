@@ -4,7 +4,7 @@
 
 ### Version 24.4.4.12 {#24-4-4-12}
 
-Release date: May , 2025.
+Release date: June 3, 2025.
 
 ## Performance
 

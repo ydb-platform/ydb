@@ -20,6 +20,8 @@ protected:
     const TOpenIdConnectSettings Settings;
     const TString ProtectedPageUrl;
     TString RequestedPageScheme;
+    NHttp::THttpOutgoingResponsePtr StreamResponse;
+    NActors::TActorId StreamConnection;
 
     const static inline TStringBuf IAM_TOKEN_SCHEME = "Bearer ";
     const static inline TStringBuf IAM_TOKEN_SCHEME_LOWER = "bearer ";
@@ -33,6 +35,20 @@ public:
 
     virtual void Bootstrap(const NActors::TActorContext& ctx);
     void HandleProxy(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event);
+    void HandleIncompleteProxy(NHttp::TEvHttpProxy::TEvHttpIncompleteIncomingResponse::TPtr event);
+    void HandleDataChunk(NHttp::TEvHttpProxy::TEvHttpIncomingDataChunk::TPtr event);
+    void HandleUndelivered(NActors::TEvents::TEvUndelivered::TPtr event);
+    void HandleCancelled();
+
+    STFUNC(StateWork) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(NHttp::TEvHttpProxy::TEvHttpIncomingResponse, HandleProxy);
+            hFunc(NHttp::TEvHttpProxy::TEvHttpIncompleteIncomingResponse, HandleIncompleteProxy);
+            hFunc(NHttp::TEvHttpProxy::TEvHttpIncomingDataChunk, HandleDataChunk);
+            cFunc(NHttp::TEvHttpProxy::EvRequestCancelled, HandleCancelled);
+            hFunc(NActors::TEvents::TEvUndelivered, HandleUndelivered);
+        }
+    }
 
 protected:
     virtual void StartOidcProcess(const NActors::TActorContext& ctx) = 0;

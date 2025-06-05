@@ -90,10 +90,6 @@ public:
         static_cast<TDerived*>(this)->ExtraInitialize();
     }
 
-    ~TInputTransformStreamLookupCommonBase() override {
-        static_cast<TDerived *>(this)->Free();
-    }
-
 protected:
     virtual NUdf::EFetchStatus FetchWideInputValue(NUdf::TUnboxedValue* inputRowItems) = 0;
     virtual void PushOutputValue(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, NUdf::TUnboxedValue* outputRowItems) = 0;
@@ -262,6 +258,9 @@ class TInputTransformStreamLookupBase : public TInputTransformStreamLookupCommon
     friend TCommon;
 public:
     using TCommon::TCommon;
+    ~TInputTransformStreamLookupBase() override {
+        Free();
+    }
 
 private: //events
     STRICT_STFUNC(StateFunc,
@@ -335,8 +334,8 @@ private:
 
     void Free() {
         auto guard = BindAllocator();
-        TCommon::Free();
         decltype(AwaitingQueue){}.swap(AwaitingQueue);
+        TCommon::Free();
     }
 
     i64 GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, TMaybe<TInstant>&, bool& finished, i64 freeSpace) final {
@@ -471,6 +470,9 @@ class TInputTransformStreamMultiLookupBase : public TInputTransformStreamLookupC
 
 public:
     using TCommon::TCommon;
+    virtual ~TInputTransformStreamMultiLookupBase() override {
+        Free();
+    }
 
 private: //events
     STRICT_STFUNC(StateFunc,

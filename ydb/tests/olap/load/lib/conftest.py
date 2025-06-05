@@ -383,7 +383,8 @@ class LoadSuiteBase:
         end_time = time()
         allure_test_description(
             cls.suite(), query_name,
-            start_time=result.start_time, end_time=end_time, node_errors=cls.check_nodes(result, end_time)
+            start_time=result.start_time, end_time=end_time, node_errors=cls.check_nodes(result, end_time),
+            workload_result=result, workload_params=None
         )
         stats = result.get_stats(query_name)
         for p in ['Mean']:
@@ -564,11 +565,11 @@ class LoadSuiteBase:
                 node_error.was_oom = has_oom
                 node_errors.append(node_error)
                 
-                # Добавляем предупреждения в результат (не ошибки)
+                # Добавляем ошибки в результат (cores и OOM - это errors)
                 if has_cores:
-                    result.add_warning(f'Node {node.slot} has {len(node_error.core_hashes)} coredump(s)')
+                    result.add_error(f'Node {node.slot} has {len(node_error.core_hashes)} coredump(s)')
                 if has_oom:
-                    result.add_warning(f'Node {node.slot} experienced OOM')
+                    result.add_error(f'Node {node.slot} experienced OOM')
         
         cls.__nodes_state = None
         return node_errors
@@ -646,14 +647,30 @@ class LoadSuiteBase:
             result.add_stat(workload_name, "nodes_with_oom", 0)
             result.add_stat(workload_name, "nodes_with_coredumps", 0)
         
+        # Собираем параметры workload из статистики
+        stats = result.get_stats(workload_name)
+        workload_params = {}
+        
+        # Извлекаем полезные параметры из статистики
+        if stats.get('total_runs'):
+            workload_params['Total Runs'] = stats['total_runs']
+        if stats.get('planned_duration'):
+            workload_params['Planned Duration'] = f"{stats['planned_duration']}s"
+        if stats.get('use_chunks'):
+            workload_params['Use Chunks'] = 'Yes' if stats['use_chunks'] else 'No'
+        if stats.get('workload_type'):
+            workload_params['Workload Type'] = stats['workload_type']
+        if stats.get('table_type'):
+            workload_params['Table Type'] = stats['table_type']
+        if stats.get('path'):
+            workload_params['Path'] = stats['path']
+        
         # Добавляем информацию в allure отчет с node_errors
         allure_test_description(
             cls.suite(), workload_name,
-            start_time=result.start_time, end_time=end_time, node_errors=node_errors
+            start_time=result.start_time, end_time=end_time, node_errors=node_errors,
+            workload_result=result, workload_params=workload_params
         )
-        
-        # Обрабатываем статистику workload
-        stats = result.get_stats(workload_name)
         
         # Логируем статистику для отладки
         logging.info(f"Workload {workload_name} statistics: {json.dumps(stats, indent=2)}")

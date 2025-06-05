@@ -48,12 +48,12 @@ TAsyncExecuteQueryResult GetNewOrder(
         DECLARE $no_d_id AS Int32;
         DECLARE $no_w_id AS Int32;
 
-        SELECT NO_W_ID, NO_D_ID, NO_O_ID FROM `new_order`
+        SELECT NO_W_ID, NO_D_ID, NO_O_ID FROM `{}`
          WHERE NO_D_ID = $no_d_id
            AND NO_W_ID = $no_w_id
          ORDER BY NO_W_ID ASC, NO_D_ID ASC, NO_O_ID ASC
          LIMIT 1;
-    )", context.Path.c_str());
+    )", context.Path.c_str(), TABLE_NEW_ORDER);
 
     auto params = TParamsBuilder()
         .AddParam("$no_d_id").Int32(districtID).Build()
@@ -84,11 +84,11 @@ TAsyncExecuteQueryResult DeleteNewOrder(
         DECLARE $no_d_id AS Int32;
         DECLARE $no_w_id AS Int32;
 
-        DELETE FROM `new_order`
+        DELETE FROM `{}`
          WHERE NO_O_ID = $no_o_id
            AND NO_D_ID = $no_d_id
            AND NO_W_ID = $no_w_id;
-    )", context.Path.c_str());
+    )", context.Path.c_str(), TABLE_NEW_ORDER);
 
     auto params = TParamsBuilder()
         .AddParam("$no_o_id").Int32(orderID).Build()
@@ -120,11 +120,11 @@ TAsyncExecuteQueryResult GetCustomerID(
         DECLARE $o_w_id AS Int32;
 
         SELECT O_C_ID
-          FROM `oorder`
+          FROM `{}`
          WHERE O_ID = $o_id
            AND O_D_ID = $o_d_id
            AND O_W_ID = $o_w_id;
-    )", context.Path.c_str());
+    )", context.Path.c_str(), TABLE_OORDER);
 
     auto params = TParamsBuilder()
         .AddParam("$o_id").Int32(orderID).Build()
@@ -156,9 +156,9 @@ TAsyncExecuteQueryResult UpdateCarrierID(
         DECLARE $o_w_id AS Int32;
         DECLARE $o_carrier_id AS Int32;
 
-        UPSERT INTO `oorder` (O_W_ID, O_D_ID, O_ID, O_CARRIER_ID)
+        UPSERT INTO `{}` (O_W_ID, O_D_ID, O_ID, O_CARRIER_ID)
          VALUES ($o_w_id, $o_d_id, $o_id, $o_carrier_id);
-    )", context.Path.c_str());
+    )", context.Path.c_str(), TABLE_OORDER);
 
     auto params = TParamsBuilder()
         .AddParam("$o_w_id").Int32(warehouseID).Build()
@@ -188,8 +188,8 @@ TAsyncExecuteQueryResult UpdateDeliveryDate(
         $mapper = ($row) -> (AsStruct(
             $row.p1 as OL_W_ID, $row.p2 as OL_D_ID, $row.p3 as OL_O_ID,
             $row.p4 as OL_NUMBER, $row.p5 as OL_DELIVERY_D));
-        UPSERT INTO `order_line` SELECT * FROM as_table(ListMap($values, $mapper));
-    )", context.Path.c_str());
+        UPSERT INTO `{}` SELECT * FROM as_table(ListMap($values, $mapper));
+    )", context.Path.c_str(), TABLE_ORDER_LINE);
 
     auto paramsBuilder = TParamsBuilder();
     auto& listBuilder = paramsBuilder.AddParam("$values").BeginList();
@@ -229,11 +229,11 @@ TAsyncExecuteQueryResult GetOrderLines(
         DECLARE $ol_w_id AS Int32;
 
         SELECT OL_NUMBER, OL_AMOUNT
-          FROM `order_line`
+          FROM `{}`
          WHERE OL_O_ID = $ol_o_id
            AND OL_D_ID = $ol_d_id
            AND OL_W_ID = $ol_w_id;
-    )", context.Path.c_str());
+    )", context.Path.c_str(), TABLE_ORDER_LINE);
 
     auto params = TParamsBuilder()
         .AddParam("$ol_o_id").Int32(orderID).Build()
@@ -265,11 +265,11 @@ TAsyncExecuteQueryResult GetCustomerData(
         DECLARE $c_id AS Int32;
 
         SELECT C_BALANCE, C_DELIVERY_CNT
-          FROM `customer`
+          FROM `{}`
          WHERE C_W_ID = $c_w_id
            AND C_D_ID = $c_d_id
            AND C_ID = $c_id;
-    )", context.Path.c_str());
+    )", context.Path.c_str(), TABLE_CUSTOMER);
 
     auto params = TParamsBuilder()
         .AddParam("$c_w_id").Int32(warehouseID).Build()
@@ -302,9 +302,9 @@ TAsyncExecuteQueryResult UpdateCustomerBalanceAndDeliveryCount(
         DECLARE $c_balance AS Double;
         DECLARE $c_delivery_cnt AS Int32;
 
-        UPSERT INTO `customer` (C_W_ID, C_D_ID, C_ID, C_BALANCE, C_DELIVERY_CNT)
+        UPSERT INTO `{}` (C_W_ID, C_D_ID, C_ID, C_BALANCE, C_DELIVERY_CNT)
          VALUES ($c_w_id, $c_d_id, $c_id, $c_balance, $c_delivery_cnt);
-    )", context.Path.c_str());
+    )", context.Path.c_str(), TABLE_CUSTOMER);
 
     auto params = TParamsBuilder()
         .AddParam("$c_w_id").Int32(warehouseID).Build()
@@ -342,7 +342,8 @@ NThreading::TFuture<TStatus> GetDeliveryTask(
     const int warehouseID = context.WarehouseID;
     const int carrierID = RandomNumber(1, 10);
 
-    LOG_T("Terminal " << context.TerminalID << " started Delivery transaction in " << warehouseID);
+    LOG_T("Terminal " << context.TerminalID << " started Delivery transaction in " << warehouseID
+        << ", session: " << session.GetId());
 
     size_t processedOrderCount = 0;
     std::optional<TTransaction> tx;
@@ -356,9 +357,11 @@ NThreading::TFuture<TStatus> GetDeliveryTask(
         if (!newOrderResult.IsSuccess()) {
             if (ShouldExit(newOrderResult)) {
                 LOG_E("Terminal " << context.TerminalID << " new order query failed: "
-                    << newOrderResult.GetIssues().ToOneLineString());
+                    << newOrderResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
                 std::quick_exit(1);
             }
+            LOG_T("Terminal " << context.TerminalID << " new order query failed: "
+                << newOrderResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
             co_return newOrderResult;
         }
 
@@ -383,9 +386,11 @@ NThreading::TFuture<TStatus> GetDeliveryTask(
         if (!customerIdResult.IsSuccess()) {
             if (ShouldExit(customerIdResult)) {
                 LOG_E("Terminal " << context.TerminalID << " get customer ID failed: "
-                    << customerIdResult.GetIssues().ToOneLineString());
+                    << customerIdResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
                 std::quick_exit(1);
             }
+            LOG_T("Terminal " << context.TerminalID << " get customer ID failed: "
+                << customerIdResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
             co_return customerIdResult;
         }
 
@@ -403,9 +408,11 @@ NThreading::TFuture<TStatus> GetDeliveryTask(
         if (!customerDataResult.IsSuccess()) {
             if (ShouldExit(customerDataResult)) {
                 LOG_E("Terminal " << context.TerminalID << " get customer data failed: "
-                    << customerDataResult.GetIssues().ToOneLineString());
+                    << customerDataResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
                 std::quick_exit(1);
             }
+            LOG_T("Terminal " << context.TerminalID << " get customer data failed: "
+                << customerDataResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
             co_return customerDataResult;
         }
 
@@ -425,9 +432,11 @@ NThreading::TFuture<TStatus> GetDeliveryTask(
         if (!orderLinesResult.IsSuccess()) {
             if (ShouldExit(orderLinesResult)) {
                 LOG_E("Terminal " << context.TerminalID << " get order lines failed: "
-                    << orderLinesResult.GetIssues().ToOneLineString());
+                    << orderLinesResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
                 std::quick_exit(1);
             }
+            LOG_T("Terminal " << context.TerminalID << " get order lines failed: "
+                << orderLinesResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
             co_return orderLinesResult;
         }
 
@@ -463,9 +472,11 @@ NThreading::TFuture<TStatus> GetDeliveryTask(
         if (!deleteOrderResult.IsSuccess()) {
             if (ShouldExit(deleteOrderResult)) {
                 LOG_E("Terminal " << context.TerminalID << " delete order failed: "
-                    << deleteOrderResult.GetIssues().ToOneLineString());
+                    << deleteOrderResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
                 std::quick_exit(1);
             }
+            LOG_T("Terminal " << context.TerminalID << " delete order failed: "
+                << deleteOrderResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
             co_return deleteOrderResult;
         }
 
@@ -475,9 +486,11 @@ NThreading::TFuture<TStatus> GetDeliveryTask(
         if (!updateCarrierResult.IsSuccess()) {
             if (ShouldExit(updateCarrierResult)) {
                 LOG_E("Terminal " << context.TerminalID << " update carrier ID failed: "
-                    << updateCarrierResult.GetIssues().ToOneLineString());
+                    << updateCarrierResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
                 std::quick_exit(1);
             }
+            LOG_T("Terminal " << context.TerminalID << " update carrier ID failed: "
+                << updateCarrierResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
             co_return updateCarrierResult;
         }
 
@@ -489,9 +502,11 @@ NThreading::TFuture<TStatus> GetDeliveryTask(
         if (!updateDeliveryResult.IsSuccess()) {
             if (ShouldExit(updateDeliveryResult)) {
                 LOG_E("Terminal " << context.TerminalID << " update delivery date failed: "
-                    << updateDeliveryResult.GetIssues().ToOneLineString());
+                    << updateDeliveryResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
                 std::quick_exit(1);
             }
+            LOG_T("Terminal " << context.TerminalID << " update delivery date failed: "
+                << updateDeliveryResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
             co_return updateDeliveryResult;
         }
 
@@ -501,9 +516,11 @@ NThreading::TFuture<TStatus> GetDeliveryTask(
         if (!updateCustomerResult.IsSuccess()) {
             if (ShouldExit(updateCustomerResult)) {
                 LOG_E("Terminal " << context.TerminalID << " update customer failed: "
-                    << updateCustomerResult.GetIssues().ToOneLineString());
+                    << updateCustomerResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
                 std::quick_exit(1);
             }
+            LOG_T("Terminal " << context.TerminalID << " update customer failed: "
+                << updateCustomerResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
             co_return updateCustomerResult;
         }
 
@@ -512,7 +529,7 @@ NThreading::TFuture<TStatus> GetDeliveryTask(
     }
 
     LOG_T("Terminal " << context.TerminalID
-        << " is committing Delivery transaction, processed " << processedOrderCount << " districts");
+        << " is committing Delivery transaction, processed " << processedOrderCount << " districts, session: " << session.GetId());
 
     auto commitFuture = tx->Commit();
     auto commitResult = co_await TSuspendWithFuture(commitFuture, context.TaskQueue, context.TerminalID);

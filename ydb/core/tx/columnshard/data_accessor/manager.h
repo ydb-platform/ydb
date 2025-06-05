@@ -3,6 +3,7 @@
 #include "request.h"
 
 #include "abstract/collector.h"
+#include "ydb/core/protos/config.pb.h"
 
 #include <ydb/core/tx/columnshard/common/path_id.h>
 
@@ -213,6 +214,9 @@ public:
     explicit TLocalManager(const std::shared_ptr<IAccessorCallback>& callback)
         : TBase(NActors::TActorId())
         , AccessorCallback(callback) {
+        if (HasAppData()) {
+            TotalMemorySize = AppDataVerified().ColumnShardConfig.GetWritingInFlightRequestsCountLimit();
+        }
     }
 };
 

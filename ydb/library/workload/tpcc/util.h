@@ -27,7 +27,7 @@ inline int GetRandomCustomerID() {
 
 // Get an item ID according to TPC-C spec
 inline int GetRandomItemID() {
-    return NonUniformRandom(8191, OL_I_ID_C, 1, ITEMS_COUNT);
+    return NonUniformRandom(8191, OL_I_ID_C, 1, ITEM_COUNT);
 }
 
 constexpr const char* const NameTokens[] = {"BAR", "OUGHT", "ABLE", "PRI",

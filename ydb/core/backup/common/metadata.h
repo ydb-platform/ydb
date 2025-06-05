@@ -54,8 +54,10 @@ public:
     ui64 GetVersion() const;
     void AddChangefeed(const TChangefeedMetadata& changefeed);
     const std::optional<std::vector<TChangefeedMetadata>>& GetChangefeeds() const;
+
     void SetEnablePermissions(bool enablePermissions = true);
-    std::optional<bool> GetEnablePermissions() const;
+    bool HasEnablePermissions() const;
+    bool GetEnablePermissions() const;
 
     TString Serialize() const;
     static TMetadata Deserialize(const TString& metadata);

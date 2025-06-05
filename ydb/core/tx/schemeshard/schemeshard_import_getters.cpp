@@ -375,7 +375,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         if (NoObjectFound(result.GetError().GetErrorType())) {
             Y_ABORT_UNLESS(ItemIdx < ImportInfo->Items.size());
             auto& item = ImportInfo->Items.at(ItemIdx);
-            if (!item.Metadata.GetEnablePermissions()) {
+            if (!item.Metadata.HasEnablePermissions()) {
                 StartDownloadingChangefeeds(); // permissions are optional if we don't know if they were created during export
             } else {
                 return Reply(Ydb::StatusIds::BAD_REQUEST, "No permissions file found");
@@ -447,7 +447,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         if (item.Metadata.HasVersion() && item.Metadata.GetVersion() == 0) {
             NeedValidateChecksums = false;
         }
-        if (item.Metadata.GetEnablePermissions() && !*item.Metadata.GetEnablePermissions()) {
+        if (item.Metadata.HasEnablePermissions() && !item.Metadata.GetEnablePermissions()) {
             NeedDownloadPermissions = false;
         }
 

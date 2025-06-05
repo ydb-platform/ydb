@@ -38,8 +38,12 @@ void TMetadata::SetEnablePermissions(bool enablePermissions) {
     EnablePermissions = enablePermissions;
 }
 
-std::optional<bool> TMetadata::GetEnablePermissions() const {
-    return EnablePermissions;
+bool TMetadata::HasEnablePermissions() const {
+    return EnablePermissions.has_value();
+}
+
+bool TMetadata::GetEnablePermissions() const {
+    return *EnablePermissions;
 }
 
 TString TMetadata::Serialize() const {

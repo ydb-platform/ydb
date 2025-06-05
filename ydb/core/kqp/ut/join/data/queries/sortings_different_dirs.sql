@@ -3,5 +3,5 @@ PRAGMA ydb.CostBasedOptimizationLevel="1";
 
 select *
     from `/Root/bank_sub_document`
-order by desc document_id, blah
+order by document_id desc, blah
 limit 1000;

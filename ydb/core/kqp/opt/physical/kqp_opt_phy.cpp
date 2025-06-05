@@ -23,6 +23,8 @@ using namespace NYql::NNodes;
 
 using TStatus = IGraphTransformer::TStatus;
 
+auto IsSort = [](const TExprNode* node) { return TCoTopBase::Match(node) || TCoSort::Match(node); };
+
 class TKqpPhysicalOptTransformer : public TOptimizeTransformerBase {
 public:
     TKqpPhysicalOptTransformer(TTypeAnnotationContext& typesCtx, const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx)
@@ -39,7 +41,7 @@ public:
         AddHandler(0, &TKqlIndexLookupJoin::Match, HNDL(BuildStreamIdxLookupJoinStagesKeepSorted));
         AddHandler(0, &TKqlIndexLookupJoin::Match, HNDL(BuildStreamIdxLookupJoinStages));
         AddHandler(0, &TKqlSequencer::Match, HNDL(BuildSequencerStages));
-        AddHandler(0, [](auto) { return true; }, HNDL(RemoveRedundantSortByPk));
+        AddHandler(0, IsSort, HNDL(RemoveRedundantSortByPk));
         AddHandler(0, &TCoTake::Match, HNDL(ApplyLimitToReadTable));
         AddHandler(0, &TCoTopSort::Match, HNDL(ApplyLimitToOlapReadTable));
         AddHandler(0, &TCoFlatMap::Match, HNDL(PushOlapFilter));
@@ -55,7 +57,7 @@ public:
         AddHandler(0, &TCoFinalizeByKey::Match, HNDL(BuildFinalizeByKeyStage<false>));
         AddHandler(0, &TCoShuffleByKeys::Match, HNDL(BuildShuffleStage<false>));
         AddHandler(0, &TCoPartitionByKey::Match, HNDL(BuildPartitionStage<false>));
-        AddHandler(0, &TCoTopBase::Match, HNDL(BuildTopStageRemoveSort<false>));
+        AddHandler(0, IsSort, HNDL(BuildTopStageRemoveSort<false>));
         AddHandler(0, &TCoTop::Match, HNDL(BuildTopStage<false>));
         AddHandler(0, &TCoTopSort::Match, HNDL(BuildTopSortStage<false>));
         AddHandler(0, &TCoTakeBase::Match, HNDL(BuildTakeSkipStage<false>));
@@ -104,7 +106,7 @@ public:
         AddHandler(1, &TCoFinalizeByKey::Match, HNDL(BuildFinalizeByKeyStage<true>));
         AddHandler(1, &TCoShuffleByKeys::Match, HNDL(BuildShuffleStage<true>));
         AddHandler(1, &TCoPartitionByKey::Match, HNDL(BuildPartitionStage<true>));
-        AddHandler(1, &TCoTopBase::Match, HNDL(BuildTopStageRemoveSort<true>));
+        AddHandler(1, IsSort, HNDL(BuildTopStageRemoveSort<true>));
         AddHandler(1, &TCoTop::Match, HNDL(BuildTopStage<true>));
         AddHandler(1, &TCoTopSort::Match, HNDL(BuildTopSortStage<true>));
         AddHandler(1, &TCoTakeBase::Match, HNDL(BuildTakeSkipStage<true>));

@@ -145,19 +145,22 @@ TExprBase KqpBuildTopStageRemoveSort(
     bool allowStageMultiUsage,
     bool ruleEnabled
 ) {
-    YQL_CLOG(TRACE, CoreDq) << "Kal1" << Endl;
     if (!ruleEnabled) {
-        YQL_CLOG(TRACE, CoreDq) << "Kal123" << Endl;
         return node;
     }
 
-    if (!node.Maybe<TCoTopBase>().Input().Maybe<TDqCnUnionAll>()) {
-        YQL_CLOG(TRACE, CoreDq) << "kal23113" << Endl;
+    bool ok = node.Maybe<TCoTopBase>().Input().Maybe<TDqCnUnionAll>().IsValid();
+    bool cock = node.Maybe<TCoSort>().Input().Maybe<TDqCnUnionAll>().IsValid();
+    YQL_CLOG(TRACE, CoreDq) << "OKsperm: " << cock << " " << ok;
+
+    if (!node.Maybe<TCoTopBase>().Input().Maybe<TDqCnUnionAll>() && !node.Maybe<TCoSort>().Input().Maybe<TDqCnUnionAll>()) {
         return node;
     }
 
-    const auto top = node.Cast<TCoTopBase>();
-    const auto dqUnion = top.Input().Cast<TDqCnUnionAll>();
+    auto maybeSort = node.Maybe<TCoSort>();
+    auto maybeTopBase = node.Maybe<TCoTopBase>();
+
+    const auto dqUnion = maybeSort? maybeSort.Cast().Input().Cast<TDqCnUnionAll>(): maybeTopBase.Cast().Input().Cast<TDqCnUnionAll>();
 
     // skip this rule to activate KqpRemoveRedundantSortByPk later to reduce readings count
     auto stageBody = dqUnion.Output().Stage().Program().Body();
@@ -185,12 +188,12 @@ TExprBase KqpBuildTopStageRemoveSort(
 
     auto inputStats = typeCtx.GetStats(dqUnion.Output().Raw());
     if (!inputStats) {
-        YQL_CLOG(TRACE, CoreDq) << "No statistics for the TopBase, skip";
+        YQL_CLOG(TRACE, CoreDq) << "No statistics for the sort, skip";
         return node;
     }
 
-    auto topStats = typeCtx.GetStats(top.Raw());
-    if (!topStats) {
+    auto nodeStats = typeCtx.GetStats(node.Raw());
+    if (!nodeStats) {
         return node;
     }
 
@@ -198,7 +201,13 @@ TExprBase KqpBuildTopStageRemoveSort(
         return node;
     }
 
-    if (!CanPushDqExpr(top.Count(), dqUnion) || !CanPushDqExpr(top.KeySelectorLambda(), dqUnion)) {
+    const auto& keySelector = maybeSort? maybeSort.Cast().KeySelectorLambda() : maybeTopBase.Cast().KeySelectorLambda();
+
+    if (!CanPushDqExpr(keySelector, dqUnion)) {
+        return node;
+    }
+
+    if (maybeTopBase.IsValid() && !CanPushDqExpr(maybeTopBase.Cast().Count(), dqUnion)) {
         return node;
     }
 
@@ -206,13 +215,12 @@ TExprBase KqpBuildTopStageRemoveSort(
         return TExprBase(ctx.ChangeChild(*node.Raw(), TCoTop::idx_Input, std::move(connToPushableStage)));
     }
 
-    YQL_CLOG(TRACE, CoreDq) << "Statistics of the input of the top sort: " << inputStats->ToString();
-    YQL_CLOG(TRACE, CoreDq) << "Statistics of the top sort: " << topStats->ToString();
-    if (!inputStats->SortingOrderings.ContainsSorting(topStats->SortingOrderingIdx)) {
+    YQL_CLOG(TRACE, CoreDq) << "Statistics of the input of the sort: " << inputStats->ToString();
+    YQL_CLOG(TRACE, CoreDq) << "Statistics of the sort: " << nodeStats->ToString();
+    if (!inputStats->SortingOrderings.ContainsSorting(nodeStats->SortingOrderingIdx)) {
         return node;
     }
 
-    const auto& keySelector = top.KeySelectorLambda();
     TVector<TString> sortKeys;
     if (auto body = keySelector.Body().Maybe<TCoMember>()) {
         sortKeys.push_back(body.Cast().Name().StringValue());
@@ -237,6 +245,24 @@ TExprBase KqpBuildTopStageRemoveSort(
     }
     auto columnList = builder.Build().Value();
 
+    auto programBuilder =
+            Build<TCoLambda>(ctx, node.Pos())
+                .Args({"stream"});
+
+    if (maybeTopBase) {
+        programBuilder
+            .Body<TCoTake>()
+                .Input("stream")
+                .Count(maybeTopBase.Cast().Count())
+            .Build();
+    } else {
+        programBuilder
+            .Body("stream")
+            .Build();
+    }
+
+    auto program = programBuilder.Build().Value();
+
     return Build<TDqCnUnionAll>(ctx, node.Pos())
         .Output()
             .Stage<TDqStage>()
@@ -249,14 +275,8 @@ TExprBase KqpBuildTopStageRemoveSort(
                         .SortColumns(columnList)
                         .Build()
                     .Build()
-                .Program()
-                    .Args({"stream"})
-                    .Body<TCoTake>()
-                        .Input("stream")
-                        .Count(top.Count())
-                        .Build()
-                    .Build()
-                .Settings(NDq::TDqStageSettings::New().BuildNode(ctx, top.Pos()))
+                .Program(std::move(program))
+                .Settings(NDq::TDqStageSettings::New().BuildNode(ctx, node.Pos()))
                 .Build()
             .Index().Build(0U)
             .Build()

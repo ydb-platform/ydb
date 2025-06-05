@@ -388,11 +388,12 @@ private:
     {
         if (State == EState::SAMPLE) {
             State = EState::KMEANS;
-            if (!Clusters.InitAggregatedClusters(Sampler)) {
+            if (!Clusters.SetClusters(Sampler.Finish().second)) {
                 // We don't need to do anything,
                 // because this datashard doesn't have valid embeddings for this prefix
                 return true;
             }
+            Clusters.InitAggregatedClusters();
             return false; // do KMEANS
         }
 

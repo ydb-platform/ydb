@@ -100,12 +100,14 @@ struct TKikimrSettings: public TTestFeatureFlagsHolder<TKikimrSettings> {
         exchangerSettings->SetMaxDelayMs(10);
         AppConfig.MutableColumnShardConfig()->SetDisabledOnSchemeShard(false);
         AppConfig.MutableColumnShardConfig()->SetMaxInFlightIntervalsOnRequest(1);
+        AppConfig.MutableColumnShardConfig()->SetAlterObjectEnabled(true);
         FeatureFlags.SetEnableSparsedColumns(true);
         FeatureFlags.SetEnableWritePortionsOnInsert(true);
         FeatureFlags.SetEnableParameterizedDecimal(true);
         FeatureFlags.SetEnableTopicAutopartitioningForCDC(true);
         FeatureFlags.SetEnableFollowerStats(true);
         FeatureFlags.SetEnableColumnStore(true);
+        FeatureFlags.SetEnableDuplicateFilterInColumnShard(true);
     }
 
     TKikimrSettings& SetAppConfig(const NKikimrConfig::TAppConfig& value) { AppConfig = value; return *this; }

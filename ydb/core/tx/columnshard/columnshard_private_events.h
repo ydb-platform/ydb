@@ -71,6 +71,9 @@ struct TEvPrivate {
         EvMetadataAccessorsInfo,
 
         EvRequestFilter,
+        EvDuplicateFilterIntervalResult,
+        EvDuplicateFilterDataFetched,
+        EvConstructFilters,
         EvFilterConstructionResult,
 
         EvEnd

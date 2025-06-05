@@ -5,11 +5,9 @@
 namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering {
 
 TEvRequestFilter::TEvRequestFilter(const IDataSource& source, const std::shared_ptr<IFilterSubscriber>& subscriber)
-    : MinPK(source.GetMinPK())
-    , MaxPK(source.GetMaxPK())
-    , SourceId(source.GetSourceId())
-    , RecordsCount(source.GetRecordsCount())
+    : SourceId(source.GetSourceId())
     , MaxVersion(source.GetContext()->GetCommonContext()->GetReadMetadata()->GetRequestSnapshot())
+    , MemoryGroup(source.GetGroupGuard())
     , Subscriber(subscriber) {
 }
 

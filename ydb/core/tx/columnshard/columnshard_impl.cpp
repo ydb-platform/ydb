@@ -592,7 +592,9 @@ protected:
         }
         TxEvent->IndexChanges->Blobs = ExtractBlobsData();
         const bool isInsert = !!dynamic_pointer_cast<NOlap::TInsertColumnEngineChanges>(TxEvent->IndexChanges);
-        std::shared_ptr<NConveyor::ITask> task = std::make_shared<TChangesTask>(std::move(TxEvent), Counters, TabletId, ParentActorId, LastCompletedTx);
+        TxEvent->IndexChanges->SetStage(NOlap::NChanges::EStage::ReadyForStart);
+        std::shared_ptr<NConveyor::ITask> task =
+            std::make_shared<TChangesTask>(std::move(TxEvent), Counters, TabletId, ParentActorId, LastCompletedTx);
         if (isInsert) {
             NConveyor::TInsertServiceOperator::SendTaskToExecute(task);
         } else {
@@ -856,6 +858,7 @@ private:
     virtual void DoOnAllocationSuccess(const std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard>& guard) override {
         Subscriber->SetResourcesGuard(guard);
         Request->RegisterSubscriber(Subscriber);
+        ChangeTask->SetStage(NOlap::NChanges::EStage::AskAccessors);
         DataAccessorsManager->AskData(Request);
     }
 
@@ -879,6 +882,7 @@ protected:
         const TString externalTaskId = Changes->GetTaskIdentifier();
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "compaction")("external_task_id", externalTaskId);
 
+        Changes->SetStage(NOlap::NChanges::EStage::ReadBlobs);
         auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(VersionedIndex, Changes, CacheDataAfterWrite);
         TActorContext::AsActorContext().Register(new NOlap::NBlobOperations::NRead::TActor(
             std::make_shared<TCompactChangesReadTask>(std::move(ev), ShardActorId, ShardTabletId, Counters, SnapshotModification)));
@@ -898,7 +902,7 @@ void TColumnShard::StartCompaction(const std::shared_ptr<NPrioritiesQueue::TAllo
         return;
     }
 
-    auto compaction = dynamic_pointer_cast<NOlap::NCompaction::TGeneralCompactColumnEngineChanges>(indexChanges);
+    auto compaction = VerifyDynamicCast<NOlap::NCompaction::TGeneralCompactColumnEngineChanges>(indexChanges);
     compaction->SetActivityFlag(GetTabletActivity());
     compaction->SetQueueGuard(guard);
     compaction->Start(*this);
@@ -910,6 +914,7 @@ void TColumnShard::StartCompaction(const std::shared_ptr<NPrioritiesQueue::TAllo
     const auto subscriber = std::make_shared<TCompactionDataAccessorsSubscriber>(ResourceSubscribeActor, indexChanges, actualIndexInfo,
         Settings.CacheDataAfterCompaction, SelfId(), TabletID(), Counters.GetCompactionCounters(), GetLastCompletedTx(),
         CompactTaskSubscription);
+    compaction->SetStage(NOlap::NChanges::EStage::AskResources);
     NOlap::NResourceBroker::NSubscribe::ITask::StartResourceSubscription(
         ResourceSubscribeActor, std::make_shared<TAccessorsMemorySubscriber>(accessorsMemory, indexChanges->GetTaskIdentifier(),
                                     CompactTaskSubscription, std::move(request), subscriber, DataAccessorsManager.GetObjectPtrVerified()));

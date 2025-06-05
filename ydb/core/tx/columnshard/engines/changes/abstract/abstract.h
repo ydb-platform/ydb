@@ -249,12 +249,11 @@ public:
 
 class TColumnEngineChanges: public TMoveOnly {
 private:
-    NChanges::EStage Stage = NChanges::EStage::Created;
     std::shared_ptr<NDataLocks::TManager::TGuard> LockGuard;
     TString AbortedReason;
     const TString TaskIdentifier = TGUID::CreateTimebased().AsGuidString();
     std::shared_ptr<const TAtomicCounter> ActivityFlag;
-    std::shared_ptr<NChanges::TChangesCounters::TStageCounters> Counters;
+    std::shared_ptr<NChanges::TChangesCounters::TStageCountersGuard> Counters;
 
     void SetStage(const NChanges::EStage stage);
 
@@ -355,7 +354,6 @@ public:
     TColumnEngineChanges(const std::shared_ptr<IStoragesManager>& storagesManager, const NBlobOperations::EConsumer consumerId)
         : Counters(NChanges::TChangesCounters::GetStageCounters(consumerId))
         , BlobsAction(storagesManager, consumerId) {
-        Counters->OnStageChanged(Stage, 0);
     }
 
     TConclusionStatus ConstructBlobs(TConstructionContext& context) noexcept;

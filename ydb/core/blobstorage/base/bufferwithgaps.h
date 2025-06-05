@@ -48,6 +48,7 @@ namespace NKikimr {
         TBufferWithGaps(ui32 offset, TRcBuf&& data)
             : Data(data)
             , Offset(offset)
+            , IsCommited(false)
         {}
 
         TBufferWithGaps(ui32 offset, ui32 size, ui32 tailroom)

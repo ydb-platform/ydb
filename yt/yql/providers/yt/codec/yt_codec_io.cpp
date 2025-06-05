@@ -413,13 +413,18 @@ private:
             }
 
             try {
+                // Note: The Arrow format actually allows reading and writing uninitialized memory.
+                // This is permitted because any "meaningful" access to the data uses a validity bitmask,
+                // which indicates whether each byte is valid.
+                YQL_MSAN_FREEZE_AND_SCOPED_UNPOISON(firstBlock->Buffer_.Get(), firstBlock->LastRecordBoundary_.value_or(firstBlock->Avail_));
                 Target_.Write(firstBlock->Buffer_.Get(), firstBlock->LastRecordBoundary_.value_or(firstBlock->Avail_));
                 if (firstBlock->LastRecordBoundary_) {
                     if (OnRecordBoundaryCallback_) {
                         OnRecordBoundaryCallback_();
                     }
                     if (firstBlock->Avail_ > *firstBlock->LastRecordBoundary_) {
-                        Target_.Write(firstBlock->Buffer_.Get() + *firstBlock->LastRecordBoundary_, firstBlock->Avail_ - *firstBlock->LastRecordBoundary_);
+                        Target_.Write(firstBlock->Buffer_.Get() + *firstBlock->LastRecordBoundary_,
+                                      firstBlock->Avail_ - *firstBlock->LastRecordBoundary_);
                     }
                 }
 

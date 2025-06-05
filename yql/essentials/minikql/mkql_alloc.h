@@ -4,7 +4,7 @@
 #include "mkql_mem_info.h"
 
 #include <yql/essentials/core/pg_settings/guc_settings.h>
-#include <yql/essentials/minikql/asan_utils.h>
+#include <yql/essentials/public/udf/sanitizer_utils.h>
 #include <yql/essentials/parser/pg_wrapper/interface/context.h>
 #include <yql/essentials/public/udf/udf_allocator.h>
 #include <yql/essentials/public/udf/udf_value.h>
@@ -119,7 +119,7 @@ struct TAllocState : public TAlignedPagePool
     explicit TAllocState(const TSourceLocation& location, const TAlignedPagePoolCounters& counters, bool supportsSizedAllocators);
     void KillAllBoxed();
     void InvalidateMemInfo();
-    Y_NO_SANITIZE("address") size_t GetDeallocatedInPages() const;
+    Y_NO_SANITIZE("address") Y_NO_SANITIZE("memory") size_t GetDeallocatedInPages() const;
     static void CleanupPAllocList(TListEntry* root);
     static void CleanupArrowList(TListEntry* root);
 
@@ -298,9 +298,9 @@ public:
     }
 
     void* Alloc(size_t sz, const EMemorySubPool pagePool = EMemorySubPool::Default) {
-        sz = GetSizeToAlloc(sz);
+        sz = NYql::NUdf::GetSizeToAlloc(sz);
         void* mem = AllocImpl(sz, pagePool);
-        return WrapPointerWithRedZones(mem, sz);
+        return NYql::NUdf::WrapPointerWithRedZones(mem, sz);
     }
 
     void Clear() noexcept;
@@ -393,9 +393,9 @@ inline void* MKQLAllocFastWithSizeImpl(size_t sz, TAllocState* state, const EMem
 }
 
 inline void* MKQLAllocFastWithSize(size_t sz, TAllocState* state, const EMemorySubPool mPool, const TAllocLocation& location = TAllocLocation::current()) {
-    sz = GetSizeToAlloc(sz);
+    sz = NYql::NUdf::GetSizeToAlloc(sz);
     void* mem = MKQLAllocFastWithSizeImpl(sz, state, mPool, location);
-    return WrapPointerWithRedZones(mem, sz);
+    return NYql::NUdf::WrapPointerWithRedZones(mem, sz);
 }
 
 void MKQLFreeSlow(TAllocPageHeader* header, TAllocState *state, const EMemorySubPool mPool) noexcept;
@@ -463,8 +463,8 @@ inline void MKQLFreeFastWithSizeImpl(const void* mem, size_t sz, TAllocState* st
 }
 
 inline void MKQLFreeFastWithSize(const void* mem, size_t sz, TAllocState* state, const EMemorySubPool mPool) noexcept {
-    mem = UnwrapPointerWithRedZones(mem, sz);
-    sz = GetSizeToAlloc(sz);
+    mem = NYql::NUdf::UnwrapPointerWithRedZones(mem, sz);
+    sz = NYql::NUdf::GetSizeToAlloc(sz);
     return MKQLFreeFastWithSizeImpl(mem, sz, state, mPool);
 }
 
@@ -598,9 +598,9 @@ struct TMKQLHugeAllocator
 
     static pointer allocate(size_type n, const void* = nullptr)
     {
-        n = GetSizeToAlloc(n);
+        n = NYql::NUdf::GetSizeToAlloc(n);
         void* mem = allocateImpl(n);
-        return static_cast<pointer>(WrapPointerWithRedZones(mem, n));
+        return static_cast<pointer>(NYql::NUdf::WrapPointerWithRedZones(mem, n));
     }
 
     static void deallocateImpl(const_pointer p, size_type n) noexcept
@@ -611,8 +611,8 @@ struct TMKQLHugeAllocator
 
     static void deallocate(const_pointer p, size_type n) noexcept
     {
-        p = static_cast<const_pointer>(UnwrapPointerWithRedZones(p, n));
-        n = GetSizeToAlloc(n);
+        p = static_cast<const_pointer>(NYql::NUdf::UnwrapPointerWithRedZones(p, n));
+        n = NYql::NUdf::GetSizeToAlloc(n);
         return deallocateImpl(p, n);
     }
 };
@@ -647,7 +647,7 @@ public:
             return;
         }
 
-        auto ptr = SanitizerMarkValid(Pool.GetPage(), TAlignedPagePool::POOL_PAGE_SIZE);
+        auto ptr = NYql::NUdf::SanitizerMakeRegionAccessible(Pool.GetPage(), TAlignedPagePool::POOL_PAGE_SIZE);
         IndexInLastPage = 1;
         Pages.push_back(ptr);
         new(ptr) T(std::move(value));

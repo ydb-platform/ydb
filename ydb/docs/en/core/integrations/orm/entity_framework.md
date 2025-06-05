@@ -95,16 +95,19 @@ For more information on getting started with EF, consult the [getting started do
 
 The Entity Framework (EF) Core provider for {{ ydb-short-name }} has its own additional configuration parameters.
 
-### Connection ADO.NET to Yandex Cloud
+### Connection with Yandex Cloud
 
 You can find more information about different authentication methods for Yandex Cloud in the [ADO.NET documentation](../../reference/languages-and-apis/ado-net/yandex-cloud.md).
 
 Below is an example of how to specify the necessary parameters for connecting to Yandex Cloud using Entity Framework:
 
 ```c#
-.UseYdb(cmd.ConnectionString, builder =>
-{
-    builder.WithCredentialsProvider(saProvider);
-    builder.WithServerCertificates(YcCerts.GetYcServerCertificates());
-})
+.UseYdb(cmd.ConnectionString, builder => builder
+    .WithCredentialsProvider(saProvider)
+    .WithServerCertificates(YcCerts.GetYcServerCertificates())
+)
 ```
+
+## Examples
+
+[On Github](https://github.com/ydb-platform/ydb-dotnet-sdk/tree/main/examples)

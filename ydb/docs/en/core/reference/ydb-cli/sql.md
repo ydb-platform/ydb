@@ -66,7 +66,7 @@ Diagnostics are collected when statistics gathering is enabled `--stats full`, a
 
 **Examples:**
 
-Example command to collect diagnostics in the `diagnostics.json` file and check its contents:
+Сommand to collect diagnostics in the `diagnostics.json` file and check its contents:
 
 ```bash
 ydb -e <endpoint> -d <database> sql -s "SELECT * FROM users WHERE email = 'alice@example.com';" --stats full --diagnostics-file diagnostics.json

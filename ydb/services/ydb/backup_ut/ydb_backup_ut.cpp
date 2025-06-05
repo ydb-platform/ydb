@@ -295,6 +295,19 @@ auto CreateHasSerialChecker(i64 nextValue, bool nextUsed) {
     };
 }
 
+auto CreateReadReplicasSettingsChecker(const NYdb::NTable::TReadReplicasSettings::EMode expectedMode, const ui64 expectedCount, const TString& debugHint = "") {
+    return [=](const TTableDescription& tableDescription) {
+        UNIT_ASSERT_C(tableDescription.GetReadReplicasSettings(), debugHint);
+        UNIT_ASSERT_C(tableDescription.GetReadReplicasSettings()->GetMode() == expectedMode, debugHint);
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            tableDescription.GetReadReplicasSettings()->GetReadReplicasCount(),
+            expectedCount,
+            debugHint
+        );
+        return true;
+    };
+}
+
 void CheckTableDescription(TSession& session, const TString& path, auto&& checker,
     const TDescribeTableSettings& settings = {}
 ) {
@@ -444,6 +457,52 @@ void TestIndexTablePartitioningSettingsArePreserved(
 
     restore();
     CheckTableDescription(session, indexTablePath, CreateMinPartitionsChecker(minIndexPartitions, DEBUG_HINT));
+}
+
+void TestIndexTableReadReplicasSettingsArePreserved(
+    const char* table, const char* index, NYdb::NTable::TReadReplicasSettings::EMode readReplicasMode, const ui64 readReplicasCount, TSession& session,
+    TBackupFunction&& backup, TRestoreFunction&& restore
+) {
+    const TString indexTablePath = JoinFsPaths(table, index, "indexImplTable");
+    TString readReplicasModeAsString;
+    switch (readReplicasMode) {
+        case NYdb::NTable::TReadReplicasSettings::EMode::PerAz:
+            readReplicasModeAsString = "PER_AZ";
+            break;
+        case NYdb::NTable::TReadReplicasSettings::EMode::AnyAz:
+            readReplicasModeAsString = "ANY_AZ";
+            break;
+        default:
+            UNIT_FAIL(TString::Join("Unsupported readReplicasMode"));
+    }
+
+    ExecuteDataDefinitionQuery(session, Sprintf(R"(
+            CREATE TABLE `%s` (
+                Key Uint32,
+                Value Uint32,
+                PRIMARY KEY (Key),
+                INDEX %s GLOBAL ON (Value)
+            );
+        )",
+        table, index
+    ));
+    ExecuteDataDefinitionQuery(session, Sprintf(R"(
+            ALTER TABLE `%s` ALTER INDEX %s SET (
+                READ_REPLICAS_SETTINGS = "%s:%)" PRIu64 R"("
+            );
+        )", table, index, readReplicasModeAsString.c_str(), readReplicasCount
+    ));
+    CheckTableDescription(session, indexTablePath, CreateReadReplicasSettingsChecker(readReplicasMode, readReplicasCount, DEBUG_HINT));
+
+    backup();
+
+    ExecuteDataDefinitionQuery(session, Sprintf(R"(
+            DROP TABLE `%s`;
+        )", table
+    ));
+
+    restore();
+    CheckTableDescription(session, indexTablePath, CreateReadReplicasSettingsChecker(readReplicasMode, readReplicasCount, DEBUG_HINT));
 }
 
 void TestTableSplitBoundariesArePreserved(
@@ -1253,6 +1312,30 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         );
     }
 
+    Y_UNIT_TEST(RestoreIndexTableReadReplicasSettings) {
+        TKikimrWithGrpcAndRootSchema server;
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())));
+        TTableClient tableClient(driver);
+        auto session = tableClient.GetSession().ExtractValueSync().GetSession();
+        TTempDir tempDir;
+        const auto& pathToBackup = tempDir.Path();
+
+        constexpr const char* table = "/Root/table";
+        constexpr const char* index = "byValue";
+        constexpr auto readReplicasMode = NYdb::NTable::TReadReplicasSettings::EMode::PerAz;
+        constexpr ui64 readReplicasCount = 1;
+
+        TestIndexTableReadReplicasSettingsArePreserved(
+            table,
+            index,
+            readReplicasMode,
+            readReplicasCount,
+            session,
+            CreateBackupLambda(driver, pathToBackup),
+            CreateRestoreLambda(driver, pathToBackup)
+        );
+    }
+
     Y_UNIT_TEST(RestoreTableSplitBoundaries) {
         TKikimrWithGrpcAndRootSchema server;
         auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())));
@@ -2048,6 +2131,24 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             table,
             index,
             minIndexPartitions,
+            testEnv.GetTableSession(),
+            CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port()),
+            CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), { "table" })
+        );
+    }
+
+    Y_UNIT_TEST(RestoreIndexTableReadReplicasSettings) {
+        TS3TestEnv testEnv;
+        constexpr const char* table = "/Root/table";
+        constexpr const char* index = "byValue";
+        constexpr auto readReplicasMode = NYdb::NTable::TReadReplicasSettings::EMode::PerAz;
+        constexpr ui64 readReplicasCount = 1;
+
+        TestIndexTableReadReplicasSettingsArePreserved(
+            table,
+            index,
+            readReplicasMode,
+            readReplicasCount,
             testEnv.GetTableSession(),
             CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port()),
             CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), { "table" })

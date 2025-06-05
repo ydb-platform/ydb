@@ -58,6 +58,7 @@ message GlobalIndexSettings {
     }
     // Partitioning settings for the table that implements the index.
     PartitioningSettings partitioning_settings = 3;
+    ReadReplicasSettings read_replicas_settings = 4;
 }
 
 message VectorIndexSettings {

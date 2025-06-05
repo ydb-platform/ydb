@@ -12,6 +12,7 @@ Y_UNIT_TEST_SUITE(GroupSizeInUnits) {
         TActorId edge = env.Runtime->AllocateEdgeActor(nodeId);
 
         auto request = std::make_unique<NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateRequest>();
+        request->Record.AddFieldsRequired(-1);
         env.Runtime->Send(new IEventHandle(whiteboardId, edge, request.release()), nodeId);
 
         auto response = env.WaitForEdgeActorEvent<NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateResponse>(
@@ -35,6 +36,7 @@ Y_UNIT_TEST_SUITE(GroupSizeInUnits) {
         TActorId edge = env.Runtime->AllocateEdgeActor(nodeId);
 
         auto request = std::make_unique<NNodeWhiteboard::TEvWhiteboard::TEvBSGroupStateRequest>();
+        request->Record.AddFieldsRequired(-1);
         env.Runtime->Send(new IEventHandle(whiteboardId, edge, request.release()), nodeId);
 
         auto response = env.WaitForEdgeActorEvent<NNodeWhiteboard::TEvWhiteboard::TEvBSGroupStateResponse>(

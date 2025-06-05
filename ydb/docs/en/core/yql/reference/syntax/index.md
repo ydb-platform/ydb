@@ -98,3 +98,9 @@
 
 {% endif %}
 
+{% if feature_serial %}
+
+* [ALTER SEQUENCE](alter-sequence.md)
+
+{% endif %}
+

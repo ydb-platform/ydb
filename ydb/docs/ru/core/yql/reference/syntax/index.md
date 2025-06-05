@@ -105,3 +105,9 @@
 * [DROP ASYNC REPLICATION](drop-async-replication.md)
 
 {% endif %}
+
+{% if feature_serial %}
+
+* [ALTER SEQUENCE](alter-sequence.md)
+
+{% endif %}

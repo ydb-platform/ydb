@@ -1,8 +1,14 @@
 #include <library/cpp/getopt/last_getopt.h>
+
+#include <ydb/library/yql/dq/runtime/dq_tasks_runner.h>
 #include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
+#include <yql/essentials/minikql/mkql_alloc.h>
+
 #include <util/generic/scope.h>
 #include <util/stream/file.h>
 #include <util/system/file.h>
+
+using namespace NYql::NDq;
 
 int main(int argc, char** argv) {
     TString inputFile;
@@ -110,13 +116,75 @@ int main(int argc, char** argv) {
 
         if (runMode) {
             if (verbose) {
-                *logStream << "NOTE: Full task runner execution is not implemented in this minimal version" << Endl;
-                *logStream << "This version only validates task structure and protobuf compatibility" << Endl;
+                *logStream << "Starting task runner preparation and execution..." << Endl;
             }
-        }
 
-        Cout << "SUCCESS: Task is compatible (structural validation passed)" << Endl;
-        return 0;
+            // Create task runner context
+            TDqTaskRunnerContext context;
+            context.TypeEnv = nullptr; // Will be created by task runner
+            context.FuncRegistry = nullptr; // Will be created by task runner
+            context.RandomProvider = nullptr; // Will be created by task runner
+            context.TimeProvider = nullptr; // Will be created by task runner
+
+            // Create task runner settings
+            TDqTaskRunnerSettings settings;
+            settings.StatsMode = NYql::NDqProto::DQ_STATS_MODE_BASIC;
+            settings.OptLLVM = "OFF"; // Disable LLVM optimization for compatibility testing
+
+            // Create memory limits
+            TDqTaskRunnerMemoryLimits memoryLimits;
+            memoryLimits.ChannelBufferSize = 1024 * 1024; // 1MB
+            memoryLimits.OutputChunkMaxSize = 1024 * 1024; // 1MB
+            memoryLimits.ChunkSizeLimit = 1024 * 1024; // 1MB
+
+            // Create execution context
+            TDqTaskRunnerExecutionContextDefault execContext;
+
+            // Create task runner
+            auto alloc = std::make_shared<NKikimr::NMiniKQL::TScopedAlloc>(TSourceLocation(__FILE__, __LINE__));
+            auto taskRunner = MakeDqTaskRunner(alloc, context, settings, [&logStream, verbose](const TString& msg) {
+                if (verbose) {
+                    *logStream << "[DQ_TASK_RUNNER]: " << msg << Endl;
+                }
+            });
+
+            // Prepare task runner
+            TDqTaskSettings taskSettings(&protoTask);
+            taskRunner->Prepare(taskSettings, memoryLimits, execContext);
+
+            if (verbose) {
+                *logStream << "Task prepared successfully" << Endl;
+            }
+
+            // Run task
+            int runCount = 0;
+            const int maxRunCount = 1000; // Safety limit
+            auto status = taskRunner->Run();
+            
+            while ((status == ERunStatus::PendingInput || status == ERunStatus::PendingOutput) && runCount < maxRunCount) {
+                status = taskRunner->Run();
+                runCount++;
+                if (verbose && runCount % 100 == 0) {
+                    *logStream << "Run iteration: " << runCount << ", status: " << (int)status << Endl;
+                }
+            }
+
+            if (runCount >= maxRunCount) {
+                Cerr << "FAILED: Task did not finish within " << maxRunCount << " iterations (potential infinite loop)" << Endl;
+                return 1;
+            }
+
+            if (status == ERunStatus::Finished) {
+                Cout << "SUCCESS: Task completed successfully (full execution)" << Endl;
+                return 0;
+            } else {
+                Cerr << "FAILED: Task failed with status: " << (int)status << Endl;
+                return 1;
+            }
+        } else {
+            Cout << "SUCCESS: Task is compatible (structural validation passed)" << Endl;
+            return 0;
+        }
 
     } catch (const std::exception& e) {
         Cerr << "ERROR: " << e.what() << Endl;

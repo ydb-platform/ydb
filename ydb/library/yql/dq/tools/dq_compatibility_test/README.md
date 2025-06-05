@@ -1,6 +1,6 @@
 # DQ Compatibility Test Tool
 
-Утилита для тестирования совместимости бинарных запросов YDB между разными версиями.
+Утилита для тестирования совместимости бинарных запросов YDB между разными версиями с полноценным task runner.
 
 ## Сборка
 
@@ -9,7 +9,7 @@ ya make tools/dq_compatibility_test
 ```
 
 Будут собраны две утилиты:
-- `dq_compatibility_test/dq_compatibility_test` - основная утилита с полноценным task runner
+- `dq_compatibility_test/main/main` - основная утилита с полноценным task runner (prepare + run)
 - `dq_compatibility_test/serializer/dq_task_serializer` - утилита для создания тестовых сериализованных задач
 
 ## Использование
@@ -28,29 +28,29 @@ ya make tools/dq_compatibility_test
 
 ```bash
 # Базовая проверка (только парсинг и валидация)
-./tools/dq_compatibility_test/dq_compatibility_test -i test_task.bin -v
+./tools/dq_compatibility_test/main/main -i test_task.bin -v
 
-# Полная проверка с выполнением task runner
-./tools/dq_compatibility_test/dq_compatibility_test -i test_task.bin -r -v
+# Полная проверка с выполнением task runner (prepare + run)
+./tools/dq_compatibility_test/main/main -i test_task.bin -r -v
 ```
 
 ### 3. Логирование
 
 ```bash
 # Записать логи в файл
-./tools/dq_compatibility_test/dq_compatibility_test -i test_task.bin -r -v -l compatibility.log
+./tools/dq_compatibility_test/main/main -i test_task.bin -r -v -l compatibility.log
 ```
 
 ## Флаги
 
-### dq_compatibility_test
+### main/main (основная утилита)
 
 - `-i, --input FILE` - входной файл с сериализованной задачей (обязательно)
 - `-l, --log FILE` - файл для записи логов (опционально)
 - `-v, --verbose` - подробный вывод
-- `-r, --run` - выполнить задачу через task runner (не только валидировать)
+- `-r, --run` - выполнить задачу через task runner (prepare + run)
 
-### dq_task_serializer
+### serializer/dq_task_serializer
 
 - `-o, --output FILE` - выходной файл для сериализованной задачи (обязательно)
 - `-p, --program DATA` - данные программы (опционально, по умолчанию тестовые данные)
@@ -69,12 +69,8 @@ ya make tools/dq_compatibility_test
 
 2. На версии YDB B:
 ```bash
-./tools/dq_compatibility_test/dq_compatibility_test -i task_version_A.bin -r -v
+./tools/dq_compatibility_test/main/main -i task_version_A.bin -r -v
 ```
-
-### Сценарий 2: Интеграция в существующий код
-
-Используйте функции из `integration_example.cpp` для сохранения реальных задач из вашего кода YDB.
 
 ## Возможные результаты
 
@@ -92,13 +88,18 @@ ya make tools/dq_compatibility_test
 
 1. **Парсинг**: Читает и парсит protobuf сообщение TDqTask
 2. **Валидация**: Проверяет базовую структуру задачи
-3. **Создание контекста**: Инициализирует TDqTaskRunnerContext и настройки
-4. **Prepare**: Вызывает taskRunner->Prepare() для подготовки задачи
-5. **Run**: Выполняет задачу через taskRunner->Run() в цикле до завершения
+3. **Создание контекста**: Инициализирует TDqTaskRunnerContext и настройки (при -r)
+4. **Prepare**: Вызывает taskRunner->Prepare() для подготовки задачи (при -r)
+5. **Run**: Выполняет задачу через taskRunner->Run() в цикле до завершения (при -r)
 
-## Примечания
+## Технические детали
 
-- Утилита отключает LLVM оптимизации для максимальной совместимости
-- Используется базовый режим статистики
-- Есть защита от бесконечных циклов (максимум 1000 итераций)
-- При возникновении ошибок компиляции из-за проблем с override в MiniKQL, используйте флаги `-w` для подавления предупреждений 
+- Полная интеграция с TDqTaskRunner
+- Использует TDqTaskRunnerContext, TDqTaskRunnerSettings, TDqTaskRunnerMemoryLimits
+- Реализует TDqTaskRunnerExecutionContextDefault для контекста выполнения
+- Создает TScopedAlloc с правильным source location
+- Обрабатывает ERunStatus состояния (Finished, PendingInput, PendingOutput)
+- Лимиты памяти: 1MB для буферов и чанков
+- Режим базовой статистики включен
+- LLVM оптимизации отключены для максимальной совместимости
+- Защита от бесконечных циклов (максимум 1000 итераций) 

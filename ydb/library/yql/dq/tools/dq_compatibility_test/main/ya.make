@@ -16,6 +16,7 @@ CXXFLAGS(
 )
 
 PEERDIR(
+    ydb/library/yql/dq/runtime
     ydb/library/yql/dq/proto
     library/cpp/getopt
     util

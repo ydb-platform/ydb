@@ -548,7 +548,7 @@ public:
                 [[fallthrough]];
             default: {
                 TStringStream ss;
-                ss << "Failed to read from df# " << shardId << ", status# " << statusCode;
+                ss << "Failed to read from ds# " << shardId << ", status# " << statusCode;
                 if (statusCode != Ydb::StatusIds::OVERLOADED) {
                     statusCode = Ydb::StatusIds::ABORTED;
                 }
@@ -727,13 +727,15 @@ public:
     }
 
     void CancelReads() {
+        // it's ok to send cancel requests for shards that were already processed, they will ignore them
         for (const auto& [shardId, v] : ShardIdToReadState) {
             auto request = std::make_unique<TEvDataShard::TEvReadCancel>();
             auto& record = request->Record;
             record.SetReadId(shardId);
-            LOG_ERROR_S(TlsActivationContext->AsActorContext(), NKikimrServices::RPC_REQUEST, "TReadRowsRPC CancelReads shardId: " << shardId);
             Send(PipeCache, new TEvPipeCache::TEvForward(request.release(), shardId, true), IEventHandle::FlagTrackDelivery, 0, Span.GetTraceId());
         }
+
+        LOG_WARN_S(TlsActivationContext->AsActorContext(), NKikimrServices::RPC_REQUEST, "TReadRowsRPC CancelReads");
     }
 
     void HandleTimeout(TEvents::TEvWakeup::TPtr&) {
@@ -757,11 +759,11 @@ public:
     }
 
     void Handle(TEvents::TEvUndelivered::TPtr&) {
-        ReplyWithError(Ydb::StatusIds::INTERNAL_ERROR, "Internal error: pipe cache is not available, the cluster might not be configured properly");
+        return ReplyWithError(Ydb::StatusIds::INTERNAL_ERROR, "Internal error: pipe cache is not available, the cluster might not be configured properly");
     }
 
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr &ev) {
-        ReplyWithError(Ydb::StatusIds::UNAVAILABLE, TStringBuilder() << "Failed to connect to shard " << ev->Get()->TabletId);
+        return ReplyWithError(Ydb::StatusIds::UNAVAILABLE, TStringBuilder() << "Failed to connect to shard " << ev->Get()->TabletId);
     }
 
     void PassAway() override {

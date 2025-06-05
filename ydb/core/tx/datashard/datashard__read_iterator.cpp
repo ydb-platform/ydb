@@ -3436,8 +3436,7 @@ void TDataShard::Handle(TEvDataShard::TEvReadCancel::TPtr& ev, const TActorConte
     }
     DeleteReadIterator(it);
 
-    LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD, TabletID()
-        << " Cancelled read: " << readId << " scanId " << state.ScanId);
+    LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD, TabletID() << " Cancelled read: " << readId);
 }
 
 void TDataShard::Handle(TEvDataShard::TEvReadScanStarted::TPtr& ev) {

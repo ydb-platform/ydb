@@ -90,10 +90,6 @@ public:
         static_cast<TDerived*>(this)->ExtraInitialize();
     }
 
-    ~TInputTransformStreamLookupCommonBase() override {
-        static_cast<TDerived *>(this)->Free();
-    }
-
 protected:
     virtual NUdf::EFetchStatus FetchWideInputValue(NUdf::TUnboxedValue* inputRowItems) = 0;
     virtual void PushOutputValue(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, NUdf::TUnboxedValue* outputRowItems) = 0;
@@ -262,6 +258,9 @@ class TInputTransformStreamLookupBase : public TInputTransformStreamLookupCommon
     friend TCommon;
 public:
     using TCommon::TCommon;
+    ~TInputTransformStreamLookupBase() override {
+        Free();
+    }
 
 private: //events
     STRICT_STFUNC(StateFunc,
@@ -335,8 +334,8 @@ private:
 
     void Free() {
         auto guard = BindAllocator();
-        TCommon::Free();
         decltype(AwaitingQueue){}.swap(AwaitingQueue);
+        TCommon::Free();
     }
 
     i64 GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, TMaybe<TInstant>&, bool& finished, i64 freeSpace) final {
@@ -471,10 +470,9 @@ class TInputTransformStreamMultiLookupBase : public TInputTransformStreamLookupC
 
 public:
     using TCommon::TCommon;
-
-protected:
-    virtual NUdf::EFetchStatus FetchWideInputValue(NUdf::TUnboxedValue* inputRowItems) = 0;
-    virtual void PushOutputValue(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, NUdf::TUnboxedValue* outputRowItems) = 0;
+    virtual ~TInputTransformStreamMultiLookupBase() override {
+        Free();
+    }
 
 private: //events
     STRICT_STFUNC(StateFunc,
@@ -491,7 +489,8 @@ private: //events
         const auto now = std::chrono::steady_clock::now();
         auto lookupResult = ev->Get()->Result.lock();
         Y_ABORT_UNLESS(lookupResult == KeysForLookup);
-        for (; !AwaitingQueue.empty(); AwaitingQueue.pop_front()) {
+        const size_t limit = LastRequestedIncomplete ? 1 : 0; // Incomplete part requires special processing
+        for (; AwaitingQueue.size() > limit; AwaitingQueue.pop_front()) {
             auto& output = AwaitingQueue.front();
             for (auto& [subKey, subIndex] : output.MissingKeysAndIndexes) {
                 auto lookupPayload = lookupResult->find(subKey);
@@ -501,6 +500,28 @@ private: //events
                 FillOutputRow(output.OutputListItems, subIndex, lookupPayload->first, lookupPayload->second);
             }
             ReadyQueue.PushRow(output.OutputRowItems, OutputRowType->GetElementsCount());
+        }
+        if (LastRequestedIncomplete) {
+            Y_DEBUG_ABORT_UNLESS(AwaitingQueue.size() == 1);
+            auto& output = AwaitingQueue.front();
+            Y_DEBUG_ABORT_UNLESS(LastRequestedIncomplete->ProcessedPosition < LastRequestedIncomplete->RequestedPosition);
+            Y_DEBUG_ABORT_UNLESS(LastRequestedIncomplete->RequestedPosition <= output.MissingKeysAndIndexes.size());
+            for (; LastRequestedIncomplete->ProcessedPosition < LastRequestedIncomplete->RequestedPosition; ++LastRequestedIncomplete->ProcessedPosition) {
+                auto& [subKey, subIndex] = output.MissingKeysAndIndexes[LastRequestedIncomplete->ProcessedPosition];
+                if (subIndex == UINT32_MAX) { // index already filled from LRU
+                    continue;
+                }
+                auto lookupPayload = lookupResult->find(subKey);
+                if (lookupPayload == lookupResult->end()) {
+                    continue;
+                }
+                FillOutputRow(output.OutputListItems, subIndex, lookupPayload->first, lookupPayload->second);
+            }
+            if (LastRequestedIncomplete->ProcessedPosition == output.MissingKeysAndIndexes.size()) {
+                ReadyQueue.PushRow(output.OutputRowItems, OutputRowType->GetElementsCount());
+                AwaitingQueue.pop_front();
+                LastRequestedIncomplete.reset();
+            }
         }
         for (auto&& [k, v]: *lookupResult) {
             LruCache->Update(NUdf::TUnboxedValue(const_cast<NUdf::TUnboxedValue&&>(k)), std::move(v), now + CacheTtl);
@@ -547,10 +568,53 @@ public:
         Y_UNUSED(freeSpace);
         auto startCycleCount = GetCycleCountFast();
         auto guard = BindAllocator();
+        ui32 hits = 0;
+        ui32 miss = 0;
 
+        const bool keysForLookupWasEmpty = GetKeysForLookup()->empty();
+        // Some List may exceed MaxKeysInRequest and requires special processing
+        if (LastRequestedIncomplete && keysForLookupWasEmpty) {
+            // Request more keys from Incomplete state
+            const auto now = std::chrono::steady_clock::now();
+            Y_DEBUG_ABORT_UNLESS(AwaitingQueue.size() == 1);
+            auto& output = AwaitingQueue.front();
+            for (; LastRequestedIncomplete->RequestedPosition < output.MissingKeysAndIndexes.size(); ++LastRequestedIncomplete->RequestedPosition) {
+                auto& [subKey, subIndex] = output.MissingKeysAndIndexes[LastRequestedIncomplete->RequestedPosition];
+                if (auto lookupPayload = LruCache->Get(subKey, now)) {
+                    // key was just added to LRU in previous round of Incomplete
+                    FillOutputRow(output.OutputListItems, subIndex, subKey, *lookupPayload);
+                    subKey = {};
+                    subIndex = UINT32_MAX; // mark as replaced
+                    ++hits;
+                } else if (KeysForLookup->size() < MaxKeysInRequest) {
+                    auto [it, inserted] = KeysForLookup->emplace(std::move(subKey), NUdf::TUnboxedValue{});
+                    subKey = it->first; // deduplicate
+                    if (inserted) {
+                        ++miss;
+                    } else {
+                        ++hits;
+                    }
+                } else {
+                    if (auto it = KeysForLookup->find(subKey); it != KeysForLookup->end()) {
+                        // skip until key not in pending lookup
+                        subKey = it->first; // deduplicate
+                        ++hits;
+                        continue;
+                    }
+                    // key must be requested, but will exceed MaxKeysInRequest
+                    break;
+                }
+            }
+            if (KeysForLookup->empty()) {
+                const auto outputColumns = OutputRowType->GetElementsCount();
+                ReadyQueue.PushRow(output.OutputRowItems, outputColumns);
+                AwaitingQueue.pop_front();
+                LastRequestedIncomplete.reset();
+            }
+        }
         DrainReadyQueue(batch);
 
-        if (InputFlowFetchStatus != NUdf::EFetchStatus::Finish && GetKeysForLookup()->empty()) {
+        if (InputFlowFetchStatus != NUdf::EFetchStatus::Finish && keysForLookupWasEmpty && !LastRequestedIncomplete) {
             Y_DEBUG_ABORT_UNLESS(AwaitingQueue.empty());
             NUdf::TUnboxedValue* inputRowItems;
             NUdf::TUnboxedValue inputRow = HolderFactory.CreateDirectArrayHolder(InputRowType->GetElementsCount(), inputRowItems);
@@ -600,11 +664,38 @@ public:
 
                     if (nullsInSubKey) {
                         // do nothing, right side is nulls
+                        ++hits;
                     } else if (auto lookupPayload = LruCache->Get(subKey, now)) {
+                        // found key in LRU
                         FillOutputRow(output.OutputListItems, subKeyIdx, subKey, *lookupPayload);
-                    } else {
+                        ++hits;
+                    } else if (KeysForLookup->size() < MaxKeysInRequest) {
+                        // we can add key to KeysForLookup
+                        auto [it, inserted] = KeysForLookup->emplace(std::move(subKey), NUdf::TUnboxedValue{});
                         output.MissingKeysAndIndexes.emplace_back(
-                                KeysForLookup->emplace(std::move(subKey), NUdf::TUnboxedValue{}).first->first,
+                                it->first, // deduplicated
+                                subKeyIdx);
+                        if (inserted) {
+                            ++miss;
+                        } else {
+                            ++hits;
+                        }
+                    } else {
+                        if (auto it = KeysForLookup->find(subKey); it != KeysForLookup->end()) {
+                            subKey = it->first; // deduplicate
+                            if (!LastRequestedIncomplete) {
+                                // delay Incomplete transition until first key not in KeysForLookup
+                                ++hits;
+                            }
+                        } else if (!LastRequestedIncomplete) {
+                            LastRequestedIncomplete.emplace(
+                                TIncompleteState {
+                                    .RequestedPosition = static_cast<ui32>(output.MissingKeysAndIndexes.size()),
+                                    .ProcessedPosition = 0,
+                                });
+                        }
+                        output.MissingKeysAndIndexes.emplace_back(
+                                std::move(subKey),
                                 subKeyIdx);
                     }
                 }
@@ -621,18 +712,18 @@ public:
             }
             if (Batches && (!KeysForLookup->empty() || ReadyQueue.RowCount())) {
                 Batches->Inc();
-                LruHits->Add(ReadyQueue.RowCount());
-                LruMiss->Add(AwaitingQueue.size());
-            }
-            if (!KeysForLookup->empty()) {
-                Send(LookupSourceId, new IDqAsyncLookupSource::TEvLookupRequest(KeysForLookup));
             }
             DrainReadyQueue(batch);
+        }
+        if (keysForLookupWasEmpty && !KeysForLookup->empty()) {
+            Send(LookupSourceId, new IDqAsyncLookupSource::TEvLookupRequest(KeysForLookup));
         }
         auto deltaTime = GetCpuTimeDelta(startCycleCount);
         CpuTime += deltaTime;
         if (CpuTimeUs) {
             CpuTimeUs->Add(deltaTime.MicroSeconds());
+            LruHits->Add(hits);
+            LruMiss->Add(miss);
         }
         finished = IsFinished();
         if (batch.empty()) {
@@ -662,6 +753,10 @@ private:
         std::vector<std::pair<NUdf::TUnboxedValue, ui32>> MissingKeysAndIndexes;
     };
     using TAwaitingQueue = std::deque<TAwaitingRow, NKikimr::NMiniKQL::TMKQLAllocator<TAwaitingRow>>;
+    struct TIncompleteState {
+        ui32 RequestedPosition;
+        ui32 ProcessedPosition;
+    };
 
     void MakeOutputRow(NUdf::TUnboxedValue& lookupKey, NUdf::TUnboxedValue& inputOther, ui32 listLength, TAwaitingRow& output, bool nullsInKey) {
         NUdf::TUnboxedValue* outputRowItems;
@@ -732,6 +827,7 @@ private:
 
     TAwaitingQueue AwaitingQueue;
     ui32 RightOutputColumns;
+    std::optional<TIncompleteState> LastRequestedIncomplete;
 };
 
 class TInputTransformStreamMultiLookupWide: public TInputTransformStreamMultiLookupBase {

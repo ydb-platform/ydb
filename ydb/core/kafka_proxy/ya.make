@@ -9,6 +9,7 @@ SRCS(
     actors/kafka_sasl_handshake_actor.cpp
     actors/kafka_metrics_actor.cpp
     actors/kafka_list_offsets_actor.cpp
+    actors/kafka_list_groups_actor.cpp
     actors/kafka_topic_offsets_actor.cpp
     actors/kafka_fetch_actor.cpp
     actors/kafka_find_coordinator_actor.cpp

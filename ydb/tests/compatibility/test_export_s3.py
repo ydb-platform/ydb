@@ -18,18 +18,20 @@ class TestExportS3(MixedClusterFixture):
     def setup(self):
         output_path = yatest.common.test_output_path()
         self.output_f = open(os.path.join(output_path, "out.log"), "w")
-        
+
         self.s3_config = self.setup_s3()
         s3_endpoint, s3_access_key, s3_secret_key, s3_bucket = self.s3_config
-        self.settings = ExportToS3Settings()                \
-                            .with_endpoint(s3_endpoint)     \
-                            .with_access_key(s3_access_key) \
-                            .with_secret_key(s3_secret_key) \
-                            .with_bucket(s3_bucket)
+        self.settings = (
+            ExportToS3Settings()
+            .with_endpoint(s3_endpoint)
+            .with_access_key(s3_access_key)
+            .with_secret_key(s3_secret_key)
+            .with_bucket(s3_bucket)
+        )
 
         yield from self.setup_cluster(
             extra_feature_flags={
-                "enable_export_auto_dropping": True
+                # "enable_export_auto_dropping": True
             }
         )
 
@@ -84,12 +86,15 @@ class TestExportS3(MixedClusterFixture):
                     # Topics
                     topic_name = f"sample_topic_{num}"
                     session.execute_scheme(
-                        f"CREATE TOPIC `{topic_name}`;"
+                        f"CREATE TOPIC `{topic_name}` ("
+                        f"CONSUMER consumerA_{num}, "
+                        f"CONSUMER consumerB_{num}"
+                        f");"
                     )
                     self.settings = self.settings.with_source_and_destination("/" + topic_name, "/" + topic_name)
         self.client = ExportClient(self.driver)
         result_export = self.client.export_to_s3(self.settings)
-        
+
         export_id = result_export.id
         progress_export = result_export.progress.name
 
@@ -107,11 +112,10 @@ class TestExportS3(MixedClusterFixture):
             keys_expected.add(table_name + "/data_00.csv")
             keys_expected.add(table_name + "/metadata.json")
             keys_expected.add(table_name + "/scheme.pb")
-            
+
             # Topics
             topic_name = f"sample_topic_{num}"
             keys_expected.add(topic_name + "/create_topic.pb")
-            
 
         bucket = s3_resource.Bucket(s3_bucket)
         keys = set()

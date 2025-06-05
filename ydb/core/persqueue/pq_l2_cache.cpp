@@ -58,7 +58,7 @@ void TPersQueueCacheL2::SendResponses(const TActorContext& ctx, const THashMap<T
         }
 
         Y_ABORT_UNLESS(key.TabletId == resp->TabletId, "PQ L2. Multiple topics in one PQ tablet.");
-        resp->Removed.emplace_back(key.Partition, key.Offset, key.PartNo, key.Count, key.InternalPartsCount, evicted);
+        resp->Removed.emplace_back(key.Partition, key.Offset, key.PartNo, key.Count, key.InternalPartsCount, key.Suffix, evicted);
 
         RetentionTime = now - evicted->GetAccessTime();
         if (RetentionTime < KeepTime)
@@ -143,8 +143,8 @@ void TPersQueueCacheL2::RemoveBlobs(const TActorContext& ctx, ui64 tabletId, con
             numEvicted++;
             if ((*it)->GetAccessCount() == 0)
                 ++numUnused;
+            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "PQ Cache (L2). Removed. " << key.ToString() << " size " << (*it)->DataSize());
             Cache.Erase(it);
-            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "PQ Cache (L2). Removed. " << key.ToString());
         } else {
             LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "PQ Cache (L2). Miss in remove. " << key.ToString());
         }
@@ -210,7 +210,8 @@ void TPersQueueCacheL2::RegretBlobs(const TActorContext& ctx, ui64 tabletId, con
 {
     for (const TCacheBlobL2& blob : blobs) {
         LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "PQ Cache (L2). Missed blob. tabletId '" << tabletId
-            << "' partition " << blob.Partition << " offset " << blob.Offset);
+            << "' partition " << blob.Partition << " offset " << blob.Offset <<
+            " partno " << blob.PartNo << " count " << blob.Count << " parts_count " << blob.InternalPartsCount);
     }
 
     { // counters

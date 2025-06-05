@@ -21,8 +21,6 @@ ydb/core/kqp/ut/cost KqpCost.OlapWriteRow
 ydb/core/kqp/ut/federated_query/large_results KqpScriptExecResults.ExecuteScriptWithLargeFile
 ydb/core/kqp/ut/federated_query/s3 sole chunk chunk
 ydb/core/kqp/ut/indexes KqpMultishardIndex.WriteIntoRenamingSyncIndex
-ydb/core/kqp/ut/olap KqpOlapJson.BloomMixIndexesVariants
-ydb/core/kqp/ut/olap KqpOlapJson.BloomNGrammIndexesVariants
 ydb/core/kqp/ut/olap KqpOlapJson.CompactionVariants
 ydb/core/kqp/ut/olap KqpOlapJson.DuplicationCompactionVariants
 ydb/core/kqp/ut/olap KqpOlapJson.SwitchAccessorCompactionVariants
@@ -230,8 +228,6 @@ ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[14]
 ydb/tests/functional/ydb_cli test_ydb_impex.py.TestImpex.test_big_dataset[tsv-additional_args3-column]
 ydb/tests/olap [*/*] chunk chunk
 ydb/tests/olap sole chunk chunk
-ydb/tests/olap test_log_scenario.py.TestLogScenario.test_log_deviation[1051200]
-ydb/tests/olap test_log_scenario.py.TestLogScenario.test_log_deviation[180]
 ydb/tests/olap/scenario sole chunk chunk
 ydb/tests/olap/scenario test_alter_compression.py.TestAlterCompression.test[alter_compression]
 ydb/tests/olap/scenario test_alter_tiering.py.TestAlterTiering.test[many_tables]

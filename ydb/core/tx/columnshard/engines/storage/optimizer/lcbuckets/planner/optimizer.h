@@ -21,7 +21,7 @@ private:
     const std::shared_ptr<IStoragesManager> StoragesManager;
     const std::shared_ptr<arrow::Schema> PrimaryKeysSchema;
 
-    virtual ui32 GetAppropriateLevel(const ui32 baseLevel, const TPortionAccessorConstructor& info) const override {
+    virtual ui32 GetAppropriateLevel(const ui32 baseLevel, const TPortionInfoForCompaction& info) const override {
         ui32 result = baseLevel;
         for (ui32 i = baseLevel; i + 1 < Levels.size(); ++i) {
             if (Levels[i]->IsAppropriatePortionToMove(info) && Levels[i + 1]->IsAppropriatePortionToStore(info)) {
@@ -71,7 +71,7 @@ protected:
         std::vector<std::vector<TPortionInfo::TPtr>> removePortionsByLevel;
         removePortionsByLevel.resize(Levels.size());
         for (auto&& [_, i] : remove) {
-            if (i->GetMeta().GetTierName() != IStoragesManager::DefaultStorageId && i->GetMeta().GetTierName() != "") {
+            if (i->GetProduced() == NPortion::EProduced::EVICTED) {
                 continue;
             }
             PortionsInfo->RemovePortion(i);
@@ -82,38 +82,18 @@ protected:
             Levels[i]->ModifyPortions({}, removePortionsByLevel[i]);
         }
         for (auto&& [_, i] : add) {
-            if (i->GetMeta().GetTierName() != IStoragesManager::DefaultStorageId && i->GetMeta().GetTierName() != "") {
+            if (i->GetProduced() == NPortion::EProduced::EVICTED) {
                 continue;
             }
             PortionsInfo->AddPortion(i);
-            if (i->GetCompactionLevel() && (i->GetCompactionLevel() >= Levels.size() || !Levels[i->GetCompactionLevel()]->CanTakePortion(i))) {
+            if (i->GetCompactionLevel() && i->GetCompactionLevel() >= Levels.size()) {
                 i->MutableMeta().ResetCompactionLevel(0);
             }
-            AFL_VERIFY(i->GetCompactionLevel() < Levels.size());
-            if (i->GetMeta().GetCompactionLevel()) {
-                Levels[i->GetMeta().GetCompactionLevel()]->ModifyPortions({ i }, {});
-            }
-        }
-
-        for (auto&& [_, i] : add) {
-            if (i->GetMeta().GetTierName() != IStoragesManager::DefaultStorageId && i->GetMeta().GetTierName() != "") {
-                continue;
+            if (!i->GetCompactionLevel() && i->GetPortionType() != EPortionType::Written) {
+                i->MutableMeta().ResetCompactionLevel(GetAppropriateLevel(0, i->GetCompactionInfo()));
             }
             AFL_VERIFY(i->GetCompactionLevel() < Levels.size());
-            if (i->GetCompactionLevel()) {
-                continue;
-            }
-            if (i->GetTotalBlobBytes() > 512 * 1024 && i->GetPortionType() == EPortionType::Compacted) {
-                for (i32 levelIdx = Levels.size() - 1; levelIdx >= 0; --levelIdx) {
-                    if (Levels[levelIdx]->CanTakePortion(i)) {
-                        Levels[levelIdx]->ModifyPortions({ i }, {});
-                        i->MutableMeta().ResetCompactionLevel(levelIdx);
-                        break;
-                    }
-                }
-            } else {
-                Levels[0]->ModifyPortions({ i }, {});
-            }
+            Levels[i->GetMeta().GetCompactionLevel()]->ModifyPortions({ i }, {});
         }
         RefreshWeights();
     }

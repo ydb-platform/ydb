@@ -996,6 +996,11 @@ void TCreateTableFormatter::Format(const TString& tablePath, const NKikimrScheme
         del = ", ";
     }
 
+    if (cdcStream.GetSchemaChanges()) {
+        Stream << del << "SCHEMA_CHANGES = TRUE";
+        del = ", ";
+    }
+
     if (cdcStream.HasAwsRegion() && !cdcStream.GetAwsRegion().empty()) {
         Stream << del << "AWS_REGION = \'" << cdcStream.GetAwsRegion() << "\'";
         del = ", ";

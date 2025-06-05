@@ -303,6 +303,38 @@ namespace NKikimr::NStorage {
                         }
                     }
                 }
+
+                DIV_CLASS("panel panel-info") {
+                    DIV_CLASS("panel-heading") {
+                        out << "Cache";
+                    }
+                    DIV_CLASS("panel-body") {
+                        TABLE_CLASS("table table-condensed") {
+                            TABLEHEAD() {
+                                TABLER() {
+                                    TABLEH() { out << "Key"; }
+                                    TABLEH() { out << "Generation"; }
+                                    TABLEH() { out << "Value size"; }
+                                }
+                            }
+                            TABLEBODY() {
+                                std::vector<TString> keys;
+                                for (const auto& [key, value] : Cache) {
+                                    keys.push_back(key);
+                                }
+                                std::ranges::sort(keys);
+                                for (const TString& key : keys) {
+                                    const TCacheItem& value = Cache.at(key);
+                                    TABLER() {
+                                        TABLED() { out << key; }
+                                        TABLED() { out << value.Generation; }
+                                        TABLED() { out << (value.Value ? value.Value->size() : 0); }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
 
             contentType = NMon::TEvHttpInfoRes::Html;

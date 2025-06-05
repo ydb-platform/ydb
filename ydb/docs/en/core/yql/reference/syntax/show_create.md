@@ -1,6 +1,6 @@
 # SHOW CREATE
 
-`SHOW CREATE` returns a query (possibly consisting of several SQL statements) required to recreate the structure of the specified object: [table](../../../concepts/datamodel/table.md) (TABLE) or [view](../../../concepts/datamodel/view.md) (VIEW).
+`SHOW CREATE` returns a query (possibly consisting of several DDL statements) required to recreate the structure of the specified object: a [table](../../../concepts/datamodel/table.md) or [view](../../../concepts/datamodel/view.md).
 
 ## Syntax
 

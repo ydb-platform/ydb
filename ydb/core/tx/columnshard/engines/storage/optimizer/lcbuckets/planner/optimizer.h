@@ -92,7 +92,7 @@ protected:
             }
         }
         for (ui32 i = 0; i < Levels.size(); ++i) {
-            auto problems = Levels[i.first]->ModifyPortions(addPortionsByLevels[i], removePortionsByLevel[i]);
+            auto problems = Levels[i]->ModifyPortions(addPortionsByLevels[i], removePortionsByLevel[i]);
             problemPortions.insert(problemPortions.end(), problems.begin(), problems.end());
         }
         for (auto&& i : problemPortions) {

@@ -26,7 +26,7 @@ std::vector<TPortionInfo::TPtr> TOneLayerPortions::DoModifyPortions(
                         "next2", it->GetPortion()->IndexKeyEnd().DebugString())("level_id", GetLevelId())("portion_id_new", i->GetPortionId())(
                         "portion_id_old", it->GetPortion()->GetPortionId())("portion_old", it->GetPortion()->DebugString())("add", sb);
                     problems.emplace_back(i);
-                    AFL_VERIFY(Portions.erase(info.first));
+                    Portions.erase(info.first);
                     continue;
                 }
             }
@@ -40,7 +40,7 @@ std::vector<TPortionInfo::TPtr> TOneLayerPortions::DoModifyPortions(
                             "pred_finish", it->GetPortion()->IndexKeyEnd().DebugString())("level_id", GetLevelId())(
                             "portion_id_new", i->GetPortionId())("portion_id_old", it->GetPortion()->GetPortionId())("add", sb);
                         problems.emplace_back(i);
-                        AFL_VERIFY(Portions.erase(info.first));
+                        Portions.erase(info.first);
                         continue;
                     }
                 }

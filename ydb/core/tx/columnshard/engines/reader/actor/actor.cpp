@@ -83,9 +83,8 @@ void TColumnShardScan::HandleScan(NColumnShard::TEvPrivate::TEvTaskProcessedResu
         Finish(NColumnShard::TScanCounters::EStatusFinish::ConveyorInternalError);
     } else {
         ACFL_DEBUG("event", "TEvTaskProcessedResult");
-        auto t = static_pointer_cast<IApplyAction>(result.GetResult());
         if (!ScanIterator->Finished()) {
-            ScanIterator->Apply(t);
+            ScanIterator->Apply(result.GetResult());
         }
     }
     ContinueProcessing();

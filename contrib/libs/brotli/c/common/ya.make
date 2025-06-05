@@ -10,7 +10,7 @@ NO_UTIL()
 
 NO_COMPILER_WARNINGS()
 
-ADDINCL(contrib/libs/brotli/include)
+ADDINCL(contrib/libs/brotli/c/include)
 
 SRCS(
     dictionary.c

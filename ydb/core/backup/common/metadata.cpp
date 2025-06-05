@@ -34,10 +34,25 @@ const std::optional<std::vector<TChangefeedMetadata>>& TMetadata::GetChangefeeds
     return Changefeeds;
 }
 
+void TMetadata::SetEnablePermissions(bool enablePermissions) {
+    EnablePermissions = enablePermissions;
+}
+
+bool TMetadata::HasEnablePermissions() const {
+    return EnablePermissions.has_value();
+}
+
+bool TMetadata::GetEnablePermissions() const {
+    return *EnablePermissions;
+}
+
 TString TMetadata::Serialize() const {
     NJson::TJsonMap m;
     if (Version.Defined()) {
         m["version"] = *Version;
+    }
+    if (EnablePermissions) {
+        m["permissions"] = static_cast<int>(*EnablePermissions);
     }
 
     NJson::TJsonArray fullBackups;
@@ -74,6 +89,11 @@ TMetadata TMetadata::Deserialize(const TString& metadata) {
     TMetadata result;
     if (value.IsUInteger()) {
         result.Version = value.GetUIntegerSafe();
+    }
+
+    if (json.Has("permissions")) {
+        const int val = json["permissions"].GetInteger();
+        result.EnablePermissions = val != 0;
     }
 
     if (json.Has("changefeeds")) {

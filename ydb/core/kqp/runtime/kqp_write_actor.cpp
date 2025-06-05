@@ -1495,6 +1495,7 @@ private:
             WriteTableActor->Write(WriteToken, Batcher->Build());
             if (Closed) {
                 WriteTableActor->Close(WriteToken);
+                WriteTableActor->FlushBuffers();
                 WriteTableActor->Close();
             }
         } catch (const TMemoryLimitExceededException&) {
@@ -1534,6 +1535,10 @@ private:
                         << " bytes of " << MessageSettings.InFlightMemoryLimitPerActorBytes << " bytes.",
                     {});
                 return;
+            }
+
+            if (!Closed && outOfMemory) {
+                WriteTableActor->FlushBuffers();
             }
 
             if (Closed || outOfMemory) {
@@ -2025,6 +2030,7 @@ public:
             bool flushFailed = false;
             ForEachWriteActor([&](TKqpTableWriteActor* actor, const TActorId) {
                 if (!flushFailed && actor->IsReady()) {
+                    actor->FlushBuffers();
                     if (!actor->FlushToShards()) {
                         flushFailed = true;
                     }

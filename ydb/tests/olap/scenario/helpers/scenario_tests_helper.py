@@ -365,10 +365,16 @@ class ScenarioTestHelper:
         fullpath = self.get_full_path(tablename)
         expect_success = (expected_status == ydb.StatusCode.SUCCESS)
 
+        def _call_upsert(data):
+            YdbCluster.get_ydb_driver().table_client.bulk_upsert(fullpath, data, data_generator.get_bulk_upsert_columns())
+
         def _upsert():
             data = data_generator.generate_data_portion(1000)
             allure.attach(repr(data), 'data', allure.attachment_type.TEXT)
-            ydb.retry_operation_sync(lambda: YdbCluster.get_ydb_driver().table_client.bulk_upsert(fullpath, data, data_generator.get_bulk_upsert_columns()))
+            if expect_success:
+                ydb.retry_operation_sync(lambda: _call_upsert(data))
+            else:
+                _call_upsert(data)
 
         while not data_generator.EOF():
             self._run_with_expected_status(

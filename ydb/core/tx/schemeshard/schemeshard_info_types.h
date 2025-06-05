@@ -17,6 +17,7 @@
 #include <ydb/core/backup/common/encryption.h>
 #include <ydb/core/backup/common/metadata.h>
 #include <ydb/core/base/feature_flags.h>
+#include <ydb/core/base/kmeans_clusters.h>
 #include <ydb/core/base/storage_pools.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/base/table_vector_index.h>
@@ -3119,15 +3120,17 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         // TODO(mbkkt) move to TVectorIndexKmeansTreeDescription
         ui32 K = 0;
         ui32 Levels = 0;
+        ui32 Rounds = 0;
 
         // progress
         enum EState : ui32 {
             Sample = 0,
-            // Recompute,
             Reshuffle,
             MultiLocal,
+            Recompute,
         };
         ui32 Level = 1;
+        ui32 Round = 0;
 
         EState State = Sample;
 
@@ -3202,8 +3205,9 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         void Set(ui32 level,
                  NTableIndex::TClusterId parentBegin, NTableIndex::TClusterId parent,
                  NTableIndex::TClusterId childBegin, NTableIndex::TClusterId child,
-                 ui32 state, ui64 tableSize) {
+                 ui32 state, ui64 tableSize, ui32 round) {
             Level = level;
+            Round = round;
             ParentBegin = parentBegin;
             Parent = parent;
             ChildBegin = childBegin;
@@ -3468,6 +3472,8 @@ public:
     };
     TSample Sample;
 
+    std::unique_ptr<NKikimr::NKMeans::IClusters> NewClusters;
+
     TString DebugString() const {
         auto result = TStringBuilder() << BuildKind;
 
@@ -3666,7 +3672,12 @@ public:
                     auto& desc = *creationConfig.MutableVectorIndexKmeansTreeDescription();
                     indexInfo->KMeans.K = std::max<ui32>(2, desc.settings().clusters());
                     indexInfo->KMeans.Levels = indexInfo->IsBuildPrefixedVectorIndex() + std::max<ui32>(1, desc.settings().levels());
-                    indexInfo->SpecializedIndexDescription =std::move(desc);
+                    indexInfo->KMeans.Rounds = NTableIndex::NTableVectorKmeansTreeIndex::DefaultKMeansRounds;
+                    TString createError;
+                    indexInfo->NewClusters = NKikimr::NKMeans::CreateClusters(desc.settings().settings(), createError);
+                    Y_ENSURE(indexInfo->NewClusters && createError == "");
+                    indexInfo->NewClusters->Init(indexInfo->KMeans.K, indexInfo->KMeans.Rounds);
+                    indexInfo->SpecializedIndexDescription = std::move(desc);
                 } break;
                 case NKikimrSchemeOp::TIndexCreationConfig::SPECIALIZEDINDEXDESCRIPTION_NOT_SET:
                     /* do nothing */

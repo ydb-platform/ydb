@@ -612,6 +612,38 @@ private:
         ToTabletSend.emplace(shardId, std::move(ev));
     }
 
+    void SendKMeansRecomputeRequest(TShardIdx shardIdx, TIndexBuildInfo& buildInfo) {
+        Y_ENSURE(buildInfo.IsBuildVectorIndex());
+        auto ev = MakeHolder<TEvDataShard::TEvRecomputeKMeansRequest>();
+        ev->Record.SetId(ui64(BuildId));
+
+        auto path = TPath::Init(buildInfo.TablePathId, Self).Dive(buildInfo.IndexName);
+        if (buildInfo.KMeans.Level == 1) {
+            buildInfo.TablePathId.ToProto(ev->Record.MutablePathId());
+        } else {
+            path.Dive(buildInfo.KMeans.ReadFrom())->PathId.ToProto(ev->Record.MutablePathId());
+            path.Rise();
+        }
+
+        *ev->Record.MutableSettings() = std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(
+            buildInfo.SpecializedIndexDescription).GetSettings().settings();
+        ev->Record.SetParent(buildInfo.KMeans.Parent);
+
+        Y_ENSURE(buildInfo.Sample.Rows.size() <= buildInfo.KMeans.K);
+        auto& clusters = *ev->Record.MutableClusters();
+        clusters.Reserve(buildInfo.Sample.Rows.size());
+        for (const auto& [_, row] : buildInfo.Sample.Rows) {
+            *clusters.Add() = TSerializedCellVec::ExtractCell(row, 0).AsBuf();
+        }
+
+        ev->Record.SetEmbeddingColumn(buildInfo.IndexColumns.back());
+
+        auto shardId = CommonFillScanRequest(ev->Record, shardIdx, buildInfo);
+        LOG_N("TTxBuildProgress: TEvRecomputeKMeansRequest: " << ToShortDebugString(ev->Record));
+
+        ToTabletSend.emplace(shardId, std::move(ev));
+    }
+
     void SendKMeansLocalRequest(TShardIdx shardIdx, TIndexBuildInfo& buildInfo) {
         Y_ENSURE(buildInfo.IsBuildVectorIndex());
         auto ev = MakeHolder<TEvDataShard::TEvLocalKMeansRequest>();
@@ -629,7 +661,7 @@ private:
         ev->Record.SetK(buildInfo.KMeans.K);
         ev->Record.SetUpload(buildInfo.KMeans.GetUpload());
 
-        ev->Record.SetNeedsRounds(3); // TODO(mbkkt) should be configurable
+        ev->Record.SetNeedsRounds(buildInfo.KMeans.Rounds);
 
         if (buildInfo.KMeans.State != TIndexBuildInfo::TKMeans::MultiLocal) {
             ev->Record.SetParentFrom(buildInfo.KMeans.Parent);
@@ -677,7 +709,7 @@ private:
         ev->Record.SetK(buildInfo.KMeans.K);
         ev->Record.SetUpload(buildInfo.KMeans.GetUpload());
 
-        ev->Record.SetNeedsRounds(3); // TODO(mbkkt) should be configurable
+        ev->Record.SetNeedsRounds(buildInfo.KMeans.Rounds);
 
         const auto shardIndex = buildInfo.Shards.at(shardIdx).Index;
         // about 2 * TableSize see comment in PrefixIndexDone
@@ -896,6 +928,10 @@ private:
         return SendToShards(buildInfo, [&](TShardIdx shardIdx) { SendKMeansReshuffleRequest(shardIdx, buildInfo); });
     }
 
+    bool SendKMeansRecompute(TIndexBuildInfo& buildInfo) {
+        return SendToShards(buildInfo, [&](TShardIdx shardIdx) { SendKMeansRecomputeRequest(shardIdx, buildInfo); });
+    }
+
     bool SendKMeansLocal(TIndexBuildInfo& buildInfo) {
         return SendToShards(buildInfo, [&](TShardIdx shardIdx) { SendKMeansLocalRequest(shardIdx, buildInfo); });
     }
@@ -922,11 +958,12 @@ private:
             NIceDb::TUpdate<Schema::KMeansTreeProgress::ParentBegin>(buildInfo.KMeans.ParentBegin),
             NIceDb::TUpdate<Schema::KMeansTreeProgress::Child>(buildInfo.KMeans.Child),
             NIceDb::TUpdate<Schema::KMeansTreeProgress::ChildBegin>(buildInfo.KMeans.ChildBegin),
-            NIceDb::TUpdate<Schema::KMeansTreeProgress::TableSize>(buildInfo.KMeans.TableSize)
+            NIceDb::TUpdate<Schema::KMeansTreeProgress::TableSize>(buildInfo.KMeans.TableSize),
+            NIceDb::TUpdate<Schema::KMeansTreeProgress::Round>(buildInfo.KMeans.Round)
         );
     }
 
-    bool FillPrefixedVectorIndex(TTransactionContext& txc, TIndexBuildInfo& buildInfo) {        
+    bool FillPrefixedVectorIndex(TTransactionContext& txc, TIndexBuildInfo& buildInfo) {
         LOG_D("FillPrefixedVectorIndex Start " << buildInfo.DebugString());
 
         if (buildInfo.KMeans.Level == 1) {
@@ -983,9 +1020,50 @@ private:
     bool FillVectorIndex(TTransactionContext& txc, TIndexBuildInfo& buildInfo) {
         LOG_D("FillVectorIndex Start " << buildInfo.DebugString());
 
-        // (Sample -> Reshuffle)* -> MultiLocal -> NextLevel
+        // (Sample -> Recompute* -> Reshuffle)* -> MultiLocal -> NextLevel
         if (buildInfo.KMeans.State == TIndexBuildInfo::TKMeans::Sample) {
             return FillVectorIndexSamples(txc, buildInfo);
+        } else if (buildInfo.KMeans.State == TIndexBuildInfo::TKMeans::Recompute) {
+            if (NoShardsAdded(buildInfo)) {
+                AddGlobalShardsForCurrentParent(buildInfo);
+            }
+            if (!SendKMeansRecompute(buildInfo)) {
+                return false;
+            }
+            ClearDoneShards(txc, buildInfo);
+            // Finalize NewClusters aggregation and move them to KMeansTreeSample
+            buildInfo.Sample.Clear();
+            NIceDb::TNiceDb db{txc.DB};
+            bool final = buildInfo.NewClusters->RecomputeClusters();
+            buildInfo.NewClusters->RemoveEmptyClusters();
+            const auto & clusters = buildInfo.NewClusters->GetClusters();
+            ui32 i = 0;
+            for (; i < clusters.size(); i++) {
+                auto sampleRow = TSerializedCellVec::Serialize(TVector<TCell>{TCell(clusters[i])});
+                buildInfo.Sample.Add(i+1, sampleRow);
+                db.Table<Schema::KMeansTreeSample>().Key(buildInfo.Id, i).Update(
+                    NIceDb::TUpdate<Schema::KMeansTreeSample::Probability>(i+1),
+                    NIceDb::TUpdate<Schema::KMeansTreeSample::Data>(sampleRow)
+                );
+            }
+            for (; i < 2*buildInfo.KMeans.K; ++i) {
+                db.Table<Schema::KMeansTreeSample>().Key(buildInfo.Id, i).Delete();
+            }
+            Self->PersistBuildIndexClustersForget(db, buildInfo);
+            if (!final) {
+                // Recompute again
+                buildInfo.KMeans.Round++;
+            } else {
+                // Cluster generation completed, save clusters
+                LOG_D("FillVectorIndex SendUploadClusters " << buildInfo.DebugString());
+                buildInfo.KMeans.State = TIndexBuildInfo::TKMeans::Sample;
+                buildInfo.Sample.State = TIndexBuildInfo::TSample::EState::Upload;
+                SendUploadSampleKRequest(buildInfo);
+            }
+            LOG_D("FillVectorIndex NextState " << buildInfo.DebugString());
+            PersistKMeansState(txc, buildInfo);
+            Progress(BuildId);
+            return false;
         } else if (buildInfo.KMeans.State == TIndexBuildInfo::TKMeans::Reshuffle) {
             if (NoShardsAdded(buildInfo)) {
                 AddGlobalShardsForCurrentParent(buildInfo);
@@ -1028,9 +1106,28 @@ private:
                 // No samples => no data for this cluster
                 return FillVectorIndexNextParent(txc, buildInfo);
             }
-            LOG_D("FillVectorIndex SendUploadSampleKRequest " << buildInfo.DebugString());
-            SendUploadSampleKRequest(buildInfo);
-            buildInfo.Sample.State = TIndexBuildInfo::TSample::EState::Upload;
+            if (buildInfo.KMeans.Rounds > 1) {
+                LOG_D("FillVectorIndex Recompute " << buildInfo.DebugString());
+                buildInfo.KMeans.State = TIndexBuildInfo::TKMeans::Recompute;
+                buildInfo.KMeans.Round = 0;
+                // Initialize NewClusters
+                buildInfo.NewClusters->ResetAggregatedClusters();
+                buildInfo.NewClusters->SetRound(0);
+                NIceDb::TNiceDb db(txc.DB);
+                for (ui32 i = 0; i < buildInfo.KMeans.K; i++) {
+                    db.Table<Schema::KMeansTreeClusters>().Key(buildInfo.Id, i).Delete();
+                }
+                buildInfo.Sample.MakeStrictTop(buildInfo.KMeans.K);
+                for (ui32 i = buildInfo.KMeans.K; i <= 2*buildInfo.KMeans.K; i++) {
+                    db.Table<Schema::KMeansTreeSample>().Key(buildInfo.Id, i).Delete();
+                }
+                PersistKMeansState(txc, buildInfo);
+                Progress(BuildId);
+            } else {
+                LOG_D("FillVectorIndex SendUploadSampleKRequest " << buildInfo.DebugString());
+                SendUploadSampleKRequest(buildInfo);
+                buildInfo.Sample.State = TIndexBuildInfo::TSample::EState::Upload;
+            }
             return false;
         } else if (buildInfo.Sample.State == TIndexBuildInfo::TSample::EState::Upload) {
             // Just wait until samples are uploaded (saved)
@@ -1763,6 +1860,47 @@ struct TSchemeShard::TIndexBuilder::TTxReplySampleK: public TTxShardReply<TEvDat
     }
 };
 
+struct TSchemeShard::TIndexBuilder::TTxReplyRecomputeKMeans: public TTxShardReply<TEvDataShard::TEvRecomputeKMeansResponse>  {
+    explicit TTxReplyRecomputeKMeans(TSelf* self, TEvDataShard::TEvRecomputeKMeansResponse::TPtr& response)
+        : TTxShardReply(self, TIndexBuildId(response->Get()->Record.GetId()), response)
+    {
+    }
+
+    void HandleDone(NIceDb::TNiceDb& db, TIndexBuildInfo& buildInfo) override {
+        auto& record = Response->Get()->Record;
+        Y_ENSURE(record.ClustersSize() == buildInfo.KMeans.K);
+        Y_ENSURE(record.ClusterSizesSize() == buildInfo.KMeans.K);
+        auto& clusters = record.GetClusters();
+        auto& sizes = record.GetClusterSizes();
+        for (ui32 i = 0; i < buildInfo.KMeans.K; i++) {
+            if (sizes[i] > 0) {
+                buildInfo.NewClusters->AddAggregatedCluster(i, clusters[i], sizes[i]);
+            }
+        }
+        buildInfo.NewClusters->RecomputeNoClear();
+        auto& newClusters = buildInfo.NewClusters->GetClusters();
+        auto& newSizes = buildInfo.NewClusters->GetNewClusterSizes();
+        for (ui32 i = 0; i < buildInfo.KMeans.K; i++) {
+            if (sizes[i] > 0) {
+                db.Table<Schema::KMeansTreeClusters>().Key(buildInfo.Id, i).Update(
+                    NIceDb::TUpdate<Schema::KMeansTreeClusters::Size>(newSizes[i]),
+                    NIceDb::TUpdate<Schema::KMeansTreeClusters::Data>(newClusters[i])
+                );
+            }
+        }
+    }
+
+    TBillingStats GetBillingStats() const override {
+        auto& record = Response->Get()->Record;
+        return {0, 0, record.GetReadRows(), record.GetReadBytes()};
+    }
+
+    TString ResponseShortDebugString() const override {
+        auto& record = Response->Get()->Record;
+        return ToShortDebugString(record);
+    }
+};
+
 struct TSchemeShard::TIndexBuilder::TTxReplyLocalKMeans: public TTxShardReply<TEvDataShard::TEvLocalKMeansResponse> {
     explicit TTxReplyLocalKMeans(TSelf* self, TEvDataShard::TEvLocalKMeansResponse::TPtr& response)
         : TTxShardReply(self, TIndexBuildId(response->Get()->Record.GetId()), response)
@@ -2296,6 +2434,10 @@ ITransaction* TSchemeShard::CreateTxReply(TEvDataShard::TEvSampleKResponse::TPtr
 
 ITransaction* TSchemeShard::CreateTxReply(TEvDataShard::TEvReshuffleKMeansResponse::TPtr& reshuffle) {
     return new TIndexBuilder::TTxReplyReshuffleKMeans(this, reshuffle);
+}
+
+ITransaction* TSchemeShard::CreateTxReply(TEvDataShard::TEvRecomputeKMeansResponse::TPtr& recompute) {
+    return new TIndexBuilder::TTxReplyRecomputeKMeans(this, recompute);
 }
 
 ITransaction* TSchemeShard::CreateTxReply(TEvDataShard::TEvLocalKMeansResponse::TPtr& local) {

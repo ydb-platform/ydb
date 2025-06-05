@@ -37,6 +37,10 @@ void TSchemeShard::Handle(TEvDataShard::TEvReshuffleKMeansResponse::TPtr& ev, co
     Execute(CreateTxReply(ev), ctx);
 }
 
+void TSchemeShard::Handle(TEvDataShard::TEvRecomputeKMeansResponse::TPtr& ev, const TActorContext& ctx) {
+    Execute(CreateTxReply(ev), ctx);
+}
+
 void TSchemeShard::Handle(TEvDataShard::TEvLocalKMeansResponse::TPtr& ev, const TActorContext& ctx) {
     Execute(CreateTxReply(ev), ctx);
 }
@@ -288,6 +292,13 @@ void TSchemeShard::PersistBuildIndexSampleForget(NIceDb::TNiceDb& db, const TInd
     }
 }
 
+void TSchemeShard::PersistBuildIndexClustersForget(NIceDb::TNiceDb& db, const TIndexBuildInfo& info) {
+    Y_ASSERT(info.IsBuildVectorIndex());
+    for (ui32 row = 0; row < info.KMeans.K; ++row) {
+        db.Table<Schema::KMeansTreeClusters>().Key(info.Id, row).Delete();
+    }
+}
+
 void TSchemeShard::PersistBuildIndexForget(NIceDb::TNiceDb& db, const TIndexBuildInfo& info) {
     db.Table<Schema::IndexBuild>().Key(info.Id).Delete();
 
@@ -312,6 +323,7 @@ void TSchemeShard::PersistBuildIndexForget(NIceDb::TNiceDb& db, const TIndexBuil
     if (info.IsBuildVectorIndex()) {
         db.Table<Schema::KMeansTreeProgress>().Key(info.Id).Delete();
         PersistBuildIndexSampleForget(db, info);
+        PersistBuildIndexClustersForget(db, info);
     }
 }
 

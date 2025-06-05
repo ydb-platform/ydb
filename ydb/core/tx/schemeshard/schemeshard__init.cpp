@@ -4662,9 +4662,14 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                             rowset.GetValue<Schema::KMeansTreeProgress::ChildBegin>(),
                             rowset.GetValue<Schema::KMeansTreeProgress::Child>(),
                             rowset.GetValue<Schema::KMeansTreeProgress::State>(),
-                            rowset.GetValue<Schema::KMeansTreeProgress::TableSize>()
+                            rowset.GetValue<Schema::KMeansTreeProgress::TableSize>(),
+                            rowset.GetValue<Schema::KMeansTreeProgress::Round>()
                         );
                         buildInfo.Sample.Rows.reserve(buildInfo.KMeans.K * 2);
+                        if (buildInfo.KMeans.State == TIndexBuildInfo::TKMeans::Recompute) {
+                            buildInfo.NewClusters->InitAggregatedClusters();
+                            buildInfo.NewClusters->SetRound(buildInfo.KMeans.Round);
+                        }
                     });
 
                     if (!rowset.Next()) {
@@ -4699,6 +4704,38 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                 LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                              "KMeansTreeSample records: " << sampleCount
+                             << ", at schemeshard: " << Self->TabletID());
+            }
+
+            // read kmeans tree aggregated clusters
+            {
+                auto rowset = db.Table<Schema::KMeansTreeClusters>().Range().Select();
+                if (!rowset.IsReady()) {
+                    return false;
+                }
+
+                size_t clusterCount = 0;
+                while (!rowset.EndOfSet()) {
+                    TIndexBuildId id = rowset.GetValue<Schema::KMeansTreeClusters::Id>();
+                    fillBuildInfoByIdSafe(id, "KMeansTreeClusters", [&](TIndexBuildInfo& buildInfo) {
+                        auto num = rowset.GetValue<Schema::KMeansTreeClusters::Row>();
+                        auto data = rowset.GetValue<Schema::KMeansTreeClusters::Data>();
+                        auto size = rowset.GetValue<Schema::KMeansTreeClusters::Size>();
+                        auto oldSize = rowset.GetValue<Schema::KMeansTreeClusters::OldSize>();
+                        Y_ENSURE(num < buildInfo.KMeans.K);
+                        if (data.size()) {
+                            buildInfo.NewClusters->AddAggregatedCluster(num, data, size);
+                        }
+                        buildInfo.NewClusters->SetOldClusterSize(num, oldSize);
+                    });
+                    clusterCount++;
+                    if (!rowset.Next()) {
+                        return false;
+                    }
+                }
+
+                LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                             "KMeansTreeCluster records: " << clusterCount
                              << ", at schemeshard: " << Self->TabletID());
             }
 

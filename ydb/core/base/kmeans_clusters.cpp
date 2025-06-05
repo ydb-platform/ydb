@@ -128,22 +128,20 @@ class TClusters: public IClusters {
     ui32 InitK = 0;
     ui32 K = 0;
     const ui32 Dimensions = 0;
+    const ui8 TypeByte = 0;
 
     TVector<TString> Clusters;
     TVector<ui64> ClusterSizes;
-
-    struct TAggregatedCluster {
-        TEmbedding Cluster;
-        ui64 Size = 0;
-    };
-    TVector<TAggregatedCluster> AggregatedClusters;
+    TVector<TEmbedding> AggregatedClusters;
+    TVector<ui64> NewClusterSizes;
 
     ui32 Round = 0;
     ui32 MaxRounds = 0;
 
 public:
-    TClusters(ui32 dimensions)
+    TClusters(ui32 dimensions, ui8 typeByte)
         : Dimensions(dimensions)
+        , TypeByte(typeByte)
     {
     }
 
@@ -151,6 +149,10 @@ public:
         InitK = k;
         K = k;
         MaxRounds = maxRounds;
+    }
+
+    void SetRound(ui32 round) override {
+        Round = round;
     }
 
     ui32 GetK() const override {
@@ -170,6 +172,16 @@ public:
 
     const TVector<ui64>& GetClusterSizes() const override {
         return ClusterSizes;
+    }
+
+    const TVector<ui64>& GetNewClusterSizes() const override {
+        return NewClusterSizes;
+    }
+
+    virtual void SetOldClusterSize(ui32 num, ui64 size) override {
+        if (num < K) {
+            ClusterSizes[num] = size;
+        }
     }
 
     void Clear() override {
@@ -195,12 +207,45 @@ public:
     }
 
     void InitAggregatedClusters() override {
+        if (AggregatedClusters.size() == K) {
+            return;
+        }
         AggregatedClusters.resize(K);
+        NewClusterSizes.resize(K, 0);
         ClusterSizes.resize(K, 0);
         for (auto& aggregate : AggregatedClusters) {
-            aggregate.Cluster.resize(Dimensions, 0);
+            aggregate.resize(Dimensions, 0);
         }
         Round = 1;
+    }
+
+    void ResetAggregatedClusters() override {
+        AggregatedClusters.clear();
+        NewClusterSizes.clear();
+        InitAggregatedClusters();
+    }
+
+    void RecomputeNoClear() override {
+        Y_ENSURE(K >= 1);
+        Y_ENSURE(AggregatedClusters.size() == K && NewClusterSizes.size() == K);
+        if (Clusters.size() != K) {
+            Clusters.resize(K);
+            size_t expectedSize = 1 + sizeof(TCoord) * Dimensions;
+            for (auto& cluster : Clusters) {
+                cluster.resize(expectedSize, 0);
+                cluster.MutRef().data()[expectedSize-1] = TypeByte;
+            }
+        }
+        for (size_t i = 0; auto& aggregate : AggregatedClusters) {
+            if (NewClusterSizes[i] != 0) {
+                auto aggData = aggregate.data();
+                auto data = GetData(Clusters[i].MutRef().data());
+                for (auto& coord : data) {
+                    coord = *aggData / NewClusterSizes[i];
+                }
+            }
+            ++i;
+        }
     }
 
     bool RecomputeClusters() override {
@@ -208,15 +253,16 @@ public:
         ui64 vectorCount = 0;
         ui64 reassignedCount = 0;
         for (size_t i = 0; auto& aggregate : AggregatedClusters) {
-            vectorCount += aggregate.Size;
+            auto& newSize = NewClusterSizes[i];
+            vectorCount += newSize;
 
             auto& clusterSize = ClusterSizes[i];
-            reassignedCount += clusterSize < aggregate.Size ? aggregate.Size - clusterSize : 0;
-            clusterSize = aggregate.Size;
+            reassignedCount += clusterSize < newSize ? newSize - clusterSize : 0;
+            clusterSize = newSize;
 
-            if (aggregate.Size != 0) {
-                this->Fill(Clusters[i], aggregate.Cluster.data(), aggregate.Size);
-                Y_ENSURE(aggregate.Size == 0);
+            if (newSize != 0) {
+                this->Fill(Clusters[i], aggregate.data(), newSize);
+                Y_ENSURE(newSize == 0);
             }
             ++i;
         }
@@ -273,11 +319,21 @@ public:
 
     void AggregateToCluster(ui32 pos, const char* embedding) override {
         auto& aggregate = AggregatedClusters[pos];
-        auto* coords = aggregate.Cluster.data();
+        auto* coords = aggregate.data();
         for (auto coord : this->GetCoords(embedding)) {
             *coords++ += coord;
         }
-        ++aggregate.Size;
+        ++NewClusterSizes[pos];
+    }
+
+    void AddAggregatedCluster(ui32 pos, const TString& embedding, ui64 size) override {
+        auto& aggregate = AggregatedClusters.at(pos);
+        auto* coords = aggregate.data();
+        Y_ENSURE(IsExpectedSize(embedding));
+        for (auto coord : this->GetCoords(embedding.data())) {
+            *coords++ += (TSum)coord * size;
+        }
+        NewClusterSizes.at(pos) += size;
     }
 
     bool IsExpectedSize(TArrayRef<const char> data) override {
@@ -310,21 +366,22 @@ std::unique_ptr<IClusters> CreateClusters(const Ydb::Table::VectorIndexSettings&
         return nullptr;
     }
 
+    const ui8 typeVal = (ui8)settings.vector_type();
     const ui32 dim = settings.vector_dimension();
 
     auto handleMetric = [&]<typename T>() -> std::unique_ptr<IClusters> {
         switch (settings.metric()) {
             case Ydb::Table::VectorIndexSettings::SIMILARITY_INNER_PRODUCT:
-                return std::make_unique<TClusters<TMaxInnerProductSimilarity<T>>>(dim);
+                return std::make_unique<TClusters<TMaxInnerProductSimilarity<T>>>(dim, typeVal);
             case Ydb::Table::VectorIndexSettings::SIMILARITY_COSINE:
             case Ydb::Table::VectorIndexSettings::DISTANCE_COSINE:
                 // We don't need to have separate implementation for distance,
                 // because clusters will be same as for similarity
-                return std::make_unique<TClusters<TCosineSimilarity<T>>>(dim);
+                return std::make_unique<TClusters<TCosineSimilarity<T>>>(dim, typeVal);
             case Ydb::Table::VectorIndexSettings::DISTANCE_MANHATTAN:
-                return std::make_unique<TClusters<TL1Distance<T>>>(dim);
+                return std::make_unique<TClusters<TL1Distance<T>>>(dim, typeVal);
             case Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN:
-                return std::make_unique<TClusters<TL2Distance<T>>>(dim);
+                return std::make_unique<TClusters<TL2Distance<T>>>(dim, typeVal);
             default:
                 error = "Wrong similarity";
                 break;

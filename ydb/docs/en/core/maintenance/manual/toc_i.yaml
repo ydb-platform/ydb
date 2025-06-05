@@ -29,7 +29,9 @@ items:
   href: config-overview.md
 - name: Dynamic cluster configuration
   href: dynamic-config.md
-- name: Cluster configuration DSL    
+- name: Cluster configuration DSL
   href: dynamic-config-selectors.md
 - name: Temporary configurations
-  href: dynamic-config-volatile-config.md  
+  href: dynamic-config-volatile-config.md
+- name: Managing non-uniform drives
+  href: managing-non-uniform-drives.md

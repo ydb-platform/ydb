@@ -70,6 +70,8 @@ protected:
     virtual void DoModifyPortions(const THashMap<ui64, TPortionInfo::TPtr>& add, const THashMap<ui64, TPortionInfo::TPtr>& remove) override {
         std::vector<std::vector<TPortionInfo::TPtr>> removePortionsByLevel;
         removePortionsByLevel.resize(Levels.size());
+        std::vector<std::vector<TPortionInfo::TPtr>> addPortionsByLevels;
+        addPortionsByLevels.resize(Levels.size());
         for (auto&& [_, i] : remove) {
             if (i->GetProduced() == NPortion::EProduced::EVICTED) {
                 continue;
@@ -78,22 +80,28 @@ protected:
             AFL_VERIFY(i->GetCompactionLevel() < Levels.size());
             removePortionsByLevel[i->GetCompactionLevel()].emplace_back(i);
         }
-        for (ui32 i = 0; i < Levels.size(); ++i) {
-            Levels[i]->ModifyPortions({}, removePortionsByLevel[i]);
-        }
+        std::vector<TPortionInfo::TPtr> problemPortions;
         for (auto&& [_, i] : add) {
             if (i->GetProduced() == NPortion::EProduced::EVICTED) {
                 continue;
             }
             PortionsInfo->AddPortion(i);
+            addPortionsByLevels[i->GetMeta().GetCompactionLevel()].emplace_back(i);
             if (i->GetCompactionLevel() && i->GetCompactionLevel() >= Levels.size()) {
-                i->MutableMeta().ResetCompactionLevel(0);
+                problemPortions.emplace_back(i);
             }
+        }
+        for (ui32 i = 0; i < Levels.size(); ++i) {
+            auto problems = Levels[i.first]->ModifyPortions(addPortionsByLevels[i], removePortionsByLevel[i]);
+            problemPortions.insert(problemPortions.end(), problems.begin(), problems.end());
+        }
+        for (auto&& i : problemPortions) {
+            i->MutableMeta().ResetCompactionLevel(0);
             if (!i->GetCompactionLevel() && i->GetPortionType() != EPortionType::Written) {
                 i->MutableMeta().ResetCompactionLevel(GetAppropriateLevel(0, i->GetCompactionInfo()));
             }
             AFL_VERIFY(i->GetCompactionLevel() < Levels.size());
-            Levels[i->GetMeta().GetCompactionLevel()]->ModifyPortions({ i }, {});
+            AFL_VERIFY(Levels[i->GetMeta().GetCompactionLevel()]->ModifyPortions({ i }, {}).empty());
         }
         RefreshWeights();
     }

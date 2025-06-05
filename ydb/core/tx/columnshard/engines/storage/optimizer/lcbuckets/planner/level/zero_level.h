@@ -34,13 +34,19 @@ private:
         return 0;
     }
 
-    virtual void DoModifyPortions(const std::vector<TPortionInfo::TPtr>& add, const std::vector<TPortionInfo::TPtr>& remove) override {
+    virtual std::vector<TPortionInfo::TPtr> DoModifyPortions(
+        const std::vector<TPortionInfo::TPtr>& add, const std::vector<TPortionInfo::TPtr>& remove) override {
+        std::vector<TPortionInfo::TPtr> problems;
         const bool constructionFlag = Portions.empty();
         if (constructionFlag) {
             std::vector<TOrderedPortion> ordered;
             ordered.reserve(add.size());
             for (auto&& i : add) {
-                ordered.emplace_back(i);
+                if (GetLevelId() && !IsAppropriatePortionToStore(i->GetCompactionInfo())) {
+                    problems.emplace_back(i);
+                } else {
+                    ordered.emplace_back(i);
+                }
             }
             std::sort(ordered.begin(), ordered.end());
             AFL_VERIFY(std::unique(ordered.begin(), ordered.end()) == ordered.end());
@@ -54,6 +60,7 @@ private:
         for (auto&& i : remove) {
             AFL_VERIFY(Portions.erase(i));
         }
+        return problems;
     }
 
     virtual bool IsLocked(const std::shared_ptr<NDataLocks::TManager>& locksManager) const override {

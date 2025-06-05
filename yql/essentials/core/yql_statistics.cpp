@@ -95,6 +95,10 @@ std::ostream& NYql::operator<<(std::ostream& os, const TOptimizerStatistics& s) 
     os << ", LogicalOrderings (Shufflings) state: " << s.LogicalOrderings.GetState();
     os << ", SortingOrderings (Sortings) state: "   << s.SortingOrderings.GetState();
 
+    if (s.ReversedSortingOrderings.HasState()) {
+        os << ", ReversedSortingOrderings (Sortings) state: "   << s.ReversedSortingOrderings.GetState();
+    }
+
     if (s.SortingOrderingIdx >= 0) {
         os << ", SortingOrderingIdx: " << s.SortingOrderingIdx;
     }

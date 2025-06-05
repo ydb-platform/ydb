@@ -19,7 +19,20 @@ using namespace NYql::NDq;
 
 using TTableData = std::pair<const NYql::TKikimrTableDescription*, NYql::TKqpReadTableSettings>;
 
-TExprBase KqpRemoveRedundantSortByPk(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
+TKqpTable GetTable(TExprBase input, bool isReadRanges) {
+    if (isReadRanges) {
+        return input.Cast<TKqlReadTableRangesBase>().Table();
+    }
+
+    return input.Cast<TKqpReadTable>().Table();
+};
+
+TExprBase KqpRemoveRedundantSortByPk(
+    TExprBase node,
+    TExprContext& ctx,
+    const TKqpOptimizeContext& kqpCtx,
+    const TTypeAnnotationContext& typeCtx
+) {
     auto maybeSort = node.Maybe<TCoSort>();
     auto maybeTopBase = node.Maybe<TCoTopBase>();
 
@@ -44,11 +57,6 @@ TExprBase KqpRemoveRedundantSortByPk(TExprBase node, TExprContext& ctx, const TK
         input = flatmap.Input();
     }
 
-    auto direction = GetSortDirection(sortDirections);
-    if (direction != ESortDirection::Forward && direction != ESortDirection::Reverse) {
-        return node;
-    }
-
     bool isReadTable = input.Maybe<TKqpReadTable>().IsValid();
     bool isReadTableRanges = input.Maybe<TKqpReadTableRanges>().IsValid() || input.Maybe<TKqpReadOlapTableRanges>().IsValid() ;
     if (!isReadTable && !isReadTableRanges) {
@@ -63,12 +71,37 @@ TExprBase KqpRemoveRedundantSortByPk(TExprBase node, TExprContext& ctx, const TK
     }
 
     auto settings = GetReadTableSettings(input, isReadTableRanges);
+    auto table = GetTable(input, isReadTableRanges);
 
-    if (!IsSortKeyPrimary(keySelector, tableDesc, passthroughFields)) {
+    bool isReversed = false;
+    auto isSorted = [&](){
+        auto tableStats = typeCtx.GetStats(table.Raw());
+        auto sortStats = typeCtx.GetStats(node.Raw());
+        if (!tableStats || !sortStats || !typeCtx.SortingsFSM) {
+            return false;
+        }
+
+        auto sortingIdx = sortStats->SortingOrderingIdx;
+
+        auto& inputSortings = tableStats->SortingOrderings;
+        if (inputSortings.ContainsSorting(sortingIdx)) {
+            return true;
+        }
+
+        auto& reversedInputSortings = tableStats->ReversedSortingOrderings;
+        if (reversedInputSortings.ContainsSorting(sortingIdx)) {
+            isReversed = true;
+            return true;
+        }
+
+        return false;
+    };
+
+    if (!isSorted()) {
         return node;
     }
 
-    if (direction == ESortDirection::Reverse) {
+    if (isReversed) {
         if (!UseSource(kqpCtx, tableDesc) && kqpCtx.IsScanQuery()) {
             return node;
         }
@@ -76,7 +109,7 @@ TExprBase KqpRemoveRedundantSortByPk(TExprBase node, TExprContext& ctx, const TK
         AFL_ENSURE(settings.GetSorting() == ERequestSorting::NONE);
         settings.SetSorting(ERequestSorting::DESC);
         input = BuildReadNode(input.Pos(), ctx, input, settings);
-    } else if (direction == ESortDirection::Forward) {
+    } else {
         if (UseSource(kqpCtx, tableDesc)) {
             AFL_ENSURE(settings.GetSorting() == ERequestSorting::NONE);
             settings.SetSorting(ERequestSorting::ASC);
@@ -112,11 +145,14 @@ TExprBase KqpBuildTopStageRemoveSort(
     bool allowStageMultiUsage,
     bool ruleEnabled
 ) {
+    YQL_CLOG(TRACE, CoreDq) << "Kal1" << Endl;
     if (!ruleEnabled) {
+        YQL_CLOG(TRACE, CoreDq) << "Kal123" << Endl;
         return node;
     }
 
     if (!node.Maybe<TCoTopBase>().Input().Maybe<TDqCnUnionAll>()) {
+        YQL_CLOG(TRACE, CoreDq) << "kal23113" << Endl;
         return node;
     }
 
@@ -149,6 +185,7 @@ TExprBase KqpBuildTopStageRemoveSort(
 
     auto inputStats = typeCtx.GetStats(dqUnion.Output().Raw());
     if (!inputStats) {
+        YQL_CLOG(TRACE, CoreDq) << "No statistics for the TopBase, skip";
         return node;
     }
 

@@ -1136,3 +1136,186 @@ class WorkloadTestBase(LoadSuiteBase):
             logging.info(f'scheme stdout: {scheme_stdout}')
             if scheme_stderr:
                 logging.warning(f'scheme stderr: {scheme_stderr}')
+
+    def execute_workload_test_with_chunks(self, workload_executor, workload_name: str, command_args_template: str, 
+                                          additional_stats: dict = None):
+        """
+        Выполняет workload test разбивая общее время на чанки для повышения надежности
+        
+        Args:
+            workload_executor: Фикстура для выполнения workload
+            workload_name: Имя workload для отчетов
+            command_args_template: Шаблон аргументов команды (без --duration)
+            additional_stats: Дополнительная статистика
+        """
+        total_duration = self.timeout
+        
+        # Вычисляем размер чанка: минимум 100 сек, максимум 1 час
+        chunk_size = min(max(total_duration // 10, 100), 3600)
+        # Если общее время меньше 200 сек - используем один чанк
+        if total_duration < 200:
+            chunk_size = total_duration
+            
+        logging.info(f"=== Starting chunked workload execution for {workload_name} ===")
+        logging.info(f"Total duration: {total_duration}s, chunk size: {chunk_size}s")
+        
+        # Создаем список чанков
+        chunks = []
+        remaining_time = total_duration
+        chunk_num = 1
+        
+        while remaining_time > 0:
+            current_chunk_size = min(chunk_size, remaining_time)
+            chunks.append({
+                'chunk_num': chunk_num,
+                'duration': current_chunk_size,
+                'start_offset': total_duration - remaining_time
+            })
+            remaining_time -= current_chunk_size
+            chunk_num += 1
+            
+        logging.info(f"Created {len(chunks)} chunks: {chunks}")
+        
+        # Сохраняем состояние нод для диагностики один раз в начале
+        with allure.step('Save nodes state for diagnostics'):
+            self.save_nodes_state_for_diagnostics()
+        
+        # Создаем общий результат
+        overall_result = YdbCliHelper.WorkloadRunResult()
+        overall_result.start_time = time()
+        
+        successful_chunks = 0
+        total_execution_time = 0
+        
+        # Выполняем каждый чанк
+        for chunk in chunks:
+            chunk_name = f"{workload_name}_chunk_{chunk['chunk_num']}"
+            logging.info(f"=== Starting chunk {chunk['chunk_num']}/{len(chunks)} ===")
+            logging.info(f"Chunk duration: {chunk['duration']}s, offset: {chunk['start_offset']}s")
+            
+            # Формируем аргументы для текущего чанка
+            command_args = f"{command_args_template} --duration {chunk['duration']}"
+            
+            chunk_start_time = time()
+            
+            try:
+                with allure.step(f'Execute {chunk_name}'):
+                    allure.attach(f"Chunk {chunk['chunk_num']}/{len(chunks)}", 'Chunk Info', attachment_type=allure.attachment_type.TEXT)
+                    allure.attach(command_args, 'Chunk Command Arguments', attachment_type=allure.attachment_type.TEXT)
+                    allure.attach(f"Expected duration: {chunk['duration']}s", 'Chunk Settings', attachment_type=allure.attachment_type.TEXT)
+                    
+                    # Временно меняем timeout для этого чанка
+                    original_timeout = self.timeout
+                    self.timeout = chunk['duration'] + 30  # Добавляем буфер для завершения
+                    
+                    try:
+                        stdout, stderr, success = workload_executor(
+                            binary_env_var=self.workload_env_var,
+                            binary_name=self.workload_binary_name,
+                            command_args=command_args,
+                            timeout=self.timeout,
+                            target_dir=self.binaries_deploy_path,
+                            raise_on_error=False  # Не прерываем выполнение если один чанк упал
+                        )
+                    finally:
+                        # Восстанавливаем оригинальный timeout
+                        self.timeout = original_timeout
+                    
+                    chunk_execution_time = time() - chunk_start_time
+                    total_execution_time += chunk_execution_time
+                    
+                    logging.info(f"Chunk {chunk['chunk_num']} completed in {chunk_execution_time:.1f}s, success: {success}")
+                    logging.info(f"Chunk stdout length: {len(stdout) if stdout else 0}")
+                    logging.info(f"Chunk stderr length: {len(stderr) if stderr else 0}")
+                    
+                    # Создаем результат для чанка
+                    chunk_result = self.create_workload_result(
+                        workload_name=chunk_name,
+                        stdout=stdout,
+                        stderr=stderr,
+                        success=success,
+                        additional_stats={
+                            **(additional_stats or {}),
+                            "chunk_number": chunk['chunk_num'],
+                            "chunk_duration": chunk['duration'],
+                            "chunk_execution_time": chunk_execution_time,
+                            "chunk_start_offset": chunk['start_offset']
+                        }
+                    )
+                    
+                    # Добавляем как iteration в общий результат
+                    iteration = YdbCliHelper.Iteration()
+                    iteration.time = chunk_execution_time
+                    if not chunk_result.success:
+                        iteration.error_message = chunk_result.error_message
+                    
+                    overall_result.iterations[chunk['chunk_num']] = iteration
+                    
+                    # Накапливаем stdout/stderr
+                    if overall_result.stdout is None:
+                        overall_result.stdout = ""
+                    if overall_result.stderr is None:
+                        overall_result.stderr = ""
+                        
+                    overall_result.stdout += f"\n=== Chunk {chunk['chunk_num']} ===\n{stdout or ''}"
+                    overall_result.stderr += f"\n=== Chunk {chunk['chunk_num']} stderr ===\n{stderr or ''}"
+                    
+                    # Если чанк завершился успешно
+                    if success and not chunk_result.error_message:
+                        successful_chunks += 1
+                        logging.info(f"Chunk {chunk['chunk_num']} completed successfully")
+                    else:
+                        logging.warning(f"Chunk {chunk['chunk_num']} failed: {chunk_result.error_message}")
+                        # Продолжаем выполнение следующих чанков
+                        
+            except Exception as e:
+                chunk_execution_time = time() - chunk_start_time
+                total_execution_time += chunk_execution_time
+                
+                logging.error(f"Exception in chunk {chunk['chunk_num']}: {e}")
+                
+                # Добавляем failed iteration
+                iteration = YdbCliHelper.Iteration()
+                iteration.time = chunk_execution_time
+                iteration.error_message = f"Chunk execution exception: {str(e)}"
+                overall_result.iterations[chunk['chunk_num']] = iteration
+                
+                # Продолжаем выполнение следующих чанков
+                continue
+        
+        logging.info(f"=== Chunked execution completed ===")
+        logging.info(f"Successful chunks: {successful_chunks}/{len(chunks)}")
+        logging.info(f"Total execution time: {total_execution_time:.1f}s")
+        
+        # Проверяем состояние схемы после всех чанков
+        self._check_scheme_state()
+        
+        # Финализируем общий результат
+        overall_result.success = successful_chunks > 0  # Успех если хотя бы один чанк выполнился
+        
+        # Добавляем общую статистику
+        chunk_stats = {
+            "total_chunks": len(chunks),
+            "successful_chunks": successful_chunks,
+            "failed_chunks": len(chunks) - successful_chunks,
+            "total_execution_time": total_execution_time,
+            "planned_duration": total_duration,
+            "chunk_size": chunk_size,
+            "success_rate": successful_chunks / len(chunks) if len(chunks) > 0 else 0
+        }
+        
+        if additional_stats:
+            chunk_stats.update(additional_stats)
+            
+        # Добавляем статистику в результат
+        for key, value in chunk_stats.items():
+            overall_result.add_stat(workload_name, key, value)
+        
+        # Финальная обработка с диагностикой
+        with allure.step('Generate diagnostics and reports'):
+            self.process_workload_result_with_diagnostics(overall_result, workload_name, False)
+            
+        logging.info(f"=== Chunked workload test completed for {workload_name} ===")
+        logging.info(f"Final result: success={overall_result.success}, successful_chunks={successful_chunks}/{len(chunks)}")
+        
+        return overall_result

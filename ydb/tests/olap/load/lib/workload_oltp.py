@@ -13,12 +13,11 @@ class OltpWorkloadBase(WorkloadTestBase):
     workload_env_var = 'OLTP_WORKLOAD_BINARY'
 
     def test_workload_oltp(self, workload_executor):
-        # Формируем аргументы команды для OLTP workload
-        command_args = (
+        # Формируем аргументы команды для OLTP workload (без --duration, он будет добавлен в чанках)
+        command_args_template = (
             f"--endpoint {YdbCluster.ydb_endpoint} "
             f"--database /{YdbCluster.ydb_database} "
-            f"--path oltp_workload "
-            f"--duration {self.timeout}"
+            f"--path oltp_workload"
         )
         
         # Дополнительная статистика специфичная для OLTP
@@ -27,11 +26,11 @@ class OltpWorkloadBase(WorkloadTestBase):
             "path": "oltp_workload"
         }
         
-        # Используем общий метод из базового класса
-        self.execute_workload_test(
+        # Используем новый метод с чанками для повышения надежности
+        self.execute_workload_test_with_chunks(
             workload_executor=workload_executor,
             workload_name="OltpWorkload",
-            command_args=command_args,
+            command_args_template=command_args_template,
             additional_stats=additional_stats
         )
 

@@ -31,6 +31,8 @@ class OltpWorkloadBase(WorkloadTestBase):
             workload_executor=workload_executor,
             workload_name="OltpWorkload",
             command_args_template=command_args_template,
+            duration_param="--duration",
+            duration_value=self.timeout,
             additional_stats=additional_stats
         )
 

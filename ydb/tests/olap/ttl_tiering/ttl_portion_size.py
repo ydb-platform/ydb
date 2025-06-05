@@ -93,7 +93,7 @@ class TestPortionSizeTtl(TllTieringTestBase):
             f"""
             ALTER OBJECT `{table_path}` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`lc-buckets`, `COMPACTION_PLANNER.FEATURES`=`
                   {{"levels" : [{{"class_name" : "Zero", "expected_blobs_size" : {total_level_size}}},
-                                {{"class_name" : "Zero"}}]}}`);
+                                {{"class_name" : "Zero", "expected_blobs_size" : {total_level_size}}}]}}`);
             """
         )
 

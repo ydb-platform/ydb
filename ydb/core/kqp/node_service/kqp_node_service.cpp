@@ -255,6 +255,7 @@ private:
                 if (querySchedulerGroup) {
                     Scheduler->AddToGroup(schedulerNow, *querySchedulerGroup, schedulingTaskOptions.Handle);
                 }
+                Scheduler->AdvanceTime(TlsActivationContext->Monotonic());
             }
 
             NComputeActor::IKqpNodeComputeActorFactory::TCreateArgs createArgs{

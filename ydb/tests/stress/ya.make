@@ -5,6 +5,7 @@ RECURSE(
     node_broker
     olap_workload
     oltp_workload
+    reconfig_state_storage_workload
     simple_queue
     show_create/view
     statistics_workload

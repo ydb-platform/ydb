@@ -981,7 +981,7 @@ void InferStatisticsForTopBase(const TExprNode::TPtr& input, TTypeAnnotationCont
     }
 
     auto topStats = std::make_shared<TOptimizerStatistics>(*inputStats);
-    auto orderingInfo = GetTopBaseSortingOrderingIdx(topBase, typeCtx->SortingsFSM, topStats->TableAliases.Get());
+    auto orderingInfo = GetTopBaseSortingOrderingInfo(topBase, typeCtx->SortingsFSM, topStats->TableAliases.Get());
     if (typeCtx->SortingsFSM && !topStats->SortingOrderings.ContainsSorting(orderingInfo.OrderingIdx)) {
         topStats->SortingOrderings = typeCtx->SortingsFSM->CreateState(orderingInfo.OrderingIdx);
     }
@@ -989,6 +989,26 @@ void InferStatisticsForTopBase(const TExprNode::TPtr& input, TTypeAnnotationCont
 
     YQL_CLOG(TRACE, CoreDq) << "Input of the TopBase: " << inputStats->ToString();
     YQL_CLOG(TRACE, CoreDq) << "Infer statistics for TopBase: " << topStats->ToString();
+    typeCtx->SetStats(inputNode.Raw(), std::move(topStats));
+}
+
+void InferStatisticsForSortBase(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx) {
+    auto inputNode = TExprBase(input);
+    auto sortBase = inputNode.Cast<TCoSortBase>();
+
+    auto inputStats = typeCtx->GetStats(sortBase.Input().Raw());
+    if (!inputStats) {
+        return;
+    }
+    auto topStats = std::make_shared<TOptimizerStatistics>(*inputStats);
+    auto orderingInfo = GetSortBaseSortingOrderingInfo(sortBase, typeCtx->SortingsFSM, topStats->TableAliases.Get());
+    if (typeCtx->SortingsFSM && !topStats->SortingOrderings.ContainsSorting(orderingInfo.OrderingIdx)) {
+        topStats->SortingOrderings = typeCtx->SortingsFSM->CreateState(orderingInfo.OrderingIdx);
+    }
+    topStats->SortingOrderingIdx = orderingInfo.OrderingIdx;
+
+    YQL_CLOG(TRACE, CoreDq) << "Input of the SortBase: " << inputStats->ToString();
+    YQL_CLOG(TRACE, CoreDq) << "Infer statistics for SortBase: " << topStats->ToString();
     typeCtx->SetStats(inputNode.Raw(), std::move(topStats));
 }
 
@@ -1046,19 +1066,20 @@ void InferStatisticsForEquiJoin(const TExprNode::TPtr& input, TTypeAnnotationCon
     }
 }
 
-TOrderingInfo GetTopBaseSortingOrderingIdx(
-    const NNodes::TCoTopBase& topBase,
-    const TSimpleSharedPtr<TOrderingsStateMachine>& sortingsFSM,
+template <typename TSortCallable>
+TOrderingInfo GetSortingOrderingInfoImpl(
+    const TSortCallable& sortCallable,
+     const TSimpleSharedPtr<TOrderingsStateMachine>& sortingsFSM,
     TTableAliasMap* tableAlias
 ) {
-    const auto& keySelector = topBase.KeySelectorLambda();
+    const auto& keySelector = sortCallable.KeySelectorLambda();
     TVector<TJoinColumn> sorting;
-    if (auto body = keySelector.Body().Maybe<TCoMember>()) {
+    if (auto body = keySelector.Body().template Maybe<TCoMember>()) {
         sorting.push_back(TJoinColumn::FromString(body.Cast().Name().StringValue()));
-    } else if (auto body = keySelector.Body().Maybe<TExprList>()) {
+    } else if (auto body = keySelector.Body().template Maybe<TExprList>()) {
         for (size_t i = 0; i < body.Cast().Size(); ++i) {
             auto item = body.Cast().Item(i);
-            if (auto member = item.Maybe<TCoMember>()) {
+            if (auto member = item.template Maybe<TCoMember>()) {
                 sorting.push_back(TJoinColumn::FromString(member.Cast().Name().StringValue()));
             }
         }
@@ -1077,12 +1098,12 @@ TOrderingInfo GetTopBaseSortingOrderingIdx(
     };
 
     std::vector<TOrdering::TItem::EDirection> directions;
-    const auto& sortDirections = topBase.SortDirections();
-    if (auto maybeList = sortDirections.Maybe<TExprList>()) {
+    const auto& sortDirections = sortCallable.SortDirections();
+    if (auto maybeList = sortDirections.template Maybe<TExprList>()) {
         for (const auto& expr : maybeList.Cast()) {
             directions.push_back(getDirection(expr));
         }
-    } else if (auto maybeBool = sortDirections.Maybe<TCoBool>()){
+    } else if (auto maybeBool = sortDirections.template Maybe<TCoBool>()){
         directions.push_back(getDirection(TExprBase(maybeBool.Cast())));
     }
 
@@ -1100,6 +1121,22 @@ TOrderingInfo GetTopBaseSortingOrderingIdx(
         .Directions = std::move(directions),
         .Ordering = std::move(sorting)
     };
+}
+
+TOrderingInfo GetSortBaseSortingOrderingInfo(
+    const NNodes::TCoSortBase& sort,
+    const TSimpleSharedPtr<TOrderingsStateMachine>& sortingsFSM,
+    TTableAliasMap* tableAlias
+) {
+    return GetSortingOrderingInfoImpl(sort, sortingsFSM, tableAlias);
+}
+
+TOrderingInfo GetTopBaseSortingOrderingInfo(
+    const NNodes::TCoTopBase& topBase,
+    const TSimpleSharedPtr<TOrderingsStateMachine>& sortingsFSM,
+    TTableAliasMap* tableAlias
+) {
+    return GetSortingOrderingInfoImpl(topBase, sortingsFSM, tableAlias);
 }
 
 } // namespace NYql::NDq {

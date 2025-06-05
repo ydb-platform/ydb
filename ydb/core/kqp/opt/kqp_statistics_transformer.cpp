@@ -956,7 +956,9 @@ private:
             } else if (auto aggregateBase = TMaybeNode<TCoAggregateBase>(node)) {
                 CollectAggregateBase(aggregateBase.Cast());
             } else if (auto topBase = TMaybeNode<TCoTopBase>(node)) {
-                CollectTopBase(topBase.Cast());
+                CollectSort<TCoTopBase>(topBase.Cast());
+            } else if (auto sort = TMaybeNode<TCoSortBase>(node)) {
+                CollectSort<TCoSortBase>(sort.Cast());
             } else if (auto kqlReadTableIndexRanges = TMaybeNode<TKqlReadTableIndexRanges>(node)) {
                 CollectKqlReadTableIndexRanges(kqlReadTableIndexRanges.Cast());
             } else if (auto flatMapBase = TMaybeNode<TCoFlatMapBase>(node)) {
@@ -1073,13 +1075,22 @@ private:
         }
 
     private:
-        void CollectTopBase(const TCoTopBase& topBase) {
+        template <typename TSortCallable>
+        void CollectSort(const TSortCallable& sortCallable) {
             TTableAliasMap* tableAliases = nullptr;
-            if (auto stats = TypeCtx.GetStats(topBase.Raw())) {
+            if (auto stats = TypeCtx.GetStats(sortCallable.Raw())) {
                 tableAliases = stats->TableAliases.Get();
             }
 
-            auto orderingInfo = GetTopBaseSortingOrderingIdx(topBase, nullptr, tableAliases);
+            TOrderingInfo orderingInfo;
+            if constexpr (std::is_same_v<TSortCallable, TCoTopBase>) {
+                orderingInfo = GetTopBaseSortingOrderingInfo(sortCallable, nullptr, tableAliases);
+            } else if constexpr (std::is_same_v<TSortCallable, TCoSortBase>) {
+                orderingInfo = GetSortBaseSortingOrderingInfo(sortCallable, nullptr, tableAliases);
+            } else {
+                static_assert(false, "There's no such callable");
+            }
+
             bool ascOnly =
                     std::all_of(
                         orderingInfo.Directions.begin(),
@@ -1088,7 +1099,7 @@ private:
                     );
 
             if (!ascOnly) { // we may have desc direction in topsort - so we will consider two cases : asc and desc table reads
-                if (auto maybeFlatMapBase = TMaybeNode<TCoFlatMapBase>(topBase.Input().Raw())) {
+                if (auto maybeFlatMapBase = TMaybeNode<TCoFlatMapBase>(sortCallable.Input().Raw())) {
                     if (auto maybeTable = GetTable(maybeFlatMapBase.Cast().Input().Raw())) {
                         CollectKqpTable<GetDescDirections>(*maybeTable);
                     }
@@ -1096,7 +1107,8 @@ private:
             }
 
             std::size_t sortingsOrderingIdx = FDStorage.AddSorting(orderingInfo.Ordering, orderingInfo.Directions, tableAliases);
-            YQL_CLOG(TRACE, CoreDq) << "Collected TopBase interesting ordering idx: " << sortingsOrderingIdx << ", TableAliases: " << TableAliasToString(tableAliases);
+
+            YQL_CLOG(TRACE, CoreDq) << "Collected " << sortCallable.CallableName() << " interesting ordering idx: " << sortingsOrderingIdx << ", TableAliases: " << TableAliasToString(tableAliases);
         }
 
         TMaybe<TKqpTable> GetTable(const TExprNode* const input) {

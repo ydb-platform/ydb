@@ -3,6 +3,7 @@
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
 #include <ydb/core/tx/columnshard/common/limits.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/engines/writer/write_controller.h>
 #include <ydb/core/tx/columnshard/splitter/settings.h>
 #include <ydb/core/tx/tiering/tier/identifier.h>
@@ -339,11 +340,11 @@ public:
         return {};
     }
 
-    virtual void OnSwitchToWork(const ui64 tabletId) {
+    virtual void OnSwitchToWork(const NOlap::TTabletId tabletId) {
         Y_UNUSED(tabletId);
     }
 
-    virtual void OnCleanupActors(const ui64 tabletId) {
+    virtual void OnCleanupActors(const NOlap::TTabletId tabletId) {
         Y_UNUSED(tabletId);
     }
 
@@ -356,6 +357,16 @@ public:
     virtual THashMap<TString, std::shared_ptr<NKikimr::NOlap::NDataLocks::ILock>> GetExternalDataLocks() const {
         return {};
     }
+
+    virtual ui64 GetInternalPathIdOffset(const NOlap::TTabletId /*tabletId*/) const {
+        return 0;
+    }
+
+    virtual void OnAddPathIdMapping(const NOlap::TTabletId /* tabletId */, const NColumnShard::TInternalPathId /* internalPathId */, const NColumnShard::TSchemeShardLocalPathId /* localPathId */) {
+    }
+    virtual void OnDeletePathIdMapping(const NOlap::TTabletId /* tabletId */, const NColumnShard::TInternalPathId /* internalPathId */, const NColumnShard::TSchemeShardLocalPathId /* localPathId */) {
+    }
+
 };
 
 class TControllers {

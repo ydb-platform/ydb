@@ -52,7 +52,7 @@ void TColumnShard::CleanupActors(const TActorContext& ctx) {
     if (Tiers) {
         Tiers->Stop(true);
     }
-    NYDBTest::TControllers::GetColumnShardController()->OnCleanupActors(TabletID());
+    NYDBTest::TControllers::GetColumnShardController()->OnCleanupActors(NOlap::TTabletId{TabletID()});
 }
 
 void TColumnShard::BecomeBroken(const TActorContext& ctx) {
@@ -85,10 +85,10 @@ void TColumnShard::TrySwitchToWork(const TActorContext& ctx) {
     Counters.GetCSCounters().OnIndexMetadataLimit(NOlap::IColumnEngine::GetMetadataLimit());
     EnqueueBackgroundActivities();
     BackgroundSessionsManager->Start();
-    ctx.Send(SelfId(), new NActors::TEvents::TEvWakeup());
+    ctx.Send(SelfId(), new NActors::TEvents::TEvWakeup()); 
     ctx.Send(SelfId(), new TEvPrivate::TEvPeriodicWakeup());
     ctx.Send(SelfId(), new TEvPrivate::TEvPingSnapshotsUsage());
-    NYDBTest::TControllers::GetColumnShardController()->OnSwitchToWork(TabletID());
+    NYDBTest::TControllers::GetColumnShardController()->OnSwitchToWork(NOlap::TTabletId{TabletID()});
     AFL_VERIFY(!!StartInstant);
     Counters.GetCSCounters().Initialization.OnSwitchToWork(TMonotonic::Now() - *StartInstant, TMonotonic::Now() - CreateInstant);
     NYDBTest::TControllers::GetColumnShardController()->OnTabletInitCompleted(*this);

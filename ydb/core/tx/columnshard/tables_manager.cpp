@@ -274,6 +274,7 @@ void TTablesManager::DropPreset(const ui32 presetId, const NOlap::TSnapshot& ver
 void TTablesManager::RegisterTable(TTableInfo&& table, NIceDb::TNiceDb& db) {
     Y_ABORT_UNLESS(!HasTable(table.GetInternalPathId()));
     Y_ABORT_UNLESS(table.IsEmpty());
+    NYDBTest::TControllers::GetColumnShardController()->OnAddPathIdMapping(NOlap::TTabletId{TabletId}, table.GetInternalPathId(), table.GetSchemeShardLocalPathId());
 
     Schema::SaveTableInfo(db, table.GetInternalPathId());
     const auto pathId = table.GetInternalPathId();

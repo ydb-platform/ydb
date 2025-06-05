@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/kqp/common/simple/temp_tables.h>
+#include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
 #include <ydb/core/kqp/provider/yql_kikimr_gateway.h>
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
@@ -25,13 +26,15 @@ public:
         TActorSystem* actorSystem,
         NYql::TKikimrConfiguration::TPtr config,
         bool needCollectSchemeData = false,
-        TKqpTempTablesState::TConstPtr tempTablesState = nullptr)
+        TKqpTempTablesState::TConstPtr tempTablesState = nullptr,
+        const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup = std::nullopt)
         : Cluster(cluster)
         , NeedCollectSchemeData(needCollectSchemeData)
         , ActorSystem(actorSystem)
         , Config(config)
         , TempTablesState(std::move(tempTablesState))
         , SystemViewRewrittenResolver(NSysView::CreateSystemViewRewrittenResolver())
+        , FederatedQuerySetup(federatedQuerySetup)
     {}
 
     NThreading::TFuture<NYql::IKikimrGateway::TTableMetadataResult> LoadTableMetadata(
@@ -76,6 +79,7 @@ private:
     NYql::TKikimrConfiguration::TPtr Config;
     TKqpTempTablesState::TConstPtr TempTablesState;
     THolder<NSysView::ISystemViewResolver> SystemViewRewrittenResolver;
+    std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
 };
 
 } // namespace NKikimr::NKqp

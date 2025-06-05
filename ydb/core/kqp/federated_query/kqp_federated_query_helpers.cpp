@@ -292,4 +292,39 @@ namespace NKikimr::NKqp {
         return issues;
     }
 
+    NThreading::TFuture<TGetSchemeEntryResult> GetSchemeEntryType(
+        const TString& endpoint,
+        const TString& database,
+        bool useTls,
+        const TString& structuredTokenJson,
+        const TString& path) {
+        std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory = NYql::CreateCredentialsProviderFactoryForStructuredToken(nullptr, structuredTokenJson, false/*config->GetAddBearerToToken()*/);
+
+        Cerr << "endpoint " << endpoint << Endl;
+        Cerr << "database " << database << Endl;
+        Cerr << "path " << path << Endl;
+        
+        NYdb::TDriverConfig config;
+        config.SetEndpoint(endpoint);
+        config.SetDatabase(database);
+        auto driver = std::make_shared<NYdb::TDriver>(config);
+        
+        NYdb::TCommonClientSettings opts;
+        opts
+            .DiscoveryEndpoint(endpoint)
+            .Database(database)
+            .SslCredentials(NYdb::TSslCredentials(useTls)) // todo
+            .CredentialsProviderFactory(credentialsProviderFactory);
+        auto schemeClient = NYdb::NScheme::TSchemeClient(*driver, opts);
+        return schemeClient.DescribePath(path)
+            .Apply([driver](const NThreading::TFuture<NYdb::NScheme::TDescribePathResult>& result) {
+                auto describePathResult = result.GetValue();
+                if (!describePathResult.IsSuccess()) {
+                    return NThreading::MakeFuture<TGetSchemeEntryResult>(Nothing()); 
+                }
+                NYdb::NScheme::TSchemeEntry entry = describePathResult.GetEntry();
+                return NThreading::MakeFuture<TGetSchemeEntryResult>(entry.Type);
+            });
+    };
+    
 }  // namespace NKikimr::NKqp

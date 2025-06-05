@@ -189,4 +189,13 @@ namespace NKikimr::NKqp {
 
     NYql::TIssues ValidateResultSetColumns(const google::protobuf::RepeatedPtrField<Ydb::Column>& columns, ui32 maxNestingDepth = 90);
 
+    using TGetSchemeEntryResult = TMaybe<NYdb::NScheme::ESchemeEntryType>;
+    
+    NThreading::TFuture<TGetSchemeEntryResult> GetSchemeEntryType(
+        const TString& endpoint,
+        const TString& database,
+        bool useTls,
+        const TString& structuredTokenJson,
+        const TString& path);
+
 }  // namespace NKikimr::NKqp

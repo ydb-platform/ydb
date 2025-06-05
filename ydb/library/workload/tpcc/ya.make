@@ -1,8 +1,11 @@
 LIBRARY()
 
 SRCS(
+    clean.cpp
     common_queries.cpp
+    data_splitter.cpp
     histogram.cpp
+    init.cpp
     runner.cpp
     task_queue.cpp
     terminal.cpp

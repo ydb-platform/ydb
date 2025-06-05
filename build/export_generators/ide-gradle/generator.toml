@@ -95,6 +95,7 @@ custom_runs-cmake_packages-components="list"
 
 javac-flags="list"
 kotlinc-flags="list"
+jvm_args="list"
 
 target_commands="list"
 target_commands-ITEM="dict"

@@ -146,6 +146,7 @@
 #include <ydb/core/tx/columnshard/blob_cache.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
+#include <ydb/core/tx/columnshard/data_accessor/node_actor.h>
 #include <ydb/core/tx/mediator/mediator.h>
 #include <ydb/core/tx/replication/controller/controller.h>
 #include <ydb/core/tx/replication/service/service.h>
@@ -1130,6 +1131,19 @@ void TSharedCacheInitializer::InitializeServices(
     setup->LocalServices.emplace_back(NSharedCache::MakeSharedPageCacheId(0),
         TActorSetupCmd(actor, TMailboxType::ReadAsFilled, appData->UserPoolId));
 }
+
+// TSharedMetadaCacheInitializer
+TSharedMetadaCacheInitializer::TSharedMetadaCacheInitializer(const TKikimrRunConfig& runConfig) 
+    : IKikimrServicesInitializer(runConfig)
+{}
+
+void TSharedMetadaCacheInitializer::InitializeServices( NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) {
+    if (appData->FeatureFlags.GetEnableSharedMetadataCache()) {
+        auto* actor = NKikimr::NOlap::NDataAccessorControl::TNodeActor::CreateActor();
+        setup->LocalServices.emplace_back(NKikimr::NOlap::NDataAccessorControl::TNodeActor::MakeActorId(NodeId),
+            TActorSetupCmd(actor, TMailboxType::HTSwap, appData->UserPoolId));
+    }
+} 
 
 // TBlobCacheInitializer
 

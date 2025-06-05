@@ -466,25 +466,34 @@ public:
 }   // namespace
 
 bool Ttl(TColumnEngineForLogs& engine, TTestDbWrapper& db, const THashMap<TInternalPathId, NOlap::TTiering>& pathEviction, ui32 expectedToDrop) {
+    Cerr << "IURII TTL 1";
     engine.StartActualization(pathEviction);
     std::vector<NOlap::TCSMetadataRequest> requests = engine.CollectMetadataRequests();
     for (auto&& i : requests) {
         i.GetRequest()->RegisterSubscriber(std::make_shared<TTestMetadataAccessorsSubscriber>(i.GetProcessor(), engine));
         engine.FetchDataAccessors(i.GetRequest());
     }
-
+    Cerr << "IURII TTL 2";
     std::vector<std::shared_ptr<TTTLColumnEngineChanges>> vChanges = engine.StartTtl(pathEviction, EmptyDataLocksManager, 512 * 1024 * 1024);
     AFL_VERIFY(vChanges.size() == 1)("count", vChanges.size());
     auto changes = vChanges.front();
     UNIT_ASSERT_VALUES_EQUAL(changes->GetPortionsToRemove().GetSize(), expectedToDrop);
-
+    Cerr << "IURII TTL 3";
     changes->StartEmergency();
+        Cerr << "IURII TTL 4";
     {
+        Cerr << "IURII TTL 4.1" << '\n';
         auto request = changes->ExtractDataAccessorsRequest();
+        Cerr << "IURII TTL 4.2" << '\n';
         request->RegisterSubscriber(
             std::make_shared<TTestCompactionAccessorsSubscriber>(changes, std::make_shared<NOlap::TVersionedIndex>(engine.GetVersionedIndex())));
+
+        Cerr << "IURII TTL 4.3" << '\n';
         engine.FetchDataAccessors(request);
+
+        Cerr << "IURII TTL 4.4" << '\n';
     }
+        Cerr << "IURII TTL 5";
     const bool result = engine.ApplyChangesOnTxCreate(changes, TSnapshot(1, 1)) && engine.ApplyChangesOnExecute(db, changes, TSnapshot(1, 1));
     NOlap::TWriteIndexContext contextExecute(nullptr, db, engine, TSnapshot(1, 1));
     changes->WriteIndexOnExecute(nullptr, contextExecute);
@@ -492,6 +501,7 @@ bool Ttl(TColumnEngineForLogs& engine, TTestDbWrapper& db, const THashMap<TInter
         NActors::TActivationContext::AsActorContext(), 0, 0, TDuration::Zero(), engine, TSnapshot(1, 1));
     changes->WriteIndexOnComplete(nullptr, contextComplete);
     changes->AbortEmergency("testing");
+        Cerr << "IURII TTL 6";
     return result;
 }
 
@@ -522,10 +532,11 @@ std::shared_ptr<NKikimr::NOlap::IStoragesManager> CommonStoragesManager = Initia
 Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
     void WriteLoadRead(const std::vector<NArrow::NTest::TTestColumn>& ydbSchema, const std::vector<NArrow::NTest::TTestColumn>& key) {
         TTestBasicRuntime runtime;
+        NTxUT::TTester::Setup(runtime);
         TTestDbWrapper db;
         TIndexInfo tableInfo = NColumnShard::BuildTableInfo(ydbSchema, key);
 
-        std::vector<TInternalPathId> paths = { 
+        std::vector<TInternalPathId> paths = {
             TInternalPathId::FromRawValue(1),
             TInternalPathId::FromRawValue(2)
         };
@@ -615,6 +626,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
 
     void ReadWithPredicates(const std::vector<NArrow::NTest::TTestColumn>& ydbSchema, const std::vector<NArrow::NTest::TTestColumn>& key) {
         TTestBasicRuntime runtime;
+        NTxUT::TTester::Setup(runtime);
         TTestDbWrapper db;
         TIndexInfo tableInfo = NColumnShard::BuildTableInfo(ydbSchema, key);
 
@@ -711,6 +723,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
 
     Y_UNIT_TEST(IndexWriteOverload) {
         TTestBasicRuntime runtime;
+        NTxUT::TTester::Setup(runtime);
         TTestDbWrapper db;
         auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
         TIndexInfo tableInfo = NColumnShard::BuildTableInfo(testColumns, testKey);
@@ -790,6 +803,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
 
     Y_UNIT_TEST(IndexTtl) {
         TTestBasicRuntime runtime;
+        NTxUT::TTester::Setup(runtime);
         TTestDbWrapper db;
         TIndexInfo tableInfo = NColumnShard::BuildTableInfo(testColumns, testKey);
         auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
@@ -801,12 +815,16 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         // insert
         ui64 planStep = 1;
         TSnapshot indexSnapshot(1, 1);
+
+        // auto DataAccessorsControlActorId = NOlap::NDataAccessorControl::TNodeActor::MakeActorId(0);
+        // auto DataAccessorsManager = std::make_shared<NOlap::NDataAccessorControl::TActorAccessorsManager>(DataAccessorsControlActorId, SelfId());
+
         {
             TColumnEngineForLogs engine(
                 0, std::make_shared<TSchemaObjectsCache>(), NDataAccessorControl::TLocalManager::BuildForTests(), CommonStoragesManager, indexSnapshot, 0, TIndexInfo(tableInfo), std::make_shared<NColumnShard::TPortionIndexStats>());
             engine.RegisterTable(pathId);
             engine.TestingLoad(db);
-
+            Cerr << "IURII Stage 1\n";
             const ui64 numRows = 1000;
             const ui64 txCount = 20;
             const ui64 tsIncrement = 1;
@@ -835,6 +853,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
                     blobStartTs += gap.MicroSeconds();
                 }
             }
+            Cerr << "IURII Stage 2\n";
 
             // compact
             planStep = 2;
@@ -845,6 +864,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
             // read
             planStep = 3;
 
+            Cerr << "IURII Stage 3\n";
             const TIndexInfo& indexInfo = engine.GetVersionedIndex().GetLastSchema()->GetIndexInfo();
             THashSet<ui32> oneColumnId = { indexInfo.GetColumnIdVerified(testColumns[0].GetName()) };
 
@@ -854,6 +874,8 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
                 UNIT_ASSERT_VALUES_EQUAL(selectInfo->Portions.size(), 20);
             }
 
+
+            Cerr << "IURII Stage 4\n";
             // Cleanup
             Cleanup(engine, db, TSnapshot(planStep, 1), 0);
 
@@ -863,13 +885,21 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
                 UNIT_ASSERT_VALUES_EQUAL(selectInfo->Portions.size(), 20);
             }
 
+
+            Cerr << "IURII Stage 5\n";
+
             // TTL
             std::shared_ptr<arrow::DataType> ttlColType = arrow::timestamp(arrow::TimeUnit::MICRO);
             THashMap<TInternalPathId, NOlap::TTiering> pathTtls;
             NOlap::TTiering tiering;
             AFL_VERIFY(tiering.Add(NOlap::TTierInfo::MakeTtl(gap, "timestamp")));
             pathTtls.emplace(pathId, std::move(tiering));
+
+            Cerr << "IURII Stage 5.4\n";
             Ttl(engine, db, pathTtls, txCount / 2);
+
+
+            Cerr << "IURII Stage 5.5\n";
 
             // read + load + read
 
@@ -879,6 +909,8 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
                 UNIT_ASSERT_VALUES_EQUAL(selectInfo->Portions.size(), 10);
             }
         }
+
+            Cerr << "IURII Stage 6 HALFWAY\n";
         {
             // load
             TColumnEngineForLogs engine(
@@ -886,14 +918,18 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
             engine.RegisterTable(pathId);
             engine.TestingLoad(db);
 
+            Cerr << "IURII Stage 7\n";
+
             const TIndexInfo& indexInfo = engine.GetVersionedIndex().GetLastSchema()->GetIndexInfo();
             THashSet<ui32> oneColumnId = { indexInfo.GetColumnIdVerified(testColumns[0].GetName()) };
 
+            Cerr << "IURII Stage 8\n";
             {   // full scan
                 ui64 txId = 1;
                 auto selectInfo = engine.Select(pathId, TSnapshot(planStep, txId), NOlap::TPKRangesFilter(), false);
                 UNIT_ASSERT_VALUES_EQUAL(selectInfo->Portions.size(), 10);
             }
+            Cerr << "IURII Stage 9\n";
         }
     }
 }

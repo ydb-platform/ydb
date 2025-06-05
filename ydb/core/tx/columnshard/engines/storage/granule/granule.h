@@ -128,6 +128,7 @@ private:
 
     mutable bool AllowInsertionFlag = false;
     const TInternalPathId PathId;
+    const TTabletId TabletId;
     std::shared_ptr<NDataAccessorControl::IDataAccessorsManager> DataAccessorsManager;
     const NColumnShard::TGranuleDataCounters Counters;
     NColumnShard::TEngineLogsCounters::TPortionsInfoGuard PortionInfoGuard;
@@ -180,7 +181,7 @@ public:
     std::unique_ptr<NDataAccessorControl::IGranuleDataAccessor> BuildDataAccessor() {
         AFL_VERIFY(!DataAccessorConstructed);
         DataAccessorConstructed = true;
-        return MetadataMemoryManager->BuildCollector(PathId);
+        return MetadataMemoryManager->BuildCollector(TabletId, PathId);
     }
 
     void RefreshTiering(const std::optional<TTiering>& tiering) {
@@ -311,7 +312,7 @@ public:
             }
             request->RegisterSubscriber(std::make_shared<TFakeDataAccessorsSubscriber>());
 
-            DataAccessorsManager->AskData(request);
+            DataAccessorsManager->AskData(TabletId, request);
         }
         if (ActualizationIndex->IsStarted()) {
             RefreshScheme();

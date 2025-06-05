@@ -3,7 +3,7 @@
 namespace NKikimr::NOlap::NDataAccessorControl {
 
 void TActor::Handle(TEvAskServiceDataAccessors::TPtr& ev) {
-    Manager->AskData(ev->Get()->GetRequest());
+    Manager->AskData(ev->Get()->GetTabletId(), ev->Get()->GetRequest());
 }
 
 void TActor::Bootstrap() {

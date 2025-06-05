@@ -28,4 +28,7 @@ void TCollector::DoModifyPortions(const std::vector<TPortionDataAccessor>& add, 
     }
 }
 
+void TCollector::DoResize([[maybe_unused]] ui64 size) {
+}
+
 }   // namespace NKikimr::NOlap::NDataAccessorControl::NInMem

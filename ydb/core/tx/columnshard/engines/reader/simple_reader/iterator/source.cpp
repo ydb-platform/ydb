@@ -421,7 +421,7 @@ bool TPortionDataSource::DoStartFetchingAccessor(const std::shared_ptr<IDataSour
     request->AddPortion(Portion);
     request->SetColumnIds(GetContext()->GetAllUsageColumns()->GetColumnIds());
     request->RegisterSubscriber(std::make_shared<TPortionAccessorFetchingSubscriber>(step, sourcePtr));
-    GetContext()->GetCommonContext()->GetDataAccessorsManager()->AskData(request);
+    GetContext()->GetCommonContext()->GetDataAccessorsManager()->AskData((NOlap::TTabletId)GetContext()->GetReadMetadata()->GetTabletId(), request);
     return true;
 }
 

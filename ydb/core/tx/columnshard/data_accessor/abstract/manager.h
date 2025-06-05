@@ -12,7 +12,7 @@ class TGranuleMeta;
 namespace NKikimr::NOlap::NDataAccessorControl {
 class IMetadataMemoryManager {
 private:
-    virtual std::unique_ptr<IGranuleDataAccessor> DoBuildCollector(const TInternalPathId pathId) = 0;
+    virtual std::unique_ptr<IGranuleDataAccessor> DoBuildCollector(const TTabletId tabletId, const TInternalPathId pathId) = 0;
     virtual std::shared_ptr<ITxReader> DoBuildLoader(
         const TVersionedIndex& versionedIndex, TGranuleMeta* granule, const std::shared_ptr<IBlobGroupSelector>& dsGroupSelector) = 0;
 
@@ -22,8 +22,8 @@ public:
         return false;
     }
 
-    std::unique_ptr<IGranuleDataAccessor> BuildCollector(const TInternalPathId pathId) {
-        return DoBuildCollector(pathId);
+    std::unique_ptr<IGranuleDataAccessor> BuildCollector(const TTabletId tabletId, const TInternalPathId pathId) {
+        return DoBuildCollector(tabletId, pathId);
     }
 
     std::shared_ptr<ITxReader> BuildLoader(

@@ -5,7 +5,7 @@
 namespace NKikimr::NOlap::NDataAccessorControl {
 class IAccessorCallback {
 public:
-    virtual void OnAccessorsFetched(std::vector<TPortionDataAccessor>&& accessors) = 0;
+    virtual void OnAccessorsFetched(TTabletId TabletId, std::vector<TPortionDataAccessor>&& accessors) = 0;
     virtual ~IAccessorCallback() = default;
 };
 
@@ -14,7 +14,7 @@ private:
     const NActors::TActorId ActorId;
 
 public:
-    virtual void OnAccessorsFetched(std::vector<TPortionDataAccessor>&& accessors) override;
+    virtual void OnAccessorsFetched(TTabletId tabletId, std::vector<TPortionDataAccessor>&& accessors) override;
     TActorAccessorsCallback(const NActors::TActorId& actorId)
         : ActorId(actorId) {
     }
@@ -79,10 +79,12 @@ public:
 class IGranuleDataAccessor {
 private:
     const TInternalPathId PathId;
+    const TTabletId TabletId;
 
     virtual void DoAskData(THashMap<TInternalPathId, TPortionsByConsumer>&& portions, const std::shared_ptr<IAccessorCallback>& callback) = 0;
     virtual TDataCategorized DoAnalyzeData(const TPortionsByConsumer& portions) = 0;
     virtual void DoModifyPortions(const std::vector<TPortionDataAccessor>& add, const std::vector<ui64>& remove) = 0;
+    virtual void DoResize(ui64 size) = 0;
 
 public:
     virtual ~IGranuleDataAccessor() = default;
@@ -90,15 +92,22 @@ public:
     TInternalPathId GetPathId() const {
         return PathId;
     }
+    TTabletId GetTabletId() const {
+        return TabletId;
+    }
 
-    IGranuleDataAccessor(const TInternalPathId pathId)
-        : PathId(pathId) {
+    IGranuleDataAccessor(const TTabletId tabletId, const TInternalPathId pathId)
+        : PathId(pathId)
+        , TabletId(tabletId) {
     }
 
     void AskData(THashMap<TInternalPathId, TPortionsByConsumer>&& portions, const std::shared_ptr<IAccessorCallback>& callback);
     TDataCategorized AnalyzeData(const TPortionsByConsumer& portions);
     void ModifyPortions(const std::vector<TPortionDataAccessor>& add, const std::vector<ui64>& remove) {
         return DoModifyPortions(add, remove);
+    }
+    void Resize(ui64 size) {
+      DoResize(size);
     }
 };
 

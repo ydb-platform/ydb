@@ -17,6 +17,7 @@ PEERDIR(
     ydb/library/actors/interconnect/rdma/ibdrv
     ydb/library/actors/interconnect/rdma
     ydb/library/actors/interconnect
+    ydb/library/actors/testlib
 )
 
 END()

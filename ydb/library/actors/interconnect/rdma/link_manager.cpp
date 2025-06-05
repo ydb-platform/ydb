@@ -70,6 +70,8 @@ private:
             return;
         }
 
+        Y_DEFER{ ibv_free_device_list(deviceList); };
+
         for (int i = 0; i < numDevices; i++) {
             ibv_device* dev = deviceList[i];
             ibv_context* ctx = ibv_open_device(dev);
@@ -77,7 +79,6 @@ private:
                 Err = Sprintf("Failed to open ib device '%s'", ibv_get_device_name(dev));
                 continue;
             }
-            Y_DEFER{ ibv_free_device_list(deviceList); };
 
             ibv_pd* pd = ibv_alloc_pd(ctx);
             if (!pd) {

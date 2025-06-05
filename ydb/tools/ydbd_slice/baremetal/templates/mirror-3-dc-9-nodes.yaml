@@ -1,10 +1,27 @@
+# YDB configuration options and their values
+# are described in documentaion https://ydb.tech/en/docs/deploy/configuration/config
+
+use_new_style_kikimr_cfg: true
+yaml_config_enabled: true
+
 # static erasure is the parameter that
 # describes the fault tolerance mode of the
 # cluster. See docs for more details https://ydb.tech/en/docs/deploy/configuration/config#domains-blob
 static_erasure: mirror-3-dc
+state_storage:
+  node_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9]
+  allow_incorrect: true
+
+log:
+  cluster_name: "default_devslice" # Change cluster name in order to have better experience with logs searching in Monium.
+  sys_log: true
+  uaclient_config:
+    uri: "[fd53::1]:16400"
+    grpc_max_message_size: 4194304
+
 host_configs: # the list of available host configurations in the cluster.
 - drive:
-  - path: /dev/disk/by-partlabel/kikimr_nvme_01 # path of the first disk in the host configration.
+  - path: &disk_path_1 /dev/disk/by-partlabel/kikimr_nvme_01 # path of the first disk in the host configration.
     type: SSD                                   # kind of the disk: available kinds are SSD, NVME or HDD
   - path: /dev/disk/by-partlabel/kikimr_nvme_02
     type: SSD
@@ -14,10 +31,11 @@ host_configs: # the list of available host configurations in the cluster.
     # If your host has nodeclaim-label like '_2hdd', that means, that
     # they will be located at `/dev/disk/by-partlabel/kikimr_hdd_03-04` (enumeration starts with 03)
   host_config_id: 1 # the unique id of the host config
+  
 hosts:
 - host: ydb-node-zone-a-1.local # storage node DNS name, change if required.
   host_config_id: 1             # numeric host configuration template identifier.
-  walle_location:               # this parameter describes where host is located.
+  location:               # this parameter describes where host is located.
     body: 1                     # string representing a host serial number.
     data_center: 'zone-a'       # string representing the datacenter / availability zone where the host is located.
                                 # if cluster is deployed using mirror-3-dc fault tolerance mode, all hosts must be distributed
@@ -30,51 +48,51 @@ hosts:
     # Just do not change `data_center` and `rack` options.
 - host: ydb-node-zone-a-2.local
   host_config_id: 1
-  walle_location:
+  location:
     body: 2
     data_center: 'zone-a'
     rack: '2'
 - host: ydb-node-zone-a-3.local
   host_config_id: 1
-  walle_location:
+  location:
     body: 3
     data_center: 'zone-a'
     rack: '3'
 
 - host: ydb-node-zone-b-1.local
   host_config_id: 1
-  walle_location:
+  location:
     body: 4
     data_center: 'zone-b'
     rack: '4'
 - host: ydb-node-zone-b-2.local
   host_config_id: 1
-  walle_location:
+  location:
     body: 5
     data_center: 'zone-b'
     rack: '5'
 - host: ydb-node-zone-b-3.local
   host_config_id: 1
-  walle_location:
+  location:
     body: 6
     data_center: 'zone-b'
     rack: '6'
 
 - host: ydb-node-zone-c-1.local
   host_config_id: 1
-  walle_location:
+  location:
     body: 7
     data_center: 'zone-c'
     rack: '7'
 - host: ydb-node-zone-c-2.local
   host_config_id: 1
-  walle_location:
+  location:
     body: 8
     data_center: 'zone-c'
     rack: '8'
 - host: ydb-node-zone-c-3.local
   host_config_id: 1
-  walle_location:
+  location:
     body: 9
     data_center: 'zone-c'
     rack: '9'
@@ -95,18 +113,18 @@ domains:
           - count: 1 # How many dynamic nodes will database have
             kind: slot
             zone: any
+    storage_pools:
+      - kind: ssd
+        num_groups: 1
     storage_pool_kinds:
     - kind: ssd
       # fault tolerance mode name - none, block-4-2, or mirror-3-dc.
       # See docs for more details https://ydb.tech/en/docs/deploy/configuration/config#domains-blob
       erasure: mirror-3-dc
+      fail_domain_type: disk
       filter_properties:
         type: SSD # device type to match host_configs.drive.type
-        state_storage:
-        - ring:
-            node: [1, 2, 3, 4, 5, 6, 7, 8, 9]
-            nto_select: 9
-          ssid: 1
+
 table_service_config:
   sql_version: 1
 
@@ -144,55 +162,58 @@ blob_storage_config: # configuration of static blobstorage group.
       - fail_domains:
         - vdisk_locations:
           - node_id: 1
-            pdisk_category: SSD
-            path: /dev/disk/by-partlabel/kikimr_nvme_01
+            pdisk_category: &pdisk_category 1 # 1 - SSD, 0 - HDD
+            path: *disk_path_1
+            pdisk_guid: 1
         - vdisk_locations:
           - node_id: 2
-            pdisk_category: SSD
-            path: /dev/disk/by-partlabel/kikimr_nvme_01
+            pdisk_category: *pdisk_category
+            path: *disk_path_1
+            pdisk_guid: 2
         - vdisk_locations:
           - node_id: 3
-            pdisk_category: SSD
-            path: /dev/disk/by-partlabel/kikimr_nvme_01
+            pdisk_category: *pdisk_category
+            path: *disk_path_1
+            pdisk_guid: 3
       - fail_domains:
         - vdisk_locations:
           - node_id: 4
-            pdisk_category: SSD
-            path: /dev/disk/by-partlabel/kikimr_nvme_01
+            pdisk_category: *pdisk_category
+            path: *disk_path_1
+            pdisk_guid: 4
         - vdisk_locations:
           - node_id: 5
-            pdisk_category: SSD
-            path: /dev/disk/by-partlabel/kikimr_nvme_01
+            pdisk_category: *pdisk_category
+            path: *disk_path_1
+            pdisk_guid: 5
         - vdisk_locations:
           - node_id: 6
-            pdisk_category: SSD
-            path: /dev/disk/by-partlabel/kikimr_nvme_01
+            pdisk_category: *pdisk_category
+            path: *disk_path_1
+            pdisk_guid: 6
       - fail_domains:
         - vdisk_locations:
           - node_id: 7
-            pdisk_category: SSD
-            path: /dev/disk/by-partlabel/kikimr_nvme_01
+            pdisk_category: *pdisk_category
+            path: *disk_path_1
+            pdisk_guid: 7
         - vdisk_locations:
           - node_id: 8
-            pdisk_category: SSD
-            path: /dev/disk/by-partlabel/kikimr_nvme_01
+            pdisk_category: *pdisk_category
+            path: *disk_path_1
+            pdisk_guid: 8
         - vdisk_locations:
           - node_id: 9
-            pdisk_category: SSD
-            path: /dev/disk/by-partlabel/kikimr_nvme_01
-channel_profile_config:
-  profile:
-  - channel:
-    - erasure_species: mirror-3-dc
-      pdisk_category: 1
-      storage_pool_kind: ssd
-    - erasure_species: mirror-3-dc
-      pdisk_category: 1
-      storage_pool_kind: ssd
-    - erasure_species: mirror-3-dc
-      pdisk_category: 1
-      storage_pool_kind: ssd
-    profile_id: 0
+            pdisk_category: *pdisk_category
+            path: *disk_path_1
+            pdisk_guid: 9
+            
+profile:
+  - channels:
+    - storage_pool_kind: ssd
+    - storage_pool_kind: ssd
+    - storage_pool_kind: ssd
+    
 interconnect_config:
     start_tcp: true
 grpc_config:

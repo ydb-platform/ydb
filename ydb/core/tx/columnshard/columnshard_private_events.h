@@ -6,6 +6,7 @@
 
 #include <ydb/core/formats/arrow/special_keys.h>
 #include <ydb/core/protos/counters_columnshard.pb.h>
+#include <ydb/core/tx/columnshard/counters/scan.h>
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
 #include <ydb/core/tx/columnshard/engines/writer/indexed_blob_constructor.h>
 #include <ydb/core/tx/columnshard/engines/writer/write_controller.h>
@@ -115,14 +116,17 @@ struct TEvPrivate {
     class TEvTaskProcessedResult: public NActors::TEventLocal<TEvTaskProcessedResult, EvTaskProcessedResult> {
     private:
         TConclusion<std::shared_ptr<NOlap::NReader::IApplyAction>> Result;
+        TCounterGuard ScanCounter;
 
     public:
         TConclusion<std::shared_ptr<NOlap::NReader::IApplyAction>> ExtractResult() {
             return std::move(Result);
         }
 
-        TEvTaskProcessedResult(const TConclusion<std::shared_ptr<NOlap::NReader::IApplyAction>>& result)
-            : Result(result) {
+        TEvTaskProcessedResult(
+            const TConclusion<std::shared_ptr<NOlap::NReader::IApplyAction>>& result, TCounterGuard&& scanCounters)
+            : Result(result)
+            , ScanCounter(std::move(scanCounters)) {
         }
     };
 

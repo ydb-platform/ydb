@@ -1,6 +1,10 @@
 {%- macro AnnotationProcessors(funcName, annotation_processors) -%}
 {%-     if annotation_processors|length -%}
-{%-         for annotation_processor in annotation_processors|unique|sort -%}
+{%-         set annotation_processors = annotation_processors|unique|sort -%}
+{%-         set lomboks = annotation_processors|select('startsWith', 'contrib/java/org/projectlombok/lombok') -%}
+{%-         set nolomboks = annotation_processors|reject('startsWith', 'contrib/java/org/projectlombok/lombok') -%}
+{%-         set annotation_processors = lomboks + nolomboks -%}
+{%-         for annotation_processor in annotation_processors -%}
 {%-             set parts = rsplit(annotation_processor, "/", 4) %}
     {{ funcName }}("{{ parts[0]|replace("contrib/java/", "")|replace("/", ".") }}:{{ parts[1] }}:{{ parts[2] }}")
 {%-         endfor -%}
@@ -78,9 +82,8 @@ dependencies {
 {%- endif -%}
 {#- glue -#}
 {{ AnnotationProcessors("annotationProcessor", target.use_annotation_processor) }}
-{%- for extra_target in extra_targets -%}
-{{ AnnotationProcessors("testAnnotationProcessor", extra_target.use_annotation_processor) }}
-{%- endfor -%}
+{%- set test_annotation_processors = extra_targets|selectattr('use_annotation_processor')|map(attribute='use_annotation_processor')|sum -%}
+{{ AnnotationProcessors("testAnnotationProcessor", test_annotation_processors) }}
 {%- if with_kapt -%}
 {{ Kapts("kapt", target.kapt.classpaths) }}
 {%- endif -%}

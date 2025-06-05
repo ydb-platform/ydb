@@ -42,11 +42,7 @@ private:
             std::vector<TOrderedPortion> ordered;
             ordered.reserve(add.size());
             for (auto&& i : add) {
-                if (GetLevelId() && !IsAppropriatePortionToStore(i->GetCompactionInfo())) {
-                    problems.emplace_back(i);
-                } else {
-                    ordered.emplace_back(i);
-                }
+                ordered.emplace_back(i);
             }
             std::sort(ordered.begin(), ordered.end());
             AFL_VERIFY(std::unique(ordered.begin(), ordered.end()) == ordered.end());

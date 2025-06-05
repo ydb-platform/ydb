@@ -93,11 +93,9 @@ namespace NActors {
 
         for (ui32 excIdx = 0; excIdx != ExecutorPoolCount; ++excIdx) {
             Executors[excIdx].Reset(CreateExecutorPool(excIdx));
-            if (excIdx < Config.PingInfoByPool.size()) {
-                Harmonizer->AddPool(Executors[excIdx].Get(), &Config.PingInfoByPool[excIdx]);
-            } else {
-                Harmonizer->AddPool(Executors[excIdx].Get());
-            }
+            bool ignoreThreads = dynamic_cast<TIOExecutorPool*>(Executors[excIdx].Get());
+            TSelfPingInfo *pingInfo = (excIdx < Config.PingInfoByPool.size()) ? &Config.PingInfoByPool[excIdx] : nullptr;
+            Harmonizer->AddPool(Executors[excIdx].Get(), pingInfo, ignoreThreads);
         }
         ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TCpuManager::Setup: created");
     }

@@ -26,7 +26,9 @@ TCommandTableInferFile::TCommandTableInferFile()
 }
 
 TCommandTableInferCsv::TCommandTableInferCsv()
-    : TYdbCommand("csv", {}, "Generate CREATE TABLE SQL query from CSV file")
+    : TYdbCommand("csv", {}, "Generate CREATE TABLE SQL query from CSV file"
+        "\n\nBy default, the command attempts to use the first row of the CSV as column names if possible."
+        " Use the \"--columns\", \"--gen-names\" or \"--header\" options to set the column names source explicitly.")
 {}
 
 void TCommandTableInferCsv::Config(TConfig& config) {
@@ -37,17 +39,12 @@ void TCommandTableInferCsv::Config(TConfig& config) {
     config.Opts->AddLongOption('p', "path", "Database path to table that should be created")
         .RequiredArgument("STRING").DefaultValue("table").StoreResult(&Path);
     config.Opts->AddLongOption("columns",
-        "Explicitly specifies the column names to be used, listed in a comma-separated format."
-        " By default, the command attempts to use the first row of the CSV as column names if possible."
-        " Otherwise, it generates column names automatically.")
+        "Explicitly specifies table column names, as a comma-separated list.")
         .RequiredArgument("NAMES").StoreResult(&ColumnNames);
     config.Opts->AddLongOption("gen-columns",
-        "Explicitly indicates that column names should be generated automatically."
-        " By default, the command attempts to use the first row of the CSV as column names if possible.")
+        "Explicitly indicates that table column names should be generated automatically.")
         .NoArgument().SetFlag(&GenerateColumnNames);
-    config.Opts->AddLongOption("header", "Explicitly indicates that the first row in the CSV contains column names."
-        " By default, the command attempts to use the first row of the CSV as column names if possible anyway,"
-        " but this automatic detection may be inaccurate.")
+    config.Opts->AddLongOption("header", "Explicitly indicates that the first row in the CSV contains column names.")
         .NoArgument().SetFlag(&HeaderHasColumnNames);
     config.Opts->AddLongOption("rows-to-analyze", "Number of rows to analyze. "
         "0 means unlimited. Reading will be stopped soon after this number of rows is read.")

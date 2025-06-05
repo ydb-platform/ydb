@@ -238,15 +238,23 @@ protected:
     }
 
 public:
-    void SetUp() override {
+    void PrepareContext() {
         Context = MakeHolder<TTestContext>();
         Context->SetObserverFunc(ObserverFunc());
 
         SetupRuntime(*Context);
+    }
+
+    void BootActors() {
         BootSchemeShard(*Context, TTestTxConfig::SchemeShard);
         BootTxAllocator(*Context, TTestTxConfig::TxAllocator);
         BootCoordinator(*Context, TTestTxConfig::Coordinator);
         BootHive(*Context, TTestTxConfig::Hive);
+    }
+
+    void SetUp() override {
+        PrepareContext();
+        BootActors();
     }
 
     void TurnOnTabletsScheduling() {

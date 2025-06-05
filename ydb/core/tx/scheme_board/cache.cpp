@@ -2152,7 +2152,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 }
                 keyDesc.Partitioning = std::move(partitions);
             } else {
-                if (Partitioning) {
+                if (Partitioning && !Partitioning->empty()) {
                     keyDesc.Partitioning = FillRangePartitioning(keyDesc.Range);
                 }
             }

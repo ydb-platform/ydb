@@ -29,10 +29,48 @@ WITH (option = value[, ...])
 
   * `CONSUMER` — имя консьюмера топика источника. Если имя не задано, то консьюмер будет добавлен топику автоматически.
 
-  * Настройки батчивания записи в таблицу:
-    * `FLUSH_INTERVAL` - интервал записи в таблицу. Данные в таблицу будут записываться с указанной периодичностью.
-    * `BATCH_SIZE_BYTES` - размер прочитанных из топика данных до записи данных в таблицу.
-    Запись данных в таблицу произойдет при достижении любого из лимитов заданных `FLUSH_INTERVAL` и `BATCH_SIZE_BYTES`.
+## Примеры {#examples}
+
+{% note tip %}
+
+Перед созданием экземпляра асинхронной репликации [создайте](create-object-type-secret.md) секрет с аутентификационными данными для подключения или убедитесь в его существовании и наличии доступа к нему.
+
+{% endnote %}
+
+Создание экземпляра трансфера из топика `example_topic` из базы `/Root/another_database` в текущую базу в таблицу `example_table`:
+
+```yql
+$transformation_lambda = ($msg) -> {
+    return [
+        <|
+            partition:CAST($msg._partition AS Uint32),
+            offset:CAST($msg._offset AS Uint32),
+            message:CAST($msg._data AS Utf8)
+        |>
+    ];
+};
+
+CREATE TRANSFER example_transfer
+    FROM example_topic TO example_table USING $transformation_lambda
+WITH (
+    CONNECTION_STRING = 'grpcs://example.com:2135/?database=/Root/another_database',
+    TOKEN_SECRET_NAME = 'my_secret'
+);
+```
+
+Создание экземпляра трансфера с явным указанием имени консьюмера `existing_consumer_of_topic`:
+
+```yql
+CREATE TRANSFER example_transfer
+    FROM example_topic TO example_table USING $transformation_lambda
+WITH (
+    CONNECTION_STRING = 'grpcs://example.com:2135/?database=/Root/another_database',
+    TOKEN_SECRET_NAME = 'my_secret',
+    CONSUMER = 'existing_consumer_of_topic'
+);
+```
+
+
 
 ## См. также
 

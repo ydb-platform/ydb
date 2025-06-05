@@ -891,6 +891,9 @@ void TOrderingsStateMachine::TNFSM::ApplyFDs(
 
                         auto newDirections = Nodes[nodeIdx].Ordering.Directions;
                         newDirections.insert(newDirections.begin() + i, TOrdering::TItem::EDirection::ENone);
+                        if (newDirections.empty()) { // smthing went wrong during ordering adding stage
+                            return;
+                        }
 
                         Y_ASSERT(fd.ConsequentItem < itemInfo.size());
 

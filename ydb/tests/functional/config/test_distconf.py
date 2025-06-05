@@ -216,7 +216,7 @@ class TestKiKiMRDistConfBasic(DistConfKiKiMRTest):
             raise
 
     def test_cluster_expand_with_seed_nodes(self):
-        table_path = '/Root/mydb/mytable_with_expand'
+        table_path = '/Root/mydb/mytable_with_seed_nodes'
         number_of_tablets = 5
 
         tablet_ids = create_kv_tablets_and_wait_for_start(

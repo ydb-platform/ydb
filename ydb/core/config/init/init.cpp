@@ -1,6 +1,7 @@
 #include "init_impl.h"
 #include "mock.h"
 #include <ydb/library/yaml_json/yaml_to_json.h>
+#include <ydb/core/util/backoff.h>
 
 namespace NKikimr::NConfig {
 
@@ -504,6 +505,8 @@ private:
         IInitLogger& logger)
     {
         NYdb::NConfig::TFetchConfigResult result;
+        TBackoffTimer backoffTimer(1000, 3600000);
+
         while (!result.IsSuccess()) {
             for (const auto& addr : addrs) {
                 logger.Out() << "Trying to fetch config from " << addr << Endl;
@@ -515,7 +518,8 @@ private:
                 logger.Err() << "Fetch config error: " << static_cast<NYdb::TStatus>(result) << Endl;
             }
             if (!result.IsSuccess()) {
-                env.Sleep(TDuration::Seconds(1));
+                ui64 backoffMs = backoffTimer.NextBackoffMs();
+                env.Sleep(TDuration::MilliSeconds(backoffMs));
             }
         }
         return result;

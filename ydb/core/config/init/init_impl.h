@@ -342,6 +342,7 @@ struct TCommonAppOptions {
     EWorkload Workload = EWorkload::Hybrid;
     TString BridgePileName;
     TString SeedNodesFile;
+    TVector<TString> SeedNodes;
 
     void RegisterCliOptions(NLastGetopt::TOpts& opts) {
         opts.AddLongOption("cluster-name", "which cluster this node belongs to")
@@ -883,8 +884,9 @@ struct TCommonAppOptions {
     };
 
     void FillClusterEndpoints(const NKikimrConfig::TAppConfig& appConfig, TVector<TString> &addrs) const {
-        if (!NodeBrokerAddresses.empty()) {
-            for (auto addr: NodeBrokerAddresses) {
+        const TVector<TString>& seedAddresses = NodeBrokerAddresses.empty() ? SeedNodes : NodeBrokerAddresses;
+        if (!seedAddresses.empty()) {
+            for (auto addr: seedAddresses) {
                 addrs.push_back(addr);
             }
         } else {
@@ -1097,8 +1099,17 @@ public:
             }
         }
 
-        if (!loadedFromStore && yamlConfigFile.empty() && CommonAppOptions.SeedNodesFile) {
-            InitConfigFromSeedNodes(yamlConfigFile, storageYamlConfigFile);
+        if (CommonAppOptions.SeedNodesFile) {
+            ParseSeedNodes(CommonAppOptions);
+        }
+
+        if (CommonAppOptions.IsStaticNode()) {
+            if (yamlConfigFile.empty() && CommonAppOptions.SeedNodesFile) {
+                InitConfigFromSeedNodes(yamlConfigFile, storageYamlConfigFile);
+            }
+            if (!CommonAppOptions.ConfigDirPath.empty() && yamlConfigFile.empty()) {
+                ythrow yexception() << "YAML config is not provided for static node";
+            }
         }
 
         LoadMainYamlConfig(refs, yamlConfigFile, storageYamlConfigFile, loadedFromStore, AppConfig, csk);
@@ -1472,40 +1483,41 @@ public:
         debugInfo.NewDynConfig.CopyFrom(InitDebug.YamlConfig);
     }
 
-    TVector<TString> ParseSeedNodes(const TString& seedFile) {
-        TVector<TString> seedEndpoints;
-        if (auto path = fs::path(seedFile.c_str()); fs::is_regular_file(path)) {
+    void ParseSeedNodes(TCommonAppOptions& cf) {
+        if (auto path = fs::path(cf.SeedNodesFile.c_str()); fs::is_regular_file(path)) {
             try {
-                TFileInput file(seedFile);
+                TFileInput file(cf.SeedNodesFile);
                 TString fileContent = file.ReadAll();
                 auto doc = NFyaml::TDocument::Parse(fileContent);
                 if (doc.Root().Type() == NFyaml::ENodeType::Sequence) {
                     for (const auto& item : doc.Root().Sequence()) {
                         if (item.Type() == NFyaml::ENodeType::Scalar) {
-                            seedEndpoints.push_back(item.Scalar());
+                            cf.SeedNodes.push_back(item.Scalar());
                         } else {
                             ythrow yexception() << "Invalid format in seed nodes file: expected a list of strings, but found non-scalar item at " << item.Path();
                         }
                     }
                 } else {
-                    ythrow yexception() << "Invalid format in seed nodes file: expected a list of strings (sequence) at root";
+                    ythrow yexception() << "Invalid format in seed nodes file: expected a list of strings at root";
                 }
             } catch (const std::exception& e) {
                 ythrow yexception() << "Failed to read or parse seed nodes file: " << e.what();
             }
         } else {
-            ythrow yexception() << "Seed nodes file not found: " << seedFile;
+            ythrow yexception() << "Seed nodes file not found: " << cf.SeedNodesFile;
         }
-
-        return seedEndpoints;
     }
 
     void InitConfigFromSeedNodes(TString& yamlConfigFile, TString& storageYamlConfigFile) {
-        const TString& seedFile = CommonAppOptions.SeedNodesFile;
+        if (AppConfig.GetConfigDirPath().empty()) {
+            ythrow yexception() << "Seed nodes file provided, but config dir path is not set";
+        }
 
-        TVector<TString> seedEndpoints = ParseSeedNodes(seedFile);
+        if (CommonAppOptions.SeedNodes.empty()) {
+            ythrow yexception() << "No seed nodes provided";
+        }
 
-        auto result = ConfigClient.FetchConfig(CommonAppOptions.GrpcSslSettings, seedEndpoints, Env, Logger);
+        auto result = ConfigClient.FetchConfig(CommonAppOptions.GrpcSslSettings, CommonAppOptions.SeedNodes, Env, Logger);
         if (!result) {
             Logger.Out() << "Failed to fetch config from seed nodes" << Endl;
             return;

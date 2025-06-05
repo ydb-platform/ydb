@@ -147,32 +147,20 @@ def _create_iterations_table(result, node_errors: list[NodeErrors] = [], workloa
         # Создаем таблицу с placeholder
         table_html = f"""
         {params_info}
-        <table border='1' cellpadding='4px' style='margin-top: 10px; border-collapse: collapse;'>
-            <thead>
-                <tr style='background-color: #f0f0f0;'>
-                    <th>Iteration</th>
-                    <th>Workload</th>
-                    <th>Duration (s)</th>
-                    <th>Cores</th>
-                    <th>OOM</th>
-                </tr>
-                <tr style='background-color: #f9f9f9; font-size: 11px;'>
-                    <td style='text-align: center;'>#</td>
-                    <td style='text-align: center;'>🟢ok 🟨warning/timeout</td>
-                    <td style='text-align: center;'>seconds</td>
-                    <td style='text-align: center;'>🟢ok 🔴count</td>
-                    <td style='text-align: center;'>🟢ok 🔴count</td>
-                </tr>
-            </thead>
-            <tbody>
-                <tr>
-                    <td style='text-align: center; font-weight: bold;'>-</td>
-                    <td style='background-color: #f0f0f0; text-align: center; font-weight: bold;'>no data</td>
-                    <td style='background-color: #f0f0f0; text-align: center; font-weight: bold;'>N/A</td>
-                    <td style='background-color: {cores_color}; text-align: center; font-weight: bold;'>{cores_value}</td>
-                    <td style='background-color: {oom_color}; text-align: center; font-weight: bold;'>{oom_value}</td>
-                </tr>
-            </tbody>
+        <table border='1' cellpadding='2px' style='border-collapse: collapse; font-size: 12px;'>
+            <tr style='background-color: #f0f0f0;'>
+                <th>Iter</th><th>Status</th><th>Dur(s)</th><th>Cores</th><th>OOM</th>
+            </tr>
+            <tr style='font-size: 10px; color: #666;'>
+                <td>#</td><td>🟢ok 🟨warn/timeout</td><td>sec</td><td>🟢ok 🔴cnt</td><td>🟢ok 🔴cnt</td>
+            </tr>
+            <tr>
+                <td>-</td>
+                <td style='background-color: #f0f0f0;'>no data</td>
+                <td style='background-color: #f0f0f0;'>N/A</td>
+                <td style='background-color: {cores_color};'>{cores_value}</td>
+                <td style='background-color: {oom_color};'>{oom_value}</td>
+            </tr>
         </table>
         """
         
@@ -194,24 +182,13 @@ def _create_iterations_table(result, node_errors: list[NodeErrors] = [], workloa
     # Создаем заголовок таблицы
     table_html = f"""
     {params_info}
-    <table border='1' cellpadding='4px' style='margin-top: 10px; border-collapse: collapse;'>
-        <thead>
-            <tr style='background-color: #f0f0f0;'>
-                <th>Iteration</th>
-                <th>Workload</th>
-                <th>Duration (s)</th>
-                <th>Cores</th>
-                <th>OOM</th>
-            </tr>
-            <tr style='background-color: #f9f9f9; font-size: 11px;'>
-                <td style='text-align: center;'>#</td>
-                <td style='text-align: center;'>🟢ok 🟨warning/timeout</td>
-                <td style='text-align: center;'>seconds</td>
-                <td style='text-align: center;'>🟢ok 🔴count</td>
-                <td style='text-align: center;'>🟢ok 🔴count</td>
-            </tr>
-        </thead>
-        <tbody>
+    <table border='1' cellpadding='2px' style='border-collapse: collapse; font-size: 12px;'>
+        <tr style='background-color: #f0f0f0;'>
+            <th>Iter</th><th>Status</th><th>Dur(s)</th><th>Cores</th><th>OOM</th>
+        </tr>
+        <tr style='font-size: 10px; color: #666;'>
+            <td>#</td><td>🟢ok 🟨warn/timeout</td><td>sec</td><td>🟢ok 🔴cnt</td><td>🟢ok 🔴cnt</td>
+        </tr>
     """
     
     # Добавляем строки для каждой итерации
@@ -277,18 +254,15 @@ def _create_iterations_table(result, node_errors: list[NodeErrors] = [], workloa
         # Добавляем строку таблицы
         table_html += f"""
             <tr>
-                <td style='text-align: center; font-weight: bold;'>{iteration_num}</td>
-                <td style='background-color: {workload_color}; text-align: center; font-weight: bold;'>{workload_value}</td>
-                <td style='background-color: {duration_color}; text-align: center; font-weight: bold;'>{duration_str}</td>
-                <td style='background-color: {cores_color}; text-align: center; font-weight: bold;'>{cores_value}</td>
-                <td style='background-color: {oom_color}; text-align: center; font-weight: bold;'>{oom_value}</td>
+                <td>{iteration_num}</td>
+                <td style='background-color: {workload_color};'>{workload_value}</td>
+                <td style='background-color: {duration_color};'>{duration_str}</td>
+                <td style='background-color: {cores_color};'>{cores_value}</td>
+                <td style='background-color: {oom_color};'>{oom_value}</td>
             </tr>
         """
     
-    table_html += """
-        </tbody>
-    </table>
-    """
+    table_html += "</table>"
     
     return table_html
 
@@ -340,61 +314,32 @@ def allure_test_description(
         </tbody></table>
     '''
     
-    allure.dynamic.description_html(html)
-    allure.attach(html, "description.html", allure.attachment_type.HTML)
-    
-    # Добавляем таблицу итераций как отдельный attachment
+    # Добавляем компактную таблицу итераций прямо в description
     logging.info(f"allure_test_description called with workload_result: {workload_result}")
     if workload_result:
         logging.info(f"workload_result is not None, calling _create_iterations_table")
         iterations_table = _create_iterations_table(workload_result, node_errors, workload_params)
         logging.info(f"iterations_table created, length: {len(iterations_table) if iterations_table else 0}")
         if iterations_table:
-            # Создаем отдельную HTML страницу только с таблицей итераций
-            iterations_html = f'''
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <meta charset="UTF-8">
-                <title>Workload Iterations Summary</title>
-                <style>
-                    body {{ font-family: Arial, sans-serif; margin: 20px; }}
-                    h2 {{ color: #333; }}
-                </style>
-            </head>
-            <body>
-                <h2>Workload Iterations Summary</h2>
-                {iterations_table}
-            </body>
-            </html>
+            html += f'''
+            <h3>Workload Iterations</h3>
+            {iterations_table}
             '''
-            allure.attach(iterations_html, "workload_iterations.html", allure.attachment_type.HTML)
-            logging.info("Added iterations table as separate HTML attachment")
+            logging.info("Added iterations table to description HTML")
         else:
-            logging.warning("iterations_table is empty, not adding attachment")
+            logging.warning("iterations_table is empty, not adding to HTML")
     else:
         logging.warning("workload_result is None, not creating iterations table")
-        # Для отладки - всегда показываем таблицу с параметрами, даже если нет workload_result
+        # Для отладки - показываем таблицу с параметрами, даже если нет workload_result
         if workload_params:
             logging.info("Creating empty table with just workload_params for debugging")
             empty_table = _create_iterations_table(None, node_errors, workload_params)
             if empty_table:
-                debug_html = f'''
-                <!DOCTYPE html>
-                <html>
-                <head>
-                    <meta charset="UTF-8">
-                    <title>Workload Iterations Summary (Debug)</title>
-                    <style>
-                        body {{ font-family: Arial, sans-serif; margin: 20px; }}
-                        h2 {{ color: #333; }}
-                    </style>
-                </head>
-                <body>
-                    <h2>Workload Iterations Summary (Debug - No Result Data)</h2>
-                    {empty_table}
-                </body>
-                </html>
+                html += f'''
+                <h3>Workload Iterations (Debug)</h3>
+                {empty_table}
                 '''
-                allure.attach(debug_html, "workload_iterations_debug.html", allure.attachment_type.HTML)
-                logging.info("Added debug iterations table as separate HTML attachment")
+                logging.info("Added debug iterations table to HTML")
+    
+    allure.dynamic.description_html(html)
+    allure.attach(html, "description.html", allure.attachment_type.HTML)

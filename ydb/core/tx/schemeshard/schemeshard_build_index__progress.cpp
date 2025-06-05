@@ -1359,7 +1359,7 @@ public:
         }
 
         NIceDb::TNiceDb db(txc.DB);
-        if (buildInfo->AddIssue(exc.what())) {
+        if (buildInfo->AddIssue(TStringBuilder() << "Unhandled exception " << exc.what())) {
             Self->PersistBuildIndexIssue(db, *buildInfo);
         }
 
@@ -1500,7 +1500,7 @@ public:
         }
 
         NIceDb::TNiceDb db(txc.DB);
-        if (buildInfo->AddIssue(exc.what())) {
+        if (buildInfo->AddIssue(TStringBuilder() << "Unhandled exception " << exc.what())) {
             Self->PersistBuildIndexIssue(db, *buildInfo);
         }
 

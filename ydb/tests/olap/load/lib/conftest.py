@@ -972,11 +972,20 @@ class WorkloadTestBase(LoadSuiteBase):
         # Анализируем результаты выполнения
         error_found = False
         
-        # Проверяем явные ошибки
-        if not success:
+        # Проверяем на timeout сначала (это warning, не error)
+        is_timeout = False
+        # Timeout может быть как в stderr, так и в stdout
+        combined_output = f"{str(stdout)} {str(stderr)}".lower()
+        if (not success and 
+            ("timeout" in combined_output or "timed out" in combined_output)):
+            result.add_warning(f"Workload execution timed out. stdout: {stdout}, stderr: {stderr}")
+            is_timeout = True
+        
+        # Проверяем явные ошибки (только если не timeout)
+        if not success and not is_timeout:
             result.add_error(f"Workload execution failed. stderr: {stderr}")
             error_found = True
-        elif "error" in str(stderr).lower() and "warning: permanently added" not in str(stderr).lower():
+        elif not is_timeout and "error" in str(stderr).lower() and "warning: permanently added" not in str(stderr).lower():
             result.add_error(f"Error detected in stderr: {stderr}")
             error_found = True
         elif self._has_real_error_in_stdout(str(stdout)):
@@ -992,7 +1001,18 @@ class WorkloadTestBase(LoadSuiteBase):
         iteration = YdbCliHelper.Iteration()
         iteration.time = self.timeout
         
-        if error_found:
+        if is_timeout:
+            # Для timeout используем более конкретное сообщение
+            if "timeout" in combined_output or "timed out" in combined_output:
+                timeout_match = None
+                for line in combined_output.split('\n'):
+                    if 'timed out' in line or 'timeout' in line:
+                        timeout_match = line.strip()
+                        break
+                iteration.error_message = timeout_match or "Workload execution timed out"
+            else:
+                iteration.error_message = "Workload execution timed out"
+        elif error_found:
             # Устанавливаем ошибку в iteration для consistency
             iteration.error_message = result.error_message
         elif self._has_real_error_in_stdout(str(stdout)):

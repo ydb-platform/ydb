@@ -6,6 +6,7 @@ from urllib.parse import urlencode
 from datetime import datetime
 from copy import deepcopy
 from pytz import timezone
+import logging
 
 
 class NodeErrors:
@@ -113,8 +114,69 @@ def _create_iterations_table(result, node_errors: list[NodeErrors] = [], workloa
     Returns:
         str: HTML таблица
     """
-    if not hasattr(result, 'iterations') or not result.iterations:
-        return ""
+    logging.info(f"_create_iterations_table called with result: {result}")
+    if result:
+        logging.info(f"result has iterations: {hasattr(result, 'iterations')}")
+        if hasattr(result, 'iterations'):
+            logging.info(f"iterations content: {result.iterations}")
+    
+    # Если result None или нет iterations, создаем пустую таблицу с информацией
+    if not result or not hasattr(result, 'iterations') or not result.iterations:
+        # Все равно показываем таблицу с параметрами, даже если нет итераций
+        
+        # Подсчитываем cores и OOM
+        total_cores = sum(len(node_error.core_hashes) for node_error in node_errors)
+        total_ooms = sum(1 for node_error in node_errors if node_error.was_oom)
+        
+        # Формируем информацию о параметрах workload для заголовка
+        params_info = ""
+        if workload_params:
+            params_list = []
+            for key, value in workload_params.items():
+                params_list.append(f"{key}: {value}")
+            if params_list:
+                params_info = f"<div style='margin-bottom: 10px; padding: 5px; background-color: #f5f5f5; border: 1px solid #ddd;'><strong>Workload Parameters:</strong> {', '.join(params_list)}</div>"
+        
+        # Определяем значения и цвета для cores и OOM
+        cores_color = "#ffcccc" if total_cores > 0 else "#ccffcc"
+        cores_value = str(total_cores) if total_cores > 0 else "ok"
+        
+        oom_color = "#ffcccc" if total_ooms > 0 else "#ccffcc"
+        oom_value = str(total_ooms) if total_ooms > 0 else "ok"
+        
+        # Создаем таблицу с placeholder
+        table_html = f"""
+        {params_info}
+        <table border='1' cellpadding='4px' style='margin-top: 10px; border-collapse: collapse;'>
+            <thead>
+                <tr style='background-color: #f0f0f0;'>
+                    <th>Iteration</th>
+                    <th>Workload</th>
+                    <th>Duration (s)</th>
+                    <th>Cores</th>
+                    <th>OOM</th>
+                </tr>
+                <tr style='background-color: #f9f9f9; font-size: 11px;'>
+                    <td style='text-align: center;'>#</td>
+                    <td style='text-align: center;'>🟢ok 🟨warning/timeout</td>
+                    <td style='text-align: center;'>seconds</td>
+                    <td style='text-align: center;'>🟢ok 🔴count</td>
+                    <td style='text-align: center;'>🟢ok 🔴count</td>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td style='text-align: center; font-weight: bold;'>-</td>
+                    <td style='background-color: #f0f0f0; text-align: center; font-weight: bold;'>no data</td>
+                    <td style='background-color: #f0f0f0; text-align: center; font-weight: bold;'>N/A</td>
+                    <td style='background-color: {cores_color}; text-align: center; font-weight: bold;'>{cores_value}</td>
+                    <td style='background-color: {oom_color}; text-align: center; font-weight: bold;'>{oom_value}</td>
+                </tr>
+            </tbody>
+        </table>
+        """
+        
+        return table_html
     
     # Подсчитываем cores и OOM по итерациям
     total_cores = sum(len(node_error.core_hashes) for node_error in node_errors)
@@ -143,7 +205,7 @@ def _create_iterations_table(result, node_errors: list[NodeErrors] = [], workloa
             </tr>
             <tr style='background-color: #f9f9f9; font-size: 11px;'>
                 <td style='text-align: center;'>#</td>
-                <td style='text-align: center;'>🟢ok 🟨warning</td>
+                <td style='text-align: center;'>🟢ok 🟨warning/timeout</td>
                 <td style='text-align: center;'>seconds</td>
                 <td style='text-align: center;'>🟢ok 🔴count</td>
                 <td style='text-align: center;'>🟢ok 🔴count</td>
@@ -160,10 +222,17 @@ def _create_iterations_table(result, node_errors: list[NodeErrors] = [], workloa
     for i, iteration_num in enumerate(iterations):
         iteration = result.iterations[iteration_num]
         
-        # Определяем статус workload
+        # Определяем статус workload - добавляем проверку на timeout
         if hasattr(iteration, 'error_message') and iteration.error_message:
-            workload_color = "#ffffcc"  # Светло-желтый (warning)
-            workload_value = "warning"
+            # Проверяем, содержит ли ошибка информацию о timeout (различные форматы)
+            error_msg_lower = iteration.error_message.lower()
+            if ("timeout" in error_msg_lower or "timed out" in error_msg_lower or 
+                "command timed out" in error_msg_lower):
+                workload_color = "#ffffcc"  # Светло-желтый (warning для timeout)
+                workload_value = "timeout"
+            else:
+                workload_color = "#ffffcc"  # Светло-желтый (warning)
+                workload_value = "warning"
         else:
             workload_color = "#ccffcc"  # Светло-зеленый
             workload_value = "ok"
@@ -271,14 +340,61 @@ def allure_test_description(
         </tbody></table>
     '''
     
-    # Добавляем таблицу итераций если есть workload_result
-    if workload_result:
-        iterations_table = _create_iterations_table(workload_result, node_errors, workload_params)
-        if iterations_table:
-            html += f'''
-            <h3>Workload Iterations Summary</h3>
-            {iterations_table}
-            '''
-    
     allure.dynamic.description_html(html)
     allure.attach(html, "description.html", allure.attachment_type.HTML)
+    
+    # Добавляем таблицу итераций как отдельный attachment
+    logging.info(f"allure_test_description called with workload_result: {workload_result}")
+    if workload_result:
+        logging.info(f"workload_result is not None, calling _create_iterations_table")
+        iterations_table = _create_iterations_table(workload_result, node_errors, workload_params)
+        logging.info(f"iterations_table created, length: {len(iterations_table) if iterations_table else 0}")
+        if iterations_table:
+            # Создаем отдельную HTML страницу только с таблицей итераций
+            iterations_html = f'''
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="UTF-8">
+                <title>Workload Iterations Summary</title>
+                <style>
+                    body {{ font-family: Arial, sans-serif; margin: 20px; }}
+                    h2 {{ color: #333; }}
+                </style>
+            </head>
+            <body>
+                <h2>Workload Iterations Summary</h2>
+                {iterations_table}
+            </body>
+            </html>
+            '''
+            allure.attach(iterations_html, "workload_iterations.html", allure.attachment_type.HTML)
+            logging.info("Added iterations table as separate HTML attachment")
+        else:
+            logging.warning("iterations_table is empty, not adding attachment")
+    else:
+        logging.warning("workload_result is None, not creating iterations table")
+        # Для отладки - всегда показываем таблицу с параметрами, даже если нет workload_result
+        if workload_params:
+            logging.info("Creating empty table with just workload_params for debugging")
+            empty_table = _create_iterations_table(None, node_errors, workload_params)
+            if empty_table:
+                debug_html = f'''
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <meta charset="UTF-8">
+                    <title>Workload Iterations Summary (Debug)</title>
+                    <style>
+                        body {{ font-family: Arial, sans-serif; margin: 20px; }}
+                        h2 {{ color: #333; }}
+                    </style>
+                </head>
+                <body>
+                    <h2>Workload Iterations Summary (Debug - No Result Data)</h2>
+                    {empty_table}
+                </body>
+                </html>
+                '''
+                allure.attach(debug_html, "workload_iterations_debug.html", allure.attachment_type.HTML)
+                logging.info("Added debug iterations table as separate HTML attachment")

@@ -1097,7 +1097,7 @@ public:
             }
         }
 
-        if (!loadedFromStore && CommonAppOptions.SeedNodesFile) {
+        if (!loadedFromStore && yamlConfigFile.empty() && CommonAppOptions.SeedNodesFile) {
             InitConfigFromSeedNodes(yamlConfigFile, storageYamlConfigFile);
         }
 

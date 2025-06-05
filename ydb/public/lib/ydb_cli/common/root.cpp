@@ -28,7 +28,7 @@ void TClientCommandRootBase::Config(TConfig& config) {
         .FileName("CA certificates").ProfileParam("ca-file")
         .LogToConnectionParams("ca-file")
         .Env("YDB_CA_FILE", true, "CA certificates")
-        .RequiredArgument("PATH").StoreFilePath(&CaCertsFile).StoreResult(&config.CaCerts);
+        .RequiredArgument("PATH").StoreFilePath(&CaCertsFile).StoreResult(&config.CaCertsFile);
     opts.AddLongOption("client-cert-file",
         "File containing client certificate for SSL/TLS connections (PKCS#12 or PEM-encoded)")
         .FileName("Client certificate")

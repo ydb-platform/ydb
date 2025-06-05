@@ -102,9 +102,13 @@ public class Post
 Ниже приведён пример того, как передать необходимые параметры для подключения к Yandex Cloud в Entity Framework:
 
 ```c#
-.UseYdb(cmd.ConnectionString, builder =>
-{
-    builder.WithCredentialsProvider(saProvider);
-    builder.WithServerCertificates(YcCerts.GetYcServerCertificates());
-})
+.UseYdb(cmd.ConnectionString, builder => builder
+    .WithCredentialsProvider(saProvider)
+    .WithServerCertificates(YcCerts.GetYcServerCertificates())
+)
 ```
+
+## Примеры
+
+[На Github](https://github.com/ydb-platform/ydb-dotnet-sdk/tree/main/examples)
+

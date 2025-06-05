@@ -22,7 +22,8 @@ public:
 
 struct TEvSysView {
     enum EEv {
-        EvSendPartitionStats = EventSpaceBegin(TKikimrEvents::ES_SYSTEM_VIEW),
+        EvUpdateFinished = EventSpaceBegin(TKikimrEvents::ES_SYSTEM_VIEW),
+        EvSendPartitionStats,
         EvSetPartitioning,
         EvRemoveTable,
         EvGetPartitionStats,
@@ -79,6 +80,12 @@ struct TEvSysView {
         EvCalculateStorageStatsResponse,
 
         EvEnd,
+    };
+
+    struct TEvUpdateFinished : public TEventLocal<
+        TEvUpdateFinished,
+        EvUpdateFinished>
+    {
     };
 
     struct TEvSendPartitionStats : public TEventLocal<

@@ -2,51 +2,26 @@ import pytest
 import math
 
 from datetime import datetime, timedelta
-from uuid import UUID
 from ydb.tests.library.compatibility.fixtures import RestartToAnotherVersionFixture
 from ydb.tests.oss.ydb_sdk_import import ydb
 from ydb.tests.datashard.lib.create_table import create_table_sql_request
-from ydb.tests.datashard.lib.types_of_variables import non_pk_types, cleanup_type_name, format_sql_value
+from ydb.tests.datashard.lib.types_of_variables import non_pk_types, pk_types, cleanup_type_name, format_sql_value
 
 
 class TestDataType(RestartToAnotherVersionFixture):
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):
-        self.pk_types = [
-            {
-                "Int64": lambda i: i,
-                "Uint64": lambda i: i,
-                "Int32": lambda i: i,
-                "Uint32": lambda i: i,
-                "Int16": lambda i: i,
-                "Uint16": lambda i: i,
-                "Int8": lambda i: i,
-                "Uint8": lambda i: i,
-                "Bool": lambda i: bool(i),
-                "Decimal(15,0)": lambda i: "{}".format(i),
-                "Decimal(22,9)": lambda i: "{}.123".format(i),
-                "Decimal(35,10)": lambda i: "{}.123456".format(i),
-                "DyNumber": lambda i: float(f"{i}e1"),
-            },
-            {
-                "Int64": lambda i: i,
-                "String": lambda i: f"String {i}",
-                "Utf8": lambda i: f"Utf8 {i}",
-                "UUID": lambda i: UUID("3{:03}5678-e89b-12d3-a456-556642440000".format(i)),
-                "Date": lambda i: datetime.strptime("2{:03}-01-01".format(i), "%Y-%m-%d").date(),
-                "Datetime": lambda i: datetime.strptime("2{:03}-10-02T11:00:00Z".format(i), "%Y-%m-%dT%H:%M:%SZ"),
-                "Timestamp": lambda i: 1696200000000000 + i * 100000000,
-                "Interval": lambda i: i,
-                "Date32": lambda i: datetime.strptime("2{:03}-01-01".format(i), "%Y-%m-%d").date(),
-                "Datetime64": lambda i: datetime.strptime("2{:03}-10-02T11:00:00Z".format(i), "%Y-%m-%dT%H:%M:%SZ"),
-                "Timestamp64": lambda i: 1696200000000000 + i * 100000000,
-                "Interval64": lambda i: i,
-            },
-        ]
+        self.pk_types = []
+        self.pk_types.append({"Int64": lambda i: i})
+        self.count_table = 1
+        for type_name, lamb in pk_types.items():
+            self.pk_types[self.count_table - 1][type_name] = lamb
+            if len(self.pk_types[self.count_table - 1]) >= 20:
+                self.pk_types.append({"Int64": lambda i: i})
+                self.count_table += 1
         self.table_names = []
         self.count_rows = 30
-        self.count_table = 2
-        self.all_types = {**self.pk_types[0], **self.pk_types[1], **non_pk_types}
+        self.all_types = {**pk_types, **non_pk_types}
         self.columns = []
         for i in range(self.count_table):
             self.columns.append(
@@ -98,8 +73,8 @@ class TestDataType(RestartToAnotherVersionFixture):
             count = 1
             value = 0
             for query in queries:
-                value += count
-                count = (count + 1) % 2
+                value += 1 if count != 0 else 0
+                count = (count + 1) % self.count_table
                 result_sets = session_pool.execute_with_retries(query)
                 assert len(result_sets[0].rows) == 1
                 rows = result_sets[0].rows

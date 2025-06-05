@@ -946,7 +946,8 @@ class WorkloadTestBase(LoadSuiteBase):
 
     def create_workload_result(self, workload_name: str, stdout: str, stderr: str, 
                               success: bool, additional_stats: dict = None, 
-                              is_timeout: bool = False, iteration_number: int = 0) -> YdbCliHelper.WorkloadRunResult:
+                              is_timeout: bool = False, iteration_number: int = 0,
+                              actual_execution_time: float = None) -> YdbCliHelper.WorkloadRunResult:
         """
         Создает и заполняет WorkloadRunResult с общей логикой
         
@@ -958,6 +959,7 @@ class WorkloadTestBase(LoadSuiteBase):
             additional_stats: Дополнительная статистика
             is_timeout: Флаг таймаута
             iteration_number: Номер итерации
+            actual_execution_time: Фактическое время выполнения
             
         Returns:
             Заполненный WorkloadRunResult
@@ -1000,7 +1002,7 @@ class WorkloadTestBase(LoadSuiteBase):
 
         # Добавляем информацию о выполнении в iterations
         iteration = YdbCliHelper.Iteration()
-        iteration.time = self.timeout
+        iteration.time = actual_execution_time if actual_execution_time is not None else self.timeout
         
         if is_timeout:
             # Для timeout используем более конкретное сообщение
@@ -1231,7 +1233,8 @@ class WorkloadTestBase(LoadSuiteBase):
                     **run_config
                 },
                 is_timeout=is_timeout,
-                iteration_number=run_num
+                iteration_number=run_num,
+                actual_execution_time=execution_time
             )
             
             # Добавляем как iteration в общий результат

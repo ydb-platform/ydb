@@ -956,6 +956,11 @@ message TYdsShardIterator {
     optional ETopicKind Kind = 7;
 }
 
+message TKafkaProducerInstanceId {
+    optional int64 Id = 1;
+    optional int32 Epoch = 2;
+};
+
 message TPartitionOperation {
     optional uint32 PartitionId = 1;
     optional uint64 CommitOffsetsBegin = 2;
@@ -968,16 +973,14 @@ message TPartitionOperation {
     optional bool OnlyCheckCommitedToFinish = 9;
     optional string ReadSessionId = 10;
     optional bool KafkaTransaction = 11 [default = false];
-    optional int64 KafkaProducerId = 12;
-    optional int32 KafkaProducerEpoch = 13;
+    optional TKafkaProducerInstanceId KafkaProducerInstanceId = 12;
 };
 
 message TWriteId {
     optional uint64 NodeId = 1;
     optional fixed64 KeyId = 2;
     optional bool KafkaTransaction = 3 [default = false];
-    optional int64 KafkaProducerId = 4;
-    optional int32 KafkaProducerEpoch = 5;
+    optional TKafkaProducerInstanceId KafkaProducerInstanceId = 4;
 };
 
 message TDataTransaction {

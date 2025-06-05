@@ -120,11 +120,15 @@ message TKafkaApiOperationsRequest {
 
 message TTopicOperationsResponse {
     message TWriteId {
+        message TKafkaProducerInstanceId {
+            optional int64 Id = 1;
+            optional int32 Epoch = 2;
+        };
+
         optional uint64 NodeId = 1;
         optional uint64 KeyId = 2;
         optional bool KafkaTransaction = 3 [default = false];
-        optional int64 KafkaProducerId = 4;
-        optional int32 KafkaProducerEpoch = 5;
+        optional TKafkaProducerInstanceId KafkaProducerInstanceId = 4;
     }
 
     optional TWriteId WriteId = 1;

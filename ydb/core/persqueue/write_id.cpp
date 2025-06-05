@@ -35,7 +35,8 @@ TWriteId GetWriteIdImpl(const T& m)
 {
     const auto& writeId = m.GetWriteId();
     if (writeId.GetKafkaTransaction()) {
-        return {NKafka::TProducerInstanceId{writeId.GetKafkaProducerId(), writeId.GetKafkaProducerEpoch()}};
+        const auto& kafkaProducerInstanceId = writeId.GetKafkaProducerInstanceId();
+        return {NKafka::TProducerInstanceId{kafkaProducerInstanceId.GetId(), kafkaProducerInstanceId.GetEpoch()}};
     } else {
         return {writeId.GetNodeId(), writeId.GetKeyId()};
     }
@@ -47,8 +48,9 @@ void SetWriteIdImpl(T& m, const TWriteId& writeId)
     auto* w = m.MutableWriteId();
     if (writeId.KafkaApiTransaction) {
         w->SetKafkaTransaction(true);
-        w->SetKafkaProducerId(writeId.KafkaProducerInstanceId.Id);
-        w->SetKafkaProducerEpoch(writeId.KafkaProducerInstanceId.Epoch);
+        auto* kafkaProducerInstanceId = w->MutableKafkaProducerInstanceId();
+        kafkaProducerInstanceId->SetId(writeId.KafkaProducerInstanceId.Id);
+        kafkaProducerInstanceId->SetEpoch(writeId.KafkaProducerInstanceId.Epoch);
     } else {
         w->SetKafkaTransaction(false);
         w->SetNodeId(writeId.NodeId);

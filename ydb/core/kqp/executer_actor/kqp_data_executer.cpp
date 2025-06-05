@@ -2836,8 +2836,8 @@ private:
             } else if (Request.TopicOperations.HasKafkaOperations() && Request.TopicOperations.HasWriteOperations()) {
                 auto* w = transaction.MutableWriteId();
                 w->SetKafkaTransaction(true);
-                w->SetKafkaProducerId(Request.TopicOperations.GetKafkaProducerInstanceId().Id);
-                w->SetKafkaProducerEpoch(Request.TopicOperations.GetKafkaProducerInstanceId().Epoch);
+                w->MutableKafkaProducerInstanceId()->SetId(Request.TopicOperations.GetKafkaProducerInstanceId().Id);
+                w->MutableKafkaProducerInstanceId()->SetEpoch(Request.TopicOperations.GetKafkaProducerInstanceId().Epoch);
             }
             transaction.SetImmediate(ImmediateTx);
 

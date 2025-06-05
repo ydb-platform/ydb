@@ -255,9 +255,9 @@ void TTopicPartitionOperations::BuildTopicTxs(TTopicOperationTransactions& txs)
         o->SetPath(*Topic_);
 
         if (KafkaProducerInstanceId_.Defined()) { // kafka transaction
-            o->SetKafkaProducerId(KafkaProducerInstanceId_->Id);
-            o->SetKafkaProducerEpoch(KafkaProducerInstanceId_->Epoch);
             o->SetKafkaTransaction(true);
+            o->MutableKafkaProducerInstanceId()->SetId(KafkaProducerInstanceId_->Id);
+            o->MutableKafkaProducerInstanceId()->SetEpoch(KafkaProducerInstanceId_->Epoch);
         } else if (SupportivePartition_.Defined()) {
             o->SetSupportivePartition(*SupportivePartition_);
         }

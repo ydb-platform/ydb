@@ -2199,8 +2199,8 @@ public:
             } else if (t.hasWrite && kafkaTransaction) {
                 auto* w = transaction.MutableWriteId();
                 w->SetKafkaTransaction(true);
-                w->SetKafkaProducerId(TxManager->GetTopicOperations().GetKafkaProducerInstanceId().Id);
-                w->SetKafkaProducerEpoch(TxManager->GetTopicOperations().GetKafkaProducerInstanceId().Epoch);
+                w->MutableKafkaProducerInstanceId()->SetId(TxManager->GetTopicOperations().GetKafkaProducerInstanceId().Id);
+                w->MutableKafkaProducerInstanceId()->SetEpoch(TxManager->GetTopicOperations().GetKafkaProducerInstanceId().Epoch);
             }
             transaction.SetImmediate(isImmediateCommit);
 

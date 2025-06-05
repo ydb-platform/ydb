@@ -2,6 +2,7 @@
 #include "validation_functions.h"
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/library/yql/providers/common/db_id_async_resolver/database_type.h>
 
 namespace NKikimr::NExternalSource {
 
@@ -62,6 +63,9 @@ struct TExternalDataSource : public IExternalSource {
             throw TExternalSourceException() << proto.GetSourceType() << " source must provide service_name";
         }
 
+        if (proto.GetSourceType() == ToString(NYql::EDatabaseType::DataStreams)) {
+            throw TExternalSourceException() << "External source with type " << proto.GetSourceType() << " is disabled. Use " << ToString(NYql::EDatabaseType::Ydb) << " source type";
+        }
         ValidateHostname(HostnamePatterns, proto.GetLocation());
     }
 

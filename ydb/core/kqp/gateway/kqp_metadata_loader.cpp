@@ -1010,15 +1010,20 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                                 auto secretName = externalDataSourceMetadata.Metadata->ExternalSource.DataSourceAuth.GetToken().GetTokenSecretName();
                                 auto structuredTokenJson = NYql::ComposeStructuredTokenJsonForTokenAuthWithSecret(secretName, token);
                                 auto databaseName = properties.Value("database_name", "");
+                                TString useTlsStr = properties.Value("use_tls", "false");
+                                useTlsStr.to_lower();
+                                bool useTls = useTlsStr == "true"sv;
+
                                 auto path = databaseName + "/" + *externalPath;
 
                                 using TSchemeEntryTypeType = TMaybe<NYdb::NScheme::ESchemeEntryType>;
                                 auto getSchemeEntryType = [](
                                     const TString& endpoint,
                                     const TString& database,
+                                    bool useTls,
                                     const TString& structuredTokenJson,
                                     const TString& path) -> NThreading::TFuture<TSchemeEntryTypeType> {
-                                    std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory = NYql::CreateCredentialsProviderFactoryForStructuredToken(nullptr, structuredTokenJson, true/*config->GetAddBearerToToken()*/);
+                                    std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory = NYql::CreateCredentialsProviderFactoryForStructuredToken(nullptr, structuredTokenJson, false/*config->GetAddBearerToToken()*/);
 
                                     Cerr << "endpoint " << endpoint << Endl;
                                     Cerr << "database " << database << Endl;
@@ -1033,7 +1038,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                                     opts
                                         .DiscoveryEndpoint(endpoint)
                                         .Database(database)
-                                        .SslCredentials(NYdb::TSslCredentials(true))
+                                        .SslCredentials(NYdb::TSslCredentials(useTls)) // todo
                                         .CredentialsProviderFactory(credentialsProviderFactory);
                                     auto schemeClient = NYdb::NScheme::TSchemeClient(*driver, opts);
                                     return schemeClient.DescribePath(path)
@@ -1050,6 +1055,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                                 getSchemeEntryType(
                                     externalDataSourceMetadata.Metadata->ExternalSource.DataSourceLocation,
                                     databaseName,
+                                    useTls,
                                     structuredTokenJson,
                                     path)
                                     .Subscribe([externalDataSourceMetadata, f = loadDynamicMetadata] (const NThreading::TFuture<TSchemeEntryTypeType>& result) mutable {

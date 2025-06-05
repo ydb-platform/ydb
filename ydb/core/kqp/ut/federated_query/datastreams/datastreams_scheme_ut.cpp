@@ -14,40 +14,64 @@ using namespace NKikimr::NKqp::NFederatedQueryTest;
 using namespace fmt::literals;
 
 Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
-    Y_UNIT_TEST(CreateExternalDataSourceDatastreamsAndReadTopic) {
+
+    Y_UNIT_TEST(CreateExternalDataSource) {
         NKikimrConfig::TAppConfig appCfg;
         auto kikimr = NFederatedQueryTest::MakeKikimrRunner(true, nullptr, nullptr, std::nullopt, NYql::NDq::CreateS3ActorsFactory());
         
-        auto db = kikimr->GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-        TString sourceName = "sourceName";
-        TString topicName = "topicName";
-        TString tableName = "tableName";
-        
-        auto driverConfig = TDriverConfig();
-
-        NYdb::NTopic::TTopicClientSettings opts;
-        opts.DiscoveryEndpoint(GetEnv("YDB_ENDPOINT"))
-            .Database(GetEnv("YDB_DATABASE"));
-
-        TDriver driver(driverConfig);
-        NYdb::NTopic::TTopicClient topicClient(driver, opts);
-
-        auto topicSettings = NYdb::NTopic::TCreateTopicSettings()
-            .PartitioningSettings(1, 1);
-
-        auto status = topicClient
-            .CreateTopic(topicName, topicSettings)
-            .GetValueSync();
-        UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
-
         auto query = TStringBuilder() << R"(
-            CREATE EXTERNAL DATA SOURCE `)" << sourceName << R"(` WITH (
+            CREATE EXTERNAL DATA SOURCE `sourceName` WITH (
+                SOURCE_TYPE="Ydb",
+                LOCATION=")" << GetEnv("YDB_ENDPOINT") << R"(",
+                DATABASE_NAME=")" << GetEnv("YDB_DATABASE") << R"(",
+                AUTH_METHOD="NONE"
+            );)";
+        auto session = kikimr->GetTableClient().CreateSession().GetValueSync().GetSession();
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        // DataStreams is not allowed.
+        auto query2 = TStringBuilder() << R"(
+            CREATE EXTERNAL DATA SOURCE `sourceName2` WITH (
                 SOURCE_TYPE="DataStreams",
                 LOCATION=")" << GetEnv("YDB_ENDPOINT") << R"(",
                 DATABASE_NAME=")" << GetEnv("YDB_DATABASE") << R"(",
                 AUTH_METHOD="NONE"
             );)";
+        result = session.ExecuteSchemeQuery(query2).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(ReadTopic) {
+        NKikimrConfig::TAppConfig appCfg;
+        auto kikimr = NFederatedQueryTest::MakeKikimrRunner(true, nullptr, nullptr, std::nullopt, NYql::NDq::CreateS3ActorsFactory());
+
+        TString sourceName = "sourceName";
+        TString topicName = "topicName";
+        TString tableName = "tableName";
+
+        NYdb::NTopic::TTopicClientSettings opts;
+        opts.DiscoveryEndpoint(GetEnv("YDB_ENDPOINT"))
+            .Database(GetEnv("YDB_DATABASE"));
+
+        auto driver = TDriver(TDriverConfig());
+        NYdb::NTopic::TTopicClient topicClient(driver, opts);
+
+        auto topicSettings = NYdb::NTopic::TCreateTopicSettings().PartitioningSettings(1, 1);
+        auto status = topicClient.CreateTopic(topicName, topicSettings).GetValueSync();
+        UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+
+        auto query = TStringBuilder() << R"(
+            CREATE EXTERNAL DATA SOURCE `)" << sourceName << R"(` WITH (
+                SOURCE_TYPE="Ydb",
+                LOCATION=")" << GetEnv("YDB_ENDPOINT") << R"(",
+                DATABASE_NAME=")" << GetEnv("YDB_DATABASE") << R"(",
+                AUTH_METHOD="NONE"
+            );)";
+
+        auto db = kikimr->GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         auto settings = TExecuteScriptSettings().StatsMode(EStatsMode::Basic);

@@ -9,9 +9,25 @@ import yatest.common
 import shutil
 import allure
 from time import time
-from typing import Union, Optional, Tuple, List, Dict, Any
+from typing import Union, Optional, Tuple, List, Dict, Any, NamedTuple
 
 LOGGER = logging.getLogger(__name__)
+
+
+class ExecutionResult(NamedTuple):
+    """
+    Результат выполнения команды
+    
+    Attributes:
+        stdout: Стандартный вывод команды
+        stderr: Ошибки команды  
+        is_timeout: True если команда была прервана по таймауту
+        exit_code: Код завершения (если доступен)
+    """
+    stdout: str
+    stderr: str
+    is_timeout: bool
+    exit_code: Optional[int] = None
 
 
 class RemoteExecutor:
@@ -116,7 +132,7 @@ class RemoteExecutor:
     def execute_command(
         cls, host: str, cmd: Union[str, list], raise_on_error: bool = True,
         timeout: Optional[float] = None, raise_on_timeout: bool = True
-    ) -> Tuple[str, str]:
+    ) -> ExecutionResult:
         """
         Выполняет команду на хосте через SSH или локально
 
@@ -128,14 +144,14 @@ class RemoteExecutor:
             raise_on_timeout: вызывать ли исключение при таймауте (по умолчанию True)
 
         Returns:
-            Tuple[str, str]: (stdout, stderr) - вывод команды
+            ExecutionResult: результат выполнения команды
         """
 
         def _handle_timeout_error(
             e: yatest.common.ExecutionTimeoutError,
             full_cmd: Union[str, list],
             is_local: bool
-        ) -> Tuple[str, str]:
+        ) -> ExecutionResult:
             """Обрабатывает ошибки таймаута"""
             cmd_type = "Local" if is_local else "SSH"
             timeout_info = f"{cmd_type} command timed out after {timeout} seconds on {host}"
@@ -173,13 +189,17 @@ class RemoteExecutor:
             if raise_on_timeout:
                 raise subprocess.TimeoutExpired(full_cmd, timeout, output=stdout, stderr=stderr)
 
-            return (f"{timeout_info}\n{stdout}" if stdout else timeout_info, stderr)
+            return ExecutionResult(
+                stdout=f"{timeout_info}\n{stdout}" if stdout else timeout_info,
+                stderr=stderr,
+                is_timeout=True
+            )
 
         def _handle_execution_error(
             e: yatest.common.ExecutionError,
             full_cmd: Union[str, list],
             is_local: bool
-        ) -> Tuple[str, str]:
+        ) -> ExecutionResult:
             """Обрабатывает ошибки выполнения"""
             cmd_type = "Local" if is_local else "SSH"
             stdout = ""
@@ -220,9 +240,14 @@ class RemoteExecutor:
             if stderr:
                 LOGGER.error(f"Command stderr:\n{stderr}")
 
-            return stdout, stderr
+            return ExecutionResult(
+                stdout=stdout,
+                stderr=stderr,
+                is_timeout=False,
+                exit_code=exit_code
+            )
 
-        def _execute_local_command(cmd: Union[str, list]) -> Tuple[str, str]:
+        def _execute_local_command(cmd: Union[str, list]) -> ExecutionResult:
             """Выполняет команду локально"""
             LOGGER.info(f"Detected localhost ({host}), executing command locally: {cmd}")
 
@@ -251,7 +276,12 @@ class RemoteExecutor:
                 if exit_code != 0 and raise_on_error:
                     raise subprocess.CalledProcessError(exit_code, full_cmd, stdout, stderr)
 
-                return stdout, stderr
+                return ExecutionResult(
+                    stdout=stdout,
+                    stderr=stderr,
+                    is_timeout=False,
+                    exit_code=exit_code
+                )
 
             except yatest.common.ExecutionTimeoutError as e:
                 return _handle_timeout_error(e, full_cmd, is_local=True)
@@ -261,9 +291,14 @@ class RemoteExecutor:
                 if raise_on_error:
                     raise
                 LOGGER.error(f"Unexpected error executing local command on {host}: {e}")
-                return "", ""
+                return ExecutionResult(
+                    stdout="",
+                    stderr="",
+                    is_timeout=False,
+                    exit_code=None
+                )
 
-        def _execute_ssh_command(cmd: Union[str, list]) -> Tuple[str, str]:
+        def _execute_ssh_command(cmd: Union[str, list]) -> ExecutionResult:
             """Выполняет команду через SSH"""
             LOGGER.info(f"Executing SSH command on {host}: {cmd}")
 
@@ -307,7 +342,12 @@ class RemoteExecutor:
                 if exit_code != 0 and raise_on_error:
                     raise subprocess.CalledProcessError(exit_code, full_cmd, stdout, stderr)
 
-                return stdout, stderr
+                return ExecutionResult(
+                    stdout=stdout,
+                    stderr=stderr,
+                    is_timeout=False,
+                    exit_code=exit_code
+                )
 
             except yatest.common.ExecutionTimeoutError as e:
                 return _handle_timeout_error(e, full_cmd, is_local=False)
@@ -317,7 +357,12 @@ class RemoteExecutor:
                 if raise_on_error:
                     raise
                 LOGGER.error(f"Unexpected error executing SSH command on {host}: {e}")
-                return "", ""
+                return ExecutionResult(
+                    stdout="",
+                    stderr="",
+                    is_timeout=False,
+                    exit_code=None
+                )
 
         # Основная логика: выбираем локальное или SSH выполнение
         if cls._is_localhost(host):
@@ -330,7 +375,7 @@ class RemoteExecutor:
 def execute_command(
     host: str, cmd: Union[str, list], raise_on_error: bool = True,
     timeout: Optional[float] = None, raise_on_timeout: bool = True
-) -> Tuple[str, str]:
+) -> ExecutionResult:
     """
     Удобная функция для выполнения команды на хосте
 
@@ -342,9 +387,30 @@ def execute_command(
         raise_on_timeout: вызывать ли исключение при таймауте
 
     Returns:
-        Tuple[str, str]: (stdout, stderr) - вывод команды
+        ExecutionResult: результат выполнения команды
     """
     return RemoteExecutor.execute_command(host, cmd, raise_on_error, timeout, raise_on_timeout)
+
+
+def execute_command_legacy(
+    host: str, cmd: Union[str, list], raise_on_error: bool = True,
+    timeout: Optional[float] = None, raise_on_timeout: bool = True
+) -> Tuple[str, str]:
+    """
+    Backward compatibility функция для старого API
+    
+    Args:
+        host: имя хоста для выполнения команды
+        cmd: команда для выполнения (строка или список)
+        raise_on_error: вызывать ли исключение при ошибке
+        timeout: таймаут выполнения команды в секундах
+        raise_on_timeout: вызывать ли исключение при таймауте
+
+    Returns:
+        Tuple[str, str]: (stdout, stderr) - вывод команды
+    """
+    result = RemoteExecutor.execute_command(host, cmd, raise_on_error, timeout, raise_on_timeout)
+    return result.stdout, result.stderr
 
 
 def is_localhost(hostname: str) -> bool:
@@ -374,8 +440,8 @@ def mkdir(host: str, path: str, raise_on_error: bool = False, use_sudo: bool = T
         str: вывод команды
     """
     cmd_prefix = "sudo " if use_sudo else ""
-    stdout, stderr = execute_command(host, f"{cmd_prefix}mkdir -p {path}", raise_on_error)
-    return stdout
+    result = execute_command(host, f"{cmd_prefix}mkdir -p {path}", raise_on_error)
+    return result.stdout
 
 
 def chmod(host: str, path: str, mode: str = "+x", raise_on_error: bool = True, use_sudo: bool = True) -> str:
@@ -393,8 +459,8 @@ def chmod(host: str, path: str, mode: str = "+x", raise_on_error: bool = True, u
         str: вывод команды
     """
     cmd_prefix = "sudo " if use_sudo else ""
-    stdout, stderr = execute_command(host, f"{cmd_prefix}chmod {mode} {path}", raise_on_error)
-    return stdout
+    result = execute_command(host, f"{cmd_prefix}chmod {mode} {path}", raise_on_error)
+    return result.stdout
 
 
 def copy_file(local_path: str, host: str, remote_path: str, raise_on_error: bool = True) -> str:
@@ -571,23 +637,23 @@ def _copy_file_via_tmp_and_sudo(local_path: str, host: str, remote_path: str, ra
         # Перемещаем файл из /tmp в целевое место
         mv_cmd = f"sudo mv {tmp_path} {remote_path}"
         LOGGER.info(f"Step 2b: Moving file - {mv_cmd}")
-        stdout, stderr = execute_command(host, mv_cmd, raise_on_error=True)
+        result = execute_command(host, mv_cmd, raise_on_error=True)
         
         LOGGER.info(f"Step 2 completed: File moved to {remote_path}")
         
         # Шаг 3: Проверяем, что файл существует в целевом месте
         check_cmd = f"ls -la {remote_path}"
         LOGGER.info(f"Step 3: Verifying file - {check_cmd}")
-        check_stdout, check_stderr = execute_command(host, check_cmd, raise_on_error=False)
+        check_result = execute_command(host, check_cmd, raise_on_error=False)
         
-        if check_stderr.strip() and "No such file or directory" in check_stderr:
+        if check_result.stderr.strip() and "No such file or directory" in check_result.stderr:
             error_msg = f"File verification failed: {remote_path} does not exist after copy"
             LOGGER.error(error_msg)
             if raise_on_error:
                 raise IOError(error_msg)
             return None
         else:
-            LOGGER.info(f"File verification successful: {check_stdout.strip()}")
+            LOGGER.info(f"File verification successful: {check_result.stdout.strip()}")
             return f"Successfully copied via /tmp staging: {remote_path}"
             
     except Exception as e:
@@ -643,11 +709,11 @@ def deploy_binary(local_path: str, host: str, target_dir: str, make_executable: 
             chmod(host, target_path, raise_on_error=True)
 
         # Проверяем, что файл скопирован успешно
-        stdout, stderr = execute_command(host, f"ls -la {target_path}")
+        ls_result = execute_command(host, f"ls -la {target_path}")
 
         result.update({
             'success': True,
-            'output': stdout
+            'output': ls_result.stdout
         })
 
         return result

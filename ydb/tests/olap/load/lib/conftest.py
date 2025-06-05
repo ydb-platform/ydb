@@ -19,7 +19,7 @@ from ydb.tests.olap.lib.allure_utils import allure_test_description, NodeErrors
 from ydb.tests.olap.lib.results_processor import ResultsProcessor
 from ydb.tests.olap.lib.utils import get_external_param
 from ydb.tests.olap.scenario.helpers.scenario_tests_helper import ScenarioTestHelper
-from ydb.tests.olap.lib.remote_execution import execute_command, deploy_binaries_to_hosts
+from ydb.tests.olap.lib.remote_execution import execute_command, deploy_binaries_to_hosts, ExecutionResult
 
 LOGGER = logging.getLogger(__name__)
 
@@ -874,12 +874,16 @@ def workload_executor():
             allure.attach(f"Timeout: {int(timeout * 2)}s", 'Execution Timeout', attachment_type=allure.attachment_type.TEXT)
             allure.attach(f"Target host: {node.host}", 'Execution Target', attachment_type=allure.attachment_type.TEXT)
             
-            stdout, stderr = execute_command(
+            execution_result = execute_command(
                 node.host, cmd, 
                 raise_on_error=False,
                 timeout=int(timeout * 2), 
                 raise_on_timeout=False
             )
+            
+            stdout = execution_result.stdout
+            stderr = execution_result.stderr
+            is_timeout = execution_result.is_timeout
             
             # Прикрепляем результаты выполнения команды
             if stdout:
@@ -892,9 +896,8 @@ def workload_executor():
             else:
                 allure.attach("(empty)", 'Command Stderr', attachment_type=allure.attachment_type.TEXT)
             
-            # success=True только если stderr пустой (исключая SSH warnings)
-            # SSH warnings уже отфильтрованы в remote_execution.py
-            success = not bool(stderr.strip())
+            # success=True только если stderr пустой (исключая SSH warnings) И нет timeout
+            success = not bool(stderr.strip()) and not is_timeout
             
             return stdout, stderr, success
     
@@ -942,7 +945,8 @@ class WorkloadTestBase(LoadSuiteBase):
             logging.error(f"Error during teardown: {e}")
 
     def create_workload_result(self, workload_name: str, stdout: str, stderr: str, 
-                              success: bool, additional_stats: dict = None) -> YdbCliHelper.WorkloadRunResult:
+                              success: bool, additional_stats: dict = None, 
+                              is_timeout: bool = False) -> YdbCliHelper.WorkloadRunResult:
         """
         Создает и заполняет WorkloadRunResult с общей логикой
         
@@ -952,6 +956,7 @@ class WorkloadTestBase(LoadSuiteBase):
             stderr: Ошибки workload  
             success: Успешность выполнения
             additional_stats: Дополнительная статистика
+            is_timeout: Флаг таймаута
             
         Returns:
             Заполненный WorkloadRunResult
@@ -973,24 +978,19 @@ class WorkloadTestBase(LoadSuiteBase):
         error_found = False
         
         # Проверяем на timeout сначала (это warning, не error)
-        is_timeout = False
-        # Timeout может быть как в stderr, так и в stdout
-        combined_output = f"{str(stdout)} {str(stderr)}".lower()
-        if (not success and 
-            ("timeout" in combined_output or "timed out" in combined_output)):
+        if is_timeout:
             result.add_warning(f"Workload execution timed out. stdout: {stdout}, stderr: {stderr}")
-            is_timeout = True
-        
-        # Проверяем явные ошибки (только если не timeout)
-        if not success and not is_timeout:
-            result.add_error(f"Workload execution failed. stderr: {stderr}")
-            error_found = True
-        elif not is_timeout and "error" in str(stderr).lower() and "warning: permanently added" not in str(stderr).lower():
-            result.add_error(f"Error detected in stderr: {stderr}")
-            error_found = True
-        elif self._has_real_error_in_stdout(str(stdout)):
-            result.add_warning(f"Error detected in stdout: {stdout}")
-            error_found = True
+        else:
+            # Проверяем явные ошибки (только если не timeout)
+            if not success:
+                result.add_error(f"Workload execution failed. stderr: {stderr}")
+                error_found = True
+            elif "error" in str(stderr).lower() and "warning: permanently added" not in str(stderr).lower():
+                result.add_error(f"Error detected in stderr: {stderr}")
+                error_found = True
+            elif self._has_real_error_in_stdout(str(stdout)):
+                result.add_warning(f"Error detected in stdout: {stdout}")
+                error_found = True
             
         # Проверяем предупреждения
         if ("warning: permanently added" not in str(stderr).lower() and
@@ -1003,26 +1003,17 @@ class WorkloadTestBase(LoadSuiteBase):
         
         if is_timeout:
             # Для timeout используем более конкретное сообщение
-            if "timeout" in combined_output or "timed out" in combined_output:
-                timeout_match = None
-                for line in combined_output.split('\n'):
-                    if 'timed out' in line or 'timeout' in line:
-                        timeout_match = line.strip()
-                        break
-                iteration.error_message = timeout_match or "Workload execution timed out"
-            else:
-                iteration.error_message = "Workload execution timed out"
+            iteration.error_message = "Workload execution timed out"
         elif error_found:
             # Устанавливаем ошибку в iteration для consistency
             iteration.error_message = result.error_message
-        elif self._has_real_error_in_stdout(str(stdout)):
-            iteration.error_message = str(stdout)
             
         result.iterations[0] = iteration
 
         # Добавляем базовую статистику
         result.add_stat(workload_name, "execution_time", self.timeout)
-        result.add_stat(workload_name, "workload_success", success and not error_found)
+        # Timeout не считается неуспешным выполнением, это warning
+        result.add_stat(workload_name, "workload_success", (success and not error_found) or is_timeout)
         result.add_stat(workload_name, "success_flag", success)  # Исходный флаг успеха
         
         # Добавляем дополнительную статистику если есть
@@ -1214,7 +1205,7 @@ class WorkloadTestBase(LoadSuiteBase):
             if run_num == 1:
                 workload_start_time = time()
             
-            success, execution_time, stdout, stderr = self._execute_single_workload_run(
+            success, execution_time, stdout, stderr, is_timeout = self._execute_single_workload_run(
                 deployed_binary_path=deployed_binary_path,
                 target_node=target_node,
                 run_name=run_name,
@@ -1237,7 +1228,8 @@ class WorkloadTestBase(LoadSuiteBase):
                     "run_duration": run_config.get('duration', duration_value),
                     "run_execution_time": execution_time,
                     **run_config
-                }
+                },
+                is_timeout=is_timeout
             )
             
             # Добавляем как iteration в общий результат
@@ -1416,12 +1408,16 @@ class WorkloadTestBase(LoadSuiteBase):
                     allure.attach(cmd, 'Full Command', attachment_type=allure.attachment_type.TEXT)
                     allure.attach(f"Timeout: {int(run_timeout)}s", 'Execution Timeout', attachment_type=allure.attachment_type.TEXT)
                     
-                    stdout, stderr = execute_command(
+                    execution_result = execute_command(
                         target_node.host, cmd, 
                         raise_on_error=False,
                         timeout=int(run_timeout), 
                         raise_on_timeout=False
                     )
+                    
+                    stdout = execution_result.stdout
+                    stderr = execution_result.stderr
+                    is_timeout = execution_result.is_timeout
                     
                     # Прикрепляем результаты выполнения команды
                     if stdout:
@@ -1434,20 +1430,20 @@ class WorkloadTestBase(LoadSuiteBase):
                     else:
                         allure.attach("(empty)", 'Command Stderr', attachment_type=allure.attachment_type.TEXT)
                     
-                    # success=True только если stderr пустой (исключая SSH warnings)
-                    success = not bool(stderr.strip())
+                    # success=True только если stderr пустой (исключая SSH warnings) И нет timeout
+                    success = not bool(stderr.strip()) and not is_timeout
                     
                     execution_time = time() - run_start_time
                     
-                    logging.info(f"{run_name} completed in {execution_time:.1f}s, success: {success}")
+                    logging.info(f"{run_name} completed in {execution_time:.1f}s, success: {success}, timeout: {is_timeout}")
                     
-                    return success, execution_time, stdout, stderr
+                    return success, execution_time, stdout, stderr, is_timeout
                     
         except Exception as e:
             execution_time = time() - run_start_time
             error_msg = f"Exception in {run_name}: {e}"
             logging.error(error_msg)
-            return False, execution_time, "", error_msg
+            return False, execution_time, "", error_msg, False
 
     def _check_scheme_state(self):
         """Проверяет состояние схемы базы данных"""

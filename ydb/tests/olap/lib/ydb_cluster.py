@@ -488,7 +488,9 @@ class YdbCluster:
                         grep_pattern = escaped_pattern
 
                     ps_cmd = f"ps -aux | grep '{grep_pattern}'"
-                    stdout, stderr = execute_command(node.host, ps_cmd, raise_on_error=False)
+                    result_exec = execute_command(node.host, ps_cmd, raise_on_error=False)
+                    stdout = result_exec.stdout
+                    stderr = result_exec.stderr
 
                     result['commands_executed'].append({
                         'command': ps_cmd,
@@ -549,7 +551,9 @@ class YdbCluster:
                     kill_cmd = f"kill -{signal_type} {pids_str}"
 
                     try:
-                        stdout, stderr = execute_command(node.host, kill_cmd, raise_on_error=False)
+                        kill_result = execute_command(node.host, kill_cmd, raise_on_error=False)
+                        stdout = kill_result.stdout
+                        stderr = kill_result.stderr
 
                         result['commands_executed'].append({
                             'command': kill_cmd,
@@ -567,7 +571,9 @@ class YdbCluster:
                         still_alive = []
                         for pid in pids_list:
                             check_cmd = f"kill -0 {pid}"
-                            stdout_check, stderr_check = execute_command(node.host, check_cmd, raise_on_error=False)
+                            check_result = execute_command(node.host, check_cmd, raise_on_error=False)
+                            stdout_check = check_result.stdout
+                            stderr_check = check_result.stderr
                             # kill -0 возвращает 0 если процесс существует
                             if "No such process" not in stderr_check:
                                 still_alive.append(pid)

@@ -472,10 +472,6 @@ class TInputTransformStreamMultiLookupBase : public TInputTransformStreamLookupC
 public:
     using TCommon::TCommon;
 
-protected:
-    virtual NUdf::EFetchStatus FetchWideInputValue(NUdf::TUnboxedValue* inputRowItems) = 0;
-    virtual void PushOutputValue(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, NUdf::TUnboxedValue* outputRowItems) = 0;
-
 private: //events
     STRICT_STFUNC(StateFunc,
         hFunc(IDqAsyncLookupSource::TEvLookupResult, Handle);

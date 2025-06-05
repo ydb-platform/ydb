@@ -482,7 +482,7 @@ namespace NKikimr::NColumnShard {
     NTxUT::TPlanStep SetupSchema(TTestBasicRuntime& runtime, TActorId& sender, const TString& txBody, const ui64 txId) {
 
         auto controller = NYDBTest::TControllers::GetControllerAs<NYDBTest::NColumnShard::TController>();
-        while (controller && !controller->IsActiveTablet(TTestTxConfig::TxTablet0)) {
+        while (controller && !controller->IsActiveTablet(NOlap::TTabletId{TTestTxConfig::TxTablet0})) {
             runtime.SimulateSleep(TDuration::Seconds(1));
         }
 

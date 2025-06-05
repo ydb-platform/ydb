@@ -263,13 +263,11 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             const auto& pathId = *pathids.begin();
 
             shard = 0;
-            for (auto&& i : csController->GetShardActualIds()) {
-                //const auto localPathId = csController->GetLocalPathIdVerified(i, pathId);
+            for (const auto& [tabletId, pathIdTranslator]: csController->GetActiveTablets()) {
+                const auto schemeShardLocalPathId = pathIdTranslator->ResolveSchemeShardLocalPathId(pathId);
                 auto request = std::make_unique<NStat::TEvStatistics::TEvStatisticsRequest>();
-                //request->Record.MutableTable()->MutablePathId()->SetLocalId(localPathId->GetRawValue());
-                request->Record.MutableTable()->MutablePathId()->SetLocalId(pathId.GetRawValue());
-
-                runtime->Send(MakePipePerNodeCacheID(false), sender, new TEvPipeCache::TEvForward(request.release(), i, false));
+                request->Record.MutableTable()->MutablePathId()->SetLocalId(schemeShardLocalPathId->GetRawValue());
+                runtime->Send(MakePipePerNodeCacheID(false), sender, new TEvPipeCache::TEvForward(request.release(), static_cast<ui64>(tabletId), false));
                 if (++shard == 3) {
                     break;
                 }

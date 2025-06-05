@@ -335,20 +335,13 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         olapHelper.CreateTestOlapTable();
         tieringHelper.WriteSampleData();
         csController->WaitCompactions(TDuration::Seconds(5));
-        THashSet<NColumnShard::TInternalPathId> pathsToLock{
-        // for (const auto& tablet: csController->GetShardActualIds()) {
-            NColumnShard::TInternalPathId::FromRawValue(0),
-            NColumnShard::TInternalPathId::FromRawValue(1),
-            NColumnShard::TInternalPathId::FromRawValue(2),
-            NColumnShard::TInternalPathId::FromRawValue(3),
-            NColumnShard::TInternalPathId::FromRawValue(4),
-            NColumnShard::TInternalPathId::FromRawValue(5)
-
-            // for (size_t i = 0; i != 6; ++i) {
-            //     //if(auto internalPathId = csController->GetInternalPathIdOptional(tablet, NColumnShard::InternalPathId::FromRawValue(i))) {
-            //         pathsToLock.insert(*internalPathId);
-            //     }
-            // }
+        THashSet<NColumnShard::TInternalPathId> pathsToLock;
+        for (const auto& [_, pathIdTranslator]: csController->GetActiveTablets()) {
+            for (size_t i = 0; i != 6; ++i) {
+                if (auto internalPathId = pathIdTranslator->ResolveInternalPathId(NColumnShard::TSchemeShardLocalPathId::FromRawValue(i))) {
+                    pathsToLock.insert(*internalPathId);
+                }
+            }
         };
 
         csController->RegisterLock("table", std::make_shared<NOlap::NDataLocks::TListTablesLock>("table", std::move(pathsToLock), NOlap::NDataLocks::ELockCategory::Compaction));

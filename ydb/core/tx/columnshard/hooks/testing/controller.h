@@ -1,4 +1,5 @@
 #pragma once
+#include <ydb/core/tx/columnshard/common/path_id.h>
 #include "ro_controller.h"
 
 #include <ydb/core/tx/columnshard/blob.h>
@@ -47,7 +48,38 @@ private:
     std::set<EBackground> DisabledBackgrounds;
 
     TMutex ActiveTabletsMutex;
-    std::set<ui64> ActiveTablets;
+
+    using TInternalPathId = NKikimr::NColumnShard::TInternalPathId;
+    using TSchemeShardLocalPathId = NKikimr::NColumnShard::TSchemeShardLocalPathId;
+
+    class TPathIdTranslator: public NOlap::IPathIdTranslator {
+        THashMap<TInternalPathId,TSchemeShardLocalPathId> InternalToSchemeShardLocal;
+        THashMap<TSchemeShardLocalPathId, TInternalPathId> SchemeShardLocalToInternal;
+    public:
+        void AddMapping(const TInternalPathId internalPathId, const TSchemeShardLocalPathId schemeShardLocalPathId) {
+            AFL_VERIFY(InternalToSchemeShardLocal.emplace(internalPathId, schemeShardLocalPathId).second);
+            AFL_VERIFY(SchemeShardLocalToInternal.emplace(schemeShardLocalPathId, internalPathId).second);
+        }
+        void DeleteMapping(const TInternalPathId internalPathId, const TSchemeShardLocalPathId schemeShardLocalPathId) {
+            InternalToSchemeShardLocal.erase(internalPathId);
+            SchemeShardLocalToInternal.erase(schemeShardLocalPathId);
+        }
+    public: //NOlap::IPathIdTranslator
+        virtual std::optional<TSchemeShardLocalPathId> ResolveSchemeShardLocalPathId(const TInternalPathId internalPathId) const override {
+            if (const auto* p = InternalToSchemeShardLocal.FindPtr(internalPathId)) {
+                return {*p};
+            }
+            return std::nullopt;
+        }
+        virtual std::optional<TInternalPathId> ResolveInternalPathId(const TSchemeShardLocalPathId schemeShardLocalPathId) const override  {
+            if (const auto* p = SchemeShardLocalToInternal.FindPtr(schemeShardLocalPathId)) {
+                return {*p};
+            }
+            return std::nullopt;
+        }
+    };
+    THashMap<NOlap::TTabletId, std::shared_ptr<TPathIdTranslator>> ActiveTablets;
+
 
     THashMap<TString, std::shared_ptr<NOlap::NDataLocks::ILock>> ExternalLocks;
 
@@ -304,22 +336,22 @@ public:
 
     bool HasPKSortingOnly() const;
 
-    void OnSwitchToWork(const ui64 tabletId) override {
+    void OnSwitchToWork(const NOlap::TTabletId tabletId) override {
         TGuard<TMutex> g(ActiveTabletsMutex);
-        ActiveTablets.emplace(tabletId);
+        ActiveTablets.emplace(tabletId, std::make_shared<TPathIdTranslator>());
     }
 
-    void OnCleanupActors(const ui64 tabletId) override {
+    void OnCleanupActors(const NOlap::TTabletId tabletId) override {
         TGuard<TMutex> g(ActiveTabletsMutex);
         ActiveTablets.erase(tabletId);
     }
 
-    ui64 GetActiveTabletsCount() const {
+    THashMap<NOlap::TTabletId, std::shared_ptr<TPathIdTranslator>> GetActiveTablets() const {
         TGuard<TMutex> g(ActiveTabletsMutex);
-        return ActiveTablets.size();
+        return ActiveTablets;
     }
 
-    bool IsActiveTablet(const ui64 tabletId) const {
+    bool IsActiveTablet(const NOlap::TTabletId tabletId) const {
         TGuard<TMutex> g(ActiveTabletsMutex);
         return ActiveTablets.contains(tabletId);
     }
@@ -328,8 +360,31 @@ public:
         RestartOnLocalDbTxCommitted = std::move(txInfo);
     }
 
+    const std::shared_ptr<TPathIdTranslator> GetPathIdTranslator(const NOlap::TTabletId tabletId) {
+        TGuard<TMutex> g(ActiveTabletsMutex);
+        const auto* tablet = ActiveTablets.FindPtr(tabletId);
+        if (!tablet) {
+            return nullptr;
+        }
+        return *tablet;
+    }
+
     virtual void OnAfterLocalTxCommitted(
         const NActors::TActorContext& ctx, const ::NKikimr::NColumnShard::TColumnShard& shard, const TString& txInfo) override;
+
+
+    virtual void OnAddPathIdMapping(const NOlap::TTabletId tabletId, const TInternalPathId internalPathId, const TSchemeShardLocalPathId schemeShardLocalPathId) override {
+        TGuard<TMutex> g(ActiveTabletsMutex);
+        auto* tablet = ActiveTablets.FindPtr(tabletId);
+        AFL_VERIFY(tablet);
+        (*tablet)->AddMapping(internalPathId, schemeShardLocalPathId);
+    }
+    virtual void OnDeletePathIdMapping(const NOlap::TTabletId tabletId, const TInternalPathId internalPathId, const TSchemeShardLocalPathId schemeShardLocalPathId) override {
+        auto* tablet = ActiveTablets.FindPtr(tabletId);
+        AFL_VERIFY(tablet);
+        (*tablet)->DeleteMapping(internalPathId, schemeShardLocalPathId);
+    }
+
 };
 
 }

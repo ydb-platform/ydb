@@ -9,19 +9,19 @@
 namespace NKikimr::NOlap::NCleanUnusedTables {
 using namespace NColumnShard;
 
-using TUnusedTables = TCleanUnusedTablesNormalizerTemplate<Schema::IndexColumns>;
+using TUnusedIndexColumns = TCleanUnusedTablesNormalizerTemplate<Schema::IndexColumns>;
 
-class TCleanUnusedTablesNormalizer final: public TUnusedTables {
-    using TBase = TUnusedTables;
+class TCleanIndexColumnsNormalizer final: public TUnusedIndexColumns {
+    using TBase = TUnusedIndexColumns;
 
     static TString ClassName() {
         return "CleanIndexColumns";
     }
 
-    static inline auto Registrator = INormalizerComponent::TFactory::TRegistrator<TCleanUnusedTablesNormalizer>(ClassName());
+    static inline auto Registrator = INormalizerComponent::TFactory::TRegistrator<TCleanIndexColumnsNormalizer>(ClassName());
 
 public:
-    explicit TCleanUnusedTablesNormalizer(const TNormalizationController::TInitContext& ctx)
+    explicit TCleanIndexColumnsNormalizer(const TNormalizationController::TInitContext& ctx)
         : TBase(ctx) {
     }
 

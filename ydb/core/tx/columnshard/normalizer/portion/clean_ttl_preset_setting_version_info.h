@@ -11,17 +11,17 @@ using namespace NColumnShard;
 
 using TUnusedTtlPresetVersionInfo = TCleanUnusedTablesNormalizerTemplate<Schema::TtlSettingsPresetVersionInfo>;
 
-class TCleanUnusedTablesNormalizer final: public TUnusedTtlPresetVersionInfo {
+class TCleanTtlPresetVersionInfoNormalizer final: public TUnusedTtlPresetVersionInfo {
     using TBase = TUnusedTtlPresetVersionInfo;
 
     static TString ClassName() {
         return "CleanTtlPresetSettingsVersionInfo";
     }
 
-    static inline auto Registrator = INormalizerComponent::TFactory::TRegistrator<TCleanUnusedTablesNormalizer>(ClassName());
+    static inline auto Registrator = INormalizerComponent::TFactory::TRegistrator<TCleanTtlPresetVersionInfoNormalizer>(ClassName());
 
 public:
-    explicit TCleanUnusedTablesNormalizer(const TNormalizationController::TInitContext& ctx)
+    explicit TCleanTtlPresetVersionInfoNormalizer(const TNormalizationController::TInitContext& ctx)
         : TBase(ctx) {
     }
 

@@ -163,7 +163,9 @@ public:
                 }
                 CurrentRemainVolume = (*FilterPointer)[Position];
             }
-            Next(startOffset);
+            if (startOffset) {
+                Next(startOffset);
+            }
         }
 
         TIterator(const bool reverse, const ui32 size, const bool startValue, const ui64 startOffset)
@@ -178,7 +180,9 @@ public:
                 }
                 CurrentRemainVolume = size;
             }
-            Next(startOffset);
+            if (startOffset) {
+                Next(startOffset);
+            }
         }
 
         bool GetCurrentAcceptance() const {

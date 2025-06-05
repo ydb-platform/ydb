@@ -946,7 +946,7 @@ class WorkloadTestBase(LoadSuiteBase):
 
     def create_workload_result(self, workload_name: str, stdout: str, stderr: str, 
                               success: bool, additional_stats: dict = None, 
-                              is_timeout: bool = False) -> YdbCliHelper.WorkloadRunResult:
+                              is_timeout: bool = False, iteration_number: int = 0) -> YdbCliHelper.WorkloadRunResult:
         """
         Создает и заполняет WorkloadRunResult с общей логикой
         
@@ -957,6 +957,7 @@ class WorkloadTestBase(LoadSuiteBase):
             success: Успешность выполнения
             additional_stats: Дополнительная статистика
             is_timeout: Флаг таймаута
+            iteration_number: Номер итерации
             
         Returns:
             Заполненный WorkloadRunResult
@@ -1008,7 +1009,7 @@ class WorkloadTestBase(LoadSuiteBase):
             # Устанавливаем ошибку в iteration для consistency
             iteration.error_message = result.error_message
             
-        result.iterations[0] = iteration
+        result.iterations[iteration_number] = iteration
 
         # Добавляем базовую статистику
         result.add_stat(workload_name, "execution_time", self.timeout)
@@ -1229,16 +1230,13 @@ class WorkloadTestBase(LoadSuiteBase):
                     "run_execution_time": execution_time,
                     **run_config
                 },
-                is_timeout=is_timeout
+                is_timeout=is_timeout,
+                iteration_number=run_num
             )
             
             # Добавляем как iteration в общий результат
-            iteration = YdbCliHelper.Iteration()
-            iteration.time = execution_time
-            if not run_result.success:
-                iteration.error_message = run_result.error_message
-            
-            overall_result.iterations[run_num] = iteration
+            # run_result уже содержит правильную iteration с номером run_num
+            overall_result.iterations[run_num] = run_result.iterations[run_num]
             
             # Накапливаем stdout/stderr
             if overall_result.stdout is None:

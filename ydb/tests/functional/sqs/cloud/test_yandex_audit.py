@@ -8,17 +8,15 @@ import uuid
 import sys
 import os
 
-import pytest
+# import pytest
 import yatest
 
-import ydb
-from hamcrest import assert_that, equal_to, not_none, has_item, has_items, is_not, contains_string
-from hamcrest import raises, greater_than, not_, less_than
 from ydb.tests.library.sqs.test_base import KikimrSqsTestBase, get_test_with_sqs_tenant_installation
-from ydb.tests.library.sqs.test_base import IS_FIFO_PARAMS, TABLES_FORMAT_PARAMS
+# from ydb.tests.library.sqs.test_base import IS_FIFO_PARAMS, TABLES_FORMAT_PARAMS
 
 import random
 import string
+
 
 class CaptureFileOutput:
     def __init__(self, filename):
@@ -63,7 +61,7 @@ class TestCloudEvents(get_test_with_sqs_tenant_installation(KikimrSqsTestBase)):
         if 'audit_config' not in config_generator.yaml_config:
             config_generator.yaml_config['audit_config'] = {}
             config_generator.yaml_config['audit_config']['file_backend'] = {}
-    
+
             with open(self.audit_file, "w") as audit_file:
                 audit_file.write('')
 
@@ -102,7 +100,7 @@ class TestCloudEvents(get_test_with_sqs_tenant_installation(KikimrSqsTestBase)):
             queue_url1 = self._sqs_api.create_queue(self.queue_name, is_fifo=False)
             time.sleep(1)
 
-            tags_keys = [ "tag_key_1", "tag_key_2" ]
+            tags_keys = ["tag_key_1", "tag_key_2"]
             tags = {
                 tags_keys[0]: "tag_value_1",
                 tags_keys[1]: "tag_value_2"

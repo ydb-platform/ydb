@@ -321,7 +321,6 @@ class KikimrSqsTestBase(object):
                     if is_cloud_events_enabled:
                         create_cloud_events_table(cls.sqs_root, session)
 
-
         http_port = cluster.nodes[1].sqs_port
         cls.create_metauser(http_port, config_generator)
 

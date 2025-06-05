@@ -320,7 +320,7 @@ public:
         const THolderFactory& holderFactory,
         const TTypeEnvironment& typeEnv,
         NPq::NProto::TDqPqTopicSource&& sourceParams,
-        NPq::NProto::TDqReadTaskParams&& readParams,
+        TVector<NPq::NProto::TDqReadTaskParams>&& readParams,
         NYdb::TDriver driver,
         std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
         const NActors::TActorId& computeActorId,
@@ -498,7 +498,7 @@ TDqPqRdReadActor::TDqPqRdReadActor(
         const THolderFactory& holderFactory,
         const TTypeEnvironment& typeEnv,
         NPq::NProto::TDqPqTopicSource&& sourceParams,
-        NPq::NProto::TDqReadTaskParams&& readParams,
+        TVector<NPq::NProto::TDqReadTaskParams>&& readParams,
         NYdb::TDriver driver,
         std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
         const NActors::TActorId& computeActorId,
@@ -775,11 +775,11 @@ TDuration TDqPqRdReadActor::GetCpuTime() {
 
 std::vector<ui64> TDqPqRdReadActor::GetPartitionsToRead() const {
     std::vector<ui64> res;
-    ui32 partitionsCount = ReadParams.GetPartitioningParams().GetTopicPartitionsCount();
-    ui64 currentPartition = ReadParams.GetPartitioningParams().GetEachTopicPartitionGroupId();
+    ui32 partitionsCount = ReadParams.front().GetPartitioningParams().GetTopicPartitionsCount();
+    ui64 currentPartition = ReadParams.front().GetPartitioningParams().GetEachTopicPartitionGroupId();
     do {
         res.emplace_back(currentPartition); // 0-based in topic API
-        currentPartition += ReadParams.GetPartitioningParams().GetDqPartitionsCount();
+        currentPartition += ReadParams.front().GetPartitioningParams().GetDqPartitionsCount();
     } while (currentPartition < partitionsCount);
     return res;
 }
@@ -1274,7 +1274,7 @@ void TDqPqRdReadActor::StartClusterDiscovery() {
                         federatedCluster.GetPartitionsCount()
                     );
                 if (cluster.PartitionsCount == 0) {
-                    cluster.PartitionsCount = ReadParams.GetPartitioningParams().GetTopicPartitionsCount();
+                    cluster.PartitionsCount = ReadParams.front().GetPartitioningParams().GetTopicPartitionsCount();
                     SRC_LOG_W("PartitionsCount for offline server assumed to be " << cluster.PartitionsCount);
                 }
             }
@@ -1284,7 +1284,7 @@ void TDqPqRdReadActor::StartClusterDiscovery() {
                     .Endpoint = SourceParams.GetEndpoint(),
                     .Path = SourceParams.GetDatabase(),
                 },
-                ReadParams.GetPartitioningParams().GetTopicPartitionsCount()
+                ReadParams.front().GetPartitioningParams().GetTopicPartitionsCount()
             );
         }
         for (ui32 clusterIndex = 0; clusterIndex < Clusters.size(); ++clusterIndex) {
@@ -1390,7 +1390,7 @@ void TDqPqRdReadActor::StartCluster(ui32 clusterIndex) {
         Clusters[clusterIndex].ChildId = SelfId();
         SourceParams.SetEndpoint(TString(Clusters[clusterIndex].Info.Endpoint));
         SourceParams.SetDatabase(TString(Clusters[clusterIndex].Info.Path));
-        ReadParams.mutable_partitioningparams()->SetTopicPartitionsCount(Clusters[clusterIndex].PartitionsCount);
+        ReadParams.front().mutable_partitioningparams()->SetTopicPartitionsCount(Clusters[clusterIndex].PartitionsCount);
         State = EState::INIT;
         Init();
         InitChild();
@@ -1400,8 +1400,10 @@ void TDqPqRdReadActor::StartCluster(ui32 clusterIndex) {
     NPq::NProto::TDqPqTopicSource sourceParams = SourceParams;
     sourceParams.SetEndpoint(TString(Clusters[clusterIndex].Info.Endpoint));
     sourceParams.SetDatabase(TString(Clusters[clusterIndex].Info.Path));
-    NPq::NProto::TDqReadTaskParams readParams = ReadParams;
-    readParams.mutable_partitioningparams()->SetTopicPartitionsCount(Clusters[clusterIndex].PartitionsCount);
+    TVector<NPq::NProto::TDqReadTaskParams> readParams;
+    NPq::NProto::TDqReadTaskParams param = ReadParams.front();
+    param.mutable_partitioningparams()->SetTopicPartitionsCount(Clusters[clusterIndex].PartitionsCount);
+    readParams.emplace_back(param);
     auto actor = new TDqPqRdReadActor(
         InputIndex,
         IngressStats.Level,
@@ -1458,8 +1460,10 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqRdReadActor(
     auto taskParamsIt = taskParams.find("pq");
     YQL_ENSURE(taskParamsIt != taskParams.end(), "Failed to get pq task params");
 
+    TVector<NPq::NProto::TDqReadTaskParams> params;
     NPq::NProto::TDqReadTaskParams readTaskParamsMsg;
     YQL_ENSURE(readTaskParamsMsg.ParseFromString(taskParamsIt->second), "Failed to parse DqPqRead task params");
+    params.emplace_back(std::move(readTaskParamsMsg));
 
     const TString& tokenName = settings.GetToken().GetName();
     const TString token = secureParams.Value(tokenName, TString());
@@ -1473,7 +1477,7 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqRdReadActor(
         holderFactory,
         typeEnv,
         std::move(settings),
-        std::move(readTaskParamsMsg),
+        std::move(params),
         driver,
         CreateCredentialsProviderFactoryForStructuredToken(credentialsFactory, token, addBearerToToken),
         computeActorId,

@@ -13,6 +13,8 @@
 #include <ydb/library/actors/core/log.h>
 #include <yql/essentials/utils/signals/utils.h>
 
+#include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
+#include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
 
 namespace NKikimr::NKqp {
 
@@ -956,12 +958,47 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                             externalDataSourceMetadata.Metadata->ExternalSource.TableLocation = *externalPath;
                         }
                         LoadExternalDataSourceSecretValues(entry, userToken, ActorSystem)
-                            .Subscribe([promise, externalDataSourceMetadata, settings](const TFuture<TEvDescribeSecretsResponse::TDescription>& result) mutable
+                            .Subscribe([promise, externalDataSourceMetadata, settings, table, database, externalPath](const TFuture<TEvDescribeSecretsResponse::TDescription>& result) mutable
                         {
                             UpdateExternalDataSourceSecretsValue(externalDataSourceMetadata, result.GetValue());
                             if (!externalDataSourceMetadata.Success()) {
                                 promise.SetValue(externalDataSourceMetadata);
                                 return;
+                            }
+
+                            if (externalDataSourceMetadata.Metadata->ExternalSource.Type == ToString(NYql::EDatabaseType::Ydb) && externalPath) {
+
+                                externalDataSourceMetadata.Metadata->ExternalSource.DataSourceAuth.GetToken().GetTokenSecretName();
+                                
+                                        THashMap<TString, TString> properties = {externalDataSourceMetadata.Metadata->ExternalSource.Properties.GetProperties().begin(), 
+                                            externalDataSourceMetadata.Metadata->ExternalSource.Properties.GetProperties().end()};
+
+                                auto token = externalDataSourceMetadata.Metadata->ExternalSource.Token;
+                                auto secretName = externalDataSourceMetadata.Metadata->ExternalSource.DataSourceAuth.GetToken().GetTokenSecretName();
+                      
+                                auto structuredTokenJson = NYql::ComposeStructuredTokenJsonForTokenAuthWithSecret(secretName, token);
+                                auto databaseName = properties.Value("database_name", "");
+                                
+                                std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory = NYql::CreateCredentialsProviderFactoryForStructuredToken(nullptr, structuredTokenJson, true/*config->GetAddBearerToToken()*/);
+                                NYdb::TDriverConfig config;
+                                config.SetEndpoint(externalDataSourceMetadata.Metadata->ExternalSource.DataSourceLocation);
+                                config.SetDatabase(databaseName);
+                                auto driver = NYdb::TDriver(config);
+                                
+                                NYdb::TCommonClientSettings opts;
+                                opts
+                                    .DiscoveryEndpoint(externalDataSourceMetadata.Metadata->ExternalSource.DataSourceLocation)
+                                    .Database(databaseName)
+                                    .SslCredentials(NYdb::TSslCredentials(true))
+                                    .CredentialsProviderFactory(credentialsProviderFactory);
+                                auto schemeClient = NYdb::NScheme::TSchemeClient(driver, opts);
+                                auto result = schemeClient.DescribePath(databaseName + "/" + *externalPath).GetValueSync();
+
+                                NYdb::NScheme::TSchemeEntry entry = result.GetEntry();
+                                if (entry.Type == NYdb::NScheme::ESchemeEntryType::Topic)
+                                {
+                                    externalDataSourceMetadata.Metadata->ExternalSource.Type = ToString(NYql::EDatabaseType::DataStreams);
+                                }
                             }
 
                             NExternalSource::IExternalSource::TPtr externalSource;

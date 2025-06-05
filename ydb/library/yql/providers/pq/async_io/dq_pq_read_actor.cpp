@@ -188,7 +188,7 @@ public:
         ui64 taskId,
         const THolderFactory& holderFactory,
         NPq::NProto::TDqPqTopicSource&& sourceParams,
-        NPq::NProto::TDqReadTaskParams&& readParams,
+        TVector<NPq::NProto::TDqReadTaskParams>&& readParams,
         NYdb::TDriver driver,
         std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
         const NActors::TActorId& computeActorId,
@@ -402,10 +402,10 @@ private:
                             .Endpoint = federatedCluster.GetEndpoint(),
                             .Path = federatedCluster.GetDatabase(),
                         },
-                        ReadParams.GetPartitioningParams().GetTopicPartitionsCount()
+                        ReadParams.front().GetPartitioningParams().GetTopicPartitionsCount()
                     );
                     if (cluster.PartitionsCount == 0) {
-                        cluster.PartitionsCount = ReadParams.GetPartitioningParams().GetTopicPartitionsCount();
+                        cluster.PartitionsCount = ReadParams.front().GetPartitioningParams().GetTopicPartitionsCount();
                         SRC_LOG_W("PartitionsCount for offline server assumed to be " << cluster.PartitionsCount);
                     }
                 }
@@ -416,7 +416,7 @@ private:
                             .Endpoint = SourceParams.GetEndpoint(),
                             .Path =SourceParams.GetDatabase()
                     },
-                    ReadParams.GetPartitioningParams().GetTopicPartitionsCount()
+                    ReadParams.front().GetPartitioningParams().GetTopicPartitionsCount()
                 );
             }
             Send(SelfId(), new TEvPrivate::TEvSourceDataReady());
@@ -588,10 +588,10 @@ private:
     std::vector<ui64> GetPartitionsToRead(TClusterState& clusterState) const {
         std::vector<ui64> res;
 
-        ui64 currentPartition = ReadParams.GetPartitioningParams().GetEachTopicPartitionGroupId();
+        ui64 currentPartition = ReadParams.front().GetPartitioningParams().GetEachTopicPartitionGroupId();
         while (currentPartition < clusterState.PartitionsCount) {
             res.emplace_back(currentPartition); // 0-based in topic API
-            currentPartition += ReadParams.GetPartitioningParams().GetDqPartitionsCount();
+            currentPartition += ReadParams.front().GetPartitioningParams().GetDqPartitionsCount();
         }
 
         return res;
@@ -875,19 +875,22 @@ private:
 };
 
 void ExtractPartitionsFromParams(
-        NPq::NProto::TDqReadTaskParams& readTaskParamsMsg,
+        TVector<NPq::NProto::TDqReadTaskParams>& readTaskParamsMsg,
         const THashMap<TString, TString>& taskParams, // partitions are here in dq
         const TVector<TString>& readRanges            // partitions are here in kqp
     ) {
         if (!readRanges.empty()) {
-            YQL_ENSURE(readRanges.size() == 1, "Multiple readRanges");
             for (const auto& readRange : readRanges) {
-                YQL_ENSURE(readTaskParamsMsg.ParseFromString(readRange), "Failed to parse DqPqRead task params");
+                NPq::NProto::TDqReadTaskParams params;
+                YQL_ENSURE(params.ParseFromString(readRange), "Failed to parse DqPqRead task params");
+               readTaskParamsMsg.emplace_back(std::move(params));
             }
         } else {
             auto taskParamsIt = taskParams.find("pq");
             YQL_ENSURE(taskParamsIt != taskParams.end(), "Failed to get pq task params");
-            YQL_ENSURE(readTaskParamsMsg.ParseFromString(taskParamsIt->second), "Failed to parse DqPqRead task params");
+            NPq::NProto::TDqReadTaskParams params;
+            YQL_ENSURE(params.ParseFromString(taskParamsIt->second), "Failed to parse DqPqRead task params");
+            readTaskParamsMsg.emplace_back(std::move(params));
         }
 }
 
@@ -910,8 +913,7 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqReadActor(
     i64 bufferSize
     )
 {
-
-    NPq::NProto::TDqReadTaskParams readTaskParamsMsg;
+    TVector<NPq::NProto::TDqReadTaskParams> readTaskParamsMsg;
     ExtractPartitionsFromParams(readTaskParamsMsg, taskParams, readRanges);
 
     const TString& tokenName = settings.GetToken().GetName();

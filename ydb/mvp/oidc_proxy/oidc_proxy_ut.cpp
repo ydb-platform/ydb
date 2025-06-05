@@ -1399,7 +1399,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         UNIT_ASSERT_STRINGS_EQUAL(location, protectedPage);
     }
 
-    Y_UNIT_TEST(OpenIdConnectStreamingRequestResponse) {
+    void OpenIdConnectStreamingRequestResponseTest(NMvp::EAccessServiceType profile) {
         // This test verifies the handling of HTTP streaming responses using chunked transfer encoding
         TPortManager tp;
         ui16 sessionServicePort = tp.GetPort(8655);
@@ -1416,7 +1416,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
             .AuthorizationServerAddress = "https://auth.test.net",
             .ClientSecret = "0123456789abcdef",
             .AllowedProxyHosts = {allowedProxyHost},
-            .AccessServiceType = NMvp::nebius_v1
+            .AccessServiceType = profile
         };
 
         const NActors::TActorId edge = runtime.AllocateEdgeActor();
@@ -1495,5 +1495,13 @@ Y_UNIT_TEST_SUITE(Mvp) {
 
         auto outgoingResponseChunk4 = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingDataChunk>(handle);
         UNIT_ASSERT_VALUES_EQUAL(outgoingResponseChunk4->DataChunk->EndOfData, true);
+    }
+
+    Y_UNIT_TEST(OpenIdConnectStreamingRequestResponseYandex) {
+        OpenIdConnectStreamingRequestResponseTest(NMvp::yandex_v2);
+    }
+
+    Y_UNIT_TEST(OpenIdConnectStreamingRequestResponseNebius) {
+        OpenIdConnectStreamingRequestResponseTest(NMvp::nebius_v1);
     }
 }

@@ -339,7 +339,7 @@ Mandatory settings to adjust for your environment in the chosen template:
 Recommended settings to adjust:
 
 * `ydb_domain`. It will be the first path component for all [scheme objects](../../concepts/glossary.md#scheme-object) in the cluster. For example, you could put your company name there, cluster region, etc.
-* `ydb_database`. It will be the second path component for all [scheme objects](../../concepts/glossary.md#scheme-object) in the database. For example, you could put the use case or project name there.
+* `ydb_database_name`. It will be the second path component for all [scheme objects](../../concepts/glossary.md#scheme-object) in the database. For example, you could put the use case or project name there.
 * `default_disk_type`. If you are using [NVMe](https://en.wikipedia.org/wiki/NVM_Express) or rotating [HDD drives](https://en.wikipedia.org/wiki/Hard_disk_drive), change this setting to `NVME` or `ROT`, respectively.
 * `ydb_config`:
   * Any {{ ydb-short-name }} settings can be adjusted via this field, see [{#T}](../../reference/configuration/index.md) for more details.
@@ -454,7 +454,7 @@ static-node-3.ydb-cluster.com : ok=136  changed=69   unreachable=0    failed=0  
 
 {% endcut %}
 
-As a result of executing the `ydb_platform.ydb.initial_setup` playbook, a {{ ydb-short-name }} cluster will be created. It will contain a [domain](../../concepts/glossary.md#domain) named with the `ydb_domain` setting (`Root` by default), a [database](../../concepts/glossary.md#database) named with the `ydb_database` setting (`database` by default), and an initial [user](../../concepts/glossary.md#access-user) named with the `ydb_user` setting (`root` by default).
+As a result of executing the `ydb_platform.ydb.initial_setup` playbook, a {{ ydb-short-name }} cluster will be created. It will contain a [domain](../../concepts/glossary.md#domain) named with the `ydb_domain` setting (`Root` by default), a [database](../../concepts/glossary.md#database) named with the `ydb_database_name` setting (`database` by default), and an initial [user](../../concepts/glossary.md#access-user) named with the `ydb_user` setting (`root` by default).
 
 ## Optional Next Steps
 

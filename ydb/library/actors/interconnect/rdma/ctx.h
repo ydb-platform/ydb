@@ -16,6 +16,10 @@ struct ibv_pd;
 
 namespace NInterconnect::NRdma {
 
+namespace NLinkMgr {
+    class TRdmaLinkManager;
+}
+
 struct TDeviceCtx : public NNonCopyable::TNonCopyable {
     TDeviceCtx(ibv_context* ctx, ibv_pd* pd);
 
@@ -26,6 +30,7 @@ struct TDeviceCtx : public NNonCopyable::TNonCopyable {
 };
 
 class TRdmaCtx : public NNonCopyable::TNonCopyable {
+    friend class NLinkMgr::TRdmaLinkManager;
     TRdmaCtx(
         std::shared_ptr<TDeviceCtx> deviceCtx, ibv_device_attr devAttr, const char* deviceName,
         ui32 portNum, ibv_port_attr portAttr, int gidIndex, ibv_gid gid
@@ -61,6 +66,10 @@ public:
         return Gid;
     }
 
+    size_t GetDeviceIndex() const {
+        return DeviceIndex;
+    }
+
     void Output(IOutputStream &str) const;
     TString ToString() const;
 
@@ -72,6 +81,7 @@ private:
     const ibv_port_attr PortAttr;
     const int GidIndex;
     const ibv_gid Gid;
+    size_t DeviceIndex;
 };
 
 }

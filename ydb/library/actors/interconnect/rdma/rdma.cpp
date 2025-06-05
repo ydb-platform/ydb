@@ -2,7 +2,7 @@
 #include "ctx.h"
 #include <util/stream/output.h>
 
-
+#include <util/datetime/base.h>
 namespace NInterconnect::NRdma {
 
 TQueuePair::~TQueuePair() {
@@ -39,7 +39,7 @@ int TQueuePair::Init(TRdmaCtx* ctx) noexcept {
     }
 }
 
-int TQueuePair::ToRtsState(TRdmaCtx* ctx, ui32 qpNum, ibv_gid& gid, ibv_mtu mtuIndex) noexcept {
+int TQueuePair::ToRtsState(TRdmaCtx* ctx, ui32 qpNum, const ibv_gid& gid, ibv_mtu mtuIndex) noexcept {
     // ibv_modify_qp() returns 0 on success, or the value of errno on
     //  failure (which indicates the failure reason).
 
@@ -97,5 +97,48 @@ int TQueuePair::ToRtsState(TRdmaCtx* ctx, ui32 qpNum, ibv_gid& gid, ibv_mtu mtuI
 
     return 0;
 } 
+
+int TQueuePair::SendRdmaReadWr(ui64 wrId, void* mrAddr, ui32 mrlKey, void* dstAddr, ui32 dstRkey, ui32 dstSize) noexcept {
+    ibv_sge sg = {
+        .addr = (ui64)mrAddr,
+        .length = dstSize,
+        .lkey = mrlKey,
+    };
+    ibv_send_wr wr {
+        .wr_id = wrId,
+        .sg_list = &sg,
+        .num_sge = 1,
+        .opcode = IBV_WR_RDMA_READ,
+        .send_flags = IBV_SEND_SIGNALED,
+        .wr = {
+            .rdma = {
+                .remote_addr = (ui64)dstAddr,
+                .rkey = dstRkey,
+            },
+        },
+    };
+    struct ibv_send_wr *bad_wr;
+
+    return ibv_post_send(Qp, &wr, &bad_wr);
+}
+
+void TQueuePair::ProcessCq() noexcept {
+    const int wcBatchSize = 1;
+    std::vector<ibv_wc> wcs(wcBatchSize);
+
+    int i = 0;
+
+    // Just for test.
+    while (i < 10) {
+        int numComp = ibv_poll_cq(Cq, wcBatchSize, &wcs.front());
+        if (numComp < 0) {
+            Cerr << "ibv_poll_cq failed: " << strerror(errno) << Endl;
+            return;
+        }
+        Cerr << "DONE " << wcs.front().wr_id << " " << ibv_wc_status_str(wcs.front().status)  << " " << wcs.front().qp_num << Endl;
+        Sleep(TDuration::Seconds(1));
+        i++;
+    }
+}
 
 }

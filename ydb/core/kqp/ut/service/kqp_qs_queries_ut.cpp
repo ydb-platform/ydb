@@ -2785,7 +2785,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             UNIT_ASSERT(!result.GetResultSets().empty());
 
             CompareYson(R"([
-                [["test_show_create"];["Table"];["CREATE TABLE `test_show_create` (\n    `Key` Uint32,\n    `Value` Uint32,\n    PRIMARY KEY (`Key`)\n);\n"]];
+                [["CREATE TABLE `test_show_create` (\n    `Key` Uint32,\n    `Value` Uint32,\n    PRIMARY KEY (`Key`)\n);\n"]; ["test_show_create"];["Table"];];
             ])", FormatResultSetYson(result.GetResultSet(0)));
         }
     }
@@ -2944,7 +2944,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             UNIT_ASSERT(!result.GetResultSets().empty());
 
             CompareYson(R"([
-                [["test_view"];["View"];["CREATE VIEW `test_view` WITH (security_invoker = TRUE) AS\nSELECT\n    *\nFROM\n    KeyValue\n;\n"]];
+                [["CREATE VIEW `test_view` WITH (security_invoker = TRUE) AS\nSELECT\n    *\nFROM\n    KeyValue\n;\n"];["test_view"];["View"]];
             ])", FormatResultSetYson(result.GetResultSet(0)));
         }
     }

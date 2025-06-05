@@ -425,7 +425,7 @@ private:
         TResultSetParser parser(resultSet);
         UNIT_ASSERT(parser.TryNextRow());
 
-        TString statement = "";
+        TString createQuery = "";
 
         for (const auto& column : columnsMeta) {
             TValueParser parserValue(parser.GetValue(column.Name));
@@ -437,15 +437,15 @@ private:
             } else if (column.Name == "PathType") {
                 auto actualType = to_upper(TString(value));
                 UNIT_ASSERT_VALUES_EQUAL(actualType, type);
-            } else if (column.Name == "Statement") {
-                statement = value;
+            } else if (column.Name == "CreateQuery") {
+                createQuery = value;
             } else {
                 UNIT_FAIL("Invalid column name: " << column.Name);
             }
         }
-        UNIT_ASSERT(statement);
+        UNIT_ASSERT(createQuery);
 
-        return statement;
+        return createQuery;
     }
 
     std::string ShowCreateTable(NQuery::TSession& session, const std::string& tableName) {

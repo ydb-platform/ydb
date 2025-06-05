@@ -7,6 +7,7 @@ RECURSE(
     runtime
     state
     tasks
+    tools
     transform
     type_ann
 )

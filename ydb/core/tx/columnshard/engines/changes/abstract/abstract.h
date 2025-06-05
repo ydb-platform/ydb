@@ -255,8 +255,6 @@ private:
     std::shared_ptr<const TAtomicCounter> ActivityFlag;
     std::shared_ptr<NChanges::TChangesCounters::TStageCountersGuard> Counters;
 
-    void SetStage(const NChanges::EStage stage);
-
 protected:
     std::optional<TDataAccessorsResult> FetchedDataAccessors;
     virtual NDataLocks::ELockCategory GetLockCategory() const = 0;
@@ -289,6 +287,8 @@ protected:
     virtual void OnDataAccessorsInitialized(const TDataAccessorsInitializationContext& context) = 0;
 
 public:
+    void SetStage(const NChanges::EStage stage);
+
     bool IsActive() const {
         return !ActivityFlag || ActivityFlag->Val();
     }
@@ -360,7 +360,7 @@ public:
     virtual ~TColumnEngineChanges();
 
     bool IsAborted() const {
-        return Stage == NChanges::EStage::Aborted;
+        return Counters->GetCurrentStage() == NChanges::EStage::Aborted;
     }
 
     void StartEmergency();

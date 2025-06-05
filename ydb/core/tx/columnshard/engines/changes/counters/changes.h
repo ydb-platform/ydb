@@ -98,6 +98,10 @@ public:
         const std::shared_ptr<TStageCounters> Counters;
         YDB_READONLY(EStage, CurrentStage, EStage::Created);
     public:
+        EStage GetStage() const {
+            return CurrentStage;
+        }
+
         TStageCountersGuard(const std::shared_ptr<TStageCounters>& counters, const EStage startStage)
             : Counters(counters)
             , CurrentStage(startStage) {
@@ -108,10 +112,11 @@ public:
             Counters->OnStageChanged(CurrentStage, std::nullopt);
         }
 
-        void SetStage(const EStage stageTo) const {
+        void SetStage(const EStage stageTo) {
             AFL_VERIFY(stageTo >= CurrentStage)("current", CurrentStage)("to", stageTo);
-            if (CurrentStage != stage) {
+            if (CurrentStage != stageTo) {
                 Counters->OnStageChanged(CurrentStage, stageTo);
+                CurrentStage = stageTo;
             }
         }
     };

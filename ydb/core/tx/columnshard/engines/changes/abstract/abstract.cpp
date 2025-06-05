@@ -10,7 +10,7 @@
 namespace NKikimr::NOlap {
 
 void TColumnEngineChanges::SetStage(const NChanges::EStage stage) {
-    Counters->SetStage(stage, GetWritePortionsCount());
+    Counters->SetStage(stage);
 }
 
 TString TColumnEngineChanges::DebugString() const {
@@ -23,7 +23,8 @@ TString TColumnEngineChanges::DebugString() const {
 
 TConclusionStatus TColumnEngineChanges::ConstructBlobs(TConstructionContext& context) noexcept {
     const NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("task_id", GetTaskIdentifier())("task_class", TypeString());
-    Y_ABORT_UNLESS(Counters->GetStage() == NChanges::EStage::ReadyForConstruct);
+    AFL_VERIFY(Counters->GetStage() == NChanges::EStage::ReadyForConstruct || Counters->GetStage() == NChanges::EStage::Started)(
+                                                                              "actual_stage", Counters->GetStage());
 
     context.Counters.CompactionInputSize(Blobs.GetTotalBlobsSize());
     const TMonotonic start = TMonotonic::Now();
@@ -38,9 +39,9 @@ TConclusionStatus TColumnEngineChanges::ConstructBlobs(TConstructionContext& con
 }
 
 void TColumnEngineChanges::WriteIndexOnExecute(NColumnShard::TColumnShard* self, TWriteIndexContext& context) {
-    Y_ABORT_UNLESS(Counters->GetStage() != NChanges::EStage::Aborted);
-    Y_ABORT_UNLESS(Counters->GetStage() <= NChanges::EStage::Written);
-    Y_ABORT_UNLESS(Counters->GetStage() >= NChanges::EStage::Compiled);
+    AFL_VERIFY(Counters->GetStage() != NChanges::EStage::Aborted);
+    AFL_VERIFY(Counters->GetStage() <= NChanges::EStage::Written);
+    AFL_VERIFY(Counters->GetStage() >= NChanges::EStage::Compiled);
 
     DoWriteIndexOnExecute(self, context);
     SetStage(NChanges::EStage::Written);
@@ -86,17 +87,17 @@ void TColumnEngineChanges::Start(NColumnShard::TColumnShard& self) {
     NYDBTest::TControllers::GetColumnShardController()->OnWriteIndexStart(self.TabletID(), *this);
     DoStart(self);
     SetStage(NChanges::EStage::Started);
-    if (!NeedConstruction()) {
-        SetStage(NChanges::EStage::Constructed);
-    }
+//    if (!NeedConstruction()) {
+//        SetStage(NChanges::EStage::Constructed);
+//    }
 }
 
 void TColumnEngineChanges::StartEmergency() {
     Y_ABORT_UNLESS(Counters->GetStage() == NChanges::EStage::Created);
     SetStage(NChanges::EStage::Started);
-    if (!NeedConstruction()) {
-        SetStage(NChanges::EStage::Constructed);
-    }
+//    if (!NeedConstruction()) {
+//        SetStage(NChanges::EStage::Constructed);
+//    }
 }
 
 void TColumnEngineChanges::AbortEmergency(const TString& reason) {

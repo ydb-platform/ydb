@@ -61,7 +61,7 @@ public:
 private:
     TCtxsMap CtxMap;
     void ScanDevices() {
-        int numDevices;
+        int numDevices = 0;
         int err;
         ibv_device** deviceList = ibv_get_device_list(&numDevices);
         if (!deviceList) {

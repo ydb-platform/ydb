@@ -2,11 +2,25 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/digest/md5/md5.h>
 #include <util/random/fast.h>
+#include <util/string/vector.h>
 
 using namespace NActors;
 
+TString GetRdmaStatus(TTestICCluster& testCluster, ui32 me, ui32 peer) {
+    auto httpResp = testCluster.GetSessionDbg(me, peer);
+    const TString& resp = httpResp.GetValueSync();
+    const TString pattern = "<tr><td>RdmaQp</td><td>[";
+    auto pos = resp.find(pattern);
+    UNIT_ASSERT_C(pos != std::string::npos, "rdma status field was not found in http info");
+    pos += pattern.size();
+    size_t end = resp.find("]<", pos);
+    UNIT_ASSERT(end != std::string::npos);
+    return resp.substr(pos, end - pos);
+}
+
 class TSenderActor : public TActorBootstrapped<TSenderActor> {
     const TActorId Recipient;
+    const size_t SendLimit;
     using TSessionToCookie = std::unordered_multimap<TActorId, ui64, THash<TActorId>>;
     TSessionToCookie SessionToCookie;
     std::unordered_map<ui64, std::pair<TSessionToCookie::iterator, TString>> InFlight;
@@ -16,8 +30,9 @@ class TSenderActor : public TActorBootstrapped<TSenderActor> {
     bool SubscribeInFlight = false;
 
 public:
-    TSenderActor(TActorId recipient)
+    TSenderActor(TActorId recipient, size_t sendLimit = -1)
         : Recipient(recipient)
+        , SendLimit(sendLimit)
     {}
 
     void Bootstrap() {
@@ -36,7 +51,7 @@ public:
         if (!SessionId) {
             return;
         }
-        while (InFlight.size() < 10) {
+        while (InFlight.size() < 10 && NextCookie < SendLimit) {
             size_t len = RandomNumber<size_t>(65536) + 1;
             TString data = TString::Uninitialized(len);
             TReallyFastRng32 rng(RandomNumber<ui32>());
@@ -48,13 +63,13 @@ public:
             InFlight.emplace(NextCookie, std::make_tuple(s2cIt, MD5::CalcRaw(data)));
             TActivationContext::Send(new IEventHandle(TEvents::THelloWorld::Ping, IEventHandle::FlagTrackDelivery, Recipient,
                 SelfId(), MakeIntrusive<TEventSerializedData>(std::move(data), TEventSerializationInfo{}), NextCookie));
-//            Cerr << (TStringBuilder() << "Send# " << NextCookie << Endl);
+            //Cerr << (TStringBuilder() << "Send# " << NextCookie << Endl);
             ++NextCookie;
         }
     }
 
     void HandlePong(TAutoPtr<IEventHandle> ev) {
-//        Cerr << (TStringBuilder() << "Receive# " << ev->Cookie << Endl);
+        //Cerr << (TStringBuilder() << "Receive# " << ev->Cookie << Endl);
         if (const auto it = InFlight.find(ev->Cookie); it != InFlight.end()) {
             auto& [s2cIt, hash] = it->second;
             Y_ABORT_UNLESS(hash == ev->GetChainBuffer()->GetString());
@@ -97,7 +112,7 @@ public:
     }
 
     void Handle(TEvents::TEvUndelivered::TPtr ev) {
-        Cerr << (TStringBuilder() << "TEvUndelivered Cookie# " << ev->Cookie << Endl);
+        //Cerr << (TStringBuilder() << "TEvUndelivered Cookie# " << ev->Cookie << Endl);
         if (const auto it = InFlight.find(ev->Cookie); it != InFlight.end()) {
             auto& [s2cIt, hash] = it->second;
             Tentative.emplace(it->first, hash);
@@ -120,6 +135,7 @@ class TRecipientActor : public TActor<TRecipientActor> {
 public:
     TRecipientActor()
         : TActor(&TThis::StateFunc)
+        , Recieved(0)
     {}
 
     void HandlePing(TAutoPtr<IEventHandle>& ev) {
@@ -127,11 +143,18 @@ public:
         const TString& response = MD5::CalcRaw(data);
         TActivationContext::Send(new IEventHandle(TEvents::THelloWorld::Pong, 0, ev->Sender, SelfId(),
             MakeIntrusive<TEventSerializedData>(response, TEventSerializationInfo{}), ev->Cookie));
+        Recieved.fetch_add(1, std::memory_order_relaxed);
     }
 
     STRICT_STFUNC(StateFunc,
         fFunc(TEvents::THelloWorld::Ping, HandlePing);
     )
+
+    size_t GetRecieved() const noexcept {
+        return Recieved.load(std::memory_order_relaxed);
+    }
+private:
+    std::atomic<size_t> Recieved;
 };
 
 Y_UNIT_TEST_SUITE(Interconnect) {
@@ -176,13 +199,19 @@ Y_UNIT_TEST_SUITE(Interconnect) {
 
     Y_UNIT_TEST(SetupRdmaSession) {
         TTestICCluster cluster(2);
-        const TActorId recipient = cluster.RegisterActor(new TRecipientActor, 1);
-        cluster.RegisterActor(new TSenderActor(recipient), 2);
+        const size_t limit = 10;
+        auto recieverPtr = new TRecipientActor;
+        const TActorId recipient = cluster.RegisterActor(recieverPtr, 1);
+        auto senderPtr = new TSenderActor(recipient, limit);
+        cluster.RegisterActor(senderPtr, 2);
 
-        Sleep(TDuration::MilliSeconds(RandomNumber<ui32>(500) + 100));
+        while (recieverPtr->GetRecieved() < limit) {
+            Sleep(TDuration::MilliSeconds(100));
+        }
 
-        //GetRdmaStatus(cluster, 1, 2);
+        auto s = GetRdmaStatus(cluster, 1, 2);
+        auto tokens = SplitString(s, ",");
+        UNIT_ASSERT(tokens.size() == 2);
+        UNIT_ASSERT(tokens[1] == "QPS_RTS");
     }
-
-
 }

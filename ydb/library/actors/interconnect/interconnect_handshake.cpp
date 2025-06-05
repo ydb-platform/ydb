@@ -247,7 +247,9 @@ namespace NActors {
         std::optional<TString> HandshakeId; // for XDC
         bool SubscribedForConnection = false;
         NInterconnect::NRdma::TRdmaCtx* RdmaCtx = nullptr;
-        std::optional<NInterconnect::NRdma::TQueuePair> RdmaQp;
+        std::unique_ptr<NInterconnect::NRdma::TQueuePair> RdmaQp;
+        NInterconnect::NRdma::TMemRegionPtr HandShakeMemRegion; // region which will be read by RDMA during handshake
+        static const size_t RdmaHandshakeRegionSize = 4096;
 
     public:
         THandshakeActor(TInterconnectProxyCommon::TPtr common, const TActorId& self, const TActorId& peer,
@@ -342,9 +344,10 @@ namespace NActors {
             Schedule(Deadline, new TEvents::TEvWakeup);
 
             try {
+                std::optional<NActorsInterconnect::TRdmaCred> rdmaIncommingRead;
                 const bool incoming = MainChannel;
                 if (incoming) {
-                    PerformIncomingHandshake();
+                    PerformIncomingHandshake(rdmaIncommingRead);
                 } else {
                     PerformOutgoingHandshake();
                 }
@@ -360,9 +363,21 @@ namespace NActors {
                                 Y_DEBUG_ABORT_UNLESS(false);
                                 Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, "Mismatching HandshakeId in external data channel");
                             }
+
+                            if (rdmaIncommingRead) {
+                                auto ack = TryRdmaRead(rdmaIncommingRead.value());
+                                SendExBlock(MainChannel, ack, "TRdmaHandshakeReadAck");
+                            }
                             ExternalDataChannel.GetSocketRef() = std::move(ev->Get()->Socket);
                         } else {
                             EstablishExternalDataChannel();
+                            if (HandShakeMemRegion) {
+                                if (WaitRdmaReadResult() == false) {
+                                    LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NLog::PRI_ERROR,
+                                        "RDMA memory read failed, disable rdma on the initiator");
+                                    RdmaQp.reset();
+                                }
+                            }
                         }
                     }
 
@@ -386,7 +401,7 @@ namespace NActors {
                 ExternalDataChannel.ResetPollerToken();
                 Y_ABORT_UNLESS(!ExternalDataChannel == !Params.UseExternalDataChannel);
                 SendToProxy(MakeHolder<TEvHandshakeDone>(std::move(MainChannel.GetSocketRef()), PeerVirtualId, SelfVirtualId,
-                    *NextPacketFromPeer, ProgramInfo->Release(), std::move(Params), std::move(ExternalDataChannel.GetSocketRef())));
+                    *NextPacketFromPeer, ProgramInfo->Release(), std::move(Params), std::move(ExternalDataChannel.GetSocketRef()), std::move(RdmaQp)));
             }
 
             MainChannel.Reset();
@@ -475,16 +490,17 @@ namespace NActors {
             ibv_gid gid;
             gid.global.interface_id = proto.GetInterfaceId();
             gid.global.subnet_prefix = proto.GetSubnetPrefix();
-            int err = RdmaQp->ToRtsState(RdmaCtx, proto.GetQpNum(), gid, IBV_MTU_1024);
+            auto mtuIndex = std::min((ui32)proto.GetMtuIndex(), (ui32)RdmaCtx->GetPortAttr().active_mtu);
+            int err = RdmaQp->ToRtsState(RdmaCtx, proto.GetQpNum(), gid, (ibv_mtu)mtuIndex);
             if (err) {
                 TStringBuilder sb;
                 sb << gid;
                 success.SetRdmaErr("Unable to promote QP to RTS on the incomming side");
                 LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NLog::PRI_ERROR,
                     "Unable to promote QP to RTS, err: %d (%s), gid: %s", err, strerror(err), sb.data());
+                RdmaQp.reset();
                 return;
             }
-            auto mtuIndex = std::min((ui32)proto.GetMtuIndex(), (ui32)RdmaCtx->GetPortAttr().active_mtu);
             auto rdmaHsResp = success.MutableQpPrepared();
             rdmaHsResp->SetQpNum(RdmaQp->GetQpNum());
             const auto& localGid = RdmaCtx->GetGid();
@@ -702,6 +718,81 @@ namespace NActors {
             SendExBlock(ExternalDataChannel, params, "ExternalDataChannelParams");
         }
 
+        NActorsInterconnect::TRdmaHandshakeReadAck TryRdmaRead(const NActorsInterconnect::TRdmaCred& cred) {
+            NActorsInterconnect::TRdmaHandshakeReadAck rdmaReadAck;
+            bool ok = true;
+            if (cred.GetSize() > RdmaHandshakeRegionSize) {
+                rdmaReadAck.SetErr("Unexpected rdma region size for READ request");
+                ok = false;
+            }
+
+            NInterconnect::NRdma::TMemRegionPtr mr; 
+            if (ok) {
+                mr = std::move(Common->RdmaMemPool->Alloc(cred.GetSize()));
+                if (!mr) {
+                    TString err("Unable to allocate memory region for handshake rdma read");
+                    LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NLog::PRI_WARN,
+                        err.c_str());
+                    rdmaReadAck.SetErr(err);
+                    ok = false;
+                }
+            };
+
+            if (ok) {
+                void* addr = mr->GetAddr(); 
+                bzero(addr, cred.GetSize());
+
+                int err = RdmaQp->SendRdmaReadWr(1234, mr->GetAddr(), mr->GetLKey(RdmaCtx->GetDeviceIndex()), (void*)cred.GetAddress(), cred.GetRkey(), cred.GetSize());
+                if (err) {
+                    TStringBuilder sb;
+                    sb << "Unable to post rdma READ work request, error " << err;
+                    LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NLog::PRI_ERROR,
+                        sb.c_str());
+                        rdmaReadAck.SetErr(sb); 
+                    ok = false;
+                }
+            }
+
+            if (ok) {
+                RdmaQp->ProcessCq();
+                //auto ev = WaitForSpecificEvent<TEvRdmaIoHandshakeDone>("TryRdmaRead");
+                ui32 crc = Crc32cExtendMSanCompatible(0, mr->GetAddr(), cred.GetSize());
+                rdmaReadAck.SetDigest(crc);
+            }
+
+            return rdmaReadAck; 
+        }
+
+        bool WaitRdmaReadResult() {
+            NActorsInterconnect::TRdmaHandshakeReadAck rdmaReadAck;
+            ReceiveExBlock(MainChannel, rdmaReadAck, "WaitRdmaReadResult");
+            ui32 crc = Crc32cExtendMSanCompatible(0, HandShakeMemRegion->GetAddr(), RdmaHandshakeRegionSize); 
+            Cerr << "WaitRdmaReadResult:::   " << rdmaReadAck.GetDigest() << "   " << crc << Endl;
+            return rdmaReadAck.GetDigest() == crc;
+        }
+
+        NInterconnect::NRdma::TMemRegionPtr SetupRdmaHandshakeRegion(NActorsInterconnect::TRdmaHandshake& proto) {
+            auto region = Common->RdmaMemPool->Alloc(RdmaHandshakeRegionSize);
+            if (!region) {
+                LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NLog::PRI_WARN,
+                    "Unable to allocate memory region to perform rdma handshake");
+                return nullptr;
+            }
+
+            void* addr = region->GetAddr();
+            bzero(addr, RdmaHandshakeRegionSize);
+            //addr must be page alligned
+            *reinterpret_cast<ui64*>(addr) = RandomNumber<ui64>();
+
+            auto read = proto.MutableRead();
+            read->SetAddress(reinterpret_cast<ui64>(addr));
+
+            //read whole page to check the case with mtu missmatch
+            read->SetSize(RdmaHandshakeRegionSize);
+            read->SetRkey(region->GetRKey(RdmaCtx->GetDeviceIndex()));
+            return region;
+        }
+
         void PerformOutgoingHandshake() {
             LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICH01", NLog::PRI_DEBUG,
                 "starting outgoing handshake");
@@ -800,6 +891,11 @@ namespace NActors {
                     rdmaHs->SetSubnetPrefix(gid.global.subnet_prefix);
                     rdmaHs->SetInterfaceId(gid.global.interface_id);
                     rdmaHs->SetMtuIndex(RdmaCtx->GetPortAttr().active_mtu);
+                    if (auto region = SetupRdmaHandshakeRegion(*rdmaHs)) {
+                        HandShakeMemRegion = std::move(region);
+                    } else {
+                        RdmaQp.reset();
+                    }
                 }
 
                 SendExBlock(MainChannel, request, "ExRequest");
@@ -857,6 +953,7 @@ namespace NActors {
                         LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NLog::PRI_ERROR,
                                 "Unable to promote QP to RTS, err: %d (%s), gid: %s", err, strerror(err), sb.data());
                         RdmaQp.reset();
+                        HandShakeMemRegion.reset();
                     }
                 }
 
@@ -931,7 +1028,7 @@ namespace NActors {
                 << " PeerAddr# " << PeerAddr << " AddressList# " << makeList(), true);
         }
 
-        void PerformIncomingHandshake() {
+        void PerformIncomingHandshake(std::optional<NActorsInterconnect::TRdmaCred>& rdma) {
             LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICH02", NLog::PRI_DEBUG,
                 "starting incoming handshake");
 
@@ -1150,6 +1247,9 @@ namespace NActors {
 
                     if (rdmaIncommingHandshake) {
                         TryRdmaQpExchange(rdmaIncommingHandshake.value(), success);
+                        if (RdmaQp && rdmaIncommingHandshake->HasRead()) {
+                            rdma = rdmaIncommingHandshake->GetRead();
+                        }
                     } else {
                         success.SetRdmaErr("Rdma is not ready on the incomming side");
                     }
@@ -1208,6 +1308,12 @@ namespace NActors {
             return data;
         }
 
+        template <typename T>
+        void ReceiveExBlock(TConnection& connection, T& proto, const char* what) {
+            if (!proto.ParseFromString(ReceiveExBlock(connection, what))) {
+                Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, "Incorrect packet from peer");
+            }
+        }
     private:
         void CreateRdmaQp() {
             // Impossoble to use rdma without configured memory pool
@@ -1236,7 +1342,7 @@ namespace NActors {
             }
 
             if (RdmaCtx) {
-                RdmaQp.emplace();
+                RdmaQp.reset(new NInterconnect::NRdma::TQueuePair);
                 int err = RdmaQp->Init(RdmaCtx);
                 if (err) {
                     LOG_ERROR_IC("ICRDMA", "Unable to initialize QP, no more attempt to use RDMA on this session");

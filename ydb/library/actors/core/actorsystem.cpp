@@ -70,6 +70,13 @@ namespace NActors {
         }
     };
 
+    TRcBuf DefaultRcBufAllocator(size_t size, size_t headRoom, size_t tailRoom) {
+        auto buf = TRcBuf::UninitializedPageAligned(size + headRoom + tailRoom);
+        buf.TrimFront(size + tailRoom);
+        buf.TrimBack(size);
+        return buf;
+    };
+
     TActorSystem::TActorSystem(THolder<TActorSystemSetup>& setup, void* appData,
                                TIntrusivePtr<NLog::TSettings> loggerSettings)
         : NodeId(setup->NodeId)
@@ -80,6 +87,7 @@ namespace NActors {
         , CurrentTimestamp(0)
         , CurrentMonotonic(0)
         , CurrentIDCounter(RandomNumber<ui64>())
+        , RcBufAllocator(setup->RcBufAllocator ?: DefaultRcBufAllocator)
         , SystemSetup(setup.Release())
         , DefSelfID(NodeId, "actorsystem")
         , AppData0(appData)

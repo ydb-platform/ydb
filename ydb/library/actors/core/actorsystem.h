@@ -84,6 +84,8 @@ namespace NActors {
         TProxyWrapperFactory ProxyWrapperFactory;
     };
 
+    using TRcBufAllocator = std::function<TRcBuf(size_t size, size_t headRoom, size_t tailRoom)>;
+
     struct TActorSystemSetup {
         ui32 NodeId = 0;
 
@@ -101,6 +103,8 @@ namespace NActors {
 
         using TLocalServices = TVector<std::pair<TActorId, TActorSetupCmd>>;
         TLocalServices LocalServices;
+
+        TRcBufAllocator RcBufAllocator = nullptr;
 
         ui32 GetExecutorsCount() const {
             return Executors ? ExecutorsCount : CpuManager.GetExecutorsCount();
@@ -151,6 +155,8 @@ namespace NActors {
 
         THolder<NSchedulerQueue::TQueueType> ScheduleQueue;
         mutable TTicketLock ScheduleLock;
+
+        const TRcBufAllocator RcBufAllocator;
 
         friend class TExecutorThread;
 
@@ -308,5 +314,8 @@ namespace NActors {
         void GetExecutorPoolState(i16 poolId, TExecutorPoolState &state) const;
         void GetExecutorPoolStates(std::vector<TExecutorPoolState> &states) const;
 
+        const TRcBufAllocator& GetRcBufAllocator() const {
+            return RcBufAllocator;
+        }
     };
 }

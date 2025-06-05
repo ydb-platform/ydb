@@ -8,6 +8,8 @@
 #include <ydb/core/driver_lib/version/ut/ut_helpers.h>
 #include <ydb/core/testlib/actors/test_runtime.h>
 
+#include <ydb/library/actors/interconnect/rdma/mem_pool.h>
+
 #include <util/system/hp_timer.h>
 
 namespace NKikimr {
@@ -1857,6 +1859,37 @@ Y_UNIT_TEST_SUITE(ShredPDisk) {
         UNIT_ASSERT_VALUES_EQUAL(res2->ShredGeneration, shredGeneration);
     }
 #endif
+}
+
+
+Y_UNIT_TEST_SUITE(RDMA) {
+    Y_UNIT_TEST(TestChunkReadWithRdmaAllocator) {
+        TActorTestContext testCtx({
+            .UseRdmaAllocator = true,
+        });
+        TVDiskMock vdisk(&testCtx);
+
+        vdisk.InitFull();
+        vdisk.ReserveChunk();
+        vdisk.CommitReservedChunks();
+        auto chunk = *vdisk.Chunks[EChunkState::COMMITTED].begin();
+
+        ui32 chunkBuffSize = 128_KB;
+        auto parts = MakeIntrusive<NPDisk::TEvChunkWrite::TAlignedParts>(PrepareData(chunkBuffSize));
+        testCtx.Send(new NPDisk::TEvChunkWrite(
+            vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound,
+            chunk, 0, parts, nullptr, false, 0));
+        auto write = testCtx.Recv<NPDisk::TEvChunkWriteResult>();
+
+        testCtx.Send(new NPDisk::TEvChunkRead(
+            vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound,
+            chunk, 123, chunkBuffSize - 1234, 0, nullptr));
+        auto read = testCtx.Recv<NPDisk::TEvChunkReadResult>();
+        TRcBuf readBuf = read->Data.ToString();
+        NInterconnect::NRdma::TMemRegionSlice memReg = NInterconnect::NRdma::TryExtractFromRcBuf(readBuf);
+        UNIT_ASSERT_C(!memReg.Empty(), "Failed to extract RDMA memory region from RcBuf");
+        UNIT_ASSERT_VALUES_EQUAL_C(memReg.GetSize(), chunkBuffSize - 1234, "Unexpected size of RDMA memory region");
+    }
 }
 
 } // namespace NKikimr

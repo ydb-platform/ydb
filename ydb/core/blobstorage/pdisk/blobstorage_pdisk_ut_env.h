@@ -33,6 +33,7 @@ public:
         bool ReadOnly = false;
         bool InitiallyZeroed = false; // Only for sector map. Zero first 1MiB on start.
         bool PlainDataChunks = false;
+        bool UseRdmaAllocator = false;
     };
 
 private:
@@ -89,7 +90,7 @@ public:
     }
 
     TActorTestContext(TSettings settings)
-        : Runtime(new TTestActorRuntime(1, true))
+        : Runtime(new TTestActorRuntime(1, true, true, settings.UseRdmaAllocator))
         , TestCtx(settings.UseSectorMap, settings.DiskMode, settings.DiskSize)
         , Settings(settings)
     {

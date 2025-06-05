@@ -17,3 +17,5 @@ items:
   href: balancing_load.md
 - name: Освобождение места на физических устройствах
   href: disk_end_space.md
+- name: Управление кластером с неоднородными по размеру дисками
+  href: managing_non_uniform_drives.md

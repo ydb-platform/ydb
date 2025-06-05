@@ -33,3 +33,5 @@ items:
   href: dynamic-config-selectors.md
 - name: Temporary configurations
   href: dynamic-config-volatile-config.md  
+- name: Managing non-uniform drives
+  href: managing_non_uniform_drives.md

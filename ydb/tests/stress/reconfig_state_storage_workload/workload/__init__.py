@@ -237,20 +237,20 @@ class WorkloadReconfigStateStorage(WorkloadBase):
             for i in range(len(newRingGroup)):
                 newRingGroup[i]["WriteOnly"] = True
             logger.info(self.do_request({"ReconfigStateStorage": {f"{self.config_name}Config": {
-                        "RingGroups": defaultRingGroup + newRingGroup}}}))
+                "RingGroups": defaultRingGroup + newRingGroup}}}))
             time.sleep(3)
             for i in range(len(newRingGroup)):
                 newRingGroup[i]["WriteOnly"] = False
             logger.info(self.do_request({"ReconfigStateStorage": {f"{self.config_name}Config": {
-                        "RingGroups": defaultRingGroup + newRingGroup}}}))
+                "RingGroups": defaultRingGroup + newRingGroup}}}))
             time.sleep(3)
             for i in range(len(defaultRingGroup)):
                 defaultRingGroup[i]["WriteOnly"] = True
             logger.info(self.do_request({"ReconfigStateStorage": {f"{self.config_name}Config": {
-                        "RingGroups": newRingGroup + defaultRingGroup}}}))
+                "RingGroups": newRingGroup + defaultRingGroup}}}))
             time.sleep(3)
             logger.info(self.do_request({"ReconfigStateStorage": {f"{self.config_name}Config": {
-                        "RingGroups": newRingGroup}}}))
+                "RingGroups": newRingGroup}}}))
             time.sleep(3)
             curConfig = self.do_request_config()[f"{self.config_name}Config"]
             expectedConfig = {"Ring": newRingGroup[0]} if len(newRingGroup) == 1 else {"RingGroups": newRingGroup}

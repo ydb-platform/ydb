@@ -459,7 +459,11 @@ public:
         YQL_ENSURE(program.GetRuntimeVersion());
         YQL_ENSURE(program.GetRuntimeVersion() <= NYql::NDqProto::ERuntimeVersion::RUNTIME_VERSION_YQL_1_0);
 
-        std::ofstream file("MISHA.bin", std::ios::binary);
+        TString filename = "MISHA";
+        filename += std::to_string(TaskId);
+        filename += ".bin";
+
+        std::ofstream file(filename, std::ios::binary);
         if (!file) {
             std::cerr << "Ошибка при открытии файла для записи\n";
         }

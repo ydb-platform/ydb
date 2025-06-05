@@ -90,7 +90,7 @@ int main(int argc, char** argv) {
         }
 
         // Check inputs and outputs structure
-        for (int i = 0; i < protoTask.InputsSize(); ++i) {
+        for (ui32 i = 0; i < protoTask.InputsSize(); ++i) {
             const auto& input = protoTask.GetInputs(i);
             if (verbose) {
                 *logStream << "  Input " << i << ": type=" << (int)input.GetTypeCase() << Endl;
@@ -102,7 +102,7 @@ int main(int argc, char** argv) {
             }
         }
 
-        for (int i = 0; i < protoTask.OutputsSize(); ++i) {
+        for (ui32 i = 0; i < protoTask.OutputsSize(); ++i) {
             const auto& output = protoTask.GetOutputs(i);
             if (verbose) {
                 *logStream << "  Output " << i << ": type=" << (int)output.GetTypeCase() << Endl;

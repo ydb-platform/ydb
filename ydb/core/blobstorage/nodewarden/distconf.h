@@ -280,6 +280,14 @@ namespace NKikimr::NStorage {
         std::optional<std::tuple<ui64, ui32>> ProposedConfigHashVersion;
         std::vector<std::tuple<TActorId, TString, ui64>> ConsoleConfigValidationQ;
 
+        // cache subsystem
+        struct TCacheItem {
+            ui32 Generation; // item generation
+            std::optional<TString> Value; // item binary value
+        };
+        THashMap<TString, TCacheItem> Cache;
+        std::set<std::tuple<TString, TActorId>> CacheSubscriptions;
+
         friend void ::Out<ERootState>(IOutputStream&, ERootState);
 
     public:
@@ -432,7 +440,7 @@ namespace NKikimr::NStorage {
         void ApplyConfigUpdateToDynamicNodes(bool drop);
         void OnDynamicNodeDisconnected(ui32 nodeId, TActorId sessionId);
         void HandleDynamicConfigSubscribe(STATEFN_SIG);
-        void PushConfigToDynamicNode(TActorId actorId, TActorId sessionId);
+        void PushConfigToDynamicNode(TActorId actorId, TActorId sessionId, bool addCache);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Event delivery
@@ -446,6 +454,18 @@ namespace NKikimr::NStorage {
         // Monitoring
 
         void Handle(NMon::TEvHttpInfo::TPtr ev);
+
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // Cache update
+
+        void ApplyCacheUpdates(NKikimrBlobStorage::TCacheUpdate *cacheUpdate, ui32 senderNodeId);
+
+        void AddCacheUpdate(NKikimrBlobStorage::TCacheUpdate *cacheUpdate, THashMap<TString, TCacheItem>::const_iterator it,
+            bool addValue);
+
+        void Handle(TEvNodeWardenUpdateCache::TPtr ev);
+        void Handle(TEvNodeWardenQueryCache::TPtr ev);
+        void Handle(TEvNodeWardenUnsubscribeFromCache::TPtr ev);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Console interaction

@@ -727,15 +727,20 @@ public:
     }
 
     void CancelReads() {
+        TStringStream ss;
+        ss << "TReadRowsRPC CancelReads, shardIds# [";
+
         // it's ok to send cancel requests for shards that were already processed, they will ignore them
         for (const auto& [shardId, v] : ShardIdToReadState) {
             auto request = std::make_unique<TEvDataShard::TEvReadCancel>();
             auto& record = request->Record;
-            record.SetReadId(shardId);
+            record.SetReadId(shardId); // shardId is also a readId
             Send(PipeCache, new TEvPipeCache::TEvForward(request.release(), shardId, true), IEventHandle::FlagTrackDelivery, 0, Span.GetTraceId());
+            ss << shardId << ", ";
         }
 
-        LOG_WARN_S(TlsActivationContext->AsActorContext(), NKikimrServices::RPC_REQUEST, "TReadRowsRPC CancelReads");
+        ss << "]";
+        LOG_WARN_S(TlsActivationContext->AsActorContext(), NKikimrServices::RPC_REQUEST, ss.Str());
     }
 
     void HandleTimeout(TEvents::TEvWakeup::TPtr&) {

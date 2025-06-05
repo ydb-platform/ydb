@@ -93,7 +93,7 @@ public class Post
 
 ## Дополнительные конфигурации {{ ydb-short-name }}
 
-Поставщик Entity Framework (EF) Core для {{ ydb-short-name }} имеет собственные дополнительные параметры конфигурации. 
+Поставщик Entity Framework (EF) Core для {{ ydb-short-name }} имеет собственные дополнительные параметры конфигурации.
 
 ### Подключение ADO.NET to Yandex Cloud
 
@@ -108,7 +108,41 @@ public class Post
 )
 ```
 
+### Миграция схемы
+
+Для корректного выполнения миграций схемы базы данных необходимо отключить стратегию автоматического повтора запросов (`ExecutionStrategy`), которая по умолчанию активирована в пакете `EntityFrameworkCore.Ydb`.
+
+Чтобы отключить ExecutionStrategy при выполнении миграций, следует явно переопределить интерфейс IDesignTimeDbContextFactory и воспользоваться методом `DisableRetryOnFailure()`.
+
+Пример реализации фабрики контекста данных для миграций:
+
+```с#
+internal class BloggingContextFactory : IDesignTimeDbContextFactory<BloggingContext>
+{
+    public BloggingContext CreateDbContext(string[] args)
+    {
+        var optionsBuilder = new DbContextOptionsBuilder<BloggingContext>();
+
+        return new BloggingContext(
+            optionsBuilder.UseYdb("Host=localhost;Port=2136;Database=/local",
+                builder => builder.DisableRetryOnFailure()
+            ).Options
+        );
+    }
+}
+```
+
+{% note info %}
+
+Объект фабрики потребуется для выполнения команд миграции, например:  
+
+```bash
+dotnet ef migrations add MyMigration  
+dotnet ef database update
+```
+
+{% endnote %}
+
 ## Примеры
 
-[На Github](https://github.com/ydb-platform/ydb-dotnet-sdk/tree/main/examples)
-
+Примеры использования вы можете найти в репозитории на [GitHub](https://github.com/ydb-platform/ydb-dotnet-sdk/tree/main/examples).

@@ -358,7 +358,7 @@ Y_UNIT_TEST_SUITE(Normalizers) {
         public:
             virtual void CorrectConfigurationOnStart(NKikimrConfig::TColumnShardConfig& columnShardConfig) const override {
                 auto* repair = columnShardConfig.MutableRepairs()->Add();
-                repair->SetClassName("CleanUnusedTables");
+                repair->SetClassName("CleanIndexColumns");
                 repair->SetDescription("Cleaning old table");
             }
         };

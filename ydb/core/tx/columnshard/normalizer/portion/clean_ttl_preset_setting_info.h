@@ -15,7 +15,7 @@ class TCleanUnusedTablesNormalizer final: public TUnusedTables {
     using TBase = TUnusedTables;
 
     static TString ClassName() {
-        return "CleanUnusedTables";
+        return "CleanTtlPresetSettingsInfo";
     }
 
     static inline auto Registrator = INormalizerComponent::TFactory::TRegistrator<TCleanUnusedTablesNormalizer>(ClassName());
@@ -31,11 +31,6 @@ public:
 
     std::optional<ENormalizerSequentialId> DoGetEnumSequentialId() const override {
         return std::nullopt;
-    }
-
-protected:
-    virtual bool ValidateConfig() override {
-        return !AppData()->ColumnShardConfig.GetColumnChunksV0Usage();
     }
 };
 

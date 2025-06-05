@@ -77,7 +77,7 @@ class TestDataType(RestartToAnotherVersionFixture):
             ), f"{data_type}, expected {timedelta(microseconds=self.all_types[data_type](values))}, received {values_from_rows}"
         elif data_type == "Timestamp" or data_type == "Timestamp64":
             assert values_from_rows == datetime.fromtimestamp(
-                self.all_types[data_type](values) / 1_000_000 - 3 * 60 * 60
+                self.all_types[data_type](values) / 1_000_000
             ), f"{data_type}, expected {datetime.fromtimestamp(self.all_types[data_type](values)/1_000_000)}, received {values_from_rows}"
         elif data_type == "Json" or data_type == "JsonDocument":
             assert str(values_from_rows).replace("'", "\"") == str(

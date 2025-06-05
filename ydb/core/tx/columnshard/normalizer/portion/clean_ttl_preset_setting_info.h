@@ -9,10 +9,10 @@
 namespace NKikimr::NOlap::NCleanUnusedTables {
 using namespace NColumnShard;
 
-using TUnusedTables = TCleanUnusedTablesNormalizerTemplate<Schema::TtlPresetSettingsInfo>;
+using TUnusedTtlPresetInfo = TCleanUnusedTablesNormalizerTemplate<Schema::TtlSettingsPresetInfo>;
 
-class TCleanUnusedTablesNormalizer final: public TUnusedTables {
-    using TBase = TUnusedTables;
+class TCleanUnusedTablesNormalizer final: public TUnusedTtlPresetInfo {
+    using TBase = TUnusedTtlPresetInfo;
 
     static TString ClassName() {
         return "CleanTtlPresetSettingsInfo";

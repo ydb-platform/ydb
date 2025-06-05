@@ -16,8 +16,8 @@ SRCS(
     GLOBAL chunks_v0_meta.cpp
     GLOBAL clean_index_columns.cpp
     GLOBAL clean_unused_tables_template.cpp
-    clean_ttl_preset_setting_info.cpp
-    clean_ttl_preset_setting_version_info.cpp
+    GLOBAL clean_ttl_preset_setting_info.cpp
+    GLOBAL clean_ttl_preset_setting_version_info.cpp
 )
 
 PEERDIR(

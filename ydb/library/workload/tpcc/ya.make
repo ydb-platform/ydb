@@ -6,6 +6,7 @@ SRCS(
     data_splitter.cpp
     histogram.cpp
     init.cpp
+    import.cpp
     runner.cpp
     task_queue.cpp
     terminal.cpp

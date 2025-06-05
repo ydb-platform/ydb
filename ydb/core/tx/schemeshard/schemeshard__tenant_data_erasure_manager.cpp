@@ -281,7 +281,7 @@ void TTenantDataErasureManager::OnDone(const TPathId&, NIceDb::TNiceDb&) {
         "[TenantDataErasureManager] [OnDone] Cannot execute in tenant schemeshard: " << SchemeShard->TabletID());
 }
 
-void TTenantDataErasureManager::OnDone(const TTabletId& tabletId, NIceDb::TNiceDb& db) {
+bool TTenantDataErasureManager::OnDone(const TTabletId& tabletId, NIceDb::TNiceDb& db) {
     const TShardIdx shardIdx = SchemeShard->GetShardIdx(tabletId);
     const auto it = SchemeShard->ShardInfos.find(shardIdx);
 
@@ -317,6 +317,15 @@ void TTenantDataErasureManager::OnDone(const TTabletId& tabletId, NIceDb::TNiceD
             WaitingDataErasureShards.erase(it);
         }
     }
+    bool needSendShardDeletion = false;
+    {
+        auto it = ShardsMarkedToDelete.find(shardIdx);
+        if (it != ShardsMarkedToDelete.end()) {
+            SchemeShard->PersistShardsToDelete(db, {shardIdx});
+            ShardsMarkedToDelete.erase(it);
+            needSendShardDeletion = true;
+        }
+    }
 
     CounterDataErasureOk++;
     UpdateMetrics();
@@ -327,6 +336,7 @@ void TTenantDataErasureManager::OnDone(const TTabletId& tabletId, NIceDb::TNiceD
         Complete();
         db.Table<Schema::TenantDataErasureGenerations>().Key(Generation).Update<Schema::TenantDataErasureGenerations::Status>(Status);
     }
+    return needSendShardDeletion;
 }
 
 void TTenantDataErasureManager::ScheduleRequestToBSC() {
@@ -383,6 +393,10 @@ bool TTenantDataErasureManager::Restore(NIceDb::TNiceDb& db) {
             WaitingDataErasureShards[shardId] = status;
             if (status == EDataErasureStatus::IN_PROGRESS) {
                 numberDataErasureShardsInRunning++;
+            }
+            bool needMarkShardToDelete = rowset.GetValue<Schema::WaitingDataErasureShards::NeedDelete>();
+            if (needMarkShardToDelete) {
+                ShardsMarkedToDelete.insert(shardId);
             }
 
             if (!rowset.Next()) {
@@ -449,6 +463,14 @@ void TTenantDataErasureManager::SyncBscGeneration(NIceDb::TNiceDb&, ui64) {
     auto ctx = SchemeShard->ActorContext();
     LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
         "[TenantDataErasureManager] [SyncBscGeneration] Cannot execute in tenant schemeshard: " << SchemeShard->TabletID());
+}
+
+bool TTenantDataErasureManager::CanDeleteShard(const TShardIdx& shardIdx) {
+    return !WaitingDataErasureShards.contains(shardIdx);
+}
+
+void TTenantDataErasureManager::MarkShardForDelete(const TShardIdx& shardIdx) {
+    ShardsMarkedToDelete.insert(shardIdx);
 }
 
 void TTenantDataErasureManager::UpdateMetrics() {
@@ -533,6 +555,7 @@ template <typename TEvType>
 struct TSchemeShard::TTxCompleteDataErasureShard : public TSchemeShard::TRwTxBase {
     TEvType Ev;
     bool NeedResponseComplete = false;
+    bool NeedSendShardDeletion = false;
 
     TTxCompleteDataErasureShard(TSelf *self, TEvType& ev)
         : TRwTxBase(self)
@@ -559,7 +582,7 @@ struct TSchemeShard::TTxCompleteDataErasureShard : public TSchemeShard::TRwTxBas
             return;
         }
         NIceDb::TNiceDb db(txc.DB);
-        manager->OnDone(TTabletId(GetTabletId(Ev)), db);
+        NeedSendShardDeletion = manager->OnDone(TTabletId(GetTabletId(Ev)), db);
         if (Self->DataErasureManager->GetStatus() == EDataErasureStatus::COMPLETED) {
             NeedResponseComplete = true;
         }
@@ -569,6 +592,11 @@ struct TSchemeShard::TTxCompleteDataErasureShard : public TSchemeShard::TRwTxBas
         LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
             "TTxCompleteDataErasureShard Complete at schemestard: " << Self->TabletID()
             << ", NeedResponseComplete# " << (NeedResponseComplete ? "true" : "false"));
+
+        if (NeedSendShardDeletion) {
+            const TShardIdx shardIdx = Self->GetShardIdx(TTabletId(GetTabletId(Ev)));
+            Self->DoShardsDeletion({shardIdx}, ctx);
+        }
 
         if (NeedResponseComplete) {
             NKikimr::NSchemeShard::SendResponseToRootSchemeShard(Self, ctx);

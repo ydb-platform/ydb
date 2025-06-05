@@ -9,7 +9,7 @@
 namespace NKikimr::NOlap::NCleanUnusedTables {
 using namespace NColumnShard;
 
-using TUnusedTables = TCleanUnusedTablesNormalizerTemplate<Schema::IndexColumns>;
+using TUnusedTables = TCleanUnusedTablesNormalizerTemplate<Schema::TtlPresetSettingsVersionInfo>;
 
 class TCleanUnusedTablesNormalizer final: public TUnusedTables {
     using TBase = TUnusedTables;

@@ -950,10 +950,7 @@ public:
         }
 
         QueryState->TxCtx->SetTempTables(QueryState->TempTablesState);
-        QueryState->TxCtx->ApplyPhysicalQuery(
-            phyQuery,
-            CanUseVolatileTx(),
-            QueryState->Commit);
+        QueryState->TxCtx->ApplyPhysicalQuery(phyQuery, QueryState->Commit);
         auto [success, issues] = QueryState->TxCtx->ApplyTableOperations(phyQuery.GetTableOps(), phyQuery.GetTableInfos(),
             EKikimrQueryType::Dml);
         if (!success) {
@@ -1195,7 +1192,7 @@ public:
             ExecutePartitioned(tx);
         } else if (QueryState->TxCtx->ShouldExecuteDeferredEffects(tx)) {
             ExecuteDeferredEffectsImmediately(tx);
-        } else if (auto commit = QueryState->ShouldCommitWithCurrentTx(tx, CanUseVolatileTx()); commit || tx) {
+        } else if (auto commit = QueryState->ShouldCommitWithCurrentTx(tx); commit || tx) {
             ExecutePhyTx(tx, commit);
         } else {
             ReplySuccess();
@@ -2898,12 +2895,6 @@ private:
             Send(ctx->BufferActorId, new TEvKqpBuffer::TEvTerminate{});
             ctx->BufferActorId = {};
         }
-    }
-
-    bool CanUseVolatileTx() const {
-        return AppData()->FeatureFlags.GetEnableDataShardVolatileTransactions()
-            && !QueryState->TxCtx->TopicOperations.HasOperations()
-            && !QueryState->TxCtx->HasOlapTable;
     }
 
 private:

@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from ydb.tests.library.compatibility.fixtures import RestartToAnotherVersionFixture
 from ydb.tests.oss.ydb_sdk_import import ydb
 from ydb.tests.datashard.lib.create_table import create_table_sql_request
-from ydb.tests.datashard.lib.types_of_variables import non_pk_types, pk_types, cleanup_type_name, format_sql_value
+from ydb.tests.datashard.lib.types_of_variables import pk_types, non_pk_types, cleanup_type_name, format_sql_value
 
 
 class TestDataType(RestartToAnotherVersionFixture):

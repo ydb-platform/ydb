@@ -41,8 +41,13 @@
 {%-                 else %}
     {{ implementationFunc }}({{ classpath }})
 {%-                 endif -%}
-{%-             else %}
+{%-             else -%}
+{%-                 if classpath|replace('project(":', '') != classpath -%}
+{#-                     Contrib in exported arcadia folders #}
+    {{ implementationFunc }}(files("$output_root/{{ library.jar }}"))
+{%-                 else %}
     {{ apiFunc }}({{ classpath }})
+{%-                 endif -%}
 {%-             endif -%}
 {%-             if library.excludes.consumer|length and not build_contribs -%} {
 {%-                 for exclude in library.excludes.consumer if exclude.classpath -%}

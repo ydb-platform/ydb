@@ -1290,8 +1290,12 @@ class WorkloadTestBase(LoadSuiteBase):
         # Проверяем состояние схемы после всех чанков
         self._check_scheme_state()
         
-        # Финализируем общий результат
-        overall_result.success = successful_chunks > 0  # Успех если хотя бы один чанк выполнился
+        # Финализируем общий результат - success вычисляется автоматически
+        # Если ни один чанк не выполнился успешно, добавляем ошибку
+        if successful_chunks == 0:
+            overall_result.add_error(f"All {len(chunks)} chunks failed to execute successfully")
+        elif successful_chunks < len(chunks):
+            overall_result.add_warning(f"Only {successful_chunks}/{len(chunks)} chunks completed successfully")
         
         # Добавляем общую статистику
         chunk_stats = {

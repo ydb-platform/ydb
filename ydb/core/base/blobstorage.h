@@ -917,6 +917,10 @@ struct TEvBlobStorage {
         EvNodeWardenReadMetadataResult,
         EvNodeWardenWriteMetadata,
         EvNodeWardenWriteMetadataResult,
+        EvNodeWardenUpdateCache,
+        EvNodeWardenQueryCache,
+        EvNodeWardenQueryCacheResult,
+        EvNodeWardenUnsubscribeFromCache,
 
         // Other
         EvRunActor = EvPut + 15 * 512,

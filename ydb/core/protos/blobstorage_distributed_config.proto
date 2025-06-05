@@ -53,6 +53,17 @@ message TStorageFileContent {
     repeated TRecord Record = 1;
 }
 
+message TCacheUpdate {
+    message TKeyValuePair {
+        string Key = 1; // unique cache item key
+        uint32 Generation = 2; // generation of the key: Value may only change with increasing generation
+        optional bytes Value = 3; // updated value; when not set, this item is considered to be deleted
+    }
+
+    repeated TKeyValuePair KeyValuePairs = 1;
+    repeated string RequestedKeys = 2;
+}
+
 // Attach sender node to the recipient one; if already bound, then just update configuration.
 message TEvNodeConfigPush {
     message TBoundNode {
@@ -62,6 +73,7 @@ message TEvNodeConfigPush {
     bool Initial = 1; // set to true if this push is initial connection establishment
     repeated TBoundNode BoundNodes = 2; // a list of bound node updates (including itself)
     repeated TNodeIdentifier DeletedBoundNodeIds = 3; // a list of detached nodes
+    TCacheUpdate CacheUpdate = 4;
 }
 
 // Used to reverse-propagate configuration and to confirm/reject initial TEvNodePushBinding query.
@@ -70,6 +82,7 @@ message TEvNodeConfigReversePush {
     bool Rejected = 2; // is the request rejected due to cyclic graph?
     TStorageConfig CommittedStorageConfig = 3; // last known committed storage configuration
     bool RecurseConfigUpdate = 4;
+    TCacheUpdate CacheUpdate = 5;
 }
 
 // Remove node from bound list.
@@ -270,4 +283,5 @@ message TEvNodeConfigInvokeOnRootResult {
 message TEvNodeWardenDynamicConfigPush {
     TStorageConfig Config = 1;
     bool NoQuorum = 2;
+    TCacheUpdate CacheUpdate = 3;
 }

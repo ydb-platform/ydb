@@ -82,7 +82,9 @@ public:
             }
         }
 
-        TIndexBuildInfo::TPtr buildInfo = new TIndexBuildInfo(BuildId, uid);
+        TIndexBuildInfo::TPtr buildInfo = new TIndexBuildInfo();
+        buildInfo->Id = BuildId;
+        buildInfo->Uid = uid;
         buildInfo->DomainPathId = domainPath.Base()->PathId;
         buildInfo->TablePathId = tablePath.Base()->PathId;
 

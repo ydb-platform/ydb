@@ -3266,9 +3266,12 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
     TKMeans KMeans;
 
     EState State = EState::Invalid;
+private:
     TString Issue;
+public:
     TInstant StartTime = TInstant::Zero();
     TInstant EndTime = TInstant::Zero();
+    bool IsBroken = false;
 
     TSet<TActorId> Subscribers;
 
@@ -3444,11 +3447,6 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
 
     void AddParent(const TSerializedTableRange& range, TShardIdx shard);
 
-    TIndexBuildInfo(TIndexBuildId id, TString uid)
-        : Id(id)
-        , Uid(uid)
-    {}
-
     template<class TRow>
     void AddBuildColumnInfo(const TRow& row) {
         TString columnName = row.template GetValue<Schema::BuildColumnOperationSettings::ColumnName>();
@@ -3488,11 +3486,26 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
     }
 
     template<class TRow>
-    static TIndexBuildInfo::TPtr FromRow(const TRow& row) {
+    static void FillFromRow(const TRow& row, TIndexBuildInfo* indexInfo) {
+        Y_ENSURE(indexInfo); // TODO: pass by ref
+        
         TIndexBuildId id = row.template GetValue<Schema::IndexBuild::Id>();
         TString uid = row.template GetValue<Schema::IndexBuild::Uid>();
 
-        TIndexBuildInfo::TPtr indexInfo = new TIndexBuildInfo(id, uid);
+        // note: essential fields go first to be filled if an error occurs
+        indexInfo->Id = id;
+        indexInfo->Uid = uid;
+
+        indexInfo->State = TIndexBuildInfo::EState(
+            row.template GetValue<Schema::IndexBuild::State>());
+        indexInfo->Issue =
+            row.template GetValueOrDefault<Schema::IndexBuild::Issue>();
+
+        // note: please note that here we specify BuildSecondaryIndex as operation default,
+        // because previously this table was dedicated for build secondary index operations only.
+        indexInfo->BuildKind = TIndexBuildInfo::EBuildKind(
+            row.template GetValueOrDefault<Schema::IndexBuild::BuildKind>(
+                ui32(TIndexBuildInfo::EBuildKind::BuildSecondaryIndex)));
 
         indexInfo->DomainPathId =
             TPathId(row.template GetValue<Schema::IndexBuild::DomainOwnerId>(),
@@ -3505,40 +3518,6 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         indexInfo->IndexName = row.template GetValue<Schema::IndexBuild::IndexName>();
         indexInfo->IndexType = row.template GetValue<Schema::IndexBuild::IndexType>();
 
-        // note: please note that here we specify BuildSecondaryIndex as operation default,
-        // because previosly this table was dedicated for build secondary index operations only.
-        indexInfo->BuildKind = TIndexBuildInfo::EBuildKind(
-            row.template GetValueOrDefault<Schema::IndexBuild::BuildKind>(
-                ui32(TIndexBuildInfo::EBuildKind::BuildSecondaryIndex)));
-
-        // Restore the operation details: ImplTableDescriptions and SpecializedIndexDescription.
-        if (row.template HaveValue<Schema::IndexBuild::CreationConfig>()) {
-            NKikimrSchemeOp::TIndexCreationConfig creationConfig;
-            Y_ENSURE(creationConfig.ParseFromString(row.template GetValue<Schema::IndexBuild::CreationConfig>()));
-
-            auto& descriptions = *creationConfig.MutableIndexImplTableDescriptions();
-            indexInfo->ImplTableDescriptions.reserve(descriptions.size());
-            for (auto& description : descriptions) {
-                indexInfo->ImplTableDescriptions.emplace_back(std::move(description));
-            }
-
-            switch (creationConfig.GetSpecializedIndexDescriptionCase()) {
-                case NKikimrSchemeOp::TIndexCreationConfig::kVectorIndexKmeansTreeDescription: {
-                    auto& desc = *creationConfig.MutableVectorIndexKmeansTreeDescription();
-                    indexInfo->KMeans.K = std::max<ui32>(2, desc.settings().clusters());
-                    indexInfo->KMeans.Levels = indexInfo->IsBuildPrefixedVectorIndex() + std::max<ui32>(1, desc.settings().levels());
-                    indexInfo->SpecializedIndexDescription =std::move(desc);
-                } break;
-                case NKikimrSchemeOp::TIndexCreationConfig::SPECIALIZEDINDEXDESCRIPTION_NOT_SET:
-                    /* do nothing */
-                    break;
-            }
-        }
-
-        indexInfo->State = TIndexBuildInfo::EState(
-            row.template GetValue<Schema::IndexBuild::State>());
-        indexInfo->Issue =
-            row.template GetValueOrDefault<Schema::IndexBuild::Issue>();
         indexInfo->CancelRequested =
             row.template GetValueOrDefault<Schema::IndexBuild::CancelRequest>(false);
         if (row.template HaveValue<Schema::IndexBuild::UserSID>()) {
@@ -3626,7 +3605,29 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
             row.template GetValueOrDefault<Schema::IndexBuild::ReadBytesProcessed>(0),
         };
 
-        return indexInfo;
+        // Restore the operation details: ImplTableDescriptions and SpecializedIndexDescription.
+        if (row.template HaveValue<Schema::IndexBuild::CreationConfig>()) {
+            NKikimrSchemeOp::TIndexCreationConfig creationConfig;
+            Y_ENSURE(creationConfig.ParseFromString(row.template GetValue<Schema::IndexBuild::CreationConfig>()));
+
+            auto& descriptions = *creationConfig.MutableIndexImplTableDescriptions();
+            indexInfo->ImplTableDescriptions.reserve(descriptions.size());
+            for (auto& description : descriptions) {
+                indexInfo->ImplTableDescriptions.emplace_back(std::move(description));
+            }
+
+            switch (creationConfig.GetSpecializedIndexDescriptionCase()) {
+                case NKikimrSchemeOp::TIndexCreationConfig::kVectorIndexKmeansTreeDescription: {
+                    auto& desc = *creationConfig.MutableVectorIndexKmeansTreeDescription();
+                    indexInfo->KMeans.K = std::max<ui32>(2, desc.settings().clusters());
+                    indexInfo->KMeans.Levels = indexInfo->IsBuildPrefixedVectorIndex() + std::max<ui32>(1, desc.settings().levels());
+                    indexInfo->SpecializedIndexDescription =std::move(desc);
+                } break;
+                case NKikimrSchemeOp::TIndexCreationConfig::SPECIALIZEDINDEXDESCRIPTION_NOT_SET:
+                    /* do nothing */
+                    break;
+            }
+        }
     }
 
     template<class TRow>
@@ -3718,6 +3719,23 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
     void AddNotifySubscriber(const TActorId& actorID) {
         Y_ENSURE(!IsFinished());
         Subscribers.insert(actorID);
+    }
+
+    const TString& GetIssue() const {
+        return Issue;
+    }
+
+    bool AddIssue(TString issue) {
+        if (Issue.Contains(issue)) { // deduplication
+            return false;
+        }
+
+        if (Issue) {
+            // TODO: store as list?
+            Issue += "; ";
+        }
+        Issue += issue;
+        return true;
     }
 
     float CalcProgressPercent() const {
@@ -3863,9 +3881,10 @@ inline void Out<NKikimr::NSchemeShard::TIndexBuildInfo>
     }
 
     o << ", State: " << info.State;
+    o << ", IsBroken: " << info.IsBroken;
     o << ", IsCancellationRequested: " << info.CancelRequested;
 
-    o << ", Issue: " << info.Issue;
+    o << ", Issue: " << info.GetIssue();
     o << ", SubscribersCount: " << info.Subscribers.size();
 
     o << ", CreateSender: " << info.CreateSender.ToString();

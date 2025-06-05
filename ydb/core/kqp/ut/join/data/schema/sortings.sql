@@ -4,7 +4,7 @@ CREATE TABLE `/Root/bank_document` (
     acc_dt_id Int32 NOT NULL,
     kostya Int32 NOT NULL,
     kek Int32 NOT NULL,
-    PRIMARY KEY (id, kek),
+    PRIMARY KEY (id),
     INDEX ix_bank_document_exec_dt_accounts GLOBAL ON (exec_dt, id, kek) COVER ( acc_dt_id )
 );
 

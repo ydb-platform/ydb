@@ -714,6 +714,10 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         return plan.Contains("Limit") && !plan.Contains("Top");
     }
 
+    bool CheckSort(const TString& plan) {
+        return plan.Contains("Top");
+    }
+
     Y_UNIT_TEST(SortingsWithLookupJoin1) {
         auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/sortings_with_lookupjoin_1.sql", "stats/sortings.json", true, false);
         UNIT_ASSERT(CheckNoSortings(plan));
@@ -762,6 +766,16 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
     Y_UNIT_TEST(Sortings4Year) {
         auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/sortings_4_year.sql", "stats/sortings.json", true, false);
         UNIT_ASSERT(CheckNoSortings(plan));
+    }
+
+    Y_UNIT_TEST(SortingsComplexOrderBy) {
+        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/sortings_complex_order_by.sql", "stats/sortings.json", true, false);
+        UNIT_ASSERT(CheckNoSortings(plan));
+    }
+
+    Y_UNIT_TEST(SortingsDifferentDirs) {
+        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/sortings_different_dirs.sql", "stats/sortings.json", true, false);
+        UNIT_ASSERT(CheckSort(plan));
     }
 
     Y_UNIT_TEST_TWIN(TPCDS34, ColumnStore) {

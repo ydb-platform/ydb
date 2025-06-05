@@ -16,8 +16,7 @@ template<typename TUdf>
 static TType* TweakUdfType(const NYql::NUdf::TStringRef& name, TType* userType,
                            const TTypeEnvironment& env)
 {
-    TFunctionTypeInfoBuilder typeInfoBuilder(NYql::UnknownLangVersion, env,
-                                             new TTypeInfoHelper(),
+    TFunctionTypeInfoBuilder typeInfoBuilder(env, new TTypeInfoHelper(),
                                              "", nullptr, {});
 
     // Obtain the callable type of the particular UDF.

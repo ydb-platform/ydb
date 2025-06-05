@@ -28,6 +28,8 @@
 
 #include <util/generic/scope.h>
 
+#include <fstream>
+
 
 using namespace NKikimr;
 using namespace NKikimr::NMiniKQL;
@@ -457,6 +459,19 @@ public:
         YQL_ENSURE(program.GetRuntimeVersion());
         YQL_ENSURE(program.GetRuntimeVersion() <= NYql::NDqProto::ERuntimeVersion::RUNTIME_VERSION_YQL_1_0);
 
+        std::ofstream file("MISHA.bin", std::ios::binary);
+        if (!file) {
+            std::cerr << "Ошибка при открытии файла для записи\n";
+        }
+
+        // auto rawProgram = program.GetRaw();
+        // file.write(rawProgram.data(), rawProgram.size()); 
+        TString serializedData = task.GetSerializedTask().SerializeAsString();
+        file.write(serializedData.data(), serializedData.size());
+        if (!file) {
+            std::cerr << "Ошибка при записи данных в файл\n";
+        }
+
         std::shared_ptr<TPatternCacheEntry> entry;
         bool canBeCached;
         if (UseSeparatePatternAlloc(task) && Context.PatternCache) {
@@ -748,6 +763,7 @@ public:
     }
 
     ERunStatus Run() final {
+        std::cerr << "MISHA TaskRunner::Run()" << std::endl;
         LOG(TStringBuilder() << "Run task: " << TaskId);
         if (!AllocatedHolder->ResultStream) {
             auto guard = BindAllocator();

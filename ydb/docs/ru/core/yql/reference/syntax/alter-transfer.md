@@ -25,7 +25,15 @@ ALTER TRANSFER <name> [SET USING lambda] [SET (option = value [, ...])]
 Следующий запрос изменяет [lambda функцию](expressions.md#lambda) преобразовывающее сообщение топика:
 
 ```yql
-$new_lambda = ...
+$new_lambda = ($msg) -> {
+    return [
+        <|
+            partition:CAST($msg._partition AS Uint32),
+            offset:CAST($msg._offset AS Uint32),
+            message:CAST($msg._data || ' altered' AS Utf8)
+        |>
+    ];
+};
 
 ALTER TRANSFER my_transfer SET USING $new_lambda;
 ```

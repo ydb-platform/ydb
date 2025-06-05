@@ -99,6 +99,14 @@ void InferStatisticsForReadTable(const TExprNode::TPtr& input, TTypeAnnotationCo
     typeCtx->SetStats(input.Get(), stats);
 }
 
+std::vector<TOrdering::TItem::EDirection> GetAscDirections(std::size_t n) {
+    return std::vector<TOrdering::TItem::EDirection>(n, TOrdering::TItem::EDirection::EAscending);
+}
+
+std::vector<TOrdering::TItem::EDirection> GetDescDirections(std::size_t n) {
+    return std::vector<TOrdering::TItem::EDirection>(n, TOrdering::TItem::EDirection::EDescending);
+}
+
 /**
  * Infer statistics for KQP table
  */
@@ -189,25 +197,28 @@ void InferStatisticsForKqpTable(
         stats->LogicalOrderings = orderingsFSM->CreateState(orderingIdx);
     }
 
+    stats->Aliases = std::move(aliases);
+
     auto& sortingsFSM = typeCtx->SortingsFSM;
     if (sortingsFSM && stats && stats->KeyColumns && stats->StorageType == EStorageType::RowStorage) {
         const TVector<TString>& keyColumns = stats->KeyColumns->Data;
 
         TVector<TJoinColumn> sortedBy(keyColumns.size());
         TString relName;
-        if (aliases && aliases->size() == 1) {
-            relName = *aliases->begin();
+        if (stats->Aliases && stats->Aliases->size() == 1) {
+            relName = *stats->Aliases->begin();
         }
         for (std::size_t i = 0; i < sortedBy.size(); ++i) {
             sortedBy[i].RelName = relName;
             sortedBy[i].AttributeName = keyColumns[i];
         }
 
-        std::int64_t orderingIdx = sortingsFSM->FDStorage.FindInterestingOrderingIdx(sortedBy, TOrdering::ESorting, nullptr);
+        std::int64_t orderingIdx = sortingsFSM->FDStorage.FindSorting(sortedBy, GetAscDirections(sortedBy.size()), nullptr);
         stats->SortingOrderings = sortingsFSM->CreateState(orderingIdx);
-    }
 
-    stats->Aliases = std::move(aliases);
+        std::int64_t reversedOrderingIdx = sortingsFSM->FDStorage.FindSorting(sortedBy, GetDescDirections(sortedBy.size()), nullptr);
+        stats->ReversedSortingOrderings = sortingsFSM->CreateState(reversedOrderingIdx);
+    }
 
     YQL_CLOG(TRACE, CoreDq) << "Infer statistics for table: " << path.Value() << ": " << stats->ToString();
 
@@ -278,8 +289,11 @@ void InferStatisticsForLookupTable(const TExprNode::TPtr& input, TTypeAnnotation
  * We look into range expression to check if its a point lookup or a full scan
  * We currently don't try to figure out whether this is a small range vs full scan
  */
-void InferStatisticsForRowsSourceSettings(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx,
-    const TKqpOptimizeContext& kqpCtx) {
+void InferStatisticsForRowsSourceSettings(
+    const TExprNode::TPtr& input,
+    TTypeAnnotationContext* typeCtx,
+    const TKqpOptimizeContext& kqpCtx
+) {
 
     auto inputNode = TExprBase(input);
     auto sourceSettings = inputNode.Cast<TKqpReadRangesSourceSettings>();
@@ -313,7 +327,6 @@ void InferStatisticsForRowsSourceSettings(const TExprNode::TPtr& input, TTypeAnn
         );
     }
 
-
     int nAttrs = sourceSettings.Columns().Size();
 
     double sizePerRow = inputStats->ByteSize / (inputRows==0?1:inputRows);
@@ -335,6 +348,15 @@ void InferStatisticsForRowsSourceSettings(const TExprNode::TPtr& input, TTypeAnn
     outputStats->LogicalOrderings = inputStats->LogicalOrderings;
     outputStats->Aliases = inputStats->Aliases;
     outputStats->SourceTableName = inputStats->SourceTableName;
+
+    auto settings = NYql::TKqpReadTableSettings::Parse(sourceSettings.Settings());
+    if (!settings.IsSorted()) {
+        outputStats->SortingOrderings.RemoveState();
+    }
+
+    if (settings.IsReverse()) {
+        outputStats->SortingOrderings = inputStats->ReversedSortingOrderings;
+    }
 
     YQL_CLOG(TRACE, CoreDq) << "Infer statistics for source settings: " << outputStats->ToString();
 
@@ -392,7 +414,8 @@ void InferStatisticsForReadTableIndexRanges(
     );
 
     if (typeCtx->SortingsFSM) {
-        std::int64_t orderingIdx = typeCtx->SortingsFSM->FDStorage.FindInterestingOrderingIdx(indexColumnsPtr->ToJoinColumns(alias), TOrdering::ESorting);
+        auto sortedBy = indexColumnsPtr->ToJoinColumns(alias);
+        std::int64_t orderingIdx = typeCtx->SortingsFSM->FDStorage.FindSorting(sortedBy, GetAscDirections(sortedBy.size()));
         stats->SortingOrderings = typeCtx->SortingsFSM->CreateState(orderingIdx);
     }
 
@@ -406,7 +429,11 @@ void InferStatisticsForReadTableIndexRanges(
     YQL_CLOG(TRACE, CoreDq) << "Infer statistics for index: " << stats->ToString();
 }
 
-void InferStatisticsForLookupJoin(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx) {
+void InferStatisticsForLookupJoin(
+    const TExprNode::TPtr& input,
+    TTypeAnnotationContext* typeCtx,
+    TKqpOptimizeContext& kqpCtx
+) {
     auto lookupJoin = TKqlIndexLookupJoinBase(input);
 
     auto inputStats = typeCtx->GetStats(lookupJoin.Input().Raw());
@@ -437,6 +464,10 @@ void InferStatisticsForLookupJoin(const TExprNode::TPtr& input, TTypeAnnotationC
 
     propagateAliases(propagateAliases, lookupJoin.Input().Ptr());
     auto outputStats = *inputStats;
+
+    if (!kqpCtx.Config->OrderPreservingLookupJoinEnabled()) {
+        outputStats.SortingOrderings.RemoveState();
+    }
 
     YQL_CLOG(TRACE, CoreDq) << "Infer statistics for lookup join: " << outputStats.ToString();
     typeCtx->SetStats(input.Get(), std::make_shared<TOptimizerStatistics>(std::move(outputStats)));
@@ -734,8 +765,11 @@ double EstimateRowSize(const TStructExprType& rowType, const TString& format, co
     return result;
 }
 
-void InferStatisticsForDqSourceWrap(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx,
-    TKqpOptimizeContext& kqpCtx) {
+void InferStatisticsForDqSourceWrap(
+    const TExprNode::TPtr& input,
+    TTypeAnnotationContext* typeCtx,
+    TKqpOptimizeContext& kqpCtx
+) {
     auto inputNode = TExprBase(input);
     if (auto wrapBase = inputNode.Maybe<TDqSourceWrapBase>()) {
         if (auto maybeS3DataSource = wrapBase.Cast().DataSource().Maybe<TS3DataSource>()) {
@@ -865,7 +899,7 @@ public:
     TInterestingOrderingsFSMBuilder(
         TTypeAnnotationContext& typeCtx
     )
-        : InterstingOrderingsCollector(typeCtx)
+        : InterestingOrderingsCollector(typeCtx)
     {}
 
 public:
@@ -878,12 +912,13 @@ public:
             node,
             {},
             [this](const TExprNode::TPtr& node){
-                return this->InterstingOrderingsCollector.Collect(node);
+                return this->InterestingOrderingsCollector.Collect(node);
             }
         );
 
-        auto shufflingsFsm = MakeSimpleShared<TOrderingsStateMachine>(InterstingOrderingsCollector.FDStorage, TOrdering::EType::EShuffle);
-        auto sortingsFsm = MakeSimpleShared<TOrderingsStateMachine>(std::move(InterstingOrderingsCollector.FDStorage), TOrdering::EType::ESorting);
+        Cout << InterestingOrderingsCollector.FDStorage.ToString() << Endl;
+        auto shufflingsFsm = MakeSimpleShared<TOrderingsStateMachine>(InterestingOrderingsCollector.FDStorage, TOrdering::EType::EShuffle);
+        auto sortingsFsm = MakeSimpleShared<TOrderingsStateMachine>(std::move(InterestingOrderingsCollector.FDStorage), TOrdering::EType::ESorting);
 
         LogReport(shufflingsFsm, sortingsFsm);
 
@@ -905,9 +940,9 @@ private:
     }
 
 private:
-    class InterestingOrderingsCollector {
+    class TInterestingOrderingsCollector {
     public:
-        InterestingOrderingsCollector(
+        TInterestingOrderingsCollector(
             TTypeAnnotationContext& typeCtx
         )
             : TypeCtx(typeCtx)
@@ -917,7 +952,7 @@ private:
             if (auto equiJoin = TMaybeNode<TCoEquiJoin>(node)) {
                 CollectEquiJoin(equiJoin.Cast());
             } else if (auto kqpTable = TMaybeNode<TKqpTable>(node)) {
-                CollectKqpTable(kqpTable.Cast());
+                CollectKqpTable<GetAscDirections>(kqpTable.Cast());
             } else if (auto aggregateBase = TMaybeNode<TCoAggregateBase>(node)) {
                 CollectAggregateBase(aggregateBase.Cast());
             } else if (auto topBase = TMaybeNode<TCoTopBase>(node)) {
@@ -941,6 +976,7 @@ private:
         }
 
     private:
+        template <auto GetDirs>
         void CollectKqpTable(const TKqpTable& table) {
             auto stats = TypeCtx.GetStats(table.Raw());
             if (!stats) {
@@ -966,11 +1002,12 @@ private:
 
                 if (stats->KeyColumns) {
                     TVector<TJoinColumn> sortedBy = stats->KeyColumns->ToJoinColumns(*stats->Aliases->begin());
-                    TString idx = ToString(FDStorage.AddInterestingOrdering(sortedBy, TOrdering::ESorting, nullptr));
+                    TString idx = ToString(FDStorage.AddSorting(sortedBy, GetDirs(sortedBy.size()), nullptr));
                     sortingsOrderingIdxes.push_back(std::move(idx));
                 }
             } else if (stats->KeyColumns) {
-                TString idx = ToString(FDStorage.AddInterestingOrdering(stats->KeyColumns->ToJoinColumns(""), TOrdering::ESorting, nullptr));
+                auto sortedBy = stats->KeyColumns->ToJoinColumns("");
+                TString idx = ToString(FDStorage.AddSorting(sortedBy, GetDirs(sortedBy.size()), nullptr));
                 sortingsOrderingIdxes.push_back(std::move(idx));
             }
 
@@ -1041,9 +1078,41 @@ private:
             if (auto stats = TypeCtx.GetStats(topBase.Raw())) {
                 tableAliases = stats->TableAliases.Get();
             }
+
             auto orderingInfo = GetTopBaseSortingOrderingIdx(topBase, nullptr, tableAliases);
-            std::size_t sortingsOrderingIdx = FDStorage.AddInterestingOrdering(orderingInfo.Ordering, TOrdering::ESorting, tableAliases);
+            bool ascOnly =
+                    std::all_of(
+                        orderingInfo.Directions.begin(),
+                        orderingInfo.Directions.end(),
+                        [](auto dir) { return dir == TOrdering::TItem::EAscending; }
+                    );
+
+            if (!ascOnly) { // we may have desc direction in topsort - so we will consider two cases : asc and desc table reads
+                if (auto maybeFlatMapBase = TMaybeNode<TCoFlatMapBase>(topBase.Input().Raw())) {
+                    if (auto maybeTable = GetTable(maybeFlatMapBase.Cast().Input().Raw())) {
+                        CollectKqpTable<GetDescDirections>(*maybeTable);
+                    }
+                }
+            }
+
+            std::size_t sortingsOrderingIdx = FDStorage.AddSorting(orderingInfo.Ordering, orderingInfo.Directions, tableAliases);
             YQL_CLOG(TRACE, CoreDq) << "Collected TopBase interesting ordering idx: " << sortingsOrderingIdx << ", TableAliases: " << TableAliasToString(tableAliases);
+        }
+
+        TMaybe<TKqpTable> GetTable(const TExprNode* const input) {
+            if (auto maybeExtractMembers = TMaybeNode<TCoExtractMembers>(input)) {
+                return GetTable(maybeExtractMembers.Input().Raw());
+            }
+
+            if (auto maybeKqlReadTableRangesBase = TMaybeNode<TKqlReadTableRangesBase>(input)) {
+                return maybeKqlReadTableRangesBase.Cast().Table();
+            }
+
+            if (auto maybeKqlReadTableBase = TMaybeNode<TKqlReadTableBase>(input)) {
+                return maybeKqlReadTableBase.Cast().Table();
+            }
+
+            return Nothing();
         }
 
     private:
@@ -1058,7 +1127,8 @@ private:
                 alias = *stats->Aliases->begin();
             }
 
-            std::size_t orderingIdx = FDStorage.AddInterestingOrdering(stats->KeyColumns->ToJoinColumns(alias), TOrdering::ESorting, nullptr);
+            auto sortedBy = stats->KeyColumns->ToJoinColumns(alias);
+            std::size_t orderingIdx = FDStorage.AddSorting(sortedBy, GetAscDirections(sortedBy.size()), nullptr);
             YQL_CLOG(TRACE, CoreDq) << "Collected KqlReadTableIndexRanges interesting ordering idx: " << orderingIdx;
         }
     private:
@@ -1078,23 +1148,24 @@ private:
 
             auto lambdaStats = TypeCtx.GetStats(lambdaBody.Raw());
             computer.Compute(lambdaBody);
-            
+
             TTableAliasMap* tableAliases = lambdaStats? lambdaStats->TableAliases.Get(): nullptr;
+            bool alwaysActive = IsRead(flatMapBase.Input().Raw());
             for (const auto& [lMember, rMember]: computer.GetMemberEqualities()) {
                 auto lhs = GetColumnFromMember(lMember);
                 auto rhs = GetColumnFromMember(rMember);
-                bool alwaysActive = IsRead(flatMapBase.Input().Raw());
                 FDStorage.AddEquivalence(lhs, rhs, alwaysActive, tableAliases);
             }
 
             for (const auto& member: computer.GetConstantMembers()) {
                 TJoinColumn constant = GetColumnFromMember(member);
-                bool alwaysActive = IsRead(flatMapBase.Input().Raw());
                 FDStorage.AddConstant(constant, alwaysActive, tableAliases);
             }
         }
 
-        bool IsRead(const TExprNode* const input) {
+        bool IsRead(
+            const TExprNode* const input
+        ) {
             if (auto maybeExtractMembers = TMaybeNode<TCoExtractMembers>(input)) {
                 return IsRead(maybeExtractMembers.Input().Raw());
             }
@@ -1116,15 +1187,18 @@ private:
     };
 
 private:
-    InterestingOrderingsCollector InterstingOrderingsCollector;
+    TInterestingOrderingsCollector InterestingOrderingsCollector;
 };
 
 /**
  * DoTransform method matches operators and callables in the query DAG and
  * uses pre-computed statistics and costs of the children to compute their cost.
  */
-IGraphTransformer::TStatus TKqpStatisticsTransformer::DoTransform(TExprNode::TPtr input,
-    TExprNode::TPtr& output, TExprContext& ctx) {
+IGraphTransformer::TStatus TKqpStatisticsTransformer::DoTransform(
+    TExprNode::TPtr input,
+    TExprNode::TPtr& output,
+    TExprContext& ctx
+) {
 
     output = input;
     if (Config->CostBasedOptimizationLevel.Get().GetOrElse(TDqSettings::TDefault::CostBasedOptimizationLevel) == 0) {
@@ -1133,8 +1207,8 @@ IGraphTransformer::TStatus TKqpStatisticsTransformer::DoTransform(TExprNode::TPt
 
     if (!TypeCtx->OrderingsFSM) {
         TDqStatisticsTransformerBase::DoTransform(input, output, ctx);
+        /* ^ we have to propogate statistics to work with aliases */
 
-        /* ^ we have to propogate KqpTable statistics to EquiJoin for working with its partitioning */
         auto fsmBuilder = TInterestingOrderingsFSMBuilder(*TypeCtx);
         std::tie(TypeCtx->OrderingsFSM, TypeCtx->SortingsFSM) = fsmBuilder.Build(input);
     }
@@ -1170,7 +1244,7 @@ bool TKqpStatisticsTransformer::BeforeLambdasSpecific(const TExprNode::TPtr& inp
         InferStatisticsForSteamLookup(input, TypeCtx);
     }
     else if (TKqlIndexLookupJoinBase::Match(input.Get())) {
-        InferStatisticsForLookupJoin(input, TypeCtx);
+        InferStatisticsForLookupJoin(input, TypeCtx, KqpCtx);
     }
 
     // Match a result binding atom and connect it to a stage

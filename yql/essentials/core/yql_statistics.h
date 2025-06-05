@@ -123,7 +123,9 @@ struct TOptimizerStatistics {
     TIntrusivePtr<NDq::TTableAliasMap> TableAliases;
 
     NDq::TOrderingsStateMachine::TLogicalOrderings LogicalOrderings;
+
     NDq::TOrderingsStateMachine::TLogicalOrderings SortingOrderings;
+    NDq::TOrderingsStateMachine::TLogicalOrderings ReversedSortingOrderings;
 
     std::optional<std::size_t> ShuffleOrderingIdx;
     std::int64_t SortingOrderingIdx = -1;

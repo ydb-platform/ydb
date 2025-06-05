@@ -1064,12 +1064,42 @@ TOrderingInfo GetTopBaseSortingOrderingIdx(
         }
     }
 
-    std::int64_t orderingIdx = -1;
-    if (sortingsFSM) {
-        orderingIdx = sortingsFSM->FDStorage.FindInterestingOrderingIdx(sorting, TOrdering::ESorting, tableAlias);
+    auto getDirection = [] (TExprBase expr) {
+        if (!expr.Maybe<TCoBool>()) {
+            return TOrdering::TItem::EDirection::ENone;
+        }
+
+        if (!FromString<bool>(expr.Cast<TCoBool>().Literal().Value())) {
+            return TOrdering::TItem::EDirection::EDescending;
+        }
+
+        return TOrdering::TItem::EDirection::EAscending;
+    };
+
+    std::vector<TOrdering::TItem::EDirection> directions;
+    const auto& sortDirections = topBase.SortDirections();
+    if (auto maybeList = sortDirections.Maybe<TExprList>()) {
+        for (const auto& expr : maybeList.Cast()) {
+            directions.push_back(getDirection(expr));
+        }
+    } else if (auto maybeBool = sortDirections.Maybe<TCoBool>()){
+        directions.push_back(getDirection(TExprBase(maybeBool.Cast())));
     }
 
-    return TOrderingInfo{.OrderingIdx = orderingIdx, .Ordering = std::move(sorting)};
+    if (directions.empty()) {
+        return TOrderingInfo();
+    }
+
+    std::int64_t orderingIdx = -1;
+    if (sortingsFSM) {
+        orderingIdx = sortingsFSM->FDStorage.FindSorting(sorting, directions, tableAlias);
+    }
+
+    return TOrderingInfo{
+        .OrderingIdx = orderingIdx,
+        .Directions = std::move(directions),
+        .Ordering = std::move(sorting)
+    };
 }
 
 } // namespace NYql::NDq {

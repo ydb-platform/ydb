@@ -759,6 +759,11 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         UNIT_ASSERT(CheckNoSortings(plan));
     }
 
+    Y_UNIT_TEST(Sortings4Year) {
+        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/sortings_4_year.sql", "stats/sortings.json", true, false);
+        UNIT_ASSERT(CheckNoSortings(plan));
+    }
+
     Y_UNIT_TEST_TWIN(TPCDS34, ColumnStore) {
         ExecuteJoinOrderTestGenericQueryWithStats("queries/tpcds34.sql", "stats/tpcds1000s.json", false, ColumnStore);
     }

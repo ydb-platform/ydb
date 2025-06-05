@@ -299,7 +299,7 @@ double NYql::NDq::TPredicateSelectivityComputer::ComputeEqualitySelectivity(
                 auto maybeMember = IsMember(left);
                 auto maybeAnotherMember = IsMember(right);
                 if (maybeMember && maybeAnotherMember) {
-                    MemberEqualities.Add(*maybeMember.Get(), *maybeAnotherMember.Get());
+                    MemberEqualities.emplace_back(*maybeMember.Get(), *maybeAnotherMember.Get());
                 }
             }
             return 0.3;

@@ -202,7 +202,7 @@ protected:
     }
 
     TMaybeNode<TExprBase> RemoveRedundantSortByPk(TExprBase node, TExprContext& ctx) {
-        TExprBase output = KqpRemoveRedundantSortByPk(node, ctx, KqpCtx);
+        TExprBase output = KqpRemoveRedundantSortByPk(node, ctx, KqpCtx, TypesCtx);
         DumpAppliedRule("RemoveRedundantSortByPk", node.Ptr(), output.Ptr(), ctx);
         return output;
     }

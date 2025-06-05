@@ -32,8 +32,9 @@ std::shared_ptr<TOptimizerStatistics> RemoveSorting(const std::shared_ptr<TOptim
 std::shared_ptr<TOptimizerStatistics> RemoveSorting(const std::shared_ptr<TOptimizerStatistics>& stats, const TExprNode::TPtr& input);
 
 struct TOrderingInfo {
-    std::int64_t OrderingIdx;
-    TVector<TJoinColumn> Ordering;
+    std::int64_t OrderingIdx = -1;
+    std::vector<TOrdering::TItem::EDirection> Directions{};
+    TVector<TJoinColumn> Ordering{};
 };
 
 TOrderingInfo GetTopBaseSortingOrderingIdx(const NNodes::TCoTopBase&, const TSimpleSharedPtr<TOrderingsStateMachine>&, TTableAliasMap*);

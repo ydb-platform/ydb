@@ -140,9 +140,11 @@ TKqpTable BuildTableMeta(const TKikimrTableDescription& tableDesc, const TPositi
     return BuildTableMeta(*tableDesc.Metadata, pos, ctx);
 }
 
-bool IsSortKeyPrimary(const NYql::NNodes::TCoLambda& keySelector, const NYql::TKikimrTableDescription& tableDesc,
-    const TMaybe<THashSet<TStringBuf>>& passthroughFields)
-{
+bool IsSortKeyPrimary(
+    const NYql::NNodes::TCoLambda& keySelector,
+    const NYql::TKikimrTableDescription& tableDesc,
+    const TMaybe<THashSet<TStringBuf>>& passthroughFields
+) {
     auto checkKey = [keySelector, &tableDesc, &passthroughFields] (NYql::NNodes::TExprBase key, ui32 index) {
         if (!key.Maybe<TCoMember>()) {
             return false;

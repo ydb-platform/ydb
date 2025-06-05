@@ -3072,7 +3072,7 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
                 --inFlight->ChunkReads;
             };
             auto completionSpan = request->SpanStack.CreateChild(TWilson::PDiskTopLevel, "PDisk.CompletionChunkRead");
-            read->FinalCompletion = new TCompletionChunkRead(this, read, std::move(onDestroy), state.Nonce, std::move(completionSpan));
+            read->FinalCompletion = new TCompletionChunkRead(this, read, std::move(onDestroy), state.Nonce, PCtx->ActorSystem->GetRcBufAllocator(), std::move(completionSpan));
 
             static_cast<TChunkRead*>(request)->SelfPointer = std::move(read);
 

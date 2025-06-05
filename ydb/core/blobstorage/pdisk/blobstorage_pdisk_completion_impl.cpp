@@ -308,7 +308,7 @@ void TCompletionChunkReadPart::Release(TActorSystem *actorSystem) {
 }
 
 TCompletionChunkRead::TCompletionChunkRead(TPDisk *pDisk, TIntrusivePtr<TChunkRead> &read, std::function<void()> onDestroy,
-            ui64 chunkNonce, NWilson::TSpan&& span)
+            ui64 chunkNonce, TRcBufAllocator alloc, NWilson::TSpan&& span)
     : TCompletionAction()
     , PDisk(pDisk)
     , Read(read)
@@ -336,7 +336,7 @@ TCompletionChunkRead::TCompletionChunkRead(TPDisk *pDisk, TIntrusivePtr<TChunkRe
         ? read->Size
         : read->Size + read->Offset % sectorSize;
     size_t tailroom = AlignUp<size_t>(newSize, sectorSize) - newSize;
-    CommonBuffer = TBufferWithGaps(read->Offset, newSize, tailroom);
+    CommonBuffer = TBufferWithGaps(read->Offset, alloc(newSize, 0, tailroom));
 }
 
 TCompletionChunkRead::~TCompletionChunkRead() {

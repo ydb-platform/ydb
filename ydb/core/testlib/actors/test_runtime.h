@@ -68,7 +68,7 @@ namespace NActors {
         };
 
         TTestActorRuntime(THeSingleSystemEnv d);
-        TTestActorRuntime(ui32 nodeCount, ui32 dataCenterCount, bool UseRealThreads);
+        TTestActorRuntime(ui32 nodeCount, ui32 dataCenterCount, bool UseRealThreads, bool useRdmaAllocator=false);
         TTestActorRuntime(ui32 nodeCount, ui32 dataCenterCount);
         TTestActorRuntime(ui32 nodeCount = 1, bool useRealThreads = false);
 

@@ -167,6 +167,10 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, private TR
         return response;
     }
 
+    bool IsKafkaTransactionWriter() {
+        return Opts.KafkaTransactionalId.has_value();
+    }
+
     void BecomeZombie(EErrorCode errorCode, const TString& error) {
         ErrorCode = errorCode;
 
@@ -337,7 +341,7 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, private TR
     }
 
     void SetNeedSupportivePartition(NKikimrClient::TPersQueuePartitionRequest& request, bool value) {
-        if (HasWriteId()) {
+        if (HasWriteId() || IsKafkaTransactionWriter()) {
             request.SetNeedSupportivePartition(value);
         }
     }
@@ -393,7 +397,7 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, private TR
             SupportivePartitionId = reply.GetSupportivePartition();
         }
 
-        if (HasWriteId()) {
+        if (HasWriteId() && !IsKafkaTransactionWriter()) {
             SavePartitionId(ActorContext());
         } else {
             GetMaxSeqNo();
@@ -909,6 +913,9 @@ public:
         if (Opts.Database && Opts.SessionId && Opts.TxId) {
             GetWriteId(ctx);
         } else {
+            if (Opts.KafkaTransactionalId) {
+                WriteId = NPQ::TWriteId{Opts.KafkaProducerInstanceId.value()};
+            }
             GetOwnership();
         }
     }

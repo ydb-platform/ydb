@@ -537,7 +537,7 @@ public:
             return;
         }
 
-        QueryState->AddOffsetsToTransaction();
+        QueryState->FillTopicOperations();
 
         auto navigate = QueryState->BuildSchemeCacheNavigate();
 
@@ -2078,7 +2078,7 @@ public:
         }
 
         if (replyTopicOperations) {
-            if (HasTopicWriteId()) {
+            if (HasTopicWriteId() && !HasKafkaWriteOperations()) {
                 auto* w = response->MutableTopicOperations();
                 auto* writeId = w->MutableWriteId();
                 writeId->SetNodeId(SelfId().NodeId());
@@ -2859,7 +2859,7 @@ private:
             ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST) << message;
         }
 
-        if (HasTopicWriteOperations() && !HasTopicWriteId()) {
+        if (HasTopicWriteOperations() && !HasTopicWriteId() && !HasKafkaWriteOperations()) {
             Send(MakeTxProxyID(), new TEvTxUserProxy::TEvAllocateTxId, 0, QueryState->QueryId);
         } else {
             ReplySuccess();
@@ -2879,6 +2879,10 @@ private:
 
     bool HasTopicWriteOperations() const {
         return QueryState->TxCtx->TopicOperations.HasWriteOperations();
+    }
+
+    bool HasKafkaWriteOperations() const {
+        return QueryState->TxCtx->TopicOperations.HasKafkaOperations() && QueryState->TxCtx->TopicOperations.HasWriteOperations();
     }
 
     bool HasTopicWriteId() const {

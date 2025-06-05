@@ -19,7 +19,7 @@ The command always returns **exactly one row** with three columns:
 
 | Path            | PathType   | CreateQuery                      |
 |-----------------|------------|----------------------------------|
-| Path   | Table/View | SQL DDL statements for creation  |
+| Path   | Table/View | DDL statements for creation  |
 
 - **Path** — The path to the object (e.g., `MyTable` or `MyView`).
 - **PathType** — The type of object: `Table` or `View`.

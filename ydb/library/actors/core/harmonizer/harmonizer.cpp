@@ -207,7 +207,7 @@ void THarmonizer::ProcessExchange() {
         i64 fullThreadCount = pool.GetFullThreadCount();
         float threadCount = fullThreadCount + SharedInfo.CpuConsumption[needyPoolIdx].CpuQuota;
 
-        sumOfAdditionalThreads -= threadCount - pool.DefaultFullThreadCount;
+        sumOfAdditionalThreads -= fullThreadCount - pool.DefaultFullThreadCount;
         if (sumOfAdditionalThreads < takingAwayThreads + 1) {
             break;
         }
@@ -432,7 +432,7 @@ void THarmonizer::AddPool(IExecutorPool* pool, TSelfPingInfo *pingInfo, bool ign
     pool->SetFullThreadCount(poolInfo.DefaultFullThreadCount);
     if (Shared) {
         TVector<i16> ownedThreads(Pools.size(), -1);
-        Shared->FillThreadOwners(ownedThreads);
+        Shared->FillOwnedThreads(ownedThreads);
         bool hasOwnSharedThread = ownedThreads[pool->PoolId] != -1;
         Shared->SetForeignThreadSlots(pool->PoolId, Min<i16>(poolInfo.MaxThreadCount - hasOwnSharedThread, Shared->GetSharedThreadCount()));
     }

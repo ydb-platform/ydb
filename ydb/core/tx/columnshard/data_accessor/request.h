@@ -39,7 +39,6 @@ public:
 
     const TPortionDataAccessor& GetPortionAccessorVerified(const ui64 portionId) const {
         auto it = PortionsById.find(portionId);
-        LOG_S_ERROR("IURII Access" << portionId << " " << PortionsById.size());
         AFL_VERIFY(it != PortionsById.end());
         return it->second;
     }
@@ -47,7 +46,6 @@ public:
     void AddData(THashMap<ui64, TPortionDataAccessor>&& accessors) {
         std::deque<TPortionDataAccessor> v;
         for (auto&& [portionId, i] : accessors) {
-            LOG_S_ERROR("IURII Add" << portionId << " " << PortionsById.size());
             AFL_VERIFY(PortionsById.emplace(portionId, i).second);
         }
     }

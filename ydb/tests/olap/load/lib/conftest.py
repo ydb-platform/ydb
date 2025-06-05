@@ -128,47 +128,111 @@ class LoadSuiteBase:
     @classmethod
     def __attach_logs(cls, start_time, attach_name, query_text):
         hosts = [node.host for node in filter(lambda x: x.role == YdbCluster.Node.Role.STORAGE, YdbCluster.get_cluster_nodes())]
+        logging.info(f"Starting __attach_logs for {attach_name}, found {len(hosts)} storage hosts: {hosts}")
+        
         tz = timezone('Europe/Moscow')
         start = datetime.fromtimestamp(start_time, tz).isoformat()
         cmd = f"ulimit -n 100500;unified_agent select -S '{start}' -s {{storage}}{{container}}"
+        logging.info(f"Base unified_agent command: {cmd}")
+        
         exec_kikimr = {
             '': {},
         }
         exec_start = deepcopy(exec_kikimr)
+        
         for host in hosts:
+            logging.info(f"Processing host: {host}")
             for c in exec_kikimr.keys():
                 try:
-                    exec_kikimr[c][host] = cls.__execute_ssh(host, cmd.format(
+                    kikimr_cmd = cmd.format(
                         storage='kikimr',
                         container=f' -m k8s_container:{c}' if c else ''
-                    ))
+                    )
+                    logging.info(f"Executing kikimr command on {host}: {kikimr_cmd}")
+                    exec_kikimr[c][host] = cls.__execute_ssh(host, kikimr_cmd)
                 except BaseException as e:
-                    logging.error(e)
+                    logging.error(f"Error executing kikimr command on {host}, container '{c}': {e}")
             for c in exec_start.keys():
                 try:
-                    exec_start[c][host] = cls.__execute_ssh(host, cmd.format(
+                    start_cmd = cmd.format(
                         storage='kikimr-start',
-                        container=f' -m k8s_container:{c}' if c else ''))
+                        container=f' -m k8s_container:{c}' if c else ''
+                    )
+                    logging.info(f"Executing kikimr-start command on {host}: {start_cmd}")
+                    exec_start[c][host] = cls.__execute_ssh(host, start_cmd)
                 except BaseException as e:
-                    logging.error(e)
+                    logging.error(f"Error executing kikimr-start command on {host}, container '{c}': {e}")
 
+        # Обрабатываем результаты exec_start
+        logging.info("Processing exec_start results...")
         error_log = ''
         for c, execs in exec_start.items():
+            logging.info(f"Processing exec_start container '{c}' with {len(execs)} executions")
             for host, e in sorted(execs.items()):
+                logging.info(f"Waiting for exec_start command completion on {host}")
                 e.wait(check_exit_code=False)
-                error_log += f'{host}:\n{e.stdout if e.returncode == 0 else e.stderr}\n'
-            allure.attach(cls.__hide_query_text(error_log, query_text), f'{attach_name}_{c}_stderr', allure.attachment_type.TEXT)
+                logging.info(f"Command on {host} completed with return code: {e.returncode}")
+                
+                host_output = e.stdout if e.returncode == 0 else e.stderr
+                host_output_len = len(host_output) if host_output else 0
+                logging.info(f"Host {host} output length: {host_output_len}")
+                if host_output_len > 0:
+                    logging.info(f"Host {host} output preview (first 100 chars): {host_output[:100]}")
+                
+                error_log += f'{host}:\n{host_output}\n'
+            
+            final_error_log = cls.__hide_query_text(error_log, query_text)
+            logging.info(f"Final error_log length for container '{c}': {len(final_error_log)}")
+            allure.attach(final_error_log, f'{attach_name}_{c}_stderr', allure.attachment_type.TEXT)
 
+        # Обрабатываем результаты exec_kikimr
+        logging.info("Processing exec_kikimr results...")
         for c, execs in exec_kikimr.items():
+            logging.info(f"Processing exec_kikimr container '{c}' with {len(execs)} executions")
             dir = os.path.join(yatest.common.tempfile.gettempdir(), f'{attach_name}_{c}_logs')
+            logging.info(f"Creating directory: {dir}")
             os.makedirs(dir, exist_ok=True)
+            
+            total_files_written = 0
+            total_content_length = 0
+            
             for host, e in execs.items():
+                logging.info(f"Waiting for exec_kikimr command completion on {host}")
                 e.wait(check_exit_code=False)
-                with open(os.path.join(dir, host), 'w') as f:
-                    f.write(cls.__hide_query_text(e.stdout if e.returncode == 0 else e.stderr, query_text))
+                logging.info(f"Command on {host} completed with return code: {e.returncode}")
+                
+                host_output = e.stdout if e.returncode == 0 else e.stderr
+                host_output_len = len(host_output) if host_output else 0
+                logging.info(f"Host {host} output length: {host_output_len}")
+                
+                if host_output_len > 0:
+                    logging.info(f"Host {host} output preview (first 100 chars): {host_output[:100]}")
+                
+                file_path = os.path.join(dir, host)
+                content = cls.__hide_query_text(host_output, query_text)
+                
+                with open(file_path, 'w') as f:
+                    f.write(content)
+                
+                written_size = os.path.getsize(file_path)
+                logging.info(f"Written file {file_path} with size: {written_size} bytes")
+                
+                total_files_written += 1
+                total_content_length += written_size
+                
+            logging.info(f"Total files written: {total_files_written}, total content length: {total_content_length}")
+            
             archive = dir + '.tar.gz'
-            yatest.common.execute(['tar', '-C', dir, '-czf', archive, '.'])
-            allure.attach.file(archive, f'{attach_name}_{c}_logs', extension='tar.gz')
+            logging.info(f"Creating archive: {archive}")
+            try:
+                yatest.common.execute(['tar', '-C', dir, '-czf', archive, '.'])
+                archive_size = os.path.getsize(archive)
+                logging.info(f"Archive created successfully, size: {archive_size} bytes")
+                allure.attach.file(archive, f'{attach_name}_{c}_logs', extension='tar.gz')
+            except Exception as e:
+                logging.error(f"Error creating archive {archive}: {e}")
+        
+        logging.info(f"__attach_logs completed for {attach_name}")
 
     @classmethod
     def save_nodes_state(cls) -> None:
@@ -535,6 +599,38 @@ class LoadSuiteBase:
         # Собираем диагностическую информацию о нодах
         node_errors = cls.check_nodes_diagnostics(result, end_time)
         
+        # Добавляем диагностическую информацию в статистику
+        if node_errors:
+            # Подсчитываем общую статистику по нодам
+            total_coredumps = sum(len(node_error.core_hashes) for node_error in node_errors)
+            nodes_with_oom = sum(1 for node_error in node_errors if node_error.was_oom)
+            nodes_with_cores = sum(1 for node_error in node_errors if node_error.core_hashes)
+            
+            # Добавляем в статистику результата
+            result.add_stat(workload_name, "nodes_with_issues", len(node_errors))
+            result.add_stat(workload_name, "total_coredumps", total_coredumps)
+            result.add_stat(workload_name, "nodes_with_oom", nodes_with_oom)
+            result.add_stat(workload_name, "nodes_with_coredumps", nodes_with_cores)
+            
+            # Детальная информация по каждой ноде
+            node_details = {}
+            for node_error in node_errors:
+                node_key = node_error.node.slot
+                node_details[node_key] = {
+                    "host": node_error.node.host,
+                    "coredumps_count": len(node_error.core_hashes),
+                    "has_oom": node_error.was_oom,
+                    "coredump_hashes": [core_hash for _, core_hash in node_error.core_hashes]
+                }
+            
+            result.add_stat(workload_name, "node_diagnostics", node_details)
+        else:
+            # Если проблем не найдено, тоже добавляем в статистику
+            result.add_stat(workload_name, "nodes_with_issues", 0)
+            result.add_stat(workload_name, "total_coredumps", 0)
+            result.add_stat(workload_name, "nodes_with_oom", 0)
+            result.add_stat(workload_name, "nodes_with_coredumps", 0)
+        
         # Добавляем информацию в allure отчет с node_errors
         allure_test_description(
             cls.suite(), workload_name,
@@ -543,16 +639,65 @@ class LoadSuiteBase:
         
         # Обрабатываем статистику workload
         stats = result.get_stats(workload_name)
+        
+        # Логируем статистику для отладки
+        logging.info(f"Workload {workload_name} statistics: {json.dumps(stats, indent=2)}")
+        
         for p in ['Mean']:
             if p in stats:
                 allure.dynamic.parameter(p, _duration_text(stats[p] / 1000.))
         
         # Прикрепляем логи только при неуспешном выполнении
         if os.getenv('NO_KUBER_LOGS') is None and not result.success:
-            cls.__attach_logs(start_time=result.start_time, attach_name='workload', query_text='')
+            cls.__attach_logs(start_time=result.start_time, attach_name='cluser', query_text='')
         
         # Прикрепляем статистику
         allure.attach(json.dumps(stats, indent=2), 'Workload Stats', attachment_type=allure.attachment_type.JSON)
+        
+        # Детальная информация об ошибках для диагностики
+        if stats.get('errors') and any(stats['errors'].values()):
+            error_details = []
+            error_details.append(f"Error Summary from stats: {stats['errors']}")
+            
+            if result.error_message:
+                error_details.append(f"Error Message: {result.error_message}")
+            if result.warning_message:
+                error_details.append(f"Warning Message: {result.warning_message}")
+            if result.stderr:
+                error_details.append(f"Stderr: {result.stderr}")
+            if result.stdout and "error" in result.stdout.lower():
+                error_details.append(f"Stdout (errors): {result.stdout}")
+                
+            # Информация из iterations
+            for iter_num, iteration in result.iterations.items():
+                if iteration.error_message:
+                    error_details.append(f"Iteration {iter_num} error: {iteration.error_message}")
+            
+            error_report = "\n\n".join(error_details)
+            allure.attach(error_report, 'Detailed Error Information', attachment_type=allure.attachment_type.TEXT)
+            logging.warning(f"Workload {workload_name} completed with errors: {error_report}")
+        
+        # Дополнительная информация о диагностике нод
+        if node_errors:
+            node_diagnostics_details = []
+            node_diagnostics_details.append(f"Found issues on {len(node_errors)} nodes:")
+            
+            for node_error in node_errors:
+                node_info = [f"Node: {node_error.node.slot} (host: {node_error.node.host})"]
+                if node_error.core_hashes:
+                    node_info.append(f"  - Coredumps: {len(node_error.core_hashes)}")
+                    for core_id, core_hash in node_error.core_hashes:
+                        node_info.append(f"    * ID: {core_id}, Hash: {core_hash}")
+                if node_error.was_oom:
+                    node_info.append(f"  - OOM detected")
+                node_diagnostics_details.append("\n".join(node_info))
+            
+            diagnostics_report = "\n\n".join(node_diagnostics_details)
+            allure.attach(diagnostics_report, 'Node Diagnostics Report', attachment_type=allure.attachment_type.TEXT)
+            logging.info(f"Node diagnostics for workload {workload_name}: {diagnostics_report}")
+        else:
+            allure.attach("No node issues detected during workload execution", 'Node Diagnostics Report', attachment_type=allure.attachment_type.TEXT)
+            logging.info(f"No node issues detected for workload {workload_name}")
         
         # Загружаем результаты если нужно
         if upload:
@@ -645,49 +790,81 @@ def workload_executor():
         import yatest.common
         import os
         
+        logging.info(f"Starting workload execution with binary_env_var={binary_env_var}, binary_name={binary_name}")
+        logging.info(f"Command args: {command_args}")
+        logging.info(f"Timeout: {timeout}s, target_dir: {target_dir}")
+        
         # Получаем бинарный файл
-        binary_files = [yatest.common.binary_path(os.getenv(binary_env_var))]
+        with allure.step('Get workload binary'):
+            binary_files = [yatest.common.binary_path(os.getenv(binary_env_var))]
+            allure.attach(f"Environment variable: {binary_env_var}", 'Binary Configuration', attachment_type=allure.attachment_type.TEXT)
+            allure.attach(f"Binary path: {binary_files[0]}", 'Binary Path', attachment_type=allure.attachment_type.TEXT)
+            logging.info(f"Binary path resolved: {binary_files[0]}")
         
         # Получаем ноды кластера и выбираем первую
-        nodes = YdbCluster.get_cluster_nodes()
-        if not nodes:
-            raise Exception("No cluster nodes found")
-        
-        node = nodes[0]
+        with allure.step('Select cluster node'):
+            nodes = YdbCluster.get_cluster_nodes()
+            if not nodes:
+                raise Exception("No cluster nodes found")
+            
+            node = nodes[0]
+            allure.attach(f"Selected node: {node.host}", 'Target Node', attachment_type=allure.attachment_type.TEXT)
+            logging.info(f"Selected target node: {node.host}")
         
         # Развертываем бинарный файл
-        deploy_results = deploy_binaries_to_hosts(
-            binary_files, [node.host], target_dir
-        )
-        
-        # Проверяем результат развертывания
-        binary_result = deploy_results.get(node.host, {}).get(binary_name, {})
-        success = binary_result.get('success', False)
-        
-        if not success:
-            error_msg = f"Binary deployment failed on node {node.host}. Result: {binary_result}"
-            if raise_on_error:
-                raise Exception(error_msg)
-            return "", error_msg, False
+        with allure.step(f'Deploy {binary_name} to {node.host}'):
+            logging.info(f"Starting deployment to {node.host}")
+            deploy_results = deploy_binaries_to_hosts(
+                binary_files, [node.host], target_dir
+            )
+            
+            # Проверяем результат развертывания
+            binary_result = deploy_results.get(node.host, {}).get(binary_name, {})
+            success = binary_result.get('success', False)
+            
+            allure.attach(f"Deployment result: {binary_result}", 'Deployment Details', attachment_type=allure.attachment_type.TEXT)
+            logging.info(f"Deployment result: {binary_result}")
+            
+            if not success:
+                error_msg = f"Binary deployment failed on node {node.host}. Result: {binary_result}"
+                logging.error(error_msg)
+                if raise_on_error:
+                    raise Exception(error_msg)
+                return "", error_msg, False
         
         # Формируем и выполняем команду
-        target_path = binary_result['path']
-        cmd = f"{target_path} {command_args}"
-        
-        try:
+        with allure.step(f'Execute workload command'):
+            target_path = binary_result['path']
+            # Отключаем буферизацию для гарантии захвата вывода
+            cmd = f"stdbuf -o0 -e0 {target_path} {command_args}"
+            
+            allure.attach(cmd, 'Full Command', attachment_type=allure.attachment_type.TEXT)
+            allure.attach(f"Timeout: {int(timeout * 2)}s", 'Execution Timeout', attachment_type=allure.attachment_type.TEXT)
+            allure.attach(f"Target host: {node.host}", 'Execution Target', attachment_type=allure.attachment_type.TEXT)
+            
             stdout, stderr = execute_command(
                 node.host, cmd, 
                 raise_on_error=False,
                 timeout=int(timeout * 2), 
                 raise_on_timeout=False
             )
-            return stdout, stderr, True
             
-        except Exception as e:
-            error_msg = f"Command execution failed: {str(e)}"
-            if raise_on_error:
-                raise Exception(error_msg)
-            return "", error_msg, False
+            # Прикрепляем результаты выполнения команды
+            if stdout:
+                allure.attach(stdout, 'Command Stdout', attachment_type=allure.attachment_type.TEXT)
+            else:
+                allure.attach("(empty)", 'Command Stdout', attachment_type=allure.attachment_type.TEXT)
+                
+            if stderr:
+                allure.attach(stderr, 'Command Stderr', attachment_type=allure.attachment_type.TEXT)
+            else:
+                allure.attach("(empty)", 'Command Stderr', attachment_type=allure.attachment_type.TEXT)
+            
+            # success=True только если stderr пустой (исключая SSH warnings)
+            # SSH warnings уже отфильтрованы в remote_execution.py
+            success = not bool(stderr.strip())
+            
+            return stdout, stderr, success
     
     return execute_workload
 
@@ -719,10 +896,10 @@ class WorkloadTestBase(LoadSuiteBase):
         Останавливает процессы workload на всех нодах кластера.
         """
         if cls.workload_binary_name is None:
-            LOGGER.warning(f"workload_binary_name not set for {cls.__name__}, skipping process cleanup")
+            logging.warning(f"workload_binary_name not set for {cls.__name__}, skipping process cleanup")
             return
             
-        LOGGER.info(f"Starting {cls.__name__} teardown: stopping workload processes")
+        logging.info(f"Starting {cls.__name__} teardown: stopping workload processes")
         
         try:
             cls.kill_workload_processes(
@@ -730,7 +907,7 @@ class WorkloadTestBase(LoadSuiteBase):
                 target_dir=cls.binaries_deploy_path
             )
         except Exception as e:
-            LOGGER.error(f"Error during teardown: {e}")
+            logging.error(f"Error during teardown: {e}")
 
     def create_workload_result(self, workload_name: str, stdout: str, stderr: str, 
                               success: bool, additional_stats: dict = None) -> YdbCliHelper.WorkloadRunResult:
@@ -752,32 +929,138 @@ class WorkloadTestBase(LoadSuiteBase):
         result.stdout = str(stdout)
         result.stderr = str(stderr)
 
+        # Добавляем диагностическую информацию о входных данных
+        logging.info(f"Creating workload result for {workload_name}")
+        logging.info(f"Input parameters - success: {success}, stdout length: {len(str(stdout))}, stderr length: {len(str(stderr))}")
+        if stdout:
+            logging.info(f"Stdout preview (first 200 chars): {str(stdout)[:200]}")
+        if stderr:
+            logging.info(f"Stderr preview (first 200 chars): {str(stderr)[:200]}")
+
         # Анализируем результаты выполнения
-        if not success or "error" in str(stderr).lower():
-            result.add_error(str(stderr))
-        elif ("warning: permanently added" not in str(stderr).lower() and
+        error_found = False
+        
+        # Проверяем явные ошибки
+        if not success:
+            result.add_error(f"Workload execution failed. stderr: {stderr}")
+            error_found = True
+        elif "error" in str(stderr).lower() and "warning: permanently added" not in str(stderr).lower():
+            result.add_error(f"Error detected in stderr: {stderr}")
+            error_found = True
+        elif self._has_real_error_in_stdout(str(stdout)):
+            result.add_warning(f"Error detected in stdout: {stdout}")
+            error_found = True
+            
+        # Проверяем предупреждения
+        if ("warning: permanently added" not in str(stderr).lower() and
               "warning" in str(stderr).lower()):
-            result.add_warning(str(stderr))
+            result.add_warning(f"Warning in stderr: {stderr}")
+
+        # Добавляем информацию о выполнении в iterations
+        iteration = YdbCliHelper.Iteration()
+        iteration.time = self.timeout
+        
+        if error_found:
+            # Устанавливаем ошибку в iteration для consistency
+            iteration.error_message = result.error_message
+        elif self._has_real_error_in_stdout(str(stdout)):
+            iteration.error_message = str(stdout)
+            
+        result.iterations[0] = iteration
 
         # Добавляем базовую статистику
         result.add_stat(workload_name, "execution_time", self.timeout)
-        result.add_stat(workload_name, "workload_success", success)
+        result.add_stat(workload_name, "workload_success", success and not error_found)
+        result.add_stat(workload_name, "success_flag", success)  # Исходный флаг успеха
         
         # Добавляем дополнительную статистику если есть
         if additional_stats:
             for key, value in additional_stats.items():
                 result.add_stat(workload_name, key, value)
-
-        # Добавляем информацию о выполнении в iterations
-        iteration = YdbCliHelper.Iteration()
-        iteration.time = self.timeout
-        if not success:
-            iteration.error_message = stderr
-        elif "error" in str(stdout).lower():
-            iteration.error_message = str(stdout)
-        result.iterations[0] = iteration
+        
+        logging.info(f"Workload result created - final success: {result.success}, error_message: {result.error_message}")
         
         return result
+
+    def _has_real_error_in_stdout(self, stdout: str) -> bool:
+        """
+        Проверяет, есть ли в stdout настоящие ошибки, исключая статистику workload
+        
+        Args:
+            stdout: Вывод stdout для анализа
+            
+        Returns:
+            bool: True если найдены настоящие ошибки
+        """
+        if not stdout:
+            return False
+            
+        stdout_lower = stdout.lower()
+        
+        # Список паттернов, которые НЕ являются ошибками (статистика workload)
+        false_positive_patterns = [
+            "error responses count:",           # статистика ответов
+            "_error responses count:",          # например scheme_error responses count
+            "error_responses_count:",           # альтернативный формат
+            "errorresponsescount:",             # без разделителей
+            "errors encountered:",              # может быть частью статистики
+            "total errors:",                    # общая статистика
+            "error rate:",                      # метрика частоты ошибок
+            "error percentage:",                # процент ошибок
+            "error count:",                     # счетчик ошибок в статистике
+            "scheme_error responses count:",    # конкретный пример из статистики
+            "aborted responses count:",         # другие типы ответов из статистики
+            "precondition_failed responses count:", # еще один тип из статистики
+            "error responses:",                 # краткий формат
+            "eventkind:",                       # статистика по событиям
+            "success responses count:",         # для контекста успешных ответов
+            "responses count:",                 # общий паттерн счетчиков ответов
+        ]
+        
+        # Проверяем, есть ли слово "error" в контексте, который НЕ является ложным срабатыванием
+        error_positions = []
+        start_pos = 0
+        while True:
+            pos = stdout_lower.find("error", start_pos)
+            if pos == -1:
+                break
+            error_positions.append(pos)
+            start_pos = pos + 1
+        
+        # Для каждого найденного "error" проверяем контекст
+        for pos in error_positions:
+            # Берем контекст вокруг найденного "error" (50 символов до и после)
+            context_start = max(0, pos - 50)
+            context_end = min(len(stdout), pos + 50)
+            context = stdout[context_start:context_end].lower()
+            
+            # Проверяем, является ли это ложным срабатыванием
+            is_false_positive = any(pattern in context for pattern in false_positive_patterns)
+            
+            if not is_false_positive:
+                # Дополнительные проверки на реальные ошибочные сообщения
+                real_error_indicators = [
+                    "FATAL ERROR",             # "FATAL ERROR: something went wrong"
+                    "fatal:",                   # "Fatal: something went wrong"
+                    "error:",                   # "Error: something went wrong"
+                    "error occurred",           # "An error occurred"
+                    "error while",              # "Error while processing"
+                    "error during",             # "Error during execution"
+                    "fatal error",              # "Fatal error"
+                    "runtime error",            # "Runtime error"
+                    "execution error",          # "Execution error"
+                    "internal error",           # "Internal error"
+                    "connection error",         # "Connection error"
+                    "timeout error",            # "Timeout error"
+                    "failed with error",        # "Operation failed with error"
+                    "exceptions must derive from baseexception",  # Python exception error
+                ]
+                
+                # Если найден реальный индикатор ошибки, возвращаем True
+                if any(indicator in context for indicator in real_error_indicators):
+                    return True
+        
+        return False
 
     def execute_workload_test(self, workload_executor, workload_name: str, command_args: str, 
                              additional_stats: dict = None):
@@ -791,32 +1074,40 @@ class WorkloadTestBase(LoadSuiteBase):
             additional_stats: Дополнительная статистика
         """
         # Сохраняем состояние нод для диагностики
-        self.save_nodes_state_for_diagnostics()
+        with allure.step('Save nodes state for diagnostics'):
+            self.save_nodes_state_for_diagnostics()
         
         # Выполняем workload через фикстуру
-        stdout, stderr, success = workload_executor(
-            binary_env_var=self.workload_env_var,
-            binary_name=self.workload_binary_name,
-            command_args=command_args,
-            timeout=self.timeout,
-            target_dir=self.binaries_deploy_path,
-            raise_on_error=True
-        )
+        with allure.step(f'Execute {workload_name} workload'):
+            allure.attach(command_args, 'Command Arguments', attachment_type=allure.attachment_type.TEXT)
+            allure.attach(f"Binary: {self.workload_binary_name}", 'Workload Info', attachment_type=allure.attachment_type.TEXT)
+            allure.attach(f"Timeout: {self.timeout}s", 'Execution Settings', attachment_type=allure.attachment_type.TEXT)
+            
+            stdout, stderr, success = workload_executor(
+                binary_env_var=self.workload_env_var,
+                binary_name=self.workload_binary_name,
+                command_args=command_args,
+                timeout=self.timeout,
+                target_dir=self.binaries_deploy_path,
+                raise_on_error=True
+            )
 
         # Проверяем состояние схемы
         self._check_scheme_state()
 
         # Создаем и заполняем результат
-        result = self.create_workload_result(
-            workload_name=workload_name,
-            stdout=stdout,
-            stderr=stderr, 
-            success=success,
-            additional_stats=additional_stats
-        )
+        with allure.step('Process workload results'):
+            result = self.create_workload_result(
+                workload_name=workload_name,
+                stdout=stdout,
+                stderr=stderr, 
+                success=success,
+                additional_stats=additional_stats
+            )
 
         # Обрабатываем результаты с диагностикой
-        self.process_workload_result_with_diagnostics(result, workload_name, False)
+        with allure.step('Generate diagnostics and reports'):
+            self.process_workload_result_with_diagnostics(result, workload_name, False)
 
     def _check_scheme_state(self):
         """Проверяет состояние схемы базы данных"""
@@ -842,6 +1133,6 @@ class WorkloadTestBase(LoadSuiteBase):
             allure.attach(scheme_stdout, 'Scheme state stdout', allure.attachment_type.TEXT)
             if scheme_stderr:
                 allure.attach(scheme_stderr, 'Scheme state stderr', allure.attachment_type.TEXT)
-            LOGGER.info(f'scheme stdout: {scheme_stdout}')
+            logging.info(f'scheme stdout: {scheme_stdout}')
             if scheme_stderr:
-                LOGGER.warning(f'scheme stderr: {scheme_stderr}')
+                logging.warning(f'scheme stderr: {scheme_stderr}')

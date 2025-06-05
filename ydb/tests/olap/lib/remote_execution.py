@@ -242,6 +242,12 @@ class RemoteExecutor:
                           if hasattr(execution, 'std_err') and execution.std_err else "")
 
                 exit_code = getattr(execution, 'exit_code', getattr(execution, 'returncode', 0))
+                
+                # Если команда завершилась с ошибкой, но stderr пустой, добавляем синтетическое сообщение
+                if exit_code != 0 and not stderr.strip():
+                    stderr = f"Command failed with exit code {exit_code}, but stderr is empty"
+                    LOGGER.warning(f"Local command failed with exit code {exit_code} but produced no stderr output on {host}")
+                
                 if exit_code != 0 and raise_on_error:
                     raise subprocess.CalledProcessError(exit_code, full_cmd, stdout, stderr)
 
@@ -292,6 +298,12 @@ class RemoteExecutor:
                 stderr = cls._filter_ssh_warnings(stderr)
 
                 exit_code = getattr(execution, 'exit_code', getattr(execution, 'returncode', 0))
+                
+                # Если команда завершилась с ошибкой, но stderr пустой, добавляем синтетическое сообщение
+                if exit_code != 0 and not stderr.strip():
+                    stderr = f"Command failed with exit code {exit_code}, but stderr is empty"
+                    LOGGER.warning(f"SSH command failed with exit code {exit_code} but produced no stderr output on {host}")
+                
                 if exit_code != 0 and raise_on_error:
                     raise subprocess.CalledProcessError(exit_code, full_cmd, stdout, stderr)
 

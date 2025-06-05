@@ -1,6 +1,5 @@
 #pragma once
 
-#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
 
@@ -29,6 +28,11 @@ class TCleanUnusedTablesNormalizerTemplate: public TNormalizationController::INo
         return "CleanUnusedTables";
     }
 
+protected:
+    virtual bool ValidateConfig() {
+        return true;
+    }
+
 public:
     static constexpr size_t BATCH = 1000;
 
@@ -47,7 +51,7 @@ public:
         const TNormalizationController&, NTabletFlatExecutor::TTransactionContext& txc) override {
         using TKey = typename TTable::TKey::TupleType;
 
-        AFL_VERIFY(!AppData()->ColumnShardConfig.GetColumnChunksV0Usage());
+        AFL_VERIFY(ValidateConfig());
 
         TNiceDb db(txc.DB);
         std::vector<INormalizerTask::TPtr> tasks;

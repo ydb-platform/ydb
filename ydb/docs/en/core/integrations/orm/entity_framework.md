@@ -108,6 +108,41 @@ Below is an example of how to specify the necessary parameters for connecting to
 )
 ```
 
+### Schema Migration
+
+To ensure that database schema migrations are executed correctly, you need to disable the automatic retry strategy (`ExecutionStrategy`), which is enabled by default in `EntityFrameworkCore.Ydb`.
+
+To do this, explicitly override the IDesignTimeDbContextFactory interface and use the `DisableRetryOnFailure()` method.
+
+An example implementation of a context factory for migrations is shown below:
+
+```c#
+internal class BloggingContextFactory : IDesignTimeDbContextFactory<BloggingContext>
+{
+    public BloggingContext CreateDbContext(string[] args)
+    {
+        var optionsBuilder = new DbContextOptionsBuilder<BloggingContext>();
+
+        return new BloggingContext(
+            optionsBuilder.UseYdb("Host=localhost;Port=2136;Database=/local",
+                builder => builder.DisableRetryOnFailure()
+            ).Options
+        );
+    }
+}
+```
+
+{% note info %}
+
+This factory class is required to execute migration commands. For example:
+
+```bash
+dotnet ef migrations add MyMigration  
+dotnet ef database update
+```
+
+{% endnote %}
+
 ## Examples
 
-[On Github](https://github.com/ydb-platform/ydb-dotnet-sdk/tree/main/examples)
+You can find usage examples in the repository on [GitHub](https://github.com/ydb-platform/ydb-dotnet-sdk/tree/main/examples)

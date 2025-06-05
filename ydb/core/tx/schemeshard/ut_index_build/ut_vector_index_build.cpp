@@ -386,16 +386,16 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
         }
 
         // Wait and check Filling state:
-        TBlockEvents<TEvDataShard::TEvSampleKResponse> sampleKBlocker(runtime, [&](const auto&) {
+        TBlockEvents<TEvDataShard::TEvLocalKMeansResponse> localKBlocker(runtime, [&](const auto&) {
             return true;
         });
-        runtime.WaitFor("sampleK", [&]{ return sampleKBlocker.size(); });
-        sampleKBlocker.Stop().Unblock();
+        runtime.WaitFor("localK", [&]{ return localKBlocker.size(); });
+        localKBlocker.Stop().Unblock();
         {
             auto buildIndexOperations = TestListBuildIndex(runtime, tenantSchemeShard, "/MyRoot/CommonDB");
             UNIT_ASSERT_VALUES_EQUAL(buildIndexOperations.EntriesSize(), 1);
             auto buildIndexOperation = TestGetBuildIndex(runtime, tenantSchemeShard, "/MyRoot/CommonDB", buildIndexTx);
-            UNIT_ASSERT_VALUES_EQUAL(buildIndexOperation.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_TRANSFERING_DATA);
+            UNIT_ASSERT_VALUES_EQUAL(buildIndexOperation.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_APPLYING);
 
             TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/CommonDB/Table"), {
                 NLs::PathExist,
@@ -541,7 +541,7 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
         {
             // id format: [billed uploadRows-readRows-uploadBytes-readBytes] [processed uploadRows-readRows-uploadBytes-readBytes]
             auto expectedBill = TBillRecord()
-                .Id("109-72075186233409549-2-0-0-0-0-4-200-148-1800")
+                .Id("109-72075186233409549-2-0-0-0-0-4-1000-148-9000")
                 .CloudId("CLOUD_ID_VAL").FolderId("FOLDER_ID_VAL").ResourceId("DATABASE_ID_VAL")
                 .SourceWt(TInstant::Seconds(10))
                 .Usage(TBillRecord::RequestUnits(130, TInstant::Seconds(0), TInstant::Seconds(10)));
@@ -599,9 +599,9 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
                 .SourceWt(TInstant::Seconds(10))
                 .Usage(TBillRecord::RequestUnits(336, TInstant::Seconds(10), TInstant::Seconds(10)));
             if (smallScanBuffer) {
-                expectedBill.Id("109-72075186233409549-2-4-200-148-1800-420-1400-11740-20600");
+                expectedBill.Id("109-72075186233409549-2-4-1000-148-9000-420-2200-11740-27800");
             } else {
-                expectedBill.Id("109-72075186233409549-2-4-200-148-1800-420-600-11740-7000");
+                expectedBill.Id("109-72075186233409549-2-4-1000-148-9000-420-1400-11740-14200");
             }
             UNIT_ASSERT_VALUES_EQUAL(meteringBlocker.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(meteringBlocker[0]->Get()->MeteringJson, expectedBill.ToString());

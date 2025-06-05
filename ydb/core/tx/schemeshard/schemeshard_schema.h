@@ -1994,6 +1994,7 @@ struct Schema : NIceDb::Schema {
         // TableSize required for prefixed kmeans tree
         // But can be filled and used for other kmeans tree for "auto" settings choice
         // Also for "auto" settings will needs to save K
+        struct Round : Column<9, NScheme::NTypeIds::Uint32> {};
 
         using TKey = TableKey<Id>;
         using TColumns = TableColumns<
@@ -2004,7 +2005,8 @@ struct Schema : NIceDb::Schema {
             ParentBegin,
             Child,
             ChildBegin,
-            TableSize
+            TableSize,
+            Round
         >;
     };
 
@@ -2092,6 +2094,28 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<
             Id,
             Operation
+        >;
+    };
+
+    struct KMeansTreeClusters : Table<121> {
+        // Index build ID
+        struct Id : Column<1, NScheme::NTypeIds::Uint64> { using Type = TIndexBuildId; };
+        // Child cluster number (0..K-1)
+        struct Num : Column<2, NScheme::NTypeIds::Uint32> {};
+        // Current new cluster size (number of rows)
+        struct Size : Column<3, NScheme::NTypeIds::Uint64> {};
+        // Current aggregated child cluster centroid
+        struct Data : Column<4, NScheme::NTypeIds::String> {};
+        // Old cluster size (number of rows)
+        struct OldSize : Column<5, NScheme::NTypeIds::Uint64> {};
+
+        using TKey = TableKey<Id, Num>;
+        using TColumns = TableColumns<
+            Id,
+            Num,
+            Size,
+            Data,
+            OldSize
         >;
     };
 
@@ -2213,7 +2237,8 @@ struct Schema : NIceDb::Schema {
         TenantDataErasureGenerations,
         WaitingDataErasureShards,
         SysView,
-        IncrementalRestoreOperations
+        IncrementalRestoreOperations,
+        KMeansTreeClusters
     >;
 
     static constexpr ui64 SysParam_NextPathId = 1;

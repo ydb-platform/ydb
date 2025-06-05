@@ -118,6 +118,7 @@ private:
         for (size_t i = 0; i < CtxMap.size(); ++i) {
             auto ctx = CtxMap[i].second;
             Cerr << "Found RDMA device: " << ctx->ToString() << Endl;
+            ctx->DeviceIndex = i;
 
             if (i > 0) {
                 auto prevCtx = CtxMap[i - 1].second;

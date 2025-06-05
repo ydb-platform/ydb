@@ -31,52 +31,6 @@ std::shared_ptr<NTxProxy::TUploadTypes> MakeOutputTypes(const TUserTable& table,
     const TProtoStringType& embedding, const google::protobuf::RepeatedPtrField<TProtoStringType>& data,
     const google::protobuf::RepeatedPtrField<TProtoStringType>& pkColumns = {});
 
-void MakeScan(auto& record, const auto& createScan, const auto& badRequest)
-{
-    const auto& settings = record.GetSettings();
-    if (settings.vector_dimension() < 1) {
-        badRequest("Dimension of vector should be at least one");
-        return;
-    }
-
-    auto handleType = [&]<template <typename...> typename T>() {
-        switch (settings.vector_type()) {
-            case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT:
-                return createScan.template operator()<T<float>>();
-            case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8:
-                return createScan.template operator()<T<ui8>>();
-            case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_INT8:
-                return createScan.template operator()<T<i8>>();
-            case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_BIT:
-                return badRequest("TODO(mbkkt) bit vector type is not supported");
-            default:
-                return badRequest("Wrong vector type");
-        }
-    };
-
-    // TODO(mbkkt) unify distance and similarity to single field in proto
-    switch (settings.metric()) {
-        case Ydb::Table::VectorIndexSettings::SIMILARITY_INNER_PRODUCT:
-            handleType.template operator()<TMaxInnerProductSimilarity>();
-            break;
-        case Ydb::Table::VectorIndexSettings::SIMILARITY_COSINE:
-        case Ydb::Table::VectorIndexSettings::DISTANCE_COSINE:
-            // We don't need to have separate implementation for distance,
-            // because clusters will be same as for similarity
-            handleType.template operator()<TCosineSimilarity>();
-            break;
-        case Ydb::Table::VectorIndexSettings::DISTANCE_MANHATTAN:
-            handleType.template operator()<TL1Distance>();
-            break;
-        case Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN:
-            handleType.template operator()<TL2Distance>();
-            break;
-        default:
-            badRequest("Wrong similarity");
-            return;
-    }
-}
-
 class TSampler {
     struct TProbability {
         ui64 P = 0;

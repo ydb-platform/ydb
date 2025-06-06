@@ -568,7 +568,7 @@ namespace NKikimr::NColumnShard {
          NTxUT::TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, snapshot);
          reader.SetReplyColumnIds(fields);
          auto rb = reader.ReadAll();
-         //UNIT_ASSERT(reader.IsCorrectlyFinished());
+         UNIT_ASSERT(reader.IsCorrectlyFinished());
          return rb ? rb : NArrow::MakeEmptyBatch(NArrow::MakeArrowSchema(schema));
      }
 }

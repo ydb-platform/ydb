@@ -1,6 +1,7 @@
 #include "path_id.h"
 #include <ydb/core/protos/tx_columnshard.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/protos/data_events.pb.h>
 #include <ydb/core/tx/columnshard/data_sharing/protos/data.pb.h>
 #include <ydb/core/tx/columnshard/data_sharing/protos/sessions.pb.h>
 #include <ydb/core/tx/columnshard/export/protos/task.pb.h>
@@ -133,6 +134,14 @@ void TSchemeShardLocalPathId::ToProto(NKikimrSchemeOp::TGranuleShardingInfo& pro
     proto.SetPathId(PathId);
 }
 
+template<>
+TSchemeShardLocalPathId TSchemeShardLocalPathId::FromProto(const NKikimrDataEvents::TLock& proto) {
+    return TSchemeShardLocalPathId(proto.GetPathId());
+}
+template<>
+void TSchemeShardLocalPathId::ToProto(NKikimrDataEvents::TLock& proto) const {
+    proto.SetPathId(PathId);
+}
 
 } //namespace NKikimr::NColumnShard
 

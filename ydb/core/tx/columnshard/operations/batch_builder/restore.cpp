@@ -64,7 +64,7 @@ TModificationRestoreTask::TModificationRestoreTask(NEvWrite::TWriteData&& writeD
           writeData.GetWriteMeta().GetId() + "::" + ::ToString(writeData.GetWriteMeta().GetWriteId()))
     , WriteData(std::move(writeData))
     , Merger(merger)
-    , PathId(WriteData.GetWriteMeta().GetTableId())
+    , PathId(WriteData.GetWriteMeta().GetInternalPathId())
     , Snapshot(actualSnapshot)
     , IncomingData(incomingData)
     , Context(context) {

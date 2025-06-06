@@ -22,7 +22,7 @@ namespace NKikimr {
             CalculateUsedHugeChunks(str, prettyPrint);
 
             Result->SetResult(str.Str());
-            SendVDiskResponse(ctx, Ev->Sender, Result.release(), 0, HullCtx->VCtx);
+            SendVDiskResponse(ctx, Ev->Sender, Result.release(), 0, HullCtx->VCtx, {});
             ctx.Send(ParentId, new TEvents::TEvGone);
             TThis::Die(ctx);
         }

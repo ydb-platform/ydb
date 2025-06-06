@@ -95,7 +95,7 @@ namespace NKikimr {
 
                 vMultiPutResult->Record.SetStatusFlags(OOSStatus.Flags);
 
-                SendVDiskResponse(ctx, Event->Sender, vMultiPutResult.release(), Event->Cookie, VCtx);
+                SendVDiskResponse(ctx, Event->Sender, vMultiPutResult.release(), Event->Cookie, VCtx, Event->Get()->Record.GetHandleClass());
                 PassAway();
             }
 

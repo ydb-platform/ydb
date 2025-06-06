@@ -32,6 +32,7 @@
 #include <util/generic/queue.h>
 #include <util/system/condvar.h>
 #include <util/system/mutex.h>
+#include <util/thread/lfqueue.h>
 
 #include <queue>
 
@@ -82,7 +83,8 @@ public:
 
     TVector<TRequestBase*> JointLogReads;
     std::queue<TIntrusivePtr<TRequestBase>> JointChunkReads;
-    std::queue<TRequestBase*> JointChunkWrites;
+    THolder<IThreadPool> ChunkEncoder;
+    TLockFreeQueue<TRequestBase*> JointChunkWrites;
     std::queue<TLogWrite*> JointLogWrites;
     TVector<TChunkTrim*> JointChunkTrims;
     TVector<std::unique_ptr<TChunkForget>> JointChunkForgets;
@@ -153,7 +155,7 @@ public:
     ui64 InsaneLogChunks = 0;  // Set when pdisk sees insanely large log, to give vdisks a chance to cut it
     ui32 FirstLogChunkToParseCommits = 0;
 
-    // DO NOT CHANGE STATE NUMBERS, NUMBERS ARE USED TO ENCODE THE STATE IN A FUTURE-PROOF WAY
+    // DO NOT CHANGE STATE NUMBERS, NUMBERS ARE USED TO ENCODE THE `STATE IN A FUTURE-PROOF WAY
     enum EShredState {
         EShredStateDefault = 0,
         EShredStateSendPreShredCompactVDisk = 1,
@@ -313,9 +315,10 @@ public:
         bool parseCommitMessage);
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Chunk writing
-    bool ChunkWritePiece(TChunkWrite *evChunkWrite, ui32 pieceShift, ui32 pieceSize);
-    void ChunkWritePiecePlain(TChunkWrite *evChunkWrite);
-    bool ChunkWritePieceEncrypted(TChunkWrite *evChunkWrite, TChunkWriter &writer, ui32 bytesAvailable);
+    void PushChunkWrite(TChunkWritePiece *piece);
+    TChunkWriteResult ChunkWritePiece(TChunkWritePiece *piece);
+    void ChunkWritePiecePlain(TChunkWritePiece *piece);
+    bool ChunkWritePieceEncrypted(TChunkWritePiece *piece, TChunkWriter &writer, ui32 bytesAvailable);
     void SendChunkWriteError(TChunkWrite &evChunkWrite, const TString &errorReason, NKikimrProto::EReplyStatus status);
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Chunk reading

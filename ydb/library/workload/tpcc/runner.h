@@ -6,6 +6,12 @@
 
 namespace NYdb::NTPCC {
 
+constexpr int DEFAULT_WAREHOUSE_COUNT = 1;
+constexpr int DEFAULT_WARMUP_MINUTES = 1; // TODO
+constexpr int DEFAULT_RUN_MINUTES = 2; // TODO
+constexpr int DEFAULT_MAX_SESSIONS = 100; // TODO
+constexpr int DEFAULT_LOG_LEVEL = 6; // TODO: properly use enum
+
 struct TRunConfig {
     enum class EDisplayMode {
         None = 0,
@@ -27,11 +33,11 @@ struct TRunConfig {
         Path = connectionConfig.Database + '/' + Path;
     }
 
-    int WarehouseCount = 0;
-    int WarmupMinutes = 0;
-    int RunMinutes = 0;
+    int WarehouseCount = DEFAULT_WAREHOUSE_COUNT;
+    int WarmupMinutes = DEFAULT_WARMUP_MINUTES;
+    int RunMinutes = DEFAULT_RUN_MINUTES;
 
-    int MaxInflight = 0;
+    int MaxInflight = DEFAULT_MAX_SESSIONS;
 
     TString Path;
 
@@ -41,7 +47,7 @@ struct TRunConfig {
 
     int ThreadCount = 0;
     int DriverCount = 0;
-    ELogPriority LogPriority = ELogPriority::TLOG_INFO;
+    ELogPriority LogPriority = static_cast<ELogPriority>(DEFAULT_LOG_LEVEL);
     bool NoDelays = false;
     bool ExtendedStats = false;
     EDisplayMode DisplayMode = EDisplayMode::None;

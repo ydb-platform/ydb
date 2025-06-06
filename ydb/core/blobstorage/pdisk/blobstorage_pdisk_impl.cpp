@@ -251,6 +251,7 @@ TString TPDisk::StartupOwnerInfo() {
         if (data.VDiskId != TVDiskID::InvalidId) {
             str << "{OwnerId: " << (ui32)owner;
             str << " VDiskId: " << data.VDiskId.ToStringWOGeneration();
+            str << " GroupSizeInUnits: " << data.GroupSizeInUnits;
             str << " ChunkWrites: " << data.InFlight->ChunkWrites.load();
             str << " ChunkReads: " << data.InFlight->ChunkReads.load();
             str << " LogWrites: " << data.InFlight->LogWrites.load();
@@ -573,6 +574,10 @@ ui32 TPDisk::GetUsedChunks(ui32 ownerId, const EOwnerGroupType ownerGroupType) c
         }
     }
     return ownedChunks;
+}
+
+ui32 TPDisk::GetNumActiveSlots() const {
+    return Keeper.GetNumActiveSlots();
 }
 
 NPDisk::TStatusFlags TPDisk::GetStatusFlags(TOwner ownerId, const EOwnerGroupType ownerGroupType, double *occupancy) const {
@@ -1897,13 +1902,16 @@ bool TPDisk::YardInitForKnownVDisk(TYardInit &evYardInit, TOwner owner) {
     ownerData.Status = TOwnerData::VDISK_STATUS_SENT_INIT;
     ownerData.LastShredGeneration = 0;
     ownerData.ShredState = TOwnerData::VDISK_SHRED_STATE_NOT_REQUESTED;
+    ownerData.GroupSizeInUnits = evYardInit.GroupSizeInUnits;
 
+    Keeper.SetOwnerWeight(owner, Cfg->GetOwnerWeight(evYardInit.GroupSizeInUnits));
     AddCbsSet(owner);
 
     P_LOG(PRI_NOTICE, BPD30, "Registered known VDisk",
             (VDisk, vDiskId),
             (OwnerId, owner),
-            (OwnerRound, ownerRound));
+            (OwnerRound, ownerRound),
+            (GroupSizeInUnits, evYardInit.GroupSizeInUnits));
 
     PCtx->ActorSystem->Send(evYardInit.Sender, result.Release());
     Mon.YardInit.CountResponse();
@@ -1976,6 +1984,7 @@ bool TPDisk::YardInitStart(TYardInit &evYardInit) {
     ADD_RECORD_WITH_TIMESTAMP_TO_OPERATION_LOG(ownerData.OperationLog, "YardInitStart, OwnerId# "
             << owner << ", new OwnerRound# " << evYardInit.OwnerRound);
     ownerData.OwnerRound = evYardInit.OwnerRound;
+    ownerData.GroupSizeInUnits = evYardInit.GroupSizeInUnits;
     return true;
 }
 
@@ -1997,10 +2006,8 @@ void TPDisk::YardInitFinish(TYardInit &evYardInit) {
             return;
         }
 
-        // Make sure owner round never decreases
         // Allocate quota for the owner
-        // TODO(cthulhu): don't allocate more owners than expected
-        Keeper.AddOwner(owner, vDiskId);
+        Keeper.AddOwner(owner, vDiskId, Cfg->GetOwnerWeight(evYardInit.GroupSizeInUnits));
 
         TOwnerData& ownerData = OwnerData[owner];
         ownerData.Reset(false);
@@ -2016,6 +2023,7 @@ void TPDisk::YardInitFinish(TYardInit &evYardInit) {
         ownerData.VDiskSlotId = evYardInit.SlotId;
         ownerData.OwnerRound = evYardInit.OwnerRound;
         VDiskOwners[vDiskId] = owner;
+        ownerData.GroupSizeInUnits = evYardInit.GroupSizeInUnits;
         ownerData.Status = TOwnerData::VDISK_STATUS_SENT_INIT;
         SysLogRecord.OwnerVDisks[owner] = vDiskId;
         ownerRound = ownerData.OwnerRound;

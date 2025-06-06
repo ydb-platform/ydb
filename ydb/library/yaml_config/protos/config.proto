@@ -73,6 +73,7 @@ message TExtendedHostConfigDrive {
 
     optional NKikimrBlobStorage.TPDiskConfig PDiskConfig = 6 [(NMarkers.CopyTo) = "THostConfigDrive"];
     optional uint64 ExpectedSlotCount = 7;
+    optional uint32 SlotSizeInUnits = 8;
 }
 
 message THosts {

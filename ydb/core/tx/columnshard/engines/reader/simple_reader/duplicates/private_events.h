@@ -1,5 +1,7 @@
 #pragma once
 
+#include "events.h"
+
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/columnshard/engines/reader/simple_reader/duplicates/common.h>
 
@@ -42,6 +44,20 @@ public:
     TEvDuplicateFilterDataFetched(const ui64 sourceId, TConclusion<TColumnsData>&& result)
         : SourceId(sourceId)
         , Result(std::move(result)) {
+    }
+};
+
+class TEvDuplicateSourceCacheResult
+    : public NActors::TEventLocal<TEvDuplicateSourceCacheResult, NColumnShard::TEvPrivate::EvDuplicateSourceCacheResult> {
+private:
+    using TDataBySource = THashMap<ui64, std::shared_ptr<TColumnsData>>;
+    YDB_READONLY_DEF(TDataBySource, ColumnData);
+    YDB_READONLY_DEF(TEvRequestFilter::TPtr, OriginalRequest);
+
+public:
+    TEvDuplicateSourceCacheResult(const TEvRequestFilter::TPtr& originalRequest, TDataBySource&& data)
+        : ColumnData(std::move(data))
+        , OriginalRequest(originalRequest) {
     }
 };
 

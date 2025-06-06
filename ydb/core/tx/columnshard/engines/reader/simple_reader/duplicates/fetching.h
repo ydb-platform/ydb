@@ -75,7 +75,7 @@ public:
         AFL_VERIFY(Owner);
     }
 
-    const TActorId& GetOwner() const {
+    const TActorId& GetOwnerVerified() const {
         AFL_VERIFY(Owner);
         return Owner;
     }
@@ -122,7 +122,7 @@ public:
     }
 
     void OnError(const TString& message) {
-        TActorContext::AsActorContext().Send(GetCommonContext().GetOwner(),
+        TActorContext::AsActorContext().Send(GetCommonContext().GetOwnerVerified(),
             new NPrivate::TEvDuplicateFilterDataFetched(Portion->GetPortionId(), TConclusionStatus::Fail(message)));
         OnDone();
     }
@@ -145,7 +145,7 @@ public:
     void BuildResult() {
         AdvanceState(EState::ASSEMBLE_BLOBS);
         AFL_VERIFY(PortionAccessor);
-        TActorContext::AsActorContext().Send(GetCommonContext().GetOwner(),
+        TActorContext::AsActorContext().Send(GetCommonContext().GetOwnerVerified(),
             new NPrivate::TEvDuplicateFilterDataFetched(Portion->GetPortionId(),
                 TColumnsData(PortionAccessor
                                  ->PrepareForAssemble(*GetCommonContext().GetResultSchema(), *GetCommonContext().GetResultSchema(), Blobs,
@@ -233,7 +233,7 @@ private:
         const std::shared_ptr<NGroupedMemoryManager::IAllocation>& /*allocation*/) override {
         if (!Context->GetStatus()->SetStartFetching()) {
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("component", "duplicates_manager")("event", "skip_start_fetching")(
-                "reason", "already_started")("manager", Context->GetCommonContext().GetOwner());
+                "reason", "already_started")("manager", Context->GetCommonContext().GetOwnerVerified());
             return false;
         }
         Context->SetResourceGuard(std::move(guard));

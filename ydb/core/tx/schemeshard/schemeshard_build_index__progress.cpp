@@ -1359,9 +1359,8 @@ public:
         }
 
         NIceDb::TNiceDb db(txc.DB);
-        if (buildInfo->AddIssue(TStringBuilder() << "Unhandled exception " << exc.what())) {
-            Self->PersistBuildIndexIssue(db, *buildInfo);
-        }
+        Self->PersistBuildIndexAddIssue(db, *buildInfo,
+            TStringBuilder() << "Unhandled exception " << exc.what());
 
         if (buildInfo->State != TIndexBuildInfo::EState::Filling) {
             // no idea how to gracefully stop index build otherwise
@@ -1500,9 +1499,8 @@ public:
         }
 
         NIceDb::TNiceDb db(txc.DB);
-        if (buildInfo->AddIssue(TStringBuilder() << "Unhandled exception " << exc.what())) {
-            Self->PersistBuildIndexIssue(db, *buildInfo);
-        }
+        Self->PersistBuildIndexAddIssue(db, *buildInfo,
+            TStringBuilder() << "Unhandled exception " << exc.what());
 
         if (buildInfo->State != TIndexBuildInfo::EState::Filling) {
             // most replies are used at Filling stage
@@ -1677,12 +1675,11 @@ public:
             break;
         case  NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR:
         case  NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST:
-            buildInfo.AddIssue(TStringBuilder()
-                << "One of the shards report " << shardStatus.Status
+            Self->PersistBuildIndexAddIssue(db, buildInfo, TStringBuilder()
+                << "One of the shards report " << shardStatus.Status << " " << shardStatus.DebugMessage
                 << " at Filling stage, process has to be canceled"
                 << ", shardId: " << shardId
                 << ", shardIdx: " << shardIdx);
-            Self->PersistBuildIndexIssue(db, buildInfo);
             ChangeState(buildInfo.Id, TIndexBuildInfo::EState::Rejection_Applying);
             Progress(BuildId);
             return true;
@@ -1778,12 +1775,11 @@ public:
             break;
         case  NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR:
         case  NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST:
-            buildInfo.AddIssue(TStringBuilder()
-                << "One of the shards report " << shardStatus.Status
+            Self->PersistBuildIndexAddIssue(db, buildInfo, TStringBuilder()
+                << "One of the shards report " << shardStatus.Status << " " << shardStatus.DebugMessage
                 << " at Filling stage, process has to be canceled"
                 << ", shardId: " << shardId
                 << ", shardIdx: " << shardIdx);
-            Self->PersistBuildIndexIssue(db, buildInfo);
             ChangeState(buildInfo.Id, TIndexBuildInfo::EState::Rejection_Applying);
             Progress(BuildId);
             return true;
@@ -1879,12 +1875,11 @@ public:
             break;
         case  NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR:
         case  NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST:
-            buildInfo.AddIssue(TStringBuilder()
-                << "One of the shards report " << shardStatus.Status
+            Self->PersistBuildIndexAddIssue(db, buildInfo, TStringBuilder()
+                << "One of the shards report " << shardStatus.Status << " " << shardStatus.DebugMessage
                 << " at Filling stage, process has to be canceled"
                 << ", shardId: " << shardId
                 << ", shardIdx: " << shardIdx);
-            Self->PersistBuildIndexIssue(db, buildInfo);
             ChangeState(buildInfo.Id, TIndexBuildInfo::EState::Rejection_Applying);
             Progress(BuildId);
             return true;
@@ -1980,12 +1975,11 @@ public:
             break;
         case  NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR:
         case  NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST:
-            buildInfo.AddIssue(TStringBuilder()
-                << "One of the shards report " << shardStatus.Status
+            Self->PersistBuildIndexAddIssue(db, buildInfo, TStringBuilder()
+                << "One of the shards report " << shardStatus.Status << " " << shardStatus.DebugMessage
                 << " at Filling stage, process has to be canceled"
                 << ", shardId: " << shardId
                 << ", shardIdx: " << shardIdx);
-            Self->PersistBuildIndexIssue(db, buildInfo);
             ChangeState(buildInfo.Id, TIndexBuildInfo::EState::Rejection_Applying);
             Progress(BuildId);
             return true;
@@ -2053,8 +2047,7 @@ public:
         } else {
             NYql::TIssues issues;
             NYql::IssuesFromMessage(record.GetIssues(), issues);
-            buildInfo.AddIssue(issues.ToString());
-            Self->PersistBuildIndexIssue(db, buildInfo);
+            Self->PersistBuildIndexAddIssue(db, buildInfo, issues.ToString());
             ChangeState(buildInfo.Id, TIndexBuildInfo::EState::Rejection_Applying);
             Progress(BuildId);
         }
@@ -2176,12 +2169,11 @@ public:
             break;
         case  NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR:
         case  NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST:
-            buildInfo.AddIssue(TStringBuilder()
-                << "One of the shards report " << shardStatus.Status
+            Self->PersistBuildIndexAddIssue(db, buildInfo, TStringBuilder()
+                << "One of the shards report " << shardStatus.Status << " " << shardStatus.DebugMessage
                 << " at Filling stage, process has to be canceled"
                 << ", shardId: " << shardId
                 << ", shardIdx: " << shardIdx);
-            Self->PersistBuildIndexIssue(db, buildInfo);
             ChangeState(buildInfo.Id, TIndexBuildInfo::EState::Rejection_Applying);
             Progress(BuildId);
             return true;
@@ -2354,11 +2346,10 @@ public:
             auto statusCode = TranslateStatusCode(record.GetStatus());
 
             if (statusCode != Ydb::StatusIds::SUCCESS) {
-                buildInfo.AddIssue(TStringBuilder()
+                Self->PersistBuildIndexAddIssue(db, buildInfo, TStringBuilder()
                     << "At " << state << " state got unsuccess propose result"
                     << ", status: " << NKikimrScheme::EStatus_Name(record.GetStatus())
                     << ", reason: " << record.GetReason());
-                Self->PersistBuildIndexIssue(db, buildInfo);
                 Self->PersistBuildIndexForget(db, buildInfo);
                 EraseBuildInfo(buildInfo);
             }
@@ -2373,11 +2364,10 @@ public:
                 Y_ENSURE(false, "NEED MORE TESTING");
                 // no op
             } else {
-                buildInfo.AddIssue(TStringBuilder()
+                Self->PersistBuildIndexAddIssue(db, buildInfo, TStringBuilder()
                     << "At " << state << " state got unsuccess propose result"
                     << ", status: " << NKikimrScheme::EStatus_Name(record.GetStatus())
                     << ", reason: " << record.GetReason());
-                Self->PersistBuildIndexIssue(db, buildInfo);
                 ChangeState(buildInfo.Id, to);
             }
         };

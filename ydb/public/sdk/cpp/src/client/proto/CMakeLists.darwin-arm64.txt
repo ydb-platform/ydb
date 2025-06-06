@@ -15,6 +15,10 @@
 add_library(src-client-proto)
 
 
+target_compile_options(src-client-proto PUBLIC
+  -DYDB_SDK_INTERNAL_CLIENTS
+)
+
 target_link_libraries(src-client-proto PUBLIC
   contrib-libs-cxxsupp
   yutil

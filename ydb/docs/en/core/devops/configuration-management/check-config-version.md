@@ -33,4 +33,4 @@ This method is convenient when there are a large number of nodes in the {{ ydb-s
 2. Go to the `config` sensor group and the `configs_dispatcher` subsystem.
 3. Pay attention to the `ConfigurationV1` and `ConfigurationV2` sensors. The values of these sensors show the number of cluster nodes running with configuration V1 and V2 respectively.
 
-For example, if `ConfigurationV1 > 0`, it means there are nodes in the cluster that use configuration V1. If `ConfigurationV2 = 0` and `ConfigurationV2` equals the total number of nodes, it means all nodes use configuration V2.
+For example, if `ConfigurationV1 > 0`, it means there are nodes in the cluster that use configuration V1. If `ConfigurationV1 = 0` and `ConfigurationV2` equals the total number of nodes, it means all nodes use configuration V2.

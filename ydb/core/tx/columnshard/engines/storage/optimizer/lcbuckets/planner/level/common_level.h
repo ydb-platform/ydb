@@ -143,7 +143,8 @@ public:
         return result;
     }
 
-    virtual void DoModifyPortions(const std::vector<TPortionInfo::TPtr>& add, const std::vector<TPortionInfo::TPtr>& remove) override;
+    virtual std::vector<TPortionInfo::TPtr> DoModifyPortions(
+        const std::vector<TPortionInfo::TPtr>& add, const std::vector<TPortionInfo::TPtr>& remove) override;
 
     virtual TCompactionTaskData DoGetOptimizationTask() const override;
 

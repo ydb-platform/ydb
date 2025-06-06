@@ -321,7 +321,7 @@ public:
 
 class IPortionsLevel {
 private:
-    virtual void DoModifyPortions(const std::vector<TPortionInfo::TPtr>& add, const std::vector<TPortionInfo::TPtr>& remove) = 0;
+    virtual std::vector<TPortionInfo::TPtr> DoModifyPortions(const std::vector<TPortionInfo::TPtr>& add, const std::vector<TPortionInfo::TPtr>& remove) = 0;
     virtual ui64 DoGetWeight() const = 0;
     virtual TInstant DoGetWeightExpirationInstant() const = 0;
     virtual NArrow::NMerger::TIntervalPositions DoGetBucketPositions(const std::shared_ptr<arrow::Schema>& pkSchema) const = 0;
@@ -451,7 +451,7 @@ public:
         return DoGetAffectedPortionBytes(from, to);
     }
 
-    void ModifyPortions(const std::vector<TPortionInfo::TPtr>& add, const std::vector<TPortionInfo::TPtr>& remove) {
+    [[nodiscard]] std::vector<TPortionInfo::TPtr> ModifyPortions(const std::vector<TPortionInfo::TPtr>& add, const std::vector<TPortionInfo::TPtr>& remove) {
         std::vector<TPortionInfo::TPtr> addSelective;
         std::vector<TPortionInfo::TPtr> removeSelective;
         for (ui32 idx = 0; idx < Selectors.size(); ++idx) {

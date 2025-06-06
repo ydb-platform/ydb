@@ -39,12 +39,12 @@ private:
             TargetInStoreTable->GetLocalPathId().ToProto(create);
         }
         if (DeleteShardIds.contains(tabletId)) {
-            NColumnShard::TSchemeShardLocalPathId::FromRawValue(TargetInStoreTable->GetPathId().LocalPathId).ToProto(*result.MutableDropTable());
+            TargetInStoreTable->GetLocalPathId().ToProto(*result.MutableDropTable());
         } else {
             auto container = Sharding->GetTabletShardingInfoOptional(tabletId);
             if (!!container) {
                 auto& shardingInfo = *result.MutableGranuleShardingInfo();
-                NColumnShard::TSchemeShardLocalPathId::FromRawValue(TargetInStoreTable->GetPathId().LocalPathId).ToProto(shardingInfo);
+                TargetInStoreTable->GetLocalPathId().ToProto(shardingInfo);
                 shardingInfo.SetVersionId(Sharding->GetShardInfoVerified(tabletId).GetShardingVersion());
                 *shardingInfo.MutableContainer() = container.SerializeToProto();
                 AFL_VERIFY(ModifiedShardIds.contains(tabletId));

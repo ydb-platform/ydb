@@ -25,7 +25,6 @@ SRCS(
     inflight_request_tracker.cpp
     write_actor.cpp
     tables_manager.cpp
-    path_id_translator.cpp
 )
 
 GENERATE_ENUM_SERIALIZATION(columnshard.h)

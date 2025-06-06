@@ -92,7 +92,7 @@ NKikimr::TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>> TDestin
 }
 
 NKikimr::TConclusionStatus TDestinationSession::DeserializeDataFromProto(
-    const NKikimrColumnShardDataSharingProto::TDestinationSession& proto, const NColumnShard::TTablesManager& tablesManager) {
+    const NKikimrColumnShardDataSharingProto::TDestinationSession& proto, const TColumnEngineForLogs& index) {
     if (!InitiatorController.DeserializeFromProto(proto.GetInitiatorController())) {
         return TConclusionStatus::Fail("cannot parse initiator controller: " + proto.GetInitiatorController().DebugString());
     }
@@ -106,21 +106,14 @@ NKikimr::TConclusionStatus TDestinationSession::DeserializeDataFromProto(
     }
 
     for (auto&& i : proto.GetPathIds()) {
-        const auto destSchemeShardLocalPathId = NColumnShard::TSchemeShardLocalPathId::FromProto(i.GetDestPathId());
-        const auto destInternalPathId = tablesManager.ResolveInternalPathId(destSchemeShardLocalPathId);
-        if (!destInternalPathId) {
-            return TConclusionStatus::Fail("Incorrect remapping into undefined path id: " + ::ToString(destSchemeShardLocalPathId.GetRawValue()));
-        }
-        auto g = tablesManager.GetPrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>().GetGranuleOptional(*destInternalPathId);
+        auto g = index.GetGranuleOptional(TInternalPathId::FromRawValue(i.GetDestPathId()));
         if (!g) {
             return TConclusionStatus::Fail("Incorrect remapping into undefined path id: " + ::ToString(i.GetDestPathId()));
         }
-        const auto srcSchemeShardLocalPathId = NColumnShard::TSchemeShardLocalPathId::FromProto(i.GetSourcePathId());
-        const auto srcInternalPathId = tablesManager.ResolveInternalPathId(srcSchemeShardLocalPathId);
-        if (!srcSchemeShardLocalPathId) {
-            return TConclusionStatus::Fail("Incorrect remapping from undefined path id: " + ::ToString(srcSchemeShardLocalPathId.GetRawValue()));
+        if (!i.GetSourcePathId() || !i.GetDestPathId()) {
+            return TConclusionStatus::Fail("PathIds remapping contains incorrect ids: " + i.DebugString());
         }
-        if (!PathIds.emplace(*srcInternalPathId, *destInternalPathId).second) {
+        if (!PathIds.emplace(TInternalPathId::FromRawValue(i.GetSourcePathId()), TInternalPathId::FromRawValue(i.GetDestPathId())).second) {
             return TConclusionStatus::Fail("PathIds contains duplicated values.");
         }
     }
@@ -130,18 +123,14 @@ NKikimr::TConclusionStatus TDestinationSession::DeserializeDataFromProto(
     return TConclusionStatus::Success();
 }
 
-NKikimrColumnShardDataSharingProto::TDestinationSession TDestinationSession::SerializeDataToProto(const IPathIdTranslator& pathIdTranslator) const {
+NKikimrColumnShardDataSharingProto::TDestinationSession TDestinationSession::SerializeDataToProto() const {
     NKikimrColumnShardDataSharingProto::TDestinationSession result;
     InitiatorController.SerializeToProto(*result.MutableInitiatorController());
     TBase::SerializeToProto(result);
-    for (const auto& [srcInternalPathId, destInternalPathId] : PathIds) {
+    for (auto&& i : PathIds) {
         auto* pathIdRemap = result.AddPathIds();
-        const auto srcSchemeShardLocalPathId = pathIdTranslator.ResolveSchemeShardLocalPathId(srcInternalPathId);
-        AFL_VERIFY(srcSchemeShardLocalPathId.has_value())("src_path_id", srcInternalPathId);
-        srcSchemeShardLocalPathId->ToProto(*pathIdRemap->MutableSourcePathId());
-        const auto destSchemeShardLocalPathId = pathIdTranslator.ResolveSchemeShardLocalPathId(destInternalPathId);
-        AFL_VERIFY(destSchemeShardLocalPathId.has_value())("dest_path_id", destInternalPathId);
-        destSchemeShardLocalPathId->ToProto(*pathIdRemap->MutableDestPathId());
+        pathIdRemap->SetSourcePathId(i.first.GetRawValue());
+        pathIdRemap->SetDestPathId(i.second.GetRawValue());
     }
     return result;
 }

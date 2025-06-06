@@ -3,8 +3,8 @@
 
 namespace NKikimr::NOlap::NDataSharing::NEvents {
 
-TEvProposeFromInitiator::TEvProposeFromInitiator(const TDestinationSession& session, const NOlap::IPathIdTranslator& pathIdTranslator) {
-    *Record.MutableSession() = session.SerializeDataToProto(pathIdTranslator);
+TEvProposeFromInitiator::TEvProposeFromInitiator(const TDestinationSession& session) {
+    *Record.MutableSession() = session.SerializeDataToProto();
 }
 
 TEvConfirmFromInitiator::TEvConfirmFromInitiator(const TString& sessionId) {

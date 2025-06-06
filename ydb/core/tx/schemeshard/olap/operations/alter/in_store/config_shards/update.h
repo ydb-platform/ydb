@@ -36,7 +36,7 @@ private:
             auto& alter = *result.MutableEnsureTables();
             auto& create = *alter.AddTables();
             FillToShardTx(create);
-            NColumnShard::TSchemeShardLocalPathId::FromRawValue(TargetInStoreTable->GetPathId().LocalPathId).ToProto(create);
+            TargetInStoreTable->GetLocalPathId().ToProto(create);
         }
         if (DeleteShardIds.contains(tabletId)) {
             NColumnShard::TSchemeShardLocalPathId::FromRawValue(TargetInStoreTable->GetPathId().LocalPathId).ToProto(*result.MutableDropTable());

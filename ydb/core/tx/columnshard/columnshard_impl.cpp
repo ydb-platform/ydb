@@ -1226,7 +1226,7 @@ void TColumnShard::Handle(TEvTxProcessing::TEvReadSetAck::TPtr& ev, const TActor
 void TColumnShard::Handle(NOlap::NDataSharing::NEvents::TEvProposeFromInitiator::TPtr& ev, const TActorContext& ctx) {
     AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("process", "BlobsSharing")("event", "TEvProposeFromInitiator");
     auto reqSession = std::make_shared<NOlap::NDataSharing::TDestinationSession>();
-    auto conclusion = reqSession->DeserializeDataFromProto(ev->Get()->Record.GetSession(), TablesManager);
+    auto conclusion = reqSession->DeserializeDataFromProto(ev->Get()->Record.GetSession(), TablesManager.GetPrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>());
     if (!conclusion) {
         if (!reqSession->GetInitiatorController()) {
             AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "cannot_parse_start_data_sharing_from_initiator");

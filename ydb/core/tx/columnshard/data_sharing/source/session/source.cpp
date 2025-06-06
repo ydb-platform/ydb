@@ -21,7 +21,7 @@ NKikimr::TConclusionStatus TSourceSession::DeserializeFromProto(const NKikimrCol
         return TConclusionStatus::Fail("Incorrect DestinationTabletId in proto.");
     }
     for (auto&& i : proto.GetPathIds()) {
-        if (!PathIds.emplace(TInternalPathId::FromProto(i)).second) {
+        if (!PathIds.emplace(TInternalPathId::FromRawValue(i)).second) {
             return TConclusionStatus::Fail("PathIds contains duplicated values.");
         }
     }

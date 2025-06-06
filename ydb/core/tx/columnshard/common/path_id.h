@@ -2,10 +2,8 @@
 #include <util/system/types.h>
 #include <util/generic/hash.h>
 #include <util/stream/output.h>
-#include <ydb/core/tx/columnshard/common/protos/path_id.pb.h>
 
 namespace NKikimr::NColumnShard {
-
 class TInternalPathId {
 private:
     ui64 PathId;
@@ -22,40 +20,27 @@ public:
     TInternalPathId& operator=(const TInternalPathId&) = default;
     TInternalPathId& operator=(TInternalPathId&&) = default;
 
-    static TInternalPathId FromRawValue(const ui64 pathId) {
-        return TInternalPathId(pathId);
-    }
-
-    static TInternalPathId FromProto(const NKikimrColumnShardPathIdProto::TInternalPathId& pathId) {
-        return TInternalPathId(pathId.GetPathId());
-    }
-
-    template<typename TProto>
-    static TInternalPathId FromProto(const TProto& proto) {
-        if (proto.HasPathId()) {
-            return FromProto(proto.GetPathId());
-        } else {
-            return TInternalPathId(proto.GetPathId_Deprecated());
-        }
-    }
-
     explicit operator bool() const {
         return PathId != 0;
     }
 
-    void ToProto(NKikimrColumnShardPathIdProto::TInternalPathId& proto) const {
-        proto.SetPathId(PathId);
+    static TInternalPathId FromRawValue(const ui64 pathId) {
+        return TInternalPathId(pathId);
     }
-
-    template<typename Proto>
-    void ToProto(Proto& proto) const {
-        ToProto(*proto.MutablePathId());
-    }
-
-
     ui64 GetRawValue() const {
         return PathId;
     }
+
+    //Templated function whithout generic implementation
+    //Must me explicitly instantiated for messages that hold internal path id
+    template<typename Proto>
+    static TInternalPathId FromProto(const Proto& proto);
+
+    //Templated function whithout generic implementation
+    //Must me explicitly instantiated for messages that hold internal path id
+    template<typename Proto>
+    void ToProto(Proto& proto) const;
+
 
     auto operator<=>(const TInternalPathId&) const = default;
 };
@@ -80,40 +65,19 @@ public:
         return TSchemeShardLocalPathId(pathId);
     }
 
-    static TSchemeShardLocalPathId FromProto(const NKikimrColumnShardPathIdProto::TSchemeShardLocalPathId& protoPathId) {
-        return TSchemeShardLocalPathId(protoPathId.GetPathId());
-    }
-
-    template<typename TProto>
-    static TSchemeShardLocalPathId FromProto(const TProto& proto) {
-        if (proto.HasPathId()) {
-            return FromProto(proto.GetPathId());
-        } else {
-            return TSchemeShardLocalPathId(proto.GetPathId_Deprecated());
-        }
-    }
-
-    template<typename TProto>
-    static TSchemeShardLocalPathId FromProtoOrTableId(const TProto& proto) {
-        if (proto.HasPathId()) {
-            return FromProto(proto.GetPathId());
-        } else {
-            return TSchemeShardLocalPathId(proto.GetTableId_Deprecated());
-        }
-    }
-
     ui64 GetRawValue() const {
         return PathId;
     }
 
-    void ToProto(NKikimrColumnShardPathIdProto::TSchemeShardLocalPathId& proto) const {
-        proto.SetPathId(PathId);
-    }
-
+    //Templated function whithout generic implementation
+    //Must me explicitly instantiated for messages that hold SchemeShardLocalPathId
     template<typename Proto>
-    void ToProto(Proto& proto) const {
-        ToProto(*proto.MutablePathId());
-    }
+    static TSchemeShardLocalPathId FromProto(const Proto& proto);
+    
+    //Templated function whithout generic implementation
+    //Must me explicitly instantiated for messages that hold SchemeShardLocalPathId
+    template<typename Proto>
+    void ToProto(Proto& proto) const;
 
     auto operator<=>(const TSchemeShardLocalPathId&) const = default;
 };

@@ -1,5 +1,6 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
+#include <ydb/core/base/blobstorage.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <yql/essentials/parser/pg_catalog/catalog.h>
 #include <yql/essentials/parser/pg_wrapper/interface/codec.h>
@@ -379,11 +380,24 @@ Y_UNIT_TEST_SUITE(KqpKv) {
         auto settings = TKikimrSettings()
             .SetFeatureFlags(flags)
             .SetWithSampleTables(false)
-            .SetControls(controls);
+            .SetUseRealThreads(false)
+            .SetControls(controls)
+            .SetGrpcServerOptions(NYdbGrpc::TServerOptions()
+                .SetGRpcShutdownDeadline(TDuration::MilliSeconds(0))
+            );
+
         auto kikimr = TKikimrRunner{settings};
+        
+        auto getValue = [&kikimr](const auto&& future) {
+            while (future.HasValue() == false) {
+                TDispatchOptions opts;
+                kikimr.GetTestServer().GetRuntime()->DispatchEvents(opts, TDuration::MilliSeconds(100));
+            }
+            return future.GetValue(TDuration::MilliSeconds(100));
+        };
 
         auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
+        auto session = getValue(db.CreateSession()).GetSession();
         const auto tableName = "/Root/TestTable";
         const auto keyColumnName_1 = "blob_id";
         const auto keyColumnName_2 = "chunk_num";
@@ -400,7 +414,7 @@ Y_UNIT_TEST_SUITE(KqpKv) {
         builder.SetPrimaryKeyColumns({keyColumnName_1, keyColumnName_2});
         builder.AddNullableColumn(dataColumnName, EPrimitiveType::String);
 
-        auto result = session.CreateTable(tableName, builder.Build()).GetValueSync();
+        auto result = getValue(session.CreateTable(tableName, builder.Build()));
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
         TString largeValue(1_MB, 'L');
@@ -417,8 +431,26 @@ Y_UNIT_TEST_SUITE(KqpKv) {
         }
         rows.EndList();
 
-        auto upsertResult = db.BulkUpsert(tableName, rows.Build()).GetValueSync();
+        auto upsertResult = getValue(db.BulkUpsert(tableName, rows.Build()));
         UNIT_ASSERT_C(upsertResult.IsSuccess(), upsertResult.GetIssues().ToString());
+
+        auto server = &kikimr.GetTestServer();
+
+        WaitForCompaction(server, tableName);
+
+        ui32 blobRequestCount = 0; 
+
+        auto holder = server->GetRuntime()->AddObserver<TEvBlobStorage::TEvGet>([&blobRequestCount](TEvBlobStorage::TEvGet::TPtr& ev) {
+            const auto& msg = ev->Get();
+            for (size_t i = 0; i < msg->QuerySize; i++) {
+                const auto& id = msg->Queries[i].Id;
+                
+                if (id.BlobSize() == 1_MB + 8 /** ext blob meta */) {
+                    blobRequestCount++;
+                    break;
+                }
+            }
+        });
 
         NYdb::TValueBuilder keys;
         keys.BeginList();
@@ -431,11 +463,7 @@ Y_UNIT_TEST_SUITE(KqpKv) {
         }
         keys.EndList();
 
-        auto server = &kikimr.GetTestServer();
-
-        WaitForCompaction(server, tableName);
-
-        auto selectResult = db.ReadRows(tableName, keys.Build()).GetValueSync();
+        auto selectResult = getValue(db.ReadRows(tableName, keys.Build()));
 
         UNIT_ASSERT_C(selectResult.IsSuccess(), selectResult.GetIssues().ToString());
 
@@ -443,11 +471,92 @@ Y_UNIT_TEST_SUITE(KqpKv) {
         UNIT_ASSERT_VALUES_EQUAL(parser.RowsCount(), 10);
 
         UNIT_ASSERT(parser.TryNextRow());
+        
+        UNIT_ASSERT_VALUES_EQUAL(UseExtBlobsPrecharge ? 2 : 10, blobRequestCount);
+    }
 
-        auto val = parser.GetValue(0);
-        TValueParser valParser(val);
-        TUuidValue v = valParser.GetUuid();
-        Cout << v.ToString() << Endl;
+    Y_UNIT_TEST(ReadRows_TimeoutCancelsReads) {
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false)
+            .SetUseRealThreads(false)
+            .SetGrpcServerOptions(NYdbGrpc::TServerOptions()
+                .SetGRpcShutdownDeadline(TDuration::MilliSeconds(0))
+            );
+
+        auto kikimr = TKikimrRunner{settings};
+        
+        auto getValue = [&kikimr](const auto&& future) {
+            while (future.HasValue() == false) {
+                TDispatchOptions opts;
+                kikimr.GetTestServer().GetRuntime()->DispatchEvents(opts, TDuration::MilliSeconds(100));
+            }
+            return future.GetValue(TDuration::MilliSeconds(100));
+        };
+
+        auto db = kikimr.GetTableClient();
+        auto session = getValue(db.CreateSession()).GetSession();
+        const auto tableName = "/Root/TestTable";
+        const auto keyColumnName = "blob_id";
+        const auto dataColumnName = "data";
+
+        TTableBuilder builder;
+        builder.AddNonNullableColumn(keyColumnName, EPrimitiveType::Int32);
+        builder.SetPrimaryKeyColumn(keyColumnName);
+        builder.AddNullableColumn(dataColumnName, EPrimitiveType::String);
+        builder.SetUniformPartitions(2);
+        TExplicitPartitions partitions;
+        partitions.AppendSplitPoints(TValueBuilder().BeginTuple().AddElement().OptionalInt32(5).EndTuple().Build());
+        builder.SetPartitionAtKeys(partitions);
+
+        auto result = getValue(session.CreateTable(tableName, builder.Build()));
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        
+        NYdb::TValueBuilder rows;
+        rows.BeginList();
+        for (int i = 0; i < 10; i++) {
+            rows.AddListItem()
+                .BeginStruct()
+                    .AddMember(keyColumnName).Int32(i)
+                    .AddMember(dataColumnName).String("foo")
+                .EndStruct();
+        }
+        rows.EndList();
+
+        auto upsertResult = getValue(db.BulkUpsert(tableName, rows.Build()));
+        UNIT_ASSERT_C(upsertResult.IsSuccess(), upsertResult.GetIssues().ToString());
+
+        ui32 cancelCount = 0;
+        bool droppedOneResult = false;
+
+        kikimr.GetTestServer().GetRuntime()->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (auto *evRead = ev->CastAsLocal<TEvDataShard::TEvReadResult>()) {
+                if (droppedOneResult) {
+                    // Drop one of two results, so only one cancel would be sent to the DataShard
+                    return TTestActorRuntime::EEventAction::PROCESS;
+                }
+                droppedOneResult = true;
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            if (auto *evReadCancel = ev->CastAsLocal<TEvDataShard::TEvReadCancel>()) {
+                cancelCount++;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        NYdb::TValueBuilder keys;
+        keys.BeginList();
+        for (int i = 0; i < 10; i++) {
+            keys.AddListItem()
+                .BeginStruct()
+                    .AddMember(keyColumnName).Int32(i)
+                .EndStruct();
+        }
+        keys.EndList();
+
+        auto selectResult = getValue(db.ReadRows(tableName, keys.Build()));
+
+        UNIT_ASSERT(!selectResult.IsSuccess());
+        UNIT_ASSERT_VALUES_EQUAL(cancelCount, 1);
     }
     
     TVector<::ReadRowsPgParam> readRowsPgParams

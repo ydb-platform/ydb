@@ -40,6 +40,7 @@ struct RequestedKeyColumn {
 struct TShardReadState {
     std::vector<TOwnedCellVec> Keys;
     ui32 FirstUnprocessedQuery = 0;
+    Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
 };
 
 }
@@ -538,6 +539,7 @@ public:
                 if (Retries < MaxTotalRetries) {
                     TStringStream ss;
                     ss << "Reached MaxRetries count for DataShard# " << shardId << ", status# " << statusCode;
+                    it->second.Status = statusCode;
                     ReplyWithError(statusCode, ss.Str(), &issues);
                 } else {
                     SendRead(shardId, it->second);
@@ -552,6 +554,7 @@ public:
                 if (statusCode != Ydb::StatusIds::OVERLOADED) {
                     statusCode = Ydb::StatusIds::ABORTED;
                 }
+                it->second.Status = statusCode;
                 return ReplyWithError(statusCode, ss.Str(), &issues);
             }
             }
@@ -568,6 +571,9 @@ public:
                 // we just wait for the next batch of results.
                 it->second.FirstUnprocessedQuery = token.GetFirstUnprocessedQuery();
                 ReadsInFlight++;
+            } else {
+                // Read for this shard has finished
+                it->second.Status = statusCode;
             }
         }
         LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::RPC_REQUEST, "TReadRowsRPC TEvReadResult RowsCount: " << msg->GetRowsCount());
@@ -730,17 +736,26 @@ public:
         TStringStream ss;
         ss << "TReadRowsRPC CancelReads, shardIds# [";
 
-        // it's ok to send cancel requests for shards that were already processed, they will ignore them
-        for (const auto& [shardId, v] : ShardIdToReadState) {
+        bool hasActiveReads = false;
+
+        for (const auto& [shardId, state] : ShardIdToReadState) {
+            if (state.Status != Ydb::StatusIds::STATUS_CODE_UNSPECIFIED) {
+                // Read has already finished for this shard
+                continue;
+            }
             auto request = std::make_unique<TEvDataShard::TEvReadCancel>();
             auto& record = request->Record;
             record.SetReadId(shardId); // shardId is also a readId
             Send(PipeCache, new TEvPipeCache::TEvForward(request.release(), shardId, true), IEventHandle::FlagTrackDelivery, 0, Span.GetTraceId());
             ss << shardId << ", ";
+            hasActiveReads = true;
         }
 
         ss << "]";
-        LOG_WARN_S(TlsActivationContext->AsActorContext(), NKikimrServices::RPC_REQUEST, ss.Str());
+
+        if (hasActiveReads) {
+            LOG_WARN_S(TlsActivationContext->AsActorContext(), NKikimrServices::RPC_REQUEST, ss.Str());
+        }
     }
 
     void HandleTimeout(TEvents::TEvWakeup::TPtr&) {

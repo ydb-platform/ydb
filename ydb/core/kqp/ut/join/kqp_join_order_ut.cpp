@@ -110,6 +110,8 @@ static void CreateSampleTableGeneric(NYdb::NQuery::TSession session, bool useCol
 }
 
 static TKikimrRunner GetKikimrWithJoinSettings(bool useStreamLookupJoin = false, TString stats = "", bool useCBO = true){
+    Y_UNUSED(useCBO);
+
     TVector<NKikimrKqp::TKqpSetting> settings;
 
     NKikimrKqp::TKqpSetting setting;

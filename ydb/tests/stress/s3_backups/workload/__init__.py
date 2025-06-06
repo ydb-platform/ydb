@@ -26,7 +26,7 @@ class WorkloadS3Export(WorkloadBase):
         self.endpoint = endpoint
         self.s3_client = ExportClient(self.client.driver)
         self.op_client = OperationClient(self.client.driver)
-        
+
         self.limit = 10  # limit on the number of exports for a database
         self.in_progress = []
         # Statistics
@@ -140,7 +140,7 @@ class WorkloadS3Export(WorkloadBase):
 
     def _cleanup_in_progress(self):
         self.in_progress = [export_id for export_id in self.in_progress if not self._export_is_completed(export_id)]
-        
+
     def _export_to_s3(self):
         with self.lock:
             self._cleanup_in_progress()

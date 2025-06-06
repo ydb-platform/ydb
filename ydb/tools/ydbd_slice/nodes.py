@@ -170,7 +170,7 @@ class Nodes(object):
 
     def _download_sky(self, url, remote_path):
         self._logger.info(f"download from '{url}' to '{remote_path}'")
-        tmp_path = f'/tmp/{url.split(":")[-1]}'
+        tmp_path = f'/tmp/sky_download_{url.split(":")[-1]}'
         script = (
             f'sky get -wu -d {tmp_path} {url} && '
             f'for FILE in `find {tmp_path} -name *.tgz -or -name *.tar`; do tar -C {tmp_path} -xf $FILE && rm $FILE; done && '

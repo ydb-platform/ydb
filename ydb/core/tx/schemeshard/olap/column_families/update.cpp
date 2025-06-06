@@ -3,67 +3,11 @@
 #include <ydb/core/formats/arrow/serializer/native.h>
 #include <ydb/core/formats/arrow/serializer/parsing.h>
 #include <ydb/core/formats/arrow/serializer/utils.h>
+#include <ydb/core/tx/schemeshard/olap/column_family/column_family.h>
+
+#include <ydb/library/formats/arrow/accessor/common/const.h>
 
 namespace NKikimr::NSchemeShard {
-
-NKikimr::TConclusion<NKikimrSchemeOp::TOlapColumn::TSerializer> ConvertFamilyDescriptionToProtoSerializer(
-    const NKikimrSchemeOp::TFamilyDescription& familyDescription) {
-    NKikimrSchemeOp::TOlapColumn::TSerializer result;
-    if (!familyDescription.HasColumnCodec()) {
-        return NKikimr::TConclusionStatus::Fail(TStringBuilder()
-                                                << "family `" << familyDescription.GetName()
-                                                << "`: can't convert TFamilyDescription to Serializer: field `ColumnCodec` is empty");
-    }
-    auto codec = NArrow::CompressionFromProto(familyDescription.GetColumnCodec());
-    if (!codec.has_value()) {
-        return NKikimr::TConclusionStatus::Fail(TStringBuilder() << "family `" << familyDescription.GetName() << "`: unknown codec");
-    }
-    if (familyDescription.HasColumnCodecLevel() && !NArrow::SupportsCompressionLevel(codec.value())) {
-        return NKikimr::TConclusionStatus::Fail(TStringBuilder() << "family `" << familyDescription.GetName() << "`: codec `"
-                                                                 << NArrow::CompressionToString(familyDescription.GetColumnCodec())
-                                                                 << "` is not support compression level");
-    }
-    if (familyDescription.HasColumnCodecLevel()) {
-        if (!NArrow::SupportsCompressionLevel(codec.value(), familyDescription.GetColumnCodecLevel())) {
-            return NKikimr::TConclusionStatus::Fail(TStringBuilder()
-                                                    << "family `" << familyDescription.GetName() << "`: incorrect level for codec `"
-                                                    << NArrow::CompressionToString(familyDescription.GetColumnCodec()) << "`. expected: ["
-                                                    << NArrow::MinimumCompressionLevel(codec.value()).value() << ":"
-                                                    << NArrow::MaximumCompressionLevel(codec.value()).value() << "]");
-        }
-    }
-
-    result.SetClassName("ARROW_SERIALIZER");
-    auto arrowCompression = result.MutableArrowCompression();
-    arrowCompression->SetCodec(familyDescription.GetColumnCodec());
-    if (familyDescription.HasColumnCodecLevel()) {
-        arrowCompression->SetLevel(familyDescription.GetColumnCodecLevel());
-    }
-    return result;
-}
-
-NKikimr::TConclusion<NKikimrSchemeOp::TFamilyDescription> ConvertSerializerContainerToFamilyDescription(
-    const NArrow::NSerialization::TSerializerContainer& serializer) {
-    if (!serializer.HasObject()) {
-        return NKikimr::TConclusionStatus::Fail("convert TSerializerContainer to TFamilyDescription: container doesn't have object");
-    }
-    NKikimrSchemeOp::TFamilyDescription result;
-    if (serializer->GetClassName().empty()) {
-        return NKikimr::TConclusionStatus::Fail("convert TSerializerContainer to TFamilyDescription: field `ClassName` is empty");
-    }
-    if (serializer.GetClassName() == NArrow::NSerialization::TNativeSerializer::GetClassNameStatic()) {
-        std::shared_ptr<NArrow::NSerialization::TNativeSerializer> nativeSerializer =
-            serializer.GetObjectPtrVerifiedAs<NArrow::NSerialization::TNativeSerializer>();
-        result.SetColumnCodec(NKikimr::NArrow::CompressionToProto(nativeSerializer->GetCodecType()));
-        auto level = nativeSerializer->GetCodecLevel();
-        if (level.has_value()) {
-            result.SetColumnCodecLevel(level.value());
-        }
-    } else {
-        return NKikimr::TConclusionStatus::Fail("convert TSerializerContainer to TFamilyDescription: Unknown value in field `ClassName`");
-    }
-    return result;
-}
 
 bool TOlapColumnFamlilyDiff::ParseFromRequest(const NKikimrSchemeOp::TFamilyDescription& diffColumnFamily, IErrorCollector& errors) {
     if (!diffColumnFamily.HasName()) {
@@ -78,18 +22,100 @@ bool TOlapColumnFamlilyDiff::ParseFromRequest(const NKikimrSchemeOp::TFamilyDesc
     if (diffColumnFamily.HasColumnCodecLevel()) {
         CodecLevel = diffColumnFamily.GetColumnCodecLevel();
     }
+    if (diffColumnFamily.HasDataAccessorConstructor()) {
+        NArrow::NAccessor::TRequestedConstructorContainer requestedConstructorContainer;
+        if (!requestedConstructorContainer.DeserializeFromProto(diffColumnFamily.GetDataAccessorConstructor())) {
+            errors.AddError("cannot parse accessor constructor from proto");
+            return false;
+        }
+        AccessorConstructor = requestedConstructorContainer;
+    }
     return true;
 }
 
 bool TOlapColumnFamlilyAdd::ParseFromRequest(const NKikimrSchemeOp::TFamilyDescription& columnFamily, IErrorCollector& errors) {
-    if (!columnFamily.HasName()) {
-        errors.AddError("column family: empty field Name");
+    TColumnFamily family;
+    TConclusionStatus result = family.DeserializeFromProto(columnFamily);
+    if (result.IsFail()) {
+        errors.AddError(result.GetErrorMessage());
         return false;
     }
+    Name = family.GetName();
+    if (family.GetColumnCodec().has_value()) {
+        auto serializer = family.GetSerializer();
+        if (serializer.IsFail()) {
+            errors.AddError(serializer.GetErrorMessage());
+            return false;
+        }
+        auto serializerContainer = NArrow::NSerialization::TSerializerContainer::BuildFromProto(serializer.GetResult());
+        if (serializerContainer.IsFail()) {
+            errors.AddError(serializerContainer.GetErrorMessage());
+            return false;
+        }
+        SerializerContainer = serializerContainer.GetResult();
+    }
 
-    Name = columnFamily.GetName();
-    if (columnFamily.HasColumnCodec()) {
-        auto serializer = ConvertFamilyDescriptionToProtoSerializer(columnFamily);
+    if (family.GetAccessorConstructor().has_value() && !AccessorConstructor.DeserializeFromProto(family.GetAccessorConstructor().value())) {
+        errors.AddError("cannot parse accessor constructor from proto");
+        return false;
+    }
+    return true;
+}
+
+void TOlapColumnFamlilyAdd::ParseFromLocalDB(const NKikimrSchemeOp::TFamilyDescription& columnFamily) {
+    TColumnFamily family;
+    TConclusionStatus result = family.DeserializeFromProto(columnFamily);
+    Y_VERIFY_S(result.IsSuccess(), result.GetErrorMessage());
+    Name = family.GetName();
+    if (family.GetColumnCodec().has_value()) {
+        auto serializer = family.GetSerializer();
+        Y_VERIFY_S(serializer.IsSuccess(), serializer.GetErrorMessage());
+        Y_VERIFY(SerializerContainer.DeserializeFromProto(serializer.GetResult()));
+    }
+    if (family.GetAccessorConstructor().has_value()) {
+        Y_VERIFY(AccessorConstructor.DeserializeFromProto(family.GetAccessorConstructor().value()));
+    }
+}
+
+void TOlapColumnFamlilyAdd::Serialize(NKikimrSchemeOp::TFamilyDescription& columnFamily) const {
+    columnFamily.SetName(Name);
+    if (SerializerContainer.HasObject()) {
+        TColumnFamily family;
+        TConclusionStatus result = family.SetSerializer(SerializerContainer);
+        Y_VERIFY_S(result.IsSuccess(), result.GetErrorMessage());
+        Y_VERIFY(family.GetColumnCodec().has_value());
+        columnFamily.SetColumnCodec(family.GetColumnCodec().value());
+        if (family.GetColumnCodecLevel().has_value()) {
+            columnFamily.SetColumnCodecLevel(family.GetColumnCodecLevel().value());
+        }
+    }
+    if (AccessorConstructor.HasObject()) {
+        *columnFamily.MutableDataAccessorConstructor() = AccessorConstructor.SerializeToProto();
+    }
+}
+
+bool TOlapColumnFamlilyAdd::ApplyDiff(const TOlapColumnFamlilyDiff& diffColumnFamily, IErrorCollector& errors) {
+    Y_ABORT_UNLESS(GetName() == diffColumnFamily.GetName());
+    auto codec = diffColumnFamily.GetCodec();
+    auto codecLevel = diffColumnFamily.GetCodecLevel();
+    if (codec.has_value() || codecLevel.has_value()) {
+        TColumnFamily newColumnFamily;
+        if (SerializerContainer.HasObject()) {
+            TConclusionStatus result = newColumnFamily.SetSerializer(SerializerContainer);
+            if (result.IsFail()) {
+                errors.AddError(result.GetErrorMessage());
+                return false;
+            }
+        }
+        newColumnFamily.SetName(GetName());
+        if (codec.has_value()) {
+            newColumnFamily.SetColumnCodec(codec.value());
+            newColumnFamily.MutableColumnCodecLevel().reset();
+        }
+        if (codecLevel.has_value()) {
+            newColumnFamily.SetColumnCodecLevel(codecLevel.value());
+        }
+        auto serializer = newColumnFamily.GetSerializer();
         if (serializer.IsFail()) {
             errors.AddError(serializer.GetErrorMessage());
             return false;
@@ -101,63 +127,9 @@ bool TOlapColumnFamlilyAdd::ParseFromRequest(const NKikimrSchemeOp::TFamilyDescr
         }
         SerializerContainer = resultBuild.GetResult();
     }
-    return true;
-}
-
-void TOlapColumnFamlilyAdd::ParseFromLocalDB(const NKikimrSchemeOp::TFamilyDescription& columnFamily) {
-    Name = columnFamily.GetName();
-    if (columnFamily.HasColumnCodec()) {
-        auto serializer = ConvertFamilyDescriptionToProtoSerializer(columnFamily);
-        Y_VERIFY_S(serializer.IsSuccess(), serializer.GetErrorMessage());
-        SerializerContainer = NArrow::NSerialization::TSerializerContainer();
-        Y_VERIFY(SerializerContainer.DeserializeFromProto(serializer.GetResult()));
+    if (diffColumnFamily.GetAccessorConstructor().HasObject()) {
+        AccessorConstructor = diffColumnFamily.GetAccessorConstructor();
     }
-}
-
-void TOlapColumnFamlilyAdd::Serialize(NKikimrSchemeOp::TFamilyDescription& columnFamily) const {
-    columnFamily.SetName(Name);
-    if (SerializerContainer.HasObject()) {
-        auto result = ConvertSerializerContainerToFamilyDescription(SerializerContainer);
-        Y_VERIFY_S(result.IsSuccess(), result.GetErrorMessage());
-        columnFamily.SetColumnCodec(result->GetColumnCodec());
-        if (result->HasColumnCodecLevel()) {
-            columnFamily.SetColumnCodecLevel(result->GetColumnCodecLevel());
-        }
-    }
-}
-
-bool TOlapColumnFamlilyAdd::ApplyDiff(const TOlapColumnFamlilyDiff& diffColumnFamily, IErrorCollector& errors) {
-    Y_ABORT_UNLESS(GetName() == diffColumnFamily.GetName());
-    NKikimrSchemeOp::TFamilyDescription newColumnFamily;
-    if (SerializerContainer.HasObject()) {
-        auto resultConvert = ConvertSerializerContainerToFamilyDescription(SerializerContainer);
-        if (resultConvert.IsFail()) {
-            errors.AddError(resultConvert.GetErrorMessage());
-            return false;
-        }
-        newColumnFamily = resultConvert.GetResult();
-    }
-    newColumnFamily.SetName(GetName());
-    auto codec = diffColumnFamily.GetCodec();
-    if (codec.has_value()) {
-        newColumnFamily.SetColumnCodec(codec.value());
-        newColumnFamily.ClearColumnCodecLevel();
-    }
-    auto codecLevel = diffColumnFamily.GetCodecLevel();
-    if (codecLevel.has_value()) {
-        newColumnFamily.SetColumnCodecLevel(codecLevel.value());
-    }
-    auto serializer = ConvertFamilyDescriptionToProtoSerializer(newColumnFamily);
-    if (serializer.IsFail()) {
-        errors.AddError(serializer.GetErrorMessage());
-        return false;
-    }
-    auto resultBuild = NArrow::NSerialization::TSerializerContainer::BuildFromProto(serializer.GetResult());
-    if (resultBuild.IsFail()) {
-        errors.AddError(resultBuild.GetErrorMessage());
-        return false;
-    }
-    SerializerContainer = resultBuild.GetResult();
     return true;
 }
 
@@ -205,4 +177,4 @@ bool TOlapColumnFamiliesUpdate::Parse(const NKikimrSchemeOp::TAlterColumnTableSc
     }
     return true;
 }
-}
+}  // namespace NKikimr::NSchemeShard

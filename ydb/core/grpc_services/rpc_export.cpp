@@ -56,7 +56,7 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
                 return true;
             case NSchemeCache::TSchemeCacheNavigate::KindView:
                 return AppData()->FeatureFlags.GetEnableViewExport();
-            case default:
+            default:
                 return false;
         }
     }

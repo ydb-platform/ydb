@@ -53,3 +53,7 @@ class TestExternalX1(ExternalSuiteBase):
 
 class TestExternalM1(ExternalSuiteBase):
     external_folder: str = 'm1'
+
+
+class TestExternalB1(ExternalSuiteBase):
+    external_folder: str = 'b1'

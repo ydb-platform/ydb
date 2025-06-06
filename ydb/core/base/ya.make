@@ -30,6 +30,7 @@ SRCS(
     group_stat.h
     hive.h
     interconnect_channels.h
+    kmeans_clusters.cpp
     local_user_token.cpp
     local_user_token.h
     localdb.cpp

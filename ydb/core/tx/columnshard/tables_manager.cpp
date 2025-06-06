@@ -208,7 +208,7 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
 THashMap<TSchemeShardLocalPathId, TInternalPathId> TTablesManager::ResolveInternalPathIds(const TSchemeShardLocalPathId from, const TSchemeShardLocalPathId to) const {
     THashMap<TSchemeShardLocalPathId, TInternalPathId> result;
     for (const auto& [schemeShardLocalPathId, internalPathId]: SchemeShardLocalToInternal) {
-        if (from.GetRawValue() <= schemeShardLocalPathId.GetRawValue() && schemeShardLocalPathId.GetRawValue() <= to.GetRawValue()) {
+        if ((from <= schemeShardLocalPathId) && (schemeShardLocalPathId <= to)) {
             result.emplace(schemeShardLocalPathId, internalPathId);
         }
     }
@@ -372,7 +372,7 @@ void TTablesManager::AddTableVersion(const TInternalPathId pathId, const NOlap::
 
 namespace {
 
-ui64 RandomOffsetForTests(ui64 tabletId) {
+ui64 GetInternalPathIdOffset(ui64 tabletId) {
     return NYDBTest::TControllers::GetColumnShardController()->GetInternalPathIdOffset(NOlap::TTabletId{tabletId});
 }
 
@@ -388,7 +388,7 @@ TTablesManager::TTablesManager(const std::shared_ptr<NOlap::IStoragesManager>& s
     , SchemaObjectsCache(schemaCache)
     , PortionsStats(portionsStats)
     , TabletId(tabletId)
-    , InternalPathIdOffset(RandomOffsetForTests(tabletId)) {
+    , InternalPathIdOffset(GetInternalPathIdOffset(tabletId)) {
 }
 
 bool TTablesManager::TryFinalizeDropPathOnExecute(NTable::TDatabase& dbTable, const TInternalPathId pathId) const {

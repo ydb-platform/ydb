@@ -1,4 +1,3 @@
-#include <ydb/core/tx/columnshard/common/path_id.h>
 #include "broken_blobs.h"
 
 #include <ydb/core/formats/arrow/arrow_helpers.h>

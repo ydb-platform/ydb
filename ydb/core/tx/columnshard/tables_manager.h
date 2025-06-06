@@ -150,7 +150,6 @@ public:
                 : internalPathId.GetRawValue()
         );
         AFL_VERIFY(schemeShardLocalPathId);
-        // AFL_VERIFY(localPathId.GetRawValue() != pathId.GetRawValue());
         TTableInfo result(internalPathId, schemeShardLocalPathId);
         if (rowset.template HaveValue<Schema::TableInfo::DropStep>() && rowset.template HaveValue<Schema::TableInfo::DropTxId>()) {
             result.DropVersion.emplace(
@@ -352,12 +351,10 @@ public:
     bool FillMonitoringReport(NTabletFlatExecutor::TTransactionContext& txc, NJson::TJsonValue& json);
 
     [[nodiscard]] std::unique_ptr<NTabletFlatExecutor::ITransaction> CreateAddShardingInfoTx(TColumnShard& owner, const NColumnShard::TSchemeShardLocalPathId pathId,
-        
         const ui64 versionId, const NSharding::TGranuleShardingLogicContainer& tabletShardingLogic) const;
 
     void SetSchemaObjectsCache(const std::shared_ptr<NOlap::TSchemaObjectsCache>& cache) {
         AFL_VERIFY(cache);
-
         AFL_VERIFY(!SchemaObjectsCache);
         SchemaObjectsCache = cache;
     }

@@ -170,22 +170,6 @@ public:
         }
     }
 
-    std::vector<std::shared_ptr<TGranuleMeta>> GetTables(const std::optional<THashSet<TInternalPathId>>& pathIdFilter) const {
-        std::vector<std::shared_ptr<TGranuleMeta>> result;
-        if (pathIdFilter.has_value()) {
-            const auto& pathIds = *pathIdFilter;
-            for (const auto& p: pathIds) {
-                if (const auto* meta = Tables.FindPtr(p)) {
-                    result.emplace_back(*meta);
-                }
-            }
-        } else {
-            for (const auto& [_, meta] : Tables) {
-                result.emplace_back(meta);
-            }
-        }
-        return result;
-    }
 
     std::shared_ptr<TPortionInfo> GetPortionOptional(const TInternalPathId pathId, const ui64 portionId) const {
         auto it = Tables.find(pathId);

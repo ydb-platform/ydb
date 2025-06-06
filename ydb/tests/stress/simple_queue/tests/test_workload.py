@@ -21,5 +21,5 @@ class TestYdbWorkload(object):
 
     @pytest.mark.parametrize('mode', ['row', 'column'])
     def test(self, mode: str):
-        with Workload(f'grpc://localhost:{self.cluster.nodes[1].grpc_port}', '/Root', 60, mode) as workload:
+        with Workload(f'grpc://localhost:{self.cluster.nodes[1].grpc_port}', '/Root', 61, mode) as workload:
             workload.start()

@@ -652,6 +652,10 @@ message TMongoDbDataSourceOptions {
         READING_MODE_UNSPECIFIED = 0;
         // Returns each top level field of the document deserialized into the corresponding YQL type; if the type of some field is ambiguous / inconsistent across several documents it is returned serialized as an YQL Utf8 value
         TABLE = 1;
+        // Returns a key-value pair of ObjectID primary key and a YSON serialized document
+        YSON = 2;
+        // Returns a key-value pair of ObjectID primary key and a JSON serialized document
+        JSON = 3;
     };
       
     // Ways of dealing with values read in ReadSplit whose types are inconsistent with types that were deduced in DescribeTable
@@ -893,8 +897,22 @@ message TRevisionFilterConfig {
 
 ///////////////////////////// Ytflow /////////////////////////////
 
+message TYtflowClusterConfig {
+    optional string Name = 1; // YQL short cluster name.
+    optional string RealName = 2; // Short cluster name.
+    optional string ProxyUrl = 3;
+    optional string Token = 4;
+
+    repeated TAttr Settings = 100;
+}
+
 message TYtflowGatewayConfig {
-    optional uint32 GatewayThreads = 1 [default = 1]; // Number of gateway MtpQueue threads. The adaptive MtpQueue will be used for 0 value
+    optional uint32 GatewayThreads = 1 [default = 1]; // Number of gateway threads. The adaptive thread pool will be used for 0 value
+    optional string YtflowWorkerBin = 2; // Path to ytflow worker executable.
+
+    repeated TYtflowClusterConfig ClusterMapping = 3;
+
+    repeated TAttr DefaultSettings = 102;
 }
 
 

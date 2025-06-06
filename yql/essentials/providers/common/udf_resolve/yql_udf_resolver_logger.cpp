@@ -11,11 +11,38 @@ using namespace NYql;
 
 class TUdfResolverWithLoggerDecorator : public IUdfResolver {
 public:
-    TUdfResolverWithLoggerDecorator(IUdfResolver::TPtr underlying, const TString& path, const TString& sessionId)
-        : Underlying_(underlying), Out_(TFile(path, WrOnly | ForAppend | OpenAlways)), SessionId_(sessionId) {}
+    TUdfResolverWithLoggerDecorator(const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
+                        IUdfResolver::TPtr underlying, const TString& path, const TString& sessionId)
+        : FunctionRegistry_(functionRegistry)
+        , Underlying_(underlying)
+        , Out_(TFile(path, WrOnly | ForAppend | OpenAlways))
+        , SessionId_(sessionId) {}
 
     TMaybe<TFilePathWithMd5> GetSystemModulePath(const TStringBuf& moduleName) const override {
         return Underlying_->GetSystemModulePath(moduleName);
+    }
+
+    void LogImport(TStringBuilder& sb, const TImport& import) const {
+        sb << " ";
+        switch (import.Block->Type) {
+        case NYql::EUserDataType::PATH:             sb << "PATH"; break;
+        case NYql::EUserDataType::URL:              sb << "URL"; break;
+        case NYql::EUserDataType::RAW_INLINE_DATA:  sb << "RAW_INLINE_DATA"; break;
+        };
+        sb << ":" << import.FileAlias << ":";
+        bool isTrusted = false;
+        if (import.Modules) {
+            bool was = false;
+            for (auto& e: *import.Modules) {
+                sb << (was ? "," : "") << e;
+                isTrusted |= FunctionRegistry_->IsLoadedUdfModule(e);
+                was = true;
+            }
+        }
+        sb << ":" << isTrusted << ":";
+        auto frozen = import.Block->FrozenFile;
+        Y_ENSURE(frozen);
+        sb << frozen->GetMd5() << ":" << frozen->GetSize();
     }
 
     bool LoadMetadata(
@@ -25,18 +52,17 @@ public:
         TSimpleTimer t;
         auto result = Underlying_->LoadMetadata(imports, functions, ctx, logLevel, storage);
         auto runningTime = t.Get().MilliSeconds();
+        if (imports.empty()) {
+            return result;
+        }
 
         TStringBuilder sb;
-        sb << SessionId_ << " LoadMetadata with imports (";
+        sb << TInstant::Now() << " " << SessionId_ << " LoadMetadata with imports (";
         for (auto& e: imports) {
             if (!e || !e->Block) {
                 continue;
             }
-            auto frozen = e->Block->Type != EUserDataType::URL ? e->Block->FrozenFile : storage.GetFrozenBlock(*e->Block);
-            if (!frozen) {
-                continue;
-            }
-            sb << " " << frozen->GetMd5() << ":" << frozen->GetSize();
+            LogImport(sb, *e);
         }
         sb << ") took " << runningTime << " ms\n";
         Out_ << TString(sb);
@@ -47,18 +73,17 @@ public:
         TSimpleTimer t;
         auto result = Underlying_->LoadRichMetadata(imports, logLevel, storage);
         auto runningTime = t.Get().MilliSeconds();
+        if (imports.empty()) {
+            return result;
+        }
 
         TStringBuilder sb;
-        sb << SessionId_ << " LoadRichMetadata with imports (";
+        sb << TInstant::Now() << " " << SessionId_ << " LoadRichMetadata with imports (";
         for (auto& e: imports) {
             if (!e.Block) {
                 continue;
             }
-            auto frozen = e.Block->Type != EUserDataType::URL ? e.Block->FrozenFile : storage.GetFrozenBlock(*e.Block);
-            if (!frozen) {
-                continue;
-            }
-            sb << " " << frozen->GetMd5() << ":" << frozen->GetSize();
+            LogImport(sb, e);
         }
         sb << ") took " << runningTime << " ms\n";
         Out_ << TString(sb);
@@ -69,6 +94,7 @@ public:
         return Underlying_->ContainsModule(moduleName);
     }
 private:
+    const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry_;
     IUdfResolver::TPtr Underlying_;
     mutable TUnbufferedFileOutput Out_;
     TString SessionId_;
@@ -77,7 +103,7 @@ private:
 }
 
 namespace NYql::NCommon {
-IUdfResolver::TPtr CreateUdfResolverDecoratorWithLogger(IUdfResolver::TPtr underlying, const TString& path, const TString& sessionId) {
-    return new TUdfResolverWithLoggerDecorator(underlying, path, sessionId);
+IUdfResolver::TPtr CreateUdfResolverDecoratorWithLogger(const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, IUdfResolver::TPtr underlying, const TString& path, const TString& sessionId) {
+    return new TUdfResolverWithLoggerDecorator(functionRegistry, underlying, path, sessionId);
 }
 }

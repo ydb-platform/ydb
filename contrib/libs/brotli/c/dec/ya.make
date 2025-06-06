@@ -10,10 +10,10 @@ NO_UTIL()
 
 NO_COMPILER_WARNINGS()
 
-ADDINCL(GLOBAL contrib/libs/brotli/include)
+ADDINCL(GLOBAL contrib/libs/brotli/c/include)
 
 PEERDIR(
-    contrib/libs/brotli/common
+    contrib/libs/brotli/c/common
 )
 
 SRCS(

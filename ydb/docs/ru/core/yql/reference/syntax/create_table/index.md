@@ -100,7 +100,7 @@ WITH (
 
   {% else %}
 
-  Для ключевых и неключевых колонок допускаются только [примитивные](../../types/primitive.md){% if feature_serial %}и [серийные](../../types/serial.md){% endif %} типы данных.
+  Для ключевых и неключевых колонок допускаются только [примитивные](../../types/primitive.md){% if feature_serial %} и [серийные](../../types/serial.md){% endif %} типы данных.
 
   {% endif %}
 

@@ -255,7 +255,6 @@ private:
                 if (querySchedulerGroup) {
                     Scheduler->AddToGroup(schedulerNow, *querySchedulerGroup, schedulingTaskOptions.Handle);
                 }
-                Scheduler->AdvanceTime(TlsActivationContext->Monotonic());
             }
 
             NComputeActor::IKqpNodeComputeActorFactory::TCreateArgs createArgs{
@@ -313,6 +312,10 @@ private:
             auto* startedTask = reply->Record.AddStartedTasks();
             startedTask->SetTaskId(taskCtx.TaskId);
             ActorIdToProto(taskCtx.ComputeActorId, startedTask->MutableActorId());
+        }
+
+        if (!schedulerGroup.empty()) {
+            Scheduler->AdvanceTime(TlsActivationContext->Monotonic());
         }
 
         TCPULimits cpuLimits;

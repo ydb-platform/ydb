@@ -93,6 +93,7 @@ namespace NKikimr::NBsController {
         storagePool.NumGroups = cmd.GetNumGroups();
         storagePool.EncryptionMode = cmd.GetEncryptionMode();
         storagePool.RandomizeGroupMapping = cmd.GetRandomizeGroupMapping();
+        storagePool.DefaultGroupSizeInUnits = cmd.GetDefaultGroupSizeInUnits();
 
         for (const auto &userId : cmd.GetUserId()) {
             storagePool.UserIds.emplace(boxId, storagePoolId, userId);

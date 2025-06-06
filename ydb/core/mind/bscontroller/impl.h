@@ -1,6 +1,7 @@
 #pragma once
 #include "defs.h"
 #include "bsc.h"
+#include "cluster_balancing.h"
 #include "scheme.h"
 #include "mood.h"
 #include "types.h"
@@ -1599,6 +1600,8 @@ private:
     NKikimrBlobStorage::TPDiskSpaceColor::E PDiskSpaceColorBorder
             = NKikimrBlobStorage::TPDiskSpaceColor::GREEN;
 
+    TClusterBalancingSettings ClusterBalancingSettings;
+
     TActorId SystemViewsCollectorId;
 
     // a set of VSlots with LastSeenReady != TInstant::Zero()
@@ -1864,6 +1867,8 @@ public:
     // basis). BS_CONTROLLER reports faulty PDisks and all involved groups in a push notification manner.
     IActor *CreateSelfHealActor();
     TActorId SelfHealId;
+
+    TActorId ClusterBalanceActorId;
 
     bool IsGroupLayoutSanitizerEnabled() const {
         return GroupLayoutSanitizerEnabled;

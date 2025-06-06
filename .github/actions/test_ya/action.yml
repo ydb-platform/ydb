@@ -287,7 +287,7 @@ runs:
         echo "BRANCH_NAME=$BRANCH_NAME" >> $GITHUB_ENV
         echo "BRANCH_NAME is set to $BRANCH_NAME"
 
-        TESTMO_BRANCH_TAG="$BRANCH_NAME"
+        TESTMO_BRANCH_TAG="${BRANCH_NAME//[^a-zA-Z0-9-]/-}"
         TESTMO_ARCH="${{ runner.arch == 'X64' && 'x86-64' || runner.arch == 'ARM64' && 'arm64' || 'unknown' }}"
         TESTMO_PR_NUMBER=${{ github.event.number }}
 

@@ -21,9 +21,9 @@ sourceSets {
 {%-     endif -%}
 
 {%-     if proto_template and symlinks_to_generated %}
-        java.srcDir("generated_java")
+        java.srcDir("generated/source/proto/main/java")
 {%-         if target.proto_grpc %}
-        java.srcDir("generated_grpc")
+        java.srcDir("generated/source/proto/main/grpc")
 {%-         endif -%}
 {%-     elif proto_template %}
         java.srcDir("$buildDir/generated/source/proto/main/java")

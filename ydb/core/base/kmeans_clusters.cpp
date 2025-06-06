@@ -6,7 +6,7 @@
 
 #include <span>
 
-namespace NKikimr::NDataShard::NKMeans {
+namespace NKikimr::NKMeans {
 
 template <typename TRes>
 Y_PURE_FUNCTION TTriWayDotProduct<TRes> CosineImpl(const float* lhs, const float* rhs, size_t length)

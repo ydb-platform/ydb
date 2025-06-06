@@ -5,7 +5,7 @@
 
 #include <ydb/public/api/protos/ydb_table.pb.h>
 
-namespace NKikimr::NDataShard::NKMeans {
+namespace NKikimr::NKMeans {
 
 class TClusters {
 public:

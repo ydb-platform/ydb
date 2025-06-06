@@ -40,6 +40,7 @@ target_link_libraries(kqp-ut-common PUBLIC
   src-client-scheme
   src-client-table
   src-client-topic
+  contrib-libs-highwayhash
 )
 
 target_sources(kqp-ut-common PRIVATE
@@ -51,6 +52,7 @@ target_sources(kqp-ut-common PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/common/datetime2_udf.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/common/math_udf.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/common/unicode_udf.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/common/digest_udf.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/common/kqp_ut_common.h
 )
 

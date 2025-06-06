@@ -28,10 +28,18 @@ void TerminateHandler() {
     abort();
 }
 
+TString SignalToString(int signal) {
+#ifndef _unix_
+    return TStringBuilder() << "signal " << signal;
+#else
+    return strsignal(signal);
+#endif
+}
+
 void BackTraceSignalHandler(int signal) {
     NColorizer::TColors colors = NColorizer::AutoColors(Cerr);
 
-    Cerr << colors.Red() << "======= " << strsignal(signal) << " call stack ========" << colors.Default() << Endl;
+    Cerr << colors.Red() << "======= " << SignalToString(signal) << " call stack ========" << colors.Default() << Endl;
     FormatBackTrace(&Cerr);
     Cerr << colors.Red() << "===============================================" << colors.Default() << Endl;
 
@@ -180,6 +188,27 @@ TString TStatsPrinter::FormatNumber(i64 number) {
     stream.imbue(std::locale(stream.getloc(), new TSeparator()));
     stream << number;
     return stream.str();
+}
+
+TCachedPrinter::TCachedPrinter(const TString& output, TPrinter printer)
+    : Output(output)
+    , Printer(printer)
+{}
+
+void TCachedPrinter::Print(const TString& data, bool allowEmpty) {
+    if ((!data && !allowEmpty) || (PrintedData && data == *PrintedData)) {
+        return;
+    }
+
+    IOutputStream* stream = &Cout;
+    if (Output != "-") {
+        FileOutput = std::make_unique<TFileOutput>(Output);
+        stream = &(*FileOutput);
+    }
+
+    Printer(data, *stream);
+    stream->Flush();
+    PrintedData = data;
 }
 
 TString LoadFile(const TString& file) {

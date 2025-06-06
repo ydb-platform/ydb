@@ -1263,7 +1263,7 @@ void TPartitionActor::WaitDataInPartition(const TActorContext& ctx) {
 
 
     LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY,
-            PQ_LOG_PREFIX << " " << Partition << " wait data in partition inited, cookie " << WaitDataCookie << " from offset" << ReadOffset);
+            PQ_LOG_PREFIX << " " << Partition << " wait data in partition inited, cookie " << WaitDataCookie << " from offset " << ReadOffset);
 
     NTabletPipe::SendData(ctx, PipeClient, event.Release());
 

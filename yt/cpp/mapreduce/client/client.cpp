@@ -1613,6 +1613,7 @@ TClientContext CreateClientContext(
     context.TvmOnly = options.TvmOnly_;
     context.ProxyAddress = options.ProxyAddress_;
     context.UseProxyUnixDomainSocket = options.UseProxyUnixDomainSocket_;
+    context.MultiproxyTargetCluster = options.MultiproxyTargetCluster_;
 
     if (options.UseTLS_) {
         context.UseTLS = *options.UseTLS_;

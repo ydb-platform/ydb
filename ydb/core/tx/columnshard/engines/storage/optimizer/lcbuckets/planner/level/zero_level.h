@@ -22,12 +22,12 @@ private:
         return std::nullopt;
     }
 
-    virtual bool IsAppropriatePortionToMove(const TPortionAccessorConstructor& info) const override {
-        return info.GetTotalBlobsSize() > ExpectedBlobsSize;
+    virtual bool IsAppropriatePortionToMove(const TPortionInfoForCompaction& info) const override {
+        return info.GetTotalBlobBytes() > NextLevel->GetExpectedPortionSize();
     }
 
-    virtual bool IsAppropriatePortionToStore(const TPortionAccessorConstructor& /*info*/) const override {
-        return true;
+    virtual bool IsAppropriatePortionToStore(const TPortionInfoForCompaction& info) const override {
+        return info.GetTotalBlobBytes() > GetExpectedPortionSize();
     }
 
     virtual ui64 DoGetAffectedPortionBytes(const NArrow::TSimpleRow& /*from*/, const NArrow::TSimpleRow& /*to*/) const override {
@@ -69,6 +69,9 @@ private:
     virtual TInstant DoGetWeightExpirationInstant() const override;
 
     virtual TCompactionTaskData DoGetOptimizationTask() const override;
+    virtual ui64 GetExpectedPortionSize() const override {
+        return ExpectedBlobsSize;
+    }
 
 public:
     TZeroLevelPortions(const ui32 levelIdx, const std::shared_ptr<IPortionsLevel>& nextLevel, const TLevelCounters& levelCounters,

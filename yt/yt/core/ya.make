@@ -32,8 +32,6 @@ SRCS(
     bus/tcp/client.cpp
     bus/tcp/local_bypass.cpp
     bus/tcp/server.cpp
-    bus/tcp/ssl_context.cpp
-    bus/tcp/ssl_helpers.cpp
 
     compression/brotli.cpp
     compression/bzip2.cpp
@@ -333,7 +331,7 @@ PEERDIR(
     contrib/libs/libbz2
     contrib/libs/c-ares
     contrib/libs/farmhash
-    contrib/libs/yajl
+    contrib/deprecated/yajl
     contrib/libs/lz4
     contrib/libs/openssl
 

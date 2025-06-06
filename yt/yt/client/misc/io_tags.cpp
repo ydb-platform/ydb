@@ -21,8 +21,7 @@ std::string FormatIOTag(EAggregateIOTag tag)
 template <class T>
 void AddTagToBaggage(const NYTree::IAttributeDictionaryPtr& baggage, T tag, TStringBuf value)
 {
-    // TODO(babenko): switch to std::string
-    baggage->Set(TString(FormatIOTag(tag)), value);
+    baggage->Set(FormatIOTag(tag), value);
 }
 
 template void AddTagToBaggage<ERawIOTag>(const NYTree::IAttributeDictionaryPtr& baggage, ERawIOTag tag, TStringBuf value);

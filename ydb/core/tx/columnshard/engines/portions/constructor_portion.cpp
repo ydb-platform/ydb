@@ -56,8 +56,6 @@ std::shared_ptr<TPortionInfo> TWrittenPortionInfoConstructor::BuildPortionImpl(T
     }
     AFL_VERIFY(InsertWriteId);
     result->InsertWriteId = *InsertWriteId;
-
-    AFL_VERIFY(result->GetMeta().GetProduced() == NPortion::EProduced::INSERTED);
     return result;
 }
 

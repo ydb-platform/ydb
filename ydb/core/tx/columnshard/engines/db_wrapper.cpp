@@ -60,7 +60,9 @@ void TDbWrapper::WriteColumn(const NOlap::TPortionInfo& portion, const TColumnRe
     }
     if (AppDataVerified().ColumnShardConfig.GetColumnChunksV0Usage()) {
         if (row.GetChunkIdx() == 0 && row.GetColumnId() == firstPKColumnId) {
-            *rowProto.MutablePortionMeta() = portion.GetMeta().SerializeToProto();
+            *rowProto.MutablePortionMeta() =
+                portion.GetMeta().SerializeToProto(portion.GetPortionType() == EPortionType::Compacted ? NPortion::EProduced::SPLIT_COMPACTED
+                                                                                                       : NPortion::EProduced::INSERTED);
         }
         using IndexColumns = NColumnShard::Schema::IndexColumns;
         auto removeSnapshot = portion.GetRemoveSnapshotOptional();

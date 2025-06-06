@@ -502,7 +502,7 @@ namespace NFlatExecutorSetup {
         virtual void CompactionComplete(ui32 tableId, const TActorContext &ctx); // would be no-op in default implementation
         virtual void DataCleanupComplete(ui64 dataCleanupGeneration, const TActorContext& ctx);
 
-        virtual void ScanComplete(NTable::EAbort status, TAutoPtr<IDestructable> prod, ui64 cookie, const TActorContext &ctx);
+        virtual void ScanComplete(NTable::EStatus status, TAutoPtr<IDestructable> prod, ui64 cookie, const TActorContext &ctx);
 
         virtual bool ReassignChannelsEnabled() const;
         virtual void OnYellowChannelsChanged();

@@ -18,6 +18,14 @@ public:
         bool Disconnect;
     };
 
+    enum Flags : ui64 {
+        EMPTY = 0,
+        USE_ZC = 1,
+        USE_TLS = 1 << 1
+    };
+
+    using TCheckerFactory = std::function<IActor*(ui32)>;
+
 private:
     const ui32 NumNodes;
     const TString Address = "::1";
@@ -31,7 +39,8 @@ private:
 
 public:
     TTestICCluster(ui32 numNodes = 1, NActors::TChannelsConfig channelsConfig = NActors::TChannelsConfig(),
-                   TTrafficInterrupterSettings* tiSettings = nullptr, TIntrusivePtr<NLog::TSettings> loggerSettings = nullptr, bool useZc = false)
+                   TTrafficInterrupterSettings* tiSettings = nullptr, TIntrusivePtr<NLog::TSettings> loggerSettings = nullptr, Flags flags = EMPTY,
+                   TCheckerFactory checkerFactory = {})
         : NumNodes(numNodes)
         , Counters(new NMonitoring::TDynamicCounters)
         , ChannelsConfig(channelsConfig)
@@ -64,7 +73,8 @@ public:
             auto& portMap = tiSettings ? specificNodePortMap[i] : nodeToPortMap;
             Nodes.emplace(i, MakeHolder<TNode>(i, NumNodes, portMap, Address, Counters, DeadPeerTimeout, ChannelsConfig,
                 /*numDynamicNodes=*/0, /*numThreads=*/1, LoggerSettings, TNode::DefaultInflight(),
-                useZc ? ESocketSendOptimization::IC_MSG_ZEROCOPY : ESocketSendOptimization::DISABLED));
+                flags & USE_ZC ? ESocketSendOptimization::IC_MSG_ZEROCOPY : ESocketSendOptimization::DISABLED,
+                flags & USE_TLS, checkerFactory));
         }
     }
 

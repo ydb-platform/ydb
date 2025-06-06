@@ -13,7 +13,7 @@ namespace NKikimr::NStorage {
         TEvNodeConfigPush() = default;
 
         bool IsUseful() const {
-            return Record.BoundNodesSize() || Record.DeletedBoundNodeIdsSize();
+            return Record.BoundNodesSize() || Record.DeletedBoundNodeIdsSize() || Record.HasCacheUpdate();
         }
     };
 
@@ -114,6 +114,42 @@ namespace NKikimr::NStorage {
         TEvNodeWardenWriteMetadataResult(std::optional<ui64> guid, NPDisk::EPDiskMetadataOutcome outcome)
             : Guid(guid)
             , Outcome(outcome)
+        {}
+    };
+
+    struct TEvNodeWardenUpdateCache : TEventLocal<TEvNodeWardenUpdateCache, TEvBlobStorage::EvNodeWardenUpdateCache> {
+        NKikimrBlobStorage::TCacheUpdate CacheUpdate;
+
+        TEvNodeWardenUpdateCache(NKikimrBlobStorage::TCacheUpdate&& cacheUpdate)
+            : CacheUpdate(std::move(cacheUpdate))
+        {}
+    };
+
+    struct TEvNodeWardenQueryCache : TEventLocal<TEvNodeWardenQueryCache, TEvBlobStorage::EvNodeWardenQueryCache> {
+        TString Key;
+        bool Subscribe;
+
+        TEvNodeWardenQueryCache(TString key, bool subscribe)
+            : Key(std::move(key))
+            , Subscribe(subscribe)
+        {}
+    };
+
+    struct TEvNodeWardenQueryCacheResult : TEventLocal<TEvNodeWardenQueryCacheResult, TEvBlobStorage::EvNodeWardenQueryCacheResult> {
+        TString Key;
+        std::optional<std::tuple<ui32, TString>> GenerationValue;
+
+        TEvNodeWardenQueryCacheResult(TString key, std::optional<std::tuple<ui32, TString>> generationValue)
+            : Key(std::move(key))
+            , GenerationValue(std::move(generationValue))
+        {}
+    };
+
+    struct TEvNodeWardenUnsubscribeFromCache : TEventLocal<TEvNodeWardenUnsubscribeFromCache, TEvBlobStorage::EvNodeWardenUnsubscribeFromCache> {
+        TString Key;
+
+        TEvNodeWardenUnsubscribeFromCache(TString key)
+            : Key(std::move(key))
         {}
     };
 

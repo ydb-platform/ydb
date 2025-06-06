@@ -409,6 +409,7 @@ private:
     void CreateTable(TImportInfo& importInfo, ui32 itemIdx, TTxId txId) {
         Y_ABORT_UNLESS(itemIdx < importInfo.Items.size());
         auto& item = importInfo.Items.at(itemIdx);
+        Y_ABORT_UNLESS(item.Table);
 
         item.SubState = ESubState::Proposed;
 
@@ -519,7 +520,7 @@ private:
             << ", txId# " << txId);
 
         Y_ABORT_UNLESS(item.WaitTxId == InvalidTxId);
-        Send(Self->SelfId(), RestorePropose(Self, txId, importInfo, itemIdx));
+        Send(Self->SelfId(), RestoreTableDataPropose(Self, txId, importInfo, itemIdx));
     }
 
     bool CancelTransferring(TImportInfo& importInfo, ui32 itemIdx) {
@@ -540,7 +541,7 @@ private:
             << ": info# " << importInfo.ToString()
             << ", item# " << item.ToString(itemIdx));
 
-        Send(Self->SelfId(), CancelRestorePropose(importInfo, item.WaitTxId), 0, importInfo.Id);
+        Send(Self->SelfId(), CancelRestoreTableDataPropose(importInfo, item.WaitTxId), 0, importInfo.Id);
         return true;
     }
 
@@ -846,7 +847,7 @@ private:
             return Nothing();
         }
 
-        return indexInfo.Issue;
+        return indexInfo.GetIssue();
     }
 
     TString GetIssues(const NKikimrIndexBuilder::TEvCreateResponse& proto) {
@@ -1009,12 +1010,8 @@ private:
         if (!msg.Success) {
             return CancelAndPersist(db, importInfo, msg.ItemIdx, msg.Error, "cannot get scheme");
         }
-        if (!IsCreatedByQuery(item)) {
-            TString error;
-            if (!CreateTablePropose(Self, TTxId(), *importInfo, msg.ItemIdx, error)) {
-                return CancelAndPersist(db, importInfo, msg.ItemIdx, error, "invalid scheme");
-            }
-        } else {
+        
+        if (IsCreatedByQuery(item)) {
             // Send the creation query to KQP to prepare.
             const auto database = GetDatabase(*Self);
             const TString source = TStringBuilder()
@@ -1029,6 +1026,11 @@ private:
                 Self->SelfId(), msg.ImportId, msg.ItemIdx, item.CreationQuery, database
             ));
             Self->RunningImportSchemeQueryExecutors.emplace(item.SchemeQueryExecutor);
+        } else if (item.Table) {
+            TString error;
+            if (!CreateTablePropose(Self, TTxId(), *importInfo, msg.ItemIdx, error)) {
+                return CancelAndPersist(db, importInfo, msg.ItemIdx, error, "invalid table scheme");
+            }
         }
 
         Self->PersistImportItemScheme(db, *importInfo, msg.ItemIdx);
@@ -1257,7 +1259,7 @@ private:
                 }
                 if (!Self->TableProfilesLoaded) {
                     Self->WaitForTableProfiles(id, i);
-                } else {
+                } else if (item.Table){
                     CreateTable(*importInfo, i, txId);
                     itemIdx = i;
                 }
@@ -1509,6 +1511,9 @@ private:
                 item.State = EState::Done;
                 break;
             }
+            if (!item.Table) {
+                Y_ABORT("Create Scheme Object: schema objects are empty");
+            }
             item.State = EState::Transferring;
             AllocateTxId(*importInfo, itemIdx);
             break;
@@ -1518,7 +1523,8 @@ private:
                 item.Issue = *issue;
                 Cancel(*importInfo, itemIdx, "issues during restore");
             } else {
-                if (item.NextIndexIdx < item.Scheme.indexes_size()) {
+                Y_ABORT_UNLESS(item.Table);
+                if (item.NextIndexIdx < item.Table->indexes_size()) {
                     item.State = EState::BuildIndexes;
                     AllocateTxId(*importInfo, itemIdx);
                 } else if (item.NextChangefeedIdx < item.Changefeeds.changefeeds_size() &&
@@ -1536,7 +1542,8 @@ private:
                 item.Issue = *issue;
                 Cancel(*importInfo, itemIdx, "issues during index building");
             } else {
-                if (++item.NextIndexIdx < item.Scheme.indexes_size()) {
+                Y_ABORT_UNLESS(item.Table);
+                if (++item.NextIndexIdx < item.Table->indexes_size()) {
                     AllocateTxId(*importInfo, itemIdx);
                 } else if (item.NextChangefeedIdx < item.Changefeeds.changefeeds_size() &&
                            AppData()->FeatureFlags.GetEnableChangefeedsImport()) {

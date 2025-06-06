@@ -1,13 +1,14 @@
 from __future__ import annotations
 import os
 from .conftest import LoadSuiteBase
-from ydb.tests.olap.lib.ydb_cli import WorkloadType
+from ydb.tests.olap.lib.ydb_cli import WorkloadType, CheckCanonicalPolicy
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 
 
 class ExternalSuiteBase(LoadSuiteBase):
     workload_type: WorkloadType = WorkloadType.EXTERNAL
     iterations: int = 1
+    check_canonical: CheckCanonicalPolicy = CheckCanonicalPolicy.ERROR
     __query_list: list[str] = None
 
     @staticmethod
@@ -48,3 +49,7 @@ class TestExternalA1(ExternalSuiteBase):
 
 class TestExternalX1(ExternalSuiteBase):
     external_folder: str = 'x1'
+
+
+class TestExternalM1(ExternalSuiteBase):
+    external_folder: str = 'm1'

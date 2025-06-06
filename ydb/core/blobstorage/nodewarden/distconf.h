@@ -175,11 +175,10 @@ namespace NKikimr::NStorage {
         const bool IsSelfStatic = false;
         TIntrusivePtr<TNodeWardenConfig> Cfg;
         bool SelfManagementEnabled = false;
-        bool IsPrimary = false;
-        bool IsBeingPromoted = false;
+        TBridgeInfo::TPtr BridgeInfo;
 
         // currently active storage config
-        std::optional<NKikimrBlobStorage::TStorageConfig> StorageConfig;
+        std::shared_ptr<const NKikimrBlobStorage::TStorageConfig> StorageConfig;
         TString MainConfigYaml; // the part we have to push (unless this is storage-only) to console
         std::optional<ui64> MainConfigYamlVersion;
         TString MainConfigFetchYaml; // the part we would get is we fetch from console
@@ -187,10 +186,10 @@ namespace NKikimr::NStorage {
         std::optional<TString> StorageConfigYaml; // set if dedicated storage yaml is enabled; otherwise nullopt
 
         // base config from config file
-        NKikimrBlobStorage::TStorageConfig BaseConfig;
+        std::shared_ptr<const NKikimrBlobStorage::TStorageConfig> BaseConfig;
 
         // initial config based on config file and stored committed configs
-        NKikimrBlobStorage::TStorageConfig InitialConfig;
+        std::shared_ptr<const NKikimrBlobStorage::TStorageConfig> InitialConfig;
         std::vector<TString> DrivesToRead;
 
         // proposed storage configuration of the cluster
@@ -281,6 +280,14 @@ namespace NKikimr::NStorage {
         std::optional<std::tuple<ui64, ui32>> ProposedConfigHashVersion;
         std::vector<std::tuple<TActorId, TString, ui64>> ConsoleConfigValidationQ;
 
+        // cache subsystem
+        struct TCacheItem {
+            ui32 Generation; // item generation
+            std::optional<TString> Value; // item binary value
+        };
+        THashMap<TString, TCacheItem> Cache;
+        std::set<std::tuple<TString, TActorId>> CacheSubscriptions;
+
         friend void ::Out<ERootState>(IOutputStream&, ERootState);
 
     public:
@@ -288,8 +295,8 @@ namespace NKikimr::NStorage {
             return NKikimrServices::TActivity::NODEWARDEN_DISTRIBUTED_CONFIG;
         }
 
-        TDistributedConfigKeeper(TIntrusivePtr<TNodeWardenConfig> cfg, const NKikimrBlobStorage::TStorageConfig& baseConfig,
-            bool isSelfStatic);
+        TDistributedConfigKeeper(TIntrusivePtr<TNodeWardenConfig> cfg,
+            std::shared_ptr<const NKikimrBlobStorage::TStorageConfig> baseConfig, bool isSelfStatic);
 
         void Bootstrap();
         void PassAway() override;
@@ -433,7 +440,7 @@ namespace NKikimr::NStorage {
         void ApplyConfigUpdateToDynamicNodes(bool drop);
         void OnDynamicNodeDisconnected(ui32 nodeId, TActorId sessionId);
         void HandleDynamicConfigSubscribe(STATEFN_SIG);
-        void PushConfigToDynamicNode(TActorId actorId, TActorId sessionId);
+        void PushConfigToDynamicNode(TActorId actorId, TActorId sessionId, bool addCache);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Event delivery
@@ -447,6 +454,18 @@ namespace NKikimr::NStorage {
         // Monitoring
 
         void Handle(NMon::TEvHttpInfo::TPtr ev);
+
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // Cache update
+
+        void ApplyCacheUpdates(NKikimrBlobStorage::TCacheUpdate *cacheUpdate, ui32 senderNodeId);
+
+        void AddCacheUpdate(NKikimrBlobStorage::TCacheUpdate *cacheUpdate, THashMap<TString, TCacheItem>::const_iterator it,
+            bool addValue);
+
+        void Handle(TEvNodeWardenUpdateCache::TPtr ev);
+        void Handle(TEvNodeWardenQueryCache::TPtr ev);
+        void Handle(TEvNodeWardenUnsubscribeFromCache::TPtr ev);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Console interaction
@@ -752,6 +771,8 @@ namespace NKikimr::NStorage {
 
     std::optional<TString> DecomposeConfig(const TString& configComposite, TString *mainConfigYaml,
         ui64 *mainConfigVersion, TString *mainConfigFetchYaml);
+
+    std::optional<TString> UpdateClusterState(NKikimrBlobStorage::TStorageConfig *config);
 
 } // NKikimr::NStorage
 

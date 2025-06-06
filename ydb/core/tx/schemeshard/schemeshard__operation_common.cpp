@@ -428,6 +428,13 @@ TDone::TDone(const TOperationId& id)
     IgnoreMessages(DebugHint(), AllIncomingEvents());
 }
 
+TDone::TDone(const TOperationId& id, TPathElement::EPathState targetState)
+    : OperationId(id)
+    , TargetState(targetState)
+{
+    IgnoreMessages(DebugHint(), AllIncomingEvents());
+}
+
 bool TDone::Process(TOperationContext& context) {
     const auto* txState = context.SS->FindTx(OperationId);
 
@@ -449,6 +456,8 @@ bool TDone::Process(TOperationContext& context) {
 
     if (txState->IsDrop()) {
         context.OnComplete.ReleasePathState(OperationId, path->PathId, TPathElement::EPathState::EPathStateNotExist);
+    } else if (TargetState) {
+        context.OnComplete.ReleasePathState(OperationId, path->PathId, *TargetState);
     } else {
         context.OnComplete.ReleasePathState(OperationId, path->PathId, TPathElement::EPathState::EPathStateNoChanges);
     }

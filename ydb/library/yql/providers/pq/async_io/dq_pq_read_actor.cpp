@@ -195,7 +195,8 @@ public:
         const ::NMonitoring::TDynamicCounterPtr& counters,
         const ::NMonitoring::TDynamicCounterPtr& taskCounters,
         i64 bufferSize,
-        const IPqGateway::TPtr& pqGateway)
+        const IPqGateway::TPtr& pqGateway,
+        ui32 topicPartitionsCount)
         : TActor<TDqPqReadActor>(&TDqPqReadActor::StateFunc)
         , TDqPqReadActorBase(inputIndex, taskId, this->SelfId(), txId, std::move(sourceParams), std::move(readParams), computeActorId)
         , Metrics(txId, taskId, counters, taskCounters)
@@ -204,6 +205,7 @@ public:
         , Driver(std::move(driver))
         , CredentialsProviderFactory(std::move(credentialsProviderFactory))
         , PqGateway(pqGateway)
+        , TopicPartitionsCount(topicPartitionsCount)
     {
         Y_UNUSED(TDuration::TryParse(SourceParams.GetReconnectPeriod(), ReconnectPeriod));
         MetadataFields.reserve(SourceParams.MetadataFieldsSize());
@@ -402,10 +404,10 @@ private:
                             .Endpoint = federatedCluster.GetEndpoint(),
                             .Path = federatedCluster.GetDatabase(),
                         },
-                        ReadParams.front().GetPartitioningParams().GetTopicPartitionsCount()
+                        TopicPartitionsCount
                     );
                     if (cluster.PartitionsCount == 0) {
-                        cluster.PartitionsCount = ReadParams.front().GetPartitioningParams().GetTopicPartitionsCount();
+                        cluster.PartitionsCount = TopicPartitionsCount;
                         SRC_LOG_W("PartitionsCount for offline server assumed to be " << cluster.PartitionsCount);
                     }
                 }
@@ -416,7 +418,7 @@ private:
                             .Endpoint = SourceParams.GetEndpoint(),
                             .Path =SourceParams.GetDatabase()
                     },
-                    ReadParams.front().GetPartitioningParams().GetTopicPartitionsCount()
+                    TopicPartitionsCount
                 );
             }
             Send(SelfId(), new TEvPrivate::TEvSourceDataReady());
@@ -588,10 +590,12 @@ private:
     std::vector<ui64> GetPartitionsToRead(TClusterState& clusterState) const {
         std::vector<ui64> res;
 
-        ui64 currentPartition = ReadParams.front().GetPartitioningParams().GetEachTopicPartitionGroupId();
-        while (currentPartition < clusterState.PartitionsCount) {
-            res.emplace_back(currentPartition); // 0-based in topic API
-            currentPartition += ReadParams.front().GetPartitioningParams().GetDqPartitionsCount();
+        for (const auto& readParams : ReadParams) {
+            ui64 currentPartition = readParams.GetPartitioningParams().GetEachTopicPartitionGroupId();
+            while (currentPartition < clusterState.PartitionsCount) {
+                res.emplace_back(currentPartition); // 0-based in topic API
+                currentPartition += readParams.GetPartitioningParams().GetDqPartitionsCount();
+            }
         }
 
         return res;
@@ -872,17 +876,24 @@ private:
     TMaybe<TInstant> NextIdlenesCheckAt;
     IPqGateway::TPtr PqGateway;
     NThreading::TFuture<std::vector<NYdb::NFederatedTopic::TFederatedTopicClient::TClusterInfo>> AsyncInit;
+    ui32 TopicPartitionsCount = 0;
 };
 
-void ExtractPartitionsFromParams(
+ui32 ExtractPartitionsFromParams(
         TVector<NPq::NProto::TDqReadTaskParams>& readTaskParamsMsg,
         const THashMap<TString, TString>& taskParams, // partitions are here in dq
         const TVector<TString>& readRanges            // partitions are here in kqp
     ) {
+        ui32 partitionCount = 0;
         if (!readRanges.empty()) {
             for (const auto& readRange : readRanges) {
                 NPq::NProto::TDqReadTaskParams params;
                 YQL_ENSURE(params.ParseFromString(readRange), "Failed to parse DqPqRead task params");
+                if (!partitionCount) {
+                    partitionCount = params.GetPartitioningParams().GetTopicPartitionsCount();
+                }
+                YQL_ENSURE(partitionCount == params.GetPartitioningParams().GetTopicPartitionsCount(),
+                    "Different partition count " << partitionCount << ", " << params.GetPartitioningParams().GetTopicPartitionsCount());
                readTaskParamsMsg.emplace_back(std::move(params));
             }
         } else {
@@ -891,7 +902,9 @@ void ExtractPartitionsFromParams(
             NPq::NProto::TDqReadTaskParams params;
             YQL_ENSURE(params.ParseFromString(taskParamsIt->second), "Failed to parse DqPqRead task params");
             readTaskParamsMsg.emplace_back(std::move(params));
+            partitionCount = params.GetPartitioningParams().GetTopicPartitionsCount();
         }
+        return partitionCount;
 }
 
 std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqReadActor(
@@ -914,7 +927,7 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqReadActor(
     )
 {
     TVector<NPq::NProto::TDqReadTaskParams> readTaskParamsMsg;
-    ExtractPartitionsFromParams(readTaskParamsMsg, taskParams, readRanges);
+    ui32 topicPartitionsCount = ExtractPartitionsFromParams(readTaskParamsMsg, taskParams, readRanges);
 
     const TString& tokenName = settings.GetToken().GetName();
     const TString token = secureParams.Value(tokenName, TString());
@@ -934,7 +947,8 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqReadActor(
         counters,
         taskCounters,
         bufferSize,
-        pqGateway
+        pqGateway,
+        topicPartitionsCount
     );
 
     return {actor, actor};

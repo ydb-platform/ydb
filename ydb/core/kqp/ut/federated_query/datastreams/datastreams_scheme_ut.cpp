@@ -148,15 +148,15 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         TString sourceName = "sourceName";
         TString topicName = "topicName";
         TString tableName = "tableName";
+        ui32 partitionCount = 10;
 
         NYdb::NTopic::TTopicClientSettings opts;
         opts.DiscoveryEndpoint(GetEnv("YDB_ENDPOINT"))
             .Database(GetEnv("YDB_DATABASE"));
-
         auto driver = TDriver(TDriverConfig());
         NYdb::NTopic::TTopicClient topicClient(driver, opts);
 
-        auto topicSettings = NYdb::NTopic::TCreateTopicSettings().PartitioningSettings(1, 1);
+        auto topicSettings = NYdb::NTopic::TCreateTopicSettings().PartitioningSettings(partitionCount, partitionCount);
         auto status = topicClient.CreateTopic(topicName, topicSettings).GetValueSync();
         UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
 
@@ -183,8 +183,8 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                             key String NOT NULL,
                             value String NOT NULL
                         ))
-                    LIMIT 1;
-            )", "source"_a=sourceName, "topic"_a=topicName);
+                    LIMIT {partition_count};
+            )", "source"_a=sourceName, "topic"_a=topicName, "partition_count"_a=partitionCount);
 
         auto queryClient = kikimr->GetQueryClient();
         auto scriptExecutionOperation = queryClient.ExecuteScript(sql, settings).ExtractValueSync();
@@ -192,9 +192,12 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         
         std::this_thread::sleep_for(std::chrono::milliseconds(1000));
 
-        auto writeSettings = NYdb::NTopic::TWriteSessionSettings().Path(topicName);
-        auto topicSession = topicClient.CreateSimpleBlockingWriteSession(writeSettings);
-        topicSession->Write(NYdb::NTopic::TWriteMessage(R"({"key":"key1", "value": "value1"})"));        
+        for (ui32 i = 0; i < partitionCount; ++i) {
+            auto writeSettings = NYdb::NTopic::TWriteSessionSettings().Path(topicName).PartitionId(i);
+            auto topicSession = topicClient.CreateSimpleBlockingWriteSession(writeSettings);
+            topicSession->Write(NYdb::NTopic::TWriteMessage(R"({"key":"key1", "value": "value1"})"));
+            topicSession->Close(); 
+        }
 
         NYdb::NQuery::TScriptExecutionOperation readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr->GetDriver());
         UNIT_ASSERT_EQUAL_C(readyOp.Metadata().ExecStatus, EExecStatus::Completed, readyOp.Status().GetIssues().ToString());
@@ -203,7 +206,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
 
         TResultSetParser resultSet(results.ExtractResultSet());
         UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnsCount(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), partitionCount);
         UNIT_ASSERT(resultSet.TryNextRow());
         UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(0).GetString(), "key1");
         UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(1).GetString(), "value1");

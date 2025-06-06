@@ -958,7 +958,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                             externalDataSourceMetadata.Metadata->ExternalSource.TableLocation = *externalPath;
                         }
                         LoadExternalDataSourceSecretValues(entry, userToken, ActorSystem)
-                            .Subscribe([promise, externalDataSourceMetadata, settings, table, database, externalPath](const TFuture<TEvDescribeSecretsResponse::TDescription>& result) mutable
+                            .Subscribe([promise, externalDataSourceMetadata, settings, table, database, externalPath, this](const TFuture<TEvDescribeSecretsResponse::TDescription>& result) mutable
                         {
                             UpdateExternalDataSourceSecretsValue(externalDataSourceMetadata, result.GetValue());
                             if (!externalDataSourceMetadata.Success()) {
@@ -1017,6 +1017,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                                 auto path = databaseName + "/" + *externalPath;
 
                                 GetSchemeEntryType(
+                                    FederatedQuerySetup,
                                     externalDataSourceMetadata.Metadata->ExternalSource.DataSourceLocation,
                                     databaseName,
                                     useTls,

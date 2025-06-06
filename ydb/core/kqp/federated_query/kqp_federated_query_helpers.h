@@ -192,6 +192,7 @@ namespace NKikimr::NKqp {
     using TGetSchemeEntryResult = TMaybe<NYdb::NScheme::ESchemeEntryType>;
     
     NThreading::TFuture<TGetSchemeEntryResult> GetSchemeEntryType(
+        const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup,
         const TString& endpoint,
         const TString& database,
         bool useTls,

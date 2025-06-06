@@ -1702,9 +1702,6 @@ namespace NKikimr {
             if (Config->BaseInfo.DonorMode) {
                 return; // this is a race; donor disk can't answer TEvVSyncFull queries
             }
-            Cerr << "Handle(TEvBlobStorage::TEvVSyncFull::TPtr &ev, const TActorContext &ctx) " << Endl;
-            Y_UNUSED(ctx);
-            Y_UNUSED(ev);
             Y_VERIFY(Db->SyncFullHandlerID);
             ctx.Send(ev->Forward(Db->SyncFullHandlerID));
         }

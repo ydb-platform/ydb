@@ -1,4 +1,4 @@
-name: Regression-run_compatibility
+name: Regression-run_stress
 
 on:
   schedule:

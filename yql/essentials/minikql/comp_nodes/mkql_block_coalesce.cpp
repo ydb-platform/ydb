@@ -70,7 +70,7 @@ bool DispatchBlendingCoalesce(const arrow::Datum& left, const arrow::Datum& righ
     if (!needUnwrapFirst) {
         bool rightTypeIsOptional;
         rightType = UnpackOptional(rightType, rightTypeIsOptional);
-        MKQL_ENSURE(rightTypeIsOptional, "Right type must be optional.");
+        MKQL_ENSURE(rightTypeIsOptional || rightType->IsPg(), "Right type must be optional or pg.");
     }
     NYql::NUdf::TDataTypeInspector typeData(typeInfoHelper, rightType);
     if (!typeData) {

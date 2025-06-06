@@ -1511,6 +1511,13 @@
             "uri": "https://{canondata_backend}/212715/cb3b5f6baa9f825ff71deb34e4af1d03b8da5f7a/resource.tar.gz#test_sql2yql.test_blocks-coalesce_multi_optional_data_type_/sql.yql"
         }
     ],
+    "test_sql2yql.test[blocks-coalesce_pg_types]": [
+        {
+            "checksum": "0efac7c58d004a33b5a513ff91752906",
+            "size": 1432,
+            "uri": "https://{canondata_backend}/1130705/6dff4192b2ae65d5b09b45c8844911820b8bd906/resource.tar.gz#test_sql2yql.test_blocks-coalesce_pg_types_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[blocks-coalesce_scalar]": [
         {
             "checksum": "3cf278b8eccf4bbed173c5075bffcf53",
@@ -8602,6 +8609,11 @@
     "test_sql_format.test[blocks-coalesce_multi_optional_data_type]": [
         {
             "uri": "file://test_sql_format.test_blocks-coalesce_multi_optional_data_type_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[blocks-coalesce_pg_types]": [
+        {
+            "uri": "file://test_sql_format.test_blocks-coalesce_pg_types_/formatted.sql"
         }
     ],
     "test_sql_format.test[blocks-coalesce_scalar]": [

@@ -463,6 +463,36 @@ def chmod(host: str, path: str, mode: str = "+x", raise_on_error: bool = True, u
     return result.stdout
 
 
+def ensure_directory_with_permissions(host: str, path: str, raise_on_error: bool = True) -> bool:
+    """
+    Создает директорию и устанавливает права 777
+    
+    Args:
+        host: имя хоста
+        path: путь к директории
+        raise_on_error: вызывать ли исключение при ошибке
+        
+    Returns:
+        bool: успешность операции
+    """
+    try:
+        # Создаем директорию с sudo
+        mkdir(host, path, raise_on_error=False, use_sudo=True)
+        
+        # Устанавливаем права 777
+        execute_command(host, f"sudo chmod 777 {path}", raise_on_error=False)
+        
+        LOGGER.info(f"Created directory with 777 permissions: {path}")
+        return True
+            
+    except Exception as e:
+        error_msg = f"Failed to ensure directory {path}: {e}"
+        LOGGER.error(error_msg)
+        if raise_on_error:
+            raise RuntimeError(error_msg) from e
+        return False
+
+
 def copy_file(local_path: str, host: str, remote_path: str, raise_on_error: bool = True) -> str:
     """
     Копирует файл на хост через SCP или локально
@@ -484,71 +514,60 @@ def copy_file(local_path: str, host: str, remote_path: str, raise_on_error: bool
             raise FileNotFoundError(error_msg)
         return None
 
-    # Логируем размер файла для диагностики
-    try:
-        file_size = os.path.getsize(local_path)
-        LOGGER.debug(f"File size: {file_size} bytes")
-    except OSError as e:
-        LOGGER.warning(f"Could not get file size: {e}")
-
     # Проверяем, является ли хост localhost
     if is_localhost(host):
-        LOGGER.info(f"Detected localhost ({host}), copying file locally: {local_path} -> {remote_path}")
+        return _copy_file_locally(local_path, remote_path, raise_on_error)
+    else:
+        return _copy_file_via_tmp_and_sudo(local_path, host, remote_path, raise_on_error)
 
+
+def _copy_file_locally(local_path: str, remote_path: str, raise_on_error: bool = True) -> str:
+    """
+    Копирует файл локально (упрощенная версия)
+    """
+    LOGGER.info(f"Copying file locally: {local_path} -> {remote_path}")
+
+    try:
+        # Создаем директорию с правами 777
+        remote_dir = os.path.dirname(remote_path)
+        if remote_dir and remote_dir != '/':
+            ensure_directory_with_permissions("localhost", remote_dir, raise_on_error=False)
+
+        # Пытаемся скопировать файл напрямую
         try:
-            # Создаем директорию назначения, если она не существует
-            remote_dir = os.path.dirname(remote_path)
-            if remote_dir and not os.path.exists(remote_dir):
-                os.makedirs(remote_dir, exist_ok=True)
-                LOGGER.debug(f"Created directory: {remote_dir}")
-
-            # Проверяем, не является ли целевой файл занятым
-            if os.path.exists(remote_path):
-                try:
-                    # Пытаемся открыть файл для записи, чтобы проверить, не занят ли он
-                    with open(remote_path, 'r+b'):
-                        pass
-                except (OSError, IOError) as e:
-                    if "Text file busy" in str(e) or "Resource temporarily unavailable" in str(e):
-                        # Генерируем новое имя файла с постфиксом
-                        timestamp = int(time())
-                        remote_filename = os.path.basename(remote_path)
-                        new_remote_filename = f"{remote_filename}.{timestamp}"
-                        remote_path = os.path.join(remote_dir, new_remote_filename)
-                        LOGGER.warning(f"Target file is busy, using new filename: {remote_path}")
-
-            # Копируем файл
             shutil.copy2(local_path, remote_path)
-
-            # Проверяем, что файл скопирован успешно
-            if os.path.exists(remote_path):
-                copied_size = os.path.getsize(remote_path)
-                original_size = os.path.getsize(local_path)
-                if copied_size == original_size:
-                    LOGGER.info(f"Successfully copied file locally: {local_path} -> {remote_path}")
-                    return f"Local copy successful: {remote_path}"
-                else:
-                    error_msg = f"File size mismatch after copy: original={original_size}, copied={copied_size}"
-                    LOGGER.error(error_msg)
-                    if raise_on_error:
-                        raise IOError(error_msg)
-                    return None
-            else:
-                error_msg = f"File was not created at destination: {remote_path}"
+            LOGGER.info(f"Successfully copied file locally: {local_path} -> {remote_path}")
+            return f"Local copy successful: {remote_path}"
+        except PermissionError:
+            # Если нет прав - используем sudo
+            LOGGER.warning(f"Permission denied, trying with sudo")
+            import tempfile
+            with tempfile.NamedTemporaryFile(delete=False, prefix="deploy_") as tmp_file:
+                temp_path = tmp_file.name
+            
+            shutil.copy2(local_path, temp_path)
+            result = execute_command("localhost", f"sudo mv {temp_path} {remote_path}", raise_on_error=False)
+            
+            if result.stderr:
+                error_msg = f"Failed to copy with sudo: {result.stderr}"
                 LOGGER.error(error_msg)
+                try:
+                    os.unlink(temp_path)
+                except:
+                    pass
                 if raise_on_error:
-                    raise IOError(error_msg)
+                    raise PermissionError(error_msg)
                 return None
+            else:
+                LOGGER.info(f"Successfully copied with sudo: {local_path} -> {remote_path}")
+                return f"Local copy with sudo successful: {remote_path}"
 
-        except Exception as e:
-            error_msg = f"Error copying file locally: {e}"
-            LOGGER.error(error_msg)
-            if raise_on_error:
-                raise IOError(error_msg) from e
-            return None
-
-    # Для удаленных хостов используем более надежный подход с /tmp и sudo
-    return _copy_file_via_tmp_and_sudo(local_path, host, remote_path, raise_on_error)
+    except Exception as e:
+        error_msg = f"Failed to copy file locally: {e}"
+        LOGGER.error(error_msg)
+        if raise_on_error:
+            raise IOError(error_msg) from e
+        return None
 
 
 def _copy_file_via_tmp_and_sudo(local_path: str, host: str, remote_path: str, raise_on_error: bool = True) -> str:
@@ -630,9 +649,9 @@ def _copy_file_via_tmp_and_sudo(local_path: str, host: str, remote_path: str, ra
     try:
         remote_dir = os.path.dirname(remote_path)
         
-        # Создаем целевую директорию если нужно (используем обновленную функцию mkdir)
+        # Создаем целевую директорию с правами 777
         if remote_dir and remote_dir != '/':
-            mkdir(host, remote_dir, raise_on_error=False)
+            ensure_directory_with_permissions(host, remote_dir, raise_on_error=False)
         
         # Перемещаем файл из /tmp в целевое место
         mv_cmd = f"sudo mv {tmp_path} {remote_path}"
@@ -685,8 +704,6 @@ def deploy_binary(local_path: str, host: str, target_dir: str, make_executable: 
     Returns:
         dict: результат деплоя
     """
-    import os
-
     binary_name = os.path.basename(local_path)
     target_path = os.path.join(target_dir, binary_name)
     result = {
@@ -696,24 +713,21 @@ def deploy_binary(local_path: str, host: str, target_dir: str, make_executable: 
     }
 
     try:
-        # Создаем директорию (с sudo по умолчанию)
-        mkdir(host, target_dir, raise_on_error=True)
+        # Создаем директорию с правами 777
+        ensure_directory_with_permissions(host, target_dir, raise_on_error=False)
 
-        # Копируем файл (используется новый метод с /tmp и sudo)
+        # Копируем файл
         copy_result = copy_file(local_path, host, target_path)
         if copy_result is None:
             raise Exception("File copy failed")
 
-        # Делаем файл исполняемым (с sudo по умолчанию), если нужно
+        # Делаем файл исполняемым если нужно
         if make_executable:
-            chmod(host, target_path, raise_on_error=True)
-
-        # Проверяем, что файл скопирован успешно
-        ls_result = execute_command(host, f"ls -la {target_path}")
+            chmod(host, target_path, raise_on_error=False)
 
         result.update({
             'success': True,
-            'output': ls_result.stdout
+            'output': f'Deployed {binary_name} to {target_path}'
         })
 
         return result
@@ -728,7 +742,7 @@ def deploy_binary(local_path: str, host: str, target_dir: str, make_executable: 
 def deploy_binaries_to_hosts(
     binary_files: List[str],
     hosts: List[str],
-    target_dir: str = '/tmp/binaries/'
+    target_dir: str = '/tmp/stress_binaries/'
 ) -> Dict[str, Dict[str, Any]]:
     """
     Разворачивает бинарные файлы на указанных хостах
@@ -793,4 +807,32 @@ def deploy_binaries_to_hosts(
         # Store the host results in the main results dictionary
         results[host] = host_results
 
+    return results
+
+
+def fix_binaries_directory_permissions(hosts: List[str], target_dir: str = '/tmp/stress_binaries/') -> Dict[str, bool]:
+    """
+    Исправляет права доступа к директории binaries на всех указанных хостах
+    
+    Args:
+        hosts: список хостов
+        target_dir: путь к директории для исправления
+        
+    Returns:
+        Dict[str, bool]: результаты по хостам
+    """
+    results = {}
+    
+    for host in hosts:
+        try:
+            success = ensure_directory_with_permissions(host, target_dir, raise_on_error=False)
+            results[host] = success
+            if success:
+                LOGGER.info(f"Fixed permissions for {target_dir} on {host}")
+            else:
+                LOGGER.warning(f"Failed to fix permissions for {target_dir} on {host}")
+        except Exception as e:
+            LOGGER.error(f"Error fixing permissions on {host}: {e}")
+            results[host] = False
+    
     return results

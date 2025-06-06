@@ -267,7 +267,7 @@ class YdbCluster:
     def deploy_binaries_to_nodes(
         cls,
         binary_files: list,
-        target_dir: str = '/tmp/binaries/'
+        target_dir: str = '/tmp/stress_binaries/'
     ) -> Dict[str, Dict[str, Any]]:
         """
         Разворачивает бинарные файлы на всех нодах кластера

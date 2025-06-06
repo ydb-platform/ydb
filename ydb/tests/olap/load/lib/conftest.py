@@ -40,6 +40,7 @@ class LoadSuiteBase:
     query_prefix: str = get_external_param('query-prefix', '')
     verify_data: bool = True
     __nodes_state: Optional[dict[str, YdbCluster.Node]] = None
+    binaries_deploy_path: str = '/tmp/stress_binaries/'
 
     @classmethod
     def get_external_path(cls) -> str:
@@ -917,7 +918,7 @@ class WorkloadTestBase(LoadSuiteBase):
     # Переопределяемые атрибуты в наследниках
     workload_binary_name: str = None  # Имя бинарного файла workload
     workload_env_var: str = None      # Переменная окружения с путем к бинарному файлу
-    binaries_deploy_path: str = '/tmp/stress_binaries/'
+    binaries_deploy_path: str = '/tmp/stress_binaries/'  # Путь для деплоя бинарных файлов
     
     @classmethod 
     def do_setup_class(cls) -> None:

@@ -2683,7 +2683,8 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         appConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
         auto settings = TKikimrSettings()
             .SetAppConfig(appConfig)
-            .SetWithSampleTables(false);
+            .SetWithSampleTables(false)
+            .SetEnableTempTables(true);
         TKikimrRunner kikimr(settings);
 
         Tests::NCommon::TLoggerInit(kikimr).SetComponents({ NKikimrServices::TX_COLUMNSHARD }, "CS").Initialize();

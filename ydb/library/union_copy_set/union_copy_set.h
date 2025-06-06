@@ -5,10 +5,6 @@
 #include <util/string/builder.h>
 #include <cstdint>
 
-#ifndef KIKIMR_UNION_COPY_SET_PEDANTIC_DESTROY
-#define KIKIMR_UNION_COPY_SET_PEDANTIC_DESTROY 0
-#endif
-
 namespace NKikimr {
 
     /**
@@ -261,7 +257,7 @@ namespace NKikimr {
 
             ~TItem() {
                 if (Up) {
-                    DestroyUp(Up, this);
+                    DestroyUp(Up);
                 }
             }
 
@@ -291,125 +287,6 @@ namespace NKikimr {
         };
 
     private:
-#if KIKIMR_UNION_COPY_SET_PEDANTIC_DESTROY
-        template<class TExpected>
-        static void DestroyUp(TUpPtr up, TExpected* expectedDown) {
-            Y_ABORT_UNLESS(up, "Unexpected DestroyUp for nullptr");
-            switch (up.GetTag()) {
-                case ETag::Item: {
-                    TUnionCopySet* set = up.GetItemPtr();
-                    Y_ABORT_UNLESS(set->Down == expectedDown, "Down link doesn't match the destroyed item");
-                    set->Down.SetNull();
-                    break;
-                }
-                case ETag::Copy: {
-                    std::unique_ptr<TCopyNode> node(up.GetCopyNodePtr());
-                    Y_ABORT_UNLESS(node->Down == expectedDown, "Down link doesn't match the destroyed item");
-                    Y_ABORT_UNLESS(node->Count > 0);
-                    size_t count = node->Count;
-                    node->Count = 0;
-                    while (!node->Items.Empty()) {
-                        Y_ABORT_UNLESS(count-- > 0);
-                        std::unique_ptr<TCopyNodeItem> item(node->Items.PopFront());
-                        auto next = item->Up;
-                        auto* check = item.get();
-                        item.reset();
-                        DestroyUp(next, check);
-                    }
-                    Y_ABORT_UNLESS(count == 0);
-                    break;
-                }
-                case ETag::Union: {
-                    // We remove current item from the union node
-                    std::unique_ptr<TUnionNodeItem> item(up.GetUnionNodeItemPtr());
-                    Y_ABORT_UNLESS(item->Down == expectedDown, "Down link doesn't match the destroyed item");
-                    TUnionNode* node = item->Up;
-                    Y_ABORT_UNLESS(node->Count > 0);
-                    node->Remove(item.get());
-                    item.reset();
-                    switch (node->Count) {
-                        case 0: [[unlikely]] {
-                            // Note: this cannot normally happen, since nodes
-                            // are removed from the graph when their count
-                            // reaches 1. However allocation errors during
-                            // insertions could leave count 1 in place.
-                            std::unique_ptr<TUnionNode> d(node);
-                            auto next = node->Up;
-                            auto* check = node;
-                            d.reset();
-                            DestroyUp(next, check);
-                            break;
-                        }
-                        case 1: {
-                            OptimizeAway(node);
-                            break;
-                        }
-                    }
-                    break;
-                }
-            }
-        }
-
-        template<class TExpected>
-        static void DestroyDown(TDownPtr down, TExpected* expectedUp) {
-            Y_ABORT_UNLESS(down, "Unexpected DestroyDown for nullptr");
-            switch (down.GetTag()) {
-                case ETag::Item: {
-                    TItem* item = down.GetItemPtr();
-                    Y_ABORT_UNLESS(item->Up == expectedUp, "Up link doesn't match the destroyed item");
-                    item->Up.SetNull();
-                    break;
-                }
-                case ETag::Copy: {
-                    // We remove current item from the copy node
-                    std::unique_ptr<TCopyNodeItem> item(down.GetCopyNodeItemPtr());
-                    Y_ABORT_UNLESS(item->Up == expectedUp, "Up link doesn't match the destroyed item");
-                    TCopyNode* node = item->Down;
-                    Y_ABORT_UNLESS(node->Count > 0);
-                    node->Remove(item.get());
-                    item.reset();
-                    switch (node->Count) {
-                        case 0: [[unlikely]] {
-                            // Note: this cannot normally happen, since nodes
-                            // are removed from the graph when their count
-                            // reaches 1. However allocation errors during
-                            // insertions could leave count 1 in place.
-                            std::unique_ptr<TCopyNode> d(node);
-                            auto next = node->Down;
-                            auto* check = node;
-                            d.reset();
-                            DestroyDown(next, check);
-                            break;
-                        }
-                        case 1: {
-                            OptimizeAway(node);
-                            break;
-                        }
-                    }
-                    break;
-                }
-                case ETag::Union: {
-                    std::unique_ptr<TUnionNode> node(down.GetUnionNodePtr());
-                    Y_ABORT_UNLESS(node->Up == expectedUp, "Up link doesn't match the destroyed item");
-                    Y_ABORT_UNLESS(node->Count > 0);
-                    node->Count = 0;
-                    while (!node->Items.Empty()) {
-                        std::unique_ptr<TUnionNodeItem> item(node->Items.PopFront());
-                        auto next = item->Down;
-                        auto* check = item.get();
-                        item.reset();
-                        DestroyDown(next, check);
-                    }
-                    break;
-                }
-            }
-        }
-#else
-        template<class TExpected>
-        static void DestroyUp(TUpPtr up, TExpected*) {
-            DestroyUp(up);
-        }
-
         static void DestroyUp(TUpPtr up) {
             // Note: we cannot actually have a deep recursion in an optimized tree,
             // because copy and union nodes alternate, and when we encounter a
@@ -484,11 +361,6 @@ namespace NKikimr {
                 up = queue.back();
                 queue.pop_back();
             }
-        }
-
-        template<class TExpected>
-        static void DestroyDown(TDownPtr down, TExpected*) {
-            DestroyDown(down);
         }
 
         static void DestroyDown(TDownPtr down) {
@@ -566,7 +438,6 @@ namespace NKikimr {
                 queue.pop_back();
             }
         }
-#endif
 
         template<class TParent>
         static void RelinkPair(TParent* parent, TDownPtr child) {
@@ -843,7 +714,7 @@ namespace NKikimr {
 
         void Clear() noexcept {
             if (Down) {
-                DestroyDown(Down, this);
+                DestroyDown(Down);
                 Down.SetNull();
             }
         }
@@ -1012,7 +883,7 @@ namespace NKikimr {
     private:
         struct TForEachValueState {
             TDownPtr Ptr;
-            TUnionNodeItem* Next = nullptr;
+            const TUnionNodeItem* Item = nullptr;
         };
 
         template<class TCallback>
@@ -1025,28 +896,29 @@ namespace NKikimr {
             for (;;) {
                 switch (state.Ptr.GetTag()) {
                     case ETag::Item: {
-                        TItem* item = state.Ptr.GetItemPtr();
-                        if (!callback(static_cast<TValue*>(item))) {
+                        const TItem* item = state.Ptr.GetItemPtr();
+                        if (!callback(static_cast<const TValue*>(item))) {
                             return false;
                         }
                         break;
                     }
                     case ETag::Copy: {
-                        TCopyNodeItem* item = state.Ptr.GetCopyNodeItemPtr();
-                        state = { item->Down->Down };
+                        const TCopyNodeItem* item = state.Ptr.GetCopyNodeItemPtr();
+                        const TCopyNode* node = item->Down;
+                        state = { node->Down };
                         continue;
                     }
                     case ETag::Union: {
-                        TUnionNode* node = state.Ptr.GetUnionNodePtr();
-                        if (node->Items.Empty()) {
-                            // Shouldn't happen
-                            break;
-                        }
-                        TUnionNodeItem* item = state.Next;
+                        const TUnionNode* node = state.Ptr.GetUnionNodePtr();
+                        const TUnionNodeItem* item = state.Item; // next item
                         if (!item) {
+                            if (node->Items.Empty()) {
+                                // Shouldn't happen
+                                break;
+                            }
                             item = node->Items.Front();
                         }
-                        typename TIntrusiveList<TUnionNodeItem>::iterator it(item);
+                        typename TIntrusiveList<TUnionNodeItem>::const_iterator it(item);
                         if (++it != node->Items.End()) {
                             queue.push_back({ state.Ptr, &*it });
                         }
@@ -1064,55 +936,88 @@ namespace NKikimr {
         }
 
     public:
-        TString DebugString() const {
+        TString DebugString(bool withAddresses = false) const {
             TStringBuilder sb;
-            DebugPrint(sb.Out);
-            return std::move(sb);
+            DebugPrint(sb.Out, withAddresses);
+            return sb;
         }
 
-        void DebugPrint(IOutputStream& out) const {
-            out << "Set(" << (const void*)this << ") -> ";
-            DebugPrint(Down, out);
+        void DebugPrint(IOutputStream& out, bool withAddresses = false) const {
+            if (withAddresses) {
+                out << "Set(" << (const void*)this << ") -> ";
+            }
+            DebugPrintImpl(Down, out, withAddresses);
         }
 
     private:
-        static void DebugPrint(TDownPtr down, IOutputStream& out) {
+        static void DebugPrintImpl(TDownPtr down, IOutputStream& out, bool withAddresses) {
             if (!down) {
-                out << "nullptr";
+                out << "empty";
                 return;
             }
-            switch (down.GetTag()) {
-                case ETag::Item: {
-                    const TItem* item = down.GetItemPtr();
-                    const TValue* value = static_cast<const TValue*>(item);
-                    out << "Value(" << (const void*)value << ")";
-                    break;
-                }
-                case ETag::Copy: {
-                    const TCopyNodeItem* item = down.GetCopyNodeItemPtr();
-                    const TCopyNode* node = item->Down;
-                    out << "CopyNodeItem(" << (const void*)item << ") -> ";
-                    out << "CopyNode(" << (const void*)node << ") -> ";
-                    DebugPrint(node->Down, out);
-                    break;
-                }
-                case ETag::Union: {
-                    const TUnionNode* node = down.GetUnionNodePtr();
-                    out << "UnionNode(" << (const void*)node << ") {";
-                    bool first = true;
-                    for (const TUnionNodeItem& item : node->Items) {
-                        if (first) {
-                            first = false;
-                            out << " ";
-                        } else {
-                            out << ", ";
+
+            TForEachValueState state = { down };
+            TStackVec<TForEachValueState> queue;
+            for (;;) {
+                switch (state.Ptr.GetTag()) {
+                    case ETag::Item: {
+                        const TItem* item = state.Ptr.GetItemPtr();
+                        const TValue* value = static_cast<const TValue*>(item);
+                        if (withAddresses) {
+                            out << "Value(" << (const void*)value << ") = ";
                         }
-                        out << "UnionNodeItem(" << (const void*)&item << ") -> ";
-                        DebugPrint(item.Down, out);
+                        out << *value;
+                        break;
                     }
-                    out << " }";
+                    case ETag::Copy: {
+                        const TCopyNodeItem* item = state.Ptr.GetCopyNodeItemPtr();
+                        const TCopyNode* node = item->Down;
+                        if (withAddresses) {
+                            out << "CopyNodeItem(" << (const void*)item << ") -> ";
+                            out << "CopyNode(" << (const void*)node << ") -> ";
+                        } else {
+                            out << "Copy -> ";
+                        }
+                        state = { node->Down };
+                        continue;
+                    }
+                    case ETag::Union: {
+                        const TUnionNode* node = state.Ptr.GetUnionNodePtr();
+                        const TUnionNodeItem* item = state.Item; // last item
+                        if (!item) {
+                            if (withAddresses) {
+                                out << "UnionNode(" << (const void*)node << "){ ";
+                            } else {
+                                out << "Union{ ";
+                            }
+                            if (node->Items.Empty()) {
+                                // Shouldn't happen
+                                out << "}";
+                                break;
+                            }
+                            item = node->Items.Front();
+                        } else {
+                            typename TIntrusiveList<TUnionNodeItem>::const_iterator it(item);
+                            if (++it == node->Items.End()) {
+                                out << " }";
+                                break;
+                            }
+                            out << ", ";
+                            item = &*it;
+                        }
+                        if (withAddresses) {
+                            out << "UnionNodeItem(" << (const void*)&item << ") -> ";
+                        }
+                        queue.push_back({ state.Ptr, item });
+                        state = { item->Down };
+                        continue;
+                    }
+                }
+                if (queue.empty()) {
                     break;
                 }
+                state = queue.back();
+                queue.pop_back();
             }
         }
 

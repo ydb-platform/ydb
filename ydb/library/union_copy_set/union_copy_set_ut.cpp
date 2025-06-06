@@ -10,12 +10,21 @@ namespace NKikimr {
 Y_UNIT_TEST_SUITE(UnionCopySet) {
 
     struct TMyValue : public TUnionCopySet<TMyValue>::TItem {
-        // nothing
+        size_t Tag;
+
+        explicit TMyValue(size_t tag = 0)
+            : Tag(tag)
+        {}
+
+        friend IOutputStream& operator<<(IOutputStream& out, const TMyValue& value) {
+            out << value.Tag;
+            return out;
+        }
     };
 
-    std::unordered_set<TMyValue*> Enumerate(const TUnionCopySet<TMyValue>& s) {
-        std::unordered_set<TMyValue*> values;
-        s.ForEachValue([&](TMyValue* value) {
+    std::unordered_set<const TMyValue*> Enumerate(const TUnionCopySet<TMyValue>& s) {
+        std::unordered_set<const TMyValue*> values;
+        s.ForEachValue([&](const TMyValue* value) {
             values.insert(value);
             return true;
         });
@@ -24,15 +33,15 @@ Y_UNIT_TEST_SUITE(UnionCopySet) {
 
     size_t Count(const TUnionCopySet<TMyValue>& s) {
         size_t count = 0;
-        s.ForEachValue([&](TMyValue*) {
+        s.ForEachValue([&](const TMyValue*) {
             ++count;
             return true;
         });
         return count;
     }
 
-    std::unordered_set<TMyValue*> MakeSet(std::initializer_list<TMyValue*> l) {
-        return std::unordered_set<TMyValue*>(l);
+    std::unordered_set<const TMyValue*> MakeSet(std::initializer_list<const TMyValue*> l) {
+        return std::unordered_set<const TMyValue*>(l);
     }
 
     Y_UNIT_TEST(Simple) {
@@ -181,6 +190,7 @@ Y_UNIT_TEST_SUITE(UnionCopySet) {
     }
 
     Y_UNIT_TEST(StressDestroyUp) {
+        // This n is enough to trigger stack overflow in release builds when implementation is recursive
         size_t n = 1'000'000;
         TVector<TMyValue> items;
         items.resize(n);
@@ -206,6 +216,7 @@ Y_UNIT_TEST_SUITE(UnionCopySet) {
     }
 
     Y_UNIT_TEST(StressDestroyDown) {
+        // This n is enough to trigger stack overflow in release builds when implementation is recursive
         size_t n = 1'000'000;
         TVector<TMyValue> items;
         items.resize(n);
@@ -241,6 +252,60 @@ Y_UNIT_TEST_SUITE(UnionCopySet) {
                 sets.back().Add(sets[i - 128]);
             }
         }
+    }
+
+    Y_UNIT_TEST(DeepDestroyUp) {
+        // This n is enough to trigger stack overflow in release builds when implementation is recursive
+        size_t n = 1'000'000;
+        std::optional<TMyValue> value;
+        TUnionCopySet<TMyValue> set;
+        set.Add(&value.emplace());
+        for (size_t i = 0; i < n; ++i) {
+            // Repeatedly add set to itself via a copy
+            // This will create a chain of copy and union nodes with 2 links between each
+            auto copy = set;
+            set.Add(copy);
+        }
+        // Note: there are currently 2^n duplicate elements in set!
+        // Destroy the value, which will unlink and destroy everything
+        value.reset();
+    }
+
+    Y_UNIT_TEST(DeepDestroyDown) {
+        // This n is enough to trigger stack overflow in release builds when implementation is recursive
+        size_t n = 1'000'000;
+        TMyValue value;
+        TUnionCopySet<TMyValue> set;
+        set.Add(&value);
+        for (size_t i = 0; i < n; ++i) {
+            // Repeatedly add set to itself via a copy
+            // This will create a chain of copy and union nodes with 2 links between each
+            auto copy = set;
+            set.Add(copy);
+        }
+        // Note: there are currently 2^n duplicate elements in set!
+        // Clear the set, which will unlink and destroy everything
+        set.Clear();
+    }
+
+    Y_UNIT_TEST(DebugString) {
+        TMyValue a(1), b(2), c(3);
+        TUnionCopySet<TMyValue> set1;
+        UNIT_ASSERT_VALUES_EQUAL(set1.DebugString(), "empty");
+        set1.Add(&a);
+        UNIT_ASSERT_VALUES_EQUAL(set1.DebugString(), "1");
+        set1.Add(&b);
+        UNIT_ASSERT_VALUES_EQUAL(set1.DebugString(), "Union{ 1, 2 }");
+        TUnionCopySet<TMyValue> set2;
+        set2.Add(&a);
+        UNIT_ASSERT_VALUES_EQUAL(set2.DebugString(), "Copy -> 1");
+        UNIT_ASSERT_VALUES_EQUAL(set1.DebugString(), "Union{ Copy -> 1, 2 }");
+        TUnionCopySet<TMyValue> set3 = set1;
+        UNIT_ASSERT_VALUES_EQUAL(set1.DebugString(), "Copy -> Union{ Copy -> 1, 2 }");
+        UNIT_ASSERT_VALUES_EQUAL(set3.DebugString(), "Copy -> Union{ Copy -> 1, 2 }");
+        set2.Clear();
+        set3.Clear();
+        UNIT_ASSERT_VALUES_EQUAL(set1.DebugString(), "Union{ 1, 2 }");
     }
 }
 

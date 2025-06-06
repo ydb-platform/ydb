@@ -65,12 +65,13 @@ void DispatchCoalesceImpl(const arrow::Datum& left, const arrow::Datum& right, a
     }
 }
 
-bool DispatchBlendingCoalesce(const arrow::Datum& left, const arrow::Datum& right, arrow::Datum& out, TType* rightType, arrow::MemoryPool& pool) {
+bool DispatchBlendingCoalesce(const arrow::Datum& left, const arrow::Datum& right, arrow::Datum& out, TType* rightType, bool needUnwrapFirst, arrow::MemoryPool& pool) {
     TTypeInfoHelper typeInfoHelper;
-    bool rightIsOptional;
-    rightType = UnpackOptional(rightType, rightIsOptional);
-    MKQL_ENSURE(rightType, "Right type must be valid");
-
+    if (!needUnwrapFirst) {
+        bool rightTypeIsOptional;
+        rightType = UnpackOptional(rightType, rightTypeIsOptional);
+        MKQL_ENSURE(rightTypeIsOptional, "Right type must be optional.");
+    }
     NYql::NUdf::TDataTypeInspector typeData(typeInfoHelper, rightType);
     if (!typeData) {
         return false;
@@ -81,18 +82,18 @@ bool DispatchBlendingCoalesce(const arrow::Datum& left, const arrow::Datum& righ
         case NYql::NUdf::EDataSlot::Bool:
         case NYql::NUdf::EDataSlot::Int8:
         case NYql::NUdf::EDataSlot::Uint8:
-            DispatchCoalesceImpl<ui8>(left, right, out, /*outIsOptional=*/rightIsOptional, pool);
+            DispatchCoalesceImpl<ui8>(left, right, out, /*outIsOptional=*/!needUnwrapFirst, pool);
             return true;
         case NYql::NUdf::EDataSlot::Int16:
         case NYql::NUdf::EDataSlot::Uint16:
         case NYql::NUdf::EDataSlot::Date:
-            DispatchCoalesceImpl<ui16>(left, right, out, /*outIsOptional=*/rightIsOptional, pool);
+            DispatchCoalesceImpl<ui16>(left, right, out, /*outIsOptional=*/!needUnwrapFirst, pool);
             return true;
         case NYql::NUdf::EDataSlot::Int32:
         case NYql::NUdf::EDataSlot::Uint32:
         case NYql::NUdf::EDataSlot::Date32:
         case NYql::NUdf::EDataSlot::Datetime:
-            DispatchCoalesceImpl<ui32>(left, right, out, /*outIsOptional=*/rightIsOptional, pool);
+            DispatchCoalesceImpl<ui32>(left, right, out, /*outIsOptional=*/!needUnwrapFirst, pool);
             return true;
         case NYql::NUdf::EDataSlot::Int64:
         case NYql::NUdf::EDataSlot::Uint64:
@@ -101,15 +102,15 @@ bool DispatchBlendingCoalesce(const arrow::Datum& left, const arrow::Datum& righ
         case NYql::NUdf::EDataSlot::Interval64:
         case NYql::NUdf::EDataSlot::Interval:
         case NYql::NUdf::EDataSlot::Timestamp:
-            DispatchCoalesceImpl<ui64>(left, right, out, /*outIsOptional=*/rightIsOptional, pool);
+            DispatchCoalesceImpl<ui64>(left, right, out, /*outIsOptional=*/!needUnwrapFirst, pool);
             return true;
         case NYql::NUdf::EDataSlot::Double:
             static_assert(sizeof(NUdf::TDataType<double>::TLayout) == sizeof(NUdf::TDataType<ui64>::TLayout));
-            DispatchCoalesceImpl<ui64>(left, right, out, /*outIsOptional=*/rightIsOptional, pool);
+            DispatchCoalesceImpl<ui64>(left, right, out, /*outIsOptional=*/!needUnwrapFirst, pool);
             return true;
         case NYql::NUdf::EDataSlot::Float:
             static_assert(sizeof(NUdf::TDataType<float>::TLayout) == sizeof(NUdf::TDataType<ui32>::TLayout));
-            DispatchCoalesceImpl<ui32>(left, right, out, /*outIsOptional=*/rightIsOptional, pool);
+            DispatchCoalesceImpl<ui32>(left, right, out, /*outIsOptional=*/!needUnwrapFirst, pool);
             return true;
         default:
             // Fallback to general builder/reader pipeline.
@@ -152,7 +153,7 @@ public:
                 builder->Add(secondValue, length);
                 *res = builder->Build(true);
             } else {
-                if (DispatchBlendingCoalesce(first, second, *res, SecondItemType_, *ctx->memory_pool())) {
+                if (DispatchBlendingCoalesce(first, second, *res, SecondItemType_, NeedUnwrapFirst_, *ctx->memory_pool())) {
                     return arrow::Status::OK();
                 }
 
@@ -177,7 +178,7 @@ public:
             } else if ((size_t)firstArray.GetNullCount() == length) {
                 *res = second;
             } else {
-                if (DispatchBlendingCoalesce(first, second, *res, SecondItemType_, *ctx->memory_pool())) {
+                if (DispatchBlendingCoalesce(first, second, *res, SecondItemType_, NeedUnwrapFirst_, *ctx->memory_pool())) {
                     return arrow::Status::OK();
                 }
 

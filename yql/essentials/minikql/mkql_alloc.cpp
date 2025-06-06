@@ -121,6 +121,7 @@ void TAllocState::InvalidateMemInfo() {
 #endif
 }
 
+Y_NO_SANITIZE("address") Y_NO_SANITIZE("memory")
 size_t TAllocState::GetDeallocatedInPages() const {
     size_t deallocated = 0;
     for (auto x : AllPages) {
@@ -208,7 +209,7 @@ void* MKQLAllocSlow(size_t sz, TAllocState* state, const EMemorySubPool mPool) {
     auto roundedSize = AlignUp(sz + sizeof(TAllocPageHeader), MKQL_ALIGNMENT);
     auto capacity = Max(ui64(TAlignedPagePool::POOL_PAGE_SIZE), roundedSize);
     auto currPage = (TAllocPageHeader*)state->GetBlock(capacity);
-    SanitizerMarkValid(currPage, sizeof(TAllocPageHeader));
+    NYql::NUdf::SanitizerMakeRegionAccessible(currPage, sizeof(TAllocPageHeader));
     currPage->Deallocated = 0;
     currPage->Capacity = capacity;
     currPage->Offset = roundedSize;
@@ -244,7 +245,7 @@ void* TPagedArena::AllocSlow(const size_t sz, const EMemorySubPool mPool) {
     auto roundedSize = AlignUp(sz + sizeof(TAllocPageHeader), MKQL_ALIGNMENT);
     auto capacity = Max(ui64(TAlignedPagePool::POOL_PAGE_SIZE), roundedSize);
     currentPage = (TAllocPageHeader*)PagePool_->GetBlock(capacity);
-    SanitizerMarkValid(currentPage, sizeof(TAllocPageHeader));
+    NYql::NUdf::SanitizerMakeRegionAccessible(currentPage, sizeof(TAllocPageHeader));
     currentPage->Capacity = capacity;
     void* ret = (char*)currentPage + sizeof(TAllocPageHeader);
     currentPage->Offset = roundedSize;
@@ -285,7 +286,7 @@ void* MKQLArrowAllocateOnArena(ui64 size) {
         }
 
         page = (TMkqlArrowHeader*)GetAlignedPage();
-        SanitizerMarkValid(page, sizeof(TMkqlArrowHeader));
+        NYql::NUdf::SanitizerMakeRegionAccessible(page, sizeof(TMkqlArrowHeader));
         page->Offset = sizeof(TMkqlArrowHeader);
         page->Size = pageSize;
         page->UseCount = 1;
@@ -330,7 +331,7 @@ void* MKQLArrowAllocateImpl(ui64 size) {
     }
 
     auto* header = (TMkqlArrowHeader*)ptr;
-    SanitizerMarkValid(header, sizeof(TMkqlArrowHeader));
+    NYql::NUdf::SanitizerMakeRegionAccessible(header, sizeof(TMkqlArrowHeader));
     header->Offset = 0;
     header->UseCount = 0;
 
@@ -347,9 +348,9 @@ void* MKQLArrowAllocateImpl(ui64 size) {
 } // namespace
 
 void* MKQLArrowAllocate(ui64 size) {
-    auto sizeWithRedzones = GetSizeToAlloc(size);
+    auto sizeWithRedzones = NYql::NUdf::GetSizeToAlloc(size);
     void* mem = MKQLArrowAllocateImpl(sizeWithRedzones);
-    return WrapPointerWithRedZones(mem, sizeWithRedzones);
+    return NYql::NUdf::WrapPointerWithRedZones(mem, sizeWithRedzones);
 }
 
 void* MKQLArrowReallocate(const void* mem, ui64 prevSize, ui64 size) {
@@ -372,7 +373,7 @@ void MKQLArrowFreeOnArena(const void* ptr) {
             Y_ENSURE(it != state->ArrowBuffers.end());
             state->ArrowBuffers.erase(it);
         }
-        SanitizerMarkInvalid(page, sizeof(TMkqlArrowHeader));
+        NYql::NUdf::SanitizerMakeRegionInaccessible(page, sizeof(TMkqlArrowHeader));
         ReleaseAlignedPage(page);
     }
 
@@ -411,13 +412,13 @@ void MKQLArrowFreeImpl(const void* mem, ui64 size) {
 } // namespace
 
 void MKQLArrowFree(const void* mem, ui64 size) {
-    mem = UnwrapPointerWithRedZones(mem, size);
-    auto sizeWithRedzones = GetSizeToAlloc(size);
+    mem = NYql::NUdf::UnwrapPointerWithRedZones(mem, size);
+    auto sizeWithRedzones = NYql::NUdf::GetSizeToAlloc(size);
     return MKQLArrowFreeImpl(mem, sizeWithRedzones);
 }
 
 void MKQLArrowUntrack(const void* mem, ui64 size) {
-    mem = GetOriginalAllocatedObject(mem, size);
+    mem = NYql::NUdf::GetOriginalAllocatedObject(mem, size);
     TAllocState* state = TlsAllocState;
     Y_ENSURE(state);
     if (!state->EnableArrowTracking) {

@@ -21,10 +21,6 @@ ydb/core/kqp/ut/cost KqpCost.OlapWriteRow
 ydb/core/kqp/ut/federated_query/large_results KqpScriptExecResults.ExecuteScriptWithLargeFile
 ydb/core/kqp/ut/federated_query/s3 sole chunk chunk
 ydb/core/kqp/ut/indexes KqpMultishardIndex.WriteIntoRenamingSyncIndex
-ydb/core/kqp/ut/olap KqpOlap.PredicatePushdown
-ydb/core/kqp/ut/olap KqpOlapDictionary.DifferentPages
-ydb/core/kqp/ut/olap KqpOlapJson.BloomMixIndexesVariants
-ydb/core/kqp/ut/olap KqpOlapJson.BloomNGrammIndexesVariants
 ydb/core/kqp/ut/olap KqpOlapJson.CompactionVariants
 ydb/core/kqp/ut/olap KqpOlapJson.DuplicationCompactionVariants
 ydb/core/kqp/ut/olap KqpOlapJson.SwitchAccessorCompactionVariants
@@ -56,7 +52,6 @@ ydb/library/actors/interconnect/ut_fat InterconnectZcLocalOp.ZcDisabledAfterHidd
 ydb/library/actors/interconnect/ut_fat InterconnectZcLocalOp.ZcIsDisabledByDefault
 ydb/library/actors/interconnect/ut_huge_cluster HugeCluster.AllToAll
 ydb/library/actors/interconnect/ut_huge_cluster sole chunk chunk
-ydb/library/yaml_config/ut_transform test_transform.py.TestYamlConfigTransformations.test_basic[args1-dump_ds_init]
 ydb/library/yql/dq/opt/ut InterestingOrderingsShuffle.Join64ChainImitation
 ydb/library/yql/dq/opt/ut sole chunk chunk
 ydb/public/sdk/cpp/src/client/topic/ut TxUsage.Sinks_Oltp_WriteToTopicAndTable_6_Query
@@ -142,6 +137,7 @@ ydb/tests/compatibility test_example.py.TestExampleRollingUpdate.test_example[25
 ydb/tests/compatibility test_example.py.TestExampleRollingUpdate.test_example[rolling_24-4_to_25-1]
 ydb/tests/compatibility test_export_s3.py.TestExportS3.test_export[mixed_25-1_and_24-4]
 ydb/tests/compatibility test_followers.py.TestFollowersCompatibility.test_followers_compatability[mixed_25-1_and_24-4]
+ydb/tests/compatibility test_followers.py.TestSecondaryIndexFollowers.test_secondary_index_followers[rolling_25-1_to_current-True]
 ydb/tests/compatibility test_rolling.py.TestRolling.test_kv[24-4_to_25-1-column]
 ydb/tests/compatibility test_rolling.py.TestRolling.test_kv[24-4_to_25-1-row]
 ydb/tests/compatibility test_rolling.py.TestRolling.test_kv[25-1_to_current-column]
@@ -232,8 +228,6 @@ ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[14]
 ydb/tests/functional/ydb_cli test_ydb_impex.py.TestImpex.test_big_dataset[tsv-additional_args3-column]
 ydb/tests/olap [*/*] chunk chunk
 ydb/tests/olap sole chunk chunk
-ydb/tests/olap test_log_scenario.py.TestLogScenario.test_log_deviation[1051200]
-ydb/tests/olap test_log_scenario.py.TestLogScenario.test_log_deviation[180]
 ydb/tests/olap/scenario sole chunk chunk
 ydb/tests/olap/scenario test_alter_compression.py.TestAlterCompression.test[alter_compression]
 ydb/tests/olap/scenario test_alter_tiering.py.TestAlterTiering.test[many_tables]

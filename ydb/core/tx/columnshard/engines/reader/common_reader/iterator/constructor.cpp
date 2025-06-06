@@ -19,9 +19,12 @@ bool TBlobsFetcherTask::DoOnError(const TString& storageId, const TBlobRange& ra
     AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("error_on_blob_reading", range.ToString())(
         "scan_actor_id", Context->GetCommonContext()->GetScanActorId())("status", status.GetErrorMessage())("status_code", status.GetStatus())(
         "storage_id", storageId);
-    NActors::TActorContext::AsActorContext().Send(
-        Context->GetCommonContext()->GetScanActorId(), std::make_unique<NColumnShard::TEvPrivate::TEvTaskProcessedResult>(
-                                                           TConclusionStatus::Fail(TStringBuilder{} << "Error reading blob range for data: " << range.ToString() << ", error: " << status.GetErrorMessage() << ", status: " << NKikimrProto::EReplyStatus_Name(status.GetStatus()))));
+    NActors::TActorContext::AsActorContext().Send(Context->GetCommonContext()->GetScanActorId(),
+        std::make_unique<NColumnShard::TEvPrivate::TEvTaskProcessedResult>(
+            TConclusionStatus::Fail(TStringBuilder{} << "Error reading blob range for data: " << range.ToString()
+                                                     << ", error: " << status.GetErrorMessage()
+                                                     << ", status: " << NKikimrProto::EReplyStatus_Name(status.GetStatus())),
+            std::move(Guard)));
     return false;
 }
 

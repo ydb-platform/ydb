@@ -13,3 +13,4 @@
 | `--exclude`                              | Query numbers or segments to be excluded from the load.                                                                                                                               | None excluded by default             |
 | `--executer`                             | Query execution engine. Available values: `scan`, `generic`.                                                                                                                          | `generic`                            |
 | `--verbose` or `-v`                      | Print additional information to the screen during query execution.                                                                                                                    |                                      |
+| `--threads <value>` or `-t <value>` | The number of parallel threads generatibg the load |

@@ -234,44 +234,68 @@ class WorkloadVectorIndex(WorkloadBase):
         vector_dimension_data = [5]
         self._create_table(table_path)
         while not self.is_stop_requested():
-            random_vector_type = random.choice(vector_type_data)
-            random_vector_dimension = random.choice(vector_dimension_data)
-            self._upsert_values(
-                table_path=table_path, vector_type=random_vector_type, vector_dimension=random_vector_dimension
-            )
-            random_levels = random.choice(levels_data)
-            random_clusters = random.choice(clusters_data)
-            random_distance = random.choice(distance_data)
-            random_similarity = random.choice(similarity_data)
-            logger.info(
-                f"""vector_type: {random_vector_type}
-                            vector_dimension: {random_vector_dimension}
-                            levels: {random_levels}
-                            clusters: {random_clusters}
-                            distance: {random_distance}
-                            similarity: {random_similarity}
-                        """
-            )
-            try:
-                self._check_loop(
-                    table_path=table_path,
-                    vector_type=random_vector_type,
-                    vector_dimension=random_vector_dimension,
-                    levels=random_levels,
-                    clusters=random_clusters,
-                    distance=random_distance,
-                )
-                self._check_loop(
-                    table_path=table_path,
-                    vector_type=random_vector_type,
-                    vector_dimension=random_vector_dimension,
-                    levels=random_levels,
-                    clusters=random_clusters,
-                    similarity=random_similarity,
-                )
-            except Exception as ex:
-                logger.info(f"ERRROR {ex}")
-                raise str(ex)
+            for vector_type in vector_type_data:
+                for vector_dimension in vector_dimension_data:
+                    self._upsert_values(
+                        table_path=table_path, vector_type=vector_type, vector_dimension=vector_dimension
+                    )
+                for levels in levels_data:
+                    for clusters in clusters_data:
+                        for distance in distance_data:
+                            logger.info(
+                                f"""vector_type: {vector_type}
+                                vector_dimension: {vector_dimension}
+                                levels: {levels}
+                                clusters: {clusters}
+                                distance: {distance}
+                                """
+                            )
+                            try:
+                                self._check_loop(
+                                    table_path=table_path,
+                                    vector_type=vector_type,
+                                    vector_dimension=vector_dimension,
+                                    levels=levels,
+                                    clusters=clusters,
+                                    distance=distance,
+                                )
+                            except Exception as ex:
+                                logger.info(f"ERRROR {ex}")
+                                raise str(ex)
+                            if self.is_stop_requested():
+                                break
+
+                        for similarity in similarity_data:
+                            logger.info(
+                                f"""vector_type: {vector_type}
+                                vector_dimension: {vector_dimension}
+                                levels: {levels}
+                                clusters: {clusters}
+                                similarity: {similarity}
+                                """
+                            )
+                            try:
+                                self._check_loop(
+                                    table_path=table_path,
+                                    vector_type=vector_type,
+                                    vector_dimension=vector_dimension,
+                                    levels=levels,
+                                    clusters=clusters,
+                                    similarity=similarity,
+                                )
+                            except Exception as ex:
+                                logger.info(f"ERRROR {ex}")
+                                raise str(ex)
+                            if self.is_stop_requested():
+                                break
+                        if self.is_stop_requested():
+                            break
+                    if self.is_stop_requested():
+                        break
+                if self.is_stop_requested():
+                    break
+            if self.is_stop_requested():
+                break
 
         self._drop_table(table_path)
 

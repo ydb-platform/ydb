@@ -1030,7 +1030,7 @@ void FillIndexDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TTableDescr
                 tableIndex.GetIndexImplTableDescriptions(0)
             );
             break;
-        case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree:
+        case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree: {
             FillGlobalIndexSettings(
                 *index->mutable_global_vector_kmeans_tree_index()->mutable_level_table_settings(),
                 tableIndex.GetIndexImplTableDescriptions(0)
@@ -1039,10 +1039,18 @@ void FillIndexDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TTableDescr
                 *index->mutable_global_vector_kmeans_tree_index()->mutable_posting_table_settings(),
                 tableIndex.GetIndexImplTableDescriptions(1)
             );
+            const bool prefixVectorIndex = tableIndex.GetKeyColumnNames().size() > 1;
+            if (prefixVectorIndex) {
+                FillGlobalIndexSettings(
+                    *index->mutable_global_vector_kmeans_tree_index()->mutable_prefix_table_settings(),
+                    tableIndex.GetIndexImplTableDescriptions(2)
+                );                    
+            }
 
             *index->mutable_global_vector_kmeans_tree_index()->mutable_vector_settings() = tableIndex.GetVectorIndexKmeansTreeDescription().GetSettings();
 
             break;
+        }
         default:
             break;
         };

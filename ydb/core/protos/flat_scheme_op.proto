@@ -1580,6 +1580,7 @@ message TIndexBuildControl {
 
 message TLockConfig {
     optional string Name = 1;
+    optional uint64 LockTxId = 2; // if missing, current tx id is used
 }
 
 message TLockGuard {

@@ -2172,9 +2172,10 @@ void TImportInfo::AddNotifySubscriber(const TActorId &actorId) {
     Subscribers.insert(actorId);
 }
 
-TIndexBuildInfo::TShardStatus::TShardStatus(TSerializedTableRange range, TString lastKeyAck)
+TIndexBuildInfo::TShardStatus::TShardStatus(TSerializedTableRange range, TString lastKeyAck, size_t shardsCount)
     : Range(std::move(range))
     , LastKeyAck(std::move(lastKeyAck))
+    , Index(shardsCount)
 {}
 
 void TIndexBuildInfo::SerializeToProto(TSchemeShard* ss, NKikimrSchemeOp::TIndexBuildConfig* result) const {
@@ -2216,7 +2217,6 @@ void TIndexBuildInfo::SerializeToProto([[maybe_unused]] TSchemeShard* ss, NKikim
 
 void TIndexBuildInfo::AddParent(const TSerializedTableRange& range, TShardIdx shard) {
     if (KMeans.Parent == 0) {
-        Y_ASSERT(KMeans.ParentEnd == 0);
         // For Parent == 0 only single kmeans needed, so there is only two options:
         // 1. It fits entirely in the single shard => local kmeans for single shard
         // 2. It doesn't fit entirely in the single shard => global kmeans for all shards
@@ -2225,14 +2225,14 @@ void TIndexBuildInfo::AddParent(const TSerializedTableRange& range, TShardIdx sh
     const auto [parentFrom, parentTo] = KMeans.RangeToBorders(range);
     // TODO(mbkkt) We can make it more granular
 
-    // if new range is not intersect with other ranges, it's local
+    // the new range does not intersect with other ranges, just add it with 1 shard
     auto itFrom = Cluster2Shards.lower_bound(parentFrom);
     if (itFrom == Cluster2Shards.end() || parentTo < itFrom->second.From) {
-        Cluster2Shards.emplace_hint(itFrom, parentTo, TClusterShards{.From = parentFrom, .Local = shard});
+        Cluster2Shards.emplace_hint(itFrom, parentTo, TClusterShards{.From = parentFrom, .Shards = {shard}});
         return;
     }
 
-    // otherwise, this range is global and we need to merge all intersecting ranges
+    // otherwise, this range has multiple shards and we need to merge all intersecting ranges
     auto itTo = parentTo < itFrom->first ? itFrom : Cluster2Shards.lower_bound(parentTo);
     if (itTo == Cluster2Shards.end()) {
         itTo = Cluster2Shards.rbegin().base();
@@ -2244,25 +2244,16 @@ void TIndexBuildInfo::AddParent(const TSerializedTableRange& range, TShardIdx sh
         itTo = Cluster2Shards.insert(Cluster2Shards.end(), std::move(node));
         itFrom = needsToReplaceFrom ? itTo : itFrom;
     }
-    auto& [toFrom, toLocal, toGlobal] = itTo->second;
+    auto& [toFrom, toShards] = itTo->second;
 
     toFrom = std::min(toFrom, parentFrom);
-    if (toLocal != InvalidShardIdx) {
-        toGlobal.emplace_back(toLocal);
-        toLocal = InvalidShardIdx;
-    }
-    toGlobal.emplace_back(shard);
+    toShards.emplace_back(shard);
 
     while (itFrom != itTo) {
-        const auto& [fromFrom, fromLocal, fromGlobal] = itFrom->second;
+        const auto& [fromFrom, fromShards] = itFrom->second;
         toFrom = std::min(toFrom, fromFrom);
-        if (fromLocal != InvalidShardIdx) {
-            Y_ASSERT(fromGlobal.empty());
-            toGlobal.emplace_back(fromLocal);
-        } else {
-            Y_ASSERT(!fromGlobal.empty());
-            toGlobal.insert(toGlobal.end(), fromGlobal.begin(), fromGlobal.end());
-        }
+        Y_ASSERT(!fromShards.empty());
+        toShards.insert(toShards.end(), fromShards.begin(), fromShards.end());
         itFrom = Cluster2Shards.erase(itFrom);
     }
 }
@@ -2586,6 +2577,13 @@ std::optional<std::pair<i64, i64>> ValidateSequenceType(const TString& sequenceN
     }
 
     return {{dataTypeMinValue, dataTypeMaxValue}};
+}
+
+NProtoBuf::Timestamp SecondsToProtoTimeStamp(ui64 sec) {
+    NProtoBuf::Timestamp timestamp;
+    timestamp.set_seconds((i64)(sec));
+    timestamp.set_nanos(0);
+    return timestamp;
 }
 
 } // namespace NSchemeShard

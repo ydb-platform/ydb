@@ -154,6 +154,10 @@ namespace NSchemeShardUT_Private {
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // A wrapper to run test scenarios with reboots of schemeshard, hive and coordinator
+    // The idea is to run the same test scenario multiple times and on each run restart a tablet **once**
+    // on receiving a non-filtered event. A given tablet is restarted when it receives an event for which
+    // PassUserRequests() doesn't return true. On the first run, it is restarted on the first such event,
+    // on the second run - on the second event and so on.
     class TTestWithReboots {
     protected:
         struct TDatashardLogBatchingSwitch {

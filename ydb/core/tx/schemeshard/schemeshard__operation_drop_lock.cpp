@@ -164,7 +164,7 @@ public:
         const auto pathId = dstPath.Base()->PathId;
         result->SetPathId(pathId.LocalPathId);
 
-        if (!dstPath.LockedBy()) {
+        if (!dstPath.IsLocked()) {
             result->SetError(TEvSchemeShard::EStatus::StatusAlreadyExists, TStringBuilder() << "path checks failed"
                 << ", path already unlocked"
                 << ", path: " << dstPath.PathString());

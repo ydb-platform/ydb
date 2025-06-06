@@ -109,6 +109,7 @@ message GlobalUniqueIndex {
 message GlobalVectorKMeansTreeIndex {
     GlobalIndexSettings level_table_settings = 1;
     GlobalIndexSettings posting_table_settings = 2;
+    GlobalIndexSettings prefix_table_settings = 4;
     KMeansTreeSettings vector_settings = 3;
 }
 

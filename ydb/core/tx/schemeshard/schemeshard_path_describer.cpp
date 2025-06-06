@@ -1405,12 +1405,6 @@ void TSchemeShard::DescribeTableIndex(const TPathId& pathId, const TString& name
     const auto* indexPathPtr = PathsById.FindPtr(pathId);
     Y_ABORT_UNLESS(indexPathPtr);
     const auto& indexPath = *indexPathPtr->Get();
-    if (const auto size = indexPath.GetChildren().size(); indexInfo->Type == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
-        // For vector index we have 2 impl tables and 2 build impl tables
-        Y_VERIFY_S(2 <= size && size <= 4, size);
-    } else {
-        Y_VERIFY_S(size == 1, size);
-    }
 
     ui64 dataSize = 0;
     for (const auto& indexImplTablePathId : indexPath.GetChildren()) {

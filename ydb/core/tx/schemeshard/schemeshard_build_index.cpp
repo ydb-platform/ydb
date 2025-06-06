@@ -40,6 +40,10 @@ void TSchemeShard::Handle(TEvDataShard::TEvLocalKMeansResponse::TPtr& ev, const 
     Execute(CreateTxReply(ev), ctx);
 }
 
+void TSchemeShard::Handle(TEvDataShard::TEvPrefixKMeansResponse::TPtr& ev, const TActorContext& ctx) {
+    Execute(CreateTxReply(ev), ctx);
+}
+
 void TSchemeShard::Handle(TEvIndexBuilder::TEvUploadSampleKResponse::TPtr& ev, const TActorContext& ctx) {
     Execute(CreateTxReply(ev), ctx);
 }
@@ -59,12 +63,18 @@ void TSchemeShard::PersistCreateBuildIndex(NIceDb::TNiceDb& db, const TIndexBuil
         NIceDb::TUpdate<Schema::IndexBuild::TableLocalId>(info.TablePathId.LocalPathId),
         NIceDb::TUpdate<Schema::IndexBuild::IndexName>(info.IndexName),
         NIceDb::TUpdate<Schema::IndexBuild::IndexType>(info.IndexType),
-        NIceDb::TUpdate<Schema::IndexBuild::MaxBatchRows>(info.Limits.MaxBatchRows),
-        NIceDb::TUpdate<Schema::IndexBuild::MaxBatchBytes>(info.Limits.MaxBatchBytes),
-        NIceDb::TUpdate<Schema::IndexBuild::MaxShards>(info.Limits.MaxShards),
-        NIceDb::TUpdate<Schema::IndexBuild::MaxRetries>(info.Limits.MaxRetries),
-        NIceDb::TUpdate<Schema::IndexBuild::BuildKind>(ui32(info.BuildKind))
+        NIceDb::TUpdate<Schema::IndexBuild::MaxBatchRows>(info.ScanSettings.GetMaxBatchRows()),
+        NIceDb::TUpdate<Schema::IndexBuild::MaxBatchBytes>(info.ScanSettings.GetMaxBatchBytes()),
+        NIceDb::TUpdate<Schema::IndexBuild::MaxShards>(info.MaxInProgressShards),
+        NIceDb::TUpdate<Schema::IndexBuild::MaxRetries>(info.ScanSettings.GetMaxBatchRetries()),
+        NIceDb::TUpdate<Schema::IndexBuild::BuildKind>(ui32(info.BuildKind)),
+        NIceDb::TUpdate<Schema::IndexBuild::StartTime>(info.StartTime.Seconds())
     );
+    if (info.UserSID) {
+        persistedBuildIndex.Update(
+            NIceDb::TUpdate<Schema::IndexBuild::UserSID>(*info.UserSID)
+        );
+    }
     // Persist details of the index build operation: ImplTableDescriptions and SpecializedIndexDescription.
     // We have chosen TIndexCreationConfig's string representation as the serialization format.
     if (bool hasSpecializedDescription = !std::holds_alternative<std::monostate>(info.SpecializedIndexDescription);
@@ -115,7 +125,11 @@ void TSchemeShard::PersistCreateBuildIndex(NIceDb::TNiceDb& db, const TIndexBuil
 
 void TSchemeShard::PersistBuildIndexState(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo) {
     db.Table<Schema::IndexBuild>().Key(indexInfo.Id).Update(
-        NIceDb::TUpdate<Schema::IndexBuild::State>(ui32(indexInfo.State)));
+        NIceDb::TUpdate<Schema::IndexBuild::State>(ui32(indexInfo.State)),
+        NIceDb::TUpdate<Schema::IndexBuild::Issue>(indexInfo.Issue),
+        NIceDb::TUpdate<Schema::IndexBuild::StartTime>(indexInfo.StartTime.Seconds()),
+        NIceDb::TUpdate<Schema::IndexBuild::EndTime>(indexInfo.EndTime.Seconds())
+    );
 }
 
 void TSchemeShard::PersistBuildIndexCancelRequest(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo) {

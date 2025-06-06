@@ -236,7 +236,7 @@ auto CreateMinPartitionsChecker(ui32 expectedMinPartitions, const TString& debug
     };
 }
 
-auto CreateHasIndexChecker(const TString& indexName, EIndexType indexType) {
+auto CreateHasIndexChecker(const TString& indexName, EIndexType indexType, bool prefix) {
     return [=](const TTableDescription& tableDescription) {
         for (const auto& indexDesc : tableDescription.GetIndexDescriptions()) {
             if (indexDesc.GetIndexName() != indexName) {
@@ -245,13 +245,16 @@ auto CreateHasIndexChecker(const TString& indexName, EIndexType indexType) {
             if (indexDesc.GetIndexType() != indexType) {
                 continue;
             }
-            if (indexDesc.GetIndexColumns().size() != 1) {
+            if (indexDesc.GetIndexColumns().size() != (prefix ? 2 : 1)) {
                 continue;
             }
             if (indexDesc.GetDataColumns().size() != 0) {
                 continue;
             }
-            if (indexDesc.GetIndexColumns()[0] != "Value") {
+            if (prefix && indexDesc.GetIndexColumns().front() != "Group") {
+                continue;
+            }
+            if (indexDesc.GetIndexColumns().back() != "Value") {
                 continue;
             }
             if (indexType != NYdb::NTable::EIndexType::GlobalVectorKMeansTree) {
@@ -647,23 +650,37 @@ NYdb::NTable::EIndexType ConvertIndexTypeToAPI(NKikimrSchemeOp::EIndexType index
 }
 
 void TestRestoreTableWithIndex(
-    const char* table, const char* index, NKikimrSchemeOp::EIndexType indexType, TSession& session,
+    const char* table, const char* index, NKikimrSchemeOp::EIndexType indexType, bool prefix, TSession& session,
     TBackupFunction&& backup, TRestoreFunction&& restore
 ) {
     TString query;
     if (indexType == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree) {
-        query = Sprintf(R"(CREATE TABLE `%s` (
-            Key Uint32,
-            Value String,
-            PRIMARY KEY (Key),
-            INDEX %s GLOBAL USING vector_kmeans_tree
-                ON (Value)
-                WITH (similarity=inner_product, vector_type=float, vector_dimension=768, levels=2, clusters=80)
-        );)", table, index);
+        if (prefix) {
+            query = Sprintf(R"(CREATE TABLE `%s` (
+                Key Uint32,
+                Group Uint32,
+                Value String,
+                PRIMARY KEY (Key),
+                INDEX %s GLOBAL USING vector_kmeans_tree
+                    ON (Group, Value)
+                    WITH (similarity=inner_product, vector_type=float, vector_dimension=768, levels=2, clusters=80)
+            );)", table, index);
+        } else {
+            query = Sprintf(R"(CREATE TABLE `%s` (
+                Key Uint32,
+                Group Uint32,
+                Value String,
+                PRIMARY KEY (Key),
+                INDEX %s GLOBAL USING vector_kmeans_tree
+                    ON (Value)
+                    WITH (similarity=inner_product, vector_type=float, vector_dimension=768, levels=2, clusters=80)
+            );)", table, index);
+        }
     } else {
         query = Sprintf(R"(
             CREATE TABLE `%s` (
                 Key Uint32,
+                Group Uint32,
                 Value Uint32,
                 PRIMARY KEY (Key),
                 INDEX %s %s ON (Value)
@@ -682,7 +699,7 @@ void TestRestoreTableWithIndex(
 
     restore();
 
-    CheckTableDescription(session, table, CreateHasIndexChecker(index, ConvertIndexTypeToAPI(indexType)));
+    CheckTableDescription(session, table, CreateHasIndexChecker(index, ConvertIndexTypeToAPI(indexType), prefix));
 }
 
 void TestRestoreDirectory(const char* directory, TSchemeClient& client, TBackupFunction&& backup, TRestoreFunction&& restore) {
@@ -1571,7 +1588,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         );
     }
 
-    void TestTableWithIndexBackupRestore(NKikimrSchemeOp::EIndexType indexType = NKikimrSchemeOp::EIndexTypeGlobal) {
+    void TestTableWithIndexBackupRestore(NKikimrSchemeOp::EIndexType indexType = NKikimrSchemeOp::EIndexTypeGlobal, bool prefix = false) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableFeatureFlags()->SetEnableVectorIndex(true);
         TKikimrWithGrpcAndRootSchema server{std::move(appConfig)};
@@ -1588,6 +1605,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             table,
             index,
             indexType,
+            prefix,
             session,
             CreateBackupLambda(driver, pathToBackup),
             CreateRestoreLambda(driver, pathToBackup)
@@ -1913,6 +1931,10 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             default:
                 UNIT_FAIL("Client backup/restore were not implemented for this index type");
         }
+    }
+
+    Y_UNIT_TEST(PrefixedVectorIndex) {
+        TestTableWithIndexBackupRestore(NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, true);
     }
 }
 
@@ -2319,7 +2341,7 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
         );
     }
 
-    void TestTableWithIndexBackupRestore(NKikimrSchemeOp::EIndexType indexType = NKikimrSchemeOp::EIndexTypeGlobal) {
+    void TestTableWithIndexBackupRestore(NKikimrSchemeOp::EIndexType indexType = NKikimrSchemeOp::EIndexTypeGlobal, bool prefix = false) {
         TS3TestEnv testEnv;
         constexpr const char* table = "/Root/table";
         constexpr const char* index = "value_idx";
@@ -2328,6 +2350,7 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             table,
             index,
             indexType,
+            prefix,
             testEnv.GetTableSession(),
             CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port()),
             CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), { "table" })
@@ -2446,5 +2469,9 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             default:
                 UNIT_FAIL("S3 backup/restore were not implemented for this index type");
         }
+    }
+
+    Y_UNIT_TEST(PrefixedVectorIndex) {
+        TestTableWithIndexBackupRestore(NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, true);
     }
 }

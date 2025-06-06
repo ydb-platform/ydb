@@ -1862,6 +1862,10 @@ ui64 TPath::GetEffectiveACLVersion() const {
     return version;
 }
 
+bool TPath::IsLocked() const {
+    return SS->LockedPaths.contains(Base()->PathId);
+}
+
 TTxId TPath::LockedBy() const {
     auto it = SS->LockedPaths.find(Base()->PathId);
     if (it != SS->LockedPaths.end()) {

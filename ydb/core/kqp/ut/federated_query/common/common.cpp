@@ -63,8 +63,8 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
         featureFlags.SetEnableExternalSourceSchemaInference(true);
         if (!appConfig) {
             appConfig.emplace();
+            appConfig->MutableQueryServiceConfig()->SetAllExternalDataSourcesAreAvailable(true);
         }
-        appConfig->MutableQueryServiceConfig()->SetAllExternalDataSourcesAreAvailable(true);
 
         auto settings = TKikimrSettings();
 

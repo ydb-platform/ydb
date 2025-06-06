@@ -7,6 +7,7 @@ SRCS(
     common.cpp
     source_cache.cpp
     fetching.cpp
+    private_events.cpp
 )
 
 PEERDIR(

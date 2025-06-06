@@ -1,6 +1,5 @@
 #include "merge.h"
-
-#include <ydb/core/tx/columnshard/engines/reader/simple_reader/duplicates/events.h>
+#include "private_events.h"
 
 namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering  {
 
@@ -67,13 +66,13 @@ void TBuildDuplicateFilters::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/
     }
 
     AFL_VERIFY(Owner);
-    TActivationContext::AsActorContext().Send(Owner, new TEvFilterConstructionResult(std::move(filters)));
+    TActivationContext::AsActorContext().Send(Owner, new NPrivate::TEvFilterConstructionResult(std::move(filters)));
     Owner = TActorId();
 }
 
 void TBuildDuplicateFilters::DoOnCannotExecute(const TString& reason) {
     AFL_VERIFY(Owner);
-    TActivationContext::AsActorContext().Send(Owner, new TEvFilterConstructionResult(TConclusionStatus::Fail(reason)));
+    TActivationContext::AsActorContext().Send(Owner, new NPrivate::TEvFilterConstructionResult(TConclusionStatus::Fail(reason)));
     Owner = TActorId();
 }
 

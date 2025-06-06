@@ -1,11 +1,12 @@
 #pragma once
 
+#include "private_events.h"
+
+#include <ydb/core/tx/columnshard/blobs_reader/actor.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/source.h>
-#include <ydb/core/tx/columnshard/engines/reader/simple_reader/duplicates/events.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/abstract_scheme.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
-#include <ydb/core/tx/columnshard/blobs_reader/actor.h>
 
 namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering  {
 
@@ -121,8 +122,8 @@ public:
     }
 
     void OnError(const TString& message) {
-        TActorContext::AsActorContext().Send(
-            GetCommonContext().GetOwner(), new TEvDuplicateFilterDataFetched(Portion->GetPortionId(), TConclusionStatus::Fail(message)));
+        TActorContext::AsActorContext().Send(GetCommonContext().GetOwner(),
+            new NPrivate::TEvDuplicateFilterDataFetched(Portion->GetPortionId(), TConclusionStatus::Fail(message)));
         OnDone();
     }
 
@@ -145,7 +146,7 @@ public:
         AdvanceState(EState::ASSEMBLE_BLOBS);
         AFL_VERIFY(PortionAccessor);
         TActorContext::AsActorContext().Send(GetCommonContext().GetOwner(),
-            new TEvDuplicateFilterDataFetched(Portion->GetPortionId(),
+            new NPrivate::TEvDuplicateFilterDataFetched(Portion->GetPortionId(),
                 TColumnsData(PortionAccessor
                                  ->PrepareForAssemble(*GetCommonContext().GetResultSchema(), *GetCommonContext().GetResultSchema(), Blobs,
                                      Portion->GetDataSnapshot(GetCommonContext().GetDefaultSnapshot()))

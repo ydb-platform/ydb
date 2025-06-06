@@ -2,6 +2,7 @@
 
 #include "events.h"
 #include "fetching.h"
+#include "private_events.h"
 
 #include <ydb/core/formats/arrow/common/container.h>
 #include <ydb/core/tx/columnshard/counters/duplicate_filtering.h>
@@ -44,7 +45,7 @@ public:
         }
         void OnFailure(const TString& error) {
             AFL_VERIFY(Owner);
-            TActivationContext::AsActorContext().Send(Owner, new TEvFilterConstructionResult(TConclusionStatus::Fail(error)));
+            TActivationContext::AsActorContext().Send(Owner, new NPrivate::TEvFilterConstructionResult(TConclusionStatus::Fail(error)));
             Owner = TActorId();
         }
 
@@ -147,14 +148,14 @@ private:
 private:
     STATEFN(StateMain) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvDuplicateFilterDataFetched, Handle);
+            hFunc(NPrivate::TEvDuplicateFilterDataFetched, Handle);
             hFunc(NActors::TEvents::TEvPoison, Handle);
             default:
                 AFL_VERIFY(false)("unexpected_event", ev->GetTypeName());
         }
     }
 
-    void Handle(const TEvDuplicateFilterDataFetched::TPtr&);
+    void Handle(const NPrivate::TEvDuplicateFilterDataFetched::TPtr&);
     void Handle(const NActors::TEvents::TEvPoison::TPtr&) {
         PassAway();
     }

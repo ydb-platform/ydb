@@ -14,7 +14,7 @@ TSourceCache::TResponseConstructor::TResponseConstructor(
     }
 }
 
-void TSourceCache::Handle(const TEvDuplicateFilterDataFetched::TPtr& ev) {
+void TSourceCache::Handle(const NPrivate::TEvDuplicateFilterDataFetched::TPtr& ev) {
     const ui64 sourceId = ev->Get()->GetSourceId();
     NActors::TLogContextGuard g(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_SCAN)("source", sourceId));
 

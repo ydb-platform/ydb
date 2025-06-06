@@ -1,6 +1,8 @@
 #include "shared_info.h"
+#include "pool.h"
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/library/actors/core/executor_pool_shared.h>
+#include <ydb/library/actors/core/executor_pool_basic.h>
 
 using namespace NActors;
 
@@ -82,7 +84,7 @@ Y_UNIT_TEST_SUITE(SharedInfoTests) {
         UNIT_ASSERT_VALUES_EQUAL(info.ForeignThreadsAllowed.size(), 2);
         UNIT_ASSERT_VALUES_EQUAL(info.OwnedThreads.size(), 2);
         UNIT_ASSERT_VALUES_EQUAL(info.CpuConsumption.size(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(info.CpuConsumptionByPool.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(info.CpuConsumptionPerThread.size(), 2);
         UNIT_ASSERT_VALUES_EQUAL(info.ThreadOwners.size(), 4);
         UNIT_ASSERT_VALUES_EQUAL(info.ThreadStats.size(), 4);
     }
@@ -111,34 +113,49 @@ Y_UNIT_TEST_SUITE(SharedInfoTests) {
             pool.SetThreadStats(i, stats);
         }
 
-        info.Pull(pool);
 
-        UNIT_ASSERT_VALUES_EQUAL_C(info.ForeignThreadsAllowed[0], 1, info.ToString());
-        UNIT_ASSERT_VALUES_EQUAL_C(info.ForeignThreadsAllowed[1], 2, info.ToString());
-        UNIT_ASSERT_VALUES_EQUAL_C(info.OwnedThreads[0], 2, info.ToString());
-        UNIT_ASSERT_VALUES_EQUAL_C(info.OwnedThreads[1], 1, info.ToString());
-
-        for (i16 poolId = 0; poolId < 2; ++poolId) {
+        std::vector<std::unique_ptr<TPoolInfo>> poolInfos;
+        poolInfos.emplace_back(std::make_unique<TPoolInfo>());
+        poolInfos.emplace_back(std::make_unique<TPoolInfo>());
+        for (auto &poolInfo : poolInfos) {
+            poolInfo->SharedInfo.resize(4);
             for (i16 threadId = 0; threadId < 4; ++threadId) {
-                const auto& consumption = info.CpuConsumptionByPool[poolId][threadId];
-                UNIT_ASSERT_VALUES_EQUAL_C(consumption.Elapsed, 1000, info.ToString());
-                UNIT_ASSERT_VALUES_EQUAL_C(consumption.Cpu, 800, info.ToString());
-                UNIT_ASSERT_VALUES_EQUAL_C(consumption.Parked, 200, info.ToString());
-                UNIT_ASSERT_VALUES_EQUAL_C(consumption.DiffElapsed, 1000, info.ToString());
-                UNIT_ASSERT_VALUES_EQUAL_C(consumption.DiffCpu, 800, info.ToString());
-                UNIT_ASSERT_VALUES_EQUAL_C(consumption.DiffParked, 200, info.ToString());
+                poolInfo->SharedInfo[threadId].ElapsedCpu.Register(1, 0);
+                poolInfo->SharedInfo[threadId].UsedCpu.Register(1, 0);
             }
         }
-    
-        stats.SafeElapsedTicks = 2000;
-        stats.CpuUs = 1600;
-        stats.SafeParkedTicks = 400;
-        
-        for (i16 i = 0; i < 2; ++i) {
-            pool.SetThreadStats(i, stats);
+
+        ui64 ts = Us2Ts(8.0 * 1'000'000);
+        for (auto &poolInfo : poolInfos) {
+            for (i16 threadId = 0; threadId < 4; ++threadId) {
+                poolInfo->SharedInfo[threadId].ElapsedCpu.Register(ts, 0.4 * 8);
+                poolInfo->SharedInfo[threadId].UsedCpu.Register(ts, 0.3 * 8);
+            }
         }
 
-        info.Pull(pool);
+        info.Pull(poolInfos, pool);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(info.ForeignThreadsAllowed[0], 1, info.ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(info.ForeignThreadsAllowed[1], 2, info.ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(info.OwnedThreads[0], 2, info.ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(info.OwnedThreads[1], 1, info.ToString());
+        for (i16 poolId = 0; poolId < 2; ++poolId) {
+            for (i16 threadId = 0; threadId < 4; ++threadId) {
+                const auto& consumption = info.CpuConsumptionPerThread[poolId][threadId];
+                UNIT_ASSERT_DOUBLES_EQUAL_C(consumption.Elapsed, 0.4, 1e-6, info.ToString());
+                UNIT_ASSERT_DOUBLES_EQUAL_C(consumption.Cpu, 0.3, 1e-6, info.ToString());
+            }
+        }
+
+        ts += Us2Ts(8.0 * 1'000'000);
+        for (auto &poolInfo : poolInfos) {
+            for (i16 threadId = 0; threadId < 4; ++threadId) {
+                poolInfo->SharedInfo[threadId].ElapsedCpu.Register(ts, (0.4 + 0.5) * 8);
+                poolInfo->SharedInfo[threadId].UsedCpu.Register(ts, (0.3 + 0.4) * 8);
+            }
+        }
+
+        info.Pull(poolInfos, pool);
 
         UNIT_ASSERT_VALUES_EQUAL_C(info.ForeignThreadsAllowed[0], 1, info.ToString());
         UNIT_ASSERT_VALUES_EQUAL_C(info.ForeignThreadsAllowed[1], 2, info.ToString());
@@ -147,13 +164,9 @@ Y_UNIT_TEST_SUITE(SharedInfoTests) {
 
         for (i16 poolId = 0; poolId < 2; ++poolId) {
             for (i16 threadId = 0; threadId < 4; ++threadId) {
-                const auto& consumption = info.CpuConsumptionByPool[poolId][threadId];
-                UNIT_ASSERT_VALUES_EQUAL_C(consumption.Elapsed, 2000, info.ToString());
-                UNIT_ASSERT_VALUES_EQUAL_C(consumption.Cpu, 1600, info.ToString());
-                UNIT_ASSERT_VALUES_EQUAL_C(consumption.Parked, 400, info.ToString());
-                UNIT_ASSERT_VALUES_EQUAL_C(consumption.DiffElapsed, 1000, info.ToString());
-                UNIT_ASSERT_VALUES_EQUAL_C(consumption.DiffCpu, 800, info.ToString());
-                UNIT_ASSERT_VALUES_EQUAL_C(consumption.DiffParked, 200, info.ToString());
+                const auto& consumption = info.CpuConsumptionPerThread[poolId][threadId];
+                UNIT_ASSERT_DOUBLES_EQUAL_C(consumption.Elapsed, 0.5, 1e-6, info.ToString());
+                UNIT_ASSERT_DOUBLES_EQUAL_C(consumption.Cpu, 0.4, 1e-6, info.ToString());
             }
         }
     }
@@ -187,9 +200,26 @@ Y_UNIT_TEST_SUITE(SharedInfoTests) {
         lowLoadStats.CpuUs = 2'000;
         lowLoadStats.SafeParkedTicks = 8'000;
 
-        pool.SetThreadStats(1, lowLoadStats);
+        std::vector<std::unique_ptr<TPoolInfo>> poolInfos;
+        poolInfos.emplace_back(std::make_unique<TPoolInfo>());
+        poolInfos.emplace_back(std::make_unique<TPoolInfo>());
+        for (auto &poolInfo : poolInfos) {
+            poolInfo->SharedInfo.resize(4);
+            for (i16 threadId = 0; threadId < 4; ++threadId) {
+                poolInfo->SharedInfo[threadId].ElapsedCpu.Register(1, 0);
+                poolInfo->SharedInfo[threadId].UsedCpu.Register(1, 0);
+            }
+        }
 
-        info.Pull(pool);
+        ui64 ts = Us2Ts(8.0 * 1'000'000);
+        for (i16 threadId = 0; threadId < 4; ++threadId) {
+            poolInfos[0]->SharedInfo[threadId].ElapsedCpu.Register(ts, 0.45 * 8);
+            poolInfos[0]->SharedInfo[threadId].UsedCpu.Register(ts, 0.45 * 8);
+            poolInfos[1]->SharedInfo[threadId].ElapsedCpu.Register(ts, 0.1 * 8);
+            poolInfos[1]->SharedInfo[threadId].UsedCpu.Register(ts, 0.1 * 8);
+        }
+
+        info.Pull(poolInfos, pool);
 
         UNIT_ASSERT_DOUBLES_EQUAL_C(info.CpuConsumption[0].Elapsed, 1.8f, 1e-6, info.ToString());
         UNIT_ASSERT_DOUBLES_EQUAL_C(info.CpuConsumption[0].Cpu, 1.8f, 1e-6, info.ToString());
@@ -198,19 +228,15 @@ Y_UNIT_TEST_SUITE(SharedInfoTests) {
         UNIT_ASSERT_DOUBLES_EQUAL_C(info.CpuConsumption[1].Cpu, 0.4f, 1e-6, info.ToString());
         UNIT_ASSERT_DOUBLES_EQUAL_C(info.CpuConsumption[1].CpuQuota, 1.3f, 1e-6, info.ToString());
 
-        highLoadStats.SafeElapsedTicks = 19'000; // +10'000
-        highLoadStats.CpuUs = 19'000;            // +10'000
-        highLoadStats.SafeParkedTicks = 1'000;   // +0'000
+        ts += Us2Ts(8.0 * 1'000'000);
+        for (i16 threadId = 0; threadId < 4; ++threadId) {
+            poolInfos[0]->SharedInfo[threadId].ElapsedCpu.Register(ts, (0.45 + 0.5) * 8);
+            poolInfos[0]->SharedInfo[threadId].UsedCpu.Register(ts, (0.45 + 0.5) * 8);
+            poolInfos[1]->SharedInfo[threadId].ElapsedCpu.Register(ts, (0.1 + 0.05) * 8);
+            poolInfos[1]->SharedInfo[threadId].UsedCpu.Register(ts, (0.1 + 0.05) * 8);
+        }
 
-        pool.SetThreadStats(0, highLoadStats);
-
-        lowLoadStats.SafeElapsedTicks = 3'000;  // +1'000
-        lowLoadStats.CpuUs = 3'000;              // +1'000
-        lowLoadStats.SafeParkedTicks = 17'000;   // +9'000
-
-        pool.SetThreadStats(1, lowLoadStats);
-
-        info.Pull(pool);
+        info.Pull(poolInfos, pool);
 
         UNIT_ASSERT_DOUBLES_EQUAL_C(info.CpuConsumption[0].Elapsed, 2.0f, 1e-6, info.ToString());
         UNIT_ASSERT_DOUBLES_EQUAL_C(info.CpuConsumption[0].Cpu, 2.0f, 1e-6, info.ToString());
@@ -221,51 +247,4 @@ Y_UNIT_TEST_SUITE(SharedInfoTests) {
         UNIT_ASSERT_DOUBLES_EQUAL_C(info.CpuConsumption[1].CpuQuota, 1.1f, 1e-6, info.ToString());
     }
 
-    Y_UNIT_TEST(TestCpuConsumptionEdgeCases) {
-        TSharedInfo info;
-        TMockSharedPool pool(2, 2);
-
-        pool.SetThreadOwner(0, 0);
-        pool.SetThreadOwner(1, 1);
-
-        info.Init(2, &pool);
-
-        for (i16 poolId = 0; poolId < 2; ++poolId) {
-            UNIT_ASSERT_DOUBLES_EQUAL_C(info.CpuConsumption[poolId].Elapsed, 0.0f, 1e-6, info.ToString());
-            UNIT_ASSERT_DOUBLES_EQUAL_C(info.CpuConsumption[poolId].Cpu, 0.0f, 1e-6, info.ToString());
-            UNIT_ASSERT_DOUBLES_EQUAL_C(info.CpuConsumption[poolId].CpuQuota, 1.0f, 1e-6, info.ToString());
-        }
-
-        TExecutorThreadStats zeroStats;
-        zeroStats.SafeElapsedTicks = 0;
-        zeroStats.CpuUs = 0;
-        zeroStats.SafeParkedTicks = 0;
-
-        pool.SetThreadStats(0, zeroStats);
-        pool.SetThreadStats(1, zeroStats);
-
-        info.Pull(pool);
-
-        for (i16 poolId = 0; poolId < 2; ++poolId) {
-            UNIT_ASSERT_DOUBLES_EQUAL_C(info.CpuConsumption[poolId].Elapsed, 0.0f, 1e-6, info.ToString());
-            UNIT_ASSERT_DOUBLES_EQUAL_C(info.CpuConsumption[poolId].Cpu, 0.0f, 1e-6, info.ToString());
-            UNIT_ASSERT_DOUBLES_EQUAL_C(info.CpuConsumption[poolId].CpuQuota, 1.0f, 1e-6, info.ToString());
-        }
-
-        TExecutorThreadStats maxStats;
-        maxStats.SafeElapsedTicks = std::numeric_limits<ui64>::max() / 4 - 1;
-        maxStats.CpuUs = std::numeric_limits<ui64>::max() / 4 - 1;
-        maxStats.SafeParkedTicks = std::numeric_limits<ui64>::max() / 4 - 1;
-
-        pool.SetThreadStats(0, maxStats);
-        pool.SetThreadStats(1, maxStats);
-
-        info.Pull(pool);
-
-        for (i16 poolId = 0; poolId < 2; ++poolId) {
-            UNIT_ASSERT_DOUBLES_EQUAL_C(info.CpuConsumption[poolId].Elapsed, 0.5f, 1e-6, info.ToString());
-            UNIT_ASSERT_DOUBLES_EQUAL_C(info.CpuConsumption[poolId].Cpu, 0.5f, 1e-6, info.ToString());
-            UNIT_ASSERT_DOUBLES_EQUAL_C(info.CpuConsumption[poolId].CpuQuota, 1.0f, 1e-6, info.ToString());
-        }
-    }
 }

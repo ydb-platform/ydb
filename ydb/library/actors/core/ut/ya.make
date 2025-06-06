@@ -12,7 +12,6 @@ ELSE()
     SIZE(MEDIUM)
 ENDIF()
 
-
 PEERDIR(
     ydb/library/actors/interconnect
     ydb/library/actors/testlib
@@ -31,6 +30,8 @@ SRCS(
     event_pb_payload_ut.cpp
     event_pb_ut.cpp
     executor_pool_basic_ut.cpp
+    executor_pool_semaphore_ut.cpp
+    executor_pools_ut.cpp
     log_ut.cpp
     mon_ut.cpp
     scheduler_actor_ut.cpp

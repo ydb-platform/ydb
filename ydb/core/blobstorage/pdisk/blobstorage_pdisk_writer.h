@@ -10,9 +10,11 @@
 #include "blobstorage_pdisk_request_id.h"
 
 #include <ydb/core/blobstorage/crypto/crypto.h>
+#include <ydb/library/pdisk_io/buffers.h>
 
 #include <util/generic/deque.h>
 
+#include <queue>
 namespace NKikimr {
 namespace NPDisk {
 
@@ -24,6 +26,31 @@ struct TBuffer;
 // BufferedWriter
 ////////////////////////////////////////////////////////////////////////////
 class TBufferedWriter {
+private: 
+    class TBlockDeviceAction {
+    protected:
+        TReqId ReqId;
+    public:
+        TBlockDeviceAction(const TReqId& ReqId) : ReqId(ReqId) {}
+        virtual void DoCall(IBlockDevice &BlockDevice) = 0;
+        virtual ~TBlockDeviceAction() = default;
+    };
+    class TBlockDeviceWrite : public TBlockDeviceAction {
+    public:
+        TBuffer::TPtr Buffer;
+        ui64 StartOffset;
+        ui64 DirtyFrom;
+        ui64 DirtyTo;
+        NWilson::TTraceId TraceId;
+        TBlockDeviceWrite(const TReqId& ReqId, TBuffer::TPtr&& buffer, ui64 StartOffset, ui64 DirtyFrom, ui64 DirtyTo, NWilson::TTraceId *TraceId);
+        virtual void DoCall(IBlockDevice &BlockDevice) override;
+    };
+    class TBlockDeviceFlush : public TBlockDeviceAction {
+    public:
+        TCompletionAction *CompletionAction;
+        TBlockDeviceFlush(const TReqId& ReqId, TCompletionAction *CompletionAction);
+        virtual void DoCall(IBlockDevice &BlockDevice) override;
+    };
 protected:
     ui64 SectorSize;
     IBlockDevice &BlockDevice;
@@ -45,11 +72,14 @@ protected:
 
     std::shared_ptr<TPDiskCtx> PCtx;
 
-    void WriteBufferWithFlush(TReqId reqId, NWilson::TTraceId *traceId,
+    bool WithDelayedFlush;
+    std::queue <THolder<TBlockDeviceAction>> BlockDeviceActions;
+    
+    void WriteToBuffer(TReqId reqId, NWilson::TTraceId *traceId,
             TCompletionAction *flushAction, ui32 chunkIdx);
 public:
     TBufferedWriter(ui64 sectorSize, IBlockDevice &blockDevice, TDiskFormat &format, TBufferPool *pool,
-        TActorSystem *actorSystem, TDriveModel *driveModel, std::shared_ptr<TPDiskCtx> pCtx);
+        TActorSystem *actorSystem, TDriveModel *driveModel, std::shared_ptr<TPDiskCtx> pCtx, bool withDelayedFlush);
     void SetupWithBuffer(ui64 startOffset, ui64 currentOffset, TBuffer *buffer, ui32 count, TReqId reqId);
     ui8* Seek(ui64 offset, ui32 count, ui32 reserve, TReqId reqId, NWilson::TTraceId *traceId, ui32 chunkIdx);
     ui8* Get() const;
@@ -58,6 +88,7 @@ public:
             ui32 chunkIdx);
     void MarkDirty();
     void Obliterate();
+    void WriteToBlockDevice();
     ~TBufferedWriter();
 };
 
@@ -112,7 +143,7 @@ public:
     TSectorWriter(TPDiskMon &mon, IBlockDevice &blockDevice, TDiskFormat &format, ui64 &nonce,
             const TKey &key, TBufferPool *pool, ui64 firstSectorIdx, ui64 endSectorIdx, ui64 dataMagic, ui32 chunkIdx,
             TLogChunkInfo *logChunkInfo, ui64 sectorIdx, TBuffer *buffer, std::shared_ptr<TPDiskCtx> pCtx,
-            TDriveModel *driveModel, bool enableEncrytion)
+            TDriveModel *driveModel, bool enableEncrytion, bool withDelayedFlush = false)
         : Mon(mon)
         , BlockDevice(blockDevice)
         , Format(format)
@@ -134,7 +165,7 @@ public:
     {
         Y_VERIFY_S(!LogChunkInfo || LogChunkInfo->ChunkIdx == ChunkIdx, PCtx->PDiskLogPrefix);
         BufferedWriter.Reset(new TBufferedWriter(Format.SectorSize, BlockDevice, Format, pool,
-                PCtx->ActorSystem, DriveModel, PCtx));
+                PCtx->ActorSystem, DriveModel, PCtx, withDelayedFlush));
 
         Cypher.SetKey(key);
         Cypher.StartMessage(Nonce);
@@ -464,6 +495,10 @@ public:
                 TerminateLog(reqId, traceId);
             }
         }
+    }
+
+    void WriteToBlockDevice() {
+        BufferedWriter->WriteToBlockDevice();
     }
 
 protected:

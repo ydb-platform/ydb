@@ -155,7 +155,7 @@ bool TOptimizerPlannerConstructor::DoDeserializeFromProto(const TProto& proto) {
     return true;
 }
 
-NKikimr::TConclusionStatus TOptimizerPlannerConstructor::DoDeserializeFromJson(const NJson::TJsonValue& jsonInfo) {
+TConclusionStatus TOptimizerPlannerConstructor::DoDeserializeFromJson(const NJson::TJsonValue& jsonInfo) {
     std::set<TString> selectorNames;
     if (jsonInfo.Has("selectors")) {
         if (!jsonInfo["selectors"].IsArray()) {

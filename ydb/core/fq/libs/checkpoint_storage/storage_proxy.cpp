@@ -154,7 +154,7 @@ TStorageProxy::TStorageProxy(
 
 void TStorageProxy::Bootstrap() {
     auto ydbConnectionPtr = NewYdbConnection(Config.GetStorage(), CredentialsProviderFactory, YqSharedResources->UserSpaceYdbDriver);
-    CheckpointStorage = NewYdbCheckpointStorage(StorageConfig, CreateEntityIdGenerator(CommonConfig.GetIdsPrefix()), ydbConnectionPtr);
+    CheckpointStorage = NewYdbCheckpointStorage(Config, CreateEntityIdGenerator(CommonConfig.GetIdsPrefix()), ydbConnectionPtr);
     auto issues = CheckpointStorage->Init().GetValueSync();
     if (!issues.Empty()) {
         LOG_STREAMS_STORAGE_SERVICE_ERROR("Failed to init checkpoint storage: " << issues.ToOneLineString());

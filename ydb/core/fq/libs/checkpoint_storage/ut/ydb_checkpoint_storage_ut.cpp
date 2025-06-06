@@ -23,17 +23,20 @@ const TCheckpointId CheckpointId4(13, 2);
 ////////////////////////////////////////////////////////////////////////////////
 
 TCheckpointStoragePtr GetCheckpointStorage(const char* tablePrefix, IEntityIdGenerator::TPtr entityIdGenerator = CreateEntityIdGenerator("id")) {
-    NConfig::TYdbStorageConfig checkpointStorageConfig;
+    
+    NConfig::TCheckpointCoordinatorConfig config;
+    auto& checkpointStorageConfig = *config.MutableStorage();
     checkpointStorageConfig.SetEndpoint(GetEnv("YDB_ENDPOINT"));
     checkpointStorageConfig.SetDatabase(GetEnv("YDB_DATABASE"));
     checkpointStorageConfig.SetToken("");
     checkpointStorageConfig.SetTablePrefix(tablePrefix);
     checkpointStorageConfig.SetTableClientMaxActiveSessions(20);
+    config.SetCheckpointsTtl("1d");
 
     auto credFactory = NKikimr::CreateYdbCredentialsProviderFactory;
     NYdb::TDriver driver(NYdb::TDriverConfig{});
     auto ydbConnectionPtr = NewYdbConnection(checkpointStorageConfig, credFactory, driver);
-    auto storage = NewYdbCheckpointStorage(checkpointStorageConfig, entityIdGenerator, ydbConnectionPtr);
+    auto storage = NewYdbCheckpointStorage(config, entityIdGenerator, ydbConnectionPtr);
     auto issues = storage->Init().GetValueSync();
     UNIT_ASSERT_C(issues.Empty(), issues.ToString());
     return storage;

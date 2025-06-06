@@ -1,5 +1,6 @@
 #include "blobstorage_pdisk_requestimpl.h"
 #include "blobstorage_pdisk_completion_impl.h"
+#include "blobstorage_pdisk_impl.h"
 
 namespace NKikimr {
 namespace NPDisk {
@@ -86,6 +87,40 @@ void TChunkRead::Abort(TActorSystem* actorSystem) {
     }
 }
 
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// TChunkWritePiece
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+TChunkWritePiece::TChunkWritePiece(TPDisk *pdisk, TIntrusivePtr<TChunkWrite> &write, ui32 pieceShift, ui32 pieceSize, NWilson::TSpan span, TCompletionChunkWrite* parent)
+    : TRequestBase(write->Sender, write->ReqId, write->Owner, write->OwnerRound, write->PriorityClass, std::move(span))
+    , PDisk(pdisk)
+    , ChunkWrite(write)
+    , PieceShift(pieceShift)
+    , PieceSize(pieceSize)
+{
+    ChunkWrite->RegisterPiece();
+    Completion = MakeHolder<TCompletionChunkWritePart>(this, parent);
+}
+
+void TChunkWritePiece::Process(void*) {
+    // const auto& req = this->ChunkWrite;
+    // req->Span.Event("PDisk.BeforeBlockDevice");
+
+    // Y_VERIFY_S(req->GetType() == ERequestType::RequestChunkWritePiece, PCtx->PDiskLogPrefix
+    //     << "Unexpected request type# " << ui64(req->GetType())
+    //     << " TypeName# " << TypeName(*req) << " in JointChunkWrites");
+
+    // P_LOG(PRI_DEBUG, BPD01, "ChunkWritePiece",
+    //     (ChunkIdx, this->ChunkWrite->ChunkIdx),
+    //     (Offset, PieceShift),
+    //     (Size, PieceSize)
+    // );
+
+    //Y_VERIFY(res, "Encoding ChunkWritePiece failed"); //better
+    this->ChunkWriteResult = MakeHolder<TChunkWriteResult>(PDisk->ChunkWritePiece(this/*->ChunkWrite.Get(), PieceShift, PieceSize*/));
+    PDisk->PushChunkWrite(this);
+}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TChunkReadPiece

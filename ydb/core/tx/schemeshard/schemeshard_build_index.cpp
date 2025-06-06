@@ -137,9 +137,11 @@ void TSchemeShard::PersistBuildIndexCancelRequest(NIceDb::TNiceDb& db, const TIn
         NIceDb::TUpdate<Schema::IndexBuild::CancelRequest>(indexInfo.CancelRequested));
 }
 
-void TSchemeShard::PersistBuildIndexIssue(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo) {
-    db.Table<Schema::IndexBuild>().Key(indexInfo.Id).Update(
-        NIceDb::TUpdate<Schema::IndexBuild::Issue>(indexInfo.GetIssue()));
+void TSchemeShard::PersistBuildIndexAddIssue(NIceDb::TNiceDb& db, TIndexBuildInfo& indexInfo, const TString& issue) {
+    if (indexInfo.AddIssue(issue)) {
+        db.Table<Schema::IndexBuild>().Key(indexInfo.Id).Update(
+            NIceDb::TUpdate<Schema::IndexBuild::Issue>(indexInfo.GetIssue()));
+    }
 }
 
 void TSchemeShard::PersistBuildIndexAlterMainTableTxId(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo) {

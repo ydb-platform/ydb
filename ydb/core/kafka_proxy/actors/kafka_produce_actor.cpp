@@ -254,7 +254,8 @@ size_t TKafkaProduceActor::EnqueueInitialization() {
     return canProcess;
 }
 
-THolder<TEvPartitionWriter::TEvWriteRequest> Convert(const TProduceRequestData::TTopicProduceData::TPartitionProduceData& data,
+THolder<TEvPartitionWriter::TEvWriteRequest> Convert(const TString& transactionalId,
+                                                     const TProduceRequestData::TTopicProduceData::TPartitionProduceData& data,
                                                      const TString& topicName,
                                                      ui64 cookie,
                                                      const TString& clientDC,
@@ -264,10 +265,13 @@ THolder<TEvPartitionWriter::TEvWriteRequest> Convert(const TProduceRequestData::
 
     const auto& batch = data.Records;
 
-    const TString producerId(batch->ProducerId, sizeof(batch->ProducerId));
-    // TODO(qyryq) Endianness?
-    // TODO(qyryq) Add transactionalId?
-    const TString sourceId = Base64Encode(producerId);
+    TString sourceId;
+    TBuffer buf;
+    buf.Reserve(transactionalId.size() + sizeof(batch->ProducerId));
+    buf.Append(transactionalId.data(), transactionalId.size());
+    buf.Append(static_cast<const char*>(static_cast<const void*>(&batch->ProducerId)), sizeof(batch->ProducerId));  // TODO(qyryq) Endianness?
+    buf.AsString(sourceId);
+    sourceId = Base64Encode(sourceId);
 
     auto* partitionRequest = request.MutablePartitionRequest();
     partitionRequest->SetTopic(topicName);
@@ -279,7 +283,9 @@ THolder<TEvPartitionWriter::TEvWriteRequest> Convert(const TProduceRequestData::
 
     ui64 totalSize = 0;
 
-    for (const auto& record : batch->Records) {
+    for (size_t batchIndex = 0; batchIndex < batch->Records.size(); ++batchIndex) {
+        const auto& record = batch->Records[batchIndex];
+
         NKikimrPQClient::TDataChunk proto;
         proto.set_codec(NPersQueueCommon::RAW);
         for(auto& h : record.Headers) {
@@ -307,9 +313,17 @@ THolder<TEvPartitionWriter::TEvWriteRequest> Convert(const TProduceRequestData::
         Y_ABORT_UNLESS(res);
 
         auto w = partitionRequest->AddCmdWrite();
-
         w->SetSourceId(sourceId);
-        w->SetSeqNo(batch->BaseOffset + record.OffsetDelta);
+
+        w->SetEnableKafkaDeduplication(batch->ProducerId >= 0);
+        w->SetProducerEpoch(batch->ProducerEpoch);
+        if (batch->BaseSequence >= 0) {
+            w->SetSeqNo(batch->BaseSequence + batchIndex);
+        } else {
+            // TODO(qyryq) Should lead to an error.
+            w->SetSeqNo(-1);
+        }
+
         w->SetData(str);
         ui64 createTime = batch->BaseTimestamp + record.TimestampDelta;
         w->SetCreateTimeMS(createTime ? createTime : TInstant::Now().MilliSeconds());
@@ -318,8 +332,6 @@ THolder<TEvPartitionWriter::TEvWriteRequest> Convert(const TProduceRequestData::
         w->SetClientDC(clientDC);
         w->SetIgnoreQuotaDeadline(true);
         w->SetExternalOperation(true);
-        w->SetEnableKafkaDeduplication(true);
-        w->SetProducerEpoch(batch->ProducerEpoch);
 
         totalSize += record.Value ? record.Value->size() : 0;
     }
@@ -368,7 +380,7 @@ void TKafkaProduceActor::ProcessRequest(TPendingRequest::TPtr pendingRequest, co
                 pendingRequest->WaitAcceptingCookies.insert(ownCookie);
                 pendingRequest->WaitResultCookies.insert(ownCookie);
 
-                auto ev = Convert(partitionData, *topicData.Name, ownCookie, ClientDC, ruPerRequest);
+                auto ev = Convert(transactionalId.GetOrElse(""), partitionData, *topicData.Name, ownCookie, ClientDC, ruPerRequest);
                 ruPerRequest = false;
 
                 Send(writer.second, std::move(ev));
@@ -529,7 +541,8 @@ void TKafkaProduceActor::SendResults(const TActorContext& ctx) {
                             SendMetrics(TStringBuilder() << topicData.Name, writeResults.size(), "successful_messages", ctx);
                             auto& lastResult = writeResults.at(writeResults.size() - 1);
                             partitionResponse.LogAppendTimeMs = lastResult.GetWriteTimestampMS();
-                            partitionResponse.BaseOffset = lastResult.GetSeqNo();
+                            // partitionResponse.BaseOffset = lastResult.GetOffset();  // TODO(qyryq) GetOffset?
+                            partitionResponse.BaseOffset = writeResults.at(0).GetOffset();
                         }
                     } else {
                         KAFKA_LOG_ERROR("Produce actor: Partition result with error: ErrorCode=" << static_cast<int>(Convert(msg->GetError().Code)) << ", ErrorMessage=" << msg->GetError().Reason << ", #02");
@@ -537,6 +550,23 @@ void TKafkaProduceActor::SendResults(const TActorContext& ctx) {
                         partitionResponse.ErrorCode = Convert(msg->GetError().Code);
                         metricsErrorCode = Convert(msg->GetError().Code);
                         partitionResponse.ErrorMessage = msg->GetError().Reason;
+
+                        // TODO(qyryq) More elegant error passing.
+                        if (partitionResponse.ErrorMessage.has_value()) {
+                            if (msg->Record.GetErrorReason().StartsWith("Epoch of producer")) {
+                                partitionResponse.ErrorCode = EKafkaErrors::INVALID_PRODUCER_EPOCH;
+                                metricsErrorCode = EKafkaErrors::INVALID_PRODUCER_EPOCH;
+                                partitionResponse.ErrorMessage = msg->Record.GetErrorReason();
+                            } else if (msg->Record.GetErrorReason().StartsWith("Duplicate sequence")) {
+                                partitionResponse.ErrorCode = EKafkaErrors::DUPLICATE_SEQUENCE_NUMBER;
+                                metricsErrorCode = EKafkaErrors::DUPLICATE_SEQUENCE_NUMBER;
+                                partitionResponse.ErrorMessage = msg->Record.GetErrorReason();
+                            } else if (msg->Record.GetErrorReason().StartsWith("Out of order sequence")) {
+                                partitionResponse.ErrorCode = EKafkaErrors::OUT_OF_ORDER_SEQUENCE_NUMBER;
+                                metricsErrorCode = EKafkaErrors::OUT_OF_ORDER_SEQUENCE_NUMBER;
+                                partitionResponse.ErrorMessage = msg->Record.GetErrorReason();
+                            }
+                        }
                     }
                 }
             }

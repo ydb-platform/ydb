@@ -29,12 +29,15 @@ TMessagePtr<TApiVersionsResponseData> TKafkaTestClient::ApiVersions() {
     return WriteAndRead<TApiVersionsResponseData>(header, request);
 }
 
-TMessagePtr<TMetadataResponseData> TKafkaTestClient::Metadata(const TVector<TString>& topics) {
+TMessagePtr<TMetadataResponseData> TKafkaTestClient::Metadata(const TVector<TString>& topics, std::optional<bool> allowAutoTopicCreation) {
     Cerr << ">>>>> MetadataRequest\n";
 
-    TRequestHeaderData header = Header(NKafka::EApiKey::METADATA, 9);
+    TRequestHeaderData header = Header(NKafka::EApiKey::METADATA, 12);
 
     TMetadataRequestData request;
+    if (allowAutoTopicCreation.has_value()) {
+        request.AllowAutoTopicCreation = allowAutoTopicCreation.value() ? 1 : 0;
+    }
     request.Topics.reserve(topics.size());
     for (auto topicName : topics) {
         NKafka::TMetadataRequestData::TMetadataRequestTopic topic;
@@ -70,7 +73,7 @@ TMessagePtr<TSaslAuthenticateResponseData> TKafkaTestClient::SaslAuthenticate(co
     return WriteAndRead<TSaslAuthenticateResponseData>(header, request);
 }
 
-TMessagePtr<TInitProducerIdResponseData> TKafkaTestClient::InitProducerId(const TString& transactionalId) {
+TMessagePtr<TInitProducerIdResponseData> TKafkaTestClient::InitProducerId(const std::optional<TString> transactionalId) {
     Cerr << ">>>>> TInitProducerIdRequestData\n";
 
     TRequestHeaderData header = Header(NKafka::EApiKey::INIT_PRODUCER_ID, 4);
@@ -120,6 +123,7 @@ TMessagePtr<TProduceResponseData> TKafkaTestClient::Produce(const TString& topic
     TRequestHeaderData header = Header(NKafka::EApiKey::PRODUCE, 9);
 
     TProduceRequestData request;
+    request.Acks = -1;
     request.TopicData.resize(1);
     request.TopicData[0].Name = topicName;
     request.TopicData[0].PartitionData.resize(msgs.size());
@@ -400,8 +404,10 @@ TMessagePtr<TFetchResponseData> TKafkaTestClient::Fetch(const std::vector<std::p
     TRequestHeaderData header = Header(NKafka::EApiKey::FETCH, 3);
 
     TFetchRequestData request;
-    request.MaxBytes = 1024;
+    // request.MaxBytes = 1024;
+    request.MaxWaitMs = 1000;
     request.MinBytes = 1;
+    request.ReplicaId = -1;
 
     for (auto& topic: topics) {
         NKafka::TFetchRequestData::TFetchTopic topicReq {};
@@ -410,7 +416,34 @@ TMessagePtr<TFetchResponseData> TKafkaTestClient::Fetch(const std::vector<std::p
             NKafka::TFetchRequestData::TFetchTopic::TFetchPartition partitionReq {};
             partitionReq.FetchOffset = offset;
             partitionReq.Partition = partition;
-            partitionReq.PartitionMaxBytes = 1024;
+            partitionReq.PartitionMaxBytes = 1_MB;
+            topicReq.Partitions.push_back(partitionReq);
+        }
+        request.Topics.push_back(topicReq);
+    }
+
+    return WriteAndRead<TFetchResponseData>(header, request);
+}
+
+TMessagePtr<TFetchResponseData> TKafkaTestClient::Fetch(const std::vector<std::pair<TKafkaUuid, std::vector<i32>>>& topics, i64 offset) {
+    Cerr << ">>>>> TFetchRequestData\n";
+
+    TRequestHeaderData header = Header(NKafka::EApiKey::FETCH, 13);
+
+    TFetchRequestData request;
+    // request.MaxBytes = 1024;
+    request.MaxWaitMs = 1000;
+    request.MinBytes = 1;
+    request.ReplicaId = -1;
+
+    for (auto& topic: topics) {
+        NKafka::TFetchRequestData::TFetchTopic topicReq {};
+        topicReq.TopicId = topic.first;
+        for (auto& partition: topic.second) {
+            NKafka::TFetchRequestData::TFetchTopic::TFetchPartition partitionReq {};
+            partitionReq.FetchOffset = offset;
+            partitionReq.Partition = partition;
+            partitionReq.PartitionMaxBytes = 1_MB;
             topicReq.Partitions.push_back(partitionReq);
         }
         request.Topics.push_back(topicReq);
@@ -430,6 +463,7 @@ TMessagePtr<TCreateTopicsResponseData> TKafkaTestClient::CreateTopics(std::vecto
         NKafka::TCreateTopicsRequestData::TCreatableTopic topic;
         topic.Name = topicToCreate.Name;
         topic.NumPartitions = topicToCreate.PartitionsNumber;
+        topic.ReplicationFactor = topicToCreate.ReplicationFactor;
 
         auto addConfig = [&topic](std::optional<TString> configValue, TString configName) {
             if (configValue.has_value()) {
@@ -454,6 +488,19 @@ TMessagePtr<TCreateTopicsResponseData> TKafkaTestClient::CreateTopics(std::vecto
     }
 
     return WriteAndRead<TCreateTopicsResponseData>(header, request);
+}
+
+TMessagePtr<TDeleteTopicsResponseData> TKafkaTestClient::DeleteTopics(std::vector<TString> topicsToDelete) {
+    Cerr << ">>>>> TDeleteTopicsRequestData\n";
+
+    TRequestHeaderData header = Header(NKafka::EApiKey::DELETE_TOPICS, 5);
+    TDeleteTopicsRequestData request;
+    for (const auto& n : topicsToDelete) {
+        //auto s = TDeleteTopicsRequestData::TDeleteTopicState();
+        //s.Name = n;
+        request.TopicNames.push_back(n);
+    }
+    return WriteAndRead<TDeleteTopicsResponseData>(header, request);
 }
 
 TMessagePtr<TCreatePartitionsResponseData> TKafkaTestClient::CreatePartitions(std::vector<TTopicConfig> topicsToCreate, bool validateOnly) {

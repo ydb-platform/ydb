@@ -101,30 +101,33 @@ void THeartbeatProcessor::ForgetSourceId(const TString& sourceId) {
     SourceIdsWithHeartbeat.erase(sourceId);
 }
 
-TSourceIdInfo::TSourceIdInfo(ui64 seqNo, ui64 offset, TInstant createTs)
+TSourceIdInfo::TSourceIdInfo(ui64 seqNo, ui64 offset, TInstant createTs, TMaybe<i32> producerEpoch)
     : SeqNo(seqNo)
     , MinSeqNo(seqNo)
     , Offset(offset)
     , WriteTimestamp(createTs)
     , CreateTimestamp(createTs)
+    , ProducerEpoch(producerEpoch)
 {
 }
 
-TSourceIdInfo::TSourceIdInfo(ui64 seqNo, ui64 offset, TInstant createTs, THeartbeat&& heartbeat)
+TSourceIdInfo::TSourceIdInfo(ui64 seqNo, ui64 offset, TInstant createTs, THeartbeat&& heartbeat, TMaybe<i32> producerEpoch)
     : SeqNo(seqNo)
     , MinSeqNo(seqNo)
     , Offset(offset)
     , WriteTimestamp(createTs)
     , CreateTimestamp(createTs)
+    , ProducerEpoch(producerEpoch)
     , LastHeartbeat(std::move(heartbeat))
 {
 }
 
-TSourceIdInfo::TSourceIdInfo(ui64 seqNo, ui64 offset, TInstant createTs, TMaybe<TPartitionKeyRange>&& keyRange, bool isInSplit)
+TSourceIdInfo::TSourceIdInfo(ui64 seqNo, ui64 offset, TInstant createTs, TMaybe<TPartitionKeyRange>&& keyRange, bool isInSplit, TMaybe<i32> producerEpoch)
     : SeqNo(seqNo)
     , MinSeqNo(seqNo)
     , Offset(offset)
     , CreateTimestamp(createTs)
+    , ProducerEpoch(producerEpoch)
     , Explicit(true)
     , KeyRange(std::move(keyRange))
 {
@@ -133,7 +136,7 @@ TSourceIdInfo::TSourceIdInfo(ui64 seqNo, ui64 offset, TInstant createTs, TMaybe<
     }
 }
 
-TSourceIdInfo TSourceIdInfo::Updated(ui64 seqNo, ui64 offset, TInstant writeTs) const {
+TSourceIdInfo TSourceIdInfo::Updated(ui64 seqNo, ui64 offset, TInstant writeTs, TMaybe<i32> producerEpoch) const {
     auto copy = *this;
     copy.SeqNo = seqNo;
     if (copy.MinSeqNo == 0) {
@@ -141,12 +144,13 @@ TSourceIdInfo TSourceIdInfo::Updated(ui64 seqNo, ui64 offset, TInstant writeTs) 
     }
     copy.Offset = offset;
     copy.WriteTimestamp = writeTs;
+    copy.ProducerEpoch = producerEpoch;
 
     return copy;
 }
 
-TSourceIdInfo TSourceIdInfo::Updated(ui64 seqNo, ui64 offset, TInstant writeTs, THeartbeat&& heartbeat) const {
-    auto copy = Updated(seqNo, offset, writeTs);
+TSourceIdInfo TSourceIdInfo::Updated(ui64 seqNo, ui64 offset, TInstant writeTs, THeartbeat&& heartbeat, TMaybe<i32> producerEpoch) const {
+    auto copy = Updated(seqNo, offset, writeTs, producerEpoch);
     copy.LastHeartbeat = std::move(heartbeat);
 
     return copy;

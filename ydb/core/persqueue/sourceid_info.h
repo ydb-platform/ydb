@@ -28,12 +28,12 @@ struct TSourceIdInfo {
 
 
     TSourceIdInfo() = default;
-    TSourceIdInfo(ui64 seqNo, ui64 offset, TInstant createTs);
-    TSourceIdInfo(ui64 seqNo, ui64 offset, TInstant createTs, THeartbeat&& heartbeat);
-    TSourceIdInfo(ui64 seqNo, ui64 offset, TInstant createTs, TMaybe<TPartitionKeyRange>&& keyRange, bool isInSplit = false);
+    TSourceIdInfo(ui64 seqNo, ui64 offset, TInstant createTs, TMaybe<i32> producerEpoch = Nothing());
+    TSourceIdInfo(ui64 seqNo, ui64 offset, TInstant createTs, THeartbeat&& heartbeat, TMaybe<i32> producerEpoch = Nothing());
+    TSourceIdInfo(ui64 seqNo, ui64 offset, TInstant createTs, TMaybe<TPartitionKeyRange>&& keyRange, bool isInSplit = false, TMaybe<i32> producerEpoch = Nothing());
 
-    TSourceIdInfo Updated(ui64 seqNo, ui64 offset, TInstant writeTs) const;
-    TSourceIdInfo Updated(ui64 seqNo, ui64 offset, TInstant writeTs, THeartbeat&& heartbeat) const;
+    TSourceIdInfo Updated(ui64 seqNo, ui64 offset, TInstant writeTs, TMaybe<i32> producerEpoch = Nothing()) const;
+    TSourceIdInfo Updated(ui64 seqNo, ui64 offset, TInstant writeTs, THeartbeat&& heartbeat, TMaybe<i32> producerEpoch = Nothing()) const;
 
     static EState ConvertState(NKikimrPQ::TMessageGroupInfo::EState value);
     static NKikimrPQ::TMessageGroupInfo::EState ConvertState(EState value);

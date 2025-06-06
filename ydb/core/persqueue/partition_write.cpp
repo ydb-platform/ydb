@@ -263,6 +263,7 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
             const ui64& seqNo = writeResponse.Msg.SeqNo;
             const ui16& partNo = writeResponse.Msg.PartNo;
             const ui16& totalParts = writeResponse.Msg.TotalParts;
+            const TMaybe<i32>& producerEpoch = writeResponse.Msg.ProducerEpoch;
             const TMaybe<ui64>& wrOffset = writeResponse.Offset;
 
             bool already = false;
@@ -273,6 +274,7 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
             ui64 maxSeqNo = 0;
             ui64 maxOffset = 0;
 
+            // TODO(qyryq) Видимо здесь надо добавить проверку с EnableKafkaDeduplication
             if (it != SourceIdStorage.GetInMemorySourceIds().end()) {
                 maxSeqNo = std::max(it->second.SeqNo, writeResponse.InitialSeqNo.value_or(0));
                 maxOffset = it->second.Offset;
@@ -281,7 +283,7 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
                 }
             } else if (writeResponse.InitialSeqNo) {
                 maxSeqNo = writeResponse.InitialSeqNo.value();
-                if (maxSeqNo >= seqNo && !writeResponse.Msg.DisableDeduplication) {
+                if (maxSeqNo >= seqNo && (!writeResponse.Msg.DisableDeduplication)) {
                     already = true;
                 }
             }
@@ -297,13 +299,13 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
                 if (it == SourceIdStorage.GetInMemorySourceIds().end()) {
                     Y_ABORT_UNLESS(!writeResponse.Msg.HeartbeatVersion);
                     TabletCounters.Cumulative()[COUNTER_PQ_SID_CREATED].Increment(1);
-                    SourceIdStorage.RegisterSourceId(s, seqNo, offset, CurrentTimestamp);
+                    SourceIdStorage.RegisterSourceId(s, seqNo, offset, CurrentTimestamp, producerEpoch);
                 } else if (const auto& hbVersion = writeResponse.Msg.HeartbeatVersion) {
                     SourceIdStorage.RegisterSourceId(s, it->second.Updated(
-                        seqNo, offset, CurrentTimestamp, THeartbeat{*hbVersion, writeResponse.Msg.Data}
-                    ));
+                        seqNo, offset, CurrentTimestamp, THeartbeat{*hbVersion, writeResponse.Msg.Data}, producerEpoch));
                 } else {
-                    SourceIdStorage.RegisterSourceId(s, it->second.Updated(seqNo, offset, CurrentTimestamp));
+                    SourceIdStorage.RegisterSourceId(s, it->second.Updated(
+                        seqNo, offset, CurrentTimestamp, producerEpoch));
                 }
 
                 TabletCounters.Cumulative()[COUNTER_PQ_WRITE_OK].Increment(1);
@@ -1114,7 +1116,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
     TabletCounters.Percentile()[COUNTER_LATENCY_PQ_RECEIVE_QUEUE].IncrementFor(ctx.Now().MilliSeconds() - p.Msg.ReceiveTimestamp);
     //check already written
 
-    ui64 poffset = p.Offset ? *p.Offset : curOffset;
+    ui64 poffset = p.Offset.GetOrElse(curOffset);
 
     PQ_LOG_T("Topic '" << TopicName() << "' partition " << Partition
             << " process write for '" << EscapeC(p.Msg.SourceId) << "'"
@@ -1122,13 +1124,58 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
             << " SeqNo=" << p.Msg.SeqNo
             << " LocalSeqNo=" << sourceId.SeqNo()
             << " InitialSeqNo=" << p.InitialSeqNo
+            << " EnableKafkaDeduplication=" << p.Msg.EnableKafkaDeduplication
+            << " ProducerEpoch=" << p.Msg.ProducerEpoch
     );
 
-    [[maybe_unused]] bool kafkaDeduplication = p.Msg.EnableKafkaDeduplication &&
-        sourceId.SeqNo() && *sourceId.SeqNo() >= p.Msg.SeqNo;
+    if (p.Msg.EnableKafkaDeduplication && sourceId.ProducerEpoch().has_value()) {
+        if (sourceId.ProducerEpoch().value().Defined() != p.Msg.ProducerEpoch.Defined()) {
+            CancelOneWriteOnWrite(ctx,
+                                  TStringBuilder() << "Can not write message at offset " << poffset
+                                  << " in " << TopicName() << "-" << Partition.OriginalPartitionId << " with message producer epoch " << (p.Msg.ProducerEpoch.Defined() ? "defined" : "undefined")
+                                  << " and last seen producer epoch " << (sourceId.ProducerEpoch().value().Defined() ? "defined" : "undefined"),
+                                  p,
+                                  NPersQueue::NErrorCode::BAD_REQUEST);
+            return false;
+        }
 
-    if (!p.Msg.DisableDeduplication && ((sourceId.SeqNo() && *sourceId.SeqNo() >= p.Msg.SeqNo)
-        || (p.InitialSeqNo && p.InitialSeqNo.value() >= p.Msg.SeqNo))
+        if (sourceId.ProducerEpoch() && *sourceId.ProducerEpoch() > *p.Msg.ProducerEpoch) {
+            CancelOneWriteOnWrite(ctx,
+                                  TStringBuilder() << "Epoch of producer " << EscapeC(p.Msg.SourceId) << " at offset " << poffset
+                                  << " in " << TopicName() << "-" << Partition.OriginalPartitionId << " is " << *p.Msg.ProducerEpoch
+                                  << ", which is smaller than the last seen epoch " << *sourceId.ProducerEpoch(),
+                                  p,
+                                  NPersQueue::NErrorCode::BAD_REQUEST);
+            return false;
+        }
+    }
+
+    bool previousProducerEpochDefined = sourceId.ProducerEpoch().has_value() && sourceId.ProducerEpoch().value().Defined();
+    if (p.Msg.EnableKafkaDeduplication && previousProducerEpochDefined) {
+        if (*sourceId.ProducerEpoch().value() == *p.Msg.ProducerEpoch) {
+            if (sourceId.SeqNo() && p.Msg.SeqNo <= *sourceId.SeqNo()) {
+                CancelOneWriteOnWrite(ctx,
+                    TStringBuilder() << "Duplicate sequence number at offset " << poffset
+                    << " in " << TopicName() << "-" << Partition.OriginalPartitionId << " with message producer epoch " << *p.Msg.ProducerEpoch
+                    << " and last seen producer epoch " << *sourceId.ProducerEpoch(),
+                    p,
+                    NPersQueue::NErrorCode::BAD_REQUEST);
+                return false;
+            }
+            if (sourceId.SeqNo() && *sourceId.SeqNo() + 1 != p.Msg.SeqNo) {
+                CancelOneWriteOnWrite(ctx,
+                    TStringBuilder() << "Out of order sequence number for producer " << EscapeC(p.Msg.SourceId) << " at offset " << poffset
+                    << " in " << TopicName() << "-" << Partition.OriginalPartitionId << ": " << p.Msg.SeqNo << " (incoming seq. number), "
+                    << *sourceId.SeqNo() << " (current end sequence number)",
+                    p,
+                    NPersQueue::NErrorCode::BAD_REQUEST);
+                return false;
+            }
+        }
+    }
+
+    if (!p.Msg.DisableDeduplication &&
+        ((sourceId.SeqNo() && *sourceId.SeqNo() >= p.Msg.SeqNo) || (p.InitialSeqNo && p.InitialSeqNo.value() >= p.Msg.SeqNo))
     ) {
         if (poffset >= curOffset) {
             PQ_LOG_D("Already written message. Topic: '" << TopicName()
@@ -1350,7 +1397,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
                 << " NewHead: " << BlobEncoder.NewHead
         );
 
-        sourceId.Update(p.Msg.SeqNo, curOffset, CurrentTimestamp);
+        sourceId.Update(p.Msg.SeqNo, curOffset, CurrentTimestamp, p.Msg.ProducerEpoch);
 
         ++curOffset;
         BlobEncoder.ClearPartitionedBlob(Partition, MaxBlobSize);

@@ -30,6 +30,7 @@ enum EApiKey {
     SASL_HANDSHAKE = 17, // [ZK_BROKER, BROKER, CONTROLLER]
     API_VERSIONS = 18, // [ZK_BROKER, BROKER, CONTROLLER]
     CREATE_TOPICS = 19, // [ZK_BROKER, BROKER, CONTROLLER]
+    DELETE_TOPICS = 20, // [ZK_BROKER, BROKER, CONTROLLER]
     INIT_PRODUCER_ID = 22, // [ZK_BROKER, BROKER]
     ADD_PARTITIONS_TO_TXN = 24, // [ZK_BROKER, BROKER]
     ADD_OFFSETS_TO_TXN = 25, // [ZK_BROKER, BROKER]
@@ -5915,6 +5916,250 @@ public:
     void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
 
     bool operator==(const TCreateTopicsResponseData& other) const = default;
+};
+
+
+class TDeleteTopicsRequestData : public TApiMessage {
+public:
+    typedef std::shared_ptr<TDeleteTopicsRequestData> TPtr;
+
+    struct MessageMeta {
+        static constexpr TKafkaVersions PresentVersions = {0, 6};
+        static constexpr TKafkaVersions FlexibleVersions = {4, Max<TKafkaVersion>()};
+    };
+
+    TDeleteTopicsRequestData();
+    ~TDeleteTopicsRequestData() = default;
+
+    class TDeleteTopicState : public TMessage {
+    public:
+        struct MessageMeta {
+            static constexpr TKafkaVersions PresentVersions = {6, 6};
+            static constexpr TKafkaVersions FlexibleVersions = VersionsAlways;
+        };
+
+        TDeleteTopicState();
+        ~TDeleteTopicState() = default;
+
+        struct NameMeta {
+            using Type = TKafkaString;
+            using TypeDesc = NPrivate::TKafkaStringDesc;
+
+            static constexpr const char* Name = "name";
+            static constexpr const char* About = "The topic name";
+            static const Type Default; // = std::nullopt;
+
+            static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+            static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+            static constexpr TKafkaVersions NullableVersions = VersionsAlways;
+            static constexpr TKafkaVersions FlexibleVersions = VersionsAlways;
+        };
+        NameMeta::Type Name;
+
+        struct TopicIdMeta {
+            using Type = TKafkaUuid;
+            using TypeDesc = NPrivate::TKafkaUuidDesc;
+
+            static constexpr const char* Name = "topicId";
+            static constexpr const char* About = "The unique topic ID";
+            static const Type Default; // = TKafkaUuid(0, 0);
+
+            static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+            static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+            static constexpr TKafkaVersions NullableVersions = VersionsNever;
+            static constexpr TKafkaVersions FlexibleVersions = VersionsAlways;
+        };
+        TopicIdMeta::Type TopicId;
+
+        i32 Size(TKafkaVersion version) const override;
+        void Read(TKafkaReadable& readable, TKafkaVersion version) override;
+        void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
+
+        bool operator==(const TDeleteTopicState& other) const = default;
+    };
+
+    struct TopicsMeta {
+        using ItemType = TDeleteTopicState;
+        using ItemTypeDesc = NPrivate::TKafkaStructDesc;
+        using Type = std::vector<TDeleteTopicState>;
+        using TypeDesc = NPrivate::TKafkaArrayDesc;
+
+        static constexpr const char* Name = "topics";
+        static constexpr const char* About = "The name or topic ID of the topic";
+
+        static constexpr TKafkaVersions PresentVersions = {6, Max<TKafkaVersion>()};
+        static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+        static constexpr TKafkaVersions NullableVersions = VersionsNever;
+        static constexpr TKafkaVersions FlexibleVersions = VersionsAlways;
+    };
+    TopicsMeta::Type Topics;
+
+    struct TopicNamesMeta {
+        using ItemType = TKafkaString;
+        using ItemTypeDesc = NPrivate::TKafkaStringDesc;
+        using Type = std::vector<TKafkaString>;
+        using TypeDesc = NPrivate::TKafkaArrayDesc;
+
+        static constexpr const char* Name = "topicNames";
+        static constexpr const char* About = "The names of the topics to delete";
+
+        static constexpr TKafkaVersions PresentVersions = {0, 5};
+        static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+        static constexpr TKafkaVersions NullableVersions = VersionsNever;
+        static constexpr TKafkaVersions FlexibleVersions = {4, Max<TKafkaVersion>()};
+    };
+    TopicNamesMeta::Type TopicNames;
+
+    struct TimeoutMsMeta {
+        using Type = TKafkaInt32;
+        using TypeDesc = NPrivate::TKafkaIntDesc;
+
+        static constexpr const char* Name = "timeoutMs";
+        static constexpr const char* About = "The length of time in milliseconds to wait for the deletions to complete.";
+        static const Type Default; // = 0;
+
+        static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+        static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+        static constexpr TKafkaVersions NullableVersions = VersionsNever;
+        static constexpr TKafkaVersions FlexibleVersions = {4, Max<TKafkaVersion>()};
+    };
+    TimeoutMsMeta::Type TimeoutMs;
+
+    i16 ApiKey() const override { return DELETE_TOPICS; };
+    i32 Size(TKafkaVersion version) const override;
+    void Read(TKafkaReadable& readable, TKafkaVersion version) override;
+    void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
+
+    bool operator==(const TDeleteTopicsRequestData& other) const = default;
+};
+
+
+class TDeleteTopicsResponseData : public TApiMessage {
+public:
+    typedef std::shared_ptr<TDeleteTopicsResponseData> TPtr;
+
+    struct MessageMeta {
+        static constexpr TKafkaVersions PresentVersions = {0, 6};
+        static constexpr TKafkaVersions FlexibleVersions = {4, Max<TKafkaVersion>()};
+    };
+
+    TDeleteTopicsResponseData();
+    ~TDeleteTopicsResponseData() = default;
+
+    class TDeletableTopicResult : public TMessage {
+    public:
+        struct MessageMeta {
+            static constexpr TKafkaVersions PresentVersions = {0, 6};
+            static constexpr TKafkaVersions FlexibleVersions = {4, Max<TKafkaVersion>()};
+        };
+
+        TDeletableTopicResult();
+        ~TDeletableTopicResult() = default;
+
+        struct NameMeta {
+            using Type = TKafkaString;
+            using TypeDesc = NPrivate::TKafkaStringDesc;
+
+            static constexpr const char* Name = "name";
+            static constexpr const char* About = "The topic name";
+            static const Type Default; // = {""};
+
+            static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+            static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+            static constexpr TKafkaVersions NullableVersions = {6, Max<TKafkaVersion>()};
+            static constexpr TKafkaVersions FlexibleVersions = {4, Max<TKafkaVersion>()};
+        };
+        NameMeta::Type Name;
+
+        struct TopicIdMeta {
+            using Type = TKafkaUuid;
+            using TypeDesc = NPrivate::TKafkaUuidDesc;
+
+            static constexpr const char* Name = "topicId";
+            static constexpr const char* About = "the unique topic ID";
+            static const Type Default; // = TKafkaUuid(0, 0);
+
+            static constexpr TKafkaVersions PresentVersions = {6, Max<TKafkaVersion>()};
+            static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+            static constexpr TKafkaVersions NullableVersions = VersionsNever;
+            static constexpr TKafkaVersions FlexibleVersions = VersionsAlways;
+        };
+        TopicIdMeta::Type TopicId;
+
+        struct ErrorCodeMeta {
+            using Type = TKafkaInt16;
+            using TypeDesc = NPrivate::TKafkaIntDesc;
+
+            static constexpr const char* Name = "errorCode";
+            static constexpr const char* About = "The deletion error, or 0 if the deletion succeeded.";
+            static const Type Default; // = 0;
+
+            static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+            static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+            static constexpr TKafkaVersions NullableVersions = VersionsNever;
+            static constexpr TKafkaVersions FlexibleVersions = {4, Max<TKafkaVersion>()};
+        };
+        ErrorCodeMeta::Type ErrorCode;
+
+        struct ErrorMessageMeta {
+            using Type = TKafkaString;
+            using TypeDesc = NPrivate::TKafkaStringDesc;
+
+            static constexpr const char* Name = "errorMessage";
+            static constexpr const char* About = "The error message, or null if there was no error.";
+            static const Type Default; // = std::nullopt;
+
+            static constexpr TKafkaVersions PresentVersions = {5, Max<TKafkaVersion>()};
+            static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+            static constexpr TKafkaVersions NullableVersions = VersionsAlways;
+            static constexpr TKafkaVersions FlexibleVersions = VersionsAlways;
+        };
+        ErrorMessageMeta::Type ErrorMessage;
+
+        i32 Size(TKafkaVersion version) const override;
+        void Read(TKafkaReadable& readable, TKafkaVersion version) override;
+        void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
+
+        bool operator==(const TDeletableTopicResult& other) const = default;
+    };
+
+    struct ThrottleTimeMsMeta {
+        using Type = TKafkaInt32;
+        using TypeDesc = NPrivate::TKafkaIntDesc;
+
+        static constexpr const char* Name = "throttleTimeMs";
+        static constexpr const char* About = "The duration in milliseconds for which the request was throttled due to a quota violation, or zero if the request did not violate any quota.";
+        static const Type Default; // = 0;
+
+        static constexpr TKafkaVersions PresentVersions = {1, Max<TKafkaVersion>()};
+        static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+        static constexpr TKafkaVersions NullableVersions = VersionsNever;
+        static constexpr TKafkaVersions FlexibleVersions = {4, Max<TKafkaVersion>()};
+    };
+    ThrottleTimeMsMeta::Type ThrottleTimeMs;
+
+    struct ResponsesMeta {
+        using ItemType = TDeletableTopicResult;
+        using ItemTypeDesc = NPrivate::TKafkaStructDesc;
+        using Type = std::vector<TDeletableTopicResult>;
+        using TypeDesc = NPrivate::TKafkaArrayDesc;
+
+        static constexpr const char* Name = "responses";
+        static constexpr const char* About = "The results for each topic we tried to delete.";
+
+        static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+        static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+        static constexpr TKafkaVersions NullableVersions = VersionsNever;
+        static constexpr TKafkaVersions FlexibleVersions = {4, Max<TKafkaVersion>()};
+    };
+    ResponsesMeta::Type Responses;
+
+    i16 ApiKey() const override { return DELETE_TOPICS; };
+    i32 Size(TKafkaVersion version) const override;
+    void Read(TKafkaReadable& readable, TKafkaVersion version) override;
+    void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
+
+    bool operator==(const TDeleteTopicsResponseData& other) const = default;
 };
 
 

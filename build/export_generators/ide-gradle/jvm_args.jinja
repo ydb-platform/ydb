@@ -1,0 +1,38 @@
+{%- macro JvmArgs(jvm_args) -%}
+{%-     if jvm_args|length %}
+    jvmArgs = mutableListOf(
+{%-         for jvm_arg in jvm_args %}
+        "{{ jvm_arg }}",
+{%-         endfor %}
+    )
+{%      endif -%}
+{%- endmacro -%}
+
+{%- set jvm_args = [] -%}
+{%- if target.enable_preview -%}
+{%-     set jvm_args = jvm_args + ["--enable-preview"] -%}
+{%- endif -%}
+{%- if target.jvm_args|length %}
+{%-     set jvm_args = jvm_args + target.jvm_args -%}
+{%- endif -%}
+{%- if jvm_args|length %}
+
+tasks.withType<JavaExec> {
+{{ JvmArgs(jvm_args) }}
+}
+{%- endif -%}
+
+{%- set test_jvm_args = jvm_args -%}
+{%- set extra_jvm_args = extra_targets|selectattr('jvm_args')|map(attribute='jvm_args')|sum -%}
+{%- if extra_jvm_args|length %}
+{%-     set test_jvm_args = test_jvm_args + extra_jvm_args -%}
+{%- endif -%}
+{%- if test_jvm_args|length %}
+
+tasks.withType<Test> {
+{{ JvmArgs(test_jvm_args) }}
+{%- if target.enable_preview %}
+    environment["JAVA_TOOL_OPTIONS"] = "--enable-preview"
+{%- endif -%}
+}
+{%- endif -%}

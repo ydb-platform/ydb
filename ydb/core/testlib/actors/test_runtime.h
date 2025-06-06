@@ -149,14 +149,12 @@ namespace NActors {
 
         static bool DefaultScheduledFilterFunc(TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event, TDuration delay, TInstant& deadline);
 
-        using TNodeLocationCallback = std::function<TNodeLocation(ui32)>;
-        TNodeLocationCallback LocationCallback;
+    public:
+        NKikimr::NAudit::TAuditLogBackends AuditLogBackends;
+    protected:
+        void AddAuditLogStuff();
 
     private:
-        void AddICStuff();
-        void AddAuditLogStuff();
-        NKikimr::NAudit::TAuditLogBackends AuditLogBackends;
-
         void Initialize() override;
         TIntrusivePtr<::NMonitoring::TDynamicCounters> GetCountersForComponent(TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, const char* component) override;
         void InitActorSystemSetup(TActorSystemSetup& setup, TNodeDataBase* node) override;

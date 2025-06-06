@@ -154,6 +154,7 @@ protected:
                         if (CurrentRequest->IsReady()) {
                             if (Endpoint->RateLimiter.Check(TActivationContext::Now())) {
                                 ALOG_DEBUG(HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") -> (" << GetRequestDebugText() << ")");
+                                ALOG_TRACE(HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") Request:\n" << CurrentRequest->GetObfuscatedData());
                                 Send(Endpoint->Proxy, new TEvHttpProxy::TEvHttpIncomingRequest(CurrentRequest));
                                 CurrentRequest = nullptr;
                             } else {
@@ -262,6 +263,7 @@ protected:
             }
         }
         ALOG_DEBUG(HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") <- (" << GetChunkDebugText(event->Get()->DataChunk) << ")");
+        ALOG_TRACE(HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") DataChunk:\n" << event->Get()->DataChunk->AsString());
         if (event->Get()->DataChunk->IsEndOfData()) {
             CancelSubscriber = nullptr;
         }
@@ -292,6 +294,8 @@ protected:
                         << Address
                         << ") Response: "
                         << response->GetObfuscatedData().substr(0, MAX_LOGGED_SIZE));
+        } else {
+            ALOG_TRACE(HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") Response:\n" << response->GetObfuscatedData());
         }
         THolder<TEvHttpProxy::TEvReportSensors> sensors(BuildIncomingRequestSensors(request, response));
         Send(Endpoint->Owner, sensors.Release());

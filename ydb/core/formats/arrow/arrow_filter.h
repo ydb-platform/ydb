@@ -201,7 +201,7 @@ public:
     TString DebugString() const;
 
     TIterator GetBegin(const bool reverse, const ui32 expectedSize) const;
-    TIterator GetIterator(const bool reverse, const ui32 expectedSize, const ui64 start) const;
+    TIterator GetIterator(const bool reverse, const ui32 expectedSize, const ui64 startOffset) const;
 
     bool CheckSlice(const ui32 offset, const ui32 count) const;
 

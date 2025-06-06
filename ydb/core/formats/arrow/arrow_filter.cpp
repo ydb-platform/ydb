@@ -522,15 +522,15 @@ TColumnFilter::TIterator TColumnFilter::GetBegin(const bool reverse, const ui32 
     return GetIterator(reverse, expectedSize, 0);
 }
 
-TColumnFilter::TIterator TColumnFilter::GetIterator(const bool reverse, const ui32 expectedSize, const ui64 start) const {
-    AFL_VERIFY(expectedSize >= start);
+TColumnFilter::TIterator TColumnFilter::GetIterator(const bool reverse, const ui32 expectedSize, const ui64 startOffset) const {
+    AFL_VERIFY(expectedSize >= startOffset);
     if (IsTotalAllowFilter()) {
-        return TIterator(reverse, expectedSize, true, start);
+        return TIterator(reverse, expectedSize, true, startOffset);
     } else if (IsTotalDenyFilter()) {
-        return TIterator(reverse, expectedSize, false, start);
+        return TIterator(reverse, expectedSize, false, startOffset);
     } else {
         AFL_VERIFY(expectedSize == GetRecordsCountVerified())("expected", expectedSize)("count", GetRecordsCountVerified())("reverse", reverse);
-        return TIterator(reverse, Filter, GetStartValue(reverse), start);
+        return TIterator(reverse, Filter, GetStartValue(reverse), startOffset);
     }
 }
 

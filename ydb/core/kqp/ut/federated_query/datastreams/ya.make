@@ -7,7 +7,7 @@ SIZE(MEDIUM)
 TIMEOUT(120)
 
 SRCS(
-    datastreams_scheme_ut.cpp
+    datastreams_ut.cpp
 )
 
 PEERDIR(

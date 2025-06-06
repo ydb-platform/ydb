@@ -18,7 +18,7 @@
 #include <yql/essentials/providers/common/codec/yql_codec.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/providers/common/udf_resolve/yql_simple_udf_resolver.h>
-#include <ydb/library/yql/dq/opt/dq_opt_join_cbo_factory.h> 
+#include <ydb/library/yql/dq/opt/dq_opt_join_cbo_factory.h>
 #include <ydb/library/yql/providers/pq/provider/yql_pq_dq_integration.h>
 #include <ydb/library/yql/providers/pq/provider/yql_pq_provider.h>
 #include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
@@ -32,9 +32,11 @@
 #include <yt/yql/providers/yt/provider/yql_yt_provider.h>
 #include <ydb/library/yql/providers/dq/helper/yql_dq_helper_impl.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
+
 #include <library/cpp/cache/cache.h>
 #include <library/cpp/random_provider/random_provider.h>
 #include <library/cpp/time_provider/time_provider.h>
+
 namespace NKikimr {
 namespace NKqp {
 
@@ -1919,7 +1921,6 @@ private:
         state->Types = TypesCtx.Get();
         state->DbResolver = FederatedQuerySetup->DatabaseAsyncResolver;
         state->FunctionRegistry = FuncRegistry;
-        // state->Disposition = disposition;
         state->Configuration->Init(FederatedQuerySetup->PqGatewayConfig, TypesCtx, state->DbResolver, state->DatabaseIds);
         state->Gateway = FederatedQuerySetup->PqGateway;;
         state->DqIntegration = NYql::CreatePqDqIntegration(state);

@@ -775,7 +775,7 @@ TExprBase BuildUpdateTableWithIndex(const TKiUpdateTable& update, const TKikimrT
         .Columns()
             .Add(updateColumnsList)
             .Build()
-        .IsBatch(ctx.NewAtom(update.Pos(), "false"))
+        .IsBatch(update.IsBatch())
         .Settings(IsConditionalUpdateSetting(ctx, update.Pos()))
         .ReturningColumns(update.ReturningColumns())
         .Done();
@@ -846,7 +846,7 @@ TExprBase BuildUpdateTableWithIndex(const TKiUpdateTable& update, const TKikimrT
                 .Columns()
                     .Add(indexColumnsList)
                     .Build()
-                .IsBatch(ctx.NewAtom(update.Pos(), "false"))
+                .IsBatch(update.IsBatch())
                 .Settings().Build()
                 .Done();
 

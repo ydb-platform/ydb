@@ -27,6 +27,7 @@ namespace NSQLComplete {
         FolderName,
         TableName,
         ClusterName,
+        BindingName,
         UnknownName,
     };
 

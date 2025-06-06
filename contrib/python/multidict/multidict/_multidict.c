@@ -573,6 +573,10 @@ multidict_setdefault(MultiDictObject *self, PyObject *const *args,
                 "key", &key, "default", &_default) < 0) {
         return NULL;
     }
+    if (_default == NULL) {
+        // fixme, _default is potentially dangerous borrowed ref here
+        _default = Py_None;
+    }
     return pair_list_set_default(&self->pairs, key, _default);
 }
 

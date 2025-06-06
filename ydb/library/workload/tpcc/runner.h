@@ -8,6 +8,18 @@ namespace NYdb::NTPCC {
 
 struct TRunConfig {
     TRunConfig() = default;
+    void SetFullPath(const NConsoleClient::TClientCommand::TConfig& connectionConfig) {
+        if (Path.empty()) {
+            Path = connectionConfig.Database;
+            return;
+        }
+
+        if (Path[0] == '/') {
+            return;
+        }
+
+        Path = connectionConfig.Database + '/' + Path;
+    }
 
     int WarehouseCount = 0;
     int WarmupSeconds = 0;

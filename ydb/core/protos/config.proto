@@ -213,6 +213,7 @@ message TDomainsConfig {
         optional uint32 StateStorageVersion = 3 [default = 0];
         repeated uint32 CompatibleVersions = 4;
         repeated TRing RingGroups = 5;
+        optional uint64 ClusterStateGeneration = 6; // generation from current ClusterState
     }
 
     message TStoragePoolType {

@@ -39,12 +39,14 @@ typedef struct roaring64_bulk_context_s {
 /**
  * Dynamically allocates a new bitmap (initially empty).
  * Client is responsible for calling `roaring64_bitmap_free()`.
+ * The returned pointer may be NULL in case of errors.
  */
 roaring64_bitmap_t *roaring64_bitmap_create(void);
 void roaring64_bitmap_free(roaring64_bitmap_t *r);
 
 /**
  * Returns a copy of a bitmap.
+ * The returned pointer may be NULL in case of errors.
  */
 roaring64_bitmap_t *roaring64_bitmap_copy(const roaring64_bitmap_t *r);
 
@@ -104,6 +106,7 @@ roaring64_bitmap_t *roaring64_bitmap_move_from_roaring32(roaring_bitmap_t *r);
 /**
  * Create a new bitmap containing all the values in [min, max) that are at a
  * distance k*step from min.
+ * The returned pointer may be NULL in case of errors.
  */
 roaring64_bitmap_t *roaring64_bitmap_from_range(uint64_t min, uint64_t max,
                                                 uint64_t step);
@@ -366,6 +369,8 @@ bool roaring64_bitmap_is_strict_subset(const roaring64_bitmap_t *r1,
  * bitmaps, two-by-two, it is best to start with the smallest bitmaps. You may
  * also rely on roaring64_bitmap_and_inplace to avoid creating many temporary
  * bitmaps.
+ *
+ * The returned pointer may be NULL in case of errors.
  */
 roaring64_bitmap_t *roaring64_bitmap_and(const roaring64_bitmap_t *r1,
                                          const roaring64_bitmap_t *r2);
@@ -410,6 +415,7 @@ double roaring64_bitmap_jaccard_index(const roaring64_bitmap_t *r1,
 /**
  * Computes the union between two bitmaps and returns new bitmap. The caller is
  * responsible for free-ing the result.
+ * The returned pointer may be NULL in case of errors.
  */
 roaring64_bitmap_t *roaring64_bitmap_or(const roaring64_bitmap_t *r1,
                                         const roaring64_bitmap_t *r2);
@@ -429,6 +435,7 @@ void roaring64_bitmap_or_inplace(roaring64_bitmap_t *r1,
 /**
  * Computes the symmetric difference (xor) between two bitmaps and returns a new
  * bitmap. The caller is responsible for free-ing the result.
+ * The returned pointer may be NULL in case of errors.
  */
 roaring64_bitmap_t *roaring64_bitmap_xor(const roaring64_bitmap_t *r1,
                                          const roaring64_bitmap_t *r2);
@@ -449,6 +456,7 @@ void roaring64_bitmap_xor_inplace(roaring64_bitmap_t *r1,
 /**
  * Computes the difference (andnot) between two bitmaps and returns a new
  * bitmap. The caller is responsible for free-ing the result.
+ * The returned pointer may be NULL in case of errors.
  */
 roaring64_bitmap_t *roaring64_bitmap_andnot(const roaring64_bitmap_t *r1,
                                             const roaring64_bitmap_t *r2);
@@ -470,6 +478,7 @@ void roaring64_bitmap_andnot_inplace(roaring64_bitmap_t *r1,
  * Compute the negation of the bitmap in the interval [min, max).
  * The number of negated values is `max - min`. Areas outside the range are
  * passed through unchanged.
+ * The returned pointer may be NULL in case of errors.
  */
 roaring64_bitmap_t *roaring64_bitmap_flip(const roaring64_bitmap_t *r,
                                           uint64_t min, uint64_t max);
@@ -478,6 +487,7 @@ roaring64_bitmap_t *roaring64_bitmap_flip(const roaring64_bitmap_t *r,
  * Compute the negation of the bitmap in the interval [min, max].
  * The number of negated values is `max - min + 1`. Areas outside the range are
  * passed through unchanged.
+ * The returned pointer may be NULL in case of errors.
  */
 roaring64_bitmap_t *roaring64_bitmap_flip_closed(const roaring64_bitmap_t *r,
                                                  uint64_t min, uint64_t max);

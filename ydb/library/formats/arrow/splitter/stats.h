@@ -1,36 +1,46 @@
 #pragma once
 #include <ydb/library/accessor/accessor.h>
-
 #include <ydb/library/actors/core/log.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
 
-#include <optional>
-#include <map>
 #include <deque>
-#include <string>
+#include <map>
 #include <memory>
+#include <optional>
+#include <string>
 
 namespace NKikimr::NArrow::NSplitter {
 
 class TSimpleSerializationStat {
+public:
+    enum class EOrigination : ui32 {
+        Statistic = 0,
+        Loader,
+        Mix
+    };
+
 protected:
     ui64 SerializedBytes = 0;
     ui64 RecordsCount = 0;
     ui64 RawBytes = 0;
+    YDB_ACCESSOR(EOrigination, Origination, EOrigination::Statistic);
+
 public:
     TSimpleSerializationStat() = default;
     TSimpleSerializationStat(const ui64 bytes, const ui64 recordsCount, const ui64 rawBytes);
 
-    std::vector<i64> SplitRecords(const ui32 recordsCount, const ui32 expectedRecordsCount, const ui32 expectedColumnPageSize, const ui32 maxBlobSize);
+    std::vector<i64> SplitRecords(
+        const ui32 recordsCount, const ui32 expectedRecordsCount, const ui32 expectedColumnPageSize, const ui32 maxBlobSize);
 
     TString DebugString() const {
         return TStringBuilder() << "{"
-            << "serialized_bytes=" << SerializedBytes << ";"
-            << "records=" << RecordsCount << ";"
-            << "raw_bytes=" << RawBytes << ";"
-            << "}";
-    }
+                                << "serialized_bytes=" << SerializedBytes << ";"
+                                << "records=" << RecordsCount << ";"
+                                << "raw_bytes=" << RawBytes << ";"
+                                << "origination=" << ::ToString(Origination) << ";"
+                                << "}";
+    };
 
     double GetSerializedBytesPerRecord() const {
         AFL_VERIFY(RecordsCount);
@@ -41,10 +51,10 @@ public:
         return 1.0 * RawBytes / RecordsCount;
     }
 
-    ui64 GetSerializedBytes() const{
+    ui64 GetSerializedBytes() const {
         return SerializedBytes;
     }
-    ui64 GetRecordsCount() const{
+    ui64 GetRecordsCount() const {
         return RecordsCount;
     }
     ui64 GetRawBytes() const {
@@ -52,6 +62,9 @@ public:
     }
 
     void AddStat(const TSimpleSerializationStat& stat) {
+        if (stat.GetOrigination() != GetOrigination()) {
+            Origination = EOrigination::Mix;
+        }
         SerializedBytes += stat.SerializedBytes;
         RecordsCount += stat.RecordsCount;
         RawBytes += stat.RawBytes;
@@ -69,60 +82,53 @@ public:
 
 class TBatchSerializationStat {
 protected:
-    ui64 RecordCount = 0;
-    double SerializedBytes = 0;
-    double RawBytes = 0;
-protected:
-    double GetSerializedBytesPerRecord() const {
-        return SerializedBytes / RecordCount;
-    }
-    double GetRawBytesPerRecord() const {
-        return RawBytes / RecordCount;
-    }
+    double SerializedBytesPerRecord = 0;
+    double RawBytesPerRecord = 0;
 public:
     TBatchSerializationStat() = default;
     TBatchSerializationStat(const ui64 bytes, const ui64 recordsCount, const ui64 rawBytes) {
         Y_ABORT_UNLESS(recordsCount);
-        RecordCount = recordsCount;
-        SerializedBytes = bytes;
-        RawBytes = rawBytes;
+        SerializedBytesPerRecord = 1.0 * bytes / recordsCount;
+        RawBytesPerRecord = 1.0 * rawBytes / recordsCount;
+    }
+
+    ui64 PredictPackedSize(const ui32 recordsCount) const {
+        return SerializedBytesPerRecord * recordsCount;
     }
 
     TString DebugString() const {
-        return TStringBuilder() << "{sbpr=" << GetSerializedBytesPerRecord() << ";rbpr=" << GetRawBytesPerRecord() << "}";
+        return TStringBuilder() << "{sbpr=" << SerializedBytesPerRecord << ";rbpr=" << RawBytesPerRecord << "}";
     }
 
     TBatchSerializationStat(const TSimpleSerializationStat& simple) {
-        RecordCount = simple.GetRecordsCount();
-        SerializedBytes = simple.GetSerializedBytes();
-        RawBytes = simple.GetRawBytes();
+        SerializedBytesPerRecord = simple.GetSerializedBytesPerRecord();
+        RawBytesPerRecord = simple.GetRawBytesPerRecord();
     }
 
     void Merge(const TSimpleSerializationStat& item) {
-        RecordCount += item.GetRecordsCount();
-        SerializedBytes += item.GetSerializedBytes();
-        RawBytes += item.GetRawBytes();
+        SerializedBytesPerRecord += item.GetSerializedBytesPerRecord();
+        RawBytesPerRecord += item.GetRawBytesPerRecord();
     }
 
     std::vector<i64> SplitRecordsForBlobSize(const i64 recordsCount, const ui64 blobSize) const;
 
-    std::optional<ui64> PredictOptimalPackRecordsCount(const ui64 recordsCount, const ui64 blobSize) const {        
-        if (!SerializedBytes) {
+    std::optional<ui64> PredictOptimalPackRecordsCount(const ui64 recordsCount, const ui64 blobSize) const {
+        if (!SerializedBytesPerRecord) {
             return {};
         }
-        const ui64 fullSize = recordsCount * GetSerializedBytesPerRecord();
+        const ui64 fullSize = 1.0 * recordsCount * SerializedBytesPerRecord;
         if (fullSize < blobSize) {
             return recordsCount;
         } else {
-            return std::floor(blobSize / GetSerializedBytesPerRecord());
+            return std::floor(1.0 * blobSize / SerializedBytesPerRecord);
         }
     }
 
     std::optional<ui64> PredictOptimalSplitFactor(const ui64 recordsCount, const ui64 blobSize) const {
-        if (!SerializedBytes) {
+        if (!SerializedBytesPerRecord) {
             return {};
         }
-        const ui64 fullSize = recordsCount * GetSerializedBytesPerRecord();
+        const ui64 fullSize = 1.0 * recordsCount * SerializedBytesPerRecord;
         if (fullSize < blobSize) {
             return 1;
         } else {
@@ -136,11 +142,11 @@ private:
     using TBase = TSimpleSerializationStat;
     YDB_READONLY(ui32, ColumnId, 0);
     YDB_READONLY_DEF(std::string, ColumnName);
+
 public:
     TColumnSerializationStat(const ui32 columnId, const std::string& columnName)
         : ColumnId(columnId)
         , ColumnName(columnName) {
-
     }
 
     double GetPackedRecordSize() const {
@@ -149,7 +155,8 @@ public:
 
     TColumnSerializationStat RecalcForRecordsCount(const ui64 recordsCount) const {
         TColumnSerializationStat result(ColumnId, ColumnName);
-        result.Merge(TSimpleSerializationStat(SerializedBytes / RecordsCount * recordsCount, recordsCount, RawBytes / RecordsCount * recordsCount));
+        result.Merge(TSimpleSerializationStat(
+            1.0 * SerializedBytes / RecordsCount * recordsCount, recordsCount, 1.0 * RawBytes / RecordsCount * recordsCount));
         return result;
     }
 
@@ -169,6 +176,7 @@ private:
     std::deque<TColumnSerializationStat> ColumnStat;
     std::map<ui32, TColumnSerializationStat*> StatsByColumnId;
     std::map<std::string, TColumnSerializationStat*> StatsByColumnName;
+
 public:
     TString DebugString() const {
         TStringBuilder sb;
@@ -190,8 +198,10 @@ public:
         auto it = StatsByColumnId.find(info.GetColumnId());
         if (it == StatsByColumnId.end()) {
             ColumnStat.emplace_back(info);
-            AFL_VERIFY(StatsByColumnId.emplace(info.GetColumnId(), &ColumnStat.back()).second)("column_id", info.GetColumnId())("column_name", info.GetColumnName());
-            AFL_VERIFY(StatsByColumnName.emplace(info.GetColumnName(), &ColumnStat.back()).second)("column_id", info.GetColumnId())("column_name", info.GetColumnName());
+            AFL_VERIFY(StatsByColumnId.emplace(info.GetColumnId(), &ColumnStat.back()).second)("column_id", info.GetColumnId())(
+                                                                      "column_name", info.GetColumnName());
+            AFL_VERIFY(StatsByColumnName.emplace(info.GetColumnName(), &ColumnStat.back()).second)("column_id", info.GetColumnId())(
+                                                                          "column_name", info.GetColumnName());
         } else {
             it->second->Merge(info);
         }
@@ -237,5 +247,4 @@ public:
         return result;
     }
 };
-
-}
+}   // namespace NKikimr::NArrow::NSplitter

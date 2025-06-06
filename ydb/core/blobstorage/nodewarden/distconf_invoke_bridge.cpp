@@ -39,10 +39,23 @@ namespace NKikimr::NStorage {
             if (numDifferent > 1) {
                 return FinishWithError(TResult::ERROR, "too many state changes in new configuration");
             }
+            if (current.GetGeneration() + 1 != newClusterState.GetGeneration()) {
+                return FinishWithError(TResult::ERROR, TStringBuilder() << "new cluster state generation# "
+                    << newClusterState.GetGeneration() << " expected# " << current.GetGeneration() + 1);
+            }
         }
 
         config.SetGeneration(config.GetGeneration() + 1);
         config.MutableClusterState()->CopyFrom(newClusterState);
+
+        auto *history = config.MutableClusterStateHistory();
+        auto *entry = history->AddUnsyncedEntries();
+        entry->MutableClusterState()->CopyFrom(newClusterState);
+        entry->SetOperationGuid(RandomNumber<ui64>());
+        for (ui32 i = 0; i < numPiles; ++i) {
+            entry->AddUnsyncedPiles(i); // all piles are unsynced by default
+        }
+
         StartProposition(&config);
     }
 

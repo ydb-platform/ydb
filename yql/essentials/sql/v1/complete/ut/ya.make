@@ -7,8 +7,10 @@ SRCS(
 PEERDIR(
     yql/essentials/sql/v1/lexer/antlr4_pure
     yql/essentials/sql/v1/lexer/antlr4_pure_ansi
+    yql/essentials/sql/v1/complete/name/cache/local
     yql/essentials/sql/v1/complete/name/cluster/static
     yql/essentials/sql/v1/complete/name/object/simple
+    yql/essentials/sql/v1/complete/name/object/simple/cached
     yql/essentials/sql/v1/complete/name/object/simple/static
     yql/essentials/sql/v1/complete/name/service/cluster
     yql/essentials/sql/v1/complete/name/service/schema

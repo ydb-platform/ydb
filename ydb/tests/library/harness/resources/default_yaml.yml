@@ -155,6 +155,7 @@ grpc_config:
   - "monitoring"
   - "auth"
   - "query_service"
+  - "view"
 feature_flags:
   enable_persistent_query_stats: true
   enable_scheme_transactions_at_scheme_shard: true
@@ -197,7 +198,6 @@ table_service_config:
     mkql_light_program_memory_limit: 65536
     mkql_heavy_program_memory_limit: 1048576
     channel_buffer_size: 262144
-    verbose_memory_limit_exception: true
 net_classifier_config:
   updater_config:
     retry_interval_seconds: 30

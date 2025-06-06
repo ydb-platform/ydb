@@ -28,6 +28,7 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/rate_limiter
     ydb/public/sdk/cpp/src/client/result
     ydb/public/sdk/cpp/src/client/table
+    ydb/public/sdk/cpp/src/client/topic
     ydb/public/sdk/cpp/src/client/value
     ydb/library/backup
 )

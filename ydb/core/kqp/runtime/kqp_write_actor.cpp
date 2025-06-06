@@ -1495,6 +1495,7 @@ private:
             WriteTableActor->Write(WriteToken, Batcher->Build());
             if (Closed) {
                 WriteTableActor->Close(WriteToken);
+                WriteTableActor->FlushBuffers();
                 WriteTableActor->Close();
             }
         } catch (const TMemoryLimitExceededException&) {
@@ -1534,6 +1535,10 @@ private:
                         << " bytes of " << MessageSettings.InFlightMemoryLimitPerActorBytes << " bytes.",
                     {});
                 return;
+            }
+
+            if (!Closed && outOfMemory) {
+                WriteTableActor->FlushBuffers();
             }
 
             if (Closed || outOfMemory) {
@@ -1897,6 +1902,9 @@ public:
                     settings.Priority);
             }
 
+            // At current time only insert operation can fail.
+            NeedToFlushBeforeCommit |= (settings.OperationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT);
+
             writeInfo.Actors.at(settings.TableId.PathId).WriteActor->Open(
                 token.Cookie,
                 settings.OperationType,
@@ -2022,6 +2030,7 @@ public:
             bool flushFailed = false;
             ForEachWriteActor([&](TKqpTableWriteActor* actor, const TActorId) {
                 if (!flushFailed && actor->IsReady()) {
+                    actor->FlushBuffers();
                     if (!actor->FlushToShards()) {
                         flushFailed = true;
                     }
@@ -2047,17 +2056,18 @@ public:
         return Process();
     }
 
-    bool Prepare(const ui64 txId, NWilson::TTraceId traceId) {
+    bool Prepare(std::optional<NWilson::TTraceId> traceId) {
         UpdateTracingState("Commit", std::move(traceId));
         OperationStartTime = TInstant::Now();
 
         CA_LOG_D("Start prepare for distributed commit");
         YQL_ENSURE(State == EState::WRITING);
+        YQL_ENSURE(!NeedToFlushBeforeCommit);
         State = EState::PREPARING;
         CheckQueuesEmpty();
-        TxId = txId;
+        AFL_ENSURE(TxId);
         ForEachWriteActor([&](TKqpTableWriteActor* actor, const TActorId) {
-            actor->SetPrepare(txId);
+            actor->SetPrepare(*TxId);
         });
         Close();
         if (!Process()) {
@@ -2498,8 +2508,14 @@ public:
             TxManager->StartExecute();
             ImmediateCommit(std::move(ev->TraceId));
         } else {
-            TxManager->StartPrepare();
-            Prepare(ev->Get()->TxId, std::move(ev->TraceId));
+            AFL_ENSURE(ev->Get()->TxId);
+            TxId = ev->Get()->TxId;
+            if (NeedToFlushBeforeCommit) {
+                Flush(std::move(ev->TraceId));
+            } else {
+                TxManager->StartPrepare();
+                Prepare(std::move(ev->TraceId));
+            }
         }
     }
 
@@ -2879,6 +2895,14 @@ public:
         UpdateTracingState("Write", BufferWriteActorSpan.GetTraceId());
         OnOperationFinished(Counters->BufferActorFlushLatencyHistogram);
         State = EState::WRITING;
+        AFL_ENSURE(!TxId || NeedToFlushBeforeCommit); // TxId => NeedToFlushBeforeCommit
+        NeedToFlushBeforeCommit = false;
+        if (TxId) {
+            TxManager->StartPrepare();
+            Prepare(std::nullopt);
+            return;
+        }
+
         Send<ESendingType::Tail>(ExecuterActorId, new TEvKqpBuffer::TEvResult{
             BuildStats()
         });
@@ -2920,8 +2944,11 @@ public:
         ReplyErrorAndDieImpl(statusCode, std::move(issues));
     }
 
-    void UpdateTracingState(const char* name, NWilson::TTraceId traceId) {
-        BufferWriteActorStateSpan = NWilson::TSpan(TWilsonKqp::BufferWriteActorState, std::move(traceId),
+    void UpdateTracingState(const char* name, std::optional<NWilson::TTraceId> traceId) {
+        if (!traceId) {
+            return;
+        }
+        BufferWriteActorStateSpan = NWilson::TSpan(TWilsonKqp::BufferWriteActorState, std::move(*traceId),
             name, NWilson::EFlags::AUTO_END);
         if (BufferWriteActorStateSpan.GetTraceId() != BufferWriteActorSpan.GetTraceId()) {
             BufferWriteActorStateSpan.Link(BufferWriteActorSpan.GetTraceId());
@@ -3017,7 +3044,7 @@ private:
             TActorId Id;
         };
 
-        THashMap<TTableId, TActorInfo> Actors;
+        THashMap<TPathId, TActorInfo> Actors;
     };
 
     THashMap<TPathId, TWriteInfo> WriteInfos;
@@ -3025,6 +3052,7 @@ private:
 
     EState State;
     bool HasError = false;
+    bool NeedToFlushBeforeCommit = false;
     THashMap<TPathId, std::queue<TBufferWriteMessage>> RequestQueues;
 
     struct TAckMessage {

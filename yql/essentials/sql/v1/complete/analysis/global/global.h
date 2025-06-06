@@ -6,6 +6,7 @@
 #include <util/generic/ptr.h>
 #include <util/generic/maybe.h>
 #include <util/generic/string.h>
+#include <util/generic/vector.h>
 
 namespace NSQLComplete {
 
@@ -16,6 +17,7 @@ namespace NSQLComplete {
 
     struct TGlobalContext {
         TMaybe<TUseContext> Use;
+        TVector<TString> Names;
     };
 
     class IGlobalAnalysis {

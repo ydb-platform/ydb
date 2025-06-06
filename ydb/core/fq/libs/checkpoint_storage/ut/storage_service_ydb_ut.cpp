@@ -556,7 +556,7 @@ Y_UNIT_TEST_SUITE(TStorageServiceTest) {
         UNIT_ASSERT(session.IsSuccess());
 
         auto test = [&](bool useTtl) {
-            NKikimr::NMiniKQL::TScopedAlloc Alloc(__LOCATION__);
+            NKikimr::NMiniKQL::TScopedAlloc alloc(__LOCATION__);
             TString prefix("ShouldSetExpireAt" + ToString(useTtl));
             auto runtime = PrepareTestActorRuntime(prefix.c_str(), true, useTtl);
 

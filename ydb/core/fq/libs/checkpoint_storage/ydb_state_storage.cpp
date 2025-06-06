@@ -355,7 +355,7 @@ private:
         const TContextPtr& context,
         NYql::TIssues& issues);
 
-    std::optional<TInstant> GetExpireAt();
+    std::optional<TInstant> GetExpireAt() const;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1011,7 +1011,7 @@ std::vector<NYql::NDq::TComputeActorState> TStateStorage::ApplyIncrements(
     return states;
 }
 
-std::optional<TInstant> TStateStorage::GetExpireAt() {
+std::optional<TInstant> TStateStorage::GetExpireAt() const {
     return CheckpointsTtl ? TInstant::Now() + *CheckpointsTtl : std::optional<TInstant>();
 }
 

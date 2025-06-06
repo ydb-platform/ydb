@@ -64,8 +64,8 @@ target_include_directories(libs-apache-arrow PRIVATE
 target_link_libraries(libs-apache-arrow PUBLIC
   contrib-libs-cxxsupp
   libs-apache-orc
-  libs-brotli-dec
-  libs-brotli-enc
+  brotli-c-dec
+  brotli-c-enc
   contrib-libs-double-conversion
   contrib-libs-lz4
   contrib-libs-rapidjson

@@ -12,31 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(blockcodecs-codecs-brotli INTERFACE)
-
-
-target_link_libraries(blockcodecs-codecs-brotli INTERFACE
-  contrib-libs-cxxsupp
-  yutil
-  brotli-c-enc
-  brotli-c-dec
-  cpp-blockcodecs-core
-)
-
-
-add_global_library_for(blockcodecs-codecs-brotli.global
-  blockcodecs-codecs-brotli)
-
-
-target_link_libraries(blockcodecs-codecs-brotli.global PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  brotli-c-enc
-  brotli-c-dec
-  cpp-blockcodecs-core
-)
-
-target_sources(blockcodecs-codecs-brotli.global PRIVATE
-  ${PROJECT_SOURCE_DIR}/library/cpp/blockcodecs/codecs/brotli/brotli.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

@@ -251,8 +251,8 @@ std::size_t TFDStorage::AddFD(
     TTableAliasMap* tableAliases
 ) {
     auto fd = TFunctionalDependency{
-        .AntecedentItems = {static_cast<std::size_t>(GetIdxByColumn(antecedentColumn, true, tableAliases))},
-        .ConsequentItem = static_cast<std::size_t>(GetIdxByColumn(consequentColumn, true, tableAliases)),
+        .AntecedentItems = {GetIdxByColumn(antecedentColumn, true, tableAliases)},
+        .ConsequentItem = GetIdxByColumn(consequentColumn, true, tableAliases),
         .Type = type,
         .AlwaysActive = alwaysActive
     };
@@ -464,7 +464,7 @@ std::vector<std::size_t> TFDStorage::ConvertColumnIntoIndexes(
     return items;
 }
 
-i64 TFDStorage::GetIdxByColumn(
+std::size_t TFDStorage::GetIdxByColumn(
     const TJoinColumn& column,
     bool createIfNotExists,
     TTableAliasMap* tableAliases
@@ -739,11 +739,6 @@ std::size_t TOrderingsStateMachine::TNFSM::AddNode(const TOrdering& ordering, TN
         if (Nodes[i].Ordering == ordering) {
             return i;
         }
-    }
-
-    if (ordering.Items.empty()) {
-        int a = 2;
-        (void)a;
     }
 
     Nodes.emplace_back(ordering, type, interestingOrderingIdx);

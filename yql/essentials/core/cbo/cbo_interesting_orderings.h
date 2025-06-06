@@ -48,6 +48,17 @@ struct TOrdering {
         , IsNatural(isNatural)
     {}
 
+    TOrdering(
+        std::vector<std::size_t> items,
+        EType type
+    )
+        : TOrdering(
+            std::move(items),
+            std::vector<TItem::EDirection>{},
+            type
+        )
+    {}
+
     TOrdering() = default;
 
     bool HasItem(std::size_t item) const;
@@ -243,7 +254,7 @@ private:
         TTableAliasMap* tableAliases = nullptr
     );
 
-    i64 GetIdxByColumn(
+    std::size_t GetIdxByColumn(
         const TJoinColumn& column,
         bool createIfNotExists,
         TTableAliasMap* tableAliases = nullptr

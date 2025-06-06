@@ -205,11 +205,11 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
 }
 
 
-THashSet<TInternalPathId> TTablesManager::ResolveInternalPathIds(const TSchemeShardLocalPathId from, const TSchemeShardLocalPathId to) const {
-    THashSet<TInternalPathId> result;
+THashMap<TSchemeShardLocalPathId, TInternalPathId> TTablesManager::ResolveInternalPathIds(const TSchemeShardLocalPathId from, const TSchemeShardLocalPathId to) const {
+    THashMap<TSchemeShardLocalPathId, TInternalPathId> result;
     for (const auto& [schemeShardLocalPathId, internalPathId]: SchemeShardLocalToInternal) {
         if (from.GetRawValue() <= schemeShardLocalPathId.GetRawValue() && schemeShardLocalPathId.GetRawValue() <= to.GetRawValue()) {
-            result.emplace(internalPathId);
+            result.emplace(schemeShardLocalPathId, internalPathId);
         }
     }
     return result;

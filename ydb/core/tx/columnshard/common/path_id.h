@@ -31,13 +31,13 @@ public:
         return PathId;
     }
 
-    //Templated function whithout generic implementation
-    //Must me explicitly instantiated for messages that hold internal path id
+    //Template function whithout generic implementation
+    //Must be explicitly instantiated for messages that hold internal path id
     template<typename Proto>
     static TInternalPathId FromProto(const Proto& proto);
 
-    //Templated function whithout generic implementation
-    //Must me explicitly instantiated for messages that hold internal path id
+    //Template function whithout generic implementation
+    //Must be explicitly instantiated for messages that hold internal path id
     template<typename Proto>
     void ToProto(Proto& proto) const;
 
@@ -70,12 +70,12 @@ public:
     }
 
     //Templated function whithout generic implementation
-    //Must me explicitly instantiated for messages that hold SchemeShardLocalPathId
+    //Must be explicitly instantiated for messages that hold SchemeShardLocalPathId
     template<typename Proto>
     static TSchemeShardLocalPathId FromProto(const Proto& proto);
     
     //Templated function whithout generic implementation
-    //Must me explicitly instantiated for messages that hold SchemeShardLocalPathId
+    //Must be explicitly instantiated for messages that hold SchemeShardLocalPathId
     template<typename Proto>
     void ToProto(Proto& proto) const;
 

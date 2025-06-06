@@ -333,7 +333,7 @@ public:
     const TTableInfo& GetTable(const TInternalPathId pathId) const;
     ui64 GetMemoryUsage() const;
     TInternalPathId CreateInternalPathId(const TSchemeShardLocalPathId schemShardLocalPathId);
-    THashSet<TInternalPathId> ResolveInternalPathIds(const TSchemeShardLocalPathId from, const TSchemeShardLocalPathId to) const;
+    THashMap<TSchemeShardLocalPathId, TInternalPathId> ResolveInternalPathIds(const TSchemeShardLocalPathId from, const TSchemeShardLocalPathId to) const;
     bool HasTable(const TInternalPathId pathId, const bool withDeleted = false, const std::optional<NOlap::TSnapshot> minReadSnapshot = std::nullopt) const;
     bool IsReadyForStartWrite(const TInternalPathId pathId, const bool withDeleted) const;
     bool IsReadyForFinishWrite(const TInternalPathId pathId, const NOlap::TSnapshot& minReadSnapshot) const;

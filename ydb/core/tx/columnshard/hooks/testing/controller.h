@@ -64,6 +64,14 @@ private:
             InternalToSchemeShardLocal.erase(internalPathId);
             SchemeShardLocalToInternal.erase(schemeShardLocalPathId);
         }
+    public:
+        THashSet<TInternalPathId> GetInternalPathIds() const {
+            THashSet<TInternalPathId> result;
+            for (const auto& [internalPathId, schemeShardLocalPathId]: InternalToSchemeShardLocal) {
+                result.emplace(internalPathId);
+            }
+            return result;
+        }
     public: //NOlap::IPathIdTranslator
         virtual std::optional<TSchemeShardLocalPathId> ResolveSchemeShardLocalPathId(const TInternalPathId internalPathId) const override {
             if (const auto* p = InternalToSchemeShardLocal.FindPtr(internalPathId)) {
@@ -314,8 +322,6 @@ public:
         }
         return result;
     }
-
-    std::vector<NKikimr::NColumnShard::TInternalPathId> GetPathIds(const ui64 tabletId) const;
 
     void SetExpectedShardsCount(const ui32 value) {
         ExpectedShardsCount = value;

@@ -120,13 +120,158 @@ def _create_iterations_table(result, node_errors: list[NodeErrors] = [], workloa
         if hasattr(result, 'iterations'):
             logging.info(f"iterations content: {result.iterations}")
     
-    # Собираем информацию о нодах
-    node_info_map = {}  # slot -> NodeErrors
-    for node_error in node_errors:
-        node_info_map[node_error.node.slot] = node_error
+    def _get_node_issue_info(node_error, show_details=True):
+        """Возвращает информацию о проблемах ноды: (цвет, значение, критичность)"""
+        issues = []
+        has_issues = False
+        has_critical_issues = False
+        
+        # Проверяем основные проблемы (рестарт, падение)
+        if node_error.message and node_error.message not in ['diagnostic info collected']:
+            if show_details:
+                issues.append(node_error.message.replace('was ', '').replace('is ', ''))
+            has_issues = True
+            
+        # Добавляем cores если есть (критичная проблема)
+        if node_error.core_hashes:
+            if show_details:
+                issues.append(f"cores:{len(node_error.core_hashes)}")
+            has_issues = True
+            has_critical_issues = True
+            
+        # Добавляем oom если есть (критичная проблема)
+        if node_error.was_oom:
+            if show_details:
+                issues.append("oom")
+            has_issues = True
+            has_critical_issues = True
+        
+        if has_issues:
+            # Красный только для критичных проблем (cores/oom)
+            # Зеленый для обычных проблем (restarted/down)
+            color = "#ffcccc" if has_critical_issues else "#ccffcc"
+            value = ", ".join(issues) if issues else "issues"
+        else:
+            color = "#ccffcc"  # Зеленый
+            value = "ok"
+            
+        return color, value, has_critical_issues
     
-    # Получаем уникальные ноды для колонок
-    unique_nodes = sorted(node_info_map.keys()) if node_info_map else []
+    def _get_aggregated_cores_oom():
+        """Возвращает агрегированную информацию по cores и oom"""
+        total_cores = sum(len(node_error.core_hashes) for node_error in node_errors)
+        total_ooms = sum(1 for node_error in node_errors if node_error.was_oom)
+        
+        # Колонка Cores
+        cores_color = "#ffcccc" if total_cores > 0 else "#ccffcc"
+        cores_value = str(total_cores)
+        
+        # Колонка OOM  
+        oom_color = "#ffcccc" if total_ooms > 0 else "#ccffcc"
+        oom_value = str(total_ooms)
+        
+        return cores_color, cores_value, oom_color, oom_value
+    
+    def _add_node_columns(unique_nodes, node_info_map, nodes_shown=None, is_first_iteration=True):
+        """Добавляет колонки для хостов в строку таблицы"""
+        columns_html = ""
+        
+        if unique_nodes:
+            # Показываем колонки для каждого хоста
+            for host in unique_nodes:
+                node_error = node_info_map.get(host)
+                if not node_error:
+                    # Если нет информации о хосте - показываем "ok"
+                    columns_html += f"<td style='background-color: #ccffcc;'>ok</td>"
+                    continue
+                
+                # Показываем проблемы с хостом только в первой итерации
+                show_node_issues = (nodes_shown is None or 
+                                  host not in nodes_shown or 
+                                  is_first_iteration)
+                
+                if show_node_issues and is_first_iteration:
+                    color, value, _ = _get_node_issue_info(node_error, show_details=True)
+                    if nodes_shown is not None:
+                        nodes_shown.add(host)
+                else:
+                    color, value = "#ccffcc", "ok"
+                
+                columns_html += f"<td style='background-color: {color};'>{value}</td>"
+        else:
+            # Показываем агрегированные колонки Cores и OOM
+            cores_color, cores_value, oom_color, oom_value = _get_aggregated_cores_oom()
+            columns_html += f"<td style='background-color: {cores_color};'>{cores_value}</td>"
+            columns_html += f"<td style='background-color: {oom_color};'>{oom_value}</td>"
+        
+        return columns_html
+    
+    # Собираем информацию о нодах, группируя по хостам
+    node_info_map = {}  # host -> NodeErrors (объединенная информация по хосту)
+    
+    # Группируем node_errors по хостам и объединяем информацию
+    for node_error in node_errors:
+        host_key = node_error.node.host
+        # Если для хоста уже есть запись, объединяем информацию
+        if host_key in node_info_map:
+            existing = node_info_map[host_key]
+            # Объединяем cores
+            existing.core_hashes.extend(node_error.core_hashes)
+            # OOM на уровне хоста - если хотя бы одна нода сообщила об OOM
+            existing.was_oom = existing.was_oom or node_error.was_oom
+            # Объединяем сообщения
+            if node_error.message and node_error.message not in existing.message:
+                if existing.message:
+                    existing.message += f", {node_error.message}"
+                else:
+                    existing.message = node_error.message
+        else:
+            node_info_map[host_key] = node_error
+    
+    # Получаем ноды для колонок (автоматически)
+    try:
+        from ydb.tests.olap.lib.ydb_cluster import YdbCluster
+        all_cluster_nodes = YdbCluster.get_cluster_nodes(db_only=True)
+        # Добавляем отладочную информацию о всех нодах
+        logging.info(f"All nodes before filtering: {[(node.slot, node.role) for node in all_cluster_nodes]}")
+        # Для отладки - показываем все ноды кластера вместо фильтрации только storage
+        # all_cluster_nodes = [node for node in all_cluster_nodes if node.role == YdbCluster.Node.Role.STORAGE]
+        
+        # Группируем ноды по хостам (как в логике получения cores/OOM)
+        hosts_to_nodes = {}
+        for node in all_cluster_nodes:
+            if node.host not in hosts_to_nodes:
+                hosts_to_nodes[node.host] = []
+            hosts_to_nodes[node.host].append(node)
+        
+        # Для каждого хоста берем первую ноду в качестве представителя
+        # (cores и OOM привязаны к хосту, а не к конкретной ноде)
+        unique_hosts = sorted(hosts_to_nodes.keys())
+        host_representatives = {host: hosts_to_nodes[host][0] for host in unique_hosts}
+        
+        all_node_slots = unique_hosts  # Используем хосты как идентификаторы колонок
+        unique_nodes = sorted(all_node_slots)
+        all_cluster_nodes = list(host_representatives.values())  # Представители хостов
+        
+        logging.info(f"Auto-discovered hosts (all roles): {len(unique_hosts)} hosts from {sum(len(nodes) for nodes in hosts_to_nodes.values())} total nodes")
+        logging.info(f"Host to nodes mapping: {[(host, len(nodes)) for host, nodes in hosts_to_nodes.items()]}")
+    except Exception as e:
+        # Если не можем получить ноды - показываем агрегированные колонки
+        unique_nodes = []
+        all_cluster_nodes = []
+        logging.warning(f"Failed to get cluster nodes, will show aggregated columns: {e}")
+    
+    # Дополняем node_info_map пустыми записями для хостов без ошибок
+    for node in all_cluster_nodes:
+        host_key = node.host  # Используем хост как ключ
+        if host_key not in node_info_map:
+            # Создаем пустую запись для хоста без проблем
+            node_info_map[host_key] = type('NodeError', (), {
+                'node': node,
+                'message': '',
+                'core_hashes': [],
+                'was_oom': False
+            })()
     
     # Формируем информацию о параметрах workload для заголовка
     params_info = ""
@@ -137,16 +282,21 @@ def _create_iterations_table(result, node_errors: list[NodeErrors] = [], workloa
         if params_list:
             params_info = f"<div style='margin-bottom: 10px; padding: 5px; background-color: #f5f5f5; border: 1px solid #ddd;'><strong>Workload Parameters:</strong> {', '.join(params_list)}</div>"
     
-    # Создаем заголовок таблицы (убираем дублирующие колонки Cores/OOM)
+    # Создаем заголовок таблицы
     table_html = f"""
     {params_info}
     <table border='1' cellpadding='2px' style='border-collapse: collapse; font-size: 12px;'>
         <tr style='background-color: #f0f0f0;'>
             <th>Iter</th><th>Status</th><th>Dur(s)</th>"""
     
-    # Добавляем колонки для каждой ноды
-    for node_slot in unique_nodes:
-        table_html += f"<th>{node_slot}</th>"
+    # Добавляем колонки для каждого хоста или агрегированные колонки
+    if unique_nodes:
+        # Если есть конкретные хосты - показываем колонки для каждого хоста
+        for host in unique_nodes:
+            table_html += f"<th>{host}</th>"
+    else:
+        # Если хостов нет - показываем агрегированные колонки Cores и OOM
+        table_html += "<th>Cores</th><th>OOM</th>"
     
     table_html += """
         </tr>
@@ -161,42 +311,8 @@ def _create_iterations_table(result, node_errors: list[NodeErrors] = [], workloa
                 <td style='background-color: #f0f0f0;'>no data</td>
                 <td style='background-color: #f0f0f0;'>N/A</td>"""
         
-        # Добавляем значения для каждой ноды
-        for node_slot in unique_nodes:
-            node_error = node_info_map[node_slot]
-            
-            # Собираем все проблемы ноды
-            issues = []
-            has_issues = False
-            has_critical_issues = False  # Отслеживаем критичные проблемы (cores/oom)
-            
-            # Проверяем основные проблемы (рестарт, падение)
-            if node_error.message and node_error.message not in ['diagnostic info collected']:
-                issues.append(node_error.message.replace('was ', '').replace('is ', ''))
-                has_issues = True
-                
-            # Добавляем cores если есть (критичная проблема)
-            if node_error.core_hashes:
-                issues.append(f"cores:{len(node_error.core_hashes)}")
-                has_issues = True
-                has_critical_issues = True
-                
-            # Добавляем oom если есть (критичная проблема)
-            if node_error.was_oom:
-                issues.append("oom")
-                has_issues = True
-                has_critical_issues = True
-            
-            if has_issues:
-                # Красный только для критичных проблем (cores/oom)
-                # Зеленый для обычных проблем (restarted/down)
-                node_color = "#ffcccc" if has_critical_issues else "#ccffcc"
-                node_value = ", ".join(issues)
-            else:
-                node_color = "#ccffcc"  # Зеленый
-                node_value = "ok"
-            
-            table_html += f"<td style='background-color: {node_color};'>{node_value}</td>"
+        # Добавляем колонки для хостов
+        table_html += _add_node_columns(unique_nodes, node_info_map, is_first_iteration=True)
         
         table_html += """
             </tr>
@@ -207,10 +323,11 @@ def _create_iterations_table(result, node_errors: list[NodeErrors] = [], workloa
     
     # Добавляем строки для каждой итерации
     iterations = sorted(result.iterations.keys())
-    nodes_shown = set()  # Отслеживаем, для каких нод уже показали проблемы
+    nodes_shown = set()  # Отслеживаем, для каких хостов уже показали проблемы
     
     for i, iteration_num in enumerate(iterations):
         iteration = result.iterations[iteration_num]
+        is_first_iteration = (i == 0)
         
         # Упрощенная логика статуса workload
         if hasattr(iteration, 'error_message') and iteration.error_message:
@@ -236,57 +353,15 @@ def _create_iterations_table(result, node_errors: list[NodeErrors] = [], workloa
             duration_str = "N/A"
             duration_color = "#ffffcc"  # Светло-желтый для неизвестных значений
         
-        # Добавляем строку таблицы (убираем колонки Cores/OOM)
+        # Добавляем строку таблицы
         table_html += f"""
             <tr>
                 <td>{iteration_num}</td>
                 <td style='background-color: {workload_color};'>{workload_value}</td>
                 <td style='background-color: {duration_color};'>{duration_str}</td>"""
         
-        # Добавляем значения для каждой ноды
-        for node_slot in unique_nodes:
-            node_error = node_info_map[node_slot]
-            
-            # Показываем проблемы с нодой только в первой итерации
-            show_node_issues = node_slot not in nodes_shown
-            
-            if show_node_issues:
-                # Собираем все проблемы ноды
-                issues = []
-                has_issues = False
-                has_critical_issues = False  # Отслеживаем критичные проблемы (cores/oom)
-                
-                # Проверяем основные проблемы (рестарт, падение)
-                if node_error.message and node_error.message not in ['diagnostic info collected']:
-                    issues.append(node_error.message.replace('was ', '').replace('is ', ''))
-                    has_issues = True
-                    
-                # Добавляем cores если есть (критичная проблема)
-                if node_error.core_hashes:
-                    issues.append(f"cores:{len(node_error.core_hashes)}")
-                    has_issues = True
-                    has_critical_issues = True
-                    
-                # Добавляем oom если есть (критичная проблема)
-                if node_error.was_oom:
-                    issues.append("oom")
-                    has_issues = True
-                    has_critical_issues = True
-                
-                if has_issues:
-                    # Красный только для критичных проблем (cores/oom)
-                    # Зеленый для обычных проблем (restarted/down)
-                    node_color = "#ffcccc" if has_critical_issues else "#ccffcc"
-                    node_value = ", ".join(issues)
-                    nodes_shown.add(node_slot)
-                else:
-                    node_color = "#ccffcc"  # Зеленый
-                    node_value = "ok"
-            else:
-                node_color = "#ccffcc"  # Зеленый
-                node_value = "ok"
-            
-            table_html += f"<td style='background-color: {node_color};'>{node_value}</td>"
+        # Добавляем колонки для хостов
+        table_html += _add_node_columns(unique_nodes, node_info_map, nodes_shown, is_first_iteration)
         
         table_html += """
             </tr>"""
@@ -347,6 +422,7 @@ def allure_test_description(
     
     # Добавляем компактную таблицу итераций прямо в description
     logging.info(f"allure_test_description called with workload_result: {workload_result}")
+    
     if workload_result:
         logging.info(f"workload_result is not None, calling _create_iterations_table")
         iterations_table = _create_iterations_table(workload_result, node_errors, workload_params)

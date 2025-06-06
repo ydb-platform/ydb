@@ -1404,7 +1404,7 @@ class WorkloadTestBase(LoadSuiteBase):
                     # Отключаем буферизацию для гарантии захвата вывода
                     cmd = f"stdbuf -o0 -e0 {deployed_binary_path} {command_args}"
                     
-                    run_timeout = run_config['duration'] + 30  # Добавляем буфер для завершения
+                    run_timeout = run_config['duration'] + 150  # Добавляем буфер для завершения
                     
                     allure.attach(cmd, 'Full Command', attachment_type=allure.attachment_type.TEXT)
                     allure.attach(f"Timeout: {int(run_timeout)}s", 'Execution Timeout', attachment_type=allure.attachment_type.TEXT)

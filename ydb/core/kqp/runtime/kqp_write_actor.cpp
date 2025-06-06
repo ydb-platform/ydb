@@ -1373,6 +1373,130 @@ private:
     NWilson::TSpan TableWriteActorSpan;
 };
 
+class TKqpWriteTask {
+public:
+    TKqpWriteTask(
+            const ui64 cookie,
+            const i64 priority,
+            const TPathId pathId,
+            std::vector<std::pair<TKqpTableWriteActor*, IDataBatchProjectionPtr>> writes)
+        : Cookie(cookie)
+        , Priority(priority)
+        , PathId(pathId) {
+
+        for (const auto& [writeActor, projection] : writes) {
+            AFL_ENSURE(projection || writeActor->GetTableId().PathId == pathId);
+            AFL_ENSURE(!projection || writeActor->GetTableId().PathId != pathId);
+            PathWriteInfo[writeActor->GetTableId().PathId] = TPathWriteInfo{
+                .Projection = projection,
+                .WriteActor = writeActor,
+            };
+        }
+    }
+
+    void Write(IDataBatchPtr data) {
+        AFL_ENSURE(!Closed);
+        Memory += data->GetMemory();
+        BufferedBatches.push_back(std::move(data));
+    }
+
+    void Close() {
+        Closed = true;
+    }
+
+    bool TryFlush() {
+        if (BufferedBatches.empty()) {
+            return false;
+        }
+
+        if (WriteBatches.empty()) {
+            std::swap(WriteBatches, BufferedBatches);
+            return true;
+        }
+        return false;
+    }
+
+    void Process() {
+        for (auto& batch : WriteBatches) {
+            Memory -= batch->GetMemory();
+            WriteBatch(std::move(batch));
+        }
+        WriteBatches.clear();
+
+        if (IsClosed() && IsEmpty() && !IsFinished()) {
+            AFL_ENSURE(GetMemory() == 0);
+            CloseWrite();
+        }
+    }
+
+    i64 GetMemory() const {
+        return Memory;
+    }
+
+    bool IsEmpty() const {
+        return BufferedBatches.empty() && WriteBatches.empty();
+    }
+
+    bool IsClosed() const {
+        return Closed;
+    }
+
+    bool IsFinished() const {
+        return Finished;
+    }
+
+    bool HasLookups() const {
+        return false;
+    }
+
+    i64 GetPriority() const {
+        return Priority;
+    }
+
+private:
+    void WriteBatch(IDataBatchPtr batch) {
+        for (auto& [actorPathId, actorInfo] : PathWriteInfo) {
+            // Write to indexes at first
+            if (PathId != actorPathId) {
+                auto preparedBatch = actorInfo.Projection->Project(batch);
+                actorInfo.WriteActor->Write(Cookie, preparedBatch);
+            }
+        }
+        PathWriteInfo.at(PathId).WriteActor->Write(Cookie, std::move(batch));
+    }
+
+    void CloseWrite() {
+        for (auto& [_, actorInfo] : PathWriteInfo) {
+            actorInfo.WriteActor->Close(Cookie);
+        }
+        Finished = true;
+    }
+
+    const ui64 Cookie;
+    const i64 Priority;
+    const TPathId PathId;
+
+    struct TPathWriteInfo {
+        IDataBatchProjectionPtr Projection = nullptr;
+        TKqpTableWriteActor* WriteActor = nullptr;
+    };
+
+    THashMap<TPathId, TPathWriteInfo> PathWriteInfo;
+    // TODO: main table lookup
+    // TODO: uniq index lookups
+
+    bool Closed = false;
+    bool Finished = false;
+    i64 Memory = 0;
+    std::vector<IDataBatchPtr> BufferedBatches;
+
+    // TODO: std::vector<IDataBatchPtr> LookupBatches;
+    // TODO: std::vector<IDataBatchPtr> WaitLookupBatches;
+    // TODO: std::vector<TDataBatchPtr> CheckUniqueBatches;
+    // TODO: std::vector<IDataBatchPtr> WaitCheckUniqueBatches;
+    std::vector<IDataBatchPtr> WriteBatches;
+};
+
 class TKqpDirectWriteActor : public TActorBootstrapped<TKqpDirectWriteActor>, public NYql::NDq::IDqComputeActorAsyncOutput, public IKqpTableWriterCallbacks {
     using TBase = TActorBootstrapped<TKqpDirectWriteActor>;
 
@@ -1924,6 +2048,8 @@ public:
 
             token = TWriteToken{settings.TableId.PathId, CurrentWriteToken++};
 
+            std::vector<std::pair<TKqpTableWriteActor*, IDataBatchProjectionPtr>> writes;
+
             AFL_ENSURE(writeInfo.Actors.size() > settings.Indexes.size());
             for (auto& indexSettings : settings.Indexes) {
                 writeInfo.Actors.at(indexSettings.TableId.PathId).Projections.emplace(token.Cookie, CreateDataBatchProjection(
@@ -1940,6 +2066,10 @@ public:
                     std::move(indexSettings.Columns),
                     std::move(indexSettings.WriteIndex),
                     settings.Priority);
+
+                writes.emplace_back(
+                    writeInfo.Actors.at(indexSettings.TableId.PathId).WriteActor,
+                    writeInfo.Actors.at(indexSettings.TableId.PathId).Projections.at(token.Cookie));
             }
 
             writeInfo.Actors.at(settings.TableId.PathId).WriteActor->Open(
@@ -1949,6 +2079,18 @@ public:
                 std::move(settings.Columns),
                 std::move(settings.WriteIndex),
                 settings.Priority);
+            writes.emplace_back(
+                writeInfo.Actors.at(settings.TableId.PathId).WriteActor,
+                nullptr);
+
+            WriteTasks.emplace(
+                token.Cookie,
+                TKqpWriteTask{
+                    token.Cookie,
+                    settings.Priority,
+                    settings.TableId.PathId,
+                    std::move(writes)
+                });
         } else {
             token = *ev->Get()->Token;
         }
@@ -1984,6 +2126,7 @@ public:
 
     bool Process() {
         ProcessRequestQueue();
+        ProcessWrite();
         if (!ProcessFlush()) {
             return false;
         }
@@ -2017,24 +2160,12 @@ public:
             while (!queue.empty()) {
                 auto& message = queue.front();
 
-                // if lookup isn't needed
-                if (message.Data) {
-                    for (auto& [actorPathId, actor] : writeInfo.Actors) {
-                        if (actorPathId != pathId && actor.Projections.contains(message.Token.Cookie)) {
-                            auto preparedBatch = actor.Projections.at(message.Token.Cookie)->Project(message.Data);
-                            actor.WriteActor->Write(message.Token.Cookie, preparedBatch);
-                        }
-                    }
-                    writeInfo.Actors.at(pathId).WriteActor->Write(message.Token.Cookie, std::move(message.Data));
-                }
+                AFL_ENSURE(message.Token.PathId == pathId);
+                auto& writeTask = WriteTasks.at(message.Token.Cookie);
 
+                writeTask.Write(std::move(message.Data));
                 if (message.Close) {
-                    for (auto& [actorPathId, actor] : writeInfo.Actors) {
-                        if (actorPathId != pathId && actor.Projections.contains(message.Token.Cookie)) {
-                            actor.WriteActor->Close(message.Token.Cookie);
-                        }
-                    }
-                    writeInfo.Actors.at(pathId).WriteActor->Close(message.Token.Cookie);
+                    writeTask.Close();
                 }
 
                 AckQueue.push(TAckMessage{
@@ -2045,6 +2176,14 @@ public:
 
                 queue.pop();
             }
+        }
+    }
+
+    void ProcessWrite() {
+        for (auto& [pathId, writeTask] : WriteTasks) {
+            do {
+                writeTask.Process();
+            } while (writeTask.TryFlush());
         }
     }
 
@@ -3115,6 +3254,7 @@ private:
     };
 
     THashMap<TPathId, TWriteInfo> WriteInfos;
+    THashMap<ui64, TKqpWriteTask> WriteTasks;
     TKqpTableWriteActor::TWriteToken CurrentWriteToken = 0;
 
     EState State;

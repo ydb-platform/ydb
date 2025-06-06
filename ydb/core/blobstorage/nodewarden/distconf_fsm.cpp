@@ -1,4 +1,5 @@
 #include "distconf.h"
+#include "distconf_quorum.h"
 
 namespace NKikimr::NStorage {
 

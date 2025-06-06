@@ -10,7 +10,7 @@ namespace NKikimr::NStorage {
         const ui32 selfNodeId = SelfId().NodeId();
         for (const auto& item : ev->Get()->Nodes) {
             if (item.NodeId == selfNodeId) {
-                SelfNode = TNodeIdentifier(item.ResolveHost, item.Port, selfNodeId);
+                SelfNode = TNodeIdentifier(item.ResolveHost, item.Port, selfNodeId, std::nullopt);
                 Y_ABORT_UNLESS(IsSelfStatic == item.IsStatic);
             }
             if (item.IsStatic) {

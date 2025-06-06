@@ -1972,7 +1972,7 @@ public:
         for (auto& [_, queue] : DataQueues) {
             YQL_ENSURE(queue.empty());
         }
-        YQL_ENSURE(TxId)
+        YQL_ENSURE(TxId);
         for (auto& [_, info] : WriteInfos) {
             info.WriteTableActor->SetPrepare(*TxId);
         }

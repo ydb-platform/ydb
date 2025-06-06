@@ -76,11 +76,11 @@ class TCompletionChunkWrite : public TCompletionAction {
     std::function<void()> OnDestroy;
     TReqId ReqId;
     NWilson::TSpan Span;
-
+    std::atomic<ui8> PartsInProgress, PartsWritten;
 public:
+    ui8 Pieces;
     TEvChunkWrite::TPartsPtr Parts;
     std::optional<TAlignedData> Buffer;
-
     TCompletionChunkWrite(const TActorId &recipient, TEvChunkWriteResult *event,
             TPDiskMon *mon, ui32 pdiskId, NHPTimer::STime startTime, size_t sizeBytes,
             ui8 priorityClass, std::function<void()> onDestroy, TReqId reqId, NWilson::TSpan&& span)
@@ -174,6 +174,40 @@ public:
         Span.EndError(ErrorReason);
         delete this;
     }
+
+    void AddPart() {
+        PartsInProgress++;
+    }
+
+    void RemovePart(TActorSystem *actorSystem) {
+        PartsInProgress--;
+        if (!PartsInProgress) {
+            if (PartsWritten == Pieces) {
+                Exec(actorSystem);
+            } else {
+                Release(actorSystem);
+            }
+        }
+    }
+
+    void CompletePart(TActorSystem *actorSystem) {
+        PartsWritten++;
+        RemovePart(actorSystem);
+    }
+};
+
+class TChunkWritePiece; 
+
+class TCompletionChunkWritePart : public TCompletionAction {
+    TChunkWritePiece *Piece;
+    TCompletionChunkWrite *CumulativeCompletion;
+    TBuffer::TPtr Buffer;
+    NWilson::TSpan Span;
+public:
+    TCompletionChunkWritePart(NKikimr::NPDisk::TChunkWritePiece* piece, TCompletionChunkWrite* cumulativeCompletion);
+    void Exec(TActorSystem *actorSystem) override;
+    void Release(TActorSystem *actorSystem) override;
+    virtual ~TCompletionChunkWritePart();
 };
 
 class TCompletionLogWrite : public TCompletionAction {

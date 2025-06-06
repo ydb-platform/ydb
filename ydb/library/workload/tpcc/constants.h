@@ -7,6 +7,9 @@ namespace NYdb::NTPCC {
 
 constexpr size_t TERMINALS_PER_WAREHOUSE = 10;
 
+// Partitioning constants
+constexpr size_t DEFAULT_SHARD_SIZE_MB = 2000;
+
 // copy-pasted TPC-C constants from the Benchbase implementation
 
 constexpr int DISTRICT_LOW_ID = 1;
@@ -51,5 +54,20 @@ constexpr std::chrono::seconds STOCK_LEVEL_THINK_TIME{5};
 // this constant is from TPC-C standard (#4.1). It is calculated based on
 // thinking and keying times and number of terminals per warehouse
 constexpr double MAX_TPMC_PER_WAREHOUSE = 12.86;
+
+// Table names
+constexpr const char* TABLE_CUSTOMER = "customer";
+constexpr const char* TABLE_WAREHOUSE = "warehouse";
+constexpr const char* TABLE_DISTRICT = "district";
+constexpr const char* TABLE_NEW_ORDER = "new_order";
+constexpr const char* TABLE_OORDER = "oorder";
+constexpr const char* TABLE_ITEM = "item";
+constexpr const char* TABLE_STOCK = "stock";
+constexpr const char* TABLE_ORDER_LINE = "order_line";
+constexpr const char* TABLE_HISTORY = "history";
+
+// Index/View names
+constexpr const char* INDEX_CUSTOMER_NAME = "idx_customer_name";
+constexpr const char* INDEX_ORDER = "idx_order";
 
 } // namespace NYdb::NTPCC

@@ -177,6 +177,14 @@ common:
     to: /yql/reference/syntax/alter-topic.md
   - from: /yql/reference/syntax/create_topic.md
     to: /yql/reference/syntax/create-topic.md
+  - from: /yql/reference/syntax/flatten.md
+    to: /yql/reference/syntax/select/flatten.md
+  - from: /yql/reference/syntax/group_by.md
+    to: /yql/reference/syntax/select/group-by.md
+  - from: /yql/reference/syntax/join.md
+    to: /yql/reference/syntax/select/join.md
+  - from: /yql/reference/syntax/window.md
+    to: /yql/reference/syntax/select/window.md
   - from: /yql/reference/ddl/create-index.md
     to: /yql/reference/syntax/create_table/secondary_index.md
 

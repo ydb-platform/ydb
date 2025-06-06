@@ -399,7 +399,7 @@ An **ActorId** is a unique identifier of the actor or [tablet](#tablet) in the [
 
 #### Actor system interconnect {#actor-system-interconnect}
 
-The **actor system interconnect** or **interconnect** is the [cluster's](#cluster internal network layer. All [actors](#actor) interact with each other within the system via the interconnect.
+The **actor system interconnect** or **interconnect** is the [cluster's](#cluster) internal network layer. All [actors](#actor) interact with each other within the system via the interconnect.
 
 #### Local {#local}
 

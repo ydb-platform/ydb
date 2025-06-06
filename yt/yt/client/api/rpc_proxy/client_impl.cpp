@@ -150,17 +150,17 @@ IChannelPtr TClient::WrapStickyChannelIntoRetrying(IChannelPtr underlying) const
         /*retryProxyBanned*/ false);
 }
 
-IChannelPtr TClient::WrapNonRetryingChannel(IChannelPtr underlying) const
+IChannelPtr TClient::WrapNonRetryingChannel(IChannelPtr channel) const
 {
-    auto credentialsInjected = CreateCredentialsInjectingChannel(
-        std::move(underlying),
+    channel = CreateCredentialsInjectingChannel(
+        std::move(channel),
         ClientOptions_);
 
-    auto targetClusterInjected = CreateTargetClusterInjectingChannel(
-        std::move(credentialsInjected),
+    channel = CreateTargetClusterInjectingChannel(
+        std::move(channel),
         ClientOptions_.MultiproxyTargetCluster);
 
-    return targetClusterInjected;
+    return channel;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

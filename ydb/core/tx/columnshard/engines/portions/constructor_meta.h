@@ -36,6 +36,11 @@ public:
     TPortionMetaConstructor() = default;
     TPortionMetaConstructor(const TPortionMeta& meta, const bool withBlobs);
 
+    const NArrow::TFirstLastSpecialKeys& GetFirstAndLastPK() const {
+        AFL_VERIFY(FirstAndLastPK);
+        return *FirstAndLastPK;
+    }
+
     ui64 GetTotalBlobBytes() const {
         AFL_VERIFY(ColumnBlobBytes);
         AFL_VERIFY(IndexBlobBytes);

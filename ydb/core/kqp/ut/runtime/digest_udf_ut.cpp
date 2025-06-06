@@ -75,7 +75,7 @@ Y_UNIT_TEST(NoFullScanInJoin) {
         auto result2 = session.ExecuteDataQuery(Sprintf(R"(
             --!syntax_v1
             UPSERT INTO `/Root/TableLeft` (hash_key, ref_id, data) VALUES
-                (%llu, 2, "match"), -- это строка с совпадением
+                (%llu, 2, "match"),
                 (%llu, 1, "no_match_1"),
                 (%llu, 3, "no_match_2");
         )", hashValue, hashValue + 1, hashValue + 2), TTxControl::BeginTx().CommitTx()).ExtractValueSync();

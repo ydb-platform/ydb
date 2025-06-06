@@ -90,6 +90,7 @@ struct TKikimrSettings: public TTestFeatureFlagsHolder<TKikimrSettings> {
     NMonitoring::TDynamicCounterPtr CountersRoot = MakeIntrusive<NMonitoring::TDynamicCounters>();
     std::shared_ptr<NYql::NDq::IS3ActorsFactory> S3ActorsFactory = NYql::NDq::CreateDefaultS3ActorsFactory();
     NKikimrConfig::TImmediateControlsConfig Controls;
+    TMaybe<NYdbGrpc::TServerOptions> GrpcServerOptions;
 
     TKikimrSettings()
     {
@@ -133,6 +134,7 @@ struct TKikimrSettings: public TTestFeatureFlagsHolder<TKikimrSettings> {
         AppConfig.MutableColumnShardConfig()->SetDoubleOutOfRangeHandling(value);
         return *this;
     }
+    TKikimrSettings& SetGrpcServerOptions(const NYdbGrpc::TServerOptions& grpcServerOptions) { GrpcServerOptions = grpcServerOptions; return *this; };
 };
 
 class TKikimrRunner {

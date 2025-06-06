@@ -49,7 +49,7 @@ namespace NSQLComplete {
             TDefaultYQLGrammar>;
 
     public:
-        explicit TSpecializedLocalSyntaxAnalysis(
+        TSpecializedLocalSyntaxAnalysis(
             TLexerSupplier lexer, const THashSet<TString>& IgnoredRules)
             : Grammar_(&GetSqlGrammar())
             , Lexer_(lexer(/* ansi = */ IsAnsiLexer))
@@ -88,7 +88,9 @@ namespace NSQLComplete {
             if (auto enclosing = context.Enclosing()) {
                 if (enclosing->IsLiteral()) {
                     return result;
-                } else if (enclosing->Base->Name == "ID_QUOTED") {
+                }
+
+                if (enclosing->Base->Name == "ID_QUOTED") {
                     result.Object = ObjectMatch(context, candidates);
                     return result;
                 }
@@ -327,7 +329,7 @@ namespace NSQLComplete {
 
     class TLocalSyntaxAnalysis: public ILocalSyntaxAnalysis {
     public:
-        explicit TLocalSyntaxAnalysis(
+        TLocalSyntaxAnalysis(
             TLexerSupplier lexer, const THashSet<TString>& IgnoredRules)
             : DefaultEngine_(lexer, IgnoredRules)
             , AnsiEngine_(lexer, IgnoredRules)

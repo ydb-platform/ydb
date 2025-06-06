@@ -4280,6 +4280,10 @@ IGraphTransformer::TStatus TryConvertTo(TExprNode::TPtr& node, const TTypeAnnota
     }
 
     TIssueScopeGuard guard(ctx.IssueManager, [&] {
+            if (sourceType.GetKind() == ETypeAnnotationKind::Struct && expectedType.GetKind() == ETypeAnnotationKind::Struct) {
+                return MakeIntrusive<TIssue>(ctx.GetPosition(node->Pos()),
+                    TStringBuilder() << "Failed to convert struct");
+            }
             return MakeIntrusive<TIssue>(ctx.GetPosition(node->Pos()),
                 TStringBuilder() << "Failed to convert type: " << sourceType << " to " << expectedType);
         });

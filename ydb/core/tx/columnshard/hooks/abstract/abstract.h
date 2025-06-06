@@ -358,8 +358,8 @@ public:
         return {};
     }
 
-    virtual ui64 GetInternalPathIdOffset(const NOlap::TTabletId /*tabletId*/) const {
-        return 0;
+    virtual ui64 GetInternalPathIdOffset(const NOlap::TTabletId tabletId) const {
+        return 1000000 + static_cast<ui64>(tabletId)%1000;
     }
 
     virtual void OnAddPathIdMapping(const NOlap::TTabletId /* tabletId */, const NColumnShard::TInternalPathId /* internalPathId */, const NColumnShard::TSchemeShardLocalPathId /* localPathId */) {

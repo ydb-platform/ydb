@@ -368,6 +368,15 @@ Y_UNIT_TEST_SUITE(KqpKv) {
         CompareYson(Sprintf("[[[%du];[%du]]]", valueToReturn_1, valueToReturn_2), TString{res});
     }
 
+    template <typename FutureT>
+    auto GetValue(TKikimrRunner& kikimr, FutureT&& future) {
+        while (!future.HasValue()) {
+            TDispatchOptions opts;
+            kikimr.GetTestServer().GetRuntime()->DispatchEvents(opts, TDuration::MilliSeconds(100));
+        }
+        return future.GetValue(TDuration::MilliSeconds(100));
+    }
+
     Y_UNIT_TEST_TWIN(ReadRows_ExternalBlobs, UseExtBlobsPrecharge) {
         NKikimrConfig::TImmediateControlsConfig controls;
 
@@ -387,17 +396,9 @@ Y_UNIT_TEST_SUITE(KqpKv) {
             );
 
         auto kikimr = TKikimrRunner{settings};
-        
-        auto getValue = [&kikimr](const auto&& future) {
-            while (future.HasValue() == false) {
-                TDispatchOptions opts;
-                kikimr.GetTestServer().GetRuntime()->DispatchEvents(opts, TDuration::MilliSeconds(100));
-            }
-            return future.GetValue(TDuration::MilliSeconds(100));
-        };
 
         auto db = kikimr.GetTableClient();
-        auto session = getValue(db.CreateSession()).GetSession();
+        auto session = GetValue(kikimr, db.CreateSession()).GetSession();
         const auto tableName = "/Root/TestTable";
         const auto keyColumnName_1 = "blob_id";
         const auto keyColumnName_2 = "chunk_num";
@@ -414,7 +415,7 @@ Y_UNIT_TEST_SUITE(KqpKv) {
         builder.SetPrimaryKeyColumns({keyColumnName_1, keyColumnName_2});
         builder.AddNullableColumn(dataColumnName, EPrimitiveType::String);
 
-        auto result = getValue(session.CreateTable(tableName, builder.Build()));
+        auto result = GetValue(kikimr, session.CreateTable(tableName, builder.Build()));
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
         TString largeValue(1_MB, 'L');
@@ -431,7 +432,7 @@ Y_UNIT_TEST_SUITE(KqpKv) {
         }
         rows.EndList();
 
-        auto upsertResult = getValue(db.BulkUpsert(tableName, rows.Build()));
+        auto upsertResult = GetValue(kikimr, db.BulkUpsert(tableName, rows.Build()));
         UNIT_ASSERT_C(upsertResult.IsSuccess(), upsertResult.GetIssues().ToString());
 
         auto server = &kikimr.GetTestServer();
@@ -463,7 +464,7 @@ Y_UNIT_TEST_SUITE(KqpKv) {
         }
         keys.EndList();
 
-        auto selectResult = getValue(db.ReadRows(tableName, keys.Build()));
+        auto selectResult = GetValue(kikimr, db.ReadRows(tableName, keys.Build()));
 
         UNIT_ASSERT_C(selectResult.IsSuccess(), selectResult.GetIssues().ToString());
 
@@ -484,17 +485,9 @@ Y_UNIT_TEST_SUITE(KqpKv) {
             );
 
         auto kikimr = TKikimrRunner{settings};
-        
-        auto getValue = [&kikimr](const auto&& future) {
-            while (future.HasValue() == false) {
-                TDispatchOptions opts;
-                kikimr.GetTestServer().GetRuntime()->DispatchEvents(opts, TDuration::MilliSeconds(100));
-            }
-            return future.GetValue(TDuration::MilliSeconds(100));
-        };
 
         auto db = kikimr.GetTableClient();
-        auto session = getValue(db.CreateSession()).GetSession();
+        auto session = GetValue(kikimr, db.CreateSession()).GetSession();
         const auto tableName = "/Root/TestTable";
         const auto keyColumnName = "blob_id";
         const auto dataColumnName = "data";
@@ -508,7 +501,7 @@ Y_UNIT_TEST_SUITE(KqpKv) {
         partitions.AppendSplitPoints(TValueBuilder().BeginTuple().AddElement().OptionalInt32(5).EndTuple().Build());
         builder.SetPartitionAtKeys(partitions);
 
-        auto result = getValue(session.CreateTable(tableName, builder.Build()));
+        auto result = GetValue(kikimr, session.CreateTable(tableName, builder.Build()));
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         
         NYdb::TValueBuilder rows;
@@ -522,7 +515,7 @@ Y_UNIT_TEST_SUITE(KqpKv) {
         }
         rows.EndList();
 
-        auto upsertResult = getValue(db.BulkUpsert(tableName, rows.Build()));
+        auto upsertResult = GetValue(kikimr, db.BulkUpsert(tableName, rows.Build()));
         UNIT_ASSERT_C(upsertResult.IsSuccess(), upsertResult.GetIssues().ToString());
 
         ui32 cancelCount = 0;
@@ -553,7 +546,7 @@ Y_UNIT_TEST_SUITE(KqpKv) {
         }
         keys.EndList();
 
-        auto selectResult = getValue(db.ReadRows(tableName, keys.Build()));
+        auto selectResult = GetValue(kikimr, db.ReadRows(tableName, keys.Build()));
 
         UNIT_ASSERT(!selectResult.IsSuccess());
         UNIT_ASSERT_VALUES_EQUAL(cancelCount, 1);

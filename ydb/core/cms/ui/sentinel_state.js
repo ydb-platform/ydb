@@ -32,6 +32,13 @@ const EPDiskStatus = {
     6: "TO_BE_REMOVED",
 };
 
+const EMaintenanceStatus = {
+    0: "NOT_SET",
+    1: "NO_REQUEST",
+    2: "LONG_TERM_MAINTENANCE_PLANNED",
+};
+
+
 const PDiskHeaders = [
     "PDiskId",
     "State",
@@ -39,6 +46,8 @@ const PDiskHeaders = [
     "StateCounter",
     "Status",
     "DesiredStatus",
+    "MaintenanceStatus",
+    "DesiredMaintenanceStatus",
     "ChangingAllowed",
     "LastStatusChange",
     "StatusChangeFailed",
@@ -131,6 +140,10 @@ class CmsSentinelState {
         return { "value": arg === undefined ? "nil" : arg + ":" + EPDiskStatus[arg], "class": arg === 1 ? "green" : (arg === undefined ? undefined : "red") };
     }
 
+    maintenanceStatus(arg) {
+        return { "value": arg === undefined ? "nil" : arg + ":" + EMaintenanceStatus[arg], "class": arg === undefined ? undefined : "green" };
+    }
+
     bool(arg) {
         return { "value": arg === true ? "+" : "-" };
     }
@@ -149,6 +162,8 @@ class CmsSentinelState {
             "PrevStatusChangeAttempts": this.id.bind(this),
             "LastStatusChange": this.id.bind(this),
             "IgnoreReason": this.id.bind(this),
+            "MaintenanceStatus": this.maintenanceStatus.bind(this),
+            "DesiredMaintenanceStatus": this.maintenanceStatus.bind(this),
         };
     }
 

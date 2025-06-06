@@ -12,6 +12,12 @@
 
 namespace NKikimr::NCms {
 
+enum class EEvictVDisksStatus {
+    Disabled,
+    Faulty,
+    Maintenance,
+};
+
 struct TCmsSentinelConfig {
     bool Enable = true;
     bool DryRun = false;
@@ -34,7 +40,7 @@ struct TCmsSentinelConfig {
     ui32 RackRatio;
     ui32 FaultyPDisksThresholdPerNode;
 
-    TMaybeFail<EPDiskStatus> EvictVDisksStatus;
+    EEvictVDisksStatus EvictVDisksStatus;
 
     void Serialize(NKikimrCms::TCmsConfig::TSentinelConfig &config) const {
         config.SetEnable(Enable);
@@ -144,28 +150,33 @@ struct TCmsSentinelConfig {
         return stateLimits;
     }
 
-    static TMaybeFail<EPDiskStatus> LoadEvictVDisksStatus(const NKikimrCms::TCmsConfig::TSentinelConfig &config) {
-        using EEvictVDisksStatus = NKikimrCms::TCmsConfig::TSentinelConfig;
+    static EEvictVDisksStatus LoadEvictVDisksStatus(const NKikimrCms::TCmsConfig::TSentinelConfig &config) {
+        using EEvictVDisksStatusProto = NKikimrCms::TCmsConfig::TSentinelConfig;
         switch (config.GetEvictVDisksStatus()) {
-            case EEvictVDisksStatus::UNKNOWN:
-            case EEvictVDisksStatus::FAULTY:
-                return EPDiskStatus::FAULTY;
-            case EEvictVDisksStatus::DISABLED:
-                return Nothing();
+            case EEvictVDisksStatusProto::FAULTY:
+                return EEvictVDisksStatus::Faulty;
+            case EEvictVDisksStatusProto::MAINTENANCE:
+                return EEvictVDisksStatus::Maintenance;
+            case EEvictVDisksStatusProto::DISABLED:
+            case EEvictVDisksStatusProto::UNKNOWN:
+                return EEvictVDisksStatus::Disabled;
         }
-        return EPDiskStatus::FAULTY;
+        return EEvictVDisksStatus::Disabled;
     }
 
     void SaveEvictVDisksStatus(NKikimrCms::TCmsConfig::TSentinelConfig &config) const {
-        using EEvictVDisksStatus = NKikimrCms::TCmsConfig::TSentinelConfig;
+        using EEvictVDisksStatusProto = NKikimrCms::TCmsConfig::TSentinelConfig;
 
-        if (EvictVDisksStatus.Empty()) {
-            config.SetEvictVDisksStatus(EEvictVDisksStatus::DISABLED);
-            return;
-        }
-
-        if (*EvictVDisksStatus == EPDiskStatus::FAULTY) {
-            config.SetEvictVDisksStatus(EEvictVDisksStatus::FAULTY);
+        switch (EvictVDisksStatus) {
+            case EEvictVDisksStatus::Disabled:
+                config.SetEvictVDisksStatus(EEvictVDisksStatusProto::DISABLED);
+                return;
+            case EEvictVDisksStatus::Faulty:
+                config.SetEvictVDisksStatus(EEvictVDisksStatusProto::FAULTY);
+                return;
+            case EEvictVDisksStatus::Maintenance:
+                config.SetEvictVDisksStatus(EEvictVDisksStatusProto::MAINTENANCE);
+                return;
         }
     }
 };

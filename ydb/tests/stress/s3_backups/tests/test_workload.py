@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
+import os
+import yatest
+
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
-from ydb.tests.stress.s3_backups.workload import WorkloadRunner
-from ydb.tests.stress.common.common import YdbClient
 
 
 class TestYdbWorkload(object):
@@ -22,8 +23,10 @@ class TestYdbWorkload(object):
         cls.cluster.stop()
 
     def test(self):
-        endpoint = f"grpc://localhost:{self.cluster.nodes[1].grpc_port}"
-        client = YdbClient(endpoint, "/Root", True)
-        client.wait_connection()
-        with WorkloadRunner(client, endpoint, 120) as runner:
-            runner.run()
+        cmd = [
+            yatest.common.binary_path(os.getenv("YDB_TEST_PATH")),
+            "--endpoint", f"grpc://localhost:{self.cluster.nodes[1].grpc_port}",
+            "--database", "/Root",
+            "--duration", "120",
+        ]
+        yatest.common.execute(cmd, wait=True)

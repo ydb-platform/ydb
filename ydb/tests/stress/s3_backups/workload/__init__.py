@@ -39,7 +39,7 @@ class WorkloadS3Export(WorkloadBase):
     def get_stat(self):
         with self.lock:
             export_stats_str = ", ".join(
-                f"exports{k.lower()}={v}"
+                f"exports_{k.lower()}={v}"
                 for k, v in self._export_stats.items()
             )
             return export_stats_str
@@ -152,7 +152,7 @@ class WorkloadS3Export(WorkloadBase):
             self.in_progress.append(export_id)
 
     def _loop(self):
-        for _ in range(0, 11):
+        while not self.is_stop_requested():
             self.id = f"{uuid.uuid1()}".replace("-", "_")
             self.prefix = f"block_{self.id}"
             s3_endpoint, s3_access_key, s3_secret_key, s3_bucket = self.s3_settings
@@ -192,7 +192,7 @@ class WorkloadRunner:
         bucket = resource.Bucket(s3_bucket)
         if not bucket.creation_date:
             bucket.create()
-            bucket.objects.all().delete()
+        bucket.objects.all().delete()
 
         return s3_endpoint, s3_access_key, s3_secret_key, s3_bucket
 

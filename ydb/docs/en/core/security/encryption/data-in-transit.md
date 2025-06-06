@@ -8,7 +8,7 @@ As {{ ydb-short-name }} is a distributed system typically running on a cluster, 
   * [gRPC](../../reference/ydb-sdk/overview-grpc-api.md) for external communication with client applications designed to work natively with {{ ydb-short-name }} via the [SDK](../../reference/ydb-sdk/index.md) or [CLI](../../reference/ydb-cli/index.md).
   * [PostgreSQL wire protocol](../../postgresql/intro.md) for external communication with client applications initially designed to work with [PostgreSQL](https://www.postgresql.org/).
   * [Kafka wire protocol](../../reference/kafka-api/index.md) for external communication with client applications initially designed to work with [Apache Kafka](https://kafka.apache.org/).
-  * HTTP for running the [Embedded UI](../../reference/embedded-ui/index.md), exposing [metrics](../../devops/manual/monitoring.md), and other miscellaneous endpoints.
+  * HTTP for running the [Embedded UI](../../reference/embedded-ui/index.md), exposing [metrics](../../devops/observability/monitoring.md), and other miscellaneous endpoints.
 
 * {{ ydb-short-name }} as a client:
 

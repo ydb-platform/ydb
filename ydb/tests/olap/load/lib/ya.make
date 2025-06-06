@@ -7,6 +7,7 @@ PY3_LIBRARY()
         tpcds.py
         tpch.py
         workload_simple_queue.py
+        workload_oltp.py
 
     )
 

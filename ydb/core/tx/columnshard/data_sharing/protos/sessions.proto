@@ -1,14 +1,12 @@
 package NKikimrColumnShardDataSharingProto;
 
-import "ydb/core/tx/columnshard/common/protos/path_id.proto";
 import "ydb/core/tx/columnshard/common/protos/snapshot.proto";
 import "ydb/core/tx/columnshard/data_sharing/protos/initiator.proto";
 import "ydb/core/protos/tx_columnshard.proto";
 
-
 message TDestinationRemapIds {
-    optional NKikimrColumnShardPathIdProto.TSchemeShardLocalPathId SourcePathId = 1;
-    optional NKikimrColumnShardPathIdProto.TSchemeShardLocalPathId DestPathId = 2;
+    optional uint64 SourcePathId = 1;
+    optional uint64 DestPathId = 2;
 }
 
 message TTransferContext {
@@ -38,14 +36,14 @@ message TDestinationSession {
 
 message TSourceSession {
     optional string SessionId = 1;
-    repeated NKikimrColumnShardPathIdProto.TInternalPathId PathIds = 3; ////NKikimrColumnShardPathIdProto.TSchemeShardLocalPathId
+    repeated uint64 PathIds = 3;
     optional uint64 DestinationTabletId = 4;
     optional TTransferContext TransferContext = 5;
 
     message TCursorDynamic {
-        optional NKikimrColumnShardPathIdProto.TInternalPathId StartPathId = 1; //NKikimrColumnShardPathIdProto.TSchemeShardLocalPathId
+        optional uint64 StartPathId = 1;
         optional uint64 StartPortionId = 2;
-        optional NKikimrColumnShardPathIdProto.TInternalPathId NextPathId = 3;  //NKikimrColumnShardPathIdProto.TSchemeShardLocalPathId
+        optional uint64 NextPathId = 3;
         optional uint64 NextPortionId = 4;
         optional uint32 PackIdx = 5;
         optional uint32 AckReceivedForPackIdx = 6[default = 0];
@@ -55,7 +53,7 @@ message TSourceSession {
     }
 
     message TPathPortionsHash {
-        optional NKikimrColumnShardPathIdProto.TInternalPathId PathId = 1; //TSchemeShardLocalPathId
+        optional uint64 PathId = 1;
         optional string Hash = 2;
     }
 

@@ -12,7 +12,6 @@
 #include <ydb/core/tx/columnshard/counters/portion_index.h>
 #include <ydb/core/tx/columnshard/engines/scheme/tiering/tier_info.h>
 #include <ydb/core/tx/columnshard/common/path_id.h>
-#include "path_id_translator.h"
 
 #include <ydb/library/accessor/accessor.h>
 

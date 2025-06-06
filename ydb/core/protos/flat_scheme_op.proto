@@ -17,7 +17,6 @@ import "ydb/core/protos/tablet.proto";
 import "ydb/core/protos/yql_translation_settings.proto";
 import "ydb/core/scheme/protos/pathid.proto";
 import "ydb/core/scheme/protos/type_info.proto";
-import "ydb/core/tx/columnshard/common/protos/path_id.proto";
 import "ydb/core/tx/columnshard/common/protos/snapshot.proto";
 import "ydb/core/tx/columnshard/engines/scheme/defaults/protos/data.proto";
 import "ydb/library/actors/protos/actors.proto";
@@ -825,10 +824,9 @@ message TGranuleShardingLogicContainer {
 }
 
 message TGranuleShardingInfo {
-    optional uint64 PathId_Deprecated = 1;
+    optional uint64 PathId = 1;
     optional uint64 VersionId = 2;
     optional TGranuleShardingLogicContainer Container = 3;
-    optional NKikimrColumnShardPathIdProto.TSchemeShardLocalPathId PathId = 4;
 }
 
 message TGranuleShardInfo {

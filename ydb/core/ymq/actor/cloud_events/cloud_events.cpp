@@ -13,8 +13,8 @@ namespace NCloudEvents {
 
         So, GenerateEventCloudId does not GenerateEventCloudId the 'real' CloudEvent id.
     */
-    uint64_t TEventIdGenerator::Generate() {
-        return Randomizer64();
+    ui64 TEventIdGenerator::Generate() {
+        return RandomNumber<ui64>();
     }
 
     void TAuditSender::Send(const TEventInfo& evInfo) {
@@ -57,9 +57,9 @@ namespace NCloudEvents {
         return TStringBuilder()
             << "--!syntax_v1" << "\n"
             << "SELECT" << "\n"
+            << "CreatedAt,"
             << "Id,"
             << "QueueName,"
-            << "CreatedAt,"
             << "Type,"
             << "CloudId,"
             << "FolderId,"
@@ -76,8 +76,8 @@ namespace NCloudEvents {
     TString TProcessor::GetInitDeleteQuery() const {
         return TStringBuilder()
             << "--!syntax_v1" << "\n"
-            << "DECLARE $Events AS List<Struct<Id:Uint64, QueueName:Utf8>>;" << "\n"
-            << "$EventsSource = (SELECT item.Id AS Id, item.QueueName AS QueueName" << "\n"
+            << "DECLARE $Events AS List<Struct<CreatedAt:Uint64, Id:Uint64>>;" << "\n"
+            << "$EventsSource = (SELECT item.CreatedAt AS CreatedAt, item.Id AS Id" << "\n"
                              << "FROM (SELECT $Events AS events) FLATTEN LIST BY events as item);" << "\n"
             << "DELETE FROM `" << GetFullTablePath() << "`" << "\n"
             << "ON SELECT * FROM $EventsSource;" << "\n";
@@ -168,16 +168,16 @@ namespace NCloudEvents {
         Y_ABORT_UNLESS(response.YdbResultsSize() == 1);
         NYdb::TResultSetParser parser(response.GetYdbResults(0));
 
-        auto convertId = [](uint_fast64_t id, const TString& type, uint_fast64_t createdAt) -> TString {
+        auto convertId = [](ui64 id, const TString& type, ui64 createdAt) -> TString {
             return TStringBuilder() << id << "$" << type << "$" << createdAt;
         };
 
         while (parser.TryNextRow()) {
             auto& cloudEvent = result.emplace_back();
 
-            cloudEvent.OriginalId = *parser.ColumnParser(0).GetOptionalUint64();
-            cloudEvent.QueueName = *parser.ColumnParser(1).GetOptionalUtf8();
-            cloudEvent.CreatedAt = *parser.ColumnParser(2).GetOptionalUint64();
+            cloudEvent.CreatedAt = *parser.ColumnParser(0).GetOptionalUint64();
+            cloudEvent.OriginalId = *parser.ColumnParser(1).GetOptionalUint64();
+            cloudEvent.QueueName = *parser.ColumnParser(2).GetOptionalUtf8();
             cloudEvent.Type = *parser.ColumnParser(3).GetOptionalUtf8();
 
             cloudEvent.Id = convertId(cloudEvent.OriginalId, cloudEvent.Type, cloudEvent.CreatedAt);
@@ -207,7 +207,7 @@ namespace NCloudEvents {
     void TProcessor::HandleSelectResponse(const NKqp::TEvKqp::TEvQueryResponse::TPtr& ev) {
         const auto& record = ev->Get()->Record;
         if (record.GetYdbStatus() != Ydb::StatusIds::SUCCESS) {
-            TString error = "DeleteResponse: Failed.\n";
+            TString error = "SelectResponse: Failed.\n";
             for (const auto& issue : record.GetResponse().GetQueryIssues()) {
                 error += issue.message() + "\n";
             }
@@ -236,10 +236,10 @@ namespace NCloudEvents {
             for (const auto& cloudEv : eventsList) {
                 param.AddListItem()
                     .BeginStruct()
+                    .AddMember("CreatedAt")
+                        .Uint64(cloudEv.CreatedAt)
                     .AddMember("Id")
                         .Uint64(cloudEv.OriginalId)
-                    .AddMember("QueueName")
-                        .Utf8(cloudEv.QueueName)
                     .EndStruct();
             }
 

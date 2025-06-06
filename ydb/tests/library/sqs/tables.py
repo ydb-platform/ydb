@@ -104,10 +104,10 @@ def create_queues_table(root, session):
 
 def create_cloud_events_table(root, session):
     columns = [
+        ('CreatedAt', ydb.PrimitiveType.Uint64),
         ('Id', ydb.PrimitiveType.Uint64),
         ('QueueName', ydb.PrimitiveType.Utf8),
         ('Type', ydb.PrimitiveType.Utf8),
-        ('CreatedAt', ydb.PrimitiveType.Uint64),
         ('CloudId', ydb.PrimitiveType.Utf8),
         ('FolderId', ydb.PrimitiveType.Utf8),
         ('UserSID', ydb.PrimitiveType.Utf8),

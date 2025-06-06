@@ -764,11 +764,11 @@ TString TCreateQueueSchemaActorV2::GenerateCommitQueueParamsQuery() {
 
         result += R"__(
                 (let cloudEventsRow '(
-                    '('Id cloudEventsId)
-                    '('QueueName cloudEventsQueueName)))
+                    '('CreatedAt cloudEventsCreatedAt)
+                    '('Id cloudEventsId)))
 
                 (let cloudEventsUpdate '(
-                    '('CreatedAt cloudEventsCreatedAt)
+                    '('QueueName cloudEventsQueueName)
                     '('Type cloudEventsType)
                     '('CloudId cloudEventsCloudId)
                     '('FolderId cloudEventsFolderId)
@@ -1349,11 +1349,11 @@ TString TDeleteQueueSchemaActorV2::GenerateEraseQueueRecordQuery() {
 
         result += R"__(
                 (let cloudEventsRow '(
-                    '('Id cloudEventsId)
-                    '('QueueName cloudEventsQueueName)))
+                    '('CreatedAt cloudEventsCreatedAt)
+                    '('Id cloudEventsId)))
 
                 (let cloudEventsUpdate '(
-                    '('CreatedAt cloudEventsCreatedAt)
+                    '('QueueName cloudEventsQueueName)
                     '('Type cloudEventsType)
                     '('CloudId cloudEventsCloudId)
                     '('FolderId cloudEventsFolderId)

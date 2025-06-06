@@ -441,7 +441,17 @@ namespace Tests {
         }
 
         const auto nodeCount = StaticNodes() + DynamicNodes();
-        Runtime = MakeHolder<TTestBasicRuntime>(nodeCount, Settings->DataCenterCount ? *Settings->DataCenterCount : nodeCount, Settings->UseRealThreads);
+
+        if (Settings->AuditLogBackendLines) {
+            Runtime = MakeHolder<TTestBasicRuntime>(nodeCount, 
+                                                    Settings->DataCenterCount ? *Settings->DataCenterCount : nodeCount,
+                                                    Settings->UseRealThreads,
+                                                    CreateTestAuditLogBackends(Settings->AuditLogBackendLines.value()));
+        } else {
+            Runtime = MakeHolder<TTestBasicRuntime>(nodeCount,
+                                                    Settings->DataCenterCount ? *Settings->DataCenterCount : nodeCount,
+                                                    Settings->UseRealThreads);
+        }
 
         if (init) {
             Initialize();

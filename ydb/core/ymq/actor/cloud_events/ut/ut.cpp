@@ -23,6 +23,8 @@ public:
         auto grpcPort = portManager.GetPort(2135);
         auto settings = TServerSettings(mbusPort);
         settings.SetDomainName("Root");
+        settings.SetAuditLogBackendLines(AuditLines);
+
         Server = MakeHolder<TServer>(settings);
         Server->EnableGRpc(NYdbGrpc::TServerOptions().SetHost("localhost").SetPort(grpcPort));
         auto driverConfig = TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << grpcPort);
@@ -75,9 +77,9 @@ private:
             auto session = Parent->TableClient->CreateSession().GetValueSync().GetSession();
 
             auto desc = NYdb::NTable::TTableBuilder()
+                .AddNullableColumn("CreatedAt", EPrimitiveType::Uint64)
                 .AddNullableColumn("Id", EPrimitiveType::Uint64)
                 .AddNullableColumn("QueueName", EPrimitiveType::Utf8)
-                .AddNullableColumn("CreatedAt", EPrimitiveType::Uint64)
                 .AddNullableColumn("Type", EPrimitiveType::Utf8)
                 .AddNullableColumn("CloudId", EPrimitiveType::Utf8)
                 .AddNullableColumn("FolderId", EPrimitiveType::Utf8)
@@ -88,7 +90,7 @@ private:
                 .AddNullableColumn("RequestId", EPrimitiveType::Utf8)
                 .AddNullableColumn("IdempotencyId", EPrimitiveType::Utf8)
                 .AddNullableColumn("Labels", EPrimitiveType::Utf8)
-                .SetPrimaryKeyColumns({"Id", "QueueName"})
+                .SetPrimaryKeyColumns({"CreatedAt", "Id"})
             .Build();
 
             auto status = session.CreateTable(FullTablePath, std::move(desc)).GetValueSync();
@@ -134,16 +136,16 @@ private:
         )
         {
             TStringBuilder queryBuilder;
-            uint_fast64_t createdAt = std::chrono::time_point_cast<std::chrono::microseconds>
+            ui64 createdAt = std::chrono::time_point_cast<std::chrono::microseconds>
                                       (std::chrono::high_resolution_clock::now())
                                       .time_since_epoch().count();
 
             queryBuilder
                 << "UPSERT INTO" << "`" << FullTablePath
                 << "` ("
+                    << "CreatedAt,"
                     << "Id,"
                     << "QueueName,"
-                    << "CreatedAt,"
                     << "Type,"
                     << "CloudId,"
                     << "FolderId,"
@@ -157,9 +159,9 @@ private:
                 << ")"
                 << "VALUES"
                 << "("
+                    << createdAt << ","
                     << NCloudEvents::TEventIdGenerator::Generate() << ","
                     << "'" << queueName << "'" << ","
-                    << createdAt << ","
                     << "'" << type << "'" << ","                                                  // DeleteMessageQueue or CreateMessageQueue or UpdateMessageQueue
                     << "'" << cloudId << "'" << ","
                     << "'" << folderId << "'" << ","
@@ -188,6 +190,7 @@ private:
     TSimpleSharedPtr<NYdb::NTable::TTableClient> TableClient;
     THolder<TServer> Server;
     TString Root = "/Root/SQS";
+    std::vector<std::string> AuditLines;
 
     UNIT_TEST_SUITE(TCloudEventsProcessorTests)
     UNIT_TEST(TestCreateCloudEventProcessor)
@@ -252,6 +255,59 @@ private:
         );
 
         Sleep(retryTimeout * 3);
+
+        enum EWaitState {
+            Create,
+            Update,
+            Delete,
+            Done
+        };
+
+        EWaitState state = EWaitState::Create;
+
+        [[maybe_unused]] int createCount = 0;
+        [[maybe_unused]] int updateCount = 0;
+        [[maybe_unused]] int deleteCount = 0;
+
+        for (const auto& line : AuditLines) {
+            std::cerr << line << std::endl;
+            bool isCreate = line.contains("CreateMessageQueue");
+            bool isUpdate = line.contains("UpdateMessageQueue");
+            bool isDelete = line.contains("DeleteMessageQueue");
+
+            createCount += isCreate;
+            updateCount += isUpdate;
+            deleteCount += isDelete;
+
+            switch (state) {
+            case EWaitState::Create: {
+                if (isCreate) {
+                    state = EWaitState::Update;
+                }
+                break;
+            }
+            case EWaitState::Update: {
+                if (isUpdate) {
+                    state = EWaitState::Delete;
+                }
+                break;
+            }
+            case EWaitState::Delete: {
+                if (isDelete) {
+                    state = EWaitState::Done;
+                }
+                break;
+            }
+            case EWaitState::Done: {
+                break;
+            }
+            }
+        }
+
+        UNIT_ASSERT(createCount == 1);
+        UNIT_ASSERT(updateCount == 1);
+        UNIT_ASSERT(deleteCount == 1);
+        UNIT_ASSERT(state == EWaitState::Done);
     }
 };
 UNIT_TEST_SUITE_REGISTRATION(TCloudEventsProcessorTests);

@@ -8,17 +8,12 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/aclib/aclib.h>
+#include <util/random/mersenne64.h>
+#include <util/random/entropy.h>
 
 namespace NKikimr::NSQS {
 namespace NCloudEvents {
     class TEventIdGenerator {
-    private:
-        inline static std::mt19937_64 Randomizer64 = std::mt19937_64(
-            std::chrono::time_point_cast<std::chrono::microseconds>(
-                std::chrono::high_resolution_clock::now()
-            ).time_since_epoch().count()
-        );
-
     public:
         static uint64_t Generate();
     };
@@ -28,10 +23,10 @@ namespace NCloudEvents {
         TString UserSanitizedToken;
         TString AuthType;
 
-        uint_fast64_t OriginalId;
+        ui64 OriginalId;
         TString Id;
         TString Type;
-        uint_fast64_t CreatedAt;
+        ui64 CreatedAt;
         TString CloudId;
         TString FolderId;
 

@@ -9,7 +9,8 @@ namespace NSchemeShardUT_Private {
 
 using namespace NKikimr;
 
-NAudit::TAuditLogBackends CreateTestAuditLogBackends(std::vector<std::string>& lineBuffer);
+using TMemoryLogBackend = NKikimr::Tests::TMemoryLogBackend;
+using NKikimr::Tests::CreateTestAuditLogBackends;
 
 std::string FindAuditLine(const std::vector<std::string>& auditLines, const std::string& substr);
 

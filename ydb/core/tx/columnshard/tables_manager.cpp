@@ -373,11 +373,7 @@ void TTablesManager::AddTableVersion(const TInternalPathId pathId, const NOlap::
 namespace {
 
 ui64 RandomOffsetForTests(ui64 tabletId) {
-    if (true) { //(NYDBTest::TControllers::GetColumnShardController()->UseRandomOffsetForInternalPathIds())
-        return (TAppData::RandomProvider->GenRand64() ^ tabletId) % 1000;
-    } else {
-        return 1000000;
-    }
+    return NYDBTest::TControllers::GetColumnShardController()->GetInternalPathIdOffset(NOlap::TTabletId{tabletId});
 }
 
 } //namespace

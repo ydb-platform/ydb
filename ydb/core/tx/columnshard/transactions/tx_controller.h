@@ -309,6 +309,10 @@ public:
             return TxInfo.TxId;
         }
 
+        ui64 GetStep() const {
+            return TxInfo.PlanStep;
+        }
+
         OpType GetOpType() const {
             return DoGetOpType();
         }

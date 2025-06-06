@@ -78,16 +78,19 @@ public:
     virtual void Open(
         const TWriteToken token,
         const TTableId TableId,
-        const NKikimrDataEvents::TEvWrite::TOperation::EOperationType operationType,
         TVector<NKikimrKqp::TKqpColumnMetadataProto>&& keyColumns,
         TVector<NKikimrKqp::TKqpColumnMetadataProto>&& inputColumns,
         std::vector<ui32>&& writeIndexes,
         const i64 priority) = 0;
-    virtual void Write(TWriteToken token, IDataBatchPtr&& data) = 0;
+    virtual void Write(
+        const TWriteToken token,
+        const NKikimrDataEvents::TEvWrite::TOperation::EOperationType operationType,
+        IDataBatchPtr&& data) = 0;
     virtual void Close(TWriteToken token) = 0;
 
     virtual void CleanupClosedTokens() = 0;
 
+    virtual void FlushBuffer(const TWriteToken token) = 0;
     virtual void FlushBuffers() = 0;
 
     virtual void Close() = 0;

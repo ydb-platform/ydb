@@ -2,6 +2,7 @@
 #include "defs.h"
 #include "blobstorage_pdisk.h"
 #include <ydb/library/pdisk_io/buffers.h>
+#include "blobstorage_pdisk_chunk_write_result.h"
 #include "blobstorage_pdisk_data.h"
 #include "blobstorage_pdisk_drivemodel.h"
 #include "blobstorage_pdisk_internal_interface.h"
@@ -500,6 +501,7 @@ public:
 
 
 class TCompletionChunkWrite;
+class TCompletionChunkWritePart;
 //
 // TChunkWrite
 //
@@ -515,17 +517,15 @@ public:
     bool ChunkEncrypted = true;
 
     ui32 TotalSize;
-    ui32 CurrentPart = 0;
-    ui32 CurrentPartOffset = 0;
-    ui32 RemainingSize = 0;
+    std::atomic<ui32> RemainingSize = 0;
 
     ui32 SlackSize;
-    ui32 BytesWritten = 0;
+    std::atomic<ui32> BytesWritten = 0;
 
     TAtomic Pieces = 0;
     TAtomic Aborted = 0;
 
-    THolder<TCompletionChunkWrite> Completion;
+    TCompletionChunkWrite *Completion;
 
     TChunkWrite(const NPDisk::TEvChunkWrite &ev, const TActorId &sender, TReqId reqId, NWilson::TSpan span);
 
@@ -575,20 +575,18 @@ public:
 //
 // TChunkWritePiece
 //
-class TChunkWritePiece : public TRequestBase {
+
+class TChunkWritePiece : public TRequestBase, public IObjectInQueue {
 public:
+    TPDisk *PDisk;
     TIntrusivePtr<TChunkWrite> ChunkWrite;
     ui32 PieceShift;
     ui32 PieceSize;
+    ui32 PartOffset = 0;
+    THolder<TChunkWriteResult> ChunkWriteResult;
+    THolder<TCompletionChunkWritePart> Completion;
 
-    TChunkWritePiece(TIntrusivePtr<TChunkWrite> &write, ui32 pieceShift, ui32 pieceSize, NWilson::TSpan span)
-        : TRequestBase(write->Sender, write->ReqId, write->Owner, write->OwnerRound, write->PriorityClass, std::move(span))
-        , ChunkWrite(write)
-        , PieceShift(pieceShift)
-        , PieceSize(pieceSize)
-    {
-        ChunkWrite->RegisterPiece();
-    }
+    TChunkWritePiece(TPDisk *pdisk, TIntrusivePtr<TChunkWrite> &write, ui32 pieceShift, ui32 pieceSize, NWilson::TSpan span, TCompletionChunkWrite* parent);
 
     ERequestType GetType() const override {
         return ERequestType::RequestChunkWritePiece;
@@ -604,6 +602,8 @@ public:
             ChunkWrite->AbortPiece(actorSystem);
         }
     }
+    
+    void Process(void*) override;
 };
 
 //

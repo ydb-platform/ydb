@@ -13,6 +13,10 @@ from typing import Any, Dict, List, Optional
 
 from ydb.tests.stress.common.common import WorkloadBase
 
+from ydb.export import ExportClient
+from ydb.export import ExportToS3Settings
+from ydb.operation import OperationClient
+
 
 class WorkloadS3Export(WorkloadBase):
     def __init__(self, client, endpoint, stop, s3_settings):
@@ -20,19 +24,22 @@ class WorkloadS3Export(WorkloadBase):
         self.lock = threading.Lock()
         self.s3_settings = s3_settings
         self.endpoint = endpoint
+        self.s3_client = ExportClient(self.client.driver)
+        self.op_client = OperationClient(self.client.driver)
+        
         self.limit = 10  # limit on the number of exports for a database
         self.in_progress = []
         # Statistics
         self._export_stats = {
-            "PROGRESS_DONE": 0,
-            "PROGRESS_CANCELLED": 0,
-            "PROGRESS_UNSPECIFIED": 0,
+            "DONE": 0,
+            "CANCELLED": 0,
+            "UNSPECIFIED": 0,
         }
 
     def get_stat(self):
         with self.lock:
             export_stats_str = ", ".join(
-                f"exports{k[8:].lower()}={v}" if k.startswith("PROGRESS_") else f"exports_{k.lower()}={v}"
+                f"exports{k.lower()}={v}"
                 for k, v in self._export_stats.items()
             )
             return export_stats_str
@@ -120,31 +127,10 @@ class WorkloadS3Export(WorkloadBase):
             return result
 
     def _export_forget(self, export_id):
-        operation_forget_command = [
-            yatest.common.binary_path(os.getenv("YDB_CLI_BINARY")),
-            "--endpoint",
-            self.endpoint,
-            "--database=%s" % self.client.database,
-            "operation",
-            "forget",
-            "%s" % export_id,
-        ]
-        yatest.common.execute(operation_forget_command, wait=True, stdout=sys.stdout, stderr=sys.stderr)
+        self.op_client.forget(export_id)
 
     def _export_is_completed(self, export_id):
-        operation_get_command = [
-            yatest.common.binary_path(os.getenv("YDB_CLI_BINARY")),
-            "--endpoint",
-            self.endpoint,
-            "--database=%s" % self.client.database,
-            "operation",
-            "get",
-            "%s" % export_id,
-            "--format",
-            "proto-json-base64"
-        ]
-        result_get = self._execute_command_and_get_result(operation_get_command)
-        progress_export = result_get["metadata"]["progress"]
+        progress_export = self.s3_client.get_export_to_s3_operation(export_id).progress.name
         if progress_export in self._export_stats:
             self._export_stats[progress_export] += 1
             self._export_forget(export_id)
@@ -154,43 +140,30 @@ class WorkloadS3Export(WorkloadBase):
 
     def _cleanup_in_progress(self):
         self.in_progress = [export_id for export_id in self.in_progress if not self._export_is_completed(export_id)]
-
+        
     def _export_to_s3(self):
-        s3_endpoint, s3_access_key, s3_secret_key, s3_bucket = self.s3_settings
-        export_command = [
-            yatest.common.binary_path(os.getenv("YDB_CLI_BINARY")),
-            "--endpoint",
-            self.endpoint,
-            "--database=" + self.client.database,
-            "export",
-            "s3",
-            "--s3-endpoint",
-            s3_endpoint,
-            "--bucket",
-            s3_bucket,
-            "--access-key",
-            s3_access_key,
-            "--secret-key",
-            s3_secret_key,
-            "--item",
-            "src=" + self.prefix + ",dst=" + self.prefix,
-            "--format",
-            "proto-json-base64"
-        ]
-
         with self.lock:
             self._cleanup_in_progress()
             while len(self.in_progress) >= self.limit:
                 self._cleanup_in_progress()
                 time.sleep(0.1)
-            result_export = self._execute_command_and_get_result(export_command)
-            export_id = result_export["id"]
+            result_export = self.s3_client.export_to_s3(self.settings)
+            export_id = result_export.id
             self.in_progress.append(export_id)
 
     def _loop(self):
         for _ in range(0, 11):
             self.id = f"{uuid.uuid1()}".replace("-", "_")
             self.prefix = f"block_{self.id}"
+            s3_endpoint, s3_access_key, s3_secret_key, s3_bucket = self.s3_settings
+            self.settings = (
+                ExportToS3Settings()
+                .with_endpoint(s3_endpoint)
+                .with_access_key(s3_access_key)
+                .with_secret_key(s3_secret_key)
+                .with_bucket(s3_bucket)
+                .with_source_and_destination(self.prefix, self.prefix)
+            )
             self._setup_tables()
             self._setup_topics()
             self._insert_rows()

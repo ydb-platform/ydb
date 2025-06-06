@@ -29,6 +29,7 @@ View the description of this command by calling it with `--help` option:
 || `--explain` | Execute an explain request for the query. Displays the query's logical plan. The query is not actually executed and does not affect database data. ||
 || `--explain-ast` | Same as `--explain`, but in addition to the query's logical plan, an [abstract syntax tree (AST)](https://en.wikipedia.org/wiki/Abstract_syntax_tree) is printed. The AST section contains a representation in the internal [miniKQL](../../concepts/glossary.md#minikql) language. ||
 || `--explain-analyze` | Execute the query in `EXPLAIN ANALYZE` mode. Displays the query execution plan. Query results are ignored.<br/>**Important note: The query is actually executed, so any changes will be applied to the database**. ||
+|| `--diagnostics-file` | Path to file where the diagnostics will be saved. ||
 || `--format` | Output format.<br/>Available options:
 
 {% include notitle [format](./_includes/result_format_common.md) %}
@@ -37,6 +38,62 @@ View the description of this command by calling it with `--help` option:
 
 ||
 |#
+
+### Diagnostics collection
+
+The `--diagnostics-file <path_to_diagnostics>` option allows you to save extended information about SQL query execution to a separate JSON file.
+
+Diagnostics are collected when statistics gathering is enabled `--stats full`, as well as during execution of `EXPLAIN` queries. For each query, a file named `<path_to_diagnostics>` will be created with the following fields:
+
+- **`plan`** — query execution plan.
+- **`stats`** — query execution statistics.
+- **`meta`** — additional query information in JSON format, including the following fields:
+    - **`created_at`** — query start time (timestamp);
+    - **`query_cluster`** — cluster or provider name;
+    - **`query_database`** — database path;
+    - **`query_id`** — unique query identifier;
+    - **`query_syntax`** — query syntax used;
+    - **`query_text`** — SQL query text.
+
+      **Note:** This field may contain sensitive or personal data, including parameter values.
+
+    - **`query_type`** — query type;
+    - **`table_metadata`** — schemas, indexes, and statistics of the tables involved in the query (JSON format).
+- **`ast`** — abstract syntax tree (AST) for the query.
+
+> **Important:**
+> The diagnostics file may contain confidential information, especially in the **`meta.query_text`**, **`plan`**, and **`ast`** fields. Before sharing this file with third parties (e.g., technical support), it is recommended to carefully review and edit its contents to remove or replace any sensitive data.
+
+**Examples:**
+
+Сommand to collect diagnostics in the `diagnostics.json` file and check its contents:
+
+```bash
+ydb -e <endpoint> -d <database> sql -s "SELECT * FROM users WHERE email = 'alice@example.com';" --stats full --diagnostics-file diagnostics.json
+cat diagnostics.json
+```
+
+If you want to collect diagnostics related to a query plan without actually executing the query, you can execute an `EXPLAIN` query instead:
+
+```bash
+ydb -e <endpoint> -d <database> sql -s "SELECT * FROM users WHERE email = 'alice@example.com';" --explain --diagnostics-file diagnostics.json
+```
+
+In the `diagnostics.json` file, in the **`meta.query_text`** field, the following string will appear:
+
+```json
+"query_text": "SELECT * FROM users WHERE email = 'alice@example.com';"
+```
+
+This contains sensitive information — a user’s email address.
+
+Before sharing the diagnostics file, it is recommended to replace actual values with placeholders:
+
+```json
+"query_text": "SELECT * FROM users WHERE email = '<EMAIL>';"
+```
+
+In this example, the email address can also be found in fields such as **`plan`** and **`ast`**, such entries should also be replaced.
 
 ### Working with parameterized queries {#parameterized-query}
 

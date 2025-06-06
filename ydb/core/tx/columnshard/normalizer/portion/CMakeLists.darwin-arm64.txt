@@ -26,6 +26,7 @@ target_link_libraries(columnshard-normalizer-portion PUBLIC
 
 target_sources(columnshard-normalizer-portion PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/normalizer/portion/normalizer.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/normalizer/portion/clean_unused_tables_template.cpp
 )
 
 

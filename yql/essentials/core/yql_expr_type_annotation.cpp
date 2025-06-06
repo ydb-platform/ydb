@@ -4280,6 +4280,10 @@ IGraphTransformer::TStatus TryConvertTo(TExprNode::TPtr& node, const TTypeAnnota
     }
 
     TIssueScopeGuard guard(ctx.IssueManager, [&] {
+            if (sourceType.GetKind() == ETypeAnnotationKind::Struct && expectedType.GetKind() == ETypeAnnotationKind::Struct) {
+                return MakeIntrusive<TIssue>(ctx.GetPosition(node->Pos()),
+                    TStringBuilder() << "Failed to convert struct");
+            }
             return MakeIntrusive<TIssue>(ctx.GetPosition(node->Pos()),
                 TStringBuilder() << "Failed to convert type: " << sourceType << " to " << expectedType);
         });
@@ -4324,7 +4328,7 @@ IGraphTransformer::TStatus TrySilentConvertTo(TExprNode::TPtr& node, const TType
 
 IGraphTransformer::TStatus TrySilentConvertTo(TExprNode::TPtr& node, const TTypeAnnotationNode& sourceType,
     const TTypeAnnotationNode& expectedType, TExprContext& ctx, TConvertFlags flags) {
-    return TryConvertToImpl(ctx, node, sourceType, expectedType, flags);
+    return TryConvertToImpl(ctx, node, sourceType, expectedType, flags, true);
 }
 
 bool IsDataTypeNumeric(EDataSlot dataSlot) {

@@ -8,69 +8,7 @@
 
 namespace NKikimr::NColumnShard {
 
-    // static TInternalPathId FromProto(const NKikimrTxColumnShard::TInternalOperationData& proto) {
-    //     return TInternalPathId(proto.GetPathId());
-    // }
-    // void ToProto(NKikimrTxColumnShard::TInternalOperationData& proto) const {
-    //     proto.SetPathId(PathId);
-    // }
-
-    // //TODO revise me when implementing resharding
-    // static TInternalPathId FromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& proto) {
-    //     return TInternalPathId(proto.GetPathId());
-    // }
-    // void ToProto(NKikimrColumnShardDataSharingProto::TPortionInfo& proto) const {
-    //     proto.SetPathId(PathId);
-    // }
-
-    // //TODO revise me when implementing resharding
-    // static TInternalPathId FromProto(const NKikimrColumnShardDataSharingProto::TPathIdData& proto) {
-    //     return TInternalPathId(proto.GetPathId());
-    // }
-    // void ToProto(NKikimrColumnShardDataSharingProto::TPathIdData& proto) const {
-    //     proto.SetPathId(PathId);
-    // }
-
-    // //TODO revise me when implementing resharding
-    // // static TInternalPathId FromProto(const NKikimrColumnShardDataSharingProto::TDestinationRemapIds& proto) {
-    // //     return TInternalPathId(proto.GetPathId());
-    // // }
-    // // void ToProto(NKikimrColumnShardDataSharingProto::TDestinationRemapIds& proto) const {
-    // //     proto.SetPathId(PathId);
-    // // }
-
-    // //TODO revise me when implementing resharding
-    // // static TInternalPathId FromProto(const NKikimrColumnShardDataSharingProto::TSourceSession& proto) {
-    // //     return TInternalPathId(proto.GetPathId());
-    // // }
-    // // void ToProto(NKikimrColumnShardDataSharingProto::TSourceSession& proto) const {
-    // //     proto.SetPathId(PathId);
-    // // }
-
-    // //TODO revise me when implementing resharding
-    // // static TInternalPathId FromProto(const NKikimrColumnShardDataSharingProto::TSourceSession::TCursorDynamic& proto) {
-    // //     return TInternalPathId(proto.GetPathId());
-    // // }
-    // // void ToProto(NKikimrColumnShardDataSharingProto::TSourceSession::TCursorDynamic& proto) const {
-    // //     proto.SetPathId(PathId);
-    // // }
-
-    // //TODO revise me when implementing resharding
-    // static TInternalPathId FromProto(const NKikimrColumnShardDataSharingProto::TSourceSession::TPathPortionsHash& proto) {
-    //     return TInternalPathId(proto.GetPathId());
-    // }
-    // void ToProto(NKikimrColumnShardDataSharingProto::TSourceSession::TPathPortionsHash& proto) const {
-    //     proto.SetPathId(PathId);
-    // }
-
-    // //TODO revise me when implementing backup
-    // static TInternalPathId FromProto(const NKikimrColumnShardExportProto::TIdentifier& proto) {
-    //     return TInternalPathId(proto.GetPathId());
-    // }
-    // void ToProto(NKikimrColumnShardExportProto::TIdentifier& proto) const {
-    //     proto.SetPathId(PathId);
-    // }
-
+//Explicit specializations for protos that hold TInternalPathId
 
 template<>
 TInternalPathId TInternalPathId::FromProto(const NKikimrTxColumnShard::TTableVersionInfo& proto) {

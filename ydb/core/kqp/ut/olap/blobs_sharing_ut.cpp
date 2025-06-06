@@ -111,7 +111,8 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
             AFL_VERIFY(ShardIds.size() == ShardsCount)("count", ShardIds.size())("ids", JoinSeq(",", ShardIds));
             std::set<NColumnShard::TInternalPathId> pathIdsSet;
             for (auto&& i : ShardIds) {
-                auto pathIds = Controller->GetPathIds(i);
+                const auto pathIdTranslator = Controller->GetPathIdTranslator(NOlap::TTabletId{i});
+                auto pathIds = pathIdTranslator->GetInternalPathIds();
                 pathIdsSet.insert(pathIds.begin(), pathIds.end());
             }
             PathIds = std::vector<NColumnShard::TInternalPathId>(pathIdsSet.begin(), pathIdsSet.end());
@@ -157,7 +158,6 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
             const TString sessionId = TGUID::CreateTimebased().AsUuidString();
             NOlap::NDataSharing::TTransferContext transferContext((NOlap::TTabletId)destination, sourceTablets, snapshot, move);
             NOlap::NDataSharing::TDestinationSession session(std::make_shared<TTestController>(), pathIdsRemap, sessionId, transferContext);
-            //TODO move me to test controller
             Kikimr.GetTestServer().GetRuntime()->Send(MakePipePerNodeCacheID(false), NActors::TActorId(), new TEvPipeCache::TEvForward(
                 new NOlap::NDataSharing::NEvents::TEvProposeFromInitiator(session), destination, false));
             {
@@ -281,7 +281,7 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
         void WaitResharding(const TString& hint = "") {
             const TInstant start = TInstant::Now();
             bool clean = false;
-            while (TInstant::Now() - start < TDuration::Seconds(60)) {
+            while (TInstant::Now() - start < TDuration::Seconds(200)) {
                 NYdb::NOperation::TOperationClient operationClient(Kikimr.GetDriver());
                 auto result = operationClient.List<NYdb::NSchemeShard::TBackgroundProcessesResponse>().GetValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
@@ -413,7 +413,7 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
 
     public:
         TAsyncReshardingTest() {
-            TLocalHelper(Kikimr).CreateTestOlapTable("olapTable", "olapStore", 2, 1);
+            TLocalHelper(Kikimr).CreateTestOlapTable("olapTable", "olapStore", 1024, 32);
         }
 
         void AddBatch(int numRows) {

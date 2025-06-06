@@ -250,9 +250,10 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             std::set<NColumnShard::TInternalPathId> pathids;
             for (auto&& i : csController->GetShardActualIds()) {
                 Cerr << ">>> shard actual id: " << i << Endl;
-                for (auto&& j : csController->GetPathIds(i)) {
-                    Cerr << ">>> path id: " << j << Endl;
-                    pathids.insert(j);
+                const auto pathIdTranslator = csController->GetPathIdTranslator(NOlap::TTabletId{i});
+                for (const auto& internalPathId : pathIdTranslator->GetInternalPathIds()) {
+                    Cerr << ">>> path id: " << internalPathId << Endl;
+                    pathids.insert(internalPathId);
                 }
                 if (++shard == 3) {
                     break;

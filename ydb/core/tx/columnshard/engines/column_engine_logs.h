@@ -207,10 +207,6 @@ public:
         return GranulesStorage->GetGranuleOptional(pathId);
     }
 
-    std::vector<std::shared_ptr<TGranuleMeta>> GetTables(const std::optional<THashSet<TInternalPathId>>& pathIdFilter) const {
-        return GranulesStorage->GetTables(pathIdFilter);
-    }
-
     ui64 GetTabletId() const {
         return TabletId;
     }

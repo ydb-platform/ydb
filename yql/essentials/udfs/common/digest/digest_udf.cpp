@@ -64,6 +64,7 @@ namespace {
             // See YQL-19967 for more info.
             if (MKQL_RUNTIME_VERSION < 51U && typesOnly) {
                 builder.SimpleSignature<TResult(TAutoMap<char*>)>();
+                builder.IsStrict();
                 return true;
             }
 

@@ -251,8 +251,8 @@ std::size_t TFDStorage::AddFD(
     TTableAliasMap* tableAliases
 ) {
     auto fd = TFunctionalDependency{
-        .AntecedentItems = {static_cast<std::size_t>(GetIdxByColumn(antecedentColumn, true, tableAliases))},
-        .ConsequentItem = static_cast<std::size_t>(GetIdxByColumn(consequentColumn, true, tableAliases)),
+        .AntecedentItems = {GetIdxByColumn(antecedentColumn, true, tableAliases)},
+        .ConsequentItem = GetIdxByColumn(consequentColumn, true, tableAliases),
         .Type = type,
         .AlwaysActive = alwaysActive
     };
@@ -267,7 +267,7 @@ std::size_t TFDStorage::AddConstant(
 ) {
     auto fd = TFunctionalDependency{
         .AntecedentItems = {},
-        .ConsequentItem = static_cast<std::size_t>(GetIdxByColumn(constantColumn, true, tableAliases)),
+        .ConsequentItem = GetIdxByColumn(constantColumn, true, tableAliases),
         .Type = TFunctionalDependency::EImplication,
         .AlwaysActive = alwaysActive
     };
@@ -283,7 +283,7 @@ std::size_t TFDStorage::AddImplication(
 ) {
     auto fd = TFunctionalDependency{
         .AntecedentItems = ConvertColumnIntoIndexes(antecedentColumns, true, tableAliases),
-        .ConsequentItem = static_cast<std::size_t>(GetIdxByColumn(consequentColumn, true, tableAliases)),
+        .ConsequentItem = GetIdxByColumn(consequentColumn, true, tableAliases),
         .Type = TFunctionalDependency::EImplication,
         .AlwaysActive = alwaysActive
     };
@@ -298,8 +298,8 @@ std::size_t TFDStorage::AddEquivalence(
     TTableAliasMap* tableAliases
 ) {
     auto fd = TFunctionalDependency{
-        .AntecedentItems = {static_cast<std::size_t>(GetIdxByColumn(lhs, true, tableAliases))},
-        .ConsequentItem = static_cast<std::size_t>(GetIdxByColumn(rhs, true, tableAliases)),
+        .AntecedentItems = {GetIdxByColumn(lhs, true, tableAliases)},
+        .ConsequentItem = GetIdxByColumn(rhs, true, tableAliases),
         .Type = TFunctionalDependency::EEquivalence,
         .AlwaysActive = alwaysActive
     };
@@ -454,7 +454,7 @@ std::vector<std::size_t> TFDStorage::ConvertColumnIntoIndexes(
     items.reserve(ordering.size());
 
     for (const auto& column: ordering) {
-        if (auto idx = GetIdxByColumn(column, createIfNotExists, tableAliases); idx >= 0) {
+        if (auto idx = GetIdxByColumn(column, createIfNotExists, tableAliases); idx != Max<size_t>()) {
             items.push_back(idx);
         } else {
             return {};
@@ -464,7 +464,7 @@ std::vector<std::size_t> TFDStorage::ConvertColumnIntoIndexes(
     return items;
 }
 
-i64 TFDStorage::GetIdxByColumn(
+std::size_t TFDStorage::GetIdxByColumn(
     const TJoinColumn& column,
     bool createIfNotExists,
     TTableAliasMap* tableAliases
@@ -484,7 +484,7 @@ i64 TFDStorage::GetIdxByColumn(
 
     Y_ENSURE(!baseColumn.AttributeName.empty());
     if (!createIfNotExists) {
-        return -1;
+        return Max<size_t>();
     }
 
     ColumnByIdx.push_back(baseColumn);
@@ -739,11 +739,6 @@ std::size_t TOrderingsStateMachine::TNFSM::AddNode(const TOrdering& ordering, TN
         if (Nodes[i].Ordering == ordering) {
             return i;
         }
-    }
-
-    if (ordering.Items.empty()) {
-        int a = 2;
-        (void)a;
     }
 
     Nodes.emplace_back(ordering, type, interestingOrderingIdx);

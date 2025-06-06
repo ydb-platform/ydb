@@ -26,38 +26,38 @@
 {%- endmacro -%}
 
 {%- macro AddNonFileDeps(current_target, file_classpaths, implementationFunc, apiFunc) -%}
-{%-     for library in current_target.consumer if library.classpath -%}
+{%-     for library in current_target.consumer -%}
 {%-         set classpath = library.classpath -%}
-{%-         if file_classpaths|select('eq', classpath)|length == 0 -%}
-{%-             if classpath|replace('"','') == classpath -%}
-{%-                 set classpath = '"' + classpath + '"' -%}
-{%-             endif -%}
-{%-             include "[generator]/patch_classpath.jinja" -%}
-{%-             if library.type != "contrib" -%}
-{%-                 if library.testdep -%}
-{%-                     set classpath = '":' + library.testdep | replace("/", ":") + '"' -%}
-{%-                     include "[generator]/patch_classpath.jinja" %}
-    {{ implementationFunc }}(project(path = {{ classpath }}, configuration = "testArtifacts"))
-{%-                 else %}
-    {{ implementationFunc }}({{ classpath }})
-{%-                 endif -%}
-{%-             else -%}
-{%-                 if classpath|replace('project(":', '') != classpath -%}
-{#-                     Contrib in exported arcadia folders #}
+{%-         if (library.type == "ejlibrary") or (classpath and file_classpaths|select('eq', classpath)|length == 0) -%}
+{%-             if (library.type == "ejlibrary") or (library.type == "contrib" and library.jar and classpath|replace('project(":', '') != classpath) %}
+{#-                 External java library or contrib in exported arcadia folders #}
     {{ implementationFunc }}(files("$output_root/{{ library.jar }}"))
+{%-             else -%}
+{%-                 if classpath|replace('"','') == classpath -%}
+{%-                     set classpath = '"' + classpath + '"' -%}
+{%-                 endif -%}
+{%-                 include "[generator]/patch_classpath.jinja" -%}
+{%-                 if library.type != "contrib" -%}
+{%-                     if library.testdep -%}
+{%-                         set classpath = '":' + library.testdep | replace("/", ":") + '"' -%}
+{%-                         include "[generator]/patch_classpath.jinja" %}
+    {{ implementationFunc }}(project(path = {{ classpath }}, configuration = "testArtifacts"))
+{%-                     else %}
+    {{ implementationFunc }}({{ classpath }})
+{%-                     endif -%}
 {%-                 else %}
     {{ apiFunc }}({{ classpath }})
 {%-                 endif -%}
-{%-             endif -%}
-{%-             if library.excludes.consumer|length and not build_contribs -%} {
-{%-                 for exclude in library.excludes.consumer if exclude.classpath -%}
-{%-                     set classpath = exclude.classpath|replace('"','') -%}
-{%-                     set classpath_parts = split(classpath, ':') -%}
-{%-                     if (classpath_parts[0] != "") and (classpath_parts[1] != "") %}
+{%-                 if library.excludes.consumer|length and not build_contribs -%} {
+{%-                     for exclude in library.excludes.consumer if exclude.classpath -%}
+{%-                         set classpath = exclude.classpath|replace('"','') -%}
+{%-                         set classpath_parts = split(classpath, ':') -%}
+{%-                         if (classpath_parts[0] != "") and (classpath_parts[1] != "") %}
         exclude(group = "{{ classpath_parts[0] }}", module = "{{ classpath_parts[1] }}")
-{%-                     endif -%}
-{%-                 endfor %}
+{%-                         endif -%}
+{%-                     endfor %}
     }
+{%-                 endif -%}
 {%-             endif -%}
 {%-         endif -%}
 {%-     endfor -%}

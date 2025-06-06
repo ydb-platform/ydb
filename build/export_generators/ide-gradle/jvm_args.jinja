@@ -18,7 +18,9 @@
 {%- if jvm_args|length %}
 
 tasks.withType<JavaExec> {
+{#- glue -#}
 {{ JvmArgs(jvm_args) }}
+{#- glue -#}
 }
 {%- endif -%}
 
@@ -30,6 +32,7 @@ tasks.withType<JavaExec> {
 {%- if test_jvm_args|length %}
 
 tasks.withType<Test> {
+{#- glue -#}
 {{ JvmArgs(test_jvm_args) }}
 {%- if target.enable_preview %}
     environment["JAVA_TOOL_OPTIONS"] = "--enable-preview"

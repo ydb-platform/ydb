@@ -352,6 +352,9 @@ std::size_t TFDStorage::AddInterestingOrdering(
     }
 
     auto [items, foundIdx] = ConvertColumnsAndFindExistingOrdering(interestingOrdering, directions, type, true, tableAliases);
+    if (items.Items.empty()) {
+        return std::numeric_limits<std::size_t>::max();
+    }
 
     if (foundIdx >= 0) {
         return static_cast<std::size_t>(foundIdx);
@@ -381,7 +384,7 @@ std::size_t TFDStorage::AddInterestingOrdering(
 }
 
 TVector<TJoinColumn> TFDStorage::GetInterestingOrderingsColumnNamesByIdx(std::size_t interestingOrderingIdx) const {
-    Y_ASSERT(interestingOrderingIdx < InterestingOrderings.size());
+    Y_ENSURE(interestingOrderingIdx < InterestingOrderings.size());
 
     TVector<TJoinColumn> columns;
     columns.reserve(InterestingOrderings[interestingOrderingIdx].Items.size());
@@ -425,7 +428,14 @@ std::pair<TOrdering, i64> TFDStorage::ConvertColumnsAndFindExistingOrdering(
     bool createIfNotExists,
     TTableAliasMap* tableAliases
 ) {
-    Y_ENSURE(directions.empty() || directions.size() == interestingOrdering.size());
+    if(!(
+        directions.empty() && type == TOrdering::EShuffle ||
+        directions.size() == interestingOrdering.size() && type == TOrdering::ESorting
+    )) {
+        YQL_CLOG(TRACE, CoreDq)
+            << "Ordering and directions sizes mismatch : " << directions.size() << " vs " << interestingOrdering.size();
+        return {TOrdering(), -1};
+    }
 
     std::vector<std::size_t> items = ConvertColumnIntoIndexes(interestingOrdering, createIfNotExists, tableAliases);
     if (items.empty()) {
@@ -803,6 +813,10 @@ void TOrderingsStateMachine::TNFSM::ApplyFDs(
 
     for (std::size_t nodeIdx = 0; nodeIdx < Nodes.size() && Nodes.size() < EMaxNFSMStates; ++nodeIdx) {
         for (std::size_t fdIdx = 0; fdIdx < fds.size() && Nodes.size() < EMaxNFSMStates; ++fdIdx) {
+            if (Nodes[nodeIdx].Ordering.Items.empty()) {
+                continue;
+            }
+            
             TFunctionalDependency fd = fds[fdIdx];
 
             auto applyFD = [this, &itemInfo, nodeIdx, maxInterestingOrderingSize](const TFunctionalDependency& fd, std::size_t fdIdx) {
@@ -861,9 +875,9 @@ void TOrderingsStateMachine::TNFSM::ApplyFDs(
                     return;
                 }
 
-                Y_ASSERT(antecedentItemIdx < Nodes[nodeIdx].Ordering.Items.size());
+                Y_ENSURE(antecedentItemIdx < Nodes[nodeIdx].Ordering.Items.size());
                 if (fd.IsEquivalence()) {
-                    Y_ASSERT(fd.AntecedentItems.size() == 1);
+                    Y_ENSURE(fd.AntecedentItems.size() == 1);
                     std::vector<std::size_t> newOrdering = Nodes[nodeIdx].Ordering.Items;
                     newOrdering[antecedentItemIdx] = fd.ConsequentItem;
 
@@ -885,12 +899,12 @@ void TOrderingsStateMachine::TNFSM::ApplyFDs(
                         newOrdering.insert(newOrdering.begin() + i, fd.ConsequentItem);
 
                         auto newDirections = Nodes[nodeIdx].Ordering.Directions;
-                        newDirections.insert(newDirections.begin() + i, TOrdering::TItem::EDirection::ENone);
                         if (newDirections.empty()) { // smthing went wrong during ordering adding stage
                             return;
                         }
+                        newDirections.insert(newDirections.begin() + i, TOrdering::TItem::EDirection::ENone);
 
-                        Y_ASSERT(fd.ConsequentItem < itemInfo.size());
+                        Y_ENSURE(fd.ConsequentItem < itemInfo.size());
 
                         if (itemInfo[fd.ConsequentItem].UsedInAscOrdering) {
                             newDirections[i] = TOrdering::TItem::EDirection::EAscending;

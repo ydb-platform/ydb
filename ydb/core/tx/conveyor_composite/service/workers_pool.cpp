@@ -1,5 +1,7 @@
 #include "workers_pool.h"
 
+#include <ydb/core/kqp/query_data/kqp_predictor.h>
+
 namespace NKikimr::NConveyorComposite {
 TWorkersPool::TWorkersPool(const TString& conveyorName, const NActors::TActorId& distributorId, const NConfig::TWorkersPool& config,
     const TCounters& counters, const std::vector<std::shared_ptr<TProcessCategory>>& categories)
@@ -12,13 +14,14 @@ TWorkersPool::TWorkersPool(const TString& conveyorName, const NActors::TActorId&
     }
     AFL_VERIFY(Processes.size());
     for (ui32 i = 0; i < WorkersCount; ++i) {
-        Workers.emplace_back(std::make_unique<TWorker>(conveyorName, config.GetWorkerCPUUsage(i), distributorId, i,
-            config.GetWorkersPoolId(), Counters.SendFwdHistogram, Counters.SendFwdDuration));
+        Workers.emplace_back(std::make_unique<TWorker>(conveyorName, config.GetWorkerCPUUsage(i, NKqp::TStagePredictor::GetUsableThreads()),
+            distributorId, i, config.GetWorkersPoolId(),
+            Counters.SendFwdHistogram, Counters.SendFwdDuration));
         ActiveWorkersIdx.emplace_back(i);
     }
     AFL_VERIFY(WorkersCount)("name", conveyorName)("action", "conveyor_registered")("config", config.DebugString())("actor_id", distributorId)(
         "count", WorkersCount);
-    Counters.WaitingQueueSizeLimit->Set(config.GetWorkersCountInfo().GetCPUInTime(NKqp::TStagePredictor::GetUsableThreads()));
+    Counters.WaitingQueueSizeLimit->Set(config.GetWorkersCountInfo().GetCPUUsageDouble(NKqp::TStagePredictor::GetUsableThreads()));
     Counters.AmountCPULimit->Set(0);
     Counters.AvailableWorkersCount->Set(0);
     Counters.WorkersCountLimit->Set(WorkersCount);

@@ -2,12 +2,13 @@
 
 #include <ydb/library/actors/core/log.h>
 
+#include <util/generic/serialized_enum.h>
 #include <util/string/builder.h>
 #include <util/string/join.h>
 
 namespace NKikimr::NConveyorComposite::NConfig {
 
-TConclusionStatus TConfig::DeserializeFromProto(const NKikimrConfig::TCompositeConveyorConfig& config, const ui64 usableThreadsCount) {
+TConclusionStatus TConfig::DeserializeFromProto(const NKikimrConfig::TCompositeConveyorConfig& config) {
     if (!config.HasEnabled()) {
         EnabledFlag = true;
     } else {
@@ -19,7 +20,7 @@ TConclusionStatus TConfig::DeserializeFromProto(const NKikimrConfig::TCompositeC
     TWorkersPool* defWorkersPool = nullptr;
     WorkerPools.reserve(1 + config.GetWorkerPools().size());
     if ((ui32)config.GetCategories().size() != GetEnumAllValues<ESpecialTaskCategory>().size()) {
-        TWorkersPool wp(WorkerPools.size(), usableThreadsCount);
+        TWorkersPool wp(WorkerPools.size());
         WorkerPools.emplace_back(std::move(wp));
         defWorkersPool = &WorkerPools.front();
     }
@@ -44,7 +45,7 @@ TConclusionStatus TConfig::DeserializeFromProto(const NKikimrConfig::TCompositeC
     }
     for (auto&& i : config.GetWorkerPools()) {
         TWorkersPool wp(WorkerPools.size());
-        auto conclusion = wp.DeserializeFromProto(i, usableThreadsCount);
+        auto conclusion = wp.DeserializeFromProto(i);
         if (conclusion.IsFail()) {
             return conclusion;
         }
@@ -65,15 +66,15 @@ TConclusionStatus TConfig::DeserializeFromProto(const NKikimrConfig::TCompositeC
     return TConclusionStatus::Success();
 }
 
-double TWorkersPool::GetWorkerCPUUsage(const ui32 workerIdx) const {
-    AFL_VERIFY(WorkersCountDouble);
+double TWorkersPool::GetWorkerCPUUsage(const ui32 workerIdx, const ui32 totalThreadsCount) const {
+    const double workersCountDouble = WorkersCountInfo.GetCPUUsageDouble(totalThreadsCount);
     double wholePart;
-    const double fractionalPart = std::modf(WorkersCountDouble, &wholePart);
+    const double fractionalPart = std::modf(workersCountDouble, &wholePart);
     if (workerIdx + 1 <= wholePart) {
         return 1;
     } else {
         AFL_VERIFY(workerIdx == wholePart);
-        AFL_VERIFY(fractionalPart)("count", WorkersCountDouble);
+        AFL_VERIFY(fractionalPart)("count", workersCountDouble);
         return fractionalPart;
     }
 }
@@ -99,6 +100,19 @@ TString TConfig::DebugString() const {
     sb << "Enabled=" << EnabledFlag << ";";
     sb << "}";
     return sb;
+}
+
+TConfig TConfig::BuildDefault() {
+    TConfig result;
+    ui32 idx = 0;
+    for (auto&& i : GetEnumAllValues<ESpecialTaskCategory>()) {
+        result.Categories.emplace_back(i);
+        result.WorkerPools.emplace_back(idx, std::nullopt, 0.33);
+        AFL_VERIFY(result.WorkerPools.back().AddLink(i));
+        AFL_VERIFY(result.Categories.back().AddWorkerPool(idx));
+        ++idx;
+    }
+    return result;
 }
 
 TWorkersPool::TWorkersPool(const ui32 wpId, const std::optional<double> workersCountDouble, const std::optional<double> workersFraction)
@@ -135,7 +149,7 @@ TString TWorkersPool::DebugString() const {
     TStringBuilder sb;
     sb << "{";
     sb << "id=" << WorkersPoolId << ";";
-    sb << "count=" << WorkersCountDouble << ";";
+    sb << "threads=" << WorkersCountInfo.DebugString() << ";";
     TStringBuilder sbLinks;
     sbLinks << "[";
     for (auto&& l : Links) {
@@ -147,9 +161,8 @@ TString TWorkersPool::DebugString() const {
     return sb;
 }
 
-ui32 TWorkersPool::GetWorkersCount() const {
-    AFL_VERIFY(WorkersCountDouble);
-    return ceil(WorkersCountDouble);
+ui32 TWorkersPool::GetWorkersCount(const ui32 totalThreadsCount) const {
+    return WorkersCountInfo.GetThreadsCount(totalThreadsCount);
 }
 
 TString TCategory::DebugString() const {
@@ -167,6 +180,54 @@ TString TWorkerPoolCategoryUsage::DebugString() const {
     sb << "{";
     sb << "c=" << Category << ";";
     sb << "w=" << Weight << ";";
+    sb << "}";
+    return sb;
+}
+
+TThreadsCountInfo::TThreadsCountInfo(const std::optional<double> count, const std::optional<double> fraction)
+    : Count(count)
+    , Fraction(fraction) {
+    AFL_VERIFY(Count || Fraction);
+}
+
+double TThreadsCountInfo::GetCPUUsageDouble(const ui32 totalThreadsCount) const {
+    if (Count) {
+        return *Count;
+    }
+    AFL_VERIFY(Fraction);
+    const double result = *Fraction * totalThreadsCount;
+    if (!result) {
+        return 1;
+    }
+    return result;
+}
+
+NKikimr::TConclusionStatus TThreadsCountInfo::DeserializeFromProto(const NKikimrConfig::TCompositeConveyorConfig::TWorkersPool& poolInfo) {
+    if (poolInfo.HasWorkersCount()) {
+        Count = poolInfo.GetWorkersCount();
+        if (*Count <= 0) {
+            return TConclusionStatus::Fail("incorrect threads count: " + ::ToString(*Count));
+        }
+        Fraction.reset();
+    } else if (poolInfo.HasDefaultFractionOfThreadsCount()) {
+        Fraction = poolInfo.GetDefaultFractionOfThreadsCount();
+        if (*Fraction <= 0 || 1 < *Fraction) {
+            return TConclusionStatus::Fail("incorrect threads count fraction: " + ::ToString(*Fraction));
+        }
+        Count.reset();
+    }
+    return TConclusionStatus::Success();
+}
+
+TString TThreadsCountInfo::DebugString() const {
+    TStringBuilder sb;
+    sb << "{";
+    if (Count) {
+        sb << "c=" << *Count << ";";
+    }
+    if (Fraction) {
+        sb << "f=" << *Fraction << ";";
+    }
     sb << "}";
     return sb;
 }

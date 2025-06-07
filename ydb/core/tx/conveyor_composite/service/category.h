@@ -25,6 +25,11 @@ public:
         RegisterScope("DEFAULT", TCPULimitsConfig(1000, 1000)).RegisterProcess(0);
     }
 
+    ~TProcessCategory() {
+        MutableProcessScope("DEFAULT").UnregisterProcess(0);
+        UnregisterScope("DEFAULT");
+    }
+
     ESpecialTaskCategory GetCategory() const {
         return Category;
     }

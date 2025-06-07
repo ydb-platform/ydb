@@ -6,6 +6,7 @@
 #include <ydb/core/tx/conveyor/usage/config.h>
 
 #include <ydb/library/accessor/accessor.h>
+#include <ydb/library/conclusion/result.h>
 #include <ydb/library/conclusion/status.h>
 
 namespace NKikimr::NConveyorComposite::NConfig {
@@ -45,45 +46,17 @@ private:
 
 public:
     TThreadsCountInfo() = default;
-    TThreadsCountInfo(const std::optional<double> count, const std::optional<double> fraction)
-        : Count(count)
-        , Fraction(fraction) {
-        AFL_VERIFY(Count || Fraction);
-    }
+    TThreadsCountInfo(const std::optional<double> count, const std::optional<double> fraction);
+
+    TString DebugString() const;
 
     ui32 GetThreadsCount(const ui32 totalThreadsCount) const {
         return std::ceil(GetCPUUsageDouble(totalThreadsCount));
     }
 
-    double GetCPUUsageDouble(const ui32 totalThreadsCount) const {
-        if (Count) {
-            return *Count;
-        }
-        AFL_VERIFY(Fraction);
-        const double result = *Fraction * totalThreadsCount;
-        if (!result) {
-            return 1;
-        }
-        return result;
-    }
+    double GetCPUUsageDouble(const ui32 totalThreadsCount) const;
 
-    TConclusionStatus DeserializeFromProto(const NKikimrConfig::TCompositeConveyorConfig::TWorkersPool& poolInfo) {
-        if (poolInfo.HasWorkersCount()) {
-            Count = poolInfo.GetWorkersCount();
-            if (*Count <= 0) {
-                return TConclusionStatus::Fail("incorrect threads count: " + ::ToString(*Count));
-            }
-            Fraction.reset();
-        } else if (poolInfo.HasDefaultFractionOfThreadsCount()) {
-            Fraction = poolInfo.GetDefaultFractionOfThreadsCount();
-            if (*Fraction <= 0 || 1 < *Fraction) {
-                return TConclusionStatus::Fail("incorrect threads count fraction: " + ::ToString(*Fraction));
-            }
-            Count.reset();
-        }
-        return TConclusionStatus::Success();
-    }
-
+    TConclusionStatus DeserializeFromProto(const NKikimrConfig::TCompositeConveyorConfig::TWorkersPool& poolInfo);
 };
 
 class TWorkersPool {
@@ -93,8 +66,8 @@ private:
     YDB_READONLY_DEF(std::vector<TWorkerPoolCategoryUsage>, Links);
 
 public:
-    double GetWorkerCPUUsage(const ui32 workerIdx) const;
-    ui32 GetWorkersCount() const;
+    double GetWorkerCPUUsage(const ui32 workerIdx, const ui32 totalThreadsCount) const;
+    ui32 GetWorkersCount(const ui32 totalThreadsCount) const;
 
     bool AddLink(const ESpecialTaskCategory cat) {
         for (auto&& i : Links) {
@@ -114,8 +87,7 @@ public:
 
     TWorkersPool(const ui32 wpId, const std::optional<double> workersCountDouble, const std::optional<double> workersFraction);
 
-    [[nodiscard]] TConclusionStatus DeserializeFromProto(
-        const NKikimrConfig::TCompositeConveyorConfig::TWorkersPool& proto, const ui64 usableThreadsCount);
+    [[nodiscard]] TConclusionStatus DeserializeFromProto(const NKikimrConfig::TCompositeConveyorConfig::TWorkersPool& proto);
 };
 
 class TCategory {
@@ -164,22 +136,11 @@ private:
     [[nodiscard]] TConclusionStatus DeserializeFromProto(const NKikimrConfig::TCompositeConveyorConfig& config);
 
 public:
-    static TConfig BuildDefault() {
-        TConfig result;
-        ui32 idx = 0;
-        for (auto&& i : GetEnumAllValues<ESpecialTaskCategory>()) {
-            result.Categories.emplace_back(i);
-            result.WorkerPools.emplace_back(idx, std::nullopt, 0.33);
-            AFL_VERIFY(result.WorkerPools.back().AddLink(i));
-            AFL_VERIFY(result.Categories.back().AddWorkerPool(idx));
-            ++idx;
-        }
-        return result;
-    }
+    static TConfig BuildDefault();
 
-    static TConclusion<TConfig> BuildFromProto(const NKikimrConfig::TCompositeConveyorConfig& config) {
+    static TConclusion<TConfig> BuildFromProto(const NKikimrConfig::TCompositeConveyorConfig& protoConfig) {
         TConfig config;
-        auto conclusion = config.DeserializeFromProto(config);
+        auto conclusion = config.DeserializeFromProto(protoConfig);
         if (conclusion.IsFail()) {
             return conclusion;
         }
@@ -206,4 +167,4 @@ public:
     TString DebugString() const;
 };
 
-}
+}   // namespace NKikimr::NConveyorComposite

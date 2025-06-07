@@ -71,7 +71,10 @@ void TTxScan::Complete(const TActorContext& ctx) {
         if (request.HasLockTxId()) {
             read.LockId = request.GetLockTxId();
         }
-        read.PathId = TInternalPathId::FromRawValue(request.GetLocalPathId());
+
+        const auto& schemeShardLocalPathId = NColumnShard::TSchemeShardLocalPathId::FromRawValue(request.GetLocalPathId());
+        const auto& internalPathId = Self->TablesManager.ResolveInternalPathId(schemeShardLocalPathId);
+        read.PathId = internalPathId ? *internalPathId : TInternalPathId{};
         read.ReadNothing = !Self->TablesManager.HasTable(read.PathId);
         read.TableName = table;
 

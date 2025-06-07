@@ -37,7 +37,8 @@ public:
 class TWriteMeta: public NColumnShard::TMonitoringObjectsCounter<TWriteMeta>, TNonCopyable {
 private:
     YDB_ACCESSOR(ui64, WriteId, 0);
-    YDB_READONLY_DEF(NColumnShard::TInternalPathId, TableId);
+    YDB_READONLY_DEF(NColumnShard::TInternalPathId, InternalPathId);
+    YDB_READONLY_DEF(NColumnShard::TSchemeShardLocalPathId, SchemeShardLocalPathId);
     YDB_ACCESSOR_DEF(NActors::TActorId, Source);
     YDB_ACCESSOR_DEF(std::optional<ui32>, GranuleShardingVersion);
     YDB_READONLY(TString, Id, TGUID::CreateTimebased().AsUuidString());
@@ -88,10 +89,11 @@ public:
         }
     }
 
-    TWriteMeta(const ui64 writeId, const NColumnShard::TInternalPathId tableId, const NActors::TActorId& source, const std::optional<ui32> granuleShardingVersion,
+    TWriteMeta(const ui64 writeId, const NColumnShard::TSchemeShardLocalPathId schemeShardLocalPathId, const NColumnShard::TInternalPathId internalPathId, const NActors::TActorId& source, const std::optional<ui32> granuleShardingVersion,
         const TString& writingIdentifier, const std::shared_ptr<TWriteFlowCounters>& counters)
         : WriteId(writeId)
-        , TableId(tableId)
+        , InternalPathId(internalPathId)
+        , SchemeShardLocalPathId(schemeShardLocalPathId)
         , Source(source)
         , GranuleShardingVersion(granuleShardingVersion)
         , Id(writingIdentifier)

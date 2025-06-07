@@ -4,7 +4,7 @@
 
 namespace NKikimr::NConveyorComposite {
 TWorkersPool::TWorkersPool(const TString& conveyorName, const NActors::TActorId& distributorId, const NConfig::TWorkersPool& config,
-    const TWorkersPoolCounters& counters, const std::vector<std::shared_ptr<TProcessCategory>>& categories)
+    const std::shared_ptr<TWorkersPoolCounters>& counters, const std::vector<std::shared_ptr<TProcessCategory>>& categories)
     : WorkersCount(config.GetWorkersCountInfo().GetThreadsCount(NKqp::TStagePredictor::GetUsableThreads()))
     , Counters(counters) {
     Workers.reserve(WorkersCount);
@@ -16,15 +16,14 @@ TWorkersPool::TWorkersPool(const TString& conveyorName, const NActors::TActorId&
     for (ui32 i = 0; i < WorkersCount; ++i) {
         Workers.emplace_back(std::make_unique<TWorker>(conveyorName, config.GetWorkerCPUUsage(i, NKqp::TStagePredictor::GetUsableThreads()),
             distributorId, i, config.GetWorkersPoolId(),
-            Counters.SendFwdHistogram, Counters.SendFwdDuration));
+            Counters->SendFwdHistogram, Counters->SendFwdDuration));
         ActiveWorkersIdx.emplace_back(i);
     }
     AFL_VERIFY(WorkersCount)("name", conveyorName)("action", "conveyor_registered")("config", config.DebugString())("actor_id", distributorId)(
         "count", WorkersCount);
-    Counters.WaitingQueueSizeLimit->Set(config.GetWorkersCountInfo().GetCPUUsageDouble(NKqp::TStagePredictor::GetUsableThreads()));
-    Counters.AmountCPULimit->Set(0);
-    Counters.AvailableWorkersCount->Set(0);
-    Counters.WorkersCountLimit->Set(WorkersCount);
+    Counters->AmountCPULimit->Set(0);
+    Counters->AvailableWorkersCount->Set(0);
+    Counters->WorkersCountLimit->Set(WorkersCount);
 }
 
 bool TWorkersPool::HasFreeWorker() const {
@@ -35,7 +34,7 @@ void TWorkersPool::RunTask(std::vector<TWorkerTask>&& tasksBatch) {
     AFL_VERIFY(HasFreeWorker());
     const auto workerIdx = ActiveWorkersIdx.back();
     ActiveWorkersIdx.pop_back();
-    Counters.AvailableWorkersCount->Set(ActiveWorkersIdx.size());
+    Counters->AvailableWorkersCount->Set(ActiveWorkersIdx.size());
 
     auto& worker = Workers[workerIdx];
     worker.OnStartTask();
@@ -46,7 +45,7 @@ void TWorkersPool::ReleaseWorker(const ui32 workerIdx) {
     AFL_VERIFY(workerIdx < Workers.size());
     Workers[workerIdx].OnStopTask();
     ActiveWorkersIdx.emplace_back(workerIdx);
-    Counters.AvailableWorkersCount->Set(ActiveWorkersIdx.size());
+    Counters->AvailableWorkersCount->Set(ActiveWorkersIdx.size());
 }
 
 bool TWorkersPool::DrainTasks() {

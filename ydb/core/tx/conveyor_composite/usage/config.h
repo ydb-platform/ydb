@@ -67,10 +67,7 @@ private:
     YDB_READONLY_DEF(std::vector<TWorkerPoolCategoryUsage>, Links);
 
 public:
-    const TString& GetName() const {
-        AFL_VERIFY(!!PoolName);
-        return PoolName;
-    }
+    const TString& GetName() const;
 
     double GetWorkerCPUUsage(const ui32 workerIdx, const ui32 totalThreadsCount) const;
     ui32 GetWorkersCount(const ui32 totalThreadsCount) const;

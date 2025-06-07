@@ -684,6 +684,7 @@ message TCompositeConveyorConfig {
         optional double WorkersCount = 1;
         optional double DefaultFractionOfThreadsCount = 2;
         repeated TWorkerPoolCategoryLink Links = 3;
+        optional string Name = 4;
     }
 
     optional bool Enabled = 1 [default = true];

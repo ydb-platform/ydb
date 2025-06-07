@@ -177,6 +177,11 @@ ui32 TWorkersPool::GetWorkersCount(const ui32 totalThreadsCount) const {
     return WorkersCountInfo.GetThreadsCount(totalThreadsCount);
 }
 
+const TString& TWorkersPool::GetName() const {
+    AFL_VERIFY(!!PoolName);
+    return PoolName;
+}
+
 TString TCategory::DebugString() const {
     TStringBuilder sb;
     sb << "{";

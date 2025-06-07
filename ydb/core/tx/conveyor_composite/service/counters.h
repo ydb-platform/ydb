@@ -75,6 +75,8 @@ private:
     THashMap<TString, std::shared_ptr<TWorkersPoolCounters>> WorkersPoolSignals;
 
 public:
+    using TBase::TBase;
+
     std::shared_ptr<TCategorySignals> GetCategorySignals(const ESpecialTaskCategory cat) {
         auto it = CategorySignals.find(cat);
         if (it == CategorySignals.end()) {

@@ -553,6 +553,13 @@ private:
     TSpaceWatcher* SpaceWatcher;
     TActorId SpaceWatcherId;
 
+    struct TTieringErrorInfo {
+        TString Error;
+        TInstant Time;
+    };
+
+    THashMap<TString, TTieringErrorInfo> LastTieringErrors;
+
     void TryRegisterMediatorTimeCast();
     void UnregisterMediatorTimeCast();
     void TryAbortWrites(NIceDb::TNiceDb& db, NOlap::TDbWrapper& dbTable, THashSet<TInsertWriteId>&& writesToAbort);
@@ -617,6 +624,15 @@ private:
 
 public:
     ui64 TabletTxCounter = 0;
+
+    void RecordTieringError(TString storageId, TString error) {
+        std::cout << "la-la-la3\n";
+        LastTieringErrors[storageId] = { std::move(error), TInstant::Now() };
+    }
+
+    const auto& GetTieringErrors() const noexcept {
+        return LastTieringErrors;
+    }
 
     std::shared_ptr<const TAtomicCounter> GetTabletActivity() const {
         return TabletActivityImpl;

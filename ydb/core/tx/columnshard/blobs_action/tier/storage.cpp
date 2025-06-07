@@ -85,7 +85,7 @@ void TOperator::InitNewExternalOperator() {
 
 void TOperator::DoInitNewExternalOperator(const NWrappers::NExternalStorage::IExternalStorageOperator::TPtr& storageOperator,
     const std::optional<NKikimrSchemeOp::TS3Settings>& settings) {
-    storageOperator->InitReplyAdapter(std::make_shared<NOlap::NBlobOperations::NTier::TRepliesAdapter>(GetStorageId()));
+    storageOperator->InitReplyAdapter(std::make_shared<NOlap::NBlobOperations::NTier::TRepliesAdapter>(Owner, GetStorageId()));
     {
         TGuard<TSpinLock> changeLock(ChangeOperatorLock);
         CurrentS3Settings = settings;
@@ -96,6 +96,7 @@ void TOperator::DoInitNewExternalOperator(const NWrappers::NExternalStorage::IEx
 TOperator::TOperator(const TString& storageId, const NColumnShard::TColumnShard& shard,
     const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& storageSharedBlobsManager)
     : TBase(storageId, storageSharedBlobsManager)
+    , Owner(const_cast<NColumnShard::TColumnShard*>(&shard))
     , TabletActorId(shard.SelfId())
     , Generation(shard.Executor()->Generation())
     , ExternalStorageOperator(std::make_shared<TExternalStorageOperatorHolder>()) {

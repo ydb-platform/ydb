@@ -1,6 +1,7 @@
 #include "columnshard_impl.h"
 #include "columnshard_view.h"
 
+#include <library/cpp/html/escape/escape.h>
 namespace NKikimr::NColumnShard {
 
 class TTxMonitoring : public TTransactionBase<TColumnShard> {
@@ -19,6 +20,22 @@ private:
     NJson::TJsonValue JsonReport = NJson::JSON_MAP;
 };
 
+inline TString EscapeHtml(const TString& in) {
+    TString out;
+    out.reserve(in.size());
+    for (char c : in) {
+        switch (c) {
+            case '<':  out += "&lt;";   break;
+            case '>':  out += "&gt;";   break;
+            case '&':  out += "&amp;";  break;
+            case '\'': out += "&#39;";  break;
+            case '\"': out += "&#34;";  break;
+            default:   out += c;        break;
+        }
+    }
+
+    return out;
+}
 
 bool TTxMonitoring::Execute(TTransactionContext& txc, const TActorContext&) {
     return Self->TablesManager.FillMonitoringReport(txc, JsonReport["tables_manager"]);
@@ -68,6 +85,34 @@ void TTxMonitoring::Complete(const TActorContext& ctx) {
             break;
         }
     }
+
+    html << "<h3>Tiering Errors</h3>";
+    std::cout << "la-la-la4 " << Self->GetTieringErrors().size() << '\n';
+    const auto& errs = Self->GetTieringErrors();
+
+    if (errs.empty()) {
+        html << "No errors<br />";
+    } else {
+        html << "<table class='table'>"
+                "<tr><th>Tier</th><th>Time</th><th>Error</th></tr>";
+        for (const auto& [tierName, info] : errs) {
+            html << "<tr>"
+                 << "<td>" << EscapeHtml(tierName) << "</td>"
+                 << "<td>" << info.Time.ToString() << "</td>"
+                 << "<td>" << EscapeHtml(info.Error) << "</td>"
+                 << "</tr>";
+        }
+
+        html << "</table><br />";
+    }
+
+    auto& jErr = JsonReport["tiering_errors"];
+    for (const auto& [tierName, info] : errs) {
+        auto& e = jErr[tierName];
+        e["error"]      = info.Error;
+        e["timestamp"]  = info.Time.Seconds();
+    }
+
     ctx.Send(HttpInfoEvent->Sender, new NMon::TEvRemoteHttpInfoRes(html.Str()));
 }
 

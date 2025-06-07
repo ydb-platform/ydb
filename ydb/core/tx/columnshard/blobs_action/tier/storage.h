@@ -11,7 +11,9 @@ namespace NKikimr::NOlap::NBlobOperations::NTier {
 
 class TOperator: public IBlobsStorageOperator {
 private:
+    using TColumnShardPtr = NKikimr::NColumnShard::TColumnShard*;
     using TBase = IBlobsStorageOperator;
+    TColumnShardPtr Owner = nullptr;
     const NActors::TActorId TabletActorId;
     const ui64 Generation;
     std::shared_ptr<TGCInfo> GCInfo = std::make_shared<TGCInfo>();

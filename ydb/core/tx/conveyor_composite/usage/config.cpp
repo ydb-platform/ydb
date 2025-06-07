@@ -122,6 +122,7 @@ TConfig TConfig::BuildDefault() {
 TWorkersPool::TWorkersPool(const ui32 wpId, const std::optional<double> workersCountDouble, const std::optional<double> workersFraction)
     : WorkersPoolId(wpId)
     , WorkersCountInfo(workersCountDouble, workersFraction) {
+    PoolName = "UNDEFINED:" + ::ToString(wpId);
 }
 
 TConclusionStatus TWorkersPool::DeserializeFromProto(const NKikimrConfig::TCompositeConveyorConfig::TWorkersPool& proto) {

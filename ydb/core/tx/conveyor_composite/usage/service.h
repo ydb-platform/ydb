@@ -9,17 +9,12 @@
 #include <ydb/library/actors/core/actorid.h>
 
 namespace NKikimr::NConveyorComposite {
-template <class TConveyorPolicy>
-class TServiceOperatorImpl {
+
+class TServiceOperator {
 private:
-    using TSelf = TServiceOperatorImpl<TConveyorPolicy>;
     std::atomic<bool> IsEnabledFlag = false;
     static void Register(const NConfig::TConfig& serviceConfig) {
         Singleton<TSelf>()->IsEnabledFlag = serviceConfig.IsEnabled();
-    }
-    static const TString& GetConveyorName() {
-        Y_ABORT_UNLESS(TConveyorPolicy::Name.size() == 4);
-        return TConveyorPolicy::Name;
     }
 
 public:
@@ -38,11 +33,11 @@ public:
         return Singleton<TSelf>()->IsEnabledFlag;
     }
     static NActors::TActorId MakeServiceId(const ui32 nodeId) {
-        return NActors::TActorId(nodeId, "SrvcConv" + GetConveyorName());
+        return NActors::TActorId(nodeId, "SrvcConvCmps");
     }
     static NActors::IActor* CreateService(const NConfig::TConfig& config, TIntrusivePtr<::NMonitoring::TDynamicCounters> conveyorSignals) {
         Register(config);
-        return new TDistributor(config, GetConveyorName(), conveyorSignals);
+        return new TDistributor(config, conveyorSignals);
     }
     static TProcessGuard StartProcess(
         const ESpecialTaskCategory category, const TString& scopeId, const ui64 externalProcessId, const TCPULimitsConfig& cpuLimits) {
@@ -58,26 +53,20 @@ public:
     }
 };
 
-class TScanConveyorPolicy {
+class TInsertServiceOperator {
 public:
-    static const inline TString Name = "Scan";
-    static constexpr bool EnableProcesses = true;
+    static bool SendTaskToExecute(
+        const std::shared_ptr<ITask>& task, const ESpecialTaskCategory category, const TString& scopeId, const ui64 processId) {
+        TServiceOperator::SendTaskToExecute(task, ESpecialTaskCategory::Insert, "DEFAULT", 0);
+    }
 };
 
-class TCompConveyorPolicy {
+class TCompServiceOperator {
 public:
-    static const inline TString Name = "Comp";
-    static constexpr bool EnableProcesses = false;
+    static bool SendTaskToExecute(
+        const std::shared_ptr<ITask>& task, const ESpecialTaskCategory category, const TString& scopeId, const ui64 processId) {
+        TServiceOperator::SendTaskToExecute(task, ESpecialTaskCategory::Compaction, "DEFAULT", 0);
+    }
 };
-
-class TInsertConveyorPolicy {
-public:
-    static const inline TString Name = "Isrt";
-    static constexpr bool EnableProcesses = false;
-};
-
-using TScanServiceOperator = TServiceOperatorImpl<TScanConveyorPolicy>;
-using TCompServiceOperator = TServiceOperatorImpl<TCompConveyorPolicy>;
-using TInsertServiceOperator = TServiceOperatorImpl<TInsertConveyorPolicy>;
 
 }   // namespace NKikimr::NConveyorComposite

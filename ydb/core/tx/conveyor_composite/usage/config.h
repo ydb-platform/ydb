@@ -38,10 +38,57 @@ public:
     }
 };
 
+class TThreadsCountInfo {
+private:
+    YDB_READONLY_DEF(std::optional<double>, Count);
+    YDB_READONLY_DEF(std::optional<double>, Fraction, 0.33);
+
+public:
+    TThreadsCountInfo(const std::optional<double> count, const std::optional<double> fraction)
+        : Count(count)
+        , Fraction(fraction) {
+        AFL_VERIFY(Count || Fraction);
+    }
+
+    ui32 GetThreadsCount(const ui32 totalThreadsCount) const {
+        return std::ceil(GetCPUUsageDouble(totalThreadsCount));
+    }
+
+    double GetCPUUsageDouble(const ui32 totalThreadsCount) const {
+        if (Count) {
+            return *Count;
+        }
+        AFL_VERIFY(Fraction);
+        const double result = *Fraction * totalThreadsCount;
+        if (!result) {
+            return 1;
+        }
+        return result;
+    }
+
+    TConclusionStatus DeserializeFromProto(const NKikimrConfig::TCompositeConveyorConfig::TWorkersPool& poolInfo) {
+        if (poolInfo.HasWorkersCount()) {
+            Count = poolInfo.GetWorkersCount();
+            if (*Count <= 0) {
+                return TConclusionStatus::Fail("incorrect threads count: " + ::ToString(*Count));
+            }
+            Fraction.reset();
+        } else if (poolInfo.HasDefaultFractionOfThreadsCount()) {
+            Fraction = poolInfo.GetDefaultFractionOfThreadsCount();
+            if (*Fraction <= 0 || 1 < *Fraction) {
+                return TConclusionStatus::Fail("incorrect threads count fraction: " + ::ToString(*Fraction));
+            }
+            Count.reset();
+        }
+        return TConclusionStatus::Success();
+    }
+
+};
+
 class TWorkersPool {
 private:
     YDB_READONLY(ui32, WorkersPoolId, 0);
-    YDB_READONLY(double, WorkersCountDouble, 0);
+    YDB_READONLY_DEF(TThreadsCountInfo, WorkersCountInfo);
     YDB_READONLY_DEF(std::vector<TWorkerPoolCategoryUsage>, Links);
 
 public:
@@ -64,7 +111,7 @@ public:
         : WorkersPoolId(wpId) {
     }
 
-    TWorkersPool(const ui32 wpId, const double workersCountDouble);
+    TWorkersPool(const ui32 wpId, const std::optional<double> workersCountDouble, const std::optional<double> workersFraction);
 
     [[nodiscard]] TConclusionStatus DeserializeFromProto(
         const NKikimrConfig::TCompositeConveyorConfig::TWorkersPool& proto, const ui64 usableThreadsCount);
@@ -113,9 +160,22 @@ private:
     YDB_READONLY_FLAG(Enabled, true);
 
 public:
+    static TConfig BuildDefault() {
+        TConfig result;
+        ui32 idx = 0;
+        for (auto&& i : GetEnumAllValues<ESpecialTaskCategory>()) {
+            result.Categories.emplace_back(i);
+            result.WorkerPools.emplace_back(idx, std::nullopt, 0.33);
+            AFL_VERIFY(result.WorkerPools.back().AddLink(i));
+            AFL_VERIFY(result.Categories.back().AddWorkerPool(idx));
+            ++idx;
+        }
+        return result;
+    }
+
     const TCategory& GetCategoryConfig(const ESpecialTaskCategory cat) const;
 
-    [[nodiscard]] TConclusionStatus DeserializeFromProto(const NKikimrConfig::TCompositeConveyorConfig& config, const ui64 usableThreadsCount);
+    [[nodiscard]] TConclusionStatus DeserializeFromProto(const NKikimrConfig::TCompositeConveyorConfig& config);
 
     TString DebugString() const;
 };

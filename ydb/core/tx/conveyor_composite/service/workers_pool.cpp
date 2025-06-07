@@ -3,7 +3,7 @@
 namespace NKikimr::NConveyorComposite {
 TWorkersPool::TWorkersPool(const TString& conveyorName, const NActors::TActorId& distributorId, const NConfig::TWorkersPool& config,
     const TCounters& counters, const std::vector<std::shared_ptr<TProcessCategory>>& categories)
-    : WorkersCount(config.GetWorkersCount())
+    : WorkersCount(config.GetWorkersCountInfo().GetThreadsCount(NKqp::TStagePredictor::GetUsableThreads()))
     , Counters(counters) {
     Workers.reserve(WorkersCount);
     for (auto&& i : config.GetLinks()) {
@@ -18,7 +18,7 @@ TWorkersPool::TWorkersPool(const TString& conveyorName, const NActors::TActorId&
     }
     AFL_VERIFY(WorkersCount)("name", conveyorName)("action", "conveyor_registered")("config", config.DebugString())("actor_id", distributorId)(
         "count", WorkersCount);
-    Counters.WaitingQueueSizeLimit->Set(config.GetWorkersCountDouble());
+    Counters.WaitingQueueSizeLimit->Set(config.GetWorkersCountInfo().GetCPUInTime(NKqp::TStagePredictor::GetUsableThreads()));
     Counters.AmountCPULimit->Set(0);
     Counters.AvailableWorkersCount->Set(0);
     Counters.WorkersCountLimit->Set(WorkersCount);

@@ -36,7 +36,7 @@ protected:
         NormContext.SetResourcesGuard(resourcesGuard);
         std::shared_ptr<NConveyor::ITask> task =
             std::make_shared<TConveyorTask>(std::move(ExtractBlobsData()), NormContext, std::move(Data), Schemas);
-        NConveyor::TCompServiceOperator::SendTaskToExecute(task);
+        NConveyorComposite::TCompServiceOperator::SendTaskToExecute(task);
     }
 
     virtual bool DoOnError(const TString& storageId, const TBlobRange& range, const IBlobsReadingAction::TErrorStatus& status) override {

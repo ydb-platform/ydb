@@ -22,6 +22,7 @@ public:
         : Category(config.GetCategory())
         , Config(config) {
         Counters = counters.GetCategorySignals(Category);
+        RegisterScope("DEFAULT", TCPULimitsConfig(1000, 1000)).RegisterProcess(0);
     }
 
     ESpecialTaskCategory GetCategory() const {

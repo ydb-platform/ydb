@@ -416,21 +416,15 @@ public:
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 };
 
-class TCompConveyorInitializer: public IKikimrServicesInitializer {
+class TCompositeConveyorInitializer : public IKikimrServicesInitializer {
 public:
-    TCompConveyorInitializer(const TKikimrRunConfig& runConfig);
-    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
+    TCompositeConveyorInitializer(const TKikimrRunConfig& runConfig);
+	void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 };
 
 class TScanConveyorInitializer: public IKikimrServicesInitializer {
 public:
     TScanConveyorInitializer(const TKikimrRunConfig& runConfig);
-    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
-};
-
-class TInsertConveyorInitializer: public IKikimrServicesInitializer {
-public:
-    TInsertConveyorInitializer(const TKikimrRunConfig& runConfig);
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 };
 

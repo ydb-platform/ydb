@@ -54,7 +54,7 @@ void TBuildBatchesTask::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) {
                 if (!WriteData.GetWritePortions() || !Context.GetNoTxWrite()) {
                     std::shared_ptr<NConveyor::ITask> task =
                         std::make_shared<NOlap::TBuildSlicesTask>(std::move(WriteData), batch.GetContainer(), Context);
-                    NConveyor::TInsertServiceOperator::SendTaskToExecute(task);
+                    NConveyorComposite::TInsertServiceOperator::SendTaskToExecute(task);
                 } else {
                     NActors::TActivationContext::ActorSystem()->Send(Context.GetBufferizationPortionsActorId(),
                         new NWritingPortions::TEvAddInsertedDataToBuffer(
@@ -86,7 +86,7 @@ void TBuildBatchesTask::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) {
             if (!WriteData.GetWritePortions() || !Context.GetNoTxWrite()) {
                 std::shared_ptr<NConveyor::ITask> task =
                     std::make_shared<NOlap::TBuildSlicesTask>(std::move(WriteData), batch.GetContainer(), Context);
-                NConveyor::TInsertServiceOperator::SendTaskToExecute(task);
+                NConveyorComposite::TInsertServiceOperator::SendTaskToExecute(task);
             } else {
                 NActors::TActivationContext::ActorSystem()->Send(Context.GetBufferizationPortionsActorId(),
                     new NWritingPortions::TEvAddInsertedDataToBuffer(

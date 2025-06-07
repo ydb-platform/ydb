@@ -101,14 +101,12 @@ TString TConfig::DebugString() const {
     return sb;
 }
 
-TWorkersPool::TWorkersPool(const ui32 wpId, const double workersCountDouble)
+TWorkersPool::TWorkersPool(const ui32 wpId, const std::optional<double> workersCountDouble, const std::optional<double> workersFraction)
     : WorkersPoolId(wpId)
-    , WorkersCountDouble(workersCountDouble) {
-    AFL_VERIFY(WorkersCountDouble);
+    , WorkersCountInfo(workersCountDouble, workersFraction) {
 }
 
-TConclusionStatus TWorkersPool::DeserializeFromProto(
-    const NKikimrConfig::TCompositeConveyorConfig::TWorkersPool& proto, const ui64 usableThreadsCount) {
+TConclusionStatus TWorkersPool::DeserializeFromProto(const NKikimrConfig::TCompositeConveyorConfig::TWorkersPool& proto) {
     if (!proto.GetLinks().size()) {
         return TConclusionStatus::Fail("no categories for workers pool");
     }
@@ -123,16 +121,11 @@ TConclusionStatus TWorkersPool::DeserializeFromProto(
     if (Links.empty()) {
         return TConclusionStatus::Fail("no links for workers pool");
     }
-    if (proto.HasWorkersCount()) {
-        WorkersCountDouble = proto.GetWorkersCount();
-    } else if (proto.HasDefaultFractionOfThreadsCount()) {
-        WorkersCountDouble = usableThreadsCount * proto.GetDefaultFractionOfThreadsCount();
-    } else {
-        WorkersCountDouble = usableThreadsCount;
-    }
-    if (WorkersCountDouble <= 0) {
-        return TConclusionStatus::Fail(
-            "incorrect WorkersCount calculated: " + proto.DebugString() + " for " + ::ToString(usableThreadsCount) + " threads");
+    {
+        auto parseConclusion = WorkersCountInfo.DeserializeFromProto(proto);
+        if (parseConclusion.IsFail()) {
+            return parseConclusion;
+        }
     }
 
     return TConclusionStatus::Success();

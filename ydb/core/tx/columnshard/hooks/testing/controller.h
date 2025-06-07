@@ -72,6 +72,14 @@ private:
             }
             return result;
         }
+        THashSet<TSchemeShardLocalPathId> GetSchemeShardLocalPathIds() const {
+            THashSet<TSchemeShardLocalPathId> result;
+            for (const auto& [internalPathId, schemeShardLocalPathId]: InternalToSchemeShardLocal) {
+                result.emplace(schemeShardLocalPathId);
+            }
+            return result;
+        }
+
     public: //NOlap::IPathIdTranslator
         virtual std::optional<TSchemeShardLocalPathId> ResolveSchemeShardLocalPathId(const TInternalPathId internalPathId) const override {
             if (const auto* p = InternalToSchemeShardLocal.FindPtr(internalPathId)) {

@@ -325,56 +325,45 @@ Y_UNIT_TEST_SUITE(KqpBatchUpdate) {
 
     Y_UNIT_TEST(TableWithIndex) {
         TKikimrRunner kikimr(GetAppConfig());
+
+        {
+            auto db = kikimr.GetTableClient();
+            auto session = db.GetSession().GetValueSync().GetSession();
+
+            CreateSampleTablesWithIndex(session, true, false);
+        }
+
         auto db = kikimr.GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();
 
         {
             auto query = Q_(R"(
-                CREATE TABLE `TestIndex` (
-                    key Uint64 NOT NULL,
-                    `timestamp` Uint64 NOT NULL,
-                    value Utf8 FAMILY lz4_family NOT NULL,
-                    PRIMARY KEY (key),
-                    FAMILY lz4_family (
-                        COMPRESSION = "lz4"
-                    ),
-                    INDEX by_timestamp GLOBAL ON (`timestamp`)
-                ) WITH (
-                    STORE = ROW,
-                    TTL = Interval("PT240S") ON `timestamp` AS SECONDS,
-                    AUTO_PARTITIONING_BY_SIZE = ENABLED,
-                    AUTO_PARTITIONING_BY_LOAD = ENABLED,
-                    AUTO_PARTITIONING_PARTITION_SIZE_MB = 128,
-                    READ_REPLICAS_SETTINGS = "PER_AZ:1",
-                    KEY_BLOOM_FILTER = ENABLED
-                );
-            )");
-
-            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-        {
-            auto query = Q_(R"(
-                UPSERT INTO `TestIndex` (key, timestamp, value)
-                    VALUES (1, 1, "None"), (2, 2, "None"), (3, 3, "None"), (4, 4, "None"), (5, 5, "None");
-            )");
-
-            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-        {
-            auto query = Q_(R"(
-                BATCH UPDATE `TestIndex`
-                    SET value = "123"
-                    WHERE timestamp > 3;
+                BATCH UPDATE `/Root/SecondaryKeys`
+                    SET Value = "123"
+                    WHERE Fk IS NULL;
             )");
 
             auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
             ExecQueryAndTestEmpty(session, R"(
-                SELECT count(*) FROM TestIndex
-                    WHERE timestamp > 3 AND value != "123";
+                SELECT count(*) FROM `/Root/SecondaryKeys`
+                    WHERE Fk IS NULL AND Value != "123";
+            )");
+        }
+        {
+            auto query = Q_(R"(
+                BATCH UPDATE `/Root/SecondaryComplexKeys`
+                    SET Value = "123"
+                    WHERE Fk1 IS NOT NULL AND Fk2 >= "Fk2";
+            )");
+
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            ExecQueryAndTestEmpty(session, R"(
+                SELECT count(*) FROM `/Root/SecondaryComplexKeys`
+                    WHERE (Fk1 IS NOT NULL AND Fk2 >= "Fk2") AND Value != "123";
             )");
         }
     }

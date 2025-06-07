@@ -33,7 +33,7 @@ void TestSimpleOnePartition(size_t maxBatchSize) {
             BATCH DELETE FROM KeyValue;
         )");
         auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         ExecQueryAndTestEmpty(session, R"(
             SELECT count(*) FROM KeyValue;
@@ -44,7 +44,7 @@ void TestSimpleOnePartition(size_t maxBatchSize) {
             BATCH DELETE FROM KeyValueLargePartition;
         )");
         auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         ExecQueryAndTestEmpty(session, R"(
             SELECT count(*) FROM KeyValueLargePartition;
@@ -56,7 +56,7 @@ void TestSimpleOnePartition(size_t maxBatchSize) {
                 WHERE Amount >= 5000ul;
         )");
         auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         ExecQueryAndTestEmpty(session, R"(
             SELECT count(*) FROM Test
@@ -69,7 +69,7 @@ void TestSimpleOnePartition(size_t maxBatchSize) {
                 WHERE Amount < 5000ul AND Group < 2;
         )");
         auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         ExecQueryAndTestEmpty(session, R"(
             SELECT count(*) FROM Test
@@ -89,7 +89,7 @@ void TestSimplePartitions(size_t maxBatchSize, size_t partitionLimit) {
                 WHERE Key >= 2;
         )");
         auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         ExecQueryAndTestEmpty(session, R"(
             SELECT count(*) FROM TwoShard
@@ -102,7 +102,7 @@ void TestSimplePartitions(size_t maxBatchSize, size_t partitionLimit) {
                 WHERE Key > 300 AND Data = 2;
         )");
         auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         ExecQueryAndTestEmpty(session, R"(
             SELECT count(*) FROM EightShard
@@ -115,7 +115,7 @@ void TestSimplePartitions(size_t maxBatchSize, size_t partitionLimit) {
                 WHERE App = "kikimr-db";
         )");
         auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         ExecQueryAndTestEmpty(session, R"(
             SELECT count(*) FROM Logs
@@ -128,7 +128,7 @@ void TestSimplePartitions(size_t maxBatchSize, size_t partitionLimit) {
                 WHERE Key1 = 102 AND Key2 = "One";
         )");
         auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         ExecQueryAndTestEmpty(session, R"(
             SELECT count(*) FROM Join2
@@ -141,7 +141,7 @@ void TestSimplePartitions(size_t maxBatchSize, size_t partitionLimit) {
                 WHERE Col3 = 0;
         )");
         auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         ExecQueryAndTestEmpty(session, R"(
             SELECT count(*) FROM TuplePrimaryDescending
@@ -163,7 +163,7 @@ void TestManyPartitions(size_t maxBatchSize, size_t totalRows, size_t shards, si
                 WHERE Data >= 200;
         )");
         auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         ExecQueryAndTestEmpty(session, R"(
             SELECT count(*) FROM ManyShardsTable
@@ -185,7 +185,7 @@ void TestLarge(size_t maxBatchSize, size_t rowsPerShard) {
                 WHERE Key >= 2000;
         )");
         auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         ExecQueryAndTestEmpty(session, R"(
             SELECT count(*) FROM LargeTable
@@ -258,6 +258,49 @@ Y_UNIT_TEST_SUITE(KqpBatchDelete) {
         }
     }
 
+    Y_UNIT_TEST(TableWithIndex) {
+        TKikimrRunner kikimr(GetAppConfig());
+
+        {
+            auto db = kikimr.GetTableClient();
+            auto session = db.GetSession().GetValueSync().GetSession();
+
+            CreateSampleTablesWithIndex(session, true, false);
+        }
+
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        {
+            auto query = Q_(R"(
+                BATCH DELETE FROM `/Root/SecondaryKeys`
+                    WHERE Fk IS NULL;
+            )");
+
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            ExecQueryAndTestEmpty(session, R"(
+                SELECT count(*) FROM `/Root/SecondaryKeys`
+                    WHERE Fk IS NULL;
+            )");
+        }
+        {
+            auto query = Q_(R"(
+                BATCH DELETE FROM `/Root/SecondaryComplexKeys`
+                    WHERE Fk1 IS NOT NULL AND Fk2 >= "Fk2";
+            )");
+
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            ExecQueryAndTestEmpty(session, R"(
+                SELECT count(*) FROM `/Root/SecondaryComplexKeys`
+                    WHERE Fk1 IS NOT NULL AND Fk2 >= "Fk2";
+            )");
+        }
+    }
+
     Y_UNIT_TEST(MultiStatement) {
         TKikimrRunner kikimr(GetAppConfig());
         auto db = kikimr.GetQueryClient();
@@ -272,7 +315,7 @@ Y_UNIT_TEST_SUITE(KqpBatchDelete) {
             )");
 
             auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
             UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "BATCH can't be used with multiple writes or reads.", result.GetIssues().ToString());
         }
         {
@@ -283,7 +326,7 @@ Y_UNIT_TEST_SUITE(KqpBatchDelete) {
             )");
 
             auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
             UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "BATCH can't be used with multiple writes or reads.", result.GetIssues().ToString());
         }
         {
@@ -294,7 +337,7 @@ Y_UNIT_TEST_SUITE(KqpBatchDelete) {
             )");
 
             auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
             UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "BATCH can't be used with multiple writes or reads.", result.GetIssues().ToString());
         }
         {
@@ -306,7 +349,7 @@ Y_UNIT_TEST_SUITE(KqpBatchDelete) {
             )");
 
             auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
             UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "BATCH can't be used with multiple writes or reads.", result.GetIssues().ToString());
         }
         {
@@ -317,7 +360,7 @@ Y_UNIT_TEST_SUITE(KqpBatchDelete) {
             )");
 
             auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
             UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "BATCH can't be used with multiple writes or reads.", result.GetIssues().ToString());
         }
     }
@@ -335,7 +378,7 @@ Y_UNIT_TEST_SUITE(KqpBatchDelete) {
             )");
 
             auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
             UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "BATCH DELETE is unsupported with RETURNING", result.GetIssues().ToString());
         }
     }
@@ -353,7 +396,7 @@ Y_UNIT_TEST_SUITE(KqpBatchDelete) {
             )");
 
             auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
             UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "BATCH DELETE is unsupported with ON", result.GetIssues().ToString());
         }
     }
@@ -375,7 +418,7 @@ Y_UNIT_TEST_SUITE(KqpBatchDelete) {
             )");
 
             auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
         {
@@ -387,7 +430,7 @@ Y_UNIT_TEST_SUITE(KqpBatchDelete) {
             )");
 
             auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
         {

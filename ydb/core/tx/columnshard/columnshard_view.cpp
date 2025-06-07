@@ -1,7 +1,6 @@
 #include "columnshard_impl.h"
 #include "columnshard_view.h"
 
-#include <library/cpp/html/escape/escape.h>
 namespace NKikimr::NColumnShard {
 
 class TTxMonitoring : public TTransactionBase<TColumnShard> {

@@ -1368,6 +1368,13 @@ struct TEvBlobStorage {
             , GroupId(groupId)
         {}
 
+        TEvGetResult(NKikimrProto::EReplyStatus status, ui32 sz, TArrayHolder<TResponse> responses, TGroupId groupId)
+            : Status(status)
+            , ResponseSz(sz)
+            , Responses(std::move(responses))
+            , GroupId(groupId.GetRawId())
+        {}
+
         TString Print(bool isFull) const {
             TStringStream str;
             str << "TEvGetResult {Status# " << NKikimrProto::EReplyStatus_Name(Status).data();
@@ -2461,6 +2468,12 @@ struct TEvBlobStorage {
         TEvStatusResult(NKikimrProto::EReplyStatus status, TStorageStatusFlags statusFlags)
             : Status(status)
             , StatusFlags(statusFlags)
+        {}
+
+        TEvStatusResult(NKikimrProto::EReplyStatus status, TStorageStatusFlags statusFlags, float approximateFreeSpaceShare)
+            : Status(status)
+            , StatusFlags(statusFlags)
+            , ApproximateFreeSpaceShare(approximateFreeSpaceShare)
         {}
 
         TString Print(bool isFull) const {

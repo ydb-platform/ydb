@@ -847,7 +847,7 @@ private:
             return Nothing();
         }
 
-        return indexInfo.Issue;
+        return indexInfo.GetIssue();
     }
 
     TString GetIssues(const NKikimrIndexBuilder::TEvCreateResponse& proto) {

@@ -16,8 +16,6 @@ PEERDIR(
     # TODO(YQL-19747): extract NameIndex
     yql/essentials/sql/v1/complete/name/service/ranking
     yql/essentials/sql/v1/complete/name/service/binding
-    # TODO(YQL-19747): add it to YDB CLI PEERDIR
-    yql/essentials/sql/v1/complete/name/service/static
 )
 
 END()

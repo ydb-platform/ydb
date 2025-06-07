@@ -197,8 +197,8 @@ void TSchemeShard::TIndexBuilder::TTxBase::Progress(TIndexBuildId id) {
 
 void TSchemeShard::TIndexBuilder::TTxBase::Fill(NKikimrIndexBuilder::TIndexBuild& index, const TIndexBuildInfo& indexInfo) {
     index.SetId(ui64(indexInfo.Id));
-    if (indexInfo.Issue) {
-        AddIssue(index.MutableIssues(), indexInfo.Issue);
+    if (indexInfo.GetIssue()) {
+        AddIssue(index.MutableIssues(), indexInfo.GetIssue());
     }
     if (indexInfo.StartTime != TInstant::Zero()) {
         *index.MutableStartTime() = SecondsToProtoTimeStamp(indexInfo.StartTime.Seconds());

@@ -33,7 +33,7 @@
   * Добавлены параметры диапазона дат (`--date-to`, `--date-from`) в операции `{{ ydb-cli }} workload log run` для поддержки равномерного распределения первичных ключей.
 * Улучшена функциональность резервного копирования и восстановления:
   * Добавлены опции `--replace` и `--verify-existence` в [команду](./reference/ydb-cli/export-import/tools-restore.md#schema-objects) `{{ ydb-cli }} tools restore` для управления удалением существующих объектов, совпадающих с объектами в резервной копии, перед восстановлением.
-  * Улучшена [команда](./reference/ydb-cli/export-import/tools-dump.md#schema-objects) `{{ ydb-cli }} tools dump`: [таблицы-реплики](./concepts/async-replication.md) у ASYNC REPLICATION и их [потоки изменений](./concepts/glossary.md#changefeed) не сохраняются в локальные резервные копии. Это предотвращает дублирование потоков изменений и уменьшает размер резервной копии на диске.
+  * Улучшена [команда](./reference/ydb-cli/export-import/tools-dump.md#schema-objects) `{{ ydb-cli }} tools dump`: {% if feature_async_replication %}[таблицы-реплики](./concepts/async-replication.md){% else %}таблицы-реплики{% endif %} у ASYNC REPLICATION и их [потоки изменений](./concepts/glossary.md#changefeed) не сохраняются в локальные резервные копии. Это предотвращает дублирование потоков изменений и уменьшает размер резервной копии на диске.
 * Изменения, повышающие удобство использования CLI:
   * Вывод подробной справки (`-hh`) теперь показывает всё дерево подкоманд.
   * Добавлена автоматическая вставка парных скобок в интерактивном режиме `{{ ydb-cli }}`.

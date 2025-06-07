@@ -1,6 +1,19 @@
+ydb/apps/ydb/ut YdbWorkloadTopic.Double_Init
+ydb/apps/ydb/ut YdbWorkloadTopic.Full_Statistics_UseTx
+ydb/apps/ydb/ut YdbWorkloadTopic.Init_Clean
+ydb/apps/ydb/ut YdbWorkloadTopic.ReadWrite_Statistics
+ydb/apps/ydb/ut YdbWorkloadTopic.Read_Statistics
+ydb/apps/ydb/ut YdbWorkloadTopic.WriteInTx
+ydb/apps/ydb/ut YdbWorkloadTopic.WriteProducesToAllPartitionsEvenly
+ydb/apps/ydb/ut YdbWorkloadTopic.Write_Statistics
+ydb/apps/ydb/ut YdbWorkloadTopic.Write_Statistics_UseTx
+ydb/apps/ydb/ut YdbWorkloadTransferTopicToTable.Default_Init_Clean
 ydb/apps/ydb/ut YdbWorkloadTransferTopicToTable.Default_Run
+ydb/apps/ydb/ut YdbWorkloadTransferTopicToTable.Specific_Init_Clean
+ydb/apps/ydb/ut YdbWorkloadTransferTopicToTable.Statistics
 ydb/core/blobstorage/dsproxy/ut TDSProxyPutTest.TestBlock42PutStatusOkWith_2_0_VdiskErrors
 ydb/core/blobstorage/dsproxy/ut_fat TBlobStorageProxyTest.TestBatchedPutRequestDoesNotContainAHugeBlob
+ydb/core/blobstorage/ut_blobstorage NodeDisconnected.BsQueueRetries
 ydb/core/blobstorage/ut_blobstorage/ut_huge HugeBlobOnlineSizeChange.Compaction
 ydb/core/blobstorage/ut_blobstorage/ut_huge [*/*] chunk chunk
 ydb/core/blobstorage/ut_blobstorage/ut_scrub BlobScrubbing.block42
@@ -38,6 +51,8 @@ ydb/core/kqp/ut/service [*/*] chunk chunk
 ydb/core/kqp/ut/yql KqpScripting.StreamExecuteYqlScriptScanOperationTmeoutBruteForce
 ydb/core/quoter/ut QuoterWithKesusTest.PrefetchCoefficient
 ydb/core/statistics/aggregator/ut AnalyzeColumnshard.AnalyzeRebootColumnShard
+ydb/core/transfer/ut/large TransferLarge.Transfer100KM_10P_RowTable_TopicAutoPartitioning
+ydb/core/transfer/ut/large TransferLarge.Transfer1KM_1KP_RowTable_TopicAutoPartitioning
 ydb/core/tx/datashard/ut_incremental_backup IncrementalBackup.ComplexRestoreBackupCollection+WithIncremental
 ydb/core/tx/schemeshard/ut_background_cleaning TSchemeshardBackgroundCleaningTest.SchemeshardBackgroundCleaningTestCreateCleanManyTables
 ydb/core/tx/schemeshard/ut_index_build VectorIndexBuildTest.BaseCase
@@ -45,6 +60,7 @@ ydb/core/tx/schemeshard/ut_login_large TSchemeShardLoginLargeTest.RemoveLogin_Ma
 ydb/core/tx/schemeshard/ut_move_reboots TSchemeShardMoveRebootsTest.WithData
 ydb/core/tx/schemeshard/ut_move_reboots TSchemeShardMoveRebootsTest.WithDataAndPersistentPartitionStats
 ydb/core/tx/tiering/ut ColumnShardTiers.TTLUsage
+ydb/core/viewer/tests test.py.test_topic_data
 ydb/core/viewer/tests test.py.test_transfer_describe
 ydb/core/viewer/ut Viewer.TabletMerging
 ydb/core/viewer/ut Viewer.TabletMergingPacked
@@ -54,6 +70,8 @@ ydb/library/actors/interconnect/ut_huge_cluster HugeCluster.AllToAll
 ydb/library/actors/interconnect/ut_huge_cluster sole chunk chunk
 ydb/library/yql/dq/opt/ut InterestingOrderingsShuffle.Join64ChainImitation
 ydb/library/yql/dq/opt/ut sole chunk chunk
+ydb/public/sdk/cpp/src/client/federated_topic/ut BasicUsage.PropagateSessionClosed
+ydb/public/sdk/cpp/src/client/federated_topic/ut [*/*] chunk chunk
 ydb/public/sdk/cpp/src/client/topic/ut TxUsage.Sinks_Oltp_WriteToTopicAndTable_6_Query
 ydb/public/sdk/cpp/src/client/topic/ut TxUsage.Sinks_Oltp_WriteToTopicAndTable_6_Table
 ydb/public/sdk/cpp/src/client/topic/ut TxUsage.Sinks_Oltp_WriteToTopic_3_Query
@@ -74,8 +92,6 @@ ydb/tests/compatibility [test_compatibility.py */*] chunk chunk
 ydb/tests/compatibility [test_example.py */*] chunk chunk
 ydb/tests/compatibility [test_statistics.py */*] chunk chunk
 ydb/tests/compatibility sole chunk chunk
-ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_simple[last_stable_to_current-column]
-ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_simple[last_stable_to_current_mixed-column]
 ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_simple[restart_24-4_to_25-1-column]
 ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_simple[restart_24-4_to_25-1-row]
 ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_simple[restart_25-1_to_24-4-column]
@@ -96,12 +112,6 @@ ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[curre
 ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[current_to_25-1-column]
 ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[current_to_25-1-row]
 ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[current_to_current-row]
-ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[current_to_last_stable-column]
-ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[current_to_last_stable-row]
-ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[last_stable_to_current-column]
-ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[last_stable_to_current-row]
-ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[last_stable_to_current_mixed-column]
-ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[last_stable_to_current_mixed-row]
 ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[restart_24-4_to_25-1-column-date64]
 ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[restart_24-4_to_25-1-column]
 ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[restart_24-4_to_25-1-row]
@@ -131,7 +141,6 @@ ydb/tests/compatibility test_datetime2.py.TestDatetime2Format.test_simple[curren
 ydb/tests/compatibility test_example.py.TestExampleMixedClusterFixture.test_example[mixed_25-1_and_24-4]
 ydb/tests/compatibility test_example.py.TestExampleRestartToAnotherVersion.test_example[restart_24-4_to_25-1]
 ydb/tests/compatibility test_example.py.TestExampleRestartToAnotherVersion.test_example[restart_25-1_to_24-4]
-ydb/tests/compatibility test_example.py.TestExampleRollingUpdate.test_example
 ydb/tests/compatibility test_example.py.TestExampleRollingUpdate.test_example[24-4_to_25-1]
 ydb/tests/compatibility test_example.py.TestExampleRollingUpdate.test_example[25-1_to_current]
 ydb/tests/compatibility test_example.py.TestExampleRollingUpdate.test_example[rolling_24-4_to_25-1]
@@ -142,7 +151,6 @@ ydb/tests/compatibility test_rolling.py.TestRolling.test_kv[24-4_to_25-1-column]
 ydb/tests/compatibility test_rolling.py.TestRolling.test_kv[24-4_to_25-1-row]
 ydb/tests/compatibility test_rolling.py.TestRolling.test_kv[25-1_to_current-column]
 ydb/tests/compatibility test_rolling.py.TestRolling.test_kv[25-1_to_current-row]
-ydb/tests/compatibility test_rolling.py.TestRolling.test_kv[column]
 ydb/tests/compatibility test_rolling.py.TestRolling.test_kv[rolling_24-4_to_25-1-column]
 ydb/tests/compatibility test_rolling.py.TestRolling.test_kv[rolling_24-4_to_25-1-row]
 ydb/tests/compatibility test_rolling.py.TestRolling.test_kv[rolling_25-1_to_current-column]
@@ -151,14 +159,12 @@ ydb/tests/compatibility test_statistics.py.TestStatisticsFollowers.test_statisti
 ydb/tests/compatibility test_statistics.py.TestStatisticsTLI.test_statistics_tli[restart_24-4_to_25-1]
 ydb/tests/compatibility test_statistics.py.TestStatisticsTLI.test_statistics_tli[restart_25-1_to_24-4]
 ydb/tests/compatibility test_stress.py.TestStress.test_kv[current_and_25-1-column]
-ydb/tests/compatibility test_stress.py.TestStress.test_kv[current_and_last_stable-column]
 ydb/tests/compatibility test_stress.py.TestStress.test_kv[mixed_25-1_and_24-4-column]
 ydb/tests/compatibility test_stress.py.TestStress.test_kv[mixed_25-1_and_24-4-row]
 ydb/tests/compatibility test_stress.py.TestStress.test_kv[mixed_current_and_25-1-column]
 ydb/tests/compatibility test_stress.py.TestStress.test_log[25-1_and_24-4-column]
 ydb/tests/compatibility test_stress.py.TestStress.test_log[current-column]
 ydb/tests/compatibility test_stress.py.TestStress.test_log[current_and_25-1-column]
-ydb/tests/compatibility test_stress.py.TestStress.test_log[current_and_last_stable-column]
 ydb/tests/compatibility test_stress.py.TestStress.test_log[mixed_25-1_and_24-4-column]
 ydb/tests/compatibility test_stress.py.TestStress.test_log[mixed_25-1_and_24-4-row]
 ydb/tests/compatibility test_stress.py.TestStress.test_log[mixed_current-column]
@@ -171,10 +177,6 @@ ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[25-1_and_24-4-colum
 ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[current_and_25-1-column-date64]
 ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[current_and_25-1-column]
 ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[current_and_25-1-row]
-ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[current_and_last_stable-column]
-ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[current_and_last_stable-row]
-ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[last_stable-column]
-ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[last_stable-row]
 ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_25-1-column-date64]
 ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_25-1-column]
 ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_25-1-row]

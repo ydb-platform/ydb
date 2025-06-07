@@ -169,7 +169,7 @@ bool TSpecialValuesInitializer::DoExecute(NTabletFlatExecutor::TTransactionConte
     if (!Schema::GetSpecialValueOpt(db, Schema::EValueIds::PathId, Self->PathId)) {
         return false;
     }
-    if (!Schema::GetSpecialValueOpt(db, Schema::EValueIds::Path, *Self->Path)) {
+    if (!Schema::GetSpecialValueOpt(db, Schema::EValueIds::Path, Self->Path)) {
         return false;
     }
 
@@ -206,7 +206,7 @@ bool TSpecialValuesInitializer::DoPrecharge(NTabletFlatExecutor::TTransactionCon
 bool TTablesManagerInitializer::DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {
     NIceDb::TNiceDb db(txc.DB);
     TTablesManager tablesManagerLocal(Self->StoragesManager, Self->DataAccessorsManager.GetObjectPtrVerified(),
-        Self->PathId ? NOlap::TSchemaCachesManager::GetCache(*Self->PathId, Self->Info()->TenantPathId)
+        Self->PathId ? NOlap::TSchemaCachesManager::GetCache(Self->PathId, Self->Info()->TenantPathId)
                           : std::shared_ptr<NOlap::TSchemaObjectsCache>(),
         Self->Counters.GetPortionIndexCounters(), Self->TabletID());
     {

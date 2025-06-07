@@ -106,13 +106,6 @@ void TTxMonitoring::Complete(const TActorContext& ctx) {
         html << "</table><br />";
     }
 
-    auto& jErr = JsonReport["tiering_errors"];
-    for (const auto& [tierName, info] : errs) {
-        auto& e = jErr[tierName];
-        e["error"]      = info.Error;
-        e["timestamp"]  = info.Time.Seconds();
-    }
-
     ctx.Send(HttpInfoEvent->Sender, new NMon::TEvRemoteHttpInfoRes(html.Str()));
 }
 

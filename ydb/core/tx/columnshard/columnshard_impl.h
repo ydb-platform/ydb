@@ -626,7 +626,6 @@ public:
     ui64 TabletTxCounter = 0;
 
     void RecordTieringError(TString storageId, TString error) {
-        std::cout << "la-la-la3\n";
         LastTieringErrors[storageId] = { std::move(error), TInstant::Now() };
     }
 

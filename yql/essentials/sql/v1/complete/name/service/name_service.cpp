@@ -8,7 +8,7 @@ namespace NSQLComplete {
 
     namespace {
 
-        void SetPrefix(TString& name, const TStringBuf delimeter, const TNamespaced& namespaced) {
+        void SetPrefix(TString& name, TStringBuf delimeter, const TNamespaced& namespaced) {
             if (namespaced.Namespace.empty()) {
                 return;
             }
@@ -17,7 +17,7 @@ namespace NSQLComplete {
             name.prepend(namespaced.Namespace);
         }
 
-        void FixPrefix(TString& name, const TStringBuf delimeter, const TNamespaced& namespaced) {
+        void FixPrefix(TString& name, TStringBuf delimeter, const TNamespaced& namespaced) {
             if (namespaced.Namespace.empty()) {
                 return;
             }

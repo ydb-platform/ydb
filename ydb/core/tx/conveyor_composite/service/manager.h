@@ -31,7 +31,7 @@ public:
         }
     }
 
-    TTasksManager(const NConfig::TConfig& config, const NActors::TActorId distributorActorId, TCounters& counters)
+    TTasksManager(const TString& /*convName*/, const NConfig::TConfig& config, const NActors::TActorId distributorActorId, TCounters& counters)
         : DistributorActorId(distributorActorId)
         , Config(config)
         , Counters(counters)

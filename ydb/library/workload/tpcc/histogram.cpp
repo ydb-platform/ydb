@@ -9,6 +9,7 @@ THistogram::THistogram(uint64_t hdrTill, uint64_t maxValue)
     : HdrTill_(hdrTill)
     , MaxValue_(maxValue)
     , TotalCount_(0)
+    , MaxRecordedValue_(0)
 {
     if (hdrTill == 0 || maxValue == 0 || hdrTill > maxValue) {
         throw std::invalid_argument("Invalid histogram parameters");
@@ -26,6 +27,7 @@ void THistogram::RecordValue(uint64_t value) {
 
     Buckets_[bucketIndex]++;
     TotalCount_++;
+    MaxRecordedValue_ = std::max(MaxRecordedValue_, value);
 }
 
 void THistogram::Add(const THistogram& other) {
@@ -37,6 +39,20 @@ void THistogram::Add(const THistogram& other) {
         Buckets_[i] += other.Buckets_[i];
     }
     TotalCount_ += other.TotalCount_;
+    MaxRecordedValue_ = std::max(MaxRecordedValue_, other.MaxRecordedValue_);
+}
+
+void THistogram::Sub(const THistogram& other) {
+    if (HdrTill_ != other.HdrTill_ || MaxValue_ != other.MaxValue_) {
+        throw std::invalid_argument("Cannot sub histograms with different parameters");
+    }
+
+    for (size_t i = 0; i < Buckets_.size() && i < other.Buckets_.size(); ++i) {
+        Buckets_[i] -= other.Buckets_[i];
+    }
+    TotalCount_ -= other.TotalCount_;
+    // Note: We can't update MaxRecordedValue_ in Sub() as we don't know the actual max value
+    // after subtraction. We'll keep the current MaxRecordedValue_.
 }
 
 uint64_t THistogram::GetValueAtPercentile(double percentile) const {
@@ -65,6 +81,7 @@ uint64_t THistogram::GetValueAtPercentile(double percentile) const {
 void THistogram::Reset() {
     std::fill(Buckets_.begin(), Buckets_.end(), 0);
     TotalCount_ = 0;
+    MaxRecordedValue_ = 0;
 }
 
 size_t THistogram::GetBucketIndex(uint64_t value) const {
@@ -97,9 +114,9 @@ uint64_t THistogram::GetBucketUpperBound(size_t bucketIndex) const {
         // Linear buckets: bucket 0 -> [0,1), bucket 1 -> [1,2), etc.
         return static_cast<uint64_t>(bucketIndex + 1);
     } else {
-        // Last bucket extends to infinity
+        // Last bucket extends to max recorded value
         if (bucketIndex == Buckets_.size() - 1) {
-            return std::numeric_limits<uint64_t>::max();
+            return MaxRecordedValue_ > 0 ? MaxRecordedValue_ : std::numeric_limits<uint64_t>::max();
         }
 
         // Exponential buckets

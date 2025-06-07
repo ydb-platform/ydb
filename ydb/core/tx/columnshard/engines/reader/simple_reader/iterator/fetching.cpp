@@ -3,6 +3,7 @@
 #include "source.h"
 
 #include <ydb/core/tx/columnshard/engines/filter.h>
+#include <ydb/core/tx/columnshard/engines/reader/simple_reader/duplicates/events.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
 
@@ -107,30 +108,18 @@ TConclusion<bool> TDetectInMem::DoExecuteInplace(const std::shared_ptr<IDataSour
 }
 
 namespace {
-class TApplySourceResult: public IDataTasksProcessor::ITask {
+class TApplySourceResult: public IApplyAction {
 private:
     using TBase = IDataTasksProcessor::ITask;
     YDB_READONLY_DEF(std::shared_ptr<IDataSource>, Source);
-    NColumnShard::TCounterGuard Guard;
     TFetchingScriptCursor Step;
 
 public:
-    virtual TString GetTaskClassIdentifier() const override {
-        return "TApplySourceResult";
-    }
-
-    TApplySourceResult(
-        const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step)
-        : TBase(NActors::TActorId())
-        , Source(source)
-        , Guard(source->GetContext()->GetCommonContext()->GetCounters().GetResultsForSourceGuard())
+    TApplySourceResult(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step)
+        : Source(source)
         , Step(step) {
     }
 
-    virtual TConclusionStatus DoExecuteImpl() override {
-        AFL_VERIFY(false)("event", "not applicable");
-        return TConclusionStatus::Success();
-    }
     virtual bool DoApply(IDataReader& indexedDataRead) const override {
         auto* plainReader = static_cast<TPlainReadData*>(&indexedDataRead);
         Source->SetCursor(Step);
@@ -168,7 +157,8 @@ TConclusion<bool> TBuildResultStep::DoExecuteInplace(const std::shared_ptr<IData
     }
     source->MutableStageResult().SetResultChunk(std::move(resultBatch), StartIndex, RecordsCount);
     NActors::TActivationContext::AsActorContext().Send(context->GetCommonContext()->GetScanActorId(),
-        new NColumnShard::TEvPrivate::TEvTaskProcessedResult(std::make_shared<TApplySourceResult>(source, step)));
+        new NColumnShard::TEvPrivate::TEvTaskProcessedResult(std::make_shared<TApplySourceResult>(source, step),
+            source->GetContext()->GetCommonContext()->GetCounters().GetResultsForSourceGuard()));
     return false;
 }
 
@@ -201,6 +191,39 @@ TConclusion<bool> TPrepareResultStep::DoExecuteInplace(const std::shared_ptr<IDa
     } else {
         return true;
     }
+}
+
+void TDuplicateFilter::TFilterSubscriber::OnFilterReady(NArrow::TColumnFilter&& filter) {
+    if (auto source = Source.lock()) {
+        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "fetch_filter")("source", source->GetSourceId())("filter", filter.DebugString());
+        if (source->GetContext()->IsAborted()) {
+            return;
+        }
+        if (const std::shared_ptr<NArrow::TColumnFilter> appliedFilter = source->GetStageData().GetAppliedFilter()) {
+            filter = filter.ApplyFilterFrom(*appliedFilter);
+        }
+        source->MutableStageData().AddFilter(std::move(filter));
+        Step.Next();
+        auto task = std::make_shared<TStepAction>(source, std::move(Step), source->GetContext()->GetCommonContext()->GetScanActorId(), false);
+        NConveyor::TScanServiceOperator::SendTaskToExecute(task, source->GetContext()->GetCommonContext()->GetConveyorProcessId());
+    }
+}
+
+void TDuplicateFilter::TFilterSubscriber::OnFailure(const TString& reason) {
+    if (auto source = Source.lock()) {
+        source->GetContext()->GetCommonContext()->AbortWithError("cannot build duplicate filter: " + reason);
+    }
+}
+
+TDuplicateFilter::TFilterSubscriber::TFilterSubscriber(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step)
+    : Source(source)
+    , Step(step)
+    , TaskGuard(source->GetContext()->GetCommonContext()->GetCounters().GetFilterFetchingGuard()) {
+}
+
+TConclusion<bool> TDuplicateFilter::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const {
+    source->StartFetchingDuplicateFilter(std::make_shared<TFilterSubscriber>(source, step));
+    return false;
 }
 
 }   // namespace NKikimr::NOlap::NReader::NSimple

@@ -6,10 +6,6 @@ namespace NYT::NHttps {
 
 void TServerCredentialsConfig::Register(TRegistrar registrar)
 {
-    registrar.Parameter("private_key", &TThis::PrivateKey)
-        .Optional();
-    registrar.Parameter("cert_chain", &TThis::CertChain)
-        .Optional();
     registrar.Parameter("update_period", &TThis::UpdatePeriod)
         .Optional();
 }
@@ -23,12 +19,8 @@ void TServerConfig::Register(TRegistrar registrar)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void TClientCredentialsConfig::Register(TRegistrar registrar)
+void TClientCredentialsConfig::Register(TRegistrar /*registrar*/)
 {
-    registrar.Parameter("private_key", &TThis::PrivateKey)
-        .Optional();
-    registrar.Parameter("cert_chain", &TThis::CertChain)
-        .Optional();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

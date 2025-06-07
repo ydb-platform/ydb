@@ -67,7 +67,7 @@ TString TAwsSignature::GetXAmzContentSha256() const {
 }
 
 TString TAwsSignature::GetAmzDate() const {
-    return CurrentTime.FormatLocalTime("%Y%m%dT%H%M%SZ");
+    return CurrentTime.FormatGmTime("%Y%m%dT%H%M%SZ");
 }
 
 TString TAwsSignature::GetContentType() const {
@@ -112,7 +112,7 @@ TString TAwsSignature::CalcSignature() const {
 }
 
 TString TAwsSignature::GetDate() const {
-    return CurrentTime.FormatLocalTime("%Y%m%d");
+    return CurrentTime.FormatGmTime("%Y%m%d");
 }
 
 TString TAwsSignature::HmacSHA256(TStringBuf key, TStringBuf data) {

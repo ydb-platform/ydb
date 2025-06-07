@@ -19,8 +19,6 @@ public:
     YDB_READONLY_DEF(TSet<TString>, Tables);
     YDB_READONLY(ui32, ProcessIndex, 0);
     YDB_READONLY(ui32, ProcessCount, 1);
-    YDB_READONLY_DEF(TFsPath, ExternalQueriesDir);
-    YDB_READONLY_PROTECT(bool, CheckCanonical, false);
 };
 
 class TTpcBaseWorkloadGenerator: public TWorkloadGeneratorBase {

@@ -67,7 +67,7 @@ TClient::TClient(
     const TClientOptions& clientOptions)
     : Connection_(std::move(connection))
     , ClientOptions_(clientOptions)
-    , RetryingChannel_(CreateSequoiaAwareRetryingChannel(
+    , RetryingChannel_(MaybeCreateRetryingChannel(
         WrapNonRetryingChannel(Connection_->CreateChannel(false)),
         /*retryProxyBanned*/ true))
     , TableMountCache_(BIND(
@@ -99,18 +99,19 @@ void TClient::Terminate()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-IChannelPtr TClient::CreateSequoiaAwareRetryingChannel(IChannelPtr channel, bool retryProxyBanned) const
+IChannelPtr TClient::MaybeCreateRetryingChannel(IChannelPtr channel, bool retryProxyBanned) const
 {
     const auto& config = Connection_->GetConfig();
-    bool retrySequoiaErrorsOnly = !config->EnableRetries;
-    // NB: Even if client's retries are disabled Sequoia transient failures are
-    // still retriable. See IsRetriableError().
-    return CreateRetryingChannel(
-        config->RetryingChannel,
-        std::move(channel),
-        BIND([=] (const TError& error) {
-            return IsRetriableError(error, retryProxyBanned, retrySequoiaErrorsOnly);
-        }));
+    if (config->EnableRetries) {
+        return NRpc::CreateRetryingChannel(
+            config->RetryingChannel,
+            std::move(channel),
+            BIND([=] (const TError& error) {
+                return IsRetriableError(error, retryProxyBanned);
+            }));
+    } else {
+        return channel;
+    }
 }
 
 IChannelPtr TClient::CreateNonRetryingChannelByAddress(const std::string& address) const
@@ -144,22 +145,22 @@ IChannelPtr TClient::CreateNonRetryingStickyChannel() const
 
 IChannelPtr TClient::WrapStickyChannelIntoRetrying(IChannelPtr underlying) const
 {
-    return CreateSequoiaAwareRetryingChannel(
+    return MaybeCreateRetryingChannel(
         std::move(underlying),
         /*retryProxyBanned*/ false);
 }
 
-IChannelPtr TClient::WrapNonRetryingChannel(IChannelPtr underlying) const
+IChannelPtr TClient::WrapNonRetryingChannel(IChannelPtr channel) const
 {
-    auto credentialsInjected = CreateCredentialsInjectingChannel(
-        std::move(underlying),
+    channel = CreateCredentialsInjectingChannel(
+        std::move(channel),
         ClientOptions_);
 
-    auto targetClusterInjected = CreateTargetClusterInjectingChannel(
-        std::move(credentialsInjected),
+    channel = CreateTargetClusterInjectingChannel(
+        std::move(channel),
         ClientOptions_.MultiproxyTargetCluster);
 
-    return targetClusterInjected;
+    return channel;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -920,7 +921,7 @@ TFuture<std::vector<TListQueueConsumerRegistrationsResult>> TClient::ListQueueCo
 TFuture<TCreateQueueProducerSessionResult> TClient::CreateQueueProducerSession(
     const TRichYPath& producerPath,
     const TRichYPath& queuePath,
-    const NQueueClient::TQueueProducerSessionId& sessionId,
+    const TQueueProducerSessionId& sessionId,
     const TCreateQueueProducerSessionOptions& options)
 {
     auto proxy = CreateApiServiceProxy();
@@ -934,6 +935,7 @@ TFuture<TCreateQueueProducerSessionResult> TClient::CreateQueueProducerSession(
     if (options.UserMeta) {
         ToProto(req->mutable_user_meta(), ConvertToYsonString(options.UserMeta).ToString());
     }
+    ToProto(req->mutable_mutating_options(), options);
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspCreateQueueProducerSessionPtr& rsp) {
         INodePtr userMeta;
@@ -952,7 +954,7 @@ TFuture<TCreateQueueProducerSessionResult> TClient::CreateQueueProducerSession(
 TFuture<void> TClient::RemoveQueueProducerSession(
     const NYPath::TRichYPath& producerPath,
     const NYPath::TRichYPath& queuePath,
-    const NQueueClient::TQueueProducerSessionId& sessionId,
+    const TQueueProducerSessionId& sessionId,
     const TRemoveQueueProducerSessionOptions& options)
 {
     auto proxy = CreateApiServiceProxy();
@@ -982,8 +984,8 @@ TFuture<TGetCurrentUserResultPtr> TClient::GetCurrentUser(const TGetCurrentUserO
 }
 
 TFuture<void> TClient::AddMember(
-    const TString& group,
-    const TString& member,
+    const std::string& group,
+    const std::string& member,
     const TAddMemberOptions& options)
 {
     auto proxy = CreateApiServiceProxy();
@@ -1000,8 +1002,8 @@ TFuture<void> TClient::AddMember(
 }
 
 TFuture<void> TClient::RemoveMember(
-    const TString& group,
-    const TString& member,
+    const std::string& group,
+    const std::string& member,
     const TRemoveMemberOptions& options)
 {
     auto proxy = CreateApiServiceProxy();
@@ -2533,7 +2535,7 @@ TFuture<TGetQueryTrackerInfoResult> TClient::GetQueryTrackerInfo(
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspGetQueryTrackerInfoPtr& rsp) {
         return TGetQueryTrackerInfoResult{
-            .QueryTrackerStage = FromProto<TString>(rsp->query_tracker_stage()),
+            .QueryTrackerStage = FromProto<std::string>(rsp->query_tracker_stage()),
             .ClusterName = FromProto<std::string>(rsp->cluster_name()),
             .SupportedFeatures = TYsonString(rsp->supported_features()),
             .AccessControlObjects = FromProto<std::vector<std::string>>(rsp->access_control_objects()),

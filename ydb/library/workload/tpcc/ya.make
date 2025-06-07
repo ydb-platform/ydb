@@ -1,8 +1,11 @@
 LIBRARY()
 
 SRCS(
+    clean.cpp
     common_queries.cpp
+    data_splitter.cpp
     histogram.cpp
+    init.cpp
     runner.cpp
     task_queue.cpp
     terminal.cpp
@@ -10,6 +13,7 @@ SRCS(
     transaction_neworder.cpp
     transaction_orderstatus.cpp
     transaction_payment.cpp
+    transaction_simulation.cpp
     transaction_stocklevel.cpp
 )
 

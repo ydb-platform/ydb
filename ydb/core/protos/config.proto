@@ -186,6 +186,15 @@ message TDynamicNameserviceConfig {
 
 message TDomainsConfig {
     message TStateStorage {
+        enum EPileState {
+            DISCONNECTED = 0; // this pile is disconnected from primary one
+            NOT_SYNCHRONIZED = 1; // this pile is connected to primary pile, but not yet fully synchronized
+            SYNCHRONIZED = 2; // this pile is connected to primary pile and in sync
+            PRIMARY = 3; // this is the primary pile
+            PROMOTED = 4; // this is the synchronized pile which is being promoted to become primary
+            DEMOTED = 5; // this is currently primary pile which is being demoted
+        }
+
         message TRing {
             optional uint32 NToSelect = 1;
             repeated TRing Ring = 2;
@@ -195,6 +204,8 @@ message TDomainsConfig {
             optional bool IsDisabled = 6 [default = false]; // used in the intermediate reconfiguration step
             optional bool WriteOnly = 7 [default = false]; // used for ring groups
             optional uint32 RingGroupActorIdOffset = 8 [default = 0]; // used for ActorId difference for multiple replicas on one node
+            optional uint32 BridgePileId = 9; // bridge pile id for this ring group when bridge mode is enabled
+            optional EPileState PileState = 10; // state for this ring group's pile
         }
 
         optional uint32 SSId = 1 [default = 1];
@@ -202,7 +213,7 @@ message TDomainsConfig {
         optional uint32 StateStorageVersion = 3 [default = 0];
         repeated uint32 CompatibleVersions = 4;
         repeated TRing RingGroups = 5;
-
+        optional uint64 ClusterStateGeneration = 6; // generation from current ClusterState
     }
 
     message TStoragePoolType {

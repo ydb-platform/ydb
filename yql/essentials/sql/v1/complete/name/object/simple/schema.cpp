@@ -19,7 +19,7 @@ namespace NSQLComplete {
             }
 
             static auto FilterByTypes(TMaybe<THashSet<TString>> types) {
-                return [types = std::move(types)](auto f) {
+                return [types = std::move(types)](auto f) mutable {
                     TVector<TFolderEntry> entries = f.ExtractValue();
                     EraseIf(entries, [types = std::move(types)](const TFolderEntry& entry) {
                         return types && !types->contains(entry.Type);
@@ -56,7 +56,7 @@ namespace NSQLComplete {
                 auto [path, name] = Simple_->Split(request.Path);
                 return Simple_->List(request.Cluster, TString(path))
                     .Apply(FilterByName(TString(name)))
-                    .Apply(FilterByTypes(std::move(request.Filter.Types)))
+                    .Apply(FilterByTypes(request.Filter.Types))
                     .Apply(Crop(request.Limit))
                     .Apply(ToResponse(name));
             }
@@ -69,12 +69,12 @@ namespace NSQLComplete {
 
     NThreading::TFuture<TVector<TFolderEntry>>
     ISimpleSchema::List(TString folder) const {
-        return List(/* cluster = */ "", folder);
+        return List(/* cluster = */ "", std::move(folder));
     }
 
     NThreading::TFuture<TVector<TFolderEntry>>
     ISimpleSchema::List(TString /* cluster */, TString folder) const {
-        return List(folder);
+        return List(std::move(folder));
     }
 
     ISchema::TPtr MakeSimpleSchema(ISimpleSchema::TPtr simple) {

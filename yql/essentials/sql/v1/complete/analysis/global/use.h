@@ -12,6 +12,7 @@ namespace NSQLComplete {
     TMaybe<TUseContext> FindUseStatement(
         SQLv1::Sql_queryContext* ctx,
         antlr4::TokenStream* tokens,
-        size_t cursorPosition);
+        size_t cursorPosition,
+        const TEnvironment& env);
 
 } // namespace NSQLComplete

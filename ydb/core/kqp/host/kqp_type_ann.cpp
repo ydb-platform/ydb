@@ -1430,14 +1430,20 @@ TStatus AnnotateKqpPhysicalTx(const TExprNode::TPtr& node, TExprContext& ctx) {
     return TStatus::Ok;
 }
 
-TStatus AnnotateKqpPhysicalQuery(const TExprNode::TPtr& node, TExprContext& ctx) {
+TStatus AnnotateKqpPhysicalQuery(const TExprNode::TPtr& node, TExprContext& ctx, bool enableRBO) {
     if (!EnsureArgsCount(*node, 3, ctx)) {
         return TStatus::Error;
     }
 
-    // TODO: ???
-
-    node->SetTypeAnn(ctx.MakeType<TVoidExprType>());
+    // We need to infer the type of physical query for RBO at this time
+    if (enableRBO) {
+        TKqpPhysicalQuery query(node);
+        auto type = query.Results().Item(0).Ptr()->GetTypeAnn();
+        node->SetTypeAnn(type);
+    }
+    else {
+        node->SetTypeAnn(ctx.MakeType<TVoidExprType>());
+    }
     return TStatus::Ok;
 }
 
@@ -2207,7 +2213,7 @@ TAutoPtr<IGraphTransformer> CreateKqpTypeAnnotationTransformer(const TString& cl
             }
 
             if (TKqpPhysicalQuery::Match(input.Get())) {
-                return AnnotateKqpPhysicalQuery(input, ctx);
+                return AnnotateKqpPhysicalQuery(input, ctx, config->EnableNewRBO);
             }
 
             if (TKqpEffects::Match(input.Get())) {

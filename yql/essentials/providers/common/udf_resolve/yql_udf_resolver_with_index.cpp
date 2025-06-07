@@ -38,6 +38,7 @@ class TUdfResolverWithIndex : public IUdfResolver {
             Block_.Type = EUserDataType::PATH;
             Block_.Data = Link_->GetPath();
             Block_.Usage.Set(EUserDataBlockUsage::Udf);
+            Block_.FrozenFile = Link_;
         }
 
         static TResourceFile::TPtr Create(const TString& packageName, const TSet<TString>& modules, TFileLinkPtr link) {
@@ -205,6 +206,8 @@ private:
         function.IsStrict = info.IsStrict;
         function.SupportsBlocks = info.SupportsBlocks;
         function.Messages = info.Messages;
+        function.MinLangVer = info.MinLangVer;
+        function.MaxLangVer = info.MaxLangVer;
         return true;
     }
 

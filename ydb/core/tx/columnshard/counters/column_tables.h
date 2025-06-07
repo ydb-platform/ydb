@@ -31,7 +31,7 @@ public:
         output.SetLastUpdateTime(LastUpdateTime->MilliSeconds());
     }
 
-    std::shared_ptr<TSingleColumnTableCounters> GetPathIdCounter(TInternalPathId pathId);
+    std::shared_ptr<TSingleColumnTableCounters> GetPathIdCounter(const TInternalPathId pathId);
 };
 
 class TSingleColumnTableCounters {

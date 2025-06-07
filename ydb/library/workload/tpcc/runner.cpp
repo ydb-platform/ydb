@@ -26,8 +26,6 @@ namespace {
 
 //-----------------------------------------------------------------------------
 
-constexpr auto SleepMsEveryIterationMainLoop = std::chrono::milliseconds(50);
-constexpr auto DisplayUpdateInterval = std::chrono::seconds(15);
 constexpr auto GracefulShutdownTimeout = std::chrono::seconds(5);
 constexpr auto MinWarmupPerTerminal = std::chrono::milliseconds(1);
 
@@ -279,7 +277,7 @@ void TPCCRunner::Join() {
             LOG_T("Waiting for terminal " << terminal->GetID());
         }
         while (!terminal->IsDone()) {
-            std::this_thread::sleep_for(SleepMsEveryIterationMainLoop);
+            std::this_thread::sleep_for(TRunConfig::SleepMsEveryIterationMainLoop);
             auto now = Clock::now();
             auto delta = now - shutdownTs;
             if (delta >= GracefulShutdownTimeout) {
@@ -296,7 +294,11 @@ void TPCCRunner::Join() {
 
     LOG_I("Stopping task queue");
     TaskQueue->Join();
+
+    // TODO: stop drivers
+
     LOG_I("Runner stopped");
+
 }
 
 void TPCCRunner::RunSync() {
@@ -354,7 +356,7 @@ void TPCCRunner::RunSync() {
         if (now >= stopDeadline) {
             break;
         }
-        std::this_thread::sleep_for(SleepMsEveryIterationMainLoop);
+        std::this_thread::sleep_for(TRunConfig::SleepMsEveryIterationMainLoop);
         now = Clock::now();
         UpdateDisplayIfNeeded(now);
     }
@@ -367,7 +369,7 @@ void TPCCRunner::RunSync() {
 
 void TPCCRunner::UpdateDisplayIfNeeded(Clock::time_point now) {
     auto delta = now - LastStatisticsSnapshot->Ts;
-    if (delta >= DisplayUpdateInterval) {
+    if (delta >= TRunConfig::DisplayUpdateInterval) {
         std::unique_ptr<TAllStatistics> newStatistics = CollectStatistics(now);
         LastStatisticsSnapshot = std::move(newStatistics);
 

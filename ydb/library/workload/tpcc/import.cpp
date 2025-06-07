@@ -6,6 +6,7 @@
 #include "util.h"
 
 #include <ydb/public/lib/ydb_cli/commands/ydb_command.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
 #include <library/cpp/logger/log.h>
@@ -17,11 +18,22 @@
 #include <util/string/printf.h>
 
 #include <atomic>
-#include <format>
+#include <expected>
+#include <memory>
+#include <stop_token>
+#include <thread>
+#include <vector>
+#include <chrono>
+#include <iomanip>
+#include <sstream>
 
 namespace NYdb::NTPCC {
 
 namespace {
+
+//-----------------------------------------------------------------------------
+
+using Clock = std::chrono::steady_clock;
 
 //-----------------------------------------------------------------------------
 
@@ -373,7 +385,7 @@ NTable::TBulkUpsertResult LoadOpenOrders(
     valueBuilder.BeginList();
 
     // TPC-C 4.3.3.1: o_c_id must be a permutation of [1, customersPerDistrict]
-    TVector<int> customerIds;
+    std::vector<int> customerIds;
     customerIds.reserve(CUSTOMERS_PER_DISTRICT);
     for (int i = 1; i <= CUSTOMERS_PER_DISTRICT; ++i) {
         customerIds.push_back(i);
@@ -504,9 +516,7 @@ void ExecuteWithRetry(const TString& operationName, LoadFunc loadFunc, TLog* Log
         } else {
             LOG_E(operationName << " failed after " << MAX_RETRIES << " retries: "
                     << result.GetIssues().ToOneLineString());
-            throw std::runtime_error(
-                std::format("Failed to execute {}: {}",
-                    operationName.c_str(), result.GetIssues().ToOneLineString().c_str()));
+            std::quick_exit(1);
         }
     }
 }
@@ -533,9 +543,46 @@ void LoadSmallTables(TDriver& driver, const TString& path, int warehouseCount, T
 
 //-----------------------------------------------------------------------------
 
+struct TIndexBuildState {
+    TOperation::TOperationId Id;
+    TString Table;
+    TString Name;
+    double Progress = 0.0;
+
+    TIndexBuildState(TOperation::TOperationId id, const TString& table, const TString& name)
+        : Id(id), Table(table), Name(name) {}
+};
+
 struct TLoadState {
+    enum ELoadState {
+        ELOAD_INDEXED_TABLES = 0,
+        ELOAD_TABLES,
+        EBUILD_INDICES,
+        ESUCCESS
+    };
+
+    explicit TLoadState(std::stop_token stopToken)
+        : State(ELOAD_INDEXED_TABLES)
+        , StopToken(stopToken)
+    {
+    }
+
+    ELoadState State;
+
+    // shared with loader threads
+
+    std::stop_token StopToken;
+
     std::atomic<size_t> DataSizeLoaded{0};
+
     std::atomic<size_t> IndexedRangesLoaded{0};
+    std::atomic<size_t> RangesLoaded{0};
+
+    // single threaded
+
+    std::vector<TIndexBuildState> IndexBuildStates;
+    size_t CurrentIndex = 0;
+    size_t ApproximateDataSize = 0;
 };
 
 //-----------------------------------------------------------------------------
@@ -563,6 +610,10 @@ void LoadRange(TDriver& driver, const TString& path, int whStart, int whEnd, TLo
 
     // load tables with indices first (so that we could start to build indices in background)
     for (int wh = whStart; wh <= whEnd; ++wh) {
+        if (state.StopToken.stop_requested()) {
+            return;
+        }
+
         for (int district = DISTRICT_LOW_ID; district <= DISTRICT_HIGH_ID; ++district) {
             ExecuteWithRetry("LoadCustomers", [&]() {
                 return LoadCustomers(tableClient, customerTablePath, wh, district, Log);
@@ -579,6 +630,10 @@ void LoadRange(TDriver& driver, const TString& path, int whStart, int whEnd, TLo
     const size_t perWhDatasize = stockDataSizePerWh + orderLineDataSizePerWh + historyDataSizePerWh + newOrderDataSizePerWh;
 
     for (int wh = whStart; wh <= whEnd; ++wh) {
+        if (state.StopToken.stop_requested()) {
+            return;
+        }
+
         constexpr int itemBatchSize = ITEM_COUNT / 10;
         for (int batch = 0; batch < 10; ++batch) {
             int startItemId = batch * itemBatchSize + 1;
@@ -602,38 +657,362 @@ void LoadRange(TDriver& driver, const TString& path, int whStart, int whEnd, TLo
 
         state.DataSizeLoaded.fetch_add(perWhDatasize, std::memory_order_relaxed);
     }
+
+    state.RangesLoaded.fetch_add(1);
 }
+
+//-----------------------------------------------------------------------------
+
+TOperation::TOperationId CreateIndex(
+    NTable::TTableClient& client,
+    const TString& path,
+    const char* table,
+    const char* indexName,
+    const std::vector<std::string>& columns,
+    TLog* Log)
+{
+    TString tablePath;
+    if (!path.empty()) {
+        tablePath = path + "/" + table;
+    } else {
+        tablePath = table;
+    }
+
+    auto settings = NTable::TAlterTableSettings()
+        .AppendAddIndexes({NTable::TIndexDescription(indexName, NTable::EIndexType::GlobalSync, columns)});
+
+    TOperation::TOperationId operationId;
+    auto result = client.RetryOperationSync([&](NTable::TSession session) {
+        auto opResult = session.AlterTableLong(tablePath, settings).GetValueSync();
+        if (opResult.Ready() && !opResult.Status().IsSuccess()) {
+            LOG_W("Failed to create index " << indexName << " for " << tablePath << ": "
+                << opResult.ToString() << ", retrying");
+            return opResult.Status();
+        } else {
+            operationId = opResult.Id();
+        }
+        return TStatus(EStatus::SUCCESS, NIssue::TIssues());
+    });
+
+    if (operationId.GetKind() == TOperation::TOperationId::UNUSED) {
+        LOG_E("Failed to create index " << indexName << " for " << tablePath);
+    }
+
+    return operationId;
+}
+
+TIndexBuildState CreateCustomerIndex(NTable::TTableClient& client, const TString& path, TLog* Log) {
+    std::vector<std::string> columns = { "C_W_ID", "C_D_ID", "C_LAST", "C_FIRST" };
+    auto id = CreateIndex(client, path, TABLE_CUSTOMER, INDEX_CUSTOMER_NAME, columns, Log);
+    LOG_T("Creating customer index: " << id.ToString());
+    return TIndexBuildState(id, TABLE_CUSTOMER, INDEX_CUSTOMER_NAME);
+}
+
+TIndexBuildState CreateOpenOrderIndex(NTable::TTableClient& client, const TString& path, TLog* Log) {
+    std::vector<std::string> columns = { "O_W_ID", "O_D_ID", "O_C_ID", "O_ID" };
+    auto id = CreateIndex(client, path, TABLE_OORDER, INDEX_ORDER, columns, Log);
+    LOG_T("Creating oorder index: " << id.ToString());
+    return TIndexBuildState(id, TABLE_OORDER, INDEX_ORDER);
+}
+
+void CreateIndices(TDriver& driver, const TString& path, TLoadState& loadState, TLog* Log) {
+    NTable::TTableClient client(driver);
+
+    loadState.IndexBuildStates = {
+        CreateCustomerIndex(client, path, Log),
+        CreateOpenOrderIndex(client, path, Log)
+    };
+}
+
+//-----------------------------------------------------------------------------
+
+double CalculateProgress(const auto& metadata) {
+    ui32 partsTotal = 0;
+    ui32 partsCompleted = 0;
+    for (const auto& item : metadata.ItemsProgress) {
+        if (!item.PartsTotal) {
+            return 0;
+        }
+
+        partsTotal += item.PartsTotal;
+        partsCompleted += item.PartsCompleted;
+    }
+
+    if (partsTotal == 0 || partsCompleted == 0) {
+        return 0;
+    }
+
+    return double(partsCompleted) / partsTotal * 100;
+}
+
+// returns either progress (100 – done) or string with error
+std::expected<double, std::string> GetIndexProgress(
+    NOperation::TOperationClient& client,
+    const TOperation::TOperationId& id)
+{
+    auto operation = client.Get<NTable::TBuildIndexOperation>(id).GetValueSync();
+    if (operation.Ready()) {
+        if (operation.Status().IsSuccess() && operation.Metadata().State == NTable::EBuildIndexState::Done) {
+            return 100;
+        }
+
+        TStringStream ss;
+        ss << "Failed to create index, operation id " << id.ToString() << ": " << operation.Status()
+            << ", build state: " << operation.Metadata().State << ", " << operation.Metadata().Path;
+        return std::unexpected(ss.Str());
+    } else {
+        return operation.Metadata().Progress;
+    }
+}
+
+//-----------------------------------------------------------------------------
+
+std::stop_source StopByInterrupt;
+
+void InterruptHandler(int) {
+    StopByInterrupt.request_stop();
+}
+
+//-----------------------------------------------------------------------------
+
+class TPCCLoader {
+public:
+    TPCCLoader(const NConsoleClient::TClientCommand::TConfig& connectionConfig, const TRunConfig& runConfig)
+        : ConnectionConfig(connectionConfig)
+        , Config(runConfig)
+        , Log(std::make_unique<TLog>(CreateLogBackend("cerr", runConfig.LogPriority, true)))
+        , LastDisplayUpdate(Clock::now())
+        , PreviousDataSizeLoaded(0)
+        , StartTime(Clock::now())
+        , LoadState(StopByInterrupt.get_token())
+    {
+    }
+
+    void ImportSync() {
+        CalculateApproximateDataSize();
+
+        LOG_I("Starting TPC-C data import for " << Config.WarehouseCount << " warehouses using " <<
+                Config.ThreadCount << " threads. Approximate data size: " << GetFormattedSize(LoadState.ApproximateDataSize));
+
+        // TODO: detect number of threads
+        size_t threadCount = std::min(Config.WarehouseCount, Config.ThreadCount );
+        threadCount = std::max(threadCount, size_t(1));
+
+        // TODO
+        size_t driverCount = threadCount;
+
+        // Create drivers
+        auto connectionConfigCopy = ConnectionConfig;
+        std::vector<TDriver> drivers;
+        drivers.reserve(driverCount);
+        for (size_t i = 0; i < driverCount; ++i) {
+            drivers.emplace_back(NConsoleClient::TYdbCommand::CreateDriver(connectionConfigCopy));
+        }
+
+        // we set handler as late as possible to overwrite
+        // any handlers set deeply inside
+        signal(SIGINT, InterruptHandler);
+        signal(SIGTERM, InterruptHandler);
+
+        StartTime = Clock::now();
+        auto startTs = TInstant::Now();
+
+        std::vector<std::thread> threads;
+        threads.reserve(threadCount);
+
+        for (size_t threadId = 0; threadId < threadCount; ++threadId) {
+            int whStart = threadId * Config.WarehouseCount / threadCount + 1;
+            int whEnd = (threadId + 1) * Config.WarehouseCount / threadCount;
+
+            threads.emplace_back([threadId, &drivers, driverCount, this, whStart, whEnd]() {
+                auto& driver = drivers[threadId % driverCount];
+                if (threadId == 0) {
+                    LoadSmallTables(driver, Config.Path, Config.WarehouseCount, Log.get());
+                }
+                LoadRange(driver, Config.Path, whStart, whEnd, LoadState, Log.get());
+            });
+        }
+
+        NOperation::TOperationClient operationClient(drivers[0]);
+
+        while (true) {
+            if (StopByInterrupt.stop_requested()) {
+                LOG_I("Stop requested, waiting for threads to finish");
+                break;
+            }
+
+            if (LoadState.State == TLoadState::ESUCCESS) {
+                break;
+            }
+
+            auto now = Clock::now();
+            UpdateDisplayIfNeeded(now);
+
+            switch (LoadState.State) {
+            case TLoadState::ELOAD_INDEXED_TABLES: {
+                // Check if all indexed ranges are loaded and start index creation
+                size_t indexedRangesLoaded = LoadState.IndexedRangesLoaded.load(std::memory_order_relaxed);
+                if (indexedRangesLoaded >= threadCount) {
+                    CreateIndices(drivers[0], Config.Path, LoadState, Log.get());
+                    LOG_I("Indexed tables loaded, indices are being created. Continuing with remaining tables");
+                    LoadState.State = TLoadState::ELOAD_TABLES;
+                }
+                break;
+            }
+            case TLoadState::ELOAD_TABLES: {
+                // Check if all ranges are loaded (work is complete)
+                size_t rangesLoaded = LoadState.RangesLoaded.load(std::memory_order_relaxed);
+                if (rangesLoaded >= threadCount) {
+                    LOG_I("All tables loaded successfully. Waiting for indices to be ready");
+                    LoadState.State = TLoadState::EBUILD_INDICES;
+                }
+                break;
+            }
+            case TLoadState::EBUILD_INDICES: {
+                if (!LoadState.IndexBuildStates.empty() && LoadState.CurrentIndex < LoadState.IndexBuildStates.size()) {
+                    auto& indexState = LoadState.IndexBuildStates[LoadState.CurrentIndex];
+                    auto progress = GetIndexProgress(operationClient, indexState.Id);
+                    if (!progress) {
+                        LOG_E("Failed to build index " << indexState.Name <<  ": " << progress.error());
+                        std::quick_exit(1);
+                    }
+                    indexState.Progress = *progress;
+                    if (indexState.Progress == 100.0) {
+                        ++LoadState.CurrentIndex;
+                    }
+
+                    if (LoadState.CurrentIndex >= LoadState.IndexBuildStates.size()) {
+                        LOG_I("Indices created successfully");
+                        LoadState.State = TLoadState::ESUCCESS;
+                        continue;
+                    }
+                } else {
+                    LoadState.State = TLoadState::ESUCCESS;
+                    continue;
+                }
+                break;
+            }
+            case TLoadState::ESUCCESS:
+                break;
+            }
+
+            std::this_thread::sleep_for(TRunConfig::SleepMsEveryIterationMainLoop);
+            now = Clock::now();
+        }
+
+        // Wait for all threads to complete
+        for (auto& thread : threads) {
+            thread.join();
+        }
+
+        // Stop all drivers
+        for (auto& driver : drivers) {
+            driver.Stop(true);
+        }
+
+        auto endTs = TInstant::Now();
+        auto duration = endTs - startTs;
+
+        if (LoadState.State == TLoadState::ESUCCESS) {
+            LOG_I("TPC-C data import completed successfully in " << duration.ToString());
+        }
+    }
+
+private:
+    void CalculateApproximateDataSize() {
+        // We calculate approximate data size based on heavy tables only
+        double stockSize = TDataSplitter::GetPerWarehouseMB(TABLE_STOCK) * Config.WarehouseCount;
+        double customerSize = TDataSplitter::GetPerWarehouseMB(TABLE_CUSTOMER) * Config.WarehouseCount;
+        double historySize = TDataSplitter::GetPerWarehouseMB(TABLE_HISTORY) * Config.WarehouseCount;
+        double oorderSize = TDataSplitter::GetPerWarehouseMB(TABLE_OORDER) * Config.WarehouseCount;
+        double orderLineSize = TDataSplitter::GetPerWarehouseMB(TABLE_ORDER_LINE) * Config.WarehouseCount;
+
+        double totalMB = stockSize + customerSize + historySize + oorderSize + orderLineSize;
+
+        LoadState.ApproximateDataSize = static_cast<size_t>(totalMB * 1024 * 1024);  // Convert to bytes
+    }
+
+    void UpdateDisplayIfNeeded(Clock::time_point now) {
+        auto delta = now - LastDisplayUpdate;
+        if (delta >= TRunConfig::DisplayUpdateInterval) {
+            if (LoadState.IndexBuildStates.empty() || LoadState.State != TLoadState::EBUILD_INDICES) {
+                // data import is in progress
+                size_t currentDataSizeLoaded = LoadState.DataSizeLoaded.load(std::memory_order_relaxed);
+
+                // Calculate percentage
+                double percentLoaded = LoadState.ApproximateDataSize > 0 ?
+                    (static_cast<double>(currentDataSizeLoaded) / LoadState.ApproximateDataSize) * 100.0 : 0.0;
+
+                // Calculate instantaneous upload speed (MiB/s)
+                auto deltaSeconds = std::chrono::duration<double>(delta).count();
+                double instantSpeedMiBs = deltaSeconds > 0 ?
+                    static_cast<double>(currentDataSizeLoaded - PreviousDataSizeLoaded) / (1024 * 1024) / deltaSeconds : 0.0;
+
+                // Calculate average upload speed (MiB/s)
+                auto totalElapsed = std::chrono::duration<double>(now - StartTime).count();
+                double avgSpeedMiBs = totalElapsed > 0 ?
+                    static_cast<double>(currentDataSizeLoaded) / (1024 * 1024) / totalElapsed : 0.0;
+
+                // Calculate time estimates
+                auto elapsedMinutes = static_cast<int>(totalElapsed / 60);
+                auto elapsedSeconds = static_cast<int>(totalElapsed) % 60;
+
+                int estimatedTimeLeftMinutes = 0;
+                int estimatedTimeLeftSeconds = 0;
+                if (avgSpeedMiBs > 0 && currentDataSizeLoaded < LoadState.ApproximateDataSize) {
+                    double remainingBytes = LoadState.ApproximateDataSize - currentDataSizeLoaded;
+                    double remainingSeconds = remainingBytes / (1024 * 1024) / avgSpeedMiBs;
+                    estimatedTimeLeftMinutes = static_cast<int>(remainingSeconds / 60);
+                    estimatedTimeLeftSeconds = static_cast<int>(remainingSeconds) % 60;
+                }
+
+                // Build progress message using string stream
+                std::stringstream ss;
+                ss << std::fixed << std::setprecision(1) << "Progress: " << percentLoaded << "% "
+                    << "(" << GetFormattedSize(currentDataSizeLoaded)
+                    << " / " << GetFormattedSize(LoadState.ApproximateDataSize) << ") "
+                    << std::setprecision(1) << instantSpeedMiBs << " MiB/s "
+                    << "(avg: " << avgSpeedMiBs << " MiB/s) "
+                    << "elapsed: " << elapsedMinutes << ":" << std::setfill('0') << std::setw(2) << elapsedSeconds << " "
+                    << "ETA: " << estimatedTimeLeftMinutes << ":"
+                    << std::setfill('0') << std::setw(2) << estimatedTimeLeftSeconds;
+
+                LOG_I(ss.str());
+                PreviousDataSizeLoaded = currentDataSizeLoaded;
+            } else {
+                // waiting for indices
+                if (LoadState.CurrentIndex < LoadState.IndexBuildStates.size()) {
+                    const auto& indexState = LoadState.IndexBuildStates[LoadState.CurrentIndex];
+                    std::stringstream ss;
+                    ss << "Waiting index " << (LoadState.CurrentIndex + 1)
+                        << " out of " << LoadState.IndexBuildStates.size()
+                        << " (" << indexState.Name << " on " << indexState.Table << ")"
+                        << ", build progress: " << std::setprecision(1) << indexState.Progress << "%";
+                    LOG_I(ss.str());
+                }
+            }
+
+            LastDisplayUpdate = now;
+        }
+    }
+
+private:
+    const NConsoleClient::TClientCommand::TConfig& ConnectionConfig;
+    const TRunConfig& Config;
+    std::unique_ptr<TLog> Log;
+    Clock::time_point LastDisplayUpdate;
+    size_t PreviousDataSizeLoaded;
+    Clock::time_point StartTime;
+    TLoadState LoadState;
+};
 
 } // anonymous namespace
 
 //-----------------------------------------------------------------------------
 
 void ImportSync(const NConsoleClient::TClientCommand::TConfig& connectionConfig, const TRunConfig& runConfig) {
-    auto log = std::make_unique<TLog>(CreateLogBackend("cerr", runConfig.LogPriority, true));
-    auto* Log = log.get(); // to make LOG_* macros working
-
-    auto connectionConfigCopy = connectionConfig;
-    auto driver = NConsoleClient::TYdbCommand::CreateDriver(connectionConfigCopy);
-
-    LOG_I("Starting TPC-C data import for " << runConfig.WarehouseCount << " warehouses");
-
-    auto startTs = TInstant::Now();
-
-    LoadSmallTables(driver, runConfig.Path, runConfig.WarehouseCount, Log);
-
-    TLoadState loadState;
-
-    for (int warehouseId = 1; warehouseId <= runConfig.WarehouseCount; ++warehouseId) {
-        LOG_T("Loading data for warehouse " << warehouseId);
-        LoadRange(driver, runConfig.Path, warehouseId, warehouseId, loadState, Log);
-    }
-
-    auto endTs = TInstant::Now();
-    auto delta = endTs - startTs;
-
-    driver.Stop(true);
-
-    LOG_I("TPC-C data import completed successfully in " << delta.Minutes());
+    TPCCLoader loader(connectionConfig, runConfig);
+    loader.ImportSync();
 }
 
 } // namespace NYdb::NTPCC

@@ -6,6 +6,8 @@
 
 #include <util/random/random.h>
 
+#include <string>
+
 namespace NYdb::NTPCC {
 
 // [from; to]
@@ -46,6 +48,9 @@ inline TString GetNonUniformRandomLastNameForRun() {
 inline TString GetNonUniformRandomLastNameForLoad() {
     return GetLastName(NonUniformRandom(255, C_LAST_LOAD_C, 0, 999));
 }
+
+// Format size in bytes to human-readable format
+std::string GetFormattedSize(size_t size);
 
 // Check if a status should cause program termination
 inline bool ShouldExit(const TStatus& status) {

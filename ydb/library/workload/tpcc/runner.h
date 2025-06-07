@@ -55,6 +55,9 @@ struct TRunConfig {
     // instead of actual transaction just async sleep and return SUCCESS
     int SimulateTransactionMs = 0;
     int SimulateTransactionSelect1Count = 0;
+
+    static constexpr auto SleepMsEveryIterationMainLoop = std::chrono::milliseconds(50);
+    static constexpr auto DisplayUpdateInterval = std::chrono::seconds(5);
 };
 
 void RunSync(const NConsoleClient::TClientCommand::TConfig& connectionConfig, const TRunConfig& runConfig);

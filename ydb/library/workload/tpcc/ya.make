@@ -16,6 +16,7 @@ SRCS(
     transaction_payment.cpp
     transaction_simulation.cpp
     transaction_stocklevel.cpp
+    util.cpp
 )
 
 PEERDIR(

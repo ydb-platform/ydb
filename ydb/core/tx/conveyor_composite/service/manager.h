@@ -7,7 +7,6 @@
 namespace NKikimr::NConveyorComposite {
 class TTasksManager {
 private:
-    const TString ConveyorName;
     std::vector<std::shared_ptr<TWorkersPool>> WorkerPools;
     std::vector<std::shared_ptr<TProcessCategory>> Categories;
     const NActors::TActorId DistributorActorId;
@@ -18,7 +17,6 @@ public:
     TString DebugString() const {
         TStringBuilder sb;
         sb << "{";
-        sb << ConveyorName << ":";
         for (auto&& wp : WorkerPools) {
             sb << wp->GetMaxWorkerThreads() << ",";
         }
@@ -33,9 +31,8 @@ public:
         }
     }
 
-    TTasksManager(const TString& convName, const NConfig::TConfig& config, const NActors::TActorId distributorActorId, TCounters& counters)
-        : ConveyorName(convName)
-        , DistributorActorId(distributorActorId)
+    TTasksManager(const NConfig::TConfig& config, const NActors::TActorId distributorActorId, TCounters& counters)
+        : DistributorActorId(distributorActorId)
         , Config(config)
         , Counters(counters)
     {
@@ -44,7 +41,7 @@ public:
         }
         for (auto&& i : Config.GetWorkerPools()) {
             WorkerPools.emplace_back(std::make_shared<TWorkersPool>(
-                ConveyorName + "::" + i.GetName(), distributorActorId, i, Counters.GetWorkersPoolSignals(i.GetName()), Categories));
+                i.GetName(), distributorActorId, i, Counters.GetWorkersPoolSignals(i.GetName()), Categories));
         }
     }
 

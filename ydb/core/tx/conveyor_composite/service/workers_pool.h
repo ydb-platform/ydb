@@ -61,7 +61,7 @@ public:
     static constexpr double Eps = 1e-6;
     using TPtr = std::shared_ptr<TWorkersPool>;
 
-    TWorkersPool(const TString& conveyorName, const NActors::TActorId& distributorId, const NConfig::TWorkersPool& config,
+    TWorkersPool(const TString& poolName, const NActors::TActorId& distributorId, const NConfig::TWorkersPool& config,
         const std::shared_ptr<TWorkersPoolCounters>& counters, const std::vector<std::shared_ptr<TProcessCategory>>& categories);
 
     bool HasTasks() const {

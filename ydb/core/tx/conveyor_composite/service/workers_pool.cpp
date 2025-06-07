@@ -3,7 +3,7 @@
 #include <ydb/core/kqp/query_data/kqp_predictor.h>
 
 namespace NKikimr::NConveyorComposite {
-TWorkersPool::TWorkersPool(const TString& conveyorName, const NActors::TActorId& distributorId, const NConfig::TWorkersPool& config,
+TWorkersPool::TWorkersPool(const TString& poolName, const NActors::TActorId& distributorId, const NConfig::TWorkersPool& config,
     const std::shared_ptr<TWorkersPoolCounters>& counters, const std::vector<std::shared_ptr<TProcessCategory>>& categories)
     : WorkersCount(config.GetWorkersCountInfo().GetThreadsCount(NKqp::TStagePredictor::GetUsableThreads()))
     , Counters(counters) {
@@ -14,12 +14,12 @@ TWorkersPool::TWorkersPool(const TString& conveyorName, const NActors::TActorId&
     }
     AFL_VERIFY(Processes.size());
     for (ui32 i = 0; i < WorkersCount; ++i) {
-        Workers.emplace_back(std::make_unique<TWorker>(conveyorName, config.GetWorkerCPUUsage(i, NKqp::TStagePredictor::GetUsableThreads()),
+        Workers.emplace_back(std::make_unique<TWorker>(poolName, config.GetWorkerCPUUsage(i, NKqp::TStagePredictor::GetUsableThreads()),
             distributorId, i, config.GetWorkersPoolId(),
             Counters->SendFwdHistogram, Counters->SendFwdDuration));
         ActiveWorkersIdx.emplace_back(i);
     }
-    AFL_VERIFY(WorkersCount)("name", conveyorName)("action", "conveyor_registered")("config", config.DebugString())("actor_id", distributorId)(
+    AFL_VERIFY(WorkersCount)("name", poolName)("action", "conveyor_registered")("config", config.DebugString())("actor_id", distributorId)(
         "count", WorkersCount);
     Counters->AmountCPULimit->Set(0);
     Counters->AvailableWorkersCount->Set(0);

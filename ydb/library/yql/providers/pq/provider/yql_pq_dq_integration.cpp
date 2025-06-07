@@ -317,6 +317,17 @@ public:
         }
     }
 
+    bool CanRead(const TExprNode& read, TExprContext&, bool) override {
+        return TPqReadTopic::Match(&read);
+    }
+
+    TMaybe<ui64> EstimateReadSize(ui64 /*dataSizePerJob*/, ui32 /*maxTasksPerStage*/, const TVector<const TExprNode*>& read, TExprContext&) override {
+        if (AllOf(read, [](const auto val) { return TPqReadTopic::Match(val); })) {
+            return 0ul; // TODO: return real size
+        }
+        return Nothing();
+    }
+
     NNodes::TCoNameValueTupleList BuildTopicReadSettings(
         const TString& cluster,
         const IDqIntegration::TWrapReadSettings& wrSettings,

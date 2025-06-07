@@ -237,6 +237,22 @@ public:
         return 0;
     }
 
+    void AddCluster(const TString& clusterName, const THashMap<TString, TString>& properties) override {
+        NYql::TPqClusterConfig cluster;
+        cluster.SetName(clusterName);
+        cluster.SetClusterType(NYql::TPqClusterConfig::CT_DATA_STREAMS);
+        const TString& location = properties.Value("location", "");
+        cluster.SetEndpoint(location);
+        cluster.SetToken(properties.Value("token", ""));
+        cluster.SetDatabase(properties.Value("database_name", ""));
+        TString useTls = properties.Value("use_tls", "false");
+        useTls.to_lower();
+        cluster.SetUseSsl(useTls == "true"sv);
+
+        State_->Configuration->AddCluster(cluster, State_->DatabaseIds, State_->Types->Credentials, State_->DbResolver, properties);
+        Gateway_->AddCluster(cluster);
+    }
+
     IDqIntegration* GetDqIntegration() override {
         return State_->DqIntegration.Get();
     }

@@ -274,6 +274,15 @@ Y_UNIT_TEST_SUITE(ConfigProto) {
             "/AppConfig/QueryServiceConfig/Solomon/DefaultSettings/Activation/ByHour/Percentage/Percentage",
             "/AppConfig/QueryServiceConfig/Solomon/DefaultSettings/Name/Name",
             "/AppConfig/QueryServiceConfig/Solomon/DefaultSettings/Value/Value",
+            "/AppConfig/QueryServiceConfig/Solomon/DefaultSettings/Value/Value",
+            "/AppConfig/QueryServiceConfig/Pq/ClusterMapping/Settings/Activation/ByHour/Hour/Hour",
+            "/AppConfig/QueryServiceConfig/Pq/DefaultSettings/Activation/ByHour/Hour/Hour",
+            "/AppConfig/QueryServiceConfig/Pq/DefaultSettings/Activation/ByHour/Percentage/Percentage",
+            "/AppConfig/QueryServiceConfig/Pq/ClusterMapping/Settings/Activation/ByHour/Percentage/Percentage",
+            "/AppConfig/QueryServiceConfig/Pq/DefaultSettings/Name/Name",
+            "/AppConfig/QueryServiceConfig/Pq/ClusterMapping/Settings/Name/Name",
+            "/AppConfig/QueryServiceConfig/Pq/DefaultSettings/Value/Value",
+            "/AppConfig/QueryServiceConfig/Pq/ClusterMapping/Settings/Value/Value"
         };
 
         TSet<TVector<ui64>> allowedNumberPaths = {
@@ -372,6 +381,14 @@ Y_UNIT_TEST_SUITE(ConfigProto) {
             {73, 21, 2, 3, 2, 2, 2}, // /AppConfig/QueryServiceConfig/Solomon/DefaultSettings/Activation/ByHour/Percentage/Percentage
             {73, 21, 2, 1, 1}, // /AppConfig/QueryServiceConfig/Solomon/DefaultSettings/Name/Name
             {73, 21, 2, 2, 2}, // /AppConfig/QueryServiceConfig/Solomon/DefaultSettings/Value/Value
+            {73, 24, 1, 100, 3, 2, 1, 1}, // /AppConfig/QueryServiceConfig/Pq/ClusterMapping/Settings/Activation/ByHour/Hour/Hour
+            {73, 24, 100, 3, 2, 1, 1}, // /AppConfig/QueryServiceConfig/Pq/DefaultSettings/Activation/ByHour/Hour/Hour
+            {73, 24, 100, 3, 2, 2, 2}, // /AppConfig/QueryServiceConfig/Pq/DefaultSettings/Activation/ByHour/Percentage/Percentage
+            {73, 24, 1, 100, 3, 2, 2, 2}, // /AppConfig/QueryServiceConfig/Pq/ClusterMapping/Settings/Activation/ByHour/Percentage/Percentage
+            {73, 24, 100, 1, 1}, // /AppConfig/QueryServiceConfig/Pq/DefaultSettings/Name/Name 
+            {73, 24, 1, 100, 1, 1}, // /AppConfig/QueryServiceConfig/Pq/ClusterMapping/Settings/Name/Name
+            {73, 24, 100, 2, 2}, // /AppConfig/QueryServiceConfig/Pq/DefaultSettings/Value/Value
+            {73, 24, 1, 100, 2, 2}, // /AppConfig/QueryServiceConfig/Pq/ClusterMapping/Settings/Value/Value
         };
 
         for (const auto& [file, typeToField] : fields) {

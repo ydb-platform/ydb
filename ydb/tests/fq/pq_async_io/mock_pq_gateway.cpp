@@ -208,6 +208,9 @@ public:
         return NYdb::NTopic::TTopicClientSettings();
      }
 
+    void AddCluster(const NYql::TPqClusterConfig& /*cluster*/) override {}
+
+
 private:
     std::unordered_map<TString, std::shared_ptr<TQueue>> Queues;
     NActors::TTestActorRuntime& Runtime;

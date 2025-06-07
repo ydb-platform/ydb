@@ -48,7 +48,7 @@ TConclusionStatus TReadMetadata::Init(
 TReadMetadata::TReadMetadata(const std::shared_ptr<TVersionedIndex>& schemaIndex, const TReadDescription& read)
     : TBase(schemaIndex, read.GetSorting(), read.GetProgram(), schemaIndex->GetSchemaVerified(read.GetSnapshot()), read.GetSnapshot(),
           read.GetScanCursorOptional(), read.GetTabletId())
-    , PathId(read.PathId)
+    , InternalPathId(read.PathId)
     , ReadStats(std::make_shared<TReadStats>()) {
 }
 
@@ -88,7 +88,7 @@ void TReadMetadata::DoOnReadFinished(NColumnShard::TColumnShard& owner) const {
         for (auto&& i : GetConflictableLockIds()) {
             conflicts.Add(i, lock);
         }
-        auto writer = std::make_shared<NOlap::NTxInteractions::TEvReadFinishedWriter>(PathId, conflicts);
+        auto writer = std::make_shared<NOlap::NTxInteractions::TEvReadFinishedWriter>(InternalPathId, conflicts);
         owner.GetOperationsManager().AddEventForLock(owner, lock, writer);
     }
 }
@@ -98,7 +98,7 @@ void TReadMetadata::DoOnBeforeStartReading(NColumnShard::TColumnShard& owner) co
         return;
     }
     auto evWriter = std::make_shared<NOlap::NTxInteractions::TEvReadStartWriter>(
-        PathId, GetResultSchema()->GetIndexInfo().GetPrimaryKey(), GetPKRangesFilterPtr(), GetConflictableLockIds());
+        InternalPathId, GetResultSchema()->GetIndexInfo().GetPrimaryKey(), GetPKRangesFilterPtr(), GetConflictableLockIds());
     owner.GetOperationsManager().AddEventForLock(owner, *LockId, evWriter);
 }
 
@@ -109,7 +109,7 @@ void TReadMetadata::DoOnReplyConstruction(const ui64 tabletId, NKqp::NInternalIm
         lockInfo.SetGeneration(LockSharingInfo->GetGeneration());
         lockInfo.SetDataShard(tabletId);
         lockInfo.SetCounter(LockSharingInfo->GetCounter());
-        lockInfo.SetPathId(PathId.GetRawValue());
+        SchemeShardLocalPathId.ToProto(lockInfo);
         lockInfo.SetHasWrites(LockSharingInfo->HasWrites());
         if (LockSharingInfo->IsBroken()) {
             scanData.LocksInfo.BrokenLocks.emplace_back(std::move(lockInfo));

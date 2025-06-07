@@ -175,7 +175,7 @@ std::optional<ui64> WriteData(TTestBasicRuntime& runtime, TActorId& sender, cons
                               ui64 tableId, const ui64 writePartId, const TString& data,
                               const std::vector<NArrow::NTest::TTestColumn>& ydbSchema, const NEvWrite::EModificationType mType)
 {
-    auto write = std::make_unique<TEvColumnShard::TEvWrite>(sender, longTxId, tableId, "0", data, writePartId, mType);
+    auto write = std::make_unique<TEvColumnShard::TEvWrite>(sender, longTxId, NColumnShard::TSchemeShardLocalPathId::FromRawValue(tableId), "0", data, writePartId, mType);
     write->SetArrowSchema(NArrow::SerializeSchema(*NArrow::MakeArrowSchema(ydbSchema)));
 
     ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, write.release());
@@ -503,7 +503,7 @@ namespace NKikimr::NColumnShard {
     NTxUT::TPlanStep SetupSchema(TTestBasicRuntime& runtime, TActorId& sender, const TString& txBody, const ui64 txId) {
 
         auto controller = NYDBTest::TControllers::GetControllerAs<NYDBTest::NColumnShard::TController>();
-        while (controller && !controller->IsActiveTablet(TTestTxConfig::TxTablet0)) {
+        while (controller && !controller->IsActiveTablet(NOlap::TTabletId{TTestTxConfig::TxTablet0})) {
             runtime.SimulateSleep(TDuration::Seconds(1));
         }
 

@@ -160,6 +160,9 @@ private:
     YDB_READONLY_DEF(std::vector<TWorkersPool>, WorkerPools);
     YDB_READONLY_FLAG(Enabled, true);
 
+    TConfig() = default;
+    [[nodiscard]] TConclusionStatus DeserializeFromProto(const NKikimrConfig::TCompositeConveyorConfig& config);
+
 public:
     static TConfig BuildDefault() {
         TConfig result;
@@ -174,9 +177,16 @@ public:
         return result;
     }
 
-    const TCategory& GetCategoryConfig(const ESpecialTaskCategory cat) const;
+    static TConclusion<TConfig> BuildFromProto(const NKikimrConfig::TCompositeConveyorConfig& config) {
+        TConfig config;
+        auto conclusion = config.DeserializeFromProto(config);
+        if (conclusion.IsFail()) {
+            return conclusion;
+        }
+        return config;
+    }
 
-    [[nodiscard]] TConclusionStatus DeserializeFromProto(const NKikimrConfig::TCompositeConveyorConfig& config);
+    const TCategory& GetCategoryConfig(const ESpecialTaskCategory cat) const;
 
     TString DebugString() const;
 };

@@ -304,11 +304,11 @@ struct TTestSchema {
     }
 
     static TString CreateInitShardTxBody(ui64 pathId, const std::vector<NArrow::NTest::TTestColumn>& columns,
-        const std::vector<NArrow::NTest::TTestColumn>& pk, const TTableSpecials& specials = {}, const TString& ownerPath = "/Root/olap") {
+        const std::vector<NArrow::NTest::TTestColumn>& pk, const TTableSpecials& specials = {}, const TString& path = "/Root/olap") {
         NKikimrTxColumnShard::TSchemaTxBody tx;
         auto* table = tx.MutableInitShard()->AddTables();
-        tx.MutableInitShard()->SetOwnerPath(ownerPath);
-        tx.MutableInitShard()->SetOwnerPathId(pathId);
+        tx.MutableInitShard()->SetPath(path);
+        tx.MutableInitShard()->SetPathId(pathId);
         table->SetPathId(pathId);
 
         {   // preset
@@ -333,8 +333,8 @@ struct TTestSchema {
         const std::vector<NArrow::NTest::TTestColumn>& pk, const TTableSpecials& specials = {}, const TString& path = "/Root/olap") {
         NKikimrTxColumnShard::TSchemaTxBody tx;
         auto* table = tx.MutableInitShard()->AddTables();
-        tx.MutableInitShard()->SetOwnerPath(path);
-        tx.MutableInitShard()->SetOwnerPathId(pathId);
+        tx.MutableInitShard()->SetPath(path);
+        tx.MutableInitShard()->SetPathId(pathId);
         table->SetPathId(pathId);
 
         InitSchema(columns, pk, specials, table->MutableSchema());

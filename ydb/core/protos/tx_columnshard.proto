@@ -268,9 +268,9 @@ message TCreateTable {
 
 message TInitShard {
     optional uint32 DataChannelCount = 1;
-    optional uint64 OwnerPathId = 2;
+    optional uint64 PathId = 2; //PathId, the shard is responsible for. It may be a store or a standalone table
     repeated TCreateTable Tables = 3;
-    optional string OwnerPath = 4;
+    optional string Path = 4; //Path, the shard is responsible for. It may be a store or a standalone table
 }
 
 message TAlterTable {

@@ -35,7 +35,7 @@ Currently, a unique index cannot be added to an existing table.
 
 [Vector Index](../../dev/vector-indexes.md) is a special type of secondary index.
 
-Unlike secondary indexes, which optimize equality or range searches, vector indexes allow [vector search](../vector_search.md) based on distance or similarity functions.
+Unlike secondary indexes, which optimize equality or range searches, vector indexes allow [vector search](../vector_search.md) based on distance or similarity functions. This capability is essential for AI-powered applications and is a key feature of {{ ydb-short-name }}'s [{#T}](../ai-database.md) architecture.
 
 ### Creating a Secondary Index Online {#index-add}
 

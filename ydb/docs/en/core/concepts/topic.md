@@ -4,6 +4,8 @@ A topic in {{ ydb-short-name }} is an entity for storing unstructured messages a
 
 A producer app writes messages to a topic. Consumer apps are independent of each other, they receive and read messages from the topic in the order they were written there. Topics implement the [publish-subscribe](https://en.wikipedia.org/wiki/Publish–subscribe_pattern) architectural pattern.
 
+Topics are a key component of {{ ydb-short-name }}'s [{#T}](universal-database.md) architecture, enabling streaming data processing alongside traditional transaction and analytical workloads within a single platform.
+
 {{ ydb-short-name }} topics have the following properties:
 
 * At-least-once delivery guarantees when messages are read by subscribers.

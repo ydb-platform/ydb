@@ -210,6 +210,19 @@ public:
         return result;
     }
 
+    const THashMap<TString, ESysViewType>& GetSystemViewsTypes(ETarget target) const override {
+        switch (target) {
+        case ETarget::Domain:
+            return DomainSystemViewTypes;
+        case ETarget::SubDomain:
+            return SubDomainSystemViewTypes;
+        case ETarget::OlapStore:
+            return OlapStoreSystemViewTypes;
+        case ETarget::ColumnTable:
+            return  ColumnTableSystemViewTypes;
+        }
+    }
+
     bool IsSystemView(const TStringBuf viewName) const override final {
         return DomainSystemViews.contains(viewName) ||
             SubDomainSystemViews.contains(viewName) ||
@@ -255,13 +268,16 @@ private:
     template <typename Table>
     void RegisterSystemView(const TStringBuf& name, ESysViewType type) {
         TSchemaFiller<Table>::Fill(DomainSystemViews[name]);
+        DomainSystemViewTypes[name] = type;
         TSchemaFiller<Table>::Fill(SubDomainSystemViews[name]);
+        SubDomainSystemViewTypes[name] = type;
         TSchemaFiller<Table>::Fill(SystemViews[type]);
     }
 
     template <typename Table>
     void RegisterDomainSystemView(const TStringBuf& name, ESysViewType type) {
         TSchemaFiller<Table>::Fill(DomainSystemViews[name]);
+        DomainSystemViewTypes[name] = type;
         TSchemaFiller<Table>::Fill(SystemViews[type]);
     }
 
@@ -332,9 +348,13 @@ private:
 
 private:
     THashMap<TString, TSchema> DomainSystemViews;
+    THashMap<TString, ESysViewType> DomainSystemViewTypes;
     THashMap<TString, TSchema> SubDomainSystemViews;
+    THashMap<TString, ESysViewType> SubDomainSystemViewTypes;
     THashMap<TString, TSchema> OlapStoreSystemViews;
+    THashMap<TString, ESysViewType> OlapStoreSystemViewTypes;
     THashMap<TString, TSchema> ColumnTableSystemViews;
+    THashMap<TString, ESysViewType> ColumnTableSystemViewTypes;
     THashMap<ESysViewType, TSchema> SystemViews;
 };
 
@@ -375,12 +395,18 @@ public:
         return {};
     }
 
+    const THashMap<TString, ESysViewType>& GetSystemViewsTypes(ETarget target) const override {
+        Y_UNUSED(target);
+        return SystemViewTypes;
+    }
+
     bool IsSystemView(const TStringBuf viewName) const override final {
         return SystemViews.contains(viewName);
     }
 
 private:
     THashMap<TString, TSchema> SystemViews;
+    THashMap<TString, ESysViewType> SystemViewTypes;
 };
 
 ISystemViewResolver* CreateSystemViewResolver() {

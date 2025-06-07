@@ -5,6 +5,8 @@
 #include "olap/bg_tasks/events/global.h"
 #include "schemeshard__data_erasure_manager.h"
 
+#include <ydb/core/sys_view/common/path.h>
+#include <ydb/core/sys_view/common/schema.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
@@ -22,6 +24,8 @@
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tx/columnshard/bg_tasks/events/events.h>
 #include <ydb/core/tx/scheme_board/events_schemeshard.h>
+#include <ydb/core/tx/schemeshard/schemeshard_path.h>
+#include <ydb/core/tx/schemeshard/schemeshard_sysviews_update.h>
 #include <ydb/core/keyvalue/keyvalue_events.h>
 #include <ydb/library/login/password_checker/password_checker.h>
 #include <ydb/library/login/account_lockout/account_lockout.h>
@@ -71,6 +75,12 @@ bool ResolvePoolNames(
     return true;
 }
 
+struct TDirectoryEntry {
+    NKikimrSchemeOp::EPathType Type;
+    TString Owner;
+    TMaybe<NKikimrSysView::ESysViewType> SysViewType;
+};
+
 }   // anonymous namespace
 
 const TSchemeLimits TSchemeShard::DefaultLimits = {};
@@ -82,6 +92,88 @@ void TSchemeShard::SubscribeToTempTableOwners() {
         ctx.Send(new IEventHandle(ownerActorId, SelfId(),
                                 new TEvSchemeShard::TEvOwnerActorAck(),
                                 IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession));
+    }
+}
+
+void TSchemeShard::CollectSysViewUpdates(const TActorContext& ctx) {
+    THashMap<uint64_t ,TModifySysViewRequestInfo> sysViewUpdates;
+
+    const TPath rootPath = TPath::Root(this);
+    const TPath sysViewDirPath = rootPath.Child(TString(NSysView::SysPathName));
+    bool needToMakeSysViewDir = false;
+
+    // make system view dir
+    if (!sysViewDirPath.Check().IsResolved().NotDeleted().NotUnderDeleting()) {
+        needToMakeSysViewDir = true;
+        TModifySysViewRequestInfo makeSysViewDirRequest;
+        makeSysViewDirRequest.OperationType = NKikimrSchemeOp::ESchemeOpMkDir;
+        makeSysViewDirRequest.WorkingDir = rootPath.PathString();
+        makeSysViewDirRequest.TargetName = sysViewDirPath.LeafName();
+
+        sysViewUpdates.emplace(GetCachedTxId(ctx), std::move(makeSysViewDirRequest));
+    }
+
+    const auto sysViewDirType = IsDomainSchemeShard
+        ? NSysView::ISystemViewResolver::ETarget::Domain
+        : NSysView::ISystemViewResolver::ETarget::SubDomain;
+    const auto sysViewsRegister = NSysView::CreateSystemViewResolver()->GetSystemViewsTypes(sysViewDirType);
+
+    TMap<TString, TDirectoryEntry> sysViewDirContents;
+    if (sysViewDirPath.Check().IsResolved().NotDeleted().NotUnderDeleting().IsDirectory()) {
+        for (const auto& [name, pathId] : sysViewDirPath->GetChildren()) {
+            const TPath dirEntryPath = TPath::Init(pathId, this);
+            const auto checks = dirEntryPath.Check();
+            if (checks.IsResolved().NotDeleted().NotUnderDeleting()) {
+                TDirectoryEntry dirEntry;
+                dirEntry.Type = dirEntryPath->PathType;
+                dirEntry.Owner = dirEntryPath->Owner;
+                if (checks.IsSysView()) {
+                    dirEntry.SysViewType = SysViews.at(pathId)->Type;
+                }
+
+                sysViewDirContents.emplace(name, std::move(dirEntry));
+            }
+        }
+    }
+
+    // create absent system views
+    if (needToMakeSysViewDir || sysViewDirPath.Check().IsResolved().NotDeleted().NotUnderDeleting().IsDirectory()) {
+        for (const auto& [name, type] : sysViewsRegister) {
+            if (!sysViewDirContents.contains(name)) {
+                TModifySysViewRequestInfo createSysViewRequest;
+                createSysViewRequest.OperationType = NKikimrSchemeOp::ESchemeOpCreateSysView;
+                createSysViewRequest.WorkingDir = sysViewDirPath.PathString();
+                createSysViewRequest.TargetName = name;
+                createSysViewRequest.SysViewType = type;
+
+                sysViewUpdates.emplace(GetCachedTxId(ctx), std::move(createSysViewRequest));
+            }
+        }
+    }
+
+    THashSet<NKikimrSysView::ESysViewType> availableSysViewTypes;
+    for (const auto& type : std::views::values(sysViewsRegister)) {
+        availableSysViewTypes.insert(type);
+    }
+
+    // drop obsolete system views
+    for (const auto& [name, dirEntry] : sysViewDirContents) {
+        if (dirEntry.Type == NKikimrSchemeOp::EPathTypeSysView) {
+            if (!dirEntry.SysViewType || !availableSysViewTypes.contains(*dirEntry.SysViewType) ||
+                (dirEntry.Owner == BUILTIN_ACL_METADATA && !sysViewsRegister.contains(name))) {
+                TModifySysViewRequestInfo dropSysViewRequest;
+                dropSysViewRequest.OperationType = NKikimrSchemeOp::ESchemeOpDropSysView;
+                dropSysViewRequest.WorkingDir = sysViewDirPath.PathString();
+                dropSysViewRequest.TargetName = name;
+
+                sysViewUpdates.emplace(GetCachedTxId(ctx), std::move(dropSysViewRequest));
+            }
+        }
+    }
+
+    if (!sysViewUpdates.empty()) {
+        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Start update system views cnt: " << sysViewUpdates.size());
+        Register(CreateSysViewsUpdate(TabletID(), SelfId(), std::move(sysViewUpdates)).Release());
     }
 }
 
@@ -6680,6 +6772,12 @@ void TSchemeShard::Handle(TEvTxAllocatorClient::TEvAllocateResult::TPtr& ev, con
         for (auto txId: ev->Get()->TxIds) {
             CachedTxIds.push_back(TTxId(txId));
         }
+
+        if (AppData()->FeatureFlags.GetEnableMaterializedSystemViewPaths() && !SysViewsUpdateStarted) {
+            SysViewsUpdateStarted = true;
+            CollectSysViewUpdates(ctx);
+        }
+
         return;
     } else if (Exports.contains(id)) {
         return Execute(CreateTxProgressExport(ev), ctx);

@@ -15,7 +15,7 @@ bool TSharingTransactionOperator::DoParse(TColumnShard& owner, const TString& da
     }
     AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("process", "BlobsSharing")("event", "TEvProposeFromInitiator");
     SharingTask = std::make_shared<NOlap::NDataSharing::TDestinationSession>();
-    auto conclusion = SharingTask->DeserializeDataFromProto(txBody, owner.GetIndexAs<NOlap::TColumnEngineForLogs>());
+    auto conclusion = SharingTask->DeserializeDataFromProto(txBody, owner.TablesManager);
     if (!conclusion) {
         AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "cannot_parse_start_data_sharing_from_initiator")("error", conclusion.GetErrorMessage());
         return false;

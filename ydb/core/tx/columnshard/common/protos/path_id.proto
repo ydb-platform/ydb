@@ -1,0 +1,10 @@
+package NKikimrColumnShardPathIdProto;
+
+message TSchemeShardLocalPathId {
+    optional uint64 PathId = 1;
+}
+
+message TInternalPathId {
+    optional uint64 PathId = 1;
+}
+

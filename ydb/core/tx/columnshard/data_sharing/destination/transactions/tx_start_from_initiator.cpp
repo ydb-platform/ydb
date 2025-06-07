@@ -6,7 +6,7 @@ bool TTxProposeFromInitiator::DoExecute(NTabletFlatExecutor::TTransactionContext
     using namespace NColumnShard;
     NIceDb::TNiceDb db(txc.DB);
     db.Table<Schema::DestinationSessions>().Key(Session->GetSessionId())
-        .Update(NIceDb::TUpdate<Schema::DestinationSessions::Details>(Session->SerializeDataToProto().SerializeAsString()));
+        .Update(NIceDb::TUpdate<Schema::DestinationSessions::Details>(Session->SerializeDataToProto(Self->GetTablesManager()).SerializeAsString()));
     return true;
 }
 
@@ -22,7 +22,7 @@ bool TTxConfirmFromInitiator::DoExecute(NTabletFlatExecutor::TTransactionContext
     Session->Confirm(true);
     db.Table<Schema::DestinationSessions>().Key(Session->GetSessionId())
         .Update(NIceDb::TUpdate<Schema::DestinationSessions::Cursor>(Session->SerializeCursorToProto().SerializeAsString()))
-        .Update(NIceDb::TUpdate<Schema::DestinationSessions::Details>(Session->SerializeDataToProto().SerializeAsString()));
+        .Update(NIceDb::TUpdate<Schema::DestinationSessions::Details>(Session->SerializeDataToProto(Self->GetTablesManager()).SerializeAsString()));
     return true;
 }
 

@@ -264,7 +264,9 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
 
             shard = 0;
             for (auto&& i : csController->GetShardActualIds()) {
+                //const auto localPathId = csController->GetLocalPathIdVerified(i, pathId);
                 auto request = std::make_unique<NStat::TEvStatistics::TEvStatisticsRequest>();
+                //request->Record.MutableTable()->MutablePathId()->SetLocalId(localPathId->GetRawValue());
                 request->Record.MutableTable()->MutablePathId()->SetLocalId(pathId.GetRawValue());
 
                 runtime->Send(MakePipePerNodeCacheID(false), sender, new TEvPipeCache::TEvForward(request.release(), i, false));

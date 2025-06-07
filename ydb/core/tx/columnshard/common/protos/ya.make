@@ -1,8 +1,9 @@
 PROTO_LIBRARY()
 
 SRCS(
-    snapshot.proto
     blob_range.proto
+    path_id.proto
+    snapshot.proto
 )
 
 PEERDIR(

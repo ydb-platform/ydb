@@ -54,7 +54,7 @@ public:
         DestSessions.erase(sessionId);
     }
 
-    [[nodiscard]] bool Load(NTable::TDatabase& database, const TColumnEngineForLogs* index);
+    [[nodiscard]] bool Load(NTable::TDatabase& database, const NColumnShard::TTablesManager& manager);
 
     void InitializeEventsExchange(const NColumnShard::TColumnShard& shard, const std::optional<ui64> sessionCookie = {});
 

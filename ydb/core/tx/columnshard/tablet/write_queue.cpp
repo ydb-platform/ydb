@@ -9,8 +9,10 @@ namespace NKikimr::NColumnShard {
 bool TWriteTask::Execute(TColumnShard* owner, const TActorContext& /* ctx */) {
     owner->Counters.GetCSCounters().WritingCounters->OnWritingTaskDequeue(TMonotonic::Now() - Created);
     owner->OperationsManager->RegisterLock(LockId, owner->Generation());
+    const auto schemeShardLocalPathId = owner->GetTablesManager().ResolveSchemeShardLocalPathId(PathId);
+    AFL_VERIFY(schemeShardLocalPathId);
     auto writeOperation = owner->OperationsManager->RegisterOperation(
-        PathId, LockId, Cookie, GranuleShardingVersionId, ModificationType, AppDataVerified().FeatureFlags.GetEnableWritePortionsOnInsert());
+        *schemeShardLocalPathId, PathId, LockId, Cookie, GranuleShardingVersionId, ModificationType, AppDataVerified().FeatureFlags.GetEnableWritePortionsOnInsert());
 
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_WRITE)("writing_size", ArrowData->GetSize())("operation_id", writeOperation->GetIdentifier())(
         "in_flight", owner->Counters.GetWritesMonitor()->GetWritesInFlight())(

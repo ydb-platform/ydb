@@ -308,6 +308,7 @@ private:
         RegisterColumnTableSystemView<Schema::PrimaryIndexPortionStats>(TablePrimaryIndexPortionStatsName);
         RegisterColumnTableSystemView<Schema::PrimaryIndexGranuleStats>(TablePrimaryIndexGranuleStatsName);
         RegisterColumnTableSystemView<Schema::PrimaryIndexOptimizerStats>(TablePrimaryIndexOptimizerStatsName);
+        RegisterColumnTableSystemView<Schema::TablePathIdMapping>(TablePathIdMappingName);
 
         RegisterSystemView<Schema::TopPartitions>(TopPartitionsByCpu1MinuteName, ESysViewType::ETopPartitionsByCpuOneMinute);
         RegisterSystemView<Schema::TopPartitions>(TopPartitionsByCpu1HourName, ESysViewType::ETopPartitionsByCpuOneHour);

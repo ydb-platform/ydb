@@ -8,6 +8,12 @@
 
 namespace NKikimr::NColumnShard {
 
+namespace NSubscriber {
+
+class ISubscriber;
+
+} //namespace NSubscriber
+
 class TSchemaTransactionOperator: public IProposeTxOperator, public TMonitoringObjectsCounter<TSchemaTransactionOperator> {
 private:
     using TBase = IProposeTxOperator;
@@ -17,7 +23,7 @@ private:
     std::unique_ptr<NTabletFlatExecutor::ITransaction> TxAddSharding;
     NKikimrTxColumnShard::TSchemaTxBody SchemaTxBody;
     THashSet<TActorId> NotifySubscribers;
-    THashSet<TInternalPathId> WaitPathIdsToErase;
+    std::shared_ptr<NSubscriber::ISubscriber> WaitOnPropose;
 
     virtual void DoOnTabletInit(TColumnShard& owner) override;
 
@@ -25,9 +31,11 @@ private:
     THashSet<TInternalPathId> GetNotErasedTableIds(const TColumnShard& owner, const TInfoProto& tables) const {
         THashSet<TInternalPathId> result;
         for (auto&& i : tables) {
-            const auto& pathId = TInternalPathId::FromRawValue(i.GetPathId());
-            if (owner.TablesManager.HasTable(pathId, true)) {
-                result.emplace(pathId);
+            const auto& schemeShardLocalPathId = TSchemeShardLocalPathId::FromProto(i);
+            if (const auto internalPathId = owner.TablesManager.ResolveInternalPathId(schemeShardLocalPathId)) {
+                if (owner.TablesManager.HasTable(*internalPathId, true)) {
+                    result.emplace(*internalPathId);
+                }
             }
         }
         if (result.size()) {
@@ -56,12 +64,14 @@ private:
                 return "Scheme:AlterStore";
             case NKikimrTxColumnShard::TSchemaTxBody::kDropTable:
                 return "Scheme:DropTable";
+            case NKikimrTxColumnShard::TSchemaTxBody::kMoveTable:
+                return "Scheme:MoveTable";
             case NKikimrTxColumnShard::TSchemaTxBody::TXBODY_NOT_SET:
                 return "Scheme:TXBODY_NOT_SET";
         }
     }
     virtual bool DoIsAsync() const override {
-        return WaitPathIdsToErase.size();
+        return !!WaitOnPropose;
     }
     virtual bool DoParse(TColumnShard& owner, const TString& data) override {
         if (!SchemaTxBody.ParseFromString(data)) {
@@ -74,7 +84,7 @@ private:
                 return false;
             }
             TxAddSharding = owner.TablesManager.CreateAddShardingInfoTx(
-                owner, TInternalPathId::FromRawValue(SchemaTxBody.GetGranuleShardingInfo().GetPathId()), SchemaTxBody.GetGranuleShardingInfo().GetVersionId(), infoContainer);
+                owner, TSchemeShardLocalPathId::FromProto(SchemaTxBody.GetGranuleShardingInfo()), SchemaTxBody.GetGranuleShardingInfo().GetVersionId(), infoContainer);
         }
         return true;
     }

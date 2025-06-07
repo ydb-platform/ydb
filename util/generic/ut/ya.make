@@ -61,6 +61,7 @@ SRCS(
 INCLUDE(${ARCADIA_ROOT}/util/tests/ya_util_tests.inc)
 
 PEERDIR(
+    library/cpp/case_insensitive_string
     library/cpp/containers/absl_flat_hash
 )
 

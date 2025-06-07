@@ -74,6 +74,7 @@ namespace NKikimr {
         TGuardedActorID HugeKeeperID;
         TGuardedActorID DskSpaceTrackerID;
         TGuardedActorID AnubisRunnerID;
+        TGuardedActorID SyncFullHandlerID;
 
     public:
         void SetVDiskIncarnationGuid(TVDiskIncarnationGuid g) {

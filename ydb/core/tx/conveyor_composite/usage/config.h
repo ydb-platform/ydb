@@ -86,6 +86,7 @@ public:
 
     TWorkersPool(const ui32 wpId)
         : WorkersPoolId(wpId) {
+        PoolName = "DEFAULT";
     }
 
     TWorkersPool(const ui32 wpId, const std::optional<double> workersCountDouble, const std::optional<double> workersFraction);
@@ -98,7 +99,6 @@ private:
     YDB_READONLY(ESpecialTaskCategory, Category, ESpecialTaskCategory::Insert);
     YDB_READONLY(ui32, QueueSizeLimit, 256 * 1024);
     YDB_READONLY_DEF(std::vector<ui32>, WorkerPools);
-    YDB_READONLY_FLAG(Default, true);
 
 public:
     TString DebugString() const;
@@ -120,7 +120,6 @@ public:
         if (proto.HasQueueSizeLimit()) {
             QueueSizeLimit = proto.GetQueueSizeLimit();
         }
-        DefaultFlag = false;
         return TConclusionStatus::Success();
     }
 

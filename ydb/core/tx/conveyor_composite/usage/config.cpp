@@ -36,13 +36,6 @@ TConclusionStatus TConfig::DeserializeFromProto(const NKikimrConfig::TCompositeC
         }
         Categories[(ui64)cat.GetCategory()] = std::move(cat);
     }
-    for (auto&& i : Categories) {
-        if (i.IsDefault()) {
-            AFL_VERIFY(defWorkersPool);
-            AFL_VERIFY(defWorkersPool->AddLink(i.GetCategory()));
-            AFL_VERIFY(i.AddWorkerPool(defWorkersPool->GetWorkersPoolId()));
-        }
-    }
     THashSet<TString> poolNames;
     for (auto&& i : config.GetWorkerPools()) {
         TWorkersPool wp(WorkerPools.size());
@@ -62,9 +55,11 @@ TConclusionStatus TConfig::DeserializeFromProto(const NKikimrConfig::TCompositeC
             }
         }
     }
-    for (auto&& c : Categories) {
-        if (c.GetWorkerPools().empty()) {
-            return TConclusionStatus::Fail("no worker pools for category: " + ::ToString(c.GetCategory()));
+    for (auto&& i : Categories) {
+        if (i.GetWorkerPools().empty()) {
+            AFL_VERIFY(defWorkersPool);
+            AFL_VERIFY(defWorkersPool->AddLink(i.GetCategory()));
+            AFL_VERIFY(i.AddWorkerPool(defWorkersPool->GetWorkersPoolId()));
         }
     }
     return TConclusionStatus::Success();
@@ -142,7 +137,7 @@ TConclusionStatus TWorkersPool::DeserializeFromProto(const NKikimrConfig::TCompo
         Links.emplace_back(std::move(link));
         categories.emplace(::ToString(link.GetCategory()));
     }
-    if (!PoolName) {
+    if (!PoolName || PoolName == "DEFAULT") {
         PoolName = JoinSeq("-", categories);
     }
     if (Links.empty()) {

@@ -8,7 +8,7 @@ namespace NKikimr::NConveyorComposite {
 
 TDistributor::TDistributor(const NConfig::TConfig& config, TIntrusivePtr<::NMonitoring::TDynamicCounters> conveyorSignals)
     : Config(config)
-    , ConveyorName("COMPOSITE")
+    , ConveyorName("COMPOSITE_CONVEYOR")
     , Counters(ConveyorName, conveyorSignals) {
 }
 

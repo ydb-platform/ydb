@@ -246,26 +246,22 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
 
             TAutoPtr<IEventHandle> handle;
 
-            size_t shard = 0;
-            std::set<NColumnShard::TInternalPathId> pathids;
+            std::optional<NColumnShard::TSchemeShardLocalPathId> schemeShardLocalPathId;
             for (auto&& i : csController->GetShardActualIds()) {
                 Cerr << ">>> shard actual id: " << i << Endl;
-                const auto pathIdTranslator = csController->GetPathIdTranslator(NOlap::TTabletId{i});
-                for (const auto& internalPathId : pathIdTranslator->GetInternalPathIds()) {
-                    Cerr << ">>> path id: " << internalPathId << Endl;
-                    pathids.insert(internalPathId);
-                }
-                if (++shard == 3) {
-                    break;
+                const auto pathIds = csController->GetPathIdTranslator(NOlap::TTabletId{i})->GetSchemeShardLocalPathIds();
+                UNIT_ASSERT(pathIds.size() == 1);
+                if (schemeShardLocalPathId.has_value()) {
+                    UNIT_ASSERT(schemeShardLocalPathId == *pathIds.begin());
+                } else {
+                    schemeShardLocalPathId = *pathIds.begin();
                 }
             }
 
-            UNIT_ASSERT(pathids.size() == 1);
-            const auto& pathId = *pathids.begin();
+            UNIT_ASSERT(schemeShardLocalPathId.has_value());
 
-            shard = 0;
+            size_t shard = 0;
             for (const auto& [tabletId, pathIdTranslator]: csController->GetActiveTablets()) {
-                const auto schemeShardLocalPathId = pathIdTranslator->ResolveSchemeShardLocalPathId(pathId);
                 auto request = std::make_unique<NStat::TEvStatistics::TEvStatisticsRequest>();
                 request->Record.MutableTable()->MutablePathId()->SetLocalId(schemeShardLocalPathId->GetRawValue());
                 runtime->Send(MakePipePerNodeCacheID(false), sender, new TEvPipeCache::TEvForward(request.release(), static_cast<ui64>(tabletId), false));

@@ -50,8 +50,8 @@ void TTxInit::SetDefaults() {
     Self->LastPlannedStep = 0;
     Self->LastPlannedTxId = 0;
     Self->LastCompletedTx = NOlap::TSnapshot::Zero();
-    Self->OwnerPathId = 0;
-    Self->OwnerPath.clear();
+    Self->PathId = 0;
+    Self->Path.clear();
     Self->LongTxWrites.clear();
     Self->LongTxWritesByUniqueId.clear();
 }

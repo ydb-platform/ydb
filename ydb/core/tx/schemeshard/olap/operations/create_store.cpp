@@ -84,8 +84,8 @@ public:
             // TODO: we may need to specify a more complex data channel mapping
             auto* init = tx.MutableInitShard();
             init->SetDataChannelCount(storeInfo->GetStorageConfig().GetDataChannelCount());
-            init->SetOwnerPathId(txState->TargetPathId.LocalPathId);
-            init->SetOwnerPath(path.PathString());
+            init->SetPathId(txState->TargetPathId.LocalPathId);
+            init->SetPath(path.PathString());
 
             Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&columnShardTxBody);
         }

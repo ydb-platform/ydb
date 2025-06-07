@@ -78,8 +78,8 @@ struct Schema : NIceDb::Schema {
         LastGcBarrierGen = 8,
         LastGcBarrierStep = 9,
         LastExportNumber = 10,
-        OwnerPathId = 11,
-        OwnerPath = 12,
+        PathId = 11, //PathId, the shard is responsible for. May by a store or a column table
+        Path = 12, //Path, the shard is responsible for. May by a store or a column table
         LastCompletedStep = 13,
         LastCompletedTxId = 14,
         LastNormalizerSequentialId = 15,

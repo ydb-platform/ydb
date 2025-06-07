@@ -49,8 +49,8 @@ void TTxMonitoring::Complete(const TActorContext& ctx) {
     html << "<b>LastSchemaSeqNoGeneration :</b> " << Self->LastSchemaSeqNo.Generation << "<br />";
     html << "<b>LastSchemaSeqNoRound :</b> " << Self->LastSchemaSeqNo.Round << "<br />";
     html << "<b>LastExportNumber :</b> " << Self->LastExportNo << "<br />";
-    html << "<b>OwnerPathId :</b> " << Self->OwnerPathId << "<br />";
-    html << "<b>Table/Store Path :</b> " << Self->OwnerPath << "<br />";
+    html << "<b>PathId :</b> " << Self->PathId << "<br />";
+    html << "<b>Table/Store Path :</b> " << Self->Path << "<br />";
     html << "<b>LastCompletedStep :</b> " << Self->LastCompletedTx.GetPlanStep() << "<br />";
     html << "<b>LastCompletedTxId :</b> " << Self->LastCompletedTx.GetTxId() << "<br />";
     html << "<b>LastNormalizerSequentialId :</b> " << Self->NormalizerController.GetLastSavedNormalizerId() << "<br />";

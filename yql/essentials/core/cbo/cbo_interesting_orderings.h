@@ -46,7 +46,12 @@ struct TOrdering {
         , Directions(std::move(directions))
         , Type(type)
         , IsNatural(isNatural)
-    {}
+    {
+        Y_ENSURE(
+            Directions.empty() && type == TOrdering::EShuffle ||
+            Directions.size() == Items.size() && type == TOrdering::ESorting
+        );
+    }
 
     TOrdering(
         std::vector<std::size_t> items,

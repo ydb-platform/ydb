@@ -1079,9 +1079,18 @@ TOrderingInfo GetSortingOrderingInfoImpl(
     } else if (auto body = keySelector.Body().template Maybe<TExprList>()) {
         for (size_t i = 0; i < body.Cast().Size(); ++i) {
             auto item = body.Cast().Item(i);
-            if (auto member = item.template Maybe<TCoMember>()) {
-                sorting.push_back(TJoinColumn::FromString(member.Cast().Name().StringValue()));
-            }
+
+            auto collectMember = [&sorting](auto&& self, const TExprBase& item) -> void {
+                if (auto member = item.Maybe<TCoMember>()) {
+                    sorting.push_back(TJoinColumn::FromString(member.Cast().Name().StringValue()));
+                }
+
+                if (auto coalesce = item.Maybe<TCoCoalesce>()) {
+                    self(self, TExprBase(coalesce.Cast().Predicate()));
+                }
+            };
+
+            collectMember(collectMember, item);
         }
     }
 

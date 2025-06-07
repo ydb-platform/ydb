@@ -23,13 +23,8 @@ enum EOptionalFlag {
 struct TKikimrSettings {
     using TConstPtr = std::shared_ptr<const TKikimrSettings>;
 private:
-#ifdef YQL_BETTER_CONF_SETTING_API
     static constexpr NCommon::EConfSettingType Static = NCommon::EConfSettingType::Static;
     static constexpr NCommon::EConfSettingType Dynamic = NCommon::EConfSettingType::Dynamic;
-#else
-    static constexpr bool Static = false;
-    static constexpr bool Dynamic = true;
-#endif
 public:
     /* KQP */
     NCommon::TConfSetting<ui32, Static> _KqpSessionIdleTimeoutSec;

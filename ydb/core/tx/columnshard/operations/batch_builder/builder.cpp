@@ -7,6 +7,7 @@
 #include <ydb/core/tx/columnshard/engines/writer/indexed_blob_constructor.h>
 #include <ydb/core/tx/columnshard/operations/slice_builder/builder.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
+#include <ydb/core/tx/conveyor_composite/usage/service.h>
 #include <ydb/core/tx/data_events/common/modification_type.h>
 
 namespace NKikimr::NOlap {
@@ -49,7 +50,8 @@ void TBuildBatchesTask::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) {
     std::shared_ptr<IMerger> merger;
     switch (WriteData.GetWriteMeta().GetModificationType()) {
         case NEvWrite::EModificationType::Upsert: {
-            const std::vector<std::shared_ptr<arrow::Field>> defaultFields = Context.GetActualSchema()->GetAbsentFields(batch.GetContainer()->schema());
+            const std::vector<std::shared_ptr<arrow::Field>> defaultFields =
+                Context.GetActualSchema()->GetAbsentFields(batch.GetContainer()->schema());
             if (defaultFields.empty()) {
                 if (!WriteData.GetWritePortions() || !Context.GetNoTxWrite()) {
                     std::shared_ptr<NConveyor::ITask> task =
@@ -68,8 +70,8 @@ void TBuildBatchesTask::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) {
                 auto batchDefault = conclusion.DetachResult();
                 NArrow::NMerger::TSortableBatchPosition pos(
                     batchDefault, 0, batchDefault->schema()->field_names(), batchDefault->schema()->field_names(), false);
-                merger = std::make_shared<TUpdateMerger>(batch, Context.GetActualSchema(),
-                    insertionConclusion.IsSuccess() ? "" : insertionConclusion.GetErrorMessage(), pos);
+                merger = std::make_shared<TUpdateMerger>(
+                    batch, Context.GetActualSchema(), insertionConclusion.IsSuccess() ? "" : insertionConclusion.GetErrorMessage(), pos);
                 break;
             }
         }
@@ -90,7 +92,7 @@ void TBuildBatchesTask::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) {
             } else {
                 NActors::TActivationContext::ActorSystem()->Send(Context.GetBufferizationPortionsActorId(),
                     new NWritingPortions::TEvAddInsertedDataToBuffer(
-                                       std::make_shared<NEvWrite::TWriteData>(WriteData), batch, std::make_shared<TWritingContext>(Context)));
+                        std::make_shared<NEvWrite::TWriteData>(WriteData), batch, std::make_shared<TWritingContext>(Context)));
             }
             return;
         }

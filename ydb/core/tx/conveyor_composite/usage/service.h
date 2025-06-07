@@ -12,13 +12,15 @@ namespace NKikimr::NConveyorComposite {
 
 class TServiceOperator {
 private:
+    using TSelf = TServiceOperator;
     std::atomic<bool> IsEnabledFlag = false;
     static void Register(const NConfig::TConfig& serviceConfig) {
         Singleton<TSelf>()->IsEnabledFlag = serviceConfig.IsEnabled();
     }
 
 public:
-    static bool SendTaskToExecute(const std::shared_ptr<ITask>& task, const ESpecialTaskCategory category, const TString& scopeId, const ui64 processId) {
+    static bool SendTaskToExecute(
+        const std::shared_ptr<ITask>& task, const ESpecialTaskCategory category, const TString& scopeId, const ui64 processId) {
         if (TSelf::IsEnabled() && NActors::TlsActivationContext) {
             auto& context = NActors::TActorContext::AsActorContext();
             const NActors::TActorId& selfId = context.SelfID;
@@ -55,17 +57,22 @@ public:
 
 class TInsertServiceOperator {
 public:
-    static bool SendTaskToExecute(
-        const std::shared_ptr<ITask>& task, const ESpecialTaskCategory category, const TString& scopeId, const ui64 processId) {
-        TServiceOperator::SendTaskToExecute(task, ESpecialTaskCategory::Insert, "DEFAULT", 0);
+    static bool SendTaskToExecute(const std::shared_ptr<ITask>& task) {
+        return TServiceOperator::SendTaskToExecute(task, ESpecialTaskCategory::Insert, "DEFAULT", 0);
+    }
+};
+
+class TNormalizerServiceOperator {
+public:
+    static bool SendTaskToExecute(const std::shared_ptr<ITask>& task) {
+        return TServiceOperator::SendTaskToExecute(task, ESpecialTaskCategory::Normalizer, "DEFAULT", 0);
     }
 };
 
 class TCompServiceOperator {
 public:
-    static bool SendTaskToExecute(
-        const std::shared_ptr<ITask>& task, const ESpecialTaskCategory category, const TString& scopeId, const ui64 processId) {
-        TServiceOperator::SendTaskToExecute(task, ESpecialTaskCategory::Compaction, "DEFAULT", 0);
+    static bool SendTaskToExecute(const std::shared_ptr<ITask>& task) {
+        return TServiceOperator::SendTaskToExecute(task, ESpecialTaskCategory::Compaction, "DEFAULT", 0);
     }
 };
 

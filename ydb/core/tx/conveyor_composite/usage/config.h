@@ -41,9 +41,10 @@ public:
 class TThreadsCountInfo {
 private:
     YDB_READONLY_DEF(std::optional<double>, Count);
-    YDB_READONLY_DEF(std::optional<double>, Fraction, 0.33);
+    YDB_READONLY(std::optional<double>, Fraction, 0.33);
 
 public:
+    TThreadsCountInfo() = default;
     TThreadsCountInfo(const std::optional<double> count, const std::optional<double> fraction)
         : Count(count)
         , Fraction(fraction) {

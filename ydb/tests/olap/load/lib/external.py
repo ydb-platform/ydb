@@ -57,3 +57,4 @@ class TestExternalM1(ExternalSuiteBase):
 
 class TestExternalB1(ExternalSuiteBase):
     external_folder: str = 'b1'
+    iterations: int = 5

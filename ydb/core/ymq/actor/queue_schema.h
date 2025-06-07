@@ -8,7 +8,12 @@
 #include <ydb/public/lib/value/value.h>
 #include <ydb/core/ymq/base/queue_attributes.h>
 
+#include <ydb/core/ymq/actor/cloud_events/cloud_events.h>
+
 #include <util/generic/maybe.h>
+
+#include <ctime>
+#include <random>
 
 namespace NKikimr::NSQS {
 
@@ -102,6 +107,8 @@ public:
         AddQuoterResource,
         Commit
     };
+private:
+    static TString GenerateCommitQueueParamsQuery();
 
 private:
     const TQueuePath QueuePath_;
@@ -170,6 +177,8 @@ public:
     }
 
 private:
+    static TString GenerateEraseQueueRecordQuery();
+
     void PrepareCleanupPlan(const bool isFifo, const ui64 shardCount);
 
     void NextAction();

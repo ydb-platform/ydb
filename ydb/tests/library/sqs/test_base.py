@@ -17,6 +17,8 @@ from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.util import LogLevels
 
 from ydb.tests.library.sqs.tables import create_all_tables as create_all_sqs_tables
+from ydb.tests.library.sqs.tables import create_cloud_events_table
+
 from ydb.tests.library.sqs.requests_client import SqsHttpApi
 from ydb.tests.library.sqs.matchers import ReadResponseMatcher
 
@@ -297,6 +299,14 @@ class KikimrSqsTestBase(object):
 
     @classmethod
     def _init_cluster(cls, cluster, config_generator):
+        is_cloud_events_enabled = (
+            'cloud_events_config' in config_generator.yaml_config['sqs_config']
+            and
+            'enable_cloud_events' in config_generator.yaml_config['sqs_config']['cloud_events_config']
+            and
+            config_generator.yaml_config['sqs_config']['cloud_events_config']['enable_cloud_events']
+        )
+
         driver_config = ydb.DriverConfig(
             "%s:%s" % (cluster.nodes[1].host, cluster.nodes[1].port),
             cls.database
@@ -306,7 +316,11 @@ class KikimrSqsTestBase(object):
             driver.wait()
             with ydb.SessionPool(driver, size=1) as pool:
                 with pool.checkout() as session:
-                    create_all_sqs_tables(cls.sqs_root, driver, session)
+                    create_all_sqs_tables(cls.sqs_root, session)
+
+                    if is_cloud_events_enabled:
+                        create_cloud_events_table(cls.sqs_root, session)
+
         http_port = cluster.nodes[1].sqs_port
         cls.create_metauser(http_port, config_generator)
 

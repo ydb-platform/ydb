@@ -18,6 +18,7 @@ PEERDIR(
     ydb/core/mon_alloc
     ydb/core/scheme
     ydb/core/tablet
+    ydb/core/testlib/audit_helpers
 )
 
 IF (GCC)

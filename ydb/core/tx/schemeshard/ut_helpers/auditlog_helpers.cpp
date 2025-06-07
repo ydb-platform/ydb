@@ -7,36 +7,11 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <ydb/core/protos/config.pb.h>
+#include <ydb/core/testlib/audit_helpers/audit_helper.h>
 
 #include "auditlog_helpers.h"
 
 namespace NSchemeShardUT_Private {
-
-namespace {
-
-class TMemoryLogBackend: public TLogBackend {
-public:
-    std::vector<std::string>& Buffer;
-
-    TMemoryLogBackend(std::vector<std::string>& buffer)
-        : Buffer(buffer)
-    {}
-
-    virtual void WriteData(const TLogRecord& rec) override {
-        Buffer.emplace_back(rec.Data, rec.Len);
-    }
-
-    virtual void ReopenLog() override {
-    }
-};
-
-}  // anonymous namespace
-
-NAudit::TAuditLogBackends CreateTestAuditLogBackends(std::vector<std::string>& lineBuffer) {
-    NAudit::TAuditLogBackends logBackends;
-    logBackends[NKikimrConfig::TAuditConfig::TXT].emplace_back(new TMemoryLogBackend(lineBuffer));
-    return logBackends;
-}
 
 std::string FindAuditLine(const std::vector<std::string>& auditLines, const std::string& substr) {
     Cerr << "AUDIT LOG buffer(" << auditLines.size() << "):" << Endl;

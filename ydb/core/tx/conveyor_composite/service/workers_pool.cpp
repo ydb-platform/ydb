@@ -4,7 +4,7 @@
 
 namespace NKikimr::NConveyorComposite {
 TWorkersPool::TWorkersPool(const TString& conveyorName, const NActors::TActorId& distributorId, const NConfig::TWorkersPool& config,
-    const TCounters& counters, const std::vector<std::shared_ptr<TProcessCategory>>& categories)
+    const TWorkersPoolCounters& counters, const std::vector<std::shared_ptr<TProcessCategory>>& categories)
     : WorkersCount(config.GetWorkersCountInfo().GetThreadsCount(NKqp::TStagePredictor::GetUsableThreads()))
     , Counters(counters) {
     Workers.reserve(WorkersCount);

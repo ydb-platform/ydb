@@ -61,11 +61,17 @@ public:
 
 class TWorkersPool {
 private:
+    TString PoolName;
     YDB_READONLY(ui32, WorkersPoolId, 0);
     YDB_READONLY_DEF(TThreadsCountInfo, WorkersCountInfo);
     YDB_READONLY_DEF(std::vector<TWorkerPoolCategoryUsage>, Links);
 
 public:
+    const TString& GetName() const {
+        AFL_VERIFY(!!PoolName);
+        return PoolName;
+    }
+
     double GetWorkerCPUUsage(const ui32 workerIdx, const ui32 totalThreadsCount) const;
     ui32 GetWorkersCount(const ui32 totalThreadsCount) const;
 

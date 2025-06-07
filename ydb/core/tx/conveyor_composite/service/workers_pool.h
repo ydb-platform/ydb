@@ -53,7 +53,7 @@ private:
     std::vector<TWeightedCategory> Processes;
     std::vector<TWorkerInfo> Workers;
     std::vector<ui32> ActiveWorkersIdx;
-    TCounters Counters;
+    TWorkersPoolCounters Counters;
     TAverageCalcer<TDuration> DeliveringDuration;
     std::deque<TDuration> DeliveryDurations;
 
@@ -62,7 +62,7 @@ public:
     using TPtr = std::shared_ptr<TWorkersPool>;
 
     TWorkersPool(const TString& conveyorName, const NActors::TActorId& distributorId, const NConfig::TWorkersPool& config,
-        const TCounters& counters, const std::vector<std::shared_ptr<TProcessCategory>>& categories);
+        const TWorkersPoolCounters& counters, const std::vector<std::shared_ptr<TProcessCategory>>& categories);
 
     bool HasTasks() const {
         for (auto&& i : Processes) {

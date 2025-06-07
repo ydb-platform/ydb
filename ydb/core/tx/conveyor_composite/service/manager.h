@@ -43,7 +43,8 @@ public:
             Categories.emplace_back(std::make_shared<TProcessCategory>(Config.GetCategoryConfig(i), Counters));
         }
         for (auto&& i : Config.GetWorkerPools()) {
-            WorkerPools.emplace_back(std::make_shared<TWorkersPool>(ConveyorName, distributorActorId, i, Counters, Categories));
+            WorkerPools.emplace_back(
+                std::make_shared<TWorkersPool>(ConveyorName + "::" + i.GetPoolName(), distributorActorId, i, Counters.GetWorkersPoolSignals(i.GetPoolName()), Categories));
         }
     }
 

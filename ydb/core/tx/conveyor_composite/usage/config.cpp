@@ -43,11 +43,15 @@ TConclusionStatus TConfig::DeserializeFromProto(const NKikimrConfig::TCompositeC
             AFL_VERIFY(i.AddWorkerPool(defWorkersPool->GetWorkersPoolId()));
         }
     }
+    THashSet<TString> poolNames;
     for (auto&& i : config.GetWorkerPools()) {
         TWorkersPool wp(WorkerPools.size());
         auto conclusion = wp.DeserializeFromProto(i);
         if (conclusion.IsFail()) {
             return conclusion;
+        }
+        if (!poolNames.emplace(wp.GetName()).second) {
+            return TConclusionStatus::Fail("pool name duplication: '" + wp.GetName() + "'");
         }
         WorkerPools.emplace_back(std::move(wp));
         for (auto&& link : WorkerPools.back().GetLinks()) {
@@ -124,6 +128,10 @@ TConclusionStatus TWorkersPool::DeserializeFromProto(const NKikimrConfig::TCompo
     if (!proto.GetLinks().size()) {
         return TConclusionStatus::Fail("no categories for workers pool");
     }
+    if (proto.HasName()) {
+        PoolName = proto.GetName();
+    }
+    std::set<TString> categories;
     for (auto&& c : proto.GetLinks()) {
         TWorkerPoolCategoryUsage link;
         auto conclusion = link.DeserializeFromProto(c);
@@ -131,6 +139,10 @@ TConclusionStatus TWorkersPool::DeserializeFromProto(const NKikimrConfig::TCompo
             return conclusion;
         }
         Links.emplace_back(std::move(link));
+        categories.emplace(::ToString(link.GetCategory()));
+    }
+    if (!PoolName) {
+        PoolName = JoinSeq("-", categories);
     }
     if (Links.empty()) {
         return TConclusionStatus::Fail("no links for workers pool");

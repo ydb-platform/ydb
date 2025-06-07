@@ -22,6 +22,13 @@ public:
         : Category(config.GetCategory())
         , Config(config) {
         Counters = counters.GetCategorySignals(Category);
+        RegisterScope("DEFAULT", TCPULimitsConfig(1000, 1000)).RegisterProcess(0);
+        Counters->WaitingQueueSizeLimit->Set(config.GetQueueSizeLimit());
+    }
+
+    ~TProcessCategory() {
+        MutableProcessScope("DEFAULT").UnregisterProcess(0);
+        UnregisterScope("DEFAULT");
     }
 
     ESpecialTaskCategory GetCategory() const {

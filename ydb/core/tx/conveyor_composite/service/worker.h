@@ -50,10 +50,10 @@ public:
         Become(&TWorker::StateMain);
     }
 
-    TWorker(const TString& conveyorName, const double cpuHardLimit, const NActors::TActorId& distributorId, const ui64 workerIdx,
+    TWorker(const TString& poolName, const double cpuHardLimit, const NActors::TActorId& distributorId, const ui64 workerIdx,
         const ui64 workersPoolId, const ::NMonitoring::THistogramPtr sendFwdHistogram,
         const ::NMonitoring::TDynamicCounters::TCounterPtr sendFwdDuration)
-        : TBase("CONVEYOR::" + conveyorName + "::WORKER")
+        : TBase("COMPOSITE_CONVEYOR::" + poolName + "::WORKER")
         , CPUHardLimit(cpuHardLimit)
         , CPUSoftLimit(cpuHardLimit)
         , DistributorId(distributorId)

@@ -2,11 +2,8 @@
 
 namespace NKikimr::NConveyorComposite {
 
-TCounters::TCounters(const TString& conveyorName, TIntrusivePtr<::NMonitoring::TDynamicCounters> baseSignals)
-    : TBase("CompositeConveyor/" + conveyorName, baseSignals)
-    , ProcessesCount(TBase::GetValue("Processes/Count"))
-    , WaitingQueueSize(TBase::GetValue("WaitingQueueSize"))
-    , WaitingQueueSizeLimit(TBase::GetValue("WaitingQueueSizeLimit"))
+TWorkersPoolCounters::TWorkersPoolCounters(const TString& poolName, const NColumnShard::TCommonCountersOwner& owner)
+    : TBase(owner, "pool_name", poolName)
     , AvailableWorkersCount(TBase::GetValue("AvailableWorkersCount"))
     , WorkersCountLimit(TBase::GetValue("WorkersCountLimit"))
     , AmountCPULimit(TBase::GetValue("AmountCPULimit"))

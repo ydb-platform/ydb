@@ -147,9 +147,8 @@ public:
         NKikimrConfig::TCompositeConveyorConfig protoConfig;
         AFL_VERIFY(google::protobuf::TextFormat::ParseFromString(textProto, &protoConfig));
 
-        NConfig::TConfig config;
-        config.DeserializeFromProto(protoConfig, threadsCount).Validate();
-        const auto actorId = actorSystem.Register(TCompServiceOperator::CreateService(config, counters));
+        NConfig::TConfig config = NConfig::TConfig::BuildFromProto(protoConfig).DetachResult();
+        const auto actorId = actorSystem.Register(TServiceOperator::CreateService(config, counters));
 
         std::vector<std::shared_ptr<IRequestProcessor>> requests = GetRequests();
         for (auto&& i : requests) {

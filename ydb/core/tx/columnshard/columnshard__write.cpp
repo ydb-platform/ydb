@@ -297,7 +297,7 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
             Counters.GetCSCounters().WritingCounters, GetLastTxSnapshot(), std::make_shared<TAtomicCounter>(1), true,
             BufferizationInsertionWriteActorId, BufferizationPortionsWriteActorId);
         std::shared_ptr<NConveyor::ITask> task = std::make_shared<NOlap::TBuildBatchesTask>(std::move(writeData), context);
-        NConveyor::TInsertServiceOperator::AsyncTaskToExecute(task);
+        NConveyor::TScanServiceOperator::AsyncTaskToExecute(task);
     }
 }
 

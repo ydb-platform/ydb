@@ -57,7 +57,7 @@ public:
         }
     }
 
-    TDistributor(const NConfig::TConfig& config, const TString& conveyorName, TIntrusivePtr<::NMonitoring::TDynamicCounters> conveyorSignals);
+    TDistributor(const NConfig::TConfig& config, TIntrusivePtr<::NMonitoring::TDynamicCounters> conveyorSignals);
 
     ~TDistributor();
 

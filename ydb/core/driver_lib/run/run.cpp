@@ -1715,12 +1715,8 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
         sil->AddServiceInitializer(new TCompPrioritiesInitializer(runConfig));
     }
 
-    if (serviceMask.EnableCompConveyor) {
-        sil->AddServiceInitializer(new TCompConveyorInitializer(runConfig));
-    }
-
-    if (serviceMask.EnableInsertConveyor) {
-        sil->AddServiceInitializer(new TInsertConveyorInitializer(runConfig));
+    if (serviceMask.EnableCompConveyor || serviceMask.EnableInsertConveyor) {
+        sil->AddServiceInitializer(new TCompositeConveyorInitializer(runConfig));
     }
 
     if (serviceMask.EnableCms) {

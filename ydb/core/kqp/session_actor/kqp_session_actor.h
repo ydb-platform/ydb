@@ -51,9 +51,9 @@ struct TKqpWorkerSettings {
         , DbCounters(dbCounters)
     {
         AppData()->Icb->RegisterSharedControl(
-            MkqlInitialMemoryLimit, "KqpSession.MkqlInitialMemoryLimit");
+            MkqlInitialMemoryLimit, EStaticControlType::KqpSessionMkqlInitialMemoryLimit);
         AppData()->Icb->RegisterSharedControl(
-            MkqlMaxMemoryLimit, "KqpSession.MkqlMaxMemoryLimit");
+            MkqlMaxMemoryLimit, EStaticControlType::KqpSessionMkqlMaxMemoryLimit);
     }
 };
 

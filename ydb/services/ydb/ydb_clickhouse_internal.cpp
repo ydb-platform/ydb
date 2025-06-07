@@ -31,7 +31,7 @@ void TGRpcYdbClickhouseInternalService::SetupIncomingRequests(NYdbGrpc::TLoggerP
                 new NGRpcService::TGrpcRequestOperationCall<Ydb::ClickhouseInternal::IN, Ydb::ClickhouseInternal::OUT> \
                     (ctx, &CB, NGRpcService::TRequestAuxSettings{RLSWITCH(NGRpcService::TRateLimiterMode::Rps), nullptr})); \
         }, &Ydb::ClickhouseInternal::V1::ClickhouseInternalService::AsyncService::Request ## NAME, \
-        #NAME, logger, getCounterBlock("clickhouse_internal", #NAME), getLimiter("ClickhouseInternal", #NAME, DEFAULT_MAX_IN_FLIGHT))->Run();
+        #NAME, logger, getCounterBlock("clickhouse_internal", #NAME), getLimiter(EStaticControlType::GRpcControlsRequestConfigsClickhouseInternal ## NAME ## MaxInFlight, DEFAULT_MAX_IN_FLIGHT))->Run();
 
     ADD_REQUEST(Scan, ScanRequest, ScanResponse, DoReadColumnsRequest);
     ADD_REQUEST(GetShardLocations, GetShardLocationsRequest, GetShardLocationsResponse, DoGetShardLocationsRequest);

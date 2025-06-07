@@ -13,7 +13,7 @@ struct TControls {
             if (appData->Icb) {
                 MergeReads = std::make_shared<NKikimr::TControlWrapper>(0, 0, 1);
                 appData->Icb->RegisterSharedControl(*MergeReads,
-                    "TableServiceControls.EnableMergeDatashardReads");
+                    NKikimr::EStaticControlType::TableServiceControlsEnableMergeDatashardReads);
             }
         }
 

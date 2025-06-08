@@ -67,7 +67,15 @@ struct TJoinOptimizerNodeInternal : public IBaseOptimizerNode {
             stream << "   ";
         }
         stream << "  ";
-        stream << "Shuffled By: " << ShuffleLeftSideByOrderingIdx << "\n";
+        stream << "Shuffled By: ";
+        if (ShuffleLeftSideByOrderingIdx == TJoinOptimizerNodeInternal::DontShuffle) {
+            stream << "Don't shuffle";
+        } else if (ShuffleLeftSideByOrderingIdx == TJoinOptimizerNodeInternal::NoOrdering) {
+            stream << "No ordering";
+        } else {
+            stream << ShuffleLeftSideByOrderingIdx;
+        }
+        stream << "\n";
 
         LeftArg->Print(stream, ntabs + 1);
 

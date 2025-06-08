@@ -526,6 +526,10 @@ void CollectInterestingOrderingsFromJoinTree(
 
     auto equiJoin = equiJoinNode.Cast<TCoEquiJoin>();
     auto stats = typeCtx.GetStats(equiJoinNode.Raw());
+    TTableAliasMap* tableAliases = nullptr;
+    if (stats) {
+        tableAliases = stats->TableAliases.Get();
+    }
 
     TVector<std::shared_ptr<TRelOptimizerNode>> rels;
     for (size_t i = 0; i < equiJoin.ArgCount() - 2; ++i) {
@@ -559,13 +563,13 @@ void CollectInterestingOrderingsFromJoinTree(
     interestingOrderingIdxes.reserve(hypergraph.GetEdges().size());
     for (const auto& edge: hypergraph.GetEdges()) {
         for (const auto& [lhs, rhs]: Zip(edge.LeftJoinKeys, edge.RightJoinKeys)) {
-            fdStorage.AddFD(lhs, rhs, TFunctionalDependency::EEquivalence, false, nullptr);
+            fdStorage.AddFD(lhs, rhs, TFunctionalDependency::EEquivalence, false, tableAliases);
         }
 
         TString idx;
-        idx = ToString(fdStorage.AddInterestingOrdering(edge.LeftJoinKeys, TOrdering::EShuffle, nullptr));
+        idx = ToString(fdStorage.AddInterestingOrdering(edge.LeftJoinKeys, TOrdering::EShuffle, tableAliases));
         interestingOrderingIdxes.insert(std::move(idx));
-        idx = ToString(fdStorage.AddInterestingOrdering(edge.RightJoinKeys, TOrdering::EShuffle, nullptr));
+        idx = ToString(fdStorage.AddInterestingOrdering(edge.RightJoinKeys, TOrdering::EShuffle, tableAliases));
         interestingOrderingIdxes.insert(std::move(idx));
     }
 

@@ -714,9 +714,9 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
     }
 
     /* tpcds23 has > 1 result sets */
-    Y_UNIT_TEST_TWIN(TPCDS23, ColumnStore) {
-        ExplainJoinOrderTestDataQueryWithStats(
-            "queries/tpcds23.sql", "stats/tpcds1000s.json", false, ColumnStore
+    Y_UNIT_TEST(TPCDS23) {
+        ExecuteJoinOrderTestGenericQueryWithStats(
+            "queries/tpcds23.sql", "stats/tpcds1000s.json", false, true
         );
     }
 

@@ -661,57 +661,22 @@ void InferStatisticsForAggregateBase(const TExprNode::TPtr& input, TTypeAnnotati
         return;
     }
 
-    auto aggStats = RemoveSorting(inputStats);
-    aggStats = std::make_shared<TOptimizerStatistics>(*aggStats);
+    auto aggStats = std::make_shared<TOptimizerStatistics>(*inputStats);
 
-    aggStats->ShuffledByColumns = nullptr;
-    auto keysStats = typeCtx->GetStats(agg.Keys().Raw());
     aggStats->TableAliases = inputStats->TableAliases;
     aggStats->Aliases = inputStats->Aliases;
-    aggStats->SourceTableName = inputStats->SourceTableName;
+
+    auto orderingInfo = GetAggregationBaseShuffleOrderingInfo(agg, typeCtx->OrderingsFSM, inputStats->TableAliases.Get());
+    aggStats->ShuffleOrderingIdx = orderingInfo.OrderingIdx;
+    if (typeCtx->OrderingsFSM) {
+        aggStats->LogicalOrderings = typeCtx->OrderingsFSM->CreateState(orderingInfo.OrderingIdx);
+    }
 
     TVector<TString> strKeys;
     strKeys.reserve(agg.Keys().Size());
     for (const auto& key: agg.Keys()) {
         strKeys.push_back(key.StringValue());
     }
-
-    if (typeCtx->OrderingsFSM && keysStats && keysStats->ShuffleOrderingIdx) {
-        aggStats->LogicalOrderings = typeCtx->OrderingsFSM->CreateState(*keysStats->ShuffleOrderingIdx);
-    } else if (typeCtx->OrderingsFSM) {
-        TString tableName = aggStats->SourceTableName;
-        if (aggStats && aggStats->Aliases && aggStats->Aliases->size() == 1) {
-            tableName = *aggStats->Aliases->begin();
-        }
-
-        std::vector<TJoinColumn> columns;
-        for (const auto& key: agg.Keys()) {
-            TString aggregationKey = key.StringValue();
-
-            TString columnName;
-            if (aggregationKey.find('.') != TString::npos) {
-                tableName = aggregationKey.substr(0, aggregationKey.find('.'));
-                columnName = aggregationKey.substr(aggregationKey.find('.') + 1);
-            } else {
-                columnName = std::move(aggregationKey);
-            }
-
-            columns.emplace_back(tableName, std::move(columnName));
-        }
-        std::int64_t shuffleOrderingIdx = -1;
-        try {
-            typeCtx->OrderingsFSM->FDStorage.FindInterestingOrderingIdx(columns, TOrdering::EShuffle, nullptr);
-        } catch (std::exception& e) {}
-
-        if (shuffleOrderingIdx == -1) {
-            aggStats->LogicalOrderings.RemoveState();
-        } else {
-            aggStats->LogicalOrderings = typeCtx->OrderingsFSM->CreateState(shuffleOrderingIdx);
-        }
-    } else {
-        aggStats->LogicalOrderings.RemoveState();
-    }
-
     YQL_CLOG(TRACE, CoreDq) << "Infer statistics for AggregateBase with keys: " << JoinSeq(", ", strKeys) << ", with stats: " << aggStats->ToString();
     typeCtx->SetStats(input.Get(), std::move(aggStats));
 }
@@ -1065,6 +1030,30 @@ void InferStatisticsForEquiJoin(const TExprNode::TPtr& input, TTypeAnnotationCon
         typeCtx->SetStats(equiJoin.Raw(), std::move(equiJoinStats));
     }
 }
+
+TOrderingInfo GetAggregationBaseShuffleOrderingInfo(
+    const NNodes::TCoAggregateBase& aggregationBase,
+    const TSimpleSharedPtr<TOrderingsStateMachine>& shufflingsFSM,
+    TTableAliasMap* tableAlias
+) {
+    TVector<TJoinColumn> shuffling;
+    shuffling.reserve(aggregationBase.Keys().Size());
+    for (const auto& key: aggregationBase.Keys()) {
+        TString aggregationKey = key.StringValue();
+        shuffling.emplace_back(TJoinColumn::FromString(aggregationKey));
+    }
+
+    std::int64_t orderingIdx = -1;
+    if (shufflingsFSM) {
+        orderingIdx = shufflingsFSM->FDStorage.FindInterestingOrderingIdx(shuffling, TOrdering::EShuffle, tableAlias);
+    }
+
+    return TOrderingInfo{
+        .OrderingIdx = orderingIdx,
+        .Ordering = std::move(shuffling)
+    };
+}
+
 
 template <typename TSortCallable>
 TOrderingInfo GetSortingOrderingInfoImpl(

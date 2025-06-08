@@ -38,9 +38,9 @@ struct TOrderingInfo {
     TVector<TJoinColumn> Ordering{};
 };
 
-TOrderingInfo GetTopBaseSortingOrderingInfo(const NNodes::TCoTopBase&, const TSimpleSharedPtr<TOrderingsStateMachine>&, TTableAliasMap*);
-TOrderingInfo GetSortBaseSortingOrderingInfo(const NNodes::TCoSortBase&, const TSimpleSharedPtr<TOrderingsStateMachine>&, TTableAliasMap*);
-TOrderingInfo GetAggregationBaseShuffleOrderingInfo(const NNodes::TCoAggregateBase, const TSimpleSharedPtr<TOrderingsStateMachine>&);
+TOrderingInfo GetTopBaseSortingOrderingInfo(const NNodes::TCoTopBase&, const TSimpleSharedPtr<TOrderingsStateMachine>& sortingsFSM, TTableAliasMap*);
+TOrderingInfo GetSortBaseSortingOrderingInfo(const NNodes::TCoSortBase&, const TSimpleSharedPtr<TOrderingsStateMachine>& sortingsFSM, TTableAliasMap*);
+TOrderingInfo GetAggregationBaseShuffleOrderingInfo(const NNodes::TCoAggregateBase&, const TSimpleSharedPtr<TOrderingsStateMachine>& shufflingsFSM, TTableAliasMap*);
 
 class TPredicateSelectivityComputer {
 public:

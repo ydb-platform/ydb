@@ -33,9 +33,11 @@ void InferStatisticsForReadTable(const TExprNode::TPtr& input, TTypeAnnotationCo
     int nAttrs = 0;
     bool readRange = false;
 
+    TMaybe<TCoAtomList> columns;
     if (auto readTable = inputNode.Maybe<TKqlReadTableBase>()) {
         inputStats = typeCtx->GetStats(readTable.Cast().Table().Raw());
         nAttrs = readTable.Cast().Columns().Size();
+        columns = readTable.Cast().Columns();
 
         auto range = readTable.Cast().Range();
         auto rangeFrom = range.From().Maybe<TKqlKeyTuple>();
@@ -46,12 +48,25 @@ void InferStatisticsForReadTable(const TExprNode::TPtr& input, TTypeAnnotationCo
     } else if (auto readRanges = inputNode.Maybe<TKqlReadTableRangesBase>()) {
         inputStats = typeCtx->GetStats(readRanges.Cast().Table().Raw());
         nAttrs = readRanges.Cast().Columns().Size();
+
+        columns = readRanges.Cast().Columns();
     } else {
         Y_ENSURE(false, "Invalid node type for InferStatisticsForReadTable");
     }
 
     if (!inputStats) {
         return;
+    }
+
+    if (inputStats->TableAliases && columns) {
+        for (const auto& column: *columns) {
+            if (inputStats->Aliases && inputStats->Aliases->size() == 1) {
+                TString alias = *inputStats->Aliases->begin();
+                TString from = alias + "." + column.StringValue();
+                TString to = column.StringValue();
+                inputStats->TableAliases->AddRename(from, to);
+            }
+        }
     }
 
     auto keyColumns = inputStats->KeyColumns;
@@ -1026,52 +1041,19 @@ private:
         }
 
     private:
-        void CollectAggregateBase(const TCoAggregateBase& aggregateCombine) {
-            if (aggregateCombine.Keys().Empty()) {
+        void CollectAggregateBase(const TCoAggregateBase& aggregationBase) {
+            if (aggregationBase.Keys().Empty()) {
                 return;
             }
 
-            std::vector<TJoinColumn> joinColumns;
-
-            TString tableName;
-            if (auto stats = TypeCtx.GetStats(aggregateCombine.Input().Raw()); stats && stats->Aliases && stats->Aliases->size() == 1) {
-                tableName = *stats->Aliases->begin();
+            TTableAliasMap* tableAliases = nullptr;
+            if (auto stats = TypeCtx.GetStats(aggregationBase.Raw())) {
+                tableAliases = stats->TableAliases.Get();
             }
 
-            for (const auto& key: aggregateCombine.Keys()) {
-                TString aggregationKey = key.StringValue();
-
-                TString columnName;
-                if (aggregationKey.find('.') != TString::npos) {
-                    tableName = aggregationKey.substr(0, aggregationKey.find('.'));
-                    columnName = aggregationKey.substr(aggregationKey.find('.') + 1);
-                } else {
-                    columnName = std::move(aggregationKey);
-                }
-
-                joinColumns.emplace_back(tableName, std::move(columnName));
-            }
-
-            auto stats = TypeCtx.GetStats(aggregateCombine.Keys().Raw());
-            if (!stats) {
-                stats = std::make_shared<TOptimizerStatistics>();
-                TypeCtx.SetStats(aggregateCombine.Keys().Raw(), stats);
-            }
-            std::size_t shuffleOrderingIdx = FDStorage.AddInterestingOrdering(joinColumns, TOrdering::EShuffle, nullptr);
-            stats->ShuffleOrderingIdx = shuffleOrderingIdx;
+            auto orderingInfo = GetAggregationBaseShuffleOrderingInfo(aggregationBase, nullptr, tableAliases);
+            std::size_t shuffleOrderingIdx = FDStorage.AddInterestingOrdering(orderingInfo.Ordering, TOrdering::EShuffle, tableAliases);
             YQL_CLOG(TRACE, CoreDq) << "Collected AggregateBase interesting ordering idx: " << shuffleOrderingIdx;
-        }
-
-        TString TryGetTableNameFromAggregationInput(const TExprNode::TPtr& node) {
-            if (auto kqpTable = TMaybeNode<TKqlReadTableRangesBase>(node)) {
-                return kqpTable.Cast().Table().Path().StringValue();
-            } else if (auto extractMembers = TMaybeNode<TCoExtractMembers>(node)) {
-                return TryGetTableNameFromAggregationInput(extractMembers.Cast().Input().Ptr());
-            } else if (auto flatMapBase = TMaybeNode<TCoFlatMapBase>(node)) {
-                return TryGetTableNameFromAggregationInput(flatMapBase.Cast().Input().Ptr());
-            }
-
-            return "";
         }
 
     private:

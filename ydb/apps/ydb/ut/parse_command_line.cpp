@@ -88,6 +88,7 @@ public:
         } else {
             CheckNoClientMetadata(context, "x-ydb-auth-ticket");
         }
+        CheckAuthContext(context);
         Ydb::Scheme::ListDirectoryResult res;
         auto* self = res.mutable_self();
         self->set_name(TEST_DATABASE);
@@ -107,6 +108,18 @@ public:
         }
     }
 
+    void CheckAuthContext(grpc::ServerContext* context) {
+        std::shared_ptr<const grpc::AuthContext> authContext = context->auth_context();
+        auto certs = authContext->FindPropertyValues("x509_pem_cert");
+        if (ExpectedClientCert) {
+            CHECK_EXP(!certs.empty(), "Expected client certificate, but not found");
+            TString cert = certs.front().data();
+            CHECK_EXP(cert == ExpectedClientCert, "Expected client certificate \"" << ExpectedClientCert << "\", but found: \"" << cert << "\"");
+        } else {
+            CHECK_EXP(certs.empty(), "Expected no client certificate, but found " << certs.size());
+        }
+    }
+
     void CheckNoClientMetadata(grpc::ServerContext* context, const TString& name) {
         auto [begin, end] = context->client_metadata().equal_range(name);
         CHECK_EXP(begin == end, "Expected no " << name << ", but found");
@@ -117,10 +130,15 @@ public:
     }
 
     void ClearExpectations() {
-        Token = {};
+        ExpectedClientCert = Token = {};
+    }
+
+    void ExpectClientCert(const TString& cert) {
+        ExpectedClientCert = cert;
     }
 
     TString Token;
+    TString ExpectedClientCert;
 };
 
 class TAuthImpl : public Ydb::Auth::V1::AuthService::Service, public TChecker {
@@ -277,6 +295,10 @@ public:
 
     void ExpectToken(const TString& token) {
         Scheme.ExpectToken(token);
+    }
+
+    void ExpectClientCert() {
+        Scheme.ExpectClientCert(GetClientCert());
     }
 
     void ExpectUserAndPassword(const TString& user, const TString& password, const TString& token) {
@@ -946,6 +968,86 @@ Y_UNIT_TEST_SUITE(ParseOptionsTest) {
         );
 
         ExpectToken("token");
+        RunCli(
+            {
+                "-v",
+                "-p", "active_test_profile",
+                "scheme", "ls",
+            },
+            {
+                {"YDB_TOKEN", "token"},
+            },
+            profile
+        );
+    }
+
+    Y_UNIT_TEST_F(ParseClientCertFile, TCliTestFixtureWithSsl) {
+        ExpectToken("token");
+        ExpectClientCert();
+        RunCli({
+            "-v",
+            "-e", GetEndpoint(),
+            "-d", GetDatabase(),
+            "--ca-file", GetRootCAFile(),
+            "--client-cert-file", GetClientCertFile(),
+            "--client-cert-key-file", GetClientKeyFile(),
+            "scheme", "ls",
+        },
+        {
+            {"YDB_TOKEN", "token"},
+        });
+    }
+
+    Y_UNIT_TEST_F(ParseClientCertFromEnv, TCliTestFixtureWithSsl) {
+        ExpectToken("token");
+        ExpectClientCert();
+        RunCli({
+            "-v",
+            "-e", GetEndpoint(),
+            "-d", GetDatabase(),
+            "scheme", "ls",
+        },
+        {
+            {"YDB_TOKEN", "token"},
+            {"YDB_CA_FILE", GetRootCAFile()},
+            {"YDB_CLIENT_CERT_FILE", GetClientCertFile()},
+            {"YDB_CLIENT_CERT_KEY_FILE", GetClientKeyFile()},
+        });
+    }
+
+    Y_UNIT_TEST_F(ParseClientCertFileFromProfile, TCliTestFixtureWithSsl) {
+        TString profile = fmt::format(R"yaml(
+        profiles:
+            active_test_profile:
+                endpoint: {endpoint}
+                database: {database}
+                ca-file: {ca_file}
+                client-cert-file: {client_cert_file}
+                client-cert-key-file: {client_cert_key_file}
+        active_profile: active_test_profile
+        )yaml",
+        "endpoint"_a = GetEndpoint(),
+        "database"_a = GetDatabase(),
+        "ca_file"_a = GetRootCAFile(),
+        "client_cert_file"_a = GetClientCertFile(),
+        "client_cert_key_file"_a = GetClientKeyFile()
+        );
+
+        ExpectToken("token");
+        ExpectClientCert();
+        RunCli(
+            {
+                "-v",
+                "scheme", "ls",
+            },
+            {
+                {"YDB_TOKEN", "token"},
+            },
+            profile
+        );
+
+        ExpectToken("token");
+        ExpectClientCert();
         RunCli(
             {
                 "-v",

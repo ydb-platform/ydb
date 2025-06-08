@@ -1023,12 +1023,6 @@ TAsyncBulkUpsertResult TTableClient::TImpl::BulkUpsertUnretryableArenaAllocated(
     const TBulkUpsertSettings& settings
 ) {
     auto request = MakeOperationRequestOnArena<Ydb::Table::BulkUpsertRequest>(settings, arena);
-    // std::cout << "request->GetArena(): " << request->GetArena() << "\n"
-    //           << "request->mutable_rows()->GetArena(): " << request->mutable_rows()->GetArena() << "\n"
-    //           << "Value->GetArena(): " << rows.second->GetArena() << "\n"
-    //           << "given arena: " << arena << std::endl;
-    // assert(request->GetArena() == arena);
-    // assert(request->mutable_rows()->GetArena() == arena);
     request->set_table(TStringType{table});
     // TODO: Ydb::Type still gets copied because request is arena-allocated and rows' Type is not
     *request->mutable_rows()->mutable_type() = std::move(rows.GetType()).ExtractProto();
@@ -1055,7 +1049,6 @@ TAsyncBulkUpsertResult TTableClient::TImpl::BulkUpsertUnretryableArenaAllocated(
 
     return promise.GetFuture();
 }
-
 
 
 

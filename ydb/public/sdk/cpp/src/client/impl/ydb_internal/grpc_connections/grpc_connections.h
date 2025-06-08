@@ -473,8 +473,6 @@ public:
             std::move(context));
     }
 
-
-
     template<typename TService, typename TRequest, typename TResponse>
     void RunDeferredOnArena(
         TRequest* request,
@@ -527,9 +525,6 @@ public:
             requestSettings,
             std::move(context));
     }
-
-
-
 
     // Run request using discovery endpoint.
     // Mostly usefull to make calls from credential provider
@@ -586,9 +581,6 @@ public:
             true, // poll
             context);
     }
-
-
-
 
 template<typename TService, typename TRequest, typename TResponse>
     void RunDeferredOnArena(

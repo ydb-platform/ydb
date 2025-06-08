@@ -1,9 +1,14 @@
 #include "sql_complete.h"
 
+#include <yql/essentials/sql/v1/complete/syntax/grammar.h>
 #include <yql/essentials/sql/v1/complete/text/word.h>
+#include <yql/essentials/sql/v1/complete/name/service/ranking/dummy.h>
+#include <yql/essentials/sql/v1/complete/name/service/binding/name_service.h>
 #include <yql/essentials/sql/v1/complete/name/service/static/name_service.h>
+#include <yql/essentials/sql/v1/complete/name/service/union/name_service.h>
 #include <yql/essentials/sql/v1/complete/syntax/local.h>
 #include <yql/essentials/sql/v1/complete/syntax/format.h>
+#include <yql/essentials/sql/v1/complete/analysis/global/global.h>
 
 #include <util/generic/algorithm.h>
 #include <util/charset/utf8.h>
@@ -12,21 +17,23 @@ namespace NSQLComplete {
 
     class TSqlCompletionEngine: public ISqlCompletionEngine {
     public:
-        explicit TSqlCompletionEngine(
+        TSqlCompletionEngine(
             TLexerSupplier lexer,
             INameService::TPtr names,
             ISqlCompletionEngine::TConfiguration configuration)
             : Configuration_(std::move(configuration))
-            , SyntaxAnalysis_(MakeLocalSyntaxAnalysis(lexer))
+            , SyntaxAnalysis_(MakeLocalSyntaxAnalysis(lexer, Configuration_.IgnoredRules))
+            , GlobalAnalysis_(MakeGlobalAnalysis())
             , Names_(std::move(names))
         {
         }
 
-        TCompletion Complete(TCompletionInput input) override {
-            return CompleteAsync(std::move(input)).ExtractValueSync();
+        TCompletion
+        Complete(TCompletionInput input, TEnvironment env = {}) override {
+            return CompleteAsync(input, env).ExtractValueSync();
         }
 
-        virtual NThreading::TFuture<TCompletion> CompleteAsync(TCompletionInput input) override {
+        NThreading::TFuture<TCompletion> CompleteAsync(TCompletionInput input, TEnvironment env) override {
             if (
                 input.CursorPosition < input.Text.length() &&
                     IsUTF8ContinuationByte(input.Text.at(input.CursorPosition)) ||
@@ -39,7 +46,9 @@ namespace NSQLComplete {
             TLocalSyntaxContext context = SyntaxAnalysis_->Analyze(input);
             auto keywords = context.Keywords;
 
-            TNameRequest request = NameRequestFrom(input, context);
+            TGlobalContext global = GlobalAnalysis_->Analyze(input, std::move(env));
+
+            TNameRequest request = NameRequestFrom(input, context, global);
             if (request.IsEmpty()) {
                 return NThreading::MakeFuture<TCompletion>({
                     .CompletedToken = GetCompletedToken(input, context.EditRange),
@@ -47,7 +56,14 @@ namespace NSQLComplete {
                 });
             }
 
-            return Names_->Lookup(std::move(request))
+            TVector<INameService::TPtr> children;
+            children.emplace_back(MakeBindingNameService(std::move(global.Names)));
+            if (!context.Binding) {
+                children.emplace_back(Names_);
+            }
+
+            return MakeUnionNameService(std::move(children), MakeDummyRanking())
+                ->Lookup(std::move(request))
                 .Apply([this, input, context = std::move(context)](auto f) {
                     return ToCompletion(input, context, f.ExtractValue());
                 });
@@ -61,7 +77,10 @@ namespace NSQLComplete {
             };
         }
 
-        TNameRequest NameRequestFrom(TCompletionInput input, const TLocalSyntaxContext& context) const {
+        TNameRequest NameRequestFrom(
+            TCompletionInput input,
+            const TLocalSyntaxContext& context,
+            const TGlobalContext& global) const {
             TNameRequest request = {
                 .Prefix = TString(GetCompletedToken(input, context.EditRange).Content),
                 .Limit = Configuration_.Limit,
@@ -94,17 +113,24 @@ namespace NSQLComplete {
             }
 
             if (context.Object) {
-                request.Constraints.Object = TObjectNameConstraints{
-                    .Provider = context.Object->Provider,
-                    .Cluster = context.Object->Cluster,
-                    .Kinds = context.Object->Kinds,
-                };
+                request.Constraints.Object = TObjectNameConstraints();
+                request.Constraints.Object->Kinds = context.Object->Kinds;
                 request.Prefix = context.Object->Path;
+            }
+
+            if (context.Object && global.Use) {
+                request.Constraints.Object->Provider = global.Use->Provider;
+                request.Constraints.Object->Cluster = global.Use->Cluster;
+            }
+
+            if (context.Object && context.Object->HasCluster()) {
+                request.Constraints.Object->Provider = context.Object->Provider;
+                request.Constraints.Object->Cluster = context.Object->Cluster;
             }
 
             if (context.Cluster) {
                 TClusterName::TConstraints constraints;
-                constraints.Namespace = context.Cluster->Provider;
+                constraints.Namespace = ""; // TODO(YQL-19747): filter by provider
                 request.Constraints.Cluster = std::move(constraints);
             }
 
@@ -170,21 +196,28 @@ namespace NSQLComplete {
 
                 if constexpr (std::is_base_of_v<TFolderName, T>) {
                     name.Indentifier.append('/');
-                    if (!context.Object->IsEnclosed) {
-                        name.Indentifier = Quoted(std::move(name.Indentifier));
+                    if (!context.Object->IsQuoted) {
+                        name.Indentifier.prepend('`');
                     }
                     return {ECandidateKind::FolderName, std::move(name.Indentifier)};
                 }
 
                 if constexpr (std::is_base_of_v<TTableName, T>) {
-                    if (!context.Object->IsEnclosed) {
-                        name.Indentifier = Quoted(std::move(name.Indentifier));
+                    if (!context.Object->IsQuoted) {
+                        name.Indentifier.prepend('`');
                     }
                     return {ECandidateKind::TableName, std::move(name.Indentifier)};
                 }
 
                 if constexpr (std::is_base_of_v<TClusterName, T>) {
                     return {ECandidateKind::ClusterName, std::move(name.Indentifier)};
+                }
+
+                if constexpr (std::is_base_of_v<TBindingName, T>) {
+                    if (!context.Binding) {
+                        name.Indentifier.prepend('$');
+                    }
+                    return {ECandidateKind::BindingName, std::move(name.Indentifier)};
                 }
 
                 if constexpr (std::is_base_of_v<TUnkownName, T>) {
@@ -195,8 +228,52 @@ namespace NSQLComplete {
 
         TConfiguration Configuration_;
         ILocalSyntaxAnalysis::TPtr SyntaxAnalysis_;
+        IGlobalAnalysis::TPtr GlobalAnalysis_;
         INameService::TPtr Names_;
     };
+
+    ISqlCompletionEngine::TConfiguration MakeConfiguration(THashSet<TString> allowedStmts) {
+        allowedStmts.emplace("sql_stmt");
+
+        ISqlCompletionEngine::TConfiguration config;
+        for (const std::string& name : GetSqlGrammar().GetAllRules()) {
+            if (name.ends_with("_stmt") && !allowedStmts.contains(name)) {
+                config.IgnoredRules.emplace(name);
+            }
+        }
+        return config;
+    }
+
+    ISqlCompletionEngine::TConfiguration MakeYDBConfiguration() {
+        return {
+            .IgnoredRules = {
+                "use_stmt",
+                "import_stmt",
+                "export_stmt",
+            },
+        };
+    }
+
+    ISqlCompletionEngine::TConfiguration MakeYQLConfiguration() {
+        return MakeConfiguration(/* allowedStmts = */ {
+            "lambda_stmt",
+            "pragma_stmt",
+            "select_stmt",
+            "named_nodes_stmt",
+            "drop_table_stmt",
+            "use_stmt",
+            "into_table_stmt",
+            "commit_stmt",
+            "declare_stmt",
+            "import_stmt",
+            "export_stmt",
+            "do_stmt",
+            "define_action_or_subquery_stmt",
+            "if_stmt",
+            "for_stmt",
+            "values_stmt",
+        });
+    }
 
     ISqlCompletionEngine::TPtr MakeSqlCompletionEngine(
         TLexerSupplier lexer,
@@ -209,8 +286,8 @@ namespace NSQLComplete {
 } // namespace NSQLComplete
 
 template <>
-void Out<NSQLComplete::ECandidateKind>(IOutputStream& out, NSQLComplete::ECandidateKind kind) {
-    switch (kind) {
+void Out<NSQLComplete::ECandidateKind>(IOutputStream& out, NSQLComplete::ECandidateKind value) {
+    switch (value) {
         case NSQLComplete::ECandidateKind::Keyword:
             out << "Keyword";
             break;
@@ -235,6 +312,9 @@ void Out<NSQLComplete::ECandidateKind>(IOutputStream& out, NSQLComplete::ECandid
         case NSQLComplete::ECandidateKind::ClusterName:
             out << "ClusterName";
             break;
+        case NSQLComplete::ECandidateKind::BindingName:
+            out << "BindingName";
+            break;
         case NSQLComplete::ECandidateKind::UnknownName:
             out << "UnknownName";
             break;
@@ -242,6 +322,6 @@ void Out<NSQLComplete::ECandidateKind>(IOutputStream& out, NSQLComplete::ECandid
 }
 
 template <>
-void Out<NSQLComplete::TCandidate>(IOutputStream& out, const NSQLComplete::TCandidate& candidate) {
-    out << "{" << candidate.Kind << ", \"" << candidate.Content << "\"}";
+void Out<NSQLComplete::TCandidate>(IOutputStream& out, const NSQLComplete::TCandidate& value) {
+    out << "{" << value.Kind << ", \"" << value.Content << "\"}";
 }

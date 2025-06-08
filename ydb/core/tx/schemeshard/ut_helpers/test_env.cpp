@@ -1025,17 +1025,7 @@ void NSchemeShardUT_Private::TTestEnv::BootTxAllocator(NActors::TTestActorRuntim
 NKikimrConfig::TAppConfig NSchemeShardUT_Private::TTestEnv::GetAppConfig() const {
     NKikimrConfig::TAppConfig appConfig;
     auto* queryServiceConfig = appConfig.MutableQueryServiceConfig();
-    queryServiceConfig->AddAvailableExternalDataSources("ObjectStorage");
-    queryServiceConfig->AddAvailableExternalDataSources("ClickHouse");
-    queryServiceConfig->AddAvailableExternalDataSources("PostgreSQL");
-    queryServiceConfig->AddAvailableExternalDataSources("MySQL");
-    queryServiceConfig->AddAvailableExternalDataSources("Ydb");
-    queryServiceConfig->AddAvailableExternalDataSources("YT");
-    queryServiceConfig->AddAvailableExternalDataSources("Greenplum");
-    queryServiceConfig->AddAvailableExternalDataSources("MsSQLServer");
-    queryServiceConfig->AddAvailableExternalDataSources("Oracle");
-    queryServiceConfig->AddAvailableExternalDataSources("Logging");
-    queryServiceConfig->AddAvailableExternalDataSources("Solomon");
+    queryServiceConfig->SetAllExternalDataSourcesAreAvailable(true);
     return appConfig;
 }
 
@@ -1194,7 +1184,9 @@ bool NSchemeShardUT_Private::TTestWithReboots::PassUserRequests(TTestActorRuntim
            event->Type == TEvIndexBuilder::EvCreateRequest ||
            event->Type == TEvIndexBuilder::EvGetRequest ||
            event->Type == TEvIndexBuilder::EvCancelRequest ||
-           event->Type == TEvIndexBuilder::EvForgetRequest
+           event->Type == TEvIndexBuilder::EvForgetRequest ||
+           // without it, ut_vector_index_build_reboots test hangs on GetRequest on the very first reboot
+           event->Type == TEvTablet::EvCommitResult
         ;
 }
 

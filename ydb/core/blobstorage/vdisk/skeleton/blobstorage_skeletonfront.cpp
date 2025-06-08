@@ -703,6 +703,7 @@ namespace NKikimr {
         NMonGroup::TVDiskStateGroup VDiskMonGroup;
         NMonGroup::TCostGroup CostGroup;
         NMonGroup::TTimerGroup TimerGroup;
+        NMonGroup::TCounterGroup CounterGroup;
         TVDiskIncarnationGuid VDiskIncarnationGuid;
         bool HasUnreadableBlobs = false;
         TInstant LastSanitizeTime = TInstant::Zero();
@@ -833,6 +834,7 @@ namespace NKikimr {
             SetupMonitoring(ctx);
             StartTimestamp = TActivationContext::Monotonic();
             TimerGroup.SkeletonFrontUptimeSeconds() = 0;
+            CounterGroup.VDiskCount() = 1;
             Become(&TThis::StateLocalRecoveryInProgress);
         }
 
@@ -2293,6 +2295,7 @@ namespace NKikimr {
             , VDiskMonGroup(VDiskCounters, "subsystem", "state")
             , CostGroup(VDiskCounters, "subsystem", "cost")
             , TimerGroup(VDiskCounters, "subsystem", "timer")
+            , CounterGroup(VDiskCounters, "subsystem", "counter")
         {
             ReplMonGroup.ReplUnreplicatedVDisks() = 1;
             VDiskMonGroup.VDiskState(NKikimrWhiteboard::EVDiskState::Initial);

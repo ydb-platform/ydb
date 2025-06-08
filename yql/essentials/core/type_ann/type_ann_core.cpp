@@ -3733,7 +3733,7 @@ namespace NTypeAnnImpl {
         return IGraphTransformer::TStatus::Ok;
     }
 
-    IGraphTransformer::TStatus LikelyWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus NoPushWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
         if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -4443,6 +4443,10 @@ namespace NTypeAnnImpl {
         }
 
         const auto sourceType = input->Head().GetTypeAnn();
+        if (HasError(sourceType, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
         const auto options = CastResult<Strong>(sourceType, targetType);
         if (!(options & NKikimr::NUdf::ECastOptions::Impossible)) {
             auto type = targetType;
@@ -12600,7 +12604,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["Or"] = &LogicalWrapper<false>;
         Functions["Xor"] = &LogicalWrapper<true>;
         Functions["Not"] = &BoolOpt1Wrapper;
-        Functions["Likely"] = &LikelyWrapper;
+        Functions["NoPush"] = &NoPushWrapper;
+        Functions["Likely"] = &NoPushWrapper;
         Functions["Map"] = &MapWrapper;
         Functions["OrderedMap"] = &MapWrapper;
         Functions["MapNext"] = &MapNextWrapper;

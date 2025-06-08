@@ -34,6 +34,7 @@ public:
     YDB_READONLY(TString, DatetimeType, "Datetime64");
     YDB_READONLY(TString, TimestampType, "Timestamp64");
     YDB_READONLY(ui64, PartitionSizeMb, 2000);
+    YDB_READONLY_PROTECT(bool, CheckCanonical, false);
 };
 
 class TWorkloadGeneratorBase : public IWorkloadQueryGenerator {

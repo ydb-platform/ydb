@@ -315,22 +315,40 @@ class TBackupEncryptionTestFixture : public TS3BackupTestFixture {
             );
         )sql", NQuery::TTxControl::NoTx()).GetValueSync();
         UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+
+        InsertData();
     }
 
     void TearDown(NUnitTest::TTestContext& /* context */) override {
+    }
+
+protected:
+    void InsertData(const TString& tableName = "/Root/EncryptedExportAndImport/dir1/dir2/EncryptedExportAndImportTable") {
+        TStringBuilder sql;
+        sql << "INSERT INTO `" << tableName << "` (Key, Value) VALUES (1, \"Encrypted hello world\");";
+        auto res = YdbQueryClient().ExecuteQuery(sql, NQuery::TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+    }
+
+    void CheckRestoredData(const TString& tableName = "/Root/EncryptedExportAndImport/RestoredExport/dir2/EncryptedExportAndImportTable") {
+        TStringBuilder sql;
+        sql << "SELECT * FROM `" << tableName << "`";
+        auto result = YdbQueryClient().ExecuteQuery(sql, NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetStatus() << ": " << result.GetIssues().ToString());
+
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        auto resultSet = result.GetResultSetParser(0);
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnsCount(), 2);
+        UNIT_ASSERT(resultSet.TryNextRow());
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser("Key").GetUint32(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser("Value").GetOptionalUtf8(), "Encrypted hello world");
     }
 };
 
 Y_UNIT_TEST_SUITE_F(EncryptedExportTest, TBackupEncryptionTestFixture) {
     Y_UNIT_TEST(EncryptedExportAndImport)
     {
-        {
-            auto res = YdbQueryClient().ExecuteQuery(R"sql(
-                INSERT INTO `/Root/EncryptedExportAndImport/dir1/dir2/EncryptedExportAndImportTable` (Key, Value) VALUES (1, "Encrypted hello world");
-            )sql", NQuery::TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
-        }
-
         {
             NExport::TExportToS3Settings exportSettings = MakeExportSettings("/Root/EncryptedExportAndImport/dir1", "EncryptedExport");
             exportSettings
@@ -356,21 +374,250 @@ Y_UNIT_TEST_SUITE_F(EncryptedExportTest, TBackupEncryptionTestFixture) {
 
             auto res = YdbImportClient().ImportFromS3(importSettings).GetValueSync();
             WaitOpSuccess(res);
+
+            CheckRestoredData();
+        }
+    }
+
+    Y_UNIT_TEST(EncryptionAndCompression) {
+        {
+            NExport::TExportToS3Settings settings = MakeExportSettings("/Root/EncryptedExportAndImport/dir1/dir2", "Prefix");
+            settings
+                .SymmetricEncryption(NExport::TExportToS3Settings::TEncryptionAlgorithm::AES_128_GCM, "Cool random key!")
+                .Compression("zstd");
+
+            auto res = YdbExportClient().ExportToS3(settings).GetValueSync();
+            WaitOpSuccess(res);
+
+            ValidateS3FileList({
+                "/test_bucket/Prefix/metadata.json",
+                "/test_bucket/Prefix/SchemaMapping/metadata.json.enc",
+                "/test_bucket/Prefix/SchemaMapping/mapping.json.enc",
+                "/test_bucket/Prefix/001/metadata.json.enc",
+                "/test_bucket/Prefix/001/scheme.pb.enc",
+                "/test_bucket/Prefix/001/data_00.csv.zst.enc",
+            });
         }
 
         {
-            auto result = YdbQueryClient().ExecuteQuery(R"sql(
-                SELECT * FROM `/Root/EncryptedExportAndImport/RestoredExport/dir2/EncryptedExportAndImportTable`
-            )sql", NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetStatus() << ": " << result.GetIssues().ToString());
+            NImport::TImportFromS3Settings importSettings = MakeImportSettings("Prefix", "/Root/Restored");
+            importSettings
+                .SymmetricKey("Cool random key!");
 
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            auto resultSet = result.GetResultSetParser(0);
-            UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnsCount(), 2);
-            UNIT_ASSERT(resultSet.TryNextRow());
-            UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser("Key").GetUint32(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser("Value").GetOptionalUtf8(), "Encrypted hello world");
+            auto res = YdbImportClient().ImportFromS3(importSettings).GetValueSync();
+            WaitOpSuccess(res);
+
+            CheckRestoredData("/Root/Restored/EncryptedExportAndImportTable");
         }
+    }
+
+    Y_UNIT_TEST(EncryptionAndChecksum) {
+        Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableChecksumsExport(true);
+
+        {
+            NExport::TExportToS3Settings settings = MakeExportSettings("/Root/EncryptedExportAndImport/dir1/dir2", "Prefix");
+            settings
+                .SymmetricEncryption(NExport::TExportToS3Settings::TEncryptionAlgorithm::AES_128_GCM, "Cool random key!");
+
+            auto res = YdbExportClient().ExportToS3(settings).GetValueSync();
+            WaitOpSuccess(res);
+
+            ValidateS3FileList({
+                "/test_bucket/Prefix/metadata.json",
+                "/test_bucket/Prefix/metadata.json.sha256",
+                "/test_bucket/Prefix/SchemaMapping/metadata.json.enc",
+                "/test_bucket/Prefix/SchemaMapping/metadata.json.sha256",
+                "/test_bucket/Prefix/SchemaMapping/mapping.json.enc",
+                "/test_bucket/Prefix/SchemaMapping/mapping.json.sha256",
+                "/test_bucket/Prefix/001/metadata.json.enc",
+                "/test_bucket/Prefix/001/metadata.json.sha256",
+                "/test_bucket/Prefix/001/scheme.pb.enc",
+                "/test_bucket/Prefix/001/scheme.pb.sha256",
+                "/test_bucket/Prefix/001/data_00.csv.enc",
+                "/test_bucket/Prefix/001/data_00.csv.sha256",
+            });
+        }
+
+        {
+            NImport::TImportFromS3Settings importSettings = MakeImportSettings("Prefix", "/Root/Restored");
+            importSettings
+                .SymmetricKey("Cool random key!");
+
+            auto res = YdbImportClient().ImportFromS3(importSettings).GetValueSync();
+            WaitOpSuccess(res);
+
+            CheckRestoredData("/Root/Restored/EncryptedExportAndImportTable");
+
+            ModifyChecksumAndCheckThatImportFails({
+                "/test_bucket/Prefix/metadata.json.sha256",
+                "/test_bucket/Prefix/SchemaMapping/metadata.json.sha256",
+                "/test_bucket/Prefix/SchemaMapping/mapping.json.sha256",
+                "/test_bucket/Prefix/001/metadata.json.sha256",
+                "/test_bucket/Prefix/001/scheme.pb.sha256",
+                "/test_bucket/Prefix/001/data_00.csv.sha256",
+            }, importSettings);
+        }
+    }
+
+    Y_UNIT_TEST(EncryptionChecksumAndCompression) {
+        Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableChecksumsExport(true);
+
+        {
+            NExport::TExportToS3Settings settings = MakeExportSettings("/Root/EncryptedExportAndImport/dir1/dir2", "Prefix");
+            settings
+                .SymmetricEncryption(NExport::TExportToS3Settings::TEncryptionAlgorithm::AES_128_GCM, "Cool random key!")
+                .Compression("zstd");
+
+            auto res = YdbExportClient().ExportToS3(settings).GetValueSync();
+            WaitOpSuccess(res);
+
+            ValidateS3FileList({
+                "/test_bucket/Prefix/metadata.json",
+                "/test_bucket/Prefix/metadata.json.sha256",
+                "/test_bucket/Prefix/SchemaMapping/metadata.json.enc",
+                "/test_bucket/Prefix/SchemaMapping/metadata.json.sha256",
+                "/test_bucket/Prefix/SchemaMapping/mapping.json.enc",
+                "/test_bucket/Prefix/SchemaMapping/mapping.json.sha256",
+                "/test_bucket/Prefix/001/metadata.json.enc",
+                "/test_bucket/Prefix/001/metadata.json.sha256",
+                "/test_bucket/Prefix/001/scheme.pb.enc",
+                "/test_bucket/Prefix/001/scheme.pb.sha256",
+                "/test_bucket/Prefix/001/data_00.csv.zst.enc",
+                "/test_bucket/Prefix/001/data_00.csv.sha256",
+            });
+        }
+
+        {
+            NImport::TImportFromS3Settings importSettings = MakeImportSettings("Prefix", "/Root/Restored");
+            importSettings
+                .SymmetricKey("Cool random key!");
+
+            auto res = YdbImportClient().ImportFromS3(importSettings).GetValueSync();
+            WaitOpSuccess(res);
+
+            CheckRestoredData("/Root/Restored/EncryptedExportAndImportTable");
+
+            ModifyChecksumAndCheckThatImportFails({
+                "/test_bucket/Prefix/metadata.json.sha256",
+                "/test_bucket/Prefix/SchemaMapping/metadata.json.sha256",
+                "/test_bucket/Prefix/SchemaMapping/mapping.json.sha256",
+                "/test_bucket/Prefix/001/metadata.json.sha256",
+                "/test_bucket/Prefix/001/scheme.pb.sha256",
+                "/test_bucket/Prefix/001/data_00.csv.sha256",
+            }, importSettings);
+        }
+    }
+
+    Y_UNIT_TEST(ChangefeedEncryption) {
+        Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableChecksumsExport(true);
+        Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableChangefeedsExport(true);
+        Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableChangefeedsImport(true);
+
+        auto res = YdbQueryClient().ExecuteQuery(R"sql(
+            ALTER TABLE `/Root/EncryptedExportAndImport/dir1/dir2/EncryptedExportAndImportTable` ADD CHANGEFEED `TestChangeFeed1` WITH (
+                FORMAT = 'JSON',
+                MODE = 'UPDATES'
+            );
+
+            ALTER TABLE `/Root/EncryptedExportAndImport/dir1/dir2/EncryptedExportAndImportTable` ADD CHANGEFEED `TestChangeFeed2` WITH (
+                FORMAT = 'JSON',
+                MODE = 'UPDATES'
+            );
+        )sql", NQuery::TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+
+        {
+            NExport::TExportToS3Settings settings = MakeExportSettings("", "Prefix");
+            settings
+                .SymmetricEncryption(NExport::TExportToS3Settings::TEncryptionAlgorithm::AES_128_GCM, "Cool random key!");
+
+            auto res = YdbExportClient().ExportToS3(settings).GetValueSync();
+            WaitOpSuccess(res);
+
+            ValidateS3FileList({
+                "/test_bucket/Prefix/metadata.json",
+                "/test_bucket/Prefix/metadata.json.sha256",
+                "/test_bucket/Prefix/SchemaMapping/metadata.json.enc",
+                "/test_bucket/Prefix/SchemaMapping/metadata.json.sha256",
+                "/test_bucket/Prefix/SchemaMapping/mapping.json.enc",
+                "/test_bucket/Prefix/SchemaMapping/mapping.json.sha256",
+                "/test_bucket/Prefix/001/metadata.json.enc",
+                "/test_bucket/Prefix/001/metadata.json.sha256",
+                "/test_bucket/Prefix/001/scheme.pb.enc",
+                "/test_bucket/Prefix/001/scheme.pb.sha256",
+                "/test_bucket/Prefix/001/data_00.csv.enc",
+                "/test_bucket/Prefix/001/data_00.csv.sha256",
+                "/test_bucket/Prefix/001/001/changefeed_description.pb.enc",
+                "/test_bucket/Prefix/001/001/changefeed_description.pb.sha256",
+                "/test_bucket/Prefix/001/001/topic_description.pb.enc",
+                "/test_bucket/Prefix/001/001/topic_description.pb.sha256",
+                "/test_bucket/Prefix/001/002/changefeed_description.pb.enc",
+                "/test_bucket/Prefix/001/002/changefeed_description.pb.sha256",
+                "/test_bucket/Prefix/001/002/topic_description.pb.enc",
+                "/test_bucket/Prefix/001/002/topic_description.pb.sha256",
+            });
+        }
+
+        {
+            NImport::TImportFromS3Settings importSettings = MakeImportSettings("Prefix", "/Root/Restored");
+            importSettings
+                .SymmetricKey("Cool random key!");
+
+            auto res = YdbImportClient().ImportFromS3(importSettings).GetValueSync();
+            WaitOpSuccess(res);
+        }
+
+        auto changeFeed1Describe = YdbSchemeClient().DescribePath("/Root/Restored/EncryptedExportAndImport/dir1/dir2/EncryptedExportAndImportTable/TestChangeFeed1").GetValueSync();
+        UNIT_ASSERT_C(changeFeed1Describe.IsSuccess(), changeFeed1Describe.GetIssues().ToString());
+
+        auto changeFeed2Describe = YdbSchemeClient().DescribePath("/Root/Restored/EncryptedExportAndImport/dir1/dir2/EncryptedExportAndImportTable/TestChangeFeed2").GetValueSync();
+        UNIT_ASSERT_C(changeFeed2Describe.IsSuccess(), changeFeed2Describe.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(ViewEncryption) {
+        Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableChecksumsExport(true);
+        Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableViewExport(true);
+        Server().GetRuntime()->GetAppData().FeatureFlags.SetEnablePermissionsExport(true);
+
+        auto res = YdbQueryClient().ExecuteQuery(R"sql(
+            CREATE VIEW `/Root/EncryptedExportAndImport/dir1/dir2/dir3/EncryptedExportAndImportView`
+                WITH (security_invoker = TRUE) AS
+                    SELECT Value FROM `/Root/EncryptedExportAndImport/dir1/dir2/EncryptedExportAndImportTable`
+                        WHERE Key = 42;
+        )sql", NQuery::TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+
+        {
+            NExport::TExportToS3Settings settings = MakeExportSettings("/Root/EncryptedExportAndImport/dir1/dir2/dir3", "Prefix");
+            settings
+                .SymmetricEncryption(NExport::TExportToS3Settings::TEncryptionAlgorithm::AES_128_GCM, "Cool random key!");
+
+            auto res = YdbExportClient().ExportToS3(settings).GetValueSync();
+            WaitOpSuccess(res);
+
+            ValidateS3FileList({
+                "/test_bucket/Prefix/metadata.json",
+                "/test_bucket/Prefix/metadata.json.sha256",
+                "/test_bucket/Prefix/SchemaMapping/metadata.json.enc",
+                "/test_bucket/Prefix/SchemaMapping/metadata.json.sha256",
+                "/test_bucket/Prefix/SchemaMapping/mapping.json.enc",
+                "/test_bucket/Prefix/SchemaMapping/mapping.json.sha256",
+                "/test_bucket/Prefix/001/create_view.sql.enc",
+                "/test_bucket/Prefix/001/metadata.json.enc",
+                "/test_bucket/Prefix/001/permissions.pb.enc",
+            });
+        }
+
+        {
+            NImport::TImportFromS3Settings importSettings = MakeImportSettings("Prefix", "/Root/Restored");
+            importSettings
+                .SymmetricKey("Cool random key!");
+
+            auto res = YdbImportClient().ImportFromS3(importSettings).GetValueSync();
+            WaitOpSuccess(res);
+        }
+
+        auto viewDescribe = YdbSchemeClient().DescribePath("/Root/Restored/EncryptedExportAndImportView").GetValueSync();
+        UNIT_ASSERT_C(viewDescribe.IsSuccess(), viewDescribe.GetIssues().ToString());
     }
 }

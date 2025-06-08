@@ -1,6 +1,7 @@
 #pragma once
 
 #include "kafka_events.h"
+#include "kafka_producer_instance_id.h"
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 
@@ -19,7 +20,7 @@ namespace NKafka {
 
         struct TTransactionalRequest {
             TString TransactionalId;
-            TEvKafka::TProducerInstanceId ProducerState;
+            TProducerInstanceId ProducerState;
             ui64 CorrelationId;
             TActorId ConnectionId;
         };
@@ -69,11 +70,11 @@ namespace NKafka {
             void ForwardToTransactionActor(TAutoPtr<TEventHandle<EventType>>& evHandle, const TActorContext& ctx);
 
             void DeleteTransactionActor(const TString& transactionalId);
-            bool NewProducerStateIsOutdated(const TEvKafka::TProducerInstanceId& currentProducerState, const TEvKafka::TProducerInstanceId& newProducerState);
+            bool NewProducerStateIsOutdated(const TProducerInstanceId& currentProducerState, const TProducerInstanceId& newProducerState);
             TMaybe<TString> GetTxnRequestError(const TTransactionalRequest& request);
-            TString GetProducerIsOutdatedError(const TString& transactionalId, const TEvKafka::TProducerInstanceId& currentProducerState, const TEvKafka::TProducerInstanceId& newProducerState);
+            TString GetProducerIsOutdatedError(const TString& transactionalId, const TProducerInstanceId& currentProducerState, const TProducerInstanceId& newProducerState);
 
-            std::unordered_map<TString, TEvKafka::TProducerInstanceId> ProducersByTransactionalId;
+            std::unordered_map<TString, TProducerInstanceId> ProducersByTransactionalId;
             std::unordered_map<TString, TActorId> TxnActorByTransactionalId;
     };
 
@@ -81,9 +82,9 @@ namespace NKafka {
         return new TTransactionsCoordinator();
     };
 
-    inline TActorId MakeTransactionsServiceID() {
+    inline TActorId MakeTransactionsServiceID(ui32 nodeId) {
         static const char x[12] = "kafka_txns";
-        return TActorId(0, TStringBuf(x, 12));
+        return TActorId(nodeId, TStringBuf(x, 12));
     };
     
 } // namespace NKafka

@@ -19,8 +19,8 @@ class TUpdateMembershipCommand
     : public TTypedCommand<TOptions>
 {
 protected:
-    TString Group;
-    TString Member;
+    std::string Group;
+    std::string Member;
 
     REGISTER_YSON_STRUCT_LITE(TUpdateMembershipCommand);
 
@@ -147,7 +147,7 @@ public:
     static void Register(TRegistrar registrar);
 
 private:
-    std::optional<TString> User;
+    std::optional<std::string> User;
     NYTree::EPermission Permission;
     NYTree::INodePtr Acl;
 

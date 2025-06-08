@@ -38,10 +38,9 @@ TConclusionStatus TStepAction::DoExecuteImpl() {
 
 TStepAction::TStepAction(const std::shared_ptr<IDataSource>& source, TFetchingScriptCursor&& cursor, const NActors::TActorId& ownerActorId,
     const bool changeSyncSection)
-    : TBase(ownerActorId)
+    : TBase(ownerActorId, source->GetContext()->GetCommonContext()->GetCounters().GetAssembleTasksGuard())
     , Source(source)
-    , Cursor(std::move(cursor))
-    , CountersGuard(Source->GetContext()->GetCommonContext()->GetCounters().GetAssembleTasksGuard()) {
+    , Cursor(std::move(cursor)) {
     if (changeSyncSection) {
         Source->StartAsyncSection();
     } else {

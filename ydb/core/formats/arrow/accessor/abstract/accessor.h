@@ -338,6 +338,8 @@ protected:
         AFL_VERIFY(false)("pos", position)("count", GetRecordsCount())("chunks_map", sb)("chunk_current", chunkCurrentInfo);
     }
 
+    virtual std::shared_ptr<arrow::ChunkedArray> DoGetChunkedArray(const TColumnConstructionContext& context) const;
+
 public:
     std::shared_ptr<IChunkedArray> ApplyFilter(const TColumnFilter& filter, const std::shared_ptr<IChunkedArray>& selfPtr) const;
 
@@ -367,7 +369,7 @@ public:
         for (ui32 currentIndex = 0; currentIndex < arr->GetRecordsCount();) {
             arrCurrent = arr->GetArray(arrCurrent, currentIndex, arr);
             auto result = actor(arrCurrent->GetArray());
-            if (!!result) {
+            if (result) {
                 return result;
             }
             currentIndex = currentIndex + arrCurrent->GetArray()->GetRecordsCount();
@@ -453,7 +455,7 @@ public:
         return *result;
     }
 
-    virtual std::shared_ptr<arrow::ChunkedArray> GetChunkedArray(
+    std::shared_ptr<arrow::ChunkedArray> GetChunkedArray(
         const TColumnConstructionContext& context = Default<TColumnConstructionContext>()) const;
     virtual ~IChunkedArray() = default;
 

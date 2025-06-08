@@ -146,7 +146,7 @@ with warnings.catch_warnings():
 ranf = random = sample = random_sample
 __all__.extend(['ranf', 'random', 'sample'])
 
-def __RandomState_ctor():
+def _RandomState_ctor():
     """Return a RandomState instance.
 
     This function exists solely to assist (un)pickling.

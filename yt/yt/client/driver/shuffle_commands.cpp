@@ -6,12 +6,16 @@
 
 #include <yt/yt/client/formats/config.h>
 
+#include <yt/yt/client/signature/signature.h>
+#include <yt/yt/client/signature/validator.h>
+
 #include <yt/yt/client/table_client/adapters.h>
 #include <yt/yt/client/table_client/table_output.h>
 #include <yt/yt/client/table_client/value_consumer.h>
 
 namespace NYT::NDriver {
 
+using namespace NApi;
 using namespace NConcurrency;
 using namespace NFormats;
 using namespace NTableClient;
@@ -42,16 +46,16 @@ void TStartShuffleCommand::DoExecute(ICommandContextPtr context)
 {
     auto client = context->GetClient();
     auto asyncResult = client->StartShuffle(Account, PartitionCount, ParentTransactionId, Options);
-    auto shuffleHandle = WaitFor(asyncResult).ValueOrThrow();
+    auto signedShuffleHandle = WaitFor(asyncResult).ValueOrThrow();
 
-    context->ProduceOutputValue(ConvertToYsonString(shuffleHandle));
+    context->ProduceOutputValue(ConvertToYsonString(signedShuffleHandle));
 }
 
 //////////////////////////////////////////////////////////////////////////////
 
 void TReadShuffleDataCommand::Register(TRegistrar registrar)
 {
-    registrar.Parameter("shuffle_handle", &TThis::ShuffleHandle);
+    registrar.Parameter("signed_shuffle_handle", &TThis::SignedShuffleHandle);
     registrar.Parameter("partition_index", &TThis::PartitionIndex);
     registrar.Parameter("writer_index_begin", &TThis::WriterIndexBegin)
         .Default()
@@ -78,13 +82,22 @@ void TReadShuffleDataCommand::DoExecute(ICommandContextPtr context)
 {
     auto client = context->GetClient();
 
+    const auto& signatureValidator = context->GetDriver()->GetSignatureValidator();
+    auto validationSuccessful = WaitFor(signatureValidator->Validate(SignedShuffleHandle.Underlying()))
+        .ValueOrThrow();
+    if (!validationSuccessful) {
+        auto shuffleHandle = ConvertTo<TShuffleHandlePtr>(TYsonStringBuf(SignedShuffleHandle.Underlying()->Payload()));
+        THROW_ERROR_EXCEPTION("Signature validation failed for shuffle handle")
+            << TErrorAttribute("shuffle_handle", shuffleHandle);
+    }
+
     std::optional<std::pair<int, int>> writerIndexRange;
     if (WriterIndexBegin.has_value()) {
         writerIndexRange = std::pair(*WriterIndexBegin, *WriterIndexEnd);
     }
 
     auto reader = WaitFor(context->GetClient()->CreateShuffleReader(
-        ShuffleHandle,
+        SignedShuffleHandle,
         PartitionIndex,
         writerIndexRange,
         Options))
@@ -117,7 +130,7 @@ void TReadShuffleDataCommand::DoExecute(ICommandContextPtr context)
 
 void TWriteShuffleDataCommand::Register(TRegistrar registrar)
 {
-    registrar.Parameter("shuffle_handle", &TThis::ShuffleHandle);
+    registrar.Parameter("signed_shuffle_handle", &TThis::SignedShuffleHandle);
     registrar.Parameter("partition_column", &TThis::PartitionColumn);
     registrar.Parameter("max_row_buffer_size", &TThis::MaxRowBufferSize)
         .Default(1_MB);
@@ -138,10 +151,19 @@ void TWriteShuffleDataCommand::DoExecute(ICommandContextPtr context)
 {
     auto client = context->GetClient();
 
+    const auto& signatureValidator = context->GetDriver()->GetSignatureValidator();
+    auto validationSuccessful = WaitFor(signatureValidator->Validate(SignedShuffleHandle.Underlying()))
+        .ValueOrThrow();
+    if (!validationSuccessful) {
+        auto shuffleHandle = ConvertTo<TShuffleHandlePtr>(TYsonStringBuf(SignedShuffleHandle.Underlying()->Payload()));
+        THROW_ERROR_EXCEPTION("Signature validation failed for shuffle handle")
+            << TErrorAttribute("shuffle_handle", shuffleHandle);
+    }
+
     Options.OverwriteExistingWriterData = OverwriteExistingWriterData;
 
     auto writer = WaitFor(context->GetClient()->CreateShuffleWriter(
-        ShuffleHandle,
+        SignedShuffleHandle,
         PartitionColumn,
         WriterIndex,
         Options))

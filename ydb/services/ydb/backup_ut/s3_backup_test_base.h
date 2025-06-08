@@ -6,11 +6,13 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 #include <ydb/services/ydb/ydb_common_ut.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <util/generic/scope.h>
 #include <util/system/env.h>
 
 class TS3BackupTestFixture : public NUnitTest::TBaseFixture {
@@ -53,6 +55,7 @@ protected:
     YDB_SDK_CLIENT(NYdb::NQuery::TQueryClient, YdbQueryClient);
     YDB_SDK_CLIENT(NYdb::NScheme::TSchemeClient, YdbSchemeClient);
     YDB_SDK_CLIENT(NYdb::NOperation::TOperationClient, YdbOperationClient);
+    YDB_SDK_CLIENT(NYdb::NTopic::TTopicClient, YdbTopicClient);
 
 #undef YDB_SDK_CLIENT
 
@@ -152,6 +155,20 @@ protected:
         return importSettings;
     }
 
+    NYdb::NImport::TListObjectsInS3ExportSettings MakeListObjectsInS3ExportSettings(const TString& prefix) {
+        NYdb::NImport::TListObjectsInS3ExportSettings listSettings;
+        listSettings
+            .Endpoint(TStringBuilder() << "localhost:" << S3Port())
+            .Bucket("test_bucket")
+            .Scheme(NYdb::ES3Scheme::HTTP)
+            .AccessKey("test_key")
+            .SecretKey("test_secret");
+        if (prefix) {
+            listSettings.Prefix(prefix);
+        }
+        return listSettings;
+    }
+
     void ValidateS3FileList(const TSet<TString>& paths, const TString& prefix = {}) {
         TSet<TString> keys;
         for (const auto& [key, _] : S3Mock().GetData()) {
@@ -178,6 +195,40 @@ protected:
         }
     }
 
+    void ValidateListObjectInS3Export(const TSet<std::pair<TString /*prefix*/, TString /*path*/>>& paths, const NYdb::NImport::TListObjectsInS3ExportSettings& listSettings) {
+        auto res = YdbImportClient().ListObjectsInS3Export(listSettings).GetValueSync();
+        UNIT_ASSERT_C(res.IsSuccess(), "Status: " << res.GetStatus() << ". Issues: " << res.GetIssues().ToString());
+
+        TSet<std::pair<TString, TString>> pathsInResponse;
+        for (const auto& item : res.GetItems()) {
+            bool inserted = pathsInResponse.emplace(item.Prefix, item.Path).second;
+            UNIT_ASSERT_C(inserted, "Duplicate item: {" << item.Prefix << ", " << item.Path << "}. Listing result: " << res);
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL_C(pathsInResponse, paths, "Listing result: " << res);
+    }
+
+    void ValidateListObjectInS3Export(const TSet<std::pair<TString /*prefix*/, TString /*path*/>>& paths, const TString& exportPrefix) {
+        ValidateListObjectInS3Export(paths, MakeListObjectsInS3ExportSettings(exportPrefix));
+    }
+
+    void ValidateListObjectPathsInS3Export(const TSet<TString>& paths, const NYdb::NImport::TListObjectsInS3ExportSettings& listSettings) {
+        auto res = YdbImportClient().ListObjectsInS3Export(listSettings).GetValueSync();
+        UNIT_ASSERT_C(res.IsSuccess(), "Status: " << res.GetStatus() << ". Issues: " << res.GetIssues().ToString());
+
+        TSet<TString> pathsInResponse;
+        for (const auto& item : res.GetItems()) {
+            bool inserted = pathsInResponse.emplace(item.Path).second;
+            UNIT_ASSERT_C(inserted, "Duplicate item: {" << item.Prefix << ", " << item.Path << "}. Listing result: " << res);
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL_C(pathsInResponse, paths, "Listing result: " << res);
+    }
+
+    void ValidateListObjectPathsInS3Export(const TSet<TString>& paths, const TString& exportPrefix) {
+        ValidateListObjectPathsInS3Export(paths, MakeListObjectsInS3ExportSettings(exportPrefix));
+    }
+
     TString DebugListDir(const TString& path) { // Debug listing for specified dir
         auto res = YdbSchemeClient().ListDirectory(path).GetValueSync();
         TStringBuilder l;
@@ -194,6 +245,50 @@ protected:
         return l;
     }
 
+    static TString ModifyHexEncodedString(TString value) {
+        UNIT_ASSERT_GT(value.size(), 0);
+        char c = value.front();
+        if (c == '9' || c == 'f' || c == 'F') {
+            --c;
+        } else {
+            ++c;
+        }
+        value[0] = c;
+        return value;
+    }
+
+    void ModifyChecksumAndCheckThatImportFails(const TString& checksumFile, const NYdb::NImport::TImportFromS3Settings& importSettings) {
+        const auto checksumFileIt = S3Mock().GetData().find(checksumFile);
+        UNIT_ASSERT_C(checksumFileIt != S3Mock().GetData().end(), "No checksum file: " << checksumFile);
+
+        // Automatic return to the previous state
+        const TString checksumValue = checksumFileIt->second;
+        Y_DEFER {
+            S3Mock().GetData()[checksumFile] = checksumValue;
+        };
+
+        checksumFileIt->second = ModifyHexEncodedString(checksumValue);
+
+        auto res = YdbImportClient().ImportFromS3(importSettings).GetValueSync();
+        WaitOpStatus(res, NYdb::EStatus::CANCELLED);
+    }
+
+    void ModifyChecksumAndCheckThatImportFails(const std::initializer_list<TString>& checksumFiles, const NYdb::NImport::TImportFromS3Settings& importSettings) {
+        auto copySettings = [&]() {
+            NYdb::NImport::TImportFromS3Settings settings = importSettings;
+            settings.DestinationPath(TStringBuilder() << "/Root/Prefix_" << RestoreAttempt++);
+            return settings;
+        };
+
+        // Check that settings are OK
+        auto res = YdbImportClient().ImportFromS3(copySettings()).GetValueSync();
+        WaitOpSuccess(res);
+
+        for (const TString& checksumFile : checksumFiles) {
+            ModifyChecksumAndCheckThatImportFails(checksumFile, copySettings());
+        }
+    }
+
 private:
     TDataShardExportFactory DataShardExportFactory;
     TMaybe<NYdb::TKikimrWithGrpcAndRootSchema> Server_;
@@ -201,4 +296,5 @@ private:
     TMaybe<NKikimr::NWrappers::NTestHelpers::TS3Mock> S3Mock_;
     TMaybe<NYdb::TDriverConfig> DriverConfig;
     TMaybe<NYdb::TDriver> Driver;
+    size_t RestoreAttempt = 0;
 };

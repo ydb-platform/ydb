@@ -16,6 +16,7 @@ SRCS(
     portions.cpp
     writes_monitor.cpp
     portion_index.cpp
+    duplicate_filtering.cpp
 )
 
 PEERDIR(
@@ -26,7 +27,7 @@ PEERDIR(
     ydb/library/actors/core
 )
 
-GENERATE_ENUM_SERIALIZATION(columnshard.h)
+GENERATE_ENUM_SERIALIZATION_WITH_HEADER(columnshard.h)
 GENERATE_ENUM_SERIALIZATION(scan.h)
 
 END()

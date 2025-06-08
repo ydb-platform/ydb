@@ -62,7 +62,8 @@ TBlobStorageController::TVSlotInfo::TVSlotInfo(TVSlotId vSlotId, TPDiskInfo *pdi
     }
 }
 
-void TBlobStorageController::TGroupInfo::CalculateGroupStatus() {
+bool TBlobStorageController::TGroupInfo::CalculateGroupStatus() {
+    const TGroupStatus prev = Status;
     Status = {NKikimrBlobStorage::TGroupStatus::FULL, NKikimrBlobStorage::TGroupStatus::FULL};
 
     if ((VirtualGroupState == NKikimrBlobStorage::EVirtualGroupState::CREATE_FAILED ||
@@ -82,6 +83,8 @@ void TBlobStorageController::TGroupInfo::CalculateGroupStatus() {
         }
         Status.MakeWorst(DeriveStatus(Topology.get(), failed), DeriveStatus(Topology.get(), failed | failedByPDisk));
     }
+
+    return Status != prev;
 }
 
 void TBlobStorageController::TGroupInfo::CalculateLayoutStatus(TBlobStorageController *self,
@@ -148,7 +151,7 @@ void TBlobStorageController::OnActivateExecutor(const TActorContext&) {
 }
 
 void TBlobStorageController::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
-    ev->Get()->Config->Swap(&StorageConfig);
+    StorageConfig = std::move(ev->Get()->Config);
     SelfManagementEnabled = ev->Get()->SelfManagementEnabled;
 
     auto prevStaticPDisks = std::exchange(StaticPDisks, {});
@@ -157,8 +160,8 @@ void TBlobStorageController::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
 
     const TMonotonic mono = TActivationContext::Monotonic();
 
-    if (StorageConfig.HasBlobStorageConfig()) {
-        const auto& bsConfig = StorageConfig.GetBlobStorageConfig();
+    if (StorageConfig->HasBlobStorageConfig()) {
+        const auto& bsConfig = StorageConfig->GetBlobStorageConfig();
 
         if (bsConfig.HasServiceSet()) {
             const auto& ss = bsConfig.GetServiceSet();
@@ -187,7 +190,7 @@ void TBlobStorageController::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
     if (SelfManagementEnabled) {
         // assuming that in autoconfig mode HostRecords are managed by the distconf; we need to apply it here to
         // avoid race with box autoconfiguration and node list change
-        HostRecords = std::make_shared<THostRecordMap::element_type>(StorageConfig);
+        HostRecords = std::make_shared<THostRecordMap::element_type>(*StorageConfig);
         if (SelfHealId) {
             Send(SelfHealId, new TEvPrivate::TEvUpdateHostRecords(HostRecords));
         }
@@ -307,10 +310,10 @@ void TBlobStorageController::ApplyBscSettings(const NKikimrConfig::TBlobStorageC
 }
 
 void TBlobStorageController::ApplyStorageConfig(bool ignoreDistconf) {
-    if (!StorageConfig.HasBlobStorageConfig()) {
+    if (!StorageConfig->HasBlobStorageConfig()) {
         return;
     }
-    const auto& bsConfig = StorageConfig.GetBlobStorageConfig();
+    const auto& bsConfig = StorageConfig->GetBlobStorageConfig();
 
     ApplyBscSettings(bsConfig);
 
@@ -318,7 +321,7 @@ void TBlobStorageController::ApplyStorageConfig(bool ignoreDistconf) {
         return;
     }
 
-    if (!ignoreDistconf && (!SelfManagementEnabled || !StorageConfig.GetSelfManagementConfig().GetAutomaticBoxManagement())) {
+    if (!ignoreDistconf && (!SelfManagementEnabled || !StorageConfig->GetSelfManagementConfig().GetAutomaticBoxManagement())) {
         return; // not expected to be managed by BSC
     }
 

@@ -228,7 +228,7 @@ private:
     void ResolveShards(const NActors::TActorContext& ctx) {
         auto& entry = ResolveNamesResult->ResultSet.front();
 
-        if (entry.TableId.IsSystemView()) {
+        if (entry.TableId.IsSystemView() || entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindSysView) {
             // Add fake shard for sys view
             auto* p = Result.add_partitions();
             p->set_tablet_id(1);

@@ -16,8 +16,8 @@ VERSION(8.5.0)
 ORIGINAL_SOURCE(https://github.com/curl/curl/releases/download/curl-8_5_0/curl-8.5.0.tar.bz2)
 
 PEERDIR(
-    contrib/libs/brotli/dec
-    contrib/libs/brotli/enc
+    contrib/libs/brotli/c/dec
+    contrib/libs/brotli/c/enc
     contrib/libs/libc_compat
     contrib/libs/libssh2
     contrib/libs/nghttp2
@@ -28,14 +28,9 @@ PEERDIR(
     contrib/libs/zstd
 )
 
-IF (NOT EXPORT_CMAKE)
-    ADDINCL(
-        contrib/libs/c-ares/include
-    )
-ENDIF()
-
 ADDINCL(
     GLOBAL contrib/libs/curl/include
+    contrib/libs/c-ares/include
     contrib/libs/curl/lib
     contrib/libs/libssh2/include
     contrib/libs/ngtcp2/crypto/includes

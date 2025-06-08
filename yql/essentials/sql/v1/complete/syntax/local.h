@@ -41,7 +41,11 @@ namespace NSQLComplete {
             TString Cluster;
             TString Path;
             THashSet<EObjectKind> Kinds;
-            bool IsEnclosed = false;
+            bool IsQuoted = false;
+
+            bool HasCluster() const {
+                return !Cluster.empty();
+            }
         };
 
         TKeywords Keywords;
@@ -51,6 +55,7 @@ namespace NSQLComplete {
         TMaybe<THint> Hint;
         TMaybe<TObject> Object;
         TMaybe<TCluster> Cluster;
+        bool Binding = false;
         TEditRange EditRange;
     };
 
@@ -58,10 +63,11 @@ namespace NSQLComplete {
     public:
         using TPtr = THolder<ILocalSyntaxAnalysis>;
 
-        virtual TLocalSyntaxContext Analyze(TCompletionInput input) = 0;
         virtual ~ILocalSyntaxAnalysis() = default;
+        virtual TLocalSyntaxContext Analyze(TCompletionInput input) = 0;
     };
 
-    ILocalSyntaxAnalysis::TPtr MakeLocalSyntaxAnalysis(TLexerSupplier lexer);
+    ILocalSyntaxAnalysis::TPtr MakeLocalSyntaxAnalysis(
+        TLexerSupplier lexer, const THashSet<TString>& IgnoredRules);
 
 } // namespace NSQLComplete

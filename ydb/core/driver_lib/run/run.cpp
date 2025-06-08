@@ -1129,9 +1129,10 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
     AppData->IoContextFactory = ModuleFactories ? ModuleFactories->IoContextFactory.get() : nullptr;
     AppData->SchemeOperationFactory = ModuleFactories ? ModuleFactories->SchemeOperationFactory.get() : nullptr;
     AppData->ConfigSwissKnife = ModuleFactories ? ModuleFactories->ConfigSwissKnife.get() : nullptr;
-    if (ModuleFactories) {
-        AppData->TransferWriterFactory = ModuleFactories->TransferWriterFactory;
-    }
+
+    AppData->TransferWriterFactory = ModuleFactories
+        ? ModuleFactories->TransferWriterFactory
+        : nullptr;
 
     AppData->SqsAuthFactory = ModuleFactories
         ? ModuleFactories->SqsAuthFactory.get()
@@ -1257,6 +1258,12 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
         AppData->QueryServiceConfig = runConfig.AppConfig.GetQueryServiceConfig();
     }
 
+    if (runConfig.AppConfig.HasBridgeConfig()) {
+        AppData->BridgeConfig->CopyFrom(runConfig.AppConfig.GetBridgeConfig());
+    } else {
+        AppData->BridgeConfig = nullptr;
+    }
+
     // setup resource profiles
     AppData->ResourceProfiles = new TResourceProfiles;
     if (runConfig.AppConfig.GetBootstrapConfig().ResourceProfilesSize())
@@ -1284,6 +1291,10 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
     appDataInitializers.AddAppDataInitializer(new TYamlConfigInitializer(runConfig));
 
     appDataInitializers.Initialize(AppData.Get());
+
+#if defined(PROFILE_MEMORY_ALLOCATIONS)
+    NKikimr::NMiniKQL::InitializeGlobalPagedBufferCounters(AppData->Counters);
+#endif
 }
 
 void TKikimrRunner::InitializeLogSettings(const TKikimrRunConfig& runConfig)

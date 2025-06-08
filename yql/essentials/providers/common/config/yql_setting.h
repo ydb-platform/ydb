@@ -12,8 +12,14 @@ namespace NCommon {
 
 const TString ALL_CLUSTERS = "$all";
 
-// TODO: replace RUNTIME/PERCLUSTER with enum
-template <typename TType, bool RUNTIME = true, bool PERCLUSTER = false>
+enum class EConfSettingType {
+    Static,
+    StaticPerCluster,
+    Dynamic,
+};
+
+#define YQL_BETTER_CONF_SETTING_API
+template <typename TType, EConfSettingType SettingType = EConfSettingType::Dynamic>
 class TConfSetting {
 public:
     TConfSetting() = default;
@@ -25,7 +31,11 @@ public:
     ~TConfSetting() = default;
 
     bool IsRuntime() const {
-        return RUNTIME;
+        return SettingType == EConfSettingType::Dynamic;
+    }
+
+    bool IsPerCluster() const {
+        return SettingType == EConfSettingType::Dynamic || SettingType == EConfSettingType::StaticPerCluster;
     }
 
     TType& operator[](const TString& cluster) {
@@ -81,7 +91,7 @@ private:
 };
 
 template <typename TType>
-class TConfSetting<TType, false, false> {
+class TConfSetting<TType, EConfSettingType::Static> {
 public:
     TConfSetting() = default;
     TConfSetting(const TType& value)
@@ -93,6 +103,10 @@ public:
     ~TConfSetting() = default;
 
     bool IsRuntime() const {
+        return false;
+    }
+
+    bool IsPerCluster() const {
         return false;
     }
 

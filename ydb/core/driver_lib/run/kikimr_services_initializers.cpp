@@ -36,6 +36,7 @@
 
 #include <ydb/core/cms/cms.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
+#include <ydb/core/cms/console/configs_dispatcher_proxy.h>
 #include <ydb/core/cms/console/configs_cache.h>
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/cms/console/feature_flags_configurator.h>
@@ -953,6 +954,9 @@ void TBSNodeWardenInitializer::InitializeServices(NActors::TActorSystemSetup* se
     if (Config.HasSelfManagementConfig()) {
         nodeWardenConfig->SelfManagementConfig.emplace(Config.GetSelfManagementConfig());
     }
+    if (Config.HasBridgeConfig()) {
+        nodeWardenConfig->BridgeConfig.emplace(Config.GetBridgeConfig());
+    }
 
     if (Config.HasConfigDirPath()) {
         nodeWardenConfig->ConfigDirPath = Config.GetConfigDirPath();
@@ -984,14 +988,16 @@ void TBSNodeWardenInitializer::InitializeServices(NActors::TActorSystemSetup* se
 template<typename TCreateFunc>
 void StartLocalStateStorageReplicas(TCreateFunc createFunc, TStateStorageInfo *info, ui32 poolId, TActorSystemSetup &setup) {
     ui32 index = 0;
-    for (auto &ring : info->Rings) {
-        for (TActorId replica : ring.Replicas) {
-            if (replica.NodeId() == setup.NodeId) {
-                setup.LocalServices.emplace_back(
-                    replica,
-                    TActorSetupCmd(createFunc(info, index), TMailboxType::ReadAsFilled, poolId));
+    for (auto &ringGroup : info->RingGroups) {
+        for (auto &ring : ringGroup.Rings) {
+            for (TActorId replica : ring.Replicas) {
+                if (replica.NodeId() == setup.NodeId) {
+                    setup.LocalServices.emplace_back(
+                        replica,
+                        TActorSetupCmd(createFunc(info, index), TMailboxType::ReadAsFilled, poolId));
+                }
+                ++index;
             }
-            ++index;
         }
     }
 }
@@ -2512,6 +2518,11 @@ void TConfigsDispatcherInitializer::InitializeServices(NActors::TActorSystemSetu
             NConsole::MakeConfigsDispatcherID(NodeId),
             TActorSetupCmd(actor, TMailboxType::HTSwap, appData->UserPoolId)));
 
+    IActor* proxyActor = NConsole::CreateConfigsDispatcherProxy();
+    setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(
+            NConsole::MakeConfigsDispatcherProxyID(NodeId),
+            TActorSetupCmd(proxyActor, TMailboxType::HTSwap, appData->UserPoolId)));
+
     setup->LocalServices.emplace_back(
         MakeFeatureFlagsServiceID(),
         TActorSetupCmd(NConsole::CreateFeatureFlagsConfigurator(), TMailboxType::HTSwap, appData->UserPoolId));
@@ -2780,7 +2791,7 @@ void TKafkaProxyServiceInitializer::InitializeServices(NActors::TActorSystemSetu
         );
         
         setup->LocalServices.emplace_back(
-            NKafka::MakeTransactionsServiceID(),
+            NKafka::MakeTransactionsServiceID(NodeId),
             TActorSetupCmd(NKafka::CreateTransactionsCoordinator(),
                 TMailboxType::HTSwap, appData->UserPoolId
             )

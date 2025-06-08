@@ -1,17 +1,18 @@
 from __future__ import annotations
-import pytest
 import allure
 import json
-import yatest
-import os
 import logging
+import os
+import pytest
+import yatest
+
 from allure_commons._core import plugin_manager
 from allure_pytest.listener import AllureListener
 from copy import deepcopy
 from datetime import datetime
 from pytz import timezone
 from time import time
-from typing import Optional
+from typing import Optional, Union
 from ydb.tests.olap.lib.ydb_cli import YdbCliHelper, WorkloadType, CheckCanonicalPolicy
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.olap.lib.allure_utils import allure_test_description, NodeErrors
@@ -30,7 +31,6 @@ class LoadSuiteBase:
     iterations: int = 5
     workload_type: WorkloadType = None
     timeout: float = 1800.
-    refference: str = ''
     check_canonical: CheckCanonicalPolicy = CheckCanonicalPolicy.NO
     query_syntax: str = ''
     query_settings: dict[int, LoadSuiteBase.QuerySettings] = {}
@@ -61,7 +61,7 @@ class LoadSuiteBase:
         return result
 
     @classmethod
-    def _get_query_settings(cls, query_num: Optional[int], query_name: Optional[str]) -> QuerySettings:
+    def _get_query_settings(cls, query_num: Optional[int] = None, query_name: Optional[str] = None) -> QuerySettings:
         result = LoadSuiteBase.QuerySettings(
             iterations=cls.iterations,
             timeout=cls.timeout,
@@ -308,7 +308,7 @@ class LoadSuiteBase:
             allure.attach(cls.__hide_query_text(result.stderr, query_text), 'Stderr', attachment_type=allure.attachment_type.TEXT)
         end_time = time()
         allure_test_description(
-            cls.suite(), query_name, refference_set=cls.refference,
+            cls.suite(), query_name,
             start_time=result.start_time, end_time=end_time, node_errors=cls.check_nodes(result, end_time)
         )
         stats = result.get_stats(query_name)
@@ -360,6 +360,67 @@ class LoadSuiteBase:
         result.start_time = max(start_time - 600, first_node_start_time)
         cls.process_query_result(result, query_name, True)
 
+    @classmethod
+    def teardown_class(cls) -> None:
+        """
+        Общий метод очистки для всех тестовых классов.
+        Может быть переопределен в наследниках для специфичной очистки.
+        """
+        with allure.step('Base teardown: checking for custom cleanup'):
+            if hasattr(cls, 'do_teardown_class'):
+                try:
+                    logging.info(f"Executing custom teardown for {cls.__name__}")
+                    cls.do_teardown_class()
+                    allure.attach(
+                        f"Custom teardown completed for {cls.__name__}",
+                        'Custom teardown result',
+                        allure.attachment_type.TEXT
+                    )
+                except Exception as e:
+                    error_msg = f"Error during custom teardown for {cls.__name__}: {e}"
+                    logging.error(error_msg)
+                    allure.attach(error_msg, 'Custom teardown error', allure.attachment_type.TEXT)
+            else:
+                logging.info(f"No custom teardown defined for {cls.__name__}")
+                allure.attach(
+                    f"No custom teardown needed for {cls.__name__}",
+                    'Teardown result',
+                    allure.attachment_type.TEXT
+                )
+
+    @classmethod
+    def kill_workload_processes(cls, process_names: Union[str, list[str]],
+                                target_dir: Optional[str] = None) -> None:
+        """
+        Удобный метод для остановки workload процессов на всех нодах кластера.
+        Использует YdbCluster.kill_processes_on_nodes.
+
+        Args:
+            process_names: имя процесса или список имен процессов для остановки
+            target_dir: директория, в которой искать процессы (опционально)
+        """
+        with allure.step(f'Killing workload processes: {process_names}'):
+            try:
+                results = YdbCluster.kill_processes_on_nodes(
+                    process_names=process_names,
+                    target_dir=target_dir
+                )
+
+                total_killed = 0
+                for host, host_results in results.items():
+                    for process_name, process_result in host_results.items():
+                        total_killed += process_result.get('killed_count', 0)
+
+                success_msg = f"Successfully processed {len(results)} hosts, killed {total_killed} processes"
+                logging.info(success_msg)
+                allure.attach(success_msg, 'Kill processes result', allure.attachment_type.TEXT)
+
+            except Exception as e:
+                error_msg = f"Error killing workload processes: {e}"
+                logging.error(error_msg)
+                allure.attach(error_msg, 'Kill processes error', allure.attachment_type.TEXT)
+                raise
+
     def run_workload_test(self, path: str, query_num: Optional[int] = None, query_name: Optional[str] = None) -> None:
         assert query_num is not None or query_name is not None
         for plugin in plugin_manager.get_plugin_manager().get_plugins():
@@ -369,13 +430,13 @@ class LoadSuiteBase:
                     for param in allure_test_result.parameters:
                         if param.name in {'query_num', 'query_name'}:
                             param.mode = allure.parameter_mode.HIDDEN.value
-        qparams = self._get_query_settings(query_num, query_name)
+        qparams = self._get_query_settings(query_num=query_num, query_name=query_name)
         if query_name is None:
             query_name = f'Query{query_num:02d}'
         self.save_nodes_state()
         result = YdbCliHelper.workload_run(
             path=path,
-            query_name=query_name,
+            query_names=[query_name],
             iterations=qparams.iterations,
             workload_type=self.workload_type,
             timeout=qparams.timeout,
@@ -384,5 +445,43 @@ class LoadSuiteBase:
             scale=self.scale,
             query_prefix=qparams.query_prefix,
             external_path=self.get_external_path(),
-        )
+        )[query_name]
         self.process_query_result(result, query_name, True)
+
+
+class LoadSuiteParallel(LoadSuiteBase):
+    threads: int = 0
+
+    def get_query_list() -> list[str]:
+        return []
+
+    def get_path() -> str:
+        return ''
+
+    __results: dict[str, YdbCliHelper.WorkloadRunResult] = {}
+
+    @classmethod
+    def do_setup_class(cls):
+        qparams = cls._get_query_settings()
+        cls.save_nodes_state()
+        cls.__results = YdbCliHelper.workload_run(
+            path=cls.get_path(),
+            query_names=cls.get_query_list(),
+            iterations=qparams.iterations,
+            workload_type=cls.workload_type,
+            timeout=qparams.timeout,
+            check_canonical=cls.check_canonical,
+            query_syntax=cls.query_syntax,
+            scale=cls.scale,
+            query_prefix=qparams.query_prefix,
+            external_path=cls.get_external_path(),
+            threads=cls.threads
+        )
+
+    def test(self, query_name):
+        self.process_query_result(result=self.__results[query_name], query_name=query_name, upload=True)
+
+
+def pytest_generate_tests(metafunc):
+    if issubclass(metafunc.cls, LoadSuiteParallel):
+        metafunc.parametrize("query_name", metafunc.cls.get_query_list() + ["Sum"])

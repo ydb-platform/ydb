@@ -92,7 +92,7 @@ pdisk_key_config:
     }
 
     Y_UNIT_TEST(AllowDefaultHostConfigId) {
-        TString config = "{self_management_config: {enabled: true, erasure_species: block-4-2, pdisk_type: NVME}, "
+        TString config = "{erasure: block-4-2, self_management_config: {enabled: true, erasure_species: block-4-2, pdisk_type: NVME}, "
             "host_configs: [{nvme: [disk1, disk2]}], hosts: [{host: fqdn1}, {host: fqdn2}]}";
         NKikimrConfig::TAppConfig cfg = Parse(config, true);
         UNIT_ASSERT(cfg.HasBlobStorageConfig());

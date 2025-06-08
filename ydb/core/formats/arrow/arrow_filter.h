@@ -263,8 +263,9 @@ public:
         return TColumnFilter(false);
     }
 
-    TColumnFilter And(const TColumnFilter& extFilter) const Y_WARN_UNUSED_RESULT;
-    TColumnFilter Or(const TColumnFilter& extFilter) const Y_WARN_UNUSED_RESULT;
+    [[nodiscard]] TColumnFilter And(const TColumnFilter& extFilter) const;
+    [[nodiscard]] TColumnFilter Or(const TColumnFilter& extFilter) const;
+    [[nodiscard]] TColumnFilter ApplyFilterFrom(const TColumnFilter& filter) const;
 
     class TApplyContext {
     private:

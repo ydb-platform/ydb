@@ -56,10 +56,16 @@ noArg {
 }
 {%  endif -%}
 
+{%- if with_kotlin and with_lombok_plugin %}
+
+tasks.withType<Delombok>().configureEach {
+    classpath = classpath + files(sourceSets.main.get().output)
+}
+{%  endif -%}
+
 {%- if with_kotlin %}
 
 kotlin {
-    kotlinDaemonJvmArgs = listOf("-Xmx2G")
     jvmToolchain({{ jdk_version }})
 }
 {%  endif -%}

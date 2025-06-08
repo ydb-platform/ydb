@@ -3044,12 +3044,14 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     TLocalPathId(rowset.GetValue<Schema::CdcStream::LocalPathId>())
                 );
                 auto alterVersion = rowset.GetValue<Schema::CdcStream::AlterVersion>();
-                auto mode = rowset.GetValue<Schema::CdcStream::Mode>();
-                auto format = rowset.GetValue<Schema::CdcStream::Format>();
-                auto vt = rowset.GetValueOrDefault<Schema::CdcStream::VirtualTimestamps>(false);
-                auto rt = TDuration::MilliSeconds(rowset.GetValueOrDefault<Schema::CdcStream::ResolvedTimestampsIntervalMs>(0));
-                auto awsRegion = rowset.GetValue<Schema::CdcStream::AwsRegion>();
-                auto state = rowset.GetValue<Schema::CdcStream::State>();
+                auto settings = TCdcStreamSettings()
+                    .WithMode(rowset.GetValue<Schema::CdcStream::Mode>())
+                    .WithFormat(rowset.GetValue<Schema::CdcStream::Format>())
+                    .WithVirtualTimestamps(rowset.GetValueOrDefault<Schema::CdcStream::VirtualTimestamps>(false))
+                    .WithResolvedTimestamps(TDuration::MilliSeconds(rowset.GetValueOrDefault<Schema::CdcStream::ResolvedTimestampsIntervalMs>(0)))
+                    .WithSchemaChanges(rowset.GetValueOrDefault<Schema::CdcStream::SchemaChanges>(false))
+                    .WithAwsRegion(rowset.GetValue<Schema::CdcStream::AwsRegion>())
+                    .WithState(rowset.GetValue<Schema::CdcStream::State>());
 
                 Y_VERIFY_S(Self->PathsById.contains(pathId), "Path doesn't exist, pathId: " << pathId);
                 auto path = Self->PathsById.at(pathId);
@@ -3059,10 +3061,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     << ", path type: " << NKikimrSchemeOp::EPathType_Name(path->PathType));
 
                 Y_ABORT_UNLESS(!Self->CdcStreams.contains(pathId));
-                Self->CdcStreams[pathId] = new TCdcStreamInfo(alterVersion, mode, format, vt, rt, awsRegion, state);
+                const auto& stream = Self->CdcStreams[pathId] = new TCdcStreamInfo(alterVersion, std::move(settings));
                 Self->IncrementPathDbRefCount(pathId);
 
-                if (state == NKikimrSchemeOp::ECdcStreamStateScan) {
+                if (stream->State == NKikimrSchemeOp::ECdcStreamStateScan) {
                     Y_VERIFY_S(Self->PathsById.contains(path->ParentPathId), "Parent path is not found"
                         << ", cdc stream pathId: " << pathId
                         << ", parent pathId: " << path->ParentPathId);
@@ -3087,14 +3089,15 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     TOwnerId(rowset.GetValue<Schema::CdcStreamAlterData::OwnerPathId>()),
                     TLocalPathId(rowset.GetValue<Schema::CdcStreamAlterData::LocalPathId>())
                 );
-
                 auto alterVersion = rowset.GetValue<Schema::CdcStreamAlterData::AlterVersion>();
-                auto mode = rowset.GetValue<Schema::CdcStreamAlterData::Mode>();
-                auto format = rowset.GetValue<Schema::CdcStreamAlterData::Format>();
-                auto vt = rowset.GetValueOrDefault<Schema::CdcStreamAlterData::VirtualTimestamps>(false);
-                auto rt = TDuration::MilliSeconds(rowset.GetValueOrDefault<Schema::CdcStreamAlterData::ResolvedTimestampsIntervalMs>(0));
-                auto awsRegion = rowset.GetValue<Schema::CdcStreamAlterData::AwsRegion>();
-                auto state = rowset.GetValue<Schema::CdcStreamAlterData::State>();
+                auto settings = TCdcStreamSettings()
+                    .WithMode(rowset.GetValue<Schema::CdcStreamAlterData::Mode>())
+                    .WithFormat(rowset.GetValue<Schema::CdcStreamAlterData::Format>())
+                    .WithVirtualTimestamps(rowset.GetValueOrDefault<Schema::CdcStreamAlterData::VirtualTimestamps>(false))
+                    .WithResolvedTimestamps(TDuration::MilliSeconds(rowset.GetValueOrDefault<Schema::CdcStreamAlterData::ResolvedTimestampsIntervalMs>(0)))
+                    .WithSchemaChanges(rowset.GetValueOrDefault<Schema::CdcStreamAlterData::SchemaChanges>(false))
+                    .WithAwsRegion(rowset.GetValue<Schema::CdcStreamAlterData::AwsRegion>())
+                    .WithState(rowset.GetValue<Schema::CdcStreamAlterData::State>());
 
                 Y_VERIFY_S(Self->PathsById.contains(pathId), "Path doesn't exist, pathId: " << pathId);
                 auto path = Self->PathsById.at(pathId);
@@ -3105,14 +3108,14 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                 if (!Self->CdcStreams.contains(pathId)) {
                     Y_ABORT_UNLESS(alterVersion == 1);
-                    Self->CdcStreams[pathId] = TCdcStreamInfo::New(mode, format, vt, rt, awsRegion);
+                    Self->CdcStreams[pathId] = TCdcStreamInfo::New(settings);
                     Self->IncrementPathDbRefCount(pathId);
                 }
 
                 auto stream = Self->CdcStreams.at(pathId);
                 Y_ABORT_UNLESS(stream->AlterData == nullptr);
                 Y_ABORT_UNLESS(stream->AlterVersion < alterVersion);
-                stream->AlterData = new TCdcStreamInfo(alterVersion, mode, format, vt, rt, awsRegion, state);
+                stream->AlterData = new TCdcStreamInfo(alterVersion, std::move(settings));
 
                 Y_VERIFY_S(Self->PathsById.contains(path->ParentPathId), "Parent path is not found"
                     << ", cdc stream pathId: " << pathId
@@ -3590,6 +3593,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         bool deserializeRes = ParseFromStringNoSizeLimit(proto, extraData);
                         Y_ABORT_UNLESS(deserializeRes);
                         txState.CdcPathId = TPathId::FromProto(proto.GetTxCopyTableExtraData().GetCdcPathId());
+                        if (proto.GetTxCopyTableExtraData().HasTargetPathTargetState()) {
+                            txState.TargetPathTargetState = proto.GetTxCopyTableExtraData().GetTargetPathTargetState();
+                        }
                     }
                 }
 
@@ -4493,9 +4499,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                                              rowset.GetValueOrDefault<Schema::ImportItems::DstPathLocalId>(InvalidLocalPathId));
 
                     if (rowset.HaveValue<Schema::ImportItems::Scheme>()) {
-                        Ydb::Table::CreateTableRequest scheme;
-                        Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(scheme, rowset.GetValue<Schema::ImportItems::Scheme>()));
-                        item.Scheme = scheme;
+                        Ydb::Table::CreateTableRequest table;
+                        Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(table, rowset.GetValue<Schema::ImportItems::Scheme>()));
+                        item.Table = table;
                     }
 
                     if (rowset.HaveValue<Schema::ImportItems::CreationQuery>()) {
@@ -4555,6 +4561,36 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
         // Read index build
         {
+            auto fillBuildInfoSafe = [&](TIndexBuildInfo& buildInfo, const TString& stepName, const auto& fill) {
+                try {
+                    fill(buildInfo);
+                } catch (const std::exception& exc) {
+                    LOG_ERROR_S(ctx, NKikimrServices::BUILD_INDEX, 
+                        "Init " << stepName << " unhandled exception, id#" << buildInfo.Id
+                        << " " << TypeName(exc) << ": " << exc.what() << Endl
+                        << TBackTrace::FromCurrentException().PrintToString()
+                        << ", TIndexBuildInfo: " << buildInfo);
+        
+                    // in-memory volatile state:
+                    buildInfo.IsBroken = true;
+                    buildInfo.AddIssue(TStringBuilder() << "Init " << stepName << " unhandled exception " << exc.what());
+                }
+            };
+
+            auto fillBuildInfoByIdSafe = [&](TIndexBuildId id, const TString& stepName, const auto& fill) {
+                const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(id);
+                Y_ASSERT(buildInfoPtr);
+                if (!buildInfoPtr) {
+                    LOG_ERROR_S(ctx, NKikimrServices::BUILD_INDEX, 
+                        "Init " << stepName << " BuildInfo not found: id#" << id);
+                    return;
+                }
+                auto& buildInfo = *buildInfoPtr->Get();
+                if (!buildInfo.IsBroken) {
+                    fillBuildInfoSafe(buildInfo, stepName, fill);
+                }
+            };
+
             // read main info
             {
                 auto rowset = db.Table<Schema::IndexBuild>().Range().Select();
@@ -4563,17 +4599,21 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 }
 
                 while (!rowset.EndOfSet()) {
-                    TIndexBuildInfo::TPtr indexInfo = TIndexBuildInfo::FromRow(rowset);
+                    TIndexBuildInfo::TPtr buildInfo = new TIndexBuildInfo();
+                    fillBuildInfoSafe(*buildInfo, "IndexBuild", [&](TIndexBuildInfo& buildInfo) {
+                        TIndexBuildInfo::FillFromRow(rowset, &buildInfo);
+                    });
 
-                    auto [it, emplaced] = Self->IndexBuilds.emplace(indexInfo->Id, indexInfo);
-                    Y_ABORT_UNLESS(emplaced);
-                    if (indexInfo->Uid) {
-                        // TODO(mbkkt) It also should be unique, but we're not sure.
-                        Y_ASSERT(!Self->IndexBuildsByUid.contains(indexInfo->Uid));
-                        Self->IndexBuildsByUid[indexInfo->Uid] = indexInfo;
+                    // Note: broken build are also added to IndexBuilds
+                    Y_ASSERT(!Self->IndexBuilds.contains(buildInfo->Id));
+                    Self->IndexBuilds[buildInfo->Id] = buildInfo;
+
+                    if (buildInfo->Uid) {
+                        Y_ASSERT(!Self->IndexBuildsByUid.contains(buildInfo->Uid));
+                        Self->IndexBuildsByUid[buildInfo->Uid] = buildInfo;
                     }
 
-                    OnComplete.ToProgress(indexInfo->Id);
+                    OnComplete.ToProgress(buildInfo->Id);
 
                     if (!rowset.Next()) {
                         return false;
@@ -4595,19 +4635,18 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                 while (!rowset.EndOfSet()) {
                     TIndexBuildId id = rowset.GetValue<Schema::KMeansTreeProgress::Id>();
-                    const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(id);
-                    Y_VERIFY_S(buildInfoPtr, "BuildIndex not found: id# " << id);
-                    auto& buildInfo = *buildInfoPtr->Get();
-                    buildInfo.KMeans.Set(
-                        rowset.GetValue<Schema::KMeansTreeProgress::Level>(),
-                        rowset.GetValue<Schema::KMeansTreeProgress::ParentBegin>(),
-                        rowset.GetValue<Schema::KMeansTreeProgress::Parent>(),
-                        rowset.GetValue<Schema::KMeansTreeProgress::ChildBegin>(),
-                        rowset.GetValue<Schema::KMeansTreeProgress::Child>(),
-                        rowset.GetValue<Schema::KMeansTreeProgress::State>(),
-                        rowset.GetValue<Schema::KMeansTreeProgress::TableSize>()
-                    );
-                    buildInfo.Sample.Rows.reserve(buildInfo.KMeans.K * 2);
+                    fillBuildInfoByIdSafe(id, "KMeansTreeProgress", [&](TIndexBuildInfo& buildInfo) {
+                        buildInfo.KMeans.Set(
+                            rowset.GetValue<Schema::KMeansTreeProgress::Level>(),
+                            rowset.GetValue<Schema::KMeansTreeProgress::ParentBegin>(),
+                            rowset.GetValue<Schema::KMeansTreeProgress::Parent>(),
+                            rowset.GetValue<Schema::KMeansTreeProgress::ChildBegin>(),
+                            rowset.GetValue<Schema::KMeansTreeProgress::Child>(),
+                            rowset.GetValue<Schema::KMeansTreeProgress::State>(),
+                            rowset.GetValue<Schema::KMeansTreeProgress::TableSize>()
+                        );
+                        buildInfo.Sample.Rows.reserve(buildInfo.KMeans.K * 2);
+                    });
 
                     if (!rowset.Next()) {
                         return false;
@@ -4623,20 +4662,25 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     return false;
                 }
 
+                size_t sampleCount = 0;
                 while (!rowset.EndOfSet()) {
                     TIndexBuildId id = rowset.GetValue<Schema::KMeansTreeSample::Id>();
-                    const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(id);
-                    Y_VERIFY_S(buildInfoPtr, "BuildIndex not found: id# " << id);
-                    auto& buildInfo = *buildInfoPtr->Get();
-                    buildInfo.Sample.Set(
-                        rowset.GetValue<Schema::KMeansTreeSample::Probability>(),
-                        rowset.GetValue<Schema::KMeansTreeSample::Data>()
-                    );
+                    fillBuildInfoByIdSafe(id, "KMeansTreeSample", [&](TIndexBuildInfo& buildInfo) {
+                        buildInfo.Sample.Add(
+                            rowset.GetValue<Schema::KMeansTreeSample::Probability>(),
+                            rowset.GetValue<Schema::KMeansTreeSample::Data>()
+                        );
+                    });
+                    sampleCount++;
 
                     if (!rowset.Next()) {
                         return false;
                     }
                 }
+
+                LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                             "KMeansTreeSample records: " << sampleCount
+                             << ", at schemeshard: " << Self->TabletID());
             }
 
             // read index build columns
@@ -4648,11 +4692,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                 while (!rowset.EndOfSet()) {
                     TIndexBuildId id = rowset.GetValue<Schema::IndexBuildColumns::Id>();
-                    const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(id);
-                    Y_VERIFY_S(buildInfoPtr, "BuildIndex not found"
-                                   << ": id# " << id);
-                    auto& buildInfo = *buildInfoPtr->Get();
-                    buildInfo.AddIndexColumnInfo(rowset);
+                    fillBuildInfoByIdSafe(id, "IndexBuildColumns", [&](TIndexBuildInfo& buildInfo) {
+                        buildInfo.AddIndexColumnInfo(rowset);
+                    });
 
                     if (!rowset.Next()) {
                         return false;
@@ -4668,11 +4710,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                 while (!rowset.EndOfSet()) {
                     TIndexBuildId id = rowset.GetValue<Schema::BuildColumnOperationSettings::Id>();
-                    const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(id);
-                    Y_VERIFY_S(buildInfoPtr, "BuildIndex not found"
-                                   << ": id# " << id);
-                    auto& buildInfo = *buildInfoPtr->Get();
-                    buildInfo.AddBuildColumnInfo(rowset);
+                    fillBuildInfoByIdSafe(id, "BuildColumnOperationSettings", [&](TIndexBuildInfo& buildInfo) {
+                        buildInfo.AddBuildColumnInfo(rowset);
+                    });
 
                     if (!rowset.Next()) {
                         return false;
@@ -4689,11 +4729,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                 while (!rowset.EndOfSet()) {
                     TIndexBuildId id = rowset.GetValue<Schema::IndexBuildShardStatus::Id>();
-                    const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(id);
-                    Y_VERIFY_S(buildInfoPtr, "BuildIndex not found"
-                                   << ": id# " << id);
-                    auto& buildInfo = *buildInfoPtr->Get();
-                    buildInfo.AddShardStatus(rowset);
+                    fillBuildInfoByIdSafe(id, "IndexBuildShardStatus", [&](TIndexBuildInfo& buildInfo) {
+                        buildInfo.AddShardStatus(rowset);
+                    });
 
                     if (!rowset.Next()) {
                         return false;

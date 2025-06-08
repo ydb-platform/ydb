@@ -1,5 +1,6 @@
 #include "node_warden.h"
 #include "node_warden_impl.h"
+#include "node_warden_events.h"
 
 #include <ydb/core/blob_depot/agent/agent.h>
 
@@ -289,6 +290,7 @@ namespace NKikimr::NStorage {
                         TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, group.GroupResolver, {}, nullptr, 0));
                     }
                     Groups.erase(groupId);
+                    Send(SelfId(), new TEvNodeWardenUnsubscribeFromCache(Sprintf("G%08" PRIx32, groupId)));
 
                     // report group deletion to whiteboard
                     Send(WhiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvBSGroupStateDelete(groupId));

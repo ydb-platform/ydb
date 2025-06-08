@@ -22,7 +22,7 @@ struct TEvExecution {
 
     class TEvNewTask: public NActors::TEventLocal<TEvNewTask, EvNewTask> {
     private:
-        YDB_READONLY_DEF(ITask::TPtr, Task);
+        YDB_ACCESSOR_DEF(ITask::TPtr, Task);
         YDB_READONLY(ESpecialTaskCategory, Category, ESpecialTaskCategory::Insert);
         YDB_READONLY(ui64, InternalProcessId, 0);
         YDB_READONLY(TMonotonic, ConstructInstant, TMonotonic::Now());

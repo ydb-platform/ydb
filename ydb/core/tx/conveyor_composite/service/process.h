@@ -9,6 +9,7 @@
 #include <ydb/library/accessor/positive_integer.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/signals/object_counter.h>
 #include <ydb/library/signals/owner.h>
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
@@ -19,15 +20,16 @@ namespace NKikimr::NConveyorComposite {
 
 class TDequePriorityFIFO {
 private:
-    std::map<ui32, std::deque<TWorkerTask>> Tasks;
+    std::map<ui32, std::deque<TWorkerTaskPrepare>> Tasks;
     ui32 Size = 0;
 
 public:
-    void push(const TWorkerTask& task) {
-        Tasks[(ui32)task.GetTask()->GetPriority()].emplace_back(task);
+    void push(TWorkerTaskPrepare&& task) {
+        auto priority = (ui32)task.GetTask()->GetPriority();
+        Tasks[priority].emplace_back(std::move(task));
         ++Size;
     }
-    TWorkerTask pop() {
+    TWorkerTaskPrepare pop() {
         Y_ABORT_UNLESS(Size);
         auto result = std::move(Tasks.rbegin()->second.front());
         Tasks.rbegin()->second.pop_front();
@@ -64,7 +66,7 @@ public:
     }
 };
 
-class TProcess: public TNonCopyable {
+class TProcess: public TNonCopyable, public NColumnShard::TMonitoringObjectsCounter<TProcess> {
 private:
     YDB_READONLY(ui64, ProcessId, 0);
     YDB_READONLY_DEF(std::shared_ptr<TCPUUsage>, CPUUsage);
@@ -88,11 +90,15 @@ public:
         return Tasks.size();
     }
 
-    TWorkerTask ExtractTaskWithPrediction() {
+    ui32 GetTasksCount() const {
+        return Tasks.size();
+    }
+
+    TWorkerTask ExtractTaskWithPrediction(const std::shared_ptr<TWPCategorySignals>& signals) {
         auto result = Tasks.pop();
         CPUUsage->AddPredicted(result.GetPredictedDuration());
         WaitingTasksCount->Dec();
-        return result;
+        return std::move(result).BuildTask(signals->GetTaskSignals(result.GetTask()->GetTaskClassIdentifier()));
     }
 
     void PutTaskResult(TWorkerTaskResult&& result) {
@@ -124,9 +130,8 @@ public:
         IncRegistration();
     }
 
-    void RegisterTask(const std::shared_ptr<ITask>& task, const std::shared_ptr<TCategorySignals>& signals) {
-        TWorkerTask wTask(task, AverageTaskDuration.GetValue(), signals->GetCategory(), Scope->GetScopeId(),
-            signals->GetTaskSignals(task->GetTaskClassIdentifier()), ProcessId);
+    void RegisterTask(const std::shared_ptr<ITask>& task, const ESpecialTaskCategory category) {
+        TWorkerTaskPrepare wTask(task, AverageTaskDuration.GetValue(), category, Scope, ProcessId);
         Tasks.push(std::move(wTask));
         WaitingTasksCount->Inc();
     }

@@ -34,9 +34,7 @@ void TDistributor::HandleMain(TEvInternal::TEvTaskProcessedResult::TPtr& evExt) 
     TWorkersPool& workersPool = Manager->MutableWorkersPool(evExt->Get()->GetWorkersPoolId());
     workersPool.AddDeliveryDuration(evExt->Get()->GetForwardSendDuration() + (TMonotonic::Now() - evExt->Get()->GetConstructInstant()));
     workersPool.ReleaseWorker(evExt->Get()->GetWorkerIdx());
-    for (auto&& i : evExt->Get()->DetachResults()) {
-        workersPool.PutTaskResult(std::move(i));
-    }
+    workersPool.PutTaskResults(evExt->Get()->DetachResults());
     if (workersPool.HasTasks()) {
         AFL_VERIFY(workersPool.DrainTasks());
     }
@@ -55,7 +53,7 @@ void TDistributor::HandleMain(TEvExecution::TEvUnregisterProcess::TPtr& ev) {
 
 void TDistributor::HandleMain(TEvExecution::TEvNewTask::TPtr& ev) {
     auto& cat = Manager->MutableCategoryVerified(ev->Get()->GetCategory());
-    cat.MutableProcessVerified(ev->Get()->GetInternalProcessId()).RegisterTask(ev->Get()->GetTask(), cat.GetCounters());
+    cat.RegisterTask(ev->Get()->GetInternalProcessId(), ev->Get()->DetachTask());
     Y_UNUSED(Manager->DrainTasks());
     cat.GetCounters()->WaitingQueueSize->Set(cat.GetWaitingQueueSize());
 }

@@ -10,7 +10,7 @@ TWorkersPool::TWorkersPool(const TString& poolName, const NActors::TActorId& dis
     Workers.reserve(WorkersCount);
     for (auto&& i : config.GetLinks()) {
         AFL_VERIFY((ui64)i.GetCategory() < categories.size());
-        Processes.emplace_back(TWeightedCategory(i.GetWeight(), categories[(ui64)i.GetCategory()]));
+        Processes.emplace_back(TWeightedCategory(i.GetWeight(), categories[(ui64)i.GetCategory()], Counters->GetCategorySignals(i.GetCategory())));
     }
     AFL_VERIFY(Processes.size());
     for (ui32 i = 0; i < WorkersCount; ++i) {
@@ -70,18 +70,43 @@ bool TWorkersPool::DrainTasks() {
     while (ActiveWorkersIdx.size() && Processes.front().GetCategory()->HasTasks()) {
         TDuration predicted = TDuration::Zero();
         std::vector<TWorkerTask> tasks;
+        THashMap<TString, std::shared_ptr<TProcessScope>> scopes;
         while ((tasks.empty() || predicted < DeliveringDuration.GetValue() * 10) && Processes.front().GetCategory()->HasTasks()) {
             std::pop_heap(Processes.begin(), Processes.end(), predHeap);
-            tasks.emplace_back(Processes.back().GetCategory()->ExtractTaskWithPrediction());
+            tasks.emplace_back(Processes.back().GetCategory()->ExtractTaskWithPrediction(Processes.back().GetCounters()));
             Processes.back().GetCPUUsage()->AddPredicted(tasks.back().GetPredictedDuration());
             predicted += tasks.back().GetPredictedDuration();
             std::push_heap(Processes.begin(), Processes.end(), predHeap);
+            scopes.emplace(tasks.back().GetScope()->GetScopeId(), tasks.back().GetScope());
+        }
+        for (auto&& i : scopes) {
+            i.second->IncInFlight();
         }
         newTask = true;
         AFL_VERIFY(tasks.size());
         RunTask(std::move(tasks));
     }
     return newTask;
+}
+
+void TWorkersPool::PutTaskResults(std::vector<TWorkerTaskResult>&& result) {
+    //        const ui32 catIdx = (ui32)result.GetCategory();
+    std::set<TString> scopeIds;
+    for (auto&& t : result) {
+        bool found = false;
+        for (auto&& i : Processes) {
+            if (i.GetCategory()->GetCategory() == t.GetCategory()) {
+                found = true;
+                i.GetCPUUsage()->Exchange(t.GetPredictedDuration(), t.GetStart(), t.GetFinish());
+                if (scopeIds.emplace(t.GetScope()->GetScopeId()).second) {
+                    t.GetScope()->DecInFlight();
+                }
+                i.GetCategory()->PutTaskResult(std::move(t));
+                break;
+            }
+        }
+        AFL_VERIFY(found);
+    }
 }
 
 }   // namespace NKikimr::NConveyorComposite

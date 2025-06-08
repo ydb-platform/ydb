@@ -17,6 +17,7 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<TCategorySignals>, Counters);
     THashMap<TString, std::shared_ptr<TProcessScope>> Scopes;
     THashMap<ui64, std::shared_ptr<TProcess>> Processes;
+    THashMap<ui64, std::shared_ptr<TProcess>> ProcessesWithTasks;
     const NConfig::TCategory Config;
 
 public:
@@ -35,19 +36,22 @@ public:
         UnregisterProcess(0);
     }
 
-    TProcess& MutableProcessVerified(const ui64 processId) {
-        auto it = Processes.find(processId);
-        AFL_VERIFY(it != Processes.end())("process_id", processId);
-        return *it->second;
+    void RegisterTask(const ui64 internalProcessId, std::shared_ptr<ITask>&& task) {
+        auto it = Processes.find(internalProcessId);
+        AFL_VERIFY(it != Processes.end())("process_id", internalProcessId);
+        it->second->RegisterTask(std::move(task), Category);
+        if (it->second->GetTasksCount() == 1) {
+            AFL_VERIFY(ProcessesWithTasks.emplace(internalProcessId, it->second).second);
+        }
     }
 
-    TProcess* MutableProcessOptional(const ui64 processId) {
-        auto it = Processes.find(processId);
-        if (it != Processes.end()) {
-            return it->second.get();
-        } else {
-            return nullptr;
+    void PutTaskResult(TWorkerTaskResult&& result) {
+        const ui64 internalProcessId = result.GetProcessId(); 
+        auto it = Processes.find(internalProcessId);
+        if (it == Processes.end()) {
+            return;
         }
+        it->second->PutTaskResult(std::move(result));
     }
 
     void RegisterProcess(const ui64 internalProcessId, std::shared_ptr<TProcessScope>&& scope) {
@@ -61,22 +65,16 @@ public:
             AFL_VERIFY(Scopes.erase(it->second->GetScope()->GetScopeId()));
         }
         Processes.erase(it);
+        ProcessesWithTasks.erase(processId);
     }
 
     ESpecialTaskCategory GetCategory() const {
         return Category;
     }
 
-    void PutTaskResult(TWorkerTaskResult&& result) {
-        const ui64 id = result.GetProcessId();
-        if (auto* process = MutableProcessOptional(id)) {
-            process->PutTaskResult(std::move(result));
-        }
-    }
-
     bool HasTasks() const;
     void DoQuant(const TMonotonic newStart);
-    TWorkerTask ExtractTaskWithPrediction();
+    TWorkerTask ExtractTaskWithPrediction(const std::shared_ptr<TWPCategorySignals>& counters);
     TProcessScope& MutableProcessScope(const TString& scopeName);
     TProcessScope* MutableProcessScopeOptional(const TString& scopeName);
     std::shared_ptr<TProcessScope> GetProcessScopePtrVerified(const TString& scopeName) const;

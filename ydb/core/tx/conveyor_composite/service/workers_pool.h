@@ -11,13 +11,16 @@ class TWeightedCategory {
 private:
     YDB_READONLY(std::shared_ptr<TCPUUsage>, CPUUsage, std::make_shared<TCPUUsage>(nullptr));
     YDB_READONLY_DEF(std::shared_ptr<TProcessCategory>, Category);
+    YDB_READONLY_DEF(std::shared_ptr<TWPCategorySignals>, Counters);
     YDB_READONLY(double, Weight, 1);
 
 public:
-    TWeightedCategory(const double weight, const std::shared_ptr<TProcessCategory>& cat)
+    TWeightedCategory(const double weight, const std::shared_ptr<TProcessCategory>& cat, const std::shared_ptr<TWPCategorySignals>& counters)
         : Category(cat)
+        , Counters(counters)
         , Weight(weight)
     {
+        AFL_VERIFY(Counters);
         AFL_VERIFY(cat);
         AFL_VERIFY(Weight);
     }
@@ -79,19 +82,7 @@ public:
         DeliveringDuration.Add(d);
     }
 
-    void PutTaskResult(TWorkerTaskResult&& result) {
-//        const ui32 catIdx = (ui32)result.GetCategory();
-        for (auto&& i : Processes) {
-            if (i.GetCategory()->GetCategory() == result.GetCategory()) {
-//                AFL_VERIFY(catIdx < Processes.size());
-//                AFL_VERIFY(Processes[catIdx]);
-                i.GetCPUUsage()->Exchange(result.GetPredictedDuration(), result.GetStart(), result.GetFinish());
-                i.GetCategory()->PutTaskResult(std::move(result));
-                return;
-            }
-        }
-        AFL_VERIFY(false);
-    }
+    void PutTaskResults(std::vector<TWorkerTaskResult>&& result);
     bool HasFreeWorker() const;
     void RunTask(std::vector<TWorkerTask>&& tasksBatch);
     void ReleaseWorker(const ui32 workerIdx);

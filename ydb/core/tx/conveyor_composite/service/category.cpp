@@ -3,12 +3,7 @@
 namespace NKikimr::NConveyorComposite {
 
 bool TProcessCategory::HasTasks() const {
-    for (auto&& i : Processes) {
-        if (i.second->HasTasks()) {
-            return true;
-        }
-    }
-    return false;
+    return ProcessesWithTasks.size();
 }
 
 void TProcessCategory::DoQuant(const TMonotonic newStart) {
@@ -18,11 +13,11 @@ void TProcessCategory::DoQuant(const TMonotonic newStart) {
     }
 }
 
-TWorkerTask TProcessCategory::ExtractTaskWithPrediction() {
+TWorkerTask TProcessCategory::ExtractTaskWithPrediction(const std::shared_ptr<TWPCategorySignals>& counters) {
     std::shared_ptr<TProcess> pMin;
     TDuration dMin;
-    for (auto&& [_, p] : Processes) {
-        if (!p->HasTasks()) {
+    for (auto&& [_, p] : ProcessesWithTasks) {
+        if (!p->GetScope()->CheckToRun()) {
             continue;
         }
         const TDuration d = p->GetCPUUsage()->CalcWeight(p->GetWeight());
@@ -32,7 +27,10 @@ TWorkerTask TProcessCategory::ExtractTaskWithPrediction() {
         }
     }
     AFL_VERIFY(pMin);
-    auto result = pMin->ExtractTaskWithPrediction();
+    auto result = pMin->ExtractTaskWithPrediction(counters);
+    if (pMin->GetTasksCount() == 0) {
+        AFL_VERIFY(ProcessesWithTasks.erase(pMin->GetProcessId()));
+    }
     Counters->WaitingQueueSize->Set(WaitingTasksCount->Val());
     return result;
 }

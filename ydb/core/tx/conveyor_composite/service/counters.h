@@ -11,7 +11,6 @@ using TTaskSignals = NConveyor::TTaskSignals;
 class TCategorySignals: public NColumnShard::TCommonCountersOwner {
 private:
     using TBase = NColumnShard::TCommonCountersOwner;
-    THashMap<TString, std::shared_ptr<TTaskSignals>> TaskClassSignals;
     YDB_READONLY(ESpecialTaskCategory, Category, ESpecialTaskCategory::Insert);
 
 public:
@@ -27,6 +26,19 @@ public:
         , WaitingQueueSize(TBase::GetValue("WaitingQueueSize"))
         , WaitingQueueSizeLimit(TBase::GetValue("WaitingQueueSizeLimit")) {
     }
+};
+
+class TWPCategorySignals: public NColumnShard::TCommonCountersOwner {
+private:
+    using TBase = NColumnShard::TCommonCountersOwner;
+    THashMap<TString, std::shared_ptr<TTaskSignals>> TaskClassSignals;
+    YDB_READONLY(ESpecialTaskCategory, Category, ESpecialTaskCategory::Insert);
+
+public:
+    TWPCategorySignals(NColumnShard::TCommonCountersOwner& base, const ESpecialTaskCategory cat)
+        : TBase(base, "wp_category", ::ToString(cat))
+        , Category(cat) {
+    }
 
     std::shared_ptr<TTaskSignals> GetTaskSignals(const TString& taskClassName) {
         auto it = TaskClassSignals.find(taskClassName);
@@ -40,6 +52,7 @@ public:
 class TWorkersPoolCounters: public NColumnShard::TCommonCountersOwner {
 private:
     using TBase = NColumnShard::TCommonCountersOwner;
+    THashMap<ESpecialTaskCategory, std::shared_ptr<TWPCategorySignals>> CategorySignals;
 
 public:
     const ::NMonitoring::TDynamicCounters::TCounterPtr AvailableWorkersCount;
@@ -66,6 +79,14 @@ public:
     const ::NMonitoring::TDynamicCounters::TCounterPtr ExecuteDuration;
 
     TWorkersPoolCounters(const TString& poolName, const NColumnShard::TCommonCountersOwner& owner);
+
+    std::shared_ptr<TWPCategorySignals> GetCategorySignals(const ESpecialTaskCategory cat) {
+        auto it = CategorySignals.find(cat);
+        if (it == CategorySignals.end()) {
+            it = CategorySignals.emplace(cat, std::make_shared<TWPCategorySignals>(*this, cat)).first;
+        }
+        return it->second;
+    }
 };
 
 class TCounters: public NColumnShard::TCommonCountersOwner {

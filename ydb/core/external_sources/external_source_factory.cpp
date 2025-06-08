@@ -157,9 +157,9 @@ IExternalSourceFactory::TPtr CreateExternalSourceFactory(const std::vector<TStri
             ToString(NYql::EDatabaseType::MongoDB),
             CreateExternalDataSource(TString{NYql::GenericProviderName}, {"BASIC"}, {"database_name", "use_tls", "reading_mode", "unexpected_type_display_mode", "unsupported_type_display_mode"}, hostnamePatternsRegEx)
         },
-         {
+        {
             ToString(NYql::EDatabaseType::OpenSearch),
-            CreateExternalDataSource(TString{NYql::GenericProviderName}, {"BASIC"}, {"database_name", "protocol", "use_tls"}, hostnamePatternsRegEx)
+            CreateExternalDataSource(TString{NYql::GenericProviderName}, {"BASIC"}, {"database_name", "use_tls"}, hostnamePatternsRegEx)
         }
     },
     allExternalDataSourcesAreAvailable,

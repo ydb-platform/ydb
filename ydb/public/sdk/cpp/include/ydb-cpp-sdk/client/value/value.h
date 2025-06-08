@@ -312,9 +312,6 @@ private:
     std::shared_ptr<TImpl> Impl_;
 };
 
-
-
-
 class TValueParser : public TMoveOnly {
     friend class TResultSetParser;
 public:
@@ -435,7 +432,6 @@ private:
 };
 
 class TValueBuilderImpl;
-
 
 template<typename TDerived>
 class TValueBuilderBase : public TMoveOnly {

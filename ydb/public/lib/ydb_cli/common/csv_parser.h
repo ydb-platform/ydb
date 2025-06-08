@@ -50,6 +50,7 @@ public:
 
     void BuildLineType();
     const TVector<TString>& GetHeader();
+    const TString& GetHeaderRow() const;
 
 private:
     TVector<TString> Header;

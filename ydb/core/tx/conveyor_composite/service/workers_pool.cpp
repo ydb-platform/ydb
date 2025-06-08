@@ -62,7 +62,7 @@ bool TWorkersPool::DrainTasks() {
         } else if (hasL && !hasR) {
             return false;
         }
-        return r.GetCPUUsage()->CalcWeight(1.0 / r.GetWeight()) < l.GetCPUUsage()->CalcWeight(1.0 / l.GetWeight());
+        return r.GetCPUUsage()->CalcWeight(r.GetWeight()) < l.GetCPUUsage()->CalcWeight(l.GetWeight());
     };
     std::make_heap(Processes.begin(), Processes.end(), predHeap);
     AFL_VERIFY(Processes.size());

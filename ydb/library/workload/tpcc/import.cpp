@@ -41,6 +41,8 @@ constexpr int MAX_RETRIES = 100;
 constexpr int BACKOFF_MILLIS = 10;
 constexpr int BACKOFF_CEILING = 5;
 
+constexpr auto INDEX_PROGRESS_CHECK_INTERVAL = std::chrono::seconds(1);
+
 //-----------------------------------------------------------------------------
 
 int GetBackoffWaitMs(int retryCount) {
@@ -556,8 +558,8 @@ struct TIndexBuildState {
 struct TLoadState {
     enum ELoadState {
         ELOAD_INDEXED_TABLES = 0,
-        ELOAD_TABLES,
-        EBUILD_INDICES,
+        ELOAD_TABLES_BUILD_INDICES,
+        EWAIT_INDICES,
         ESUCCESS
     };
 
@@ -726,25 +728,6 @@ void CreateIndices(TDriver& driver, const TString& path, TLoadState& loadState, 
 
 //-----------------------------------------------------------------------------
 
-double CalculateProgress(const auto& metadata) {
-    ui32 partsTotal = 0;
-    ui32 partsCompleted = 0;
-    for (const auto& item : metadata.ItemsProgress) {
-        if (!item.PartsTotal) {
-            return 0;
-        }
-
-        partsTotal += item.PartsTotal;
-        partsCompleted += item.PartsCompleted;
-    }
-
-    if (partsTotal == 0 || partsCompleted == 0) {
-        return 0;
-    }
-
-    return double(partsCompleted) / partsTotal * 100;
-}
-
 // returns either progress (100 – done) or string with error
 std::expected<double, std::string> GetIndexProgress(
     NOperation::TOperationClient& client,
@@ -835,6 +818,8 @@ public:
 
         NOperation::TOperationClient operationClient(drivers[0]);
 
+        Clock::time_point lastIndexProgressCheck = Clock::time_point::min();
+
         while (true) {
             if (StopByInterrupt.stop_requested()) {
                 LOG_I("Stop requested, waiting for threads to finish");
@@ -855,38 +840,43 @@ public:
                 if (indexedRangesLoaded >= threadCount) {
                     CreateIndices(drivers[0], Config.Path, LoadState, Log.get());
                     LOG_I("Indexed tables loaded, indices are being created. Continuing with remaining tables");
-                    LoadState.State = TLoadState::ELOAD_TABLES;
+                    LoadState.State = TLoadState::ELOAD_TABLES_BUILD_INDICES;
+                    lastIndexProgressCheck = now;
                 }
                 break;
             }
-            case TLoadState::ELOAD_TABLES: {
+            case TLoadState::ELOAD_TABLES_BUILD_INDICES: {
                 // Check if all ranges are loaded (work is complete)
                 size_t rangesLoaded = LoadState.RangesLoaded.load(std::memory_order_relaxed);
                 if (rangesLoaded >= threadCount) {
                     LOG_I("All tables loaded successfully. Waiting for indices to be ready");
-                    LoadState.State = TLoadState::EBUILD_INDICES;
+                    LoadState.State = TLoadState::EWAIT_INDICES;
                 }
-                break;
+                [[fallthrough]];
             }
-            case TLoadState::EBUILD_INDICES: {
-                if (!LoadState.IndexBuildStates.empty() && LoadState.CurrentIndex < LoadState.IndexBuildStates.size()) {
-                    auto& indexState = LoadState.IndexBuildStates[LoadState.CurrentIndex];
+            case TLoadState::EWAIT_INDICES: {
+                auto timeSinceLastCheck = now - lastIndexProgressCheck;
+                if (timeSinceLastCheck < INDEX_PROGRESS_CHECK_INTERVAL) {
+                    break;
+                }
+                lastIndexProgressCheck = now;
+
+                // update progress of all indices and advance LoadState.CurrentIndex
+                for (size_t i = 0; i < LoadState.IndexBuildStates.size(); ++i) {
+                    auto& indexState = LoadState.IndexBuildStates[i];
                     auto progress = GetIndexProgress(operationClient, indexState.Id);
                     if (!progress) {
                         LOG_E("Failed to build index " << indexState.Name <<  ": " << progress.error());
                         std::quick_exit(1);
                     }
                     indexState.Progress = *progress;
-                    if (indexState.Progress == 100.0) {
+                    if (i == LoadState.CurrentIndex && indexState.Progress == 100.0) {
                         ++LoadState.CurrentIndex;
                     }
+                }
 
-                    if (LoadState.CurrentIndex >= LoadState.IndexBuildStates.size()) {
-                        LOG_I("Indices created successfully");
-                        LoadState.State = TLoadState::ESUCCESS;
-                        continue;
-                    }
-                } else {
+                if (LoadState.State == TLoadState::EWAIT_INDICES && LoadState.CurrentIndex >= LoadState.IndexBuildStates.size()) {
+                    LOG_I("Indices created successfully");
                     LoadState.State = TLoadState::ESUCCESS;
                     continue;
                 }
@@ -935,7 +925,7 @@ private:
     void UpdateDisplayIfNeeded(Clock::time_point now) {
         auto delta = now - LastDisplayUpdate;
         if (delta >= TRunConfig::DisplayUpdateInterval) {
-            if (LoadState.IndexBuildStates.empty() || LoadState.State != TLoadState::EBUILD_INDICES) {
+            if (LoadState.IndexBuildStates.empty() || LoadState.State != TLoadState::EWAIT_INDICES) {
                 // data import is in progress
                 size_t currentDataSizeLoaded = LoadState.DataSizeLoaded.load(std::memory_order_relaxed);
 
@@ -969,25 +959,35 @@ private:
                 // Build progress message using string stream
                 std::stringstream ss;
                 ss << std::fixed << std::setprecision(1) << "Progress: " << percentLoaded << "% "
-                    << "(" << GetFormattedSize(currentDataSizeLoaded)
-                    << " / " << GetFormattedSize(LoadState.ApproximateDataSize) << ") "
+                    << "(" << GetFormattedSize(currentDataSizeLoaded) << ") "
                     << std::setprecision(1) << instantSpeedMiBs << " MiB/s "
                     << "(avg: " << avgSpeedMiBs << " MiB/s) "
                     << "elapsed: " << elapsedMinutes << ":" << std::setfill('0') << std::setw(2) << elapsedSeconds << " "
                     << "ETA: " << estimatedTimeLeftMinutes << ":"
                     << std::setfill('0') << std::setw(2) << estimatedTimeLeftSeconds;
 
+                // Add index progress information if indices are being built
+                if (!LoadState.IndexBuildStates.empty() && LoadState.State == TLoadState::ELOAD_TABLES_BUILD_INDICES) {
+                    ss << " | ";
+                    for (size_t i = 0; i < LoadState.IndexBuildStates.size(); ++i) {
+                        const auto& indexState = LoadState.IndexBuildStates[i];
+                        if (i > 0) ss << ", ";
+                        ss << "index " << (i + 1) << ": " << std::fixed << std::setprecision(1) << indexState.Progress << "%";
+                    }
+                }
+
                 LOG_I(ss.str());
                 PreviousDataSizeLoaded = currentDataSizeLoaded;
             } else {
                 // waiting for indices
                 if (LoadState.CurrentIndex < LoadState.IndexBuildStates.size()) {
-                    const auto& indexState = LoadState.IndexBuildStates[LoadState.CurrentIndex];
                     std::stringstream ss;
-                    ss << "Waiting index " << (LoadState.CurrentIndex + 1)
-                        << " out of " << LoadState.IndexBuildStates.size()
-                        << " (" << indexState.Name << " on " << indexState.Table << ")"
-                        << ", build progress: " << std::setprecision(1) << indexState.Progress << "%";
+                    ss << "Waiting for indices ";
+                    for (size_t i = 0; i < LoadState.IndexBuildStates.size(); ++i) {
+                        const auto& indexState = LoadState.IndexBuildStates[i];
+                        if (i > 0) ss << ", ";
+                        ss << "index " << (i + 1) << ": " << std::fixed << std::setprecision(1) << indexState.Progress << "%";
+                    }
                     LOG_I(ss.str());
                 }
             }

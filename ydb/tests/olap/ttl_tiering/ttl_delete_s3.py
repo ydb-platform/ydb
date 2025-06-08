@@ -124,15 +124,19 @@ class TestDeleteS3Ttl(TllDeleteBase):
             not_empty = not_empty and f(bucket_stat[0])
 
         return not_empty
-    
+
     def wait_rows_stable(self, table_path, expected, attempts=3, timeout=300):
         ok = [False] * attempts
+        last = None
+
         def _cond():
-            rows = self.get_aggregated(table_path)
-            ok.pop(0); ok.append(rows == expected)
+            last = self.get_aggregated(table_path)
+            ok.pop(0)
+            ok.append(last == expected)
             return all(ok)
+
         if not self.wait_for(_cond, timeout):
-            raise Exception(f"Row count not stable: last = {rows}, expected = {expected}")
+            raise Exception(f"Row count not stable: last = {last}, expected = {expected}")
 
     def teset_generator(self, test_name, buckets, ttl, single_upsert_row_count, upsert_number):
         test_dir = f"{self.ydb_client.database}/{test_name}"

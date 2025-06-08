@@ -25,7 +25,7 @@ void TClientCommandRootBase::Config(TConfig& config) {
     opts.AddLongOption("ca-file",
         "File containing PEM encoded root certificates for SSL/TLS connections.\n"
         "If this parameter is empty, the default roots will be used")
-        .FileName("CA certificates").ProfileParam("ca-file")
+        .FileName("CA certificates").ProfileParam("ca-file", true)
         .LogToConnectionParams("ca-file")
         .Env("YDB_CA_FILE", true, "CA certificates")
         .RequiredArgument("PATH").StoreFilePath(&CaCertsFile).StoreResult(&config.CaCerts);

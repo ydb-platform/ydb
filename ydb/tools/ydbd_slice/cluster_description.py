@@ -28,7 +28,7 @@ class ClusterDetails(ClusterDetailsProvider):
     SLOTS_PORTS_START = 31000
     PORTS_SHIFT = 10
 
-    def __init__(self, cluster_description_path, walle_provider, validator=None):
+    def __init__(self, cluster_description_path, walle_provider=None, validator=None):
         self.__template = None
         self.__details = None
         self.__databases = None
@@ -44,6 +44,11 @@ class ClusterDetails(ClusterDetailsProvider):
             with open(self._cluster_description_file, 'r') as file:
                 content = file.read()
             self.__template = yaml.safe_load(content)
+
+        # for V2 configs, we need to use the config field
+        if 'config' in self.__template:
+            return self.__template['config']
+
         return self.__template
 
     @property
@@ -68,7 +73,7 @@ class ClusterDetails(ClusterDetailsProvider):
     @property
     def dynamic_slots(self):
         if self.__dynamic_slots is None:
-            self.__dynamic_slots = {}
+            self.__dynamic_slots = []
             for slot in super(ClusterDetails, self).dynamic_slots:
                 mbus_port = self.SLOTS_PORTS_START + 0
                 grpc_port = self.SLOTS_PORTS_START + 1
@@ -77,7 +82,7 @@ class ClusterDetails(ClusterDetailsProvider):
                 kafka_port = self.SLOTS_PORTS_START + 5
                 full_name = str(ic_port)
 
-                self.__dynamic_slots[full_name] = DynamicSlot(
+                self.__dynamic_slots.append(DynamicSlot(
                     slot=full_name,
                     domain=slot.domain,
                     mbus=mbus_port,
@@ -85,7 +90,7 @@ class ClusterDetails(ClusterDetailsProvider):
                     mon=mon_port,
                     ic=ic_port,
                     kafka_port=kafka_port,
-                )
+                ))
                 self.SLOTS_PORTS_START += self.PORTS_SHIFT
         return self.__dynamic_slots
 

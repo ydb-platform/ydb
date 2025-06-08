@@ -9,15 +9,7 @@ import gast as ast
 
 
 def is_none(expr):
-    # py3
-    if isinstance(expr, ast.Constant) and expr.value is None:
-        return True
-
-    # py2
-    if not isinstance(expr, ast.Attribute):
-        return False
-
-    return expr.attr == "None"
+    return isinstance(expr, ast.Constant) and expr.value is None
 
 
 def is_is_none(expr):
@@ -64,12 +56,9 @@ def is_is_not_none(expr):
     return None
 
 
-class NormalizeIsNone(Transformation):
+class NormalizeIsNone(Transformation[Ancestors]):
 
     table = {ast.And: ast.BitAnd, ast.Or: ast.BitOr}
-
-    def __init__(self):
-        super(NormalizeIsNone, self).__init__(Ancestors)
 
     @staticmethod
     def match_is_none(node):

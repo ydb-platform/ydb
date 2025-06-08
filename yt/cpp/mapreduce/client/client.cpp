@@ -1565,6 +1565,7 @@ void SetupClusterContext(
     const TString& serverName)
 {
     context.ServerName = serverName;
+    context.MultiproxyTargetCluster = serverName;
     ApplyProxyUrlAliasingRules(context.ServerName);
 
     if (context.ServerName.find('.') == TString::npos &&
@@ -1612,18 +1613,13 @@ TClientContext CreateClientContext(
     context.Config = options.Config_ ? options.Config_ : TConfig::Get();
     context.TvmOnly = options.TvmOnly_;
     context.ProxyAddress = options.ProxyAddress_;
-    context.UseProxyUnixDomainSocket = options.UseProxyUnixDomainSocket_;
-    context.MultiproxyTargetCluster = options.MultiproxyTargetCluster_;
+    context.JobProxySocketPath = options.JobProxySocketPath_;
 
     if (options.UseTLS_) {
         context.UseTLS = *options.UseTLS_;
     }
 
-    if (!options.UseProxyUnixDomainSocket_) {
-        SetupClusterContext(context, serverName);
-    } else {
-        context.ServerName = serverName;
-    }
+    SetupClusterContext(context, serverName);
 
     if (context.Config->HttpProxyRole && context.Config->Hosts == DefaultHosts) {
         context.Config->Hosts = "hosts?role=" + context.Config->HttpProxyRole;

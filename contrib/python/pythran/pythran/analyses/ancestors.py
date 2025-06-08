@@ -13,10 +13,11 @@ class Ancestors(ModuleAnalysis):
     and list of nodes as values.
     '''
 
+    ResultType = dict
+
     def __init__(self):
-        self.result = dict()
+        super().__init__()
         self.current = tuple()
-        super(Ancestors, self).__init__()
 
     def generic_visit(self, node):
         self.result[node] = current = self.current
@@ -29,6 +30,7 @@ class Ancestors(ModuleAnalysis):
 
 class AncestorsWithBody(Ancestors):
 
+    # Overload the visit method set from Ancestors
     visit = ModuleAnalysis.visit
 
     def visit_metadata(self, node):

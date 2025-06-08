@@ -51,9 +51,9 @@ class ExpandGlobals(Transformation):
 
     def __init__(self):
         """ Initialize local declaration and constant name to expand. """
+        super().__init__()
         self.local_decl = set()
         self.to_expand = set()
-        super(ExpandGlobals, self).__init__()
 
     def visit_Module(self, node):
         """Turn globals assignment to functionDef and visit function defs. """

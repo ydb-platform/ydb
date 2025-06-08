@@ -43,12 +43,12 @@ private:
     bool Finished = false;
     const std::optional<NActors::TActorId> ServiceActorId;
 public:
-    ui64 GetProcessId() const {
-        return ProcessId;
+    ui64 GetInternalProcessId() const {
+        return InternalProcessId;
     }
 
-    explicit TProcessGuard(const ui64 processId, const std::optional<NActors::TActorId>& actorId)
-        : ProcessId(processId)
+    explicit TProcessGuard(const ui64 internalProcessId, const std::optional<NActors::TActorId>& actorId)
+        : InternalProcessId(processId)
         , ServiceActorId(actorId) {
 
     }

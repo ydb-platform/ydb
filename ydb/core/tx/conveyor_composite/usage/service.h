@@ -46,11 +46,9 @@ public:
         if (TSelf::IsEnabled() && NActors::TlsActivationContext) {
             auto& context = NActors::TActorContext::AsActorContext();
             const NActors::TActorId& selfId = context.SelfID;
-            context.Send(MakeServiceId(selfId.NodeId()),
-                new NConveyorComposite::TEvExecution::TEvRegisterProcess(cpuLimits, category, scopeId, externalProcessId));
-            return TProcessGuard(category, scopeId, externalProcessId, MakeServiceId(selfId.NodeId()));
+            return TProcessGuard(category, scopeId, externalProcessId, cpuLimits, MakeServiceId(selfId.NodeId()));
         } else {
-            return TProcessGuard(category, scopeId, externalProcessId, {});
+            return TProcessGuard(category, scopeId, externalProcessId, cpuLimits, {});
         }
     }
 };
@@ -73,6 +71,17 @@ class TCompServiceOperator {
 public:
     static bool SendTaskToExecute(const std::shared_ptr<ITask>& task) {
         return TServiceOperator::SendTaskToExecute(task, ESpecialTaskCategory::Compaction, "DEFAULT", 0);
+    }
+};
+
+class TScanServiceOperator {
+public:
+    static bool SendTaskToExecute(const std::shared_ptr<ITask>& task, const ui64 internalProcessId) {
+        return TServiceOperator::SendTaskToExecute(task, ESpecialTaskCategory::Compaction, internalProcessId);
+    }
+
+    static TProcessGuard StartProcess(const ui64 externalProcessId, const TString& scopeId, const TCPULimitsConfig& cpuLimits) {
+        return TServiceOperator::StartProcess(ESpecialTaskCategory::Scan, scopeId, externalProcessId, cpuLimits);
     }
 };
 

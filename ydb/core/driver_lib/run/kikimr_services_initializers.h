@@ -422,12 +422,6 @@ public:
 	void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 };
 
-class TScanConveyorInitializer: public IKikimrServicesInitializer {
-public:
-    TScanConveyorInitializer(const TKikimrRunConfig& runConfig);
-    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
-};
-
 class TExternalIndexInitializer: public IKikimrServicesInitializer {
 public:
     TExternalIndexInitializer(const TKikimrRunConfig& runConfig);

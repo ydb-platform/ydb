@@ -68,6 +68,8 @@ private:
     YDB_READONLY(ui64, ProcessId, 0);
     YDB_READONLY_DEF(std::shared_ptr<TCPUUsage>, CPUUsage);
     YDB_ACCESSOR_DEF(TDequePriorityFIFO, Tasks);
+    YDB_READONLY_DEF(std::shared_ptr<TProcessScope>, Scope);
+
     std::shared_ptr<TPositiveControlInteger> WaitingTasksCount;
     TAverageCalcer<TDuration> AverageTaskDuration;
     ui32 LinksCount = 0;
@@ -111,17 +113,18 @@ public:
         ++LinksCount;
     }
 
-    TProcess(const ui64 processId, const std::shared_ptr<TCPUUsage>& scopeUsage, const std::shared_ptr<TPositiveControlInteger>& waitingTasksCount)
+    TProcess(
+        const ui64 processId, const std::shared_ptr<TProcessScope>& scope, const std::shared_ptr<TPositiveControlInteger>& waitingTasksCount)
         : ProcessId(processId)
-        , WaitingTasksCount(waitingTasksCount)
-    {
+        , Scope(scope)
+        , WaitingTasksCount(waitingTasksCount) {
         AFL_VERIFY(WaitingTasksCount);
-        CPUUsage = std::make_shared<TCPUUsage>(scopeUsage);
+        CPUUsage = std::make_shared<TCPUUsage>(Scope->GetCPUUsage());
         IncRegistration();
     }
 
-    void RegisterTask(const std::shared_ptr<ITask>& task, const TString& scopeId, const std::shared_ptr<TCategorySignals>& signals) {
-        TWorkerTask wTask(task, AverageTaskDuration.GetValue(), signals->GetCategory(), scopeId,
+    void RegisterTask(const std::shared_ptr<ITask>& task, const std::shared_ptr<TCategorySignals>& signals) {
+        TWorkerTask wTask(task, AverageTaskDuration.GetValue(), signals->GetCategory(), Scope->GetScopeId(),
             signals->GetTaskSignals(task->GetTaskClassIdentifier()), ProcessId);
         Tasks.push(std::move(wTask));
         WaitingTasksCount->Inc();

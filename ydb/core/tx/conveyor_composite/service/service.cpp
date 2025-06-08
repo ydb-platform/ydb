@@ -43,25 +43,19 @@ void TDistributor::HandleMain(TEvInternal::TEvTaskProcessedResult::TPtr& evExt) 
 }
 
 void TDistributor::HandleMain(TEvExecution::TEvRegisterProcess::TPtr& ev) {
-    Manager->MutableCategoryVerified(ev->Get()->GetCategory())
-        .UpsertScope(ev->Get()->GetScopeId(), ev->Get()->GetCPULimits())
-        .RegisterProcess(ev->Get()->GetProcessId());
+    auto& cat = Manager->MutableCategoryVerified(ev->Get()->GetCategory());
+    std::shared_ptr<TProcessScope> scope = cat->UpsertScope(ev->Get()->GetScopeId(), ev->Get()->GetCPULimits());
+    cat.RegisterProcess(ev->Get()->GetInternalProcessId(), scope);
 }
 
 void TDistributor::HandleMain(TEvExecution::TEvUnregisterProcess::TPtr& ev) {
     auto* evData = ev->Get();
-    if (Manager->MutableCategoryVerified(evData->GetCategory())
-            .MutableProcessScope(evData->GetScopeId())
-            .UnregisterProcess(evData->GetProcessId())) {
-        Manager->MutableCategoryVerified(evData->GetCategory()).UnregisterScope(evData->GetScopeId());
-    }
+    Manager->MutableCategoryVerified(evData->GetCategory()).UnregisterProcess(evData->GetProcessId());
 }
 
 void TDistributor::HandleMain(TEvExecution::TEvNewTask::TPtr& ev) {
     auto& cat = Manager->MutableCategoryVerified(ev->Get()->GetCategory());
-    cat.MutableProcessScope(ev->Get()->GetScopeId())
-        .MutableProcessVerified(ev->Get()->GetProcessId())
-        .RegisterTask(ev->Get()->GetTask(), ev->Get()->GetScopeId(), cat.GetCounters());
+    cat.MutableProcessVerified(ev->Get()->GetInternalProcessId()).RegisterTask(ev->Get()->GetTask(), cat.GetCounters());
     Y_UNUSED(Manager->DrainTasks());
     cat.GetCounters()->WaitingQueueSize->Set(cat.GetWaitingQueueSize());
 }

@@ -58,7 +58,7 @@ private:
     const TComputeShardingPolicy ComputeShardingPolicy;
     std::shared_ptr<TAtomicCounter> AbortionFlag = std::make_shared<TAtomicCounter>(0);
     std::shared_ptr<const TAtomicCounter> ConstAbortionFlag = AbortionFlag;
-    const NConveyor::TProcessGuard ConveyorProcessGuard;
+    const NConveyorComposite::TProcessGuard ConveyorProcessGuard;
     std::shared_ptr<NArrow::NSSA::IColumnResolver> Resolver;
 
 public:
@@ -68,7 +68,7 @@ public:
     }
 
     ui64 GetConveyorProcessId() const {
-        return ConveyorProcessGuard.GetProcessId();
+        return ConveyorProcessGuard.GetInternalProcessId();
     }
 
     template <class T>
@@ -149,7 +149,7 @@ public:
         const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
         const NColumnShard::TConcreteScanCounters& counters, const TReadMetadataBase::TConstPtr& readMetadata, const TActorId& scanActorId,
         const TActorId& resourceSubscribeActorId, const TActorId& readCoordinatorActorId, const TComputeShardingPolicy& computeShardingPolicy,
-        const ui64 scanId, const NConveyor::TCPULimitsConfig& cpuLimits);
+        const ui64 scanId, const NConveyorComposite::TCPULimitsConfig& cpuLimits);
 };
 
 class IDataReader {

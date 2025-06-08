@@ -2287,7 +2287,7 @@ void TCompositeConveyorInitializer::InitializeServices(NActors::TActorSystemSetu
             } else if (Config.GetCompConveyorConfig().HasDefaultFractionOfThreadsCount()) {
                 protoWorkersPool.SetDefaultFractionOfThreadsCount(Config.GetCompConveyorConfig().GetDefaultFractionOfThreadsCount());
             } else {
-                protoWorkersPool.SetDefaultFractionOfThreadsCount(0.33);
+                protoWorkersPool.SetDefaultFractionOfThreadsCount(0.2);
             }
         } else {
             NKikimrConfig::TCompositeConveyorConfig::TCategory& protoCategory = *result.AddCategories();
@@ -2297,6 +2297,31 @@ void TCompositeConveyorInitializer::InitializeServices(NActors::TActorSystemSetu
             protoLink.SetCategory(::ToString(NConveyorComposite::ESpecialTaskCategory::Insert));
             protoLink.SetWeight(1);
             protoWorkersPool.SetDefaultFractionOfThreadsCount(0.2);
+        }
+        if (Config.HasScanConveyorConfig()) {
+            NKikimrConfig::TCompositeConveyorConfig::TCategory& protoCategory = *result.AddCategories();
+            protoCategory.SetName(::ToString(NConveyorComposite::ESpecialTaskCategory::Scan));
+            NKikimrConfig::TCompositeConveyorConfig::TWorkersPool& protoWorkersPool = *result.AddWorkerPools();
+            NKikimrConfig::TCompositeConveyorConfig::TWorkerPoolCategoryLink& protoLink = *protoWorkersPool.AddLinks();
+            protoLink.SetCategory(::ToString(NConveyorComposite::ESpecialTaskCategory::Scan));
+            protoLink.SetWeight(1);
+            if (Config.GetScanConveyorConfig().HasWorkersCount()) {
+                protoWorkersPool.SetWorkersCount(Config.GetScanConveyorConfig().GetWorkersCount());
+            } else if (Config.GetScanConveyorConfig().HasWorkersCountDouble()) {
+                protoWorkersPool.SetWorkersCount(Config.GetScanConveyorConfig().GetWorkersCountDouble());
+            } else if (Config.GetCompConveyorConfig().HasDefaultFractionOfThreadsCount()) {
+                protoWorkersPool.SetDefaultFractionOfThreadsCount(Config.GetCompConveyorConfig().GetDefaultFractionOfThreadsCount());
+            } else {
+                protoWorkersPool.SetDefaultFractionOfThreadsCount(0.4);
+            }
+        } else {
+            NKikimrConfig::TCompositeConveyorConfig::TCategory& protoCategory = *result.AddCategories();
+            protoCategory.SetName(::ToString(NConveyorComposite::ESpecialTaskCategory::Scan));
+            NKikimrConfig::TCompositeConveyorConfig::TWorkersPool& protoWorkersPool = *result.AddWorkerPools();
+            NKikimrConfig::TCompositeConveyorConfig::TWorkerPoolCategoryLink& protoLink = *protoWorkersPool.AddLinks();
+            protoLink.SetCategory(::ToString(NConveyorComposite::ESpecialTaskCategory::Scan));
+            protoLink.SetWeight(1);
+            protoWorkersPool.SetDefaultFractionOfThreadsCount(0.4);
         }
         return result;
     }();
@@ -2309,7 +2334,6 @@ void TCompositeConveyorInitializer::InitializeServices(NActors::TActorSystemSetu
     }
     AFL_VERIFY(!serviceConfig.IsFail());
 
-
     if (serviceConfig->IsEnabled()) {
         TIntrusivePtr<::NMonitoring::TDynamicCounters> tabletGroup = GetServiceCounters(appData->Counters, "tablets");
         TIntrusivePtr<::NMonitoring::TDynamicCounters> conveyorGroup = tabletGroup->GetSubgroup("type", "TX_COMPOSITE_CONVEYOR");
@@ -2318,28 +2342,6 @@ void TCompositeConveyorInitializer::InitializeServices(NActors::TActorSystemSetu
 
         setup->LocalServices.push_back(std::make_pair(
             NConveyorComposite::TServiceOperator::MakeServiceId(NodeId), TActorSetupCmd(service, TMailboxType::HTSwap, appData->UserPoolId)));
-    }
-}
-
-TScanConveyorInitializer::TScanConveyorInitializer(const TKikimrRunConfig& runConfig)
-    : IKikimrServicesInitializer(runConfig) {
-}
-
-void TScanConveyorInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
-    NConveyor::TConfig serviceConfig;
-    if (Config.HasScanConveyorConfig()) {
-        Y_ABORT_UNLESS(serviceConfig.DeserializeFromProto(Config.GetScanConveyorConfig()));
-    }
-
-    if (serviceConfig.IsEnabled()) {
-        TIntrusivePtr<::NMonitoring::TDynamicCounters> tabletGroup = GetServiceCounters(appData->Counters, "tablets");
-        TIntrusivePtr<::NMonitoring::TDynamicCounters> conveyorGroup = tabletGroup->GetSubgroup("type", "TX_SCAN_CONVEYOR");
-
-        auto service = NConveyor::TScanServiceOperator::CreateService(serviceConfig, conveyorGroup);
-
-        setup->LocalServices.push_back(std::make_pair(
-            NConveyor::TScanServiceOperator::MakeServiceId(NodeId),
-            TActorSetupCmd(service, TMailboxType::HTSwap, appData->UserPoolId)));
     }
 }
 

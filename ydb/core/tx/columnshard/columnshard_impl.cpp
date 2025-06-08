@@ -1511,7 +1511,8 @@ public:
         }
 
         AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("stage", "finished");
-        NConveyor::TScanServiceOperator::AsyncTaskToExecute(std::make_shared<TAccessorsParsingTask>(FetchCallback, std::move(FetchedAccessors)));
+        NConveyorComposite::TScanServiceOperator::SendTaskToExecute(
+            std::make_shared<TAccessorsParsingTask>(FetchCallback, std::move(FetchedAccessors)), 0);
         return true;
     }
     void Complete(const TActorContext& /*ctx*/) override {

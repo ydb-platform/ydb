@@ -8,9 +8,8 @@ class TTypeBuilder;
 class TValue;
 class TValueParser;
 class TValueBuilder;
-class TArenaAllocatedValueBuilder;
 
-template<typename TDerived, typename ValueHolder>
+template<typename TDerived>
 class TValueBuilderBase;
 
 }  // namespace NYdb

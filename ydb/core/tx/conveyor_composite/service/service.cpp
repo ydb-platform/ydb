@@ -63,6 +63,9 @@ void TDistributor::HandleMain(TEvExecution::TEvUnregisterProcess::TPtr& ev) {
 }
 
 void TDistributor::HandleMain(TEvExecution::TEvNewTask::TPtr& ev) {
+    const TDuration d = TMonotonic::Now() - ev->Get()->GetConstructInstant();
+    Counters.ReceiveTaskDuration->Add(d.MicroSeconds());
+    Counters.ReceiveTaskHistogram->Collect(d.MicroSeconds());
     auto& cat = Manager->MutableCategoryVerified(ev->Get()->GetCategory());
     cat.RegisterTask(ev->Get()->GetInternalProcessId(), ev->Get()->DetachTask());
     Y_UNUSED(Manager->DrainTasks());

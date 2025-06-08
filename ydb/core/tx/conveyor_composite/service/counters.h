@@ -95,10 +95,13 @@ private:
 
 public:
     const ::NMonitoring::THistogramPtr ReceiveTaskHistogram;
+    const ::NMonitoring::TDynamicCounters::TCounterPtr ReceiveTaskDuration;
 
     TCounters(const TString& module, TIntrusivePtr<::NMonitoring::TDynamicCounters> baseSignals)
         : TBase(module, baseSignals)
-        , ReceiveTaskHistogram(TBase::GetHistogram("ReceiveTask/Duration/Us", NMonitoring::ExponentialHistogram(25, 2, 50))) {
+        , ReceiveTaskHistogram(TBase::GetHistogram("ReceiveTask/Duration/Us", NMonitoring::ExponentialHistogram(25, 2, 50)))
+        , ReceiveTaskDuration(TBase::GetDeriviative("ReceiveTask/Duration/Us"))
+    {
     }
 
     std::shared_ptr<TCategorySignals> GetCategorySignals(const ESpecialTaskCategory cat) {

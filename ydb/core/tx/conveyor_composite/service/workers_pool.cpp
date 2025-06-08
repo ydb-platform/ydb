@@ -14,9 +14,8 @@ TWorkersPool::TWorkersPool(const TString& poolName, const NActors::TActorId& dis
     }
     AFL_VERIFY(Processes.size());
     for (ui32 i = 0; i < WorkersCount; ++i) {
-        Workers.emplace_back(std::make_unique<TWorker>(poolName, config.GetWorkerCPUUsage(i, NKqp::TStagePredictor::GetUsableThreads()),
-            distributorId, i, config.GetWorkersPoolId(),
-            Counters->SendFwdHistogram, Counters->SendFwdDuration));
+        Workers.emplace_back(std::make_unique<TWorker>(
+            poolName, config.GetWorkerCPUUsage(i, NKqp::TStagePredictor::GetUsableThreads()), distributorId, i, config.GetWorkersPoolId()));
         ActiveWorkersIdx.emplace_back(i);
     }
     AFL_VERIFY(WorkersCount)("name", poolName)("action", "conveyor_registered")("config", config.DebugString())("actor_id", distributorId)(

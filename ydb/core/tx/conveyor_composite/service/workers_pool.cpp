@@ -96,6 +96,9 @@ void TWorkersPool::PutTaskResults(std::vector<TWorkerTaskResult>&& result) {
         bool found = false;
         for (auto&& i : Processes) {
             if (i.GetCategory()->GetCategory() == t.GetCategory()) {
+                i.GetCounters()->WaitingHistogram->Collect((t.GetStart() - t.GetCreateInstant()).MicroSeconds());
+                i.GetCounters()->TaskExecuteHistogram->Collect((t.GetFinish() - t.GetStart()).MicroSeconds());
+                i.GetCounters()->ExecuteDuration->Add((t.GetFinish() - t.GetStart()).MicroSeconds());
                 found = true;
                 i.GetCPUUsage()->Exchange(t.GetPredictedDuration(), t.GetStart(), t.GetFinish());
                 if (scopeIds.emplace(t.GetScope()->GetScopeId()).second) {

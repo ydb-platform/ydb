@@ -67,6 +67,10 @@ public:
     TWorkersPool(const TString& poolName, const NActors::TActorId& distributorId, const NConfig::TWorkersPool& config,
         const std::shared_ptr<TWorkersPoolCounters>& counters, const std::vector<std::shared_ptr<TProcessCategory>>& categories);
 
+    const std::shared_ptr<TWorkersPoolCounters>& GetCounters() const {
+        return Counters;
+    }
+
     bool HasTasks() const {
         for (auto&& i : Processes) {
             if (i.GetCategory()->HasTasks()) {

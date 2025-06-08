@@ -31,10 +31,21 @@ void TDistributor::HandleMain(NActors::TEvents::TEvWakeup::TPtr& evExt) {
 }
 
 void TDistributor::HandleMain(TEvInternal::TEvTaskProcessedResult::TPtr& evExt) {
-    TWorkersPool& workersPool = Manager->MutableWorkersPool(evExt->Get()->GetWorkersPoolId());
-    workersPool.AddDeliveryDuration(evExt->Get()->GetForwardSendDuration() + (TMonotonic::Now() - evExt->Get()->GetConstructInstant()));
-    workersPool.ReleaseWorker(evExt->Get()->GetWorkerIdx());
-    workersPool.PutTaskResults(evExt->Get()->DetachResults());
+    auto& ev = *evExt->Get();
+    const TDuration backSendDuration = (TMonotonic::Now() - ev.GetConstructInstant());
+    TWorkersPool& workersPool = Manager->MutableWorkersPool(ev.GetWorkersPoolId());
+    workersPool.GetCounters()->PackExecuteHistogram->Collect(
+        (ev.GetResults().back().GetFinish() - ev.GetResults().front().GetStart()).MicroSeconds());
+    workersPool.GetCounters()->PackSizeHistogram->Collect(ev.GetResults().size());
+    workersPool.GetCounters()->SendBackHistogram->Collect(backSendDuration.MicroSeconds());
+    workersPool.GetCounters()->SendFwdHistogram->Collect(ev.GetForwardSendDuration().MicroSeconds());
+
+    workersPool.GetCounters()->SendBackDuration->Add(backSendDuration.MicroSeconds());
+    workersPool.GetCounters()->SendFwdDuration->Add(ev.GetForwardSendDuration().MicroSeconds());
+
+    workersPool.AddDeliveryDuration(ev.GetForwardSendDuration() + backSendDuration);
+    workersPool.ReleaseWorker(ev.GetWorkerIdx());
+    workersPool.PutTaskResults(ev.DetachResults());
     if (workersPool.HasTasks()) {
         AFL_VERIFY(workersPool.DrainTasks());
     }

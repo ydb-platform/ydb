@@ -132,6 +132,10 @@ struct TEvInternal {
         YDB_READONLY(ui64, WorkersPoolId, 0);
 
     public:
+        const std::vector<TWorkerTaskResult>& GetResults() const {
+            return Results;
+        }
+
         std::vector<TWorkerTaskResult>&& DetachResults() {
             return std::move(Results);
         }

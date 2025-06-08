@@ -61,11 +61,11 @@ public:
     void UnregisterProcess(const ui64 processId) {
         auto it = Processes.find(processId);
         AFL_VERIFY(it != Processes.end());
+        ProcessesWithTasks.erase(processId);
         if (it->second->GetScope().use_count() == 2) {
             AFL_VERIFY(Scopes.erase(it->second->GetScope()->GetScopeId()));
         }
         Processes.erase(it);
-        ProcessesWithTasks.erase(processId);
     }
 
     ESpecialTaskCategory GetCategory() const {

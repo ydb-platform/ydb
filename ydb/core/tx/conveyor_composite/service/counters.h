@@ -35,10 +35,12 @@ private:
     YDB_READONLY(ESpecialTaskCategory, Category, ESpecialTaskCategory::Insert);
 
 public:
-    TWPCategorySignals(NColumnShard::TCommonCountersOwner& base, const ESpecialTaskCategory cat)
-        : TBase(base, "wp_category", ::ToString(cat))
-        , Category(cat) {
-    }
+    const ::NMonitoring::THistogramPtr WaitingHistogram;
+    const ::NMonitoring::THistogramPtr TaskExecuteHistogram;
+
+    const ::NMonitoring::TDynamicCounters::TCounterPtr ExecuteDuration;
+
+    TWPCategorySignals(NColumnShard::TCommonCountersOwner& base, const ESpecialTaskCategory cat);
 
     std::shared_ptr<TTaskSignals> GetTaskSignals(const TString& taskClassName) {
         auto it = TaskClassSignals.find(taskClassName);
@@ -55,6 +57,14 @@ private:
     THashMap<ESpecialTaskCategory, std::shared_ptr<TWPCategorySignals>> CategorySignals;
 
 public:
+    const ::NMonitoring::THistogramPtr PackSizeHistogram;
+    const ::NMonitoring::THistogramPtr PackExecuteHistogram;
+    const ::NMonitoring::THistogramPtr SendBackHistogram;
+    const ::NMonitoring::THistogramPtr SendFwdHistogram;
+
+    const ::NMonitoring::TDynamicCounters::TCounterPtr SendBackDuration;
+    const ::NMonitoring::TDynamicCounters::TCounterPtr SendFwdDuration;
+
     const ::NMonitoring::TDynamicCounters::TCounterPtr AvailableWorkersCount;
     const ::NMonitoring::TDynamicCounters::TCounterPtr WorkersCountLimit;
     const ::NMonitoring::TDynamicCounters::TCounterPtr AmountCPULimit;
@@ -65,18 +75,6 @@ public:
     const ::NMonitoring::TDynamicCounters::TCounterPtr WaitWorkerRate;
     const ::NMonitoring::TDynamicCounters::TCounterPtr UseWorkerRate;
     const ::NMonitoring::TDynamicCounters::TCounterPtr ChangeCPULimitRate;
-
-    const ::NMonitoring::THistogramPtr WaitingHistogram;
-    const ::NMonitoring::THistogramPtr PackHistogram;
-    const ::NMonitoring::THistogramPtr PackExecuteHistogram;
-    const ::NMonitoring::THistogramPtr TaskExecuteHistogram;
-    const ::NMonitoring::THistogramPtr SendBackHistogram;
-    const ::NMonitoring::THistogramPtr SendFwdHistogram;
-    const ::NMonitoring::THistogramPtr ReceiveTaskHistogram;
-
-    const ::NMonitoring::TDynamicCounters::TCounterPtr SendBackDuration;
-    const ::NMonitoring::TDynamicCounters::TCounterPtr SendFwdDuration;
-    const ::NMonitoring::TDynamicCounters::TCounterPtr ExecuteDuration;
 
     TWorkersPoolCounters(const TString& poolName, const NColumnShard::TCommonCountersOwner& owner);
 
@@ -96,7 +94,12 @@ private:
     THashMap<TString, std::shared_ptr<TWorkersPoolCounters>> WorkersPoolSignals;
 
 public:
-    using TBase::TBase;
+    const ::NMonitoring::THistogramPtr ReceiveTaskHistogram;
+
+    TCounters(const TString& module, TIntrusivePtr<::NMonitoring::TDynamicCounters> baseSignals)
+        : TBase(module, baseSignals)
+        , ReceiveTaskHistogram(TBase::GetHistogram("ReceiveTask/Duration/Us", NMonitoring::ExponentialHistogram(25, 2, 50))) {
+    }
 
     std::shared_ptr<TCategorySignals> GetCategorySignals(const ESpecialTaskCategory cat) {
         auto it = CategorySignals.find(cat);

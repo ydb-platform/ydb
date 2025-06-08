@@ -1,5 +1,6 @@
 #include "run_ydb.h"
 
+#include <ydb/core/security/certificate_check/cert_auth_utils.h>
 #include <ydb/public/api/grpc/ydb_discovery_v1.grpc.pb.h>
 #include <ydb/public/api/grpc/ydb_scheme_v1.grpc.pb.h>
 #include <ydb/public/api/grpc/ydb_auth_v1.grpc.pb.h>
@@ -168,7 +169,7 @@ public:
     }
 
     TString GetEndpoint() const {
-        return TStringBuilder() << "grpc://" << Address << ":" << Port;
+        return TStringBuilder() << ConnectSchema << "://" << Address << ":" << Port;
     }
 
     TString GetDatabase() const {
@@ -179,11 +180,69 @@ public:
         return TStringBuilder() << Address << ":" << Port;
     }
 
+    void GenerateCerts() {
+        if (RootCAFile) {
+            return;
+        }
+
+        using namespace NKikimr;
+        const TCertAndKey ca = GenerateCA(TProps::AsCA());
+        const TCertAndKey serverCert = GenerateSignedCert(ca, TProps::AsServer());
+        const TCertAndKey clientCert = GenerateSignedCert(ca, TProps::AsClient());
+        RootCA = ca.Certificate;
+        RootCAFile = EnvFile(RootCA, "root_ca.pem");
+        ServerCert = serverCert.Certificate;
+        ServerCertFile = EnvFile(ServerCert, "server_cert.pem");
+        ServerKey = serverCert.PrivateKey;
+        ServerKeyFile = EnvFile(ServerKey, "server_key.pem");
+        ClientCert = clientCert.Certificate;
+        ClientCertFile = EnvFile(ClientCert, "client_cert.pem");
+        ClientKey = clientCert.PrivateKey;
+        ClientKeyFile = EnvFile(ClientKey, "client_key.pem");
+
+        const TCertAndKey wrongCa = GenerateCA(TProps::AsCA());
+        WrongRootCA = wrongCa.Certificate;
+        WrongRootCAFile = EnvFile(WrongRootCA, "root_ca.pem");
+    }
+
+#define DECL_CERT_GETTER(name) \
+    TString Get##name() { \
+        GenerateCerts(); \
+        return name; \
+    }
+
+    DECL_CERT_GETTER(RootCAFile);
+    DECL_CERT_GETTER(RootCA);
+    DECL_CERT_GETTER(WrongRootCAFile);
+    DECL_CERT_GETTER(WrongRootCA);
+    DECL_CERT_GETTER(ServerCertFile);
+    DECL_CERT_GETTER(ServerCert);
+    DECL_CERT_GETTER(ServerKeyFile);
+    DECL_CERT_GETTER(ServerKey);
+    DECL_CERT_GETTER(ClientCertFile);
+    DECL_CERT_GETTER(ClientCert);
+    DECL_CERT_GETTER(ClientKeyFile);
+    DECL_CERT_GETTER(ClientKey);
+
+    void MakeSslServerCredentials() {
+        ConnectSchema = "grpcs";
+        grpc::SslServerCredentialsOptions sslOps;
+        sslOps.pem_root_certs = GetRootCA();
+        auto& certPair = sslOps.pem_key_cert_pairs.emplace_back();
+        certPair.private_key = GetServerKey();
+        certPair.cert_chain = GetServerCert();
+        sslOps.client_certificate_request = GRPC_SSL_REQUEST_CLIENT_CERTIFICATE_AND_VERIFY;
+        ServerCredentials = grpc::SslServerCredentials(sslOps);
+    }
+
     void Start() {
         TStringBuilder address;
         address << "0.0.0.0:" << Port;
         grpc::ServerBuilder builder;
-        builder.AddListeningPort(address, grpc::InsecureServerCredentials());
+        if (!ServerCredentials) {
+            ServerCredentials = grpc::InsecureServerCredentials();
+        }
+        builder.AddListeningPort(address, ServerCredentials);
         builder.RegisterService(&Discovery);
         builder.RegisterService(&Scheme);
         builder.RegisterService(&Auth);
@@ -261,6 +320,7 @@ public:
 
 private:
     TPortManager PortManager;
+    TString ConnectSchema = "grpc";
     TString Address = "localhost";
     ui16 Port = 0;
     TDiscoveryImpl Discovery;
@@ -270,6 +330,30 @@ private:
     std::thread ServerThread;
     int ExpectedExitCode = 0;
     std::list<TTempFile> EnvFiles;
+
+    std::shared_ptr<grpc::ServerCredentials> ServerCredentials;
+    TString RootCA;
+    TString RootCAFile;
+    TString WrongRootCA;
+    TString WrongRootCAFile;
+    TString ServerCert;
+    TString ServerCertFile;
+    TString ServerKey;
+    TString ServerKeyFile;
+    TString ClientCert;
+    TString ClientCertFile;
+    TString ClientKey;
+    TString ClientKeyFile;
+};
+
+class TCliTestFixtureWithSsl : public TCliTestFixture {
+public:
+    TCliTestFixtureWithSsl() = default;
+
+    void SetUp(NUnitTest::TTestContext&) override {
+        MakeSslServerCredentials();
+        Start();
+    }
 };
 
 Y_UNIT_TEST_SUITE(ParseOptionsTest) {
@@ -767,5 +851,111 @@ Y_UNIT_TEST_SUITE(ParseOptionsTest) {
             {"YDB_USER", "wrong-user"},
             {"YDB_PASSWORD", "wrong-password"},
         });
+    }
+
+    Y_UNIT_TEST_F(ParseCAFile, TCliTestFixtureWithSsl) {
+        ExpectToken("token");
+        RunCli({
+            "-v",
+            "-e", GetEndpoint(),
+            "-d", GetDatabase(),
+            "--ca-file", GetRootCAFile(),
+            "scheme", "ls",
+        },
+        {
+            {"YDB_TOKEN", "token"},
+        });
+
+        // But fail with wrong untrusted CA
+        ExpectFail();
+        RunCli({
+            "-v",
+            "-e", GetEndpoint(),
+            "-d", GetDatabase(),
+            "--ca-file", GetWrongRootCAFile(),
+            "scheme", "ls",
+        },
+        {
+            {"YDB_TOKEN", "token"},
+        });
+
+        // No trusted CA
+        ExpectFail();
+        RunCli({
+            "-v",
+            "-e", GetEndpoint(),
+            "-d", GetDatabase(),
+            "scheme", "ls",
+        },
+        {
+            {"YDB_TOKEN", "token"},
+        });
+    }
+
+    Y_UNIT_TEST_F(ParseCAFileFromEnv, TCliTestFixtureWithSsl) {
+        ExpectToken("token");
+        RunCli({
+            "-v",
+            "-e", GetEndpoint(),
+            "-d", GetDatabase(),
+            "scheme", "ls",
+        },
+        {
+            {"YDB_TOKEN", "token"},
+            {"YDB_CA_FILE", GetRootCAFile()},
+        });
+
+        // But fail with wrong untrusted CA
+        ExpectFail();
+        RunCli({
+            "-v",
+            "-e", GetEndpoint(),
+            "-d", GetDatabase(),
+            "scheme", "ls",
+        },
+        {
+            {"YDB_TOKEN", "token"},
+            {"YDB_CA_FILE", GetWrongRootCAFile()},
+        });
+    }
+
+    Y_UNIT_TEST_F(ParseCAFileFromProfile, TCliTestFixtureWithSsl) {
+        TString profile = fmt::format(R"yaml(
+        profiles:
+            active_test_profile:
+                endpoint: {endpoint}
+                database: {database}
+                ca-file: {ca_file}
+        active_profile: active_test_profile
+        )yaml",
+        "endpoint"_a = GetEndpoint(),
+        "database"_a = GetDatabase(),
+        "ca_file"_a = GetRootCAFile()
+        );
+
+        ExpectToken("token");
+        RunCli(
+            {
+                "-v",
+                "scheme", "ls",
+            },
+            {
+                {"YDB_TOKEN", "token"},
+            },
+            profile
+        );
+
+        ExpectToken("token");
+        RunCli(
+            {
+                "-v",
+                "-p", "active_test_profile",
+                "scheme", "ls",
+            },
+            {
+                {"YDB_TOKEN", "token"},
+            },
+            profile
+        );
     }
 }

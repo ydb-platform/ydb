@@ -34,14 +34,14 @@ void TClientCommandRootBase::Config(TConfig& config) {
         .FileName("Client certificate")
         .LogToConnectionParams("client-cert-file")
         .Env("YDB_CLIENT_CERT_FILE", true, "Client certificate")
-        .ProfileParam("client-cert-file")
+        .ProfileParam("client-cert-file", true)
         .RequiredArgument("PATH").StoreFilePath(&ClientCertFile).StoreResult(&config.ClientCert);
     opts.AddLongOption("client-cert-key-file",
         "File containing PEM encoded client certificate private key for SSL/TLS connections")
         .FileName("Client certificate private key")
         .LogToConnectionParams("client-cert-key-file")
         .Env("YDB_CLIENT_CERT_KEY_FILE", true, "Client certificate private key")
-        .ProfileParam("client-cert-key-file")
+        .ProfileParam("client-cert-key-file", true)
         .RequiredArgument("PATH").StoreFilePath(&ClientCertPrivateKeyFile).StoreResult(&config.ClientCertPrivateKey);
     opts.AddLongOption("client-cert-key-password-file",
         "File containing password for client certificate private key (if key is encrypted).\n"
@@ -50,7 +50,7 @@ void TClientCommandRootBase::Config(TConfig& config) {
         .LogToConnectionParams("client-cert-key-password-file")
         .Env("YDB_CLIENT_CERT_KEY_PASSWORD", false)
         .Env("YDB_CLIENT_CERT_KEY_PASSWORD_FILE", true, "Client certificate private key password")
-        .ProfileParam("client-cert-key-password-file")
+        .ProfileParam("client-cert-key-password-file", true)
         .RequiredArgument("PATH").StoreFilePath(&ClientCertPrivateKeyPasswordFile).StoreResult(&config.ClientCertPrivateKeyPassword);
 
     opts.SetCustomUsage(config.ArgV[0]);

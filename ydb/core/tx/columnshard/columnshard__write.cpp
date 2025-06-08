@@ -14,7 +14,7 @@
 #include "transactions/operators/ev_write/sync.h"
 
 #include <ydb/core/tx/columnshard/tablet/write_queue.h>
-#include <ydb/core/tx/conveyor/usage/service.h>
+#include <ydb/core/tx/conveyor_composite/usage/service.h>
 #include <ydb/core/tx/data_events/events.h>
 
 namespace NKikimr::NColumnShard {

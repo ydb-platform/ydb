@@ -1,5 +1,6 @@
 #pragma once
 #include "common.h"
+#include "scope.h"
 #include "worker.h"
 
 #include <ydb/core/tx/conveyor_composite/usage/config.h>

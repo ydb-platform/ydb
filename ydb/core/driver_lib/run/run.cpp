@@ -1707,15 +1707,11 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
         sil->AddServiceInitializer(new TGroupedMemoryLimiterInitializer(runConfig));
     }
 
-    if (serviceMask.EnableScanConveyor) {
-        sil->AddServiceInitializer(new TScanConveyorInitializer(runConfig));
-    }
-
     if (serviceMask.EnableCompPriorities) {
         sil->AddServiceInitializer(new TCompPrioritiesInitializer(runConfig));
     }
 
-    if (serviceMask.EnableCompConveyor || serviceMask.EnableInsertConveyor) {
+    if (serviceMask.EnableCompConveyor || serviceMask.EnableInsertConveyor || serviceMask.EnableScanConveyor) {
         sil->AddServiceInitializer(new TCompositeConveyorInitializer(runConfig));
     }
 

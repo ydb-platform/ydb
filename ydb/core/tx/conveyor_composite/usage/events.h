@@ -45,7 +45,7 @@ struct TEvExecution {
             const TCPULimitsConfig& cpuLimits, const ESpecialTaskCategory category, const TString& scopeId, const ui64 internalProcessId)
             : Category(category)
             , ScopeId(scopeId)
-            , InternalProcessId(processId)
+            , InternalProcessId(internalProcessId)
             , CPULimits(cpuLimits) {
         }
     };
@@ -53,14 +53,12 @@ struct TEvExecution {
     class TEvUnregisterProcess: public NActors::TEventLocal<TEvUnregisterProcess, EvUnregisterProcess> {
     private:
         YDB_READONLY(ESpecialTaskCategory, Category, ESpecialTaskCategory::Insert);
-        YDB_READONLY_DEF(TString, ScopeId);
-        YDB_READONLY(ui64, ProcessId, 0);
+        YDB_READONLY(ui64, InternalProcessId, 0);
 
     public:
-        explicit TEvUnregisterProcess(const ESpecialTaskCategory category, const TString& scopeId, const ui64 processId)
+        explicit TEvUnregisterProcess(const ESpecialTaskCategory category, const ui64 internalProcessId)
             : Category(category)
-            , ScopeId(scopeId)
-            , ProcessId(processId) {
+            , InternalProcessId(internalProcessId) {
         }
     };
 };

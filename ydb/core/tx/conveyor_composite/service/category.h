@@ -1,6 +1,7 @@
 #pragma once
 #include "common.h"
 #include "counters.h"
+#include "process.h"
 #include "scope.h"
 #include "worker.h"
 
@@ -26,25 +27,17 @@ public:
         : Category(config.GetCategory())
         , Config(config) {
         Counters = counters.GetCategorySignals(Category);
-        RegisterScope("DEFAULT", TCPULimitsConfig(1000, 1000)).RegisterProcess(0);
+        RegisterProcess(0, RegisterScope("DEFAULT", TCPULimitsConfig(1000, 1000)));
         Counters->WaitingQueueSizeLimit->Set(config.GetQueueSizeLimit());
     }
 
     ~TProcessCategory() {
-        MutableProcessScope("DEFAULT").UnregisterProcess(0);
-        UnregisterScope("DEFAULT");
-    }
-
-    void PutTaskResult(TWorkerTaskResult&& result) {
-        const ui64 id = result.GetProcessId();
-        if (auto* process = MutableProcessOptional(id)) {
-            process->PutTaskResult(std::move(result));
-        }
+        UnregisterProcess(0);
     }
 
     TProcess& MutableProcessVerified(const ui64 processId) {
         auto it = Processes.find(processId);
-        AFL_VERIFY(it != Processes.end());
+        AFL_VERIFY(it != Processes.end())("process_id", processId);
         return *it->second;
     }
 
@@ -75,9 +68,9 @@ public:
     }
 
     void PutTaskResult(TWorkerTaskResult&& result) {
-        const TString id = result.GetScopeId();
-        if (TProcessScope* scope = MutableProcessScopeOptional(id)) {
-            scope->PutTaskResult(std::move(result));
+        const ui64 id = result.GetProcessId();
+        if (auto* process = MutableProcessOptional(id)) {
+            process->PutTaskResult(std::move(result));
         }
     }
 
@@ -86,10 +79,11 @@ public:
     TWorkerTask ExtractTaskWithPrediction();
     TProcessScope& MutableProcessScope(const TString& scopeName);
     TProcessScope* MutableProcessScopeOptional(const TString& scopeName);
-    TProcessScope& RegisterScope(const TString& scopeId, const TCPULimitsConfig& processCpuLimits);
-    TProcessScope& UpsertScope(const TString& scopeId, const TCPULimitsConfig& processCpuLimits);
+    std::shared_ptr<TProcessScope> GetProcessScopePtrVerified(const TString& scopeName) const;
+    std::shared_ptr<TProcessScope> RegisterScope(const TString& scopeId, const TCPULimitsConfig& processCpuLimits);
+    std::shared_ptr<TProcessScope> UpsertScope(const TString& scopeId, const TCPULimitsConfig& processCpuLimits);
 
-    TProcessScope& UpdateScope(const TString& scopeId, const TCPULimitsConfig& processCpuLimits);
+    std::shared_ptr<TProcessScope> UpdateScope(const TString& scopeId, const TCPULimitsConfig& processCpuLimits);
     void UnregisterScope(const TString& name);
 };
 

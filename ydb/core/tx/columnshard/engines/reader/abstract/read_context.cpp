@@ -1,7 +1,7 @@
 #include "read_context.h"
 
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/constructor/resolver.h>
-#include <ydb/core/tx/conveyor/usage/service.h>
+#include <ydb/core/tx/conveyor_composite/usage/service.h>
 
 namespace NKikimr::NOlap::NReader {
 
@@ -24,7 +24,7 @@ TReadContext::TReadContext(const std::shared_ptr<IStoragesManager>& storagesMana
     , ResourceSubscribeActorId(resourceSubscribeActorId)
     , ReadCoordinatorActorId(readCoordinatorActorId)
     , ComputeShardingPolicy(computeShardingPolicy)
-    , ConveyorProcessGuard(NConveyorComposite::TScanServiceOperator::StartProcess(ScanId, cpuLimits)) {
+    , ConveyorProcessGuard(NConveyorComposite::TScanServiceOperator::StartProcess(ScanId, ::ToString(ScanId), cpuLimits)) {
     Y_ABORT_UNLESS(ReadMetadata);
     if (ReadMetadata->HasResultSchema()) {
         Resolver = std::make_shared<NCommon::TIndexColumnResolver>(ReadMetadata->GetResultSchema()->GetIndexInfo());

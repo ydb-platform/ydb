@@ -8,6 +8,7 @@
 #include <ydb/core/tx/columnshard/resource_subscriber/task.h>
 #include <ydb/core/tx/conveyor/usage/abstract.h>
 #include <ydb/core/tx/conveyor/usage/config.h>
+#include <ydb/core/tx/conveyor_composite/usage/common.h>
 
 #include <ydb/library/accessor/accessor.h>
 

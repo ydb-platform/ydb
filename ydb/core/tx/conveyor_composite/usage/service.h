@@ -19,12 +19,11 @@ private:
     }
 
 public:
-    static bool SendTaskToExecute(
-        const std::shared_ptr<ITask>& task, const ESpecialTaskCategory category, const TString& scopeId, const ui64 processId) {
+    static bool SendTaskToExecute(const std::shared_ptr<ITask>& task, const ESpecialTaskCategory category, const ui64 internalProcessId) {
         if (TSelf::IsEnabled() && NActors::TlsActivationContext) {
             auto& context = NActors::TActorContext::AsActorContext();
             const NActors::TActorId& selfId = context.SelfID;
-            context.Send(MakeServiceId(selfId.NodeId()), new NConveyorComposite::TEvExecution::TEvNewTask(task, category, scopeId, processId));
+            context.Send(MakeServiceId(selfId.NodeId()), new NConveyorComposite::TEvExecution::TEvNewTask(task, category, internalProcessId));
             return true;
         } else {
             task->Execute(nullptr, task);
@@ -56,28 +55,28 @@ public:
 class TInsertServiceOperator {
 public:
     static bool SendTaskToExecute(const std::shared_ptr<ITask>& task) {
-        return TServiceOperator::SendTaskToExecute(task, ESpecialTaskCategory::Insert, "DEFAULT", 0);
+        return TServiceOperator::SendTaskToExecute(task, ESpecialTaskCategory::Insert, 0);
     }
 };
 
 class TNormalizerServiceOperator {
 public:
     static bool SendTaskToExecute(const std::shared_ptr<ITask>& task) {
-        return TServiceOperator::SendTaskToExecute(task, ESpecialTaskCategory::Normalizer, "DEFAULT", 0);
+        return TServiceOperator::SendTaskToExecute(task, ESpecialTaskCategory::Normalizer, 0);
     }
 };
 
 class TCompServiceOperator {
 public:
     static bool SendTaskToExecute(const std::shared_ptr<ITask>& task) {
-        return TServiceOperator::SendTaskToExecute(task, ESpecialTaskCategory::Compaction, "DEFAULT", 0);
+        return TServiceOperator::SendTaskToExecute(task, ESpecialTaskCategory::Compaction, 0);
     }
 };
 
 class TScanServiceOperator {
 public:
     static bool SendTaskToExecute(const std::shared_ptr<ITask>& task, const ui64 internalProcessId) {
-        return TServiceOperator::SendTaskToExecute(task, ESpecialTaskCategory::Compaction, internalProcessId);
+        return TServiceOperator::SendTaskToExecute(task, ESpecialTaskCategory::Scan, internalProcessId);
     }
 
     static TProcessGuard StartProcess(const ui64 externalProcessId, const TString& scopeId, const TCPULimitsConfig& cpuLimits) {

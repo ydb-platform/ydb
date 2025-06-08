@@ -3,6 +3,7 @@
 
 namespace NKikimr::NConveyorComposite {
 using ITask = NConveyor::ITask;
+class TCPULimitsConfig;
 
 enum class ESpecialTaskCategory {
     Insert = 0 /* "insert" */,
@@ -27,16 +28,7 @@ public:
     }
 
     explicit TProcessGuard(const ESpecialTaskCategory category, const TString& scopeId, const ui64 externalProcessId,
-        const TCPULimitsConfig& cpuLimits, const std::optional<NActors::TActorId>& actorId)
-        : Category(category)
-        , ScopeId(scopeId)
-        , ExternalProcessId(externalProcessId)
-        , ServiceActorId(actorId) {
-        if (ServiceActorId) {
-            context.Send(
-                *ServiceActorId, new NConveyorComposite::TEvExecution::TEvRegisterProcess(cpuLimits, category, scopeId, InternalProcessId));
-        }
-    }
+        const TCPULimitsConfig& cpuLimits, const std::optional<NActors::TActorId>& actorId);
 
     void Finish();
 

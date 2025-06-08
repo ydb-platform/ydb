@@ -4,7 +4,7 @@
 
 #include <ydb/core/tx/columnshard/engines/filter.h>
 #include <ydb/core/tx/columnshard/engines/reader/simple_reader/duplicates/events.h>
-#include <ydb/core/tx/conveyor/usage/service.h>
+#include <ydb/core/tx/conveyor_composite/usage/service.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
 
 #include <ydb/library/formats/arrow/simple_arrays_cache.h>

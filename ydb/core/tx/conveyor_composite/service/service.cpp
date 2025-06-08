@@ -44,13 +44,13 @@ void TDistributor::HandleMain(TEvInternal::TEvTaskProcessedResult::TPtr& evExt) 
 
 void TDistributor::HandleMain(TEvExecution::TEvRegisterProcess::TPtr& ev) {
     auto& cat = Manager->MutableCategoryVerified(ev->Get()->GetCategory());
-    std::shared_ptr<TProcessScope> scope = cat->UpsertScope(ev->Get()->GetScopeId(), ev->Get()->GetCPULimits());
-    cat.RegisterProcess(ev->Get()->GetInternalProcessId(), scope);
+    std::shared_ptr<TProcessScope> scope = cat.UpsertScope(ev->Get()->GetScopeId(), ev->Get()->GetCPULimits());
+    cat.RegisterProcess(ev->Get()->GetInternalProcessId(), std::move(scope));
 }
 
 void TDistributor::HandleMain(TEvExecution::TEvUnregisterProcess::TPtr& ev) {
     auto* evData = ev->Get();
-    Manager->MutableCategoryVerified(evData->GetCategory()).UnregisterProcess(evData->GetProcessId());
+    Manager->MutableCategoryVerified(evData->GetCategory()).UnregisterProcess(evData->GetInternalProcessId());
 }
 
 void TDistributor::HandleMain(TEvExecution::TEvNewTask::TPtr& ev) {

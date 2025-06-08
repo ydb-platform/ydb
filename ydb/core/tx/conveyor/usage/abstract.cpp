@@ -36,7 +36,7 @@ void TProcessGuard::Finish() {
     Finished = true;
     if (ServiceActorId && NActors::TlsActivationContext) {
         auto& context = NActors::TActorContext::AsActorContext();
-        context.Send(*ServiceActorId, new NConveyor::TEvExecution::TEvUnregisterProcess(InternalProcessId));
+        context.Send(*ServiceActorId, new NConveyor::TEvExecution::TEvUnregisterProcess(ProcessId));
     }
 }
 

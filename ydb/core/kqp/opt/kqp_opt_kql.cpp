@@ -543,7 +543,7 @@ TExprBase BuildRowsToDelete(const TKikimrTableDescription& tableData, bool withS
     const auto tableMeta = BuildTableMeta(tableData, pos, ctx);
     const auto tableColumns = BuildColumnsList(tableData, pos, ctx, withSystemColumns, true /*ignoreWriteOnlyColumns*/);
 
-    const auto allRows = BuildReadTable(tableColumns, pos, tableData, (isBatch == "true"), {}, ctx);
+    const auto allRows = BuildReadTable(tableColumns, pos, tableData, (isBatch == "true"), ctx);
 
     return Build<TCoFilter>(ctx, pos)
         .Input(allRows)
@@ -622,7 +622,7 @@ TExprBase BuildDeleteTableWithIndex(const TKiDeleteTable& del, const TKikimrTabl
 TExprBase BuildRowsToUpdate(const TKikimrTableDescription& tableData, bool withSystemColumns, const TCoLambda& filter,
     const TCoAtom& isBatch, const TPositionHandle pos, TExprContext& ctx)
 {
-    auto kqlReadTable = BuildReadTable(BuildColumnsList(tableData, pos, ctx, withSystemColumns, true /*ignoreWriteOnlyColumns*/), pos, tableData, (isBatch == "true"), {}, ctx);
+    auto kqlReadTable = BuildReadTable(BuildColumnsList(tableData, pos, ctx, withSystemColumns, true /*ignoreWriteOnlyColumns*/), pos, tableData, (isBatch == "true"), ctx);
 
     return Build<TCoFilter>(ctx, pos)
         .Input(kqlReadTable)

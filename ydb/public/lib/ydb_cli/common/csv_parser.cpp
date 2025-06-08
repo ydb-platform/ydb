@@ -612,8 +612,6 @@ TArenaAllocatedValue TCsvParser::BuildListOnArena(
     return TArenaAllocatedValue(ResultListType.value(), value);
 }
 
-std::atomic_bool print = true;
-
 // Helper method to process a single CSV line
 void TCsvParser::ProcessCsvLine(
     const TString& line,

@@ -1142,18 +1142,6 @@ TStatus TImportFileClient::TImpl::UpsertCsv(IInputStream& input,
     };
 
     auto upsertCsvFunc = [&](std::vector<TString>&& buffer, ui64 row, std::shared_ptr<TImportBatchStatus> batchStatus) {
-        // auto buildFunc = [&, buffer = std::move(buffer), row, this] () mutable {
-        //     try {
-        //         return parser.BuildList(buffer, filePath, row);
-        //     } catch (const std::exception& e) {
-        //         if (!Failed.exchange(true)) {
-        //             ErrorStatus = MakeHolder<TStatus>(MakeStatus(EStatus::INTERNAL_ERROR, e.what()));
-        //         }
-        //         jobInflightManager->ReleaseJob();
-        //         throw;
-        //     }
-        // };
-
         auto buildOnArenaFunc = [&, buffer = std::move(buffer), row, this] (google::protobuf::Arena* arena) mutable {
             try {
                 return parser.BuildListOnArena(buffer, filePath, arena, row);
@@ -1167,7 +1155,6 @@ TStatus TImportFileClient::TImpl::UpsertCsv(IInputStream& input,
         };
 
         // TODO: create arena here and pass it to UpsertTValueBufferOnArena?
-        // UpsertTValueBuffer(dbPath, std::move(buildFunc))
         UpsertTValueBufferOnArena(dbPath, std::move(buildOnArenaFunc))
             .Apply([&, batchStatus](const TAsyncStatus& asyncStatus) {
                 jobInflightManager->ReleaseJob();

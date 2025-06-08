@@ -920,6 +920,10 @@ struct TEvBlobStorage {
         EvNodeWardenReadMetadataResult,
         EvNodeWardenWriteMetadata,
         EvNodeWardenWriteMetadataResult,
+        EvNodeWardenUpdateCache,
+        EvNodeWardenQueryCache,
+        EvNodeWardenQueryCacheResult,
+        EvNodeWardenUnsubscribeFromCache,
 
         // Other
         EvRunActor = EvPut + 15 * 512,
@@ -1362,6 +1366,13 @@ struct TEvBlobStorage {
             , ResponseSz(sz)
             , Responses(sz == 0 ? nullptr : new TResponse[sz])
             , GroupId(groupId)
+        {}
+
+        TEvGetResult(NKikimrProto::EReplyStatus status, ui32 sz, TArrayHolder<TResponse> responses, TGroupId groupId)
+            : Status(status)
+            , ResponseSz(sz)
+            , Responses(std::move(responses))
+            , GroupId(groupId.GetRawId())
         {}
 
         TString Print(bool isFull) const {
@@ -2457,6 +2468,12 @@ struct TEvBlobStorage {
         TEvStatusResult(NKikimrProto::EReplyStatus status, TStorageStatusFlags statusFlags)
             : Status(status)
             , StatusFlags(statusFlags)
+        {}
+
+        TEvStatusResult(NKikimrProto::EReplyStatus status, TStorageStatusFlags statusFlags, float approximateFreeSpaceShare)
+            : Status(status)
+            , StatusFlags(statusFlags)
+            , ApproximateFreeSpaceShare(approximateFreeSpaceShare)
         {}
 
         TString Print(bool isFull) const {

@@ -130,6 +130,16 @@ std::shared_ptr<arrow::ChunkedArray> IChunkedArray::GetChunkedArray(const TColum
     if (context.GetStartIndex() || context.GetRecordsCount()) {
         const ui32 start = context.GetStartIndex().value_or(0);
         const ui32 count = context.GetRecordsCount().value_or(GetRecordsCount() - start);
+        AFL_VERIFY(start + count <= GetRecordsCount())("start", start)("count", count)("records_count", GetRecordsCount());
+    }
+
+    return DoGetChunkedArray(context);
+}
+
+std::shared_ptr<arrow::ChunkedArray> IChunkedArray::DoGetChunkedArray(const TColumnConstructionContext& context) const {
+    if (context.GetStartIndex() || context.GetRecordsCount()) {
+        const ui32 start = context.GetStartIndex().value_or(0);
+        const ui32 count = context.GetRecordsCount().value_or(GetRecordsCount() - start);
         auto slice = ISlice(start, count);
         if (context.GetFilter() && !context.GetFilter()->IsTotalAllowFilter()) {
             return slice->ApplyFilter(context.GetFilter()->Slice(start, count), slice)->GetChunkedArrayTrivial();

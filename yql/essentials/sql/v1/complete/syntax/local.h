@@ -63,8 +63,8 @@ namespace NSQLComplete {
     public:
         using TPtr = THolder<ILocalSyntaxAnalysis>;
 
-        virtual TLocalSyntaxContext Analyze(TCompletionInput input) = 0;
         virtual ~ILocalSyntaxAnalysis() = default;
+        virtual TLocalSyntaxContext Analyze(TCompletionInput input) = 0;
     };
 
     ILocalSyntaxAnalysis::TPtr MakeLocalSyntaxAnalysis(

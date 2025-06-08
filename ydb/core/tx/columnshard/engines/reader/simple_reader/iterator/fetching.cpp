@@ -108,30 +108,18 @@ TConclusion<bool> TDetectInMem::DoExecuteInplace(const std::shared_ptr<IDataSour
 }
 
 namespace {
-class TApplySourceResult: public IDataTasksProcessor::ITask {
+class TApplySourceResult: public IApplyAction {
 private:
     using TBase = IDataTasksProcessor::ITask;
     YDB_READONLY_DEF(std::shared_ptr<IDataSource>, Source);
-    NColumnShard::TCounterGuard Guard;
     TFetchingScriptCursor Step;
 
 public:
-    virtual TString GetTaskClassIdentifier() const override {
-        return "TApplySourceResult";
-    }
-
-    TApplySourceResult(
-        const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step)
-        : TBase(NActors::TActorId())
-        , Source(source)
-        , Guard(source->GetContext()->GetCommonContext()->GetCounters().GetResultsForSourceGuard())
+    TApplySourceResult(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step)
+        : Source(source)
         , Step(step) {
     }
 
-    virtual TConclusionStatus DoExecuteImpl() override {
-        AFL_VERIFY(false)("event", "not applicable");
-        return TConclusionStatus::Success();
-    }
     virtual bool DoApply(IDataReader& indexedDataRead) const override {
         auto* plainReader = static_cast<TPlainReadData*>(&indexedDataRead);
         Source->SetCursor(Step);
@@ -169,7 +157,8 @@ TConclusion<bool> TBuildResultStep::DoExecuteInplace(const std::shared_ptr<IData
     }
     source->MutableStageResult().SetResultChunk(std::move(resultBatch), StartIndex, RecordsCount);
     NActors::TActivationContext::AsActorContext().Send(context->GetCommonContext()->GetScanActorId(),
-        new NColumnShard::TEvPrivate::TEvTaskProcessedResult(std::make_shared<TApplySourceResult>(source, step)));
+        new NColumnShard::TEvPrivate::TEvTaskProcessedResult(std::make_shared<TApplySourceResult>(source, step),
+            source->GetContext()->GetCommonContext()->GetCounters().GetResultsForSourceGuard()));
     return false;
 }
 

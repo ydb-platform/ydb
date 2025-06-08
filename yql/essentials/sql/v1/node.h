@@ -1281,6 +1281,7 @@ namespace NSQLTranslationV1 {
     struct TAlterDatabaseParameters {
         TDeferredAtom DbPath;
         std::optional<TDeferredAtom> Owner;
+        THashMap<TString, TNodePtr> DatabaseSettings;
     };
 
     struct TTableRef;

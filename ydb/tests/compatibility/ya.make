@@ -20,6 +20,7 @@ TEST_SRCS(
     test_batch_operations.py
     udf/test_datetime2.py
     udf/test_digest.py
+    udf/test_digest_regression.py
 )
 
 SIZE(LARGE)

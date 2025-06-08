@@ -1240,13 +1240,13 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             R"(`uid` LIKE "_id%000_")",
             R"(`uid` ILIKE "UID%002")",
 
-            //R"(Udf(String::AsciiEqualsIgnoreCase)(`uid`,  "UI"))", //bug #19270
+            R"(Udf(String::_yql_AsciiEqualsIgnoreCase)(`uid`,  "UI"))",
             R"(Udf(String::Contains)(`uid`,  "UI"))",
-            //R"(Udf(String::AsciiContainsIgnoreCase)(`uid`,  "UI"))", //bug #19270
+            R"(Udf(String::_yql_AsciiContainsIgnoreCase)(`uid`,  "UI"))",
             R"(Udf(String::StartsWith)(`uid`,  "UI"))",
-            //R"(Udf(String::AsciiStartsWithIgnoreCase)(`uid`,  "UI"))", //bug #19270
+            R"(Udf(String::_yql_AsciiStartsWithIgnoreCase)(`uid`,  "UI"))",
             R"(Udf(String::EndsWith)(`uid`,  "UI"))",
-            //R"(Udf(String::AsciiEndsWithIgnoreCase)(`uid`,  "UI"))", //bug #19270
+            R"(Udf(String::_yql_AsciiEndsWithIgnoreCase)(`uid`,  "UI"))",
         };
 
         for (const auto& predicate: testData) {
@@ -3278,7 +3278,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             auto alterQuery =
                 R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`lc-buckets`, `COMPACTION_PLANNER.FEATURES`=`
                   {"levels" : [{"class_name" : "Zero", "expected_blobs_size" : 1, "portions_count_available" : 3},
-                               {"class_name" : "Zero"}]}`);
+                               {"class_name" : "Zero", "expected_blobs_size" : 1}]}`);
                 )";
             auto result = session.ExecuteQuery(alterQuery, NQuery::TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToOneLineString());

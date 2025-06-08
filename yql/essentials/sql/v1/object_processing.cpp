@@ -59,7 +59,7 @@ INode::TPtr TCreateObject::FillFeatures(INode::TPtr options) const {
 
 namespace {
 
-bool InitFeatures(TContext& ctx, ISource* src, std::map<TString, TDeferredAtom>& features) {
+bool InitFeatures(TContext& ctx, ISource* src, const std::map<TString, TDeferredAtom>& features) {
     for (auto& [key, value] : features) {
         if (value.HasNode() && !value.Build()->Init(ctx, src)) {
             return false;

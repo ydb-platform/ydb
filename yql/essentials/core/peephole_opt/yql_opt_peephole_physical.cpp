@@ -22,6 +22,7 @@
 #include <yql/essentials/utils/yql_paths.h>
 
 #include <util/generic/xrange.h>
+#include <util/string/ascii.h>
 
 #include <library/cpp/svnversion/svnversion.h>
 #include <library/cpp/yson/writer.h>
@@ -8645,7 +8646,39 @@ TExprNode::TPtr ExpandSqlCompare(const TExprNode::TPtr& node, TExprContext& ctx)
 }
 TExprNode::TPtr ExpandContainsIgnoreCase(const TExprNode::TPtr& node, TExprContext& ctx) {
     YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << node->Content();
+    const auto pos = node->Pos();
     const TString part{node->Child(1)->Child(0)->Content()};
+    if (node->Child(0)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Null) {
+        return MakeBool<false>(pos, ctx);
+    }
+
+    if (AllOf(part, IsAscii)) {
+        TString func = "String._yql_";
+        if (node->Content() == "EqualsIgnoreCase") {
+            func += "AsciiEqualsIgnoreCase";
+        } else if (node->Content() == "StartsWithIgnoreCase") {
+            func += "AsciiStartsWithIgnoreCase";
+        } else if (node->Content() == "EndsWithIgnoreCase") {
+            func += "AsciiEndsWithIgnoreCase";
+        } else if (node->Content() == "StringContainsIgnoreCase") {
+            func += "AsciiContainsIgnoreCase";
+        } else {
+            YQL_ENSURE(!"Unknown IngoreCase node");
+        }
+
+        return ctx.Builder(pos)
+            .Callable("Apply")
+                .Callable(0, "Udf")
+                    .Atom(0, func)
+                .Seal()
+                .Add(1, node->ChildPtr(0))
+                .Callable(2, "String")
+                    .Atom(0, part)
+                .Seal()
+            .Seal()
+        .Build();
+    }
+
     TString pattern;
     if (node->Content() == "EqualsIgnoreCase") {
         pattern = part;
@@ -8658,7 +8691,6 @@ TExprNode::TPtr ExpandContainsIgnoreCase(const TExprNode::TPtr& node, TExprConte
     } else {
         YQL_ENSURE(!"Unknown IngoreCase node");
     }
-    const auto pos = node->Pos();
     auto patternExpr = ctx.Builder(pos)
         .Callable("Apply")
             .Callable(0, "Udf")

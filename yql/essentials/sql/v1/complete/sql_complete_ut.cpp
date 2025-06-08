@@ -125,7 +125,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
     }
 
     TVector<TCandidate> CompleteTop(size_t limit, ISqlCompletionEngine::TPtr& engine, TString sharped) {
-        auto candidates = Complete(engine, sharped);
+        auto candidates = Complete(engine, std::move(sharped));
         candidates.crop(limit);
         return candidates;
     }

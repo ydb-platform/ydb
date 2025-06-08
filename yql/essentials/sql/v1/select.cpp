@@ -3034,8 +3034,8 @@ public:
             if (!SkipTake->Init(ctx, FakeSource.Get())) {
                 return false;
             }
-            if (SkipTake->HasSkip() && EOrderKind::Sort != Source->GetOrderKind()) {
-                ctx.Warning(Source->GetPos(), TIssuesIds::YQL_OFFSET_WITHOUT_SORT) << "LIMIT with OFFSET without ORDER BY may provide different results from run to run";
+            if (SkipTake->HasSkip() && Source->GetOrderKind() != EOrderKind::Sort && Source->GetOrderKind() != EOrderKind::Assume) {
+                ctx.Warning(Source->GetPos(), TIssuesIds::YQL_OFFSET_WITHOUT_SORT) << "LIMIT with OFFSET without [ASSUME] ORDER BY may provide different results from run to run";
             }
         }
 

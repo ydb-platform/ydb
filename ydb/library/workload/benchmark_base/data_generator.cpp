@@ -130,7 +130,7 @@ public:
             Path,
             TDataPortion::TCsv(std::move(data), Foramt),
             position,
-            lines.size()
+            readBytes
         );
     }
 

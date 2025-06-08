@@ -117,7 +117,7 @@ TConfig TConfig::BuildDefault() {
 TWorkersPool::TWorkersPool(const ui32 wpId, const std::optional<double> workersCountDouble, const std::optional<double> workersFraction)
     : WorkersPoolId(wpId)
     , WorkersCountInfo(workersCountDouble, workersFraction) {
-    PoolName = "UNDEFINED:" + ::ToString(wpId);
+    PoolName = "WP::UNDEFINED:" + ::ToString(wpId);
 }
 
 TConclusionStatus TWorkersPool::DeserializeFromProto(const NKikimrConfig::TCompositeConveyorConfig::TWorkersPool& proto) {
@@ -137,8 +137,8 @@ TConclusionStatus TWorkersPool::DeserializeFromProto(const NKikimrConfig::TCompo
         Links.emplace_back(std::move(link));
         categories.emplace(::ToString(link.GetCategory()));
     }
-    if (!PoolName || PoolName == "DEFAULT") {
-        PoolName = JoinSeq("-", categories);
+    if (!PoolName || PoolName == "WP::DEFAULT") {
+        PoolName = "WP::" + JoinSeq("-", categories);
     }
     if (Links.empty()) {
         return TConclusionStatus::Fail("no links for workers pool");

@@ -7,8 +7,9 @@ namespace NKikimr::NConveyorComposite {
 class TProcessScope: public TNonCopyable {
 private:
     YDB_READONLY_DEF(std::shared_ptr<TCPUUsage>, CPUUsage);
+    std::shared_ptr<TPositiveControlInteger> WaitingTasksCount;
     TCPUGroup::TPtr ScopeLimits;
-    THashMap<ui64, TProcess> Processes;
+    THashMap<ui64, std::shared_ptr<TProcess>> Processes;
 
 public:
     double GetWeight() const {
@@ -36,29 +37,30 @@ public:
         }
     }
 
-    TProcessScope(TCPUGroup::TPtr&& limits, const std::shared_ptr<TCPUUsage>& categoryScope)
+    TProcessScope(
+        TCPUGroup::TPtr&& limits, const std::shared_ptr<TCPUUsage>& categoryScope, const std::shared_ptr<TPositiveControlInteger>& waitingTasksCount)
         : CPUUsage(std::make_shared<TCPUUsage>(categoryScope))
+        , WaitingTasksCount(waitingTasksCount)
         , ScopeLimits(std::move(limits)) {
     }
 
     TProcess& MutableProcessVerified(const ui64 processId) {
         auto it = Processes.find(processId);
         AFL_VERIFY(it != Processes.end());
-        return it->second;
+        return *it->second;
     }
 
     TProcess* MutableProcessOptional(const ui64 processId) {
         auto it = Processes.find(processId);
         if (it != Processes.end()) {
-            return &it->second;
+            return it->second.get();
         } else {
             return nullptr;
         }
     }
 
     void RegisterProcess(const ui64 processId) {
-        TProcess process(processId, CPUUsage);
-        AFL_VERIFY(Processes.emplace(processId, std::move(process)).second);
+        AFL_VERIFY(Processes.emplace(processId, std::make_shared<TProcess>(processId, CPUUsage, WaitingTasksCount)).second);
         ScopeLimits->IncProcesses();
     }
 

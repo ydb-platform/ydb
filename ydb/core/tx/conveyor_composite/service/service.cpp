@@ -63,6 +63,7 @@ void TDistributor::HandleMain(TEvExecution::TEvNewTask::TPtr& ev) {
         .MutableProcessVerified(ev->Get()->GetProcessId())
         .RegisterTask(ev->Get()->GetTask(), ev->Get()->GetScopeId(), cat.GetCounters());
     Y_UNUSED(Manager->DrainTasks());
+    cat.GetCounters()->WaitingQueueSize->Set(cat.GetWaitingQueueSize());
 }
 
 }   // namespace NKikimr::NConveyorComposite

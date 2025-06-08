@@ -86,7 +86,7 @@ public:
 
     TWorkersPool(const ui32 wpId)
         : WorkersPoolId(wpId) {
-        PoolName = "DEFAULT";
+        PoolName = "WP::DEFAULT";
     }
 
     TWorkersPool(const ui32 wpId, const std::optional<double> workersCountDouble, const std::optional<double> workersFraction);

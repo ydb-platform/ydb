@@ -63,15 +63,20 @@ public:
     }
 };
 
-class TProcess: public TMoveOnly {
+class TProcess: public TNonCopyable {
 private:
     YDB_READONLY(ui64, ProcessId, 0);
     YDB_READONLY_DEF(std::shared_ptr<TCPUUsage>, CPUUsage);
     YDB_ACCESSOR_DEF(TDequePriorityFIFO, Tasks);
+    std::shared_ptr<TPositiveControlInteger> WaitingTasksCount;
     TAverageCalcer<TDuration> AverageTaskDuration;
     ui32 LinksCount = 0;
 
 public:
+    ~TProcess() {
+        WaitingTasksCount->Sub(Tasks.size());
+    }
+
     void DoQuant(const TMonotonic newStart) {
         CPUUsage->Cut(newStart);
     }
@@ -83,6 +88,7 @@ public:
     TWorkerTask ExtractTaskWithPrediction() {
         auto result = Tasks.pop();
         CPUUsage->AddPredicted(result.GetPredictedDuration());
+        WaitingTasksCount->Dec();
         return result;
     }
 
@@ -105,9 +111,11 @@ public:
         ++LinksCount;
     }
 
-    TProcess(const ui64 processId, const std::shared_ptr<TCPUUsage>& scopeUsage)
+    TProcess(const ui64 processId, const std::shared_ptr<TCPUUsage>& scopeUsage, const std::shared_ptr<TPositiveControlInteger>& waitingTasksCount)
         : ProcessId(processId)
+        , WaitingTasksCount(waitingTasksCount)
     {
+        AFL_VERIFY(WaitingTasksCount);
         CPUUsage = std::make_shared<TCPUUsage>(scopeUsage);
         IncRegistration();
     }
@@ -116,6 +124,7 @@ public:
         TWorkerTask wTask(task, AverageTaskDuration.GetValue(), signals->GetCategory(), scopeId,
             signals->GetTaskSignals(task->GetTaskClassIdentifier()), ProcessId);
         Tasks.push(std::move(wTask));
+        WaitingTasksCount->Inc();
     }
 };
 

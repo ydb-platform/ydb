@@ -32,7 +32,9 @@ TWorkerTask TProcessCategory::ExtractTaskWithPrediction() {
         }
     }
     AFL_VERIFY(scopeMin);
-    return scopeMin->ExtractTaskWithPrediction();
+    auto result = scopeMin->ExtractTaskWithPrediction();
+    Counters->WaitingQueueSize->Set(WaitingTasksCount->Val());
+    return result;
 }
 
 TProcessScope& TProcessCategory::MutableProcessScope(const TString& scopeName) {
@@ -52,7 +54,7 @@ TProcessScope* TProcessCategory::MutableProcessScopeOptional(const TString& scop
 
 TProcessScope& TProcessCategory::RegisterScope(const TString& scopeId, const TCPULimitsConfig& processCpuLimits) {
     TCPUGroup::TPtr cpuGroup = std::make_shared<TCPUGroup>(processCpuLimits.GetCPUGroupThreadsLimitDef(256));
-    auto info = Scopes.emplace(scopeId, std::make_shared<TProcessScope>(std::move(cpuGroup), CPUUsage));
+    auto info = Scopes.emplace(scopeId, std::make_shared<TProcessScope>(std::move(cpuGroup), CPUUsage, WaitingTasksCount));
     AFL_VERIFY(info.second);
     return *info.first->second;
 }

@@ -12,3 +12,11 @@
 * 15515:Fixed a topic reading hang that occurred when at least one partition had no incoming data but was being read by multiple consumers. [#15515](https://github.com/ydb-platform/ydb/pull/15515) ([FloatingCrowbar](https://github.com/FloatingCrowbar))
 * 18302:Optimized memory usage in transactions with a large number of participants by changing the storage and resending mechanism for TEvReadSet messages. [#18302](https://github.com/ydb-platform/ydb/pull/18302) ([Alek5andr-Kotov](https://github.com/Alek5andr-Kotov))
 * 18270:Fixed replication bug #10650 [#18270](https://github.com/ydb-platform/ydb/pull/18270) ([Alexander Rutkovsky](https://github.com/alexvru))
+* 19152:cherry-pick 4d47c26, 1e03aed, f009fcf, 56233d0, 0490569, f97455e, fcb5799, 5a1a8f9, 70deecf, 36da963, 13746c6 and ac47d74. Relates to #18487.
+... [#19152](https://github.com/ydb-platform/ydb/pull/19152) ([Igor Munkin](https://github.com/igormunkin))
+* 19115:fixes issue in stream lookup join https://github.com/ydb-platform/ydb/issues/19083 [#19115](https://github.com/ydb-platform/ydb/pull/19115) ([Vitalii Gridnev](https://github.com/gridnevvvit))
+
+### Functionality
+
+* 19327:Enable kafka port in local-ydb docker container [#19327](https://github.com/ydb-platform/ydb/pull/19327) ([Timofey Koolin](https://github.com/rekby))
+

@@ -904,7 +904,19 @@ public:
         auto duration = endTs - startTs;
 
         if (LoadState.State == TLoadState::ESUCCESS) {
-            LOG_I("TPC-C data import completed successfully in " << duration.ToString());
+            // Calculate average upload speed
+            size_t totalDataLoaded = LoadState.DataSizeLoaded.load(std::memory_order_relaxed);
+            auto totalElapsedSeconds = duration.Seconds();
+            double avgSpeedMiBs = totalElapsedSeconds > 0 ?
+                static_cast<double>(totalDataLoaded) / (1024 * 1024) / totalElapsedSeconds : 0.0;
+
+            // Build average speed string
+            std::stringstream avgSpeedStream;
+            avgSpeedStream << std::fixed << std::setprecision(1) << avgSpeedMiBs;
+            std::string avgSpeedMiBsStr = avgSpeedStream.str();
+
+            LOG_I("TPC-C data import completed successfully in " << duration.ToString()
+                  << " (avg: " << avgSpeedMiBsStr << " MiB/s)");
         }
     }
 

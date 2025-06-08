@@ -81,6 +81,7 @@ public:
 
     void BuildLineType();
     const TVector<TString>& GetHeader();
+    const TString& GetHeaderRow() const;
     void ParseLineTypes(TString& line, TPossibleTypes& possibleTypes, const TParseMetadata& meta);
 
 private:

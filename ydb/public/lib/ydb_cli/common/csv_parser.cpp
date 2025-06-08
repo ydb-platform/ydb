@@ -812,6 +812,10 @@ const TVector<TString>& TCsvParser::GetHeader() {
     return Header;
 }
 
+const TString& TCsvParser::GetHeaderRow() const {
+    return HeaderRow;
+}
+
 }
 }
 

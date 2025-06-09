@@ -513,6 +513,7 @@ void TCms::AddPermissionExtensions(const TAction& action, TPermission& perm) con
         case TAction::RESTART_SERVICES:
         case TAction::SHUTDOWN_HOST:
         case TAction::REBOOT_HOST:
+        case TAction::DRAIN_NODE:
             AddHostExtensions(action.GetHost(), perm);
             break;
         default:
@@ -597,6 +598,8 @@ bool TCms::CheckAction(const TAction &action, const TActionOptions &opts, TError
             return CheckActionShutdownHost(action, opts, error, ctx);
         case TAction::REPLACE_DEVICES:
             return CheckActionReplaceDevices(action, opts.PermissionDuration, error);
+        case TAction::DRAIN_NODE:
+            return true;
         case TAction::START_SERVICES:
         case TAction::STOP_SERVICES:
         case TAction::ADD_HOST:

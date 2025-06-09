@@ -55,6 +55,7 @@ public:
     }
 
     void RegisterProcess(const ui64 internalProcessId, std::shared_ptr<TProcessScope>&& scope) {
+        scope->IncProcesses();
         AFL_VERIFY(Processes.emplace(internalProcessId, std::make_shared<TProcess>(internalProcessId, std::move(scope), WaitingTasksCount)).second);
     }
 
@@ -62,7 +63,7 @@ public:
         auto it = Processes.find(processId);
         AFL_VERIFY(it != Processes.end());
         ProcessesWithTasks.erase(processId);
-        if (it->second->GetScope().use_count() == 2) {
+        if (it->second->GetScope()->DecProcesses()) {
             AFL_VERIFY(Scopes.erase(it->second->GetScope()->GetScopeId()));
         }
         Processes.erase(it);

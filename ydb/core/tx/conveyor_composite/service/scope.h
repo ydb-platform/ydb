@@ -13,8 +13,17 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<TCPUUsage>, CPUUsage);
     TCPUGroup::TPtr ScopeLimits;
     TPositiveControlInteger CountInFlight;
+    TPositiveControlInteger CountProcesses;
 
 public:
+    void IncProcesses() {
+        CountProcesses.Inc();
+    }
+
+    bool DecProcesses() {
+        return CountProcesses.Dec() == 0;
+    }
+
     ui32 GetCountInFlight() const {
         return CountInFlight.Val();
     }

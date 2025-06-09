@@ -5,6 +5,7 @@
 
 #include <ydb/library/actors/core/executor_pool_basic.h>
 #include <ydb/library/actors/core/scheduler_basic.h>
+#include <ydb/library/signals/object_counter.h>
 
 #include <contrib/libs/protobuf/src/google/protobuf/text_format.h>
 #include <library/cpp/testing/unittest/registar.h>
@@ -131,6 +132,7 @@ private:
     virtual ui32 GetTasksCount() const {
         return 1000000;
     }
+
 public:
     virtual double GetThreadsCount() const {
         return 9.5;
@@ -190,14 +192,15 @@ public:
                 ++idx;
             }
         }
-        Cerr << (GetThreadsCount() * (TMonotonic::Now() - globalStart) / (1.0 * requests.size() * GetTasksCount())).MicroSeconds() << "us per task"
-             << Endl;
+        Cerr << (GetThreadsCount() * (TMonotonic::Now() - globalStart) / (1.0 * requests.size() * GetTasksCount())).MicroSeconds()
+             << "us per task" << Endl;
         TStringBuilder sb;
         for (auto&& i : durations) {
             sb << i << ";";
         }
         Cerr << sb << Endl;
-        Sleep(TDuration::Seconds(5));
+        Sleep(TDuration::Seconds(15));
+        AFL_VERIFY(NKikimr::NColumnShard::TMonitoringObjectsCounter<TProcessScope>::GetCounter().Val() == 4)("count", NKikimr::NColumnShard::TMonitoringObjectsCounter<TProcessScope>::GetCounter().Val());
 
         actorSystem.Stop();
         actorSystem.Cleanup();
@@ -394,8 +397,7 @@ Y_UNIT_TEST_SUITE(CompositeConveyorTests) {
                 GetThreadsCount());
         }
         virtual std::vector<std::shared_ptr<IRequestProcessor>> GetRequests() override {
-            return { 
-                std::make_shared<TSimpleRequest>("I_1_1", ESpecialTaskCategory::Insert, "1", 1),
+            return { std::make_shared<TSimpleRequest>("I_1_1", ESpecialTaskCategory::Insert, "1", 1),
                 std::make_shared<TSimpleRequest>("I_2_1", ESpecialTaskCategory::Insert, "2", 2),
                 std::make_shared<TSimpleRequest>("I_3_1", ESpecialTaskCategory::Insert, "3", 3),
                 std::make_shared<TSimpleRequest>("S_1_1", ESpecialTaskCategory::Scan, "1", 4),
@@ -412,8 +414,7 @@ Y_UNIT_TEST_SUITE(CompositeConveyorTests) {
                 std::make_shared<TSimpleRequest>("S_3_2", ESpecialTaskCategory::Scan, "3", 26),
                 std::make_shared<TSimpleRequest>("N_1_2", ESpecialTaskCategory::Normalizer, "1", 27),
                 std::make_shared<TSimpleRequest>("N_2_2", ESpecialTaskCategory::Normalizer, "2", 28),
-                std::make_shared<TSimpleRequest>("N_3_2", ESpecialTaskCategory::Normalizer, "3", 29)
-            };
+                std::make_shared<TSimpleRequest>("N_3_2", ESpecialTaskCategory::Normalizer, "3", 29) };
         }
 
     public:

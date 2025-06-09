@@ -8,7 +8,6 @@
 #include <yql/essentials/sql/v1/complete/name/service/schema/name_service.h>
 #include <yql/essentials/sql/v1/complete/name/service/static/name_service.h>
 #include <yql/essentials/sql/v1/complete/name/service/union/name_service.h>
-#include <yql/essentials/sql/v1/complete/text/word.h>
 
 #include <yql/essentials/sql/v1/lexer/antlr4_pure/lexer.h>
 #include <yql/essentials/sql/v1/lexer/antlr4_pure_ansi/lexer.h>
@@ -68,7 +67,7 @@ namespace NYdb::NConsoleClient {
             replxx::Replxx::completions_t entries;
             entries.reserve(candidates.size());
             for (auto& candidate : candidates) {
-                if (candidate.Kind == NSQLComplete::ECandidateKind::FolderName && 
+                if (candidate.Kind == NSQLComplete::ECandidateKind::FolderName &&
                     candidate.Content.EndsWith('`')) {
                     candidate.Content.pop_back();
                 }
@@ -126,10 +125,10 @@ namespace NYdb::NConsoleClient {
         TColorSchema color, TDriver driver, TString database, bool isVerbose) {
         NSQLComplete::TLexerSupplier lexer = MakePureLexerSupplier();
 
-        NSQLComplete::IRanking::TPtr ranking = NSQLComplete::MakeDefaultRanking();
+        auto ranking = NSQLComplete::MakeDefaultRanking(NSQLComplete::LoadFrequencyData());
 
         auto statics = NSQLComplete::MakeStaticNameService(
-            NSQLComplete::MakeDefaultNameSet(), ranking);
+            NSQLComplete::LoadDefaultNameSet(), ranking);
 
         TVector<NSQLComplete::INameService::TPtr> heavies = {
             statics,

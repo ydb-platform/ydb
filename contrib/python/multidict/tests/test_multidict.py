@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import gc
 import operator
+import platform
 import sys
 import weakref
 from collections import deque
 from collections.abc import Callable, Iterable, Iterator, KeysView, Mapping
 from types import ModuleType
-from typing import Union, cast
+from typing import TypeVar, Union, cast
 
 import pytest
 
@@ -18,7 +19,11 @@ from multidict import (
     MultiDictProxy,
     MultiMapping,
     MutableMultiMapping,
+    istr,
 )
+
+_T = TypeVar("_T")
+IS_PYPY = platform.python_implementation() == "PyPy"
 
 
 def chained_callable(
@@ -34,8 +39,6 @@ def chained_callable(
         *args: object,
         **kwargs: object,
     ) -> MultiMapping[int | str] | MutableMultiMapping[int | str]:
-        nonlocal callables
-
         callable_chain = (getattr(module, name) for name in callables)
         first_callable = next(callable_chain)
 
@@ -291,7 +294,7 @@ class BaseMultiDictTest:
         self,
         cls: type[MutableMultiMapping[str]],
     ) -> None:
-        with pytest.raises(TypeError):
+        with pytest.raises(ValueError, match="multidict update sequence element"):
             cls([(1, 2, 3)])  # type: ignore[call-arg]
 
     def test_keys_is_set_less(self, cls: type[MultiDict[str]]) -> None:
@@ -723,6 +726,17 @@ class TestMultiDict(BaseMultiDictTest):
 
         assert str(d) == "<%s('key': 'one', 'key': 'two')>" % _cls.__name__
 
+    def test__repr___recursive(
+        self, any_multidict_class: type[MultiDict[object]]
+    ) -> None:
+        d = any_multidict_class()
+        _cls = type(d)
+
+        d = any_multidict_class()
+        d["key"] = d
+
+        assert str(d) == "<%s('key': ...)>" % _cls.__name__
+
     def test_getall(self, cls: type[MultiDict[str]]) -> None:
         d = cls([("key", "value1")], key="value2")
 
@@ -752,16 +766,31 @@ class TestMultiDict(BaseMultiDictTest):
 
     def test_items__repr__(self, cls: type[MultiDict[str]]) -> None:
         d = cls([("key", "value1")], key="value2")
-        expected = "_ItemsView('key': 'value1', 'key': 'value2')"
+        expected = "<_ItemsView('key': 'value1', 'key': 'value2')>"
+        assert repr(d.items()) == expected
+
+    def test_items__repr__recursive(
+        self, any_multidict_class: type[MultiDict[object]]
+    ) -> None:
+        d = any_multidict_class()
+        d["key"] = d.items()
+        expected = "<_ItemsView('key': <_ItemsView('key': ...)>)>"
         assert repr(d.items()) == expected
 
     def test_keys__repr__(self, cls: type[MultiDict[str]]) -> None:
         d = cls([("key", "value1")], key="value2")
-        assert repr(d.keys()) == "_KeysView('key', 'key')"
+        assert repr(d.keys()) == "<_KeysView('key', 'key')>"
 
     def test_values__repr__(self, cls: type[MultiDict[str]]) -> None:
         d = cls([("key", "value1")], key="value2")
-        assert repr(d.values()) == "_ValuesView('value1', 'value2')"
+        assert repr(d.values()) == "<_ValuesView('value1', 'value2')>"
+
+    def test_values__repr__recursive(
+        self, any_multidict_class: type[MultiDict[object]]
+    ) -> None:
+        d = any_multidict_class()
+        d["key"] = d.values()
+        assert repr(d.values()) == "<_ValuesView(<_ValuesView(...)>)>"
 
 
 class TestCIMultiDict(BaseMultiDictTest):
@@ -793,6 +822,12 @@ class TestCIMultiDict(BaseMultiDictTest):
         with pytest.raises(KeyError, match="key2"):
             d.getone("key2")
 
+    def test_from_md_and_kwds(self, cls: type[CIMultiDict[str]]) -> None:
+        d = cls([("KEY", "value1")])
+        d2 = cls(d, KEY="value2")
+
+        assert list(d2.items()) == [("KEY", "value1"), ("KEY", "value2")]
+
     def test_getall(self, cls: type[CIMultiDict[str]]) -> None:
         d = cls([("KEY", "value1")], KEY="value2")
 
@@ -817,13 +852,494 @@ class TestCIMultiDict(BaseMultiDictTest):
 
     def test_items__repr__(self, cls: type[CIMultiDict[str]]) -> None:
         d = cls([("KEY", "value1")], key="value2")
-        expected = "_ItemsView('KEY': 'value1', 'key': 'value2')"
+        expected = "<_ItemsView('KEY': 'value1', 'key': 'value2')>"
         assert repr(d.items()) == expected
 
     def test_keys__repr__(self, cls: type[CIMultiDict[str]]) -> None:
         d = cls([("KEY", "value1")], key="value2")
-        assert repr(d.keys()) == "_KeysView('KEY', 'key')"
+        assert repr(d.keys()) == "<_KeysView('KEY', 'key')>"
 
     def test_values__repr__(self, cls: type[CIMultiDict[str]]) -> None:
         d = cls([("KEY", "value1")], key="value2")
-        assert repr(d.values()) == "_ValuesView('value1', 'value2')"
+        assert repr(d.values()) == "<_ValuesView('value1', 'value2')>"
+
+    def test_items_iter_of_iter(self, cls: type[CIMultiDict[str]]) -> None:
+        d = cls([("KEY", "value1")], key="value2")
+        it = iter(d.items())
+        assert iter(it) is it
+
+    def test_keys_iter_of_iter(self, cls: type[CIMultiDict[str]]) -> None:
+        d = cls([("KEY", "value1")], key="value2")
+        it = iter(d.keys())
+        assert iter(it) is it
+
+    def test_values_iter_of_iter(self, cls: type[CIMultiDict[str]]) -> None:
+        d = cls([("KEY", "value1")], key="value2")
+        it = iter(d.values())
+        assert iter(it) is it
+
+    @pytest.mark.parametrize(
+        ("arg", "expected"),
+        (
+            pytest.param({"key"}, {"KEY"}, id="ok"),
+            pytest.param({"key", 123}, {"KEY"}, id="non-str"),
+        ),
+    )
+    def test_keys_case_insensitive_and(
+        self, cls: type[CIMultiDict[str]], arg: set[_T], expected: set[_T]
+    ) -> None:
+        d = cls([("KEY", "one")])
+        assert d.keys() & arg == expected
+
+    @pytest.mark.parametrize(
+        ("arg", "expected"),
+        (
+            pytest.param(["key"], {"key"}, id="ok"),
+            pytest.param(["key", 123], {"key"}, id="non-str"),
+        ),
+    )
+    def test_keys_case_insensitive_rand(
+        self, cls: type[CIMultiDict[str]], arg: list[_T], expected: set[_T]
+    ) -> None:
+        d = cls([("KEY", "one")])
+        assert type(arg) is list
+        assert arg & d.keys() == expected
+
+    @pytest.mark.parametrize(
+        ("arg", "expected"),
+        (
+            pytest.param({"key", "other"}, {"KEY", "other"}, id="ok"),
+            pytest.param({"key", "other", 123}, {"KEY", "other", 123}, id="non-str"),
+        ),
+    )
+    def test_keys_case_insensitive_or(
+        self, cls: type[CIMultiDict[str]], arg: set[_T], expected: set[_T]
+    ) -> None:
+        d = cls([("KEY", "one")])
+
+        assert d.keys() | arg == expected
+
+    @pytest.mark.parametrize(
+        ("arg", "expected"),
+        (
+            pytest.param(["key", "other"], {"key", "other"}, id="ok"),
+            pytest.param(["key", "other", 123], {"key", "other", 123}, id="non-str"),
+        ),
+    )
+    def test_keys_case_insensitive_ror(
+        self, cls: type[CIMultiDict[str]], arg: list[_T], expected: set[_T]
+    ) -> None:
+        d = cls([("KEY", "one")])
+        assert type(arg) is list
+
+        assert arg | d.keys() == expected
+
+    @pytest.mark.parametrize(
+        ("arg", "expected"),
+        (
+            pytest.param({"key", "other"}, {"KEY2"}, id="ok"),
+            pytest.param({"key", "other", 123}, {"KEY2"}, id="non-str"),
+        ),
+    )
+    def test_keys_case_insensitive_sub(
+        self, cls: type[CIMultiDict[str]], arg: set[_T], expected: set[_T]
+    ) -> None:
+        d = cls([("KEY", "one"), ("KEY2", "two")])
+
+        assert d.keys() - arg == expected
+
+    @pytest.mark.parametrize(
+        ("arg", "expected"),
+        (
+            pytest.param(["key", "other"], {"other"}, id="ok"),
+            pytest.param(["key", "other", 123], {"other", 123}, id="non-str"),
+        ),
+    )
+    def test_keys_case_insensitive_rsub(
+        self, cls: type[CIMultiDict[str]], arg: list[_T], expected: set[_T]
+    ) -> None:
+        d = cls([("KEY", "one"), ("KEY2", "two")])
+        assert type(arg) is list
+
+        assert arg - d.keys() == expected
+
+    @pytest.mark.parametrize(
+        ("arg", "expected"),
+        (
+            pytest.param(["key", "other"], {"KEY2", "other"}, id="ok"),
+            pytest.param(["key", "other", 123], {"KEY2", "other", 123}, id="non-str"),
+        ),
+    )
+    def test_keys_case_insensitive_xor(
+        self, cls: type[CIMultiDict[str]], arg: list[_T], expected: set[_T]
+    ) -> None:
+        d = cls([("KEY", "one"), ("KEY2", "two")])
+
+        assert d.keys() ^ arg == expected
+
+    @pytest.mark.parametrize(
+        ("arg", "expected"),
+        (
+            pytest.param(["key", "other"], {"KEY2", "other"}, id="ok"),
+            pytest.param(["key", "other", 123], {"KEY2", "other", 123}, id="non-str"),
+        ),
+    )
+    def test_keys_case_insensitive_rxor(
+        self, cls: type[CIMultiDict[str]], arg: list[_T], expected: set[_T]
+    ) -> None:
+        d = cls([("KEY", "one"), ("KEY2", "two")])
+
+        assert arg ^ d.keys() == expected
+
+    @pytest.mark.parametrize(
+        ("arg", "expected"),
+        (
+            pytest.param({"key"}, False, id="ok"),
+            pytest.param({123}, True, id="non-str"),
+        ),
+    )
+    def test_keys_case_insensitive_isdisjoint(
+        self, cls: type[CIMultiDict[str]], arg: set[_T], expected: bool
+    ) -> None:
+        d = cls([("KEY", "one")])
+        assert d.keys().isdisjoint(arg) == expected
+
+    def test_keys_case_insensitive_not_iterable(
+        self, cls: type[CIMultiDict[str]]
+    ) -> None:
+        d = cls([("KEY", "one"), ("KEY2", "two")])
+
+        with pytest.raises(TypeError):
+            123 & d.keys()  # type: ignore[operator]
+
+        with pytest.raises(TypeError):
+            d.keys() & 123  # type: ignore[operator]
+
+        with pytest.raises(TypeError):
+            123 | d.keys()  # type: ignore[operator]
+
+        with pytest.raises(TypeError):
+            d.keys() | 123  # type: ignore[operator]
+
+        with pytest.raises(TypeError):
+            123 ^ d.keys()  # type: ignore[operator]
+
+        with pytest.raises(TypeError):
+            d.keys() ^ 123  # type: ignore[operator]
+
+        with pytest.raises(TypeError):
+            d.keys() - 123  # type: ignore[operator]
+
+        with pytest.raises(TypeError):
+            123 - d.keys()  # type: ignore[operator]
+
+    @pytest.mark.parametrize(
+        "param",
+        (
+            pytest.param("non-tuple", id="not-tuple"),
+            pytest.param(("key2", "two", "three"), id="not-2-elems"),
+            pytest.param((123, "two"), id="not-str"),
+        ),
+    )
+    def test_items_case_insensitive_parse_item(
+        self, cls: type[CIMultiDict[str]], param: _T
+    ) -> None:
+        d = cls([("KEY", "one")])
+        assert d.items() | {param} == {("KEY", "one"), param}
+
+    @pytest.mark.parametrize(
+        ("arg", "expected"),
+        (
+            pytest.param({("key", "one")}, {("KEY", "one")}, id="ok"),
+            pytest.param(
+                {("key", "one"), (123, "two")},
+                {("KEY", "one")},
+                id="non-str",
+            ),
+            pytest.param(
+                {("key", "one"), ("key", "two")},
+                {("KEY", "one")},
+                id="nonequal-value",
+            ),
+        ),
+    )
+    def test_items_case_insensitive_and(
+        self, cls: type[CIMultiDict[str]], arg: set[_T], expected: set[_T]
+    ) -> None:
+        d = cls([("KEY", "one")])
+        assert d.items() & arg == expected
+
+    @pytest.mark.parametrize(
+        ("arg", "expected"),
+        (
+            pytest.param([("key", "one")], {("key", "one")}, id="ok"),
+            pytest.param(
+                [("key", "one"), (123, "two")],
+                {("key", "one")},
+                id="non-str",
+            ),
+            pytest.param(
+                [("key", "one"), ("key", "two")],
+                {("key", "one")},
+                id="nonequal-value",
+            ),
+        ),
+    )
+    def test_items_case_insensitive_rand(
+        self, cls: type[CIMultiDict[str]], arg: list[_T], expected: set[_T]
+    ) -> None:
+        d = cls([("KEY", "one")])
+        assert type(arg) is list
+        assert arg & d.items() == expected
+
+    def test_items_case_insensitive_or(self, cls: type[CIMultiDict[str]]) -> None:
+        d = cls([("KEY", "one")])
+
+        assert d.items() | {("key", "one"), ("other", "two")} == {
+            ("KEY", "one"),
+            ("other", "two"),
+        }
+
+    def test_items_case_insensitive_ror(self, cls: type[CIMultiDict[str]]) -> None:
+        d = cls([("KEY", "one"), ("KEY2", "three")])
+
+        assert [("key", "one"), ("other", "two")] | d.items() == {
+            ("key", "one"),
+            ("other", "two"),
+            ("KEY2", "three"),
+        }
+
+    @pytest.mark.parametrize(
+        ("arg", "expected"),
+        (
+            pytest.param(
+                {("key", "one"), ("other", "three")}, {("KEY2", "two")}, id="ok"
+            ),
+            pytest.param(
+                {("key", "one"), (123, "three")}, {("KEY2", "two")}, id="non-str"
+            ),
+        ),
+    )
+    def test_items_case_insensitive_sub(
+        self, cls: type[CIMultiDict[str]], arg: set[_T], expected: set[_T]
+    ) -> None:
+        d = cls([("KEY", "one"), ("KEY2", "two")])
+
+        assert d.items() - arg == expected
+
+    @pytest.mark.parametrize(
+        ("arg", "expected"),
+        (
+            pytest.param(
+                [("key", "one"), ("other", "three")], {("other", "three")}, id="ok"
+            ),
+            pytest.param(
+                [("key", "one"), (123, "three")], {(123, "three")}, id="non-str"
+            ),
+        ),
+    )
+    def test_items_case_insensitive_rsub(
+        self, cls: type[CIMultiDict[str]], arg: set[_T], expected: set[_T]
+    ) -> None:
+        d = cls([("KEY", "one"), ("KEY2", "two")])
+
+        assert arg - d.items() == expected
+
+    @pytest.mark.parametrize(
+        ("arg", "expected"),
+        (
+            pytest.param(
+                {("key", "one"), ("other", "three")},
+                {("KEY2", "two"), ("other", "three")},
+                id="ok",
+            ),
+            pytest.param(
+                {("key", "one"), (123, "three")},
+                {("KEY2", "two"), (123, "three")},
+                id="non-str",
+            ),
+        ),
+    )
+    def test_items_case_insensitive_xor(
+        self, cls: type[CIMultiDict[str]], arg: set[_T], expected: set[_T]
+    ) -> None:
+        d = cls([("KEY", "one"), ("KEY2", "two")])
+
+        assert d.items() ^ arg == expected
+
+    def test_items_case_insensitive_rxor(self, cls: type[CIMultiDict[str]]) -> None:
+        d = cls([("KEY", "one"), ("KEY2", "two")])
+
+        assert [("key", "one"), ("other", "three")] ^ d.items() == {
+            ("KEY2", "two"),
+            ("other", "three"),
+        }
+
+    def test_items_case_insensitive_non_iterable(
+        self, cls: type[CIMultiDict[str]]
+    ) -> None:
+        d = cls([("KEY", "one")])
+
+        with pytest.raises(TypeError):
+            d.items() & None  # type: ignore[operator]
+
+        with pytest.raises(TypeError):
+            None & d.items()  # type: ignore[operator]
+
+        with pytest.raises(TypeError):
+            d.items() | None  # type: ignore[operator]
+
+        with pytest.raises(TypeError):
+            None | d.items()  # type: ignore[operator]
+
+        with pytest.raises(TypeError):
+            d.items() ^ None  # type: ignore[operator]
+
+        with pytest.raises(TypeError):
+            None ^ d.items()  # type: ignore[operator]
+
+        with pytest.raises(TypeError):
+            d.items() - None  # type: ignore[operator]
+
+        with pytest.raises(TypeError):
+            None - d.items()  # type: ignore[operator]
+
+    @pytest.mark.parametrize(
+        ("arg", "expected"),
+        (
+            pytest.param({("key", "one")}, False, id="ok"),
+            pytest.param({(123, "one")}, True, id="non-str"),
+        ),
+    )
+    def test_items_case_insensitive_isdisjoint(
+        self, cls: type[CIMultiDict[str]], arg: set[_T], expected: bool
+    ) -> None:
+        d = cls([("KEY", "one")])
+        assert d.items().isdisjoint(arg) == expected
+
+
+def test_create_multidict_from_existing_multidict_new_pairs() -> None:
+    """Test creating a MultiDict from an existing one does not mutate the original."""
+    original = MultiDict([("h1", "header1"), ("h2", "header2"), ("h3", "header3")])
+    new = MultiDict(original, h4="header4")
+    assert "h4" in new
+    assert "h4" not in original
+
+
+def test_convert_multidict_to_cimultidict_and_back(
+    case_sensitive_multidict_class: type[MultiDict[str]],
+    case_insensitive_multidict_class: type[CIMultiDict[str]],
+    case_insensitive_str_class: type[istr],
+) -> None:
+    """Test conversion from MultiDict to CIMultiDict."""
+    start_as_md = case_sensitive_multidict_class(
+        [("KEY", "value1"), ("key2", "value2")]
+    )
+    assert start_as_md.get("KEY") == "value1"
+    assert start_as_md["KEY"] == "value1"
+    assert start_as_md.get("key2") == "value2"
+    assert start_as_md["key2"] == "value2"
+    start_as_cimd = case_insensitive_multidict_class(
+        [("KEY", "value1"), ("key2", "value2")]
+    )
+    assert start_as_cimd.get("key") == "value1"
+    assert start_as_cimd["key"] == "value1"
+    assert start_as_cimd.get("key2") == "value2"
+    assert start_as_cimd["key2"] == "value2"
+    converted_to_ci = case_insensitive_multidict_class(start_as_md)
+    assert converted_to_ci.get("key") == "value1"
+    assert converted_to_ci["key"] == "value1"
+    assert converted_to_ci.get("key2") == "value2"
+    assert converted_to_ci["key2"] == "value2"
+    converted_to_md = case_sensitive_multidict_class(converted_to_ci)
+    assert all(type(k) is case_insensitive_str_class for k in converted_to_ci.keys())
+    assert converted_to_md.get("KEY") == "value1"
+    assert converted_to_md["KEY"] == "value1"
+    assert converted_to_md.get("key2") == "value2"
+    assert converted_to_md["key2"] == "value2"
+
+
+def test_convert_multidict_to_cimultidict_eq(
+    case_sensitive_multidict_class: type[MultiDict[str]],
+    case_insensitive_multidict_class: type[CIMultiDict[str]],
+) -> None:
+    """Test compare after conversion from MultiDict to CIMultiDict."""
+    original = case_sensitive_multidict_class(
+        [("h1", "header1"), ("h2", "header2"), ("h3", "header3")]
+    )
+    assert case_insensitive_multidict_class(
+        original
+    ) == case_insensitive_multidict_class(
+        [("H1", "header1"), ("H2", "header2"), ("H3", "header3")]
+    )
+
+
+@pytest.mark.skipif(IS_PYPY, reason="getrefcount is not supported on PyPy")
+def test_extend_does_not_alter_refcount(
+    case_sensitive_multidict_class: type[MultiDict[str]],
+) -> None:
+    """Test that extending a MultiDict with a MultiDict does not alter the refcount of the original."""
+    original = case_sensitive_multidict_class([("h1", "header1")])
+    new = case_sensitive_multidict_class([("h2", "header2")])
+    original_refcount = sys.getrefcount(original)
+    new.extend(original)
+    assert sys.getrefcount(original) == original_refcount
+
+
+@pytest.mark.skipif(IS_PYPY, reason="getrefcount is not supported on PyPy")
+def test_update_does_not_alter_refcount(
+    case_sensitive_multidict_class: type[MultiDict[str]],
+) -> None:
+    """Test that updating a MultiDict with a MultiDict does not alter the refcount of the original."""
+    original = case_sensitive_multidict_class([("h1", "header1")])
+    new = case_sensitive_multidict_class([("h2", "header2")])
+    original_refcount = sys.getrefcount(original)
+    new.update(original)
+    assert sys.getrefcount(original) == original_refcount
+
+
+@pytest.mark.skipif(IS_PYPY, reason="getrefcount is not supported on PyPy")
+def test_init_does_not_alter_refcount(
+    case_sensitive_multidict_class: type[MultiDict[str]],
+) -> None:
+    """Test that initializing a MultiDict with a MultiDict does not alter the refcount of the original."""
+    original = case_sensitive_multidict_class([("h1", "header1")])
+    original_refcount = sys.getrefcount(original)
+    case_sensitive_multidict_class(original)
+    assert sys.getrefcount(original) == original_refcount
+
+
+def test_subclassed_multidict(
+    any_multidict_class: type[MultiDict[str]],
+) -> None:
+    """Test that subclassed MultiDicts work as expected."""
+
+    class SubclassedMultiDict(any_multidict_class):  # type: ignore[valid-type, misc]
+        """Subclassed MultiDict."""
+
+    d1 = SubclassedMultiDict([("key", "value1")])
+    d2 = SubclassedMultiDict([("key", "value2")])
+    d3 = SubclassedMultiDict([("key", "value1")])
+    assert d1 != d2
+    assert d1 == d3
+    assert d1 == SubclassedMultiDict([("key", "value1")])
+    assert d1 != SubclassedMultiDict([("key", "value2")])
+
+
+@pytest.mark.c_extension
+def test_view_direct_instantiation_segfault() -> None:
+    """Test that view objects cannot be instantiated directly (issue: segfault).
+
+    This test only applies to the C extension implementation.
+    """
+    # Test that _ItemsView cannot be instantiated directly
+    with pytest.raises(TypeError, match="cannot create '.*_ItemsView' instances directly"):
+        multidict._ItemsView()  # type: ignore[attr-defined]
+
+    # Test that _KeysView cannot be instantiated directly
+    with pytest.raises(TypeError, match="cannot create '.*_KeysView' instances directly"):
+        multidict._KeysView()  # type: ignore[attr-defined]
+
+    # Test that _ValuesView cannot be instantiated directly
+    with pytest.raises(TypeError, match="cannot create '.*_ValuesView' instances directly"):
+        multidict._ValuesView()  # type: ignore[attr-defined]

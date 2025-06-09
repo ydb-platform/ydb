@@ -18,7 +18,7 @@ using namespace NConcurrency;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static constexpr auto& Logger = RpcClientLogger;
+constinit const auto Logger = RpcClientLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -227,7 +227,7 @@ private:
                 }));
 
             if (!RetryChecker_.Run(error)) {
-                ResponseHandler_->HandleError(std::move(error));
+                ReportError(error);
                 return;
             }
 

@@ -1,7 +1,7 @@
 #pragma once
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
-#include <ydb/library/actors/core/actorid.h>
+#include <ydb/library/actors/core/actorsystem.h>
 
 #include <atomic>
 
@@ -13,9 +13,11 @@ constexpr auto Endless = "\0"sv;
 
 struct TSharedStuff {
     using TPtr = std::shared_ptr<TSharedStuff>;
+    using TWeakPtr = std::weak_ptr<TSharedStuff>;
 
     std::unique_ptr<NYdb::NQuery::TQueryClient> Client;
     std::atomic<i64> Revision = 0LL, Lease = 0LL;
+    NActors::TActorSystem* ActorSystem = nullptr;
     NActors::TActorId Watchtower;
     std::string TablePrefix;
 };

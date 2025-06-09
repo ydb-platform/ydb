@@ -133,6 +133,14 @@ static TKikimrRunner GetKikimrWithJoinSettings(bool useStreamLookupJoin = false,
     return TKikimrRunner(serverSettings);
 }
 
+void Replace(std::string& s, const std::string& from, const std::string& to) {
+    size_t pos = 0;
+    while ((pos = s.find(from, pos)) != std::string::npos) {
+        s.replace(pos, from.size(), to);
+        pos += to.size();
+    }
+}
+
 void PrintPlan(const TString& plan) {
     Cout << plan << Endl;
     NYdb::NConsoleClient::TQueryPlanPrinter queryPlanPrinter(NYdb::NConsoleClient::EDataFormat::PrettyTable, true, Cout, 0);
@@ -469,7 +477,7 @@ Y_UNIT_TEST_SUITE(OlapEstimationRowsCorrectness) {
     }
 
     Y_UNIT_TEST(TPCH3) {
-        TestOlapEstimationRowsCorrectness("queries/tpch3.sql", "stats/tpch1000s.json");
+       TestOlapEstimationRowsCorrectness("queries/tpch3.sql", "stats/tpch1000s.json");
     }
 
     Y_UNIT_TEST(TPCH5) {
@@ -681,6 +689,10 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
 
     Y_UNIT_TEST_TWIN(DatetimeConstantFold, ColumnStore) {
         ExecuteJoinOrderTestGenericQueryWithStats("queries/datetime_constant_fold.sql", "stats/basic.json", false, ColumnStore);
+    }
+
+    Y_UNIT_TEST_TWIN(UdfConstantFold, ColumnStore) {
+        ExecuteJoinOrderTestGenericQueryWithStats("queries/udf_constant_fold.sql", "stats/basic.json", false, ColumnStore);
     }
 
     Y_UNIT_TEST_TWIN(TPCHRandomJoinViewJustWorks, ColumnStore) {
@@ -938,6 +950,86 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         Cout << "actual\n" << GetJoinOrder(plan).GetStringRobust() << Endl;
         Cout << "expected\n" << GetJoinOrderFromDetailedJoinOrder(ref).GetStringRobust() << Endl;
         UNIT_ASSERT(currentJoinOrder == ref);
+    }
+
+    void RunBenchmarkQueries(
+        NYdb::NQuery::TSession& session,
+        const std::string& benchmarkName,
+        const std::string& constsPath,
+        const std::vector<std::string>& queryTypes,
+        size_t queryCount,
+        const std::string& queryPathTemplate,
+        const std::string& tablePrefix
+    ) {
+
+        std::string consts;
+        if (!constsPath.empty()) {
+            TIFStream s(constsPath);
+            consts = s.ReadAll();
+        }
+
+        for (const std::string& queryType : queryTypes) {
+            for (std::size_t i = 1; i <= queryCount; ++i) {
+                TString qPath = TStringBuilder{} << ArcadiaSourceRoot() << queryPathTemplate << queryType << "/" << "q" << i << ".sql";
+
+                TIFStream s(qPath);
+                std::string q = s.ReadAll();
+                Replace(q, "{path}", tablePrefix);
+                Replace(q, "{% include 'header.sql.jinja' %}", "");
+                std::regex pattern(R"(\{\{\s*([a-zA-Z0-9_]+)\s*\}\})");
+                q = std::regex_replace(q, pattern, "`" + tablePrefix + "$1`");
+                if (queryType == "yql" && !consts.empty()) {
+                    q = consts + "\n" + q;
+                }
+
+                Cout << "Running " << benchmarkName << " query: " << i << ", type: " << queryType << Endl;
+                auto settings = NYdb::NQuery::TExecuteQuerySettings();
+                auto result = session.ExecuteQuery(q, NYdb::NQuery::TTxControl::NoTx(), settings).ExtractValueSync();
+                result.GetIssues().PrintTo(Cerr);
+                UNIT_ASSERT_C(result.IsSuccess(), TStringBuilder{} << "query " << benchmarkName << "#" << i
+                    << ", type: " << queryType << " failed, query:\n" << q);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(TPCHEveryQueryWorks) {
+        auto kikimr = GetKikimrWithJoinSettings(false, GetStatic("stats/tpch1000s.json"), true);
+        auto db = kikimr.GetQueryClient();
+        auto result = db.GetSession().GetValueSync();
+        NStatusHelpers::ThrowOnError(result);
+        auto session = result.GetSession();
+
+        CreateTables(session, "schema/tpch.sql", true);
+
+        RunBenchmarkQueries(
+            session,
+            "TPCH",
+            ArcadiaSourceRoot() + "/ydb/library/benchmarks/gen_queries/consts.yql",
+            {"yql", "nice", "ydb"},
+            22,
+            "/ydb/library/benchmarks/queries/tpch/",
+            "/Root/"
+        );
+    }
+
+    Y_UNIT_TEST(TPCDSEveryQueryWorks) {
+        auto kikimr = GetKikimrWithJoinSettings(false, GetStatic("stats/tpcds1000s.json"), true);
+        auto db = kikimr.GetQueryClient();
+        auto result = db.GetSession().GetValueSync();
+        NStatusHelpers::ThrowOnError(result);
+        auto session = result.GetSession();
+
+        CreateTables(session, "schema/tpcds.sql", true);
+
+        RunBenchmarkQueries(
+            session,
+            "TPCDS",
+            ArcadiaSourceRoot() + "/ydb/library/benchmarks/gen_queries/consts.yql",
+            {"yql"},
+            99,
+            "/ydb/library/benchmarks/queries/tpcds/",
+            "/Root/test/ds/"
+        );
     }
 
     Y_UNIT_TEST(CanonizedJoinOrderTPCH1) {

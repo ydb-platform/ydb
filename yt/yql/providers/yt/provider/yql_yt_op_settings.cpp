@@ -12,6 +12,7 @@
 #include <util/generic/hash_set.h>
 
 #include <library/cpp/yson/node/node_io.h>
+#include <library/cpp/json/json_reader.h>
 
 
 namespace NYql {
@@ -424,7 +425,6 @@ bool ValidateSettings(const TExprNode& settingsNode, EYtSettingTypes accepted, T
         case EYtSettingType::IgnoreNonExisting:
         case EYtSettingType::WarnNonExisting:
         case EYtSettingType::ForceTransform:
-        case EYtSettingType::SoftTransform:
         case EYtSettingType::CombineChunks:
         case EYtSettingType::WithQB:
         case EYtSettingType::Inline:
@@ -853,9 +853,9 @@ bool ValidateSettings(const TExprNode& settingsNode, EYtSettingTypes accepted, T
                         << "Expected list value, group: "
                         << it->first.Quote()));
                     return false;
-                } else if (it->second.AsList().size() < 2) {
+                } else if (it->second.AsList().empty()) {
                     ctx.AddError(TIssue(ctx.GetPosition(setting->Tail().Pos()), TStringBuilder()
-                        << "Expected list with at least two columns, group: "
+                        << "Expected non empty column list, group: "
                         << it->first.Quote()));
                     return false;
                 } else {
@@ -903,7 +903,24 @@ bool ValidateSettings(const TExprNode& settingsNode, EYtSettingTypes accepted, T
                     return false;
                 }
             }
-            return true;
+            break;
+        }
+        case EYtSettingType::SoftTransform: {
+            if (!EnsureTupleSize(*setting, 2, ctx)) {
+                return false;
+            }
+            TVector<TString> values;
+            if (!ValidateColumnSettings(setting->Tail(), ctx, values, false)) {
+                return false;
+            }
+            for (const auto& value: values) {
+                if (value != "column_groups" && value != "storage") {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting->Tail().Pos()), TStringBuilder()
+                        << "Unsupported value " << value));
+                    return false;
+                }
+            }
+            break;
         }
         case EYtSettingType::BlockOutputReady: {
             if (!EnsureTupleSize(*setting, 2, ctx)) {
@@ -916,7 +933,7 @@ bool ValidateSettings(const TExprNode& settingsNode, EYtSettingTypes accepted, T
                     << "Unsupported block output mode value " << TString{setting->Child(1)->Content()}.Quote()));
                 return false;
             }
-            return true;
+            break;
         }
         case EYtSettingType::QLFilter: {
             if (!EnsureTupleSize(*setting, 2, ctx)) {
@@ -1331,9 +1348,24 @@ void YtWriteHint(std::string_view name, NJsonWriter::TBuf& json) {
 }
 
 void YtWriteHints(EYtSettingTypes flags, NJsonWriter::TBuf& json) {
-    for (ui32 i = 0; i < (ui32)EYtSettingType::LAST; ++i) {
-        if (flags.HasFlags((EYtSettingType)i)) {
-            YtWriteHint(ToString((EYtSettingType)i), json);
+    auto res = NResource::Find("/yql_yt_op_settings.json");
+    NJson::TJsonValue enumJson;
+    ReadJsonTree(res, &enumJson, true);
+    for (const auto& x : enumJson.GetArraySafe()) {
+        if (x["cpp_name"].GetStringSafe() != "EYtSettingType") {
+            continue;
+        }
+
+        for (const auto& y : x["items"].GetArraySafe()) {
+            if (!y["str_value"].IsDefined()) {
+                continue;
+            }
+
+            if (flags.HasFlags(FromString<EYtSettingType>(y["str_value"].GetStringSafe()))) {
+                for (const auto& a : y["aliases"].GetArraySafe()) {
+                    YtWriteHint(a.GetStringSafe(), json);
+                }
+            }
         }
     }
 }

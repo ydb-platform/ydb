@@ -11,6 +11,8 @@
 #include <yt/yt/core/ytree/ypath_client.h>
 #include <yt/yt/core/ytree/yson_struct.h>
 
+#include <yt/yt/core/ytree/unittests/proto/test.pb.h>
+
 #include <util/stream/buffer.h>
 
 #include <util/ysaveload.h>
@@ -374,6 +376,59 @@ TEST_P(TYsonStructParseTest, UnrecognizedSimple)
     auto deserializedConfig = ConvertTo<TTestConfigPtr>(output);
     EXPECT_TRUE(AreNodesEqual(ConvertToNode(config), ConvertToNode(deserializedConfig)));
 }
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TSimpleStructKeepUnrecognized
+    : public TYsonStruct
+{
+public:
+    int Value;
+
+    REGISTER_YSON_STRUCT(TSimpleStructKeepUnrecognized);
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.UnrecognizedStrategy(EUnrecognizedStrategy::KeepRecursive);
+
+        registrar.Parameter("value", &TSimpleStructKeepUnrecognized::Value)
+            .Default(1);
+    }
+};
+
+TEST_P(TYsonStructParseTest, UnrecognizedSorted)
+{
+    auto configNode = BuildYsonNodeFluently()
+        .BeginMap()
+            .Item("value_unrecognized").Value(42)
+            .Item("unrecognized").Value("TestString")
+            .Item("value").Value(1337)
+            .Item("a_unrecognized").Value("TestString")
+        .EndMap();
+
+    auto config = Load<TSimpleStructKeepUnrecognized>(configNode->AsMap());
+
+    auto unrecognizedNode = config->GetLocalUnrecognized();
+    auto unrecognizedRecursivelyNode = config->GetRecursiveUnrecognized();
+    EXPECT_TRUE(AreNodesEqual(unrecognizedNode, unrecognizedRecursivelyNode));
+    EXPECT_EQ(3, unrecognizedNode->GetChildCount());
+
+    TString expectedYson;
+    expectedYson += "{\"a_unrecognized\"=\"TestString\";";
+    expectedYson += "\"value\"=1337;";
+    expectedYson += "\"value_unrecognized\"=42;";
+    expectedYson += "\"unrecognized\"=\"TestString\";}";
+
+    auto output = ConvertToYsonString(config, NYson::EYsonFormat::Text);
+
+    EXPECT_TRUE(AreNodesEqual(
+        ConvertToNode(TYsonString(expectedYson)),
+        ConvertToNode(TYsonString(output.AsStringBuf()))))
+        << "Expected: " << expectedYson
+        << ", got: " << output.AsStringBuf();
+}
+
+////////////////////////////////////////////////////////////////////////////////
 
 template <EUnrecognizedStrategy strategy>
 class TThrowOnUnrecognized
@@ -1709,10 +1764,9 @@ TEST(TYsonStructTest, Aliases5)
     EXPECT_FALSE(config->IsSet("key"));
 }
 
-class TTestConfigWithContainers
+struct TTestConfigWithContainers
     : public NYTree::TYsonStructLite
 {
-public:
     std::vector<TString> Vector;
     std::array<TString, 3> Array;
     std::pair<size_t, TString> Pair;
@@ -3405,6 +3459,99 @@ TEST(TYsonStructTest, TestPolymorphicYsonStructMergeIfPossible)
     EXPECT_EQ(drv1Ptr->Field1, 18);
 }
 
+DEFINE_POLYMORPHIC_YSON_STRUCT_WITH_DEFAULT(MyPolyDefault, Drv1,
+    ((Base) (TPolyBase))
+    ((Drv1) (TPolyDerived1))
+    ((Drv2) (TPolyDerived2))
+);
+
+TEST(TYsonStructTest, TestPolymorphicYsonStructDefault)
+{
+    TMyPolyDefault poly;
+
+    auto node = BuildYsonNodeFluently()
+        .BeginMap()
+            .Item("base_field").Value(11)
+            .Item("field1").Value(123)
+        .EndMap();
+
+    Deserialize(poly, node->AsMap());
+    EXPECT_EQ(poly.GetCurrentType(), EMyPolyDefaultType::Drv1);
+
+    auto drv1Ptr = poly.TryGetConcrete<TPolyDerived1>();
+    EXPECT_TRUE(drv1Ptr.operator bool());
+    EXPECT_EQ(drv1Ptr->BaseField, 11);
+    EXPECT_EQ(drv1Ptr->Field1, 123);
+
+    node = BuildYsonNodeFluently()
+        .BeginMap()
+            .Item("type").Value("drv2")
+            .Item("base_field").Value(14)
+            .Item("field2").Value(111)
+        .EndMap();
+
+    Deserialize(poly, node->AsMap());
+    EXPECT_EQ(poly.GetCurrentType(), EMyPolyDefaultType::Drv2);
+
+    node = BuildYsonNodeFluently()
+    .BeginMap()
+        .Item("base_field").Value(11)
+        .Item("field1").Value(123)
+    .EndMap();
+
+    Deserialize(poly, node->AsMap());
+    EXPECT_EQ(poly.GetCurrentType(), EMyPolyDefaultType::Drv1);
+}
+
+DEFINE_ENUM(EMyPolyDefaultEnum,
+    (Base)
+    (Drv1)
+    (Drv2)
+);
+
+DEFINE_POLYMORPHIC_YSON_STRUCT_FOR_ENUM_WITH_DEFAULT(MyPolyDefaultEnum, EMyPolyDefaultEnum, Base,
+    ((Base) (TPolyBase))
+    ((Drv1) (TPolyDerived1))
+    ((Drv2) (TPolyDerived2))
+);
+
+TEST(TYsonStructTest, TestPolymorphicYsonStructDefaultEnum)
+{
+    TMyPolyDefaultEnum poly;
+
+    auto node = BuildYsonNodeFluently()
+        .BeginMap()
+            .Item("base_field").Value(11)
+            .Item("field1").Value(123)
+        .EndMap();
+
+    Deserialize(poly, node->AsMap());
+    EXPECT_EQ(poly.GetCurrentType(), EMyPolyDefaultEnum::Base);
+
+    auto basePtr = poly.TryGetConcrete<TPolyBase>();
+    EXPECT_TRUE(basePtr.operator bool());
+    EXPECT_EQ(basePtr->BaseField, 11);
+
+    node = BuildYsonNodeFluently()
+        .BeginMap()
+            .Item("type").Value("drv1")
+            .Item("base_field").Value(14)
+            .Item("field1").Value(111)
+        .EndMap();
+
+    Deserialize(poly, node->AsMap());
+    EXPECT_EQ(poly.GetCurrentType(), EMyPolyDefaultEnum::Drv1);
+
+    node = BuildYsonNodeFluently()
+    .BeginMap()
+        .Item("base_field").Value(11)
+        .Item("field1").Value(123)
+    .EndMap();
+
+    Deserialize(poly, node->AsMap());
+    EXPECT_EQ(poly.GetCurrentType(), EMyPolyDefaultEnum::Base);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 struct TPolyHolder
@@ -3739,6 +3886,64 @@ TEST(TYsonStructTest, DefaultUnrecognizedStrategy3)
     THasFieldWithDefaultedStrategyAndOwnRecursiveStrategy yson = {};
     EXPECT_ANY_THROW(Deserialize(yson, source->AsMap()));
 }
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TTestYsonStructWithProto
+    : public virtual TYsonStruct
+{
+    NProto::TTestMessage DefaultProto;
+    TProtoSerializedAsYson<NProto::TTestMessage> YsonProto;
+    TProtoSerializedAsString<NProto::TTestMessage> StringProto;
+
+    REGISTER_YSON_STRUCT(TTestYsonStructWithProto);
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.Parameter("default_proto", &TThis::DefaultProto)
+            .Default();
+        registrar.Parameter("yson_proto", &TThis::YsonProto)
+            .Default();
+        registrar.Parameter("string_proto", &TThis::StringProto)
+            .Default();
+    }
+};
+
+using TTestYsonStructWithProtoPtr = TIntrusivePtr<TTestYsonStructWithProto>;
+
+TEST(TYsonStructTest, ProtoSerialize)
+{
+    NProto::TTestMessage proto;
+    proto.set_int32_field(532);
+    proto.set_string_field("abcdef");
+    auto serialized = proto.SerializeAsString();
+
+    auto ysonStruct = New<TTestYsonStructWithProto>();
+    ysonStruct->DefaultProto.CopyFrom(proto);
+    ysonStruct->YsonProto.CopyFrom(proto);
+    ysonStruct->StringProto.CopyFrom(proto);
+
+    auto node = ConvertToNode(ysonStruct);
+    const auto expectedNode = BuildYsonNodeFluently()
+        .BeginMap()
+            .Item("default_proto")
+                .BeginMap()
+                    .Item("int32_field").Value(532)
+                    .Item("string_field").Value("abcdef")
+                .EndMap()
+            .Item("yson_proto")
+                .BeginMap()
+                    .Item("int32_field").Value(532)
+                    .Item("string_field").Value("abcdef")
+                .EndMap()
+            .Item("string_proto").Value(serialized)
+        .EndMap();
+    EXPECT_TRUE(AreNodesEqual(node, expectedNode));
+    auto otherStruct = ConvertTo<TTestYsonStructWithProtoPtr>(node);
+    EXPECT_EQ(*otherStruct, *ysonStruct);
+}
+
+////////////////////////////////////////////////////////////////////////////////
 
 } // namespace
 } // namespace NYT::NYTree

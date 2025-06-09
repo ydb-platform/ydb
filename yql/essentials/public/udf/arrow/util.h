@@ -248,7 +248,11 @@ inline bool IsSingularType(const ITypeInfoHelper& typeInfoHelper, const TType* t
            kind == ETypeKind::EmptyList;
 }
 
+const TType* SkipTaggedType(const ITypeInfoHelper& typeInfoHelper, const TType* type);
+
 inline bool NeedWrapWithExternalOptional(const ITypeInfoHelper& typeInfoHelper, const TType* type) {
+    type = SkipTaggedType(typeInfoHelper, type);
+
     return TPgTypeInspector(typeInfoHelper, type) || IsSingularType(typeInfoHelper, type);
 }
 

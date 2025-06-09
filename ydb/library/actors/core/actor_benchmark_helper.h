@@ -74,10 +74,9 @@ struct TActorBenchmark {
         Follower
     };
 
-    struct TEvOwnedPing : TEvents::TEvPing {
+    struct TEvOwnedPing : TEventLocal<TEvOwnedPing, TEvents::TEvPing::EventType> {
         TEvOwnedPing(TActorId owner)
-            : TEvPing()
-            , Owner(owner)
+            : Owner(owner)
         {}
 
         TActorId Owner;

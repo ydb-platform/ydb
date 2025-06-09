@@ -74,6 +74,7 @@ namespace NActors {
             Cerr << "... blocking " << (ev->HasEvent() ? TypeName(*ev->GetBase()) : TypeName<TEvType>())
                 << " from " << Runtime.FindActorName(ev->Sender)
                 << " to " << Runtime.FindActorName(ev->GetRecipientRewrite())
+                << " cookie " << ptr->Cookie
                 << Endl;
             this->emplace_back(std::move(ev));
         }

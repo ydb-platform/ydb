@@ -35,17 +35,13 @@ struct TOperation {
 };
 
 void MakeSlice(const std::string_view& where, std::ostream& sql, NYdb::TParamsBuilder& params, size_t* paramsCounter = nullptr, const i64 revision = 0LL) {
-    sql << "select * from (select max_by(TableRow(), `modified`) from `content`" << where;
-    if (revision)
+    if (revision) {
+        sql << "select * from (select max_by(TableRow(), `modified`) from `history`" << where;
         sql << " and " << AddParam("Rev", params, revision, paramsCounter) << " >= `modified`";
-    sql << " group by `key`) flatten columns where 0L < `version`";
-}
-
-void MakeSlice(const std::string_view& key, const std::string_view& rangeEnd, std::ostream& sql, NYdb::TParamsBuilder& params, size_t* paramsCounter, const i64 revision = 0LL) {
-    std::ostringstream where;
-    where << " where ";
-    MakeSimplePredicate(key, rangeEnd, where, params, paramsCounter);
-    MakeSlice(where.view(), sql, params, paramsCounter, revision);
+        sql << " group by `key`) flatten columns where 0L < `version`";
+    } else {
+        sql << "select * from `current`" << where;
+    }
 }
 
 struct TRange : public TOperation {
@@ -252,7 +248,7 @@ struct TPut : public TOperation {
         const auto& oldResultSetName = GetNameWithIndex("Old", resultsCounter);
         const auto& newResultSetName = GetNameWithIndex("New", resultsCounter);
 
-        sql << oldResultSetName << " = select * from (select * from `content`" << keyFilter << " order by `modified` desc limit 1UL) where 0L < `version`;" << std::endl;
+        sql << oldResultSetName << " = select * from `current`" << keyFilter << ';' << std::endl;
         sql << newResultSetName << " = select" << std::endl;
         sql << '\t' << keyParamName << " as `key`," << std::endl;
         sql << '\t' << "if(`version` > 0L, `created`, $Revision) as `created`," << std::endl;
@@ -274,7 +270,8 @@ struct TPut : public TOperation {
             sql << " where " << txnFilter << ')';
         sql << ';' << std::endl;
 
-        sql << "insert into `content` select * from " << newResultSetName << ';' << std::endl;
+        sql << (update ? "update `current` on" : "upsert into `current`") << " select * from " << newResultSetName << ';' << std::endl;
+        sql << "insert into `history` select * from " << newResultSetName << ';' << std::endl;
 
         if (GetPrevious || NotifyWatchtower || update) {
             if (resultsCounter)
@@ -376,7 +373,7 @@ struct TDeleteRange : public TOperation {
             sql << " where " << txnFilter;
         sql << ';' << std::endl;
 
-        sql << "insert into `content`" << std::endl;
+        sql << "insert into `history`" << std::endl;
         sql << "select `key`, `created`, $Revision as `modified`, 0L as `version`, `value`, `lease` from " << oldResultSetName << ';' << std::endl;
 
         sql << "select count(*) from " << oldResultSetName << ';' << std::endl;
@@ -385,6 +382,10 @@ struct TDeleteRange : public TOperation {
                 ++(*resultsCounter);
             sql << "select `key`, `value`, `created`, `modified`, `version`, `lease` from " << oldResultSetName << ';' << std::endl;
         }
+        sql << "delete from `current`" << keyFilter;
+        if (!txnFilter.empty())
+            sql << " and " << txnFilter;
+        sql << ';' << std::endl;
     }
 
     void MakeQueryWithParams(std::ostream& sql, NYdb::TParamsBuilder& params, size_t* paramsCounter = nullptr, size_t* resultsCounter = nullptr, const std::string_view& txnFilter = {}) {
@@ -618,10 +619,10 @@ struct TTxn : public TOperation {
         return fill(Success, rec.success()) + fill(Failure, rec.failure());
     }
 
-    void MakeQueryWithParams(std::ostream& sql, const std::string_view& keyParamName, const std::string_view& keyFilter, NYdb::TParamsBuilder& params, size_t* paramsCounter = nullptr, size_t* resultsCounter = nullptr, const std::string_view& txnFilter = {}) {
+    void MakeQueryWithParams(std::ostream& sql, const std::string_view& keyParamName, bool singleKey, const std::string_view& keyFilter, NYdb::TParamsBuilder& params, size_t* paramsCounter = nullptr, size_t* resultsCounter = nullptr, const std::string_view& txnFilter = {}) {
         ResultIndex = (*resultsCounter)++;
 
-        const auto make = [&sql, &params](std::vector<TRequestOp>& operations, size_t* paramsCounter, size_t* resultsCounter, const std::string_view& keyFilter, const std::string_view& keyParamName, const std::string_view& txnFilter) {
+        const auto make = [&sql, &params](std::vector<TRequestOp>& operations, size_t* paramsCounter, size_t* resultsCounter, const std::string_view& keyFilter, const std::string_view& keyParamName, bool singleKey, const std::string_view& txnFilter) {
             for (auto& operation : operations) {
                 if (const auto oper = std::get_if<TRange>(&operation))
                     oper->MakeQueryWithParams(sql, keyFilter, params, paramsCounter, resultsCounter, txnFilter);
@@ -630,7 +631,7 @@ struct TTxn : public TOperation {
                 else if (const auto oper = std::get_if<TDeleteRange>(&operation))
                     oper->MakeQueryWithParams(sql, keyFilter, params, paramsCounter, resultsCounter, txnFilter);
                 else if (const auto oper = std::get_if<TTxn>(&operation))
-                    oper->MakeQueryWithParams(sql, keyParamName, keyFilter, params, paramsCounter, resultsCounter, txnFilter);
+                    oper->MakeQueryWithParams(sql, keyParamName, singleKey, keyFilter, params, paramsCounter, resultsCounter, txnFilter);
             }
         };
 
@@ -646,7 +647,7 @@ struct TTxn : public TOperation {
 
         if (Compares.empty()) {
             sql << "select true;" << std::endl;
-            make(Success, paramsCounter, resultsCounter, keyFilter, keyParamName, txnFilter);
+            make(Success, paramsCounter, resultsCounter, keyFilter, keyParamName, singleKey, txnFilter);
         } else {
             std::ostringstream thenExtra, elseExtra;
             if (!txnFilter.empty()) {
@@ -656,12 +657,15 @@ struct TTxn : public TOperation {
             thenExtra << '(' << thenFilter.view() << ')';
             elseExtra << '(' << elseFilter.view() << ')';
 
-            sql << "select nvl(bool_and(`cmp`), " << (def ? "true" : "false") << ") from (select " << (def ? '0' : '1') << "UL = count(*) as `cmp` from (";
-            MakeSlice(keyFilter, sql, params, paramsCounter);
-            sql << ") where " << (def ? elseFilter : thenFilter).view() << " group by `key`);" << std::endl;
+            if (!singleKey)
+                 sql << "select bool_and(`cmp`) as`cmp` from (";
+            sql << "select nvl(" << (def ? '0' : '1') << "UL = count(*), " << (def ? "true" : "false") << ") as `cmp` from `current`" << keyFilter << " and " << (def ? elseFilter : thenFilter).view();
+            if (!singleKey)
+                sql << " group by `key`)";
+            sql << ';' << std::endl;
 
-            make(Success, paramsCounter, resultsCounter, keyFilter, keyParamName, thenExtra.view());
-            make(Failure, paramsCounter, resultsCounter, keyFilter, keyParamName, elseExtra.view());
+            make(Success, paramsCounter, resultsCounter, keyFilter, keyParamName, singleKey, thenExtra.view());
+            make(Failure, paramsCounter, resultsCounter, keyFilter, keyParamName, singleKey, elseExtra.view());
         }
     }
 
@@ -709,9 +713,8 @@ struct TTxn : public TOperation {
                     std::ostringstream stub;
                     def = j->MakeQueryWithParams(sql, stub, params, paramsCounter) && def;
                 }
-                sql << "), " << (def ? "true" : "false") << ") as `cmp` from (";
-                MakeSlice(i->first.first, i->first.second, sql, params, paramsCounter);
-                sql << ')';
+                sql << "), " << (def ? "true" : "false") << ") as `cmp` from `current` where ";
+                MakeSimplePredicate(i->first.first, i->first.second, sql, params, paramsCounter);
             }
 
             if (manyRanges)
@@ -781,6 +784,7 @@ protected:
     virtual std::string ParseGrpcRequest() = 0;
     virtual void MakeQueryWithParams(std::ostream& sql, NYdb::TParamsBuilder& params) = 0;
     virtual void ReplyWith(const NYdb::TResultSets& results, const TActorContext& ctx) = 0;
+    virtual bool ExecuteAsync() const { return false; }
 
     i64 Revision = 0LL;
 };
@@ -804,7 +808,7 @@ public:
             this->Die(ctx);
         } else {
             this->Become(&TEtcdRequestGrpc::StateFunc);
-            SendDatabaseRequest();
+            SendDatabaseRequest(ctx);
         }
     }
 private:
@@ -814,7 +818,7 @@ private:
 
     virtual std::ostream& Dump(std::ostream& out) const = 0;
 
-    void SendDatabaseRequest() {
+    TQueryClient::TQueryResultFunc GetQueryResultFunc() {
         std::ostringstream sql;
         NYdb::TParamsBuilder params;
         sql << "-- " << GetRequestName() << " >>>>" << std::endl;
@@ -823,17 +827,30 @@ private:
         sql << "-- " << GetRequestName() << " <<<<" << std::endl;
 //      std::cout << std::endl << sql.view() << std::endl;
 
-        TQueryClient::TQueryResultFunc callback = [query = sql.str(), args = params.Build()](TQueryClient::TSession session) -> TAsyncExecuteQueryResult {
-            return session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx(), args);
+        return [query = sql.str(), args = params.Build()](TQueryClient::TSession session) -> TAsyncExecuteQueryResult {
+            return session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx(), args, TExecuteQuerySettings().StatsMode(EStatsMode::Basic));
         };
-        const auto my = this->SelfId();
-        const auto ass = NActors::TlsActivationContext->ExecutorThread.ActorSystem;
-        Stuff->Client->RetryQuery(std::move(callback)).Subscribe([my, ass](const auto& future) {
-            if (const auto res = future.GetValueSync(); res.IsSuccess())
-                ass->Send(my, new NEtcd::TEvQueryResult(res.GetResultSets()));
-            else
-                ass->Send(my, new NEtcd::TEvQueryError(res.GetIssues()));
-        });
+    }
+
+    void SendDatabaseRequest(const TActorContext& ctx) {
+        if (this->ExecuteAsync()) {
+            Stuff->Client->RetryQuery(GetQueryResultFunc()).Subscribe([name = GetRequestName()](const auto& future) {
+                if (const auto res = future.GetValue(); res.IsSuccess())
+                    std::cout << name << " finished succesfully." << std::endl;
+                else
+                    std::cout << name << " finished with errors: " << res.GetIssues().ToString() << std::endl;
+            });
+            ctx.Send(this->SelfId(), new NEtcd::TEvQueryResult);
+        } else {
+            Stuff->Client->RetryQuery(GetQueryResultFunc()).Subscribe([my = this->SelfId(), stuff = TSharedStuff::TWeakPtr(Stuff)](const auto& future) {
+                if (const auto lock = stuff.lock()) {
+                    if (const auto res = future.GetValue(); res.IsSuccess())
+                        lock->ActorSystem->Send(my, new NEtcd::TEvQueryResult(res.GetResultSets()));
+                    else
+                        lock->ActorSystem->Send(my, new NEtcd::TEvQueryError(res.GetIssues()));
+                }
+            });
+        }
     }
 
     STFUNC(StateFunc) {
@@ -1021,12 +1038,12 @@ private:
         Txn.GetKeys(keys);
         size_t resultsCounter = 0U, paramsCounter = 0U;
         if (keys.empty()) {
-            return Txn.MakeQueryWithParams(sql, {}, {}, params, &resultsCounter, &paramsCounter);
+            return Txn.MakeQueryWithParams(sql, {}, true, {}, params, &resultsCounter, &paramsCounter);
         } else if (1U == keys.size()) {
             std::ostringstream where;
             where << " where ";
             const auto& keyParamName = MakeSimplePredicate(keys.cbegin()->first, keys.cbegin()->second, where, params);
-            return Txn.MakeQueryWithParams(sql, keyParamName, where.view(), params, &resultsCounter, &paramsCounter);
+            return Txn.MakeQueryWithParams(sql, keyParamName, keys.cbegin()->second.empty(), where.view(), params, &resultsCounter, &paramsCounter);
         };
 
         return Txn.MakeQueryWithParams(sql, params, &resultsCounter, &paramsCounter);
@@ -1068,37 +1085,54 @@ private:
 
         const auto &rec = *GetProtoRequest();
         KeyRevision = rec.revision();
+        Physical = rec.physical();
         if (KeyRevision <= 0LL | KeyRevision >= Revision)
             return std::string("invalid revision:" ) += std::to_string(KeyRevision);
         return {};
     }
 
+    bool ExecuteAsync() const final {
+        return !Physical;
+    }
+
     void MakeQueryWithParams(std::ostream& sql, NYdb::TParamsBuilder& params) final {
-        sql << "$Trash = select c.key as key, c.modified as modified from `content` as c inner join (" << std::endl;
-        sql << "select max_by((`key`, `modified`), `modified`) as pair from `content`" << std::endl;
+        sql << "$Trash = select c.key as key, c.modified as modified from `history` as c inner join (" << std::endl;
+        sql << "select max_by((`key`, `modified`), `modified`) as pair from `history`" << std::endl;
         sql << "where `modified` < " << AddParam("Revision", params, KeyRevision) << " and 0L = `version` group by `key`" << std::endl;
         sql << ") as keys on keys.pair.0 = c.key where c.modified <= keys.pair.1;" << std::endl;
-        sql << "select count(*) from $Trash;" << std::endl;
-        sql << "delete from `content` on select * from $Trash;" << std::endl;
+        sql << "delete from `history` on select * from $Trash;" << std::endl;
+        if (Physical) {
+            sql << "select count(*) from $Trash;" << std::endl;
+        }
     }
 
     void ReplyWith(const NYdb::TResultSets& results, const TActorContext& ctx) final {
-        auto parser = NYdb::TResultSetParser(results.front());
-        const auto erased = parser.TryNextRow() ? NYdb::TValueParser(parser.GetValue(0)).GetUint64() : 0ULL;
-        if (!erased)
-            TryToRollbackRevision();
+        Dump(std::cout);
+        if (Physical) {
+            auto parser = NYdb::TResultSetParser(results.front());
+            const auto erased = parser.TryNextRow() ? NYdb::TValueParser(parser.GetValue(0)).GetUint64() : 0ULL;
+            if (!erased)
+                TryToRollbackRevision();
+
+            std::cout << '=' << erased << std::endl;
+        } else {
+            std::cout << " is executing asynchronously." << std::endl;
+        }
 
         etcdserverpb::CompactionResponse response;
         response.mutable_header()->set_revision(Revision);
-        Dump(std::cout) << '=' << erased << std::endl;
         return Reply(response, ctx);
     }
 
     std::ostream& Dump(std::ostream& out) const final {
-        return out << "Compact(" << KeyRevision << ')';
+        out << "Compact(" << KeyRevision;
+        if (Physical)
+            out << ",physical";
+        return out << ')';
     }
 
     i64 KeyRevision;
+    bool Physical;
 };
 
 class TLeaseGrantRequest
@@ -1163,16 +1197,15 @@ private:
 
         sql << "select count(*) > 0UL from `leases` where " << leaseParamName << " = `id`;" << std::endl;
 
-        sql << "$Victims = ";
-        MakeSimpleSlice(sql, params);
-        sql << " and " << leaseParamName << " = `lease`;" << std::endl;
-
-        sql << "insert into `content`" << std::endl;
-        sql << "select `key`, `created`, " << revisionParamName << " as `modified`, 0L as `version`, `value`, `lease` from $Victims;" << std::endl;
+        sql << "$Victims = select `key`, `value`, `created`, `modified`, `version`, `lease` from `current` view `lease` where " << leaseParamName << " = `lease`;" << std::endl;
 
         if constexpr (NotifyWatchtower) {
             sql << "select `key`, `value`, `created`, `modified`, `version`, `lease` from $Victims;" << std::endl;
         }
+
+        sql << "insert into `history`" << std::endl;
+        sql << "select `key`, `created`, " << revisionParamName << " as `modified`, 0L as `version`, `value`, `lease` from $Victims;" << std::endl;
+        sql << "delete from `current` on select `key` from $Victims;" << std::endl;
         sql << "delete from `leases` where " << leaseParamName << " = `id`;" << std::endl;
     }
 
@@ -1237,9 +1270,7 @@ private:
 
         sql << "select `ttl`, `ttl` - unwrap(cast(CurrentUtcDatetime(`id`) - `updated` as Int64) / 1000000L) as `granted` from `leases` where " << leaseParamName << " = `id`;" << std::endl;
         if (Keys) {
-            sql << "select `key` from (";
-            MakeSimpleSlice(sql, params);
-            sql << " and " << leaseParamName << " = `lease`);" << std::endl;
+            sql << "select `key` from `current` where " << leaseParamName << " = `lease`;" << std::endl;
         }
     }
 
@@ -1341,10 +1372,6 @@ std::string MakeSimplePredicate(const std::string_view& key, const std::string_v
     else
         sql << "`key` between " << keyParamName << " and " << AddParam("RangeEnd", params, rangeEnd, paramsCounter);
     return keyParamName;
-}
-
-void MakeSimpleSlice(std::ostream& sql, NYdb::TParamsBuilder& params) {
-    MakeSlice(std::string_view(), sql, params);
 }
 
 NActors::IActor* MakeRange(std::unique_ptr<NKikimr::NGRpcService::IRequestCtx> p, TSharedStuff::TPtr stuff) {

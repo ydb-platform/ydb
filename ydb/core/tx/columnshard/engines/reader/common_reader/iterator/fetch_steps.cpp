@@ -48,29 +48,33 @@ bool TAllocateMemoryStep::TFetchingStepAllocation::DoOnAllocated(std::shared_ptr
         guard->Release();
         return false;
     }
-    if (StageIndex == EStageFeaturesIndexes::Accessors) {
+    if (StageIndex == NArrow::NSSA::IMemoryCalculationPolicy::EStage::Accessors) {
         data->MutableStageData().SetAccessorsGuard(std::move(guard));
     } else {
         data->RegisterAllocationGuard(std::move(guard));
     }
-    Step.Next();
+    if (NeedNextStep) {
+        Step.Next();
+    }
     FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, data->AddEvent("fmalloc"));
     auto task = std::make_shared<TStepAction>(data, std::move(Step), data->GetContext()->GetCommonContext()->GetScanActorId(), false);
     NConveyor::TScanServiceOperator::SendTaskToExecute(task, data->GetContext()->GetCommonContext()->GetConveyorProcessId());
     return true;
 }
 
-TAllocateMemoryStep::TFetchingStepAllocation::TFetchingStepAllocation(
-    const std::shared_ptr<IDataSource>& source, const ui64 mem, const TFetchingScriptCursor& step, const EStageFeaturesIndexes stageIndex)
+TAllocateMemoryStep::TFetchingStepAllocation::TFetchingStepAllocation(const std::shared_ptr<IDataSource>& source, const ui64 mem,
+    const TFetchingScriptCursor& step, const NArrow::NSSA::IMemoryCalculationPolicy::EStage stageIndex, const bool needNextStep)
     : TBase(mem)
     , Source(source)
     , Step(step)
     , TasksGuard(source->GetContext()->GetCommonContext()->GetCounters().GetResourcesAllocationTasksGuard())
-    , StageIndex(stageIndex) {
+    , StageIndex(stageIndex)
+    , NeedNextStep(needNextStep) {
 }
 
 void TAllocateMemoryStep::TFetchingStepAllocation::DoOnAllocationImpossible(const TString& errorMessage) {
     auto sourcePtr = Source.lock();
+    AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "allocation_impossible")("error", errorMessage);
     if (sourcePtr) {
         FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, sourcePtr->AddEvent("fail_malloc"));
         sourcePtr->GetContext()->GetCommonContext()->AbortWithError(

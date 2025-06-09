@@ -125,6 +125,7 @@ struct aws_h2_connection {
         uint64_t outgoing_timestamp_ns;
         /* Timestamp when connection has data to receive, which is when there is an active stream */
         uint64_t incoming_timestamp_ns;
+
     } thread_data;
 
     /* Any thread may touch this data, but the lock must be held (unless it's an atomic) */

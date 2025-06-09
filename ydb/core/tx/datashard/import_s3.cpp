@@ -314,10 +314,12 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
                     // Each block contains at least one row of data with '\n',
                     // so we will always get some data from DataController.
                     ReadyInputBytes += processedAfter - processedBefore;
-                    DataController->Feed(TString(block->Data(), block->Size()), Last);
-                    const EDataStatus status = DataController->TryGetData(data, error);
-                    Y_ENSURE(status == READY_DATA);
-                    return status;
+                    if (block->Size()) {
+                        DataController->Feed(TString(block->Data(), block->Size()), Last);
+                        const EDataStatus status = DataController->TryGetData(data, error);
+                        Y_ENSURE(status == READY_DATA);
+                    }
+                    return READY_DATA;
                 } else {
                     return NOT_ENOUGH_DATA;
                 }
@@ -519,6 +521,13 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
         ETag = result.GetResult().GetETag();
         ContentLength = result.GetResult().GetContentLength();
 
+        if (!ContentLength && Settings.EncryptionSettings.EncryptedBackup) {
+            // Encrypted file can not have zero length
+            const TString error = "File is corrupted";
+            IMPORT_LOG_E(error);
+            return Finish(false, error);
+        }
+
         if (Checksum) {
             HeadObject(ChecksumKey(Settings.GetDataKey(DataFormat, ECompressionCodec::None)));
             Become(&TThis::StateDownloadChecksum);
@@ -664,8 +673,14 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
         }
 
         RequestBuilder.New(TableInfo, Scheme);
-        TMemoryPool pool(256);
-        while (ProcessData(data, pool));
+
+        // Special case:
+        // in encrypted file we have nonzero bytes on input, but can still have zero bytes on output
+        // In this case TryGetData() returns READY_DATA
+        if (data) {
+            TMemoryPool pool(256);
+            while (ProcessData(data, pool));
+        }
 
         if (const auto processed = Reader->ReadyBytes()) { // has progress
             ProcessedBytes += processed;

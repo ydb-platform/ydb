@@ -197,6 +197,20 @@ DEFINE_REFCOUNTED_TYPE(TJournalChunkWriterConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TDynamicJournalWriterConfig
+    : public virtual NYTree::TYsonStruct
+{
+    std::optional<bool> ValidateErasureCoding;
+
+    REGISTER_YSON_STRUCT(TDynamicJournalWriterConfig);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TDynamicJournalWriterConfig)
+
+////////////////////////////////////////////////////////////////////////////////
+
 struct TJournalWriterConfig
     : public TJournalChunkWriterConfig
 {
@@ -210,6 +224,7 @@ struct TJournalWriterConfig
     TDuration PrerequisiteTransactionProbePeriod;
 
     bool EnableChecksums;
+    bool ValidateErasureCoding;
 
     // For testing purposes only.
     bool DontClose;
@@ -217,6 +232,9 @@ struct TJournalWriterConfig
     bool DontPreallocate;
 
     std::optional<TDuration> OpenDelay;
+
+    TJournalWriterConfigPtr ApplyDynamic(const TDynamicJournalWriterConfigPtr& dynamicConfig) const;
+    void ApplyDynamicInplace(const TDynamicJournalWriterConfigPtr& dynamicConfig);
 
     REGISTER_YSON_STRUCT(TJournalWriterConfig);
 
@@ -227,10 +245,9 @@ DEFINE_REFCOUNTED_TYPE(TJournalWriterConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TJournalChunkWriterOptions
+struct TJournalChunkWriterOptions
     : public NYTree::TYsonStruct
 {
-public:
     int ReplicationFactor;
     NErasure::ECodec ErasureCodec;
 

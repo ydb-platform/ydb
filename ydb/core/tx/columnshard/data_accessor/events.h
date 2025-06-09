@@ -3,11 +3,11 @@
 #include "abstract/collector.h"
 
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
 
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/actors/core/event_local.h>
-#include <ydb/core/tx/columnshard/common/path_id.h>
 
 namespace NKikimr::NOlap {
 class IGranuleDataAccessor;
@@ -60,8 +60,7 @@ public:
 
     explicit TEvRegisterController(std::unique_ptr<IGranuleDataAccessor>&& accessor, const bool isUpdate)
         : Controller(std::move(accessor))
-        , IsUpdateFlag(isUpdate)
-    {
+        , IsUpdateFlag(isUpdate) {
     }
 };
 
@@ -76,18 +75,17 @@ public:
     }
 };
 
-class TEvAskTabletDataAccessors: public NActors::TEventLocal<TEvAskTabletDataAccessors, NColumnShard::TEvPrivate::EEv::EvAskTabletDataAccessors> {
+class TEvAskTabletDataAccessors
+    : public NActors::TEventLocal<TEvAskTabletDataAccessors, NColumnShard::TEvPrivate::EEv::EvAskTabletDataAccessors> {
 private:
-    YDB_ACCESSOR_DEF(std::vector<TPortionInfo::TConstPtr>, Portions);
+    using TPortions = THashMap<TInternalPathId, TPortionsByConsumer>;
+    YDB_ACCESSOR_DEF(TPortions, Portions);
     YDB_READONLY_DEF(std::shared_ptr<NDataAccessorControl::IAccessorCallback>, Callback);
-    YDB_READONLY_DEF(TString, Consumer);
 
 public:
-    explicit TEvAskTabletDataAccessors(const std::vector<TPortionInfo::TConstPtr>& portions,
-        const std::shared_ptr<NDataAccessorControl::IAccessorCallback>& callback, const TString& consumer)
-        : Portions(portions)
-        , Callback(callback)
-        , Consumer(consumer) {
+    explicit TEvAskTabletDataAccessors(TPortions&& portions, const std::shared_ptr<NDataAccessorControl::IAccessorCallback>& callback)
+        : Portions(std::move(portions))
+        , Callback(callback) {
     }
 };
 

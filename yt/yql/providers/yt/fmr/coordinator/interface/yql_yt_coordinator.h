@@ -11,6 +11,7 @@ struct THeartbeatRequest {
     ui32 WorkerId;
     TString VolatileId;
     std::vector<TTaskState::TPtr> TaskStates;
+    ui64 AvailableSlots = 0;
 };
 // Worker sends requests in loop or long polling
 
@@ -25,7 +26,7 @@ struct TStartOperationRequest {
     TString SessionId;
     TMaybe<TString> IdempotencyKey = Nothing();
     ui32 NumRetries = 1; // Not supported yet
-    TClusterConnection ClusterConnection = {}; // TODO - change to map
+    std::unordered_map<TFmrTableId, TClusterConnection> ClusterConnections = {};
     TMaybe<NYT::TNode> FmrOperationSpec = Nothing();
 };
 
@@ -41,6 +42,7 @@ struct TGetOperationRequest {
 struct TGetOperationResponse {
     EOperationStatus Status;
     std::vector<TFmrError> ErrorMessages = {};
+    std::vector<TTableStats> OutputTablesStats = {};
 };
 
 struct TDeleteOperationRequest {
@@ -56,7 +58,7 @@ struct TGetFmrTableInfoRequest {
 };
 
 struct TGetFmrTableInfoResponse {
-    TTableStats TableStats; // for only one PartId
+    TTableStats TableStats;
     std::vector<TFmrError> ErrorMessages = {};
 };
 

@@ -68,8 +68,19 @@ TLoginProvider::TLoginProvider(const TPasswordComplexity& passwordComplexity,
 TLoginProvider::~TLoginProvider()
 {}
 
-bool TLoginProvider::CheckAllowedName(const TString& name) {
-    return name.find_first_not_of("abcdefghijklmnopqrstuvwxyz0123456789") == std::string::npos;
+bool TLoginProvider::StrongCheckAllowedName(const TString& name) {
+    return !name.empty() && name.find_first_not_of("abcdefghijklmnopqrstuvwxyz0123456789") == std::string::npos;
+}
+
+bool TLoginProvider::BasicCheckAllowedName(const TString& name) {
+    return !name.empty() && name.find_first_not_of("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_") == std::string::npos;
+}
+
+bool TLoginProvider::CheckGroupNameAllowed(const bool strongCheckName, const TString& groupName) {
+    if (strongCheckName) {
+        return StrongCheckAllowedName(groupName);
+    }
+    return BasicCheckAllowedName(groupName);
 }
 
 bool TLoginProvider::CheckPasswordOrHash(bool IsHashedPassword, const TString& user, const TString& password, TString& error) const {
@@ -93,7 +104,7 @@ bool TLoginProvider::CheckPasswordOrHash(bool IsHashedPassword, const TString& u
 TLoginProvider::TBasicResponse TLoginProvider::CreateUser(const TCreateUserRequest& request) {
     TBasicResponse response;
 
-    if (!CheckAllowedName(request.User)) {
+    if (!StrongCheckAllowedName(request.User)) {
         response.Error = "Name is not allowed";
         return response;
     }
@@ -192,7 +203,7 @@ TLoginProvider::TRemoveUserResponse TLoginProvider::RemoveUser(const TString& us
 TLoginProvider::TBasicResponse TLoginProvider::CreateGroup(const TCreateGroupRequest& request) {
     TBasicResponse response;
 
-    if (request.Options.CheckName && !CheckAllowedName(request.Group)) {
+    if (!CheckGroupNameAllowed(request.Options.StrongCheckName, request.Group)) {
         response.Error = "Name is not allowed";
         return response;
     }
@@ -265,7 +276,7 @@ TLoginProvider::TBasicResponse TLoginProvider::RemoveGroupMembership(const TRemo
 TLoginProvider::TRenameGroupResponse TLoginProvider::RenameGroup(const TRenameGroupRequest& request) {
     TRenameGroupResponse response;
 
-    if (request.Options.CheckName && !CheckAllowedName(request.NewName)) {
+    if (!CheckGroupNameAllowed(request.Options.StrongCheckName, request.Group)) {
         response.Error = "Name is not allowed";
         return response;
     }

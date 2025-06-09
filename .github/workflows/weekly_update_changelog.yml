@@ -57,7 +57,7 @@ jobs:
         run: |
           REF_NAME=${{ matrix.branch }}
           echo "::notice:: branch = $REF_NAME, date = $LAST_WEEK_DATE"
-          PRS=$(gh pr list --state merged --json number,title,baseRefName,mergedAt --jq ".[] | select(.baseRefName == \"$REF_NAME\" and .mergedAt >= \"$LAST_WEEK_DATE\") | {id: .number}" | jq -c -s ".")
+          PRS=$(gh pr list -L 1000 --state merged --json number,title,baseRefName,mergedAt --jq ".[] | select(.baseRefName == \"$REF_NAME\" and .mergedAt >= \"$LAST_WEEK_DATE\") | {id: .number}" | jq -c -s ".")
 
           if [ -z "$PRS" ]; then
             PRS="[]"

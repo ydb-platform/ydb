@@ -173,6 +173,7 @@ public:
     ui64 LockId = 0;
     ui32 LockNodeId = 0;
     TLockInfo::TPtr Lock;
+    bool LockInconsistent = false;
 
     // note that will be always overwritten by values from request
     NKikimrDataEvents::EDataFormat Format = NKikimrDataEvents::FORMAT_CELLVEC;

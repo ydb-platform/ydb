@@ -1,3 +1,4 @@
+#include <fmt/format.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
 #include <ydb/core/tx/datashard/datashard_failpoints.h>
@@ -2494,6 +2495,289 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
             )", IsOlap ? "COLUMN" : "ROW"), NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
             UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Invalid type for column: Value.", result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(CreateAsSelectPath, UseTablePathPrefix) {
+        const auto dirPath = UseTablePathPrefix ? "" : "/Root/test/";
+        const auto pragma = UseTablePathPrefix ? "PRAGMA TablePathPrefix(\"/Root/test\");" : "";
+
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
+        appConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
+        appConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
+        auto settings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetWithSampleTables(false)
+            .SetEnableTempTables(true)
+            .SetAuthToken("user0@builtin");;
+        TKikimrRunner kikimr(settings);
+
+        {
+            auto driverConfig = TDriverConfig()
+            .SetEndpoint(kikimr.GetEndpoint())
+                .SetAuthToken("root@builtin");
+            auto driver = TDriver(driverConfig);
+            auto schemeClient = NYdb::NScheme::TSchemeClient(driver);
+
+            {
+                auto result = schemeClient.MakeDirectory("/Root/test").ExtractValueSync();
+                AssertSuccessResult(result);
+            }
+            {
+                NYdb::NScheme::TPermissions permissions("user0@builtin",
+                    {"ydb.generic.read", "ydb.generic.write"}
+                );
+                auto result = schemeClient.ModifyPermissions("/Root/test",
+                    NYdb::NScheme::TModifyPermissionsSettings().AddGrantPermissions(permissions)
+                ).ExtractValueSync();
+                AssertSuccessResult(result);
+            }
+        }
+
+        const TString query = std::format(R"(
+            {1}
+            CREATE TABLE `{0}Source` (
+                Col1 Uint64 NOT NULL,
+                Col2 Int32,
+                PRIMARY KEY (Col1)
+            );
+        )", dirPath, pragma);
+
+        auto client = kikimr.GetQueryClient();
+        auto result = client.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+        {
+            auto prepareResult = client.ExecuteQuery(std::format(R"(
+                {1}
+                REPLACE INTO `{0}Source` (Col1, Col2) VALUES
+                    (1u, 1), (100u, 100), (10u, 10);
+            )", dirPath, pragma), NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());
+        }
+
+        {
+            auto prepareResult = client.ExecuteQuery(std::format(R"(
+                {1}
+                CREATE TABLE `{0}Destination1` (
+                    PRIMARY KEY (Col1)
+                )
+                AS SELECT Col2 As Col1, Col1 As Col2
+                FROM `{0}Source`;
+            )", dirPath, pragma), NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());
+        }
+
+        {
+            auto it = client.StreamExecuteQuery(std::format(R"(
+                {1}
+                SELECT Col1, Col2 FROM `{0}Destination1`;
+            )", dirPath, pragma), NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+            TString output = StreamResultToYson(it);
+            CompareYson(output, R"([[[1];[1u]];[[10];[10u]];[[100];[100u]]])");
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(UpdateThenDelete, UseSink) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
+        auto settings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetWithSampleTables(true);
+
+        TKikimrRunner kikimr(settings);
+        auto client = kikimr.GetTableClient();
+
+        {
+            const TString query = R"(
+                DECLARE $data AS List<Struct<
+                    Key: String,
+                    Value: String
+                >>;
+
+                UPSERT INTO KeyValue2 SELECT * FROM AS_TABLE($data);
+
+                DELETE FROM KeyValue2 ON SELECT * FROM KeyValue2 AS a LEFT ONLY JOIN AS_TABLE($data) AS b USING (Key);
+            )";
+
+            TTypeBuilder builder;
+            builder
+                .BeginStruct()
+                    .AddMember("Key", TTypeBuilder().Primitive(NYdb::EPrimitiveType::String).Build())
+                    .AddMember("Value", TTypeBuilder().Primitive(NYdb::EPrimitiveType::String).Build())
+                .EndStruct();
+
+            auto params = client.GetParamsBuilder()
+                .AddParam("$data")
+                    .EmptyList(builder.Build())
+                    .Build()
+                .Build();
+
+            auto session = client.CreateSession().GetValueSync().GetSession();
+            auto result = session.ExecuteDataQuery(query, NYdb::NTable::TTxControl::BeginTx().CommitTx(), std::move(params)).ExtractValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+        }
+        {
+            const TString query = R"(
+                SELECT * FROM KeyValue2;
+            )";
+
+            auto session = client.CreateSession().GetValueSync().GetSession();
+            auto result = session.ExecuteDataQuery(query, NYdb::NTable::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+            Cerr << FormatResultSetYson(result.GetResultSet(0)) << Endl;
+            UNIT_ASSERT_VALUES_EQUAL(0, result.GetResultSet(0).RowsCount());
+        }
+    }
+
+    Y_UNIT_TEST(ExecuteWriteQuery) {
+        using namespace fmt::literals;
+
+        TKikimrRunner kikimr;
+        auto client = kikimr.GetQueryClient();
+
+        {   // Just generate table
+            const auto sql = fmt::format(R"(
+                CREATE TABLE test_table (
+                    PRIMARY KEY (id)
+                ) AS SELECT
+                    ROW_NUMBER() OVER w AS id, data
+                FROM
+                    AS_TABLE(ListReplicate(<|data: '{data}'|>, 500000))
+                WINDOW
+                    w AS (ORDER BY data))",
+                "data"_a = std::string(137, 'a')
+            );
+            const auto result = client.ExecuteQuery(sql, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        Cerr << TInstant::Now() << " --------------- Start update ---------------\n";
+
+        const auto hangingResult = client.ExecuteQuery(R"(
+            UPDATE test_table SET data = "a"
+        )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(hangingResult.GetStatus(), EStatus::SUCCESS, hangingResult.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(CreateAsSelectView) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        appConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
+        appConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
+        auto settings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        Tests::NCommon::TLoggerInit(kikimr).SetComponents({ NKikimrServices::TX_COLUMNSHARD }, "CS").Initialize();
+
+        auto client = kikimr.GetQueryClient();
+
+        {
+            auto result = client.ExecuteQuery( R"(
+                CREATE TABLE `l_source` (
+                    id Uint64,
+                    num Uint64,
+                    unused String,
+                    PRIMARY KEY (id)
+                );
+
+                CREATE TABLE `r_source` (
+                    id Uint64,
+                    id2 Uint64,
+                    unused String,
+                    PRIMARY KEY (id)
+                );
+            )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = client.ExecuteQuery( R"(
+                CREATE VIEW `l`
+                with (security_invoker = TRUE)
+                AS (
+                    SELECT
+                        id,
+                        num
+                    FROM
+                        `l_source`
+                );
+
+                CREATE VIEW `r` 
+                with (security_invoker = TRUE)
+                AS (
+                    SELECT
+                        id,
+                        id2
+                    FROM
+                        `r_source`
+                );
+            )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto prepareResult = client.ExecuteQuery(R"(
+                INSERT INTO `/Root/l_source` (id, num) VALUES
+                    (1u, 1u), (100u, 100u), (10u, 10u);
+                INSERT INTO `/Root/r_source` (id, id2) VALUES
+                    (1u, 1u), (100u, 100u), (10u, 10u);
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());
+        }
+
+        {
+            auto prepareResult = client.ExecuteQuery(R"(
+                CREATE TABLE `table1`
+                    (PRIMARY KEY (id))
+                AS (
+                    SELECT
+                        id, num
+                    FROM `l`
+                )
+            )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());
+        }
+
+        {
+            auto it = client.StreamExecuteQuery(R"(
+                SELECT id, num FROM `/Root/table1` ORDER BY id;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+            TString output = StreamResultToYson(it);
+            CompareYson(output, R"([[[1u];[1u]];[[10u];[10u]];[[100u];[100u]]])");
+        }
+
+        {
+            auto prepareResult = client.ExecuteQuery(R"(
+                CREATE TABLE `table2`
+                    (PRIMARY KEY (id2))
+                AS (
+                    SELECT
+                        r.id2 AS id2,
+                        sum(l.num) AS num
+                    FROM `l` AS l
+                    LEFT JOIN `r` AS r ON l.id = r.id
+                    GROUP BY r.id2
+                )
+            )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());
+        }
+
+        {
+            auto it = client.StreamExecuteQuery(R"(
+                SELECT id2, num FROM `/Root/table2` ORDER BY id2;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+            TString output = StreamResultToYson(it);
+            CompareYson(output, R"([[[1u];[1u]];[[10u];[10u]];[[100u];[100u]]])");
         }
     }
 }

@@ -2,7 +2,6 @@
 #include "../datashard_impl.h"
 #include "../range_ops.h"
 #include "../scan_common.h"
-#include "../upload_stats.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
@@ -21,12 +20,30 @@
 #include <util/string/builder.h>
 
 namespace NKikimr::NDataShard {
+using namespace NKMeans;
 
-class TSampleKScan final: public TActor<TSampleKScan>, public NTable::IScan {
+/*
+ * TSampleKScan performs K-sampling over a single table shard to extract a probabilistic sample
+ * of embeddings or rows. This is used as a lightweight pre-clustering step (e.g. centroid seeding).
+ *
+ * Request:
+ * - The client sends TEvSampleKRequest with:
+ *   - K: the number of rows to sample
+ *   - KeyRange: optional key range within the shard to restrict the scan
+ *
+ * Execution Flow:
+ * - TSampleKScan performs a linear scan over the specified key range:
+ *   - For each row, it computes an inclusion probability based on the max probability bound
+ *   - Uses reservoir or weighted sampling to probabilistically select up to K rows
+ *   - Sampled rows and their inclusion probabilities are retained in memory
+ *
+ * Response:
+ * - TEvSampleKResponse is returned when scanning completes:
+ *   - Contains up to K sampled rows (serialized), with associated probabilities
+ */
+
+class TSampleKScan final: public TActor<TSampleKScan>, public IActorExceptionHandler, public NTable::IScan {
 protected:
-    const TAutoPtr<TEvDataShard::TEvSampleKResponse> Response;
-    const TActorId ResponseActorId;
-
     const TTags ScanTags;
     const TVector<NScheme::TTypeInfo> KeyTypes;
 
@@ -34,27 +51,21 @@ protected:
     const TSerializedTableRange RequestedRange;
     const ui64 K;
 
-    struct TProbability {
-        ui64 P = 0;
-        ui64 I = 0;
-
-        auto operator<=>(const TProbability&) const noexcept = default;
-    };
-
     ui64 TabletId = 0;
     ui64 BuildId = 0;
 
     ui64 ReadRows = 0;
     ui64 ReadBytes = 0;
 
-    // We are using binary heap, because we don't want to do batch processing here,
-    // serialization is more expensive than compare
-    ui64 MaxProbability = 0;
-    TReallyFastRng32 Rng;
-    std::vector<TProbability> MaxRows;
-    std::vector<TString> DataRows;
+    TSampler Sampler;
 
     IDriver* Driver = nullptr;
+    NYql::TIssues Issues;
+
+    TLead Lead;
+
+    const TAutoPtr<TEvDataShard::TEvSampleKResponse> Response;
+    const TActorId ResponseActorId;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -65,8 +76,6 @@ public:
                  const TActorId& responseActorId, TAutoPtr<TEvDataShard::TEvSampleKResponse>&& response,
                  const TSerializedTableRange& range)
         : TActor(&TThis::StateWork)
-        , Response(std::move(response))
-        , ResponseActorId(responseActorId)
         , ScanTags(BuildTags(table, request.GetColumns()))
         , KeyTypes(table.KeyColumnTypes)
         , TableRange(table.Range)
@@ -74,13 +83,25 @@ public:
         , K(request.GetK())
         , TabletId(tabletId)
         , BuildId(request.GetId())
-        , MaxProbability(request.GetMaxProbability())
-        , Rng(request.GetSeed()) 
+        , Sampler(request.GetK(), request.GetSeed(), request.GetMaxProbability())
+        , Response(std::move(response))
+        , ResponseActorId(responseActorId)
     {
         LOG_I("Create " << Debug());
-    }
 
-    ~TSampleKScan() final = default;
+        auto scanRange = Intersect(KeyTypes, RequestedRange.ToTableRange(), TableRange.ToTableRange());
+
+        if (scanRange.From) {
+            auto seek = scanRange.InclusiveFrom ? NTable::ESeek::Lower : NTable::ESeek::Upper;
+            Lead.To(ScanTags, scanRange.From, seek);
+        } else {
+            Lead.To(ScanTags, {}, NTable::ESeek::Lower);
+        }
+
+        if (scanRange.To) {
+            Lead.Until(scanRange.To, scanRange.InclusiveTo);
+        }
+    }
 
     TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme>) final {
         TActivationContext::AsActorContext().RegisterWithSameMailbox(this);
@@ -93,89 +114,88 @@ public:
     }
 
     EScan Seek(TLead& lead, ui64 seq) final {
-        Y_ENSURE(seq == 0);
-        LOG_D("Seek " << Debug());
+        LOG_D("Seek " << seq << " " << Debug());
 
-        auto scanRange = Intersect(KeyTypes, RequestedRange.ToTableRange(), TableRange.ToTableRange());
-
-        if (scanRange.From) {
-            auto seek = scanRange.InclusiveFrom ? NTable::ESeek::Lower : NTable::ESeek::Upper;
-            lead.To(ScanTags, scanRange.From, seek);
-        } else {
-            lead.To(ScanTags, {}, NTable::ESeek::Lower);
-        }
-
-        if (scanRange.To) {
-            lead.Until(scanRange.To, scanRange.InclusiveTo);
-        }
+        lead = Lead;
 
         return EScan::Feed;
     }
 
     EScan Feed(TArrayRef<const TCell> key, const TRow& row) final {
-        LOG_T("Feed key " << DebugPrintPoint(KeyTypes, key, *AppData()->TypeRegistry) << " " << Debug());
+        LOG_T("Feed " << Debug());
+
         ++ReadRows;
         ReadBytes += CountBytes(key, row);
 
-        const auto probability = GetProbability();
-        if (probability > MaxProbability) {
-            return EScan::Feed;
-        }
+        Sampler.Add([&row](){
+            return TSerializedCellVec::Serialize(*row);
+        });
 
-        if (DataRows.size() < K) {
-            MaxRows.push_back({probability, DataRows.size()});
-            DataRows.emplace_back(TSerializedCellVec::Serialize(*row));
-            if (DataRows.size() == K) {
-                std::make_heap(MaxRows.begin(), MaxRows.end());
-                MaxProbability = MaxRows.front().P;
-            }
-        } else {
-            // TODO(mbkkt) use tournament tree to make less compare and swaps
-            std::pop_heap(MaxRows.begin(), MaxRows.end());
-            TSerializedCellVec::Serialize(DataRows[MaxRows.back().I], *row);
-            MaxRows.back().P = probability;
-            std::push_heap(MaxRows.begin(), MaxRows.end());
-            MaxProbability = MaxRows.front().P;
-        }
-
-        if (MaxProbability == 0) {
+        if (Sampler.GetMaxProbability() == 0) {
             return EScan::Final;
         }
+
         return EScan::Feed;
     }
 
-    TAutoPtr<IDestructable> Finish(EAbort abort) final {
-        Y_ENSURE(Response);
-        Response->Record.SetReadRows(ReadRows);
-        Response->Record.SetReadBytes(ReadBytes);
-        if (abort == EAbort::None) {
-            FillResponse();
+    EScan Exhausted() final
+    {
+        LOG_D("Exhausted " << Debug());
+
+        return EScan::Final;
+    }
+
+    TAutoPtr<IDestructable> Finish(const std::exception& exc) final
+    {
+        Issues.AddIssue(NYql::TIssue(TStringBuilder()
+            << "Scan failed " << exc.what()));
+        return Finish(EStatus::Exception);
+    }
+
+    TAutoPtr<IDestructable> Finish(EStatus status) final {
+        auto& record = Response->Record;
+        record.SetReadRows(ReadRows);
+        record.SetReadBytes(ReadBytes);
+
+        if (status == EStatus::Exception) {
+            record.SetStatus(NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
+        } else if (status != NTable::EStatus::Done) {
+            record.SetStatus(NKikimrIndexBuilder::EBuildStatus::ABORTED);
         } else {
-            Response->Record.SetStatus(NKikimrIndexBuilder::EBuildStatus::ABORTED);
+            record.SetStatus(NKikimrIndexBuilder::EBuildStatus::DONE);
+            FillResponse();
         }
 
+        NYql::IssuesToMessage(Issues, record.MutableIssues());
+
         if (Response->Record.GetStatus() == NKikimrIndexBuilder::DONE) {
-            LOG_N("Done " << Debug() << " " << Response->Record.ShortDebugString());
+            LOG_N("Done " << Debug() << " " << ToShortDebugString(Response->Record));
         } else {
-            LOG_E("Failed " << Debug() << " " << Response->Record.ShortDebugString());
+            LOG_E("Failed " << Debug() << " " << ToShortDebugString(Response->Record));
         }
         Send(ResponseActorId, Response.Release());
+
         Driver = nullptr;
         PassAway();
         return nullptr;
+    }
+
+    bool OnUnhandledException(const std::exception& exc) final {
+        if (!Driver) {
+            return false;
+        }
+        Driver->Throw(exc);
+        return true;
     }
 
     void Describe(IOutputStream& out) const final {
         out << Debug();
     }
 
-    EScan Exhausted() final {
-        return EScan::Final;
-    }
-
     TString Debug() const {
         return TStringBuilder() << "TSampleKScan TabletId: " << TabletId << " Id: " << BuildId
-            << " K: " << K << " Clusters: " << MaxRows.size();
+            << " K: " << K
+            << " " << Sampler.Debug();
     }
 
 private:
@@ -188,23 +208,15 @@ private:
     }
 
     void FillResponse() {
-        std::sort(MaxRows.begin(), MaxRows.end());
+        auto [maxRows, dataRows] = Sampler.Finish();
+
+        std::sort(maxRows.begin(), maxRows.end());
         auto& record = Response->Record;
-        for (auto& [p, i] : MaxRows) {
+        for (auto& [p, i] : maxRows) {
             record.AddProbabilities(p);
-            record.AddRows(std::move(DataRows[i]));
+            record.AddRows(std::move(dataRows[i]));
         }
         record.SetStatus(NKikimrIndexBuilder::EBuildStatus::DONE);
-    }
-
-    ui64 GetProbability() {
-        while (true) {
-            auto p = Rng.GenRand64();
-            // We exclude max ui64 from generated probabilities, so we can use this value as initial max
-            if (Y_LIKELY(p != std::numeric_limits<ui64>::max())) {
-                return p;
-            }
-        }
     }
 };
 
@@ -240,120 +252,108 @@ void TDataShard::HandleSafe(TEvDataShard::TEvSampleKRequest::TPtr& ev, const TAc
         : GetMvccTxVersion(EMvccTxMode::ReadOnly);
     TScanRecord::TSeqNo seqNo = {request.GetSeqNoGeneration(), request.GetSeqNoRound()};
 
-    auto response = MakeHolder<TEvDataShard::TEvSampleKResponse>();
-    response->Record.SetId(id);
-    response->Record.SetTabletId(TabletID());
-    response->Record.SetRequestSeqNoGeneration(seqNo.Generation);
-    response->Record.SetRequestSeqNoRound(seqNo.Round);
+    try {
+        auto response = MakeHolder<TEvDataShard::TEvSampleKResponse>();
+        response->Record.SetId(id);
+        response->Record.SetTabletId(TabletID());
+        response->Record.SetRequestSeqNoGeneration(seqNo.Generation);
+        response->Record.SetRequestSeqNoRound(seqNo.Round);
 
-    LOG_N("Starting TSampleKScan TabletId: " << TabletID()
-        << " " << request.ShortDebugString()
-        << " row version " << rowVersion);
+        LOG_N("Starting TSampleKScan TabletId: " << TabletID()
+            << " " << request.ShortDebugString()
+            << " row version " << rowVersion);
 
-    // Note: it's very unlikely that we have volatile txs before this snapshot
-    if (VolatileTxManager.HasVolatileTxsAtSnapshot(rowVersion)) {
-        VolatileTxManager.AttachWaitingSnapshotEvent(rowVersion, std::unique_ptr<IEventHandle>(ev.Release()));
-        return;
-    }
-
-    auto badRequest = [&](const TString& error) {
-        response->Record.SetStatus(NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST);
-        auto issue = response->Record.AddIssues();
-        issue->set_severity(NYql::TSeverityIds::S_ERROR);
-        issue->set_message(error);
-    };
-    auto trySendBadRequest = [&] {
-        if (response->Record.GetStatus() == NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST) {
-            LOG_E("Rejecting TSampleKScan bad request TabletId: " << TabletID()
-                << " " << request.ShortDebugString()
-                << " with response " << response->Record.ShortDebugString());
-            ctx.Send(ev->Sender, std::move(response));
-            return true;
-        } else {
-            return false;
-        }
-    };
-
-    // 1. Validating table and path existence
-    if (request.GetTabletId() != TabletID()) {
-        badRequest(TStringBuilder() << "Wrong shard " << request.GetTabletId() << " this is " << TabletID());
-    }
-    if (!IsStateActive()) {
-        badRequest(TStringBuilder() << "Shard " << TabletID() << " is " << State << " and not ready for requests");
-    }
-    const auto pathId = TPathId::FromProto(request.GetPathId());
-    const auto* userTableIt = GetUserTables().FindPtr(pathId.LocalPathId);
-    if (!userTableIt) {
-        badRequest(TStringBuilder() << "Unknown table id: " << pathId.LocalPathId);
-    }
-    if (trySendBadRequest()) {
-        return;
-    }
-    const auto& userTable = **userTableIt;
-
-    // 2. Validating request fields
-    if (request.HasSnapshotStep() || request.HasSnapshotTxId()) {
-        const TSnapshotKey snapshotKey(pathId, rowVersion.Step, rowVersion.TxId);
-        if (!SnapshotManager.FindAvailable(snapshotKey)) {
-            badRequest(TStringBuilder() << "Unknown snapshot for path id " << pathId.OwnerId << ":" << pathId.LocalPathId
-                << ", snapshot step is " << snapshotKey.Step << ", snapshot tx is " << snapshotKey.TxId);
-        }
-    }
-
-    if (request.GetK() < 1) {
-        badRequest("Should be requested on at least one row");
-    }
-
-    if (request.GetMaxProbability() <= 0) {
-        badRequest("Max probability should be positive");
-    }
-
-    TSerializedTableRange requestedRange;
-    requestedRange.Load(request.GetKeyRange());
-    auto scanRange = Intersect(userTable.KeyColumnTypes, requestedRange.ToTableRange(), userTable.Range.ToTableRange());
-    if (scanRange.IsEmptyRange(userTable.KeyColumnTypes)) {
-        badRequest(TStringBuilder() << " requested range doesn't intersect with table range"
-            << " requestedRange: " << DebugPrintRange(userTable.KeyColumnTypes, requestedRange.ToTableRange(), *AppData()->TypeRegistry)
-            << " tableRange: " << DebugPrintRange(userTable.KeyColumnTypes, userTable.Range.ToTableRange(), *AppData()->TypeRegistry)
-            << " scanRange: " << DebugPrintRange(userTable.KeyColumnTypes, scanRange, *AppData()->TypeRegistry));
-    }
-
-    if (request.ColumnsSize() < 1) {
-        badRequest("Should be requested at least one column");
-    }
-    auto tags = GetAllTags(userTable);
-    for (auto column : request.GetColumns()) {
-        if (!tags.contains(column)) {
-            badRequest(TStringBuilder() << "Unknown column: " << column);
-        }
-    }
-
-    if (trySendBadRequest()) {
-        return;
-    }
-
-    // 3. Creating scan
-    TAutoPtr<NTable::IScan> scan = new TSampleKScan(TabletID(), userTable,
-        request, ev->Sender, std::move(response),
-        requestedRange);
-
-    if (const auto* recCard = ScanManager.Get(id)) {
-        if (recCard->SeqNo == seqNo) {
-            // do no start one more scan
+        // Note: it's very unlikely that we have volatile txs before this snapshot
+        if (VolatileTxManager.HasVolatileTxsAtSnapshot(rowVersion)) {
+            VolatileTxManager.AttachWaitingSnapshotEvent(rowVersion, std::unique_ptr<IEventHandle>(ev.Release()));
             return;
         }
 
-        for (auto scanId : recCard->ScanIds) {
-            CancelScan(userTable.LocalTid, scanId);
-        }
-        ScanManager.Drop(id);
-    }
+        auto badRequest = [&](const TString& error) {
+            response->Record.SetStatus(NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST);
+            auto issue = response->Record.AddIssues();
+            issue->set_severity(NYql::TSeverityIds::S_ERROR);
+            issue->set_message(error);
+        };
+        auto trySendBadRequest = [&] {
+            if (response->Record.GetStatus() == NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST) {
+                LOG_E("Rejecting TSampleKScan bad request TabletId: " << TabletID()
+                    << " " << request.ShortDebugString()
+                    << " with response " << ToShortDebugString(response->Record));
+                ctx.Send(ev->Sender, std::move(response));
+                return true;
+            } else {
+                return false;
+            }
+        };
 
-    TScanOptions scanOpts;
-    scanOpts.SetSnapshotRowVersion(rowVersion);
-    scanOpts.SetResourceBroker("build_index", 10); // TODO(mbkkt) Should be different group?
-    const auto scanId = QueueScan(userTable.LocalTid, std::move(scan), 0, scanOpts);
-    ScanManager.Set(id, seqNo).push_back(scanId);
+        // 1. Validating table and path existence
+        if (request.GetTabletId() != TabletID()) {
+            badRequest(TStringBuilder() << "Wrong shard " << request.GetTabletId() << " this is " << TabletID());
+        }
+        if (!IsStateActive()) {
+            badRequest(TStringBuilder() << "Shard " << TabletID() << " is " << State << " and not ready for requests");
+        }
+        const auto pathId = TPathId::FromProto(request.GetPathId());
+        const auto* userTableIt = GetUserTables().FindPtr(pathId.LocalPathId);
+        if (!userTableIt) {
+            badRequest(TStringBuilder() << "Unknown table id: " << pathId.LocalPathId);
+        }
+        if (trySendBadRequest()) {
+            return;
+        }
+        const auto& userTable = **userTableIt;
+
+        // 2. Validating request fields
+        if (request.HasSnapshotStep() || request.HasSnapshotTxId()) {
+            const TSnapshotKey snapshotKey(pathId, rowVersion.Step, rowVersion.TxId);
+            if (!SnapshotManager.FindAvailable(snapshotKey)) {
+                badRequest(TStringBuilder() << "Unknown snapshot for path id " << pathId.OwnerId << ":" << pathId.LocalPathId
+                    << ", snapshot step is " << snapshotKey.Step << ", snapshot tx is " << snapshotKey.TxId);
+            }
+        }
+
+        if (request.GetK() < 1) {
+            badRequest("Should be requested on at least one row");
+        }
+
+        if (request.GetMaxProbability() <= 0) {
+            badRequest("Max probability should be positive");
+        }
+
+        TSerializedTableRange requestedRange;
+        requestedRange.Load(request.GetKeyRange());
+        auto scanRange = Intersect(userTable.KeyColumnTypes, requestedRange.ToTableRange(), userTable.Range.ToTableRange());
+        if (scanRange.IsEmptyRange(userTable.KeyColumnTypes)) {
+            badRequest(TStringBuilder() << " requested range doesn't intersect with table range"
+                << " requestedRange: " << DebugPrintRange(userTable.KeyColumnTypes, requestedRange.ToTableRange(), *AppData()->TypeRegistry)
+                << " tableRange: " << DebugPrintRange(userTable.KeyColumnTypes, userTable.Range.ToTableRange(), *AppData()->TypeRegistry)
+                << " scanRange: " << DebugPrintRange(userTable.KeyColumnTypes, scanRange, *AppData()->TypeRegistry));
+        }
+
+        if (request.ColumnsSize() < 1) {
+            badRequest("Should be requested at least one column");
+        }
+        auto tags = GetAllTags(userTable);
+        for (auto column : request.GetColumns()) {
+            if (!tags.contains(column)) {
+                badRequest(TStringBuilder() << "Unknown column: " << column);
+            }
+        }
+
+        if (trySendBadRequest()) {
+            return;
+        }
+
+        // 3. Creating scan
+        TAutoPtr<NTable::IScan> scan = new TSampleKScan(TabletID(), userTable,
+            request, ev->Sender, std::move(response),
+            requestedRange);
+
+        StartScan(this, std::move(scan), id, seqNo, rowVersion, userTable.LocalTid);
+    } catch (const std::exception& exc) {
+        FailScan<TEvDataShard::TEvSampleKResponse>(id, TabletID(), ev->Sender, seqNo, exc, "TSampleKScan");
+    }
 }
 
 }

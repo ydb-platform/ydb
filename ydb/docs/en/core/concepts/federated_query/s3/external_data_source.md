@@ -1,4 +1,4 @@
-# Working with S3 buckets ({{objstorage-full-name}})
+# Working with S3 Buckets ({{objstorage-full-name}})
 
 To work with S3, you need to set up a data storage connection. There is a DDL for configuring such connections. Next, let's look at the SQL syntax and the management of these settings.
 
@@ -21,8 +21,8 @@ CREATE EXTERNAL DATA SOURCE object_storage WITH (
 To set up a connection to a private bucket, you need to run a few SQL queries. First, create [secrets](../../datamodel/secrets.md) containing `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`.
 
 ```yql
-    CREATE OBJECT aws_access_id (TYPE SECRET) WITH (value=`<id>`);
-    CREATE OBJECT aws_access_key (TYPE SECRET) WITH (value=`<key>`);
+CREATE OBJECT aws_access_id (TYPE SECRET) WITH (value=`<id>`);
+CREATE OBJECT aws_access_key (TYPE SECRET) WITH (value=`<key>`);
 ```
 
 The next step is to create an external connection named `object_storage`, which points to a specific S3 bucket named `bucket` and uses `AUTH_METHOD="AWS"`. The parameters `AWS_ACCESS_KEY_ID_SECRET_NAME`, `AWS_SECRET_ACCESS_KEY_SECRET_NAME`, and `AWS_REGION` are filled in for `AWS`. The values of these parameters are described above.
@@ -38,7 +38,7 @@ CREATE EXTERNAL DATA SOURCE object_storage WITH (
 );
 ```
 
-## Using an external connection to an S3 bucket {#external-data-source-settings}
+## Using an External Connection to an S3 Bucket {#external-data-source-settings}
 
 When working with {{ objstorage-full-name }} using [external data sources](../../datamodel/external_data_source.md), it is convenient to perform prototyping and initial data connection setup.
 
@@ -62,7 +62,7 @@ WITH
 
 The list of supported formats and data compression algorithms for reading data in S3 ({{objstorage-full-name}}) is provided in the section [{#T}](formats.md).
 
-## Data model {#data_model}
+## Data Model {#data_model}
 
 In {{ objstorage-full-name }}, data is stored in files. To read data, you need to specify the data format in the files, compression, and lists of fields. This is done using the following SQL expression:
 
@@ -89,7 +89,7 @@ Where:
 * `schema_definition` — the [schema definition](#schema) of the data stored in the files.
 * `format_settings` — optional [format settings](#format_settings)
 
-### Data schema description {#schema}
+### Data Schema Description {#schema}
 
 The data schema description consists of a set of fields:
 
@@ -103,9 +103,9 @@ For example, the data schema below describes a schema field named `Year` of type
 Year Int32 NOT NULL
 ```
 
-If a data field is marked as required (`NOT NULL`) but is missing in the processed file, processing such a file will result in an error. If a field is marked as optional (`NULL`), no error will occur the field is absent in the processed file, but the field will take the value `NULL`. The keyword `NULL` is optional in this context.
+If a data field is marked as required (`NOT NULL`) but is missing in the processed file, processing such a file will result in an error. If a field is marked as optional (`NULL`), no error will occur if the field is absent in the processed file, but the field will take the value `NULL`. The keyword `NULL` is optional in this context.
 
-### Schema inference {#inference}
+### Schema Inference {#inference}
 
 {{ ydb-short-name }} can determine the data schema of the files inside the bucket so that you do not have to specify these fields manually.
 
@@ -133,19 +133,19 @@ WHERE
 Where:
 
 * `object_storage_connection_name` — the name of the external data source leading to the S3 bucket ({{ objstorage-full-name }}).
-* `file_path` — the path to the file or files inside the bucket. Wildcards `*` are supported; For more information, see [{#T}](#path_format).
+* `file_path` — the path to the file or files inside the bucket. Wildcards `*` are supported. For more information, see [{#T}](#path_format).
 * `file_format` — the [data format](formats.md#formats) in the files. All formats except `raw` and `json_as_string` are supported.
 * `compression` — the [compression format](formats.md#compression_formats) of the files.
 
 As a result of executing such a query, the names and types of fields will be inferred.
 
-### Data path formats specified in `file_path` {#path_format}
+### Data Path Formats Specified in `file_path` {#path_format}
 
 In {{ ydb-full-name }}, the followingdata paths are supported:
 
 {% include [!](_includes/path_format.md) %}
 
-### Format settings {#format_settings}
+### Format Settings {#format_settings}
 
 In {{ ydb-full-name }}, the following format settings are supported:
 

@@ -15,6 +15,8 @@
   - jni.h
   - EGL/egl.h
   - EGL/eglext.h
+  - GLES/gl.h
+  - GLES/glext.h
   - GLES2/gl2.h
   - GLES2/gl2ext.h
   - GLES3/gl31.h

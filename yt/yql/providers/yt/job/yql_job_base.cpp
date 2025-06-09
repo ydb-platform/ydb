@@ -286,7 +286,8 @@ void TYqlJobBase::Save(IOutputStream& s) const {
         UdfValidateMode,
         OptLLVM,
         TableNames,
-        RuntimeLogLevel
+        RuntimeLogLevel,
+        LangVer
     );
 }
 
@@ -297,7 +298,8 @@ void TYqlJobBase::Load(IInputStream& s) {
         UdfValidateMode,
         OptLLVM,
         TableNames,
-        RuntimeLogLevel
+        RuntimeLogLevel,
+        LangVer
     );
 }
 

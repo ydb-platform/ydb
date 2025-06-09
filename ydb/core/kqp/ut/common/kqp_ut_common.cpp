@@ -72,6 +72,9 @@ NYql::NUdf::TUniquePtr<NYql::NUdf::IUdfModule> CreateJson2Module();
 NYql::NUdf::TUniquePtr<NYql::NUdf::IUdfModule> CreateRe2Module();
 NYql::NUdf::TUniquePtr<NYql::NUdf::IUdfModule> CreateStringModule();
 NYql::NUdf::TUniquePtr<NYql::NUdf::IUdfModule> CreateDateTime2Module();
+NYql::NUdf::TUniquePtr<NYql::NUdf::IUdfModule> CreateMathModule();
+NYql::NUdf::TUniquePtr<NYql::NUdf::IUdfModule> CreateUnicodeModule();
+NYql::NUdf::TUniquePtr<NYql::NUdf::IUdfModule> CreateDigestModule();
 
 NMiniKQL::IFunctionRegistry* UdfFrFactory(const NScheme::TTypeRegistry& typeRegistry) {
     Y_UNUSED(typeRegistry);
@@ -81,6 +84,10 @@ NMiniKQL::IFunctionRegistry* UdfFrFactory(const NScheme::TTypeRegistry& typeRegi
     funcRegistry->AddModule("", "Re2", CreateRe2Module());
     funcRegistry->AddModule("", "String", CreateStringModule());
     funcRegistry->AddModule("", "DateTime", CreateDateTime2Module());
+    funcRegistry->AddModule("", "Math", CreateMathModule());
+    funcRegistry->AddModule("", "Unicode", CreateUnicodeModule());
+    funcRegistry->AddModule("", "Digest", CreateDigestModule());
+    
     NKikimr::NMiniKQL::FillStaticModules(*funcRegistry);
     return funcRegistry.Release();
 }
@@ -559,6 +566,8 @@ void TKikimrRunner::Initialize(const TKikimrSettings& settings) {
     SetupLogLevelFromTestParam(NKikimrServices::TX_COLUMNSHARD);
     SetupLogLevelFromTestParam(NKikimrServices::TX_COLUMNSHARD_SCAN);
     SetupLogLevelFromTestParam(NKikimrServices::LOCAL_PGWIRE);
+    SetupLogLevelFromTestParam(NKikimrServices::SSA_GRAPH_EXECUTION);
+
 
     RunCall([this, domain = settings.DomainRoot]{
         this->Client->InitRootScheme(domain);
@@ -721,7 +730,7 @@ TDataQueryResult ExecQueryAndTestResult(TSession& session, const TString& query,
 NYdb::NQuery::TExecuteQueryResult ExecQueryAndTestEmpty(NYdb::NQuery::TSession& session, const TString& query) {
     auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx())
         .ExtractValueSync();
-    UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
     CompareYson("[[0u]]", FormatResultSetYson(result.GetResultSet(0)));
     return result;
 }
@@ -1392,6 +1401,16 @@ void InitRoot(Tests::TServer::TPtr server, TActorId sender) {
     server->SetupRootStoragePools(sender);
 }
 
+void Grant(NYdb::NTable::TSession& adminSession, const char* permissions, const char* path, const char* user) {
+    auto grantQuery = Sprintf(R"(
+            GRANT %s ON `%s` TO `%s`;
+        )",
+        permissions, path, user
+    );
+    auto result = adminSession.ExecuteSchemeQuery(grantQuery).ExtractValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+};  
+
 THolder<NSchemeCache::TSchemeCacheNavigate> Navigate(TTestActorRuntime& runtime, const TActorId& sender,
                                                      const TString& path, NSchemeCache::TSchemeCacheNavigate::EOp op)
 {
@@ -1512,6 +1531,65 @@ void WaitForZeroReadIterators(Tests::TServer& server, const TString& path) {
     UNIT_ASSERT_C(iterators == 0, "Unable to wait for proper read iterator count, it looks like cancelation doesn`t work (" << iterators << ")");
 }
 
+int GetCumulativeCounterValue(Tests::TServer& server, const TString& path, const TString& counterName) {
+    int result = 0;
+
+    TTestActorRuntime* runtime = server.GetRuntime();
+    auto sender = runtime->AllocateEdgeActor();
+    auto shards = GetTableShards(&server, sender, path);
+    UNIT_ASSERT_C(shards.size() > 0, "Table: " << path << " has no shards");
+
+    for (auto x : shards) {
+        runtime->SendToPipe(
+            x,
+            sender,
+            new TEvTablet::TEvGetCounters,
+            0,
+            GetPipeConfigWithRetries());
+
+        auto ev = runtime->GrabEdgeEvent<TEvTablet::TEvGetCountersResponse>(sender);
+        UNIT_ASSERT(ev);
+
+        const NKikimrTabletBase::TEvGetCountersResponse& resp = ev->Get()->Record;
+        for (const auto& counter : resp.GetTabletCounters().GetAppCounters().GetCumulativeCounters()) {
+            if (counter.GetName() == counterName) {
+                result += counter.GetValue();
+            }
+        }
+    }
+
+    return result;
+}
+
+void CheckTableReads(NYdb::NTable::TSession& session, const TString& tableName, bool checkFollower, bool readsExpected) {
+    for (size_t attempt = 0; attempt < 30; ++attempt)
+    {
+        Cerr << "... SELECT from partition_stats for " << tableName << " , attempt " << attempt << Endl;
+
+        const TString selectPartitionStats(Q_(Sprintf(R"(
+            SELECT *
+            FROM `/Root/.sys/partition_stats`
+            WHERE FollowerId %s 0 AND (RowReads != 0 OR RangeReadRows != 0) AND Path = '%s'   
+        )", (checkFollower ? "!=" : "="), tableName.c_str())));
+
+        auto result = session.ExecuteDataQuery(selectPartitionStats, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        AssertSuccessResult(result);
+        Cerr << selectPartitionStats << Endl;
+
+        auto rs = result.GetResultSet(0);
+        if (readsExpected) {
+            if (rs.RowsCount() != 0)
+                return;
+            Sleep(TDuration::Seconds(5));
+        } else {
+            if (rs.RowsCount() == 0)
+                return;
+            Y_FAIL("!readsExpected, but there are read stats for %s", tableName.c_str());
+        }
+    }
+    Y_FAIL("readsExpected, but there is timeout waiting for read stats from %s", tableName.c_str());    
+}
+
 TTableId ResolveTableId(Tests::TServer* server, TActorId sender, const TString& path) {
     auto response = Navigate(*server->GetRuntime(), sender, path, NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
     return response->ResultSet.at(0).TableId;
@@ -1541,6 +1619,10 @@ void WaitForCompaction(Tests::TServer* server, const TString& path, bool compact
 }
 
 NJson::TJsonValue SimplifyPlan(NJson::TJsonValue& opt, const TGetPlanParams& params) {
+    Cout << opt.GetStringRobust() << Endl;
+    if (!opt.IsMap()) {
+        return {};
+    }
     const auto& [_, nodeType] = *opt.GetMapSafe().find("Node Type");
     bool isShuffle = nodeType.GetStringSafe().find("HashShuffle") != TString::npos;
 
@@ -1556,7 +1638,7 @@ NJson::TJsonValue SimplifyPlan(NJson::TJsonValue& opt, const TGetPlanParams& par
             opName.find("Join") != TString::npos ||
             opName.find("Union") != TString::npos ||
             (opName.find("Filter") != TString::npos && params.IncludeFilters) ||
-            (opName.find("HashShuffle") != TString::npos && params.IncludeShuffles) 
+            (opName.find("HashShuffle") != TString::npos && params.IncludeShuffles)
         ) {
             NJson::TJsonValue newChildren;
 
@@ -1572,8 +1654,12 @@ NJson::TJsonValue SimplifyPlan(NJson::TJsonValue& opt, const TGetPlanParams& par
         }
     }
 
-    auto firstPlan = opt.GetMapSafe().at("Plans").GetArraySafe()[0];
-    return SimplifyPlan(firstPlan, params);
+    if (opt.IsMap() && opt.GetMapSafe().contains("Plans")) {
+        auto firstPlan = opt.GetMapSafe().at("Plans").GetArraySafe()[0];
+        return SimplifyPlan(firstPlan, params);
+    }
+
+    return {};
 }
 
 bool JoinOrderAndAlgosMatch(const NJson::TJsonValue& opt, const NJson::TJsonValue& ref) {
@@ -1651,6 +1737,10 @@ NJson::TJsonValue GetDetailedJoinOrder(const TString& deserializedPlan, const TG
 }
 
 NJson::TJsonValue GetJoinOrderImpl(const NJson::TJsonValue& opt) {
+    if (!opt.IsMap()) {
+        return {};
+    }
+
     if (!opt.GetMapSafe().contains("Plans")) {
         auto op = opt.GetMapSafe().at("Operators").GetArraySafe()[0];
         return op.GetMapSafe().at("Table").GetStringSafe();
@@ -1674,6 +1764,10 @@ NJson::TJsonValue GetJoinOrder(const TString& deserializedPlan) {
 }
 
 NJson::TJsonValue GetJoinOrderFromDetailedJoinOrderImpl(const NJson::TJsonValue& opt) {
+    if (!opt.IsMap()) {
+        return {};
+    }
+
     if (!opt.GetMapSafe().contains("table")) {
         NJson::TJsonValue res;
         auto args = opt.GetMapSafe().at("args").GetArraySafe();

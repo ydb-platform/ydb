@@ -2760,6 +2760,7 @@ namespace {
     }
 
     IGraphTransformer::TStatus UnionAllWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        const bool checkHashes = input->IsCallable("Union");
         switch (input->ChildrenSize()) {
             case 0U:
                 output = ctx.Expr.NewCallable(input->Pos(), "EmptyList", {});
@@ -2792,14 +2793,16 @@ namespace {
             const auto structType = itemType->Cast<TStructExprType>();
             for (const auto& item: structType->GetItems()) {
                 if (const auto res = members.insert({ item->GetName(), { item->GetItemType(), 1U } }); !res.second) {
-                    if (item->GetItemType()->GetKind() == ETypeAnnotationKind::Error) {
-                        continue;
-                    }
-
                     auto& p = res.first->second;
                     if (p.first->GetKind() == ETypeAnnotationKind::Error) {
                         continue;
                     }
+
+                    if (item->GetItemType()->GetKind() == ETypeAnnotationKind::Error) {
+                        p.first = item->GetItemType();
+                        continue;
+                    }
+
 
                     if (const auto commonType = CommonType<false, true>(input.Pos(), p.first, item->GetItemType(), ctx.Expr)) {
                         p.first = commonType;
@@ -2855,6 +2858,16 @@ namespace {
 
         for (auto structType : structTypes) {
             addResultItems(structType);
+        }
+
+        if (checkHashes) {
+            for (const auto& r : resultItems) {
+                if (!r->GetItemType()->IsHashable() || !r->GetItemType()->IsEquatable()) {
+                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() << "Expected hashable and equatable type for column: " <<
+                        r->GetName() << ", but got: " << *r->GetItemType()));
+                    return IGraphTransformer::TStatus::Error;
+                }
+            }
         }
 
         auto structType = ctx.Expr.MakeType<TStructExprType>(resultItems);

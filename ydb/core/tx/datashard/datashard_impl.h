@@ -282,7 +282,6 @@ class TDataShard
     friend class TValidatedDataTx;
     friend class TValidatedWriteTx;
     friend class TEngineBay;
-    friend class NMiniKQL::TKqpScanComputeContext;
     friend class TSnapshotManager;
     friend class TSchemaSnapshotManager;
     friend class TVolatileTxManager;
@@ -1819,7 +1818,7 @@ public:
     void UpdateTableStats(const TActorContext& ctx);
     void CollectCpuUsage(const TActorContext& ctx);
 
-    void ScanComplete(NTable::EAbort status, TAutoPtr<IDestructable> prod, ui64 cookie, const TActorContext &ctx) override;
+    void ScanComplete(NTable::EStatus status, TAutoPtr<IDestructable> prod, ui64 cookie, const TActorContext &ctx) override;
     bool ReassignChannelsEnabled() const override;
     void OnYellowChannelsChanged() override;
     void OnRejectProbabilityRelaxed() override;

@@ -1,5 +1,5 @@
 // Copyright Ruslan Arutyunyan, 2019-2021.
-// Copyright Antony Polukhin, 2021-2024.
+// Copyright Antony Polukhin, 2021-2025.
 //
 // Distributed under the Boost Software License, Version 1.0. (See
 // accompanying file LICENSE_1_0.txt or copy at
@@ -167,7 +167,7 @@ namespace anys {
         template <typename ValueType>
         static void create(basic_any& any, const ValueType& value, std::true_type)
         {
-            typedef typename std::decay<const ValueType>::type DecayedType;
+            using DecayedType = typename std::decay<const ValueType>::type;
 
             any.man = &small_manager<DecayedType>;
             new (&any.content.small_value) ValueType(value);
@@ -176,7 +176,7 @@ namespace anys {
         template <typename ValueType>
         static void create(basic_any& any, const ValueType& value, std::false_type)
         {
-            typedef typename std::decay<const ValueType>::type DecayedType;
+            using DecayedType = typename std::decay<const ValueType>::type;
 
             any.man = &large_manager<DecayedType>;
             any.content.large_value = new DecayedType(value);
@@ -185,7 +185,7 @@ namespace anys {
         template <typename ValueType>
         static void create(basic_any& any, ValueType&& value, std::true_type)
         {
-            typedef typename std::decay<const ValueType>::type DecayedType;
+            using DecayedType = typename std::decay<const ValueType>::type;
             any.man = &small_manager<DecayedType>;
             new (&any.content.small_value) DecayedType(std::forward<ValueType>(value));
         }
@@ -193,7 +193,7 @@ namespace anys {
         template <typename ValueType>
         static void create(basic_any& any, ValueType&& value, std::false_type)
         {
-            typedef typename std::decay<const ValueType>::type DecayedType;
+            using DecayedType = typename std::decay<const ValueType>::type;
             any.man = &large_manager<DecayedType>;
             any.content.large_value = new DecayedType(std::forward<ValueType>(value));
         }
@@ -283,7 +283,7 @@ namespace anys {
             , typename std::enable_if<!std::is_const<ValueType>::value >::type* = 0) // disable if value has type `const ValueType&&`
           : man(0), content()
         {
-            typedef typename std::decay<ValueType>::type DecayedType;
+            using DecayedType = typename std::decay<ValueType>::type;
             static_assert(
                 !std::is_same<DecayedType, boost::any>::value,
                 "boost::anys::basic_any shall not be constructed from boost::any"
@@ -383,7 +383,7 @@ namespace anys {
         template <class ValueType>
         basic_any & operator=(ValueType&& rhs)
         {
-            typedef typename std::decay<ValueType>::type DecayedType;
+            using DecayedType = typename std::decay<ValueType>::type;
             static_assert(
                 !std::is_same<DecayedType, boost::any>::value,
                 "boost::any shall not be assigned into boost::anys::basic_any"
@@ -475,7 +475,7 @@ namespace anys {
     template<typename ValueType, std::size_t OptimizeForSize, std::size_t OptimizeForAlignment>
     ValueType any_cast(basic_any<OptimizeForSize, OptimizeForAlignment> & operand)
     {
-        typedef typename std::remove_reference<ValueType>::type nonref;
+        using nonref = typename std::remove_reference<ValueType>::type;
 
         nonref * result = boost::anys::any_cast<nonref>(std::addressof(operand));
         if(!result)
@@ -507,7 +507,7 @@ namespace anys {
     template<typename ValueType, std::size_t OptimizeForSize, std::size_t OptimizeForAlignment>
     inline ValueType any_cast(const basic_any<OptimizeForSize, OptimizeForAlignment> & operand)
     {
-        typedef typename std::remove_reference<ValueType>::type nonref;
+        using nonref = typename std::remove_reference<ValueType>::type;
         return boost::anys::any_cast<const nonref &>(const_cast<basic_any<OptimizeForSize, OptimizeForAlignment> &>(operand));
     }
 

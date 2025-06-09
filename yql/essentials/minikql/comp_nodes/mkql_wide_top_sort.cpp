@@ -651,7 +651,7 @@ private:
 
 public:
     TSpillingSupportState(TMemoryUsageInfo* memInfo, const bool* directons, size_t keyWidth, const TCompareFunc& compare,
-        const std::vector<ui32>& indexes, TMultiType* tupleMultiType, const TComputationContext& ctx)
+        const std::vector<ui32>& indexes, TMultiType* tupleMultiType, const TComputationContext& ctx, NUdf::TLoggerPtr logger, NUdf::TLogComponentId logComponent)
         : TBase(memInfo)
         , Indexes(indexes)
         , Directions(directons, directons + keyWidth)
@@ -659,6 +659,8 @@ public:
         , Fields(Indexes.size(), nullptr)
         , TupleMultiType(tupleMultiType)
         , Ctx(ctx)
+        , Logger(logger)
+        , LogComponent(logComponent)
     {
         if (Ctx.SpillerFactory) {
             Spiller = Ctx.SpillerFactory->CreateSpiller();
@@ -678,7 +680,8 @@ public:
                 ResetFields();
                 auto nextMode = (IsReadFromChannelFinished() ? EOperatingMode::ProcessSpilled : EOperatingMode::InMemory);
 
-                YQL_LOG(INFO) << (nextMode == EOperatingMode::ProcessSpilled ? "Switching to ProcessSpilled" : "Switching to Memory mode");
+                UDF_LOG(Logger, LogComponent, NUdf::ELogLevel::Info, TStringBuilder() <<
+                        (nextMode == EOperatingMode::ProcessSpilled ? "Switching to ProcessSpilled" : "Switching to Memory mode"));
 
                 SwitchMode(nextMode);
                 return IsReadyToContinue();
@@ -712,8 +715,8 @@ public:
             const auto used = TlsAllocState->GetUsed();
             const auto limit = TlsAllocState->GetLimit();
 
-            YQL_LOG(INFO) << "Yellow zone reached " << (used*100/limit) << "%=" << used << "/" << limit;
-            YQL_LOG(INFO) << "Switching Memory mode to Spilling";
+            UDF_LOG(Logger, LogComponent, NUdf::ELogLevel::Info, TStringBuilder() << "Yellow zone reached " << (used*100/limit) << "%=" << used << "/" << limit);
+            UDF_LOG(Logger, LogComponent, NUdf::ELogLevel::Info, "Switching Memory mode to Spilling");
 
             SwitchMode(EOperatingMode::Spilling);
         }
@@ -860,6 +863,8 @@ private:
     std::vector<TSpilledUnboxedValuesIterator> SpilledUnboxedValuesIterators;
     ISpiller::TPtr Spiller = nullptr;
     bool IsHeapBuilt = false;
+    const NYql::NUdf::TLoggerPtr Logger;
+    const NYql::NUdf::TLogComponentId LogComponent;
 };
 
 class TWideSortWrapper: public TStatefulWideFlowCodegeneratorNode<TWideSortWrapper>
@@ -1101,10 +1106,13 @@ public:
 #endif
 private:
     void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state, const bool* directions) const {
+        NYql::NUdf::TLoggerPtr logger = ctx.MakeLogger();
+        NYql::NUdf::TLogComponentId logComponent = logger->RegisterComponent("WideSort");
+        UDF_LOG(logger, logComponent, NUdf::ELogLevel::Debug, TStringBuilder() << "State initialized");
 #ifdef MKQL_DISABLE_CODEGEN
-        state = ctx.HolderFactory.Create<TSpillingSupportState>(directions, Directions.size(), TMyValueCompare(Keys), Indexes, TupleMultiType, ctx);
+        state = ctx.HolderFactory.Create<TSpillingSupportState>(directions, Directions.size(), TMyValueCompare(Keys), Indexes, TupleMultiType, ctx, logger, logComponent);
 #else
-        state = ctx.HolderFactory.Create<TSpillingSupportState>(directions, Directions.size(), ctx.ExecuteLLVM && Compare ? TCompareFunc(Compare) : TCompareFunc(TMyValueCompare(Keys)), Indexes, TupleMultiType, ctx);
+        state = ctx.HolderFactory.Create<TSpillingSupportState>(directions, Directions.size(), ctx.ExecuteLLVM && Compare ? TCompareFunc(Compare) : TCompareFunc(TMyValueCompare(Keys)), Indexes, TupleMultiType, ctx, logger, logComponent);
 #endif
     }
 

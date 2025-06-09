@@ -43,6 +43,7 @@
 #include <yql/essentials/sql/v1/format/sql_format.h>
 #include <yql/essentials/sql/v1/sql.h>
 #include <yql/essentials/sql/sql.h>
+#include <yql/essentials/sql/v1/lexer/check/check_lexers.h>
 #include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
 #include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>
 #include <yql/essentials/sql/v1/proto_parser/antlr4/proto_parser.h>
@@ -436,8 +437,25 @@ void TFacadeRunOptions::Parse(int argc, const char *argv[]) {
     if (CustomTests) {
         opts.AddLongOption("test-antlr4", "Check antlr4 parser").NoArgument().SetFlag(&TestAntlr4);
         opts.AddLongOption("test-format", "Compare formatted query's AST with the original query's AST (only syntaxVersion=1 is supported)").NoArgument().SetFlag(&TestSqlFormat);
+        opts.AddLongOption("test-lexers", "Compare lexers").NoArgument().SetFlag(&TestLexers);
         opts.AddLongOption("validate-result-format", "Check that result-format can parse Result").NoArgument().SetFlag(&ValidateResultFormat);
     }
+
+    opts.AddLongOption("langver", "Set current language version").Optional().RequiredArgument("VER")
+        .Handler1T<TString>([this](const TString& str) {
+            if (str == "unknown") {
+                LangVer = UnknownLangVersion;
+            } else if (!ParseLangVersion(str, LangVer)) {
+                throw yexception() << "Failed to parse language version: " << str;
+            }
+        });
+
+    opts.AddLongOption("max-langver", "Set maximum language version").Optional().RequiredArgument("VER")
+        .Handler1T<TString>([this](const TString& str) {
+            if (!ParseLangVersion(str, MaxLangVer)) {
+                throw yexception() << "Failed to parse language version: " << str;
+            }
+        });
 
     opts.SetFreeArgsMax(0);
 
@@ -452,7 +470,11 @@ void TFacadeRunOptions::Parse(int argc, const char *argv[]) {
             QPlayerStorage_ = MakeFileQStorage(".");
         }
         if (EQPlayerMode::Replay == QPlayerMode) {
-            QPlayerContext = TQContext(QPlayerStorage_->MakeReader(OperationId, {}));
+            try {
+                QPlayerContext = TQContext(QPlayerStorage_->MakeReader(OperationId, {}));
+            } catch (...) {
+                throw yexception() << "QPlayer replay is probably broken. Exception: " << CurrentExceptionMessage();
+            }
             ProgramFile = "-replay-";
             ProgramText = "";
         } else if (EQPlayerMode::Capture == QPlayerMode) {
@@ -575,6 +597,24 @@ int TFacadeRunner::DoMain(int argc, const char *argv[]) {
         ctx.NextUniqueId = NPg::GetSqlLanguageParser()->GetContext().NextUniqueId;
     }
     IModuleResolver::TPtr moduleResolver;
+    TModuleResolver::TModuleChecker moduleChecker;
+    if (RunOptions_.TestLexers) {
+        moduleChecker = [](const TString& query, const TString& fileName, TExprContext& ctx) {
+            TIssues issues;
+            if (!NSQLTranslationV1::CheckLexers(TPosition(0, 0, fileName), query, issues)) {
+                auto issue = TIssue(TPosition(0, 0, fileName), "Lexers mismatched");
+                for (const auto& i : issues) {
+                    issue.AddSubIssue(MakeIntrusive<TIssue>(i));
+                }
+
+                ctx.AddError(issue);
+                return false;
+            }
+
+            return true;
+        };
+    }
+
     if (RunOptions_.MountConfig) {
         TModulesTable modules;
         FillUserDataTableFromFileSystem(*RunOptions_.MountConfig, RunOptions_.DataTable);
@@ -585,9 +625,11 @@ int TFacadeRunner::DoMain(int argc, const char *argv[]) {
             return -1;
         }
 
-        moduleResolver = std::make_shared<TModuleResolver>(translators, std::move(modules), ctx.NextUniqueId, ClusterMapping_, RunOptions_.SqlFlags, RunOptions_.Mode >= ERunMode::Validate);
+        moduleResolver = std::make_shared<TModuleResolver>(translators, std::move(modules), ctx.NextUniqueId,
+            ClusterMapping_, RunOptions_.SqlFlags, RunOptions_.Mode >= ERunMode::Validate, THolder<TExprContext>(), moduleChecker);
     } else {
-        if (!GetYqlDefaultModuleResolver(ctx, moduleResolver, ClusterMapping_, RunOptions_.OptimizeLibs && RunOptions_.Mode >= ERunMode::Validate)) {
+        if (!GetYqlDefaultModuleResolver(ctx, moduleResolver, ClusterMapping_,
+            RunOptions_.OptimizeLibs && RunOptions_.Mode >= ERunMode::Validate, moduleChecker)) {
             *RunOptions_.ErrStream << "Errors loading default YQL libraries:" << Endl;
             ctx.IssueManager.GetIssues().PrintTo(*RunOptions_.ErrStream);
             return -1;
@@ -614,13 +656,13 @@ int TFacadeRunner::DoMain(int argc, const char *argv[]) {
             Cerr << "udf-resolver path must be specified when use 'scan-udfs'";
             return -1;
         }
-
         udfResolver = NCommon::CreateOutProcUdfResolver(FuncRegistry_.Get(), FileStorage_, RunOptions_.UdfResolverPath, {}, {}, RunOptions_.UdfResolverFilterSyscalls, {});
 
         udfIndex = new TUdfIndex();
         if (EQPlayerMode::Replay != RunOptions_.QPlayerMode) {
+            THoldingFileStorage storage(FileStorage_);
             RunOptions_.PrintInfo(TStringBuilder() << TInstant::Now().ToStringLocalUpToSeconds() << " Udf scanning started for " << RunOptions_.UdfsPaths.size() << " udfs ...");
-            LoadRichMetadataToUdfIndex(*udfResolver, RunOptions_.UdfsPaths, false, TUdfIndex::EOverrideMode::RaiseError, *udfIndex);
+            LoadRichMetadataToUdfIndex(*udfResolver, RunOptions_.UdfsPaths, false, TUdfIndex::EOverrideMode::RaiseError, *udfIndex, storage);
             RunOptions_.PrintInfo(TStringBuilder() << TInstant::Now().ToStringLocalUpToSeconds() << " UdfIndex done.");
         }
 
@@ -675,6 +717,8 @@ int TFacadeRunner::DoMain(int argc, const char *argv[]) {
 int TFacadeRunner::DoRun(TProgramFactory& factory) {
 
     TProgramPtr program = factory.Create(RunOptions_.ProgramFile, RunOptions_.ProgramText, RunOptions_.OperationId, EHiddenMode::Disable, RunOptions_.QPlayerContext, RunOptions_.GatewaysPatch);
+    program->SetLanguageVersion(RunOptions_.LangVer);
+    program->SetMaxLanguageVersion(RunOptions_.MaxLangVer);
     if (RunOptions_.Params) {
         program->SetParametersYson(RunOptions_.Params);
     }
@@ -743,6 +787,14 @@ int TFacadeRunner::DoRun(TProgramFactory& factory) {
             frmProgram->AstRoot()->PrettyPrintTo(frmQuery, PRETTY_FLAGS);
             if (srcQuery.Str() != frmQuery.Str()) {
                 *RunOptions_.ErrStream << "source query's AST and formatted query's AST are not same" << Endl;
+                return -1;
+            }
+        }
+        if (!fail && RunOptions_.TestLexers && 1 == RunOptions_.SyntaxVersion) {
+            TIssues issues;
+            if (!NSQLTranslationV1::CheckLexers({}, RunOptions_.ProgramText, issues)) {
+                *RunOptions_.ErrStream << "Lexers mismatched" << Endl;
+                issues.PrintTo(*RunOptions_.ErrStream);
                 return -1;
             }
         }

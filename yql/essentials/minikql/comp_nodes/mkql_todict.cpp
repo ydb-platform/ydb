@@ -985,7 +985,7 @@ public:
 
     NUdf::TUnboxedValuePod DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
         if (state.IsFinish()) {
-            return state.Release();
+            return state;
         } else if (state.IsInvalid()) {
             MakeState(ctx, state);
         }
@@ -1162,7 +1162,7 @@ public:
 
     NUdf::TUnboxedValuePod DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
         if (state.IsFinish()) {
-            return state.Release();
+            return state;
         } else if (state.IsInvalid()) {
             MakeState(ctx, state);
         }

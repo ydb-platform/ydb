@@ -115,10 +115,13 @@ public:
         AFL_VERIFY(Portions.erase(portion.GetPortionId()));
     }
     virtual bool LoadPortions(const std::optional<TInternalPathId> pathId,
-        const std::function<void(NOlap::TPortionInfoConstructor&&, const NKikimrTxColumnShard::TIndexPortionMeta&)>& callback) override {
+        const std::function<void(std::unique_ptr<NOlap::TPortionInfoConstructor>&&, const NKikimrTxColumnShard::TIndexPortionMeta&)>& callback) override {
         for (auto&& i : Portions) {
-            if (!pathId || *pathId == i.second.GetPathId()) {
-                callback(NOlap::TPortionInfoConstructor(i.second, false, false), i.second.GetMeta().SerializeToProto());
+            if (!pathId || *pathId == i.second->GetPathId()) {
+                callback(i.second->BuildConstructor(false, false),
+                    i.second->GetMeta().SerializeToProto(i.second->GetPortionType() == NOlap::EPortionType::Compacted
+                                                             ? NPortion::EProduced::SPLIT_COMPACTED
+                                                             : NPortion::EProduced::INSERTED));
             }
         }
         return true;
@@ -127,18 +130,20 @@ public:
     void WriteColumn(const TPortionInfo& portion, const TColumnRecord& row, const ui32 firstPKColumnId) override {
         auto rowProto = row.GetMeta().SerializeToProto();
         if (firstPKColumnId == row.GetColumnId() && row.GetChunkIdx() == 0) {
-            *rowProto.MutablePortionMeta() = portion.GetMeta().SerializeToProto();
+            *rowProto.MutablePortionMeta() = portion.GetMeta().SerializeToProto(portion.GetPortionType() == NOlap::EPortionType::Compacted
+                                                                                    ? NPortion::EProduced::SPLIT_COMPACTED
+                                                                                    : NPortion::EProduced::INSERTED);
         }
 
         auto& data = Indices[0].Columns[portion.GetPathId()];
         auto it = data.find(portion.GetPortionId());
         if (it == data.end()) {
-            it = data.emplace(portion.GetPortionId(), TPortionInfoConstructor(portion, true, true)).first;
+            it = data.emplace(portion.GetPortionId(), portion.BuildConstructor(true, true)).first;
         } else {
             Y_ABORT_UNLESS(portion.GetPathId() == it->second.MutablePortionConstructor().GetPathId() &&
                            portion.GetPortionId() == it->second.MutablePortionConstructor().GetPortionIdVerified());
         }
-        it->second.MutablePortionConstructor().SetMinSnapshotDeprecated(portion.GetMinSnapshotDeprecated());
+        it->second.MutablePortionConstructor().SetSchemaVersion(portion.GetSchemaVersionVerified());
         if (portion.HasRemoveSnapshot()) {
             if (!it->second.MutablePortionConstructor().HasRemoveSnapshot()) {
                 it->second.MutablePortionConstructor().SetRemoveSnapshot(portion.GetRemoveSnapshotVerified());
@@ -182,8 +187,8 @@ public:
                 continue;
             }
             for (auto& [portionId, portionLocal] : portions) {
-                auto copy = portionLocal.MakeCopy();
-                copy.TestMutableRecords().clear();
+//                auto copy = portionLocal.MakeCopy();
+//                copy->TestMutableRecords().clear();
                 auto it = LoadContexts.find(portionLocal.GetPortionConstructor().GetAddress());
                 AFL_VERIFY(it != LoadContexts.end());
                 callback(std::move(it->second));
@@ -219,7 +224,7 @@ private:
     THashMap<TInsertWriteId, TInsertedData> Inserted;
     THashMap<TInternalPathId, TSet<TCommittedData>> Committed;
     THashMap<TInsertWriteId, TInsertedData> Aborted;
-    THashMap<ui64, NOlap::TPortionInfo> Portions;
+    THashMap<ui64, std::shared_ptr<NOlap::TPortionInfo>> Portions;
     THashMap<ui32, TIndex> Indices;
 };
 
@@ -388,7 +393,7 @@ bool Compact(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, N
         auto request = changes->ExtractDataAccessorsRequest();
         request->RegisterSubscriber(
             std::make_shared<TTestCompactionAccessorsSubscriber>(changes, std::make_shared<NOlap::TVersionedIndex>(engine.GetVersionedIndex())));
-        engine.FetchDataAccessors(changes->ExtractDataAccessorsRequest());
+        engine.FetchDataAccessors(request);
     }
     changes->Blobs = std::move(blobs);
     NOlap::TConstructionContext context(engine.GetVersionedIndex(), NColumnShard::TIndexationCounters("Compaction"), NOlap::TSnapshot(step, 1));
@@ -478,7 +483,7 @@ bool Ttl(TColumnEngineForLogs& engine, TTestDbWrapper& db, const THashMap<TInter
         auto request = changes->ExtractDataAccessorsRequest();
         request->RegisterSubscriber(
             std::make_shared<TTestCompactionAccessorsSubscriber>(changes, std::make_shared<NOlap::TVersionedIndex>(engine.GetVersionedIndex())));
-        engine.FetchDataAccessors(changes->ExtractDataAccessorsRequest());
+        engine.FetchDataAccessors(request);
     }
     const bool result = engine.ApplyChangesOnTxCreate(changes, TSnapshot(1, 1)) && engine.ApplyChangesOnExecute(db, changes, TSnapshot(1, 1));
     NOlap::TWriteIndexContext contextExecute(nullptr, db, engine, TSnapshot(1, 1));
@@ -541,8 +546,8 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         }
         engine.TestingLoad(db);
 
-        std::vector<TCommittedData> dataToIndex = { TCommittedData(TUserData::Build(paths[0], blobRanges[0], TLocalHelper::GetMetaProto(), 0, {}), TSnapshot(1, 2), 0, (TInsertWriteId)2),
-            TCommittedData(TUserData::Build(paths[0], blobRanges[1], TLocalHelper::GetMetaProto(), 0, {}), TSnapshot(2, 1), 0, (TInsertWriteId)1) };
+        std::vector<TCommittedData> dataToIndex = { TCommittedData(TUserData::Build(paths[0], blobRanges[0], TLocalHelper::GetMetaProto(), 1, {}), TSnapshot(1, 2), 0, (TInsertWriteId)2),
+            TCommittedData(TUserData::Build(paths[0], blobRanges[1], TLocalHelper::GetMetaProto(), 1, {}), TSnapshot(2, 1), 0, (TInsertWriteId)1) };
 
         // write
 
@@ -638,7 +643,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
             std::vector<TCommittedData> dataToIndex;
             TSnapshot ss(planStep, txId);
             dataToIndex.push_back(
-                TCommittedData(TUserData::Build(pathId, blobRange, TLocalHelper::GetMetaProto(), 0, {}), ss, 0, (TInsertWriteId)txId));
+                TCommittedData(TUserData::Build(pathId, blobRange, TLocalHelper::GetMetaProto(), 1, {}), ss, 0, (TInsertWriteId)txId));
 
             bool ok = Insert(engine, db, ss, std::move(dataToIndex), blobs, step);
             UNIT_ASSERT(ok);
@@ -736,7 +741,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
             std::vector<TCommittedData> dataToIndex;
             TSnapshot ss(planStep, txId);
             dataToIndex.push_back(
-                TCommittedData(TUserData::Build(pathId, blobRange, TLocalHelper::GetMetaProto(), 0, {}), ss, 0, (TInsertWriteId)txId));
+                TCommittedData(TUserData::Build(pathId, blobRange, TLocalHelper::GetMetaProto(), 1, {}), ss, 0, (TInsertWriteId)txId));
 
             bool ok = Insert(engine, db, ss, std::move(dataToIndex), blobs, step);
             blobsAll.Merge(std::move(blobs));
@@ -769,7 +774,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
             std::vector<TCommittedData> dataToIndex;
             TSnapshot ss(planStep, txId);
             dataToIndex.push_back(
-                TCommittedData(TUserData::Build(pathId, blobRange, TLocalHelper::GetMetaProto(), 0, {}), ss, 0, TInsertWriteId(txId)));
+                TCommittedData(TUserData::Build(pathId, blobRange, TLocalHelper::GetMetaProto(), 1, {}), ss, 0, TInsertWriteId(txId)));
 
             bool ok = Insert(engine, db, ss, std::move(dataToIndex), blobs, step);
             UNIT_ASSERT(ok);
@@ -819,7 +824,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
                 TSnapshot ss(planStep, txId);
                 std::vector<TCommittedData> dataToIndex;
                 dataToIndex.push_back(
-                    TCommittedData(TUserData::Build(pathId, blobRange, TLocalHelper::GetMetaProto(), 0, {}), ss, 0, TInsertWriteId(txId)));
+                    TCommittedData(TUserData::Build(pathId, blobRange, TLocalHelper::GetMetaProto(), 1, {}), ss, 0, TInsertWriteId(txId)));
 
                 bool ok = Insert(engine, db, ss, std::move(dataToIndex), blobs, step);
                 UNIT_ASSERT(ok);

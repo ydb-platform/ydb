@@ -43,6 +43,7 @@ struct INodeFactory;
 struct ITransactionalNodeFactory;
 
 DECLARE_REFCOUNTED_STRUCT(IAttributeDictionary)
+using IConstAttributeDictionaryPtr = TIntrusivePtr<const IAttributeDictionary>;
 
 struct IAttributeOwner;
 

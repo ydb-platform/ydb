@@ -1,6 +1,7 @@
 #pragma once
 
 #include <yql/essentials/core/pg_settings/guc_settings.h>
+#include <yql/essentials/public/langver/yql_langver.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
@@ -76,6 +77,7 @@ namespace NSQLTranslation {
         TTranslationSettings();
         google::protobuf::Arena* Arena = nullptr;
 
+        NYql::TLangVersion LangVer = NYql::MinLangVersion;
         THashMap<TString, TString> ClusterMapping;
         TString PathPrefix;
         // keys (cluster name) should be normalized

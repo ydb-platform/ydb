@@ -12,6 +12,7 @@ PEERDIR(
     yql/essentials/public/udf
     yql/essentials/utils
     yql/essentials/providers/common/mkql
+    yql/essentials/public/langver
 )
 
 YQL_LAST_ABI_VERSION()

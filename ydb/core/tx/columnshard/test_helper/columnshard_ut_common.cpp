@@ -22,9 +22,12 @@ using namespace Tests;
 
 void TTester::Setup(TTestActorRuntime& runtime) {
     runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
-    runtime.SetLogPriority(NKikimrServices::BLOB_CACHE, NActors::NLog::PRI_INFO);
+//    runtime.SetLogPriority(NKikimrServices::BLOB_CACHE, NActors::NLog::PRI_INFO);
     runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD_SCAN, NActors::NLog::PRI_DEBUG);
-    runtime.SetLogPriority(NKikimrServices::S3_WRAPPER, NLog::PRI_DEBUG);
+    runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD_WRITE, NActors::NLog::PRI_DEBUG);
+    //    runtime.SetLogPriority(NKikimrServices::S3_WRAPPER, NLog::PRI_DEBUG);
+
+    NOlap::TSchemaCachesManager::DropCaches();
 
     ui32 domainId = 0;
     ui32 planResolution = 500;
@@ -133,7 +136,9 @@ bool WriteDataImpl(TTestBasicRuntime& runtime, TActorId& sender, const ui64 shar
     const TString dedupId = ToString(writeId);
 
     auto write = std::make_unique<NEvents::TDataEvents::TEvWrite>(writeId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
-    write->SetLockId(lockId, 1);
+    if (lockId) {
+        write->SetLockId(lockId, 1);
+    }
     auto& operation = write->AddOperation(TEnumOperator<NEvWrite::EModificationType>::SerializeToWriteProto(mType), TTableId(0, tableId, 1), {},
         0, NKikimrDataEvents::FORMAT_ARROW);
     *operation.MutablePayloadSchema() = NArrow::SerializeSchema(*schema);
@@ -460,6 +465,11 @@ void TTestSchema::InitSchema(const std::vector<NArrow::NTest::TTestColumn>& colu
     if (specials.CompressionLevel) {
         schema->MutableDefaultCompression()->SetLevel(*specials.CompressionLevel);
     }
+    if (specials.GetUseForcedCompaction()) {
+        NKikimrSchemeOp::TCompactionPlannerConstructorContainer::TLOptimizer optimizer;
+        *schema->MutableOptions()->MutableCompactionPlannerConstructor()->MutableLBuckets() = optimizer;
+        schema->MutableOptions()->MutableCompactionPlannerConstructor()->SetClassName("l-buckets"); //TODO use appropriate lc-buckets configuration
+    }
 }
 
 }
@@ -503,20 +513,18 @@ namespace NKikimr::NColumnShard {
         return planStep;
     }
 
-    NTxUT::TPlanStep SetupSchema(TTestBasicRuntime& runtime, TActorId& sender, ui64 pathId,
-                 const TestTableDescription& table, TString codec) {
+    NTxUT::TPlanStep SetupSchema(
+        TTestBasicRuntime& runtime, TActorId& sender, ui64 pathId, const TestTableDescription& table, TString codec, const ui64 txId) {
         using namespace NTxUT;
-        const ui64 txId = 10;
         TString txBody;
         auto specials = TTestSchema::TTableSpecials().WithCodec(codec);
         if (table.InStore) {
-            txBody = TTestSchema::CreateTableTxBody(pathId, table.Schema, table.Pk, specials);
+            txBody = TTestSchema::CreateInitShardTxBody(pathId, table.Schema, table.Pk, specials);
         } else {
             txBody = TTestSchema::CreateStandaloneTableTxBody(pathId, table.Schema, table.Pk, specials);
         }
         return SetupSchema(runtime, sender, txBody, txId);
     }
-
 
     NTxUT::TPlanStep PrepareTablet(TTestBasicRuntime& runtime, const ui64 tableId, const std::vector<NArrow::NTest::TTestColumn>& schema, const ui32 keySize) {
         using namespace NTxUT;

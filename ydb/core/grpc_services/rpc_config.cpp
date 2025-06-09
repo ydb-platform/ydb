@@ -201,6 +201,8 @@ public:
             cmd->SetSwitchDedicatedStorageSection(*shim.SwitchDedicatedStorageSection);
         }
         cmd->SetDedicatedStorageSectionConfigMode(shim.DedicatedConfigMode);
+        cmd->SetUserToken(Request_->GetSerializedToken());
+        cmd->SetPeerName(Request_->GetPeerName());
     }
 
     void FillDistconfResult(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult& /*record*/,
@@ -236,7 +238,9 @@ public:
             request->allow_unknown_fields() || request->bypass_checks(),
             request->bypass_checks(),
             /*enableConfigV2=*/ ff.GetSwitchToConfigV2(),
-            /*disableConfigV2=*/ ff.GetSwitchToConfigV1());
+            /*disableConfigV2=*/ ff.GetSwitchToConfigV1(),
+            Request_->GetPeerName(),
+            Request_->GetSerializedToken());
     }
 
 private:
@@ -377,7 +381,23 @@ public:
             issues.AddIssue("Only fetch mode \"all\" is supported now.");
             return false;
         }
-        return true;
+        switch (const auto& all = request.all(); all.config_transform_case()) {
+            case Ydb::Config::FetchConfigRequest::FetchModeAll::ConfigTransformCase::CONFIG_TRANSFORM_NOT_SET:
+            case Ydb::Config::FetchConfigRequest::FetchModeAll::ConfigTransformCase::kNone:
+                return true;
+
+            case Ydb::Config::FetchConfigRequest::FetchModeAll::ConfigTransformCase::kAddBlobStorageAndDomainsConfig:
+            case Ydb::Config::FetchConfigRequest::FetchModeAll::ConfigTransformCase::kAddExplicitSections:
+                RequireSelfManagement = true;
+                return true;
+
+            case Ydb::Config::FetchConfigRequest::FetchModeAll::ConfigTransformCase::kDetachStorageConfigSection:
+            case Ydb::Config::FetchConfigRequest::FetchModeAll::ConfigTransformCase::kAttachStorageConfigSection:
+                break; // we don't support them
+        }
+        status = Ydb::StatusIds::BAD_REQUEST;
+        issues.AddIssue("Unsupported config_transform specified.");
+        return false;
     }
 
     NACLib::EAccessRights GetRequiredAccessRights() const {
@@ -405,6 +425,18 @@ public:
             case Ydb::Config::FetchConfigRequest::ModeCase::kAll:
                 record->SetMainConfig(true);
                 record->SetStorageConfig(true);
+                switch (const auto& all = request.all(); all.config_transform_case()) {
+                    case Ydb::Config::FetchConfigRequest::FetchModeAll::ConfigTransformCase::kAddBlobStorageAndDomainsConfig:
+                        record->SetAddSectionsForMigrationToV1(true);
+                        break;
+
+                    case Ydb::Config::FetchConfigRequest::FetchModeAll::ConfigTransformCase::kAddExplicitSections:
+                        record->SetAddExplicitConfigs(true);
+                        break;
+
+                    default:
+                        break;
+                }
                 break;
 
             case Ydb::Config::FetchConfigRequest::ModeCase::kTarget:
@@ -426,7 +458,7 @@ public:
             // TODO: !imp error if empty
             auto& config = *result.add_config();
             auto& identity = *config.mutable_identity();
-            identity.set_version(*metadata.Version);
+            identity.set_version(metadata.Version.value_or(0));
             identity.set_cluster(AppData()->ClusterName);
             identity.mutable_main();
             config.set_config(conf);
@@ -437,7 +469,7 @@ public:
             // TODO: !imp error if empty
             auto& config = *result.add_config();
             auto& identity = *config.mutable_identity();
-            identity.set_version(*metadata.Version);
+            identity.set_version(metadata.Version.value_or(0));
             identity.set_cluster(AppData()->ClusterName);
             identity.mutable_storage();
             config.set_config(conf);

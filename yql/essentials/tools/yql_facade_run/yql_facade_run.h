@@ -9,6 +9,7 @@
 #include <yql/essentials/core/yql_user_data.h>
 #include <yql/essentials/core/facade/yql_facade.h>
 #include <yql/essentials/core/qplayer/storage/interface/yql_qstorage.h>
+#include <yql/essentials/public/langver/yql_langver.h>
 
 #include <library/cpp/getopt/last_getopt.h>
 #include <library/cpp/yson/public.h>
@@ -69,6 +70,8 @@ public:
     ~TFacadeRunOptions();
 
     EProgramType ProgramType = EProgramType::SExpr;
+    TLangVersion LangVer = MinLangVersion;
+    TLangVersion MaxLangVer = GetMaxLangVersion();
     NYson::EYsonFormat ResultsFormat = NYson::EYsonFormat::Text;
     ERunMode Mode = ERunMode::Run;
     TString ProgramFile;
@@ -86,6 +89,7 @@ public:
     bool TestAntlr4 = false;
     bool AssumeYdbOnClusterWithSlash = false;
     bool TestSqlFormat = false;
+    bool TestLexers = false;
     THashMap<TString, NSQLTranslation::TTableBindingSettings> Bindings;
 
     bool PrintAst = false;

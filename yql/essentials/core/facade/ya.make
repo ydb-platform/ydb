@@ -30,6 +30,8 @@ PEERDIR(
     yql/essentials/utils/log
     yql/essentials/core
     yql/essentials/core/type_ann
+    yql/essentials/core/langver
+    yql/essentials/public/langver
     yql/essentials/providers/common/config
     yql/essentials/providers/common/proto
     yql/essentials/providers/common/provider

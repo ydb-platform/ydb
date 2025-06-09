@@ -114,6 +114,7 @@ namespace NLs {
     void IsView(const NKikimrScheme::TEvDescribeSchemeResult& record);
     void IsResourcePool(const NKikimrScheme::TEvDescribeSchemeResult& record);
     void IsBackupCollection(const NKikimrScheme::TEvDescribeSchemeResult& record);
+    void IsSysView(const NKikimrScheme::TEvDescribeSchemeResult& record);
     TCheckFunc CheckColumns(const TString& name, const TSet<TString>& columns, const TSet<TString>& droppedColumns, const TSet<TString> keyColumns, bool strictCount = false);
     TCheckFunc CheckColumnType(const ui64 columnIndex, const TString& columnTypename);
     void CheckBoundaries(const NKikimrScheme::TEvDescribeSchemeResult& record);
@@ -157,6 +158,7 @@ namespace NLs {
                               NKikimrSchemeOp::EPathState pathState = NKikimrSchemeOp::EPathState::EPathStateNoChanges);
     TCheckFunc CheckPQAlterVersion (const TString& name, ui64 alterVersion);
     TCheckFunc IndexesCount(ui32 count);
+    TCheckFunc CheckPathState(NKikimrSchemeOp::EPathState pathState = NKikimrSchemeOp::EPathState::EPathStateNoChanges);
 
     TCheckFunc IndexType(NKikimrSchemeOp::EIndexType type);
     TCheckFunc IndexState(NKikimrSchemeOp::EIndexState state);
@@ -183,6 +185,7 @@ namespace NLs {
     TCheckFunc StreamState(NKikimrSchemeOp::ECdcStreamState state);
     TCheckFunc StreamVirtualTimestamps(bool value);
     TCheckFunc StreamResolvedTimestamps(const TDuration& value);
+    TCheckFunc StreamSchemaChanges(bool value);
     TCheckFunc StreamAwsRegion(const TString& value);
     TCheckFunc StreamInitialScanProgress(ui32 total, ui32 completed);
     TCheckFunc RetentionPeriod(const TDuration& value);

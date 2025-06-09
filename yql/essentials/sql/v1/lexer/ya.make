@@ -22,6 +22,7 @@ RECURSE(
     antlr4_ansi
     antlr4_pure
     antlr4_pure_ansi
+    check
     regex
 )
 

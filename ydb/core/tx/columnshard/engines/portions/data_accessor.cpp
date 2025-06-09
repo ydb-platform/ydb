@@ -1,3 +1,4 @@
+#include "compacted.h"
 #include "constructor_meta.h"
 #include "data_accessor.h"
 
@@ -19,31 +20,6 @@ namespace NKikimr::NOlap {
 
 namespace {
 
-void FillDefaultColumn(TPortionDataAccessor::TColumnAssemblingInfo& column, const TPortionInfo& portionInfo, const TSnapshot& defaultSnapshot) {
-    if (column.GetColumnId() == (ui32)IIndexInfo::ESpecialColumn::PLAN_STEP) {
-        column.AddBlobInfo(0, portionInfo.GetRecordsCount(),
-            TPortionDataAccessor::TAssembleBlobInfo(
-                portionInfo.GetRecordsCount(), std::make_shared<arrow::UInt64Scalar>(defaultSnapshot.GetPlanStep())));
-    }
-    if (column.GetColumnId() == (ui32)IIndexInfo::ESpecialColumn::TX_ID) {
-        column.AddBlobInfo(0, portionInfo.GetRecordsCount(),
-            TPortionDataAccessor::TAssembleBlobInfo(
-                portionInfo.GetRecordsCount(), std::make_shared<arrow::UInt64Scalar>(defaultSnapshot.GetTxId())));
-    }
-    if (column.GetColumnId() == (ui32)IIndexInfo::ESpecialColumn::WRITE_ID) {
-        column.AddBlobInfo(0, portionInfo.GetRecordsCount(),
-            TPortionDataAccessor::TAssembleBlobInfo(
-                portionInfo.GetRecordsCount(), std::make_shared<arrow::UInt64Scalar>((ui64)portionInfo.GetInsertWriteIdVerified())));
-    }
-    if (column.GetColumnId() == (ui32)IIndexInfo::ESpecialColumn::DELETE_FLAG) {
-        AFL_VERIFY(portionInfo.GetRecordsCount() == portionInfo.GetMeta().GetDeletionsCount() || portionInfo.GetMeta().GetDeletionsCount() == 0)("deletes",
-                                                          portionInfo.GetMeta().GetDeletionsCount())("count", portionInfo.GetRecordsCount());
-        column.AddBlobInfo(0, portionInfo.GetRecordsCount(),
-            TPortionDataAccessor::TAssembleBlobInfo(
-                portionInfo.GetRecordsCount(), std::make_shared<arrow::BooleanScalar>((bool)portionInfo.GetMeta().GetDeletionsCount())));
-    }
-}
-
 template <class TExternalBlobInfo>
 TPortionDataAccessor::TPreparedBatchData PrepareForAssembleImpl(const TPortionDataAccessor& portionData, const TPortionInfo& portionInfo,
     const ISnapshotSchema& dataSchema, const ISnapshotSchema& resultSchema, THashMap<TChunkAddress, TExternalBlobInfo>& blobsData,
@@ -52,13 +28,6 @@ TPortionDataAccessor::TPreparedBatchData PrepareForAssembleImpl(const TPortionDa
     columns.reserve(resultSchema.GetColumnIds().size());
     const ui32 rowsCount = portionInfo.GetRecordsCount();
     auto it = portionData.GetRecordsVerified().begin();
-
-    TSnapshot defaultSnapshotLocal = TSnapshot::Zero();
-    if (portionInfo.HasCommitSnapshot()) {
-        defaultSnapshotLocal = portionInfo.GetCommitSnapshotVerified();
-    } else if (defaultSnapshot) {
-        defaultSnapshotLocal = *defaultSnapshot;
-    }
 
     for (auto&& i : resultSchema.GetColumnIds()) {
         while (it != portionData.GetRecordsVerified().end() && it->GetColumnId() < i) {
@@ -69,10 +38,7 @@ TPortionDataAccessor::TPreparedBatchData PrepareForAssembleImpl(const TPortionDa
             if (restoreAbsent || IIndexInfo::IsSpecialColumn(i)) {
                 columns.emplace_back(rowsCount, dataSchema.GetColumnLoaderOptional(i), resultSchema.GetColumnLoaderVerified(i));
             }
-            if (!portionInfo.HasInsertWriteId()) {
-                continue;
-            }
-            FillDefaultColumn(columns.back(), portionInfo, defaultSnapshotLocal);
+            portionInfo.FillDefaultColumn(columns.back(), defaultSnapshot);
         }
         if (it == portionData.GetRecordsVerified().end()) {
             continue;
@@ -685,6 +651,7 @@ void TPortionDataAccessor::FullValidation() const {
         TBlobRange::Validate(PortionInfo->GetMeta().GetBlobIds(), i.GetBlobRange()).Validate();
         blobIdxs.emplace(i.GetBlobRange().GetBlobIdxVerified());
     }
+    AFL_VERIFY(GetRecordsVerified().size());
     for (auto&& i : GetIndexesVerified()) {
         if (auto bRange = i.GetBlobRangeOptional()) {
             TBlobRange::Validate(PortionInfo->GetMeta().GetBlobIds(), *bRange).Validate();
@@ -734,7 +701,8 @@ TConclusion<TPortionDataAccessor> TPortionDataAccessor::BuildFromProto(
     if (!constructor.LoadMetadata(proto.GetMeta(), indexInfo, groupSelector)) {
         return TConclusionStatus::Fail("cannot parse meta");
     }
-    std::shared_ptr<TPortionInfo> resultPortion(new TPortionInfo(constructor.Build()));
+    std::shared_ptr<TPortionInfo> resultPortion = std::make_shared<TCompactedPortionInfo>(constructor.Build());
+
     {
         auto parse = resultPortion->DeserializeFromProto(proto);
         if (!parse) {

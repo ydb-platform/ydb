@@ -55,6 +55,20 @@
             "uri": "https://{canondata_backend}/1937429/6dc717bd36879ce84e2fa1eb85b97eefce0733e9/resource.tar.gz#test.test_Blocks-ListFromBlocks-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[Blocks-WideFromBlocks-WideToBlocks-default.txt-Debug]": [
+        {
+            "checksum": "d6c0024db8898aef8f8b31b1025667cc",
+            "size": 483,
+            "uri": "https://{canondata_backend}/1925842/70c39ce7d6aa898d26d58abf8d512eebac34de7f/resource.tar.gz#test.test_Blocks-WideFromBlocks-WideToBlocks-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[Blocks-WideFromBlocks-WideToBlocks-default.txt-Results]": [
+        {
+            "checksum": "3326d454244059e96a0b61b3fdf53480",
+            "size": 878,
+            "uri": "https://{canondata_backend}/1925842/70c39ce7d6aa898d26d58abf8d512eebac34de7f/resource.tar.gz#test.test_Blocks-WideFromBlocks-WideToBlocks-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[Builtins-ToIntegral-default.txt-Debug]": [
         {
             "checksum": "33f569baf5940bbd79fbf635f47cc363",

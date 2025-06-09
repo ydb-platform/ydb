@@ -24,7 +24,7 @@ extern const TJobTraceId NullJobTraceId;
 
 YT_DEFINE_STRONG_TYPEDEF(TAllocationId, TGuid);
 
-constexpr TAllocationId NullAllocationId{};
+extern const TAllocationId NullAllocationId;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -176,12 +176,13 @@ DEFINE_ENUM(EAbortReason,
 DEFINE_ENUM_UNKNOWN_VALUE(EAbortReason, Unknown);
 
 DEFINE_ENUM(EInterruptionReason,
-    ((None)               (0))
-    ((Preemption)         (1))
-    ((UserRequest)        (2))
-    ((JobSplit)           (3))
-    ((Unknown)            (4))
-    ((JobsDisabledOnNode) (5))
+    ((None)                (0))
+    ((Preemption)          (1))
+    ((UserRequest)         (2))
+    ((JobSplit)            (3))
+    ((Unknown)             (4))
+    ((JobsDisabledOnNode)  (5))
+    ((NbdDeviceStopping)   (6))
 );
 
 DEFINE_ENUM_UNKNOWN_VALUE(EInterruptionReason, Unknown);
@@ -195,7 +196,7 @@ DEFINE_ENUM(EAutoMergeMode,
 
 DECLARE_REFCOUNTED_CLASS(TOperationCache)
 
-DECLARE_REFCOUNTED_CLASS(TSpecPatch);
+DECLARE_REFCOUNTED_STRUCT(TSpecPatch);
 using TSpecPatchList = std::vector<TSpecPatchPtr>;
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -221,7 +221,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
     ParseStatementName(core, internalStatementName, humanStatementName);
     const auto& altCase = core.Alt_case();
     if (Mode == NSQLTranslation::ESqlMode::LIMITED_VIEW && (altCase >= TRule_sql_stmt_core::kAltSqlStmtCore4 &&
-        altCase != TRule_sql_stmt_core::kAltSqlStmtCore13)) {
+        altCase != TRule_sql_stmt_core::kAltSqlStmtCore13 && altCase != TRule_sql_stmt_core::kAltSqlStmtCore18)) {
         Error() << humanStatementName << " statement is not supported in limited views";
         return false;
     }
@@ -1937,26 +1937,45 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore61: {
-            // alter_database_stmt: ALTER DATABASE an_id_schema OWNER TO role_name
-            auto& node = core.GetAlt_sql_stmt_core61().GetRule_alter_database_stmt1();
+            // alter_database_stmt: ALTER DATABASE an_id_schema alter_database_action
+            const auto& node = core.GetAlt_sql_stmt_core61().GetRule_alter_database_stmt1();
+            const auto& action = node.GetRule_alter_database_action4();
 
-            TDeferredAtom roleName;
-            {
-                bool allowSystemRoles = true;
-                if (!RoleNameClause(node.GetRule_role_name6(), roleName, allowSystemRoles)) {
-                    return false;
+            TAlterDatabaseParameters params;
+            params.DbPath = TDeferredAtom(Ctx.Pos(), Id(node.GetRule_an_id_schema3(), *this));
+
+            switch (action.GetAltCase()) {
+                case TRule_alter_database_action::kAltAlterDatabaseAction1: {
+                    // OWNER TO role_name
+                    const auto& ownerAction = action.GetAlt_alter_database_action1();
+                    TDeferredAtom roleName;
+                    {
+                        bool allowSystemRoles = true;
+                        if (!RoleNameClause(ownerAction.GetRule_role_name3(), roleName, allowSystemRoles)) {
+                            return false;
+                        }
+                    }
+                    params.Owner = roleName;
+                    break;
                 }
+                case TRule_alter_database_action::kAltAlterDatabaseAction2: {
+                    // SET ( database_settings )
+                    const auto& settings = action.GetAlt_alter_database_action2().GetRule_set_database_settings1().GetRule_database_settings3();
+                    if (!ParseDatabaseSettings(settings, params.DatabaseSettings)) {
+                        return false;
+                    }
+                    break;
+                }
+                case TRule_alter_database_action::ALT_NOT_SET:
+                    AltNotImplemented("alter_database_action", action);
+                    return false;
             }
-
-            TAlterDatabaseParameters alterDatabaseParams;
-            alterDatabaseParams.Owner = roleName;
-            alterDatabaseParams.DbPath = TDeferredAtom(Ctx.Pos(), Id(node.GetRule_an_id_schema3(), *this));
 
             const TPosition pos = Ctx.Pos();
             TString service = Ctx.Scoped->CurrService;
             TDeferredAtom cluster = Ctx.Scoped->CurrCluster;
 
-            auto stmt = BuildAlterDatabase(pos, service, cluster, alterDatabaseParams, Ctx.Scoped);
+            auto stmt = BuildAlterDatabase(pos, service, cluster, params, Ctx.Scoped);
             AddStatementToBlocks(blocks, stmt);
             break;
         }
@@ -3200,6 +3219,12 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
         } else if (normalizedPragma == "orderedcolumns") {
             Ctx.OrderedColumns = true;
             Ctx.IncrementMonCounter("sql_pragma", "OrderedColumns");
+        } else if (normalizedPragma == "derivecolumnorder") {
+            Ctx.DeriveColumnOrder = true;
+            Ctx.IncrementMonCounter("sql_pragma", "DeriveColumnOrder");
+        } else if (normalizedPragma == "disablederivecolumnorder") {
+            Ctx.DeriveColumnOrder = false;
+            Ctx.IncrementMonCounter("sql_pragma", "DisableDeriveColumnOrder");
         } else if (normalizedPragma == "disableorderedcolumns") {
             Ctx.OrderedColumns = false;
             Ctx.IncrementMonCounter("sql_pragma", "DisableOrderedColumns");
@@ -3387,6 +3412,24 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
         } else if (normalizedPragma == "disableemitunionmerge") {
             Ctx.EmitUnionMerge = false;
             Ctx.IncrementMonCounter("sql_pragma", "DisableEmitUnionMerge");
+        } else if (normalizedPragma == "distinctoverkeys") {
+            Ctx.DistinctOverKeys = true;
+            Ctx.IncrementMonCounter("sql_pragma", "DistinctOverKeys");
+        } else if (normalizedPragma == "disabledistinctoverkeys") {
+            Ctx.DistinctOverKeys = false;
+            Ctx.IncrementMonCounter("sql_pragma", "DisableDistinctOverKeys");
+        } else if (normalizedPragma == "groupbyexprafterwhere") {
+            Ctx.GroupByExprAfterWhere = true;
+            Ctx.IncrementMonCounter("sql_pragma", "GroupByExprAfterWhere");
+        } else if (normalizedPragma == "disablegroupbyexprafterwhere") {
+            Ctx.GroupByExprAfterWhere = false;
+            Ctx.IncrementMonCounter("sql_pragma", "DisableGroupByExprAfterWhere");
+        } else if (normalizedPragma == "failongroupbyexproverride") {
+            Ctx.FailOnGroupByExprOverride = true;
+            Ctx.IncrementMonCounter("sql_pragma", "FailOnGroupByExprOverride");
+        } else if (normalizedPragma == "disablefailongroupbyexproverride") {
+            Ctx.FailOnGroupByExprOverride = false;
+            Ctx.IncrementMonCounter("sql_pragma", "DisableFailOnGroupByExprOverride");
         } else if (normalizedPragma == "engine") {
             Ctx.IncrementMonCounter("sql_pragma", "Engine");
 
@@ -3416,6 +3459,12 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
             }
 
             Ctx.Engine = *literal;
+        } else if (normalizedPragma == "optimizesimpleilike") {
+            Ctx.OptimizeSimpleIlike = true;
+            Ctx.IncrementMonCounter("sql_pragma", "OptimizeSimpleILIKE");
+        } else if (normalizedPragma == "disableoptimizesimpleilike") {
+            Ctx.OptimizeSimpleIlike = false;
+            Ctx.IncrementMonCounter("sql_pragma", "DisableOptimizeSimpleILIKE");
         } else {
             Error() << "Unknown pragma: " << pragma;
             Ctx.IncrementMonCounter("sql_errors", "UnknownPragma");

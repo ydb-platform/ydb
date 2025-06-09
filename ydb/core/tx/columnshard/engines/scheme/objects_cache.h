@@ -79,19 +79,36 @@ public:
 
 class TSchemaCachesManager {
 private:
-    THashMap<ui64, std::shared_ptr<TSchemaObjectsCache>> CacheByTableOwner;
+    class TColumnOwnerId {
+    private:
+        TPathId Tenant;
+        TLocalPathId Owner;
+
+    public:
+        TColumnOwnerId(const TPathId& tenant, const TLocalPathId owner)
+            : Tenant(tenant)
+            , Owner(owner) {
+            AFL_VERIFY(!!Owner);
+        }
+
+        operator size_t() const {
+            return CombineHashes(Owner, Tenant.Hash());
+        }
+        bool operator==(const TColumnOwnerId& other) const {
+            return Tenant == other.Tenant && Owner == other.Owner;
+        }
+    };
+
+    THashMap<TColumnOwnerId, std::shared_ptr<TSchemaObjectsCache>> CacheByTableOwner;
     TMutex Mutex;
 
-    std::shared_ptr<TSchemaObjectsCache> GetCacheImpl(const ui64 ownerPathId) {
-        if (!ownerPathId) {
-            return std::make_shared<TSchemaObjectsCache>();
-        }
+    std::shared_ptr<TSchemaObjectsCache> GetCacheImpl(const TColumnOwnerId& owner) {
         TGuard lock(Mutex);
-        auto findCache = CacheByTableOwner.FindPtr(ownerPathId);
+        auto findCache = CacheByTableOwner.FindPtr(owner);
         if (findCache) {
             return *findCache;
         }
-        return CacheByTableOwner.emplace(ownerPathId, std::make_shared<TSchemaObjectsCache>()).first->second;
+        return CacheByTableOwner.emplace(owner, std::make_shared<TSchemaObjectsCache>()).first->second;
     }
 
     void DropCachesImpl() {
@@ -100,8 +117,8 @@ private:
     }
 
 public:
-    static std::shared_ptr<TSchemaObjectsCache> GetCache(const ui64 ownerPathId) {
-        return Singleton<TSchemaCachesManager>()->GetCacheImpl(ownerPathId);
+    static std::shared_ptr<TSchemaObjectsCache> GetCache(const ui64 ownerPathId, const TPathId& tenantPathId) {
+        return Singleton<TSchemaCachesManager>()->GetCacheImpl(TColumnOwnerId(tenantPathId, ownerPathId));
     }
 
     static void DropCaches() {

@@ -16,7 +16,7 @@ public:
         : Alloc(__LOCATION__)
         , Env(Alloc)
         , TypeInfoHelper(new TTypeInfoHelper())
-        , FunctionTypeInfoBuilder(Env, TypeInfoHelper, "", nullptr, {}) {
+        , FunctionTypeInfoBuilder(NYql::UnknownLangVersion, Env, TypeInfoHelper, "", nullptr, {}) {
     }
 
 private:
@@ -40,6 +40,7 @@ private:
         UNIT_TEST(TestDataTypeFormat);
         UNIT_TEST(TestBlockTypeFormat);
         UNIT_TEST(TestArrowType);
+        UNIT_TEST(TestArrowTaggedType);
     UNIT_TEST_SUITE_END();
 
     TString FormatType(NUdf::TType* t) {
@@ -148,8 +149,8 @@ private:
 
     void TestTaggedTypeFormat() {
         {
-            auto s = FormatType(FunctionTypeInfoBuilder.Tagged(FunctionTypeInfoBuilder.SimpleType<i8>(), "my_resource"));
-            UNIT_ASSERT_VALUES_EQUAL(s, "Tagged<Int8,'my_resource'>");
+            auto s = FormatType(FunctionTypeInfoBuilder.Tagged(FunctionTypeInfoBuilder.SimpleType<i8>(), "my_tag"));
+            UNIT_ASSERT_VALUES_EQUAL(s, "Tagged<Int8,'my_tag'>");
         }
     }
 
@@ -348,6 +349,17 @@ private:
         auto atype2 = TypeInfoHelper->ImportArrowType(&s);
         UNIT_ASSERT_VALUES_EQUAL(static_cast<TArrowType*>(atype2.Get())->GetType()->ToString(), std::string("uint64"));
     }
+
+    void TestArrowTaggedType() {
+        auto type = FunctionTypeInfoBuilder.Tagged(FunctionTypeInfoBuilder.SimpleType<ui64>(), "my_tag");
+        auto atype1 = TypeInfoHelper->MakeArrowType(type);
+        UNIT_ASSERT(atype1);
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<TArrowType*>(atype1.Get())->GetType()->ToString(), std::string("uint64"));
+        ArrowSchema s;
+        atype1->Export(&s);
+        auto atype2 = TypeInfoHelper->ImportArrowType(&s);
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<TArrowType*>(atype2.Get())->GetType()->ToString(), std::string("uint64"));
+    }
 };
 
 UNIT_TEST_SUITE_REGISTRATION(TMiniKQLTypeBuilderTest);
@@ -369,7 +381,7 @@ Y_UNIT_TEST_SUITE(TLogProviderTest) {
                 [this](const NUdf::TStringRef& component, NUdf::ELogLevel level, const NUdf::TStringRef& message) {
                     Messages.push_back({TString(component), level, TString(message)});
                 }))
-            , FunctionTypeInfoBuilder(Env, TypeInfoHelper, "module", nullptr, {}, nullptr, withoutLog ? nullptr : LogProvider.Get())
+            , FunctionTypeInfoBuilder(NYql::UnknownLangVersion, Env, TypeInfoHelper, "module", nullptr, {}, nullptr, withoutLog ? nullptr : LogProvider.Get())
         {}
 
         TScopedAlloc Alloc;

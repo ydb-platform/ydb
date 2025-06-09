@@ -67,25 +67,38 @@ def test(case):
 
     in_tables = yql_utils.get_input_tables(None, cfg, DATA_PATH, def_attr=yql_utils.KSV_ATTR)
 
-    udfs_dir = yql_utils.get_udfs_path([
-        yatest.common.build_path(os.path.join(yatest.common.context.project_path, ".."))
-    ])
+    udfs_list = [yatest.common.build_path(os.path.join(yatest.common.context.project_path, ".."))]
+    env_udfs_list = yql_utils.get_param("EXTRA_UDF_DIRS")
+    if env_udfs_list:
+        for udf_path in env_udfs_list.strip().split(":"):
+            udfs_list.append(yatest.common.build_path(udf_path))
+    udfs_dir = yql_utils.get_udfs_path(udfs_list)
 
     xfail = yql_utils.is_xfail(cfg)
     if yql_utils.get_param('TARGET_PLATFORM') and xfail:
         pytest.skip('xfail is not supported on non-default target platform')
+    langver = yql_utils.get_langver(cfg)
+    envs = yql_utils.get_envs(cfg)
+    if not langver:
+        langver = "unknown"
+    # no default version, because UDFs may have different release cycles
 
     extra_env = dict(os.environ)
     extra_env["YQL_UDF_RESOLVER"] = "1"
     extra_env["YQL_ARCADIA_BINARY_PATH"] = os.path.expandvars(yatest.common.build_path('.'))
     extra_env["YQL_ARCADIA_SOURCE_PATH"] = os.path.expandvars(yatest.common.source_path('.'))
     extra_env["Y_NO_AVX_IN_DOT_PRODUCT"] = "1"
+    extra_env.update(envs)
 
     # this breaks tests using V0 syntax
     if "YA_TEST_RUNNER" in extra_env:
         del extra_env["YA_TEST_RUNNER"]
 
-    yqlrun_res = YQLRun(udfs_dir=udfs_dir, prov='yt', use_sql2yql=False, cfg_dir=os.getenv('YQL_CONFIG_DIR') or 'yql/essentials/cfg/udf_test').yql_exec(
+    yqlrun = YQLRun(udfs_dir=udfs_dir,
+                    prov='yt', use_sql2yql=False,
+                    cfg_dir=os.getenv('YQL_CONFIG_DIR') or 'yql/essentials/cfg/udf_test',
+                    langver=langver)
+    yqlrun_res = yqlrun.yql_exec(
         program=program,
         run_sql=True,
         tables=in_tables,

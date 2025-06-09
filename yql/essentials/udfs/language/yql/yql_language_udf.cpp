@@ -2,6 +2,7 @@
 
 #include <yql/essentials/sql/v1/context.h>
 #include <yql/essentials/sql/v1/sql_translation.h>
+#include <yql/essentials/sql/v1/reflect/sql_reflect.h>
 #include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
 #include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>
 #include <yql/essentials/sql/v1/proto_parser/proto_parser.h>
@@ -31,11 +32,17 @@ public:
     TRuleFreqVisitor(TContext& ctx)
         : Translation(ctx)
     {
+        KeywordNames = NSQLReflect::LoadLexerGrammar().KeywordNames;
     }
 
     void Visit(const NProtoBuf::Message& msg) {
         const NProtoBuf::Descriptor* descr = msg.GetDescriptor();
         if (descr == TToken::GetDescriptor()) {
+            const auto& token = dynamic_cast<const TToken&>(msg);
+            auto upper = to_upper(token.GetValue());
+            if (KeywordNames.contains(upper)) {
+                Freqs[std::make_pair("KEYWORD", upper)] += 1;
+            }
             return;
         } else if (descr == TRule_use_stmt::GetDescriptor()) {
             VisitUseStmt(dynamic_cast<const TRule_use_stmt&>(msg));
@@ -285,6 +292,7 @@ private:
 
     THashMap<std::pair<TString, TString>, ui64> Freqs;
     TRuleFreqTranslation Translation;
+    THashSet<TString> KeywordNames;
 };
 
 SIMPLE_UDF(TObfuscate, TOptional<char*>(TAutoMap<char*>)) {

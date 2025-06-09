@@ -123,6 +123,11 @@ void ToProto(
     ::google::protobuf::RepeatedField<TSerialized>* serializedArray,
     const TOriginalArray& originalArray);
 
+template <class TKey, class TValue, class TSerializedKey, class TSerializedValue>
+void ToProto(
+    ::google::protobuf::Map<TSerializedKey, TSerializedValue>* serializedMap,
+    const THashMap<TKey, TValue>& originalMap);
+
 template <class TOriginalArray, class TSerialized, class... TArgs>
 void FromProto(
     TOriginalArray* originalArray,
@@ -143,6 +148,11 @@ template <class TOriginal, class TSerialized>
 void CheckedHashSetFromProto(
     THashSet<TOriginal>* originalHashSet,
     const ::google::protobuf::RepeatedField<TSerialized>& serializedHashSet);
+
+template <class TKey, class TValue, class TSerializedKey, class TSerializedValue>
+void FromProto(
+    THashMap<TKey, TValue>* originalMap,
+    const ::google::protobuf::Map<TSerializedKey, TSerializedValue>& serializedMap);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -347,7 +357,7 @@ struct TProtobufExtensionDescriptor
 {
     const google::protobuf::Descriptor* MessageDescriptor;
     const int Tag;
-    const TString Name;
+    const std::string Name;
 };
 
 struct IProtobufExtensionRegistry
@@ -368,7 +378,7 @@ struct IProtobufExtensionRegistry
     virtual const TProtobufExtensionDescriptor* FindDescriptorByTag(int tag) = 0;
 
     //! Finds a descriptor by name.
-    virtual const TProtobufExtensionDescriptor* FindDescriptorByName(const TString& name) = 0;
+    virtual const TProtobufExtensionDescriptor* FindDescriptorByName(const std::string& name) = 0;
 
     //! Returns the singleton instance.
     static IProtobufExtensionRegistry* Get();
@@ -427,7 +437,7 @@ NYT::NProto::TExtensionSet FilterProtoExtensions(
 ////////////////////////////////////////////////////////////////////////////////
 
 THashSet<int> GetExtensionTagSet(const NYT::NProto::TExtensionSet& source);
-std::optional<TString> FindExtensionName(int tag);
+std::optional<std::string> FindExtensionName(int tag);
 
 ////////////////////////////////////////////////////////////////////////////////
 

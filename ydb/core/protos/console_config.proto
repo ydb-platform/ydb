@@ -268,6 +268,7 @@ message TSetYamlConfigRequest {
     optional string PeerName = 3;
     optional string IngressDatabase = 4;
     optional bool BypassAuth = 5;
+    optional bool SkipAuditLog = 6;
 }
 
 message TSetYamlConfigResponse {
@@ -280,6 +281,7 @@ message TReplaceYamlConfigRequest {
     optional string PeerName = 3;
     optional string IngressDatabase = 4;
     optional bool BypassAuth = 5;
+    optional bool SkipAuditLog = 6;
 }
 
 message TReplaceYamlConfigResponse {
@@ -660,6 +662,26 @@ message TFetchStartupConfigRequest {
 
 message TFetchStartupConfigResponse {
     optional Ydb.DynamicConfig.FetchStartupConfigResult Response = 1;
+}
+
+message TGetConfigurationVersionRequest {
+    optional Ydb.DynamicConfig.GetConfigurationVersionRequest Request = 1;
+    optional bytes UserToken = 2;
+    optional string PeerName = 3;
+    optional string IngressDatabase = 4;
+}
+
+message TGetConfigurationVersionResponse {
+    optional Ydb.DynamicConfig.GetConfigurationVersionResult Response = 1;
+}
+
+message TGetNodeConfigurationVersionRequest {
+    optional uint32 NodeId = 1;
+}
+
+message TGetNodeConfigurationVersionResponse {
+    optional TStatus Status = 1;
+    optional string Version = 2;
 }
 
 enum EValidationLevel {

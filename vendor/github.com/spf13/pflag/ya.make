@@ -2,7 +2,7 @@ GO_LIBRARY()
 
 LICENSE(BSD-3-Clause)
 
-VERSION(v1.0.6-0.20201009195203-85dd5c8bc61c)
+VERSION(v1.0.6)
 
 SRCS(
     bool.go

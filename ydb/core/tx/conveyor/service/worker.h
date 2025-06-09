@@ -73,11 +73,13 @@ struct TEvInternal {
         YDB_READONLY_DEF(std::vector<TMonotonic>, Instants);
         YDB_READONLY_DEF(std::vector<ui64>, ProcessIds);
         YDB_READONLY(TMonotonic, ConstructInstant, TMonotonic::Now());
+        YDB_READONLY(ui64, WorketIdx, 0);
     public:
-        TEvTaskProcessedResult(std::vector<TMonotonic>&& instants, std::vector<ui64>&& processIds, const TDuration forwardSendDuration)
+        TEvTaskProcessedResult(std::vector<TMonotonic>&& instants, std::vector<ui64>&& processIds, const TDuration forwardSendDuration, const ui64 workerIdx)
             : ForwardSendDuration(forwardSendDuration)
             , Instants(std::move(instants))
-            , ProcessIds(std::move(processIds)) {
+            , ProcessIds(std::move(processIds))
+            , WorketIdx(workerIdx) {
             AFL_VERIFY(ProcessIds.size());
             AFL_VERIFY(Instants.size() == ProcessIds.size() + 1);
         }
@@ -87,17 +89,22 @@ struct TEvInternal {
 class TWorker: public NActors::TActorBootstrapped<TWorker> {
 private:
     using TBase = NActors::TActorBootstrapped<TWorker>;
-    const double CPUUsage = 1;
+    const double CPUHardLimit = 1;
+    YDB_READONLY(double, CPUSoftLimit, 1);
+    ui64 CPULimitGeneration = 0;
     bool WaitWakeUp = false;
     std::optional<TDuration> ForwardDuration;
     const NActors::TActorId DistributorId;
+    const ui64 WorkerIdx;
     std::vector<TMonotonic> Instants;
     std::vector<ui64> ProcessIds;
     const ::NMonitoring::THistogramPtr SendFwdHistogram;
     const ::NMonitoring::TDynamicCounters::TCounterPtr SendFwdDuration;
+    TDuration GetWakeupDuration() const;
     void ExecuteTask(std::vector<TWorkerTask>&& workerTasks);
     void HandleMain(TEvInternal::TEvNewTask::TPtr& ev);
     void HandleMain(NActors::TEvents::TEvWakeup::TPtr& ev);
+    void OnWakeup();
 public:
 
     STATEFN(StateMain) {
@@ -114,15 +121,19 @@ public:
         Become(&TWorker::StateMain);
     }
 
-    TWorker(const TString& conveyorName, const double cpuUsage, const NActors::TActorId& distributorId, const ::NMonitoring::THistogramPtr sendFwdHistogram, const ::NMonitoring::TDynamicCounters::TCounterPtr sendFwdDuration)
+    TWorker(const TString& conveyorName, const double cpuHardLimit, const NActors::TActorId& distributorId, const ui64 workerIdx, const ::NMonitoring::THistogramPtr sendFwdHistogram, const ::NMonitoring::TDynamicCounters::TCounterPtr sendFwdDuration)
         : TBase("CONVEYOR::" + conveyorName + "::WORKER")
-        , CPUUsage(cpuUsage)
+        , CPUHardLimit(cpuHardLimit)
+        , CPUSoftLimit(cpuHardLimit)
         , DistributorId(distributorId)
+        , WorkerIdx(workerIdx)
         , SendFwdHistogram(sendFwdHistogram)
         , SendFwdDuration(sendFwdDuration) {
-        AFL_VERIFY(0 < CPUUsage);
-        AFL_VERIFY(CPUUsage <= 1);
+        AFL_VERIFY(0 < CPUHardLimit);
+        AFL_VERIFY(CPUHardLimit <= 1);
     }
+
+    void UpdateCPUSoftLimit(const double cpuSoftLimit);
 };
 
 }

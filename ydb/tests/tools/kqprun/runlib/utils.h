@@ -96,6 +96,21 @@ private:
     const std::unique_ptr<NFq::IPlanStatProcessor> StatProcessor;
 };
 
+class TCachedPrinter {
+public:
+    using TPrinter = std::function<void(const TString& data, IOutputStream& output)>;
+
+    TCachedPrinter(const TString& output, TPrinter printer);
+
+    void Print(const TString& data, bool allowEmpty = false);
+
+private:
+    TString Output;
+    TPrinter Printer;
+    std::unique_ptr<TFileOutput> FileOutput;
+    std::optional<TString> PrintedData;
+};
+
 TString LoadFile(const TString& file);
 
 NKikimrServices::EServiceKikimr GetLogService(const TString& serviceName);
@@ -109,5 +124,13 @@ TChoices<NActors::NLog::EPriority> GetLogPrioritiesMap(const TString& optionName
 void SetupSignalActions();
 
 void PrintResultSet(EResultOutputFormat format, IOutputStream& output, const Ydb::ResultSet& resultSet);
+
+template <typename TValue>
+TValue GetValue(size_t index, const std::vector<TValue>& values, TValue defaultValue) {
+    if (values.empty()) {
+        return defaultValue;
+    }
+    return values[std::min(index, values.size() - 1)];
+}
 
 }  // namespace NKikimrRun

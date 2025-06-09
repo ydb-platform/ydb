@@ -452,7 +452,7 @@ TEST_F(TLoggingTest, LogManager)
             };
         ];
         writers = {
-            "error" = {
+            error = {
                 file_name = "%v";
                 type = "file";
             };
@@ -487,14 +487,14 @@ TEST_F(TLoggingTest, ThreadMinLogLevel)
     Configure(Format(R"({
         rules = [
             {
-                min_level = "debug";
-                writers = [ "debug" ];
+                min_level = debug;
+                writers = [ debug ];
             };
         ];
         writers = {
-            "debug" = {
+            debug = {
                 file_name = "%v";
-                type = "file";
+                type = file;
             };
         };
     })", debugFile.Name()));
@@ -614,12 +614,12 @@ TEST_F(TLoggingTest, SlogMacroLogging)
             rules = [
                 {
                     min_level = info;
-                    writers = [ "test" ];
+                    writers = [ test ];
                 };
             ];
             writers = {
-                "test" = {
-                    "format" = "%v";
+                test = {
+                    format = "%v";
                     file_name = "%v";
                     type = "file";
                 };
@@ -656,8 +656,8 @@ TEST_F(TLoggingTest, SlogMacroConstexprLogging)
                 };
             ];
             writers = {
-                "test" = {
-                    "format" = "%v";
+                test = {
+                    format = "%v";
                     file_name = "%v";
                     type = "file";
                 };
@@ -770,25 +770,67 @@ TEST_F(TLoggingTest, StructuredLoggingJsonFormat)
     EXPECT_EQ(message->GetChildOrThrow("category")->AsString()->GetValue(), Logger().GetCategory()->Name);
 }
 
+TEST_F(TLoggingTest, StructuredLoggingWithLoggerTags)
+{
+    for (auto format : {ELogFormat::Yson, ELogFormat::Json}) {
+        TTempFile logFile(GenerateLogFileName());
+        Configure(Format(R"({
+            rules = [
+                {
+                    family = structured;
+                    min_level = info;
+                    writers = [ test ];
+                };
+            ];
+            writers = {
+                test = {
+                    format = "%v";
+                    file_name = "%v";
+                    type = file;
+                };
+            };
+            structured_validation_sampling_rate = 1.0;
+        })", format, logFile.Name()));
+
+        auto logger = Logger()
+            .WithStructuredTag("key1", "value1")
+            .WithStructuredTag("key2", "value2");
+        LogStructuredEventFluently(logger, ELogLevel::Info)
+            .Item("key3").Value("value3");
+
+        TLogManager::Get()->Synchronize();
+
+        auto lines = ReadPlainTextEvents(logFile.Name());
+        EXPECT_EQ(1, std::ssize(lines));
+
+        auto message = DeserializeStructuredEvent(lines[0], format);
+        EXPECT_EQ(message->GetChildOrThrow("key1")->AsString()->GetValue(), "value1");
+        EXPECT_EQ(message->GetChildOrThrow("key2")->AsString()->GetValue(), "value2");
+        EXPECT_EQ(message->GetChildOrThrow("key3")->AsString()->GetValue(), "value3");
+        EXPECT_EQ(message->GetChildOrThrow("level")->AsString()->GetValue(), FormatEnum(ELogLevel::Info));
+        EXPECT_EQ(message->GetChildOrThrow("category")->AsString()->GetValue(), Logger().GetCategory()->Name);
+    }
+}
+
 TEST_F(TLoggingTest, StructuredLoggingWithValidator)
 {
     TTempFile logFile(GenerateLogFileName());
     Configure(Format(R"({
         rules = [
             {
-                "family" = "structured";
+                family = structured;
                 min_level = info;
-                writers = [ "test" ];
+                writers = [ test ];
             };
         ];
         writers = {
-            "test" = {
-                "format" = "structured";
+            test = {
+                format = structured;
                 file_name = "%v";
-                type = "file";
+                type = file;
             };
         };
-        "structured_validation_sampling_rate" = 1.0;
+        structured_validation_sampling_rate = 1.0;
     })", logFile.Name()));
 
     auto logger = Logger().WithStructuredValidator([] (const TYsonString& yson) {
@@ -826,19 +868,19 @@ TEST_F(TLoggingTest, StructuredValidationWithSamplingRate)
     Configure(Format(R"({
         rules = [
             {
-                "family" = "structured";
+                family = structured;
                 min_level = info;
-                writers = [ "test" ];
+                writers = [ test ];
             };
         ];
         writers = {
-            "test" = {
+            test = {
                 file_name = "%v";
-                "format" = "structured";
-                type = "file";
+                format = structured;
+                type = file;
             }
         };
-        "structured_validation_sampling_rate" = 0.5;
+        structured_validation_sampling_rate = 0.5;
     })", logFile.Name()));
     EXPECT_NEAR(TLogManager::Get()->GetCategory("Test")->StructuredValidationSamplingRate, 0.5, 0.001);
 
@@ -922,12 +964,12 @@ TEST_P(TBuiltinRotationTest, All)
         writers = {
             info = {
                 file_name = "%v";
-                "use_timestamp_suffix" = %v;
-                "use_logrotate_compatible_timestamp_suffix" = %v;
+                use_timestamp_suffix = %v;
+                use_logrotate_compatible_timestamp_suffix = %v;
                 type = "file";
-                "rotation_policy" = {
-                    "max_segment_count_to_keep" = %v;
-                    "max_segment_size" = 10;
+                rotation_policy = {
+                    max_segment_count_to_keep = %v;
+                    max_segment_size = 10;
                 };
             };
         };
@@ -1155,7 +1197,7 @@ TEST_F(TLoggingTest, DISABLED_LogFatal)
         writers = {
             info = {
                 file_name = "%v";
-                type = "file";
+                type = file;
             };
         };
     })", logFile.Name()));
@@ -1184,10 +1226,10 @@ TEST_F(TLoggingTest, SupressedRequests)
         writers = {
             info = {
                 file_name = "%v";
-                type = "file";
+                type = file;
             };
         };
-        "request_suppression_timeout" = 100;
+        request_suppression_timeout = 100;
     })", logFile.Name()));
 
     {
@@ -1225,7 +1267,7 @@ TEST_F(TLoggingTest, SuppressedMessages)
         writers = {
             info = {
                 file_name = "%v";
-                type = "file";
+                type = file;
             };
         };
         suppressed_messages = ["Suppressed message"];
@@ -1256,7 +1298,7 @@ TEST_F(TLoggingTest, MessageLevelOverride)
         writers = {
             info = {
                 file_name = "%v";
-                type = "file";
+                type = file;
             };
         };
         message_level_overrides = {
@@ -1352,14 +1394,14 @@ protected:
             rules = [
                 {
                     min_level = info;
-                    "max_level" = info;
+                    max_level = info;
                     writers = [ info ];
                 };
             ];
             writers = {
                 info = {
                     file_name = "%v";
-                    type = "file";
+                    type = file;
                 };
             };
         })", fileName));
@@ -1539,10 +1581,10 @@ TEST_F(TCustomWriterTest, UnknownWriterType)
     EXPECT_THROW_WITH_SUBSTRING(
         {
             Configure(R"({
-                "rules" = [];
+                rules = [];
                 writers = {
-                    "custom" = {
-                        type = "unknown";
+                    custom = {
+                        type = unknown;
                     };
                 };
             })");
@@ -1555,11 +1597,11 @@ TEST_F(TCustomWriterTest, WriterConfigValidation)
     EXPECT_THROW_WITH_SUBSTRING(
         {
             Configure(Format(R"({
-                "rules" = [];
+                rules = [];
                 writers = {
-                    "custom" = {
+                    custom = {
                         type = "%v";
-                        "padding" = -10;
+                        padding = -10;
                     };
                 };
             })", CustomWriterType));
@@ -1573,13 +1615,13 @@ TEST_F(TCustomWriterTest, Write)
         "rules" = [
             {
                 min_level = info;
-                writers = [ "custom" ];
+                writers = [ custom ];
             }
         ];
         writers = {
-            "custom" = {
+            custom = {
                 type = "%v";
-                "padding" = 2;
+                padding = 2;
             };
         };
     })", CustomWriterType));

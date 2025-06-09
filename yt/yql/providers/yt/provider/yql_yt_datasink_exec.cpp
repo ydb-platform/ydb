@@ -314,6 +314,7 @@ private:
                 .OperationHash(operationHash)
                 .SecureParams(secureParams)
                 .RuntimeLogLevel(State_->Types->RuntimeLogLevel)
+                .LangVer(State_->Types->LangVer)
                 .AdditionalSecurityTags(addSecTags)
             );
     }
@@ -709,7 +710,7 @@ private:
         TString operationHash;
         if (const auto queryCacheMode = config->QueryCacheMode.Get().GetOrElse(EQueryCacheMode::Disable); queryCacheMode != EQueryCacheMode::Disable) {
             if (!hasNonDeterministicFunctions) {
-                operationHash = TYtNodeHashCalculator(State_, cluster, config).GetHash(*input);
+                operationHash = TYtNodeHashCalculator(State_, cluster, config).GetHash(*optimizedNode);
             }
             YQL_CLOG(DEBUG, ProviderYt) << "Operation hash: " << HexEncode(operationHash).Quote() << ", cache mode: " << queryCacheMode;
         }
@@ -758,10 +759,9 @@ private:
         }
 
         if (!delegatedNode) {
-            const auto cluster = op.DataSink().Cluster();
+            const auto clusterStr = op.DataSink().Cluster().StringValue();
             const auto config = State_->Configuration->GetSettingsForNode(*input);
-            const auto tmpFolder = GetTablesTmpFolder(*config);
-            auto clusterStr = TString{cluster.Value()};
+            const auto tmpFolder = GetTablesTmpFolder(*config, clusterStr);
 
             delegatedNode = input->ChildPtr(TYtDqProcessWrite::idx_Input);
 

@@ -58,6 +58,7 @@ message GlobalIndexSettings {
     }
     // Partitioning settings for the table that implements the index.
     PartitioningSettings partitioning_settings = 3;
+    ReadReplicasSettings read_replicas_settings = 4;
 }
 
 message VectorIndexSettings {
@@ -108,6 +109,7 @@ message GlobalUniqueIndex {
 message GlobalVectorKMeansTreeIndex {
     GlobalIndexSettings level_table_settings = 1;
     GlobalIndexSettings posting_table_settings = 2;
+    GlobalIndexSettings prefix_table_settings = 4;
     KMeansTreeSettings vector_settings = 3;
 }
 
@@ -231,6 +233,8 @@ message Changefeed {
     google.protobuf.Duration resolved_timestamps_interval = 9;
     // Partitioning settings of underlying topic.
     Topic.PartitioningSettings topic_partitioning_settings = 10;
+    // Emit schema change events or not
+    bool schema_changes = 11;
 }
 
 message ChangefeedDescription {
@@ -272,6 +276,8 @@ message ChangefeedDescription {
     google.protobuf.Duration resolved_timestamps_interval = 8;
     // Progress of initial scan. If unspecified, initial scan was not launched.
     InitialScanProgress initial_scan_progress = 9;
+    // State of emitting of schema change events
+    bool schema_changes = 10;
 }
 
 message StoragePool {
@@ -1293,6 +1299,8 @@ message ExecuteScanQueryPartialResult {
     // works only in mode: MODE_EXPLAIN,
     // collects additional diagnostics about query compilation, including query plan and scheme
     string query_full_diagnostics = 7 [deprecated = true];
+    // Optional snapshot that corresponds to the returned data
+    VirtualTimestamp snapshot = 8;
 }
 
 // Returns information about an external data source with a given path.

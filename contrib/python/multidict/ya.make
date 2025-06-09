@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(6.2.0)
+VERSION(6.4.4)
 
 LICENSE(Apache-2.0)
 
@@ -27,7 +27,6 @@ PY_SRCS(
     multidict/__init__.py
     multidict/_abc.py
     multidict/_compat.py
-    multidict/_multidict_base.py
     multidict/_multidict_py.py
 )
 

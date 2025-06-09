@@ -147,7 +147,7 @@ public:
     }
     std::shared_ptr<TInsertColumnEngineChanges> StartInsert(std::vector<TCommittedData>&& dataToIndex) noexcept override;
     ui64 GetCompactionPriority(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager, const std::set<TInternalPathId>& pathIds,
-        const std::optional<ui64> waitingPriority) noexcept override;
+        const std::optional<ui64> waitingPriority) const noexcept override;
     std::shared_ptr<TColumnEngineChanges> StartCompaction(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept override;
     std::shared_ptr<TCleanupPortionsColumnEngineChanges> StartCleanupPortions(const TSnapshot& snapshot, const THashSet<TInternalPathId>& pathsToDrop,
         const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept override;
@@ -232,7 +232,7 @@ public:
         auto granule = GetGranulePtrVerified(portion->GetPathId());
         granule->ModifyPortionOnComplete(portion, modifier);
         Counters->AddPortion(*portion);
-        Counters->RemovePortion(exPortion);
+        Counters->RemovePortion(*exPortion);
     }
 
     void AppendPortion(const TPortionDataAccessor& portionInfo);

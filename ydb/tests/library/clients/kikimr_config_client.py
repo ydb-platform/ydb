@@ -44,6 +44,10 @@ class ConfigClient(object):
         ]
         self._channel = grpc.insecure_channel("%s:%s" % (self.server, self.port), options=self._options)
         self._stub = grpc_server.ConfigServiceStub(self._channel)
+        self._auth_token = None
+
+    def set_auth_token(self, token):
+        self._auth_token = token
 
     def _get_invoke_callee(self, method):
         return getattr(self._stub, method)
@@ -53,7 +57,10 @@ class ConfigClient(object):
         while True:
             try:
                 callee = self._get_invoke_callee(method)
-                return callee(request)
+                metadata = []
+                if self._auth_token:
+                    metadata.append(('x-ydb-auth-ticket', self._auth_token))
+                return callee(request, metadata=metadata)
             except (RuntimeError, grpc.RpcError):
                 retry -= 1
 

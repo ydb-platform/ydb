@@ -1,8 +1,8 @@
-# {{ ydb-short-name }} cluster topology
+# {{ ydb-short-name }} Cluster Topology
 
 A {{ ydb-short-name }} cluster consists of [storage](glossary.md#storage-node) and [database](glossary.md#database-node) nodes. As the data stored in {{ ydb-short-name }} is available only via queries and API calls, both types of nodes are essential for [database availability](#database-availability). However, [distributed storage](glossary.md#distributed-storage) consisting of storage nodes has the most impact on the cluster's fault tolerance and ability to persist data reliably. During the initial cluster deployment, an appropriate distributed storage [operating mode](#cluster-config) needs to be chosen according to the expected workload and [database availability](#database-availability) requirements. The operation mode cannot be changed after the initial cluster setup, making it one of the key decisions to consider when planning a new {{ ydb-short-name }} deployment.
 
-## Cluster operating modes {#cluster-config}
+## Cluster Operating Modes {#cluster-config}
 
 Cluster topology is based on the chosen distributed storage operating mode, which needs to be determined according to the fault tolerance requirements. {{ ydb-short-name }}'s failure model is based on the concepts of [fail domain](glossary.md#fail-domain) and [fail realm](glossary.md#fail-realm).
 
@@ -43,7 +43,7 @@ The storage volume multiplier specified above only applies to the fault toleranc
 
 For information about how to set the {{ ydb-short-name }} cluster topology, see [{#T}](../reference/configuration/index.md#domains-blob).
 
-### Reduced configurations {#reduced}
+### Reduced Configurations {#reduced}
 
 If it is impossible to use the [recommended amount](#cluster-config) of hardware, you can divide servers within a single rack into two dummy fail domains. In this configuration, the failure of one rack results in the failure of two domains instead of just one. In such reduced configurations, {{ ydb-short-name }} will continue to operate if two domains fail. The minimum number of racks in a cluster is five for `block-4-2` mode and two per data center (e.g., six in total) for `mirror-3-dc` mode.
 
@@ -51,7 +51,7 @@ The minimal fault-tolerant configuration of a {{ ydb-short-name }} cluster uses 
 
 {{ ydb-short-name }} clusters configured with one of these approaches can be used for production environments if they don't require stronger fault tolerance guarantees.
 
-## Capacity and performance considerations {#capacity}
+## Capacity and Performance Considerations {#capacity}
 
 The system can function with fail domains of any size. However, if there are few domains with varying numbers of disks, the number of storage groups that can be created will be limited. In such cases, hardware in overly large fail domains may be underutilized. If all hardware is fully utilized, significant differences in domain sizes may prevent reconfiguration.
 
@@ -70,7 +70,7 @@ Therefore, the optimal initial hardware configurations for production {{ ydb-sho
 * **A cluster hosted in one availability zone**: This setup uses the `block-4-2` mode and consists of nine or more racks, each with an identical number of servers.
 * **A cluster hosted in three availability zones**: This setup uses the `mirror-3-dc` mode and is distributed across three data centers, with four or more racks in each, all containing an identical number of servers.
 
-## Database availability {#database-availability}
+## Database Availability {#database-availability}
 
 A [database](glossary.md#database) within a {{ ydb-short-name }} cluster is available if both its storage and compute resources are operational:
 
@@ -82,11 +82,11 @@ To survive an entire data center outage at the database level, assuming a cluste
 - The [storage nodes](glossary.md#storage-node) need to have at least double the I/O bandwidth and disk capacity compared to what is required for normal operation. In the worst case, the load on the remaining nodes during the maximum allowed outage might triple, but that's only temporary until self-heal restores failed disks in operating data centers.
 - The [database nodes](glossary.md#database-node) must be evenly distributed between all 3 data centers and include sufficient resources to handle the entire workload when running in just 2 of the 3 data centers. To achieve this, database nodes in each datacenter need at least 35% extra spare CPU and RAM resources when running normally without ongoing failures. If database nodes are typically utilized above this threshold, consider adding more of them or moving them to servers with more resources.
 
-## See also
+## See Also
 
 * [Documentation for DevOps Engineers](../devops/index.md)
 * [{#T}](../reference/configuration/index.md#domains-blob)
-* [Example cluster configuration files](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/yaml_config_examples/)
+* [Example Cluster Configuration Files](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/yaml_config_examples/)
 * [{#T}](../contributor/distributed-storage.md)
 
 [*recommended-node-count]: Using fewer than this number of nodes will limit the cluster's ability to [self-heal](../maintenance/manual/selfheal.md).

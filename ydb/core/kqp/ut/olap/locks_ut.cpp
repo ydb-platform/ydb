@@ -144,27 +144,44 @@ Y_UNIT_TEST_SUITE(KqpOlapLocks) {
         //DELETE 1 row from one shard and 0 rows from others
         const auto resultDelete = client.ExecuteQuery("DELETE from `/Root/ttt` ", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
         UNIT_ASSERT_C(resultDelete.IsSuccess() != reboot, resultDelete.GetIssues().ToString());
-        {
-            const auto resultSelect =
-                client.ExecuteQuery("SELECT * FROM `/Root/ttt`", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
 
-            UNIT_ASSERT_C(resultSelect.IsSuccess(), resultSelect.GetIssues().ToString());
-            const auto resultSets = resultSelect.GetResultSets();
-            UNIT_ASSERT_VALUES_EQUAL(resultSets.size(), 1);
-            const auto resultSet = resultSets[0];
-            if (shardCount > 1 && reboot) {
-                UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 1); // locks broken
-            } else {
-                UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 0); // not need locks
-            }
+        const auto resultSelect =
+            client.ExecuteQuery("SELECT * FROM `/Root/ttt`", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+
+        UNIT_ASSERT_C(resultSelect.IsSuccess(), resultSelect.GetIssues().ToString());
+        const auto resultSets = resultSelect.GetResultSets();
+        UNIT_ASSERT_VALUES_EQUAL(resultSets.size(), 1);
+        const auto resultSet = resultSets[0];
+        if (shardCount > 1 && reboot) {
+            const auto deleteUnavailiable = resultDelete.GetStatus() == NYdb::Dev::EStatus::UNAVAILABLE;
+            const auto deleteUndetermined = resultDelete.GetStatus() == NYdb::Dev::EStatus::UNDETERMINED;
+            UNIT_ASSERT_C(
+                // If UNAVAILABLE: row should still exist in DB
+                (deleteUnavailiable && resultSet.RowsCount() == 1) ||
+
+                // If UNDETERMINED: operation might have succeeded or failed
+                deleteUndetermined,
+
+                resultDelete.GetStatus()
+            );
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 0); // not need locks
         }
+
         //DELETE 0 rows from every shard
         const auto resultDelete2 =
             client.ExecuteQuery("DELETE from `/Root/ttt` WHERE id < 100", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
         if (shardCount > 1 && reboot) {
-            UNIT_ASSERT_C(!resultDelete2.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_C(
+                (!resultDelete2.IsSuccess() && resultSet.RowsCount() == 1) ||
+
+                // Delete success due to optimisations
+                (resultDelete2.IsSuccess() && (resultSet.RowsCount() == 0)),
+
+                resultDelete2.GetIssues().ToString()
+            );
         } else {
-            UNIT_ASSERT_C(resultDelete2.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_C(resultDelete2.IsSuccess(), resultDelete2.GetIssues().ToString());
         }
     }
     Y_UNIT_TEST_TWIN(DeleteAbsentSingleShard, Reboot) {

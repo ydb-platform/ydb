@@ -44,7 +44,7 @@ Y_UNIT_TEST_SUITE(KqpSinkMvcc) {
                 Sleep(TDuration::Seconds(1));
                 auto result = session1.ExecuteQuery(Q_(R"(
                     SELECT * FROM `/Root/KV` WHERE Key = 1u OR Key = 4000000001u;
-                )"), TTxControl::Tx(tx->GetId())).ExtractValueSync();
+                )"), TTxControl::Tx(*tx)).ExtractValueSync();
                 if (result.GetStatus() == EStatus::SUCCESS)
                     continue;
 
@@ -113,7 +113,7 @@ Y_UNIT_TEST_SUITE(KqpSinkMvcc) {
 
             result = session1.ExecuteQuery(Q_(R"(
                 SELECT * FROM `/Root/KV` WHERE Key = 1u;
-            )"), TTxControl::Tx(tx->GetId())).ExtractValueSync();
+            )"), TTxControl::Tx(*tx)).ExtractValueSync();
 
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             CompareYson(R"([
@@ -122,7 +122,7 @@ Y_UNIT_TEST_SUITE(KqpSinkMvcc) {
 
             result = session1.ExecuteQuery(Q_(R"(
                 SELECT * FROM `/Root/KV` WHERE Key = 2u OR Key = 4000000002u ORDER BY Key;
-            )"), TTxControl::Tx(tx->GetId()).CommitTx()).ExtractValueSync();
+            )"), TTxControl::Tx(*tx).CommitTx()).ExtractValueSync();
 
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
                 CompareYson(R"([
@@ -172,7 +172,7 @@ Y_UNIT_TEST_SUITE(KqpSinkMvcc) {
 
             result = session1.ExecuteQuery(Q_(R"(
                 UPSERT INTO `/Root/KV` (Key, Value) VALUES (1u, "TwiceChangedOne");
-            )"), TTxControl::Tx(tx->GetId()).CommitTx()).ExtractValueSync();
+            )"), TTxControl::Tx(*tx).CommitTx()).ExtractValueSync();
 
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
             UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED), result.GetIssues().ToString());
@@ -224,7 +224,7 @@ Y_UNIT_TEST_SUITE(KqpSinkMvcc) {
             result = session1.ExecuteQuery(Q_(R"(
                 UPDATE `/Root/KV` SET Value = "Something" WHERE Key = 1u;
                 UPDATE `/Root/KV2` SET Value = "AnotherString" WHERE Key = 101u;
-            )"), TTxControl::Tx(tx->GetId()).CommitTx()).ExtractValueSync();
+            )"), TTxControl::Tx(*tx).CommitTx()).ExtractValueSync();
 
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
             UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED), result.GetIssues().ToString());
@@ -271,7 +271,7 @@ Y_UNIT_TEST_SUITE(KqpSinkMvcc) {
 
             result = session1.ExecuteQuery(Q_(R"(
                 SELECT * FROM `/Root/KV` WHERE Key = 2u OR Key = 4000000002u ORDER BY Key;
-            )"), TTxControl::Tx(tx->GetId())).ExtractValueSync();
+            )"), TTxControl::Tx(*tx)).ExtractValueSync();
 
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
                 CompareYson(R"([
@@ -281,7 +281,7 @@ Y_UNIT_TEST_SUITE(KqpSinkMvcc) {
 
             result = session1.ExecuteQuery(Q_(R"(
                 UPSERT INTO `/Root/KV` (Key, Value) VALUES (2u, "TwiceChangedTwo");
-            )"), TTxControl::Tx(tx->GetId()).CommitTx()).ExtractValueSync();
+            )"), TTxControl::Tx(*tx).CommitTx()).ExtractValueSync();
 
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
             UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED), result.GetIssues().ToString());

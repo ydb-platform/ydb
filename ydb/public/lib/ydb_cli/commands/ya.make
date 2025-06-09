@@ -10,7 +10,6 @@ SRCS(
     topic_read_scenario.cpp
     topic_write_scenario.cpp
     topic_readwrite_scenario.cpp
-    query_workload.cpp
     ydb_admin.cpp
     ydb_benchmark.cpp
     ydb_cluster.cpp
@@ -35,6 +34,7 @@ SRCS(
     ydb_tools.cpp
     ydb_workload.cpp
     ydb_workload_import.cpp
+    ydb_workload_tpcc.cpp
     ydb_yql.cpp
 )
 
@@ -78,7 +78,6 @@ PEERDIR(
     yql/essentials/public/decimal
 )
 
-GENERATE_ENUM_SERIALIZATION(ydb_benchmark.h)
 GENERATE_ENUM_SERIALIZATION(ydb_ping.h)
 GENERATE_ENUM_SERIALIZATION(ydb_latency.h)
 

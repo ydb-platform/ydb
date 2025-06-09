@@ -10,6 +10,7 @@
 #include <yql/essentials/minikql/mkql_node.h>
 #include <yql/essentials/minikql/mkql_alloc.h>
 #include <yql/essentials/public/udf/udf_validate.h>
+#include <yql/essentials/public/langver/yql_langver.h>
 
 #include <library/cpp/random_provider/random_provider.h>
 #include <library/cpp/time_provider/time_provider.h>
@@ -35,7 +36,8 @@ public:
         NKikimr::NMiniKQL::IStatsRegistry* jobStats = nullptr,
         NKikimr::NUdf::ICountersProvider* counters = nullptr,
         const NKikimr::NUdf::ISecureParamsProvider *secureParamsProvider = nullptr,
-        const NKikimr::NUdf::ILogProvider* logProvider = nullptr);
+        const NKikimr::NUdf::ILogProvider* logProvider = nullptr,
+        TLangVersion langver = UnknownLangVersion);
 
     ~TLambdaBuilder();
 
@@ -108,6 +110,7 @@ protected:
     NKikimr::NUdf::ICountersProvider* const Counters;
     const NKikimr::NUdf::ISecureParamsProvider* SecureParamsProvider;
     const NKikimr::NUdf::ILogProvider* LogProvider;
+    const TLangVersion LangVer;
 
     /// TODO: remove?
     void SetExternalEnv(const NKikimr::NMiniKQL::TTypeEnvironment* env);

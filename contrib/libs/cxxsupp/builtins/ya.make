@@ -12,9 +12,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(20.1.2)
+VERSION(20.1.5)
 
-ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/releases/download/llvmorg-20.1.2/compiler-rt-20.1.2.src.tar.xz)
+ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/releases/download/llvmorg-20.1.5/compiler-rt-20.1.5.src.tar.xz)
 
 NO_COMPILER_WARNINGS()
 
@@ -86,7 +86,7 @@ IF (ARCH_ARM64 OR ARCH_X86_64)
     ENDIF()
 ENDIF()
 
-IF (ARCH_ARM7)
+IF (ARCH_ARM6 OR ARCH_ARM7)
     SRCS(
         absvdi2.c
         absvsi2.c

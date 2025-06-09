@@ -79,14 +79,18 @@ void TReplicatedTableOptions::Register(TRegistrar registrar)
 {
     registrar.Parameter("max_sync_replica_count", &TThis::MaxSyncReplicaCount)
         .Alias("sync_replica_count")
-        .Optional();
+        .Optional()
+        .GreaterThanOrEqual(0);
     registrar.Parameter("min_sync_replica_count", &TThis::MinSyncReplicaCount)
-        .Optional();
+        .Optional()
+        .GreaterThanOrEqual(0);
     registrar.Parameter("max_sync_queue_replica_count", &TThis::MaxSyncQueueReplicaCount)
         .Optional()
+        .GreaterThanOrEqual(2)
         .DontSerializeDefault();
     registrar.Parameter("min_sync_queue_replica_count", &TThis::MinSyncQueueReplicaCount)
         .Optional()
+        .GreaterThanOrEqual(1)
         .DontSerializeDefault();
 
     registrar.Parameter("enable_replicated_table_tracker", &TThis::EnableReplicatedTableTracker)
@@ -111,11 +115,6 @@ void TReplicatedTableOptions::Register(TRegistrar registrar)
             config->MinSyncReplicaCount > config->MaxSyncReplicaCount)
         {
             THROW_ERROR_EXCEPTION("\"min_sync_replica_count\" must be less or equal to \"max_sync_replica_count\"");
-        }
-
-        if (config->MaxSyncQueueReplicaCount && config->MaxSyncQueueReplicaCount < 2) {
-            THROW_ERROR_EXCEPTION("\"max_sync_queue_replica_count\" canot be less than 2, actual: %v",
-                config->MaxSyncQueueReplicaCount);
         }
 
         if (config->MaxSyncQueueReplicaCount &&

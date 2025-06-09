@@ -38,6 +38,7 @@ class TUdfResolverWithIndex : public IUdfResolver {
             Block_.Type = EUserDataType::PATH;
             Block_.Data = Link_->GetPath();
             Block_.Usage.Set(EUserDataBlockUsage::Udf);
+            Block_.FrozenFile = Link_;
         }
 
         static TResourceFile::TPtr Create(const TString& packageName, const TSet<TString>& modules, TFileLinkPtr link) {
@@ -79,7 +80,7 @@ public:
     }
 
     bool LoadMetadata(const TVector<TImport*>& imports, const TVector<TFunction*>& functions,
-        TExprContext& ctx, NUdf::ELogLevel logLevel) const override {
+        TExprContext& ctx, NUdf::ELogLevel logLevel, THoldingFileStorage& storage) const override {
         with_lock(Lock_) {
             bool hasErrors = false;
             THashSet<TString> requiredModules;
@@ -106,12 +107,12 @@ public:
 
             fallbackImports.insert(fallbackImports.end(), additionalImports.begin(), additionalImports.end());
 
-            return Fallback_->LoadMetadata(fallbackImports, fallbackFunctions, ctx, logLevel) && !hasErrors;
+            return Fallback_->LoadMetadata(fallbackImports, fallbackFunctions, ctx, logLevel, storage) && !hasErrors;
         }
     }
 
-    TResolveResult LoadRichMetadata(const TVector<TImport>& imports, NUdf::ELogLevel logLevel) const override {
-        return Fallback_->LoadRichMetadata(imports, logLevel);
+    TResolveResult LoadRichMetadata(const TVector<TImport>& imports, NUdf::ELogLevel logLevel, THoldingFileStorage& storage) const override {
+        return Fallback_->LoadRichMetadata(imports, logLevel, storage);
     }
 
     bool ContainsModule(const TStringBuf& moduleName) const override {
@@ -205,6 +206,8 @@ private:
         function.IsStrict = info.IsStrict;
         function.SupportsBlocks = info.SupportsBlocks;
         function.Messages = info.Messages;
+        function.MinLangVer = info.MinLangVer;
+        function.MaxLangVer = info.MaxLangVer;
         return true;
     }
 

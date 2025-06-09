@@ -102,8 +102,6 @@ SRCS(
     datashard_kqp_compute.h
     datashard_kqp_delete_rows.cpp
     datashard_kqp_effects.cpp
-    datashard_kqp_lookup_table.cpp
-    datashard_kqp_read_table.cpp
     datashard_kqp_upsert_rows.cpp
     datashard_loans.cpp
     datashard_locks_db.cpp
@@ -313,6 +311,7 @@ RECURSE_FOR_TESTS(
     ut_compaction
     ut_data_cleanup
     ut_erase_rows
+    ut_export
     ut_external_blobs
     ut_followers
     ut_incremental_backup

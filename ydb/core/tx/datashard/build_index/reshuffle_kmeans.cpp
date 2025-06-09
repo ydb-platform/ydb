@@ -22,15 +22,36 @@
 namespace NKikimr::NDataShard {
 using namespace NKMeans;
 
-// This scan needed to run kmeans reshuffle which is part of global kmeans run.
-class TReshuffleKMeansScanBase: public TActor<TReshuffleKMeansScanBase>, public NTable::IScan {
+/*
+ * TReshuffleKMeansScan performs a post-processing step in a distributed K-means pipeline.
+ * It reassigns data points to given clusters and uploads the reshuffled results.
+ * It scans either a MAIN or BUILD table shard, while the output rows go to the BUILD or POSTING table.
+ *
+ * Request:
+ * - The client sends TEvReshuffleKMeansRequest with:
+ *   - Parent: ID of the scanned cluster
+ *     - If Parent=0, the entire table shard is scanned
+ *   - Child, serving as the base ID for the new cluster IDs computed in this local stage
+ *   - Clusters: list of centroids to which input rows will be reassigned
+ *   - Upload mode (MAIN_TO_BUILD, MAIN_TO_POSTING, BUILD_TO_BUILD or BUILD_TO_POSTING)
+ *     determining input and output layouts
+ *   - The embedding column name and additional data columns to be used for K-means
+ *   - Name of the target table for row results ("posting" or "build")
+ *
+ * Execution Flow:
+ * - TReshuffleKMeansScan scans the relevant input shard range
+ * - For each input row:
+ *   - The closest cluster (from the provided centroids) is determined
+ *   - The row is annotated with a new Child+cluster index ID
+ *   - The row and any specified data columns are written to the output table
+ */
+
+class TReshuffleKMeansScanBase: public TActor<TReshuffleKMeansScanBase>, public IActorExceptionHandler, public NTable::IScan {
 protected:
     using EState = NKikimrTxDataShard::EKMeansState;
 
     NTableIndex::TClusterId Parent = 0;
     NTableIndex::TClusterId Child = 0;
-
-    ui32 K = 0;
 
     EState UploadState;
 
@@ -44,34 +65,31 @@ protected:
     ui64 ReadRows = 0;
     ui64 ReadBytes = 0;
 
-    std::vector<TString> Clusters;
+    TBatchRowsUploader Uploader;
+    
+    TBufferData* OutputBuf = nullptr;
 
-    // Upload
-    std::shared_ptr<NTxProxy::TUploadTypes> TargetTypes;
-
-    TString TargetTable;
-
-    TBufferData ReadBuf;
-    TBufferData WriteBuf;
-
+    const ui32 Dimensions = 0;
     NTable::TPos EmbeddingPos = 0;
     NTable::TPos DataPos = 1;
 
     ui32 RetryCount = 0;
 
-    TActorId Uploader;
     const TIndexBuildScanSettings ScanSettings;
 
-    TTags UploadScan;
+    TTags ScanTags;
 
     TUploadStatus UploadStatus;
 
     ui64 UploadRows = 0;
     ui64 UploadBytes = 0;
 
-    // Response
     TActorId ResponseActorId;
     TAutoPtr<TEvDataShard::TEvReshuffleKMeansResponse> Response;
+
+    bool IsExhausted = false;
+
+    virtual TString Debug() const = 0;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType()
@@ -86,24 +104,22 @@ public:
         : TActor{&TThis::StateWork}
         , Parent{request.GetParent()}
         , Child{request.GetChild()}
-        , K{static_cast<ui32>(request.ClustersSize())}
         , UploadState{request.GetUpload()}
         , Lead{std::move(lead)}
         , TabletId(tabletId)
         , BuildId{request.GetId()}
-        , Clusters{request.GetClusters().begin(), request.GetClusters().end()}
-        , TargetTable{request.GetPostingName()}
+        , Uploader(request.GetScanSettings())
+        , Dimensions(request.GetSettings().vector_dimension())
         , ScanSettings(request.GetScanSettings())
         , ResponseActorId{responseActorId}
         , Response{std::move(response)}
     {
         const auto& embedding = request.GetEmbeddingColumn();
         const auto& data = request.GetDataColumns();
-        // scan tags
         NTable::TTag embeddingTag;
-        UploadScan = MakeUploadTags(table, embedding, data, EmbeddingPos, DataPos, embeddingTag);
-        // upload types
-        TargetTypes = MakeUploadTypes(table, UploadState, embedding, data);
+        ScanTags = MakeScanTags(table, embedding, data, EmbeddingPos, DataPos, embeddingTag);
+        Lead.SetTags(ScanTags);
+        OutputBuf = Uploader.AddDestination(request.GetOutputName(), MakeOutputTypes(table, UploadState, embedding, data));
     }
 
     TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme>) final
@@ -112,51 +128,24 @@ public:
         LOG_I("Prepare " << Debug());
 
         Driver = driver;
+        Uploader.SetOwner(SelfId());
+
         return {EScan::Feed, {}};
     }
 
-    EScan Seek(TLead& lead, ui64 seq) final
+    TAutoPtr<IDestructable> Finish(const std::exception& exc) final
     {
-        LOG_D("Seek " << Debug());
-        if (seq == 0) {
-            lead = std::move(Lead);
-            lead.SetTags(UploadScan);
-            return EScan::Feed;
-        }
-        if (!WriteBuf.IsEmpty()) {
-            return EScan::Sleep;
-        }
-        if (!ReadBuf.IsEmpty()) {
-            ReadBuf.FlushTo(WriteBuf);
-            Upload(false);
-            return EScan::Sleep;
-        }
-        if (UploadStatus.IsNone()) {
-            UploadStatus.StatusCode = Ydb::StatusIds::SUCCESS;
-        }
-        return EScan::Final;
+        Uploader.AddIssue(exc);
+        return Finish(EStatus::Exception);
     }
 
-    TAutoPtr<IDestructable> Finish(EAbort abort) final
+    TAutoPtr<IDestructable> Finish(EStatus status) final
     {
-        if (Uploader) {
-            Send(Uploader, new TEvents::TEvPoison);
-            Uploader = {};
-        }
-
         auto& record = Response->Record;
         record.SetReadRows(ReadRows);
         record.SetReadBytes(ReadBytes);
-        record.SetUploadRows(UploadRows);
-        record.SetUploadBytes(UploadBytes);
-        if (abort != EAbort::None) {
-            record.SetStatus(NKikimrIndexBuilder::EBuildStatus::ABORTED);
-        } else if (UploadStatus.IsSuccess()) {
-            record.SetStatus(NKikimrIndexBuilder::EBuildStatus::DONE);
-        } else {
-            record.SetStatus(NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
-        }
-        NYql::IssuesToMessage(UploadStatus.Issues, record.MutableIssues());
+        
+        Uploader.Finish(record, status);
 
         if (Response->Record.GetStatus() == NKikimrIndexBuilder::DONE) {
             LOG_N("Done " << Debug() << " " << Response->Record.ShortDebugString());
@@ -170,17 +159,18 @@ public:
         return nullptr;
     }
 
+    bool OnUnhandledException(const std::exception& exc) final
+    {
+        if (!Driver) {
+            return false;
+        }
+        Driver->Throw(exc);
+        return true;
+    }
+
     void Describe(IOutputStream& out) const final
     {
         out << Debug();
-    }
-
-    TString Debug() const
-    {
-        return TStringBuilder() << "TReshuffleKMeansScan TabletId: " << TabletId << " Id: " << BuildId
-            << " Parent: " << Parent << " Child: " << Child
-            << " Target: " << TargetTable << " K: " << K << " Clusters: " << Clusters.size()
-            << " ReadBuf size: " << ReadBuf.Size() << " WriteBuf size: " << WriteBuf.Size();
     }
 
     EScan PageFault() final
@@ -193,165 +183,154 @@ protected:
     STFUNC(StateWork)
     {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvTxUserProxy::TEvUploadRowsResponse, Handle);
-            cFunc(TEvents::TSystem::Wakeup, HandleWakeup);
+            HFunc(TEvTxUserProxy::TEvUploadRowsResponse, Handle);
+            CFunc(TEvents::TSystem::Wakeup, HandleWakeup);
             default:
                 LOG_E("StateWork unexpected event type: " << ev->GetTypeRewrite() 
                     << " event: " << ev->ToString() << " " << Debug());
         }
     }
 
-    void HandleWakeup()
+    void HandleWakeup(const NActors::TActorContext& /*ctx*/)
     {
-        LOG_I("Retry upload " << Debug());
+        LOG_D("Retry upload " << Debug());
 
-        if (!WriteBuf.IsEmpty()) {
-            Upload(true);
-        }
+        Uploader.RetryUpload();
     }
 
-    void Handle(TEvTxUserProxy::TEvUploadRowsResponse::TPtr& ev)
+    void Handle(TEvTxUserProxy::TEvUploadRowsResponse::TPtr& ev, const TActorContext& ctx)
     {
-        LOG_D("Handle TEvUploadRowsResponse " << Debug() << " Uploader: " << Uploader.ToString()
-                                              << " ev->Sender: " << ev->Sender.ToString());
+        LOG_D("Handle TEvUploadRowsResponse " << Debug()
+            << " ev->Sender: " << ev->Sender.ToString());
 
-        if (Uploader) {
-            Y_ENSURE(Uploader == ev->Sender, "Mismatch"
-                << " Uploader: " << Uploader.ToString()
-                << " Sender: " << ev->Sender.ToString());
-        } else {
-            Y_ENSURE(Driver == nullptr);
+        if (!Driver) {
             return;
         }
 
-        UploadStatus.StatusCode = ev->Get()->Status;
-        UploadStatus.Issues = ev->Get()->Issues;
-        if (UploadStatus.IsSuccess()) {
-            UploadRows += WriteBuf.GetRows();
-            UploadBytes += WriteBuf.GetBytes();
-            WriteBuf.Clear();
-            if (HasReachedLimits(ReadBuf, ScanSettings)) {
-                ReadBuf.FlushTo(WriteBuf);
-                Upload(false);
-            }
+        Uploader.Handle(ev);
 
+        if (Uploader.GetUploadStatus().IsSuccess()) {
             Driver->Touch(EScan::Feed);
             return;
         }
 
-        if (RetryCount < ScanSettings.GetMaxBatchRetries() && UploadStatus.IsRetriable()) {
-            LOG_N("Got retriable error, " << Debug() << " " << UploadStatus.ToString());
-
-            Schedule(GetRetryWakeupTimeoutBackoff(RetryCount), new TEvents::TEvWakeup);
+        if (auto retryAfter = Uploader.GetRetryAfter(); retryAfter) {
+            LOG_N("Got retriable error, " << Debug() << " " << Uploader.GetUploadStatus().ToString());
+            ctx.Schedule(*retryAfter, new TEvents::TEvWakeup());
             return;
         }
 
-        LOG_N("Got error, abort scan, " << Debug() << " " << UploadStatus.ToString());
+        LOG_N("Got error, abort scan, " << Debug() << " " << Uploader.GetUploadStatus().ToString());
 
         Driver->Touch(EScan::Final);
-    }
-
-    EScan FeedUpload()
-    {
-        if (!HasReachedLimits(ReadBuf, ScanSettings)) {
-            return EScan::Feed;
-        }
-        if (!WriteBuf.IsEmpty()) {
-            return EScan::Sleep;
-        }
-        ReadBuf.FlushTo(WriteBuf);
-        Upload(false);
-        return EScan::Feed;
-    }
-
-    void Upload(bool isRetry)
-    {
-        if (isRetry) {
-            ++RetryCount;
-        } else {
-            RetryCount = 0;
-        }
-
-        auto actor = NTxProxy::CreateUploadRowsInternal(
-            this->SelfId(), TargetTable, TargetTypes, WriteBuf.GetRowsData(),
-            NTxProxy::EUploadRowsMode::WriteToTableShadow, true /*writeToPrivateTable*/);
-
-        Uploader = this->Register(actor);
     }
 };
 
 template <typename TMetric>
-class TReshuffleKMeansScan final: public TReshuffleKMeansScanBase, private TCalculation<TMetric> {
+class TReshuffleKMeansScan final : public TReshuffleKMeansScanBase {
+    TClusters<TMetric> Clusters;
+
+    TString Debug() const
+    {
+        return TStringBuilder() << "TReshuffleKMeansScan TabletId: " << TabletId << " Id: " << BuildId
+            << " Parent: " << Parent << " Child: " << Child
+            << " " << Clusters.Debug()
+            << " " << Uploader.Debug();
+    }
+
 public:
     TReshuffleKMeansScan(ui64 tabletId, const TUserTable& table, TLead&& lead, NKikimrTxDataShard::TEvReshuffleKMeansRequest& request,
                          const TActorId& responseActorId, TAutoPtr<TEvDataShard::TEvReshuffleKMeansResponse>&& response)
         : TReshuffleKMeansScanBase{tabletId, table, std::move(lead), request, responseActorId, std::move(response)}
+        , Clusters(TVector<TString>{request.GetClusters().begin(), request.GetClusters().end()}, request.GetSettings().vector_dimension())
     {
-        this->Dimensions = request.GetSettings().vector_dimension();
         LOG_I("Create " << Debug());
     }
 
-    EScan Feed(TArrayRef<const TCell> key, const TRow& row_) final
+    EScan Seek(TLead& lead, ui64 seq) final
+    {
+        LOG_D("Seek " << seq << " " << Debug());
+
+        if (IsExhausted) {
+            return Uploader.CanFinish()
+                ? EScan::Final
+                : EScan::Sleep;
+        }
+
+        lead = Lead;
+
+        return EScan::Feed;
+    }
+
+    EScan Feed(TArrayRef<const TCell> key, const TRow& row) final
     {
         LOG_T("Feed " << Debug());
-        
+
         ++ReadRows;
-        ReadBytes += CountBytes(key, row_);
-        auto row = *row_;
+        ReadBytes += CountBytes(key, row);
+
+        Feed(key, *row);
+
+        return Uploader.ShouldWaitUpload() ? EScan::Sleep : EScan::Feed;
+    }
+
+    EScan Exhausted() final
+    {
+        LOG_D("Exhausted " << Debug());
+
+        IsExhausted = true;
         
-        switch (UploadState) {
-            case EState::UPLOAD_MAIN_TO_BUILD:
-                return FeedUploadMain2Build(key, row);
-            case EState::UPLOAD_MAIN_TO_POSTING:
-                return FeedUploadMain2Posting(key, row);
-            case EState::UPLOAD_BUILD_TO_BUILD:
-                return FeedUploadBuild2Build(key, row);
-            case EState::UPLOAD_BUILD_TO_POSTING:
-                return FeedUploadBuild2Posting(key, row);
-            default:
-                return EScan::Final;
-        }
+        // call Seek to wait uploads
+        return EScan::Reset;
     }
 
 private:
-    EScan FeedUploadMain2Build(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
+    void Feed(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
-        const ui32 pos = FeedEmbedding(*this, Clusters, row, EmbeddingPos);
-        if (pos >= K) {
-            return EScan::Feed;
+        switch (UploadState) {
+            case EState::UPLOAD_MAIN_TO_BUILD:
+                FeedMainToBuild(key, row);
+                break;
+            case EState::UPLOAD_MAIN_TO_POSTING:
+                FeedMainToPosting(key, row);
+                break;
+            case EState::UPLOAD_BUILD_TO_BUILD:
+                FeedBuildToBuild(key, row);
+                break;
+            case EState::UPLOAD_BUILD_TO_POSTING:
+                FeedBuildToPosting(key, row);
+                break;
+            default:
+                Y_ENSURE(false);
         }
-        AddRowMain2Build(ReadBuf, Child + pos, key, row);
-        return FeedUpload();
     }
 
-    EScan FeedUploadMain2Posting(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
+    void FeedMainToBuild(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
-        const ui32 pos = FeedEmbedding(*this, Clusters, row, EmbeddingPos);
-        if (pos >= K) {
-            return EScan::Feed;
+        if (auto pos = Clusters.FindCluster(row, EmbeddingPos); pos) {
+            AddRowToData(*OutputBuf, Child + *pos, key, row, key, false);
         }
-        AddRowMain2Posting(ReadBuf, Child + pos, key, row, DataPos);
-        return FeedUpload();
     }
 
-    EScan FeedUploadBuild2Build(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
+    void FeedMainToPosting(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
-        const ui32 pos = FeedEmbedding(*this, Clusters, row, EmbeddingPos);
-        if (pos >= K) {
-            return EScan::Feed;
+        if (auto pos = Clusters.FindCluster(row, EmbeddingPos); pos) {
+            AddRowToData(*OutputBuf, Child + *pos, key, row.Slice(DataPos), key, true);
         }
-        AddRowBuild2Build(ReadBuf, Child + pos, key, row);
-        return FeedUpload();
     }
 
-    EScan FeedUploadBuild2Posting(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
+    void FeedBuildToBuild(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
-        const ui32 pos = FeedEmbedding(*this, Clusters, row, EmbeddingPos);
-        if (pos >= K) {
-            return EScan::Feed;
+        if (auto pos = Clusters.FindCluster(row, EmbeddingPos); pos) {
+            AddRowToData(*OutputBuf, Child + *pos, key.Slice(1), row, key, false);
         }
-        AddRowBuild2Posting(ReadBuf, Child + pos, key, row, DataPos);
-        return FeedUpload();
+    }
+
+    void FeedBuildToPosting(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
+    {
+        if (auto pos = Clusters.FindCluster(row, EmbeddingPos); pos) {
+            AddRowToData(*OutputBuf, Child + *pos, key.Slice(1), row.Slice(DataPos), key, true);
+        }
     }
 };
 
@@ -391,133 +370,137 @@ void TDataShard::HandleSafe(TEvDataShard::TEvReshuffleKMeansRequest::TPtr& ev, c
         : GetMvccTxVersion(EMvccTxMode::ReadOnly);
     TScanRecord::TSeqNo seqNo = {request.GetSeqNoGeneration(), request.GetSeqNoRound()};
 
-    auto response = MakeHolder<TEvDataShard::TEvReshuffleKMeansResponse>();
-    response->Record.SetId(id);
-    response->Record.SetTabletId(TabletID());
-    response->Record.SetRequestSeqNoGeneration(seqNo.Generation);
-    response->Record.SetRequestSeqNoRound(seqNo.Round);
+    try {
+        auto response = MakeHolder<TEvDataShard::TEvReshuffleKMeansResponse>();
+        response->Record.SetId(id);
+        response->Record.SetTabletId(TabletID());
+        response->Record.SetRequestSeqNoGeneration(seqNo.Generation);
+        response->Record.SetRequestSeqNoRound(seqNo.Round);
 
-    LOG_N("Starting TReshuffleKMeansScan TabletId: " << TabletID() 
-        << " " << request.ShortDebugString()
-        << " row version " << rowVersion);
+        LOG_N("Starting TReshuffleKMeansScan TabletId: " << TabletID() 
+            << " " << ToShortDebugString(request)
+            << " row version " << rowVersion);
 
-    // Note: it's very unlikely that we have volatile txs before this snapshot
-    if (VolatileTxManager.HasVolatileTxsAtSnapshot(rowVersion)) {
-        VolatileTxManager.AttachWaitingSnapshotEvent(rowVersion, std::unique_ptr<IEventHandle>(ev.Release()));
-        return;
-    }
-
-    auto badRequest = [&](const TString& error) {
-        response->Record.SetStatus(NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST);
-        auto issue = response->Record.AddIssues();
-        issue->set_severity(NYql::TSeverityIds::S_ERROR);
-        issue->set_message(error);
-    };
-    auto trySendBadRequest = [&] {
-        if (response->Record.GetStatus() == NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST) {
-            LOG_E("Rejecting TReshuffleKMeansScan bad request TabletId: " << TabletID()
-                << " " << request.ShortDebugString()
-                << " with response " << response->Record.ShortDebugString());
-            ctx.Send(ev->Sender, std::move(response));
-            return true;
-        } else {
-            return false;
-        }
-    };
-
-    // 1. Validating table and path existence
-    if (request.GetTabletId() != TabletID()) {
-        badRequest(TStringBuilder() << "Wrong shard " << request.GetTabletId() << " this is " << TabletID());
-    }
-    if (!IsStateActive()) {
-        badRequest(TStringBuilder() << "Shard " << TabletID() << " is " << State << " and not ready for requests");
-    }
-    const auto pathId = TPathId::FromProto(request.GetPathId());
-    const auto* userTableIt = GetUserTables().FindPtr(pathId.LocalPathId);
-    if (!userTableIt) {
-        badRequest(TStringBuilder() << "Unknown table id: " << pathId.LocalPathId);
-    }
-    if (trySendBadRequest()) {
-        return;
-    }
-    const auto& userTable = **userTableIt;
-
-    // 2. Validating request fields
-    if (request.HasSnapshotStep() || request.HasSnapshotTxId()) {
-        const TSnapshotKey snapshotKey(pathId, rowVersion.Step, rowVersion.TxId);
-        if (!SnapshotManager.FindAvailable(snapshotKey)) {
-            badRequest(TStringBuilder() << "Unknown snapshot for path id " << pathId.OwnerId << ":" << pathId.LocalPathId
-                << ", snapshot step is " << snapshotKey.Step << ", snapshot tx is " << snapshotKey.TxId);
-        }
-    }
-
-    if (request.GetUpload() != NKikimrTxDataShard::UPLOAD_MAIN_TO_BUILD
-        && request.GetUpload() != NKikimrTxDataShard::UPLOAD_MAIN_TO_POSTING
-        && request.GetUpload() != NKikimrTxDataShard::UPLOAD_BUILD_TO_BUILD
-        && request.GetUpload() != NKikimrTxDataShard::UPLOAD_BUILD_TO_POSTING)
-    {
-        badRequest("Wrong upload");
-    }
-
-    if (request.ClustersSize() < 1) {
-        badRequest("Should be requested at least single cluster");
-    }
-
-    TCell from, to;
-    const auto range = CreateRangeFrom(userTable, request.GetParent(), from, to);
-    if (range.IsEmptyRange(userTable.KeyColumnTypes)) {
-        badRequest(TStringBuilder() << " requested range doesn't intersect with table range");
-    }
-
-    if (!request.HasPostingName()) {
-        badRequest(TStringBuilder() << "Empty posting table name");
-    }
-
-    auto tags = GetAllTags(userTable);
-    if (!tags.contains(request.GetEmbeddingColumn())) {
-        badRequest(TStringBuilder() << "Unknown embedding column: " << request.GetEmbeddingColumn());
-    }
-    for (auto dataColumn : request.GetDataColumns()) {
-        if (!tags.contains(dataColumn)) {
-            badRequest(TStringBuilder() << "Unknown data column: " << dataColumn);
-        }
-    }
-
-    if (trySendBadRequest()) {
-        return;
-    }
-
-    // 3. Validating vector index settings
-    TAutoPtr<NTable::IScan> scan;
-    auto createScan = [&]<typename T> {
-        scan = new TReshuffleKMeansScan<T>{
-            TabletID(), userTable, CreateLeadFrom(range), request, ev->Sender, std::move(response),
-        };
-    };
-    MakeScan(request, createScan, badRequest);
-    if (!scan) {
-        auto sent = trySendBadRequest();
-        Y_ENSURE(sent);
-        return;
-    }
-
-    if (const auto* recCard = ScanManager.Get(id)) {
-        if (recCard->SeqNo == seqNo) {
-            // do no start one more scan
+        // Note: it's very unlikely that we have volatile txs before this snapshot
+        if (VolatileTxManager.HasVolatileTxsAtSnapshot(rowVersion)) {
+            VolatileTxManager.AttachWaitingSnapshotEvent(rowVersion, std::unique_ptr<IEventHandle>(ev.Release()));
             return;
         }
 
-        for (auto scanId : recCard->ScanIds) {
-            CancelScan(userTable.LocalTid, scanId);
-        }
-        ScanManager.Drop(id);
-    }
+        auto badRequest = [&](const TString& error) {
+            response->Record.SetStatus(NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST);
+            auto issue = response->Record.AddIssues();
+            issue->set_severity(NYql::TSeverityIds::S_ERROR);
+            issue->set_message(error);
+        };
+        auto trySendBadRequest = [&] {
+            if (response->Record.GetStatus() == NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST) {
+                LOG_E("Rejecting TReshuffleKMeansScan bad request TabletId: " << TabletID()
+                    << " " << ToShortDebugString(request)
+                    << " with response " << response->Record.ShortDebugString());
+                ctx.Send(ev->Sender, std::move(response));
+                return true;
+            } else {
+                return false;
+            }
+        };
 
-    TScanOptions scanOpts;
-    scanOpts.SetSnapshotRowVersion(rowVersion);
-    scanOpts.SetResourceBroker("build_index", 10); // TODO(mbkkt) Should be different group?
-    const auto scanId = QueueScan(userTable.LocalTid, std::move(scan), 0, scanOpts);
-    ScanManager.Set(id, seqNo).push_back(scanId);
+        // 1. Validating table and path existence
+        if (request.GetTabletId() != TabletID()) {
+            badRequest(TStringBuilder() << "Wrong shard " << request.GetTabletId() << " this is " << TabletID());
+        }
+        if (!IsStateActive()) {
+            badRequest(TStringBuilder() << "Shard " << TabletID() << " is " << State << " and not ready for requests");
+        }
+        const auto pathId = TPathId::FromProto(request.GetPathId());
+        const auto* userTableIt = GetUserTables().FindPtr(pathId.LocalPathId);
+        if (!userTableIt) {
+            badRequest(TStringBuilder() << "Unknown table id: " << pathId.LocalPathId);
+        }
+        if (trySendBadRequest()) {
+            return;
+        }
+        const auto& userTable = **userTableIt;
+
+        // 2. Validating request fields
+        if (request.HasSnapshotStep() || request.HasSnapshotTxId()) {
+            const TSnapshotKey snapshotKey(pathId, rowVersion.Step, rowVersion.TxId);
+            if (!SnapshotManager.FindAvailable(snapshotKey)) {
+                badRequest(TStringBuilder() << "Unknown snapshot for path id " << pathId.OwnerId << ":" << pathId.LocalPathId
+                    << ", snapshot step is " << snapshotKey.Step << ", snapshot tx is " << snapshotKey.TxId);
+            }
+        }
+
+        if (request.GetUpload() != NKikimrTxDataShard::UPLOAD_MAIN_TO_BUILD
+            && request.GetUpload() != NKikimrTxDataShard::UPLOAD_MAIN_TO_POSTING
+            && request.GetUpload() != NKikimrTxDataShard::UPLOAD_BUILD_TO_BUILD
+            && request.GetUpload() != NKikimrTxDataShard::UPLOAD_BUILD_TO_POSTING)
+        {
+            badRequest("Wrong upload");
+        }
+
+        if (request.ClustersSize() < 1) {
+            badRequest("Should be requested at least single cluster");
+        }
+
+        const auto parent = request.GetParent();
+        NTable::TLead lead;
+        if (parent == 0) {
+            if (request.GetUpload() == NKikimrTxDataShard::UPLOAD_BUILD_TO_BUILD 
+                || request.GetUpload() == NKikimrTxDataShard::UPLOAD_BUILD_TO_POSTING)
+            {
+                badRequest("Wrong upload for zero parent");
+            }
+            lead.To({}, NTable::ESeek::Lower);
+        } else if (request.GetUpload() == NKikimrTxDataShard::UPLOAD_MAIN_TO_BUILD 
+            || request.GetUpload() == NKikimrTxDataShard::UPLOAD_MAIN_TO_POSTING)
+        {
+            badRequest("Wrong upload for non-zero parent");
+        } else {
+            TCell from, to;
+            const auto range = CreateRangeFrom(userTable, request.GetParent(), from, to);
+            if (range.IsEmptyRange(userTable.KeyColumnTypes)) {
+                badRequest(TStringBuilder() << " requested range doesn't intersect with table range");
+            }
+            lead = CreateLeadFrom(range);
+        }
+
+        if (!request.HasOutputName()) {
+            badRequest(TStringBuilder() << "Empty output table name");
+        }
+
+        auto tags = GetAllTags(userTable);
+        if (!tags.contains(request.GetEmbeddingColumn())) {
+            badRequest(TStringBuilder() << "Unknown embedding column: " << request.GetEmbeddingColumn());
+        }
+        for (auto dataColumn : request.GetDataColumns()) {
+            if (!tags.contains(dataColumn)) {
+                badRequest(TStringBuilder() << "Unknown data column: " << dataColumn);
+            }
+        }
+
+        if (trySendBadRequest()) {
+            return;
+        }
+
+        // 3. Validating vector index settings
+        TAutoPtr<NTable::IScan> scan;
+        auto createScan = [&]<typename T> {
+            scan = new TReshuffleKMeansScan<T>{
+                TabletID(), userTable, std::move(lead), request, ev->Sender, std::move(response),
+            };
+        };
+        MakeScan(request, createScan, badRequest);
+        if (!scan) {
+            auto sent = trySendBadRequest();
+            Y_ENSURE(sent);
+            return;
+        }
+
+        StartScan(this, std::move(scan), id, seqNo, rowVersion, userTable.LocalTid);
+    } catch (const std::exception& exc) {
+        FailScan<TEvDataShard::TEvReshuffleKMeansResponse>(id, TabletID(), ev->Sender, seqNo, exc, "TReshuffleKMeansScan");
+    }
 }
 
 }

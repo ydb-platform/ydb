@@ -422,6 +422,9 @@ void TChunkReaderOptions::Register(TRegistrar registrar)
     registrar.Parameter("enable_key_widening", &TThis::EnableKeyWidening)
         .Default(false);
 
+    registrar.Parameter("enable_any_unpacking", &TThis::EnableAnyUnpacking)
+        .Default(true);
+
     registrar.Postprocessor([] (TThis* config) {
         if (config->EnableRangeIndex && !config->EnableRowIndex) {
             THROW_ERROR_EXCEPTION("\"enable_row_index\" must be set when \"enable_range_index\" is set");

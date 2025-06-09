@@ -9,11 +9,13 @@ SRCS(
 
 PEERDIR(
     ydb/core/base
+    ydb/core/formats/arrow/serializer
     ydb/core/kqp/runtime
     ydb/core/protos
-    ydb/core/tx/columnshard/engines/scheme/defaults/protos
     ydb/core/sys_view/common
+    ydb/core/tx/columnshard/engines/scheme/defaults/protos
     ydb/core/tx/schemeshard
+    ydb/core/tx/sequenceproxy
     ydb/core/tx/tx_proxy
     ydb/core/ydb_convert
     ydb/library/actors/core

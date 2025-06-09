@@ -1184,7 +1184,8 @@ All the metadata provided when writing a message is sent to a consumer with the 
 
 ### Connecting to a topic for message reads {#start-reader}
 
-To be able to read messages from topic, a Consumer on this topic should exist.
+Reading messages from a topic can be done by specifying a Consumer associated with that topic, as well as without a Consumer. If a Consumer is not specified, the client application must calculate the offset for reading messages on its own. A more detailed example of reading without a Consumer is discussed in the [relevant section](#no-consumer).
+
 A Consumer can be created on [creating](#create-topic) or [altering](#alter-topic) a topic.
 Topic can have several Consumers and for each of them server stores its own reading progress.
 
@@ -1222,7 +1223,7 @@ Topic can have several Consumers and for each of them server stores its own read
   To establish a connection to the existing `my-topic` topic using the added `my-consumer` consumer, use the following code:
 
   ```python
-  reader = driver.topic_client.reader(topic="topic-path", consumer="consumer_name")
+  reader = driver.topic_client.reader(topic="my-topic", consumer="my-consumer")
   ```
 
 - Java (sync)
@@ -1928,6 +1929,32 @@ Reading progress is usually saved on a server for each Consumer. However, such p
   }
   ```
 
+- Python
+
+  To read without a `Consumer`, create a reader using the `reader` method with specifying these arguments:
+  * `topic` - `ydb.TopicReaderSelector` object with defined `path` and `partitions` list;
+  * `consumer` - should be `None`;
+  * `event_handler` - inheritor of `ydb.TopicReaderEvents.EventHandler` that implements the `on_partition_get_start_offset` function. This function is responsible for returning the initial offset for reading messages when the reader starts and during reconnections. The client application must specify this offset in the parameter `ydb.TopicReaderEvents.OnPartitionGetStartOffsetResponse.start_offset`. The function can also be implemented as asynchronous.
+
+  Example:
+
+  ```python
+  class CustomEventHandler(ydb.TopicReaderEvents.EventHandler):
+      def on_partition_get_start_offset(self, event: ydb.TopicReaderEvents.OnPartitionGetStartOffsetRequest):
+          return ydb.TopicReaderEvents.OnPartitionGetStartOffsetResponse(
+              start_offset=0,
+          )
+
+  reader = driver.topic_client.reader(
+      topic=ydb.TopicReaderSelector(
+          path="topic-path",
+          partitions=[0, 1, 2],
+      ),
+      consumer=None,
+      event_handler=CustomEventHandler(),
+  )
+  ```
+
 {% endlist %}
 
 ### Reading in a transaction {#read-tx}
@@ -2321,5 +2348,26 @@ In case of a _hard interruption_, the client receives a notification that it is 
   ```
 
   From a practical perspective, these modes do not differ for the end user. However, the full support mode differs from the compatibility mode in terms of who guarantees the order of reading—the client or the server. Compatibility mode is achieved through server-side processing and generally operates slower.
+
+{% endlist %}
+
+### Commit outside the reader {#commit-outside-the-reader}
+
+Most often, committing is conveniently done within the reader that has read the messages. However, there are scenarios where committing needs to be performed by a separate process. In such cases, a method of committing outside the reader is necessary.
+
+{% list tabs group=lang %}
+
+- Python
+
+  Commit outside the reader is done using the `topic_client.commit_offset` method:
+
+  ```python
+  driver.topic_client.commit_offset(
+      topic_path,
+      consumer_name,
+      partition_id,
+      offset,
+  )
+  ```
 
 {% endlist %}

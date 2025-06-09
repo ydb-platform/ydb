@@ -21,10 +21,13 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/persqueue_public/impl
     ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils
 
+    ydb/public/sdk/cpp/src/client/query
+    ydb/public/sdk/cpp/src/client/table
     ydb/public/sdk/cpp/src/client/topic
     ydb/public/sdk/cpp/src/client/topic/common
     ydb/public/sdk/cpp/src/client/topic/impl
     ydb/public/sdk/cpp/src/client/topic/ut/ut_utils
+    ydb/public/sdk/cpp/src/library/issue
 
     ydb/core/tx/schemeshard/ut_helpers
     ydb/core/persqueue/ut/common
@@ -46,3 +49,7 @@ RESOURCE(
 )
 
 END()
+
+RECURSE_FOR_TESTS(
+    with_direct_read_ut
+)

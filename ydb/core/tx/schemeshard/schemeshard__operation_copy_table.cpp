@@ -1,5 +1,6 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common.h"
+#include "schemeshard__data_erasure_manager.h"
 #include "schemeshard_impl.h"
 #include "schemeshard_tx_infly.h"
 #include "schemeshard_cdc_stream_common.h"
@@ -313,6 +314,7 @@ public:
 class TCopyTable: public TSubOperation {
 
     THashSet<TString> LocalSequences;
+    TMaybe<TPathElement::EPathState> TargetState;
 
     static TTxState::ETxState NextState() {
         return TTxState::CreateParts;
@@ -350,18 +352,28 @@ class TCopyTable: public TSubOperation {
         case TTxState::CopyTableBarrier:
             return MakeHolder<TCopyTableBarrier>(OperationId);
         case TTxState::Done:
-            return MakeHolder<TDone>(OperationId);
+            if (!TargetState) {
+                return MakeHolder<TDone>(OperationId);
+            } else {
+                return MakeHolder<TDone>(OperationId, *TargetState);
+            }
         default:
             return nullptr;
         }
     }
 
 public:
-    using TSubOperation::TSubOperation;
+    explicit TCopyTable(const TOperationId& id, TTxState::ETxState txState, TTxState* state)
+        : TSubOperation(id, txState)
+    {
+        Y_ENSURE(state);
+        TargetState = state->TargetPathTargetState;
+    }
 
-    explicit TCopyTable(const TOperationId& id, const TTxTransaction& tx, const THashSet<TString>& localSequences)
+    explicit TCopyTable(const TOperationId& id, const TTxTransaction& tx, const THashSet<TString>& localSequences, TMaybe<TPathElement::EPathState> targetState)
         : TSubOperation(id, tx)
         , LocalSequences(localSequences)
+        , TargetState(targetState)
     {
     }
 
@@ -578,11 +590,13 @@ public:
 
         const NScheme::TTypeRegistry* typeRegistry = AppData()->TypeRegistry;
         const TSchemeLimits& limits = domainInfo->GetSchemeLimits();
+        // Copy table should not check feature flags for columns types.
+        // If the types in original table are created then they should be allowed in destination table.
         const TTableInfo::TCreateAlterDataFeatureFlags featureFlags = {
-            .EnableTablePgTypes = context.SS->EnableTablePgTypes,
-            .EnableTableDatetime64 = context.SS->EnableTableDatetime64,
-            .EnableParameterizedDecimal = context.SS->EnableParameterizedDecimal,
-        };
+            .EnableTablePgTypes = true,
+            .EnableTableDatetime64 = true,
+            .EnableParameterizedDecimal = true,
+            };
         TTableInfo::TAlterDataPtr alterData = TTableInfo::CreateAlterData(nullptr, schema, *typeRegistry,
             limits, *domainInfo, featureFlags, errStr, LocalSequences);
         if (!alterData.Get()) {
@@ -664,15 +678,24 @@ public:
         if (Transaction.HasCreateCdcStream()) {
             txState.CdcPathId = srcPath.Base()->PathId;
         }
+        if (Transaction.GetCreateTable().HasPathState()) {
+            txState.TargetPathTargetState = Transaction.GetCreateTable().GetPathState();
+        }
 
         TShardInfo datashardInfo = TShardInfo::DataShardInfo(OperationId.GetTxId(), newTable->PathId);
         datashardInfo.BindedChannels = channelsBinding;
         auto newPartition = NTableState::ApplyPartitioningCopyTable(datashardInfo, srcTableInfo, txState, context.SS);
+        TVector<TShardIdx> newShardsIdx;
+        newShardsIdx.reserve(newPartition.size());
         for (const auto& part: newPartition) {
             context.MemChanges.GrabNewShard(context.SS, part.ShardIdx);
             context.DbChanges.PersistShard(part.ShardIdx);
+            newShardsIdx.push_back(part.ShardIdx);
         }
         context.SS->SetPartitioning(newTable->PathId, tableInfo, std::move(newPartition));
+        if (context.SS->EnableDataErasure && context.SS->DataErasureManager->GetStatus() == EDataErasureStatus::IN_PROGRESS) {
+            context.OnComplete.Send(context.SS->SelfId(), new TEvPrivate::TEvAddNewShardToDataErasure(std::move(newShardsIdx)));
+        }
         for (const auto& shard : tableInfo->GetPartitions()) {
             Y_ABORT_UNLESS(context.SS->ShardInfos.contains(shard.ShardIdx), "shard info is set before");
             if (storePerShardConfig) {
@@ -766,14 +789,14 @@ public:
 
 namespace NKikimr::NSchemeShard {
 
-ISubOperation::TPtr CreateCopyTable(TOperationId id, const TTxTransaction& tx, const THashSet<TString>& localSequences)
+ISubOperation::TPtr CreateCopyTable(TOperationId id, const TTxTransaction& tx, const THashSet<TString>& localSequences, TMaybe<TPathElement::EPathState> targetState)
 {
-    return MakeSubOperation<TCopyTable>(id, tx, localSequences);
+    return MakeSubOperation<TCopyTable>(id, tx, localSequences, targetState);
 }
 
-ISubOperation::TPtr CreateCopyTable(TOperationId id, TTxState::ETxState state) {
-    Y_ABORT_UNLESS(state != TTxState::Invalid);
-    return MakeSubOperation<TCopyTable>(id, state);
+ISubOperation::TPtr CreateCopyTable(TOperationId id, TTxState::ETxState txState, TTxState* state) {
+    Y_ABORT_UNLESS(txState != TTxState::Invalid);
+    return MakeSubOperation<TCopyTable>(id, txState, state);
 }
 
 TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context) {

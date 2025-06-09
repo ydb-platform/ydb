@@ -693,6 +693,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::ReplaceStatWriteTable(T
         newInput = path.Table().Cast<TYtOutput>();
     } else if (auto op = input.Maybe<TYtOutput>().Operation()) {
         newInput = input.Cast<TYtOutput>();
+        cluster = GetClusterName(input);
     } else {
         YQL_ENSURE(false, "Unexpected operation input: " << input.Ptr()->Content());
     }

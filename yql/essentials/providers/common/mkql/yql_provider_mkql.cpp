@@ -1675,17 +1675,17 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
     });
 
     AddCallable("BlockStorage", [](const TExprNode& node, TMkqlBuildContext& ctx) {
-        const auto stream = MkqlBuildExpr(node.Head(), ctx);
+        const auto list = MkqlBuildExpr(node.Head(), ctx);
         const auto returnType = BuildType(node, *node.GetTypeAnn(), ctx.ProgramBuilder);
-        return ctx.ProgramBuilder.BlockStorage(stream, returnType);
+        return ctx.ProgramBuilder.BlockStorage(list, returnType);
     });
 
     AddCallable("BlockMapJoinIndex", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         const auto blockStorage = MkqlBuildExpr(node.Head(), ctx);
-        const auto itemType = node.Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TMultiExprType>();
+        const auto itemType = node.Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
 
         std::vector<ui32> keyColumns;
-        node.Child(2)->ForEachChild([&](const TExprNode& child){ keyColumns.emplace_back(*GetWideBlockFieldPosition(*itemType, child.Content())); });
+        node.Child(2)->ForEachChild([&](const TExprNode& child){ keyColumns.emplace_back(*GetFieldPosition(*itemType, child.Content())); });
 
         const bool any = HasSetting(node.Tail(), "any");
 
@@ -1699,15 +1699,15 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         const auto rightBlockStorage = MkqlBuildExpr(*node.Child(1), ctx);
 
         const auto leftItemType = node.Head().GetTypeAnn()->Cast<TStreamExprType>()->GetItemType()->Cast<TMultiExprType>();
-        const auto rightItemType = node.Child(2)->GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TMultiExprType>();
+        const auto rightItemType = node.Child(2)->GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
 
         const auto joinKind = GetJoinKind(node, node.Child(3)->Content());
 
         std::vector<ui32> leftKeyColumns, leftKeyDrops, rightKeyColumns, rightKeyDrops;
         node.Child(4)->ForEachChild([&](const TExprNode& child){ leftKeyColumns.emplace_back(*GetWideBlockFieldPosition(*leftItemType, child.Content())); });
         node.Child(5)->ForEachChild([&](const TExprNode& child){ leftKeyDrops.emplace_back(*GetWideBlockFieldPosition(*leftItemType, child.Content())); });
-        node.Child(6)->ForEachChild([&](const TExprNode& child){ rightKeyColumns.emplace_back(*GetWideBlockFieldPosition(*rightItemType, child.Content())); });
-        node.Child(7)->ForEachChild([&](const TExprNode& child){ rightKeyDrops.emplace_back(*GetWideBlockFieldPosition(*rightItemType, child.Content())); });
+        node.Child(6)->ForEachChild([&](const TExprNode& child){ rightKeyColumns.emplace_back(*GetFieldPosition(*rightItemType, child.Content())); });
+        node.Child(7)->ForEachChild([&](const TExprNode& child){ rightKeyDrops.emplace_back(*GetFieldPosition(*rightItemType, child.Content())); });
 
         const auto rightItemMkqlType = BuildType(*node.Child(2), *rightItemType, ctx.ProgramBuilder);
         const auto returnType = BuildType(node, *node.GetTypeAnn(), ctx.ProgramBuilder);
@@ -3016,7 +3016,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         return MkqlBuildExpr(node.Head(), ctx);
     });
 
-    AddCallable({ "AssumeStrict", "AssumeNonStrict", "Likely" }, [](const TExprNode& node, TMkqlBuildContext& ctx) {
+    AddCallable({ "AssumeStrict", "AssumeNonStrict", "NoPush", "Likely" }, [](const TExprNode& node, TMkqlBuildContext& ctx) {
         return MkqlBuildExpr(node.Head(), ctx);
     });
 

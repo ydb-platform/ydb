@@ -1,4 +1,9 @@
 {
+    "test.test[aggregation]": [
+        {
+            "uri": "file://test.test_aggregation_/results.txt"
+        }
+    ],
     "test.test[cardinality]": [
         {
             "uri": "file://test.test_cardinality_/results.txt"

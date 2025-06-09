@@ -326,6 +326,9 @@ public:
                     // That was not persisted to avoid issues with downgrades
                     node.Down = true;
                 }
+                if (node.Down) {
+                    Self->UpdateCounterNodesDown(+1);
+                }
                 if (nodeRowset.HaveValue<Schema::Node::Location>()) {
                     auto location = nodeRowset.GetValue<Schema::Node::Location>();
                     if (location.HasDataCenter()) {
@@ -605,6 +608,12 @@ public:
                     followerGroup.LocalNodeOnly = tabletFollowerGroupRowset.GetValueOrDefault<Schema::TabletFollowerGroup::LocalNodeOnly>();
                     followerGroup.FollowerCountPerDataCenter = tabletFollowerGroupRowset.GetValueOrDefault<Schema::TabletFollowerGroup::FollowerCountPerDataCenter>();
                     followerGroup.RequireDifferentNodes = tabletFollowerGroupRowset.GetValueOrDefault<Schema::TabletFollowerGroup::RequireDifferentNodes>();
+
+                    if (followerGroup.RequireAllDataCenters && !followerGroup.FollowerCountPerDataCenter) {
+                        followerGroup.FollowerCountPerDataCenter = true;
+                        auto dataCenters = Self->DataCenters.size() ? Self->DataCenters.size() : 3ull;
+                        followerGroup.SetFollowerCount((followerGroup.GetRawFollowerCount() + dataCenters - 1) / dataCenters); // round up
+                    }
                 } else {
                     ++numMissingTablets;
                 }
@@ -665,8 +674,10 @@ public:
                     continue;
                 }
                 std::map<TDataCenterId, i32> dataCentersToCover; // dc -> need x more followers in dc
-                for (const auto& [dc, _] : Self->DataCenters) {
-                    dataCentersToCover[dc] = group.GetFollowerCountForDataCenter(dc);
+                for (const auto& [dcId, dcInfo] : Self->DataCenters) {
+                    if (dcInfo.IsRegistered()) {
+                        dataCentersToCover[dcId] = group.GetFollowerCountForDataCenter(dcId);
+                    }
                 }
                 auto groupId = group.Id;
                 auto filterGroup = [groupId](auto&& follower) { return follower->FollowerGroup.Id == groupId;};
@@ -727,6 +738,7 @@ public:
                         leaderOrFollower->MutableResourceMetricsAggregates().MaximumCPU.InitializeFrom(metricsRowset.GetValueOrDefault<Schema::Metrics::MaximumCPU>());
                         leaderOrFollower->MutableResourceMetricsAggregates().MaximumMemory.InitializeFrom(metricsRowset.GetValueOrDefault<Schema::Metrics::MaximumMemory>());
                         leaderOrFollower->MutableResourceMetricsAggregates().MaximumNetwork.InitializeFrom(metricsRowset.GetValueOrDefault<Schema::Metrics::MaximumNetwork>());
+                        leaderOrFollower->UsageImpact = metricsRowset.GetValueOrDefault<Schema::Metrics::UsageImpact>();
                         // do not reorder
                         leaderOrFollower->UpdateResourceUsage(metricsRowset.GetValueOrDefault<Schema::Metrics::ProtoMetrics>());
                     }
@@ -874,6 +886,12 @@ public:
         if (!Self->PendingFollowerUpdates.Empty()) {
             ctx.Send(Self->SelfId(), new TEvPrivate::TEvUpdateFollowers);
             Self->ProcessFollowerUpdatesScheduled = true;
+        }
+
+        for (const auto& [dcId, dcInfo] : Self->DataCenters) {
+            if (!dcInfo.IsRegistered()) {
+                Self->Schedule(TDuration::Seconds(1), new TEvPrivate::TEvUpdateDataCenterFollowers(dcId));
+            }
         }
 
         Self->ProcessPendingStopTablet();

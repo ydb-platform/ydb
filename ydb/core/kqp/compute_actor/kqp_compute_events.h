@@ -110,8 +110,8 @@ struct TEvScanData: public NActors::TEventLocal<TEvScanData, TKqpComputeEvents::
     }
 
 
-    static NActors::IEventBase* Load(TEventSerializedData* data) {
-        auto pbEv = THolder<TEvRemoteScanData>(static_cast<TEvRemoteScanData*>(TEvRemoteScanData::Load(data)));
+    static TEvScanData* Load(const TEventSerializedData* data) {
+        auto pbEv = THolder<TEvRemoteScanData>(TEvRemoteScanData::Load(data));
         auto ev = MakeHolder<TEvScanData>(pbEv->Record.GetScanId(), pbEv->Record.GetGeneration());
 
         ev->CpuTime = TDuration::MicroSeconds(pbEv->Record.GetCpuTimeUs());
@@ -220,8 +220,8 @@ struct TEvKqpCompute {
             return Remote->SerializeToArcadiaStream(chunker);
         }
 
-        static NActors::IEventBase* Load(TEventSerializedData* data) {
-            auto pbEv = THolder<TEvRemoteScanDataAck>(static_cast<TEvRemoteScanDataAck *>(TEvRemoteScanDataAck::Load(data)));
+        static TEvScanDataAck* Load(const TEventSerializedData* data) {
+            auto pbEv = THolder<TEvRemoteScanDataAck>(TEvRemoteScanDataAck::Load(data));
             ui32 maxChunksCount = Max<ui32>();
             if (pbEv->Record.HasMaxChunksCount()) {
                 maxChunksCount = pbEv->Record.GetMaxChunksCount();

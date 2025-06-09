@@ -1,21 +1,9 @@
 ====================0BSD====================
-        0BSD for newer releases was made in Febrary 2024 because
-
-
-====================0BSD====================
         and ChangeLog) are under 0BSD unless stated otherwise in
 
 
 ====================0BSD====================
         are under 0BSD; they aren't based on the man pages of GNU gzip.
-
-
-====================0BSD====================
-        domain and 0BSD. The main difference likely is that one
-
-
-====================0BSD====================
-        shouldn't claim that 0BSD-licensed code is in the public
 
 
 ====================0BSD====================
@@ -58,14 +46,6 @@ CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM
 LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT,
 NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
 CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
-
-====================0BSD AND Public-Domain====================
-        an extremely permissive license. Neither 0BSD nor public domain
-
-
-====================BSD-2-Clause====================
-        for example, BSD 2-Clause "Simplified" License which does have
-
 
 ====================BSD-3-Clause AND 0BSD====================
  * liblzma is distributed under the BSD Zero Clause License (0BSD).
@@ -117,25 +97,7 @@ CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 
 ====================Public-Domain====================
-        There is very little *practical* difference between public
-        domain and 0BSD. The main difference likely is that one
-
-
-====================Public-Domain====================
         lzma-file-format.xt are in the public domain but may
-
-
-====================Public-Domain====================
-        public domain has (real or perceived) legal ambiguities in
-
-
-====================Public-Domain====================
-        shouldn't claim that 0BSD-licensed code is in the public
-        domain; 0BSD-licensed code is copyrighted but available under
-
-
-====================Public-Domain====================
-        significant amount of code put into the public domain and
 
 
 ====================Public-Domain====================
@@ -143,12 +105,4 @@ CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 
 ====================Public-Domain====================
-        that obviously remains so. The switch from public domain to
-
-
-====================Public-Domain====================
 //  The C code is based on the public domain SHA-256 code found from
-
-
-====================Public-Domain====================
-/// and the public domain code from https://github.com/rawrunprotected/crc

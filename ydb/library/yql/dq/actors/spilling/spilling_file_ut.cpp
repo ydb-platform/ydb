@@ -502,25 +502,43 @@ Y_UNIT_TEST_SUITE(DqSpillingFileTests) {
         TTestActorRuntime runtime;
         runtime.Initialize();
 
-        runtime.StartSpillingService(1000, 500, 10, 1);
+        auto spillingService = runtime.StartSpillingService(1000, 500, 10, 1);
         ui32 iters = 100;
-        std::vector<TActorId> testers;
+        TActorId tester;
         std::vector<TActorId> spillingActors;
         for (ui32 i = 0; i < iters; ++i) {
-            testers.emplace_back(runtime.AllocateEdgeActor());
-            spillingActors.emplace_back(runtime.StartSpillingActor(testers.back()));
+            spillingActors.emplace_back(runtime.StartSpillingActor(tester));
         }
 
         runtime.WaitBootstrap();
 
+        std::atomic_uint writeResultEventsCount = 0;
+        std::atomic_uint errorEventsCount = 0;
+
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
+            if (event->GetTypeRewrite() == TEvDqSpilling::TEvError::EventType && event->Sender == spillingService) {
+                auto error = event.Get()->Get<TEvDqSpilling::TEvError>();
+                Cerr << error->Message << Endl;
+                UNIT_ASSERT_EQUAL("[Write] Can not run operation", error->Message);
+                ++writeResultEventsCount;
+            }
+            if (event->GetTypeRewrite() == TEvDqSpilling::TEvWriteResult::EventType && event->Sender == spillingService) {
+                ++errorEventsCount;
+            }
+            return TTestActorRuntimeBase::EEventAction::PROCESS;
+        });
+
+        TDispatchOptions options;
+        options.CustomFinalCondition = [&]() {
+            return errorEventsCount.load() + writeResultEventsCount.load() == iters;
+        };
+
         for (ui32 i = 0; i < iters; ++i) {
             auto ev = new TEvDqSpilling::TEvWrite(i, CreateRope(10, 'a'));
-            runtime.Send(new IEventHandle(spillingActors[i], testers[i], ev));
+            runtime.Send(new IEventHandle(spillingActors[i], tester, ev));
         }
 
-        auto resp = runtime.GrabEdgeEvent<TEvDqSpilling::TEvError>(TDuration::Seconds(1));
-        Cerr << resp->Message << Endl;
-        UNIT_ASSERT_EQUAL("[Write] Can not run operation", resp->Message);
+        runtime.DispatchEvents(options);
     }
 
     Y_UNIT_TEST(StartError) {

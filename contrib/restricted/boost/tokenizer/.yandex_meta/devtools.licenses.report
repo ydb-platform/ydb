@@ -44,30 +44,40 @@ BELONGS ya.make
     Files with this license:
         LICENSE [1:23]
 
-KEEP     BSL-1.0              561c491af10a049439d8f917b068c743
+KEEP     BSL-1.0              483dde97b6686cd137961e30f0fe963e
 BELONGS ya.make
-    License text:
-        Distributed under the Boost Software License, Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: BSL-1.0
         Score           : 100.00
         Match type      : NOTICE
         Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
     Files with this license:
-        README.md [89:89]
+        README.md [82:82]
 
-KEEP     BSL-1.0              648ee54e68cb4c96cfd2e41a7a53e0f8
+KEEP     BSL-1.0              8d1a316e985f5001c2db542ac9f487a3
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        README.md [82:82]
+
+KEEP     BSL-1.0              a84b62b7fab19a18e7129119ab661542
 BELONGS ya.make
     License text:
         \## License
-        Distributed under the [Boost Software License, Version 1.0](http://www.boost.org/LICENSE_1_0.txt).
+        Distributed under the [Boost Software License, Version 1.0](https://www.boost.org/LICENSE_1_0.txt).
     Scancode info:
         Original SPDX id: BSL-1.0
-        Score           : 60.00
+        Score           : 55.00
         Match type      : NOTICE
         Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
     Files with this license:
-        README.md [10:12]
+        README.md [5:7]
 
 KEEP     BSL-1.0              b28554be9e679e0afc207f28ee3501c9
 BELONGS ya.make

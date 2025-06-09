@@ -20,7 +20,7 @@ public:
 
         auto type = ToString(NYql::EDatabaseType::Iceberg);
         auto factory = NExternalSource::CreateExternalSourceFactory(
-            {}, nullptr, 50000, nullptr, false, false, {type});
+            {}, nullptr, 50000, nullptr, false, false, false, {type});
 
         Source = factory->GetOrCreate(type);
 
@@ -50,8 +50,8 @@ Y_UNIT_TEST_SUITE(IcebergDdlTest) {
     Y_UNIT_TEST_F(HiveCatalogWithS3Test, TTestFixture) {
         using namespace NKikimr::NExternalSource::NIceberg;
 
-        Props[CATALOG_TYPE]     = VALUE_HIVE;
-        Props[CATALOG_HIVE_URI] = "hive_uri";
+        Props[CATALOG_TYPE]               = VALUE_HIVE_METASTORE;
+        Props[CATALOG_HIVE_METASTORE_URI] = "hive_metastore_uri";
             
         UNIT_ASSERT_NO_EXCEPTION(Source->ValidateExternalDataSource(Proto.SerializeAsString()));
 

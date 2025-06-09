@@ -6,11 +6,13 @@
 #include <yql/essentials/core/cbo/cbo_optimizer_new.h>
 
 namespace NYql::NDq {
+enum class EInequalityPredicateType : ui8 { Less, LessOrEqual, Greater, GreaterOrEqual, Equal };
 
 void InferStatisticsForFlatMap(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx);
 void InferStatisticsForFilter(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx);
 void InferStatisticsForSkipNullMembers(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx);
-void InferStatisticsForAggregateCombine(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx);
+void InferStatisticsForExtendBase(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx);
+void InferStatisticsForAggregateBase(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx);
 void InferStatisticsForAggregateMergeFinalize(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx);
 void PropagateStatisticsToLambdaArgument(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx);
 void PropagateStatisticsToStageArguments(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx);
@@ -83,6 +85,8 @@ public:
 
 protected:
     double ComputeEqualitySelectivity(const NYql::NNodes::TExprBase& left, const NYql::NNodes::TExprBase& right);
+    double ComputeInequalitySelectivity(const NYql::NNodes::TExprBase& left, const NYql::NNodes::TExprBase& right,
+                                        EInequalityPredicateType predicate);
 
     double ComputeComparisonSelectivity(const NYql::NNodes::TExprBase& left, const NYql::NNodes::TExprBase& right);
 
@@ -96,7 +100,7 @@ private:
 };
 
 bool NeedCalc(NNodes::TExprBase node);
-bool IsConstantExpr(const TExprNode::TPtr& input);
+bool IsConstantExpr(const TExprNode::TPtr& input, bool foldUdfs = true);
 bool IsConstantExprWithParams(const TExprNode::TPtr& input);
 
 } // namespace NYql::NDq {

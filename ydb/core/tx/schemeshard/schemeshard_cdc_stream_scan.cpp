@@ -115,7 +115,7 @@ public:
 
     void Complete(const TActorContext& ctx) override {
         for (auto& [streamPathId, tabletId, ev] : ScanRequests) {
-            Self->CdcStreamScanPipes.Create(streamPathId, tabletId, std::move(ev), ctx);
+            Self->CdcStreamScanPipes.Send(streamPathId, tabletId, std::move(ev), ctx);
         }
 
         if (StreamToProgress) {

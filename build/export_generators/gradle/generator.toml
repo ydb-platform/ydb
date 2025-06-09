@@ -16,6 +16,18 @@ template="build.gradle.kts.jinja"
 [targets.jar_proto]
 template={ path="build.gradle.kts.proto.jinja", dest="build.gradle.kts" }
 
+[targets.jar_test]
+is_test = true
+is_extra_target = true
+
+[targets.junit4]
+is_test = true
+is_extra_target = true
+
+[targets.junit5]
+is_test = true
+is_extra_target = true
+
 [attrs.target]
 # DEPRECATED
 annotation_processors="list"
@@ -26,6 +38,7 @@ junit4_test="flag"
 junit5_test="flag"
 app_main_class="str"
 jar_source_set="list"
+jar_resource_set="list"
 enable_preview="flag"
 use_annotation_processor="list"
 use_errorprone="flag"
@@ -61,7 +74,6 @@ runs-classpath="list"
 runs-cwd="str"
 runs-in="list"
 runs-in_dir="list"
-runs-in_dirs_inputs="list"
 runs-in_noparse="list"
 runs-out="list"
 runs-out_dir="list"
@@ -89,13 +101,5 @@ kotlinc-flags="list"
 consumer-classpath="str"
 consumer-jar="str"
 consumer-type="str"
+consumer-proto_namespace="str"
 consumer-prebuilt="flag"
-
-[merge]
-test=[
-    "/ut",
-    "/src/test",
-    "/src/test/java",
-    "/src/test-integration",
-    "/src/test-multicell"
-]

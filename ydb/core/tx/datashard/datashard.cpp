@@ -4455,7 +4455,7 @@ void TDataShard::Handle(TEvDataShard::TEvS3UploadRowsRequest::TPtr& ev, const TA
     Execute(new TTxS3UploadRows(this, ev), ctx);
 }
 
-void TDataShard::ScanComplete(NTable::EAbort,
+void TDataShard::ScanComplete(NTable::EStatus,
                                      TAutoPtr<IDestructable> prod,
                                      ui64 cookie,
                                      const TActorContext &ctx)
@@ -4779,9 +4779,8 @@ TString TEvDataShard::TEvRead::ToString() const {
     return ss.Str();
 }
 
-NActors::IEventBase* TEvDataShard::TEvRead::Load(TEventSerializedData* data) {
-    auto* base = TBase::Load(data);
-    auto* event = static_cast<TEvRead*>(base);
+TEvDataShard::TEvRead* TEvDataShard::TEvRead::Load(const TEventSerializedData* data) {
+    TEvRead* event = TBase::Load(data);
     auto& record = event->Record;
 
     event->Keys.reserve(record.KeysSize());
@@ -4794,7 +4793,7 @@ NActors::IEventBase* TEvDataShard::TEvRead::Load(TEventSerializedData* data) {
         event->Ranges.emplace_back(range);
     }
 
-    return base;
+    return event;
 }
 
 // really ugly hacky, because Record is not mutable and calling members are const
@@ -4833,9 +4832,8 @@ TString TEvDataShard::TEvReadResult::ToString() const {
     return ss.Str();
 }
 
-NActors::IEventBase* TEvDataShard::TEvReadResult::Load(TEventSerializedData* data) {
-    auto* base = TBase::Load(data);
-    auto* event = static_cast<TEvReadResult*>(base);
+TEvDataShard::TEvReadResult* TEvDataShard::TEvReadResult::Load(const TEventSerializedData* data) {
+    TEvReadResult* event = TBase::Load(data);
     auto& record = event->Record;
 
     if (record.HasArrowBatch()) {
@@ -4852,7 +4850,7 @@ NActors::IEventBase* TEvDataShard::TEvReadResult::Load(TEventSerializedData* dat
         record.ClearCellVec();
     }
 
-    return base;
+    return event;
 }
 
 void TEvDataShard::TEvReadResult::FillRecord() {

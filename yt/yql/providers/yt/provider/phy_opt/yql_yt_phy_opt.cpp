@@ -31,6 +31,8 @@ TYtPhysicalOptProposalTransformer::TYtPhysicalOptProposalTransformer(TYtState::T
     AddHandler(0, &TCoTopSort::Match, HNDL(Sort<true>));
     AddHandler(0, &TCoTop::Match, HNDL(Sort<true>));
     AddHandler(0, &TYtSort::Match, HNDL(YtSortOverAlreadySorted));
+    AddHandler(0, &TCoPruneKeys::Match, HNDL(PushPruneKeysIntoYtOperation));
+    AddHandler(0, &TCoPruneAdjacentKeys::Match, HNDL(PushPruneKeysIntoYtOperation));
     AddHandler(0, &TCoPartitionByKeyBase::Match, HNDL(PartitionByKey));
     AddHandler(0, &TCoFlatMapBase::Match, HNDL(FlatMap));
     AddHandler(0, &TCoCombineByKey::Match, HNDL(CombineByKey));

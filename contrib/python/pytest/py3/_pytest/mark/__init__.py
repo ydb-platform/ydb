@@ -1,4 +1,5 @@
 """Generic mechanism for marking and selecting python functions."""
+
 import dataclasses
 from typing import AbstractSet
 from typing import Collection
@@ -22,6 +23,7 @@ from _pytest.config import hookimpl
 from _pytest.config import UsageError
 from _pytest.config.argparsing import Parser
 from _pytest.stash import StashKey
+
 
 if TYPE_CHECKING:
     from _pytest.nodes import Item
@@ -152,12 +154,19 @@ class KeywordMatcher:
     def from_item(cls, item: "Item") -> "KeywordMatcher":
         mapped_names = set()
 
-        # Add the names of the current item and any parent items.
+        # Add the names of the current item and any parent items,
+        # except the Session and root Directory's which are not
+        # interesting for matching.
         import pytest
 
         for node in item.listchain():
-            if not isinstance(node, pytest.Session):
-                mapped_names.add(node.name)
+            if isinstance(node, pytest.Session):
+                continue
+            if isinstance(node, pytest.Directory) and isinstance(
+                node.parent, pytest.Session
+            ):
+                continue
+            mapped_names.add(node.name)
 
         # Add the names added as extra keywords to current or parent items.
         mapped_names.update(item.listextrakeywords())
@@ -260,8 +269,8 @@ def pytest_configure(config: Config) -> None:
 
     if empty_parameterset not in ("skip", "xfail", "fail_at_collect", None, ""):
         raise UsageError(
-            "{!s} must be one of skip, xfail or fail_at_collect"
-            " but it is {!r}".format(EMPTY_PARAMETERSET_OPTION, empty_parameterset)
+            f"{EMPTY_PARAMETERSET_OPTION!s} must be one of skip, xfail or fail_at_collect"
+            f" but it is {empty_parameterset!r}"
         )
 
 

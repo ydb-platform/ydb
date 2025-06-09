@@ -83,17 +83,20 @@ protected:
     }
 
 public:
-    void WaitCompactions(const TDuration d) const {
+    bool WaitCompactions(const TDuration d) const {
         TInstant start = TInstant::Now();
         ui32 compactionsStart = GetCompactionStartedCounter().Val();
+        ui32 count = 0;
         while (Now() - start < d) {
             if (compactionsStart != GetCompactionStartedCounter().Val()) {
                 compactionsStart = GetCompactionStartedCounter().Val();
                 start = TInstant::Now();
+                ++count;
             }
             Cerr << "WAIT_COMPACTION: " << GetCompactionStartedCounter().Val() << Endl;
-            Sleep(TDuration::Seconds(1));
+            Sleep(std::min(TDuration::Seconds(1), d));
         }
+        return count > 0;
     }
 
     void WaitIndexation(const TDuration d) const {
@@ -109,9 +112,10 @@ public:
         }
     }
 
-    void WaitCleaning(const TDuration d, NActors::TTestBasicRuntime* testRuntime = nullptr) const {
+    bool WaitCleaning(const TDuration d, NActors::TTestBasicRuntime* testRuntime = nullptr) const {
         TInstant start = TInstant::Now();
-        ui32 countStart = GetCleaningStartedCounter().Val();
+        const ui32 countStart0 = GetCleaningStartedCounter().Val();
+        ui32 countStart = countStart0;
         while (Now() - start < d) {
             if (countStart != GetCleaningStartedCounter().Val()) {
                 countStart = GetCleaningStartedCounter().Val();
@@ -124,6 +128,7 @@ public:
                 Sleep(TDuration::Seconds(1));
             }
         }
+        return GetCleaningStartedCounter().Val() != countStart0;
     }
 
     void WaitTtl(const TDuration d) const {

@@ -119,9 +119,29 @@ namespace NActors {
             {
             }
 
+            TEvLog(
+                    EPriority prio,
+                    EComponent comp,
+                    const char* fileName,
+                    ui64 lineNumber,
+                    TString line,
+                    bool json,
+                    TInstant time = TInstant::Now())
+                : Stamp(time)
+                , Level(EPrio(prio))
+                , Component(comp)
+                , FileName(fileName)
+                , LineNumber(lineNumber)
+                , Line(std::move(line))
+                , Json(json)
+            {
+            }
+
             const TInstant Stamp = TInstant::Max();
             const TLevel Level;
             const EComponent Component = 0;
+            const char* FileName = nullptr;
+            const ui64 LineNumber = 0;
             TString Line;
             const bool Json;
         };

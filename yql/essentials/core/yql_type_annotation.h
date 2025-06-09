@@ -7,8 +7,11 @@
 #include "yql_arrow_resolver.h"
 #include "yql_statistics.h"
 
+#include <yql/essentials/core/cbo/cbo_interesting_orderings.h>
+
 #include <yql/essentials/public/udf/udf_validate.h>
 #include <yql/essentials/public/udf/udf_log.h>
+#include <yql/essentials/public/langver/yql_langver.h>
 #include <yql/essentials/core/credentials/yql_credentials.h>
 #include <yql/essentials/core/url_lister/interface/url_lister_manager.h>
 #include <yql/essentials/core/qplayer/storage/interface/yql_qstorage.h>
@@ -26,9 +29,12 @@
 #include <util/generic/vector.h>
 #include <util/digest/city.h>
 
+#include <functional>
 #include <vector>
 
 namespace NYql {
+
+using TTypeAnnCallableFactory = std::function<TAutoPtr<IGraphTransformer>()>;
 
 class IUrlLoader : public TThrRefBase {
 public:
@@ -41,15 +47,19 @@ public:
 
 class TModuleResolver : public IModuleResolver {
 public:
+    using TModuleChecker = std::function<bool(const TString& query, const TString& fileName, TExprContext& ctx)>;
+
     TModuleResolver(const NSQLTranslation::TTranslators& translators, TModulesTable&& modules,
         ui64 nextUniqueId, const THashMap<TString, TString>& clusterMapping,
-        const THashSet<TString>& sqlFlags, bool optimizeLibraries = true, THolder<TExprContext> ownedCtx = {})
+        const THashSet<TString>& sqlFlags, bool optimizeLibraries = true,
+        THolder<TExprContext> ownedCtx = {}, TModuleChecker moduleChecker = {})
         : Translators(translators)
         , OwnedCtx(std::move(ownedCtx))
         , LibsContext(nextUniqueId)
         , Modules(std::move(modules))
         , ClusterMapping(clusterMapping)
         , SqlFlags(sqlFlags)
+        , ModuleChecker(moduleChecker)
         , OptimizeLibraries(optimizeLibraries)
     {
         if (OwnedCtx) {
@@ -60,7 +70,7 @@ public:
     TModuleResolver(const NSQLTranslation::TTranslators& translators, const TModulesTable* parentModules,
         ui64 nextUniqueId, const THashMap<TString, TString>& clusterMapping,
         const THashSet<TString>& sqlFlags, bool optimizeLibraries, const TSet<TString>& knownPackages, const THashMap<TString,
-        THashMap<int, TLibraryCohesion>>& libs, const TString& fileAliasPrefix)
+        THashMap<int, TLibraryCohesion>>& libs, const TString& fileAliasPrefix, TModuleChecker moduleChecker)
         : Translators(translators)
         , ParentModules(parentModules)
         , LibsContext(nextUniqueId)
@@ -68,6 +78,7 @@ public:
         , Libs(libs)
         , ClusterMapping(clusterMapping)
         , SqlFlags(sqlFlags)
+        , ModuleChecker(moduleChecker)
         , OptimizeLibraries(optimizeLibraries)
         , FileAliasPrefix(fileAliasPrefix)
     {
@@ -100,6 +111,10 @@ public:
     }
     void SetSqlFlags(const THashSet<TString>& flags) {
         SqlFlags = flags;
+    }
+
+    void SetModuleChecker(TModuleChecker moduleChecker) {
+        ModuleChecker = moduleChecker;
     }
 
     void RegisterPackage(const TString& package) override;
@@ -139,6 +154,7 @@ private:
     TModulesTable Modules;
     THashMap<TString, TString> ClusterMapping;
     THashSet<TString> SqlFlags;
+    TModuleChecker ModuleChecker;
     const bool OptimizeLibraries;
     THolder<TExprContext::TFreezeGuard> FreezeGuard;
     TString FileAliasPrefix;
@@ -328,6 +344,8 @@ struct TUdfCachedInfo {
     const TTypeAnnotationNode* NormalizedUserType = nullptr;
     bool SupportsBlocks = false;
     bool IsStrict = false;
+    TLangVersion MinLangVer = UnknownLangVersion;
+    TLangVersion MaxLangVer = UnknownLangVersion;
 };
 
 const TString TypeAnnotationContextComponent = "TypeAnnotationContext";
@@ -365,6 +383,8 @@ inline TString GetRandomKey<TGUID>() {
 }
 
 struct TTypeAnnotationContext: public TThrRefBase {
+    TSimpleSharedPtr<NDq::TOrderingsStateMachine> OrderingsFSM;
+    TLangVersion LangVer = MinLangVersion;
     THashMap<TString, TIntrusivePtr<TOptimizerStatistics::TColumnStatMap>> ColumnStatisticsByTableName;
     THashMap<ui64, std::shared_ptr<TOptimizerStatistics>> StatisticsMap;
     TIntrusivePtr<ITimeProvider> TimeProvider;
@@ -435,11 +455,13 @@ struct TTypeAnnotationContext: public TThrRefBase {
     ui32 TimeOrderRecoverRowLimit = 1'000'000;
     // compatibility with v0 or raw s-expression code
     bool OrderedColumns = false;
+    bool DeriveColumnOrder = false;
     TColumnOrderStorage::TPtr ColumnOrderStorage = new TColumnOrderStorage;
     THashSet<TString> OptimizerFlags;
     THashSet<TString> PeepholeFlags;
     bool StreamLookupJoin = false;
     ui32 MaxAggPushdownPredicates = 6; // algorithm complexity is O(2^N)
+    ui32 PruneKeysMemLimit = 128 * 1024 * 1024;
 
     TMaybe<TColumnOrder> LookupColumnOrder(const TExprNode& node) const;
     IGraphTransformer::TStatus SetColumnOrder(const TExprNode& node, const TColumnOrder& columnOrder, TExprContext& ctx);
@@ -451,6 +473,9 @@ struct TTypeAnnotationContext: public TThrRefBase {
     std::optional<bool> InitializeResult;
     EHiddenMode HiddenMode = EHiddenMode::Disable;
     EEngineType EngineType = EEngineType::Default;
+
+    // temporary flag to skip applying ExpandPg rules
+    bool IgnoreExpandPg = false;
 
     template <typename T>
     T GetRandom() const noexcept;
@@ -550,7 +575,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
     /**
      * Helper method to fetch statistics from type annotation context
      */
-    std::shared_ptr<TOptimizerStatistics> GetStats(const TExprNode* input) {
+    std::shared_ptr<TOptimizerStatistics> GetStats(const TExprNode* input) const {
         return StatisticsMap.Value(input ? input->UniqueId() : 0, std::shared_ptr<TOptimizerStatistics>(nullptr));
     }
 

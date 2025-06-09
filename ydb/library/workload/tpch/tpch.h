@@ -19,6 +19,7 @@ public:
 protected:
     TString GetTablesYaml() const override;
     TWorkloadGeneratorBase::TSpecialDataTypes GetSpecialDataTypes() const override;
+    ui32 GetDefaultPartitionsCount(const TString& tableName) const override;
 
 private:
     const TTpchWorkloadParams& Params;

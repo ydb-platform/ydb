@@ -63,12 +63,6 @@ NYql::NNodes::TExprBase KqpApplyExtractMembersToReadTable(NYql::NNodes::TExprBas
 NYql::NNodes::TExprBase KqpApplyExtractMembersToReadOlapTable(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx,
     const NYql::TParentsMap& parentsMap, bool allowMultiUsage);
 
-NYql::NNodes::TExprBase KqpApplyExtractMembersToReadTableRanges(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx,
-    const NYql::TParentsMap& parentsMap, bool allowMultiUsage);
-
-NYql::NNodes::TExprBase KqpApplyExtractMembersToLookupTable(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx,
-    const NYql::TParentsMap& parentsMap, bool allowMultiUsage);
-
 NYql::NNodes::TExprBase KqpTopSortOverExtend(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx,
     const NYql::TParentsMap& parents);
 

@@ -185,7 +185,7 @@ getTdefsByNumber(int nTable)
       }
       // Use w_tdefs only if we decreased the index
       if (wtdefsIndex != -1) {
-         return(&w_tdefs[nTable]);
+         return(&w_tdefs[wtdefsIndex]);
       }
    }
 

@@ -52,6 +52,7 @@ message TProgram {
     uint32 RuntimeVersion = 1;
     bytes Raw = 2;
     TSettings Settings = 3;
+    uint32 LangVer = 4;
 }
 
 message TDqUri {
@@ -201,6 +202,7 @@ message TDqInputTransformLookupSettings {
     uint64 CacheLimit = 9;
     uint64 CacheTtlSeconds = 10;
     uint64 MaxDelayedRows = 11;
+    bool IsMultiget = 12;
 }
 
 message TDqTask {

@@ -49,18 +49,10 @@ static void SetPathParam(TNode* node, const TString& pathPrefix, const TYPath& p
     (*node)["path"] = std::move(updatedPath);
 }
 
-static TNode SerializeAttributeFilter(const TAttributeFilter& attributeFilter)
+template <typename TFilter>
+static TNode SerializeAttributeFilter(const TFilter& attributeFilter)
 {
-    TNode result = TNode::CreateList();
-    for (const auto& attribute : attributeFilter.Attributes_) {
-        result.Add(attribute);
-    }
-    return result;
-}
-
-static TNode SerializeAttributeFilter(const TOperationAttributeFilter& attributeFilter)
-{
-    TNode result = TNode::CreateList();
+    auto result = TNode::CreateList();
     for (const auto& attribute : attributeFilter.Attributes_) {
         result.Add(ToString(attribute));
     }
@@ -79,10 +71,21 @@ static void SetFirstLastTabletIndex(TNode* node, const TOptions& options)
 }
 
 template <typename T>
-void SerializeMasterReadOptions(TNode* node, const TMasterReadOptions<T>& options)
+static void SerializeMasterReadOptions(TNode* node, const TMasterReadOptions<T>& options)
 {
     if (options.ReadFrom_) {
         (*node)["read_from"] = ToString(*options.ReadFrom_);
+    }
+}
+
+template <typename T>
+static void SerializeSuppressableAccessTrackingOptions(TNode* node, const TSuppressableAccessTrackingOptions<T>& options)
+{
+    if (options.SuppressAccessTracking_) {
+        (*node)["suppress_access_tracking"] = options.SuppressAccessTracking_;
+    }
+    if (options.SuppressModificationTracking_) {
+        (*node)["suppress_modification_tracking"] = options.SuppressAccessTracking_;
     }
 }
 
@@ -132,6 +135,7 @@ TNode SerializeParamsForExists(
     SetTransactionIdParam(&result, transactionId);
     SetPathParam(&result, pathPrefix, path);
     SerializeMasterReadOptions(&result, options);
+    SerializeSuppressableAccessTrackingOptions(&result, options);
     return result;
 }
 
@@ -145,6 +149,7 @@ TNode SerializeParamsForGet(
     SetTransactionIdParam(&result, transactionId);
     SetPathParam(&result, pathPrefix, path);
     SerializeMasterReadOptions(&result, options);
+    SerializeSuppressableAccessTrackingOptions(&result, options);
     if (options.AttributeFilter_) {
         result["attributes"] = SerializeAttributeFilter(*options.AttributeFilter_);
     }
@@ -163,6 +168,7 @@ TNode SerializeParamsForSet(
     TNode result;
     SetTransactionIdParam(&result, transactionId);
     SetPathParam(&result, pathPrefix, path);
+    SerializeSuppressableAccessTrackingOptions(&result, options);
     result["recursive"] = options.Recursive_;
     if (options.Force_) {
         result["force"] = *options.Force_;
@@ -179,6 +185,7 @@ TNode SerializeParamsForMultisetAttributes(
     TNode result;
     SetTransactionIdParam(&result, transactionId);
     SetPathParam(&result, pathPrefix, path);
+    SerializeSuppressableAccessTrackingOptions(&result, options);
     if (options.Force_) {
         result["force"] = *options.Force_;
     }
@@ -195,6 +202,7 @@ TNode SerializeParamsForList(
     SetTransactionIdParam(&result, transactionId);
     SetPathParam(&result, pathPrefix, path);
     SerializeMasterReadOptions(&result, options);
+    SerializeSuppressableAccessTrackingOptions(&result, options);
     if (options.MaxSize_) {
         result["max_size"] = *options.MaxSize_;
     }
@@ -513,11 +521,14 @@ TNode SerializeParamsForUpdateOperationParameters(
 TNode SerializeParamsForGetJob(
     const TOperationId& operationId,
     const TJobId& jobId,
-    const TGetJobOptions& /* options */)
+    const TGetJobOptions& options)
 {
     TNode result;
     SetOperationIdParam(&result, operationId);
     result["job_id"] = GetGuidAsString(jobId);
+    if (options.AttributeFilter_) {
+        result["attributes"] = SerializeAttributeFilter(*options.AttributeFilter_);
+    }
     return result;
 }
 
@@ -597,6 +608,32 @@ TNode SerializeParamsForListJobs(
     if (options.IncludeControllerAgent_) {
         result["include_controller_agent"] = *options.IncludeControllerAgent_;
     }
+    if (options.AttributeFilter_) {
+        result["attributes"] = SerializeAttributeFilter(*options.AttributeFilter_);
+    }
+    return result;
+}
+
+TNode SerializeParamsForSelectRows(
+    const TString& query,
+    const TSelectRowsOptions& options)
+{
+    TNode result;
+    result["query"] = query;
+    SerializeSuppressableAccessTrackingOptions(&result, options);
+    if (options.Timeout_) {
+        result["timeout"] = static_cast<i64>(options.Timeout_->MilliSeconds());
+    }
+    if (options.InputRowLimit_) {
+        result["input_row_limit"] = *options.InputRowLimit_;
+    }
+    if (options.OutputRowLimit_) {
+        result["output_row_limit"] = *options.OutputRowLimit_;
+    }
+    result["range_expansion_limit"] = options.RangeExpansionLimit_;
+    result["fail_on_incomplete_result"] = options.FailOnIncompleteResult_;
+    result["verbose_logging"] = options.VerboseLogging_;
+    result["enable_code_cache"] = options.EnableCodeCache_;
     return result;
 }
 
@@ -660,6 +697,7 @@ TNode SerializeParamsForReadTable(
 {
     TNode result;
     SetTransactionIdParam(&result, transactionId);
+    SerializeSuppressableAccessTrackingOptions(&result, options);
     result["control_attributes"] = BuildYsonNodeFluently()
         .BeginMap()
             .Item("enable_row_index").Value(options.ControlAttributes_.EnableRowIndex_)
@@ -668,10 +706,11 @@ TNode SerializeParamsForReadTable(
     return result;
 }
 
-TNode SerializeParamsForReadTablePartition(const TString& cookie, const TTablePartitionReaderOptions& /*options*/)
+TNode SerializeParamsForReadTablePartition(const TString& cookie, const TTablePartitionReaderOptions& options)
 {
     TNode node;
     node["cookie"] = cookie;
+    SerializeSuppressableAccessTrackingOptions(&node, options);
     return node;
 }
 
@@ -693,6 +732,7 @@ TNode SerializeParamsForReadBlobTable(
                 .UpperLimit(TReadLimit().Key(upperLimitKey))));
 
     SetTransactionIdParam(&result, transactionId);
+    SerializeSuppressableAccessTrackingOptions(&result, options);
 
     result["start_part_index"] = options.StartPartIndex_;
     result["offset"] = options.Offset_;
@@ -823,6 +863,16 @@ TNode SerializeParamsForGetTablePartitions(
     }
     result["adjust_data_weight_per_partition"] = options.AdjustDataWeightPerPartition_;
     result["enable_cookies"] = options.EnableCookies_;
+    return result;
+}
+
+TNode SerializeParamsForReadFile(
+    const TTransactionId& transactionId,
+    const TFileReaderOptions& options)
+{
+    TNode result;
+    SetTransactionIdParam(&result, transactionId);
+    SerializeSuppressableAccessTrackingOptions(&result, options);
     return result;
 }
 

@@ -340,8 +340,19 @@ struct TCreateScriptExecutionActor : public TActorBootstrapped<TCreateScriptExec
             resultsTtl = Min(operationTtl, resultsTtl);
         }
 
+        const auto& eventProto = Event->Get()->Record;
+        const TKqpRunScriptActorSettings settings = {
+            .Database = eventProto.GetRequest().GetDatabase(),
+            .ExecutionId = ExecutionId,
+            .LeaseGeneration = 1,
+            .LeaseDuration = LeaseDuration,
+            .ResultsTtl = resultsTtl,
+            .ProgressStatsPeriod = Event->Get()->ProgressStatsPeriod,
+            .Counters = Counters,
+        };
+
         // Start request
-        RunScriptActorId = Register(CreateRunScriptActor(ExecutionId, Event->Get()->Record, Event->Get()->Record.GetRequest().GetDatabase(), 1, LeaseDuration, resultsTtl, QueryServiceConfig, Counters));
+        RunScriptActorId = Register(CreateRunScriptActor(eventProto, settings, QueryServiceConfig));
         Register(new TCreateScriptOperationQuery(ExecutionId, RunScriptActorId, Event->Get()->Record, operationTtl, resultsTtl, LeaseDuration, MaxRunTime));
     }
 
@@ -1014,9 +1025,10 @@ public:
     {}
 
     void Bootstrap() {
-        TMaybe<TString> executionId = NKqp::ScriptExecutionIdFromOperation(Request->Get()->OperationId);
+        TString error;
+        TMaybe<TString> executionId = NKqp::ScriptExecutionIdFromOperation(Request->Get()->OperationId, error);
         if (!executionId) {
-            Reply(Ydb::StatusIds::BAD_REQUEST, "Incorrect operation id");
+            Reply(Ydb::StatusIds::BAD_REQUEST, error);
             return;
         }
         ExecutionId = *executionId;
@@ -1282,9 +1294,10 @@ public:
     {}
 
     void OnBootstrap() override {
-        TMaybe<TString> executionId = ScriptExecutionIdFromOperation(Request->Get()->OperationId);
+        TString error;
+        TMaybe<TString> executionId = ScriptExecutionIdFromOperation(Request->Get()->OperationId, error);
         if (!executionId) {
-            Reply(Ydb::StatusIds::BAD_REQUEST, "Incorrect operation id");
+            Reply(Ydb::StatusIds::BAD_REQUEST, error);
             return;
         }
         ExecutionId = *executionId;
@@ -1624,9 +1637,10 @@ public:
     {}
 
     void Bootstrap() {
-        const TMaybe<TString> executionId = NKqp::ScriptExecutionIdFromOperation(Request->Get()->OperationId);
+        TString error;
+        const TMaybe<TString> executionId = NKqp::ScriptExecutionIdFromOperation(Request->Get()->OperationId, error);
         if (!executionId) {
-            return Reply(Ydb::StatusIds::BAD_REQUEST, "Incorrect operation id");
+            return Reply(Ydb::StatusIds::BAD_REQUEST, error);
         }
         ExecutionId = *executionId;
 
@@ -1640,6 +1654,7 @@ public:
         hFunc(TEvKqp::TEvCancelScriptExecutionResponse, Handle);
         hFunc(NActors::TEvents::TEvUndelivered, Handle);
         hFunc(NActors::TEvInterconnect::TEvNodeDisconnected, Handle);
+        IgnoreFunc(NActors::TEvInterconnect::TEvNodeConnected);
     )
 
     void Handle(TEvPrivate::TEvLeaseCheckResult::TPtr& ev) {
@@ -1647,7 +1662,7 @@ public:
             KQP_PROXY_LOG_D("[TCancelScriptExecutionOperationActor] ExecutionId: " << ExecutionId << ", check lease success");
             RunScriptActor = ev->Get()->RunScriptActorId;
             if (ev->Get()->OperationStatus) {
-                Reply(Ydb::StatusIds::PRECONDITION_FAILED); // Already finished.
+                Reply(Ydb::StatusIds::PRECONDITION_FAILED, "Script execution operation is already finished");
             } else {
                 if (CancelSent) { // We have not found the actor, but after it status of the operation is not defined, something strage happened.
                     Reply(Ydb::StatusIds::INTERNAL_ERROR, "Failed to cancel script execution operation");
@@ -1933,7 +1948,7 @@ public:
 
     void Reply(Ydb::StatusIds::StatusCode status, NYql::TIssues issues = {}) {
         KQP_PROXY_LOG_D("[TSaveScriptExecutionResultActor] ExecutionId: " << ExecutionId << ", reply " << status << ", issues: " << issues.ToOneLineString());
-        Send(ReplyActorId, new TEvSaveScriptResultFinished(status, std::move(issues)));
+        Send(ReplyActorId, new TEvSaveScriptResultFinished(status, ResultSetId, std::move(issues)));
         PassAway();
     }
 
@@ -2011,47 +2026,51 @@ public:
         }
 
         const std::optional<i32> operationStatus = result.ColumnParser("operation_status").GetOptionalInt32();
-        if (!operationStatus) {
-            Finish(Ydb::StatusIds::BAD_REQUEST, "Results are not ready");
-            return;
-        }
 
-        const auto serializedMeta = result.ColumnParser("meta").GetOptionalJsonDocument();
-        if (!serializedMeta) {
-            Finish(Ydb::StatusIds::INTERNAL_ERROR, "Missing operation metainformation");
-            return;
-        }
-
-        const auto endTs = result.ColumnParser("end_ts").GetOptionalTimestamp();
-        if (!endTs) {
-            Finish(Ydb::StatusIds::INTERNAL_ERROR, "Missing operation end timestamp");
-            return;
-        }
-
-        const auto ttl = GetTtlFromSerializedMeta(TString{*serializedMeta});
-        if (!ttl) {
-            Finish(Ydb::StatusIds::INTERNAL_ERROR, "Metainformation is corrupted");
-            return;
-        }
-        const auto [_, resultsTtl] = *ttl;
-        if (resultsTtl && (*endTs + resultsTtl) < TInstant::Now()){
-            Finish(Ydb::StatusIds::NOT_FOUND, "Results are expired");
-            return;
-        }
-
-        Ydb::StatusIds::StatusCode operationStatusCode = static_cast<Ydb::StatusIds::StatusCode>(*operationStatus);
-        if (operationStatusCode != Ydb::StatusIds::SUCCESS) {
-            const std::optional<TString> issuesSerialized = result.ColumnParser("issues").GetOptionalJsonDocument();
-            if (issuesSerialized) {
-                Finish(operationStatusCode, DeserializeIssues(*issuesSerialized));
-            } else {
-                Finish(operationStatusCode, "Invalid operation");
+        if (operationStatus) {
+            const auto serializedMeta = result.ColumnParser("meta").GetOptionalJsonDocument();
+            if (!serializedMeta) {
+                Finish(Ydb::StatusIds::INTERNAL_ERROR, "Missing operation metainformation");
+                return;
             }
-            return;
+
+            const auto endTs = result.ColumnParser("end_ts").GetOptionalTimestamp();
+            if (!endTs) {
+                Finish(Ydb::StatusIds::INTERNAL_ERROR, "Missing operation end timestamp");
+                return;
+            }
+
+            const auto ttl = GetTtlFromSerializedMeta(TString{*serializedMeta});
+            if (!ttl) {
+                Finish(Ydb::StatusIds::INTERNAL_ERROR, "Metainformation is corrupted");
+                return;
+            }
+            const auto [_, resultsTtl] = *ttl;
+            if (resultsTtl && (*endTs + resultsTtl) < TInstant::Now()){
+                Finish(Ydb::StatusIds::NOT_FOUND, "Results are expired");
+                return;
+            }
         }
 
         const std::optional<std::string> serializedMetas = result.ColumnParser("result_set_metas").GetOptionalJsonDocument();
         if (!serializedMetas) {
+            if (!operationStatus) {
+                Finish(Ydb::StatusIds::BAD_REQUEST, "Result is not ready");
+                return;
+            }
+
+            const Ydb::StatusIds::StatusCode operationStatusCode = static_cast<Ydb::StatusIds::StatusCode>(*operationStatus);
+            if (operationStatusCode != Ydb::StatusIds::SUCCESS) {
+                NYql::TIssue rootIssue("Script execution failed without results");
+                if (const auto& issuesSerialized = result.ColumnParser("issues").GetOptionalJsonDocument()) {
+                    for (const auto& issue : DeserializeIssues(TString(*issuesSerialized))) {
+                        rootIssue.AddSubIssue(MakeIntrusive<NYql::TIssue>(issue));
+                    }
+                }
+                Finish(operationStatusCode, NYql::TIssues{rootIssue});
+                return;
+            }
+
             Finish(Ydb::StatusIds::INTERNAL_ERROR, "Result meta is empty");
             return;
         }
@@ -2071,6 +2090,15 @@ public:
         Ydb::Query::Internal::ResultSetMeta meta;
         NProtobufJson::Json2Proto(*metaValue, meta);
 
+        if (!operationStatus) {
+            if (!meta.enabled_runtime_results()) {
+                Finish(Ydb::StatusIds::BAD_REQUEST, "Results are not ready");
+                return;
+            }
+            HasMoreResults = !meta.finished();
+            NumberOfSavedRows = meta.number_rows();
+        }
+
         *ResultSet.mutable_columns() = meta.columns();
         ResultSet.set_truncated(meta.truncated());
         ResultSetSize = ResultSet.ByteSizeLong();
@@ -2086,6 +2114,7 @@ public:
             DECLARE $execution_id AS Text;
             DECLARE $result_set_id AS Int32;
             DECLARE $offset AS Int64;
+            DECLARE $max_row_id AS Int64;
             DECLARE $limit AS Uint64;
 
             SELECT database, execution_id, result_set_id, row_id, result_set
@@ -2094,6 +2123,7 @@ public:
               AND execution_id = $execution_id
               AND result_set_id = $result_set_id
               AND row_id >= $offset
+              AND row_id < $max_row_id
             ORDER BY database, execution_id, result_set_id, row_id
             LIMIT $limit;
         )";
@@ -2111,6 +2141,9 @@ public:
                 .Build()
             .AddParam("$offset")
                 .Int64(Offset)
+                .Build()
+            .AddParam("$max_row_id")
+                .Int64(NumberOfSavedRows)
                 .Build()
             .AddParam("$limit")
                 .Uint64(RowsLimit ? RowsLimit + 1 : std::numeric_limits<ui64>::max())
@@ -2190,6 +2223,7 @@ private:
     const i64 SizeLimit;
     const TInstant Deadline;
 
+    i64 NumberOfSavedRows = std::numeric_limits<i64>::max();
     i64 ResultSetSize = 0;
     i64 AdditionalRowSize = 0;
     Ydb::ResultSet ResultSet;
@@ -2300,7 +2334,7 @@ private:
         }
 
         NJsonWriter::TBuf serializedSinks;
-        serializedSinks.WriteJsonValue(&value);
+        serializedSinks.WriteJsonValue(&value, false, PREC_NDIGITS, 17);
 
         return serializedSinks.Str();
     }
@@ -2316,7 +2350,7 @@ private:
         }
 
         NJsonWriter::TBuf serializedSecretNames;
-        serializedSecretNames.WriteJsonValue(&value);
+        serializedSecretNames.WriteJsonValue(&value, false, PREC_NDIGITS, 17);
 
         return serializedSecretNames.Str();
     }
@@ -2535,7 +2569,14 @@ public:
             Ydb::TableStats::QueryStats queryStats;
             NGRpcService::FillQueryStats(queryStats, *Request.QueryStats);
             NProtobufJson::Proto2Json(queryStats, statsJson, NProtobufJson::TProto2JsonConfig());
-            serializedStats = NJson::WriteJson(statsJson);
+            TStringStream statsStream;
+            NJson::WriteJson(&statsStream, &statsJson, {
+                .DoubleNDigits = 17,
+                .FloatToStringMode = PREC_NDIGITS,
+                .ValidateUtf8 = false,
+                .WriteNanAsString = true,
+            });
+            serializedStats = statsStream.Str();
         }
 
         std::optional<TString> ast;

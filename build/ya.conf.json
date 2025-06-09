@@ -84,6 +84,14 @@
                     "clang-format"
                 ]
             },
+            "formula": "build/platform/clang/clang-format/clang-format18.json"
+        },
+        "clang-format-16": {
+            "executable": {
+                "clang-format": [
+                    "clang-format"
+                ]
+            },
             "formula": "build/platform/clang/clang-format/clang-format16.json"
         },
         "clang-format-18": {
@@ -192,6 +200,15 @@
             },
             "formula": "build/platform/clang/clang18.json"
         },
+        "clangd": {
+            "executable": {
+                "clangd": [
+                    "bin",
+                    "clangd"
+                ]
+            },
+            "formula": "build/platform/clang/clangd/clangd18.json"
+        },
         "gdb": {
             "executable": {
                 "gcore": [
@@ -243,7 +260,7 @@
                     "gofmt"
                 ]
             },
-            "formula": "build/external_resources/go_tools/go1.22.json"
+            "formula": "build/external_resources/go_tools/go1.23.json"
         },
         "jdk17": {
             "executable": {
@@ -488,6 +505,49 @@
             "tools": {
                 "clang-format": {
                     "bottle": "clang-format",
+                    "executable": "clang-format"
+                }
+            }
+        },
+        "clang-format-16": {
+            "platforms": [
+                {
+                    "default": true,
+                    "host": {
+                        "arch": "x86_64",
+                        "os": "LINUX"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "arch": "aarch64",
+                        "os": "LINUX"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "os": "WIN"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "os": "DARWIN"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "arch": "arm64",
+                        "os": "DARWIN"
+                    }
+                }
+            ],
+            "tools": {
+                "clang-format-16": {
+                    "bottle": "clang-format-16",
                     "executable": "clang-format"
                 }
             }
@@ -1618,6 +1678,16 @@
                         "os": "LINUX"
                     },
                     "target": {
+                        "arch": "armv6hf",
+                        "os": "LINUX"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "os": "LINUX"
+                    },
+                    "target": {
                         "arch": "armv7a",
                         "os": "LINUX"
                     }
@@ -1891,6 +1961,49 @@
                 }
             }
         },
+        "clangd": {
+            "platforms": [
+                {
+                    "default": true,
+                    "host": {
+                        "arch": "x86_64",
+                        "os": "LINUX"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "arch": "aarch64",
+                        "os": "LINUX"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "os": "WIN"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "os": "DARWIN"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "arch": "arm64",
+                        "os": "DARWIN"
+                    }
+                }
+            ],
+            "tools": {
+                "clangd": {
+                    "bottle": "clangd",
+                    "executable": "clangd"
+                }
+            }
+        },
         "gdb": {
             "env": {
                 "TERMINFO": [
@@ -1982,7 +2095,7 @@
         "golang": {
             "params": {
                 "type": "golang",
-                "version": "1.22.1"
+                "version": "1.23.8"
             },
             "platforms": [
                 {
@@ -2351,11 +2464,17 @@
         "clang-format": {
             "description": "Run Clang-Format source code formatter"
         },
+        "clang-format-16": {
+            "description": "Run Clang-Format source code formatter (16 version)"
+        },
         "clang-format-18": {
             "description": "Run Clang-Format source code formatter (18 version)"
         },
         "clang-rename": {
             "description": "Run Clang-Rename refactoring tool"
+        },
+        "clangd": {
+            "description": "Run clangd language server"
         },
         "gcov": {
             "description": "Run gcov"

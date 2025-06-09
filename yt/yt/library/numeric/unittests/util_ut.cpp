@@ -325,6 +325,123 @@ TEST_F(TUtilTest, TestUnsignedSaturationArithmeticOperations)
     }
 }
 
+TEST_F(TUtilTest, TestSignedSaturationConversion)
+{
+    struct TTestCase
+    {
+        const std::string Name;
+        const double Value;
+        const i64 Expected;
+        const i64 AbsError = 0;
+    };
+
+    const std::vector<TTestCase> testCases = {
+        {
+            .Name = "conversion_0",
+            .Value = 0.,
+            .Expected = 0,
+        },
+        {
+            .Name = "conversion_42",
+            .Value = 42.,
+            .Expected = 42,
+        },
+        {
+            .Name = "conversion_2^80",
+            .Value = pow(2, 80),
+            .Expected = std::numeric_limits<i64>::max(),
+        },
+        {
+            .Name = "conversion_double_max",
+            .Value = std::numeric_limits<double>::max(),
+            .Expected = std::numeric_limits<i64>::max(),
+        },
+        {
+            .Name = "conversion_maxint",
+            .Value = std::numeric_limits<i64>::max(),
+            .Expected = std::numeric_limits<i64>::max(),
+        },
+        {
+            .Name = "conversion_maxint+eps",
+            .Value = std::nexttoward(std::numeric_limits<i64>::max(), std::numeric_limits<double>::infinity()),
+            .Expected = std::numeric_limits<i64>::max(),
+        },
+        {
+            .Name = "conversion_maxint+eps+eps",
+            .Value = std::nexttoward(std::nexttoward(std::numeric_limits<i64>::max(), std::numeric_limits<double>::infinity()), std::numeric_limits<double>::infinity()),
+            .Expected = std::numeric_limits<i64>::max(),
+        },
+        {
+            .Name = "conversion_maxint-eps",
+            .Value = std::nexttoward(std::numeric_limits<i64>::max(), 0),
+            .Expected = std::numeric_limits<i64>::max(),
+            .AbsError = 2048,
+        },
+        {
+            .Name = "conversion_maxint-eps-eps",
+            .Value = std::nexttoward(std::nexttoward(std::numeric_limits<i64>::max(), 0), 0),
+            .Expected = std::numeric_limits<i64>::max(),
+            .AbsError = 4096,
+        },
+        {
+            .Name = "conversion_infinity",
+            .Value = std::numeric_limits<double>::infinity(),
+            .Expected = std::numeric_limits<i64>::max(),
+        },
+        {
+            .Name = "conversion_-42",
+            .Value = -42.,
+            .Expected = -42,
+        },
+        {
+            .Name = "conversion_-2^80",
+            .Value = -pow(2, 80),
+            .Expected = std::numeric_limits<i64>::min(),
+        },
+        {
+            .Name = "conversion_double_lowest",
+            .Value = std::numeric_limits<double>::lowest(),
+            .Expected = std::numeric_limits<i64>::min(),
+        },
+        {
+            .Name = "conversion_minint",
+            .Value = std::numeric_limits<i64>::min(),
+            .Expected = std::numeric_limits<i64>::min(),
+        },
+        {
+            .Name = "conversion_minint-eps",
+            .Value = std::nexttoward(std::numeric_limits<i64>::min(), -std::numeric_limits<double>::infinity()),
+            .Expected = std::numeric_limits<i64>::min(),
+        },
+        {
+            .Name = "conversion_minint-eps-eps",
+            .Value = std::nexttoward(std::nexttoward(std::numeric_limits<i64>::min(), -std::numeric_limits<double>::infinity()), -std::numeric_limits<double>::infinity()),
+            .Expected = std::numeric_limits<i64>::min(),
+        },
+        {
+            .Name = "conversion_minint+eps",
+            .Value = std::nexttoward(std::numeric_limits<i64>::min(), 0),
+            .Expected = std::numeric_limits<i64>::min(),
+            .AbsError = 2048,
+        },
+        {
+            .Name = "conversion_minint+eps+eps",
+            .Value = std::nexttoward(std::nexttoward(std::numeric_limits<i64>::min(), 0), 0),
+            .Expected = std::numeric_limits<i64>::min(),
+            .AbsError = 4096,
+        },
+        {
+            .Name = "conversion_-infinity",
+            .Value = -std::numeric_limits<double>::infinity(),
+            .Expected = std::numeric_limits<i64>::min(),
+        },
+    };
+
+    for (const auto& testCase : testCases) {
+        EXPECT_NEAR(testCase.Expected, SignedSaturationConversion(testCase.Value), testCase.AbsError) << "In the test case " << testCase.Name;
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace

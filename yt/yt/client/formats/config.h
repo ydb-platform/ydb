@@ -62,10 +62,9 @@ DEFINE_REFCOUNTED_TYPE(TYsonFormatConfig)
 // All fields are declared in Base classes, all parameters are                               //
 // registered in derived classes.                                                            //
 
-class TTableFormatConfigBase
+struct TTableFormatConfigBase
     : public NTableClient::TTypeConversionConfig
 {
-public:
     char RecordSeparator;
     char FieldSeparator;
 
@@ -89,10 +88,9 @@ DEFINE_REFCOUNTED_TYPE(TTableFormatConfigBase)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TYamrFormatConfigBase
+struct TYamrFormatConfigBase
     : public virtual TTableFormatConfigBase
 {
-public:
     bool HasSubkey;
     bool Lenval;
     bool EnableEom;
@@ -107,10 +105,9 @@ DEFINE_REFCOUNTED_TYPE(TYamrFormatConfigBase)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TDsvFormatConfigBase
+struct TDsvFormatConfigBase
     : public virtual TTableFormatConfigBase
 {
-public:
     char KeyValueSeparator;
 
     // Only supported for tabular data
@@ -129,9 +126,9 @@ DEFINE_REFCOUNTED_TYPE(TDsvFormatConfigBase)
 struct TYamrFormatConfig
     : public TYamrFormatConfigBase
 {
-    TString Key;
-    TString Subkey;
-    TString Value;
+    std::string Key;
+    std::string Subkey;
+    std::string Value;
 
     REGISTER_YSON_STRUCT(TYamrFormatConfig);
 

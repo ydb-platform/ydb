@@ -39,7 +39,7 @@ private:
     void HandleDescribe(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
     void SendPQReadRequest();
     void HandlePQResponse(TEvPersQueue::TEvResponse::TPtr& ev);
-    void FillProtoResponse(ui64 maxSingleMessageSize = 1_MB, ui64 maxTotalSize = 10_MB);
+    void FillProtoResponse(ui64 maxTotalSize = 10_MB);
     NYdb::NTopic::ICodec* GetCodec(NPersQueueCommon::ECodec codec);
 
     STATEFN(StateRequestedDescribe);
@@ -58,10 +58,12 @@ private:
     TString TopicPath;
     ui32 PartitionId;
     ui64 Offset = 0;
+    ui64 LastOffset = 0;
     ui64 Timestamp = 0;
 
     ui32 Limit = 10;
     bool TruncateLongMessages = true;
+    ui64 MaxSingleMessageSize = 1024 * 1024;
     TMap<ui32, THolder<NYdb::NTopic::ICodec>> Codecs;
     std::optional<TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult>> NavigateResponse;
 
@@ -104,11 +106,26 @@ public:
                 description: start offset to read from
                 required: false
                 type: integer
+              - name: last_offset
+                in: query
+                description: last offset that can possibly be read
+                required: false
+                type: integer
               - name: limit
                 in: query
                 description: max number of messages to read (default = 10)
                 required: false
                 type: integer
+              - name: message_size_limit
+                in: query
+                description: max size of single message (default = 1_MB)
+                required: false
+                type: integer
+              - name: truncate
+                in: query
+                description: dont truncate large messages
+                required: false
+                type: bool
               - name: timeout
                 in: query
                 description: timeout in ms

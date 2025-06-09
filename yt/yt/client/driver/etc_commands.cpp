@@ -29,6 +29,16 @@ using namespace NApi;
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void TGetCurrentUserCommand::DoExecute(ICommandContextPtr context)
+{
+    auto userInfo = WaitFor(context->GetClient()->GetCurrentUser())
+        .ValueOrThrow();
+
+    context->ProduceOutputValue(ConvertToYsonString(userInfo));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 void TAddMemberCommand::DoExecute(ICommandContextPtr context)
 {
     WaitFor(context->GetClient()->AddMember(
@@ -412,9 +422,9 @@ void TDiscoverProxiesCommand::Register(TRegistrar registrar)
         .Alias("type")
         .Default(EProxyKind::Rpc);
     registrar.Parameter("role", &TThis::Role)
-        .Optional();;
+        .Optional();
     registrar.Parameter("address_type", &TThis::AddressType)
-        .Optional();;
+        .Optional();
     registrar.Parameter("network_name", &TThis::NetworkName)
         .Default(NRpcProxy::DefaultNetworkName);
     registrar.Parameter("ignore_balancers", &TThis::IgnoreBalancers)

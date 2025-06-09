@@ -60,10 +60,9 @@ DEFINE_REFCOUNTED_TYPE(TChunkReaderConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TChunkWriterTestingOptions
+struct TChunkWriterTestingOptions
     : public NYTree::TYsonStruct
 {
-public:
     //! If true, unsupported chunk feature is added to chunk meta.
     bool AddUnsupportedFeature;
 
@@ -372,16 +371,16 @@ DEFINE_REFCOUNTED_TYPE(TInsertRowsFormatConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TChunkReaderOptions
+struct TChunkReaderOptions
     : public virtual NYTree::TYsonStruct
 {
-public:
     bool EnableTableIndex;
     bool EnableRangeIndex;
     bool EnableRowIndex;
     bool DynamicTable;
     bool EnableTabletIndex;
     bool EnableKeyWidening;
+    bool EnableAnyUnpacking;
 
     static TChunkReaderOptionsPtr GetDefault();
 
@@ -394,10 +393,9 @@ DEFINE_REFCOUNTED_TYPE(TChunkReaderOptions)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TChunkWriterOptions
+struct TChunkWriterOptions
     : public virtual NChunkClient::TEncodingWriterOptions
 {
-public:
     bool ValidateSorted;
     bool ValidateRowWeight;
     bool ValidateKeyWeight;

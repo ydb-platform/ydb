@@ -1182,7 +1182,8 @@
 
 ### Подключение к топику для чтения сообщений {#start-reader}
 
-Для чтения сообщений из топика необходимо наличие заранее созданного Consumer, связанного с этим топиком.
+Чтение сообщений из топика может выполнятся с указанием Consumer'а, связанного с этим топиком, а также без Consumer'а. Если Consumer не указан, то клиентское приложение должно самостоятельно рассчитывать offset для чтения сообщений. Более подробно пример чтения без Consumer'а рассмотрен в [соответствующей секции](#no-consumer).
+
 Создать Consumer можно при [создании](#create-topic) или [изменении](#alter-topic) топика.
 У топика может быть несколько Consumer'ов и для каждого из них сервер хранит свой прогресс чтения.
 
@@ -1220,7 +1221,7 @@
   Чтобы создать подключение к существующему топику `my-topic` через добавленного ранее читателя `my-consumer`, используйте следующий код:
 
   ```python
-  reader = driver.topic_client.reader(topic="topic-path", consumer="consumer_name")
+  reader = driver.topic_client.reader(topic="my-topic", consumer="my-consumer")
   ```
 
 - Java (sync)
@@ -1909,7 +1910,7 @@
 
 - Java
 
-  Для чтения без `Consumer`а следует в настройках читателя `ReaderSettings` это явно указать, вызвав `withoutConsumer()`:
+  Для чтения без Consumer'а следует в настройках читателя `ReaderSettings` это явно указать, вызвав `withoutConsumer()`:
 
   ```java
   ReaderSettings settings = ReaderSettings.newBuilder()
@@ -1929,6 +1930,32 @@
               .setReadOffset(lastReadOffset) // the last offset read by this client, Long
               .build());
   }
+  ```
+
+- Python
+
+  Для чтения без Consumer'а следует создать читателя с помощью метода `reader` с указанием следующих аргументов:
+  * `topic` - объект `ydb.TopicReaderSelector` с указанными `path` и списком `partitions`;
+  * `consumer` - должен быть `None`;
+  * `event_handler` - наследник `ydb.TopicReaderEvents.EventHandler`, который реализует функцию `on_partition_get_start_offset`. Эта функция отвечает за возвращение начального смещения (offset) для чтения сообщений при старте читателя, а также во время переподключений. Клиентское приложение должно указать это смещение в параметре `ydb.TopicReaderEvents.OnPartitionGetStartOffsetResponse.start_offset`. Также функция может быть реализована как асинхронная.
+
+  Пример:
+
+  ```python
+  class CustomEventHandler(ydb.TopicReaderEvents.EventHandler):
+      def on_partition_get_start_offset(self, event: ydb.TopicReaderEvents.OnPartitionGetStartOffsetRequest):
+          return ydb.TopicReaderEvents.OnPartitionGetStartOffsetResponse(
+              start_offset=0,
+          )
+
+  reader = driver.topic_client.reader(
+      topic=ydb.TopicReaderSelector(
+          path="topic-path",
+          partitions=[0, 1, 2],
+      ),
+      consumer=None,
+      event_handler=CustomEventHandler(),
+  )
   ```
 
 {% endlist %}
@@ -2364,5 +2391,26 @@
   ```
 
   С практической точки зрения для конечного пользователя режимы не отличаются. Режим полной поддержки отличается от режима совместимости тем, кто гарантирует порядок чтения — клиент или сервер. Режим совместимости достигается серверной обработкой и, как правило, работает медленнее.
+
+{% endlist %}
+
+### Подтверждение обработки вне читателя {#commit-outside-the-reader}
+
+Чаще всего подтверждение обработки удобно выполнять в рамках читателя, получающего сообщения. Однако существуют сценарии, при которых подтверждение обработки должно производиться процессом, отличным от процесса чтения. В таком случае необходим способ подтверждения, находящийся вне читателя.
+
+{% list tabs group=lang %}
+
+- Python
+
+  Подтверждения обработки вне читателя производится с помощью метода `topic_client.commit_offset`:
+
+  ```python
+  driver.topic_client.commit_offset(
+      topic_path,
+      consumer_name,
+      partition_id,
+      offset,
+  )
+  ```
 
 {% endlist %}

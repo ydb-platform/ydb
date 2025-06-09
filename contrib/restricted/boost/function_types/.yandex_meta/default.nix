@@ -1,7 +1,7 @@
 self: super: with self; {
   boost_function_types = stdenv.mkDerivation rec {
     pname = "boost_function_types";
-    version = "1.87.0";
+    version = "1.88.0";
 
     src = fetchFromGitHub {
       owner = "boostorg";

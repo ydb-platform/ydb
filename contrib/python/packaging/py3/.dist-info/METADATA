@@ -1,6 +1,6 @@
-Metadata-Version: 2.3
+Metadata-Version: 2.4
 Name: packaging
-Version: 24.2
+Version: 25.0
 Summary: Core utilities for Python packages
 Author-email: Donald Stufft <donald@stufft.io>
 Requires-Python: >=3.8
@@ -21,6 +21,9 @@ Classifier: Programming Language :: Python :: 3.13
 Classifier: Programming Language :: Python :: Implementation :: CPython
 Classifier: Programming Language :: Python :: Implementation :: PyPy
 Classifier: Typing :: Typed
+License-File: LICENSE
+License-File: LICENSE.APACHE
+License-File: LICENSE.BSD
 Project-URL: Documentation, https://packaging.pypa.io/
 Project-URL: Source, https://github.com/pypa/packaging
 

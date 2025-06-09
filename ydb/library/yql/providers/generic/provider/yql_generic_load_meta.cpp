@@ -98,7 +98,11 @@ namespace NYql {
             TableDescriptions_.reserve(pendingTables.size());
 
             for (const auto& tableAddress : pendingTables) {
-                LoadTableMetadataFromConnector(tableAddress, handles);
+                auto tIssues = LoadTableMetadataFromConnector(tableAddress, handles);
+                if (!tIssues.Empty()) {
+                    ctx.AddError(TIssue(tIssues.ToString()));
+                    return TStatus::Error;
+                }
             }
 
             if (handles.empty()) {
@@ -111,22 +115,28 @@ namespace NYql {
         // clang-format on
 
     private:
-        void LoadTableMetadataFromConnector(const TGenericState::TTableAddress& tableAddress,
+        TIssues LoadTableMetadataFromConnector(const TGenericState::TTableAddress& tableAddress,
                                             std::vector<NThreading::TFuture<void>>& handles) {
             const auto it = State_->Configuration->ClusterNamesToClusterConfigs.find(tableAddress.ClusterName);
             YQL_ENSURE(State_->Configuration->ClusterNamesToClusterConfigs.cend() != it,
                        "cluster not found: " << tableAddress.ClusterName);
 
+            // preserve data source instance for the further usage
+            auto emplaceIt =
+                TableDescriptions_.emplace(tableAddress, std::make_shared<TTableDescription>());
+
+            auto desc = emplaceIt.first->second;
+
             NConnector::NApi::TDescribeTableRequest request;
-            FillDescribeTableRequest(request, it->second, tableAddress.TableName);
+            auto issues = FillDescribeTableRequest(request, it->second, tableAddress.TableName);
+
+            if (!issues.Empty()) {
+                return issues;
+            }
 
             auto promise = NThreading::NewPromise();
             handles.emplace_back(promise.GetFuture());
 
-            // preserve data source instance for the further usage
-            auto emplaceIt =
-                TableDescriptions_.emplace(tableAddress, std::make_shared<TTableDescription>());
-            auto desc = emplaceIt.first->second;
             desc->DataSourceInstance = request.data_source_instance();
 
             Y_ENSURE(State_->GenericClient);
@@ -217,6 +227,8 @@ namespace NYql {
                             });
                         });
                 });
+
+            return TIssues{};
         }
 
     public:
@@ -362,7 +374,7 @@ namespace NYql {
             // clang-format on
         }
 
-        void FillDescribeTableRequest(NConnector::NApi::TDescribeTableRequest& request,
+        TIssues FillDescribeTableRequest(NConnector::NApi::TDescribeTableRequest& request,
                                       const TGenericClusterConfig& clusterConfig, const TString& tablePath) {
             const auto dataSourceKind = clusterConfig.GetKind();
             auto dsi = request.mutable_data_source_instance();
@@ -372,8 +384,14 @@ namespace NYql {
             dsi->set_protocol(clusterConfig.GetProtocol());
             FillCredentials(request, clusterConfig);
             FillTypeMappingSettings(request);
-            FillDataSourceOptions(request, clusterConfig);
+            auto issues = FillDataSourceOptions(request, clusterConfig);
+            if (!issues.Empty()) {
+                return issues;
+            }
+
             FillTablePath(request, clusterConfig, tablePath);
+            
+            return {};
         }
 
         void FillCredentials(NConnector::NApi::TDescribeTableRequest& request,
@@ -499,16 +517,48 @@ namespace NYql {
             if (VALUE_HADOOP == catalogType) {
                 // hadoop nothing yet
                 catalog.mutable_hadoop();
-            } else if (VALUE_HIVE == catalogType) {
-                auto hiveUri = GetOptionValue(clusterOptions, CATALOG_HIVE_URI);
+            } else if (VALUE_HIVE_METASTORE == catalogType) {
+                auto uri = GetOptionValue(clusterOptions, CATALOG_HIVE_METASTORE_URI);
 
-                catalog.mutable_hive()->set_uri(hiveUri);
+                catalog.mutable_hive_metastore()->set_uri(uri);
             } else {
                 throw yexception() << "Unexpected catalog type: " << catalogType;
             }
         }
 
-        void FillDataSourceOptions(NConnector::NApi::TDescribeTableRequest& request,
+        TIssues SetMongoDBOptions(NYql::TMongoDbDataSourceOptions& options, const TGenericClusterConfig& clusterConfig) {
+            TIssues issues;
+            auto it = clusterConfig.GetDataSourceOptions().find("reading_mode");
+            if (it != clusterConfig.GetDataSourceOptions().end()) {
+                TMongoDbDataSourceOptions_EReadingMode value = TMongoDbDataSourceOptions::READING_MODE_UNSPECIFIED;
+                if (!TMongoDbDataSourceOptions_EReadingMode_Parse(it->second, &value)) {
+                    issues.AddIssue(TIssue(TStringBuilder() << "Failed to parse MongoDB reading_mode: " << it->second));
+                }
+                options.set_reading_mode(value);
+            }
+
+            it = clusterConfig.GetDataSourceOptions().find("unexpected_type_display_mode");
+            if (it != clusterConfig.GetDataSourceOptions().end()) {
+                TMongoDbDataSourceOptions_EUnexpectedTypeDisplayMode value = TMongoDbDataSourceOptions::UNEXPECTED_UNSPECIFIED;
+                if (!TMongoDbDataSourceOptions_EUnexpectedTypeDisplayMode_Parse(it->second, &value)) {
+                    issues.AddIssue(TIssue(TStringBuilder() << "Failed to parse MongoDB unexpected_type_display_mode: " << it->second));
+                }
+                options.set_unexpected_type_display_mode(value);
+            }
+
+            it = clusterConfig.GetDataSourceOptions().find("unsupported_type_display_mode");
+            if (it != clusterConfig.GetDataSourceOptions().end()) {
+                TMongoDbDataSourceOptions_EUnsupportedTypeDisplayMode value = TMongoDbDataSourceOptions::UNSUPPORTED_UNSPECIFIED;
+                if (!TMongoDbDataSourceOptions_EUnsupportedTypeDisplayMode_Parse(it->second, &value)) {
+                    issues.AddIssue(TIssue(TStringBuilder() << "Failed to parse MongoDB unsupported_type_display_mode: " << it->second));
+                }
+                options.set_unsupported_type_display_mode(value);
+            }
+
+            return issues;
+        }
+
+        TIssues FillDataSourceOptions(NConnector::NApi::TDescribeTableRequest& request,
                                    const TGenericClusterConfig& clusterConfig) {
             const auto dataSourceKind = clusterConfig.GetKind();
             switch (dataSourceKind) {
@@ -544,10 +594,16 @@ namespace NYql {
                     break;
                 case NYql::EGenericDataSourceKind::PROMETHEUS:
                     break;
+                case NYql::EGenericDataSourceKind::MONGO_DB: {
+                    auto* options = request.mutable_data_source_instance()->mutable_mongodb_options();
+                    return SetMongoDBOptions(*options, clusterConfig);
+                } break;
                 default:
                     throw yexception() << "Unexpected data source kind: '"
                                        << NYql::EGenericDataSourceKind_Name(dataSourceKind) << "'";
             }
+
+            return TIssues{};
         }
 
         void FillTypeMappingSettings(NConnector::NApi::TDescribeTableRequest& request) {

@@ -1,6 +1,6 @@
 <tmp_path>/program.sql:<main>: Info: Type annotation
 
-    <tmp_path>/program.sql:<main>:2:1: Info: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject, At function: SqlProjectItem
+    <tmp_path>/program.sql:<main>:2:1: Info: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject, At tuple, At function: SqlProjectItem, At lambda
     	select SimpleUdf::Logging(0,'foo');
 	^
         <tmp_path>/program.sql:<main>:2:19: Info: At function: Apply, At function: Udf, At SimpleUdf.Logging

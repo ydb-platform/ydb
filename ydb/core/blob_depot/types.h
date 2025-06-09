@@ -292,7 +292,7 @@ namespace NKikimr::NBlobDepot {
                 NJson::TJsonWriter __json(&__stream, false); \
                 ::NKikimr::NStLog::TMessage<MARKER>("", 0, #MARKER)STLOG_PARAMS(__VA_ARGS__).WriteToJson(__json) << TEXT; \
             } \
-            ::NActors::MemLogAdapter(ctx, priority, component, __stream.Str()); \
+            ::NActors::MemLogAdapter(ctx, priority, component, __FILE_NAME__, __LINE__, __stream.Str()); \
         }; \
     } while (false)
 

@@ -50,13 +50,13 @@ TTxIdOpt GetTransactionId(const std::optional<TTransactionId>& tx)
     return TTxId(tx->SessionId, tx->TxId);
 }
 
-std::optional<TTransactionId> MakeTransactionId(const NTable::TTransaction* tx)
+std::optional<TTransactionId> MakeTransactionId(const TTransactionBase* tx)
 {
     if (!tx) {
         return std::nullopt;
     }
 
-    return TTransactionId{tx->GetSession().GetId(), tx->GetId()};
+    return TTransactionId{tx->GetSessionId(), tx->GetId()};
 }
 
 }
@@ -537,7 +537,7 @@ NThreading::TFuture<void> TWriteSessionImpl::WaitEvent() {
     return EventsQueue->WaitEvent();
 }
 
-void TWriteSessionImpl::TrySubscribeOnTransactionCommit(TTransaction* tx)
+void TWriteSessionImpl::TrySubscribeOnTransactionCommit(TTransactionBase* tx)
 {
     if (!tx) {
         return;

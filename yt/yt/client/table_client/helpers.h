@@ -132,6 +132,18 @@ void FromUnversionedValue(NNet::TIP6Address* value, TUnversionedValue unversione
 void ToUnversionedValue(TUnversionedValue* unversionedValue, const TError& value, const TRowBufferPtr& rowBuffer, int id = 0, EValueFlags flags = EValueFlags::None);
 void FromUnversionedValue(TError* value, TUnversionedValue unversionedValue);
 
+template <NYTree::CYsonStructDerived T>
+void ToUnversionedValue(
+    TUnversionedValue* unversionedValue,
+    T value,
+    const TRowBufferPtr& rowBuffer,
+    int id = 0,
+    EValueFlags flags = EValueFlags::None);
+template <NYTree::CYsonStructDerived T>
+void FromUnversionedValue(
+    T* value,
+    TUnversionedValue unversionedValue);
+
 template <class T>
     requires TEnumTraits<T>::IsEnum
 void ToUnversionedValue(
@@ -389,6 +401,16 @@ struct TUnversionedValueRangeTruncationOptions
 //! NB: Newly generated values are captured into the provided row buffer, however, the lifetime of unchanged values remains the responsibility of the caller.
 //! NB: The resulting total binary size can be slightly larger than the limit, since even Null filler values take up some space.
 TUnversionedValueRangeTruncationResult TruncateUnversionedValues(TUnversionedValueRange values, const TRowBufferPtr& rowBuffer, const TUnversionedValueRangeTruncationOptions& options);
+
+////////////////////////////////////////////////////////////////////////////////
+
+bool GetBit(TRef bitmap, i64 index);
+
+void SetBit(TMutableRef bitmap, i64 index, bool value);
+
+////////////////////////////////////////////////////////////////////////////////
+
+TString EscapeCAndSingleQuotes(TStringBuf str);
 
 ////////////////////////////////////////////////////////////////////////////////
 

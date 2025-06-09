@@ -26,10 +26,9 @@ DEFINE_ENUM(ERequestTracingMode,
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class THistogramExponentialBounds
+struct THistogramExponentialBounds
     : public NYTree::TYsonStruct
 {
-public:
     TDuration Min;
     TDuration Max;
 
@@ -151,6 +150,7 @@ struct TMethodConfig
     std::optional<int> ConcurrencyLimit;
     std::optional<i64> ConcurrencyByteLimit;
     std::optional<NLogging::ELogLevel> LogLevel;
+    std::optional<NLogging::ELogLevel> ErrorLogLevel;
     std::optional<TDuration> LoggingSuppressionTimeout;
     NConcurrency::TThroughputThrottlerConfigPtr RequestBytesThrottler;
     NConcurrency::TThroughputThrottlerConfigPtr RequestWeightThrottler;
@@ -313,10 +313,9 @@ DEFINE_REFCOUNTED_TYPE(TServiceDiscoveryEndpointsConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TBalancingChannelConfigBase
+struct TBalancingChannelConfigBase
     : public TDynamicChannelPoolConfig
 {
-public:
     //! Disables discovery and balancing when just one address is given.
     //! This is vital for jobs since node's redirector is incapable of handling
     //! discover requests properly.
@@ -423,8 +422,10 @@ struct TDispatcherConfig
     int HeavyPoolSize;
     int CompressionPoolSize;
     TDuration HeavyPoolPollingPeriod;
+    TDuration DefaultRequestTimeout;
 
     bool AlertOnMissingRequestInfo;
+    bool AlertOnUnsetRequestTimeout;
 
     bool SendTracingBaggage;
 
@@ -445,8 +446,10 @@ struct TDispatcherDynamicConfig
     std::optional<int> HeavyPoolSize;
     std::optional<int> CompressionPoolSize;
     std::optional<TDuration> HeavyPoolPollingPeriod;
+    std::optional<TDuration> DefaultRequestTimeout;
 
     std::optional<bool> AlertOnMissingRequestInfo;
+    std::optional<bool> AlertOnUnsetRequestTimeout;
 
     std::optional<bool> SendTracingBaggage;
 

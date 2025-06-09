@@ -440,7 +440,6 @@ TRawTableWriterPtr TClientBase::CreateRawWriter(
         GetTransactionPinger(),
         Context_,
         TransactionId_,
-        GetWriteTableCommand(Context_.Config->ApiVersion),
         format,
         CanonizeYPath(path),
         options).Get();
@@ -1226,7 +1225,7 @@ void TClient::InsertRows(
     RequestWithRetry<void>(
         ClientRetryPolicy_->CreatePolicyForGenericRequest(),
         [this, &path, &rows, &options] (TMutationId /*mutationId*/) {
-            NRawClient::InsertRows(Context_, path, rows, options);
+            RawClient_->InsertRows(path, rows, options);
         });
 }
 
@@ -1239,7 +1238,7 @@ void TClient::DeleteRows(
     RequestWithRetry<void>(
         ClientRetryPolicy_->CreatePolicyForGenericRequest(),
         [this, &path, &keys, &options] (TMutationId /*mutationId*/) {
-            NRawClient::DeleteRows(Context_, path, keys, options);
+            RawClient_->DeleteRows(path, keys, options);
         });
 }
 
@@ -1266,7 +1265,7 @@ TNode::TListType TClient::LookupRows(
     return RequestWithRetry<TNode::TListType>(
         ClientRetryPolicy_->CreatePolicyForGenericRequest(),
         [this, &path, &keys, &options] (TMutationId /*mutationId*/) {
-            return NRawClient::LookupRows(Context_, path, keys, options);
+            return RawClient_->LookupRows(path, keys, options);
         });
 }
 
@@ -1516,10 +1515,14 @@ TYtPoller& TClient::GetYtPoller()
 
 void TClient::Shutdown()
 {
-    auto g = Guard(Lock_);
-
-    if (!Shutdown_.exchange(true) && YtPoller_) {
-        YtPoller_->Stop();
+    std::unique_ptr<TYtPoller> poller;
+    with_lock(Lock_) {
+        if (!Shutdown_.exchange(true) && YtPoller_) {
+            poller = std::move(YtPoller_);
+        }
+    }
+    if (poller) {
+        poller->Stop();
     }
 }
 
@@ -1562,6 +1565,7 @@ void SetupClusterContext(
     const TString& serverName)
 {
     context.ServerName = serverName;
+    context.MultiproxyTargetCluster = serverName;
     ApplyProxyUrlAliasingRules(context.ServerName);
 
     if (context.ServerName.find('.') == TString::npos &&
@@ -1609,17 +1613,13 @@ TClientContext CreateClientContext(
     context.Config = options.Config_ ? options.Config_ : TConfig::Get();
     context.TvmOnly = options.TvmOnly_;
     context.ProxyAddress = options.ProxyAddress_;
-    context.UseProxyUnixDomainSocket = options.UseProxyUnixDomainSocket_;
+    context.JobProxySocketPath = options.JobProxySocketPath_;
 
     if (options.UseTLS_) {
         context.UseTLS = *options.UseTLS_;
     }
 
-    if (!options.UseProxyUnixDomainSocket_) {
-        SetupClusterContext(context, serverName);
-    } else {
-        context.ServerName = serverName;
-    }
+    SetupClusterContext(context, serverName);
 
     if (context.Config->HttpProxyRole && context.Config->Hosts == DefaultHosts) {
         context.Config->Hosts = "hosts?role=" + context.Config->HttpProxyRole;

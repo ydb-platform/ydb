@@ -1,4 +1,0 @@
-## Network block storage volume {#volume}
-
-{{ ydb-short-name }} can be used as a platform for creating a wide range of data storage and processing systems, for example, by implementing a [network block device](https://en.wikipedia.org/wiki/Network_block_device) on {{ ydb-short-name }}. Network block devices implement an interface for a local block device, as well as ensure fault-tolerance (through redundancy) and good scalability in terms of volume size and the number of input/output operations per unit of time. The downside of a network block device is that any input/output operation on such device requires network interaction, which might increase the latency of the network device compared to the local device. You can deploy a common file system on a network block device and/or run an application directly on the block device, such as a database management system.
-

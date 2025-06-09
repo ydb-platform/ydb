@@ -59,4 +59,4 @@ $udfParseJson = Udf(Protobuf::Parse, $config_json as TypeConfig);
 $udfParseBin = Udf(Protobuf::Parse, $config_bin as TypeConfig);
 $udfSerializeBin = Udf(Protobuf::Serialize, $config_bin as TypeConfig);
 
-SELECT Ensure("Success", $udfParseJson($dat) == $udfParseBin($udfSerializeBin($udfParseJson($dat))), "Fail");
+SELECT $udfParseJson($dat), $udfSerializeBin($udfParseJson($dat)), Ensure("Success", $udfParseJson($dat) == $udfParseBin($udfSerializeBin($udfParseJson($dat))), "Fail");

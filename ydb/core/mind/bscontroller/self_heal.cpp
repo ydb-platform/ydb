@@ -158,6 +158,7 @@ namespace NKikimr::NBsController {
                 VDiskIDFromVDiskID(*VDiskToReplace, cmd->MutableVDiskId());
                 cmd->SetConvertToDonor(DonorMode);
                 cmd->SetIsSelfHealReasonDecommit(IsSelfHealReasonDecommit);
+                cmd->SetFromSelfHeal(true);
                 Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), ev.release());
                 return;
             }
@@ -253,13 +254,19 @@ namespace NKikimr::NBsController {
         struct TWithFaultyDisks {};
         struct TWithInvalidLayout {};
 
+        enum class EReassignStatus : ui8 {
+            NotNeeded = 0,
+            Enqueued,
+            Active,
+        };
+
         struct TGroupRecord
             : TIntrusiveListItem<TGroupRecord, TWithFaultyDisks>
             , TIntrusiveListItem<TGroupRecord, TWithInvalidLayout>
         {
             const TGroupId GroupId;
             TEvControllerUpdateSelfHealInfo::TGroupContent Content;
-            TActorId ReassignerActorId; // reassigner in flight
+            EReassignStatus ReassignStatus = EReassignStatus::NotNeeded;
             TDuration RetryTimeout = MinRetryTimeout;
             TMonotonic NextRetryTimestamp = TMonotonic::Zero();
             std::shared_ptr<TBlobStorageGroupInfo::TTopology> Topology;
@@ -276,9 +283,10 @@ namespace NKikimr::NBsController {
         const ui64 TabletId;
         TActorId ControllerId;
         THashMap<TGroupId, TGroupRecord> Groups;
-        TIntrusiveList<TGroupRecord, TWithFaultyDisks> GroupsWithFaultyDisks;
+        TIntrusiveList<TGroupRecord, TWithFaultyDisks> GroupsWithVDisksToReassign;
         TIntrusiveList<TGroupRecord, TWithInvalidLayout> GroupsWithInvalidLayout;
-        std::shared_ptr<std::atomic_uint64_t> UnreassignableGroups;
+        std::unordered_set<TGroupId> UnreassignableGroups;
+        std::shared_ptr<std::atomic_uint64_t> UnreassignableGroupsCount;
         bool GroupLayoutSanitizerEnabled;
         bool AllowMultipleRealmsOccupation;
         bool DonorMode;
@@ -294,13 +302,17 @@ namespace NKikimr::NBsController {
         static constexpr uint32_t GroupLayoutSanitizerOperationLogSize = 128;
         TOperationLog<GroupLayoutSanitizerOperationLogSize> GroupLayoutSanitizerOperationLog;
 
+        std::deque<TGroupId> SelfHealReassignQueue;
+        std::deque<TGroupId> GroupLayoutSanitizerReassignQueue;
+        std::optional<TActorId> ActiveReassignerActorId = std::nullopt;
+
     public:
         TSelfHealActor(ui64 tabletId, std::shared_ptr<std::atomic_uint64_t> unreassignableGroups, THostRecordMap hostRecords,
                 bool groupLayoutSanitizerEnabled, bool allowMultipleRealmsOccupation, bool donorMode,
                 std::shared_ptr<TControlWrapper> enableSelfHealWithDegraded,
                 std::shared_ptr<std::atomic_uint64_t> groupsWithInvalidLayoutCounter)
             : TabletId(tabletId)
-            , UnreassignableGroups(std::move(unreassignableGroups))
+            , UnreassignableGroupsCount(std::move(unreassignableGroups))
             , GroupLayoutSanitizerEnabled(groupLayoutSanitizerEnabled)
             , AllowMultipleRealmsOccupation(allowMultipleRealmsOccupation)
             , DonorMode(donorMode)
@@ -343,7 +355,7 @@ namespace NKikimr::NBsController {
 
                     const auto [it, inserted] = Groups.try_emplace(groupId, groupId);
                     auto& g = it->second;
-                    bool hasFaultyDisks = false;
+                    bool hasVDisksToReassign = false;
                     
                     g.Content = std::move(*data);
 
@@ -354,15 +366,15 @@ namespace NKikimr::NBsController {
                     ui32 numVDisksPerFailDomain = 0;
 
                     for (const auto& [vdiskId, vdisk] : g.Content.VDisks) {
-                        hasFaultyDisks |= vdisk.Faulty;
+                        hasVDisksToReassign |= vdisk.RequiresReassignment;
                         numFailRealms = Max<ui32>(numFailRealms, 1 + vdiskId.FailRealm);
                         numFailDomainsPerFailRealm = Max<ui32>(numFailDomainsPerFailRealm, 1 + vdiskId.FailDomain);
                         numVDisksPerFailDomain = Max<ui32>(numVDisksPerFailDomain, 1 + vdiskId.VDisk);
                     }
-                    if (hasFaultyDisks) {
-                        GroupsWithFaultyDisks.PushBack(&g);
+                    if (hasVDisksToReassign) {
+                        GroupsWithVDisksToReassign.PushBack(&g);
                     } else {
-                        GroupsWithFaultyDisks.Remove(&g);
+                        GroupsWithVDisksToReassign.Remove(&g);
                     }
 
                     Y_ABORT_UNLESS(numFailRealms && numFailDomainsPerFailRealm && numVDisksPerFailDomain);
@@ -385,8 +397,11 @@ namespace NKikimr::NBsController {
                     TGroupRecord& group = it->second;
 
                     // kill reassigner, if it is working
-                    if (group.ReassignerActorId) {
-                        Send(group.ReassignerActorId, new TEvents::TEvPoison);
+                    if (group.ReassignStatus == EReassignStatus::Active) {
+                        Y_DEBUG_ABORT_UNLESS(ActiveReassignerActorId);
+                        if (ActiveReassignerActorId) {
+                            Send(*ActiveReassignerActorId, new TEvents::TEvPoison);
+                        }
                     }
 
                     // remove the group
@@ -422,49 +437,16 @@ namespace NKikimr::NBsController {
         void CheckGroups() {
             const TMonotonic now = TActivationContext::Monotonic();
 
-            ui64 counter = 0;
-
-            for (TGroupRecord& group : GroupsWithFaultyDisks) {
-                if (group.ReassignerActorId || now < group.NextRetryTimestamp) {
-                    continue; // we are already running reassigner for this group
+            for (TGroupRecord& group : GroupsWithVDisksToReassign) {
+                if (group.ReassignStatus != EReassignStatus::NotNeeded || now < group.NextRetryTimestamp) {
+                    continue; // reassign is already enqueued
                 }
 
                 if (group.UpdateConfigTxSeqNo < group.ResponseConfigTxSeqNo) {
                     continue; // response from bsc was received before selfheal info update
                 }
-
-                // check if it is possible to move anything out
-                bool isSelfHealReasonDecommit;
-                bool ignoreDegradedGroupsChecks;
-                if (const auto v = FindVDiskToReplace(group.Content, now, group.Topology.get(), &isSelfHealReasonDecommit,
-                        &ignoreDegradedGroupsChecks)) {
-                    group.ReassignerActorId = Register(new TReassignerActor(ControllerId, group.GroupId, group.Content,
-                        *v, group.Topology, isSelfHealReasonDecommit, ignoreDegradedGroupsChecks, DonorMode));
-                } else {
-                    ++counter; // this group can't be reassigned right now
-
-                    auto log = [&]() {
-                        TStringStream ss;
-                        ss << "[";
-                        bool first = true;
-                        for (const auto& [vdiskId, vdisk] : group.Content.VDisks) {
-                            if (!std::exchange(first, false)) {
-                                ss << ",";
-                            }
-                            ss << "{";
-                            ss << vdiskId;
-                            ss << (IsReady(vdisk, now) ? " Ready" : " NotReady");
-                            ss << (vdisk.Faulty ? " Faulty" : "");
-                            ss << (vdisk.Bad ? " IsBad" : "");
-                            ss << (vdisk.Decommitted ? " Decommitted" : "");
-                            ss << "}";
-                        }
-                        ss << "]";
-                        return ss.Str();
-                    };
-        
-                    STLOG(PRI_INFO, BS_SELFHEAL, BSSH11, "group can't be reassigned right now " << log(), (GroupId, group.GroupId));
-                }
+            
+                EnqueueReassign(group, EGroupRepairOperation::SelfHeal);
             }
 
             if (GroupLayoutSanitizerEnabled) {
@@ -476,7 +458,7 @@ namespace NKikimr::NBsController {
 
                     bool allDisksAreFullyOperational = true;
                     for (const auto& [vdiskId, vdisk] : group.Content.VDisks) {
-                        if (vdisk.Bad || vdisk.Faulty || !IsReady(vdisk, now)) {
+                        if (vdisk.UnavailabilityRisk || vdisk.RequiresReassignment || !IsReady(vdisk, now)) {
                             // don't sanitize groups with non-operational or replicating disks
                             allDisksAreFullyOperational = false;
                             break;
@@ -488,20 +470,19 @@ namespace NKikimr::NBsController {
                     }
 
                     Y_ABORT_UNLESS(!group.LayoutValid);
-                    if (group.ReassignerActorId || now < group.NextRetryTimestamp) {
+                    if (group.ReassignStatus != EReassignStatus::NotNeeded || now < group.NextRetryTimestamp) {
                         // nothing to do
                     } else {
                         ADD_RECORD_WITH_TIMESTAMP_TO_OPERATION_LOG(GroupLayoutSanitizerOperationLog,
                                 "Start sanitizing GroupId# " << group.GroupId << " GroupGeneration# " << group.Content.Generation);
-                        group.ReassignerActorId = Register(new TReassignerActor(ControllerId, group.GroupId, group.Content,
-                            std::nullopt, group.Topology, false /*isSelfHealReasonDecommit*/,
-                            false /*ignoreDegradedGroupsChecks*/, DonorMode));
+                        EnqueueReassign(group, EGroupRepairOperation::GroupLayoutSanitizer);
                     }
                 }
             }
 
+            ProcessReassignQueues();
             GroupsWithInvalidLayoutCounter->store(GroupsWithInvalidLayout.Size());
-            UnreassignableGroups->store(counter);
+            UnreassignableGroupsCount->store(UnreassignableGroups.size());
         }
 
         void UpdateGroupLayoutInformation(TGroupRecord& group) {
@@ -555,7 +536,7 @@ namespace NKikimr::NBsController {
             // so, first we check that we have no replicating or starting disk in the group; but we allow one
             // semi-replicated disk to prevent selfheal blocking
             TBlobStorageGroupInfo::TGroupVDisks failedByReadiness(topology);
-            TBlobStorageGroupInfo::TGroupVDisks failedByBadness(topology);
+            TBlobStorageGroupInfo::TGroupVDisks failedByUnavailabilityRisk(topology);
             ui32 numReplicatingWithPhantomsOnly = 0;
             for (const auto& [vdiskId, vdisk] : content.VDisks) {
                 switch (vdisk.VDiskStatus) {
@@ -575,16 +556,16 @@ namespace NKikimr::NBsController {
                 if (!IsReady(vdisk, now)) {
                     failedByReadiness |= {topology, vdiskId};
                 }
-                if (vdisk.Bad) {
-                    failedByBadness |= {topology, vdiskId};
+                if (vdisk.UnavailabilityRisk) {
+                    failedByUnavailabilityRisk |= {topology, vdiskId};
                 }
             }
 
             const auto& checker = topology->GetQuorumChecker();
-            const auto failed = failedByReadiness | failedByBadness; // assume disks marked as Bad may become non-ready any moment now
+            const auto failed = failedByReadiness | failedByUnavailabilityRisk;
 
             for (const auto& [vdiskId, vdisk] : content.VDisks) {
-                if (vdisk.Faulty) {
+                if (vdisk.RequiresReassignment) {
                     const auto newFailed = failed | TBlobStorageGroupInfo::TGroupVDisks(topology, vdiskId);
                     if (!checker.CheckFailModelForGroup(newFailed)) {
                         continue; // healing this disk would break the group
@@ -602,9 +583,13 @@ namespace NKikimr::NBsController {
         }
 
         void Handle(TEvReassignerDone::TPtr& ev) {
-            if (const auto it = Groups.find(ev->Get()->GroupId); it != Groups.end() && it->second.ReassignerActorId == ev->Sender) {
+            Y_ABORT_UNLESS(ActiveReassignerActorId);
+            TActorId reassigner = *std::exchange(ActiveReassignerActorId, std::nullopt);
+            Y_ABORT_UNLESS(reassigner == ev->Sender);
+
+            if (const auto it = Groups.find(ev->Get()->GroupId); it != Groups.end()) {
                 auto& group = it->second;
-                group.ReassignerActorId = {};
+                group.ReassignStatus = EReassignStatus::NotNeeded;
 
                 const TMonotonic now = TActivationContext::Monotonic();
                 if (ev->Get()->Success) {
@@ -623,9 +608,9 @@ namespace NKikimr::NBsController {
                                 "Sanitizing failed GroupId# " << group.GroupId << " ErrorReason# " << ev->Get()->ErrorReason);
                     }
                 }
-
                 CheckGroups();
             }
+            ProcessReassignQueues();
         }
 
         using TVDiskInfo = TEvControllerUpdateSelfHealInfo::TGroupContent::TVDiskInfo;
@@ -652,6 +637,101 @@ namespace NKikimr::NBsController {
             TStringStream str;
             RenderMonPage(str, ev->Cookie);
             Send(ev->Sender, new NMon::TEvRemoteHttpInfoRes(str.Str()));
+        }
+
+        void ProcessReassignQueues() {
+            while (!ActiveReassignerActorId && !SelfHealReassignQueue.empty()) {
+                TGroupId groupId = SelfHealReassignQueue.front();
+                SelfHealReassignQueue.pop_front();
+                CreateReassignerActorIfNeededForSelfHeal(groupId);
+            }
+
+            while (!ActiveReassignerActorId && !GroupLayoutSanitizerReassignQueue.empty()) {
+                TGroupId groupId = GroupLayoutSanitizerReassignQueue.front();
+                GroupLayoutSanitizerReassignQueue.pop_front();
+                auto it = Groups.find(groupId);
+                if (it != Groups.end()) {
+                    TGroupRecord& group = it->second;
+                    CreateReassignerActor(group, std::nullopt, false, false);
+                }
+            }
+        }
+
+        bool CreateReassignerActorIfNeededForSelfHeal(TGroupId groupId) {
+            auto it = Groups.find(groupId);
+            if (it == Groups.end()) {
+                // group is deleted
+                return false;
+            }
+
+            TGroupRecord& group = it->second;
+            if (group.ReassignStatus == EReassignStatus::NotNeeded) {
+                // Group is already fully healed
+                return false;
+            }
+
+            // check if it is possible to move anything out
+            bool isSelfHealReasonDecommit;
+            bool ignoreDegradedGroupsChecks;
+            if (const std::optional<TVDiskID> vdiskId = FindVDiskToReplace(group.Content, TActivationContext::Monotonic(),
+                    group.Topology.get(), &isSelfHealReasonDecommit, &ignoreDegradedGroupsChecks)) {
+                if (auto it = UnreassignableGroups.find(groupId); it != UnreassignableGroups.end()) {
+                    UnreassignableGroups.erase(it);
+                }
+                CreateReassignerActor(group, vdiskId, isSelfHealReasonDecommit, ignoreDegradedGroupsChecks);
+                return true;
+            } else {
+                // unable to reassign VDisk
+                UnreassignableGroups.insert(groupId);
+                group.ReassignStatus = EReassignStatus::NotNeeded;
+
+                TMonotonic now = TActivationContext::Monotonic();
+                auto log = [&]() {
+                    TStringStream ss;
+                    ss << "[";
+                    bool first = true;
+                    for (const auto& [vdiskId, vdisk] : group.Content.VDisks) {
+                        if (!std::exchange(first, false)) {
+                            ss << ",";
+                        }
+                        ss << "{";
+                        ss << vdiskId;
+                        ss << (IsReady(vdisk, now) ? " Ready" : " NotReady");
+                        ss << (vdisk.RequiresReassignment ? " RequiresReassignment" : "");
+                        ss << (vdisk.UnavailabilityRisk ? " UnavailabilityRisk" : "");
+                        ss << (vdisk.Decommitted ? " Decommitted" : "");
+                        ss << "}";
+                    }
+                    ss << "]";
+                    return ss.Str();
+                };
+    
+                STLOG(PRI_INFO, BS_SELFHEAL, BSSH11, "group can't be reassigned right now " << log(), (GroupId, groupId));
+            }
+            return false;
+        }
+
+
+        void CreateReassignerActor(TGroupRecord& group, std::optional<TVDiskID> vdiskId, bool isSelfHealReasonDecommit,
+                bool ignoreDegradedGroupsChecks) {
+            group.ReassignStatus = EReassignStatus::Active;
+            Y_ABORT_UNLESS(!ActiveReassignerActorId);
+            ActiveReassignerActorId = Register(new TReassignerActor(ControllerId, group.GroupId, group.Content,
+                    vdiskId, group.Topology, isSelfHealReasonDecommit, ignoreDegradedGroupsChecks, DonorMode));
+        }
+
+        void EnqueueReassign(TGroupRecord& group, EGroupRepairOperation operation) {
+            group.ReassignStatus = EReassignStatus::Enqueued;
+            switch (operation) {
+            case EGroupRepairOperation::SelfHeal:
+                SelfHealReassignQueue.push_back(group.GroupId);
+                break;
+            case EGroupRepairOperation::GroupLayoutSanitizer:
+                GroupLayoutSanitizerReassignQueue.push_back(group.GroupId);
+                break;
+            default:
+                Y_ABORT("Unknown operation");
+            }
         }
 
         void RenderMonPage(IOutputStream& out, bool selfHealEnabled) {
@@ -715,10 +795,14 @@ namespace NKikimr::NBsController {
                         out << "Broken groups";
                     }
                     DIV_CLASS("panel-body") {
+                        out << "Legend:" << Endl;
+                        out << "<strong>VDisk requires reassignment</strong>" << Endl;
+                        out << "<font color='red'>VDisk is considered unreliable</font>" << Endl;
+
                         TABLE_CLASS("table-sortable table") {
                             TABLEHEAD() {
                                 ui32 numCols = 0;
-                                for (const TGroupRecord& group : GroupsWithFaultyDisks) {
+                                for (const TGroupRecord& group : GroupsWithVDisksToReassign) {
                                     numCols = Max<ui32>(numCols, group.Content.VDisks.size());
                                 }
 
@@ -730,7 +814,7 @@ namespace NKikimr::NBsController {
                                 }
                             }
                             TABLEBODY() {
-                                for (const TGroupRecord& group : GroupsWithFaultyDisks) {
+                                for (const TGroupRecord& group : GroupsWithVDisksToReassign) {
                                     TABLER() {
                                         out << "<td rowspan='2'><a href='?TabletID=" << TabletId
                                             << "&page=GroupDetail&GroupId=" << group.GroupId << "'>"
@@ -751,17 +835,17 @@ namespace NKikimr::NBsController {
                                         for (const auto& [vdiskId, vdisk] : group.Content.VDisks) {
                                             TABLED() {
                                                 const auto& l = vdisk.Location;
-                                                if (vdisk.Faulty) {
+                                                if (vdisk.RequiresReassignment) {
                                                     out << "<strong>";
                                                 }
-                                                if (vdisk.Bad) {
+                                                if (vdisk.UnavailabilityRisk) {
                                                     out << "<font color='red'>";
                                                 }
                                                 out << "[" << l.NodeId << ":" << l.PDiskId << ":" << l.VSlotId << "]";
-                                                if (vdisk.Bad) {
+                                                if (vdisk.UnavailabilityRisk) {
                                                     out << "</font>";
                                                 }
-                                                if (vdisk.Faulty) {
+                                                if (vdisk.RequiresReassignment) {
                                                     out << "</strong>";
                                                 }
                                             }
@@ -859,17 +943,17 @@ namespace NKikimr::NBsController {
                                         for (const auto& [vdiskId, vdisk] : group.Content.VDisks) {
                                             TABLED() {
                                                 const auto& l = vdisk.Location;
-                                                if (vdisk.Faulty) {
+                                                if (vdisk.RequiresReassignment) {
                                                     out << "<strong>";
                                                 }
-                                                if (vdisk.Bad) {
+                                                if (vdisk.UnavailabilityRisk) {
                                                     out << "<font color='red'>";
                                                 }
                                                 out << "[" << l.NodeId << ":" << l.PDiskId << ":" << l.VSlotId << "]";
-                                                if (vdisk.Bad) {
+                                                if (vdisk.UnavailabilityRisk) {
                                                     out << "</font>";
                                                 }
-                                                if (vdisk.Faulty) {
+                                                if (vdisk.RequiresReassignment) {
                                                     out << "</strong>";
                                                 }
                                             }
@@ -921,50 +1005,50 @@ namespace NKikimr::NBsController {
                 continue;
             }
 
-            const TGroupInfo *p = state ? state->Groups.Find(groupId) : FindGroup(groupId);
-            Y_ABORT_UNLESS(p);
+            const TGroupInfo *groupInfo = state ? state->Groups.Find(groupId) : FindGroup(groupId);
+            Y_ABORT_UNLESS(groupInfo);
 
-            group->Generation = p->Generation;
-            group->Type = TBlobStorageGroupType(p->ErasureSpecies);
+            group->Generation = groupInfo->Generation;
+            group->Type = TBlobStorageGroupType(groupInfo->ErasureSpecies);
 
-            if (auto it = geomCache.find(p->StoragePoolId); it != geomCache.end()) {
+            if (auto it = geomCache.find(groupInfo->StoragePoolId); it != geomCache.end()) {
                 group->Geometry = it->second;
             } else {
                 const TMap<TBoxStoragePoolId, TStoragePoolInfo>& storagePools = state
                     ? state->StoragePools.Get()
                     : StoragePools;
-                const auto spIt = storagePools.find(p->StoragePoolId);
+                const auto spIt = storagePools.find(groupInfo->StoragePoolId);
                 Y_ABORT_UNLESS(spIt != storagePools.end());
                 group->Geometry = std::make_unique<TGroupGeometryInfo>(group->Type, spIt->second.GetGroupGeometry());
-                geomCache.emplace(p->StoragePoolId, group->Geometry);
+                geomCache.emplace(groupInfo->StoragePoolId, group->Geometry);
             }
 
-            for (const TVSlotInfo *slot : p->VDisksInGroup) {
+            for (const TVSlotInfo *slot : groupInfo->VDisksInGroup) {
                 group->VDisks[slot->GetVDiskId()] = {
-                    slot->VSlotId,
-                    slot->PDisk->ShouldBeSettledBySelfHeal(),
-                    slot->PDisk->BadInTermsOfSelfHeal(),
-                    slot->PDisk->Decommitted(),
-                    slot->PDisk->IsSelfHealReasonDecommit(),
-                    slot->OnlyPhantomsRemain,
-                    slot->IsReady,
-                    TMonotonic::Zero(),
-                    slot->GetStatus(),
+                    .Location = slot->VSlotId,
+                    .RequiresReassignment = slot->PDisk->ShouldBeSettledBySelfHeal(),
+                    .UnavailabilityRisk = slot->PDisk->BadInTermsOfSelfHeal(),
+                    .Decommitted =  slot->PDisk->Decommitted(),
+                    .IsSelfHealReasonDecommit = slot->PDisk->IsSelfHealReasonDecommit(),
+                    .OnlyPhantomsRemain = slot->OnlyPhantomsRemain,
+                    .IsReady = slot->IsReady,
+                    .ReadySince = TMonotonic::Zero(),
+                    .VDiskStatus = slot->GetStatus(),
                 };
             }
         }
     }
 
     void TBlobStorageController::PushStaticGroupsToSelfHeal() {
-        if (!SelfHealId || !StorageConfigObtained || !StorageConfig.HasBlobStorageConfig() || !SelfManagementEnabled) {
+        if (!SelfHealId || !StorageConfigObtained || !StorageConfig->HasBlobStorageConfig() || !SelfManagementEnabled) {
             return;
         }
 
         auto sh = std::make_unique<TEvControllerUpdateSelfHealInfo>();
 
-        if (const auto& bsConfig = StorageConfig.GetBlobStorageConfig(); bsConfig.HasServiceSet()) {
+        if (const auto& bsConfig = StorageConfig->GetBlobStorageConfig(); bsConfig.HasServiceSet()) {
             const auto& ss = bsConfig.GetServiceSet();
-            const auto& smConfig = StorageConfig.GetSelfManagementConfig();
+            const auto& smConfig = StorageConfig->GetSelfManagementConfig();
             for (const auto& group : ss.GetGroups()) {
                 auto& content = sh->GroupsToUpdate[TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetGroupID)];
                 const TBlobStorageGroupType gtype(static_cast<TBlobStorageGroupType::EErasureSpecies>(group.GetErasureSpecies()));
@@ -1024,7 +1108,7 @@ namespace NKikimr::NBsController {
                 if (const TGroupInfo *group = slot->Group) {
                     const bool wasReady = slot->IsReady;
                     if (slot->GetStatus() != m.GetStatus() || slot->OnlyPhantomsRemain != m.GetOnlyPhantomsRemain()) {
-                        slot->SetStatus(m.GetStatus(), mono, now, m.GetOnlyPhantomsRemain());
+                        slot->SetStatus(m.GetStatus(), mono, now, m.GetOnlyPhantomsRemain(), this);
                         if (slot->IsReady != wasReady) {
                             ScrubState.UpdateVDiskState(slot);
                             if (wasReady) {

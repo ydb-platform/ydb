@@ -743,7 +743,7 @@ int aws_channel_slot_insert_end(struct aws_channel *channel, struct aws_channel_
     }
 
     AWS_ASSERT(0);
-    return AWS_OP_ERR;
+    return aws_raise_error(AWS_ERROR_INVALID_STATE);
 }
 
 int aws_channel_slot_insert_left(struct aws_channel_slot *slot, struct aws_channel_slot *to_add) {

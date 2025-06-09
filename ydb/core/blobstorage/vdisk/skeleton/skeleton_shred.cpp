@@ -24,11 +24,12 @@ namespace NKikimr {
 
         THashMap<TChunkIdx, EChunkType> ChunkTypes;
         THashSet<TChunkIdx> ChunksShredded;
-        THashSet<ui64> TablesToCompact;
+        THashSet<ui64> TablesToCompactLogoBlobs;
+        THashSet<ui64> TablesToCompactBlocks;
+        THashSet<ui64> TablesToCompactBarriers;
         ui32 RepliesPending = 0;
         bool SnapshotProcessed = false;
         bool DefragCompleted = false;
-        bool FoundAnyChunks = false;
 
     public:
         TSkeletonShredActor(NPDisk::TEvShredVDisk::TPtr ev, TShredCtxPtr shredCtx)
@@ -71,7 +72,6 @@ namespace NKikimr {
             RepliesPending = 2;
             SnapshotProcessed = false;
             DefragCompleted = false;
-            FoundAnyChunks = false;
         }
 
         void Handle(TEvListChunksResult::TPtr ev) {
@@ -84,7 +84,6 @@ namespace NKikimr {
                 for (const TChunkIdx chunkId : set) {
                     if (const auto it = ChunkTypes.find(chunkId); it != ChunkTypes.end()) {
                         it->second = type;
-                        FoundAnyChunks = true;
                         Y_VERIFY_DEBUG_S(ChunksToShred.contains(chunkId), ShredCtx->VCtx->VDiskLogPrefix);
                     } else {
                         Y_VERIFY_DEBUG_S(!ChunksToShred.contains(chunkId), ShredCtx->VCtx->VDiskLogPrefix);
@@ -104,15 +103,20 @@ namespace NKikimr {
                 (ActorId, SelfId()));
 
             auto& snap = ev->Get()->Snap;
-            TablesToCompact.clear();
-            Scan<true>(snap.HullCtx, snap.LogoBlobsSnap, TablesToCompact);
-            Scan<false>(snap.HullCtx, snap.BlocksSnap, TablesToCompact);
-            Scan<false>(snap.HullCtx, snap.BarriersSnap, TablesToCompact);
+            TablesToCompactLogoBlobs.clear();
+            TablesToCompactBlocks.clear();
+            TablesToCompactBarriers.clear();
+            Scan<true>(snap.HullCtx, snap.LogoBlobsSnap, TablesToCompactLogoBlobs);
+            Scan<false>(snap.HullCtx, snap.BlocksSnap, TablesToCompactBlocks);
+            Scan<false>(snap.HullCtx, snap.BarriersSnap, TablesToCompactBarriers);
             SnapshotProcessed = true;
+            DropUnknownChunks();
+            CheckIfDone();
             CheckDefragStage();
 
             STLOG(PRI_DEBUG, BS_SHRED, BSSV09, ShredCtx->VCtx->VDiskLogPrefix << "TEvTakeHullSnapshotResult processed",
-                (ActorId, SelfId()), (TablesToCompact, TablesToCompact));
+                (ActorId, SelfId()), (TablesToCompactLogoBlobs, TablesToCompactLogoBlobs),
+                (TablesToCompactBlocks, TablesToCompactBlocks), (TablesToCompactBarriers, TablesToCompactBarriers));
         }
 
         template<bool Blobs, typename TKey, typename TMemRec>
@@ -128,7 +132,6 @@ namespace NKikimr {
                         }
                         if (const auto it = ChunkTypes.find(p->ChunkIdx); it != ChunkTypes.end()) {
                             it->second = EChunkType::HUGE_CHUNK;
-                            FoundAnyChunks = true;
                         }
                     }
                 }
@@ -155,7 +158,6 @@ namespace NKikimr {
                         tablesToCompact.insert(seg.AssignedSstId);
                         STLOG(PRI_DEBUG, BS_SHRED, BSSV13, ShredCtx->VCtx->VDiskLogPrefix << "going to compact SST",
                             (SstId, seg.AssignedSstId), (AllChunks, seg.AllChunks));
-                        FoundAnyChunks = true;
                         Y_VERIFY_DEBUG_S(ChunksToShred.contains(chunkId), ShredCtx->VCtx->VDiskLogPrefix);
                     } else {
                         Y_VERIFY_DEBUG_S(!ChunksToShred.contains(chunkId), ShredCtx->VCtx->VDiskLogPrefix);
@@ -172,6 +174,19 @@ namespace NKikimr {
             }
         }
 
+        void DropUnknownChunks() {
+            for (auto it = ChunkTypes.begin(); it != ChunkTypes.end(); ) {
+                if (it->second == EChunkType::UNKNOWN) {
+                    const size_t num = ChunksToShred.erase(it->first);
+                    Y_VERIFY_DEBUG_S(num == 1, ShredCtx->VCtx->VDiskLogPrefix);
+                    ChunksShredded.insert(it->first);
+                    ChunkTypes.erase(it++);
+                } else {
+                    ++it;
+                }
+            }
+        }
+
         void HandleHullShredDefragResult() {
             STLOG(PRI_DEBUG, BS_SHRED, BSSV14, ShredCtx->VCtx->VDiskLogPrefix << "EvHullShredDefragResult received",
                 (ActorId, SelfId()));
@@ -184,8 +199,15 @@ namespace NKikimr {
                 return;
             }
 
-            if (!TablesToCompact.empty()) {
-                Send(ShredCtx->SkeletonId, TEvCompactVDisk::Create(EHullDbType::LogoBlobs, std::move(TablesToCompact)));
+            if (!TablesToCompactLogoBlobs.empty()) {
+                Send(ShredCtx->SkeletonId, TEvCompactVDisk::Create(EHullDbType::LogoBlobs,
+                    std::exchange(TablesToCompactLogoBlobs, {})));
+            } else if (!TablesToCompactBlocks.empty()) {
+                Send(ShredCtx->SkeletonId, TEvCompactVDisk::Create(EHullDbType::Blocks,
+                    std::exchange(TablesToCompactBlocks, {})));
+            } else if (!TablesToCompactBarriers.empty()) {
+                Send(ShredCtx->SkeletonId, TEvCompactVDisk::Create(EHullDbType::Barriers,
+                    std::exchange(TablesToCompactBarriers, {})));
             } else {
                 TActivationContext::Schedule(TDuration::Minutes(1), new IEventHandle(TEvents::TSystem::Wakeup, 0,
                     SelfId(), TActorId(), nullptr, 0));
@@ -195,8 +217,7 @@ namespace NKikimr {
         void Handle(TEvCompactVDiskResult::TPtr /*ev*/) {
             STLOG(PRI_DEBUG, BS_SHRED, BSSV11, ShredCtx->VCtx->VDiskLogPrefix << "TEvCompactVDiskResult received",
                 (ActorId, SelfId()));
-            TActivationContext::Schedule(TDuration::Minutes(1), new IEventHandle(TEvents::TSystem::Wakeup, 0, SelfId(),
-                TActorId(), nullptr, 0));
+            CheckDefragStage();
         }
 
         void Handle(TEvNotifyChunksDeleted::TPtr ev) {

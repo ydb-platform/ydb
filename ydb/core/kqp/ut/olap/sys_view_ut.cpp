@@ -14,11 +14,13 @@ namespace NKikimr::NKqp {
 Y_UNIT_TEST_SUITE(KqpOlapSysView) {
     Y_UNIT_TEST(StatsSysView) {
         auto settings = TKikimrSettings()
-            .SetWithSampleTables(false);
+            .SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
         TKikimrRunner kikimr(settings);
 
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
-        TLocalHelper(kikimr).CreateTestOlapTable();
+        auto helper = TLocalHelper(kikimr);
+        helper.CreateTestOlapTable();
+        helper.SetForcedCompaction();
         for (ui64 i = 0; i < 100; ++i) {
             WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000 + i * 10000, 1000);
         }
@@ -111,87 +113,106 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
     }
 
     Y_UNIT_TEST(StatsSysViewEnumStringBytes) {
-        ui64 rawBytesPK1;
-        ui64 bytesPK1;
-        {
-            auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
-            csController->SetOverrideBlobSplitSettings(NOlap::NSplitter::TSplitSettings());
-            auto settings = TKikimrSettings()
-                .SetColumnShardAlterObjectEnabled(true)
-                .SetWithSampleTables(false);
-            TKikimrRunner kikimr(settings);
-            Tests::NCommon::TLoggerInit(kikimr).Initialize();
-            TTypedLocalHelper helper("", kikimr, "olapTable", "olapStore12");
-            helper.CreateTestOlapTable();
-            helper.FillPKOnly(0, 800000);
-            csController->WaitCompactions(TDuration::Seconds(10));
-            helper.GetVolumes(rawBytesPK1, bytesPK1, false);
-        }
-
+        ui64 rawBytes1;
+        ui64 bytes1;
+        ui64 count1;
+        ui64 rawBytes2;
+        ui64 bytes2;
+        ui64 count2;
+        ui64 rawBytes3;
+        ui64 bytes3;
+        ui64 count3;
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
         csController->SetOverrideBlobSplitSettings(NOlap::NSplitter::TSplitSettings());
-        ui64 rawBytesUnpack1PK = 0;
-        ui64 bytesUnpack1PK = 0;
-        ui64 rawBytesPackAndUnpack2PK;
-        ui64 bytesPackAndUnpack2PK;
+        auto settings = TKikimrSettings().SetColumnShardAlterObjectEnabled(true).SetWithSampleTables(false);
+        csController->DisableBackground(NYDBTest::ICSController::EBackground::Compaction);
+        TKikimrRunner kikimr(settings);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+        TTypedLocalHelper helper("Utf8", kikimr, "olapTable", "olapStore12");
+        helper.CreateTestOlapTable(1, 1);
+
         const ui32 rowsCount = 800000;
         const ui32 groupsCount = 512;
-        {
-            auto settings = TKikimrSettings()
-                .SetColumnShardAlterObjectEnabled(true)
-                .SetWithSampleTables(false);
-            TKikimrRunner kikimr(settings);
-            Tests::NCommon::TLoggerInit(kikimr).Initialize();
-            TTypedLocalHelper helper("Utf8", kikimr);
-            helper.CreateTestOlapTable();
-            NArrow::NConstruction::TStringPoolFiller sPool(groupsCount, 52);
-            helper.FillTable(sPool, 0, rowsCount);
-            csController->WaitCompactions(TDuration::Seconds(10));
-            helper.PrintCount();
-            {
-                auto d = helper.GetDistribution();
-                Y_ABORT_UNLESS(d.GetCount() == rowsCount);
-                Y_ABORT_UNLESS(d.GetGroupsCount() == groupsCount);
-                Y_ABORT_UNLESS(d.GetMaxCount() - d.GetMinCount() <= 1);
-            }
-            helper.GetVolumes(rawBytesUnpack1PK, bytesUnpack1PK, false);
-            auto tableClient = kikimr.GetTableClient();
-            helper.ExecuteSchemeQuery(TStringBuilder() << "ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=ALTER_COLUMN, NAME=field, `ENCODING.DICTIONARY.ENABLED`=`true`);");
-            helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=ALTER_COLUMN, NAME=field1, `ENCODING.DICTIONARY.ENABLED`=`true`);", NYdb::EStatus::SCHEME_ERROR);
-            helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=ALTER_COLUMN, NAME=field, `ENCODING.DICTIONARY.ENABLED1`=`true`);", NYdb::EStatus::GENERIC_ERROR);
-            helper.FillTable(sPool, 1, rowsCount);
-            csController->WaitCompactions(TDuration::Seconds(10));
-            {
-                helper.GetVolumes(rawBytesPackAndUnpack2PK, bytesPackAndUnpack2PK, false);
-                helper.PrintCount();
-                {
-                    auto d = helper.GetDistribution();
-                    Cerr << d.DebugString() << Endl;
-                    Y_ABORT_UNLESS(d.GetCount() == 2 * rowsCount);
-                    Y_ABORT_UNLESS(d.GetGroupsCount() == groupsCount);
-                    Y_ABORT_UNLESS(d.GetMaxCount() - d.GetMinCount() <= 2);
-                }
-            }
-            helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=ALTER_COLUMN, NAME=field, `SERIALIZER.CLASS_NAME`=`ARROW_SERIALIZER`, `COMPRESSION.TYPE`=`zstd`);");
-            csController->WaitCompactions(TDuration::Seconds(10));
+
+        NArrow::NConstruction::TStringPoolFiller sPool(groupsCount, 52);
+
+        for (ui32 i = 0; i < 10; ++i) {
+            helper.FillTable(sPool, i, rowsCount / 10);
         }
-        const i64 rawBytesUnpack = rawBytesUnpack1PK - rawBytesPK1;
-        const i64 bytesUnpack = bytesUnpack1PK - bytesPK1;
-        const i64 rawBytesPack = rawBytesPackAndUnpack2PK - rawBytesUnpack1PK - rawBytesPK1;
-        const i64 bytesPack = bytesPackAndUnpack2PK - bytesUnpack1PK - bytesPK1;
-        TStringBuilder result;
-        result << "unpacked data: " << rawBytesUnpack << " / " << bytesUnpack << Endl;
-        result << "packed data: " << rawBytesPack << " / " << bytesPack << Endl;
-        result << "frq_diff: " << 1.0 * bytesPack / bytesUnpack << Endl;
-        result << "frq_compression: " << 1.0 * bytesPack / rawBytesPack << Endl;
-        result << "pk_size : " << rawBytesPK1 << " / " << bytesPK1 << Endl;
-        Cerr << result << Endl;
-        Y_ABORT_UNLESS(bytesPack / bytesUnpack < 0.1);
+        {
+            auto alterQuery =
+                TStringBuilder() <<
+                R"(ALTER OBJECT `/Root/olapStore12` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`lc-buckets`, `COMPACTION_PLANNER.FEATURES`=`
+                  {"levels" : [{"class_name" : "Zero", "portions_live_duration" : "180s", "expected_blobs_size" : 2048},
+                               {"class_name" : "Zero", "expected_blobs_size" : 2048}, {"class_name" : "Zero"}]}`);
+                )";
+            auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+            auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
+        }
+        helper.GetVolumes(rawBytes1, bytes1, count1, false, { "field" });
+
+        helper.ExecuteSchemeQuery(TStringBuilder() << "ALTER OBJECT `/Root/olapStore12` (TYPE TABLESTORE) SET (ACTION=ALTER_COLUMN, "
+                                                      "NAME=field, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`);");
+        helper.ExecuteSchemeQuery(
+            "ALTER OBJECT `/Root/olapStore12` (TYPE TABLESTORE) SET (ACTION=ALTER_COLUMN, NAME=field1, "
+            "`DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`);",
+            NYdb::EStatus::SCHEME_ERROR);
+        helper.ExecuteSchemeQuery(
+            "ALTER OBJECT `/Root/olapStore12` (TYPE TABLESTORE) SET (ACTION=ALTER_COLUMN, NAME=field, "
+            "`DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY1`);",
+            NYdb::EStatus::GENERIC_ERROR);
+        helper.ExecuteSchemeQuery(
+            "ALTER OBJECT `/Root/olapStore12` (TYPE TABLESTORE) SET (ACTION=ALTER_COLUMN, NAME=field, "
+            "`DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME1`=`DICTIONARY`);",
+            NYdb::EStatus::GENERIC_ERROR);
+
+        helper.ExecuteSchemeQuery(
+            "ALTER OBJECT `/Root/olapStore12` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`);");
+        helper.GetVolumes(rawBytes2, bytes2, count2, false, { "field" });
+        csController->WaitActualization(TDuration::Seconds(5));
+        {
+            auto db = kikimr.GetQueryClient();
+
+            auto result = db.ExecuteQuery(R"(SELECT COUNT(*) FROM `/Root/olapStore12/olapTable`;)", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+            TString output = FormatResultSetYson(result.GetResultSet(0));
+            Cout << output << Endl;
+            CompareYson(output, R"([[800000u;]])");
+        }
+
+        csController->EnableBackground(NYDBTest::ICSController::EBackground::Compaction);
+        csController->WaitCompactions(TDuration::Seconds(10));
+        {
+            auto db = kikimr.GetQueryClient();
+
+            auto result =
+                db.ExecuteQuery(R"(SELECT COUNT(*) FROM `/Root/olapStore12/olapTable`;)", NYdb::NQuery::TTxControl::BeginTx().CommitTx())
+                    .ExtractValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+            TString output = FormatResultSetYson(result.GetResultSet(0));
+            Cout << output << Endl;
+            CompareYson(output, R"([[800000u;]])");
+
+        }
+        helper.GetVolumes(rawBytes3, bytes3, count3, false, { "field" });
+        AFL_VERIFY(bytes2 * 10 < bytes1);
+        AFL_VERIFY(bytes3 * 90 < bytes1);
+        AFL_VERIFY(rawBytes3 * 10 < rawBytes1);
+        Cerr << rawBytes1 << "/" << bytes1 << "/" << count1 << Endl;
+        Cerr << rawBytes2 << "/" << bytes2 << "/" << count2 << Endl;
+        Cerr << rawBytes3 << "/" << bytes3 << "/" << count3 << Endl;
     }
 
     Y_UNIT_TEST(StatsSysViewBytesPackActualization) {
         ui64 rawBytesPK1;
         ui64 bytesPK1;
+
+        ui64 count1;
+        ui64 count2;
+        ui64 count3;
+
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
         NKikimrConfig::TAppConfig appConfig;
         auto* CSConfig = appConfig.MutableColumnShardConfig();
@@ -205,7 +226,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
         helper.FillPKOnly(0, 800000);
         csController->WaitCompactions(TDuration::Seconds(10));
 
-        helper.GetVolumes(rawBytesPK1, bytesPK1, false, {"pk_int"});
+        helper.GetVolumes(rawBytesPK1, bytesPK1, count1, false, {"pk_int"});
         auto tableClient = kikimr.GetTableClient();
         {
             helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=ALTER_COLUMN, NAME=pk_int, `SERIALIZER.CLASS_NAME`=`ARROW_SERIALIZER`, `COMPRESSION.TYPE`=`zstd`);");
@@ -213,7 +234,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
             csController->WaitActualization(TDuration::Seconds(10));
             ui64 rawBytesPK2;
             ui64 bytesPK2;
-            helper.GetVolumes(rawBytesPK2, bytesPK2, false, {"pk_int"});
+            helper.GetVolumes(rawBytesPK2, bytesPK2, count2, false, {"pk_int"});
             AFL_VERIFY(rawBytesPK2 == rawBytesPK1)("pk1", rawBytesPK1)("pk2", rawBytesPK2);
             AFL_VERIFY(bytesPK2 < bytesPK1 / 3)("pk1", bytesPK1)("pk2", bytesPK2);
         }
@@ -223,7 +244,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
             csController->WaitActualization(TDuration::Seconds(10));
             ui64 rawBytesPK2;
             ui64 bytesPK2;
-            helper.GetVolumes(rawBytesPK2, bytesPK2, false, {"pk_int"});
+            helper.GetVolumes(rawBytesPK2, bytesPK2, count3, false, {"pk_int"});
             AFL_VERIFY(rawBytesPK2 == rawBytesPK1)("pk1", rawBytesPK1)("pk2", rawBytesPK2);
             AFL_VERIFY(bytesPK2 < bytesPK1 * 1.01 && bytesPK1 < bytesPK2 * 1.01)("pk1", bytesPK1)("pk2", bytesPK2);
         }
@@ -232,6 +253,8 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
     Y_UNIT_TEST(StatsSysViewBytesColumnActualization) {
         ui64 rawBytes1;
         ui64 bytes1;
+        ui64 count1;
+        ui64 count2;
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
         auto settings = TKikimrSettings()
             .SetColumnShardAlterObjectEnabled(true)
@@ -246,7 +269,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
         helper.FillTable(sPool, 0.5, 800000);
         csController->WaitCompactions(TDuration::Seconds(5));
 
-        helper.GetVolumes(rawBytes1, bytes1, false, {"new_column_ui64"});
+        helper.GetVolumes(rawBytes1, bytes1, count1, false, {"new_column_ui64"});
         AFL_VERIFY(rawBytes1 == 0);
         AFL_VERIFY(bytes1 == 0);
         auto tableClient = kikimr.GetTableClient();
@@ -256,7 +279,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
             csController->WaitActualization(TDuration::Seconds(10));
             ui64 rawBytes2;
             ui64 bytes2;
-            helper.GetVolumes(rawBytes2, bytes2, false, { "new_column_ui64", NOlap::IIndexInfo::SPEC_COL_DELETE_FLAG });
+            helper.GetVolumes(rawBytes2, bytes2, count2, false, { "new_column_ui64", NOlap::IIndexInfo::SPEC_COL_DELETE_FLAG });
             AFL_VERIFY(rawBytes2 == 0)("real", rawBytes2);
             AFL_VERIFY(bytes2 == 0)("b", bytes2);
         }
@@ -265,6 +288,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
     Y_UNIT_TEST(StatsSysViewBytesDictActualization) {
         ui64 rawBytes1;
         ui64 bytes1;
+        ui64 count1;
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
         NKikimrConfig::TAppConfig appConfig;
         auto* CSConfig = appConfig.MutableColumnShardConfig();
@@ -279,25 +303,27 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
         helper.FillTable(sPool, 0, 800000);
         csController->WaitCompactions(TDuration::Seconds(10));
 
-        helper.GetVolumes(rawBytes1, bytes1, false, {"field"});
+        helper.GetVolumes(rawBytes1, bytes1, count1, false, {"field"});
         auto tableClient = kikimr.GetTableClient();
         {
-            helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=ALTER_COLUMN, NAME=field, `ENCODING.DICTIONARY.ENABLED`=`true`);");
+            helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=ALTER_COLUMN, NAME=field, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`);");
             helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`);");
             csController->WaitActualization(TDuration::Seconds(10));
             ui64 rawBytes2;
             ui64 bytes2;
-            helper.GetVolumes(rawBytes2, bytes2, false, {"field"});
-            AFL_VERIFY(rawBytes2 == rawBytes1)("f1", rawBytes1)("f2", rawBytes2);
+            ui64 count2;
+            helper.GetVolumes(rawBytes2, bytes2, count2, false, { "field" });
+            AFL_VERIFY(rawBytes2 * 2 < rawBytes1)("f1", rawBytes1)("f2", rawBytes2);
             AFL_VERIFY(bytes2 < bytes1 * 0.5)("f1", bytes1)("f2", bytes2);
         }
         {
-            helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=ALTER_COLUMN, NAME=field, `ENCODING.DICTIONARY.ENABLED`=`false`);");
+            helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=ALTER_COLUMN, NAME=field, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`PLAIN`);");
             helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`);");
             csController->WaitActualization(TDuration::Seconds(10));
             ui64 rawBytes2;
             ui64 bytes2;
-            helper.GetVolumes(rawBytes2, bytes2, false, {"field"});
+            ui64 count2;
+            helper.GetVolumes(rawBytes2, bytes2, count2, false, {"field"});
             AFL_VERIFY(rawBytes2 == rawBytes1)("f1", rawBytes1)("f2", rawBytes2);
             AFL_VERIFY(bytes2 < bytes1 * 1.01 && bytes1 < bytes2 * 1.01)("f1", bytes1)("f2", bytes2);
         }
@@ -321,10 +347,13 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
         helper.FillTable(sPool, 0, 800000);
         csController->WaitCompactions(TDuration::Seconds(10));
 
-        helper.GetVolumes(rawBytes1, bytes1, false, {"field"});
+        ui64 count1;
+        ui64 count2;
+
+        helper.GetVolumes(rawBytes1, bytes1, count1, false, {"field"});
         auto tableClient = kikimr.GetTableClient();
         {
-            helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=ALTER_COLUMN, NAME=field, `ENCODING.DICTIONARY.ENABLED`=`true`);");
+            helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=ALTER_COLUMN, NAME=field, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`);");
             helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=pk_int_max, TYPE=MAX, FEATURES=`{\"column_name\" : \"pk_int\"}`);");
             helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`);");
             csController->WaitActualization(TDuration::Seconds(40));
@@ -332,8 +361,8 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
             {
                 ui64 rawBytes2;
                 ui64 bytes2;
-                helper.GetVolumes(rawBytes2, bytes2, false, { "field" });
-                AFL_VERIFY(rawBytes2 == rawBytes1)("f1", rawBytes1)("f2", rawBytes2);
+                helper.GetVolumes(rawBytes2, bytes2, count2, false, { "field" });
+                AFL_VERIFY(rawBytes2 * 2 < rawBytes1)("f1", rawBytes1)("f2", rawBytes2);
                 AFL_VERIFY(bytes2 < bytes1 * 0.5)("f1", bytes1)("f2", bytes2);
                 std::vector<NJson::TJsonValue> stats;
                 helper.GetStats(stats, true);
@@ -606,13 +635,14 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
     }
 
     Y_UNIT_TEST(StatsSysViewAggregation) {
-        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
         TKikimrRunner kikimr(settings);
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
-
-        TLocalHelper(kikimr.GetTestServer()).CreateTestOlapTable("olapTable_1");
-        TLocalHelper(kikimr.GetTestServer()).CreateTestOlapTable("olapTable_2");
-        TLocalHelper(kikimr.GetTestServer()).CreateTestOlapTable("olapTable_3");
+        TLocalHelper helper(kikimr.GetTestServer());
+        helper.CreateTestOlapTable("olapTable_1");
+        helper.CreateTestOlapTable("olapTable_2");
+        helper.CreateTestOlapTable("olapTable_3");
+        helper.SetForcedCompaction();
 
         for (ui64 i = 0; i < 100; ++i) {
             WriteTestData(kikimr, "/Root/olapStore/olapTable_1", 0, 1000000 + i * 10000, 1000);

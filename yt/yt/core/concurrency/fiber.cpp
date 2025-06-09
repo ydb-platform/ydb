@@ -28,7 +28,7 @@ using namespace NProfiling;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static constexpr auto& Logger = ConcurrencyLogger;
+constinit const auto Logger = ConcurrencyLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -148,7 +148,7 @@ private:
     {
         ShutdownCookie_ = RegisterShutdownCallback(
             "TFiberRegistry",
-            BIND([this] {
+            BIND_NO_PROPAGATE([this] {
                 auto guard = Guard(Lock_);
                 while(GuardedProcessQueues());
             }),

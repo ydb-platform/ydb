@@ -1192,7 +1192,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
 
     Y_UNIT_TEST(AlterDatabaseAst) {
         NYql::TAstParseResult request = SqlToYql("USE plato; ALTER DATABASE `/Root/test` OWNER TO user1;");
-        UNIT_ASSERT(request.IsOk());
+        UNIT_ASSERT_C(request.IsOk(), request.Issues.ToString());
 
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             Y_UNUSED(word);
@@ -1205,6 +1205,43 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         TWordCountHive elementStat({TString("\'mode \'alterDatabase")});
         VerifyProgram(request, elementStat, verifyLine);
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["\'mode \'alterDatabase"]);
+    }
+
+    Y_UNIT_TEST(AlterDatabaseSetting) {
+        NYql::TAstParseResult res = SqlToYql("USE plato; ALTER DATABASE `/Root/test` SET (key1 = 1);");
+        UNIT_ASSERT_C(res.IsOk(), res.Issues.ToString());
+
+        TVerifyLineFunc verifyLine = [&](const TString& word, const TString& line) {
+            if (word == "Write!") {
+                UNIT_ASSERT_STRING_CONTAINS(line, "(Key '('databasePath (String '\"/Root/test\")))");
+                UNIT_ASSERT_STRING_CONTAINS(line, "'('('mode 'alterDatabase) '('\"KEY1\" (Uint64 '\"1\")))");
+            }
+        };
+
+        TWordCountHive elementStat = { {"Write!"} };
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(elementStat["Write!"], 1);
+    }
+
+    Y_UNIT_TEST(AlterDatabaseSettings) {
+        NYql::TAstParseResult res = SqlToYql("USE plato; ALTER DATABASE `/Root/test` SET (key1 = 1, key2 = \"2\", key3 = true);");
+        UNIT_ASSERT_C(res.IsOk(), res.Issues.ToString());
+
+        TVerifyLineFunc verifyLine = [&](const TString& word, const TString& line) {
+            if (word == "Write!") {
+                UNIT_ASSERT_STRING_CONTAINS(line, "(Key '('databasePath (String '\"/Root/test\")))");
+                UNIT_ASSERT_STRING_CONTAINS(line, "'('mode 'alterDatabase)");
+                UNIT_ASSERT_STRING_CONTAINS(line, "'('\"KEY1\" (Uint64 '\"1\"))");
+                UNIT_ASSERT_STRING_CONTAINS(line, "'('\"KEY2\" (String '\"2\"))");
+                UNIT_ASSERT_STRING_CONTAINS(line, "'('\"KEY3\" (Bool '\"true\"))");
+            }
+        };
+
+        TWordCountHive elementStat = { {"Write!"} };
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(elementStat["Write!"], 1);
     }
 
     Y_UNIT_TEST(CreateTableNonNullableYqlTypeAstCorrect) {
@@ -1707,6 +1744,15 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
 
     Y_UNIT_TEST(UnionTest) {
         NYql::TAstParseResult res = SqlToYql("SELECT key FROM plato.Input UNION select subkey FROM plato.Input;");
+        UNIT_ASSERT(res.Root);
+
+        TWordCountHive elementStat = {{TString("Union"), 0}};
+        VerifyProgram(res, elementStat, {});
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Union"]);
+    }
+
+    Y_UNIT_TEST(UnionDistinctTest) {
+        NYql::TAstParseResult res = SqlToYql("SELECT key FROM plato.Input UNION DISTINCT select subkey FROM plato.Input;");
         UNIT_ASSERT(res.Root);
 
         TWordCountHive elementStat = {{TString("Union"), 0}};
@@ -2644,6 +2690,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
                     INITIAL_SCAN = TRUE,
                     VIRTUAL_TIMESTAMPS = FALSE,
                     BARRIERS_INTERVAL = Interval("PT1S"),
+                    SCHEMA_CHANGES = FALSE,
                     RETENTION_PERIOD = Interval("P1D"),
                     TOPIC_MIN_ACTIVE_PARTITIONS = 10,
                     AWS_REGION = 'aws:region'
@@ -2664,6 +2711,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("virtual_timestamps"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("false"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("barriers_interval"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("schema_changes"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("retention_period"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("topic_min_active_partitions"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("aws_region"));
@@ -2957,6 +3005,114 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
 #endif
     }
 
+    Y_UNIT_TEST(CreateTableAddIndexGlobalUnique) {
+        NYql::TAstParseResult result = SqlToYql(R"sql(USE plato;
+            CREATE TABLE table (
+                pk INT32 NOT NULL,
+                col String,
+                INDEX idx GLOBAL UNIQUE ON(col),
+                PRIMARY KEY (pk))
+                )sql");
+        UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
+        UNIT_ASSERT(result.Root);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            Y_UNUSED(word);
+            UNIT_ASSERT_STRING_CONTAINS(line, R"('indexType 'syncGlobalUnique)");
+        };
+
+        TWordCountHive elementStat({TString("\'indexName \'\"idx\"")});
+        VerifyProgram(result, elementStat, verifyLine);
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["\'indexName \'\"idx\""]);
+    }
+
+    Y_UNIT_TEST(CreateTableAddIndexGlobalUniqueSync) {
+        NYql::TAstParseResult result = SqlToYql(R"sql(USE plato;
+            CREATE TABLE table (
+                pk INT32 NOT NULL,
+                col String,
+                INDEX idx GLOBAL UNIQUE SYNC ON(col),
+                PRIMARY KEY (pk))
+                )sql");
+        UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
+        UNIT_ASSERT(result.Root);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            Y_UNUSED(word);
+            UNIT_ASSERT_STRING_CONTAINS(line, R"('indexType 'syncGlobalUnique)");
+        };
+
+        TWordCountHive elementStat({TString("\'indexName \'\"idx\"")});
+        VerifyProgram(result, elementStat, verifyLine);
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["\'indexName \'\"idx\""]);
+    }
+
+    Y_UNIT_TEST(CreateTableAddIndexGlobalUniqueAsync) {
+#if ANTLR_VER == 3
+        ExpectFailWithFuzzyError(R"sql(USE plato;
+            CREATE TABLE table (
+                pk INT32 NOT NULL,
+                col String,
+                INDEX idx GLOBAL UNIQUE ASYNC ON(col),
+                PRIMARY KEY (pk))
+                )sql",
+            "<main>:5:41: Error: unique: alternative is not implemented yet: \\d+:\\d+: global_index\\n");
+#else
+        ExpectFailWithError(R"sql(USE plato;
+            CREATE TABLE table (
+                pk INT32 NOT NULL,
+                col String,
+                INDEX idx GLOBAL UNIQUE ASYNC ON(col),
+                PRIMARY KEY (pk))
+                )sql",
+            "<main>:5:41: Error: unique: alternative is not implemented yet: \n");
+#endif
+    }
+
+    Y_UNIT_TEST(AlterTableAddIndexGlobalUnique) {
+        NYql::TAstParseResult result = SqlToYql(R"sql(USE plato;
+            ALTER TABLE table ADD INDEX idx GLOBAL UNIQUE ON(col))sql");
+        UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
+        UNIT_ASSERT(result.Root);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            Y_UNUSED(word);
+            UNIT_ASSERT_STRING_CONTAINS(line, R"('indexType 'syncGlobalUnique)");
+        };
+
+        TWordCountHive elementStat({TString("\'indexName \'\"idx\"")});
+        VerifyProgram(result, elementStat, verifyLine);
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["\'indexName \'\"idx\""]);
+    }
+
+    Y_UNIT_TEST(AlterTableAddIndexGlobalUniqueSync) {
+        NYql::TAstParseResult result = SqlToYql(R"sql(USE plato;
+            ALTER TABLE table ADD INDEX idx GLOBAL UNIQUE SYNC ON(col))sql");
+        UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
+        UNIT_ASSERT(result.Root);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            Y_UNUSED(word);
+            UNIT_ASSERT_STRING_CONTAINS(line, R"('indexType 'syncGlobalUnique)");
+        };
+
+        TWordCountHive elementStat({TString("\'indexName \'\"idx\"")});
+        VerifyProgram(result, elementStat, verifyLine);
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["\'indexName \'\"idx\""]);
+    }
+
+    Y_UNIT_TEST(AlterTableAddIndexGlobalUniqueAsync) {
+#if ANTLR_VER == 3
+        ExpectFailWithFuzzyError(R"sql(USE plato;
+            ALTER TABLE table ADD INDEX idx GLOBAL UNIQUE ASYNC ON(col))sql",
+            "<main>:2:59: Error: unique: alternative is not implemented yet: \\d+:\\d+: global_index\\n");
+#else
+        ExpectFailWithError(R"sql(USE plato;
+            ALTER TABLE table ADD INDEX idx GLOBAL UNIQUE ASYNC ON(col))sql",
+            "<main>:2:59: Error: unique: alternative is not implemented yet: \n");
+#endif
+    }
+
     Y_UNIT_TEST(CreateTableAddIndexVector) {
         const auto result = SqlToYql(R"(USE plato;
             CREATE TABLE table (
@@ -3010,6 +3166,22 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
     Y_UNIT_TEST(AlterTableAlterIndexResetPartitioningIsNotSupported) {
         ExpectFailWithError("USE plato; ALTER TABLE table ALTER INDEX index RESET (AUTO_PARTITIONING_MIN_PARTITIONS_COUNT)",
             "<main>:1:55: Error: AUTO_PARTITIONING_MIN_PARTITIONS_COUNT reset is not supported\n"
+        );
+    }
+
+    Y_UNIT_TEST(AlterTableAlterIndexSetReadReplicasSettingsUncompatIsCorrect) {
+        const auto result = SqlToYql("USE plato; ALTER TABLE table ALTER INDEX index SET READ_REPLICAS_SETTINGS \"PER_AZ:1\"");
+        UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
+    }
+
+    Y_UNIT_TEST(AlterTableAlterIndexSetReadReplicasSettingsCompatIsCorrect) {
+        const auto result = SqlToYql("USE plato; ALTER TABLE table ALTER INDEX index SET (READ_REPLICAS_SETTINGS = \"PER_AZ:1\")");
+        UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
+    }
+
+    Y_UNIT_TEST(AlterTableAlterIndexResetReadReplicasSettingsIsNotSupported) {
+        ExpectFailWithError("USE plato; ALTER TABLE table ALTER INDEX index RESET (READ_REPLICAS_SETTINGS)",
+            "<main>:1:55: Error: READ_REPLICAS_SETTINGS reset is not supported\n"
         );
     }
 
@@ -5126,6 +5298,19 @@ select FormatType($f());
         auto res = SqlToYql(req);
         UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:5:100: Error: Literal of Interval type is expected for BARRIERS_INTERVAL\n");
+    }
+
+    Y_UNIT_TEST(InvalidChangefeedSchemaChanges) {
+        auto req = R"(
+            USE plato;
+            CREATE TABLE tableName (
+                Key Uint32, PRIMARY KEY (Key),
+                CHANGEFEED feedName WITH (MODE = "KEYS_ONLY", FORMAT = "json", SCHEMA_CHANGES = "foo")
+            );
+        )";
+        auto res = SqlToYql(req);
+        UNIT_ASSERT(!res.Root);
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:5:97: Error: Literal of Bool type is expected for SCHEMA_CHANGES\n");
     }
 
     Y_UNIT_TEST(InvalidChangefeedRetentionPeriod) {

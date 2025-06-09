@@ -174,7 +174,12 @@ void Init(
     }
 
     if (protoConfig.GetCheckpointCoordinator().GetEnabled()) {
-        auto checkpointStorage = NFq::NewCheckpointStorageService(protoConfig.GetCheckpointCoordinator(), protoConfig.GetCommon(), NKikimr::CreateYdbCredentialsProviderFactory, yqSharedResources);
+        auto checkpointStorage = NFq::NewCheckpointStorageService(
+            protoConfig.GetCheckpointCoordinator(),
+            protoConfig.GetCommon(),
+            NKikimr::CreateYdbCredentialsProviderFactory,
+            yqSharedResources,
+            yqCounters->GetSubgroup("subsystem", "checkpoint_storage"));
         actorRegistrator(NYql::NDq::MakeCheckpointStorageID(), checkpointStorage.release());
     }
 

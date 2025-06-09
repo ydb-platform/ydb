@@ -8,7 +8,11 @@ from ydb.tests.olap.scenario.helpers import (
 from ydb.tests.olap.common.thread_helper import TestThread, TestThreads
 from ydb import PrimitiveType
 from typing import List, Dict, Any
-from ydb.tests.olap.lib.utils import get_external_param, external_param_is_true
+from ydb.tests.olap.lib.utils import get_external_param
+
+import random
+import logging
+logger = logging.getLogger(__name__)
 
 
 class TestInsert(BaseTestSet):
@@ -26,28 +30,42 @@ class TestInsert(BaseTestSet):
     )
 
     def _loop_upsert(self, ctx: TestContext, data: list, table: str):
+        min_time = 10.0 / len(data)
+        max_time = min_time * 10
+
         sth = ScenarioTestHelper(ctx)
         table_name = "log" + table
         for batch in data:
             sth.bulk_upsert_data(table_name, self.schema_log, batch)
+            logger.info("Upsert")
+            time.sleep(random.uniform(min_time, max_time))
 
-    def _loop_insert(self, ctx: TestContext, rows_count: int, table: str, ignore_read_errors: bool):
+    def _loop_insert(self, ctx: TestContext, rows_count: int, table: str):
+        min_time = 1.0 / rows_count
+        max_time = min_time * 10
+
         sth = ScenarioTestHelper(ctx)
         log: str = sth.get_full_path("log" + table)
         cnt: str = sth.get_full_path("cnt" + table)
         for i in range(rows_count):
+            logger.info("Insert")
             for c in range(10):
                 try:
-                    sth.execute_query(
+                    result = sth.execute_query(
                         yql=f'$cnt = SELECT CAST(COUNT(*) AS INT64) from `{log}`; INSERT INTO `{cnt}` (key, c) values({i}, $cnt)', retries=20, fail_on_error=False
                     )
+                    if result == 1:
+                        if c >= 9:
+                            raise Exception('Insert failed table {}'.format(table))
+                        else:
+                            time.sleep(1)
+                            continue
+
                     break
                 except Exception:
-                    if ignore_read_errors:
-                        pass
-                    else:
+                    if c >= 9:
                         raise
-                time.sleep(1)
+                time.sleep(random.uniform(min_time, max_time))
 
     def scenario_read_data_during_bulk_upsert(self, ctx: TestContext):
         sth = ScenarioTestHelper(ctx)
@@ -55,9 +73,8 @@ class TestInsert(BaseTestSet):
         log_table_name: str = "log"
         batches_count = int(get_external_param("batches_count", "10"))
         rows_count = int(get_external_param("rows_count", "1000"))
-        inserts_count = int(get_external_param("inserts_count", "200"))
+        inserts_count = int(get_external_param("inserts_count", str(self.def_inserts_count)))
         tables_count = int(get_external_param("tables_count", "1"))
-        ignore_read_errors = external_param_is_true("ignore_read_errors")
         for table in range(tables_count):
             sth.execute_scheme_query(
                 CreateTable(cnt_table_name + str(table)).with_schema(self.schema_cnt)
@@ -78,7 +95,7 @@ class TestInsert(BaseTestSet):
         for table in range(tables_count):
             thread1.append(TestThread(target=self._loop_upsert, args=[ctx, data, str(table)]))
         for table in range(tables_count):
-            thread2.append(TestThread(target=self._loop_insert, args=[ctx, inserts_count, str(table), ignore_read_errors]))
+            thread2.append(TestThread(target=self._loop_insert, args=[ctx, inserts_count, str(table)]))
 
         thread1.start_all()
         thread2.start_all()

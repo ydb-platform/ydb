@@ -108,17 +108,23 @@ int TProxy::Run() {
     if (const auto res = Init()) {
         return res;
     }
-    if (Initialize_) {
-        if (const auto res = InitDatabase()) {
+    if (!ExportTo_.empty()) {
+        if (const auto res = ExportDatabase()) {
             return res;
         }
-    }
-    if (!ImportPrefix_.empty()) {
-        if (const auto res = ImportDatabase()) {
-            return res;
+    } else {
+        if (Initialize_) {
+            if (const auto res = InitDatabase()) {
+                return res;
+            }
+        }
+        if (!ImportPrefix_.empty()) {
+            if (const auto res = ImportDatabase()) {
+                return res;
+            }
         }
     }
-    if (!Initialize_ && ImportPrefix_.empty()) {
+    if (!Initialize_ && ImportPrefix_.empty() && ExportTo_.empty()) {
         if (const auto res = StartServer()) {
             return res;
         }
@@ -210,12 +216,87 @@ int TProxy::ImportDatabase() {
     const auto driver = NYdb::TDriver(config);
     auto client = NYdb::NTable::TTableClient(driver);
 
-    if (const auto res = client.BulkUpsert(Database + Folder + "/content", std::move(value)).ExtractValueSync(); !res.IsSuccess()) {
+    if (const auto res = client.BulkUpsert(Database + Folder + "/current", std::move(value)).ExtractValueSync(); !res.IsSuccess()) {
+        std::cout << res.GetIssues().ToString() << std::endl;
+        return 1;
+    }
+
+    const auto& param = NYdb::TParamsBuilder().AddParam("$Prefix").String(ImportPrefix_).Build().Build();
+    if (const auto res = Stuff->Client->ExecuteQuery("insert into `history` select * from `current` where startswith(`key`,$Prefix);", NYdb::NQuery::TTxControl::NoTx(), param).ExtractValueSync(); !res.IsSuccess()) {
         std::cout << res.GetIssues().ToString() << std::endl;
         return 1;
     }
 
     std::cout << count << " of " << rangeResponse.count() << " keys imported successfully." << std::endl;
+    return 0;
+}
+
+int TProxy::ExportDatabase() {
+    auto credentials = grpc::InsecureChannelCredentials();
+    if (!Root.empty() || !Cert.empty() || !Key.empty()) {
+        const grpc::SslCredentialsOptions opts {
+            .pem_root_certs = TFileInput(Root).ReadAll(),
+            .pem_private_key = TFileInput(Key).ReadAll(),
+            .pem_cert_chain = TFileInput(Cert).ReadAll()
+        };
+        credentials = grpc::SslCredentials(opts);
+    }
+
+    const auto channel = grpc::CreateChannel(TString(ExportTo_), credentials);
+    const std::unique_ptr<etcdserverpb::KV::Stub> kv = etcdserverpb::KV::NewStub(channel);
+
+    NYdb::TDriverConfig config;
+    config.SetEndpoint(Endpoint);
+    config.SetDatabase(Database);
+    if (!Token.empty())
+        config.SetAuthToken(Token);
+    if (!CA.empty())
+        config.UseSecureConnection(TFileInput(CA).ReadAll());
+
+    const auto driver = NYdb::TDriver(config);
+    auto client = NYdb::NTable::TTableClient(driver);
+    auto count = 0ULL;
+    if (const auto res = client.CreateSession().ExtractValueSync(); res.IsSuccess()) {
+        NYdb::NTable::TReadTableSettings settings;
+        settings.BatchLimitRows(97ULL).AppendColumns("key").AppendColumns("value").AppendColumns("lease");
+        if (auto it = res.GetSession().ReadTable(Database + Folder + "/current", settings).ExtractValueSync(); it.IsSuccess()) {
+            for (;;) {
+                auto streamPart = it.ReadNext().ExtractValueSync();
+                if (streamPart.EOS())
+                    break;
+
+                if (!streamPart.IsSuccess()) {
+                    std::cout << streamPart.GetIssues().ToString() << std::endl;
+                    return 1;
+                }
+
+                etcdserverpb::TxnRequest txnRequest;
+                for (auto parser = NYdb::TResultSetParser(streamPart.ExtractPart()); parser.TryNextRow();) {
+                    if (const auto lease = NYdb::TValueParser(parser.GetValue("lease")).GetOptionalInt64(); lease && !*lease) {
+                        ++count;
+                        const auto put = txnRequest.add_success()->mutable_request_put();
+                        put->set_key(*NYdb::TValueParser(parser.GetValue("key")).GetOptionalString());
+                        put->set_value(*NYdb::TValueParser(parser.GetValue("value")).GetOptionalString());
+                    }
+                }
+
+                grpc::ClientContext txnCtx;
+                etcdserverpb::TxnResponse txnResponse;
+                if (const auto& status = kv->Txn(&txnCtx, txnRequest, &txnResponse); !status.ok()) {
+                    std::cout << status.error_message() << std::endl;
+                    return 1;
+                }
+            }
+        } else {
+            std::cout << it.GetIssues().ToString() << std::endl;
+            return 1;
+        }
+    } else {
+        std::cout << res.GetIssues().ToString() << std::endl;
+        return 1;
+    }
+
+    std::cout << count << " keys exported successfully." << std::endl;
     return 0;
 }
 
@@ -246,6 +327,7 @@ TProxy::TProxy(int argc, char** argv)
 
     opts.AddLongOption("import-from", "Import existing data from etcd base").RequiredArgument("ENDPOINT").DefaultValue("localhost:2379").StoreResult(&ImportFrom_);
     opts.AddLongOption("import-prefix", "Prefix of data to import").RequiredArgument("PREFIX").StoreResult(&ImportPrefix_);
+    opts.AddLongOption("export-to", "Export existing data to etcd from ydb").RequiredArgument("ENDPOINT").StoreResult(&ExportTo_);
 
     opts.AddLongOption("ca", "SSL CA certificate file").Optional().RequiredArgument("CA").StoreResult(&Root);
     opts.AddLongOption("cert", "SSL certificate file").Optional().RequiredArgument("CERT").StoreResult(&Cert);

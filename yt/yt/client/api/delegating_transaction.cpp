@@ -189,7 +189,7 @@ DELEGATE_METHOD(NTransactionClient::EDurability, GetDurability, () const, ())
 DELEGATE_METHOD(TDuration, GetTimeout, () const, ())
 
 DELEGATE_METHOD(TFuture<void>, Ping, (
-    const NApi::TTransactionPingOptions& options),
+    const NApi::TPrerequisitePingOptions& options),
     (options))
 
 DELEGATE_METHOD(TFuture<TTransactionCommitResult>, Commit, (

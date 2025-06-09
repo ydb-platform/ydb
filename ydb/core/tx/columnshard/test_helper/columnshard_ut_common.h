@@ -49,7 +49,7 @@ using TTypeId = NScheme::TTypeId;
 using TTypeInfo = NScheme::TTypeInfo;
 
 struct TTestSchema {
-    static inline const TString DefaultTtlColumn = "saved_at";
+    static inline const TString DefaultTtlColumn = "timestamp";
 
     struct TStorageTier {
         TString TtlColumn = DefaultTtlColumn;
@@ -126,6 +126,7 @@ struct TTestSchema {
     public:
         std::vector<TStorageTier> Tiers;
         bool WaitEmptyAfter = false;
+        bool UseForcedCompaction = false;
 
         TTableSpecials() noexcept = default;
 
@@ -141,9 +142,19 @@ struct TTestSchema {
             return EvictAfter.has_value();
         }
 
+        bool GetUseForcedCompaction() const {
+            return UseForcedCompaction;
+        }
+
         TTableSpecials WithCodec(const TString& codec) const {
             TTableSpecials out = *this;
             out.SetCodec(codec);
+            return out;
+        }
+
+        TTableSpecials WithForcedCompaction(bool forced) const {
+            TTableSpecials out = *this;
+            out.UseForcedCompaction = forced;
             return out;
         }
 
@@ -297,9 +308,18 @@ struct TTestSchema {
         NKikimrTxColumnShard::TSchemaTxBody tx;
         auto* table = tx.MutableInitShard()->AddTables();
         tx.MutableInitShard()->SetOwnerPath(ownerPath);
+        tx.MutableInitShard()->SetOwnerPathId(pathId);
         table->SetPathId(pathId);
 
-        InitSchema(columns, pk, specials, table->MutableSchema());
+        {   // preset
+            auto* preset = table->MutableSchemaPreset();
+            preset->SetId(1);
+            preset->SetName("default");
+
+            // schema
+            InitSchema(columns, pk, specials, preset->MutableSchema());
+        }
+
         InitTiersAndTtl(specials, table->MutableTtlSettings());
 
         Cerr << "CreateInitShard: " << tx << "\n";
@@ -310,9 +330,11 @@ struct TTestSchema {
     }
 
     static TString CreateStandaloneTableTxBody(ui64 pathId, const std::vector<NArrow::NTest::TTestColumn>& columns,
-        const std::vector<NArrow::NTest::TTestColumn>& pk, const TTableSpecials& specials = {}) {
+        const std::vector<NArrow::NTest::TTestColumn>& pk, const TTableSpecials& specials = {}, const TString& path = "/Root/olap") {
         NKikimrTxColumnShard::TSchemaTxBody tx;
-        auto* table = tx.MutableEnsureTables()->AddTables();
+        auto* table = tx.MutableInitShard()->AddTables();
+        tx.MutableInitShard()->SetOwnerPath(path);
+        tx.MutableInitShard()->SetOwnerPathId(pathId);
         table->SetPathId(pathId);
 
         InitSchema(columns, pk, specials, table->MutableSchema());
@@ -325,11 +347,17 @@ struct TTestSchema {
         return out;
     }
 
-    static TString AlterTableTxBody(ui64 pathId, ui32 version, const TTableSpecials& specials) {
+    static TString AlterTableTxBody(ui64 pathId, ui32 version, const std::vector<NArrow::NTest::TTestColumn>& columns,
+        const std::vector<NArrow::NTest::TTestColumn>& pk, const TTableSpecials& specials) {
         NKikimrTxColumnShard::TSchemaTxBody tx;
         auto* table = tx.MutableAlterTable();
         table->SetPathId(pathId);
         tx.MutableSeqNo()->SetRound(version);
+
+        auto* preset = table->MutableSchemaPreset();
+        preset->SetId(1);
+        preset->SetName("default");
+        InitSchema(columns, pk, specials, preset->MutableSchema());
 
         auto* ttlSettings = table->MutableTtlSettings();
         if (!InitTiersAndTtl(specials, ttlSettings)) {
@@ -560,7 +588,8 @@ struct TestTableDescription {
     }
 };
 
-[[nodiscard]] NTxUT::TPlanStep SetupSchema(TTestBasicRuntime& runtime, TActorId& sender, ui64 pathId, const TestTableDescription& table = {}, TString codec = "none");
+[[nodiscard]] NTxUT::TPlanStep SetupSchema(TTestBasicRuntime& runtime, TActorId& sender, ui64 pathId, const TestTableDescription& table = {},
+    TString codec = "none", const ui64 txId = 10);
 [[nodiscard]] NTxUT::TPlanStep SetupSchema(TTestBasicRuntime& runtime, TActorId& sender, const TString& txBody, const ui64 txId);
 
 [[nodiscard]] NTxUT::TPlanStep PrepareTablet(

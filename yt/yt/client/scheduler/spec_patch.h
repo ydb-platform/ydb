@@ -10,10 +10,9 @@ namespace NYT::NScheduler {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TSpecPatch
+struct TSpecPatch
     : public NYTree::TYsonStruct
 {
-public:
     NYPath::TYPath Path;
     NYTree::INodePtr Value;
 

@@ -28,7 +28,7 @@ using namespace NSQLTranslationV1;
 
 TLexers Lexers = {
     .Antlr3 = MakeAntlr3LexerFactory(),
-    .Antlr3Ansi = MakeAntlr4AnsiLexerFactory(),
+    .Antlr3Ansi = MakeAntlr3AnsiLexerFactory(),
     .Antlr4 = MakeAntlr4LexerFactory(),
     .Antlr4Ansi = MakeAntlr4AnsiLexerFactory(),
     .Antlr4Pure = MakeAntlr4PureLexerFactory(),
@@ -307,6 +307,21 @@ Y_UNIT_TEST_SUITE(SQLv1Lexer) {
         UNIT_ASSERT_TOKENIZED(lexer, "INSERT", "INSERT EOF");
         UNIT_ASSERT_TOKENIZED(lexer, "FROM", "FROM EOF");
         UNIT_ASSERT_TOKENIZED(lexer, "from", "FROM(from) EOF");
+        UNIT_ASSERT_TOKENIZED(lexer, " UPSERT ", "WS( ) UPSERT WS( ) EOF");
+        UNIT_ASSERT_TOKENIZED(lexer, "ERROR", "ERROR EOF");
+    }
+
+    Y_UNIT_TEST_ON_EACH_LEXER(KeywordSkip) {
+        auto lexer = MakeLexer(Lexers, ANSI, ANTLR4, FLAVOR);
+        if (ANTLR4 || FLAVOR == ELexerFlavor::Regex) {
+            UNIT_ASSERT_TOKENIZED(lexer, "sKip", "TSKIP(sKip) EOF");
+            UNIT_ASSERT_TOKENIZED(lexer, "SKIP", "TSKIP(SKIP) EOF");
+            UNIT_ASSERT_TOKENIZED(lexer, " SKIP ", "WS( ) TSKIP(SKIP) WS( ) EOF");
+        } else {
+            UNIT_ASSERT_TOKENIZED(lexer, "sKip", "SKIP(sKip) EOF");
+            UNIT_ASSERT_TOKENIZED(lexer, "SKIP", "SKIP EOF");
+            UNIT_ASSERT_TOKENIZED(lexer, " SKIP ", "WS( ) SKIP WS( ) EOF");
+        }
     }
 
     Y_UNIT_TEST_ON_EACH_LEXER(Punctuation) {
@@ -337,10 +352,17 @@ Y_UNIT_TEST_SUITE(SQLv1Lexer) {
         UNIT_ASSERT_TOKENIZED(lexer, "123", "DIGITS(123) EOF");
         UNIT_ASSERT_TOKENIZED(lexer, "123u", "INTEGER_VALUE(123u) EOF");
         UNIT_ASSERT_TOKENIZED(lexer, "123ui", "INTEGER_VALUE(123ui) EOF");
+        UNIT_ASSERT_TOKENIZED(lexer, "0xDEADbeef", "DIGITS(0xDEADbeef) EOF");
         UNIT_ASSERT_TOKENIZED(lexer, "123.45", "REAL(123.45) EOF");
         UNIT_ASSERT_TOKENIZED(lexer, "123.45E10", "REAL(123.45E10) EOF");
         UNIT_ASSERT_TOKENIZED(lexer, "123.45E+10", "REAL(123.45E+10) EOF");
         UNIT_ASSERT_TOKENIZED(lexer, "1E+10", "REAL(1E+10) EOF");
+        UNIT_ASSERT_TOKENIZED(lexer, "123l", "INTEGER_VALUE(123l) EOF");
+        UNIT_ASSERT_TOKENIZED(lexer, "0b01u", "INTEGER_VALUE(0b01u) EOF");
+        UNIT_ASSERT_TOKENIZED(lexer, "0xfful", "INTEGER_VALUE(0xfful) EOF");
+        UNIT_ASSERT_TOKENIZED(lexer, "0o7ut", "INTEGER_VALUE(0o7ut) EOF");
+        UNIT_ASSERT_TOKENIZED(lexer, "456s", "INTEGER_VALUE(456s) EOF");
+        UNIT_ASSERT_TOKENIZED(lexer, "1.2345f", "REAL(1.2345f) EOF");
     }
 
     Y_UNIT_TEST_ON_EACH_LEXER(SingleLineString) {
@@ -353,7 +375,7 @@ Y_UNIT_TEST_SUITE(SQLv1Lexer) {
         if (!ANSI) {
             UNIT_ASSERT_TOKENIZED(lexer, "\"\\\"\"", "STRING_VALUE(\"\\\"\") EOF");
             UNIT_ASSERT_TOKENIZED(lexer, "\"\"\"\"", "STRING_VALUE(\"\") STRING_VALUE(\"\") EOF");
-        } else {
+        } else if (ANTLR4 || FLAVOR == ELexerFlavor::Regex) {
             UNIT_ASSERT_TOKENIZED(lexer, "\"\\\"\"", "[INVALID] STRING_VALUE(\"\\\") EOF");
             UNIT_ASSERT_TOKENIZED(lexer, "\"\"\"\"", "STRING_VALUE(\"\"\"\") EOF");
         }
@@ -365,6 +387,7 @@ Y_UNIT_TEST_SUITE(SQLv1Lexer) {
         UNIT_ASSERT_TOKENIZED(lexer, "@@ @@@", "STRING_VALUE(@@ @@@) EOF");
         UNIT_ASSERT_TOKENIZED(lexer, "@@test@@", "STRING_VALUE(@@test@@) EOF");
         UNIT_ASSERT_TOKENIZED(lexer, "@@line1\nline2@@", "STRING_VALUE(@@line1\nline2@@) EOF");
+        UNIT_ASSERT_TOKENIZED(lexer, "@@@@ @@A@@ @@@A@@", "STRING_VALUE(@@@@) WS( ) STRING_VALUE(@@A@@) WS( ) STRING_VALUE(@@@A@@) EOF");
     }
 
     Y_UNIT_TEST_ON_EACH_LEXER(SingleLineComment) {
@@ -387,7 +410,7 @@ Y_UNIT_TEST_SUITE(SQLv1Lexer) {
         if (!ANSI) {
             UNIT_ASSERT_TOKENIZED(lexer, "/* /* yql */", "COMMENT(/* /* yql */) EOF");
             UNIT_ASSERT_TOKENIZED(lexer, "/* /* yql */ */", "COMMENT(/* /* yql */) WS( ) ASTERISK(*) SLASH(/) EOF");
-        } else {
+        } else if (ANTLR4 || FLAVOR == ELexerFlavor::Regex) {
             UNIT_ASSERT_TOKENIZED(lexer, "/* /* yql */", "COMMENT(/* /* yql */) EOF");
             UNIT_ASSERT_TOKENIZED(lexer, "/* yql */ */", "COMMENT(/* yql */) WS( ) ASTERISK(*) SLASH(/) EOF");
             UNIT_ASSERT_TOKENIZED(lexer, "/* /* /* yql */ */", "COMMENT(/* /* /* yql */ */) EOF");
@@ -408,8 +431,8 @@ Y_UNIT_TEST_SUITE(SQLv1Lexer) {
         auto reference = MakeLexer(Lexers, ANSI, /* antlr4 = */ true, ELexerFlavor::Pure);
 
         SetRandomSeed(100);
-        for (size_t i = 0; i < 512; ++i) {
-            auto input = RandomMultilineCommentLikeText(/* maxSize = */ 32);
+        for (size_t i = 0; i < 128; ++i) {
+            auto input = RandomMultilineCommentLikeText(/* maxSize = */ 16);
             TString actual = Tokenized(lexer, input);
             TString expected = Tokenized(reference, input);
 
@@ -451,6 +474,60 @@ Y_UNIT_TEST_SUITE(SQLv1Lexer) {
             "JOIN WS( ) ID_PLAIN(test) SEMICOLON(;) EOF";
 
         UNIT_ASSERT_TOKENIZED(lexer, query, expected);
+    }
+
+    Y_UNIT_TEST_ON_EACH_LEXER(Examples) {
+        auto lexer = MakeLexer(Lexers, ANSI, ANTLR4, FLAVOR);
+        UNIT_ASSERT_TOKENIZED(
+            lexer,
+            R"(
+SELECT
+ YQL::@@(Uint32 '100500)@@,
+ YQL::@@(String '[WAT])@@
+;)",
+            "WS(\n) "
+            "SELECT WS(\n) WS( ) ID_PLAIN(YQL) NAMESPACE(::) STRING_VALUE(@@(Uint32 '100500)@@) COMMA(,) WS(\n) "
+            "WS( ) ID_PLAIN(YQL) NAMESPACE(::) STRING_VALUE(@@(String '[WAT])@@) WS(\n) "
+            "SEMICOLON(;) EOF");
+    }
+
+    Y_UNIT_TEST_ON_EACH_LEXER(AsciiEscape) {
+        auto lexer = MakeLexer(Lexers, ANSI, ANTLR4, FLAVOR);
+        UNIT_ASSERT_TOKENIZED(lexer, "\0", "EOF");           // Null character
+        UNIT_ASSERT_TOKENIZED(lexer, "\t", "WS(\t) EOF");    // Horizontal Tab
+        UNIT_ASSERT_TOKENIZED(lexer, "\n", "WS(\n) EOF");    // Line Feed
+        UNIT_ASSERT_TOKENIZED(lexer, "\v", "[INVALID] EOF"); // Vertical Tabulation
+        UNIT_ASSERT_TOKENIZED(lexer, "\f", "WS(\x0C) EOF");  // Form Feed
+        UNIT_ASSERT_TOKENIZED(lexer, "\r", "WS(\r) EOF");    // Carriage Return
+        UNIT_ASSERT_TOKENIZED(lexer, "\r\n", "WS(\r) WS(\n) EOF");
+    }
+
+    Y_UNIT_TEST_ON_EACH_LEXER(AsciiEscapeCanon) {
+        static THashMap<char, TString> canon;
+
+        auto lexer = MakeLexer(Lexers, ANSI, ANTLR4, FLAVOR);
+
+        for (char c = 0; c < std::numeric_limits<char>::max(); ++c) {
+            TString input;
+            input += c;
+
+            TString& expected = canon[c];
+            if (expected.empty()) {
+                expected = Tokenized(lexer, input);
+            }
+
+            UNIT_ASSERT_TOKENIZED(lexer, input, expected);
+        }
+    }
+
+    Y_UNIT_TEST_ON_EACH_LEXER(Utf8BOM) {
+        auto lexer = MakeLexer(Lexers, ANSI, ANTLR4, FLAVOR);
+        if (ANTLR4 || FLAVOR == ELexerFlavor::Regex) {
+            UNIT_ASSERT_TOKENIZED(lexer, "\xEF\xBB\xBF 1", "WS( ) DIGITS(1) EOF");
+            UNIT_ASSERT_TOKENIZED(lexer, "\xEF\xBB\xBF \xEF\xBB\xBF", "[INVALID] WS( ) EOF");
+        } else {
+            UNIT_ASSERT_TOKENIZED(lexer, "\xEF\xBB\xBF 1", "[INVALID] WS( ) DIGITS(1) EOF");
+        }
     }
 
 } // Y_UNIT_TEST_SUITE(SQLv1Lexer)

@@ -84,8 +84,9 @@ std::unique_ptr<typename TTraits::TResult> DispatchByArrowTraits(const ITypeInfo
         isOptional = true;
     }
 
+    unpacked = SkipTaggedType(typeInfoHelper, unpacked);
+
     TOptionalTypeInspector unpackedOpt(typeInfoHelper, unpacked);
-    TPgTypeInspector unpackedPg(typeInfoHelper, unpacked);
     if (unpackedOpt || (typeOpt && NeedWrapWithExternalOptional(typeInfoHelper, unpacked))) {
         ui32 nestLevel = 0;
         auto currentType = type;
@@ -97,6 +98,9 @@ std::unique_ptr<typename TTraits::TResult> DispatchByArrowTraits(const ITypeInfo
             types.push_back(currentType);
             TOptionalTypeInspector currentOpt(typeInfoHelper, currentType);
             currentType = currentOpt.GetItemType();
+
+            currentType = SkipTaggedType(typeInfoHelper, currentType);
+
             TOptionalTypeInspector nexOpt(typeInfoHelper, currentType);
             if (!nexOpt) {
                 break;

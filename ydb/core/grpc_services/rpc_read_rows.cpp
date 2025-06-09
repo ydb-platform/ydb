@@ -385,7 +385,7 @@ public:
         OwnerId = entry.Self->Info.GetSchemeshardId();
         TableId = entry.Self->Info.GetPathId();
 
-        if (entry.TableId.IsSystemView()) {
+        if (entry.TableId.IsSystemView() || entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindSysView) {
             return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR,
                 Sprintf("Table '%s' is a system view. ReadRows is not supported.", GetTable().c_str()));
         }
@@ -592,7 +592,7 @@ public:
             }
             case NScheme::NTypeIds::Decimal: {
                 return NYdb::TTypeBuilder().Decimal(NYdb::TDecimalType(
-                        typeInfo.GetDecimalType().GetPrecision(), 
+                        typeInfo.GetDecimalType().GetPrecision(),
                         typeInfo.GetDecimalType().GetScale()))
                     .Build();
             }
@@ -732,6 +732,14 @@ public:
         SendResult(status, errorMsg, issues);
     }
 
+    void Handle(TEvents::TEvUndelivered::TPtr&) {
+        return ReplyWithError(Ydb::StatusIds::INTERNAL_ERROR, "Internal error: pipe cache is not available, the cluster might not be configured properly");
+    }
+
+    void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr &ev) {
+        return ReplyWithError(Ydb::StatusIds::UNAVAILABLE, TStringBuilder() << "Failed to connect to shard " << ev->Get()->TabletId);
+    }
+
     void PassAway() override {
         Send(PipeCache, new TEvPipeCache::TEvUnlink(0));
         if (TimeoutTimerActorId) {
@@ -747,6 +755,9 @@ public:
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
             hFunc(TEvTxProxySchemeCache::TEvResolveKeySetResult, Handle);
             hFunc(TEvDataShard::TEvReadResult, Handle);
+
+            hFunc(TEvents::TEvUndelivered, Handle);
+            hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
 
             hFunc(TEvents::TEvWakeup, HandleTimeout);
         }

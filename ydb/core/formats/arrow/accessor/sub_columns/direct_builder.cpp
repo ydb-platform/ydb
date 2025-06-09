@@ -76,6 +76,7 @@ std::shared_ptr<TSubColumnsArray> TDataBuilder::Finish() {
                 case IChunkedArray::EType::SubColumnsArray:
                 case IChunkedArray::EType::SubColumnsPartialArray:
                 case IChunkedArray::EType::ChunkedArray:
+                case IChunkedArray::EType::Dictionary:
                     AFL_VERIFY(false);
             }
             ++columnIdx;

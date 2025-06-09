@@ -6,8 +6,8 @@
 #include <ydb/core/formats/arrow/reader/position.h>
 #include <ydb/core/tx/columnshard/blob.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/action.h>
-#include <ydb/core/tx/columnshard/common/snapshot.h>
 #include <ydb/core/tx/columnshard/common/path_id.h>
+#include <ydb/core/tx/columnshard/common/snapshot.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/tx/columnshard/engines/predicate/range.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/columns_set.h>
@@ -33,10 +33,10 @@ class IDataSource: public NCommon::IDataSource {
 private:
     using TBase = NCommon::IDataSource;
     YDB_ACCESSOR(bool, ExclusiveIntervalOnly, true);
+    NArrow::TSimpleRow StartReplaceKey;
+    NArrow::TSimpleRow FinishReplaceKey;
     YDB_READONLY_DEF(NArrow::NMerger::TSortableBatchPosition, Start);
     YDB_READONLY_DEF(NArrow::NMerger::TSortableBatchPosition, Finish);
-    NArrow::TReplaceKey StartReplaceKey;
-    NArrow::TReplaceKey FinishReplaceKey;
     YDB_READONLY(ui32, IntervalsCount, 0);
     virtual NJson::TJsonValue DoDebugJson() const = 0;
     bool MergingStartedFlag = false;
@@ -48,8 +48,8 @@ private:
     virtual void DoOnSourceFetchingFinishedSafe(IDataReader& owner, const std::shared_ptr<NCommon::IDataSource>& /*sourcePtr*/) override;
     virtual void DoBuildStageResult(const std::shared_ptr<NCommon::IDataSource>& sourcePtr) override;
     virtual void DoOnEmptyStageData(const std::shared_ptr<NCommon::IDataSource>& sourcePtr) override;
-    virtual TConclusion<bool> DoStartFetchImpl(
-        const NArrow::NSSA::TProcessorContext& /*context*/, const std::vector<std::shared_ptr<NCommon::IKernelFetchLogic>>& /*fetchersExt*/) override {
+    virtual TConclusion<bool> DoStartFetchImpl(const NArrow::NSSA::TProcessorContext& /*context*/,
+        const std::vector<std::shared_ptr<NCommon::IKernelFetchLogic>>& /*fetchersExt*/) override {
         AFL_VERIFY(false);
         return false;
     }
@@ -107,10 +107,10 @@ public:
     virtual TInternalPathId GetPathId() const = 0;
     virtual bool HasIndexes(const std::set<ui32>& indexIds) const = 0;
 
-    const NArrow::TReplaceKey& GetStartReplaceKey() const {
+    const NArrow::TSimpleRow& GetStartReplaceKey() const {
         return StartReplaceKey;
     }
-    const NArrow::TReplaceKey& GetFinishReplaceKey() const {
+    const NArrow::TSimpleRow& GetFinishReplaceKey() const {
         return FinishReplaceKey;
     }
 
@@ -164,15 +164,15 @@ public:
 
     void RegisterInterval(TFetchingInterval& interval, const std::shared_ptr<IDataSource>& sourcePtr);
 
-    IDataSource(const ui64 sourceId, const ui32 sourceIdx, const std::shared_ptr<TSpecialReadContext>& context, const NArrow::TReplaceKey& start,
-        const NArrow::TReplaceKey& finish, const TSnapshot& recordSnapshotMin, const TSnapshot& recordSnapshotMax, const ui32 recordsCount,
+    IDataSource(const ui64 sourceId, const ui32 sourceIdx, const std::shared_ptr<TSpecialReadContext>& context, const NArrow::TSimpleRow& start,
+        const NArrow::TSimpleRow& finish, const TSnapshot& recordSnapshotMin, const TSnapshot& recordSnapshotMax, const ui32 recordsCount,
         const std::optional<ui64> shardingVersion, const bool hasDeletions)
         : TBase(sourceId, sourceIdx, context, recordSnapshotMin, recordSnapshotMax, recordsCount, shardingVersion, hasDeletions)
-        , Start(context->GetReadMetadata()->BuildSortedPosition(start))
-        , Finish(context->GetReadMetadata()->BuildSortedPosition(finish))
         , StartReplaceKey(start)
-        , FinishReplaceKey(finish) {
-        UsageClass = GetContext()->GetReadMetadata()->GetPKRangesFilter().GetUsageClass(GetStartReplaceKey(), GetFinishReplaceKey());
+        , FinishReplaceKey(finish)
+        , Start(context->GetReadMetadata()->BuildSortedPosition(StartReplaceKey))
+        , Finish(context->GetReadMetadata()->BuildSortedPosition(FinishReplaceKey)) {
+        UsageClass = GetContext()->GetReadMetadata()->GetPKRangesFilter().GetUsageClass(start, finish);
         AFL_VERIFY(UsageClass != TPKRangeFilter::EUsageClass::NoUsage);
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "portions_for_merge")("start", Start.DebugJson())("finish", Finish.DebugJson());
         if (Start.IsReverseSort()) {
@@ -202,8 +202,6 @@ private:
         NJson::TJsonValue result = NJson::JSON_MAP;
         result.InsertValue("type", "portion");
         result.InsertValue("info", Portion->DebugString());
-        result.InsertValue("commit", Portion->GetCommitSnapshotOptional().value_or(TSnapshot::Zero()).DebugString());
-        result.InsertValue("insert", (ui64)Portion->GetInsertWriteIdOptional().value_or(TInsertWriteId(0)));
         return result;
     }
 
@@ -242,16 +240,7 @@ public:
         return !HasStageData() || !GetStageData().HasPortionAccessor();
     }
 
-    virtual bool DoAddTxConflict() override {
-        if (Portion->HasCommitSnapshot() || !Portion->HasInsertWriteId()) {
-            GetContext()->GetReadMetadata()->SetBrokenWithCommitted();
-            return true;
-        } else if (!GetContext()->GetReadMetadata()->IsMyUncommitted(Portion->GetInsertWriteIdVerified())) {
-            GetContext()->GetReadMetadata()->SetConflictedWriteId(Portion->GetInsertWriteIdVerified());
-            return true;
-        }
-        return false;
-    }
+    virtual bool DoAddTxConflict() override;
 
     virtual bool HasIndexes(const std::set<ui32>& indexIds) const override {
         return Schema->GetIndexInfo().HasIndexes(indexIds);

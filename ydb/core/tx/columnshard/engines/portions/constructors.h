@@ -76,8 +76,8 @@ public:
         return &info.first->second;
     }
 
-    TPortionAccessorConstructor* AddConstructorVerified(TPortionInfoConstructor&& constructor) {
-        const ui64 portionId = constructor.GetPortionIdVerified();
+    TPortionAccessorConstructor* AddConstructorVerified(std::unique_ptr<TPortionInfoConstructor>&& constructor) {
+        const ui64 portionId = constructor->GetPortionIdVerified();
         auto info = Constructors.emplace(portionId, TPortionAccessorConstructor(std::move(constructor)));
         AFL_VERIFY(info.second);
         return &info.first->second;

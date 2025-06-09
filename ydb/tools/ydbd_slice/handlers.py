@@ -120,7 +120,8 @@ class Slice:
         self.nodes.execute_async(
             f"{self.slice_kikimr_path} admin blobstorage config init --yaml-file /Berkanavt/kikimr/cfg/config.yaml",
             nodes=self.nodes.nodes_list[:1],
-            check_retcode=False
+            check_retcode=True,
+            retry_attempts=5,
         )
 
         create_db_template = f"{self.slice_kikimr_path} admin database /{{}}/{{}} create {{}}:{{}}"
@@ -192,6 +193,7 @@ class Slice:
         cfg = """\
 tenant=/{domain}/{tenant}
 grpc={grpc}
+kafka_port={kafka_port}
 mbus={mbus}
 ic={ic}
 mon={mon}""".format(
@@ -201,6 +203,7 @@ mon={mon}""".format(
             grpc=slot.grpc,
             mon=slot.mon,
             ic=slot.ic,
+            kafka_port=slot.kafka_port,
         )
 
         escaped_cmd = cfg.encode('unicode_escape').decode()
@@ -240,19 +243,20 @@ mon={mon}""".format(
 
     def _start_slot(self, slot):
         cmd = "sudo sh -c \"if [ -x /sbin/start ]; "\
-            "    then start kikimr-multi slot={slot} tenant=dynamic mbus={mbus} grpc={grpc} mon={mon} ic={ic}; "\
+            "    then start kikimr-multi slot={slot} tenant=dynamic mbus={mbus} grpc={grpc} mon={mon} ic={ic} kafka_port={kafka_port}; "\
             "    else systemctl start kikimr-multi@{slot}; fi\"".format(
                 slot=slot.slot,
                 mbus=slot.mbus,
                 grpc=slot.grpc,
                 mon=slot.mon,
-                ic=slot.ic
+                ic=slot.ic,
+                kafka_port=slot.kafka_port,
             )
         self.nodes.execute_async(self, cmd, check_retcode=False)
 
     def _start_slot_for_tenant(self, slot, tenant, host, node_bind=None):
         cmd = "sudo sh -c \"if [ -x /sbin/start ]; "\
-            "    then start kikimr-multi slot={slot} tenant=/{domain}/{name} mbus={mbus} grpc={grpc} mon={mon} ic={ic}; "\
+            "    then start kikimr-multi slot={slot} tenant=/{domain}/{name} mbus={mbus} grpc={grpc} mon={mon} ic={ic} kafka_port={kafka_port}; "\
             "    else systemctl start kikimr-multi@{slot}; fi\"".format(
                 slot=slot.slot,
                 domain=slot.domain,
@@ -260,7 +264,8 @@ mon={mon}""".format(
                 mbus=slot.mbus,
                 grpc=slot.grpc,
                 mon=slot.mon,
-                ic=slot.ic
+                ic=slot.ic,
+                kafka_port=slot.kafka_port,
             )
         if node_bind is not None:
             cmd += " bindnumanode={bind}".format(bind=node_bind)

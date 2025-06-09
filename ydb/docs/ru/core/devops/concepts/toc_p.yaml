@@ -1,0 +1,7 @@
+items:
+- name: Системные требования
+  href: system-requirements.md
+- name: Версионирование
+  href: versioning.md
+- name: Обслуживание
+  href: maintenance-without-downtime.md

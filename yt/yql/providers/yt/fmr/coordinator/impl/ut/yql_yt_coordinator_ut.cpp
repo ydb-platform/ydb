@@ -7,6 +7,7 @@
 #include <yt/yql/providers/yt/fmr/coordinator/impl/yql_yt_coordinator_impl.h>
 #include <yt/yql/providers/yt/fmr/job_factory/impl/yql_yt_job_factory_impl.h>
 #include <yt/yql/providers/yt/fmr/worker/impl/yql_yt_worker_impl.h>
+#include <yt/yql/providers/yt/fmr/coordinator/yt_coordinator_service/file/yql_yt_file_coordinator_service.h>
 
 namespace NYql::NFmr {
 
@@ -45,16 +46,18 @@ private:
 
 
 TDownloadOperationParams downloadOperationParams{
-    .Input = TYtTableRef{"Path","Cluster"},
-    .Output = TFmrTableRef{"TableId"}
+    .Input = TYtTableRef{.Path = "Path", .Cluster = "Cluster", .FilePath = "File_path"},
+    .Output = TFmrTableRef{{"TestCluster", "TestPath"}}
 };
+
+// TODO - создать общий файл на все тесты, наполнить его чем-то
 
 TStartOperationRequest CreateOperationRequest(ETaskType taskType = ETaskType::Download, TOperationParams operationParams = downloadOperationParams) {
     return TStartOperationRequest{
         .TaskType = taskType,
         .OperationParams = operationParams,
         .IdempotencyKey = "IdempotencyKey",
-        .ClusterConnection = TClusterConnection{.TransactionId = "transaction_id", .YtServerName = "hahn.yt.yandex.net", .Token = "token"}
+        .ClusterConnections = {{TFmrTableId("Cluster", "Path"), TClusterConnection{.TransactionId = "transaction_id", .YtServerName = "hahn.yt.yandex.net", .Token = "token"}}}
     };
 }
 
@@ -67,7 +70,7 @@ std::vector<TStartOperationRequest> CreateSeveralOperationRequests(
             .TaskType = taskType,
             .OperationParams = operationParams,
             .IdempotencyKey = "IdempotencyKey_" + ToString(i),
-            .ClusterConnection = TClusterConnection{.TransactionId = "transaction_id", .YtServerName = "hahn", .Token = "token"}
+            .ClusterConnections = {{TFmrTableId("Cluster", "Path"), TClusterConnection{.TransactionId = "transaction_id", .YtServerName = "hahn.yt.yandex.net", .Token = "token"}}}
         };
     }
     return startOperationRequests;
@@ -83,13 +86,13 @@ auto defaultTaskFunction = [] (TTask::TPtr /*task*/, std::shared_ptr<std::atomic
 
 Y_UNIT_TEST_SUITE(FmrCoordinatorTests) {
     Y_UNIT_TEST(StartOperation) {
-        auto coordinator = MakeFmrCoordinator();
+        auto coordinator = MakeFmrCoordinator(TFmrCoordinatorSettings(), MakeFileYtCoordinatorService());
         auto startOperationResponse = coordinator->StartOperation(CreateOperationRequest()).GetValueSync();
         auto status = startOperationResponse.Status;
         UNIT_ASSERT_VALUES_EQUAL(status, EOperationStatus::Accepted);
     }
     Y_UNIT_TEST(RetryAcceptedOperation) {
-        auto coordinator = MakeFmrCoordinator();
+        auto coordinator = MakeFmrCoordinator(TFmrCoordinatorSettings(), MakeFileYtCoordinatorService());
         auto downloadRequest = CreateOperationRequest();
         auto firstResponse = coordinator->StartOperation(downloadRequest).GetValueSync();
         auto firstOperationId = firstResponse.OperationId;
@@ -102,13 +105,13 @@ Y_UNIT_TEST_SUITE(FmrCoordinatorTests) {
     }
 
     Y_UNIT_TEST(DeleteNonexistentOperation) {
-        auto coordinator = MakeFmrCoordinator();
+        auto coordinator = MakeFmrCoordinator(TFmrCoordinatorSettings(), MakeFileYtCoordinatorService());
         auto deleteOperationResponse = coordinator->DeleteOperation({"delete_operation_id"}).GetValueSync();
         EOperationStatus status = deleteOperationResponse.Status;
         UNIT_ASSERT_VALUES_EQUAL(status, EOperationStatus::NotFound);
     }
     Y_UNIT_TEST(DeleteOperationBeforeSendToWorker) {
-        auto coordinator = MakeFmrCoordinator();
+        auto coordinator = MakeFmrCoordinator(TFmrCoordinatorSettings(), MakeFileYtCoordinatorService());
         auto startOperationResponse = coordinator->StartOperation(CreateOperationRequest()).GetValueSync();
         TString operationId = startOperationResponse.OperationId;
         auto deleteOperationResponse = coordinator->DeleteOperation({operationId}).GetValueSync();
@@ -116,13 +119,13 @@ Y_UNIT_TEST_SUITE(FmrCoordinatorTests) {
         UNIT_ASSERT_VALUES_EQUAL(status, EOperationStatus::Aborted);
     }
     Y_UNIT_TEST(GetNonexistentOperation) {
-        auto coordinator = MakeFmrCoordinator();
+        auto coordinator = MakeFmrCoordinator(TFmrCoordinatorSettings(), MakeFileYtCoordinatorService());
         auto getOperationResponse = coordinator->GetOperation({"get_operation_id"}).GetValueSync();
         EOperationStatus status = getOperationResponse.Status;
         UNIT_ASSERT_VALUES_EQUAL(status, EOperationStatus::NotFound);
     }
     Y_UNIT_TEST(GetAcceptedOperationStatus) {
-        auto coordinator = MakeFmrCoordinator();
+        auto coordinator = MakeFmrCoordinator(TFmrCoordinatorSettings(), MakeFileYtCoordinatorService());
         auto startOperationResponse = coordinator->StartOperation(CreateOperationRequest()).GetValueSync();
         TString operationId = startOperationResponse.OperationId;
         auto getOperationResponse = coordinator->GetOperation({operationId}).GetValueSync();
@@ -130,7 +133,7 @@ Y_UNIT_TEST_SUITE(FmrCoordinatorTests) {
         UNIT_ASSERT_VALUES_EQUAL(status, EOperationStatus::Accepted);
     }
     Y_UNIT_TEST(GetRunningOperationStatus) {
-        auto coordinator = MakeFmrCoordinator();
+        auto coordinator = MakeFmrCoordinator(TFmrCoordinatorSettings(), MakeFileYtCoordinatorService());
         auto startOperationResponse = coordinator->StartOperation(CreateOperationRequest()).GetValueSync();
         TString operationId = startOperationResponse.OperationId;
 
@@ -145,7 +148,7 @@ Y_UNIT_TEST_SUITE(FmrCoordinatorTests) {
         UNIT_ASSERT_VALUES_EQUAL(status, EOperationStatus::InProgress);
     }
     Y_UNIT_TEST(GetCompletedOperationStatuses) {
-        auto coordinator = MakeFmrCoordinator();
+        auto coordinator = MakeFmrCoordinator(TFmrCoordinatorSettings(), MakeFileYtCoordinatorService());
         auto startOperationRequests = CreateSeveralOperationRequests();
         std::vector<TString> operationIds;
         for (auto& request: startOperationRequests) {
@@ -165,31 +168,27 @@ Y_UNIT_TEST_SUITE(FmrCoordinatorTests) {
         }
     }
     Y_UNIT_TEST(GetCompletedAndFailedOperationStatuses) {
-        auto coordinator = MakeFmrCoordinator();
+        auto coordinator = MakeFmrCoordinator(TFmrCoordinatorSettings(), MakeFileYtCoordinatorService());
         auto downloadOperationRequests = CreateSeveralOperationRequests();
         std::vector<TString> downloadOperationIds;
         for (auto& request: downloadOperationRequests) {
             auto startOperationResponse = coordinator->StartOperation(request).GetValueSync();
             downloadOperationIds.emplace_back(startOperationResponse.OperationId);
         }
-        auto uploadOperationRequest = CreateOperationRequest(ETaskType::Upload, TUploadOperationParams{});
-        auto uploadOperationResponse = coordinator->StartOperation(uploadOperationRequest).GetValueSync();
-        auto uploadOperationId = uploadOperationResponse.OperationId;
+        auto badDownloadRequest = CreateOperationRequest(ETaskType::Download, TDownloadOperationParams{
+            .Input = TYtTableRef{.Path = "bad_path", .Cluster = "bad_cluster", .FilePath = "bad_file_path"},
+            .Output = TFmrTableRef{{"bad_cluster", "bad_path"}}
+        });
+        auto badDownloadOperationResponse = coordinator->StartOperation(badDownloadRequest).GetValueSync();
+        auto badDownloadOperationId = badDownloadOperationResponse.OperationId;
 
         auto func = [&] (TTask::TPtr task, std::shared_ptr<std::atomic<bool>> cancelFlag) {
             while (! cancelFlag->load()) {
                 Sleep(TDuration::Seconds(1));
-                ETaskStatus taskStatus = std::visit([] (auto&& taskParams) {
-                    using T = std::decay_t<decltype(taskParams)>;
-                    if constexpr (std::is_same_v<T, TUploadTaskParams>) {
-                        return ETaskStatus::Failed;
-                    }
-                    return ETaskStatus::Completed;
-                }, task->TaskParams);
-                if (taskStatus == ETaskStatus::Failed) {
+                TDownloadTaskParams downloadTaskParams = std::get<TDownloadTaskParams>(task->TaskParams);
+                if (downloadTaskParams.Output.TableId.Contains("bad_path")) {
                     return TJobResult{.TaskStatus = ETaskStatus::Failed, .Stats = TStatistics()};
                 }
-                Sleep(TDuration::Seconds(1));
                 return TJobResult{.TaskStatus = ETaskStatus::Completed, .Stats = TStatistics()};
             }
             return TJobResult{.TaskStatus = ETaskStatus::Failed, .Stats = TStatistics()};
@@ -207,12 +206,12 @@ Y_UNIT_TEST_SUITE(FmrCoordinatorTests) {
             EOperationStatus status = getDownloadOperationResponse.Status;
             UNIT_ASSERT_VALUES_EQUAL(status, EOperationStatus::Completed);
         }
-        auto getUploadOperationResponse = coordinator->GetOperation({uploadOperationId}).GetValueSync();
-        EOperationStatus uploadStatus = getUploadOperationResponse.Status;
-        UNIT_ASSERT_VALUES_EQUAL(uploadStatus, EOperationStatus::Failed);
+        auto getBadDownloadOperationResponse = coordinator->GetOperation({badDownloadOperationId}).GetValueSync();
+        EOperationStatus badDownloadStatus = getBadDownloadOperationResponse.Status;
+        UNIT_ASSERT_VALUES_EQUAL(badDownloadStatus, EOperationStatus::Failed);
     }
     Y_UNIT_TEST(RetryRunningOperation) {
-        auto coordinator = MakeFmrCoordinator();
+        auto coordinator = MakeFmrCoordinator(TFmrCoordinatorSettings(), MakeFileYtCoordinatorService());
         auto downloadRequest = CreateOperationRequest();
         auto startOperationResponse = coordinator->StartOperation(downloadRequest).GetValueSync();
         TString firstOperationId = startOperationResponse.OperationId;
@@ -231,9 +230,9 @@ Y_UNIT_TEST_SUITE(FmrCoordinatorTests) {
         UNIT_ASSERT_VALUES_EQUAL(status, EOperationStatus::InProgress);
     }
     Y_UNIT_TEST(RetryRunningOperationAfterIdempotencyKeyClear) {
-        TFmrCoordinatorSettings coordinatorSettings{
-            .WorkersNum = 1, .RandomProvider = CreateDeterministicRandomProvider(2), .IdempotencyKeyStoreTime = TDuration::Seconds(1)};
-        auto coordinator = MakeFmrCoordinator(coordinatorSettings);
+        auto coordinatorSettings = TFmrCoordinatorSettings();
+        coordinatorSettings.IdempotencyKeyStoreTime = TDuration::Seconds(1);
+        auto coordinator = MakeFmrCoordinator(coordinatorSettings, MakeFileYtCoordinatorService());
 
         TFmrJobFactorySettings settings{.NumThreads = 3, .Function = defaultTaskFunction};
         auto factory = MakeFmrJobFactory(settings);
@@ -257,7 +256,7 @@ Y_UNIT_TEST_SUITE(FmrCoordinatorTests) {
         UNIT_ASSERT_VALUES_EQUAL(secondOperationStatus, EOperationStatus::Accepted);
     }
     Y_UNIT_TEST(CancelTasksAfterVolatileIdReload) {
-        auto coordinator = MakeFmrCoordinator();
+        auto coordinator = MakeFmrCoordinator(TFmrCoordinatorSettings(), MakeFileYtCoordinatorService());
         auto func = [&] (TTask::TPtr /*task*/, std::shared_ptr<std::atomic<bool>> cancelFlag) {
             int numIterations = 0;
             while (!cancelFlag->load()) {
@@ -289,7 +288,7 @@ Y_UNIT_TEST_SUITE(FmrCoordinatorTests) {
         UNIT_ASSERT_NO_DIFF(*error.OperationId, operationId);
     }
     Y_UNIT_TEST(HandleJobErrors) {
-        auto coordinator = MakeFmrCoordinator();
+        auto coordinator = MakeFmrCoordinator(TFmrCoordinatorSettings(), MakeFileYtCoordinatorService());
         auto startOperationResponse = coordinator->StartOperation(CreateOperationRequest()).GetValueSync();
         TString operationId = startOperationResponse.OperationId;
 
@@ -320,13 +319,21 @@ Y_UNIT_TEST_SUITE(FmrCoordinatorTests) {
     }
 
     Y_UNIT_TEST(GetFmrTableInfo) {
-        auto coordinator = MakeFmrCoordinator();
-        TTableStats tableStats = {.Chunks = 1, .Rows = 2, .DataWeight = 3};
-        TString tableId = "test_table";
-        TFmrTableOutputRef fmrTableOutputRef{.TableId = tableId, .PartId = "test_part_id"};
-        std::unordered_map<TFmrTableOutputRef, TTableStats> outputTables{{fmrTableOutputRef, tableStats}};
-        auto func = [&] (TTask::TPtr /*task*/, std::shared_ptr<std::atomic<bool>> cancelFlag) {
+        auto coordinator = MakeFmrCoordinator(TFmrCoordinatorSettings(), MakeFileYtCoordinatorService());
+        ui64 totalChunkCount = 10, chunkRowCount = 1, chunkDataWeight = 2;
+        TString tableId = "TestCluster.TestPath"; // corresponds to CreateOperationRequest()
+        auto func = [&] (TTask::TPtr task, std::shared_ptr<std::atomic<bool>> cancelFlag) {
             while (!cancelFlag->load()) {
+                Sleep(TDuration::Seconds(1));
+                TDownloadTaskParams downloadTaskParams = std::get<TDownloadTaskParams>(task->TaskParams);
+                TString partId = downloadTaskParams.Output.PartId;
+                TFmrTableOutputRef fmrTableOutputRef{.TableId = tableId, .PartId = partId};
+                TTableChunkStats tableChunkStats{
+                    .PartId = partId,
+                    .PartIdChunkStats = std::vector<TChunkStats>(totalChunkCount, TChunkStats{.Rows = chunkRowCount, .DataWeight = chunkDataWeight})
+                };
+                std::unordered_map<TFmrTableOutputRef, TTableChunkStats> outputTables{{fmrTableOutputRef, tableChunkStats}};
+
                 return TJobResult{.TaskStatus = ETaskStatus::Completed, .Stats = TStatistics{
                     .OutputTables = outputTables
                 }};
@@ -343,9 +350,9 @@ Y_UNIT_TEST_SUITE(FmrCoordinatorTests) {
         Sleep(TDuration::Seconds(3));
         auto response = coordinator->GetFmrTableInfo({tableId}).GetValueSync();
         worker->Stop();
-        UNIT_ASSERT_VALUES_EQUAL(response.TableStats.Chunks, tableStats.Chunks);
-        UNIT_ASSERT_VALUES_EQUAL(response.TableStats.Rows, tableStats.Rows);
-        UNIT_ASSERT_VALUES_EQUAL(response.TableStats.DataWeight, tableStats.DataWeight);
+        UNIT_ASSERT_VALUES_EQUAL(response.TableStats.Chunks, totalChunkCount);
+        UNIT_ASSERT_VALUES_EQUAL(response.TableStats.Rows, totalChunkCount * chunkRowCount);
+        UNIT_ASSERT_VALUES_EQUAL(response.TableStats.DataWeight, totalChunkCount * chunkDataWeight);
     }
 }
 

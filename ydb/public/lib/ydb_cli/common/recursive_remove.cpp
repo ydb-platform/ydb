@@ -75,6 +75,10 @@ TStatus RemoveCoordinationNode(NCoordination::TClient& client, const TString& pa
     });
 }
 
+TStatus RemoveReplication(NQuery::TQueryClient& client, const TString& path, const TRemoveDirectorySettings& settings) {
+    return DropSchemeObject("ASYNC REPLICATION", client, path, settings);
+}
+
 NYdb::NIssue::TIssues MakeIssues(const TString& error) {
     NYdb::NIssue::TIssues issues;
     issues.AddIssue(NYdb::NIssue::TIssue(error));
@@ -161,6 +165,8 @@ TStatus Remove(
     case ESchemeEntryType::SubDomain:
         // continue silently
         return TStatus(EStatus::SUCCESS, {});
+    case ESchemeEntryType::Replication:
+        return Remove(&RemoveReplication, schemeClient, queryClient, type, path, prompt, settings);
 
     default:
         return TStatus(EStatus::UNSUPPORTED, MakeIssues(TStringBuilder()
@@ -255,7 +261,7 @@ TStatus RemovePathRecursive(
         case NYdb::NScheme::ESchemeEntryType::Directory:
             return RemoveDirectoryRecursive(driver, path, settings);
         default:
-            return RemovePathRecursive(driver, entity.GetEntry(), settings);
+            return RemovePathRecursive(driver, entry, settings);
     }
 }
 
@@ -269,7 +275,7 @@ namespace NInternal {
         NCoordination::TClient& coordinationClient,
         const TRemoveDirectoryRecursiveSettings& settings
     ) {
-        return [&](const TSchemeEntry& entry) {
+        return [&, settings](const TSchemeEntry& entry) {
             return Remove(schemeClient, tableClient, topicClient, queryClient, coordinationClient, entry.Type, TString(entry.Name), settings.Prompt_, settings);
         };
     }

@@ -9,6 +9,7 @@
 #include "yql_pos_handle.h"
 
 #include <yql/essentials/core/url_lister/interface/url_lister_manager.h>
+#include <yql/essentials/core/sql_types/normalize_name.h>
 #include <yql/essentials/utils/yql_panic.h>
 #include <yql/essentials/public/issue/yql_issue_manager.h>
 #include <yql/essentials/public/udf/udf_data_type.h>
@@ -1664,7 +1665,7 @@ public:
 
     bool HasResult() const {
         ENSURE_NOT_DELETED
-        return Type() != Callable || bool(Result);
+        return bool(Result);
     }
 
     void SetResult(TPtr&& result) {
@@ -1800,7 +1801,8 @@ public:
         return State == EState::ExecutionComplete
             || State == EState::ExecutionInProgress
             || State == EState::ExecutionRequired
-            || State == EState::ExecutionPending;
+            || State == EState::ExecutionPending
+            || HasResult();
     }
 
     bool IsComplete() const {
@@ -2006,7 +2008,7 @@ public:
         ENSURE_NOT_DELETED
         ENSURE_NOT_FROZEN
         Y_ENSURE(static_cast<EState>(State) >= EState::TypeComplete);
-        Y_ENSURE(!StartsExecution());
+        Y_ENSURE(static_cast<EState>(State) < EState::ExecutionRequired);
         Constraints_.AddConstraint(node);
         State = EState::ConstrComplete;
     }
@@ -2953,9 +2955,6 @@ const TTypeAnnotationNode* GetSeqItemType(const TTypeAnnotationNode* seq);
 const TTypeAnnotationNode& GetSeqItemType(const TTypeAnnotationNode& seq);
 
 const TTypeAnnotationNode& RemoveOptionality(const TTypeAnnotationNode& type);
-
-TMaybe<TIssue> NormalizeName(TPosition position, TString& name);
-TString NormalizeName(const TStringBuf& name);
 
 } // namespace NYql
 

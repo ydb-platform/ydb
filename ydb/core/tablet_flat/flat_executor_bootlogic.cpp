@@ -271,7 +271,7 @@ TExecutorBootLogic::EOpResult TExecutorBootLogic::Receive(::NActors::IEventHandl
         if (EPageCollectionRequest(ev.Cookie) != EPageCollectionRequest::BootLogic)
             return OpResultUnhandled;
 
-        auto it = Loads.find(msg->Origin.Get());
+        auto it = Loads.find(msg->PageCollection.Get());
         if (it == Loads.end()) // could receive outdated results
             return OpResultUnhandled;
 

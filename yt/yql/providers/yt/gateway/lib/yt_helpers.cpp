@@ -128,6 +128,7 @@ THashSet<TStringBuf> SERVICE_YQL_ATTRS = {
     TStringBuf("_yql_runner"),
     TStringBuf("_yql_op_id"),
     TStringBuf("_yql_op_title"),
+    TStringBuf("_yql_op_url"),
     TStringBuf("_yql_query_name"),
 };
 
@@ -239,6 +240,9 @@ IYtGateway::TCanonizedPath CanonizedPath(const TString& path) {
                 richYPath.AddRange(NYT::TReadRange().Exact(toReadLimit(r)));
             }
         }
+    }
+    while (richYPath.Path_.EndsWith('&')) {
+        richYPath.Path_.pop_back();
     }
     return {
         richYPath.Path_,
@@ -558,6 +562,9 @@ NYT::TNode YqlOpOptionsToAttrs(const TYqlOperationOptions& opOpts) {
     attrs["_yql_runner"] = opOpts.Runner;
     if (auto id = opOpts.Id.GetOrElse(TString())) {
         attrs["_yql_op_id"] = id;
+    }
+    if (auto url = opOpts.Url.GetOrElse(TString())) {
+        attrs["_yql_op_url"] = url;
     }
     if (auto title = opOpts.Title.GetOrElse(TString())) {
         attrs["_yql_op_title"] = title;

@@ -123,9 +123,15 @@ hosts:
 
 When deploying {{ ydb-short-name }} with a Kubernetes operator, the entire `hosts` section is generated automatically, replacing any user-specified content in the configuration passed to the operator. All Storage nodes use `host_config_id` = `1`, for which the [correct configuration](#host-configs-k8s) must be specified.
 
+## log_config: Logging configuration {#log-config}
+
+The `log_config` section controls how {{ ydb-short-name }} processes and manages logs. It allows you to customize logging levels, formats, and destinations for different components.
+
+For detailed information about log configuration options, see [{#T}](log_config.md).
+
 ## domains_config: Cluster domain {#domains-config}
 
-This section contains the configuration of the {{ ydb-short-name }} cluster root domain, including the [Blob Storage](#domains-blob) (binary object storage), [State Storage](#domains-state), and [authentication](#auth) configurations.
+This section contains the configuration of the {{ ydb-short-name }} cluster root domain, including the [Blob Storage](#domains-blob) (binary object storage) and [State Storage](#domains-state) configurations.
 
 ### Syntax
 
@@ -206,193 +212,6 @@ state_storage:
 Each State Storage client (for example, DataShard tablet) uses `nto_select` nodes to write copies of its data to State Storage. If State Storage consists of more than `nto_select` nodes, different nodes can be used for different clients, so you must ensure that any subset of `nto_select` nodes within State Storage meets the fault tolerance criteria.
 
 Odd numbers must be used for `nto_select` because using even numbers does not improve fault tolerance in comparison to the nearest smaller odd number.
-
-## Authentication configuration {#auth}
-
-The [authentication mode](../../security/authentication.md) in the {{ ydb-short-name }} cluster is created in the `domains_config.security_config` section.
-
-### Syntax
-
-```yaml
-domains_config:
-  ...
-  security_config:
-    # authentication mode settings
-    enforce_user_token_requirement: false
-    enforce_user_token_check_requirement: false
-    default_user_sids: <SID list for anonymous requests>
-    all_authenticated_users: <group SID for all authenticated users>
-    all_users_group: <group SID for all users>
-
-    # initial security settings
-    default_users: <initial list of users>
-    default_groups: <initial list of groups>
-    default_access: <initial permissions>
-
-    # настройки привилегий
-    viewer_allowed_sids: <list of SIDs enabled for YDB UI access>
-    monitoring_allowed_sids: <list of SIDs enabled for tablet administration>
-    administration_allowed_sids: <list of SIDs enabled for storage administration>
-    register_dynamic_node_allowed_sids: <list of SIDs enabled for database node registration>
-  ...
-```
-
-| Key                              | Description                                                                                                                                                                                                                                                                       |
-|----------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `enforce_user_token_requirement` | Require a user token.<br/>Acceptable values:<br/><ul><li>`false`: Anonymous authentication mode, no token needed (used by default if the parameter is omitted).</li><li>`true`: Username/password authentication mode. A valid user token is needed for authentication.</li></ul> |
-
-### Examples {#domains-examples}
-
-{% list tabs %}
-
-- `block-4-2`
-
-   ```yaml
-   domains_config:
-     domain:
-     - name: Root
-       storage_pool_types:
-       - kind: ssd
-         pool_config:
-           box_id: 1
-           erasure_species: block-4-2
-           kind: ssd
-           pdisk_filter:
-           - property:
-             - type: SSD
-           vdisk_kind: Default
-     state_storage:
-     - ring:
-         node: [1, 2, 3, 4, 5, 6, 7, 8]
-         nto_select: 5
-       ssid: 1
-
-
-- `block-4-2` + Auth
-
-   ```yaml
-   domains_config:
-     domain:
-     - name: Root
-       storage_pool_types:
-       - kind: ssd
-         pool_config:
-           box_id: 1
-           erasure_species: block-4-2
-           kind: ssd
-           pdisk_filter:
-           - property:
-             - type: SSD
-           vdisk_kind: Default
-     state_storage:
-     - ring:
-         node: [1, 2, 3, 4, 5, 6, 7, 8]
-         nto_select: 5
-       ssid: 1
-     security_config:
-       enforce_user_token_requirement: true
-
-
-- `mirror-3-dc`
-
-   ```yaml
-   domains_config:
-     domain:
-     - name: global
-       storage_pool_types:
-       - kind: ssd
-         pool_config:
-           box_id: 1
-           erasure_species: mirror-3-dc
-           kind: ssd
-           pdisk_filter:
-           - property:
-             - type: SSD
-           vdisk_kind: Default
-     state_storage:
-     - ring:
-         node: [1, 2, 3, 4, 5, 6, 7, 8, 9]
-         nto_select: 9
-       ssid: 1
-   ```
-
-- `none` (without fault tolerance)
-
-   ```yaml
-   domains_config:
-     domain:
-     - name: Root
-       storage_pool_types:
-       - kind: ssd
-         pool_config:
-           box_id: 1
-           erasure_species: none
-           kind: ssd
-           pdisk_filter:
-           - property:
-             - type: SSD
-           vdisk_kind: Default
-     state_storage:
-     - ring:
-         node:
-         - 1
-         nto_select: 1
-       ssid: 1
-   ```
-
-- Multiple pools
-
-   ```yaml
-   domains_config:
-     domain:
-     - name: Root
-       storage_pool_types:
-       - kind: ssd
-         pool_config:
-           box_id: '1'
-           erasure_species: block-4-2
-           kind: ssd
-           pdisk_filter:
-           - property:
-             - {type: SSD}
-           vdisk_kind: Default
-       - kind: rot
-         pool_config:
-           box_id: '1'
-           erasure_species: block-4-2
-           kind: rot
-           pdisk_filter:
-           - property:
-             - {type: ROT}
-           vdisk_kind: Default
-       - kind: rotencrypted
-         pool_config:
-           box_id: '1'
-           encryption_mode: 1
-           erasure_species: block-4-2
-           kind: rotencrypted
-           pdisk_filter:
-           - property:
-             - {type: ROT}
-           vdisk_kind: Default
-       - kind: ssdencrypted
-         pool_config:
-           box_id: '1'
-           encryption_mode: 1
-           erasure_species: block-4-2
-           kind: ssdencrypted
-           pdisk_filter:
-           - property:
-             - {type: SSD}
-           vdisk_kind: Default
-     state_storage:
-     - ring:
-         node: [1, 16, 31, 46, 61, 76, 91, 106]
-         nto_select: 5
-       ssid: 1
-   ```
-
-{% endlist %}
 
 ## Actor system {#actor-system}
 
@@ -617,61 +436,6 @@ blob_storage_config:
 
 For a configuration located in 3 availability zones, specify 3 rings. For a configuration within a single availability zone, specify exactly one ring.
 
-## Configuring authentication providers {#auth-config}
-
-{{ ydb-short-name }} supports various user authentication methods. The configuration for authentication providers is specified in the `auth_config` section.
-
-### Configuring LDAP authentication {#ldap-auth-config}
-
-One of the user authentication methods in {{ ydb-short-name }} is with an LDAP directory. More details about this type of authentication can be found in the section on [interacting with the LDAP directory](../../security/authentication.md#ldap-auth-provider). To configure LDAP authentication, the `ldap_authentication` section must be defined.
-
-Example of the `ldap_authentication` section:
-
-```yaml
-auth_config:
-  #...
-  ldap_authentication:
-    hosts:
-      - "ldap-hostname-01.example.net"
-      - "ldap-hostname-02.example.net"
-      - "ldap-hostname-03.example.net"
-    port: 389
-    base_dn: "dc=mycompany,dc=net"
-    bind_dn: "cn=serviceAccaunt,dc=mycompany,dc=net"
-    bind_password: "serviceAccauntPassword"
-    search_filter: "uid=$username"
-    use_tls:
-      enable: true
-      ca_cert_file: "/path/to/ca.pem"
-      cert_require: DEMAND
-  ldap_authentication_domain: "ldap"
-  scheme: "ldap"
-  requested_group_attribute: "memberOf"
-  extended_settings:
-      enable_nested_groups_search: true
-
-  refresh_time: "1h"
-  #...
-```
-
-| Parameter | Description |
-| --- | --- |
-| `hosts` | A list of hostnames where the LDAP server is running. |
-| `port` | The port used to connect to the LDAP server. |
-| `base_dn` | The root of the subtree in the LDAP directory from which the user entry search begins. |
-| `bind_dn` | The Distinguished Name (DN) of the service account used to search for the user entry. |
-| `bind_password` | The password for the service account used to search for the user entry. |
-| `search_filter` | A filter for searching the user entry in the LDAP directory. The filter string can include the sequence *$username*, which is replaced with the username requested for authentication in the database. |
-| `use_tls` | Configuration settings for the TLS connection between {{ ydb-short-name }} and the LDAP server. |
-| `enable` | Determines if a TLS connection [using the `StartTls` request](../../security/authentication.md#starttls) will be attempted. When set to `true`, the `ldaps` connection scheme should be disabled by setting `ldap_authentication.scheme` to `ldap`. |
-| `ca_cert_file` | The path to the certification authority's certificate file. |
-| `cert_require` | Specifies the certificate requirement level for the LDAP server.<br>Possible values:<ul><li>`NEVER` - {{ ydb-short-name }} does not request a certificate or accepts any presented certificate.</li><li>`ALLOW` - {{ ydb-short-name }} requests a certificate from the LDAP server but will establish the TLS session even if the certificate is not trusted.</li><li>`TRY` - {{ ydb-short-name }} requires a certificate from the LDAP server and terminates the connection if it is not trusted.</li><li>`DEMAND`/`HARD` - These are equivalent to `TRY` and are the default setting, with the value set to `DEMAND`.</li></ul> |
-| `ldap_authentication_domain` | An identifier appended to the username to distinguish LDAP directory users from those authenticated using other providers. The default value is `ldap`. |
-| `scheme` | The connection scheme to the LDAP server.<br>Possible values:<ul><li>`ldap` - Connects without encryption, sending passwords in plain text. This is the default value.</li><li>`ldaps` - Connects using TLS encryption from the first request. To use `ldaps`, disable the [`StartTls` request](../../security/authentication.md#starttls) by setting `ldap_authentication.use_tls.enable` to `false`, and provide certificate details in `ldap_authentication.use_tls.ca_cert_file` and set the certificate requirement level in `ldap_authentication.use_tls.cert_require`.</li><li>Any other value defaults to `ldap`.</li></ul> |
-| `requested_group_attribute` | The attribute used for reverse group membership. The default is `memberOf`. |
-| `extended_settings.enable_nested_groups_search` | A flag indicating whether to perform a request to retrieve the full hierarchy of groups to which the user's direct groups belong. |
-| `host` | The hostname of the LDAP server. This parameter is deprecated and should be replaced with the `hosts` parameter. |
-| `refresh_time` | Specifies the interval for refreshing user information. The actual update will occur within the range from `refresh_time/2` to `refresh_time`. |
 
 ## Enabling stable node names {#node-broker-config}
 

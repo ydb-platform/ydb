@@ -93,8 +93,7 @@ public:
 };
 
 class TTableInfo {
-public:
-    TInternalPathId PathId;
+    const TInternalPathId PathId;
     std::optional<NOlap::TSnapshot> DropVersion;
     YDB_READONLY_DEF(TSet<NOlap::TSnapshot>, Versions);
 
@@ -131,20 +130,19 @@ public:
         return *DropVersion < *minReadSnapshot;
     }
 
-    TTableInfo() = default;
-
     TTableInfo(const TInternalPathId pathId)
         : PathId(pathId) {
     }
 
     template <class TRow>
-    bool InitFromDB(const TRow& rowset) {
-        PathId = TInternalPathId::FromRawValue(rowset.template GetValue<Schema::TableInfo::PathId>());
+    static TTableInfo InitFromDB(const TRow& rowset) {
+        const auto pathId = TInternalPathId::FromRawValue(rowset.template GetValue<Schema::TableInfo::PathId>());
+        TTableInfo result(pathId);
         if (rowset.template HaveValue<Schema::TableInfo::DropStep>() && rowset.template HaveValue<Schema::TableInfo::DropTxId>()) {
-            DropVersion.emplace(
+            result.DropVersion.emplace(
                 rowset.template GetValue<Schema::TableInfo::DropStep>(), rowset.template GetValue<Schema::TableInfo::DropTxId>());
         }
-        return true;
+        return result;
     }
 };
 
@@ -199,7 +197,7 @@ private:
     std::shared_ptr<NOlap::IStoragesManager> StoragesManager;
     std::shared_ptr<NOlap::NDataAccessorControl::IDataAccessorsManager> DataAccessorsManager;
     std::unique_ptr<TTableLoadTimeCounters> LoadTimeCounters;
-    std::shared_ptr<NOlap::TSchemaObjectsCache> SchemaObjectsCache;
+    NBackgroundTasks::TControlInterfaceContainer<NOlap::TSchemaObjectsCache> SchemaObjectsCache;
     std::shared_ptr<TPortionIndexStats> PortionsStats;
     ui64 TabletId = 0;
 
@@ -331,6 +329,12 @@ public:
 
     [[nodiscard]] std::unique_ptr<NTabletFlatExecutor::ITransaction> CreateAddShardingInfoTx(TColumnShard& owner, const TInternalPathId pathId,
         const ui64 versionId, const NSharding::TGranuleShardingLogicContainer& tabletShardingLogic) const;
+
+    void SetSchemaObjectsCache(const std::shared_ptr<NOlap::TSchemaObjectsCache>& cache) {
+        AFL_VERIFY(cache);
+        AFL_VERIFY(!SchemaObjectsCache);
+        SchemaObjectsCache = cache;
+    }
 };
 
 }   // namespace NKikimr::NColumnShard

@@ -68,7 +68,7 @@ std::optional<TTieringActualizer::TFullActualizationInfo> TTieringActualizer::Bu
         } else {
             AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION)("event", "skip_add_portion")("reason", "no_eviction")(
                 "portion", portion.GetPortionId())("skip_eviction", skipEviction)("optimized",
-                portion.HasRuntimeFeature(NOlap::TPortionInfo::ERuntimeFeature::Optimized))("has_insert_write_id", portion.HasInsertWriteId());
+                portion.HasRuntimeFeature(NOlap::TPortionInfo::ERuntimeFeature::Optimized))("has_insert_write_id", portion.GetPortionType());
             return {};
         }
     } else if (currentTierName != IStoragesManager::DefaultStorageId) {
@@ -112,8 +112,8 @@ void TTieringActualizer::DoAddPortion(const TPortionInfo& portion, const TAddExt
         auto schema = portion.GetSchema(VersionedIndex);
         if (*TValidator::CheckNotNull(TieringColumnId) == schema->GetIndexInfo().GetPKColumnIds().front()) {
             NYDBTest::TControllers::GetColumnShardController()->OnMaxValueUsage();
-            const auto lastPk = portion.GetMeta().GetFirstLastPK().GetLast();
-            const auto max = NArrow::TStatusValidator::GetValid(lastPk.Column(0).GetScalar(lastPk.GetPosition()));
+            const auto lastPk = portion.IndexKeyEnd();
+            const auto max = lastPk.GetScalar(0);
             AFL_VERIFY(MaxByPortionId.emplace(portion.GetPortionId(), max).second);
             AddPortionImpl(portion, addContext.GetNow());
         } else {
@@ -136,8 +136,10 @@ void TTieringActualizer::ActualizePortionInfo(const TPortionDataAccessor& access
         AFL_VERIFY(*TieringColumnId != portionSchema->GetIndexInfo().GetPKColumnIds().front());
         if (auto indexMeta = portionSchema->GetIndexInfo().GetIndexMetaMax(*TieringColumnId)) {
             NYDBTest::TControllers::GetColumnShardController()->OnStatisticsUsage(NIndexes::TIndexMetaContainer(indexMeta));
-            const std::vector<TString> data = accessor.GetIndexInplaceDataVerified(indexMeta->GetIndexId());
-            max = indexMeta->GetMaxScalarVerified(data, portionSchema->GetIndexInfo().GetColumnFieldVerified(*TieringColumnId)->type());
+            const std::vector<TString> data = accessor.GetIndexInplaceDataOptional(indexMeta->GetIndexId());
+            if (!data.empty()) {
+                max = indexMeta->GetMaxScalarVerified(data, portionSchema->GetIndexInfo().GetColumnFieldVerified(*TieringColumnId)->type());
+            }
         }
         AFL_VERIFY(MaxByPortionId.emplace(portion.GetPortionId(), max).second);
     }

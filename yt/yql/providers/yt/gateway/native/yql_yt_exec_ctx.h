@@ -19,7 +19,7 @@
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <yql/essentials/core/file_storage/file_storage.h>
 #include <yql/essentials/minikql/mkql_function_registry.h>
-#include <yql/essentials/utils/log/context.h>
+#include <yql/essentials/utils/log/log.h>
 
 #include <yt/cpp/mapreduce/interface/common.h>
 #include <library/cpp/yson/node/node.h>
@@ -42,23 +42,11 @@ namespace NNative {
 
 struct TInputInfo {
     TInputInfo() = default;
-    TInputInfo(const TString& name, const NYT::TRichYPath& path, bool temp, bool strict, const TYtTableBaseInfo& info, const NYT::TNode& spec, ui32 group = 0)
-        : Name(name)
-        , Path(path)
-        , Temp(temp)
-        , Dynamic(info.Meta->IsDynamic)
-        , Strict(strict)
-        , Records(info.Stat->RecordsCount)
-        , DataSize(info.Stat->DataSize)
-        , Spec(spec)
-        , Group(group)
-        , Lookup(info.Meta->Attrs.Value("optimize_for", "scan") != "scan")
-        , Erasure(info.Meta->Attrs.Value("erasure_codec", "none") != "none")
-    {
-    }
+    TInputInfo(const TString& name, const NYT::TRichYPath& path, bool temp, bool strict, const TYtTableBaseInfo& info, const NYT::TNode& spec, ui32 group = 0);
 
     TString Name;
     NYT::TRichYPath Path;
+    TString Cluster;
     bool Temp = false;
     bool Dynamic = false;
     bool Strict = true;
@@ -68,7 +56,10 @@ struct TInputInfo {
     NYT::TNode QB2Premapper;
     ui32 Group = 0;
     bool Lookup = false;
-    bool Erasure = false;
+    TString ErasureCodec;
+    TString CompressionCode;
+    TString PrimaryMedium;
+    NYT::TNode Media;
 };
 
 struct TOutputInfo {
@@ -154,6 +145,7 @@ public:
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry_ = nullptr;
     TFileStoragePtr FileStorage_;
     TYtGatewayConfigPtr Config_;
+    ISecretMasker::TPtr SecretMasker;
     TConfigClusters::TPtr Clusters_;
     TIntrusivePtr<NCommon::TMkqlCommonCallableCompiler> MkqlCompiler_;
     TSession::TPtr Session_;
@@ -171,6 +163,7 @@ public:
     bool DisableAnonymousClusterAccess_;
     bool Hidden = false;
     IMetricsRegistryPtr Metrics;
+    TOperationProgress::EOpBlockStatus BlockStatus = TOperationProgress::EOpBlockStatus::None;
 };
 
 
@@ -236,6 +229,19 @@ public:
         }
         auto progress = TOperationProgress(TString(YtProviderName), *publicId,
             TOperationProgress::EState::InProgress, stage);
+        Session_->ProgressWriter_(progress);
+    }
+
+    void ReportNodeBlockStatus() const {
+        auto publicId = Options_.PublicId();
+        if (!publicId) {
+            return;
+        }
+
+        YQL_CLOG(INFO, ProviderYt) << "Reporting " << BlockStatus << " block status for node #" << *publicId;
+        auto progress = TOperationProgress(TString(YtProviderName), *publicId,
+            TOperationProgress::EState::InProgress);
+        progress.BlockStatus = BlockStatus;
         Session_->ProgressWriter_(progress);
     }
 

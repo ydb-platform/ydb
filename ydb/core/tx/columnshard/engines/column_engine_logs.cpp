@@ -38,6 +38,7 @@ TColumnEngineForLogs::TColumnEngineForLogs(const ui64 tabletId, const std::share
     , Counters(counters)
     , LastPortion(0)
     , LastGranule(0) {
+    AFL_VERIFY(SchemaObjectsCache);
     ActualizationController = std::make_shared<NActualizer::TController>();
     RegisterSchemaVersion(snapshot, presetId, schema);
 }
@@ -53,6 +54,7 @@ TColumnEngineForLogs::TColumnEngineForLogs(const ui64 tabletId, const std::share
     , Counters(counters)
     , LastPortion(0)
     , LastGranule(0) {
+    AFL_VERIFY(SchemaObjectsCache);
     ActualizationController = std::make_shared<NActualizer::TController>();
     RegisterSchemaVersion(snapshot, presetId, std::move(schema));
 }
@@ -63,7 +65,7 @@ void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, cons
     bool switchAccessorsManager = false;
     if (!VersionedIndex.IsEmpty()) {
         const NOlap::TIndexInfo& lastIndexInfo = VersionedIndex.GetLastSchema()->GetIndexInfo();
-        Y_ABORT_UNLESS(lastIndexInfo.CheckCompatible(indexInfo));
+        lastIndexInfo.CheckCompatible(indexInfo).Validate();
         switchOptimizer = !indexInfo.GetCompactionPlannerConstructor()->IsEqualTo(lastIndexInfo.GetCompactionPlannerConstructor());
         switchAccessorsManager = !indexInfo.GetMetadataManagerConstructor()->IsEqualTo(*lastIndexInfo.GetMetadataManagerConstructor());
     }
@@ -189,7 +191,7 @@ std::shared_ptr<TInsertColumnEngineChanges> TColumnEngineForLogs::StartInsert(st
 }
 
 ui64 TColumnEngineForLogs::GetCompactionPriority(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager, const std::set<TInternalPathId>& pathIds,
-    const std::optional<ui64> waitingPriority) noexcept {
+    const std::optional<ui64> waitingPriority) const noexcept {
     auto priority = GranulesStorage->GetCompactionPriority(dataLocksManager, pathIds, waitingPriority);
     if (!priority) {
         return 0;
@@ -436,12 +438,7 @@ std::shared_ptr<TSelectInfo> TColumnEngineForLogs::Select(
     }
 
     for (const auto& [_, portionInfo] : spg->GetInsertedPortions()) {
-        AFL_VERIFY(portionInfo->HasInsertWriteId());
-        if (withUncommitted) {
-            if (!portionInfo->IsVisible(snapshot, !withUncommitted)) {
-                continue;
-            }
-        } else if (!portionInfo->HasCommitSnapshot()) {
+        if (!portionInfo->IsVisible(snapshot, !withUncommitted)) {
             continue;
         }
         const bool skipPortion = !pkRangesFilter.IsUsed(*portionInfo);

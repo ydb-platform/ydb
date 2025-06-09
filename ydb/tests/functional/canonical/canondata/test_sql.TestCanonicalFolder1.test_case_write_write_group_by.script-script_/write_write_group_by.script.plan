@@ -107,19 +107,19 @@
                 "Plans": [
                     {
                         "Node Type": "Sink",
+                        "Operators": [
+                            {
+                                "Inputs": [],
+                                "Name": "Upsert",
+                                "Path": "/local/base_write_write_group_by_script_script/Temp",
+                                "SinkType": "KqpTableSink",
+                                "Table": "base_write_write_group_by_script_script/Temp"
+                            }
+                        ],
                         "PlanNodeId": 7,
                         "Plans": [
                             {
-                                "Node Type": "Stage-Sink",
-                                "Operators": [
-                                    {
-                                        "Inputs": [],
-                                        "Name": "Upsert",
-                                        "Path": "/local/base_write_write_group_by_script_script/Temp",
-                                        "SinkType": "KqpTableSink",
-                                        "Table": "base_write_write_group_by_script_script/Temp"
-                                    }
-                                ],
+                                "Node Type": "Stage",
                                 "PlanNodeId": 6,
                                 "Plans": [
                                     {
@@ -200,11 +200,11 @@
                                             }
                                         ]
                                     }
-                                ],
-                                "Tables": [
-                                    "base_write_write_group_by_script_script/Temp"
                                 ]
                             }
+                        ],
+                        "Tables": [
+                            "base_write_write_group_by_script_script/Temp"
                         ]
                     }
                 ],

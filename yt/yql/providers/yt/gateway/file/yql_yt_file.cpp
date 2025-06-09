@@ -164,9 +164,10 @@ struct TSession {
 struct TFileYtLambdaBuilder: public TLambdaBuilder {
     TFileYtLambdaBuilder(TScopedAlloc& alloc, const TSession& /*session*/,
         TIntrusivePtr<IFunctionRegistry> customFunctionRegistry,
-        const NUdf::ISecureParamsProvider* secureParamsProvider)
+        const NUdf::ISecureParamsProvider* secureParamsProvider,
+        TLangVersion langver)
         : TLambdaBuilder(customFunctionRegistry.Get(), alloc, nullptr, CreateDeterministicRandomProvider(1), CreateDeterministicTimeProvider(10000000),
-          nullptr, nullptr, secureParamsProvider)
+          nullptr, nullptr, secureParamsProvider, nullptr, langver)
         , CustomFunctionRegistry_(customFunctionRegistry)
     {}
 
@@ -445,7 +446,8 @@ public:
                     auto secureParamsProvider = MakeSimpleSecureParamsProvider(options.SecureParams());
                     TVector<TFileLinkPtr> externalFiles;
                     TFileYtLambdaBuilder builder(alloc, *session,
-                        MakeFunctionRegistry(*Services_->GetFunctionRegistry(), options.UserDataBlocks(), Services_->GetFileStorage(), externalFiles), secureParamsProvider.get());
+                        MakeFunctionRegistry(*Services_->GetFunctionRegistry(), options.UserDataBlocks(),
+                        Services_->GetFileStorage(), externalFiles), secureParamsProvider.get(), options.LangVer());
                     TProgramBuilder pgmBuilder(builder.GetTypeEnvironment(), *Services_->GetFunctionRegistry());
 
                     TVector<TRuntimeNode> strings;
@@ -773,7 +775,8 @@ public:
             auto secureParamsProvider = MakeSimpleSecureParamsProvider(options.SecureParams());
             TVector<TFileLinkPtr> externalFiles;
             TFileYtLambdaBuilder builder(alloc, *session,
-                MakeFunctionRegistry(*Services_->GetFunctionRegistry(), options.UserDataBlocks(), Services_->GetFileStorage(), externalFiles), secureParamsProvider.get());
+                MakeFunctionRegistry(*Services_->GetFunctionRegistry(), options.UserDataBlocks(),
+                Services_->GetFileStorage(), externalFiles), secureParamsProvider.get(), options.LangVer());
             auto nodeFactory = GetYtFileFullFactory(Services_);
             for (auto& node: nodes) {
                 auto data = builder.BuildLambda(*MkqlCompiler_, node, ctx);
@@ -819,7 +822,8 @@ public:
             alloc.SetLimit(options.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
             TVector<TFileLinkPtr> externalFiles;
             TFileYtLambdaBuilder builder(alloc, *session,
-                MakeFunctionRegistry(*Services_->GetFunctionRegistry(), {}, Services_->GetFileStorage(), externalFiles), nullptr);
+                MakeFunctionRegistry(*Services_->GetFunctionRegistry(), {}, Services_->GetFileStorage(), externalFiles),
+                nullptr, UnknownLangVersion);
 
             TProgramBuilder pgmBuilder(builder.GetTypeEnvironment(), builder.GetFunctionRegistry());
             TMkqlBuildContext ctx(*MkqlCompiler_, pgmBuilder, exprCtx);
@@ -1125,10 +1129,10 @@ public:
     }
 
     TGetTablePartitionsResult GetTablePartitions(TGetTablePartitionsOptions&& options) override {
-        const TString tmpFolder = GetTablesTmpFolder(*options.Config());
         auto res = TGetTablePartitionsResult();
         TVector<NYT::TRichYPath> paths;
         for (const auto& pathInfo: options.Paths()) {
+            const TString tmpFolder = GetTablesTmpFolder(*options.Config(), pathInfo->Table->Cluster);
             const auto tablePath = TransformPath(tmpFolder, pathInfo->Table->Name, pathInfo->Table->IsTemp, options.SessionId());
             NYT::TRichYPath richYtPath{NYT::AddPathPrefix(tablePath, NYT::TConfig::Get()->Prefix)};
             pathInfo->FillRichYPath(richYtPath);  // n.b. throws exception, if there is no RowSpec (we assume it is always there)
@@ -1186,6 +1190,18 @@ private:
         }
         if (attrs.AsMap().contains("schema_mode") && attrs["schema_mode"].AsString() == "weak") {
             info.Attrs["schema_mode"] = attrs["schema_mode"].AsString();
+        }
+        if (attrs.AsMap().contains("compression_codec") && attrs["compression_codec"].AsString() != "none") {
+            info.Attrs["compression_codec"] = attrs["compression_codec"].AsString();
+        }
+        if (attrs.AsMap().contains("primary_medium") && attrs["primary_medium"].AsString() != "default") {
+            info.Attrs["primary_medium"] = attrs["primary_medium"].AsString();
+        }
+        if (attrs.AsMap().contains("media") && (!attrs["media"].AsMap().contains("default") || attrs["media"].AsMap().size() != 1)) {
+            info.Attrs["media"] = NYT::NodeToYsonString(attrs["media"]);
+        }
+        if (info.IsDynamic && attrs.AsMap().contains("enable_dynamic_store_read") && NYT::GetBool(attrs["enable_dynamic_store_read"])) {
+            info.Attrs["enable_dynamic_store_read"] = "true";
         }
 
         NYT::TNode schemaAttrs;
@@ -1252,7 +1268,8 @@ private:
         auto secureParamsProvider = MakeSimpleSecureParamsProvider(options.SecureParams());
         TVector<TFileLinkPtr> externalFiles;
         TFileYtLambdaBuilder builder(alloc, session,
-            MakeFunctionRegistry(*Services_->GetFunctionRegistry(), options.UserDataBlocks(), Services_->GetFileStorage(), externalFiles), secureParamsProvider.get());
+            MakeFunctionRegistry(*Services_->GetFunctionRegistry(), options.UserDataBlocks(),
+            Services_->GetFileStorage(), externalFiles), secureParamsProvider.get(), options.LangVer());
         auto data = builder.BuildLambda(*MkqlCompiler_, input.Ptr(), exprCtx);
         auto transform = TFileTransformProvider(Services_, options.UserDataBlocks());
         data = builder.TransformAndOptimizeProgram(data, transform);
@@ -1288,14 +1305,14 @@ private:
         }
 
         if (writeRef && !options.FillSettings().Discard) {
-            auto cluster = GetClusterName(pull.Input());
             writer.OnKeyedItem("Ref");
             writer.OnBeginList();
             for (auto& tableInfo: GetInputTableInfos(pull.Input())) {
+                TString cluster = tableInfo->Cluster;
                 writer.OnListItem();
                 if (tableInfo->IsTemp) {
                     auto outPath = Services_->GetTmpTablePath(tableInfo->Name);
-                    session.CancelDeleteAtFinalize(TString{cluster}, outPath);
+                    session.CancelDeleteAtFinalize(cluster, outPath);
                 }
                 NYql::WriteTableReference(writer, YtProviderName, cluster, tableInfo->Name, tableInfo->IsTemp, columns);
             }
@@ -1331,7 +1348,8 @@ private:
             auto secureParamsProvider = MakeSimpleSecureParamsProvider(options.SecureParams());
             TVector<TFileLinkPtr> externalFiles;
             TFileYtLambdaBuilder builder(alloc, session,
-                MakeFunctionRegistry(*Services_->GetFunctionRegistry(), options.UserDataBlocks(), Services_->GetFileStorage(), externalFiles), secureParamsProvider.get());
+                MakeFunctionRegistry(*Services_->GetFunctionRegistry(), options.UserDataBlocks(), Services_->GetFileStorage(),
+                externalFiles), secureParamsProvider.get(), options.LangVer());
             auto data = builder.BuildLambda(*MkqlCompiler_, node, exprCtx);
             auto transform = TFileTransformProvider(Services_, options.UserDataBlocks());
             data = builder.TransformAndOptimizeProgram(data, transform);
@@ -1596,6 +1614,9 @@ private:
         return TClusterConnectionResult();
     }
 
+    TMaybe<TString> GetTableFilePath(const TGetTableFilePathOptions&& options) override {
+        return Services_->GetTablePath(options.Cluster(), options.Path(), options.IsTemp());
+    }
 
 private:
     TYtFileServices::TPtr Services_;

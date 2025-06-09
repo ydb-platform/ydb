@@ -13,12 +13,14 @@ IF (OS_DARWIN)
     TAG(
         ya:fat
         ya:exotic_platform
+        ya:large_tests_on_single_slots
     )
 ELSEIF (OS_WINDOWS)
     SIZE(LARGE)
     TAG(
         ya:fat
-        sb:ssd&~MULTISLOT&WINDOWS
+        sb:ssd&WINDOWS
+        ya:large_tests_on_single_slots
     )
 ENDIF()
 

@@ -440,7 +440,8 @@ namespace Tests {
             return;
         }
 
-        Runtime = MakeHolder<TTestBasicRuntime>(StaticNodes() + DynamicNodes(), Settings->UseRealThreads);
+        const auto nodeCount = StaticNodes() + DynamicNodes();
+        Runtime = MakeHolder<TTestBasicRuntime>(nodeCount, Settings->DataCenterCount ? *Settings->DataCenterCount : nodeCount, Settings->UseRealThreads);
 
         if (init) {
             Initialize();
@@ -541,6 +542,7 @@ namespace Tests {
             appData.SharedCacheConfig.MergeFrom(Settings->AppConfig->GetSharedCacheConfig());
             appData.TransferWriterFactory = Settings->TransferWriterFactory;
             appData.WorkloadManagerConfig.MergeFrom(Settings->AppConfig->GetWorkloadManagerConfig());
+            appData.QueryServiceConfig.MergeFrom(Settings->AppConfig->GetQueryServiceConfig());
 
             appData.DynamicNameserviceConfig = new TDynamicNameserviceConfig;
             auto dnConfig = appData.DynamicNameserviceConfig;
@@ -1450,8 +1452,8 @@ namespace Tests {
             TActorId discoveryCacheId = Runtime->Register(discoveryCache, nodeIdx, userPoolId);
             Runtime->RegisterService(NKafka::MakeKafkaDiscoveryCacheID(), discoveryCacheId, nodeIdx);
             
-            TActorId kafkaTxnCoordinatorActorId = Runtime->Register(NKafka::CreateKafkaTransactionsCoordinator(), nodeIdx, userPoolId);
-            Runtime->RegisterService(NKafka::MakeKafkaTransactionsServiceID(), kafkaTxnCoordinatorActorId, nodeIdx);
+            TActorId kafkaTxnCoordinatorActorId = Runtime->Register(NKafka::CreateTransactionsCoordinator(), nodeIdx, userPoolId);
+            Runtime->RegisterService(NKafka::MakeTransactionsServiceID(Runtime->GetNodeId(nodeIdx)), kafkaTxnCoordinatorActorId, nodeIdx);
 
             NKafka::TListenerSettings settings;
             settings.Port = Settings->AppConfig->GetKafkaProxyConfig().GetListeningPort();

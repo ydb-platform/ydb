@@ -1245,6 +1245,7 @@ namespace NSQLTranslationV1 {
         TNodePtr InitialScan;
         TNodePtr VirtualTimestamps;
         TNodePtr BarriersInterval;
+        TNodePtr SchemaChanges;
         TNodePtr RetentionPeriod;
         TNodePtr TopicAutoPartitioning;
         TNodePtr TopicPartitions;
@@ -1280,6 +1281,7 @@ namespace NSQLTranslationV1 {
     struct TAlterDatabaseParameters {
         TDeferredAtom DbPath;
         std::optional<TDeferredAtom> Owner;
+        THashMap<TString, TNodePtr> DatabaseSettings;
     };
 
     struct TTableRef;

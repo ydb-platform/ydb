@@ -14,13 +14,6 @@ enum class EMemType {
     RawSequential
 };
 
-enum class EStageFeaturesIndexes {
-    Accessors = 0,
-    Filter = 1,
-    Fetching = 2,
-    Merge = 3
-};
-
 class TIndexesSet {
 private:
     YDB_READONLY_DEF(std::vector<ui32>, IndexIds);

@@ -181,6 +181,7 @@ public:
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, RequestRestart);
 
     // Security
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, GetCurrentUser);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, AddMember);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, RemoveMember);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, CheckPermission);
@@ -197,6 +198,7 @@ public:
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, PausePipeline);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, GetPipelineState);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, GetFlowView);
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, FlowExecute);
 
     // Query tracker
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, StartQuery);

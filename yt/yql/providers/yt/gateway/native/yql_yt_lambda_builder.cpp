@@ -100,14 +100,14 @@ NKikimr::NMiniKQL::TComputationNodeFactory GetGatewayNodeFactory(TCodecContext* 
 
 
 TNativeYtLambdaBuilder::TNativeYtLambdaBuilder(TScopedAlloc& alloc, const IFunctionRegistry* functionRegistry, const TSession& session,
-    const NKikimr::NUdf::ISecureParamsProvider* secureParamsProvider)
+    const NKikimr::NUdf::ISecureParamsProvider* secureParamsProvider, TLangVersion langver)
     : TLambdaBuilder(functionRegistry, alloc, nullptr,
-        session.RandomProvider_, session.TimeProvider_, nullptr, nullptr, secureParamsProvider)
+        session.RandomProvider_, session.TimeProvider_, nullptr, nullptr, secureParamsProvider, nullptr, langver)
 {
 }
 
-TNativeYtLambdaBuilder::TNativeYtLambdaBuilder(TScopedAlloc& alloc, const TYtNativeServices& services, const TSession& session)
-    : TNativeYtLambdaBuilder(alloc, services.FunctionRegistry, session)
+TNativeYtLambdaBuilder::TNativeYtLambdaBuilder(TScopedAlloc& alloc, const TYtNativeServices& services, const TSession& session, TLangVersion langver)
+    : TNativeYtLambdaBuilder(alloc, services.FunctionRegistry, session, nullptr, langver)
 {
 }
 

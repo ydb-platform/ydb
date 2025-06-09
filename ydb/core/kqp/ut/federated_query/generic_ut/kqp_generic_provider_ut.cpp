@@ -8,6 +8,7 @@
 #include <ydb/library/yql/providers/generic/connector/libcpp/ut_helpers/database_resolver_mock.h>
 #include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory_impl.h>
 #include <ydb/public/api/protos/ydb_query.pb.h>
+#include <ydb/public/api/grpc/ydb_operation_v1.grpc.pb.h>
 #include <ydb/public/api/grpc/ydb_query_v1.grpc.pb.h>
 #include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
@@ -38,9 +39,9 @@ namespace NKikimr::NKqp {
         PostgreSQL,
         ClickHouse,
         Ydb,
-        IcebergHiveBasic,
-        IcebergHiveSa,
-        IcebergHiveToken,
+        IcebergHiveMetastoreBasic,
+        IcebergHiveMetastoreSa,
+        IcebergHiveMetastoreToken,
         IcebergHadoopBasic,
         IcebergHadoopSa,
         IcebergHadoopToken,
@@ -54,12 +55,12 @@ namespace NKikimr::NKqp {
                 return TConnectorClientMock::TClickHouseDataSourceInstanceBuilder<>().GetResult();
             case EProviderType::Ydb:
                 return TConnectorClientMock::TYdbDataSourceInstanceBuilder<>().GetResult();
-            case EProviderType::IcebergHiveBasic:
-                return NTestUtils::CreateIcebergBasic().CreateDataSourceForHive();
-            case EProviderType::IcebergHiveSa:
-                return NTestUtils::CreateIcebergSa().CreateDataSourceForHive();
-            case EProviderType::IcebergHiveToken:
-                return NTestUtils::CreateIcebergToken().CreateDataSourceForHive();
+            case EProviderType::IcebergHiveMetastoreBasic:
+                return NTestUtils::CreateIcebergBasic().CreateDataSourceForHiveMetastore();
+            case EProviderType::IcebergHiveMetastoreSa:
+                return NTestUtils::CreateIcebergSa().CreateDataSourceForHiveMetastore();
+            case EProviderType::IcebergHiveMetastoreToken:
+                return NTestUtils::CreateIcebergToken().CreateDataSourceForHiveMetastore();
             case EProviderType::IcebergHadoopBasic:
                 return NTestUtils::CreateIcebergBasic().CreateDataSourceForHadoop();
             case EProviderType::IcebergHadoopSa:
@@ -77,15 +78,15 @@ namespace NKikimr::NKqp {
                 return CreateClickHouseExternalDataSource(kikimr);
             case EProviderType::Ydb:
                 return CreateYdbExternalDataSource(kikimr);
-            case EProviderType::IcebergHiveBasic:
+            case EProviderType::IcebergHiveMetastoreBasic:
                 return NTestUtils::CreateIcebergBasic()
-                    .ExecuteCreateHiveExternalDataSource(kikimr);
-            case EProviderType::IcebergHiveSa:
+                    .ExecuteCreateHiveMetastoreExternalDataSource(kikimr);
+            case EProviderType::IcebergHiveMetastoreSa:
                 return NTestUtils::CreateIcebergSa()
-                    .ExecuteCreateHiveExternalDataSource(kikimr);
-            case EProviderType::IcebergHiveToken:
+                    .ExecuteCreateHiveMetastoreExternalDataSource(kikimr);
+            case EProviderType::IcebergHiveMetastoreToken:
                 return NTestUtils::CreateIcebergToken()
-                    .ExecuteCreateHiveExternalDataSource(kikimr);
+                    .ExecuteCreateHiveMetastoreExternalDataSource(kikimr);
             case EProviderType::IcebergHadoopBasic:
                 return NTestUtils::CreateIcebergBasic()
                     .ExecuteCreateHadoopExternalDataSource(kikimr);
@@ -238,15 +239,15 @@ namespace NKikimr::NKqp {
         }
 
         Y_UNIT_TEST(IcebergHiveBasicSelectAll) {
-            TestSelectAllFields(EProviderType::IcebergHiveBasic);
+            TestSelectAllFields(EProviderType::IcebergHiveMetastoreBasic);
         }
 
         Y_UNIT_TEST(IcebergHiveSaSelectAll) {
-            TestSelectAllFields(EProviderType::IcebergHiveSa);
+            TestSelectAllFields(EProviderType::IcebergHiveMetastoreSa);
         }
 
         Y_UNIT_TEST(IcebergHiveTokenSelectAll) {
-            TestSelectAllFields(EProviderType::IcebergHiveToken);
+            TestSelectAllFields(EProviderType::IcebergHiveMetastoreToken);
         }
 
         Y_UNIT_TEST(IcebergHadoopBasicSelectAll) {
@@ -353,15 +354,15 @@ namespace NKikimr::NKqp {
         }
 
         Y_UNIT_TEST(IcebergHiveBasicSelectConstant) {
-            TestSelectConstant(EProviderType::IcebergHiveBasic);
+            TestSelectConstant(EProviderType::IcebergHiveMetastoreBasic);
         }
 
         Y_UNIT_TEST(IcebergHiveSaSelectConstant) {
-            TestSelectConstant(EProviderType::IcebergHiveSa);
+            TestSelectConstant(EProviderType::IcebergHiveMetastoreSa);
         }
 
         Y_UNIT_TEST(IcebergHiveTokenSelectConstant) {
-            TestSelectConstant(EProviderType::IcebergHiveToken);
+            TestSelectConstant(EProviderType::IcebergHiveMetastoreToken);
         }
 
         Y_UNIT_TEST(IcebergHadoopBasicSelectConstant) {
@@ -464,15 +465,15 @@ namespace NKikimr::NKqp {
         }
 
         Y_UNIT_TEST(IcebergHiveBasicSelectCount) {
-            TestSelectCount(EProviderType::IcebergHiveBasic);
+            TestSelectCount(EProviderType::IcebergHiveMetastoreBasic);
         }
 
         Y_UNIT_TEST(IcebergHiveSaSelectCount) {
-            TestSelectCount(EProviderType::IcebergHiveSa);
+            TestSelectCount(EProviderType::IcebergHiveMetastoreSa);
         }
 
         Y_UNIT_TEST(IcebergHiveTokenSelectCount) {
-            TestSelectCount(EProviderType::IcebergHiveToken);
+            TestSelectCount(EProviderType::IcebergHiveMetastoreToken);
         }
 
         Y_UNIT_TEST(IcebergHadoopBasicSelectCount) {
@@ -600,15 +601,15 @@ namespace NKikimr::NKqp {
         }
 
         Y_UNIT_TEST(IcebergHiveBasicFilterPushdown) {
-            TestFilterPushdown(EProviderType::IcebergHiveBasic);
+            TestFilterPushdown(EProviderType::IcebergHiveMetastoreBasic);
         }
 
         Y_UNIT_TEST(IcebergHiveSaFilterPushdown) {
-            TestFilterPushdown(EProviderType::IcebergHiveSa);
+            TestFilterPushdown(EProviderType::IcebergHiveMetastoreSa);
         }
 
         Y_UNIT_TEST(IcebergHiveTokenFilterPushdown) {
-            TestFilterPushdown(EProviderType::IcebergHiveToken);
+            TestFilterPushdown(EProviderType::IcebergHiveMetastoreToken);
         }
 
         Y_UNIT_TEST(IcebergHadoopBasicFilterPushdown) {
@@ -633,25 +634,58 @@ namespace NKikimr::NKqp {
 
             // Create trash query
             NYdbGrpc::TGRpcClientLow clientLow;
+            const auto channel = grpc::CreateChannel("localhost:" + ToString(kikimr->GetTestServer().GetGRpcServer().GetPort()), grpc::InsecureChannelCredentials());
+            const auto queryServiceStub = Ydb::Query::V1::QueryService::NewStub(channel);
+            const auto operationServiceStub = Ydb::Operation::V1::OperationService::NewStub(channel);
 
-            std::shared_ptr<grpc::Channel> channel;
-            channel = grpc::CreateChannel("localhost:" + ToString(kikimr->GetTestServer().GetGRpcServer().GetPort()), grpc::InsecureChannelCredentials());
             {
-                std::unique_ptr<Ydb::Query::V1::QueryService::Stub> stub;
-                stub = Ydb::Query::V1::QueryService::NewStub(channel);
                 grpc::ClientContext context;
                 Ydb::Query::FetchScriptResultsRequest request;
                 request.set_operation_id(operationId);
                 request.set_fetch_token(fetchToken);
                 Ydb::Query::FetchScriptResultsResponse response;
-                grpc::Status st = stub->FetchScriptResults(&context, request, &response);
+                grpc::Status st = queryServiceStub->FetchScriptResults(&context, request, &response);
                 UNIT_ASSERT(st.ok());
-                UNIT_ASSERT_EQUAL_C(response.status(), Ydb::StatusIds::BAD_REQUEST, response);
+                UNIT_ASSERT_VALUES_EQUAL_C(response.status(), Ydb::StatusIds::BAD_REQUEST, response);
+            }
+
+            {
+                grpc::ClientContext context;
+                Ydb::Operations::ForgetOperationRequest request;
+                request.set_id(operationId);
+                Ydb::Operations::ForgetOperationResponse response;
+                grpc::Status st = operationServiceStub->ForgetOperation(&context, request, &response);
+                UNIT_ASSERT(st.ok());
+                UNIT_ASSERT_VALUES_EQUAL_C(response.status(), Ydb::StatusIds::BAD_REQUEST, response);
+            }
+
+            {
+                grpc::ClientContext context;
+                Ydb::Operations::GetOperationRequest request;
+                request.set_id(operationId);
+                Ydb::Operations::GetOperationResponse response;
+                grpc::Status st = operationServiceStub->GetOperation(&context, request, &response);
+                UNIT_ASSERT(st.ok());
+                UNIT_ASSERT_VALUES_EQUAL_C(response.operation().status(), Ydb::StatusIds::BAD_REQUEST, response);
+            }
+
+            {
+                grpc::ClientContext context;
+                Ydb::Operations::CancelOperationRequest request;
+                request.set_id(operationId);
+                Ydb::Operations::CancelOperationResponse response;
+                grpc::Status st = operationServiceStub->CancelOperation(&context, request, &response);
+                UNIT_ASSERT(st.ok());
+                UNIT_ASSERT_VALUES_EQUAL_C(response.status(), Ydb::StatusIds::BAD_REQUEST, response);
             }
         }
 
-        Y_UNIT_TEST(TestFailsOnIncorrectScriptExecutionOperationId) {
+        Y_UNIT_TEST(TestFailsOnIncorrectScriptExecutionOperationId1) {
             TestFailsOnIncorrectScriptExecutionOperation("trash", "");
+        }
+
+        Y_UNIT_TEST(TestFailsOnIncorrectScriptExecutionOperationId2) {
+            TestFailsOnIncorrectScriptExecutionOperation("ydb://scriptexec/9?fd=b214872a-d040e60d-62a1b34-a9be3c3d", "trash");
         }
 
         Y_UNIT_TEST(TestFailsOnIncorrectScriptExecutionFetchToken) {

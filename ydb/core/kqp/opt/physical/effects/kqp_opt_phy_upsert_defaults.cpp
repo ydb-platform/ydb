@@ -17,7 +17,7 @@ TMaybeNode<TDqPhyPrecompute> PrecomputeCurrentDefaultsForKeys(const TDqPhyPrecom
                 .Value(key)
                 .Done();
 
-        lookupColumns.emplace_back(std::move(atom));        
+        lookupColumns.emplace_back(std::move(atom));
     }
 
     for(const auto& atom: columnsWithDefault) {
@@ -96,7 +96,7 @@ TDqStage BuildInsertOnConflictUpdateInputStage(
                         .Body<TCoIfPresent>()
                             .Optional<TCoLookup>()
                                 .Collection(lookupDictArg)
-                                .Lookup(inputKeyArg)    
+                                .Lookup(inputKeyArg)
                                 .Build()
                             .PresentHandler<TCoLambda>()
                                 .Args(presetHandlerPayload)
@@ -188,7 +188,7 @@ TExprBase KqpRewriteGenerateIfInsert(TExprBase node, TExprContext& ctx, const TK
         .IsBatch(ctx.NewAtom(insertOnConlictUpdate.Pos(), "false"))
         .Settings(insertOnConlictUpdate.Settings())
         .ReturningColumns(insertOnConlictUpdate.ReturningColumns())
-        .Done();    
+        .Done();
 }
 
 } // namespace NKikimr::NKqp::NOpt

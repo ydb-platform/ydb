@@ -141,6 +141,7 @@ struct TAlterTableReplicaOptions
     std::optional<NTransactionClient::EAtomicity> Atomicity;
     std::optional<bool> EnableReplicatedTableTracker;
     std::optional<NYPath::TYPath> ReplicaPath;
+    bool Force = false;
 };
 
 struct TGetTablePivotKeysOptions
@@ -322,6 +323,9 @@ struct TPartitionTablesOptions
 
     //! COMPAT(apollo1321): remove in 25.2 release.
     bool UseNewSlicingImplementationInOrderedPool = true;
+
+    //! COMPAT(apollo1321): remove in 25.2 release.
+    bool UseNewSlicingImplementationInUnorderedPool = true;
 };
 
 struct TReadTablePartitionOptions
@@ -462,7 +466,7 @@ struct ITableClient
         const TGetTabletErrorsOptions& options = {}) = 0;
 
     virtual TFuture<std::vector<NTabletClient::TTabletActionId>> BalanceTabletCells(
-        const TString& tabletCellBundle,
+        const std::string& tabletCellBundle,
         const std::vector<NYPath::TYPath>& movableTables,
         const TBalanceTabletCellsOptions& options = {}) = 0;
 

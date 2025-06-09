@@ -66,11 +66,7 @@ void RunTestForQuery(const std::string& query, const std::string& expectedLog, b
             break;
         }
     }
-
-    // TODO: remove this if after https://github.com/ydb-platform/ydb/issues/15597
-    if (!enabledLogs) {
-        UNIT_ASSERT(hasExpectedLog == enabledLogs);
-    }
+    UNIT_ASSERT(hasExpectedLog == enabledLogs);
 }
 
 } // anonymous namespace

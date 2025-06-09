@@ -46,6 +46,10 @@ namespace NKikimr {
         : public TEventLocal<TEvRequestProxyQueueState, TEvBlobStorage::EvRequestProxyQueueState>
     {};
 
+    struct TEvBSQueueResetConnection
+        : public TEventLocal<TEvBSQueueResetConnection, TEvBlobStorage::EvBSQueueResetConnection>
+    {};
+
     IActor* CreateVDiskBackpressureClient(const TIntrusivePtr<TBlobStorageGroupInfo>& info, TVDiskIdShort vdiskId,
         NKikimrBlobStorage::EVDiskQueueId queueId,const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
         const TBSProxyContextPtr& bspctx, const NBackpressure::TQueueClientId& clientId, const TString& queueName,

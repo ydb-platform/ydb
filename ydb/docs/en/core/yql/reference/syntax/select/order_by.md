@@ -19,6 +19,6 @@ ORDER BY key DESC, LENGTH(string_column) ASC;
 
 {% if feature_window_functions %}
 
-You can also use `ORDER BY` for [window functions](../window.md).
+You can also use `ORDER BY` for [window functions](window.md).
 
 {% endif %}

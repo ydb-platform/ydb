@@ -169,20 +169,9 @@ const TLoggingCategory* TLogger::GetCategory() const
     return Category_;
 }
 
-bool TLogger::IsLevelEnabledHeavy(ELogLevel level) const
+void TLogger::UpdateCategory() const
 {
-    // Note that we managed to reach this point, i.e. level >= MinLevel_,
-    // which implies that MinLevel_ != ELogLevel::Maximum, so this logger was not
-    // default constructed, thus it has non-trivial category.
-    YT_ASSERT(Category_);
-
-    if (Category_->CurrentVersion != Category_->ActualVersion->load(std::memory_order::relaxed)) {
-        LogManager_->UpdateCategory(const_cast<TLoggingCategory*>(Category_));
-    }
-
-    return
-        level >= Category_->MinPlainTextLevel &&
-        level >= ThreadMinLogLevel();
+    LogManager_->UpdateCategory(const_cast<TLoggingCategory*>(Category_));
 }
 
 bool TLogger::GetAbortOnAlert() const
@@ -226,18 +215,30 @@ void TLogger::AddRawTag(const std::string& tag)
     state->Tag += tag;
 }
 
-TLogger TLogger::WithRawTag(const std::string& tag) const
+TLogger TLogger::WithRawTag(const std::string& tag) const &
 {
     auto result = *this;
     result.AddRawTag(tag);
     return result;
 }
 
-TLogger TLogger::WithEssential(bool essential) const
+TLogger TLogger::WithRawTag(const std::string& tag) &&
+{
+    AddRawTag(tag);
+    return std::move(*this);
+}
+
+TLogger TLogger::WithEssential(bool essential) const &
 {
     auto result = *this;
     result.Essential_ = essential;
     return result;
+}
+
+TLogger TLogger::WithEssential(bool essential) &&
+{
+    Essential_ = essential;
+    return std::move(*this);
 }
 
 void TLogger::AddStructuredValidator(TStructuredValidator validator)
@@ -246,20 +247,34 @@ void TLogger::AddStructuredValidator(TStructuredValidator validator)
     state->StructuredValidators.push_back(std::move(validator));
 }
 
-TLogger TLogger::WithStructuredValidator(TStructuredValidator validator) const
+TLogger TLogger::WithStructuredValidator(TStructuredValidator validator) const &
 {
     auto result = *this;
     result.AddStructuredValidator(std::move(validator));
     return result;
 }
 
-TLogger TLogger::WithMinLevel(ELogLevel minLevel) const
+TLogger TLogger::WithStructuredValidator(TStructuredValidator validator) &&
+{
+    AddStructuredValidator(std::move(validator));
+    return std::move(*this);
+}
+
+TLogger TLogger::WithMinLevel(ELogLevel minLevel) const &
 {
     auto result = *this;
     if (result) {
         result.MinLevel_ = minLevel;
     }
     return result;
+}
+
+TLogger TLogger::WithMinLevel(ELogLevel minLevel) &&
+{
+    if (*this) {
+        MinLevel_ = minLevel;
+    }
+    return std::move(*this);
 }
 
 const std::string& TLogger::GetTag() const

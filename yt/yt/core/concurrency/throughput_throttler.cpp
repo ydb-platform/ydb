@@ -219,6 +219,13 @@ public:
         return limit;
     }
 
+    TDuration GetPeriod() const override
+    {
+        YT_ASSERT_THREAD_AFFINITY_ANY();
+
+        return Period_.load();
+    }
+
     i64 GetQueueTotalAmount() const override
     {
         YT_ASSERT_THREAD_AFFINITY_ANY();
@@ -668,6 +675,13 @@ public:
         return std::nullopt;
     }
 
+    TDuration GetPeriod() const override
+    {
+        YT_ASSERT_THREAD_AFFINITY_ANY();
+
+        return TDuration::Max();
+    }
+
     TFuture<void> GetAvailableFuture() override
     {
         YT_UNIMPLEMENTED();
@@ -725,11 +739,26 @@ public:
         }));
     }
 
-    bool TryAcquire(i64 /*amount*/) override
+    bool TryAcquire(i64 amount) override
     {
-        YT_ABORT();
+        size_t i = 0;
+        for (; i < Throttlers_.size(); ++i) {
+            if (!Throttlers_[i]->TryAcquire(amount)) {
+                break;
+            }
+        }
+
+        if (i != Throttlers_.size()) {
+            for (size_t j = 0; j < i; ++j) {
+                Throttlers_[j]->Release(amount);
+            }
+            return false;
+        }
+
+        return true;
     }
 
+    // TODO(vvshlyaga): implement TryAcquireAvailable the same way as TryAcquire.
     i64 TryAcquireAvailable(i64 /*amount*/) override
     {
         YT_ABORT();

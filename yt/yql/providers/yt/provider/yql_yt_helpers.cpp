@@ -714,7 +714,7 @@ void GetNodesToCalculateFromQLFilter(const TExprNode& qlFilter, TExprNode::TList
     YQL_ENSURE(qlFilter.IsCallable("YtQLFilter"));
     const auto lambdaBody = qlFilter.Child(1)->Child(1);
     VisitExpr(lambdaBody, [&needCalc, &uniqNodes](const TExprNode::TPtr& node) {
-        if (node->IsCallable({"And", "Or", "Not", "<", "<=", ">", ">=", "==", "!="})) {
+        if (node->IsCallable({"And", "Or", "Not", "Coalesce", "Exists", "<", "<=", ">", ">=", "==", "!="})) {
             return true;
         }
         if (node->IsCallable("Member")) {
@@ -884,7 +884,6 @@ std::pair<IGraphTransformer::TStatus, TAsyncTransformCallbackFuture> CalculateNo
     TExprContext& ctx)
 {
     YQL_ENSURE(!needCalc.empty());
-    YQL_ENSURE(!input->HasResult(), "Infinitive calculation loop detected");
     TNodeMap<size_t> calcNodes;
     TUserDataTable files;
 
@@ -950,6 +949,7 @@ std::pair<IGraphTransformer::TStatus, TAsyncTransformCallbackFuture> CalculateNo
             .OperationHash(calcHash)
             .SecureParams(secureParams)
             .RuntimeLogLevel(state->Types->RuntimeLogLevel)
+            .LangVer(state->Types->LangVer)
         );
     return WrapFutureCallback(future, [state, calcNodes](const IYtGateway::TCalcResult& res, const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
         YQL_ENSURE(res.Data.size() == calcNodes.size());
@@ -973,7 +973,9 @@ std::pair<IGraphTransformer::TStatus, TAsyncTransformCallbackFuture> CalculateNo
             auto type = node->GetTypeAnn();
             YQL_ENSURE(type);
             NYT::TNode data = res.Data[it.second];
-            remaps.emplace(node, NCommon::NodeToExprLiteral(node->Pos(), *type, data, ctx));
+            auto newNode = NCommon::NodeToExprLiteral(node->Pos(), *type, data, ctx);
+            newNode->SetResult(ctx.NewAtom(node->Pos(), "calc"));
+            remaps.emplace(node, newNode);
         }
         TOptimizeExprSettings settings(state->Types);
         settings.VisitChanges = true;
@@ -985,7 +987,6 @@ std::pair<IGraphTransformer::TStatus, TAsyncTransformCallbackFuture> CalculateNo
             return status;
         }
         input->SetState(TExprNode::EState::ExecutionComplete);
-        output->SetResult(ctx.NewAtom(output->Pos(), "calc")); // Special marker to check infinitive loop
         return status.Combine(IGraphTransformer::TStatus::Repeat);
     });
 }

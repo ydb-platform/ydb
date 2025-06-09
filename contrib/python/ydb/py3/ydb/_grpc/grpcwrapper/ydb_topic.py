@@ -136,6 +136,22 @@ class UpdateTokenResponse(IFromProto):
         return UpdateTokenResponse()
 
 
+@dataclass
+class CommitOffsetRequest(IToProto):
+    path: str
+    consumer: str
+    partition_id: int
+    offset: int
+
+    def to_proto(self) -> ydb_topic_pb2.CommitOffsetRequest:
+        return ydb_topic_pb2.CommitOffsetRequest(
+            path=self.path,
+            consumer=self.consumer,
+            partition_id=self.partition_id,
+            offset=self.offset,
+        )
+
+
 ########################################################################################################################
 #  StreamWrite
 ########################################################################################################################
@@ -438,12 +454,13 @@ class StreamReadMessage:
     @dataclass
     class InitRequest(IToProto):
         topics_read_settings: List["StreamReadMessage.InitRequest.TopicReadSettings"]
-        consumer: str
+        consumer: Optional[str]
         auto_partitioning_support: bool
 
         def to_proto(self) -> ydb_topic_pb2.StreamReadMessage.InitRequest:
             res = ydb_topic_pb2.StreamReadMessage.InitRequest()
-            res.consumer = self.consumer
+            if self.consumer is not None:
+                res.consumer = self.consumer
             for settings in self.topics_read_settings:
                 res.topics_read_settings.append(settings.to_proto())
             res.auto_partitioning_support = self.auto_partitioning_support

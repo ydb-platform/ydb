@@ -56,6 +56,57 @@ Y_UNIT_TEST_SUITE(TArrayBuilderTest) {
             "Expected equal values after building array");
     }
 
+    Y_UNIT_TEST(TestTaggedTypeBuilder) {
+        TArrayBuilderTestData data;
+        const auto intType = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int32, false);
+        const auto taggedType = data.PgmBuilder.NewTaggedType(intType, "tag");
+
+        const auto arrayBuilder = MakeArrayBuilder(NMiniKQL::TTypeInfoHelper(), taggedType, *data.ArrowPool, MAX_BLOCK_SIZE, /*pgBuilder=*/nullptr);
+
+        TUnboxedValue testData = TUnboxedValuePod(123);
+
+        arrayBuilder->Add(testData);
+
+        auto datum = arrayBuilder->Build(true);
+
+        UNIT_ASSERT(datum.is_array());
+        UNIT_ASSERT_VALUES_EQUAL(datum.length(), 1);
+
+        auto value = datum.array()->buffers[1];
+
+        UNIT_ASSERT_VALUES_EQUAL(*reinterpret_cast<int32_t*>(value->address()), 123);
+    }
+
+    Y_UNIT_TEST(TestTaggedTypeReader) {
+        TArrayBuilderTestData data;
+        const auto intType = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int32, false);
+        const auto taggedType = data.PgmBuilder.NewTaggedType(intType, "tag");
+
+        const auto arrayBuilder = MakeArrayBuilder(NMiniKQL::TTypeInfoHelper(), taggedType, *data.ArrowPool, MAX_BLOCK_SIZE, /*pgBuilder=*/nullptr);
+
+        TUnboxedValue first = TUnboxedValuePod(123);
+        TUnboxedValue second = TUnboxedValuePod(456);
+
+        arrayBuilder->Add(first);
+        arrayBuilder->Add(second);
+
+        auto datum = arrayBuilder->Build(true);
+
+        UNIT_ASSERT(datum.is_array());
+        UNIT_ASSERT_VALUES_EQUAL(datum.length(), 2);
+
+        const auto blockReader = MakeBlockReader(NMiniKQL::TTypeInfoHelper(), taggedType);
+
+        const auto item1AfterRead = blockReader->GetItem(*datum.array(), 0);
+        const auto item2AfterRead = blockReader->GetItem(*datum.array(), 1);
+
+        UNIT_ASSERT_C(item1AfterRead.HasValue(), "Expected not null");
+        UNIT_ASSERT_C(item2AfterRead.HasValue(), "Expected not null");
+
+        UNIT_ASSERT_VALUES_EQUAL(item1AfterRead.Get<int>(), 123);
+        UNIT_ASSERT_VALUES_EQUAL(item2AfterRead.Get<int>(), 456);
+    }
+
     extern const char ResourceName[] = "Resource.Name";
     Y_UNIT_TEST(TestDtorCall) {
         TArrayBuilderTestData data;
@@ -180,7 +231,8 @@ Y_UNIT_TEST_SUITE(TArrayBuilderTest) {
     Y_UNIT_TEST(TestTzDateBuilder_Layout) {
         TArrayBuilderTestData data;
         const auto tzDateType = data.PgmBuilder.NewDataType(EDataSlot::TzDate);
-        const auto arrayBuilder = MakeArrayBuilder(NMiniKQL::TTypeInfoHelper(), tzDateType,
+        const NMiniKQL::TTypeInfoHelper typeInfoHelper;
+        const auto arrayBuilder = MakeArrayBuilder(typeInfoHelper, tzDateType,
             *data.ArrowPool, MAX_BLOCK_SIZE, /* pgBuilder */ nullptr);
 
         auto makeTzDate = [] (ui16 val, ui16 tz) {
@@ -196,9 +248,14 @@ Y_UNIT_TEST_SUITE(TArrayBuilderTest) {
 
         const auto datum = arrayBuilder->Build(true);
         UNIT_ASSERT(datum.is_array());
+        const auto array = datum.array();
+        const auto expectedType = GetArrowType(typeInfoHelper, tzDateType);
+        UNIT_ASSERT(array->type->Equals(expectedType));
         UNIT_ASSERT_VALUES_EQUAL(datum.length(), dates.size());
-        const auto childData = datum.array()->child_data;
+        const auto childData = array->child_data;
         UNIT_ASSERT_VALUES_EQUAL_C(childData.size(), 2, "Expected date and timezone children");
+        UNIT_ASSERT(childData[0]->type->Equals(expectedType->field(0)->type()));
+        UNIT_ASSERT(childData[1]->type->Equals(expectedType->field(1)->type()));
     }
 
     Y_UNIT_TEST(TestResourceStringValueBuilderReader) {

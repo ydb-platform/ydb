@@ -118,7 +118,7 @@ struct client_connection_args {
     aws_client_bootstrap_on_channel_event_fn *shutdown_callback;
     struct client_channel_data channel_data;
     struct aws_socket_options outgoing_options;
-    uint16_t outgoing_port;
+    uint32_t outgoing_port;
     struct aws_string *host_name;
     void *user_data;
     uint8_t addresses_count;
@@ -182,10 +182,14 @@ static struct aws_event_loop *s_get_connection_event_loop(struct client_connecti
     return aws_event_loop_group_get_next_loop(args->bootstrap->event_loop_group);
 }
 
-static void s_connection_args_setup_callback(
+static void s_connect_args_setup_callback_safe(
     struct client_connection_args *args,
     int error_code,
     struct aws_channel *channel) {
+
+    AWS_FATAL_ASSERT(
+        (args->requested_event_loop == NULL) || aws_event_loop_thread_is_callers_thread(args->requested_event_loop));
+
     /* setup_callback is always called exactly once */
     AWS_FATAL_ASSERT(!args->setup_called);
 
@@ -198,6 +202,75 @@ static void s_connection_args_setup_callback(
         args->shutdown_callback = NULL;
     }
     s_client_connection_args_release(args);
+}
+
+struct aws_connection_args_setup_callback_task {
+    struct aws_allocator *allocator;
+    struct aws_task task;
+    struct client_connection_args *args;
+    int error_code;
+    struct aws_channel *channel;
+};
+
+static void s_aws_connection_args_setup_callback_task_delete(struct aws_connection_args_setup_callback_task *task) {
+    if (task == NULL) {
+        return;
+    }
+
+    s_client_connection_args_release(task->args);
+    if (task->channel) {
+        aws_channel_release_hold(task->channel);
+    }
+
+    aws_mem_release(task->allocator, task);
+}
+
+void s_aws_connection_args_setup_callback_task_fn(struct aws_task *task, void *arg, enum aws_task_status status) {
+    (void)task;
+
+    struct aws_connection_args_setup_callback_task *callback_task = arg;
+
+    if (status == AWS_TASK_STATUS_RUN_READY) {
+        s_connect_args_setup_callback_safe(callback_task->args, callback_task->error_code, callback_task->channel);
+    }
+
+    s_aws_connection_args_setup_callback_task_delete(callback_task);
+}
+
+static struct aws_connection_args_setup_callback_task *s_aws_connection_args_setup_callback_task_new(
+    struct aws_allocator *allocator,
+    struct client_connection_args *args,
+    int error_code,
+    struct aws_channel *channel) {
+
+    struct aws_connection_args_setup_callback_task *task =
+        aws_mem_calloc(allocator, 1, sizeof(struct aws_connection_args_setup_callback_task));
+    task->allocator = allocator;
+    task->args = s_client_connection_args_acquire(args);
+    task->error_code = error_code;
+    task->channel = channel;
+    if (channel != NULL) {
+        aws_channel_acquire_hold(channel);
+    }
+
+    aws_task_init(
+        &task->task, s_aws_connection_args_setup_callback_task_fn, task, "safe connection args setup callback");
+
+    return task;
+}
+
+static void s_connection_args_setup_callback(
+    struct client_connection_args *args,
+    int error_code,
+    struct aws_channel *channel) {
+
+    if (args->requested_event_loop == NULL || aws_event_loop_thread_is_callers_thread(args->requested_event_loop)) {
+        s_connect_args_setup_callback_safe(args, error_code, channel);
+    } else {
+        struct aws_connection_args_setup_callback_task *callback_task =
+            s_aws_connection_args_setup_callback_task_new(args->bootstrap->allocator, args, error_code, channel);
+        aws_event_loop_schedule_task_now(args->requested_event_loop, &callback_task->task);
+    }
 }
 
 static void s_connection_args_creation_callback(struct client_connection_args *args, struct aws_channel *channel) {
@@ -567,10 +640,6 @@ static void s_attempt_connection(struct aws_task *task, void *arg, enum aws_task
     }
 
     struct aws_socket *outgoing_socket = aws_mem_acquire(allocator, sizeof(struct aws_socket));
-    if (!outgoing_socket) {
-        goto socket_alloc_failed;
-    }
-
     if (aws_socket_init(outgoing_socket, allocator, &task_data->options)) {
         goto socket_init_failed;
     }
@@ -592,19 +661,27 @@ socket_connect_failed:
     aws_socket_clean_up(outgoing_socket);
 socket_init_failed:
     aws_mem_release(allocator, outgoing_socket);
-socket_alloc_failed:
-    err_code = aws_last_error();
-    AWS_LOGF_ERROR(
-        AWS_LS_IO_CHANNEL_BOOTSTRAP,
-        "id=%p: failed to create socket with error %d",
-        (void *)task_data->args->bootstrap,
-        err_code);
 task_cancelled:
+    err_code = aws_last_error();
     task_data->args->failed_count++;
     /* if this is the last attempted connection and it failed, notify the user */
     if (task_data->args->failed_count == task_data->args->addresses_count) {
+        AWS_LOGF_ERROR(
+            AWS_LS_IO_CHANNEL_BOOTSTRAP,
+            "id=%p: Last attempt failed to create socket with error %d",
+            (void *)task_data->args->bootstrap,
+            err_code);
         s_connection_args_setup_callback(task_data->args, err_code, NULL);
+    } else {
+        AWS_LOGF_DEBUG(
+            AWS_LS_IO_CHANNEL_BOOTSTRAP,
+            "id=%p: Socket connect attempt %d/%d failed with error %d. More attempts ongoing...",
+            (void *)task_data->args->bootstrap,
+            task_data->args->failed_count,
+            task_data->args->addresses_count,
+            err_code);
     }
+
     s_client_connection_args_release(task_data->args);
 
 cleanup_task:
@@ -760,14 +837,14 @@ int aws_client_bootstrap_new_socket_channel(struct aws_socket_channel_bootstrap_
     }
 
     const char *host_name = options->host_name;
-    uint16_t port = options->port;
+    uint32_t port = options->port;
 
     AWS_LOGF_TRACE(
         AWS_LS_IO_CHANNEL_BOOTSTRAP,
-        "id=%p: attempting to initialize a new client channel to %s:%d",
+        "id=%p: attempting to initialize a new client channel to %s:%u",
         (void *)bootstrap,
         host_name,
-        (int)port);
+        port);
 
     aws_ref_count_init(
         &client_connection_args->ref_count,
@@ -1359,10 +1436,10 @@ struct aws_socket *aws_server_bootstrap_new_socket_listener(
     AWS_LOGF_INFO(
         AWS_LS_IO_CHANNEL_BOOTSTRAP,
         "id=%p: attempting to initialize a new "
-        "server socket listener for %s:%d",
+        "server socket listener for %s:%u",
         (void *)bootstrap_options->bootstrap,
         bootstrap_options->host_name,
-        (int)bootstrap_options->port);
+        bootstrap_options->port);
 
     aws_ref_count_init(
         &server_connection_args->ref_count,

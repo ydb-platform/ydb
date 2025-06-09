@@ -29,7 +29,7 @@ namespace NActors {
         return true;
     }
 
-    IEventBase* TEvents::TEvUndelivered::Load(TEventSerializedData* bufs) {
+    TEvents::TEvUndelivered* TEvents::TEvUndelivered::Load(const TEventSerializedData* bufs) {
         TString str = bufs->GetString();
         Y_ENSURE(str.size() == (sizeof(ui32) + sizeof(ui32)));
         const char* p = str.data();

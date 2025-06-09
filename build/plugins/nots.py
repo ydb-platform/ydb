@@ -1,3 +1,4 @@
+import re
 import os
 from enum import auto, StrEnum
 from typing import Any, Literal, TYPE_CHECKING
@@ -25,7 +26,8 @@ if TYPE_CHECKING:
 # 1 is 60 files per chunk for TIMEOUT(60) - default timeout for SIZE(SMALL)
 # 0.5 is 120 files per chunk for TIMEOUT(60) - default timeout for SIZE(SMALL)
 # 0.2 is 300 files per chunk for TIMEOUT(60) - default timeout for SIZE(SMALL)
-ESLINT_FILE_PROCESSING_TIME_DEFAULT = 0.2  # seconds per file
+# 0.0 - not to use chunks
+ESLINT_FILE_PROCESSING_TIME_DEFAULT = 0.0  # seconds per file
 
 REQUIRED_MISSING = "~~required~~"
 
@@ -192,6 +194,7 @@ TS_TEST_SPECIFIC_FIELDS = {
         df.TsTestDataDirsRename.value,
         df.TsResources.value,
         df.TsTestForPath.value,
+        df.DockerImage.value,
     ),
     TsTestType.PLAYWRIGHT: (
         df.Size.from_unit,
@@ -202,6 +205,7 @@ TS_TEST_SPECIFIC_FIELDS = {
         df.TsTestDataDirsRename.value,
         df.TsResources.value,
         df.TsTestForPath.value,
+        df.DockerImage.value,
     ),
     TsTestType.PLAYWRIGHT_LARGE: (
         df.ConfigPath.value,
@@ -295,6 +299,19 @@ def _with_report_configure_error(fn):
     return _wrapper
 
 
+def _get_var_name(s: str) -> tuple[bool, str]:
+    if not s.startswith("$"):
+        return False, ""
+
+    PLAIN_VAR_PATTERN = r"^\$\w+$"
+    WRAPPED_VAR_PATTERN = r"^\$\{\w+\}$"
+    if re.match(PLAIN_VAR_PATTERN, s):
+        return True, s[1:]
+    if re.match(WRAPPED_VAR_PATTERN, s):
+        return True, s[2:-1]
+    return False, ""
+
+
 def _build_directives(flags: list[str] | tuple[str], paths: list[str]) -> str:
     parts = [p for p in (flags or []) if p]
     parts_str = ";".join(parts)
@@ -306,8 +323,9 @@ def _build_directives(flags: list[str] | tuple[str], paths: list[str]) -> str:
 def _build_cmd_input_paths(paths: list[str] | tuple[str], hide=False, disable_include_processor=False):
     hide_part = "hide" if hide else ""
     disable_ip_part = "context=TEXT" if disable_include_processor else ""
+    input_part = "input=TEXT" if disable_include_processor else "input"
 
-    return _build_directives([hide_part, disable_ip_part, "input"], paths)
+    return _build_directives([hide_part, disable_ip_part, input_part], paths)
 
 
 def _build_cmd_output_paths(paths: list[str] | tuple[str], hide=False):
@@ -393,16 +411,16 @@ def on_set_append_with_directive(unit: NotsUnitType, var_name: str, directive: s
 
 
 def _check_nodejs_version(unit: NotsUnitType, major: int) -> None:
-    if major < 14:
+    if major < 16:
         raise Exception(
             "Node.js {} is unsupported. Update Node.js please. See https://nda.ya.ru/t/joB9Mivm6h4znu".format(major)
         )
 
-    if major < 18:
+    if major < 20:
         unit.message(
             [
                 "WARN",
-                "Node.js {} is deprecated. Update Node.js please. See https://nda.ya.ru/t/joB9Mivm6h4znu".format(major),
+                "Node.js {} is deprecated. Update Node.js please. See https://nda.ya.ru/t/Yk0qYZe17DeVKP".format(major),
             ]
         )
 
@@ -637,7 +655,6 @@ def _setup_tsc_typecheck(unit: NotsUnitType) -> None:
     unit.on_peerdir_ts_resource("typescript")
     user_recipes = unit.get("TEST_RECIPES_VALUE")
     unit.on_setup_install_node_modules_recipe()
-    unit.on_setup_extract_output_tars_recipe([unit.get("MODDIR")])
 
     test_type = TsTestType.TSC_TYPECHECK
 
@@ -690,7 +707,6 @@ def _setup_stylelint(unit: NotsUnitType) -> None:
 
     recipes_value = unit.get("TEST_RECIPES_VALUE")
     unit.on_setup_install_node_modules_recipe()
-    unit.on_setup_extract_output_tars_recipe([unit.get("MODDIR")])
 
     test_type = TsTestType.TS_STYLELINT
 
@@ -787,6 +803,19 @@ def on_prepare_deps_configure(unit: NotsUnitType) -> None:
         unit.set(["_PREPARE_DEPS_CMD", "$_PREPARE_NO_DEPS_CMD"])
 
 
+def _node_modules_bundle_needed(unit: NotsUnitType, arc_path: str) -> bool:
+    if unit.get("TS_LOCAL_CLI") == "yes":
+        return False
+
+    if unit.get("_WITH_NODE_MODULES") == "yes":
+        return True
+
+    node_modules_for = unit.get("NODE_MODULES_FOR")
+    nm_required_for = node_modules_for.split(":") if node_modules_for else []
+
+    return arc_path in nm_required_for
+
+
 @_with_report_configure_error
 def on_node_modules_configure(unit: NotsUnitType) -> None:
     pm = _create_pm(unit)
@@ -795,8 +824,11 @@ def on_node_modules_configure(unit: NotsUnitType) -> None:
 
     if has_deps:
         unit.onpeerdir(pm.get_local_peers_from_package_json())
-        local_cli = unit.get("TS_LOCAL_CLI") == "yes"
-        ins, outs = pm.calc_node_modules_inouts(local_cli, has_deps)
+        nm_bundle_needed = _node_modules_bundle_needed(unit, pm.module_path)
+        if nm_bundle_needed:
+            unit.set(["_NODE_MODULES_BUNDLE_ARG", "--nm-bundle yes"])
+
+        ins, outs = pm.calc_node_modules_inouts(nm_bundle_needed)
 
         __set_append(unit, "_NODE_MODULES_INOUTS", _build_directives(["hide", "input"], sorted(ins)))
         if not unit.get("TS_TEST_FOR"):
@@ -860,8 +892,13 @@ def on_ts_test_for_configure(
 
     for_mod_path = df.TsTestForPath.value(unit, (), {})[df.TsTestForPath.KEY]
     unit.onpeerdir([for_mod_path])
+
+    # user-defined recipes should be in the end
+    user_recipes = unit.get("TEST_RECIPES_VALUE").replace("$TEST_RECIPES_VALUE", "").strip()
+    unit.set(["TEST_RECIPES_VALUE", ""])
     unit.on_setup_extract_node_modules_recipe([for_mod_path])
     unit.on_setup_extract_output_tars_recipe([for_mod_path])
+    __set_append(unit, "TEST_RECIPES_VALUE", user_recipes)
 
     build_root = "$B" if test_runner in [TsTestType.HERMIONE, TsTestType.PLAYWRIGHT_LARGE] else "$(BUILD_ROOT)"
     unit.set(["TS_TEST_NM", os.path.join(build_root, for_mod_path, node_modules_filename)])
@@ -873,7 +910,7 @@ def on_ts_test_for_configure(
 
     test_files = df.TestFiles.ts_test_srcs(unit, (), {})[df.TestFiles.KEY]
     if not test_files:
-        ymake.report_configure_error("No tests found")
+        ymake.report_configure_error(f"No tests found for {test_runner}")
         return
 
     from lib.nots.package_manager import constants
@@ -911,7 +948,10 @@ def on_ts_test_for_configure(
 # noinspection PyUnusedLocal
 @_with_report_configure_error
 def on_validate_ts_test_for_args(unit: NotsUnitType, for_mod: str, root: str) -> None:
-    # FBP-1085
+    if for_mod == "." or for_mod == "./":
+        ymake.report_configure_error(f"Tests should be for parent module but got path '{for_mod}'")
+        return
+
     is_arc_root = root == "${ARCADIA_ROOT}"
     is_rel_for_mod = for_mod.startswith(".")
 
@@ -994,12 +1034,19 @@ def on_depends_on_mod(unit: NotsUnitType) -> None:
 
 
 @_with_report_configure_error
-def on_run_javascript_after_build_add_js_script_as_input(unit: NotsUnitType, js_script: str) -> None:
+def on_run_javascript_after_build_process_inputs(unit: NotsUnitType, js_script: str) -> None:
+    inputs = unit.get("_RUN_JAVASCRIPT_AFTER_BUILD_INPUTS").split(" ")
+
+    def process_input(input: str) -> str:
+        is_var, var_name = _get_var_name(input)
+        if is_var:
+            return f"${{hide;input:{var_name}}}"
+        return _build_cmd_input_paths([input], hide=True)
+
+    processed_inputs = [process_input(i) for i in inputs if i]
+
     js_script = os.path.normpath(js_script)
-    if js_script.startswith("node_modules/"):
-        return
+    if not js_script.startswith("node_modules/"):
+        processed_inputs.append(_build_cmd_input_paths([js_script], hide=True))
 
-    __set_append(unit, "_RUN_JAVASCRIPT_AFTER_BUILD_INPUTS", js_script)
-
-
-# Zero-diff commit
+    unit.set(["_RUN_JAVASCRIPT_AFTER_BUILD_INPUTS", " ".join(processed_inputs)])

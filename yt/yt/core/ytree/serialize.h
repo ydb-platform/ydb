@@ -2,6 +2,8 @@
 
 #include "public.h"
 
+#include "proto_yson_struct.h"
+
 #include <yt/yt/core/yson/producer.h>
 
 #include <yt/yt/core/misc/guid.h>
@@ -169,11 +171,15 @@ template <class E, class T, E Min, E Max>
 void Serialize(const TEnumIndexedArray<E, T, Min, Max>& value, NYson::IYsonConsumer* consumer);
 
 // Subtypes of google::protobuf::Message
-template <class T>
+template <CProtobufMessageAsYson T>
 void Serialize(
     const T& message,
-    NYson::IYsonConsumer* consumer,
-    typename std::enable_if<std::is_convertible<T*, google::protobuf::Message*>::value, void>::type* = nullptr);
+    NYson::IYsonConsumer* consumer);
+
+template <CProtobufMessageAsString T>
+void Serialize(
+    const T& message,
+    NYson::IYsonConsumer* consumer);
 
 template <class T, class TTag>
 void Serialize(const TStrongTypedef<T, TTag>& value, NYson::IYsonConsumer* consumer);
@@ -286,8 +292,12 @@ template <class E, class T, E Min, E Max>
 void Deserialize(TEnumIndexedArray<E, T, Min, Max>& vector, INodePtr node);
 
 // Subtypes of google::protobuf::Message
-template <class T>
-    requires std::derived_from<T, google::protobuf::Message>
+template <CProtobufMessageAsYson T>
+void Deserialize(
+    T& message,
+    const INodePtr& node);
+
+template <CProtobufMessageAsString T>
 void Deserialize(
     T& message,
     const INodePtr& node);

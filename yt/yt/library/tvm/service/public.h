@@ -15,13 +15,16 @@ DECLARE_REFCOUNTED_STRUCT(IDynamicTvmService)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+using TUid = ui64;
+using TTvmId = ui64;
+
+////////////////////////////////////////////////////////////////////////////////
+
 struct TParsedTicket
 {
-    ui64 DefaultUid;
-    THashSet<TString> Scopes;
+    TUid DefaultUid;
+    THashSet<std::string> Scopes;
 };
-
-using TTvmId = ui64;
 
 struct TParsedServiceTicket
 {

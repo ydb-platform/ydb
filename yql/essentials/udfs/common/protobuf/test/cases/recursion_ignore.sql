@@ -30,6 +30,6 @@ $config = @@{
 $udfPar = Udf(Protobuf::Parse, $config as TypeConfig);
 $udfSer = Udf(Protobuf::Serialize, $config as TypeConfig);
 
-SELECT TestField, Ensure("Success", $udfPar(TestField) == $udfPar($udfSer($udfPar(TestField))), "Fail")
+SELECT TestField, $udfPar(TestField), $udfSer($udfPar(TestField)), Ensure("Success", $udfPar(TestField) == $udfPar($udfSer($udfPar(TestField))), "Fail")
 FROM plato.Input;
 

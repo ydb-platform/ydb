@@ -289,8 +289,6 @@ private:
 
     TInitRequest InitRequest;
 
-    TDeque<ui64> SeqNoInflight;
-
     TActorId PartitionWriterCache;
     TActorId PartitionChooser;
 

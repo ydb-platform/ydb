@@ -1,4 +1,5 @@
 PRAGMA FilterPushdownOverJoinOptionalSide;
+PRAGMA config.flags("OptimizerFlags", "FuseEquiJoinsInputMultiLabels", "PullUpFlatMapOverJoinMultipleLabels");
 
 SELECT t1.Key1, t1.Key2, t1.Fk1, t1.Value, t2.Key, t2.Value, t3.Value
 

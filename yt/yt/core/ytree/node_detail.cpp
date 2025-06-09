@@ -112,7 +112,12 @@ void TNodeBase::RemoveSelf(
     TRspRemove* /*response*/,
     const TCtxRemovePtr& context)
 {
-    context->SetRequestInfo("Recursive: %v, Force: %v", request->recursive(), request->force());
+    bool recursive = request->recursive();
+    bool force = request->force();
+
+    context->SetRequestInfo("Recursive: %v, Force: %v",
+        recursive,
+        force);
 
     ValidatePermission(
         EPermissionCheckScope::Subtree,
@@ -122,13 +127,13 @@ void TNodeBase::RemoveSelf(
         EPermission::Write | EPermission::ModifyChildren);
 
     bool isComposite = (GetType() == ENodeType::Map || GetType() == ENodeType::List);
-    if (!request->recursive() && isComposite && AsComposite()->GetChildCount() > 0) {
+    if (!recursive && isComposite && AsComposite()->GetChildCount() > 0) {
         THROW_ERROR_EXCEPTION(
             NYTree::EErrorCode::CannotRemoveNonemptyCompositeNode,
             "Cannot remove non-empty composite node");
     }
 
-    DoRemoveSelf(request->recursive(), request->force());
+    DoRemoveSelf(recursive, force);
 
     context->Reply();
 }
@@ -201,8 +206,7 @@ void TCompositeNodeMixin::SetRecursive(
     ValidatePermission(EPermissionCheckScope::This, EPermission::Write);
 
     auto factory = CreateFactory();
-    auto child = ConvertToNode(TYsonString(request->value()), factory.get());
-    SetChild(factory.get(), "/" + path, child, request->recursive());
+    SetChildValue(factory.get(), "/" + path, TYsonString(request->value()), request->recursive());
     factory->Commit();
 
     context->Reply();
@@ -310,8 +314,6 @@ void TMapNodeMixin::ListSelf(
     TRspList* response,
     const TCtxListPtr& context)
 {
-    ValidatePermission(EPermissionCheckScope::This, EPermission::Read);
-
     auto attributeFilter = request->has_attributes()
         ? FromProto<TAttributeFilter>(request->attributes())
         : TAttributeFilter();
@@ -326,6 +328,8 @@ void TMapNodeMixin::ListSelf(
         THROW_ERROR_EXCEPTION("Limit is negative")
             << TErrorAttribute("limit", limit);
     }
+
+    ValidatePermission(EPermissionCheckScope::This, EPermission::Read);
 
     TAsyncYsonWriter writer;
 
@@ -361,13 +365,17 @@ void TMapNodeMixin::ListSelf(
         }));
 }
 
-std::pair<TString, INodePtr> TMapNodeMixin::PrepareSetChild(
+std::pair<TString, INodePtr> TMapNodeMixin::PrepareSetChildOrChildValue(
     INodeFactory* factory,
     const TYPath& path,
-    INodePtr child,
+    std::variant<INodePtr, NYson::TYsonString> childOrChildValue,
     bool recursive)
 {
-    YT_VERIFY(factory || !recursive);
+    if (std::holds_alternative<INodePtr>(childOrChildValue)) {
+        YT_VERIFY(factory || !recursive);
+    } else {
+        YT_VERIFY(factory);
+    }
 
     NYPath::TTokenizer tokenizer(path);
     if (tokenizer.Advance() == NYPath::ETokenType::EndOfStream) {
@@ -402,7 +410,15 @@ std::pair<TString, INodePtr> TMapNodeMixin::PrepareSetChild(
 
             ValidateChildCount(GetPath(), currentNode->GetChildCount());
 
-            auto newChild = lastStep ? child : factory->CreateMap();
+            auto newChild = lastStep
+                ? Visit(childOrChildValue,
+                    [] (INodePtr child) {
+                        return child;
+                    },
+                    [&] (const TYsonString& childValue) {
+                        return ConvertToNode(childValue, factory);
+                    })
+                : factory->CreateMap();
             if (currentNode != rootNode) {
                 YT_VERIFY(currentNode->AddChild(key, newChild));
             } else {
@@ -427,6 +443,15 @@ std::pair<TString, INodePtr> TMapNodeMixin::PrepareSetChild(
     return {rootKey, rootChild};
 }
 
+std::pair<TString, INodePtr> TMapNodeMixin::PrepareSetChild(
+    INodeFactory* factory,
+    const TYPath& path,
+    INodePtr child,
+    bool recursive)
+{
+    return PrepareSetChildOrChildValue(factory, path, child, recursive);
+}
+
 void TMapNodeMixin::SetChild(
     INodeFactory* factory,
     const TYPath& path,
@@ -434,6 +459,16 @@ void TMapNodeMixin::SetChild(
     bool recursive)
 {
     const auto& [rootKey, rootChild] = PrepareSetChild(factory, path, child, recursive);
+    AddChild(rootKey, rootChild);
+}
+
+void TMapNodeMixin::SetChildValue(
+    INodeFactory* factory,
+    const TYPath& path,
+    NYson::TYsonString childValue,
+    bool recursive)
+{
+    const auto& [rootKey, rootChild] = PrepareSetChildOrChildValue(factory, path, childValue, recursive);
     AddChild(rootKey, rootChild);
 }
 
@@ -513,12 +548,14 @@ IYPathService::TResolveResult TListNodeMixin::ResolveRecursive(
     }
 }
 
-void TListNodeMixin::SetChild(
-    INodeFactory* /*factory*/,
+void TListNodeMixin::SetChildOrChildValue(
+    INodeFactory* factory,
     const TYPath& path,
-    INodePtr child,
+    std::variant<INodePtr, TYsonString> childOrValue,
     bool recursive)
 {
+    YT_VERIFY(factory || std::holds_alternative<INodePtr>(childOrValue));
+
     if (recursive) {
         THROW_ERROR_EXCEPTION("List node %v does not support \"recursive\" option",
             GetPath());
@@ -557,7 +594,29 @@ void TListNodeMixin::SetChild(
 
     ValidateChildCount(GetPath(), GetChildCount());
 
-    AddChild(child, beforeIndex);
+    AddChild(
+        std::holds_alternative<INodePtr>(childOrValue)
+            ? std::get<INodePtr>(childOrValue)
+            : ConvertToNode(std::get<TYsonString>(childOrValue), factory),
+        beforeIndex);
+}
+
+void TListNodeMixin::SetChild(
+    INodeFactory* factory,
+    const TYPath& path,
+    INodePtr child,
+    bool recursive)
+{
+    SetChildOrChildValue(factory, path, child, recursive);
+}
+
+void TListNodeMixin::SetChildValue(
+    INodeFactory* factory,
+    const TYPath& path,
+    TYsonString childValue,
+    bool recursive)
+{
+    SetChildOrChildValue(factory, path, childValue, recursive);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -568,6 +627,7 @@ void TSupportsSetSelfMixin::SetSelf(
     const TCtxSetPtr& context)
 {
     bool force = request->force();
+
     context->SetRequestInfo("Force: %v", force);
 
     ValidateSetSelf(force);

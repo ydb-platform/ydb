@@ -222,9 +222,9 @@ static TMaybe<TDuration> TryGetBackoffDuration(const TErrorResponse& errorRespon
     }
     for (auto code : {
         NRpc::TransportError,
+        NBus::TransportError,
         NRpc::Unavailable,
         NApi::RetriableArchiveError,
-        NSequoiaClient::SequoiaRetriableError,
         NRpc::TransientFailure,
         Canceled,
         Timeout,

@@ -38,7 +38,7 @@ public:
     }
 
     bool LoadMetadata(const TVector<TImport*>& imports,
-        const TVector<TFunction*>& functions, TExprContext& ctx, NUdf::ELogLevel logLevel) const final {
+        const TVector<TFunction*>& functions, TExprContext& ctx, NUdf::ELogLevel logLevel, THoldingFileStorage& storage) const final {
         if (QContext_.CanRead()) {
             for (auto& f : functions) {
                 auto key = MakeKey(f);
@@ -53,7 +53,7 @@ public:
             return true;
         }
 
-        auto res = Inner_->LoadMetadata(imports, functions, ctx, logLevel);
+        auto res = Inner_->LoadMetadata(imports, functions, ctx, logLevel, storage);
         if (res && QContext_.CanWrite()) {
             // calculate hash for each function and store it
             for (const auto& f : functions) {
@@ -66,12 +66,12 @@ public:
         return res;
     }
 
-    TResolveResult LoadRichMetadata(const TVector<TImport>& imports, NUdf::ELogLevel logLevel) const final {
+    TResolveResult LoadRichMetadata(const TVector<TImport>& imports, NUdf::ELogLevel logLevel, THoldingFileStorage& storage) const final {
         if (QContext_.CanRead()) {
             ythrow yexception() << "Can't replay LoadRichMetadata";
         }
 
-        return Inner_->LoadRichMetadata(imports, logLevel);
+        return Inner_->LoadRichMetadata(imports, logLevel, storage);
     }
 
     bool ContainsModule(const TStringBuf& moduleName) const final {

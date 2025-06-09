@@ -66,7 +66,7 @@ NYql::TResolveResult DoDiscover(const NYql::TResolve& inMsg, IMutableFunctionReg
 
             TFunctionTypeInfo funcInfo;
             if (!f.second.IsTypeAwareness) {
-                auto status = functionRegistry.FindFunctionTypeInfo(env, typeInfoHelper,
+                auto status = functionRegistry.FindFunctionTypeInfo(NYql::UnknownLangVersion, env, typeInfoHelper,
                     nullptr, funcName, nullptr, nullptr, NUdf::IUdfModule::TFlags::TypesOnly, {}, nullptr, logProvider.Get(), &funcInfo);
 
                 if (!status.IsOk()) {
@@ -86,6 +86,8 @@ NYql::TResolveResult DoDiscover(const NYql::TResolve& inMsg, IMutableFunctionReg
 
                 udfRes->SetSupportsBlocks(funcInfo.SupportsBlocks);
                 udfRes->SetIsStrict(funcInfo.IsStrict);
+                udfRes->SetMinLangVer(funcInfo.MinLangVer);
+                udfRes->SetMaxLangVer(funcInfo.MaxLangVer);
             }
         }
     }
@@ -103,7 +105,8 @@ void Print(const NYql::TResolveResult& result, IOutputStream& out, bool printAsP
     out << "UDF count: " << result.UdfsSize() << Endl;
 }
 
-void DiscoverInFiles(const TVector<TString>& udfPaths, IOutputStream& out, bool printAsProto, NYql::NUdf::ELogLevel logLevel) {
+void DiscoverInFiles(const TVector<TString>& udfPaths, IOutputStream& out, bool printAsProto,
+    NYql::NUdf::ELogLevel logLevel) {
     NYql::TResolve inMsg;
     inMsg.SetRuntimeLogLevel(static_cast<ui32>(logLevel));
     for (auto& path : udfPaths) {

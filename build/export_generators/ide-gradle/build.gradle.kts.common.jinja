@@ -1,0 +1,18 @@
+{%- include "[generator]/repositories.jinja" -%}
+{%- include "[generator]/publish.jinja" -%}
+
+{#- Compiler flags -#}
+{%- include "[generator]/javac_flags.jinja" -%}
+{%- include "[generator]/kotlinc_flags.jinja" -%}
+
+{#- Runtime flags -#}
+{%- include "[generator]/jvm_args.jinja" -%}
+
+{%- include "[generator]/source_sets.jinja" -%}
+{%- include "[generator]/codegen.jinja" -%}
+
+{#- To disable redundant javadoc (it may fail the build) #}
+
+tasks.withType<Javadoc>().configureEach {
+    isEnabled = false
+}

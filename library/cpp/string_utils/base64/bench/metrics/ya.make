@@ -6,8 +6,6 @@ TAG(
     ya:force_sandbox
     sb:intel_e5_2660v1
     ya:fat
-    ya:large_tests_on_multi_slots
-    ya:large_tests_on_ya_make_2
 )
 
 TEST_SRCS(

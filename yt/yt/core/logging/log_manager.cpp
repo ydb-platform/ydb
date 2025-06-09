@@ -26,7 +26,6 @@
 #include <yt/yt/core/misc/property.h>
 #include <yt/yt/core/misc/shutdown.h>
 #include <yt/yt/core/misc/ref_counted_tracker.h>
-#include <yt/yt/core/misc/signal_registry.h>
 #include <yt/yt/core/misc/shutdown.h>
 #include <yt/yt/core/misc/heap.h>
 
@@ -39,6 +38,8 @@
 
 #include <yt/yt/library/profiling/producer.h>
 #include <yt/yt/library/profiling/sensor.h>
+
+#include <yt/yt/library/signals/signal_registry.h>
 
 #include <library/cpp/yt/misc/hash.h>
 #include <library/cpp/yt/misc/variant.h>
@@ -79,6 +80,7 @@ using namespace NYTree;
 using namespace NConcurrency;
 using namespace NFS;
 using namespace NProfiling;
+using namespace NSignals;
 using namespace NTracing;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -390,6 +392,7 @@ public:
 
         if (!IsConfiguredFromEnv()) {
             DoUpdateConfig(TLogManagerConfig::CreateDefault(), /*fromEnv*/ false);
+            DefaultConfigured_.store(true);
         }
 
         SystemCategory_ = GetCategory(SystemLoggingCategoryName);
@@ -426,6 +429,13 @@ public:
         if (sync) {
             future.Get().ThrowOnError();
         }
+
+        DefaultConfigured_.store(false);
+    }
+
+    bool IsDefaultConfigured()
+    {
+        return DefaultConfigured_.load();
     }
 
     void ConfigureFromEnv()
@@ -599,6 +609,9 @@ public:
         // NB: This is somewhat racy but should work fine as long as more messages keep coming.
         auto lowBacklogWatermark = LowBacklogWatermark_.load(std::memory_order::relaxed);
         auto highBacklogWatermark = HighBacklogWatermark_.load(std::memory_order::relaxed);
+
+        BacklogQueueFillFraction_.store(static_cast<double>(backlogEvents) / highBacklogWatermark, std::memory_order::relaxed);
+
         if (Suspended_.load(std::memory_order::relaxed)) {
             if (backlogEvents < lowBacklogWatermark) {
                 Suspended_.store(false, std::memory_order::relaxed);
@@ -659,6 +672,11 @@ public:
     IInvokerPtr GetCompressionInvoker() override
     {
         return CompressionThreadPool_->GetInvoker();
+    }
+
+    double GetBacklogQueueFillFraction() const
+    {
+        return BacklogQueueFillFraction_.load(std::memory_order::relaxed);
     }
 
 private:
@@ -1028,6 +1046,7 @@ private:
         if (!perThreadQueue) {
             perThreadQueue = new TThreadLocalQueue();
             RegisteredLocalQueues_.Enqueue(perThreadQueue);
+            Y_UNUSED(LocalQueueReclaimer()); // Touch thread-local variable so that its destructor is called.
         }
 
         ++EnqueuedEvents_;
@@ -1433,6 +1452,7 @@ private:
     // Incrementing version forces loggers to update their own default configuration (default level etc.).
     std::atomic<int> Version_ = 0;
 
+    std::atomic<bool> DefaultConfigured_ = false;
     std::atomic<bool> ConfiguredFromEnv_ = false;
 
     // These are just cached (for performance reason) copies from Config_.
@@ -1503,6 +1523,8 @@ private:
     THashMap<TString, TLoggingAnchor*> AnchorMap_;
     std::atomic<TLoggingAnchor*> FirstAnchor_ = nullptr;
     std::vector<std::unique_ptr<TLoggingAnchor>> DynamicAnchors_;
+
+    std::atomic<double> BacklogQueueFillFraction_ = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1540,6 +1562,14 @@ void TLogManager::Configure(TLogManagerConfigPtr config, bool sync)
         return;
     }
     Impl_->Configure(std::move(config), /*fromEnv*/ false, sync);
+}
+
+bool TLogManager::IsDefaultConfigured()
+{
+    [[unlikely]] if (!Impl_->IsInitialized()) {
+        return false;
+    }
+    return Impl_->IsDefaultConfigured();
 }
 
 void TLogManager::ConfigureFromEnv()
@@ -1677,6 +1707,11 @@ void TLogManager::Synchronize(TInstant deadline)
         return;
     }
     Impl_->Synchronize(deadline);
+}
+
+double TLogManager::GetBacklogQueueFillFraction() const
+{
+    return Impl_->GetBacklogQueueFillFraction();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

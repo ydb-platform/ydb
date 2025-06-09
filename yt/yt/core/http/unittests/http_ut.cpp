@@ -99,9 +99,9 @@ TEST(TParseCookiesTest, ParseCookie)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-std::vector<TString> ToVector(const TCompactVector<TString, 1>& v)
+std::vector<std::string> ToVector(const auto& v)
 {
-    return std::vector<TString>(v.begin(), v.end());
+    return {v.begin(), v.end()};
 }
 
 TEST(THeadersTest, Simple)
@@ -110,20 +110,20 @@ TEST(THeadersTest, Simple)
 
     headers->Set("X-Test", "F");
 
-    ASSERT_EQ(std::vector<TString>{{"F"}}, ToVector(headers->GetAll("X-Test")));
-    ASSERT_EQ(TString{"F"}, headers->GetOrThrow("X-Test"));
-    ASSERT_EQ(TString{"F"}, *headers->Find("X-Test"));
+    ASSERT_EQ(std::vector<std::string>{{"F"}}, ToVector(headers->GetAll("X-Test")));
+    ASSERT_EQ(std::string("F"), headers->GetOrThrow("X-Test"));
+    ASSERT_EQ(std::string("F"), *headers->Find("X-Test"));
 
     ASSERT_THROW(headers->GetAll("X-Test2"), TErrorException);
     ASSERT_THROW(headers->GetOrThrow("X-Test2"), TErrorException);
     ASSERT_FALSE(headers->Find("X-Test2"));
 
     headers->Add("X-Test", "H");
-    std::vector<TString> expected = {"F", "H"};
+    std::vector<std::string> expected = {"F", "H"};
     ASSERT_EQ(expected, ToVector(headers->GetAll("X-Test")));
 
     headers->Set("X-Test", "J");
-    ASSERT_EQ(std::vector<TString>{{"J"}}, ToVector(headers->GetAll("X-Test")));
+    ASSERT_EQ(std::vector<std::string>{{"J"}}, ToVector(headers->GetAll("X-Test")));
 }
 
 TEST(THeadersTest, HeaderCaseIsIrrelevant)
@@ -131,8 +131,8 @@ TEST(THeadersTest, HeaderCaseIsIrrelevant)
     auto headers = New<THeaders>();
 
     headers->Set("x-tEsT", "F");
-    ASSERT_EQ(TString("F"), headers->GetOrThrow("x-test"));
-    ASSERT_EQ(TString("F"), headers->GetOrThrow("X-Test"));
+    ASSERT_EQ(std::string("F"), headers->GetOrThrow("x-test"));
+    ASSERT_EQ(std::string("F"), headers->GetOrThrow("X-Test"));
 
     TString buffer;
     TStringOutput output(buffer);
@@ -141,7 +141,6 @@ TEST(THeadersTest, HeaderCaseIsIrrelevant)
     TString expected = "x-tEsT: F\r\n";
     ASSERT_EQ(expected, buffer);
 }
-
 
 TEST(THeadersTest, MessedUpHeaderValuesAreNotAllowed)
 {
@@ -642,8 +641,8 @@ private:
             serverConfig->Credentials = New<NHttps::TServerCredentialsConfig>();
             serverConfig->Credentials->PrivateKey = New<TPemBlobConfig>();
             serverConfig->Credentials->PrivateKey->Value = TestCertificate;
-            serverConfig->Credentials->CertChain = New<TPemBlobConfig>();
-            serverConfig->Credentials->CertChain->Value = TestCertificate;
+            serverConfig->Credentials->CertificateChain = New<TPemBlobConfig>();
+            serverConfig->Credentials->CertificateChain->Value = TestCertificate;
             SetupServer(serverConfig);
             ServerConfig = serverConfig;
             Server = NHttps::CreateServer(serverConfig, Poller);
@@ -652,8 +651,8 @@ private:
             clientConfig->Credentials = New<NHttps::TClientCredentialsConfig>();
             clientConfig->Credentials->PrivateKey = New<TPemBlobConfig>();
             clientConfig->Credentials->PrivateKey->Value = TestCertificate;
-            clientConfig->Credentials->CertChain = New<TPemBlobConfig>();
-            clientConfig->Credentials->CertChain->Value = TestCertificate;
+            clientConfig->Credentials->CertificateChain = New<TPemBlobConfig>();
+            clientConfig->Credentials->CertificateChain->Value = TestCertificate;
             SetupClient(clientConfig);
             Client = NHttps::CreateClient(clientConfig, Poller);
         }
@@ -1036,7 +1035,7 @@ TEST_P(THttpServerTest, ResponseStreaming)
     Sleep(TDuration::MilliSeconds(10));
 }
 
-static constexpr auto& Logger = HttpLogger;
+constinit const auto Logger = HttpLogger;
 
 class TCancelingHandler
     : public IHttpHandler

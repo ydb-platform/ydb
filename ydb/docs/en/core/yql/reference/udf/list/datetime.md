@@ -170,7 +170,7 @@ Conversions between `Interval` and various time units.
 
 AddTimezone doesn't affect the output of ToSeconds() in any way, because ToSeconds() always returns GMT time.
 
-You can also create an Interval from a string literal in the format [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601%23Durations).
+You can also create an Interval from a string literal in the format [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601%23Durations). Time units up to a week are supported, inclusive.
 
 ### Examples
 

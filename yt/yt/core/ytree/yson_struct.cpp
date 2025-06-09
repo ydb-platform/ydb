@@ -64,9 +64,29 @@ void TYsonStructBase::Load(
     INodePtr node,
     bool postprocess,
     bool setDefaults,
+    const std::function<NYPath::TYPath()>& pathGetter)
+{
+    Meta_->LoadStruct(this, std::move(node), postprocess, setDefaults, pathGetter);
+}
+
+void TYsonStructBase::Load(
+    TYsonPullParserCursor* cursor,
+    bool postprocess,
+    bool setDefaults,
+    const std::function<NYPath::TYPath()>& pathGetter)
+{
+    Meta_->LoadStruct(this, cursor, postprocess, setDefaults, pathGetter);
+}
+
+void TYsonStructBase::Load(
+    INodePtr node,
+    bool postprocess,
+    bool setDefaults,
     const NYPath::TYPath& path)
 {
-    Meta_->LoadStruct(this, std::move(node), postprocess, setDefaults, path);
+    Load(std::move(node), postprocess, setDefaults, [&] {
+        return path;
+    });
 }
 
 void TYsonStructBase::Load(
@@ -75,7 +95,9 @@ void TYsonStructBase::Load(
     bool setDefaults,
     const NYPath::TYPath& path)
 {
-    Meta_->LoadStruct(this, cursor, postprocess, setDefaults, path);
+    Load(cursor, postprocess, setDefaults, [&] {
+        return path;
+    });
 }
 
 void TYsonStructBase::Load(IInputStream* input)
@@ -91,7 +113,7 @@ void TYsonStructBase::Save(IYsonConsumer* consumer) const
     consumer->OnEndMap();
 }
 
-void TYsonStructBase::SaveAsMapFragment(NYson::IYsonConsumer* consumer) const
+void TYsonStructBase::SaveRecognizedAsMapFragment(NYson::IYsonConsumer* consumer) const
 {
     for (const auto& [name, parameter] : Meta_->GetParameterSortedList()) {
         if (!parameter->CanOmitValue(this)) {
@@ -99,14 +121,51 @@ void TYsonStructBase::SaveAsMapFragment(NYson::IYsonConsumer* consumer) const
             parameter->Save(this, consumer);
         }
     }
+}
 
-    if (LocalUnrecognized_) {
-        auto unrecognizedList = LocalUnrecognized_->GetChildren();
-        SortBy(unrecognizedList, [] (const auto& item) { return item.first; });
-        for (const auto& [key, child] : unrecognizedList) {
-            consumer->OnKeyedItem(key);
-            Serialize(child, consumer);
+void TYsonStructBase::SaveAsMapFragment(NYson::IYsonConsumer* consumer) const
+{
+    if (!LocalUnrecognized_) {
+        // Fast path.
+        return SaveRecognizedAsMapFragment(consumer);
+    }
+
+    const auto& recognizedList = Meta_->GetParameterSortedList();
+    auto recognizedIt = recognizedList.begin();
+
+    auto unrecognizedList = LocalUnrecognized_->GetChildren();
+    SortBy(unrecognizedList, [] (const auto& item) { return item.first; });
+    auto unrecognizedIt = unrecognizedList.begin();
+
+    auto saveRecognized = [&recognizedIt, this] (auto* consumer) {
+        const auto& parameter = recognizedIt->second;
+        if (!parameter->CanOmitValue(this)) {
+            consumer->OnKeyedItem(recognizedIt->first);
+            parameter->Save(this, consumer);
         }
+        ++recognizedIt;
+    };
+
+    auto saveUnrecognized = [&unrecognizedIt] (auto* consumer) {
+        consumer->OnKeyedItem(unrecognizedIt->first);
+        Serialize(unrecognizedIt->second, consumer);
+        ++unrecognizedIt;
+    };
+
+    while (recognizedIt != recognizedList.end() && unrecognizedIt != unrecognizedList.end()) {
+        if (recognizedIt->first < unrecognizedIt->first) {
+            saveRecognized(consumer);
+        } else {
+            saveUnrecognized(consumer);
+        }
+    }
+
+    while (recognizedIt != recognizedList.end()) {
+        saveRecognized(consumer);
+    }
+
+    while (unrecognizedIt != unrecognizedList.end()) {
+        saveUnrecognized(consumer);
     }
 }
 
@@ -117,9 +176,9 @@ void TYsonStructBase::Save(IOutputStream* output) const
     context.Finish();
 }
 
-void TYsonStructBase::Postprocess(const TYPath& path)
+void TYsonStructBase::Postprocess(const std::function<NYPath::TYPath()>& pathGetter)
 {
-    Meta_->PostprocessStruct(this, path);
+    Meta_->PostprocessStruct(this, pathGetter);
 }
 
 void TYsonStructBase::SetDefaults()

@@ -1744,6 +1744,11 @@ public:
         if (Flatten) {
             block = L(block, Y("let", "core", Y(ordered ? "OrderedFlatMap" : "FlatMap", "core", BuildLambda(Pos, Y("row"), Flatten, "res"))));
         }
+        if (ctx.GroupByExprAfterWhere) {
+            if (auto filter = Source->BuildFilter(ctx, "core"); filter) {
+                block = L(block, Y("let", "core", filter));
+            }
+        }
         if (PreaggregatedMap) {
             block = L(block, Y("let", "core", PreaggregatedMap));
             if (Source->IsCompositeSource() && !Columns.QualifiedAll) {
@@ -1752,9 +1757,10 @@ public:
         } else if (Source->IsCompositeSource() && !Columns.QualifiedAll) {
             block = L(block, Y("let", "origcore", "core"));
         }
-        auto filter = Source->BuildFilter(ctx, "core");
-        if (filter) {
-            block = L(block, Y("let", "core", filter));
+        if (!ctx.GroupByExprAfterWhere) {
+            if (auto filter = Source->BuildFilter(ctx, "core"); filter) {
+                block = L(block, Y("let", "core", filter));
+            }
         }
         if (Aggregate) {
             block = L(block, Y("let", "core", Aggregate));
@@ -3028,8 +3034,8 @@ public:
             if (!SkipTake->Init(ctx, FakeSource.Get())) {
                 return false;
             }
-            if (SkipTake->HasSkip() && EOrderKind::Sort != Source->GetOrderKind()) {
-                ctx.Warning(Source->GetPos(), TIssuesIds::YQL_OFFSET_WITHOUT_SORT) << "LIMIT with OFFSET without ORDER BY may provide different results from run to run";
+            if (SkipTake->HasSkip() && Source->GetOrderKind() != EOrderKind::Sort && Source->GetOrderKind() != EOrderKind::Assume) {
+                ctx.Warning(Source->GetPos(), TIssuesIds::YQL_OFFSET_WITHOUT_SORT) << "LIMIT with OFFSET without [ASSUME] ORDER BY may provide different results from run to run";
             }
         }
 

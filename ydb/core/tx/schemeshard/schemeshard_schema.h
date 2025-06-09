@@ -4,6 +4,7 @@
 
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/scheme/scheme_pathid.h>
+#include <ydb/core/protos/sys_view_types.pb.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/protos/tx.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
@@ -1377,6 +1378,10 @@ struct Schema : NIceDb::Schema {
         struct ReadRowsProcessed : Column<39, NScheme::NTypeIds::Uint64> {};
         struct ReadBytesProcessed : Column<40, NScheme::NTypeIds::Uint64> {};
 
+        struct StartTime : Column<41, NScheme::NTypeIds::Uint64> {};
+        struct EndTime : Column<42, NScheme::NTypeIds::Uint64> {};
+        struct UserSID : Column<43, NScheme::NTypeIds::Utf8> {};
+
         using TKey = TableKey<Id>;
         using TColumns = TableColumns<
             Id,
@@ -1418,7 +1423,10 @@ struct Schema : NIceDb::Schema {
             UploadRowsProcessed,
             UploadBytesProcessed,
             ReadRowsProcessed,
-            ReadBytesProcessed
+            ReadBytesProcessed,
+            StartTime,
+            EndTime,
+            UserSID
         >;
     };
 
@@ -1583,6 +1591,7 @@ struct Schema : NIceDb::Schema {
         struct DstPathName : Column<3, NScheme::NTypeIds::Utf8> {};
         struct DstPathOwnerId : Column<4, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
         struct DstPathLocalId : Column<5, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
+        // Table scheme
         struct Scheme : Column<6, NScheme::NTypeIds::String> {};
         struct CreationQuery : Column<13, NScheme::NTypeIds::Utf8> {};
         // NKikimrSchemeOp::TModifyScheme serialized as string
@@ -1590,6 +1599,7 @@ struct Schema : NIceDb::Schema {
         struct Permissions : Column<11, NScheme::NTypeIds::String> {};
         struct Metadata : Column<12, NScheme::NTypeIds::String> {};
         struct Changefeeds : Column<15, NScheme::NTypeIds::String> { using Type = NKikimrSchemeOp::TImportTableChangefeeds; };
+        struct Topic : Column<20, NScheme::NTypeIds::String> {};
 
         struct State : Column<7, NScheme::NTypeIds::Byte> {};
         struct WaitTxId : Column<8, NScheme::NTypeIds::Uint64> { using Type = TTxId; };
@@ -1598,6 +1608,7 @@ struct Schema : NIceDb::Schema {
         struct Issue : Column<10, NScheme::NTypeIds::Utf8> {};
         struct SrcPrefix : Column<17, NScheme::NTypeIds::Utf8> {};
         struct EncryptionIV : Column<18, NScheme::NTypeIds::String> {};
+        struct SrcPath : Column<19, NScheme::NTypeIds::Utf8> {};
 
         using TKey = TableKey<ImportId, Index>;
         using TColumns = TableColumns<
@@ -1618,7 +1629,9 @@ struct Schema : NIceDb::Schema {
             NextChangefeedIdx,
             Issue,
             SrcPrefix,
-            EncryptionIV
+            EncryptionIV,
+            SrcPath,
+            Topic
         >;
     };
 
@@ -1716,6 +1729,7 @@ struct Schema : NIceDb::Schema {
         struct VirtualTimestamps : Column<7, NScheme::NTypeIds::Bool> {};
         struct AwsRegion : Column<8, NScheme::NTypeIds::Utf8> {};
         struct ResolvedTimestampsIntervalMs : Column<9, NScheme::NTypeIds::Uint64> {};
+        struct SchemaChanges: Column<10, NScheme::NTypeIds::Bool> {};
 
         using TKey = TableKey<OwnerPathId, LocalPathId>;
         using TColumns = TableColumns<
@@ -1727,7 +1741,8 @@ struct Schema : NIceDb::Schema {
             Format,
             VirtualTimestamps,
             AwsRegion,
-            ResolvedTimestampsIntervalMs
+            ResolvedTimestampsIntervalMs,
+            SchemaChanges
         >;
     };
 
@@ -1741,6 +1756,7 @@ struct Schema : NIceDb::Schema {
         struct VirtualTimestamps : Column<7, NScheme::NTypeIds::Bool> {};
         struct AwsRegion : Column<8, NScheme::NTypeIds::Utf8> {};
         struct ResolvedTimestampsIntervalMs : Column<9, NScheme::NTypeIds::Uint64> {};
+        struct SchemaChanges: Column<10, NScheme::NTypeIds::Bool> {};
 
         using TKey = TableKey<OwnerPathId, LocalPathId>;
         using TColumns = TableColumns<
@@ -1752,7 +1768,8 @@ struct Schema : NIceDb::Schema {
             Format,
             VirtualTimestamps,
             AwsRegion,
-            ResolvedTimestampsIntervalMs
+            ResolvedTimestampsIntervalMs,
+            SchemaChanges
         >;
     };
 
@@ -2019,6 +2036,15 @@ struct Schema : NIceDb::Schema {
         >;
     };
 
+    struct SysView : Table<119> {
+        struct PathId : Column<1, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
+        struct AlterVersion : Column<2, NScheme::NTypeIds::Uint64> {};
+        struct SysViewType : Column<3, NScheme::NTypeIds::Uint32> { using Type = NKikimrSysView::ESysViewType; };
+
+        using TKey = TableKey<PathId>;
+        using TColumns = TableColumns<PathId, AlterVersion, SysViewType>;
+    };
+
     using TTables = SchemaTables<
         Paths,
         TxInFlight,
@@ -2135,7 +2161,8 @@ struct Schema : NIceDb::Schema {
         DataErasureGenerations,
         WaitingDataErasureTenants,
         TenantDataErasureGenerations,
-        WaitingDataErasureShards
+        WaitingDataErasureShards,
+        SysView
     >;
 
     static constexpr ui64 SysParam_NextPathId = 1;

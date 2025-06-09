@@ -294,6 +294,8 @@ public:
                 "PDisk is in StateInit, wait for PDisk to read sys log. Did you ckeck EvYardInit result? Marker# BSY09";
             Become(&TThis::StateInit);
         }
+
+        *PDisk->Mon.PDiskCount = 1;
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -450,12 +452,12 @@ public:
                             FormatPDisk(cfg->GetDevicePath(), 0, cfg->SectorSize, cfg->ChunkSize,
                                 cfg->PDiskGuid, chunkKey, logKey, sysLogKey, actor->MainKey.Keys.back(), TString(), false,
                                 cfg->FeatureFlags.GetTrimEntireDeviceOnStartup(), cfg->SectorMap,
-                                cfg->FeatureFlags.GetEnableSmallDiskOptimization(), metadata);
+                                cfg->FeatureFlags.GetEnableSmallDiskOptimization(), metadata, cfg->PlainDataChunks);
                         } catch (NPDisk::TPDiskFormatBigChunkException) {
                             FormatPDisk(cfg->GetDevicePath(), 0, cfg->SectorSize, NPDisk::SmallDiskMaximumChunkSize,
                                 cfg->PDiskGuid, chunkKey, logKey, sysLogKey, actor->MainKey.Keys.back(), TString(), false,
                                 cfg->FeatureFlags.GetTrimEntireDeviceOnStartup(), cfg->SectorMap,
-                                cfg->FeatureFlags.GetEnableSmallDiskOptimization(), metadata);
+                                cfg->FeatureFlags.GetEnableSmallDiskOptimization(), metadata, cfg->PlainDataChunks);
                         }
                         actorSystem->Send(pDiskActor, new TEvPDiskFormattingFinished(true, ""));
                     } catch (yexception ex) {
@@ -642,14 +644,27 @@ public:
             ev->Sender, evYardInit.CutLogID, evYardInit.WhiteboardProxyId, evYardInit.SlotId);
     }
 
-    void InitHandle(NPDisk::TEvYardControl::TPtr &ev) {
+    void OnPDiskStop(TActorId &sender, void *cookie) {
+        if (PDisk) {
+            PDisk->Stop();
+            *PDisk->Mon.PDiskState = NKikimrBlobStorage::TPDiskState::Stopped;
+            *PDisk->Mon.PDiskBriefState = TPDiskMon::TPDisk::Stopped;
+            *PDisk->Mon.PDiskDetailedState = TPDiskMon::TPDisk::StoppedByYardControl;
+        }
+        InitError("Received TEvYardControl::PDiskStop");
+        Send(sender, new NPDisk::TEvYardControlResult(NKikimrProto::OK, cookie, {}));
+    }
 
+    void InitHandle(NPDisk::TEvYardControl::TPtr &ev) {
         const NPDisk::TEvYardControl &evControl = *ev->Get();
         switch (evControl.Action) {
         case TEvYardControl::PDiskStart:
             ControledStartResult = MakeHolder<IEventHandle>(ev->Sender, SelfId(),
                     new TEvYardControlResult(NKikimrProto::OK, evControl.Cookie, {}));
         break;
+        case TEvYardControl::PDiskStop:
+            OnPDiskStop(ev->Sender, evControl.Cookie);
+            break;
         default:
             Send(ev->Sender, new NPDisk::TEvYardControlResult(NKikimrProto::CORRUPTED, evControl.Cookie,
                         "Unexpected control action for pdisk in StateInit"));
@@ -668,7 +683,7 @@ public:
                     evSlay.VDiskId, evSlay.SlayOwnerRound, evSlay.PDiskId, evSlay.VSlotId, str.Str()));
         PDisk->Mon.YardSlay.CountResponse();
     }
-    
+
     void InitHandle(NPDisk::TEvShredPDisk::TPtr &ev) {
         const NPDisk::TEvShredPDisk &evShredPDisk = *ev->Get();
         InitQueue.emplace_back(ev->Sender, evShredPDisk.ShredGeneration, ev->Cookie);
@@ -837,10 +852,17 @@ public:
             break;
         }
         default:
+            // Only PDiskStart is allowed in StateError. PDiskStop is not allowed since PDisk in error state should already be stopped
+            // or in the process of being stopped.
             Send(ev->Sender, new NPDisk::TEvYardControlResult(NKikimrProto::CORRUPTED, evControl.Cookie, StateErrorReason));
             PDisk->Mon.YardControl.CountResponse();
             break;
         }
+    }
+
+    void ErrorHandle(TEvReadFormatResult::TPtr &ev) {
+        // Just ignore the event, disk is in error state.
+        Y_UNUSED(ev);
     }
 
     void ErrorHandle(NPDisk::TEvAskForCutLog::TPtr &ev) {
@@ -968,12 +990,7 @@ public:
             Send(ev->Sender, new NPDisk::TEvYardControlResult(NKikimrProto::OK, evControl.Cookie, {}));
             break;
         case TEvYardControl::PDiskStop:
-            PDisk->Stop();
-            *PDisk->Mon.PDiskState = NKikimrBlobStorage::TPDiskState::Stopped;
-            *PDisk->Mon.PDiskBriefState = TPDiskMon::TPDisk::Stopped;
-            *PDisk->Mon.PDiskDetailedState = TPDiskMon::TPDisk::StoppedByYardControl;
-            InitError("Received TEvYardControl::PDiskStop");
-            Send(ev->Sender, new NPDisk::TEvYardControlResult(NKikimrProto::OK, evControl.Cookie, {}));
+            OnPDiskStop(ev->Sender, evControl.Cookie);
             break;
         case TEvYardControl::GetPDiskPointer:
             Y_VERIFY_S(!evControl.Cookie, PCtx->PDiskLogPrefix);
@@ -1505,6 +1522,7 @@ public:
             hFunc(NPDisk::TEvChunkForget, ErrorHandle);
             hFunc(NPDisk::TEvYardControl, ErrorHandle);
             hFunc(NPDisk::TEvAskForCutLog, ErrorHandle);
+            hFunc(NPDisk::TEvReadFormatResult, ErrorHandle);
             hFunc(NPDisk::TEvWhiteboardReportResult, Handle);
             hFunc(NPDisk::TEvHttpInfoResult, Handle);
             hFunc(NPDisk::TEvReadLogContinue, Handle);

@@ -12,6 +12,9 @@ namespace NSQLReflect {
         THashSet<TString> PunctuationNames;
         TVector<TString> OtherNames;
         THashMap<TString, TString> BlockByName;
+
+        static const TStringBuf KeywordBlockByName(const TStringBuf name);
+        static const TString KeywordNameByBlock(const TStringBuf block);
     };
 
     TLexerGrammar LoadLexerGrammar();

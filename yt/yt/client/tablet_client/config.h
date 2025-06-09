@@ -80,10 +80,9 @@ DEFINE_REFCOUNTED_TYPE(TRetryingRemoteDynamicStoreReaderConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TReplicationCollocationOptions
+struct TReplicationCollocationOptions
     : public NYTree::TYsonStruct
 {
-public:
     std::optional<std::vector<std::string>> PreferredSyncReplicaClusters;
 
     REGISTER_YSON_STRUCT(TReplicationCollocationOptions);
@@ -95,10 +94,9 @@ DEFINE_REFCOUNTED_TYPE(TReplicationCollocationOptions)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TReplicatedTableOptions
+struct TReplicatedTableOptions
     : public TReplicationCollocationOptions
 {
-public:
     bool EnableReplicatedTableTracker;
 
     std::optional<int> MaxSyncReplicaCount;

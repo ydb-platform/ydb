@@ -4,6 +4,7 @@
 #include "mkql_node.h"
 #include "mkql_node_builder.h"
 #include "mkql_type_builder.h"
+#include <yql/essentials/public/langver/yql_langver.h>
 #include <yql/essentials/public/udf/udf_value.h>
 #include <yql/essentials/core/sql_types/match_recognize.h>
 
@@ -142,7 +143,8 @@ std::vector<TType*> ValidateBlockFlowType(const TType* flowType, bool unwrap = t
 
 class TProgramBuilder : public TTypeBuilder {
 public:
-    TProgramBuilder(const TTypeEnvironment& env, const IFunctionRegistry& functionRegistry, bool voidWithEffects = false);
+    TProgramBuilder(const TTypeEnvironment& env, const IFunctionRegistry& functionRegistry, bool voidWithEffects = false,
+        NYql::TLangVersion langver = NYql::UnknownLangVersion);
 
     const TTypeEnvironment& GetTypeEnvironment() const;
     const IFunctionRegistry& GetFunctionRegistry() const;
@@ -264,9 +266,9 @@ public:
     TRuntimeNode BlockFromPg(TRuntimeNode input, TType* returnType);
     TRuntimeNode BlockPgResolvedCall(const std::string_view& name, ui32 id,
         const TArrayRef<const TRuntimeNode>& args, TType* returnType);
-    TRuntimeNode BlockStorage(TRuntimeNode stream, TType* returnType);
-    TRuntimeNode BlockMapJoinIndex(TRuntimeNode blockStorage, TType* streamItemType, const TArrayRef<const ui32>& keyColumns, bool any, TType* returnType);
-    TRuntimeNode BlockMapJoinCore(TRuntimeNode leftStream, TRuntimeNode rightBlockStorage, TType* rightStreamItemType, EJoinKind joinKind,
+    TRuntimeNode BlockStorage(TRuntimeNode list, TType* returnType);
+    TRuntimeNode BlockMapJoinIndex(TRuntimeNode blockStorage, TType* listItemType, const TArrayRef<const ui32>& keyColumns, bool any, TType* returnType);
+    TRuntimeNode BlockMapJoinCore(TRuntimeNode leftStream, TRuntimeNode rightBlockStorage, TType* rightListItemType, EJoinKind joinKind,
         const TArrayRef<const ui32>& leftKeyColumns, const TArrayRef<const ui32>& leftKeyDrops,
         const TArrayRef<const ui32>& rightKeyColumns, const TArrayRef<const ui32>& rightKeyDrops, TType* returnType
     );
@@ -868,6 +870,7 @@ private:
 protected:
     const IFunctionRegistry& FunctionRegistry;
     const bool VoidWithEffects;
+    const NYql::TLangVersion LangVer;
     NUdf::ITypeInfoHelper::TPtr TypeInfoHelper;
 };
 

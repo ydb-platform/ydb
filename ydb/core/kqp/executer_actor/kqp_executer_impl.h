@@ -333,6 +333,13 @@ protected:
                 streamEv->Record.SetSeqNo(computeData.Proto.GetSeqNo());
                 streamEv->Record.SetQueryResultIndex(*txResult.QueryResultIndex + StatementResultIndex);
                 streamEv->Record.SetChannelId(channel.Id);
+                streamEv->Record.SetFinished(channelData.GetFinished());
+                const auto& snap = GetSnapshot();
+                if (snap.IsValid()) {
+                    auto vt = streamEv->Record.MutableVirtualTimestamp();
+                    vt->SetStep(snap.Step);
+                    vt->SetTxId(snap.TxId);
+                }
 
                 TKqpProtoBuilder protoBuilder{*AppData()->FunctionRegistry};
                 protoBuilder.BuildYdbResultSet(*streamEv->Record.MutableResultSet(), std::move(batches),
@@ -961,7 +968,7 @@ protected:
             } else {
                 settings = *stageInfo.Meta.ResolvedSinkSettings;
             }
-        
+
             auto& lockTxId = TasksGraph.GetMeta().LockTxId;
             if (lockTxId) {
                 settings.SetLockTxId(*lockTxId);
@@ -1038,6 +1045,14 @@ protected:
             structuredToken = NYql::CreateStructuredTokenParser(externalSource.GetAuthInfo()).ToBuilder().ReplaceReferences(SecureParams).ToJson();
         }
 
+        ui64 selfNodeIdx = 0;
+        for (size_t i = 0; i < resourceSnapshot.size(); ++i) {
+            if (resourceSnapshot[i].GetNodeId() == SelfId().NodeId()) {
+                selfNodeIdx = i;
+                break;
+            }
+        }
+
         TVector<ui64> tasksIds;
 
         // generate all tasks
@@ -1059,7 +1074,7 @@ protected:
             if (resourceSnapshot.empty()) {
                 task.Meta.Type = TTaskMeta::TTaskType::Compute;
             } else {
-                task.Meta.NodeId = resourceSnapshot[i % resourceSnapshot.size()].GetNodeId();
+                task.Meta.NodeId = resourceSnapshot[(selfNodeIdx + i) % resourceSnapshot.size()].GetNodeId();
                 task.Meta.Type = TTaskMeta::TTaskType::Scan;
             }
 
@@ -1171,6 +1186,8 @@ protected:
             input.Meta.SourceSettings = TasksGraph.GetMeta().Allocate<NKikimrTxDataShard::TKqpReadRangesSourceSettings>();
             NKikimrTxDataShard::TKqpReadRangesSourceSettings* settings = input.Meta.SourceSettings;
             FillTableMeta(stageInfo, settings->MutableTable());
+
+            settings->SetIsTableImmutable(source.GetIsTableImmutable());
 
             for (auto& keyColumn : keyTypes) {
                 auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(keyColumn, "");

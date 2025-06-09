@@ -117,6 +117,10 @@ public:
             }
         }
 
+        if (UsePerChannelTcpConnection_) {
+            clientConfig.IntChannelParams[GRPC_ARG_USE_LOCAL_SUBCHANNEL_POOL] = 1;
+        }
+
         std::unique_ptr<TServiceConnection<TService>> conn;
 #ifndef YDB_GRPC_BYPASS_CHANNEL_POOL
         ChannelPool_.GetStubsHolderLocked(
@@ -733,6 +737,7 @@ private:
     IDiscoveryMutatorApi::TMutatorCb DiscoveryMutatorCb;
 
     const size_t NetworkThreadsNum_;
+    bool UsePerChannelTcpConnection_;
     // Must be the last member (first called destructor)
     NYdbGrpc::TGRpcClientLow GRpcClientLow_;
     TLog Log;

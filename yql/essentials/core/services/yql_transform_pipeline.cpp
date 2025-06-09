@@ -19,8 +19,13 @@
 
 namespace NYql {
 
-TTransformationPipeline::TTransformationPipeline(TIntrusivePtr<TTypeAnnotationContext> ctx)
+TTransformationPipeline::TTransformationPipeline(
+    TIntrusivePtr<TTypeAnnotationContext> ctx,
+    TTypeAnnCallableFactory typeAnnCallableFactory)
     : TypeAnnotationContext_(ctx)
+    , TypeAnnCallableFactory_(typeAnnCallableFactory ? typeAnnCallableFactory : [ctx = ctx.Get()](){
+        return CreateExtCallableTypeAnnotationTransformer(*ctx);
+    })
 {}
 
 TTransformationPipeline& TTransformationPipeline::Add(TAutoPtr<IGraphTransformer> transformer, const TString& stageName,
@@ -58,9 +63,10 @@ TTransformationPipeline& TTransformationPipeline::AddExpressionEvaluation(const 
     IGraphTransformer* calcTransfomer, EYqlIssueCode issueCode) {
     auto& typeCtx = *TypeAnnotationContext_;
     auto& funcReg = functionRegistry;
+    auto typeAnnCallableFactory = TypeAnnCallableFactory_;
     Transformers_.push_back(TTransformStage(CreateFunctorTransformer(
-        [&typeCtx, &funcReg, calcTransfomer](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
-        return EvaluateExpression(input, output, typeCtx, ctx, funcReg, calcTransfomer);
+        [&typeCtx, &funcReg, calcTransfomer, typeAnnCallableFactory](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
+        return EvaluateExpression(input, output, typeCtx, ctx, funcReg, calcTransfomer, typeAnnCallableFactory);
     }), "EvaluateExpression", issueCode));
 
     return *this;
@@ -137,13 +143,9 @@ TTransformationPipeline& TTransformationPipeline::AddPostTypeAnnotation(bool for
     return *this;
 }
 
-TTransformationPipeline& TTransformationPipeline::AddCommonOptimization(EYqlIssueCode issueCode) {
-    // auto instantCallableTransformer =
-    //    CreateExtCallableTypeAnnotationTransformer(*TypeAnnotationContext_, true);
-    // TypeAnnotationContext_->CustomInstantTypeTransformer =
-    //     CreateTypeAnnotationTransformer(instantCallableTransformer, *TypeAnnotationContext_);
+TTransformationPipeline& TTransformationPipeline::AddCommonOptimization(bool forPeephole, EYqlIssueCode issueCode) {
     Transformers_.push_back(TTransformStage(
-        CreateCommonOptTransformer(TypeAnnotationContext_.Get()),
+        CreateCommonOptTransformer(forPeephole, TypeAnnotationContext_.Get()),
         "CommonOptimization",
         issueCode));
     return *this;
@@ -158,7 +160,7 @@ TTransformationPipeline& TTransformationPipeline::AddFinalCommonOptimization(EYq
 }
 
 TTransformationPipeline& TTransformationPipeline::AddOptimization(bool checkWorld, bool withFinalOptimization, EYqlIssueCode issueCode) {
-    AddCommonOptimization(issueCode);
+    AddCommonOptimization(false, issueCode);
     Transformers_.push_back(TTransformStage(
         CreateChoiceGraphTransformer(
             [&typesCtx = std::as_const(*TypeAnnotationContext_)](const TExprNode::TPtr&, TExprContext&) {
@@ -199,7 +201,7 @@ TTransformationPipeline& TTransformationPipeline::AddOptimization(bool checkWorl
 }
 
 TTransformationPipeline& TTransformationPipeline::AddLineageOptimization(TMaybe<TString>& lineageOut, EYqlIssueCode issueCode) {
-    AddCommonOptimization(issueCode);
+    AddCommonOptimization(false, issueCode);
     Transformers_.push_back(TTransformStage(
         CreateFunctorTransformer(
             [typeCtx = TypeAnnotationContext_, &lineageOut](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
@@ -271,7 +273,7 @@ TTransformationPipeline& TTransformationPipeline::AddTypeAnnotationTransformer(
 }
 
 TTransformationPipeline& TTransformationPipeline::AddTypeAnnotationTransformerWithMode(EYqlIssueCode issueCode, ETypeCheckMode mode) {
-    auto callableTransformer = CreateExtCallableTypeAnnotationTransformer(*TypeAnnotationContext_);
+    auto callableTransformer = TypeAnnCallableFactory_();
     AddTypeAnnotationTransformer(callableTransformer, issueCode, mode);
     return *this;
 }
@@ -279,11 +281,11 @@ TTransformationPipeline& TTransformationPipeline::AddTypeAnnotationTransformerWi
 TTransformationPipeline& TTransformationPipeline::AddTypeAnnotationTransformer(EYqlIssueCode issueCode, bool twoStages)
 {
     if (twoStages) {
-        std::shared_ptr<IGraphTransformer> callableTransformer(CreateExtCallableTypeAnnotationTransformer(*TypeAnnotationContext_).Release());
+        std::shared_ptr<IGraphTransformer> callableTransformer(TypeAnnCallableFactory_().Release());
         AddTypeAnnotationTransformer(MakeSharedTransformerProxy(callableTransformer), issueCode, ETypeCheckMode::Initial);
         AddTypeAnnotationTransformer(MakeSharedTransformerProxy(callableTransformer), issueCode, ETypeCheckMode::Repeat);
     } else {
-        auto callableTransformer = CreateExtCallableTypeAnnotationTransformer(*TypeAnnotationContext_);
+        auto callableTransformer = TypeAnnCallableFactory_();
         AddTypeAnnotationTransformer(callableTransformer, issueCode, ETypeCheckMode::Single);
     }
 

@@ -782,6 +782,7 @@ void BuildUserJobFluently(
                 })
             .EndList()
         .Item("start_queue_consumer_registration_manager").Value(false)
+        .Item("enable_rpc_proxy_in_job_proxy").Value(userJobSpec.EnableRpcProxyInJobProxy_)
         .Item("redirect_stdout_to_stderr").Value(preparer.ShouldRedirectStdoutToStderr());
 }
 

@@ -8,9 +8,12 @@
 #include <yt/yt/client/formats/config.h>
 #include <yt/yt/client/formats/parser.h>
 
-#include <yt/yt/client/signature/generator.h>
 #include <yt/yt/client/signature/signature.h>
 #include <yt/yt/client/signature/validator.h>
+
+#include <yt/yt/client/table_client/adapters.h>
+#include <yt/yt/client/table_client/table_output.h>
+#include <yt/yt/client/table_client/value_consumer.h>
 
 #include <yt/yt/client/ypath/public.h>
 
@@ -25,6 +28,7 @@ namespace NYT::NDriver {
 using namespace NApi;
 using namespace NConcurrency;
 using namespace NFormats;
+using namespace NTableClient;
 using namespace NTracing;
 using namespace NYTree;
 using namespace NYson;
@@ -35,6 +39,12 @@ using namespace NYPath;
 void TStartDistributedWriteSessionCommand::Register(TRegistrar registrar)
 {
     registrar.Parameter("path", &TThis::Path);
+    registrar.ParameterWithUniversalAccessor<int>(
+        "cookie_count",
+        [] (TThis* command) -> auto& {
+            return command->Options.CookieCount;
+        })
+        .Default();
 }
 
 // -> DistributedWriteSession
@@ -42,14 +52,8 @@ void TStartDistributedWriteSessionCommand::DoExecute(ICommandContextPtr context)
 {
     auto transaction = AttachTransaction(context, /*required*/ false);
 
-    auto signatureGenerator = context->GetDriver()->GetSignatureGenerator();
     auto sessionAndCookies = WaitFor(context->GetClient()->StartDistributedWriteSession(Path, Options))
         .ValueOrThrow();
-
-    signatureGenerator->Resign(sessionAndCookies.Session.Underlying());
-    for (const auto& cookie : sessionAndCookies.Cookies) {
-        signatureGenerator->Resign(cookie.Underlying());
-    }
 
     ProduceOutput(context, [sessionAndCookies = std::move(sessionAndCookies)] (IYsonConsumer* consumer) {
         Serialize(sessionAndCookies, consumer);
@@ -91,23 +95,18 @@ void TFinishDistributedWriteSessionCommand::DoExecute(ICommandContextPtr context
 
     WaitFor(context->GetClient()->FinishDistributedWriteSession(sessionWithResults, Options))
         .ThrowOnError();
-
-    ProduceEmptyOutput(context);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void TWriteTableFragmentCommand::Execute(ICommandContextPtr context)
-{
-    TTypedCommand<NApi::TTableFragmentWriterOptions>::Execute(std::move(context));
-}
-
 void TWriteTableFragmentCommand::Register(TRegistrar registrar)
 {
     registrar.Parameter("cookie", &TThis::Cookie);
+    registrar.Parameter("max_row_buffer_size", &TThis::MaxRowBufferSize)
+        .Default(1_MB);
 }
 
-NApi::ITableWriterPtr TWriteTableFragmentCommand::CreateTableWriter(
+ITableFragmentWriterPtr TWriteTableFragmentCommand::CreateTableWriter(
     const ICommandContextPtr& context)
 {
     PutMethodInfoInTraceContext("write_table_fragment");
@@ -125,14 +124,12 @@ NApi::ITableWriterPtr TWriteTableFragmentCommand::CreateTableWriter(
                 << TErrorAttribute("cookie_id", concreteCookie.CookieId);
     }
 
-    auto tableWriter = WaitFor(context
+    return WaitFor(context
         ->GetClient()
         ->CreateTableFragmentWriter(
             signedCookie,
             TTypedCommand<TTableFragmentWriterOptions>::Options))
         .ValueOrThrow();
-    TableWriter = tableWriter;
-    return tableWriter;
 }
 
 // -> Cookie
@@ -140,13 +137,31 @@ void TWriteTableFragmentCommand::DoExecute(ICommandContextPtr context)
 {
     auto cookie = ConvertTo<TSignedWriteFragmentCookiePtr>(Cookie);
 
-    DoExecuteImpl(context);
+    auto tableWriter = CreateTableWriter(context);
 
-    // Sadly, we are plagued by virtual bases :/.
-    auto writer = DynamicPointerCast<NApi::ITableFragmentWriter>(TableWriter);
+    // NB(pavook): we shouldn't ping transaction here, as this method is executed in parallel
+    // and pinging the transaction could cause substantial master load.
 
-    auto signedWriteResult = writer->GetWriteFragmentResult();
-    context->GetDriver()->GetSignatureGenerator()->Resign(signedWriteResult.Underlying());
+    auto schemalessWriter = CreateSchemalessFromApiWriterAdapter(static_cast<ITableWriterPtr>(tableWriter));
+
+    TWritingValueConsumer valueConsumer(
+        schemalessWriter,
+        ConvertTo<TTypeConversionConfigPtr>(context->GetInputFormat().Attributes()),
+        MaxRowBufferSize);
+
+    TTableOutput output(CreateParserForFormat(
+        context->GetInputFormat(),
+        &valueConsumer));
+
+    PipeInputToOutput(context->Request().InputStream, &output);
+
+    WaitFor(valueConsumer.Flush())
+        .ThrowOnError();
+
+    WaitFor(schemalessWriter->Close())
+        .ThrowOnError();
+
+    auto signedWriteResult = tableWriter->GetWriteFragmentResult();
 
     ProduceOutput(context, [result = std::move(signedWriteResult)] (IYsonConsumer* consumer) {
         Serialize(

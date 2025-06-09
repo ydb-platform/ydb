@@ -11,6 +11,8 @@ public:
     TPlainGrpcPingResult(TStatus&& status)
         : TStatus(std::move(status))
     {}
+
+    ui64 CallBackTs = 0;
 };
 
 class TGrpcProxyPingResult: public TStatus {

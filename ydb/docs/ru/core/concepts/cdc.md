@@ -235,7 +235,7 @@ Change Data Capture (CDC) обеспечивает захват изменени
 
 ## Количество партиций топика {#topic-partitions}
 
-По умолчанию количество [партиций топика](topic.md#partitioning) равно количеству партиций таблицы. Количество партиций топика можно переопределить, указав параметр [TOPIC_MIN_ACTIVE_PARTITIONS](../yql/reference/syntax/alter_table/changefeed.md) при создании потока изменений.
+По умолчанию количество [партиций топика](topic.md#partitioning) равно количеству партиций таблицы. Количество партиций топика можно переопределить, указав параметр [TOPIC_MIN_ACTIVE_PARTITIONS](../yql/reference/syntax/alter_table/changefeed.md) при создании потока изменений. Кроме того, можно создать поток изменений, в котором количество партиций будет увеличиваться автоматически, задав параметр [TOPIC_AUTO_PARTITIONING](../yql/reference/syntax/alter_table/changefeed.md) при создании потока изменений.
 
 {% note info %}
 
@@ -246,6 +246,29 @@ Change Data Capture (CDC) обеспечивает захват изменени
 ## Создание и удаление потока изменений {#ddl}
 
 Поток изменений может быть добавлен к существующей таблице или удален директивами [ADD CHANGEFEED и DROP CHANGEFEED](../yql/reference/syntax/alter_table/changefeed.md) операции YQL `ALTER TABLE`. При удалении таблицы добавленный к ней поток изменений также будет удален.
+
+## Получение и изменение параметров топика {#topic-options}
+
+Для получения параметров топика можно воспользоваться [SDK](../reference/ydb-sdk/topic.md#describe-topic) или [{{ ydb-short-name }} CLI](../reference/ydb-cli/commands/scheme-describe.md), передав в аргументах путь до потока изменений, который формируется следующим образом:
+
+```txt
+путь/до/строковой_таблицы/имя_потока_изменений
+```
+
+>Например, если у строковой таблицы `table` в директории `my` есть поток изменений с именем `updates_feed`, то путь к нему будет выглядеть так:
+>
+>```text
+>my/table/updates_feed
+>```
+
+Параметры топика могут быть изменены с использованием выражения [ALTER TOPIC](../yql/reference/syntax/alter-topic.md). Поддерживаемые действия:
+
+* [изменение параметров](../yql/reference/syntax/alter-topic.md#alter-topic):
+
+  * `retention_period`;
+  * `retention_storage_mb`;
+
+* [управление читателями](../yql/reference/syntax/alter-topic.md#consumer).
 
 ## Назначение и применение CDC {#best_practices}
 

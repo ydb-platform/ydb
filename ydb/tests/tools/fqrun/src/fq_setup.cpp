@@ -297,7 +297,7 @@ private:
 
     template <typename TRequest, typename TProto>
     std::unique_ptr<TRequest> GetControlPlaneRequest(const TProto& request, const TFqOptions& options) const {
-        return std::make_unique<TRequest>(TStringBuilder() << "yandexcloud://" << (options.Scope ? options.Scope : "fqrun"), request, BUILTIN_ACL_ROOT, Settings.YqlToken ? Settings.YqlToken : "fqrun", TVector<TString>{});
+        return std::make_unique<TRequest>(TStringBuilder() << "yandexcloud://" << options.Scope, request, BUILTIN_ACL_ROOT, Settings.YqlToken ? Settings.YqlToken : "fqrun", TVector<TString>{});
     }
 
     template <typename TRequest, typename TResponse, typename TProto>
@@ -354,6 +354,7 @@ TRequestResult TFqSetup::DescribeQuery(const TString& queryId, const TFqOptions&
 
     meta.Ast = result.ast().data();
     meta.Plan = result.plan().json();
+    meta.Statistics = result.statistics().json();
 
     return GetStatus(response->Get()->Issues);
 }

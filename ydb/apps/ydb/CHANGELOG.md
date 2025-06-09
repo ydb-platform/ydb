@@ -1,3 +1,28 @@
+* Fixed bug with state working in commnads `ydb workload query import` and `ydb workload clickbench import files`.
+
+## 2.22.0 ##
+
+* Ignore empty directories in dumps when restoring it with `ydb tools restore`. Empty directories are created for unknown scheme objects when dumping with `ydb tools dump`.
+* Added support of check canonical results in `ydb workload query run` command.
+* Added support of parquet format to `ydb workload query import` and `ydb workload clickbench import files` commands.
+* `ydb workload query` deep reworked. Now it can be used for user defined full cycle load testing.
+* Fixed an issue where the `ydb workload * clean` commands were deleting all contents from the target directory, instead of just the tables created by the init command.
+* Switched highlighting engine
+* Added `ydb admin cluster config verion` command to show configuration version (V1/V2) on nodes.
+* Removed `--executor` option from `ydb workload run` commands. Use always `generic`.
+* Added object names completion in interactive mode
+* Added `--threads` option to `ydb workload clickbench run`, `ydb workload tpch run` and `ydb workload tpcds run`. It allows to send workload queries by multiple threads.
+
+## 2.21.0 ##
+
+* Fixed a bug where ydb cli was trying to read parameters from stdin even if it had no data.
+* Add `--replace` option to `ydb tools restore` command. If enabled, scheme objects present in the backup would be dropped before restoring.
+* Added date range parameters (--date-to, --date-from to support uniform PK distribution) for ydb workload log run operations including bulk_upsert, insert, and upsert
+* Do not save to local backups destination tables of `ASYNC REPLICATION` and its changefeeds. It prevents duplication of changefeeds and reduces the amount of space the backup takes on disk.
+* Fix `ydb operation get` not working for running operations.
+* Improved `ydb import file` commands to support files with BOM (Byte Order Mark).
+* Brackets are now inserted in pairs in YDB CLI interactive mode
+* Added `--scale` option to `ydb workload tpch init` and `ydb workload tpcds init` commands. Sets the percentage of the benchmark's data size and workload to use, relative to full scale.
 * Added "--no-discovery" option. It allows to skip discovery and use user provided endpoint to connect to YDB cluster.
 * Added `--retries` to `ydb workload <clickbenh|tpch|tpcds> run` command.
 * Added `--partition-size` param to `ydb workload <clickbench/tpcds/tpch> init`.
@@ -7,6 +32,9 @@
 * Fixed return code of command `ydb workload * run --check-canonical` for the case when benchmark query results differ from canonical ones.
 * Fixed scheme error in `ydb admin cluster dump` when specifying a domain database.
 * Fixed unauthorized error in `ydb admin database restore` when multiple database admins are in dump.
+* Added `--min-inflight` to `ydb debug latency` command.
+* Added support for multiple `-p` (percentile) params in `ydb debug latency` command.
+* `ydb debug latency` outputs additional measurements for GRPC ping.
 
 ## 2.20.0 ##
 
@@ -286,7 +314,7 @@ Also now you can load test YDB topics, using wide transactions that span over al
 * You can now save the IAM service URL in a profile.
 * Added support for username and password-based authentication without specifying the password.
 * Added support for AWS profiles in the [ydb export s3](reference/ydb-cli/export-import/auth-s3.md#auth) command.
-* You can now create profiles using `stdin`. For example, you can pass the [YC CLI](https://cloud.yandex.ru/docs/cli/) `yc ydb database get information` command output to the `ydb config profile create` command input.
+* You can now create profiles using `stdin`. For example, you can pass the [YC CLI](https://yandex.cloud/docs/cli/) `yc ydb database get information` command output to the `ydb config profile create` command input.
 
 ### Bug fixes
 

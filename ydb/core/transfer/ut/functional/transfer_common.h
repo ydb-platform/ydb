@@ -15,6 +15,7 @@ void WriteNullToColumn(const std::string& tableType);
 void Upsert_DifferentBatch(const std::string& tableType);
 void Upsert_OneBatch(const std::string& tableType);
 
+void ColumnType_Bool(const std::string& tableType);
 void ColumnType_Date(const std::string& tableType);
 void ColumnType_Double(const std::string& tableType);
 void ColumnType_Utf8_LongValue(const std::string& tableType);

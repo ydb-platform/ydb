@@ -47,6 +47,11 @@ Y_UNIT_TEST_SUITE(Transfer_RowTable)
     }
 
 
+    Y_UNIT_TEST(ColumnType_Bool)
+    {
+        ColumnType_Bool(TableType);
+    }
+
     Y_UNIT_TEST(ColumnType_Date)
     {
         ColumnType_Date(TableType);

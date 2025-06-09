@@ -14,7 +14,7 @@ struct TWriteActorSettings : TAtomicRefCount<TWriteActorSettings> {
     TDuration StartRetryDelay = TDuration::Seconds(1);
     TDuration MaxRetryDelay = TDuration::Seconds(10);
     double UnsertaintyRatio = 0.5;
-    double Multiplier = 1.5;
+    double Multiplier = 2.0;
 
     ui64 MaxWriteAttempts = 5;
     ui64 MaxResolveAttempts = 5;

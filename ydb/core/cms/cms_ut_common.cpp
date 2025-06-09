@@ -239,20 +239,21 @@ public:
 
 void GenerateExtendedInfo(TTestActorRuntime &runtime, NKikimrBlobStorage::TBaseConfig *config,
         ui32 pdisks, ui32 vdiskPerPdisk = 4, const TNodeTenantsMap &tenants = {}, bool useMirror3dcErasure = false)
-{
+{   
+    constexpr ui32 MIRROR_3DC_VDISKS_COUNT = 9;
+    constexpr ui32 BLOCK_4_2_VDISKS_COUNT = 8;
+
     ui32 numNodes = runtime.GetNodeCount();
-    ui32 numNodeGroups = pdisks * vdiskPerPdisk;
+    ui32 vdisksPerNode = pdisks * vdiskPerPdisk;
     ui32 numGroups;
-
-    if (numNodes < 9)
-        useMirror3dcErasure = false;
-
     if (useMirror3dcErasure)
-        numGroups = numNodes * numNodeGroups / 9;
-    else if (numNodes >= 8)
-        numGroups = numNodes * numNodeGroups / 8;
+        numGroups = numNodes * vdisksPerNode / MIRROR_3DC_VDISKS_COUNT;
+    else if (numNodes >= BLOCK_4_2_VDISKS_COUNT)
+        numGroups = numNodes * vdisksPerNode / BLOCK_4_2_VDISKS_COUNT;
     else
-        numGroups = numNodes * numNodeGroups;
+        numGroups = numNodes * vdisksPerNode;
+    
+    ui32 maxOneGroupVdisksPerNode = useMirror3dcErasure && numNodes < MIRROR_3DC_VDISKS_COUNT ? 3 : 1;
 
     auto now = runtime.GetTimeProvider()->Now();
     for (ui32 groupId = 0; groupId < numGroups; ++groupId) {
@@ -261,7 +262,7 @@ void GenerateExtendedInfo(TTestActorRuntime &runtime, NKikimrBlobStorage::TBaseC
         group.SetGroupGeneration(1);
         if (useMirror3dcErasure)
             group.SetErasureSpecies("mirror-3-dc");
-        else if (numNodes >= 8)
+        else if (numNodes >= BLOCK_4_2_VDISKS_COUNT)
             group.SetErasureSpecies("block-4-2");
         else
             group.SetErasureSpecies("none");
@@ -284,12 +285,18 @@ void GenerateExtendedInfo(TTestActorRuntime &runtime, NKikimrBlobStorage::TBaseC
         } else {
             node.SystemStateInfo.AddRoles("Storage");
         }
-
-        ui32 groupShift = (nodeIndex / 8) * pdisks * vdiskPerPdisk;
-        if (numNodes < 8)
-            groupShift = nodeIndex * numNodeGroups;
-        if (useMirror3dcErasure)
-            groupShift = (nodeIndex / 9) * pdisks * vdiskPerPdisk;
+ 
+        ui32 groupsPerNode = vdisksPerNode / maxOneGroupVdisksPerNode;
+        ui32 groupShift;
+        if (useMirror3dcErasure) {
+            ui32 groupNodesSize = MIRROR_3DC_VDISKS_COUNT / maxOneGroupVdisksPerNode;
+            groupShift = (nodeIndex / groupNodesSize) * groupsPerNode;
+        } else if (numNodes >= BLOCK_4_2_VDISKS_COUNT) {
+            ui32 groupNodesSize = BLOCK_4_2_VDISKS_COUNT / maxOneGroupVdisksPerNode;
+            groupShift = (nodeIndex / groupNodesSize) * groupsPerNode;
+        } else {
+            groupShift = nodeIndex * groupsPerNode;
+        }
 
         for (ui32 pdiskIndex = 0; pdiskIndex < pdisks; ++pdiskIndex) {
             auto pdiskId = nodeId * pdisks + pdiskIndex;
@@ -316,12 +323,28 @@ void GenerateExtendedInfo(TTestActorRuntime &runtime, NKikimrBlobStorage::TBaseC
 
             for (ui8 vdiskIndex = 0; vdiskIndex < vdiskPerPdisk; ++vdiskIndex) {
                 ui32 vdiskId = pdiskIndex * vdiskPerPdisk + vdiskIndex;
-                ui32 groupId = groupShift + vdiskId;
-                ui32 failRealm = 0;
-                if (useMirror3dcErasure)
-                    failRealm = (nodeIndex % 9) / 3;
+                ui32 groupId = groupShift + vdiskId / maxOneGroupVdisksPerNode;
 
-                TVDiskID id = {(ui8)groupId, 1, (ui8)failRealm, (ui8)(nodeIndex % 8), (ui8)0};
+                if (groupId >= config->GroupSize()) {
+                    break;
+                }
+
+                ui32 failRealm = 0;
+                if (useMirror3dcErasure) {
+                    if (numNodes >= MIRROR_3DC_VDISKS_COUNT) {
+                        failRealm = (nodeIndex % MIRROR_3DC_VDISKS_COUNT) / 3;
+                    } else {
+                        failRealm = nodeIndex % 3;
+                    }
+                }
+
+                TVDiskID id = {
+                    (ui8)groupId,
+                    1,
+                    (ui8)failRealm,
+                    (ui8)(nodeIndex % BLOCK_4_2_VDISKS_COUNT),
+                    (ui8)(vdiskId % maxOneGroupVdisksPerNode)
+                };
 
                 auto &vdisk = node.VDiskStateInfo[id];
                 VDiskIDFromVDiskID(id, vdisk.MutableVDiskId());
@@ -339,7 +362,8 @@ void GenerateExtendedInfo(TTestActorRuntime &runtime, NKikimrBlobStorage::TBaseC
                 vdiskConfig.SetGroupId(groupId);
                 vdiskConfig.SetGroupGeneration(1);
                 vdiskConfig.SetFailRealmIdx(failRealm);
-                vdiskConfig.SetFailDomainIdx(nodeIndex % 8);
+                vdiskConfig.SetFailDomainIdx(nodeIndex % BLOCK_4_2_VDISKS_COUNT);
+                vdiskConfig.SetVDiskIdx(vdiskId % maxOneGroupVdisksPerNode);
 
                 config->MutableGroup(groupId)->AddVSlotId()
                     ->CopyFrom(vdiskConfig.GetVSlotId());

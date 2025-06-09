@@ -40,9 +40,9 @@ To run the command to export data to S3 storage, specify the [S3 connection para
 
 `--exclude STRING`: Template ([PCRE](https://www.pcre.org/original/doc/html/pcrepattern.html)) to exclude paths from export. Specify this parameter multiple times for different templates.
 
-`--encryption-algorithm ALGORITHM`: Encryption algorithm. Supported values: `AES-128-GCM`, `AES-256-GCM`, `ChaCha20-Poly1305`.
+`--encryption-algorithm ALGORITHM`: Encryption algorithm (only for encrypted exports). Supported values: `AES-128-GCM`, `AES-256-GCM`, `ChaCha20-Poly1305`.
 
-`--encryption-key-file PATH`: File path that contains encryption key.
+`--encryption-key-file PATH`: File path that contains encryption key (only for encrypted exports).
 
 ### Additional parameters {#aux}
 

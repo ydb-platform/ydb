@@ -49,10 +49,10 @@ namespace NPDisk {
 
     void SetupIcb(TTestActorRuntime& runtime, ui32 nodeIndex, const NKikimrConfig::TImmediateControlsConfig& config,
             const TIntrusivePtr<NKikimr::TControlBoard>& icb,
-            const TIntrusivePtr<NKikimr::TDynamicControlBoard>& dynamicControlBoard)
+            const TIntrusivePtr<NKikimr::TDynamicControlBoard>& dcb)
     {
         runtime.AddLocalService(MakeIcbId(runtime.GetNodeId(nodeIndex)),
-            TActorSetupCmd(CreateImmediateControlActor(icb, dynamicControlBoard, runtime.GetDynamicCounters(nodeIndex)),
+            TActorSetupCmd(CreateImmediateControlActor(icb, dcb, runtime.GetDynamicCounters(nodeIndex)),
                     TMailboxType::ReadAsFilled, 0),
             nodeIndex);
 

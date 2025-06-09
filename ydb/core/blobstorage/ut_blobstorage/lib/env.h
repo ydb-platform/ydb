@@ -1228,12 +1228,12 @@ config:
         if (nodeId == 0) {
             for (nodeId = 1; nodeId <= Settings.NodeCount; ++nodeId) {
                 auto it = IcbControls.find({nodeId, controlType});
-                Y_ABORT_UNLESS(it != StaticControls.end());
+                Y_ABORT_UNLESS(it != IcbControls.end());
                 it->second = value;
             }
         } else {
             auto it = IcbControls.find({nodeId, controlType});
-            Y_ABORT_UNLESS(it != StaticControls.end());
+            Y_ABORT_UNLESS(it != IcbControls.end());
             it->second = value;
         }
     }

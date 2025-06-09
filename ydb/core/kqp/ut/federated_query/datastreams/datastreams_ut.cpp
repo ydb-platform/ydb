@@ -63,7 +63,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                 DATABASE_NAME=")" << GetEnv("YDB_DATABASE") << R"(",
                 AUTH_METHOD="BASIC",
                 LOGIN="root",
-                PASSWORD_SECRET_NAME="1234"
+                PASSWORD_SECRET_NAME="secret_local_password"
             );)";
         auto session = kikimr->GetTableClient().CreateSession().GetValueSync().GetSession();
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
@@ -248,7 +248,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
 
         auto query = TStringBuilder() << R"(
-            CREATE OBJECT secret_local_password (TYPE SECRET) WITH (value = "123");
+            CREATE OBJECT secret_local_password (TYPE SECRET) WITH (value = "1234");
             CREATE EXTERNAL DATA SOURCE `)" << sourceName << R"(` WITH (
                 SOURCE_TYPE="Ydb",
                 LOCATION=")" << GetEnv("YDB_ENDPOINT") << R"(",

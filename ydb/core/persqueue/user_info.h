@@ -71,6 +71,8 @@ struct TUserInfoBase {
 
     ui64 PartitionSessionId = 0;
     TActorId PipeClient;
+
+    std::optional<TString> CommittedMetadata = std::nullopt;
 };
 
 struct TUserInfo: public TUserInfoBase {
@@ -197,10 +199,11 @@ struct TUserInfo: public TUserInfoBase {
         const ui64 readRuleGeneration, const bool important, const NPersQueue::TTopicConverterPtr& topicConverter,
         const ui32 partition, const TString& session, ui64 partitionSession, ui32 gen, ui32 step, i64 offset,
         const ui64 readOffsetRewindSum, const TString& dcId, TInstant readFromTimestamp,
-        const TString& dbPath, bool meterRead, const TActorId& pipeClient, bool anyCommits
+        const TString& dbPath, bool meterRead, const TActorId& pipeClient, bool anyCommits,
+        const std::optional<TString>& committedMetadata = std::nullopt
     )
         : TUserInfoBase{user, readRuleGeneration, session, gen, step, offset, anyCommits, important,
-                        readFromTimestamp, partitionSession, pipeClient}
+                        readFromTimestamp, partitionSession, pipeClient, committedMetadata}
         , ActualTimestamps(false)
         , WriteTimestamp(TInstant::Zero())
         , CreateTimestamp(TInstant::Zero())
@@ -392,9 +395,11 @@ public:
     TUserInfoBase CreateUserInfo(const TString& user,
                              TMaybe<ui64> readRuleGeneration = {}) const;
     TUserInfo& Create(
-        const TActorContext& ctx, const TString& user, const ui64 readRuleGeneration, bool important, const TString& session,
+        const TActorContext& ctx,
+        const TString& user, const ui64 readRuleGeneration, bool important, const TString& session,
         ui64 partitionSessionId, ui32 gen, ui32 step, i64 offset, ui64 readOffsetRewindSum,
-        TInstant readFromTimestamp, const TActorId& pipeClient, bool anyCommits
+        TInstant readFromTimestamp, const TActorId& pipeClient, bool anyCommits,
+        const std::optional<TString>& committedMetadata = std::nullopt
     );
 
     void Clear(const TActorContext& ctx);
@@ -410,7 +415,10 @@ private:
                              const TString& session,
                              ui64 partitionSessionId,
                              ui32 gen, ui32 step, i64 offset, ui64 readOffsetRewindSum,
-                             TInstant readFromTimestamp, const TActorId& pipeClient, bool anyCommits) const;
+                             TInstant readFromTimestamp,
+                             const TActorId& pipeClient,
+                             bool anyCommits,
+                             const std::optional<TString>& committedMetadata = std::nullopt) const;
 
 private:
     THashMap<TString, TUserInfo> UsersInfo;

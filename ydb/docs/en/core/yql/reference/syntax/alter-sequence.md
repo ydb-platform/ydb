@@ -1,6 +1,6 @@
 # ALTER SEQUENCE
 
-Modifies the parameters of an existing `Sequence` object associated with a [Serial](../types/serial.md) column.
+Modifies parameters of an existing `Sequence` object associated with a [Serial](../types/serial.md) column.
 
 ## Syntax
 
@@ -17,13 +17,13 @@ ALTER SEQUENCE [ IF EXISTS ] path_to_sequence
 
     The path is constructed as `<path_to_table>/_serial_column_{column_name}`,
     where `<path_to_table>` is the absolute path to the table, and `{column_name}` is the name of the `Serial` column.
-    For example, for a table at `/local/users` and a column `user_id`, the corresponding `Sequence` path will be `/local/users/_serial_column_user_id`.
+    For example, for the column `user_id` in the table `/local/users`, the corresponding `Sequence` path will be `/local/users/_serial_column_user_id`.
 
 * `IF EXISTS` — if used, the statement does not return an error if the `Sequence` does not exist at the specified path.
 
 * `INCREMENT [ BY ] increment` — sets the increment step for the sequence. Default: 1.
 
-* `START [ WITH ] start_value` — sets a new start value for the sequence. Changing this parameter with `ALTER SEQUENCE` does not affect the current value, but it will be used with `ALTER SEQUENCE RESTART` if no value is specified. Default: 1.
+* `START [ WITH ] start_value` — sets a new start value for the sequence. Changing this parameter with `ALTER SEQUENCE` does not affect the current value, but new start value will be used with `ALTER SEQUENCE RESTART` if no value is specified. Default: 1.
 
 * `RESTART [ [ WITH ] restart_value ]` — sets the current value of the sequence to the specified `restart_value`. If the value is not specified, the current value will be set to the current start value.
 

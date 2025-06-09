@@ -281,6 +281,38 @@ void ColumnType_Utf8_LongValue(const std::string& tableType) {
     });
 }
 
+void ColumnType_Uuid(const std::string& tableType) {
+    MainTestCase(std::nullopt, tableType).Run({
+        .TableDDL = R"(
+            CREATE TABLE `%s` (
+                Key Uint64 NOT NULL,
+                Message Uuid,
+                PRIMARY KEY (Key)
+            )  WITH (
+                STORE = %s
+            );
+        )",
+
+        .Lambda = R"(
+            $l = ($x) -> {
+                return [
+                    <|
+                        Key:CAST($x._offset AS Uint64),
+                        Message:CAST($x._data AS Uuid)
+                    |>
+                ];
+            };
+        )",
+
+        .Messages = {{"123e4567-e89b-12d3-a456-426614174000"}},
+
+        .Expectations = {{
+            _C("Key", ui64(0)),
+            _C("Message", TUuidValue("123e4567-e89b-12d3-a456-426614174000")),
+        }}
+    });
+}
+
 void MessageField_Partition(const std::string& tableType) {
     MainTestCase(std::nullopt, tableType).Run({
         .TableDDL = R"(

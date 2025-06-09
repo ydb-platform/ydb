@@ -62,6 +62,11 @@ Y_UNIT_TEST_SUITE(Transfer_RowTable)
         ColumnType_Utf8_LongValue(TableType);
     }
 
+    Y_UNIT_TEST(ColumnType_Uuid)
+    {
+        ColumnType_Uuid(TableType);
+    }
+
 
     Y_UNIT_TEST(MessageField_Partition)
     {

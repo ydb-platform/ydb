@@ -18,6 +18,7 @@ void Upsert_OneBatch(const std::string& tableType);
 void ColumnType_Date(const std::string& tableType);
 void ColumnType_Double(const std::string& tableType);
 void ColumnType_Utf8_LongValue(const std::string& tableType);
+void ColumnType_Uuid(const std::string& tableType);
 
 void MessageField_MessageGroupId(const std::string& tableType);
 void MessageField_Partition(const std::string& tableType);

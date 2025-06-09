@@ -40,7 +40,13 @@ class EventKind(object):
     BATCH_DELETE = 'batch_delete'
 
     @classmethod
-    def periodic_tasks(cls):
+    def periodic_tasks_column(cls):
+        return (
+            cls.READ_TABLE,
+        )
+
+    @classmethod
+    def periodic_tasks_row(cls):
         return (
             cls.READ_TABLE,
 
@@ -436,7 +442,7 @@ class Workload:
             for op in EventKind.rare():
                 schedule.extend([(point, op) for point in self.random_points()])
 
-            for op in EventKind.periodic_tasks():
+            for op in EventKind.periodic_tasks_row() if self.mode == 'row' else EventKind.periodic_tasks_column():
                 schedule.extend([(point, op) for point in self.random_points(size=50)])
 
             schedule = collections.deque(list(sorted(schedule)))

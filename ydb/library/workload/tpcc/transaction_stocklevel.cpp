@@ -126,7 +126,7 @@ NThreading::TFuture<TStatus> GetStockLevelTask(
         if (ShouldExit(districtResult)) {
             LOG_E("Terminal " << context.TerminalID << " district query (stockleve) failed: "
                 << districtResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
-            std::quick_exit(1);
+            QuickExit(1);
         }
         LOG_T("Terminal " << context.TerminalID << " district query (stockleve) failed: "
             << districtResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
@@ -140,7 +140,7 @@ NThreading::TFuture<TStatus> GetStockLevelTask(
     if (!districtParser.TryNextRow()) {
         LOG_E("Terminal " << context.TerminalID
             << ", warehouseId " << warehouseID << ", districtId " << districtID << " not found");
-        std::quick_exit(1);
+        QuickExit(1);
     }
 
     int nextOrderID = *districtParser.ColumnParser("D_NEXT_O_ID").GetOptionalInt32();
@@ -152,7 +152,7 @@ NThreading::TFuture<TStatus> GetStockLevelTask(
         if (ShouldExit(stockCountResult)) {
             LOG_E("Terminal " << context.TerminalID << " stock count query failed: "
                 << stockCountResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
-            std::quick_exit(1);
+            QuickExit(1);
         }
         LOG_T("Terminal " << context.TerminalID << " stock count query failed: "
             << stockCountResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());

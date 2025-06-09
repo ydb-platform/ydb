@@ -5,4 +5,5 @@ END()
 RECURSE(
     global
     local
+    yql
 )

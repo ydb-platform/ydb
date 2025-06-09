@@ -7,7 +7,7 @@
 * [Объект доступа](../concepts/glossary.md#access-object)
 * [Субъект доступа](../concepts/glossary.md#access-subject)
 * [Права доступа](../concepts/glossary.md#access-right)
-* [Уровни доступа](../concepts/glossary.md#access-level))
+* [Уровни доступа](../concepts/glossary.md#access-level)
 * [Список доступов](../concepts/glossary.md#access-acl)
 * [Владелец](../concepts/glossary.md#access-owner)
 * [Пользователь](../concepts/glossary.md#access-user)
@@ -75,7 +75,7 @@
 
 Управление доступом в {{ ydb-short-name }} реализуется двумя механизмами:
 
-- [правами доступа](../concepts/glossary.md#access-right) на [схемных объектах](../concepts/glossary.md#scheme-object);
+- [правами доступа](../concepts/glossary.md#access-right) на [схемные объекты](../concepts/glossary.md#scheme-object);
 - [уровнями доступа](../concepts/glossary.md#access-level), определяющими дополнительные возможности или ограничения.
 
 Оба механизма применяются одновременно: для конкретного [субъекта](../concepts/glossary.md#access-subject) действие оказывается доступно, если оба механизма его разрешают, и не доступно, если хотя бы один не разрешает.
